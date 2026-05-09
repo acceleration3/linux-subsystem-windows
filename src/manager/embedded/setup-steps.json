@@ -1,0 +1,48 @@
+{
+  "_schema": "steps[] runs as a sequence of stages. Each entry is either:",
+  "_schema_object": "  - an object: a single step that runs alone, waits for previous stage to finish",
+  "_schema_array": "  - an array of step objects: those steps run in PARALLEL within the same stage",
+  "_schema_blank": "",
+  "_schema_kinds": "Three step kinds (each a JSON object with a `name` field):",
+  "_schema_download": "  download_install: HTTP-download `url`, then run with `args` (silent flags).",
+  "_schema_script": "  run_script:       write `script` verbatim to a temp .cmd and execute via cmd /c.",
+  "_schema_script_ref": "                    or use `script_ref` (resolved at parse time to a script",
+  "_schema_script_ref2": "                    embedded from embedded/scripts/<ref>.cmd — keeps long",
+  "_schema_script_ref3": "                    batch bodies out of this JSON file).",
+  "_schema_extract": "  download_extract: HTTP-download `url`, extract via tar.exe to `extract_to`",
+  "_schema_extract2": "                    (or a temp dir if empty), then optionally run `script` with",
+  "_schema_extract3": "                    %LSW_EXTRACT_DIR% and %LSW_DOWNLOAD_PATH% set.",
+  "_schema_virtio": "virtio drivers are NOT downloaded here anymore: the",
+  "_schema_virtio2": "  domain attaches virtio-win.iso and the autounattend PnP",
+  "_schema_virtio3": "  customizations inject viostor/vioscsi/NetKVM into WinPE +",
+  "_schema_virtio4": "  the offline image, so the guest boots virtio from first boot.",
+  "_schema_gt": "virtio-win-guest-tools is run FROM the mounted virtio-win.iso",
+  "_schema_gt2": "  (no download) for the non-boot extras: qemu-ga, Balloon service,",
+  "_schema_gt3": "  viosock WSP belt-and-suspenders. The CDs are ejected by the",
+  "_schema_gt4": "  manager after setup completes.",
+  "_schema_promote": "Admin promotion is NOT a setup step: it runs from C:\\Windows\\Setup\\Scripts\\SetupComplete.cmd → LswPromote.ps1 (SYSTEM, before first AutoLogon) so the account is admin when LSA builds its logon token — no re-logon needed. The autounattend <Group>Administrators> is live-proven not to stick on Win11 26200 and `net localgroup /add` fails 1317 there; PowerShell Add-LocalGroupMember works.",
+  "_schema_no_guesttools": "virtio-win-guest-tools is intentionally NOT installed. All virtio drivers (viostor/NetKVM/viosock/Balloon/viorng) are already PnP-injected by the autounattend at install; nothing in LSW consumes the bundle's extras — qemu-ga has no virtio-serial channel wired, the Balloon service has no work (fixed RAM), SPICE is unused (LSW renders via its own Vulkan-ICD proxy + VNC). Running the bundle only reinstalled NetKVM and reset the NIC the agent's RPC rides on → recurring 'stuck in virtio install'. If host-driven graceful shutdown / fsfreeze snapshots are wanted later, add <channel name='org.qemu.guest_agent.0'> to domain.xml AND install just guest-agent\\qemu-ga-x86_64.msi (the no-NIC-touch MSI) then.",
+  "steps": [
+    [
+      {
+        "name": "DXVK 2.7.1",
+        "kind": "download_extract",
+        "url": "https://github.com/doitsujin/dxvk/releases/download/v2.7.1/dxvk-2.7.1.tar.gz",
+        "extract_to": "C:\\ProgramData\\LSW\\dxvk",
+        "script": "@echo off\nrem The DXVK tarball expands to dxvk-X.Y\\x64\\*.dll and dxvk-X.Y\\x32\\*.dll under\nrem %LSW_EXTRACT_DIR%. capture_setup expects them one level higher\nrem (C:\\ProgramData\\LSW\\dxvk\\x64\\... and \\x32\\...), so flatten the versioned wrapper.\nfor /d %%D in (\"%LSW_EXTRACT_DIR%\\dxvk-*\") do (\n  xcopy /E /I /Y \"%%D\\*\" \"%LSW_EXTRACT_DIR%\\\" >nul\n  rd /s /q \"%%D\"\n)\nexit /b 0\n"
+      },
+      {
+        "name": "VKD3D-Proton 3.0.1",
+        "kind": "download_extract",
+        "url": "https://github.com/HansKristian-Work/vkd3d-proton/releases/download/v3.0.1/vkd3d-proton-3.0.1.tar.zst",
+        "extract_to": "C:\\ProgramData\\LSW\\vkd3d",
+        "script": "@echo off\nrem VKD3D-Proton tarball expands to vkd3d-proton-X.Y\\x64\\*.dll and \\x86\\*.dll under\nrem %LSW_EXTRACT_DIR%. capture_setup wants those one level up (\\vkd3d\\x64\\ and \\vkd3d\\x86\\).\nrem .tar.zst extraction needs Win11 24H2+ (libarchive 3.6 with zstd in the in-box tar.exe).\nfor /d %%D in (\"%LSW_EXTRACT_DIR%\\vkd3d-proton-*\") do (\n  xcopy /E /I /Y \"%%D\\*\" \"%LSW_EXTRACT_DIR%\\\" >nul\n  rd /s /q \"%%D\"\n)\nexit /b 0\n"
+      },
+      {
+        "name": "Tune Windows for VM use",
+        "kind": "run_script",
+        "script_ref": "tune-windows"
+      }
+    ]
+  ]
+}

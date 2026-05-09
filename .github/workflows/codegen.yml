@@ -1,0 +1,35 @@
+name: codegen
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install codegen package
+        run: pip install ./codegen
+
+      - name: Run codegen tests
+        run: pip install ./codegen[dev] && pytest codegen/tests
+
+      - name: Sanity-run codegen against pinned vk.xml
+        run: |
+          mkdir -p /tmp/lsw-gen-check
+          lsw-codegen \
+            --xml third_party/Vulkan-Headers/registry/vk.xml \
+            --out /tmp/lsw-gen-check \
+            --verbose
+
+      # In Phase 1+ this step diffs /tmp/lsw-gen-check against the
+      # committed generated/ tree and fails on mismatch.

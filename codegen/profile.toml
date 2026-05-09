@@ -1,0 +1,66 @@
+# LSW codegen profile.
+#
+# Drives the entire generated/ directory: the codegen walks vk.xml's
+# <feature> + <extension> elements to derive the command set, then
+# emits serialize/deserialize/dispatch C++ for everything in it.
+#
+# Adding a new extension is one line in [extensions].include and a
+# regeneration. The only commands the codegen does NOT touch are listed
+# in [commands].exclude — typically platform-tied entry points whose
+# create-info can't cross a process boundary (xcb_connection_t*,
+# wl_display*, etc.); those are hand-written in src/client.
+
+api_version = "1.3"
+
+[extensions]
+include = [
+    # Surface + per-platform surface creation.
+    "VK_KHR_surface",
+    "VK_KHR_xcb_surface",
+    "VK_KHR_xlib_surface",
+    "VK_KHR_wayland_surface",
+
+    # Swapchain.
+    "VK_KHR_swapchain",
+]
+
+[commands]
+# These ICD entry points are intercepted client-side and never go on
+# the wire as their codegen'd shape. Surface creation is per-platform
+# and carries process-local pointers (xcb_connection_t*, wl_display*);
+# the client sends a custom kCmdCreateXcbSurface frame instead, and
+# the server creates the real VkSurfaceKHR via its own xcb connection.
+# vkDestroySurfaceKHR is similarly overridden on the client.
+exclude = [
+    # Loader-negotiation entries: handled in icd_entry.cpp before any
+    # transport exists. They can't be wire-routed.
+    "vkEnumerateInstanceVersion",
+    "vkEnumerateInstanceExtensionProperties",
+    "vkEnumerateInstanceLayerProperties",
+    "vkGetInstanceProcAddr",
+    "vkGetDeviceProcAddr",
+
+    # Surface creation: per-platform, carries process-local pointers.
+    # The client sends a custom kCmdCreateXcbSurface frame instead.
+    "vkCreateXcbSurfaceKHR",
+    "vkCreateXlibSurfaceKHR",
+    "vkCreateWaylandSurfaceKHR",
+    "vkDestroySurfaceKHR",
+    # Win32 surface creation never makes sense on Linux.
+    "vkCreateWin32SurfaceKHR",
+    # Presentation-support queries are pure client-side decisions.
+    "vkGetPhysicalDeviceXcbPresentationSupportKHR",
+    "vkGetPhysicalDeviceXlibPresentationSupportKHR",
+    "vkGetPhysicalDeviceWaylandPresentationSupportKHR",
+    "vkGetPhysicalDeviceWin32PresentationSupportKHR",
+]
+
+[platforms]
+include = ["common", "linux"]
+
+[sync_overrides]
+# Default sync detection: void return + no out-param = async; anything
+# with an out-param or VkResult return is sync. Override here when the
+# Vulkan spec lets us be optimistic.
+"vkQueueSubmit" = "async"
+"vkQueueSubmit2" = "async"
