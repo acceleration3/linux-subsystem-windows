@@ -118,6 +118,16 @@ private:
     // stolen. Only left presses are NC-hit-tested today.
     unsigned stolen_press_buttons_ = 0;
 
+    // Event token for the agent's ``caption_drag_started`` push. The
+    // host no longer hit-tests caption areas synchronously; instead
+    // it forwards every non-button press to the guest, and the agent
+    // (via SetWinEventHook on ``EVENT_SYSTEM_MOVESIZESTART``) notifies
+    // us back the instant DefWindowProc decides a press was a
+    // caption drag — the agent cancels the guest's move loop AND we
+    // call ``startSystemMove`` on this mirror so the host window
+    // moves instead.
+    std::uint64_t drag_event_token_ = 0;
+
     // System caption-button rects in EFB-relative px, fetched once
     // from ``window_props`` (which gets them from the guest's
     // ``WM_GETTITLEBARINFOEX``). The press handler checks these LOCALLY
@@ -126,6 +136,15 @@ private:
     // buttons at the frame layer). An empty rect (width or height == 0)
     // means the button isn't present. ``WM_NCHITTEST`` is still used
     // for caption-drag and resize-edge detection below.
+    // System caption-button rects in EFB-relative px from UIA. The
+    // press handler's local check fires BEFORE any RPC: if the press
+    // lands in one of these, we route to the host op (min/max/close)
+    // and skip the nchittest round-trip entirely. Caption-drag for
+    // the rest of the title bar is decided by a per-press
+    // ``nchittest`` RPC — UIA can't discriminate dead caption strip
+    // from tabs / address bars / toolbars sharing the caption row,
+    // but the OS's WM_NCHITTEST returns HTCAPTION only for the real
+    // draggable area.
     QRect btn_min_rect_;
     QRect btn_max_rect_;
     QRect btn_close_rect_;

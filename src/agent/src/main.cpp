@@ -10,7 +10,7 @@
 // on. The wizard account is a local admin, so the agent is elevated
 // enough for installer setup steps.
 
-#include "lsw/agent/agent_service.hpp"
+#include "lsw/agent/core/agent_service.hpp"
 #include "lsw/agent/log.hpp"
 
 // clang-format off
@@ -82,5 +82,5 @@ int wmain(int /*argc*/, wchar_t** /*argv*/) {
     // interactive logon — nothing to wait for. Admin promotion is
     // done by LswPromote.ps1 (SetupComplete), not here.
     enable_install_privileges();
-    return ::lsw::agent::AgentService::instance().run();
+    return ::lsw::agent::core::AgentService::instance().run();
 }

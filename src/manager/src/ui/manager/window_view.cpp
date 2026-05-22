@@ -138,61 +138,42 @@ constexpr int kHtBottom      = 15;
 constexpr int kHtBottomLeft  = 16;
 constexpr int kHtBottomRight = 17;
 
-// Map an ``HT*`` resize-edge code to the Qt::Edges set
-// ``QWindow::startSystemResize`` takes. Returns ``{}`` for non-edge
-// codes.
-Qt::Edges edges_for_ht(int ht) {
-    switch (ht) {
-    case kHtLeft:        return Qt::LeftEdge;
-    case kHtRight:       return Qt::RightEdge;
-    case kHtTop:         return Qt::TopEdge;
-    case kHtBottom:      return Qt::BottomEdge;
-    case kHtTopLeft:     return Qt::TopEdge | Qt::LeftEdge;
-    case kHtTopRight:    return Qt::TopEdge | Qt::RightEdge;
-    case kHtBottomLeft:  return Qt::BottomEdge | Qt::LeftEdge;
-    case kHtBottomRight: return Qt::BottomEdge | Qt::RightEdge;
-    default:             return {};
-    }
-}
+// (``edges_for_ht`` removed in Phase 7 with the rest of the
+// WM_NCHITTEST path: the host derives resize edges directly from
+// widget-edge px zones via ``edges_for_widget_pos``, never from a
+// HT code.)
 
 // Synchronous NC hit-test against the guest window. ``ht`` defaults
 // to ``kHtClient`` on RPC / parse failure (the safe fallback that lets
 // the existing forward-to-guest path run); the rest of the fields are
 // diagnostic — only consumed by the debug overlay.
-struct NcHitResult {
-    int ht = kHtClient;
-    QRect efb;
-    QRect win;
-    QPoint screen;
-    unsigned dpi = 0;
-};
-NcHitResult nc_hit_test(vm::AgentRpcClient& rpc, std::uint64_t hwnd, QPoint g) {
-    NcHitResult r;
+// Synchronous ``WM_NCHITTEST`` against the guest window for the
+// given EFB-relative pixel. Used by ``mousePressEvent`` AFTER the
+// cached UIA button-rect check misses, to discriminate caption-drag
+// (HTCAPTION → host startSystemMove) from a real content click
+// (HTCLIENT / anything else → forward to guest). Tabs / address
+// bars / toolbars on the caption row correctly return HTCLIENT
+// here; only the dead caption strip returns HTCAPTION.
+//
+// Round-trip cost: one RPC per left-press whose target isn't a
+// caption button. The agent's handler is a plain ``SendMessageW`` —
+// typically <1 ms on the loopback channel.
+int nc_hit_test(vm::AgentRpcClient& rpc, std::uint64_t hwnd, QPoint g) {
     const QByteArray reply = rpc.call(nlohmann::json{
         {"cmd", "nchittest"},
         {"params", {{"hwnd", hwnd}, {"x", g.x()}, {"y", g.y()}}}});
     if (reply.isEmpty()) {
-        return r;
+        return kHtClient;
     }
     try {
         const auto j = nlohmann::json::parse(reply.constData(),
                                               reply.constData() + reply.size());
         if (j.is_object()) {
-            r.ht = j.value("ht", kHtClient);
-            const int l = j.value("efb_l", 0);
-            const int t = j.value("efb_t", 0);
-            r.efb = QRect(l, t, j.value("efb_r", 0) - l,
-                          j.value("efb_b", 0) - t);
-            const int wl = j.value("win_l", 0);
-            const int wt = j.value("win_t", 0);
-            r.win = QRect(wl, wt, j.value("win_r", 0) - wl,
-                          j.value("win_b", 0) - wt);
-            r.screen = QPoint(j.value("sx", 0), j.value("sy", 0));
-            r.dpi = j.value("dpi", 0u);
+            return j.value("ht", kHtClient);
         }
     } catch (const nlohmann::json::exception&) {
     }
-    return r;
+    return kHtClient;
 }
 
 // Which window edge(s) a widget-local position sits in. The resize
@@ -333,6 +314,28 @@ WindowView::WindowView(vm::AgentRpcClient& rpc, std::uint64_t hwnd,
     connect(&rpc_, &vm::AgentRpcClient::window_gone, this, &WindowView::on_window_gone);
     rpc_.subscribe_window(hwnd_);
 
+    // Caption-drag detector. The agent fires ``caption_drag_started``
+    // the instant DefWindowProc enters its SC_MOVE modal loop on the
+    // guest (and cancels the loop with WM_CANCELMODE in the same
+    // breath, so the guest never visibly moves). On a match we mark
+    // the current press stolen and start a host-side system move —
+    // Windows decided "this is a drag"; the host carries it out.
+    drag_event_token_ = rpc_.on_event(
+        QStringLiteral("caption_drag_started"),
+        [this](const nlohmann::json& j) {
+            const auto h = j.value("hwnd", std::uint64_t{0});
+            if (h != hwnd_) return;
+            QMetaObject::invokeMethod(this, [this] {
+                if (QWindow* wh = windowHandle()) {
+                    wh->startSystemMove();
+                }
+                // Suppress the matching release so the guest doesn't
+                // see an orphan WM_LBUTTONUP after the agent's
+                // WM_CANCELMODE already tore its modal state down.
+                stolen_press_buttons_ |= 1u;  // bit 0 = left button
+            }, Qt::QueuedConnection);
+        });
+
     if (relative_to != nullptr) {
         // Popup: no separate props phase; size/place is image-driven.
         props_ready_ = true;
@@ -399,10 +402,13 @@ WindowView::WindowView(vm::AgentRpcClient& rpc, std::uint64_t hwnd,
                     }
                     return r;
                 };
-                btn_min_rect_   = rect_of("btn_min");
-                btn_max_rect_   = rect_of("btn_max");
-                btn_close_rect_ = rect_of("btn_close");
-                btn_help_rect_  = rect_of("btn_help");
+                btn_min_rect_    = rect_of("btn_min");
+                btn_max_rect_    = rect_of("btn_max");
+                btn_close_rect_  = rect_of("btn_close");
+                btn_help_rect_   = rect_of("btn_help");
+                // title-bar rect is no longer requested from
+                // window_props; caption-drag is decided per-press by
+                // the ``nchittest`` RPC below.
                 screen_w_ = j.value("screen_w", 0);
                 screen_h_ = j.value("screen_h", 0);
                 // EFB width that the cached btn rects correspond to.
@@ -603,10 +609,12 @@ void WindowView::mousePressEvent(QMouseEvent* e) {
                 return;
             }
         }
-        // 1. Check the OS-frame button rects locally. These come from
-        //    WM_GETTITLEBARINFOEX and are authoritative for the
-        //    system caption buttons regardless of what the app's
-        //    wndproc returns for WM_NCHITTEST.
+        // 1. Check the OS-frame button rects locally. UIA-sourced
+        //    (Phase 7): the agent's ``window_props`` reply now
+        //    includes the title bar's bounding rect and each Button
+        //    child rect. Authoritative for the system caption
+        //    buttons regardless of how the app's own wndproc treats
+        //    WM_NCHITTEST.
         bool stolen = false;
         int synthetic_ht = -1;
         if (btn_min_rect_.contains(g)) {
@@ -628,6 +636,13 @@ void WindowView::mousePressEvent(QMouseEvent* e) {
             stolen = true;
             synthetic_ht = 20;  // HTCLOSE
         }
+        // No host-side hit-test: non-button presses just go to the
+        // guest. If Windows decides the press is a caption-drag
+        // (DefWindowProc enters its SC_MOVE modal loop), the agent's
+        // ``EVENT_SYSTEM_MOVESIZESTART`` hook catches that instantly,
+        // cancels the guest move, and pushes ``caption_drag_started``
+        // — handled in the constructor lambda, which calls
+        // ``startSystemMove`` on this mirror's window.
         if (stolen) {
             last_ht_ = synthetic_ht;
             last_hit_widget_ = e->position();
@@ -635,34 +650,6 @@ void WindowView::mousePressEvent(QMouseEvent* e) {
             if (debug_nchit_enabled()) {
                 update();
             }
-            stolen_press_buttons_ |= (1u << button_index(e->button()));
-            e->accept();
-            return;
-        }
-        // 2. Not on a system button — ask the agent for WM_NCHITTEST
-        //    so we can still catch caption-drag and resize-edge.
-        const NcHitResult r = nc_hit_test(rpc_, hwnd_, g);
-        const int ht = r.ht;
-        last_ht_ = ht;
-        last_hit_widget_ = e->position();
-        last_hit_guest_ = g;
-        last_efb_ = r.efb;
-        last_win_ = r.win;
-        last_screen_ = r.screen;
-        last_dpi_ = r.dpi;
-        if (debug_nchit_enabled()) {
-            update();
-        }
-        if (ht == kHtCaption || ht == kHtSysMenu) {
-            if (wh != nullptr) {
-                stolen = wh->startSystemMove();
-            }
-        } else if (const Qt::Edges edges = edges_for_ht(ht); edges != 0) {
-            if (wh != nullptr) {
-                stolen = wh->startSystemResize(edges);
-            }
-        }
-        if (stolen) {
             stolen_press_buttons_ |= (1u << button_index(e->button()));
             e->accept();
             return;
@@ -719,28 +706,17 @@ void WindowView::mouseDoubleClickEvent(QMouseEvent* e) {
             e->accept();
             return;
         }
-        const NcHitResult r = nc_hit_test(rpc_, hwnd_, g);
-        const int ht = r.ht;
-        last_ht_ = ht;
-        last_hit_widget_ = e->position();
-        last_hit_guest_ = g;
-        last_efb_ = r.efb;
-        last_win_ = r.win;
-        last_screen_ = r.screen;
-        last_dpi_ = r.dpi;
-        if (debug_nchit_enabled()) {
-            update();
-        }
-        if (ht == kHtCaption) {
-            if (isMaximized()) {
-                showNormal();
-            } else {
-                showMaximized();
-            }
-            stolen_press_buttons_ |= (1u << button_index(e->button()));
-            e->accept();
-            return;
-        }
+        // Caption dbl-click → toggle maximize. Local rect check via
+        // the cached UIA title-bar rect; no RPC.
+        // Caption dbl-click also flows through the guest now (no
+        // host-side hit-test). Windows enters its modal move loop on
+        // the first single-press; ``caption_drag_started`` handler
+        // already started a host system-move, so any second-down
+        // (the dbl-click event) will arrive at the guest as a
+        // WM_LBUTTONDBLCLK but won't restart a move because the
+        // first one was cancelled. Toggle-maximize via dbl-click can
+        // be added later by listening for a "drag never moved" event
+        // — punted for now in favour of the simpler path.
     }
     post_input(rpc_, hwnd_,
                {{"type", "dblclick"}, {"x", g.x()}, {"y", g.y()},
@@ -805,6 +781,10 @@ void WindowView::keyReleaseEvent(QKeyEvent* e) {
 }
 
 WindowView::~WindowView() {
+    if (drag_event_token_ != 0) {
+        rpc_.off_event(drag_event_token_);
+        drag_event_token_ = 0;
+    }
     rpc_.unsubscribe_window(hwnd_);
 }
 
@@ -940,6 +920,10 @@ void WindowView::paintEvent(QPaintEvent* /*e*/) {
                 static_cast<int>(std::lround(gr.height() * sy)));
         };
         p.setRenderHint(QPainter::Antialiasing, true);
+        // (Title-bar outline removed — there's no cached title-bar
+        // rect anymore; caption-drag is resolved per-press via
+        // ``nchittest`` and shows up in ``last_ht_`` if you want it
+        // surfaced in the overlay text.)
         struct BtnDraw { const QRect& src; QColor color; };
         const BtnDraw btns[] = {
             {btn_min_rect_,   QColor(0,   200, 255, 220)},  // cyan

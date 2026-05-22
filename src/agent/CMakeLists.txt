@@ -27,21 +27,98 @@ if(NOT WIN32)
     return()
 endif()
 
-add_executable(lsw-guest-agent
+# Sources are grouped by module — each subdirectory is one feature
+# area. Adding a new RPC handler in Phase 4+ means a new TU under
+# src/rpc/handlers/<category>/<name>.cpp; that TU gets listed here
+# (no GLOB — explicit listing is more reliable, especially with the
+# MinGW + Ninja cross-build).
+set(_lsw_agent_core_sources
     src/main.cpp
-    src/agent_service.cpp
-    src/host_endpoint.cpp
-    src/installer.cpp
     src/log.cpp
-    src/app_catalog.cpp
-    src/capture_setup.cpp
-    src/console.cpp
-    src/gdi_util.cpp
-    src/input_inject.cpp
-    src/process_launcher.cpp
-    src/system_info.cpp
-    src/window_capture.cpp
-    src/wgc_capture.cpp
+    src/core/agent_service.cpp
+)
+set(_lsw_agent_transport_sources
+    src/transport/host_endpoint.cpp
+)
+set(_lsw_agent_rpc_sources
+    src/rpc/registry.cpp
+    # Per-RPC handler TUs — one per command. Each TU registers itself
+    # at static-init via LSW_REGISTER_RPC; the transport dispatcher
+    # is now a single registry lookup. Adding a new RPC means a new
+    # TU in this list (Phase 4 of the refactor; subsequent UIA RPCs
+    # land under src/rpc/handlers/uia/ in Phase 8+).
+    src/rpc/handlers/system/system_info.cpp
+    src/rpc/handlers/apps/list_apps.cpp
+    src/rpc/handlers/apps/launch.cpp
+    src/rpc/handlers/apps/get_icon.cpp
+    src/rpc/handlers/window/list_windows.cpp
+    src/rpc/handlers/window/close_window.cpp
+    src/rpc/handlers/window/focus_window.cpp
+    src/rpc/handlers/window/unfocus_window.cpp
+    src/rpc/handlers/window/resize_window.cpp
+    src/rpc/handlers/window/window_props.cpp
+    src/rpc/handlers/window/nchittest.cpp
+    src/rpc/handlers/input/inject_input.cpp
+    src/rpc/handlers/capture/subscribe_window.cpp
+    src/rpc/handlers/capture/unsubscribe_window.cpp
+    src/rpc/handlers/capture/capture_debug.cpp
+    src/rpc/handlers/capture/set_capture_method.cpp
+    src/rpc/handlers/install/download_install.cpp
+    src/rpc/handlers/install/download_extract.cpp
+    src/rpc/handlers/install/run_script.cpp
+    src/rpc/handlers/console/console_open.cpp
+    src/rpc/handlers/console/console_input.cpp
+    src/rpc/handlers/console/console_close.cpp
+    src/rpc/handlers/uia/uia_state.cpp
+    src/rpc/handlers/uia/uia_invoke.cpp
+    src/rpc/handlers/uia/uia_set_value.cpp
+    src/rpc/handlers/uia/uia_get_text.cpp
+    src/rpc/handlers/uia/uia_tree_dump.cpp
+    src/rpc/handlers/uia/uia_subscribe_lifecycle.cpp
+    src/rpc/handlers/uia/uia_unsubscribe_lifecycle.cpp
+    src/rpc/handlers/uia/uia_subscribe_focus.cpp
+    src/rpc/handlers/uia/uia_subscribe_properties.cpp
+    src/rpc/handlers/uia/uia_unsubscribe.cpp
+)
+set(_lsw_agent_win_sources
+    src/win/window.cpp
+    src/win/input.cpp
+    src/win/gdi.cpp
+    src/win/com.cpp
+    src/win/move_resize_watcher.cpp
+)
+set(_lsw_agent_capture_sources
+    src/capture/wgc.cpp
+    src/capture/setup.cpp
+)
+set(_lsw_agent_uia_sources
+    src/uia/uia.cpp
+)
+set(_lsw_agent_apps_sources
+    src/apps/catalog.cpp
+    src/apps/launcher.cpp
+)
+set(_lsw_agent_install_sources
+    src/install/installer.cpp
+)
+set(_lsw_agent_console_sources
+    src/console/console.cpp
+)
+set(_lsw_agent_system_sources
+    src/system/info.cpp
+)
+
+add_executable(lsw-guest-agent
+    ${_lsw_agent_core_sources}
+    ${_lsw_agent_transport_sources}
+    ${_lsw_agent_rpc_sources}
+    ${_lsw_agent_win_sources}
+    ${_lsw_agent_capture_sources}
+    ${_lsw_agent_uia_sources}
+    ${_lsw_agent_apps_sources}
+    ${_lsw_agent_install_sources}
+    ${_lsw_agent_console_sources}
+    ${_lsw_agent_system_sources}
 )
 
 # Build stamp: regenerated EVERY build so agent_version always
@@ -58,7 +135,7 @@ add_custom_target(lsw_agent_stamp
     VERBATIM
 )
 add_dependencies(lsw-guest-agent lsw_agent_stamp)
-set_source_files_properties(src/system_info.cpp
+set_source_files_properties(src/system/info.cpp
     PROPERTIES OBJECT_DEPENDS "${_lsw_build_stamp}")
 
 target_include_directories(lsw-guest-agent
@@ -82,6 +159,9 @@ target_link_libraries(lsw-guest-agent
         runtimeobject # WinRT (RoInitialize / RoGetActivationFactory)
         d3d11         # WGC capture device
         dxgi          # DXGI device interop for WGC
+        ole32         # COM (CoInitializeEx / CoCreateInstance for UIA)
+        oleaut32      # COM BSTR/VARIANT used by UIA
+        uuid          # CLSID_CUIAutomation, IID_IUIAutomation*
 )
 
 target_compile_definitions(lsw-guest-agent PRIVATE

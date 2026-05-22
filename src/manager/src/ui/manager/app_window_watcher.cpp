@@ -14,9 +14,16 @@ namespace lsw::manager::ui::manager {
 
 namespace {
 
-constexpr int kPollMs = 50;  // ~20 Hz: popups still appear ~instantly,
-                             // far less load than 50 Hz EnumWindows +
-                             // RPC competing with 30 fps WGC capture
+// Safety-net poll interval. The primary signal is now UIA push events
+// (``uia_window_opened`` / ``uia_window_closed`` from the agent's
+// ``uia_subscribe_lifecycle``), which fire within one transport tick
+// (~33 ms). The timer covers the cases UIA can miss: App Execution
+// Aliases / packaged apps that surface windows under a different PID
+// than the one we subscribed for, full-screen games that don't
+// register with UIA, and the brief startup window between ``launch``
+// and the first event handler being live. 1 s is fast enough to keep
+// stragglers responsive without burning 50 RPCs/s on idle.
+constexpr int kPollMs = 1000;
 constexpr qint64 kIdleQuitMs = 30000;  // shut down 30 s after the app stops showing windows
 
 struct GuestWindow {
@@ -109,14 +116,62 @@ AppWindowWatcher::AppWindowWatcher(vm::AgentRpcClient& rpc, quint32 pid,
 }
 
 void AppWindowWatcher::start() {
-    if (!timer_.isActive()) {
-        timer_.start();
-        on_tick();  // first probe immediately
+    if (timer_.isActive()) {
+        return;
     }
+    // Subscribe to UIA window opened/closed events for our PID. The
+    // ``call`` is synchronous but returns immediately (one round trip
+    // to the agent + reply). The sub_id is what we pass to
+    // ``uia_unsubscribe_lifecycle`` in ``stop()``.
+    const QByteArray sub_reply = rpc_.call(nlohmann::json{
+        {"cmd", "uia_subscribe_lifecycle"},
+        {"params", {{"pid", static_cast<std::uint64_t>(pid_)}}}});
+    if (!sub_reply.isEmpty()) {
+        try {
+            const auto j = nlohmann::json::parse(
+                sub_reply.constData(),
+                sub_reply.constData() + sub_reply.size());
+            uia_sub_id_ = j.value("sub_id", std::uint64_t{0});
+        } catch (const nlohmann::json::exception&) {
+        }
+    }
+    // Hook the push events. Both opened and closed kick an immediate
+    // ``on_tick`` so the existing logic (PID filter, name-match
+    // fallback, popup parenting, stale view cleanup) picks the change
+    // up in one round-trip. We do NOT do partial spawn/teardown here
+    // because the event payload lacks the popup-parent / screen-pos
+    // metadata ``on_tick`` resolves via ``list_windows``; relying on
+    // the tick keeps both code paths in agreement.
+    auto kick = [this](const nlohmann::json& /*frame*/) {
+        QMetaObject::invokeMethod(this, &AppWindowWatcher::on_tick,
+                                   Qt::QueuedConnection);
+    };
+    uia_opened_tok_ = rpc_.on_event(QStringLiteral("uia_window_opened"), kick);
+    uia_closed_tok_ = rpc_.on_event(QStringLiteral("uia_window_closed"), kick);
+
+    timer_.start();
+    on_tick();  // first probe immediately
 }
 
 void AppWindowWatcher::stop() {
     timer_.stop();
+    if (uia_opened_tok_ != 0) {
+        rpc_.off_event(uia_opened_tok_);
+        uia_opened_tok_ = 0;
+    }
+    if (uia_closed_tok_ != 0) {
+        rpc_.off_event(uia_closed_tok_);
+        uia_closed_tok_ = 0;
+    }
+    if (uia_sub_id_ != 0) {
+        // Fire-and-forget: the watcher is going away, we don't care
+        // about the reply. Use ``post_oneway`` to avoid blocking the
+        // GUI thread on the disconnect path.
+        rpc_.post_oneway(nlohmann::json{
+            {"cmd", "uia_unsubscribe_lifecycle"},
+            {"params", {{"sub_id", uia_sub_id_}}}});
+        uia_sub_id_ = 0;
+    }
     Q_EMIT exhausted(pid_);
 }
 

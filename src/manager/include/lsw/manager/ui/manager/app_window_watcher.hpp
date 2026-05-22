@@ -87,6 +87,15 @@ private:
     QTimer timer_;
     bool tick_in_flight_ = false;
 
+    // UIA push channel: subscribe to ``uia_window_opened`` and
+    // ``uia_window_closed`` for ``pid_``. Events kick an immediate
+    // tick so we react inside ~33 ms instead of waiting for the
+    // safety-net timer. Tokens hand back to ``off_event`` and the
+    // sub id to ``uia_unsubscribe_lifecycle`` in ``stop()``.
+    std::uint64_t uia_sub_id_ = 0;
+    std::uint64_t uia_opened_tok_ = 0;
+    std::uint64_t uia_closed_tok_ = 0;
+
     // HWNDs present at the first tick. Windows in this set predate the
     // launch and are excluded from the exe-name fallback so it can't
     // adopt an instance the user already had open. Empty until the
