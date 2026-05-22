@@ -21,9 +21,12 @@ namespace {
 // Aliases / packaged apps that surface windows under a different PID
 // than the one we subscribed for, full-screen games that don't
 // register with UIA, and the brief startup window between ``launch``
-// and the first event handler being live. 1 s is fast enough to keep
-// stragglers responsive without burning 50 RPCs/s on idle.
-constexpr int kPollMs = 1000;
+// and the first event handler being live. ~22 ms ≈ 45 Hz — finer than
+// the agent's own 33 ms drain tick, so for non-UIA windows we see
+// changes the moment the next list_windows reply lands instead of
+// waiting on the host-side timer. ``tick_in_flight_`` coalesces
+// re-entrant polls so a slow RPC reply can't queue them.
+constexpr int kPollMs = 22;
 constexpr qint64 kIdleQuitMs = 30000;  // shut down 30 s after the app stops showing windows
 
 struct GuestWindow {

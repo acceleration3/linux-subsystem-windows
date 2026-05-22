@@ -58,6 +58,7 @@ set(_lsw_agent_rpc_sources
     src/rpc/handlers/window/resize_window.cpp
     src/rpc/handlers/window/window_props.cpp
     src/rpc/handlers/window/nchittest.cpp
+    src/rpc/handlers/window/get_window_icon.cpp
     src/rpc/handlers/input/inject_input.cpp
     src/rpc/handlers/capture/subscribe_window.cpp
     src/rpc/handlers/capture/unsubscribe_window.cpp

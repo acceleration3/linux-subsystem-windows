@@ -1,6 +1,7 @@
 #include "lsw/manager/ui/manager/app_list.hpp"
 
 #include "lsw/log.hpp"
+#include "lsw/manager/apps/desktop_launcher.hpp"
 #include "lsw/manager/ui/manager/app_config_dialog.hpp"
 #include "lsw/manager/ui/manager/app_window_watcher.hpp"
 #include "lsw/manager/vm/agent_rpc_client.hpp"
@@ -90,6 +91,12 @@ void AppListWidget::rebuild() {
 
 void AppListWidget::on_store_changed() {
     rebuild();
+    // The store reflects the union of live agent reports and stored
+    // user customisations; every change is a potential add/remove
+    // that should propagate to the host's XDG menu. ``sync`` is
+    // idempotent and cheap (per-entry hash comparison + file write
+    // only when contents differ).
+    apps::DesktopLauncher::sync(store_.configs());
 }
 
 void AppListWidget::on_refresh_clicked() {
@@ -105,7 +112,14 @@ void AppListWidget::on_new_clicked() {
 
 void AppListWidget::on_loaded(const QList<apps::AppEntry>& entries) {
     store_.merge_from_agent(entries);
-    // ``rebuild`` runs via ``on_store_changed``.
+    // ``rebuild`` runs via ``on_store_changed`` if the merge actually
+    // mutated anything. The desktop-launcher sync, on the other hand,
+    // has to run on every refresh — the user may have hand-deleted a
+    // .desktop file, or the catalog may have produced identical icon
+    // bytes (no store change → no on_store_changed signal) but the
+    // on-disk PNGs still need to be rewritten because the agent now
+    // produces a different format (e.g. higher-resolution alpha).
+    apps::DesktopLauncher::sync(store_.configs());
 }
 
 void AppListWidget::on_item_activated(QListWidgetItem* item) {
@@ -202,6 +216,9 @@ void AppListWidget::on_context_menu(const QPoint& pos) {
         return;
     }
     if (chosen == del_act) {
+        // Store::remove triggers ``changed`` which calls
+        // ``DesktopLauncher::sync(configs)`` from on_store_changed —
+        // the now-missing entry naturally gets pruned in that pass.
         store_.remove(id);
         return;
     }

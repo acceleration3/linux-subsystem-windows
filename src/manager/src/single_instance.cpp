@@ -47,8 +47,25 @@ bool SingleInstance::raise_existing() {
     return reply.type() == QDBusMessage::ReplyMessage;
 }
 
+bool SingleInstance::launch_app_existing(const QString& app_id) {
+    auto bus = QDBusConnection::sessionBus();
+    if (!bus.isConnected()) {
+        return false;
+    }
+    QDBusInterface ifc{kBusName, kObjectPath, kInterface, bus};
+    if (!ifc.isValid()) {
+        return false;
+    }
+    auto reply = ifc.call("launch_app", app_id);
+    return reply.type() == QDBusMessage::ReplyMessage;
+}
+
 void SingleInstance::raise() {
     Q_EMIT raise_requested();
+}
+
+void SingleInstance::launch_app(const QString& app_id) {
+    Q_EMIT launch_app_requested(app_id);
 }
 
 }  // namespace lsw::manager

@@ -171,9 +171,15 @@
          TCP 127.0.0.1:5102 (5103 reserved). vsock was attempted but
          this class of host kernel has no working vhost_vsock
          (/dev/vhost-vsock open -> ENODEV), so TCP-over-hostfwd is the
-         only reliable channel — same reason the project chose it. -->
+         only reliable channel — same reason the project chose it.
+         Host 5445 → guest :445 carries the CIFS / SMB mount of the
+         guest's ``C:\`` at ``$HOME/Windows`` (driven by
+         ``vm::HostSmbMounter`` once the agent answers). We can't
+         hostfwd on host :445 because qemu user-net runs unprivileged
+         and :445 is in the reserved <1024 range; mount.cifs is told
+         ``port=5445`` to compensate. -->
     <qemu:arg value='-netdev'/>
-    <qemu:arg value='user,id=lsw-net,hostfwd=tcp:127.0.0.1:5102-:5102,hostfwd=tcp:127.0.0.1:5103-:5103'/>
+    <qemu:arg value='user,id=lsw-net,hostfwd=tcp:127.0.0.1:5102-:5102,hostfwd=tcp:127.0.0.1:5103-:5103,hostfwd=tcp:127.0.0.1:5445-:445'/>
     <qemu:arg value='-device'/>
     <qemu:arg value='virtio-net-pci,netdev=lsw-net,id=lsw-nic,bus=pcie.0,addr=0x10,mq=on'/>
   </qemu:commandline>

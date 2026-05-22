@@ -20,12 +20,18 @@ if(NOT (UNIX AND NOT APPLE))
     return()
 endif()
 
-find_package(Qt6 REQUIRED COMPONENTS Widgets Network DBus Concurrent)
+find_package(Qt6 REQUIRED COMPONENTS Widgets Network DBus Concurrent Xml)
 find_package(PkgConfig REQUIRED)
 find_package(ZLIB REQUIRED)  # MicrosoftClient: defensive gunzip fallback
 pkg_check_modules(LIBVIRT REQUIRED IMPORTED_TARGET libvirt)
 pkg_check_modules(LIBISOFS REQUIRED IMPORTED_TARGET libisofs-1)  # PayloadIsoBuilder
 pkg_check_modules(LIBVNCCLIENT REQUIRED IMPORTED_TARGET libvncclient)  # VncView
+# xcb is used to set a per-window WM_CLASS on each mirror so the Linux
+# taskbar (KDE / GNOME / etc. on X11) treats every guest window as its
+# own entry instead of grouping them all under "lsw-manager". On
+# Wayland the property is ignored and grouping falls back to Qt's
+# QGuiApplication::desktopFileName — same as before this change.
+pkg_check_modules(XCB IMPORTED_TARGET xcb)
 
 # libwim (wimlib) — list Windows editions in the install ISO. Ships no
 # pkg-config / CMake config, so resolve the lib + header by hand.
@@ -78,6 +84,7 @@ add_library(lsw_manager STATIC
     include/lsw/manager/config/settings.hpp
     include/lsw/manager/config/vm_state.hpp
     include/lsw/manager/vm/agent_rpc_client.hpp
+    include/lsw/manager/vm/dolphin_places.hpp
     include/lsw/manager/vm/libvirt_conn.hpp
     include/lsw/manager/vm/lifecycle.hpp
     include/lsw/manager/vm/monitor.hpp
@@ -89,6 +96,7 @@ add_library(lsw_manager STATIC
     include/lsw/manager/apps/app_config.hpp
     include/lsw/manager/apps/app_config_store.hpp
     include/lsw/manager/apps/catalog.hpp
+    include/lsw/manager/apps/desktop_launcher.hpp
     include/lsw/manager/apps/launcher.hpp
     include/lsw/manager/apps/log_store.hpp
     include/lsw/manager/mcp/mcp_server.hpp
@@ -96,6 +104,7 @@ add_library(lsw_manager STATIC
     include/lsw/manager/ui/manager/app_window_watcher.hpp
     include/lsw/manager/ui/manager/console_window.hpp
     include/lsw/manager/ui/manager/log_viewer.hpp
+    include/lsw/manager/ui/manager/taskbar_entry.hpp
     include/lsw/manager/ui/manager/window_view.hpp
     include/lsw/manager/ui/vnc_view.hpp
     include/lsw/manager/ui/manager/main_window.hpp
@@ -131,6 +140,7 @@ add_library(lsw_manager STATIC
     src/vm/agent_rpc_client.cpp
     src/vm/libvirt_conn.cpp
     src/vm/domain_xml.cpp
+    src/vm/dolphin_places.cpp
     src/vm/lifecycle.cpp
     src/vm/monitor.cpp
     src/vm/vsock.cpp
@@ -149,6 +159,7 @@ add_library(lsw_manager STATIC
     src/apps/app_config.cpp
     src/apps/app_config_store.cpp
     src/apps/catalog.cpp
+    src/apps/desktop_launcher.cpp
     src/apps/launcher.cpp
     src/apps/log_store.cpp
 
@@ -158,6 +169,7 @@ add_library(lsw_manager STATIC
     src/ui/manager/app_window_watcher.cpp
     src/ui/manager/console_window.cpp
     src/ui/manager/log_viewer.cpp
+    src/ui/manager/taskbar_entry.cpp
     src/ui/manager/window_view.cpp
 
     src/ui/vnc_view.cpp
@@ -193,6 +205,7 @@ target_link_libraries(lsw_manager
         Qt6::Network
         Qt6::DBus
         Qt6::Concurrent
+        Qt6::Xml
         PkgConfig::LIBVIRT
         LSW::Common
         LSW::Protocol
@@ -204,6 +217,11 @@ target_link_libraries(lsw_manager
         PkgConfig::LIBVNCCLIENT
         ${WIMLIB_LIBRARY}
 )
+
+if(TARGET PkgConfig::XCB)
+    target_link_libraries(lsw_manager PRIVATE PkgConfig::XCB)
+    target_compile_definitions(lsw_manager PRIVATE LSW_HAVE_XCB=1)
+endif()
 
 target_include_directories(lsw_manager PRIVATE ${WIMLIB_INCLUDE_DIR})
 

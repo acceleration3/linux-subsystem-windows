@@ -36,6 +36,9 @@ CliOptions parse_cli(const QStringList& argv) {
         "VM memory in MiB.", "mib");
     QCommandLineOption disk_opt({"disk", "d"},
         "VM disk size in GiB.", "gib");
+    QCommandLineOption launch_opt("launch",
+        "Launch the named guest app and exit (forwards to a running "
+        "manager via D-Bus; starts one if none is up).", "app-id");
 
     p.addOption(accept_license);
     p.addOption(iso_opt);
@@ -47,6 +50,7 @@ CliOptions parse_cli(const QStringList& argv) {
     p.addOption(cpu_opt);
     p.addOption(mem_opt);
     p.addOption(disk_opt);
+    p.addOption(launch_opt);
 
     p.process(argv);
 
@@ -67,6 +71,7 @@ CliOptions parse_cli(const QStringList& argv) {
     if (p.isSet(disk_opt)) {
         o.disk_gib = p.value(disk_opt).toInt();
     }
+    o.launch_app_id = p.value(launch_opt);
     return o;
 }
 

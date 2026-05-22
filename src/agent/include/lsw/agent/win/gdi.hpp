@@ -19,4 +19,11 @@ void ensure_gdiplus();
 // ship per-app icons up to the manager.
 [[nodiscard]] std::string extract_icon_png_base64(const std::wstring& path);
 
+// Pull the icon for a live HWND (WM_GETICON ICON_BIG → ICON_SMALL2 →
+// ICON_SMALL → class GCLP_HICON → class GCLP_HICONSM → executable
+// fallback) and return it PNG-encoded + base64. Used by the manager
+// to give each mirror window the guest window's actual icon so the
+// Linux taskbar shows it instead of the generic Qt icon.
+[[nodiscard]] std::string extract_window_icon_png_base64(void* hwnd);
+
 }  // namespace lsw::agent::gdi

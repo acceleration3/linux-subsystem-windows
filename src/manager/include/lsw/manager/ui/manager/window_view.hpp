@@ -39,6 +39,19 @@ public:
     // real (bypasses the "just request close" path in closeEvent).
     void guest_closed();
 
+    // Overridden to stamp a per-window app identity around the
+    // native window's creation. On Wayland, Qt reads
+    // ``QGuiApplication::desktopFileName()`` exactly once at
+    // ``xdg_toplevel`` creation to set ``app_id``; afterwards the
+    // app_id is immutable for the toplevel's lifetime. We toggle the
+    // process-wide name to a unique ``lsw-window-<hwnd>`` around the
+    // create-and-map sequence so KWin's taskmanager sees a distinct
+    // app per mirror and stops grouping them, then restore the
+    // previous value so unrelated windows (wizard pages, dialogs)
+    // keep their normal identity. On X11 the same value is also
+    // written to ``WM_CLASS`` post-creation as a belt-and-suspenders.
+    void setVisible(bool visible) override;
+
 protected:
     void paintEvent(QPaintEvent* e) override;
     void closeEvent(QCloseEvent* e) override;

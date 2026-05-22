@@ -73,6 +73,13 @@ private Q_SLOTS:
     // SingleInstance "raise" delivered via DBus.
     void on_raise_request();
 
+    // SingleInstance "launch_app <id>" delivered via DBus from an XDG
+    // launcher click (either an external second invocation forwarding
+    // its --launch arg, or a direct DBus call). If the VM isn't up
+    // yet we pop a 'Starting Windows...' splash and start it, then
+    // fire the launch RPC once the agent becomes reachable.
+    void on_launch_app_request(const QString& app_id);
+
 private:
     void show_main_window();
     void show_wizard();
@@ -111,6 +118,14 @@ private:
 
     ui::manager::MainWindow* main_window_ = nullptr;
     ui::wizard::Wizard* wizard_ = nullptr;
+
+    // Pending --launch / DBus launch_app id that arrived BEFORE the
+    // VM's agent was reachable. The launch RPC needs an agent on the
+    // other end, so we stash the id and fire it from the monitor's
+    // ``agent_reachable`` flip. The boot-splash QMessageBox (a child
+    // of main_window_, dismissed when the launch fires or the user
+    // cancels) is owned by Qt's parent tree.
+    QString pending_launch_id_;
 };
 
 }  // namespace lsw::manager

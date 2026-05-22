@@ -1,11 +1,15 @@
 #include "lsw/manager/ui/manager/window_view.hpp"
 
+#include "lsw/manager/ui/manager/taskbar_entry.hpp"
 #include "lsw/manager/vm/agent_rpc_client.hpp"
 
 #include <QByteArray>
+#include <QGuiApplication>
+#include <QIcon>
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QPixmap>
 #include <QResizeEvent>
 #include <QShowEvent>
 #include <QWheelEvent>
@@ -15,6 +19,12 @@
 #include <cmath>
 
 #include <nlohmann/json.hpp>
+
+#if LSW_HAVE_XCB
+// QNativeInterface::QX11Application is the public Qt 6.2+ entry point
+// for the X11 connection; no Qt private headers required.
+#include <xcb/xcb.h>
+#endif
 
 namespace lsw::manager::ui::manager {
 
@@ -258,6 +268,48 @@ const char* ht_name(int ht) {
     }
 }
 
+// Stamp an X11 WM_CLASS pair (instance, class) on the window so the
+// Linux taskbar / Alt-Tab indexer treats each mirror as a separate
+// app entry instead of grouping every mirror under "lsw-manager".
+//
+// Qt sets WM_CLASS once at native-window creation from
+// ``QGuiApplication::applicationName()``, which is process-wide and
+// therefore identical across mirrors — that's the grouping. We
+// overwrite it post-creation per-window so KWin / Mutter / wmctrl
+// see distinct identities. ICCCM WM_CLASS layout is
+// ``instance\0class\0`` (two NUL-terminated Latin-1 strings).
+//
+// No-op on non-X11 (Wayland, offscreen): Wayland's xdg_toplevel
+// app_id is set process-wide by Qt and we don't poke its private
+// API here. KWin Wayland users who want ungrouping will need to
+// match on title / desktop file name instead.
+void apply_per_window_wm_class(QWindow* qwin, const QString& key) {
+    if (qwin == nullptr) return;
+#if LSW_HAVE_XCB
+    auto* x11 = qApp->nativeInterface<QNativeInterface::QX11Application>();
+    if (x11 == nullptr) return;  // Wayland / offscreen
+    xcb_connection_t* conn = x11->connection();
+    if (conn == nullptr) return;
+    const auto win = static_cast<xcb_window_t>(qwin->winId());
+    if (win == 0) return;
+    const QByteArray u8 = key.toLatin1();
+    QByteArray data;
+    data.reserve(u8.size() * 2 + 2);
+    data.append(u8);
+    data.append('\0');
+    data.append(u8);
+    data.append('\0');
+    xcb_change_property(conn, XCB_PROP_MODE_REPLACE, win,
+                        XCB_ATOM_WM_CLASS, XCB_ATOM_STRING, 8,
+                        static_cast<std::uint32_t>(data.size()),
+                        data.constData());
+    xcb_flush(conn);
+#else
+    Q_UNUSED(qwin);
+    Q_UNUSED(key);
+#endif
+}
+
 }  // namespace
 
 WindowView::WindowView(vm::AgentRpcClient& rpc, std::uint64_t hwnd,
@@ -424,6 +476,44 @@ WindowView::WindowView(vm::AgentRpcClient& rpc, std::uint64_t hwnd,
     w->setFuture(QtConcurrent::run([this, qhwnd] {
         return rpc_.call(nlohmann::json{
             {"cmd", "window_props"}, {"params", {{"hwnd", qhwnd}}}});
+    }));
+
+    // Per-window icon: fire-and-forget RPC, applied via setWindowIcon
+    // once the PNG arrives. Runs in parallel with window_props so the
+    // window can show before the icon lands; the taskbar entry will
+    // refresh in place when the icon update reaches the WM. The agent
+    // path uses Gdiplus::Bitmap::FromHICON so the PNG carries the
+    // icon's real alpha channel (transparent corners, not black).
+    auto* iconw = new QFutureWatcher<QByteArray>(this);
+    connect(iconw, &QFutureWatcher<QByteArray>::finished, this,
+            [this, iconw] {
+        const QByteArray reply = iconw->result();
+        iconw->deleteLater();
+        try {
+            const auto j = nlohmann::json::parse(reply.constData(),
+                                                  reply.constData()
+                                                      + reply.size());
+            const auto b64 = j.value("icon_png_base64", std::string{});
+            const auto png = b64.empty()
+                ? QByteArray{}
+                : QByteArray::fromBase64(QByteArray::fromStdString(b64));
+            // setWindowIcon is the X11 path (writes _NET_WM_ICON). On
+            // Wayland the call is a no-op — the taskbar resolves icons
+            // by mapping ``xdg_toplevel.app_id`` to a .desktop file's
+            // ``Icon=`` field. We do both: setWindowIcon for X11 and
+            // write a per-window .desktop + PNG for Wayland.
+            if (!png.isEmpty()) {
+                QPixmap pm;
+                if (pm.loadFromData(png, "PNG")) {
+                    setWindowIcon(QIcon(pm));
+                }
+            }
+            TaskbarEntry::register_window(hwnd_, windowTitle(), png);
+        } catch (const nlohmann::json::exception&) {}
+    });
+    iconw->setFuture(QtConcurrent::run([this, qhwnd] {
+        return rpc_.call(nlohmann::json{
+            {"cmd", "get_window_icon"}, {"params", {{"hwnd", qhwnd}}}});
     }));
 }
 
@@ -786,6 +876,11 @@ WindowView::~WindowView() {
         drag_event_token_ = 0;
     }
     rpc_.unsubscribe_window(hwnd_);
+    // Drop the per-window .desktop + cached icon PNG. Done in the
+    // dtor (not guest_closed) so the entry survives the host-driven
+    // "user clicked X" path where the mirror sticks around until the
+    // guest actually acknowledges WM_CLOSE.
+    TaskbarEntry::unregister_window(hwnd_);
 }
 
 void WindowView::guest_closed() {
@@ -857,6 +952,38 @@ void WindowView::on_frame(std::uint64_t hwnd, QImage image) {
         if (want != size()) {
             sizing_to_frame_ = true;
             resize(want);
+        }
+        if (anchor_set_ && !owner_view_.isNull()) {
+            // Recompute popup_anchor_ from CURRENT owner state on
+            // every frame, not just at showEvent. When a popup is
+            // detected in the same list_windows tick as its owner
+            // (Notepad sometimes pops a Find dialog right after the
+            // main window appears), spawn_view fires show() on the
+            // popup while the owner's first frame hasn't arrived yet
+            // and the compositor hasn't configured the owner's
+            // surface, so owner_view_->mapToGlobal returns a default
+            // position and image_ is null → wrong scale + wrong
+            // origin → popup lands at the wrong place. By the time
+            // the popup's own first frame arrives, the owner has
+            // typically stabilised; redoing the math here picks up
+            // the correct anchor. Wayland xdg_popup.reposition (Qt
+            // 6.5+) honours the post-show move(), so the user sees
+            // the corrected position rather than the stale one.
+            double sx = 1.0;
+            double sy = 1.0;
+            if (!owner_view_->image_.isNull()) {
+                const QRect ofr = owner_view_->compute_frame_rect();
+                if (owner_view_->image_.width() > 0 && ofr.width() > 0) {
+                    sx = double(ofr.width()) / owner_view_->image_.width();
+                }
+                if (owner_view_->image_.height() > 0 && ofr.height() > 0) {
+                    sy = double(ofr.height()) / owner_view_->image_.height();
+                }
+            }
+            const QPoint origin = owner_view_->mapToGlobal(QPoint(0, 0));
+            popup_anchor_ = origin + QPoint(
+                static_cast<int>(std::lround(pending_rel_guest_px_.x() * sx)),
+                static_cast<int>(std::lround(pending_rel_guest_px_.y() * sy)));
         }
         if (anchor_set_) {
             move(popup_anchor_ + content_rect_.topLeft());
@@ -1038,6 +1165,25 @@ void WindowView::changeEvent(QEvent* e) {
             pv->guest_closed();
         }
     }
+}
+
+void WindowView::setVisible(bool visible) {
+    // Only toggle the global app id around the FIRST show, when no
+    // native window exists yet. Subsequent show/hide cycles reuse the
+    // existing toplevel — its app_id is already locked from the first
+    // pass, so toggling again would be both wasteful and racy.
+    if (visible && windowHandle() == nullptr) {
+        const QString unique = QStringLiteral("lsw-window-%1").arg(hwnd_);
+        const QString prev = QGuiApplication::desktopFileName();
+        QGuiApplication::setDesktopFileName(unique);
+        QWidget::setVisible(true);
+        QGuiApplication::setDesktopFileName(prev);
+        // X11 path: WM_CLASS can be updated after creation and most
+        // EWMH-compliant compositors re-read it. No-op on Wayland.
+        apply_per_window_wm_class(windowHandle(), unique);
+        return;
+    }
+    QWidget::setVisible(visible);
 }
 
 void WindowView::showEvent(QShowEvent* e) {

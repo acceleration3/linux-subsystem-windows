@@ -1,16 +1,26 @@
 #include "lsw/manager/app.hpp"
 
 #include "lsw/log.hpp"
+#include "lsw/manager/apps/desktop_launcher.hpp"
+#include "lsw/manager/apps/launcher.hpp"
 #include "lsw/manager/install/wim_editions.hpp"
 #include "lsw/manager/mcp/mcp_server.hpp"
+#include "lsw/manager/ui/manager/app_window_watcher.hpp"
 #include "lsw/manager/ui/manager/main_window.hpp"
+#include "lsw/manager/ui/manager/taskbar_entry.hpp"
 #include "lsw/manager/ui/wizard/wizard.hpp"
 #include "lsw/manager/wizard/microsoft_resolver.hpp"
 #include "lsw/manager/wizard/pipeline.hpp"
 
+#include <QCursor>
 #include <QDir>
+#include <QGuiApplication>
+#include <QMessageBox>
 #include <QMetaEnum>
+#include <QPointer>
+#include <QScreen>
 #include <QTextStream>
+#include <QTimer>
 #include <libvirt/libvirt.h>
 
 #include <cstdio>
@@ -32,6 +42,20 @@ App::App(int& argc, char** argv)
     setApplicationName("lsw-manager");
     setOrganizationName("lsw");
     setOrganizationDomain("lsw");
+    // Wipe any per-window XDG launcher entries left over from a
+    // previous manager run that crashed or was SIGKILL'd before its
+    // WindowView dtors could fire. Each entry is one Plasma Task
+    // Manager / GNOME Shell sidebar slot, so leftover files surface
+    // as ghost icons that resolve to nothing.
+    ui::manager::TaskbarEntry::cleanup_stale_entries();
+    // Sync the host's XDG menu with whatever app configs we already
+    // have on disk from previous runs — covers the case where the
+    // user opens an .desktop entry that's been there for a while
+    // without first opening the manager UI.
+    apps::DesktopLauncher::sync(app_configs_.configs());
+    connect(&app_configs_, &apps::AppConfigStore::changed, this, [this] {
+        apps::DesktopLauncher::sync(app_configs_.configs());
+    });
     // We turn this OFF only once a real, tray-backed main window is up
     // (see ``show_main_window``). During the wizard phase we keep it ON
     // so closing/cancelling the wizard actually exits the process —
@@ -40,14 +64,27 @@ App::App(int& argc, char** argv)
     setQuitOnLastWindowClosed(true);
 
     connect(&single_instance_, &SingleInstance::raise_requested, this, &App::on_raise_request);
+    connect(&single_instance_, &SingleInstance::launch_app_requested, this,
+            &App::on_launch_app_request);
 }
 
 App::~App() = default;
 
 int App::run() {
     if (!single_instance_.acquire()) {
-        LSW_INFO("another lsw-manager is already running; raising it");
-        (void)single_instance_.raise_existing();
+        // Another manager owns the DBus name. If we were invoked with
+        // ``--launch <id>`` (an XDG launcher click on a guest app
+        // entry), forward the id over to that running instance and
+        // exit — the primary will pop the splash + drive the VM. Bare
+        // re-invocations just raise the existing window.
+        if (!cli_.launch_app_id.isEmpty()) {
+            LSW_INFO("forwarding --launch to running manager: {}",
+                     cli_.launch_app_id.toStdString());
+            (void)single_instance_.launch_app_existing(cli_.launch_app_id);
+        } else {
+            LSW_INFO("another lsw-manager is already running; raising it");
+            (void)single_instance_.raise_existing();
+        }
         return 0;
     }
     if (!settings_.ensure_directories()) {
@@ -70,6 +107,16 @@ int App::run() {
         show_wizard();
     } else {
         show_main_window();
+    }
+    // If we were invoked as ``lsw-manager --launch <id>`` and there's
+    // no other manager running, we're the primary and we own the
+    // launch ourselves. Defer to a queued slot so the event loop is
+    // up and the main window has shown (the splash needs a parent).
+    if (!cli_.launch_app_id.isEmpty()) {
+        const QString id = cli_.launch_app_id;
+        QMetaObject::invokeMethod(this,
+            [this, id] { on_launch_app_request(id); },
+            Qt::QueuedConnection);
     }
     return exec();
 }
@@ -141,6 +188,149 @@ void App::on_raise_request() {
         wizard_->raise();
         wizard_->activateWindow();
     }
+}
+
+void App::on_launch_app_request(const QString& app_id) {
+    // Reject if there's no defined VM — we can't launch into nothing.
+    // Logs only; the .desktop entries we wrote should match real apps
+    // from a successful install.
+    if (vms_.records().isEmpty()) {
+        LSW_WARN("launch_app({}): no VM defined", app_id.toStdString());
+        return;
+    }
+    // Resolve AppConfig id → guest Windows path. The .desktop entries
+    // ship the stable id (sha1-prefix of path) in their ``Exec=``
+    // because that's robust to spaces/backslashes and survives the
+    // app moving on the guest side. The agent's launch RPC needs the
+    // actual path string.
+    const auto* cfg = app_configs_.find(app_id);
+    if (cfg == nullptr || cfg->path.isEmpty()) {
+        LSW_WARN("launch_app({}): no matching config (was the manager "
+                 "ever run with this app installed in the guest?)",
+                 app_id.toStdString());
+        return;
+    }
+    const QString launch_path = cfg->path;
+    const QUuid uuid = vms_.records().first().uuid;
+
+    // Intentionally do NOT show the main window — the user clicked an
+    // XDG launcher to open a guest app, not to bring up the manager.
+    // We just need the splash + the eventual mirror window.
+
+    // Wire the rpc channel to the VM if it hasn't been already. The
+    // main window's set_target normally does this — but the window
+    // may never be shown for this launch path.
+    if (!rpc_.has_target()) {
+        if (auto* rec = vms_.find(uuid); rec != nullptr) {
+            rpc_.set_target(rec->vsock_cid, 5102);
+        }
+    }
+
+    // Fire-and-track helper. Without the AppWindowWatcher spawn,
+    // the agent dutifully ``CreateProcessW``-es the app inside the
+    // guest but no host-side mirror appears — the watcher is what
+    // turns up host WindowViews when the new PID's windows surface.
+    auto fire_launch = [this](const QString& path) {
+        auto* launcher = new apps::Launcher(rpc_, this);
+        connect(launcher, &apps::Launcher::launched, this,
+                [this, launcher](const QString& reported_path, quint32 pid) {
+            launcher->deleteLater();
+            if (pid == 0) {
+                LSW_WARN("launch_app: agent returned pid=0 — old agent?");
+                return;
+            }
+            // Derive an exe basename for the watcher's packaged/alias
+            // matching. Path has Windows backslashes; mimic
+            // AppListWidget::on_launched.
+            const qsizetype sep = std::max(
+                reported_path.lastIndexOf(QLatin1Char('\\')),
+                reported_path.lastIndexOf(QLatin1Char('/')));
+            const QString exe_basename =
+                sep < 0 ? reported_path : reported_path.mid(sep + 1);
+            auto* w = new ui::manager::AppWindowWatcher(
+                rpc_, pid, exe_basename, this);
+            // The watcher self-destructs when its idle timer expires
+            // (no live mirrors AND no matching guest windows).
+            connect(w, &ui::manager::AppWindowWatcher::exhausted, w,
+                    &QObject::deleteLater);
+            w->start();
+        });
+        connect(launcher, &apps::Launcher::failed, launcher,
+                [launcher](const QString& id, const QString& err) {
+                    LSW_WARN("launch_app({}) failed: {}",
+                             id.toStdString(), err.toStdString());
+                    launcher->deleteLater();
+                });
+        launcher->launch(path);
+    };
+
+    // Fast path: agent already reachable → fire the launch RPC now.
+    if (monitor_.latest(uuid).agent_reachable) {
+        LSW_INFO("launch_app({}): firing immediately path={}",
+                 app_id.toStdString(), launch_path.toStdString());
+        fire_launch(launch_path);
+        return;
+    }
+
+    // Cold start. Show a non-modal "Starting Windows..." dialog and
+    // start the VM if libvirt thinks it's down. Stash the id; the
+    // monitor's next agent_reachable=true flip drives the actual RPC.
+    pending_launch_id_ = app_id;
+    if (!lifecycle_.is_running(uuid)) {
+        const int rc = lifecycle_.start(uuid);
+        if (rc != 0) {
+            LSW_WARN("launch_app({}): lifecycle.start rc={}",
+                     app_id.toStdString(), rc);
+        }
+    }
+    monitor_.watch(uuid);
+
+    // Parentless top-level so the splash isn't tied to the (possibly
+    // hidden) main window, and so it appears in its own taskbar slot.
+    // Centred on whichever screen the cursor is on at the moment of
+    // the click — primaryScreen fallback if the cursor query fails.
+    auto* splash = new QMessageBox(nullptr);
+    splash->setWindowTitle(QStringLiteral("LSW"));
+    splash->setIcon(QMessageBox::Information);
+    splash->setText(QStringLiteral("Starting Windows…"));
+    splash->setInformativeText(
+        QStringLiteral("Waiting for the LSW VM to become ready before launching\n"
+                       "%1.").arg(app_id));
+    splash->setStandardButtons(QMessageBox::Cancel);
+    splash->setModal(false);
+    splash->setAttribute(Qt::WA_DeleteOnClose);
+    QScreen* screen = QGuiApplication::screenAt(QCursor::pos());
+    if (screen == nullptr) screen = QGuiApplication::primaryScreen();
+    if (screen != nullptr) {
+        // QMessageBox sizes itself when first shown. Defer the centre
+        // step to the next event-loop tick so geometry() is populated;
+        // adjustSize() forces the recompute pre-show so the first
+        // frame already lands centred (no flicker reposition).
+        splash->adjustSize();
+        const QRect avail = screen->availableGeometry();
+        splash->move(avail.center() - splash->rect().center());
+    }
+    QPointer<QMessageBox> splash_ptr(splash);
+
+    // The monitor emits stats_updated periodically. Wait for the
+    // first reachable flip (or splash Cancel), then fire the launch.
+    auto* conn = new QObject(this);
+    connect(&monitor_, &vm::Monitor::stats_updated, conn,
+            [this, conn, uuid, app_id, launch_path, splash_ptr, fire_launch]
+            (const QUuid& u, const vm::VmStats& s) {
+        if (u != uuid || !s.agent_reachable) return;
+        if (pending_launch_id_ != app_id) return;  // user cancelled / superseded
+        pending_launch_id_.clear();
+        if (splash_ptr) splash_ptr->close();
+        fire_launch(launch_path);
+        conn->deleteLater();
+    });
+    connect(splash, &QMessageBox::rejected, conn,
+            [this, conn, app_id] {
+        if (pending_launch_id_ == app_id) pending_launch_id_.clear();
+        conn->deleteLater();
+    });
+    splash->show();
 }
 
 namespace {

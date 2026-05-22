@@ -26,6 +26,12 @@ struct CliOptions {
     int cpu_cores = -1;      // --cpu N
     int memory_mib = -1;     // --memory MIB
     int disk_gib = -1;       // --disk GIB
+    // --launch <app-id>: invoked by the XDG launcher entries we drop
+    // into ~/.local/share/applications. The second process forwards
+    // this to the running manager via SingleInstance and exits; if no
+    // manager is running, we self-host (start the VM, run the launch
+    // RPC, then keep the manager up).
+    QString launch_app_id;
 
     // True iff any wizard-driving flag was supplied. We treat this as
     // "the user asked us to skip past everything we can" — pages with

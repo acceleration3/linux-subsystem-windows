@@ -7,6 +7,7 @@
 #include "lsw/manager/iso/catalog.hpp"
 #include "lsw/manager/install/post_install.hpp"
 #include "lsw/manager/vm/agent_rpc_client.hpp"
+#include "lsw/manager/vm/dolphin_places.hpp"
 #include "lsw/manager/vm/domain_xml.hpp"
 #include "lsw/manager/vm/lifecycle.hpp"
 #include "setup_steps_template.hpp"
@@ -393,6 +394,13 @@ void Pipeline::build_payload_iso() {
     au.user_name = inputs_.user_name;
     au.user_password = inputs_.user_password;
     au.image_index = inputs_.image_index;
+
+    // Register a Dolphin Places bookmark pointing at the guest's
+    // C$ share via KIO's userspace smb:// worker. No kernel cifs
+    // mount → no junction auto-submount pollution in Dolphin's
+    // Remote sidebar; one click in Dolphin opens C:\ live.
+    (void)vm::DolphinPlaces::register_windows_bookmark(
+        inputs_.user_name, inputs_.user_password);
 
     install::PayloadInputs pi;
     pi.output_iso_path =
