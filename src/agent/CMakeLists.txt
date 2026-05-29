@@ -27,6 +27,14 @@ if(NOT WIN32)
     return()
 endif()
 
+# .rc compiler (windres on mingw) — needed to embed the UAC manifest
+# resource so Windows auto-elevates the agent at launch. Without it
+# the agent inherits the wizard user's filtered (Medium-integrity)
+# token via HKLM\Run; with it the agent runs High-integrity silently
+# (UAC config in the autounattend is ConsentPromptBehaviorAdmin=0 +
+# PromptOnSecureDesktop=0, so no prompt is shown).
+enable_language(RC)
+
 # Sources are grouped by module — each subdirectory is one feature
 # area. Adding a new RPC handler in Phase 4+ means a new TU under
 # src/rpc/handlers/<category>/<name>.cpp; that TU gets listed here
@@ -39,6 +47,7 @@ set(_lsw_agent_core_sources
 )
 set(_lsw_agent_transport_sources
     src/transport/host_endpoint.cpp
+    src/transport/shmem.cpp
 )
 set(_lsw_agent_rpc_sources
     src/rpc/registry.cpp
@@ -120,6 +129,7 @@ add_executable(lsw-guest-agent
     ${_lsw_agent_install_sources}
     ${_lsw_agent_console_sources}
     ${_lsw_agent_system_sources}
+    manifest/lsw-guest-agent.rc
 )
 
 # Build stamp: regenerated EVERY build so agent_version always
@@ -160,6 +170,8 @@ target_link_libraries(lsw-guest-agent
         runtimeobject # WinRT (RoInitialize / RoGetActivationFactory)
         d3d11         # WGC capture device
         dxgi          # DXGI device interop for WGC
+        setupapi      # SetupDi* — locate the IVSHMEM PCI device
+        cfgmgr32      # CM_* helpers used by setupapi
         ole32         # COM (CoInitializeEx / CoCreateInstance for UIA)
         oleaut32      # COM BSTR/VARIANT used by UIA
         uuid          # CLSID_CUIAutomation, IID_IUIAutomation*

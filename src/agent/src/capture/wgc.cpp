@@ -7,8 +7,8 @@
 
 #include "lsw/agent/capture/wgc.hpp"
 
-#include "lsw/agent/win/gdi.hpp"
 #include "lsw/agent/log.hpp"
+#include "lsw/agent/transport/shmem.hpp"
 
 // clang-format off
 #include <windows.h>
@@ -17,7 +17,6 @@
 #include <d3d11.h>
 #include <dxgi1_2.h>
 #include <objidl.h>
-#include <gdiplus.h>
 #include <wrl/client.h>
 #include <wrl/wrappers/corewrappers.h>
 // Only the capture headers — they transitively pull the exact
@@ -28,6 +27,7 @@
 #include <windows.graphics.capture.interop.h>
 // clang-format on
 
+#include <cstdio>
 #include <cstring>
 #include <map>
 #include <mutex>
@@ -65,6 +65,19 @@ bool g_init_ok = false;
 ComPtr<ID3D11Device> g_d3d;
 ComPtr<ID3D11DeviceContext> g_ctx;
 ComPtr<WGD3D::IDirect3DDevice> g_rt_device;
+LARGE_INTEGER g_qpc_freq{};
+
+inline LONGLONG qpc_now() {
+    LARGE_INTEGER li{};
+    ::QueryPerformanceCounter(&li);
+    return li.QuadPart;
+}
+inline std::uint64_t qpc_to_us(LONGLONG d) {
+    if (g_qpc_freq.QuadPart == 0) return 0;
+    return static_cast<std::uint64_t>(
+        (static_cast<double>(d) * 1'000'000.0)
+        / static_cast<double>(g_qpc_freq.QuadPart));
+}
 
 struct Session {
     ComPtr<WGC::IGraphicsCaptureItem> item;
@@ -74,7 +87,23 @@ struct Session {
     UINT staging_w = 0;
     UINT staging_h = 0;
     SizeInt32 pool_size{0, 0};  // size the frame pool was (re)created at
-    std::vector<std::uint8_t> last_png;  // serve while waiting for a frame
+    int shmem_slot = -1;         // index in transport::shmem allocator
+
+    // Rolling 1-second stats window. Reset after each emit.
+    LONGLONG stats_window_start_qpc = 0;
+    std::uint64_t calls = 0;          // total grab() calls
+    std::uint64_t delivered = 0;      // grabs that committed a fresh frame
+    std::uint64_t cached = 0;         // grabs where no new frame was queued
+    std::uint64_t errors = 0;         // grabs that hit a failure path
+    std::uint64_t drained = 0;        // frames discarded by drain-to-newest
+    std::uint64_t recreates = 0;      // frame-pool recreates (size change)
+    std::uint64_t over_60 = 0;        // delivered grabs with total > 16.667 ms
+    std::uint64_t over_30 = 0;        // delivered grabs with total > 33.333 ms
+    // Per-stage sums + maxes (us), denominator is `delivered`.
+    std::uint64_t t_copy_sum_us  = 0, t_copy_max_us  = 0;
+    std::uint64_t t_map_sum_us   = 0, t_map_max_us   = 0;
+    std::uint64_t t_write_sum_us = 0, t_write_max_us = 0;
+    std::uint64_t t_grab_sum_us  = 0, t_grab_max_us  = 0;
 };
 
 std::map<HWND, Session> g_sessions;
@@ -84,6 +113,7 @@ bool init_locked() {
         return g_init_ok;
     }
     g_init_done = true;
+    ::QueryPerformanceFrequency(&g_qpc_freq);
     // The agent never called RoInitialize; multi-threaded apartment.
     // S_FALSE / RPC_E_CHANGED_MODE are both fine.
     ::RoInitialize(RO_INIT_MULTITHREADED);
@@ -136,6 +166,9 @@ Session* ensure_session_locked(HWND hwnd) {
     // agent crash). Reuse keeps it stable and is far cheaper.
     for (auto i = g_sessions.begin(); i != g_sessions.end();) {
         if (::IsWindow(i->first) == FALSE) {
+            if (i->second.shmem_slot >= 0) {
+                transport::shmem().free_slot(i->second.shmem_slot);
+            }
             i = g_sessions.erase(i);
         } else {
             ++i;
@@ -195,94 +228,134 @@ Session* ensure_session_locked(HWND hwnd) {
     if (FAILED(s.session->StartCapture())) {
         return nullptr;
     }
+    s.stats_window_start_qpc = qpc_now();
     auto res = g_sessions.emplace(hwnd, std::move(s));
     return &res.first->second;
 }
 
-// PNG-encode a tight BGRA (straight-alpha) buffer.
-std::vector<std::uint8_t> encode_bgra_png(const std::uint8_t* bgra, int w,
-                                          int h) {
-    gdi::ensure_gdiplus();
-    Gdiplus::Bitmap bmp(w, h, w * 4, PixelFormat32bppARGB,
-                        const_cast<BYTE*>(bgra));
-    CLSID clsid;
-    UINT num = 0;
-    UINT size = 0;
-    Gdiplus::GetImageEncodersSize(&num, &size);
-    if (size == 0) {
-        return {};
+// Emit + reset the rolling stats window if at least 1 s has elapsed.
+// Caller holds g_mu.
+void maybe_emit_stats_locked(HWND hwnd, Session& s) {
+    if (g_qpc_freq.QuadPart == 0 || s.stats_window_start_qpc == 0) {
+        return;
     }
-    auto* info = static_cast<Gdiplus::ImageCodecInfo*>(
-        ::HeapAlloc(::GetProcessHeap(), 0, size));
-    Gdiplus::GetImageEncoders(num, size, info);
-    bool found = false;
-    for (UINT i = 0; i < num; ++i) {
-        if (wcscmp(info[i].MimeType, L"image/png") == 0) {
-            clsid = info[i].Clsid;
-            found = true;
-            break;
-        }
+    const LONGLONG now = qpc_now();
+    const double secs = static_cast<double>(now - s.stats_window_start_qpc)
+                        / static_cast<double>(g_qpc_freq.QuadPart);
+    if (secs < 1.0) {
+        return;
     }
-    ::HeapFree(::GetProcessHeap(), 0, info);
-    if (!found) {
-        return {};
-    }
-    IStream* stream = nullptr;
-    ::CreateStreamOnHGlobal(nullptr, TRUE, &stream);
-    bmp.Save(stream, &clsid, nullptr);
-    HGLOBAL hg = nullptr;
-    ::GetHGlobalFromStream(stream, &hg);
-    const SIZE_T sz = ::GlobalSize(hg);
-    std::vector<std::uint8_t> png(sz);
-    if (void* p = ::GlobalLock(hg); p != nullptr) {
-        std::memcpy(png.data(), p, sz);
-        ::GlobalUnlock(hg);
-    }
-    stream->Release();
-    return png;
+    auto avg_ms = [](std::uint64_t sum, std::uint64_t n) {
+        return n == 0 ? 0.0
+                      : (static_cast<double>(sum) / static_cast<double>(n))
+                            / 1000.0;
+    };
+    const double produced_rate =
+        static_cast<double>(s.delivered + s.drained) / secs;
+    char buf[768];
+    std::snprintf(buf, sizeof(buf),
+        "wgc[hwnd=0x%llx]: poll=%.1f/s produced=%.1f/s deliver=%.1f/s "
+        "cache=%.1f/s drained=%.2f/s recreates=%llu err=%llu | "
+        "copy=%.2f/%.2fms map=%.2f/%.2fms write=%.2f/%.2fms "
+        "grab=%.2f/%.2fms | over60=%llu over30=%llu",
+        static_cast<unsigned long long>(reinterpret_cast<std::uintptr_t>(hwnd)),
+        static_cast<double>(s.calls) / secs,
+        produced_rate,
+        static_cast<double>(s.delivered) / secs,
+        static_cast<double>(s.cached) / secs,
+        static_cast<double>(s.drained) / secs,
+        static_cast<unsigned long long>(s.recreates),
+        static_cast<unsigned long long>(s.errors),
+        avg_ms(s.t_copy_sum_us, s.delivered),
+        static_cast<double>(s.t_copy_max_us) / 1000.0,
+        avg_ms(s.t_map_sum_us, s.delivered),
+        static_cast<double>(s.t_map_max_us) / 1000.0,
+        avg_ms(s.t_write_sum_us, s.delivered),
+        static_cast<double>(s.t_write_max_us) / 1000.0,
+        avg_ms(s.t_grab_sum_us, s.delivered),
+        static_cast<double>(s.t_grab_max_us) / 1000.0,
+        static_cast<unsigned long long>(s.over_60),
+        static_cast<unsigned long long>(s.over_30));
+    LSW_AGENT_INFO(std::string(buf));
+
+    s.stats_window_start_qpc = now;
+    s.calls = s.delivered = s.cached = s.errors = 0;
+    s.drained = s.recreates = 0;
+    s.over_60 = s.over_30 = 0;
+    s.t_copy_sum_us = s.t_copy_max_us = 0;
+    s.t_map_sum_us = s.t_map_max_us = 0;
+    s.t_write_sum_us = s.t_write_max_us = 0;
+    s.t_grab_sum_us = s.t_grab_max_us = 0;
+}
+
+inline void bump_stage(std::uint64_t& sum, std::uint64_t& mx,
+                       std::uint64_t us) {
+    sum += us;
+    if (us > mx) mx = us;
 }
 
 // Pull one frame, crop to client area, un-premultiply. ``stats`` (if
-// non-null) gets an alpha histogram instead of producing a PNG.
-std::vector<std::uint8_t> grab(HWND hwnd, bool& ok, std::string* stats) {
-    ok = false;
+// Returns true if the window still exists (caller keeps the
+// subscription); false if it's gone (host_endpoint should emit
+// frame_gone and drop the sub). Side effect: commits BGRA frames
+// into the shmem slot owned by ``s`` and rings the doorbell.
+bool grab(HWND hwnd) {
     std::lock_guard<std::mutex> lock(g_mu);
     if (!init_locked()) {
-        return {};
+        return false;
     }
     if (::IsWindow(hwnd) == FALSE) {
-        g_sessions.erase(hwnd);  // window gone — reap its session now
-        return {};
+        // Window gone — release any slot we owned for it.
+        if (auto it = g_sessions.find(hwnd); it != g_sessions.end()) {
+            if (it->second.shmem_slot >= 0) {
+                transport::shmem().free_slot(it->second.shmem_slot);
+            }
+            g_sessions.erase(it);
+        }
+        return false;
     }
     Session* s = ensure_session_locked(hwnd);
     if (s == nullptr) {
-        return {};
+        return true;  // transient failure (no D3D / shmem) — keep sub
     }
-    // NEVER sleep here — this runs on the agent's single-threaded
-    // host loop. Drain the free-threaded pool to the NEWEST queued
-    // frame (non-blocking) and discard older ones so latency can't
-    // accumulate; if nothing is ready yet, serve the cached frame and
-    // return immediately. (The old Sleep-retry blocked the loop up to
-    // 50 ms per window per tick — that was the lag.)
+
+    const LONGLONG t_grab_start = qpc_now();
+    ++s->calls;
+
+    enum class Outcome { Delivered, Cached, Error };
+    auto finalize = [&](Outcome oc) {
+        const std::uint64_t total_us = qpc_to_us(qpc_now() - t_grab_start);
+        bump_stage(s->t_grab_sum_us, s->t_grab_max_us, total_us);
+        switch (oc) {
+            case Outcome::Delivered:
+                ++s->delivered;
+                if (total_us > 16'667) ++s->over_60;
+                if (total_us > 33'333) ++s->over_30;
+                break;
+            case Outcome::Cached: ++s->cached; break;
+            case Outcome::Error:  ++s->errors; break;
+        }
+        maybe_emit_stats_locked(hwnd, *s);
+    };
+
+    // Drain to newest queued frame; discard older ones so latency
+    // can't accumulate across slow ticks.
     ComPtr<WGC::IDirect3D11CaptureFrame> frame;
     for (;;) {
         ComPtr<WGC::IDirect3D11CaptureFrame> next;
         s->pool->TryGetNextFrame(&next);
-        if (!next) {
-            break;
-        }
+        if (!next) break;
+        if (frame) ++s->drained;
         frame = std::move(next);
     }
     if (!frame) {
-        ok = !s->last_png.empty();
-        return s->last_png;  // no new frame this tick — reuse last
+        finalize(Outcome::Cached);
+        return true;
     }
 
-    // The window may have resized (we drive resize_window to match
-    // the host widget). The frame pool is fixed-size, so a stale pool
-    // clips/chops the content. When the frame's ContentSize differs,
-    // Recreate the pool at the new size and serve the cached frame
-    // this tick; the next tick captures at the correct size.
+    // Resize: recreate the pool AND free + reallocate the shmem slot
+    // so the buffer half fits the new dimensions. The next tick will
+    // commit at the new size.
     SizeInt32 cs{};
     if (SUCCEEDED(frame->get_ContentSize(&cs))
         && (cs.Width != s->pool_size.Width || cs.Height != s->pool_size.Height)
@@ -292,9 +365,19 @@ std::vector<std::uint8_t> grab(HWND hwnd, bool& ok, std::string* stats) {
                 WGD::DirectXPixelFormat_B8G8R8A8UIntNormalized, 2, cs))) {
             s->pool_size = cs;
         }
+        if (s->shmem_slot >= 0) {
+            transport::shmem().free_slot(s->shmem_slot);
+            s->shmem_slot = -1;
+        }
+        const auto info = transport::shmem().alloc_slot(
+            reinterpret_cast<std::uint64_t>(hwnd),
+            static_cast<std::uint32_t>(cs.Width),
+            static_cast<std::uint32_t>(cs.Height));
+        s->shmem_slot = info.index;
+        ++s->recreates;
         frame.Reset();
-        ok = !s->last_png.empty();
-        return s->last_png;
+        finalize(Outcome::Cached);
+        return true;
     }
     ComPtr<WGD3D::IDirect3DSurface> surface;
     frame->get_Surface(&surface);
@@ -307,7 +390,8 @@ std::vector<std::uint8_t> grab(HWND hwnd, bool& ok, std::string* stats) {
         || !access
         || FAILED(access->GetInterface(__uuidof(ID3D11Texture2D), &tex))
         || !tex) {
-        return {};
+        finalize(Outcome::Error);
+        return true;
     }
     D3D11_TEXTURE2D_DESC desc{};
     tex->GetDesc(&desc);
@@ -320,104 +404,63 @@ std::vector<std::uint8_t> grab(HWND hwnd, bool& ok, std::string* stats) {
         sd.MiscFlags = 0;
         s->staging.Reset();
         if (FAILED(g_d3d->CreateTexture2D(&sd, nullptr, &s->staging))) {
-            return {};
+            finalize(Outcome::Error);
+            return true;
         }
         s->staging_w = desc.Width;
         s->staging_h = desc.Height;
     }
+
+    const LONGLONG t_copy_start = qpc_now();
     g_ctx->CopyResource(s->staging.Get(), tex.Get());
+    const std::uint64_t t_copy_us = qpc_to_us(qpc_now() - t_copy_start);
+
+    const LONGLONG t_map_start = qpc_now();
     D3D11_MAPPED_SUBRESOURCE map{};
-    if (FAILED(g_ctx->Map(s->staging.Get(), 0, D3D11_MAP_READ, 0, &map))) {
-        return {};
+    HRESULT hr_map = g_ctx->Map(s->staging.Get(), 0, D3D11_MAP_READ, 0, &map);
+    const std::uint64_t t_map_us = qpc_to_us(qpc_now() - t_map_start);
+    if (FAILED(hr_map)) {
+        finalize(Outcome::Error);
+        return true;
+    }
+    bump_stage(s->t_copy_sum_us, s->t_copy_max_us, t_copy_us);
+    bump_stage(s->t_map_sum_us,  s->t_map_max_us,  t_map_us);
+
+    // Lazy slot allocation. ensure_session_locked may have created the
+    // session before transport::shmem was open; alloc now if needed.
+    if (s->shmem_slot < 0) {
+        const auto info = transport::shmem().alloc_slot(
+            reinterpret_cast<std::uint64_t>(hwnd), desc.Width, desc.Height);
+        s->shmem_slot = info.index;
     }
 
-    // FULL-WINDOW model: the WGC texture already spans the window's
-    // DWM extended frame bounds (the whole visible window incl. title
-    // bar / menu bar, excl. the external drop shadow) — exactly what
-    // we want to mirror. No client crop.
-    const int ox = 0;
-    const int oy = 0;
-    const int cw = static_cast<int>(desc.Width);
-    const int ch = static_cast<int>(desc.Height);
-
-    std::vector<std::uint8_t> buf(static_cast<size_t>(cw) * ch * 4);
-    const auto* base = static_cast<const std::uint8_t*>(map.pData);
-    std::uint64_t a0 = 0;
-    std::uint64_t a255 = 0;
-    std::uint64_t amid = 0;
-    for (int y = 0; y < ch; ++y) {
-        const std::uint8_t* srow = base + static_cast<size_t>(y + oy)
-                                              * map.RowPitch
-                                       + static_cast<size_t>(ox) * 4;
-        std::uint8_t* drow = buf.data() + static_cast<size_t>(y) * cw * 4;
-        for (int x = 0; x < cw; ++x) {
-            const std::uint8_t* sp = srow + x * 4;  // B,G,R,A premultiplied
-            std::uint8_t* dp = drow + x * 4;
-            const int a = sp[3];
-            if (a == 0) {
-                dp[0] = dp[1] = dp[2] = dp[3] = 0;
-                ++a0;
-            } else {
-                // Un-premultiply (WGC alpha is premultiplied).
-                for (int c = 0; c < 3; ++c) {
-                    int v = sp[c] * 255 / a;
-                    dp[c] = static_cast<std::uint8_t>(v > 255 ? 255 : v);
-                }
-                dp[3] = static_cast<std::uint8_t>(a);
-                if (a == 255) {
-                    ++a255;
-                } else {
-                    ++amid;
-                }
-            }
-        }
+    bool committed = false;
+    if (s->shmem_slot >= 0) {
+        const LONGLONG t_write_start = qpc_now();
+        committed = transport::shmem().commit_frame(
+            s->shmem_slot,
+            static_cast<const std::uint8_t*>(map.pData),
+            map.RowPitch, desc.Width, desc.Height,
+            static_cast<std::uint64_t>(qpc_now()));
+        const std::uint64_t t_write_us = qpc_to_us(qpc_now() - t_write_start);
+        bump_stage(s->t_write_sum_us, s->t_write_max_us, t_write_us);
     }
+
     g_ctx->Unmap(s->staging.Get(), 0);
     frame.Reset();
-
-    if (stats != nullptr) {
-        RECT gwr{};
-        ::GetWindowRect(hwnd, &gwr);
-        RECT efb{};
-        ::DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &efb,
-                                sizeof(efb));
-        auto r = [](const RECT& q) {
-            return std::to_string(q.left) + "," + std::to_string(q.top) + ","
-                   + std::to_string(q.right) + "," + std::to_string(q.bottom);
-        };
-        *stats = std::string{"{\"w\":"} + std::to_string(cw) + ",\"h\":"
-                 + std::to_string(ch) + ",\"a0\":" + std::to_string(a0)
-                 + ",\"a255\":" + std::to_string(a255) + ",\"amid\":"
-                 + std::to_string(amid)
-                 + ",\"tex\":\"" + std::to_string(desc.Width) + "x"
-                 + std::to_string(desc.Height) + "\""
-                 + ",\"pool\":\"" + std::to_string(s->pool_size.Width) + "x"
-                 + std::to_string(s->pool_size.Height) + "\""
-                 + ",\"winrect\":\"" + r(gwr) + "\""
-                 + ",\"efb\":\"" + r(efb) + "\""
-                 + ",\"ox\":" + std::to_string(ox) + ",\"oy\":"
-                 + std::to_string(oy) + "}";
-        ok = true;
-        return {};
-    }
-    auto png = encode_bgra_png(buf.data(), cw, ch);
-    if (!png.empty()) {
-        s->last_png = png;
-        ok = true;
-    }
-    return png;
+    finalize(committed ? Outcome::Delivered : Outcome::Error);
+    return true;
 }
 
 }  // namespace
 
 bool Wgc::available() {
     std::lock_guard<std::mutex> lock(g_mu);
-    return init_locked();
+    return init_locked() && transport::shmem().open();
 }
 
-std::vector<std::uint8_t> Wgc::capture_png(std::uintptr_t hwnd,
-                                                  bool& ok) {
-    return grab(reinterpret_cast<HWND>(hwnd), ok, nullptr);
+bool Wgc::tick_capture(std::uintptr_t hwnd) {
+    return grab(reinterpret_cast<HWND>(hwnd));
 }
 
 void Wgc::release(std::uintptr_t /*hwnd*/) {
@@ -428,20 +471,12 @@ void Wgc::release(std::uintptr_t /*hwnd*/) {
     // grab once the window is genuinely gone (IsWindow == false).
 }
 
-std::string Wgc::debug_json(std::uintptr_t hwnd) {
-    // Diagnostic only — unlike the real path it MAY block, retrying
-    // until a frame flows past session-warmup / pool-recreate so the
-    // geometry is actually reported.
-    std::string stats = "{\"err\":\"fail\"}";
-    for (int i = 0; i < 40; ++i) {
-        bool ok = false;
-        grab(reinterpret_cast<HWND>(hwnd), ok, &stats);
-        if (stats.rfind("{\"err\"", 0) != 0) {
-            break;
-        }
-        ::Sleep(15);
-    }
-    return stats;
+std::string Wgc::debug_json(std::uintptr_t /*hwnd*/) {
+    // The alpha-histogram diagnostic path is gone with the JPEG
+    // encode path. Kept as a stub so the RPC handler still links;
+    // callers should fold any future diagnostics into the per-stage
+    // stats line emitted by ``maybe_emit_stats_locked``.
+    return "{\"note\":\"debug_json retired; see wgc[hwnd=...] log lines\"}";
 }
 
 }  // namespace lsw::agent::capture

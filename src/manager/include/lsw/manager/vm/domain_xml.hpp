@@ -17,6 +17,14 @@ struct DomainXmlInputs {
     // the autounattend's PnP customizations inject viostor/vioscsi/
     // NetKVM from it so Windows installs straight onto virtio-blk.
     QString virtio_iso;
+    // IVSHMEM-doorbell chardev path the manager's ``IvshmemServer``
+    // listens on. Must exist before ``virDomainCreate`` or libvirt
+    // fails the start. Filled by ``Lifecycle::define_and_start``.
+    QString ivshmem_socket;
+    // ShmemRegion size, in MiB. Default 256 fits ~15 simultaneous
+    // 1080p mirrors (double-buffered) before the slot allocator
+    // starts refusing. Caller can override per-VM.
+    int ivshmem_size_mib = 256;
     // Retained for ABI/source stability only. There is one domain
     // template now (domain.xml, virtio-from-install); this no longer
     // selects anything.

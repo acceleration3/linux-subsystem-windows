@@ -467,108 +467,20 @@ std::string Window::capture_debug_json(std::uintptr_t hwnd_raw) {
     return out;
 }
 
-std::vector<std::uint8_t> Window::capture_client_png(std::uintptr_t hwnd_raw) {
+bool Window::tick_capture(std::uintptr_t hwnd_raw) {
     auto* hwnd = reinterpret_cast<HWND>(hwnd_raw);
     if (hwnd == nullptr || ::IsWindow(hwnd) == FALSE) {
-        return {};
+        return false;
     }
-
-    // Prefer Windows.Graphics.Capture: it gets the real DWM-composited
-    // output WITH alpha and renders DComp/XAML/flyout surfaces that
-    // PrintWindow draws as opaque black. Falls through to the
-    // PrintWindow path below if WGC is unavailable or this particular
-    // window can't be captured by it.
-    if (capture::Wgc::available()) {
-        bool ok = false;
-        auto png = capture::Wgc::capture_png(hwnd_raw, ok);
-        if (ok && !png.empty()) {
-            return png;
-        }
+    if (!capture::Wgc::available()) {
+        // IVSHMEM region not yet mapped (driver missing on a fresh
+        // VM, or post-install setup hasn't completed). Keep the
+        // subscription alive; available() will start returning true
+        // once the manager region is in place and the agent's
+        // shmem.open() succeeds.
+        return true;
     }
-    // Full-window rect (DWM extended frame bounds), matching the WGC
-    // path and enumeration — so the PrintWindow fallback mirrors the
-    // same region.
-    RECT fr{};
-    if (FAILED(::DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &fr,
-                                       sizeof(fr)))) {
-        ::GetWindowRect(hwnd, &fr);
-    }
-    const int w = fr.right - fr.left;
-    const int h = fr.bottom - fr.top;
-    if (w <= 0 || h <= 0) {
-        return {};
-    }
-
-    gdi::ensure_gdiplus();
-
-    HDC screen = ::GetDC(nullptr);
-    HDC mem = ::CreateCompatibleDC(screen);
-    // 32-bpp top-down DIB (NOT CreateCompatibleBitmap — a screen-
-    // format DDB has no alpha, so every transparent region of a WinUI
-    // menu, including the rounded corners, was flattened to opaque
-    // black). PrintWindow(PW_RENDERFULLCONTENT) on DWM/WinUI windows
-    // writes PREMULTIPLIED alpha into a 32-bpp target.
-    BITMAPINFO bi{};
-    bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    bi.bmiHeader.biWidth = w;
-    bi.bmiHeader.biHeight = -h;  // top-down
-    bi.bmiHeader.biPlanes = 1;
-    bi.bmiHeader.biBitCount = 32;
-    bi.bmiHeader.biCompression = BI_RGB;
-    void* bits = nullptr;
-    HBITMAP bmp =
-        ::CreateDIBSection(screen, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
-    std::vector<std::uint8_t> png;
-    if (bmp != nullptr && bits != nullptr) {
-        const size_t n = static_cast<size_t>(w) * h * 4;
-        std::memset(bits, 0, n);
-        HBITMAP old = static_cast<HBITMAP>(::SelectObject(mem, bmp));
-        // PW_RENDERFULLCONTENT forces DComp/WinUI windows (modern
-        // Notepad's title + tab bar, Settings, …) to re-render into
-        // the DC — the only thing that captures composited content.
-        ::PrintWindow(hwnd, mem, kPwRenderFullContent);  // full window
-        ::SelectObject(mem, old);
-
-        auto* px = static_cast<std::uint8_t*>(bits);
-        bool any_alpha = false;
-        for (size_t i = 3; i < n; i += 4) {
-            if (px[i] != 0) { any_alpha = true; break; }
-        }
-        if (!any_alpha) {
-            // Classic window: GDI never touched the alpha byte. The
-            // RGB is correct and fully opaque.
-            for (size_t i = 3; i < n; i += 4) {
-                px[i] = 255;
-            }
-        } else {
-            // WinUI/DWM: premultiplied → un-premultiply to straight
-            // alpha for the PNG so the host composites it correctly
-            // (transparent corners/padding instead of black).
-            for (size_t i = 0; i < n; i += 4) {
-                const int a = px[i + 3];
-                if (a == 0) {
-                    px[i] = px[i + 1] = px[i + 2] = 0;
-                } else if (a < 255) {
-                    for (int c = 0; c < 3; ++c) {
-                        int v = px[i + c] * 255 / a;
-                        px[i + c] =
-                            static_cast<std::uint8_t>(v > 255 ? 255 : v);
-                    }
-                }
-            }
-        }
-        Gdiplus::Bitmap bitmap(w, h, w * 4, PixelFormat32bppARGB,
-                               static_cast<BYTE*>(bits));
-        png = encode_png(bitmap);
-    }
-
-    if (bmp != nullptr) {
-        ::DeleteObject(bmp);
-    }
-    ::DeleteDC(mem);
-    ::ReleaseDC(nullptr, screen);
-
-    return png;
+    return capture::Wgc::tick_capture(hwnd_raw);
 }
 
 }  // namespace lsw::agent::win

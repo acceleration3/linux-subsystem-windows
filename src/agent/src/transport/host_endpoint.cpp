@@ -77,10 +77,10 @@ constexpr unsigned short kAgentTcpPort = 5102;
 // Capture poll tick. Caps latency on agent-initiated pushes (log,
 // installer, frames) and acts as the frame rate cap for the window
 // mirror (~30 Hz).
-constexpr int kTickMs = 33;
+constexpr int kTickMs = 16;
 
 constexpr std::uint8_t kFrameTypeControl = 1;
-constexpr std::uint8_t kFrameTypeFrame = 2;
+// type 2 (frame) retired: frames now ride IVSHMEM directly.
 constexpr std::uint8_t kFrameTypeFrameGone = 3;
 
 constexpr size_t kFrameHeaderSize = 1 + 4;  // type + length
@@ -431,32 +431,28 @@ void HostEndpoint::handle_connection(intptr_t accepted_fd) {
     };
 
     auto push_pending_frames = [&]() -> bool {
+        // The frame bytes themselves never traverse this socket
+        // anymore — ``Window::tick_capture`` commits BGRA into the
+        // IVSHMEM slot the manager mmaps directly and rings the
+        // doorbell. We only emit the small ``frame_gone`` envelope
+        // here so the manager invalidates the slot when a window
+        // dies between ticks.
         for (auto it = subscribed_windows.begin(); it != subscribed_windows.end(); ) {
             const auto hwnd = *it;
-            const auto png = win::Window::capture_client_png(
-                static_cast<std::uintptr_t>(hwnd));
-            if (png.empty()) {
-                // Window vanished — emit frame_gone, drop subscription.
-                std::uint8_t payload[8];
-                write_u64_be(payload, hwnd);
-                if (!send_envelope(kFrameTypeFrameGone, payload, sizeof(payload))) {
-                    return false;
-                }
-                LSW_AGENT_INFO(std::string{"host_endpoint: hwnd="}
-                               + std::to_string(hwnd) + " reported gone");
-                ++events_sent;
-                it = subscribed_windows.erase(it);
+            if (win::Window::tick_capture(static_cast<std::uintptr_t>(hwnd))) {
+                ++frames_sent;
+                ++it;
                 continue;
             }
-            // Build [hwnd:u64][png bytes] payload in one buffer.
-            std::vector<std::uint8_t> payload(8 + png.size());
-            write_u64_be(payload.data(), hwnd);
-            std::memcpy(payload.data() + 8, png.data(), png.size());
-            if (!send_envelope(kFrameTypeFrame, payload.data(), payload.size())) {
+            std::uint8_t payload[8];
+            write_u64_be(payload, hwnd);
+            if (!send_envelope(kFrameTypeFrameGone, payload, sizeof(payload))) {
                 return false;
             }
-            ++frames_sent;
-            ++it;
+            LSW_AGENT_INFO(std::string{"host_endpoint: hwnd="}
+                           + std::to_string(hwnd) + " reported gone");
+            ++events_sent;
+            it = subscribed_windows.erase(it);
         }
         return true;
     };

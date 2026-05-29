@@ -225,6 +225,7 @@ void VmDetailPanel::set_target(const QUuid& uuid) {
         preview_->stop();
         app_list_->clear_target();
         stats_->clear();
+        rpc_.detach_shmem();
         rpc_.clear_target();
         log_store_.clear();
         state_timer_.stop();
@@ -233,6 +234,11 @@ void VmDetailPanel::set_target(const QUuid& uuid) {
     monitor_.watch(uuid_);
     auto* rec = vms_.find(uuid_);
     if (rec != nullptr) {
+        // Bind the per-VM IVSHMEM transport BEFORE set_target so the
+        // first frame_received signal after connect routes through
+        // shmem rather than the legacy TCP envelope path.
+        rpc_.attach_shmem(lifecycle_.ivshmem_server(uuid_),
+                          lifecycle_.shmem_region(uuid_));
         rpc_.set_target(rec->vsock_cid, kAgentPort);
         const int vp = lifecycle_.vnc_port(uuid_);
         if (vp > 0) {

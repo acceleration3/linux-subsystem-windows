@@ -1,14 +1,18 @@
 // lsw-guest-agent entry point.
 //
-// Autostarted from ``HKLM\...\Run\lsw-agent`` (the value is written
-// in the autounattend's Specialize.ps1; see autounattend.xml). The
-// shell processes Run values only at a real INTERACTIVE logon — the
-// post-OOBE AutoLogon of the wizard user — so the agent runs AS THAT
-// USER, in their session (window enumeration/capture and app launch
-// are native — plain CreateProcess, no SYSTEM, no session bridging),
-// and only after OOBE, so there is no install-sentinel gate to wait
-// on. The wizard account is a local admin, so the agent is elevated
-// enough for installer setup steps.
+// Autostarted from the ``lsw-agent`` scheduled task (registered by
+// LswPromote.ps1 at SetupComplete, with LogonTrigger -User <wizard
+// SID>, LogonType InteractiveToken, RunLevel Highest). The task
+// fires the instant LSA mints the user's session token — which is
+// EARLIER than the shell coming up — so before binding our TCP
+// listener we wait on the ``C:\ProgramData\LSW\lsw-ready.flag``
+// sentinel that FirstLogon.ps1 writes as its last action. Without
+// the gate the manager's PostInstallWatcher sees ``:5102`` alive
+// while Windows is still on the OOBE "preparing your account"
+// screens and prematurely declares install done. The wizard
+// account is a local admin and the agent EXE is manifested as
+// requireAdministrator, so children inherit a full token for
+// pnputil / sc / driver work.
 
 #include "lsw/agent/core/agent_service.hpp"
 #include "lsw/agent/log.hpp"
@@ -77,10 +81,33 @@ void enable_install_privileges() {
 int wmain(int /*argc*/, wchar_t** /*argv*/) {
     ::lsw::agent::log::append(::lsw::agent::log::Level::Info,
                                "agent: process start");
-    // No install-sentinel gate: the agent autostarts from HKLM\Run,
-    // which the shell processes only at the real post-OOBE
-    // interactive logon — nothing to wait for. Admin promotion is
-    // done by LswPromote.ps1 (SetupComplete), not here.
+    // Wait for the OOBE-done sentinel before going further. Bounded
+    // so a partially-broken install (FirstLogon never ran) still
+    // gives up and starts the agent after 30 minutes — better to be
+    // reachable late than not at all. Once written the flag survives
+    // forever, so reboots and redeploy-swaps fall straight through.
+    constexpr const wchar_t* kReadyFlag =
+        L"C:\\ProgramData\\LSW\\lsw-ready.flag";
+    if (::GetFileAttributesW(kReadyFlag) == INVALID_FILE_ATTRIBUTES) {
+        ::lsw::agent::log::append(
+            ::lsw::agent::log::Level::Info,
+            "agent: waiting for lsw-ready.flag (OOBE-done sentinel)");
+        for (int i = 0; i < 1800; ++i) {
+            ::Sleep(1000);
+            if (::GetFileAttributesW(kReadyFlag) != INVALID_FILE_ATTRIBUTES) {
+                ::lsw::agent::log::append(
+                    ::lsw::agent::log::Level::Info,
+                    std::string{"agent: sentinel present after "}
+                        + std::to_string(i + 1) + "s");
+                break;
+            }
+        }
+        if (::GetFileAttributesW(kReadyFlag) == INVALID_FILE_ATTRIBUTES) {
+            ::lsw::agent::log::append(
+                ::lsw::agent::log::Level::Warn,
+                "agent: sentinel never appeared after 30 min — proceeding anyway");
+        }
+    }
     enable_install_privileges();
     return ::lsw::agent::core::AgentService::instance().run();
 }

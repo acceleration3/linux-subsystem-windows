@@ -85,6 +85,7 @@ add_library(lsw_manager STATIC
     include/lsw/manager/config/vm_state.hpp
     include/lsw/manager/vm/agent_rpc_client.hpp
     include/lsw/manager/vm/dolphin_places.hpp
+    include/lsw/manager/vm/ivshmem_server.hpp
     include/lsw/manager/vm/libvirt_conn.hpp
     include/lsw/manager/vm/lifecycle.hpp
     include/lsw/manager/vm/monitor.hpp
@@ -141,8 +142,10 @@ add_library(lsw_manager STATIC
     src/vm/libvirt_conn.cpp
     src/vm/domain_xml.cpp
     src/vm/dolphin_places.cpp
+    src/vm/ivshmem_server.cpp
     src/vm/lifecycle.cpp
     src/vm/monitor.cpp
+    src/vm/shmem_region.cpp
     src/vm/vsock.cpp
 
     src/iso/catalog.cpp

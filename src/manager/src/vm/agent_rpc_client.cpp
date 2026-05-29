@@ -1,5 +1,8 @@
 #include "lsw/manager/vm/agent_rpc_client.hpp"
 
+#include "lsw/manager/vm/ivshmem_server.hpp"
+#include "lsw/manager/vm/shmem_region.hpp"
+
 #include "lsw/log.hpp"
 
 #include <QMetaObject>
@@ -20,10 +23,10 @@ constexpr int kReconnectBackoffMs = 500;
 // Wire format — mirror of the agent's host_endpoint.cpp comment.
 //   [type:u8][len:u32-BE][payload:len bytes]
 // type=1 control (JSON payload)
-// type=2 frame   ([hwnd:u64-BE][png bytes:rest])
 // type=3 frame_gone ([hwnd:u64-BE])
+// Frame pixels travel via IVSHMEM, not this socket (see ShmemRegion /
+// IvshmemServer); type=2 is retired.
 constexpr std::uint8_t kFrameTypeControl = 1;
-constexpr std::uint8_t kFrameTypeFrame = 2;
 constexpr std::uint8_t kFrameTypeFrameGone = 3;
 constexpr std::size_t  kFrameHeaderSize = 5;
 
@@ -94,6 +97,42 @@ void AgentRpcClient::set_target(quint32 cid, quint32 port) {
 
 void AgentRpcClient::clear_target() {
     set_target(0, 0);
+}
+
+void AgentRpcClient::attach_shmem(IvshmemServer* server, ShmemRegion* region) {
+    if (shmem_server_ == server && shmem_region_ == region) {
+        return;
+    }
+    detach_shmem();
+    shmem_server_ = server;
+    shmem_region_ = region;
+    if (shmem_server_ != nullptr) {
+        connect(shmem_server_, &IvshmemServer::slot_ready, this,
+                &AgentRpcClient::on_shmem_slot_ready);
+    }
+}
+
+void AgentRpcClient::detach_shmem() {
+    if (shmem_server_ != nullptr) {
+        disconnect(shmem_server_, &IvshmemServer::slot_ready, this,
+                   &AgentRpcClient::on_shmem_slot_ready);
+        shmem_server_ = nullptr;
+    }
+    shmem_region_ = nullptr;
+}
+
+void AgentRpcClient::on_shmem_slot_ready(int slot_index) {
+    if (shmem_region_ == nullptr) {
+        return;
+    }
+    quint64 hwnd = 0;
+    QImage img;
+    if (!shmem_region_->read_slot_frame(slot_index, &hwnd, &img)) {
+        // Empty slot / race / corrupt — silently drop. The agent will
+        // doorbell again on the next frame.
+        return;
+    }
+    Q_EMIT frame_received(hwnd, std::move(img));
 }
 
 AgentRpcClient::EventToken AgentRpcClient::on_event(const QString& topic,
@@ -406,19 +445,6 @@ void AgentRpcClient::reader_loop() {
                             deliver_reply(id, std::move(body));
                         }
                     }
-                }
-            } else if (type == kFrameTypeFrame && len >= 8) {
-                const std::uint64_t hwnd = read_u64_be(payload);
-                // Raw PNG follows the 8-byte hwnd. QImage decodes it
-                // directly — no base64, no JSON.
-                QImage img;
-                img.loadFromData(
-                    reinterpret_cast<const uchar*>(payload + 8),
-                    static_cast<int>(len - 8), "PNG");
-                if (!img.isNull()) {
-                    QMetaObject::invokeMethod(
-                        this, [this, hwnd, img] { Q_EMIT frame_received(hwnd, img); },
-                        Qt::QueuedConnection);
                 }
             } else if (type == kFrameTypeFrameGone && len >= 8) {
                 const std::uint64_t hwnd = read_u64_be(payload);

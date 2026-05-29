@@ -29,19 +29,26 @@
         "kind": "download_extract",
         "url": "https://github.com/doitsujin/dxvk/releases/download/v2.7.1/dxvk-2.7.1.tar.gz",
         "extract_to": "C:\\ProgramData\\LSW\\dxvk",
-        "script": "@echo off\nrem The DXVK tarball expands to dxvk-X.Y\\x64\\*.dll and dxvk-X.Y\\x32\\*.dll under\nrem %LSW_EXTRACT_DIR%. capture_setup expects them one level higher\nrem (C:\\ProgramData\\LSW\\dxvk\\x64\\... and \\x32\\...), so flatten the versioned wrapper.\nfor /d %%D in (\"%LSW_EXTRACT_DIR%\\dxvk-*\") do (\n  xcopy /E /I /Y \"%%D\\*\" \"%LSW_EXTRACT_DIR%\\\" >nul\n  rd /s /q \"%%D\"\n)\nexit /b 0\n"
+        "script": "@echo off\nfor /d %%D in (\"%LSW_EXTRACT_DIR%\\dxvk-*\") do (\n  xcopy /E /I /Y \"%%D\\*\" \"%LSW_EXTRACT_DIR%\\\" >nul\n  rd /s /q \"%%D\"\n)\nexit /b 0\n"
       },
       {
         "name": "VKD3D-Proton 3.0.1",
         "kind": "download_extract",
         "url": "https://github.com/HansKristian-Work/vkd3d-proton/releases/download/v3.0.1/vkd3d-proton-3.0.1.tar.zst",
         "extract_to": "C:\\ProgramData\\LSW\\vkd3d",
-        "script": "@echo off\nrem VKD3D-Proton tarball expands to vkd3d-proton-X.Y\\x64\\*.dll and \\x86\\*.dll under\nrem %LSW_EXTRACT_DIR%. capture_setup wants those one level up (\\vkd3d\\x64\\ and \\vkd3d\\x86\\).\nrem .tar.zst extraction needs Win11 24H2+ (libarchive 3.6 with zstd in the in-box tar.exe).\nfor /d %%D in (\"%LSW_EXTRACT_DIR%\\vkd3d-proton-*\") do (\n  xcopy /E /I /Y \"%%D\\*\" \"%LSW_EXTRACT_DIR%\\\" >nul\n  rd /s /q \"%%D\"\n)\nexit /b 0\n"
+        "script": "@echo off\nfor /d %%D in (\"%LSW_EXTRACT_DIR%\\vkd3d-proton-*\") do (\n  xcopy /E /I /Y \"%%D\\*\" \"%LSW_EXTRACT_DIR%\\\" >nul\n  rd /s /q \"%%D\"\n)\nexit /b 0\n"
       },
       {
         "name": "Tune Windows for VM use",
         "kind": "run_script",
         "script_ref": "tune-windows"
+      },
+      {
+        "name": "IVSHMEM driver",
+        "kind": "download_extract",
+        "url": "https://looking-glass.io/artifact/stable/host",
+        "extract_to": "C:\\ProgramData\\LSW\\drivers\\ivshmem",
+        "script": "@echo off\nstart /wait \"\" \"%LSW_EXTRACT_DIR%\\looking-glass-host-setup.exe\" /S\nsc stop \"Looking Glass (host)\"\nsc delete \"Looking Glass (host)\"\nrmdir /S /Q \"C:\\Program Files\\Looking Glass (host)\"\nexit /b 0\n"
       }
     ]
   ]

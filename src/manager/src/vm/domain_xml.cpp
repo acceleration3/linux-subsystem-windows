@@ -40,6 +40,13 @@ QString DomainXmlBuilder::build(const config::VmRecord& vm, const DomainXmlInput
     vars["payload_iso"] = vm.payload_iso_path;
     vars["virtio_iso"] = inputs.virtio_iso;
 
+    // IVSHMEM-doorbell wiring. ``ivshmem_socket`` is the chardev path
+    // ``IvshmemServer`` binds before ``virDomainCreate`` and is the
+    // same path libvirt's ``<shmem><server>`` element points to.
+    // Size matches the manager-side ``ShmemRegion`` allocation.
+    vars["ivshmem_socket"]   = inputs.ivshmem_socket;
+    vars["ivshmem_size_mib"] = QString::number(inputs.ivshmem_size_mib);
+
     // The PipeWire audio backend needs XDG_RUNTIME_DIR to find its
     // socket under $XDG_RUNTIME_DIR/pipewire-0. libvirt session-mode
     // strips most env vars when spawning QEMU, so we re-inject it via

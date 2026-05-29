@@ -25,15 +25,14 @@ public:
     // path comes from QueryFullProcessImageNameW.
     [[nodiscard]] static std::vector<DiscoveredWindow> enumerate();
 
-    // PNG-encoded snapshot of the window's client area only (no
-    // title bar / borders), produced via
-    // ``PrintWindow(.., PW_CLIENTONLY | PW_RENDERFULLCONTENT)``. The
-    // ``RENDERFULLCONTENT`` flag (Win 8.1+) makes this work for
-    // hardware-accelerated / DirectComposition windows. Returns raw
-    // PNG bytes (no base64, no JSON wrapper) — the host_endpoint
-    // ships them as the binary payload of a length-prefixed type=2
-    // frame on the wire. Empty vector on failure (dead window, etc).
-    [[nodiscard]] static std::vector<std::uint8_t> capture_client_png(std::uintptr_t hwnd);
+    // Tick one capture for ``hwnd``: drain the WGC frame pool,
+    // commit any fresh frame into the IVSHMEM slot for that window,
+    // and ring the doorbell. Returns true if the window still exists
+    // (host_endpoint keeps the subscription), false if it has
+    // vanished (host_endpoint emits a ``frame_gone`` envelope and
+    // drops the sub). The pixel data is never returned to userland
+    // — it lives in shared memory the manager mmaps directly.
+    [[nodiscard]] static bool tick_capture(std::uintptr_t hwnd);
 
     // Static properties of a top-level window, queried once so the
     // host mirror can open at the right size with the right buttons

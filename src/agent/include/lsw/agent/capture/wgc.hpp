@@ -2,38 +2,38 @@
 
 #include <cstdint>
 #include <string>
-#include <vector>
 
 namespace lsw::agent::capture {
 
-// Windows.Graphics.Capture backend. Unlike PrintWindow (which is
-// structurally opaque — verified: alpha is 255 for 100% of pixels for
-// every window, and DirectComposition-only flyout surfaces come back
-// black), WGC captures the real DWM-composited output WITH a true
-// alpha channel and renders DComp/XAML/flyout content correctly.
+// Windows.Graphics.Capture backend. One persistent capture session
+// per HWND is kept alive across frames (creating a session per frame
+// is far too slow); ``tick_capture`` drains the WGC frame pool to
+// the newest frame, copies its BGRA-premultiplied pixels into the
+// per-window slot in the host-shared IVSHMEM region, and rings the
+// MSI-X doorbell so the host manager picks them up.
 //
-// One persistent capture session per HWND is kept alive across frames
-// (creating a session per frame is far too slow); ``capture_png``
-// pulls the latest frame, crops it to the window's CLIENT area (to
-// match the rest of the mirror/resize/coordinate model) and returns a
-// straight-alpha PNG.
+// The capture transport runs entirely through ``transport::shmem``;
+// there is no TCP frame envelope. If the IVSHMEM driver isn't
+// installed or the region's LSWF header isn't ready, ``available``
+// returns false and the caller must skip capture.
 class Wgc {
 public:
-    // True if WGC is usable on this OS (Win10 1903+ with the runtime
-    // + a usable D3D11 device). Cached. When false the caller must
-    // fall back to the PrintWindow path.
+    // True iff the WGC runtime is functional AND the IVSHMEM region
+    // is mapped + header-verified. Cached after first success.
     [[nodiscard]] static bool available();
 
-    // Latest client-area frame of ``hwnd`` as a PNG (BGRA, straight
-    // alpha). Empty on failure (``ok`` distinguishes "not ready yet,
-    // retry" from "broken"). Session is created lazily and reused.
-    [[nodiscard]] static std::vector<std::uint8_t> capture_png(
-        std::uintptr_t hwnd, bool& ok);
+    // Drain the WGC pool for ``hwnd`` and (if a new frame is queued)
+    // commit it into the shmem slot for that window. Returns true if
+    // the window is still alive (caller keeps the subscription) and
+    // false if it has vanished (caller emits frame_gone + drops sub).
+    [[nodiscard]] static bool tick_capture(std::uintptr_t hwnd);
 
-    // Drop a window's session (window closed / unsubscribed).
+    // Drop a window's session (window closed / unsubscribed). Frees
+    // the associated shmem slot.
     static void release(std::uintptr_t hwnd);
 
-    // DIAGNOSTIC: raw alpha histogram of one WGC frame as JSON.
+    // Diagnostic stub retained for the existing RPC handler; the
+    // alpha-histogram path retired with the JPEG encode path.
     [[nodiscard]] static std::string debug_json(std::uintptr_t hwnd);
 };
 

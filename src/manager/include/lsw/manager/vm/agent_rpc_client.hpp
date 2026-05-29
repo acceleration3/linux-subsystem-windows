@@ -21,6 +21,9 @@
 
 namespace lsw::manager::vm {
 
+class IvshmemServer;
+class ShmemRegion;
+
 // Multiplexed JSON-line channel to the guest agent. One TCP
 // connection carries everything: bidirectional RPCs, agent-pushed
 // events (log records, install progress), and window-mirror frames.
@@ -122,6 +125,14 @@ public:
     void subscribe_window(std::uint64_t hwnd);
     void unsubscribe_window(std::uint64_t hwnd);
 
+    // Bind the per-VM IVSHMEM transport. When set, the manager listens
+    // to ``server->slot_ready`` and reads each frame out of
+    // ``region``, then emits ``frame_received`` from the GUI thread.
+    // The TCP frame-envelope path was retired in Phase 6; pixels never
+    // ride this socket anymore.
+    void attach_shmem(IvshmemServer* server, ShmemRegion* region);
+    void detach_shmem();
+
 Q_SIGNALS:
     void frame_received(std::uint64_t hwnd, QImage image);
     void window_gone(std::uint64_t hwnd);
@@ -177,6 +188,14 @@ private:
 
     std::atomic<bool> stop_{false};
     std::thread reader_;
+
+    // IVSHMEM transport binding. Set by ``attach_shmem`` on the GUI
+    // thread; signal connection wired then too. Cleared by
+    // ``detach_shmem`` / dtor. Non-owning pointers.
+    IvshmemServer* shmem_server_ = nullptr;
+    ShmemRegion*   shmem_region_ = nullptr;
+
+    Q_SLOT void on_shmem_slot_ready(int slot_index);
 };
 
 }  // namespace lsw::manager::vm

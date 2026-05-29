@@ -222,6 +222,8 @@ void App::on_launch_app_request(const QString& app_id) {
     // may never be shown for this launch path.
     if (!rpc_.has_target()) {
         if (auto* rec = vms_.find(uuid); rec != nullptr) {
+            rpc_.attach_shmem(lifecycle_.ivshmem_server(uuid),
+                              lifecycle_.shmem_region(uuid));
             rpc_.set_target(rec->vsock_cid, 5102);
         }
     }

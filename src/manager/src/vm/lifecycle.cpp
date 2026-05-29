@@ -1,10 +1,14 @@
 #include "lsw/manager/vm/lifecycle.hpp"
 
 #include "lsw/log.hpp"
+#include "lsw/manager/vm/ivshmem_server.hpp"
+#include "lsw/manager/vm/shmem_region.hpp"
 
 #include <QProcess>
 #include <QRegularExpression>
 #include <libvirt/libvirt.h>
+
+#include <cstdint>
 
 namespace lsw::manager::vm {
 
@@ -37,15 +41,27 @@ int Lifecycle::define_and_start(const config::VmRecord& vm, const DomainXmlInput
         LSW_ERROR("libvirt not connected");
         return -1;
     }
-    const QString xml = DomainXmlBuilder::build(vm, inputs);
+    // The IVSHMEM server socket MUST exist before virDomainCreate or
+    // QEMU's chardev setup fails outright. We bring up the region +
+    // server here, then pass the socket path to the XML builder.
+    DomainXmlInputs filled = inputs;
+    const QString sock = ensure_shmem(vm.uuid, filled.ivshmem_size_mib);
+    if (sock.isEmpty()) {
+        return -1;
+    }
+    filled.ivshmem_socket = sock;
+
+    const QString xml = DomainXmlBuilder::build(vm, filled);
     auto* d = ::virDomainDefineXML(conn_.raw(), xml.toUtf8().constData());
     if (d == nullptr) {
         LSW_ERROR("virDomainDefineXML failed: {}", conn_.last_error().toStdString());
+        teardown_shmem(vm.uuid);
         return -1;
     }
     DomainHandle dom{d};
     if (::virDomainCreate(dom.raw()) < 0) {
         LSW_ERROR("virDomainCreate failed: {}", conn_.last_error().toStdString());
+        teardown_shmem(vm.uuid);
         return -1;
     }
     LSW_INFO("VM started: {} (cid={})", vm.name.toStdString(), vm.vsock_cid);
@@ -61,8 +77,14 @@ int Lifecycle::start(const QUuid& uuid) {
     if (::virDomainIsActive(dom.raw()) == 1) {
         return 0;  // already running — idempotent
     }
+    // The VM's persistent XML already references the chardev path;
+    // ensure the matching server is up before QEMU connects to it.
+    if (ensure_shmem(uuid, 256).isEmpty()) {
+        return -1;
+    }
     if (::virDomainCreate(dom.raw()) < 0) {
         LSW_ERROR("virDomainCreate failed: {}", conn_.last_error().toStdString());
+        teardown_shmem(uuid);
         return -1;
     }
     return 0;
@@ -83,6 +105,10 @@ int Lifecycle::shutdown(const QUuid& uuid) {
     if (!dom.valid()) {
         return -1;
     }
+    // Don't tear shmem here — ACPI shutdown is asynchronous; the
+    // server stays up so we can still service late doorbells from a
+    // guest that hasn't yet acted on the shutdown signal. The
+    // ``force_off`` path is what reaps the region.
     return ::virDomainShutdown(dom.raw());
 }
 
@@ -91,7 +117,9 @@ int Lifecycle::force_off(const QUuid& uuid) {
     if (!dom.valid()) {
         return -1;
     }
-    return ::virDomainDestroy(dom.raw());
+    const int rc = ::virDomainDestroy(dom.raw());
+    teardown_shmem(uuid);
+    return rc;
 }
 
 int Lifecycle::undefine(const QUuid& uuid) {
@@ -99,6 +127,7 @@ int Lifecycle::undefine(const QUuid& uuid) {
     if (!dom.valid()) {
         return -1;
     }
+    teardown_shmem(uuid);
     return ::virDomainUndefine(dom.raw());
 }
 
@@ -166,6 +195,55 @@ int Lifecycle::eject_install_media(const QUuid& uuid) {
         }
     }
     return rc;
+}
+
+ShmemRegion* Lifecycle::shmem_region(const QUuid& uuid) const {
+    auto it = shmem_.find(uuid);
+    return (it != shmem_.end()) ? it->second.region.get() : nullptr;
+}
+
+IvshmemServer* Lifecycle::ivshmem_server(const QUuid& uuid) const {
+    auto it = shmem_.find(uuid);
+    return (it != shmem_.end()) ? it->second.server.get() : nullptr;
+}
+
+QString Lifecycle::ensure_shmem(const QUuid& uuid, int size_mib) {
+    // Reuse an existing bundle (start-without-define on an already
+    // running VM hits this path). The shm region + server stay live
+    // across VM ACPI shutdowns so late frames don't crash the manager.
+    if (auto it = shmem_.find(uuid); it != shmem_.end()) {
+        return it->second.server->socket_path();
+    }
+    ShmemBundle bundle;
+    bundle.region = std::make_unique<ShmemRegion>();
+    const std::uint64_t bytes =
+        static_cast<std::uint64_t>(size_mib > 0 ? size_mib : 256)
+        * 1024ULL * 1024ULL;
+    if (bundle.region->open(uuid, bytes) != 0) {
+        return {};
+    }
+    bundle.server = std::make_unique<IvshmemServer>(uuid, *bundle.region);
+    if (bundle.server->start() != 0) {
+        bundle.region->close();
+        return {};
+    }
+    const QString sock = bundle.server->socket_path();
+    shmem_.emplace(uuid, std::move(bundle));
+    return sock;
+}
+
+void Lifecycle::teardown_shmem(const QUuid& uuid) {
+    auto it = shmem_.find(uuid);
+    if (it == shmem_.end()) {
+        return;
+    }
+    if (it->second.server) {
+        it->second.server->stop();
+    }
+    if (it->second.region) {
+        it->second.region->close();
+    }
+    shmem_.erase(it);
 }
 
 }  // namespace lsw::manager::vm

@@ -2,10 +2,15 @@
 
 #include "lsw/manager/config/vm_state.hpp"
 #include "lsw/manager/vm/domain_xml.hpp"
+#include "lsw/manager/vm/ivshmem_server.hpp"
 #include "lsw/manager/vm/libvirt_conn.hpp"
+#include "lsw/manager/vm/shmem_region.hpp"
 
 #include <QObject>
 #include <QUuid>
+
+#include <memory>
+#include <unordered_map>
 
 namespace lsw::manager::vm {
 
@@ -66,10 +71,31 @@ public:
     // Best-effort: a missing/already-empty drive is not an error.
     [[nodiscard]] int eject_install_media(const QUuid& uuid);
 
-private:
-    [[nodiscard]] DomainHandle lookup(const QUuid& uuid) const;
+    // Live ShmemRegion / IvshmemServer for ``uuid`` (the WGC capture
+    // transport). Non-null only while the VM is running. The manager's
+    // ``AgentRpcClient`` uses these to receive frame doorbells and
+    // decode them out of the shared region. Returns null otherwise.
+    [[nodiscard]] ShmemRegion* shmem_region(const QUuid& uuid) const;
+    [[nodiscard]] IvshmemServer* ivshmem_server(const QUuid& uuid) const;
 
+private:
+    struct ShmemBundle {
+        std::unique_ptr<ShmemRegion> region;
+        std::unique_ptr<IvshmemServer> server;
+    };
+    [[nodiscard]] DomainHandle lookup(const QUuid& uuid) const;
+    // Create + bind the per-VM region and server. Returns the socket
+    // path (substituted into domain XML) or empty on failure.
+    [[nodiscard]] QString ensure_shmem(const QUuid& uuid, int size_mib);
+    void teardown_shmem(const QUuid& uuid);
+
+    struct QUuidHash {
+        std::size_t operator()(const QUuid& u) const noexcept {
+            return qHash(u);
+        }
+    };
     LibvirtConnection& conn_;
+    std::unordered_map<QUuid, ShmemBundle, QUuidHash> shmem_;
 };
 
 }  // namespace lsw::manager::vm

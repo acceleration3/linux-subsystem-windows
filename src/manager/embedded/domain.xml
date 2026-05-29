@@ -162,6 +162,20 @@
       <stats period='5'/>
     </memballoon>
 
+    <!-- IVSHMEM-doorbell: the WGC capture transport. lsw-manager runs
+         the doorbell-server protocol in-process at {{ivshmem_socket}};
+         the agent's ivshmem.sys (installed as a post-install setup
+         step) maps the shared region into user-mode and writes BGRA
+         frames into per-window slots. MSI vectors=64 mirrors
+         ShmemRegion::kSlotCount; the region size comes from the
+         ftruncate'd shm fd the server hands over via SCM_RIGHTS, NOT
+         from the XML (libvirt rejects <size> for ivshmem-doorbell). -->
+    <shmem name='lsw-{{uuid}}'>
+      <model type='ivshmem-doorbell'/>
+      <server path='{{ivshmem_socket}}'/>
+      <msi vectors='64' ioeventfd='on'/>
+    </shmem>
+
     <panic model='isa'/>
   </devices>
 

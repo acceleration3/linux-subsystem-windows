@@ -34,7 +34,13 @@
 		     the boot-critical driver from WinPE, so this is mandatory to
 		     avoid INACCESSIBLE_BOOT_DEVICE. The virtio-win.iso CD letter
 		     in this environment is not deterministic, so every plausible
-		     letter is listed; missing ones are skipped with a warning. -->
+		     letter is listed; missing ones are skipped with a warning.
+
+		     The IVSHMEM driver is NOT staged here. Red Hat's virtio-win
+		     iso historically does not ship ivshmem.sys; the signed
+		     binary is bundled inside the Looking Glass host installer.
+		     The agent fetches + silent-installs it as a post-install
+		     setup step (see embedded/setup-steps.json). -->
 		<component name="Microsoft-Windows-PnpCustomizationsNonWinPE" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
 			<DriverPaths>
 				<PathAndCredentials wcm:action="add" wcm:keyValue="1"><Path>D:\viostor\w11\amd64</Path></PathAndCredentials>
@@ -505,16 +511,17 @@ $scripts = @(
 		Register-ScheduledTask -TaskName 'MoveActiveHours' -Xml $( Get-Content -LiteralPath 'C:\Windows\Setup\Scripts\MoveActiveHours.xml' -Raw );
 	};
 	{
-		# Autostart the agent via HKLM\...\Run — NOT a scheduled task.
-		# A Run value is just a registry write (works here in the
-		# specialize pass, no dependency on the wizard account
-		# existing yet) and the shell processes it only at a real
-		# INTERACTIVE logon — i.e. the post-OOBE AutoLogon of the
-		# wizard user, in their session. That naturally gives the
-		# in-session, post-OOBE start we want, with no scheduled-task
-		# principal/registration-timing problems and no need for the
-		# installed.txt OOBE gate.
-		reg.exe add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" /v lsw-agent /t REG_SZ /d "C:\ProgramData\LSW\lsw-agent.exe" /f;
+		# The 'lsw-agent' scheduled task is registered by LswPromote.ps1
+		# at SetupComplete (post-OOBE), NOT here in Specialize. At
+		# specialize time the wizard user account doesn't exist yet
+		# (oobeSystem creates it), so Register-ScheduledTask -UserId
+		# can't resolve the principal and the task is silently never
+		# created. LswPromote.ps1 already runs after the account
+		# materializes, as SYSTEM — that's the right hook for tasks
+		# bound to the wizard user.
+		# (Intentionally no autostart write here. Don't reintroduce
+		# the HKLM\Run path either — Explorer's Run-key processor
+		# refuses to silent-elevate the manifested-as-admin agent.)
 	};
 	{
 		reg.exe add "HKLM\SOFTWARE\Policies\Microsoft\Dsh" /v AllowNewsAndInterests /t REG_DWORD /d 0 /f;
@@ -708,6 +715,16 @@ $scripts = @(
 		  'C:\Windows\Setup\Scripts\Wifi.xml';
 		) -Force -ErrorAction 'SilentlyContinue' -Verbose;
 	};
+	{
+		# OOBE-done sentinel. The 'lsw-agent' scheduled task fires
+		# at logon BEFORE the shell is up — it runs LswAgentRun.ps1
+		# which waits for this flag before exec'ing the agent.
+		# Without the gate the manager's PostInstallWatcher would
+		# see :5102 alive while Windows is still on the "preparing
+		# your account" screen and prematurely declare install done.
+		New-Item -ItemType Directory -Force -Path 'C:\ProgramData\LSW' | Out-Null;
+		Set-Content -LiteralPath 'C:\ProgramData\LSW\lsw-ready.flag' -Value (Get-Date -Format s) -Encoding Ascii -Force;
+	};
 );
 
 &amp; {
@@ -777,8 +794,70 @@ if ($members -contains $lu.SID.Value) {
         exit 0;
     }
 }
-# (The agent autostarts from HKLM\...\Run, set in Specialize.ps1 —
-# no scheduled task to register here.)
+# Register the 'lsw-agent' scheduled task that autostarts the
+# agent at autologon. Must happen HERE (post-OOBE, SYSTEM, user
+# account exists) not in Specialize — Specialize runs before
+# oobeSystem creates the local account. We need a task rather
+# than HKLM\Run because the agent EXE is manifested as
+# requireAdministrator (children inherit a full token for sc.exe
+# / pnputil / driver work) and Explorer's Run-key processor
+# refuses to silent-elevate Run entries at autologon.
+# RunLevel=HighestAvailable + LogonType=InteractiveToken honors
+# the manifest at trigger time.
+#
+# Register via raw XML (NOT the New-ScheduledTask* cmdlets):
+# their cmdlet-generated XML trips Task Scheduler's principal
+# validator with HRESULT 0x80070057 ("(7,21):UserId:lsw") even
+# when every argument is documented as valid. The raw-XML form
+# is the same one UnlockStartLayout and MoveActiveHours use
+# elsewhere in this autounattend and is the proven-good path.
+# UserId is the user's SID, not their name — SIDs always
+# resolve unambiguously regardless of casing or domain prefix.
+$sid = $lu.SID.Value;
+$xml = @"
+&lt;?xml version="1.0" encoding="UTF-16"?&gt;
+&lt;Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task"&gt;
+  &lt;Triggers&gt;
+    &lt;LogonTrigger&gt;
+      &lt;Enabled&gt;true&lt;/Enabled&gt;
+      &lt;UserId&gt;$sid&lt;/UserId&gt;
+    &lt;/LogonTrigger&gt;
+  &lt;/Triggers&gt;
+  &lt;Principals&gt;
+    &lt;Principal id="Author"&gt;
+      &lt;UserId&gt;$sid&lt;/UserId&gt;
+      &lt;LogonType&gt;InteractiveToken&lt;/LogonType&gt;
+      &lt;RunLevel&gt;HighestAvailable&lt;/RunLevel&gt;
+    &lt;/Principal&gt;
+  &lt;/Principals&gt;
+  &lt;Settings&gt;
+    &lt;MultipleInstancesPolicy&gt;IgnoreNew&lt;/MultipleInstancesPolicy&gt;
+    &lt;DisallowStartIfOnBatteries&gt;false&lt;/DisallowStartIfOnBatteries&gt;
+    &lt;StopIfGoingOnBatteries&gt;false&lt;/StopIfGoingOnBatteries&gt;
+    &lt;AllowHardTerminate&gt;true&lt;/AllowHardTerminate&gt;
+    &lt;StartWhenAvailable&gt;true&lt;/StartWhenAvailable&gt;
+    &lt;AllowStartOnDemand&gt;true&lt;/AllowStartOnDemand&gt;
+    &lt;Enabled&gt;true&lt;/Enabled&gt;
+    &lt;ExecutionTimeLimit&gt;PT0S&lt;/ExecutionTimeLimit&gt;
+    &lt;Priority&gt;7&lt;/Priority&gt;
+    &lt;RestartOnFailure&gt;
+      &lt;Interval&gt;PT1M&lt;/Interval&gt;
+      &lt;Count&gt;3&lt;/Count&gt;
+    &lt;/RestartOnFailure&gt;
+  &lt;/Settings&gt;
+  &lt;Actions Context="Author"&gt;
+    &lt;Exec&gt;
+      &lt;Command&gt;C:\ProgramData\LSW\lsw-agent.exe&lt;/Command&gt;
+    &lt;/Exec&gt;
+  &lt;/Actions&gt;
+&lt;/Task&gt;
+"@;
+try {
+    Register-ScheduledTask -TaskName 'lsw-agent' -Xml $xml -Force | Out-Null;
+    L ('lsw-agent scheduled task registered for SID ' + $sid);
+} catch {
+    L ('lsw-agent task registration FAILED: ' + $_.Exception.Message);
+}
 Set-Content -LiteralPath $flag -Value (Get-Date -Format s) -Encoding Ascii -Force;
 ( Get-LocalGroupMember -Group 'Administrators' | Format-Table Name, SID -AutoSize | Out-String ) | Add-Content -LiteralPath $log -Encoding Ascii;
 L 'SetupComplete promote done';
