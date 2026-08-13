@@ -6,15 +6,57 @@ A "reverse WSL" — run Windows applications on a Linux host with per-applicatio
 
 Greenfield. Phase 0 scaffolding.
 
-- **Design:** [docs/](docs/) — architecture, components, protocol, transport, roadmap.
-- **Implementation state and next step:** [STATE.md](STATE.md).
-- **Component overviews:**
-  [render-server](docs/render-server.md) ·
-  [client-icd](docs/client-icd.md) ·
-  [vm-manager](docs/vm-manager.md) ·
-  [serialization-codegen](docs/serialization-codegen.md) ·
-  [protocol](docs/protocol.md) ·
-  [transport](docs/transport.md)
+## Layout
+
+```
+src/
+  base/           logging macros + Logger
+  linkproto/      the host<->guest contract, compiled by BOTH toolchains
+  protocol/       wire frames, buffers, transports, listeners
+  vkproto/        generated Vulkan serialization + dispatch
+  icd/            the guest-side Vulkan ICD (.so loaded by the loader)
+  render_server/  host-side Vulkan replay + per-app windows
+  agent/          lsw-guest-agent.exe — runs inside the Windows VM
+  host/           the Linux manager
+codegen/          vk.xml -> generated/ (Python)
+docs/             link-protocol.md — the normative host<->guest spec
+```
+
+`src/linkproto/` is the one module the Linux manager and the Windows
+guest agent both compile: envelope framing, the IVSHMEM frame-ring
+layout, and the RPC command vocabulary. It is header-only and depends on
+nothing but the standard library — no Qt, no spdlog, no POSIX, no Win32.
+Anything either side could change unilaterally and still compile does
+not belong there.
+
+Every module has exactly one `include/` tree and one `src/` tree, so every
+include in the repo reads `lsw/<module>/<concern>/<class>.hpp`. One class
+per header, one header/.cpp pair per class.
+
+`src/host/` subdivides by concern:
+
+```
+src/host/
+  include/lsw/host/<concern>/*.hpp
+  src/<concern>/*.cpp
+
+  platform/   DBus single-instance, vsock, XDG places
+  config/     settings + the VM manifest
+  vm/         libvirt lifecycle, stats, shared-memory transport
+  link/       the multiplexed JSON channel to the guest agent
+  apps/       guest app catalog, per-app config, launch, logs
+  ui/         widgets shared by both UIs
+  services/   HostServices — the container every feature takes
+  provision/  first-run install pipeline (ISO, autounattend, setup)
+  wizard/     the first-run QWizard and its pages
+  manager/    the everyday window and guest-window mirrors
+  mcp/        MCP automation surface over localhost HTTP
+  app/        composition root + entry point
+```
+
+Those twelve concerns are linked as four libraries plus the executable —
+see the header comment in `src/host/CMakeLists.txt`. Include paths never
+name a target, so moving a concern between libraries touches no source.
 
 ## Building
 

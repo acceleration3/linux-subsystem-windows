@@ -29,4 +29,4 @@ if [[ ! -f "${AGENT_EXE}" ]]; then
 fi
 
 say "Launch manager (LSW_AGENT_EXE=${AGENT_EXE})"
-LSW_LOG=info LSW_AGENT_EXE="${AGENT_EXE}" "${ROOT}/build/src/manager/lsw-manager"
+LSW_LOG=info LSW_AGENT_EXE="${AGENT_EXE}" "${ROOT}/build/src/host/lsw-manager"

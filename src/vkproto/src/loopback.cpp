@@ -1,3 +1,4 @@
+#include "lsw/protocol/buffer_reader.hpp"
 #include "lsw/vkproto/loopback.hpp"
 
 namespace lsw::vkproto {

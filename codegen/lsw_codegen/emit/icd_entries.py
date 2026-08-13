@@ -39,6 +39,36 @@ DISPATCHABLE_HANDLES = frozenset(
 )
 
 
+def _is_recordable(cmd: Command, parent: Param) -> bool:
+    """Does this command belong in a per-command-buffer batch?
+
+    ``vkCmd*`` taking a VkCommandBuffer, plus Begin and End. Those are
+    the commands that record into a buffer rather than acting
+    immediately, and the buffer they record into is externally
+    synchronised — so accumulating them per buffer needs no lock and
+    cannot reorder anything.
+
+    Begin and End earn their place: they bracket the recording rather
+    than being global state, so putting them IN the batch removes two
+    blocking round trips per frame and costs no extra message. The
+    wrappers in ``src/icd/src/cmdbuf.cpp`` still exist — Begin drops the
+    previous batch before recording into it, and End ships the batch
+    once the End itself has been recorded — but the serialization goes
+    through the recorder either way.
+
+    Reset is NOT here. It has to reach the server even if the
+    application never records into that buffer again, so it goes
+    straight out on the transport (asynchronously) rather than sitting
+    in a batch that might never be flushed.
+    """
+    if parent.type.base != "VkCommandBuffer":
+        return False
+    return cmd.name.startswith("vkCmd") or cmd.name in (
+        "vkBeginCommandBuffer",
+        "vkEndCommandBuffer",
+    )
+
+
 # ---- Helpers ---------------------------------------------------------------
 
 
@@ -170,9 +200,24 @@ def _emit_default_body(cmd: Command) -> list[str]:
             "either special-case it (like vkCreateInstance) or audit the profile"
         )
 
-    pre_call.append(
-        f"    auto* conn = ::lsw::icd::connection_of({parent.name});"
-    )
+    # A recorded command never touches the Connection: its bytes go into
+    # the command buffer's own batch, and it has no handle outputs to
+    # wrap. Emitting the lookup anyway would be an unused variable in
+    # every one of the hundred-odd vkCmd* wrappers.
+    if not _is_recordable(cmd, parent):
+        pre_call.append(
+            f"    auto* conn = ::lsw::icd::connection_of({parent.name});"
+        )
+
+    # Where this command's bytes go. For a recorded command that is the
+    # command buffer's own batch, which is a Transport that appends
+    # instead of sending; for everything else it is the connection's
+    # real transport. The generated body is otherwise identical, which
+    # is the point — nothing below here knows batching exists.
+    if _is_recordable(cmd, parent):
+        transport = f"::lsw::icd::record_target({parent.name})"
+    else:
+        transport = "conn->transport()"
 
     i = 0
     while i < len(cmd.params):
@@ -197,7 +242,7 @@ def _emit_default_body(cmd: Command) -> list[str]:
                         forward_args.append(q.name)
                 pre_call.append(
                     f"        return ::lsw::vkproto::lsw_{cmd.name}("
-                    "conn->transport(), " + ", ".join(forward_args) + ");"
+                    + transport + ", " + ", ".join(forward_args) + ");"
                 )
                 pre_call.append("    }")
                 pre_call.append(
@@ -275,7 +320,7 @@ def _emit_default_body(cmd: Command) -> list[str]:
     body: list[str] = []
     body.extend(pre_call)
     call_str = (
-        f"::lsw::vkproto::lsw_{cmd.name}(conn->transport(), "
+        f"::lsw::vkproto::lsw_{cmd.name}({transport}, "
         + ", ".join(call_args) + ")"
     )
     if is_void:

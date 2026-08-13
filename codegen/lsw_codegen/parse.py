@@ -188,6 +188,10 @@ def _collect_commands_from_requires(parent: ET.Element) -> list[str]:
     gates inclusion; for the LSW codegen we always expand the full set
     that the API contains and let downstream selection decide what to
     serialize. Conditional inclusion can land later.
+
+    (Note: a ``<require>`` can also contain ``<feature name="..."/>``
+    children. Those name DEVICE features — ``robustBufferAccess`` and
+    friends — not other feature blocks, and are not commands.)
     """
     out: list[str] = []
     for req in parent.findall("require"):
@@ -227,14 +231,37 @@ def parse_features(root: ET.Element) -> dict[str, list[str]]:
     return out
 
 
+# Core commands used to live directly under ``VK_VERSION_1_x``. Since the
+# registry was split into base/compute/graphics interface sets (around
+# header 1.4.32x) those blocks hold the commands and ``VK_VERSION_1_x``
+# only ``depends`` on them, so a walker that recognises the old name
+# alone finds an API with no commands in it — the codegen then emits a
+# protocol containing nothing but the extension entry points, silently.
+#
+# All four spellings carry the same ``number``, so treating them as the
+# same version is exactly right; no depends-chasing needed.
+_FEATURE_PREFIXES = (
+    "VK_VERSION_",
+    "VK_BASE_VERSION_",
+    "VK_COMPUTE_VERSION_",
+    "VK_GRAPHICS_VERSION_",
+)
+
+
 def parse_feature_number(name: str) -> tuple[int, int] | None:
-    """``"VK_VERSION_1_3"`` -> ``(1, 3)``. Returns None if the name doesn't fit."""
-    if not name.startswith("VK_VERSION_"):
-        return None
-    parts = name.removeprefix("VK_VERSION_").split("_")
-    if len(parts) != 2 or not all(p.isdigit() for p in parts):
-        return None
-    return (int(parts[0]), int(parts[1]))
+    """``"VK_VERSION_1_3"`` -> ``(1, 3)``. Returns None if the name doesn't fit.
+
+    Also accepts the split-interface spellings
+    (``VK_BASE_VERSION_1_3`` and friends), which are the same version.
+    """
+    for prefix in _FEATURE_PREFIXES:
+        if not name.startswith(prefix):
+            continue
+        parts = name.removeprefix(prefix).split("_")
+        if len(parts) != 2 or not all(p.isdigit() for p in parts):
+            return None
+        return (int(parts[0]), int(parts[1]))
+    return None
 
 
 def parse_extensions(root: ET.Element) -> dict[str, dict]:

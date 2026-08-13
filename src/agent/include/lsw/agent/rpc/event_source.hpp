@@ -2,6 +2,7 @@
 
 #include "lsw/agent/rpc/event.hpp"
 
+#include <cstddef>
 #include <vector>
 
 namespace lsw::agent::rpc {
@@ -25,6 +26,18 @@ class EventSource {
 public:
     virtual ~EventSource() = default;
     [[nodiscard]] virtual std::vector<Event> collect_pending() = 0;
+
+    // The connection died partway through delivering the batch that
+    // ``collect_pending`` just returned: events from ``first_undelivered``
+    // onwards never reached the manager.
+    //
+    // Most sources let them go (a missed progress tick is not worth
+    // keeping). Sources with terminal events that a peer is *waiting* for
+    // — the installer's ``setup_done``, which the wizard blocks on —
+    // override this to put them back for the next connection.
+    virtual void undeliverable(std::size_t first_undelivered) {
+        (void)first_undelivered;
+    }
 };
 
 }  // namespace lsw::agent::rpc

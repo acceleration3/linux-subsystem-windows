@@ -249,7 +249,11 @@ def emit(reg: Registry, out_dir: Path) -> None:
         "",
         '#include "vk_dispatch_client.h"',
         "",
-        '#include "lsw/log.hpp"',
+        # lsw/base/log.hpp, not lsw/log.hpp — the latter has never
+        # existed. The committed output had been corrected by hand, which
+        # is why check-codegen could not pass and why regenerating broke
+        # the build.
+        '#include "lsw/base/log.hpp"',
         '#include "lsw/protocol/buffer.hpp"',
         '#include "vk_protocol_ids.h"',
         '#include "vk_serialize.h"',

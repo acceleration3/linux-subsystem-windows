@@ -60,27 +60,50 @@ endif()
 include(LSWDependencies)
 
 # ---- Subprojects ----
-# common / protocol / vkproto are Linux-side libraries (logging,
-# vsock transport, Vulkan dispatch). The Windows guest agent doesn't
-# consume any of them, so when only LSW_BUILD_AGENT is on we skip
-# them — they wouldn't compile under mingw anyway (sys/socket.h etc.)
-# and they pull in spdlog, which has no mingw package.
+# linkproto is the one module BOTH sides compile: the manager and the
+# Windows guest agent share it, so it is header-only and depends on
+# nothing but the standard library. Added unconditionally — an
+# agent-only cross-build needs it exactly as much as a host build does.
+add_subdirectory(src/linkproto)
+
+# base / protocol / vkproto: logging, framing and transports, Vulkan
+# dispatch. These used to be described as "Linux-side" and skipped for
+# the cross build. That stopped being true with the Windows ICD: the
+# guest runs the same protocol library, the same generated dispatch and
+# the same shared-memory channel as the host. The POSIX-only sources
+# inside src/protocol are selected there, not here.
 if(LSW_BUILD_SERVER OR LSW_BUILD_CLIENT OR LSW_BUILD_MANAGER OR LSW_BUILD_TESTS)
-    add_subdirectory(src/common)
+    add_subdirectory(src/base)
     add_subdirectory(src/protocol)
     add_subdirectory(src/vkproto)
 endif()
 
 if(LSW_BUILD_SERVER)
-    add_subdirectory(src/server)
+    add_subdirectory(src/render_server)
 endif()
 
 if(LSW_BUILD_CLIENT)
-    add_subdirectory(src/client)
+    add_subdirectory(src/icd)
 endif()
 
 if(LSW_BUILD_MANAGER)
-    add_subdirectory(src/manager)
+    # Dependencies shared by the host-side modules under src/host.
+    # Resolved once here, in the parent scope, so every subdirectory sees
+    # the same imported targets and the pkg-config IMPORTED targets are
+    # not created twice.
+    find_package(Qt6 REQUIRED COMPONENTS Widgets Network DBus Concurrent Xml)
+    find_package(PkgConfig REQUIRED)
+    find_package(ZLIB REQUIRED)  # MicrosoftClient: defensive gunzip fallback
+    pkg_check_modules(LIBVIRT REQUIRED IMPORTED_TARGET libvirt)
+    pkg_check_modules(LIBISOFS REQUIRED IMPORTED_TARGET libisofs-1)  # PayloadIsoBuilder
+    pkg_check_modules(LIBVNCCLIENT REQUIRED IMPORTED_TARGET libvncclient)  # VncView
+    # xcb: per-window WM_CLASS on each mirror (X11 taskbar ungrouping).
+    pkg_check_modules(XCB IMPORTED_TARGET xcb)
+    # libwim (wimlib) — ships no pkg-config / CMake config; resolve by hand.
+    find_library(WIMLIB_LIBRARY NAMES wim REQUIRED)
+    find_path(WIMLIB_INCLUDE_DIR NAMES wimlib.h REQUIRED)
+
+    add_subdirectory(src/host)
 endif()
 
 if(LSW_BUILD_AGENT)
@@ -89,6 +112,15 @@ endif()
 
 if(LSW_BUILD_TESTS)
     add_subdirectory(src/protocol/tests)
+    # The link contract: the highest-risk code in the repo (both sides of
+    # a VM boundary must agree byte for byte) and, now that it lives in
+    # one toolchain-neutral module, testable host-native.
+    add_subdirectory(src/linkproto/tests)
+    # The agent's platform-free logic, compiled by the HOST toolchain —
+    # the agent executable itself is Windows-only, but this is not.
+    if(NOT WIN32)
+        add_subdirectory(src/agent/tests)
+    endif()
     # vkproto tests are wired from src/vkproto/CMakeLists.txt
 endif()
 

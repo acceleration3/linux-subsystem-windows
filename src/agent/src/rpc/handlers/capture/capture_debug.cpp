@@ -1,6 +1,8 @@
 #include "lsw/agent/capture/wgc.hpp"
 #include "lsw/agent/rpc/handler.hpp"
-#include "lsw/agent/rpc/registry.hpp"
+#include "lsw/agent/rpc/auto_register.hpp"
+
+#include "lsw/linkproto/commands.hpp"
 #include "lsw/agent/win/window.hpp"
 
 #include <cstdint>
@@ -23,4 +25,4 @@ struct CaptureDebugHandler : RpcHandler {
 
 }  // namespace lsw::agent::rpc::handlers
 
-LSW_REGISTER_RPC(lsw::agent::rpc::handlers::CaptureDebugHandler, "capture_debug")
+LSW_REGISTER_RPC(lsw::agent::rpc::handlers::CaptureDebugHandler, ::lsw::linkproto::cmd::kCaptureDebug)

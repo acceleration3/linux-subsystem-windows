@@ -102,7 +102,10 @@ def _check(reg: Registry, out: Path, backends: tuple[Backend, ...]) -> int:
 
         differ = False
         expected = sorted(p.name for p in tmp.iterdir())
-        actual = sorted(p.name for p in out.iterdir() if p.name != ".gitkeep")
+        # Dotfiles are configuration that lives alongside the output, not
+        # output: generated/.clang-format is what stops an editor
+        # reformatting these files and breaking this very check.
+        actual = sorted(p.name for p in out.iterdir() if not p.name.startswith("."))
         if expected != actual:
             print(
                 f"error: file set differs.\n  expected: {expected}\n  actual:   {actual}",

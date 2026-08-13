@@ -1,5 +1,7 @@
 #include "lsw/agent/rpc/handler.hpp"
-#include "lsw/agent/rpc/registry.hpp"
+#include "lsw/agent/rpc/auto_register.hpp"
+
+#include "lsw/linkproto/commands.hpp"
 #include "lsw/agent/system/info.hpp"
 
 namespace lsw::agent::rpc::handlers {
@@ -13,4 +15,4 @@ struct SystemInfoHandler : RpcHandler {
 
 }  // namespace lsw::agent::rpc::handlers
 
-LSW_REGISTER_RPC(lsw::agent::rpc::handlers::SystemInfoHandler, "system_info")
+LSW_REGISTER_RPC(lsw::agent::rpc::handlers::SystemInfoHandler, ::lsw::linkproto::cmd::kSystemInfo)

@@ -2,6 +2,7 @@
 // once the test surface grows. For Phase 0, no external test dep.
 
 #include "lsw/protocol/buffer.hpp"
+#include "lsw/protocol/buffer_reader.hpp"
 #include "lsw/protocol/frame.hpp"
 
 #include <cassert>

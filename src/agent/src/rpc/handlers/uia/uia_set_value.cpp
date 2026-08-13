@@ -1,6 +1,8 @@
 #include "lsw/agent/core/services.hpp"
 #include "lsw/agent/rpc/handler.hpp"
-#include "lsw/agent/rpc/registry.hpp"
+#include "lsw/agent/rpc/auto_register.hpp"
+
+#include "lsw/linkproto/commands.hpp"
 #include "lsw/agent/uia/uia.hpp"
 
 #include <cstdint>
@@ -27,4 +29,4 @@ struct UiaSetValueHandler : RpcHandler {
 
 }  // namespace lsw::agent::rpc::handlers
 
-LSW_REGISTER_RPC(lsw::agent::rpc::handlers::UiaSetValueHandler, "uia_set_value")
+LSW_REGISTER_RPC(lsw::agent::rpc::handlers::UiaSetValueHandler, ::lsw::linkproto::cmd::kUiaSetValue)

@@ -1,6 +1,6 @@
 #include "lsw/agent/apps/catalog.hpp"
 
-#include "lsw/agent/win/gdi.hpp"
+#include "lsw/agent/win/icon_extractor.hpp"
 #include "lsw/agent/log.hpp"
 
 // clang-format off
@@ -286,7 +286,7 @@ std::string Catalog::list_json() {
         o["id"] = exe_u8;
         o["name"] = name_u8;
         o["exe_path"] = exe_u8;
-        const auto b64 = gdi::extract_icon_png_base64(icon_src);
+        const auto b64 = win::IconExtractor::from_executable(icon_src);
         if (!b64.empty()) {
             ++with_icon;
         }

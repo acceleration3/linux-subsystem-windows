@@ -1,6 +1,8 @@
 #include "lsw/agent/core/services.hpp"
 #include "lsw/agent/rpc/handler.hpp"
-#include "lsw/agent/rpc/registry.hpp"
+#include "lsw/agent/rpc/auto_register.hpp"
+
+#include "lsw/linkproto/commands.hpp"
 #include "lsw/agent/uia/uia.hpp"
 
 #include <cstdint>
@@ -29,4 +31,4 @@ struct UiaTreeDumpHandler : RpcHandler {
 
 }  // namespace lsw::agent::rpc::handlers
 
-LSW_REGISTER_RPC(lsw::agent::rpc::handlers::UiaTreeDumpHandler, "uia_tree_dump")
+LSW_REGISTER_RPC(lsw::agent::rpc::handlers::UiaTreeDumpHandler, ::lsw::linkproto::cmd::kUiaTreeDump)

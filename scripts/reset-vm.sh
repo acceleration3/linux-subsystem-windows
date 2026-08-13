@@ -29,4 +29,4 @@ rm -rf "${DATA}"
 echo "Clearing wizard 'first run' flag..."
 rm -fv "${CONFIG}/manager.ini"
 
-echo "Done. Re-run ./build/src/manager/lsw-manager to start the wizard."
+echo "Done. Re-run ./build/src/host/lsw-manager to start the wizard."

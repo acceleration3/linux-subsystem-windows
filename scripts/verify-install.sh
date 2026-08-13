@@ -5,7 +5,7 @@
 #   * the qcow2 disk has been written to (>= 4 GiB used = Windows
 #     unpacked, not just an empty-disk first boot)
 #   * vsock(cid=100, port=5102) accepts a connection (= guest agent
-#     service is up)
+#     is up and listening)
 #
 # Each check prints PASS / FAIL with a short note. Exit 0 if every
 # check passes, 1 otherwise.
@@ -79,22 +79,49 @@ if (( fails > 0 )); then
 === in-VM verification (open a VNC viewer to the running VM and run
     these in cmd.exe — Win+R "cmd") ===
 
-  1. Did SetupComplete.cmd run?
-     type C:\lsw-postinstall.log
+  1. Did the post-OOBE promote script run?
+     type C:\ProgramData\LSW\promote.log
+
+     It logs every step of SetupComplete: creating the wizard account,
+     promoting it to Administrators, and registering the agent's
+     scheduled task. An empty or missing file means SetupComplete.cmd
+     never ran.
 
   2. Was the agent .exe copied off the payload CD?
      dir C:\ProgramData\LSW\lsw-agent.exe
 
-  3. Did the service register?
-     sc query lsw-agent
+     Copied during the specialize pass. Missing means the payload ISO
+     was not mounted, or did not contain lsw-agent.exe — rebuild it
+     with scripts/build-agent.sh before re-running the wizard.
 
-     If state is RUNNING -> agent is up but vsock isn't reaching us.
-     If state is STOPPED -> service registered but couldn't start;
-                            check Event Viewer (Application + System).
-     If "service does not exist" -> SetupComplete.cmd didn't run,
-                            or sc create failed (see lsw-postinstall.log).
+  3. Did the specialize pass and the finalize scripts finish?
+     type C:\ProgramData\LSW\installed.txt
+     type C:\ProgramData\LSW\lsw-ready.flag
 
-  4. Connect the VNC viewer:
+  3b. Is the desktop actually up?
+     tasklist /fi "imagename eq explorer.exe"
+
+     The agent deliberately holds :5102 closed until Explorer and the
+     taskbar exist, so a running task with no listener usually means
+     the session is still on "Preparing Windows" rather than that
+     anything is broken. Check the agent log for the "waiting for the
+     interactive shell" line.
+
+  4. Is the agent's scheduled task registered and running?
+     schtasks /query /tn lsw-agent /v /fo list
+
+     The task runs the agent AS THE WIZARD USER in their interactive
+     session (InteractiveToken + HighestAvailable), which is what makes
+     window capture and app launch native.
+
+       Last Result 0, task Running  -> agent is up but vsock is not
+                                       reaching the host
+       Registered but never run     -> no interactive logon yet; check
+                                       that AutoLogon is configured
+       "cannot find the file"       -> LswPromote.ps1 did not get that
+                                       far; see promote.log above
+
+  5. Connect the VNC viewer:
      virt-viewer -c qemu:///session lsw
 EOF
     exit 1

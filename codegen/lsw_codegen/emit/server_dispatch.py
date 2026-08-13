@@ -234,7 +234,11 @@ def emit(reg: Registry, out_dir: Path) -> None:
         "",
         "#include <vulkan/vulkan_core.h>",
         "",
+        # dispatch_command's signature names both, so both must be
+        # complete here — a forward declaration of BufferReader is not
+        # enough for the declaration to compile.
         '#include "lsw/protocol/buffer.hpp"',
+        '#include "lsw/protocol/buffer_reader.hpp"',
         "",
         "namespace lsw::vkproto {",
         "",
@@ -268,7 +272,8 @@ def emit(reg: Registry, out_dir: Path) -> None:
         "",
         "#include <vector>",
         "",
-        '#include "lsw/log.hpp"',
+        # lsw/base/log.hpp, not lsw/log.hpp — see client_dispatch.py.
+        '#include "lsw/base/log.hpp"',
         '#include "vk_protocol_ids.h"',
         '#include "vk_serialize.h"',
         "",

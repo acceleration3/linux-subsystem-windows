@@ -1,8 +1,11 @@
 #include "lsw/agent/rpc/handler.hpp"
-#include "lsw/agent/rpc/registry.hpp"
+#include "lsw/agent/rpc/auto_register.hpp"
+
+#include "lsw/linkproto/commands.hpp"
 #include "lsw/agent/win/window.hpp"
 
 #include <cstdint>
+#include <string>
 
 namespace lsw::agent::rpc::handlers {
 
@@ -26,8 +29,17 @@ struct ListWindowsHandler : RpcHandler {
         }
         return {{"windows", std::move(arr)}};
     }
+
+    // Polled by every window watcher at ~45 Hz; a REQ/REP pair each
+    // would leave room for nothing else in the log ring.
+    [[nodiscard]] bool silent() const override { return true; }
+
+    [[nodiscard]] std::string summarize(const nlohmann::json& reply) const override {
+        return std::to_string(reply.value("windows", nlohmann::json::array()).size())
+               + " windows";
+    }
 };
 
 }  // namespace lsw::agent::rpc::handlers
 
-LSW_REGISTER_RPC(lsw::agent::rpc::handlers::ListWindowsHandler, "list_windows")
+LSW_REGISTER_RPC(lsw::agent::rpc::handlers::ListWindowsHandler, ::lsw::linkproto::cmd::kListWindows)

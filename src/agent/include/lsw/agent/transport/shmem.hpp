@@ -1,25 +1,38 @@
 #pragma once
 
+#include "lsw/linkproto/byte_ring.hpp"
+#include "lsw/linkproto/frame_ring.hpp"
+#include "lsw/linkproto/region.hpp"
+#include "lsw/protocol/ivshmem_region.hpp"
+
 #include <cstdint>
 #include <string>
 
 namespace lsw::agent::transport {
 
-// Guest-side IVSHMEM transport for the WGC capture path. Opens the
-// virtio-win ``\\.\IVSHMEM`` device, mmaps the PCI BAR into user
-// space, manages a best-fit slot allocator over the buffer area, and
-// fires MSI-X doorbells to the manager when a frame is committed.
+// Guest-side IVSHMEM transport. Opens the virtio-win ``\\.\IVSHMEM``
+// device, maps the PCI BAR into user space, and hands out the region's
+// channels:
 //
-// Header layout is shared with the manager's ``ShmemRegion``; see
-// that file for the byte-level spec. Single producer (the agent's
-// capture grab path), no internal locking — the agent's host loop
-// already serializes window iteration.
+//   frames      a best-fit slot allocator over the pixel buffer area,
+//               plus the doorbell fired when a frame is committed
+//   rpc         duplex message rings for control traffic
+//   cmdstream   duplex message rings for the Vulkan command stream
+//
+// The manager owns the layout and writes the channel table; this side
+// reads it, so a channel that a newer manager adds costs nothing here
+// until something asks for it.
+//
+// The layout is the shared contract in ``lsw/linkproto/`` — the same
+// headers the manager compiles. Single producer on the frame path (the
+// capture grab), no internal locking: the agent's host loop already
+// serializes window iteration.
 class Shmem {
 public:
-    static constexpr std::uint32_t kMagic       = 0x4657534CU;  // 'LSWF' LE
-    static constexpr std::uint32_t kVersion     = 1;
-    static constexpr std::uint32_t kSlotCount   = 64;
-    static constexpr std::uint32_t kFormatBgra8Premul = 1;
+    static constexpr std::uint32_t kMagic     = linkproto::kFrameRingMagic;
+    static constexpr std::uint32_t kVersion   = linkproto::kRegionVersion;
+    static constexpr std::uint32_t kSlotCount = linkproto::kSlotCount;
+    static constexpr std::uint32_t kFormatBgra8Premul = linkproto::kFormatBgra8Premul;
 
     struct SlotInfo {
         int           index      = -1;     // -1 == invalid
@@ -30,11 +43,14 @@ public:
         std::uint32_t height     = 0;
     };
 
-    // Open + verify the device. Returns true if the BAR is mapped and
-    // the LSWF header matches the manager. False is recoverable (the
-    // agent falls back to TCP+JPEG once those code paths return) but
-    // until Phase 6 the only consumer is the capture path which will
-    // refuse to start.
+    // Open the device, verify the region header, and resolve every
+    // channel. Returns true if the BAR is mapped and the region is one
+    // this build understands.
+    //
+    // A version mismatch is the expected outcome of a half-finished
+    // redeploy (new manager, old agent or vice versa) and is refused
+    // loudly rather than reinterpreted — the frame path simply does not
+    // start.
     [[nodiscard]] bool open();
 
     // True once ``open`` has succeeded.
@@ -57,8 +73,34 @@ public:
                                      std::uint32_t width, std::uint32_t height,
                                      std::uint64_t present_qpc);
 
+    // ---- Message channels ----------------------------------------------
+    // The mirror image of the manager's endpoints: this side produces
+    // guest→host and consumes host→guest. Invalid endpoints mean the
+    // region has no such channel (an older manager), which callers must
+    // treat as "use the socket instead", not as a failure.
+
+    [[nodiscard]] linkproto::ByteRingProducer& rpc_to_host() { return rpc_to_host_; }
+    [[nodiscard]] linkproto::ByteRingConsumer& rpc_from_host() { return rpc_from_host_; }
+    [[nodiscard]] linkproto::ByteRingProducer& cmd_to_host() { return cmd_to_host_; }
+    [[nodiscard]] linkproto::ByteRingConsumer& cmd_from_host() { return cmd_from_host_; }
+
+    // Wake the manager on a channel it is waiting on. Writing to a ring
+    // is silent by itself — the manager only polls after a doorbell.
+    void ring_channel_doorbell(std::uint32_t channel_kind);
+
 private:
-    void* device_handle_ = nullptr;  // HANDLE; ``void*`` keeps the header agnostic
+    // Fire an MSI-X doorbell at the manager (peer 0) on ``vector``.
+    void ring_doorbell(std::uint16_t vector);
+
+    // Resolve one duplex channel into a producer/consumer pair.
+    void bind_duplex_channel(std::uint32_t kind, linkproto::ByteRingProducer& to_host,
+                             linkproto::ByteRingConsumer& from_host);
+
+    // The mapping itself, shared with the guest ICD: one implementation
+    // of "map the IVSHMEM BAR", not two. ``base_`` / ``size_`` are
+    // cached copies of the region's, so the hot frame path is a member
+    // read rather than a virtual call.
+    ::lsw::protocol::IvshmemRegion region_;
     void* base_ = nullptr;
     std::uint64_t size_ = 0;
     // Allocator state: array of (offset, size, in_use) for ``kSlotCount``
@@ -70,8 +112,18 @@ private:
         bool in_use = false;
     };
     Reservation reservations_[kSlotCount]{};
-    std::uint64_t buffers_offset_ = 0;
+
+    // Frame channel. Slot and buffer offsets are relative to this base,
+    // not to the region.
+    std::uint8_t* frames_base_ = nullptr;
+    std::uint64_t frames_size_ = 0;
+    std::uint64_t buffers_offset_ = 0;  // relative to frames_base_
     std::uint64_t buffers_size_ = 0;
+
+    linkproto::ByteRingProducer rpc_to_host_;
+    linkproto::ByteRingConsumer rpc_from_host_;
+    linkproto::ByteRingProducer cmd_to_host_;
+    linkproto::ByteRingConsumer cmd_from_host_;
 };
 
 // Process-wide singleton. The capture path uses this; one IVSHMEM

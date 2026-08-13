@@ -1,7 +1,9 @@
 #include "lsw/agent/core/services.hpp"
 #include "lsw/agent/install/installer.hpp"
 #include "lsw/agent/rpc/handler.hpp"
-#include "lsw/agent/rpc/registry.hpp"
+#include "lsw/agent/rpc/auto_register.hpp"
+
+#include "lsw/linkproto/commands.hpp"
 
 #include <stdexcept>
 #include <string>
@@ -23,4 +25,4 @@ struct RunScriptHandler : RpcHandler {
 
 }  // namespace lsw::agent::rpc::handlers
 
-LSW_REGISTER_RPC(lsw::agent::rpc::handlers::RunScriptHandler, "run_script")
+LSW_REGISTER_RPC(lsw::agent::rpc::handlers::RunScriptHandler, ::lsw::linkproto::cmd::kRunScript)

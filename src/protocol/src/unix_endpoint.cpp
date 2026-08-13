@@ -1,6 +1,6 @@
 #include "lsw/protocol/unix_endpoint.hpp"
 
-#include "lsw/protocol/frame.hpp"
+#include "lsw/protocol/fd_frame_channel.hpp"
 #include "lsw/protocol/frame_io.hpp"
 
 #include <cerrno>
@@ -61,18 +61,20 @@ int UnixListener::bind(const std::string& path) {
     return 0;
 }
 
-AcceptedFd UnixListener::accept() {
+std::unique_ptr<FrameChannel> UnixListener::accept() {
     while (listen_fd_ >= 0) {
         const int fd = ::accept4(listen_fd_, nullptr, nullptr, SOCK_CLOEXEC);
         if (fd >= 0) {
-            return AcceptedFd{fd};
+            auto channel = std::make_unique<FdFrameChannel>(fd);
+            channel->set_description("unix://" + path_);
+            return channel;
         }
         if (errno == EINTR) {
             continue;
         }
-        return AcceptedFd{};
+        return nullptr;
     }
-    return AcceptedFd{};
+    return nullptr;
 }
 
 void UnixListener::close() noexcept {
@@ -89,42 +91,9 @@ std::string UnixListener::description() const {
     return "unix://" + path_;
 }
 
-// ---- UnixSocketTransport --------------------------------------------------
+// ---- Connecting end -------------------------------------------------------
 
-UnixSocketTransport::UnixSocketTransport(int fd) noexcept : fd_(fd) {}
-
-UnixSocketTransport::~UnixSocketTransport() {
-    close();
-}
-
-UnixSocketTransport::UnixSocketTransport(UnixSocketTransport&& other) noexcept
-    : fd_(other.fd_), next_token_(other.next_token_) {
-    other.fd_ = -1;
-}
-
-UnixSocketTransport& UnixSocketTransport::operator=(UnixSocketTransport&& other) noexcept {
-    if (this != &other) {
-        close();
-        fd_ = other.fd_;
-        next_token_ = other.next_token_;
-        other.fd_ = -1;
-    }
-    return *this;
-}
-
-bool UnixSocketTransport::is_open() const noexcept {
-    return fd_ >= 0;
-}
-
-void UnixSocketTransport::close() noexcept {
-    if (fd_ >= 0) {
-        ::close(fd_);
-        fd_ = -1;
-    }
-}
-
-int UnixSocketTransport::connect(const std::string& path) {
-    close();
+int connect_unix_socket(const std::string& path) {
     sockaddr_un addr{};
     if (const int rc = fill_addr(addr, path); rc != 0) {
         return rc;
@@ -138,45 +107,7 @@ int UnixSocketTransport::connect(const std::string& path) {
         ::close(fd);
         return -err;
     }
-    fd_ = fd;
-    next_token_ = 1;
-    return 0;
-}
-
-TransportResult UnixSocketTransport::send_sync(std::uint32_t cmd_id,
-                                               std::span<const std::uint8_t> payload,
-                                               Buffer* reply_out) {
-    if (fd_ < 0) {
-        return TransportResult::Disconnected;
-    }
-    FrameStream io{fd_};
-    const std::uint64_t token = next_token_++;
-    if (io.write_frame(cmd_id, FrameFlags::needs_reply, token, payload) != IoResult::Ok) {
-        return TransportResult::Disconnected;
-    }
-    Frame reply{};
-    if (io.read_reply(reply) != IoResult::Ok) {
-        return TransportResult::Disconnected;
-    }
-    if (reply.reply_token != token) {
-        return TransportResult::InvalidFrame;
-    }
-    if (reply_out != nullptr && !reply.payload.empty()) {
-        reply_out->write(reply.payload.data(), reply.payload.size());
-    }
-    return TransportResult::Ok;
-}
-
-TransportResult UnixSocketTransport::send_async(std::uint32_t cmd_id,
-                                                std::span<const std::uint8_t> payload) {
-    if (fd_ < 0) {
-        return TransportResult::Disconnected;
-    }
-    FrameStream io{fd_};
-    if (io.write_frame(cmd_id, /*flags=*/0, /*reply_token=*/0, payload) != IoResult::Ok) {
-        return TransportResult::Disconnected;
-    }
-    return TransportResult::Ok;
+    return fd;
 }
 
 }  // namespace lsw::protocol

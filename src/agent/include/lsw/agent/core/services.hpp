@@ -21,21 +21,18 @@ namespace lsw::agent::core {
 // fires at static-destruction time, which is too late once the COM
 // runtime has already been torn down by other code).
 //
-// ``Installer`` and ``Console`` are still accessed via their existing
-// singleton ``instance()`` accessors — they have no COM dependency
-// so they don't need the same ordering dance.
+// ``Installer`` and ``Console`` are plain members: they have no COM
+// dependency, so they need none of the ordering dance above. They used
+// to be singletons; they are not, because a handler that reaches for a
+// global is a handler that cannot be tested.
 class AgentServices {
 public:
     AgentServices() = default;
     AgentServices(const AgentServices&) = delete;
     AgentServices& operator=(const AgentServices&) = delete;
 
-    [[nodiscard]] install::Installer& installer() noexcept {
-        return install::Installer::instance();
-    }
-    [[nodiscard]] console::Console& console() noexcept {
-        return console::Console::instance();
-    }
+    [[nodiscard]] install::Installer& installer() noexcept { return installer_; }
+    [[nodiscard]] console::Console& console() noexcept { return console_; }
     [[nodiscard]] uia::Uia& uia() noexcept { return uia_; }
     [[nodiscard]] win::MoveResizeWatcher& move_resize_watcher() noexcept {
         return move_resize_watcher_;
@@ -50,6 +47,8 @@ public:
     void shutdown() { uia_.shutdown(); }
 
 private:
+    install::Installer installer_;
+    console::Console console_;
     win::Apartment apartment_;  // must initialise BEFORE uia_
     uia::Uia uia_;
     win::MoveResizeWatcher move_resize_watcher_;  // pure Win32, no COM dep

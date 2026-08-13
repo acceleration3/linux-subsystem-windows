@@ -31,11 +31,13 @@ target_include_directories(lsw_vkproto
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<BUILD_INTERFACE:${GENERATED_DIR}>
-        $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/third_party/Vulkan-Headers/include>
 )
 
+# Vulkan::Headers, not a path into third_party/ — that directory never
+# existed, so the headers were quietly coming from the host's
+# /usr/include and a cross-build had nowhere to get them.
 target_link_libraries(lsw_vkproto
-    PUBLIC LSW::Protocol LSW::Common
+    PUBLIC LSW::Protocol LSW::Base Vulkan::Headers
     PRIVATE LSW::CompileOptions
 )
 

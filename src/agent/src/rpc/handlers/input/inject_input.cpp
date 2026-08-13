@@ -1,5 +1,7 @@
 #include "lsw/agent/rpc/handler.hpp"
-#include "lsw/agent/rpc/registry.hpp"
+#include "lsw/agent/rpc/auto_register.hpp"
+
+#include "lsw/linkproto/commands.hpp"
 #include "lsw/agent/win/input.hpp"
 
 #include <cstdint>
@@ -39,8 +41,12 @@ struct InjectInputHandler : RpcHandler {
         ev.mods = params.value("mods", 0u);
         return {{"ok", win::Input::inject(static_cast<std::uintptr_t>(hwnd), ev)}};
     }
+
+    // Fires at mouse-move frequency. The injector itself logs failures;
+    // a REQ/REP pair per pointer sample would drown everything else.
+    [[nodiscard]] bool silent() const override { return true; }
 };
 
 }  // namespace lsw::agent::rpc::handlers
 
-LSW_REGISTER_RPC(lsw::agent::rpc::handlers::InjectInputHandler, "inject_input")
+LSW_REGISTER_RPC(lsw::agent::rpc::handlers::InjectInputHandler, ::lsw::linkproto::cmd::kInjectInput)

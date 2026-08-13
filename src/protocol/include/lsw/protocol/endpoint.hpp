@@ -24,9 +24,25 @@ namespace lsw::protocol {
 [[nodiscard]] std::unique_ptr<Listener> open_listener(std::string_view url,
                                                       std::string* error_out = nullptr);
 
-// Default endpoint for the ICD client and render-server when nothing else
-// is configured. Today this is a Unix-domain socket in /tmp; vsock takes
-// over once Phase 4 lands.
+// Default endpoint when nothing else is configured.
+//
+// This differs by platform because the set of schemes does. On the host
+// a Unix socket is the sensible default: it is inspectable, and the
+// loopback harness lives on it. In the guest there is no such thing —
+// ``shm://`` is the only scheme that exists there, and defaulting to a
+// socket path meant a guest application loaded the ICD, got
+// "unsupported transport scheme on Windows: unix", and reported
+// VK_ERROR_INCOMPATIBLE_DRIVER. Which is a correct answer to the wrong
+// question.
+//
+// The name after ``shm://`` is ignored in the guest: there is exactly
+// one IVSHMEM device, so the region is not something to address. It is
+// spelled as a URL anyway so that ``$LSW_SERVER_SOCKET`` overrides work
+// identically on both sides.
+#if defined(_WIN32)
+inline constexpr std::string_view kDefaultEndpoint = "shm://guest";
+#else
 inline constexpr std::string_view kDefaultEndpoint = "unix:///tmp/lsw.sock";
+#endif
 
 }  // namespace lsw::protocol

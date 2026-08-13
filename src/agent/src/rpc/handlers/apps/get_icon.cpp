@@ -1,6 +1,8 @@
 #include "lsw/agent/rpc/handler.hpp"
-#include "lsw/agent/rpc/registry.hpp"
-#include "lsw/agent/win/gdi.hpp"
+#include "lsw/agent/rpc/auto_register.hpp"
+
+#include "lsw/linkproto/commands.hpp"
+#include "lsw/agent/win/icon_extractor.hpp"
 
 // clang-format off
 #include <windows.h>
@@ -25,10 +27,16 @@ struct GetIconHandler : RpcHandler {
             ::MultiByteToWideChar(CP_UTF8, 0, path.c_str(), -1, wpath.data(),
                                   wlen);
         }
-        return {{"icon_png_base64", gdi::extract_icon_png_base64(wpath)}};
+        return {{"icon_png_base64", win::IconExtractor::from_executable(wpath)}};
+    }
+
+    [[nodiscard]] std::string summarize(const nlohmann::json& reply) const override {
+        const auto b64 = reply.value("icon_png_base64", std::string{});
+        return "png_b64_len=" + std::to_string(b64.size())
+               + (b64.empty() ? " (FAILED)" : "");
     }
 };
 
 }  // namespace lsw::agent::rpc::handlers
 
-LSW_REGISTER_RPC(lsw::agent::rpc::handlers::GetIconHandler, "get_icon")
+LSW_REGISTER_RPC(lsw::agent::rpc::handlers::GetIconHandler, ::lsw::linkproto::cmd::kGetIcon)

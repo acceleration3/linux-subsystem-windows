@@ -1,6 +1,6 @@
 #include "lsw/agent/win/window.hpp"
 
-#include "lsw/agent/win/gdi.hpp"
+#include "lsw/agent/win/icon_extractor.hpp"
 #include "lsw/agent/log.hpp"
 #include "lsw/agent/capture/wgc.hpp"
 

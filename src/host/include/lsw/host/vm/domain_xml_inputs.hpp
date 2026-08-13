@@ -1,0 +1,40 @@
+#pragma once
+
+#include "lsw/linkproto/region_layout.hpp"
+
+#include <QString>
+
+namespace lsw::host::vm {
+
+// Per-spec extras the manager needs to thread into the XML on top of
+// the persisted ``VmRecord`` — paths to OVMF firmware, the virtio-win
+// driver ISO, etc. Defaults match a stock Arch / Fedora / Debian setup;
+// the wizard exposes them when auto-detection fails.
+struct DomainXmlInputs {
+    QString ovmf_code = "/usr/share/edk2/x64/OVMF_CODE.4m.fd";
+    QString ovmf_vars_template = "/usr/share/edk2/x64/OVMF_VARS.4m.fd";
+    // Path to virtio-win.iso. Always mounted as a CD in domain.xml;
+    // the autounattend's PnP customizations inject viostor/vioscsi/
+    // NetKVM from it so Windows installs straight onto virtio-blk.
+    QString virtio_iso;
+    // IVSHMEM-doorbell chardev path the manager's ``IvshmemServer``
+    // listens on. Must exist before ``virDomainCreate`` or libvirt
+    // fails the start. Filled by ``Lifecycle::define_and_start``.
+    QString ivshmem_socket;
+    // ShmemRegion size, in MiB. The default is the shared one, so a VM's
+    // region and a local loopback's region are laid out identically;
+    // caller can override per-VM.
+    //
+    // 256 fits ~14 simultaneous 1080p mirrors (double-buffered) before
+    // the slot allocator starts refusing — it was ~15 before the
+    // host-memory arena took its share; see
+    // ``kDefaultHostMemChannelBytes`` for that tradeoff.
+    //
+    // Must stay a power of two: the region backs the ivshmem PCI BAR.
+    int ivshmem_size_mib = linkproto::kDefaultRegionMib;
+    // Retained for source stability only. There is one domain template
+    // now (domain.xml, virtio-from-install); this selects nothing.
+    bool use_virtio = false;
+};
+
+}  // namespace lsw::host::vm

@@ -69,11 +69,6 @@ Console::~Console() {
     delete impl_;
 }
 
-Console& Console::instance() {
-    static Console inst;
-    return inst;
-}
-
 std::string Console::open() {
     SECURITY_ATTRIBUTES sa{};
     sa.nLength = sizeof(sa);

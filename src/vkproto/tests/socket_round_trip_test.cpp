@@ -6,10 +6,12 @@
 //   generated server dispatch -> ServerDispatch impl ->
 //   reply -> UnixSocketTransport -> application out-params.
 
+#include "lsw/protocol/endpoint.hpp"
 #include "lsw/protocol/unix_endpoint.hpp"
-#include "lsw/server/handler.hpp"
-#include "lsw/server/handlers/vulkan_handler.hpp"
-#include "lsw/server/server.hpp"
+#include "lsw/render/dispatch_chain.hpp"
+#include "lsw/render/handler.hpp"
+#include "lsw/render/handlers/vulkan_handler.hpp"
+#include "lsw/render/server.hpp"
 #include "vk_default_dispatch.h"
 #include "vk_dispatch_client.h"
 
@@ -112,10 +114,10 @@ int main() {
     const std::string sock_path = make_socket_path();
 
     EchoServer echo;
-    auto build_chain = [&](::lsw::server::Session& /*s*/, ::lsw::server::DispatchChain& chain) {
+    auto build_chain = [&](::lsw::render::Session& /*s*/, ::lsw::render::DispatchChain& chain) {
         // No HelloHandler: the test sends Vulkan calls directly without HELLO,
         // matching the original test's narrow scope.
-        chain.add(std::make_unique<::lsw::server::handlers::VulkanHandler>(echo));
+        chain.add(std::make_unique<::lsw::render::handlers::VulkanHandler>(echo));
     };
 
     lsw::protocol::UnixListener listener{sock_path};
@@ -123,7 +125,7 @@ int main() {
 
     std::atomic<bool> server_done{false};
     std::thread server_thread{[&] {
-        ::lsw::server::Server server{listener, build_chain};
+        ::lsw::render::Server server{listener, build_chain};
         server.serve_one();
         server_done.store(true, std::memory_order_release);
     }};
@@ -132,8 +134,9 @@ int main() {
     // ECONNREFUSED happens if we race the listen() call.
     bool client_ran = false;
     for (int attempt = 0; attempt < 50; ++attempt) {
-        lsw::protocol::UnixSocketTransport t;
-        if (t.connect(sock_path) == 0) {
+        auto transport = lsw::protocol::open_transport("unix://" + sock_path);
+        if (transport != nullptr) {
+            auto& t = *transport;
             client_ran = true;
             // ---- vkCreateInstance round-trip over the real socket ----
             VkApplicationInfo app{};
@@ -168,8 +171,9 @@ int main() {
             // Async path: vkDestroyInstance.
             lsw::vkproto::lsw_vkDestroyInstance(t, instance, nullptr);
 
-            // Closing the transport will EOF the server read loop.
-            t.close();
+            // Dropping the transport closes the channel, which EOFs the
+            // server's read loop.
+            transport.reset();
             break;
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(20));

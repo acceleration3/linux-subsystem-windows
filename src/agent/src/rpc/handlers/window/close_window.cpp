@@ -1,5 +1,7 @@
 #include "lsw/agent/rpc/handler.hpp"
-#include "lsw/agent/rpc/registry.hpp"
+#include "lsw/agent/rpc/auto_register.hpp"
+
+#include "lsw/linkproto/commands.hpp"
 #include "lsw/agent/win/window.hpp"
 
 #include <cstdint>
@@ -18,4 +20,4 @@ struct CloseWindowHandler : RpcHandler {
 
 }  // namespace lsw::agent::rpc::handlers
 
-LSW_REGISTER_RPC(lsw::agent::rpc::handlers::CloseWindowHandler, "close_window")
+LSW_REGISTER_RPC(lsw::agent::rpc::handlers::CloseWindowHandler, ::lsw::linkproto::cmd::kCloseWindow)

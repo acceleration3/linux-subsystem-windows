@@ -1,11 +1,23 @@
 #!/usr/bin/env bash
-# Cross-build the Windows guest agent with mingw-w64.
+# Cross-build the Windows guest side with mingw-w64.
 #
-# Output: build-agent/src/agent/lsw-guest-agent.exe (statically linked,
-# drops onto a stock Win11 install with no extra DLLs needed).
+# Outputs:
+#   build-agent/src/agent/lsw-guest-agent.exe   the control-plane agent
+#   build-agent/src/icd/lsw_icd.dll             the Vulkan ICD
 #
-# The manager's InstallPage will pick this up automatically when
-# building the payload ISO if the path matches.
+# Both are statically linked against the mingw runtime, so they drop onto
+# a stock Win11 install with no extra DLLs. For the ICD that is not a
+# nicety: it is loaded inside an arbitrary application by the Vulkan
+# loader, and a missing libstdc++-6.dll would surface as nothing more
+# informative than "driver not found".
+#
+# The ICD is the SAME sources as the Linux liblsw_icd.so — same wire
+# format, same batching, same shared-memory channel. Only the mapper
+# underneath differs, and that is E1.
+#
+# The wizard's payload-ISO step picks the agent path up automatically
+# (see lsw::host::platform::AgentExePath), as does
+# scripts/redeploy-agent.sh. Override either with $LSW_AGENT_EXE.
 
 set -euo pipefail
 
@@ -18,19 +30,50 @@ cmake -S "${ROOT}" -B "${BUILD}" -G Ninja \
     -DCMAKE_TOOLCHAIN_FILE="${TOOLCHAIN}" \
     -DCMAKE_BUILD_TYPE=Release \
     -DLSW_BUILD_SERVER=OFF \
-    -DLSW_BUILD_CLIENT=OFF \
+    -DLSW_BUILD_CLIENT=ON \
     -DLSW_BUILD_MANAGER=OFF \
     -DLSW_BUILD_AGENT=ON \
     -DLSW_BUILD_TESTS=OFF
 
-echo ">>> Building agent"
-cmake --build "${BUILD}" --target lsw-guest-agent
+echo ">>> Building agent + ICD + Vulkan loader"
+# ``vulkan`` is Vulkan-Loader's target: vulkan-1.dll. A VM with no GPU
+# driver ships no loader, and without one nothing can find our ICD —
+# the loader is what reads HKLM\SOFTWARE\Khronos\Vulkan\Drivers.
+cmake --build "${BUILD}" --target lsw-guest-agent lsw_icd vulkan
 
 EXE="${BUILD}/src/agent/lsw-guest-agent.exe"
-if [[ -f "${EXE}" ]]; then
-    SIZE=$(stat -c%s "${EXE}")
-    echo ">>> Built ${EXE} (${SIZE} bytes)"
-else
-    echo "!!! Build did not produce ${EXE}"
+if [[ ! -f "${EXE}" ]]; then
+    echo "!!! Build did not produce ${EXE}" >&2
     exit 1
+fi
+echo ">>> Built ${EXE} ($(stat -c%s "${EXE}") bytes)"
+
+DLL="${BUILD}/src/icd/lsw_icd.dll"
+if [[ ! -f "${DLL}" ]]; then
+    echo "!!! Build did not produce ${DLL}" >&2
+    exit 1
+fi
+echo ">>> Built ${DLL} ($(stat -c%s "${DLL}") bytes)"
+
+# A DLL that pulls in the mingw runtime loads on this machine and
+# nowhere else, and the Vulkan loader reports that as a driver it could
+# not find. Cheap to check, so check.
+LOADER="$(find "${BUILD}" -name vulkan-1.dll -print -quit)"
+if [[ -z "${LOADER}" ]]; then
+    echo "!!! Build did not produce vulkan-1.dll" >&2
+    exit 1
+fi
+echo ">>> Built ${LOADER} ($(stat -c%s "${LOADER}") bytes)"
+
+# A DLL that pulls in the mingw runtime loads on this machine and
+# nowhere else, and the Vulkan loader reports that as a driver it could
+# not find. Cheap to check, so check.
+if command -v x86_64-w64-mingw32-objdump >/dev/null 2>&1; then
+    for f in "${DLL}" "${LOADER}"; do
+        if x86_64-w64-mingw32-objdump -p "${f}" | grep -qE "DLL Name: (libstdc\+\+|libgcc_s|libwinpthread)"; then
+            echo "!!! ${f} depends on mingw runtime DLLs; it will not load on a stock Windows" >&2
+            x86_64-w64-mingw32-objdump -p "${f}" | grep "DLL Name" >&2
+            exit 1
+        fi
+    done
 fi

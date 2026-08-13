@@ -35,7 +35,6 @@ public:
         int exit_code = 0;                // populated for Closed
     };
 
-    [[nodiscard]] static Console& instance();
 
     // Spawn a fresh ``cmd.exe`` (the user's local %COMSPEC% if set,
     // otherwise the system one) with stdin/stdout/stderr redirected
@@ -57,11 +56,12 @@ public:
     // per-tick event push.
     [[nodiscard]] std::vector<Note> collect_pending();
 
-private:
     Console();
     ~Console();
     Console(const Console&) = delete;
     Console& operator=(const Console&) = delete;
+
+private:
 
     struct Impl;
     Impl* impl_;

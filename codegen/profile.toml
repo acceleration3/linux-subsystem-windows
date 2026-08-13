@@ -62,5 +62,30 @@ include = ["common", "linux"]
 # Default sync detection: void return + no out-param = async; anything
 # with an out-param or VkResult return is sync. Override here when the
 # Vulkan spec lets us be optimistic.
+#
+# A blocking round trip is the dominant cost of a proxied frame, and
+# most of them buy nothing. Measured against the real guest: 7.05
+# blocking round trips per frame, ~1.2 ms each, which was essentially
+# the whole 8.6 ms frame. The command stream itself was not the problem
+# — batching had already collapsed 7 vkCmd* calls into one message.
+#
+# A command belongs here when its VkResult carries no information the
+# caller can act on at the point of the call:
+#
+#   * it can only return VK_SUCCESS or an out-of-memory / device-lost
+#     condition, and
+#   * that condition is fatal anyway, so it will resurface at the next
+#     call that genuinely has to block.
+#
+# Errors come back out-of-band on the control stream (kCmdAsyncError).
 "vkQueueSubmit" = "async"
 "vkQueueSubmit2" = "async"
+# Command-buffer lifecycle. Begin/End/Reset can each only fail with
+# out-of-memory; nothing here is a decision point. Begin and End are
+# additionally RECORDED into the buffer's batch (see icd_entries.py),
+# so they cost no message at all — End is what ships the batch.
+"vkBeginCommandBuffer" = "async"
+"vkEndCommandBuffer" = "async"
+"vkResetCommandBuffer" = "async"
+# vkResetFences cannot fail except on device loss.
+"vkResetFences" = "async"

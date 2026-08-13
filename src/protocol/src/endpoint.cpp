@@ -1,6 +1,7 @@
 #include "lsw/protocol/endpoint.hpp"
 
-#include "lsw/protocol/unix_endpoint.hpp"
+#include "lsw/protocol/channel_transport.hpp"
+#include "lsw/protocol/endpoint_platform.hpp"
 
 #include <utility>
 
@@ -38,6 +39,17 @@ void set_error(std::string* error_out, std::string msg) {
     }
 }
 
+// ``unix:///tmp/foo`` gives path "/tmp/foo"; ``unix://foo`` gives an
+// empty path and authority "foo". Both spellings are in use, and both
+// mean the same filesystem path.
+[[nodiscard]] std::string url_target(const ParsedUrl& p) {
+    std::string target{p.path};
+    if (target.empty()) {
+        target.assign(p.authority);
+    }
+    return target;
+}
+
 }  // namespace
 
 std::unique_ptr<Transport> open_transport(std::string_view url, std::string* error_out) {
@@ -46,25 +58,27 @@ std::unique_ptr<Transport> open_transport(std::string_view url, std::string* err
         set_error(error_out, "endpoint URL must include scheme://");
         return nullptr;
     }
-    if (p.scheme == "unix") {
-        // For unix:///tmp/foo, ``path`` is "/tmp/foo"; for unix://foo it's empty.
-        std::string socket_path{p.path};
-        if (socket_path.empty()) {
-            socket_path.assign(p.authority);
-        }
-        if (socket_path.empty()) {
-            set_error(error_out, "unix:// endpoint requires a path");
-            return nullptr;
-        }
-        auto t = std::make_unique<UnixSocketTransport>();
-        if (const int rc = t->connect(socket_path); rc != 0) {
-            set_error(error_out, "connect to " + socket_path + " failed");
-            return nullptr;
-        }
-        return t;
+    const std::string target = url_target(p);
+    if (target.empty()) {
+        set_error(error_out, std::string{p.scheme} + ":// endpoint requires a target");
+        return nullptr;
     }
-    set_error(error_out, "unsupported transport scheme: " + std::string{p.scheme});
-    return nullptr;
+
+    // Every scheme ends in the same place: a FrameChannel wrapped in a
+    // ChannelTransport. That is B3 and B4 together — the difference
+    // between running the proxy over a socket, over local shared memory
+    // and over a guest's IVSHMEM BAR is which channel gets constructed,
+    // and nothing above this function can tell.
+    auto channel = platform_open_channel(p.scheme, target, error_out);
+    if (channel == nullptr) {
+        return nullptr;
+    }
+    auto t = std::make_unique<ChannelTransport>();
+    if (const int rc = t->adopt(std::move(channel)); rc != 0) {
+        set_error(error_out, "channel was not usable");
+        return nullptr;
+    }
+    return t;
 }
 
 std::unique_ptr<Listener> open_listener(std::string_view url, std::string* error_out) {
@@ -73,24 +87,12 @@ std::unique_ptr<Listener> open_listener(std::string_view url, std::string* error
         set_error(error_out, "endpoint URL must include scheme://");
         return nullptr;
     }
-    if (p.scheme == "unix") {
-        std::string socket_path{p.path};
-        if (socket_path.empty()) {
-            socket_path.assign(p.authority);
-        }
-        if (socket_path.empty()) {
-            set_error(error_out, "unix:// endpoint requires a path");
-            return nullptr;
-        }
-        auto l = std::make_unique<UnixListener>();
-        if (const int rc = l->bind(socket_path); rc != 0) {
-            set_error(error_out, "bind to " + socket_path + " failed");
-            return nullptr;
-        }
-        return l;
+    const std::string target = url_target(p);
+    if (target.empty()) {
+        set_error(error_out, std::string{p.scheme} + ":// endpoint requires a target");
+        return nullptr;
     }
-    set_error(error_out, "unsupported listener scheme: " + std::string{p.scheme});
-    return nullptr;
+    return platform_open_listener(p.scheme, target, error_out);
 }
 
 }  // namespace lsw::protocol

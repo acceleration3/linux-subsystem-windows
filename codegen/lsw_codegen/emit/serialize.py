@@ -463,6 +463,11 @@ def emit(reg: Registry, out_dir: Path) -> None:
         "",
         '#include "lsw/protocol/arena.hpp"',
         '#include "lsw/protocol/buffer.hpp"',
+        # Every deserialize_* takes a BufferReader&, so this header is
+        # not optional. It was missing from the emitter and present in
+        # the committed output, which is one of the ways generated/ had
+        # drifted out of reach of check-codegen.
+        '#include "lsw/protocol/buffer_reader.hpp"',
         "",
         "namespace lsw::vkproto {",
         "",

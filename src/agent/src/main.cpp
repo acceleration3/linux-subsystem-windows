@@ -1,113 +1,59 @@
 // lsw-guest-agent entry point.
 //
-// Autostarted from the ``lsw-agent`` scheduled task (registered by
-// LswPromote.ps1 at SetupComplete, with LogonTrigger -User <wizard
-// SID>, LogonType InteractiveToken, RunLevel Highest). The task
-// fires the instant LSA mints the user's session token — which is
-// EARLIER than the shell coming up — so before binding our TCP
-// listener we wait on the ``C:\ProgramData\LSW\lsw-ready.flag``
-// sentinel that FirstLogon.ps1 writes as its last action. Without
-// the gate the manager's PostInstallWatcher sees ``:5102`` alive
-// while Windows is still on the OOBE "preparing your account"
-// screens and prematurely declares install done. The wizard
-// account is a local admin and the agent EXE is manifested as
-// requireAdministrator, so children inherit a full token for
-// pnputil / sc / driver work.
+// Autostarted from the ``lsw-agent`` scheduled task that LswPromote.ps1
+// registers at SetupComplete (LogonTrigger on the wizard user's SID,
+// LogonType InteractiveToken, RunLevel Highest). The wizard account is a
+// local admin and this EXE is manifested requireAdministrator, so
+// children inherit a full token for pnputil / sc / driver work.
+//
+// The task fires the moment LSA mints the session token, which is long
+// before the user can see a desktop — so we hold the listener closed
+// until the desktop is genuinely usable. That gate matters beyond
+// cosmetics: the manager's PostInstallWatcher treats a reachable
+// ``:5102`` as "install finished", so binding early makes the wizard
+// declare success over the top of "Preparing Windows".
 
 #include "lsw/agent/core/agent_service.hpp"
 #include "lsw/agent/log.hpp"
+#include "lsw/agent/win/desktop_probe.hpp"
+#include "lsw/agent/win/desktop_session.hpp"
+#include "lsw/agent/win/token_privileges.hpp"
 
-// clang-format off
-#include <windows.h>
-// clang-format on
-
-#include <string>
-
-namespace {
-
-// Enable the privileges that admin/SYSTEM tokens carry but leave
-// disabled by default — the agent runs as SYSTEM, but Windows still
-// gates ACL and driver operations behind explicitly-enabled
-// privileges. Most well-behaved installers call AdjustTokenPrivileges
-// themselves; some legacy ones don't and fail with Win32 1307
-// (ERROR_INVALID_OWNER) on a SetNamedSecurityInfo. Enabling these
-// here is inherited by every CreateProcess child the agent spawns
-// (download_install, run_script, console_open, ...), so installers
-// and pnputil calls Just Work.
-//
-// We don't fail the agent if a privilege isn't present (running as
-// non-admin during dev is fine — only the install paths will fail).
-void enable_install_privileges() {
-    HANDLE token = nullptr;
-    if (!::OpenProcessToken(::GetCurrentProcess(),
-                              TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &token)) {
-        ::lsw::agent::log::append(
-            ::lsw::agent::log::Level::Warn,
-            std::string{"privileges: OpenProcessToken failed err="}
-                + std::to_string(::GetLastError()));
-        return;
-    }
-    static constexpr const wchar_t* kPrivs[] = {
-        SE_TAKE_OWNERSHIP_NAME,  // ACL ownership changes (the 1307 fix)
-        SE_RESTORE_NAME,         // restoring files with original ownership
-        SE_BACKUP_NAME,          // reading files past their DACL
-        SE_SECURITY_NAME,         // SACL / audit access
-        SE_LOAD_DRIVER_NAME,     // driver install (DIFx, pnputil)
-        SE_DEBUG_NAME,           // some installers cross-poke service processes
-    };
-    int enabled = 0;
-    for (const auto* name : kPrivs) {
-        TOKEN_PRIVILEGES tp{};
-        tp.PrivilegeCount = 1;
-        if (!::LookupPrivilegeValueW(nullptr, name, &tp.Privileges[0].Luid)) {
-            continue;
-        }
-        tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
-        if (::AdjustTokenPrivileges(token, FALSE, &tp, sizeof(tp), nullptr, nullptr)
-            && ::GetLastError() == ERROR_SUCCESS) {
-            ++enabled;
-        }
-    }
-    ::CloseHandle(token);
-    ::lsw::agent::log::append(
-        ::lsw::agent::log::Level::Info,
-        std::string{"privileges: enabled "} + std::to_string(enabled)
-            + " of " + std::to_string(sizeof(kPrivs) / sizeof(kPrivs[0]))
-            + " install-relevant token privileges");
-}
-
-}  // namespace
+#include <chrono>
 
 int wmain(int /*argc*/, wchar_t** /*argv*/) {
-    ::lsw::agent::log::append(::lsw::agent::log::Level::Info,
-                               "agent: process start");
-    // Wait for the OOBE-done sentinel before going further. Bounded
-    // so a partially-broken install (FirstLogon never ran) still
-    // gives up and starts the agent after 30 minutes — better to be
-    // reachable late than not at all. Once written the flag survives
-    // forever, so reboots and redeploy-swaps fall straight through.
-    constexpr const wchar_t* kReadyFlag =
-        L"C:\\ProgramData\\LSW\\lsw-ready.flag";
-    if (::GetFileAttributesW(kReadyFlag) == INVALID_FILE_ATTRIBUTES) {
-        ::lsw::agent::log::append(
-            ::lsw::agent::log::Level::Info,
-            "agent: waiting for lsw-ready.flag (OOBE-done sentinel)");
-        for (int i = 0; i < 1800; ++i) {
-            ::Sleep(1000);
-            if (::GetFileAttributesW(kReadyFlag) != INVALID_FILE_ATTRIBUTES) {
-                ::lsw::agent::log::append(
-                    ::lsw::agent::log::Level::Info,
-                    std::string{"agent: sentinel present after "}
-                        + std::to_string(i + 1) + "s");
-                break;
-            }
-        }
-        if (::GetFileAttributesW(kReadyFlag) == INVALID_FILE_ATTRIBUTES) {
-            ::lsw::agent::log::append(
-                ::lsw::agent::log::Level::Warn,
-                "agent: sentinel never appeared after 30 min — proceeding anyway");
-        }
+    LSW_AGENT_INFO("agent: process start");
+
+    // Bounded: a machine whose shell never arrives (replaced shell, or
+    // the agent run by hand outside an interactive session) still gets a
+    // reachable agent, just a late one. That is worth more than a
+    // guaranteed-correct gate, because an unreachable agent cannot be
+    // diagnosed remotely at all.
+    // Sample every readiness signal for the whole boot, independently of
+    // the gate below. The first-logon "Preparing Windows" phase happens
+    // once per install and cannot be reproduced by rebooting, so there
+    // is no second chance to observe it — the trace has to be captured
+    // on the run that matters. Keeps going after the gate opens, because
+    // the diagnostic question is "what was still false when we let go".
+    lsw::agent::win::DesktopProbe probe;
+    probe.start(std::chrono::minutes(20), std::chrono::milliseconds(500));
+
+    // The desktop must stay uncovered for a couple of seconds, not just
+    // be uncovered at one instant: OOBE hands off between several
+    // full-screen hosts and there are gaps in between that would
+    // otherwise read as ready.
+    if (!lsw::agent::win::DesktopSession::wait_for_desktop(
+            std::chrono::minutes(30), std::chrono::milliseconds(500),
+            std::chrono::seconds(3), std::chrono::seconds(90))) {
+        LSW_AGENT_WARN("agent: desktop never became usable after 30 min — "
+                       "starting anyway");
     }
-    enable_install_privileges();
-    return ::lsw::agent::core::AgentService::instance().run();
+
+    // Stamp the exact state at the instant the gate opened, so it can be
+    // lined up against the probe trace either side of it.
+    lsw::agent::win::DesktopProbe::write(
+        lsw::agent::win::DesktopProbe::snapshot("gate-released"));
+
+    (void)lsw::agent::win::TokenPrivileges::enable_install_privileges();
+    return lsw::agent::core::AgentService::instance().run();
 }

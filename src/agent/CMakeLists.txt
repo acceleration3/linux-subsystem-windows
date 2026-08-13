@@ -47,7 +47,16 @@ set(_lsw_agent_core_sources
 )
 set(_lsw_agent_transport_sources
     src/transport/host_endpoint.cpp
+    src/transport/envelope_writer.cpp
+    src/transport/event_pump.cpp
+    # One TU per push-event source. Each adapts a service's own typed
+    # notifications into rpc::Event, so the connection loop drains them
+    # all through the same EventPump.
+    src/transport/log_event_source.cpp
+    src/transport/console_event_source.cpp
+    src/transport/installer_event_source.cpp
     src/transport/shmem.cpp
+    src/transport/shmem_channel.cpp
 )
 set(_lsw_agent_rpc_sources
     src/rpc/registry.cpp
@@ -93,9 +102,17 @@ set(_lsw_agent_rpc_sources
 set(_lsw_agent_win_sources
     src/win/window.cpp
     src/win/input.cpp
-    src/win/gdi.cpp
+    src/win/icon_extractor.cpp
+    src/win/gdiplus_runtime.cpp
     src/win/com.cpp
     src/win/move_resize_watcher.cpp
+    src/win/desktop_session.cpp
+    src/win/desktop_probe.cpp
+    src/win/token_privileges.cpp
+)
+set(_lsw_agent_util_sources
+    src/util/base64.cpp
+    src/util/text_encoding.cpp
 )
 set(_lsw_agent_capture_sources
     src/capture/wgc.cpp
@@ -103,13 +120,40 @@ set(_lsw_agent_capture_sources
 )
 set(_lsw_agent_uia_sources
     src/uia/uia.cpp
+    src/uia/uia_root.cpp
+    src/uia/uia_event_queue.cpp
+    src/uia/bstr_text.cpp
+    src/uia/element_locator.cpp
+    src/uia/caption_button_query.cpp
+    src/uia/window_state_query.cpp
+    src/uia/element_invoker.cpp
+    src/uia/element_value_setter.cpp
+    src/uia/text_extractor.cpp
+    src/uia/tree_dumper.cpp
+    src/uia/lifecycle_event_handler.cpp
+    src/uia/focus_event_handler.cpp
+    src/uia/property_event_handler.cpp
+    src/uia/subscription_registry.cpp
 )
 set(_lsw_agent_apps_sources
     src/apps/catalog.cpp
     src/apps/launcher.cpp
+    src/apps/d3d_translation.cpp
 )
 set(_lsw_agent_install_sources
     src/install/installer.cpp
+    src/install/install_job.cpp
+    src/install/download_install_job.cpp
+    src/install/download_extract_job.cpp
+    src/install/run_script_job.cpp
+    src/install/http_downloader.cpp
+    src/install/process_runner.cpp
+    src/install/notification_queue.cpp
+    src/install/job_id_generator.cpp
+    src/install/directory_maker.cpp
+    src/install/script_file.cpp
+    src/install/work_dir.cpp
+    src/install/url_file_name.cpp
 )
 set(_lsw_agent_console_sources
     src/console/console.cpp
@@ -122,6 +166,7 @@ add_executable(lsw-guest-agent
     ${_lsw_agent_core_sources}
     ${_lsw_agent_transport_sources}
     ${_lsw_agent_rpc_sources}
+    ${_lsw_agent_util_sources}
     ${_lsw_agent_win_sources}
     ${_lsw_agent_capture_sources}
     ${_lsw_agent_uia_sources}
@@ -129,7 +174,6 @@ add_executable(lsw-guest-agent
     ${_lsw_agent_install_sources}
     ${_lsw_agent_console_sources}
     ${_lsw_agent_system_sources}
-    manifest/lsw-guest-agent.rc
 )
 
 # Build stamp: regenerated EVERY build so agent_version always
@@ -158,6 +202,12 @@ target_include_directories(lsw-guest-agent
 target_link_libraries(lsw-guest-agent
     PRIVATE
         LSW::CompileOptions
+        LSW::LinkProto   # wire contract shared with the manager
+        # IvshmemRegion: the one implementation of "map the BAR", shared
+        # with the guest ICD. Brings in no logging — lsw_protocol has no
+        # spdlog dependency, which is what lets the agent keep its own
+        # logger without a second one arriving through the back door.
+        LSW::Protocol
         nlohmann_json::nlohmann_json
         ws2_32        # WinSock2
         iphlpapi      # GetAdaptersAddresses

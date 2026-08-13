@@ -31,3 +31,15 @@ set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
 # (mingw-w64 sometimes defaults the other way otherwise).
 set(CMAKE_EXE_LINKER_FLAGS_INIT
     "-static -static-libgcc -static-libstdc++ -mconsole -Wl,-Bstatic,--whole-archive -lwinpthread -Wl,--no-whole-archive")
+
+# Same treatment for shared libraries, and for the same reason: the
+# Vulkan ICD is a DLL that has to load inside an arbitrary application
+# on a stock Windows install. Left to the defaults it links against
+# libstdc++-6.dll, libgcc_s_seh-1.dll and libwinpthread-1.dll, none of
+# which are there — the driver would simply fail to load, with the
+# loader reporting nothing more useful than "not found".
+#
+# ``-static`` is deliberately absent here: it is meaningless for a DLL
+# and mingw warns about it.
+set(CMAKE_SHARED_LINKER_FLAGS_INIT
+    "-static-libgcc -static-libstdc++ -Wl,-Bstatic,--whole-archive -lwinpthread -Wl,--no-whole-archive")

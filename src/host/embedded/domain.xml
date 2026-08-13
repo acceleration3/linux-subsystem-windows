@@ -1,0 +1,201 @@
+<!--
+  LSW domain XML — the single, high-performance shape used for BOTH
+  install and steady-state. There is no longer a pre/post-virtio
+  split or a controller swap: Windows installs straight onto a
+  virtio-blk disk because the autounattend loads the viostor driver
+  into WinPE (Microsoft-Windows-PnpCustomizationsWinPE) and injects it
+  into the offline image (Microsoft-Windows-PnpCustomizationsNonWinPE)
+  from the attached virtio-win.iso. That eliminates the
+  INACCESSIBLE_BOOT_DEVICE class entirely.
+
+  Every perf knob that matters for a running Windows guest is on from
+  the first boot: dedicated virtio-blk iothread + multiqueue,
+  cache=none/io=native, full Hyper-V enlightenment suite, TSC native
+  clock with invtsc, virtio-net (mq), virtio-rng.
+
+  Substituted variables (DomainXmlBuilder::build):
+    {{domain_name}}, {{uuid}}, {{ram_mib}}, {{cpus}}
+    {{ovmf_code}}, {{ovmf_vars_template}}, {{nvram_path}}
+    {{disk_path}}, {{windows_iso}}, {{payload_iso}}, {{virtio_iso}}
+    {{xdg_env_inner}}      (one <qemu:env> line or empty)
+-->
+<domain type='kvm' xmlns:qemu='http://libvirt.org/schemas/domain/qemu/1.0'>
+  <name>{{domain_name}}</name>
+  <uuid>{{uuid}}</uuid>
+  <memory unit='MiB'>{{ram_mib}}</memory>
+  <currentMemory unit='MiB'>{{ram_mib}}</currentMemory>
+  <vcpu placement='static'>{{cpus}}</vcpu>
+  <!-- Dedicated iothread for the virtio-blk system disk (pinned via
+       iothread='1' below) — keeps disk I/O off the vcpu threads. -->
+  <iothreads>1</iothreads>
+
+  <os>
+    <type arch='x86_64' machine='q35'>hvm</type>
+    <loader readonly='yes' type='pflash'>{{ovmf_code}}</loader>
+    <nvram template='{{ovmf_vars_template}}'>{{nvram_path}}</nvram>
+    <!-- The install ISO is boot entry 1, the virtio system disk
+         entry 2. On first boot Setup runs off the ISO; once Windows
+         is installed the ISO's El-Torito "press any key" times out
+         and firmware falls through to the disk. -->
+    <bootmenu enable='no'/>
+  </os>
+
+  <features>
+    <acpi/>
+    <apic/>
+    <!-- Full Hyper-V enlightenment suite — each line is a measurable
+         win for a running Windows guest (relaxed timers, virtual
+         APIC, spinlock hinting, synthetic interrupt controller +
+         timers, MSR-based TLB flush / IPI, direct TSC frequency,
+         enlightened VMCS on Intel). -->
+    <hyperv mode='custom'>
+      <relaxed         state='on'/>
+      <vapic           state='on'/>
+      <spinlocks       state='on' retries='8191'/>
+      <vpindex         state='on'/>
+      <synic           state='on'/>
+      <stimer          state='on'/>
+      <runtime         state='on'/>
+      <reset           state='on'/>
+      <frequencies     state='on'/>
+      <reenlightenment state='on'/>
+      <tlbflush        state='on'/>
+      <ipi             state='on'/>
+      <evmcs           state='on'/>
+    </hyperv>
+    <vmport state='off'/>
+  </features>
+
+  <cpu mode='host-passthrough' check='none' migratable='on'>
+    <topology sockets='1' dies='1' cores='{{cpus}}' threads='1'/>
+    <feature policy='disable' name='hle'/>
+    <feature policy='disable' name='rtm'/>
+    <feature policy='require' name='invtsc'/>
+  </cpu>
+
+  <clock offset='localtime'>
+    <timer name='rtc'         tickpolicy='catchup'/>
+    <timer name='pit'         tickpolicy='delay'/>
+    <timer name='hpet'        present='no'/>
+    <timer name='tsc'         present='yes' mode='native'/>
+    <timer name='kvmclock'    present='no'/>
+    <timer name='hypervclock' present='yes'/>
+  </clock>
+
+  <on_poweroff>destroy</on_poweroff>
+  <on_reboot>restart</on_reboot>
+  <on_crash>restart</on_crash>
+
+  <devices>
+    <emulator>/usr/bin/qemu-system-x86_64</emulator>
+
+    <!-- virtio-blk system disk from the very first boot. cache='none'
+         + io='native' + dedicated iothread + per-vcpu queues =
+         maximum throughput with no host page-cache double buffering.
+         boot order 2 (the install ISO is 1). -->
+    <disk type='file' device='disk'>
+      <driver name='qemu' type='qcow2'
+              cache='none' io='native' discard='unmap' detect_zeroes='unmap'
+              iothread='1' queues='{{cpus}}'/>
+      <source file='{{disk_path}}'/>
+      <target dev='vda' bus='virtio'/>
+      <boot order='2'/>
+    </disk>
+
+    <!-- Windows install ISO (boots first). SATA so WinPE reads it
+         with no extra driver. -->
+    <disk type='file' device='cdrom'>
+      <driver name='qemu' type='raw'/>
+      <source file='{{windows_iso}}'/>
+      <target dev='sdb' bus='sata'/>
+      <readonly/>
+      <boot order='1'/>
+    </disk>
+
+    <!-- Payload ISO: autounattend.xml + lsw-agent.exe. -->
+    <disk type='file' device='cdrom'>
+      <driver name='qemu' type='raw'/>
+      <source file='{{payload_iso}}'/>
+      <target dev='sdc' bus='sata'/>
+      <readonly/>
+    </disk>
+
+    <!-- virtio-win.iso: the viostor / vioscsi / NetKVM drivers the
+         autounattend PnP customizations inject into WinPE + the
+         offline image so the virtio-blk system disk is bootable. -->
+    <disk type='file' device='cdrom'>
+      <driver name='qemu' type='raw'/>
+      <source file='{{virtio_iso}}'/>
+      <target dev='sdd' bus='sata'/>
+      <readonly/>
+    </disk>
+
+    <!-- Plain VGA — real 3D goes through the render-server over
+         vsock; this is just for the VNC install console. -->
+    <video>
+      <model type='vga' heads='1' primary='yes'/>
+    </video>
+
+    <!-- sharePolicy='ignore': QEMU's default 'allow-exclusive' drops
+         a connecting client when the display is contended or on a
+         connect/reconnect race, which makes the manager's live
+         preview fail right after VNC auth ("server closed
+         connection"). 'ignore' = allow any number of clients and
+         never disconnect anyone, so the wizard install view, the
+         manager preview, and any virt-viewer can coexist and the
+         preview can freely (re)connect. -->
+    <graphics type='vnc' autoport='yes' listen='127.0.0.1' sharePolicy='ignore'>
+      <listen type='address' address='127.0.0.1'/>
+    </graphics>
+
+    <sound model='ich9'>
+      <audio id='1'/>
+    </sound>
+    <audio id='1' type='pipewire'/>
+
+    <!-- virtio-rng: host entropy so guest CNG / OpenSSL never blocks. -->
+    <rng model='virtio'>
+      <backend model='random'>/dev/urandom</backend>
+    </rng>
+
+    <memballoon model='virtio'>
+      <stats period='5'/>
+    </memballoon>
+
+    <!-- IVSHMEM-doorbell: the WGC capture transport. lsw-manager runs
+         the doorbell-server protocol in-process at {{ivshmem_socket}};
+         the agent's ivshmem.sys (installed as a post-install setup
+         step) maps the shared region into user-mode and writes BGRA
+         frames into per-window slots. MSI vectors=66 mirrors
+         linkproto::kDoorbellVectorCount — one per frame slot plus one
+         per message channel (rpc, cmdstream); the region size comes from the
+         ftruncate'd shm fd the server hands over via SCM_RIGHTS, NOT
+         from the XML (libvirt rejects <size> for ivshmem-doorbell). -->
+    <shmem name='lsw-{{uuid}}'>
+      <model type='ivshmem-doorbell'/>
+      <server path='{{ivshmem_socket}}'/>
+      <msi vectors='66' ioeventfd='on'/>
+    </shmem>
+
+    <panic model='isa'/>
+  </devices>
+
+  <qemu:commandline>
+{{xdg_env_inner}}
+    <!-- virtio-net + QEMU user-net hostfwd: the agent transport is
+         TCP 127.0.0.1:5102 (5103 reserved). vsock was attempted but
+         this class of host kernel has no working vhost_vsock
+         (/dev/vhost-vsock open -> ENODEV), so TCP-over-hostfwd is the
+         only reliable channel — same reason the project chose it.
+         Host 5445 → guest :445 carries the CIFS / SMB mount of the
+         guest's ``C:\`` at ``$HOME/Windows`` (driven by
+         ``vm::HostSmbMounter`` once the agent answers). We can't
+         hostfwd on host :445 because qemu user-net runs unprivileged
+         and :445 is in the reserved <1024 range; mount.cifs is told
+         ``port=5445`` to compensate. -->
+    <qemu:arg value='-netdev'/>
+    <qemu:arg value='user,id=lsw-net,hostfwd=tcp:127.0.0.1:5102-:5102,hostfwd=tcp:127.0.0.1:5103-:5103,hostfwd=tcp:127.0.0.1:5445-:445'/>
+    <qemu:arg value='-device'/>
+    <qemu:arg value='virtio-net-pci,netdev=lsw-net,id=lsw-nic,bus=pcie.0,addr=0x10,mq=on'/>
+  </qemu:commandline>
+</domain>
