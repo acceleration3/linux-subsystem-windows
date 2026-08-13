@@ -10,24 +10,31 @@ Greenfield. Phase 0 scaffolding.
 
 ```
 src/
-  base/           logging macros + Logger
-  linkproto/      the host<->guest contract, compiled by BOTH toolchains
-  protocol/       wire frames, buffers, transports, listeners
-  vkproto/        generated Vulkan serialization + dispatch
-  icd/            the guest-side Vulkan ICD (.so loaded by the loader)
-  render_server/  host-side Vulkan replay + per-app windows
   agent/          lsw-guest-agent.exe — runs inside the Windows VM
   host/           the Linux manager
-codegen/          vk.xml -> generated/ (Python)
-docs/             link-protocol.md — the normative host<->guest spec
+external/
+  remotevk/       the Vulkan proxy: ICD, render server, protocol, codegen
 ```
 
-`src/linkproto/` is the one module the Linux manager and the Windows
-guest agent both compile: envelope framing, the IVSHMEM frame-ring
-layout, and the RPC command vocabulary. It is header-only and depends on
-nothing but the standard library — no Qt, no spdlog, no POSIX, no Win32.
-Anything either side could change unilaterally and still compile does
-not belong there.
+The Vulkan half — the ICD an application loads, the server that replays
+its command stream, the transports underneath, and the vk.xml codegen —
+lives in [remotevk](external/remotevk), a submodule. It knows how to
+move Vulkan across a wire and nothing about virtual machines, so it
+builds and tests entirely on its own:
+
+```sh
+git submodule update --init --recursive
+```
+
+What this repository adds is the VM around it: provisioning Windows,
+running it, and presenting its applications as native Linux windows.
+
+`remotevk/src/linkproto/` is the one module the Linux manager and the
+Windows guest agent both compile: envelope framing, the IVSHMEM
+frame-ring layout, and the RPC command vocabulary. It is header-only and
+depends on nothing but the standard library — no Qt, no spdlog, no
+POSIX, no Win32. Anything either side could change unilaterally and
+still compile does not belong there.
 
 Every module has exactly one `include/` tree and one `src/` tree, so every
 include in the repo reads `lsw/<module>/<concern>/<class>.hpp`. One class

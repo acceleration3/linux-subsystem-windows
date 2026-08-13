@@ -7,7 +7,19 @@ project(LSW
     LANGUAGES CXX
 )
 
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
+# remotevk carries the cmake modules that define LSW::CompileOptions and
+# resolve the shared third-party dependencies, so its module directory
+# has to be on the path before anything here includes them. LSW's own
+# cmake/ still holds the mingw toolchain file, which is selected on the
+# command line rather than included.
+set(LSW_REMOTEVK_DIR "${CMAKE_SOURCE_DIR}/external/remotevk"
+    CACHE PATH "Location of the remotevk checkout")
+if(NOT EXISTS "${LSW_REMOTEVK_DIR}/CMakeLists.txt")
+    message(FATAL_ERROR
+        "remotevk is missing from ${LSW_REMOTEVK_DIR}.\n"
+        "It is a submodule: git submodule update --init --recursive")
+endif()
+list(APPEND CMAKE_MODULE_PATH "${LSW_REMOTEVK_DIR}/cmake" "${CMAKE_SOURCE_DIR}/cmake")
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -23,7 +35,10 @@ endif()
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-include(LSWCompileOptions)
+# LSW::CompileOptions and the shared third-party dependencies are
+# defined by remotevk when it is added below; including those modules
+# here as well would define the same targets twice. Everything that
+# uses them (src/host, src/agent) is added after remotevk.
 
 # ---- Options ----
 option(LSW_BUILD_SERVER  "Build the host render server (Linux only)" ON)
@@ -56,35 +71,22 @@ if(LSW_BUILD_TESTS)
     enable_testing()
 endif()
 
-# ---- Dependencies ----
-include(LSWDependencies)
 
 # ---- Subprojects ----
-# linkproto is the one module BOTH sides compile: the manager and the
-# Windows guest agent share it, so it is header-only and depends on
-# nothing but the standard library. Added unconditionally — an
-# agent-only cross-build needs it exactly as much as a host build does.
-add_subdirectory(src/linkproto)
-
-# base / protocol / vkproto: logging, framing and transports, Vulkan
-# dispatch. These used to be described as "Linux-side" and skipped for
-# the cross build. That stopped being true with the Windows ICD: the
-# guest runs the same protocol library, the same generated dispatch and
-# the same shared-memory channel as the host. The POSIX-only sources
-# inside src/protocol are selected there, not here.
-if(LSW_BUILD_SERVER OR LSW_BUILD_CLIENT OR LSW_BUILD_MANAGER OR LSW_BUILD_TESTS)
-    add_subdirectory(src/base)
-    add_subdirectory(src/protocol)
-    add_subdirectory(src/vkproto)
-endif()
-
-if(LSW_BUILD_SERVER)
-    add_subdirectory(src/render_server)
-endif()
-
-if(LSW_BUILD_CLIENT)
-    add_subdirectory(src/icd)
-endif()
+# The Vulkan proxy — the ICD, the render server, the protocol and the
+# shared-memory region layout — lives in remotevk and is consumed from
+# here. It is independent of everything else in this repository: it
+# knows how to move Vulkan across a transport and nothing about virtual
+# machines, so it can be built and tested without any of this.
+#
+# The manager and the guest agent both link its LSW::LinkProto and
+# LSW::Protocol targets. That is the whole of the coupling: the region
+# layout and the framing are a contract the two ends of the VM boundary
+# must agree on, and there is exactly one definition of it.
+set(REMOTEVK_BUILD_SERVER ${LSW_BUILD_SERVER} CACHE BOOL "" FORCE)
+set(REMOTEVK_BUILD_CLIENT ${LSW_BUILD_CLIENT} CACHE BOOL "" FORCE)
+set(REMOTEVK_BUILD_TESTS  ${LSW_BUILD_TESTS}  CACHE BOOL "" FORCE)
+add_subdirectory("${LSW_REMOTEVK_DIR}" remotevk)
 
 if(LSW_BUILD_MANAGER)
     # Dependencies shared by the host-side modules under src/host.
@@ -111,21 +113,15 @@ if(LSW_BUILD_AGENT)
 endif()
 
 if(LSW_BUILD_TESTS)
-    add_subdirectory(src/protocol/tests)
-    # The link contract: the highest-risk code in the repo (both sides of
-    # a VM boundary must agree byte for byte) and, now that it lives in
-    # one toolchain-neutral module, testable host-native.
-    add_subdirectory(src/linkproto/tests)
     # The agent's platform-free logic, compiled by the HOST toolchain —
     # the agent executable itself is Windows-only, but this is not.
+    #
+    # The protocol, link-contract and codegen tests moved to remotevk
+    # with the code they cover, and run from there.
     if(NOT WIN32)
         add_subdirectory(src/agent/tests)
     endif()
-    # vkproto tests are wired from src/vkproto/CMakeLists.txt
 endif()
-
-# ---- Codegen targets ----
-add_subdirectory(codegen)
 
 # ---- Summary ----
 message(STATUS "")

@@ -1,0 +1,3 @@
+[submodule "external/remotevk"]
+	path = external/remotevk
+	url = /home/accel/Coding/remotevk

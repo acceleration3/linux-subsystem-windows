@@ -51,7 +51,7 @@ fi
 for target in "${HOST_TARGETS[@]}"; do
     case "$target" in
         lsw-manager)       echo "  manager:       ${BUILD}/src/host/lsw-manager" ;;
-        lsw_icd)           echo "  icd:           ${BUILD}/src/icd/liblsw_icd.so" ;;
-        lsw-render-server) echo "  render-server: ${BUILD}/src/render_server/lsw-render-server" ;;
+        lsw_icd)           echo "  icd:           $(find "${BUILD}" -name liblsw_icd.so -print -quit)" ;;
+        lsw-render-server) echo "  render-server: $(find "${BUILD}" -name lsw-render-server -print -quit)" ;;
     esac
 done

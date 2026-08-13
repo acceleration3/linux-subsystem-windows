@@ -3,7 +3,7 @@
 #
 # Outputs:
 #   build-agent/src/agent/lsw-guest-agent.exe   the control-plane agent
-#   build-agent/src/icd/lsw_icd.dll             the Vulkan ICD
+#   build-agent/remotevk/src/icd/lsw_icd.dll    the Vulkan ICD
 #
 # Both are statically linked against the mingw runtime, so they drop onto
 # a stock Win11 install with no extra DLLs. For the ICD that is not a
@@ -48,9 +48,14 @@ if [[ ! -f "${EXE}" ]]; then
 fi
 echo ">>> Built ${EXE} ($(stat -c%s "${EXE}") bytes)"
 
-DLL="${BUILD}/src/icd/lsw_icd.dll"
+# The ICD builds inside the remotevk subproject, so its binary dir is
+# nested under the name the root CMakeLists gives that subdirectory.
+# Located rather than hard-coded: the alternative is a path that goes
+# stale the next time the layout moves, and fails as "did not produce"
+# long after the build itself succeeded.
+DLL="$(find "${BUILD}" -name lsw_icd.dll -print -quit)"
 if [[ ! -f "${DLL}" ]]; then
-    echo "!!! Build did not produce ${DLL}" >&2
+    echo "!!! Build did not produce lsw_icd.dll" >&2
     exit 1
 fi
 echo ">>> Built ${DLL} ($(stat -c%s "${DLL}") bytes)"

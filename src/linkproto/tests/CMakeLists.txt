@@ -1,3 +1,0 @@
-add_executable(lsw_linkproto_test linkproto_test.cpp)
-target_link_libraries(lsw_linkproto_test PRIVATE LSW::LinkProto)
-add_test(NAME lsw_linkproto_test COMMAND lsw_linkproto_test)

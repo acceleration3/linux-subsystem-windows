@@ -54,7 +54,9 @@ endfunction()
 # include path is uniform so no source ever names a target.
 set(LSW_HOST_INCLUDE_DIR $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
 
-include(${CMAKE_SOURCE_DIR}/cmake/EmbedTextFile.cmake)
+# By module path, not by absolute path: this module ships with remotevk
+# now, and CMAKE_MODULE_PATH is where the root says to find it.
+include(EmbedTextFile)
 
 # ---- lsw_host_core -------------------------------------------------------
 set(LSW_CORE_CONCERNS platform config vm link apps ui services)
