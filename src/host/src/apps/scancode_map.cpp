@@ -191,30 +191,4 @@ unsigned ScancodeMap::virtual_key_for(unsigned hid_usage) {
     }
 }
 
-bool ScancodeMap::produces_text(unsigned hid_usage) {
-    if (hid_usage >= kA && hid_usage <= kZ) {
-        return true;
-    }
-    if (hid_usage >= k1 && hid_usage <= k0) {
-        return true;
-    }
-    switch (hid_usage) {
-    case kSpace:
-    case kMinus:
-    case kEquals:
-    case kLeftBracket:
-    case kRightBracket:
-    case kBackslash:
-    case kSemicolon:
-    case kApostrophe:
-    case kGrave:
-    case kComma:
-    case kPeriod:
-    case kSlash:
-        return true;
-    default:
-        return false;
-    }
-}
-
 }  // namespace lsw::host::apps

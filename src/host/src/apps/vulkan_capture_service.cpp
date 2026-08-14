@@ -12,6 +12,12 @@
 #include "lsw/host/manager/guest_input_sender.hpp"
 #include "lsw/render/window_input.hpp"
 
+#include "lsw/linkproto/commands.hpp"
+
+#include <QtConcurrent>
+
+#include <nlohmann/json.hpp>
+
 namespace lsw::host::apps {
 
 VulkanCaptureService::VulkanCaptureService(vm::Lifecycle& lifecycle, link::AgentRpcClient& rpc,
@@ -93,13 +99,17 @@ bool VulkanCaptureService::ensure_running(const QUuid& vm_uuid) {
             break;
         case Kind::KeyDown:
         case Kind::KeyUp: {
-            // A key that produces a character is sent as text only: the
-            // guest's own TranslateMessage would otherwise synthesise a
-            // second character from the key and every letter would
-            // arrive twice.
-            if (ScancodeMap::produces_text(ev.scancode)) {
-                break;
-            }
+            // EVERY key goes as a key, including the ones that produce
+            // characters.
+            //
+            // The agent injects these with SendInput and a real virtual
+            // key, so Windows raises WM_KEYDOWN and the application's
+            // own TranslateMessage derives the character from it — one
+            // path serves both. The text path uses KEYEVENTF_UNICODE
+            // instead, which delivers a character and no key at all: a
+            // text box is happy with that and a game reads nothing,
+            // which is exactly how Z and X reached Touhou 6's window
+            // and not its input handler.
             const unsigned vk = ScancodeMap::virtual_key_for(ev.scancode);
             if (vk == 0) {
                 break;  // unmapped: silence beats a plausible wrong key
@@ -112,9 +122,33 @@ bool VulkanCaptureService::ensure_running(const QUuid& vm_uuid) {
             break;
         }
         case Kind::Text:
-            input.text(ev.code_point, ev.mods);
+            // Only what the key path cannot express. An ASCII character
+            // has already arrived as a key press, and sending it again
+            // here would type everything twice; a character the host
+            // layout produced some other way (a dead key, AltGr, an
+            // input method) has no virtual key of ours and this is the
+            // only way it gets there.
+            if (ev.code_point >= 0x80) {
+                input.text(ev.code_point, ev.mods);
+            }
             break;
         }
+    });
+
+    // Closing the window means closing the application. The window
+    // belongs to the replay, but what is drawing into it is a process
+    // in the VM — so the request goes there, and the window goes away
+    // when that process does. Same contract as closing a mirror.
+    service_->surfaces().set_close_sink([this](std::uint64_t /*surface_id*/) {
+        const std::uint64_t hwnd = input_hwnd_.load();
+        if (hwnd == 0) {
+            return;
+        }
+        LSW_INFO("vulkan capture: window closed — asking guest window {:#x} to close", hwnd);
+        (void)QtConcurrent::run([this, hwnd] {
+            (void)rpc_.call(nlohmann::json{{"cmd", linkproto::cmd::kCloseWindow},
+                                           {"params", {{"hwnd", hwnd}}}});
+        });
     });
 
     running_.store(true);
