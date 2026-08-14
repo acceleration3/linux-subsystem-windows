@@ -20,15 +20,6 @@ public:
     ScancodeMap() = delete;
 
     [[nodiscard]] static unsigned virtual_key_for(unsigned hid_usage);
-
-    // Whether this key produces text the platform will also deliver as
-    // a character.
-    //
-    // Text arrives twice otherwise: once as the key, once as the
-    // character it produced — and Windows' own TranslateMessage would
-    // synthesise a second character from the key, so every letter typed
-    // would land twice in the application.
-    [[nodiscard]] static bool produces_text(unsigned hid_usage);
 };
 
 }  // namespace lsw::host::apps
