@@ -153,34 +153,15 @@ void AppListWidget::on_item_activated(QListWidgetItem* item) {
     // ours to start; the second the agent does when told the launch is
     // a Vulkan one.
     const bool vulkan = cfg->capture == apps::CaptureMethod::Vulkan;
-    if (vulkan && !uuid_.isNull() && vulkan_.ensure_running(uuid_)
-        && apps::VulkanCaptureService::can_adopt_mirror()) {
-        // The window has to exist BEFORE the application does. A guest
-        // application asks for its surface within a moment of starting,
-        // and the surface is created on this window — so a mirror
-        // opened afterwards (which is how the WGC path works, once the
-        // watcher finds a guest window) would be too late to be the
-        // thing the replay presents into.
-        //
-        // It opens unbound: there is no guest window to send input to
-        // yet. ``on_windows_for_vulkan`` binds it when one appears.
-        if (vulkan_mirror_) {
-            vulkan_mirror_->close();
-            vulkan_mirror_->deleteLater();
-        }
-        vulkan_mirror_ = new VulkanMirror(rpc_, cfg->name.isEmpty() ? cfg->path : cfg->name,
-                                          QSize(1280, 720));
-        connect(vulkan_mirror_, &VulkanMirror::closed, this, [this] {
-            windows_.unsubscribe();
-            vulkan_pid_ = 0;
-        });
-        vulkan_mirror_->show();
-        vulkan_.set_adoption_target(static_cast<std::uint64_t>(vulkan_mirror_->winId()),
-                                    1280, 720);
+    if (vulkan && !uuid_.isNull()) {
+        // Something has to replay the command stream this application
+        // is about to produce, or it blocks on its first Vulkan call.
+        // It runs in this process so that the window it opens can send
+        // its input back to the guest — which is the only reason the
+        // manager hosts it rather than spawning lsw-render-server.
+        (void)vulkan_.ensure_running(uuid_);
+        vulkan_.stop_forwarding();
     }
-    // Async — actual watcher creation happens in on_launched once
-    // the agent has reported the spawned PID. Launch by path so
-    // manual configs work too.
     launcher_.launch(cfg->path, vulkan);
 }
 
@@ -197,12 +178,14 @@ void AppListWidget::on_launched(const QString& app_id, quint32 pid) {
     if (!rpc_.has_target()) {
         return;
     }
-    if (vulkan_mirror_ != nullptr && vulkan_pid_ == 0 && !vulkan_mirror_->is_bound()) {
-        // A Vulkan-capture launch gets no AppWindowWatcher: its windows
-        // would each become a WGC mirror, and those are fed by the
-        // frame ring — which this application does not use. It has one
-        // window already, holding its pixels; all it needs is the guest
-        // HWND to send input to.
+    const auto* launched = store_.find(apps::AppConfig::make_id(app_id));
+    if (launched != nullptr && launched->capture == apps::CaptureMethod::Vulkan) {
+        // No AppWindowWatcher for a Vulkan-capture launch: its windows
+        // would each become a mirror fed by the frame ring, which this
+        // application does not use — they would sit there black beside
+        // the window that has the picture. What it needs instead is for
+        // the replay's window to know which guest window to send input
+        // to, which takes the PID's window turning up.
         vulkan_pid_ = pid;
         connect(&windows_, &link::GuestWindowModel::updated, this,
                 &AppListWidget::on_windows_for_vulkan, Qt::UniqueConnection);
@@ -226,16 +209,16 @@ void AppListWidget::on_launched(const QString& app_id, quint32 pid) {
 }
 
 void AppListWidget::on_windows_for_vulkan(const QList<link::GuestWindow>& windows) {
-    if (vulkan_pid_ == 0 || vulkan_mirror_ == nullptr) {
+    if (vulkan_pid_ == 0) {
         return;
     }
     for (const auto& w : windows) {
         if (w.pid != vulkan_pid_ || w.hwnd == 0) {
             continue;
         }
-        vulkan_mirror_->bind(w.hwnd);
-        // One binding is all this needs; the enumeration keeps running
-        // for everyone else.
+        vulkan_.forward_input_to(w.hwnd);
+        // One window is all this needs; the enumeration keeps running
+        // for every other consumer.
         disconnect(&windows_, &link::GuestWindowModel::updated, this,
                    &AppListWidget::on_windows_for_vulkan);
         windows_.unsubscribe();
