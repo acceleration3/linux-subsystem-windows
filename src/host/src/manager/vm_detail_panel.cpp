@@ -89,6 +89,7 @@ QLabel#StatusBadgeStopped {
 VmDetailPanel::VmDetailPanel(config::VmState& vms, vm::Lifecycle& lifecycle, vm::Monitor& monitor,
                              apps::AppConfigStore& app_configs, link::AgentRpcClient& rpc,
                              link::GuestWindowModel& windows, apps::LogStore& log_store,
+                             apps::VulkanCaptureService& vulkan,
                              QWidget* parent)
     : QWidget(parent),
       vms_(vms),
@@ -188,7 +189,7 @@ VmDetailPanel::VmDetailPanel(config::VmState& vms, vm::Lifecycle& lifecycle, vm:
     auto* apps_group = new QGroupBox(QStringLiteral("Installed applications"));
     auto* apps_layout = new QVBoxLayout(apps_group);
     apps_layout->setContentsMargins(8, 8, 8, 8);
-    app_list_ = new AppListWidget(app_configs, rpc_, windows_);
+    app_list_ = new AppListWidget(app_configs, rpc_, windows_, vulkan);
     apps_layout->addWidget(app_list_, 1);
     right_layout->addWidget(apps_group);
     splitter->addWidget(right_col);

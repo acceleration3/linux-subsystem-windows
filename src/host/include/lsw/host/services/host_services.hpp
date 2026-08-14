@@ -2,6 +2,7 @@
 
 #include "lsw/host/apps/app_config_store.hpp"
 #include "lsw/host/apps/log_store.hpp"
+#include "lsw/host/apps/vulkan_capture_service.hpp"
 #include "lsw/host/config/settings.hpp"
 #include "lsw/host/config/vm_state.hpp"
 #include "lsw/host/link/agent_guest_stats_probe.hpp"
@@ -57,6 +58,12 @@ public:
     [[nodiscard]] link::GuestWindowModel& windows() noexcept { return windows_; }
     [[nodiscard]] apps::AppConfigStore& app_configs() noexcept { return app_configs_; }
     [[nodiscard]] apps::LogStore& log_store() noexcept { return log_store_; }
+    // Owns the render server that replays a Vulkan-capture app's
+    // command stream. Declared after lifecycle_, whose regions it
+    // attaches to.
+    [[nodiscard]] apps::VulkanCaptureService& vulkan_capture() noexcept {
+        return vulkan_capture_;
+    }
 
 private:
     config::Settings settings_;
@@ -74,6 +81,7 @@ private:
     link::AgentGuestStatsProbe guest_probe_;
     apps::AppConfigStore app_configs_;
     apps::LogStore log_store_;  // declared after rpc_: detaches from it in ~LogStore
+    apps::VulkanCaptureService vulkan_capture_;
 };
 
 }  // namespace lsw::host::services

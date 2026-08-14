@@ -18,7 +18,13 @@ public:
     explicit Launcher(link::AgentRpcClient& rpc, QObject* parent = nullptr);
 
     // Async — returns immediately and emits launched/failed.
-    void launch(const QString& app_id);
+    //
+    // ``vulkan`` says this app renders through the LSW ICD. The agent
+    // needs to know before the process starts: the ICD's transport is
+    // the IVSHMEM region, the driver hands that region to one process
+    // at a time, and the agent is holding it. Told in advance, the
+    // agent steps aside for the life of the process.
+    void launch(const QString& app_id, bool vulkan = false);
 
 Q_SIGNALS:
     // ``pid`` is the spawned process id (0 if the agent couldn't
