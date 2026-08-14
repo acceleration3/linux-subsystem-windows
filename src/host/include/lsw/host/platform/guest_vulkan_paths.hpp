@@ -32,6 +32,17 @@ public:
     // build-tree default. Empty when neither exists.
     [[nodiscard]] static QString vulkan_loader();
 
+    // The same two files, built for i686.
+    //
+    // A 32-bit process can only load a 32-bit driver, and every D3D8 /
+    // D3D9 title is 32-bit — so a guest with only the x86-64 pair can
+    // run none of them. They come out of the second cross-build (see
+    // scripts/build-agent.sh) and are staged beside the 64-bit pair,
+    // registered under the WOW6432Node view of the driver key because
+    // that is the one a 32-bit process reads.
+    [[nodiscard]] static QString icd_dll_x86();
+    [[nodiscard]] static QString vulkan_loader_x86();
+
     // The ICD manifest the guest's loader reads. Generated rather than
     // shipped as a file, because it has to name the driver's path on the
     // GUEST filesystem, which the host only knows by convention.

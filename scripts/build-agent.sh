@@ -41,6 +41,32 @@ echo ">>> Building agent + ICD + Vulkan loader"
 # the loader is what reads HKLM\SOFTWARE\Khronos\Vulkan\Drivers.
 cmake --build "${BUILD}" --target lsw-guest-agent lsw_icd vulkan
 
+# The i686 pair, in a second build tree.
+#
+# A 32-bit process can only load a 32-bit driver, and every D3D8 / D3D9
+# title is 32-bit — so without this the guest can run modern Vulkan
+# applications and none of the old games the whole exercise is for. Only
+# the ICD and the loader are built here: the agent is our own program
+# and nothing loads it into a 32-bit process.
+BUILD32="${ROOT}/build-agent32"
+TOOLCHAIN32="${ROOT}/cmake/toolchain-mingw-w64-i686.cmake"
+if command -v i686-w64-mingw32-g++ >/dev/null 2>&1; then
+    echo ">>> Configuring 32-bit ICD cross-build (mingw-w64 i686) -> ${BUILD32}"
+    cmake -S "${ROOT}" -B "${BUILD32}" -G Ninja \
+        -DCMAKE_TOOLCHAIN_FILE="${TOOLCHAIN32}" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DLSW_BUILD_SERVER=OFF \
+        -DLSW_BUILD_CLIENT=ON \
+        -DLSW_BUILD_MANAGER=OFF \
+        -DLSW_BUILD_AGENT=OFF \
+        -DLSW_BUILD_TESTS=OFF
+    echo ">>> Building 32-bit ICD + Vulkan loader"
+    cmake --build "${BUILD32}" --target lsw_icd vulkan
+else
+    echo "!!! i686-w64-mingw32-g++ not found; skipping the 32-bit pair." >&2
+    echo "    32-bit applications in the guest will find no Vulkan driver." >&2
+fi
+
 EXE="${BUILD}/src/agent/lsw-guest-agent.exe"
 if [[ ! -f "${EXE}" ]]; then
     echo "!!! Build did not produce ${EXE}" >&2

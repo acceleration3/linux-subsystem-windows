@@ -134,6 +134,67 @@ bool unlink_one(const std::wstring& target) {
     return false;
 }
 
+// The Vulkan loader belongs next to the exe as well.
+//
+// A translation layer calls into vulkan-1.dll, and a VM with no GPU
+// driver has no vulkan-1.dll anywhere on the system path — the wizard
+// installs ours under ProgramData, which nothing outside that folder
+// finds. Placing it beside the application puts it first in the DLL
+// search order, which is the only mechanism available: there is no
+// per-application way to point at a loader otherwise.
+constexpr const wchar_t* kLoaderDll = L"vulkan-1.dll";
+
+// Where the wizard puts each build of the driver + loader.
+[[nodiscard]] std::wstring vulkan_dir_for(Arch arch) {
+    return arch == Arch::X64 ? L"C:\\ProgramData\\LSW\\vulkan"
+                             : L"C:\\ProgramData\\LSW\\vulkan32";
+}
+
+// Register the ICD for ``arch`` if it is not registered already.
+//
+// The loader finds drivers ONLY through this key, and a 32-bit process
+// reads the redirected WOW6432Node view of it — so a guest installed
+// before the 32-bit pair existed has a driver on disk that nothing will
+// ever load. Writing it here rather than only in the answer file means
+// an existing VM gains 32-bit support without being reinstalled.
+//
+// Idempotent, and quiet on success: this runs on every enable.
+void ensure_icd_registered(Arch arch) {
+    const std::wstring manifest = vulkan_dir_for(arch) + L"\\lsw_icd.json";
+    if (::GetFileAttributesW(manifest.c_str()) == INVALID_FILE_ATTRIBUTES) {
+        LSW_AGENT_WARN(std::string{"capture_setup: no ICD manifest at "}
+                       + wide_to_utf8(manifest) + " — that build of the driver is not "
+                                                  "installed in this guest");
+        return;
+    }
+    // KEY_WOW64_32KEY names the view a 32-bit process would read. The
+    // agent is 64-bit, so without it both writes would land in the
+    // 64-bit view and the 32-bit loader would still find nothing.
+    const REGSAM view = arch == Arch::X64 ? KEY_WOW64_64KEY : KEY_WOW64_32KEY;
+    HKEY key = nullptr;
+    const LSTATUS open_rc = ::RegCreateKeyExW(
+        HKEY_LOCAL_MACHINE, L"SOFTWARE\\Khronos\\Vulkan\\Drivers", 0, nullptr,
+        REG_OPTION_NON_VOLATILE, KEY_SET_VALUE | view, nullptr, &key, nullptr);
+    if (open_rc != ERROR_SUCCESS) {
+        LSW_AGENT_ERROR(std::string{"capture_setup: cannot open the Vulkan drivers key: "}
+                        + std::to_string(open_rc));
+        return;
+    }
+    const DWORD enabled = 0;  // 0 means enabled; the loader ignores the data
+    const LSTATUS set_rc =
+        ::RegSetValueExW(key, manifest.c_str(), 0, REG_DWORD,
+                         reinterpret_cast<const BYTE*>(&enabled), sizeof(enabled));
+    ::RegCloseKey(key);
+    if (set_rc != ERROR_SUCCESS) {
+        LSW_AGENT_ERROR(std::string{"capture_setup: cannot register "}
+                        + wide_to_utf8(manifest) + ": " + std::to_string(set_rc));
+        return;
+    }
+    LSW_AGENT_INFO(std::string{"capture_setup: ICD registered ("}
+                   + (arch == Arch::X64 ? "x64" : "x86") + "): " + wide_to_utf8(manifest));
+}
+
+
 }  // namespace
 
 bool Setup::enable_vulkan_for(const std::string& app_exe_path) {
@@ -157,7 +218,23 @@ bool Setup::enable_vulkan_for(const std::string& app_exe_path) {
     const std::wstring vkd3d_dir =
         std::wstring(L"C:\\ProgramData\\LSW\\vkd3d\\") + (arch == Arch::X64 ? L"x64" : L"x86");
 
+    ensure_icd_registered(arch);
+
     bool all_ok = true;
+    // The loader first: a translation DLL beside the exe with no
+    // vulkan-1.dll beside it either fails to load or silently picks up
+    // some other loader.
+    {
+        const std::wstring src = vulkan_dir_for(arch) + L"\\" + kLoaderDll;
+        if (::GetFileAttributesW(src.c_str()) != INVALID_FILE_ATTRIBUTES) {
+            if (!link_one(dir + L"\\" + kLoaderDll, src)) {
+                all_ok = false;
+            }
+        } else {
+            LSW_AGENT_WARN(std::string{"capture_setup: no "} + wide_to_utf8(src)
+                           + "; the application will have to find a loader elsewhere");
+        }
+    }
     for (const auto* name : kDxvkDlls) {
         const std::wstring src = dxvk_dir + L"\\" + name;
         if (::GetFileAttributesW(src.c_str()) == INVALID_FILE_ATTRIBUTES) {
@@ -189,11 +266,15 @@ bool Setup::disable_vulkan_for(const std::string& app_exe_path) {
         return false;
     }
     const std::wstring dir = parent_dir(exe);
+
     bool all_ok = true;
     for (const auto* name : kDxvkDlls) {
         if (!unlink_one(dir + L"\\" + name)) {
             all_ok = false;
         }
+    }
+    if (!unlink_one(dir + L"\\" + kLoaderDll)) {
+        all_ok = false;
     }
     for (const auto* name : kVkd3dDlls) {
         if (!unlink_one(dir + L"\\" + name)) {

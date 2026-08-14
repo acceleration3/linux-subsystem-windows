@@ -23,7 +23,19 @@ namespace {
 }  // namespace
 
 QString GuestVulkanPaths::icd_dll() {
-    return locate("LSW_ICD_DLL", QStringLiteral("/../../../build-agent/src/icd/lsw_icd.dll"));
+    return locate("LSW_ICD_DLL",
+                  QStringLiteral("/../../../build-agent/remotevk/src/icd/lsw_icd.dll"));
+}
+
+QString GuestVulkanPaths::icd_dll_x86() {
+    return locate("LSW_ICD_DLL_X86",
+                  QStringLiteral("/../../../build-agent32/remotevk/src/icd/lsw_icd.dll"));
+}
+
+QString GuestVulkanPaths::vulkan_loader_x86() {
+    return locate(
+        "LSW_VULKAN_LOADER_X86",
+        QStringLiteral("/../../../build-agent32/_deps/vulkanloader-build/loader/vulkan-1.dll"));
 }
 
 QString GuestVulkanPaths::vulkan_loader() {

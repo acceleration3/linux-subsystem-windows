@@ -279,6 +279,23 @@
 					<Description>LSW: register the ICD in HKLM\SOFTWARE\Khronos\Vulkan\Drivers</Description>
 					<Path>reg add "HKLM\SOFTWARE\Khronos\Vulkan\Drivers" /v "C:\ProgramData\LSW\vulkan\lsw_icd.json" /t REG_DWORD /d 0 /f</Path>
 				</RunSynchronousCommand>
+				<!-- The same two files built for i686, and registered
+				     in the 32-bit view of the same key. A 32-bit
+				     process cannot load a 64-bit driver, and the
+				     registry it reads is redirected to WOW6432Node —
+				     so without this pair every D3D8 and D3D9 title
+				     (they are all 32-bit) finds no Vulkan driver at
+				     all. -->
+				<RunSynchronousCommand wcm:action="add">
+					<Order>26</Order>
+					<Description>LSW: copy the 32-bit Vulkan ICD + loader from payload CD</Description>
+					<Path>cmd.exe /c for %i in (D E F G H I J K L M N) do @if exist %i:\vulkan32\lsw_icd.dll xcopy /E /I /Y %i:\vulkan32 C:\ProgramData\LSW\vulkan32</Path>
+				</RunSynchronousCommand>
+				<RunSynchronousCommand wcm:action="add">
+					<Order>27</Order>
+					<Description>LSW: register the 32-bit ICD under WOW6432Node</Description>
+					<Path>reg add "HKLM\SOFTWARE\WOW6432Node\Khronos\Vulkan\Drivers" /v "C:\ProgramData\LSW\vulkan32\lsw_icd.json" /t REG_DWORD /d 0 /f</Path>
+				</RunSynchronousCommand>
 				<!-- The agent autostarts from the 'lsw-agent' scheduled
 				     task (registered by LswPromote.ps1 at SetupComplete,
 				     once the wizard account exists), NOT from HKLM\Run.
