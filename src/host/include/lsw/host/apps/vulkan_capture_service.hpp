@@ -62,6 +62,16 @@ public:
 
     [[nodiscard]] bool running() const noexcept { return running_.load(); }
 
+    // Whether a mirror can be the thing presented into.
+    //
+    // False on a Wayland session: a Qt window's native handle is then
+    // not an X11 window, and the adoption path creates an XCB surface.
+    // The replay makes its own window instead — two windows, input in
+    // the guest one, which is what happened before any of this. Run the
+    // manager with QT_QPA_PLATFORM=xcb to get the single-window path
+    // under XWayland.
+    [[nodiscard]] static bool can_adopt_mirror();
+
 private:
     void stop();
 

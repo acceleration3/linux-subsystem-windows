@@ -7,6 +7,8 @@
 #include "lsw/protocol/listener.hpp"
 #include "lsw/render/render_service.hpp"
 
+#include <QGuiApplication>
+
 namespace lsw::host::apps {
 
 VulkanCaptureService::VulkanCaptureService(vm::Lifecycle& lifecycle, QObject* parent)
@@ -60,10 +62,18 @@ bool VulkanCaptureService::ensure_running(const QUuid& vm_uuid) {
     }
 
     service_ = std::make_unique<::lsw::render::RenderService>();
-    // No SDL in this process: the manager has its own event loop and
-    // its own display connection, and every surface the replay makes
-    // here is created on a window the manager already owns.
-    service_->surfaces().set_adopt_only(true);
+    if (can_adopt_mirror()) {
+        // No SDL in this process: the manager has its own event loop
+        // and its own display connection, and every surface the replay
+        // makes here is created on a window the manager already owns.
+        service_->surfaces().set_adopt_only(true);
+    } else {
+        LSW_WARN("vulkan capture: this is a {} session, so a mirror's native handle is not an "
+                 "X11 window and cannot be presented into. The replay will open its own "
+                 "window; run the manager with QT_QPA_PLATFORM=xcb for a single window with "
+                 "input.",
+                 QGuiApplication::platformName().toStdString());
+    }
 
     running_.store(true);
     attached_uuid_ = vm_uuid;
@@ -76,9 +86,13 @@ bool VulkanCaptureService::ensure_running(const QUuid& vm_uuid) {
     return true;
 }
 
+bool VulkanCaptureService::can_adopt_mirror() {
+    return QGuiApplication::platformName() == QLatin1String("xcb");
+}
+
 void VulkanCaptureService::set_adoption_target(std::uint64_t native_window, std::uint32_t width,
                                                std::uint32_t height) {
-    if (service_ == nullptr) {
+    if (service_ == nullptr || !can_adopt_mirror()) {
         return;
     }
     service_->surfaces().set_adoption_target(native_window, width, height);

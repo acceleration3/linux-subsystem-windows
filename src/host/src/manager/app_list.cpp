@@ -153,7 +153,8 @@ void AppListWidget::on_item_activated(QListWidgetItem* item) {
     // ours to start; the second the agent does when told the launch is
     // a Vulkan one.
     const bool vulkan = cfg->capture == apps::CaptureMethod::Vulkan;
-    if (vulkan && !uuid_.isNull() && vulkan_.ensure_running(uuid_)) {
+    if (vulkan && !uuid_.isNull() && vulkan_.ensure_running(uuid_)
+        && apps::VulkanCaptureService::can_adopt_mirror()) {
         // The window has to exist BEFORE the application does. A guest
         // application asks for its surface within a moment of starting,
         // and the surface is created on this window — so a mirror
