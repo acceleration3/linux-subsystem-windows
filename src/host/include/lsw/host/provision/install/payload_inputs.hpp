@@ -44,6 +44,11 @@ struct PayloadInputs {
     // only the GPU path is absent.
     QString icd_dll_path;
     QString vulkan_loader_path;
+    // The i686 pair, for 32-bit applications. Optional: a guest without
+    // it installs fine and runs 64-bit Vulkan apps, and only a D3D8 /
+    // D3D9 title notices.
+    QString icd32_dll_path;
+    QString vulkan32_loader_path;
     QString icd_manifest_json;  // contents, not a path
 };
 

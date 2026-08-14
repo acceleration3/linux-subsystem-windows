@@ -71,6 +71,23 @@ void PayloadIsoStager::build(const config::VmRecord& record, const PipelineInput
                  icd_dll.toStdString(), loader.toStdString());
     }
 
+    // The i686 pair is what a 32-bit application loads, and every D3D8
+    // and D3D9 title is one. Its absence costs only those, so it is a
+    // note rather than a warning.
+    const QString icd32 = platform::GuestVulkanPaths::icd_dll_x86();
+    const QString loader32 = platform::GuestVulkanPaths::vulkan_loader_x86();
+    if (icd32.isEmpty() || loader32.isEmpty()) {
+        LSW_INFO("provision: no 32-bit guest Vulkan pair; 32-bit applications will have no "
+                 "driver. Run scripts/build-agent.sh (it builds both), or set "
+                 "LSW_ICD_DLL_X86 and LSW_VULKAN_LOADER_X86");
+    } else {
+        payload.icd32_dll_path = icd32;
+        payload.vulkan32_loader_path = loader32;
+        payload.icd_manifest_json = platform::GuestVulkanPaths::icd_manifest_json();
+        LSW_INFO("provision: bundling 32-bit guest Vulkan ICD from {} and loader from {}",
+                 icd32.toStdString(), loader32.toStdString());
+    }
+
     // libisofs writes hundreds of megabytes; off the GUI thread.
     const QPointer<PayloadIsoStager> self{this};
     (void)QtConcurrent::run([self, payload]() {

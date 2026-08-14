@@ -113,6 +113,33 @@ QStringList PayloadIsoBuilder::stage_files(const PayloadInputs& in, const QStrin
         }
     }
 
+    // The i686 pair, in its own directory for the same reason. It has
+    // to be a separate directory rather than a suffix: the manifest
+    // names the driver by a RELATIVE path, so the two builds cannot
+    // share one folder without one of them shadowing the other.
+    if (!in.icd32_dll_path.isEmpty() && !in.vulkan32_loader_path.isEmpty()) {
+        const QString vk32_dir = dir.filePath("vulkan32");
+        QDir().mkpath(vk32_dir);
+        auto stage_into_vulkan32 = [&](const QString& src, const QString& name) {
+            const QString dest = QDir(vk32_dir).filePath(name);
+            if (!QFile::copy(src, dest)) {
+                LSW_WARN("failed to stage {} -> {}", src.toStdString(), dest.toStdString());
+                return;
+            }
+            created << dest;
+        };
+        stage_into_vulkan32(in.icd32_dll_path, "lsw_icd.dll");
+        stage_into_vulkan32(in.vulkan32_loader_path, "vulkan-1.dll");
+        if (!in.icd_manifest_json.isEmpty()) {
+            const QString manifest = QDir(vk32_dir).filePath("lsw_icd.json");
+            QFile mf{manifest};
+            if (mf.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+                mf.write(in.icd_manifest_json.toUtf8());
+                created << manifest;
+            }
+        }
+    }
+
     stage_optional(in.lsw_msi_path, "lsw.msi");
     stage_optional(in.dxvk_archive_path, "dxvk.tar.gz");
     stage_optional(in.vkd3d_archive_path, "vkd3d.tar.gz");

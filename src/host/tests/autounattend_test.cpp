@@ -146,6 +146,25 @@ int main(int argc, char** argv) {
             QDir(staging3.path()).filePath(QStringLiteral("vulkan/") + QLatin1String(name));
         check(QFile::exists(on_iso), "guest Vulkan file staged into \\vulkan on the ISO");
     }
+    // The 32-bit pair, which is what a D3D8 / D3D9 title loads. It
+    // stages into its own directory — the manifest names the driver
+    // relatively, so one folder cannot hold both builds — and registers
+    // under the WOW6432Node view, which is the key a 32-bit process
+    // actually reads.
+    check(xml.contains(QStringLiteral("WOW6432Node\\Khronos\\Vulkan\\Drivers")),
+          "autounattend registers the 32-bit ICD in the redirected drivers key");
+
+    QTemporaryDir staging4;
+    PayloadInputs with_vulkan32 = with_vulkan;
+    with_vulkan32.icd32_dll_path = with_vulkan.icd_dll_path;
+    with_vulkan32.vulkan32_loader_path = with_vulkan.vulkan_loader_path;
+    (void)PayloadIsoBuilder::stage_files(with_vulkan32, staging4.path());
+    for (const char* name : {"lsw_icd.dll", "vulkan-1.dll", "lsw_icd.json"}) {
+        const QString on_iso =
+            QDir(staging4.path()).filePath(QStringLiteral("vulkan32/") + QLatin1String(name));
+        check(QFile::exists(on_iso), "32-bit guest Vulkan file staged into \\vulkan32");
+    }
+
     // The manifest's library_path must stay relative: the loader
     // resolves it against the manifest's own directory, so a relative
     // path survives being copied anywhere in the guest, and an absolute
