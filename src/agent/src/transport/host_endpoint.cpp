@@ -249,6 +249,19 @@ void HostEndpoint::run(std::atomic<bool>& stop_flag) {
             LSW_AGENT_WARN("host_endpoint: accept failed wsa_err={}", ::WSAGetLastError());
             continue;
         }
+        // Nagle off on this side too. Replies to input are not sent at
+        // all, so there is nothing to coalesce with — and the events
+        // travelling the other way are exactly the small writes Nagle
+        // was designed to hold back.
+        {
+            const int one = 1;
+            if (::setsockopt(c, IPPROTO_TCP, TCP_NODELAY,
+                             reinterpret_cast<const char*>(&one), sizeof(one))
+                == SOCKET_ERROR) {
+                LSW_AGENT_WARN("host_endpoint: TCP_NODELAY failed wsa_err={}",
+                               ::WSAGetLastError());
+            }
+        }
         char ip[64] = {};
         ::inet_ntop(AF_INET, &peer.sin_addr, ip, sizeof(ip));
         const std::string peer_desc =

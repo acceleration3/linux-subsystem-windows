@@ -6,6 +6,7 @@
 #include <cerrno>
 #include <cstring>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -40,6 +41,21 @@ int VsockClient::connect(quint32 /*cid*/, quint32 port) {
     addr.sin_family = AF_INET;
     addr.sin_port = htons(static_cast<unsigned short>(port));
     ::inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
+    // Nagle off.
+    //
+    // This carries input: a stream of small one-way writes with no
+    // replies to piggyback an ACK on. Left on, Nagle holds each write
+    // until the previous one is acknowledged, the guest's delayed ACK
+    // sits on that for tens of milliseconds, and what arrives is a
+    // burst — a key-down and its key-up delivered together, or a key
+    // held far longer than it was pressed. It reads as input that is
+    // sometimes late, sometimes stuck, and never quite reproducible.
+    {
+        const int one = 1;
+        if (::setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one)) < 0) {
+            LSW_WARN("agent tcp TCP_NODELAY: {}", std::strerror(errno));
+        }
+    }
     if (::connect(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) < 0) {
         const int e = errno;
         // Connect failures are expected during install / boot — the

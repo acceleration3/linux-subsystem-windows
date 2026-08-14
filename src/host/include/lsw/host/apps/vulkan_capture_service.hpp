@@ -6,6 +6,8 @@
 #include <atomic>
 #include <cstdint>
 #include <memory>
+#include <mutex>
+#include <set>
 #include <thread>
 
 namespace lsw::protocol { class Listener; }
@@ -79,6 +81,12 @@ private:
     // The guest window input is going to, or 0. Read from the replay's
     // window thread, written from the GUI thread.
     std::atomic<std::uint64_t> input_hwnd_{0};
+    // Virtual keys currently down, so they can be released if the
+    // window stops hearing about them — losing focus produces no
+    // key-up, and a key injected with SendInput and never lifted stays
+    // down in the guest.
+    std::mutex held_mu_;
+    std::set<unsigned> held_keys_;
     std::unique_ptr<::lsw::render::RenderService> service_;
     std::unique_ptr<::lsw::protocol::Listener> listener_;
     std::thread thread_;

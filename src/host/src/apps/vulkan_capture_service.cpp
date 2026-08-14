@@ -16,6 +16,8 @@
 
 #include <QtConcurrent>
 
+#include <vector>
+
 #include <nlohmann/json.hpp>
 
 namespace lsw::host::apps {
@@ -116,8 +118,29 @@ bool VulkanCaptureService::ensure_running(const QUuid& vm_uuid) {
             }
             if (ev.kind == Kind::KeyDown) {
                 input.key_down(vk, ev.mods);
+                std::lock_guard lk(held_mu_);
+                held_keys_.insert(vk);
             } else {
                 input.key_up(vk, ev.mods);
+                std::lock_guard lk(held_mu_);
+                held_keys_.erase(vk);
+            }
+            break;
+        }
+        case Kind::FocusLost: {
+            // Nothing will report the release of a key that was down
+            // when focus went away, so let go of everything now. In the
+            // guest that key is held by SendInput at the OS level: it
+            // would stay down with no window left to lift it, and the
+            // application would read it forever.
+            std::vector<unsigned> stuck;
+            {
+                std::lock_guard lk(held_mu_);
+                stuck.assign(held_keys_.begin(), held_keys_.end());
+                held_keys_.clear();
+            }
+            for (const unsigned vk : stuck) {
+                input.key_up(vk, 0);
             }
             break;
         }
