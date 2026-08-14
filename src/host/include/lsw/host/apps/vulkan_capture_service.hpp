@@ -9,6 +9,7 @@
 #include <thread>
 
 namespace lsw::protocol { class Listener; }
+namespace lsw::host::link { class AgentRpcClient; }
 namespace lsw::render { class RenderService; }
 namespace lsw::host::vm { class Lifecycle; }
 
@@ -38,7 +39,8 @@ namespace lsw::host::apps {
 class VulkanCaptureService : public QObject {
     Q_OBJECT
 public:
-    explicit VulkanCaptureService(vm::Lifecycle& lifecycle, QObject* parent = nullptr);
+    VulkanCaptureService(vm::Lifecycle& lifecycle, link::AgentRpcClient& rpc,
+                         QObject* parent = nullptr);
     ~VulkanCaptureService() override;
 
     // Make sure the replay is serving ``vm_uuid``'s region. Returns
@@ -50,32 +52,33 @@ public:
     // never starts.
     [[nodiscard]] bool ensure_running(const QUuid& vm_uuid);
 
-    // The window the next surface the guest asks for should be created
-    // on, instead of one of the replay's own. ``native_window`` is an
-    // X11 window id — a mirror's ``winId()``.
+    // Send input that happens in the replay's window to ``hwnd``.
     //
-    // Set before the application is launched: the guest asks for its
-    // surface within a moment of starting, and a target that arrives
-    // afterwards is too late for that surface.
-    void set_adoption_target(std::uint64_t native_window, std::uint32_t width,
-                             std::uint32_t height);
+    // The replay's window is the one with the application's picture in
+    // it, so it is the one the user clicks and types into — but only
+    // the manager can reach the guest, over the agent's input RPC. So
+    // the window hands its events here and they go on to the guest
+    // window that produced the picture.
+    //
+    // This is why the replay is hosted in the manager rather than run
+    // as ``lsw-render-server``: not to share a window with Qt, but to
+    // share the agent connection. It works the same under X11 and
+    // Wayland, because SDL owns the window either way.
+    void forward_input_to(std::uint64_t hwnd);
+
+    // Stop forwarding — the guest window is gone.
+    void stop_forwarding();
 
     [[nodiscard]] bool running() const noexcept { return running_.load(); }
-
-    // Whether a mirror can be the thing presented into.
-    //
-    // False on a Wayland session: a Qt window's native handle is then
-    // not an X11 window, and the adoption path creates an XCB surface.
-    // The replay makes its own window instead — two windows, input in
-    // the guest one, which is what happened before any of this. Run the
-    // manager with QT_QPA_PLATFORM=xcb to get the single-window path
-    // under XWayland.
-    [[nodiscard]] static bool can_adopt_mirror();
 
 private:
     void stop();
 
     vm::Lifecycle& lifecycle_;
+    link::AgentRpcClient& rpc_;
+    // The guest window input is going to, or 0. Read from the replay's
+    // window thread, written from the GUI thread.
+    std::atomic<std::uint64_t> input_hwnd_{0};
     std::unique_ptr<::lsw::render::RenderService> service_;
     std::unique_ptr<::lsw::protocol::Listener> listener_;
     std::thread thread_;

@@ -7,12 +7,16 @@
 #include "lsw/protocol/listener.hpp"
 #include "lsw/render/render_service.hpp"
 
-#include <QGuiApplication>
+#include "lsw/host/apps/scancode_map.hpp"
+#include "lsw/host/link/agent_rpc_client.hpp"
+#include "lsw/host/manager/guest_input_sender.hpp"
+#include "lsw/render/window_input.hpp"
 
 namespace lsw::host::apps {
 
-VulkanCaptureService::VulkanCaptureService(vm::Lifecycle& lifecycle, QObject* parent)
-    : QObject(parent), lifecycle_(lifecycle) {}
+VulkanCaptureService::VulkanCaptureService(vm::Lifecycle& lifecycle, link::AgentRpcClient& rpc,
+                                           QObject* parent)
+    : QObject(parent), lifecycle_(lifecycle), rpc_(rpc) {}
 
 VulkanCaptureService::~VulkanCaptureService() {
     stop();
@@ -62,18 +66,56 @@ bool VulkanCaptureService::ensure_running(const QUuid& vm_uuid) {
     }
 
     service_ = std::make_unique<::lsw::render::RenderService>();
-    if (can_adopt_mirror()) {
-        // No SDL in this process: the manager has its own event loop
-        // and its own display connection, and every surface the replay
-        // makes here is created on a window the manager already owns.
-        service_->surfaces().set_adopt_only(true);
-    } else {
-        LSW_WARN("vulkan capture: this is a {} session, so a mirror's native handle is not an "
-                 "X11 window and cannot be presented into. The replay will open its own "
-                 "window; run the manager with QT_QPA_PLATFORM=xcb for a single window with "
-                 "input.",
-                 QGuiApplication::platformName().toStdString());
-    }
+    // Everything that happens in the replay's window goes to the guest
+    // window that produced the picture in it. Runs on the replay's
+    // window thread and must not block, so every send is the RPC
+    // client's fire-and-forget path.
+    service_->surfaces().set_input_sink([this](const ::lsw::render::WindowInputEvent& ev) {
+        const std::uint64_t hwnd = input_hwnd_.load();
+        if (hwnd == 0) {
+            return;  // no guest window bound yet; nothing to send to
+        }
+        manager::GuestInputSender input{rpc_, hwnd};
+        const QPoint at{ev.x, ev.y};
+        using Kind = ::lsw::render::WindowInputEvent::Kind;
+        switch (ev.kind) {
+        case Kind::MouseMove:
+            input.move(at, ev.mods);
+            break;
+        case Kind::MouseDown:
+            input.button_down(at, ev.button, ev.mods);
+            break;
+        case Kind::MouseUp:
+            input.button_up(at, ev.button, ev.mods);
+            break;
+        case Kind::Wheel:
+            input.wheel(at, ev.wheel_delta, ev.horizontal, ev.mods);
+            break;
+        case Kind::KeyDown:
+        case Kind::KeyUp: {
+            // A key that produces a character is sent as text only: the
+            // guest's own TranslateMessage would otherwise synthesise a
+            // second character from the key and every letter would
+            // arrive twice.
+            if (ScancodeMap::produces_text(ev.scancode)) {
+                break;
+            }
+            const unsigned vk = ScancodeMap::virtual_key_for(ev.scancode);
+            if (vk == 0) {
+                break;  // unmapped: silence beats a plausible wrong key
+            }
+            if (ev.kind == Kind::KeyDown) {
+                input.key_down(vk, ev.mods);
+            } else {
+                input.key_up(vk, ev.mods);
+            }
+            break;
+        }
+        case Kind::Text:
+            input.text(ev.code_point, ev.mods);
+            break;
+        }
+    });
 
     running_.store(true);
     attached_uuid_ = vm_uuid;
@@ -86,16 +128,13 @@ bool VulkanCaptureService::ensure_running(const QUuid& vm_uuid) {
     return true;
 }
 
-bool VulkanCaptureService::can_adopt_mirror() {
-    return QGuiApplication::platformName() == QLatin1String("xcb");
+void VulkanCaptureService::forward_input_to(std::uint64_t hwnd) {
+    input_hwnd_.store(hwnd);
+    LSW_INFO("vulkan capture: input goes to guest window {:#x}", hwnd);
 }
 
-void VulkanCaptureService::set_adoption_target(std::uint64_t native_window, std::uint32_t width,
-                                               std::uint32_t height) {
-    if (service_ == nullptr || !can_adopt_mirror()) {
-        return;
-    }
-    service_->surfaces().set_adoption_target(native_window, width, height);
+void VulkanCaptureService::stop_forwarding() {
+    input_hwnd_.store(0);
 }
 
 }  // namespace lsw::host::apps

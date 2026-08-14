@@ -81,6 +81,7 @@ private:
     link::AgentGuestStatsProbe guest_probe_;
     apps::AppConfigStore app_configs_;
     apps::LogStore log_store_;  // declared after rpc_: detaches from it in ~LogStore
+    // After rpc_: it forwards the replay window's input through it.
     apps::VulkanCaptureService vulkan_capture_;
 };
 
