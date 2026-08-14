@@ -7,6 +7,8 @@
 
 #include "lsw/agent/capture/wgc.hpp"
 
+#include "lsw/agent/capture/vulkan_session.hpp"
+
 #include "lsw/agent/log.hpp"
 #include "lsw/agent/transport/shmem.hpp"
 
@@ -455,8 +457,32 @@ bool grab(HWND hwnd) {
 }  // namespace
 
 bool Wgc::available() {
+    // Never while an application owns the region.
+    //
+    // ``open`` is not a query — it maps the BAR — so asking whether
+    // capture is available would TAKE the mapping back from a running
+    // Vulkan application, or fail against the driver every tick trying.
+    // Neither is capture's decision to make.
+    if (VulkanSession::active()) {
+        return false;
+    }
     std::lock_guard<std::mutex> lock(g_mu);
     return init_locked() && transport::shmem().open();
+}
+
+void Wgc::drop_all_sessions() {
+    std::lock_guard<std::mutex> lock(g_mu);
+    for (auto& [hwnd, session] : g_sessions) {
+        if (session.shmem_slot >= 0) {
+            transport::shmem().free_slot(session.shmem_slot);
+        }
+    }
+    const auto n = g_sessions.size();
+    g_sessions.clear();
+    if (n != 0) {
+        LSW_AGENT_INFO(std::string{"wgc: dropped "} + std::to_string(n)
+                       + " capture session(s); the region is going to an application");
+    }
 }
 
 bool Wgc::tick_capture(std::uintptr_t hwnd) {

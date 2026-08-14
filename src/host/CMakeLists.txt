@@ -78,6 +78,11 @@ target_link_libraries(lsw_host_core
         PkgConfig::LIBVIRT      # virConnectPtr / virDomainPtr are in the headers
         LSW::Base
         LSW::LinkProto          # wire contract shared with the guest agent
+        # The replay runs IN THIS PROCESS. A Vulkan replay can only
+        # present into a window its own process owns, and the window it
+        # presents into is a mirror's — so the render service is linked
+        # in rather than spawned as lsw-render-server.
+        LSW::Render
     PRIVATE
         LSW::CompileOptions
         nlohmann_json::nlohmann_json

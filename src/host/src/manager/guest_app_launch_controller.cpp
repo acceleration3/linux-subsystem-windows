@@ -107,7 +107,25 @@ void GuestAppLaunchController::fire_launch(const QString& guest_path) {
                 LSW_WARN("launch_app({}) failed: {}", id.toStdString(), err.toStdString());
                 launcher->deleteLater();
             });
-    launcher->launch(guest_path);
+    // Same two prerequisites as the in-manager list: a replay server on
+    // this side, and an agent told to let go of the region. The config
+    // is looked up by path because that is what this path carries.
+    bool vulkan = false;
+    for (const auto& cfg : services_.app_configs().configs()) {
+        if (cfg.path == guest_path) {
+            vulkan = cfg.capture == apps::CaptureMethod::Vulkan;
+            break;
+        }
+    }
+    if (vulkan) {
+        // Same single-VM resolution this controller already uses to
+        // pick a channel target.
+        const auto& records = services_.vms().records();
+        if (!records.isEmpty()) {
+            (void)services_.vulkan_capture().ensure_running(records.first().uuid);
+        }
+    }
+    launcher->launch(guest_path, vulkan);
 }
 
 void GuestAppLaunchController::start_vm_and_wait(const QUuid& uuid, const QString& app_id,

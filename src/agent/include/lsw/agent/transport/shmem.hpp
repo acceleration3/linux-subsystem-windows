@@ -56,6 +56,23 @@ public:
     // True once ``open`` has succeeded.
     [[nodiscard]] bool available() const { return base_ != nullptr; }
 
+    // Give the BAR back to the driver, and take it again.
+    //
+    // The IVSHMEM driver hands the mapping to ONE process at a time. A
+    // guest application that renders through the LSW ICD needs it —
+    // that region IS the command-stream transport — so it cannot start
+    // while the agent holds it, and the agent cannot exit without
+    // taking the control plane with it. Releasing is the way out: the
+    // frame path and the shared-memory RPC route stop, RPC continues
+    // over TCP, and the application gets the region for as long as it
+    // runs.
+    //
+    // Every allocated slot is dropped on release; a subscriber has to
+    // re-subscribe afterwards, which the manager does anyway when a
+    // window's mirror comes back.
+    void release();
+    [[nodiscard]] bool reacquire();
+
     // Allocate a slot for ``hwnd`` sized w*h*4 (×2 for back buffer).
     // Returns slot.index >= 0 on success, -1 if no room.
     [[nodiscard]] SlotInfo alloc_slot(std::uint64_t hwnd, std::uint32_t width,

@@ -117,6 +117,7 @@ set(_lsw_agent_util_sources
 set(_lsw_agent_capture_sources
     src/capture/wgc.cpp
     src/capture/setup.cpp
+    src/capture/vulkan_session.cpp
 )
 set(_lsw_agent_uia_sources
     src/uia/uia.cpp

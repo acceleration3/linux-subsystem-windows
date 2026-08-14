@@ -24,7 +24,7 @@ struct LaunchResult {
 Launcher::Launcher(link::AgentRpcClient& rpc, QObject* parent)
     : QObject(parent), rpc_(rpc) {}
 
-void Launcher::launch(const QString& app_id) {
+void Launcher::launch(const QString& app_id, bool vulkan) {
     auto* watcher = new QFutureWatcher<LaunchResult>(this);
     connect(watcher, &QFutureWatcher<LaunchResult>::finished, this, [this, watcher, app_id]() {
         const LaunchResult r = watcher->result();
@@ -35,11 +35,11 @@ void Launcher::launch(const QString& app_id) {
         }
         watcher->deleteLater();
     });
-    auto fut = QtConcurrent::run([this, app_id]() -> LaunchResult {
+    auto fut = QtConcurrent::run([this, app_id, vulkan]() -> LaunchResult {
         LaunchResult out;
         nlohmann::json req = {
             {"cmd", linkproto::cmd::kLaunch},
-            {"params", {{"app_id", app_id.toStdString()}}},
+            {"params", {{"app_id", app_id.toStdString()}, {"vulkan", vulkan}}},
         };
         const auto reply = rpc_.call(req);
         if (reply.isEmpty()) {

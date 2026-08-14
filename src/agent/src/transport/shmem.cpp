@@ -125,6 +125,44 @@ void Shmem::ring_channel_doorbell(std::uint32_t channel_kind) {
     ring_doorbell(linkproto::doorbell_vector_for_channel(channel_kind));
 }
 
+void Shmem::release() {
+    if (base_ == nullptr) {
+        return;
+    }
+    LSW_AGENT_INFO("shmem: releasing the IVSHMEM mapping (a Vulkan application wants it)");
+    // Drop the endpoints before the memory they point into goes away.
+    // They are plain views over region bytes: keeping one across an
+    // unmap is a dangling pointer that only bites when something
+    // eventually writes through it.
+    rpc_to_host_ = {};
+    rpc_from_host_ = {};
+    cmd_to_host_ = {};
+    cmd_from_host_ = {};
+    for (auto& r : reservations_) {
+        r = Reservation{};
+    }
+    frames_base_ = nullptr;
+    frames_size_ = 0;
+    buffers_offset_ = 0;
+    buffers_size_ = 0;
+    base_ = nullptr;
+    size_ = 0;
+    region_.close();
+}
+
+bool Shmem::reacquire() {
+    if (base_ != nullptr) {
+        return true;
+    }
+    // ``open`` re-reads the channel table and rebinds every endpoint,
+    // so there is nothing to restore by hand. The slot allocator starts
+    // empty, which is correct: whatever was mirrored before the release
+    // is gone from the manager's side too.
+    const bool ok = open();
+    LSW_AGENT_INFO(std::string{"shmem: reacquire "} + (ok ? "ok" : "FAILED"));
+    return ok;
+}
+
 Shmem::SlotInfo Shmem::alloc_slot(std::uint64_t hwnd, std::uint32_t width,
                                    std::uint32_t height) {
     SlotInfo out;

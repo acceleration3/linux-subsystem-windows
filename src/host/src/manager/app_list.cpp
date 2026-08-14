@@ -22,8 +22,9 @@
 namespace lsw::host::manager {
 
 AppListWidget::AppListWidget(apps::AppConfigStore& store, link::AgentRpcClient& rpc,
-                             link::GuestWindowModel& windows, QWidget* parent)
-    : QWidget(parent), store_(store), rpc_(rpc), windows_(windows),
+                             link::GuestWindowModel& windows,
+                             apps::VulkanCaptureService& vulkan, QWidget* parent)
+    : QWidget(parent), store_(store), vulkan_(vulkan), rpc_(rpc), windows_(windows),
       catalog_(rpc), launcher_(rpc) {
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(0, 0, 0, 0);
@@ -145,10 +146,41 @@ void AppListWidget::on_item_activated(QListWidgetItem* item) {
     const std::string line = "app_list: launching " + cfg->path.toStdString();
     LSW_INFO("{}", line);
     Q_EMIT launch_requested(id);
+
+    // A Vulkan-capture app needs two things this one does not: a server
+    // on the host replaying its command stream, and an agent that has
+    // let go of the region the stream travels through. The first is
+    // ours to start; the second the agent does when told the launch is
+    // a Vulkan one.
+    const bool vulkan = cfg->capture == apps::CaptureMethod::Vulkan;
+    if (vulkan && !uuid_.isNull() && vulkan_.ensure_running(uuid_)) {
+        // The window has to exist BEFORE the application does. A guest
+        // application asks for its surface within a moment of starting,
+        // and the surface is created on this window — so a mirror
+        // opened afterwards (which is how the WGC path works, once the
+        // watcher finds a guest window) would be too late to be the
+        // thing the replay presents into.
+        //
+        // It opens unbound: there is no guest window to send input to
+        // yet. ``on_windows_for_vulkan`` binds it when one appears.
+        if (vulkan_mirror_) {
+            vulkan_mirror_->close();
+            vulkan_mirror_->deleteLater();
+        }
+        vulkan_mirror_ = new VulkanMirror(rpc_, cfg->name.isEmpty() ? cfg->path : cfg->name,
+                                          QSize(1280, 720));
+        connect(vulkan_mirror_, &VulkanMirror::closed, this, [this] {
+            windows_.unsubscribe();
+            vulkan_pid_ = 0;
+        });
+        vulkan_mirror_->show();
+        vulkan_.set_adoption_target(static_cast<std::uint64_t>(vulkan_mirror_->winId()),
+                                    1280, 720);
+    }
     // Async — actual watcher creation happens in on_launched once
     // the agent has reported the spawned PID. Launch by path so
     // manual configs work too.
-    launcher_.launch(cfg->path);
+    launcher_.launch(cfg->path, vulkan);
 }
 
 void AppListWidget::on_launched(const QString& app_id, quint32 pid) {
@@ -162,6 +194,18 @@ void AppListWidget::on_launched(const QString& app_id, quint32 pid) {
         return;
     }
     if (!rpc_.has_target()) {
+        return;
+    }
+    if (vulkan_mirror_ != nullptr && vulkan_pid_ == 0 && !vulkan_mirror_->is_bound()) {
+        // A Vulkan-capture launch gets no AppWindowWatcher: its windows
+        // would each become a WGC mirror, and those are fed by the
+        // frame ring — which this application does not use. It has one
+        // window already, holding its pixels; all it needs is the guest
+        // HWND to send input to.
+        vulkan_pid_ = pid;
+        connect(&windows_, &link::GuestWindowModel::updated, this,
+                &AppListWidget::on_windows_for_vulkan, Qt::UniqueConnection);
+        windows_.subscribe();
         return;
     }
     if (watchers_.contains(pid)) {
@@ -178,6 +222,25 @@ void AppListWidget::on_launched(const QString& app_id, quint32 pid) {
     connect(w, &AppWindowWatcher::exhausted, this, &AppListWidget::on_watcher_exhausted);
     watchers_.insert(pid, w);
     w->start();
+}
+
+void AppListWidget::on_windows_for_vulkan(const QList<link::GuestWindow>& windows) {
+    if (vulkan_pid_ == 0 || vulkan_mirror_ == nullptr) {
+        return;
+    }
+    for (const auto& w : windows) {
+        if (w.pid != vulkan_pid_ || w.hwnd == 0) {
+            continue;
+        }
+        vulkan_mirror_->bind(w.hwnd);
+        // One binding is all this needs; the enumeration keeps running
+        // for everyone else.
+        disconnect(&windows_, &link::GuestWindowModel::updated, this,
+                   &AppListWidget::on_windows_for_vulkan);
+        windows_.unsubscribe();
+        vulkan_pid_ = 0;
+        return;
+    }
 }
 
 void AppListWidget::on_launch_failed(const QString& app_id, const QString& error) {

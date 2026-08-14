@@ -1,5 +1,6 @@
 #include "lsw/agent/apps/d3d_translation.hpp"
 #include "lsw/agent/apps/launcher.hpp"
+#include "lsw/agent/capture/vulkan_session.hpp"
 #include "lsw/agent/rpc/handler.hpp"
 #include "lsw/agent/rpc/auto_register.hpp"
 #include "lsw/agent/log.hpp"
@@ -29,10 +30,32 @@ struct LaunchHandler : RpcHandler {
             LSW_AGENT_WARN("launch: d3d translation unavailable: " + d3d_err);
         }
 
+        // A Vulkan-capture application renders through the LSW ICD,
+        // whose transport is the IVSHMEM region — and the driver hands
+        // that region to one process at a time. So the agent lets go of
+        // it before the process starts and takes it back when the
+        // process exits. Control traffic is unaffected: it falls back
+        // to TCP for the duration.
+        const bool vulkan = params.value("vulkan", false);
+        if (vulkan && !capture::VulkanSession::begin_launch()) {
+            LSW_AGENT_WARN("launch: could not release the IVSHMEM region; the application "
+                           "will probably report no Vulkan driver");
+        }
+
         unsigned long pid = 0;
         std::string err;
         const bool ok = apps::Launcher::launch(app_id, &pid, &err);
+        if (vulkan) {
+            if (ok) {
+                capture::VulkanSession::watch(pid);
+            } else {
+                capture::VulkanSession::abandon_launch();
+            }
+        }
         nlohmann::json r = {{"ok", ok}, {"pid", static_cast<std::uint64_t>(pid)}};
+        if (vulkan) {
+            r["vulkan"] = true;
+        }
         if (translate_d3d) {
             r["d3d"] = d3d_err.empty();
             if (!d3d_err.empty()) {
