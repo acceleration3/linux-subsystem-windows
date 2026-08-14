@@ -158,6 +158,27 @@ bool Launcher::launch(const std::string& app_id, unsigned long* pid_out,
     path = expand_env(path);
     working_dir = expand_env(working_dir);
     args = expand_env(args);
+
+    // Default the working directory to the executable's own folder.
+    //
+    // This is what Explorer does, and applications assume it: anything
+    // that opens a data file by a relative name — a config, an archive,
+    // a save — reads it relative to the working directory, not to the
+    // image. Launched with none, the child inherits the agent's, which
+    // is C:\ProgramData\LSW, and an application that finds none of its
+    // own files there fails in whatever way it fails when its data is
+    // missing. Touhou 6 gets far enough to try creating a Direct3D
+    // device and then reports that every mode failed, which names
+    // neither the missing config nor this.
+    //
+    // A .lnk that carries its own working directory keeps it: the
+    // shortcut's author chose it deliberately.
+    if (working_dir.empty()) {
+        const auto slash = path.find_last_of(L"\\/");
+        if (slash != std::wstring::npos && slash > 0) {
+            working_dir = path.substr(0, slash);
+        }
+    }
     LSW_AGENT_DEBUG(std::string{"launch: expanded path="} + utf16_to_utf8(path)
                     + " working_dir=" + utf16_to_utf8(working_dir));
 
