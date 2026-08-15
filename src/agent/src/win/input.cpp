@@ -130,12 +130,21 @@ bool Input::inject(std::uintptr_t top_raw, const InputEvent& ev) {
         // Windows hit-tests/routes it itself (no PostMessage/NCHITTEST
         // dance; works with games / raw input / custom chrome) and
         // un-hides the cursor + drives the WinUI pointer pipeline.
-        RECT fr{};
-        if (FAILED(::DwmGetWindowAttribute(top, DWMWA_EXTENDED_FRAME_BOUNDS,
-                                           &fr, sizeof(fr)))) {
-            ::GetWindowRect(top, &fr);
+        POINT p{ev.x, ev.y};
+        if (ev.client_space) {
+            // The sender's window shows the client area alone — a
+            // Vulkan swapchain, with no title bar in it — so its
+            // top-left IS the client origin.
+            ::ClientToScreen(top, &p);
+        } else {
+            RECT fr{};
+            if (FAILED(::DwmGetWindowAttribute(top, DWMWA_EXTENDED_FRAME_BOUNDS,
+                                               &fr, sizeof(fr)))) {
+                ::GetWindowRect(top, &fr);
+            }
+            p.x += fr.left;
+            p.y += fr.top;
         }
-        POINT p{fr.left + ev.x, fr.top + ev.y};
         // Foreground only for actual button events. Wheel routes by
         // cursor position regardless of foreground, and stealing
         // focus on a wheel-over a combobox dropdown made Windows

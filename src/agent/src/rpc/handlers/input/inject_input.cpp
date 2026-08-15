@@ -32,6 +32,7 @@ struct InjectInputHandler : RpcHandler {
         }
         ev.x = params.value("x", 0);
         ev.y = params.value("y", 0);
+        ev.client_space = params.value("client", false);
         ev.button = params.value("button", 0);
         ev.wheel = params.value("wheel", 0);
         ev.hwheel = params.value("hwheel", false);

@@ -83,7 +83,9 @@ bool VulkanCaptureService::ensure_running(const QUuid& vm_uuid) {
         if (hwnd == 0) {
             return;  // no guest window bound yet; nothing to send to
         }
-        manager::GuestInputSender input{rpc_, hwnd};
+        // The replay's window is the swapchain and nothing else, so
+        // what it reports are client coordinates.
+        manager::GuestInputSender input{rpc_, hwnd, /*client_space=*/true};
         const QPoint at{ev.x, ev.y};
         using Kind = ::lsw::render::WindowInputEvent::Kind;
         switch (ev.kind) {
