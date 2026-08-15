@@ -32,9 +32,19 @@ struct InputEvent {
 
     Kind kind = Kind::MouseMove;
 
-    // Mouse: client coords in the TOP-LEVEL window.
+    // Mouse position, in whichever space ``client_space`` names.
     int x = 0;
     int y = 0;
+    // Which origin x/y are measured from.
+    //
+    // false — the window's DWM extended frame bounds, which is what a
+    //   captured frame shows: title bar and border included, so a click
+    //   in the mirror is at the same offset in the frame.
+    // true  — the client area. A window presented by the Vulkan replay
+    //   shows the swapchain and nothing else, so its top-left is the
+    //   client origin and using the frame origin puts every click low
+    //   and right by the height of the title bar.
+    bool client_space = false;
     int button = 0;     // 0 = left, 1 = right, 2 = middle (down/up/dblclk)
     int wheel = 0;      // wheel delta (±120 per notch); +y = away from user
     bool hwheel = false;  // true = horizontal wheel (WM_MOUSEHWHEEL)
