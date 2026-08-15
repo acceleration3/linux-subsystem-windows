@@ -27,8 +27,6 @@
 #include <QWindow>
 #include <QtConcurrent>
 
-#include <cmath>
-
 #include <algorithm>
 
 #include <nlohmann/json.hpp>
@@ -159,24 +157,17 @@ void WindowView::apply_props(const GuestWindowProps& props) {
     setWindowFlags(Qt::Window | Qt::FramelessWindowHint);
     resize_border_ = props.resizable ? ResizeEdgeZones::kBorderPx : 0;
 
-    // The guest reports its window in guest pixels; the widget wants
-    // logical units, and one guest pixel is meant to be one host pixel.
-    const qreal dpr = devicePixelRatioF() > 0.0 ? devicePixelRatioF() : 1.0;
-    const auto to_logical = [dpr](int guest_px) {
-        return static_cast<int>(std::lround(guest_px / dpr));
-    };
     if (!props.resizable) {
-        setFixedSize(to_logical(props.width), to_logical(props.height));
+        setFixedSize(props.width, props.height);
     } else {
         if (props.min_width > 0 && props.min_height > 0) {
-            setMinimumSize(to_logical(props.min_width), to_logical(props.min_height));
+            setMinimumSize(props.min_width, props.min_height);
         }
         // Deliberately no maximum: the user may grow the mirror past the
         // guest's max track size. flush_resize clamps what the guest is
         // told, and the frame letterboxes inside the larger widget.
         geometry_.expect_echo();
-        resize(to_logical(props.width) + 2 * resize_border_,
-               to_logical(props.height) + 2 * resize_border_);
+        resize(props.width + 2 * resize_border_, props.height + 2 * resize_border_);
     }
 
     buttons_.adopt(props.button_minimize, props.button_maximize, props.button_close,
@@ -214,15 +205,6 @@ void WindowView::resizeEvent(QResizeEvent* e) {
 void WindowView::send_resize(int width, int height) {
     // Make the guest window match the widget so the mirror is ~1:1. The
     // clamp to the guest's own screen already happened in GeometrySync.
-    //
-    // The widget's size is logical; the guest's is pixels. On a scaled
-    // desktop those differ, and sending logical units would ask the
-    // guest for a window smaller than the space it is being shown in —
-    // then its frame would be upscaled to fit, which is the blur this
-    // whole path exists to avoid.
-    const qreal dpr = devicePixelRatioF() > 0.0 ? devicePixelRatioF() : 1.0;
-    width = static_cast<int>(std::lround(width * dpr));
-    height = static_cast<int>(std::lround(height * dpr));
     const std::uint64_t hwnd = hwnd_;
     (void)QtConcurrent::run([this, hwnd, width, height] {
         (void)rpc_.call(nlohmann::json{
@@ -450,7 +432,7 @@ void WindowView::on_frame(std::uint64_t hwnd, QImage image) {
     }
     // Popups trim the WinUI shadow margin so the menu fills the window;
     // classic Win32 menus have no such margin and keep the whole frame.
-    presenter_.submit(std::move(image), /*trim_shadow=*/is_popup(), devicePixelRatioF());
+    presenter_.submit(std::move(image), /*trim_shadow=*/is_popup());
 
     if (!is_popup()) {
         buttons_.track_frame_width(presenter_.source_size().width());
@@ -469,11 +451,7 @@ void WindowView::on_frame(std::uint64_t hwnd, QImage image) {
         // Main mirror: open at the guest's client size.
         first_frame_ = false;
         geometry_.expect_echo();
-        // ``natural_size`` and not ``source_size``: the first is
-        // logical units, the second guest pixels, and resize takes the
-        // former. Passing pixels made the window the scale factor too
-        // big on a scaled desktop.
-        resize(presenter_.natural_size());
+        resize(presenter_.source_size());
     }
     update();
 }
