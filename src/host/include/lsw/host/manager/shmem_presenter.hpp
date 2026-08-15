@@ -19,7 +19,15 @@ public:
     // menu floats in the middle of an oversized window with a second,
     // compositor-drawn shadow around it. Classic Win32 menus have no
     // such margin and the trim comes back empty.
-    void submit(QImage frame, bool trim_shadow);
+    // ``device_pixel_ratio`` is the widget's. A captured frame is
+    // measured in GUEST pixels, and the mirror exists to show them as
+    // they are — so they have to land on host pixels one for one,
+    // whatever the desktop's scale factor is. Stamping the ratio onto
+    // the image is how Qt is told that: it then treats the frame as
+    // high-DPI content and stops stretching it to logical size, which
+    // on a scaled display made every mirror come out 1.25x or 2x too
+    // big and blurred by the upscale.
+    void submit(QImage frame, bool trim_shadow, qreal device_pixel_ratio);
 
     [[nodiscard]] bool has_content() const override { return !image_.isNull(); }
     [[nodiscard]] QSize source_size() const override { return image_.size(); }
@@ -35,6 +43,10 @@ public:
 
     // Size the widget should take to show this frame 1:1 — the trimmed
     // content for a popup, the whole frame otherwise.
+    //
+    // In LOGICAL units, because that is what QWidget::resize takes: the
+    // guest's pixel count divided by the scale factor, so the result
+    // occupies exactly that many host pixels.
     [[nodiscard]] QSize natural_size() const;
 
 private:
