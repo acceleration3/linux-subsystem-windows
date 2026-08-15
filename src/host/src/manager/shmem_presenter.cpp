@@ -6,8 +6,11 @@
 
 namespace lsw::host::manager {
 
-void ShmemPresenter::submit(QImage frame, bool trim_shadow) {
+void ShmemPresenter::submit(QImage frame, bool trim_shadow, qreal device_pixel_ratio) {
     image_ = std::move(frame);
+    if (!image_.isNull() && device_pixel_ratio > 0.0) {
+        image_.setDevicePixelRatio(device_pixel_ratio);
+    }
     if (trim_shadow && !image_.isNull()) {
         content_rect_ = FrameGeometry::opaque_bounds(image_);
     } else {
@@ -19,7 +22,14 @@ QSize ShmemPresenter::natural_size() const {
     if (image_.isNull()) {
         return {};
     }
-    return content_rect_.isEmpty() ? image_.size() : content_rect_.size();
+    const QSize pixels = content_rect_.isEmpty() ? image_.size() : content_rect_.size();
+    const qreal dpr = image_.devicePixelRatio();
+    if (dpr <= 0.0) {
+        return pixels;
+    }
+    // Logical units: ``resize`` speaks them, and dividing here is what
+    // makes the frame cover exactly its own pixel count on screen.
+    return QSizeF(pixels.width() / dpr, pixels.height() / dpr).toSize();
 }
 
 QRect ShmemPresenter::frame_rect(QSize widget_size) const {
