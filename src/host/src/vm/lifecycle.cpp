@@ -69,7 +69,7 @@ int Lifecycle::define_and_start(const config::VmRecord& vm, const DomainXmlInput
     return 0;
 }
 
-int Lifecycle::start(const QUuid& uuid) {
+int Lifecycle::start(const QUuid& uuid, bool first_boot_done) {
     auto dom = lookup(uuid);
     if (!dom.valid()) {
         LSW_ERROR("start: domain {} not found", uuid.toString().toStdString());
@@ -92,6 +92,20 @@ int Lifecycle::start(const QUuid& uuid) {
         }
         return 0;
     }
+    // A VM whose guest has already run has no business still holding
+    // the installer.
+    //
+    // Provisioning ejects the media when it finishes, but that only
+    // covers a run that reached the end WITH that step present: a VM
+    // installed before it existed, or one whose run failed partway and
+    // was picked up by hand, keeps the ISOs for good. The guest then
+    // shows the install media as drives every boot, and the files stay
+    // pinned. Doing it here as well makes it self-correcting, and it
+    // costs one no-op call per start otherwise.
+    if (first_boot_done) {
+        (void)eject_install_media(uuid);
+    }
+
     // The VM's persistent XML already references the chardev path;
     // ensure the matching server is up before QEMU connects to it.
     if (ensure_shmem(uuid, 256).isEmpty()) {

@@ -42,7 +42,10 @@ public:
     // ``virDomainCreate`` on the already-defined domain. Doesn't
     // touch the persistent XML — what's defined stays defined.
     // Returns 0/-1.
-    [[nodiscard]] int start(const QUuid& uuid);
+    // ``first_boot_done`` says the guest has run before, which is what
+    // makes it safe — and right — to drop any install media still
+    // attached before starting. See the note in the implementation.
+    [[nodiscard]] int start(const QUuid& uuid, bool first_boot_done = false);
 
     // ACPI shutdown request (``virDomainShutdown``). The guest may
     // ignore — pair with a UI timeout that escalates to ``destroy``.

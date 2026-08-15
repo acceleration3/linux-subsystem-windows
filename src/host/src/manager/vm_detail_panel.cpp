@@ -326,7 +326,12 @@ void VmDetailPanel::on_start_clicked() {
     // wizard's post-virtio swap leaves the live XML in the
     // virtio-optimised shape; a redefine here would silently revert
     // it back to pre-virtio.
-    (void)lifecycle_.start(uuid_);
+    // Pass whether the guest has booted before: a VM past that point
+    // should not still be carrying the install media, and starting is
+    // where that gets noticed for one provisioned before the eject
+    // existed.
+    const auto* record = vms_.find(uuid_);
+    (void)lifecycle_.start(uuid_, record != nullptr && record->first_boot_done);
     on_state_tick();
 }
 

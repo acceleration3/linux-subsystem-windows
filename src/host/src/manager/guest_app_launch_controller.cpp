@@ -133,7 +133,10 @@ void GuestAppLaunchController::start_vm_and_wait(const QUuid& uuid, const QStrin
     pending_app_id_ = app_id;
     auto& lifecycle = services_.lifecycle();
     if (!lifecycle.is_running(uuid)) {
-        if (const int rc = lifecycle.start(uuid); rc != 0) {
+        const auto* record = services_.vms().find(uuid);
+        if (const int rc =
+                lifecycle.start(uuid, record != nullptr && record->first_boot_done);
+            rc != 0) {
             LSW_WARN("launch_app({}): lifecycle.start rc={}", app_id.toStdString(), rc);
         }
     }
