@@ -116,8 +116,14 @@ void WindowView::configure_as_popup(WindowView* owner, QPoint rel_guest_px) {
 }
 
 void WindowView::configure_as_main_window() {
-    setAttribute(Qt::WA_OpaquePaintEvent);
-    setStyleSheet("background-color: black;");
+    // Translucent, like a popup. Not because a main window is usually
+    // see-through, but because some are in part: a layered splash
+    // screen is shaped entirely by its alpha, and every Win11 window
+    // has four transparent corners. An opaque widget with a black
+    // background turned all of that black — which is why Photoshop's
+    // splash was black on the launch that made it a main mirror, and
+    // correct on the launch that happened to make it a popup.
+    setAttribute(Qt::WA_TranslucentBackground);
     // Minimum comes later from the guest's own constraints; forcing
     // 320x240 here would inflate a smaller guest window.
     setMinimumSize(1, 1);
@@ -445,7 +451,7 @@ void WindowView::reposition_popup() {
 
 void WindowView::paintEvent(QPaintEvent*) {
     QPainter painter{this};
-    presenter_.paint(painter, size(), /*translucent=*/is_popup());
+    presenter_.paint(painter, size(), /*letterbox=*/!is_popup());
 
     if (presenter_.has_content() && NcHitDebugOverlay::enabled() && !is_popup()) {
         debug_overlay_.paint(painter, frame_rect(), presenter_.image(),

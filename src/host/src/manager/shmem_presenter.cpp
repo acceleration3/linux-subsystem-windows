@@ -3,6 +3,7 @@
 #include "lsw/host/manager/frame_geometry.hpp"
 
 #include <QPainter>
+#include <QRegion>
 
 namespace lsw::host::manager {
 
@@ -38,24 +39,34 @@ QPoint ShmemPresenter::map_to_guest(QPointF widget_position, QSize widget_size) 
                                    image_.size());
 }
 
-void ShmemPresenter::paint(QPainter& painter, QSize widget_size, bool translucent) const {
+void ShmemPresenter::paint(QPainter& painter, QSize widget_size, bool letterbox) const {
     const QRect widget_rect{QPoint{0, 0}, widget_size};
-    if (translucent) {
-        // Anything outside the captured menu must not show as a black box.
-        painter.setCompositionMode(QPainter::CompositionMode_Source);
-        painter.fillRect(widget_rect, Qt::transparent);
-        painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
-    } else {
-        // Black through any transient aspect mismatch while the guest
-        // catches up to a resize.
-        painter.fillRect(widget_rect, Qt::black);
-    }
+    // Start from nothing, always. A captured frame carries the window's
+    // own alpha — a splash screen shaped by it, a rounded corner, the
+    // trimmed margin around a menu — and filling black first is what
+    // turned all of those into black boxes. Whatever the frame leaves
+    // transparent stays transparent.
+    painter.setCompositionMode(QPainter::CompositionMode_Source);
+    painter.fillRect(widget_rect, Qt::transparent);
+    painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
     if (image_.isNull()) {
         return;
     }
+    const QRect target = frame_rect(widget_size);
+    if (letterbox && target != widget_rect) {
+        // Black bars where the widget is wider or taller than the frame
+        // — which is what a mirror looks like for the instant between
+        // the user resizing it and the guest window catching up. Only
+        // there: the frame's own area is the frame's business.
+        QRegion bars{widget_rect};
+        bars -= target;
+        for (const QRect& bar : bars) {
+            painter.fillRect(bar, Qt::black);
+        }
+    }
     painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
     const QRect source = content_rect_.isEmpty() ? image_.rect() : content_rect_;
-    painter.drawImage(frame_rect(widget_size), image_, source);
+    painter.drawImage(target, image_, source);
 }
 
 }  // namespace lsw::host::manager

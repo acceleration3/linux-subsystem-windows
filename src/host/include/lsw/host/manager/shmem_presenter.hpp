@@ -27,7 +27,7 @@ public:
     [[nodiscard]] QRect frame_rect(QSize widget_size) const override;
     [[nodiscard]] QPoint map_to_guest(QPointF widget_position,
                                       QSize widget_size) const override;
-    void paint(QPainter& painter, QSize widget_size, bool translucent) const override;
+    void paint(QPainter& painter, QSize widget_size, bool letterbox) const override;
 
     // The image itself, for the paths that still need it: caption-button
     // width tracking and the non-client hit-test debug overlay.
