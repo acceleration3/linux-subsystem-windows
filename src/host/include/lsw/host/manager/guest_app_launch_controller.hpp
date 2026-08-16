@@ -34,6 +34,11 @@ private:
     // AppWindowWatcher that turns the new PID's windows into mirrors.
     void fire_launch(const QString& guest_path);
 
+    // Point the replay's window at the launched app's guest window, once
+    // one exists. The Vulkan counterpart of spawning a watcher: that app
+    // gets no mirrors, so this is all the host does about its windows.
+    void bind_vulkan_input(quint32 pid);
+
     // Cold path: start the domain if it is down, show the boot splash,
     // and arm a one-shot wait on the monitor's agent_reachable flip.
     void start_vm_and_wait(const QUuid& uuid, const QString& app_id,
