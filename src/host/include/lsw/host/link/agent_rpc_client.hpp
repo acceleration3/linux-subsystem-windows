@@ -11,6 +11,7 @@
 #include <QObject>
 #include <QSet>
 #include <QString>
+#include <QTimer>
 
 #include <atomic>
 #include <chrono>
@@ -227,6 +228,22 @@ private:
     vm::ShmemRegion*   shmem_region_ = nullptr;
 
     Q_SLOT void on_shmem_slot_ready(int slot_index);
+
+    // Doorbell-free path: look at every slot and every channel and act
+    // on what changed since the last look.
+    //
+    // Runs when the region was attached rather than created — a manager
+    // that did not start the VM has no doorbells, because the ivshmem
+    // device handshook with the process that did. Reading a slot's
+    // sequence number is two loads, so sweeping all of them costs far
+    // less than the frame copy that a changed one leads to.
+    Q_SLOT void poll_shmem();
+
+    // Timer driving ``poll_shmem``; null whenever doorbells work.
+    QTimer* shmem_poll_ = nullptr;
+    // Last sequence number seen per slot, so a sweep only reads frames
+    // that actually moved.
+    std::vector<quint64> slot_seen_;
 
     // The guest doorbelled a message channel: drain it and route what it
     // finds exactly like socket traffic. ``kind`` is a

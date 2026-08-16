@@ -71,10 +71,100 @@ int ShmemRegion::open(const QUuid& vm_uuid, quint64 size_bytes) {
         close();
         return -1;
     }
+    created_ = true;
 
     LSW_INFO("shmem region opened: {} ({} MiB, fd={})",
              shm_name_.toStdString(), size_bytes / (1024 * 1024), fd_);
     return 0;
+}
+
+int ShmemRegion::attach(const QUuid& vm_uuid) {
+    if (fd_ >= 0) {
+        LSW_WARN("ShmemRegion::attach called on an open region; closing previous");
+        close();
+    }
+    const QString name = QStringLiteral("/lsw-frames-%1")
+                             .arg(vm_uuid.toString(QUuid::WithoutBraces));
+    const auto name_utf8 = name.toUtf8();
+    const int fd = ::shm_open(name_utf8.constData(), O_RDWR, 0600);
+    if (fd < 0) {
+        LSW_INFO("no existing shmem region {} to attach to: {}", name.toStdString(),
+                 std::strerror(errno));
+        return -1;
+    }
+    struct stat st {};
+    if (::fstat(fd, &st) != 0 || st.st_size <= 0) {
+        LSW_WARN("fstat({}) failed or empty region", name.toStdString());
+        ::close(fd);
+        return -1;
+    }
+    const auto size = static_cast<quint64>(st.st_size);
+    void* base = ::mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (base == MAP_FAILED) {
+        LSW_WARN("mmap({} bytes) of {} failed: {}", size, name.toStdString(),
+                 std::strerror(errno));
+        ::close(fd);
+        return -1;
+    }
+
+    // Only now commit to the members, so a rejected region leaves this
+    // object exactly as it was.
+    fd_ = fd;
+    base_ = base;
+    size_ = size;
+    shm_name_ = name;
+    created_ = false;
+
+    const auto magic = linkproto::load_field<quint32>(
+        static_cast<std::uint8_t*>(base_) + linkproto::region_off::magic);
+    const auto version = linkproto::load_field<quint32>(
+        static_cast<std::uint8_t*>(base_) + linkproto::region_off::version);
+    if (magic != kMagic || version != kVersion) {
+        LSW_WARN("shmem region {} has magic={:#x} version={} (want {:#x}/{}) — not "
+                 "attaching",
+                 name.toStdString(), magic, version, kMagic, kVersion);
+        close();
+        return -1;
+    }
+    if (!bind_channels_from_table()) {
+        close();
+        return -1;
+    }
+
+    LSW_INFO("shmem region attached: {} ({} MiB, fd={}) — reusing the region this VM "
+             "is already running on",
+             shm_name_.toStdString(), size_ / (1024 * 1024), fd_);
+    return 0;
+}
+
+bool ShmemRegion::bind_channels_from_table() {
+    const auto frames = linkproto::find_channel(base_, linkproto::kChannelFrames);
+    if (!frames.valid()) {
+        LSW_WARN("shmem region has no frames channel — not one of ours");
+        return false;
+    }
+    auto* base = static_cast<std::uint8_t*>(base_);
+    frames_base_ = base + frames.offset;
+    frames_size_ = frames.size;
+
+    // A channel that is absent leaves its endpoints default-constructed,
+    // which reads as invalid — the same state as before any region at
+    // all, and what callers already check for.
+    if (const auto rpc = linkproto::find_channel(base_, linkproto::kChannelRpc);
+        rpc.valid()) {
+        rpc_from_guest_ = linkproto::ByteRingConsumer{
+            base + rpc.offset + linkproto::guest_to_host_ring_offset(rpc.size)};
+        rpc_to_guest_ = linkproto::ByteRingProducer{
+            base + rpc.offset + linkproto::host_to_guest_ring_offset(rpc.size)};
+    }
+    if (const auto cmd = linkproto::find_channel(base_, linkproto::kChannelCmdStream);
+        cmd.valid()) {
+        cmd_from_guest_ = linkproto::ByteRingConsumer{
+            base + cmd.offset + linkproto::guest_to_host_ring_offset(cmd.size)};
+        cmd_to_guest_ = linkproto::ByteRingProducer{
+            base + cmd.offset + linkproto::host_to_guest_ring_offset(cmd.size)};
+    }
+    return true;
 }
 
 bool ShmemRegion::lay_out_channels(quint64 size_bytes) {
@@ -140,11 +230,34 @@ void ShmemRegion::close() {
         ::close(fd_);
         fd_ = -1;
     }
-    if (!shm_name_.isEmpty()) {
-        ::shm_unlink(shm_name_.toUtf8().constData());
-        shm_name_.clear();
-    }
+    // The name is deliberately left in place — see the header. A region
+    // whose VM is gone is unlinked by ``discard``; one whose VM is still
+    // running is what the next manager attaches to.
+    shm_name_.clear();
     size_ = 0;
+    created_ = false;
+}
+
+void ShmemRegion::discard() {
+    const QString name = shm_name_;
+    close();
+    if (!name.isEmpty()) {
+        ::shm_unlink(name.toUtf8().constData());
+        LSW_INFO("shmem region discarded: {}", name.toStdString());
+    }
+}
+
+quint64 ShmemRegion::slot_sequence(int slot_index) const {
+    if (frames_base_ == nullptr || slot_index < 0
+        || slot_index >= static_cast<int>(kSlotCount)) {
+        return 0;
+    }
+    const auto* slot = linkproto::slot_ptr(frames_base_, static_cast<quint32>(slot_index));
+    if (load_field<quint64>(slot + slot_off::hwnd) == 0
+        || load_field<quint32>(slot + slot_off::state) != linkproto::kSlotStateActive) {
+        return 0;
+    }
+    return linkproto::load_seqno_acquire(slot + slot_off::seqno);
 }
 
 bool ShmemRegion::read_slot_frame(int slot_index, quint64* hwnd_out,

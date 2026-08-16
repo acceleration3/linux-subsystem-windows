@@ -82,6 +82,18 @@ public:
     [[nodiscard]] ShmemRegion* shmem_region(const QUuid& uuid) const;
     [[nodiscard]] IvshmemServer* ivshmem_server(const QUuid& uuid) const;
 
+    // Take over the region of a VM that is already running — one this
+    // manager did not start, because the previous one was closed and
+    // the VM was left up. Emits ``shmem_ready`` on success, exactly as
+    // starting the VM would, so every consumer binds the same way.
+    //
+    // The one thing that does not come back is the frame doorbell: the
+    // ivshmem device handshakes once, with whoever was serving the
+    // socket when QEMU started. Consumers poll instead.
+    //
+    // Returns false when the VM is not running or left no region.
+    bool attach_running(const QUuid& uuid);
+
 Q_SIGNALS:
     // The bundle for ``uuid`` just came up / went away. Consumers bind
     // here rather than at their own construction time: the bundle only

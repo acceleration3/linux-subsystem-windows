@@ -43,4 +43,19 @@ bool HostServices::open() {
     return true;
 }
 
+void HostServices::attach_running_vms() {
+    // A VM the user left running when they closed the last manager. Its
+    // shared region outlived that process, so take it over rather than
+    // making them restart Windows to get their mirrors back.
+    //
+    // Separate from ``open`` because the VM list is not known until the
+    // domain importer has run, which needs an open libvirt — so this is
+    // the first moment there is anything to attach to.
+    for (const auto& record : vms_.records()) {
+        if (lifecycle_.is_running(record.uuid)) {
+            (void)lifecycle_.attach_running(record.uuid);
+        }
+    }
+}
+
 }  // namespace lsw::host::services
