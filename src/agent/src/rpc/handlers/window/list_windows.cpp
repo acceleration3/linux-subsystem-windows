@@ -35,6 +35,7 @@ struct ListWindowsHandler : RpcHandler {
                 {"screen_y", w.screen_y},
                 {"minimized", w.minimized},
                 {"maximized", w.maximized},
+                {"has_caption", w.has_caption},
             });
         }
         return {{"windows", std::move(arr)}};

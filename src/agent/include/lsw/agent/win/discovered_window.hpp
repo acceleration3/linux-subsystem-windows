@@ -24,6 +24,12 @@ struct DiscoveredWindow {
     // every window regardless of who painted the chrome.
     bool minimized;
     bool maximized;
+    // WS_CAPTION: this window has a title bar of its own, which is what
+    // separates a dialog from a menu. Both are owned windows, and the
+    // host treats them very differently — a menu is a transient popup
+    // placed against its owner, a dialog is a window in its own right
+    // that the user expects to drag, focus and find in the taskbar.
+    bool has_caption;
 };
 
 }  // namespace lsw::agent::win

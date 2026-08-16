@@ -38,6 +38,7 @@ namespace {
             gw.screen_y = w.value("screen_y", 0);
             gw.minimized = w.value("minimized", false);
             gw.maximized = w.value("maximized", false);
+            gw.has_caption = w.value("has_caption", false);
             out.append(gw);
         }
     } catch (const nlohmann::json::exception&) {
