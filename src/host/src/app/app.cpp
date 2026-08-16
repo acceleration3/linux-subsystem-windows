@@ -85,6 +85,10 @@ int App::run() {
     }
     (void)vm::DomainImporter::import_existing(services_.libvirt(), services_.settings(),
                                               services_.vms());
+    // Now that we know which VMs exist, pick up any that are still
+    // running from a previous manager — closing the manager is not
+    // supposed to cost a VM restart.
+    services_.attach_running_vms();
 
     if (cli_.unattended()) {
         unattended_ = std::make_unique<UnattendedRunner>(services_, cli_, this);

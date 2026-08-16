@@ -48,6 +48,10 @@ public:
     // disabled, the rest of the UI still works).
     [[nodiscard]] bool open();
 
+    // Bind to the shared region of any VM that is already running —
+    // one this process did not start. Call once the VM list is known.
+    void attach_running_vms();
+
     [[nodiscard]] config::Settings& settings() noexcept { return settings_; }
     [[nodiscard]] config::VmState& vms() noexcept { return vms_; }
     [[nodiscard]] vm::LibvirtConnection& libvirt() noexcept { return libvirt_; }

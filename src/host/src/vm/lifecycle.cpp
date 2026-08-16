@@ -76,19 +76,11 @@ int Lifecycle::start(const QUuid& uuid, bool first_boot_done) {
         return -1;
     }
     if (::virDomainIsActive(dom.raw()) == 1) {
-        // Idempotent — but if we have no bundle for a VM that is
-        // already up, this manager did not start it. QEMU handshook
-        // its ivshmem device against the *previous* manager's socket
-        // and eventfds, and the device is one-shot: it cannot be
-        // re-handshaken while the guest is running. Frames will not
-        // arrive, and window mirrors stay black until the VM is
-        // restarted by this process. Say so — the silent version of
-        // this cost a long debugging session.
+        // Idempotent — but a VM that is already up was started by some
+        // earlier manager, so attach to the region it left rather than
+        // running blind.
         if (!shmem_.contains(uuid)) {
-            LSW_WARN("start: VM already running but this manager owns no IVSHMEM "
-                     "region for it — frame doorbells go to the process that "
-                     "started the VM. Window mirrors will be black until the VM "
-                     "is restarted from here.");
+            (void)attach_running(uuid);
         }
         return 0;
     }
@@ -236,12 +228,52 @@ IvshmemServer* Lifecycle::ivshmem_server(const QUuid& uuid) const {
     return (it != shmem_.end()) ? it->second.server.get() : nullptr;
 }
 
+bool Lifecycle::attach_running(const QUuid& uuid) {
+    if (shmem_.contains(uuid)) {
+        return true;
+    }
+    if (!is_running(uuid)) {
+        return false;
+    }
+    ShmemBundle bundle;
+    bundle.region = std::make_unique<ShmemRegion>();
+    if (bundle.region->attach(uuid) != 0) {
+        LSW_WARN("attach: VM {} is running but its shared region is gone — window "
+                 "mirrors will be black until the VM is restarted from here",
+                 uuid.toString().toStdString());
+        return false;
+    }
+    // No IvshmemServer: QEMU handshook its device against the socket and
+    // eventfds of whichever manager started the VM, and that handshake
+    // is one-shot — a new server here would never be connected to. The
+    // doorbells are therefore gone for this session, and consumers fall
+    // back to polling the region. Everything else about it is intact,
+    // because the memory is QEMU's for as long as the domain lives.
+    LSW_INFO("attach: reattached to the running VM {} — no frame doorbells this "
+             "session (the VM was started by an earlier manager), so frames are "
+             "polled instead",
+             uuid.toString().toStdString());
+    shmem_.emplace(uuid, std::move(bundle));
+    Q_EMIT shmem_ready(uuid);
+    return true;
+}
+
 QString Lifecycle::ensure_shmem(const QUuid& uuid, int size_mib) {
     // Reuse an existing bundle (start-without-define on an already
     // running VM hits this path). The shm region + server stay live
     // across VM ACPI shutdowns so late frames don't crash the manager.
     if (auto it = shmem_.find(uuid); it != shmem_.end()) {
-        return it->second.server->socket_path();
+        if (it->second.server) {
+            return it->second.server->socket_path();
+        }
+        // An attached bundle: no server, and the region belongs to a VM
+        // that is about to be started again. Both have to be made
+        // fresh — the guest that was using it is gone, and the new QEMU
+        // needs a socket to hand shake against.
+        LSW_INFO("shmem: replacing the attached region for {} with a fresh one for "
+                 "the new VM run",
+                 uuid.toString().toStdString());
+        teardown_shmem(uuid);
     }
     ShmemBundle bundle;
     bundle.region = std::make_unique<ShmemRegion>();
@@ -271,7 +303,10 @@ void Lifecycle::teardown_shmem(const QUuid& uuid) {
         it->second.server->stop();
     }
     if (it->second.region) {
-        it->second.region->close();
+        // Unlink, not just unmap: this path runs when the VM is off or
+        // failed to start, and a region no VM is using should not be
+        // left behind for the next manager to attach to.
+        it->second.region->discard();
     }
     shmem_.erase(it);
     // After the erase: a consumer that re-queries in the slot handler

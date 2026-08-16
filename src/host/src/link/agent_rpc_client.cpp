@@ -25,6 +25,12 @@ namespace {
 constexpr int kRecvChunk = 64 * 1024;
 constexpr int kReconnectBackoffMs = 500;
 
+// Sweep interval for a region with no doorbells. Fast enough that a
+// mirror of a 60 Hz window misses at most one frame's worth of latency,
+// and cheap enough to leave running: a sweep that finds nothing reads
+// two words per slot.
+constexpr int kShmemPollMs = 8;
+
 // The envelope framing, the big-endian codecs and the command names all
 // come from lsw/linkproto — the same headers the guest agent compiles.
 // This file used to carry its own copy of each.
@@ -94,10 +100,51 @@ void AgentRpcClient::attach_shmem(vm::IvshmemServer* server, vm::ShmemRegion* re
                 &AgentRpcClient::on_shmem_slot_ready);
         connect(shmem_server_, &vm::IvshmemServer::channel_ready, this,
                 &AgentRpcClient::on_shmem_channel_ready);
+        return;
+    }
+    if (shmem_region_ != nullptr) {
+        // A region with no server: this manager attached to a VM it did
+        // not start, so nothing will ring a doorbell here. Sweep instead.
+        LSW_INFO("shmem: attached to a region with no doorbells — polling it every "
+                 "{} ms",
+                 kShmemPollMs);
+        slot_seen_.assign(vm::ShmemRegion::kSlotCount, 0);
+        shmem_poll_ = new QTimer(this);
+        shmem_poll_->setInterval(kShmemPollMs);
+        connect(shmem_poll_, &QTimer::timeout, this, &AgentRpcClient::poll_shmem);
+        shmem_poll_->start();
     }
 }
 
+void AgentRpcClient::poll_shmem() {
+    if (shmem_region_ == nullptr) {
+        return;
+    }
+    for (int slot = 0; slot < static_cast<int>(vm::ShmemRegion::kSlotCount); ++slot) {
+        const quint64 seq = shmem_region_->slot_sequence(slot);
+        // A slot that emptied resets to 0, and must not then look
+        // "changed" forever afterwards.
+        if (seq == slot_seen_[static_cast<std::size_t>(slot)]) {
+            continue;
+        }
+        slot_seen_[static_cast<std::size_t>(slot)] = seq;
+        if (seq != 0) {
+            on_shmem_slot_ready(slot);
+        }
+    }
+    // The guest rings a channel doorbell we will never hear, so the ring
+    // is drained on the same sweep. Empty is the common case and costs
+    // one load.
+    on_shmem_channel_ready(linkproto::kChannelRpc);
+}
+
 void AgentRpcClient::detach_shmem() {
+    if (shmem_poll_ != nullptr) {
+        shmem_poll_->stop();
+        shmem_poll_->deleteLater();
+        shmem_poll_ = nullptr;
+        slot_seen_.clear();
+    }
     if (shmem_server_ != nullptr) {
         disconnect(shmem_server_, &vm::IvshmemServer::slot_ready, this,
                    &AgentRpcClient::on_shmem_slot_ready);

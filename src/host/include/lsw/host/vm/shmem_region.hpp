@@ -50,8 +50,33 @@ public:
     // channel. Returns 0 on success, -1 on failure (logged).
     [[nodiscard]] int open(const QUuid& vm_uuid, quint64 size_bytes);
 
-    // ``munmap`` + ``close(fd)`` + ``shm_unlink``. Idempotent.
+    // Map the region a previous manager left behind for ``vm_uuid`` and
+    // read its channel table, writing nothing. This is how a manager
+    // restarted while the VM keeps running gets back to the memory the
+    // guest is already using: QEMU holds that memory open for as long as
+    // the domain lives, so it outlives whichever manager created it.
+    //
+    // Deliberately not ``open``'s job. Laying the region out again would
+    // reset every ring's head and tail underneath a guest that is
+    // mid-stream, which is worse than not attaching at all. Returns 0,
+    // or -1 if there is no such region or its header is not one we
+    // understand (both logged).
+    [[nodiscard]] int attach(const QUuid& vm_uuid);
+
+    // ``munmap`` + ``close(fd)``. The shm name stays in the filesystem:
+    // the region belongs to the VM, not to this process, and unlinking
+    // it here is what used to make a manager restart cost a VM restart.
+    // Idempotent.
     void close();
+
+    // ``close`` plus ``shm_unlink`` — the region is not coming back.
+    // For when the VM itself is gone; anything else should leave it for
+    // the next manager to attach to.
+    void discard();
+
+    // Whether this manager created the region (as opposed to attaching
+    // to one an earlier one left).
+    [[nodiscard]] bool created() const { return created_; }
 
     // The shm fd ``IvshmemServer`` sends to QEMU via SCM_RIGHTS so the
     // guest IVSHMEM device sees the same backing memory.
@@ -65,6 +90,12 @@ public:
     // next doorbell).
     [[nodiscard]] bool read_slot_frame(int slot_index, quint64* hwnd_out,
                                        QImage* out);
+
+    // The slot's current sequence number, or 0 for a slot with no live
+    // window in it. Changes on every commit, which is all a caller
+    // polling for new frames needs to compare — reading it is a couple
+    // of loads, against a frame read's copy of the whole image.
+    [[nodiscard]] quint64 slot_sequence(int slot_index) const;
 
     // Mark a slot empty. Called on ``frame_gone`` notification so the
     // manager forgets the hwnd; the agent should also free its
@@ -89,12 +120,20 @@ private:
     // hold a usable set of channels.
     [[nodiscard]] bool lay_out_channels(quint64 size_bytes);
 
+    // Point the frame base and the ring endpoints at the channels the
+    // table already describes, without writing anything. Shared by
+    // ``attach``; ``lay_out_channels`` does the same from the layout it
+    // has just written. False if the frames channel is missing, which
+    // means the region is not one of ours.
+    [[nodiscard]] bool bind_channels_from_table();
+
     // Byte address of a channel's start, or nullptr if absent.
     [[nodiscard]] std::uint8_t* channel_base(std::uint32_t kind) const;
 
     int     fd_       = -1;
     void*   base_     = nullptr;
     quint64 size_     = 0;
+    bool    created_  = false;  // false = attached to an existing region
     QString shm_name_;  // shm_open name (e.g. "/lsw-frames-<uuid>")
 
     // Frame channel, resolved once at open. Slot and buffer offsets are
