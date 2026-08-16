@@ -26,6 +26,7 @@
 #include <QShowEvent>
 #include <QWheelEvent>
 #include <QWindow>
+#include <QApplication>
 #include <QtConcurrent>
 
 #include <algorithm>
@@ -281,7 +282,13 @@ bool WindowView::steal_caption_press(QMouseEvent* e, QPoint guest) {
 }
 
 void WindowView::mousePressEvent(QMouseEvent* e) {
-    setFocus(Qt::MouseFocusReason);
+    if (!is_popup()) {
+        // Never for a popup. Taking host focus for a menu's mirror
+        // deactivates the mirror it belongs to, and what the guest makes
+        // of that is a closed menu — see changeEvent. The menu already
+        // has the guest's focus; it needs the click, not the focus.
+        setFocus(Qt::MouseFocusReason);
+    }
     flush_move();  // ordering: any pending move lands before the click
     const QPoint guest = map_to_guest(e->position());
 
@@ -500,12 +507,42 @@ void WindowView::changeEvent(QEvent* e) {
         // during teardown: closing posts WM_CLOSE and Windows picks the
         // next foreground itself.
         const std::uint64_t hwnd = hwnd_;
-        const bool active = isActiveWindow();
-        (void)QtConcurrent::run([this, hwnd, active] {
-            (void)rpc_.call(nlohmann::json{
-                {"cmd", active ? linkproto::cmd::kFocusWindow : linkproto::cmd::kUnfocusWindow},
-                {"params", {{"hwnd", hwnd}}}});
-        });
+        if (isActiveWindow()) {
+            (void)QtConcurrent::run([this, hwnd] {
+                (void)rpc_.call(nlohmann::json{{"cmd", linkproto::cmd::kFocusWindow},
+                                               {"params", {{"hwnd", hwnd}}}});
+            });
+        } else {
+            // Losing activation is not the same as the guest losing
+            // focus, and answering it immediately breaks menus.
+            //
+            // Clicking a menu's mirror deactivates the main mirror it
+            // belongs to. Unfocusing the guest window there hands the
+            // guest's foreground to the shell — and a menu belongs to
+            // its application's foreground thread, so Windows closes it
+            // on the spot. The click we were forwarding then arrives at
+            // whatever the menu had been covering. That is the whole
+            // bug: the item was never clicked, its menu was dismissed
+            // out from under it.
+            //
+            // So decide once the host has settled on a new active
+            // window, and only unfocus when the guest really did lose
+            // it — i.e. when focus went somewhere that is not another
+            // mirror. A mirror that takes it announces itself with its
+            // own focus_window.
+            QTimer::singleShot(0, this, [this, hwnd] {
+                if (guest_gone_ || isActiveWindow()) {
+                    return;
+                }
+                if (qobject_cast<WindowView*>(QApplication::activeWindow()) != nullptr) {
+                    return;  // another mirror has it; the guest keeps focus
+                }
+                (void)QtConcurrent::run([this, hwnd] {
+                    (void)rpc_.call(nlohmann::json{{"cmd", linkproto::cmd::kUnfocusWindow},
+                                                   {"params", {{"hwnd", hwnd}}}});
+                });
+            });
+        }
     }
 
     if (e->type() == QEvent::WindowStateChange && !is_popup() && !guest_gone_) {
