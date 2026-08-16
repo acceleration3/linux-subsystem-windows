@@ -4,6 +4,7 @@
 #include "lsw/host/apps/app_config_store.hpp"
 #include "lsw/host/apps/launcher.hpp"
 #include "lsw/host/config/vm_state.hpp"
+#include "lsw/host/link/guest_window_model.hpp"
 #include "lsw/host/manager/app_window_watcher.hpp"
 #include "lsw/host/services/host_services.hpp"
 
@@ -12,8 +13,10 @@
 #include <QMessageBox>
 #include <QPointer>
 #include <QScreen>
+#include <QTimer>
 
 #include <algorithm>
+#include <memory>
 
 namespace lsw::host::manager {
 
@@ -21,6 +24,11 @@ namespace {
 
 // The agent's RPC port inside the guest. Fixed by the agent build.
 constexpr quint32 kAgentPort = 5102;
+
+// How long to keep looking for the window of a Vulkan-capture launch
+// before concluding it is not coming. Generous: a cold app on a cold
+// guest can take a while to put anything up.
+constexpr int kVulkanBindTimeoutMs = 60000;
 
 // Derive an exe basename from a guest path (Windows backslashes) for the
 // watcher's packaged/alias window matching.
@@ -84,12 +92,27 @@ void GuestAppLaunchController::ensure_channel_target(const QUuid& uuid) {
 }
 
 void GuestAppLaunchController::fire_launch(const QString& guest_path) {
+    // Same two prerequisites as the in-manager list: a replay server on
+    // this side, and an agent told to let go of the region. The config
+    // is looked up by path because that is what this path carries.
+    bool vulkan = false;
+    for (const auto& cfg : services_.app_configs().configs()) {
+        if (cfg.path == guest_path) {
+            vulkan = cfg.capture == apps::CaptureMethod::Vulkan;
+            break;
+        }
+    }
+
     auto* launcher = new apps::Launcher(services_.rpc(), this);
     connect(launcher, &apps::Launcher::launched, this,
-            [this, launcher](const QString& reported_path, quint32 pid) {
+            [this, launcher, vulkan](const QString& reported_path, quint32 pid) {
         launcher->deleteLater();
         if (pid == 0) {
             LSW_WARN("launch_app: agent returned pid=0 — old agent?");
+            return;
+        }
+        if (vulkan) {
+            bind_vulkan_input(pid);
             return;
         }
         // Without the watcher the agent dutifully CreateProcessW-es the
@@ -107,16 +130,6 @@ void GuestAppLaunchController::fire_launch(const QString& guest_path) {
                 LSW_WARN("launch_app({}) failed: {}", id.toStdString(), err.toStdString());
                 launcher->deleteLater();
             });
-    // Same two prerequisites as the in-manager list: a replay server on
-    // this side, and an agent told to let go of the region. The config
-    // is looked up by path because that is what this path carries.
-    bool vulkan = false;
-    for (const auto& cfg : services_.app_configs().configs()) {
-        if (cfg.path == guest_path) {
-            vulkan = cfg.capture == apps::CaptureMethod::Vulkan;
-            break;
-        }
-    }
     if (vulkan) {
         // Same single-VM resolution this controller already uses to
         // pick a channel target.
@@ -124,8 +137,54 @@ void GuestAppLaunchController::fire_launch(const QString& guest_path) {
         if (!records.isEmpty()) {
             (void)services_.vulkan_capture().ensure_running(records.first().uuid);
         }
+        services_.vulkan_capture().stop_forwarding();
     }
     launcher->launch(guest_path, vulkan);
+}
+
+void GuestAppLaunchController::bind_vulkan_input(quint32 pid) {
+    // No AppWindowWatcher for a Vulkan-capture launch. Its windows would
+    // each become a mirror fed by the frame ring, which this application
+    // never writes to — a black window next to the replay's window that
+    // has the actual picture. What the replay needs instead is the HWND
+    // to send its window's input to, and that takes waiting for the
+    // PID's window to turn up in the enumeration.
+    auto* binder = new QObject(this);
+    // The subscription is released exactly once, by whichever of the two
+    // paths below gets there first: ``deleteLater`` only takes effect on
+    // the next loop turn, so the timer can still fire after a successful
+    // bind has asked for the binder's death.
+    auto done = std::make_shared<bool>(false);
+    auto release = [this, binder, done] {
+        if (*done) {
+            return;
+        }
+        *done = true;
+        services_.windows().unsubscribe();
+        binder->deleteLater();
+    };
+
+    connect(&services_.windows(), &link::GuestWindowModel::updated, binder,
+            [this, pid, release](const QList<link::GuestWindow>& wins) {
+        for (const auto& w : wins) {
+            if (w.pid != pid || w.hwnd == 0) {
+                continue;
+            }
+            services_.vulkan_capture().forward_input_to(w.hwnd);
+            release();
+            return;
+        }
+    });
+    services_.windows().subscribe();
+
+    // The window may never come (the app died, or it draws without one),
+    // and an unmatched subscription would keep the enumeration polling
+    // for the rest of the session. Give up after a while.
+    QTimer::singleShot(kVulkanBindTimeoutMs, binder, [release] {
+        LSW_WARN("launch_app: no guest window for the Vulkan-capture app; "
+                 "its replay window will have no input");
+        release();
+    });
 }
 
 void GuestAppLaunchController::start_vm_and_wait(const QUuid& uuid, const QString& app_id,
