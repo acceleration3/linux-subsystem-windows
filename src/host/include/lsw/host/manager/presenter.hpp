@@ -56,10 +56,15 @@ public:
     [[nodiscard]] virtual QPoint map_to_guest(QPointF widget_position,
                                               QSize widget_size) const = 0;
 
-    // Draw. ``translucent`` selects the popup treatment: clear to
-    // transparent rather than filling black, so the trimmed shadow
-    // margin does not paint as a box.
-    virtual void paint(QPainter& painter, QSize widget_size, bool translucent) const = 0;
+    // Draw.
+    //
+    // What the guest hands over carries real per-pixel alpha — a
+    // layered splash screen, a rounded corner, a trimmed shadow margin
+    // — and it is preserved either way. ``letterbox`` only says what
+    // happens OUTSIDE the content: black bars for a mirror whose widget
+    // does not match its frame's aspect mid-resize, nothing at all for a
+    // popup, whose widget is its content.
+    virtual void paint(QPainter& painter, QSize widget_size, bool letterbox) const = 0;
 };
 
 }  // namespace lsw::host::manager
