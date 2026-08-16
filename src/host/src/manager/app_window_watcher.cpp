@@ -249,7 +249,7 @@ void AppWindowWatcher::on_windows(const QList<link::GuestWindow>& wins) {
             // enumeration) — force the mirror down. Plain close() now
             // only *requests* a guest close and keeps the mirror alive
             // until the window really vanishes.
-            v->guest_closed();
+            v->guest_closed("its hwnd left the guest window enumeration");
         }
     }
 

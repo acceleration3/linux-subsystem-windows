@@ -55,7 +55,7 @@ public:
 
     // The guest window is verifiably gone — tear the mirror down for
     // real, bypassing the "just request close" path in closeEvent.
-    void guest_closed();
+    void guest_closed(const char* reason = "unspecified");
 
     // Match the mirror to the guest window's show state, as the last
     // enumeration reported it.
