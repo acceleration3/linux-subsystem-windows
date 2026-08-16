@@ -146,8 +146,15 @@ void AppWindowWatcher::on_windows(const QList<link::GuestWindow>& wins) {
         // Instance identified — strict launch scoping from here on,
         // never name-adopt again (that is what multiplied mirrors across
         // launches).
+        //
+        // Either the agent still attributes the window to our launch, or
+        // it is running under a PID we already know this launch owns.
+        // The second half is what survives the agent restarting: it
+        // forgets which launch a process came from, and without this the
+        // watcher would lose every window it has and refuse every window
+        // the application opens from then on.
         for (const auto& w : wins) {
-            if (w.from_launch(locked_pid_)) {
+            if (w.from_launch(locked_pid_) || locked_pids_.contains(w.pid)) {
                 matches.insert(w.hwnd, w.title);
             }
         }
@@ -174,6 +181,14 @@ void AppWindowWatcher::on_windows(const QList<link::GuestWindow>& wins) {
                 locked_ = true;
                 locked_pid_ = chosen;
             }
+        }
+    }
+
+    // Remember whose processes these are, while the agent is still
+    // telling us. See ``locked_pids_``.
+    for (auto it = matches.constBegin(); it != matches.constEnd(); ++it) {
+        if (const quint32 pid = by_hwnd.value(it.key()).pid; pid != 0) {
+            locked_pids_.insert(pid);
         }
     }
 
