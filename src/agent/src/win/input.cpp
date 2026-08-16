@@ -36,12 +36,43 @@ bool is_extended_vk(unsigned vk) {
     }
 }
 
+// Is a menu open anywhere in the foreground thread — a menu bar being
+// tracked, a popup menu, a system menu?
+//
+// Worth asking before touching the foreground, because a menu is a modal
+// tracking loop that Windows cancels the moment the foreground window
+// changes. The menu is not the foreground window while it is up (its
+// owner is), so "make the target foreground" looks harmless and is not.
+bool menu_is_open() {
+    GUITHREADINFO info{};
+    info.cbSize = sizeof(info);
+    if (::GetGUIThreadInfo(0, &info) == FALSE) {
+        return false;
+    }
+    constexpr DWORD kMenuFlags = GUI_INMENUMODE | GUI_POPUPMENUMODE | GUI_SYSTEMMENUMODE;
+    return (info.flags & kMenuFlags) != 0 || info.hwndMenuOwner != nullptr;
+}
+
 // Bring the target window to the foreground so synthetic input (which
 // is global / goes to the focused window) lands on it. Best-effort:
 // even if SetForegroundWindow is refused, positioning the cursor over
 // the window (done by the caller) still routes mouse input correctly.
 void bring_foreground(HWND top) {
     if (::GetForegroundWindow() == top) {
+        return;
+    }
+    // Never while a menu is up. Clicking an item in a mirrored menu came
+    // through as a click on the MENU window, so this tried to make that
+    // window the foreground — and Windows answered by closing the menu,
+    // after which the click landed on whatever the menu had covered. The
+    // menu's own application already has the foreground, which is what
+    // makes the click reach the item: the cursor is over it, and mouse
+    // input follows the cursor.
+    //
+    // The wheel path has skipped this for the same reason for a while
+    // (a wheel over a combobox dropdown used to dismiss it); it turns
+    // out clicks needed it more.
+    if (menu_is_open()) {
         return;
     }
     if (::IsIconic(top)) {
