@@ -114,6 +114,18 @@ private:
     bool locked_ = false;
     quint32 locked_pid_ = 0;
 
+    // Every PID this launch has been seen to own a window under.
+    //
+    // Attribution comes from the agent, and the agent forgets it when it
+    // restarts — a hot redeploy, a crash — after which every window of a
+    // still-running application reports no launch at all. A watcher that
+    // trusted only the launch would match nothing from that moment on:
+    // its existing mirrors would go, and no dialog the application
+    // opened afterwards would ever get one. The PIDs do not change when
+    // the agent restarts, so what we learned while attribution worked
+    // keeps the launch identifiable after it stops.
+    QSet<quint32> locked_pids_;
+
     // Map persists entries even after the WindowView is destroyed
     // (QPointer goes null) — that's how we avoid respawning a mirror
     // for a window the user just told us to close while the guest
