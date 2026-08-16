@@ -1,5 +1,6 @@
 #include "lsw/host/manager/window_view.hpp"
 
+#include "lsw/base/log.hpp"
 #include "lsw/host/link/agent_rpc_client.hpp"
 #include "lsw/host/manager/frame_geometry.hpp"
 #include "lsw/host/manager/guest_window_icon_fetcher.hpp"
@@ -360,7 +361,13 @@ void WindowView::keyReleaseEvent(QKeyEvent* e) {
 
 // ---- lifecycle -------------------------------------------------------------
 
-void WindowView::guest_closed() {
+void WindowView::guest_closed(const char* reason) {
+    // Logged because this is the only way a mirror goes away against
+    // the user's wishes, and the three callers are indistinguishable
+    // afterwards. A mirror that vanished while its application was
+    // still on screen — mid save-prompt, say — is a bug in whichever
+    // one of them fired, and this line is what names it.
+    LSW_INFO("mirror {:#x}: closing ({})", hwnd_, reason);
     guest_gone_ = true;
     close();
 }
@@ -386,7 +393,7 @@ void WindowView::closeEvent(QCloseEvent* e) {
 
 void WindowView::on_window_gone(std::uint64_t hwnd) {
     if (hwnd == hwnd_) {
-        guest_closed();
+        guest_closed("the agent reported the guest window gone");
     }
 }
 
@@ -539,7 +546,7 @@ void WindowView::changeEvent(QEvent* e) {
                 (void)rpc_.call(nlohmann::json{{"cmd", linkproto::cmd::kCloseWindow},
                                                {"params", {{"hwnd", popup_hwnd}}}});
             });
-            popup->guest_closed();
+            popup->guest_closed("its owner was minimized");
         }
     }
 }
