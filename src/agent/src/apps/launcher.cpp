@@ -1,5 +1,6 @@
 #include "lsw/agent/apps/launcher.hpp"
 
+#include "lsw/agent/apps/launch_group.hpp"
 #include "lsw/agent/log.hpp"
 
 // clang-format off
@@ -203,9 +204,15 @@ bool Launcher::launch(const std::string& app_id, unsigned long* pid_out,
     // CREATE_NO_WINDOW so the child doesn't briefly flash a console
     // window for non-GUI exes; CREATE_UNICODE_ENVIRONMENT because we
     // implicitly inherit our (UTF-16) environment.
+    //
+    // CREATE_SUSPENDED so the process can be put in its launch's job
+    // before it executes an instruction. A launcher stub can spawn the
+    // real application in the first milliseconds of its life, and a
+    // child that starts before the assignment is outside the job for
+    // good — which is exactly the process we most need to track.
     const BOOL ok = ::CreateProcessW(
         path.c_str(), mutable_cmd.data(), nullptr, nullptr, FALSE,
-        CREATE_UNICODE_ENVIRONMENT | CREATE_NO_WINDOW, nullptr,
+        CREATE_UNICODE_ENVIRONMENT | CREATE_NO_WINDOW | CREATE_SUSPENDED, nullptr,
         working_dir.empty() ? nullptr : working_dir.c_str(), &si, &pi);
     if (!ok) {
         const DWORD err = ::GetLastError();
@@ -239,6 +246,12 @@ bool Launcher::launch(const std::string& app_id, unsigned long* pid_out,
         }
         return true;
     }
+    // Job first, then let it run. Whether the adoption worked or not the
+    // thread has to be resumed — a process left suspended is a process
+    // that never starts.
+    (void)LaunchGroup::adopt(pi.hProcess, pi.dwProcessId);
+    ::ResumeThread(pi.hThread);
+
     LSW_AGENT_INFO(std::string{"launch: spawned pid="} + std::to_string(pi.dwProcessId));
     if (pid_out != nullptr) {
         *pid_out = pi.dwProcessId;

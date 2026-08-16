@@ -31,6 +31,7 @@ namespace {
             gw.hwnd = w.value("hwnd", std::uint64_t{0});
             gw.owner = w.value("owner", std::uint64_t{0});
             gw.pid = static_cast<quint32>(w.value("pid", std::uint64_t{0}));
+            gw.root_pid = static_cast<quint32>(w.value("root_pid", std::uint64_t{0}));
             gw.title = QString::fromStdString(w.value("title", std::string{}));
             gw.exe_path = QString::fromStdString(w.value("exe_path", std::string{}));
             gw.screen_x = w.value("screen_x", 0);

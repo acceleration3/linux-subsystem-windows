@@ -213,7 +213,7 @@ void AppListWidget::on_windows_for_vulkan(const QList<link::GuestWindow>& window
         return;
     }
     for (const auto& w : windows) {
-        if (w.pid != vulkan_pid_ || w.hwnd == 0) {
+        if (!w.from_launch(vulkan_pid_) || w.hwnd == 0) {
             continue;
         }
         vulkan_.forward_input_to(w.hwnd);

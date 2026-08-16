@@ -1,5 +1,6 @@
 #include "lsw/agent/capture/vulkan_session.hpp"
 
+#include "lsw/agent/apps/launch_group.hpp"
 #include "lsw/agent/capture/wgc.hpp"
 #include "lsw/agent/log.hpp"
 #include "lsw/agent/transport/shmem.hpp"
@@ -84,8 +85,21 @@ void VulkanSession::watch(unsigned long pid) {
         }
         ::WaitForSingleObject(proc, INFINITE);
         ::CloseHandle(proc);
-        LSW_AGENT_INFO(std::string{"vulkan_session: pid "} + std::to_string(pid)
-                       + " exited");
+        // The launched process is gone, which is not the same as the
+        // application being gone: a launcher stub exits as soon as it
+        // has started the real executable. Taking the region back then
+        // would pull the transport out from under an application that
+        // is still rendering. Wait for the whole launch to empty out.
+        if (apps::LaunchGroup::alive(pid)) {
+            LSW_AGENT_INFO(std::string{"vulkan_session: pid "} + std::to_string(pid)
+                           + " exited but its launch is still running; holding the "
+                             "region");
+            while (apps::LaunchGroup::alive(pid)) {
+                ::Sleep(500);
+            }
+        }
+        LSW_AGENT_INFO(std::string{"vulkan_session: launch "} + std::to_string(pid)
+                       + " finished");
         VulkanSession::abandon_launch();
     }).detach();
 }

@@ -138,6 +138,7 @@ set(_lsw_agent_uia_sources
 )
 set(_lsw_agent_apps_sources
     src/apps/catalog.cpp
+    src/apps/launch_group.cpp
     src/apps/launcher.cpp
     src/apps/d3d_translation.cpp
 )

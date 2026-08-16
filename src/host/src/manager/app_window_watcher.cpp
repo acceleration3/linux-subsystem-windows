@@ -29,21 +29,22 @@ QString exe_basename_lower(const QString& path) {
 }
 
 // Select the HWNDs (→ titles) this watcher owns out of an enumeration.
-// Primary scoping is the exact launched PID — that separates
-// simultaneous instances of a genuine Win32 app. The exe-name path is
-// a fallback only: App Execution Aliases / packaged apps launch a
-// throwaway stub, so the real window lives under a different PID and
-// the PID filter finds nothing. The fallback matches by executable
-// basename but skips ``baseline`` HWNDs (windows that existed before
-// our launch) so it can't hijack a pre-existing instance, and is only
-// consulted when the PID match is empty.
+// Primary scoping is the launch — the PID we started plus everything it
+// went on to start. That separates simultaneous instances of a genuine
+// Win32 app. The exe-name path is a fallback only, for App Execution
+// Aliases and packaged apps: those are handed to the shell, so there is
+// no process of ours to root a job at and the launch match finds
+// nothing. The fallback matches by executable basename but skips
+// ``baseline`` HWNDs (windows that existed before our launch) so it
+// can't hijack a pre-existing instance, and is only consulted when the
+// launch match is empty.
 QHash<quint64, QString> select_matches(const QList<GuestWindow>& wins,
                                         quint32 pid,
                                         const QString& exe_basename_lc,
                                         const QSet<quint64>& baseline) {
     QHash<quint64, QString> matches;
     for (const auto& w : wins) {
-        if (w.pid == pid) {
+        if (w.from_launch(pid)) {
             matches.insert(w.hwnd, w.title);
         }
     }
@@ -142,30 +143,31 @@ void AppWindowWatcher::on_windows(const QList<link::GuestWindow>& wins) {
 
     QHash<quint64, QString> matches;
     if (locked_) {
-        // Instance identified — strict PID scoping from here on, never
-        // name-adopt again (that is what multiplied mirrors across
+        // Instance identified — strict launch scoping from here on,
+        // never name-adopt again (that is what multiplied mirrors across
         // launches).
         for (const auto& w : wins) {
-            if (w.pid == locked_pid_) {
+            if (w.from_launch(locked_pid_)) {
                 matches.insert(w.hwnd, w.title);
             }
         }
     } else {
         matches = select_matches(wins, pid_, exe_basename_, baseline_hwnds_);
-        // First time we have our window(s): lock to their real PID.
-        // Prefer the launched PID if it actually matched (genuine
-        // Win32); otherwise adopt the PID of a name-matched window
-        // (alias/packaged case).
+        // First time we have our window(s): lock to the launch if these
+        // came from it, which keeps every later process it spawns in
+        // scope. Otherwise (alias/packaged, matched by name) lock to the
+        // PID of the window we adopted — there is no launch of ours to
+        // anchor to.
         if (!matches.isEmpty()) {
             quint32 chosen = 0;
             for (auto it = matches.constBegin(); it != matches.constEnd(); ++it) {
-                const quint32 wp = by_hwnd.value(it.key()).pid;
-                if (wp == pid_) {  // genuine launched process wins
-                    chosen = wp;
+                const GuestWindow& w = by_hwnd[it.key()];
+                if (w.from_launch(pid_)) {  // our launch wins
+                    chosen = pid_;
                     break;
                 }
                 if (chosen == 0) {
-                    chosen = wp;
+                    chosen = w.pid;
                 }
             }
             if (chosen != 0) {
