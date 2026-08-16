@@ -1,6 +1,5 @@
 #include "lsw/agent/uia/uia.hpp"
 
-#include "lsw/agent/uia/caption_button_query.hpp"
 #include "lsw/agent/uia/element_invoker.hpp"
 #include "lsw/agent/uia/element_value_setter.hpp"
 #include "lsw/agent/uia/subscription_registry.hpp"
@@ -18,10 +17,6 @@ Uia::~Uia() = default;
 void Uia::shutdown() { root_.shutdown(); }
 
 bool Uia::ok() const noexcept { return root_.ok(); }
-
-CaptionButtons Uia::get_caption_buttons(std::uintptr_t hwnd, int efb_left, int efb_top) {
-    return CaptionButtonQuery::run(root_.get(), hwnd, efb_left, efb_top);
-}
 
 WindowState Uia::get_window_state(std::uintptr_t hwnd) {
     return WindowStateQuery::run(root_.get(), hwnd);

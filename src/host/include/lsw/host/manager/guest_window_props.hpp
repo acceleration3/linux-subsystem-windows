@@ -1,7 +1,5 @@
 #pragma once
 
-#include <QRect>
-
 namespace lsw::host::manager {
 
 // What the guest reports about a window before its mirror is shown.
@@ -21,11 +19,6 @@ struct GuestWindowProps {
     // the guest is never asked to be bigger than its own display.
     int screen_width = 0;
     int screen_height = 0;
-    // Caption-button rects in captured-frame pixels; empty = absent.
-    QRect button_minimize;
-    QRect button_maximize;
-    QRect button_close;
-    QRect button_help;
 };
 
 }  // namespace lsw::host::manager

@@ -11,25 +11,6 @@
 
 namespace lsw::host::manager {
 
-namespace {
-
-// Four-element JSON array -> QRect. Empty when absent or degenerate,
-// which is how "this window has no such button" is spelled.
-[[nodiscard]] QRect rect_from(const nlohmann::json& json, const char* key) {
-    const auto it = json.find(key);
-    if (it == json.end() || !it->is_array() || it->size() != 4) {
-        return {};
-    }
-    const int w = it->at(2).get<int>();
-    const int h = it->at(3).get<int>();
-    if (w <= 0 || h <= 0) {
-        return {};
-    }
-    return QRect(it->at(0).get<int>(), it->at(1).get<int>(), w, h);
-}
-
-}  // namespace
-
 GuestWindowPropsFetcher::GuestWindowPropsFetcher(link::AgentRpcClient& rpc,
                                                  std::uint64_t hwnd, QObject* parent)
     : QObject(parent), rpc_(rpc), hwnd_(hwnd) {}
@@ -53,10 +34,6 @@ void GuestWindowPropsFetcher::start() {
                 props.min_height = json.value("min_h", 0);
                 props.screen_width = json.value("screen_w", 0);
                 props.screen_height = json.value("screen_h", 0);
-                props.button_minimize = rect_from(json, "btn_min");
-                props.button_maximize = rect_from(json, "btn_max");
-                props.button_close = rect_from(json, "btn_close");
-                props.button_help = rect_from(json, "btn_help");
             }
         } catch (const nlohmann::json::exception&) {
             // Leave props.valid false; the mirror falls back to

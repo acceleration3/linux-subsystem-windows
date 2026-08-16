@@ -2,7 +2,6 @@
 
 #include "lsw/agent/rpc/event.hpp"
 #include "lsw/agent/rpc/event_source.hpp"
-#include "lsw/agent/uia/caption_buttons.hpp"
 #include "lsw/agent/uia/uia_event_queue.hpp"
 #include "lsw/agent/uia/uia_root.hpp"
 #include "lsw/agent/uia/window_state.hpp"
@@ -50,8 +49,6 @@ public:
 
     // ---- queries ---------------------------------------------------------
 
-    [[nodiscard]] CaptionButtons get_caption_buttons(std::uintptr_t hwnd, int efb_left,
-                                                     int efb_top);
     [[nodiscard]] WindowState get_window_state(std::uintptr_t hwnd);
     [[nodiscard]] bool invoke_by_selector(std::uintptr_t hwnd, const std::string& selector);
     [[nodiscard]] bool set_value(std::uintptr_t hwnd, const std::string& selector,

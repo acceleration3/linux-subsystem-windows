@@ -9,7 +9,6 @@ class QPainter;
 
 namespace lsw::host::manager {
 
-class CaptionButtonRects;
 
 // Diagnostic overlay for coordinate drift, enabled by ``LSW_DEBUG_NCHIT=1``.
 //
@@ -28,7 +27,7 @@ public:
 
     // Draw the button rects, the press marker and the diagnostic text.
     // ``frame_rect`` is where the captured image is drawn.
-    void paint(QPainter& painter, const CaptionButtonRects& buttons, QRect frame_rect,
+    void paint(QPainter& painter, QRect frame_rect,
                const QImage& image, int widget_width, int widget_height,
                double device_pixel_ratio) const;
 

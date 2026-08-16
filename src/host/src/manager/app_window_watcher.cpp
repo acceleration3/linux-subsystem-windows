@@ -222,6 +222,19 @@ void AppWindowWatcher::on_windows(const QList<link::GuestWindow>& wins) {
         spawn_view(gw.hwnd, it.value(), owner_view, rel_guest_px);
     }
 
+    // Match every live mirror to its window's show state. Cheap and
+    // unconditional: this is the only way a click on the application's
+    // own minimize or maximize button — forwarded to the guest like any
+    // other click — comes back to the host.
+    for (auto it = views_.constBegin(); it != views_.constEnd(); ++it) {
+        WindowView* view = it.value().data();
+        if (view == nullptr || !by_hwnd.contains(it.key())) {
+            continue;
+        }
+        const GuestWindow& gw = by_hwnd[it.key()];
+        view->apply_guest_state(gw.minimized, gw.maximized);
+    }
+
     // Tear down mirrors whose underlying HWND is gone.
     QList<quint64> stale;
     for (auto it = views_.constBegin(); it != views_.constEnd(); ++it) {
