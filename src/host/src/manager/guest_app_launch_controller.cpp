@@ -167,7 +167,7 @@ void GuestAppLaunchController::bind_vulkan_input(quint32 pid) {
     connect(&services_.windows(), &link::GuestWindowModel::updated, binder,
             [this, pid, release](const QList<link::GuestWindow>& wins) {
         for (const auto& w : wins) {
-            if (w.pid != pid || w.hwnd == 0) {
+            if (!w.from_launch(pid) || w.hwnd == 0) {
                 continue;
             }
             services_.vulkan_capture().forward_input_to(w.hwnd);

@@ -2,6 +2,7 @@
 #include "lsw/agent/rpc/auto_register.hpp"
 
 #include "lsw/linkproto/commands.hpp"
+#include "lsw/agent/apps/launch_group.hpp"
 #include "lsw/agent/win/window.hpp"
 
 #include <cstdint>
@@ -19,6 +20,13 @@ struct ListWindowsHandler : RpcHandler {
                 {"hwnd", static_cast<std::uint64_t>(w.hwnd)},
                 {"owner", static_cast<std::uint64_t>(w.owner)},
                 {"pid", static_cast<std::uint64_t>(w.pid)},
+                // Which launch this window's process came from, following
+                // through any stub that spawned it. 0 for a process the
+                // agent did not start. The host scopes a watcher to this
+                // rather than to ``pid``, or an application whose first
+                // process is a launcher loses every window it opens.
+                {"root_pid", static_cast<std::uint64_t>(
+                                 apps::LaunchGroup::root_of(w.pid))},
                 {"title", w.title},
                 {"exe_path", w.exe_path},
                 {"client_w", w.client_w},
