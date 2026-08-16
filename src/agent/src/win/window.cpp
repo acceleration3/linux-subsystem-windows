@@ -138,6 +138,8 @@ BOOL CALLBACK enum_proc(HWND hwnd, LPARAM lparam) {
     w.client_h = fr.bottom - fr.top;
     w.screen_x = fr.left;              // now the WINDOW origin
     w.screen_y = fr.top;
+    w.minimized = ::IsIconic(hwnd) != FALSE;
+    w.maximized = ::IsZoomed(hwnd) != FALSE;
     out->push_back(std::move(w));
     return TRUE;
 }
@@ -217,6 +219,31 @@ bool Window::unfocus_window(std::uintptr_t hwnd_raw) {
     return ::SetForegroundWindow(shell) != FALSE;
 }
 
+bool Window::system_command(std::uintptr_t hwnd_raw, const std::string& command) {
+    auto* hwnd = reinterpret_cast<HWND>(hwnd_raw);
+    if (hwnd == nullptr || ::IsWindow(hwnd) == FALSE) {
+        return false;
+    }
+    WPARAM sc = 0;
+    if (command == "minimize") {
+        sc = SC_MINIMIZE;
+    } else if (command == "maximize") {
+        sc = SC_MAXIMIZE;
+    } else if (command == "restore") {
+        sc = SC_RESTORE;
+    } else {
+        return false;
+    }
+    // Posted, not sent: SC_MINIMIZE and friends run an animation and a
+    // full layout pass inside the target's message loop, and the RPC
+    // thread has no reason to wait for that — nor to hang behind an
+    // application that is busy.
+    const BOOL ok = ::PostMessageW(hwnd, WM_SYSCOMMAND, sc, 0);
+    LSW_AGENT_INFO(std::string{"window_command: "} + command + " hwnd="
+                   + std::to_string(hwnd_raw) + (ok != FALSE ? " ok" : " FAILED"));
+    return ok != FALSE;
+}
+
 int Window::hit_test_nc(std::uintptr_t hwnd_raw, int x, int y) {
     auto* hwnd = reinterpret_cast<HWND>(hwnd_raw);
     if (hwnd == nullptr || ::IsWindow(hwnd) == FALSE) {
@@ -232,10 +259,19 @@ int Window::hit_test_nc(std::uintptr_t hwnd_raw, int x, int y) {
     }
     const int sx = efb.left + x;
     const int sy = efb.top + y;
-    const LRESULT r = ::SendMessageW(
-        hwnd, WM_NCHITTEST, 0,
-        MAKELPARAM(static_cast<WORD>(sx), static_cast<WORD>(sy)));
-    return static_cast<int>(r);
+    // With a timeout, and abandoning rather than waiting: a packaged app
+    // whose process the OS has suspended answers nothing at all, and a
+    // plain SendMessageW there blocks this thread until it resumes —
+    // which is to say, until something the agent is no longer able to
+    // service makes it resume.
+    DWORD_PTR result = 0;
+    if (::SendMessageTimeoutW(hwnd, WM_NCHITTEST, 0,
+                              MAKELPARAM(static_cast<WORD>(sx), static_cast<WORD>(sy)),
+                              SMTO_ABORTIFHUNG | SMTO_ERRORONEXIT, 100, &result)
+        == 0) {
+        return -1;  // HTERROR
+    }
+    return static_cast<int>(result);
 }
 
 bool Window::close_window(std::uintptr_t hwnd_raw) {

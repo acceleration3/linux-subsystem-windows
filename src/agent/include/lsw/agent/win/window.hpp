@@ -90,15 +90,26 @@ public:
     [[nodiscard]] static bool unfocus_window(std::uintptr_t hwnd);
 
     // Run ``WM_NCHITTEST`` against ``hwnd`` for the point ``(x, y)``
-    // expressed in EFB-relative captured-frame pixels. The host
-    // calls this on left-press AFTER its cached UIA button-rect
-    // check misses — i.e. only to decide caption-drag vs HTCLIENT
-    // for points outside the button strip (notably for modern apps
-    // with tabs in the title bar, where Win11's wndproc correctly
-    // returns HTCAPTION for the empty caption strip and HTCLIENT
-    // for the tab strip). Returns the raw ``HT*`` code; ``-1`` on
-    // an invalid hwnd.
+    // expressed in EFB-relative captured-frame pixels. Returns the raw
+    // ``HT*`` code; ``-1`` on an invalid hwnd or a window that did not
+    // answer in time.
+    //
+    // Not used to find caption buttons — the answer is only as good as
+    // the application's own hit testing, which for a window that draws
+    // its own chrome is usually ``HTCLIENT`` everywhere including over
+    // its buttons. It survives for the caption-drag question, where a
+    // wrong answer costs a drag rather than a wrong button press.
     [[nodiscard]] static int hit_test_nc(std::uintptr_t hwnd, int x, int y);
+
+    // ``minimize`` / ``maximize`` / ``restore`` as a WM_SYSCOMMAND.
+    //
+    // The command every window handles the same way whoever drew its
+    // chrome, because it arrives at the window procedure rather than at
+    // a button: an app with a custom title bar routes its own buttons
+    // here too. Returns false for an invalid window or an unknown
+    // command name.
+    [[nodiscard]] static bool system_command(std::uintptr_t hwnd,
+                                             const std::string& command);
 };
 
 }  // namespace lsw::agent::win

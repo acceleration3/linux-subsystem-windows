@@ -33,6 +33,8 @@ struct ListWindowsHandler : RpcHandler {
                 {"client_h", w.client_h},
                 {"screen_x", w.screen_x},
                 {"screen_y", w.screen_y},
+                {"minimized", w.minimized},
+                {"maximized", w.maximized},
             });
         }
         return {{"windows", std::move(arr)}};

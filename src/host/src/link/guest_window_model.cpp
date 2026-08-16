@@ -36,6 +36,8 @@ namespace {
             gw.exe_path = QString::fromStdString(w.value("exe_path", std::string{}));
             gw.screen_x = w.value("screen_x", 0);
             gw.screen_y = w.value("screen_y", 0);
+            gw.minimized = w.value("minimized", false);
+            gw.maximized = w.value("maximized", false);
             out.append(gw);
         }
     } catch (const nlohmann::json::exception&) {

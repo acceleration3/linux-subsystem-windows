@@ -74,6 +74,7 @@ set(_lsw_agent_rpc_sources
     src/rpc/handlers/window/focus_window.cpp
     src/rpc/handlers/window/unfocus_window.cpp
     src/rpc/handlers/window/resize_window.cpp
+    src/rpc/handlers/window/window_command.cpp
     src/rpc/handlers/window/window_props.cpp
     src/rpc/handlers/window/nchittest.cpp
     src/rpc/handlers/window/get_window_icon.cpp
@@ -125,7 +126,6 @@ set(_lsw_agent_uia_sources
     src/uia/uia_event_queue.cpp
     src/uia/bstr_text.cpp
     src/uia/element_locator.cpp
-    src/uia/caption_button_query.cpp
     src/uia/window_state_query.cpp
     src/uia/element_invoker.cpp
     src/uia/element_value_setter.cpp

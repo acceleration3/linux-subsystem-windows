@@ -1,6 +1,5 @@
 #include "lsw/host/manager/nc_hit_debug_overlay.hpp"
 
-#include "lsw/host/manager/caption_button_rects.hpp"
 #include "lsw/host/manager/non_client_hit.hpp"
 
 #include <QFontMetrics>
@@ -27,44 +26,17 @@ void NcHitDebugOverlay::record(QPointF widget_position, QPoint guest_position,
     hit_code_ = hit_code;
 }
 
-void NcHitDebugOverlay::paint(QPainter& painter, const CaptionButtonRects& buttons,
+void NcHitDebugOverlay::paint(QPainter& painter,
                               QRect frame_rect, const QImage& image, int widget_width,
                               int widget_height, double device_pixel_ratio) const {
     if (image.width() <= 0 || image.height() <= 0) {
         return;
     }
-    // Same transform the press handler uses, so a mismatch between the
-    // drawn rects and the visible buttons is the bug, not the overlay.
-    const auto to_widget = [&](const QRect& guest_rect) {
-        if (guest_rect.isEmpty()) {
-            return QRect();
-        }
-        const double sx = double(frame_rect.width()) / image.width();
-        const double sy = double(frame_rect.height()) / image.height();
-        return QRect(frame_rect.x() + static_cast<int>(std::lround(guest_rect.x() * sx)),
-                     frame_rect.y() + static_cast<int>(std::lround(guest_rect.y() * sy)),
-                     static_cast<int>(std::lround(guest_rect.width() * sx)),
-                     static_cast<int>(std::lround(guest_rect.height() * sy)));
-    };
-
     painter.setRenderHint(QPainter::Antialiasing, true);
-    struct Overlay { QRect source; QColor colour; };
-    const Overlay overlays[] = {
-        {buttons.minimize(), QColor(0, 200, 255, 220)},   // cyan
-        {buttons.maximize(), QColor(0, 255, 100, 220)},   // green
-        {buttons.close(),    QColor(255, 80, 80, 220)},   // red
-        {buttons.help(),     QColor(255, 200, 0, 220)},   // amber
-    };
-    for (const auto& overlay : overlays) {
-        const QRect rect = to_widget(overlay.source);
-        if (rect.isEmpty()) {
-            continue;
-        }
-        painter.setPen(QPen(overlay.colour, 2));
-        painter.setBrush(QColor(overlay.colour.red(), overlay.colour.green(),
-                                overlay.colour.blue(), 48));
-        painter.drawRect(rect);
-    }
+    // No button rects to draw any more: the mirror no longer decides
+    // which press is a button, so there is nothing here to disagree with
+    // what the user sees. What remains is the press marker, which is
+    // still the way to see where a click landed in guest pixels.
 
     if (hit_code_ < 0) {
         return;  // nothing pressed yet

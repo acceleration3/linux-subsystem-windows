@@ -170,8 +170,6 @@ void WindowView::apply_props(const GuestWindowProps& props) {
         resize(props.width + 2 * resize_border_, props.height + 2 * resize_border_);
     }
 
-    buttons_.adopt(props.button_minimize, props.button_maximize, props.button_close,
-                   props.button_help, props.width);
     geometry_.set_guest_screen(props.screen_width, props.screen_height);
 }
 
@@ -260,43 +258,19 @@ bool WindowView::steal_caption_press(QMouseEvent* e, QPoint guest) {
         }
     }
 
-    // System caption buttons, checked locally against the UIA-sourced
-    // rects — no round trip per press.
-    int synthetic_hit = -1;
-    switch (buttons_.hit(guest)) {
-    case CaptionButtonRects::Button::Minimize:
-        showMinimized();
-        synthetic_hit = NonClientHit::kMinButton;
-        break;
-    case CaptionButtonRects::Button::Maximize:
-        if (isMaximized()) {
-            showNormal();
-        } else {
-            showMaximized();
-        }
-        synthetic_hit = NonClientHit::kMaxButton;
-        break;
-    case CaptionButtonRects::Button::Close:
-        // Through the normal close path, so the app still gets to
-        // prompt for unsaved changes.
-        close();
-        synthetic_hit = NonClientHit::kClose;
-        break;
-    case CaptionButtonRects::Button::Help:
-    case CaptionButtonRects::Button::None:
-        break;
-    }
-    if (synthetic_hit < 0) {
-        // Everything else goes to the guest. If Windows decides the
-        // press is a caption drag, the agent's MOVESIZESTART hook tells
-        // us and the constructor's handler starts a host system move.
-        return false;
-    }
-    debug_overlay_.record(e->position(), guest, synthetic_hit);
-    if (NcHitDebugOverlay::enabled()) {
-        update();
-    }
-    return true;
+    // Nothing else is intercepted. A press on what looks like a
+    // caption button is forwarded like any other: the button belongs to
+    // the application, which draws it and knows where it is, and the
+    // host learns what came of the click from the window's show state
+    // on the next enumeration. Trying to recognise the press here meant
+    // knowing the button rects, and nothing reports those reliably —
+    // UIA lies about custom chrome, and an application that hit-tests
+    // its own title bar answers HTCLIENT over every button it drew.
+    //
+    // If Windows decides the press is a caption drag, the agent's
+    // MOVESIZESTART hook tells us and the constructor's handler starts
+    // a host system move.
+    return false;
 }
 
 void WindowView::mousePressEvent(QMouseEvent* e) {
@@ -336,14 +310,6 @@ void WindowView::mouseDoubleClickEvent(QMouseEvent* e) {
     // Qt delivers press, release, then this in place of the second
     // press — which is exactly what WM_*BUTTONDBLCLK is.
     const QPoint guest = map_to_guest(e->position());
-    if (!is_popup() && e->button() == Qt::LeftButton
-        && buttons_.hit(guest) != CaptionButtonRects::Button::None) {
-        // The single-press path already ran the button's action; swallow
-        // the double so the guest does not see a phantom double-click.
-        stolen_press_buttons_ |= (1u << InputModifiers::button_index(e->button()));
-        e->accept();
-        return;
-    }
     input_.double_click(guest, InputModifiers::button_index(e->button()),
                         InputModifiers::of(e->modifiers(), e->buttons()));
     e->accept();
@@ -434,10 +400,6 @@ void WindowView::on_frame(std::uint64_t hwnd, QImage image) {
     // classic Win32 menus have no such margin and keep the whole frame.
     presenter_.submit(std::move(image), /*trim_shadow=*/is_popup());
 
-    if (!is_popup()) {
-        buttons_.track_frame_width(presenter_.source_size().width());
-    }
-
     if (is_popup() && presenter_.has_content()) {
         // Always size and anchor: gating on the trim changing skipped
         // sizing for classic menus and mis-placed them.
@@ -479,12 +441,43 @@ void WindowView::paintEvent(QPaintEvent*) {
     presenter_.paint(painter, size(), /*translucent=*/is_popup());
 
     if (presenter_.has_content() && NcHitDebugOverlay::enabled() && !is_popup()) {
-        debug_overlay_.paint(painter, buttons_, frame_rect(), presenter_.image(),
+        debug_overlay_.paint(painter, frame_rect(), presenter_.image(),
                              width(), height(), devicePixelRatioF());
     }
 }
 
 // ---- host window state -----------------------------------------------------
+
+Qt::WindowStates WindowView::show_state_of(bool minimized, bool maximized) {
+    if (minimized) {
+        return Qt::WindowMinimized;
+    }
+    return maximized ? Qt::WindowMaximized : Qt::WindowNoState;
+}
+
+void WindowView::apply_guest_state(bool minimized, bool maximized) {
+    if (is_popup() || guest_gone_) {
+        return;
+    }
+    const Qt::WindowStates want = show_state_of(minimized, maximized);
+    guest_state_ = want;
+    if (want == show_state_of((windowState() & Qt::WindowMinimized) != 0,
+                              (windowState() & Qt::WindowMaximized) != 0)) {
+        return;
+    }
+    if (minimized) {
+        showMinimized();
+    } else if (maximized) {
+        showMaximized();
+    } else {
+        showNormal();
+    }
+    // ``guest_state_`` is what stops the resulting WindowStateChange
+    // from being sent straight back as a command. Deliberately a
+    // remembered state rather than a flag held across the call: the
+    // event arrives whenever the host's window manager gets to it, which
+    // under Wayland is not within this function.
+}
 
 void WindowView::changeEvent(QEvent* e) {
     QWidget::changeEvent(e);
@@ -500,6 +493,34 @@ void WindowView::changeEvent(QEvent* e) {
                 {"cmd", active ? linkproto::cmd::kFocusWindow : linkproto::cmd::kUnfocusWindow},
                 {"params", {{"hwnd", hwnd}}}});
         });
+    }
+
+    if (e->type() == QEvent::WindowStateChange && !is_popup() && !guest_gone_) {
+        // The user did this to the mirror — the host's window menu, its
+        // taskbar, a keyboard shortcut. Pass it on as a WM_SYSCOMMAND,
+        // which reaches the guest window's own procedure whoever painted
+        // its chrome, and needs to know nothing about where its buttons
+        // are.
+        //
+        // Unless the guest is already in this state, which means this
+        // event IS the guest's own change arriving back through
+        // apply_guest_state. Telling it to do what it just did would
+        // bounce between the two forever.
+        const Qt::WindowStates now =
+            show_state_of((windowState() & Qt::WindowMinimized) != 0,
+                          (windowState() & Qt::WindowMaximized) != 0);
+        if (now != guest_state_) {
+            guest_state_ = now;
+            const char* command = now == Qt::WindowMinimized  ? "minimize"
+                                  : now == Qt::WindowMaximized ? "maximize"
+                                                               : "restore";
+            const std::uint64_t hwnd = hwnd_;
+            (void)QtConcurrent::run([this, hwnd, command] {
+                (void)rpc_.call(nlohmann::json{{"cmd", linkproto::cmd::kWindowCommand},
+                                               {"params", {{"hwnd", hwnd},
+                                                           {"command", command}}}});
+            });
+        }
     }
 
     if (e->type() == QEvent::WindowStateChange && !is_popup()

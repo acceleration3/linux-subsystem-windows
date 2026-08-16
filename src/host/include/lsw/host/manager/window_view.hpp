@@ -1,6 +1,5 @@
 #pragma once
 
-#include "lsw/host/manager/caption_button_rects.hpp"
 #include "lsw/host/manager/geometry_sync.hpp"
 #include "lsw/host/manager/guest_input_sender.hpp"
 #include "lsw/host/manager/guest_window_props.hpp"
@@ -35,7 +34,6 @@ namespace lsw::host::manager {
 //   GeometrySync       size agreement between mirror and guest window
 //   MirrorShowGate     when a mirror may appear, and its desktop identity
 //   GuestInputSender   the wire format for injected input
-//   CaptionButtonRects the guest's own caption buttons
 //   FrameGeometry      widget pixels <-> guest pixels
 //   VirtualKeyMap      Qt keys -> virtual-key codes
 //   NcHitDebugOverlay  the hit-test diagnostics
@@ -58,6 +56,17 @@ public:
     // The guest window is verifiably gone — tear the mirror down for
     // real, bypassing the "just request close" path in closeEvent.
     void guest_closed();
+
+    // Match the mirror to the guest window's show state, as the last
+    // enumeration reported it.
+    //
+    // This is how a click on the application's own minimize or maximize
+    // button reaches the host: the click was forwarded like any other,
+    // the application acted on it, and the state it ended up in comes
+    // back with the window list. It is also how a state change with no
+    // click behind it arrives — the app's Window menu, Win+Down, the
+    // guest's own taskbar.
+    void apply_guest_state(bool minimized, bool maximized);
 
     // Overridden to stamp a per-window identity around native-window
     // creation.
@@ -161,7 +170,12 @@ private:
     // cancelling the guest's move loop while we start a host one.
     std::uint64_t drag_event_token_ = 0;
 
-    CaptionButtonRects buttons_;
+    // The guest's show state as last applied or last sent, so a change
+    // arriving from one side is never echoed back to the other.
+    Qt::WindowStates guest_state_ = Qt::WindowNoState;
+
+    // Minimized/maximized -> the single Qt state that stands for it.
+    [[nodiscard]] static Qt::WindowStates show_state_of(bool minimized, bool maximized);
     NcHitDebugOverlay debug_overlay_;
 
     // Outermost px of the widget reserved as a resize halo, mirroring

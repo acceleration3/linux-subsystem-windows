@@ -1,9 +1,7 @@
-#include "lsw/agent/core/services.hpp"
 #include "lsw/agent/rpc/handler.hpp"
 #include "lsw/agent/rpc/auto_register.hpp"
 
 #include "lsw/linkproto/commands.hpp"
-#include "lsw/agent/uia/uia.hpp"
 #include "lsw/agent/win/window.hpp"
 
 #include <cstdint>
@@ -13,26 +11,22 @@ namespace lsw::agent::rpc::handlers {
 
 struct WindowPropsHandler : RpcHandler {
     nlohmann::json handle(const nlohmann::json& params,
-                          RpcContext& ctx) override {
+                          RpcContext& /*ctx*/) override {
         const auto hwnd = params.value("hwnd", std::uint64_t{0});
         if (hwnd == 0) {
             throw std::invalid_argument("window_props: missing hwnd");
         }
         const auto p =
             win::Window::query_props(static_cast<std::uintptr_t>(hwnd));
-        // Title-bar rect + button rects come from UIA (Phase 7), not
-        // WM_GETTITLEBARINFOEX. UIA reports rects in screen coords;
-        // we translate to EFB-relative using ``p.x, p.y`` (EFB top-
-        // left). For apps with no UIA TitleBar element (custom-chrome
-        // / full-frame extension), ``layout.present`` is false and
-        // every rect stays {0,0,0,0} — host treats as "no title bar
-        // chrome to reroute, forward every click to the guest".
-        const auto btns = ctx.services.uia().get_caption_buttons(
-            static_cast<std::uintptr_t>(hwnd), p.x, p.y);
-        // Buttons only. The title-bar / caption-drag region is resolved
-        // per-press on the host via ``nchittest`` so tab strips, address
-        // bars, etc. — which share the caption row but aren't caption —
-        // don't get wrongly claimed as draggable.
+        // No caption-button rects. They used to come from UIA, and the
+        // host used them to catch a click on minimize / maximize /
+        // close before forwarding it — which required the application
+        // to expose its title bar as UIA elements with truthful bounds.
+        // Photoshop reports its buttons 4 pixels tall; a WinUI app that
+        // hit-tests its title bar in XAML reports nothing useful
+        // either. So the host no longer tries to recognise the press:
+        // it forwards it, the application's own button handles it, and
+        // the resulting show state arrives with the next enumeration.
         return {
             {"valid", p.valid},
             {"x", p.x}, {"y", p.y}, {"w", p.w}, {"h", p.h},
@@ -43,12 +37,6 @@ struct WindowPropsHandler : RpcHandler {
             {"min_w", p.min_w}, {"min_h", p.min_h},
             {"max_w", p.max_w}, {"max_h", p.max_h},
             {"screen_w", p.screen_w}, {"screen_h", p.screen_h},
-            {"btn_min",   {btns.min_x, btns.min_y, btns.min_w, btns.min_h}},
-            {"btn_max",   {btns.max_x, btns.max_y, btns.max_w, btns.max_h}},
-            {"btn_close", {btns.close_x, btns.close_y,
-                            btns.close_w, btns.close_h}},
-            {"btn_help",  {btns.help_x, btns.help_y,
-                            btns.help_w, btns.help_h}},
         };
     }
 };

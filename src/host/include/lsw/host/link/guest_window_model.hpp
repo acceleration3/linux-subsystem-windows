@@ -26,6 +26,14 @@ struct GuestWindow {
     QString exe_path;
     int screen_x = 0;  // client-area origin in the guest's screen space
     int screen_y = 0;
+    // Show state as the guest OS reports it. A mirror follows these
+    // rather than deciding for itself: the user's click on minimize
+    // went to the application, whose own chrome handled it, and this is
+    // how the host finds out what came of it — including when the state
+    // changed with no click at all (the app's Window menu, Win+Down,
+    // the guest's own taskbar).
+    bool minimized = false;
+    bool maximized = false;
 
     // Whether this window came from the launch the manager started as
     // ``launched_pid`` — directly, or through any stub in between.
