@@ -34,6 +34,11 @@ struct GuestWindow {
     // the guest's own taskbar).
     bool minimized = false;
     bool maximized = false;
+    // The window has a title bar of its own (WS_CAPTION). What tells a
+    // dialog apart from a menu: both are owned by another window, and
+    // only one of them is a window the user expects to drag and find in
+    // the taskbar.
+    bool has_caption = false;
 
     // Whether this window came from the launch the manager started as
     // ``launched_pid`` — directly, or through any stub in between.

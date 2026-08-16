@@ -140,6 +140,8 @@ BOOL CALLBACK enum_proc(HWND hwnd, LPARAM lparam) {
     w.screen_y = fr.top;
     w.minimized = ::IsIconic(hwnd) != FALSE;
     w.maximized = ::IsZoomed(hwnd) != FALSE;
+    w.has_caption =
+        (::GetWindowLongW(hwnd, GWL_STYLE) & WS_CAPTION) == WS_CAPTION;
     out->push_back(std::move(w));
     return TRUE;
 }

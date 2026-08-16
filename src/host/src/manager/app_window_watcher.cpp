@@ -194,10 +194,19 @@ void AppWindowWatcher::on_windows(const QList<link::GuestWindow>& wins) {
         // relative position so it lands where the app put it instead of
         // wherever the host WM drops a new top-level. (See WindowView —
         // best-effort under Wayland.)
+        //
+        // Only a window with no caption of its own, though. A dialog is
+        // an owned window too — Photoshop's File > New is owned by its
+        // main window — and treating one as a popup makes it a
+        // frameless, show-without-activating tool window: no taskbar
+        // entry, no focus, and nothing to drag it by. If it has a title
+        // bar, it is a window in its own right and gets mirrored as one.
         WindowView* owner_view = nullptr;
         QPoint rel_guest_px;
         quint64 owner_hwnd = 0;
-        if (gw.owner != 0 && views_.contains(gw.owner)) {
+        if (gw.has_caption) {
+            owner_hwnd = 0;
+        } else if (gw.owner != 0 && views_.contains(gw.owner)) {
             owner_hwnd = gw.owner;
         } else if (!views_.isEmpty()) {
             // Fallback: the agent reports owner via GA_ROOTOWNER, but
