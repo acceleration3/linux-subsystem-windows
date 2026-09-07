@@ -2,6 +2,8 @@
 
 #include "lsw/agent/apps/guest_drivers.hpp"
 
+#include <string>
+
 namespace lsw::agent::apps {
 
 // Every process a launch produced, not just the one we started.
@@ -48,6 +50,16 @@ public:
     // at which the drivers are known to be unused, since the launched
     // PID is a stub that exits long before the application does.
     static bool adopt(void* process, unsigned long pid, GuestDrivers::Staging staging);
+
+    // The name of the Job Object holding ``pid``'s launch.
+    //
+    // Named rather than anonymous so something outside this process can
+    // ask what a launch contains. A window mirror has to know which
+    // windows belong to the application it was started for, and the job
+    // is the only answer that stays right when the launched process is a
+    // stub that exits — the payload it spawned is in the job, whatever
+    // its parentage looks like by the time its window appears.
+    [[nodiscard]] static std::string job_name(unsigned long pid);
 
     // The launched PID whose job ``pid`` belongs to, or 0 if it belongs
     // to no launch of ours. A launch's own PID maps to itself.
