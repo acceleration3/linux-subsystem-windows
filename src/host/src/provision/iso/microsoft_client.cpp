@@ -207,7 +207,6 @@ QByteArray MicrosoftClient::finish_reply(QNetworkReply* reply, const char* step,
 void MicrosoftClient::initialize(const QString& locale) {
     locale_ = locale;
     initialized_ = false;
-    banned_ = false;
     LSW_INFO("microsoft: initialize locale={}", locale_.toStdString());
 
     // Stage 1 — check_locale. We chain into visit_download_page from
@@ -436,7 +435,6 @@ void MicrosoftClient::parse_microsoft_envelope(const QByteArray& body, bool* err
         const int type = first.value("Type", -1);
         LSW_WARN("microsoft: response carries Errors envelope (Type={})", type);
         if (type == 9) {
-            banned_ = true;
             *banned_out = true;
             const std::string line = "Microsoft 715-123130: IP banned or region restricted "
                                      "(session_id=" +

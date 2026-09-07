@@ -144,23 +144,6 @@ public:
     void attach_shmem(vm::IvshmemServer* server, vm::ShmemRegion* region);
     void detach_shmem();
 
-    // Whether the guest has announced the shared-memory RPC channel.
-    [[nodiscard]] bool shmem_channel_live() const noexcept {
-        return shmem_channel_live_.load();
-    }
-
-    // Route requests over the shared-memory RPC channel when it is live,
-    // falling back to TCP when it is not (or when the ring is full).
-    //
-    // Off by default, and deliberately so. The two transports carry
-    // identical messages, so this is a routing choice — but the ring has
-    // not yet carried the control plane end to end on a real guest, and
-    // a wrong answer here is a VM that boots and then does not respond.
-    // ``$LSW_RPC_OVER_SHMEM=1`` turns it on; flipping the default is the
-    // last step of retiring TCP, once the guest path is proven.
-    void set_prefer_shmem_rpc(bool on) noexcept { prefer_shmem_rpc_ = on; }
-    [[nodiscard]] bool prefer_shmem_rpc() const noexcept { return prefer_shmem_rpc_; }
-
 Q_SIGNALS:
     // ``visible`` is the part of THIS image that is on the guest's
     // screen: the whole thing for an ordinary window, less the overhang

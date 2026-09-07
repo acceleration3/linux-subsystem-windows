@@ -82,7 +82,6 @@ public:
     // guest IVSHMEM device sees the same backing memory.
     [[nodiscard]] int fd() const { return fd_; }
     [[nodiscard]] quint64 size() const { return size_; }
-    [[nodiscard]] QString shm_name() const { return shm_name_; }
 
     // Seqlock-aware slot read. Returns a fully-owned ``QImage``
     // (memcpy out of the front buffer) and the slot's hwnd. False if

@@ -20,8 +20,6 @@ public:
 
     [[nodiscard]] const QList<VmRecord>& records() const noexcept { return records_; }
 
-    [[nodiscard]] QList<VmRecord>& mutable_records() noexcept { return records_; }
-
     // Append; returns the assigned UUID. ``vsock_cid`` is auto-allocated
     // to the next free integer >= 100.
     QUuid add(VmRecord rec);

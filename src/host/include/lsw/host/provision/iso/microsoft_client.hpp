@@ -38,10 +38,6 @@ class MicrosoftClient : public QObject {
 public:
     explicit MicrosoftClient(QObject* parent = nullptr);
 
-    [[nodiscard]] bool is_initialized() const noexcept { return initialized_; }
-
-    [[nodiscard]] bool is_banned() const noexcept { return banned_; }
-
     [[nodiscard]] const QString& session_id() const noexcept { return session_id_; }
 
     [[nodiscard]] const QString& locale() const noexcept { return locale_; }
@@ -109,7 +105,6 @@ private:
     QString locale_;
     QString session_id_;
     bool initialized_ = false;
-    bool banned_ = false;
 
     // Host overrides + record dir.
     QString microsoft_base_ = "https://www.microsoft.com";

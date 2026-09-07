@@ -91,11 +91,6 @@ struct RegionLayout {
     return out;
 }
 
-// Smallest region ``plan_region`` will accept.
-[[nodiscard]] inline std::uint64_t min_region_bytes() {
-    return plan_region(0).required_bytes();
-}
-
 // Does this mapping hold a region this build understands?
 //
 // The version check is the one that matters. The magic was deliberately
