@@ -120,6 +120,7 @@ set(_lsw_agent_capture_sources
 )
 set(_lsw_agent_uia_sources
     src/uia/uia.cpp
+    src/uia/uia_window.cpp
     src/uia/uia_root.cpp
     src/uia/uia_event_queue.cpp
     src/uia/bstr_text.cpp

@@ -57,11 +57,11 @@ void PayloadIsoStager::build(const config::VmRecord& record, const PipelineInput
     // The guest drivers. Absent means the guest installs normally and
     // the agent runs; only the GPU path is missing, so this is a
     // warning rather than a failure.
-    using platform::GuestDriverPaths;
-    payload.vulkan_icd_path = GuestDriverPaths::vulkan_icd();
-    payload.opengl_icd_path = GuestDriverPaths::opengl_icd();
-    payload.opencl_icd_path = GuestDriverPaths::opencl_icd();
-    payload.vulkan_loader_path = GuestDriverPaths::vulkan_loader();
+    const auto x64 = platform::GuestDriverPaths::x86_64();
+    payload.vulkan_icd_path = x64.vulkan_icd();
+    payload.opengl_icd_path = x64.opengl_icd();
+    payload.opencl_icd_path = x64.opencl_icd();
+    payload.vulkan_loader_path = x64.vulkan_loader();
     if (payload.vulkan_icd_path.isEmpty() || payload.vulkan_loader_path.isEmpty()) {
         LSW_WARN("provision: no guest Vulkan driver / loader found; the guest will install "
                  "without the GPU path. Run scripts/build-agent.sh, or set "
@@ -77,10 +77,11 @@ void PayloadIsoStager::build(const config::VmRecord& record, const PipelineInput
     // The i686 set is what a 32-bit application loads, and every D3D8
     // and D3D9 title is one. Its absence costs only those, so it is a
     // note rather than a warning.
-    payload.vulkan_icd32_path = GuestDriverPaths::vulkan_icd_x86();
-    payload.opengl_icd32_path = GuestDriverPaths::opengl_icd_x86();
-    payload.opencl_icd32_path = GuestDriverPaths::opencl_icd_x86();
-    payload.vulkan32_loader_path = GuestDriverPaths::vulkan_loader_x86();
+    const auto x86 = platform::GuestDriverPaths::i686();
+    payload.vulkan_icd32_path = x86.vulkan_icd();
+    payload.opengl_icd32_path = x86.opengl_icd();
+    payload.opencl_icd32_path = x86.opencl_icd();
+    payload.vulkan32_loader_path = x86.vulkan_loader();
     if (payload.vulkan_icd32_path.isEmpty() || payload.vulkan32_loader_path.isEmpty()) {
         LSW_INFO("provision: no 32-bit guest drivers; 32-bit applications will have no "
                  "driver. Run scripts/build-agent.sh (it builds both), or set "

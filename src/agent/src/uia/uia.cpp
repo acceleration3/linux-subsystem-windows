@@ -1,5 +1,7 @@
 #include "lsw/agent/uia/uia.hpp"
 
+#include "lsw/agent/uia/uia_window.hpp"
+
 #include "lsw/agent/uia/element_invoker.hpp"
 #include "lsw/agent/uia/element_value_setter.hpp"
 #include "lsw/agent/uia/subscription_registry.hpp"
@@ -19,24 +21,24 @@ void Uia::shutdown() { root_.shutdown(); }
 bool Uia::ok() const noexcept { return root_.ok(); }
 
 WindowState Uia::get_window_state(std::uintptr_t hwnd) {
-    return WindowStateQuery::for_window(root_.get(), hwnd);
+    return WindowStateQuery::for_window(UiaWindow{root_.get(), hwnd});
 }
 
 bool Uia::invoke_by_selector(std::uintptr_t hwnd, const std::string& selector) {
-    return ElementInvoker::invoke(root_.get(), hwnd, selector);
+    return ElementInvoker::invoke(UiaWindow{root_.get(), hwnd}, selector);
 }
 
 bool Uia::set_value(std::uintptr_t hwnd, const std::string& selector,
                     const std::string& value) {
-    return ElementValueSetter::set_value(root_.get(), hwnd, selector, value);
+    return ElementValueSetter::set_value(UiaWindow{root_.get(), hwnd}, selector, value);
 }
 
 std::string Uia::get_text(std::uintptr_t hwnd, int max_chars) {
-    return TextExtractor::from_window(root_.get(), hwnd, max_chars);
+    return TextExtractor::from_window(UiaWindow{root_.get(), hwnd}, max_chars);
 }
 
 nlohmann::json Uia::dump_tree(std::uintptr_t hwnd, int max_depth) {
-    return TreeDumper::dump(root_.get(), hwnd, max_depth);
+    return TreeDumper::dump(UiaWindow{root_.get(), hwnd}, max_depth);
 }
 
 std::uint64_t Uia::subscribe_pid_lifecycle(std::uint32_t pid) {

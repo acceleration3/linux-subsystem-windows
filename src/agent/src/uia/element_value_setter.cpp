@@ -1,6 +1,6 @@
 #include "lsw/agent/uia/element_value_setter.hpp"
 
-#include "lsw/agent/uia/element_locator.hpp"
+#include "lsw/agent/uia/uia_window.hpp"
 #include "lsw/agent/util/text_encoding.hpp"
 
 // clang-format off
@@ -10,15 +10,9 @@
 
 namespace lsw::agent::uia {
 
-bool ElementValueSetter::set_value(IUIAutomation* root, std::uintptr_t hwnd,
-                             const std::string& selector, const std::string& value) {
-    IUIAutomationElement* window = ElementLocator::from_window(root, hwnd);
-    if (window == nullptr) {
-        return false;
-    }
-    IUIAutomationElement* target =
-        ElementLocator::by_selector(root, window, util::TextEncoding::to_wide(selector));
-    window->Release();
+bool ElementValueSetter::set_value(const UiaWindow& window, const std::string& selector,
+                                   const std::string& value) {
+    IUIAutomationElement* target = window.find(selector);
     if (target == nullptr) {
         return false;
     }

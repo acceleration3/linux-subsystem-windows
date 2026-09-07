@@ -1,7 +1,7 @@
 #include "lsw/agent/uia/tree_dumper.hpp"
 
 #include "lsw/agent/uia/bstr_text.hpp"
-#include "lsw/agent/uia/element_locator.hpp"
+#include "lsw/agent/uia/uia_window.hpp"
 
 // clang-format off
 #include <windows.h>
@@ -57,21 +57,18 @@ void dump_node(IUIAutomationTreeWalker* walker, IUIAutomationElement* element, i
 
 }  // namespace
 
-nlohmann::json TreeDumper::dump(IUIAutomation* root, std::uintptr_t hwnd, int max_depth) {
+nlohmann::json TreeDumper::dump(const UiaWindow& window, int max_depth) {
     nlohmann::json out = nlohmann::json::object();
-    IUIAutomationElement* element = ElementLocator::from_window(root, hwnd);
-    if (element == nullptr) {
+    if (!window.valid()) {
         return out;
     }
     IUIAutomationTreeWalker* walker = nullptr;
-    root->get_ControlViewWalker(&walker);
+    window.automation()->get_ControlViewWalker(&walker);
     if (walker == nullptr) {
-        element->Release();
         return out;
     }
-    dump_node(walker, element, 0, max_depth > 0 ? max_depth : 4, out);
+    dump_node(walker, window.element(), 0, max_depth > 0 ? max_depth : 4, out);
     walker->Release();
-    element->Release();
     return out;
 }
 

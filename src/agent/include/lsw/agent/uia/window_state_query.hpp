@@ -2,11 +2,10 @@
 
 #include "lsw/agent/uia/window_state.hpp"
 
-#include <cstdint>
-
-struct IUIAutomation;
 
 namespace lsw::agent::uia {
+
+class UiaWindow;
 
 // Reads a window's WindowPattern state: normal/maximized/minimized,
 // modal, topmost.
@@ -14,7 +13,7 @@ class WindowStateQuery {
 public:
     WindowStateQuery() = delete;
 
-    [[nodiscard]] static WindowState for_window(IUIAutomation* root, std::uintptr_t hwnd);
+    [[nodiscard]] static WindowState for_window(const UiaWindow& window);
 };
 
 }  // namespace lsw::agent::uia

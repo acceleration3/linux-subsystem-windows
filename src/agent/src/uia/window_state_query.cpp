@@ -1,6 +1,6 @@
 #include "lsw/agent/uia/window_state_query.hpp"
 
-#include "lsw/agent/uia/element_locator.hpp"
+#include "lsw/agent/uia/uia_window.hpp"
 
 // clang-format off
 #include <windows.h>
@@ -9,9 +9,9 @@
 
 namespace lsw::agent::uia {
 
-WindowState WindowStateQuery::for_window(IUIAutomation* root, std::uintptr_t hwnd) {
+WindowState WindowStateQuery::for_window(const UiaWindow& window) {
     WindowState out;
-    IUIAutomationElement* element = ElementLocator::from_window(root, hwnd);
+    IUIAutomationElement* element = window.element();
     if (element == nullptr) {
         return out;
     }
@@ -19,7 +19,6 @@ WindowState WindowStateQuery::for_window(IUIAutomation* root, std::uintptr_t hwn
     element->GetCurrentPatternAs(UIA_WindowPatternId,
                                  __uuidof(IUIAutomationWindowPattern),
                                  reinterpret_cast<void**>(&pattern));
-    element->Release();
     if (pattern == nullptr) {
         return out;
     }
