@@ -23,6 +23,7 @@ UnattendedRunner::UnattendedRunner(services::HostServices& services, CliOptions 
 QString UnattendedRunner::step_label(Step s) {
     switch (s) {
     case Step::DownloadingIso:           return QStringLiteral("download-iso");
+    case Step::TrimmingImage:            return QStringLiteral("trim-image");
     case Step::BuildingPayloadIso:       return QStringLiteral("build-payload");
     case Step::CreatingDisk:             return QStringLiteral("create-disk");
     case Step::StartingVm:               return QStringLiteral("start-vm");

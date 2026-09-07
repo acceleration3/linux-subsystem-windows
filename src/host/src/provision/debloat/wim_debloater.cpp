@@ -24,9 +24,11 @@ namespace {
 // where an earlier version of this list looked first. A root that is
 // not there is skipped rather than failing, so adding one back costs
 // nothing if a future build moves them again.
-const QStringList kAppxRoots = {
-    QStringLiteral("/Program Files/WindowsApps"),
-};
+const QString kAppxRoot = QStringLiteral("/Program Files/WindowsApps");
+
+// The two directories that hold most of a Windows image.
+const QString kDriverStore = QStringLiteral("/Windows/System32/DriverStore/FileRepository");
+const QString kWinSxS = QStringLiteral("/Windows/WinSxS");
 
 // The offline hives, by their path in the image. NTUSER.DAT is the
 // template every new profile is copied from, which is why a per-user
@@ -64,39 +66,61 @@ int collect_child(const struct wimlib_dir_entry* entry, void* context) {
 
 WimDebloater::WimDebloater(QObject* parent) : QObject(parent) {}
 
-QStringList WimDebloater::find_appx_payloads(void* wim, int image_index,
-                                             const QStringList& prefixes) const {
+QStringList WimDebloater::children_of(void* wim, int image_index, const QString& root) {
+    QStringList children;
+    ChildCollector collector{&children, root};
+    // Children only: a payload directory is the unit of removal, and
+    // walking into it would produce thousands of paths that all
+    // disappear with their parent anyway.
+    const int rc = wimlib_iterate_dir_tree(
+        static_cast<WIMStruct*>(wim), image_index, root.toUtf8().constData(),
+        WIMLIB_ITERATE_DIR_TREE_FLAG_CHILDREN, collect_child, &collector);
+    if (rc != 0) {
+        LSW_DEBUG("debloat: no {} in image ({})", root.toStdString(),
+                  wim_error(rc).toStdString());
+        return {};
+    }
+    return children;
+}
+
+QStringList WimDebloater::children_matching(void* wim, int image_index, const QString& root,
+                                            const QStringList& prefixes) {
     QStringList matches;
     if (prefixes.isEmpty()) {
         return matches;
     }
-    auto* handle = static_cast<WIMStruct*>(wim);
-    for (const QString& root : kAppxRoots) {
-        QStringList children;
-        ChildCollector collector{&children, root};
-        // Children only: the payload directory is the unit of removal,
-        // and walking into it would produce thousands of paths that all
-        // disappear with their parent anyway.
-        const int rc = wimlib_iterate_dir_tree(handle, image_index, root.toUtf8().constData(),
-                                               WIMLIB_ITERATE_DIR_TREE_FLAG_CHILDREN,
-                                               collect_child, &collector);
-        if (rc != 0) {
-            // A root this edition does not have. Not a failure.
-            LSW_DEBUG("debloat: no {} in image ({})", root.toStdString(),
-                      wim_error(rc).toStdString());
-            continue;
-        }
-        for (const QString& child : children) {
-            const QString leaf = child.section(QLatin1Char('/'), -1);
-            for (const QString& prefix : prefixes) {
-                if (leaf.startsWith(prefix, Qt::CaseInsensitive)) {
-                    matches.append(child);
-                    break;
-                }
+    for (const QString& child : children_of(wim, image_index, root)) {
+        const QString leaf = child.section(QLatin1Char('/'), -1);
+        for (const QString& prefix : prefixes) {
+            if (leaf.startsWith(prefix, Qt::CaseInsensitive)) {
+                matches.append(child);
+                break;
             }
         }
     }
     return matches;
+}
+
+QStringList WimDebloater::children_not_keeping(void* wim, int image_index, const QString& root,
+                                               const QStringList& keep) {
+    QStringList doomed;
+    if (keep.isEmpty()) {
+        return doomed;  // an empty keep-list would mean "delete everything"
+    }
+    for (const QString& child : children_of(wim, image_index, root)) {
+        const QString leaf = child.section(QLatin1Char('/'), -1);
+        bool kept = false;
+        for (const QString& token : keep) {
+            if (leaf.contains(token, Qt::CaseInsensitive)) {
+                kept = true;
+                break;
+            }
+        }
+        if (!kept) {
+            doomed.append(child);
+        }
+    }
+    return doomed;
 }
 
 bool WimDebloater::isolate_edition(const QString& src_path, int image_index,
@@ -194,9 +218,23 @@ bool WimDebloater::apply(const QString& wim_path, int image_index, const Debloat
     }
 
     Q_EMIT progress(QStringLiteral("Finding bundled applications"), 30);
-    QStringList targets = find_appx_payloads(wim, image_index, plan.appx_prefixes());
+    QStringList targets = children_matching(wim, image_index, kAppxRoot, plan.appx_prefixes());
     LSW_INFO("debloat: {} provisioned application payloads matched", targets.size());
     targets += plan.paths();
+
+    // The two that carry the gigabytes, and only at Maximum.
+    if (!plan.driver_remove().isEmpty()) {
+        const QStringList drivers =
+            children_matching(wim, image_index, kDriverStore, plan.driver_remove());
+        LSW_INFO("debloat: {} driver packages matched", drivers.size());
+        targets += drivers;
+    }
+    if (!plan.winsxs_keep().isEmpty()) {
+        const QStringList components =
+            children_not_keeping(wim, image_index, kWinSxS, plan.winsxs_keep());
+        LSW_INFO("debloat: {} component-store directories matched", components.size());
+        targets += components;
+    }
 
     // One update call for everything: wimlib applies the batch and
     // rewrites the metadata once, rather than once per path.

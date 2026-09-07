@@ -50,11 +50,24 @@ public:
     [[nodiscard]] const QStringList& paths() const noexcept { return paths_; }
 
     // Windows component packages to strip, by the leading part of their
-    // package name under SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\
-    // Component Based Servicing\\Packages.
+    // package name under the SOFTWARE hive's "Microsoft/Windows/
+    // CurrentVersion/Component Based Servicing/Packages".
     [[nodiscard]] const QStringList& component_prefixes() const noexcept {
         return component_prefixes_;
     }
+
+    // WinSxS is a keep-list, not a remove-list: it holds thousands of
+    // component directories whose names carry a version and a hash, so
+    // naming what goes is not possible and naming what stays is. A
+    // directory is kept when its name contains any of these.
+    [[nodiscard]] const QStringList& winsxs_keep() const noexcept { return winsxs_keep_; }
+
+    // Driver packages under DriverStore/FileRepository, by the leading
+    // part of their INF name. A remove-list and deliberately so: this
+    // one fails safe. Keeping a driver nothing needs costs megabytes;
+    // removing the wrong storage or input driver produces an image that
+    // installs and then will not boot.
+    [[nodiscard]] const QStringList& driver_remove() const noexcept { return driver_remove_; }
 
     // One line per level, for the wizard's summary label.
     [[nodiscard]] QString summary() const;
@@ -71,6 +84,8 @@ private:
     QStringList appx_prefixes_;
     QStringList paths_;
     QStringList component_prefixes_;
+    QStringList winsxs_keep_;
+    QStringList driver_remove_;
 };
 
 }  // namespace lsw::host::provision::debloat
