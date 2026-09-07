@@ -4,9 +4,6 @@
 
 #include <QObject>
 #include <QString>
-#include <QTemporaryDir>
-
-#include <memory>
 
 namespace lsw::host::provision {
 
@@ -48,15 +45,11 @@ public:
 
 Q_SIGNALS:
     // Path to the rebuilt Windows ISO, which the domain boots in place
-    // of the original. Written next to the source rather than into the
-    // scratch directory, so it outlives this object.
+    // of the original. Written into ``output_dir``, not into the scratch
+    // directory, which is gone by the time this arrives.
     void finished(const QString& iso_path);
     void failed(const QString& message);
     void progress(const QString& detail, int percent);
-
-private:
-    // Kept alive for the caller: the emitted path points inside it.
-    std::unique_ptr<QTemporaryDir> scratch_;
 };
 
 }  // namespace lsw::host::provision

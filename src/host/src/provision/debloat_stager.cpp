@@ -10,7 +10,10 @@
 #include <QPointer>
 #include <QProcess>
 #include <QStorageInfo>
+#include <QTemporaryDir>
 #include <QtConcurrent>
+
+#include <memory>
 
 namespace lsw::host::provision {
 
@@ -47,6 +50,21 @@ constexpr qint64 kFreeSpaceSlackBytes = 2LL * 1024 * 1024 * 1024;
     return QFile::exists(out) ? out : QString{};
 }
 
+// Scratch directories from a previous run that did not get to remove
+// its own. Only a crash or a kill leaves one behind, but each is the
+// size of an unpacked Windows ISO, so they are worth sweeping before
+// adding another.
+void remove_stale_scratch(const QString& output_dir) {
+    QDir parent{output_dir};
+    for (const QString& name :
+         parent.entryList({QStringLiteral("lsw-trim-*")}, QDir::Dirs | QDir::NoDotAndDotDot)) {
+        const QString path = parent.filePath(name);
+        if (QDir{path}.removeRecursively()) {
+            LSW_INFO("debloat: removed a leftover scratch directory at {}", path.toStdString());
+        }
+    }
+}
+
 }  // namespace
 
 DebloatStager::DebloatStager(QObject* parent) : QObject(parent) {}
@@ -60,13 +78,20 @@ void DebloatStager::trim(const QString& iso_path, const QString& output_dir,
     // Windows ISO twice over. The default location fails instantly, and
     // fails by filling memory rather than by saying it is out of space.
     QDir().mkpath(output_dir);
-    scratch_ = std::make_unique<QTemporaryDir>(
+    remove_stale_scratch(output_dir);
+
+    // Held by the worker and by nothing else, so the unpacked ISO and
+    // the rewritten WIM - fifteen gigabytes between them - are removed
+    // the moment the work stops, on the failure paths as much as on the
+    // successful one. Deleting it with this object instead would keep
+    // them until the wizard closed.
+    auto scratch = std::make_shared<QTemporaryDir>(
         QDir(output_dir).filePath(QStringLiteral("lsw-trim-XXXXXX")));
-    if (!scratch_->isValid()) {
+    if (!scratch->isValid()) {
         Q_EMIT failed(QStringLiteral("cannot create a scratch directory for the image"));
         return;
     }
-    const QString dir = scratch_->path();
+    const QString dir = scratch->path();
 
     // Refuse early rather than dying part-way through a rebuild: the
     // failure at the end of a ten-minute extract is the expensive one.
@@ -81,7 +106,7 @@ void DebloatStager::trim(const QString& iso_path, const QString& output_dir,
     }
 
     const QPointer<DebloatStager> self{this};
-    (void)QtConcurrent::run([self, iso_path, output_dir, dir, image_index, level]() {
+    (void)QtConcurrent::run([self, scratch, iso_path, output_dir, dir, image_index, level]() {
         auto report = [self](const QString& detail, int percent) {
             QMetaObject::invokeMethod(self.data(), [self, detail, percent] {
                 if (self) {
