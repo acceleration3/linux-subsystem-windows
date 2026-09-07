@@ -492,7 +492,6 @@ GuestDrivers::Staging GuestDrivers::stage_for(const std::string& exe_path,
     }
 
     std::vector<std::wstring> manifests;
-    std::vector<std::wstring> opencl_icds;
     for (const std::wstring& dir : exe_dirs_under(parent_dir(exe))) {
         if (under_windows_dir(dir)) {
             LSW_AGENT_INFO("guest_drivers: " + util::TextEncoding::to_utf8(dir)
@@ -510,7 +509,7 @@ GuestDrivers::Staging GuestDrivers::stage_for(const std::string& exe_path,
                        + " drivers in " + util::TextEncoding::to_utf8(dir));
 
         bool vulkan_icd = false;
-        bool opencl_icd = false;
+        bool opencl_icd = false;  // placed, but found through the registry
         if (!stage_dir(dir, arch, &vulkan_icd, &opencl_icd, error_out)) {
             staged.complete = false;
         }
@@ -520,9 +519,6 @@ GuestDrivers::Staging GuestDrivers::stage_for(const std::string& exe_path,
             } else {
                 staged.complete = false;
             }
-        }
-        if (opencl_icd) {
-            opencl_icds.push_back(join(dir, "rvk_opencl.dll"));
         }
         staged.dirs.push_back(util::TextEncoding::to_utf8(dir));
         acquire_dir(dir);
@@ -542,14 +538,15 @@ GuestDrivers::Staging GuestDrivers::stage_for(const std::string& exe_path,
         env->push_back({"VK_DRIVER_FILES", list});
         env->push_back({"VK_ICD_FILENAMES", list});
     }
-    if (!opencl_icds.empty()) {
-        // Windows ships the Khronos ICD loader as OpenCL.dll, and this
-        // is the variable it reads to be told a driver directly —
-        // without it the loader consults only
-        // HKLM\SOFTWARE\Khronos\OpenCL\Vendors, which is machine-wide
-        // and therefore the wrong scope for a per-application choice.
-        env->push_back({"OCL_ICD_FILENAMES", join_list(opencl_icds)});
-    }
+    // No OCL_ICD_FILENAMES. Windows ships the Khronos ICD loader as
+    // OpenCL.dll, and it reads that variable through a secure-getenv
+    // which hands nothing to an elevated process — which every launch of
+    // ours is. Setting it produced a guest that enumerated zero OpenCL
+    // platforms with a working driver linked beside the executable; the
+    // registry entry ``register_installed_icds`` writes is what the
+    // loader actually reads. Left unset rather than set-and-ignored, so
+    // a loader that does read it cannot also find the staged copy and
+    // enumerate every platform twice.
     return staged;
 }
 
@@ -574,6 +571,55 @@ void GuestDrivers::unstage(const Staging& staging) {
         }
         ::DeleteFileW(join(dir, kIcdManifestName).c_str());
         LSW_AGENT_INFO("guest_drivers: unstaged " + utf8_dir);
+    }
+}
+
+void GuestDrivers::register_installed_icds() {
+    // One entry per architecture, each in the registry view a process of
+    // that architecture reads: a 32-bit application is redirected to
+    // WOW6432Node and never sees the 64-bit key, so registering only one
+    // leaves the other half of the guest with no driver at all.
+    struct Entry {
+        const char* dir;
+        REGSAM view;
+        const char* label;
+    };
+    static constexpr std::array<Entry, 2> kEntries = {{
+        {"rvk", KEY_WOW64_64KEY, "x64"},
+        {"rvk32", KEY_WOW64_32KEY, "x86"},
+    }};
+
+    for (const auto& entry : kEntries) {
+        const std::wstring driver =
+            join(join(util::TextEncoding::to_wide(kRoot), entry.dir), "rvk_opencl.dll");
+        if (!exists(driver)) {
+            continue;  // that build is not installed in this guest
+        }
+        HKEY key = nullptr;
+        const LSTATUS opened = ::RegCreateKeyExW(
+            HKEY_LOCAL_MACHINE, L"SOFTWARE\\Khronos\\OpenCL\\Vendors", 0, nullptr,
+            REG_OPTION_NON_VOLATILE, KEY_SET_VALUE | entry.view, nullptr, &key, nullptr);
+        if (opened != ERROR_SUCCESS) {
+            LSW_AGENT_WARN("guest_drivers: cannot open the " + std::string(entry.label)
+                           + " OpenCL vendor key (err=" + std::to_string(opened) + ")");
+            continue;
+        }
+        // The value NAME is the driver path; the data is a DWORD the
+        // loader reads as "0 means use this one". An unusual shape, and
+        // the one the Khronos loader defines.
+        const DWORD enabled = 0;
+        const LSTATUS set = ::RegSetValueExW(
+            key, driver.c_str(), 0, REG_DWORD,
+            reinterpret_cast<const BYTE*>(&enabled), sizeof(enabled));
+        ::RegCloseKey(key);
+        if (set != ERROR_SUCCESS) {
+            LSW_AGENT_WARN("guest_drivers: cannot register "
+                           + util::TextEncoding::to_utf8(driver)
+                           + " (err=" + std::to_string(set) + ")");
+            continue;
+        }
+        LSW_AGENT_INFO("guest_drivers: registered the " + std::string(entry.label)
+                       + " OpenCL driver " + util::TextEncoding::to_utf8(driver));
     }
 }
 
