@@ -164,7 +164,7 @@ bool IvshmemDriver::extract_from_package(const QString& package_path,
 QString IvshmemDriver::locate(const QString& cache_dir) {
     // 1. Explicit override. Checked first so a broken cache can always be
     //    stepped around without clearing anything.
-    const QString override_dir =
+    QString override_dir =
         QString::fromLocal8Bit(qgetenv("LSW_IVSHMEM_DRIVER_DIR")).trimmed();
     if (!override_dir.isEmpty()) {
         if (looks_like_driver_dir(override_dir)) {
@@ -178,7 +178,7 @@ QString IvshmemDriver::locate(const QString& cache_dir) {
     }
 
     // 2. Already unpacked by a previous run (or dropped in by hand).
-    const QString cached = cache_path(cache_dir);
+    QString cached = cache_path(cache_dir);
     if (looks_like_driver_dir(cached)) {
         return cached;
     }

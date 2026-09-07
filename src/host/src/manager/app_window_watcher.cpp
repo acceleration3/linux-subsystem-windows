@@ -65,7 +65,8 @@ QHash<quint64, QString> select_matches(const QList<GuestWindow>& wins,
 
 AppWindowWatcher::AppWindowWatcher(link::AgentRpcClient& rpc,
                                      link::GuestWindowModel& windows, quint32 pid,
-                                     QString exe_basename, QObject* parent)
+                                     const QString& exe_basename,
+                                     QObject* parent)
     : QObject(parent), rpc_(rpc), windows_(windows), pid_(pid),
       exe_basename_(exe_basename.toLower()) {
     last_seen_unix_ = QDateTime::currentMSecsSinceEpoch();

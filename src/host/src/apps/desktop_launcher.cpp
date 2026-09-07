@@ -65,7 +65,7 @@ QString sanitise_name(const QString& s) {
 // be both an /usr/bin/lsw-manager and a developer build under
 // ~/Coding/.../build/.
 QString lsw_manager_executable() {
-    const QString self = QCoreApplication::applicationFilePath();
+    QString self = QCoreApplication::applicationFilePath();
     if (!self.isEmpty() && QFile::exists(self)) {
         return self;
     }

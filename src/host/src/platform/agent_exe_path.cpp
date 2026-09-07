@@ -7,7 +7,7 @@
 namespace lsw::host::platform {
 
 QString AgentExePath::locate() {
-    const QString from_env = qEnvironmentVariable("LSW_AGENT_EXE");
+    QString from_env = qEnvironmentVariable("LSW_AGENT_EXE");
     if (!from_env.isEmpty() && QFile::exists(from_env)) {
         return from_env;
     }
