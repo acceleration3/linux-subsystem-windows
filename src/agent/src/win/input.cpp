@@ -36,21 +36,31 @@ bool is_extended_vk(unsigned vk) {
     }
 }
 
-// Is a menu open anywhere in the foreground thread — a menu bar being
-// tracked, a popup menu, a system menu?
+// Is something open that changing the foreground would cancel?
 //
-// Worth asking before touching the foreground, because a menu is a modal
-// tracking loop that Windows cancels the moment the foreground window
-// changes. The menu is not the foreground window while it is up (its
-// owner is), so "make the target foreground" looks harmless and is not.
-bool menu_is_open() {
+// Menus are the obvious case: a menu is a modal tracking loop Windows
+// cancels the moment the foreground window changes, and the menu is not
+// itself the foreground window while it is up (its owner is), so "make
+// the target foreground" looks harmless and is not.
+//
+// A DROPDOWN is the non-obvious case, and none of the menu flags see it.
+// A combo box's list, or the popup an application draws for itself —
+// Photoshop's Mode dropdown — is not a menu; it tracks the mouse by
+// holding the CAPTURE, and Windows releases the capture when the
+// foreground moves. The application reads that as the user clicking
+// away and closes the list, so the click that was meant to pick an item
+// dismissed the dropdown instead. ``hwndCapture`` is what these have in
+// common, and it covers anything else mid-gesture too — a drag, a
+// scrollbar being held, a control tracking a press.
+bool foreground_change_would_cancel() {
     GUITHREADINFO info{};
     info.cbSize = sizeof(info);
     if (::GetGUIThreadInfo(0, &info) == FALSE) {
         return false;
     }
     constexpr DWORD kMenuFlags = GUI_INMENUMODE | GUI_POPUPMENUMODE | GUI_SYSTEMMENUMODE;
-    return (info.flags & kMenuFlags) != 0 || info.hwndMenuOwner != nullptr;
+    return (info.flags & kMenuFlags) != 0 || info.hwndMenuOwner != nullptr
+           || info.hwndCapture != nullptr;
 }
 
 // Bring the target window to the foreground so synthetic input (which
@@ -72,7 +82,16 @@ void bring_foreground(HWND top) {
     // The wheel path has skipped this for the same reason for a while
     // (a wheel over a combobox dropdown used to dismiss it); it turns
     // out clicks needed it more.
-    if (menu_is_open()) {
+    if (foreground_change_would_cancel()) {
+        return;
+    }
+    // An owned window is never the one that should hold the foreground:
+    // a dropdown, a menu, a tool window belongs to the window that
+    // spawned it, and that window already has it. Handing it to the
+    // popup instead is how a click on one dismissed it. A dialog is
+    // owned too, and gets the foreground the other way — the mirror
+    // taking host activation sends ``focus_window`` for it.
+    if (::GetWindow(top, GW_OWNER) != nullptr) {
         return;
     }
     if (::IsIconic(top)) {

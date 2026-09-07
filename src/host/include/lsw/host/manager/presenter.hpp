@@ -45,9 +45,19 @@ public:
     // Size of the guest content, in guest pixels.
     [[nodiscard]] virtual QSize source_size() const = 0;
 
-    // The sub-rectangle of the source that is actually the window —
-    // popups trim a transparent shadow margin. Empty means "all of it".
+    // The sub-rectangle of the source that is actually the window.
+    // Empty means "all of it". Two things narrow it: a popup trims its
+    // transparent shadow margin, and a maximized window's frame
+    // overhangs the guest's monitor with nothing painted out there.
     [[nodiscard]] virtual QRect content_rect() const = 0;
+
+    // ``content_rect`` as a real rectangle — the whole source when it is
+    // empty. The one place to ask "which guest pixels am I showing?",
+    // since every mapping needs both its origin and its size.
+    [[nodiscard]] QRect source_rect() const {
+        const QRect content = content_rect();
+        return content.isEmpty() ? QRect(QPoint(0, 0), source_size()) : content;
+    }
 
     // Where the content lands inside a widget of ``widget_size``.
     [[nodiscard]] virtual QRect frame_rect(QSize widget_size) const = 0;

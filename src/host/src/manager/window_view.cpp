@@ -3,6 +3,7 @@
 #include "lsw/base/log.hpp"
 #include "lsw/host/link/agent_rpc_client.hpp"
 #include "lsw/host/manager/frame_geometry.hpp"
+#include "lsw/host/manager/frame_tap.hpp"
 #include "lsw/host/manager/guest_window_icon_fetcher.hpp"
 #include "lsw/host/manager/guest_window_props_fetcher.hpp"
 #include "lsw/host/manager/input_modifiers.hpp"
@@ -23,6 +24,7 @@
 #include <QPainter>
 #include <QPixmap>
 #include <QResizeEvent>
+#include <QSet>
 #include <QShowEvent>
 #include <QWheelEvent>
 #include <QWindow>
@@ -34,6 +36,19 @@
 #include <nlohmann/json.hpp>
 
 namespace lsw::host::manager {
+
+namespace {
+// Guest windows with a mirror on screen right now. See
+// ``WindowView::is_mirrored``.
+QSet<std::uint64_t>& mirrored_hwnds() {
+    static QSet<std::uint64_t> live;
+    return live;
+}
+}  // namespace
+
+bool WindowView::is_mirrored(std::uint64_t hwnd) {
+    return mirrored_hwnds().contains(hwnd);
+}
 
 WindowView::WindowView(link::AgentRpcClient& rpc, std::uint64_t hwnd,
                        QString window_title, WindowView* relative_to,
@@ -53,6 +68,8 @@ WindowView::WindowView(link::AgentRpcClient& rpc, std::uint64_t hwnd,
     move_coalesce_.setInterval(8);  // ~120 Hz cap on forwarded moves
     connect(&move_coalesce_, &QTimer::timeout, this, &WindowView::flush_move);
 
+    mirrored_hwnds().insert(hwnd_);
+    FrameTap::instance().attach(hwnd_, this);
     connect(&rpc_, &link::AgentRpcClient::frame_received, this, &WindowView::on_frame);
     connect(&rpc_, &link::AgentRpcClient::window_gone, this, &WindowView::on_window_gone);
     rpc_.subscribe_window(hwnd_);
@@ -89,6 +106,8 @@ WindowView::~WindowView() {
         drag_event_token_ = 0;
     }
     rpc_.unsubscribe_window(hwnd_);
+    mirrored_hwnds().remove(hwnd_);
+    FrameTap::instance().detach(hwnd_);
     // Drop the per-window .desktop here rather than in guest_closed():
     // on the host-driven "user clicked X" path the mirror lives on until
     // the guest acknowledges WM_CLOSE.
@@ -165,8 +184,13 @@ void WindowView::apply_props(const GuestWindowProps& props) {
     setWindowFlags(Qt::Window | Qt::FramelessWindowHint);
     resize_border_ = props.resizable ? ResizeEdgeZones::kBorderPx : 0;
 
+    // The opening size is the frame's. Which PART of the frame is shown
+    // is not asked here — it arrives with each frame, measured for that
+    // frame — so a window that opens maximized is briefly sized to its
+    // overhang too, and the first frame settles it.
+    const QSize shown(props.width, props.height);
     if (!props.resizable) {
-        setFixedSize(props.width, props.height);
+        setFixedSize(shown);
     } else {
         if (props.min_width > 0 && props.min_height > 0) {
             setMinimumSize(props.min_width, props.min_height);
@@ -175,7 +199,7 @@ void WindowView::apply_props(const GuestWindowProps& props) {
         // guest's max track size. flush_resize clamps what the guest is
         // told, and the frame letterboxes inside the larger widget.
         geometry_.expect_echo();
-        resize(props.width + 2 * resize_border_, props.height + 2 * resize_border_);
+        resize(shown);
     }
 
     geometry_.set_guest_screen(props.screen_width, props.screen_height);
@@ -412,34 +436,43 @@ void WindowView::on_window_gone(std::uint64_t hwnd) {
 
 // ---- frames ----------------------------------------------------------------
 
-void WindowView::on_frame(std::uint64_t hwnd, QImage image) {
+void WindowView::on_frame(std::uint64_t hwnd, QImage image, QRect visible) {
     if (hwnd != hwnd_) {
         return;
     }
     // Popups trim the WinUI shadow margin so the menu fills the window;
     // classic Win32 menus have no such margin and keep the whole frame.
+    // Everything else takes the sub-rect the guest measured for THIS
+    // frame and sent along with it.
+    if (!is_popup()) {
+        presenter_.set_content_rect(visible.size() == image.size() ? QRect() : visible);
+    }
     presenter_.submit(std::move(image), /*trim_shadow=*/is_popup());
 
     if (is_popup() && presenter_.has_content()) {
         // Always size and anchor: gating on the trim changing skipped
         // sizing for classic menus and mis-placed them.
-        if (const QSize want = presenter_.natural_size(); want != size()) {
-            geometry_.expect_echo();
-            resize(want);
-        }
         reposition_popup();
         first_frame_ = false;
     } else if (first_frame_ && presenter_.has_content()) {
-        // Main mirror: open at the guest's client size.
+        // Main mirror: open showing exactly what the guest shows —
+        // ``natural_size`` is the frame minus any overhang the guest
+        // told us about.
         first_frame_ = false;
         geometry_.expect_echo();
-        resize(presenter_.source_size());
+        resize(presenter_.natural_size());
     }
+    // Snapshot for ``dump_frame``: the frame as it arrived, next to the
+    // geometry this mirror is about to draw it with.
+    FrameTap::instance().record(
+        hwnd_, {presenter_.image(), windowTitle(), size(), frame_rect(),
+                presenter_.content_rect(), is_popup(),
+                is_popup() ? owner_view_->hwnd_ : std::uint64_t{0}});
     update();
 }
 
 void WindowView::reposition_popup() {
-    if (!popup_anchor_.has_value() || owner_view_.isNull()) {
+    if (owner_view_.isNull()) {
         return;
     }
     // Recompute from the owner's CURRENT state on every frame, not just
@@ -449,11 +482,33 @@ void WindowView::reposition_popup() {
     // computed then is wrong. By the time the popup's own first frame
     // arrives the owner has settled; Wayland's xdg_popup.reposition
     // honours the later move(), so the user sees the corrected spot.
-    popup_anchor_ = PopupPlacement::anchor(owner_view_->mapToGlobal(QPoint(0, 0)),
-                                           owner_view_->frame_rect(),
-                                           owner_view_->presenter_.source_size(),
-                                           pending_rel_guest_px_);
-    move(*popup_anchor_ + presenter_.content_rect().topLeft());
+    const QRect owner_frame = owner_view_->frame_rect();
+    const QRect owner_source = owner_view_->presenter_.source_rect();
+    const double scale = PopupPlacement::scale(owner_frame, owner_source);
+
+    // Drawn at the owner's scale. A mirror is only 1:1 until the user
+    // drags its edge; a menu left at native size beside a mirror scaled
+    // to 1.3 is the wrong size, and its offset from the owner would be
+    // measured in different units than its own.
+    if (presenter_.has_content()) {
+        if (const QSize want =
+                PopupPlacement::scaled_size(presenter_.natural_size(), scale);
+            want != size()) {
+            resize(want);
+        }
+    }
+
+    // What this widget's top-left corner IS, in guest pixels of the
+    // owner's frame: where the popup's frame sits relative to the
+    // owner's (``pending_rel_guest_px_``), plus however far into that
+    // frame its visible content starts (the shadow margin the presenter
+    // trimmed). One point, mapped once, through the owner's frame — so
+    // the letterbox offset, the scale and the owner's own sub-rect are
+    // all applied exactly once each.
+    const QPoint corner = pending_rel_guest_px_ + presenter_.source_rect().topLeft();
+    popup_anchor_ = owner_view_->mapToGlobal(
+        PopupPlacement::to_widget(corner, owner_frame, owner_source));
+    move(*popup_anchor_);
 }
 
 void WindowView::paintEvent(QPaintEvent*) {
@@ -630,14 +685,10 @@ void WindowView::showEvent(QShowEvent* e) {
         }
     }
 
-    // Anchor at where the FULL captured frame's origin would sit; the
-    // visible menu is inset by content_rect_.topLeft() within it, which
-    // reposition_popup applies once the trim is known.
-    popup_anchor_ = PopupPlacement::anchor(owner_view_->mapToGlobal(QPoint(0, 0)),
-                                           owner_view_->frame_rect(),
-                                           owner_view_->presenter_.source_size(),
-                                           pending_rel_guest_px_);
-    move(*popup_anchor_ + presenter_.content_rect().topLeft());
+    // Place it from what the owner knows right now. The trim and the
+    // owner's settled geometry only arrive with this popup's first
+    // frame; reposition_popup runs again there and corrects it.
+    reposition_popup();
 }
 
 }  // namespace lsw::host::manager

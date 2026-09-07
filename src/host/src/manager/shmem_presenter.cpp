@@ -11,9 +11,18 @@ void ShmemPresenter::submit(QImage frame, bool trim_shadow) {
     image_ = std::move(frame);
     if (trim_shadow && !image_.isNull()) {
         content_rect_ = FrameGeometry::opaque_bounds(image_);
-    } else {
-        content_rect_ = QRect{};
+        return;
     }
+    // Keep what the guest told us, but never let it outlive the frame it
+    // described: a window that just resized has a smaller image than the
+    // rect that arrived with the enumeration before it.
+    if (!content_rect_.isEmpty() && !image_.isNull()) {
+        content_rect_ = content_rect_.intersected(image_.rect());
+    }
+}
+
+void ShmemPresenter::set_content_rect(QRect rect) {
+    content_rect_ = image_.isNull() ? rect : rect.intersected(image_.rect());
 }
 
 QSize ShmemPresenter::natural_size() const {

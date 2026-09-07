@@ -19,7 +19,20 @@ public:
     // menu floats in the middle of an oversized window with a second,
     // compositor-drawn shadow around it. Classic Win32 menus have no
     // such margin and the trim comes back empty.
+    //
+    // For anything else the content rect is not guessed from the pixels
+    // — the guest already knows it and says so; see ``set_content_rect``.
     void submit(QImage frame, bool trim_shadow);
+
+    // The sub-rect of the frame to show, as the guest reported it: the
+    // whole frame, except for a maximized window whose frame overhangs
+    // the monitor. An empty rect means the whole frame.
+    //
+    // Deliberately not derived from alpha here. The transparent band on
+    // a maximized window looks exactly like the transparent band on a
+    // frame that arrived half-painted mid-resize, and cropping to the
+    // pixels cropped real content the moment the two were confused.
+    void set_content_rect(QRect rect);
 
     [[nodiscard]] bool has_content() const override { return !image_.isNull(); }
     [[nodiscard]] QSize source_size() const override { return image_.size(); }
