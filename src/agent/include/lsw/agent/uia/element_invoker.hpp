@@ -15,7 +15,7 @@ public:
     ElementInvoker() = delete;
 
     // False when the element is not found or exposes no InvokePattern.
-    [[nodiscard]] static bool run(IUIAutomation* root, std::uintptr_t hwnd,
+    [[nodiscard]] static bool invoke(IUIAutomation* root, std::uintptr_t hwnd,
                                   const std::string& selector);
 };
 

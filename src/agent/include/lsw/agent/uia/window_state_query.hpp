@@ -14,7 +14,7 @@ class WindowStateQuery {
 public:
     WindowStateQuery() = delete;
 
-    [[nodiscard]] static WindowState run(IUIAutomation* root, std::uintptr_t hwnd);
+    [[nodiscard]] static WindowState for_window(IUIAutomation* root, std::uintptr_t hwnd);
 };
 
 }  // namespace lsw::agent::uia

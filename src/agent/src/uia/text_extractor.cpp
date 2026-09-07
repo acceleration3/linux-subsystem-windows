@@ -10,7 +10,7 @@
 
 namespace lsw::agent::uia {
 
-std::string TextExtractor::run(IUIAutomation* root, std::uintptr_t hwnd, int max_chars) {
+std::string TextExtractor::from_window(IUIAutomation* root, std::uintptr_t hwnd, int max_chars) {
     IUIAutomationElement* element = ElementLocator::from_window(root, hwnd);
     if (element == nullptr) {
         return {};

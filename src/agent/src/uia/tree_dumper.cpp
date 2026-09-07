@@ -57,7 +57,7 @@ void dump_node(IUIAutomationTreeWalker* walker, IUIAutomationElement* element, i
 
 }  // namespace
 
-nlohmann::json TreeDumper::run(IUIAutomation* root, std::uintptr_t hwnd, int max_depth) {
+nlohmann::json TreeDumper::dump(IUIAutomation* root, std::uintptr_t hwnd, int max_depth) {
     nlohmann::json out = nlohmann::json::object();
     IUIAutomationElement* element = ElementLocator::from_window(root, hwnd);
     if (element == nullptr) {
