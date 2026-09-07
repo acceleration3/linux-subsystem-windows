@@ -1,4 +1,5 @@
 #include "lsw/agent/apps/catalog.hpp"
+#include "lsw/agent/util/text_encoding.hpp"
 
 #include "lsw/agent/win/icon_extractor.hpp"
 #include "lsw/agent/log.hpp"
@@ -36,19 +37,6 @@ struct RegEntry {
     std::wstring install_location;
     std::wstring publisher;
 };
-
-std::string utf16_to_utf8(const std::wstring& w) {
-    if (w.empty()) {
-        return {};
-    }
-    int n = ::WideCharToMultiByte(CP_UTF8, 0, w.data(), -1, nullptr, 0, nullptr, nullptr);
-    if (n <= 1) {
-        return {};
-    }
-    std::string out(static_cast<size_t>(n - 1), '\0');
-    ::WideCharToMultiByte(CP_UTF8, 0, w.data(), -1, out.data(), n, nullptr, nullptr);
-    return out;
-}
 
 bool ends_with_icase(const std::wstring& s, const wchar_t* suffix) {
     const size_t n = std::wcslen(suffix);
@@ -279,8 +267,8 @@ std::string Catalog::list_json() {
         }
 
         const auto icon_src = !icon_path.empty() ? icon_path : exe_path;
-        const auto exe_u8 = utf16_to_utf8(exe_path);
-        const auto name_u8 = utf16_to_utf8(e.display_name);
+        const auto exe_u8 = util::TextEncoding::to_utf8(exe_path);
+        const auto name_u8 = util::TextEncoding::to_utf8(e.display_name);
 
         nlohmann::json o = nlohmann::json::object();
         o["id"] = exe_u8;

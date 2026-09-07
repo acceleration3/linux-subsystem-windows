@@ -1,4 +1,5 @@
 #include "lsw/agent/apps/launcher.hpp"
+#include "lsw/agent/util/text_encoding.hpp"
 
 #include "lsw/agent/apps/guest_drivers.hpp"
 
@@ -21,33 +22,6 @@
 namespace lsw::agent::apps {
 
 namespace {
-
-std::wstring utf8_to_utf16(const std::string& s) {
-    if (s.empty()) {
-        return {};
-    }
-    int n = ::MultiByteToWideChar(CP_UTF8, 0, s.data(), -1, nullptr, 0);
-    if (n <= 0) {
-        return {};
-    }
-    std::wstring out(static_cast<size_t>(n - 1), L'\0');
-    ::MultiByteToWideChar(CP_UTF8, 0, s.data(), -1, out.data(), n);
-    return out;
-}
-
-std::string utf16_to_utf8(const std::wstring& w) {
-    if (w.empty()) {
-        return {};
-    }
-    const int n = ::WideCharToMultiByte(CP_UTF8, 0, w.c_str(), -1, nullptr, 0,
-                                          nullptr, nullptr);
-    if (n <= 1) {
-        return {};
-    }
-    std::string out(static_cast<size_t>(n - 1), '\0');
-    ::WideCharToMultiByte(CP_UTF8, 0, w.c_str(), -1, out.data(), n, nullptr, nullptr);
-    return out;
-}
 
 // The child's environment: ours, with ``overrides`` applied on top,
 // laid out the way CreateProcessW wants it — NAME=value strings each
@@ -91,11 +65,11 @@ std::vector<wchar_t> build_environment(const std::vector<Launcher::EnvVar>& over
         ::FreeEnvironmentStringsW(block);
     }
     for (const auto& [name, value] : overrides) {
-        const std::wstring wname = utf8_to_utf16(name);
+        const std::wstring wname = util::TextEncoding::to_wide(name);
         if (wname.empty()) {
             continue;
         }
-        vars[upper(wname)] = {wname, utf8_to_utf16(value)};
+        vars[upper(wname)] = {wname, util::TextEncoding::to_wide(value)};
     }
 
     std::vector<wchar_t> out;
@@ -205,7 +179,7 @@ bool Launcher::launch(const std::string& app_id, const std::string& extra_args,
 
     // Resolve .lnk → real exe + args + working dir. For raw .exe /
     // .bat paths we just hand the path straight to CreateProcessW.
-    std::wstring path = utf8_to_utf16(app_id);
+    std::wstring path = util::TextEncoding::to_wide(app_id);
     std::wstring args;
     std::wstring working_dir;
     if (ends_with_icase(path, L".lnk")) {
@@ -216,9 +190,9 @@ bool Launcher::launch(const std::string& app_id, const std::string& extra_args,
                     + app_id);
             return false;
         }
-        LSW_AGENT_INFO(std::string{"launch: lnk_resolve target="} + utf16_to_utf8(resolved)
-                       + " args=" + utf16_to_utf8(args)
-                       + " working_dir=" + utf16_to_utf8(working_dir));
+        LSW_AGENT_INFO(std::string{"launch: lnk_resolve target="} + util::TextEncoding::to_utf8(resolved)
+                       + " args=" + util::TextEncoding::to_utf8(args)
+                       + " working_dir=" + util::TextEncoding::to_utf8(working_dir));
         path = resolved;
     }
     path = expand_env(path);
@@ -245,8 +219,8 @@ bool Launcher::launch(const std::string& app_id, const std::string& extra_args,
             working_dir = path.substr(0, slash);
         }
     }
-    LSW_AGENT_DEBUG(std::string{"launch: expanded path="} + utf16_to_utf8(path)
-                    + " working_dir=" + utf16_to_utf8(working_dir));
+    LSW_AGENT_DEBUG(std::string{"launch: expanded path="} + util::TextEncoding::to_utf8(path)
+                    + " working_dir=" + util::TextEncoding::to_utf8(working_dir));
 
     // Build a mutable command line — CreateProcessW writes through
     // ``lpCommandLine``. Quote the exe path so spaces work; append args.
@@ -258,7 +232,7 @@ bool Launcher::launch(const std::string& app_id, const std::string& extra_args,
     // The configured arguments come last, after whatever a .lnk
     // carried, so an app config can add to a shortcut rather than
     // having to restate it.
-    if (const std::wstring extra = expand_env(utf8_to_utf16(extra_args)); !extra.empty()) {
+    if (const std::wstring extra = expand_env(util::TextEncoding::to_wide(extra_args)); !extra.empty()) {
         cmdline += L" ";
         cmdline += extra;
     }
@@ -276,7 +250,7 @@ bool Launcher::launch(const std::string& app_id, const std::string& extra_args,
     // application that refuses to start.
     std::vector<EnvVar> launch_env = env;
     std::string driver_err;
-    if (!GuestDrivers::link_beside(utf16_to_utf8(path), &launch_env, &driver_err)) {
+    if (!GuestDrivers::link_beside(util::TextEncoding::to_utf8(path), &launch_env, &driver_err)) {
         LSW_AGENT_WARN("launch: guest drivers not fully staged: " + driver_err);
     }
 
@@ -346,7 +320,7 @@ bool Launcher::launch(const std::string& app_id, const std::string& extra_args,
                     std::string{"launch failed: direct CreateProcessW err="}
                         + std::to_string(err) + ", shell fallback err="
                         + std::to_string(::GetLastError())
-                        + ", cmdline=" + utf16_to_utf8(cmdline));
+                        + ", cmdline=" + util::TextEncoding::to_utf8(cmdline));
             return false;
         }
         LSW_AGENT_INFO("launch: dispatched via shell; PID not tracked (shell-owned)");
