@@ -49,6 +49,21 @@ public:
     [[nodiscard]] bool apply(const QString& wim_path, int image_index, const DebloatPlan& plan,
                              QString* error_out);
 
+    // Write image ``image_index`` of ``src_path`` to ``dest_path`` as
+    // the only image in a new WIM.
+    //
+    // This is what makes a debloat worth doing. A WIM is content
+    // addressed and Windows media carries eleven editions sharing one
+    // pool of resources, so deleting a file from one image frees
+    // nothing while the other ten still reference it - measured at 63
+    // MiB reclaimed from removing 84 application payloads. Exporting a
+    // single image drops every resource the others were holding, and
+    // the guest only installs one edition anyway.
+    //
+    // The result has one image, so callers debloat index 1 of it.
+    [[nodiscard]] static bool isolate_edition(const QString& src_path, int image_index,
+                                              const QString& dest_path, QString* error_out);
+
     // What the last ``apply`` removed, one entry per deleted path. For
     // the log and the wizard's summary.
     [[nodiscard]] const QStringList& removed() const noexcept { return removed_; }

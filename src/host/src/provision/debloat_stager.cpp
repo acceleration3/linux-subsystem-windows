@@ -55,7 +55,13 @@ DebloatStager::~DebloatStager() = default;
 
 void DebloatStager::trim(const QString& iso_path, const QString& output_dir,
                          int image_index, debloat::DebloatLevel level) {
-    scratch_ = std::make_unique<QTemporaryDir>();
+    // Beside the output, not in QDir::tempPath(). /tmp is tmpfs on a
+    // normal desktop — a few gigabytes of RAM — and this unpacks a
+    // Windows ISO twice over. The default location fails instantly, and
+    // fails by filling memory rather than by saying it is out of space.
+    QDir().mkpath(output_dir);
+    scratch_ = std::make_unique<QTemporaryDir>(
+        QDir(output_dir).filePath(QStringLiteral("lsw-trim-XXXXXX")));
     if (!scratch_->isValid()) {
         Q_EMIT failed(QStringLiteral("cannot create a scratch directory for the image"));
         return;
@@ -104,6 +110,22 @@ void DebloatStager::trim(const QString& iso_path, const QString& output_dir,
             return;
         }
 
+        // Keep only the edition being installed, before anything is
+        // removed from it. Windows media carries eleven editions over
+        // one pool of shared resources, so a deletion from one of them
+        // frees nothing while the other ten still hold the same blobs -
+        // and the debloat that follows then runs over a far smaller
+        // file.
+        report(QStringLiteral("Isolating the chosen edition..."), 5);
+        const QString single = QDir(dir).filePath(QStringLiteral("install-single.wim"));
+        QString isolate_error;
+        if (!debloat::WimDebloater::isolate_edition(wim, image_index, single, &isolate_error)) {
+            fail(isolate_error);
+            return;
+        }
+        QFile::remove(wim);
+        wim = single;
+
         // Lives on this thread for the length of the call. Its progress
         // signal is emitted here and marshalled back by ``report``,
         // which is why the connection takes no context object.
@@ -114,7 +136,8 @@ void DebloatStager::trim(const QString& iso_path, const QString& output_dir,
                          });
 
         QString error;
-        if (!debloater.apply(wim, image_index, debloat::DebloatPlan{level}, &error)) {
+        // Index 1: the isolated file has exactly one image in it.
+        if (!debloater.apply(wim, 1, debloat::DebloatPlan{level}, &error)) {
             fail(error);
             return;
         }
