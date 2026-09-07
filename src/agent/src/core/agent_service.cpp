@@ -1,5 +1,6 @@
 #include "lsw/agent/core/agent_service.hpp"
 
+#include "lsw/agent/apps/guest_drivers.hpp"
 #include "lsw/agent/transport/host_endpoint.hpp"
 #include "lsw/agent/log.hpp"
 
@@ -45,6 +46,10 @@ AgentService::~AgentService() {
 
 int AgentService::run() {
     ::SetConsoleCtrlHandler(&ctrl_handler, TRUE);
+    // Before anything can be launched. The OpenCL loader reads this at
+    // the first clGetPlatformIDs of each process, so an application
+    // started before it is written finds no driver.
+    apps::GuestDrivers::register_installed_icds();
     main_loop();
     // Explicit pre-destructor teardown of long-lived services. Phase
     // 6 needs this to release COM pointers while CoInitialize is

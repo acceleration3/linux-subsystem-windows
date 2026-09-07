@@ -86,6 +86,26 @@ public:
     // A directory staged by two live launches is cleaned when the
     // second of them ends, not the first.
     static void unstage(const Staging& staging);
+
+    // Point the system OpenCL loader at the installed driver, in both
+    // registry views.
+    //
+    // A Khronos loader reads OCL_ICD_FILENAMES through a secure-getenv
+    // that returns nothing to an elevated process, and the agent hands
+    // its elevated administrator token to everything it launches — so
+    // the variable is set for an application that is not allowed to
+    // read it, and the guest enumerated zero OpenCL platforms with a
+    // working driver sitting right beside the executable. The registry
+    // is the only route an elevated process is offered. (The same is
+    // long known of the Vulkan loader and VK_DRIVER_FILES.)
+    //
+    // Machine-wide, which per-launch staging exists to avoid — but the
+    // scope is honest here: the entry names the installed driver, which
+    // is installed machine-wide, and there is no other OpenCL driver in
+    // the guest for it to displace.
+    //
+    // Idempotent. Called once at agent startup, and safe to repeat.
+    static void register_installed_icds();
 };
 
 }  // namespace lsw::agent::apps
