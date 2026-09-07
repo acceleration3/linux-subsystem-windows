@@ -51,7 +51,13 @@ bool Shmem::open() {
                            linkproto::kRegionVersion);
             break;
         default:
-            LSW_AGENT_WARN("shmem: could not map the IVSHMEM BAR");
+            // The OS error, not just the errno-style code: the driver
+            // answers ERROR_ALREADY_INITIALIZED, ACCESS_DENIED and
+            // INVALID_FUNCTION for three different causes, and
+            // collapsing them into one line cost a debugging round trip
+            // once already.
+            LSW_AGENT_WARN("shmem: could not map the IVSHMEM BAR (rc={}, GetLastError={})",
+                           rc, region_.last_os_error());
             break;
         }
         return false;
