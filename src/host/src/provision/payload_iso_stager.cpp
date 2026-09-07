@@ -48,6 +48,15 @@ void PayloadIsoStager::build(const config::VmRecord& record, const PipelineInput
     // transport the agent talks over, so a driver installed later — over
     // that same transport — never gets the chance.
     payload.ivshmem_driver_dir = install::IvshmemDriver::locate(settings_.data_dir());
+    if (payload.ivshmem_driver_dir.isEmpty()) {
+        // Last chance to notice: the ISO is being built now, and a
+        // driver absent from it is absent from the first boot.
+        LSW_WARN("provision: no ivshmem driver to stage — the guest will boot WITHOUT the "
+                 "shared-memory device, so window frames and the shmem channel will be "
+                 "unavailable. Put an unpacked driver in {}/ivshmem or set "
+                 "LSW_IVSHMEM_DRIVER_DIR.",
+                 settings_.data_dir().toStdString());
+    }
 
     const QString agent_exe = platform::AgentExePath::locate();
     if (agent_exe.isEmpty()) {
