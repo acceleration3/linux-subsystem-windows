@@ -107,7 +107,12 @@ void DebloatPage::start_trim() {
     status_->setText(QStringLiteral("Preparing..."));
 
     auto& state = wizard_.state();
+    // Deletes itself once it has spoken. A failed attempt can be retried
+    // from this page, and without this each retry would leave the
+    // previous stager parented to the page for the life of the wizard.
     auto* stager = new provision::DebloatStager(this);
+    connect(stager, &provision::DebloatStager::finished, stager, &QObject::deleteLater);
+    connect(stager, &provision::DebloatStager::failed, stager, &QObject::deleteLater);
     connect(stager, &provision::DebloatStager::progress, this,
             [this](const QString& detail, int percent) {
         bar_->setValue(percent);
