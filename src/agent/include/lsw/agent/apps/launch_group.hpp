@@ -1,5 +1,7 @@
 #pragma once
 
+#include "lsw/agent/apps/guest_drivers.hpp"
+
 namespace lsw::agent::apps {
 
 // Every process a launch produced, not just the one we started.
@@ -39,7 +41,13 @@ public:
     // ``process`` is the handle from CreateProcessW; it is not consumed.
     // Returns false if the job could not be created or assigned, which
     // costs descendant tracking and nothing else.
-    static bool adopt(void* process, unsigned long pid);
+    //
+    // ``staging`` is what ``GuestDrivers::stage_for`` placed for this
+    // launch. It is unstaged when the launch retires, which is the
+    // moment the last process attributed to it exits — the only moment
+    // at which the drivers are known to be unused, since the launched
+    // PID is a stub that exits long before the application does.
+    static bool adopt(void* process, unsigned long pid, GuestDrivers::Staging staging);
 
     // The launched PID whose job ``pid`` belongs to, or 0 if it belongs
     // to no launch of ours. A launch's own PID maps to itself.

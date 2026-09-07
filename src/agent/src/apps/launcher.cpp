@@ -17,6 +17,7 @@
 #include <cwctype>
 #include <map>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace lsw::agent::apps {
@@ -239,10 +240,14 @@ bool Launcher::launch(const std::string& app_id, const std::string& extra_args,
     std::vector<wchar_t> mutable_cmd(cmdline.begin(), cmdline.end());
     mutable_cmd.push_back(L'\0');
 
-    // The drivers go beside the RESOLVED executable, which is the only
-    // path any of the loaders will search — a .lnk's own directory is
-    // not on it. That is why this is here rather than in the RPC
-    // handler: the handler has the shortcut, this has the image.
+    // The drivers go into the tree of the RESOLVED executable, which is
+    // the only path any of the loaders will search — a .lnk's own
+    // directory is not on it. That is why this is here rather than in
+    // the RPC handler: the handler has the shortcut, this has the image.
+    //
+    // Before CreateProcessW, because the environment the loaders read is
+    // built from what this returns and a child cannot be told about a
+    // driver staged after it started.
     //
     // A failure is logged and the launch goes ahead. Without the
     // drivers the application finds whatever Windows has, which on a
@@ -250,7 +255,9 @@ bool Launcher::launch(const std::string& app_id, const std::string& extra_args,
     // application that refuses to start.
     std::vector<EnvVar> launch_env = env;
     std::string driver_err;
-    if (!GuestDrivers::link_beside(util::TextEncoding::to_utf8(path), &launch_env, &driver_err)) {
+    GuestDrivers::Staging staging =
+        GuestDrivers::stage_for(util::TextEncoding::to_utf8(path), &launch_env, &driver_err);
+    if (!staging.complete) {
         LSW_AGENT_WARN("launch: guest drivers not fully staged: " + driver_err);
     }
 
@@ -305,6 +312,11 @@ bool Launcher::launch(const std::string& app_id, const std::string& extra_args,
         }
         LSW_AGENT_WARN(std::string{"launch: direct spawn failed (GetLastError="}
                        + std::to_string(err) + ") — retrying via shell (explorer)");
+        // Nothing will be tracked through the shell, so nothing will
+        // ever retire and clean these up. Take them back now: without
+        // the environment the loaders need, the drivers left in place
+        // would do nothing but sit there.
+        GuestDrivers::unstage(staging);
         const std::wstring explorer = expand_env(L"%windir%\\explorer.exe");
         std::wstring shell_cmd = L"\"" + explorer + L"\" \"" + path + L"\"";
         std::vector<wchar_t> shell_mut(shell_cmd.begin(), shell_cmd.end());
@@ -334,7 +346,7 @@ bool Launcher::launch(const std::string& app_id, const std::string& extra_args,
     // Job first, then let it run. Whether the adoption worked or not the
     // thread has to be resumed — a process left suspended is a process
     // that never starts.
-    (void)LaunchGroup::adopt(pi.hProcess, pi.dwProcessId);
+    (void)LaunchGroup::adopt(pi.hProcess, pi.dwProcessId, std::move(staging));
     ::ResumeThread(pi.hThread);
 
     LSW_AGENT_INFO(std::string{"launch: spawned pid="} + std::to_string(pi.dwProcessId));
