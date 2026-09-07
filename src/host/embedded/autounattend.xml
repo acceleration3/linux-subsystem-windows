@@ -265,17 +265,20 @@
 					<Path>netsh advfirewall firewall add rule name="LSW Stream" dir=in action=allow protocol=TCP localport=5103 profile=any</Path>
 				</RunSynchronousCommand>
 				<!-- The render server's guest drivers, and the Khronos
-				     Vulkan loader beside them. A VM with no GPU ships no
-				     loader at all, so without vulkan-1.dll nothing can
-				     find a Vulkan driver however well it is placed.
+				     Vulkan loader beside them.
 
-				     Copied here, linked per application later: the agent
-				     symlinks the set an application needs into its own
-				     directory at launch and names the manifest in that
-				     launch's VK_DRIVER_FILES. Nothing is registered
-				     machine-wide, because opengl32.dll and d3d11.dll are
-				     found by the DLL search order and there is no
-				     machine-wide equivalent to register them with. -->
+				     Two mechanisms, because the libraries divide in two.
+				     opengl32.dll and the Direct3D set are named by the
+				     DLL search order and by nothing else, so the agent
+				     symlinks those into an application's own directory
+				     at launch. The two ICDs are named by their loaders
+				     through HKLM\SOFTWARE\Khronos, which the agent
+				     writes at startup: a Khronos loader reads
+				     VK_DRIVER_FILES and OCL_ICD_FILENAMES through a
+				     secure-getenv that hands nothing to an elevated
+				     process, and every launch of ours is elevated, so
+				     the environment was being set for an application
+				     that could not read it. -->
 				<RunSynchronousCommand wcm:action="add">
 					<Order>24</Order>
 					<Description>LSW: copy the guest drivers + Vulkan loader from payload CD</Description>
@@ -291,6 +294,67 @@
 					<Order>25</Order>
 					<Description>LSW: copy the 32-bit guest drivers from payload CD</Description>
 					<Path>cmd.exe /c for %i in (D E F G H I J K L M N) do @if exist %i:\rvk32\rvk_icd.dll xcopy /E /I /Y %i:\rvk32 C:\ProgramData\LSW\rvk32</Path>
+				</RunSynchronousCommand>
+				<!-- The Vulkan loader, and only if this Windows ships
+				     none of its own.
+
+				     vulkan-1.dll is the one library here that no registry
+				     key can name: DXVK and VKD3D resolve it by the DLL
+				     search order like any other import, so it has to be
+				     somewhere on that path before either can reach a
+				     driver. Recent builds carry one (26200 has 1.3.300.0
+				     in both views) and that one is kept — it is newer
+				     than ours and serves the whole machine. A build that
+				     ships none, or a debloat that trimmed it, gets ours.
+
+				     Machine-wide on purpose, unlike everything the agent
+				     stages: a loader is not per-application, and putting
+				     it beside each executable would shadow whatever the
+				     system has with an older copy. -->
+				<RunSynchronousCommand wcm:action="add">
+					<Order>26</Order>
+					<Description>LSW: install the Vulkan loader if Windows ships none</Description>
+					<Path>cmd.exe /c if not exist %windir%\System32\vulkan-1.dll if exist C:\ProgramData\LSW\rvk\vulkan-1.dll copy /y C:\ProgramData\LSW\rvk\vulkan-1.dll %windir%\System32\vulkan-1.dll</Path>
+				</RunSynchronousCommand>
+				<RunSynchronousCommand wcm:action="add">
+					<Order>27</Order>
+					<Description>LSW: install the 32-bit Vulkan loader if Windows ships none</Description>
+					<Path>cmd.exe /c if not exist %windir%\SysWOW64\vulkan-1.dll if exist C:\ProgramData\LSW\rvk32\vulkan-1.dll copy /y C:\ProgramData\LSW\rvk32\vulkan-1.dll %windir%\SysWOW64\vulkan-1.dll</Path>
+				</RunSynchronousCommand>
+				<!-- How much video memory the display adapter admits to.
+
+				     A VM with no GPU enumerates the Microsoft Basic
+				     Display Adapter, whose HardwareInformation.MemorySize
+				     is 0 — and applications gate their GPU path on that
+				     number long before they ever open a driver.
+				     Photoshop's sniffer reads exactly this key, reported
+				     "video RAM(MB): 0", and disabled the GPU with a
+				     working OpenGL sitting underneath it. Nothing in the
+				     render server can influence the value: it is read
+				     from the registry, not from DXVK.
+
+				     1 GiB. Comfortably over the 256 MB minimum the
+				     applications that check this ask for, and under the
+				     4 GiB where the DWORD form of it stops being
+				     representable. Takes effect with no reboot.
+
+				     Both spellings, because consumers are split between
+				     them: the QWORD is what a WDDM adapter reports today
+				     and the DWORD is what the older path reads. -->
+				<RunSynchronousCommand wcm:action="add">
+					<Order>28</Order>
+					<Description>LSW: report video memory on the display adapter</Description>
+					<Path>%windir%\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$class = 'HKLM:\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}'; Get-ChildItem $class -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -match '^[0-9]{4}$' } | ForEach-Object { New-ItemProperty -LiteralPath $_.PSPath -Name 'HardwareInformation.qwMemorySize' -Value 1073741824 -PropertyType QWord -Force; New-ItemProperty -LiteralPath $_.PSPath -Name 'HardwareInformation.MemorySize' -Value 1073741824 -PropertyType DWord -Force }"</Path>
+				</RunSynchronousCommand>
+				<!-- The same values on 0000 whether or not it exists yet.
+				     The adapter is enumerated by PnP, and on an image
+				     where that has not happened by this point the loop
+				     above matches nothing and writes nowhere; 0000 is the
+				     subkey the first adapter takes. -->
+				<RunSynchronousCommand wcm:action="add">
+					<Order>29</Order>
+					<Description>LSW: video memory fallback for an adapter not yet enumerated</Description>
+					<Path>cmd.exe /c reg add "HKLM\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}\0000" /v HardwareInformation.qwMemorySize /t REG_QWORD /d 1073741824 /f &amp; reg add "HKLM\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}\0000" /v HardwareInformation.MemorySize /t REG_DWORD /d 1073741824 /f</Path>
 				</RunSynchronousCommand>
 				<!-- The agent autostarts from the 'lsw-agent' scheduled
 				     task (registered by LswPromote.ps1 at SetupComplete,
