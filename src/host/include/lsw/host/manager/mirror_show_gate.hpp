@@ -23,7 +23,14 @@ namespace lsw::host::manager {
 class MirrorShowGate {
 public:
     // ``show`` is invoked exactly once, after the desktop entry exists.
-    MirrorShowGate(std::uint64_t hwnd, std::function<void()> show);
+    //
+    // ``desktop_id`` is the identity the mirror will map under. A window
+    // borrowing its application's launcher entry needs nothing written —
+    // that entry already exists, carries the application's real name and
+    // icon, and is what every window of the application groups under.
+    // Only a mirror falling back to an identity of its own gets a
+    // per-window entry, because nothing else would describe it.
+    MirrorShowGate(std::uint64_t hwnd, QString desktop_id, std::function<void()> show);
 
     void props_arrived(const QString& window_title);
     void icon_arrived(const QString& window_title, QByteArray icon_png);
@@ -39,6 +46,7 @@ private:
     void maybe_show(const QString& window_title);
 
     std::uint64_t hwnd_;
+    QString desktop_id_;
     std::function<void()> show_;
     QByteArray icon_png_;
     bool props_done_ = false;

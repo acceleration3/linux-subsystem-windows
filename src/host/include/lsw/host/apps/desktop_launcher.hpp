@@ -34,6 +34,17 @@ namespace lsw::host::apps {
 // XDG filename ASCII-clean.
 class DesktopLauncher {
 public:
+    // The launcher entry's basename for ``app_config_id``, without the
+    // ``.desktop`` suffix — ``lsw-app-<digest>``.
+    //
+    // Also the desktop identity the app's mirrors take: a window whose
+    // app_id is this resolves, in every compositor's task manager, to
+    // the very entry written for it here. So the mirrors of one guest
+    // application group together, under that application's own name and
+    // icon, against the launcher the user may already have pinned —
+    // rather than under the manager that happens to host them.
+    [[nodiscard]] static QString entry_id(const QString& app_config_id);
+
     // Returns true if the entry was (re)written. Idempotent — calling
     // again with the same config just rewrites the same files. Side
     // effect: ensures the ``Windows`` category and .menu fragment

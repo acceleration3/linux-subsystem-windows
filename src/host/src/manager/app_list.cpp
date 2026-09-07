@@ -171,7 +171,18 @@ void AppListWidget::on_launched(const QString& app_id, quint32 pid) {
     const qsizetype sep = std::max(app_id.lastIndexOf(QLatin1Char('\\')),
                                    app_id.lastIndexOf(QLatin1Char('/')));
     const QString exe_basename = sep < 0 ? app_id : app_id.mid(sep + 1);
-    auto* w = new AppWindowWatcher(rpc_, windows_, pid, exe_basename, this);
+    // The identity every mirror of this launch will present to the task
+    // manager: the launcher entry already written for this application,
+    // so its windows group under its own name and icon — and against the
+    // launcher the user may have pinned — rather than under the manager.
+    QString desktop_id;
+    for (const auto& cfg : store_.configs()) {
+        if (cfg.path == app_id) {
+            desktop_id = apps::DesktopLauncher::entry_id(cfg.id);
+            break;
+        }
+    }
+    auto* w = new AppWindowWatcher(rpc_, windows_, pid, exe_basename, desktop_id, this);
     connect(w, &AppWindowWatcher::exhausted, this, &AppListWidget::on_watcher_exhausted);
     watchers_.insert(pid, w);
     w->start();

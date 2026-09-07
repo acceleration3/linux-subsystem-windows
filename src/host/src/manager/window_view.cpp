@@ -51,11 +51,20 @@ bool WindowView::is_mirrored(std::uint64_t hwnd) {
 }
 
 WindowView::WindowView(link::AgentRpcClient& rpc, std::uint64_t hwnd,
-                       const QString& window_title, WindowView* relative_to,
-                       QPoint rel_guest_px)
-    : QWidget(nullptr), rpc_(rpc), hwnd_(hwnd), input_(rpc, hwnd),
+                       const QString& window_title, const QString& desktop_id,
+                       WindowView* relative_to, QPoint rel_guest_px)
+    : QWidget(nullptr), rpc_(rpc), hwnd_(hwnd),
+      // An application's own identity when the launch knew it, so every
+      // window it opens lands in one task-manager group. Only a window
+      // that belongs to no configured app falls back to one of its own,
+      // which is a group of one — still separate from the manager, which
+      // is the point.
+      desktop_id_(desktop_id.isEmpty()
+                      ? QStringLiteral("lsw-window-%1").arg(hwnd)
+                      : desktop_id),
+      input_(rpc, hwnd),
       geometry_([this](int w, int h) { send_resize(w, h); }, this),
-      show_gate_(hwnd, [this] { show(); }), owner_view_(relative_to) {
+      show_gate_(hwnd, desktop_id_, [this] { show(); }), owner_view_(relative_to) {
     setWindowTitle(window_title);
     setAttribute(Qt::WA_DeleteOnClose);
 
@@ -654,15 +663,27 @@ void WindowView::setVisible(bool visible) {
     // native window exists yet. Later show/hide cycles reuse the same
     // toplevel, whose app_id is already locked in.
     if (visible && windowHandle() == nullptr) {
-        const QString unique = QStringLiteral("lsw-window-%1").arg(hwnd_);
         const QString previous = QGuiApplication::desktopFileName();
-        QGuiApplication::setDesktopFileName(unique);
+        QGuiApplication::setDesktopFileName(desktop_id_);
         QWidget::setVisible(true);
         QGuiApplication::setDesktopFileName(previous);
         // X11 can take WM_CLASS after creation; no-op on Wayland.
-        WindowClassStamper::apply(windowHandle(), unique);
+        WindowClassStamper::apply(windowHandle(), desktop_id_);
+        LSW_INFO("mirror {:#x}: shown as '{}' (was '{}')", hwnd_,
+                 desktop_id_.toStdString(), previous.toStdString());
         return;
     }
+    // The identity is set exactly once, and only here. A mirror that
+    // reaches this line on its first show already has a native window,
+    // which means something created it earlier and it will carry the
+    // manager's app_id for the rest of its life — the symptom being
+    // every guest window grouped under the manager in the task bar.
+    if (visible && !shown_once_) {
+        LSW_WARN("mirror {:#x}: native window already existed at first show; it "
+                 "keeps the manager's identity instead of '{}'",
+                 hwnd_, desktop_id_.toStdString());
+    }
+    shown_once_ = shown_once_ || visible;
     QWidget::setVisible(visible);
 }
 

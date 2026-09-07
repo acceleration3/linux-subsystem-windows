@@ -47,8 +47,14 @@ public:
     // owner. When set, this view is made transient to it and placed at
     // ``rel_guest_px`` — the guest-pixel offset of this window's client
     // origin from the owner's — so popups land where the app put them.
+    // ``desktop_id`` is the identity this mirror presents to the host's
+    // task manager — ``DesktopLauncher::entry_id`` of the application it
+    // was launched from, shared by every window that application opens.
+    // Empty when the window belongs to no configured app, and the mirror
+    // then falls back to an identity of its own.
     WindowView(link::AgentRpcClient& rpc, std::uint64_t hwnd, const QString& window_title,
-               WindowView* relative_to = nullptr, QPoint rel_guest_px = {});
+               const QString& desktop_id = {}, WindowView* relative_to = nullptr,
+               QPoint rel_guest_px = {});
     ~WindowView() override;
 
     [[nodiscard]] std::uint64_t hwnd() const noexcept { return hwnd_; }
@@ -68,8 +74,8 @@ public:
     // guest's own taskbar.
     void apply_guest_state(bool minimized, bool maximized);
 
-    // Overridden to stamp a per-window identity around native-window
-    // creation.
+    // Overridden to stamp this mirror's desktop identity around
+    // native-window creation.
     //
     // On Wayland, Qt reads ``QGuiApplication::desktopFileName()`` exactly
     // once at xdg_toplevel creation to set app_id, and it is immutable
@@ -149,6 +155,11 @@ private:
 
     link::AgentRpcClient& rpc_;
     std::uint64_t hwnd_;
+    // What the compositor is told this window is. See the constructor.
+    QString desktop_id_;
+    // Whether this mirror has ever been shown, so the "identity was
+    // already lost" warning fires once rather than on every show.
+    bool shown_once_ = false;
     GuestInputSender input_;
 
     // Where the pixels come from. A ``Presenter`` by design: the Vulkan
