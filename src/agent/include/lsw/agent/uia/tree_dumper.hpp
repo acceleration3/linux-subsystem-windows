@@ -19,7 +19,7 @@ public:
     // ``max_depth`` clamps recursion; <= 0 falls back to 4 levels, which
     // is deep enough to find real controls and shallow enough not to
     // serialise an entire Electron app.
-    [[nodiscard]] static nlohmann::json run(IUIAutomation* root, std::uintptr_t hwnd,
+    [[nodiscard]] static nlohmann::json dump(IUIAutomation* root, std::uintptr_t hwnd,
                                             int max_depth);
 };
 

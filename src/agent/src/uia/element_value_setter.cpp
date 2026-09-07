@@ -10,7 +10,7 @@
 
 namespace lsw::agent::uia {
 
-bool ElementValueSetter::run(IUIAutomation* root, std::uintptr_t hwnd,
+bool ElementValueSetter::set_value(IUIAutomation* root, std::uintptr_t hwnd,
                              const std::string& selector, const std::string& value) {
     IUIAutomationElement* window = ElementLocator::from_window(root, hwnd);
     if (window == nullptr) {

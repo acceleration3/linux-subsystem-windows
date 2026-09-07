@@ -9,7 +9,7 @@
 
 namespace lsw::agent::uia {
 
-WindowState WindowStateQuery::run(IUIAutomation* root, std::uintptr_t hwnd) {
+WindowState WindowStateQuery::for_window(IUIAutomation* root, std::uintptr_t hwnd) {
     WindowState out;
     IUIAutomationElement* element = ElementLocator::from_window(root, hwnd);
     if (element == nullptr) {

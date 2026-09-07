@@ -14,7 +14,7 @@ public:
     ElementValueSetter() = delete;
 
     // False when the element is not found or exposes no ValuePattern.
-    [[nodiscard]] static bool run(IUIAutomation* root, std::uintptr_t hwnd,
+    [[nodiscard]] static bool set_value(IUIAutomation* root, std::uintptr_t hwnd,
                                   const std::string& selector,
                                   const std::string& value);
 };

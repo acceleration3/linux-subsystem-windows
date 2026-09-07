@@ -10,7 +10,7 @@
 
 namespace lsw::agent::uia {
 
-bool ElementInvoker::run(IUIAutomation* root, std::uintptr_t hwnd,
+bool ElementInvoker::invoke(IUIAutomation* root, std::uintptr_t hwnd,
                          const std::string& selector) {
     IUIAutomationElement* window = ElementLocator::from_window(root, hwnd);
     if (window == nullptr) {
