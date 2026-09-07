@@ -31,27 +31,28 @@ enum class Arch { Unknown, X64, X86 };
 // and every D3D8 / D3D9 title is 32-bit.
 constexpr const char* kRoot = "C:\\ProgramData\\LSW";
 
-// What gets linked, and out of which per-architecture directory. The
-// name is the same on both sides: the application's loader looks for
-// ``opengl32.dll`` by the DLL search order and for ``rvk_icd.dll`` by
-// the manifest written beside it, and in neither case is there a second
-// spelling to translate to.
+// What gets linked, and out of which per-architecture directory.
 //
-// The order matters for exactly one pair: ``vulkan-1.dll`` must be
-// beside the exe before a translation layer beside the exe calls into
-// it, and on a guest with no GPU driver there is no loader anywhere
-// else on the search path.
+// Only the libraries whose ONLY discovery mechanism is the DLL search
+// order. ``opengl32.dll`` and the Direct3D set are named by the loader
+// from the directory of the running image and from nowhere else, so a
+// copy beside the executable is the whole of the mechanism.
+//
+// The two ICDs are not here. ``rvk_icd.dll`` and ``rvk_opencl.dll`` are
+// found by their loaders through the registry — see
+// ``register_installed_icds`` for why that is the only route that works
+// for an elevated process — and a copy beside the executable was never
+// read. ``vulkan-1.dll`` is not here either: it is the loader itself,
+// no registry key names it, and provisioning puts one in the Windows
+// directory when the Windows build ships none.
 struct Driver {
     const char* name;
     const char* dir64;  // subdirectory of kRoot holding the x86-64 build
     const char* dir32;  // ... and the i686 one
 };
 
-constexpr std::array<Driver, 11> kDrivers = {{
-    {"vulkan-1.dll", "rvk", "rvk32"},
-    {"rvk_icd.dll", "rvk", "rvk32"},
+constexpr std::array<Driver, 8> kDrivers = {{
     {"opengl32.dll", "rvk", "rvk32"},
-    {"rvk_opencl.dll", "rvk", "rvk32"},
     {"d3d8.dll", "dxvk\\x64", "dxvk\\x32"},
     {"d3d9.dll", "dxvk\\x64", "dxvk\\x32"},
     {"d3d10core.dll", "dxvk\\x64", "dxvk\\x32"},
@@ -61,6 +62,16 @@ constexpr std::array<Driver, 11> kDrivers = {{
     {"d3d12core.dll", "vkd3d\\x64", "vkd3d\\x86"},
 }};
 
+// What earlier versions of this staged and this one does not. A guest
+// upgraded in place still has them linked beside every application that
+// was launched before the change, and the launch that ends next is the
+// only thing that will ever look at those directories again.
+constexpr std::array<const char*, 3> kRetiredDrivers = {{
+    "vulkan-1.dll",
+    "rvk_icd.dll",
+    "rvk_opencl.dll",
+}};
+
 // The Vulkan loader reads a manifest, not a DLL, and the path in it
 // must be absolute: the Windows loader opens a driver with
 // ``LoadLibraryEx(LOAD_WITH_ALTERED_SEARCH_PATH)``, which rejects a
@@ -68,14 +79,6 @@ constexpr std::array<Driver, 11> kDrivers = {{
 // call return VK_ERROR_OUT_OF_HOST_MEMORY — from which an application
 // usually exits with no message at all.
 constexpr const char* kIcdManifestName = "rvk_icd.json";
-
-// The environment is one value for the whole process tree while the
-// drivers are per-directory, so both loader variables carry a list. A
-// Vulkan ICD or an OpenCL vendor that cannot be loaded — the 32-bit one
-// named to a 64-bit process, and the other way round — is skipped by
-// its loader rather than failing it, which is what makes listing every
-// architecture at once safe.
-constexpr wchar_t kListSeparator = L';';
 
 // Bounds on the walk. A tree deeper or wider than this is not a
 // launcher-plus-payload arrangement any more, and staging into all of
@@ -439,22 +442,9 @@ void acquire_dir(const std::wstring& dir) {
     return out.good();
 }
 
-[[nodiscard]] std::string join_list(const std::vector<std::wstring>& paths) {
-    std::wstring out;
-    for (const std::wstring& p : paths) {
-        if (!out.empty()) {
-            out += kListSeparator;
-        }
-        out += p;
-    }
-    return util::TextEncoding::to_utf8(out);
-}
-
 // Link every installed driver of ``arch`` into ``dir``. Returns false
-// when one that exists could not be placed; ``vulkan_icd`` and
-// ``opencl_icd`` say which loaders now have something to find there.
-[[nodiscard]] bool stage_dir(const std::wstring& dir, Arch arch, bool* vulkan_icd,
-                             bool* opencl_icd, std::string* error_out) {
+// when one that exists could not be placed.
+[[nodiscard]] bool stage_dir(const std::wstring& dir, Arch arch, std::string* error_out) {
     bool all_ok = true;
     for (const auto& driver : kDrivers) {
         const std::wstring source =
@@ -466,11 +456,7 @@ void acquire_dir(const std::wstring& dir) {
         }
         if (!link_one(join(dir, driver.name), source, error_out)) {
             all_ok = false;
-            continue;
         }
-        const std::string linked{driver.name};
-        *vulkan_icd = *vulkan_icd || linked == "rvk_icd.dll";
-        *opencl_icd = *opencl_icd || linked == "rvk_opencl.dll";
     }
     return all_ok;
 }
@@ -491,7 +477,6 @@ GuestDrivers::Staging GuestDrivers::stage_for(const std::string& exe_path,
         return staged;
     }
 
-    std::vector<std::wstring> manifests;
     for (const std::wstring& dir : exe_dirs_under(parent_dir(exe))) {
         if (under_windows_dir(dir)) {
             LSW_AGENT_INFO("guest_drivers: " + util::TextEncoding::to_utf8(dir)
@@ -508,17 +493,8 @@ GuestDrivers::Staging GuestDrivers::stage_for(const std::string& exe_path,
         LSW_AGENT_INFO("guest_drivers: staging " + std::string(arch == Arch::X64 ? "x64" : "x86")
                        + " drivers in " + util::TextEncoding::to_utf8(dir));
 
-        bool vulkan_icd = false;
-        bool opencl_icd = false;  // placed, but found through the registry
-        if (!stage_dir(dir, arch, &vulkan_icd, &opencl_icd, error_out)) {
+        if (!stage_dir(dir, arch, error_out)) {
             staged.complete = false;
-        }
-        if (vulkan_icd) {
-            if (write_icd_manifest(dir, error_out)) {
-                manifests.push_back(join(dir, kIcdManifestName));
-            } else {
-                staged.complete = false;
-            }
         }
         staged.dirs.push_back(util::TextEncoding::to_utf8(dir));
         acquire_dir(dir);
@@ -531,22 +507,16 @@ GuestDrivers::Staging GuestDrivers::stage_for(const std::string& exe_path,
     // from the one carrying the frame ring, which is why the agent no
     // longer has to let go of anything for an application to render.
     env->push_back({"RVK_SERVER", "ivshmem"});
-    if (!manifests.empty()) {
-        // Both spellings: VK_ICD_FILENAMES is what a loader older
-        // than 1.3.207 reads, and a guest may have either.
-        const std::string list = join_list(manifests);
-        env->push_back({"VK_DRIVER_FILES", list});
-        env->push_back({"VK_ICD_FILENAMES", list});
-    }
-    // No OCL_ICD_FILENAMES. Windows ships the Khronos ICD loader as
-    // OpenCL.dll, and it reads that variable through a secure-getenv
-    // which hands nothing to an elevated process — which every launch of
-    // ours is. Setting it produced a guest that enumerated zero OpenCL
-    // platforms with a working driver linked beside the executable; the
-    // registry entry ``register_installed_icds`` writes is what the
-    // loader actually reads. Left unset rather than set-and-ignored, so
-    // a loader that does read it cannot also find the staged copy and
-    // enumerate every platform twice.
+    // No VK_DRIVER_FILES, VK_ICD_FILENAMES or OCL_ICD_FILENAMES. Every
+    // Khronos loader reads those through a secure-getenv that hands
+    // nothing to an elevated process, and the agent gives its elevated
+    // administrator token to everything it launches — so each was set
+    // for an application not permitted to read it, and the guest found
+    // no Vulkan and no OpenCL driver at all with working ones linked
+    // beside the executable. ``register_installed_icds`` puts them where
+    // an elevated process is allowed to look. Left unset rather than
+    // set-and-ignored: a loader that did read them would find the staged
+    // copy as well as the registered one and enumerate everything twice.
     return staged;
 }
 
@@ -558,8 +528,16 @@ void GuestDrivers::unstage(const Staging& staging) {
                             + " is still in use by another launch; left staged");
             continue;
         }
+        std::vector<std::wstring> names;
+        names.reserve(kDrivers.size() + kRetiredDrivers.size());
         for (const auto& driver : kDrivers) {
-            const std::wstring target = join(dir, driver.name);
+            names.push_back(util::TextEncoding::to_wide(driver.name));
+        }
+        for (const char* retired : kRetiredDrivers) {
+            names.push_back(util::TextEncoding::to_wide(retired));
+        }
+        for (const std::wstring& name : names) {
+            const std::wstring target = join(dir, name);
             if (!is_our_link(target)) {
                 continue;
             }
@@ -579,47 +557,70 @@ void GuestDrivers::register_installed_icds() {
     // that architecture reads: a 32-bit application is redirected to
     // WOW6432Node and never sees the 64-bit key, so registering only one
     // leaves the other half of the guest with no driver at all.
-    struct Entry {
-        const char* dir;
+    struct Arch {
+        const char* dir;    // subdirectory of kRoot holding this build
         REGSAM view;
         const char* label;
     };
-    static constexpr std::array<Entry, 2> kEntries = {{
+    static constexpr std::array<Arch, 2> kArches = {{
         {"rvk", KEY_WOW64_64KEY, "x64"},
         {"rvk32", KEY_WOW64_32KEY, "x86"},
     }};
 
-    for (const auto& entry : kEntries) {
-        const std::wstring driver =
-            join(join(util::TextEncoding::to_wide(kRoot), entry.dir), "rvk_opencl.dll");
-        if (!exists(driver)) {
-            continue;  // that build is not installed in this guest
-        }
+    // Value NAME is the path, value DATA is a DWORD both loaders read as
+    // "0 means use this one". An unusual shape, and the one Khronos
+    // defines for each of these keys.
+    const auto register_one = [](REGSAM view, const wchar_t* subkey,
+                                 const std::wstring& path, const char* what) {
         HKEY key = nullptr;
-        const LSTATUS opened = ::RegCreateKeyExW(
-            HKEY_LOCAL_MACHINE, L"SOFTWARE\\Khronos\\OpenCL\\Vendors", 0, nullptr,
-            REG_OPTION_NON_VOLATILE, KEY_SET_VALUE | entry.view, nullptr, &key, nullptr);
+        const LSTATUS opened =
+            ::RegCreateKeyExW(HKEY_LOCAL_MACHINE, subkey, 0, nullptr,
+                              REG_OPTION_NON_VOLATILE, KEY_SET_VALUE | view, nullptr,
+                              &key, nullptr);
         if (opened != ERROR_SUCCESS) {
-            LSW_AGENT_WARN("guest_drivers: cannot open the " + std::string(entry.label)
-                           + " OpenCL vendor key (err=" + std::to_string(opened) + ")");
-            continue;
+            LSW_AGENT_WARN("guest_drivers: cannot open the " + std::string(what)
+                           + " key (err=" + std::to_string(opened) + ")");
+            return;
         }
-        // The value NAME is the driver path; the data is a DWORD the
-        // loader reads as "0 means use this one". An unusual shape, and
-        // the one the Khronos loader defines.
         const DWORD enabled = 0;
-        const LSTATUS set = ::RegSetValueExW(
-            key, driver.c_str(), 0, REG_DWORD,
-            reinterpret_cast<const BYTE*>(&enabled), sizeof(enabled));
+        const LSTATUS set =
+            ::RegSetValueExW(key, path.c_str(), 0, REG_DWORD,
+                             reinterpret_cast<const BYTE*>(&enabled), sizeof(enabled));
         ::RegCloseKey(key);
         if (set != ERROR_SUCCESS) {
             LSW_AGENT_WARN("guest_drivers: cannot register "
-                           + util::TextEncoding::to_utf8(driver)
+                           + util::TextEncoding::to_utf8(path) + " as " + what
                            + " (err=" + std::to_string(set) + ")");
-            continue;
+            return;
         }
-        LSW_AGENT_INFO("guest_drivers: registered the " + std::string(entry.label)
-                       + " OpenCL driver " + util::TextEncoding::to_utf8(driver));
+        LSW_AGENT_INFO("guest_drivers: registered " + util::TextEncoding::to_utf8(path)
+                       + " as the " + what);
+    };
+
+    for (const auto& arch : kArches) {
+        const std::wstring dir = join(util::TextEncoding::to_wide(kRoot), arch.dir);
+
+        // Vulkan: the key names a manifest, and the manifest names the
+        // driver. It is written here rather than shipped on the payload
+        // ISO because the path inside it is a guest path, which only the
+        // guest knows.
+        if (exists(join(dir, "rvk_icd.dll"))) {
+            std::string manifest_err;
+            if (write_icd_manifest(dir, &manifest_err)) {
+                register_one(arch.view, L"SOFTWARE\\Khronos\\Vulkan\\Drivers",
+                             join(dir, kIcdManifestName),
+                             (std::string{arch.label} + " Vulkan driver").c_str());
+            } else {
+                LSW_AGENT_WARN("guest_drivers: " + manifest_err);
+            }
+        }
+
+        // OpenCL: the key names the driver directly — no manifest.
+        if (exists(join(dir, "rvk_opencl.dll"))) {
+            register_one(arch.view, L"SOFTWARE\\Khronos\\OpenCL\\Vendors",
+                         join(dir, "rvk_opencl.dll"),
+                         (std::string{arch.label} + " OpenCL driver").c_str());
+        }
     }
 }
 
