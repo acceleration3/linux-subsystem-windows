@@ -32,20 +32,27 @@ public:
     IvshmemRegion(const IvshmemRegion&) = delete;
     IvshmemRegion& operator=(const IvshmemRegion&) = delete;
 
-    // Find the IVSHMEM device, map its BAR, and check that what is
-    // there is a region this build understands. Returns 0, or a
-    // negative errno-style code:
+    // Find this manager's IVSHMEM device, map its BAR, and check that
+    // what is there is a region this build understands.
     //
-    //   -ENODEV   no IVSHMEM device (driver missing, or no <shmem/> in
-    //             the domain)
+    // Every IVSHMEM function on the bus is tried, not just the first:
+    // the guest also carries the render server's region, a separate
+    // device whose enumeration order relative to this one is not ours
+    // to decide. The region is recognised by its header rather than by
+    // its position. Returns 0, or a negative errno-style code:
+    //
+    //   -ENODEV   no IVSHMEM device carries a region of ours (driver
+    //             missing, or no <shmem/> in the domain)
     //   -ENXIO    the device is there but would not report its size
     //   -EBUSY    the device is there but would not hand out a mapping.
     //             The usual cause is that another process in this guest
     //             already has one: the driver tracks a single owner, so
     //             the agent and the ICD cannot both map the BAR.
-    //   -EPROTO   the mapping is not an LSW region of this version —
-    //             the expected outcome of a half-finished redeploy, and
-    //             refused loudly rather than reinterpreted
+    //   -EPROTO   a device is there but no mapping on the bus is an LSW
+    //             region of this version — the expected outcome of a
+    //             half-finished redeploy, and refused loudly rather
+    //             than reinterpreted. Reported as -ENODEV, since from
+    //             out here "no region of ours" is the same answer.
     [[nodiscard]] int open();
 
     // GetLastError() from whichever step failed, so a caller can say
@@ -70,6 +77,12 @@ public:
     [[nodiscard]] std::uint16_t msi_vectors() const noexcept { return msi_vectors_; }
 
 private:
+    // Take ``device_handle`` (a HANDLE) as this region if what is
+    // mapped through it is one of ours. Returns the same codes as
+    // ``open``; on anything but 0 the handle is left for the caller to
+    // close and nothing about this object has changed.
+    [[nodiscard]] int adopt_device(void* device_handle);
+
     void* device_handle_ = nullptr;  // HANDLE; void* keeps the header agnostic
     void* base_ = nullptr;
     std::size_t size_ = 0;

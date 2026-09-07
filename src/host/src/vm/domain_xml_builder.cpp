@@ -1,5 +1,7 @@
 #include "lsw/host/vm/domain_xml_builder.hpp"
 
+#include "lsw/host/vm/render_server.hpp"
+
 #include "domain_template.hpp"
 
 #include <QHash>
@@ -46,6 +48,14 @@ QString DomainXmlBuilder::build(const config::VmRecord& vm, const DomainXmlInput
     // Size matches the manager-side ``ShmemRegion`` allocation.
     vars["ivshmem_socket"]   = inputs.ivshmem_socket;
     vars["ivshmem_size_mib"] = QString::number(inputs.ivshmem_size_mib);
+
+    // The render server's region: a second, plain ivshmem device
+    // backed by the file rvk-render-server made. Both the name and the
+    // size come from RenderServer rather than from a second copy here
+    // — the guest maps whichever file this names, and a name that
+    // disagrees is a guest whose drivers find nothing.
+    vars["rvk_region_name"] = RenderServer::region_name(vm.uuid);
+    vars["rvk_region_mib"]  = QString::number(RenderServer::kRegionMib);
 
     // The PipeWire audio backend needs XDG_RUNTIME_DIR to find its
     // socket under $XDG_RUNTIME_DIR/pipewire-0. libvirt session-mode

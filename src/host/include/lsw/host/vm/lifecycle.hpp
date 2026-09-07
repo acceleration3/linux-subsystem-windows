@@ -5,6 +5,7 @@
 #include "lsw/host/vm/ivshmem_server.hpp"
 #include "lsw/host/vm/domain_handle.hpp"
 #include "lsw/host/vm/libvirt_connection.hpp"
+#include "lsw/host/vm/render_server.hpp"
 #include "lsw/host/vm/shmem_region.hpp"
 
 #include <QObject>
@@ -109,6 +110,10 @@ private:
     struct ShmemBundle {
         std::unique_ptr<ShmemRegion> region;
         std::unique_ptr<IvshmemServer> server;
+        // Serves the guest drivers' own region, which is a second
+        // ivshmem device on the same domain. Per VM for the same reason
+        // the region is: the name is derived from the UUID.
+        std::unique_ptr<RenderServer> render;
     };
     [[nodiscard]] DomainHandle lookup(const QUuid& uuid) const;
     // Create + bind the per-VM region and server. Returns the socket
