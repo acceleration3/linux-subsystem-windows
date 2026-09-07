@@ -2,6 +2,7 @@
 
 #include "lsw/agent/apps/guest_drivers.hpp"
 #include "lsw/agent/log.hpp"
+#include "lsw/agent/util/text_encoding.hpp"
 
 // clang-format off
 #include <windows.h>
@@ -344,6 +345,13 @@ void start_reaper_once() {
 
 }  // namespace
 
+std::string LaunchGroup::job_name(unsigned long pid) {
+    // Session-local: the mirror runs in the same session as the agent,
+    // and a global name would collide across sessions on a machine with
+    // more than one user signed in.
+    return "Local\\lsw-launch-" + std::to_string(pid);
+}
+
 bool LaunchGroup::adopt(void* process, unsigned long pid, GuestDrivers::Staging staging) {
     Group g;
     g.staging = std::move(staging);
@@ -370,7 +378,8 @@ bool LaunchGroup::adopt(void* process, unsigned long pid, GuestDrivers::Staging 
         }
     }
 
-    g.job = ::CreateJobObjectW(nullptr, nullptr);
+    const std::wstring name = util::TextEncoding::to_wide(job_name(pid));
+    g.job = ::CreateJobObjectW(nullptr, name.c_str());
     if (g.job == nullptr) {
         LSW_AGENT_WARN(std::string{"launch_group: CreateJobObject failed (err="}
                        + std::to_string(::GetLastError())

@@ -1,3 +1,4 @@
+#include "lsw/agent/apps/launch_group.hpp"
 #include "lsw/agent/apps/launcher.hpp"
 #include "lsw/agent/rpc/handler.hpp"
 #include "lsw/agent/rpc/auto_register.hpp"
@@ -34,6 +35,11 @@ struct LaunchHandler : RpcHandler {
         std::string err;
         const bool ok = apps::Launcher::launch(app_id, args, env, &pid, &err);
         nlohmann::json r = {{"ok", ok}, {"pid", static_cast<std::uint64_t>(pid)}};
+        // What this launch is, for anything that has to recognise its
+        // windows later. The caller is spared the naming convention.
+        if (ok && pid != 0) {
+            r["job"] = apps::LaunchGroup::job_name(pid);
+        }
         if (!ok && !err.empty()) {
             r["error"] = err;
         }
@@ -44,6 +50,7 @@ struct LaunchHandler : RpcHandler {
         const auto err = reply.value("error", std::string{});
         return std::string{"ok="} + (reply.value("ok", false) ? "true" : "false")
                + " pid=" + std::to_string(reply.value("pid", std::uint64_t{0}))
+               + " job=" + reply.value("job", std::string{})
                + (err.empty() ? "" : " err=" + err);
     }
 };
