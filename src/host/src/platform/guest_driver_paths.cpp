@@ -11,7 +11,7 @@ namespace {
 // Same shape as AgentExePath::locate: an override for developers, else
 // the build tree relative to the manager binary.
 [[nodiscard]] QString locate(const char* env_var, const QString& build_tree_relative) {
-    const QString from_env = qEnvironmentVariable(env_var);
+    QString from_env = qEnvironmentVariable(env_var);
     if (!from_env.isEmpty() && QFile::exists(from_env)) {
         return from_env;
     }

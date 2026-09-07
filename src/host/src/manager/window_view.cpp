@@ -51,7 +51,7 @@ bool WindowView::is_mirrored(std::uint64_t hwnd) {
 }
 
 WindowView::WindowView(link::AgentRpcClient& rpc, std::uint64_t hwnd,
-                       QString window_title, WindowView* relative_to,
+                       const QString& window_title, WindowView* relative_to,
                        QPoint rel_guest_px)
     : QWidget(nullptr), rpc_(rpc), hwnd_(hwnd), input_(rpc, hwnd),
       geometry_([this](int w, int h) { send_resize(w, h); }, this),

@@ -47,7 +47,7 @@ public:
     // owner. When set, this view is made transient to it and placed at
     // ``rel_guest_px`` — the guest-pixel offset of this window's client
     // origin from the owner's — so popups land where the app put them.
-    WindowView(link::AgentRpcClient& rpc, std::uint64_t hwnd, QString window_title,
+    WindowView(link::AgentRpcClient& rpc, std::uint64_t hwnd, const QString& window_title,
                WindowView* relative_to = nullptr, QPoint rel_guest_px = {});
     ~WindowView() override;
 

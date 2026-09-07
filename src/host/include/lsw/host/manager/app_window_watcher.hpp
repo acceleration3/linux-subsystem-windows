@@ -60,7 +60,7 @@ public:
     // "notepad.exe"), used for the alias/packaged fallback match
     // described above. May be empty (PID-only matching then).
     AppWindowWatcher(link::AgentRpcClient& rpc, link::GuestWindowModel& windows,
-                     quint32 pid, QString exe_basename, QObject* parent = nullptr);
+                     quint32 pid, const QString& exe_basename, QObject* parent = nullptr);
 
     void start();
     void stop();
@@ -88,7 +88,7 @@ private:
     link::AgentRpcClient& rpc_;
     link::GuestWindowModel& windows_;
     quint32 pid_;
-    QString exe_basename_;  // lowercased; empty = PID-only matching
+    const QString& exe_basename_;  // lowercased; empty = PID-only matching
     bool subscribed_ = false;
 
     // Tells the AGENT to emit UIA lifecycle events for our pid. The

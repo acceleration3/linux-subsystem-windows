@@ -148,7 +148,7 @@ void Monitor::kick_agent_poll(const QUuid& uuid) {
     if (it == agent_poll_in_flight_.constEnd()) {
         return;
     }
-    auto in_flight = it.value();
+    const auto& in_flight = it.value();
     bool expected = false;
     if (!in_flight->compare_exchange_strong(expected, true)) {
         return;  // previous poll still pending — skip this tick

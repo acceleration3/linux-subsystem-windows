@@ -68,7 +68,7 @@ QString RenderServer::region_name(const QUuid& uuid) {
 }
 
 QString RenderServer::executable_path() {
-    const QString from_env = qEnvironmentVariable("LSW_RENDER_SERVER");
+    QString from_env = qEnvironmentVariable("LSW_RENDER_SERVER");
     if (!from_env.isEmpty() && QFile::exists(from_env)) {
         return from_env;
     }
