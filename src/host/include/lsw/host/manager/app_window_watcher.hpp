@@ -104,6 +104,10 @@ private:
     QSet<quint64> baseline_hwnds_;
     bool baseline_captured_ = false;
 
+    // HWNDs another watcher already mirrors, so the refusal is logged
+    // once rather than at the enumeration rate.
+    QSet<quint64> refused_;
+
     // Once the exe-name fallback first identifies this launch's real
     // window, we record its owning PID and from then on match ONLY
     // that PID — exactly like a normal Win32 launch. Without this lock

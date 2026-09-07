@@ -98,9 +98,24 @@ protected:
     bool focusNextPrevChild(bool) override { return false; }
 
 private Q_SLOTS:
-    void on_frame(std::uint64_t hwnd, QImage image);
+    void on_frame(std::uint64_t hwnd, QImage image, QRect visible);
     void on_window_gone(std::uint64_t hwnd);
     void flush_move();
+
+private:
+public:
+    // Is some mirror already showing this guest window?
+    //
+    // One guest window, one mirror — enforced here rather than per
+    // watcher, because each watcher keeps its own view map and the
+    // duplicates come from having TWO watchers matching one window. A
+    // watcher whose launch never produced a window of its own stays
+    // unlocked, keeps adopting by executable name, and so adopts the
+    // NEXT launch's window alongside the watcher that launched it. The
+    // claim is what stops the second mirror; whichever watcher gets
+    // there first owns the window, and the other treats it as none of
+    // its business.
+    [[nodiscard]] static bool is_mirrored(std::uint64_t hwnd);
 
 private:
     [[nodiscard]] bool is_popup() const { return !owner_view_.isNull(); }
@@ -117,6 +132,7 @@ private:
     void configure_as_popup(WindowView* owner, QPoint rel_guest_px);
     void configure_as_main_window();
     void apply_props(const GuestWindowProps& props);
+
 
     // A left-press that lands on caption chrome drives the HOST window,
     // not the guest — otherwise dragging the captured title bar moves

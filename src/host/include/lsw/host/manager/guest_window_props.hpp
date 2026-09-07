@@ -10,6 +10,7 @@ namespace lsw::host::manager {
 // appears.
 struct GuestWindowProps {
     bool valid = false;
+    // The captured frame's size — the whole window as WGC delivers it.
     int width = 800;
     int height = 600;
     bool resizable = true;

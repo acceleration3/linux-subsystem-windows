@@ -1,6 +1,8 @@
 #pragma once
 
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace lsw::agent::apps {
 
@@ -14,6 +16,9 @@ namespace lsw::agent::apps {
 // service; that's gone.
 class Launcher {
 public:
+    // One ``NAME=value`` override for the child's environment.
+    using EnvVar = std::pair<std::string, std::string>;
+
     // ``app_id`` may be a .exe or a .lnk path. .lnk targets are
     // resolved via IShellLink and ``%ENVVAR%`` references are expanded
     // before launching. The spawned PID is returned via ``pid_out``
@@ -21,7 +26,22 @@ public:
     // launch instance. On failure, ``error_out`` (if non-null) gets
     // a short diagnostic identifying which step failed; the same
     // line is also appended to ``C:\ProgramData\LSW\agent.log``.
+    //
+    // ``args`` is appended to the command line, after any a .lnk
+    // carries of its own.
+    //
+    // ``env`` overrides variables for this child only. The child
+    // otherwise inherits the agent's environment, so an override is
+    // exactly that — a name replaced, not a fresh environment. This
+    // exists because some applications are configured only through
+    // their environment (Mesa's ``GALLIUM_DRIVER`` picks the OpenGL
+    // backend, for instance) and the alternatives are all worse: a
+    // machine-wide variable reaches every process and needs a logon to
+    // take effect, and a batch wrapper hides the real executable from
+    // the launch tracking.
     [[nodiscard]] static bool launch(const std::string& app_id,
+                                       const std::string& args = {},
+                                       const std::vector<EnvVar>& env = {},
                                        unsigned long* pid_out = nullptr,
                                        std::string* error_out = nullptr);
 };

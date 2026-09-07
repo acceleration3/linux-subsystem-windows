@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "lsw/agent/win/discovered_window.hpp"
@@ -10,6 +11,21 @@ namespace lsw::agent::win {
 
 class Window {
 public:
+    // The on-screen part of a window's frame, in frame coordinates —
+    // what enumeration and ``query_props`` report as ``visible_*``. The
+    // whole frame, except for a maximized window, whose frame overhangs
+    // the monitor with nothing painted in the overhang.
+    struct VisibleRect {
+        bool valid = false;
+        int x = 0, y = 0;
+        int w = 0, h = 0;
+    };
+    [[nodiscard]] static VisibleRect visible_rect(std::uintptr_t hwnd);
+
+    // The frame's size — what the capture texture is. {0,0} if the hwnd
+    // is not a window.
+    [[nodiscard]] static std::pair<int, int> frame_size(std::uintptr_t hwnd);
+
     // Enumerate all top-level visible windows that have a non-empty
     // title and aren't tool windows / our own agent. Per-process exe
     // path comes from QueryFullProcessImageNameW.
@@ -30,8 +46,8 @@ public:
     // Qt-default rectangle during initial show layout.
     struct WindowProps {
         bool valid = false;
-        int x = 0, y = 0;          // EFB top-left (screen)
-        int w = 0, h = 0;          // EFB size (current window size)
+        int x = 0, y = 0;          // frame top-left (screen)
+        int w = 0, h = 0;          // frame size (current window size)
         bool resizable = false;     // WS_THICKFRAME
         bool minimizable = false;   // WS_MINIMIZEBOX
         bool maximizable = false;   // WS_MAXIMIZEBOX
@@ -56,15 +72,15 @@ public:
     // isn't coming through. Temporary.
     [[nodiscard]] static std::string capture_debug_json(std::uintptr_t hwnd);
 
-    // Resize the window so its CLIENT area becomes exactly
-    // ``client_w`` x ``client_h`` pixels (the host mirror shows the
-    // client area, so the host drives this to keep the mirror 1:1).
-    // The outer window rect is derived from the client size via
-    // ``AdjustWindowRectEx`` against the window's current style; the
-    // top-left position is left unchanged. Returns ``false`` if
-    // ``hwnd`` isn't a valid window or the dimensions are non-positive.
-    [[nodiscard]] static bool resize_client(std::uintptr_t hwnd, int client_w,
-                                            int client_h);
+    // Resize the window so its FRAME — the rectangle the host captures
+    // and mirrors — becomes exactly ``frame_w`` x ``frame_h`` pixels.
+    // The window rect set underneath is bigger by the invisible resize
+    // border, so that the visible result is the size that was asked
+    // for; the frame is re-centred on the monitor's work area. Returns
+    // ``false`` if ``hwnd`` isn't a valid window or the dimensions are
+    // non-positive.
+    [[nodiscard]] static bool resize_client(std::uintptr_t hwnd, int frame_w,
+                                            int frame_h);
 
     // Posts ``WM_CLOSE`` to the window — the standard "user clicked
     // the X" semantics. The app gets a chance to prompt for unsaved

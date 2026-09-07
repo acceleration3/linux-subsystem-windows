@@ -162,7 +162,13 @@ public:
     [[nodiscard]] bool prefer_shmem_rpc() const noexcept { return prefer_shmem_rpc_; }
 
 Q_SIGNALS:
-    void frame_received(std::uint64_t hwnd, QImage image);
+    // ``visible`` is the part of THIS image that is on the guest's
+    // screen: the whole thing for an ordinary window, less the overhang
+    // for a maximized one. It arrives with the image because it came out
+    // of the same seqlocked slot — pairing a frame with a rectangle from
+    // anywhere else means pairing it, sooner or later, with a rectangle
+    // measured for a different frame.
+    void frame_received(std::uint64_t hwnd, QImage image, QRect visible);
     void window_gone(std::uint64_t hwnd);
 
 private:

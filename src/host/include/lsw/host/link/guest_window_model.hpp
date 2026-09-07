@@ -24,7 +24,7 @@ struct GuestWindow {
     quint32 root_pid = 0;
     QString title;
     QString exe_path;
-    int screen_x = 0;  // client-area origin in the guest's screen space
+    int screen_x = 0;  // frame origin in the guest's screen space
     int screen_y = 0;
     // Show state as the guest OS reports it. A mirror follows these
     // rather than deciding for itself: the user's click on minimize

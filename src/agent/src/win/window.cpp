@@ -21,6 +21,53 @@ namespace {
 
 constexpr UINT kPwRenderFullContent = 0x00000002U;  // PW_RENDERFULLCONTENT (Win8.1+)
 
+// The window's frame rect: the DWM extended frame bounds (the visible
+// window, drop shadow excluded), falling back to GetWindowRect.
+//
+// This one rectangle is the whole coordinate system. The WGC capture
+// texture IS this rect — measured, not assumed: a restored Notepad
+// captures 667x389 against a 667x389 frame, a maximized one 1280x754
+// against 1280x754, a maximized Photoshop 1296x768 against 1296x768,
+// while GetWindowRect disagrees with all three. So enumeration, props,
+// input injection and capture all measure from here and need no
+// conversion between them.
+RECT frame_rect_of(HWND hwnd) {
+    RECT fr{};
+    if (FAILED(::DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &fr,
+                                       sizeof(fr)))
+        || fr.right - fr.left <= 0 || fr.bottom - fr.top <= 0) {
+        ::GetWindowRect(hwnd, &fr);
+    }
+    return fr;
+}
+
+// Which part of ``frame`` is on screen, relative to the frame's own
+// top-left. See DiscoveredWindow::visible_x.
+RECT visible_within(HWND hwnd, const RECT& frame) {
+    RECT whole{0, 0, frame.right - frame.left, frame.bottom - frame.top};
+    if (::IsZoomed(hwnd) == FALSE) {
+        // A window the user dragged half off-screen is still rendered in
+        // full by DWM, and the mirror is happy to show all of it. Only a
+        // maximized window has a frame that reaches somewhere nothing is
+        // ever painted.
+        return whole;
+    }
+    HMONITOR mon = ::MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO mi{};
+    mi.cbSize = sizeof(mi);
+    if (mon == nullptr || ::GetMonitorInfoW(mon, &mi) == 0) {
+        return whole;
+    }
+    RECT on_screen{};
+    if (::IntersectRect(&on_screen, &frame, &mi.rcWork) == FALSE
+        || on_screen.right - on_screen.left <= 0
+        || on_screen.bottom - on_screen.top <= 0) {
+        return whole;
+    }
+    return {on_screen.left - frame.left, on_screen.top - frame.top,
+            on_screen.right - frame.left, on_screen.bottom - frame.top};
+}
+
 
 std::string utf16_to_utf8(const std::wstring& w) {
     if (w.empty()) {
@@ -102,16 +149,9 @@ BOOL CALLBACK enum_proc(HWND hwnd, LPARAM lparam) {
     // FULL-WINDOW model: the mirror shows the whole window (title bar,
     // menu bar, borders) — not just the client area — so classic
     // menu-bar / system menus, which open in the NON-client region,
-    // line up. The reference rect is the DWM extended frame bounds
-    // (the visible window; excludes only the external drop shadow),
-    // falling back to GetWindowRect. Origin + size both come from it
-    // so enumeration, capture, input and placement all agree.
-    RECT fr{};
-    if (FAILED(::DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &fr,
-                                       sizeof(fr)))
-        || fr.right - fr.left <= 0 || fr.bottom - fr.top <= 0) {
-        ::GetWindowRect(hwnd, &fr);
-    }
+    // line up. Origin + size both come from the frame rect, so
+    // enumeration, capture, input and placement all agree.
+    const RECT fr = frame_rect_of(hwnd);
     if (fr.right - fr.left <= 0 || fr.bottom - fr.top <= 0) {
         return TRUE;  // zero-area placeholder/ghost top-level
     }
@@ -213,6 +253,25 @@ bool Window::unfocus_window(std::uintptr_t hwnd_raw) {
     if (::GetForegroundWindow() != hwnd) {
         return true;
     }
+    // Not while the window has something open that a foreground change
+    // cancels. A menu or a dropdown belongs to this window's foreground
+    // thread, so handing the foreground to the shell closes it — and the
+    // host asks for exactly that whenever its mirror loses activation,
+    // which is what clicking the dropdown's own mirror does.
+    {
+        GUITHREADINFO info{};
+        info.cbSize = sizeof(info);
+        constexpr DWORD kMenuFlags =
+            GUI_INMENUMODE | GUI_POPUPMENUMODE | GUI_SYSTEMMENUMODE;
+        if (::GetGUIThreadInfo(0, &info) != FALSE
+            && ((info.flags & kMenuFlags) != 0 || info.hwndMenuOwner != nullptr
+                || info.hwndCapture != nullptr)) {
+            LSW_AGENT_INFO("unfocus_window: refused for hwnd="
+                           + std::to_string(hwnd_raw)
+                           + " — a menu or dropdown is open");
+            return true;
+        }
+    }
     HWND shell = ::GetShellWindow();
     if (shell == nullptr) {
         return false;
@@ -292,18 +351,22 @@ bool Window::close_window(std::uintptr_t hwnd_raw) {
     return ok;
 }
 
-bool Window::resize_client(std::uintptr_t hwnd_raw, int client_w,
-                                   int client_h) {
+bool Window::resize_client(std::uintptr_t hwnd_raw, int frame_w, int frame_h) {
     auto* hwnd = reinterpret_cast<HWND>(hwnd_raw);
-    if (hwnd == nullptr || ::IsWindow(hwnd) == FALSE || client_w <= 0
-        || client_h <= 0) {
+    if (hwnd == nullptr || ::IsWindow(hwnd) == FALSE || frame_w <= 0
+        || frame_h <= 0) {
         return false;
     }
-    // FULL-WINDOW model: the host widget IS the whole window, so the
-    // requested size is the window size — set it directly (no
-    // client→window inflation). The captured DWM extended-frame size
-    // differs from GetWindowRect by only the invisible border, which
-    // is immaterial here.
+    // The size asked for is a FRAME size — the host speaks in frame
+    // coordinates throughout, because the frame is what it captures and
+    // shows. SetWindowPos takes a window rect, which is bigger by the
+    // invisible resize border, so the two must be converted between.
+    //
+    // Setting the window rect to the requested size directly was a
+    // feedback loop with a fixed point at the wrong place: ask for 798
+    // wide, get a 798-wide window rect whose frame is 788, so the mirror
+    // was left permanently 10 px wider than the picture in it — a black
+    // bar down each side of every window the user had ever resized.
     //
     // Clamp to the work area of the monitor the window currently sits
     // on (so it never grows past the guest's desktop / under the
@@ -322,17 +385,34 @@ bool Window::resize_client(std::uintptr_t hwnd_raw, int client_w,
     }
     const int work_w = work.right - work.left;
     const int work_h = work.bottom - work.top;
-    if (client_w > work_w) client_w = work_w;
-    if (client_h > work_h) client_h = work_h;
-    const int x = work.left + (work_w - client_w) / 2;
-    const int y = work.top + (work_h - client_h) / 2;
-    const BOOL ok = ::SetWindowPos(hwnd, nullptr, x, y, client_w, client_h,
-                                   SWP_NOZORDER | SWP_NOACTIVATE);
+    if (frame_w > work_w) frame_w = work_w;
+    if (frame_h > work_h) frame_h = work_h;
+
+    // How much bigger the window rect is than the frame, per edge.
+    RECT wr{};
+    ::GetWindowRect(hwnd, &wr);
+    const RECT fr = frame_rect_of(hwnd);
+    int pad_left = fr.left - wr.left;
+    int pad_top = fr.top - wr.top;
+    int pad_w = (wr.right - wr.left) - (fr.right - fr.left);
+    int pad_h = (wr.bottom - wr.top) - (fr.bottom - fr.top);
+    if (pad_left < 0 || pad_top < 0 || pad_w < 0 || pad_h < 0) {
+        pad_left = pad_top = pad_w = pad_h = 0;
+    }
+
+    // Centre the FRAME on the work area — that is the rectangle the user
+    // sees, in the guest as much as in the mirror. The border hangs off
+    // it, exactly as it does for a window they placed themselves.
+    const int x = work.left + ((work_w - frame_w) / 2) - pad_left;
+    const int y = work.top + ((work_h - frame_h) / 2) - pad_top;
+    const BOOL ok = ::SetWindowPos(hwnd, nullptr, x, y, frame_w + pad_w,
+                                   frame_h + pad_h, SWP_NOZORDER | SWP_NOACTIVATE);
     LSW_AGENT_INFO(std::string{"window_capture: resize hwnd="}
-                   + std::to_string(hwnd_raw) + " -> "
-                   + std::to_string(client_w) + "x" + std::to_string(client_h)
-                   + " @ " + std::to_string(x) + "," + std::to_string(y)
-                   + (ok ? " ok" : " FAILED"));
+                   + std::to_string(hwnd_raw) + " -> frame "
+                   + std::to_string(frame_w) + "x" + std::to_string(frame_h)
+                   + " (window " + std::to_string(frame_w + pad_w) + "x"
+                   + std::to_string(frame_h + pad_h) + ") @ " + std::to_string(x)
+                   + "," + std::to_string(y) + (ok ? " ok" : " FAILED"));
     return ok != FALSE;
 }
 
@@ -342,11 +422,7 @@ Window::WindowProps Window::query_props(std::uintptr_t hwnd_raw) {
     if (hwnd == nullptr || ::IsWindow(hwnd) == FALSE) {
         return p;
     }
-    RECT fr{};
-    if (FAILED(::DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &fr,
-                                       sizeof(fr)))) {
-        ::GetWindowRect(hwnd, &fr);
-    }
+    const RECT fr = frame_rect_of(hwnd);
     p.x = fr.left;
     p.y = fr.top;
     p.w = fr.right - fr.left;
@@ -418,6 +494,29 @@ Window::WindowProps Window::query_props(std::uintptr_t hwnd_raw) {
 
     p.valid = true;
     return p;
+}
+
+Window::VisibleRect Window::visible_rect(std::uintptr_t hwnd_raw) {
+    auto* hwnd = reinterpret_cast<HWND>(hwnd_raw);
+    if (hwnd == nullptr || ::IsWindow(hwnd) == FALSE) {
+        return {};
+    }
+    const RECT vis = visible_within(hwnd, frame_rect_of(hwnd));
+    if (vis.right - vis.left <= 0 || vis.bottom - vis.top <= 0) {
+        return {};
+    }
+    return {true, vis.left, vis.top, static_cast<int>(vis.right - vis.left),
+            static_cast<int>(vis.bottom - vis.top)};
+}
+
+std::pair<int, int> Window::frame_size(std::uintptr_t hwnd_raw) {
+    auto* hwnd = reinterpret_cast<HWND>(hwnd_raw);
+    if (hwnd == nullptr || ::IsWindow(hwnd) == FALSE) {
+        return {0, 0};
+    }
+    const RECT fr = frame_rect_of(hwnd);
+    return {static_cast<int>(fr.right - fr.left),
+            static_cast<int>(fr.bottom - fr.top)};
 }
 
 std::vector<DiscoveredWindow> Window::enumerate() {

@@ -162,7 +162,8 @@ void AgentRpcClient::on_shmem_slot_ready(int slot_index) {
     }
     quint64 hwnd = 0;
     QImage img;
-    if (!shmem_region_->read_slot_frame(slot_index, &hwnd, &img)) {
+    QRect visible;
+    if (!shmem_region_->read_slot_frame(slot_index, &hwnd, &img, &visible)) {
         // Empty slot / race / corrupt. The agent will doorbell again on
         // the next frame, so one failure is not interesting — but a
         // steady stream of them is a mirror that never paints, and
@@ -176,7 +177,7 @@ void AgentRpcClient::on_shmem_slot_ready(int slot_index) {
         return;
     }
     LSW_DEBUG("shmem: slot {} -> hwnd={} {}x{}", slot_index, hwnd, img.width(), img.height());
-    Q_EMIT frame_received(hwnd, std::move(img));
+    Q_EMIT frame_received(hwnd, std::move(img), visible);
 }
 
 void AgentRpcClient::on_shmem_channel_ready(unsigned kind) {

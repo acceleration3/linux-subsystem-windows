@@ -1,5 +1,6 @@
 #include "lsw/host/manager/app_window_watcher.hpp"
 
+#include "lsw/base/log.hpp"
 #include "lsw/host/link/agent_rpc_client.hpp"
 #include "lsw/host/manager/window_view.hpp"
 
@@ -202,6 +203,20 @@ void AppWindowWatcher::on_windows(const QList<link::GuestWindow>& wins) {
         if (views_.contains(hwnd)) {
             continue;
         }
+        if (WindowView::is_mirrored(hwnd)) {
+            // Another watcher got here first. Two watchers can match one
+            // window — a launch that never produced a window of its own
+            // stays unlocked and goes on adopting by executable name,
+            // including the next launch's window — and each keeps its
+            // own view map, so both would put a mirror on screen.
+            if (!refused_.contains(hwnd)) {
+                refused_.insert(hwnd);
+                LSW_INFO("watcher pid={}: hwnd {:#x} already has a mirror; "
+                         "leaving it to the watcher that claimed it",
+                         pid_, hwnd);
+            }
+            continue;
+        }
         const GuestWindow gw = by_hwnd.value(hwnd);
         // If this window is owned by another window we're already
         // mirroring (e.g. Notepad's Find / Settings popup), parent the
@@ -279,7 +294,19 @@ void AppWindowWatcher::on_windows(const QList<link::GuestWindow>& wins) {
 
     // Idle shutdown: no live mirrors AND no matching guest windows for
     // kIdleQuitMs → self-destruct.
-    if (!matches.isEmpty() || !views_.isEmpty()) {
+    //
+    // A window some other watcher mirrors does not count as matching.
+    // Otherwise the watcher that lost the claim keeps seeing "its"
+    // window forever, never idles out, and holds the enumeration poll
+    // open for a window it does not own.
+    bool matches_own = false;
+    for (auto it = matches.constBegin(); it != matches.constEnd(); ++it) {
+        if (views_.contains(it.key()) || !WindowView::is_mirrored(it.key())) {
+            matches_own = true;
+            break;
+        }
+    }
+    if (matches_own || !views_.isEmpty()) {
         last_seen_unix_ = QDateTime::currentMSecsSinceEpoch();
     } else if (QDateTime::currentMSecsSinceEpoch() - last_seen_unix_ > kIdleQuitMs) {
         stop();
