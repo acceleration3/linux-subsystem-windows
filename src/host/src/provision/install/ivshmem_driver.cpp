@@ -197,10 +197,12 @@ QString IvshmemDriver::locate(const QString& cache_dir) {
         }
     }
 
-    LSW_WARN("ivshmem driver not found — the guest will boot WITHOUT the shared-memory "
-             "device, so window frames and the shmem channel are unavailable. Put an "
-             "unpacked driver in {} or set LSW_IVSHMEM_DRIVER_DIR.",
-             cached.toStdString());
+    // No warning here. This is a query, and its commonest caller asks
+    // it before downloading anything — so warning on an empty answer
+    // announced a broken guest five seconds before the fetcher fixed
+    // it. Whether an empty answer is a problem is the caller's to know:
+    // the fetcher goes and gets one, and the payload stager, which
+    // cannot, says so.
     return {};
 }
 
