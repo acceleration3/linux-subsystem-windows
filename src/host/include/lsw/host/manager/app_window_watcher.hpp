@@ -59,8 +59,17 @@ public:
     // ``exe_basename`` is the launched executable's file name (e.g.
     // "notepad.exe"), used for the alias/packaged fallback match
     // described above. May be empty (PID-only matching then).
+    //
+    // ``desktop_id`` is the launched application's launcher-entry id
+    // (``DesktopLauncher::entry_id``). Every mirror this watcher spawns
+    // presents it to the host's task manager, so one application's
+    // windows group together under that application's own name and icon
+    // instead of under the manager. Empty for a launch with no configured
+    // app behind it; each mirror then falls back to an identity of its
+    // own, which still keeps it out of the manager's group.
     AppWindowWatcher(link::AgentRpcClient& rpc, link::GuestWindowModel& windows,
-                     quint32 pid, const QString& exe_basename, QObject* parent = nullptr);
+                     quint32 pid, const QString& exe_basename,
+                     const QString& desktop_id = {}, QObject* parent = nullptr);
 
     void start();
     void stop();
@@ -88,7 +97,13 @@ private:
     link::AgentRpcClient& rpc_;
     link::GuestWindowModel& windows_;
     quint32 pid_;
-    const QString& exe_basename_;  // lowercased; empty = PID-only matching
+    // By value, both of them. ``exe_basename_`` used to be a
+    // ``const QString&`` bound to ``exe_basename.toLower()`` — a
+    // temporary, and lifetime extension does not reach a reference
+    // member past the end of the constructor, so every match against it
+    // afterwards read freed memory.
+    QString exe_basename_;  // lowercased; empty = PID-only matching
+    QString desktop_id_;    // the launched app's launcher-entry id; may be empty
     bool subscribed_ = false;
 
     // Tells the AGENT to emit UIA lifecycle events for our pid. The

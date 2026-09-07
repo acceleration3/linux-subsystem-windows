@@ -29,6 +29,10 @@ namespace lsw::host::manager {
 // App startup to scrub anything left from a previous crashed run.
 class TaskbarEntry {
 public:
+    // The identity a mirror with no application behind it maps under,
+    // and the basename of the entry ``register_window`` writes for it.
+    [[nodiscard]] static QString entry_id(std::uint64_t hwnd);
+
     // Writes both files. If ``icon_png`` is empty, the .desktop is
     // still emitted (with no ``Icon=`` line) so the title appears.
     static void register_window(std::uint64_t hwnd, const QString& title,

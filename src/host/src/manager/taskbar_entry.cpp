@@ -13,6 +13,14 @@ namespace {
 
 constexpr const char* kEntryPrefix = "lsw-window-";
 
+}  // namespace
+
+QString TaskbarEntry::entry_id(std::uint64_t hwnd) {
+    return QString::fromUtf8(kEntryPrefix) + QString::number(hwnd);
+}
+
+namespace {
+
 QString applications_dir() {
     const QString share =
         QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
@@ -27,7 +35,7 @@ QString icons_dir() {
 
 QString desktop_path_for(std::uint64_t hwnd) {
     return QDir(applications_dir())
-        .filePath(QStringLiteral("%1%2.desktop").arg(kEntryPrefix).arg(hwnd));
+        .filePath(TaskbarEntry::entry_id(hwnd) + QStringLiteral(".desktop"));
 }
 
 QString icon_path_for(std::uint64_t hwnd) {

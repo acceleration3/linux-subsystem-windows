@@ -2,6 +2,7 @@
 
 #include "lsw/base/log.hpp"
 #include "lsw/host/apps/app_config_store.hpp"
+#include "lsw/host/apps/desktop_launcher.hpp"
 #include "lsw/host/apps/launcher.hpp"
 #include "lsw/host/config/vm_state.hpp"
 #include "lsw/host/manager/app_window_watcher.hpp"
@@ -89,17 +90,24 @@ void GuestAppLaunchController::fire_launch(const QString& guest_path) {
     // to a path before we got here.
     QString args;
     QString env;
+    // And the identity its windows will present to the task manager.
+    // Taken from the same config as the arguments, in the same pass:
+    // this path was reached from an id that was already resolved to a
+    // path, so the config is the only thing that still knows which
+    // application this is.
+    QString desktop_id;
     for (const auto& cfg : services_.app_configs().configs()) {
         if (cfg.path == guest_path) {
             args = cfg.cmdline;
             env = cfg.env;
+            desktop_id = apps::DesktopLauncher::entry_id(cfg.id);
             break;
         }
     }
 
     auto* launcher = new apps::Launcher(services_.rpc(), this);
     connect(launcher, &apps::Launcher::launched, this,
-            [this, launcher](const QString& reported_path, quint32 pid) {
+            [this, launcher, desktop_id](const QString& reported_path, quint32 pid) {
         launcher->deleteLater();
         if (pid == 0) {
             LSW_WARN("launch_app: agent returned pid=0 — old agent?");
@@ -109,7 +117,8 @@ void GuestAppLaunchController::fire_launch(const QString& guest_path) {
         // app inside the guest but no host-side mirror appears: the
         // watcher is what turns up WindowViews as the PID's windows show.
         auto* w = new AppWindowWatcher(services_.rpc(), services_.windows(), pid,
-                                       exe_basename_of(reported_path), this);
+                                       exe_basename_of(reported_path),
+                                       desktop_id, this);
         // Self-destructs when its idle timer expires (no live mirrors AND
         // no matching guest windows).
         connect(w, &AppWindowWatcher::exhausted, w, &QObject::deleteLater);

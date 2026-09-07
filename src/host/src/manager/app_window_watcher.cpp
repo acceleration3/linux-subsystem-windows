@@ -66,9 +66,9 @@ QHash<quint64, QString> select_matches(const QList<GuestWindow>& wins,
 AppWindowWatcher::AppWindowWatcher(link::AgentRpcClient& rpc,
                                      link::GuestWindowModel& windows, quint32 pid,
                                      const QString& exe_basename,
-                                     QObject* parent)
+                                     const QString& desktop_id, QObject* parent)
     : QObject(parent), rpc_(rpc), windows_(windows), pid_(pid),
-      exe_basename_(exe_basename.toLower()) {
+      exe_basename_(exe_basename.toLower()), desktop_id_(desktop_id) {
     last_seen_unix_ = QDateTime::currentMSecsSinceEpoch();
 }
 
@@ -323,7 +323,7 @@ void AppWindowWatcher::on_windows(const QList<link::GuestWindow>& wins) {
 void AppWindowWatcher::spawn_view(std::uint64_t hwnd, const QString& title,
                                    WindowView* relative_to,
                                    QPoint rel_guest_px) {
-    auto* view = new WindowView(rpc_, hwnd, title, relative_to, rel_guest_px);
+    auto* view = new WindowView(rpc_, hwnd, title, desktop_id_, relative_to, rel_guest_px);
     // Popups show immediately (frameless, instant placement); main
     // mirrors show themselves once window_props has been fetched and
     // applied, so we don't open at a Qt-default size and shrink the

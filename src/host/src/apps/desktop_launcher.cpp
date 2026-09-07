@@ -39,9 +39,7 @@ QString menus_merged_dir()     { return QDir(xdg_config_home()).filePath("menus/
 // contain characters XDG dislikes; rehash for the launcher filename
 // so we're robust to whatever the source produced.
 QString entry_basename(const AppConfig& cfg) {
-    const QByteArray digest = QCryptographicHash::hash(
-        cfg.id.toUtf8(), QCryptographicHash::Sha1).toHex().left(16);
-    return QString::fromUtf8(kEntryPrefix) + QString::fromUtf8(digest);
+    return DesktopLauncher::entry_id(cfg.id);
 }
 
 QString desktop_path(const AppConfig& cfg) {
@@ -179,6 +177,12 @@ void ensure_windows_category() {
 }
 
 }  // namespace
+
+QString DesktopLauncher::entry_id(const QString& app_config_id) {
+    const QByteArray digest = QCryptographicHash::hash(
+        app_config_id.toUtf8(), QCryptographicHash::Sha1).toHex().left(16);
+    return QString::fromUtf8(kEntryPrefix) + QString::fromUtf8(digest);
+}
 
 bool DesktopLauncher::install(const AppConfig& cfg) {
     if (cfg.id.isEmpty() || cfg.path.isEmpty()) {

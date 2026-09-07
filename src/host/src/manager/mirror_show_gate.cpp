@@ -6,8 +6,9 @@
 
 namespace lsw::host::manager {
 
-MirrorShowGate::MirrorShowGate(std::uint64_t hwnd, std::function<void()> show)
-    : hwnd_(hwnd), show_(std::move(show)) {}
+MirrorShowGate::MirrorShowGate(std::uint64_t hwnd, QString desktop_id,
+                               std::function<void()> show)
+    : hwnd_(hwnd), desktop_id_(std::move(desktop_id)), show_(std::move(show)) {}
 
 void MirrorShowGate::props_arrived(const QString& window_title) {
     props_done_ = true;
@@ -26,8 +27,11 @@ void MirrorShowGate::maybe_show(const QString& window_title) {
     }
     shown_ = true;
     // Desktop entry first — see the header for why the order is
-    // load-bearing.
-    TaskbarEntry::register_window(hwnd_, window_title, icon_png_);
+    // load-bearing. Nothing to write when the mirror maps under its
+    // application's launcher entry, which already describes it.
+    if (desktop_id_ == TaskbarEntry::entry_id(hwnd_)) {
+        TaskbarEntry::register_window(hwnd_, window_title, icon_png_);
+    }
     if (show_) {
         show_();
     }
