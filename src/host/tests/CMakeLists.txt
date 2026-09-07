@@ -63,3 +63,21 @@ target_compile_definitions(lsw_host_provision_ivshmem_driver_test PRIVATE QT_NO_
 add_test(NAME lsw_host_provision_ivshmem_driver_test
          COMMAND lsw_host_provision_ivshmem_driver_test)
 set_tests_properties(lsw_host_provision_ivshmem_driver_test PROPERTIES TIMEOUT 120)
+
+# The debloater against real Windows media. Opt-in: without
+# $LSW_TEST_WIM pointing at a writable install.wim copy it reports
+# skipped and passes, because CI has no Windows media and the questions
+# it answers — is the appx directory where we look, do the prefixes
+# match what Microsoft ships, do they catch a dependency — cannot be
+# answered by a fixture.
+add_executable(lsw_host_provision_debloat_wim_test debloat_wim_test.cpp)
+target_link_libraries(lsw_host_provision_debloat_wim_test
+    PRIVATE
+        lsw_host_provision
+        LSW::CompileOptions
+)
+target_compile_definitions(lsw_host_provision_debloat_wim_test PRIVATE QT_NO_KEYWORDS)
+add_test(NAME lsw_host_provision_debloat_wim_test
+         COMMAND lsw_host_provision_debloat_wim_test)
+# Rewriting seven gigabytes of WIM is not a sixty-second job.
+set_tests_properties(lsw_host_provision_debloat_wim_test PROPERTIES TIMEOUT 3600)

@@ -17,11 +17,14 @@ namespace lsw::host::provision::debloat {
 namespace {
 
 // Where Windows stages the payload of a provisioned application before
-// any user has logged in. Win11 uses InfusedApps; earlier builds and
-// some editions stage into WindowsApps, so both are searched and
-// neither being present is normal.
+// any user has logged in.
+//
+// One entry, and measured rather than assumed: a Windows 11 25H2 image
+// has this directory and has no /Windows/InfusedApps at all, which is
+// where an earlier version of this list looked first. A root that is
+// not there is skipped rather than failing, so adding one back costs
+// nothing if a future build moves them again.
 const QStringList kAppxRoots = {
-    QStringLiteral("/Windows/InfusedApps/Applications"),
     QStringLiteral("/Program Files/WindowsApps"),
 };
 
@@ -94,6 +97,48 @@ QStringList WimDebloater::find_appx_payloads(void* wim, int image_index,
         }
     }
     return matches;
+}
+
+bool WimDebloater::isolate_edition(const QString& src_path, int image_index,
+                                   const QString& dest_path, QString* error_out) {
+    WIMStruct* src = nullptr;
+    if (const int rc = wimlib_open_wim(src_path.toUtf8().constData(), 0, &src); rc != 0) {
+        if (error_out != nullptr) {
+            *error_out = QStringLiteral("cannot open %1: %2").arg(src_path, wim_error(rc));
+        }
+        return false;
+    }
+    WIMStruct* dest = nullptr;
+    // LZX rather than the media's XPRESS: this file is written once on
+    // a machine with cores to spare and then read by Setup, so the
+    // slower, tighter codec is paid for in the right direction.
+    if (const int rc = wimlib_create_new_wim(WIMLIB_COMPRESSION_TYPE_LZX, &dest); rc != 0) {
+        wimlib_free(src);
+        if (error_out != nullptr) {
+            *error_out = QStringLiteral("cannot create the output image: %1").arg(wim_error(rc));
+        }
+        return false;
+    }
+    if (const int rc = wimlib_export_image(src, image_index, dest, nullptr, nullptr, 0);
+        rc != 0) {
+        wimlib_free(dest);
+        wimlib_free(src);
+        if (error_out != nullptr) {
+            *error_out =
+                QStringLiteral("cannot export edition %1: %2").arg(image_index).arg(wim_error(rc));
+        }
+        return false;
+    }
+    const int rc = wimlib_write(dest, dest_path.toUtf8().constData(), 1, 0, 0);
+    wimlib_free(dest);
+    wimlib_free(src);
+    if (rc != 0) {
+        if (error_out != nullptr) {
+            *error_out = QStringLiteral("cannot write %1: %2").arg(dest_path, wim_error(rc));
+        }
+        return false;
+    }
+    return true;
 }
 
 bool WimDebloater::apply(const QString& wim_path, int image_index, const DebloatPlan& plan,

@@ -13,9 +13,11 @@ namespace {
 // do the runtime packages every other appx links against — VCLibs,
 // the .NET native framework, UI.Xaml — which are dependencies rather
 // than applications, and taking them out breaks whatever is left.
-// Notepad, Calculator, Photos, Terminal and the Snipping Tool stay too:
-// they are small, they are what a user reaches for inside the guest,
-// and removing them is how a debloat earns a bad name.
+// Notepad, Calculator, Photos and the Snipping Tool stay, and so do
+// SecHealthUI and the App Installer. The list below was checked against
+// a real Windows 11 25H2 image: every name in it is either present
+// there or present on another edition, and nothing in it is a prefix of
+// a package the rest depend on.
 const QStringList kConsumerApps = {
     "Microsoft.BingNews",
     "Microsoft.BingWeather",
@@ -28,18 +30,24 @@ const QStringList kConsumerApps = {
     "Microsoft.MicrosoftSolitaireCollection",
     "Microsoft.MicrosoftStickyNotes",
     "Microsoft.MixedReality.Portal",
+    "Microsoft.OutlookForWindows",
+    "Microsoft.Paint",
     "Microsoft.People",
     "Microsoft.PowerAutomateDesktop",
     "Microsoft.Todos",
     "Microsoft.WindowsAlarms",
+    "Microsoft.WindowsCamera",
     "Microsoft.WindowsFeedbackHub",
     "Microsoft.WindowsMaps",
     "Microsoft.WindowsSoundRecorder",
+    "Microsoft.WindowsTerminal",
     "Microsoft.Xbox",
     "Microsoft.YourPhone",
     "Microsoft.ZuneMusic",
     "Microsoft.ZuneVideo",
     "MicrosoftCorporationII.MicrosoftFamily",
+    "MicrosoftWindows.Client.WebExperience",
+    "MicrosoftWindows.CrossDevice",
     "MicrosoftCorporationII.QuickAssist",
     "MicrosoftTeams",
     "MSTeams",
