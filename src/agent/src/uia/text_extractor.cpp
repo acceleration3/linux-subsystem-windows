@@ -1,7 +1,7 @@
 #include "lsw/agent/uia/text_extractor.hpp"
 
 #include "lsw/agent/uia/bstr_text.hpp"
-#include "lsw/agent/uia/element_locator.hpp"
+#include "lsw/agent/uia/uia_window.hpp"
 
 // clang-format off
 #include <windows.h>
@@ -10,15 +10,14 @@
 
 namespace lsw::agent::uia {
 
-std::string TextExtractor::from_window(IUIAutomation* root, std::uintptr_t hwnd, int max_chars) {
-    IUIAutomationElement* element = ElementLocator::from_window(root, hwnd);
+std::string TextExtractor::from_window(const UiaWindow& window, int max_chars) {
+    IUIAutomationElement* element = window.element();
     if (element == nullptr) {
         return {};
     }
     IUIAutomationTextPattern* pattern = nullptr;
     element->GetCurrentPatternAs(UIA_TextPatternId, __uuidof(IUIAutomationTextPattern),
                                  reinterpret_cast<void**>(&pattern));
-    element->Release();
     if (pattern == nullptr) {
         return {};
     }

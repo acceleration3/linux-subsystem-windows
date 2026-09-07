@@ -1,7 +1,6 @@
 #include "lsw/agent/uia/element_invoker.hpp"
 
-#include "lsw/agent/uia/element_locator.hpp"
-#include "lsw/agent/util/text_encoding.hpp"
+#include "lsw/agent/uia/uia_window.hpp"
 
 // clang-format off
 #include <windows.h>
@@ -10,15 +9,8 @@
 
 namespace lsw::agent::uia {
 
-bool ElementInvoker::invoke(IUIAutomation* root, std::uintptr_t hwnd,
-                         const std::string& selector) {
-    IUIAutomationElement* window = ElementLocator::from_window(root, hwnd);
-    if (window == nullptr) {
-        return false;
-    }
-    IUIAutomationElement* target =
-        ElementLocator::by_selector(root, window, util::TextEncoding::to_wide(selector));
-    window->Release();
+bool ElementInvoker::invoke(const UiaWindow& window, const std::string& selector) {
+    IUIAutomationElement* target = window.find(selector);
     if (target == nullptr) {
         return false;
     }
