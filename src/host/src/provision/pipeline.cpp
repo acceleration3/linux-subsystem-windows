@@ -5,6 +5,7 @@
 #include "lsw/host/provision/install/post_install.hpp"
 #include "lsw/host/provision/iso/downloader.hpp"
 #include "lsw/host/provision/ivshmem_driver_fetcher.hpp"
+#include "lsw/host/provision/debloat_stager.hpp"
 #include "lsw/host/provision/payload_iso_stager.hpp"
 #include "lsw/host/provision/press_any_key_prompter.hpp"
 #include "lsw/host/provision/setup_stage_runner.hpp"
@@ -62,7 +63,7 @@ void Pipeline::start() {
         if (inputs_.iso_local_path.isEmpty()) {
             run_download();
         } else {
-            run_build_payload();  // Windows ISO already local
+            run_trim_image();  // Windows ISO already local
         }
     });
 }
@@ -126,7 +127,7 @@ void Pipeline::run_download() {
     connect(downloader_, &iso::Downloader::finished, this, [this](const QString& path) {
         inputs_.iso_local_path = path;
         Q_EMIT step_finished(Step::DownloadingIso);
-        run_build_payload();
+        run_trim_image();
     });
     connect(downloader_, &iso::Downloader::failed, this, [this](const QString& message) {
         emit_failed(Step::DownloadingIso, message);
@@ -135,6 +136,35 @@ void Pipeline::run_download() {
 }
 
 // ----- Fetch virtio drivers, then build the payload ISO --------------------
+
+// ----- Trim the Windows image, on the HOST ---------------------------------
+//
+// Before the payload ISO is built, because the trimmed install.wim is
+// one of the things the payload ISO carries. The Windows ISO is read
+// and never written: the answer file installs from the copy on the
+// payload, so the source stays byte-identical for the next VM.
+void Pipeline::run_trim_image() {
+    Q_EMIT step_started(Step::TrimmingImage, QStringLiteral("Trimming the Windows image..."));
+
+    debloat_stager_ = new DebloatStager(this);
+    connect(debloat_stager_, &DebloatStager::progress, this,
+            [this](const QString& detail, int percent) {
+        Q_EMIT step_progress(Step::TrimmingImage, percent / 100.0, detail);
+    });
+    connect(debloat_stager_, &DebloatStager::failed, this, [this](const QString& message) {
+        emit_failed(Step::TrimmingImage, message);
+    });
+    connect(debloat_stager_, &DebloatStager::finished, this, [this](const QString& iso_path) {
+        // Everything downstream boots what iso_local_path names, so the
+        // swap is the whole of the wiring. The source ISO is left alone
+        // and stays reusable for the next VM.
+        inputs_.iso_local_path = iso_path;
+        Q_EMIT step_finished(Step::TrimmingImage);
+        run_build_payload();
+    });
+    debloat_stager_->trim(inputs_.iso_local_path, services_.settings().isos_dir(),
+                          inputs_.image_index, inputs_.debloat);
+}
 
 void Pipeline::run_build_payload() {
     Q_EMIT step_started(Step::BuildingPayloadIso,

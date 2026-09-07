@@ -4,6 +4,7 @@
 #include "lsw/host/wizard/done_page.hpp"
 #include "lsw/host/wizard/download_page.hpp"
 #include "lsw/host/wizard/install_page.hpp"
+#include "lsw/host/wizard/debloat_page.hpp"
 #include "lsw/host/wizard/iso_choice_page.hpp"
 #include "lsw/host/wizard/license_page.hpp"
 #include "lsw/host/wizard/payload_page.hpp"
@@ -30,6 +31,7 @@ Wizard::Wizard(services::HostServices& services, QWidget* parent) : QWizard(pare
     setPage(Welcome, new WelcomePage);
     setPage(License, new LicensePage);
     setPage(IsoChoice, new IsoChoicePage(*this));
+    setPage(Debloat, new DebloatPage(*this));
     setPage(Download, new DownloadPage(*this));
     setPage(VmSize, new VmSizePage(*this));
     setPage(Payload, new PayloadPage(*this));
@@ -86,6 +88,7 @@ void Wizard::start_pipeline() {
     in.computer_name = state_.computer_name;
     in.sizing = state_.draft.sizing;
     in.image_index = state_.image_index;
+    in.debloat = state_.debloat;
     pipeline_->set_inputs(in);
     pipeline_->start();
 }

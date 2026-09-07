@@ -101,7 +101,7 @@ lsw_host_sources(LSW_PROVISION_SOURCES provision)
 add_library(lsw_host_provision STATIC ${LSW_PROVISION_SOURCES})
 target_include_directories(lsw_host_provision PUBLIC ${LSW_HOST_INCLUDE_DIR})
 target_include_directories(lsw_host_provision
-    PRIVATE $<BUILD_INTERFACE:${_prov_embed}> ${WIMLIB_INCLUDE_DIR})
+    PRIVATE $<BUILD_INTERFACE:${_prov_embed}> ${WIMLIB_INCLUDE_DIR} ${HIVEX_INCLUDE_DIR})
 target_link_libraries(lsw_host_provision
     PUBLIC
         lsw_host_core
@@ -110,7 +110,8 @@ target_link_libraries(lsw_host_provision
         nlohmann_json::nlohmann_json
         ZLIB::ZLIB              # iso/microsoft_client.cpp gunzip fallback
         PkgConfig::LIBISOFS     # install/payload_iso.cpp
-        ${WIMLIB_LIBRARY}       # install/wim_editions.cpp
+        ${WIMLIB_LIBRARY}       # install/wim_editions.cpp, debloat/wim_debloater.cpp
+        ${HIVEX_LIBRARY}        # debloat/registry_tweaks.cpp
 )
 target_compile_definitions(lsw_host_provision PRIVATE QT_NO_KEYWORDS)
 

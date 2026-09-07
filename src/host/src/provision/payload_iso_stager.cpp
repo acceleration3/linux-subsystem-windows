@@ -27,6 +27,10 @@ void PayloadIsoStager::build(const config::VmRecord& record, const PipelineInput
     answers.user_name = inputs.user_name;
     answers.user_password = inputs.user_password;
     answers.image_index = inputs.image_index;
+    // install_from_path stays empty, and deliberately: the trimmed
+    // image IS the install.wim on the media being booted, so Setup's
+    // own default is already the right answer. A <Path> here would name
+    // the same file by a route WinPE cannot resolve that early.
 
     // Register a Dolphin bookmark for the guest's C$ share via KIO's
     // userspace smb:// worker. No kernel cifs mount, so no junction

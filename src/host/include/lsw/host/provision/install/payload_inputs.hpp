@@ -18,6 +18,7 @@ struct PayloadInputs {
     QString vkd3d_archive_path;  // optional .tar.gz
     QString agent_exe_path;      // optional; cross-built lsw-guest-agent.exe
 
+
     // Directory holding the IVSHMEM driver (ivshmem.inf/.cat/.sys).
     // Copied to ``\\ivshmem`` on the ISO so the autounattend can inject
     // it into the offline image — the shared-memory channel has to exist

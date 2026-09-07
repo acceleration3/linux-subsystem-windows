@@ -148,11 +148,18 @@
 			</DiskConfiguration>
 			<ImageInstall>
 				<OSImage>
+					<!-- {{install_from_path}} is the trimmed install.wim on
+					     the payload CD, or empty when the image was left
+					     as shipped and Setup should use the one on its
+					     own media. Written as a <Path> because there is
+					     no way to say "the default" once a path is
+					     given, so the whole element goes or stays. -->
 					<InstallFrom>
 						<MetaData wcm:action="add">
 							<Key>/IMAGE/INDEX</Key>
 							<Value>{{image_index}}</Value>
 						</MetaData>
+{{install_from_path}}
 					</InstallFrom>
 					<InstallTo>
 						<DiskID>0</DiskID>

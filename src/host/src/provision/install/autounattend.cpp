@@ -22,6 +22,12 @@ QString Autounattend::render(const AutounattendInputs& in) {
     out = sub(out, "user_password", in.user_password);
     out = sub(out, "product_key", in.product_key);
     out = sub(out, "image_index", QString::number(in.image_index));
+    // The whole element or none of it: Setup has no way to be told
+    // "the default path" once a <Path> is present.
+    out = sub(out, "install_from_path",
+              in.install_from_path.isEmpty()
+                  ? QString{}
+                  : QStringLiteral("\t\t\t\t\t\t<Path>%1</Path>").arg(in.install_from_path));
     out = sub(out, "win11_bypass_block",
               in.win11_bypass ? QString{embedded::kWin11BypassTemplate} : QString{});
     return out;
