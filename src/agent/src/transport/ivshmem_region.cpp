@@ -9,6 +9,9 @@
 #include <setupapi.h>
 
 #include <cerrno>
+#include <cstdlib>
+#include <cstring>
+#include <string>
 
 namespace lsw::agent::transport {
 
@@ -37,7 +40,26 @@ constexpr DWORD kIoctlRequestMmap = ctl_code(0x802);
 constexpr DWORD kIoctlReleaseMmap = ctl_code(0x803);
 constexpr DWORD kIoctlRingDoorbell = ctl_code(0x804);
 
+constexpr UINT8 kCacheCached = 1;
 constexpr UINT8 kCacheWriteCombined = 2;
+
+// Which cache mode to ask the driver for.
+//
+// Write-combining is the fast choice for a region this side only ever
+// writes in bulk, and it is what this has always used. It is also the
+// one x86 memory type with genuinely weak ordering in both directions,
+// so it puts the burden of SFENCE/LFENCE on every publish and consume
+// (see linkproto/region_fence.hpp). ``LSW_IVSHMEM_CACHE=cached`` asks
+// for ordinary write-back memory instead: slower for large writes,
+// strongly ordered, and therefore the control when something in the
+// stream looks like it arrived out of order.
+[[nodiscard]] UINT8 configured_cache_mode() noexcept {
+    const char* v = std::getenv("LSW_IVSHMEM_CACHE");
+    if (v != nullptr && std::strcmp(v, "cached") == 0) {
+        return kCacheCached;
+    }
+    return kCacheWriteCombined;
+}
 
 struct IvshmemMmapConfig {
     UINT8 cacheMode;
@@ -53,41 +75,34 @@ struct IvshmemRing {
     UINT16 vector;
 };
 
-[[nodiscard]] HANDLE open_ivshmem_device() {
+// The device path of the ``index``-th IVSHMEM function present, or an
+// empty string when there is no such device.
+[[nodiscard]] std::wstring ivshmem_device_path(DWORD index) {
     HDEVINFO set = ::SetupDiGetClassDevsW(&GUID_DEVINTERFACE_IVSHMEM, nullptr, nullptr,
                                           DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
     if (set == INVALID_HANDLE_VALUE) {
-        return INVALID_HANDLE_VALUE;
+        return {};
     }
     SP_DEVICE_INTERFACE_DATA ifdata{};
     ifdata.cbSize = sizeof(ifdata);
-    if (::SetupDiEnumDeviceInterfaces(set, nullptr, &GUID_DEVINTERFACE_IVSHMEM, 0, &ifdata)
-        == FALSE) {
-        ::SetupDiDestroyDeviceInfoList(set);
-        return INVALID_HANDLE_VALUE;
-    }
-    DWORD needed = 0;
-    ::SetupDiGetDeviceInterfaceDetailW(set, &ifdata, nullptr, 0, &needed, nullptr);
-    auto* detail = static_cast<PSP_DEVICE_INTERFACE_DETAIL_DATA_W>(
-        ::HeapAlloc(::GetProcessHeap(), 0, needed));
-    if (detail == nullptr) {
-        ::SetupDiDestroyDeviceInfoList(set);
-        return INVALID_HANDLE_VALUE;
-    }
-    detail->cbSize = sizeof(SP_DEVICE_INTERFACE_DETAIL_DATA_W);
-    HANDLE h = INVALID_HANDLE_VALUE;
-    if (::SetupDiGetDeviceInterfaceDetailW(set, &ifdata, detail, needed, nullptr, nullptr)
+    std::wstring path;
+    if (::SetupDiEnumDeviceInterfaces(set, nullptr, &GUID_DEVINTERFACE_IVSHMEM, index, &ifdata)
         != FALSE) {
-        // Shared read/write: the agent has the same device open for the
-        // frame channel while the ICD uses the command stream. One
-        // region, several channels, several openers — which is what the
-        // channel table is for.
-        h = ::CreateFileW(detail->DevicePath, GENERIC_READ | GENERIC_WRITE,
-                          FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, 0, nullptr);
+        DWORD needed = 0;
+        ::SetupDiGetDeviceInterfaceDetailW(set, &ifdata, nullptr, 0, &needed, nullptr);
+        auto* detail = static_cast<PSP_DEVICE_INTERFACE_DETAIL_DATA_W>(
+            ::HeapAlloc(::GetProcessHeap(), 0, needed));
+        if (detail != nullptr) {
+            detail->cbSize = sizeof(SP_DEVICE_INTERFACE_DETAIL_DATA_W);
+            if (::SetupDiGetDeviceInterfaceDetailW(set, &ifdata, detail, needed, nullptr, nullptr)
+                != FALSE) {
+                path = detail->DevicePath;
+            }
+            ::HeapFree(::GetProcessHeap(), 0, detail);
+        }
     }
-    ::HeapFree(::GetProcessHeap(), 0, detail);
     ::SetupDiDestroyDeviceInfoList(set);
-    return h;
+    return path;
 }
 
 }  // namespace
@@ -100,11 +115,46 @@ int IvshmemRegion::open() {
     if (base_ != nullptr) {
         return 0;
     }
-    HANDLE h = open_ivshmem_device();
-    if (h == INVALID_HANDLE_VALUE) {
-        return -ENODEV;
+    // Every IVSHMEM function on the bus, not the first one.
+    //
+    // The guest has more than one: this region carries the frame ring
+    // and the agent's control channel, and the render server's region —
+    // a different device, created by a different process on the host —
+    // sits beside it. Which one Windows enumerates first is not ours to
+    // decide, so the region is identified by what is written in it
+    // rather than by where it turned up.
+    int last_error = -ENODEV;
+    for (DWORD index = 0;; ++index) {
+        const std::wstring path = ivshmem_device_path(index);
+        if (path.empty()) {
+            return last_error;
+        }
+        // Shared read/write: the agent has the same device open for the
+        // frame channel while other openers use other channels. One
+        // region, several channels, several openers — which is what the
+        // channel table is for.
+        HANDLE h = ::CreateFileW(path.c_str(), GENERIC_READ | GENERIC_WRITE,
+                                 FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, 0,
+                                 nullptr);
+        if (h == INVALID_HANDLE_VALUE) {
+            continue;
+        }
+        const int rc = adopt_device(h);
+        if (rc == 0) {
+            return 0;
+        }
+        ::CloseHandle(h);
+        // -EPROTO says "not ours", which is not an error worth
+        // reporting while another device may still be. Anything else is
+        // a real failure of a device that IS ours to use.
+        if (rc != -EPROTO) {
+            last_error = rc;
+        }
     }
+}
 
+int IvshmemRegion::adopt_device(void* device_handle) {
+    HANDLE h = device_handle;
     DWORD got = 0;
     UINT64 dev_size = 0;
     if (::DeviceIoControl(h, kIoctlRequestSize, nullptr, 0, &dev_size, sizeof(dev_size), &got,
@@ -112,12 +162,11 @@ int IvshmemRegion::open() {
             == FALSE
         || dev_size == 0) {
         last_os_error_ = ::GetLastError();
-        ::CloseHandle(h);
         return -ENXIO;
     }
 
     IvshmemMmapConfig cfg{};
-    cfg.cacheMode = kCacheWriteCombined;
+    cfg.cacheMode = configured_cache_mode();
     IvshmemMmap m{};
     if (::DeviceIoControl(h, kIoctlRequestMmap, &cfg, sizeof(cfg), &m, sizeof(m), &got, nullptr)
             == FALSE
@@ -125,17 +174,16 @@ int IvshmemRegion::open() {
         // Most often ERROR_ALREADY_INITIALIZED / ACCESS_DENIED: the
         // driver hands the BAR to one owner at a time.
         last_os_error_ = ::GetLastError();
-        ::CloseHandle(h);
         return -EBUSY;
     }
 
     // Check the header before trusting a single offset out of it. A
     // version this build does not know is the expected result of a
     // half-finished redeploy, and reading a v2 channel table as a v1
-    // slot table would be far worse than refusing.
+    // slot table would be far worse than refusing. It is also how a
+    // device belonging to something else is told apart from ours.
     if (!linkproto::region_is_readable(m.ptr, m.size)) {
         ::DeviceIoControl(h, kIoctlReleaseMmap, nullptr, 0, nullptr, 0, &got, nullptr);
-        ::CloseHandle(h);
         return -EPROTO;
     }
 

@@ -288,6 +288,11 @@ QString Lifecycle::ensure_shmem(const QUuid& uuid, int size_mib) {
         bundle.region->close();
         return {};
     }
+    // Not fatal, and deliberately so: a guest that boots and reports no
+    // GPU driver can be looked at, and one that will not start cannot.
+    // The warning is in RenderServer.
+    bundle.render = std::make_unique<RenderServer>();
+    (void)bundle.render->ensure_running(uuid);
     const QString sock = bundle.server->socket_path();
     shmem_.emplace(uuid, std::move(bundle));
     Q_EMIT shmem_ready(uuid);
@@ -298,6 +303,9 @@ void Lifecycle::teardown_shmem(const QUuid& uuid) {
     auto it = shmem_.find(uuid);
     if (it == shmem_.end()) {
         return;
+    }
+    if (it->second.render) {
+        it->second.render->stop();
     }
     if (it->second.server) {
         it->second.server->stop();

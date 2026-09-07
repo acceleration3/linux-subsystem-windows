@@ -162,19 +162,45 @@
       <stats period='5'/>
     </memballoon>
 
+    <!-- IVSHMEM-plain: the render server's region.
+
+         The guest's OpenCL, OpenGL and Vulkan drivers put their command
+         streams here and rvk-render-server, on the host, replays them
+         against the host's real GPU. Plain, not doorbell: a doorbell
+         needs an ivshmem-server in between and buys an interrupt
+         neither side waits on, because the rings are polled — a futex
+         wake does not cross the VM boundary.
+
+         DECLARED FIRST, and that is load-bearing. It is the file
+         rvk-render-server created, and the server addresses its
+         sessions by device index: session 0 is the first ivshmem
+         function on the bus. The manager's own region is found by the
+         header written into it instead (see IvshmemRegion::open), so
+         it does not care which position it ends up in and this one
+         does.
+
+         The size must match the region the server made — a PCI BAR's
+         size is decoded by address bits, so QEMU does not round it,
+         it asserts and the VM dies before the guest exists. 1024 MiB
+         is RenderServer::kRegionMib. -->
+    <shmem name='{{rvk_region_name}}'>
+      <model type='ivshmem-plain'/>
+      <size unit='M'>{{rvk_region_mib}}</size>
+    </shmem>
+
     <!-- IVSHMEM-doorbell: the WGC capture transport. lsw-manager runs
          the doorbell-server protocol in-process at {{ivshmem_socket}};
          the agent's ivshmem.sys (installed as a post-install setup
          step) maps the shared region into user-mode and writes BGRA
-         frames into per-window slots. MSI vectors=66 mirrors
+         frames into per-window slots. MSI vectors=65 mirrors
          linkproto::kDoorbellVectorCount — one per frame slot plus one
-         per message channel (rpc, cmdstream); the region size comes from the
+         for the rpc channel; the region size comes from the
          ftruncate'd shm fd the server hands over via SCM_RIGHTS, NOT
          from the XML (libvirt rejects <size> for ivshmem-doorbell). -->
     <shmem name='lsw-{{uuid}}'>
       <model type='ivshmem-doorbell'/>
       <server path='{{ivshmem_socket}}'/>
-      <msi vectors='66' ioeventfd='on'/>
+      <msi vectors='65' ioeventfd='on'/>
     </shmem>
 
     <panic model='isa'/>
