@@ -9,9 +9,9 @@ namespace lsw::host::apps {
 
 // Tells the guest agent to start an installed app inside the VM. The
 // agent uses ``WTSQueryUserToken`` + ``CreateProcessAsUser`` so the
-// process runs in the active user's session (so DXVK/VKD3D can find
-// the user's GPU/driver state and the LSW ICD points at the host
-// render-server).
+// process runs in the active user's session — session 0 has no
+// desktop, and an application started there runs its init and exits
+// before it can show a window.
 class Launcher : public QObject {
     Q_OBJECT
 public:
@@ -19,12 +19,11 @@ public:
 
     // Async — returns immediately and emits launched/failed.
     //
-    // ``vulkan`` says this app renders through the LSW ICD. The agent
-    // needs to know before the process starts: the ICD's transport is
-    // the IVSHMEM region, the driver hands that region to one process
-    // at a time, and the agent is holding it. Told in advance, the
-    // agent steps aside for the life of the process.
-    void launch(const QString& app_id, bool vulkan = false);
+    // ``args`` is appended to the app's command line; ``env`` is the
+    // app config's environment block — ``NAME=value`` per line —
+    // applied to that launch alone.
+    void launch(const QString& app_id, const QString& args = {},
+                const QString& env = {});
 
 Q_SIGNALS:
     // ``pid`` is the spawned process id (0 if the agent couldn't

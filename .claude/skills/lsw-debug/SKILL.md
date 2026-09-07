@@ -45,7 +45,7 @@ Notes:
 - The agent fires `console_output` events as cmd.exe produces output; the MCP server accumulates them into a per-session ring. So `console_read` is non-blocking — if you read too early, you'll get partial output. Send input, wait ~500 ms, read.
 
 ### `rpc` (`cmd`: string, `params`: object)
-Escape hatch for verbs not exposed as dedicated tools (e.g., `close_window`, `subscribe_window`, `set_capture_method`). The reply body is whatever the agent's dispatcher returned.
+Escape hatch for verbs not exposed as dedicated tools (e.g., `close_window`, `subscribe_window`, `window_command`). The reply body is whatever the agent's dispatcher returned.
 
 ## Common recipes
 

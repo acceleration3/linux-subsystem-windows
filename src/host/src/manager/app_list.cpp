@@ -22,9 +22,8 @@
 namespace lsw::host::manager {
 
 AppListWidget::AppListWidget(apps::AppConfigStore& store, link::AgentRpcClient& rpc,
-                             link::GuestWindowModel& windows,
-                             apps::VulkanCaptureService& vulkan, QWidget* parent)
-    : QWidget(parent), store_(store), vulkan_(vulkan), rpc_(rpc), windows_(windows),
+                             link::GuestWindowModel& windows, QWidget* parent)
+    : QWidget(parent), store_(store), rpc_(rpc), windows_(windows),
       catalog_(rpc), launcher_(rpc) {
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(0, 0, 0, 0);
@@ -146,23 +145,7 @@ void AppListWidget::on_item_activated(QListWidgetItem* item) {
     const std::string line = "app_list: launching " + cfg->path.toStdString();
     LSW_INFO("{}", line);
     Q_EMIT launch_requested(id);
-
-    // A Vulkan-capture app needs two things this one does not: a server
-    // on the host replaying its command stream, and an agent that has
-    // let go of the region the stream travels through. The first is
-    // ours to start; the second the agent does when told the launch is
-    // a Vulkan one.
-    const bool vulkan = cfg->capture == apps::CaptureMethod::Vulkan;
-    if (vulkan && !uuid_.isNull()) {
-        // Something has to replay the command stream this application
-        // is about to produce, or it blocks on its first Vulkan call.
-        // It runs in this process so that the window it opens can send
-        // its input back to the guest — which is the only reason the
-        // manager hosts it rather than spawning lsw-render-server.
-        (void)vulkan_.ensure_running(uuid_);
-        vulkan_.stop_forwarding();
-    }
-    launcher_.launch(cfg->path, vulkan);
+    launcher_.launch(cfg->path, cfg->cmdline, cfg->env);
 }
 
 void AppListWidget::on_launched(const QString& app_id, quint32 pid) {
@@ -176,20 +159,6 @@ void AppListWidget::on_launched(const QString& app_id, quint32 pid) {
         return;
     }
     if (!rpc_.has_target()) {
-        return;
-    }
-    const auto* launched = store_.find(apps::AppConfig::make_id(app_id));
-    if (launched != nullptr && launched->capture == apps::CaptureMethod::Vulkan) {
-        // No AppWindowWatcher for a Vulkan-capture launch: its windows
-        // would each become a mirror fed by the frame ring, which this
-        // application does not use — they would sit there black beside
-        // the window that has the picture. What it needs instead is for
-        // the replay's window to know which guest window to send input
-        // to, which takes the PID's window turning up.
-        vulkan_pid_ = pid;
-        connect(&windows_, &link::GuestWindowModel::updated, this,
-                &AppListWidget::on_windows_for_vulkan, Qt::UniqueConnection);
-        windows_.subscribe();
         return;
     }
     if (watchers_.contains(pid)) {
@@ -206,25 +175,6 @@ void AppListWidget::on_launched(const QString& app_id, quint32 pid) {
     connect(w, &AppWindowWatcher::exhausted, this, &AppListWidget::on_watcher_exhausted);
     watchers_.insert(pid, w);
     w->start();
-}
-
-void AppListWidget::on_windows_for_vulkan(const QList<link::GuestWindow>& windows) {
-    if (vulkan_pid_ == 0) {
-        return;
-    }
-    for (const auto& w : windows) {
-        if (!w.from_launch(vulkan_pid_) || w.hwnd == 0) {
-            continue;
-        }
-        vulkan_.forward_input_to(w.hwnd);
-        // One window is all this needs; the enumeration keeps running
-        // for every other consumer.
-        disconnect(&windows_, &link::GuestWindowModel::updated, this,
-                   &AppListWidget::on_windows_for_vulkan);
-        windows_.unsubscribe();
-        vulkan_pid_ = 0;
-        return;
-    }
 }
 
 void AppListWidget::on_launch_failed(const QString& app_id, const QString& error) {
@@ -284,40 +234,7 @@ void AppListWidget::open_config_dialog(const apps::AppConfig& initial) {
     if (dlg.exec() != QDialog::Accepted) {
         return;
     }
-    const apps::AppConfig out = dlg.result();
-    store_.upsert(out);
-    // DLL plumbing is a VULKAN-ONLY concern: enabling Vulkan capture
-    // hardlinks the DXVK / VKD3D-Proton proxy DLLs next to the exe.
-    // WGC captures the window directly and needs no DLLs — and we must
-    // NEVER run the "disable" path for it, because that DeleteFile()s a
-    // fixed list (d3d8/d3d9/d3d11/dxgi/d3d12/…) by name in the app's
-    // own folder and would clobber DLLs the app itself ships. So only
-    // push set_capture_method when the method is Vulkan; switching to
-    // WGC simply leaves the folder untouched.
-    if (out.capture != apps::CaptureMethod::Vulkan) {
-        return;
-    }
-    // Push the (enable) plumbing when Vulkan was just selected — either
-    // the method changed to Vulkan, or it's a new config that starts on
-    // Vulkan.
-    const bool needs_setup =
-        out.capture != dlg.initial_capture() || initial.id.isEmpty();
-    if (!needs_setup || !rpc_.has_target() || out.path.isEmpty()) {
-        return;
-    }
-    // Fire-and-forget on a worker — RPC takes a moment, no need to
-    // block the UI on it. Logged on the agent side; nothing actionable
-    // for the user beyond the log.
-    const QString path = out.path;
-    const QString method = apps::capture_method_to_string(out.capture);
-    (void)QtConcurrent::run([this, path, method] {
-        nlohmann::json req = {
-            {"cmd", linkproto::cmd::kSetCaptureMethod},
-            {"params", {{"path", path.toStdString()},
-                         {"method", method.toStdString()}}},
-        };
-        (void)rpc_.call(req);
-    });
+    store_.upsert(dlg.result());
 }
 
 }  // namespace lsw::host::manager

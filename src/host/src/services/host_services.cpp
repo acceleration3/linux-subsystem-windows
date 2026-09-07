@@ -11,8 +11,7 @@ HostServices::HostServices(QObject* parent)
       lifecycle_(libvirt_, this), monitor_(libvirt_, this), rpc_(this),
       windows_(rpc_, this), guest_probe_(rpc_),
       app_configs_(QDir(settings_.data_dir()).filePath("apps"), this),
-      log_store_(this),
-      vulkan_capture_(lifecycle_, rpc_) {
+      log_store_(this) {
     // Wire the two services that consume the agent channel. Done here,
     // not by the UI, so records and stats are collected from the moment
     // the channel connects — the manager window may never be shown at

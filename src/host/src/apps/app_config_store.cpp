@@ -140,7 +140,6 @@ void AppConfigStore::merge_from_agent(const QList<AppEntry>& entries) {
         cfg.id = id;
         cfg.name = e.name;
         cfg.path = e.exe_path;
-        cfg.capture = CaptureMethod::Wgc;  // default for everything
         cfg.discovered_via_agent = true;
         cfg.last_seen_unix = now;
         cfg.icon_png_base64 = png_base64_from_image(e.icon);

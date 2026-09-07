@@ -2,7 +2,6 @@
 
 #include "lsw/host/apps/app_config_store.hpp"
 #include "lsw/host/apps/log_store.hpp"
-#include "lsw/host/apps/vulkan_capture_service.hpp"
 #include "lsw/host/config/vm_state.hpp"
 #include "lsw/host/manager/app_list.hpp"
 #include "lsw/host/manager/stats_widget.hpp"
@@ -29,7 +28,7 @@ public:
     VmDetailPanel(config::VmState& vms, vm::Lifecycle& lifecycle, vm::Monitor& monitor,
                   apps::AppConfigStore& app_configs, link::AgentRpcClient& rpc,
                   link::GuestWindowModel& windows, apps::LogStore& log_store,
-                  apps::VulkanCaptureService& vulkan, QWidget* parent = nullptr);
+                  QWidget* parent = nullptr);
 
     void set_target(const QUuid& vm_uuid);
     void clear_target();

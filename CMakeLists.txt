@@ -7,25 +7,13 @@ project(LSW
     LANGUAGES CXX
 )
 
-# remotevk carries the cmake modules that define LSW::CompileOptions and
-# resolve the shared third-party dependencies, so its module directory
-# has to be on the path before anything here includes them. LSW's own
-# cmake/ still holds the mingw toolchain file, which is selected on the
-# command line rather than included.
-set(LSW_REMOTEVK_DIR "${CMAKE_SOURCE_DIR}/external/remotevk"
-    CACHE PATH "Location of the remotevk checkout")
-if(NOT EXISTS "${LSW_REMOTEVK_DIR}/CMakeLists.txt")
-    message(FATAL_ERROR
-        "remotevk is missing from ${LSW_REMOTEVK_DIR}.\n"
-        "It is a submodule: git submodule update --init --recursive")
-endif()
-list(APPEND CMAKE_MODULE_PATH "${LSW_REMOTEVK_DIR}/cmake" "${CMAKE_SOURCE_DIR}/cmake")
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Static libs may end up linked into shared libs (the ICD .so).
+# Static libs may end up linked into shared libs.
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
@@ -35,26 +23,16 @@ endif()
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# LSW::CompileOptions and the shared third-party dependencies are
-# defined by remotevk when it is added below; including those modules
-# here as well would define the same targets twice. Everything that
-# uses them (src/host, src/agent) is added after remotevk.
+include(LSWCompileOptions)
 
 # ---- Options ----
-option(LSW_BUILD_SERVER  "Build the host render server (Linux only)" ON)
-option(LSW_BUILD_CLIENT  "Build the client Vulkan ICD"               ON)
-option(LSW_BUILD_MANAGER "Build the VM manager UI (Linux only)"      ON)
-option(LSW_BUILD_AGENT   "Build the Windows guest agent"             ${WIN32})
-option(LSW_BUILD_TESTS   "Build unit tests"                          ON)
+option(LSW_BUILD_MANAGER "Build the VM manager UI (Linux only)"   ON)
+option(LSW_BUILD_AGENT   "Build the Windows guest agent"          ${WIN32})
+option(LSW_BUILD_TESTS   "Build unit tests"                       ON)
 
 # ---- Platform sanity ----
 if(NOT (UNIX OR WIN32))
     message(WARNING "LSW only targets Linux (host) and Windows (guest); other platforms unsupported")
-endif()
-
-if(LSW_BUILD_SERVER AND NOT (UNIX AND NOT APPLE))
-    message(STATUS "LSW_BUILD_SERVER=OFF (only supported on Linux)")
-    set(LSW_BUILD_SERVER OFF)
 endif()
 
 if(LSW_BUILD_MANAGER AND NOT (UNIX AND NOT APPLE))
@@ -71,22 +49,17 @@ if(LSW_BUILD_TESTS)
     enable_testing()
 endif()
 
+# ---- Dependencies ----
+include(LSWDependencies)
 
 # ---- Subprojects ----
-# The Vulkan proxy — the ICD, the render server, the protocol and the
-# shared-memory region layout — lives in remotevk and is consumed from
-# here. It is independent of everything else in this repository: it
-# knows how to move Vulkan across a transport and nothing about virtual
-# machines, so it can be built and tested without any of this.
-#
-# The manager and the guest agent both link its LSW::LinkProto and
-# LSW::Protocol targets. That is the whole of the coupling: the region
-# layout and the framing are a contract the two ends of the VM boundary
-# must agree on, and there is exactly one definition of it.
-set(REMOTEVK_BUILD_SERVER ${LSW_BUILD_SERVER} CACHE BOOL "" FORCE)
-set(REMOTEVK_BUILD_CLIENT ${LSW_BUILD_CLIENT} CACHE BOOL "" FORCE)
-set(REMOTEVK_BUILD_TESTS  ${LSW_BUILD_TESTS}  CACHE BOOL "" FORCE)
-add_subdirectory("${LSW_REMOTEVK_DIR}" remotevk)
+# linkproto is the shared-memory region layout: the byte-for-byte
+# contract between the two ends of the VM boundary. Header-only, depends
+# on nothing but the standard library, and added unconditionally because
+# every configuration needs it — including a cross-build that compiles
+# nothing else here.
+add_subdirectory(src/linkproto)
+add_subdirectory(src/base)
 
 if(LSW_BUILD_MANAGER)
     # Dependencies shared by the host-side modules under src/host.
@@ -113,11 +86,11 @@ if(LSW_BUILD_AGENT)
 endif()
 
 if(LSW_BUILD_TESTS)
+    # The highest-risk code here: both ends of a VM boundary must agree
+    # byte for byte, and this is where that is checked.
+    add_subdirectory(src/linkproto/tests)
     # The agent's platform-free logic, compiled by the HOST toolchain —
     # the agent executable itself is Windows-only, but this is not.
-    #
-    # The protocol, link-contract and codegen tests moved to remotevk
-    # with the code they cover, and run from there.
     if(NOT WIN32)
         add_subdirectory(src/agent/tests)
     endif()
@@ -128,8 +101,6 @@ message(STATUS "")
 message(STATUS "LSW configuration:")
 message(STATUS "  Build type:       ${CMAKE_BUILD_TYPE}")
 message(STATUS "  C++ compiler:     ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}")
-message(STATUS "  Server:           ${LSW_BUILD_SERVER}")
-message(STATUS "  Client:           ${LSW_BUILD_CLIENT}")
 message(STATUS "  Manager:          ${LSW_BUILD_MANAGER}")
 message(STATUS "  Agent:            ${LSW_BUILD_AGENT}")
 message(STATUS "  Tests:            ${LSW_BUILD_TESTS}")

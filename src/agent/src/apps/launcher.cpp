@@ -11,6 +11,9 @@
 // clang-format on
 
 #include <cwchar>
+#include <cwctype>
+#include <map>
+#include <string>
 #include <vector>
 
 namespace lsw::agent::apps {
@@ -41,6 +44,65 @@ std::string utf16_to_utf8(const std::wstring& w) {
     }
     std::string out(static_cast<size_t>(n - 1), '\0');
     ::WideCharToMultiByte(CP_UTF8, 0, w.c_str(), -1, out.data(), n, nullptr, nullptr);
+    return out;
+}
+
+// The child's environment: ours, with ``overrides`` applied on top,
+// laid out the way CreateProcessW wants it — NAME=value strings each
+// NUL-terminated, the whole block terminated by a second NUL.
+//
+// Sorted case-insensitively by name because that is what the
+// documentation asks of an environment block, and because a block that
+// merely happens to work is the kind of thing that stops working on
+// somebody else's machine.
+//
+// Empty when there is nothing to override, and the caller then passes
+// nullptr and the child inherits ours directly — no copy, no chance of
+// this code mangling an environment nobody asked it to touch.
+std::vector<wchar_t> build_environment(const std::vector<Launcher::EnvVar>& overrides) {
+    if (overrides.empty()) {
+        return {};
+    }
+    auto upper = [](std::wstring s) {
+        for (wchar_t& c : s) {
+            c = static_cast<wchar_t>(::towupper(c));
+        }
+        return s;
+    };
+
+    // Existing variables, keyed by upper-cased name so an override
+    // replaces a differently-cased one rather than adding a twin.
+    std::map<std::wstring, std::pair<std::wstring, std::wstring>> vars;  // KEY -> (name, value)
+    if (wchar_t* block = ::GetEnvironmentStringsW(); block != nullptr) {
+        for (const wchar_t* p = block; *p != L'\0';) {
+            const std::wstring entry(p);
+            p += entry.size() + 1;
+            // Skip the "=C:=C:\..." drive-current-directory entries:
+            // they start with '=' and are the shell's business.
+            const auto eq = entry.find(L'=', 1);
+            if (entry.empty() || entry[0] == L'=' || eq == std::wstring::npos) {
+                continue;
+            }
+            const std::wstring name = entry.substr(0, eq);
+            vars[upper(name)] = {name, entry.substr(eq + 1)};
+        }
+        ::FreeEnvironmentStringsW(block);
+    }
+    for (const auto& [name, value] : overrides) {
+        const std::wstring wname = utf8_to_utf16(name);
+        if (wname.empty()) {
+            continue;
+        }
+        vars[upper(wname)] = {wname, utf8_to_utf16(value)};
+    }
+
+    std::vector<wchar_t> out;
+    for (const auto& [key, pair] : vars) {  // std::map iterates sorted
+        const std::wstring entry = pair.first + L"=" + pair.second;
+        out.insert(out.end(), entry.begin(), entry.end());
+        out.push_back(L'\0');
+    }
+    out.push_back(L'\0');  // block terminator
     return out;
 }
 
@@ -131,7 +193,8 @@ void set_err(std::string* error_out, const std::string& s) {
 
 }  // namespace
 
-bool Launcher::launch(const std::string& app_id, unsigned long* pid_out,
+bool Launcher::launch(const std::string& app_id, const std::string& extra_args,
+                              const std::vector<EnvVar>& env, unsigned long* pid_out,
                               std::string* error_out) {
     if (pid_out != nullptr) {
         *pid_out = 0;
@@ -190,8 +253,27 @@ bool Launcher::launch(const std::string& app_id, unsigned long* pid_out,
         cmdline += L" ";
         cmdline += args;
     }
+    // The configured arguments come last, after whatever a .lnk
+    // carried, so an app config can add to a shortcut rather than
+    // having to restate it.
+    if (const std::wstring extra = expand_env(utf8_to_utf16(extra_args)); !extra.empty()) {
+        cmdline += L" ";
+        cmdline += extra;
+    }
     std::vector<wchar_t> mutable_cmd(cmdline.begin(), cmdline.end());
     mutable_cmd.push_back(L'\0');
+
+    // Empty unless this launch overrides something, in which case the
+    // child gets a copy of ours with the overrides applied.
+    std::vector<wchar_t> env_block = build_environment(env);
+    void* env_ptr = env_block.empty() ? nullptr : env_block.data();
+    if (!env.empty()) {
+        std::string names;
+        for (const auto& [name, value] : env) {
+            names += (names.empty() ? "" : " ") + name;
+        }
+        LSW_AGENT_INFO("launch: environment overrides: " + names);
+    }
 
     // The agent runs AS THE USER, in their interactive session
     // (HKLM\Run autostart at the post-OOBE AutoLogon; the account is
@@ -212,12 +294,22 @@ bool Launcher::launch(const std::string& app_id, unsigned long* pid_out,
     // good — which is exactly the process we most need to track.
     const BOOL ok = ::CreateProcessW(
         path.c_str(), mutable_cmd.data(), nullptr, nullptr, FALSE,
-        CREATE_UNICODE_ENVIRONMENT | CREATE_NO_WINDOW | CREATE_SUSPENDED, nullptr,
+        CREATE_UNICODE_ENVIRONMENT | CREATE_NO_WINDOW | CREATE_SUSPENDED, env_ptr,
         working_dir.empty() ? nullptr : working_dir.c_str(), &si, &pi);
     if (!ok) {
         const DWORD err = ::GetLastError();
         // Same shell fallback as the user-session path: not a plain
         // PE (alias / packaged / document) → let the shell open it.
+        //
+        // Environment overrides do not survive this: the shell starts
+        // the application from its own process, with its own
+        // environment. Nothing can be done about that from here — a
+        // packaged app is started by the shell by definition — so it is
+        // logged rather than silently ignored.
+        if (!env.empty()) {
+            LSW_AGENT_WARN("launch: environment overrides are lost on the shell "
+                           "fallback path (packaged app / alias / document)");
+        }
         LSW_AGENT_WARN(std::string{"launch: direct spawn failed (GetLastError="}
                        + std::to_string(err) + ") — retrying via shell (explorer)");
         const std::wstring explorer = expand_env(L"%windir%\\explorer.exe");

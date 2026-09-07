@@ -32,16 +32,6 @@ public:
     // the associated shmem slot.
     static void release(std::uintptr_t hwnd);
 
-    // Drop every capture session and free every slot it holds.
-    //
-    // For the moment the region goes away underneath us: a Vulkan
-    // application is taking the mapping, and the sessions' slot indices
-    // describe an allocator that will not exist. Frames stop until the
-    // manager subscribes again, which is what it does when a mirror is
-    // next created. Called BEFORE the region is released, because
-    // freeing a slot writes to it.
-    static void drop_all_sessions();
-
     // Diagnostic stub retained for the existing RPC handler; the
     // alpha-histogram path retired with the JPEG encode path.
     [[nodiscard]] static std::string debug_json(std::uintptr_t hwnd);

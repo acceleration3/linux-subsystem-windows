@@ -15,8 +15,7 @@ MainWindow::MainWindow(services::HostServices& services, QWidget* parent) : QMai
 
     detail_panel_ = new VmDetailPanel(services_.vms(), services_.lifecycle(), services_.monitor(),
                                        services_.app_configs(), services_.rpc(),
-                                       services_.windows(), services_.log_store(),
-                                       services_.vulkan_capture(), this);
+                                       services_.windows(), services_.log_store(), this);
     setCentralWidget(detail_panel_);
 
     // Single-VM model — pin the panel to whatever record App

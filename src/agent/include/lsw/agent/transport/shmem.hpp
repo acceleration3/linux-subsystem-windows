@@ -3,7 +3,7 @@
 #include "lsw/linkproto/byte_ring.hpp"
 #include "lsw/linkproto/frame_ring.hpp"
 #include "lsw/linkproto/region.hpp"
-#include "lsw/protocol/ivshmem_region.hpp"
+#include "lsw/agent/transport/ivshmem_region.hpp"
 
 #include <cstdint>
 #include <string>
@@ -17,7 +17,6 @@ namespace lsw::agent::transport {
 //   frames      a best-fit slot allocator over the pixel buffer area,
 //               plus the doorbell fired when a frame is committed
 //   rpc         duplex message rings for control traffic
-//   cmdstream   duplex message rings for the Vulkan command stream
 //
 // The manager owns the layout and writes the channel table; this side
 // reads it, so a channel that a newer manager adds costs nothing here
@@ -58,21 +57,6 @@ public:
 
     // Give the BAR back to the driver, and take it again.
     //
-    // The IVSHMEM driver hands the mapping to ONE process at a time. A
-    // guest application that renders through the LSW ICD needs it —
-    // that region IS the command-stream transport — so it cannot start
-    // while the agent holds it, and the agent cannot exit without
-    // taking the control plane with it. Releasing is the way out: the
-    // frame path and the shared-memory RPC route stop, RPC continues
-    // over TCP, and the application gets the region for as long as it
-    // runs.
-    //
-    // Every allocated slot is dropped on release; a subscriber has to
-    // re-subscribe afterwards, which the manager does anyway when a
-    // window's mirror comes back.
-    void release();
-    [[nodiscard]] bool reacquire();
-
     // Allocate a slot for ``hwnd`` sized w*h*4 (×2 for back buffer).
     // Returns slot.index >= 0 on success, -1 if no room.
     [[nodiscard]] SlotInfo alloc_slot(std::uint64_t hwnd, std::uint32_t width,
@@ -85,10 +69,16 @@ public:
     // data into the back buffer + doorbell. ``src_pitch`` may include
     // padding (e.g. WGC staging texture RowPitch). Returns true on
     // success, false if ``slot_index`` is invalid or geometry mismatch.
+    //
+    // ``visible_insets`` says how much of THIS frame is off the guest's
+    // screen, packed one byte per edge (see FrameSlot::visible_insets).
+    // It travels with the pixels so the host can never pair a frame with
+    // a rectangle measured for a different one.
     [[nodiscard]] bool commit_frame(int slot_index, const std::uint8_t* src_bgra,
                                      std::uint32_t src_pitch,
                                      std::uint32_t width, std::uint32_t height,
-                                     std::uint64_t present_qpc);
+                                     std::uint64_t present_qpc,
+                                     std::uint32_t visible_insets);
 
     // ---- Message channels ----------------------------------------------
     // The mirror image of the manager's endpoints: this side produces
@@ -98,12 +88,10 @@ public:
 
     [[nodiscard]] linkproto::ByteRingProducer& rpc_to_host() { return rpc_to_host_; }
     [[nodiscard]] linkproto::ByteRingConsumer& rpc_from_host() { return rpc_from_host_; }
-    [[nodiscard]] linkproto::ByteRingProducer& cmd_to_host() { return cmd_to_host_; }
-    [[nodiscard]] linkproto::ByteRingConsumer& cmd_from_host() { return cmd_from_host_; }
 
-    // Wake the manager on a channel it is waiting on. Writing to a ring
-    // is silent by itself — the manager only polls after a doorbell.
-    void ring_channel_doorbell(std::uint32_t channel_kind);
+    // Wake the manager on the rpc channel. Writing to a ring is silent
+    // by itself — the manager only polls after a doorbell.
+    void ring_rpc_doorbell();
 
 private:
     // Fire an MSI-X doorbell at the manager (peer 0) on ``vector``.
@@ -117,7 +105,7 @@ private:
     // of "map the IVSHMEM BAR", not two. ``base_`` / ``size_`` are
     // cached copies of the region's, so the hot frame path is a member
     // read rather than a virtual call.
-    ::lsw::protocol::IvshmemRegion region_;
+    IvshmemRegion region_;
     void* base_ = nullptr;
     std::uint64_t size_ = 0;
     // Allocator state: array of (offset, size, in_use) for ``kSlotCount``
@@ -139,8 +127,6 @@ private:
 
     linkproto::ByteRingProducer rpc_to_host_;
     linkproto::ByteRingConsumer rpc_from_host_;
-    linkproto::ByteRingProducer cmd_to_host_;
-    linkproto::ByteRingConsumer cmd_from_host_;
 };
 
 // Process-wide singleton. The capture path uses this; one IVSHMEM

@@ -19,12 +19,41 @@ struct LaunchResult {
     quint32 pid = 0;
 };
 
+// ``NAME=value`` per line → a JSON object for the agent.
+//
+// Blank lines and ``#`` comments are skipped so a config can be
+// annotated, and a line with no ``=`` is dropped rather than sent as a
+// nameless variable. The value keeps its spaces — a path may have them
+// — but the name is trimmed, because "NAME = value" is what everyone
+// types at least once.
+nlohmann::json env_object(const QString& text) {
+    auto obj = nlohmann::json::object();
+    const auto lines = text.split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+    for (const QString& line : lines) {
+        const QString trimmed = line.trimmed();
+        if (trimmed.isEmpty() || trimmed.startsWith(QLatin1Char('#'))) {
+            continue;
+        }
+        const qsizetype eq = trimmed.indexOf(QLatin1Char('='));
+        if (eq <= 0) {
+            continue;
+        }
+        const QString name = trimmed.left(eq).trimmed();
+        if (name.isEmpty()) {
+            continue;
+        }
+        obj[name.toStdString()] = trimmed.mid(eq + 1).toStdString();
+    }
+    return obj;
+}
+
 }  // namespace
 
 Launcher::Launcher(link::AgentRpcClient& rpc, QObject* parent)
     : QObject(parent), rpc_(rpc) {}
 
-void Launcher::launch(const QString& app_id, bool vulkan) {
+void Launcher::launch(const QString& app_id, const QString& args,
+                      const QString& env) {
     auto* watcher = new QFutureWatcher<LaunchResult>(this);
     connect(watcher, &QFutureWatcher<LaunchResult>::finished, this, [this, watcher, app_id]() {
         const LaunchResult r = watcher->result();
@@ -35,11 +64,18 @@ void Launcher::launch(const QString& app_id, bool vulkan) {
         }
         watcher->deleteLater();
     });
-    auto fut = QtConcurrent::run([this, app_id, vulkan]() -> LaunchResult {
+    auto fut = QtConcurrent::run([this, app_id, args, env]() -> LaunchResult {
         LaunchResult out;
+        nlohmann::json params = {{"app_id", app_id.toStdString()}};
+        if (!args.trimmed().isEmpty()) {
+            params["args"] = args.toStdString();
+        }
+        if (auto vars = env_object(env); !vars.empty()) {
+            params["env"] = std::move(vars);
+        }
         nlohmann::json req = {
             {"cmd", linkproto::cmd::kLaunch},
-            {"params", {{"app_id", app_id.toStdString()}, {"vulkan", vulkan}}},
+            {"params", std::move(params)},
         };
         const auto reply = rpc_.call(req);
         if (reply.isEmpty()) {

@@ -26,7 +26,7 @@ bool ShmemChannel::send(const nlohmann::json& message) {
         // that is fatal or just a dropped progress tick.
         return false;
     }
-    shmem_->ring_channel_doorbell(linkproto::kChannelRpc);
+    shmem_->ring_rpc_doorbell();
     return true;
 }
 
