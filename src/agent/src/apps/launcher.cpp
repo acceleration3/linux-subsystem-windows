@@ -1,5 +1,7 @@
 #include "lsw/agent/apps/launcher.hpp"
 
+#include "lsw/agent/apps/guest_drivers.hpp"
+
 #include "lsw/agent/apps/launch_group.hpp"
 #include "lsw/agent/log.hpp"
 
@@ -263,13 +265,30 @@ bool Launcher::launch(const std::string& app_id, const std::string& extra_args,
     std::vector<wchar_t> mutable_cmd(cmdline.begin(), cmdline.end());
     mutable_cmd.push_back(L'\0');
 
+    // The drivers go beside the RESOLVED executable, which is the only
+    // path any of the loaders will search — a .lnk's own directory is
+    // not on it. That is why this is here rather than in the RPC
+    // handler: the handler has the shortcut, this has the image.
+    //
+    // A failure is logged and the launch goes ahead. Without the
+    // drivers the application finds whatever Windows has, which on a
+    // guest with no GPU means WARP: slow, and far better than an
+    // application that refuses to start.
+    std::vector<EnvVar> launch_env = env;
+    std::string driver_err;
+    if (!GuestDrivers::link_beside(utf16_to_utf8(path), &launch_env, &driver_err)) {
+        LSW_AGENT_WARN("launch: guest drivers not fully staged: " + driver_err);
+    }
+
     // Empty unless this launch overrides something, in which case the
-    // child gets a copy of ours with the overrides applied.
-    std::vector<wchar_t> env_block = build_environment(env);
+    // child gets a copy of ours with the overrides applied. The app
+    // config's own overrides come first, so a user who sets one of
+    // these by hand wins over what was just staged.
+    std::vector<wchar_t> env_block = build_environment(launch_env);
     void* env_ptr = env_block.empty() ? nullptr : env_block.data();
-    if (!env.empty()) {
+    if (!launch_env.empty()) {
         std::string names;
-        for (const auto& [name, value] : env) {
+        for (const auto& [name, value] : launch_env) {
             names += (names.empty() ? "" : " ") + name;
         }
         LSW_AGENT_INFO("launch: environment overrides: " + names);

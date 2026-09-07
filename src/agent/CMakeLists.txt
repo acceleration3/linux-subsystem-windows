@@ -116,7 +116,6 @@ set(_lsw_agent_util_sources
     src/util/text_encoding.cpp
 )
 set(_lsw_agent_capture_sources
-    src/capture/setup.cpp
     src/capture/wgc.cpp
 )
 set(_lsw_agent_uia_sources
@@ -139,7 +138,7 @@ set(_lsw_agent_apps_sources
     src/apps/catalog.cpp
     src/apps/launch_group.cpp
     src/apps/launcher.cpp
-    src/apps/d3d_translation.cpp
+    src/apps/guest_drivers.cpp
 )
 set(_lsw_agent_install_sources
     src/install/installer.cpp
