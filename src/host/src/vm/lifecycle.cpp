@@ -253,6 +253,20 @@ bool Lifecycle::attach_running(const QUuid& uuid) {
              "session (the VM was started by an earlier manager), so frames are "
              "polled instead",
              uuid.toString().toStdString());
+    // A RenderServer, though, because none of the above applies to it.
+    // It is a child process of the manager, so the one that was serving
+    // this domain died with the manager that started it; and its region
+    // is the second ivshmem device — a plain memory-backend-file that
+    // QEMU maps directly, with no handshake to have missed. A fresh
+    // server opens that same file and serves it.
+    //
+    // Without this, a manager restarted while its VM kept running left
+    // the guest attaching to a region nobody was consuming: every
+    // application reached "attached to render server at ivshmem-0" and
+    // then timed out on its first command with "head is 0", which reads
+    // like a driver fault and is not one.
+    bundle.render = std::make_unique<RenderServer>();
+    (void)bundle.render->ensure_running(uuid);
     shmem_.emplace(uuid, std::move(bundle));
     Q_EMIT shmem_ready(uuid);
     return true;
