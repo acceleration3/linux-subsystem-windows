@@ -73,10 +73,23 @@ Q_SIGNALS:
     void progress(const QString& phase, int percent);
 
 private:
-    // Directories under which provisioned application payloads are
-    // staged, searched for names matching the plan's prefixes.
-    [[nodiscard]] QStringList find_appx_payloads(void* wim, int image_index,
-                                                 const QStringList& prefixes) const;
+    // Immediate children of ``root`` in the image, full paths. Empty
+    // when the image has no such directory, which is not an error:
+    // editions differ in what they ship.
+    [[nodiscard]] static QStringList children_of(void* wim, int image_index,
+                                                 const QString& root);
+
+    // Children of ``root`` whose name starts with any of ``prefixes``.
+    [[nodiscard]] static QStringList children_matching(void* wim, int image_index,
+                                                       const QString& root,
+                                                       const QStringList& prefixes);
+
+    // Children of ``root`` whose name contains NONE of ``keep``. The
+    // inverse of the above, for WinSxS, where what stays can be named
+    // and what goes cannot.
+    [[nodiscard]] static QStringList children_not_keeping(void* wim, int image_index,
+                                                          const QString& root,
+                                                          const QStringList& keep);
 
     QStringList removed_;
 };

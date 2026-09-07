@@ -51,9 +51,17 @@ int main(int argc, char** argv) {
     const int index = qEnvironmentVariable("LSW_TEST_WIM_INDEX", QStringLiteral("1")).toInt();
 
     using namespace lsw::host::provision::debloat;
+    // Sane by default because it is the level the wizard recommends and
+    // the one whose assertions below are about. LSW_TEST_WIM_LEVEL=maximum
+    // measures the component-store and driver passes instead, which is
+    // the run worth doing when either of those lists changes.
+    const DebloatLevel level =
+        DebloatPlan::from_string(qEnvironmentVariable("LSW_TEST_WIM_LEVEL",
+                                                      QStringLiteral("sane")));
     const qint64 before = QFileInfo(wim).size();
-    std::printf("  image: %s (%lld MiB), index %d\n", qPrintable(wim),
-                static_cast<long long>(before / (1024 * 1024)), index);
+    std::printf("  image: %s (%lld MiB), index %d, level %s\n", qPrintable(wim),
+                static_cast<long long>(before / (1024 * 1024)), index,
+                qPrintable(DebloatPlan::to_string(level)));
 
     // Isolate first, exactly as DebloatStager does: without it the
     // deletions free almost nothing, because the other editions in the
@@ -82,7 +90,7 @@ int main(int argc, char** argv) {
 
     QString error;
     // Index 1: the isolated file has exactly one image.
-    const bool ok = debloater.apply(single, 1, DebloatPlan{DebloatLevel::Sane}, &error);
+    const bool ok = debloater.apply(single, 1, DebloatPlan{level}, &error);
     check(ok, "apply() succeeded");
     if (!ok) {
         std::printf("  error: %s\n", qPrintable(error));
