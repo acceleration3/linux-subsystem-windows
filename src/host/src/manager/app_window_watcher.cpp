@@ -89,7 +89,13 @@ void AppWindowWatcher::start() {
             const auto j = nlohmann::json::parse(
                 sub_reply.constData(), sub_reply.constData() + sub_reply.size());
             uia_sub_id_ = j.value("sub_id", std::uint64_t{0});
-        } catch (const nlohmann::json::exception&) {
+        } catch (const nlohmann::json::exception& e) {
+            // No subscription id means no UIA events for this launch, so
+            // the watcher falls back to polling. That is slower rather
+            // than broken, but it is not something to discover by
+            // wondering why a window took a second to appear.
+            LSW_WARN("app_window_watcher: agent's UIA subscribe reply did not parse, "
+                     "falling back to polling: {}", e.what());
         }
     }
 

@@ -1,5 +1,6 @@
 #include "lsw/host/manager/console_window.hpp"
 
+#include "lsw/base/log.hpp"
 #include "lsw/host/link/agent_rpc_client.hpp"
 
 #include <QByteArray>
@@ -137,7 +138,11 @@ void ConsoleWindow::open_session() {
                 if (j.value("ok", false)) {
                     sid = QString::fromStdString(j.value("session_id", std::string{}));
                 }
-            } catch (...) {}
+            } catch (const nlohmann::json::exception& e) {
+                // sid stays empty, which the caller reports as a console
+                // that would not open. Say which reply did it.
+                LSW_WARN("console: open reply did not parse: {}", e.what());
+            }
         }
         QMetaObject::invokeMethod(
             self.data(), [self, sid]() {

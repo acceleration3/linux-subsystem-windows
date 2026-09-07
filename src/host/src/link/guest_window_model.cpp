@@ -1,5 +1,6 @@
 #include "lsw/host/link/guest_window_model.hpp"
 
+#include "lsw/base/log.hpp"
 #include "lsw/host/link/agent_rpc_client.hpp"
 
 #include "lsw/linkproto/commands.hpp"
@@ -41,7 +42,12 @@ namespace {
             gw.has_caption = w.value("has_caption", false);
             out.append(gw);
         }
-    } catch (const nlohmann::json::exception&) {
+    } catch (const nlohmann::json::exception& e) {
+        // Whatever parsed before the fault is kept: a truncated list is
+        // still every window the guest managed to describe, and losing
+        // them all would blank every mirror over one bad entry.
+        LSW_WARN("guest windows: malformed enumeration, kept {} of them: {}",
+                 out.size(), e.what());
     }
     return out;
 }
