@@ -1,4 +1,5 @@
 #include "lsw/agent/win/window.hpp"
+#include "lsw/agent/util/text_encoding.hpp"
 
 #include "lsw/agent/win/icon_extractor.hpp"
 #include "lsw/agent/log.hpp"
@@ -69,19 +70,6 @@ RECT visible_within(HWND hwnd, const RECT& frame) {
 }
 
 
-std::string utf16_to_utf8(const std::wstring& w) {
-    if (w.empty()) {
-        return {};
-    }
-    int n = ::WideCharToMultiByte(CP_UTF8, 0, w.data(), -1, nullptr, 0, nullptr, nullptr);
-    if (n <= 0) {
-        return {};
-    }
-    std::string out(static_cast<size_t>(n - 1), '\0');
-    ::WideCharToMultiByte(CP_UTF8, 0, w.data(), -1, out.data(), n, nullptr, nullptr);
-    return out;
-}
-
 std::string exe_path_for(DWORD pid) {
     HANDLE h = ::OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
     if (h == nullptr) {
@@ -91,7 +79,7 @@ std::string exe_path_for(DWORD pid) {
     DWORD n = MAX_PATH;
     std::string out;
     if (::QueryFullProcessImageNameW(h, 0, buf, &n) != 0) {
-        out = utf16_to_utf8(std::wstring(buf, n));
+        out = util::TextEncoding::to_utf8(std::wstring(buf, n));
     }
     ::CloseHandle(h);
     return out;
@@ -141,7 +129,7 @@ BOOL CALLBACK enum_proc(HWND hwnd, LPARAM lparam) {
     {
         wchar_t self[MAX_PATH] = {};
         ::GetModuleFileNameW(nullptr, self, MAX_PATH);
-        if (utf16_to_utf8(self) == exe) {
+        if (util::TextEncoding::to_utf8(self) == exe) {
             return TRUE;
         }
     }
@@ -172,7 +160,7 @@ BOOL CALLBACK enum_proc(HWND hwnd, LPARAM lparam) {
                   ? reinterpret_cast<std::uintptr_t>(root)
                   : 0;
     w.pid = static_cast<std::uint32_t>(pid);
-    w.title = utf16_to_utf8(title);
+    w.title = util::TextEncoding::to_utf8(title);
     w.exe_path = exe;
     w.client_w = fr.right - fr.left;   // now the WINDOW size
     w.client_h = fr.bottom - fr.top;

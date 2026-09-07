@@ -2,6 +2,7 @@
 #include "lsw/agent/rpc/auto_register.hpp"
 
 #include "lsw/linkproto/commands.hpp"
+#include "lsw/agent/util/text_encoding.hpp"
 #include "lsw/agent/win/icon_extractor.hpp"
 
 // clang-format off
@@ -20,14 +21,8 @@ struct GetIconHandler : RpcHandler {
         if (path.empty()) {
             throw std::invalid_argument("get_icon: missing path");
         }
-        const int wlen =
-            ::MultiByteToWideChar(CP_UTF8, 0, path.c_str(), -1, nullptr, 0);
-        std::wstring wpath(static_cast<size_t>(wlen > 0 ? wlen - 1 : 0), L'\0');
-        if (wlen > 0) {
-            ::MultiByteToWideChar(CP_UTF8, 0, path.c_str(), -1, wpath.data(),
-                                  wlen);
-        }
-        return {{"icon_png_base64", win::IconExtractor::from_executable(wpath)}};
+        return {{"icon_png_base64",
+                 win::IconExtractor::from_executable(util::TextEncoding::to_wide(path))}};
     }
 
     [[nodiscard]] std::string summarize(const nlohmann::json& reply) const override {
