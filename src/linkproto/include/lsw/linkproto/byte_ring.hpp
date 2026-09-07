@@ -162,16 +162,6 @@ class ByteRingProducer : public ByteRingEndpoint {
 public:
     using ByteRingEndpoint::ByteRingEndpoint;
 
-    [[nodiscard]] std::uint64_t free_bytes() const {
-        if (!valid()) {
-            return 0;
-        }
-        const std::uint64_t write_pos = load_field<std::uint64_t>(base_ + ring_off::write_pos);
-        ::lsw::linkproto::consume_fence();
-        const std::uint64_t read_pos = load_field<std::uint64_t>(base_ + ring_off::read_pos);
-        return capacity_ - (write_pos - read_pos);
-    }
-
     // Append one message. All-or-nothing: false means the ring did not
     // have room and NOTHING was written, so the caller can retry or drop
     // deliberately. A message larger than ``max_message`` can never fit
