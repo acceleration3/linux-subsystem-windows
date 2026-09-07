@@ -17,45 +17,37 @@ cmake --build build
 
 Default options:
 
-- `LSW_BUILD_SERVER` (Linux only)
-- `LSW_BUILD_CLIENT`
 - `LSW_BUILD_MANAGER` (Linux only)
 - `LSW_BUILD_AGENT` (Windows only)
+- `LSW_BUILD_RENDER_SERVER` — the render server on Linux, the guest's
+  OpenCL / OpenGL / Vulkan drivers on the mingw cross-build
+- `LSW_BUILD_TESTS`
 
 Disable any with `-DLSW_BUILD_X=OFF`.
 
-## Updating Vulkan-Headers
+The Windows half is cross-built, not built here:
 
 ```sh
-cd third_party/Vulkan-Headers
-git fetch --tags
-git checkout vX.Y.Z
-cd ../..
-git add third_party/Vulkan-Headers
+./scripts/build-agent.sh
 ```
 
-After bumping, regenerate codegen output:
+That produces `lsw-guest-agent.exe`, the three guest drivers and the
+Vulkan loader, for x86-64 and i686, under `build-agent/` and
+`build-agent32/`. The wizard picks all of them up from there.
 
-```sh
-cmake --build build --target regenerate-vulkan
-```
+## Changing the graphics proxy
 
-CI will fail on a regen-vs-committed mismatch.
-
-## Codegen development
-
-```sh
-cd codegen
-python -m venv .venv
-source .venv/bin/activate
-pip install -e .
-lsw-codegen --xml ../third_party/Vulkan-Headers/registry/vk.xml --out /tmp/out
-```
+The drivers and the server live in the
+[render-server](external/render-server) submodule, which has its own
+build, its own tests and its own contributing rules (see its
+`CLAUDE.md`). Change it there and bump the submodule pointer here; the
+codegen that produces its Vulkan, OpenGL and OpenCL wire format is its
+own too.
 
 ## Style
 
 - C++: `.clang-format` and `.clang-tidy` at repo root. Run `clang-format -i` before committing.
-- Python: `ruff check codegen/`.
+- Python: `ruff check` in whichever tree the code lives in.
 - Commit messages: imperative mood, ~70 char subject.
 
 ## Changing the host↔guest link
