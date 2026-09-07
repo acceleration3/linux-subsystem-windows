@@ -3,7 +3,6 @@
 #include "lsw/host/link/guest_window_model.hpp"
 
 #include "lsw/host/apps/app_config_store.hpp"
-#include "lsw/host/apps/vulkan_capture_service.hpp"
 #include "lsw/host/apps/catalog.hpp"
 #include "lsw/host/apps/launcher.hpp"
 
@@ -34,8 +33,7 @@ class AppListWidget : public QWidget {
     Q_OBJECT
 public:
     AppListWidget(apps::AppConfigStore& store, link::AgentRpcClient& rpc,
-                  link::GuestWindowModel& windows, apps::VulkanCaptureService& vulkan,
-                  QWidget* parent = nullptr);
+                  link::GuestWindowModel& windows, QWidget* parent = nullptr);
 
     void set_target(const QUuid& vm_uuid);
     void clear_target();
@@ -44,9 +42,6 @@ Q_SIGNALS:
     void launch_requested(const QString& app_id);
 
 private Q_SLOTS:
-    // A Vulkan-capture launch's guest window appeared: point the
-    // replay window's input at it.
-    void on_windows_for_vulkan(const QList<link::GuestWindow>& windows);
     void on_loaded(const QList<apps::AppEntry>& entries);
     void on_item_activated(QListWidgetItem* item);
     void on_context_menu(const QPoint& pos);
@@ -62,12 +57,6 @@ private:
     void rebuild();
 
     apps::AppConfigStore& store_;
-    apps::VulkanCaptureService& vulkan_;
-    // The PID of a Vulkan-capture launch whose guest window has not
-    // turned up yet. The replay already has the pixels; what is missing
-    // is somewhere to send the input its window receives. One at a
-    // time, which is the region's limit anyway.
-    quint32 vulkan_pid_ = 0;
     link::AgentRpcClient& rpc_;
     link::GuestWindowModel& windows_;
     apps::AppCatalog catalog_;

@@ -6,6 +6,7 @@
 #include "lsw/linkproto/region_layout.hpp"
 
 #include <QImage>
+#include <QRect>
 #include <QString>
 #include <QUuid>
 
@@ -29,7 +30,6 @@ namespace lsw::host::vm {
 //               original contents of the whole region)
 //   rpc         duplex message rings, for control traffic that does not
 //               want to be on TCP-over-hostfwd
-//   cmdstream   duplex message rings, for the Vulkan command stream
 //
 // The aliases below exist so callers keep reading
 // ``ShmemRegion::kSlotCount``; the values are the shared ones.
@@ -88,8 +88,15 @@ public:
     // (memcpy out of the front buffer) and the slot's hwnd. False if
     // the slot is empty or the read race-failed (caller retries on the
     // next doorbell).
+    //
+    // ``visible_out`` (optional) receives the part of THAT frame which
+    // is on the guest's screen — the whole image for everything but a
+    // maximized window, whose frame overhangs the monitor. Read inside
+    // the same seqlock as the pixels, which is the point of it being in
+    // the slot at all: a rectangle from any other source can describe a
+    // different frame than the one in hand.
     [[nodiscard]] bool read_slot_frame(int slot_index, quint64* hwnd_out,
-                                       QImage* out);
+                                       QImage* out, QRect* visible_out = nullptr);
 
     // The slot's current sequence number, or 0 for a slot with no live
     // window in it. Changes on every commit, which is all a caller
@@ -111,8 +118,6 @@ public:
 
     [[nodiscard]] linkproto::ByteRingConsumer& rpc_from_guest() { return rpc_from_guest_; }
     [[nodiscard]] linkproto::ByteRingProducer& rpc_to_guest() { return rpc_to_guest_; }
-    [[nodiscard]] linkproto::ByteRingConsumer& cmd_from_guest() { return cmd_from_guest_; }
-    [[nodiscard]] linkproto::ByteRingProducer& cmd_to_guest() { return cmd_to_guest_; }
 
 private:
     // Write the region header + channel table and initialise each
@@ -143,8 +148,6 @@ private:
 
     linkproto::ByteRingConsumer rpc_from_guest_;
     linkproto::ByteRingProducer rpc_to_guest_;
-    linkproto::ByteRingConsumer cmd_from_guest_;
-    linkproto::ByteRingProducer cmd_to_guest_;
 };
 
 }  // namespace lsw::host::vm

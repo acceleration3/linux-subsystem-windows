@@ -157,13 +157,6 @@ bool ShmemRegion::bind_channels_from_table() {
         rpc_to_guest_ = linkproto::ByteRingProducer{
             base + rpc.offset + linkproto::host_to_guest_ring_offset(rpc.size)};
     }
-    if (const auto cmd = linkproto::find_channel(base_, linkproto::kChannelCmdStream);
-        cmd.valid()) {
-        cmd_from_guest_ = linkproto::ByteRingConsumer{
-            base + cmd.offset + linkproto::guest_to_host_ring_offset(cmd.size)};
-        cmd_to_guest_ = linkproto::ByteRingProducer{
-            base + cmd.offset + linkproto::host_to_guest_ring_offset(cmd.size)};
-    }
     return true;
 }
 
@@ -188,17 +181,8 @@ bool ShmemRegion::lay_out_channels(quint64 size_bytes) {
         base + layout.rpc.offset + linkproto::guest_to_host_ring_offset(layout.rpc.size)};
     rpc_to_guest_ = linkproto::ByteRingProducer{
         base + layout.rpc.offset + linkproto::host_to_guest_ring_offset(layout.rpc.size)};
-    cmd_from_guest_ = linkproto::ByteRingConsumer{
-        base + layout.cmdstream.offset
-        + linkproto::guest_to_host_ring_offset(layout.cmdstream.size)};
-    cmd_to_guest_ = linkproto::ByteRingProducer{
-        base + layout.cmdstream.offset
-        + linkproto::host_to_guest_ring_offset(layout.cmdstream.size)};
-
-    LSW_INFO("shmem channels: rpc {} KiB @0x{:x}, cmdstream {} KiB @0x{:x}, "
-             "frames {} MiB @0x{:x}",
+    LSW_INFO("shmem channels: rpc {} KiB @0x{:x}, frames {} MiB @0x{:x}",
              layout.rpc.size / 1024, layout.rpc.offset,
-             layout.cmdstream.size / 1024, layout.cmdstream.offset,
              layout.frames.size / (1024 * 1024), layout.frames.offset);
     return true;
 }
@@ -218,8 +202,6 @@ void ShmemRegion::close() {
     // Endpoints point into the mapping; drop them before it goes away.
     rpc_from_guest_ = {};
     rpc_to_guest_ = {};
-    cmd_from_guest_ = {};
-    cmd_to_guest_ = {};
     frames_base_ = nullptr;
     frames_size_ = 0;
     if (base_ != nullptr) {
@@ -260,8 +242,8 @@ quint64 ShmemRegion::slot_sequence(int slot_index) const {
     return linkproto::load_seqno_acquire(slot + slot_off::seqno);
 }
 
-bool ShmemRegion::read_slot_frame(int slot_index, quint64* hwnd_out,
-                                  QImage* out) {
+bool ShmemRegion::read_slot_frame(int slot_index, quint64* hwnd_out, QImage* out,
+                                  QRect* visible_out) {
     if (frames_base_ == nullptr || slot_index < 0
         || slot_index >= static_cast<int>(kSlotCount)) {
         return false;
@@ -290,6 +272,7 @@ bool ShmemRegion::read_slot_frame(int slot_index, quint64* hwnd_out,
         const quint32 stride       = load_field<quint32>(slot + slot_off::stride);
         const quint32 height       = load_field<quint32>(slot + slot_off::height);
         const quint32 format       = load_field<quint32>(slot + slot_off::format);
+        const quint32 insets       = load_field<quint32>(slot + slot_off::visible_insets);
         const quint64 buffer_off   = load_field<quint64>(slot + slot_off::buffer_offset);
         const quint64 buffer_total = load_field<quint64>(slot + slot_off::buffer_size);
         if (format != linkproto::kFormatBgra8Premul || width == 0 || height == 0
@@ -317,6 +300,20 @@ bool ShmemRegion::read_slot_frame(int slot_index, quint64* hwnd_out,
         if (s2 == s1) {
             *hwnd_out = hwnd;
             *out = std::move(copy);
+            if (visible_out != nullptr) {
+                // Read under the same seqlock as the pixels, so it can
+                // only ever describe THIS frame. All-zero insets — every
+                // ordinary window, and any agent that predates the field
+                // — mean the whole frame is on screen.
+                const int left = static_cast<int>(insets & 0xFFU);
+                const int top = static_cast<int>((insets >> 8U) & 0xFFU);
+                const int right = static_cast<int>((insets >> 16U) & 0xFFU);
+                const int bottom = static_cast<int>((insets >> 24U) & 0xFFU);
+                const QRect visible(left, top,
+                                    static_cast<int>(width) - left - right,
+                                    static_cast<int>(height) - top - bottom);
+                *visible_out = visible.isEmpty() ? QRect() : visible;
+            }
             return true;
         }
         // Producer raced; retry.

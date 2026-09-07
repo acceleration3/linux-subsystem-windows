@@ -242,15 +242,11 @@ void IvshmemServer::worker_loop() {
                     }
                     continue;
                 }
-                // Vectors past the frame slots belong to the message
-                // channels; see linkproto/region.hpp for the split.
+                // The vector past the frame slots belongs to the rpc
+                // channel; see linkproto/region.hpp for the split.
                 if (slot == linkproto::kRpcDoorbellVector) {
                     QMetaObject::invokeMethod(
                         this, [this] { Q_EMIT channel_ready(linkproto::kChannelRpc); },
-                        Qt::QueuedConnection);
-                } else if (slot == linkproto::kCmdStreamDoorbellVector) {
-                    QMetaObject::invokeMethod(
-                        this, [this] { Q_EMIT channel_ready(linkproto::kChannelCmdStream); },
                         Qt::QueuedConnection);
                 } else {
                     QMetaObject::invokeMethod(

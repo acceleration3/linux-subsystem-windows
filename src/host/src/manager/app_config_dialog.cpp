@@ -20,6 +20,7 @@ namespace lsw::host::manager {
 namespace {
 
 constexpr int kIconPx = 64;
+constexpr int kEnvBoxPx = 72;  // ~3 lines; enough to see what is set
 constexpr int kPathIdleMs = 600;
 
 // Small RPC helper — synchronous get_icon over the shared channel.
@@ -47,7 +48,6 @@ AppConfigDialog::AppConfigDialog(apps::AppConfig initial, link::AgentRpcClient& 
                                  QWidget* parent)
     : QDialog(parent),
       cfg_(std::move(initial)),
-      initial_capture_(cfg_.capture),
       rpc_(rpc) {
     setWindowTitle(cfg_.id.isEmpty() ? "New application" : "Configure application");
     setModal(true);
@@ -68,13 +68,14 @@ AppConfigDialog::AppConfigDialog(apps::AppConfig initial, link::AgentRpcClient& 
     cmdline_edit_->setPlaceholderText("Optional extra arguments");
     form->addRow("Arguments", cmdline_edit_);
 
-    capture_combo_ = new QComboBox;
-    capture_combo_->addItem("Windows Graphics Capture (default — works for any window)",
-                            static_cast<int>(apps::CaptureMethod::Wgc));
-    capture_combo_->addItem("Vulkan ICD proxy (zero-copy for Vulkan-rendering apps)",
-                            static_cast<int>(apps::CaptureMethod::Vulkan));
-    capture_combo_->setCurrentIndex(static_cast<int>(cfg_.capture));
-    form->addRow("Capture", capture_combo_);
+    // Arguments and environment are not interchangeable, and the
+    // difference catches people out: a variable typed into Arguments
+    // reaches the application as a filename to open. Hence a field of
+    // its own, and a placeholder that shows the shape.
+    env_edit_ = new QPlainTextEdit(cfg_.env);
+    env_edit_->setPlaceholderText("One per line, e.g.\nGALLIUM_DRIVER=llvmpipe");
+    env_edit_->setFixedHeight(kEnvBoxPx);
+    form->addRow("Environment", env_edit_);
 
     icon_label_ = new QLabel;
     icon_label_->setFixedSize(kIconPx, kIconPx);
@@ -156,8 +157,7 @@ void AppConfigDialog::on_accept() {
     cfg_.name = name_edit_->text().trimmed();
     cfg_.path = path_edit_->text().trimmed();
     cfg_.cmdline = cmdline_edit_->text();
-    cfg_.capture =
-        static_cast<apps::CaptureMethod>(capture_combo_->currentData().toInt());
+    cfg_.env = env_edit_->toPlainText();
     if (cfg_.id.isEmpty() && !cfg_.path.isEmpty()) {
         cfg_.id = apps::AppConfig::make_id(cfg_.path);
     } else if (cfg_.id.isEmpty()) {

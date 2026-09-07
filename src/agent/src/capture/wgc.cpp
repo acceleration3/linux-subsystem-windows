@@ -7,10 +7,10 @@
 
 #include "lsw/agent/capture/wgc.hpp"
 
-#include "lsw/agent/capture/vulkan_session.hpp"
 
 #include "lsw/agent/log.hpp"
 #include "lsw/agent/transport/shmem.hpp"
+#include "lsw/agent/win/window.hpp"
 
 // clang-format off
 #include <windows.h>
@@ -29,6 +29,8 @@
 #include <windows.graphics.capture.interop.h>
 // clang-format on
 
+#include <algorithm>
+#include <cstddef>
 #include <cstdio>
 #include <cstring>
 #include <map>
@@ -81,6 +83,99 @@ inline std::uint64_t qpc_to_us(LONGLONG d) {
         / static_cast<double>(g_qpc_freq.QuadPart));
 }
 
+// Is every pixel of this band fully transparent? BGRA, so alpha is
+// byte 3.
+bool band_is_empty(const std::uint8_t* pixels, UINT pitch, int x, int y, int w,
+                   int h) {
+    if (w <= 0 || h <= 0) {
+        return false;
+    }
+    for (int row = y; row < y + h; ++row) {
+        const std::uint8_t* p = pixels + (static_cast<std::size_t>(row) * pitch)
+                                + (static_cast<std::size_t>(x) * 4U);
+        for (int col = 0; col < w; ++col) {
+            if (p[(static_cast<std::size_t>(col) * 4U) + 3U] != 0U) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+// A frame that was never finished painting.
+//
+// The window's ON-SCREEN part is where the application definitely draws
+// — the overhang of a maximized window is not, and is transparent by
+// rights. So an outermost row or column INSIDE that part being empty
+// from end to end means the capture is short of pixels the window has:
+// PrintWindow of the same window comes back fully opaque.
+//
+// This is what maximizing leaves behind. The frame that lands during the
+// transition is missing its top and left edges, and since WGC only
+// produces a frame when something changes, an application that then sits
+// idle never sends a better one — the mirror keeps the hole for as long
+// as the window is up.
+//
+// Rounded corners do not trip it: those leave the corners clear, not a
+// whole edge. Layered windows are excluded outright — a window shaped by
+// its own alpha is entitled to a transparent edge.
+bool frame_is_incomplete(HWND hwnd, const std::uint8_t* pixels, UINT pitch,
+                         UINT tex_w, UINT tex_h) {
+    if (pixels == nullptr
+        || (::GetWindowLongW(hwnd, GWL_EXSTYLE) & WS_EX_LAYERED) != 0) {
+        return false;
+    }
+    const auto vis =
+        win::Window::visible_rect(reinterpret_cast<std::uintptr_t>(hwnd));
+    if (!vis.valid) {
+        return false;
+    }
+    // Only what is really in this texture — the two disagree for a frame
+    // or two after a resize.
+    const int x = vis.x;
+    const int y = vis.y;
+    const int w = std::min(vis.w, static_cast<int>(tex_w) - x);
+    const int h = std::min(vis.h, static_cast<int>(tex_h) - y);
+    if (x < 0 || y < 0 || w <= 1 || h <= 1) {
+        return false;
+    }
+    return band_is_empty(pixels, pitch, x, y, w, 1)
+           || band_is_empty(pixels, pitch, x, y + h - 1, w, 1)
+           || band_is_empty(pixels, pitch, x, y, 1, h)
+           || band_is_empty(pixels, pitch, x + w - 1, y, 1, h);
+}
+
+// How much of THIS texture is off the guest's screen, packed one byte
+// per edge for the slot header (left | top<<8 | right<<16 | bottom<<24).
+//
+// Computed here, against the texture actually being committed, and only
+// when the two agree on size: mid-transition the window's frame rect has
+// already changed while the texture still holds the old one, and insets
+// from the new rect would crop the old pixels. Zero means "all of it",
+// which is both the common case and the safe answer.
+std::uint32_t visible_insets_for(HWND hwnd, UINT tex_w, UINT tex_h) {
+    const auto vis =
+        win::Window::visible_rect(reinterpret_cast<std::uintptr_t>(hwnd));
+    const auto frame =
+        win::Window::frame_size(reinterpret_cast<std::uintptr_t>(hwnd));
+    if (!vis.valid || frame.first != static_cast<int>(tex_w)
+        || frame.second != static_cast<int>(tex_h)) {
+        return 0;
+    }
+    const int left = vis.x;
+    const int top = vis.y;
+    const int right = static_cast<int>(tex_w) - (vis.x + vis.w);
+    const int bottom = static_cast<int>(tex_h) - (vis.y + vis.h);
+    if (left < 0 || top < 0 || right < 0 || bottom < 0 || left > 255 || top > 255
+        || right > 255 || bottom > 255) {
+        return 0;
+    }
+    return static_cast<std::uint32_t>(left)
+           | (static_cast<std::uint32_t>(top) << 8U)
+           | (static_cast<std::uint32_t>(right) << 16U)
+           | (static_cast<std::uint32_t>(bottom) << 24U);
+}
+
 struct Session {
     ComPtr<WGC::IGraphicsCaptureItem> item;
     ComPtr<WGC::IDirect3D11CaptureFramePool> pool;
@@ -90,6 +185,8 @@ struct Session {
     UINT staging_h = 0;
     SizeInt32 pool_size{0, 0};  // size the frame pool was (re)created at
     int shmem_slot = -1;         // index in transport::shmem allocator
+    int repairs = 0;             // see repair_locked
+    LONGLONG last_repair_qpc = 0;
 
     // Rolling 1-second stats window. Reset after each emit.
     LONGLONG stats_window_start_qpc = 0;
@@ -109,6 +206,75 @@ struct Session {
 };
 
 std::map<HWND, Session> g_sessions;
+
+// When, and at what size, each window's capture session was last
+// rebuilt. Kept outside Session because rebuilding destroys the Session,
+// and the whole point of the record is to outlive it.
+struct RebuildStamp {
+    LONGLONG qpc = 0;
+    UINT width = 0;
+    UINT height = 0;
+};
+std::map<HWND, RebuildStamp> g_last_rebuild;
+
+enum class Repair { None, Repaint, Rebuild };
+
+constexpr int kMaxRepairs = 3;
+
+// What to do about a window whose last frame came up short.
+//
+// A half-painted frame is not itself the problem — the problem is that
+// it is the LAST one. WGC produces a frame only when something changes,
+// so an application that maximizes and then sits idle (produced=0.0/s in
+// the stats line) leaves the mirror holding the frame that landed
+// mid-transition, with its top and left edges missing, for as long as
+// the window is up.
+//
+// First a repaint request, which is cheap and enough for a window that
+// draws through WM_PAINT. If the next look is still short, rebuild the
+// capture session: a fresh GraphicsCaptureItem makes DWM hand over the
+// whole window surface again, which is what an agent restart was
+// accidentally doing every time it "fixed" this.
+//
+// Bounded twice over. Sessions are deliberately not torn down at the
+// rate the watcher subscribes and unsubscribes — that churn destabilised
+// WGC and crashed the agent — so a rebuild is rate-limited per window by
+// a clock that outlives the session it replaces.
+Repair plan_repair_locked(HWND hwnd, Session& s, UINT tex_w, UINT tex_h) {
+    constexpr std::uint64_t kMinGapUs = 150'000;
+    constexpr std::uint64_t kSameSizeRebuildGapUs = 5'000'000;
+    if (s.repairs >= kMaxRepairs) {
+        return Repair::None;
+    }
+    const LONGLONG now = qpc_now();
+    if (s.last_repair_qpc != 0 && qpc_to_us(now - s.last_repair_qpc) < kMinGapUs) {
+        return Repair::None;
+    }
+    s.last_repair_qpc = now;
+    ++s.repairs;
+    if (s.repairs == 1) {
+        return Repair::Repaint;
+    }
+    // The floor is per GEOMETRY, not per window. A window that is a
+    // different size than when it was last rebuilt has genuinely new
+    // pixels to get wrong and is repaired straight away — a flat
+    // per-window timer instead made every other maximize come out
+    // broken, because toggling faster than the timer refused the repair
+    // outright.
+    //
+    // The timer still guards the pathological case: the same window, at
+    // the same size, coming up short over and over. Session churn is
+    // what destabilised WGC, so it must stay bounded there.
+    const auto last = g_last_rebuild.find(hwnd);
+    const bool same_geometry = last != g_last_rebuild.end()
+                               && last->second.width == tex_w
+                               && last->second.height == tex_h;
+    if (same_geometry && qpc_to_us(now - last->second.qpc) < kSameSizeRebuildGapUs) {
+        return Repair::None;
+    }
+    g_last_rebuild[hwnd] = {now, tex_w, tex_h};
+    return Repair::Rebuild;
+}
 
 bool init_locked() {
     if (g_init_done) {
@@ -171,6 +337,7 @@ Session* ensure_session_locked(HWND hwnd) {
             if (i->second.shmem_slot >= 0) {
                 transport::shmem().free_slot(i->second.shmem_slot);
             }
+            g_last_rebuild.erase(i->first);  // the hwnd is free to be reused
             i = g_sessions.erase(i);
         } else {
             ++i;
@@ -314,6 +481,7 @@ bool grab(HWND hwnd) {
             }
             g_sessions.erase(it);
         }
+        g_last_rebuild.erase(hwnd);
         return false;
     }
     Session* s = ensure_session_locked(hwnd);
@@ -351,7 +519,45 @@ bool grab(HWND hwnd) {
         frame = std::move(next);
     }
     if (!frame) {
+        // Nothing new — which is exactly when a frame that came up short
+        // matters, because there is nothing on the way to replace it.
+        // Re-examine the one we last copied out; ``plan_repair_locked``
+        // rate-limits this, so an idle window is scanned a few times
+        // after a resize and then left alone.
+        bool short_frame = false;
+        if (s->staging != nullptr && s->repairs < kMaxRepairs) {
+            D3D11_MAPPED_SUBRESOURCE last{};
+            if (SUCCEEDED(g_ctx->Map(s->staging.Get(), 0, D3D11_MAP_READ, 0, &last))) {
+                short_frame = frame_is_incomplete(
+                    hwnd, static_cast<const std::uint8_t*>(last.pData),
+                    last.RowPitch, s->staging_w, s->staging_h);
+                g_ctx->Unmap(s->staging.Get(), 0);
+            }
+        }
+        const Repair plan =
+            short_frame ? plan_repair_locked(hwnd, *s, s->staging_w, s->staging_h)
+                        : Repair::None;
+        if (plan == Repair::Repaint) {
+            ::RedrawWindow(hwnd, nullptr, nullptr,
+                           RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ALLCHILDREN);
+            LSW_AGENT_INFO("wgc: last frame for hwnd="
+                           + std::to_string(reinterpret_cast<std::uintptr_t>(hwnd))
+                           + " is missing an edge and none is coming; asked the "
+                             "window to repaint");
+        }
         finalize(Outcome::Cached);
+        if (plan == Repair::Rebuild) {
+            // Everything that touches the session is done; drop it, and
+            // the next tick builds a fresh capture for this window.
+            LSW_AGENT_INFO("wgc: hwnd="
+                           + std::to_string(reinterpret_cast<std::uintptr_t>(hwnd))
+                           + " still missing an edge after a repaint; rebuilding "
+                             "its capture session");
+            if (s->shmem_slot >= 0) {
+                transport::shmem().free_slot(s->shmem_slot);
+            }
+            g_sessions.erase(hwnd);
+        }
         return true;
     }
 
@@ -376,6 +582,9 @@ bool grab(HWND hwnd) {
             static_cast<std::uint32_t>(cs.Width),
             static_cast<std::uint32_t>(cs.Height));
         s->shmem_slot = info.index;
+        // A new size is a new chance to paint a whole frame — and a
+        // resize is exactly when the half-painted ones turn up.
+        s->repairs = 0;
         ++s->recreates;
         frame.Reset();
         finalize(Outcome::Cached);
@@ -428,6 +637,16 @@ bool grab(HWND hwnd) {
     bump_stage(s->t_copy_sum_us, s->t_copy_max_us, t_copy_us);
     bump_stage(s->t_map_sum_us,  s->t_map_max_us,  t_map_us);
 
+    // A whole frame clears the repair budget: this window paints fine,
+    // so spend it again freely if it ever stops. Frames that come up
+    // short are still committed as they are — a thin hole beats a stale
+    // picture — and the idle path above deals with them if they turn out
+    // to be the last word.
+    const auto* mapped = static_cast<const std::uint8_t*>(map.pData);
+    if (!frame_is_incomplete(hwnd, mapped, map.RowPitch, desc.Width, desc.Height)) {
+        s->repairs = 0;
+    }
+
     // Lazy slot allocation. ensure_session_locked may have created the
     // session before transport::shmem was open; alloc now if needed.
     if (s->shmem_slot < 0) {
@@ -443,7 +662,8 @@ bool grab(HWND hwnd) {
             s->shmem_slot,
             static_cast<const std::uint8_t*>(map.pData),
             map.RowPitch, desc.Width, desc.Height,
-            static_cast<std::uint64_t>(qpc_now()));
+            static_cast<std::uint64_t>(qpc_now()),
+            visible_insets_for(hwnd, desc.Width, desc.Height));
         const std::uint64_t t_write_us = qpc_to_us(qpc_now() - t_write_start);
         bump_stage(s->t_write_sum_us, s->t_write_max_us, t_write_us);
     }
@@ -457,32 +677,8 @@ bool grab(HWND hwnd) {
 }  // namespace
 
 bool Wgc::available() {
-    // Never while an application owns the region.
-    //
-    // ``open`` is not a query — it maps the BAR — so asking whether
-    // capture is available would TAKE the mapping back from a running
-    // Vulkan application, or fail against the driver every tick trying.
-    // Neither is capture's decision to make.
-    if (VulkanSession::active()) {
-        return false;
-    }
     std::lock_guard<std::mutex> lock(g_mu);
     return init_locked() && transport::shmem().open();
-}
-
-void Wgc::drop_all_sessions() {
-    std::lock_guard<std::mutex> lock(g_mu);
-    for (auto& [hwnd, session] : g_sessions) {
-        if (session.shmem_slot >= 0) {
-            transport::shmem().free_slot(session.shmem_slot);
-        }
-    }
-    const auto n = g_sessions.size();
-    g_sessions.clear();
-    if (n != 0) {
-        LSW_AGENT_INFO(std::string{"wgc: dropped "} + std::to_string(n)
-                       + " capture session(s); the region is going to an application");
-    }
 }
 
 bool Wgc::tick_capture(std::uintptr_t hwnd) {

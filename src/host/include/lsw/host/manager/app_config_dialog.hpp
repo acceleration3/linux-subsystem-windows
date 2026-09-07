@@ -2,10 +2,10 @@
 
 #include "lsw/host/apps/app_config.hpp"
 
-#include <QComboBox>
 #include <QDialog>
 #include <QLabel>
 #include <QLineEdit>
+#include <QPlainTextEdit>
 #include <QTimer>
 
 namespace lsw::host::link { class AgentRpcClient; }
@@ -25,11 +25,6 @@ public:
 
     [[nodiscard]] apps::AppConfig result() const { return cfg_; }
 
-    // Capture method the dialog was opened with. AppListWidget reads
-    // this after ``exec()`` to decide whether to push a
-    // ``set_capture_method`` RPC.
-    [[nodiscard]] apps::CaptureMethod initial_capture() const { return initial_capture_; }
-
 private Q_SLOTS:
     void on_path_changed(const QString& text);
     void on_path_idle();
@@ -40,13 +35,12 @@ private:
     void update_icon_preview();
 
     apps::AppConfig cfg_;
-    apps::CaptureMethod initial_capture_;
     link::AgentRpcClient& rpc_;
 
     QLineEdit* name_edit_ = nullptr;
     QLineEdit* path_edit_ = nullptr;
     QLineEdit* cmdline_edit_ = nullptr;
-    QComboBox* capture_combo_ = nullptr;
+    QPlainTextEdit* env_edit_ = nullptr;
     QLabel* icon_label_ = nullptr;
     QLabel* icon_status_ = nullptr;
     QTimer path_idle_timer_;

@@ -3,7 +3,7 @@
 #include "lsw/agent/log.hpp"
 
 #include "lsw/linkproto/frame_ring.hpp"
-#include "lsw/protocol/ivshmem_region.hpp"
+#include "lsw/agent/transport/ivshmem_region.hpp"
 
 #include <atomic>
 #include <cstring>
@@ -34,7 +34,7 @@ bool Shmem::open() {
     if (base_ != nullptr) {
         return true;
     }
-    // The mapping is ``lsw::protocol::IvshmemRegion`` — the same class
+    // The mapping is ``IvshmemRegion`` — the same class
     // the guest ICD uses, and the same interface the host side satisfies
     // with POSIX shared memory. This file used to open the device and
     // drive the IOCTLs itself, which meant two implementations of the
@@ -84,13 +84,12 @@ bool Shmem::open() {
     buffers_size_ = load_field<std::uint64_t>(frames_base + hdr_off::buffers_size);
 
     bind_duplex_channel(linkproto::kChannelRpc, rpc_to_host_, rpc_from_host_);
-    bind_duplex_channel(linkproto::kChannelCmdStream, cmd_to_host_, cmd_from_host_);
 
     LSW_AGENT_INFO("shmem: opened (size={} MiB, frames={} MiB, buffers={} MiB, "
-                   "rpc_ring={} KiB, cmd_ring={} KiB, peerID={}, vectors={})",
+                   "rpc_ring={} KiB, peerID={}, vectors={})",
                    size_ / (1024 * 1024), frames_size_ / (1024 * 1024),
                    buffers_size_ / (1024 * 1024), rpc_to_host_.capacity() / 1024,
-                   cmd_to_host_.capacity() / 1024, region_.peer_id(), region_.msi_vectors());
+                   region_.peer_id(), region_.msi_vectors());
     if (region_.msi_vectors() < linkproto::kDoorbellVectorCount) {
         // Frames still work (their vectors come first); the channel
         // doorbells silently would not, so say so once rather than leave
@@ -121,46 +120,8 @@ void Shmem::ring_doorbell(std::uint16_t vector) {
     region_.ring_vector(vector);
 }
 
-void Shmem::ring_channel_doorbell(std::uint32_t channel_kind) {
-    ring_doorbell(linkproto::doorbell_vector_for_channel(channel_kind));
-}
-
-void Shmem::release() {
-    if (base_ == nullptr) {
-        return;
-    }
-    LSW_AGENT_INFO("shmem: releasing the IVSHMEM mapping (a Vulkan application wants it)");
-    // Drop the endpoints before the memory they point into goes away.
-    // They are plain views over region bytes: keeping one across an
-    // unmap is a dangling pointer that only bites when something
-    // eventually writes through it.
-    rpc_to_host_ = {};
-    rpc_from_host_ = {};
-    cmd_to_host_ = {};
-    cmd_from_host_ = {};
-    for (auto& r : reservations_) {
-        r = Reservation{};
-    }
-    frames_base_ = nullptr;
-    frames_size_ = 0;
-    buffers_offset_ = 0;
-    buffers_size_ = 0;
-    base_ = nullptr;
-    size_ = 0;
-    region_.close();
-}
-
-bool Shmem::reacquire() {
-    if (base_ != nullptr) {
-        return true;
-    }
-    // ``open`` re-reads the channel table and rebinds every endpoint,
-    // so there is nothing to restore by hand. The slot allocator starts
-    // empty, which is correct: whatever was mirrored before the release
-    // is gone from the manager's side too.
-    const bool ok = open();
-    LSW_AGENT_INFO(std::string{"shmem: reacquire "} + (ok ? "ok" : "FAILED"));
-    return ok;
+void Shmem::ring_rpc_doorbell() {
+    ring_doorbell(linkproto::kRpcDoorbellVector);
 }
 
 Shmem::SlotInfo Shmem::alloc_slot(std::uint64_t hwnd, std::uint32_t width,
@@ -256,7 +217,8 @@ void Shmem::free_slot(int slot_index) {
 
 bool Shmem::commit_frame(int slot_index, const std::uint8_t* src_bgra,
                           std::uint32_t src_pitch, std::uint32_t width,
-                          std::uint32_t height, std::uint64_t present_qpc) {
+                          std::uint32_t height, std::uint64_t present_qpc,
+                          std::uint32_t visible_insets) {
     if (base_ == nullptr || slot_index < 0
         || slot_index >= static_cast<int>(kSlotCount)) {
         return false;
@@ -302,6 +264,9 @@ bool Shmem::commit_frame(int slot_index, const std::uint8_t* src_bgra,
     store_field<std::uint32_t>(slot + slot_off::width,  width);
     store_field<std::uint32_t>(slot + slot_off::stride, stride);
     store_field<std::uint32_t>(slot + slot_off::height, height);
+    // Inside the seqlock with the pixels it describes — that pairing is
+    // the whole reason this rides here instead of on the enumeration.
+    store_field<std::uint32_t>(slot + slot_off::visible_insets, visible_insets);
     store_seqno_release(slot + slot_off::seqno, next);  // commit
 
     // Ring the manager's doorbell on this slot's vector. Frame slots own

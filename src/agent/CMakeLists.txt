@@ -56,6 +56,7 @@ set(_lsw_agent_transport_sources
     src/transport/console_event_source.cpp
     src/transport/installer_event_source.cpp
     src/transport/shmem.cpp
+    src/transport/ivshmem_region.cpp
     src/transport/shmem_channel.cpp
 )
 set(_lsw_agent_rpc_sources
@@ -82,7 +83,6 @@ set(_lsw_agent_rpc_sources
     src/rpc/handlers/capture/subscribe_window.cpp
     src/rpc/handlers/capture/unsubscribe_window.cpp
     src/rpc/handlers/capture/capture_debug.cpp
-    src/rpc/handlers/capture/set_capture_method.cpp
     src/rpc/handlers/install/download_install.cpp
     src/rpc/handlers/install/download_extract.cpp
     src/rpc/handlers/install/run_script.cpp
@@ -116,9 +116,8 @@ set(_lsw_agent_util_sources
     src/util/text_encoding.cpp
 )
 set(_lsw_agent_capture_sources
-    src/capture/wgc.cpp
     src/capture/setup.cpp
-    src/capture/vulkan_session.cpp
+    src/capture/wgc.cpp
 )
 set(_lsw_agent_uia_sources
     src/uia/uia.cpp
@@ -205,11 +204,6 @@ target_link_libraries(lsw-guest-agent
     PRIVATE
         LSW::CompileOptions
         LSW::LinkProto   # wire contract shared with the manager
-        # IvshmemRegion: the one implementation of "map the BAR", shared
-        # with the guest ICD. Brings in no logging — lsw_protocol has no
-        # spdlog dependency, which is what lets the agent keep its own
-        # logger without a second one arriving through the back door.
-        LSW::Protocol
         nlohmann_json::nlohmann_json
         ws2_32        # WinSock2
         iphlpapi      # GetAdaptersAddresses

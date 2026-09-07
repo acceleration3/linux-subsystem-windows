@@ -10,23 +10,6 @@ namespace lsw::host::apps {
 
 using nlohmann::json;
 
-QString capture_method_to_string(CaptureMethod m) {
-    switch (m) {
-    case CaptureMethod::Vulkan:
-        return QStringLiteral("vulkan");
-    case CaptureMethod::Wgc:
-    default:
-        return QStringLiteral("wgc");
-    }
-}
-
-CaptureMethod capture_method_from_string(const QString& s) {
-    if (s.compare("vulkan", Qt::CaseInsensitive) == 0) {
-        return CaptureMethod::Vulkan;
-    }
-    return CaptureMethod::Wgc;
-}
-
 QImage AppConfig::icon_image() const {
     if (icon_png_base64.isEmpty()) {
         return {};
@@ -69,7 +52,7 @@ QString AppConfig::to_json() const {
     j["name"] = name.toStdString();
     j["path"] = path.toStdString();
     j["cmdline"] = cmdline.toStdString();
-    j["capture"] = capture_method_to_string(capture).toStdString();
+    j["env"] = env.toStdString();
     j["icon_png_base64"] = icon_png_base64.toStdString();
     j["discovered_via_agent"] = discovered_via_agent;
     j["last_seen_unix"] = static_cast<std::int64_t>(last_seen_unix);
@@ -95,8 +78,7 @@ AppConfig AppConfig::from_json(const QString& s, bool* ok) {
     out.name = QString::fromStdString(j.value("name", std::string{}));
     out.path = QString::fromStdString(j.value("path", std::string{}));
     out.cmdline = QString::fromStdString(j.value("cmdline", std::string{}));
-    out.capture = capture_method_from_string(
-        QString::fromStdString(j.value("capture", std::string{"wgc"})));
+    out.env = QString::fromStdString(j.value("env", std::string{}));
     out.icon_png_base64 = QString::fromStdString(j.value("icon_png_base64", std::string{}));
     out.discovered_via_agent = j.value("discovered_via_agent", false);
     out.last_seen_unix = j.value("last_seen_unix", static_cast<std::int64_t>(0));
