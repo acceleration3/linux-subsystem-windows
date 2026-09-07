@@ -7,6 +7,8 @@
 #include <QObject>
 #include <QString>
 
+#include <functional>
+
 class QNetworkReply;
 
 namespace lsw::host::provision::iso {
@@ -16,19 +18,25 @@ namespace lsw::host::provision::iso {
 //   1. check_locale       — GET https://www.microsoft.com/<locale>/software-download/
 //                            (falls back to en-US on non-200)
 //   2. generate_session_id — UUID v4 (random)
-//   3. visit_download_page — GET https://www.microsoft.com/software-download/windows11
-//                            (just for the AKAM/MS cookies a real browser would have)
-//   4. whitelist_session  — GET https://vlscppe.microsoft.com/tags?org_id=...&session_id=...
+//   3. visit_download_page — GET https://www.microsoft.com/<locale>/software-download/windows11
+//                            for the MC1 / MUID / MSFPC cookies the
+//                            connector calls carry
 //
 // After ``initialize`` succeeds, two follow-up calls are available:
 //
 //   * ``fetch_skus``        — GET .../api/getskuinformationbyproductedition
 //   * ``fetch_download_url``— GET .../api/GetProductDownloadLinksBySku
 //
-// We deliberately skip the ``ov-df.microsoft.com/mdt.js`` round-trip
-// Fido does — Microsoft has rotated that endpoint and it's no longer
-// required to get a working URL. Browser cookies + the vlscppe
-// whitelist are enough.
+// There is no fourth stage. A GET to ``vlscppe.microsoft.com/tags``
+// used to sit here, described as whitelisting the session — but a real
+// browser session never contacts that host, so it authorised nothing.
+// It was a request no browser makes, from a client trying to look like
+// one, which is the opposite of what it was for.
+//
+// ``ov-df.microsoft.com/mdt.js`` is loaded by the real page and skipped
+// here. It sets no cookie the connector calls carry, and a captured
+// session completed with its beacons blocked, so it appears to be
+// passive fingerprinting rather than part of the contract.
 //
 // Cookie state persists automatically via QNetworkAccessManager's
 // built-in cookie jar; that's why we keep one ``nam_`` for the whole
@@ -58,7 +66,7 @@ public:
 
     // When set to a non-empty directory, every HTTP response body is
     // written to ``<dir>/NN_<step>.bin`` (NN counter, ``step`` one of
-    // ``locale`` / ``visit`` / ``whitelist`` / ``skus`` / ``download_url``).
+    // ``locale`` / ``visit`` / ``skus`` / ``download_url``).
     // The directory is created if it doesn't exist. Useful for capturing
     // a real session for later replay in the unit test.
     void set_record_directory(const QString& dir);
@@ -67,7 +75,7 @@ public:
     // with two ``http://127.0.0.1:PORT`` values from a test's MockHttp
     // server to redirect every request without touching DNS. Empty
     // strings restore the defaults.
-    void set_host_overrides(const QString& microsoft_base, const QString& vlscppe_base);
+    void set_host_overrides(const QString& microsoft_base);
 
 Q_SIGNALS:
     void initialized();
@@ -80,12 +88,18 @@ Q_SIGNALS:
 private Q_SLOTS:
     void on_locale_check_finished();
     void on_visit_page_finished();
-    void on_whitelist_finished();
     void on_skus_finished();
     void on_download_url_finished();
 
 private:
-    [[nodiscard]] QNetworkRequest make_request(const QString& url, bool with_referer = false) const;
+    // A page load, and an XMLHttpRequest the page would make. Two
+    // shapes because they carry different headers - see the definitions.
+    [[nodiscard]] QNetworkRequest make_page_request(const QString& url) const;
+    [[nodiscard]] QNetworkRequest make_api_request(const QString& url) const;
+
+    // Run ``work`` after a jittered pause, so the connector calls do not
+    // land the instant the page they claim to come from returns.
+    void after_human_pause(std::function<void()> work);
     [[nodiscard]] static QString generate_session_id();
     // ``json_out`` is ``nlohmann::json*``, kept void* so the header
     // doesn't need to drag the json single-include in.
@@ -108,7 +122,6 @@ private:
 
     // Host overrides + record dir.
     QString microsoft_base_ = "https://www.microsoft.com";
-    QString vlscppe_base_ = "https://vlscppe.microsoft.com";
     QString record_dir_;
     int record_counter_ = 0;
 };
