@@ -85,60 +85,46 @@ QStringList PayloadIsoBuilder::stage_files(const PayloadInputs& in, const QStrin
         }
     }
 
-    // The Vulkan pair goes in its own directory so the whole thing can
-    // be copied to the guest with one xcopy, manifest included.
-    if (!in.icd_dll_path.isEmpty() || !in.vulkan_loader_path.isEmpty()) {
-        const QString vk_dir = dir.filePath("vulkan");
-        QDir().mkpath(vk_dir);
-        auto stage_into_vulkan = [&](const QString& src, const QString& name) {
+    // Each architecture's drivers go in a directory of their own, so
+    // the whole set copies to the guest with one xcopy — and so a
+    // 32-bit driver can never shadow its 64-bit namesake, which
+    // ``opengl32.dll`` would otherwise do.
+    //
+    // Names on the ISO are the names the guest wants, not the names the
+    // cross-build produced: the mingw ``lib`` prefix means nothing to
+    // Windows, and ``rvk_icd.dll`` is what the agent's manifest points
+    // at.
+    auto stage_drivers = [&](const QString& subdir, const QString& vulkan_icd,
+                             const QString& opengl_icd, const QString& opencl_icd,
+                             const QString& loader) {
+        if (vulkan_icd.isEmpty() && opengl_icd.isEmpty() && opencl_icd.isEmpty()) {
+            return;
+        }
+        const QString driver_dir = dir.filePath(subdir);
+        QDir().mkpath(driver_dir);
+        auto stage_one = [&](const QString& src, const QString& name) {
             if (src.isEmpty()) {
                 return;
             }
-            const QString dest = QDir(vk_dir).filePath(name);
+            const QString dest = QDir(driver_dir).filePath(name);
             if (!QFile::copy(src, dest)) {
                 LSW_WARN("failed to stage {} -> {}", src.toStdString(), dest.toStdString());
                 return;
             }
             created << dest;
         };
-        stage_into_vulkan(in.icd_dll_path, "lsw_icd.dll");
-        stage_into_vulkan(in.vulkan_loader_path, "vulkan-1.dll");
-        if (!in.icd_manifest_json.isEmpty()) {
-            const QString manifest = QDir(vk_dir).filePath("lsw_icd.json");
-            QFile mf{manifest};
-            if (mf.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-                mf.write(in.icd_manifest_json.toUtf8());
-                created << manifest;
-            }
-        }
-    }
-
-    // The i686 pair, in its own directory for the same reason. It has
-    // to be a separate directory rather than a suffix: the manifest
-    // names the driver by a RELATIVE path, so the two builds cannot
-    // share one folder without one of them shadowing the other.
-    if (!in.icd32_dll_path.isEmpty() && !in.vulkan32_loader_path.isEmpty()) {
-        const QString vk32_dir = dir.filePath("vulkan32");
-        QDir().mkpath(vk32_dir);
-        auto stage_into_vulkan32 = [&](const QString& src, const QString& name) {
-            const QString dest = QDir(vk32_dir).filePath(name);
-            if (!QFile::copy(src, dest)) {
-                LSW_WARN("failed to stage {} -> {}", src.toStdString(), dest.toStdString());
-                return;
-            }
-            created << dest;
-        };
-        stage_into_vulkan32(in.icd32_dll_path, "lsw_icd.dll");
-        stage_into_vulkan32(in.vulkan32_loader_path, "vulkan-1.dll");
-        if (!in.icd_manifest_json.isEmpty()) {
-            const QString manifest = QDir(vk32_dir).filePath("lsw_icd.json");
-            QFile mf{manifest};
-            if (mf.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-                mf.write(in.icd_manifest_json.toUtf8());
-                created << manifest;
-            }
-        }
-    }
+        stage_one(vulkan_icd, "rvk_icd.dll");
+        stage_one(opengl_icd, "opengl32.dll");
+        stage_one(opencl_icd, "rvk_opencl.dll");
+        // The loader ships beside the drivers rather than in a
+        // directory of its own: the agent links both out of the same
+        // per-architecture folder, and one folder is one xcopy.
+        stage_one(loader, "vulkan-1.dll");
+    };
+    stage_drivers("rvk", in.vulkan_icd_path, in.opengl_icd_path, in.opencl_icd_path,
+                  in.vulkan_loader_path);
+    stage_drivers("rvk32", in.vulkan_icd32_path, in.opengl_icd32_path, in.opencl_icd32_path,
+                  in.vulkan32_loader_path);
 
     stage_optional(in.lsw_msi_path, "lsw.msi");
     stage_optional(in.dxvk_archive_path, "dxvk.tar.gz");

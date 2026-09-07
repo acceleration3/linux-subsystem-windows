@@ -117,64 +117,60 @@ int main(int argc, char** argv) {
         check(QFile::exists(on_iso), "driver file staged into \\ivshmem on the ISO");
     }
 
-    // E2: the guest Vulkan pair. Both files plus a manifest have to land
-    // in \vulkan on the ISO, and the answer file has to both copy them
-    // in and register the ICD — a driver nothing registers is a driver
-    // the loader never looks at, and the failure mode is "the app falls
-    // back to software rendering" rather than anything that says so.
-    check(xml.contains(QStringLiteral("Khronos\\Vulkan\\Drivers")),
-          "autounattend registers the ICD in the Vulkan drivers key");
-    check(xml.contains(QStringLiteral("lsw_icd.json")),
-          "and the registered value names the manifest");
+    // E2: the guest drivers. All four files per architecture have to
+    // land in \\rvk (and \\rvk32) on the ISO under the names the guest
+    // wants, and the answer file has to copy them in — nothing
+    // registers them, because the agent points each launch at the set
+    // it staged beside that application.
+    check(xml.contains(QStringLiteral("C:\\ProgramData\\LSW\\rvk")),
+          "autounattend copies the guest drivers to ProgramData");
+    check(xml.contains(QStringLiteral("C:\\ProgramData\\LSW\\rvk32")),
+          "and the 32-bit set, which is what a D3D8 / D3D9 title loads");
 
-    QTemporaryDir vk_src;
-    for (const char* name : {"lsw_icd.dll", "vulkan-1.dll"}) {
-        QFile f{QDir(vk_src.path()).filePath(QLatin1String(name))};
-        check(f.open(QIODevice::WriteOnly), "created a fake guest Vulkan binary");
+    QTemporaryDir drv_src;
+    for (const char* name : {"librvk_icd.dll", "opengl32.dll", "librvk_opencl.dll",
+                             "vulkan-1.dll"}) {
+        QFile f{QDir(drv_src.path()).filePath(QLatin1String(name))};
+        check(f.open(QIODevice::WriteOnly), "created a fake guest driver");
         f.write("MZstub");
     }
+    const QString vk_icd = QDir(drv_src.path()).filePath(QStringLiteral("librvk_icd.dll"));
+    const QString gl_icd = QDir(drv_src.path()).filePath(QStringLiteral("opengl32.dll"));
+    const QString cl_icd = QDir(drv_src.path()).filePath(QStringLiteral("librvk_opencl.dll"));
+    const QString loader = QDir(drv_src.path()).filePath(QStringLiteral("vulkan-1.dll"));
 
     QTemporaryDir staging3;
-    PayloadInputs with_vulkan;
-    with_vulkan.autounattend_xml = xml;
-    with_vulkan.icd_dll_path = QDir(vk_src.path()).filePath(QStringLiteral("lsw_icd.dll"));
-    with_vulkan.vulkan_loader_path = QDir(vk_src.path()).filePath(QStringLiteral("vulkan-1.dll"));
-    with_vulkan.icd_manifest_json = QStringLiteral("{\"ICD\":{\"library_path\":\".\\\\lsw_icd.dll\"}}");
-    (void)PayloadIsoBuilder::stage_files(with_vulkan, staging3.path());
-    for (const char* name : {"lsw_icd.dll", "vulkan-1.dll", "lsw_icd.json"}) {
+    PayloadInputs with_drivers;
+    with_drivers.autounattend_xml = xml;
+    with_drivers.vulkan_icd_path = vk_icd;
+    with_drivers.opengl_icd_path = gl_icd;
+    with_drivers.opencl_icd_path = cl_icd;
+    with_drivers.vulkan_loader_path = loader;
+    (void)PayloadIsoBuilder::stage_files(with_drivers, staging3.path());
+    // The names on the ISO are the guest's names, not the cross-build's:
+    // the mingw ``lib`` prefix means nothing to Windows, and the agent's
+    // manifest points at rvk_icd.dll.
+    for (const char* name : {"rvk_icd.dll", "opengl32.dll", "rvk_opencl.dll", "vulkan-1.dll"}) {
         const QString on_iso =
-            QDir(staging3.path()).filePath(QStringLiteral("vulkan/") + QLatin1String(name));
-        check(QFile::exists(on_iso), "guest Vulkan file staged into \\vulkan on the ISO");
+            QDir(staging3.path()).filePath(QStringLiteral("rvk/") + QLatin1String(name));
+        check(QFile::exists(on_iso), "guest driver staged into \\rvk on the ISO");
     }
-    // The 32-bit pair, which is what a D3D8 / D3D9 title loads. It
-    // stages into its own directory — the manifest names the driver
-    // relatively, so one folder cannot hold both builds — and registers
-    // under the WOW6432Node view, which is the key a 32-bit process
-    // actually reads.
-    check(xml.contains(QStringLiteral("WOW6432Node\\Khronos\\Vulkan\\Drivers")),
-          "autounattend registers the 32-bit ICD in the redirected drivers key");
 
+    // The i686 set stages into its own directory. It has to be a
+    // separate one rather than a suffix: opengl32.dll is found by the
+    // DLL search order, so two builds in one folder would shadow each
+    // other.
     QTemporaryDir staging4;
-    PayloadInputs with_vulkan32 = with_vulkan;
-    with_vulkan32.icd32_dll_path = with_vulkan.icd_dll_path;
-    with_vulkan32.vulkan32_loader_path = with_vulkan.vulkan_loader_path;
-    (void)PayloadIsoBuilder::stage_files(with_vulkan32, staging4.path());
-    for (const char* name : {"lsw_icd.dll", "vulkan-1.dll", "lsw_icd.json"}) {
+    PayloadInputs with_drivers32 = with_drivers;
+    with_drivers32.vulkan_icd32_path = vk_icd;
+    with_drivers32.opengl_icd32_path = gl_icd;
+    with_drivers32.opencl_icd32_path = cl_icd;
+    with_drivers32.vulkan32_loader_path = loader;
+    (void)PayloadIsoBuilder::stage_files(with_drivers32, staging4.path());
+    for (const char* name : {"rvk_icd.dll", "opengl32.dll", "rvk_opencl.dll", "vulkan-1.dll"}) {
         const QString on_iso =
-            QDir(staging4.path()).filePath(QStringLiteral("vulkan32/") + QLatin1String(name));
-        check(QFile::exists(on_iso), "32-bit guest Vulkan file staged into \\vulkan32");
-    }
-
-    // The manifest's library_path must stay relative: the loader
-    // resolves it against the manifest's own directory, so a relative
-    // path survives being copied anywhere in the guest, and an absolute
-    // one would duplicate a guest path the host has to guess.
-    {
-        QFile mf{QDir(staging3.path()).filePath(QStringLiteral("vulkan/lsw_icd.json"))};
-        check(mf.open(QIODevice::ReadOnly), "staged manifest is readable");
-        const QString body = QString::fromUtf8(mf.readAll());
-        check(!body.contains(QStringLiteral("C:\\")),
-              "the ICD manifest names the driver relatively, not by an absolute guest path");
+            QDir(staging4.path()).filePath(QStringLiteral("rvk32/") + QLatin1String(name));
+        check(QFile::exists(on_iso), "32-bit guest driver staged into \\rvk32");
     }
 
     // End to end: build a real ISO and read the answer file back out of

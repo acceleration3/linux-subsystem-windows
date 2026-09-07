@@ -4,7 +4,7 @@
 #include "lsw/host/config/settings.hpp"
 #include "lsw/host/config/vm_name.hpp"
 #include "lsw/host/platform/agent_exe_path.hpp"
-#include "lsw/host/platform/guest_vulkan_paths.hpp"
+#include "lsw/host/platform/guest_driver_paths.hpp"
 #include "lsw/host/platform/dolphin_places.hpp"
 #include "lsw/host/provision/install/autounattend.hpp"
 #include "lsw/host/provision/install/ivshmem_driver.hpp"
@@ -54,38 +54,37 @@ void PayloadIsoStager::build(const config::VmRecord& record, const PipelineInput
         LSW_INFO("provision: bundling guest agent from {}", agent_exe.toStdString());
     }
 
-    // The guest Vulkan pair. Absent means the guest installs normally
-    // and the agent runs; only the GPU path is missing, so this is a
+    // The guest drivers. Absent means the guest installs normally and
+    // the agent runs; only the GPU path is missing, so this is a
     // warning rather than a failure.
-    const QString icd_dll = platform::GuestVulkanPaths::icd_dll();
-    const QString loader = platform::GuestVulkanPaths::vulkan_loader();
-    if (icd_dll.isEmpty() || loader.isEmpty()) {
-        LSW_WARN("provision: no guest Vulkan ICD / loader found; the guest will install "
-                 "without the GPU path. Run scripts/build-agent.sh, or set LSW_ICD_DLL "
-                 "and LSW_VULKAN_LOADER");
+    using platform::GuestDriverPaths;
+    payload.vulkan_icd_path = GuestDriverPaths::vulkan_icd();
+    payload.opengl_icd_path = GuestDriverPaths::opengl_icd();
+    payload.opencl_icd_path = GuestDriverPaths::opencl_icd();
+    payload.vulkan_loader_path = GuestDriverPaths::vulkan_loader();
+    if (payload.vulkan_icd_path.isEmpty() || payload.vulkan_loader_path.isEmpty()) {
+        LSW_WARN("provision: no guest Vulkan driver / loader found; the guest will install "
+                 "without the GPU path. Run scripts/build-agent.sh, or set "
+                 "LSW_VULKAN_ICD_DLL and LSW_VULKAN_LOADER");
     } else {
-        payload.icd_dll_path = icd_dll;
-        payload.vulkan_loader_path = loader;
-        payload.icd_manifest_json = platform::GuestVulkanPaths::icd_manifest_json();
-        LSW_INFO("provision: bundling guest Vulkan ICD from {} and loader from {}",
-                 icd_dll.toStdString(), loader.toStdString());
+        LSW_INFO("provision: bundling guest drivers vulkan={} opengl={} opencl={} loader={}",
+                 payload.vulkan_icd_path.toStdString(),
+                 payload.opengl_icd_path.toStdString(),
+                 payload.opencl_icd_path.toStdString(),
+                 payload.vulkan_loader_path.toStdString());
     }
 
-    // The i686 pair is what a 32-bit application loads, and every D3D8
+    // The i686 set is what a 32-bit application loads, and every D3D8
     // and D3D9 title is one. Its absence costs only those, so it is a
     // note rather than a warning.
-    const QString icd32 = platform::GuestVulkanPaths::icd_dll_x86();
-    const QString loader32 = platform::GuestVulkanPaths::vulkan_loader_x86();
-    if (icd32.isEmpty() || loader32.isEmpty()) {
-        LSW_INFO("provision: no 32-bit guest Vulkan pair; 32-bit applications will have no "
+    payload.vulkan_icd32_path = GuestDriverPaths::vulkan_icd_x86();
+    payload.opengl_icd32_path = GuestDriverPaths::opengl_icd_x86();
+    payload.opencl_icd32_path = GuestDriverPaths::opencl_icd_x86();
+    payload.vulkan32_loader_path = GuestDriverPaths::vulkan_loader_x86();
+    if (payload.vulkan_icd32_path.isEmpty() || payload.vulkan32_loader_path.isEmpty()) {
+        LSW_INFO("provision: no 32-bit guest drivers; 32-bit applications will have no "
                  "driver. Run scripts/build-agent.sh (it builds both), or set "
-                 "LSW_ICD_DLL_X86 and LSW_VULKAN_LOADER_X86");
-    } else {
-        payload.icd32_dll_path = icd32;
-        payload.vulkan32_loader_path = loader32;
-        payload.icd_manifest_json = platform::GuestVulkanPaths::icd_manifest_json();
-        LSW_INFO("provision: bundling 32-bit guest Vulkan ICD from {} and loader from {}",
-                 icd32.toStdString(), loader32.toStdString());
+                 "LSW_VULKAN_ICD_DLL_X86 and LSW_VULKAN_LOADER_X86");
     }
 
     // libisofs writes hundreds of megabytes; off the GUI thread.

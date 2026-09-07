@@ -27,29 +27,38 @@ struct PayloadInputs {
     // carries it.
     QString ivshmem_driver_dir;  // optional; empty = not staged
 
-    // The guest Vulkan pair, staged into ``\vulkan`` on the ISO and
-    // copied to ``C:\ProgramData\LSW\vulkan`` at install:
+    // The guest drivers, staged into ``\\rvk`` (and ``\\rvk32``) on the
+    // ISO and copied to ``C:\\ProgramData\\LSW\\rvk`` at install, with
+    // the Khronos Vulkan loader into ``\\vulkan``:
     //
-    //   icd_dll_path        lsw_icd.dll — our driver
-    //   vulkan_loader_path  vulkan-1.dll — the Khronos loader, without
-    //                       which nothing can find the driver, because a
-    //                       VM with no GPU has no loader of its own
+    //   vulkan_icd_path   librvk_icd.dll  — the render server's Vulkan
+    //                     driver, staged as rvk_icd.dll
+    //   opengl_icd_path   opengl32.dll    — its OpenGL driver, which an
+    //                     application finds by the DLL search order
+    //   opencl_icd_path   librvk_opencl.dll, staged as rvk_opencl.dll
+    //   vulkan_loader_path  vulkan-1.dll  — the Khronos loader, without
+    //                     which nothing can find a Vulkan driver,
+    //                     because a VM with no GPU has none of its own
     //
-    // A manifest naming the DLL is written beside them and registered in
-    // ``HKLM\SOFTWARE\Khronos\Vulkan\Drivers``; that registry value is
-    // the entire discovery mechanism on Windows, the counterpart of the
-    // .json file the Linux loader finds on disk.
+    // No manifest and no registry value: the agent writes an ICD
+    // manifest beside each application it launches and names it in that
+    // launch's VK_DRIVER_FILES. Which driver an application uses is a
+    // per-application decision, and a machine-wide registry key is the
+    // wrong scope for one.
     //
-    // Both optional. Without them the guest installs and the agent runs;
+    // All optional. Without them the guest installs and the agent runs;
     // only the GPU path is absent.
-    QString icd_dll_path;
+    QString vulkan_icd_path;
+    QString opengl_icd_path;
+    QString opencl_icd_path;
     QString vulkan_loader_path;
-    // The i686 pair, for 32-bit applications. Optional: a guest without
-    // it installs fine and runs 64-bit Vulkan apps, and only a D3D8 /
+    // The i686 set, for 32-bit applications. Optional: a guest without
+    // it installs fine and runs 64-bit applications, and only a D3D8 /
     // D3D9 title notices.
-    QString icd32_dll_path;
+    QString vulkan_icd32_path;
+    QString opengl_icd32_path;
+    QString opencl_icd32_path;
     QString vulkan32_loader_path;
-    QString icd_manifest_json;  // contents, not a path
 };
 
 }  // namespace lsw::host::provision::install
