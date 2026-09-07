@@ -89,6 +89,9 @@ void Wizard::start_pipeline() {
     in.sizing = state_.draft.sizing;
     in.image_index = state_.image_index;
     in.debloat = state_.debloat;
+    // DebloatPage has already produced the trimmed ISO and pointed
+    // chosen_iso_path at it.
+    in.image_already_trimmed = true;
     pipeline_->set_inputs(in);
     pipeline_->start();
 }

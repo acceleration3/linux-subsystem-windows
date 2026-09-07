@@ -1,7 +1,10 @@
 #include "lsw/host/wizard/download_page.hpp"
 
 #include "lsw/host/wizard/wizard.hpp"
-#include "lsw/host/provision/pipeline.hpp"
+#include "lsw/host/config/settings.hpp"
+#include "lsw/host/services/host_services.hpp"
+
+#include <QDir>
 
 #include <QTimer>
 #include <QVBoxLayout>
@@ -30,39 +33,46 @@ void DownloadPage::initializePage() {
     status_->setText("Connecting...");
     Q_EMIT completeChanged();
 
-    auto* p = wizard_.pipeline();
-    if (p == nullptr) {
-        status_->setText("Internal error: pipeline not started.");
+    auto& state = wizard_.state();
+    if (state.fido_download_url.isEmpty()) {
+        status_->setText("Internal error: no download URL was resolved.");
         return;
     }
-    using Step = ::lsw::host::provision::Pipeline::Step;
-    connect(p, &::lsw::host::provision::Pipeline::step_started, this,
-            [this](Step s, const QString& desc) {
-                if (s == Step::DownloadingIso) status_->setText(desc);
-            });
-    connect(p, &::lsw::host::provision::Pipeline::step_progress, this,
-            [this](Step s, double frac, const QString& detail) {
-                if (s != Step::DownloadingIso) return;
-                if (frac >= 0.0 && frac <= 1.0) {
-                    bar_->setValue(static_cast<int>(frac * 100));
-                }
-                status_->setText(detail);
-            });
-    connect(p, &::lsw::host::provision::Pipeline::step_finished, this, [this](Step s) {
-        if (s != Step::DownloadingIso) return;
+    const QString dest =
+        QDir(wizard_.services().settings().isos_dir()).filePath(QStringLiteral("windows.iso"));
+
+    downloader_ = new provision::iso::Downloader(this);
+    connect(downloader_, &provision::iso::Downloader::progress, this,
+            [this](qint64 received, qint64 total) {
+        if (total > 0) {
+            bar_->setValue(static_cast<int>((received * 100) / total));
+        }
+        status_->setText(QStringLiteral("%1 MiB%2")
+                             .arg(received / (1024 * 1024))
+                             .arg(total > 0 ? QStringLiteral(" / %1 MiB").arg(total / (1024 * 1024))
+                                            : QString{}));
+    });
+    connect(downloader_, &provision::iso::Downloader::failed, this,
+            [this](const QString& message) {
+        status_->setText(QStringLiteral("Download failed: %1").arg(message));
+    });
+    connect(downloader_, &provision::iso::Downloader::finished, this,
+            [this](const QString& path) {
+        // The trim page reads this, and so does the pipeline when it
+        // starts: a local path here is what makes it skip its own
+        // download step.
+        wizard_.state().chosen_iso_path = path;
         bar_->setValue(100);
         status_->setText("Download complete.");
         complete_ = true;
         Q_EMIT completeChanged();
         QTimer::singleShot(0, this, [this] {
-            if (auto* w = wizard()) w->next();
+            if (auto* w = wizard()) {
+                w->next();
+            }
         });
     });
-    connect(p, &::lsw::host::provision::Pipeline::failed, this,
-            [this](Step s, const QString& err) {
-                if (s != Step::DownloadingIso) return;
-                status_->setText(QStringLiteral("Download failed: %1").arg(err));
-            });
+    downloader_->start(state.fido_download_url, dest);
 }
 
 bool DownloadPage::isComplete() const {
@@ -70,8 +80,8 @@ bool DownloadPage::isComplete() const {
 }
 
 int DownloadPage::nextId() const {
-    // Windows ISO download done → the Payload (build) page next.
-    return Wizard::Payload;
+    // The image is local now, so it can be trimmed.
+    return Wizard::Debloat;
 }
 
 }  // namespace lsw::host::wizard
