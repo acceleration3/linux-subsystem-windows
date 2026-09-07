@@ -9,6 +9,8 @@
 #include <QNetworkRequest>
 #include <QRegularExpression>
 #include <QUrl>
+#include <QRandomGenerator>
+#include <QTimer>
 #include <QUuid>
 #include <nlohmann/json.hpp>
 #include <vector>
@@ -20,14 +22,32 @@ namespace {
 
 using nlohmann::json;
 
-// Verbatim from microsoft_interface.cpp — these IDs and the User-Agent
-// must match what a real browser session sees, otherwise vlscppe
-// silently rejects the whitelist call.
-constexpr auto kOrgId = "y6jn8c31";
+// The download-connector API keys this to the browser session. Both
+// values were re-read from a real Firefox session against the live site
+// (see docs/microsoft-iso-flow.md) and still match.
 constexpr auto kProfile = "606624d44113";
 constexpr auto kUserAgent =
-    "Mozilla/5.0 (X11; Linux x86_64; rv:143.0) Gecko/20100101 Firefox/143.0";
-constexpr auto kReferer = "https://www.microsoft.com/software-download/windows11";
+    "Mozilla/5.0 (X11; Linux x86_64; rv:155.0) Gecko/20100101 Firefox/155.0";
+
+// How long to wait before each connector call.
+//
+// A real session takes seven and a half seconds from the page load to
+// the first call and six more to the second — a person reading the page
+// and working a dropdown. Firing both the moment the page returns is
+// the one part of the timing a client cannot pass off as a browser, and
+// the cost here is a few seconds on a provisioning run that takes tens
+// of minutes.
+//
+// Jittered, because a constant interval is its own signature.
+constexpr int kApiDelayMinMs = 4000;
+constexpr int kApiDelayMaxMs = 9000;
+
+// The page the connector calls are made from. Locale-qualified: the
+// browser's Referer carries the same /en-us/ segment the page was
+// served under, and the bare form does not appear in a real session.
+[[nodiscard]] QString referer_for(const QString& locale) {
+    return QStringLiteral("https://www.microsoft.com/%1/software-download/windows11").arg(locale);
+}
 
 // Replace UTF-8 NBSP, collapse runs of whitespace, trim. Mirrors the
 // ``normalize_whitespace`` helper from the reference impl — Microsoft
@@ -109,12 +129,9 @@ void MicrosoftClient::set_record_directory(const QString& dir) {
     }
 }
 
-void MicrosoftClient::set_host_overrides(const QString& microsoft_base,
-                                         const QString& vlscppe_base) {
+void MicrosoftClient::set_host_overrides(const QString& microsoft_base) {
     microsoft_base_ = microsoft_base.isEmpty() ? "https://www.microsoft.com" : microsoft_base;
-    vlscppe_base_ = vlscppe_base.isEmpty() ? "https://vlscppe.microsoft.com" : vlscppe_base;
-    LSW_INFO("microsoft: host overrides ms={} vlscppe={}", microsoft_base_.toStdString(),
-             vlscppe_base_.toStdString());
+    LSW_INFO("microsoft: host override ms={}", microsoft_base_.toStdString());
 }
 
 QString MicrosoftClient::rewrite_host(const QString& url) const {
@@ -122,19 +139,17 @@ QString MicrosoftClient::rewrite_host(const QString& url) const {
     if (microsoft_base_ != "https://www.microsoft.com") {
         out.replace("https://www.microsoft.com", microsoft_base_);
     }
-    if (vlscppe_base_ != "https://vlscppe.microsoft.com") {
-        out.replace("https://vlscppe.microsoft.com", vlscppe_base_);
-    }
     return out;
 }
 
-QNetworkRequest MicrosoftClient::make_request(const QString& url, bool with_referer) const {
+// A request for a page, as the browser makes it.
+QNetworkRequest MicrosoftClient::make_page_request(const QString& url) const {
     const QString final_url = rewrite_host(url);
     LSW_DEBUG("microsoft: GET {}", final_url.toStdString());
     QNetworkRequest req{QUrl{final_url}};
     req.setHeader(QNetworkRequest::UserAgentHeader, kUserAgent);
     req.setRawHeader("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
-    req.setRawHeader("Accept-Language", "en-US,en;q=0.5");
+    req.setRawHeader("Accept-Language", "en-US,en;q=0.9");
     // NOTE: do NOT set Accept-Encoding here. Qt's QNetworkAccessManager
     // only auto-decompresses gzip/deflate when it owns that header — if
     // we set it ourselves, autoDecompress flips off and we get raw
@@ -142,10 +157,47 @@ QNetworkRequest MicrosoftClient::make_request(const QString& url, bool with_refe
     // first byte 0x1F" downstream. Letting Qt set its own header means
     // it advertises only what it can decompress.
     req.setRawHeader("Connection", "keep-alive");
-    if (with_referer) {
-        req.setRawHeader("Referer", kReferer);
-    }
+    req.setRawHeader("Sec-Fetch-Dest", "document");
+    req.setRawHeader("Sec-Fetch-Mode", "navigate");
+    req.setRawHeader("Sec-Fetch-Site", "none");
     return req;
+}
+
+// A request for the download connector, as the PAGE makes it.
+//
+// Not the same shape as a page load, and that is the point: these two
+// calls are XMLHttpRequests issued by the download page's own script,
+// so they carry a JSON Accept, the X-Requested-With marker jQuery sets,
+// and Sec-Fetch headers describing a same-origin CORS fetch rather than
+// a navigation. Sending them with a document's headers is a browser
+// User-Agent attached to a request no browser would produce that way.
+QNetworkRequest MicrosoftClient::make_api_request(const QString& url) const {
+    const QString final_url = rewrite_host(url);
+    LSW_DEBUG("microsoft: XHR {}", final_url.toStdString());
+    QNetworkRequest req{QUrl{final_url}};
+    req.setHeader(QNetworkRequest::UserAgentHeader, kUserAgent);
+    req.setRawHeader("Accept", "application/json, text/javascript, */*; q=0.01");
+    req.setRawHeader("Accept-Language", "en-US,en;q=0.9");
+    req.setRawHeader("X-Requested-With", "XMLHttpRequest");
+    req.setRawHeader("Connection", "keep-alive");
+    req.setRawHeader("Referer", referer_for(locale_).toUtf8());
+    req.setRawHeader("Sec-Fetch-Dest", "empty");
+    req.setRawHeader("Sec-Fetch-Mode", "cors");
+    req.setRawHeader("Sec-Fetch-Site", "same-origin");
+    return req;
+}
+
+// Run ``work`` after a jittered pause. See kApiDelayMinMs.
+void MicrosoftClient::after_human_pause(std::function<void()> work) {
+    // Only against the real site. Pointed at a mock there is nobody to
+    // look human to, and the wait would just be a slow test.
+    if (microsoft_base_ != QLatin1String("https://www.microsoft.com")) {
+        work();
+        return;
+    }
+    const int delay = QRandomGenerator::global()->bounded(kApiDelayMinMs, kApiDelayMaxMs);
+    LSW_DEBUG("microsoft: pausing {} ms before the connector call", delay);
+    QTimer::singleShot(delay, this, std::move(work));
 }
 
 QString MicrosoftClient::generate_session_id() {
@@ -214,7 +266,7 @@ void MicrosoftClient::initialize(const QString& locale) {
     // ``initialization_failed``. Falling back to en-US is handled in
     // the slot itself.
     const QString url = "https://www.microsoft.com/" + locale_ + "/software-download/";
-    auto* reply = nam_.get(make_request(url));
+    auto* reply = nam_.get(make_page_request(url));
     connect(reply, &QNetworkReply::finished, this, &MicrosoftClient::on_locale_check_finished);
 }
 
@@ -239,10 +291,10 @@ void MicrosoftClient::on_locale_check_finished() {
     session_id_ = generate_session_id();
     LSW_INFO("microsoft: session_id={}", session_id_.toStdString());
 
-    // Stage 3 — visit the Win11 download page so the AKAM cookies
-    // land in our jar. Microsoft inspects cookies on the vlscppe
-    // request that follows.
-    auto* reply2 = nam_.get(make_request(kReferer));
+    // Stage 3 — visit the Win11 download page. This is what puts MC1,
+    // MUID and MSFPC in the jar, and those are the cookies the
+    // connector calls carry.
+    auto* reply2 = nam_.get(make_page_request(referer_for(locale_)));
     connect(reply2, &QNetworkReply::finished, this, &MicrosoftClient::on_visit_page_finished);
 }
 
@@ -253,29 +305,20 @@ void MicrosoftClient::on_visit_page_finished() {
     }
     int status = 0;
     (void)finish_reply(reply, "visit", &status);
-
-    // Stage 4 — vlscppe.microsoft.com/tags whitelist. Failure here is
-    // usually a regional block; we surface it as ``initialization_failed``.
-    const QString url = QStringLiteral("https://vlscppe.microsoft.com/tags?org_id=%1&session_id=%2")
-                            .arg(kOrgId, session_id_);
-    auto* reply2 = nam_.get(make_request(url, /*with_referer=*/true));
-    connect(reply2, &QNetworkReply::finished, this, &MicrosoftClient::on_whitelist_finished);
-}
-
-void MicrosoftClient::on_whitelist_finished() {
-    auto* reply = qobject_cast<QNetworkReply*>(sender());
-    if (reply == nullptr) {
-        return;
-    }
-    int status = 0;
-    (void)finish_reply(reply, "whitelist", &status);
     if (status != 200) {
         Q_EMIT initialization_failed(
-            QStringLiteral("vlscppe whitelist returned HTTP %1").arg(status));
+            QStringLiteral("download page returned HTTP %1").arg(status));
         return;
     }
+
+    // That is the whole of it. There used to be a fourth stage here,
+    // a GET to vlscppe.microsoft.com/tags said to whitelist the
+    // session — but a real browser session never contacts that host at
+    // all, so the call was not authorising anything. It was a request
+    // no browser makes, from a client trying to look like one.
     initialized_ = true;
-    LSW_INFO("microsoft: session whitelisted");
+    LSW_INFO("microsoft: session ready (locale={} session_id={})",
+             locale_.toStdString(), session_id_.toStdString());
     Q_EMIT initialized();
 }
 
@@ -297,8 +340,10 @@ void MicrosoftClient::fetch_skus(int product_edition_id) {
             .arg(kProfile)
             .arg(product_edition_id)
             .arg(locale_, session_id_);
-    auto* reply = nam_.get(make_request(url));
-    connect(reply, &QNetworkReply::finished, this, &MicrosoftClient::on_skus_finished);
+    after_human_pause([this, url] {
+        auto* reply = nam_.get(make_api_request(url));
+        connect(reply, &QNetworkReply::finished, this, &MicrosoftClient::on_skus_finished);
+    });
 }
 
 void MicrosoftClient::on_skus_finished() {
@@ -363,8 +408,11 @@ void MicrosoftClient::fetch_download_url(const MsSku& sku) {
                        "?profile=%1&ProductEditionId=undefined&SKU=%2&friendlyFileName=undefined"
                        "&Locale=%3&sessionID=%4")
             .arg(kProfile, sku.id, locale_, session_id_);
-    auto* reply = nam_.get(make_request(url, /*with_referer=*/true));
-    connect(reply, &QNetworkReply::finished, this, &MicrosoftClient::on_download_url_finished);
+    after_human_pause([this, url] {
+        auto* reply = nam_.get(make_api_request(url));
+        connect(reply, &QNetworkReply::finished, this,
+                &MicrosoftClient::on_download_url_finished);
+    });
 }
 
 void MicrosoftClient::on_download_url_finished() {

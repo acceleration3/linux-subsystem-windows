@@ -9,7 +9,7 @@
 // developer record one real session and replay it deterministically.
 //
 // Asserts:
-//   * initialize() drives locale -> visit -> whitelist and emits
+//   * initialize() drives locale -> visit and emits
 //     ``initialized``.
 //   * fetch_skus() parses the SKU list and emits ``skus_ready`` with
 //     the expected count.
@@ -172,13 +172,12 @@ void test_full_pipeline(const QString& tmp_dir) {
     const bool using_real_fixtures = !qEnvironmentVariable("LSW_MICROSOFT_FIXTURE_DIR").isEmpty();
     const QByteArray locale_html = load_fixture("locale", "<html>locale ok</html>");
     const QByteArray visit_html = load_fixture("visit", "<html>visit ok</html>");
-    const QByteArray whitelist = load_fixture("whitelist", "");
     const QByteArray skus_json =
         load_fixture("skus", QByteArray::fromRawData(kSkusJson, sizeof(kSkusJson) - 1));
     const QByteArray dl_json = load_fixture(
         "download_url", QByteArray::fromRawData(kDownloadUrlJson, sizeof(kDownloadUrlJson) - 1));
 
-    int hits_locale = 0, hits_visit = 0, hits_whitelist = 0;
+    int hits_locale = 0, hits_visit = 0, hits_tags = 0;
     int hits_skus = 0, hits_dl = 0;
 
     MockHttp srv([&](const QByteArray& headers) {
@@ -188,18 +187,21 @@ void test_full_pipeline(const QString& tmp_dir) {
         const auto sp1 = first.indexOf(' ');
         const auto sp2 = first.indexOf(' ', sp1 + 1);
         const auto path = first.mid(sp1 + 1, sp2 - sp1 - 1);
+        if (path.contains("/software-download/windows11")) {
+            ++hits_visit;
+            return http_response(200, "OK", visit_html, "text/html");
+        }
         if (path.startsWith("/en-US/software-download/") ||
             path.startsWith("/de-DE/software-download/")) {
             ++hits_locale;
             return http_response(200, "OK", locale_html, "text/html");
         }
-        if (path.startsWith("/software-download/windows11")) {
-            ++hits_visit;
-            return http_response(200, "OK", visit_html, "text/html");
-        }
         if (path.startsWith("/tags")) {
-            ++hits_whitelist;
-            return http_response(200, "OK", whitelist, "text/plain");
+            // Nothing may ask for this. A real browser session never
+            // contacts vlscppe, so a request here means the client has
+            // grown the extra call back.
+            ++hits_tags;
+            return http_response(404, "Not Found", "");
         }
         if (path.contains("getskuinformationbyproductedition")) {
             ++hits_skus;
@@ -213,7 +215,7 @@ void test_full_pipeline(const QString& tmp_dir) {
     });
 
     lsw::host::provision::iso::MicrosoftClient client;
-    client.set_host_overrides(srv.microsoft_base(), srv.vlscppe_base());
+    client.set_host_overrides(srv.microsoft_base());
     const QString record_dir = tmp_dir + "/record";
     client.set_record_directory(record_dir);
 
@@ -230,7 +232,7 @@ void test_full_pipeline(const QString& tmp_dir) {
     check(init_ok, "initialize: signal fired");
     check(hits_locale == 1, "initialize: hit locale endpoint");
     check(hits_visit == 1, "initialize: hit visit endpoint");
-    check(hits_whitelist == 1, "initialize: hit whitelist endpoint");
+    check(hits_tags == 0, "initialize: never contacts vlscppe");
 
     bool got_skus = false;
     QList<lsw::host::provision::iso::MsSku> skus;
@@ -295,8 +297,8 @@ void test_full_pipeline(const QString& tmp_dir) {
 
     QDir rdir(record_dir);
     const auto recorded = rdir.entryList({"*.bin"}, QDir::Files, QDir::Name);
-    check(recorded.size() == 5,
-          "record: five files written (locale,visit,whitelist,skus,download_url)");
+    check(recorded.size() == 4,
+          "record: four files written (locale,visit,skus,download_url)");
 }
 
 }  // namespace
