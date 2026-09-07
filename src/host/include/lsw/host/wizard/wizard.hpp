@@ -30,6 +30,7 @@ public:
         Welcome = 0,
         License,
         IsoChoice,
+        Debloat,
         Download,
         VmSize,
         Payload,

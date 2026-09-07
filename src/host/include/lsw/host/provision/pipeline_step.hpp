@@ -13,6 +13,7 @@ Q_NAMESPACE
 // independently of the phase it belongs to.
 enum class PipelineStep {
     DownloadingIso,            // skipped when a local ISO was supplied
+    TrimmingImage,             // pulls install.wim out and debloats it
     BuildingPayloadIso,        // also fetches the latest virtio-win.iso
     CreatingDisk,
     StartingVm,

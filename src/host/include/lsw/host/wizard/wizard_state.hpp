@@ -1,6 +1,7 @@
 #pragma once
 
 #include "lsw/host/config/vm_record.hpp"
+#include "lsw/host/provision/debloat/debloat_level.hpp"
 
 #include <QList>
 #include <QString>
@@ -26,6 +27,9 @@ struct WizardState {
     QString user_name = "lsw";
     QString user_password = "lsw";
     QString computer_name;  // Windows hostname; empty → VM name
+    // How much of Windows to remove from install.wim before the guest
+    // is installed from it. Chosen on DebloatPage.
+    provision::debloat::DebloatLevel debloat = provision::debloat::DebloatLevel::Sane;
     // 1-based WIM image index chosen on VmSizePage (which Windows
     // edition to install). 1 when unknown / Microsoft-download path.
     int image_index = 1;

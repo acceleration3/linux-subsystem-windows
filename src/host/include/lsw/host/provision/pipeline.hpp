@@ -16,6 +16,7 @@ namespace lsw::host::provision {
 
 namespace iso { class Downloader; }
 namespace install { class PostInstallWatcher; }
+class DebloatStager;
 class PayloadIsoStager;
 class PressAnyKeyPrompter;
 class SetupStageRunner;
@@ -99,6 +100,7 @@ private:
     // Phase entry points, in order. Each emits ``step_started`` and
     // arranges for the next once its work completes.
     void run_download();
+    void run_trim_image();
     void run_build_payload();
     // Between the virtio fetch and the ISO build: the driver has to be
     // on the host before the ISO that carries it into the offline image
@@ -133,6 +135,7 @@ private:
     iso::Downloader* downloader_ = nullptr;
     VirtioWinFetcher* virtio_fetcher_ = nullptr;
     IvshmemDriverFetcher* ivshmem_fetcher_ = nullptr;
+    DebloatStager* debloat_stager_ = nullptr;
     PayloadIsoStager* payload_stager_ = nullptr;
     install::PostInstallWatcher* agent_watcher_ = nullptr;
     PressAnyKeyPrompter* prompter_ = nullptr;

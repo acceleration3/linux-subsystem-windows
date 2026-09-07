@@ -23,6 +23,11 @@ struct AutounattendInputs {
     // via <ImageInstall>/<OSImage>/<InstallFrom>. Resolve with
     // WimEditionLister.
     int image_index = 1;
+    // Guest path of the trimmed install.wim on the payload CD, or empty
+    // to let Setup use the image on its own media. Empty is the right
+    // default: an <InstallFrom><Path> naming a file that is not there
+    // fails the install outright, with no fallback.
+    QString install_from_path;
 };
 
 }  // namespace lsw::host::provision::install

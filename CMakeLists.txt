@@ -108,6 +108,10 @@ if(LSW_BUILD_MANAGER)
     # libwim (wimlib) — ships no pkg-config / CMake config; resolve by hand.
     find_library(WIMLIB_LIBRARY NAMES wim REQUIRED)
     find_path(WIMLIB_INCLUDE_DIR NAMES wimlib.h REQUIRED)
+    # hivex (libguestfs) — edits the offline Windows registry hives
+    # inside install.wim. Ships no pkg-config either.
+    find_library(HIVEX_LIBRARY NAMES hivex REQUIRED)
+    find_path(HIVEX_INCLUDE_DIR NAMES hivex.h REQUIRED)
 
     add_subdirectory(src/host)
 endif()

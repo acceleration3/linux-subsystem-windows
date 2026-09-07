@@ -1,6 +1,7 @@
 #pragma once
 
 #include "lsw/host/config/vm_sizing.hpp"
+#include "lsw/host/provision/debloat/debloat_level.hpp"
 
 #include <QString>
 
@@ -23,6 +24,9 @@ struct PipelineInputs {
     // 1-based WIM image index (which Windows edition to install).
     // Resolved from the ISO via install::WimEditionLister::list().
     int image_index = 1;
+    // How much of Windows to take out of the image before installing.
+    debloat::DebloatLevel debloat = debloat::DebloatLevel::Sane;
+
 };
 
 }  // namespace lsw::host::provision
