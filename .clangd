@@ -1,0 +1,8 @@
+# Qt6 puts -mno-direct-extern-access on every target that links it, guarded by
+# $<CXX_COMPILER_ID:GNU>. The build uses GCC, so the flag lands in
+# compile_commands.json - and clang's driver rejects it outright, which stops
+# clangd and clang-tidy analysing any file that includes a Qt header. Dropping
+# it here costs nothing: it changes symbol visibility in the generated object,
+# and neither tool generates one.
+CompileFlags:
+  Remove: [-mno-direct-extern-access]
