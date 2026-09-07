@@ -1,5 +1,8 @@
 #include "lsw/host/wizard/debloat_page.hpp"
 
+#include "lsw/host/config/settings.hpp"
+#include "lsw/host/provision/debloat_stager.hpp"
+#include "lsw/host/services/host_services.hpp"
 #include "lsw/host/wizard/wizard.hpp"
 
 #include <QVBoxLayout>
@@ -58,11 +61,82 @@ DebloatPage::DebloatPage(Wizard& wizard, QWidget* parent)
     warning_->setStyleSheet("color: #b5651d;");
     lay->addWidget(warning_);
 
+    lay->addSpacing(8);
+    start_ = new QPushButton("Prepare the image");
+    start_->setDefault(true);
+    lay->addWidget(start_);
+
+    bar_ = new QProgressBar;
+    bar_->setRange(0, 100);
+    bar_->setVisible(false);
+    lay->addWidget(bar_);
+
+    status_ = new QLabel;
+    status_->setWordWrap(true);
+    lay->addWidget(status_);
+
     lay->addStretch(1);
 
     connect(group_, &QButtonGroup::idToggled, this, &DebloatPage::on_selection_changed);
+    connect(start_, &QPushButton::clicked, this, &DebloatPage::start_trim);
     on_selection_changed();
 }
+
+void DebloatPage::initializePage() {
+    // Reachable twice if the user goes Back from a later page. The
+    // image was already rewritten by then, so offer the work again
+    // rather than pretending it is still to do.
+    done_ = false;
+    bar_->setVisible(false);
+    bar_->setValue(0);
+    status_->clear();
+    start_->setEnabled(true);
+    Q_EMIT completeChanged();
+}
+
+void DebloatPage::start_trim() {
+    const auto level = static_cast<DebloatLevel>(group_->checkedId());
+    wizard_.state().debloat = level;
+
+    // The choice is made; from here the page is doing, not asking.
+    for (auto* button : {none_, sane_, maximum_}) {
+        button->setEnabled(false);
+    }
+    start_->setEnabled(false);
+    bar_->setVisible(true);
+    status_->setText(QStringLiteral("Preparing..."));
+
+    auto& state = wizard_.state();
+    auto* stager = new provision::DebloatStager(this);
+    connect(stager, &provision::DebloatStager::progress, this,
+            [this](const QString& detail, int percent) {
+        bar_->setValue(percent);
+        status_->setText(detail);
+    });
+    connect(stager, &provision::DebloatStager::failed, this, [this](const QString& message) {
+        // Recoverable: the source image is untouched, so the user can
+        // pick a different level or try again.
+        status_->setText(QStringLiteral("Could not prepare the image: %1").arg(message));
+        bar_->setVisible(false);
+        for (auto* button : {none_, sane_, maximum_}) {
+            button->setEnabled(true);
+        }
+        start_->setEnabled(true);
+    });
+    connect(stager, &provision::DebloatStager::finished, this, [this](const QString& iso_path) {
+        // Everything downstream boots what this names, and the pipeline
+        // skips its own trim because the work is already done.
+        wizard_.state().chosen_iso_path = iso_path;
+        bar_->setValue(100);
+        status_->setText(QStringLiteral("Ready: %1").arg(iso_path));
+        done_ = true;
+        Q_EMIT completeChanged();
+    });
+    stager->trim(state.chosen_iso_path, wizard_.services().settings().isos_dir(),
+                 state.image_index, level);
+}
+
+bool DebloatPage::isComplete() const { return done_; }
 
 void DebloatPage::on_selection_changed() {
     const auto level = static_cast<DebloatLevel>(group_->checkedId());
@@ -74,10 +148,13 @@ void DebloatPage::on_selection_changed() {
 }
 
 bool DebloatPage::validatePage() {
-    wizard_.state().debloat = static_cast<DebloatLevel>(group_->checkedId());
+    // Everything the pipeline needs is collected, and the image it will
+    // install from is already on disk. This is the last page that
+    // gathers anything; the rest report.
+    wizard_.start_pipeline();
     return true;
 }
 
-int DebloatPage::nextId() const { return Wizard::VmSize; }
+int DebloatPage::nextId() const { return Wizard::Payload; }
 
 }  // namespace lsw::host::wizard

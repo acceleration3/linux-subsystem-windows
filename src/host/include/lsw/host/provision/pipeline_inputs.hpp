@@ -26,6 +26,11 @@ struct PipelineInputs {
     int image_index = 1;
     // How much of Windows to take out of the image before installing.
     debloat::DebloatLevel debloat = debloat::DebloatLevel::Sane;
+    // Set when ``iso_local_path`` already names a trimmed image, which
+    // is what the wizard hands over: it does the work on its own page,
+    // under a progress bar, before the pipeline exists. False for the
+    // unattended CLI path, where the pipeline still trims for itself.
+    bool image_already_trimmed = false;
 
 };
 

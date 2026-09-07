@@ -144,6 +144,12 @@ void Pipeline::run_download() {
 // and never written: the answer file installs from the copy on the
 // payload, so the source stays byte-identical for the next VM.
 void Pipeline::run_trim_image() {
+    if (inputs_.image_already_trimmed) {
+        // The wizard did it, on the page that asked for the level.
+        LSW_INFO("pipeline: image already trimmed; skipping");
+        run_build_payload();
+        return;
+    }
     Q_EMIT step_started(Step::TrimmingImage, QStringLiteral("Trimming the Windows image..."));
 
     debloat_stager_ = new DebloatStager(this);

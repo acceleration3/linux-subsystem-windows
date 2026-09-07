@@ -204,17 +204,18 @@ bool VmSizePage::validatePage() {
     const QVariant idx = edition_combo_->currentData();
     s.image_index = idx.isValid() ? idx.toInt() : 1;
 
-    // All inputs collected — fire the install pipeline. Subsequent
-    // pages (Download/Install/Setup) are presentation only.
-    wizard_.start_pipeline();
+    // The pipeline is NOT started here. The trim page after this one
+    // needs a local ISO and the edition index chosen above, and it does
+    // its work before the pipeline exists; starting it now would race
+    // it to the same image.
     return true;
 }
 
 int VmSizePage::nextId() const {
-    // Local ISO → straight to the Payload (build) page; the pipeline
-    // skips DownloadingIso. Microsoft-download → DownloadPage first,
-    // which then advances to Payload.
-    return wizard_.state().chosen_iso_path.isEmpty() ? Wizard::Download : Wizard::Payload;
+    // Either way the next stop is the trim, which needs the image on
+    // disk: a local ISO is already there, a Microsoft one goes through
+    // DownloadPage first.
+    return wizard_.state().chosen_iso_path.isEmpty() ? Wizard::Download : Wizard::Debloat;
 }
 
 }  // namespace lsw::host::wizard

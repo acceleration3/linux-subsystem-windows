@@ -372,11 +372,10 @@ bool IsoChoicePage::validatePage() {
 }
 
 int IsoChoicePage::nextId() const {
-    // Debloat, then VmSize — whether we'll later need to download the
-    // ISO (download radio chosen) or skip straight to Install (browse
-    // radio with a local path) is decided by VmSizePage::nextId, which
-    // checks ``state.chosen_iso_path``.
-    return Wizard::Debloat;
+    // VmSize is always next. Where it goes after that — straight to the
+    // trim, or through the download first — is decided by
+    // VmSizePage::nextId, which checks ``state.chosen_iso_path``.
+    return Wizard::VmSize;
 }
 
 }  // namespace lsw::host::wizard
