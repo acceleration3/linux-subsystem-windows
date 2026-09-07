@@ -1,0 +1,3 @@
+[submodule "external/render-server"]
+	path = external/render-server
+	url = ../render-server
