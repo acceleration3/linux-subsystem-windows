@@ -13,7 +13,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Static libs may end up linked into shared libs.
+# Static libs may end up linked into shared libs (the guest ICDs).
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
@@ -29,6 +29,12 @@ include(LSWCompileOptions)
 option(LSW_BUILD_MANAGER "Build the VM manager UI (Linux only)"   ON)
 option(LSW_BUILD_AGENT   "Build the Windows guest agent"          ${WIN32})
 option(LSW_BUILD_TESTS   "Build unit tests"                       ON)
+
+# The render server, and the guest drivers that talk to it. On Linux
+# this is the ``rvk-render-server`` binary the manager spawns; on the
+# mingw cross build it is the guest's OpenCL, OpenGL and Vulkan ICDs.
+# One switch, because it is one submodule either way.
+option(LSW_BUILD_RENDER_SERVER "Build the render server / guest ICDs" ON)
 
 # ---- Platform sanity ----
 if(NOT (UNIX OR WIN32))
@@ -60,6 +66,31 @@ include(LSWDependencies)
 # nothing else here.
 add_subdirectory(src/linkproto)
 add_subdirectory(src/base)
+
+# The render server is a project of its own: it knows how to move
+# OpenCL, OpenGL and Vulkan across a shared-memory transport and nothing
+# about virtual machines, so it builds and tests without any of this.
+#
+# LSW consumes it as two artifacts and links neither. On Linux it is the
+# ``rvk-render-server`` executable the manager spawns per VM; on the
+# mingw cross build it is the guest drivers — ``librvk_icd.dll``,
+# ``opengl32.dll``, ``librvk_opencl.dll`` — that the agent links into an
+# application's own directory before starting it.
+set(LSW_RENDER_SERVER_DIR "${CMAKE_SOURCE_DIR}/external/render-server"
+    CACHE PATH "Location of the render-server checkout")
+if(LSW_BUILD_RENDER_SERVER)
+    if(NOT EXISTS "${LSW_RENDER_SERVER_DIR}/CMakeLists.txt")
+        message(FATAL_ERROR
+            "render-server is missing from ${LSW_RENDER_SERVER_DIR}.\n"
+            "It is a submodule: git submodule update --init --recursive")
+    endif()
+    # No demo applications and no test suite: LSW wants the server and
+    # the drivers, and the rest is that project's own business when it
+    # is built on its own.
+    set(RVK_BUILD_GUEST_TOOLS OFF CACHE BOOL "" FORCE)
+    set(RVK_BUILD_TESTS       OFF CACHE BOOL "" FORCE)
+    add_subdirectory("${LSW_RENDER_SERVER_DIR}" render-server)
+endif()
 
 if(LSW_BUILD_MANAGER)
     # Dependencies shared by the host-side modules under src/host.
@@ -103,5 +134,6 @@ message(STATUS "  Build type:       ${CMAKE_BUILD_TYPE}")
 message(STATUS "  C++ compiler:     ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}")
 message(STATUS "  Manager:          ${LSW_BUILD_MANAGER}")
 message(STATUS "  Agent:            ${LSW_BUILD_AGENT}")
+message(STATUS "  Render server:    ${LSW_BUILD_RENDER_SERVER}")
 message(STATUS "  Tests:            ${LSW_BUILD_TESTS}")
 message(STATUS "")

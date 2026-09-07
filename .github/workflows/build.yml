@@ -50,8 +50,8 @@ jobs:
       - name: Configure
         run: >
           cmake -S . -B build
-          -DLSW_BUILD_SERVER=OFF
           -DLSW_BUILD_MANAGER=OFF
+          -DLSW_BUILD_RENDER_SERVER=OFF
           -DCMAKE_BUILD_TYPE=Debug
 
       - name: Build

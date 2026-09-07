@@ -6,7 +6,7 @@
 # ISO, so the agent has to exist first.
 #
 # Run: ./scripts/build.sh              # agent + manager (the usual case)
-#      ./scripts/build.sh --all        # also the ICD and the render-server
+#      ./scripts/build.sh --all        # also the render server
 #      ./scripts/build.sh --host-only  # skip the mingw cross-build
 #
 # Exits non-zero on the first build failure.
@@ -22,7 +22,7 @@ HOST_TARGETS=(lsw-manager)
 
 for arg in "$@"; do
     case "$arg" in
-        --all)       HOST_TARGETS=(lsw-manager lsw_icd lsw-render-server) ;;
+        --all)       HOST_TARGETS=(lsw-manager rvk-render-server) ;;
         --host-only) BUILD_AGENT=0 ;;
         -h|--help)   sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *)           echo "build: unknown argument '$arg'" >&2; exit 2 ;;
@@ -51,7 +51,6 @@ fi
 for target in "${HOST_TARGETS[@]}"; do
     case "$target" in
         lsw-manager)       echo "  manager:       ${BUILD}/src/host/lsw-manager" ;;
-        lsw_icd)           echo "  icd:           $(find "${BUILD}" -name liblsw_icd.so -print -quit)" ;;
-        lsw-render-server) echo "  render-server: $(find "${BUILD}" -name lsw-render-server -print -quit)" ;;
+        rvk-render-server) echo "  render-server: $(find "${BUILD}" -name rvk-render-server -print -quit)" ;;
     esac
 done
