@@ -1,6 +1,6 @@
 # Linux Subsystem for Windows (LSW)
 
-A "reverse WSL" — run Windows applications on a Linux host with per-application native windows, via a Vulkan command-stream proxy from the guest to the host.
+A "reverse WSL" — run Windows applications on a Linux host with per-application native windows, their pixels captured in the guest and their GPU work replayed on the host.
 
 ## Status
 
@@ -11,30 +11,43 @@ Greenfield. Phase 0 scaffolding.
 ```
 src/
   agent/          lsw-guest-agent.exe — runs inside the Windows VM
+  base/           logging, shared by both sides
+  linkproto/      the host <-> guest wire contract
   host/           the Linux manager
 external/
-  remotevk/       the Vulkan proxy: ICD, render server, protocol, codegen
+  render-server/  the GPU proxy: OpenCL, OpenGL and Vulkan drivers + server
 ```
 
-The Vulkan half — the ICD an application loads, the server that replays
-its command stream, the transports underneath, and the vk.xml codegen —
-lives in [remotevk](external/remotevk), a submodule. It knows how to
-move Vulkan across a wire and nothing about virtual machines, so it
-builds and tests entirely on its own:
+There are two paths across the VM boundary and they are independent.
+
+**Windows Graphics Capture** carries pixels. The agent captures each
+window in the guest and writes BGRA frames into an IVSHMEM region; the
+manager reads them out and paints one native Linux window per guest
+window. This is how every application is mirrored, whatever it draws
+with.
+
+**The render server** carries GPU work. An application's OpenCL, OpenGL
+and Vulkan calls are encoded by drivers the agent links into that
+application's own directory, travel over a second IVSHMEM region, and
+are replayed by `rvk-render-server` against the host's real GPU. That
+half lives in [render-server](external/render-server), a submodule; it
+knows how to move a graphics API across a shared-memory transport and
+nothing about virtual machines, so it builds and tests entirely on its
+own:
 
 ```sh
 git submodule update --init --recursive
 ```
 
-What this repository adds is the VM around it: provisioning Windows,
+What this repository adds is the VM around both: provisioning Windows,
 running it, and presenting its applications as native Linux windows.
 
-`remotevk/src/linkproto/` is the one module the Linux manager and the
-Windows guest agent both compile: envelope framing, the IVSHMEM
-frame-ring layout, and the RPC command vocabulary. It is header-only and
-depends on nothing but the standard library — no Qt, no spdlog, no
-POSIX, no Win32. Anything either side could change unilaterally and
-still compile does not belong there.
+`src/linkproto/` is the one module the Linux manager and the Windows
+guest agent both compile: envelope framing, the IVSHMEM frame-ring
+layout, and the RPC command vocabulary. It is header-only and depends on
+nothing but the standard library — no Qt, no spdlog, no POSIX, no Win32.
+Anything either side could change unilaterally and still compile does
+not belong there.
 
 Every module has exactly one `include/` tree and one `src/` tree, so every
 include in the repo reads `lsw/<module>/<concern>/<class>.hpp`. One class
@@ -73,7 +86,10 @@ cmake -S . -B build -G Ninja
 cmake --build build
 ```
 
-Requires CMake 3.25+, a C++20 compiler, and (later phases) Vulkan + Wayland headers on the host.
+Requires CMake 3.25+, a C++20 compiler, Qt 6, libvirt, and — for the
+render server — Vulkan, OpenGL (EGL) and OpenCL development packages on
+the host. `scripts/build-agent.sh` cross-builds the Windows half with
+mingw-w64.
 
 ## License
 
