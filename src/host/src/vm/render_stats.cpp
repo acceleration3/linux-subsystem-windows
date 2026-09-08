@@ -1,3 +1,5 @@
+#include <algorithm>
+
 #include <QDateTime>
 #include "lsw/host/vm/render_stats.hpp"
 
@@ -151,6 +153,32 @@ void adopt_throughput(ChannelPressure& channel,
         channel.bytes_per_second = 0.0;
         channel.frames_per_second = 0.0;
     }
+    // The biggest thing each area has carried, congested or not. The
+    // congestion counters only remember what overflowed, so without
+    // this an area that is working reports nothing about the sizes it
+    // handles — and that is what says how much headroom is left.
+    // Nothing carried by an area can be larger than the area, so a
+    // value that is says the writer laid this struct out differently —
+    // an older server against a newer manager. Believing it once put a
+    // nanosecond clock on screen as a payload of twenty-six million
+    // mebibytes, so it is checked rather than trusted.
+    const auto believable = [](const AreaPressure& area, std::uint64_t bytes) {
+        return bytes > 0 && area.configured_kib > 0
+               && bytes <= area.configured_kib * 1024ULL;
+    };
+    if (channel.areas.size() > kRing
+        && believable(channel.areas[kRing], totals.largest_command_bytes)) {
+        channel.areas[kRing].largest_bytes =
+            std::max(channel.areas[kRing].largest_bytes,
+                     static_cast<quint64>(totals.largest_command_bytes));
+    }
+    if (channel.areas.size() > kReply
+        && believable(channel.areas[kReply], totals.largest_reply_bytes)) {
+        channel.areas[kReply].largest_bytes =
+            std::max(channel.areas[kReply].largest_bytes,
+                     static_cast<quint64>(totals.largest_reply_bytes));
+    }
+
     channel.last_commands = totals.commands;
     channel.last_bytes = totals.command_bytes + totals.reply_bytes;
     channel.last_frames = totals.frames;

@@ -6,6 +6,8 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLocale>
+
+#include <algorithm>
 #include <QProgressBar>
 #include <QPushButton>
 #include <QScrollArea>
@@ -95,7 +97,16 @@ int area_fill(const AreaPressure& area) {
     if (area.state == AreaPressure::State::Tight) {
         return 72;
     }
-    return area.configured_kib == 0 ? 0 : 34;
+    // How close the biggest thing carried came to the size of the area
+    // it had to fit in. This is the reading the bar was standing in for
+    // with a constant: an area at a tenth of its size has room, and one
+    // at four fifths is about to start splitting payloads.
+    if (area.configured_kib > 0 && area.largest_bytes > 0) {
+        const double used = static_cast<double>(area.largest_bytes)
+                            / static_cast<double>(area.configured_kib * 1024ULL);
+        return std::clamp(static_cast<int>(used * 100.0), 1, 96);
+    }
+    return area.configured_kib == 0 ? 0 : 2;
 }
 
 int fill_percent(const ChannelPressure& channel) {
@@ -455,8 +466,15 @@ void RenderPanel::rebuild() {
                            area.events > 0 ? colour_for(area.state) : Theme::Color::kFgDim));
         row->addWidget(kpi(QStringLiteral("Extra trips"),
                            QString::number(area.extra_trips), Theme::Color::kFgDim));
-        row->addWidget(kpi(QStringLiteral("Largest"), bytes_label(area.largest_bytes),
-                           Theme::Color::kFgDim));
+        // A dash rather than "0 B": nothing has been measured is a
+        // different statement from the largest thing was empty, and the
+        // blob arena is carved in the guest so nothing here ever
+        // measures it.
+        row->addWidget(kpi(QStringLiteral("Largest"),
+                           area.largest_bytes > 0 ? bytes_label(area.largest_bytes)
+                                                  : QStringLiteral("—"),
+                           area.largest_bytes > 0 ? Theme::Color::kFgDim
+                                                  : Theme::Color::kFgFaint));
         row->addWidget(kpi(QStringLiteral("Suggested"),
                            area.suggested_kib > 0 ? size_label(area.suggested_kib)
                                                   : QStringLiteral("—"),
