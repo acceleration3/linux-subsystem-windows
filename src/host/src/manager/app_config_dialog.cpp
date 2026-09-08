@@ -2,10 +2,13 @@
 
 #include "lsw/base/log.hpp"
 #include "lsw/host/link/agent_rpc_client.hpp"
+#include "lsw/host/manager/remote_file_dialog.hpp"
 
 #include <QByteArray>
 #include <QDialogButtonBox>
 #include <QFormLayout>
+#include <QHBoxLayout>
+#include <QPushButton>
 #include <QFutureWatcher>
 #include <QPixmap>
 #include <QVBoxLayout>
@@ -60,9 +63,37 @@ AppConfigDialog::AppConfigDialog(apps::AppConfig initial, link::AgentRpcClient& 
     name_edit_->setPlaceholderText("Display name");
     form->addRow("Name", name_edit_);
 
+    // The path is a Windows path, so browsing for it has to happen
+    // inside Windows. The button opens a picker that reads the guest
+    // over the agent connection, not this machine's disk.
     path_edit_ = new QLineEdit(cfg_.path);
     path_edit_->setPlaceholderText("C:\\Program Files\\App\\app.exe");
-    form->addRow("Path", path_edit_);
+    auto* path_row = new QWidget;
+    auto* path_layout = new QHBoxLayout(path_row);
+    path_layout->setContentsMargins(0, 0, 0, 0);
+    path_layout->setSpacing(8);
+    auto* browse = new QPushButton(QStringLiteral("Browse the guest"));
+    path_layout->addWidget(path_edit_, 1);
+    path_layout->addWidget(browse);
+    form->addRow("Path in Windows", path_row);
+
+    connect(browse, &QPushButton::clicked, this, [this] {
+        RemoteFileDialog picker{rpc_, RemoteFileDialog::Mode::Program, this};
+        if (picker.exec() != QDialog::Accepted || picker.selected_path().isEmpty()) {
+            return;
+        }
+        path_edit_->setText(picker.selected_path());
+        // A shortcut carries its own arguments and working folder, and
+        // dropping them is how an application ends up launching without
+        // the switches its Start menu entry always passed it.
+        if (!picker.selected_arguments().isEmpty() && cmdline_edit_->text().isEmpty()) {
+            cmdline_edit_->setText(picker.selected_arguments());
+        }
+        if (name_edit_->text().isEmpty()) {
+            const QString file = picker.selected_path().section(QLatin1Char('\\'), -1);
+            name_edit_->setText(file.section(QLatin1Char('.'), 0, 0));
+        }
+    });
 
     cmdline_edit_ = new QLineEdit(cfg_.cmdline);
     cmdline_edit_->setPlaceholderText("Optional extra arguments");

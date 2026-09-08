@@ -72,6 +72,8 @@ set(_lsw_agent_rpc_sources
     src/rpc/handlers/apps/list_apps.cpp
     src/rpc/handlers/apps/launch.cpp
     src/rpc/handlers/apps/get_icon.cpp
+    src/rpc/handlers/apps/list_dir.cpp
+    src/rpc/handlers/apps/resolve_shortcut.cpp
     src/rpc/handlers/window/start_window_mirror.cpp
     src/rpc/handlers/window/list_windows.cpp
     src/rpc/handlers/window/close_window.cpp
