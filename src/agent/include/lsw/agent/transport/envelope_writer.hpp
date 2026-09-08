@@ -34,8 +34,6 @@ public:
     // Send a JSON object as a control envelope.
     [[nodiscard]] bool send_control(const nlohmann::json& message);
 
-    // Send the "this window is gone" envelope for ``hwnd``.
-    [[nodiscard]] bool send_frame_gone(std::uint64_t hwnd);
 
     [[nodiscard]] std::uint64_t bytes_sent() const noexcept { return bytes_sent_; }
 

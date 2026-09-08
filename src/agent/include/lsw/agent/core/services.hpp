@@ -4,7 +4,6 @@
 #include "lsw/agent/install/installer.hpp"
 #include "lsw/agent/uia/uia.hpp"
 #include "lsw/agent/win/com.hpp"
-#include "lsw/agent/win/move_resize_watcher.hpp"
 
 namespace lsw::agent::core {
 
@@ -34,15 +33,11 @@ public:
     [[nodiscard]] install::Installer& installer() noexcept { return installer_; }
     [[nodiscard]] console::Console& console() noexcept { return console_; }
     [[nodiscard]] uia::Uia& uia() noexcept { return uia_; }
-    [[nodiscard]] win::MoveResizeWatcher& move_resize_watcher() noexcept {
-        return move_resize_watcher_;
-    }
 
     // Explicit pre-destructor teardown. Called from
     // ``AgentService::run`` before its scope ends. Releases COM-held
     // objects while ``apartment_`` is still live so the destructor
     // chain doesn't race the COM runtime teardown. The
-    // ``move_resize_watcher_`` is a plain Win32 hook (no COM); its
     // destructor handles its own teardown.
     void shutdown() { uia_.shutdown(); }
 
@@ -51,7 +46,6 @@ private:
     console::Console console_;
     win::Apartment apartment_;  // must initialise BEFORE uia_
     uia::Uia uia_;
-    win::MoveResizeWatcher move_resize_watcher_;  // pure Win32, no COM dep
 };
 
 }  // namespace lsw::agent::core

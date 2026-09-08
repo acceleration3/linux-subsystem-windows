@@ -2,85 +2,24 @@
 
 #include <cstdint>
 #include <string>
-#include <utility>
 #include <vector>
 
 #include "lsw/agent/win/discovered_window.hpp"
 
 namespace lsw::agent::win {
 
+// What the agent knows about the guest's windows.
+//
+// Enumerating them, and the two commands that act on one: closing it,
+// and the system command its own chrome would send. A window's pixels
+// and its input are not here — they belong to the mirror, which reads
+// and writes them in a process of its own.
 class Window {
 public:
-    // The on-screen part of a window's frame, in frame coordinates —
-    // what enumeration and ``query_props`` report as ``visible_*``. The
-    // whole frame, except for a maximized window, whose frame overhangs
-    // the monitor with nothing painted in the overhang.
-    struct VisibleRect {
-        bool valid = false;
-        int x = 0, y = 0;
-        int w = 0, h = 0;
-    };
-    [[nodiscard]] static VisibleRect visible_rect(std::uintptr_t hwnd);
-
-    // The frame's size — what the capture texture is. {0,0} if the hwnd
-    // is not a window.
-    [[nodiscard]] static std::pair<int, int> frame_size(std::uintptr_t hwnd);
-
     // Enumerate all top-level visible windows that have a non-empty
     // title and aren't tool windows / our own agent. Per-process exe
     // path comes from QueryFullProcessImageNameW.
     [[nodiscard]] static std::vector<DiscoveredWindow> enumerate();
-
-    // Tick one capture for ``hwnd``: drain the WGC frame pool,
-    // commit any fresh frame into the IVSHMEM slot for that window,
-    // and ring the doorbell. Returns true if the window still exists
-    // (host_endpoint keeps the subscription), false if it has
-    // vanished (host_endpoint emits a ``frame_gone`` envelope and
-    // drops the sub). The pixel data is never returned to userland
-    // — it lives in shared memory the manager mmaps directly.
-    [[nodiscard]] static bool tick_capture(std::uintptr_t hwnd);
-
-    // Static properties of a top-level window, queried once so the
-    // host mirror can open at the right size with the right buttons
-    // and constraints — and NOT inadvertently resize the guest to a
-    // Qt-default rectangle during initial show layout.
-    struct WindowProps {
-        bool valid = false;
-        int x = 0, y = 0;          // frame top-left (screen)
-        int w = 0, h = 0;          // frame size (current window size)
-        bool resizable = false;     // WS_THICKFRAME
-        bool minimizable = false;   // WS_MINIMIZEBOX
-        bool maximizable = false;   // WS_MAXIMIZEBOX
-        bool closable = false;      // WS_SYSMENU + SC_CLOSE not disabled
-        int min_w = 0, min_h = 0;   // 0 = no app-imposed minimum
-        int max_w = 0, max_h = 0;   // 0 = no app-imposed maximum
-        int screen_w = 0, screen_h = 0;  // guest's primary screen size,
-                                          // used by the host to clamp
-                                          // resize_window so we never
-                                          // ask the guest for a window
-                                          // bigger than its display
-        // Caption-button rects and the title-bar bounding rect live
-        // on ``uia::TitleBarLayout`` now (sourced from UIA, not
-        // ``WM_GETTITLEBARINFOEX``). The ``window_props`` RPC handler
-        // merges this struct with the UIA layout into the JSON reply.
-    };
-    [[nodiscard]] static WindowProps query_props(std::uintptr_t hwnd);
-
-    // DIAGNOSTIC: PrintWindow into a 32-bpp DIB and report the RAW
-    // alpha histogram (before any post-processing) plus the 4 corner
-    // pixels, as a JSON string. Used to trace why popup transparency
-    // isn't coming through. Temporary.
-    [[nodiscard]] static std::string capture_debug_json(std::uintptr_t hwnd);
-
-    // Resize the window so its FRAME — the rectangle the host captures
-    // and mirrors — becomes exactly ``frame_w`` x ``frame_h`` pixels.
-    // The window rect set underneath is bigger by the invisible resize
-    // border, so that the visible result is the size that was asked
-    // for; the frame is re-centred on the monitor's work area. Returns
-    // ``false`` if ``hwnd`` isn't a valid window or the dimensions are
-    // non-positive.
-    [[nodiscard]] static bool resize_client(std::uintptr_t hwnd, int frame_w,
-                                            int frame_h);
 
     // Posts ``WM_CLOSE`` to the window — the standard "user clicked
     // the X" semantics. The app gets a chance to prompt for unsaved
@@ -89,33 +28,6 @@ public:
     // as a new HWND on the next ``list_windows`` tick, so the host
     // still gets to interact with it.
     [[nodiscard]] static bool close_window(std::uintptr_t hwnd);
-
-    // Bring ``hwnd`` to the foreground (and restore if minimised). The
-    // host calls this when its mirror window gains focus on the host
-    // — without it, Alt-Tab onto a mirror leaves the guest window
-    // unfocused since input-injection-driven focus only fires on
-    // actual clicks / key presses.
-    [[nodiscard]] static bool focus_window(std::uintptr_t hwnd);
-
-    // Remove the guest window's foreground status by switching the
-    // foreground to the shell window (Program Manager). Used when the
-    // host mirror loses focus on the host so the guest stops
-    // receiving keystrokes / hover. No-op if ``hwnd`` isn't currently
-    // the foreground window — avoids stomping a focus change the
-    // user already made via the guest itself.
-    [[nodiscard]] static bool unfocus_window(std::uintptr_t hwnd);
-
-    // Run ``WM_NCHITTEST`` against ``hwnd`` for the point ``(x, y)``
-    // expressed in EFB-relative captured-frame pixels. Returns the raw
-    // ``HT*`` code; ``-1`` on an invalid hwnd or a window that did not
-    // answer in time.
-    //
-    // Not used to find caption buttons — the answer is only as good as
-    // the application's own hit testing, which for a window that draws
-    // its own chrome is usually ``HTCLIENT`` everywhere including over
-    // its buttons. It survives for the caption-drag question, where a
-    // wrong answer costs a drag rather than a wrong button press.
-    [[nodiscard]] static int hit_test_nc(std::uintptr_t hwnd, int x, int y);
 
     // ``minimize`` / ``maximize`` / ``restore`` as a WM_SYSCOMMAND.
     //

@@ -1,7 +1,6 @@
 #pragma once
 
 #include "lsw/linkproto/byte_ring.hpp"
-#include "lsw/linkproto/frame_ring.hpp"
 #include "lsw/linkproto/region.hpp"
 #include "lsw/agent/transport/ivshmem_region.hpp"
 
@@ -14,8 +13,6 @@ namespace lsw::agent::transport {
 // device, maps the PCI BAR into user space, and hands out the region's
 // channels:
 //
-//   frames      a best-fit slot allocator over the pixel buffer area,
-//               plus the doorbell fired when a frame is committed
 //   rpc         duplex message rings for control traffic
 //
 // The manager owns the layout and writes the channel table; this side
@@ -23,24 +20,10 @@ namespace lsw::agent::transport {
 // until something asks for it.
 //
 // The layout is the shared contract in ``lsw/linkproto/`` — the same
-// headers the manager compiles. Single producer on the frame path (the
-// capture grab), no internal locking: the agent's host loop already
-// serializes window iteration.
+// headers the manager compiles.
 class Shmem {
 public:
-    static constexpr std::uint32_t kMagic     = linkproto::kFrameRingMagic;
-    static constexpr std::uint32_t kVersion   = linkproto::kRegionVersion;
-    static constexpr std::uint32_t kSlotCount = linkproto::kSlotCount;
-    static constexpr std::uint32_t kFormatBgra8Premul = linkproto::kFormatBgra8Premul;
-
-    struct SlotInfo {
-        int           index      = -1;     // -1 == invalid
-        std::uint64_t buffer_off = 0;       // half-buffer half offset (front+back share buffer_size)
-        std::uint64_t buffer_size = 0;     // total bytes reserved (front + back)
-        std::uint32_t stride     = 0;
-        std::uint32_t width      = 0;
-        std::uint32_t height     = 0;
-    };
+    static constexpr std::uint32_t kVersion = linkproto::kRegionVersion;
 
     // Open the device, verify the region header, and resolve every
     // channel. Returns true if the BAR is mapped and the region is one
@@ -48,38 +31,13 @@ public:
     //
     // A version mismatch is the expected outcome of a half-finished
     // redeploy (new manager, old agent or vice versa) and is refused
-    // loudly rather than reinterpreted — the frame path simply does not
-    // start.
+    // loudly rather than reinterpreted.
     [[nodiscard]] bool open();
 
     // True once ``open`` has succeeded.
     [[nodiscard]] bool available() const { return base_ != nullptr; }
 
     // Give the BAR back to the driver, and take it again.
-    //
-    // Allocate a slot for ``hwnd`` sized w*h*4 (×2 for back buffer).
-    // Returns slot.index >= 0 on success, -1 if no room.
-    [[nodiscard]] SlotInfo alloc_slot(std::uint64_t hwnd, std::uint32_t width,
-                                       std::uint32_t height);
-
-    // Free a previously allocated slot (window unsubscribed / gone).
-    void free_slot(int slot_index);
-
-    // Write one frame: seqlock write of metadata + memcpy of pixel
-    // data into the back buffer + doorbell. ``src_pitch`` may include
-    // padding (e.g. WGC staging texture RowPitch). Returns true on
-    // success, false if ``slot_index`` is invalid or geometry mismatch.
-    //
-    // ``visible_insets`` says how much of THIS frame is off the guest's
-    // screen, packed one byte per edge (see FrameSlot::visible_insets).
-    // It travels with the pixels so the host can never pair a frame with
-    // a rectangle measured for a different one.
-    [[nodiscard]] bool commit_frame(int slot_index, const std::uint8_t* src_bgra,
-                                     std::uint32_t src_pitch,
-                                     std::uint32_t width, std::uint32_t height,
-                                     std::uint64_t present_qpc,
-                                     std::uint32_t visible_insets);
-
     // ---- Message channels ----------------------------------------------
     // The mirror image of the manager's endpoints: this side produces
     // guest→host and consumes host→guest. Invalid endpoints mean the
@@ -108,23 +66,6 @@ private:
     IvshmemRegion region_;
     void* base_ = nullptr;
     std::uint64_t size_ = 0;
-    // Allocator state: array of (offset, size, in_use) for ``kSlotCount``
-    // slots, packed contiguously from ``kBuffersOffset``. Best-fit on
-    // ``alloc_slot``. Single-threaded.
-    struct Reservation {
-        std::uint64_t offset = 0;
-        std::uint64_t size = 0;
-        bool in_use = false;
-    };
-    Reservation reservations_[kSlotCount]{};
-
-    // Frame channel. Slot and buffer offsets are relative to this base,
-    // not to the region.
-    std::uint8_t* frames_base_ = nullptr;
-    std::uint64_t frames_size_ = 0;
-    std::uint64_t buffers_offset_ = 0;  // relative to frames_base_
-    std::uint64_t buffers_size_ = 0;
-
     linkproto::ByteRingProducer rpc_to_host_;
     linkproto::ByteRingConsumer rpc_from_host_;
 };

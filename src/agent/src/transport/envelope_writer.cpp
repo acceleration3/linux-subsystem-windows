@@ -74,10 +74,5 @@ bool EnvelopeWriter::send_control(const nlohmann::json& message) {
                 reinterpret_cast<const std::uint8_t*>(body.data()), body.size());
 }
 
-bool EnvelopeWriter::send_frame_gone(std::uint64_t hwnd) {
-    std::uint8_t payload[linkproto::kFrameGonePayloadSize];
-    linkproto::write_u64_be(payload, hwnd);
-    return send(linkproto::FrameType::FrameGone, payload, sizeof(payload));
-}
 
 }  // namespace lsw::agent::transport

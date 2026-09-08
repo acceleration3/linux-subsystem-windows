@@ -73,56 +73,13 @@ struct ConnectionStats {
     std::uint64_t bytes_received = 0;
     std::uint64_t requests_handled = 0;
     std::uint64_t events_sent = 0;
-    std::uint64_t frames_committed = 0;
 
     [[nodiscard]] std::string describe(std::uint64_t bytes_sent) const {
         return std::to_string(requests_handled) + " requests, "
              + std::to_string(events_sent) + " events, "
-             + std::to_string(frames_committed) + " frames, "
              + std::to_string(bytes_received) + "B in / "
              + std::to_string(bytes_sent) + "B out";
     }
-};
-
-// Pushes captured frames for the windows this connection subscribed to.
-//
-// Pixels do not traverse the socket: ``Window::tick_capture`` commits
-// BGRA into the IVSHMEM slot the manager mmaps directly and rings the
-// doorbell. The only thing on the wire is the small ``frame_gone``
-// envelope, emitted when a window dies between ticks so the manager
-// invalidates its slot.
-//
-// Not an ``EventSource``: its output is a binary envelope, not a JSON
-// event, and it must run after the event drains so a window's last
-// events precede the notice that it is gone.
-class FramePusher {
-public:
-    FramePusher(rpc::Session& session, EnvelopeWriter& writer, ConnectionStats& stats)
-        : session_(&session), writer_(&writer), stats_(&stats) {}
-
-    [[nodiscard]] bool tick() {
-        auto& subscribed = session_->subscribed_windows;
-        for (auto it = subscribed.begin(); it != subscribed.end();) {
-            const auto hwnd = *it;
-            if (win::Window::tick_capture(static_cast<std::uintptr_t>(hwnd))) {
-                ++stats_->frames_committed;
-                ++it;
-                continue;
-            }
-            if (!writer_->send_frame_gone(hwnd)) {
-                return false;
-            }
-            LSW_AGENT_INFO("host_endpoint: hwnd={} reported gone", hwnd);
-            ++stats_->events_sent;
-            it = subscribed.erase(it);
-        }
-        return true;
-    }
-
-private:
-    rpc::Session* session_;
-    EnvelopeWriter* writer_;
-    ConnectionStats* stats_;
 };
 
 // Turns one request frame into one reply frame, logging both.
@@ -342,7 +299,6 @@ void HostEndpoint::handle_connection(std::intptr_t accepted_fd, bool owns_shmem_
     ConnectionStats stats;
     EnvelopeWriter writer{accepted_fd, peer};
     RequestDispatcher dispatcher{rpc_ctx, stats};
-    FramePusher frames{session, writer, stats};
 
     // Second transport for the same messages: the shared region's RPC
     // channel. Opening the device here rather than waiting for the first
@@ -380,7 +336,6 @@ void HostEndpoint::handle_connection(std::intptr_t accepted_fd, bool owns_shmem_
     pump.add(installer);
     pump.add(console);
     pump.add(services_->uia());
-    pump.add(services_->move_resize_watcher());
 
     const EventPump::Sender send_event = [&](const rpc::Event& ev) {
         nlohmann::json message = ev.payload;
@@ -485,9 +440,6 @@ void HostEndpoint::handle_connection(std::intptr_t accepted_fd, bool owns_shmem_
         drain_shmem_channel();
 
         if (!pump.drain(send_event)) {
-            return;
-        }
-        if (!frames.tick()) {
             return;
         }
     }
