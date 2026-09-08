@@ -26,6 +26,8 @@ using K = config::ManagerSettings::Key;
 // layout inside and no text of their own, so their sizeHint is one
 // line and they clip whatever the layout put in them.
 constexpr int kCardHeight = 62;
+// What the band around the cards adds to their height.
+constexpr int kStripPadding = 18;
 
 QLabel* caption(const QString& text) {
     auto* label = new QLabel(text.toUpper());
@@ -174,12 +176,12 @@ RenderPanel::RenderPanel(vm::RenderStats& stats, config::ManagerSettings& settin
     // inside and no text, so neither they nor their holder have a
     // sizeHint worth anything; both are told their height instead of
     // being asked for it.
-    auto* strip_holder = new QWidget;
-    strip_holder->setFixedHeight(kCardHeight + 18);
-    strip_ = new QHBoxLayout(strip_holder);
+    strip_holder_ = new QWidget;
+    strip_holder_->setFixedHeight(kCardHeight + kStripPadding);
+    strip_ = new QHBoxLayout(strip_holder_);
     strip_->setContentsMargins(14, 12, 14, 6);
     strip_->setSpacing(8);
-    root->addWidget(strip_holder);
+    root->addWidget(strip_holder_);
 
     summary_ = meta(QString{});
     summary_->setContentsMargins(14, 6, 14, 0);
@@ -263,6 +265,7 @@ void RenderPanel::rebuild() {
         selected_ = 0;
     }
 
+    card_height_ = kCardHeight;
     for (const auto& channel : channels) {
         // A bordered card, selected by its edge rather than by a rail
         // marker: it is a thing you pick, and the design draws it so.
@@ -275,7 +278,11 @@ void RenderPanel::rebuild() {
         // A QPushButton sizes itself from its text, and this one has
         // none: everything in it is a laid-out child. Left to its own
         // sizeHint it comes out one line tall and clips its contents.
+        // Fixed to what the rows in it actually need rather than to a
+        // constant — a constant is right until a row is added, and then
+        // it silently cuts the new one off.
         card->setFixedHeight(kCardHeight);
+        card_height_ = kCardHeight;
 
         auto* layout = new QVBoxLayout(card);
         layout->setContentsMargins(11, 9, 11, 9);
@@ -321,6 +328,12 @@ void RenderPanel::rebuild() {
         mini->setProperty("pressure", QString::fromLatin1(state_key(channel.worst())));
         layout->addWidget(mini);
 
+        // Everything is in it now, so ask.
+        if (const int needed = layout->sizeHint().height(); needed > card->height()) {
+            card->setFixedHeight(needed);
+            card_height_ = std::max(card_height_, needed);
+        }
+
         connect(card, &QPushButton::clicked, this,
                 [this, index = channel.index] { select(index); });
         strip_->addWidget(card);
@@ -329,7 +342,7 @@ void RenderPanel::rebuild() {
     // every other size on the page.
     auto* add = new QPushButton(QStringLiteral("+  Add a channel"));
     add->setObjectName(QString::fromLatin1(Theme::Role::kAddCard));
-    add->setFixedHeight(kCardHeight);
+    add->setFixedHeight(card_height_);
     add->setCursor(Qt::PointingHandCursor);
     connect(add, &QPushButton::clicked, this, [this] {
         const int now = pending_.staged_or_current(QLatin1String(K::kChannels)).toInt();
@@ -337,6 +350,9 @@ void RenderPanel::rebuild() {
         Q_EMIT settings_requested();
     });
     strip_->addWidget(add);
+    if (strip_holder_ != nullptr) {
+        strip_holder_->setFixedHeight(card_height_ + kStripPadding);
+    }
     strip_->addStretch(1);
 
     if (channels.isEmpty()) {

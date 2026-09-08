@@ -44,6 +44,10 @@ private:
     config::PendingChanges& pending_;
 
     QHBoxLayout* strip_ = nullptr;
+    QWidget* strip_holder_ = nullptr;
+    // What the tallest card in the strip needed, so the band around
+    // them and the "add" tile match it.
+    int card_height_ = 0;
     QVBoxLayout* areas_ = nullptr;
     QLabel* summary_ = nullptr;
     QString region_prefix_;
