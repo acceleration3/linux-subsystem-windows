@@ -17,6 +17,10 @@ struct PayloadInputs {
     QString dxvk_archive_path;   // optional .tar.gz
     QString vkd3d_archive_path;  // optional .tar.gz
     QString agent_exe_path;      // optional; cross-built lsw-guest-agent.exe
+    // optional; remotewin's guest half, started beside a launched
+    // application and dialling back out to the mirror process the
+    // manager runs for it
+    QString mirror_exe_path;
 
 
     // Directory holding the IVSHMEM driver (ivshmem.inf/.cat/.sys).

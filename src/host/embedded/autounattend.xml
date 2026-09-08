@@ -256,11 +256,16 @@
 				</RunSynchronousCommand>
 				<RunSynchronousCommand wcm:action="add">
 					<Order>22</Order>
+					<Description>LSW: copy remotewin-guest.exe from payload CD</Description>
+					<Path>cmd.exe /c for %i in (D E F G H I J K L M N) do @if exist %i:\remotewin-guest.exe copy /y %i:\remotewin-guest.exe C:\ProgramData\LSW\remotewin-guest.exe</Path>
+				</RunSynchronousCommand>
+				<RunSynchronousCommand wcm:action="add">
+					<Order>23</Order>
 					<Description>LSW: firewall rule for agent control port</Description>
 					<Path>netsh advfirewall firewall add rule name="LSW Agent" dir=in action=allow protocol=TCP localport=5102 profile=any</Path>
 				</RunSynchronousCommand>
 				<RunSynchronousCommand wcm:action="add">
-					<Order>23</Order>
+					<Order>24</Order>
 					<Description>LSW: firewall rule for stream port</Description>
 					<Path>netsh advfirewall firewall add rule name="LSW Stream" dir=in action=allow protocol=TCP localport=5103 profile=any</Path>
 				</RunSynchronousCommand>
@@ -280,7 +285,7 @@
 				     the environment was being set for an application
 				     that could not read it. -->
 				<RunSynchronousCommand wcm:action="add">
-					<Order>24</Order>
+					<Order>25</Order>
 					<Description>LSW: copy the guest drivers + Vulkan loader from payload CD</Description>
 					<Path>cmd.exe /c for %i in (D E F G H I J K L M N) do @if exist %i:\rvk\rvk_icd.dll xcopy /E /I /Y %i:\rvk C:\ProgramData\LSW\rvk</Path>
 				</RunSynchronousCommand>
@@ -291,7 +296,7 @@
 				     by the DLL search order, so the two builds cannot share
 				     a folder without one shadowing the other. -->
 				<RunSynchronousCommand wcm:action="add">
-					<Order>25</Order>
+					<Order>26</Order>
 					<Description>LSW: copy the 32-bit guest drivers from payload CD</Description>
 					<Path>cmd.exe /c for %i in (D E F G H I J K L M N) do @if exist %i:\rvk32\rvk_icd.dll xcopy /E /I /Y %i:\rvk32 C:\ProgramData\LSW\rvk32</Path>
 				</RunSynchronousCommand>
@@ -312,12 +317,12 @@
 				     it beside each executable would shadow whatever the
 				     system has with an older copy. -->
 				<RunSynchronousCommand wcm:action="add">
-					<Order>26</Order>
+					<Order>27</Order>
 					<Description>LSW: install the Vulkan loader if Windows ships none</Description>
 					<Path>cmd.exe /c if not exist %windir%\System32\vulkan-1.dll if exist C:\ProgramData\LSW\rvk\vulkan-1.dll copy /y C:\ProgramData\LSW\rvk\vulkan-1.dll %windir%\System32\vulkan-1.dll</Path>
 				</RunSynchronousCommand>
 				<RunSynchronousCommand wcm:action="add">
-					<Order>27</Order>
+					<Order>28</Order>
 					<Description>LSW: install the 32-bit Vulkan loader if Windows ships none</Description>
 					<Path>cmd.exe /c if not exist %windir%\SysWOW64\vulkan-1.dll if exist C:\ProgramData\LSW\rvk32\vulkan-1.dll copy /y C:\ProgramData\LSW\rvk32\vulkan-1.dll %windir%\SysWOW64\vulkan-1.dll</Path>
 				</RunSynchronousCommand>
@@ -342,7 +347,7 @@
 				     them: the QWORD is what a WDDM adapter reports today
 				     and the DWORD is what the older path reads. -->
 				<RunSynchronousCommand wcm:action="add">
-					<Order>28</Order>
+					<Order>29</Order>
 					<Description>LSW: report video memory on the display adapter</Description>
 					<Path>%windir%\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$class = 'HKLM:\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}'; Get-ChildItem $class -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -match '^[0-9]{4}$' } | ForEach-Object { New-ItemProperty -LiteralPath $_.PSPath -Name 'HardwareInformation.qwMemorySize' -Value 1073741824 -PropertyType QWord -Force; New-ItemProperty -LiteralPath $_.PSPath -Name 'HardwareInformation.MemorySize' -Value 1073741824 -PropertyType DWord -Force }"</Path>
 				</RunSynchronousCommand>
@@ -352,7 +357,7 @@
 				     above matches nothing and writes nowhere; 0000 is the
 				     subkey the first adapter takes. -->
 				<RunSynchronousCommand wcm:action="add">
-					<Order>29</Order>
+					<Order>30</Order>
 					<Description>LSW: video memory fallback for an adapter not yet enumerated</Description>
 					<Path>cmd.exe /c reg add "HKLM\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}\0000" /v HardwareInformation.qwMemorySize /t REG_QWORD /d 1073741824 /f &amp; reg add "HKLM\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}\0000" /v HardwareInformation.MemorySize /t REG_DWORD /d 1073741824 /f</Path>
 				</RunSynchronousCommand>

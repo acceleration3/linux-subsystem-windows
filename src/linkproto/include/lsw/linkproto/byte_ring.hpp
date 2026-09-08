@@ -1,6 +1,7 @@
 #pragma once
 
-#include "lsw/linkproto/frame_ring.hpp"  // load_field / store_field
+#include "lsw/linkproto/field.hpp"
+#include "lsw/linkproto/region_fence.hpp"
 
 #include <algorithm>
 #include <atomic>

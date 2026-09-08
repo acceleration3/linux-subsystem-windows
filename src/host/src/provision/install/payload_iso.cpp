@@ -130,6 +130,7 @@ QStringList PayloadIsoBuilder::stage_files(const PayloadInputs& in, const QStrin
     stage_optional(in.dxvk_archive_path, "dxvk.tar.gz");
     stage_optional(in.vkd3d_archive_path, "vkd3d.tar.gz");
     stage_optional(in.agent_exe_path, "lsw-agent.exe");
+    stage_optional(in.mirror_exe_path, "remotewin-guest.exe");
 
     return created;
 }

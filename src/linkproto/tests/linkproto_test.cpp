@@ -15,7 +15,6 @@
 #include "lsw/linkproto/commands.hpp"
 #include "lsw/linkproto/envelope.hpp"
 #include "lsw/linkproto/frame_reader.hpp"
-#include "lsw/linkproto/frame_ring.hpp"
 #include "lsw/linkproto/region.hpp"
 #include "lsw/linkproto/region_layout.hpp"
 
@@ -66,15 +65,15 @@ void test_envelope_header() {
     check(kHeaderSize == 5, "header is type + u32 length");
 
     std::uint8_t header[kHeaderSize] = {};
-    write_header(header, FrameType::FrameGone, 8);
-    check(read_type(header) == FrameType::FrameGone, "type round-trips");
+    write_header(header, FrameType::Control, 8);
+    check(read_type(header) == FrameType::Control, "type round-trips");
     check(read_payload_len(header) == 8, "length round-trips");
 
-    // The retired frame type must stay burnt: an old peer's frames must
-    // never be mistaken for a live type.
+    // The retired types stay burnt: an old peer's frames must never be
+    // mistaken for a live one.
     check(static_cast<int>(FrameType::Control) == 1, "control is type 1");
     check(static_cast<int>(FrameType::RetiredFrame) == 2, "type 2 stays reserved");
-    check(static_cast<int>(FrameType::FrameGone) == 3, "frame_gone is type 3");
+    check(static_cast<int>(FrameType::RetiredFrameGone) == 3, "type 3 stays reserved");
 }
 
 // Append one framed message to ``out``.
@@ -188,62 +187,6 @@ void test_frame_reader_reset() {
     reader.reset();
     check(reader.buffered() == 0, "reset drops a half-received frame");
 }
-
-// ---- frame ring ---------------------------------------------------------
-
-void test_frame_ring_layout() {
-    using namespace lsw::linkproto;
-    // The struct offsets are static_asserted in the header; these are the
-    // values the two sides had hardcoded, restated once as a tripwire.
-    check(sizeof(FrameSlot) == 64, "slot stays 64 bytes");
-    check(slot_off::hwnd == 0x00 && slot_off::state == 0x08, "slot head layout");
-    check(slot_off::seqno == 0x30 && slot_off::present_qpc == 0x38, "slot tail layout");
-    check(hdr_off::buffers_offset == 0x18, "header layout");
-    check(kTableOffset == 0x100, "slot table starts at 0x100");
-    check(kBuffersOffset == 0x100 + (64 * 64), "buffers start after the slot table");
-    check(kFrameRingMagic == 0x4657534CU, "magic is 'LSWF' little-endian");
-}
-
-void test_frame_ring_seqlock() {
-    using namespace lsw::linkproto;
-    // A fresh slot: not being written, low half readable.
-    std::uint64_t seqno = 0;
-    check(!seqno_is_writing(seqno), "a fresh slot is not mid-write");
-    check(!seqno_front_is_high_half(seqno), "the low half is readable first");
-
-    // One commit: counter advances, half flips, write bit clear.
-    const std::uint64_t first = seqno_next_commit(seqno);
-    check(seqno_is_writing(seqno_begin_write(first)), "the write mark sets bit 0");
-    check(!seqno_is_writing(first), "a committed seqno is not mid-write");
-    check(seqno_front_is_high_half(first), "the first commit flips to the high half");
-    check(first > seqno, "the counter advances");
-
-    // Second commit flips back.
-    const std::uint64_t second = seqno_next_commit(first);
-    check(!seqno_front_is_high_half(second), "the second commit flips back");
-    check(second > first, "the counter keeps advancing");
-
-    // The producer writes into the half the new seqno designates; the
-    // consumer reads the half the last committed seqno designates. They
-    // must be different halves, or a torn frame is visible.
-    constexpr std::uint64_t kPairSize = 4096;
-    check(half_offset(first, kPairSize) == kPairSize / 2, "high half is the second buffer");
-    check(half_offset(second, kPairSize) == 0, "low half is the first buffer");
-    check(half_offset(first, kPairSize) != half_offset(seqno, kPairSize),
-          "a commit never writes the half the consumer is reading");
-
-    // Committing repeatedly must keep alternating, never stall on one half.
-    std::uint64_t s = 0;
-    bool saw_low = false;
-    bool saw_high = false;
-    for (int i = 0; i < 8; ++i) {
-        s = seqno_next_commit(s);
-        (seqno_front_is_high_half(s) ? saw_high : saw_low) = true;
-    }
-    check(saw_low && saw_high, "commits alternate halves");
-}
-
-// ---- command vocabulary -------------------------------------------------
 
 void test_command_names_unique() {
     namespace cmd = lsw::linkproto::cmd;
@@ -445,10 +388,8 @@ void test_region_layout() {
     check(kChannelTableOffset + (kMaxChannels * sizeof(ChannelDescriptor))
               <= kFirstChannelOffset,
           "the table fits before the first channel");
-    // Doorbell vectors must not collide with frame slots, or a ring
-    // notification would be read as a frame.
-    check(kRpcDoorbellVector >= kSlotCount, "rpc vector is past the frame slots");
-    check(kDoorbellVectorCount == kSlotCount + 1, "one vector per frame slot, plus rpc");
+    check(kRpcDoorbellVector < kDoorbellVectorCount,
+          "the message channel's doorbell is one the device exposes");
 }
 
 void test_channel_table_roundtrip() {
@@ -458,23 +399,23 @@ void test_channel_table_roundtrip() {
 
     // An unwritten region must not appear to contain channels — the
     // guest maps this memory before the manager may have finished.
-    check(!find_channel(base, kChannelFrames).valid(), "no channels before the table exists");
+    check(!find_channel(base, kChannelRpc).valid(), "no channels before the table exists");
 
-    store_field<std::uint32_t>(base + region_off::magic, kFrameRingMagic);
+    store_field<std::uint32_t>(base + region_off::magic, kRegionMagic);
     store_field<std::uint32_t>(base + region_off::version, kRegionVersion);
     store_field<std::uint32_t>(base + region_off::channel_count, 2U);
     store_field<std::uint32_t>(base + region_off::channel_entry_size,
                                static_cast<std::uint32_t>(sizeof(ChannelDescriptor)));
     store_field<std::uint64_t>(base + region_off::channel_table_offset, kChannelTableOffset);
     store_field<std::uint64_t>(base + region_off::region_size, region.size());
-    write_channel(base, 0, kChannelRpc, 0x1000, 0x1000);
-    write_channel(base, 1, kChannelFrames, 0x6000, 0x8000);
+    // Written second, and found by kind rather than by position.
+    write_channel(base, 0, 999, 0x6000, 0x8000);
+    write_channel(base, 1, kChannelRpc, 0x1000, 0x1000);
 
     const auto rpc = find_channel(base, kChannelRpc);
-    check(rpc.valid() && rpc.offset == 0x1000 && rpc.size == 0x1000, "rpc channel found");
-    const auto frames = find_channel(base, kChannelFrames);
-    check(frames.valid() && frames.offset == 0x6000, "frame channel found by kind, not position");
-    check(!find_channel(base, 999).valid(), "an unknown kind is simply absent");
+    check(rpc.valid() && rpc.offset == 0x1000 && rpc.size == 0x1000,
+          "the message channel is found by kind, not position");
+    check(!find_channel(base, 1234).valid(), "an unknown kind is simply absent");
 
     // A table written by a future build with bigger entries must be
     // refused, not misread.
@@ -494,13 +435,10 @@ void test_channel_table_roundtrip() {
 void test_region_layout_is_deterministic() {
     using namespace lsw::linkproto;
 
-    // The whole region need not be allocated to lay it out: nothing is
-    // written past the frame channel's own header, which is what lets a
-    // 256 MiB region cost a few pages until pixels arrive.
     const std::uint64_t size = kDefaultRegionBytes;
     const auto plan = plan_region(size);
     check(plan.valid, "the default region size lays out");
-    const auto touched = static_cast<std::size_t>(plan.frames.offset + kBuffersOffset);
+    const auto touched = static_cast<std::size_t>(plan.rpc.offset + plan.rpc.size);
 
     std::vector<std::uint8_t> a(touched, 0);
     std::vector<std::uint8_t> b(touched, 0);
@@ -513,35 +451,14 @@ void test_region_layout_is_deterministic() {
     // And the table describes what the arithmetic said it would.
     check(find_channel(a.data(), kChannelRpc).offset == plan.rpc.offset, "rpc where planned");
 
-    // The frame channel takes whatever the other channels leave, so
-    // adding or growing a channel silently costs window mirrors. That
-    // already happened once: the Vulkan proxy's host-memory arena went
-    // in at 64 MiB and took the region from ~15 simultaneous 1080p
-    // mirrors to 11, with nothing anywhere saying so. Both of the
-    // proxy's channels are gone now — its transport is the render
-    // server's own region — so the floor is back where it started.
-    //
-    // Pin the floor. A change that drops below it is a real capability
-    // regression and should have to be argued for, not discovered.
-    constexpr std::uint64_t kMirrorPairBytes =
-        (((1920ULL * 4 * 1080) + 63) & ~63ULL) * 2;  // BGRA, front+back
-    constexpr std::uint64_t kMinSimultaneousMirrors = 15;
-    const std::uint64_t buffer_area = plan.frames.size - kBuffersOffset;
-    check(buffer_area / kMirrorPairBytes >= kMinSimultaneousMirrors,
-          "the frame channel still fits at least 15 double-buffered 1080p mirrors");
-
     // And the region size must stay a power of two: it is the size of
     // the ivshmem PCI BAR, and PCI BARs are powers of two.
     check((kDefaultRegionBytes & (kDefaultRegionBytes - 1)) == 0,
           "the region size is a power of two (it backs a PCI BAR)");
-    check(find_channel(a.data(), kChannelFrames).offset == plan.frames.offset,
-          "frames where planned");
-    check(plan.frames.offset + plan.frames.size == size,
-          "the frame channel absorbs the remainder exactly");
     check(region_is_readable(a.data(), size), "a laid-out region reads back as valid");
 
     // A region too small must be refused rather than laid out short.
-    std::vector<std::uint8_t> tiny(kFirstChannelOffset + 4096, 0);
+    std::vector<std::uint8_t> tiny(kFirstChannelOffset + 16, 0);
     check(!lay_out_region(tiny.data(), tiny.size()).valid, "a too-small region is refused");
     check(!region_is_readable(tiny.data(), tiny.size()), "and does not read back as valid");
 }
@@ -597,8 +514,6 @@ int main() {
     test_frame_reader_keeps_partial_tail();
     test_frame_reader_aborts_on_handler_false();
     test_frame_reader_reset();
-    test_frame_ring_layout();
-    test_frame_ring_seqlock();
     test_command_names_unique();
     test_ring_init();
     test_ring_fifo();

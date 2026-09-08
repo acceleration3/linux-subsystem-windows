@@ -1,7 +1,7 @@
 #pragma once
 
 #include "lsw/linkproto/byte_ring.hpp"
-#include "lsw/linkproto/frame_ring.hpp"
+#include "lsw/linkproto/field.hpp"
 #include "lsw/linkproto/region.hpp"
 #include "lsw/linkproto/region_layout.hpp"
 
@@ -32,13 +32,10 @@ namespace lsw::host::vm {
 //               want to be on TCP-over-hostfwd
 //
 // The aliases below exist so callers keep reading
-// ``ShmemRegion::kSlotCount``; the values are the shared ones.
 class ShmemRegion {
 public:
-    static constexpr quint32 kMagic     = linkproto::kFrameRingMagic;
-    static constexpr quint32 kVersion   = linkproto::kRegionVersion;
-    static constexpr quint32 kSlotCount = linkproto::kSlotCount;
-    static constexpr quint32 kSlotSize  = sizeof(linkproto::FrameSlot);
+    static constexpr quint32 kMagic   = linkproto::kRegionMagic;
+    static constexpr quint32 kVersion = linkproto::kRegionVersion;
 
     ShmemRegion() = default;
     ShmemRegion(const ShmemRegion&) = delete;
@@ -85,36 +82,8 @@ public:
 
     // Seqlock-aware slot read. Returns a fully-owned ``QImage``
     // (memcpy out of the front buffer) and the slot's hwnd. False if
-    // the slot is empty or the read race-failed (caller retries on the
-    // next doorbell).
-    //
-    // ``visible_out`` (optional) receives the part of THAT frame which
-    // is on the guest's screen — the whole image for everything but a
-    // maximized window, whose frame overhangs the monitor. Read inside
-    // the same seqlock as the pixels, which is the point of it being in
-    // the slot at all: a rectangle from any other source can describe a
-    // different frame than the one in hand.
-    [[nodiscard]] bool read_slot_frame(int slot_index, quint64* hwnd_out,
-                                       QImage* out, QRect* visible_out = nullptr);
-
-    // The slot's current sequence number, or 0 for a slot with no live
-    // window in it. Changes on every commit, which is all a caller
-    // polling for new frames needs to compare — reading it is a couple
-    // of loads, against a frame read's copy of the whole image.
-    [[nodiscard]] quint64 slot_sequence(int slot_index) const;
-
-    // Mark a slot empty. Called on ``frame_gone`` notification so the
-    // manager forgets the hwnd; the agent should also free its
-    // allocator side, but the manager invalidates eagerly so a stale
-    // hwnd never paints.
-    void clear_slot(int slot_index);
-
-    // ---- Message channels ----------------------------------------------
-    // Each duplex channel is two rings. The manager consumes what the
-    // guest wrote and produces what the guest will read; the guest holds
-    // the mirror image of these. Endpoints are invalid (``valid()`` ==
-    // false) when the region is closed or the channel did not fit.
-
+    // The duplex message ring, as endpoints. Invalid until a region is
+    // open and its channels are bound.
     [[nodiscard]] linkproto::ByteRingConsumer& rpc_from_guest() { return rpc_from_guest_; }
     [[nodiscard]] linkproto::ByteRingProducer& rpc_to_guest() { return rpc_to_guest_; }
 
@@ -124,11 +93,11 @@ private:
     // hold a usable set of channels.
     [[nodiscard]] bool lay_out_channels(quint64 size_bytes);
 
-    // Point the frame base and the ring endpoints at the channels the
-    // table already describes, without writing anything. Shared by
-    // ``attach``; ``lay_out_channels`` does the same from the layout it
-    // has just written. False if the frames channel is missing, which
-    // means the region is not one of ours.
+    // Point the ring endpoints at the channels the table already
+    // describes, without writing anything. Shared by ``attach``;
+    // ``lay_out_channels`` does the same from the layout it has just
+    // written. False if the channel is missing, which means the region
+    // is not one of ours.
     [[nodiscard]] bool bind_channels_from_table();
 
     // Byte address of a channel's start, or nullptr if absent.
@@ -142,8 +111,6 @@ private:
 
     // Frame channel, resolved once at open. Slot and buffer offsets are
     // relative to this base, not to the region.
-    std::uint8_t* frames_base_ = nullptr;
-    quint64       frames_size_ = 0;
 
     linkproto::ByteRingConsumer rpc_from_guest_;
     linkproto::ByteRingProducer rpc_to_guest_;

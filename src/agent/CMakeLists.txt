@@ -3,8 +3,8 @@
 # autounattend's Specialize.ps1). The shell processes Run values only
 # at a real interactive logon — the post-OOBE AutoLogon of the wizard
 # user — so the agent runs AS THAT USER, IN their session. Window
-# enumeration/capture (``EnumWindows``/``PrintWindow``/``GetDC``) and
-# app launch (plain ``CreateProcessW``) are all native — no SYSTEM,
+# enumeration (``EnumWindows``) and app launch (plain
+# ``CreateProcessW``) are all native — no SYSTEM,
 # no session bridging. The account is a local admin; UAC stays
 # enabled (EnableLUA=1) with silent elevation
 # (ConsentPromptBehaviorAdmin=0).
@@ -14,8 +14,10 @@
 #   * List installed apps (Uninstall registry).
 #   * Launch apps via plain ``CreateProcessW`` (we are already the
 #     user, in the user's session — no ``CreateProcessAsUser`` dance).
-#   * Enumerate / capture / stream the user's windows (native, since
-#     the agent runs in the user session).
+#   * Enumerate the user's windows, and start the window mirror's
+#     guest half beside a launched application. The windows
+#     themselves — their pixels and their input — belong to that
+#     mirror and travel on its own connection, not this one.
 #   * Push log records back to the manager over the bidirectional
 #     RPC channel on TCP 5102.
 #
@@ -73,17 +75,7 @@ set(_lsw_agent_rpc_sources
     src/rpc/handlers/window/start_window_mirror.cpp
     src/rpc/handlers/window/list_windows.cpp
     src/rpc/handlers/window/close_window.cpp
-    src/rpc/handlers/window/focus_window.cpp
-    src/rpc/handlers/window/unfocus_window.cpp
-    src/rpc/handlers/window/resize_window.cpp
     src/rpc/handlers/window/window_command.cpp
-    src/rpc/handlers/window/window_props.cpp
-    src/rpc/handlers/window/nchittest.cpp
-    src/rpc/handlers/window/get_window_icon.cpp
-    src/rpc/handlers/input/inject_input.cpp
-    src/rpc/handlers/capture/subscribe_window.cpp
-    src/rpc/handlers/capture/unsubscribe_window.cpp
-    src/rpc/handlers/capture/capture_debug.cpp
     src/rpc/handlers/install/download_install.cpp
     src/rpc/handlers/install/download_extract.cpp
     src/rpc/handlers/install/run_script.cpp
@@ -104,11 +96,9 @@ set(_lsw_agent_rpc_sources
 set(_lsw_agent_win_sources
     src/win/mirror_process.cpp
     src/win/window.cpp
-    src/win/input.cpp
     src/win/icon_extractor.cpp
     src/win/gdiplus_runtime.cpp
     src/win/com.cpp
-    src/win/move_resize_watcher.cpp
     src/win/desktop_session.cpp
     src/win/desktop_probe.cpp
     src/win/token_privileges.cpp
@@ -116,9 +106,6 @@ set(_lsw_agent_win_sources
 set(_lsw_agent_util_sources
     src/util/base64.cpp
     src/util/text_encoding.cpp
-)
-set(_lsw_agent_capture_sources
-    src/capture/wgc.cpp
 )
 set(_lsw_agent_uia_sources
     src/uia/uia.cpp
@@ -171,7 +158,6 @@ add_executable(lsw-guest-agent
     ${_lsw_agent_rpc_sources}
     ${_lsw_agent_util_sources}
     ${_lsw_agent_win_sources}
-    ${_lsw_agent_capture_sources}
     ${_lsw_agent_uia_sources}
     ${_lsw_agent_apps_sources}
     ${_lsw_agent_install_sources}
@@ -209,15 +195,13 @@ target_link_libraries(lsw-guest-agent
         nlohmann_json::nlohmann_json
         ws2_32        # WinSock2
         iphlpapi      # GetAdaptersAddresses
-        gdi32         # GDI window capture (PrintWindow/BitBlt)
+        gdi32         # icon bitmaps
         gdiplus       # PNG encoding
         advapi32      # registry / SetConsoleCtrlHandler
         shlwapi       # PathMatchSpec etc.
         winhttp       # Installer: HTTP(S) downloads
         dwmapi        # DWMWA_CLOAKED / EXTENDED_FRAME_BOUNDS
         runtimeobject # WinRT (RoInitialize / RoGetActivationFactory)
-        d3d11         # WGC capture device
-        dxgi          # DXGI device interop for WGC
         setupapi      # SetupDi* — locate the IVSHMEM PCI device
         cfgmgr32      # CM_* helpers used by setupapi
         ole32         # COM (CoInitializeEx / CoCreateInstance for UIA)

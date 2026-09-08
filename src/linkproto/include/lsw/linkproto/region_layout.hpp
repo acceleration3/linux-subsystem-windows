@@ -1,7 +1,6 @@
 #pragma once
 
 #include "lsw/linkproto/byte_ring.hpp"
-#include "lsw/linkproto/frame_ring.hpp"
 #include "lsw/linkproto/region.hpp"
 
 #include <atomic>
@@ -26,37 +25,33 @@
 
 namespace lsw::linkproto {
 
-// Channels start on a page boundary. The guest maps this memory
-// write-combined, where an unaligned start costs real throughput on the
-// pixel path.
+// Channels start on a page boundary: the guest maps this memory
+// write-combined, where an unaligned start costs throughput.
 inline constexpr std::uint64_t kRegionPageSize = 4096;
 
 [[nodiscard]] inline constexpr std::uint64_t region_page_up(std::uint64_t v) {
     return (v + kRegionPageSize - 1) & ~(kRegionPageSize - 1);
 }
 
-// Pixel buffer area below which the frame channel is not worth having.
-inline constexpr std::uint64_t kMinFrameBufferBytes = 16ULL << 20;
-
-// Default region size. 256 MiB fits ~15 simultaneous 1080p mirrors
-// (double-buffered) before the slot allocator starts refusing.
+// Default region size. Messages are all that travel here now, and the
+// ring is a megabyte each way; the rest is room for a channel that has
+// not been added yet.
 //
 // It lives here rather than next to either user because the layout is a
 // pure function of this number: a manager that gives a VM one size and a
 // loopback that creates another do not lay out the same region, and the
 // local path stops being the VM path in the one way that is hardest to
 // notice — everything still works, just differently.
-inline constexpr int kDefaultRegionMib = 256;
+inline constexpr int kDefaultRegionMib = 8;
 inline constexpr std::uint64_t kDefaultRegionBytes =
     static_cast<std::uint64_t>(kDefaultRegionMib) << 20;
 
 struct RegionLayout {
     ChannelView rpc;
-    ChannelView frames;
     bool valid = false;
 
     [[nodiscard]] std::uint64_t required_bytes() const noexcept {
-        return frames.offset + kBuffersOffset + kMinFrameBufferBytes;
+        return rpc.offset + rpc.size;
     }
 };
 
@@ -64,9 +59,8 @@ struct RegionLayout {
 // memory — the layout is a function of the size and nothing else, which
 // is exactly what makes it checkable.
 //
-// Order is ascending with the frame channel LAST so it absorbs the
-// remainder: pixel demand scales with what the user opens, message rings
-// are fixed and small.
+// One channel today. Ascending from the first channel offset, so
+// another added after it takes the space beyond.
 [[nodiscard]] inline RegionLayout plan_region(std::uint64_t size_bytes) {
     RegionLayout out;
     std::uint64_t cursor = kFirstChannelOffset;
@@ -74,35 +68,22 @@ struct RegionLayout {
     out.rpc.kind = kChannelRpc;
     out.rpc.offset = cursor;
     out.rpc.size = kDefaultRpcChannelBytes;
-    cursor = region_page_up(cursor + out.rpc.size);
-
-    out.frames.kind = kChannelFrames;
-    out.frames.offset = cursor;
-    // Set before the size check so ``required_bytes`` is answerable on a
-    // layout that did not fit — that is the number a caller wants to
-    // report.
-    if (out.frames.offset + kBuffersOffset + kMinFrameBufferBytes > size_bytes) {
-        out.frames.size = 0;
-        out.valid = false;
-        return out;
-    }
-    out.frames.size = size_bytes - out.frames.offset;
-    out.valid = true;
+    out.valid = out.rpc.offset + out.rpc.size <= size_bytes;
     return out;
 }
 
 // Does this mapping hold a region this build understands?
 //
-// The version check is the one that matters. The magic was deliberately
-// left unchanged across the v1 -> v2 format change, so a peer that knows
-// only v1 reads a version it does not recognise and refuses, rather than
-// reading the channel table as if it were a frame-slot table.
+// The version check is the one that matters. The magic is deliberately
+// unchanged across format changes, so a peer that knows an older one
+// reads a version it does not recognise and refuses, rather than reading
+// the channel table as whatever it used to be.
 [[nodiscard]] inline bool region_is_readable(const void* region_base, std::uint64_t mapped_bytes) {
     if (region_base == nullptr || mapped_bytes < kFirstChannelOffset) {
         return false;
     }
     const auto* base = static_cast<const std::uint8_t*>(region_base);
-    return load_field<std::uint32_t>(base + region_off::magic) == kFrameRingMagic
+    return load_field<std::uint32_t>(base + region_off::magic) == kRegionMagic
            && load_field<std::uint32_t>(base + region_off::version) == kRegionVersion
            && load_field<std::uint64_t>(base + region_off::region_size) <= mapped_bytes
            && load_field<std::uint64_t>(base + region_off::region_size) != 0;
@@ -116,21 +97,6 @@ struct RegionLayout {
            && ring_init(base + host_to_guest_ring_offset(channel.size), ring_bytes);
 }
 
-// Initialise the frame channel's own header. Slot and buffer offsets are
-// relative to the channel base, not the region.
-inline void init_frame_channel(void* region_base, const ChannelView& channel) {
-    auto* base = static_cast<std::uint8_t*>(region_base) + channel.offset;
-    store_field<std::uint32_t>(base + hdr_off::magic, kFrameRingMagic);
-    store_field<std::uint32_t>(base + hdr_off::version, kFrameRingVersion);
-    store_field<std::uint32_t>(base + hdr_off::slot_count, kSlotCount);
-    store_field<std::uint32_t>(base + hdr_off::slot_size,
-                               static_cast<std::uint32_t>(sizeof(FrameSlot)));
-    store_field<std::uint64_t>(base + hdr_off::table_offset, kTableOffset);
-    store_field<std::uint64_t>(base + hdr_off::buffers_offset, kBuffersOffset);
-    store_field<std::uint64_t>(base + hdr_off::buffers_size, channel.size - kBuffersOffset);
-    store_field<std::uint64_t>(base + hdr_off::region_size, channel.size);
-}
-
 // Write the region header, the channel table, and every channel's own
 // contents into an already-mapped, already-zeroed region.
 //
@@ -140,8 +106,7 @@ inline void init_frame_channel(void* region_base, const ChannelView& channel) {
 //
 // Callers that create the region get the zeroing for free — tmpfs and
 // ``ftruncate`` zero-fill on first touch — so this deliberately does not
-// memset: doing so would fault in and dirty the whole region, including
-// tens of megabytes of pixel buffers nobody has asked for yet.
+// memset: doing so would fault in and dirty the whole region.
 [[nodiscard]] inline RegionLayout lay_out_region(void* region_base, std::uint64_t size_bytes) {
     RegionLayout layout = plan_region(size_bytes);
     if (!layout.valid || region_base == nullptr) {
@@ -154,14 +119,11 @@ inline void init_frame_channel(void* region_base, const ChannelView& channel) {
         layout.valid = false;
         return layout;
     }
-    init_frame_channel(region_base, layout.frames);
-
     write_channel(region_base, 0, layout.rpc.kind, layout.rpc.offset, layout.rpc.size);
-    write_channel(region_base, 1, layout.frames.kind, layout.frames.offset, layout.frames.size);
 
-    store_field<std::uint32_t>(base + region_off::magic, kFrameRingMagic);
+    store_field<std::uint32_t>(base + region_off::magic, kRegionMagic);
     store_field<std::uint32_t>(base + region_off::version, kRegionVersion);
-    store_field<std::uint32_t>(base + region_off::channel_count, 2U);
+    store_field<std::uint32_t>(base + region_off::channel_count, 1U);
     store_field<std::uint32_t>(base + region_off::channel_entry_size,
                                static_cast<std::uint32_t>(sizeof(ChannelDescriptor)));
     store_field<std::uint64_t>(base + region_off::channel_table_offset, kChannelTableOffset);

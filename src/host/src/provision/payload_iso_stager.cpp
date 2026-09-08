@@ -4,6 +4,7 @@
 #include "lsw/host/config/settings.hpp"
 #include "lsw/host/config/vm_name.hpp"
 #include "lsw/host/platform/agent_exe_path.hpp"
+#include "lsw/host/platform/mirror_exe_paths.hpp"
 #include "lsw/host/platform/guest_driver_paths.hpp"
 #include "lsw/host/platform/dolphin_places.hpp"
 #include "lsw/host/provision/install/autounattend.hpp"
@@ -65,6 +66,17 @@ void PayloadIsoStager::build(const config::VmRecord& record, const PipelineInput
     } else {
         payload.agent_exe_path = agent_exe;
         LSW_INFO("provision: bundling guest agent from {}", agent_exe.toStdString());
+    }
+
+    const QString mirror_exe = platform::MirrorExePaths::guest();
+    if (mirror_exe.isEmpty()) {
+        LSW_WARN("provision: no guest window mirror found; applications will run in the "
+                 "guest with no windows on this desktop. Set LSW_REMOTEWIN_GUEST or run "
+                 "scripts/build-agent.sh");
+    } else {
+        payload.mirror_exe_path = mirror_exe;
+        LSW_INFO("provision: bundling the window mirror's guest half from {}",
+                 mirror_exe.toStdString());
     }
 
     // The guest drivers. Absent means the guest installs normally and

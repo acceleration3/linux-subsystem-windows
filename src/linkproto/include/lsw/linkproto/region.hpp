@@ -1,7 +1,7 @@
 #pragma once
 
 #include "lsw/linkproto/byte_ring.hpp"
-#include "lsw/linkproto/frame_ring.hpp"
+#include "lsw/linkproto/field.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -32,7 +32,6 @@
 namespace lsw::linkproto {
 
 // What a channel carries. Values are a wire contract; never renumber.
-inline constexpr std::uint32_t kChannelFrames = 1;     // window frame slots + pixel buffers
 inline constexpr std::uint32_t kChannelRpc = 2;        // duplex control messages
 // 3 and 4 were the Vulkan proxy's command stream and its host-memory
 // arena. The proxy is the render server's now, in a region of its own,
@@ -63,6 +62,13 @@ struct RegionHeader {
 // refuses cleanly instead of interpreting the channel table as a slot
 // table.
 inline constexpr std::uint32_t kRegionVersion = 3;
+
+// 'LSWF' little-endian. Unchanged from the format that carried window
+// frames, because the version beside it is what a peer checks: an older
+// one reads a version it does not know and refuses, which is the right
+// answer, and a magic that changed too would have made it the right
+// answer for the wrong reason.
+inline constexpr std::uint32_t kRegionMagic = 0x4657534CU;
 
 inline constexpr std::uint64_t kChannelTableOffset = 0x40;
 inline constexpr std::uint32_t kMaxChannels = 8;
@@ -110,17 +116,14 @@ inline constexpr std::size_t size   = offsetof(ChannelDescriptor, size);
 inline constexpr std::uint64_t kDefaultRpcChannelBytes = 1ULL << 20;        // 1 MiB
 
 // ---- Doorbell vectors ---------------------------------------------------
-// The guest signals the host with an IVSHMEM MSI-X doorbell. Vectors
-// 0..kSlotCount-1 belong to frame slots (vector == slot index, as
-// before); the channels get their own past the end, so a ring
-// notification can never be mistaken for a frame.
+// The guest signals the host with an IVSHMEM MSI-X doorbell. One
+// channel, one vector. A device that exposes more than this asks for is
+// a VM defined by an older manager, and the extra vectors go unused.
 
-inline constexpr std::uint16_t kRpcDoorbellVector =
-    static_cast<std::uint16_t>(kSlotCount);
+inline constexpr std::uint16_t kRpcDoorbellVector = 0;
 // Total vectors the device must expose. Mirrored by <msi vectors='N'/>
 // in domain.xml and by IvshmemServer::kVectorCount.
-inline constexpr std::uint16_t kDoorbellVectorCount =
-    static_cast<std::uint16_t>(kSlotCount + 1);
+inline constexpr std::uint16_t kDoorbellVectorCount = 1;
 
 // ---- Duplex layout ------------------------------------------------------
 // A duplex channel is two independent rings back to back, each getting
