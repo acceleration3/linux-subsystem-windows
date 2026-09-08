@@ -163,7 +163,10 @@ void SettingsPage::build() {
                         Choices{{QStringLiteral("512 MiB"), 512},
                                 {QStringLiteral("1024 MiB"), 1024},
                                 {QStringLiteral("2048 MiB"), 2048},
-                                {QStringLiteral("3072 MiB"), 3072}}));
+                                {QStringLiteral("3072 MiB"), 3072},
+                                {QStringLiteral("4096 MiB"), 4096},
+                                {QStringLiteral("6144 MiB"), 6144},
+                                {QStringLiteral("8192 MiB"), 8192}}));
     add_row(display, QLatin1String(K::kLivePreview), QStringLiteral("Live preview"),
             QStringLiteral("Streams the whole guest desktop into the overview."),
             make_toggle(QLatin1String(K::kLivePreview)));
