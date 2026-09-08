@@ -88,12 +88,17 @@ VmDetailPanel::VmDetailPanel(config::VmState& vms, vm::Lifecycle& lifecycle,
     left_layout->setSpacing(14);
 
     auto preview_panel = make_panel(QStringLiteral("Live preview"));
-    preview_panel.body->setContentsMargins(0, 0, 0, 0);
+    preview_panel.body->setContentsMargins(10, 10, 10, 10);
+    preview_panel.body->setSpacing(8);
+    // What the picture is, for when there is not one yet.
+    preview_tag_ = new QLabel(QStringLiteral("VNC 127.0.0.1"));
+    preview_tag_->setObjectName(QStringLiteral("ScreenTag"));
+    preview_panel.body->addWidget(preview_tag_, 0, Qt::AlignLeft | Qt::AlignTop);
     preview_ = new lsw::host::ui::VncView;
     preview_->setMinimumHeight(220);
     preview_->set_controls_visible(true);
     preview_slot_ = preview_panel.body;
-    preview_slot_->addWidget(preview_);
+    preview_slot_->addWidget(preview_, 1);
     left_layout->addWidget(preview_panel.frame, 1);
 
     auto stats_panel = make_panel(QStringLiteral("System"));
@@ -180,6 +185,7 @@ void VmDetailPanel::set_target(const QUuid& uuid) {
         rpc_.set_target(rec->vsock_cid, kAgentPort);
         const int vp = lifecycle_.vnc_port(uuid_);
         if (vp > 0) {
+            preview_tag_->setText(QStringLiteral("VNC 127.0.0.1:%1").arg(vp));
             preview_->connect_to(QStringLiteral("127.0.0.1"), vp);
         } else {
             preview_->stop();

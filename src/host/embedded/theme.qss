@@ -447,6 +447,18 @@ QSpinBox#SliderValue {
     color: #e4e8f0;
 }
 
+/* The label on the guest's console, so the black rectangle says what
+   it is before there is anything in it. */
+QLabel#ScreenTag {
+    font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace;
+    font-size: 9px;
+    letter-spacing: 1.2px;
+    color: #646d7e;
+    border: 1px solid #272d3a;
+    border-radius: 2px;
+    padding: 2px 6px;
+}
+
 /* A pressure bar: green while there is room, amber as it fills, red
    when operations are splitting. The id is named alongside the property
    because an id selector outranks a bare attribute one, and the chunk

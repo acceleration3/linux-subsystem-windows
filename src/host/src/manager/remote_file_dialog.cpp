@@ -41,11 +41,14 @@ struct Place {
     const char* glyph;
 };
 
+// The glyphs are the two a plain desktop font is certain to have. An
+// icon theme would be prettier and is not guaranteed to be installed.
 const Place kPlaces[] = {
-    {"Start menu", R"(C:\ProgramData\Microsoft\Windows\Start Menu\Programs)", "*"},
-    {"Program Files", R"(C:\Program Files)", "/"},
-    {"Program Files (x86)", R"(C:\Program Files (x86))", "/"},
-    {"Desktop", R"(C:\Users\Public\Desktop)", "~"},
+    {"Start menu", R"(C:\ProgramData\Microsoft\Windows\Start Menu\Programs)", "▪"},
+    {"Program Files", R"(C:\Program Files)", "▪"},
+    {"Program Files (x86)", R"(C:\Program Files (x86))", "▪"},
+    {"Desktop", R"(C:\Users\Public\Desktop)", "●"},
+    {"Downloads", R"(C:\Users\Public\Downloads)", "●"},
 };
 
 QString human_size(qint64 bytes) {
@@ -267,7 +270,7 @@ void RemoteFileDialog::refresh_places() {
                 const QString label = entry.value(QStringLiteral("label")).toString();
                 self->add_place(label.isEmpty() ? name
                                                 : QStringLiteral("%1 %2").arg(name, label),
-                                name + QLatin1Char('\\'), QStringLiteral(":"));
+                                name + QLatin1Char('\\'), QStringLiteral("◆"));
             }
         });
     });

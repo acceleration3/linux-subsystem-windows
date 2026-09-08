@@ -24,6 +24,10 @@ public:
     // draw.
     static QVBoxLayout* install(QWizardPage* page, const QString& title,
                                 const QString& subtitle);
+
+    // The title band's own layout, for the one page that puts its
+    // progress up there with the title rather than in the body.
+    [[nodiscard]] static QVBoxLayout* head_of(QWizardPage* page);
 };
 
 }  // namespace lsw::host::wizard

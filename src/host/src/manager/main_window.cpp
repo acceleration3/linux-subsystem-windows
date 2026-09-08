@@ -115,8 +115,15 @@ MainWindow::MainWindow(services::HostServices& services, QWidget* parent)
             overview_->pop_out_preview();
         }
     });
-    connect(clear_button_, &QPushButton::clicked, this,
-            [this] { services_.log_store().clear(); });
+    connect(clear_button_, &QPushButton::clicked, this, [this] {
+        if (rail_->current() == NavRail::Page::Console) {
+            if (console_ != nullptr) {
+                console_->clear_transcript();
+            }
+            return;
+        }
+        services_.log_store().clear();
+    });
     connect(reset_counts_button_, &QPushButton::clicked, this,
             [this] { services_.render_stats().reset(); });
     connect(config_folder_button_, &QPushButton::clicked, this, [this] {
@@ -353,7 +360,8 @@ void MainWindow::show_page(NavRail::Page page) {
     pop_out_button_->setVisible(page == NavRail::Page::Console
                                 || page == NavRail::Page::Log);
     preview_button_->setVisible(page == NavRail::Page::Overview);
-    clear_button_->setVisible(page == NavRail::Page::Log);
+    clear_button_->setVisible(page == NavRail::Page::Log
+                              || page == NavRail::Page::Console);
     reset_counts_button_->setVisible(page == NavRail::Page::Render);
     config_folder_button_->setVisible(page == NavRail::Page::Settings);
 

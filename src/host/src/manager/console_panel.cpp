@@ -63,18 +63,8 @@ ConsolePanel::ConsolePanel(link::AgentRpcClient& rpc, QWidget* parent)
     auto* row = new QHBoxLayout(band);
     row->setContentsMargins(14, 10, 14, 10);
     row->setSpacing(8);
-    auto* prompt = new QLabel(QStringLiteral(">"));
-    // Amber, because the prompt is the guest speaking. Host text in
-    // this window stays neutral.
-    prompt->setStyleSheet(QStringLiteral("color: %1; font-weight: bold;")
-                              .arg(QString::fromLatin1(ui::Theme::Color::kAmber)));
-    {
-        QFont mono(QStringLiteral("monospace"));
-        mono.setStyleHint(QFont::Monospace);
-        prompt->setFont(mono);
-    }
-    row->addWidget(prompt);
     input_ = new QLineEdit;
+    input_->setPlaceholderText(tr("Type a command and press Enter"));
     {
         QFont mono(QStringLiteral("monospace"));
         mono.setStyleHint(QFont::Monospace);
@@ -247,6 +237,10 @@ bool ConsolePanel::eventFilter(QObject* watched, QEvent* event) {
         return true;
     }
     return QWidget::eventFilter(watched, event);
+}
+
+void ConsolePanel::clear_transcript() {
+    output_->clear();
 }
 
 void ConsolePanel::release_session() {

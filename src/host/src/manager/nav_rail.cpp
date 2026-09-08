@@ -67,6 +67,10 @@ NavRail::NavRail(QWidget* parent) : QWidget(parent) {
     detail_label_ = new QLabel;
     detail_label_->setObjectName(QString::fromLatin1(Theme::Role::kMeta));
     detail_label_->setWordWrap(true);
+    // A shade smaller than the other captions: the machine's shape is
+    // three facts on one line, and wrapping "60 GiB" onto a third line
+    // makes the identity look like an error.
+    detail_label_->setStyleSheet(QStringLiteral("font-size: 10px;"));
 
     id_layout->addWidget(name_label_);
     id_layout->addWidget(detail_label_);
