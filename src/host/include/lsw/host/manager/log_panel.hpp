@@ -2,7 +2,7 @@
 
 #include "lsw/host/apps/log_store.hpp"
 
-#include <QDialog>
+#include <QWidget>
 #include <QString>
 #include <QVector>
 
@@ -14,16 +14,23 @@ class QLabel;
 
 namespace lsw::host::manager {
 
-// Read-only log viewer: a plain-text scrolling area pre-populated with
-// everything in the LogStore plus a find bar. Live records appended
-// to the store while the viewer is open are auto-streamed in.
+// Read-only log: a scrolling text area pre-populated with everything
+// in the LogStore, plus a find bar. Records appended to the store while
+// the page is open stream in.
 //
-// Modeless — opening multiple is fine; each runs against the same
-// shared store. Closing the dialog deletes it (Qt::WA_DeleteOnClose).
-class LogViewer : public QDialog {
+// A page in the manager's stack. Several may exist at once (a popped
+// out copy alongside the embedded one) and they all read the same
+// shared store.
+class LogPanel : public QWidget {
     Q_OBJECT
 public:
-    explicit LogViewer(apps::LogStore& store, QWidget* parent = nullptr);
+    explicit LogPanel(apps::LogStore& store, QWidget* parent = nullptr);
+
+    // How many records are on screen, for the rail's marker.
+    [[nodiscard]] int record_count() const noexcept { return shown_; }
+
+Q_SIGNALS:
+    void record_count_changed(int count);
 
 private Q_SLOTS:
     void on_find_text_changed(const QString& s);
@@ -43,6 +50,7 @@ private:
     QPushButton* find_next_ = nullptr;
     QPushButton* find_prev_ = nullptr;
     QCheckBox* autoscroll_ = nullptr;
+    int shown_ = 0;
     QLabel* status_ = nullptr;
 };
 

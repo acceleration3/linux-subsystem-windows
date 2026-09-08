@@ -106,6 +106,12 @@ Q_SIGNALS:
     void shmem_ready(const QUuid& uuid);
     void shmem_gone(const QUuid& uuid);
 
+    // Forwarded from whichever render server is running. The manager
+    // parses its congestion warnings out of these; the server has been
+    // counting stalls and recommending sizes all along, into a log
+    // nobody read.
+    void render_server_logged(const QString& line);
+
 private:
     struct ShmemBundle {
         std::unique_ptr<ShmemRegion> region;

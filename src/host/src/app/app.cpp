@@ -6,6 +6,7 @@
 #include "lsw/host/manager/guest_app_launch_controller.hpp"
 #include "lsw/host/manager/main_window.hpp"
 #include "lsw/host/mcp/mcp_server.hpp"
+#include "lsw/host/ui/theme.hpp"
 #include "lsw/host/vm/domain_importer.hpp"
 #include "lsw/host/wizard/wizard.hpp"
 
@@ -19,6 +20,11 @@ App::App(int& argc, char** argv)
     setApplicationName("lsw-manager");
     setOrganizationName("lsw");
     setOrganizationDomain("lsw");
+
+    // Before any window exists, so the wizard and the manager and every
+    // dialog either of them opens are all wearing it from their first
+    // paint. Widgets carry object names, not stylesheets of their own.
+    ui::Theme::apply();
 
     // Sync the host's XDG menu with whatever app configs are already on
     // disk — covers opening a .desktop entry that has been there a while

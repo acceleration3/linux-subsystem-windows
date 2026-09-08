@@ -69,6 +69,11 @@ set(_core_embed "${CMAKE_CURRENT_BINARY_DIR}/embedded/core")
 file(MAKE_DIRECTORY "${_core_embed}")
 embed_text_file("${CMAKE_CURRENT_SOURCE_DIR}/embedded/domain.xml"
                 "${_core_embed}/domain_template.hpp" kDomainTemplate)
+# The stylesheet both applications wear (ui/theme.cpp). Embedded for the
+# same reason: a theme read from disk is one more thing to install, and
+# a manager that cannot find it looks broken rather than plain.
+embed_text_file("${CMAKE_CURRENT_SOURCE_DIR}/embedded/theme.qss"
+                "${_core_embed}/theme_qss.hpp" kThemeQss)
 
 lsw_host_sources(LSW_CORE_SOURCES ${LSW_CORE_CONCERNS})
 add_library(lsw_host_core STATIC ${LSW_CORE_SOURCES})

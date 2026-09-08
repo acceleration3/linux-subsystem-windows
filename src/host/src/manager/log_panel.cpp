@@ -1,4 +1,4 @@
-#include "lsw/host/manager/log_viewer.hpp"
+#include "lsw/host/manager/log_panel.hpp"
 
 #include <QCheckBox>
 #include <QDateTime>
@@ -14,9 +14,8 @@
 
 namespace lsw::host::manager {
 
-LogViewer::LogViewer(apps::LogStore& store, QWidget* parent)
-    : QDialog(parent), store_(store) {
-    setAttribute(Qt::WA_DeleteOnClose);
+LogPanel::LogPanel(apps::LogStore& store, QWidget* parent)
+    : QWidget(parent), store_(store) {
     setWindowTitle(tr("Agent Log"));
     resize(900, 600);
 
@@ -51,21 +50,21 @@ LogViewer::LogViewer(apps::LogStore& store, QWidget* parent)
 
     rebuild_all();
 
-    connect(find_edit_, &QLineEdit::textChanged, this, &LogViewer::on_find_text_changed);
-    connect(find_next_, &QPushButton::clicked, this, &LogViewer::on_find_next);
-    connect(find_prev_, &QPushButton::clicked, this, &LogViewer::on_find_prev);
-    connect(autoscroll_, &QCheckBox::toggled, this, &LogViewer::on_autoscroll_toggled);
-    connect(&store_, &apps::LogStore::appended, this, &LogViewer::on_appended);
-    connect(&store_, &apps::LogStore::cleared, this, &LogViewer::on_cleared);
+    connect(find_edit_, &QLineEdit::textChanged, this, &LogPanel::on_find_text_changed);
+    connect(find_next_, &QPushButton::clicked, this, &LogPanel::on_find_next);
+    connect(find_prev_, &QPushButton::clicked, this, &LogPanel::on_find_prev);
+    connect(autoscroll_, &QCheckBox::toggled, this, &LogPanel::on_autoscroll_toggled);
+    connect(&store_, &apps::LogStore::appended, this, &LogPanel::on_appended);
+    connect(&store_, &apps::LogStore::cleared, this, &LogPanel::on_cleared);
 
     // Enter in the find box jumps to next match. Ctrl+F focuses find.
-    connect(find_edit_, &QLineEdit::returnPressed, this, &LogViewer::on_find_next);
+    connect(find_edit_, &QLineEdit::returnPressed, this, &LogPanel::on_find_next);
     auto* focus_find = new QShortcut(QKeySequence::Find, this);
     connect(focus_find, &QShortcut::activated, this,
             [this] { find_edit_->setFocus(); find_edit_->selectAll(); });
 }
 
-QString LogViewer::format_record(const apps::LogRecord& r) {
+QString LogPanel::format_record(const apps::LogRecord& r) {
     const QDateTime dt =
         QDateTime::fromMSecsSinceEpoch(static_cast<qint64>(r.ts_ms)).toLocalTime();
     return QStringLiteral("[%1 %2] %3")
@@ -74,7 +73,7 @@ QString LogViewer::format_record(const apps::LogRecord& r) {
              r.msg);
 }
 
-void LogViewer::rebuild_all() {
+void LogPanel::rebuild_all() {
     QStringList lines;
     const auto& recs = store_.records();
     lines.reserve(recs.size());
@@ -85,9 +84,11 @@ void LogViewer::rebuild_all() {
     if (autoscroll_->isChecked()) {
         view_->moveCursor(QTextCursor::End);
     }
+    shown_ = static_cast<int>(recs.size());
+    Q_EMIT record_count_changed(shown_);
 }
 
-void LogViewer::on_appended(const QVector<apps::LogRecord>& batch) {
+void LogPanel::on_appended(const QVector<apps::LogRecord>& batch) {
     if (batch.isEmpty()) {
         return;
     }
@@ -104,19 +105,23 @@ void LogViewer::on_appended(const QVector<apps::LogRecord>& batch) {
     if (autoscroll_->isChecked() || was_at_bottom) {
         view_->moveCursor(QTextCursor::End);
     }
+    shown_ += static_cast<int>(batch.size());
+    Q_EMIT record_count_changed(shown_);
 }
 
-void LogViewer::on_cleared() {
+void LogPanel::on_cleared() {
     view_->clear();
+    shown_ = 0;
+    Q_EMIT record_count_changed(0);
 }
 
-void LogViewer::on_autoscroll_toggled(bool on) {
+void LogPanel::on_autoscroll_toggled(bool on) {
     if (on) {
         view_->moveCursor(QTextCursor::End);
     }
 }
 
-void LogViewer::on_find_text_changed(const QString& s) {
+void LogPanel::on_find_text_changed(const QString& s) {
     // Reset cursor to start of selection so the next ``Find`` searches
     // from the same spot — feels right when you're refining the term.
     if (s.isEmpty()) {
@@ -129,7 +134,7 @@ void LogViewer::on_find_text_changed(const QString& s) {
     on_find_next();
 }
 
-void LogViewer::on_find_next() {
+void LogPanel::on_find_next() {
     const auto needle = find_edit_->text();
     if (needle.isEmpty()) {
         return;
@@ -149,7 +154,7 @@ void LogViewer::on_find_next() {
     }
 }
 
-void LogViewer::on_find_prev() {
+void LogPanel::on_find_prev() {
     const auto needle = find_edit_->text();
     if (needle.isEmpty()) {
         return;

@@ -266,6 +266,8 @@ bool Lifecycle::attach_running(const QUuid& uuid) {
     // then timed out on its first command with "head is 0", which reads
     // like a driver fault and is not one.
     bundle.render = std::make_unique<RenderServer>();
+    connect(bundle.render.get(), &RenderServer::line_logged, this,
+            &Lifecycle::render_server_logged);
     (void)bundle.render->ensure_running(uuid);
     shmem_.emplace(uuid, std::move(bundle));
     Q_EMIT shmem_ready(uuid);
@@ -306,6 +308,8 @@ QString Lifecycle::ensure_shmem(const QUuid& uuid, int size_mib) {
     // GPU driver can be looked at, and one that will not start cannot.
     // The warning is in RenderServer.
     bundle.render = std::make_unique<RenderServer>();
+    connect(bundle.render.get(), &RenderServer::line_logged, this,
+            &Lifecycle::render_server_logged);
     (void)bundle.render->ensure_running(uuid);
     const QString sock = bundle.server->socket_path();
     shmem_.emplace(uuid, std::move(bundle));

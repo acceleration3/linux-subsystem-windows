@@ -55,7 +55,7 @@ QString DomainXmlBuilder::build(const config::VmRecord& vm, const DomainXmlInput
     // — the guest maps whichever file this names, and a name that
     // disagrees is a guest whose drivers find nothing.
     vars["rvk_region_name"] = RenderServer::region_name(vm.uuid);
-    vars["rvk_region_mib"]  = QString::number(RenderServer::kRegionMib);
+    vars["rvk_region_mib"]  = QString::number(RenderServer::region_mib());
 
     // The PipeWire audio backend needs XDG_RUNTIME_DIR to find its
     // socket under $XDG_RUNTIME_DIR/pipewire-0. libvirt session-mode
