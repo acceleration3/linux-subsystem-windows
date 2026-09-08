@@ -89,6 +89,15 @@ MainWindow::MainWindow(services::HostServices& services, QWidget* parent)
     bar_layout->addWidget(content_title_);
     bar_layout->addWidget(content_detail_);
     bar_layout->addStretch(1);
+    // Console and Log are pages now, which is right for the common
+    // case and wrong for the one where you want to watch the log while
+    // doing something else. So they can still be a window.
+    pop_out_button_ = new QPushButton(QStringLiteral("Pop out"));
+    pop_out_button_->setObjectName(QString::fromLatin1(Theme::Role::kQuiet));
+    pop_out_button_->setVisible(false);
+    bar_layout->addWidget(pop_out_button_);
+    connect(pop_out_button_, &QPushButton::clicked, this,
+            [this] { pop_out(rail_->current()); });
     right_layout->addWidget(bar);
 
     // ---- warning strip --------------------------------------------
@@ -230,6 +239,34 @@ void MainWindow::build_pages() {
     });
 }
 
+void MainWindow::pop_out(NavRail::Page page) {
+    // A second instance rather than reparenting the embedded one: the
+    // page keeps working where it is, and each console gets its own
+    // session id from the agent anyway, which is what makes two of them
+    // a sensible thing to have.
+    QWidget* content = nullptr;
+    QString title;
+    if (page == NavRail::Page::Console) {
+        content = new ConsolePanel(services_.rpc());
+        title = QStringLiteral("Console");
+    } else if (page == NavRail::Page::Log) {
+        content = new LogPanel(services_.log_store());
+        title = QStringLiteral("Log");
+    } else {
+        return;
+    }
+
+    auto* window = new QWidget(nullptr, Qt::Window);
+    window->setAttribute(Qt::WA_DeleteOnClose);
+    window->setWindowTitle(QStringLiteral("LSW %1").arg(title));
+    window->resize(900, 560);
+    auto* layout = new QVBoxLayout(window);
+    layout->setContentsMargins(0, 0, 0, 0);
+    content->setParent(window);
+    layout->addWidget(content);
+    window->show();
+}
+
 QWidget* MainWindow::build_empty_state() {
     auto* page = new QWidget;
     auto* outer = new QVBoxLayout(page);
@@ -280,6 +317,8 @@ void MainWindow::show_page(NavRail::Page page) {
     rail_->set_current(page);
     content_title_->setText(QString::fromLatin1(kPages[index].title));
     content_detail_->setText(QString::fromLatin1(kPages[index].detail));
+    pop_out_button_->setVisible(page == NavRail::Page::Console
+                                || page == NavRail::Page::Log);
 
     // A console nobody is looking at should not be holding a shell open
     // in the guest.
