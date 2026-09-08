@@ -7,6 +7,7 @@
 #include <QBrush>
 #include "lsw/host/ui/theme.hpp"
 
+#include <QBrush>
 #include <QColor>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -19,35 +20,61 @@ namespace lsw::host::wizard {
 
 namespace {
 constexpr int kColTask = 0;
-constexpr int kColStatus = 1;
+constexpr int kColSource = 1;
+constexpr int kColStatus = 2;
 }  // namespace
 
 PayloadPage::PayloadPage(Wizard& wizard, QWidget* parent)
     : QWizardPage(parent), wizard_(wizard) {
 
-    auto* lay = PageChrome::install(this, QStringLiteral("Preparing the install payload"), QStringLiteral("Fetching the latest virtio-win drivers and building the "
-                "LSW payload ISO."));
-    table_ = new QTableWidget(3, 2);
-    table_->setHorizontalHeaderLabels(QStringList{"TASK", "STATUS"});
-    table_->horizontalHeader()->setDefaultAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    auto* lay = PageChrome::install(
+        this, QStringLiteral("Building the install payload"),
+        QStringLiteral("The answer file, the guest binaries and the drivers that must be "
+                       "present on the very first boot."));
+    table_ = new QTableWidget(3, 3);
+    ui::Theme::rows_table(table_, QStringList{QStringLiteral("ARTIFACT"),
+                                              QStringLiteral("SOURCE"),
+                                              QStringLiteral("STATE")});
     table_->horizontalHeader()->setSectionResizeMode(kColTask, QHeaderView::Stretch);
-    table_->horizontalHeader()->setSectionResizeMode(kColStatus, QHeaderView::Stretch);
-    table_->verticalHeader()->setVisible(false);
-    table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    table_->setSelectionMode(QAbstractItemView::NoSelection);
-    table_->setFocusPolicy(Qt::NoFocus);
-    table_->setItem(0, kColTask, new QTableWidgetItem("Download virtio-win.iso"));
+    table_->horizontalHeader()->setSectionResizeMode(kColSource, QHeaderView::Fixed);
+    table_->setColumnWidth(kColSource, 220);
+    // Fixed: the state is a cell widget, and a column sized to its
+    // items measures the empty item behind it and clips the pill.
+    table_->horizontalHeader()->setSectionResizeMode(kColStatus, QHeaderView::Fixed);
+    table_->setColumnWidth(kColStatus, 190);
+    // The artifacts, named as themselves. A row says what is being made
+    // or fetched; the verb is in the state column, where it changes.
+    table_->setItem(0, kColTask, new QTableWidgetItem("virtio-win.iso"));
     // Its own row because it can fail on its own without stopping the
     // install — and because a missing shared-memory device is otherwise
     // only discovered much later, as a PCI device that is not there.
-    table_->setItem(1, kColTask, new QTableWidgetItem("Fetch IVSHMEM driver"));
-    table_->setItem(2, kColTask, new QTableWidgetItem("Build LSW payload ISO"));
+    table_->setItem(1, kColTask, new QTableWidgetItem("ivshmem driver"));
+    table_->setItem(2, kColTask, new QTableWidgetItem("lsw-payload.iso"));
 
-    status_label_ = new QLabel("Preparing the install payload...");
+    // Where each one comes from. The shared-memory driver is the one
+    // whose source is worth naming: it is not in Red Hat's virtio-win
+    // media and has to be taken out of the Looking Glass host package.
+    table_->setItem(0, kColSource, ui::Theme::kind_cell("fedorapeople"));
+    table_->setItem(1, kColSource, ui::Theme::kind_cell("Looking Glass host package"));
+    table_->setItem(2, kColSource, ui::Theme::kind_cell("local build"));
+    ui::Theme::fit_rows(table_);
+
+    // Why one of those rows exists at all. Static, and separate from
+    // the status line, which the pipeline overwrites.
+    auto* footnote = new QLabel(QStringLiteral(
+        "The shared memory driver is injected offline, because a driver delivered over "
+        "the channel it provides cannot bootstrap that channel."));
+    footnote->setObjectName(QString::fromLatin1(lsw::host::ui::Theme::Role::kMeta));
+    footnote->setWordWrap(true);
+
+    status_label_ = new QLabel;
+    status_label_->setObjectName(QString::fromLatin1(lsw::host::ui::Theme::Role::kMeta));
     status_label_->setWordWrap(true);
 
-    lay->addWidget(table_, /*stretch=*/1);
+    lay->addWidget(table_);
+    lay->addWidget(footnote);
     lay->addWidget(status_label_);
+    lay->addStretch(1);
 }
 
 void PayloadPage::initializePage() {
@@ -92,6 +119,13 @@ void PayloadPage::initializePage() {
                 if (s != Step::BuildingPayloadIso) return;
                 status_label_->setText(QStringLiteral("Payload step failed: %1").arg(err));
             });
+}
+
+void PayloadPage::demo_fill() {
+    set_row_status(0, RowStatus::Running, QStringLiteral("877 MiB, 71 %"));
+    set_row_status(1, RowStatus::Pending);
+    set_row_status(2, RowStatus::Pending);
+    status_label_->setText(QStringLiteral("Downloading the virtio-win media."));
 }
 
 bool PayloadPage::isComplete() const {

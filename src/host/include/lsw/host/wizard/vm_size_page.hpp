@@ -36,6 +36,9 @@ private Q_SLOTS:
 
 private:
     QFormLayout* form_ = nullptr;
+    QLabel* footnote_ = nullptr;
+
+    void refresh_footnote();
     Wizard& wizard_;
     QLineEdit* user_edit_ = nullptr;
     QLineEdit* pass_edit_ = nullptr;

@@ -135,7 +135,7 @@ QString bytes_label(quint64 bytes) {
 // A key/value tile. Several sit in a row under each area's meter.
 QWidget* kpi(const QString& key, const QString& value, const char* colour) {
     auto* box = new QWidget;
-    box->setObjectName(QString::fromLatin1(Theme::Role::kTile));
+    Theme::surface(box, Theme::Role::kTile);
     auto* layout = new QVBoxLayout(box);
     layout->setContentsMargins(11, 9, 11, 9);
     layout->setSpacing(3);
@@ -367,13 +367,13 @@ void RenderPanel::rebuild() {
 
     for (const auto& area : channel.areas) {
         auto* frame = new QFrame;
-        frame->setObjectName(QString::fromLatin1(Theme::Role::kPanel));
+        Theme::surface(frame, Theme::Role::kPanel);
         auto* outer = new QVBoxLayout(frame);
         outer->setContentsMargins(0, 0, 0, 0);
         outer->setSpacing(0);
 
         auto* header = new QWidget;
-        header->setObjectName(QString::fromLatin1(Theme::Role::kPanelHeader));
+        Theme::surface(header, Theme::Role::kPanelHeader);
         auto* header_layout = new QHBoxLayout(header);
         header_layout->setContentsMargins(12, 8, 12, 8);
         header_layout->setSpacing(10);
@@ -401,7 +401,7 @@ void RenderPanel::rebuild() {
         body->addWidget(meter);
 
         auto* grid = new QFrame;
-        grid->setObjectName(QString::fromLatin1(Theme::Role::kKpiGrid));
+        Theme::surface(grid, Theme::Role::kKpiGrid);
         auto* row = new QHBoxLayout(grid);
         row->setContentsMargins(1, 1, 1, 1);
         row->setSpacing(1);
@@ -424,7 +424,7 @@ void RenderPanel::rebuild() {
         const QString advice = area.advice();
         if (!advice.isEmpty()) {
             auto* advice_frame = new QFrame;
-            advice_frame->setObjectName(QString::fromLatin1(Theme::Role::kAdvice));
+            Theme::surface(advice_frame, Theme::Role::kAdvice);
             auto* advice_row = new QHBoxLayout(advice_frame);
             advice_row->setContentsMargins(12, 9, 12, 9);
             advice_row->setSpacing(10);

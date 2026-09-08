@@ -13,6 +13,8 @@
 #include "lsw/host/mcp/mcp_server.hpp"
 #include "lsw/host/ui/theme.hpp"
 #include "lsw/host/vm/domain_importer.hpp"
+#include "lsw/host/wizard/payload_page.hpp"
+#include "lsw/host/wizard/setup_page.hpp"
 #include "lsw/host/wizard/wizard.hpp"
 
 #include <QDir>
@@ -217,6 +219,15 @@ int App::capture_screens(const QString& dir) {
         // picture of a page, not a run of the wizard.
         wiz->setStartId(id);
         wiz->restart();
+        // Two pages are tables the pipeline fills, and there is no
+        // pipeline here. An empty table is a picture of nothing, so
+        // they are asked for a plausible run instead.
+        if (auto* payload = qobject_cast<wizard::PayloadPage*>(wiz->currentPage())) {
+            payload->demo_fill();
+        }
+        if (auto* setup = qobject_cast<wizard::SetupPage*>(wiz->currentPage())) {
+            setup->demo_fill();
+        }
         shoot(wiz, QStringLiteral("wizard-%1-%2")
                        .arg(id + 1, 2, 10, QLatin1Char('0'))
                        .arg(QString::fromLatin1(wiz->currentPage()->objectName().isEmpty()

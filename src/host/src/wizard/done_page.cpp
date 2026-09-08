@@ -22,7 +22,7 @@ DonePage::DonePage(Wizard& wizard, QWidget* parent)
     grid->setSpacing(8);
     const auto tile = [](const QString& key, const QString& value, QLabel** value_out) {
         auto* frame = new QFrame;
-        frame->setObjectName(QString::fromLatin1(ui::Theme::Role::kPanel));
+        ui::Theme::surface(frame, ui::Theme::Role::kPanel);
         auto* row = new QHBoxLayout(frame);
         row->setContentsMargins(13, 11, 13, 11);
         auto* k = new QLabel(key.toUpper());

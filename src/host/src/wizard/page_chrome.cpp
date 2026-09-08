@@ -28,7 +28,7 @@ using ui::Theme;
 // the page is the whole of what QWizard lays out.
 QWidget* build_rail() {
     auto* rail = new QWidget;
-    rail->setObjectName(QString::fromLatin1(Theme::Role::kWizardSide));
+    Theme::surface(rail, Theme::Role::kWizardSide);
     rail->setFixedWidth(212);
 
     auto* layout = new QVBoxLayout(rail);
@@ -52,7 +52,7 @@ QWidget* build_rail() {
     layout->addStretch(1);
 
     auto* foot = new QFrame;
-    foot->setObjectName(QString::fromLatin1(Theme::Role::kWizardSideFoot));
+    Theme::surface(foot, Theme::Role::kWizardSideFoot);
     auto* foot_layout = new QVBoxLayout(foot);
     foot_layout->setContentsMargins(18, 12, 18, 0);
     foot_layout->setSpacing(3);
@@ -90,7 +90,7 @@ QVBoxLayout* PageChrome::install(QWizardPage* page, const QString& title,
 
     // ---- title band -----------------------------------------------
     auto* head = new QFrame;
-    head->setObjectName(QString::fromLatin1(Theme::Role::kWizardHead));
+    Theme::surface(head, Theme::Role::kWizardHead);
     head->setProperty("lswHead", true);
     auto* head_layout = new QVBoxLayout(head);
     head_layout->setContentsMargins(26, 22, 26, 18);
@@ -120,7 +120,7 @@ QVBoxLayout* PageChrome::install(QWizardPage* page, const QString& title,
     // page. QWizard's own button row spans the window and cannot be
     // told otherwise, so it is emptied and this stands in.
     auto* foot = new QFrame;
-    foot->setObjectName(QString::fromLatin1(Theme::Role::kWizardFoot));
+    Theme::surface(foot, Theme::Role::kWizardFoot);
     auto* foot_layout = new QHBoxLayout(foot);
     foot_layout->setContentsMargins(20, 14, 20, 14);
     foot_layout->setSpacing(10);

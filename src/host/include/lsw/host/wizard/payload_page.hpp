@@ -18,6 +18,10 @@ public:
     explicit PayloadPage(Wizard& wizard, QWidget* parent = nullptr);
 
     void initializePage() override;
+
+    // A plausible mid-run state for --screenshot, where there is no
+    // pipeline to drive the rows.
+    void demo_fill();
     [[nodiscard]] bool isComplete() const override;
     [[nodiscard]] int nextId() const override;
 

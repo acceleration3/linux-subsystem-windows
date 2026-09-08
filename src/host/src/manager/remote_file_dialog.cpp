@@ -10,10 +10,11 @@
 #include <QJsonObject>
 #include <QLabel>
 #include <QLineEdit>
-#include <QListWidget>
+#include <QButtonGroup>
 #include <QComboBox>
 #include <QHeaderView>
 #include <QPointer>
+#include <QStyle>
 #include <QPushButton>
 #include <QTreeWidget>
 #include <QVBoxLayout>
@@ -44,9 +45,9 @@ struct Place {
 // The glyphs are the two a plain desktop font is certain to have. An
 // icon theme would be prettier and is not guaranteed to be installed.
 const Place kPlaces[] = {
-    {"Start menu", R"(C:\ProgramData\Microsoft\Windows\Start Menu\Programs)", "▪"},
-    {"Program Files", R"(C:\Program Files)", "▪"},
-    {"Program Files (x86)", R"(C:\Program Files (x86))", "▪"},
+    {"Start menu", R"(C:\ProgramData\Microsoft\Windows\Start Menu\Programs)", "▣"},
+    {"Program Files", R"(C:\Program Files)", "▢"},
+    {"Program Files (x86)", R"(C:\Program Files (x86))", "▢"},
     {"Desktop", R"(C:\Users\Public\Desktop)", "●"},
     {"Downloads", R"(C:\Users\Public\Downloads)", "●"},
 };
@@ -91,22 +92,22 @@ void RemoteFileDialog::build() {
     root->setSpacing(0);
 
     // ---- places ---------------------------------------------------
-    places_ = new QListWidget;
+    // A column of buttons rather than a list: the design gives the
+    // current place an amber edge and its glyph the same colour, and a
+    // list item is one piece of text that cannot be two colours.
+    places_ = new QWidget;
+    Theme::surface(places_, Theme::Role::kNavRail);
     places_->setFixedWidth(190);
-    places_->setFrameShape(QFrame::NoFrame);
-    places_->setObjectName(QString::fromLatin1(Theme::Role::kNavRail));
+    places_layout_ = new QVBoxLayout(places_);
+    places_layout_->setContentsMargins(8, 9, 8, 9);
+    places_layout_->setSpacing(1);
     add_place_heading(QStringLiteral("Shortcuts"));
     for (const auto& place : kPlaces) {
         add_place(QString::fromLatin1(place.label), QString::fromLatin1(place.path),
                   QString::fromUtf8(place.glyph));
     }
+    places_layout_->addStretch(1);
     root->addWidget(places_);
-    connect(places_, &QListWidget::itemActivated, this, [this](QListWidgetItem* item) {
-        navigate_to(item->data(kRoleName).toString());
-    });
-    connect(places_, &QListWidget::itemClicked, this, [this](QListWidgetItem* item) {
-        navigate_to(item->data(kRoleName).toString());
-    });
 
     // ---- pane -----------------------------------------------------
     auto* pane = new QWidget;
@@ -115,7 +116,7 @@ void RemoteFileDialog::build() {
     pane_layout->setSpacing(0);
 
     auto* bar = new QWidget;
-    bar->setObjectName(QString::fromLatin1(Theme::Role::kContentBar));
+    Theme::surface(bar, Theme::Role::kContentBar);
     auto* bar_layout = new QHBoxLayout(bar);
     bar_layout->setContentsMargins(10, 8, 10, 8);
     bar_layout->setSpacing(6);
@@ -179,7 +180,7 @@ void RemoteFileDialog::build() {
 
     // ---- name and filter ------------------------------------------
     auto* name_row = new QFrame;
-    name_row->setObjectName(QString::fromLatin1(Theme::Role::kContentBar));
+    Theme::surface(name_row, Theme::Role::kContentBar);
     auto* name_layout = new QHBoxLayout(name_row);
     name_layout->setContentsMargins(12, 10, 12, 10);
     name_layout->setSpacing(8);
@@ -203,7 +204,7 @@ void RemoteFileDialog::build() {
 
     // ---- footer ---------------------------------------------------
     auto* footer = new QFrame;
-    footer->setObjectName(QString::fromLatin1(Theme::Role::kDialogFoot));
+    Theme::surface(footer, Theme::Role::kDialogFoot);
     auto* footer_layout = new QHBoxLayout(footer);
     footer_layout->setContentsMargins(12, 10, 12, 10);
     footer_layout->setSpacing(8);
@@ -225,22 +226,83 @@ void RemoteFileDialog::build() {
     root->addWidget(pane, 1);
 }
 
-void RemoteFileDialog::add_place(const QString& label, const QString& path,
-                                 const QString& glyph) {
-    auto* item = new QListWidgetItem(QStringLiteral("%1  %2").arg(glyph, label), places_);
-    item->setData(kRoleName, path);
+// The column ends in a stretch once it has been built, and anything
+// added later (the drives, when the guest answers) goes above it.
+void RemoteFileDialog::append_place_widget(QWidget* widget) {
+    int at = places_layout_->count();
+    if (at > 0 && places_layout_->itemAt(at - 1)->spacerItem() != nullptr) {
+        --at;
+    }
+    places_layout_->insertWidget(at, widget);
 }
 
-// A heading in the places list. Not selectable, because it is a label
-// that happens to live in a list.
+void RemoteFileDialog::add_place(const QString& label, const QString& path,
+                                 const QString& glyph) {
+    auto* button = new QPushButton;
+    button->setObjectName(QStringLiteral("Place"));
+    button->setCheckable(true);
+    button->setCursor(Qt::PointingHandCursor);
+    button->setProperty("placePath", path);
+    // The row height is in the stylesheet, not here: QStyleSheetStyle
+    // rewrites a widget's minimum and maximum size from the sheet when
+    // it polishes it, so setFixedHeight on a styled button is undone
+    // and the button comes back the height of its (empty) text.
+
+    auto* layout = new QHBoxLayout(button);
+    layout->setContentsMargins(9, 6, 9, 6);
+    layout->setSpacing(9);
+    auto* mark = new QLabel(glyph);
+    mark->setObjectName(QStringLiteral("PlaceGlyph"));
+    mark->setFixedWidth(14);
+    mark->setAlignment(Qt::AlignCenter);
+    auto* text = new QLabel(label);
+    text->setObjectName(QStringLiteral("PlaceLabel"));
+    layout->addWidget(mark);
+    layout->addWidget(text, 1);
+
+    append_place_widget(button);
+    place_buttons_.push_back(button);
+    connect(button, &QPushButton::clicked, this, [this, path] { navigate_to(path); });
+}
+
+// Which place the pane is inside. A folder deeper in a place still
+// belongs to it, so the longest matching prefix wins.
+void RemoteFileDialog::highlight_place(const QString& path) {
+    QPushButton* best = nullptr;
+    int longest = 0;
+    for (auto* button : place_buttons_) {
+        const QString root = button->property("placePath").toString();
+        if (root.isEmpty()) {
+            continue;
+        }
+        if (path.startsWith(root, Qt::CaseInsensitive) && root.size() > longest) {
+            longest = static_cast<int>(root.size());
+            best = button;
+        }
+    }
+    for (auto* button : place_buttons_) {
+        const bool on = button == best;
+        button->setChecked(on);
+        if (auto* glyph = button->findChild<QLabel*>(QStringLiteral("PlaceGlyph"))) {
+            glyph->setProperty("on", on);
+            glyph->style()->unpolish(glyph);
+            glyph->style()->polish(glyph);
+        }
+        if (auto* label = button->findChild<QLabel*>(QStringLiteral("PlaceLabel"))) {
+            label->setProperty("on", on);
+            label->style()->unpolish(label);
+            label->style()->polish(label);
+        }
+    }
+}
+
+// A heading over a group of places. Small mono caps, and the design's
+// breathing room above it, because it separates two kinds of thing.
 void RemoteFileDialog::add_place_heading(const QString& text) {
-    auto* item = new QListWidgetItem(text.toUpper(), places_);
-    item->setFlags(Qt::NoItemFlags);
-    item->setForeground(QColor(QString::fromLatin1(Theme::Color::kFgFaint)));
-    QFont font = item->font();
-    font.setFamilies({QStringLiteral("JetBrains Mono"), QStringLiteral("DejaVu Sans Mono")});
-    font.setPixelSize(10);
-    item->setFont(font);
+    auto* label = new QLabel(text.toUpper());
+    label->setObjectName(QString::fromLatin1(Theme::Role::kCaption));
+    label->setContentsMargins(9, places_layout_->count() == 0 ? 0 : 10, 9, 5);
+    append_place_widget(label);
 }
 
 void RemoteFileDialog::refresh_places() {
@@ -261,16 +323,18 @@ void RemoteFileDialog::refresh_places() {
             }
             const auto reply = QJsonDocument::fromJson(raw).object();
             const auto drives = reply.value(QStringLiteral("entries")).toArray();
-            if (!drives.isEmpty()) {
-                self->add_place_heading(QStringLiteral("Drives"));
+            if (drives.isEmpty() || self->drives_listed_) {
+                return;
             }
+            self->drives_listed_ = true;
+            self->add_place_heading(QStringLiteral("Drives"));
             for (const auto value : drives) {
                 const auto entry = value.toObject();
                 const QString name = entry.value(QStringLiteral("name")).toString();
                 const QString label = entry.value(QStringLiteral("label")).toString();
                 self->add_place(label.isEmpty() ? name
                                                 : QStringLiteral("%1 %2").arg(name, label),
-                                name + QLatin1Char('\\'), QStringLiteral("◆"));
+                                name + QLatin1Char('\\'), QStringLiteral("◔"));
             }
         });
     });
@@ -329,6 +393,7 @@ void RemoteFileDialog::navigate_to(const QString& path) {
     }
     current_ = path;
     set_breadcrumb(path);
+    highlight_place(path);
     status_->setText(QStringLiteral("Reading %1 over the agent connection").arg(path));
     entries_->clear();
 
@@ -359,7 +424,7 @@ void RemoteFileDialog::navigate_to(const QString& path) {
         });
     });
 
-    if (places_->count() == std::size(kPlaces)) {
+    if (!drives_listed_) {
         refresh_places();
     }
 }

@@ -6,10 +6,11 @@
 
 #include <QDialog>
 #include <QString>
+#include <QVector>
 
 class QLabel;
 class QLineEdit;
-class QListWidget;
+class QVBoxLayout;
 class QPushButton;
 class QTreeWidget;
 class QTreeWidgetItem;
@@ -54,7 +55,9 @@ public:
 
 private:
     void build();
+    void append_place_widget(QWidget* widget);
     void add_place(const QString& label, const QString& path, const QString& glyph);
+    void highlight_place(const QString& path);
     void add_place_heading(const QString& text);
     void refresh_places();
     void render_entries(const QJsonObject& reply);
@@ -72,7 +75,10 @@ private:
     QString arguments_;
     QString workdir_;
 
-    QListWidget* places_ = nullptr;
+    QWidget* places_ = nullptr;
+    QVBoxLayout* places_layout_ = nullptr;
+    QVector<QPushButton*> place_buttons_;
+    bool drives_listed_ = false;
     QHBoxLayout* crumbs_ = nullptr;
     QTreeWidget* entries_ = nullptr;
     QLineEdit* name_edit_ = nullptr;

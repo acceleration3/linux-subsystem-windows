@@ -59,7 +59,7 @@ ConsolePanel::ConsolePanel(link::AgentRpcClient& rpc, QWidget* parent)
     // colour with a rule over it, with a Send button for the case where
     // Enter is not the habit.
     auto* band = new QFrame;
-    band->setObjectName(QString::fromLatin1(ui::Theme::Role::kDialogFoot));
+    ui::Theme::surface(band, ui::Theme::Role::kDialogFoot);
     auto* row = new QHBoxLayout(band);
     row->setContentsMargins(14, 10, 14, 10);
     row->setSpacing(8);

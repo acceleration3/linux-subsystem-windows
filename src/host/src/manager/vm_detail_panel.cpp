@@ -30,14 +30,14 @@ struct Panel {
 Panel make_panel(const QString& caption) {
     Panel panel;
     panel.frame = new QFrame;
-    panel.frame->setObjectName(QString::fromLatin1(Theme::Role::kPanel));
+    Theme::surface(panel.frame, Theme::Role::kPanel);
 
     auto* outer = new QVBoxLayout(panel.frame);
     outer->setContentsMargins(0, 0, 0, 0);
     outer->setSpacing(0);
 
     auto* header_widget = new QWidget;
-    header_widget->setObjectName(QString::fromLatin1(Theme::Role::kPanelHeader));
+    Theme::surface(header_widget, Theme::Role::kPanelHeader);
     panel.header = new QHBoxLayout(header_widget);
     panel.header->setContentsMargins(12, 8, 8, 8);
     panel.header->setSpacing(8);

@@ -75,7 +75,7 @@ MainWindow::MainWindow(services::HostServices& services, QWidget* parent)
 
     // ---- content bar ----------------------------------------------
     auto* bar = new QWidget;
-    bar->setObjectName(QString::fromLatin1(Theme::Role::kContentBar));
+    Theme::surface(bar, Theme::Role::kContentBar);
     auto* bar_layout = new QHBoxLayout(bar);
     bar_layout->setContentsMargins(14, 9, 14, 9);
     bar_layout->setSpacing(10);
@@ -138,7 +138,7 @@ MainWindow::MainWindow(services::HostServices& services, QWidget* parent)
     // which is the same rule the render server uses for its own
     // warnings.
     warn_strip_ = new QWidget;
-    warn_strip_->setObjectName(QString::fromLatin1(Theme::Role::kWarnStrip));
+    Theme::surface(warn_strip_, Theme::Role::kWarnStrip);
     auto* warn_layout = new QHBoxLayout(warn_strip_);
     warn_layout->setContentsMargins(14, 9, 14, 9);
     warn_layout->setSpacing(12);
@@ -169,7 +169,7 @@ MainWindow::MainWindow(services::HostServices& services, QWidget* parent)
     // has its own foot, and a bar that runs beneath it reads as
     // belonging to neither.
     auto* strip = new QWidget;
-    strip->setObjectName(QString::fromLatin1(Theme::Role::kStatusStrip));
+    Theme::surface(strip, Theme::Role::kStatusStrip);
     auto* strip_layout = new QHBoxLayout(strip);
     strip_layout->setContentsMargins(14, 5, 14, 5);
     status_left_ = new QLabel;

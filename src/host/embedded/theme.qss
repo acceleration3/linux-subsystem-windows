@@ -300,6 +300,37 @@ QListWidget, QListView, QTreeView, QTableWidget, QTableView {
     alternate-background-color: #171c25;
 }
 
+/* A table of rows the eye reads down: hairlines between them and a rule
+   under the headings, and nothing else. A box around it would be a
+   second frame inside whatever panel already holds it. */
+QTableWidget#Rows, QTableView#Rows {
+    background: transparent;
+    border: none;
+    border-radius: 0px;
+    gridline-color: transparent;
+}
+QTableWidget#Rows::item, QTableView#Rows::item {
+    border-bottom: 1px solid #1b202a;
+    padding: 9px 12px;
+}
+/* The heading is a line of small caps over a rule, not a filled band:
+   a band reads as a second surface inside the panel. */
+QTableWidget#Rows QHeaderView, QTableView#Rows QHeaderView {
+    background: transparent;
+    border: none;
+}
+QTableWidget#Rows QHeaderView::section, QTableView#Rows QHeaderView::section {
+    background: transparent;
+    color: #646d7e;
+    border: none;
+    border-bottom: 1px solid #272d3a;
+    padding: 0px 12px 7px 12px;
+}
+QTableWidget#Rows QTableCornerButton::section {
+    background: transparent;
+    border: none;
+}
+
 QListWidget::item, QTreeView::item {
     padding: 4px;
     border-radius: 4px;
@@ -459,6 +490,16 @@ QLabel#ScreenTag {
     padding: 2px 6px;
 }
 
+/* Something the next click will do, rather than something being
+   explained. Warm, and edged on the side the eye starts from. */
+QLabel#Callout {
+    background-color: #1d1712;
+    border-left: 2px solid #ff9f45;
+    border-radius: 0px 3px 3px 0px;
+    color: #f0c393;
+    padding: 10px 13px;
+}
+
 /* A pressure bar: green while there is room, amber as it fills, red
    when operations are splitting. The id is named alongside the property
    because an id selector outranks a bare attribute one, and the chunk
@@ -572,6 +613,27 @@ QPushButton#NavItem:checked {
     color: #e4e8f0;
     font-weight: 500;
 }
+
+/* A place in the guest browser's sidebar. Same shape as a nav item,
+   but its glyph and its label are separate labels inside it so the
+   current place can tint one amber and leave the other alone. */
+QPushButton#Place {
+    background-color: transparent;
+    border: none;
+    border-left: 2px solid transparent;
+    border-radius: 5px;
+    padding: 0px;
+    min-height: 30px;
+}
+QPushButton#Place:hover { background-color: #1c212c; }
+QPushButton#Place:checked {
+    background-color: #1a1f29;
+    border-left: 2px solid #ff9f45;
+}
+QLabel#PlaceLabel { color: #9aa3b4; font-size: 12px; }
+QLabel#PlaceLabel[on="true"] { color: #e4e8f0; font-weight: 500; }
+QLabel#PlaceGlyph { color: #646d7e; font-size: 11px; }
+QLabel#PlaceGlyph[on="true"] { color: #ff9f45; }
 
 /* ---- content bar and status bar ---------------------------------- */
 
