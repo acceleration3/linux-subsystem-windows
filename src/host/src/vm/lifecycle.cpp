@@ -312,6 +312,16 @@ QString Lifecycle::ensure_shmem(const QUuid& uuid, int size_mib) {
     // across VM ACPI shutdowns so late frames don't crash the manager.
     if (auto it = shmem_.find(uuid); it != shmem_.end()) {
         if (it->second.server) {
+            // The bundle survives an ACPI shutdown, and so does this
+            // path on the next start — but the render server is a
+            // separate process that may not have. One that crashed, was
+            // killed, or was replaced by a newer build leaves the guest
+            // attaching to a region nobody consumes, which reads as a
+            // driver fault in every application at once. Asking costs
+            // nothing when it is already running.
+            if (it->second.render) {
+                (void)it->second.render->ensure_running(uuid);
+            }
             return it->second.server->socket_path();
         }
         // An attached bundle: no server, and the region belongs to a VM
