@@ -198,10 +198,8 @@ void test_command_names_unique() {
     const std::vector<const char*> commands = {
         cmd::kSystemInfo,     cmd::kListApps,       cmd::kLaunch,
         cmd::kGetIcon,        cmd::kListWindows,    cmd::kCloseWindow,
-        cmd::kFocusWindow,    cmd::kUnfocusWindow,  cmd::kResizeWindow,
-        cmd::kWindowProps,    cmd::kNcHitTest,      cmd::kGetWindowIcon,
-        cmd::kInjectInput,    cmd::kSubscribeWindow, cmd::kUnsubscribeWindow,
-        cmd::kCaptureDebug,   cmd::kDownloadInstall,
+        cmd::kWindowCommand,  cmd::kStartWindowMirror,
+        cmd::kDownloadInstall,
         cmd::kDownloadExtract, cmd::kRunScript,     cmd::kConsoleOpen,
         cmd::kConsoleInput,   cmd::kConsoleClose,   cmd::kUiaState,
         cmd::kUiaInvoke,      cmd::kUiaSetValue,    cmd::kUiaGetText,
@@ -217,7 +215,7 @@ void test_command_names_unique() {
 
     const std::vector<const char*> topics = {
         topic::kLog,             topic::kSetupProgress,  topic::kSetupDone,
-        topic::kConsoleOutput,   topic::kConsoleClosed,  topic::kCaptionDragStarted,
+        topic::kConsoleOutput,   topic::kConsoleClosed,
         topic::kUiaWindowOpened, topic::kUiaWindowClosed, topic::kUiaFocusChanged,
         topic::kUiaStateChanged, topic::kUiaTitleChanged, topic::kUiaModalChanged,
     };
