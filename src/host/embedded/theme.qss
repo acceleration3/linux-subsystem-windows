@@ -160,6 +160,14 @@ QPushButton#IconButton {
 
 /* ---- text entry -------------------------------------------------- */
 
+/* Mono, because what goes in one of these is almost always a path, a
+   port, a size or a name the guest will see, and lining those up is
+   most of what makes a field of them readable. */
+QLineEdit, QPlainTextEdit, QTextEdit, QSpinBox, QDoubleSpinBox, QComboBox {
+    font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace;
+    font-size: 12px;
+}
+
 QLineEdit, QPlainTextEdit, QTextEdit, QSpinBox, QDoubleSpinBox {
     background-color: #0f131a;
     border: 1px solid #272d3a;
@@ -208,14 +216,17 @@ QComboBox::drop-down {
     border: none;
     width: 18px;
 }
+/* A styled combo draws its own arrow or none at all, so the proxy style
+   never sees it: this is the borders-as-a-triangle recipe, sized large
+   enough to read as one. */
 QComboBox::down-arrow {
-    image: none;
-    border-left: 4px solid transparent;
-    border-right: 4px solid transparent;
-    border-top: 4px solid #9aa3b4;
-    width: 0px;
-    height: 0px;
-    margin-right: 6px;
+    image: url(:/lsw/caret.png);
+    width: 12px;
+    height: 7px;
+    margin-right: 8px;
+}
+QComboBox::down-arrow:disabled {
+    image: url(:/lsw/caret-disabled.png);
 }
 QComboBox QAbstractItemView {
     background-color: #151922;
@@ -233,22 +244,10 @@ QCheckBox, QRadioButton {
     background: transparent;
 }
 
-QCheckBox::indicator, QRadioButton::indicator {
-    width: 14px;
-    height: 14px;
-    border: 1px solid #646d7e;
-    background-color: #0f131a;
-}
-QCheckBox::indicator { border-radius: 3px; }
-QRadioButton::indicator { border-radius: 8px; }
-
-QCheckBox::indicator:hover, QRadioButton::indicator:hover {
-    border-color: #ff9f45;
-}
-QCheckBox::indicator:checked, QRadioButton::indicator:checked {
-    background-color: #ff9f45;
-    border-color: #ff9f45;
-}
+/* No ::indicator rules on purpose. Styling one makes Qt draw it from
+   the stylesheet, which can fill a box but cannot put a tick or a dot
+   in it, so a checked box comes out as a solid square. Left unstyled,
+   both fall through to LswStyle, which paints them. */
 
 /* ---- slider ------------------------------------------------------ */
 
@@ -365,6 +364,30 @@ QFrame#Panel {
 
 /* A tile inside a panel: one shade up, so a row of them reads as a
    row of things rather than as text floating on the panel. */
+/* An option card. The selected one carries an amber edge and a warmer
+   ground, so a choice reads from across the dialog rather than from a
+   dot. */
+QFrame#OptionCard {
+    background-color: #151922;
+    border: 1px solid #272d3a;
+    border-radius: 5px;
+}
+QFrame#OptionCard:hover {
+    background-color: #1c212c;
+}
+QFrame#OptionCard[selected="true"] {
+    background-color: #1b1a19;
+    border: 1px solid #a8672a;
+}
+
+/* An icon that is not there yet still has a place. */
+QLabel#IconSlot {
+    background-color: #0f131a;
+    border: 1px dashed #272d3a;
+    border-radius: 10px;
+    color: #646d7e;
+}
+
 QWidget#Tile {
     background-color: #1a1f29;
     border-right: 1px solid #272d3a;

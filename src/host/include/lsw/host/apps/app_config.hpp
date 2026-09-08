@@ -25,6 +25,10 @@ struct AppConfig {
     // real executable from the launch tracking that scopes mirrors to
     // an instance.
     QString env;
+    // Where the program starts. Empty means the folder it lives in,
+    // which is what its own shortcut would have done; a .lnk that
+    // named one contributes it when the picker resolves it.
+    QString workdir;
     QString icon_png_base64;     // cached icon, ASCII-clean
     bool discovered_via_agent = false;  // came from start-menu enum
     qint64 last_seen_unix = 0;          // bumped on each successful refresh

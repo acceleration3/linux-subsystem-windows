@@ -1,6 +1,7 @@
 #include "lsw/host/manager/settings_page.hpp"
 
 #include "lsw/host/ui/theme.hpp"
+#include "lsw/host/ui/toggle_switch.hpp"
 
 #include <QCheckBox>
 #include <QComboBox>
@@ -61,7 +62,13 @@ QPushButton* small_button(const QString& text) {
 
 QTableWidget* make_table(const QStringList& headers) {
     auto* table = new QTableWidget(0, static_cast<int>(headers.size()));
-    table->setHorizontalHeaderLabels(headers);
+    QStringList upper;
+    upper.reserve(headers.size());
+    for (const auto& header : headers) {
+        upper << header.toUpper();
+    }
+    table->setHorizontalHeaderLabels(upper);
+    table->horizontalHeader()->setDefaultAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     table->verticalHeader()->setVisible(false);
     table->setSelectionMode(QAbstractItemView::NoSelection);
     table->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -519,9 +526,11 @@ QWidget* SettingsPage::make_choice(const QString& key, const Choices& options) {
 }
 
 QWidget* SettingsPage::make_toggle(const QString& key) {
-    auto* box = new QCheckBox;
+    // A switch rather than a check box: every boolean here is a thing
+    // that is on or off, not one of a list of things being ticked.
+    auto* box = new ui::ToggleSwitch;
     box->setChecked(pending_.staged_or_current(key).toBool());
-    connect(box, &QCheckBox::toggled, this, [this, key](bool on) { put(key, on); });
+    connect(box, &ui::ToggleSwitch::toggled, this, [this, key](bool on) { put(key, on); });
 
     // The control column is right aligned, and a bare checkbox floating
     // there reads as unfinished; the wrapper gives it the same right

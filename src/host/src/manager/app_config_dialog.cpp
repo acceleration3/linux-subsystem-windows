@@ -3,9 +3,9 @@
 #include "lsw/base/log.hpp"
 #include "lsw/host/link/agent_rpc_client.hpp"
 #include "lsw/host/manager/remote_file_dialog.hpp"
+#include "lsw/host/ui/theme.hpp"
 
 #include <QByteArray>
-#include <QDialogButtonBox>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QFormLayout>
@@ -49,6 +49,16 @@ QString agent_rpc_get_icon(link::AgentRpcClient& rpc, const QString& path) {
 
 }  // namespace
 
+namespace {
+
+QLabel* field_label(const QString& text) {
+    auto* label = new QLabel(text.toUpper());
+    label->setObjectName(QString::fromLatin1(ui::Theme::Role::kCaption));
+    return label;
+}
+
+}  // namespace
+
 AppConfigDialog::AppConfigDialog(apps::AppConfig initial, link::AgentRpcClient& rpc,
                                  QWidget* parent)
     : QDialog(parent),
@@ -59,16 +69,46 @@ AppConfigDialog::AppConfigDialog(apps::AppConfig initial, link::AgentRpcClient& 
     setMinimumWidth(520);
 
     auto* root = new QVBoxLayout(this);
+    root->setContentsMargins(20, 18, 20, 16);
+    root->setSpacing(14);
+
+    // Identity first. The dialog opens by confirming which application
+    // this is, rather than making you read the path to find out.
+    auto* identity = new QHBoxLayout;
+    identity->setSpacing(14);
+    icon_label_ = new QLabel;
+    icon_label_->setFixedSize(kIconPx, kIconPx);
+    icon_label_->setAlignment(Qt::AlignCenter);
+    icon_label_->setObjectName(QStringLiteral("IconSlot"));
+    auto* titles = new QVBoxLayout;
+    titles->setSpacing(3);
+    identity_name_ = new QLabel(cfg_.name.isEmpty() ? QStringLiteral("New application")
+                                                    : cfg_.name);
+    identity_name_->setObjectName(QString::fromLatin1(ui::Theme::Role::kHeading));
+    icon_status_ = new QLabel;
+    icon_status_->setObjectName(QString::fromLatin1(ui::Theme::Role::kMeta));
+    icon_status_->setWordWrap(true);
+    titles->addWidget(identity_name_);
+    titles->addWidget(icon_status_);
+    identity->addWidget(icon_label_);
+    identity->addLayout(titles, 1);
+    auto* replace_icon = new QPushButton(QStringLiteral("Replace icon"));
+    replace_icon->setObjectName(QString::fromLatin1(ui::Theme::Role::kQuiet));
+    identity->addWidget(replace_icon, 0, Qt::AlignTop);
+    root->addLayout(identity);
+    connect(replace_icon, &QPushButton::clicked, this, &AppConfigDialog::fetch_icon);
+
     auto* form = new QFormLayout;
 
     name_edit_ = new QLineEdit(cfg_.name);
     name_edit_->setPlaceholderText("Display name");
-    form->addRow("Name", name_edit_);
+    form->addRow(field_label(QStringLiteral("Name")), name_edit_);
 
     // The path is a Windows path, so browsing for it has to happen
     // inside Windows. The button opens a picker that reads the guest
     // over the agent connection, not this machine's disk.
     path_edit_ = new QLineEdit(cfg_.path);
+    path_edit_->setCursorPosition(0);
     path_edit_->setPlaceholderText("C:\\Program Files\\App\\app.exe");
     auto* path_row = new QWidget;
     auto* path_layout = new QHBoxLayout(path_row);
@@ -77,7 +117,7 @@ AppConfigDialog::AppConfigDialog(apps::AppConfig initial, link::AgentRpcClient& 
     auto* browse = new QPushButton(QStringLiteral("Browse the guest"));
     path_layout->addWidget(path_edit_, 1);
     path_layout->addWidget(browse);
-    form->addRow("Path in Windows", path_row);
+    form->addRow(field_label(QStringLiteral("Path in Windows")), path_row);
 
     connect(browse, &QPushButton::clicked, this, [this] {
         RemoteFileDialog picker{rpc_, RemoteFileDialog::Mode::Program, this};
@@ -85,6 +125,10 @@ AppConfigDialog::AppConfigDialog(apps::AppConfig initial, link::AgentRpcClient& 
             return;
         }
         path_edit_->setText(picker.selected_path());
+        path_edit_->setCursorPosition(0);
+        if (!picker.selected_workdir().isEmpty() && workdir_edit_->text().isEmpty()) {
+            workdir_edit_->setText(picker.selected_workdir());
+        }
         // A shortcut carries its own arguments and working folder, and
         // dropping them is how an application ends up launching without
         // the switches its Start menu entry always passed it.
@@ -97,9 +141,29 @@ AppConfigDialog::AppConfigDialog(apps::AppConfig initial, link::AgentRpcClient& 
         }
     });
 
+    // Where the program starts. Empty means the folder it lives in,
+    // which is what a shortcut would have done.
+    workdir_edit_ = new QLineEdit(cfg_.workdir);
+    workdir_edit_->setPlaceholderText(
+        QStringLiteral("Defaults to the folder the program is in"));
+    auto* workdir_row = new QWidget;
+    auto* workdir_layout = new QHBoxLayout(workdir_row);
+    workdir_layout->setContentsMargins(0, 0, 0, 0);
+    workdir_layout->setSpacing(8);
+    auto* browse_dir = new QPushButton(QStringLiteral("Browse"));
+    workdir_layout->addWidget(workdir_edit_, 1);
+    workdir_layout->addWidget(browse_dir);
+    form->addRow(field_label(QStringLiteral("Working folder")), workdir_row);
+    connect(browse_dir, &QPushButton::clicked, this, [this] {
+        RemoteFileDialog picker{rpc_, RemoteFileDialog::Mode::Directory, this};
+        if (picker.exec() == QDialog::Accepted && !picker.selected_path().isEmpty()) {
+            workdir_edit_->setText(picker.selected_path());
+        }
+    });
+
     cmdline_edit_ = new QLineEdit(cfg_.cmdline);
     cmdline_edit_->setPlaceholderText("Optional extra arguments");
-    form->addRow("Arguments", cmdline_edit_);
+    form->addRow(field_label(QStringLiteral("Arguments")), cmdline_edit_);
 
     // Arguments and environment are not interchangeable, and the
     // difference catches people out: a variable typed into Arguments
@@ -108,7 +172,7 @@ AppConfigDialog::AppConfigDialog(apps::AppConfig initial, link::AgentRpcClient& 
     env_edit_ = new QPlainTextEdit(cfg_.env);
     env_edit_->setPlaceholderText("One per line, e.g.\nGALLIUM_DRIVER=llvmpipe");
     env_edit_->setFixedHeight(kEnvBoxPx);
-    form->addRow("Environment", env_edit_);
+    form->addRow(field_label(QStringLiteral("Environment")), env_edit_);
 
     // Where it appears on this desktop. The switch in Settings decides
     // whether any application is published; this decides whether this
@@ -123,7 +187,7 @@ AppConfigDialog::AppConfigDialog(apps::AppConfig initial, link::AgentRpcClient& 
                                    .join(QStringLiteral(", ")));
     mime_edit_->setPlaceholderText(
         QStringLiteral("image/vnd.adobe.photoshop, application/x-ms-dos-executable"));
-    form->addRow(QStringLiteral("Opens file types"), mime_edit_);
+    form->addRow(field_label(QStringLiteral("Opens file types")), mime_edit_);
 
     // -1 is "any", which is what every application did before there was
     // a choice, and is still the right default: pinning matters only
@@ -137,28 +201,35 @@ AppConfigDialog::AppConfigDialog(apps::AppConfig initial, link::AgentRpcClient& 
     if (const int index = channel_combo_->findData(cfg_.channel); index >= 0) {
         channel_combo_->setCurrentIndex(index);
     }
-    form->addRow(QStringLiteral("Render channel"), channel_combo_);
-
-    icon_label_ = new QLabel;
-    icon_label_->setFixedSize(kIconPx, kIconPx);
-    icon_label_->setStyleSheet("background-color: #222; border: 1px solid #444;");
-    icon_label_->setAlignment(Qt::AlignCenter);
-    icon_status_ = new QLabel("(no icon)");
-    icon_status_->setStyleSheet("color: gray;");
-    auto* icon_row = new QHBoxLayout;
-    icon_row->addWidget(icon_label_);
-    icon_row->addWidget(icon_status_, 1);
-    auto* icon_widget = new QWidget;
-    icon_widget->setLayout(icon_row);
-    form->addRow("Icon", icon_widget);
+    form->addRow(field_label(QStringLiteral("Render channel")), channel_combo_);
 
     root->addLayout(form);
 
-    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-    root->addWidget(buttons);
+    // Remove sits apart from the pair that finish the dialog, and quiet,
+    // because it is the one that destroys something.
+    auto* footer = new QHBoxLayout;
+    auto* remove = new QPushButton(QStringLiteral("Remove"));
+    remove->setObjectName(QString::fromLatin1(ui::Theme::Role::kQuiet));
+    remove->setVisible(!cfg_.id.isEmpty());
+    auto* cancel = new QPushButton(QStringLiteral("Cancel"));
+    auto* save = new QPushButton(QStringLiteral("Save"));
+    save->setObjectName(QString::fromLatin1(ui::Theme::Role::kPrimary));
+    save->setDefault(true);
+    footer->addWidget(remove);
+    footer->addStretch(1);
+    footer->addWidget(cancel);
+    footer->addWidget(save);
+    root->addLayout(footer);
 
-    connect(buttons, &QDialogButtonBox::accepted, this, &AppConfigDialog::on_accept);
-    connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
+    connect(save, &QPushButton::clicked, this, &AppConfigDialog::on_accept);
+    connect(cancel, &QPushButton::clicked, this, &QDialog::reject);
+    connect(remove, &QPushButton::clicked, this, [this] {
+        removal_requested_ = true;
+        accept();
+    });
+    connect(name_edit_, &QLineEdit::textChanged, this, [this](const QString& text) {
+        identity_name_->setText(text.isEmpty() ? QStringLiteral("New application") : text);
+    });
     connect(path_edit_, &QLineEdit::textChanged, this, &AppConfigDialog::on_path_changed);
 
     path_idle_timer_.setSingleShot(true);
@@ -219,6 +290,7 @@ void AppConfigDialog::on_accept() {
     cfg_.name = name_edit_->text().trimmed();
     cfg_.path = path_edit_->text().trimmed();
     cfg_.cmdline = cmdline_edit_->text();
+    cfg_.workdir = workdir_edit_->text().trimmed();
     cfg_.env = env_edit_->toPlainText();
     cfg_.publish_entry = publish_box_->isChecked();
     cfg_.channel = channel_combo_->currentData().toInt();

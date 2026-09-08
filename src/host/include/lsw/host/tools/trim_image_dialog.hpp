@@ -3,9 +3,11 @@
 #include "lsw/host/provision/debloat/debloat_level.hpp"
 
 #include <QDialog>
+#include <QVector>
 #include <QString>
 
 class QButtonGroup;
+class QFrame;
 class QLabel;
 class QLineEdit;
 class QProgressBar;
@@ -39,6 +41,10 @@ public:
     [[nodiscard]] QString result_path() const noexcept { return result_path_; }
     [[nodiscard]] bool use_for_install() const;
 
+protected:
+    // A click anywhere on a level's card picks that level.
+    bool eventFilter(QObject* watched, QEvent* event) override;
+
 private:
     void start();
     void refresh_estimate();
@@ -52,6 +58,7 @@ private:
     QLineEdit* source_edit_ = nullptr;
     QComboBox* edition_combo_ = nullptr;
     QButtonGroup* level_group_ = nullptr;
+    QVector<QFrame*> cards_;
     QLabel* warning_ = nullptr;
     QLineEdit* output_dir_ = nullptr;
     QLineEdit* output_name_ = nullptr;

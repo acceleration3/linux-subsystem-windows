@@ -53,6 +53,7 @@ QString AppConfig::to_json() const {
     j["path"] = path.toStdString();
     j["cmdline"] = cmdline.toStdString();
     j["env"] = env.toStdString();
+    j["workdir"] = workdir.toStdString();
     j["icon_png_base64"] = icon_png_base64.toStdString();
     j["discovered_via_agent"] = discovered_via_agent;
     j["last_seen_unix"] = static_cast<std::int64_t>(last_seen_unix);
@@ -82,6 +83,7 @@ AppConfig AppConfig::from_json(const QString& s, bool* ok) {
     out.path = QString::fromStdString(j.value("path", std::string{}));
     out.cmdline = QString::fromStdString(j.value("cmdline", std::string{}));
     out.env = QString::fromStdString(j.value("env", std::string{}));
+    out.workdir = QString::fromStdString(j.value("workdir", std::string{}));
     out.icon_png_base64 = QString::fromStdString(j.value("icon_png_base64", std::string{}));
     out.discovered_via_agent = j.value("discovered_via_agent", false);
     out.last_seen_unix = j.value("last_seen_unix", static_cast<std::int64_t>(0));

@@ -27,6 +27,9 @@ public:
 
     [[nodiscard]] apps::AppConfig result() const { return cfg_; }
 
+    // True when the dialog was closed by Remove rather than Save.
+    [[nodiscard]] bool removal_requested() const noexcept { return removal_requested_; }
+
 private Q_SLOTS:
     void on_path_changed(const QString& text);
     void on_path_idle();
@@ -42,6 +45,7 @@ private:
     QLineEdit* name_edit_ = nullptr;
     QLineEdit* path_edit_ = nullptr;
     QLineEdit* cmdline_edit_ = nullptr;
+    QLineEdit* workdir_edit_ = nullptr;
     QPlainTextEdit* env_edit_ = nullptr;
     // Where this application shows up on the host, and which render
     // channel it draws on. Both are per application because both are
@@ -49,6 +53,10 @@ private:
     QCheckBox* publish_box_ = nullptr;
     QLineEdit* mime_edit_ = nullptr;
     QComboBox* channel_combo_ = nullptr;
+    QLabel* identity_name_ = nullptr;
+    // Set when the dialog was closed by Remove rather than Save, so the
+    // caller knows the difference between "keep this" and "delete it".
+    bool removal_requested_ = false;
     QLabel* icon_label_ = nullptr;
     QLabel* icon_status_ = nullptr;
     QTimer path_idle_timer_;

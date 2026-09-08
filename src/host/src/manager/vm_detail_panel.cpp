@@ -92,7 +92,8 @@ VmDetailPanel::VmDetailPanel(config::VmState& vms, vm::Lifecycle& lifecycle,
     preview_ = new lsw::host::ui::VncView;
     preview_->setMinimumHeight(220);
     preview_->set_controls_visible(true);
-    preview_panel.body->addWidget(preview_);
+    preview_slot_ = preview_panel.body;
+    preview_slot_->addWidget(preview_);
     left_layout->addWidget(preview_panel.frame, 1);
 
     auto stats_panel = make_panel(QStringLiteral("System"));
@@ -123,6 +124,29 @@ VmDetailPanel::VmDetailPanel(config::VmState& vms, vm::Lifecycle& lifecycle,
 
     state_timer_.setInterval(kStatePollMs);
     connect(&state_timer_, &QTimer::timeout, this, &VmDetailPanel::on_state_tick);
+}
+
+void VmDetailPanel::pop_out_preview() {
+    if (preview_ == nullptr || preview_->window() != window()) {
+        return;  // already out
+    }
+    auto* holder = new QWidget(nullptr, Qt::Window);
+    holder->setAttribute(Qt::WA_DeleteOnClose);
+    holder->setWindowTitle(QStringLiteral("LSW preview"));
+    holder->resize(960, 600);
+    auto* layout = new QVBoxLayout(holder);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->addWidget(preview_);
+
+    // Back into the panel when the window goes, so the page is not
+    // left with a hole in it.
+    connect(holder, &QObject::destroyed, this, [this] {
+        if (preview_slot_ != nullptr && preview_ != nullptr) {
+            preview_slot_->addWidget(preview_);
+            preview_->show();
+        }
+    });
+    holder->show();
 }
 
 void VmDetailPanel::set_target(const QUuid& uuid) {

@@ -36,7 +36,8 @@ SetupPage::SetupPage(Wizard& wizard, QWidget* parent) : QWizardPage(parent), wiz
 
     auto* lay = new QVBoxLayout(this);
     table_ = new QTableWidget(0, 3);
-    table_->setHorizontalHeaderLabels(QStringList{"Step", "Type", "Status"});
+    table_->setHorizontalHeaderLabels(QStringList{"STEP", "TYPE", "STATUS"});
+    table_->horizontalHeader()->setDefaultAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     table_->horizontalHeader()->setSectionResizeMode(kColName, QHeaderView::Stretch);
     table_->horizontalHeader()->setSectionResizeMode(kColKind, QHeaderView::ResizeToContents);
     table_->horizontalHeader()->setSectionResizeMode(kColStatus, QHeaderView::Stretch);

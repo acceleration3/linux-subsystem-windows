@@ -1,5 +1,7 @@
 #include "lsw/host/ui/theme.hpp"
 
+#include "lsw/host/ui/lsw_style.hpp"
+
 #include <QApplication>
 #include <QFont>
 #include <QFontDatabase>
@@ -10,6 +12,12 @@
 #include <QColor>
 
 #include "theme_qss.hpp"
+
+// Outside the namespace: Q_INIT_RESOURCE expands to a call on a symbol
+// Qt declares at global scope.
+void init_lsw_theme_resources() {
+    Q_INIT_RESOURCE(resources);
+}
 
 namespace lsw::host::ui {
 
@@ -37,6 +45,12 @@ QString Theme::stylesheet() {
 }
 
 void Theme::apply() {
+    // The images live in a static library, whose resource initialiser
+    // is only pulled in when something references it. Nothing would, so
+    // this does. The symbol Qt generates is at global scope, which is
+    // why the call is qualified.
+    ::init_lsw_theme_resources();
+
     auto* app = qobject_cast<QApplication*>(QCoreApplication::instance());
     if (app == nullptr) {
         return;
@@ -51,14 +65,15 @@ void Theme::apply() {
     base.setPixelSize(13);
     app->setFont(base);
 
-    // Fusion, and a palette to go with it.
+    // Fusion under a proxy that paints the three indicators a
+    // stylesheet cannot, and a palette to go with it.
     //
     // A stylesheet does not reach everything: QWizard paints its own
     // title band, item views draw their own alternating rows, and the
     // platform style may ignore a colour it thinks it knows better.
     // Those all read the palette, so the palette has to say the same
     // thing the stylesheet does or half the window is light.
-    app->setStyle(QStyleFactory::create(QStringLiteral("Fusion")));
+    app->setStyle(new LswStyle);
 
     const QColor ink{QString::fromLatin1(Color::kInk)};
     const QColor surface{QString::fromLatin1(Color::kSurface)};

@@ -8,6 +8,7 @@
 #include <QLineEdit>
 #include <QSpinBox>
 #include <QVector>
+#include <QFormLayout>
 #include <QWizardPage>
 
 namespace lsw::host::wizard {
@@ -34,6 +35,7 @@ private Q_SLOTS:
     void on_editions_ready();
 
 private:
+    QFormLayout* form_ = nullptr;
     Wizard& wizard_;
     QLineEdit* user_edit_ = nullptr;
     QLineEdit* pass_edit_ = nullptr;

@@ -4,6 +4,7 @@
 #include "lsw/host/wizard/wizard_state.hpp"
 #include "lsw/host/provision/pipeline.hpp"
 
+#include <QStringList>
 #include <QWizard>
 
 class QListWidget;
@@ -74,6 +75,8 @@ private:
     // The step rail down the left, and the slot that keeps it in step
     // with the page being shown.
     void build_side_rail();
+    // The eight names, in order, shared by the rail and the highlight.
+    [[nodiscard]] static const QStringList& step_names();
     void highlight_step(int page_id);
 
     services::HostServices& services_;
