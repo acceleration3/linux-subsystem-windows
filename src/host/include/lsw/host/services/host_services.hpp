@@ -80,6 +80,13 @@ public:
     // sizes it was started with, which is why they are restart keys.
     void apply_render_sizing();
 
+    // Push the desktop-entry and file-manager settings out to the
+    // places they actually live: the XDG applications directory, the
+    // menu fragment, and the two bookmark files. Called at startup and
+    // whenever one of those settings changes, so a toggle takes effect
+    // where the toggle says it does.
+    void apply_integrations();
+
 private:
     config::Settings settings_;
     config::ManagerSettings manager_settings_;

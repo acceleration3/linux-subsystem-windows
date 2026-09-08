@@ -258,6 +258,16 @@ void Pipeline::run_build_payload_iso() {
     emit_status(Step::BuildingPayloadIso,
                 QStringLiteral("Building the LSW payload ISO..."));
 
+    // The manager rewrites the file-manager bookmarks whenever the
+    // Files settings change, long after this runs, and it needs the
+    // account they authenticate as. This is where that account is
+    // decided, so this is where it gets written down.
+    {
+        using K = config::ManagerSettings::Key;
+        auto& settings = services_.manager_settings();
+        settings.set_value(QLatin1String(K::kGuestUser), inputs_.user_name);
+        settings.set_value(QLatin1String(K::kGuestPassword), inputs_.user_password);
+    }
     payload_stager_ = new PayloadIsoStager(services_.settings(), this);
     const auto generation = generation_;
     connect(payload_stager_, &PayloadIsoStager::failed, this,

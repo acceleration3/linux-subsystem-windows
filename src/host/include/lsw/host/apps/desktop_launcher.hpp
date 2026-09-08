@@ -51,6 +51,18 @@ public:
     // exist on first call.
     [[nodiscard]] static bool install(const AppConfig& cfg);
 
+    // Which submenu the entries appear under, and whether they are
+    // written at all. Both come from Settings; the manager installs
+    // them once, at startup and whenever they change, so no caller has
+    // to pass them through.
+    static void set_category(const QString& name);
+    [[nodiscard]] static QString category();
+    static void set_publishing(bool enabled);
+    [[nodiscard]] static bool publishing();
+    // Whether a published entry also declares itself a handler for the
+    // Windows file types its application named.
+    static void set_file_associations(bool enabled);
+
     // Remove the .desktop and PNG for this app. Leaves the category
     // .menu / .directory files in place — they're cheap and other
     // apps may still use them.
@@ -65,6 +77,9 @@ public:
     // in ``live``. Called every time the AppConfigStore changes so
     // app removals/additions in the manager propagate to the host
     // menu automatically without user action.
+    // Writes an entry for every config that asks for one and removes
+    // every entry that no longer should exist, including the ones an
+    // application was just un-published from. Idempotent.
     static void sync(const QList<AppConfig>& live);
 };
 

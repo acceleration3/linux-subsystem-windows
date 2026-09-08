@@ -29,10 +29,12 @@ App::App(int& argc, char** argv)
     // Sync the host's XDG menu with whatever app configs are already on
     // disk — covers opening a .desktop entry that has been there a while
     // without first opening the manager UI.
+    // Through the services rather than straight at DesktopLauncher, so
+    // the category, the publish switch and the file-type handlers are
+    // all applied from settings on the same pass.
     auto& configs = services_.app_configs();
-    apps::DesktopLauncher::sync(configs.configs());
     connect(&configs, &apps::AppConfigStore::changed, this,
-            [this] { apps::DesktopLauncher::sync(services_.app_configs().configs()); });
+            [this] { services_.apply_integrations(); });
 
     // Turned OFF only once a real, tray-backed main window is up (see
     // ``show_main_window``). During the wizard phase we keep it ON so

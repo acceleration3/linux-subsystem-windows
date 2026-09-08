@@ -6,6 +6,8 @@
 
 #include <QByteArray>
 #include <QDialogButtonBox>
+#include <QCheckBox>
+#include <QComboBox>
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QPushButton>
@@ -108,6 +110,35 @@ AppConfigDialog::AppConfigDialog(apps::AppConfig initial, link::AgentRpcClient& 
     env_edit_->setFixedHeight(kEnvBoxPx);
     form->addRow("Environment", env_edit_);
 
+    // Where it appears on this desktop. The switch in Settings decides
+    // whether any application is published; this decides whether this
+    // one is, because a guest with forty Start menu shortcuts should
+    // not put forty entries in somebody's launcher.
+    publish_box_ = new QCheckBox(QStringLiteral("Show in my application menu"));
+    publish_box_->setChecked(cfg_.publish_entry);
+    form->addRow(QString{}, publish_box_);
+
+    mime_edit_ = new QLineEdit(cfg_.mime_types.split(QLatin1Char('\n'),
+                                                     Qt::SkipEmptyParts)
+                                   .join(QStringLiteral(", ")));
+    mime_edit_->setPlaceholderText(
+        QStringLiteral("image/vnd.adobe.photoshop, application/x-ms-dos-executable"));
+    form->addRow(QStringLiteral("Opens file types"), mime_edit_);
+
+    // -1 is "any", which is what every application did before there was
+    // a choice, and is still the right default: pinning matters only
+    // when you want one application's counters or its ring size kept
+    // apart from everything else.
+    channel_combo_ = new QComboBox;
+    channel_combo_->addItem(QStringLiteral("Any free channel"), -1);
+    for (int i = 0; i < 8; ++i) {
+        channel_combo_->addItem(QStringLiteral("Channel %1").arg(i), i);
+    }
+    if (const int index = channel_combo_->findData(cfg_.channel); index >= 0) {
+        channel_combo_->setCurrentIndex(index);
+    }
+    form->addRow(QStringLiteral("Render channel"), channel_combo_);
+
     icon_label_ = new QLabel;
     icon_label_->setFixedSize(kIconPx, kIconPx);
     icon_label_->setStyleSheet("background-color: #222; border: 1px solid #444;");
@@ -189,6 +220,18 @@ void AppConfigDialog::on_accept() {
     cfg_.path = path_edit_->text().trimmed();
     cfg_.cmdline = cmdline_edit_->text();
     cfg_.env = env_edit_->toPlainText();
+    cfg_.publish_entry = publish_box_->isChecked();
+    cfg_.channel = channel_combo_->currentData().toInt();
+    // Typed with commas because that is how people write a list; stored
+    // one per line because that is how the .desktop file wants them.
+    QStringList types;
+    for (const auto& piece : mime_edit_->text().split(QLatin1Char(','), Qt::SkipEmptyParts)) {
+        const QString trimmed = piece.trimmed();
+        if (!trimmed.isEmpty()) {
+            types << trimmed;
+        }
+    }
+    cfg_.mime_types = types.join(QLatin1Char('\n'));
     if (cfg_.id.isEmpty() && !cfg_.path.isEmpty()) {
         cfg_.id = apps::AppConfig::make_id(cfg_.path);
     } else if (cfg_.id.isEmpty()) {

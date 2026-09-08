@@ -84,6 +84,14 @@ public:
         static constexpr const char* kBookmarkDolphin = "files/bookmark_dolphin";
         static constexpr const char* kBookmarkGtk = "files/bookmark_gtk";
         static constexpr const char* kHostShares = "files/host_shares";  // restart
+        // The account the bookmarks authenticate as. Written once, by
+        // the pipeline, so the manager can rewrite a bookmark long
+        // after the install. The password is stored in clear, which is
+        // the same thing user-places.xbel already does with it and the
+        // same thing the answer file did before that; it protects a
+        // loopback share on a machine the user already owns.
+        static constexpr const char* kGuestUser = "files/guest_user";
+        static constexpr const char* kGuestPassword = "files/guest_password";
         // Desktop entries (live)
         static constexpr const char* kPublishEntries = "desktop/publish";
         static constexpr const char* kMenuCategory = "desktop/category";
