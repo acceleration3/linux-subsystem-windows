@@ -6,6 +6,7 @@
 #include <QDeadlineTimer>
 #include <QDir>
 #include <QFile>
+#include <QProcessEnvironment>
 #include <QThread>
 
 namespace lsw::host::vm {
@@ -96,6 +97,48 @@ QString RenderServer::executable_path() {
     return QFile::exists(candidate) ? candidate : QString{};
 }
 
+QVector<RenderServer::GlDevice> RenderServer::gl_devices() {
+    // Cached: enumerating costs a process that makes and drops a
+    // context on every card, and the cards in a machine do not come and
+    // go while the manager is open.
+    static QVector<GlDevice> cached;
+    static bool asked = false;
+    if (asked) {
+        return cached;
+    }
+    asked = true;
+    const QString exe = executable_path();
+    if (exe.isEmpty()) {
+        LSW_WARN("render server: no binary to ask which GPUs it could draw on");
+        return cached;
+    }
+    QProcess listing;
+    listing.start(exe, {QStringLiteral("--list-gl-devices")});
+    if (!listing.waitForStarted(kRegionWaitMs)
+        || !listing.waitForFinished(kRegionWaitMs)) {
+        LSW_WARN("render server: --list-gl-devices did not answer: {}",
+                 listing.errorString().toStdString());
+        return cached;
+    }
+    const QString text = QString::fromUtf8(listing.readAllStandardOutput());
+    for (const QString& line : text.split(QLatin1Char('\n'), Qt::SkipEmptyParts)) {
+        // index<tab>vendor<tab>renderer. Anything else on the stream is
+        // the server's own logging, which has no tabs in it.
+        const QStringList fields = line.split(QLatin1Char('\t'));
+        if (fields.size() < 3) {
+            continue;
+        }
+        bool numeric = false;
+        const int index = fields.at(0).trimmed().toInt(&numeric);
+        if (!numeric) {
+            continue;
+        }
+        cached.push_back(GlDevice{index, fields.at(1).trimmed(), fields.at(2).trimmed()});
+    }
+    LSW_INFO("render server: {} GPU(s) available to draw on", cached.size());
+    return cached;
+}
+
 bool RenderServer::running() const {
     return process_.state() != QProcess::NotRunning;
 }
@@ -125,6 +168,19 @@ bool RenderServer::ensure_running(const QUuid& uuid) {
         QStringLiteral("--reply-kib"), QString::number(g_sizing.reply_kib),
         QStringLiteral("--blob-mib"), QString::number(g_sizing.blob_mib),
     };
+    // Which GPU, when the user named one. EGL's default display is
+    // whichever card drives the screen, so a machine with two draws on
+    // the one wired to the panel unless told otherwise — and the server
+    // reads the choice from its environment.
+    if (g_sizing.gl_device >= 0) {
+        QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
+        environment.insert(QStringLiteral("RVK_GL_DEVICE"),
+                           QString::number(g_sizing.gl_device));
+        process_.setProcessEnvironment(environment);
+        LSW_INFO("render server: drawing on GPU {}", g_sizing.gl_device);
+    } else {
+        process_.setProcessEnvironment(QProcessEnvironment::systemEnvironment());
+    }
     LSW_INFO("render server: {} {}", exe.toStdString(),
              args.join(QLatin1Char(' ')).toStdString());
     process_.start(exe, args);

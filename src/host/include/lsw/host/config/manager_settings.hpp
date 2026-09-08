@@ -71,6 +71,10 @@ public:
         static constexpr const char* kLivePreview = "display/live_preview";  // live
         // Render channels (restart, except the warning toggle)
         static constexpr const char* kChannels = "render/channels";
+        // Which GPU the render server draws on: an index into the
+        // devices EGL enumerates, or -1 for whichever drives the
+        // display. See RenderServer::gl_devices.
+        static constexpr const char* kGlDevice = "render/gl_device";
         static constexpr const char* kRingKib = "render/ring_kib";
         static constexpr const char* kReplyKib = "render/reply_kib";
         static constexpr const char* kBlobMib = "render/blob_mib";

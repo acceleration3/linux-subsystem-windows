@@ -98,6 +98,7 @@ void HostServices::apply_render_sizing() {
     sizing.ring_kib = manager_settings_.int_value(QLatin1String(K::kRingKib));
     sizing.reply_kib = manager_settings_.int_value(QLatin1String(K::kReplyKib));
     sizing.blob_mib = manager_settings_.int_value(QLatin1String(K::kBlobMib));
+    sizing.gl_device = manager_settings_.int_value(QLatin1String(K::kGlDevice));
     vm::RenderServer::set_sizing(sizing);
 
     render_stats_.set_channel_count(sizing.sessions);
