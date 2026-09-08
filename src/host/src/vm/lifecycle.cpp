@@ -69,6 +69,38 @@ int Lifecycle::define_and_start(const config::VmRecord& vm, const DomainXmlInput
     return 0;
 }
 
+int Lifecycle::redefine(const config::VmRecord& vm, const DomainXmlInputs& inputs) {
+    if (!conn_.is_open()) {
+        LSW_ERROR("libvirt not connected");
+        return -1;
+    }
+    DomainXmlInputs filled = inputs;
+    // Reuse the socket path the region already has when one is up, so a
+    // redefine under a running guest names the same chardev it is
+    // already attached to rather than inventing a second.
+    if (filled.ivshmem_socket.isEmpty()) {
+        if (auto it = shmem_.find(vm.uuid);
+            it != shmem_.end() && it->second.server) {
+            filled.ivshmem_socket = it->second.server->socket_path();
+        }
+    }
+    if (filled.ivshmem_socket.isEmpty()) {
+        // Nothing is up: the socket will be made when the VM next
+        // starts, and the path it takes is derived from the UUID, so
+        // naming it now is safe and keeps the definition complete.
+        filled.ivshmem_socket = IvshmemServer::socket_path_for(vm.uuid);
+    }
+    const QString xml = DomainXmlBuilder::build(vm, filled);
+    auto* d = ::virDomainDefineXML(conn_.raw(), xml.toUtf8().constData());
+    if (d == nullptr) {
+        LSW_ERROR("virDomainDefineXML failed: {}", conn_.last_error().toStdString());
+        return -1;
+    }
+    DomainHandle dom{d};
+    LSW_INFO("VM redefined: {}", vm.name.toStdString());
+    return 0;
+}
+
 int Lifecycle::start(const QUuid& uuid, bool first_boot_done) {
     auto dom = lookup(uuid);
     if (!dom.valid()) {

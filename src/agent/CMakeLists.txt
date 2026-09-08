@@ -69,6 +69,7 @@ set(_lsw_agent_rpc_sources
     # TU in this list (Phase 4 of the refactor; subsequent UIA RPCs
     # land under src/rpc/handlers/uia/ in Phase 8+).
     src/rpc/handlers/system/system_info.cpp
+    src/rpc/handlers/system/set_display.cpp
     src/rpc/handlers/apps/list_apps.cpp
     src/rpc/handlers/apps/launch.cpp
     src/rpc/handlers/apps/get_icon.cpp

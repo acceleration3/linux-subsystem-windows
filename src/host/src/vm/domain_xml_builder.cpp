@@ -72,6 +72,42 @@ QString DomainXmlBuilder::build(const config::VmRecord& vm, const DomainXmlInput
     }
     vars["xdg_env_inner"] = xdg_inner;
 
+    vars["video_vram_kib"] = QString::number(inputs.video_vram_kib);
+
+    // Shared folders, and the memory backing they require.
+    //
+    // virtiofs reads the guest's RAM directly, so that RAM has to be a
+    // shared mapping rather than the anonymous one QEMU uses by
+    // default. Both halves are emitted together or not at all: a domain
+    // with no shares is exactly the domain that existed before this,
+    // which is what keeps a feature nobody asked for from changing how
+    // everybody else's memory is allocated.
+    QString shares_inner;
+    QString memory_backing_inner;
+    if (!inputs.shares.isEmpty()) {
+        memory_backing_inner =
+            QStringLiteral("  <memoryBacking>\n"
+                           "    <source type='memfd'/>\n"
+                           "    <access mode='shared'/>\n"
+                           "  </memoryBacking>");
+        QStringList blocks;
+        for (const auto& share : inputs.shares) {
+            blocks << QStringLiteral(
+                          "    <filesystem type='mount' accessmode='passthrough'>\n"
+                          "      <driver type='virtiofs'/>\n"
+                          "      <source dir='%1'/>\n"
+                          "      <target dir='%2'/>\n"
+                          "%3"
+                          "    </filesystem>")
+                          .arg(share.host_path, share.tag,
+                               share.read_only ? QStringLiteral("      <readonly/>\n")
+                                               : QString{});
+        }
+        shares_inner = blocks.join(QLatin1Char('\n'));
+    }
+    vars["host_shares_inner"] = shares_inner;
+    vars["memory_backing_inner"] = memory_backing_inner;
+
     // One template now — the high-performance virtio-from-install
     // shape. ``use_virtio`` is retained on DomainXmlInputs for ABI
     // stability but no longer selects a template.

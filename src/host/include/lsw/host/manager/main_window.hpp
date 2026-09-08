@@ -49,6 +49,7 @@ private:
     void refresh_identity();
     void refresh_status_bar();
     void refresh_warning();
+    void push_display_settings();
     void restart_guest();
 
     services::HostServices& services_;

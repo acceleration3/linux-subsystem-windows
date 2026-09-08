@@ -64,6 +64,11 @@ public:
     // chardev points at. Stable for the VM's lifetime.
     [[nodiscard]] QString socket_path() const { return socket_path_; }
 
+    // The path a server for ``uuid`` will bind. Derived rather than
+    // stored, so a domain can be defined with the right chardev before
+    // any server exists to bind it.
+    [[nodiscard]] static QString socket_path_for(const QUuid& uuid);
+
 Q_SIGNALS:
     // Fired on the GUI thread whenever the guest doorbells our peer
     // (id 0) on a frame vector. ``slot_index`` is identical to the
