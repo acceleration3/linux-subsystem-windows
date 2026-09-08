@@ -29,6 +29,14 @@ public:
     // first if needed. Repeated calls supersede the pending request.
     void launch(const QString& app_id);
 
+Q_SIGNALS:
+    // The agent has started the application. The splash retires on
+    // this, rather than on the agent merely being reachable.
+    void application_running();
+    // The splash's "open the log" button, forwarded to whoever owns a
+    // window to show it in.
+    void log_requested();
+
 private:
     // Fire the launch RPC now — the agent is known reachable. Spawns the
     // AppWindowWatcher that turns the new PID's windows into mirrors.

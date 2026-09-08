@@ -52,6 +52,16 @@ manager::GuestAppLaunchController& App::launch_controller() {
     if (launch_controller_ == nullptr) {
         launch_controller_ =
             std::make_unique<manager::GuestAppLaunchController>(services_, this);
+        // The splash offers the log when a guest goes quiet during a
+        // launch, and the log lives in the manager window, which this
+        // path deliberately never shows on its own.
+        connect(launch_controller_.get(),
+                &manager::GuestAppLaunchController::log_requested, this, [this] {
+                    show_main_window();
+                    if (main_window_ != nullptr) {
+                        main_window_->show_page(manager::NavRail::Page::Log);
+                    }
+                });
     }
     return *launch_controller_;
 }
