@@ -30,27 +30,16 @@ inline constexpr const char* kGetIcon  = "get_icon";
 inline constexpr const char* kStartWindowMirror = "start_window_mirror";
 
 // -- windows --------------------------------------------------------------
-inline constexpr const char* kListWindows   = "list_windows";
-inline constexpr const char* kCloseWindow   = "close_window";
-inline constexpr const char* kFocusWindow   = "focus_window";
-inline constexpr const char* kUnfocusWindow = "unfocus_window";
-inline constexpr const char* kResizeWindow  = "resize_window";
+// What the agent still answers about windows. A window's pixels and its
+// input are the mirror's, and are asked for over its own connection —
+// nothing about them is here.
+inline constexpr const char* kListWindows  = "list_windows";
+inline constexpr const char* kCloseWindow  = "close_window";
 // Minimize / maximize / restore a guest window. Carried as a
 // WM_SYSCOMMAND, which every window understands whether its chrome is
 // the system's or its own — unlike synthesising a click on a button
 // whose position we would first have to discover.
-inline constexpr const char* kWindowCommand  = "window_command";
-inline constexpr const char* kWindowProps   = "window_props";
-inline constexpr const char* kNcHitTest     = "nchittest";
-inline constexpr const char* kGetWindowIcon = "get_window_icon";
-
-// -- input ----------------------------------------------------------------
-inline constexpr const char* kInjectInput = "inject_input";
-
-// -- capture --------------------------------------------------------------
-inline constexpr const char* kSubscribeWindow   = "subscribe_window";
-inline constexpr const char* kUnsubscribeWindow = "unsubscribe_window";
-inline constexpr const char* kCaptureDebug      = "capture_debug";
+inline constexpr const char* kWindowCommand = "window_command";
 
 // -- install / provisioning ----------------------------------------------
 inline constexpr const char* kDownloadInstall = "download_install";
@@ -85,8 +74,6 @@ inline constexpr const char* kSetupProgress = "setup_progress";
 inline constexpr const char* kSetupDone     = "setup_done";
 inline constexpr const char* kConsoleOutput = "console_output";
 inline constexpr const char* kConsoleClosed = "console_closed";
-
-inline constexpr const char* kCaptionDragStarted = "caption_drag_started";
 
 // Sent by the agent on the shared-memory RPC channel as soon as it maps
 // the region: proof to the manager that the channel is live, and the

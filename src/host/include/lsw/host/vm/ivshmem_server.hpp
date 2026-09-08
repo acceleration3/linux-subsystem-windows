@@ -28,10 +28,10 @@ class ShmemRegion;
 //     4) server -> qemu : i64 P,              SCM_RIGHTS P.eventfd[V]
 //
 // We act as the server AND as peer 0; QEMU is peer 1. Each of our
-// ``kVectorCount`` eventfds maps to one slot in ``ShmemRegion``;
+// ``kVectorCount`` eventfds is one doorbell;
 // when the guest writes to the IVSHMEM outbound MMIO register
 // addressing peer 0 vector V, QEMU writes a u64 1 to ``eventfds_[V]``
-// and we emit ``slot_ready(V)`` from a ``QSocketNotifier``.
+// and we emit ``channel_ready`` from a ``QSocketNotifier``.
 class IvshmemServer : public QObject {
     Q_OBJECT
 public:
@@ -68,7 +68,6 @@ Q_SIGNALS:
     // Fired on the GUI thread whenever the guest doorbells our peer
     // (id 0) on a frame vector. ``slot_index`` is identical to the
     // ShmemRegion slot the doorbell refers to.
-    void slot_ready(int slot_index);
 
     // Fired when the guest doorbells one of the message channels:
     // ``kind`` is a ``linkproto::kChannel*`` value and there is at

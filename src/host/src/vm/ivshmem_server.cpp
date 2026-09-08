@@ -227,8 +227,8 @@ void IvshmemServer::worker_loop() {
                     qemu_fd = -1;
                 }
             } else {
-                // eventfd[V] — drain the counter, emit slot_ready
-                // queued onto the consumer's thread.
+                // eventfd[V] — drain the counter and wake the
+                // consumer's thread.
                 int slot = -1;
                 for (int v = 0; v < kVectorCount; ++v) {
                     if (eventfds_[v] == pfd[i].fd) { slot = v; break; }
@@ -247,10 +247,6 @@ void IvshmemServer::worker_loop() {
                 if (slot == linkproto::kRpcDoorbellVector) {
                     QMetaObject::invokeMethod(
                         this, [this] { Q_EMIT channel_ready(linkproto::kChannelRpc); },
-                        Qt::QueuedConnection);
-                } else {
-                    QMetaObject::invokeMethod(
-                        this, [this, slot] { Q_EMIT slot_ready(slot); },
                         Qt::QueuedConnection);
                 }
             }
