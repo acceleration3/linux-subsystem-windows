@@ -1,4 +1,4 @@
-#include "lsw/host/manager/console_window.hpp"
+#include "lsw/host/manager/console_panel.hpp"
 
 #include "lsw/base/log.hpp"
 #include "lsw/host/link/agent_rpc_client.hpp"
@@ -31,11 +31,9 @@ constexpr int kMaxBufferLines = 5000;
 
 }  // namespace
 
-ConsoleWindow::ConsoleWindow(link::AgentRpcClient& rpc, QWidget* parent)
-    : QDialog(parent), rpc_(rpc) {
-    setAttribute(Qt::WA_DeleteOnClose);
+ConsolePanel::ConsolePanel(link::AgentRpcClient& rpc, QWidget* parent)
+    : QWidget(parent), rpc_(rpc) {
     setWindowTitle(tr("Command Line"));
-    resize(900, 540);
 
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(8, 8, 8, 8);
@@ -83,7 +81,7 @@ ConsoleWindow::ConsoleWindow(link::AgentRpcClient& rpc, QWidget* parent)
     status_->setStyleSheet("color: gray;");
     root->addWidget(status_);
 
-    connect(input_, &QLineEdit::returnPressed, this, &ConsoleWindow::on_input_submitted);
+    connect(input_, &QLineEdit::returnPressed, this, &ConsolePanel::on_input_submitted);
 
     // Register event handlers for console output/close. The agent
     // fires the same topic for every session, so we filter by
@@ -92,7 +90,7 @@ ConsoleWindow::ConsoleWindow(link::AgentRpcClient& rpc, QWidget* parent)
     // WA_DeleteOnClose. A QPointer guard inside each lambda is a belt
     // for the brace in case an event arrives between off_event and
     // the actual deletion on the reader thread.
-    const QPointer<ConsoleWindow> self{this};
+    const QPointer<ConsolePanel> self{this};
     output_token_ = rpc_.on_event(QString::fromLatin1(linkproto::topic::kConsoleOutput),
                                     [self](const nlohmann::json& f) {
         if (!self) return;
@@ -112,20 +110,30 @@ ConsoleWindow::ConsoleWindow(link::AgentRpcClient& rpc, QWidget* parent)
             self.data(), "on_closed_event", Qt::QueuedConnection,
             Q_ARG(QString, sid), Q_ARG(int, exit_code));
     });
-
-    open_session();
 }
 
-ConsoleWindow::~ConsoleWindow() {
+ConsolePanel::~ConsolePanel() {
+    release_session();
     rpc_.off_event(output_token_);
     rpc_.off_event(closed_token_);
 }
 
-void ConsoleWindow::open_session() {
+void ConsolePanel::showEvent(QShowEvent* e) {
+    QWidget::showEvent(e);
+    // Lazily, and once. A manager sitting on the Overview page has no
+    // business holding a cmd.exe open inside the guest, and opening the
+    // session in the constructor did exactly that.
+    if (session_id_.isEmpty() && !opening_) {
+        opening_ = true;
+        open_session();
+    }
+}
+
+void ConsolePanel::open_session() {
     // Async — don't block the GUI on the RPC. ``call`` blocks until
     // the reply arrives, so wrap in QtConcurrent and marshal the
     // session_id back via QueuedConnection.
-    const QPointer<ConsoleWindow> self{this};
+    const QPointer<ConsolePanel> self{this};
     (void)QtConcurrent::run([self]() {
         if (!self) return;
         const nlohmann::json req = {{"cmd", linkproto::cmd::kConsoleOpen}};
@@ -160,7 +168,7 @@ void ConsoleWindow::open_session() {
     });
 }
 
-QString ConsoleWindow::sanitize(const QByteArray& raw) {
+QString ConsolePanel::sanitize(const QByteArray& raw) {
     // cmd.exe spits out CR-LF; QPlainTextEdit handles both, but
     // strip stray \r so the cursor doesn't bounce.
     QString s = QString::fromLocal8Bit(raw);
@@ -169,7 +177,7 @@ QString ConsoleWindow::sanitize(const QByteArray& raw) {
     return s;
 }
 
-void ConsoleWindow::append_output(const QString& text) {
+void ConsolePanel::append_output(const QString& text) {
     auto* sb = output_->verticalScrollBar();
     const bool was_at_bottom = sb->value() == sb->maximum();
     auto cursor = output_->textCursor();
@@ -180,19 +188,19 @@ void ConsoleWindow::append_output(const QString& text) {
     }
 }
 
-void ConsoleWindow::on_output_event(const QString& session_id, const QByteArray& bytes) {
+void ConsolePanel::on_output_event(const QString& session_id, const QByteArray& bytes) {
     if (session_id != session_id_) return;
     append_output(sanitize(bytes));
 }
 
-void ConsoleWindow::on_closed_event(const QString& session_id, int exit_code) {
+void ConsolePanel::on_closed_event(const QString& session_id, int exit_code) {
     if (session_id != session_id_) return;
     status_->setText(tr("Session %1 exited (code=%2)").arg(session_id).arg(exit_code));
     input_->setEnabled(false);
     session_id_.clear();
 }
 
-void ConsoleWindow::on_input_submitted() {
+void ConsolePanel::on_input_submitted() {
     if (session_id_.isEmpty()) return;
     const QString line = input_->text();
     input_->clear();
@@ -216,9 +224,9 @@ void ConsoleWindow::on_input_submitted() {
     });
 }
 
-bool ConsoleWindow::eventFilter(QObject* watched, QEvent* event) {
+bool ConsolePanel::eventFilter(QObject* watched, QEvent* event) {
     if (watched != input_ || event->type() != QEvent::KeyPress) {
-        return QDialog::eventFilter(watched, event);
+        return QWidget::eventFilter(watched, event);
     }
     auto* ke = static_cast<QKeyEvent*>(event);
     // Ctrl+L clears the output buffer — convenient and Bash-ish.
@@ -226,25 +234,27 @@ bool ConsoleWindow::eventFilter(QObject* watched, QEvent* event) {
         output_->clear();
         return true;
     }
-    return QDialog::eventFilter(watched, event);
+    return QWidget::eventFilter(watched, event);
 }
 
-void ConsoleWindow::closeEvent(QCloseEvent* e) {
-    if (!session_id_.isEmpty()) {
-        const QString sid = session_id_;
-        session_id_.clear();
-        // ``this`` is about to be deleted (WA_DeleteOnClose); the
-        // worker only needs the rpc reference, which the App owns.
-        auto* rpc = &rpc_;
-        (void)QtConcurrent::run([rpc, sid]() {
-            nlohmann::json req = {
-                {"cmd", linkproto::cmd::kConsoleClose},
-                {"params", {{"session_id", sid.toStdString()}}},
-            };
-            (void)rpc->call(req);
-        });
+void ConsolePanel::release_session() {
+    if (session_id_.isEmpty()) {
+        opening_ = false;
+        return;
     }
-    QDialog::closeEvent(e);
+    const QString sid = session_id_;
+    session_id_.clear();
+    opening_ = false;
+    // The worker only needs the rpc reference, which the App owns and
+    // outlives this page.
+    auto* rpc = &rpc_;
+    (void)QtConcurrent::run([rpc, sid]() {
+        nlohmann::json req = {
+            {"cmd", linkproto::cmd::kConsoleClose},
+            {"params", {{"session_id", sid.toStdString()}}},
+        };
+        (void)rpc->call(req);
+    });
 }
 
 }  // namespace lsw::host::manager

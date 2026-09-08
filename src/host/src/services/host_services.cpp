@@ -1,13 +1,16 @@
 #include "lsw/host/services/host_services.hpp"
 
 #include "lsw/base/log.hpp"
+#include "lsw/host/vm/render_server.hpp"
 
 #include <QDir>
 
 namespace lsw::host::services {
 
 HostServices::HostServices(QObject* parent)
-    : QObject(parent), settings_(this), vms_(this), libvirt_(this),
+    : QObject(parent), settings_(this), manager_settings_(this),
+      pending_changes_(manager_settings_, this), render_stats_(this), vms_(this),
+      libvirt_(this),
       lifecycle_(libvirt_, this), monitor_(libvirt_, this), rpc_(this),
       guest_probe_(rpc_),
       app_configs_(QDir(settings_.data_dir()).filePath("apps"), this),
@@ -27,6 +30,31 @@ HostServices::HostServices(QObject* parent)
     });
     connect(&lifecycle_, &vm::Lifecycle::shmem_gone, this,
             [this](const QUuid&) { rpc_.detach_shmem(); });
+
+    // The render server takes its sizes on the command line, so they
+    // have to be in place before anything starts one.
+    apply_render_sizing();
+    connect(&manager_settings_, &config::ManagerSettings::changed, this,
+            [this](const QString&) { apply_render_sizing(); });
+
+    // Every line the server prints goes past the congestion parser. It
+    // already counts stalls and already knows what size would have
+    // avoided them; none of that was reaching anybody.
+    connect(&lifecycle_, &vm::Lifecycle::render_server_logged, this,
+            [this](const QString& line) { render_stats_.ingest(line); });
+}
+
+void HostServices::apply_render_sizing() {
+    using K = config::ManagerSettings::Key;
+    vm::RenderServer::Sizing sizing;
+    sizing.sessions = manager_settings_.int_value(QLatin1String(K::kChannels));
+    sizing.ring_kib = manager_settings_.int_value(QLatin1String(K::kRingKib));
+    sizing.reply_kib = manager_settings_.int_value(QLatin1String(K::kReplyKib));
+    sizing.blob_mib = manager_settings_.int_value(QLatin1String(K::kBlobMib));
+    vm::RenderServer::set_sizing(sizing);
+
+    render_stats_.set_channel_count(sizing.sessions);
+    render_stats_.set_area_sizes(sizing.ring_kib, sizing.reply_kib, sizing.blob_mib);
 }
 
 HostServices::~HostServices() = default;

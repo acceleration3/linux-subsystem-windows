@@ -10,17 +10,25 @@
 #include "lsw/host/vm/lifecycle.hpp"
 #include "lsw/host/vm/monitor.hpp"
 
-#include <QPushButton>
 #include <QTimer>
 #include <QUuid>
 #include <QWidget>
 
-class QLabel;
-
 namespace lsw::host::manager {
 
-// Right-side VM detail: header (name + Start/Stop), thumbnail, stats,
-// app grid.
+// The Overview page: live preview, the four gauges, and the grid of
+// applications found inside the guest.
+//
+// It used to carry a header of its own with a status badge and four
+// buttons. Those moved to the NavRail, which is the one place in the
+// window that knows where you are and what the machine is doing. What
+// is left here is the content of one page.
+//
+// The panel still owns the polling, because it already holds the
+// Lifecycle and Monitor references the polling needs. It reports what
+// it learns upward instead of drawing it: the rail renders the state,
+// the window fills its status bar, and neither has to poll a second
+// time.
 class VmDetailPanel : public QWidget {
     Q_OBJECT
 public:
@@ -32,19 +40,29 @@ public:
     void set_target(const QUuid& vm_uuid);
     void clear_target();
 
+    [[nodiscard]] bool is_running() const noexcept { return last_running_; }
+    [[nodiscard]] bool is_agent_online() const noexcept { return last_agent_reachable_; }
+
+public Q_SLOTS:
+    // Driven by the rail's single power button.
+    void start_guest();
+    void stop_guest();
+
+Q_SIGNALS:
+    // libvirt says the domain is up. Tracks the qemu process, so the
+    // power button follows this one.
+    void running_changed(bool running);
+    // The agent answers, which is the point at which the guest is
+    // actually usable. The badge follows this one, because libvirt
+    // reports "running" a minute or two before a guest is interactive.
+    void agent_online_changed(bool online);
+    void stats_changed(const vm::VmStats& stats);
+
 private Q_SLOTS:
-    void on_start_clicked();
-    void on_stop_clicked();
-    void on_open_log_clicked();
-    void on_open_console_clicked();
     void on_stats_updated(const QUuid& uuid, const vm::VmStats& stats);
-    // Polls libvirt every ~2s and refreshes title text + button
-    // enabled-state to match the live domain state.
     void on_state_tick();
 
 private:
-    void refresh_header();
-
     config::VmState& vms_;
     vm::Lifecycle& lifecycle_;
     vm::Monitor& monitor_;
@@ -54,12 +72,6 @@ private:
     bool last_agent_reachable_ = false;
     QTimer state_timer_;
 
-    QLabel* title_label_ = nullptr;
-    QLabel* status_label_ = nullptr;
-    QPushButton* start_button_ = nullptr;
-    QPushButton* stop_button_ = nullptr;
-    QPushButton* open_log_button_ = nullptr;
-    QPushButton* open_console_button_ = nullptr;
     lsw::host::ui::VncView* preview_ = nullptr;
     StatsWidget* stats_ = nullptr;
     AppListWidget* app_list_ = nullptr;

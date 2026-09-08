@@ -36,6 +36,11 @@ public:
     AppListWidget(apps::AppConfigStore& store, link::AgentRpcClient& rpc,
                   QWidget* parent = nullptr);
 
+    // The toolbar the grid builds for itself. The Overview page lifts
+    // it into the panel's caption row, so refresh and add sit on the
+    // same line as the panel's name rather than in a strip of their own.
+    [[nodiscard]] QToolBar* toolbar() const noexcept { return toolbar_; }
+
     void set_target(const QUuid& vm_uuid);
     void clear_target();
 

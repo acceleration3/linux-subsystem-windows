@@ -12,32 +12,10 @@ namespace lsw::host::vm {
 
 namespace {
 
-// One session, because one ivshmem device is one region is one session
-// and the domain declares one device. A second concurrent application
-// in the guest reports "no free session"; DXVK surfaces that as "Failed
-// to create Vulkan instance" with its extension list perfectly intact,
-// which is worth knowing before it is seen.
-constexpr int kSessions = 1;
-
-// The command ring and the reply slot. Small and fixed: they are sized
-// by what a single round trip needs, not by what an application
-// allocates.
-constexpr int kRingKib = 1024;
-constexpr int kReplyKib = 8192;
-
-// What an application's own allocations are suballocated from — the
-// buffers, images and staging memory it maps, and the frame slots it
-// carves to present through.
-//
-// This is a floor, not the final size. ``--vm`` rounds the whole region
-// up to the next power of two and gives every byte of the rounding to
-// the blob area, so the numbers above plus this land on a 1 GiB region
-// whose blob area is ~1014 MiB — very nearly the whole of it, which is
-// what it should be.
-//
-// Fixed for now. It wants to be a per-VM setting alongside RAM and
-// disk, in the same place the wizard asks for those.
-constexpr int kBlobMib = 512;
+// The live sizing, installed by the manager from its settings before
+// anything starts. Defaults match what the server would have done
+// unasked, so a manager that never touches this behaves as before.
+RenderServer::Sizing g_sizing{};
 
 // How long to wait for the server to create its region before starting
 // the domain without it. Generous relative to what it takes (the server
@@ -56,7 +34,48 @@ constexpr int kRegionPollMs = 50;
 }  // namespace
 
 RenderServer::RenderServer(QObject* parent) : QObject(parent) {
-    process_.setProcessChannelMode(QProcess::ForwardedChannels);
+    // Separate channels rather than forwarded: the manager wants to
+    // read the server's warnings, and a forwarded stream goes to the
+    // terminal where nothing can. Standard output still carries
+    // everything it did, because drain_output logs each line on.
+    process_.setProcessChannelMode(QProcess::MergedChannels);
+    connect(&process_, &QProcess::readyReadStandardOutput, this,
+            &RenderServer::drain_output);
+}
+
+void RenderServer::set_sizing(const Sizing& sizing) {
+    g_sizing = sizing;
+}
+
+RenderServer::Sizing RenderServer::sizing() {
+    return g_sizing;
+}
+
+int RenderServer::region_mib() {
+    // The three areas plus the header, rounded up to a power of two,
+    // which is what ``--vm`` does on the server's side. Both ends have
+    // to agree: the domain XML declares the size QEMU decodes as a BAR.
+    const int wanted = g_sizing.blob_mib + (g_sizing.ring_kib / 1024)
+                       + (g_sizing.reply_kib / 1024) + 1;
+    int rounded = 1;
+    while (rounded < wanted) {
+        rounded <<= 1;
+    }
+    return rounded;
+}
+
+void RenderServer::drain_output() {
+    pending_ += process_.readAllStandardOutput();
+    int newline = pending_.indexOf('\n');
+    while (newline >= 0) {
+        const QString line = QString::fromUtf8(pending_.left(newline)).trimmed();
+        pending_.remove(0, newline + 1);
+        if (!line.isEmpty()) {
+            LSW_INFO("render server: {}", line.toStdString());
+            Q_EMIT line_logged(line);
+        }
+        newline = pending_.indexOf('\n');
+    }
 }
 
 RenderServer::~RenderServer() { stop(); }
@@ -97,15 +116,15 @@ bool RenderServer::ensure_running(const QUuid& uuid) {
 
     const QStringList args = {
         QStringLiteral("--name"), QStringLiteral("/") + region_prefix(uuid),
-        QStringLiteral("--sessions"), QString::number(kSessions),
+        QStringLiteral("--sessions"), QString::number(g_sizing.sessions),
         // Sizes the region for a guest that reaches it as an ivshmem
         // BAR: rounded to a power of two, its backing file reused
         // across restarts, and the ring polled rather than waited on —
         // a futex wake does not cross the VM boundary.
         QStringLiteral("--vm"),
-        QStringLiteral("--ring-kib"), QString::number(kRingKib),
-        QStringLiteral("--reply-kib"), QString::number(kReplyKib),
-        QStringLiteral("--blob-mib"), QString::number(kBlobMib),
+        QStringLiteral("--ring-kib"), QString::number(g_sizing.ring_kib),
+        QStringLiteral("--reply-kib"), QString::number(g_sizing.reply_kib),
+        QStringLiteral("--blob-mib"), QString::number(g_sizing.blob_mib),
     };
     LSW_INFO("render server: {} {}", exe.toStdString(),
              args.join(QLatin1Char(' ')).toStdString());
@@ -124,7 +143,7 @@ bool RenderServer::ensure_running(const QUuid& uuid) {
     QDeadlineTimer deadline(kRegionWaitMs);
     while (!deadline.hasExpired()) {
         if (QFile::exists(region)) {
-            LSW_INFO("render server: serving {} ({} MiB)", region.toStdString(), kRegionMib);
+            LSW_INFO("render server: serving {} ({} MiB)", region.toStdString(), region_mib());
             return true;
         }
         if (!running()) {

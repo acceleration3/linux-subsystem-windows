@@ -1,21 +1,40 @@
 #pragma once
 
+#include "lsw/host/manager/nav_rail.hpp"
+
 #include <QMainWindow>
 #include <QSystemTrayIcon>
+
+class QLabel;
+class QStackedWidget;
 
 namespace lsw::host::services { class HostServices; }
 
 namespace lsw::host::manager {
 
+class ConsolePanel;
+class LogPanel;
+class RenderPanel;
+class SettingsPage;
 class VmDetailPanel;
 
-// Manager shell. Single-VM model — there's no list to pick from, so
-// the central widget is just the VmDetailPanel pinned to the lone
-// ``lsw`` VM. Closing the window minimizes to the system tray.
+// Manager shell: a navigation rail down the left, one page at a time
+// beside it, and a status bar carrying the facts that used to live only
+// in a log.
+//
+// The window used to be a single panel with four buttons across its
+// top. Those buttons could not say where you were, two of them were
+// always disabled, and everything they opened became a separate
+// top-level window. Now the pages are pages, the rail marks the current
+// one, and Start and Stop are one control that says what it does.
 class MainWindow : public QMainWindow {
     Q_OBJECT
 public:
     explicit MainWindow(services::HostServices& services, QWidget* parent = nullptr);
+
+    // Bring a specific page up, used by the pages themselves when one
+    // hands off to another.
+    void show_page(NavRail::Page page);
 
 protected:
     void closeEvent(QCloseEvent* e) override;
@@ -25,11 +44,31 @@ private Q_SLOTS:
     void on_tray_activated(QSystemTrayIcon::ActivationReason reason);
 
 private:
+    void build_pages();
     void setup_tray();
+    void refresh_identity();
+    void refresh_status_bar();
+    void refresh_warning();
+    void restart_guest();
 
     services::HostServices& services_;
-    VmDetailPanel* detail_panel_ = nullptr;
+
+    NavRail* rail_ = nullptr;
+    QStackedWidget* stack_ = nullptr;
+    QLabel* content_title_ = nullptr;
+    QLabel* content_detail_ = nullptr;
+    QWidget* warn_strip_ = nullptr;
+    QLabel* warn_text_ = nullptr;
+    QLabel* status_left_ = nullptr;
+
+    VmDetailPanel* overview_ = nullptr;
+    ConsolePanel* console_ = nullptr;
+    LogPanel* log_ = nullptr;
+    RenderPanel* render_ = nullptr;
+    SettingsPage* settings_page_ = nullptr;
     QSystemTrayIcon* tray_ = nullptr;
+
+    bool warning_dismissed_ = false;
 };
 
 }  // namespace lsw::host::manager

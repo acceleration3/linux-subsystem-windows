@@ -2,7 +2,7 @@
 
 #include "lsw/host/link/agent_rpc_client.hpp"
 
-#include <QDialog>
+#include <QWidget>
 #include <QString>
 
 class QPlainTextEdit;
@@ -11,25 +11,30 @@ class QLabel;
 
 namespace lsw::host::manager {
 
-// Manager-side terminal for an interactive ``cmd.exe`` running in
-// the VM. Opening the dialog fires the ``console_open`` RPC at the
-// agent; the agent spawns ``cmd.exe`` with redirected stdin/stdout
-// and reports its output as ``console_output`` events. We append
-// each chunk to the read-only QPlainTextEdit. Lines typed in the
-// input QLineEdit are forwarded via the ``console_input`` RPC.
+// Manager-side terminal for an interactive ``cmd.exe`` running in the
+// VM. It fires ``console_open`` at the agent, which spawns ``cmd.exe``
+// with redirected stdin and stdout and reports its output back as
+// ``console_output`` events; each chunk is appended to the read-only
+// view, and lines typed below go out as ``console_input``.
 //
-// Closing the dialog (or hitting Ctrl+D on an empty line) fires
-// ``console_close``. The dialog is modeless and auto-deletes on
-// close; multiple consoles can be open simultaneously (each gets
-// its own session_id from the agent).
-class ConsoleWindow : public QDialog {
+// A page in the manager's stack rather than a window of its own. The
+// session is opened the first time the page is shown and closed when
+// the page is destroyed or explicitly released, so a manager left on
+// the Overview page is not holding a cmd.exe open inside the guest.
+// Ctrl+D on an empty line still ends the session.
+class ConsolePanel : public QWidget {
     Q_OBJECT
 public:
-    explicit ConsoleWindow(link::AgentRpcClient& rpc, QWidget* parent = nullptr);
-    ~ConsoleWindow() override;
+    explicit ConsolePanel(link::AgentRpcClient& rpc, QWidget* parent = nullptr);
+    ~ConsolePanel() override;
+
+    // Ends the guest-side session if one is open. Called when the page
+    // is left for long enough that holding a shell is rude, and by the
+    // destructor.
+    void release_session();
 
 protected:
-    void closeEvent(QCloseEvent* e) override;
+    void showEvent(QShowEvent* e) override;
     bool eventFilter(QObject* watched, QEvent* event) override;
 
 private Q_SLOTS:
@@ -44,6 +49,7 @@ private:
 
     link::AgentRpcClient& rpc_;
     QString session_id_;
+    bool opening_ = false;
     QPlainTextEdit* output_ = nullptr;
     QLineEdit* input_ = nullptr;
     QLabel* status_ = nullptr;

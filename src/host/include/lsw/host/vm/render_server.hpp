@@ -42,12 +42,29 @@ public:
     // session index the server appends.
     [[nodiscard]] static QString region_name(const QUuid& uuid);
 
-    // How large that region is, in MiB. Matches what the command line
-    // below asks for once ``--vm`` has rounded it up to a power of two,
-    // which it must be: the region is a PCI BAR, and a BAR's size is
-    // decoded by address bits, so QEMU does not round — it asserts, and
-    // the VM dies before the guest exists.
-    static constexpr int kRegionMib = 1024;
+    // How the region is carved up, and how many of them there are.
+    //
+    // These used to be constants with a comment saying they wanted to
+    // be settings. They are settings now: the manager reads them from
+    // ManagerSettings and installs them here before starting anything,
+    // because the server takes them on its command line and a running
+    // server cannot be told otherwise.
+    struct Sizing {
+        int sessions = 1;
+        int ring_kib = 1024;
+        int reply_kib = 8192;
+        int blob_mib = 512;
+    };
+
+    static void set_sizing(const Sizing& sizing);
+    [[nodiscard]] static Sizing sizing();
+
+    // How large one region is, in MiB. The region is a PCI BAR, and a
+    // BAR's size is decoded by address bits, so it must be a power of
+    // two: QEMU does not round, it asserts, and the VM dies before the
+    // guest exists. ``--vm`` rounds on the server's side; this is the
+    // same arithmetic so the domain XML agrees with it.
+    [[nodiscard]] static int region_mib();
 
     // Start the server for ``uuid`` if it is not already running, and
     // wait for the region file to appear. Returns false when the server
@@ -63,14 +80,24 @@ public:
 
     [[nodiscard]] bool running() const;
 
+Q_SIGNALS:
+    // Every line the server writes to its standard error. The manager
+    // reads its congestion warnings out of these, which is what makes a
+    // stalling ring visible without the server having to publish
+    // anything it does not already print.
+    void line_logged(const QString& line);
+
 private:
     // Absolute path to the executable, or empty when there is none.
     // ``$LSW_RENDER_SERVER`` wins so a developer can point at a
     // specific build; otherwise the build tree beside the manager.
     [[nodiscard]] static QString executable_path();
 
+    void drain_output();
+
     QProcess process_;
     QUuid serving_;
+    QByteArray pending_;
 };
 
 }  // namespace lsw::host::vm
