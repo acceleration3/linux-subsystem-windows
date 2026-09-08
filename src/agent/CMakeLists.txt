@@ -70,6 +70,7 @@ set(_lsw_agent_rpc_sources
     src/rpc/handlers/apps/list_apps.cpp
     src/rpc/handlers/apps/launch.cpp
     src/rpc/handlers/apps/get_icon.cpp
+    src/rpc/handlers/window/start_window_mirror.cpp
     src/rpc/handlers/window/list_windows.cpp
     src/rpc/handlers/window/close_window.cpp
     src/rpc/handlers/window/focus_window.cpp
@@ -101,6 +102,7 @@ set(_lsw_agent_rpc_sources
     src/rpc/handlers/uia/uia_unsubscribe.cpp
 )
 set(_lsw_agent_win_sources
+    src/win/mirror_process.cpp
     src/win/window.cpp
     src/win/input.cpp
     src/win/icon_extractor.cpp

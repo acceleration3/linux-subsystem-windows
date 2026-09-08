@@ -96,8 +96,6 @@ void AgentRpcClient::attach_shmem(vm::IvshmemServer* server, vm::ShmemRegion* re
     if (shmem_server_ != nullptr) {
         LSW_INFO("shmem: attached to ivshmem server (region={})",
                  static_cast<const void*>(shmem_region_));
-        connect(shmem_server_, &vm::IvshmemServer::slot_ready, this,
-                &AgentRpcClient::on_shmem_slot_ready);
         connect(shmem_server_, &vm::IvshmemServer::channel_ready, this,
                 &AgentRpcClient::on_shmem_channel_ready);
         return;
@@ -108,7 +106,6 @@ void AgentRpcClient::attach_shmem(vm::IvshmemServer* server, vm::ShmemRegion* re
         LSW_INFO("shmem: attached to a region with no doorbells — polling it every "
                  "{} ms",
                  kShmemPollMs);
-        slot_seen_.assign(vm::ShmemRegion::kSlotCount, 0);
         shmem_poll_ = new QTimer(this);
         shmem_poll_->setInterval(kShmemPollMs);
         connect(shmem_poll_, &QTimer::timeout, this, &AgentRpcClient::poll_shmem);
@@ -120,20 +117,8 @@ void AgentRpcClient::poll_shmem() {
     if (shmem_region_ == nullptr) {
         return;
     }
-    for (int slot = 0; slot < static_cast<int>(vm::ShmemRegion::kSlotCount); ++slot) {
-        const quint64 seq = shmem_region_->slot_sequence(slot);
-        // A slot that emptied resets to 0, and must not then look
-        // "changed" forever afterwards.
-        if (seq == slot_seen_[static_cast<std::size_t>(slot)]) {
-            continue;
-        }
-        slot_seen_[static_cast<std::size_t>(slot)] = seq;
-        if (seq != 0) {
-            on_shmem_slot_ready(slot);
-        }
-    }
-    // The guest rings a channel doorbell we will never hear, so the ring
-    // is drained on the same sweep. Empty is the common case and costs
+    // The guest rings a doorbell we will never hear, so the ring is
+    // drained on a sweep instead. Empty is the common case and costs
     // one load.
     on_shmem_channel_ready(linkproto::kChannelRpc);
 }
@@ -143,41 +128,14 @@ void AgentRpcClient::detach_shmem() {
         shmem_poll_->stop();
         shmem_poll_->deleteLater();
         shmem_poll_ = nullptr;
-        slot_seen_.clear();
     }
     if (shmem_server_ != nullptr) {
-        disconnect(shmem_server_, &vm::IvshmemServer::slot_ready, this,
-                   &AgentRpcClient::on_shmem_slot_ready);
         disconnect(shmem_server_, &vm::IvshmemServer::channel_ready, this,
                    &AgentRpcClient::on_shmem_channel_ready);
         shmem_server_ = nullptr;
     }
     shmem_region_ = nullptr;
     shmem_channel_live_.store(false);
-}
-
-void AgentRpcClient::on_shmem_slot_ready(int slot_index) {
-    if (shmem_region_ == nullptr) {
-        return;
-    }
-    quint64 hwnd = 0;
-    QImage img;
-    QRect visible;
-    if (!shmem_region_->read_slot_frame(slot_index, &hwnd, &img, &visible)) {
-        // Empty slot / race / corrupt. The agent will doorbell again on
-        // the next frame, so one failure is not interesting — but a
-        // steady stream of them is a mirror that never paints, and
-        // dropping them silently is how that becomes invisible.
-        static std::atomic<std::uint64_t> drops{0};
-        const auto n = drops.fetch_add(1) + 1;
-        if (n <= 3 || (n % 128) == 0) {
-            LSW_WARN("shmem: slot {} doorbell but no readable frame ({} so far)",
-                     slot_index, n);
-        }
-        return;
-    }
-    LSW_DEBUG("shmem: slot {} -> hwnd={} {}x{}", slot_index, hwnd, img.width(), img.height());
-    Q_EMIT frame_received(hwnd, std::move(img), visible);
 }
 
 void AgentRpcClient::on_shmem_channel_ready(unsigned kind) {
@@ -294,7 +252,6 @@ bool AgentRpcClient::ensure_connected_locked() {
     if (client_.connect(cid, port) != 0) {
         return false;
     }
-    replay_subscriptions_locked();
     return true;
 }
 
@@ -341,57 +298,6 @@ bool AgentRpcClient::send_locked(const QByteArray& body) {
                    static_cast<qsizetype>(linkproto::kHeaderSize));
     framed.append(body);
     return client_.send_all(framed) == 0;
-}
-
-void AgentRpcClient::replay_subscriptions_locked() {
-    QSet<std::uint64_t> snapshot;
-    {
-        std::lock_guard<std::mutex> lock(subs_mu_);
-        snapshot = subscribed_windows_;
-    }
-    for (const auto hwnd : snapshot) {
-        nlohmann::json req = {
-            {"id", next_id_.fetch_add(1)},
-            {"cmd", cmd::kSubscribeWindow},
-            {"params", {{"hwnd", hwnd}}},
-        };
-        const std::string s = req.dump();
-        if (!send_locked(QByteArray(s.data(), static_cast<qsizetype>(s.size())))) {
-            return;
-        }
-    }
-}
-
-void AgentRpcClient::subscribe_window(std::uint64_t hwnd) {
-    {
-        std::lock_guard<std::mutex> lock(subs_mu_);
-        subscribed_windows_.insert(hwnd);
-    }
-    std::lock_guard<std::mutex> lock(io_mu_);
-    if (!ensure_connected_locked()) return;
-    nlohmann::json req = {
-        {"id", next_id_.fetch_add(1)},
-        {"cmd", cmd::kSubscribeWindow},
-        {"params", {{"hwnd", hwnd}}},
-    };
-    const std::string s = req.dump();
-    (void)send_locked(QByteArray(s.data(), static_cast<qsizetype>(s.size())));
-}
-
-void AgentRpcClient::unsubscribe_window(std::uint64_t hwnd) {
-    {
-        std::lock_guard<std::mutex> lock(subs_mu_);
-        subscribed_windows_.remove(hwnd);
-    }
-    std::lock_guard<std::mutex> lock(io_mu_);
-    if (!ensure_connected_locked()) return;
-    nlohmann::json req = {
-        {"id", next_id_.fetch_add(1)},
-        {"cmd", cmd::kUnsubscribeWindow},
-        {"params", {{"hwnd", hwnd}}},
-    };
-    const std::string s = req.dump();
-    (void)send_locked(QByteArray(s.data(), static_cast<qsizetype>(s.size())));
 }
 
 void AgentRpcClient::post_oneway(const nlohmann::json& request) {
@@ -574,14 +480,6 @@ void AgentRpcClient::reader_loop() {
             switch (type) {
                 case FrameType::Control:
                     handle_control(payload, len);
-                    break;
-                case FrameType::FrameGone:
-                    if (len >= linkproto::kFrameGonePayloadSize) {
-                        const std::uint64_t hwnd = linkproto::read_u64_be(payload);
-                        QMetaObject::invokeMethod(
-                            this, [this, hwnd] { Q_EMIT window_gone(hwnd); },
-                            Qt::QueuedConnection);
-                    }
                     break;
                 default:
                     LSW_WARN("agent_rpc_client: unknown frame type={} len={}",

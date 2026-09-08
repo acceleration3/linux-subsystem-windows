@@ -27,11 +27,14 @@ public:
 
 Q_SIGNALS:
     // ``pid`` is the spawned process id (0 if the agent couldn't
-    // resolve it). Per-launch unique — used by the host to scope a
-    // window watcher to this specific instance, so multiple
-    // simultaneous launches of the same app each get their own
-    // mirror window set.
-    void launched(const QString& app_id, quint32 pid);
+    // resolve it) and ``job`` the Job Object the agent named the launch
+    // with. Both scope a mirror to this instance, so simultaneous
+    // launches of the same application do not show each other's
+    // windows; the job is the better of the two, because a launcher
+    // stub that starts the real application and exits leaves a process
+    // id that names nothing while everything it started is still in the
+    // job. Empty when the agent could not make one.
+    void launched(const QString& app_id, quint32 pid, const QString& job);
     void failed(const QString& app_id, const QString& error_message);
 
 private:

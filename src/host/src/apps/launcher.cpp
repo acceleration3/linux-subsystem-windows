@@ -17,6 +17,7 @@ namespace {
 struct LaunchResult {
     QString error;
     quint32 pid = 0;
+    QString job;
 };
 
 // ``NAME=value`` per line → a JSON object for the agent.
@@ -58,7 +59,7 @@ void Launcher::launch(const QString& app_id, const QString& args,
     connect(watcher, &QFutureWatcher<LaunchResult>::finished, this, [this, watcher, app_id]() {
         const LaunchResult r = watcher->result();
         if (r.error.isEmpty()) {
-            Q_EMIT launched(app_id, r.pid);
+            Q_EMIT launched(app_id, r.pid, r.job);
         } else {
             Q_EMIT failed(app_id, r.error);
         }
@@ -93,6 +94,7 @@ void Launcher::launch(const QString& app_id, const QString& args,
                 return out;
             }
             out.pid = static_cast<quint32>(j.value("pid", std::uint64_t{0}));
+            out.job = QString::fromStdString(j.value("job", std::string{}));
         } catch (const nlohmann::json::exception& e) {
             out.error = QString::fromStdString(e.what());
         }

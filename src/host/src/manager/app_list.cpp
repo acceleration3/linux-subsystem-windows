@@ -3,7 +3,7 @@
 #include "lsw/base/log.hpp"
 #include "lsw/host/apps/desktop_launcher.hpp"
 #include "lsw/host/manager/app_config_dialog.hpp"
-#include "lsw/host/manager/app_window_watcher.hpp"
+#include "lsw/host/mirror/window_mirror.hpp"
 #include "lsw/host/link/agent_rpc_client.hpp"
 
 #include <QAction>
@@ -22,8 +22,8 @@
 namespace lsw::host::manager {
 
 AppListWidget::AppListWidget(apps::AppConfigStore& store, link::AgentRpcClient& rpc,
-                             link::GuestWindowModel& windows, QWidget* parent)
-    : QWidget(parent), store_(store), rpc_(rpc), windows_(windows),
+                             QWidget* parent)
+    : QWidget(parent), store_(store), rpc_(rpc),
       catalog_(rpc), launcher_(rpc) {
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(0, 0, 0, 0);
@@ -148,7 +148,7 @@ void AppListWidget::on_item_activated(QListWidgetItem* item) {
     launcher_.launch(cfg->path, cfg->cmdline, cfg->env);
 }
 
-void AppListWidget::on_launched(const QString& app_id, quint32 pid) {
+void AppListWidget::on_launched(const QString& app_id, quint32 pid, const QString& job) {
     const std::string line = "app_list: agent reported launch ok for "
                               + app_id.toStdString() + " (pid=" + std::to_string(pid) + ")";
     LSW_INFO("{}", line);
@@ -161,20 +161,13 @@ void AppListWidget::on_launched(const QString& app_id, quint32 pid) {
     if (!rpc_.has_target()) {
         return;
     }
-    if (watchers_.contains(pid)) {
-        return;  // PID already tracked (shouldn't happen — PIDs are unique)
+    if (mirrors_.contains(pid)) {
+        return;  // PID already mirrored (shouldn't happen — PIDs are unique)
     }
-    // ``app_id`` is the launched path (the manager launches by
-    // cfg->path). Derive the executable basename for the watcher's
-    // alias/packaged fallback. Compute it manually — QFileInfo on the
-    // Linux host won't split a Windows ``\`` path.
-    const qsizetype sep = std::max(app_id.lastIndexOf(QLatin1Char('\\')),
-                                   app_id.lastIndexOf(QLatin1Char('/')));
-    const QString exe_basename = sep < 0 ? app_id : app_id.mid(sep + 1);
-    // The identity every mirror of this launch will present to the task
-    // manager: the launcher entry already written for this application,
-    // so its windows group under its own name and icon — and against the
-    // launcher the user may have pinned — rather than under the manager.
+    // The identity this launch's windows present to the task manager:
+    // the launcher entry already written for this application, so they
+    // group under its own name and icon — and against the launcher the
+    // user may have pinned — rather than under the manager.
     QString desktop_id;
     for (const auto& cfg : store_.configs()) {
         if (cfg.path == app_id) {
@@ -182,10 +175,13 @@ void AppListWidget::on_launched(const QString& app_id, quint32 pid) {
             break;
         }
     }
-    auto* w = new AppWindowWatcher(rpc_, windows_, pid, exe_basename, desktop_id, this);
-    connect(w, &AppWindowWatcher::exhausted, this, &AppListWidget::on_watcher_exhausted);
-    watchers_.insert(pid, w);
-    w->start();
+    auto* mirror = new mirror::WindowMirror(rpc_, pid, job, desktop_id, this);
+    connect(mirror, &mirror::WindowMirror::finished, this, &AppListWidget::on_mirror_finished);
+    mirrors_.insert(pid, mirror);
+    if (!mirror->start()) {
+        mirrors_.remove(pid);
+        mirror->deleteLater();
+    }
 }
 
 void AppListWidget::on_launch_failed(const QString& app_id, const QString& error) {
@@ -194,15 +190,15 @@ void AppListWidget::on_launch_failed(const QString& app_id, const QString& error
     LSW_WARN("{}", line);
 }
 
-void AppListWidget::on_watcher_exhausted(quint32 pid) {
-    auto it = watchers_.find(pid);
-    if (it == watchers_.end()) {
+void AppListWidget::on_mirror_finished(quint32 pid) {
+    auto it = mirrors_.find(pid);
+    if (it == mirrors_.end()) {
         return;
     }
-    if (auto* w = it.value().data(); w != nullptr) {
-        w->deleteLater();
+    if (auto* mirror = it.value().data(); mirror != nullptr) {
+        mirror->deleteLater();
     }
-    watchers_.erase(it);
+    mirrors_.erase(it);
 }
 
 void AppListWidget::on_context_menu(const QPoint& pos) {

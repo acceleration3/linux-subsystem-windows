@@ -7,7 +7,6 @@
 #include "lsw/host/manager/stats_widget.hpp"
 #include "lsw/host/ui/vnc_view.hpp"
 #include "lsw/host/link/agent_rpc_client.hpp"
-#include "lsw/host/link/guest_window_model.hpp"
 #include "lsw/host/vm/lifecycle.hpp"
 #include "lsw/host/vm/monitor.hpp"
 
@@ -27,7 +26,7 @@ class VmDetailPanel : public QWidget {
 public:
     VmDetailPanel(config::VmState& vms, vm::Lifecycle& lifecycle, vm::Monitor& monitor,
                   apps::AppConfigStore& app_configs, link::AgentRpcClient& rpc,
-                  link::GuestWindowModel& windows, apps::LogStore& log_store,
+                  apps::LogStore& log_store,
                   QWidget* parent = nullptr);
 
     void set_target(const QUuid& vm_uuid);
@@ -68,7 +67,6 @@ private:
     // Hoisted up to App so the wizard and MCP server share the same
     // channel + log buffer with the manager UI.
     link::AgentRpcClient& rpc_;
-    link::GuestWindowModel& windows_;
     apps::LogStore& log_store_;
 };
 

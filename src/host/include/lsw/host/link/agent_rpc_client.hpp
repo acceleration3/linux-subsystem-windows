@@ -6,7 +6,6 @@
 
 #include <QByteArray>
 #include <QHash>
-#include <QImage>
 #include <QList>
 #include <QObject>
 #include <QSet>
@@ -28,8 +27,9 @@ namespace lsw::host::link {
 
 // Multiplexed channel to the guest agent. One TCP connection carries
 // everything: bidirectional RPCs and agent-pushed events (log records,
-// install progress, UIA notifications). Window pixels travel through the
-// IVSHMEM frame ring instead; see ``attach_shmem``.
+// install progress, UIA notifications). An application's windows do not:
+// they are mirrored by a process of their own, over a connection of its
+// own, and nothing of them passes through here.
 //
 // The framing, the message shapes and the command vocabulary are the
 // shared contract in ``lsw/linkproto/`` — normative prose in
@@ -129,30 +129,12 @@ public:
     // call with a 0 / unknown token (no-op).
     void off_event(EventToken token);
 
-    // Window-mirror conveniences. ``subscribe_window`` fires the
-    // ``subscribe_window`` RPC at the agent and remembers the HWND
-    // for replay on reconnect. ``frame_received`` / ``window_gone``
-    // signals fire as the agent pushes frame events back.
-    void subscribe_window(std::uint64_t hwnd);
-    void unsubscribe_window(std::uint64_t hwnd);
-
-    // Bind the per-VM IVSHMEM transport. When set, the manager listens
-    // to ``server->slot_ready`` and reads each frame out of
-    // ``region``, then emits ``frame_received`` from the GUI thread.
-    // The TCP frame-envelope path was retired in Phase 6; pixels never
-    // ride this socket anymore.
+    // Bind the per-VM IVSHMEM transport, which carries the RPC ring:
+    // the manager listens for the channel doorbell and drains what the
+    // guest wrote, or sweeps for it when this manager did not start the
+    // VM and so has no doorbells.
     void attach_shmem(vm::IvshmemServer* server, vm::ShmemRegion* region);
     void detach_shmem();
-
-Q_SIGNALS:
-    // ``visible`` is the part of THIS image that is on the guest's
-    // screen: the whole thing for an ordinary window, less the overhang
-    // for a maximized one. It arrives with the image because it came out
-    // of the same seqlocked slot — pairing a frame with a rectangle from
-    // anywhere else means pairing it, sooner or later, with a rectangle
-    // measured for a different frame.
-    void frame_received(std::uint64_t hwnd, QImage image, QRect visible);
-    void window_gone(std::uint64_t hwnd);
 
 private:
     void reader_loop();
@@ -160,7 +142,6 @@ private:
     bool ensure_connected_locked();           // caller holds io_mu_
     bool send_locked(const QByteArray& body); // caller holds io_mu_
     void drop_connection_locked();            // caller holds io_mu_
-    void replay_subscriptions_locked();       // caller holds io_mu_
     void dispatch_event(const nlohmann::json& frame);
     void deliver_reply(quint64 id, QByteArray body);
 
@@ -201,12 +182,6 @@ private:
     QHash<QString, QList<HandlerEntry>> handlers_;
     std::atomic<EventToken> next_event_token_{1};
 
-    // Window subscriptions, replayed on reconnect. Guarded by
-    // subs_mu_; touched by subscribe_window/unsubscribe_window
-    // (GUI thread) and replay_subscriptions_locked (reader thread).
-    mutable std::mutex subs_mu_;
-    QSet<std::uint64_t> subscribed_windows_;
-
     std::atomic<bool> stop_{false};
     std::thread reader_;
 
@@ -216,23 +191,15 @@ private:
     vm::IvshmemServer* shmem_server_ = nullptr;
     vm::ShmemRegion*   shmem_region_ = nullptr;
 
-    Q_SLOT void on_shmem_slot_ready(int slot_index);
-
-    // Doorbell-free path: look at every slot and every channel and act
-    // on what changed since the last look.
+    // Doorbell-free path: drain the channel on a timer.
     //
     // Runs when the region was attached rather than created — a manager
     // that did not start the VM has no doorbells, because the ivshmem
-    // device handshook with the process that did. Reading a slot's
-    // sequence number is two loads, so sweeping all of them costs far
-    // less than the frame copy that a changed one leads to.
+    // device handshook with the process that did.
     Q_SLOT void poll_shmem();
 
     // Timer driving ``poll_shmem``; null whenever doorbells work.
     QTimer* shmem_poll_ = nullptr;
-    // Last sequence number seen per slot, so a sweep only reads frames
-    // that actually moved.
-    std::vector<quint64> slot_seen_;
 
     // The guest doorbelled a message channel: drain it and route what it
     // finds exactly like socket traffic. ``kind`` is a

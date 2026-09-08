@@ -6,7 +6,6 @@
 #include "lsw/host/config/vm_state.hpp"
 #include "lsw/host/link/agent_guest_stats_probe.hpp"
 #include "lsw/host/link/agent_rpc_client.hpp"
-#include "lsw/host/link/guest_window_model.hpp"
 #include "lsw/host/vm/libvirt_connection.hpp"
 #include "lsw/host/vm/lifecycle.hpp"
 #include "lsw/host/vm/monitor.hpp"
@@ -58,7 +57,6 @@ public:
     [[nodiscard]] vm::Monitor& monitor() noexcept { return monitor_; }
     [[nodiscard]] link::AgentRpcClient& rpc() noexcept { return rpc_; }
     // The one guest-window enumeration every consumer shares.
-    [[nodiscard]] link::GuestWindowModel& windows() noexcept { return windows_; }
     [[nodiscard]] apps::AppConfigStore& app_configs() noexcept { return app_configs_; }
     [[nodiscard]] apps::LogStore& log_store() noexcept { return log_store_; }
 
@@ -71,7 +69,6 @@ private:
     link::AgentRpcClient rpc_;
     // Declared after rpc_: it registers UIA event handlers on it and
     // detaches them in its destructor.
-    link::GuestWindowModel windows_;
     // Adapter handed to monitor_ so the VM layer can read in-guest
     // numbers without depending on the agent channel. Declared after
     // rpc_ (it holds a reference to it).

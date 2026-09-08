@@ -59,7 +59,7 @@ set(LSW_HOST_INCLUDE_DIR $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
 include(EmbedTextFile)
 
 # ---- lsw_host_core -------------------------------------------------------
-set(LSW_CORE_CONCERNS platform config vm link apps ui services)
+set(LSW_CORE_CONCERNS platform config vm link apps mirror ui services)
 
 # The libvirt domain XML template (vm/domain_xml_builder.cpp) is embedded
 # at configure time so the C++ stays free of a giant raw-string literal.

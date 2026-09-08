@@ -9,7 +9,7 @@ namespace lsw::host::services {
 HostServices::HostServices(QObject* parent)
     : QObject(parent), settings_(this), vms_(this), libvirt_(this),
       lifecycle_(libvirt_, this), monitor_(libvirt_, this), rpc_(this),
-      windows_(rpc_, this), guest_probe_(rpc_),
+      guest_probe_(rpc_),
       app_configs_(QDir(settings_.data_dir()).filePath("apps"), this),
       log_store_(this) {
     // Wire the two services that consume the agent channel. Done here,
