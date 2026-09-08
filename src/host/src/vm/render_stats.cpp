@@ -1,6 +1,11 @@
 #include "lsw/host/vm/render_stats.hpp"
 
+#include "lsw/base/log.hpp"
+
+#include <QFile>
 #include <QRegularExpression>
+
+#include <csignal>
 
 namespace lsw::host::vm {
 
@@ -80,6 +85,36 @@ QString size_label(quint64 kib) {
         return QStringLiteral("%1 MiB").arg(kib / 1024);
     }
     return QStringLiteral("%1 KiB").arg(kib);
+}
+
+// The first fields of the region header the render server writes, in
+// its order. Only the part this reads is mirrored, and it is checked
+// against the magic before anything else is believed, so a header that
+// has moved on is refused rather than misread.
+//
+// See rvk/wire/region_layout.hpp in the render server for the whole of
+// it.
+struct RegionHeaderPrefix {
+    std::uint32_t magic;
+    std::uint32_t header_bytes;
+    std::uint32_t ready;
+    std::uint32_t reserved_0;
+    std::uint64_t region_bytes;
+    std::uint32_t owner_pid;
+    std::uint32_t reserved_1;
+    std::uint64_t ring_offset;
+    std::uint64_t ring_buffer_bytes;
+    std::uint64_t ring_extra_bytes;
+    std::uint64_t reply_offset;
+    std::uint64_t reply_bytes;
+    std::uint64_t blob_offset;
+    std::uint64_t blob_bytes;
+};
+
+constexpr std::uint32_t kRegionMagic = 0x524B5247;  // "RKRG"
+
+bool alive(std::uint32_t pid) {
+    return pid != 0 && ::kill(static_cast<int>(pid), 0) == 0;
 }
 
 }  // namespace
@@ -223,6 +258,71 @@ void RenderStats::ingest(const QString& line) {
     if (touched) {
         Q_EMIT updated();
     }
+}
+
+void RenderStats::poll_regions(const QString& region_prefix) {
+    bool touched = false;
+    for (int i = 0; i < channels_.size(); ++i) {
+        auto& channel = channels_[i];
+        const bool was_claimed = channel.claimed;
+        const quint32 was_owner = channel.owner_pid;
+
+        channel.claimed = false;
+        channel.owner_pid = 0;
+
+        QFile file{QStringLiteral("/dev/shm/%1-%2").arg(region_prefix).arg(i)};
+        if (file.open(QIODevice::ReadOnly)) {
+            RegionHeaderPrefix header{};
+            const auto read = file.read(reinterpret_cast<char*>(&header), sizeof(header));
+            if (read == static_cast<qint64>(sizeof(header)) && header.magic == kRegionMagic
+                && header.ready != 0) {
+                channel.owner_pid = header.owner_pid;
+                channel.claimed = alive(header.owner_pid);
+                // The sizes come from the region rather than from the
+                // settings, so a channel still running on what it was
+                // started with reports that and not what has since been
+                // asked for.
+                channel.areas[kRing].configured_kib = header.ring_buffer_bytes >> 10;
+                channel.areas[kReply].configured_kib = header.reply_bytes >> 10;
+                channel.areas[kBlob].configured_kib = header.blob_bytes >> 10;
+            }
+        }
+        touched = touched || channel.claimed != was_claimed
+                  || channel.owner_pid != was_owner;
+    }
+    if (touched) {
+        Q_EMIT updated();
+    }
+}
+
+bool RenderStats::release_channel(const QString& region_prefix, int index) {
+    if (index < 0 || index >= channels_.size()) {
+        return false;
+    }
+    const auto& channel = channels_.at(index);
+    if (alive(channel.owner_pid)) {
+        LSW_WARN("render: refusing to release channel {}; pid {} is still running",
+                 index, channel.owner_pid);
+        return false;
+    }
+    QFile file{QStringLiteral("/dev/shm/%1-%2").arg(region_prefix).arg(index)};
+    if (!file.open(QIODevice::ReadWrite)) {
+        return false;
+    }
+    RegionHeaderPrefix header{};
+    if (file.read(reinterpret_cast<char*>(&header), sizeof(header))
+            != static_cast<qint64>(sizeof(header))
+        || header.magic != kRegionMagic) {
+        return false;
+    }
+    header.owner_pid = 0;
+    file.seek(0);
+    const bool ok = file.write(reinterpret_cast<const char*>(&header), sizeof(header))
+                    == static_cast<qint64>(sizeof(header));
+    channels_[index].claimed = false;
+    channels_[index].owner_pid = 0;
+    Q_EMIT updated();
+    return ok;
 }
 
 AreaPressure::State RenderStats::worst() const {
