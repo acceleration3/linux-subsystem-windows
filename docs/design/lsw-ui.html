@@ -1,0 +1,2823 @@
+<title>LSW Interface Kit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap">
+
+<style>
+/* ─────────────────────────────────────────────────────────────
+   PAGE CHROME TOKENS (theme aware: this is the presentation
+   surface, not the product). Light is the bare :root.
+   ───────────────────────────────────────────────────────────── */
+:root{
+  --page-bg:#eceef2;
+  --page-bg-grid:#dfe3ea;
+  --page-fg:#171a22;
+  --page-muted:#5d6474;
+  --page-line:#cfd4dd;
+  --page-card:#f7f8fa;
+  --page-accent:#b25a12;
+  --page-rail:#ffffff;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --page-bg:#0b0c10;
+    --page-bg-grid:#13151b;
+    --page-fg:#e3e7ef;
+    --page-muted:#8b93a4;
+    --page-line:#242833;
+    --page-card:#111319;
+    --page-accent:#ff9f45;
+    --page-rail:#0f1117;
+  }
+}
+:root[data-theme="dark"]{
+  --page-bg:#0b0c10;
+  --page-bg-grid:#13151b;
+  --page-fg:#e3e7ef;
+  --page-muted:#8b93a4;
+  --page-line:#242833;
+  --page-card:#111319;
+  --page-accent:#ff9f45;
+  --page-rail:#0f1117;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   PRODUCT TOKENS. Fixed dark: LSW is a machine console and
+   commits to one visual world. Every value below is QSS safe:
+   flat fills, 1px borders, radii, linear gradients only.
+   ───────────────────────────────────────────────────────────── */
+:root{
+  --ink:#0d0f14;        /* window ground            */
+  --surface:#151922;    /* panel                    */
+  --raised:#1c212c;     /* control, table row       */
+  --raised-hi:#242a37;  /* hover                    */
+  --line:#272d3a;       /* hairline                 */
+  --line-hi:#39415260;  /* inner top highlight      */
+  --fg:#e4e8f0;
+  --fg-dim:#9aa3b4;
+  --fg-faint:#646d7e;
+  --amber:#ff9f45;      /* guest side, primary      */
+  --amber-dim:#a8672a;
+  --amber-wash:#ff9f451f;
+  --ok:#4ec98a;
+  --ok-wash:#4ec98a1f;
+  --bad:#f2555a;
+  --bad-wash:#f2555a1f;
+  --info:#5aa9f0;
+  --info-wash:#5aa9f01f;
+  --r-sm:3px; --r-md:5px; --r-lg:8px;
+}
+
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  background:
+    linear-gradient(var(--page-bg-grid) 1px, transparent 1px) 0 0/64px 64px,
+    linear-gradient(90deg, var(--page-bg-grid) 1px, transparent 1px) 0 0/64px 64px,
+    var(--page-bg);
+  color:var(--page-fg);
+  font-family:"Archivo","Helvetica Neue",Arial,sans-serif;
+  font-size:15px;
+  line-height:1.5;
+}
+h1,h2,h3,h4{margin:0;text-wrap:balance;font-weight:600;letter-spacing:-0.012em}
+p{margin:0}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+:focus-visible{outline:2px solid var(--page-accent);outline-offset:2px}
+
+.mono{font-family:"JetBrains Mono",ui-monospace,"DejaVu Sans Mono",monospace}
+.eyebrow{
+  font-family:"JetBrains Mono",ui-monospace,monospace;
+  font-size:10px;font-weight:500;letter-spacing:0.14em;text-transform:uppercase;
+  color:var(--page-muted);
+}
+
+/* ── page header ─────────────────────────────────────────── */
+.topbar{
+  position:sticky;top:0;z-index:20;
+  display:flex;align-items:center;gap:20px;flex-wrap:wrap;
+  padding:14px 24px;
+  background:var(--page-rail);
+  border-bottom:1px solid var(--page-line);
+}
+.mark{display:flex;align-items:baseline;gap:10px}
+.mark .glyph{
+  font-family:"JetBrains Mono",monospace;font-weight:700;font-size:15px;
+  letter-spacing:0.06em;
+  color:#0d0f14;background:var(--page-accent);
+  padding:3px 7px;border-radius:var(--r-sm);
+}
+.mark .name{font-weight:600;font-size:15px}
+.mark .sub{font-size:12.5px;color:var(--page-muted)}
+
+.segmented{
+  display:flex;gap:2px;padding:2px;margin-left:auto;
+  border:1px solid var(--page-line);border-radius:var(--r-md);
+  background:var(--page-bg);
+}
+.segmented button{
+  padding:5px 14px;border-radius:3px;font-size:13px;font-weight:500;
+  color:var(--page-muted);
+}
+.segmented button:hover{color:var(--page-fg)}
+.segmented button[aria-selected="true"]{
+  background:var(--page-card);color:var(--page-fg);
+  box-shadow:inset 0 0 0 1px var(--page-line);
+}
+
+/* ── shell ───────────────────────────────────────────────── */
+.shell{display:grid;grid-template-columns:246px minmax(0,1fr);gap:0;align-items:start}
+@media (max-width:900px){.shell{grid-template-columns:1fr}}
+
+.rail{
+  position:sticky;top:59px;
+  padding:22px 16px 40px;
+  border-right:1px solid var(--page-line);
+  background:var(--page-rail);
+  min-height:calc(100vh - 59px);
+}
+@media (max-width:900px){.rail{position:static;min-height:0;border-right:none;border-bottom:1px solid var(--page-line)}}
+.rail h2{font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--page-muted);
+  font-family:"JetBrains Mono",monospace;font-weight:500;margin-bottom:12px}
+.rail ol,.rail ul{list-style:none;margin:0 0 22px;padding:0;display:flex;flex-direction:column;gap:1px}
+.rail button{
+  display:flex;align-items:center;gap:10px;width:100%;text-align:left;
+  padding:7px 9px;border-radius:var(--r-md);font-size:13.5px;color:var(--page-muted);
+  border-left:2px solid transparent;
+}
+.rail button:hover{background:var(--page-bg);color:var(--page-fg)}
+.rail button[aria-current="true"]{
+  background:var(--page-bg);color:var(--page-fg);font-weight:500;
+  border-left:2px solid var(--page-accent);
+}
+.rail .num{
+  font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--page-muted);
+  font-variant-numeric:tabular-nums;
+}
+.rail button[aria-current="true"] .num{color:var(--page-accent)}
+
+.stage{padding:32px 32px 72px;min-width:0}
+.stage-head{max-width:64ch;margin-bottom:20px;display:flex;flex-direction:column;gap:6px}
+.stage-head h1{font-size:25px}
+.stage-head p{color:var(--page-muted);font-size:14.5px}
+
+.notes{
+  margin-top:22px;display:grid;gap:1px;
+  border:1px solid var(--page-line);border-radius:var(--r-lg);overflow:hidden;
+  background:var(--page-line);
+}
+.note{background:var(--page-card);padding:13px 16px;display:grid;
+  grid-template-columns:minmax(120px,168px) minmax(0,1fr);gap:18px;align-items:start}
+@media (max-width:640px){.note{grid-template-columns:1fr;gap:4px}}
+.note dt{font-family:"JetBrains Mono",monospace;font-size:11.5px;color:var(--page-muted)}
+.note dd{margin:0;font-size:13.5px}
+.note dd code{font-family:"JetBrains Mono",monospace;font-size:12.5px;color:var(--page-accent)}
+
+/* ═════════════════════════════════════════════════════════
+   WINDOW FRAME
+   ═════════════════════════════════════════════════════════ */
+.frame{
+  border-radius:var(--r-lg);overflow:hidden;
+  border:1px solid #000;
+  box-shadow:0 24px 60px -24px rgba(0,0,0,.55), 0 2px 6px rgba(0,0,0,.3);
+  background:var(--ink);color:var(--fg);
+  max-width:1020px;
+}
+.frame.narrow{max-width:880px}
+.titlebar{
+  display:flex;align-items:center;gap:10px;
+  padding:0 10px;height:34px;
+  background:linear-gradient(#1b2029,#161a22);
+  border-bottom:1px solid var(--line);
+}
+.titlebar .dot{width:11px;height:11px;border-radius:50%;background:#2c3441;border:1px solid #000a}
+.titlebar .t{
+  font-size:12.5px;color:var(--fg-dim);margin-left:4px;
+  font-weight:500;letter-spacing:0.01em;
+}
+.titlebar .spacer{margin-left:auto;display:flex;gap:14px;color:var(--fg-faint);font-size:12px}
+
+/* ── wizard ─────────────────────────────────────────────── */
+.wiz{display:grid;grid-template-columns:212px minmax(0,1fr);min-height:496px}
+@media (max-width:720px){.wiz{grid-template-columns:1fr}}
+.wiz-side{
+  background:#10141b;border-right:1px solid var(--line);
+  padding:18px 0 18px;display:flex;flex-direction:column;
+}
+.wiz-side .cap{
+  padding:0 18px 14px;font-family:"JetBrains Mono",monospace;font-size:10px;
+  letter-spacing:0.14em;text-transform:uppercase;color:var(--fg-faint);
+}
+.wiz-steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.wiz-steps li{
+  display:grid;grid-template-columns:26px minmax(0,1fr);gap:8px;align-items:center;
+  padding:6px 18px;font-size:12.5px;color:var(--fg-faint);
+  border-left:2px solid transparent;
+}
+.wiz-steps li .tick{
+  font-family:"JetBrains Mono",monospace;font-size:10.5px;text-align:center;
+  font-variant-numeric:tabular-nums;
+}
+.wiz-steps li.done{color:var(--fg-dim)}
+.wiz-steps li.done .tick{color:var(--ok)}
+.wiz-steps li.now{
+  color:var(--fg);font-weight:500;background:#161c26;
+  border-left:2px solid var(--amber);
+}
+.wiz-steps li.now .tick{color:var(--amber)}
+.wiz-side .foot{
+  margin-top:auto;padding:14px 18px 0;border-top:1px solid var(--line);
+  font-family:"JetBrains Mono",monospace;font-size:10.5px;color:var(--fg-faint);
+  display:flex;flex-direction:column;gap:3px;
+}
+
+.wiz-main{display:flex;flex-direction:column;background:var(--ink)}
+.wiz-head{padding:22px 26px 16px;border-bottom:1px solid var(--line);background:var(--surface)}
+.wiz-head h3{font-size:19px}
+.wiz-head p{color:var(--fg-dim);font-size:13px;margin-top:5px;max-width:58ch}
+.wiz-body{padding:22px 26px;display:flex;flex-direction:column;gap:16px;flex:1;font-size:13.5px}
+.wiz-body p{color:var(--fg-dim);max-width:62ch;line-height:1.62}
+.wiz-foot{
+  display:flex;align-items:center;gap:10px;
+  padding:12px 20px;border-top:1px solid var(--line);background:var(--surface);
+}
+.wiz-foot .hint{font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--fg-faint);margin-right:auto}
+
+/* ── controls (shared, QSS mappable) ────────────────────── */
+.btn{
+  display:inline-flex;align-items:center;gap:7px;
+  padding:6px 14px;border-radius:var(--r-md);
+  background:var(--raised);border:1px solid var(--line);
+  color:var(--fg);font-size:13px;font-weight:500;
+  box-shadow:inset 0 1px 0 var(--line-hi);
+}
+.btn:hover{background:var(--raised-hi)}
+.btn.primary{background:var(--amber);border-color:#c97a2d;color:#17120b;font-weight:600}
+.btn.primary:hover{background:#ffb066}
+.btn.quiet{background:transparent;border-color:transparent;color:var(--fg-dim)}
+.btn.quiet:hover{background:var(--raised);color:var(--fg)}
+.btn:disabled{color:var(--fg-faint);background:#161a22;border-color:#20252f;box-shadow:none;cursor:default}
+.btn.go{color:var(--ok)}
+.btn.stop{color:var(--bad)}
+
+.field{display:flex;flex-direction:column;gap:5px}
+.field label{font-family:"JetBrains Mono",monospace;font-size:10.5px;letter-spacing:0.1em;
+  text-transform:uppercase;color:var(--fg-faint)}
+.input{
+  background:#0f131a;border:1px solid var(--line);border-radius:var(--r-md);
+  padding:7px 10px;font-size:13px;color:var(--fg);
+  font-family:"JetBrains Mono",monospace;
+}
+.input.ph{color:var(--fg-faint)}
+.input.focused{border-color:var(--amber);box-shadow:0 0 0 2px var(--amber-wash)}
+.select{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.select::after{content:"";width:0;height:0;border:4px solid transparent;border-top-color:var(--fg-dim);margin-top:3px}
+
+.opt{
+  display:grid;grid-template-columns:16px minmax(0,1fr);gap:11px;align-items:start;
+  padding:11px 13px;border:1px solid var(--line);border-radius:var(--r-md);
+  background:var(--surface);cursor:pointer;
+}
+.opt:hover{background:var(--raised)}
+.opt[aria-checked="true"]{border-color:var(--amber-dim);background:#1b1a19}
+.opt .dial{
+  width:15px;height:15px;border-radius:50%;border:1.5px solid var(--fg-faint);margin-top:2px;
+  display:grid;place-items:center;
+}
+.opt[aria-checked="true"] .dial{border-color:var(--amber)}
+.opt[aria-checked="true"] .dial::after{content:"";width:7px;height:7px;border-radius:50%;background:var(--amber)}
+.opt .t{font-size:13.5px;color:var(--fg);font-weight:500}
+.opt .d{font-size:12.5px;color:var(--fg-dim);margin-top:3px;line-height:1.55}
+
+.check{display:flex;gap:10px;align-items:center;cursor:pointer;font-size:13.5px}
+.check .box{
+  width:15px;height:15px;border-radius:var(--r-sm);border:1.5px solid var(--amber);
+  background:var(--amber);color:#17120b;display:grid;place-items:center;font-size:11px;font-weight:700;
+}
+
+.slider-row{display:grid;grid-template-columns:96px minmax(0,1fr) 92px;gap:14px;align-items:center}
+.slider-row .lbl{font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--fg-faint);
+  letter-spacing:0.08em;text-transform:uppercase}
+.track{height:4px;border-radius:2px;background:#20252f;position:relative}
+.track .fill{position:absolute;inset:0 auto 0 0;border-radius:2px;background:var(--amber)}
+.track .knob{position:absolute;top:50%;width:13px;height:13px;border-radius:50%;
+  background:var(--fg);border:2px solid var(--ink);transform:translate(-50%,-50%)}
+.slider-row .val{
+  font-family:"JetBrains Mono",monospace;font-size:12.5px;text-align:right;
+  font-variant-numeric:tabular-nums;color:var(--fg);
+  border:1px solid var(--line);border-radius:var(--r-sm);padding:4px 8px;background:#0f131a;
+}
+
+.bar{height:5px;border-radius:3px;background:#20252f;overflow:hidden}
+.bar > i{display:block;height:100%;border-radius:3px;background:var(--amber)}
+.bar.stripe > i{
+  background:repeating-linear-gradient(115deg,var(--amber) 0 10px,var(--amber-dim) 10px 20px);
+}
+.meta{font-family:"JetBrains Mono",monospace;font-size:11.5px;color:var(--fg-faint)}
+.meta b{color:var(--fg-dim);font-weight:500}
+
+.callout{
+  border-left:2px solid var(--amber);background:var(--amber-wash);
+  padding:10px 13px;border-radius:0 var(--r-md) var(--r-md) 0;
+  font-size:12.5px;color:#f0c393;line-height:1.55;max-width:62ch;
+}
+
+/* screen inside the wizard (VNC preview) */
+.screen{
+  border:1px solid var(--line);border-radius:var(--r-md);background:#05070a;
+  flex:1;min-height:150px;display:grid;place-items:center;position:relative;overflow:hidden;
+}
+.screen .scan{
+  position:absolute;inset:0;
+  background:repeating-linear-gradient(#ffffff05 0 2px, transparent 2px 4px);
+}
+.screen .plate{
+  font-family:"JetBrains Mono",monospace;font-size:11px;color:#3d4756;text-align:center;
+  line-height:1.9;position:relative;
+}
+.screen .tag{
+  position:absolute;left:9px;top:9px;font-family:"JetBrains Mono",monospace;font-size:9.5px;
+  letter-spacing:0.12em;text-transform:uppercase;color:var(--fg-faint);
+  border:1px solid var(--line);border-radius:2px;padding:2px 6px;background:#0b0e13cc;
+}
+
+/* setup table */
+.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl th{
+  text-align:left;font-family:"JetBrains Mono",monospace;font-size:10px;font-weight:500;
+  letter-spacing:0.13em;text-transform:uppercase;color:var(--fg-faint);
+  padding:0 12px 8px;border-bottom:1px solid var(--line);
+}
+.tbl td{padding:9px 12px;border-bottom:1px solid #1b202a;vertical-align:middle}
+.tbl tr:last-child td{border-bottom:none}
+.tbl .kind{font-family:"JetBrains Mono",monospace;font-size:11.5px;color:var(--fg-faint)}
+.pill{
+  display:inline-flex;align-items:center;gap:6px;
+  font-family:"JetBrains Mono",monospace;font-size:11px;font-weight:500;
+  padding:2px 8px;border-radius:999px;border:1px solid;
+}
+.pill::before{content:"";width:5px;height:5px;border-radius:50%;background:currentColor}
+.pill.pend{color:var(--fg-faint);border-color:#2b313d;background:#181c25}
+.pill.run{color:var(--info);border-color:#2b4a6b;background:var(--info-wash)}
+.pill.done{color:var(--ok);border-color:#2c5c44;background:var(--ok-wash)}
+.pill.fail{color:var(--bad);border-color:#6b2f32;background:var(--bad-wash)}
+
+/* ── manager ────────────────────────────────────────────── */
+.badge{
+  display:inline-flex;align-items:center;gap:7px;
+  font-family:"JetBrains Mono",monospace;font-size:11.5px;font-weight:500;letter-spacing:0.06em;
+  padding:5px 11px;border-radius:var(--r-md);border:1px solid;
+}
+.badge::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.badge.on{color:var(--ok);border-color:#2c5c44;background:var(--ok-wash)}
+.badge.off{color:var(--fg-faint);border-color:#2b313d;background:#181c25}
+
+.mgr-body{display:grid;grid-template-columns:minmax(0,38fr) minmax(0,62fr);gap:14px;padding:14px;flex:1}
+@media (max-width:820px){.mgr-body{grid-template-columns:1fr}}
+.panel{border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface);
+  display:flex;flex-direction:column;overflow:hidden}
+.panel > header{
+  display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--line);
+  font-family:"JetBrains Mono",monospace;font-size:10px;letter-spacing:0.14em;text-transform:uppercase;
+  color:var(--fg-faint);background:#131720;
+}
+.panel > header .tools{margin-left:auto;display:flex;gap:6px}
+.icon-btn{
+  width:24px;height:24px;border-radius:var(--r-sm);border:1px solid var(--line);
+  background:var(--raised);display:grid;place-items:center;color:var(--fg-dim);font-size:12px;
+}
+.icon-btn:hover{background:var(--raised-hi);color:var(--fg)}
+.panel .in{padding:12px}
+
+.left-col{display:flex;flex-direction:column;gap:14px;min-width:0}
+.gauges{display:flex;flex-direction:column;gap:11px}
+.gauge{display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:11px;align-items:center}
+.gauge .k{font-family:"JetBrains Mono",monospace;font-size:10.5px;letter-spacing:0.1em;
+  text-transform:uppercase;color:var(--fg-faint)}
+.gauge .v{font-family:"JetBrains Mono",monospace;font-size:11.5px;color:var(--fg-dim);
+  font-variant-numeric:tabular-nums}
+.gauge .bar > i.ok{background:var(--ok)}
+.gauge .bar > i.warn{background:var(--amber)}
+
+.apps{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:6px;padding:12px;
+  align-content:start;overflow:hidden}
+.app{
+  display:flex;flex-direction:column;align-items:center;gap:8px;padding:12px 6px 10px;
+  border-radius:var(--r-md);border:1px solid transparent;cursor:pointer;text-align:center;
+}
+.app:hover{background:var(--raised);border-color:var(--line)}
+.app[aria-selected="true"]{background:#241d14;border-color:var(--amber-dim)}
+.app .ic{
+  width:44px;height:44px;border-radius:9px;display:grid;place-items:center;
+  font-family:"JetBrains Mono",monospace;font-weight:700;font-size:15px;color:#0d0f14;
+  border:1px solid #0006;
+}
+.app .nm{font-size:11.5px;color:var(--fg-dim);line-height:1.35;word-break:break-word}
+.app[aria-selected="true"] .nm{color:var(--fg)}
+
+.statusbar{
+  display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+  padding:6px 14px;border-top:1px solid var(--line);background:#10141b;
+  font-family:"JetBrains Mono",monospace;font-size:10.5px;color:var(--fg-faint);
+}
+.statusbar .sep{width:1px;height:11px;background:var(--line)}
+.statusbar b{color:var(--fg-dim);font-weight:500}
+
+/* ── manager shell: nav rail, no button row ─────────────── */
+.mgr2{display:grid;grid-template-columns:186px minmax(0,1fr);min-height:566px;background:var(--ink)}
+@media (max-width:760px){.mgr2{grid-template-columns:1fr}}
+.nav{background:#0f131a;border-right:1px solid var(--line);display:flex;flex-direction:column}
+.nav .id{padding:13px 14px 12px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:2px}
+.nav .id .n{font-size:14.5px;font-weight:600}
+.nav .id .m{font-family:"JetBrains Mono",monospace;font-size:10px;color:var(--fg-faint);line-height:1.5}
+.nav ul{list-style:none;margin:0;padding:8px;display:flex;flex-direction:column;gap:1px}
+.navitem{
+  display:flex;align-items:center;gap:10px;width:100%;text-align:left;
+  padding:7px 10px;border-radius:var(--r-md);font-size:13px;color:var(--fg-dim);
+  border-left:2px solid transparent;
+}
+.navitem .g{width:15px;text-align:center;color:var(--fg-faint);font-size:12px}
+.navitem:hover{background:var(--raised);color:var(--fg)}
+.navitem.on{background:#1a1f29;color:var(--fg);font-weight:500;border-left:2px solid var(--amber)}
+.navitem.on .g{color:var(--amber)}
+.navitem .count{margin-left:auto;font-family:"JetBrains Mono",monospace;font-size:10.5px;color:var(--fg-faint)}
+.nav .power{margin-top:auto;border-top:1px solid var(--line);padding:11px 12px;display:flex;flex-direction:column;gap:9px}
+.nav .power .btn{justify-content:center}
+
+.content{display:flex;flex-direction:column;min-width:0}
+.cbar{display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--line);background:var(--surface)}
+.cbar h4{font-size:14px;font-weight:600}
+.cbar .sub{font-family:"JetBrains Mono",monospace;font-size:10.5px;color:var(--fg-faint)}
+.cbar .acts{margin-left:auto;display:flex;gap:7px;align-items:center}
+
+/* ── settings ────────────────────────────────────────────── */
+.settings{padding:14px;display:flex;flex-direction:column;gap:14px;overflow:hidden}
+.sgroup{border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface);overflow:hidden}
+.sgroup > h5{
+  margin:0;padding:8px 12px;border-bottom:1px solid var(--line);background:#131720;
+  font-family:"JetBrains Mono",monospace;font-size:10px;font-weight:500;
+  letter-spacing:0.14em;text-transform:uppercase;color:var(--fg-faint);
+}
+.srow{
+  display:grid;grid-template-columns:minmax(0,1fr) 292px;gap:18px;align-items:center;
+  padding:10px 12px;border-bottom:1px solid #1b202a;
+}
+.srow:last-child{border-bottom:none}
+@media (max-width:700px){.srow{grid-template-columns:1fr;gap:8px}}
+.srow .k{font-size:13px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.srow .d{font-size:12px;color:var(--fg-dim);margin-top:3px;line-height:1.5;max-width:52ch}
+.srow .ctl{display:flex;align-items:center;gap:9px;justify-content:flex-end}
+.tagr{
+  font-family:"JetBrains Mono",monospace;font-size:9px;letter-spacing:0.1em;text-transform:uppercase;
+  color:var(--amber);border:1px solid var(--amber-dim);border-radius:2px;padding:1px 5px;
+}
+.tagr.live{color:var(--ok);border-color:#2c5c44}
+.toggle{width:34px;height:19px;border-radius:999px;background:#20252f;border:1px solid var(--line);position:relative;flex:none}
+.toggle i{position:absolute;top:2px;left:2px;width:13px;height:13px;border-radius:50%;background:var(--fg-faint)}
+.toggle.on{background:var(--amber-wash);border-color:var(--amber-dim)}
+.toggle.on i{left:16px;background:var(--amber)}
+.applybar{
+  display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+  padding:11px 14px;border-top:1px solid var(--amber-dim);background:#1d1712;
+}
+.applybar .diffs{display:flex;gap:14px;flex-wrap:wrap;font-family:"JetBrains Mono",monospace;font-size:11px}
+.applybar .diff .f{color:var(--fg-faint);text-decoration:line-through}
+.applybar .diff .t{color:var(--amber)}
+.applybar .acts{margin-left:auto;display:flex;gap:8px}
+
+/* ── health, meters, warnings ─────────────────────────────── */
+.warnstrip{
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  padding:9px 14px;border-bottom:1px solid var(--amber-dim);background:#1d1712;
+}
+.warnstrip.crit{border-bottom-color:#6b2f32;background:#1f1315}
+.warnstrip .wdot{width:7px;height:7px;border-radius:50%;background:var(--amber);flex:none}
+.warnstrip.crit .wdot{background:var(--bad)}
+.warnstrip .msg{font-size:12.5px;color:#f0c393}
+.warnstrip.crit .msg{color:#f0b0b2}
+.warnstrip .msg b{color:var(--fg);font-weight:500}
+.warnstrip .acts{margin-left:auto;display:flex;gap:8px}
+.navitem .wdot{width:6px;height:6px;border-radius:50%;background:var(--amber);margin-left:auto;flex:none}
+
+.areas{display:flex;flex-direction:column;gap:12px;padding:14px}
+.area{border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface);overflow:hidden}
+.area.hot{border-color:var(--amber-dim)}
+.area > header{
+  display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--line);
+  background:#131720;
+}
+.area > header .nm{font-size:13.5px;font-weight:600}
+.area > header .cap{font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--fg-faint)}
+.area > header .right{margin-left:auto;display:flex;align-items:center;gap:10px}
+.area .in{padding:12px;display:flex;flex-direction:column;gap:11px}
+.meter{height:7px;border-radius:4px;background:#20252f;overflow:hidden;display:flex}
+.meter i{display:block;height:100%}
+.meter i.used{background:var(--ok)}
+.meter i.used.hot{background:var(--amber)}
+.meter i.used.crit{background:var(--bad)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:1px;background:var(--line);
+  border:1px solid var(--line);border-radius:var(--r-sm);overflow:hidden}
+.kpi{background:var(--surface);padding:9px 11px;display:flex;flex-direction:column;gap:3px}
+.kpi .k{font-family:"JetBrains Mono",monospace;font-size:9.5px;letter-spacing:0.12em;
+  text-transform:uppercase;color:var(--fg-faint)}
+.kpi .v{font-family:"JetBrains Mono",monospace;font-size:15px;font-variant-numeric:tabular-nums}
+.kpi .v.hot{color:var(--amber)}
+.kpi .v.ok{color:var(--ok)}
+.advice{
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  border-left:2px solid var(--amber);background:var(--amber-wash);padding:9px 12px;
+  border-radius:0 var(--r-sm) var(--r-sm) 0;font-size:12.5px;color:#f0c393;line-height:1.5;
+}
+.advice .btn{margin-left:auto}
+.spark{display:flex;align-items:flex-end;gap:2px;height:26px}
+.spark i{flex:1;background:#2b3240;border-radius:1px 1px 0 0}
+.spark i.hot{background:var(--amber)}
+
+/* ── channel strip, editable lists ────────────────────────── */
+.chanstrip{display:flex;gap:8px;padding:12px 14px 2px;flex-wrap:wrap}
+.chan{
+  border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface);
+  padding:9px 11px;min-width:158px;display:flex;flex-direction:column;gap:7px;
+  text-align:left;cursor:pointer;
+}
+.chan:hover{background:var(--raised)}
+.chan.on{border-color:var(--amber-dim);background:#1b1a19}
+.chan .top{display:flex;align-items:center;gap:8px}
+.chan .cn{font-size:12.5px;font-weight:600}
+.chan .st{width:7px;height:7px;border-radius:50%;margin-left:auto;flex:none}
+.chan .st.free{background:#39414f}
+.chan .st.ok{background:var(--ok)}
+.chan .st.hot{background:var(--amber)}
+.chan .st.crit{background:var(--bad)}
+.chan .own{
+  font-family:"JetBrains Mono",monospace;font-size:10px;color:var(--fg-faint);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px;
+}
+.chan.on .own{color:var(--fg-dim)}
+.chan .mini{display:flex;gap:3px}
+.chan .mini i{flex:1;height:3px;border-radius:2px;background:#2b3240}
+.chan .mini i.f{background:var(--ok)}
+.chan .mini i.f.hot{background:var(--amber)}
+.chan .mini i.f.crit{background:var(--bad)}
+.chan.add{align-items:center;justify-content:center;border-style:dashed;color:var(--fg-faint);
+  min-width:110px;font-size:12.5px}
+.chan.add:hover{color:var(--fg);border-color:var(--fg-faint)}
+
+.editlist{border:1px solid var(--line);border-radius:var(--r-sm);overflow:hidden}
+.editlist table{width:100%;border-collapse:collapse}
+.editlist th{
+  text-align:left;font-family:"JetBrains Mono",monospace;font-size:9.5px;font-weight:500;
+  letter-spacing:0.12em;text-transform:uppercase;color:var(--fg-faint);
+  padding:7px 10px;background:#131720;border-bottom:1px solid var(--line);
+}
+.editlist td{padding:7px 10px;border-bottom:1px solid #1b202a;font-size:12.5px;vertical-align:middle}
+.editlist tr:last-child td{border-bottom:none}
+.editlist td .input{padding:5px 8px;font-size:12px;width:100%}
+.editlist td.tight{width:1%;white-space:nowrap}
+.editlist .rm{
+  width:22px;height:22px;border-radius:var(--r-sm);border:1px solid var(--line);
+  background:var(--raised);color:var(--fg-faint);display:grid;place-items:center;font-size:13px;
+}
+.editlist .rm:hover{color:var(--bad);border-color:#6b2f32}
+.editlist .foot{padding:8px 10px;background:#131720;border-top:1px solid var(--line);display:flex;gap:8px;align-items:center}
+.srow.wide{grid-template-columns:1fr;gap:10px}
+
+/* ── remote file picker ───────────────────────────────────── */
+.picker{display:grid;grid-template-columns:190px minmax(0,1fr);min-height:430px}
+@media (max-width:640px){.picker{grid-template-columns:1fr}}
+.places{background:#10141b;border-right:1px solid var(--line);padding:9px 8px;display:flex;
+  flex-direction:column;gap:1px;overflow:hidden}
+.places .ph{
+  font-family:"JetBrains Mono",monospace;font-size:9.5px;letter-spacing:0.13em;text-transform:uppercase;
+  color:var(--fg-faint);padding:9px 9px 5px;
+}
+.place{
+  display:flex;align-items:center;gap:9px;width:100%;text-align:left;
+  padding:6px 9px;border-radius:var(--r-md);font-size:12.5px;color:var(--fg-dim);
+  border-left:2px solid transparent;
+}
+.place:hover{background:var(--raised);color:var(--fg)}
+.place.on{background:#1a1f29;color:var(--fg);font-weight:500;border-left:2px solid var(--amber)}
+.place .g{width:14px;text-align:center;color:var(--fg-faint);font-size:11px}
+.place.on .g{color:var(--amber)}
+
+.pane{display:flex;flex-direction:column;min-width:0;background:var(--ink)}
+.crumbs{display:flex;align-items:center;gap:4px;padding:8px 12px;border-bottom:1px solid var(--line);
+  background:var(--surface);flex-wrap:wrap}
+.crumb{font-size:12.5px;color:var(--fg-dim);padding:3px 7px;border-radius:var(--r-sm)}
+.crumb:hover{background:var(--raised);color:var(--fg)}
+.crumb.cur{color:var(--fg);font-weight:500}
+.crumbs .sepc{color:var(--fg-faint);font-size:11px}
+.fhead,.frow{display:grid;grid-template-columns:minmax(0,1fr) 92px 128px;gap:12px;align-items:center}
+.fhead{
+  padding:7px 12px;border-bottom:1px solid var(--line);background:#131720;
+  font-family:"JetBrains Mono",monospace;font-size:9.5px;font-weight:500;letter-spacing:0.12em;
+  text-transform:uppercase;color:var(--fg-faint);
+}
+.frow{padding:6px 12px;font-size:12.5px;cursor:pointer;border-left:2px solid transparent}
+.frow:hover{background:var(--raised)}
+.frow.sel{background:#241d14;border-left:2px solid var(--amber)}
+.frow .nm{display:flex;align-items:center;gap:9px;min-width:0}
+.frow .nm span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ic2{width:19px;height:19px;border-radius:4px;display:grid;place-items:center;flex:none;
+  font-family:"JetBrains Mono",monospace;font-weight:700;font-size:9px;color:#0d0f14}
+.ic2.dir{background:#2f3644;color:#8fa3c4}
+.frow .sz,.frow .md{font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--fg-faint);
+  font-variant-numeric:tabular-nums}
+
+/* console + log */
+.term{
+  background:#07090d;padding:14px 16px;flex:1;overflow:hidden;
+  font-family:"JetBrains Mono",monospace;font-size:12px;line-height:1.75;color:#b9c2d1;
+}
+.term .p{color:var(--amber)}
+.term .d{color:var(--fg-faint)}
+.term .caret{display:inline-block;width:7px;height:14px;background:var(--amber);vertical-align:-2px}
+.logline{
+  display:grid;grid-template-columns:78px 56px minmax(0,1fr);gap:12px;
+  font-family:"JetBrains Mono",monospace;font-size:11.5px;padding:3px 14px;color:#b9c2d1;
+}
+.logline:nth-child(odd){background:#0f131a}
+.logline .ts{color:var(--fg-faint)}
+.logline .lv{font-weight:500}
+.logline .lv.i{color:var(--info)}
+.logline .lv.w{color:var(--amber)}
+.logline .lv.e{color:var(--bad)}
+
+/* dialog */
+.dlg{max-width:560px}
+.dlg-body{padding:18px 20px;display:flex;flex-direction:column;gap:14px}
+.dlg-foot{display:flex;gap:8px;justify-content:flex-end;padding:12px 20px;
+  border-top:1px solid var(--line);background:var(--surface)}
+.icon-slot{
+  width:56px;height:56px;border-radius:10px;border:1px dashed var(--line);
+  display:grid;place-items:center;background:#0f131a;
+  font-family:"JetBrains Mono",monospace;font-size:9.5px;color:var(--fg-faint);text-align:center;
+}
+
+/* ── design system view ─────────────────────────────────── */
+.swatches{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:10px}
+.sw{border:1px solid var(--page-line);border-radius:var(--r-md);overflow:hidden;background:var(--page-card)}
+.sw .chip{height:56px}
+.sw .txt{padding:8px 10px;display:flex;flex-direction:column;gap:2px}
+.sw .nm{font-size:12.5px;font-weight:500}
+.sw .hx{font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--page-muted)}
+.scale{display:flex;flex-direction:column;gap:12px;margin-top:6px}
+.scale .row{display:grid;grid-template-columns:150px minmax(0,1fr);gap:18px;align-items:baseline;
+  padding-bottom:12px;border-bottom:1px solid var(--page-line)}
+.scale .row:last-child{border-bottom:none}
+.scale .spec{font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--page-muted)}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px}
+.block{border:1px solid var(--page-line);border-radius:var(--r-lg);background:var(--page-card);padding:18px 20px}
+.block h3{font-size:15px;margin-bottom:10px}
+.block ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px;
+  font-size:13.5px;color:var(--page-muted)}
+.block ul b{color:var(--page-fg);font-weight:500}
+.specimen{background:var(--ink);border-radius:var(--r-md);padding:18px;display:flex;
+  flex-wrap:wrap;gap:10px;align-items:center;border:1px solid #000}
+</style>
+
+<header class="topbar">
+  <div class="mark">
+    <span class="glyph">LSW</span>
+    <span class="name">Interface Kit</span>
+    <span class="sub">first-run wizard and manager, proposed redesign</span>
+  </div>
+  <div class="segmented" role="tablist" aria-label="Surface">
+    <button role="tab" data-tab="mgr" aria-selected="true">Manager</button>
+    <button role="tab" data-tab="wiz" aria-selected="false">Wizard</button>
+    <button role="tab" data-tab="sys" aria-selected="false">Design system</button>
+  </div>
+</header>
+
+<div class="shell">
+  <!-- ══════════════ RAIL ══════════════ -->
+  <nav class="rail">
+    <div data-rail="mgr">
+      <h2>Manager surfaces</h2>
+      <ul>
+        <li><button data-view="m-main" aria-current="true">Overview</button></li>
+        <li><button data-view="m-render">Render channel</button></li>
+        <li><button data-view="m-settings">Settings</button></li>
+        <li><button data-view="m-console">Console</button></li>
+        <li><button data-view="m-log">Log</button></li>
+        <li><button data-view="m-splash">Starting the guest</button></li>
+        <li><button data-view="m-cfg">Configure application</button></li>
+        <li><button data-view="m-picker">Browse the guest</button></li>
+        <li><button data-view="m-empty">No guest yet</button></li>
+      </ul>
+    </div>
+
+    <div data-rail="wiz" hidden>
+      <h2>Wizard sequence</h2>
+      <ol>
+        <li><button data-view="w-1" aria-current="true"><span class="num">01</span> Welcome</button></li>
+        <li><button data-view="w-2"><span class="num">02</span> Licensing</button></li>
+        <li><button data-view="w-3"><span class="num">03</span> Windows ISO</button></li>
+        <li><button data-view="w-4"><span class="num">04</span> Size and account</button></li>
+        <li><button data-view="w-7"><span class="num">05</span> Payload</button></li>
+        <li><button data-view="w-8"><span class="num">06</span> Installing</button></li>
+        <li><button data-view="w-9"><span class="num">07</span> Setup steps</button></li>
+        <li><button data-view="w-10"><span class="num">08</span> Finished</button></li>
+      </ol>
+      <h2>Image tools</h2>
+      <ul>
+        <li><button data-view="w-download"><span class="num">&#8595;</span> Download a Windows image</button></li>
+        <li><button data-view="w-trim"><span class="num">&#9633;</span> Trim a Windows image</button></li>
+      </ul>
+    </div>
+
+    <div data-rail="sys" hidden>
+      <h2>System</h2>
+      <ul>
+        <li><button data-view="s-color" aria-current="true">Color</button></li>
+        <li><button data-view="s-type">Type</button></li>
+        <li><button data-view="s-comp">Components</button></li>
+        <li><button data-view="s-qt">Qt mapping</button></li>
+      </ul>
+    </div>
+  </nav>
+
+  <!-- ══════════════ STAGE ══════════════ -->
+  <main class="stage">
+
+  <!-- ─────────── MANAGER: OVERVIEW ─────────── -->
+  <section data-view="m-main">
+    <div class="stage-head">
+      <span class="eyebrow">Manager</span>
+      <h1>Overview</h1>
+      <p>The row of buttons across the top is gone. Navigation moved to a rail on the left, which is also where the machine's identity, its state, and the one power control live. A congested render channel says so here rather than only in a log.</p>
+    </div>
+
+    <div class="frame">
+      <div class="titlebar">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <span class="t">LSW</span>
+        <span class="spacer mono">1000 &times; 620</span>
+      </div>
+      <div class="mgr2">
+        <aside class="nav">
+          <div class="id">
+            <span class="n">lsw</span>
+            <span class="m">Windows 11 Pro 26200<br>8 cores &middot; 8 GiB &middot; 60 GiB</span>
+          </div>
+          <ul>
+            <li><button class="navitem on"><span class="g">&#9633;</span> Overview</button></li>
+            <li><button class="navitem"><span class="g">&gt;_</span> Console</button></li>
+            <li><button class="navitem"><span class="g">&#8801;</span> Log <span class="count">1 284</span></button></li>
+            <li><button class="navitem"><span class="g">&#9678;</span> Render <span class="wdot"></span></button></li>
+            <li><button class="navitem"><span class="g">&#9881;</span> Settings <span class="count" style="color:var(--amber)">3</span></button></li>
+          </ul>
+          <div class="power">
+            <span class="badge on">ONLINE</span>
+            <button class="btn stop">Stop the guest</button>
+          </div>
+        </aside>
+        <div class="content">
+          <div class="cbar">
+            <h4>Overview</h4>
+            <span class="sub">up 04:12:38</span>
+            <span class="acts">
+              <button class="btn quiet">Pop out preview</button>
+            </span>
+          </div>
+
+          <div class="warnstrip">
+            <span class="wdot"></span>
+            <span class="msg"><b>The command ring is congested.</b> 214 commands were split across several passes, each waiting for the server to drain.</span>
+            <span class="acts">
+              <button class="btn quiet">Dismiss</button>
+              <button class="btn">Show the render channel</button>
+            </span>
+          </div>
+
+          <div class="mgr-body" style="flex:1">
+            <div class="left-col">
+              <div class="panel" style="flex:1">
+                <header>Live preview</header>
+                <div class="screen" style="border:none;border-radius:0">
+                  <span class="tag">vnc 127.0.0.1:5900</span>
+                  <div class="scan"></div>
+                  <div class="plate">guest desktop<br>1920 &times; 1080 &middot; 30 fps</div>
+                </div>
+              </div>
+              <div class="panel">
+                <header>System</header>
+                <div class="in gauges">
+                  <div class="gauge"><span class="k">CPU</span><span class="bar"><i class="ok" style="width:23%"></i></span><span class="v">23 %</span></div>
+                  <div class="gauge"><span class="k">RAM</span><span class="bar"><i class="ok" style="width:64%"></i></span><span class="v">5.1 / 8.0 GB</span></div>
+                  <div class="gauge"><span class="k">VRAM</span><span class="bar"><i class="warn" style="width:41%"></i></span><span class="v">0.4 / 1.0 GB</span></div>
+                  <div class="gauge"><span class="k">Disk</span><span class="bar"><i class="ok" style="width:57%"></i></span><span class="v">34.2 / 60.0 GB</span></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="panel">
+              <header>Installed applications
+                <span class="tools">
+                  <button class="icon-btn" title="Refresh">&#8635;</button>
+                  <button class="icon-btn" title="Add">+</button>
+                </span>
+              </header>
+              <div class="apps" id="appGrid">
+                <button class="app" aria-selected="true"><span class="ic" style="background:#5aa9f0">Ps</span><span class="nm">Photoshop 2024</span></button>
+                <button class="app"><span class="ic" style="background:#e05a8a">&#26481;</span><span class="nm">Touhou 06</span></button>
+                <button class="app"><span class="ic" style="background:#8b93a4">Nt</span><span class="nm">Notepad</span></button>
+                <button class="app"><span class="ic" style="background:#4ec98a">fb</span><span class="nm">foobar2000</span></button>
+                <button class="app"><span class="ic" style="background:#ff9f45">Iv</span><span class="nm">IrfanView</span></button>
+                <button class="app"><span class="ic" style="background:#7d7fe0">Ex</span><span class="nm">File Explorer</span></button>
+                <button class="app"><span class="ic" style="background:#c9a24e">Re</span><span class="nm">Registry Editor</span></button>
+                <button class="app"><span class="ic" style="background:#2f3644;color:#cfd6e2">&gt;_</span><span class="nm">Command Prompt</span></button>
+                <button class="app"><span class="ic" style="background:#d06a4a">Wm</span><span class="nm">Media Player</span></button>
+                <button class="app"><span class="ic" style="background:#5f9ea0">Vs</span><span class="nm">VS Code</span></button>
+              </div>
+            </div>
+          </div>
+
+          <div class="statusbar">
+            <span><b>agent</b> 127.0.0.1:5102</span>
+            <span class="sep"></span>
+            <span><b>transport</b> ivshmem 1.0 GiB, vector 0</span>
+            <span class="sep"></span>
+            <span><b>disk</b> virtio-blk, iothread</span>
+            <span class="sep"></span>
+            <span><b>render</b> remotewin, 2 windows</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <dl class="notes">
+      <div class="note"><dt>Why the rail</dt><dd>Four buttons in a row said nothing about where you were, and two of them were always disabled. The rail marks the current section, keeps the count of unread log records and pending settings in view, and leaves one power control instead of a Start and a Stop that take turns being dead.</dd></div>
+      <div class="note"><dt>One power button</dt><dd>It reads <code>Stop the guest</code> while running and <code>Start the guest</code> while off. The state badge above it is the thing that changes color, not the button.</dd></div>
+      <div class="note"><dt>Console and log</dt><dd>Now sections in the same window rather than separate top level windows. <code>Pop out</code> is still there for anyone who wants a second window.</dd></div>
+      <div class="note"><dt>Status bar</dt><dd>The transport facts that currently only exist in logs: <code>ivshmem</code> region, doorbell vector, agent port, virtio backing.</dd></div>
+      <div class="note"><dt>Warning strip</dt><dd>Appears only when an area of the shared region is actually running out. Amber for tight, red for repeated splitting. Dismissing hides it until the count doubles, which is the same rule the render server uses for its own warnings.</dd></div>
+    </dl>
+  </section>
+
+  <!-- ─────────── MANAGER: RENDER CHANNEL ─────────── -->
+  <section data-view="m-render" hidden>
+    <div class="stage-head">
+      <span class="eyebrow">Manager</span>
+      <h1>Render channel</h1>
+      <p>The server runs several channels, one per drawing process, and each is three areas that run out separately. This is where you see which process holds which channel, how hard each area is being pushed, and what size would have avoided the last stall. The server already counts all of it.</p>
+    </div>
+
+    <div class="frame">
+      <div class="titlebar">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <span class="t">LSW</span>
+        <span class="spacer mono">1000 &times; 620</span>
+      </div>
+      <div class="mgr2">
+        <aside class="nav">
+          <div class="id">
+            <span class="n">lsw</span>
+            <span class="m">Windows 11 Pro 26200<br>8 cores &middot; 8 GiB &middot; 60 GiB</span>
+          </div>
+          <ul>
+            <li><button class="navitem"><span class="g">&#9633;</span> Overview</button></li>
+            <li><button class="navitem"><span class="g">&gt;_</span> Console</button></li>
+            <li><button class="navitem"><span class="g">&#8801;</span> Log <span class="count">1 284</span></button></li>
+            <li><button class="navitem on"><span class="g">&#9678;</span> Render <span class="wdot"></span></button></li>
+            <li><button class="navitem"><span class="g">&#9881;</span> Settings <span class="count" style="color:var(--amber)">3</span></button></li>
+          </ul>
+          <div class="power">
+            <span class="badge on">ONLINE</span>
+            <button class="btn stop">Stop the guest</button>
+          </div>
+        </aside>
+
+        <div class="content">
+          <div class="cbar">
+            <h4>Render channel</h4>
+            <span class="sub">4 channels &middot; 3 in use &middot; 4.0 GiB reserved</span>
+            <span class="acts">
+              <span class="meta">source <b>counters</b></span>
+              <button class="btn quiet">Reset counts</button>
+            </span>
+          </div>
+
+          <div class="chanstrip">
+            <button class="chan on">
+              <span class="top"><span class="cn">Channel 0</span><span class="st crit"></span></span>
+              <span class="own">Photoshop.exe, pid 6104</span>
+              <span class="mini"><i class="f crit" style="flex:94"></i><i style="flex:6"></i></span>
+            </button>
+            <button class="chan">
+              <span class="top"><span class="cn">Channel 1</span><span class="st ok"></span></span>
+              <span class="own">Photoshop.exe, pid 6132</span>
+              <span class="mini"><i class="f" style="flex:31"></i><i style="flex:69"></i></span>
+            </button>
+            <button class="chan">
+              <span class="top"><span class="cn">Channel 2</span><span class="st hot"></span></span>
+              <span class="own">th06.exe, pid 4088</span>
+              <span class="mini"><i class="f hot" style="flex:72"></i><i style="flex:28"></i></span>
+            </button>
+            <button class="chan">
+              <span class="top"><span class="cn">Channel 3</span><span class="st free"></span></span>
+              <span class="own">free</span>
+              <span class="mini"><i style="flex:100"></i></span>
+            </button>
+            <button class="chan add">+ Add a channel</button>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 14px 2px">
+            <span class="meta">Channel 0 &middot; <b>1.0 GiB</b> &middot; sizes inherited from Settings &middot; claimed 04:11 ago</span>
+            <span style="margin-left:auto;display:flex;gap:8px">
+              <button class="btn quiet">Give this channel its own sizes</button>
+              <button class="btn quiet">Release it</button>
+            </span>
+          </div>
+
+          <div class="warnstrip">
+            <span class="wdot"></span>
+            <span class="msg"><b>The command ring is congested.</b> 214 commands were sent in several passes, each waiting for the server to drain. 1 MiB is not enough for what this application sends.</span>
+            <span class="acts">
+              <button class="btn">Raise the ring to 4 MiB</button>
+            </span>
+          </div>
+
+          <div class="areas" style="flex:1">
+            <div class="area hot">
+              <header>
+                <span class="nm">Command ring</span>
+                <span class="cap">1024 KiB</span>
+                <span class="right">
+                  <span class="pill fail">Congested</span>
+                </span>
+              </header>
+              <div class="in">
+                <div class="meter"><i class="used hot" style="width:94%"></i></div>
+                <div class="kpis">
+                  <div class="kpi"><span class="k">Fill</span><span class="v hot">94 %</span></div>
+                  <div class="kpi"><span class="k">Space waits</span><span class="v hot">1 807</span></div>
+                  <div class="kpi"><span class="k">Split commands</span><span class="v hot">214</span></div>
+                  <div class="kpi"><span class="k">Largest command</span><span class="v">3.4 MiB</span></div>
+                  <div class="kpi"><span class="k">Doorbells</span><span class="v">48 210</span></div>
+                </div>
+                <div class="spark">
+                  <i style="height:20%"></i><i style="height:34%"></i><i style="height:28%"></i><i style="height:52%"></i>
+                  <i style="height:44%"></i><i class="hot" style="height:78%"></i><i class="hot" style="height:96%"></i>
+                  <i class="hot" style="height:88%"></i><i class="hot" style="height:100%"></i><i class="hot" style="height:92%"></i>
+                  <i class="hot" style="height:84%"></i><i class="hot" style="height:97%"></i>
+                </div>
+                <div class="advice">
+                  A command larger than the ring is sent in pieces, and every piece waits for the server to drain the one before it. The server's own suggestion for the largest it has seen is <b>4096 KiB</b>.
+                  <button class="btn">Stage 4096 KiB</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="area">
+              <header>
+                <span class="nm">Reply slot</span>
+                <span class="cap">8 MiB</span>
+                <span class="right"><span class="pill run">Tight</span></span>
+              </header>
+              <div class="in">
+                <div class="meter"><i class="used" style="width:61%"></i></div>
+                <div class="kpis">
+                  <div class="kpi"><span class="k">Peak answer</span><span class="v">4.9 MiB</span></div>
+                  <div class="kpi"><span class="k">Split answers</span><span class="v">6</span></div>
+                  <div class="kpi"><span class="k">Extra trips</span><span class="v">18</span></div>
+                  <div class="kpi"><span class="k">Largest</span><span class="v">11.2 MiB</span></div>
+                </div>
+                <div class="advice">
+                  Six answers did not fit and were collected in 18 extra round trips. <b>16 MiB</b> would have taken every one of them whole.
+                  <button class="btn">Stage 16 MiB</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="area">
+              <header>
+                <span class="nm">Blob arena</span>
+                <span class="cap">256 MiB</span>
+                <span class="right"><span class="pill done">Healthy</span></span>
+              </header>
+              <div class="in">
+                <div class="meter"><i class="used" style="width:43%"></i></div>
+                <div class="kpis">
+                  <div class="kpi"><span class="k">In use</span><span class="v">110 MiB</span></div>
+                  <div class="kpi"><span class="k">Peak</span><span class="v">168 MiB</span></div>
+                  <div class="kpi"><span class="k">Blocks</span><span class="v">312</span></div>
+                  <div class="kpi"><span class="k">Failed allocations</span><span class="v ok">0</span></div>
+                </div>
+                <span class="meta">Frames on their way to a window are carved out of this too, so it moves with the size of the guest's display.</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="statusbar">
+            <span><b>channel 0</b> lsw-rvk-0, 1.0 GiB</span>
+            <span class="sep"></span>
+            <span><b>ring</b> 1024 KiB</span>
+            <span class="sep"></span>
+            <span><b>reply</b> 8 MiB</span>
+            <span class="sep"></span>
+            <span><b>blob</b> 256 MiB</span>
+            <span class="sep"></span>
+            <span><b>owner</b> pid 6104, Photoshop.exe</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <dl class="notes">
+      <div class="note"><dt>Where the numbers come from</dt><dd>The render server already keeps them: <code>ring.space_waits</code>, <code>wire.chunked_commands</code>, <code>wire.partial_replies</code>, <code>blob.bytes_in_use</code>. Preferred plan is a small counters block in the region header the server writes and the host reads directly, which costs a load and no round trip.</dd></div>
+      <div class="note"><dt>Fallback if that lands later</dt><dd>Parse the warnings the server already prints. They carry the command id, the byte count, the number of passes, and the exact flag: <code>start the server with --ring-kib 4096 to carry this one in a single pass</code>. The suggested value in the panel is that number, not one LSW invented.</dd></div>
+      <div class="note"><dt>Three states per area</dt><dd><b>Healthy</b>, nothing waited. <b>Tight</b>, the area is filling or a handful of operations split. <b>Congested</b>, operations are splitting repeatedly, which is round trips per frame and shows up as frame time.</dd></div>
+      <div class="note"><dt>Stage, not apply</dt><dd>Each suggestion stages the matching setting. The server takes these sizes at startup, so they land through the same restart bar as cores and memory.</dd></div>
+      <div class="note"><dt>One channel, one process</dt><dd>A channel carries a single command stream, so two processes cannot share one; the second would interleave its commands into nonsense. That is why the strip shows Photoshop twice: Wine starts several processes and each one that draws claims a channel of its own.</dd></div>
+      <div class="note"><dt>Managing them</dt><dd>Add or remove channels from the strip, and give one its own sizes when a single application needs a bigger ring than the rest deserve. Both are startup arguments to the server, so both stage for the next restart.</dd></div>
+      <div class="note"><dt>Release</dt><dd>Clears a claim left behind by a process that died without letting go. Refuses while the owner is still alive, because taking a channel from a running process corrupts its stream.</dd></div>
+      <div class="note"><dt>Assignment</dt><dd>Set in Settings. An application can be pinned to a channel, and each pin says what to do when that channel is already taken: wait for it, take any free one, or do not start. Unpinned applications take the first free channel, which is what happens today.</dd></div>
+    </dl>
+  </section>
+
+  <!-- ─────────── MANAGER: SETTINGS ─────────── -->
+  <section data-view="m-settings" hidden>
+    <div class="stage-head">
+      <span class="eyebrow">Manager</span>
+      <h1>Settings</h1>
+      <p>Machine, display, file manager integration, desktop entries. Every row says whether it takes effect now or at the next boot; restart changes collect at the bottom, and nothing reboots until you say so.</p>
+    </div>
+
+    <div class="frame">
+      <div class="titlebar">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <span class="t">LSW</span>
+        <span class="spacer mono">1000 &times; 620</span>
+      </div>
+      <div class="mgr2">
+        <aside class="nav">
+          <div class="id">
+            <span class="n">lsw</span>
+            <span class="m">Windows 11 Pro 26200<br>8 cores &middot; 8 GiB &middot; 60 GiB</span>
+          </div>
+          <ul>
+            <li><button class="navitem"><span class="g">&#9633;</span> Overview</button></li>
+            <li><button class="navitem"><span class="g">&gt;_</span> Console</button></li>
+            <li><button class="navitem"><span class="g">&#8801;</span> Log <span class="count">1 284</span></button></li>
+            <li><button class="navitem"><span class="g">&#9678;</span> Render <span class="wdot"></span></button></li>
+            <li><button class="navitem on"><span class="g">&#9881;</span> Settings <span class="count" style="color:var(--amber)">3</span></button></li>
+          </ul>
+          <div class="power">
+            <span class="badge on">ONLINE</span>
+            <button class="btn stop">Stop the guest</button>
+          </div>
+        </aside>
+        <div class="content">
+          <div class="cbar">
+            <h4>Settings</h4>
+            <span class="sub">~/.config/lsw/manager.toml</span>
+            <span class="acts">
+              <button class="btn quiet">Open config folder</button>
+            </span>
+          </div>
+
+          <div class="settings" style="flex:1">
+            <div class="sgroup">
+              <h5>Machine</h5>
+              <div class="srow">
+                <span>
+                  <span class="k">Processor cores <span class="tagr">restart</span></span>
+                  <span class="d">The host has 20 threads. The guest topology is one socket, cores only, no SMT.</span>
+                </span>
+                <span class="ctl">
+                  <span class="track" style="flex:1"><i class="fill" style="width:60%"></i><span class="knob" style="left:60%"></span></span>
+                  <span class="val">12</span>
+                </span>
+              </div>
+              <div class="srow">
+                <span>
+                  <span class="k">Memory <span class="tagr">restart</span></span>
+                  <span class="d">Ballooned, so the guest gives memory back when idle. 31 GiB on the host.</span>
+                </span>
+                <span class="ctl">
+                  <span class="track" style="flex:1"><i class="fill" style="width:39%"></i><span class="knob" style="left:39%"></span></span>
+                  <span class="val">12288 MiB</span>
+                </span>
+              </div>
+              <div class="srow">
+                <span>
+                  <span class="k">Disk <span class="tagr">restart</span></span>
+                  <span class="d">Grows only. The qcow2 is resized on the host and Windows extends the volume on the next boot.</span>
+                </span>
+                <span class="ctl">
+                  <span class="input mono" style="width:110px;text-align:right">60 GiB</span>
+                  <button class="btn">Grow</button>
+                </span>
+              </div>
+            </div>
+
+            <div class="sgroup">
+              <h5>Display</h5>
+              <div class="srow">
+                <span>
+                  <span class="k">Guest resolution <span class="tagr">restart</span></span>
+                  <span class="d">The size of the virtual monitor Windows sees. Application windows are mirrored individually, so this is the ceiling a maximised window can reach.</span>
+                </span>
+                <span class="ctl"><span class="input select" style="width:180px">2560 &times; 1440</span></span>
+              </div>
+              <div class="srow">
+                <span>
+                  <span class="k">Match the monitor the manager is on <span class="tagr">restart</span></span>
+                  <span class="d">Takes the resolution from your current output instead of the list above. Turn it off for a fixed size that survives moving the window.</span>
+                </span>
+                <span class="ctl"><span class="toggle"><i></i></span></span>
+              </div>
+              <div class="srow">
+                <span>
+                  <span class="k">Scaling <span class="tagr">restart</span></span>
+                  <span class="d">Windows DPI. Applied at the guest logon, so it takes a restart to change.</span>
+                </span>
+                <span class="ctl"><span class="input select" style="width:180px">150 % (144 DPI)</span></span>
+              </div>
+              <div class="srow">
+                <span>
+                  <span class="k">Refresh rate <span class="tagr live">now</span></span>
+                  <span class="d">How often a mirrored window is repainted. Lower it to spend less host CPU on an idle guest.</span>
+                </span>
+                <span class="ctl"><span class="input select" style="width:180px">60 Hz</span></span>
+              </div>
+              <div class="srow">
+                <span>
+                  <span class="k">Video memory the adapter reports <span class="tagr">restart</span></span>
+                  <span class="d">Applications gate their GPU path on this number before they ever open a driver. Written into the guest registry.</span>
+                </span>
+                <span class="ctl"><span class="input select" style="width:180px">2048 MiB</span></span>
+              </div>
+              <div class="srow">
+                <span>
+                  <span class="k">Live preview <span class="tagr live">now</span></span>
+                  <span class="d">Streams the whole guest desktop into the overview. Independent of the mirrored windows.</span>
+                </span>
+                <span class="ctl"><span class="toggle on"><i></i></span></span>
+              </div>
+            </div>
+
+            <div class="sgroup">
+              <h5>Files</h5>
+              <div class="srow">
+                <span>
+                  <span class="k">Browse the guest from your file manager <span class="tagr live">now</span></span>
+                  <span class="d">Serves the guest over SMB on <span class="mono">127.0.0.1:5445</span>, handled in userspace by the file manager. Nothing is mounted, so Windows junctions never appear as extra mounts.</span>
+                </span>
+                <span class="ctl"><span class="toggle on"><i></i></span></span>
+              </div>
+              <div class="srow">
+                <span>
+                  <span class="k">Shared folder</span>
+                  <span class="d">What the bookmark opens. The whole disk, or a single folder if you would rather not expose all of C:.</span>
+                </span>
+                <span class="ctl"><span class="input select" style="width:180px">Whole disk (C$)</span></span>
+              </div>
+              <div class="srow">
+                <span>
+                  <span class="k">Add a bookmark to <span class="tagr live">now</span></span>
+                  <span class="d">Writes a Places entry titled Windows. Dolphin reads <span class="mono">user-places.xbel</span>, GNOME Files and Thunar read <span class="mono">gtk-3.0/bookmarks</span>. Both can be on at once.</span>
+                </span>
+                <span class="ctl" style="flex-direction:column;align-items:flex-end;gap:7px">
+                  <span style="display:flex;align-items:center;gap:8px"><span style="font-size:12.5px;color:var(--fg-dim)">Dolphin</span><span class="toggle on"><i></i></span></span>
+                  <span style="display:flex;align-items:center;gap:8px"><span style="font-size:12.5px;color:var(--fg-dim)">GNOME Files, Thunar</span><span class="toggle on"><i></i></span></span>
+                </span>
+              </div>
+              <div class="srow wide">
+                <span>
+                  <span class="k">Host folders the guest can see <span class="tagr">restart</span></span>
+                  <span class="d">Each one becomes a virtiofs device on the machine and a drive letter in Windows. Add as many as you want; a letter is only used once.</span>
+                </span>
+                <div class="editlist">
+                  <table>
+                    <thead>
+                      <tr><th>Folder on this machine</th><th style="width:88px">Drive</th><th style="width:96px">Access</th><th class="tight"></th></tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td><span class="input">/home/accel/Documents</span></td>
+                        <td><span class="input select">Z:</span></td>
+                        <td><span class="input select">Read write</span></td>
+                        <td class="tight"><button class="rm" title="Remove">&times;</button></td>
+                      </tr>
+                      <tr>
+                        <td><span class="input">/home/accel/Pictures</span></td>
+                        <td><span class="input select">Y:</span></td>
+                        <td><span class="input select">Read only</span></td>
+                        <td class="tight"><button class="rm" title="Remove">&times;</button></td>
+                      </tr>
+                      <tr>
+                        <td><span class="input">/mnt/scratch/renders</span></td>
+                        <td><span class="input select">X:</span></td>
+                        <td><span class="input select">Read write</span></td>
+                        <td class="tight"><button class="rm" title="Remove">&times;</button></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <div class="foot">
+                    <button class="btn">Add a folder</button>
+                    <span class="meta">3 of 23 letters used</span>
+                  </div>
+                </div>
+              </div>
+              <div class="srow">
+                <span>
+                  <span class="k">Open the share</span>
+                  <span class="d">Launches your file manager at the guest's C: drive.</span>
+                </span>
+                <span class="ctl"><button class="btn">Open Windows files</button></span>
+              </div>
+            </div>
+
+            <div class="sgroup">
+              <h5>Desktop entries</h5>
+              <div class="srow">
+                <span>
+                  <span class="k">Put guest applications in your menu <span class="tagr live">now</span></span>
+                  <span class="d">Writes one <span class="mono">.desktop</span> file per application into <span class="mono">~/.local/share/applications</span>, with the icon pulled out of the executable.</span>
+                </span>
+                <span class="ctl"><span class="toggle on"><i></i></span></span>
+              </div>
+              <div class="srow">
+                <span>
+                  <span class="k">Menu category <span class="tagr live">now</span></span>
+                  <span class="d">The submenu they appear under. Written as a merged menu fragment, which KDE, GNOME and LXQt all honour.</span>
+                </span>
+                <span class="ctl"><span class="input" style="width:180px">Windows</span></span>
+              </div>
+              <div class="srow">
+                <span>
+                  <span class="k">Open Windows file types with these applications <span class="tagr live">now</span></span>
+                  <span class="d">Registers MIME handlers, so double clicking a .psd on the host opens it in the guest. Your existing default for a type is never replaced without asking.</span>
+                </span>
+                <span class="ctl"><span class="toggle"><i></i></span></span>
+              </div>
+              <div class="srow">
+                <span>
+                  <span class="k">Which applications</span>
+                  <span class="d">10 found in the guest, 8 published. Turn individual ones off from the application's own settings.</span>
+                </span>
+                <span class="ctl"><button class="btn">Choose applications</button></span>
+              </div>
+              <div class="srow">
+                <span>
+                  <span class="k">Rewrite the entries</span>
+                  <span class="d">Regenerates every .desktop file and icon. Use it if a launcher is showing a stale name or a missing icon.</span>
+                </span>
+                <span class="ctl"><button class="btn">Rewrite now</button></span>
+              </div>
+            </div>
+
+            <div class="sgroup">
+              <h5>Render channels</h5>
+              <div class="srow">
+                <span>
+                  <span class="k">Channels <span class="tagr">restart</span></span>
+                  <span class="d">Each drawing process claims one. A channel carries a single command stream, so two processes can never share one, and Wine starts several processes per application.</span>
+                </span>
+                <span class="ctl"><span class="input select" style="width:180px">4 channels</span></span>
+              </div>
+              <div class="srow">
+                <span>
+                  <span class="k">Command ring <span class="tagr">restart</span></span>
+                  <span class="d">Where commands queue on the way to the server. A command bigger than this is sent in pieces, each waiting for the one before it to drain. Power of two.</span>
+                </span>
+                <span class="ctl"><span class="input select" style="width:180px">1024 KiB</span></span>
+              </div>
+              <div class="srow">
+                <span>
+                  <span class="k">Reply slot <span class="tagr">restart</span></span>
+                  <span class="d">Where answers land. An answer that does not fit is collected in extra round trips instead of arriving whole.</span>
+                </span>
+                <span class="ctl"><span class="input select" style="width:180px">8 MiB</span></span>
+              </div>
+              <div class="srow">
+                <span>
+                  <span class="k">Blob arena <span class="tagr">restart</span></span>
+                  <span class="d">Large command streams, host visible device memory, and the frames on their way to a window. The largest of the three by far.</span>
+                </span>
+                <span class="ctl"><span class="input select" style="width:180px">256 MiB</span></span>
+              </div>
+              <div class="srow">
+                <span>
+                  <span class="k">Total reserved</span>
+                  <span class="d">Each channel is rounded to a power of two because the guest sees it as a PCI BAR. Sizes are the default for every channel; one channel can be given its own on the Render page.</span>
+                </span>
+                <span class="ctl"><span class="input mono" style="width:180px;text-align:right;color:var(--fg-faint)">4 &times; 1.0 GiB</span></span>
+              </div>
+              <div class="srow">
+                <span>
+                  <span class="k">Warn when an area is congested <span class="tagr live">now</span></span>
+                  <span class="d">Reads the counters the server publishes. Falls back to reading its log if this build does not publish them.</span>
+                </span>
+                <span class="ctl"><span class="toggle on"><i></i></span></span>
+              </div>
+            </div>
+
+            <div class="sgroup">
+              <h5>Which application uses which channel</h5>
+              <div class="srow wide">
+                <span>
+                  <span class="k">Assignments <span class="tagr live">now</span></span>
+                  <span class="d">Anything not listed takes the first free channel. Pin an application when you want its sizes, or its counters, kept separate from everything else.</span>
+                </span>
+                <div class="editlist">
+                  <table>
+                    <thead>
+                      <tr><th>Application</th><th style="width:132px">Channel</th><th style="width:186px">If it is already in use</th><th class="tight"></th></tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td><span style="display:flex;align-items:center;gap:8px"><span class="ic" style="width:20px;height:20px;border-radius:4px;background:#5aa9f0;display:grid;place-items:center;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:9px;color:#0d0f14">Ps</span> Photoshop 2024</span></td>
+                        <td><span class="input select">Channel 0</span></td>
+                        <td><span class="input select">Wait for it</span></td>
+                        <td class="tight"><button class="rm" title="Remove">&times;</button></td>
+                      </tr>
+                      <tr>
+                        <td><span style="display:flex;align-items:center;gap:8px"><span class="ic" style="width:20px;height:20px;border-radius:4px;background:#e05a8a;display:grid;place-items:center;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:9px;color:#0d0f14">&#26481;</span> Touhou 06</span></td>
+                        <td><span class="input select">Channel 2</span></td>
+                        <td><span class="input select">Take any free one</span></td>
+                        <td class="tight"><button class="rm" title="Remove">&times;</button></td>
+                      </tr>
+                      <tr>
+                        <td><span style="display:flex;align-items:center;gap:8px"><span class="ic" style="width:20px;height:20px;border-radius:4px;background:#5f9ea0;display:grid;place-items:center;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:9px;color:#0d0f14">Vs</span> VS Code</span></td>
+                        <td><span class="input select">Any</span></td>
+                        <td><span class="input select" style="color:var(--fg-faint)">Take any free one</span></td>
+                        <td class="tight"><button class="rm" title="Remove">&times;</button></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <div class="foot">
+                    <button class="btn">Pin an application</button>
+                    <span class="meta">2 pinned &middot; 1 channel left unpinned</span>
+                  </div>
+                </div>
+              </div>
+              <div class="srow">
+                <span>
+                  <span class="k">When nothing is free <span class="tagr live">now</span></span>
+                  <span class="d">Every channel claimed and another process wants one. Waiting blocks that process until one is released; refusing lets it fail at startup with a message instead of hanging.</span>
+                </span>
+                <span class="ctl"><span class="input select" style="width:180px">Wait, then refuse</span></span>
+              </div>
+              <div class="srow">
+                <span>
+                  <span class="k">How long to wait <span class="tagr live">now</span></span>
+                  <span class="d">Before refusing. A process that gives up says so in the log and the application falls back to software rendering.</span>
+                </span>
+                <span class="ctl"><span class="input mono" style="width:180px;text-align:right">15 s</span></span>
+              </div>
+            </div>
+
+            <div class="sgroup">
+              <h5>Guest</h5>
+              <div class="srow">
+                <span>
+                  <span class="k">Windows account</span>
+                  <span class="d">Set at install and baked into the answer file. Change it from inside Windows.</span>
+                </span>
+                <span class="ctl"><span class="input" style="width:180px;color:var(--fg-faint)">lsw</span></span>
+              </div>
+              <div class="srow">
+                <span>
+                  <span class="k">Agent port <span class="tagr">restart</span></span>
+                  <span class="d">Forwarded from the host loopback into the guest. Change it if something else on this machine wants 5102.</span>
+                </span>
+                <span class="ctl"><span class="input mono" style="width:180px;text-align:right">5102</span></span>
+              </div>
+              <div class="srow">
+                <span>
+                  <span class="k">Start the guest when the manager opens <span class="tagr live">now</span></span>
+                  <span class="d">Otherwise it starts the first time you launch an application.</span>
+                </span>
+                <span class="ctl"><span class="toggle on"><i></i></span></span>
+              </div>
+            </div>
+
+            <div class="sgroup">
+              <h5>Host</h5>
+              <div class="srow">
+                <span>
+                  <span class="k">Data folder <span class="tagr live">now</span></span>
+                  <span class="d">Disks, ISOs and firmware variables. Moving it moves 40 GiB.</span>
+                </span>
+                <span class="ctl">
+                  <span class="input" style="flex:1;overflow:hidden">~/.local/share/lsw</span>
+                  <button class="btn">Change</button>
+                </span>
+              </div>
+              <div class="srow">
+                <span>
+                  <span class="k">Keep running in the tray when closed <span class="tagr live">now</span></span>
+                  <span class="d">Closing the window leaves the guest running.</span>
+                </span>
+                <span class="ctl"><span class="toggle on"><i></i></span></span>
+              </div>
+            </div>
+
+            <div class="sgroup">
+              <h5>Images</h5>
+              <div class="srow">
+                <span>
+                  <span class="k">Download a Windows image</span>
+                  <span class="d">Fetch an installation ISO from microsoft.com into any folder. Useful for a reinstall or a second edition.</span>
+                </span>
+                <span class="ctl"><button class="btn">Open the download tool</button></span>
+              </div>
+              <div class="srow">
+                <span>
+                  <span class="k">Trim a Windows image</span>
+                  <span class="d">Build a smaller install ISO from one you have, into any folder. Does not touch the running guest.</span>
+                </span>
+                <span class="ctl"><button class="btn">Open the image tool</button></span>
+              </div>
+              <div class="srow">
+                <span>
+                  <span class="k">Reinstall the guest</span>
+                  <span class="d">Deletes the current disk and runs the first-run wizard again. Applications inside the guest are lost.</span>
+                </span>
+                <span class="ctl"><button class="btn stop">Reinstall</button></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="applybar">
+            <span class="eyebrow" style="color:var(--amber)">3 changes need a restart</span>
+            <span class="diffs">
+              <span class="diff">cores <span class="f">8</span> <span class="t">12</span></span>
+              <span class="diff">memory <span class="f">8192</span> <span class="t">12288 MiB</span></span>
+              <span class="diff">resolution <span class="f">1920 &times; 1080</span> <span class="t">2560 &times; 1440</span></span>
+            </span>
+            <span class="acts">
+              <button class="btn quiet">Revert</button>
+              <button class="btn primary">Apply and restart the guest</button>
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <dl class="notes">
+      <div class="note"><dt>Restart is explicit</dt><dd>Nothing reboots behind your back. Restart-only fields are tagged <code>restart</code>, edits stay staged, and the bar at the bottom shows exactly what changed before it offers the reboot.</dd></div>
+      <div class="note"><dt>Live fields apply on the spot</dt><dd>Tagged <code>now</code>, written to <code>manager.toml</code> as they change. Mixing the two kinds in one page is fine as long as each row says which it is.</dd></div>
+      <div class="note"><dt>Pending count</dt><dd>The rail shows an amber count next to Settings, so a staged change is visible from any other section.</dd></div>
+      <div class="note"><dt>Files</dt><dd>The SMB path already exists: the machine forwards <code>127.0.0.1:5445</code> to the guest's 445, and the bookmark is served in userspace by the file manager rather than mounted, so Windows junctions never turn into a pile of extra mounts. The new part is the GTK bookmark file beside the KDE one, the choice of what to share, and a host folder going the other way.</dd></div>
+      <div class="note"><dt>Desktop entries</dt><dd>Publishing already writes a .desktop and a menu fragment per application. The page adds the category name, a per-application choice, file type handlers, and a rewrite button for when a launcher is showing a stale icon.</dd></div>
+      <div class="note"><dt>Display</dt><dd>Resolution and DPI are the virtual monitor and the guest logon, so both restart. Refresh rate is how often a mirrored window repaints, which is a host side number and applies immediately.</dd></div>
+      <div class="note"><dt>Scrolling</dt><dd>Shown in full here. In the window the list scrolls and the amber bar stays pinned to the bottom.</dd></div>
+      <div class="note"><dt>Where the tools went</dt><dd>Settings, under Images. The wizard's ISO page has the other entry point.</dd></div>
+    </dl>
+  </section>
+
+  <!-- ─────────── MANAGER: CONSOLE ─────────── -->
+  <section data-view="m-console" hidden>
+    <div class="stage-head">
+      <span class="eyebrow">Manager</span>
+      <h1>Console</h1>
+      <p>A shell into the guest, in the same window. Same mono face as the log, so output pasted between the two lines up.</p>
+    </div>
+    <div class="frame">
+      <div class="titlebar">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <span class="t">LSW</span>
+      </div>
+      <div class="mgr2">
+        <aside class="nav">
+          <div class="id">
+            <span class="n">lsw</span>
+            <span class="m">Windows 11 Pro 26200<br>8 cores &middot; 8 GiB &middot; 60 GiB</span>
+          </div>
+          <ul>
+            <li><button class="navitem"><span class="g">&#9633;</span> Overview</button></li>
+            <li><button class="navitem on"><span class="g">&gt;_</span> Console</button></li>
+            <li><button class="navitem"><span class="g">&#8801;</span> Log <span class="count">1 284</span></button></li>
+            <li><button class="navitem"><span class="g">&#9678;</span> Render <span class="wdot"></span></button></li>
+            <li><button class="navitem"><span class="g">&#9881;</span> Settings <span class="count" style="color:var(--amber)">3</span></button></li>
+          </ul>
+          <div class="power">
+            <span class="badge on">ONLINE</span>
+            <button class="btn stop">Stop the guest</button>
+          </div>
+        </aside>
+        <div class="content">
+          <div class="cbar">
+            <h4>Console</h4>
+            <span class="sub">cmd.exe &middot; session 1 &middot; running as lsw</span>
+            <span class="acts">
+              <button class="btn quiet">Clear</button>
+              <button class="btn quiet">Pop out</button>
+            </span>
+          </div>
+          <div class="term" style="flex:1">
+            <div><span class="d">Microsoft Windows [Version 10.0.26200.8037]</span></div>
+            <div>&nbsp;</div>
+            <div><span class="p">C:\Users\lsw&gt;</span> where vulkan-1.dll</div>
+            <div><span class="d">C:\Windows\System32\vulkan-1.dll</span></div>
+            <div>&nbsp;</div>
+            <div><span class="p">C:\Users\lsw&gt;</span> reg query "HKLM\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}\0000" /v HardwareInformation.qwMemorySize</div>
+            <div><span class="d">&nbsp;&nbsp;&nbsp;&nbsp;HardwareInformation.qwMemorySize&nbsp;&nbsp;&nbsp;&nbsp;REG_QWORD&nbsp;&nbsp;&nbsp;&nbsp;0x40000000</span></div>
+            <div>&nbsp;</div>
+            <div><span class="p">C:\Users\lsw&gt;</span> <span class="caret"></span></div>
+          </div>
+          <div style="display:flex;gap:8px;padding:10px 14px;border-top:1px solid var(--line);background:var(--surface)">
+            <span class="input mono" style="flex:1;color:var(--fg-faint)">Type a command and press Enter</span>
+            <button class="btn primary">Send</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────── MANAGER: LOG ─────────── -->
+  <section data-view="m-log" hidden>
+    <div class="stage-head">
+      <span class="eyebrow">Manager</span>
+      <h1>Log</h1>
+      <p>Fixed columns, so severity scans down the left edge instead of hiding inside a sentence.</p>
+    </div>
+    <div class="frame">
+      <div class="titlebar">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <span class="t">LSW</span>
+      </div>
+      <div class="mgr2">
+        <aside class="nav">
+          <div class="id">
+            <span class="n">lsw</span>
+            <span class="m">Windows 11 Pro 26200<br>8 cores &middot; 8 GiB &middot; 60 GiB</span>
+          </div>
+          <ul>
+            <li><button class="navitem"><span class="g">&#9633;</span> Overview</button></li>
+            <li><button class="navitem"><span class="g">&gt;_</span> Console</button></li>
+            <li><button class="navitem on"><span class="g">&#8801;</span> Log <span class="count">1 284</span></button></li>
+            <li><button class="navitem"><span class="g">&#9678;</span> Render <span class="wdot"></span></button></li>
+            <li><button class="navitem"><span class="g">&#9881;</span> Settings <span class="count" style="color:var(--amber)">3</span></button></li>
+          </ul>
+          <div class="power">
+            <span class="badge on">ONLINE</span>
+            <button class="btn stop">Stop the guest</button>
+          </div>
+        </aside>
+        <div class="content">
+          <div class="cbar">
+            <h4>Log</h4>
+            <span class="sub">1 284 records &middot; live</span>
+            <span class="acts">
+              <span class="input ph" style="width:180px">Filter</span>
+              <button class="btn">Info</button>
+              <button class="btn" style="color:var(--amber)">Warn</button>
+              <button class="btn" style="color:var(--bad)">Error</button>
+              <button class="btn quiet">Save</button>
+            </span>
+          </div>
+          <div style="flex:1;padding:6px 0">
+            <div class="logline"><span class="ts">01:31:44.118</span><span class="lv i">INFO</span><span>shmem: region mapped, 1.0 GiB at bar2, doorbell vector 0</span></div>
+            <div class="logline"><span class="ts">01:31:44.203</span><span class="lv i">INFO</span><span>rpc: session opened from 127.0.0.1:5102</span></div>
+            <div class="logline"><span class="ts">01:31:45.007</span><span class="lv i">INFO</span><span>catalog: 47 shortcuts enumerated in 812 ms</span></div>
+            <div class="logline"><span class="ts">01:32:02.551</span><span class="lv w">WARN</span><span>icon: get_icon fell back to shell extraction for C:\Program Files\Adobe\Photoshop 2024\Photoshop.exe</span></div>
+            <div class="logline"><span class="ts">01:32:19.884</span><span class="lv i">INFO</span><span>launch: started pid 6104, session 1, elevated linked token</span></div>
+            <div class="logline"><span class="ts">01:32:20.310</span><span class="lv i">INFO</span><span>remotewin-guest: attached to hwnd 0x000705AE, 1600 x 900</span></div>
+            <div class="logline"><span class="ts">01:34:58.006</span><span class="lv e">ERROR</span><span>rpc: reply dropped, ring full, backpressure for 42 ms</span></div>
+            <div class="logline"><span class="ts">01:35:01.442</span><span class="lv i">INFO</span><span>rpc: ring drained, throughput 118 MiB/s</span></div>
+            <div class="logline"><span class="ts">01:41:12.900</span><span class="lv i">INFO</span><span>stats: cpu 23 %, rss 5.1 GiB, disk 34.2 GiB</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────── MANAGER: LAUNCH SPLASH ─────────── -->
+  <section data-view="m-splash" hidden>
+    <div class="stage-head">
+      <span class="eyebrow">Manager</span>
+      <h1>Starting the guest</h1>
+      <p>What you get when you click a Windows application in your launcher and the VM is off. It is the only LSW window most people will see on a normal day, so it names the application, says which part is slow, and stays out of the way.</p>
+    </div>
+
+    <div class="frame dlg" style="max-width:420px">
+      <div class="titlebar">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <span class="t">Photoshop 2024</span>
+      </div>
+      <div style="padding:22px 22px 18px;display:flex;flex-direction:column;gap:16px;background:var(--ink)">
+        <div style="display:flex;gap:14px;align-items:center">
+          <span class="ic" style="width:52px;height:52px;border-radius:11px;background:#5aa9f0;display:grid;place-items:center;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:18px;color:#0d0f14">Ps</span>
+          <div style="display:flex;flex-direction:column;gap:3px;min-width:0">
+            <span style="font-size:15px;font-weight:600">Photoshop 2024</span>
+            <span style="font-size:12.5px;color:var(--fg-dim)">Starting Windows so it has somewhere to run</span>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div class="bar"><i style="width:58%"></i></div>
+          <div style="display:flex;justify-content:space-between" class="meta">
+            <span>Waiting for the guest agent</span>
+            <span><b>0:22</b> of about 0:40</span>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:7px">
+          <div style="display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--fg-dim)">
+            <span style="color:var(--ok);width:13px;text-align:center">&#10003;</span> Machine started
+          </div>
+          <div style="display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--fg-dim)">
+            <span style="color:var(--ok);width:13px;text-align:center">&#10003;</span> Windows booted
+          </div>
+          <div style="display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--fg)">
+            <span style="color:var(--amber);width:13px;text-align:center">&#9679;</span> Agent answering
+          </div>
+          <div style="display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--fg-faint)">
+            <span style="width:13px;text-align:center">&#9675;</span> Render channel claimed
+          </div>
+          <div style="display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--fg-faint)">
+            <span style="width:13px;text-align:center">&#9675;</span> Photoshop 2024 running
+          </div>
+        </div>
+
+        <label class="check" style="font-size:12.5px;color:var(--fg-dim)">
+          <span class="box" style="background:transparent;border-color:var(--fg-faint);color:transparent">&#10003;</span>
+          Keep Windows running after I close this application
+        </label>
+      </div>
+      <div class="dlg-foot">
+        <span class="meta" style="margin-right:auto">Closing this leaves the guest starting</span>
+        <button class="btn quiet">Cancel</button>
+        <button class="btn">Hide</button>
+      </div>
+    </div>
+
+    <h3 style="margin:26px 0 12px;font-size:14px">The two ways it ends badly</h3>
+    <div style="display:flex;gap:16px;flex-wrap:wrap">
+      <div class="frame dlg" style="max-width:420px;flex:1;min-width:320px">
+        <div class="titlebar">
+          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          <span class="t">Photoshop 2024</span>
+        </div>
+        <div style="padding:20px 22px;display:flex;flex-direction:column;gap:14px;background:var(--ink)">
+          <div style="display:flex;gap:13px;align-items:center">
+            <span class="ic" style="width:44px;height:44px;border-radius:10px;background:#5aa9f0;display:grid;place-items:center;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:15px;color:#0d0f14">Ps</span>
+            <div style="display:flex;flex-direction:column;gap:3px">
+              <span style="font-size:14px;font-weight:600">Windows did not answer</span>
+              <span style="font-size:12.5px;color:var(--fg-dim)">The machine is running but the agent has been silent for 2 minutes.</span>
+            </div>
+          </div>
+          <div class="callout" style="font-size:12px">Usually a guest still finishing an update. The log will say if the agent crashed.</div>
+        </div>
+        <div class="dlg-foot">
+          <button class="btn quiet">Open the log</button>
+          <button class="btn">Keep waiting</button>
+          <button class="btn primary">Restart the guest</button>
+        </div>
+      </div>
+
+      <div class="frame dlg" style="max-width:420px;flex:1;min-width:320px">
+        <div class="titlebar">
+          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          <span class="t">Touhou 06</span>
+        </div>
+        <div style="padding:20px 22px;display:flex;flex-direction:column;gap:14px;background:var(--ink)">
+          <div style="display:flex;gap:13px;align-items:center">
+            <span class="ic" style="width:44px;height:44px;border-radius:10px;background:#e05a8a;display:grid;place-items:center;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:15px;color:#0d0f14">&#26481;</span>
+            <div style="display:flex;flex-direction:column;gap:3px">
+              <span style="font-size:14px;font-weight:600">Channel 2 is busy</span>
+              <span style="font-size:12.5px;color:var(--fg-dim)">Touhou 06 is pinned to it, and Photoshop is using it. Waiting 15 seconds.</span>
+            </div>
+          </div>
+          <div class="bar"><i style="width:70%"></i></div>
+          <span class="meta">A channel carries one command stream, so it cannot be shared.</span>
+        </div>
+        <div class="dlg-foot">
+          <button class="btn quiet">Cancel</button>
+          <button class="btn">Use any free channel</button>
+        </div>
+      </div>
+    </div>
+
+    <dl class="notes">
+      <div class="note"><dt>When it appears</dt><dd>Only when the guest is not already up. Launching into a running guest opens the application's window directly, with no splash at all.</dd></div>
+      <div class="note"><dt>Named phases</dt><dd>Machine, Windows, agent, channel, application. A cold start is around 40 seconds and the slow part moves around, so a single spinner would tell you nothing about whether it is stuck.</dd></div>
+      <div class="note"><dt>Hide, not cancel</dt><dd>Hide sends it to the tray and the application still opens when it is ready. Cancel stops the launch and, if the manager started the guest for this, offers to stop it again.</dd></div>
+      <div class="note"><dt>Channel busy</dt><dd>The second failure card is the policy from Settings made visible. It only appears for a pinned application whose channel is taken, and it offers the fallback the policy refused to take on its own.</dd></div>
+    </dl>
+  </section>
+
+  <!-- ─────────── MANAGER: CONFIG DIALOG ─────────── -->
+  <section data-view="m-cfg" hidden>
+    <div class="stage-head">
+      <span class="eyebrow">Manager</span>
+      <h1>Configure application</h1>
+      <p>Arguments and environment are different things and get different fields, because a variable typed into arguments reaches the app as a filename to open.</p>
+    </div>
+    <div class="frame dlg">
+      <div class="titlebar">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <span class="t">Configure application</span>
+      </div>
+      <div class="dlg-body">
+        <div style="display:flex;gap:14px;align-items:center">
+          <span class="ic" style="width:56px;height:56px;border-radius:12px;background:#5aa9f0;display:grid;place-items:center;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:19px;color:#0d0f14">Ps</span>
+          <div style="display:flex;flex-direction:column;gap:3px">
+            <span style="font-size:15px;font-weight:600">Photoshop 2024</span>
+            <span class="meta">icon read from the executable, 64 &times; 64 PNG</span>
+          </div>
+          <button class="btn quiet" style="margin-left:auto">Replace icon</button>
+        </div>
+        <div class="field"><label>Name</label><span class="input">Photoshop 2024</span></div>
+        <div class="field">
+          <label>Path in Windows</label>
+          <span style="display:flex;gap:8px">
+            <span class="input focused" style="flex:1;overflow:hidden">C:\Program Files\Adobe\Photoshop 2024\Photoshop.exe</span>
+            <button class="btn">Browse the guest</button>
+          </span>
+          <span class="meta">Browsing opens a file picker that reads the guest, not this machine.</span>
+        </div>
+        <div class="field">
+          <label>Working folder</label>
+          <span style="display:flex;gap:8px">
+            <span class="input ph" style="flex:1">Defaults to the folder the program is in</span>
+            <button class="btn">Browse</button>
+          </span>
+        </div>
+        <div class="field"><label>Arguments</label><span class="input ph">Optional, passed after the executable</span></div>
+        <div class="field"><label>Environment</label><span class="input" style="min-height:60px;line-height:1.7">DXVK_HUD=fps<br>RVK_QUEUE_DEPTH=3</span></div>
+      </div>
+      <div class="dlg-foot">
+        <button class="btn quiet">Remove</button>
+        <button class="btn">Cancel</button>
+        <button class="btn primary">Save</button>
+      </div>
+    </div>
+    <dl class="notes">
+      <div class="note"><dt>Identity first</dt><dd>Icon, name, and where the icon came from sit above the form, so the dialog opens by confirming what you are editing.</dd></div>
+      <div class="note"><dt>Browse the guest</dt><dd>The path field is a Windows path, so the button opens a picker that reads the guest rather than your own disk. Working folder gets the same treatment and defaults to wherever the program lives.</dd></div>
+      <div class="note"><dt>Destructive left</dt><dd>Remove is separated from Cancel and Save, quiet by default, and confirms before it deletes the entry and its .desktop file.</dd></div>
+    </dl>
+  </section>
+
+  <!-- ─────────── MANAGER: REMOTE FILE PICKER ─────────── -->
+  <section data-view="m-picker" hidden>
+    <div class="stage-head">
+      <span class="eyebrow">Manager</span>
+      <h1>Browse the guest</h1>
+      <p>A file picker that reads the guest over the agent connection, not your own disk. It opens where applications actually live, so picking one is two clicks rather than typing a Windows path from memory.</p>
+    </div>
+
+    <div class="frame" style="max-width:760px">
+      <div class="titlebar">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <span class="t">Choose a program in Windows</span>
+        <span class="spacer mono">760 &times; 560</span>
+      </div>
+
+      <div class="picker">
+        <aside class="places">
+          <span class="ph">Shortcuts</span>
+          <button class="place on"><span class="g">&#9635;</span> Start menu</button>
+          <button class="place"><span class="g">&#9633;</span> Program Files</button>
+          <button class="place"><span class="g">&#9633;</span> Program Files (x86)</button>
+          <button class="place"><span class="g">&#9679;</span> Desktop</button>
+          <button class="place"><span class="g">&#9679;</span> Downloads</button>
+          <span class="ph">Drives</span>
+          <button class="place"><span class="g">&#9683;</span> C: Windows</button>
+          <button class="place"><span class="g">&#9683;</span> X: renders</button>
+          <button class="place"><span class="g">&#9683;</span> Y: Pictures</button>
+          <button class="place"><span class="g">&#9683;</span> Z: Documents</button>
+        </aside>
+
+        <div class="pane">
+          <div class="crumbs">
+            <button class="btn quiet" style="padding:3px 8px">&#8593;</button>
+            <button class="crumb">C:</button><span class="sepc">&#92;</span>
+            <button class="crumb">ProgramData</button><span class="sepc">&#92;</span>
+            <button class="crumb">Microsoft</button><span class="sepc">&#92;</span>
+            <button class="crumb">Windows</button><span class="sepc">&#92;</span>
+            <button class="crumb">Start Menu</button><span class="sepc">&#92;</span>
+            <button class="crumb cur">Programs</button>
+            <span style="margin-left:auto;display:flex;gap:6px">
+              <span class="input ph" style="width:150px;padding:4px 8px;font-size:12px">Search this folder</span>
+              <button class="btn quiet" style="padding:4px 9px">&#8635;</button>
+            </span>
+          </div>
+
+          <div class="fhead">
+            <span>Name</span><span>Size</span><span>Modified</span>
+          </div>
+
+          <div style="flex:1;overflow:hidden">
+            <div class="frow"><span class="nm"><span class="ic2 dir">&#9698;</span><span>Accessibility</span></span><span class="sz"></span><span class="md">08 Sep 01:44</span></div>
+            <div class="frow"><span class="nm"><span class="ic2 dir">&#9698;</span><span>Accessories</span></span><span class="sz"></span><span class="md">08 Sep 01:44</span></div>
+            <div class="frow"><span class="nm"><span class="ic2 dir">&#9698;</span><span>Adobe</span></span><span class="sz"></span><span class="md">08 Sep 02:11</span></div>
+            <div class="frow sel"><span class="nm"><span class="ic2" style="background:#5aa9f0">Ps</span><span>Adobe Photoshop 2024.lnk</span></span><span class="sz">2.1 KB</span><span class="md">08 Sep 02:11</span></div>
+            <div class="frow"><span class="nm"><span class="ic2" style="background:#2f3644;color:#cfd6e2">&gt;_</span><span>Command Prompt.lnk</span></span><span class="sz">1.4 KB</span><span class="md">08 Sep 01:44</span></div>
+            <div class="frow"><span class="nm"><span class="ic2" style="background:#4ec98a">fb</span><span>foobar2000.lnk</span></span><span class="sz">1.6 KB</span><span class="md">08 Sep 02:31</span></div>
+            <div class="frow"><span class="nm"><span class="ic2" style="background:#ff9f45">Iv</span><span>IrfanView 64.lnk</span></span><span class="sz">1.5 KB</span><span class="md">08 Sep 02:29</span></div>
+            <div class="frow"><span class="nm"><span class="ic2" style="background:#8b93a4">Nt</span><span>Notepad.lnk</span></span><span class="sz">1.2 KB</span><span class="md">08 Sep 01:44</span></div>
+            <div class="frow"><span class="nm"><span class="ic2" style="background:#c9a24e">Re</span><span>Registry Editor.lnk</span></span><span class="sz">1.3 KB</span><span class="md">08 Sep 01:44</span></div>
+            <div class="frow"><span class="nm"><span class="ic2" style="background:#5f9ea0">Vs</span><span>Visual Studio Code.lnk</span></span><span class="sz">2.4 KB</span><span class="md">08 Sep 02:38</span></div>
+          </div>
+
+          <div style="display:flex;gap:8px;align-items:center;padding:11px 12px;border-top:1px solid var(--line);background:var(--surface)">
+            <span class="input" style="flex:1;overflow:hidden">Adobe Photoshop 2024.lnk</span>
+            <span class="input select" style="width:180px">Programs and shortcuts</span>
+          </div>
+          <div class="dlg-foot" style="border-top:none">
+            <span class="meta" style="margin-right:auto">Reading C: over the agent connection</span>
+            <button class="btn">Cancel</button>
+            <button class="btn primary">Choose</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h3 style="margin:26px 0 12px;font-size:14px">When it cannot read</h3>
+    <div style="display:flex;gap:16px;flex-wrap:wrap">
+      <div class="frame dlg" style="max-width:400px;flex:1;min-width:300px">
+        <div class="titlebar">
+          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          <span class="t">Choose a program in Windows</span>
+        </div>
+        <div style="padding:34px 24px;display:grid;place-items:center;background:var(--ink)">
+          <div style="display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center;max-width:38ch">
+            <span class="badge off">OFFLINE</span>
+            <span style="font-size:14px;font-weight:600">Windows is not running</span>
+            <span style="font-size:12.5px;color:var(--fg-dim);line-height:1.6">There is nothing to browse until the guest is up. Starting it takes about 40 seconds.</span>
+            <button class="btn primary" style="margin-top:2px">Start the guest and browse</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="frame dlg" style="max-width:400px;flex:1;min-width:300px">
+        <div class="titlebar">
+          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          <span class="t">Choose a program in Windows</span>
+        </div>
+        <div style="padding:34px 24px;display:grid;place-items:center;background:var(--ink)">
+          <div style="display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center;max-width:38ch">
+            <span class="pill fail">Access denied</span>
+            <span style="font-size:14px;font-weight:600">Windows would not open this folder</span>
+            <span style="font-size:12.5px;color:var(--fg-dim);line-height:1.6">C:\\Users\\Administrator is readable only by its owner. The agent runs as lsw and Windows refused it.</span>
+            <button class="btn" style="margin-top:2px">Go back</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <dl class="notes">
+      <div class="note"><dt>Needs one new command</dt><dd>The agent has <code>list_apps</code>, <code>launch</code> and <code>get_icon</code>, but nothing that lists a directory. This adds <code>list_dir</code>: a path in, one page of entries out, each with name, whether it is a folder, size, modified time and an icon id. Paging matters because <code>C:\\Windows\\System32</code> is five thousand entries and the reply slot is not the place to find that out.</dd></div>
+      <div class="note"><dt>Icons come from the same place as the app list</dt><dd><code>get_icon</code> already extracts one from an executable or a shortcut. The picker asks for them lazily, only for the rows on screen, so opening a folder is one round trip and not one per file.</dd></div>
+      <div class="note"><dt>Opens where applications are</dt><dd>Default location is the Start menu Programs folder, which is exactly what the catalog already enumerates. Program Files and the mapped host drives are one click away in the sidebar.</dd></div>
+      <div class="note"><dt>Shortcuts are resolved</dt><dd>Choosing a .lnk stores what it points at, plus its arguments and working folder, so the entry keeps working if the shortcut is deleted later.</dd></div>
+      <div class="note"><dt>Not the SMB share</dt><dd>The share in Settings exists for your file manager and can be turned off. The picker goes over the agent connection, so it works regardless, and it sees the guest as the account that will run the program.</dd></div>
+    </dl>
+  </section>
+
+  <!-- ─────────── MANAGER: EMPTY ─────────── -->
+  <section data-view="m-empty" hidden>
+    <div class="stage-head">
+      <span class="eyebrow">Manager</span>
+      <h1>No guest yet</h1>
+      <p>What the manager shows before the wizard has ever run. The rail keeps its shape, the sections that need a guest are unavailable, and one action leads somewhere.</p>
+    </div>
+    <div class="frame">
+      <div class="titlebar">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <span class="t">LSW</span>
+      </div>
+      <div class="mgr2" style="min-height:440px">
+        <aside class="nav">
+          <div class="id">
+            <span class="n">lsw</span>
+            <span class="m">not provisioned</span>
+          </div>
+          <ul>
+            <li><button class="navitem on"><span class="g">&#9633;</span> Overview</button></li>
+            <li><button class="navitem" style="opacity:.45"><span class="g">&gt;_</span> Console</button></li>
+            <li><button class="navitem" style="opacity:.45"><span class="g">&#8801;</span> Log</button></li>
+            <li><button class="navitem" style="opacity:.45"><span class="g">&#9678;</span> Render</button></li>
+            <li><button class="navitem"><span class="g">&#9881;</span> Settings</button></li>
+          </ul>
+          <div class="power">
+            <span class="badge off">NO GUEST</span>
+            <button class="btn" disabled>Start the guest</button>
+          </div>
+        </aside>
+        <div class="content">
+          <div class="cbar"><h4>Overview</h4></div>
+          <div style="flex:1;display:grid;place-items:center;padding:40px 20px">
+            <div style="display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center;max-width:44ch">
+              <span class="eyebrow" style="color:var(--fg-faint)">Nothing installed</span>
+              <h3 style="font-size:19px;color:var(--fg)">There is no Windows guest on this machine yet</h3>
+              <p style="font-size:13.5px;color:var(--fg-dim);line-height:1.6">The first run builds one: pick or download an ISO, size the VM, and let the unattended installer do the rest. Around 25 minutes, mostly unattended.</p>
+              <button class="btn primary" style="margin-top:4px">Run the first-run wizard</button>
+            </div>
+          </div>
+          <div class="statusbar">
+            <span><b>agent</b> not reachable</span>
+            <span class="sep"></span>
+            <span><b>libvirt</b> qemu:///session</span>
+            <span class="sep"></span>
+            <span><b>ivshmem</b> /dev/shm free</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <dl class="notes">
+      <div class="note"><dt>Why</dt><dd>Today the panel opens with dead buttons and blank gauges. Naming the situation and offering the wizard removes the only genuinely confusing moment in the app.</dd></div>
+    </dl>
+  </section>
+
+  <!-- ═══════════════ WIZARD ═══════════════ -->
+
+  <!-- 01 -->
+  <section data-view="w-1" hidden>
+    <div class="stage-head">
+      <span class="eyebrow">Wizard, step 01</span>
+      <h1>Welcome</h1>
+      <p>The wizard gains a permanent step rail, so the length of the process is visible from the first screen instead of being discovered one Next at a time.</p>
+    </div>
+    <div class="frame narrow">
+      <div class="titlebar">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <span class="t">LSW first-run wizard</span>
+        <span class="spacer mono">880 &times; 620</span>
+      </div>
+      <div class="wiz">
+        <aside class="wiz-side">
+          <div class="cap">Setup</div>
+          <ol class="wiz-steps" data-steps></ol>
+          <div class="foot">
+            <span>host: 20 threads, 31 GiB</span>
+            <span>free: 412 GiB</span>
+          </div>
+        </aside>
+        <div class="wiz-main">
+          <div class="wiz-head">
+            <h3>Run Windows applications on Linux</h3>
+            <p>LSW installs a Windows guest and renders its windows onto your desktop. Four stages, roughly 25 minutes, mostly unattended.</p>
+          </div>
+          <div class="wiz-body">
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px">
+              <div style="border:1px solid var(--line);border-radius:5px;padding:12px 13px;background:var(--surface)">
+                <div class="meta" style="color:var(--amber)">01 &middot; IMAGE</div>
+                <div style="margin-top:5px;color:var(--fg-dim);font-size:12.5px;line-height:1.55">Point at a Windows ISO you have. Tools to download one or shrink one sit next to the field.</div>
+              </div>
+              <div style="border:1px solid var(--line);border-radius:5px;padding:12px 13px;background:var(--surface)">
+                <div class="meta" style="color:var(--amber)">02 &middot; MACHINE</div>
+                <div style="margin-top:5px;color:var(--fg-dim);font-size:12.5px;line-height:1.55">Size cores, memory and disk, and name the local Windows account.</div>
+              </div>
+              <div style="border:1px solid var(--line);border-radius:5px;padding:12px 13px;background:var(--surface)">
+                <div class="meta" style="color:var(--amber)">03 &middot; PAYLOAD</div>
+                <div style="margin-top:5px;color:var(--fg-dim);font-size:12.5px;line-height:1.55">Answer file, guest binaries, and the drivers that must exist on the first boot.</div>
+              </div>
+              <div style="border:1px solid var(--line);border-radius:5px;padding:12px 13px;background:var(--surface)">
+                <div class="meta" style="color:var(--amber)">04 &middot; INSTALL</div>
+                <div style="margin-top:5px;color:var(--fg-dim);font-size:12.5px;line-height:1.55">Unattended Windows setup, then the guest agent, DXVK and VKD3D-Proton.</div>
+              </div>
+            </div>
+            <p>Nothing on this machine is modified outside <span class="mono" style="color:var(--amber)">~/.local/share/lsw</span>. The guest is a single qcow2 file you can delete.</p>
+          </div>
+          <div class="wiz-foot">
+            <span class="hint">step 1 of 8</span>
+            <button class="btn" disabled>Back</button>
+            <button class="btn primary">Next</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <dl class="notes">
+      <div class="note"><dt>Step rail</dt><dd><code>QWizard::setSideWidget()</code>. Costs one widget, and turns ten unlabelled screens into a visible sequence with the current one marked.</dd></div>
+      <div class="note"><dt>Copy</dt><dd>Four stage cards instead of a numbered paragraph. Same information, scannable, and it survives translation better than a run on sentence.</dd></div>
+    </dl>
+  </section>
+
+  <!-- 02 -->
+  <section data-view="w-2" hidden>
+    <div class="stage-head">
+      <span class="eyebrow">Wizard, step 02</span>
+      <h1>Licensing</h1>
+      <p>A gate, not a wall of text. One paragraph, one checkbox, and the Next button stays disabled until it is ticked.</p>
+    </div>
+    <div class="frame narrow">
+      <div class="titlebar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="t">LSW first-run wizard</span></div>
+      <div class="wiz">
+        <aside class="wiz-side"><div class="cap">Setup</div><ol class="wiz-steps" data-steps data-current="2"></ol>
+          <div class="foot"><span>host: 20 threads, 31 GiB</span><span>free: 412 GiB</span></div></aside>
+        <div class="wiz-main">
+          <div class="wiz-head">
+            <h3>Microsoft Windows licensing</h3>
+            <p>LSW is not affiliated with Microsoft, and does not bundle Windows.</p>
+          </div>
+          <div class="wiz-body">
+            <p>Installing or running Windows requires a license from Microsoft and compliance with the Microsoft Software License Terms. The full terms are shown during Windows setup.</p>
+            <div class="callout">If you continue, you confirm you hold a valid license to install and use Windows in this virtual machine.</div>
+            <label class="check"><span class="box">&#10003;</span> I have a valid Windows license and accept the terms</label>
+          </div>
+          <div class="wiz-foot">
+            <span class="hint">step 2 of 8</span>
+            <button class="btn">Back</button>
+            <button class="btn primary">Next</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 03 -->
+  <section data-view="w-3" hidden>
+    <div class="stage-head">
+      <span class="eyebrow">Wizard, step 03</span>
+      <h1>Windows ISO</h1>
+      <p>One field: the image to install. Getting an image and shrinking one are both tools, reachable from here, and neither is on the path to Next.</p>
+    </div>
+    <div class="frame narrow">
+      <div class="titlebar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="t">LSW first-run wizard</span></div>
+      <div class="wiz">
+        <aside class="wiz-side"><div class="cap">Setup</div><ol class="wiz-steps" data-steps data-current="3"></ol>
+          <div class="foot"><span>host: 20 threads, 31 GiB</span><span>free: 412 GiB</span></div></aside>
+        <div class="wiz-main">
+          <div class="wiz-head">
+            <h3>Which Windows image should be installed</h3>
+            <p>Any retail or evaluation Windows 10 or 11 ISO. If you do not have one, download it here.</p>
+          </div>
+          <div class="wiz-body">
+            <div class="field">
+              <label>Image</label>
+              <span style="display:flex;gap:8px">
+                <span class="input" style="flex:1">/home/accel/images/windows/win11-pro-trimmed.iso</span>
+                <button class="btn">Browse</button>
+              </span>
+              <span class="meta">2.41 GiB &middot; <b>Windows 11 Pro</b>, index 6 &middot; trimmed on 8 September</span>
+            </div>
+
+            <div style="height:1px;background:var(--line)"></div>
+
+            <span class="eyebrow" style="color:var(--fg-faint)">Image tools, optional</span>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+              <div style="border:1px solid var(--line);border-radius:5px;padding:13px;background:var(--surface);display:flex;flex-direction:column;gap:7px;align-items:flex-start">
+                <span style="font-size:13.5px;font-weight:500">No image yet</span>
+                <span style="font-size:12.5px;color:var(--fg-dim);line-height:1.55">Fetch one from microsoft.com, into any folder you choose.</span>
+                <button class="btn" style="margin-top:auto">Download an image</button>
+              </div>
+              <div style="border:1px solid var(--line);border-radius:5px;padding:13px;background:var(--surface);display:flex;flex-direction:column;gap:7px;align-items:flex-start">
+                <span style="font-size:13.5px;font-weight:500">Smaller guest</span>
+                <span style="font-size:12.5px;color:var(--fg-dim);line-height:1.55">Cut the bundled apps, or strip the image down to the minimum.</span>
+                <button class="btn" style="margin-top:auto">Trim this image</button>
+              </div>
+            </div>
+          </div>
+          <div class="wiz-foot">
+            <span class="hint">step 3 of 8</span>
+            <button class="btn">Back</button>
+            <button class="btn primary">Next</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <dl class="notes">
+      <div class="note"><dt>What changed</dt><dd>The two radio cards are gone. Downloading is not an alternative way to answer this question, it is a thing that produces an answer, so it became a button that fills the field.</dd></div>
+      <div class="note"><dt>Either tool can be skipped</dt><dd>Both write an ISO and hand back its path. Neither blocks Next, and a failure in either leaves the field exactly as it was.</dd></div>
+    </dl>
+  </section>
+
+  <!-- 04 -->
+  <section data-view="w-4" hidden>
+    <div class="stage-head">
+      <span class="eyebrow">Wizard, step 04</span>
+      <h1>Size and account</h1>
+      <p>Sliders bounded by the real host: 20 threads, 31 GiB of memory, 412 GiB free. The ceilings are facts, not guesses.</p>
+    </div>
+    <div class="frame narrow">
+      <div class="titlebar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="t">LSW first-run wizard</span></div>
+      <div class="wiz">
+        <aside class="wiz-side"><div class="cap">Setup</div><ol class="wiz-steps" data-steps data-current="4"></ol>
+          <div class="foot"><span>host: 20 threads, 31 GiB</span><span>free: 412 GiB</span></div></aside>
+        <div class="wiz-main">
+          <div class="wiz-head">
+            <h3>Size the machine and name the account</h3>
+            <p>Both are baked into the answer file, so they are set before the installer boots.</p>
+          </div>
+          <div class="wiz-body" style="gap:14px">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+              <div class="field"><label>Username</label><span class="input">lsw</span></div>
+              <div class="field"><label>Password</label><span class="input">&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;</span></div>
+              <div class="field"><label>Computer name</label><span class="input">lsw</span></div>
+              <div class="field"><label>Edition</label><span class="input select">Windows 11 Pro</span></div>
+            </div>
+            <div style="height:1px;background:var(--line);margin:2px 0"></div>
+            <div style="display:flex;flex-direction:column;gap:13px">
+              <div class="slider-row">
+                <span class="lbl">Cores</span>
+                <span class="track"><i class="fill" style="width:40%"></i><span class="knob" style="left:40%"></span></span>
+                <span class="val">8</span>
+              </div>
+              <div class="slider-row">
+                <span class="lbl">Memory</span>
+                <span class="track"><i class="fill" style="width:26%"></i><span class="knob" style="left:26%"></span></span>
+                <span class="val">8192 MiB</span>
+              </div>
+              <div class="slider-row">
+                <span class="lbl">Disk</span>
+                <span class="track"><i class="fill" style="width:15%"></i><span class="knob" style="left:15%"></span></span>
+                <span class="val">60 GiB</span>
+              </div>
+            </div>
+            <span class="meta">Leaves <b>352 GiB</b> free on the host. The disk is sparse and grows as the guest fills it.</span>
+          </div>
+          <div class="wiz-foot">
+            <span class="hint">step 4 of 8</span>
+            <button class="btn">Back</button>
+            <button class="btn primary">Next</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <dl class="notes">
+      <div class="note"><dt>Consequence line</dt><dd>The footnote recalculates as the disk slider moves. Sizing decisions are easier when the cost is spelled out next to the control.</dd></div>
+    </dl>
+  </section>
+
+  <!-- TOOL: DOWNLOAD -->
+  <section data-view="w-download" hidden>
+    <div class="stage-head">
+      <span class="eyebrow">Tool, opens from a button</span>
+      <h1>Download a Windows image</h1>
+      <p>Also not a step. Fetching an ISO is a thing you do once and keep, so it is a tool with its own output folder, openable from the wizard or from the manager, and skippable entirely if you already have an image.</p>
+    </div>
+
+    <div class="frame dlg" style="max-width:640px">
+      <div class="titlebar">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <span class="t">Download a Windows image</span>
+        <span class="spacer mono">640 &times; 560</span>
+      </div>
+
+      <div class="dlg-body">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="field">
+            <label>Edition</label>
+            <span class="input select">Windows 11 25H2</span>
+          </div>
+          <div class="field">
+            <label>Language</label>
+            <span class="input select">English (United States)</span>
+          </div>
+        </div>
+        <span class="meta">11 editions listed by microsoft.com. The download link is resolved when you press Download and is valid for 24 hours.</span>
+
+        <div style="height:1px;background:var(--line)"></div>
+
+        <div class="field">
+          <label>Save to</label>
+          <span style="display:flex;gap:8px">
+            <span class="input" style="flex:1">/home/accel/images/windows</span>
+            <button class="btn">Choose folder</button>
+          </span>
+          <span style="display:flex;gap:8px;margin-top:6px">
+            <span class="input" style="flex:1">Win11_25H2_x64.iso</span>
+          </span>
+          <span class="meta">5.51 GiB to download. 412 GiB free on that volume.</span>
+        </div>
+
+        <label class="check" style="font-size:13px">
+          <span class="box">&#10003;</span> Use this image for the install when the dialog closes
+        </label>
+
+        <div style="display:flex;flex-direction:column;gap:9px">
+          <div class="bar"><i style="width:62%"></i></div>
+          <div style="display:flex;justify-content:space-between" class="meta">
+            <span><b>3.42 GiB</b> of 5.51 GiB</span>
+            <span><b>62 %</b></span>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+            <div style="border:1px solid var(--line);border-radius:5px;padding:9px 11px;background:var(--surface)">
+              <div class="meta">RATE</div>
+              <div class="mono" style="font-size:16px;margin-top:2px;font-variant-numeric:tabular-nums">28.4 MiB/s</div>
+            </div>
+            <div style="border:1px solid var(--line);border-radius:5px;padding:9px 11px;background:var(--surface)">
+              <div class="meta">ELAPSED</div>
+              <div class="mono" style="font-size:16px;margin-top:2px;font-variant-numeric:tabular-nums">02:03</div>
+            </div>
+            <div style="border:1px solid var(--line);border-radius:5px;padding:9px 11px;background:var(--surface)">
+              <div class="meta">REMAINING</div>
+              <div class="mono" style="font-size:16px;margin-top:2px;font-variant-numeric:tabular-nums">01:15</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="dlg-foot">
+        <span class="meta" style="margin-right:auto">Resumes if the connection drops</span>
+        <button class="btn">Close</button>
+        <button class="btn primary">Download</button>
+      </div>
+    </div>
+
+    <dl class="notes">
+      <div class="note"><dt>Why a tool</dt><dd>The download page could only ever run once, in one place, and a wizard that had already committed to downloading could not go back. As a tool it can run before the wizard, be cancelled without losing anything, and be reopened to fetch a second edition.</dd></div>
+      <div class="note"><dt>When Microsoft refuses</dt><dd>The portal rate limits automated requests. The dialog says so, keeps the edition list it already has, and closes without a file. The wizard is unaffected because it never depended on this succeeding.</dd></div>
+      <div class="note"><dt>Same shape as the trim tool</dt><dd>Source at the top, options in the middle, output folder and filename at the bottom, progress above the footer. Both dialogs are the same widget skeleton.</dd></div>
+    </dl>
+  </section>
+
+  <!-- TOOL: TRIM -->
+  <section data-view="w-trim" hidden>
+    <div class="stage-head">
+      <span class="eyebrow">Tool, opens from a button</span>
+      <h1>Trim a Windows image</h1>
+      <p>No longer a step. It is a dialog you open when you want it, from the wizard's ISO page or from the manager, and it writes a new ISO wherever you point it. The source image is never modified.</p>
+    </div>
+
+    <div class="frame dlg" style="max-width:640px">
+      <div class="titlebar">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <span class="t">Trim a Windows image</span>
+        <span class="spacer mono">640 &times; 620</span>
+      </div>
+
+      <div class="dlg-body" id="trimBody">
+        <div class="field">
+          <label>Source image</label>
+          <span style="display:flex;gap:8px">
+            <span class="input" style="flex:1">/home/accel/Downloads/Win11_25H2_x64.iso</span>
+            <button class="btn">Browse</button>
+          </span>
+          <span class="meta">5.51 GiB &middot; 11 editions &middot; <b>Windows 11 Pro</b> selected as index 6</span>
+        </div>
+
+        <div style="height:1px;background:var(--line)"></div>
+
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <span class="eyebrow" style="color:var(--fg-faint)">How much to remove</span>
+          <div class="opt" data-trim="none" aria-checked="false">
+            <span class="dial"></span>
+            <span><span class="t">Keep everything</span>
+            <span class="d">Windows exactly as Microsoft ships it. Useful only to repack a different edition.</span></span>
+          </div>
+          <div class="opt" data-trim="sane" aria-checked="true">
+            <span class="dial"></span>
+            <span><span class="t">Remove the bundled apps and telemetry</span>
+            <span class="d">32 consumer apps, Copilot, Recall, widgets and web search. Windows Update, Defender and the recovery environment keep working.</span></span>
+          </div>
+          <div class="opt" data-trim="max" aria-checked="false">
+            <span class="dial"></span>
+            <span><span class="t">Strip it to the minimum</span>
+            <span class="d">Everything above, plus Edge, WebView2, Defender, most of the component store, and drivers for hardware this VM does not have.</span></span>
+          </div>
+          <div id="trimWarn" class="callout" hidden>
+            This cannot be undone from inside the guest. Gutting the component store takes Windows Update with it, along with sfc, DISM repair and any way to add a feature later. Choose it for a disposable guest that runs one program.
+          </div>
+        </div>
+
+        <div style="height:1px;background:var(--line)"></div>
+
+        <div class="field">
+          <label>Write the new image to</label>
+          <span style="display:flex;gap:8px">
+            <span class="input" style="flex:1">/home/accel/images/windows</span>
+            <button class="btn">Choose folder</button>
+          </span>
+          <span style="display:flex;gap:8px;margin-top:6px">
+            <span class="input" style="flex:1">win11-pro-trimmed.iso</span>
+          </span>
+          <span class="meta">Estimated <b id="trimEst">3.1 GiB</b> out. 412 GiB free on that volume.</span>
+        </div>
+
+        <label class="check" style="font-size:13px">
+          <span class="box">&#10003;</span> Use this image for the install when the dialog closes
+        </label>
+
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div class="bar"><i style="width:38%"></i></div>
+          <div style="display:flex;justify-content:space-between" class="meta">
+            <span id="trimStatus">Removing provisioned packages, 21 of 32</span>
+            <span><b>38 %</b></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="dlg-foot">
+        <span class="meta" style="margin-right:auto">Source image is read only, never modified</span>
+        <button class="btn">Close</button>
+        <button class="btn primary">Trim image</button>
+      </div>
+    </div>
+
+    <dl class="notes">
+      <div class="note"><dt>Why a tool</dt><dd>Trimming is not part of installing. Forcing it into the sequence made a mandatory wait out of an optional optimisation, and gave the wizard a page that had to be re-run whenever the user went back.</dd></div>
+      <div class="note"><dt>Output path</dt><dd>Folder and filename are separate fields, so the ISO can land anywhere: an external disk, a shared images folder, next to the source. The default stays <code>~/.local/share/lsw/isos</code> for anyone who does not care.</dd></div>
+      <div class="note"><dt>Two entry points</dt><dd>From the wizard's ISO page, where the checkbox hands the result straight to the install. From the manager, where it is a standalone image tool and the checkbox is absent.</dd></div>
+      <div class="note"><dt>Try it</dt><dd>Click the third level. The warning and the estimated output size both change.</dd></div>
+    </dl>
+  </section>
+
+  <!-- 07 -->
+  <section data-view="w-7" hidden>
+    <div class="stage-head">
+      <span class="eyebrow">Wizard, step 05</span>
+      <h1>Payload</h1>
+      <p>Four artifacts, each with its own state. A checklist beats one indeterminate bar for work that has parts.</p>
+    </div>
+    <div class="frame narrow">
+      <div class="titlebar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="t">LSW first-run wizard</span></div>
+      <div class="wiz">
+        <aside class="wiz-side"><div class="cap">Setup</div><ol class="wiz-steps" data-steps data-current="5"></ol>
+          <div class="foot"><span>payload: lsw-payload.iso</span><span>staging: ~/.local/share/lsw</span></div></aside>
+        <div class="wiz-main">
+          <div class="wiz-head">
+            <h3>Building the install payload</h3>
+            <p>The answer file, the guest binaries and the drivers that must be present on the very first boot.</p>
+          </div>
+          <div class="wiz-body">
+            <table class="tbl">
+              <thead><tr><th>Artifact</th><th>Source</th><th style="width:130px">State</th></tr></thead>
+              <tbody>
+                <tr><td>autounattend.xml</td><td class="kind">rendered</td><td><span class="pill done">Done</span></td></tr>
+                <tr><td>lsw-agent.exe, remotewin-guest.exe</td><td class="kind">local build</td><td><span class="pill done">Done</span></td></tr>
+                <tr><td>virtio-win.iso</td><td class="kind">fedorapeople</td><td><span class="pill run">877 MiB, 71 %</span></td></tr>
+                <tr><td>ivshmem driver</td><td class="kind">Looking Glass host package</td><td><span class="pill pend">Pending</span></td></tr>
+                <tr><td>rvk, rvk32 guest drivers</td><td class="kind">local build</td><td><span class="pill pend">Pending</span></td></tr>
+              </tbody>
+            </table>
+            <span class="meta">The shared memory driver is injected offline, because a driver delivered over the channel it provides cannot bootstrap that channel.</span>
+          </div>
+          <div class="wiz-foot">
+            <span class="hint">step 5 of 8, cannot go back</span>
+            <button class="btn quiet">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 08 -->
+  <section data-view="w-8" hidden>
+    <div class="stage-head">
+      <span class="eyebrow">Wizard, step 06</span>
+      <h1>Installing Windows</h1>
+      <p>The screen is the content. The status line above it says which phase the pipeline is in, and the guest console fills the rest.</p>
+    </div>
+    <div class="frame narrow">
+      <div class="titlebar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="t">LSW first-run wizard</span></div>
+      <div class="wiz">
+        <aside class="wiz-side"><div class="cap">Setup</div><ol class="wiz-steps" data-steps data-current="6"></ol>
+          <div class="foot"><span>vm: lsw, running</span><span>waiting for agent</span></div></aside>
+        <div class="wiz-main">
+          <div class="wiz-head" style="padding-bottom:14px">
+            <h3>Running the unattended installer</h3>
+            <div style="display:flex;align-items:center;gap:12px;margin-top:10px">
+              <span class="bar stripe" style="flex:1"><i style="width:100%"></i></span>
+              <span class="meta" style="white-space:nowrap"><b>08:14</b> elapsed</span>
+            </div>
+            <p style="margin-top:8px">Windows setup usually takes 10 to 30 minutes and reboots itself several times.</p>
+          </div>
+          <div class="wiz-body" style="padding:14px 16px">
+            <div class="screen">
+              <span class="tag">guest console</span>
+              <div class="scan"></div>
+              <div class="plate">Windows setup<br>specialize pass</div>
+            </div>
+          </div>
+          <div class="wiz-foot">
+            <span class="hint">step 6 of 8, cannot go back</span>
+            <button class="btn quiet">Cancel install</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <dl class="notes">
+      <div class="note"><dt>Failure</dt><dd>If setup rejects the answer file, the guest shows a dialog and the wizard would otherwise wait forever. The redesign watches for a stalled install and offers the setup log instead of an indeterminate bar that never ends.</dd></div>
+    </dl>
+  </section>
+
+  <!-- 09 -->
+  <section data-view="w-9" hidden>
+    <div class="stage-head">
+      <span class="eyebrow">Wizard, step 07</span>
+      <h1>Setup steps</h1>
+      <p>The steps from <span class="mono">setup-steps.json</span>, live from the guest agent. Parallel steps in a stage are visibly grouped.</p>
+    </div>
+    <div class="frame narrow">
+      <div class="titlebar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="t">LSW first-run wizard</span></div>
+      <div class="wiz">
+        <aside class="wiz-side"><div class="cap">Setup</div><ol class="wiz-steps" data-steps data-current="7"></ol>
+          <div class="foot"><span>agent: online</span><span>stage 1 of 1</span></div></aside>
+        <div class="wiz-main">
+          <div class="wiz-head">
+            <h3>Installing runtimes inside the guest</h3>
+            <p>Reported live by the agent. Steps inside one stage run in parallel.</p>
+          </div>
+          <div class="wiz-body">
+            <div class="meta" style="display:flex;align-items:center;gap:8px">
+              <span style="width:7px;height:7px;border-radius:2px;background:var(--amber)"></span>
+              STAGE 1, 3 STEPS IN PARALLEL
+            </div>
+            <table class="tbl">
+              <thead><tr><th>Step</th><th style="width:150px">Type</th><th style="width:190px">Status</th></tr></thead>
+              <tbody>
+                <tr><td>DXVK 2.7.1</td><td class="kind">download + extract</td><td><span class="pill done">Done, 12.4 MiB</span></td></tr>
+                <tr><td>VKD3D-Proton 3.0.1</td><td class="kind">download + extract</td><td><span class="pill run">Extracting</span></td></tr>
+                <tr><td>Tune Windows for VM use</td><td class="kind">run script</td><td><span class="pill run">Applying registry</span></td></tr>
+              </tbody>
+            </table>
+            <div style="margin-top:auto;display:flex;flex-direction:column;gap:8px">
+              <div class="bar"><i style="width:55%"></i></div>
+              <span class="meta">Then the VM shuts down, restarts on the virtio configuration, and the agent reconnects.</span>
+            </div>
+          </div>
+          <div class="wiz-foot">
+            <span class="hint">step 7 of 8, cannot go back</span>
+            <button class="btn quiet">View log</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 10 -->
+  <section data-view="w-10" hidden>
+    <div class="stage-head">
+      <span class="eyebrow">Wizard, step 08</span>
+      <h1>Finished</h1>
+      <p>A summary of what was actually built, then one button that goes where the user wants to be.</p>
+    </div>
+    <div class="frame narrow">
+      <div class="titlebar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="t">LSW first-run wizard</span></div>
+      <div class="wiz">
+        <aside class="wiz-side"><div class="cap">Setup</div><ol class="wiz-steps" data-steps data-current="8"></ol>
+          <div class="foot"><span>total: 24 min 51 s</span><span>agent online</span></div></aside>
+        <div class="wiz-main">
+          <div class="wiz-head">
+            <h3>The guest is ready</h3>
+            <p>Windows 11 Pro is installed, trimmed, and answering on the shared memory channel.</p>
+          </div>
+          <div class="wiz-body">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <div style="border:1px solid var(--line);border-radius:5px;padding:11px 13px;background:var(--surface);display:flex;justify-content:space-between;align-items:baseline">
+                <span class="meta">EDITION</span><span class="mono" style="font-size:12.5px">Windows 11 Pro</span></div>
+              <div style="border:1px solid var(--line);border-radius:5px;padding:11px 13px;background:var(--surface);display:flex;justify-content:space-between;align-items:baseline">
+                <span class="meta">MACHINE</span><span class="mono" style="font-size:12.5px">8 cores, 8 GiB, 60 GiB</span></div>
+              <div style="border:1px solid var(--line);border-radius:5px;padding:11px 13px;background:var(--surface);display:flex;justify-content:space-between;align-items:baseline">
+                <span class="meta">TRIM</span><span class="mono" style="font-size:12.5px">3.1 GiB removed</span></div>
+              <div style="border:1px solid var(--line);border-radius:5px;padding:11px 13px;background:var(--surface);display:flex;justify-content:space-between;align-items:baseline">
+                <span class="meta">RUNTIMES</span><span class="mono" style="font-size:12.5px">DXVK, VKD3D-Proton</span></div>
+            </div>
+            <p>The manager lists the applications found inside the guest. Double click one and its window opens on your desktop, rendered through the LSW render server. Installing more Windows software is done from inside the guest.</p>
+          </div>
+          <div class="wiz-foot">
+            <span class="hint">step 8 of 8</span>
+            <button class="btn">Close</button>
+            <button class="btn primary">Open the manager</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════ DESIGN SYSTEM ═══════════════ -->
+  <section data-view="s-color" hidden>
+    <div class="stage-head">
+      <span class="eyebrow">Design system</span>
+      <h1>Color</h1>
+      <p>Cool blue black for the host side, one warm amber reserved for the guest side and for the primary action. Semantic colors are separate from the accent and never used decoratively.</p>
+    </div>
+    <h3 style="margin:20px 0 10px;font-size:14px">Surfaces</h3>
+    <div class="swatches">
+      <div class="sw"><div class="chip" style="background:#0d0f14"></div><div class="txt"><span class="nm">ink</span><span class="hx">#0d0f14 &middot; window ground</span></div></div>
+      <div class="sw"><div class="chip" style="background:#151922"></div><div class="txt"><span class="nm">surface</span><span class="hx">#151922 &middot; panel, header, footer</span></div></div>
+      <div class="sw"><div class="chip" style="background:#1c212c"></div><div class="txt"><span class="nm">raised</span><span class="hx">#1c212c &middot; button, row</span></div></div>
+      <div class="sw"><div class="chip" style="background:#242a37"></div><div class="txt"><span class="nm">raised.hover</span><span class="hx">#242a37</span></div></div>
+      <div class="sw"><div class="chip" style="background:#272d3a"></div><div class="txt"><span class="nm">line</span><span class="hx">#272d3a &middot; every 1 px border</span></div></div>
+    </div>
+    <h3 style="margin:24px 0 10px;font-size:14px">Text</h3>
+    <div class="swatches">
+      <div class="sw"><div class="chip" style="background:#e4e8f0"></div><div class="txt"><span class="nm">fg</span><span class="hx">#e4e8f0 &middot; 13.6:1 on ink</span></div></div>
+      <div class="sw"><div class="chip" style="background:#9aa3b4"></div><div class="txt"><span class="nm">fg.dim</span><span class="hx">#9aa3b4 &middot; body, 6.4:1</span></div></div>
+      <div class="sw"><div class="chip" style="background:#646d7e"></div><div class="txt"><span class="nm">fg.faint</span><span class="hx">#646d7e &middot; labels only</span></div></div>
+    </div>
+    <h3 style="margin:24px 0 10px;font-size:14px">Meaning</h3>
+    <div class="swatches">
+      <div class="sw"><div class="chip" style="background:#ff9f45"></div><div class="txt"><span class="nm">amber</span><span class="hx">#ff9f45 &middot; guest, primary</span></div></div>
+      <div class="sw"><div class="chip" style="background:#4ec98a"></div><div class="txt"><span class="nm">ok</span><span class="hx">#4ec98a &middot; online, done</span></div></div>
+      <div class="sw"><div class="chip" style="background:#5aa9f0"></div><div class="txt"><span class="nm">info</span><span class="hx">#5aa9f0 &middot; running</span></div></div>
+      <div class="sw"><div class="chip" style="background:#f2555a"></div><div class="txt"><span class="nm">bad</span><span class="hx">#f2555a &middot; failed, stop</span></div></div>
+    </div>
+    <div class="block" style="margin-top:24px">
+      <h3>The one rule</h3>
+      <ul>
+        <li><b>Amber marks the guest.</b> The Windows side of the machine, the primary action, the current wizard step, the focus ring. Nothing else.</li>
+        <li><b>Green, blue and red carry state,</b> never emphasis. A green button would be a bug.</li>
+        <li><b>Every border is 1 px of <span class="mono">line</span>.</b> Depth comes from fill, not from shadow, because Qt stylesheets have no shadow.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section data-view="s-type" hidden>
+    <div class="stage-head">
+      <span class="eyebrow">Design system</span>
+      <h1>Type</h1>
+      <p>Archivo for interface text, JetBrains Mono for everything the machine said: paths, ports, sizes, timestamps, states.</p>
+    </div>
+    <div class="scale">
+      <div class="row"><span class="spec">Archivo 600 &middot; 19px</span><span style="font-size:19px;font-weight:600">Size the machine and name the account</span></div>
+      <div class="row"><span class="spec">Archivo 600 &middot; 15px</span><span style="font-size:15px;font-weight:600">Installed applications</span></div>
+      <div class="row"><span class="spec">Archivo 400 &middot; 13.5px</span><span style="font-size:13.5px">Body text. Removed from the image on this machine, before the guest ever boots.</span></div>
+      <div class="row"><span class="spec">JetBrains Mono 500 &middot; 10px<br>0.14em, uppercase</span><span class="mono" style="font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--page-muted)">Live preview</span></div>
+      <div class="row"><span class="spec">JetBrains Mono 400 &middot; 12.5px<br>tabular numerals</span><span class="mono" style="font-size:12.5px;font-variant-numeric:tabular-nums">5.1 / 8.0 GB &nbsp; 127.0.0.1:5102 &nbsp; 01:34:58.006</span></div>
+    </div>
+    <div class="block" style="margin-top:24px">
+      <h3>Rules</h3>
+      <ul>
+        <li><b>If the machine produced it, it is mono.</b> Paths, hex, ports, byte counts, durations, status words.</li>
+        <li><b>Tabular numerals wherever digits stack:</b> gauges, log timestamps, the setup table.</li>
+        <li><b>Uppercase mono labels replace group box titles,</b> which is how a panel gets a name without a heavy border and a floating caption.</li>
+        <li><b>Both faces ship in the binary</b> as Qt resources, so the UI looks the same on a host with no fonts installed.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section data-view="s-comp" hidden>
+    <div class="stage-head">
+      <span class="eyebrow">Design system</span>
+      <h1>Components</h1>
+      <p>Every control in both applications, in every state it can be in.</p>
+    </div>
+
+    <h3 style="margin:20px 0 10px;font-size:14px">Buttons</h3>
+    <div class="specimen">
+      <button class="btn primary">Primary</button>
+      <button class="btn">Default</button>
+      <button class="btn quiet">Quiet</button>
+      <button class="btn go">Start</button>
+      <button class="btn stop">Stop</button>
+      <button class="btn" disabled>Disabled</button>
+    </div>
+
+    <h3 style="margin:24px 0 10px;font-size:14px">State</h3>
+    <div class="specimen">
+      <span class="badge on">ONLINE</span>
+      <span class="badge off">OFFLINE</span>
+      <span class="pill pend">Pending</span>
+      <span class="pill run">Running</span>
+      <span class="pill done">Done</span>
+      <span class="pill fail">Failed</span>
+    </div>
+
+    <h3 style="margin:24px 0 10px;font-size:14px">Warnings</h3>
+    <div class="specimen" style="display:flex;flex-direction:column;gap:10px;align-items:stretch;padding:0;overflow:hidden">
+      <div class="warnstrip" style="border-bottom:none">
+        <span class="wdot"></span>
+        <span class="msg"><b>The reply slot is tight.</b> Six answers were collected in 18 extra round trips.</span>
+        <span class="acts"><button class="btn">Stage 16 MiB</button></span>
+      </div>
+      <div class="warnstrip crit" style="border-bottom:none">
+        <span class="wdot"></span>
+        <span class="msg"><b>The command ring is congested.</b> 214 commands split across several passes.</span>
+        <span class="acts"><button class="btn">Raise the ring</button></span>
+      </div>
+    </div>
+
+    <h3 style="margin:24px 0 10px;font-size:14px">Pressure</h3>
+    <div class="specimen" style="display:flex;flex-direction:column;gap:12px;align-items:stretch">
+      <div><div class="meta" style="margin-bottom:6px">Healthy, under half</div><div class="meter"><i class="used" style="width:43%"></i></div></div>
+      <div><div class="meta" style="margin-bottom:6px">Tight, filling</div><div class="meter"><i class="used hot" style="width:78%"></i></div></div>
+      <div><div class="meta" style="margin-bottom:6px">Congested, operations splitting</div><div class="meter"><i class="used crit" style="width:96%"></i></div></div>
+    </div>
+
+    <h3 style="margin:24px 0 10px;font-size:14px">Input</h3>
+    <div class="specimen" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">
+      <div class="field"><label>Rest</label><span class="input">lsw</span></div>
+      <div class="field"><label>Placeholder</label><span class="input ph">Path to Windows ISO</span></div>
+      <div class="field"><label>Focus</label><span class="input focused">C:\Program Files</span></div>
+      <div class="field"><label>Select</label><span class="input select">Windows 11 Pro</span></div>
+    </div>
+
+    <h3 style="margin:24px 0 10px;font-size:14px">Progress</h3>
+    <div class="specimen" style="display:flex;flex-direction:column;gap:14px;align-items:stretch">
+      <div><div class="meta" style="margin-bottom:6px">Determinate</div><div class="bar"><i style="width:62%"></i></div></div>
+      <div><div class="meta" style="margin-bottom:6px">Indeterminate</div><div class="bar stripe"><i style="width:100%"></i></div></div>
+      <div><div class="meta" style="margin-bottom:6px">Gauge, within budget</div><div class="bar"><i class="ok" style="width:38%;background:#4ec98a"></i></div></div>
+      <div><div class="meta" style="margin-bottom:6px">Gauge, over threshold</div><div class="bar"><i style="width:86%"></i></div></div>
+    </div>
+
+    <h3 style="margin:24px 0 10px;font-size:14px">Choice</h3>
+    <div class="specimen" style="display:flex;flex-direction:column;gap:8px;align-items:stretch">
+      <div class="opt" aria-checked="true"><span class="dial"></span><span><span class="t">Selected option</span><span class="d">The description sits inside the card, so the choice and its cost are one target.</span></span></div>
+      <div class="opt" aria-checked="false"><span class="dial"></span><span><span class="t">Unselected option</span><span class="d">Same geometry, quieter fill.</span></span></div>
+    </div>
+  </section>
+
+  <section data-view="s-qt" hidden>
+    <div class="stage-head">
+      <span class="eyebrow">Design system</span>
+      <h1>Qt mapping</h1>
+      <p>Nothing in this design needs a custom paint event. Every visual is reachable from a Qt stylesheet plus a handful of layout changes.</p>
+    </div>
+    <div class="grid2">
+      <div class="block">
+        <h3>Straight stylesheet</h3>
+        <ul>
+          <li><b>Buttons, inputs, combos, tables, scrollbars.</b> Flat fills, 1 px borders, radii, one inset top highlight via <span class="mono">border-top</span>.</li>
+          <li><b>Progress bars.</b> <span class="mono">::chunk</span> with a flat fill; the indeterminate stripe is a <span class="mono">qlineargradient</span>.</li>
+          <li><b>Badges and pills.</b> QLabel with an object name, exactly as the panel already does today.</li>
+          <li><b>Panels.</b> QGroupBox loses its title and gains a header QLabel, so the caption sits inside the border instead of on it.</li>
+        </ul>
+      </div>
+      <div class="block">
+        <h3>Needs a small code change</h3>
+        <ul>
+          <li><b>Wizard step rail.</b> <span class="mono">QWizard::setSideWidget()</span> with a QListWidget, plus a slot on <span class="mono">currentIdChanged</span>.</li>
+          <li><b>Two wizard pages become dialogs.</b> <span class="mono">DebloatPage</span> and <span class="mono">DownloadPage</span> lose their page ids (<span class="mono">Wizard::Debloat</span>, <span class="mono">Wizard::Download</span>) and their widgets move into <span class="mono">TrimImageDialog</span> and <span class="mono">DownloadImageDialog</span>. Each owns its worker, each returns the path it wrote.</li>
+          <li><b>Output directory.</b> <span class="mono">DebloatStager::trim()</span> already takes an output directory, so the dialog passes the chosen folder plus a filename instead of <span class="mono">settings().isos_dir()</span>. The downloader gains the same pair.</li>
+          <li><b>IsoChoicePage shrinks</b> to one path field and two buttons. <span class="mono">MicrosoftClient</span> and <span class="mono">IsoSourceFetcher</span> move with the download dialog, so the page no longer owns network state or a ban flag.</li>
+          <li><b>Manager nav rail.</b> A QListWidget beside a QStackedWidget replaces the header button row. <span class="mono">MainWindow</span> keeps its tray; <span class="mono">VmDetailPanel</span> becomes the Overview page of the stack.</li>
+          <li><b>Console and log move into the stack.</b> <span class="mono">ConsoleWindow</span> and <span class="mono">LogViewer</span> become plain QWidgets that the stack owns; the pop out button reparents one into a QDialog.</li>
+          <li><b>Settings page.</b> New <span class="mono">SettingsPage</span> over a <span class="mono">PendingChanges</span> object: live keys write straight to <span class="mono">Settings</span>, restart keys stage until Apply, which calls <span class="mono">Lifecycle::shutdown</span>, rewrites the domain XML from the template, and starts it again.</li>
+          <li><b>File manager bookmarks.</b> <span class="mono">DolphinPlaces</span> gains an uninstall and a folder argument, and a sibling writes <span class="mono">~/.config/gtk-3.0/bookmarks</span> for GNOME Files and Thunar. Both are toggles over the same SMB URL.</li>
+          <li><b>Host folder into the guest.</b> A <span class="mono">&lt;filesystem type='mount' accessmode='passthrough'&gt;</span> virtiofs device in <span class="mono">domain.xml</span>, plus the drive letter mapping in the guest. Restart only, hence the tag.</li>
+          <li><b>Desktop entries.</b> <span class="mono">DesktopLauncher</span> gains the category name as a parameter, a per-application publish flag on <span class="mono">AppConfig</span>, MIME registration, and a rewrite-all entry point for the button.</li>
+          <li><b>Resolution and DPI.</b> Written into the guest at boot by the agent, and the virtual monitor size goes in the domain XML, so both land through the same Apply path as cores and memory.</li>
+          <li><b>Render channel sizes.</b> Three fields that become <span class="mono">--ring-kib</span>, <span class="mono">--reply-kib</span> and <span class="mono">--blob-mib</span> on the render server command line, plus <span class="mono">--sessions</span>. The derived region size must match the <span class="mono">&lt;shmem&gt;</span> size in <span class="mono">domain.xml</span>, so both are written from one number.</li>
+          <li><b>Congestion counters, preferred.</b> A counters block in <span class="mono">RegionHeader</span> that the server updates where it already calls <span class="mono">RVK_PROF_COUNTER</span>: <span class="mono">space_waits</span>, <span class="mono">chunked_commands</span>, <span class="mono">partial_replies</span>, <span class="mono">reply_fetches</span>, <span class="mono">blob_in_use</span>, <span class="mono">blob_failures</span>, plus each area's suggested size, which the server already computes for its warning text. LSW maps the region read only and polls it.</li>
+          <li><b>Congestion counters, fallback.</b> A parser over the render server log for the three warning lines it already emits. They carry the counts and the recommended flag value verbatim, so the panel shows the server's number either way.</li>
+          <li><b>Channel list.</b> <span class="mono">owner_pid</span> is already in <span class="mono">RegionHeader</span>, claimed with a compare exchange. Reading each region's header gives the whole strip: who holds it, its sizes, its counters. Release is a compare exchange back to zero, refused while the pid is alive.</li>
+          <li><b>Per channel sizes.</b> The server takes one <span class="mono">--ring-kib</span> for every session today. An override needs the flags to accept a per index form, or a small config file the server reads at startup. This is the one item on the page that needs a render server change beyond counters.</li>
+          <li><b>Assignment and the busy policy.</b> Host side. <span class="mono">AppConfig</span> gains a channel index and a busy policy; the launcher passes the index to the ICD through the environment it already builds, and the ICD's claim loop honours wait, fall back, or fail.</li>
+          <li><b>Host folders.</b> A list of <span class="mono">&lt;filesystem&gt;</span> devices in <span class="mono">domain.xml</span> rather than one, each with a tag the guest maps to a drive letter.</li>
+          <li><b>Launch splash.</b> A frameless QDialog the manager shows when <span class="mono">--launch &lt;app-id&gt;</span> arrives and the domain is not running. Phases come from signals that already exist on <span class="mono">Lifecycle</span> and <span class="mono">Monitor</span>, plus one new one for the channel claim.</li>
+          <li><b>Remote file picker.</b> A new agent command <span class="mono">list_dir</span> (path, cursor, filter in; name, is_dir, size, mtime, icon id out, paged), and a <span class="mono">RemoteFileDialog</span> on the host: a QListWidget of places beside a QTreeView over a small model that fetches a page at a time and asks <span class="mono">get_icon</span> only for visible rows. Shortcut resolution happens agent side, so the host stores the target rather than the .lnk.</li>
+          <li><b>Manager status bar.</b> A QStatusBar fed from Lifecycle and AgentRpcClient.</li>
+          <li><b>Empty state.</b> A second page in a QStackedWidget inside the panel.</li>
+          <li><b>Payload checklist.</b> The existing payload page becomes a small QTableWidget, same shape as the setup table.</li>
+          <li><b>Option cards.</b> QRadioButton with the description as a child label, wrapped in a clickable QFrame.</li>
+        </ul>
+      </div>
+      <div class="block">
+        <h3>Not doing</h3>
+        <ul>
+          <li><b>No shadows, blur or transparency</b> inside the app windows. Qt stylesheets cannot draw them, and faking them costs a paint event.</li>
+          <li><b>No animation</b> beyond what QProgressBar already does.</li>
+          <li><b>No light theme for the app.</b> The manager is a machine console and commits to one world. Tokens are named so a light set can be added later without touching layout.</li>
+          <li><b>No icon font.</b> Symbols are either real app icons from the guest or plain text.</li>
+          <li><b>Trim is never mandatory.</b> The pipeline keeps its own trim path for the unattended CLI runner, but the wizard never blocks on it.</li>
+        </ul>
+      </div>
+      <div class="block">
+        <h3>Files this touches</h3>
+        <ul>
+          <li><span class="mono">src/host/src/manager/main_window.cpp</span>, nav rail and the stacked pages</li>
+          <li><span class="mono">src/host/src/manager/vm_detail_panel.cpp</span>, becomes the Overview page, header row deleted, stylesheet constant moves to a resource</li>
+          <li>new <span class="mono">src/host/src/manager/settings_page.cpp</span> and <span class="mono">src/host/src/config/pending_changes.cpp</span></li>
+          <li><span class="mono">src/host/src/platform/dolphin_places.cpp</span>, plus a new <span class="mono">gtk_bookmarks.cpp</span> beside it</li>
+          <li><span class="mono">src/host/src/apps/desktop_launcher.cpp</span>, category and MIME handling</li>
+          <li>new <span class="mono">src/host/src/link/render_stats.cpp</span>, region counters and the log fallback</li>
+          <li>new <span class="mono">src/host/src/manager/launch_splash.cpp</span></li>
+          <li>new <span class="mono">src/host/src/manager/remote_file_dialog.cpp</span>, and <span class="mono">list_dir</span> in <span class="mono">src/agent/src/rpc/</span> plus <span class="mono">src/linkproto/include/lsw/linkproto/commands.hpp</span></li>
+          <li><span class="mono">src/host/src/apps/app_config.cpp</span>, channel index and busy policy per application</li>
+          <li>render server: a counters block in <span class="mono">src/wire/include/rvk/wire/region_layout.hpp</span>, written where <span class="mono">ring_producer.cpp</span>, <span class="mono">ring_transport.cpp</span> and <span class="mono">blob_allocator.cpp</span> already count</li>
+          <li><span class="mono">src/host/src/manager/stats_widget.cpp</span>, gauges</li>
+          <li><span class="mono">src/host/src/manager/app_list.cpp</span>, tile metrics</li>
+          <li><span class="mono">src/host/src/wizard/*.cpp</span>, all eight pages</li>
+          <li><span class="mono">src/host/src/wizard/debloat_page.cpp</span> and <span class="mono">download_page.cpp</span> move to <span class="mono">src/host/src/tools/</span> as dialogs</li>
+          <li>new <span class="mono">src/host/embedded/theme.qss</span> and a fonts resource</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  </main>
+</div>
+
+<script>
+(function(){
+  var STEPS = ["Welcome","Licensing","Windows ISO","Size and account",
+               "Payload","Installing","Setup steps","Finished"];
+
+  // Build every wizard step rail from one list.
+  document.querySelectorAll("[data-steps]").forEach(function(ol){
+    var cur = parseInt(ol.getAttribute("data-current") || "1", 10);
+    STEPS.forEach(function(name, i){
+      var n = i + 1;
+      var li = document.createElement("li");
+      li.className = n < cur ? "done" : (n === cur ? "now" : "");
+      var tick = document.createElement("span");
+      tick.className = "tick";
+      tick.textContent = n < cur ? "\u2713" : String(n).padStart(2, "0");
+      var label = document.createElement("span");
+      label.textContent = name;
+      li.appendChild(tick);
+      li.appendChild(label);
+      ol.appendChild(li);
+    });
+  });
+
+  var tabs = document.querySelectorAll(".segmented button");
+  var rails = document.querySelectorAll("[data-rail]");
+  var views = document.querySelectorAll(".stage > section");
+
+  function showView(id){
+    views.forEach(function(v){ v.hidden = v.getAttribute("data-view") !== id; });
+    document.querySelectorAll(".rail button").forEach(function(b){
+      b.setAttribute("aria-current", b.getAttribute("data-view") === id ? "true" : "false");
+    });
+    window.scrollTo({top:0, behavior:"instant"});
+  }
+
+  // Capture mode. "?shot=<view>" strips the page's own chrome and
+  // leaves one mockup window, so a headless browser screenshot of the
+  // document is exactly the frame the design specifies. The compare
+  // tool in scripts/ drives this.
+  var shot = new URLSearchParams(location.search).get("shot");
+  if (shot) {
+    showView(shot);
+    // display, not the hidden attribute: these all set an explicit
+    // display in the stylesheet, which wins over it.
+    var gone = [".topbar", ".rail"];
+    document.querySelectorAll(gone.join(",")).forEach(function(n){
+      n.style.display = "none";
+    });
+    // section, not [data-view]: the rail's buttons carry the same
+    // attribute and come first in the document.
+    var section = document.querySelector('section[data-view="' + shot + '"]');
+    // :scope, so the mockup's own headings inside the frame survive.
+    section.querySelectorAll(":scope > .stage-head, :scope > .notes, :scope > h3")
+      .forEach(function(n){
+      n.style.display = "none";
+    });
+    // Anything in the section that is not the mockup window goes too:
+    // the failure-state rows under some of the dialogs are a second
+    // frame, and the capture wants one.
+    var first = section.querySelector(".frame");
+    Array.prototype.forEach.call(section.children, function(child){
+      if (child !== first && !child.contains(first)) {
+        child.style.display = "none";
+      }
+    });
+    document.body.style.background = "#0b0c10";
+    document.querySelector(".stage").style.padding = "0";
+    document.querySelector(".shell").style.display = "block";
+    if (first) {
+      first.style.margin = "0";
+      first.style.borderRadius = "0";
+      first.style.boxShadow = "none";
+      first.style.maxWidth = "none";
+      first.style.border = "none";
+      // The window chrome the mockup draws is a picture of a title bar;
+      // the built application has a real one from the compositor.
+      var bar = first.querySelector(".titlebar");
+      if (bar) { bar.style.display = "none"; }
+    }
+  }
+
+  tabs.forEach(function(t){
+    t.addEventListener("click", function(){
+      var tab = t.getAttribute("data-tab");
+      tabs.forEach(function(x){ x.setAttribute("aria-selected", x === t ? "true" : "false"); });
+      rails.forEach(function(r){ r.hidden = r.getAttribute("data-rail") !== tab; });
+      var first = document.querySelector('[data-rail="' + tab + '"] button');
+      if (first) showView(first.getAttribute("data-view"));
+    });
+  });
+
+  document.querySelectorAll(".rail button").forEach(function(b){
+    b.addEventListener("click", function(){ showView(b.getAttribute("data-view")); });
+  });
+
+  // Trim page: selecting the destructive level surfaces its warning.
+  var trimBody = document.getElementById("trimBody");
+  if (trimBody){
+    var warn = document.getElementById("trimWarn");
+    var status = document.getElementById("trimStatus");
+    var est = document.getElementById("trimEst");
+    var texts = {
+      none: "Copying the image unchanged, 3 210 of 8 400 files",
+      sane: "Removing provisioned packages, 21 of 32",
+      max:  "Deleting WinSxS entries, 2 841 of 7 460"
+    };
+    var sizes = { none: "5.5 GiB", sane: "5.1 GiB", max: "2.4 GiB" };
+    trimBody.querySelectorAll(".opt").forEach(function(opt){
+      opt.addEventListener("click", function(){
+        trimBody.querySelectorAll(".opt").forEach(function(o){ o.setAttribute("aria-checked","false"); });
+        opt.setAttribute("aria-checked","true");
+        var kind = opt.getAttribute("data-trim");
+        warn.hidden = kind !== "max";
+        status.textContent = texts[kind];
+        if (est) est.textContent = sizes[kind];
+      });
+    });
+    trimBody.querySelector('[data-trim="sane"]').click();
+  }
+
+  // App grid selection.
+  var grid = document.getElementById("appGrid");
+  if (grid){
+    grid.querySelectorAll(".app").forEach(function(a){
+      a.addEventListener("click", function(){
+        grid.querySelectorAll(".app").forEach(function(x){ x.setAttribute("aria-selected","false"); });
+        a.setAttribute("aria-selected","true");
+      });
+    });
+  }
+})();
+</script>

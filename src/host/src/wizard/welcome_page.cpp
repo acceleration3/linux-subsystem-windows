@@ -1,4 +1,5 @@
 #include "lsw/host/wizard/welcome_page.hpp"
+#include "lsw/host/wizard/page_chrome.hpp"
 
 #include "lsw/host/ui/theme.hpp"
 
@@ -40,13 +41,10 @@ QWidget* stage_card(const QString& number, const QString& title, const QString& 
 }  // namespace
 
 WelcomePage::WelcomePage(QWidget* parent) : QWizardPage(parent) {
-    setTitle(QStringLiteral("Run Windows applications on Linux"));
-    setSubTitle(QStringLiteral("LSW installs a Windows guest and renders its windows onto "
+
+    auto* root = PageChrome::install(this, QStringLiteral("Run Windows applications on Linux"), QStringLiteral("LSW installs a Windows guest and renders its windows onto "
                                "your desktop. Four stages, roughly 25 minutes, mostly "
                                "unattended."));
-
-    auto* root = new QVBoxLayout(this);
-    root->setSpacing(12);
 
     auto* grid = new QGridLayout;
     grid->setSpacing(10);
@@ -71,9 +69,13 @@ WelcomePage::WelcomePage(QWidget* parent) : QWizardPage(parent) {
     root->addLayout(grid);
 
     auto* footnote = new QLabel(
-        QStringLiteral("Nothing outside ~/.local/share/lsw is modified. The guest is a "
-                       "single qcow2 file you can delete."));
-    footnote->setObjectName(QString::fromLatin1(Theme::Role::kBody));
+        QStringLiteral("Nothing on this machine is modified outside <span style=\"color:%1;"
+                       "font-family:'JetBrains Mono','DejaVu Sans Mono',monospace\">"
+                       "~/.local/share/lsw</span>. The guest is a single qcow2 file you "
+                       "can delete.")
+            .arg(QString::fromLatin1(Theme::Color::kAmber)));
+    footnote->setObjectName(QString::fromLatin1(Theme::Role::kDim));
+    footnote->setTextFormat(Qt::RichText);
     footnote->setWordWrap(true);
     root->addWidget(footnote);
     root->addStretch(1);

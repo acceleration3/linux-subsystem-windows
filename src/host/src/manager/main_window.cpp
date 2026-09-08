@@ -49,7 +49,7 @@ const PageInfo kPages[] = {
     {"Overview", ""},
     {"Console", "cmd.exe in the guest"},
     {"Log", "live"},
-    {"Render channel", "shared memory between the guest drivers and the server"},
+    {"Render channel", ""},
     {"Settings", "~/.config/lsw/manager.conf"},
 };
 
@@ -349,7 +349,7 @@ void MainWindow::show_page(NavRail::Page page) {
     stack_->setCurrentIndex(index);
     rail_->set_current(page);
     content_title_->setText(QString::fromLatin1(kPages[index].title));
-    content_detail_->setText(QString::fromLatin1(kPages[index].detail));
+    content_detail_->setText(page_detail(page));
     pop_out_button_->setVisible(page == NavRail::Page::Console
                                 || page == NavRail::Page::Log);
     preview_button_->setVisible(page == NavRail::Page::Overview);
@@ -372,7 +372,7 @@ void MainWindow::refresh_identity() {
     const auto& record = services_.vms().records().first();
     auto& settings = services_.manager_settings();
     const QString detail =
-        QStringLiteral("%1\n%2 cores · %3 GiB RAM\n%4 GiB disk")
+        QStringLiteral("%1\n%2 cores · %3 GiB · %4 GiB")
             .arg(record.edition.isEmpty() ? QStringLiteral("Windows") : record.edition)
             .arg(settings.int_value(QLatin1String(K::kCpuCores)))
             .arg(settings.int_value(QLatin1String(K::kMemoryMib)) / 1024)
@@ -380,19 +380,53 @@ void MainWindow::refresh_identity() {
     rail_->set_identity(record.name.isEmpty() ? QStringLiteral("lsw") : record.name, detail);
 }
 
+QString MainWindow::page_detail(NavRail::Page page) const {
+    auto& settings = services_.manager_settings();
+    switch (page) {
+    case NavRail::Page::Overview:
+        return overview_ != nullptr && overview_->is_running()
+                   ? QStringLiteral("running")
+                   : QStringLiteral("stopped");
+    case NavRail::Page::Render: {
+        const int channels = settings.int_value(QLatin1String(K::kChannels));
+        int claimed = 0;
+        for (const auto& channel : services_.render_stats().channels()) {
+            claimed += channel.claimed ? 1 : 0;
+        }
+        return QStringLiteral("%1 channels · %2 in use · %3 GiB reserved")
+            .arg(channels)
+            .arg(claimed)
+            .arg(static_cast<double>(channels) * vm::RenderServer::region_mib() / 1024.0,
+                 0, 'f', 1);
+    }
+    case NavRail::Page::Log:
+    case NavRail::Page::Console:
+    case NavRail::Page::Settings:
+    case NavRail::Page::Count:
+        break;
+    }
+    return QString::fromLatin1(kPages[static_cast<int>(page)].detail);
+}
+
 void MainWindow::refresh_status_bar() {
     auto& settings = services_.manager_settings();
     const int channels = settings.int_value(QLatin1String(K::kChannels));
-    const QString text =
-        QStringLiteral("agent 127.0.0.1:%1   ·   transport ivshmem, doorbell vector 0   "
-                       "·   disk virtio-blk, iothread   ·   render %2 channel%3   ·   %4")
-            .arg(settings.int_value(QLatin1String(K::kAgentPort)))
+    // The facts, with a rule between each, which is what makes a row of
+    // them read as a row rather than as a sentence.
+    const QStringList facts = {
+        QStringLiteral("agent 127.0.0.1:%1")
+            .arg(settings.int_value(QLatin1String(K::kAgentPort))),
+        QStringLiteral("transport ivshmem %1 GiB, vector 0")
+            .arg(vm::RenderServer::region_mib() / 1024.0, 0, 'f', 1),
+        QStringLiteral("disk virtio-blk, iothread"),
+        QStringLiteral("render %1 channel%2")
             .arg(channels)
-            .arg(channels == 1 ? QString{} : QStringLiteral("s"))
-            .arg(overview_ != nullptr && overview_->is_agent_online()
-                     ? QStringLiteral("agent answering")
-                     : QStringLiteral("agent not reachable"));
-    status_left_->setText(text);
+            .arg(channels == 1 ? QString{} : QStringLiteral("s")),
+        overview_ != nullptr && overview_->is_agent_online()
+            ? QStringLiteral("agent answering")
+            : QStringLiteral("agent not reachable"),
+    };
+    status_left_->setText(facts.join(QStringLiteral("   \u2502   ")));
 }
 
 void MainWindow::refresh_warning() {

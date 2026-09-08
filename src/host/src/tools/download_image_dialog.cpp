@@ -70,8 +70,15 @@ DownloadImageDialog::DownloadImageDialog(config::Settings& settings, QWidget* pa
     setModal(true);
     setMinimumWidth(620);
 
-    auto* root = new QVBoxLayout(this);
+    // The body carries the dialog's padding; the footer band beneath it
+    // runs edge to edge, which is what makes it a band.
+    auto* outer = new QVBoxLayout(this);
+    outer->setContentsMargins(0, 0, 0, 0);
+    outer->setSpacing(0);
+    auto* body_widget = new QWidget;
+    auto* root = new QVBoxLayout(body_widget);
     root->setContentsMargins(20, 18, 20, 16);
+    outer->addWidget(body_widget, 1);
     root->setSpacing(14);
 
     // ---- what to fetch --------------------------------------------
@@ -136,7 +143,10 @@ DownloadImageDialog::DownloadImageDialog(config::Settings& settings, QWidget* pa
 
     root->addStretch(1);
 
-    auto* footer = new QHBoxLayout;
+    auto* foot_band = new QFrame;
+    foot_band->setObjectName(QString::fromLatin1(Theme::Role::kDialogFoot));
+    auto* footer = new QHBoxLayout(foot_band);
+    footer->setContentsMargins(20, 12, 20, 12);
     footer->addWidget(meta(QStringLiteral("Resumes if the connection drops.")), 1);
     close_button_ = new QPushButton(QStringLiteral("Close"));
     run_button_ = new QPushButton(QStringLiteral("Download"));
@@ -144,7 +154,7 @@ DownloadImageDialog::DownloadImageDialog(config::Settings& settings, QWidget* pa
     run_button_->setEnabled(false);
     footer->addWidget(close_button_);
     footer->addWidget(run_button_);
-    root->addLayout(footer);
+    outer->addWidget(foot_band);
 
     connect(close_button_, &QPushButton::clicked, this, &QDialog::reject);
     connect(run_button_, &QPushButton::clicked, this, &DownloadImageDialog::start);

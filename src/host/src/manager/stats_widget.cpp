@@ -42,7 +42,7 @@ QProgressBar* make_bar() {
 }  // namespace
 
 StatsWidget::StatsWidget(QWidget* parent) : QFrame(parent) {
-    setFrameShape(QFrame::StyledPanel);
+    setFrameShape(QFrame::NoFrame);
     auto* form = new QFormLayout(this);
     form->setHorizontalSpacing(12);
 

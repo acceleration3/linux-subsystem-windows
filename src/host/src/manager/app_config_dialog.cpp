@@ -9,6 +9,7 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QFormLayout>
+#include <QFrame>
 #include <QHBoxLayout>
 #include <QPushButton>
 #include <QFutureWatcher>
@@ -68,9 +69,14 @@ AppConfigDialog::AppConfigDialog(apps::AppConfig initial, link::AgentRpcClient& 
     setModal(true);
     setMinimumWidth(520);
 
-    auto* root = new QVBoxLayout(this);
+    auto* outer = new QVBoxLayout(this);
+    outer->setContentsMargins(0, 0, 0, 0);
+    outer->setSpacing(0);
+    auto* body_widget = new QWidget;
+    auto* root = new QVBoxLayout(body_widget);
     root->setContentsMargins(20, 18, 20, 16);
     root->setSpacing(14);
+    outer->addWidget(body_widget, 1);
 
     // Identity first. The dialog opens by confirming which application
     // this is, rather than making you read the path to find out.
@@ -207,7 +213,10 @@ AppConfigDialog::AppConfigDialog(apps::AppConfig initial, link::AgentRpcClient& 
 
     // Remove sits apart from the pair that finish the dialog, and quiet,
     // because it is the one that destroys something.
-    auto* footer = new QHBoxLayout;
+    auto* foot_band = new QFrame;
+    foot_band->setObjectName(QString::fromLatin1(ui::Theme::Role::kDialogFoot));
+    auto* footer = new QHBoxLayout(foot_band);
+    footer->setContentsMargins(20, 12, 20, 12);
     auto* remove = new QPushButton(QStringLiteral("Remove"));
     remove->setObjectName(QString::fromLatin1(ui::Theme::Role::kQuiet));
     remove->setVisible(!cfg_.id.isEmpty());
@@ -219,7 +228,7 @@ AppConfigDialog::AppConfigDialog(apps::AppConfig initial, link::AgentRpcClient& 
     footer->addStretch(1);
     footer->addWidget(cancel);
     footer->addWidget(save);
-    root->addLayout(footer);
+    outer->addWidget(foot_band);
 
     connect(save, &QPushButton::clicked, this, &AppConfigDialog::on_accept);
     connect(cancel, &QPushButton::clicked, this, &QDialog::reject);

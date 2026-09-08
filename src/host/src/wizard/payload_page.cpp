@@ -1,10 +1,15 @@
 #include "lsw/host/wizard/payload_page.hpp"
+#include "lsw/host/wizard/page_chrome.hpp"
 
 #include "lsw/host/wizard/wizard.hpp"
 #include "lsw/host/provision/pipeline.hpp"
 
 #include <QBrush>
+#include "lsw/host/ui/theme.hpp"
+
 #include <QColor>
+#include <QHBoxLayout>
+#include <QLabel>
 #include <QHeaderView>
 #include <QTimer>
 #include <QVBoxLayout>
@@ -19,11 +24,9 @@ constexpr int kColStatus = 1;
 
 PayloadPage::PayloadPage(Wizard& wizard, QWidget* parent)
     : QWizardPage(parent), wizard_(wizard) {
-    setTitle("Preparing the install payload");
-    setSubTitle("Fetching the latest virtio-win drivers and building the "
-                "LSW payload ISO.");
 
-    auto* lay = new QVBoxLayout(this);
+    auto* lay = PageChrome::install(this, QStringLiteral("Preparing the install payload"), QStringLiteral("Fetching the latest virtio-win drivers and building the "
+                "LSW payload ISO."));
     table_ = new QTableWidget(3, 2);
     table_->setHorizontalHeaderLabels(QStringList{"TASK", "STATUS"});
     table_->horizontalHeader()->setDefaultAlignment(Qt::AlignLeft | Qt::AlignVCenter);
@@ -104,29 +107,33 @@ void PayloadPage::set_row_status(int row, RowStatus s, const QString& detail) {
         return;
     }
     QString text;
-    QColor fg;
+    const char* role = ui::Theme::Role::kPill;
     switch (s) {
     case RowStatus::Pending:
         text = QStringLiteral("Pending");
-        fg = QColor("#888888");
         break;
     case RowStatus::Running:
-        text = detail.isEmpty() ? QStringLiteral("Running...") : detail;
-        fg = QColor("#1f6feb");
+        text = detail.isEmpty() ? QStringLiteral("Running") : detail;
+        role = ui::Theme::Role::kPillRun;
         break;
     case RowStatus::Done:
         text = detail.isEmpty() ? QStringLiteral("Done") : detail;
-        fg = QColor("#1a7f37");
+        role = ui::Theme::Role::kPillDone;
         break;
     case RowStatus::Failed:
         text = detail.isEmpty() ? QStringLiteral("Failed")
-                                 : QStringLiteral("Failed: %1").arg(detail);
-        fg = QColor("#cf222e");
+                                : QStringLiteral("Failed: %1").arg(detail);
+        role = ui::Theme::Role::kPillFail;
         break;
     }
-    auto* item = new QTableWidgetItem(text);
-    item->setForeground(QBrush(fg));
-    table_->setItem(row, kColStatus, item);
+    auto* holder = new QWidget;
+    auto* layout = new QHBoxLayout(holder);
+    layout->setContentsMargins(8, 0, 8, 0);
+    auto* pill = new QLabel(QStringLiteral("\u25cf  %1").arg(text));
+    pill->setObjectName(QString::fromLatin1(role));
+    layout->addWidget(pill, 0, Qt::AlignLeft | Qt::AlignVCenter);
+    layout->addStretch(1);
+    table_->setCellWidget(row, kColStatus, holder);
 }
 
 }  // namespace lsw::host::wizard

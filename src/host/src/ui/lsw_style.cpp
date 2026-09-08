@@ -6,6 +6,8 @@
 #include <QPainterPath>
 #include <QStyleFactory>
 #include <QStyleOption>
+#include <QWizard>
+#include <QWizardPage>
 
 namespace lsw::host::ui {
 
@@ -40,6 +42,27 @@ LswStyle::LswStyle() : QProxyStyle(QStyleFactory::create(QStringLiteral("Fusion"
 
 int LswStyle::pixelMetric(PixelMetric metric, const QStyleOption* option,
                           const QWidget* widget) const {
+    // QWizard lays its page, its side widget and its button row out with
+    // the style's own margins, and there is no API to set them. It asks
+    // twice: once about itself for the outer margin, and once about the
+    // current page for the inner one that surrounds both the page and
+    // the rail. Both have to answer zero, or the design's rail and page
+    // float in a border of the window's ground.
+    if (widget != nullptr
+        && (qobject_cast<const QWizard*>(widget) != nullptr
+            || qobject_cast<const QWizardPage*>(widget) != nullptr)) {
+        switch (metric) {
+        case PM_LayoutLeftMargin:
+        case PM_LayoutRightMargin:
+        case PM_LayoutTopMargin:
+        case PM_LayoutBottomMargin:
+        case PM_LayoutHorizontalSpacing:
+        case PM_LayoutVerticalSpacing:
+            return 0;
+        default:
+            break;
+        }
+    }
     switch (metric) {
     case PM_IndicatorWidth:
     case PM_IndicatorHeight:

@@ -91,8 +91,15 @@ TrimImageDialog::TrimImageDialog(config::Settings& settings, QString source_iso,
     setModal(true);
     setMinimumWidth(620);
 
-    auto* root = new QVBoxLayout(this);
+    // The body carries the dialog's padding; the footer band beneath it
+    // runs edge to edge, which is what makes it a band.
+    auto* outer = new QVBoxLayout(this);
+    outer->setContentsMargins(0, 0, 0, 0);
+    outer->setSpacing(0);
+    auto* body_widget = new QWidget;
+    auto* root = new QVBoxLayout(body_widget);
     root->setContentsMargins(20, 18, 20, 16);
+    outer->addWidget(body_widget, 1);
     root->setSpacing(14);
 
     // ---- source ---------------------------------------------------
@@ -198,7 +205,10 @@ TrimImageDialog::TrimImageDialog(config::Settings& settings, QString source_iso,
     root->addStretch(1);
 
     // ---- footer ---------------------------------------------------
-    auto* footer = new QHBoxLayout;
+    auto* foot_band = new QFrame;
+    foot_band->setObjectName(QString::fromLatin1(Theme::Role::kDialogFoot));
+    auto* footer = new QHBoxLayout(foot_band);
+    footer->setContentsMargins(20, 12, 20, 12);
     footer->addWidget(meta(QStringLiteral("The source image is read only and is never "
                                           "modified.")),
                       1);
@@ -207,7 +217,7 @@ TrimImageDialog::TrimImageDialog(config::Settings& settings, QString source_iso,
     run_button_->setObjectName(QString::fromLatin1(Theme::Role::kPrimary));
     footer->addWidget(close_button_);
     footer->addWidget(run_button_);
-    root->addLayout(footer);
+    outer->addWidget(foot_band);
 
     connect(close_button_, &QPushButton::clicked, this, &QDialog::reject);
     connect(run_button_, &QPushButton::clicked, this, &TrimImageDialog::start);

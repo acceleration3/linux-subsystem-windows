@@ -55,6 +55,7 @@ private:
     void pop_out(NavRail::Page page);
     void setup_tray();
     void refresh_identity();
+    [[nodiscard]] QString page_detail(NavRail::Page page) const;
     void refresh_status_bar();
     void refresh_warning();
     void push_display_settings();

@@ -464,7 +464,9 @@ QWidget* SettingsPage::add_row(QVBoxLayout* group, const QString& key, const QSt
     text->addWidget(body);
 
     layout->addLayout(text, 1);
-    control->setMinimumWidth(220);
+    // The control column is a fixed share of the row, so a slider has
+    // somewhere to travel and a combo does not float in the middle.
+    control->setFixedWidth(300);
     layout->addWidget(control, 0, Qt::AlignRight);
 
     group->addWidget(row);
@@ -494,8 +496,9 @@ QWidget* SettingsPage::make_slider(const QString& key, int min, int max, int ste
     spin->setRange(min, max);
     spin->setSingleStep(step);
     spin->setSuffix(suffix);
-    spin->setMinimumWidth(110);
-    spin->setObjectName(QString::fromLatin1(Theme::Role::kMono));
+    spin->setFixedWidth(96);
+    spin->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    spin->setObjectName(QStringLiteral("SliderValue"));
 
     const int initial = pending_.staged_or_current(key).toInt();
     slider->setValue(initial);
