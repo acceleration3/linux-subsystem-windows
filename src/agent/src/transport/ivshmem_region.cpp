@@ -117,8 +117,8 @@ int IvshmemRegion::open() {
     }
     // Every IVSHMEM function on the bus, not the first one.
     //
-    // The guest has more than one: this region carries the frame ring
-    // and the agent's control channel, and the render server's region —
+    // The guest has more than one: this region carries the agent's
+    // control channel, and the render server's region —
     // a different device, created by a different process on the host —
     // sits beside it. Which one Windows enumerates first is not ours to
     // decide, so the region is identified by what is written in it

@@ -504,8 +504,8 @@ GuestDrivers::Staging GuestDrivers::stage_for(const std::string& exe_path,
         return staged;
     }
     // The render server's region is an IVSHMEM BAR — a different device
-    // from the one carrying the frame ring, which is why the agent no
-    // longer has to let go of anything for an application to render.
+    // from the one carrying the agent's own channel, which is why the
+    // agent has nothing to let go of for an application to render.
     env->push_back({"RVK_SERVER", "ivshmem"});
     // No VK_DRIVER_FILES, VK_ICD_FILENAMES or OCL_ICD_FILENAMES. Every
     // Khronos loader reads those through a secure-getenv that hands
