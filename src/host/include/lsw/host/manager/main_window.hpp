@@ -36,6 +36,11 @@ public:
     // hands off to another.
     void show_page(NavRail::Page page);
 
+Q_SIGNALS:
+    // There is no guest, and the only thing that leads anywhere is the
+    // wizard. The application owns that flow, not this window.
+    void wizard_requested();
+
 protected:
     void closeEvent(QCloseEvent* e) override;
 
@@ -45,6 +50,7 @@ private Q_SLOTS:
 
 private:
     void build_pages();
+    QWidget* build_empty_state();
     void setup_tray();
     void refresh_identity();
     void refresh_status_bar();
@@ -62,6 +68,10 @@ private:
     QLabel* warn_text_ = nullptr;
     QLabel* status_left_ = nullptr;
 
+    // Overview is two pages: the machine, and the state where there is
+    // no machine yet. A manager that opens with dead buttons and blank
+    // gauges is the one genuinely confusing moment in the application.
+    QStackedWidget* overview_stack_ = nullptr;
     VmDetailPanel* overview_ = nullptr;
     ConsolePanel* console_ = nullptr;
     LogPanel* log_ = nullptr;

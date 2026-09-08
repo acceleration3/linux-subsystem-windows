@@ -8,6 +8,7 @@
 #include <QProgressBar>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QTimer>
 #include <QVBoxLayout>
 
 namespace lsw::host::manager {
@@ -130,7 +131,28 @@ RenderPanel::RenderPanel(vm::RenderStats& stats, config::ManagerSettings& settin
     root->addWidget(scroll, 1);
 
     connect(&stats_, &vm::RenderStats::updated, this, &RenderPanel::rebuild);
+
+    // Ownership is a word in each region's header, so reading it costs
+    // an open and a read and asks the server nothing. Two seconds is
+    // fast enough for "who has channel 2" and slow enough to be free.
+    poll_ = new QTimer(this);
+    poll_->setInterval(2000);
+    connect(poll_, &QTimer::timeout, this, [this] {
+        if (!region_prefix_.isEmpty()) {
+            stats_.poll_regions(region_prefix_);
+        }
+    });
     rebuild();
+}
+
+void RenderPanel::set_region_prefix(const QString& prefix) {
+    region_prefix_ = prefix;
+    if (prefix.isEmpty()) {
+        poll_->stop();
+        return;
+    }
+    stats_.poll_regions(prefix);
+    poll_->start();
 }
 
 void RenderPanel::select(int channel) {
@@ -210,7 +232,29 @@ void RenderPanel::rebuild() {
             .arg(region_mib)
             .arg(channel.claimed
                      ? QStringLiteral("claimed by pid %1").arg(channel.owner_pid)
-                     : QStringLiteral("not claimed")));
+                     : (channel.owner_pid != 0
+                            ? QStringLiteral("claimed by pid %1, which is gone")
+                                  .arg(channel.owner_pid)
+                            : QStringLiteral("not claimed"))));
+
+    // Only offered for a claim whose owner is gone: taking a channel
+    // from a running process corrupts the stream it is in the middle
+    // of, and the release refuses that anyway.
+    if (channel.owner_pid != 0 && !channel.claimed) {
+        auto* row = new QWidget;
+        auto* layout = new QHBoxLayout(row);
+        layout->setContentsMargins(0, 0, 0, 4);
+        layout->addWidget(
+            meta(QStringLiteral("The process that claimed this channel is gone. Nothing "
+                                "else can take it until the claim is cleared.")),
+            1);
+        auto* release = new QPushButton(QStringLiteral("Release it"));
+        connect(release, &QPushButton::clicked, this, [this, index = channel.index] {
+            (void)stats_.release_channel(region_prefix_, index);
+        });
+        layout->addWidget(release);
+        areas_->addWidget(row);
+    }
 
     for (const auto& area : channel.areas) {
         auto* frame = new QFrame;

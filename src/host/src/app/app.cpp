@@ -139,6 +139,10 @@ void App::show_wizard() {
 void App::show_main_window() {
     if (main_window_ == nullptr) {
         main_window_ = new manager::MainWindow(services_);
+        // A manager opened on a machine with no guest offers the wizard,
+        // which is the application's flow rather than the window's.
+        connect(main_window_, &manager::MainWindow::wizard_requested, this,
+                &App::show_wizard);
     }
     main_window_->show();
     main_window_->raise();

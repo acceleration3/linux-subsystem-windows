@@ -25,6 +25,10 @@ public:
     RenderPanel(vm::RenderStats& stats, config::ManagerSettings& settings,
                 config::PendingChanges& pending, QWidget* parent = nullptr);
 
+    // Which VM's regions to read. The names are derived from its UUID,
+    // and there is nothing to poll until one is known.
+    void set_region_prefix(const QString& prefix);
+
 Q_SIGNALS:
     // A staged size change wants the settings page, so the user can see
     // it sitting in the apply bar with everything else.
@@ -41,6 +45,8 @@ private:
     QHBoxLayout* strip_ = nullptr;
     QVBoxLayout* areas_ = nullptr;
     QLabel* summary_ = nullptr;
+    QString region_prefix_;
+    class QTimer* poll_ = nullptr;
     int selected_ = 0;
 };
 

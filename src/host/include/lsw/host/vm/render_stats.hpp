@@ -71,6 +71,17 @@ public:
     void set_channel_count(int channels);
     void set_area_sizes(int ring_kib, int reply_kib, int blob_mib);
 
+    // Read each region's header for who holds it and how it is carved
+    // up. The header is the first page of a file in /dev/shm that the
+    // server wrote and both sides map, so this costs an open and a read
+    // and asks the server nothing.
+    void poll_regions(const QString& region_prefix);
+
+    // Clear a claim a dead process left behind. Refuses while the
+    // owning pid is still alive, because taking a channel from a
+    // running process corrupts the stream it is in the middle of.
+    [[nodiscard]] bool release_channel(const QString& region_prefix, int index);
+
     [[nodiscard]] const QVector<ChannelPressure>& channels() const noexcept {
         return channels_;
     }

@@ -202,6 +202,13 @@ void NavRail::set_marker(Page page, const QString& text, bool amber) {
                                 : QString{});
 }
 
+void NavRail::set_guest_provisioned(bool provisioned) {
+    for (const auto page : {Page::Console, Page::Log, Page::Render}) {
+        items_[static_cast<int>(page)]->setEnabled(provisioned);
+    }
+    power_->setEnabled(provisioned);
+}
+
 void NavRail::set_log_count(int records) {
     set_marker(Page::Log, records > 0 ? QString::number(records) : QString{}, false);
 }

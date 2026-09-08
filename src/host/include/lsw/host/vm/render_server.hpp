@@ -40,7 +40,11 @@ public:
     // is backed by, for ``uuid``. This is what goes in the domain XML's
     // ``<shmem name='...'/>``, and it is ``region_prefix`` plus the
     // session index the server appends.
-    [[nodiscard]] static QString region_name(const QUuid& uuid);
+    // ``index`` is the session, which is also the ivshmem device's
+    // position on the bus: the server addresses its sessions by device
+    // index, so the order the domain declares them in is the order the
+    // guest finds them.
+    [[nodiscard]] static QString region_name(const QUuid& uuid, int index = 0);
 
     // How the region is carved up, and how many of them there are.
     //

@@ -2,6 +2,7 @@
 
 #include "lsw/host/config/vm_state.hpp"
 #include "lsw/host/vm/domain_xml_inputs.hpp"
+#include "lsw/host/vm/render_server.hpp"
 #include "lsw/host/manager/console_panel.hpp"
 #include "lsw/host/manager/log_panel.hpp"
 #include "lsw/host/manager/render_panel.hpp"
@@ -156,8 +157,16 @@ MainWindow::MainWindow(services::HostServices& services, QWidget* parent)
     // Single-VM model: pin the pages to whatever record App populated
     // for the lone ``lsw`` domain on startup.
     if (!services_.vms().records().isEmpty()) {
-        overview_->set_target(services_.vms().records().first().uuid);
+        const QUuid uuid = services_.vms().records().first().uuid;
+        overview_->set_target(uuid);
+        // The render regions are named after the VM, so the page has
+        // nothing to read until there is one.
+        render_->set_region_prefix(
+            vm::RenderServer::region_name(uuid, 0).chopped(2));
     }
+    const bool provisioned = !services_.vms().records().isEmpty();
+    overview_stack_->setCurrentIndex(provisioned ? 0 : 1);
+    rail_->set_guest_provisioned(provisioned);
     refresh_identity();
     refresh_status_bar();
     show_page(NavRail::Page::Overview);
@@ -176,8 +185,12 @@ void MainWindow::build_pages() {
                                       services_.pending_changes(),
                                       services_.app_configs(), this);
 
+    overview_stack_ = new QStackedWidget;
+    overview_stack_->addWidget(overview_);
+    overview_stack_->addWidget(build_empty_state());
+
     // Order must match NavRail::Page.
-    stack_->addWidget(overview_);
+    stack_->addWidget(overview_stack_);
     stack_->addWidget(console_);
     stack_->addWidget(log_);
     stack_->addWidget(render_);
@@ -215,6 +228,47 @@ void MainWindow::build_pages() {
         QDesktopServices::openUrl(
             QUrl(QStringLiteral("smb://127.0.0.1:5445/C$")));
     });
+}
+
+QWidget* MainWindow::build_empty_state() {
+    auto* page = new QWidget;
+    auto* outer = new QVBoxLayout(page);
+    outer->setContentsMargins(20, 40, 20, 40);
+    outer->addStretch(1);
+
+    auto* column = new QVBoxLayout;
+    column->setSpacing(14);
+    column->setAlignment(Qt::AlignHCenter);
+
+    auto* eyebrow = new QLabel(QStringLiteral("NOTHING INSTALLED"));
+    eyebrow->setObjectName(QString::fromLatin1(Theme::Role::kCaption));
+    eyebrow->setAlignment(Qt::AlignCenter);
+
+    auto* heading =
+        new QLabel(QStringLiteral("There is no Windows guest on this machine yet"));
+    heading->setObjectName(QString::fromLatin1(Theme::Role::kHeading));
+    heading->setAlignment(Qt::AlignCenter);
+
+    auto* body = new QLabel(
+        QStringLiteral("The first run builds one: pick or download an image, size the "
+                       "machine, and let the unattended installer do the rest. Around "
+                       "25 minutes, mostly unattended."));
+    body->setObjectName(QString::fromLatin1(Theme::Role::kDim));
+    body->setWordWrap(true);
+    body->setAlignment(Qt::AlignCenter);
+    body->setMaximumWidth(420);
+
+    auto* run = new QPushButton(QStringLiteral("Run the first-run wizard"));
+    run->setObjectName(QString::fromLatin1(Theme::Role::kPrimary));
+    connect(run, &QPushButton::clicked, this, &MainWindow::wizard_requested);
+
+    column->addWidget(eyebrow);
+    column->addWidget(heading);
+    column->addWidget(body, 0, Qt::AlignHCenter);
+    column->addWidget(run, 0, Qt::AlignHCenter);
+    outer->addLayout(column);
+    outer->addStretch(1);
+    return page;
 }
 
 void MainWindow::show_page(NavRail::Page page) {

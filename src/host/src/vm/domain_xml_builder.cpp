@@ -5,6 +5,7 @@
 #include "domain_template.hpp"
 
 #include <QHash>
+#include <QStringList>
 #include <QProcessEnvironment>
 
 namespace lsw::host::vm {
@@ -54,8 +55,21 @@ QString DomainXmlBuilder::build(const config::VmRecord& vm, const DomainXmlInput
     // size come from RenderServer rather than from a second copy here
     // — the guest maps whichever file this names, and a name that
     // disagrees is a guest whose drivers find nothing.
-    vars["rvk_region_name"] = RenderServer::region_name(vm.uuid);
-    vars["rvk_region_mib"]  = QString::number(RenderServer::region_mib());
+    // One ivshmem device per render channel. The server addresses its
+    // sessions by device index, so a guest with four channels
+    // configured and a single device has three of them nowhere.
+    const auto sizing = RenderServer::sizing();
+    const int region_mib = RenderServer::region_mib();
+    QStringList regions;
+    for (int i = 0; i < qMax(1, sizing.sessions); ++i) {
+        regions << QStringLiteral("    <shmem name='%1'>\n"
+                                  "      <model type='ivshmem-plain'/>\n"
+                                  "      <size unit='M'>%2</size>\n"
+                                  "    </shmem>")
+                       .arg(RenderServer::region_name(vm.uuid, i))
+                       .arg(region_mib);
+    }
+    vars["rvk_regions_inner"] = regions.join(QLatin1Char('\n'));
 
     // The PipeWire audio backend needs XDG_RUNTIME_DIR to find its
     // socket under $XDG_RUNTIME_DIR/pipewire-0. libvirt session-mode

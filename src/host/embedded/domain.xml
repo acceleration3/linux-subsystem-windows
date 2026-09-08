@@ -186,12 +186,12 @@
 
          The size must match the region the server made — a PCI BAR's
          size is decoded by address bits, so QEMU does not round it,
-         it asserts and the VM dies before the guest exists. 1024 MiB
-         is RenderServer::kRegionMib. -->
-    <shmem name='{{rvk_region_name}}'>
-      <model type='ivshmem-plain'/>
-      <size unit='M'>{{rvk_region_mib}}</size>
-    </shmem>
+         it asserts and the VM dies before the guest exists.
+
+         One device per channel, in order, because the server addresses
+         its sessions by device index and a guest with four channels
+         configured and one device has three of them nowhere. -->
+{{rvk_regions_inner}}
 
     <!-- IVSHMEM-doorbell: the message transport. lsw-manager runs the
          doorbell-server protocol in-process at {{ivshmem_socket}}; the

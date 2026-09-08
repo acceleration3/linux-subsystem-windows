@@ -44,6 +44,12 @@ public:
     void set_pending_changes(int count);
     void set_render_warning(bool warned);
 
+    // The pages that need a guest to have been installed at all. With
+    // none, they are shown but not selectable, which says more than
+    // hiding them would: the application has those parts, this machine
+    // has not got there yet.
+    void set_guest_provisioned(bool provisioned);
+
 Q_SIGNALS:
     void page_selected(Page page);
     void start_requested();

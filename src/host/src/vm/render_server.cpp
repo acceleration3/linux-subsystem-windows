@@ -80,10 +80,9 @@ void RenderServer::drain_output() {
 
 RenderServer::~RenderServer() { stop(); }
 
-QString RenderServer::region_name(const QUuid& uuid) {
-    // The server appends the session index to the name it is given, and
-    // one device carries one region, so session 0 is the only device.
-    return region_prefix(uuid) + QStringLiteral("-0");
+QString RenderServer::region_name(const QUuid& uuid, int index) {
+    // The server appends the session index to the name it is given.
+    return region_prefix(uuid) + QStringLiteral("-%1").arg(index);
 }
 
 QString RenderServer::executable_path() {
