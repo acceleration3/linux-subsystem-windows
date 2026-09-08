@@ -4,7 +4,6 @@
 #include "lsw/host/mcp/tools/console_input_tool.hpp"
 #include "lsw/host/mcp/tools/console_open_tool.hpp"
 #include "lsw/host/mcp/tools/console_read_tool.hpp"
-#include "lsw/host/mcp/tools/dump_frame_tool.hpp"
 #include "lsw/host/mcp/tools/launch_tool.hpp"
 #include "lsw/host/mcp/tools/list_apps_tool.hpp"
 #include "lsw/host/mcp/tools/list_windows_tool.hpp"
@@ -13,7 +12,6 @@
 #include "lsw/host/mcp/tools/redeploy_agent_tool.hpp"
 #include "lsw/host/mcp/tools/system_info_tool.hpp"
 
-#include "lsw/host/manager/frame_tap.hpp"
 #include "lsw/host/mcp/json_rpc_frame.hpp"
 
 #include <nlohmann/json.hpp>
@@ -37,10 +35,6 @@ McpServer::McpServer(link::AgentRpcClient& rpc, apps::LogStore& log_store, QObje
 McpServer::~McpServer() = default;
 
 void McpServer::register_tools(apps::LogStore& log_store) {
-    // Build the frame tap here, on the GUI thread, so it has an event
-    // loop for ``dump_frame`` to reach it on from an HTTP worker.
-    (void)manager::FrameTap::instance();
-
     // Advertised to the model in this order.
     tools_.add(std::make_unique<SystemInfoTool>(agent_));
     tools_.add(std::make_unique<ListAppsTool>(agent_));
@@ -51,7 +45,6 @@ void McpServer::register_tools(apps::LogStore& log_store) {
     tools_.add(std::make_unique<ConsoleReadTool>(consoles_));
     tools_.add(std::make_unique<ConsoleCloseTool>(agent_, consoles_));
     tools_.add(std::make_unique<RecentLogsTool>(log_store));
-    tools_.add(std::make_unique<DumpFrameTool>());
     tools_.add(std::make_unique<RawRpcTool>(agent_));
     tools_.add(std::make_unique<RedeployAgentTool>(agent_));
 }

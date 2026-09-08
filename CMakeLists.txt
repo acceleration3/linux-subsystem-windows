@@ -36,6 +36,12 @@ option(LSW_BUILD_TESTS   "Build unit tests"                       ON)
 # One switch, because it is one submodule either way.
 option(LSW_BUILD_RENDER_SERVER "Build the render server / guest ICDs" ON)
 
+# remotewin, the window half. On Linux this is the ``remotewin`` binary
+# the manager spawns for a launched application; on the mingw cross
+# build it is ``remotewin-guest.exe``, which runs beside that application
+# inside the guest. One switch, because it is one submodule either way.
+option(LSW_BUILD_REMOTEWIN "Build the window mirror / its guest half" ON)
+
 # ---- Platform sanity ----
 if(NOT (UNIX OR WIN32))
     message(WARNING "LSW only targets Linux (host) and Windows (guest); other platforms unsupported")
@@ -90,6 +96,30 @@ if(LSW_BUILD_RENDER_SERVER)
     set(RVK_BUILD_GUEST_TOOLS OFF CACHE BOOL "" FORCE)
     set(RVK_BUILD_TESTS       OFF CACHE BOOL "" FORCE)
     add_subdirectory("${LSW_RENDER_SERVER_DIR}" render-server)
+endif()
+
+# The window half, and a project of its own for the same reason: it
+# knows how to move a Windows application's windows, its input and its
+# cursors across a boundary, and nothing about virtual machines.
+#
+# LSW consumes it as two artifacts and links neither. On Linux it is the
+# ``remotewin`` executable the manager spawns for each launched
+# application, one process per application, owning that application's
+# windows on this desktop; on the mingw cross build it is
+# ``remotewin-guest.exe``, which the agent starts in the guest session
+# and which dials back out to that process.
+set(LSW_REMOTEWIN_DIR "${CMAKE_SOURCE_DIR}/external/remotewin"
+    CACHE PATH "Location of the remotewin checkout")
+if(LSW_BUILD_REMOTEWIN)
+    if(NOT EXISTS "${LSW_REMOTEWIN_DIR}/CMakeLists.txt")
+        message(FATAL_ERROR
+            "remotewin is missing from ${LSW_REMOTEWIN_DIR}.\n"
+            "It is a submodule: git submodule update --init --recursive")
+    endif()
+    # Its own test suite is its own business when it is built on its own,
+    # and it wants a Qt that a cross build has no reason to have.
+    set(RWIN_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    add_subdirectory("${LSW_REMOTEWIN_DIR}" remotewin)
 endif()
 
 if(LSW_BUILD_MANAGER)

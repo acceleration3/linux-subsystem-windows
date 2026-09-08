@@ -3,6 +3,7 @@
 #
 # Outputs, under build-agent (and build-agent32 for the i686 set):
 #   src/agent/lsw-guest-agent.exe                        the control-plane agent
+#   remotewin/source/guest/remotewin-guest.exe           the window mirror's guest half
 #   render-server/src/apis/vulkan/icd/librvk_icd.dll     the Vulkan driver
 #   render-server/src/apis/opengl/icd/opengl32.dll       the OpenGL driver
 #   render-server/src/apis/opencl/icd/librvk_opencl.dll  the OpenCL driver
@@ -33,11 +34,12 @@ cmake -S "${ROOT}" -B "${BUILD}" -G Ninja \
     -DLSW_BUILD_RENDER_SERVER=ON \
     -DLSW_BUILD_TESTS=OFF
 
-echo ">>> Building agent + guest drivers + Vulkan loader"
+echo ">>> Building agent + window mirror + guest drivers + Vulkan loader"
 # ``vulkan`` is Vulkan-Loader's target: vulkan-1.dll. A VM with no GPU
 # driver ships no loader, and without one nothing in the guest can find
 # a Vulkan driver — the loader is what reads VK_DRIVER_FILES.
-cmake --build "${BUILD}" --target lsw-guest-agent rvk_icd rvk_opengl32 rvk_opencl vulkan
+cmake --build "${BUILD}" --target lsw-guest-agent remotewin-guest \
+    rvk_icd rvk_opengl32 rvk_opencl vulkan
 
 # The i686 pair, in a second build tree.
 #
@@ -70,6 +72,13 @@ if [[ ! -f "${EXE}" ]]; then
     exit 1
 fi
 echo ">>> Built ${EXE} ($(stat -c%s "${EXE}") bytes)"
+
+MIRROR="${BUILD}/remotewin/source/guest/remotewin-guest.exe"
+if [[ ! -f "${MIRROR}" ]]; then
+    echo "!!! Build did not produce ${MIRROR}" >&2
+    exit 1
+fi
+echo ">>> Built ${MIRROR} ($(stat -c%s "${MIRROR}") bytes)"
 
 # The drivers build inside the render-server subproject, so their binary
 # dirs are nested under the name the root CMakeLists gives that

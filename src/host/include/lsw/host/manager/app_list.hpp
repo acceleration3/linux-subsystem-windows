@@ -1,6 +1,5 @@
 #pragma once
 
-#include "lsw/host/link/guest_window_model.hpp"
 
 #include "lsw/host/apps/app_config_store.hpp"
 #include "lsw/host/apps/catalog.hpp"
@@ -17,23 +16,25 @@ namespace lsw::host::link {
 class AgentRpcClient;
 }
 
-namespace lsw::host::manager {
+namespace lsw::host::mirror {
+class WindowMirror;
+}
 
-class AppWindowWatcher;
+namespace lsw::host::manager {
 
 // Toolbar (Refresh + New) above an icon-grid of configured apps.
 // Items are loaded from the local ``AppConfigStore``; agent
 // discoveries are merged on each refresh so user overrides survive
 // re-enumeration. Right-click → Configure / Delete.
 //
-// Double-click launches the app in the guest and starts an
-// ``AppWindowWatcher`` that polls for the app's windows and spawns
-// a ``WindowView`` (host-side mirror) for each one as they appear.
+// Double-click launches the app in the guest and starts a
+// ``mirror::WindowMirror`` for it: one mirror process per launch, which
+// owns that application's windows on this desktop.
 class AppListWidget : public QWidget {
     Q_OBJECT
 public:
     AppListWidget(apps::AppConfigStore& store, link::AgentRpcClient& rpc,
-                  link::GuestWindowModel& windows, QWidget* parent = nullptr);
+                  QWidget* parent = nullptr);
 
     void set_target(const QUuid& vm_uuid);
     void clear_target();
@@ -48,9 +49,9 @@ private Q_SLOTS:
     void on_refresh_clicked();
     void on_new_clicked();
     void on_store_changed();
-    void on_launched(const QString& app_id, quint32 pid);
+    void on_launched(const QString& app_id, quint32 pid, const QString& job);
     void on_launch_failed(const QString& app_id, const QString& error);
-    void on_watcher_exhausted(quint32 pid);
+    void on_mirror_finished(quint32 pid);
 
 private:
     void open_config_dialog(const apps::AppConfig& initial);
@@ -58,7 +59,6 @@ private:
 
     apps::AppConfigStore& store_;
     link::AgentRpcClient& rpc_;
-    link::GuestWindowModel& windows_;
     apps::AppCatalog catalog_;
     apps::Launcher launcher_;
     QToolBar* toolbar_ = nullptr;
@@ -66,10 +66,10 @@ private:
 
     QUuid uuid_;
 
-    // One watcher per launched-instance PID. Each double-click
-    // creates a fresh watcher; multiple simultaneous instances of
-    // the same app each get their own scoped mirror set.
-    QHash<quint32, QPointer<AppWindowWatcher>> watchers_;
+    // One per launched application, keyed by the process id the agent
+    // reported for it. Each double-click starts another, so two
+    // instances of the same application do not share a set of windows.
+    QHash<quint32, QPointer<mirror::WindowMirror>> mirrors_;
 };
 
 }  // namespace lsw::host::manager

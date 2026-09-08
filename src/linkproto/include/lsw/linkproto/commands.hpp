@@ -22,6 +22,13 @@ inline constexpr const char* kListApps = "list_apps";
 inline constexpr const char* kLaunch   = "launch";
 inline constexpr const char* kGetIcon  = "get_icon";
 
+// -- the window mirror ----------------------------------------------------
+// Start remotewin's guest half, which dials back out to the mirror
+// process the manager started for one application and carries that
+// application's windows, input and cursors over a connection of its own.
+// Nothing else about the mirror crosses this channel.
+inline constexpr const char* kStartWindowMirror = "start_window_mirror";
+
 // -- windows --------------------------------------------------------------
 inline constexpr const char* kListWindows   = "list_windows";
 inline constexpr const char* kCloseWindow   = "close_window";

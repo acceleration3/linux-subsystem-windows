@@ -5,7 +5,7 @@
 #include "lsw/host/apps/desktop_launcher.hpp"
 #include "lsw/host/apps/launcher.hpp"
 #include "lsw/host/config/vm_state.hpp"
-#include "lsw/host/manager/app_window_watcher.hpp"
+#include "lsw/host/mirror/window_mirror.hpp"
 #include "lsw/host/services/host_services.hpp"
 
 #include <QCursor>
@@ -107,22 +107,21 @@ void GuestAppLaunchController::fire_launch(const QString& guest_path) {
 
     auto* launcher = new apps::Launcher(services_.rpc(), this);
     connect(launcher, &apps::Launcher::launched, this,
-            [this, launcher, desktop_id](const QString& reported_path, quint32 pid) {
+            [this, launcher, desktop_id](const QString& /*reported_path*/, quint32 pid,
+                                         const QString& job) {
         launcher->deleteLater();
         if (pid == 0) {
             LSW_WARN("launch_app: agent returned pid=0 — old agent?");
             return;
         }
-        // Without the watcher the agent dutifully CreateProcessW-es the
-        // app inside the guest but no host-side mirror appears: the
-        // watcher is what turns up WindowViews as the PID's windows show.
-        auto* w = new AppWindowWatcher(services_.rpc(), services_.windows(), pid,
-                                       exe_basename_of(reported_path),
-                                       desktop_id, this);
-        // Self-destructs when its idle timer expires (no live mirrors AND
-        // no matching guest windows).
-        connect(w, &AppWindowWatcher::exhausted, w, &QObject::deleteLater);
-        w->start();
+        // Without this the agent dutifully starts the application inside
+        // the guest and nothing of it appears here: the mirror is what
+        // carries its windows onto this desktop.
+        auto* mirror = new mirror::WindowMirror(services_.rpc(), pid, job, desktop_id, this);
+        connect(mirror, &mirror::WindowMirror::finished, mirror, &QObject::deleteLater);
+        if (!mirror->start()) {
+            mirror->deleteLater();
+        }
     });
     connect(launcher, &apps::Launcher::failed, launcher,
             [launcher](const QString& id, const QString& err) {
