@@ -111,8 +111,25 @@ void adopt(ChannelPressure& channel, const rvk::wire::RegionCounters& counters) 
     }
 }
 
-bool alive(std::uint32_t pid) {
-    return pid != 0 && ::kill(static_cast<int>(pid), 0) == 0;
+// Whether whoever holds a claim is still running.
+//
+// The claim word is a process id from one side or the other, and the
+// top bit says which: set means the guest took it. A guest id means
+// nothing to kill(), and asking anyway reports every guest-held channel
+// as abandoned — which is what the page showed. The transport draws the
+// same distinction from the other side; see claim_holder_alive.
+constexpr std::uint32_t kGuestClaim = 0x80000000U;
+
+bool alive(std::uint32_t claim) {
+    if (claim == 0) {
+        return false;
+    }
+    if ((claim & kGuestClaim) != 0) {
+        // Not ours to interpret. The guest reclaims its own dead
+        // claims; from here the honest answer is "held".
+        return true;
+    }
+    return ::kill(static_cast<int>(claim), 0) == 0;
 }
 
 }  // namespace
@@ -264,6 +281,14 @@ void RenderStats::poll_regions(const QString& region_prefix) {
         auto& channel = channels_[i];
         const bool was_claimed = channel.claimed;
         const quint32 was_owner = channel.owner_pid;
+        // Counters move far more often than ownership does, and a page
+        // that only redraws when a channel changes hands shows numbers
+        // that were true the last time somebody claimed one.
+        QVector<quint64> was_events;
+        was_events.reserve(channel.areas.size());
+        for (const auto& area : channel.areas) {
+            was_events.push_back(area.events);
+        }
 
         channel.claimed = false;
         channel.owner_pid = 0;
@@ -288,6 +313,9 @@ void RenderStats::poll_regions(const QString& region_prefix) {
         }
         touched = touched || channel.claimed != was_claimed
                   || channel.owner_pid != was_owner;
+        for (int a = 0; a < channel.areas.size() && a < was_events.size(); ++a) {
+            touched = touched || channel.areas[a].events != was_events[a];
+        }
     }
     if (touched) {
         Q_EMIT updated();

@@ -37,7 +37,16 @@ struct AreaPressure {
 struct ChannelPressure {
     int index = 0;
     bool claimed = false;
+    // The claim word as the region carries it. A claim taken inside the
+    // guest has its top bit set, because the two sides number their
+    // processes independently and a bare number would be ambiguous.
     quint32 owner_pid = 0;
+    // The process id with that marking removed, which is what the
+    // process calls itself on whichever side it runs.
+    [[nodiscard]] quint32 owner() const noexcept { return owner_pid & 0x7fffffffU; }
+    [[nodiscard]] bool owner_is_guest() const noexcept {
+        return (owner_pid & 0x80000000U) != 0;
+    }
     QVector<AreaPressure> areas;
 
     [[nodiscard]] AreaPressure::State worst() const;
