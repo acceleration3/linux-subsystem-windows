@@ -26,9 +26,12 @@ public:
     [[nodiscard]] int nextId() const override;
 
 private:
+    void set_phase(const QString& text);
     Wizard& wizard_;
     QProgressBar* bar_ = nullptr;
     QLabel* status_ = nullptr;
+    QLabel* elapsed_ = nullptr;
+    QString phase_;
     ui::VncView* vnc_ = nullptr;
     bool complete_ = false;
 };

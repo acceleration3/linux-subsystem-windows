@@ -82,6 +82,7 @@ private:
 
     lsw::host::ui::VncView* preview_ = nullptr;
     QVBoxLayout* preview_slot_ = nullptr;
+    class QLabel* preview_tag_ = nullptr;
     StatsWidget* stats_ = nullptr;
     AppListWidget* app_list_ = nullptr;
 

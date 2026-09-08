@@ -33,6 +33,10 @@ public:
     // destructor.
     void release_session();
 
+    // Empties what is on screen. The guest-side session keeps running:
+    // this is the transcript, not the shell.
+    void clear_transcript();
+
 protected:
     void showEvent(QShowEvent* e) override;
     bool eventFilter(QObject* watched, QEvent* event) override;

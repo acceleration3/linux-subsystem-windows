@@ -122,6 +122,7 @@ TrimImageDialog::TrimImageDialog(config::Settings& settings, QString source_iso,
     root->addWidget(separator());
 
     // ---- level ----------------------------------------------------
+    root->addWidget(separator());
     root->addWidget(caption(QStringLiteral("How much to remove")));
     level_group_ = new QButtonGroup(this);
     level_group_->setExclusive(true);
@@ -141,16 +142,29 @@ TrimImageDialog::TrimImageDialog(config::Settings& settings, QString source_iso,
         auto* card = new QFrame;
         card->setObjectName(QString::fromLatin1(Theme::Role::kOptionCard));
         auto* card_layout = new QVBoxLayout(card);
-        card_layout->setContentsMargins(13, 11, 13, 12);
-        card_layout->setSpacing(4);
+        card_layout->setContentsMargins(13, 10, 13, 11);
+        card_layout->setSpacing(0);
 
-        auto* radio = new QRadioButton(QString::fromLatin1(entry.title));
+        // The dial and one flow of text: the name of the level, then
+        // what it costs, which is the same sentence a person reads.
+        auto* row = new QHBoxLayout;
+        row->setContentsMargins(0, 0, 0, 0);
+        row->setSpacing(10);
+        auto* radio = new QRadioButton;
         level_group_->addButton(radio, static_cast<int>(entry.level));
-        card_layout->addWidget(radio);
+        row->addWidget(radio, 0, Qt::AlignTop);
 
-        auto* description = prose(DebloatPlan{entry.level}.summary());
-        description->setContentsMargins(23, 0, 0, 0);
-        card_layout->addWidget(description);
+        auto* text = new QLabel(
+            QStringLiteral("<span style=\"color:%1\">%2</span>  "
+                           "<span style=\"color:%3\">%4</span>")
+                .arg(QString::fromLatin1(Theme::Color::kFg),
+                     QString::fromLatin1(entry.title).toHtmlEscaped(),
+                     QString::fromLatin1(Theme::Color::kFgDim),
+                     DebloatPlan{entry.level}.summary().toHtmlEscaped()));
+        text->setWordWrap(true);
+        text->setTextFormat(Qt::RichText);
+        row->addWidget(text, 1);
+        card_layout->addLayout(row);
 
         // Clicking anywhere on the card picks it. A card you have to
         // hit the dot of is a card pretending to be clickable.
@@ -176,6 +190,7 @@ TrimImageDialog::TrimImageDialog(config::Settings& settings, QString source_iso,
     root->addWidget(separator());
 
     // ---- output ---------------------------------------------------
+    root->addWidget(separator());
     root->addWidget(caption(QStringLiteral("Write the new image to")));
     auto* out_row = new QHBoxLayout;
     output_dir_ = new QLineEdit(settings_.isos_dir());

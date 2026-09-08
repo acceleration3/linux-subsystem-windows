@@ -68,6 +68,13 @@ QWidget* build_rail() {
 
 }  // namespace
 
+QVBoxLayout* PageChrome::head_of(QWizardPage* page) {
+    auto* head =
+        page->findChild<QFrame*>(QString::fromLatin1(ui::Theme::Role::kWizardHead));
+    return head == nullptr ? nullptr
+                           : qobject_cast<QVBoxLayout*>(head->layout());
+}
+
 QVBoxLayout* PageChrome::install(QWizardPage* page, const QString& title,
                                  const QString& subtitle) {
     auto* columns = new QHBoxLayout(page);
@@ -84,6 +91,7 @@ QVBoxLayout* PageChrome::install(QWizardPage* page, const QString& title,
     // ---- title band -----------------------------------------------
     auto* head = new QFrame;
     head->setObjectName(QString::fromLatin1(Theme::Role::kWizardHead));
+    head->setProperty("lswHead", true);
     auto* head_layout = new QVBoxLayout(head);
     head_layout->setContentsMargins(26, 22, 26, 18);
     head_layout->setSpacing(6);

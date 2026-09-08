@@ -8,7 +8,6 @@
 #include <QByteArray>
 #include <QCheckBox>
 #include <QComboBox>
-#include <QFormLayout>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QPushButton>
@@ -58,6 +57,33 @@ QLabel* field_label(const QString& text) {
     return label;
 }
 
+// A field: its name above it, and the control the full width of the
+// dialog. A two-column form would put a short caption beside a long
+// path and waste the width the path needs.
+class FieldStack {
+public:
+    explicit FieldStack(QVBoxLayout* into) : into_(into) {}
+
+    void add(const QString& name, QWidget* control) {
+        auto* column = new QVBoxLayout;
+        column->setContentsMargins(0, 0, 0, 0);
+        column->setSpacing(5);
+        column->addWidget(field_label(name));
+        column->addWidget(control);
+        into_->addLayout(column);
+    }
+
+    void add_note(const QString& text) {
+        auto* note = new QLabel(text);
+        note->setObjectName(QString::fromLatin1(ui::Theme::Role::kMeta));
+        note->setWordWrap(true);
+        into_->addWidget(note);
+    }
+
+private:
+    QVBoxLayout* into_;
+};
+
 }  // namespace
 
 AppConfigDialog::AppConfigDialog(apps::AppConfig initial, link::AgentRpcClient& rpc,
@@ -91,7 +117,7 @@ AppConfigDialog::AppConfigDialog(apps::AppConfig initial, link::AgentRpcClient& 
     identity_name_ = new QLabel(cfg_.name.isEmpty() ? QStringLiteral("New application")
                                                     : cfg_.name);
     identity_name_->setObjectName(QString::fromLatin1(ui::Theme::Role::kHeading));
-    icon_status_ = new QLabel;
+    icon_status_ = new QLabel(QStringLiteral("no icon yet"));
     icon_status_->setObjectName(QString::fromLatin1(ui::Theme::Role::kMeta));
     icon_status_->setWordWrap(true);
     titles->addWidget(identity_name_);
@@ -104,11 +130,13 @@ AppConfigDialog::AppConfigDialog(apps::AppConfig initial, link::AgentRpcClient& 
     root->addLayout(identity);
     connect(replace_icon, &QPushButton::clicked, this, &AppConfigDialog::fetch_icon);
 
-    auto* form = new QFormLayout;
+    auto* form = new QVBoxLayout;
+    form->setSpacing(12);
+    FieldStack fields{form};
 
     name_edit_ = new QLineEdit(cfg_.name);
     name_edit_->setPlaceholderText("Display name");
-    form->addRow(field_label(QStringLiteral("Name")), name_edit_);
+    fields.add(QStringLiteral("Name"), name_edit_);
 
     // The path is a Windows path, so browsing for it has to happen
     // inside Windows. The button opens a picker that reads the guest
@@ -123,7 +151,9 @@ AppConfigDialog::AppConfigDialog(apps::AppConfig initial, link::AgentRpcClient& 
     auto* browse = new QPushButton(QStringLiteral("Browse the guest"));
     path_layout->addWidget(path_edit_, 1);
     path_layout->addWidget(browse);
-    form->addRow(field_label(QStringLiteral("Path in Windows")), path_row);
+    fields.add(QStringLiteral("Path in Windows"), path_row);
+    fields.add_note(QStringLiteral("Browsing opens a file picker that reads the guest, "
+                                   "not this machine."));
 
     connect(browse, &QPushButton::clicked, this, [this] {
         RemoteFileDialog picker{rpc_, RemoteFileDialog::Mode::Program, this};
@@ -159,7 +189,7 @@ AppConfigDialog::AppConfigDialog(apps::AppConfig initial, link::AgentRpcClient& 
     auto* browse_dir = new QPushButton(QStringLiteral("Browse"));
     workdir_layout->addWidget(workdir_edit_, 1);
     workdir_layout->addWidget(browse_dir);
-    form->addRow(field_label(QStringLiteral("Working folder")), workdir_row);
+    fields.add(QStringLiteral("Working folder"), workdir_row);
     connect(browse_dir, &QPushButton::clicked, this, [this] {
         RemoteFileDialog picker{rpc_, RemoteFileDialog::Mode::Directory, this};
         if (picker.exec() == QDialog::Accepted && !picker.selected_path().isEmpty()) {
@@ -169,7 +199,7 @@ AppConfigDialog::AppConfigDialog(apps::AppConfig initial, link::AgentRpcClient& 
 
     cmdline_edit_ = new QLineEdit(cfg_.cmdline);
     cmdline_edit_->setPlaceholderText("Optional extra arguments");
-    form->addRow(field_label(QStringLiteral("Arguments")), cmdline_edit_);
+    fields.add(QStringLiteral("Arguments"), cmdline_edit_);
 
     // Arguments and environment are not interchangeable, and the
     // difference catches people out: a variable typed into Arguments
@@ -178,7 +208,7 @@ AppConfigDialog::AppConfigDialog(apps::AppConfig initial, link::AgentRpcClient& 
     env_edit_ = new QPlainTextEdit(cfg_.env);
     env_edit_->setPlaceholderText("One per line, e.g.\nGALLIUM_DRIVER=llvmpipe");
     env_edit_->setFixedHeight(kEnvBoxPx);
-    form->addRow(field_label(QStringLiteral("Environment")), env_edit_);
+    fields.add(QStringLiteral("Environment"), env_edit_);
 
     // Where it appears on this desktop. The switch in Settings decides
     // whether any application is published; this decides whether this
@@ -186,14 +216,14 @@ AppConfigDialog::AppConfigDialog(apps::AppConfig initial, link::AgentRpcClient& 
     // not put forty entries in somebody's launcher.
     publish_box_ = new QCheckBox(QStringLiteral("Show in my application menu"));
     publish_box_->setChecked(cfg_.publish_entry);
-    form->addRow(QString{}, publish_box_);
+    form->addWidget(publish_box_);
 
     mime_edit_ = new QLineEdit(cfg_.mime_types.split(QLatin1Char('\n'),
                                                      Qt::SkipEmptyParts)
                                    .join(QStringLiteral(", ")));
     mime_edit_->setPlaceholderText(
         QStringLiteral("image/vnd.adobe.photoshop, application/x-ms-dos-executable"));
-    form->addRow(field_label(QStringLiteral("Opens file types")), mime_edit_);
+    fields.add(QStringLiteral("Opens file types"), mime_edit_);
 
     // -1 is "any", which is what every application did before there was
     // a choice, and is still the right default: pinning matters only
@@ -207,9 +237,10 @@ AppConfigDialog::AppConfigDialog(apps::AppConfig initial, link::AgentRpcClient& 
     if (const int index = channel_combo_->findData(cfg_.channel); index >= 0) {
         channel_combo_->setCurrentIndex(index);
     }
-    form->addRow(field_label(QStringLiteral("Render channel")), channel_combo_);
+    fields.add(QStringLiteral("Render channel"), channel_combo_);
 
     root->addLayout(form);
+    root->addStretch(1);
 
     // Remove sits apart from the pair that finish the dialog, and quiet,
     // because it is the one that destroys something.
