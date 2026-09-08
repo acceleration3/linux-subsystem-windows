@@ -69,6 +69,28 @@ int main(int argc, char** argv) {
     check(doc.documentElement().tagName() == QStringLiteral("unattend"),
           "root element is <unattend>");
 
+    // A RunSynchronousCommand's <Path> is capped at 259 characters
+    // (MAX_PATH). Going over does not fail that one command: setup
+    // rejects the ENTIRE answer file with 0x80220005 and the install
+    // dies at specialize behind "The computer restarted unexpectedly".
+    // Two 1-GiB-VRAM registry writes once did exactly that, which is
+    // why anything that long now lives in Specialize.ps1 instead.
+    constexpr int kMaxPathLength = 259;
+    bool paths_within_limit = true;
+    const QDomNodeList commands = doc.elementsByTagName(QStringLiteral("RunSynchronousCommand"));
+    for (int i = 0; i < commands.count(); ++i) {
+        const QDomElement command = commands.at(i).toElement();
+        const QString path = command.firstChildElement(QStringLiteral("Path")).text();
+        if (path.size() > kMaxPathLength) {
+            std::printf("       Order %s: <Path> is %d characters\n",
+                        qPrintable(command.firstChildElement(QStringLiteral("Order")).text()),
+                        static_cast<int>(path.size()));
+            paths_within_limit = false;
+        }
+    }
+    check(commands.count() > 0, "the answer file has RunSynchronousCommand entries");
+    check(paths_within_limit, "every RunSynchronousCommand <Path> is within 259 characters");
+
     // And it must survive the trip onto the ISO staging directory —
     // this is what actually lands at the root of the payload ISO.
     QTemporaryDir staging;
