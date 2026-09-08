@@ -36,7 +36,11 @@ const QHash<QString, QVariant>& defaults() {
         {QLatin1String(K::kChannels), 4},
         {QLatin1String(K::kRingKib), 1024},
         {QLatin1String(K::kReplyKib), 8192},
-        {QLatin1String(K::kBlobMib), 256},
+        // 512, not 256: the three areas plus the header round up to a
+        // 1 GiB region, which is the size every domain defined so far
+        // declares. A smaller default rounds to 512 and a guest whose
+        // XML says 1024 then maps a region the server never made.
+        {QLatin1String(K::kBlobMib), 512},
         {QLatin1String(K::kWarnCongestion), true},
         {QLatin1String(K::kChannelBindings), QString{}},
         {QLatin1String(K::kNothingFreePolicy), QStringLiteral("wait")},
