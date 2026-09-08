@@ -23,15 +23,32 @@
 
 /* ---- ground ------------------------------------------------------ */
 
+/* Type and colour on every widget; a ground on none of them.
+ *
+ * A blanket background here is the mistake that makes a themed Qt app
+ * look wrong: it paints an opaque rectangle behind every label, every
+ * layout container and every child of a panel, so the panel's own
+ * surface never shows and each caption sits in a box of its own. The
+ * windows carry the ground, the named surfaces carry theirs, and
+ * everything else is transparent. */
 QWidget {
-    background-color: #0d0f14;
     color: #e4e8f0;
     font-family: "Archivo", "Inter", "Noto Sans", "DejaVu Sans", sans-serif;
     font-size: 13px;
 }
 
-QMainWindow, QDialog {
+QMainWindow, QDialog, QWizard, QWizardPage {
     background-color: #0d0f14;
+}
+
+QLabel, QCheckBox, QRadioButton, QGroupBox {
+    background: transparent;
+}
+
+/* The scroll areas the settings and render pages live in. Without
+   this the viewport paints Base (an input colour) behind the page. */
+QScrollArea, QAbstractScrollArea, QAbstractScrollArea > QWidget > QWidget {
+    background: transparent;
 }
 
 QToolTip {
@@ -55,6 +72,13 @@ QLabel#Meta {
 
 QLabel#Dim {
     color: #9aa3b4;
+}
+
+/* Prose under a setting's name. Sans, because it is a sentence; #Meta
+   is the mono one, for things the machine said. */
+QLabel#Body {
+    color: #9aa3b4;
+    font-size: 12px;
 }
 
 /* Uppercase mono captions replace group-box titles. */
@@ -85,6 +109,14 @@ QPushButton {
 
 QPushButton:hover   { background-color: #242a37; border-color: #39415a; }
 QPushButton:pressed { background-color: #2c3444; }
+
+/* A latching button has to look latched. The log's severity buttons are
+   the only ones, and three of them all looking identical is three
+   buttons that say nothing. */
+QPushButton:checked {
+    background-color: #2c3444;
+    border-color: #4a536b;
+}
 
 QPushButton:disabled {
     background-color: #161a22;
@@ -148,13 +180,15 @@ QLineEdit:disabled, QPlainTextEdit:disabled, QSpinBox:disabled {
     color: #4d5566;
 }
 
+/* No steppers. Every spin box in the application sits beside a slider
+   that is the real control, and the pair of arrow stubs Fusion draws
+   outside the rounded border is the only thing in the window that does
+   not line up with anything. The value is still typed and still
+   scrolled. */
 QSpinBox::up-button, QSpinBox::down-button {
-    background-color: #1c212c;
-    border: 1px solid #272d3a;
-    width: 14px;
-}
-QSpinBox::up-button:hover, QSpinBox::down-button:hover {
-    background-color: #242a37;
+    width: 0px;
+    border: none;
+    background: transparent;
 }
 
 /* ---- combo ------------------------------------------------------- */
@@ -329,6 +363,13 @@ QFrame#Panel {
     border-radius: 5px;
 }
 
+/* A tile inside a panel: one shade up, so a row of them reads as a
+   row of things rather than as text floating on the panel. */
+QWidget#Tile {
+    background-color: #1a1f29;
+    border-right: 1px solid #272d3a;
+}
+
 QWidget#PanelHeader {
     background-color: #131720;
     border-bottom: 1px solid #272d3a;
@@ -430,6 +471,11 @@ QWidget#ContentBar {
     border-bottom: 1px solid #272d3a;
 }
 
+QWidget#StatusStrip {
+    background-color: #10141b;
+    border-top: 1px solid #272d3a;
+}
+
 QStatusBar {
     background-color: #10141b;
     border-top: 1px solid #272d3a;
@@ -498,6 +544,22 @@ QToolButton:hover {
 
 QWizard, QWizardPage { background-color: #0d0f14; }
 
+/* QWizard paints its own header band and names it. Without this it
+   comes out in the style's idea of a title area, which on a dark page
+   is a light bar with a hairline under it. */
+QWidget#qt_wizard_header {
+    background-color: #151922;
+    border-bottom: 1px solid #272d3a;
+}
+QLabel#qt_wizard_titleLabel {
+    color: #e4e8f0;
+    font-size: 16px;
+    font-weight: 600;
+}
+QLabel#qt_wizard_subTitleLabel {
+    color: #9aa3b4;
+}
+
 QWidget#WizardSide {
     background-color: #10141b;
     border-right: 1px solid #272d3a;
@@ -507,6 +569,9 @@ QListWidget#WizardSteps {
     background: transparent;
     border: none;
     outline: none;
+}
+QListWidget#WizardSteps::item:hover {
+    background-color: #161c26;
 }
 QListWidget#WizardSteps::item {
     padding: 6px 10px;

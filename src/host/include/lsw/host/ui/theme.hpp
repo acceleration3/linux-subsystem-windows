@@ -33,6 +33,10 @@ public:
         static constexpr const char* kMono = "Mono";
         static constexpr const char* kMeta = "Meta";
         static constexpr const char* kDim = "Dim";
+        // Prose under a setting's name. Sans; kMeta is the mono one.
+        static constexpr const char* kBody = "Body";
+        static constexpr const char* kTile = "Tile";
+        static constexpr const char* kStatusStrip = "StatusStrip";
         static constexpr const char* kCaption = "Caption";
         static constexpr const char* kHeading = "Heading";
         static constexpr const char* kPanel = "Panel";

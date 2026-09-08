@@ -183,7 +183,7 @@ void AppConfigDialog::fetch_icon() {
         return;
     }
     if (!rpc_.has_target()) {
-        icon_status_->setText("(VM not running — can't fetch icon)");
+        icon_status_->setText("Windows is not running, so there is no icon to read.");
         return;
     }
     icon_status_->setText("Fetching from guest agent...");

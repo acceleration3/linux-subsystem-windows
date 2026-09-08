@@ -73,7 +73,7 @@ WelcomePage::WelcomePage(QWidget* parent) : QWizardPage(parent) {
     auto* footnote = new QLabel(
         QStringLiteral("Nothing outside ~/.local/share/lsw is modified. The guest is a "
                        "single qcow2 file you can delete."));
-    footnote->setObjectName(QString::fromLatin1(Theme::Role::kMeta));
+    footnote->setObjectName(QString::fromLatin1(Theme::Role::kBody));
     footnote->setWordWrap(true);
     root->addWidget(footnote);
     root->addStretch(1);

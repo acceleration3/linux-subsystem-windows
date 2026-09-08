@@ -152,7 +152,7 @@ void VmSizePage::on_editions_ready() {
     const auto editions = edition_watcher_->result();
     edition_combo_->clear();
     if (editions.isEmpty()) {
-        edition_status_->setText("Could not read editions from the ISO — Setup will "
+        edition_status_->setText("Could not read the editions from this image. Setup will "
                                  "install image 1 (or prompt if that fails).");
         editions_loaded_ = true;  // don't block the wizard; fall back to index 1
         Q_EMIT completeChanged();

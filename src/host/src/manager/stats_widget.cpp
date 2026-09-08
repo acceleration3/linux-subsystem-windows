@@ -1,5 +1,7 @@
 #include "lsw/host/manager/stats_widget.hpp"
 
+#include "lsw/host/ui/theme.hpp"
+
 #include <QFormLayout>
 #include <QLabel>
 #include <QProgressBar>
@@ -10,6 +12,23 @@ namespace {
 
 QString fmt_gib(quint64 bytes) {
     return QString::number(static_cast<double>(bytes) / (1024.0 * 1024.0 * 1024.0), 'f', 1) + " GB";
+}
+
+// The row's name, in the same uppercase mono every other caption in
+// the application uses, so a gauge reads as one of them rather than as
+// a form field.
+QLabel* key_label(const QString& text) {
+    auto* label = new QLabel(text);
+    label->setObjectName(QString::fromLatin1(ui::Theme::Role::kCaption));
+    return label;
+}
+
+QLabel* value_label(const QString& text) {
+    auto* label = new QLabel(text);
+    label->setObjectName(QString::fromLatin1(ui::Theme::Role::kMeta));
+    label->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    label->setMinimumWidth(92);
+    return label;
 }
 
 QProgressBar* make_bar() {
@@ -28,40 +47,40 @@ StatsWidget::StatsWidget(QWidget* parent) : QFrame(parent) {
     form->setHorizontalSpacing(12);
 
     cpu_bar_ = make_bar();
-    cpu_label_ = new QLabel("0%");
+    cpu_label_ = value_label(QStringLiteral("0%"));
     auto* cpu_row = new QWidget;
     auto* cpu_lay = new QHBoxLayout(cpu_row);
     cpu_lay->setContentsMargins(0, 0, 0, 0);
     cpu_lay->addWidget(cpu_bar_, 1);
     cpu_lay->addWidget(cpu_label_);
-    form->addRow("CPU", cpu_row);
+    form->addRow(key_label(QStringLiteral("CPU")), cpu_row);
 
     ram_bar_ = make_bar();
-    ram_label_ = new QLabel("0 / 0 GB");
+    ram_label_ = value_label(QStringLiteral("0 / 0 GB"));
     auto* ram_row = new QWidget;
     auto* ram_lay = new QHBoxLayout(ram_row);
     ram_lay->setContentsMargins(0, 0, 0, 0);
     ram_lay->addWidget(ram_bar_, 1);
     ram_lay->addWidget(ram_label_);
-    form->addRow("RAM", ram_row);
+    form->addRow(key_label(QStringLiteral("RAM")), ram_row);
 
     vram_bar_ = make_bar();
-    vram_label_ = new QLabel("0 GB");
+    vram_label_ = value_label(QStringLiteral("0 GB"));
     auto* vram_row = new QWidget;
     auto* vram_lay = new QHBoxLayout(vram_row);
     vram_lay->setContentsMargins(0, 0, 0, 0);
     vram_lay->addWidget(vram_bar_, 1);
     vram_lay->addWidget(vram_label_);
-    form->addRow("VRAM", vram_row);
+    form->addRow(key_label(QStringLiteral("VRAM")), vram_row);
 
     disk_bar_ = make_bar();
-    disk_label_ = new QLabel("0 GB");
+    disk_label_ = value_label(QStringLiteral("0 GB"));
     auto* disk_row = new QWidget;
     auto* disk_lay = new QHBoxLayout(disk_row);
     disk_lay->setContentsMargins(0, 0, 0, 0);
     disk_lay->addWidget(disk_bar_, 1);
     disk_lay->addWidget(disk_label_);
-    form->addRow("Disk", disk_row);
+    form->addRow(key_label(QStringLiteral("DISK")), disk_row);
 }
 
 void StatsWidget::update_stats(const vm::VmStats& s) {

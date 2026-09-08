@@ -1,5 +1,7 @@
 #include "lsw/host/manager/console_panel.hpp"
 
+#include "lsw/host/ui/theme.hpp"
+
 #include "lsw/base/log.hpp"
 #include "lsw/host/link/agent_rpc_client.hpp"
 
@@ -48,16 +50,17 @@ ConsolePanel::ConsolePanel(link::AgentRpcClient& rpc, QWidget* parent)
         mono.setStyleHint(QFont::Monospace);
         output_->setFont(mono);
     }
-    output_->setStyleSheet(
-        "QPlainTextEdit { background-color: #111; color: #ddd; "
-        "border: 1px solid #444; }");
+    output_->setObjectName(QString::fromLatin1(ui::Theme::Role::kMono));
     root->addWidget(output_, 1);
 
     auto* row = new QHBoxLayout;
     row->setContentsMargins(0, 0, 0, 0);
     row->setSpacing(4);
     auto* prompt = new QLabel(QStringLiteral(">"));
-    prompt->setStyleSheet("color: #4af; font-weight: bold;");
+    // Amber, because the prompt is the guest speaking. Host text in
+    // this window stays neutral.
+    prompt->setStyleSheet(QStringLiteral("color: %1; font-weight: bold;")
+                              .arg(QString::fromLatin1(ui::Theme::Color::kAmber)));
     {
         QFont mono(QStringLiteral("monospace"));
         mono.setStyleHint(QFont::Monospace);
@@ -70,15 +73,13 @@ ConsolePanel::ConsolePanel(link::AgentRpcClient& rpc, QWidget* parent)
         mono.setStyleHint(QFont::Monospace);
         input_->setFont(mono);
     }
-    input_->setStyleSheet(
-        "QLineEdit { background-color: #111; color: #ddd; "
-        "border: 1px solid #444; padding: 2px 4px; }");
+    input_->setObjectName(QString::fromLatin1(ui::Theme::Role::kMono));
     input_->installEventFilter(this);  // catch Ctrl+C / Ctrl+D
     row->addWidget(input_, 1);
     root->addLayout(row);
 
     status_ = new QLabel(tr("Spawning cmd.exe..."));
-    status_->setStyleSheet("color: gray;");
+    status_->setObjectName(QString::fromLatin1(ui::Theme::Role::kMeta));
     root->addWidget(status_);
 
     connect(input_, &QLineEdit::returnPressed, this, &ConsolePanel::on_input_submitted);
@@ -156,12 +157,12 @@ void ConsolePanel::open_session() {
             self.data(), [self, sid]() {
                 if (!self) return;
                 if (sid.isEmpty()) {
-                    self->status_->setText(self->tr("Failed to open console — agent unreachable?"));
+                    self->status_->setText(self->tr("Could not open a console. The agent is not answering."));
                     self->input_->setEnabled(false);
                     return;
                 }
                 self->session_id_ = sid;
-                self->status_->setText(self->tr("Session %1 — type commands and press Enter").arg(sid));
+                self->status_->setText(self->tr("Session %1. Type a command and press Enter.").arg(sid));
                 self->input_->setFocus();
             },
             Qt::QueuedConnection);

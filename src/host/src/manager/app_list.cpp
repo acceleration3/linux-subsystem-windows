@@ -29,9 +29,13 @@ AppListWidget::AppListWidget(apps::AppConfigStore& store, link::AgentRpcClient& 
     root->setContentsMargins(0, 0, 0, 0);
 
     toolbar_ = new QToolBar;
-    auto* refresh_act =
-        toolbar_->addAction(style()->standardIcon(QStyle::SP_BrowserReload), "Refresh");
-    auto* new_act = toolbar_->addAction(style()->standardIcon(QStyle::SP_FileIcon), "New...");
+    // Text rather than the platform's icon theme: those icons arrive in
+    // whatever colours the user's theme picked, which on a dark panel is
+    // a pair of bright stickers.
+    auto* refresh_act = toolbar_->addAction(QStringLiteral("\u21bb"));
+    refresh_act->setToolTip(QStringLiteral("Refresh"));
+    auto* new_act = toolbar_->addAction(QStringLiteral("+"));
+    new_act->setToolTip(QStringLiteral("Add an application"));
     root->addWidget(toolbar_);
 
     list_ = new QListWidget;

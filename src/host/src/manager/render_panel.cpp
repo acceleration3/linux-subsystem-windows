@@ -8,6 +8,7 @@
 #include <QProgressBar>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QSizePolicy>
 #include <QTimer>
 #include <QVBoxLayout>
 
@@ -20,6 +21,11 @@ using vm::AreaPressure;
 using vm::ChannelPressure;
 using K = config::ManagerSettings::Key;
 
+// The channel strip is a fixed band: its cards are buttons with a
+// layout inside and no text of their own, so their sizeHint is one
+// line and they clip whatever the layout put in them.
+constexpr int kCardHeight = 62;
+
 QLabel* caption(const QString& text) {
     auto* label = new QLabel(text.toUpper());
     label->setObjectName(QString::fromLatin1(Theme::Role::kCaption));
@@ -29,6 +35,13 @@ QLabel* caption(const QString& text) {
 QLabel* meta(const QString& text) {
     auto* label = new QLabel(text);
     label->setObjectName(QString::fromLatin1(Theme::Role::kMeta));
+    return label;
+}
+
+QLabel* prose(const QString& text) {
+    auto* label = new QLabel(text);
+    label->setObjectName(QString::fromLatin1(Theme::Role::kBody));
+    label->setWordWrap(true);
     return label;
 }
 
@@ -76,6 +89,7 @@ QString bytes_label(quint64 bytes) {
 // A key/value tile. Several sit in a row under each area's meter.
 QWidget* kpi(const QString& key, const QString& value, const char* colour) {
     auto* box = new QWidget;
+    box->setObjectName(QString::fromLatin1(Theme::Role::kTile));
     auto* layout = new QVBoxLayout(box);
     layout->setContentsMargins(11, 9, 11, 9);
     layout->setSpacing(3);
@@ -109,9 +123,14 @@ RenderPanel::RenderPanel(vm::RenderStats& stats, config::ManagerSettings& settin
     root->setContentsMargins(0, 0, 0, 0);
     root->setSpacing(0);
 
+    // The strip is a fixed band. Its cards are buttons with a layout
+    // inside and no text, so neither they nor their holder have a
+    // sizeHint worth anything; both are told their height instead of
+    // being asked for it.
     auto* strip_holder = new QWidget;
+    strip_holder->setFixedHeight(kCardHeight + 18);
     strip_ = new QHBoxLayout(strip_holder);
-    strip_->setContentsMargins(14, 12, 14, 2);
+    strip_->setContentsMargins(14, 12, 14, 6);
     strip_->setSpacing(8);
     root->addWidget(strip_holder);
 
@@ -187,6 +206,10 @@ void RenderPanel::rebuild() {
         card->setChecked(channel.index == selected_);
         card->setCursor(Qt::PointingHandCursor);
         card->setMinimumWidth(158);
+        // A QPushButton sizes itself from its text, and this one has
+        // none: everything in it is a laid-out child. Left to its own
+        // sizeHint it comes out one line tall and clips its contents.
+        card->setFixedHeight(kCardHeight);
 
         auto* layout = new QVBoxLayout(card);
         layout->setContentsMargins(11, 9, 11, 9);
@@ -245,7 +268,7 @@ void RenderPanel::rebuild() {
         auto* layout = new QHBoxLayout(row);
         layout->setContentsMargins(0, 0, 0, 4);
         layout->addWidget(
-            meta(QStringLiteral("The process that claimed this channel is gone. Nothing "
+            prose(QStringLiteral("The process that claimed this channel is gone. Nothing "
                                 "else can take it until the claim is cleared.")),
             1);
         auto* release = new QPushButton(QStringLiteral("Release it"));
@@ -303,8 +326,7 @@ void RenderPanel::rebuild() {
         if (!advice.isEmpty()) {
             auto* advice_row = new QHBoxLayout;
             advice_row->setSpacing(10);
-            auto* text = meta(advice);
-            text->setWordWrap(true);
+            auto* text = prose(advice);
             text->setStyleSheet(QStringLiteral("color: #f0c393;"));
             advice_row->addWidget(text, 1);
 
