@@ -1,6 +1,9 @@
 #include "lsw/host/services/host_services.hpp"
 
 #include "lsw/base/log.hpp"
+#include "lsw/host/apps/desktop_launcher.hpp"
+#include "lsw/host/platform/dolphin_places.hpp"
+#include "lsw/host/platform/gtk_bookmarks.hpp"
 #include "lsw/host/vm/render_server.hpp"
 
 #include <QDir>
@@ -34,14 +37,53 @@ HostServices::HostServices(QObject* parent)
     // The render server takes its sizes on the command line, so they
     // have to be in place before anything starts one.
     apply_render_sizing();
+    apply_integrations();
     connect(&manager_settings_, &config::ManagerSettings::changed, this,
-            [this](const QString&) { apply_render_sizing(); });
+            [this](const QString&) {
+                apply_render_sizing();
+                apply_integrations();
+            });
 
     // Every line the server prints goes past the congestion parser. It
     // already counts stalls and already knows what size would have
     // avoided them; none of that was reaching anybody.
     connect(&lifecycle_, &vm::Lifecycle::render_server_logged, this,
             [this](const QString& line) { render_stats_.ingest(line); });
+}
+
+void HostServices::apply_integrations() {
+    using K = config::ManagerSettings::Key;
+
+    apps::DesktopLauncher::set_category(
+        manager_settings_.string_value(QLatin1String(K::kMenuCategory)));
+    apps::DesktopLauncher::set_publishing(
+        manager_settings_.bool_value(QLatin1String(K::kPublishEntries)));
+    apps::DesktopLauncher::set_file_associations(
+        manager_settings_.bool_value(QLatin1String(K::kFileAssociations)));
+    apps::DesktopLauncher::sync(app_configs_.configs());
+
+    // The bookmark is the same URL for both file managers, and both can
+    // be on at once: a KDE user and a GNOME user are not exclusive, and
+    // somebody with Dolphin and Thunar installed wants it in both.
+    const bool serving = manager_settings_.bool_value(QLatin1String(K::kSmbEnabled));
+    const QString user = manager_settings_.string_value(QLatin1String(K::kGuestUser));
+    const QString password =
+        manager_settings_.string_value(QLatin1String(K::kGuestPassword));
+    const QString scope = manager_settings_.string_value(QLatin1String(K::kShareScope));
+    const QString share = scope == QLatin1String("profile")
+                              ? QStringLiteral("Users")
+                              : QStringLiteral("C$");
+
+    if (serving && manager_settings_.bool_value(QLatin1String(K::kBookmarkDolphin))) {
+        (void)platform::DolphinPlaces::register_windows_bookmark(user, password, share);
+    } else {
+        platform::DolphinPlaces::remove_windows_bookmark();
+    }
+    if (serving && manager_settings_.bool_value(QLatin1String(K::kBookmarkGtk))) {
+        (void)platform::GtkBookmarks::register_windows_bookmark(user, password, share);
+    } else {
+        platform::GtkBookmarks::remove_windows_bookmark();
+    }
 }
 
 void HostServices::apply_render_sizing() {

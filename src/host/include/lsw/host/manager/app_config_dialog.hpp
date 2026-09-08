@@ -2,6 +2,8 @@
 
 #include "lsw/host/apps/app_config.hpp"
 
+#include <QCheckBox>
+#include <QComboBox>
 #include <QDialog>
 #include <QLabel>
 #include <QLineEdit>
@@ -41,6 +43,12 @@ private:
     QLineEdit* path_edit_ = nullptr;
     QLineEdit* cmdline_edit_ = nullptr;
     QPlainTextEdit* env_edit_ = nullptr;
+    // Where this application shows up on the host, and which render
+    // channel it draws on. Both are per application because both are
+    // choices about one application, not about all of them.
+    QCheckBox* publish_box_ = nullptr;
+    QLineEdit* mime_edit_ = nullptr;
+    QComboBox* channel_combo_ = nullptr;
     QLabel* icon_label_ = nullptr;
     QLabel* icon_status_ = nullptr;
     QTimer path_idle_timer_;

@@ -24,14 +24,15 @@ QString places_xbel_path() {
     return QDir(share).filePath(QStringLiteral("user-places.xbel"));
 }
 
-QString build_smb_url(const QString& username, const QString& password) {
+QString build_smb_url(const QString& username, const QString& password,
+                      const QString& share) {
     QUrl u;
     u.setScheme(QStringLiteral("smb"));
     u.setHost(QStringLiteral("127.0.0.1"));
     u.setPort(5445);
     u.setUserName(username);
     u.setPassword(password);
-    u.setPath(QStringLiteral("/C$"));
+    u.setPath(QLatin1Char('/') + share);
     return QString::fromUtf8(u.toEncoded());
 }
 
@@ -56,7 +57,8 @@ QDomElement find_existing_bookmark(const QDomElement& root,
 }  // namespace
 
 bool DolphinPlaces::register_windows_bookmark(const QString& username,
-                                              const QString& password) {
+                                              const QString& password,
+                                              const QString& share) {
     const QString path = places_xbel_path();
     QDir().mkpath(QFileInfo(path).absolutePath());
 
@@ -101,8 +103,11 @@ bool DolphinPlaces::register_windows_bookmark(const QString& username,
     // signature. Don't add a duplicate if the user (or an earlier
     // install) already wrote one — just refresh the credentials
     // by overwriting its href.
-    const QString unique_signature = QStringLiteral("@127.0.0.1:5445/C$");
-    const QString url = build_smb_url(username, password);
+    // The host and port identify the entry as ours whatever the share
+    // or the credentials happen to be, so changing either refreshes the
+    // one line rather than adding a second.
+    const QString unique_signature = QStringLiteral("@127.0.0.1:5445/");
+    const QString url = build_smb_url(username, password, share);
     QDomElement existing = find_existing_bookmark(root, unique_signature);
     if (!existing.isNull()) {
         existing.setAttribute(QStringLiteral("href"), url);
@@ -152,6 +157,32 @@ bool DolphinPlaces::register_windows_bookmark(const QString& username,
     LSW_INFO("DolphinPlaces: registered {} bookmark in {}",
              kBookmarkTitle, path.toStdString());
     return true;
+}
+
+void DolphinPlaces::remove_windows_bookmark() {
+    const QString path = places_xbel_path();
+    QFile file{path};
+    if (!file.open(QIODevice::ReadOnly)) {
+        return;
+    }
+    QDomDocument doc;
+    const bool parsed = static_cast<bool>(doc.setContent(&file));
+    file.close();
+    if (!parsed) {
+        return;
+    }
+    QDomElement root = doc.documentElement();
+    QDomElement existing =
+        find_existing_bookmark(root, QStringLiteral("@127.0.0.1:5445/"));
+    if (existing.isNull()) {
+        return;
+    }
+    existing.parentNode().removeChild(existing);
+    if (file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        file.write(doc.toByteArray(2));
+        file.close();
+        LSW_INFO("DolphinPlaces: removed the Windows bookmark");
+    }
 }
 
 }  // namespace lsw::host::platform

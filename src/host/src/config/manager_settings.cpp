@@ -47,6 +47,8 @@ const QHash<QString, QVariant>& defaults() {
         {QLatin1String(K::kBookmarkDolphin), true},
         {QLatin1String(K::kBookmarkGtk), true},
         {QLatin1String(K::kHostShares), QString{}},
+        {QLatin1String(K::kGuestUser), QStringLiteral("lsw")},
+        {QLatin1String(K::kGuestPassword), QStringLiteral("lsw")},
 
         {QLatin1String(K::kPublishEntries), true},
         {QLatin1String(K::kMenuCategory), QStringLiteral("Windows")},
