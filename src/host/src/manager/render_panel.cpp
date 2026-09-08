@@ -278,7 +278,9 @@ void RenderPanel::rebuild() {
         layout->addLayout(top);
 
         auto* owner = meta(channel.claimed
-                               ? QStringLiteral("pid %1").arg(channel.owner_pid)
+                               ? (channel.owner_is_guest()
+                                      ? QStringLiteral("guest pid %1").arg(channel.owner())
+                                      : QStringLiteral("pid %1").arg(channel.owner()))
                                : QStringLiteral("free"));
         owner->setAttribute(Qt::WA_TransparentForMouseEvents);
         layout->addWidget(owner);
@@ -325,10 +327,13 @@ void RenderPanel::rebuild() {
             .arg(channel.index)
             .arg(region_mib)
             .arg(channel.claimed
-                     ? QStringLiteral("claimed by pid %1").arg(channel.owner_pid)
+                     ? QStringLiteral("claimed by %1pid %2")
+                           .arg(channel.owner_is_guest() ? QStringLiteral("guest ")
+                                                         : QString{})
+                           .arg(channel.owner())
                      : (channel.owner_pid != 0
                             ? QStringLiteral("claimed by pid %1, which is gone")
-                                  .arg(channel.owner_pid)
+                                  .arg(channel.owner())
                             : QStringLiteral("not claimed"))));
 
     // What can be done to this channel. Sizing it apart from the rest
