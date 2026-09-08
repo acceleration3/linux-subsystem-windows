@@ -6,6 +6,7 @@
 #include <QSystemTrayIcon>
 
 class QLabel;
+class QPushButton;
 class QStackedWidget;
 
 namespace lsw::host::services { class HostServices; }
@@ -51,6 +52,7 @@ private Q_SLOTS:
 private:
     void build_pages();
     QWidget* build_empty_state();
+    void pop_out(NavRail::Page page);
     void setup_tray();
     void refresh_identity();
     void refresh_status_bar();
@@ -64,6 +66,7 @@ private:
     QStackedWidget* stack_ = nullptr;
     QLabel* content_title_ = nullptr;
     QLabel* content_detail_ = nullptr;
+    QPushButton* pop_out_button_ = nullptr;
     QWidget* warn_strip_ = nullptr;
     QLabel* warn_text_ = nullptr;
     QLabel* status_left_ = nullptr;

@@ -42,6 +42,7 @@ private Q_SLOTS:
 
 private:
     void rebuild_all();
+    [[nodiscard]] bool passes(const apps::LogRecord& record) const;
     static QString format_record(const apps::LogRecord& r);
 
     apps::LogStore& store_;
@@ -50,6 +51,11 @@ private:
     QPushButton* find_next_ = nullptr;
     QPushButton* find_prev_ = nullptr;
     QCheckBox* autoscroll_ = nullptr;
+    // Which severities are on screen. Toggles rather than a combo:
+    // seeing only the errors is two clicks and no menu, and the state
+    // of all three is readable at a glance.
+    QPushButton* level_buttons_[3]{};
+    bool level_shown_[3] = {true, true, true};
     int shown_ = 0;
     QLabel* status_ = nullptr;
 };

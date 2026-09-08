@@ -1,5 +1,7 @@
 #include "lsw/host/manager/log_panel.hpp"
 
+#include "lsw/host/ui/theme.hpp"
+
 #include <QCheckBox>
 #include <QDateTime>
 #include <QHBoxLayout>
@@ -37,6 +39,30 @@ LogPanel::LogPanel(apps::LogStore& store, QWidget* parent)
     autoscroll_ = new QCheckBox(tr("Autoscroll"));
     autoscroll_->setChecked(true);
     bar->addWidget(autoscroll_);
+
+    // Severity, as three latching buttons. The colours are the ones the
+    // rest of the application uses for the same three meanings.
+    const struct {
+        const char* label;
+        const char* colour;
+    } kLevels[] = {
+        {"Info", ui::Theme::Color::kInfo},
+        {"Warn", ui::Theme::Color::kAmber},
+        {"Error", ui::Theme::Color::kBad},
+    };
+    for (int i = 0; i < 3; ++i) {
+        auto* button = new QPushButton(tr(kLevels[i].label));
+        button->setCheckable(true);
+        button->setChecked(true);
+        button->setStyleSheet(QStringLiteral("color: %1;")
+                                  .arg(QString::fromLatin1(kLevels[i].colour)));
+        connect(button, &QPushButton::toggled, this, [this, i](bool on) {
+            level_shown_[i] = on;
+            rebuild_all();
+        });
+        level_buttons_[i] = button;
+        bar->addWidget(button);
+    }
     root->addLayout(bar);
 
     view_ = new QPlainTextEdit;
@@ -73,18 +99,38 @@ QString LogPanel::format_record(const apps::LogRecord& r) {
              r.msg);
 }
 
+bool LogPanel::passes(const apps::LogRecord& record) const {
+    // Anything that is not one of the three named levels is shown
+    // whatever the buttons say: a record nobody can filter is worse
+    // than one nobody asked for.
+    const QString level = record.level.trimmed().toUpper();
+    if (level.startsWith(QLatin1Char('E'))) {
+        return level_shown_[2];
+    }
+    if (level.startsWith(QLatin1Char('W'))) {
+        return level_shown_[1];
+    }
+    if (level.startsWith(QLatin1Char('I')) || level.startsWith(QLatin1Char('D'))) {
+        return level_shown_[0];
+    }
+    return true;
+}
+
 void LogPanel::rebuild_all() {
     QStringList lines;
     const auto& recs = store_.records();
     lines.reserve(recs.size());
     for (const auto& r : recs) {
+        if (!passes(r)) {
+            continue;
+        }
         lines << format_record(r);
     }
     view_->setPlainText(lines.join(QLatin1Char('\n')));
     if (autoscroll_->isChecked()) {
         view_->moveCursor(QTextCursor::End);
     }
-    shown_ = static_cast<int>(recs.size());
+    shown_ = static_cast<int>(lines.size());
     Q_EMIT record_count_changed(shown_);
 }
 
@@ -96,16 +142,21 @@ void LogPanel::on_appended(const QVector<apps::LogRecord>& batch) {
                                 == view_->verticalScrollBar()->maximum();
     auto cursor = view_->textCursor();
     cursor.movePosition(QTextCursor::End);
+    int added = 0;
     for (const auto& r : batch) {
+        if (!passes(r)) {
+            continue;
+        }
         if (cursor.position() > 0) {
             cursor.insertText(QStringLiteral("\n"));
         }
         cursor.insertText(format_record(r));
+        ++added;
     }
     if (autoscroll_->isChecked() || was_at_bottom) {
         view_->moveCursor(QTextCursor::End);
     }
-    shown_ += static_cast<int>(batch.size());
+    shown_ += added;
     Q_EMIT record_count_changed(shown_);
 }
 

@@ -78,7 +78,14 @@ embed_text_file("${CMAKE_CURRENT_SOURCE_DIR}/embedded/theme.qss"
 lsw_host_sources(LSW_CORE_SOURCES ${LSW_CORE_CONCERNS})
 add_library(lsw_host_core STATIC ${LSW_CORE_SOURCES})
 target_include_directories(lsw_host_core PUBLIC ${LSW_HOST_INCLUDE_DIR})
-target_include_directories(lsw_host_core PRIVATE $<BUILD_INTERFACE:${_core_embed}>)
+# vm/render_stats.cpp reads the render server's region header. Its
+# layout is the contract between the two, so the header itself is
+# included rather than mirrored: a mirror is a copy that drifts, and it
+# drifts silently because both sides still compile.
+set(_rvk_wire_include
+    "${CMAKE_SOURCE_DIR}/external/render-server/src/wire/include")
+target_include_directories(lsw_host_core
+    PRIVATE $<BUILD_INTERFACE:${_core_embed}> $<BUILD_INTERFACE:${_rvk_wire_include}>)
 target_link_libraries(lsw_host_core
     PUBLIC
         Qt6::Widgets Qt6::Network Qt6::DBus Qt6::Xml Qt6::Concurrent

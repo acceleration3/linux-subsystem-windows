@@ -7,6 +7,8 @@
 
 #include <csignal>
 
+#include "rvk/wire/region_layout.hpp"
+
 namespace lsw::host::vm {
 
 namespace {
@@ -87,31 +89,27 @@ QString size_label(quint64 kib) {
     return QStringLiteral("%1 KiB").arg(kib);
 }
 
-// The first fields of the region header the render server writes, in
-// its order. Only the part this reads is mirrored, and it is checked
-// against the magic before anything else is believed, so a header that
-// has moved on is refused rather than misread.
-//
-// See rvk/wire/region_layout.hpp in the render server for the whole of
-// it.
-struct RegionHeaderPrefix {
-    std::uint32_t magic;
-    std::uint32_t header_bytes;
-    std::uint32_t ready;
-    std::uint32_t reserved_0;
-    std::uint64_t region_bytes;
-    std::uint32_t owner_pid;
-    std::uint32_t reserved_1;
-    std::uint64_t ring_offset;
-    std::uint64_t ring_buffer_bytes;
-    std::uint64_t ring_extra_bytes;
-    std::uint64_t reply_offset;
-    std::uint64_t reply_bytes;
-    std::uint64_t blob_offset;
-    std::uint64_t blob_bytes;
-};
-
-constexpr std::uint32_t kRegionMagic = 0x524B5247;  // "RKRG"
+// Take what the server published over what the log said. Both describe
+// the same events, and the header is the one that cannot be behind: a
+// warning is printed on the first occurrence and then on every power of
+// two, so between two of them the log's count is stale by design.
+void adopt(ChannelPressure& channel, const rvk::wire::RegionCounters& counters) {
+    auto& ring = channel.areas[kRing];
+    if (counters.chunked_commands > 0) {
+        ring.events = counters.chunked_commands;
+        ring.largest_bytes = counters.chunked_largest_bytes;
+        ring.suggested_kib = counters.ring_suggest_kib;
+        ring.state = state_for(ring.events);
+    }
+    auto& reply = channel.areas[kReply];
+    if (counters.partial_replies > 0) {
+        reply.events = counters.partial_replies;
+        reply.extra_trips = counters.reply_extra_trips;
+        reply.largest_bytes = counters.reply_largest_bytes;
+        reply.suggested_kib = counters.reply_suggest_kib;
+        reply.state = state_for(reply.events);
+    }
+}
 
 bool alive(std::uint32_t pid) {
     return pid != 0 && ::kill(static_cast<int>(pid), 0) == 0;
@@ -272,10 +270,10 @@ void RenderStats::poll_regions(const QString& region_prefix) {
 
         QFile file{QStringLiteral("/dev/shm/%1-%2").arg(region_prefix).arg(i)};
         if (file.open(QIODevice::ReadOnly)) {
-            RegionHeaderPrefix header{};
+            rvk::wire::RegionHeader header{};
             const auto read = file.read(reinterpret_cast<char*>(&header), sizeof(header));
-            if (read == static_cast<qint64>(sizeof(header)) && header.magic == kRegionMagic
-                && header.ready != 0) {
+            if (read == static_cast<qint64>(sizeof(header))
+                && header.magic == rvk::wire::RegionHeader{}.magic && header.ready != 0) {
                 channel.owner_pid = header.owner_pid;
                 channel.claimed = alive(header.owner_pid);
                 // The sizes come from the region rather than from the
@@ -285,6 +283,7 @@ void RenderStats::poll_regions(const QString& region_prefix) {
                 channel.areas[kRing].configured_kib = header.ring_buffer_bytes >> 10;
                 channel.areas[kReply].configured_kib = header.reply_bytes >> 10;
                 channel.areas[kBlob].configured_kib = header.blob_bytes >> 10;
+                adopt(channel, header.counters);
             }
         }
         touched = touched || channel.claimed != was_claimed
@@ -309,10 +308,10 @@ bool RenderStats::release_channel(const QString& region_prefix, int index) {
     if (!file.open(QIODevice::ReadWrite)) {
         return false;
     }
-    RegionHeaderPrefix header{};
+    rvk::wire::RegionHeader header{};
     if (file.read(reinterpret_cast<char*>(&header), sizeof(header))
             != static_cast<qint64>(sizeof(header))
-        || header.magic != kRegionMagic) {
+        || header.magic != rvk::wire::RegionHeader{}.magic) {
         return false;
     }
     header.owner_pid = 0;
