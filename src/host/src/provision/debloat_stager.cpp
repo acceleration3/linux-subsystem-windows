@@ -72,7 +72,7 @@ DebloatStager::DebloatStager(QObject* parent) : QObject(parent) {}
 DebloatStager::~DebloatStager() = default;
 
 void DebloatStager::trim(const QString& iso_path, const QString& output_dir,
-                         int image_index, debloat::DebloatLevel level) {
+                         int image_index, debloat::DebloatLevel level, const QString& file_name) {
     // Beside the output, not in QDir::tempPath(). /tmp is tmpfs on a
     // normal desktop — a few gigabytes of RAM — and this unpacks a
     // Windows ISO twice over. The default location fails instantly, and
@@ -106,7 +106,11 @@ void DebloatStager::trim(const QString& iso_path, const QString& output_dir,
     }
 
     const QPointer<DebloatStager> self{this};
-    (void)QtConcurrent::run([self, scratch, iso_path, output_dir, dir, image_index, level]() {
+    const QString out_name = file_name.isEmpty()
+                                 ? QStringLiteral("windows-trimmed.iso")
+                                 : file_name;
+    (void)QtConcurrent::run([self, scratch, iso_path, output_dir, dir, image_index, level,
+                             out_name]() {
         auto report = [self](const QString& detail, int percent) {
             QMetaObject::invokeMethod(self.data(), [self, detail, percent] {
                 if (self) {
@@ -175,8 +179,7 @@ void DebloatStager::trim(const QString& iso_path, const QString& output_dir,
         // anything can go looking for a second CD, so a path on the
         // payload ISO is not one it can be given.
         report(QStringLiteral("Rebuilding the Windows ISO..."), 70);
-        const QString out_iso =
-            QDir(output_dir).filePath(QStringLiteral("windows-trimmed.iso"));
+        const QString out_iso = QDir(output_dir).filePath(out_name);
         QString iso_error;
         if (!install::WindowsIsoBuilder::build(iso_path, wim, out_iso, dir, &iso_error)) {
             fail(iso_error);

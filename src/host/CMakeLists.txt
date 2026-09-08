@@ -122,12 +122,26 @@ target_link_libraries(lsw_host_provision
 )
 target_compile_definitions(lsw_host_provision PRIVATE QT_NO_KEYWORDS)
 
+# ---- lsw_host_tools ------------------------------------------------------
+# The image tools: download one, trim one. They used to be wizard pages,
+# which meant they could only run once, in one place, on the way to
+# something else. Both the wizard and the manager open them now, so they
+# live in a target of their own that neither owns.
+lsw_host_sources(LSW_TOOLS_SOURCES tools)
+add_library(lsw_host_tools STATIC ${LSW_TOOLS_SOURCES})
+target_include_directories(lsw_host_tools PUBLIC ${LSW_HOST_INCLUDE_DIR})
+target_link_libraries(lsw_host_tools
+    PUBLIC  lsw_host_provision
+    PRIVATE LSW::CompileOptions
+)
+target_compile_definitions(lsw_host_tools PRIVATE QT_NO_KEYWORDS)
+
 # ---- lsw_host_wizard -----------------------------------------------------
 lsw_host_sources(LSW_WIZARD_SOURCES wizard)
 add_library(lsw_host_wizard STATIC ${LSW_WIZARD_SOURCES})
 target_include_directories(lsw_host_wizard PUBLIC ${LSW_HOST_INCLUDE_DIR})
 target_link_libraries(lsw_host_wizard
-    PUBLIC  lsw_host_provision
+    PUBLIC  lsw_host_provision lsw_host_tools
     PRIVATE LSW::CompileOptions nlohmann_json::nlohmann_json
 )
 target_compile_definitions(lsw_host_wizard PRIVATE QT_NO_KEYWORDS)
@@ -137,7 +151,7 @@ lsw_host_sources(LSW_MANAGER_SOURCES manager mcp)
 add_library(lsw_host_manager STATIC ${LSW_MANAGER_SOURCES})
 target_include_directories(lsw_host_manager PUBLIC ${LSW_HOST_INCLUDE_DIR})
 target_link_libraries(lsw_host_manager
-    PUBLIC  lsw_host_core
+    PUBLIC  lsw_host_core lsw_host_tools
     PRIVATE LSW::CompileOptions nlohmann_json::nlohmann_json
 )
 target_compile_definitions(lsw_host_manager PRIVATE QT_NO_KEYWORDS)

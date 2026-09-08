@@ -6,7 +6,10 @@
 #include "lsw/host/manager/render_panel.hpp"
 #include "lsw/host/manager/settings_page.hpp"
 #include "lsw/host/manager/vm_detail_panel.hpp"
+#include "lsw/host/apps/desktop_launcher.hpp"
 #include "lsw/host/services/host_services.hpp"
+#include "lsw/host/tools/download_image_dialog.hpp"
+#include "lsw/host/tools/trim_image_dialog.hpp"
 #include "lsw/host/ui/theme.hpp"
 
 #include <QCloseEvent>
@@ -173,6 +176,24 @@ void MainWindow::build_pages() {
             [this] { show_page(NavRail::Page::Settings); });
     connect(settings_page_, &SettingsPage::restart_requested, this,
             &MainWindow::restart_guest);
+    // The image tools are the same dialogs the wizard opens. Nothing
+    // about them needs a guest, so they work with the machine off.
+    connect(settings_page_, &SettingsPage::download_tool_requested, this, [this] {
+        tools::DownloadImageDialog dialog{services_.settings(), this};
+        dialog.exec();
+    });
+    connect(settings_page_, &SettingsPage::trim_tool_requested, this, [this] {
+        const QString source = services_.vms().records().isEmpty()
+                                   ? QString{}
+                                   : services_.vms().records().first().iso_path;
+        tools::TrimImageDialog dialog{services_.settings(), source, 1, this};
+        dialog.exec();
+    });
+    connect(settings_page_, &SettingsPage::rewrite_entries_requested, this, [this] {
+        // Idempotent, and the point of the button is the case where the
+        // files on disk have drifted from what the store says.
+        apps::DesktopLauncher::sync(services_.app_configs().configs());
+    });
     connect(settings_page_, &SettingsPage::open_share_requested, this, [this] {
         // The share is served in userspace by the file manager, so this
         // is a URL rather than a mount.
