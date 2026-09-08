@@ -189,10 +189,10 @@ void SettingsPage::build() {
             QStringLiteral("Large command streams, host visible device memory, and the "
                            "frames on their way to a window."),
             make_choice(QLatin1String(K::kBlobMib),
-                        Choices{{QStringLiteral("128 MiB"), 128},
-                                {QStringLiteral("256 MiB"), 256},
+                        Choices{{QStringLiteral("256 MiB"), 256},
                                 {QStringLiteral("512 MiB"), 512},
-                                {QStringLiteral("1024 MiB"), 1024}}));
+                                {QStringLiteral("1024 MiB"), 1024},
+                                {QStringLiteral("2048 MiB"), 2048}}));
     add_row(render, QLatin1String(K::kWarnCongestion),
             QStringLiteral("Warn when an area is congested"),
             QStringLiteral("Reads the counters the render server publishes, and falls "

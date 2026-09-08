@@ -65,7 +65,12 @@ void HostServices::apply_integrations() {
     // The bookmark is the same URL for both file managers, and both can
     // be on at once: a KDE user and a GNOME user are not exclusive, and
     // somebody with Dolphin and Thunar installed wants it in both.
-    const bool serving = manager_settings_.bool_value(QLatin1String(K::kSmbEnabled));
+    // A bookmark pointing at a guest that does not exist is worse than
+    // no bookmark: it is a folder in somebody's sidebar that fails when
+    // clicked. So the share is only advertised once there is something
+    // behind it.
+    const bool serving = manager_settings_.bool_value(QLatin1String(K::kSmbEnabled))
+                         && !vms_.records().isEmpty();
     const QString user = manager_settings_.string_value(QLatin1String(K::kGuestUser));
     const QString password =
         manager_settings_.string_value(QLatin1String(K::kGuestPassword));
@@ -113,6 +118,10 @@ bool HostServices::open() {
 }
 
 void HostServices::attach_running_vms() {
+    // The VM list is only known by the time this runs, and two of the
+    // integrations depend on there being one.
+    apply_integrations();
+
     // A VM the user left running when they closed the last manager. Its
     // shared region outlived that process, so take it over rather than
     // making them restart Windows to get their mirrors back.
