@@ -240,10 +240,10 @@ bool DesktopLauncher::install(const AppConfig& cfg) {
     }
     s << "Exec=" << lsw_manager_executable() << " --launch '" << exec_id << "'\n"
       << "Categories=" << kCategoryName << ";\n"
-      // StartupWMClass is the X11 grouping hint; on Wayland the
-      // taskbar matches against the per-window app_id stamped by
-      // WindowView::setVisible (``lsw-window-<hwnd>``), so this is
-      // mostly for the launcher-side bounce / startup-id flow on X11.
+      // StartupWMClass is the X11 grouping hint; on Wayland the taskbar
+      // matches against the app id the mirror presents, which is this
+      // entry's own, so this is mostly for the launcher-side bounce /
+      // startup-id flow on X11.
       << "StartupNotify=true\n"
       << "Terminal=false\n";
     df.close();

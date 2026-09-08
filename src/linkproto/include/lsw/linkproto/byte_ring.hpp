@@ -11,12 +11,9 @@
 
 // A single-producer / single-consumer message ring in shared memory.
 //
-// The frame ring solved one problem — get pixels across the VM boundary
-// without copying them through a socket. This is the general form: an
-// ordered byte channel between exactly one writer and one reader, living
-// in the same IVSHMEM region. Two of them back to back make a duplex
-// channel (see region.hpp), which is what a command stream or an RPC
-// channel needs.
+// An ordered byte channel between exactly one writer and one reader,
+// living in an IVSHMEM region. Two of them back to back make a duplex
+// channel (see region.hpp), which is what an RPC channel needs.
 //
 // Design constraints that are not negotiable here:
 //
