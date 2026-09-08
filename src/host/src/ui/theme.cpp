@@ -10,6 +10,9 @@
 #include <QStyleFactory>
 
 #include <QColor>
+#include <QHeaderView>
+#include <QTableWidget>
+#include <QWidget>
 
 #include "theme_qss.hpp"
 
@@ -39,6 +42,61 @@ namespace {
 }
 
 }  // namespace
+
+void Theme::surface(QWidget* widget, const char* role) {
+    widget->setObjectName(QString::fromLatin1(role));
+    widget->setAttribute(Qt::WA_StyledBackground, true);
+}
+
+// One table, everywhere. The design draws a row list rather than a
+// grid: headings in letter-spaced mono over a hairline, rows separated
+// by a fainter one, and no box around any of it, because the panel
+// holding the table is already the box.
+void Theme::rows_table(QTableWidget* table, const QStringList& headers) {
+    table->setColumnCount(static_cast<int>(headers.size()));
+    table->setHorizontalHeaderLabels(headers);
+    table->setObjectName(QStringLiteral("Rows"));
+    table->setAttribute(Qt::WA_StyledBackground, true);
+    table->setShowGrid(false);
+    table->setFrameShape(QFrame::NoFrame);
+    table->verticalHeader()->setVisible(false);
+    table->verticalHeader()->setDefaultSectionSize(38);
+    table->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    table->setSelectionMode(QAbstractItemView::NoSelection);
+    table->setFocusPolicy(Qt::NoFocus);
+    table->setWordWrap(false);
+
+    auto* head = table->horizontalHeader();
+    head->setDefaultAlignment(Qt::AlignLeft | Qt::AlignBottom);
+    head->setHighlightSections(false);
+    head->setFixedHeight(28);
+    // Letter spacing is the one thing the heading needs and a
+    // stylesheet cannot say.
+    QFont font = head->font();
+    font.setFamilies({QStringLiteral("JetBrains Mono"), QStringLiteral("DejaVu Sans Mono")});
+    font.setPixelSize(10);
+    font.setWeight(QFont::Medium);
+    font.setLetterSpacing(QFont::PercentageSpacing, 113);
+    head->setFont(font);
+}
+
+QTableWidgetItem* Theme::kind_cell(const QString& text) {
+    auto* item = new QTableWidgetItem(text);
+    QFont font;
+    font.setFamilies({QStringLiteral("JetBrains Mono"), QStringLiteral("DejaVu Sans Mono")});
+    font.setPixelSize(12);
+    item->setFont(font);
+    item->setForeground(QColor{QString::fromLatin1(Color::kFgFaint)});
+    return item;
+}
+
+void Theme::fit_rows(QTableWidget* table) {
+    int height = table->horizontalHeader()->height();
+    for (int row = 0; row < table->rowCount(); ++row) {
+        height += table->rowHeight(row);
+    }
+    table->setFixedHeight(height + 2);
+}
 
 QString Theme::stylesheet() {
     return QString::fromUtf8(::lsw::embedded::kThemeQss);

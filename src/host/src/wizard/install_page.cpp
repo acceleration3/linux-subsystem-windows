@@ -40,7 +40,7 @@ InstallPage::InstallPage(Wizard& wizard, QWidget* parent) : QWizardPage(parent),
     // The screen is the content. A bordered frame around the guest's
     // console, with the same corner and line as every other panel.
     auto* screen = new QFrame;
-    screen->setObjectName(QString::fromLatin1(ui::Theme::Role::kScreen));
+    ui::Theme::surface(screen, ui::Theme::Role::kScreen);
     auto* screen_layout = new QVBoxLayout(screen);
     screen_layout->setContentsMargins(10, 10, 10, 10);
     screen_layout->setSpacing(8);

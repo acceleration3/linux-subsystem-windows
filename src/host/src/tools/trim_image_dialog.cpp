@@ -140,7 +140,7 @@ TrimImageDialog::TrimImageDialog(config::Settings& settings, QString source_iso,
         // what it costs are one target, and the selected one says so
         // with its own border rather than with a dot alone.
         auto* card = new QFrame;
-        card->setObjectName(QString::fromLatin1(Theme::Role::kOptionCard));
+        Theme::surface(card, Theme::Role::kOptionCard);
         auto* card_layout = new QVBoxLayout(card);
         card_layout->setContentsMargins(13, 10, 13, 11);
         card_layout->setSpacing(0);
@@ -221,7 +221,7 @@ TrimImageDialog::TrimImageDialog(config::Settings& settings, QString source_iso,
 
     // ---- footer ---------------------------------------------------
     auto* foot_band = new QFrame;
-    foot_band->setObjectName(QString::fromLatin1(Theme::Role::kDialogFoot));
+    Theme::surface(foot_band, Theme::Role::kDialogFoot);
     auto* footer = new QHBoxLayout(foot_band);
     footer->setContentsMargins(20, 12, 20, 12);
     footer->addWidget(meta(QStringLiteral("The source image is read only and is never "

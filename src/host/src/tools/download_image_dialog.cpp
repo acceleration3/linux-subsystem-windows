@@ -41,7 +41,7 @@ QLabel* caption(const QString& text) {
 // real numbers.
 QWidget* tile(const QString& name, QLabel*& value_out) {
     auto* box = new QFrame;
-    box->setObjectName(QString::fromLatin1(Theme::Role::kPanel));
+    Theme::surface(box, Theme::Role::kPanel);
     auto* layout = new QVBoxLayout(box);
     layout->setContentsMargins(11, 9, 11, 9);
     layout->setSpacing(2);
@@ -144,7 +144,7 @@ DownloadImageDialog::DownloadImageDialog(config::Settings& settings, QWidget* pa
     root->addStretch(1);
 
     auto* foot_band = new QFrame;
-    foot_band->setObjectName(QString::fromLatin1(Theme::Role::kDialogFoot));
+    Theme::surface(foot_band, Theme::Role::kDialogFoot);
     auto* footer = new QHBoxLayout(foot_band);
     footer->setContentsMargins(20, 12, 20, 12);
     footer->addWidget(meta(QStringLiteral("Resumes if the connection drops.")), 1);

@@ -19,7 +19,7 @@ using ui::Theme;
 // a run-on sentence in a language with longer words.
 QWidget* stage_card(const QString& number, const QString& title, const QString& body) {
     auto* frame = new QFrame;
-    frame->setObjectName(QString::fromLatin1(Theme::Role::kPanel));
+    Theme::surface(frame, Theme::Role::kPanel);
     auto* layout = new QVBoxLayout(frame);
     layout->setContentsMargins(13, 12, 13, 12);
     layout->setSpacing(5);

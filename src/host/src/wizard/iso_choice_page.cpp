@@ -26,7 +26,7 @@ using ui::Theme;
 // the button that opens it.
 QWidget* tool_card(const QString& title, const QString& blurb, QPushButton* button) {
     auto* frame = new QFrame;
-    frame->setObjectName(QString::fromLatin1(Theme::Role::kPanel));
+    Theme::surface(frame, Theme::Role::kPanel);
     auto* layout = new QVBoxLayout(frame);
     layout->setContentsMargins(13, 13, 13, 13);
     layout->setSpacing(7);

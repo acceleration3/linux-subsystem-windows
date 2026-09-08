@@ -245,7 +245,7 @@ AppConfigDialog::AppConfigDialog(apps::AppConfig initial, link::AgentRpcClient& 
     // Remove sits apart from the pair that finish the dialog, and quiet,
     // because it is the one that destroys something.
     auto* foot_band = new QFrame;
-    foot_band->setObjectName(QString::fromLatin1(ui::Theme::Role::kDialogFoot));
+    ui::Theme::surface(foot_band, ui::Theme::Role::kDialogFoot);
     auto* footer = new QHBoxLayout(foot_band);
     footer->setContentsMargins(20, 12, 20, 12);
     auto* remove = new QPushButton(QStringLiteral("Remove"));

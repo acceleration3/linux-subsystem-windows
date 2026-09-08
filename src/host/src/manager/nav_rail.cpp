@@ -44,7 +44,7 @@ QLabel* make_marker() {
 }  // namespace
 
 NavRail::NavRail(QWidget* parent) : QWidget(parent) {
-    setObjectName(QString::fromLatin1(Theme::Role::kNavRail));
+    Theme::surface(this, Theme::Role::kNavRail);
     setFixedWidth(186);
 
     auto* root = new QVBoxLayout(this);
@@ -53,7 +53,7 @@ NavRail::NavRail(QWidget* parent) : QWidget(parent) {
 
     // ---- identity -------------------------------------------------
     auto* identity = new QWidget;
-    identity->setObjectName(QString::fromLatin1(Theme::Role::kNavIdentity));
+    Theme::surface(identity, Theme::Role::kNavIdentity);
     auto* id_layout = new QVBoxLayout(identity);
     id_layout->setContentsMargins(14, 13, 14, 12);
     id_layout->setSpacing(2);
@@ -132,7 +132,7 @@ NavRail::NavRail(QWidget* parent) : QWidget(parent) {
 
     // ---- power ----------------------------------------------------
     auto* power_box = new QWidget;
-    power_box->setObjectName(QString::fromLatin1(Theme::Role::kNavPower));
+    Theme::surface(power_box, Theme::Role::kNavPower);
     auto* power_layout = new QVBoxLayout(power_box);
     power_layout->setContentsMargins(12, 11, 12, 12);
     power_layout->setSpacing(9);

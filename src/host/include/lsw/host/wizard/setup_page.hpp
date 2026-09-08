@@ -3,6 +3,7 @@
 #include "lsw/host/provision/setup_plan_parser.hpp"
 
 #include <QLabel>
+#include <QProgressBar>
 #include <QTableWidget>
 #include <QWizardPage>
 
@@ -21,6 +22,11 @@ public:
     explicit SetupPage(Wizard& wizard, QWidget* parent = nullptr);
 
     void initializePage() override;
+
+    // Fill the table with a plausible run. Used by --screenshot, where
+    // there is no pipeline and an empty table says nothing about
+    // whether the page matches the design.
+    void demo_fill();
     [[nodiscard]] bool isComplete() const override;
     [[nodiscard]] int nextId() const override;
 
@@ -31,7 +37,11 @@ private:
 
     Wizard& wizard_;
     QTableWidget* table_ = nullptr;
+    QLabel* stage_label_ = nullptr;
+    QProgressBar* progress_ = nullptr;
     QLabel* status_label_ = nullptr;
+    int total_steps_ = 0;
+    int finished_steps_ = 0;
     bool complete_ = false;
 };
 

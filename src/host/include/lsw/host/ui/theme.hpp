@@ -1,6 +1,11 @@
 #pragma once
 
 #include <QString>
+#include <QStringList>
+
+class QTableWidget;
+class QTableWidgetItem;
+class QWidget;
 
 namespace lsw::host::ui {
 
@@ -20,6 +25,31 @@ public:
     // Applies ``stylesheet()`` to the running QApplication and sets the
     // default font. Safe to call once, early, before any window exists.
     static void apply();
+
+    // Give ``widget`` one of the surface roles below.
+    //
+    // A plain QWidget does not paint a stylesheet background: QWidget's
+    // own paintEvent draws nothing, and only WA_StyledBackground routes
+    // it through the style. Borders come out either way, which is what
+    // makes the mistake hard to see — a rail with its edge but not its
+    // ground looks like a rail that is simply the wrong colour. Every
+    // surface goes through here so none of them can forget.
+    static void surface(QWidget* widget, const char* role);
+
+    // Dress a table as the design's row list: no box, no grid, a rule
+    // under letter-spaced mono headings, and rows tall enough to read
+    // down. Every table in the application goes through here so they
+    // cannot drift apart one page at a time.
+    static void rows_table(QTableWidget* table, const QStringList& headers);
+
+    // A cell for the secondary column of such a table: mono and faint,
+    // because it names a kind rather than a thing.
+    [[nodiscard]] static QTableWidgetItem* kind_cell(const QString& text);
+
+    // Freeze a table to exactly the height of what it holds, so what
+    // follows it sits under the last row rather than at the bottom of
+    // the page.
+    static void fit_rows(QTableWidget* table);
 
     // Object names the stylesheet selects on. Widgets set these instead
     // of carrying inline stylesheets of their own, so the whole look
@@ -47,6 +77,8 @@ public:
         static constexpr const char* kMeter = "Meter";
         static constexpr const char* kMiniBar = "MiniBar";
         static constexpr const char* kAddCard = "AddCard";
+        // A consequence, set apart from the explanation above it.
+        static constexpr const char* kCallout = "Callout";
         static constexpr const char* kStatusStrip = "StatusStrip";
         static constexpr const char* kCaption = "Caption";
         static constexpr const char* kHeading = "Heading";

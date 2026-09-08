@@ -387,7 +387,7 @@ void SettingsPage::build() {
 
     // ---- apply bar ------------------------------------------------
     apply_bar_ = new QWidget;
-    apply_bar_->setObjectName(QString::fromLatin1(Theme::Role::kApplyBar));
+    Theme::surface(apply_bar_, Theme::Role::kApplyBar);
     auto* bar = new QHBoxLayout(apply_bar_);
     bar->setContentsMargins(14, 11, 14, 11);
     bar->setSpacing(14);
@@ -418,13 +418,13 @@ void SettingsPage::build() {
 
 QVBoxLayout* SettingsPage::new_group(const QString& title) {
     auto* frame = new QFrame;
-    frame->setObjectName(QString::fromLatin1(Theme::Role::kPanel));
+    Theme::surface(frame, Theme::Role::kPanel);
     auto* outer = new QVBoxLayout(frame);
     outer->setContentsMargins(0, 0, 0, 0);
     outer->setSpacing(0);
 
     auto* header = new QWidget;
-    header->setObjectName(QString::fromLatin1(Theme::Role::kPanelHeader));
+    Theme::surface(header, Theme::Role::kPanelHeader);
     auto* header_layout = new QHBoxLayout(header);
     header_layout->setContentsMargins(12, 8, 12, 8);
     header_layout->addWidget(caption(title));
