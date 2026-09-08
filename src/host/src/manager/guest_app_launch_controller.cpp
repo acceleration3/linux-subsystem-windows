@@ -5,14 +5,18 @@
 #include "lsw/host/apps/desktop_launcher.hpp"
 #include "lsw/host/apps/launcher.hpp"
 #include "lsw/host/config/vm_state.hpp"
+#include "lsw/host/manager/launch_splash.hpp"
 #include "lsw/host/mirror/window_mirror.hpp"
 #include "lsw/host/services/host_services.hpp"
 
 #include <QCursor>
+#include <QIcon>
+#include <QPixmap>
 #include <QGuiApplication>
-#include <QMessageBox>
 #include <QPointer>
 #include <QScreen>
+
+#include <QTimer>
 
 #include <algorithm>
 
@@ -22,6 +26,11 @@ namespace {
 
 // The agent's RPC port inside the guest. Fixed by the agent build.
 constexpr quint32 kAgentPort = 5102;
+
+// How long a guest may take to answer before the splash stops
+// pretending this is normal. A cold boot is around forty seconds; three
+// minutes is not a slow boot, it is something wrong.
+constexpr int kStallMs = 180000;
 
 // Derive an exe basename from a guest path (Windows backslashes) for the
 // watcher's packaged/alias window matching.
@@ -114,6 +123,7 @@ void GuestAppLaunchController::fire_launch(const QString& guest_path) {
             LSW_WARN("launch_app: agent returned pid=0 — old agent?");
             return;
         }
+        Q_EMIT application_running();
         // Without this the agent dutifully starts the application inside
         // the guest and nothing of it appears here: the mirror is what
         // carries its windows onto this desktop.
@@ -148,42 +158,84 @@ void GuestAppLaunchController::start_vm_and_wait(const QUuid& uuid, const QStrin
     // Parentless top-level so the splash is not tied to the (possibly
     // hidden) main window, and so it gets its own taskbar slot. Centred
     // on whichever screen the cursor is on at the moment of the click.
-    auto* splash = new QMessageBox(nullptr);
-    splash->setWindowTitle(QStringLiteral("LSW"));
-    splash->setIcon(QMessageBox::Information);
-    splash->setText(QStringLiteral("Starting Windows…"));
-    splash->setInformativeText(
-        QStringLiteral("Waiting for the LSW VM to become ready before launching\n"
-                       "%1.").arg(app_id));
-    splash->setStandardButtons(QMessageBox::Cancel);
-    splash->setModal(false);
-    splash->setAttribute(Qt::WA_DeleteOnClose);
+    QString display_name = app_id;
+    QIcon icon;
+    if (const auto* cfg = services_.app_configs().find(app_id); cfg != nullptr) {
+        if (!cfg->name.isEmpty()) {
+            display_name = cfg->name;
+        }
+        const QImage image = cfg->icon_image();
+        if (!image.isNull()) {
+            icon = QIcon{QPixmap::fromImage(image)};
+        }
+    }
+
+    auto* splash = new LaunchSplash(display_name, icon);
     if (QScreen* screen = QGuiApplication::screenAt(QCursor::pos());
         screen != nullptr || (screen = QGuiApplication::primaryScreen()) != nullptr) {
-        // QMessageBox sizes itself when first shown; adjustSize() forces
-        // the recompute pre-show so the first frame lands centred.
         splash->adjustSize();
         splash->move(screen->availableGeometry().center() - splash->rect().center());
     }
-    QPointer<QMessageBox> splash_ptr(splash);
+    QPointer<LaunchSplash> splash_ptr(splash);
+    if (lifecycle.is_running(uuid)) {
+        splash->reach(LaunchSplash::Phase::MachineStarted);
+    }
+
+    // A guest that has not answered in this long is not merely slow.
+    // Rather than spin forever, say so and offer the two things that
+    // help: the log, and a restart.
+    auto* patience = new QTimer(this);
+    patience->setSingleShot(true);
+    patience->setInterval(kStallMs);
+    connect(patience, &QTimer::timeout, this, [splash_ptr] {
+        if (splash_ptr) {
+            splash_ptr->stall(QStringLiteral(
+                "The machine is running but the agent has not answered. Usually a guest "
+                "still finishing an update; the log says so if the agent crashed."));
+        }
+    });
+    patience->start();
 
     // The monitor emits stats_updated periodically. Wait for the first
-    // reachable flip (or splash Cancel), then fire the launch.
+    // reachable flip (or a cancel), then fire the launch.
     auto* wait = new QObject(this);
     connect(&services_.monitor(), &vm::Monitor::stats_updated, wait,
-            [this, wait, uuid, app_id, guest_path, splash_ptr]
+            [this, wait, uuid, app_id, guest_path, splash_ptr, patience]
             (const QUuid& u, const vm::VmStats& s) {
         if (u != uuid || !s.agent_reachable) return;
         if (pending_app_id_ != app_id) return;  // cancelled / superseded
         pending_app_id_.clear();
-        if (splash_ptr) splash_ptr->close();
+        patience->stop();
+        if (splash_ptr) splash_ptr->reach(LaunchSplash::Phase::GuestAnswering);
         fire_launch(guest_path);
+        // The splash closes itself once the application is actually
+        // running, which the launcher reports; until then it stays up
+        // saying what it is waiting for.
+        if (splash_ptr) {
+            connect(this, &GuestAppLaunchController::application_running, splash_ptr,
+                    [splash_ptr] {
+                        if (splash_ptr) {
+                            splash_ptr->reach(LaunchSplash::Phase::ApplicationRunning);
+                        }
+                    });
+        }
         wait->deleteLater();
     });
-    connect(splash, &QMessageBox::rejected, wait, [this, wait, app_id] {
+    connect(splash, &LaunchSplash::cancelled, wait, [this, wait, app_id] {
         if (pending_app_id_ == app_id) pending_app_id_.clear();
         wait->deleteLater();
     });
+    connect(splash, &LaunchSplash::restart_requested, this, [this, uuid, splash_ptr] {
+        (void)services_.lifecycle().shutdown(uuid);
+        const auto* record = services_.vms().find(uuid);
+        (void)services_.lifecycle().start(uuid,
+                                          record != nullptr && record->first_boot_done);
+        if (splash_ptr) {
+            splash_ptr->reach(LaunchSplash::Phase::MachineStarted);
+        }
+    });
+    connect(splash, &LaunchSplash::log_requested, this,
+            &GuestAppLaunchController::log_requested);
     splash->show();
 }
 
