@@ -4,6 +4,7 @@
 #include "lsw/host/apps/app_config_store.hpp"
 #include "lsw/host/apps/desktop_launcher.hpp"
 #include "lsw/host/apps/launcher.hpp"
+#include "lsw/host/config/manager_settings.hpp"
 #include "lsw/host/config/vm_state.hpp"
 #include "lsw/host/manager/launch_splash.hpp"
 #include "lsw/host/mirror/window_mirror.hpp"
@@ -105,13 +106,43 @@ void GuestAppLaunchController::fire_launch(const QString& guest_path) {
     // path, so the config is the only thing that still knows which
     // application this is.
     QString desktop_id;
+    int channel = -1;
     for (const auto& cfg : services_.app_configs().configs()) {
         if (cfg.path == guest_path) {
             args = cfg.cmdline;
             env = cfg.env;
             desktop_id = apps::DesktopLauncher::entry_id(cfg.id);
+            channel = cfg.channel;
             break;
         }
+    }
+
+    // Pinning an application to a render channel is done here, in the
+    // environment the guest process is started with, because the only
+    // thing that can act on it is the driver inside that process. A
+    // channel carries one command stream and cannot be shared, so the
+    // policy says what to do when the pinned one is busy rather than
+    // pretending it can be joined.
+    if (channel >= 0) {
+        using K = config::ManagerSettings::Key;
+        auto& settings = services_.manager_settings();
+        const auto& bindings = settings.channel_bindings();
+        auto policy = config::ChannelBusyPolicy::TakeAnyFree;
+        for (const auto& binding : bindings) {
+            if (binding.channel == channel) {
+                policy = binding.busy;
+                break;
+            }
+        }
+        QStringList lines = env.isEmpty()
+                                ? QStringList{}
+                                : env.split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+        lines << QStringLiteral("RVK_CHANNEL=%1").arg(channel);
+        lines << QStringLiteral("RVK_CHANNEL_BUSY=%1")
+                     .arg(config::ManagerSettings::policy_to_string(policy));
+        lines << QStringLiteral("RVK_CHANNEL_WAIT_MS=%1")
+                     .arg(settings.int_value(QLatin1String(K::kChannelWaitSeconds)) * 1000);
+        env = lines.join(QLatin1Char('\n'));
     }
 
     auto* launcher = new apps::Launcher(services_.rpc(), this);

@@ -48,6 +48,18 @@ public:
     // attached before starting. See the note in the implementation.
     [[nodiscard]] int start(const QUuid& uuid, bool first_boot_done = false);
 
+    // Rewrite the persisted domain XML for a VM that already exists,
+    // without starting it.
+    //
+    // Settings like cores, memory and the shared folders are not
+    // properties of a running machine and cannot be told to one: they
+    // are the domain definition. The manager stops the guest, calls
+    // this, and starts it again, which is the whole of what "apply and
+    // restart" means. Kept separate from ``define_and_start`` because
+    // that one also brings the shared-memory region up, and a redefine
+    // must not disturb a region a guest may still be holding.
+    [[nodiscard]] int redefine(const config::VmRecord& vm, const DomainXmlInputs& inputs);
+
     // ACPI shutdown request (``virDomainShutdown``). The guest may
     // ignore — pair with a UI timeout that escalates to ``destroy``.
     [[nodiscard]] int shutdown(const QUuid& uuid);

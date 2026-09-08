@@ -1,6 +1,7 @@
 #include "lsw/host/manager/main_window.hpp"
 
 #include "lsw/host/config/vm_state.hpp"
+#include "lsw/host/vm/domain_xml_inputs.hpp"
 #include "lsw/host/manager/console_panel.hpp"
 #include "lsw/host/manager/log_panel.hpp"
 #include "lsw/host/manager/render_panel.hpp"
@@ -14,6 +15,7 @@
 
 #include <QCloseEvent>
 #include <QDesktopServices>
+#include <QDir>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QMenu>
@@ -22,7 +24,13 @@
 #include <QStatusBar>
 #include <QStyle>
 #include <QUrl>
+#include <QScreen>
 #include <QVBoxLayout>
+#include <QtConcurrent>
+
+#include <nlohmann/json.hpp>
+
+#include "lsw/linkproto/commands.hpp"
 
 namespace lsw::host::manager {
 
@@ -135,6 +143,9 @@ MainWindow::MainWindow(services::HostServices& services, QWidget* parent)
     connect(overview_, &VmDetailPanel::agent_online_changed, this, [this](bool online) {
         rail_->set_agent_online(online);
         refresh_status_bar();
+        if (online) {
+            push_display_settings();
+        }
     });
     connect(log_, &LogPanel::record_count_changed, rail_, &NavRail::set_log_count);
     connect(&services_.pending_changes(), &config::PendingChanges::changed, this,
@@ -281,15 +292,88 @@ void MainWindow::refresh_warning() {
     warn_strip_->setVisible(!warning_dismissed_);
 }
 
+void MainWindow::push_display_settings() {
+    // The virtual monitor's size, the guest's DPI and the video memory
+    // the adapter reports are settings on this side that live on that
+    // side, so they go across the moment there is something to send
+    // them to. The resolution takes effect at once; the other two are
+    // registry state Windows reads at logon and at boot, which is why
+    // they are tagged as restart settings in the page that sets them.
+    auto& settings = services_.manager_settings();
+    int width = settings.int_value(QLatin1String(K::kGuestWidth));
+    int height = settings.int_value(QLatin1String(K::kGuestHeight));
+    if (settings.bool_value(QLatin1String(K::kMatchHostOutput))) {
+        if (const QScreen* screen = this->screen(); screen != nullptr) {
+            width = screen->geometry().width();
+            height = screen->geometry().height();
+        }
+    }
+
+    const nlohmann::json request = {
+        {"cmd", linkproto::cmd::kSetDisplay},
+        {"params",
+         {{"width", width},
+          {"height", height},
+          {"scaling_percent", settings.int_value(QLatin1String(K::kScalingPercent))},
+          {"vram_mib", settings.int_value(QLatin1String(K::kVramMib))}}},
+    };
+    auto* rpc = &services_.rpc();
+    (void)QtConcurrent::run([rpc, request] { (void)rpc->call(request); });
+}
+
 void MainWindow::restart_guest() {
-    // The values are already current; what is left is to make the guest
-    // pick them up. Stop, then start: the render server's sizes are
-    // command-line arguments and the domain XML is rebuilt on start.
+    // The values are current by the time this runs; what is left is to
+    // make the machine take them. Cores, memory, the shared folders and
+    // the adapter's video memory are the domain definition rather than
+    // properties of a running guest, so the definition is rewritten
+    // between the stop and the start.
     if (services_.vms().records().isEmpty()) {
         return;
     }
     services_.apply_render_sizing();
+
+    auto& settings = services_.manager_settings();
+    config::VmRecord record = services_.vms().records().first();
+    record.sizing.cpu_cores = settings.int_value(QLatin1String(K::kCpuCores));
+    record.sizing.memory_mib = settings.int_value(QLatin1String(K::kMemoryMib));
+    record.sizing.disk_gib = settings.int_value(QLatin1String(K::kDiskGib));
+
+    vm::DomainXmlInputs inputs;
+    // The template names all three CDs, so the definition has to carry
+    // them even for a guest that has already ejected the media: an
+    // empty source is a definition libvirt will not take. The Windows
+    // and payload paths live on the record; virtio-win is where the
+    // pipeline put it.
+    inputs.virtio_iso =
+        QDir(services_.settings().isos_dir()).filePath(QStringLiteral("virtio-win.iso"));
+    // The adapter's memory bounds the modes the guest can set, so it
+    // follows the resolution rather than capping it: enough for the
+    // asked-for mode at 32 bits per pixel, doubled for a back buffer,
+    // and never below what QEMU's VGA wants anyway.
+    const int width = settings.int_value(QLatin1String(K::kGuestWidth));
+    const int height = settings.int_value(QLatin1String(K::kGuestHeight));
+    const int needed_kib = ((width * height * 4 * 2) / 1024) + 1024;
+    inputs.video_vram_kib = qMax(16384, needed_kib);
+
+    for (const auto& share : settings.host_shares()) {
+        vm::DomainShare mapped;
+        // The tag is what the guest mounts by, and a drive letter is a
+        // guest-side idea, so the letter is the tag: "Z:" becomes "z".
+        mapped.tag = share.drive.left(1).toLower();
+        mapped.host_path = share.host_path;
+        mapped.read_only = share.read_only;
+        inputs.shares.push_back(mapped);
+    }
+
     overview_->stop_guest();
+    if (services_.lifecycle().redefine(record, inputs) != 0) {
+        // A definition libvirt refused is one the guest must not be
+        // started against, and the old one is still on disk, so the
+        // honest thing is to say nothing was applied.
+        status_left_->setText(
+            QStringLiteral("libvirt refused the new machine definition; nothing changed"));
+        return;
+    }
     overview_->start_guest();
     refresh_identity();
     refresh_status_bar();

@@ -30,6 +30,12 @@ inline constexpr const char* kGetIcon  = "get_icon";
 // drives. ``resolve_shortcut`` turns a .lnk into what it points at, so
 // an application configured by picking one from the Start menu keeps
 // working after the shortcut is deleted.
+// The virtual monitor's size, the guest's DPI, and how much video
+// memory the adapter admits to owning. All three are settings on the
+// host and all three live in the guest, so the manager pushes them
+// across once the agent answers. The resolution takes effect at once;
+// the other two are registry state Windows reads at logon and at boot.
+inline constexpr const char* kSetDisplay      = "set_display";
 inline constexpr const char* kListDir         = "list_dir";
 inline constexpr const char* kResolveShortcut = "resolve_shortcut";
 

@@ -23,6 +23,7 @@
   <name>{{domain_name}}</name>
   <uuid>{{uuid}}</uuid>
   <memory unit='MiB'>{{ram_mib}}</memory>
+{{memory_backing_inner}}
   <currentMemory unit='MiB'>{{ram_mib}}</currentMemory>
   <vcpu placement='static'>{{cpus}}</vcpu>
   <!-- Dedicated iothread for the virtio-blk system disk (pinned via
@@ -131,9 +132,12 @@
     </disk>
 
     <!-- Plain VGA — real 3D goes through the render-server over
-         vsock; this is just for the VNC install console. -->
+         shared memory; this is just for the VNC install console and
+         the manager's preview. ``vram`` bounds the modes the guest can
+         set, so it follows the resolution the user asked for rather
+         than a constant that quietly caps it. -->
     <video>
-      <model type='vga' heads='1' primary='yes'/>
+      <model type='vga' vram='{{video_vram_kib}}' heads='1' primary='yes'/>
     </video>
 
     <!-- sharePolicy='ignore': QEMU's default 'allow-exclusive' drops
@@ -161,6 +165,7 @@
     <memballoon model='virtio'>
       <stats period='5'/>
     </memballoon>
+{{host_shares_inner}}
 
     <!-- IVSHMEM-plain: the render server's region.
 
