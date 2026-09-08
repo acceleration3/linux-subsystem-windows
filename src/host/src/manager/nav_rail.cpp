@@ -171,7 +171,7 @@ void NavRail::set_current(Page page) {
 }
 
 void NavRail::set_agent_online(bool online) {
-    badge_->setText(online ? QStringLiteral("ONLINE") : QStringLiteral("OFFLINE"));
+    badge_->setText(online ? QStringLiteral("\u25cf  ONLINE") : QStringLiteral("\u25cb  OFFLINE"));
     badge_->setObjectName(QString::fromLatin1(online ? Theme::Role::kBadgeOnline
                                                      : Theme::Role::kBadgeOffline));
     // Qt does not re-evaluate a stylesheet when an object name changes.

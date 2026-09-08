@@ -175,9 +175,10 @@ void RemoteFileDialog::build() {
             });
 
     // ---- name and filter ------------------------------------------
-    auto* name_row = new QWidget;
+    auto* name_row = new QFrame;
+    name_row->setObjectName(QString::fromLatin1(Theme::Role::kContentBar));
     auto* name_layout = new QHBoxLayout(name_row);
-    name_layout->setContentsMargins(12, 11, 12, 6);
+    name_layout->setContentsMargins(12, 10, 12, 10);
     name_layout->setSpacing(8);
     name_edit_ = new QLineEdit;
     name_edit_->setPlaceholderText(QStringLiteral("File name"));
@@ -198,9 +199,10 @@ void RemoteFileDialog::build() {
             [this](int) { navigate_to(current_); });
 
     // ---- footer ---------------------------------------------------
-    auto* footer = new QWidget;
+    auto* footer = new QFrame;
+    footer->setObjectName(QString::fromLatin1(Theme::Role::kDialogFoot));
     auto* footer_layout = new QHBoxLayout(footer);
-    footer_layout->setContentsMargins(12, 6, 12, 12);
+    footer_layout->setContentsMargins(12, 10, 12, 10);
     footer_layout->setSpacing(8);
     status_ = new QLabel;
     status_->setObjectName(QString::fromLatin1(Theme::Role::kMeta));

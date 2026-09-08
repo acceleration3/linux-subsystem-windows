@@ -38,6 +38,15 @@ public:
         static constexpr const char* kTile = "Tile";
         // A whole choice as one target: the option and what it costs.
         static constexpr const char* kOptionCard = "OptionCard";
+        static constexpr const char* kChannelCard = "ChannelCard";
+        static constexpr const char* kKpiGrid = "KpiGrid";
+        static constexpr const char* kAdvice = "Advice";
+        // The guest's console, framed like a panel and black inside.
+        static constexpr const char* kScreen = "Screen";
+        // Bars whose colour follows a "pressure" property.
+        static constexpr const char* kMeter = "Meter";
+        static constexpr const char* kMiniBar = "MiniBar";
+        static constexpr const char* kAddCard = "AddCard";
         static constexpr const char* kStatusStrip = "StatusStrip";
         static constexpr const char* kCaption = "Caption";
         static constexpr const char* kHeading = "Heading";
@@ -59,6 +68,17 @@ public:
         static constexpr const char* kApplyBar = "ApplyBar";
         static constexpr const char* kWizardSide = "WizardSide";
         static constexpr const char* kWizardSteps = "WizardSteps";
+        static constexpr const char* kWizardSideFoot = "WizardSideFoot";
+        static constexpr const char* kWizardHead = "WizardHead";
+        static constexpr const char* kWizardFoot = "WizardFoot";
+        static constexpr const char* kWizardTitle = "WizardTitle";
+        // A dialog's button row, on the surface colour with a rule over it.
+        static constexpr const char* kDialogFoot = "DialogFoot";
+        // A status word with its dot: ONLINE, Done, Congested.
+        static constexpr const char* kPill = "Pill";
+        static constexpr const char* kPillRun = "PillRun";
+        static constexpr const char* kPillDone = "PillDone";
+        static constexpr const char* kPillFail = "PillFail";
     };
 
     // Colours the stylesheet cannot reach: painted widgets, item

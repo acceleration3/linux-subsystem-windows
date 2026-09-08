@@ -11,7 +11,9 @@
 #include <QHBoxLayout>
 #include <QKeyEvent>
 #include <QLabel>
+#include <QFrame>
 #include <QLineEdit>
+#include <QPushButton>
 #include <QMetaObject>
 #include <QPlainTextEdit>
 #include <QPointer>
@@ -38,8 +40,8 @@ ConsolePanel::ConsolePanel(link::AgentRpcClient& rpc, QWidget* parent)
     setWindowTitle(tr("Command Line"));
 
     auto* root = new QVBoxLayout(this);
-    root->setContentsMargins(8, 8, 8, 8);
-    root->setSpacing(4);
+    root->setContentsMargins(0, 0, 0, 0);
+    root->setSpacing(0);
 
     output_ = new QPlainTextEdit;
     output_->setReadOnly(true);
@@ -53,9 +55,14 @@ ConsolePanel::ConsolePanel(link::AgentRpcClient& rpc, QWidget* parent)
     output_->setObjectName(QString::fromLatin1(ui::Theme::Role::kMono));
     root->addWidget(output_, 1);
 
-    auto* row = new QHBoxLayout;
-    row->setContentsMargins(0, 0, 0, 0);
-    row->setSpacing(4);
+    // The input lives in a band under the transcript, on the surface
+    // colour with a rule over it, with a Send button for the case where
+    // Enter is not the habit.
+    auto* band = new QFrame;
+    band->setObjectName(QString::fromLatin1(ui::Theme::Role::kDialogFoot));
+    auto* row = new QHBoxLayout(band);
+    row->setContentsMargins(14, 10, 14, 10);
+    row->setSpacing(8);
     auto* prompt = new QLabel(QStringLiteral(">"));
     // Amber, because the prompt is the guest speaking. Host text in
     // this window stays neutral.
@@ -76,7 +83,11 @@ ConsolePanel::ConsolePanel(link::AgentRpcClient& rpc, QWidget* parent)
     input_->setObjectName(QString::fromLatin1(ui::Theme::Role::kMono));
     input_->installEventFilter(this);  // catch Ctrl+C / Ctrl+D
     row->addWidget(input_, 1);
-    root->addLayout(row);
+    auto* send = new QPushButton(QStringLiteral("Send"));
+    send->setObjectName(QString::fromLatin1(ui::Theme::Role::kPrimary));
+    connect(send, &QPushButton::clicked, this, &ConsolePanel::on_input_submitted);
+    row->addWidget(send);
+    root->addWidget(band);
 
     status_ = new QLabel(tr("Spawning cmd.exe..."));
     status_->setObjectName(QString::fromLatin1(ui::Theme::Role::kMeta));

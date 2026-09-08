@@ -1,9 +1,13 @@
 #include "lsw/host/wizard/install_page.hpp"
+#include "lsw/host/wizard/page_chrome.hpp"
 
 #include "lsw/base/log.hpp"
 #include "lsw/host/wizard/wizard.hpp"
 #include "lsw/host/provision/pipeline.hpp"
 
+#include "lsw/host/ui/theme.hpp"
+
+#include <QFrame>
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QWizard>
@@ -11,19 +15,25 @@
 namespace lsw::host::wizard {
 
 InstallPage::InstallPage(Wizard& wizard, QWidget* parent) : QWizardPage(parent), wizard_(wizard) {
-    setTitle("Installing Windows");
-    setSubTitle("Booting the VM and running the unattended installer.");
 
-    auto* lay = new QVBoxLayout(this);
+    auto* lay = PageChrome::install(this, QStringLiteral("Installing Windows"), QStringLiteral("Booting the VM and running the unattended installer."));
     bar_ = new QProgressBar;
     bar_->setRange(0, 0);  // indeterminate
-    status_ = new QLabel("Preparing...");
+    status_ = new QLabel(QStringLiteral("Preparing"));
+    status_->setObjectName(QString::fromLatin1(ui::Theme::Role::kMeta));
     status_->setWordWrap(true);
-    vnc_ = new ui::VncView;
-
     lay->addWidget(bar_);
     lay->addWidget(status_);
-    lay->addWidget(vnc_, /*stretch=*/1);
+
+    // The screen is the content. A bordered frame around the guest's
+    // console, with the same corner and line as every other panel.
+    auto* screen = new QFrame;
+    screen->setObjectName(QString::fromLatin1(ui::Theme::Role::kScreen));
+    auto* screen_layout = new QVBoxLayout(screen);
+    screen_layout->setContentsMargins(1, 1, 1, 1);
+    vnc_ = new ui::VncView;
+    screen_layout->addWidget(vnc_);
+    lay->addWidget(screen, /*stretch=*/1);
 }
 
 void InstallPage::initializePage() {

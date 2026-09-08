@@ -37,7 +37,11 @@ QWidget {
     font-size: 13px;
 }
 
-QMainWindow, QDialog, QWizard, QWizardPage {
+QMainWindow, QDialog, QWizardPage {
+    background-color: #0d0f14;
+}
+
+QWizard {
     background-color: #0d0f14;
 }
 
@@ -362,8 +366,6 @@ QFrame#Panel {
     border-radius: 5px;
 }
 
-/* A tile inside a panel: one shade up, so a row of them reads as a
-   row of things rather than as text floating on the panel. */
 /* An option card. The selected one carries an amber edge and a warmer
    ground, so a choice reads from across the dialog rather than from a
    dot. */
@@ -388,10 +390,82 @@ QLabel#IconSlot {
     color: #646d7e;
 }
 
+/* A figure under a meter. The grid behind it shows through 1px gaps,
+   which is where the hairlines between tiles come from. */
 QWidget#Tile {
-    background-color: #1a1f29;
-    border-right: 1px solid #272d3a;
+    background-color: #151922;
 }
+
+QFrame#KpiGrid {
+    background-color: #272d3a;
+    border: 1px solid #272d3a;
+    border-radius: 3px;
+}
+
+/* A channel in the strip: a card you pick, marked by its edge. */
+QPushButton#ChannelCard {
+    background-color: #151922;
+    border: 1px solid #272d3a;
+    border-radius: 5px;
+    padding: 0px;
+    text-align: left;
+}
+QPushButton#ChannelCard:hover   { background-color: #1c212c; }
+QPushButton#ChannelCard:checked { background-color: #1b1a19; border-color: #a8672a; }
+
+/* Adding one: an outline where a card would be. */
+QPushButton#AddCard {
+    background: transparent;
+    border: 1px dashed #39415a;
+    border-radius: 5px;
+    color: #646d7e;
+    padding: 0px 14px;
+    font-weight: 400;
+}
+QPushButton#AddCard:hover { color: #e4e8f0; border-color: #646d7e; }
+
+/* What the server suggests, and the button that stages it. */
+QFrame#Advice {
+    background-color: #1d1712;
+    border-left: 2px solid #ff9f45;
+    border-radius: 0px 3px 3px 0px;
+}
+
+/* The guest's console on the install page. */
+QFrame#Screen {
+    background-color: #05070a;
+    border: 1px solid #272d3a;
+    border-radius: 5px;
+}
+
+/* The number beside a slider. Quiet: the slider is the control and this
+   is what it currently says. */
+QSpinBox#SliderValue {
+    background: transparent;
+    border: none;
+    padding: 4px 2px;
+    color: #e4e8f0;
+}
+
+/* A pressure bar: green while there is room, amber as it fills, red
+   when operations are splitting. The id is named alongside the property
+   because an id selector outranks a bare attribute one, and the chunk
+   would otherwise keep the default fill whatever the pressure says. */
+QProgressBar#Meter, QProgressBar#MiniBar {
+    background-color: #20252f;
+    border: none;
+    border-radius: 3px;
+}
+QProgressBar#Meter { min-height: 7px; max-height: 7px; }
+QProgressBar#MiniBar { min-height: 3px; max-height: 3px; border-radius: 2px; }
+QProgressBar#Meter::chunk, QProgressBar#MiniBar::chunk {
+    border-radius: 3px;
+    background-color: #4ec98a;
+}
+QProgressBar#Meter[pressure="hot"]::chunk,
+QProgressBar#MiniBar[pressure="hot"]::chunk  { background-color: #ff9f45; }
+QProgressBar#Meter[pressure="crit"]::chunk,
+QProgressBar#MiniBar[pressure="crit"]::chunk { background-color: #f2555a; }
 
 QWidget#PanelHeader {
     background-color: #131720;
@@ -582,6 +656,77 @@ QLabel#qt_wizard_titleLabel {
 QLabel#qt_wizard_subTitleLabel {
     color: #9aa3b4;
 }
+
+/* The title band at the top of every page. */
+QFrame#WizardHead {
+    background-color: #151922;
+    border-bottom: 1px solid #272d3a;
+}
+QLabel#WizardTitle {
+    font-size: 19px;
+    font-weight: 600;
+}
+
+/* The page's own footer: counter left, Back and Next right. */
+QFrame#WizardFoot {
+    background-color: #151922;
+    border-top: 1px solid #272d3a;
+}
+QLabel#StepCounter {
+    font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace;
+    font-size: 11px;
+    color: #646d7e;
+}
+QPushButton#WizNext {
+    background-color: #ff9f45;
+    border: 1px solid #c97a2d;
+    color: #17120b;
+    font-weight: 600;
+    padding: 6px 16px;
+}
+QPushButton#WizNext:hover   { background-color: #ffb066; }
+QPushButton#WizNext:disabled {
+    background-color: #4a3a26;
+    border-color: #4a3a26;
+    color: #8a7358;
+}
+QPushButton#WizBack, QPushButton#WizCancel {
+    padding: 6px 16px;
+}
+QPushButton#WizCancel {
+    background-color: transparent;
+    border-color: transparent;
+    color: #9aa3b4;
+}
+
+QFrame#WizardSideFoot {
+    border-top: 1px solid #272d3a;
+}
+QLabel#RailHost, QLabel#RailFree {
+    font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace;
+    font-size: 11px;
+    color: #646d7e;
+}
+
+/* A dialog's button row: on the surface, with a rule over it. */
+QFrame#DialogFoot {
+    background-color: #151922;
+    border-top: 1px solid #272d3a;
+}
+
+/* A status word with its dot, in a pill. Pending, running, done and
+   failed each keep the colour that means that everywhere else. */
+QLabel#Pill, QLabel#PillRun, QLabel#PillDone, QLabel#PillFail {
+    font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace;
+    font-size: 11px;
+    font-weight: 500;
+    border-radius: 9px;
+    padding: 1px 8px;
+}
+QLabel#Pill     { color: #646d7e; border: 1px solid #2b313d; background-color: #181c25; }
+QLabel#PillRun  { color: #5aa9f0; border: 1px solid #2b4a6b; background-color: #16202c; }
+QLabel#PillDone { color: #4ec98a; border: 1px solid #2c5c44; background-color: #16241d; }
+QLabel#PillFail { color: #f2555a; border: 1px solid #6b2f32; background-color: #24181a; }
 
 QWidget#WizardSide {
     background-color: #10141b;

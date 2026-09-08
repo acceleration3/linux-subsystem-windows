@@ -1,4 +1,5 @@
 #include "lsw/host/wizard/iso_choice_page.hpp"
+#include "lsw/host/wizard/page_chrome.hpp"
 
 #include "lsw/host/services/host_services.hpp"
 #include "lsw/host/tools/download_image_dialog.hpp"
@@ -49,12 +50,9 @@ QWidget* tool_card(const QString& title, const QString& blurb, QPushButton* butt
 
 IsoChoicePage::IsoChoicePage(Wizard& wizard, QWidget* parent)
     : QWizardPage(parent), wizard_(wizard) {
-    setTitle(QStringLiteral("Which Windows image should be installed"));
-    setSubTitle(QStringLiteral("Any retail or evaluation Windows 10 or 11 ISO. If you do "
-                               "not have one, download it here."));
 
-    auto* root = new QVBoxLayout(this);
-    root->setSpacing(12);
+    auto* root = PageChrome::install(this, QStringLiteral("Which Windows image should be installed"), QStringLiteral("Any retail or evaluation Windows 10 or 11 ISO. If you do "
+                               "not have one, download it here."));
 
     auto* label = new QLabel(QStringLiteral("IMAGE"));
     label->setObjectName(QString::fromLatin1(Theme::Role::kCaption));

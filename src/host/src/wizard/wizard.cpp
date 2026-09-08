@@ -15,6 +15,8 @@
 #include <QDir>
 #include <QFrame>
 #include <QLabel>
+
+#include <QLayout>
 #include <QListWidget>
 #include <QPushButton>
 #include <QStyle>
@@ -47,50 +49,17 @@ Wizard::Wizard(services::HostServices& services, QWidget* parent) : QWizard(pare
     setPage(Payload, new PayloadPage(*this));
     setPage(Install, new InstallPage(*this));
     setPage(Setup, new SetupPage(*this));
-    setPage(Done, new DonePage);
+    setPage(Done, new DonePage(*this));
     setStartId(Welcome);
 
-    // A flat, unclickable custom button is the only thing QWizard will
-    // put in its button row that is not a button, and the counter
-    // belongs in that row rather than floating in the page.
-    setOption(HaveCustomButton1, true);
-    if (auto* counter = button(CustomButton1)) {
-        // It has to read as the caption it is, not as a fourth button
-        // nobody should press. Styled on the widget rather than through
-        // the application sheet, because that is the only precedence
-        // that beats the QPushButton rules in it.
-        if (auto* push = qobject_cast<QPushButton*>(counter)) {
-            push->setFlat(true);
-        }
-        counter->setFocusPolicy(Qt::NoFocus);
-        counter->setCursor(Qt::ArrowCursor);
-        counter->setStyleSheet(QStringLiteral(
-            "QPushButton, QPushButton:hover, QPushButton:pressed,"
-            "QPushButton:focus, QPushButton:disabled {"
-            "  background: transparent; border: none; outline: none;"
-            "  padding: 0px; margin: 0px; min-height: 0px; min-width: 0px;"
-            "  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;"
-            "  font-size: 11px; font-weight: 400; color: %1; text-align: left; }")
-                                   .arg(QString::fromLatin1(ui::Theme::Color::kFgFaint)));
-    }
-    setButtonLayout({CustomButton1, Stretch, BackButton, NextButton, FinishButton,
-                     CancelButton});
-    // Without the angle brackets. They are a convention from a
-    // different decade and the rail already says which way is forward.
-    setButtonText(BackButton, QStringLiteral("Back"));
-    setButtonText(NextButton, QStringLiteral("Next"));
-    setButtonText(CancelButton, QStringLiteral("Cancel"));
+    // No button row. Each page carries its own footer, beside the rail,
+    // which is where the design puts it; QWizard's would run under both.
+    setButtonLayout({});
+    setOption(NoCancelButton, true);
+    setOption(NoBackButtonOnStartPage, true);
 
-    build_side_rail();
 
-    // Hide Back+Next on the long-running pages. They auto-advance via
-    // ``next()`` once the pipeline finishes their phase, so the user has
-    // nothing useful to click; a stray Back during Install would tear
-    // the VM down mid-Setup.
     connect(this, &QWizard::currentIdChanged, this, [this](int id) {
-        const bool hide_nav = (id == Payload || id == Install || id == Setup);
-        if (auto* b = button(BackButton)) b->setVisible(!hide_nav);
-        if (auto* b = button(NextButton)) b->setVisible(!hide_nav);
         highlight_step(id);
     });
 }
@@ -105,66 +74,41 @@ const QStringList& Wizard::step_names() {
     return names;
 }
 
-void Wizard::build_side_rail() {
-    // QWizard has a slot for exactly this and nothing was in it. The
-    // cost is one widget; what it buys is that eight screens read as a
-    // sequence with a position in it, rather than eight screens.
-    auto* side = new QWidget;
-    side->setObjectName(QString::fromLatin1(ui::Theme::Role::kWizardSide));
-    side->setFixedWidth(196);
-
-    auto* layout = new QVBoxLayout(side);
-    layout->setContentsMargins(0, 18, 0, 18);
-    layout->setSpacing(0);
-
-    auto* caption = new QLabel(QStringLiteral("SETUP"));
-    caption->setObjectName(QString::fromLatin1(ui::Theme::Role::kCaption));
-    caption->setContentsMargins(18, 0, 18, 12);
-    layout->addWidget(caption);
-
-    steps_ = new QListWidget;
-    steps_->setObjectName(QString::fromLatin1(ui::Theme::Role::kWizardSteps));
-    // Selection is how the stylesheet marks the current step, so the
-    // list keeps it and gives up the mouse instead: the rail reports
-    // where you are, it is not a way to jump.
-    steps_->setSelectionMode(QAbstractItemView::SingleSelection);
-    steps_->setFocusPolicy(Qt::NoFocus);
-    steps_->setAttribute(Qt::WA_TransparentForMouseEvents);
-    steps_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    steps_->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    steps_->setFrameShape(QFrame::NoFrame);
-    for (const auto& name : step_names()) {
-        steps_->addItem(name);
-    }
-    // Sized to the eight it holds. A list left to its own sizeHint gets
-    // a scrollbar and clips the last step, which is exactly the thing
-    // the rail exists to show.
-    steps_->setFixedHeight(step_names().size() * 30);
-    steps_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
-    layout->addWidget(steps_);
-    layout->addStretch(1);
-
-    auto* host = new QLabel(QStringLiteral("host: %1 threads, %2 GiB")
-                                .arg(state_.host_cpu_threads)
-                                .arg(state_.host_ram_mib / 1024));
-    host->setObjectName(QString::fromLatin1(ui::Theme::Role::kMeta));
-    host->setContentsMargins(18, 10, 18, 0);
-    layout->addWidget(host);
-
-    setSideWidget(side);
-    highlight_step(Welcome);
-}
-
 void Wizard::highlight_step(int page_id) {
-    if (steps_ == nullptr) {
+    // The rail and the footer belong to the page being shown, so they
+    // are found on it. A side widget would have been one object rather
+    // than eight, but QWizard insets everything around one, out of a
+    // margin the stylesheet's style answers for and nothing can reach.
+    auto* shown = currentPage();
+    if (shown == nullptr) {
         return;
+    }
+    auto* steps = shown->findChild<QListWidget*>(
+        QString::fromLatin1(ui::Theme::Role::kWizardSteps));
+    if (steps == nullptr) {
+        return;
+    }
+    if (steps->count() == 0) {
+        for (const auto& name : step_names()) {
+            steps->addItem(name);
+        }
+        steps->setFixedHeight(static_cast<int>(step_names().size()) * 30);
+    }
+    if (auto* host = shown->findChild<QLabel*>(QStringLiteral("RailHost"))) {
+        host->setText(QStringLiteral("host: %1 threads, %2 GiB")
+                          .arg(state_.host_cpu_threads)
+                          .arg(state_.host_ram_mib / 1024));
+    }
+    if (auto* free_space = shown->findChild<QLabel*>(QStringLiteral("RailFree"))) {
+        free_space->setText(QStringLiteral("free: %1 GiB")
+                                .arg(state_.host_free_disk_bytes / (1024LL * 1024 * 1024)));
     }
     // The ids are contiguous and in display order, so the page is the
     // row. Each row carries its own number until it is behind you, and
     // then a tick: the rail is a position in a sequence, and a sequence
     // with no numbers is a list.
-    for (int row = 0; row < steps_->count(); ++row) {
-        auto* item = steps_->item(row);
+    for (int row = 0; row < steps->count(); ++row) {
+        auto* item = steps->item(row);
         const bool done = row < page_id;
         const bool current = row == page_id;
         const QString mark = done ? QStringLiteral("\u2713")
@@ -178,24 +122,39 @@ void Wizard::highlight_step(int page_id) {
             done ? ui::Theme::Color::kFgDim
                  : (current ? ui::Theme::Color::kFg : ui::Theme::Color::kFgFaint))));
     }
-    steps_->setCurrentRow(page_id);
+    steps->setCurrentRow(page_id);
 
-    // "step 4 of 8", where the wizard's own buttons are. A wizard that
-    // shows a rail and still cannot say how far along it is has told
-    // you where you are without telling you how much is left.
-    setButtonText(CustomButton1, QStringLiteral("step %1 of %2")
-                                     .arg(page_id + 1)
-                                     .arg(steps_->count()));
-
-    // Next and Finish carry the primary weight; Back does not. Set on
-    // every page change because QWizard swaps which of them is showing.
-    for (const auto role : {NextButton, FinishButton}) {
-        if (auto* button = this->button(role)) {
-            button->setObjectName(QString::fromLatin1(ui::Theme::Role::kPrimary));
-            button->style()->unpolish(button);
-            button->style()->polish(button);
+    // The footer belongs to the page being shown, so it is found there.
+    {
+        if (auto* counter = shown->findChild<QLabel*>(QStringLiteral("StepCounter"))) {
+            const bool locked = page_id == Payload || page_id == Install || page_id == Setup;
+            counter->setText((locked ? QStringLiteral("step %1 of %2, cannot go back")
+                                     : QStringLiteral("step %1 of %2"))
+                                 .arg(page_id + 1)
+                                 .arg(steps->count()));
+        }
+        auto* back = shown->findChild<QPushButton*>(QStringLiteral("WizBack"));
+        auto* next = shown->findChild<QPushButton*>(QStringLiteral("WizNext"));
+        auto* cancel = shown->findChild<QPushButton*>(QStringLiteral("WizCancel"));
+        const bool locked = page_id == Payload || page_id == Install || page_id == Setup;
+        if (back != nullptr) {
+            back->setVisible(!locked);
+            back->setEnabled(page_id != Welcome);
+        }
+        if (next != nullptr) {
+            next->setVisible(!locked);
+            next->setEnabled(shown->isComplete());
+            next->setText(page_id == Done ? QStringLiteral("Open the manager")
+                                          : QStringLiteral("Next"));
+        }
+        if (cancel != nullptr) {
+            cancel->setVisible(locked);
+            cancel->setText(page_id == Install ? QStringLiteral("Cancel install")
+                            : page_id == Payload ? QStringLiteral("Cancel")
+                                                 : QStringLiteral("View log"));
         }
     }
+
 }
 
 void Wizard::detect_host_caps() {

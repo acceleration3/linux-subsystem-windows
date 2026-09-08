@@ -1,4 +1,5 @@
 #include "lsw/host/wizard/license_page.hpp"
+#include "lsw/host/wizard/page_chrome.hpp"
 
 #include <QLabel>
 #include <QVBoxLayout>
@@ -6,10 +7,8 @@
 namespace lsw::host::wizard {
 
 LicensePage::LicensePage(QWidget* parent) : QWizardPage(parent) {
-    setTitle("Microsoft Windows licensing");
-    setSubTitle("LSW is not affiliated with Microsoft. You are responsible for licensing.");
 
-    auto* lay = new QVBoxLayout(this);
+    auto* lay = PageChrome::install(this, QStringLiteral("Microsoft Windows licensing"), QStringLiteral("LSW is not affiliated with Microsoft. You are responsible for licensing."));
     auto* blurb = new QLabel(
         "LSW does not bundle Windows. Installing or running Microsoft Windows requires "
         "you to obtain a license from Microsoft and to comply with the Microsoft Software "

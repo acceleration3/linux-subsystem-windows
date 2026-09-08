@@ -91,12 +91,25 @@ LogPanel::LogPanel(apps::LogStore& store, QWidget* parent)
 }
 
 QString LogPanel::format_record(const apps::LogRecord& r) {
+    // Three columns by width rather than by table: timestamp, level,
+    // message, with the level in the colour that means that everywhere
+    // else in the application. Plain text keeps find working across it.
     const QDateTime dt =
         QDateTime::fromMSecsSinceEpoch(static_cast<qint64>(r.ts_ms)).toLocalTime();
-    return QStringLiteral("[%1 %2] %3")
-        .arg(dt.toString(QStringLiteral("HH:mm:ss.zzz")),
-             r.level.leftJustified(5, QLatin1Char(' ')),
-             r.msg);
+    const QString level = r.level.trimmed().toUpper();
+    const char* colour = ui::Theme::Color::kInfo;
+    if (level.startsWith(QLatin1Char('E'))) {
+        colour = ui::Theme::Color::kBad;
+    } else if (level.startsWith(QLatin1Char('W'))) {
+        colour = ui::Theme::Color::kAmber;
+    }
+    return QStringLiteral("<span style=\"color:%1\">%2</span>  "
+                          "<span style=\"color:%3;font-weight:500\">%4</span>  "
+                          "<span style=\"color:%5\">%6</span>")
+        .arg(QString::fromLatin1(ui::Theme::Color::kFgFaint),
+             dt.toString(QStringLiteral("HH:mm:ss.zzz")), QString::fromLatin1(colour),
+             level.leftJustified(5, QLatin1Char('\u00a0')),
+             QString::fromLatin1(ui::Theme::Color::kFgDim), r.msg.toHtmlEscaped());
 }
 
 bool LogPanel::passes(const apps::LogRecord& record) const {
@@ -126,7 +139,8 @@ void LogPanel::rebuild_all() {
         }
         lines << format_record(r);
     }
-    view_->setPlainText(lines.join(QLatin1Char('\n')));
+    view_->clear();
+    view_->appendHtml(lines.join(QStringLiteral("<br>")));
     if (autoscroll_->isChecked()) {
         view_->moveCursor(QTextCursor::End);
     }
@@ -140,17 +154,12 @@ void LogPanel::on_appended(const QVector<apps::LogRecord>& batch) {
     }
     const bool was_at_bottom = view_->verticalScrollBar()->value()
                                 == view_->verticalScrollBar()->maximum();
-    auto cursor = view_->textCursor();
-    cursor.movePosition(QTextCursor::End);
     int added = 0;
     for (const auto& r : batch) {
         if (!passes(r)) {
             continue;
         }
-        if (cursor.position() > 0) {
-            cursor.insertText(QStringLiteral("\n"));
-        }
-        cursor.insertText(format_record(r));
+        view_->appendHtml(format_record(r));
         ++added;
     }
     if (autoscroll_->isChecked() || was_at_bottom) {

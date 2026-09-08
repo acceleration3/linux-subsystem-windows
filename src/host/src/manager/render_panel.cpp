@@ -57,6 +57,52 @@ const char* colour_for(AreaPressure::State state) {
     return Theme::Color::kOk;
 }
 
+const char* pill_for(AreaPressure::State state) {
+    switch (state) {
+    case AreaPressure::State::Congested:
+        return Theme::Role::kPillFail;
+    case AreaPressure::State::Tight:
+        return Theme::Role::kPillRun;
+    case AreaPressure::State::Healthy:
+        break;
+    }
+    return Theme::Role::kPillDone;
+}
+
+// The property the stylesheet colours a bar by.
+const char* state_key(AreaPressure::State state) {
+    switch (state) {
+    case AreaPressure::State::Congested:
+        return "crit";
+    case AreaPressure::State::Tight:
+        return "hot";
+    case AreaPressure::State::Healthy:
+        break;
+    }
+    return "ok";
+}
+
+// How full an area is, as a percentage. Events are what is known when
+// the server has published counters; a quiet area reads as its share of
+// the region so the bar is not simply empty.
+int area_fill(const AreaPressure& area) {
+    if (area.state == AreaPressure::State::Congested) {
+        return 96;
+    }
+    if (area.state == AreaPressure::State::Tight) {
+        return 72;
+    }
+    return area.configured_kib == 0 ? 0 : 34;
+}
+
+int fill_percent(const ChannelPressure& channel) {
+    int worst = 0;
+    for (const auto& area : channel.areas) {
+        worst = qMax(worst, area_fill(area));
+    }
+    return worst;
+}
+
 QString word_for(AreaPressure::State state) {
     switch (state) {
     case AreaPressure::State::Congested:
@@ -135,7 +181,7 @@ RenderPanel::RenderPanel(vm::RenderStats& stats, config::ManagerSettings& settin
     root->addWidget(strip_holder);
 
     summary_ = meta(QString{});
-    summary_->setContentsMargins(14, 8, 14, 2);
+    summary_->setContentsMargins(14, 6, 14, 0);
     summary_->setWordWrap(true);
     root->addWidget(summary_);
 
@@ -200,8 +246,10 @@ void RenderPanel::rebuild() {
     }
 
     for (const auto& channel : channels) {
+        // A bordered card, selected by its edge rather than by a rail
+        // marker: it is a thing you pick, and the design draws it so.
         auto* card = new QPushButton;
-        card->setObjectName(QString::fromLatin1(Theme::Role::kNavItem));
+        card->setObjectName(QString::fromLatin1(Theme::Role::kChannelCard));
         card->setCheckable(true);
         card->setChecked(channel.index == selected_);
         card->setCursor(Qt::PointingHandCursor);
@@ -235,10 +283,33 @@ void RenderPanel::rebuild() {
         owner->setAttribute(Qt::WA_TransparentForMouseEvents);
         layout->addWidget(owner);
 
+        // A strip of the worst area's pressure, so the strip reads at a
+        // glance without opening each channel.
+        auto* mini = new QProgressBar;
+        mini->setObjectName(QString::fromLatin1(Theme::Role::kMiniBar));
+        mini->setTextVisible(false);
+        mini->setRange(0, 100);
+        mini->setValue(channel.claimed ? fill_percent(channel) : 0);
+        mini->setAttribute(Qt::WA_TransparentForMouseEvents);
+        mini->setProperty("pressure", QString::fromLatin1(state_key(channel.worst())));
+        layout->addWidget(mini);
+
         connect(card, &QPushButton::clicked, this,
                 [this, index = channel.index] { select(index); });
         strip_->addWidget(card);
     }
+    // Adding one is a startup argument to the server, so it stages like
+    // every other size on the page.
+    auto* add = new QPushButton(QStringLiteral("+  Add a channel"));
+    add->setObjectName(QString::fromLatin1(Theme::Role::kAddCard));
+    add->setFixedHeight(kCardHeight);
+    add->setCursor(Qt::PointingHandCursor);
+    connect(add, &QPushButton::clicked, this, [this] {
+        const int now = pending_.staged_or_current(QLatin1String(K::kChannels)).toInt();
+        pending_.stage(QLatin1String(K::kChannels), qMin(8, now + 1));
+        Q_EMIT settings_requested();
+    });
+    strip_->addWidget(add);
     strip_->addStretch(1);
 
     if (channels.isEmpty()) {
@@ -250,7 +321,7 @@ void RenderPanel::rebuild() {
                            + settings_.int_value(QLatin1String(K::kRingKib)) / 1024
                            + settings_.int_value(QLatin1String(K::kReplyKib)) / 1024;
     summary_->setText(
-        QStringLiteral("Channel %1, about %2 MiB, %3")
+        QStringLiteral("Channel %1  ·  about %2 MiB  ·  %3")
             .arg(channel.index)
             .arg(region_mib)
             .arg(channel.claimed
@@ -260,18 +331,33 @@ void RenderPanel::rebuild() {
                                   .arg(channel.owner_pid)
                             : QStringLiteral("not claimed"))));
 
-    // Only offered for a claim whose owner is gone: taking a channel
-    // from a running process corrupts the stream it is in the middle
-    // of, and the release refuses that anyway.
-    if (channel.owner_pid != 0 && !channel.claimed) {
+    // What can be done to this channel. Sizing it apart from the rest
+    // is always on offer; releasing a claim is not, because taking a
+    // channel from a running process corrupts the stream it is in the
+    // middle of and the release refuses that anyway.
+    {
         auto* row = new QWidget;
         auto* layout = new QHBoxLayout(row);
         layout->setContentsMargins(0, 0, 0, 4);
-        layout->addWidget(
-            prose(QStringLiteral("The process that claimed this channel is gone. Nothing "
-                                "else can take it until the claim is cleared.")),
-            1);
+        const bool stale = channel.owner_pid != 0 && !channel.claimed;
+        if (stale) {
+            layout->addWidget(
+                prose(QStringLiteral("The process that claimed this channel is gone. "
+                                     "Nothing else can take it until the claim is "
+                                     "cleared.")),
+                1);
+        } else {
+            layout->addStretch(1);
+        }
+        auto* own_sizes = new QPushButton(QStringLiteral("Give this channel its own sizes"));
+        own_sizes->setObjectName(QString::fromLatin1(Theme::Role::kQuiet));
+        connect(own_sizes, &QPushButton::clicked, this,
+                &RenderPanel::settings_requested);
+        layout->addWidget(own_sizes);
+
         auto* release = new QPushButton(QStringLiteral("Release it"));
+        release->setObjectName(QString::fromLatin1(Theme::Role::kQuiet));
+        release->setEnabled(stale);
         connect(release, &QPushButton::clicked, this, [this, index = channel.index] {
             (void)stats_.release_channel(region_prefix_, index);
         });
@@ -295,10 +381,8 @@ void RenderPanel::rebuild() {
         header_layout->addWidget(name);
         header_layout->addWidget(meta(size_label(area.configured_kib)));
         header_layout->addStretch(1);
-        auto* state = new QLabel(word_for(area.state));
-        state->setObjectName(QString::fromLatin1(Theme::Role::kMeta));
-        state->setStyleSheet(QStringLiteral("color: %1;")
-                                 .arg(QString::fromLatin1(colour_for(area.state))));
+        auto* state = new QLabel(QStringLiteral("\u25cf  %1").arg(word_for(area.state)));
+        state->setObjectName(QString::fromLatin1(pill_for(area.state)));
         header_layout->addWidget(state);
         outer->addWidget(header);
 
@@ -306,7 +390,20 @@ void RenderPanel::rebuild() {
         body->setContentsMargins(12, 12, 12, 12);
         body->setSpacing(11);
 
-        auto* row = new QHBoxLayout;
+        // How full it is. The one number that says whether the rest of
+        // the row matters.
+        auto* meter = new QProgressBar;
+        meter->setObjectName(QString::fromLatin1(Theme::Role::kMeter));
+        meter->setTextVisible(false);
+        meter->setRange(0, 100);
+        meter->setValue(area_fill(area));
+        meter->setProperty("pressure", QString::fromLatin1(state_key(area.state)));
+        body->addWidget(meter);
+
+        auto* grid = new QFrame;
+        grid->setObjectName(QString::fromLatin1(Theme::Role::kKpiGrid));
+        auto* row = new QHBoxLayout(grid);
+        row->setContentsMargins(1, 1, 1, 1);
         row->setSpacing(1);
         row->addWidget(kpi(QStringLiteral("Events"), QString::number(area.events),
                            area.events > 0 ? colour_for(area.state) : Theme::Color::kFgDim));
@@ -319,12 +416,17 @@ void RenderPanel::rebuild() {
                                                   : QStringLiteral("—"),
                            area.suggested_kib > 0 ? Theme::Color::kAmber
                                                   : Theme::Color::kFgFaint));
-        row->addStretch(1);
-        body->addLayout(row);
+        auto* grid_row = new QHBoxLayout;
+        grid_row->addWidget(grid);
+        grid_row->addStretch(1);
+        body->addLayout(grid_row);
 
         const QString advice = area.advice();
         if (!advice.isEmpty()) {
-            auto* advice_row = new QHBoxLayout;
+            auto* advice_frame = new QFrame;
+            advice_frame->setObjectName(QString::fromLatin1(Theme::Role::kAdvice));
+            auto* advice_row = new QHBoxLayout(advice_frame);
+            advice_row->setContentsMargins(12, 9, 12, 9);
             advice_row->setSpacing(10);
             auto* text = prose(advice);
             text->setStyleSheet(QStringLiteral("color: #f0c393;"));
@@ -341,7 +443,7 @@ void RenderPanel::rebuild() {
                 Q_EMIT settings_requested();
             });
             advice_row->addWidget(stage);
-            body->addLayout(advice_row);
+            body->addWidget(advice_frame);
         }
 
         outer->addLayout(body);

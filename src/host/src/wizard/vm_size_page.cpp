@@ -1,4 +1,5 @@
 #include "lsw/host/wizard/vm_size_page.hpp"
+#include "lsw/host/wizard/page_chrome.hpp"
 
 #include "lsw/host/services/host_services.hpp"
 #include "lsw/host/config/settings.hpp"
@@ -8,6 +9,7 @@
 #include "lsw/host/ui/theme.hpp"
 
 #include <QFormLayout>
+#include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QSlider>
@@ -62,12 +64,15 @@ QWidget* make_slider_row(int min, int max, int step, int initial, const QString&
 }  // namespace
 
 VmSizePage::VmSizePage(Wizard& wizard, QWidget* parent) : QWizardPage(parent), wizard_(wizard) {
-    setTitle("VM size and account");
-    setSubTitle(QStringLiteral("Size the \"%1\" VM, pick the local Windows "
+
+    auto* body = PageChrome::install(this, QStringLiteral("VM size and account"), QStringLiteral("Size the \"%1\" VM, pick the local Windows "
                                  "account, and choose the Windows edition.")
                     .arg(QString::fromLatin1(config::kVmName)));
-
-    auto* form = new QFormLayout(this);
+    auto* form = new QFormLayout;
+    form->setHorizontalSpacing(16);
+    form->setVerticalSpacing(12);
+    body->addLayout(form);
+    body->addStretch(1);
     form_ = form;
     // Let the field column eat all horizontal slack so the (sometimes
     // 30+ char) edition names aren't clipped into a tiny combo.
@@ -100,6 +105,13 @@ VmSizePage::VmSizePage(Wizard& wizard, QWidget* parent) : QWizardPage(parent), w
     edition_status_->setWordWrap(true);
     form->addRow(field_label(QStringLiteral("Edition")), edition_combo_);
     form->addRow(QString{}, edition_status_);
+
+    // A rule between the account and the machine: two questions, and
+    // the design draws the seam.
+    auto* rule = new QFrame;
+    rule->setObjectName(QString::fromLatin1(lsw::host::ui::Theme::Role::kSeparator));
+    rule->setFixedHeight(1);
+    form->addRow(rule);
 
     // Defaults plugged in by initializePage() once we've inspected the host.
     form->addRow(field_label(QStringLiteral("CPU cores")), make_slider_row(1, 32, 1, 4, " cores", cpu_spin_));
