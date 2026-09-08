@@ -112,9 +112,16 @@ struct SetDisplayHandler : RpcHandler {
             const auto bytes = static_cast<std::uint64_t>(mib) * 1024ULL * 1024ULL;
             const bool a = write_qword(HKEY_LOCAL_MACHINE, kAdapterClass,
                                        L"HardwareInformation.qwMemorySize", bytes);
+            // The DWORD cannot hold four gigabytes, and truncating to
+            // it reports a card with no memory at all — the opposite of
+            // what was asked for. Saturate instead: a consumer reading
+            // the old spelling sees the largest it can express, and one
+            // reading the QWORD sees the real figure.
+            constexpr std::uint64_t kDwordMax = 0xFFFFFFFFULL;
             const bool b = write_dword(HKEY_LOCAL_MACHINE, kAdapterClass,
                                        L"HardwareInformation.MemorySize",
-                                       static_cast<std::uint32_t>(bytes));
+                                       static_cast<std::uint32_t>(
+                                           bytes > kDwordMax ? kDwordMax : bytes));
             reply["vram"] = a && b;
         }
         return reply;
