@@ -1,8 +1,11 @@
 #include "lsw/host/manager/settings_page.hpp"
 
+#include "lsw/host/vm/render_server.hpp"
+
 #include "lsw/host/ui/theme.hpp"
 #include "lsw/host/ui/toggle_switch.hpp"
 
+#include <QAbstractItemView>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QFileDialog>
@@ -175,6 +178,11 @@ void SettingsPage::build() {
                                 {QStringLiteral("2 channels"), 2},
                                 {QStringLiteral("4 channels"), 4},
                                 {QStringLiteral("8 channels"), 8}}));
+    add_row(render, QLatin1String(K::kGlDevice), QStringLiteral("OpenGL GPU"),
+            QStringLiteral("Which card guest applications draw on. Left to itself, "
+                           "the driver picks whichever GPU drives this screen — on a "
+                           "laptop, the integrated one."),
+            make_choice(QLatin1String(K::kGlDevice), gl_device_choices()));
     add_row(render, QLatin1String(K::kRingKib), QStringLiteral("Command ring"),
             QStringLiteral("A command bigger than this is sent in pieces, each waiting "
                            "for the one before it to drain."),
@@ -514,6 +522,54 @@ QWidget* SettingsPage::make_slider(const QString& key, int min, int max, int ste
     return row;
 }
 
+
+// The GPUs to offer, as the render server enumerates them.
+//
+// Asking costs a process, so it is asked once and the answer stands for
+// the life of the page. A host that answers with nothing still gets the
+// automatic entry: a chooser with no choices in it would say the
+// machine has no GPU, which is not what "we could not enumerate" means.
+QVector<QPair<QString, QVariant>> SettingsPage::gl_device_choices() {
+    // What a driver calls itself is written for a log, not for a
+    // control: the trailing bus and instruction-set notes, and the
+    // registered-trademark marks, cost the width the card's actual name
+    // needs. Only decoration is dropped — no name is invented.
+    const auto shorten = [](QString name) {
+        name.remove(QStringLiteral("(R)"));
+        name.remove(QStringLiteral("(TM)"));
+        if (const qsizetype bus = name.indexOf(QStringLiteral("/PCIe")); bus > 0) {
+            name.truncate(bus);
+        }
+        // "Mesa Intel Iris Xe Graphics (ADL GT2)" names the stack, the
+        // vendor, the card and the silicon revision. The card is the
+        // part being chosen between.
+        if (name.startsWith(QStringLiteral("Mesa "), Qt::CaseInsensitive)) {
+            name.remove(0, 5);
+        }
+        if (name.contains(QStringLiteral("llvmpipe"), Qt::CaseInsensitive)) {
+            return QStringLiteral("llvmpipe (software)");
+        }
+        if (const qsizetype detail = name.lastIndexOf(QLatin1Char('('));
+            detail > 0 && name.endsWith(QLatin1Char(')'))) {
+            name.truncate(detail);
+        }
+        return name.simplified();
+    };
+
+    QVector<QPair<QString, QVariant>> choices{{QStringLiteral("Automatic"), -1}};
+    for (const auto& device : vm::RenderServer::gl_devices()) {
+        // A device with no context is still listed: leaving it out
+        // would renumber the ones after it, and the number is the
+        // setting.
+        const QString label =
+            device.renderer.isEmpty()
+                ? QStringLiteral("%1 — no OpenGL").arg(device.index)
+                : QStringLiteral("%1 — %2").arg(device.index).arg(shorten(device.renderer));
+        choices.push_back({label, device.index});
+    }
+    return choices;
+}
+
 QWidget* SettingsPage::make_choice(const QString& key, const Choices& options) {
     auto* combo = new QComboBox;
     for (const auto& option : options) {
@@ -522,7 +578,14 @@ QWidget* SettingsPage::make_choice(const QString& key, const Choices& options) {
     const QVariant current = pending_.staged_or_current(key);
     const int index = combo->findData(current);
     combo->setCurrentIndex(index >= 0 ? index : 0);
+    // The control column is a fixed width and some of these names are
+    // longer than it. The list that drops down is not bound by it, so
+    // the choice is made against the whole name even when the closed
+    // box shows the beginning of one.
+    combo->view()->setMinimumWidth(combo->sizeHint().width());
+    combo->setToolTip(combo->currentText());
     connect(combo, &QComboBox::currentIndexChanged, this, [this, combo, key](int i) {
+        combo->setToolTip(combo->itemText(i));
         put(key, combo->itemData(i));
     });
     return combo;

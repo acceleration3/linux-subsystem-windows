@@ -54,6 +54,11 @@ private:
     QWidget* make_slider(const QString& key, int min, int max, int step,
                          const QString& suffix);
     QWidget* make_choice(const QString& key, const QVector<QPair<QString, QVariant>>& options);
+
+    // The GPUs to offer for the OpenGL device, asked of the render
+    // server. Static because it depends on the host rather than on any
+    // page state, and because it is worth asking only once.
+    [[nodiscard]] static QVector<QPair<QString, QVariant>> gl_device_choices();
     QWidget* make_toggle(const QString& key);
     QWidget* make_number(const QString& key, int min, int max);
     QWidget* make_text(const QString& key);

@@ -34,6 +34,10 @@ const QHash<QString, QVariant>& defaults() {
         // The render server's own defaults, so a fresh install matches
         // what it would have done unasked.
         {QLatin1String(K::kChannels), 4},
+        // -1: whichever GPU drives the display, which is what EGL hands
+        // out unasked. Named explicitly so a laptop's discrete card can
+        // be chosen over the one wired to the screen.
+        {QLatin1String(K::kGlDevice), -1},
         {QLatin1String(K::kRingKib), 1024},
         {QLatin1String(K::kReplyKib), 8192},
         // 512, not 256: the three areas plus the header round up to a
@@ -74,7 +78,8 @@ const QStringList& restart_keys() {
         QLatin1String(K::kDiskGib),     QLatin1String(K::kGuestWidth),
         QLatin1String(K::kGuestHeight), QLatin1String(K::kMatchHostOutput),
         QLatin1String(K::kScalingPercent), QLatin1String(K::kVramMib),
-        QLatin1String(K::kChannels),    QLatin1String(K::kRingKib),
+        QLatin1String(K::kChannels),    QLatin1String(K::kGlDevice),
+        QLatin1String(K::kRingKib),
         QLatin1String(K::kReplyKib),    QLatin1String(K::kBlobMib),
         QLatin1String(K::kHostShares),  QLatin1String(K::kAgentPort),
     };
