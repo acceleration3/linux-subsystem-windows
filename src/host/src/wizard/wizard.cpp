@@ -16,6 +16,8 @@
 #include <QFrame>
 #include <QLabel>
 #include <QListWidget>
+#include <QPushButton>
+#include <QStyle>
 #include <QSizePolicy>
 #include <QVBoxLayout>
 #include <QStorageInfo>
@@ -48,6 +50,37 @@ Wizard::Wizard(services::HostServices& services, QWidget* parent) : QWizard(pare
     setPage(Done, new DonePage);
     setStartId(Welcome);
 
+    // A flat, unclickable custom button is the only thing QWizard will
+    // put in its button row that is not a button, and the counter
+    // belongs in that row rather than floating in the page.
+    setOption(HaveCustomButton1, true);
+    if (auto* counter = button(CustomButton1)) {
+        // It has to read as the caption it is, not as a fourth button
+        // nobody should press. Styled on the widget rather than through
+        // the application sheet, because that is the only precedence
+        // that beats the QPushButton rules in it.
+        if (auto* push = qobject_cast<QPushButton*>(counter)) {
+            push->setFlat(true);
+        }
+        counter->setFocusPolicy(Qt::NoFocus);
+        counter->setCursor(Qt::ArrowCursor);
+        counter->setStyleSheet(QStringLiteral(
+            "QPushButton, QPushButton:hover, QPushButton:pressed,"
+            "QPushButton:focus, QPushButton:disabled {"
+            "  background: transparent; border: none; outline: none;"
+            "  padding: 0px; margin: 0px; min-height: 0px; min-width: 0px;"
+            "  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;"
+            "  font-size: 11px; font-weight: 400; color: %1; text-align: left; }")
+                                   .arg(QString::fromLatin1(ui::Theme::Color::kFgFaint)));
+    }
+    setButtonLayout({CustomButton1, Stretch, BackButton, NextButton, FinishButton,
+                     CancelButton});
+    // Without the angle brackets. They are a convention from a
+    // different decade and the rail already says which way is forward.
+    setButtonText(BackButton, QStringLiteral("Back"));
+    setButtonText(NextButton, QStringLiteral("Next"));
+    setButtonText(CancelButton, QStringLiteral("Cancel"));
+
     build_side_rail();
 
     // Hide Back+Next on the long-running pages. They auto-advance via
@@ -60,6 +93,16 @@ Wizard::Wizard(services::HostServices& services, QWidget* parent) : QWizard(pare
         if (auto* b = button(NextButton)) b->setVisible(!hide_nav);
         highlight_step(id);
     });
+}
+
+const QStringList& Wizard::step_names() {
+    static const QStringList names = {
+        QStringLiteral("Welcome"),   QStringLiteral("Licensing"),
+        QStringLiteral("Windows ISO"), QStringLiteral("Size and account"),
+        QStringLiteral("Payload"),   QStringLiteral("Installing"),
+        QStringLiteral("Setup steps"), QStringLiteral("Finished"),
+    };
+    return names;
 }
 
 void Wizard::build_side_rail() {
@@ -90,17 +133,13 @@ void Wizard::build_side_rail() {
     steps_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     steps_->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     steps_->setFrameShape(QFrame::NoFrame);
-    for (const auto& name : {QStringLiteral("Welcome"), QStringLiteral("Licensing"),
-                             QStringLiteral("Windows ISO"),
-                             QStringLiteral("Size and account"), QStringLiteral("Payload"),
-                             QStringLiteral("Installing"), QStringLiteral("Setup steps"),
-                             QStringLiteral("Finished")}) {
+    for (const auto& name : step_names()) {
         steps_->addItem(name);
     }
     // Sized to the eight it holds. A list left to its own sizeHint gets
     // a scrollbar and clips the last step, which is exactly the thing
     // the rail exists to show.
-    steps_->setFixedHeight(8 * 30);
+    steps_->setFixedHeight(step_names().size() * 30);
     steps_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
     layout->addWidget(steps_);
     layout->addStretch(1);
@@ -121,19 +160,42 @@ void Wizard::highlight_step(int page_id) {
         return;
     }
     // The ids are contiguous and in display order, so the page is the
-    // row. A tick for what is behind you, the number for what is not.
+    // row. Each row carries its own number until it is behind you, and
+    // then a tick: the rail is a position in a sequence, and a sequence
+    // with no numbers is a list.
     for (int row = 0; row < steps_->count(); ++row) {
         auto* item = steps_->item(row);
         const bool done = row < page_id;
-        item->setSelected(row == page_id);
+        const bool current = row == page_id;
+        const QString mark = done ? QStringLiteral("\u2713")
+                                  : QStringLiteral("%1").arg(row + 1, 2, 10, QLatin1Char('0'));
+        item->setText(QStringLiteral("%1   %2").arg(mark, step_names().at(row)));
+        item->setSelected(current);
         auto font = item->font();
-        font.setWeight(row == page_id ? QFont::Medium : QFont::Normal);
+        font.setWeight(current ? QFont::Medium : QFont::Normal);
         item->setFont(font);
         item->setForeground(QColor(QString::fromLatin1(
             done ? ui::Theme::Color::kFgDim
-                 : (row == page_id ? ui::Theme::Color::kFg : ui::Theme::Color::kFgFaint))));
+                 : (current ? ui::Theme::Color::kFg : ui::Theme::Color::kFgFaint))));
     }
     steps_->setCurrentRow(page_id);
+
+    // "step 4 of 8", where the wizard's own buttons are. A wizard that
+    // shows a rail and still cannot say how far along it is has told
+    // you where you are without telling you how much is left.
+    setButtonText(CustomButton1, QStringLiteral("step %1 of %2")
+                                     .arg(page_id + 1)
+                                     .arg(steps_->count()));
+
+    // Next and Finish carry the primary weight; Back does not. Set on
+    // every page change because QWizard swaps which of them is showing.
+    for (const auto role : {NextButton, FinishButton}) {
+        if (auto* button = this->button(role)) {
+            button->setObjectName(QString::fromLatin1(ui::Theme::Role::kPrimary));
+            button->style()->unpolish(button);
+            button->style()->polish(button);
+        }
+    }
 }
 
 void Wizard::detect_host_caps() {

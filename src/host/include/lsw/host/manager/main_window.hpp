@@ -67,6 +67,13 @@ private:
     QLabel* content_title_ = nullptr;
     QLabel* content_detail_ = nullptr;
     QPushButton* pop_out_button_ = nullptr;
+    // Per-page actions in the content bar. Shown for the page they
+    // belong to and hidden for the rest, rather than each page growing
+    // a toolbar of its own.
+    QPushButton* preview_button_ = nullptr;
+    QPushButton* clear_button_ = nullptr;
+    QPushButton* config_folder_button_ = nullptr;
+    QPushButton* reset_counts_button_ = nullptr;
     QWidget* warn_strip_ = nullptr;
     QLabel* warn_text_ = nullptr;
     QLabel* status_left_ = nullptr;

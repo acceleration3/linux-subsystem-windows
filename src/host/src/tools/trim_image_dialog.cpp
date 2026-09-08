@@ -20,7 +20,10 @@
 #include <QLineEdit>
 #include <QProgressBar>
 #include <QPushButton>
+#include <QEvent>
+#include <QMouseEvent>
 #include <QRadioButton>
+#include <QStyle>
 #include <QStorageInfo>
 #include <QVBoxLayout>
 #include <QtConcurrent>
@@ -36,6 +39,13 @@ using ui::Theme;
 QLabel* meta(const QString& text) {
     auto* label = new QLabel(text);
     label->setObjectName(QString::fromLatin1(Theme::Role::kMeta));
+    label->setWordWrap(true);
+    return label;
+}
+
+QLabel* prose(const QString& text) {
+    auto* label = new QLabel(text);
+    label->setObjectName(QString::fromLatin1(Theme::Role::kBody));
     label->setWordWrap(true);
     return label;
 }
@@ -99,6 +109,7 @@ TrimImageDialog::TrimImageDialog(config::Settings& settings, QString source_iso,
 
     edition_combo_ = new QComboBox;
     edition_combo_->setEnabled(false);
+    edition_combo_->setVisible(false);
     source_box->addWidget(edition_combo_);
     root->addLayout(source_box);
     root->addWidget(separator());
@@ -117,18 +128,41 @@ TrimImageDialog::TrimImageDialog(config::Settings& settings, QString source_iso,
         {DebloatLevel::Maximum, "Strip it to the minimum"},
     };
     for (const auto& entry : kLevels) {
+        // A card, not a radio with a paragraph under it: the choice and
+        // what it costs are one target, and the selected one says so
+        // with its own border rather than with a dot alone.
+        auto* card = new QFrame;
+        card->setObjectName(QString::fromLatin1(Theme::Role::kOptionCard));
+        auto* card_layout = new QVBoxLayout(card);
+        card_layout->setContentsMargins(13, 11, 13, 12);
+        card_layout->setSpacing(4);
+
         auto* radio = new QRadioButton(QString::fromLatin1(entry.title));
         level_group_->addButton(radio, static_cast<int>(entry.level));
-        root->addWidget(radio);
-        auto* description = meta(DebloatPlan{entry.level}.summary());
-        description->setContentsMargins(24, 0, 0, 4);
-        root->addWidget(description);
+        card_layout->addWidget(radio);
+
+        auto* description = prose(DebloatPlan{entry.level}.summary());
+        description->setContentsMargins(23, 0, 0, 0);
+        card_layout->addWidget(description);
+
+        // Clicking anywhere on the card picks it. A card you have to
+        // hit the dot of is a card pretending to be clickable.
+        card->installEventFilter(this);
+        card->setProperty("lswRadio", QVariant::fromValue(static_cast<QObject*>(radio)));
+        cards_.push_back(card);
+        root->addWidget(card);
+
+        connect(radio, &QRadioButton::toggled, card, [card](bool on) {
+            card->setProperty("selected", on);
+            card->style()->unpolish(card);
+            card->style()->polish(card);
+        });
         if (entry.level == DebloatLevel::Sane) {
             radio->setChecked(true);
         }
     }
 
-    warning_ = meta(QString{});
+    warning_ = prose(QString{});
     warning_->setStyleSheet(QStringLiteral("color: #f0c393;"));
     warning_->setVisible(false);
     root->addWidget(warning_);
@@ -214,6 +248,7 @@ TrimImageDialog::TrimImageDialog(config::Settings& settings, QString source_iso,
                     const int wanted = edition_combo_->findData(image_index_);
                     edition_combo_->setCurrentIndex(wanted >= 0 ? wanted : 0);
                     edition_combo_->setEnabled(true);
+                    edition_combo_->setVisible(true);
                 }
                 watcher->deleteLater();
             });
@@ -226,6 +261,17 @@ TrimImageDialog::TrimImageDialog(config::Settings& settings, QString source_iso,
     }
 
     refresh_estimate();
+}
+
+bool TrimImageDialog::eventFilter(QObject* watched, QEvent* event) {
+    if (event->type() == QEvent::MouseButtonRelease) {
+        if (auto* radio = qobject_cast<QRadioButton*>(
+                watched->property("lswRadio").value<QObject*>())) {
+            radio->setChecked(true);
+            return true;
+        }
+    }
+    return QDialog::eventFilter(watched, event);
 }
 
 bool TrimImageDialog::use_for_install() const {

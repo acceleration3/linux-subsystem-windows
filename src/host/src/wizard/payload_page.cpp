@@ -25,7 +25,8 @@ PayloadPage::PayloadPage(Wizard& wizard, QWidget* parent)
 
     auto* lay = new QVBoxLayout(this);
     table_ = new QTableWidget(3, 2);
-    table_->setHorizontalHeaderLabels(QStringList{"Task", "Status"});
+    table_->setHorizontalHeaderLabels(QStringList{"TASK", "STATUS"});
+    table_->horizontalHeader()->setDefaultAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     table_->horizontalHeader()->setSectionResizeMode(kColTask, QHeaderView::Stretch);
     table_->horizontalHeader()->setSectionResizeMode(kColStatus, QHeaderView::Stretch);
     table_->verticalHeader()->setVisible(false);

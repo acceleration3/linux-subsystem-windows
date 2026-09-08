@@ -14,6 +14,8 @@
 #include <QUuid>
 #include <QWidget>
 
+class QVBoxLayout;
+
 namespace lsw::host::manager {
 
 // The Overview page: live preview, the four gauges, and the grid of
@@ -44,6 +46,12 @@ public:
     [[nodiscard]] bool is_agent_online() const noexcept { return last_agent_reachable_; }
 
 public Q_SLOTS:
+    // Hand the preview to a window of its own, and take it back when
+    // that window closes. One VNC connection either way: a second one
+    // would be a second client on a display the guest is already
+    // sharing.
+    void pop_out_preview();
+
     // Driven by the rail's single power button.
     void start_guest();
     void stop_guest();
@@ -73,6 +81,7 @@ private:
     QTimer state_timer_;
 
     lsw::host::ui::VncView* preview_ = nullptr;
+    QVBoxLayout* preview_slot_ = nullptr;
     StatsWidget* stats_ = nullptr;
     AppListWidget* app_list_ = nullptr;
 

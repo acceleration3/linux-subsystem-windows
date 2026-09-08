@@ -36,6 +36,8 @@ public:
         // Prose under a setting's name. Sans; kMeta is the mono one.
         static constexpr const char* kBody = "Body";
         static constexpr const char* kTile = "Tile";
+        // A whole choice as one target: the option and what it costs.
+        static constexpr const char* kOptionCard = "OptionCard";
         static constexpr const char* kStatusStrip = "StatusStrip";
         static constexpr const char* kCaption = "Caption";
         static constexpr const char* kHeading = "Heading";

@@ -42,10 +42,10 @@ struct Place {
 };
 
 const Place kPlaces[] = {
-    {"Start menu", R"(C:\ProgramData\Microsoft\Windows\Start Menu\Programs)", "▤"},
-    {"Program Files", R"(C:\Program Files)", "□"},
-    {"Program Files (x86)", R"(C:\Program Files (x86))", "□"},
-    {"Desktop", R"(C:\Users\Public\Desktop)", "●"},
+    {"Start menu", R"(C:\ProgramData\Microsoft\Windows\Start Menu\Programs)", "*"},
+    {"Program Files", R"(C:\Program Files)", "/"},
+    {"Program Files (x86)", R"(C:\Program Files (x86))", "/"},
+    {"Desktop", R"(C:\Users\Public\Desktop)", "~"},
 };
 
 QString human_size(qint64 bytes) {
@@ -92,6 +92,7 @@ void RemoteFileDialog::build() {
     places_->setFixedWidth(190);
     places_->setFrameShape(QFrame::NoFrame);
     places_->setObjectName(QString::fromLatin1(Theme::Role::kNavRail));
+    add_place_heading(QStringLiteral("Shortcuts"));
     for (const auto& place : kPlaces) {
         add_place(QString::fromLatin1(place.label), QString::fromLatin1(place.path),
                   QString::fromUtf8(place.glyph));
@@ -144,8 +145,9 @@ void RemoteFileDialog::build() {
 
     entries_ = new QTreeWidget;
     entries_->setColumnCount(3);
-    entries_->setHeaderLabels({QStringLiteral("Name"), QStringLiteral("Size"),
-                               QStringLiteral("Modified")});
+    entries_->setHeaderLabels({QStringLiteral("NAME"), QStringLiteral("SIZE"),
+                               QStringLiteral("MODIFIED")});
+    entries_->header()->setDefaultAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     entries_->setRootIsDecorated(false);
     entries_->setUniformRowHeights(true);
     entries_->setAlternatingRowColors(false);
@@ -224,6 +226,18 @@ void RemoteFileDialog::add_place(const QString& label, const QString& path,
     item->setData(kRoleName, path);
 }
 
+// A heading in the places list. Not selectable, because it is a label
+// that happens to live in a list.
+void RemoteFileDialog::add_place_heading(const QString& text) {
+    auto* item = new QListWidgetItem(text.toUpper(), places_);
+    item->setFlags(Qt::NoItemFlags);
+    item->setForeground(QColor(QString::fromLatin1(Theme::Color::kFgFaint)));
+    QFont font = item->font();
+    font.setFamilies({QStringLiteral("JetBrains Mono"), QStringLiteral("DejaVu Sans Mono")});
+    font.setPixelSize(10);
+    item->setFont(font);
+}
+
 void RemoteFileDialog::refresh_places() {
     // The drives the guest reports, appended under the fixed shortcuts.
     // A mapped host folder is a drive letter in there like any other,
@@ -241,13 +255,17 @@ void RemoteFileDialog::refresh_places() {
                 return;
             }
             const auto reply = QJsonDocument::fromJson(raw).object();
-            for (const auto value : reply.value(QStringLiteral("entries")).toArray()) {
+            const auto drives = reply.value(QStringLiteral("entries")).toArray();
+            if (!drives.isEmpty()) {
+                self->add_place_heading(QStringLiteral("Drives"));
+            }
+            for (const auto value : drives) {
                 const auto entry = value.toObject();
                 const QString name = entry.value(QStringLiteral("name")).toString();
                 const QString label = entry.value(QStringLiteral("label")).toString();
                 self->add_place(label.isEmpty() ? name
                                                 : QStringLiteral("%1 %2").arg(name, label),
-                                name + QLatin1Char('\\'), QStringLiteral("◱"));
+                                name + QLatin1Char('\\'), QStringLiteral(":"));
             }
         });
     });

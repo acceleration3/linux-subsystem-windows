@@ -4,13 +4,19 @@
 #include "lsw/host/app/unattended_runner.hpp"
 #include "lsw/host/apps/desktop_launcher.hpp"
 #include "lsw/host/manager/guest_app_launch_controller.hpp"
+#include "lsw/host/manager/app_config_dialog.hpp"
+#include "lsw/host/manager/launch_splash.hpp"
 #include "lsw/host/manager/main_window.hpp"
+#include "lsw/host/manager/remote_file_dialog.hpp"
+#include "lsw/host/tools/download_image_dialog.hpp"
+#include "lsw/host/tools/trim_image_dialog.hpp"
 #include "lsw/host/mcp/mcp_server.hpp"
 #include "lsw/host/ui/theme.hpp"
 #include "lsw/host/vm/domain_importer.hpp"
 #include "lsw/host/wizard/wizard.hpp"
 
 #include <QDir>
+#include <QIcon>
 #include <QMetaObject>
 #include <QProcess>
 
@@ -175,6 +181,33 @@ int App::capture_screens(const QString& dir) {
         shoot(window, QString::fromLatin1(entry.name));
     }
     window->deleteLater();
+
+    // The dialogs, too. They are where most of the controls live, and a
+    // screenshot set that skips them checks the easy half.
+    {
+        tools::DownloadImageDialog download{services_.settings()};
+        download.resize(620, 620);
+        shoot(&download, QStringLiteral("dialog-1-download"));
+
+        tools::TrimImageDialog trim{services_.settings(), QString{}, 1};
+        trim.resize(620, 720);
+        shoot(&trim, QStringLiteral("dialog-2-trim"));
+
+        apps::AppConfig sample;
+        sample.name = QStringLiteral("Photoshop 2024");
+        sample.path = QStringLiteral("C:\\Program Files\\Adobe\\Photoshop.exe");
+        manager::AppConfigDialog config{sample, services_.rpc()};
+        config.resize(560, 520);
+        shoot(&config, QStringLiteral("dialog-3-application"));
+
+        manager::RemoteFileDialog picker{services_.rpc(),
+                                         manager::RemoteFileDialog::Mode::Program};
+        shoot(&picker, QStringLiteral("dialog-4-browse"));
+
+        manager::LaunchSplash splash{QStringLiteral("Photoshop 2024"), QIcon{}};
+        splash.reach(manager::LaunchSplash::Phase::MachineStarted);
+        shoot(&splash, QStringLiteral("dialog-5-starting"));
+    }
 
     auto* wiz = new wizard::Wizard(services_);
     wiz->resize(880, 620);

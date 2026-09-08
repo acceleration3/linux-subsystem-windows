@@ -76,7 +76,11 @@ embed_text_file("${CMAKE_CURRENT_SOURCE_DIR}/embedded/theme.qss"
                 "${_core_embed}/theme_qss.hpp" kThemeQss)
 
 lsw_host_sources(LSW_CORE_SOURCES ${LSW_CORE_CONCERNS})
-add_library(lsw_host_core STATIC ${LSW_CORE_SOURCES})
+# The stylesheet's images. See embedded/resources.qrc for why there are
+# any at all.
+set(CMAKE_AUTORCC ON)
+add_library(lsw_host_core STATIC ${LSW_CORE_SOURCES}
+    ${CMAKE_CURRENT_SOURCE_DIR}/embedded/resources.qrc)
 target_include_directories(lsw_host_core PUBLIC ${LSW_HOST_INCLUDE_DIR})
 # vm/render_stats.cpp reads the render server's region header. Its
 # layout is the contract between the two, so the header itself is

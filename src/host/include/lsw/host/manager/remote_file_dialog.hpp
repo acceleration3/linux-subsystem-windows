@@ -55,6 +55,7 @@ public:
 private:
     void build();
     void add_place(const QString& label, const QString& path, const QString& glyph);
+    void add_place_heading(const QString& text);
     void refresh_places();
     void render_entries(const QJsonObject& reply);
     void set_breadcrumb(const QString& path);

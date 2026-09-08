@@ -92,12 +92,37 @@ MainWindow::MainWindow(services::HostServices& services, QWidget* parent)
     // Console and Log are pages now, which is right for the common
     // case and wrong for the one where you want to watch the log while
     // doing something else. So they can still be a window.
-    pop_out_button_ = new QPushButton(QStringLiteral("Pop out"));
-    pop_out_button_->setObjectName(QString::fromLatin1(Theme::Role::kQuiet));
-    pop_out_button_->setVisible(false);
-    bar_layout->addWidget(pop_out_button_);
+    const auto bar_action = [&](const QString& text) {
+        auto* button = new QPushButton(text);
+        button->setObjectName(QString::fromLatin1(Theme::Role::kQuiet));
+        button->setVisible(false);
+        bar_layout->addWidget(button);
+        return button;
+    };
+    preview_button_ = bar_action(QStringLiteral("Pop out preview"));
+    clear_button_ = bar_action(QStringLiteral("Clear"));
+    reset_counts_button_ = bar_action(QStringLiteral("Reset counts"));
+    config_folder_button_ = bar_action(QStringLiteral("Open config folder"));
+    pop_out_button_ = bar_action(QStringLiteral("Pop out"));
+
     connect(pop_out_button_, &QPushButton::clicked, this,
             [this] { pop_out(rail_->current()); });
+    connect(preview_button_, &QPushButton::clicked, this, [this] {
+        // The preview is one VNC connection and the panel owns it, so
+        // this hands the widget itself to a window and takes it back
+        // when that window closes rather than opening a second stream.
+        if (overview_ != nullptr) {
+            overview_->pop_out_preview();
+        }
+    });
+    connect(clear_button_, &QPushButton::clicked, this,
+            [this] { services_.log_store().clear(); });
+    connect(reset_counts_button_, &QPushButton::clicked, this,
+            [this] { services_.render_stats().reset(); });
+    connect(config_folder_button_, &QPushButton::clicked, this, [this] {
+        QDesktopServices::openUrl(
+            QUrl::fromLocalFile(services_.settings().config_dir()));
+    });
     right_layout->addWidget(bar);
 
     // ---- warning strip --------------------------------------------
@@ -327,6 +352,10 @@ void MainWindow::show_page(NavRail::Page page) {
     content_detail_->setText(QString::fromLatin1(kPages[index].detail));
     pop_out_button_->setVisible(page == NavRail::Page::Console
                                 || page == NavRail::Page::Log);
+    preview_button_->setVisible(page == NavRail::Page::Overview);
+    clear_button_->setVisible(page == NavRail::Page::Log);
+    reset_counts_button_->setVisible(page == NavRail::Page::Render);
+    config_folder_button_->setVisible(page == NavRail::Page::Settings);
 
     // A console nobody is looking at should not be holding a shell open
     // in the guest.

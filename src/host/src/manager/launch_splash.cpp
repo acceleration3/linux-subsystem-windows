@@ -34,6 +34,15 @@ QLabel* meta(const QString& text) {
     return label;
 }
 
+// Sentences, not values: the subtitle and the footnote are prose and
+// read in the interface face.
+QLabel* prose(const QString& text) {
+    auto* label = new QLabel(text);
+    label->setObjectName(QString::fromLatin1(Theme::Role::kBody));
+    label->setWordWrap(true);
+    return label;
+}
+
 }  // namespace
 
 LaunchSplash::LaunchSplash(QString application, QIcon icon, QWidget* parent)
@@ -65,7 +74,7 @@ LaunchSplash::LaunchSplash(QString application, QIcon icon, QWidget* parent)
     titles->setSpacing(3);
     auto* name = new QLabel(application_);
     name->setObjectName(QString::fromLatin1(Theme::Role::kHeading));
-    subtitle_ = meta(QStringLiteral("Starting Windows so it has somewhere to run"));
+    subtitle_ = prose(QStringLiteral("Starting Windows so it has somewhere to run"));
     titles->addWidget(name);
     titles->addWidget(subtitle_);
     head->addWidget(badge);
@@ -91,7 +100,7 @@ LaunchSplash::LaunchSplash(QString application, QIcon icon, QWidget* parent)
     }
     root->addLayout(steps);
 
-    stall_text_ = meta(QString{});
+    stall_text_ = prose(QString{});
     stall_text_->setStyleSheet(QStringLiteral("color: #f0c393;"));
     stall_text_->setVisible(false);
     root->addWidget(stall_text_);
@@ -102,8 +111,8 @@ LaunchSplash::LaunchSplash(QString application, QIcon icon, QWidget* parent)
     footer_ = new QWidget;
     auto* footer_layout = new QHBoxLayout(footer_);
     footer_layout->setContentsMargins(0, 0, 0, 0);
-    footer_layout->addWidget(meta(QStringLiteral("Closing this leaves the guest starting.")),
-                             1);
+    footer_layout->addWidget(
+        prose(QStringLiteral("Closing this leaves the guest starting.")), 1);
     auto* cancel = new QPushButton(QStringLiteral("Cancel"));
     cancel->setObjectName(QString::fromLatin1(Theme::Role::kQuiet));
     auto* hide_button = new QPushButton(QStringLiteral("Hide"));

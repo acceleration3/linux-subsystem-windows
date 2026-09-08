@@ -5,6 +5,8 @@
 #include "lsw/host/config/vm_state.hpp"
 #include "lsw/host/wizard/wizard.hpp"
 
+#include "lsw/host/ui/theme.hpp"
+
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -20,6 +22,15 @@ namespace {
 // (it owns the value), the slider mirrors it, and changing either
 // updates the other. Returns the row widget for embedding in a layout;
 // the caller keeps the spin box for reading the value back.
+// Field names in the same uppercase mono every caption in the
+// application uses, so a form reads as part of it rather than as a
+// dialog somebody else wrote.
+QLabel* field_label(const QString& text) {
+    auto* label = new QLabel(text.toUpper());
+    label->setObjectName(QString::fromLatin1(lsw::host::ui::Theme::Role::kCaption));
+    return label;
+}
+
 QWidget* make_slider_row(int min, int max, int step, int initial, const QString& suffix,
                          QSpinBox*& spin_out) {
     auto* row = new QWidget;
@@ -57,6 +68,7 @@ VmSizePage::VmSizePage(Wizard& wizard, QWidget* parent) : QWizardPage(parent), w
                     .arg(QString::fromLatin1(config::kVmName)));
 
     auto* form = new QFormLayout(this);
+    form_ = form;
     // Let the field column eat all horizontal slack so the (sometimes
     // 30+ char) edition names aren't clipped into a tiny combo.
     form->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
@@ -70,9 +82,9 @@ VmSizePage::VmSizePage(Wizard& wizard, QWidget* parent) : QWizardPage(parent), w
     pass_edit_->setEchoMode(QLineEdit::Password);
     computer_edit_ = new QLineEdit;
     computer_edit_->setPlaceholderText(QString::fromLatin1(config::kVmName));
-    form->addRow("Username", user_edit_);
-    form->addRow("Password", pass_edit_);
-    form->addRow("Computer name", computer_edit_);
+    form->addRow(field_label(QStringLiteral("Username")), user_edit_);
+    form->addRow(field_label(QStringLiteral("Password")), pass_edit_);
+    form->addRow(field_label(QStringLiteral("Computer name")), computer_edit_);
 
     // Edition combo — populated async from the ISO's WIM image table.
     edition_combo_ = new QComboBox;
@@ -86,13 +98,13 @@ VmSizePage::VmSizePage(Wizard& wizard, QWidget* parent) : QWizardPage(parent), w
     edition_status_ = new QLabel;
     edition_status_->setStyleSheet("color: gray;");
     edition_status_->setWordWrap(true);
-    form->addRow("Edition", edition_combo_);
+    form->addRow(field_label(QStringLiteral("Edition")), edition_combo_);
     form->addRow(QString{}, edition_status_);
 
     // Defaults plugged in by initializePage() once we've inspected the host.
-    form->addRow("CPU cores", make_slider_row(1, 32, 1, 4, " cores", cpu_spin_));
-    form->addRow("Memory", make_slider_row(2048, 65536, 1024, 8192, " MiB", mem_spin_));
-    form->addRow("Disk", make_slider_row(30, 512, 5, 60, " GiB", disk_spin_));
+    form->addRow(field_label(QStringLiteral("CPU cores")), make_slider_row(1, 32, 1, 4, " cores", cpu_spin_));
+    form->addRow(field_label(QStringLiteral("Memory")), make_slider_row(2048, 65536, 1024, 8192, " MiB", mem_spin_));
+    form->addRow(field_label(QStringLiteral("Disk")), make_slider_row(30, 512, 5, 60, " GiB", disk_spin_));
 
     connect(user_edit_, &QLineEdit::textChanged, this, &VmSizePage::completeChanged);
     connect(pass_edit_, &QLineEdit::textChanged, this, &VmSizePage::completeChanged);
@@ -125,14 +137,16 @@ void VmSizePage::initializePage() {
     // WIM. In that case hide the row and keep image_index at 1.
     const QString iso = s.chosen_iso_path;
     if (iso.isEmpty()) {
-        edition_combo_->setVisible(false);
-        edition_status_->setVisible(false);
+        // Hide the row, not just the field: a label with nothing beside
+        // it is a question the page is not asking.
+        form_->setRowVisible(edition_combo_, false);
+        form_->setRowVisible(edition_status_, false);
         editions_loaded_ = true;
         Q_EMIT completeChanged();
         return;
     }
-    edition_combo_->setVisible(true);
-    edition_status_->setVisible(true);
+    form_->setRowVisible(edition_combo_, true);
+    form_->setRowVisible(edition_status_, true);
 
     if (probed_iso_ == iso) {
         return;  // already listed this ISO; keep the existing combo

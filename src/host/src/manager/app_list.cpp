@@ -245,6 +245,12 @@ void AppListWidget::open_config_dialog(const apps::AppConfig& initial) {
     if (dlg.exec() != QDialog::Accepted) {
         return;
     }
+    if (dlg.removal_requested()) {
+        if (!initial.id.isEmpty()) {
+            store_.remove(initial.id);
+        }
+        return;
+    }
     store_.upsert(dlg.result());
 }
 
