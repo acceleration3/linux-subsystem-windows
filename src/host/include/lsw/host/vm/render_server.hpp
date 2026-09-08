@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QObject>
+#include <QDateTime>
 #include <QProcess>
 #include <QString>
 #include <QUuid>
@@ -105,6 +106,9 @@ public:
     [[nodiscard]] bool running() const;
 
 Q_SIGNALS:
+    // The server process went away while it was serving a guest.
+    void died();
+
     // Every line the server writes to its standard error. The manager
     // reads its congestion warnings out of these, which is what makes a
     // stalling ring visible without the server having to publish
@@ -121,6 +125,9 @@ private:
 
     QProcess process_;
     QUuid serving_;
+    // When the process now running was started, so a newer build on
+    // disk can be noticed at the next boot.
+    QDateTime started_;
     QByteArray pending_;
 };
 

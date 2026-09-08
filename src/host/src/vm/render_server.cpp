@@ -3,9 +3,11 @@
 #include "lsw/base/log.hpp"
 
 #include <QCoreApplication>
+#include <QDateTime>
 #include <QDeadlineTimer>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QProcessEnvironment>
 #include <QThread>
 
@@ -42,6 +44,22 @@ RenderServer::RenderServer(QObject* parent) : QObject(parent) {
     process_.setProcessChannelMode(QProcess::MergedChannels);
     connect(&process_, &QProcess::readyReadStandardOutput, this,
             &RenderServer::drain_output);
+    // A server that exits while a guest is using it cannot simply be
+    // started again: the guest's ring position and a fresh server's
+    // disagree, and every command after that fails. Saying so is worth
+    // more than a silent restart that looks like a driver fault.
+    connect(&process_, &QProcess::finished, this,
+            [this](int code, QProcess::ExitStatus status) {
+                if (serving_.isNull()) {
+                    return;
+                }
+                LSW_ERROR("render server: exited ({}, code {}) while serving {} — "
+                          "guest applications have lost the GPU until the guest is "
+                          "restarted",
+                          status == QProcess::CrashExit ? "crashed" : "stopped", code,
+                          serving_.toString().toStdString());
+                Q_EMIT died();
+            });
 }
 
 void RenderServer::set_sizing(const Sizing& sizing) {
@@ -145,7 +163,20 @@ bool RenderServer::running() const {
 
 bool RenderServer::ensure_running(const QUuid& uuid) {
     if (running() && serving_ == uuid) {
-        return true;
+        // A build newer than the process serving this VM is a build
+        // nobody is running. Restarting between guests is free — the
+        // regions are recreated with the domain — and it is the only
+        // moment it is safe: a server replaced under a live guest
+        // leaves the ring positions of the two sides disagreeing, which
+        // surfaces as every command failing at once.
+        const QFileInfo binary{executable_path()};
+        if (binary.exists() && started_.isValid()
+            && binary.lastModified() > started_) {
+            LSW_INFO("render server: {} is newer than the one running; restarting it "
+                     "for this boot", executable_path().toStdString());
+        } else {
+            return true;
+        }
     }
     stop();
 
@@ -190,6 +221,7 @@ bool RenderServer::ensure_running(const QUuid& uuid) {
         return false;
     }
     serving_ = uuid;
+    started_ = QDateTime::currentDateTime();
 
     // Wait for the region, not for the process: QEMU opens the file by
     // path, so "started" is not the state the domain needs — "the file

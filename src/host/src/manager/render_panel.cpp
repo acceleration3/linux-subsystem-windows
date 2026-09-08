@@ -5,6 +5,7 @@
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QLocale>
 #include <QProgressBar>
 #include <QPushButton>
 #include <QScrollArea>
@@ -225,6 +226,23 @@ void RenderPanel::select(int channel) {
     rebuild();
 }
 
+// Commands, bytes and frames a second, in the units a reader thinks in.
+QString RenderPanel::rate_line(const vm::ChannelPressure& channel) {
+    if (channel.commands_per_second < 1.0 && channel.frames_per_second < 0.5) {
+        return QStringLiteral("idle");
+    }
+    const double mib = channel.bytes_per_second / (1024.0 * 1024.0);
+    QString text = QStringLiteral("%1 cmd/s").arg(
+        QLocale::system().toString(channel.commands_per_second, 'f', 0));
+    if (mib >= 0.05) {
+        text += QStringLiteral("  ·  %1 MiB/s").arg(mib, 0, 'f', 1);
+    }
+    if (channel.frames_per_second >= 0.5) {
+        text += QStringLiteral("  ·  %1 fps").arg(channel.frames_per_second, 0, 'f', 0);
+    }
+    return text;
+}
+
 void RenderPanel::rebuild() {
     // Both lists are rebuilt wholesale. They are a handful of widgets
     // and they change when a counter moves, which is rare enough that
@@ -284,6 +302,13 @@ void RenderPanel::rebuild() {
                                : QStringLiteral("free"));
         owner->setAttribute(Qt::WA_TransparentForMouseEvents);
         layout->addWidget(owner);
+
+        // What it is carrying right now. A claimed channel that is
+        // drawing nothing reads "idle" rather than a row of zeroes.
+        auto* rate = meta(channel.claimed ? rate_line(channel) : QString{});
+        rate->setAttribute(Qt::WA_TransparentForMouseEvents);
+        rate->setVisible(channel.claimed);
+        layout->addWidget(rate);
 
         // A strip of the worst area's pressure, so the strip reads at a
         // glance without opening each channel.

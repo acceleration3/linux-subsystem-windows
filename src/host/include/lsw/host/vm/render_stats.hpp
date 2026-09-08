@@ -49,7 +49,22 @@ struct ChannelPressure {
     }
     QVector<AreaPressure> areas;
 
+    // What the channel is carrying, per second, worked out from two
+    // samples of the running totals the server publishes. Zero for a
+    // channel nobody has claimed, and zero for an idle one — which are
+    // different situations that ``claimed`` tells apart.
+    double commands_per_second = 0.0;
+    double bytes_per_second = 0.0;
+    double frames_per_second = 0.0;
+
     [[nodiscard]] AreaPressure::State worst() const;
+
+    // The previous sample, kept so the next one has something to
+    // subtract from.
+    quint64 last_commands = 0;
+    quint64 last_bytes = 0;
+    quint64 last_frames = 0;
+    qint64 last_sampled_ms = 0;
 };
 
 // What the render server is telling us about its own congestion.

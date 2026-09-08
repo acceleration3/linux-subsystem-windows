@@ -36,6 +36,7 @@ Q_SIGNALS:
 
 private:
     void rebuild();
+    [[nodiscard]] static QString rate_line(const vm::ChannelPressure& channel);
     void select(int channel);
 
     vm::RenderStats& stats_;

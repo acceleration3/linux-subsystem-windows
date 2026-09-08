@@ -1,3 +1,4 @@
+#include <QDateTime>
 #include "lsw/host/vm/render_stats.hpp"
 
 #include "lsw/base/log.hpp"
@@ -119,6 +120,42 @@ void adopt(ChannelPressure& channel, const rvk::wire::RegionCounters& counters) 
 // as abandoned — which is what the page showed. The transport draws the
 // same distinction from the other side; see claim_holder_alive.
 constexpr std::uint32_t kGuestClaim = 0x80000000U;
+
+// Running totals into rates.
+//
+// The server publishes what it has carried since the session began and
+// nothing about time, which is right: it has no idea how often anything
+// is looking. Two samples and the clock between them are the reader's
+// business.
+void adopt_throughput(ChannelPressure& channel,
+                      const rvk::wire::RegionThroughput& totals) {
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    const qint64 elapsed = now - channel.last_sampled_ms;
+    // A first sample has nothing to subtract from, and a counter that
+    // went backwards is a new session on the same region rather than
+    // negative work.
+    const bool usable = channel.last_sampled_ms != 0 && elapsed > 0
+                        && totals.commands >= channel.last_commands
+                        && totals.frames >= channel.last_frames;
+    if (usable) {
+        const double seconds = static_cast<double>(elapsed) / 1000.0;
+        channel.commands_per_second =
+            static_cast<double>(totals.commands - channel.last_commands) / seconds;
+        channel.bytes_per_second =
+            static_cast<double>((totals.command_bytes + totals.reply_bytes)
+                                - channel.last_bytes) / seconds;
+        channel.frames_per_second =
+            static_cast<double>(totals.frames - channel.last_frames) / seconds;
+    } else {
+        channel.commands_per_second = 0.0;
+        channel.bytes_per_second = 0.0;
+        channel.frames_per_second = 0.0;
+    }
+    channel.last_commands = totals.commands;
+    channel.last_bytes = totals.command_bytes + totals.reply_bytes;
+    channel.last_frames = totals.frames;
+    channel.last_sampled_ms = now;
+}
 
 bool alive(std::uint32_t claim) {
     if (claim == 0) {
@@ -284,6 +321,7 @@ void RenderStats::poll_regions(const QString& region_prefix) {
         // Counters move far more often than ownership does, and a page
         // that only redraws when a channel changes hands shows numbers
         // that were true the last time somebody claimed one.
+        const double was_rate = channel.commands_per_second;
         QVector<quint64> was_events;
         was_events.reserve(channel.areas.size());
         for (const auto& area : channel.areas) {
@@ -309,6 +347,7 @@ void RenderStats::poll_regions(const QString& region_prefix) {
                 channel.areas[kReply].configured_kib = header.reply_bytes >> 10;
                 channel.areas[kBlob].configured_kib = header.blob_bytes >> 10;
                 adopt(channel, header.counters);
+                adopt_throughput(channel, header.throughput);
             }
         }
         touched = touched || channel.claimed != was_claimed
@@ -316,6 +355,7 @@ void RenderStats::poll_regions(const QString& region_prefix) {
         for (int a = 0; a < channel.areas.size() && a < was_events.size(); ++a) {
             touched = touched || channel.areas[a].events != was_events[a];
         }
+        touched = touched || channel.commands_per_second != was_rate;
     }
     if (touched) {
         Q_EMIT updated();
