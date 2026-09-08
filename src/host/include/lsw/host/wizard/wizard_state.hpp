@@ -27,9 +27,19 @@ struct WizardState {
     QString user_name = "lsw";
     QString user_password = "lsw";
     QString computer_name;  // Windows hostname; empty → VM name
-    // How much of Windows to remove from install.wim before the guest
-    // is installed from it. Chosen on DebloatPage.
-    provision::debloat::DebloatLevel debloat = provision::debloat::DebloatLevel::Sane;
+    // How much of Windows to remove from install.wim, and whether it
+    // has already been removed.
+    //
+    // Trimming is a tool now, not a step, so the usual answer is "the
+    // user did not run it". That does NOT make the preparation pass
+    // optional: the setup bypasses live in the offline registry, and
+    // without them Windows Setup refuses this domain outright. So an
+    // untouched image still goes through the stager at ``None``, which
+    // writes the bypasses and takes nothing out.
+    provision::debloat::DebloatLevel debloat = provision::debloat::DebloatLevel::None;
+    // Set when ``chosen_iso_path`` came out of the trim tool, which has
+    // already done that pass.
+    bool iso_prepared = false;
     // 1-based WIM image index chosen on VmSizePage (which Windows
     // edition to install). 1 when unknown / Microsoft-download path.
     int image_index = 1;
@@ -39,7 +49,6 @@ struct WizardState {
     QString fido_edition_label;
     QString fido_preferred_arch = "x64";
     QString fido_download_url;
-    bool microsoft_banned = false;
 };
 
 }  // namespace lsw::host::wizard

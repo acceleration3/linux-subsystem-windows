@@ -1,36 +1,26 @@
 #pragma once
 
-#include "lsw/host/provision/iso/catalog.hpp"
-#include "lsw/host/provision/iso/windows_edition.hpp"
-#include "lsw/host/provision/iso/microsoft_client.hpp"
-#include "lsw/host/provision/iso/source_fetcher.hpp"
-
-#include <QButtonGroup>
-#include <QComboBox>
-#include <QGroupBox>
-#include <QLabel>
-#include <QLineEdit>
-#include <QRadioButton>
 #include <QWizardPage>
+
+class QLabel;
+class QLineEdit;
+class QPushButton;
 
 namespace lsw::host::wizard {
 
 class Wizard;
 
-// Step 3: pick how to get the Windows ISO. Two mutually-exclusive modes
-// (enforced by a shared QButtonGroup — ``QRadioButton``s nested in
-// separate ``QGroupBox``es do NOT auto-exclude each other, only their
-// siblings within the same parent):
-//   * Download: edition + language (SKU) chosen here. ``MicrosoftClient``
-//     lives on this page so we can ``fetch_skus`` eagerly when the
-//     edition changes and ``fetch_download_url`` synchronously when the
-//     user clicks Next. On a 715-123130 (Type=9) ban during URL resolve
-//     we red-outline the box, disable the radio, and stay on the page —
-//     we never advance to a doomed download.
-//   * Browse: user provides a local file.
+// Which image to install.
 //
-// The download list is populated dynamically by ``IsoSourceFetcher``;
-// no static catalog ships with the binary.
+// One field. Getting an image and shrinking one are both tools, opened
+// from the buttons below it, and neither is on the path to Next: they
+// write an ISO somewhere and hand back its path, and a failure in
+// either leaves this field exactly as it was.
+//
+// It used to be two radio cards, one of which was a whole Microsoft
+// download flow with its own edition list, session, SKU query and ban
+// state. Downloading is not an alternative way to answer the question
+// this page asks, it is a thing that produces an answer.
 class IsoChoicePage : public QWizardPage {
     Q_OBJECT
 public:
@@ -38,58 +28,21 @@ public:
 
     void initializePage() override;
     [[nodiscard]] bool isComplete() const override;
-    [[nodiscard]] int nextId() const override;
     bool validatePage() override;
-
-private Q_SLOTS:
-    void on_browse_clicked();
-    void on_mode_changed();
-    void on_edition_changed();
-    void on_editions_ready(const QList<provision::iso::WindowsEdition>& editions);
-    void on_fetch_failed(const QString& message);
-
-    void on_ms_initialized();
-    void on_ms_initialization_failed(const QString& message);
-    void on_skus_ready(const QList<provision::iso::MsSku>& skus);
-    void on_download_url_ready(const QString& url);
-    void on_ms_failed(const QString& message);
-    void on_ms_banned();
+    [[nodiscard]] int nextId() const override;
 
 private:
-    // Apply the red-outlined "download disabled" treatment with the
-    // given user-facing reason. Idempotent. Used by both the live
-    // poll-failure path and the persistent ban flag in WizardState.
-    void apply_blocked_state(const QString& reason);
-
-    // Kick off ms_.fetch_skus for the currently selected edition iff
-    // the MS session is initialized and we don't already have SKUs for
-    // it. Cancels staleness via ``current_skus_edition_id_``.
-    void maybe_fetch_skus();
+    void describe_image();
+    void open_download_tool();
+    void open_trim_tool();
 
     Wizard& wizard_;
-    provision::iso::IsoSourceFetcher fetcher_;
-    provision::iso::MicrosoftClient ms_;
-    QList<provision::iso::WindowsEdition> editions_;
-    QList<provision::iso::MsSku> skus_;
-
-    QButtonGroup* mode_group_ = nullptr;
-    QGroupBox* dl_box_ = nullptr;
-    QRadioButton* download_radio_ = nullptr;
-    QRadioButton* browse_radio_ = nullptr;
-    QComboBox* edition_combo_ = nullptr;
-    QComboBox* language_combo_ = nullptr;
-    QLabel* fetch_status_ = nullptr;
     QLineEdit* path_edit_ = nullptr;
-
-    // ---- Async pipeline state ----
-    bool ms_init_in_flight_ = false;
-    bool ms_initialized_ = false;
-    bool fetching_skus_ = false;
-    int current_skus_edition_id_ = 0;  // ignore stale fetch_skus replies
-    bool resolving_url_ = false;
-    bool url_resolved_ = false;  // makes the post-resolve validatePage() return true
-    QString resolved_url_;
-    bool blocked_ = false;  // microsoft.com poll failed OR Microsoft returned a Type=9 ban
+    QLabel* detail_ = nullptr;
+    QPushButton* trim_button_ = nullptr;
+    // Set when the path came out of the trim tool, which has already
+    // run the preparation pass the installer needs.
+    bool prepared_ = false;
 };
 
 }  // namespace lsw::host::wizard

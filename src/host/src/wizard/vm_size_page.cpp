@@ -204,18 +204,15 @@ bool VmSizePage::validatePage() {
     const QVariant idx = edition_combo_->currentData();
     s.image_index = idx.isValid() ? idx.toInt() : 1;
 
-    // The pipeline is NOT started here. The trim page after this one
-    // needs a local ISO and the edition index chosen above, and it does
-    // its work before the pipeline exists; starting it now would race
-    // it to the same image.
+    // This is the last page that gathers anything, so the pipeline
+    // starts here. It used to start on the trim page, which no longer
+    // exists: trimming is a tool, run before this point or not at all.
+    wizard_.start_pipeline();
     return true;
 }
 
 int VmSizePage::nextId() const {
-    // Either way the next stop is the trim, which needs the image on
-    // disk: a local ISO is already there, a Microsoft one goes through
-    // DownloadPage first.
-    return wizard_.state().chosen_iso_path.isEmpty() ? Wizard::Download : Wizard::Debloat;
+    return Wizard::Payload;
 }
 
 }  // namespace lsw::host::wizard
