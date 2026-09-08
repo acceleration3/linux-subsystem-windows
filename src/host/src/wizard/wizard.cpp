@@ -13,8 +13,10 @@
 #include "lsw/host/ui/theme.hpp"
 
 #include <QDir>
+#include <QFrame>
 #include <QLabel>
 #include <QListWidget>
+#include <QSizePolicy>
 #include <QVBoxLayout>
 #include <QStorageInfo>
 #include <QSysInfo>
@@ -24,7 +26,12 @@ namespace lsw::host::wizard {
 
 Wizard::Wizard(services::HostServices& services, QWidget* parent) : QWizard(parent), services_(services) {
     setWindowTitle("LSW first-run wizard");
-    setWizardStyle(QWizard::ModernStyle);
+    // Classic rather than Modern. Modern paints a header band of its
+    // own, from a palette role the stylesheet cannot reach, so the one
+    // light strip in the whole application was the wizard's title.
+    // Classic draws the same title and subtitle on the page's own
+    // ground, which is the ground everything else already uses.
+    setWizardStyle(QWizard::ClassicStyle);
     setOption(QWizard::IndependentPages, false);
     setOption(QWizard::NoCancelButtonOnLastPage);
     resize(880, 620);
@@ -74,9 +81,15 @@ void Wizard::build_side_rail() {
 
     steps_ = new QListWidget;
     steps_->setObjectName(QString::fromLatin1(ui::Theme::Role::kWizardSteps));
-    steps_->setSelectionMode(QAbstractItemView::NoSelection);
+    // Selection is how the stylesheet marks the current step, so the
+    // list keeps it and gives up the mouse instead: the rail reports
+    // where you are, it is not a way to jump.
+    steps_->setSelectionMode(QAbstractItemView::SingleSelection);
     steps_->setFocusPolicy(Qt::NoFocus);
+    steps_->setAttribute(Qt::WA_TransparentForMouseEvents);
     steps_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    steps_->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    steps_->setFrameShape(QFrame::NoFrame);
     for (const auto& name : {QStringLiteral("Welcome"), QStringLiteral("Licensing"),
                              QStringLiteral("Windows ISO"),
                              QStringLiteral("Size and account"), QStringLiteral("Payload"),
@@ -84,6 +97,11 @@ void Wizard::build_side_rail() {
                              QStringLiteral("Finished")}) {
         steps_->addItem(name);
     }
+    // Sized to the eight it holds. A list left to its own sizeHint gets
+    // a scrollbar and clips the last step, which is exactly the thing
+    // the rail exists to show.
+    steps_->setFixedHeight(8 * 30);
+    steps_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
     layout->addWidget(steps_);
     layout->addStretch(1);
 

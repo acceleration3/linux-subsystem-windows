@@ -451,7 +451,8 @@ QWidget* SettingsPage::add_row(QVBoxLayout* group, const QString& key, const QSt
     head->addStretch(1);
     text->addLayout(head);
 
-    auto* body = meta(description);
+    auto* body = new QLabel(description);
+    body->setObjectName(QString::fromLatin1(Theme::Role::kBody));
     body->setWordWrap(true);
     text->addWidget(body);
 

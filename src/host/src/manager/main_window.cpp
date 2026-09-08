@@ -131,16 +131,24 @@ MainWindow::MainWindow(services::HostServices& services, QWidget* parent)
 
     stack_ = new QStackedWidget;
     right_layout->addWidget(stack_, 1);
+
+    // ---- status strip ---------------------------------------------
+    // Under the content rather than across the whole window: the rail
+    // has its own foot, and a bar that runs beneath it reads as
+    // belonging to neither.
+    auto* strip = new QWidget;
+    strip->setObjectName(QString::fromLatin1(Theme::Role::kStatusStrip));
+    auto* strip_layout = new QHBoxLayout(strip);
+    strip_layout->setContentsMargins(14, 5, 14, 5);
+    status_left_ = new QLabel;
+    status_left_->setObjectName(QString::fromLatin1(Theme::Role::kMeta));
+    strip_layout->addWidget(status_left_, 1);
+    right_layout->addWidget(strip);
+
     columns->addWidget(right, 1);
     setCentralWidget(central);
 
     build_pages();
-
-    // ---- status bar -----------------------------------------------
-    status_left_ = new QLabel;
-    status_left_->setObjectName(QString::fromLatin1(Theme::Role::kMeta));
-    statusBar()->addWidget(status_left_);
-    statusBar()->setSizeGripEnabled(false);
 
     connect(rail_, &NavRail::page_selected, this, &MainWindow::show_page);
     connect(rail_, &NavRail::start_requested, overview_, &VmDetailPanel::start_guest);
@@ -335,7 +343,7 @@ void MainWindow::refresh_identity() {
     const auto& record = services_.vms().records().first();
     auto& settings = services_.manager_settings();
     const QString detail =
-        QStringLiteral("%1\n%2 cores · %3 GiB · %4 GiB")
+        QStringLiteral("%1\n%2 cores · %3 GiB RAM\n%4 GiB disk")
             .arg(record.edition.isEmpty() ? QStringLiteral("Windows") : record.edition)
             .arg(settings.int_value(QLatin1String(K::kCpuCores)))
             .arg(settings.int_value(QLatin1String(K::kMemoryMib)) / 1024)

@@ -104,7 +104,7 @@ void SetupPage::initializePage() {
                 }
             });
     connect(p, &::lsw::host::provision::Pipeline::completed, this, [this](const QUuid&) {
-        status_label_->setText("Setup complete — VM is on the virtio-optimised config.");
+        status_label_->setText("Setup is complete. The VM is on the virtio configuration.");
         complete_ = true;
         Q_EMIT completeChanged();
         QTimer::singleShot(0, this, [this] {
@@ -140,7 +140,7 @@ void SetupPage::populate_from_plan(const QVector<::lsw::host::provision::SetupSt
         }
     }
     if (stages.isEmpty()) {
-        status_label_->setText("No setup steps configured — nothing to do.");
+        status_label_->setText("No setup steps are configured, so there is nothing to do.");
     } else if (parallel_groups > 0) {
         status_label_->setText(QStringLiteral("%1 step(s) across %2 stage(s); %3 parallel group(s).")
                                    .arg(total).arg(stages.size()).arg(parallel_groups));

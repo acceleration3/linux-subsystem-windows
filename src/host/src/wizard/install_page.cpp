@@ -76,7 +76,7 @@ void InstallPage::initializePage() {
         if (s != Step::WaitingForAgent) return;
         bar_->setRange(0, 100);
         bar_->setValue(100);
-        status_->setText("Guest agent reachable — install finished.");
+        status_->setText("The guest agent is answering. The install is finished.");
         complete_ = true;
         Q_EMIT completeChanged();
         QTimer::singleShot(0, this, [this] {

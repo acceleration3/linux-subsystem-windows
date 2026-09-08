@@ -10,6 +10,7 @@
 #include "lsw/host/vm/domain_importer.hpp"
 #include "lsw/host/wizard/wizard.hpp"
 
+#include <QDir>
 #include <QMetaObject>
 #include <QProcess>
 
@@ -88,6 +89,15 @@ bool App::forward_to_primary() {
 }
 
 int App::run() {
+    // Before the single-instance check: a screenshot run must not
+    // forward itself to whatever manager happens to be open, and it
+    // owns nothing another one would mind.
+    if (!cli_.screenshot_dir.isEmpty()) {
+        (void)services_.open();
+        (void)vm::DomainImporter::import_existing(services_.libvirt(),
+                                                  services_.settings(), services_.vms());
+        return capture_screens(cli_.screenshot_dir);
+    }
     if (forward_to_primary()) {
         return 0;
     }
@@ -124,6 +134,66 @@ int App::run() {
                                   Qt::QueuedConnection);
     }
     return exec();
+}
+
+int App::capture_screens(const QString& dir) {
+    QDir().mkpath(dir);
+    int saved = 0;
+
+    const auto shoot = [&](QWidget* widget, const QString& name) {
+        // Show it, let the layout settle, grab it. Offscreen is enough:
+        // the grab renders the widget itself rather than reading a
+        // framebuffer, so no display server is needed to see what the
+        // stylesheet did.
+        widget->show();
+        for (int i = 0; i < 4; ++i) {
+            processEvents(QEventLoop::AllEvents, 50);
+        }
+        const QString path = QDir(dir).filePath(name + QStringLiteral(".png"));
+        if (widget->grab().save(path)) {
+            ++saved;
+            LSW_INFO("screenshot: {}", path.toStdString());
+        } else {
+            LSW_WARN("screenshot: could not write {}", path.toStdString());
+        }
+    };
+
+    auto* window = new manager::MainWindow(services_);
+    window->resize(1000, 620);
+    static constexpr struct {
+        manager::NavRail::Page page;
+        const char* name;
+    } kPages[] = {
+        {manager::NavRail::Page::Overview, "manager-01-overview"},
+        {manager::NavRail::Page::Console, "manager-02-console"},
+        {manager::NavRail::Page::Log, "manager-03-log"},
+        {manager::NavRail::Page::Render, "manager-04-render"},
+        {manager::NavRail::Page::Settings, "manager-05-settings"},
+    };
+    for (const auto& entry : kPages) {
+        window->show_page(entry.page);
+        shoot(window, QString::fromLatin1(entry.name));
+    }
+    window->deleteLater();
+
+    auto* wiz = new wizard::Wizard(services_);
+    wiz->resize(880, 620);
+    for (int id = wizard::Wizard::Welcome; id <= wizard::Wizard::Done; ++id) {
+        // Straight to the page rather than through next(): the later
+        // ones validate inputs the earlier ones collect, and this is a
+        // picture of a page, not a run of the wizard.
+        wiz->setStartId(id);
+        wiz->restart();
+        shoot(wiz, QStringLiteral("wizard-%1-%2")
+                       .arg(id + 1, 2, 10, QLatin1Char('0'))
+                       .arg(QString::fromLatin1(wiz->currentPage()->objectName().isEmpty()
+                                                    ? "page"
+                                                    : "page")));
+    }
+    wiz->deleteLater();
+
+    LSW_INFO("screenshot: {} images written to {}", saved, dir.toStdString());
+    return saved > 0 ? 0 : 1;
 }
 
 void App::show_wizard() {
