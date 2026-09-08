@@ -16,6 +16,8 @@
 #                       vm        libvirt lifecycle, stats, shared-memory transport
 #                       link      the multiplexed JSON channel to the guest agent
 #                       apps      guest app catalog, per-app config, launch, logs
+#                       mirror    the window mirror a launch starts, one per
+#                                 application
 #                       ui        widgets shared by both UIs (VncView)
 #                       services  HostServices — the container everything takes
 #
@@ -24,7 +26,7 @@
 #                                 wizard UI and the --unattended CLI.
 #
 #   lsw_host_wizard     wizard    the first-run QWizard and its pages
-#   lsw_host_manager    manager   the everyday window + guest-window mirrors
+#   lsw_host_manager    manager   the everyday window
 #                       mcp       external automation surface (MCP over HTTP)
 #
 #   lsw-manager         app       composition root + entry point
