@@ -107,11 +107,14 @@ int area_fill(const AreaPressure& area) {
     }
     const double capacity = static_cast<double>(area.configured_kib * 1024ULL);
     if (area.measured) {
-        const double used =
-            static_cast<double>(qMax(area.used_bytes, area.peak_bytes)) / capacity;
-        // A floor of 1 rather than 0: an area in use is not the same
-        // picture as one nothing has touched, even when the fraction
-        // rounds away.
+        // What is in there now, not the worst it has been. The peak is
+        // the sizing answer and it is on the tile beside this; a bar
+        // drawn from it climbs once and then sits still for the rest of
+        // the session, which is a picture of a session that has stopped.
+        const double used = static_cast<double>(area.used_bytes) / capacity;
+        // A floor of 1 rather than 0: an area holding something is not
+        // the same picture as one holding nothing, even when the
+        // fraction rounds away.
         return std::clamp(static_cast<int>(used * 100.0),
                           area.used_bytes > 0 ? 1 : 0, 96);
     }
@@ -159,6 +162,24 @@ QString bytes_label(quint64 bytes) {
         return QStringLiteral("%1 KiB").arg(bytes / 1024);
     }
     return QStringLiteral("%1 B").arg(bytes);
+}
+
+// What the area is holding, and the most it ever held.
+//
+// One tile rather than two, because they are the same measurement and
+// on two of the three areas they are the same number: the reply slot
+// holds one answer at a time, so between two of them it holds nothing
+// and its high-water mark is all there is to say. That is why that card
+// sits still while the page around it moves.
+QString used_label(const AreaPressure& area) {
+    if (!area.measured) {
+        return QStringLiteral("—");
+    }
+    if (area.peak_bytes > area.used_bytes) {
+        return QStringLiteral("%1  ·  peak %2")
+            .arg(bytes_label(area.used_bytes), bytes_label(area.peak_bytes));
+    }
+    return bytes_label(area.used_bytes);
 }
 
 // A key/value tile. Several sit in a row under each area's meter.
@@ -492,10 +513,12 @@ void RenderPanel::rebuild() {
         // What the meter is drawn from, in the units the size above it
         // is written in. A bar without its number says "about a third"
         // and never which third.
-        row->addWidget(kpi(QStringLiteral("Used"),
-                           area.measured ? bytes_label(qMax(area.used_bytes,
-                                                            area.peak_bytes))
-                                         : QStringLiteral("—"),
+        //
+        // With the high-water mark after it where the two differ: the
+        // bar answers "what is in there now" and the peak answers "how
+        // big does this need to be", and the second is the reason the
+        // page exists.
+        row->addWidget(kpi(QStringLiteral("Used"), used_label(area),
                            area.measured ? Theme::Color::kFgDim
                                          : Theme::Color::kFgFaint));
         row->addWidget(kpi(QStringLiteral("Events"), QString::number(area.events),

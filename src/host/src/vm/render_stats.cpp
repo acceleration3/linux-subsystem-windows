@@ -137,9 +137,12 @@ void adopt_client(ChannelPressure& channel, const rvk::wire::RegionClientUsage& 
     // area it is an occupancy of is the tell.
     if (ring.configured_kib > 0
         && client.ring_peak_inflight <= ring.configured_kib * 1024ULL) {
-        ring.peak_bytes = qMax(ring.peak_bytes,
-                               static_cast<quint64>(client.ring_peak_inflight));
-        ring.used_bytes = ring.peak_bytes;
+        // Taken as published rather than maxed with what was here
+        // before. The guest already keeps the high-water mark for its
+        // own session; accumulating on top of that only carries one
+        // application's peak onto the next one to claim the channel.
+        ring.peak_bytes = client.ring_peak_inflight;
+        ring.used_bytes = client.ring_inflight;
         ring.measured = true;
     }
     // The sending side's count of the same events the server counts.
@@ -242,6 +245,10 @@ void adopt_throughput(ChannelPressure& channel,
         // The slot holds one answer at a time, so the largest answer
         // written IS how full it has been — the only area where those
         // two questions have the same answer.
+        // No live reading to have: the slot holds one answer, and
+        // between two of them it holds nothing. The high-water mark is
+        // the whole of what can be said, which is why this is the one
+        // card whose number sits still on a busy channel.
         channel.areas[kReply].used_bytes = channel.areas[kReply].largest_bytes;
         channel.areas[kReply].peak_bytes = channel.areas[kReply].largest_bytes;
         channel.areas[kReply].measured = true;
