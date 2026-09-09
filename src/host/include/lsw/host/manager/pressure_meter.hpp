@@ -35,6 +35,14 @@ public:
     // Both as percentages of the area's capacity, clamped to 0..100.
     void set_readings(int used_percent, int peak_percent);
 
+    // A bar is as tall as it is told to be and as wide as it is given.
+    // Stated here rather than left to the stylesheet: a QWidget with no
+    // size hint collapses to nothing in a layout, and a rule that fails
+    // to match then takes the whole bar with it rather than just its
+    // colours.
+    [[nodiscard]] QSize sizeHint() const override;
+    [[nodiscard]] QSize minimumSizeHint() const override;
+
     [[nodiscard]] QColor track() const noexcept;
     void set_track(const QColor& colour);
     [[nodiscard]] QColor fill() const noexcept;

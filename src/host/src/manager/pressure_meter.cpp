@@ -3,6 +3,7 @@
 #include <algorithm>
 
 #include <QPainter>
+#include <QSizePolicy>
 #include <QPainterPath>
 
 namespace lsw::host::manager {
@@ -12,11 +13,15 @@ namespace {
 // The bar's corner radius, matching the track it is drawn in.
 constexpr double kRadius = 3.0;
 
+// The bar's thickness, as QProgressBar#Meter was given in the
+// stylesheet before this widget replaced it.
+constexpr int kThickness = 7;
+
 // How much of the fill colour the peak band keeps. Enough to read as
 // the same colour at a glance and not enough to be mistaken for the
 // live figure — the two are side by side and the eye has to tell which
 // edge is which.
-constexpr int kPeakAlpha = 90;
+constexpr int kPeakAlpha = 125;
 
 // A band that is a whole pixel wide however small the fraction is. A
 // peak of a third of a per cent is still a peak, and a band rounded
@@ -30,7 +35,14 @@ double band_width(int percent, double full) {
 
 }  // namespace
 
-PressureMeter::PressureMeter(QWidget* parent) : QWidget(parent) {}
+PressureMeter::PressureMeter(QWidget* parent) : QWidget(parent) {
+    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    setAttribute(Qt::WA_TransparentForMouseEvents);
+}
+
+QSize PressureMeter::sizeHint() const { return {0, kThickness}; }
+
+QSize PressureMeter::minimumSizeHint() const { return {0, kThickness}; }
 
 void PressureMeter::set_readings(int used_percent, int peak_percent) {
     const int used = std::clamp(used_percent, 0, 100);
