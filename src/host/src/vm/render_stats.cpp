@@ -145,6 +145,14 @@ void adopt_client(ChannelPressure& channel, const rvk::wire::RegionClientUsage& 
         ring.used_bytes = client.ring_inflight;
         ring.measured = true;
     }
+    // What actually says the ring is too small. A ring that never made
+    // the producer stop is big enough however little of it is in use at
+    // any instant, and one that did is not, however empty it looks
+    // between the stalls.
+    ring.waits = client.ring_space_waits;
+    if (ring.waits > 0 && ring.state == AreaPressure::State::Healthy) {
+        ring.state = state_for(ring.waits);
+    }
     // The sending side's count of the same events the server counts.
     // Taken only where the server has nothing, so the two never
     // disagree on screen: the server's is what actually arrived.
@@ -169,6 +177,7 @@ void adopt_client(ChannelPressure& channel, const rvk::wire::RegionClientUsage& 
     if (blob.configured_kib > 0 && client.blob_in_use <= blob.configured_kib * 1024ULL) {
         blob.used_bytes = client.blob_in_use;
         blob.peak_bytes = client.blob_peak;
+        blob.blocks = client.blob_blocks;
         blob.measured = true;
     }
     if (client.blob_failures > 0) {
@@ -275,7 +284,19 @@ bool alive(std::uint32_t claim) {
 }  // namespace
 
 QString AreaPressure::advice() const {
-    if (state == State::Healthy || suggested_kib == 0) {
+    if (state == State::Healthy) {
+        return {};
+    }
+    // A ring that stalled for room says so even without a recommended
+    // size: nothing split, so the server never had cause to name one,
+    // and the diagnosis is the wait itself.
+    if (waits > 0 && name.startsWith(QLatin1String("Command"))) {
+        return QStringLiteral(
+                   "The producer stopped and waited for ring space %1 times. The ring "
+                   "is not draining fast enough to stay ahead of this workload.")
+            .arg(waits);
+    }
+    if (suggested_kib == 0) {
         return {};
     }
     if (name.startsWith(QLatin1String("Command"))) {
@@ -323,13 +344,14 @@ void RenderStats::set_channel_count(int channels) {
     for (int i = before; i < wanted; ++i) {
         ChannelPressure channel;
         channel.index = i;
+        // Named, not positional: every field after the name has a
+        // default that says the same thing, and a positional list has
+        // to be recounted every time one is added — which it was not,
+        // and the state landed in a counter.
         channel.areas = {
-            AreaPressure{QStringLiteral("Command ring"), 0, 0, 0, 0, 0,
-                         AreaPressure::State::Healthy},
-            AreaPressure{QStringLiteral("Reply slot"), 0, 0, 0, 0, 0,
-                         AreaPressure::State::Healthy},
-            AreaPressure{QStringLiteral("Blob arena"), 0, 0, 0, 0, 0,
-                         AreaPressure::State::Healthy},
+            AreaPressure{.name = QStringLiteral("Command ring")},
+            AreaPressure{.name = QStringLiteral("Reply slot")},
+            AreaPressure{.name = QStringLiteral("Blob arena")},
         };
         channels_[i] = channel;
     }
@@ -544,6 +566,8 @@ void RenderStats::reset() {
             a.suggested_kib = 0;
             a.used_bytes = 0;
             a.peak_bytes = 0;
+            a.waits = 0;
+            a.blocks = 0;
             a.measured = false;
             a.state = AreaPressure::State::Healthy;
         }

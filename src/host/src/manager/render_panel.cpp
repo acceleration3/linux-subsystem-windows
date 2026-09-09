@@ -9,6 +9,8 @@
 
 #include <algorithm>
 #include <QProgressBar>
+
+#include "lsw/host/manager/pressure_meter.hpp"
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSizePolicy>
@@ -107,10 +109,8 @@ int area_fill(const AreaPressure& area) {
     }
     const double capacity = static_cast<double>(area.configured_kib * 1024ULL);
     if (area.measured) {
-        // What is in there now, not the worst it has been. The peak is
-        // the sizing answer and it is on the tile beside this; a bar
-        // drawn from it climbs once and then sits still for the rest of
-        // the session, which is a picture of a session that has stopped.
+        // What is in there now. The worst it has ever been is the other
+        // band, drawn behind this one by area_peak_fill.
         const double used = static_cast<double>(area.used_bytes) / capacity;
         // A floor of 1 rather than 0: an area holding something is not
         // the same picture as one holding nothing, even when the
@@ -125,6 +125,20 @@ int area_fill(const AreaPressure& area) {
         return std::clamp(static_cast<int>(used * 100.0), 1, 96);
     }
     return 2;
+}
+
+// The band behind the live one: the most this area has ever held.
+//
+// Nothing to draw where nothing has published an occupancy — the bar
+// then shows only what area_fill could infer, and a peak band invented
+// to sit behind it would be a second reading of the same guess.
+int area_peak_fill(const AreaPressure& area) {
+    if (!area.measured || area.configured_kib == 0 || area.peak_bytes == 0) {
+        return 0;
+    }
+    const double capacity = static_cast<double>(area.configured_kib * 1024ULL);
+    const double peak = static_cast<double>(area.peak_bytes) / capacity;
+    return std::clamp(static_cast<int>(peak * 100.0), 1, 96);
 }
 
 int fill_percent(const ChannelPressure& channel) {
@@ -162,24 +176,6 @@ QString bytes_label(quint64 bytes) {
         return QStringLiteral("%1 KiB").arg(bytes / 1024);
     }
     return QStringLiteral("%1 B").arg(bytes);
-}
-
-// What the area is holding, and the most it ever held.
-//
-// One tile rather than two, because they are the same measurement and
-// on two of the three areas they are the same number: the reply slot
-// holds one answer at a time, so between two of them it holds nothing
-// and its high-water mark is all there is to say. That is why that card
-// sits still while the page around it moves.
-QString used_label(const AreaPressure& area) {
-    if (!area.measured) {
-        return QStringLiteral("—");
-    }
-    if (area.peak_bytes > area.used_bytes) {
-        return QStringLiteral("%1  ·  peak %2")
-            .arg(bytes_label(area.used_bytes), bytes_label(area.peak_bytes));
-    }
-    return bytes_label(area.used_bytes);
 }
 
 // A key/value tile. Several sit in a row under each area's meter.
@@ -495,13 +491,12 @@ void RenderPanel::rebuild() {
         body->setContentsMargins(12, 12, 12, 12);
         body->setSpacing(11);
 
-        // How full it is. The one number that says whether the rest of
-        // the row matters.
-        auto* meter = new QProgressBar;
+        // How full it is now, over how full it has ever been. Two
+        // readings of one area, drawn as two bands of one colour:
+        // filling to either alone throws the other away.
+        auto* meter = new PressureMeter;
         meter->setObjectName(QString::fromLatin1(Theme::Role::kMeter));
-        meter->setTextVisible(false);
-        meter->setRange(0, 100);
-        meter->setValue(area_fill(area));
+        meter->set_readings(area_fill(area), area_peak_fill(area));
         meter->setProperty("pressure", QString::fromLatin1(state_key(area.state)));
         body->addWidget(meter);
 
@@ -510,21 +505,51 @@ void RenderPanel::rebuild() {
         auto* row = new QHBoxLayout(grid);
         row->setContentsMargins(1, 1, 1, 1);
         row->setSpacing(1);
-        // What the meter is drawn from, in the units the size above it
-        // is written in. A bar without its number says "about a third"
-        // and never which third.
+        // The two bands of the meter, in the units the size in the
+        // card's header is written in. A bar without its numbers says
+        // "about a third" and never which third.
         //
-        // With the high-water mark after it where the two differ: the
-        // bar answers "what is in there now" and the peak answers "how
-        // big does this need to be", and the second is the reason the
-        // page exists.
-        row->addWidget(kpi(QStringLiteral("Used"), used_label(area),
+        // Two tiles, because they are two measurements: what is in
+        // there now, and how big the area has to be. The second is the
+        // reason the page exists, and it does not belong inside the
+        // first one's label.
+        row->addWidget(kpi(QStringLiteral("Used"),
+                           area.measured ? bytes_label(area.used_bytes)
+                                         : QStringLiteral("—"),
+                           area.measured ? Theme::Color::kFgDim
+                                         : Theme::Color::kFgFaint));
+        row->addWidget(kpi(QStringLiteral("Peak"),
+                           area.measured ? bytes_label(area.peak_bytes)
+                                         : QStringLiteral("—"),
                            area.measured ? Theme::Color::kFgDim
                                          : Theme::Color::kFgFaint));
         row->addWidget(kpi(QStringLiteral("Events"), QString::number(area.events),
                            area.events > 0 ? colour_for(area.state) : Theme::Color::kFgDim));
-        row->addWidget(kpi(QStringLiteral("Extra trips"),
-                           QString::number(area.extra_trips), Theme::Color::kFgDim));
+        // The second reading is a different one per area, because the
+        // three fail differently. "Extra trips" on the ring card was a
+        // column that could only ever read zero — extra trips are what
+        // an answer costs, and the ring does not carry answers.
+        {
+            QString key = QStringLiteral("Extra trips");
+            QString value = QString::number(area.extra_trips);
+            const char* colour = Theme::Color::kFgDim;
+            if (area.name.startsWith(QLatin1String("Command"))) {
+                // What says the ring is too small. Not its depth: a
+                // pipe that is empty is a pipe that is keeping up.
+                key = QStringLiteral("Waits");
+                value = QString::number(area.waits);
+                colour = area.waits > 0 ? colour_for(area.state) : Theme::Color::kFgDim;
+            } else if (area.name.startsWith(QLatin1String("Blob"))) {
+                // Fragmentation. An arena with room to spare that
+                // cannot find a long enough run is a different problem
+                // from one that is simply too small.
+                key = QStringLiteral("Blocks");
+                value = area.measured ? QString::number(area.blocks)
+                                      : QStringLiteral("\u2014");
+                colour = area.measured ? Theme::Color::kFgDim : Theme::Color::kFgFaint;
+            }
+            row->addWidget(kpi(key, value, colour));
+        }
         // A dash rather than "0 B": nothing has been measured is a
         // different statement from the largest thing was empty, and the
         // blob arena is carved in the guest so nothing here ever

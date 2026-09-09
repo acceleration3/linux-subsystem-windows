@@ -504,21 +504,33 @@ QLabel#Callout {
    when operations are splitting. The id is named alongside the property
    because an id selector outranks a bare attribute one, and the chunk
    would otherwise keep the default fill whatever the pressure says. */
-QProgressBar#Meter, QProgressBar#MiniBar {
+QProgressBar#MiniBar {
     background-color: #20252f;
     border: none;
     border-radius: 3px;
+    min-height: 3px;
+    max-height: 3px;
 }
-QProgressBar#Meter { min-height: 7px; max-height: 7px; }
-QProgressBar#MiniBar { min-height: 3px; max-height: 3px; border-radius: 2px; }
-QProgressBar#Meter::chunk, QProgressBar#MiniBar::chunk {
+QProgressBar#MiniBar::chunk {
     border-radius: 3px;
     background-color: #4ec98a;
 }
-QProgressBar#Meter[pressure="hot"]::chunk,
 QProgressBar#MiniBar[pressure="hot"]::chunk  { background-color: #ff9f45; }
-QProgressBar#Meter[pressure="crit"]::chunk,
 QProgressBar#MiniBar[pressure="crit"]::chunk { background-color: #f2555a; }
+
+/* The area meter paints two readings, so it is a widget of its own and
+   takes its colours as properties rather than as a chunk fill. Same
+   three pressure colours as the mini bar above; the paler band behind
+   the live figure is derived from `fill` in the widget, because it is
+   the same reading at its worst and wants the same hue. */
+PressureMeter#Meter {
+    min-height: 7px;
+    max-height: 7px;
+    qproperty-track: #20252f;
+    qproperty-fill: #4ec98a;
+}
+PressureMeter#Meter[pressure="hot"]  { qproperty-fill: #ff9f45; }
+PressureMeter#Meter[pressure="crit"] { qproperty-fill: #f2555a; }
 
 QWidget#PanelHeader {
     background-color: #131720;
