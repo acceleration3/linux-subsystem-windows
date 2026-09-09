@@ -523,14 +523,20 @@ QProgressBar#MiniBar[pressure="crit"]::chunk { background-color: #f2555a; }
    three pressure colours as the mini bar above; the paler band behind
    the live figure is derived from `fill` in the widget, because it is
    the same reading at its worst and wants the same hue. */
-PressureMeter#Meter {
-    min-height: 7px;
-    max-height: 7px;
+/* Selected through QWidget, not through the class's own name: the
+   class lives in a namespace, so its metaobject name is
+   lsw::host::manager::PressureMeter and a stylesheet type selector for
+   it has to be spelled lsw--host--manager--PressureMeter. A type
+   selector matches subclasses, and nothing else in this window is
+   called Meter, so the base class and the object name are enough — and
+   they cannot be silently invalidated by the class moving namespace.
+   The widget sizes itself; only the colours come from here. */
+QWidget#Meter {
     qproperty-track: #20252f;
     qproperty-fill: #4ec98a;
 }
-PressureMeter#Meter[pressure="hot"]  { qproperty-fill: #ff9f45; }
-PressureMeter#Meter[pressure="crit"] { qproperty-fill: #f2555a; }
+QWidget#Meter[pressure="hot"]  { qproperty-fill: #ff9f45; }
+QWidget#Meter[pressure="crit"] { qproperty-fill: #f2555a; }
 
 QWidget#PanelHeader {
     background-color: #131720;
