@@ -114,6 +114,68 @@ void adopt(ChannelPressure& channel, const rvk::wire::RegionCounters& counters) 
     }
 }
 
+// What the guest publishes about the two areas it owns.
+//
+// The server can only report what reached it, and two of the three
+// areas on the page are not its to report at all: the blob arena is
+// carved inside the guest, and how full the ring runs is known only to
+// the process filling it. Both were therefore permanently blank —
+// events at zero, no recommendation, and a meter with nothing behind
+// it — on a channel that was working perfectly hard.
+//
+// ``published_ns`` of zero is a guest that predates this block. Its
+// zeroes are not measurements and nothing here is taken from them.
+void adopt_client(ChannelPressure& channel, const rvk::wire::RegionClientUsage& client) {
+    if (client.published_ns == 0) {
+        return;
+    }
+
+    auto& ring = channel.areas[kRing];
+    // Believable for the same reason the throughput largests are
+    // checked: a field written at a different offset by an older build
+    // arrives as a plausible integer, and an occupancy larger than the
+    // area it is an occupancy of is the tell.
+    if (ring.configured_kib > 0
+        && client.ring_peak_inflight <= ring.configured_kib * 1024ULL) {
+        ring.peak_bytes = qMax(ring.peak_bytes,
+                               static_cast<quint64>(client.ring_peak_inflight));
+        ring.used_bytes = ring.peak_bytes;
+        ring.measured = true;
+    }
+    // The sending side's count of the same events the server counts.
+    // Taken only where the server has nothing, so the two never
+    // disagree on screen: the server's is what actually arrived.
+    if (ring.events == 0 && client.chunked_commands > 0) {
+        ring.events = client.chunked_commands;
+        ring.largest_bytes = qMax(ring.largest_bytes,
+                                  static_cast<quint64>(client.chunked_largest_bytes));
+        ring.state = state_for(ring.events);
+    }
+
+    auto& reply = channel.areas[kReply];
+    if (reply.events == 0 && client.partial_replies > 0) {
+        reply.events = client.partial_replies;
+        reply.extra_trips = client.reply_extra_trips;
+        reply.largest_bytes = qMax(reply.largest_bytes,
+                                   static_cast<quint64>(client.reply_largest_bytes));
+        reply.state = state_for(reply.events);
+    }
+
+    // The blob arena, which has no other source at all.
+    auto& blob = channel.areas[kBlob];
+    if (blob.configured_kib > 0 && client.blob_in_use <= blob.configured_kib * 1024ULL) {
+        blob.used_bytes = client.blob_in_use;
+        blob.peak_bytes = client.blob_peak;
+        blob.measured = true;
+    }
+    if (client.blob_failures > 0) {
+        blob.events = client.blob_failures;
+        blob.largest_bytes = client.blob_largest_failure;
+        blob.suggested_kib = client.blob_suggest_mib * 1024ULL;
+        blob.state = state_for(blob.events);
+    }
+}
+
 // Whether whoever holds a claim is still running.
 //
 // The claim word is a process id from one side or the other, and the
@@ -177,6 +239,12 @@ void adopt_throughput(ChannelPressure& channel,
         channel.areas[kReply].largest_bytes =
             std::max(channel.areas[kReply].largest_bytes,
                      static_cast<quint64>(totals.largest_reply_bytes));
+        // The slot holds one answer at a time, so the largest answer
+        // written IS how full it has been — the only area where those
+        // two questions have the same answer.
+        channel.areas[kReply].used_bytes = channel.areas[kReply].largest_bytes;
+        channel.areas[kReply].peak_bytes = channel.areas[kReply].largest_bytes;
+        channel.areas[kReply].measured = true;
     }
 
     channel.last_commands = totals.commands;
@@ -219,7 +287,7 @@ QString AreaPressure::advice() const {
             .arg(size_label(suggested_kib));
     }
     return QStringLiteral(
-               "%1 allocations found no run large enough. The server asks for %2 or more.")
+               "%1 allocations found no run large enough. The arena asks for %2 or more.")
         .arg(events)
         .arg(size_label(suggested_kib));
 }
@@ -351,9 +419,12 @@ void RenderStats::poll_regions(const QString& region_prefix) {
         // that were true the last time somebody claimed one.
         const double was_rate = channel.commands_per_second;
         QVector<quint64> was_events;
+        QVector<quint64> was_used;
         was_events.reserve(channel.areas.size());
+        was_used.reserve(channel.areas.size());
         for (const auto& area : channel.areas) {
             was_events.push_back(area.events);
+            was_used.push_back(area.used_bytes);
         }
 
         channel.claimed = false;
@@ -376,12 +447,14 @@ void RenderStats::poll_regions(const QString& region_prefix) {
                 channel.areas[kBlob].configured_kib = header.blob_bytes >> 10;
                 adopt(channel, header.counters);
                 adopt_throughput(channel, header.throughput);
+                adopt_client(channel, header.client);
             }
         }
         touched = touched || channel.claimed != was_claimed
                   || channel.owner_pid != was_owner;
         for (int a = 0; a < channel.areas.size() && a < was_events.size(); ++a) {
-            touched = touched || channel.areas[a].events != was_events[a];
+            touched = touched || channel.areas[a].events != was_events[a]
+                      || channel.areas[a].used_bytes != was_used[a];
         }
         touched = touched || channel.commands_per_second != was_rate;
     }
@@ -462,6 +535,9 @@ void RenderStats::reset() {
             a.extra_trips = 0;
             a.largest_bytes = 0;
             a.suggested_kib = 0;
+            a.used_bytes = 0;
+            a.peak_bytes = 0;
+            a.measured = false;
             a.state = AreaPressure::State::Healthy;
         }
     }
