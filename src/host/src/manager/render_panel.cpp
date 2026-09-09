@@ -87,9 +87,14 @@ const char* state_key(AreaPressure::State state) {
     return "ok";
 }
 
-// How full an area is, as a percentage. Events are what is known when
-// the server has published counters; a quiet area reads as its share of
-// the region so the bar is not simply empty.
+// How full an area is, as a percentage.
+//
+// Occupancy where somebody measures it — the arena's bytes in use, the
+// ring's high-water mark, the largest answer the reply slot has held.
+// The largest single payload stood in for this and was the wrong
+// reading: a 1 MiB ring cycling 877,000 commands through reported the
+// biggest one of them at 3.8 KiB, which is 0.3% and a bar that never
+// moved off its floor.
 int area_fill(const AreaPressure& area) {
     if (area.state == AreaPressure::State::Congested) {
         return 96;
@@ -97,16 +102,26 @@ int area_fill(const AreaPressure& area) {
     if (area.state == AreaPressure::State::Tight) {
         return 72;
     }
-    // How close the biggest thing carried came to the size of the area
-    // it had to fit in. This is the reading the bar was standing in for
-    // with a constant: an area at a tenth of its size has room, and one
-    // at four fifths is about to start splitting payloads.
-    if (area.configured_kib > 0 && area.largest_bytes > 0) {
-        const double used = static_cast<double>(area.largest_bytes)
-                            / static_cast<double>(area.configured_kib * 1024ULL);
+    if (area.configured_kib == 0) {
+        return 0;
+    }
+    const double capacity = static_cast<double>(area.configured_kib * 1024ULL);
+    if (area.measured) {
+        const double used =
+            static_cast<double>(qMax(area.used_bytes, area.peak_bytes)) / capacity;
+        // A floor of 1 rather than 0: an area in use is not the same
+        // picture as one nothing has touched, even when the fraction
+        // rounds away.
+        return std::clamp(static_cast<int>(used * 100.0),
+                          area.used_bytes > 0 ? 1 : 0, 96);
+    }
+    // Nothing has published an occupancy. The largest payload is what
+    // is left to say anything at all with.
+    if (area.largest_bytes > 0) {
+        const double used = static_cast<double>(area.largest_bytes) / capacity;
         return std::clamp(static_cast<int>(used * 100.0), 1, 96);
     }
-    return area.configured_kib == 0 ? 0 : 2;
+    return 2;
 }
 
 int fill_percent(const ChannelPressure& channel) {
@@ -371,9 +386,21 @@ void RenderPanel::rebuild() {
     }
 
     const auto& channel = channels.at(selected_);
-    const int region_mib = settings_.int_value(QLatin1String(K::kBlobMib))
-                           + settings_.int_value(QLatin1String(K::kRingKib)) / 1024
-                           + settings_.int_value(QLatin1String(K::kReplyKib)) / 1024;
+    // Added up from the areas as the region carries them, not from the
+    // settings. A channel already running keeps the sizes it started
+    // with, so the settings describe the next one and not this one —
+    // and a number that moves when a spin box does, while the channel
+    // it names has not changed, is worse than no number.
+    quint64 region_kib = 0;
+    for (const auto& area : channel.areas) {
+        region_kib += area.configured_kib;
+    }
+    const int region_mib =
+        region_kib > 0
+            ? static_cast<int>(region_kib / 1024)
+            : settings_.int_value(QLatin1String(K::kBlobMib))
+                  + settings_.int_value(QLatin1String(K::kRingKib)) / 1024
+                  + settings_.int_value(QLatin1String(K::kReplyKib)) / 1024;
     summary_->setText(
         QStringLiteral("Channel %1  ·  about %2 MiB  ·  %3")
             .arg(channel.index)
@@ -462,6 +489,15 @@ void RenderPanel::rebuild() {
         auto* row = new QHBoxLayout(grid);
         row->setContentsMargins(1, 1, 1, 1);
         row->setSpacing(1);
+        // What the meter is drawn from, in the units the size above it
+        // is written in. A bar without its number says "about a third"
+        // and never which third.
+        row->addWidget(kpi(QStringLiteral("Used"),
+                           area.measured ? bytes_label(qMax(area.used_bytes,
+                                                            area.peak_bytes))
+                                         : QStringLiteral("—"),
+                           area.measured ? Theme::Color::kFgDim
+                                         : Theme::Color::kFgFaint));
         row->addWidget(kpi(QStringLiteral("Events"), QString::number(area.events),
                            area.events > 0 ? colour_for(area.state) : Theme::Color::kFgDim));
         row->addWidget(kpi(QStringLiteral("Extra trips"),

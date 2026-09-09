@@ -30,6 +30,24 @@ struct AreaPressure {
     quint64 suggested_kib = 0; // the server's own recommendation, not ours
     State state = State::Healthy;
 
+    // How much of the area is actually being used, and the most that
+    // ever was. This is what the meter wants and what it did not have:
+    // the largest single payload is a different question, and on a
+    // healthy channel its answer is a fraction of a per cent of a ring
+    // that is cycling hundreds of thousands of commands through.
+    //
+    // Only the side that carves an area can say. The blob arena is
+    // carved in the guest and the ring is filled there, so both come
+    // from the client's block in the region header; the reply slot has
+    // no occupancy to speak of — the server writes one answer at a time
+    // — so its reading is the largest answer it has written.
+    quint64 used_bytes = 0;
+    quint64 peak_bytes = 0;
+    // False when nothing has published a reading, which is not the same
+    // as a reading of zero: an older guest publishes nothing, and a bar
+    // drawn at empty for it would be a measurement that was never made.
+    bool measured = false;
+
     [[nodiscard]] QString advice() const;
 };
 
@@ -76,11 +94,18 @@ struct ChannelPressure {
 // flag value verbatim. None of that was reaching anybody, because it
 // went to a log the manager did not read.
 //
-// So this reads it. The preferred source is a counters block in the
-// region header, which costs a load and no round trip; until the server
-// publishes one, the same numbers are parsed out of the warnings it
-// already prints, which is why the recommendation shown in the manager
-// is the server's number rather than one invented here.
+// So this reads it. The preferred source is the region header, which
+// costs a load and no round trip; failing that, the same numbers are
+// parsed out of the warnings the server already prints, which is why
+// the recommendation shown in the manager is the server's number rather
+// than one invented here.
+//
+// Two blocks, because two processes see different halves. The server
+// publishes what reached it and what it carried. The guest publishes
+// what only it can see: the blob arena is carved inside the guest, and
+// how full the command ring ran is known to the process filling it and
+// to nobody else — so those were blank on every channel until the guest
+// started saying.
 class RenderStats : public QObject {
     Q_OBJECT
 public:
