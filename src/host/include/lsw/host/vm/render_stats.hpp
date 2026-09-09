@@ -26,6 +26,20 @@ struct AreaPressure {
     quint64 configured_kib = 0;
     quint64 events = 0;        // splits, partial answers, failed allocations
     quint64 extra_trips = 0;   // what those splits cost
+
+    // The second reading each area has, and it is a different one per
+    // area — which is why there is no single name for it here. The ring
+    // is made to wait; the reply slot costs extra trips; the arena
+    // fragments. The tile beside the meter shows whichever of these
+    // belongs to the card it is on, rather than a column that is
+    // structurally zero on two cards out of three.
+    //
+    // ``waits`` is the ring's real pressure reading. Its depth is not:
+    // a ring is a pipe, and a pipe that is empty is a pipe that is
+    // keeping up. What says the ring is too small is the producer
+    // having had to stop and wait for room, which is this.
+    quint64 waits = 0;
+    quint64 blocks = 0;
     quint64 largest_bytes = 0; // the operation that did not fit
     quint64 suggested_kib = 0; // the server's own recommendation, not ours
     State state = State::Healthy;
