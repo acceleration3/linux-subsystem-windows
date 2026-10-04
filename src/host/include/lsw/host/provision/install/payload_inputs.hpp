@@ -32,9 +32,9 @@ struct PayloadInputs {
     QString ivshmem_driver_dir;  // optional; empty = not staged
 
     // The accel-virt driver package, as ``cmake --install`` lays it
-    // out (``AccelVirtPaths::driver_tree``): provision.ps1, adapters.txt,
-    // package\ with avgpu.sys/.inf, the user-mode drivers for both
-    // architectures and package.sha256, and loaders\{x64,x86}\OpenCL.dll.
+    // out (``AccelVirtPaths::driver_tree``): provision.ps1, package\ with
+    // avgpu.sys/.inf, the user-mode drivers for both architectures and
+    // package.sha256, and loaders\{x64,x86}\OpenCL.dll.
     // Staged whole, recursively, as ``\av`` on the ISO; the specialize
     // pass copies it to ``C:\av`` and SetupComplete runs its
     // provision.ps1 to sign and install the driver.
@@ -44,6 +44,12 @@ struct PayloadInputs {
     // because a guest whose only display is a device with no driver
     // has no desktop once the install-time VGA adapter is gone.
     QString av_driver_tree;
+    // ``\av\adapters.txt``: this host's GPU names, which provision.ps1
+    // names each GPU's INF model with (AdapterNames::render). Written in
+    // place of any adapters.txt the tree carries, which names the GPUs
+    // of whatever machine built the package. Empty writes none, and the
+    // guest names each model as the INF's static one.
+    QString av_adapter_names;
     // The Khronos Vulkan loaders, which the driver package does not
     // carry: ``vulkan-1.dll`` for x64 and for x86, staged as
     // ``\av\loaders\x64\vulkan-1.dll`` and

@@ -133,6 +133,7 @@ int main(int argc, char** argv) {
     // have: an apostrophe for XML, a comma for QEMU's option parser.
     inputs.qemu_binary = QStringLiteral("/opt/o'av/qemu/qemu-system-x86_64");
     inputs.qemu_module_dir = QStringLiteral("/opt/o'av/qemu");
+    inputs.qemu_data_dir = QStringLiteral("/opt/o'av/qemu/share");
     inputs.executor = QStringLiteral("/opt/a,b/libav_executor.so");
     inputs.renderer = QStringLiteral("/opt/av/av-renderer");
     inputs.d3d_lib_dir = QStringLiteral("/opt/av & d3d/lib");
@@ -171,6 +172,13 @@ int main(int argc, char** argv) {
           "QEMU_MODULE_DIR is passed, read back exactly");
     check(qemu_env(doc, QStringLiteral("AV_D3D_PATH")) == inputs.d3d_lib_dir,
           "AV_D3D_PATH is passed, read back exactly");
+    {
+        const QStringList all = qemu_args(doc);
+        check(all.count(QStringLiteral("-L")) == 1 &&
+                  args_after(all, QStringLiteral("-L"), QString{}).value(0) ==
+                      inputs.qemu_data_dir,
+              "an installed QEMU's data directory is passed once as -L, read back exactly");
+    }
 
     // The guest's RAM is a shared memfd.
     const QDomElement backing =
@@ -243,6 +251,7 @@ int main(int argc, char** argv) {
     install.renderer.clear();
     install.display_modes.clear();
     install.host_gpu_uuid.clear();
+    install.qemu_data_dir.clear();
     const QDomDocument install_doc =
         parse(DomainXmlBuilder::build(vm, install), "the install definition is well-formed XML");
     check(video_model(install_doc) == QStringLiteral("vga"),
@@ -260,6 +269,8 @@ int main(int argc, char** argv) {
     check(!install_gpus.value(0).contains(QStringLiteral("renderer=")) &&
               !install_gpus.value(0).contains(QStringLiteral("modes=")),
           "no renderer path and no modes leave both options out");
+    check(!qemu_args(install_doc).contains(QStringLiteral("-L")),
+          "a build tree's QEMU, with no data directory, gets no -L");
     check(!install_doc.elementsByTagName(QStringLiteral("memoryBacking")).isEmpty(),
           "guest RAM is a shared memfd with no shares too");
 

@@ -31,3 +31,6 @@ Thumbs.db
 
 # LSW-local
 generated/
+
+# Release tarballs (scripts/package-release.sh)
+dist/

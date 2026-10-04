@@ -181,6 +181,9 @@ target_link_libraries(lsw-manager
     PRIVATE LSW::CompileOptions lsw_host_wizard lsw_host_manager
 )
 target_compile_definitions(lsw-manager PRIVATE QT_NO_KEYWORDS)
+install(TARGETS lsw-manager
+        RUNTIME DESTINATION bin
+        COMPONENT ${LSW_INSTALL_COMPONENT})
 
 if(LSW_BUILD_TESTS)
     add_subdirectory(tests)

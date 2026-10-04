@@ -5,7 +5,9 @@
 #include "lsw/host/platform/accel_virt_paths.hpp"
 #include "lsw/host/platform/agent_exe_path.hpp"
 #include "lsw/host/platform/dolphin_places.hpp"
+#include "lsw/host/platform/host_gpus.hpp"
 #include "lsw/host/platform/mirror_exe_paths.hpp"
+#include "lsw/host/provision/install/adapter_names.hpp"
 #include "lsw/host/provision/install/autounattend.hpp"
 #include "lsw/host/provision/install/ivshmem_driver.hpp"
 #include "lsw/host/provision/install/payload_iso.hpp"
@@ -91,6 +93,16 @@ void PayloadIsoStager::build(const config::VmRecord& record, const PipelineInput
     }
     LSW_INFO("provision: bundling the accel-virt driver package from {}",
              payload.av_driver_tree.toStdString());
+    // What this machine's GPUs are called, for the INF models the guest
+    // writes for them: a name for each GPU the device can present.
+    payload.av_adapter_names = install::AdapterNames{}.render(platform::HostGpus::enumerate());
+    if (payload.av_adapter_names.isEmpty()) {
+        LSW_WARN("provision: no host GPU found to name; the guest's adapter takes the "
+                 "driver's static model name");
+    } else {
+        LSW_INFO("provision: guest adapter names:\n{}",
+                 payload.av_adapter_names.trimmed().toStdString());
+    }
 
     // The Vulkan loaders. Windows 11 may ship one (26200 carries
     // 1.3.300.0 in both views) and the guest keeps it when it does, so

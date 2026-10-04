@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=LSW Manager
+GenericName=Windows Virtual Machine Manager
+Comment=Run Windows applications in a managed virtual machine
+Exec=lsw-manager
+Icon=computer
+Terminal=false
+Categories=System;Emulator;
+Keywords=Windows;VM;virtual machine;libvirt;QEMU;
+StartupWMClass=lsw-manager

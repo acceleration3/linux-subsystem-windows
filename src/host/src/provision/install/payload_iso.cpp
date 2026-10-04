@@ -13,6 +13,9 @@ namespace lsw::host::provision::install {
 
 namespace {
 
+// provision.ps1's $AdapterNames, relative to C:\av.
+constexpr char kAdapterNamesFile[] = "adapters.txt";
+
 bool set_error(QString* error_out, const QString& message) {
     LSW_ERROR("payload: {}", message.toStdString());
     if (error_out != nullptr) {
@@ -87,11 +90,14 @@ bool PayloadIsoBuilder::stage_files(const PayloadInputs& in, const QString& stag
     // The accel-virt driver package, whole, as ``\av``. Copied as a
     // tree rather than file by file so the layout ``cmake --install``
     // produced is the layout the guest gets: provision.ps1 finds its
-    // package in ``C:\av\package`` and its adapter names in
-    // ``C:\av\adapters.txt``, and the sign stage checks every file
-    // against package.sha256. A file that failed to copy is a package
-    // pnputil refuses, so unlike the optional files above it fails the
-    // build.
+    // package in ``C:\av\package``, and the sign stage checks every
+    // file against package.sha256. A file that failed to copy is a
+    // package pnputil refuses, so unlike the optional files above it
+    // fails the build.
+    //
+    // All but adapters.txt: accel-virt's install writes the GPUs of the
+    // machine that built the package into it, and the guest's are this
+    // machine's, written below from in.av_adapter_names.
     if (!in.av_driver_tree.isEmpty()) {
         const QDir src_root{in.av_driver_tree};
         for (const char* required : {"provision.ps1", "package/avgpu.inf", "package/avgpu.sys"}) {
@@ -111,12 +117,26 @@ bool PayloadIsoBuilder::stage_files(const PayloadInputs& in, const QString& stag
         while (it.hasNext()) {
             const QString src = it.next();
             const QString relative = src_root.relativeFilePath(src);
+            if (relative == QLatin1String(kAdapterNamesFile)) {
+                continue;
+            }
             const QString dest = QDir(dest_root).filePath(relative);
             if (!QDir().mkpath(QFileInfo(dest).absolutePath()) || !QFile::copy(src, dest)) {
                 return set_error(error_out,
                                  QStringLiteral("could not stage %1 from the accel-virt driver "
                                                 "package into the payload")
                                      .arg(relative));
+            }
+            created << dest;
+        }
+        if (!in.av_adapter_names.isEmpty()) {
+            const QString dest = QDir(dest_root).filePath(QLatin1String(kAdapterNamesFile));
+            QFile names{dest};
+            const QByteArray bytes = in.av_adapter_names.toUtf8();
+            if (!names.open(QIODevice::WriteOnly | QIODevice::Truncate) ||
+                names.write(bytes) != bytes.size() || !names.flush()) {
+                return set_error(error_out, QStringLiteral("could not write %1: %2")
+                                                .arg(dest, names.errorString()));
             }
             created << dest;
         }

@@ -276,3 +276,10 @@ if(MINGW)
 elseif(MSVC)
     target_link_options(lsw-guest-agent PRIVATE /ENTRY:wmainCRTStartup)
 endif()
+
+# A file the payload ISO carries, not a program for this machine: under
+# share/, by its build name (the stager names it lsw-agent.exe on the
+# ISO).
+install(TARGETS lsw-guest-agent
+        RUNTIME DESTINATION ${LSW_INSTALL_GUESTDIR}
+        COMPONENT ${LSW_INSTALL_COMPONENT})

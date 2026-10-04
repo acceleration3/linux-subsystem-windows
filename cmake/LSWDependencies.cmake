@@ -87,4 +87,16 @@ if(WIN32)
     set(BUILD_WSI_XLIB_SUPPORT    OFF CACHE INTERNAL "")
     set(BUILD_WSI_WAYLAND_SUPPORT OFF CACHE INTERNAL "")
     FetchContent_MakeAvailable(VulkanLoader)
+
+    # Into the guest files, by architecture: the payload stager puts
+    # loaders/x64 in System32 and loaders/x86 in SysWOW64. The DLL alone
+    # — install(TARGETS) would bring its import library along.
+    if(CMAKE_SIZEOF_VOID_P EQUAL 4)
+        set(_lsw_loader_arch x86)
+    else()
+        set(_lsw_loader_arch x64)
+    endif()
+    install(FILES $<TARGET_FILE:vulkan>
+            DESTINATION ${LSW_INSTALL_GUESTDIR}/loaders/${_lsw_loader_arch}
+            COMPONENT ${LSW_INSTALL_COMPONENT})
 endif()

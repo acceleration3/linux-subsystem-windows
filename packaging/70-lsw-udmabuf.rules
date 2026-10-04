@@ -1,0 +1,6 @@
+# The logged-in user's QEMU (libvirt's session mode runs it as that
+# user) opens /dev/udmabuf for the GPU device. systemd's own
+# 70-uaccess.rules grants this from systemd 256 on; this rule is the same
+# grant for a system whose systemd predates it, and changes nothing
+# where it does not.
+KERNEL=="udmabuf", SUBSYSTEM=="misc", TAG+="uaccess"
