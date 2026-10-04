@@ -1,4 +1,4 @@
-# Host-side (Linux) code. Four libraries plus the executable.
+# Host-side (Linux) code. Five libraries plus the executable.
 #
 # One include/ tree and one src/ tree, subdivided by concern:
 #
@@ -18,12 +18,15 @@
 #                       apps      guest app catalog, per-app config, launch, logs
 #                       mirror    the window mirror a launch starts, one per
 #                                 application
-#                       ui        widgets shared by both UIs (VncView)
+#                       ui        widgets and theme shared by both UIs
 #                       services  HostServices — the container everything takes
 #
 #   lsw_host_provision  provision first-run install pipeline (ISO, autounattend,
 #                                 setup steps). No widgets; two consumers, the
 #                                 wizard UI and the --unattended CLI.
+#
+#   lsw_host_tools      tools     the image tools (download, trim), opened by
+#                                 both the wizard and the manager
 #
 #   lsw_host_wizard     wizard    the first-run QWizard and its pages
 #   lsw_host_manager    manager   the everyday window
@@ -87,7 +90,7 @@ target_include_directories(lsw_host_core PUBLIC ${LSW_HOST_INCLUDE_DIR})
 # included rather than mirrored: a mirror is a copy that drifts, and it
 # drifts silently because both sides still compile.
 set(_rvk_wire_include
-    "${CMAKE_SOURCE_DIR}/external/render-server/src/wire/include")
+    "${LSW_RENDER_SERVER_DIR}/src/wire/include")
 target_include_directories(lsw_host_core
     PRIVATE $<BUILD_INTERFACE:${_core_embed}> $<BUILD_INTERFACE:${_rvk_wire_include}>)
 target_link_libraries(lsw_host_core

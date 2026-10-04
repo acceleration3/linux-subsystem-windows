@@ -1,5 +1,7 @@
 #include "lsw/host/mcp/tool_result.hpp"
 
+#include "lsw/host/link/agent_reply.hpp"
+
 #include <nlohmann/json.hpp>
 
 namespace lsw::host::mcp {
@@ -17,6 +19,15 @@ nlohmann::json ToolResult::json_body(const nlohmann::json& payload) {
 
 nlohmann::json ToolResult::error(const std::string& message) {
     return text(message, /*is_error=*/true);
+}
+
+nlohmann::json ToolResult::from_reply(const link::AgentReply& reply) {
+    return reply.ok ? json_body(reply.body) : error(reply.error);
+}
+
+nlohmann::json ToolResult::acknowledge(const link::AgentReply& reply,
+                                       const std::string& ok_text) {
+    return reply.ok ? text(ok_text) : error(reply.error);
 }
 
 }  // namespace lsw::host::mcp

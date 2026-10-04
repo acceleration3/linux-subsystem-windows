@@ -30,11 +30,6 @@ public:
     // bookmark that outlives the thing it points at is worse than never
     // having written one.
     static void remove_windows_bookmark();
-
-    // What both file managers are pointed at.
-    [[nodiscard]] static QString share_url(const QString& username,
-                                           const QString& password,
-                                           const QString& share);
 };
 
 }  // namespace lsw::host::platform

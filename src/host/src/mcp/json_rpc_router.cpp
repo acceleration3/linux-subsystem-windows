@@ -1,6 +1,6 @@
 #include "lsw/host/mcp/json_rpc_router.hpp"
 
-#include "lsw/host/mcp/agent_command.hpp"
+#include "lsw/host/link/agent_rpc_client.hpp"
 #include "lsw/host/mcp/json_rpc_frame.hpp"
 #include "lsw/host/mcp/tool_registry.hpp"
 #include "lsw/host/mcp/tool_result.hpp"
@@ -17,8 +17,9 @@ nlohmann::json JsonRpcRouter::dispatch(const nlohmann::json& request) {
     }
     const auto id = request.value("id", nlohmann::json());
     const auto method = request.value("method", std::string{});
-    const auto params =
-        request.contains("params") ? request["params"] : nlohmann::json::object();
+    const auto params = (request.contains("params") && request["params"].is_object())
+                            ? request["params"]
+                            : nlohmann::json::object();
 
     try {
         if (method == "initialize") return JsonRpcFrame::result(id, on_initialize());
@@ -63,7 +64,7 @@ nlohmann::json JsonRpcRouter::on_tools_call(const nlohmann::json& params) {
     if (tool == nullptr) {
         return ToolResult::error("unknown tool: " + name);
     }
-    if (tool->requires_agent() && !agent_.agent_available()) {
+    if (tool->requires_agent() && !agent_.has_target()) {
         return ToolResult::error("No VM is currently targeted — cannot reach the agent.");
     }
     return tool->call(args);

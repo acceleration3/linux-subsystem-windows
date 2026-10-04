@@ -1,32 +1,31 @@
 #include "lsw/host/wizard/install_page.hpp"
-#include "lsw/host/wizard/page_chrome.hpp"
 
 #include "lsw/base/log.hpp"
 #include "lsw/host/wizard/wizard.hpp"
 #include "lsw/host/provision/pipeline.hpp"
 
 #include "lsw/host/ui/theme.hpp"
+#include "lsw/host/ui/widgets.hpp"
 
 #include <QFrame>
 #include <QHBoxLayout>
-#include <QTimer>
 #include <QVBoxLayout>
-#include <QWizard>
 
 namespace lsw::host::wizard {
 
-InstallPage::InstallPage(Wizard& wizard, QWidget* parent) : QWizardPage(parent), wizard_(wizard) {
+InstallPage::InstallPage(Wizard& wizard, QWidget* parent) : PipelinePage(parent), wizard_(wizard) {
 
-    auto* lay = PageChrome::install(this, QStringLiteral("Installing Windows"), QStringLiteral("Booting the VM and running the unattended installer."));
+    auto* lay =
+        install_chrome(QStringLiteral("Installing Windows"),
+                       QStringLiteral("Booting the VM and running the unattended installer."));
     // In the title band with the title: the wait is what this page is,
     // and how long it has been going is the first thing to read.
-    auto* head = PageChrome::head_of(this);
+    auto* head = chrome().head;
     auto* progress_row = new QHBoxLayout;
     progress_row->setSpacing(12);
     bar_ = new QProgressBar;
     bar_->setRange(0, 0);  // indeterminate
-    elapsed_ = new QLabel;
-    elapsed_->setObjectName(QString::fromLatin1(ui::Theme::Role::kMeta));
+    elapsed_ = ui::Widgets::meta(QString{});
     progress_row->addWidget(bar_, 1);
     progress_row->addWidget(elapsed_);
     head->addLayout(progress_row);
@@ -60,8 +59,7 @@ void InstallPage::set_phase(const QString& text) {
 }
 
 void InstallPage::initializePage() {
-    complete_ = false;
-    Q_EMIT completeChanged();
+    reset_complete();
 
     auto* p = wizard_.pipeline();
     if (p == nullptr) {
@@ -110,20 +108,12 @@ void InstallPage::initializePage() {
         bar_->setRange(0, 100);
         bar_->setValue(100);
         set_phase("The guest agent is answering. The install is finished.");
-        complete_ = true;
-        Q_EMIT completeChanged();
-        QTimer::singleShot(0, this, [this] {
-            if (auto* w = wizard()) w->next();
-        });
+        finish_and_advance();
     });
     connect(p, &::lsw::host::provision::Pipeline::vnc_port_available, this, [this](int port) {
         LSW_INFO("install_page: attaching ui::VncView to 127.0.0.1:{}", port);
         vnc_->connect_to("127.0.0.1", port);
     });
-}
-
-bool InstallPage::isComplete() const {
-    return complete_;
 }
 
 int InstallPage::nextId() const {

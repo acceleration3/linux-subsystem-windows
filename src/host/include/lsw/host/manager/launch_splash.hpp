@@ -43,7 +43,6 @@ public:
 
 Q_SIGNALS:
     void cancelled();
-    void hidden();
     void log_requested();
     void restart_requested();
 

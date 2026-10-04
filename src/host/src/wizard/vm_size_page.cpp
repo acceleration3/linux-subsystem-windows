@@ -1,19 +1,19 @@
 #include "lsw/host/wizard/vm_size_page.hpp"
-#include "lsw/host/wizard/page_chrome.hpp"
 
-#include "lsw/host/services/host_services.hpp"
 #include "lsw/host/config/settings.hpp"
+#include "lsw/host/config/vm_sizing.hpp"
 #include "lsw/host/config/vm_state.hpp"
+#include "lsw/host/services/host_services.hpp"
+#include "lsw/host/ui/field_stack.hpp"
+#include "lsw/host/ui/machine_limits.hpp"
+#include "lsw/host/ui/slider_spin.hpp"
+#include "lsw/host/ui/widgets.hpp"
 #include "lsw/host/wizard/wizard.hpp"
 
-#include "lsw/host/ui/theme.hpp"
-
 #include <QFormLayout>
-#include <QFrame>
 #include <QGridLayout>
-#include <QHBoxLayout>
 #include <QLabel>
-#include <QSlider>
+#include <QSpinBox>
 #include <QVBoxLayout>
 #include <QtConcurrent>
 
@@ -21,53 +21,24 @@ namespace lsw::host::wizard {
 
 namespace {
 
-// Pair a slider and a spin box so the spin box is the source of truth
-// (it owns the value), the slider mirrors it, and changing either
-// updates the other. Returns the row widget for embedding in a layout;
-// the caller keeps the spin box for reading the value back.
-// Field names in the same uppercase mono every caption in the
-// application uses, so a form reads as part of it rather than as a
-// dialog somebody else wrote.
-QLabel* field_label(const QString& text) {
-    auto* label = new QLabel(text.toUpper());
-    label->setObjectName(QString::fromLatin1(lsw::host::ui::Theme::Role::kCaption));
-    return label;
-}
+using ui::Widgets;
 
-QWidget* make_slider_row(int min, int max, int step, int initial, const QString& suffix,
-                         QSpinBox*& spin_out) {
-    auto* row = new QWidget;
-    auto* lay = new QHBoxLayout(row);
-    lay->setContentsMargins(0, 0, 0, 0);
-
-    auto* slider = new QSlider(Qt::Horizontal);
-    slider->setRange(min, max);
-    slider->setSingleStep(step);
-    slider->setPageStep(step * 4);
-    slider->setValue(initial);
-
-    auto* spin = new QSpinBox;
-    spin->setRange(min, max);
-    spin->setSingleStep(step);
-    spin->setSuffix(suffix);
-    spin->setValue(initial);
-    spin->setMinimumWidth(120);
-
-    QObject::connect(slider, &QSlider::valueChanged, spin, &QSpinBox::setValue);
-    QObject::connect(spin, QOverload<int>::of(&QSpinBox::valueChanged), slider, &QSlider::setValue);
-
-    lay->addWidget(slider, 1);
-    lay->addWidget(spin);
-    spin_out = spin;
-    return row;
+// A sizing slider, starting at ``initial``, with room beside it for the
+// number and its unit.
+ui::SliderSpin* make_slider(const ui::MachineLimits::Range& range, int initial,
+                            const QString& suffix) {
+    auto* slider = new ui::SliderSpin(range.min, range.max, range.step, suffix);
+    slider->spin()->setMinimumWidth(120);
+    slider->set_value(initial);
+    return slider;
 }
 
 }  // namespace
 
-VmSizePage::VmSizePage(Wizard& wizard, QWidget* parent) : QWizardPage(parent), wizard_(wizard) {
+VmSizePage::VmSizePage(Wizard& wizard, QWidget* parent) : WizardPage(parent), wizard_(wizard) {
 
-    auto* body = PageChrome::install(
-        this, QStringLiteral("Size the machine and name the account"),
+    auto* body = install_chrome(
+        QStringLiteral("Size the machine and name the account"),
         QStringLiteral("Both are baked into the answer file, so they are set before the "
                        "installer boots."));
 
@@ -77,14 +48,6 @@ VmSizePage::VmSizePage(Wizard& wizard, QWidget* parent) : QWizardPage(parent), w
     auto* account = new QGridLayout;
     account->setHorizontalSpacing(16);
     account->setVerticalSpacing(12);
-    const auto stacked = [](const QString& name, QWidget* control) {
-        auto* column = new QVBoxLayout;
-        column->setContentsMargins(0, 0, 0, 0);
-        column->setSpacing(5);
-        column->addWidget(field_label(name));
-        column->addWidget(control);
-        return column;
-    };
 
     user_edit_ = new QLineEdit;
     user_edit_->setPlaceholderText(QStringLiteral("e.g. lsw"));
@@ -98,14 +61,13 @@ VmSizePage::VmSizePage(Wizard& wizard, QWidget* parent) : QWizardPage(parent), w
     edition_combo_->setEnabled(false);
     edition_combo_->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
     edition_combo_->setMinimumContentsLength(16);
-    edition_status_ = new QLabel;
-    edition_status_->setObjectName(QString::fromLatin1(lsw::host::ui::Theme::Role::kMeta));
-    edition_status_->setWordWrap(true);
+    edition_status_ = Widgets::meta(QString{}, true);
 
-    account->addLayout(stacked(QStringLiteral("Username"), user_edit_), 0, 0);
-    account->addLayout(stacked(QStringLiteral("Password"), pass_edit_), 0, 1);
-    account->addLayout(stacked(QStringLiteral("Computer name"), computer_edit_), 1, 0);
-    account->addLayout(stacked(QStringLiteral("Edition"), edition_combo_), 1, 1);
+    using ui::FieldStack;
+    account->addLayout(FieldStack::column(QStringLiteral("Username"), user_edit_), 0, 0);
+    account->addLayout(FieldStack::column(QStringLiteral("Password"), pass_edit_), 0, 1);
+    account->addLayout(FieldStack::column(QStringLiteral("Computer name"), computer_edit_), 1, 0);
+    account->addLayout(FieldStack::column(QStringLiteral("Edition"), edition_combo_), 1, 1);
     account->addWidget(edition_status_, 2, 1);
     account->setColumnStretch(0, 1);
     account->setColumnStretch(1, 1);
@@ -113,10 +75,7 @@ VmSizePage::VmSizePage(Wizard& wizard, QWidget* parent) : QWizardPage(parent), w
 
     // A rule between the account and the machine: two questions, and
     // the design draws the seam.
-    auto* rule = new QFrame;
-    rule->setObjectName(QString::fromLatin1(lsw::host::ui::Theme::Role::kSeparator));
-    rule->setFixedHeight(1);
-    body->addWidget(rule);
+    body->addWidget(Widgets::separator());
 
     // The machine. A narrow caption, then as much slider as the page
     // will give, then what it currently says.
@@ -128,22 +87,23 @@ VmSizePage::VmSizePage(Wizard& wizard, QWidget* parent) : QWizardPage(parent), w
     body->addLayout(sizing);
     form_ = sizing;
 
-    sizing->addRow(field_label(QStringLiteral("Cores")),
-                   make_slider_row(1, 32, 1, 4, QStringLiteral(" cores"), cpu_spin_));
-    sizing->addRow(field_label(QStringLiteral("Memory")),
-                   make_slider_row(2048, 65536, 1024, 8192, QStringLiteral(" MiB"),
-                                   mem_spin_));
-    sizing->addRow(field_label(QStringLiteral("Disk")),
-                   make_slider_row(30, 512, 5, 60, QStringLiteral(" GiB"), disk_spin_));
+    const config::VmSizing defaults;
+    cpu_slider_ = make_slider(ui::MachineLimits::kCores, defaults.cpu_cores,
+                              QStringLiteral(" cores"));
+    mem_slider_ = make_slider(ui::MachineLimits::kMemoryMib, defaults.memory_mib,
+                              QStringLiteral(" MiB"));
+    disk_slider_ = make_slider(ui::MachineLimits::kDiskGib, defaults.disk_gib,
+                               QStringLiteral(" GiB"));
+    sizing->addRow(Widgets::caption(QStringLiteral("Cores")), cpu_slider_);
+    sizing->addRow(Widgets::caption(QStringLiteral("Memory")), mem_slider_);
+    sizing->addRow(Widgets::caption(QStringLiteral("Disk")), disk_slider_);
 
     // What the sizing costs, next to the control that decides it.
-    footnote_ = new QLabel;
-    footnote_->setObjectName(QString::fromLatin1(lsw::host::ui::Theme::Role::kMeta));
-    footnote_->setWordWrap(true);
+    footnote_ = Widgets::meta(QString{}, true);
     body->addWidget(footnote_);
     body->addStretch(1);
 
-    connect(disk_spin_, &QSpinBox::valueChanged, this,
+    connect(disk_slider_, &ui::SliderSpin::value_changed, this,
             [this](int) { refresh_footnote(); });
     connect(user_edit_, &QLineEdit::textChanged, this, &VmSizePage::completeChanged);
     connect(pass_edit_, &QLineEdit::textChanged, this, &VmSizePage::completeChanged);
@@ -155,11 +115,11 @@ VmSizePage::VmSizePage(Wizard& wizard, QWidget* parent) : QWizardPage(parent), w
 
 void VmSizePage::initializePage() {
     auto& s = wizard_.state();
-    cpu_spin_->setMaximum(std::max(2, s.host_cpu_threads));
-    mem_spin_->setMaximum(std::max(4096, s.host_ram_mib));
+    cpu_slider_->set_maximum(std::max(2, s.host_cpu_threads));
+    mem_slider_->set_maximum(std::max(4096, s.host_ram_mib));
     if (s.host_free_disk_bytes > 0) {
         const int free_gib = static_cast<int>(s.host_free_disk_bytes / (1024LL * 1024LL * 1024LL));
-        disk_spin_->setMaximum(std::max(60, free_gib - 10));
+        disk_slider_->set_maximum(std::max(60, free_gib - 10));
     }
     refresh_footnote();
     if (user_edit_->text().isEmpty()) {
@@ -211,7 +171,7 @@ void VmSizePage::refresh_footnote() {
     const qint64 free_gib = wizard_.state().host_free_disk_bytes / (1024LL * 1024 * 1024);
     footnote_->setText(QStringLiteral("Leaves %1 GiB free on the host. The disk is sparse "
                                       "and grows as the guest fills it.")
-                           .arg(qMax<qint64>(0, free_gib - disk_spin_->value())));
+                           .arg(qMax<qint64>(0, free_gib - disk_slider_->value())));
 }
 
 void VmSizePage::on_editions_ready() {
@@ -251,9 +211,9 @@ bool VmSizePage::isComplete() const {
 
 bool VmSizePage::validatePage() {
     auto& s = wizard_.state();
-    s.draft.sizing.cpu_cores = cpu_spin_->value();
-    s.draft.sizing.memory_mib = mem_spin_->value();
-    s.draft.sizing.disk_gib = disk_spin_->value();
+    s.draft.sizing.cpu_cores = cpu_slider_->value();
+    s.draft.sizing.memory_mib = mem_slider_->value();
+    s.draft.sizing.disk_gib = disk_slider_->value();
     s.user_name = user_edit_->text().trimmed();
     s.user_password = pass_edit_->text();
     if (s.user_name.isEmpty()) {

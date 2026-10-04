@@ -39,9 +39,6 @@ public:
 
     [[nodiscard]] QString result_path() const noexcept { return result_path_; }
     [[nodiscard]] bool use_for_install() const;
-    // Microsoft rate limits the download portal. Once it has refused
-    // us, saying so again is more useful than trying again.
-    [[nodiscard]] bool was_blocked() const noexcept { return blocked_; }
 
 private:
     void start();
@@ -57,7 +54,6 @@ private:
     provision::iso::Downloader* downloader_ = nullptr;
 
     QString result_path_;
-    bool blocked_ = false;
     bool ms_ready_ = false;
     bool resolving_ = false;
     QElapsedTimer clock_;

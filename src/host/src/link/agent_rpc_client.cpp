@@ -1,5 +1,7 @@
 #include "lsw/host/link/agent_rpc_client.hpp"
 
+#include "lsw/host/link/agent_reply.hpp"
+#include "lsw/host/link/pending_calls.hpp"
 #include "lsw/host/vm/ivshmem_server.hpp"
 #include "lsw/host/vm/shmem_region.hpp"
 
@@ -10,11 +12,12 @@
 #include "lsw/linkproto/frame_reader.hpp"
 #include "lsw/linkproto/region.hpp"
 
-#include <QMetaObject>
+#include <QtConcurrent>
 
 #include <chrono>
 #include <cstdint>
-#include <cstring>
+#include <optional>
+#include <string>
 
 #include <nlohmann/json.hpp>
 
@@ -35,13 +38,13 @@ constexpr int kShmemPollMs = 8;
 // come from lsw/linkproto — the same headers the guest agent compiles.
 // This file used to carry its own copy of each.
 using linkproto::FrameType;
-namespace cmd = linkproto::cmd;
 
 }  // namespace
 
-AgentRpcClient::AgentRpcClient(QObject* parent) : QObject(parent) {
-    qRegisterMetaType<std::uint64_t>("std::uint64_t");
-    qRegisterMetaType<QImage>("QImage");
+AgentRpcClient::AgentRpcClient(QObject* parent)
+    : QObject(parent),
+      pending_(std::make_unique<PendingCalls>()),
+      events_(std::make_unique<EventBus>()) {
     reader_ = std::thread{[this] { reader_loop(); }};
 }
 
@@ -50,16 +53,6 @@ AgentRpcClient::~AgentRpcClient() {
     {
         std::lock_guard<std::mutex> lock(io_mu_);
         drop_connection_locked();
-    }
-    {
-        std::lock_guard<std::mutex> lock(pending_mu_);
-        for (auto* p : pending_) {
-            std::lock_guard<std::mutex> plock(p->mu);
-            p->done = true;
-            p->reply.clear();
-            p->cv.notify_all();
-        }
-        pending_.clear();
     }
     if (reader_.joinable()) {
         reader_.join();
@@ -158,59 +151,29 @@ void AgentRpcClient::on_shmem_channel_ready(unsigned kind) {
         if (n == 0) {
             continue;
         }
-        nlohmann::json message;
-        try {
-            message = nlohmann::json::parse(shmem_scratch_.data(),
-                                            shmem_scratch_.data() + n);
-        } catch (const nlohmann::json::exception& e) {
-            LSW_WARN("agent_rpc_client: malformed shmem message: {}", e.what());
+        const auto message = nlohmann::json::parse(shmem_scratch_.data(),
+                                                   shmem_scratch_.data() + n, nullptr,
+                                                   /*allow_exceptions=*/false);
+        if (message.is_discarded()) {
+            LSW_WARN("agent_rpc_client: malformed shmem message ({} bytes)", n);
             continue;
         }
-        if (!message.is_object()) {
+        // The one message only this pipe carries. Everything else is
+        // routed exactly like its socket-borne twin.
+        const auto topic = message.is_object() ? message.find("event") : message.end();
+        if (topic != message.end() && *topic == linkproto::topic::kChannelHello) {
+            shmem_channel_live_.store(true);
+            LSW_INFO("agent_rpc_client: guest announced the shmem RPC channel "
+                     "({} KiB rings)",
+                     message.value("ring_bytes", std::uint64_t{0}) / 1024);
             continue;
         }
-        if (message.contains("event")) {
-            const auto topic = message["event"].get<std::string>();
-            if (topic == linkproto::topic::kChannelHello) {
-                shmem_channel_live_.store(true);
-                LSW_INFO("agent_rpc_client: guest announced the shmem RPC channel "
-                         "({} KiB rings)",
-                         message.value("ring_bytes", std::uint64_t{0}) / 1024);
-                continue;
-            }
-            // Anything else is an ordinary agent event and goes to the
-            // same subscribers as its socket-borne twin.
-            dispatch_event(message);
-            continue;
-        }
-        if (message.contains("id") && !message.contains("cmd")) {
-            handle_control(shmem_scratch_.data(), n);
-        }
+        route_message(message);
     }
 }
 
-AgentRpcClient::EventToken AgentRpcClient::on_event(const QString& topic,
-                                                     EventHandler handler) {
-    const EventToken token = next_event_token_.fetch_add(1);
-    std::lock_guard<std::mutex> lock(handlers_mu_);
-    handlers_[topic].append(HandlerEntry{token, std::move(handler)});
-    return token;
-}
-
-void AgentRpcClient::off_event(EventToken token) {
-    if (token == 0) {
-        return;
-    }
-    std::lock_guard<std::mutex> lock(handlers_mu_);
-    for (auto it = handlers_.begin(); it != handlers_.end(); ++it) {
-        auto& list = it.value();
-        for (qsizetype i = 0; i < list.size(); ++i) {
-            if (list[i].token == token) {
-                list.removeAt(i);
-                return;
-            }
-        }
-    }
+EventSubscription AgentRpcClient::subscribe(std::string_view topic, EventHandler handler) {
+    return events_->subscribe(topic, std::move(handler));
 }
 
 void AgentRpcClient::drop_connection_locked() {
@@ -226,13 +189,8 @@ void AgentRpcClient::drop_connection_locked() {
     // until it's restarted. The reader's reconnect loop is fine; the
     // pending caller just needs to be released so the next monitor
     // tick can try again.
-    std::lock_guard<std::mutex> lock(pending_mu_);
-    for (auto* p : pending_) {
-        std::lock_guard<std::mutex> plock(p->mu);
-        p->done = true;
-        p->reply.clear();
-        p->cv.notify_all();
-    }
+    pending_->fail_all(stop_.load() ? "the agent client is shutting down"
+                                    : "the connection to the agent dropped");
 }
 
 bool AgentRpcClient::ensure_connected_locked() {
@@ -300,155 +258,103 @@ bool AgentRpcClient::send_locked(const QByteArray& body) {
     return client_.send_all(framed) == 0;
 }
 
-void AgentRpcClient::post_oneway(const nlohmann::json& request) {
+AgentReply AgentRpcClient::request(std::string_view cmd) {
+    return request(cmd, nlohmann::json::object());
+}
+
+AgentReply AgentRpcClient::request(std::string_view cmd, const nlohmann::json& params,
+                                   std::chrono::milliseconds timeout) {
     if (stop_.load()) {
-        return;
+        return AgentReply::failure("the agent client is shutting down");
     }
-    nlohmann::json req = request;
-    req["id"] = next_id_.fetch_add(1);
-    const std::string body = req.dump();
-    const QByteArray bytes(body.data(), static_cast<qsizetype>(body.size()));
-    std::lock_guard<std::mutex> lock(io_mu_);
-    if (!ensure_connected_locked()) {
-        return;  // drop — input is loss-tolerant
-    }
-    (void)send_locked(bytes);
-}
-
-QByteArray AgentRpcClient::call(const QByteArray& request_line,
-                                 std::chrono::milliseconds timeout) {
-    nlohmann::json req;
-    try {
-        req = nlohmann::json::parse(request_line.constData(),
-                                     request_line.constData() + request_line.size());
-    } catch (const nlohmann::json::exception&) {
-        LSW_WARN("agent_rpc_client: caller passed malformed JSON to call()");
-        return {};
-    }
-    return call(req, timeout);
-}
-
-QByteArray AgentRpcClient::call(const nlohmann::json& request,
-                                 std::chrono::milliseconds timeout) {
-    if (stop_.load()) return {};
     const auto id = next_id_.fetch_add(1);
-    nlohmann::json req = request;
-    req["id"] = id;
-    const std::string body = req.dump();
+    nlohmann::json message = {{"id", id}, {"cmd", cmd}};
+    if (params.is_object() && !params.empty()) {
+        message["params"] = params;
+    }
+    const std::string body = message.dump();
     const QByteArray bytes(body.data(), static_cast<qsizetype>(body.size()));
 
-    Pending pending;
-    {
-        std::lock_guard<std::mutex> lock(pending_mu_);
-        pending_.insert(id, &pending);
-    }
-    struct Eraser {
-        AgentRpcClient* self;
-        quint64 id;
-        ~Eraser() {
-            std::lock_guard<std::mutex> lock(self->pending_mu_);
-            self->pending_.remove(id);
-        }
-    } eraser{this, id};
-
+    // Opened once connected and just before the send, so neither the
+    // connect nor a reconnect — both of which release every waiter —
+    // can fail this call before it has been made.
+    std::optional<PendingCalls::Ticket> ticket;
     {
         std::lock_guard<std::mutex> lock(io_mu_);
         if (!ensure_connected_locked()) {
-            return {};
+            return AgentReply::failure(has_target() ? "agent unreachable (connect failed)"
+                                                    : "agent unreachable (no VM targeted)");
         }
+        ticket.emplace(*pending_, id);
         if (!send_locked(bytes)) {
             drop_connection_locked();
-            if (!ensure_connected_locked() || !send_locked(bytes)) {
-                return {};
+            ticket.reset();
+            if (!ensure_connected_locked()) {
+                return AgentReply::failure("agent unreachable (connection lost)");
+            }
+            ticket.emplace(*pending_, id);
+            if (!send_locked(bytes)) {
+                return AgentReply::failure("agent unreachable (send failed)");
             }
         }
     }
 
-    std::unique_lock<std::mutex> plock(pending.mu);
-    if (!pending.cv.wait_for(plock, timeout, [&] { return pending.done; })) {
+    auto reply = ticket->wait(timeout);
+    if (!reply) {
         // The agent took the request and never answered. Report it with
-        // the command so a wedged handler is identifiable, and return
-        // empty like every other failure — the ``Eraser`` above drops
-        // the id, so a late reply lands on deliver_reply's unknown-id
-        // path and is discarded.
-        LSW_WARN("agent_rpc_client: id={} cmd={} timed out after {} ms", id,
-                 request.value("cmd", std::string{"?"}), timeout.count());
-        return {};
+        // the command so a wedged handler is identifiable; the ticket
+        // closes on return, so a late reply finds nobody waiting.
+        LSW_WARN("agent_rpc_client: id={} cmd={} timed out after {} ms", id, cmd,
+                 timeout.count());
+        return AgentReply::failure("the agent did not answer " + std::string{cmd} + " within " +
+                                   std::to_string(timeout.count()) + " ms");
     }
-    return std::move(pending.reply);
+    if (!reply->ok) {
+        LSW_WARN("agent_rpc_client: id={} cmd={} failed: {}", id, cmd, reply->error);
+    }
+    return std::move(*reply);
 }
 
-void AgentRpcClient::deliver_reply(quint64 id, QByteArray body) {
-    Pending* p = nullptr;
-    {
-        std::lock_guard<std::mutex> lock(pending_mu_);
-        const auto it = pending_.constFind(id);
-        if (it == pending_.constEnd()) return;
-        p = it.value();
-    }
-    std::lock_guard<std::mutex> plock(p->mu);
-    p->reply = std::move(body);
-    p->done = true;
-    p->cv.notify_all();
+void AgentRpcClient::request_async(std::string_view cmd, nlohmann::json params,
+                                   QObject* context,
+                                   std::function<void(const AgentReply&)> done) {
+    QtConcurrent::run([this, cmd = std::string{cmd}, params = std::move(params)] {
+        return request(cmd, params);
+    }).then(context, std::move(done));
 }
 
-void AgentRpcClient::dispatch_event(const nlohmann::json& frame) {
-    if (!frame.contains("event") || !frame["event"].is_string()) return;
-    const auto topic = QString::fromStdString(frame["event"].get<std::string>());
-    // Snapshot the handler list under the lock so we don't hold
-    // handlers_mu_ while invoking — a handler that touches the rpc
-    // (e.g. off_event from its own callback) would deadlock.
-    QList<EventHandler> snapshot;
-    {
-        std::lock_guard<std::mutex> lock(handlers_mu_);
-        const auto it = handlers_.constFind(topic);
-        if (it == handlers_.constEnd()) return;
-        snapshot.reserve(it.value().size());
-        for (const auto& entry : it.value()) {
-            snapshot.append(entry.handler);
-        }
+void AgentRpcClient::request_detached(std::string_view cmd, nlohmann::json params) {
+    (void)QtConcurrent::run([this, cmd = std::string{cmd}, params = std::move(params)] {
+        (void)request(cmd, params);
+    });
+}
+
+void AgentRpcClient::route_message(const nlohmann::json& message) {
+    if (!message.is_object()) {
+        return;
     }
-    for (const auto& h : snapshot) {
-        h(frame);
+    if (message.contains("event")) {
+        events_->dispatch(message);
+        return;
     }
+    if (message.contains("cmd")) {
+        return;  // agent-initiated request — none defined; drop.
+    }
+    const auto id = message.find("id");
+    if (id == message.end() || !id->is_number_unsigned()) {
+        return;
+    }
+    pending_->deliver(id->get<std::uint64_t>(), AgentReply::from_frame(message));
 }
 
 void AgentRpcClient::handle_control(const std::uint8_t* payload, std::size_t len) {
-    nlohmann::json frame;
-    try {
-        frame = nlohmann::json::parse(payload, payload + len);
-    } catch (const nlohmann::json::exception& e) {
-        LSW_WARN("agent_rpc_client: malformed control payload: {}", e.what());
+    const auto message = nlohmann::json::parse(payload, payload + len, nullptr,
+                                               /*allow_exceptions=*/false);
+    if (message.is_discarded()) {
+        LSW_WARN("agent_rpc_client: malformed control payload ({} bytes)", len);
         return;
     }
-    if (!frame.is_object()) {
-        return;
-    }
-    if (frame.contains("event")) {
-        dispatch_event(frame);
-        return;
-    }
-    if (!frame.contains("id")) {
-        return;
-    }
-    if (frame.contains("cmd")) {
-        return;  // agent-initiated request — none defined; drop.
-    }
-    const auto id = frame["id"].get<std::uint64_t>();
-    QByteArray body;
-    if (frame.contains("result")) {
-        const auto s = frame["result"].dump();
-        body = QByteArray(s.data(), static_cast<qsizetype>(s.size()));
-    } else if (frame.contains("error")) {
-        // Propagate the agent's error string as a parseable JSON body so
-        // callers can show "agent: <msg>" instead of the empty "no reply"
-        // fallback.
-        const auto err_str = frame["error"].get<std::string>();
-        LSW_WARN("agent_rpc_client: id={} error: {}", id, err_str);
-        const auto s = nlohmann::json{{"error", err_str}}.dump();
-        body = QByteArray(s.data(), static_cast<qsizetype>(s.size()));
-    }
-    deliver_reply(id, std::move(body));
+    route_message(message);
 }
 
 void AgentRpcClient::reader_loop() {

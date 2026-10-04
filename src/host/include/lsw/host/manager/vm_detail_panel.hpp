@@ -1,20 +1,18 @@
 #pragma once
 
-#include "lsw/host/apps/app_config_store.hpp"
-#include "lsw/host/apps/log_store.hpp"
-#include "lsw/host/config/vm_state.hpp"
 #include "lsw/host/manager/app_list.hpp"
 #include "lsw/host/manager/stats_widget.hpp"
 #include "lsw/host/ui/vnc_view.hpp"
-#include "lsw/host/link/agent_rpc_client.hpp"
-#include "lsw/host/vm/lifecycle.hpp"
-#include "lsw/host/vm/monitor.hpp"
+#include "lsw/host/vm/vm_stats.hpp"
 
 #include <QTimer>
 #include <QUuid>
 #include <QWidget>
 
+class QLabel;
 class QVBoxLayout;
+
+namespace lsw::host::services { class HostServices; }
 
 namespace lsw::host::manager {
 
@@ -27,20 +25,17 @@ namespace lsw::host::manager {
 // is left here is the content of one page.
 //
 // The panel still owns the polling, because it already holds the
-// Lifecycle and Monitor references the polling needs. It reports what
+// services the polling needs. It reports what
 // it learns upward instead of drawing it: the rail renders the state,
 // the window fills its status bar, and neither has to poll a second
 // time.
 class VmDetailPanel : public QWidget {
     Q_OBJECT
 public:
-    VmDetailPanel(config::VmState& vms, vm::Lifecycle& lifecycle, vm::Monitor& monitor,
-                  apps::AppConfigStore& app_configs, link::AgentRpcClient& rpc,
-                  apps::LogStore& log_store,
-                  QWidget* parent = nullptr);
+    explicit VmDetailPanel(services::HostServices& services, QWidget* parent = nullptr);
 
+    // A null uuid releases the current one.
     void set_target(const QUuid& vm_uuid);
-    void clear_target();
 
     [[nodiscard]] bool is_running() const noexcept { return last_running_; }
     [[nodiscard]] bool is_agent_online() const noexcept { return last_agent_reachable_; }
@@ -64,16 +59,15 @@ Q_SIGNALS:
     // actually usable. The badge follows this one, because libvirt
     // reports "running" a minute or two before a guest is interactive.
     void agent_online_changed(bool online);
-    void stats_changed(const vm::VmStats& stats);
 
 private Q_SLOTS:
     void on_stats_updated(const QUuid& uuid, const vm::VmStats& stats);
     void on_state_tick();
 
 private:
-    config::VmState& vms_;
-    vm::Lifecycle& lifecycle_;
-    vm::Monitor& monitor_;
+    // Hoisted up to App so the wizard and MCP server share the same
+    // channel and log buffer with the manager UI.
+    services::HostServices& services_;
 
     QUuid uuid_;
     bool last_running_ = false;
@@ -82,14 +76,9 @@ private:
 
     lsw::host::ui::VncView* preview_ = nullptr;
     QVBoxLayout* preview_slot_ = nullptr;
-    class QLabel* preview_tag_ = nullptr;
+    QLabel* preview_tag_ = nullptr;
     StatsWidget* stats_ = nullptr;
     AppListWidget* app_list_ = nullptr;
-
-    // Hoisted up to App so the wizard and MCP server share the same
-    // channel + log buffer with the manager UI.
-    link::AgentRpcClient& rpc_;
-    apps::LogStore& log_store_;
 };
 
 }  // namespace lsw::host::manager

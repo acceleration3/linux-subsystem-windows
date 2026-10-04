@@ -1,12 +1,11 @@
 #include "lsw/agent/core/services.hpp"
-#include "lsw/agent/rpc/handler.hpp"
 #include "lsw/agent/rpc/auto_register.hpp"
-
-#include "lsw/linkproto/commands.hpp"
+#include "lsw/agent/rpc/handler.hpp"
+#include "lsw/agent/rpc/params.hpp"
 #include "lsw/agent/uia/uia.hpp"
+#include "lsw/linkproto/commands.hpp"
 
 #include <cstdint>
-#include <stdexcept>
 
 namespace lsw::agent::rpc::handlers {
 
@@ -17,15 +16,11 @@ namespace lsw::agent::rpc::handlers {
 // up Accessibility Insights inside the VM. ``max_depth`` caps
 // recursion to keep replies bounded.
 struct UiaTreeDumpHandler : RpcHandler {
-    nlohmann::json handle(const nlohmann::json& params,
-                          RpcContext& ctx) override {
-        const auto hwnd = params.value("hwnd", std::uint64_t{0});
-        if (hwnd == 0) {
-            throw std::invalid_argument("uia_tree_dump: missing hwnd");
-        }
-        const int max_depth = params.value("max_depth", 4);
-        return {{"tree", ctx.services.uia().dump_tree(
-                            static_cast<std::uintptr_t>(hwnd), max_depth)}};
+    nlohmann::json handle(const nlohmann::json& params, RpcContext& ctx) override {
+        const Params p{params, linkproto::cmd::kUiaTreeDump};
+        const auto hwnd = p.require_hwnd();
+        const int max_depth = p.get("max_depth", 4);
+        return {{"tree", ctx.services.uia().dump_tree(hwnd, max_depth)}};
     }
 };
 

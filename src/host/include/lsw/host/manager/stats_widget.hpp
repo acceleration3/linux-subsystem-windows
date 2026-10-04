@@ -4,8 +4,9 @@
 
 #include <QFrame>
 
-class QProgressBar;
+class QFormLayout;
 class QLabel;
+class QProgressBar;
 
 namespace lsw::host::manager {
 
@@ -21,14 +22,25 @@ public Q_SLOTS:
     void clear();
 
 private:
-    QProgressBar* cpu_bar_ = nullptr;
-    QLabel* cpu_label_ = nullptr;
-    QProgressBar* ram_bar_ = nullptr;
-    QLabel* ram_label_ = nullptr;
-    QProgressBar* vram_bar_ = nullptr;
-    QLabel* vram_label_ = nullptr;
-    QProgressBar* disk_bar_ = nullptr;
-    QLabel* disk_label_ = nullptr;
+    // One row: a bar, and what it says in words beside it.
+    struct Gauge {
+        QProgressBar* bar = nullptr;
+        QLabel* label = nullptr;
+
+        void set(int percent, const QString& text) const;
+    };
+
+    // Appends a row named ``name`` to ``form``, reading ``initial``.
+    [[nodiscard]] static Gauge add_gauge(QFormLayout* form, const QString& name,
+                                         const QString& initial);
+
+    // ``used`` of ``total`` bytes, or a dash when the total is unknown.
+    static void show_usage(const Gauge& gauge, quint64 used, quint64 total);
+
+    Gauge cpu_;
+    Gauge ram_;
+    Gauge vram_;
+    Gauge disk_;
 };
 
 }  // namespace lsw::host::manager

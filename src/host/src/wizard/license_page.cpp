@@ -1,5 +1,4 @@
 #include "lsw/host/wizard/license_page.hpp"
-#include "lsw/host/wizard/page_chrome.hpp"
 
 #include "lsw/host/ui/theme.hpp"
 
@@ -16,9 +15,11 @@ constexpr int kProseWidth = 620;
 
 }  // namespace
 
-LicensePage::LicensePage(QWidget* parent) : QWizardPage(parent) {
+LicensePage::LicensePage(QWidget* parent) : WizardPage(parent) {
 
-    auto* lay = PageChrome::install(this, QStringLiteral("Microsoft Windows licensing"), QStringLiteral("LSW is not affiliated with Microsoft, and does not bundle Windows."));
+    auto* lay = install_chrome(
+        QStringLiteral("Microsoft Windows licensing"),
+        QStringLiteral("LSW is not affiliated with Microsoft, and does not bundle Windows."));
     auto* blurb = new QLabel(
         "LSW does not bundle Windows. Installing or running Microsoft Windows requires "
         "you to obtain a license from Microsoft and to comply with the Microsoft Software "

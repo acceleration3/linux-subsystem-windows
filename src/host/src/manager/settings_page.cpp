@@ -2,8 +2,12 @@
 
 #include "lsw/host/vm/render_server.hpp"
 
+#include "lsw/host/ui/machine_limits.hpp"
+#include "lsw/host/ui/panel.hpp"
+#include "lsw/host/ui/slider_spin.hpp"
 #include "lsw/host/ui/theme.hpp"
 #include "lsw/host/ui/toggle_switch.hpp"
+#include "lsw/host/ui/widgets.hpp"
 
 #include <QAbstractItemView>
 #include <QCheckBox>
@@ -16,7 +20,6 @@
 #include <QLineEdit>
 #include <QPushButton>
 #include <QScrollArea>
-#include <QSlider>
 #include <QSpinBox>
 #include <QTableWidget>
 #include <QVBoxLayout>
@@ -26,6 +29,7 @@ namespace lsw::host::manager {
 namespace {
 
 using ui::Theme;
+using ui::Widgets;
 using config::ChannelBinding;
 using config::ChannelBusyPolicy;
 using config::HostShare;
@@ -33,27 +37,12 @@ using K = config::ManagerSettings::Key;
 
 using Choices = QVector<QPair<QString, QVariant>>;
 
-QLabel* caption(const QString& text) {
-    auto* label = new QLabel(text.toUpper());
-    label->setObjectName(QString::fromLatin1(Theme::Role::kCaption));
-    return label;
-}
-
-QLabel* meta(const QString& text) {
-    auto* label = new QLabel(text);
-    label->setObjectName(QString::fromLatin1(Theme::Role::kMeta));
-    return label;
-}
-
 // The now-or-restart tag. Amber for restart because it is the one that
 // costs something; green for now because it is already done.
 QLabel* tag(bool restart) {
-    auto* label = new QLabel(restart ? QStringLiteral("RESTART") : QStringLiteral("NOW"));
-    label->setObjectName(QString::fromLatin1(Theme::Role::kMeta));
-    label->setStyleSheet(
-        QStringLiteral("color: %1; border: 1px solid %2; border-radius: 2px; padding: 0px 4px;")
-            .arg(QString::fromLatin1(restart ? Theme::Color::kAmber : Theme::Color::kOk),
-                 QString::fromLatin1(restart ? "#a8672a" : "#2c5c44")));
+    auto* label = Widgets::meta(restart ? QStringLiteral("RESTART") : QStringLiteral("NOW"));
+    label->setProperty(Theme::Tone::kProperty,
+                       restart ? Theme::Tone::kRestart : Theme::Tone::kNow);
     return label;
 }
 
@@ -61,6 +50,27 @@ QPushButton* small_button(const QString& text) {
     auto* button = new QPushButton(text);
     button->setCursor(Qt::PointingHandCursor);
     return button;
+}
+
+// Drive letters no share in ``shares`` has taken, backwards from Z,
+// which is where people put a mapped drive, and stopping before the
+// letters Windows has already spoken for. The same rule as
+// ManagerSettings::free_drive_letters, applied to the staged list:
+// that one reads what is stored, and two folders added before an
+// Apply would otherwise both be offered Z:.
+QStringList free_drive_letters(const QVector<HostShare>& shares) {
+    QStringList taken;
+    for (const auto& share : shares) {
+        taken << share.drive.toUpper();
+    }
+    QStringList out;
+    for (char letter = 'Z'; letter >= 'E'; --letter) {
+        const QString candidate = QString(QLatin1Char(letter)) + QLatin1Char(':');
+        if (!taken.contains(candidate)) {
+            out << candidate;
+        }
+    }
+    return out;
 }
 
 QTableWidget* make_table(const QStringList& headers) {
@@ -95,6 +105,11 @@ SettingsPage::SettingsPage(config::ManagerSettings& settings, config::PendingCha
             &SettingsPage::refresh_apply_bar);
     connect(&apps_, &apps::AppConfigStore::changed, this,
             &SettingsPage::rebuild_bindings_table);
+    // The shares table shows the staged list, so whatever changes what
+    // is staged (an add, a remove, Revert, Apply) redraws it. Queued,
+    // because a remove is clicked from inside the table it rebuilds.
+    connect(&pending_, &config::PendingChanges::changed, this,
+            &SettingsPage::rebuild_shares_table, Qt::QueuedConnection);
     refresh_apply_bar();
 }
 
@@ -116,50 +131,49 @@ void SettingsPage::build() {
 
     // ---- machine --------------------------------------------------
     auto* machine = new_group(QStringLiteral("Machine"));
-    add_row(machine, QLatin1String(K::kCpuCores), QStringLiteral("Processor cores"),
+    add_row(machine, K::kCpuCores, QStringLiteral("Processor cores"),
             QStringLiteral("One socket, cores only, no SMT."),
-            make_slider(QLatin1String(K::kCpuCores), 1, 32, 1, QString{}));
-    add_row(machine, QLatin1String(K::kMemoryMib), QStringLiteral("Memory"),
+            make_slider(K::kCpuCores, ui::MachineLimits::kCores, QString{}));
+    add_row(machine, K::kMemoryMib, QStringLiteral("Memory"),
             QStringLiteral("Ballooned, so the guest gives memory back when it is idle."),
-            make_slider(QLatin1String(K::kMemoryMib), 2048, 65536, 1024,
-                        QStringLiteral(" MiB")));
-    add_row(machine, QLatin1String(K::kDiskGib), QStringLiteral("Disk"),
+            make_slider(K::kMemoryMib, ui::MachineLimits::kMemoryMib, QStringLiteral(" MiB")));
+    add_row(machine, K::kDiskGib, QStringLiteral("Disk"),
             QStringLiteral("Grows only. Windows extends the volume on the next boot."),
-            make_slider(QLatin1String(K::kDiskGib), 30, 512, 5, QStringLiteral(" GiB")));
+            make_slider(K::kDiskGib, ui::MachineLimits::kDiskGib, QStringLiteral(" GiB")));
 
     // ---- display --------------------------------------------------
     auto* display = new_group(QStringLiteral("Display"));
-    add_row(display, QLatin1String(K::kGuestWidth), QStringLiteral("Guest resolution"),
+    add_row(display, K::kGuestWidth, QStringLiteral("Guest resolution"),
             QStringLiteral("The size of the virtual monitor Windows sees, and the ceiling "
                            "a maximised window can reach."),
-            make_choice(QLatin1String(K::kGuestWidth),
+            make_choice(K::kGuestWidth,
                         Choices{{QStringLiteral("1280 x 720"), 1280},
                                 {QStringLiteral("1920 x 1080"), 1920},
                                 {QStringLiteral("2560 x 1440"), 2560},
                                 {QStringLiteral("3840 x 2160"), 3840}}));
-    add_row(display, QLatin1String(K::kMatchHostOutput),
+    add_row(display, K::kMatchHostOutput,
             QStringLiteral("Match the monitor the manager is on"),
             QStringLiteral("Takes the resolution from your current output instead."),
-            make_toggle(QLatin1String(K::kMatchHostOutput)));
-    add_row(display, QLatin1String(K::kScalingPercent), QStringLiteral("Scaling"),
+            make_toggle(K::kMatchHostOutput));
+    add_row(display, K::kScalingPercent, QStringLiteral("Scaling"),
             QStringLiteral("Windows DPI, applied at the guest logon."),
-            make_choice(QLatin1String(K::kScalingPercent),
+            make_choice(K::kScalingPercent,
                         Choices{{QStringLiteral("100 % (96 DPI)"), 100},
                                 {QStringLiteral("125 % (120 DPI)"), 125},
                                 {QStringLiteral("150 % (144 DPI)"), 150},
                                 {QStringLiteral("200 % (192 DPI)"), 200}}));
-    add_row(display, QLatin1String(K::kRefreshHz), QStringLiteral("Refresh rate"),
+    add_row(display, K::kRefreshHz, QStringLiteral("Refresh rate"),
             QStringLiteral("How often a mirrored window repaints. Lower it to spend less "
                            "host CPU on an idle guest."),
-            make_choice(QLatin1String(K::kRefreshHz),
+            make_choice(K::kRefreshHz,
                         Choices{{QStringLiteral("30 Hz"), 30},
                                 {QStringLiteral("60 Hz"), 60},
                                 {QStringLiteral("120 Hz"), 120}}));
-    add_row(display, QLatin1String(K::kVramMib),
+    add_row(display, K::kVramMib,
             QStringLiteral("Video memory the adapter reports"),
             QStringLiteral("Applications gate their GPU path on this number before they "
                            "ever open a driver."),
-            make_choice(QLatin1String(K::kVramMib),
+            make_choice(K::kVramMib,
                         Choices{{QStringLiteral("512 MiB"), 512},
                                 {QStringLiteral("1024 MiB"), 1024},
                                 {QStringLiteral("2048 MiB"), 2048},
@@ -167,55 +181,55 @@ void SettingsPage::build() {
                                 {QStringLiteral("4096 MiB"), 4096},
                                 {QStringLiteral("6144 MiB"), 6144},
                                 {QStringLiteral("8192 MiB"), 8192}}));
-    add_row(display, QLatin1String(K::kLivePreview), QStringLiteral("Live preview"),
+    add_row(display, K::kLivePreview, QStringLiteral("Live preview"),
             QStringLiteral("Streams the whole guest desktop into the overview."),
-            make_toggle(QLatin1String(K::kLivePreview)));
+            make_toggle(K::kLivePreview));
 
     // ---- render channels ------------------------------------------
     auto* render = new_group(QStringLiteral("Render channels"));
-    add_row(render, QLatin1String(K::kChannels), QStringLiteral("Channels"),
+    add_row(render, K::kChannels, QStringLiteral("Channels"),
             QStringLiteral("Each drawing process claims one. A channel carries a single "
                            "command stream, so two processes can never share one."),
-            make_choice(QLatin1String(K::kChannels),
+            make_choice(K::kChannels,
                         Choices{{QStringLiteral("1 channel"), 1},
                                 {QStringLiteral("2 channels"), 2},
                                 {QStringLiteral("4 channels"), 4},
                                 {QStringLiteral("8 channels"), 8}}));
-    add_row(render, QLatin1String(K::kGlDevice), QStringLiteral("OpenGL GPU"),
+    add_row(render, K::kGlDevice, QStringLiteral("OpenGL GPU"),
             QStringLiteral("Which card guest applications draw on. Left to itself, "
                            "the driver picks whichever GPU drives this screen — on a "
                            "laptop, the integrated one."),
-            make_choice(QLatin1String(K::kGlDevice), gl_device_choices()));
-    add_row(render, QLatin1String(K::kRingKib), QStringLiteral("Command ring"),
+            make_choice(K::kGlDevice, gl_device_choices()));
+    add_row(render, K::kRingKib, QStringLiteral("Command ring"),
             QStringLiteral("A command bigger than this is sent in pieces, each waiting "
                            "for the one before it to drain."),
-            make_choice(QLatin1String(K::kRingKib),
+            make_choice(K::kRingKib,
                         Choices{{QStringLiteral("256 KiB"), 256},
                                 {QStringLiteral("512 KiB"), 512},
                                 {QStringLiteral("1024 KiB"), 1024},
                                 {QStringLiteral("4096 KiB"), 4096},
                                 {QStringLiteral("16384 KiB"), 16384}}));
-    add_row(render, QLatin1String(K::kReplyKib), QStringLiteral("Reply slot"),
+    add_row(render, K::kReplyKib, QStringLiteral("Reply slot"),
             QStringLiteral("An answer that does not fit is collected in extra round "
                            "trips instead of arriving whole."),
-            make_choice(QLatin1String(K::kReplyKib),
+            make_choice(K::kReplyKib,
                         Choices{{QStringLiteral("2 MiB"), 2048},
                                 {QStringLiteral("8 MiB"), 8192},
                                 {QStringLiteral("16 MiB"), 16384},
                                 {QStringLiteral("64 MiB"), 65536}}));
-    add_row(render, QLatin1String(K::kBlobMib), QStringLiteral("Blob arena"),
+    add_row(render, K::kBlobMib, QStringLiteral("Blob arena"),
             QStringLiteral("Large command streams, host visible device memory, and the "
                            "frames on their way to a window."),
-            make_choice(QLatin1String(K::kBlobMib),
+            make_choice(K::kBlobMib,
                         Choices{{QStringLiteral("256 MiB"), 256},
                                 {QStringLiteral("512 MiB"), 512},
                                 {QStringLiteral("1024 MiB"), 1024},
                                 {QStringLiteral("2048 MiB"), 2048}}));
-    add_row(render, QLatin1String(K::kWarnCongestion),
+    add_row(render, K::kWarnCongestion,
             QStringLiteral("Warn when an area is congested"),
             QStringLiteral("Reads the counters the render server publishes, and falls "
                            "back to reading its log."),
-            make_toggle(QLatin1String(K::kWarnCongestion)));
+            make_toggle(K::kWarnCongestion));
 
     // ---- assignments ----------------------------------------------
     auto* bindings = new_group(QStringLiteral("Which application uses which channel"));
@@ -225,48 +239,48 @@ void SettingsPage::build() {
     auto* bindings_layout = new QVBoxLayout(bindings_row);
     bindings_layout->setContentsMargins(12, 10, 12, 12);
     bindings_layout->setSpacing(8);
-    bindings_layout->addWidget(caption(QStringLiteral("Assignments")));
+    bindings_layout->addWidget(Widgets::caption(QStringLiteral("Assignments")));
     bindings_layout->addWidget(
-        meta(QStringLiteral("Anything left on Any takes the first free channel.")));
+        Widgets::meta(QStringLiteral("Anything left on Any takes the first free channel.")));
     bindings_layout->addWidget(bindings_table_);
     bindings->addWidget(bindings_row);
     rebuild_bindings_table();
 
-    add_row(bindings, QLatin1String(K::kNothingFreePolicy),
+    add_row(bindings, K::kNothingFreePolicy,
             QStringLiteral("When nothing is free"),
             QStringLiteral("Every channel claimed and another process wants one."),
-            make_choice(QLatin1String(K::kNothingFreePolicy),
+            make_choice(K::kNothingFreePolicy,
                         Choices{{QStringLiteral("Wait, then refuse"),
                                  QStringLiteral("wait")},
                                 {QStringLiteral("Refuse immediately"),
                                  QStringLiteral("refuse")}}));
-    add_row(bindings, QLatin1String(K::kChannelWaitSeconds),
+    add_row(bindings, K::kChannelWaitSeconds,
             QStringLiteral("How long to wait"),
             QStringLiteral("Before refusing. A process that gives up says so in the log."),
-            make_number(QLatin1String(K::kChannelWaitSeconds), 1, 120));
+            make_number(K::kChannelWaitSeconds, 1, 120));
 
     // ---- files ----------------------------------------------------
     auto* files = new_group(QStringLiteral("Files"));
-    add_row(files, QLatin1String(K::kSmbEnabled),
+    add_row(files, K::kSmbEnabled,
             QStringLiteral("Browse the guest from your file manager"),
             QStringLiteral("Serves the guest over SMB on 127.0.0.1:5445, handled in "
                            "userspace, so nothing is mounted and Windows junctions never "
                            "turn into extra mounts."),
-            make_toggle(QLatin1String(K::kSmbEnabled)));
-    add_row(files, QLatin1String(K::kShareScope), QStringLiteral("Shared folder"),
+            make_toggle(K::kSmbEnabled));
+    add_row(files, K::kShareScope, QStringLiteral("Shared folder"),
             QStringLiteral("What the bookmark opens."),
-            make_choice(QLatin1String(K::kShareScope),
+            make_choice(K::kShareScope,
                         Choices{{QStringLiteral("Whole disk (C$)"), QStringLiteral("C$")},
                                 {QStringLiteral("The user's profile"),
                                  QStringLiteral("profile")}}));
-    add_row(files, QLatin1String(K::kBookmarkDolphin),
+    add_row(files, K::kBookmarkDolphin,
             QStringLiteral("Bookmark in Dolphin"),
             QStringLiteral("Writes a Places entry titled Windows into user-places.xbel."),
-            make_toggle(QLatin1String(K::kBookmarkDolphin)));
-    add_row(files, QLatin1String(K::kBookmarkGtk),
+            make_toggle(K::kBookmarkDolphin));
+    add_row(files, K::kBookmarkGtk,
             QStringLiteral("Bookmark in GNOME Files and Thunar"),
             QStringLiteral("The same entry, in gtk-3.0/bookmarks."),
-            make_toggle(QLatin1String(K::kBookmarkGtk)));
+            make_toggle(K::kBookmarkGtk));
 
     // The shares are a list because there is no reason for there to be
     // only one of them.
@@ -275,14 +289,14 @@ void SettingsPage::build() {
     shares_layout->setContentsMargins(12, 10, 12, 12);
     shares_layout->setSpacing(8);
     auto* shares_head = new QHBoxLayout;
-    shares_head->addWidget(caption(QStringLiteral("Host folders the guest can see")));
+    shares_head->addWidget(Widgets::caption(QStringLiteral("Host folders the guest can see")));
     shares_head->addWidget(tag(true));
     shares_head->addStretch(1);
     auto* add_share = small_button(QStringLiteral("Add a folder"));
     shares_head->addWidget(add_share);
     shares_layout->addLayout(shares_head);
     shares_layout->addWidget(
-        meta(QStringLiteral("Each one becomes a virtiofs device and a drive letter.")));
+        Widgets::meta(QStringLiteral("Each one becomes a virtiofs device and a drive letter.")));
     shares_table_ = make_table({QStringLiteral("Folder on this machine"),
                                 QStringLiteral("Drive"), QStringLiteral("Access"),
                                 QString{}});
@@ -296,103 +310,70 @@ void SettingsPage::build() {
         if (dir.isEmpty()) {
             return;
         }
-        const auto letters = settings_.free_drive_letters();
+        auto shares = staged_shares();
+        const auto letters = free_drive_letters(shares);
         if (letters.isEmpty()) {
             return;
         }
-        auto shares = settings_.host_shares();
         shares.push_back(HostShare{dir, letters.first(), false});
-        // A share is a device on the machine, so it stages rather than
-        // applying under a running guest.
-        QStringList records;
-        for (const auto& share : shares) {
-            records << QStringList{share.host_path, share.drive,
-                                   share.read_only ? QStringLiteral("ro")
-                                                   : QStringLiteral("rw")}
-                           .join(QLatin1Char('\x1e'));
-        }
-        put(QLatin1String(K::kHostShares), records.join(QLatin1Char('\x1f')));
-        rebuild_shares_table();
+        stage_shares(shares);
     });
 
-    add_row(files, QString{}, QStringLiteral("Open the share"),
-            QStringLiteral("Launches your file manager at the guest's C: drive."),
-            [this] {
-                auto* button = small_button(QStringLiteral("Open Windows files"));
-                connect(button, &QPushButton::clicked, this,
-                        &SettingsPage::open_share_requested);
-                return button;
-            }());
+    add_action_row(files, QStringLiteral("Open the share"),
+                   QStringLiteral("Launches your file manager at the guest's C: drive."),
+                   QStringLiteral("Open Windows files"), &SettingsPage::open_share_requested);
 
     // ---- desktop entries ------------------------------------------
     auto* entries = new_group(QStringLiteral("Desktop entries"));
-    add_row(entries, QLatin1String(K::kPublishEntries),
+    add_row(entries, K::kPublishEntries,
             QStringLiteral("Put guest applications in your menu"),
             QStringLiteral("One .desktop file per application, with the icon pulled out "
                            "of the executable."),
-            make_toggle(QLatin1String(K::kPublishEntries)));
-    add_row(entries, QLatin1String(K::kMenuCategory), QStringLiteral("Menu category"),
+            make_toggle(K::kPublishEntries));
+    add_row(entries, K::kMenuCategory, QStringLiteral("Menu category"),
             QStringLiteral("The submenu they appear under."),
-            make_text(QLatin1String(K::kMenuCategory)));
-    add_row(entries, QLatin1String(K::kFileAssociations),
+            make_text(K::kMenuCategory));
+    add_row(entries, K::kFileAssociations,
             QStringLiteral("Open Windows file types with these applications"),
             QStringLiteral("Registers MIME handlers. An existing default is never "
                            "replaced without asking."),
-            make_toggle(QLatin1String(K::kFileAssociations)));
-    add_row(entries, QString{}, QStringLiteral("Rewrite the entries"),
-            QStringLiteral("Regenerates every .desktop file and icon."), [this] {
-                auto* button = small_button(QStringLiteral("Rewrite now"));
-                connect(button, &QPushButton::clicked, this,
-                        &SettingsPage::rewrite_entries_requested);
-                return button;
-            }());
+            make_toggle(K::kFileAssociations));
+    add_action_row(entries, QStringLiteral("Rewrite the entries"),
+                   QStringLiteral("Regenerates every .desktop file and icon."),
+                   QStringLiteral("Rewrite now"), &SettingsPage::rewrite_entries_requested);
 
     // ---- guest ----------------------------------------------------
     auto* guest = new_group(QStringLiteral("Guest"));
-    add_row(guest, QLatin1String(K::kAgentPort), QStringLiteral("Agent port"),
+    add_row(guest, K::kAgentPort, QStringLiteral("Agent port"),
             QStringLiteral("Forwarded from the host loopback into the guest."),
-            make_number(QLatin1String(K::kAgentPort), 1024, 65535));
-    add_row(guest, QLatin1String(K::kAutostart),
+            make_number(K::kAgentPort, 1024, 65535));
+    add_row(guest, K::kAutostart,
             QStringLiteral("Start the guest when the manager opens"),
             QStringLiteral("Otherwise it starts the first time you launch an application."),
-            make_toggle(QLatin1String(K::kAutostart)));
+            make_toggle(K::kAutostart));
 
     // ---- host -----------------------------------------------------
     auto* host = new_group(QStringLiteral("Host"));
-    add_row(host, QLatin1String(K::kCloseToTray),
+    add_row(host, K::kCloseToTray,
             QStringLiteral("Keep running in the tray when closed"),
             QStringLiteral("Closing the window leaves the guest running."),
-            make_toggle(QLatin1String(K::kCloseToTray)));
+            make_toggle(K::kCloseToTray));
 
     // ---- images ---------------------------------------------------
     auto* images = new_group(QStringLiteral("Images"));
-    add_row(images, QString{}, QStringLiteral("Download a Windows image"),
-            QStringLiteral("Fetch an installation ISO from microsoft.com into any folder."),
-            [this] {
-                auto* button = small_button(QStringLiteral("Open the download tool"));
-                connect(button, &QPushButton::clicked, this,
-                        &SettingsPage::download_tool_requested);
-                return button;
-            }());
-    add_row(images, QString{}, QStringLiteral("Trim a Windows image"),
-            QStringLiteral("Build a smaller install ISO from one you have, into any "
-                           "folder. Does not touch the running guest."),
-            [this] {
-                auto* button = small_button(QStringLiteral("Open the image tool"));
-                connect(button, &QPushButton::clicked, this,
-                        &SettingsPage::trim_tool_requested);
-                return button;
-            }());
-    add_row(images, QString{}, QStringLiteral("Reinstall the guest"),
-            QStringLiteral("Deletes the current disk and runs the first-run wizard again. "
-                           "Applications inside the guest are lost."),
-            [this] {
-                auto* button = small_button(QStringLiteral("Reinstall"));
-                button->setObjectName(QString::fromLatin1(Theme::Role::kStop));
-                connect(button, &QPushButton::clicked, this,
-                        &SettingsPage::reinstall_requested);
-                return button;
-            }());
+    add_action_row(images, QStringLiteral("Download a Windows image"),
+                   QStringLiteral("Fetch an installation ISO from microsoft.com into any folder."),
+                   QStringLiteral("Open the download tool"),
+                   &SettingsPage::download_tool_requested);
+    add_action_row(images, QStringLiteral("Trim a Windows image"),
+                   QStringLiteral("Build a smaller install ISO from one you have, into any "
+                                  "folder. Does not touch the running guest."),
+                   QStringLiteral("Open the image tool"), &SettingsPage::trim_tool_requested);
+    add_action_row(images, QStringLiteral("Reinstall the guest"),
+                   QStringLiteral("Deletes the current disk and runs the first-run wizard "
+                                  "again. Applications inside the guest are lost."),
+                   QStringLiteral("Reinstall"), &SettingsPage::reinstall_requested,
+                   Theme::Role::kStop);
 
     content_->addStretch(1);
 
@@ -403,11 +384,9 @@ void SettingsPage::build() {
     bar->setContentsMargins(14, 11, 14, 11);
     bar->setSpacing(14);
 
-    apply_count_ = caption(QStringLiteral("0 changes need a restart"));
-    apply_count_->setStyleSheet(
-        QStringLiteral("color: %1;").arg(QString::fromLatin1(Theme::Color::kAmber)));
-    apply_diffs_ = meta(QString{});
-    apply_diffs_->setWordWrap(true);
+    apply_count_ = Widgets::caption(QStringLiteral("0 changes need a restart"));
+    apply_count_->setProperty(Theme::Tone::kProperty, Theme::Tone::kAmber);
+    apply_diffs_ = Widgets::meta(QString{}, true);
 
     auto* revert = small_button(QStringLiteral("Revert"));
     revert->setObjectName(QString::fromLatin1(Theme::Role::kQuiet));
@@ -428,26 +407,13 @@ void SettingsPage::build() {
 }
 
 QVBoxLayout* SettingsPage::new_group(const QString& title) {
-    auto* frame = new QFrame;
-    Theme::surface(frame, Theme::Role::kPanel);
-    auto* outer = new QVBoxLayout(frame);
-    outer->setContentsMargins(0, 0, 0, 0);
-    outer->setSpacing(0);
-
-    auto* header = new QWidget;
-    Theme::surface(header, Theme::Role::kPanelHeader);
-    auto* header_layout = new QHBoxLayout(header);
-    header_layout->setContentsMargins(12, 8, 12, 8);
-    header_layout->addWidget(caption(title));
-    outer->addWidget(header);
-
-    auto* body = new QVBoxLayout;
-    body->setContentsMargins(0, 0, 0, 0);
-    body->setSpacing(0);
-    outer->addLayout(body);
-
-    content_->addWidget(frame);
-    return body;
+    // Rows run edge to edge and carry their own padding, so the body
+    // has none.
+    const auto group = ui::Panel::make(title);
+    group.body->setContentsMargins(0, 0, 0, 0);
+    group.body->setSpacing(0);
+    content_->addWidget(group.frame);
+    return group.body;
 }
 
 QWidget* SettingsPage::add_row(QVBoxLayout* group, const QString& key, const QString& label,
@@ -469,10 +435,7 @@ QWidget* SettingsPage::add_row(QVBoxLayout* group, const QString& key, const QSt
     head->addStretch(1);
     text->addLayout(head);
 
-    auto* body = new QLabel(description);
-    body->setObjectName(QString::fromLatin1(Theme::Role::kBody));
-    body->setWordWrap(true);
-    text->addWidget(body);
+    text->addWidget(Widgets::prose(description));
 
     layout->addLayout(text, 1);
     // The control column is a fixed share of the row, so a slider has
@@ -484,45 +447,33 @@ QWidget* SettingsPage::add_row(QVBoxLayout* group, const QString& key, const QSt
 
     // A hairline between rows, and none after the last one; the frame's
     // own border closes the group.
-    auto* line = new QFrame;
-    line->setObjectName(QString::fromLatin1(Theme::Role::kSeparator));
-    line->setFixedHeight(1);
-    group->addWidget(line);
+    group->addWidget(Widgets::separator());
     return row;
 }
 
-QWidget* SettingsPage::make_slider(const QString& key, int min, int max, int step,
+void SettingsPage::add_action_row(QVBoxLayout* group, const QString& label,
+                                  const QString& description, const QString& button_text,
+                                  void (SettingsPage::*clicked)(), const char* role) {
+    auto* button = small_button(button_text);
+    if (role != nullptr) {
+        button->setObjectName(QString::fromLatin1(role));
+    }
+    connect(button, &QPushButton::clicked, this, clicked);
+    add_row(group, QString{}, label, description, button);
+}
+
+QWidget* SettingsPage::make_slider(const QString& key, const ui::MachineLimits::Range& range,
                                    const QString& suffix) {
-    auto* row = new QWidget;
-    auto* layout = new QHBoxLayout(row);
-    layout->setContentsMargins(0, 0, 0, 0);
-    layout->setSpacing(12);
-
-    auto* slider = new QSlider(Qt::Horizontal);
-    slider->setRange(min, max);
-    slider->setSingleStep(step);
-    slider->setPageStep(step * 4);
-
-    auto* spin = new QSpinBox;
-    spin->setRange(min, max);
-    spin->setSingleStep(step);
-    spin->setSuffix(suffix);
-    spin->setFixedWidth(96);
-    spin->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    spin->setObjectName(QStringLiteral("SliderValue"));
-
-    const int initial = pending_.staged_or_current(key).toInt();
-    slider->setValue(initial);
-    spin->setValue(initial);
-
-    connect(slider, &QSlider::valueChanged, spin, &QSpinBox::setValue);
-    connect(spin, &QSpinBox::valueChanged, slider, &QSlider::setValue);
-    connect(spin, &QSpinBox::valueChanged, this,
+    auto* slider = new ui::SliderSpin(range.min, range.max, range.step, suffix);
+    slider->row()->setSpacing(12);
+    // The number is quiet and right aligned: the slider is the control.
+    slider->spin()->setFixedWidth(96);
+    slider->spin()->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    slider->spin()->setObjectName(QStringLiteral("SliderValue"));
+    slider->set_value(pending_.staged_or_current(key).toInt());
+    connect(slider, &ui::SliderSpin::value_changed, this,
             [this, key](int value) { put(key, value); });
-
-    layout->addWidget(slider, 1);
-    layout->addWidget(spin);
-    return row;
+    return slider;
 }
 
 
@@ -637,8 +588,19 @@ void SettingsPage::put(const QString& key, const QVariant& value) {
     settings_.set_value(key, value);
 }
 
+QVector<HostShare> SettingsPage::staged_shares() const {
+    return config::ManagerSettings::decode_host_shares(
+        pending_.staged_or_current(K::kHostShares).toString());
+}
+
+void SettingsPage::stage_shares(const QVector<HostShare>& shares) {
+    // A share is a device on the machine, so it stages rather than
+    // applying under a running guest.
+    put(K::kHostShares, config::ManagerSettings::encode_host_shares(shares));
+}
+
 void SettingsPage::rebuild_shares_table() {
-    const auto shares = settings_.host_shares();
+    const auto shares = staged_shares();
     shares_table_->setRowCount(static_cast<int>(shares.size()));
     for (int row = 0; row < shares.size(); ++row) {
         const auto& share = shares.at(row);
@@ -651,18 +613,9 @@ void SettingsPage::rebuild_shares_table() {
         auto* remove = small_button(QStringLiteral("✕"));
         remove->setObjectName(QString::fromLatin1(Theme::Role::kQuiet));
         connect(remove, &QPushButton::clicked, this, [this, path = share.host_path] {
-            auto remaining = settings_.host_shares();
-            remaining.removeIf(
-                [&path](const HostShare& s) { return s.host_path == path; });
-            QStringList records;
-            for (const auto& s : remaining) {
-                records << QStringList{s.host_path, s.drive,
-                                       s.read_only ? QStringLiteral("ro")
-                                                   : QStringLiteral("rw")}
-                               .join(QLatin1Char('\x1e'));
-            }
-            put(QLatin1String(K::kHostShares), records.join(QLatin1Char('\x1f')));
-            rebuild_shares_table();
+            auto remaining = staged_shares();
+            remaining.removeIf([&path](const HostShare& s) { return s.host_path == path; });
+            stage_shares(remaining);
         });
         shares_table_->setCellWidget(row, 3, remove);
     }
@@ -671,7 +624,7 @@ void SettingsPage::rebuild_shares_table() {
 void SettingsPage::rebuild_bindings_table() {
     const auto& configs = apps_.configs();
     auto bindings = settings_.channel_bindings();
-    const int channels = pending_.staged_or_current(QLatin1String(K::kChannels)).toInt();
+    const int channels = pending_.staged_or_current(K::kChannels).toInt();
 
     bindings_table_->setRowCount(static_cast<int>(configs.size()));
     int row = 0;

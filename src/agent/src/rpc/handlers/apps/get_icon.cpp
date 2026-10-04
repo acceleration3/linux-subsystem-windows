@@ -1,34 +1,28 @@
-#include "lsw/agent/rpc/handler.hpp"
 #include "lsw/agent/rpc/auto_register.hpp"
-
-#include "lsw/linkproto/commands.hpp"
+#include "lsw/agent/rpc/handler.hpp"
+#include "lsw/agent/rpc/params.hpp"
 #include "lsw/agent/util/text_encoding.hpp"
 #include "lsw/agent/win/icon_extractor.hpp"
+#include "lsw/linkproto/commands.hpp"
 
 // clang-format off
 #include <windows.h>
 // clang-format on
 
-#include <stdexcept>
 #include <string>
 
 namespace lsw::agent::rpc::handlers {
 
 struct GetIconHandler : RpcHandler {
-    nlohmann::json handle(const nlohmann::json& params,
-                          RpcContext& /*ctx*/) override {
-        const auto path = params.value("path", std::string{});
-        if (path.empty()) {
-            throw std::invalid_argument("get_icon: missing path");
-        }
+    nlohmann::json handle(const nlohmann::json& params, RpcContext& /*ctx*/) override {
+        const auto path = Params{params, linkproto::cmd::kGetIcon}.require_string("path");
         return {{"icon_png_base64",
                  win::IconExtractor::from_executable(util::TextEncoding::to_wide(path))}};
     }
 
     [[nodiscard]] std::string summarize(const nlohmann::json& reply) const override {
         const auto b64 = reply.value("icon_png_base64", std::string{});
-        return "png_b64_len=" + std::to_string(b64.size())
-               + (b64.empty() ? " (FAILED)" : "");
+        return "png_b64_len=" + std::to_string(b64.size()) + (b64.empty() ? " (FAILED)" : "");
     }
 };
 

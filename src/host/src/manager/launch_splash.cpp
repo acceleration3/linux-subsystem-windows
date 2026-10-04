@@ -1,6 +1,8 @@
 #include "lsw/host/manager/launch_splash.hpp"
 
+#include "lsw/host/ui/format.hpp"
 #include "lsw/host/ui/theme.hpp"
+#include "lsw/host/ui/widgets.hpp"
 
 #include <QHBoxLayout>
 #include <QIcon>
@@ -14,6 +16,7 @@ namespace lsw::host::manager {
 namespace {
 
 using ui::Theme;
+using ui::Widgets;
 
 // What a cold start costs, measured: the domain boots, Windows reaches
 // a logon, the agent's scheduled task fires. Shown as an expectation
@@ -26,22 +29,6 @@ const char* const kPhaseNames[] = {
     "Windows answering",
     "Application running",
 };
-
-QLabel* meta(const QString& text) {
-    auto* label = new QLabel(text);
-    label->setObjectName(QString::fromLatin1(Theme::Role::kMeta));
-    label->setWordWrap(true);
-    return label;
-}
-
-// Sentences, not values: the subtitle and the footnote are prose and
-// read in the interface face.
-QLabel* prose(const QString& text) {
-    auto* label = new QLabel(text);
-    label->setObjectName(QString::fromLatin1(Theme::Role::kBody));
-    label->setWordWrap(true);
-    return label;
-}
 
 }  // namespace
 
@@ -74,7 +61,9 @@ LaunchSplash::LaunchSplash(QString application, QIcon icon, QWidget* parent)
     titles->setSpacing(3);
     auto* name = new QLabel(application_);
     name->setObjectName(QString::fromLatin1(Theme::Role::kHeading));
-    subtitle_ = prose(QStringLiteral("Starting Windows so it has somewhere to run"));
+    // Sentences, not values: the subtitle and the footnote are prose and
+    // read in the interface face.
+    subtitle_ = Widgets::prose(QStringLiteral("Starting Windows so it has somewhere to run"));
     titles->addWidget(name);
     titles->addWidget(subtitle_);
     head->addWidget(badge);
@@ -85,7 +74,7 @@ LaunchSplash::LaunchSplash(QString application, QIcon icon, QWidget* parent)
     bar_ = new QProgressBar;
     bar_->setRange(0, kExpectedSeconds);
     root->addWidget(bar_);
-    timing_ = meta(QString{});
+    timing_ = Widgets::meta(QString{}, true);
     root->addWidget(timing_);
 
     // ---- phases ---------------------------------------------------
@@ -94,14 +83,13 @@ LaunchSplash::LaunchSplash(QString application, QIcon icon, QWidget* parent)
     for (int i = 0; i < static_cast<int>(Phase::Count); ++i) {
         steps_[i] = new QLabel(QStringLiteral("○  %1")
                                    .arg(QString::fromLatin1(kPhaseNames[i])));
-        steps_[i]->setStyleSheet(
-            QStringLiteral("color: %1;").arg(QString::fromLatin1(Theme::Color::kFgFaint)));
+        steps_[i]->setProperty(Theme::Tone::kProperty, Theme::Tone::kFaint);
         steps->addWidget(steps_[i]);
     }
     root->addLayout(steps);
 
-    stall_text_ = prose(QString{});
-    stall_text_->setStyleSheet(QStringLiteral("color: #f0c393;"));
+    stall_text_ = Widgets::prose(QString{});
+    stall_text_->setProperty(Theme::Tone::kProperty, Theme::Tone::kWarm);
     stall_text_->setVisible(false);
     root->addWidget(stall_text_);
 
@@ -112,9 +100,8 @@ LaunchSplash::LaunchSplash(QString application, QIcon icon, QWidget* parent)
     auto* footer_layout = new QHBoxLayout(footer_);
     footer_layout->setContentsMargins(0, 0, 0, 0);
     footer_layout->addWidget(
-        prose(QStringLiteral("Closing this leaves the guest starting.")), 1);
-    auto* cancel = new QPushButton(QStringLiteral("Cancel"));
-    cancel->setObjectName(QString::fromLatin1(Theme::Role::kQuiet));
+        Widgets::prose(QStringLiteral("Closing this leaves the guest starting.")), 1);
+    auto* cancel = Widgets::button(QStringLiteral("Cancel"), Theme::Role::kQuiet);
     auto* hide_button = new QPushButton(QStringLiteral("Hide"));
     footer_layout->addWidget(cancel);
     footer_layout->addWidget(hide_button);
@@ -124,11 +111,9 @@ LaunchSplash::LaunchSplash(QString application, QIcon icon, QWidget* parent)
     auto* stalled_layout = new QHBoxLayout(stalled_footer_);
     stalled_layout->setContentsMargins(0, 0, 0, 0);
     stalled_layout->addStretch(1);
-    auto* open_log = new QPushButton(QStringLiteral("Open the log"));
-    open_log->setObjectName(QString::fromLatin1(Theme::Role::kQuiet));
+    auto* open_log = Widgets::button(QStringLiteral("Open the log"), Theme::Role::kQuiet);
     auto* keep = new QPushButton(QStringLiteral("Keep waiting"));
-    auto* restart = new QPushButton(QStringLiteral("Restart the guest"));
-    restart->setObjectName(QString::fromLatin1(Theme::Role::kPrimary));
+    auto* restart = Widgets::button(QStringLiteral("Restart the guest"), Theme::Role::kPrimary);
     stalled_layout->addWidget(open_log);
     stalled_layout->addWidget(keep);
     stalled_layout->addWidget(restart);
@@ -142,7 +127,6 @@ LaunchSplash::LaunchSplash(QString application, QIcon icon, QWidget* parent)
     connect(hide_button, &QPushButton::clicked, this, [this] {
         // Hide, not cancel: the application still opens when it is
         // ready, it just stops occupying the screen while it waits.
-        Q_EMIT hidden();
         hide();
     });
     connect(open_log, &QPushButton::clicked, this, &LaunchSplash::log_requested);
@@ -164,11 +148,8 @@ LaunchSplash::LaunchSplash(QString application, QIcon icon, QWidget* parent)
 void LaunchSplash::tick() {
     const int seconds = static_cast<int>(clock_.elapsed() / 1000);
     bar_->setValue(qMin(seconds, kExpectedSeconds));
-    timing_->setText(QStringLiteral("%1:%2 of about %3:%4")
-                         .arg(seconds / 60)
-                         .arg(seconds % 60, 2, 10, QLatin1Char('0'))
-                         .arg(kExpectedSeconds / 60)
-                         .arg(kExpectedSeconds % 60, 2, 10, QLatin1Char('0')));
+    timing_->setText(QStringLiteral("%1 of about %2")
+                         .arg(ui::Format::clock(seconds), ui::Format::clock(kExpectedSeconds)));
 }
 
 void LaunchSplash::reach(Phase phase) {
@@ -185,11 +166,11 @@ void LaunchSplash::reach(Phase phase) {
                                          : (current ? QStringLiteral("●")
                                                     : QStringLiteral("○")),
                                     QString::fromLatin1(kPhaseNames[i])));
-        steps_[i]->setStyleSheet(
-            QStringLiteral("color: %1;")
-                .arg(QString::fromLatin1(done      ? Theme::Color::kOk
-                                         : current ? Theme::Color::kFg
-                                                   : Theme::Color::kFgFaint)));
+        // The current phase is in the plain foreground, which is no tone.
+        Widgets::set_flag(steps_[i], Theme::Tone::kProperty,
+                          done      ? QVariant(Theme::Tone::kOk)
+                          : current ? QVariant()
+                                    : QVariant(Theme::Tone::kFaint));
     }
     switch (phase) {
     case Phase::MachineStarted:

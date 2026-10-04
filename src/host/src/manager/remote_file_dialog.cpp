@@ -1,24 +1,24 @@
 #include "lsw/host/manager/remote_file_dialog.hpp"
 
+#include "lsw/host/link/agent_reply.hpp"
+#include "lsw/host/link/agent_rpc_client.hpp"
+
+#include "lsw/host/ui/dialog_chrome.hpp"
+#include "lsw/host/ui/format.hpp"
 #include "lsw/host/ui/theme.hpp"
+#include "lsw/host/ui/widgets.hpp"
 
 #include <QDateTime>
 #include <QFrame>
 #include <QHBoxLayout>
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
 #include <QLabel>
 #include <QLineEdit>
 #include <QButtonGroup>
 #include <QComboBox>
 #include <QHeaderView>
-#include <QPointer>
-#include <QStyle>
 #include <QPushButton>
 #include <QTreeWidget>
 #include <QVBoxLayout>
-#include <QtConcurrent>
 
 #include <nlohmann/json.hpp>
 
@@ -29,6 +29,7 @@ namespace lsw::host::manager {
 namespace {
 
 using ui::Theme;
+using ui::Widgets;
 
 constexpr int kRoleName = Qt::UserRole;
 constexpr int kRoleIsDir = Qt::UserRole + 1;
@@ -51,19 +52,6 @@ const Place kPlaces[] = {
     {"Desktop", R"(C:\Users\Public\Desktop)", "●"},
     {"Downloads", R"(C:\Users\Public\Downloads)", "●"},
 };
-
-QString human_size(qint64 bytes) {
-    if (bytes <= 0) {
-        return {};
-    }
-    if (bytes >= 1024LL * 1024 * 1024) {
-        return QStringLiteral("%1 GB").arg(bytes / (1024.0 * 1024 * 1024), 0, 'f', 1);
-    }
-    if (bytes >= 1024 * 1024) {
-        return QStringLiteral("%1 MB").arg(bytes / (1024.0 * 1024), 0, 'f', 1);
-    }
-    return QStringLiteral("%1 KB").arg(qMax<qint64>(1, bytes / 1024));
-}
 
 }  // namespace
 
@@ -121,8 +109,7 @@ void RemoteFileDialog::build() {
     bar_layout->setContentsMargins(10, 8, 10, 8);
     bar_layout->setSpacing(6);
 
-    auto* up = new QPushButton(QStringLiteral("↑"));
-    up->setObjectName(QString::fromLatin1(Theme::Role::kQuiet));
+    auto* up = Widgets::button(QStringLiteral("↑"), Theme::Role::kQuiet);
     up->setFixedWidth(32);
     bar_layout->addWidget(up);
 
@@ -203,21 +190,13 @@ void RemoteFileDialog::build() {
             [this](int) { navigate_to(current_); });
 
     // ---- footer ---------------------------------------------------
-    auto* footer = new QFrame;
-    Theme::surface(footer, Theme::Role::kDialogFoot);
-    auto* footer_layout = new QHBoxLayout(footer);
-    footer_layout->setContentsMargins(12, 10, 12, 10);
-    footer_layout->setSpacing(8);
-    status_ = new QLabel;
-    status_->setObjectName(QString::fromLatin1(Theme::Role::kMeta));
-    status_->setWordWrap(true);
+    auto* footer_layout = ui::DialogChrome::foot_band(pane_layout, QMargins(12, 10, 12, 10), 8);
+    status_ = Widgets::meta(QString{}, true);
     auto* cancel = new QPushButton(QStringLiteral("Cancel"));
-    choose_button_ = new QPushButton(QStringLiteral("Choose"));
-    choose_button_->setObjectName(QString::fromLatin1(Theme::Role::kPrimary));
+    choose_button_ = Widgets::button(QStringLiteral("Choose"), Theme::Role::kPrimary);
     footer_layout->addWidget(status_, 1);
     footer_layout->addWidget(cancel);
     footer_layout->addWidget(choose_button_);
-    pane_layout->addWidget(footer);
 
     connect(cancel, &QPushButton::clicked, this, &QDialog::reject);
     connect(choose_button_, &QPushButton::clicked, this,
@@ -284,14 +263,10 @@ void RemoteFileDialog::highlight_place(const QString& path) {
         const bool on = button == best;
         button->setChecked(on);
         if (auto* glyph = button->findChild<QLabel*>(QStringLiteral("PlaceGlyph"))) {
-            glyph->setProperty("on", on);
-            glyph->style()->unpolish(glyph);
-            glyph->style()->polish(glyph);
+            Widgets::set_flag(glyph, "on", on);
         }
         if (auto* label = button->findChild<QLabel*>(QStringLiteral("PlaceLabel"))) {
-            label->setProperty("on", on);
-            label->style()->unpolish(label);
-            label->style()->polish(label);
+            Widgets::set_flag(label, "on", on);
         }
     }
 }
@@ -299,8 +274,7 @@ void RemoteFileDialog::highlight_place(const QString& path) {
 // A heading over a group of places. Small mono caps, and the design's
 // breathing room above it, because it separates two kinds of thing.
 void RemoteFileDialog::add_place_heading(const QString& text) {
-    auto* label = new QLabel(text.toUpper());
-    label->setObjectName(QString::fromLatin1(Theme::Role::kCaption));
+    auto* label = Widgets::caption(text);
     label->setContentsMargins(9, places_layout_->count() == 0 ? 0 : 10, 9, 5);
     append_place_widget(label);
 }
@@ -309,34 +283,21 @@ void RemoteFileDialog::refresh_places() {
     // The drives the guest reports, appended under the fixed shortcuts.
     // A mapped host folder is a drive letter in there like any other,
     // which is exactly how it should read.
-    const QPointer<RemoteFileDialog> self{this};
-    (void)QtConcurrent::run([self]() {
-        if (!self) {
+    rpc_.request_async(linkproto::cmd::kListDir, {{"path", ""}}, this,
+                       [this](const link::AgentReply& reply) {
+        const auto drives = reply.ok ? reply.body.value("entries", nlohmann::json::array())
+                                     : nlohmann::json::array();
+        if (!drives.is_array() || drives.empty() || drives_listed_) {
             return;
         }
-        const nlohmann::json request = {{"cmd", linkproto::cmd::kListDir},
-                                        {"params", {{"path", ""}}}};
-        const auto raw = self->rpc_.call(request);
-        QMetaObject::invokeMethod(self.data(), [self, raw] {
-            if (!self || raw.isEmpty()) {
-                return;
-            }
-            const auto reply = QJsonDocument::fromJson(raw).object();
-            const auto drives = reply.value(QStringLiteral("entries")).toArray();
-            if (drives.isEmpty() || self->drives_listed_) {
-                return;
-            }
-            self->drives_listed_ = true;
-            self->add_place_heading(QStringLiteral("Drives"));
-            for (const auto value : drives) {
-                const auto entry = value.toObject();
-                const QString name = entry.value(QStringLiteral("name")).toString();
-                const QString label = entry.value(QStringLiteral("label")).toString();
-                self->add_place(label.isEmpty() ? name
-                                                : QStringLiteral("%1 %2").arg(name, label),
-                                name + QLatin1Char('\\'), QStringLiteral("◔"));
-            }
-        });
+        drives_listed_ = true;
+        add_place_heading(QStringLiteral("Drives"));
+        for (const auto& entry : drives) {
+            const auto name = QString::fromStdString(entry.value("name", std::string{}));
+            const auto label = QString::fromStdString(entry.value("label", std::string{}));
+            add_place(label.isEmpty() ? name : QStringLiteral("%1 %2").arg(name, label),
+                      name + QLatin1Char('\\'), QStringLiteral("◔"));
+        }
     });
 }
 
@@ -373,15 +334,12 @@ void RemoteFileDialog::set_breadcrumb(const QString& path) {
     for (int i = 0; i < parts.size(); ++i) {
         walked += parts.at(i);
         const QString target = walked + QLatin1Char('\\');
-        auto* crumb = new QPushButton(parts.at(i));
-        crumb->setObjectName(QString::fromLatin1(Theme::Role::kQuiet));
+        auto* crumb = Widgets::button(parts.at(i), Theme::Role::kQuiet);
         crumb->setCursor(Qt::PointingHandCursor);
         connect(crumb, &QPushButton::clicked, this, [this, target] { navigate_to(target); });
         crumbs_->addWidget(crumb);
         if (i + 1 < parts.size()) {
-            auto* sep = new QLabel(QStringLiteral("\\"));
-            sep->setObjectName(QString::fromLatin1(Theme::Role::kMeta));
-            crumbs_->addWidget(sep);
+            crumbs_->addWidget(Widgets::meta(QStringLiteral("\\")));
         }
         walked += QLatin1Char('\\');
     }
@@ -397,61 +355,44 @@ void RemoteFileDialog::navigate_to(const QString& path) {
     status_->setText(QStringLiteral("Reading %1 over the agent connection").arg(path));
     entries_->clear();
 
-    const QPointer<RemoteFileDialog> self{this};
-    const std::string wanted = path.toStdString();
-    const std::string suffix = suffix_filter().toStdString();
-    const bool dirs_only = mode_ == Mode::Directory;
-    (void)QtConcurrent::run([self, wanted, suffix, dirs_only]() {
-        if (!self) {
-            return;
-        }
-        const nlohmann::json request = {
-            {"cmd", linkproto::cmd::kListDir},
-            {"params",
-             {{"path", wanted}, {"suffix", suffix}, {"dirs_only", dirs_only}}},
-        };
-        const auto raw = self->rpc_.call(request);
-        QMetaObject::invokeMethod(self.data(), [self, raw] {
-            if (!self) {
-                return;
-            }
-            if (raw.isEmpty()) {
-                self->status_->setText(
-                    QStringLiteral("The guest did not answer. It may still be booting."));
-                return;
-            }
-            self->render_entries(QJsonDocument::fromJson(raw).object());
-        });
-    });
+    rpc_.request_async(linkproto::cmd::kListDir,
+                       {{"path", path.toStdString()},
+                        {"suffix", suffix_filter().toStdString()},
+                        {"dirs_only", mode_ == Mode::Directory}},
+                       this, [this](const link::AgentReply& reply) { render_entries(reply); });
 
     if (!drives_listed_) {
         refresh_places();
     }
 }
 
-void RemoteFileDialog::render_entries(const QJsonObject& reply) {
-    const QString error = reply.value(QStringLiteral("error")).toString();
-    if (!error.isEmpty()) {
+void RemoteFileDialog::render_entries(const link::AgentReply& reply) {
+    if (!reply.ok) {
+        // A refusal carries the folder's own entries field; a transport
+        // failure carries nothing. They read differently.
+        if (!reply.body.is_object()) {
+            status_->setText(QStringLiteral("The guest did not answer. It may still be booting."));
+            return;
+        }
         // The agent runs as the wizard user, so a folder belonging to
         // somebody else is refused by Windows and not by us. Saying
         // which is the difference between a bug and a permission.
         status_->setText(QStringLiteral("%1. The agent runs as the guest's own account.")
-                             .arg(error));
+                             .arg(QString::fromStdString(reply.error)));
         return;
     }
 
-    const auto entries = reply.value(QStringLiteral("entries")).toArray();
-    for (const auto value : entries) {
-        const auto entry = value.toObject();
-        const QString name = entry.value(QStringLiteral("name")).toString();
-        const bool is_dir = entry.value(QStringLiteral("is_dir")).toBool();
-        const auto size = static_cast<qint64>(entry.value(QStringLiteral("size")).toDouble());
-        const auto mtime =
-            static_cast<qint64>(entry.value(QStringLiteral("mtime")).toDouble());
+    const auto entries = reply.body.value("entries", nlohmann::json::array());
+    for (const auto& entry : entries) {
+        const auto name = QString::fromStdString(entry.value("name", std::string{}));
+        const bool is_dir = entry.value("is_dir", false);
+        const auto size = entry.value("size", std::int64_t{0});
+        const auto mtime = entry.value("mtime", std::int64_t{0});
 
         auto* item = new QTreeWidgetItem(entries_);
         item->setText(0, name);
-        item->setText(1, is_dir ? QString{} : human_size(size));
+        item->setText(1, is_dir || size <= 0 ? QString{}
+                                             : ui::Format::bytes(static_cast<quint64>(size)));
         item->setText(2, mtime > 0 ? QDateTime::fromSecsSinceEpoch(mtime).toString(
                                          QStringLiteral("dd MMM hh:mm"))
                                    : QString{});
@@ -464,8 +405,8 @@ void RemoteFileDialog::render_entries(const QJsonObject& reply) {
         item->setData(0, kRoleName, child + name);
     }
 
-    const int total = reply.value(QStringLiteral("total")).toInt();
-    const bool more = reply.contains(QStringLiteral("next_cursor"));
+    const int total = reply.body.value("total", 0);
+    const bool more = reply.body.contains("next_cursor");
     status_->setText(more ? QStringLiteral("Showing %1 of %2 entries")
                                 .arg(entries.size())
                                 .arg(total)
@@ -499,28 +440,19 @@ void RemoteFileDialog::accept_current() {
     // guest what it points at, and keep its arguments and working
     // folder while we are there.
     status_->setText(QStringLiteral("Resolving the shortcut"));
-    const QPointer<RemoteFileDialog> self{this};
-    const std::string wanted = path.toStdString();
-    (void)QtConcurrent::run([self, wanted, path]() {
-        if (!self) {
-            return;
-        }
-        const nlohmann::json request = {{"cmd", linkproto::cmd::kResolveShortcut},
-                                        {"params", {{"path", wanted}}}};
-        const auto raw = self->rpc_.call(request);
-        QMetaObject::invokeMethod(self.data(), [self, raw, path] {
-            if (!self) {
-                return;
-            }
-            const auto reply = QJsonDocument::fromJson(raw).object();
-            const QString target = reply.value(QStringLiteral("target")).toString();
-            // A shortcut that resolves to nothing is still better stored
-            // as itself than not stored at all.
-            self->selected_ = target.isEmpty() ? path : target;
-            self->arguments_ = reply.value(QStringLiteral("args")).toString();
-            self->workdir_ = reply.value(QStringLiteral("workdir")).toString();
-            self->accept();
-        });
+    rpc_.request_async(linkproto::cmd::kResolveShortcut, {{"path", path.toStdString()}}, this,
+                       [this, path](const link::AgentReply& reply) {
+        const auto field = [&reply](const char* key) {
+            return reply.ok ? QString::fromStdString(reply.body.value(key, std::string{}))
+                            : QString{};
+        };
+        // A shortcut that resolves to nothing is still better stored
+        // as itself than not stored at all.
+        const QString target = field("target");
+        selected_ = target.isEmpty() ? path : target;
+        arguments_ = field("args");
+        workdir_ = field("workdir");
+        accept();
     });
 }
 

@@ -4,6 +4,7 @@
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <vector>
 
 namespace lsw::agent::log {
@@ -41,8 +42,7 @@ void append(Level level, const std::string& msg);
 // nothing new). If the ring has wrapped past ``since`` (caller fell
 // way behind) the returned records start from the oldest still
 // retained — the caller will detect this from the gap.
-[[nodiscard]] std::vector<Record> collect_since(std::uint64_t since,
-                                                  std::uint64_t& next_since);
+[[nodiscard]] std::vector<Record> collect_since(std::uint64_t since, std::uint64_t& next_since);
 
 // ---- Message formatting -------------------------------------------------
 //
@@ -59,24 +59,45 @@ void append(Level level, const std::string& msg);
 // placeholders.
 
 // Single argument: pass through untouched.
-[[nodiscard]] inline std::string format(std::string message) { return message; }
+[[nodiscard]] inline std::string format(std::string message) {
+    return message;
+}
 
 namespace detail {
 
-// Append one argument in the spdlog/fmt style: strings as-is,
-// everything else through the stream operator.
-template <typename T>
+// UTF-16 text — a Win32 path, a window title — converted to UTF-8. Out
+// of line, in log.cpp, so this header stays free of <windows.h>.
+void append_wide(std::string& out, std::wstring_view value);
+
+// Append one argument in the spdlog/fmt style: strings as-is, wide
+// strings as UTF-8, everything else through the stream operator. The
+// wide cases are tested first because the stream operator would accept
+// a ``wchar_t*`` too, and print its address.
+template<typename T>
 void append_arg(std::string& out, const T& value) {
-    std::ostringstream oss;
-    oss << value;
-    out += oss.str();
+    if constexpr (std::is_convertible_v<const T&, const wchar_t*>) {
+        const wchar_t* text = value;
+        append_wide(out, text != nullptr ? std::wstring_view{text} : std::wstring_view{L"(null)"});
+    } else if constexpr (std::is_convertible_v<const T&, std::wstring_view>) {
+        append_wide(out, std::wstring_view{value});
+    } else {
+        std::ostringstream oss;
+        oss << value;
+        out += oss.str();
+    }
 }
 
-inline void append_arg(std::string& out, const std::string& value) { out += value; }
+inline void append_arg(std::string& out, const std::string& value) {
+    out += value;
+}
+
 inline void append_arg(std::string& out, const char* value) {
     out += (value != nullptr) ? value : "(null)";
 }
-inline void append_arg(std::string& out, bool value) { out += value ? "true" : "false"; }
+
+inline void append_arg(std::string& out, bool value) {
+    out += value ? "true" : "false";
+}
 
 }  // namespace detail
 
@@ -84,7 +105,7 @@ inline void append_arg(std::string& out, bool value) { out += value ? "true" : "
 // surplus arguments are appended in a trailing " | " group rather than
 // dropped, because a log line that silently loses data is worse than an
 // ugly one. ``{{`` emits a literal brace.
-template <typename... Args>
+template<typename... Args>
     requires(sizeof...(Args) > 0)
 [[nodiscard]] std::string format(std::string_view fmt, const Args&... args) {
     std::string out;
@@ -128,11 +149,15 @@ template <typename... Args>
 //
 //   LSW_AGENT_WARN("bind(:{}) failed wsa_err={}", port, err);
 //   LSW_AGENT_INFO(already_built_string);
-#define LSW_AGENT_INFO(...) \
-    ::lsw::agent::log::append(::lsw::agent::log::Level::Info, ::lsw::agent::log::format(__VA_ARGS__))
-#define LSW_AGENT_WARN(...) \
-    ::lsw::agent::log::append(::lsw::agent::log::Level::Warn, ::lsw::agent::log::format(__VA_ARGS__))
-#define LSW_AGENT_ERROR(...) \
-    ::lsw::agent::log::append(::lsw::agent::log::Level::Error, ::lsw::agent::log::format(__VA_ARGS__))
-#define LSW_AGENT_DEBUG(...) \
-    ::lsw::agent::log::append(::lsw::agent::log::Level::Debug, ::lsw::agent::log::format(__VA_ARGS__))
+#define LSW_AGENT_INFO(...)                                                                        \
+    ::lsw::agent::log::append(::lsw::agent::log::Level::Info,                                      \
+                              ::lsw::agent::log::format(__VA_ARGS__))
+#define LSW_AGENT_WARN(...)                                                                        \
+    ::lsw::agent::log::append(::lsw::agent::log::Level::Warn,                                      \
+                              ::lsw::agent::log::format(__VA_ARGS__))
+#define LSW_AGENT_ERROR(...)                                                                       \
+    ::lsw::agent::log::append(::lsw::agent::log::Level::Error,                                     \
+                              ::lsw::agent::log::format(__VA_ARGS__))
+#define LSW_AGENT_DEBUG(...)                                                                       \
+    ::lsw::agent::log::append(::lsw::agent::log::Level::Debug,                                     \
+                              ::lsw::agent::log::format(__VA_ARGS__))

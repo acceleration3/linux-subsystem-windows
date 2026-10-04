@@ -1,6 +1,7 @@
 #include "lsw/host/mcp/tools/list_windows_tool.hpp"
 
-#include "lsw/host/mcp/agent_command.hpp"
+#include "lsw/host/link/agent_reply.hpp"
+#include "lsw/host/link/agent_rpc_client.hpp"
 #include "lsw/host/mcp/json_schema.hpp"
 #include "lsw/host/mcp/tool_result.hpp"
 
@@ -18,8 +19,7 @@ std::string ListWindowsTool::description() const {
 nlohmann::json ListWindowsTool::input_schema() const { return JsonSchema::no_args(); }
 
 nlohmann::json ListWindowsTool::call(const nlohmann::json&) {
-    const auto r = agent_.invoke(linkproto::cmd::kListWindows);
-    return r.ok ? ToolResult::json_body(r.body) : ToolResult::error(r.error);
+    return ToolResult::from_reply(agent_.request(linkproto::cmd::kListWindows));
 }
 
 }  // namespace lsw::host::mcp

@@ -20,6 +20,11 @@ public:
     // Test hook — exposed so unit tests can pin the exact output.
     [[nodiscard]] static QString render_template(const QString& tmpl,
                                                  const QHash<QString, QString>& vars);
+
+    // ``text`` made safe for both element content and an attribute in
+    // either quote: & < > " and ' become entities. Applied by ``build``
+    // to every value that came from outside it.
+    [[nodiscard]] static QString xml_escape(const QString& text);
 };
 
 }  // namespace lsw::host::vm

@@ -58,12 +58,11 @@ private:
     QLineEdit* input_ = nullptr;
     QLabel* status_ = nullptr;
 
-    // Tokens for the console_output / console_closed event handlers.
-    // Must be unregistered in the destructor so the rpc reader thread
-    // doesn't invoke a lambda that captured ``this`` after the dialog
-    // is gone (WA_DeleteOnClose).
-    link::AgentRpcClient::EventToken output_token_ = 0;
-    link::AgentRpcClient::EventToken closed_token_ = 0;
+    // The console_output / console_closed handlers capture ``this``;
+    // the destructor drops these first, which waits out a handler the
+    // reader thread is already running.
+    link::EventSubscription output_sub_;
+    link::EventSubscription closed_sub_;
 };
 
 }  // namespace lsw::host::manager

@@ -38,14 +38,14 @@ public:
     Uia(const Uia&) = delete;
     Uia& operator=(const Uia&) = delete;
 
-    // Release COM-held objects while the apartment is still alive.
-    // Called by AgentServices before the destructor chain runs.
+    // Detach every subscription and release COM-held objects while the
+    // apartment is still alive. Called by AgentServices before the
+    // destructor chain runs.
     void shutdown();
 
-    // False on hosts where UIA is unavailable (very rare on Win10+). In
-    // that case every method below short-circuits to a benign no-op, so
-    // handlers stay correct without checking.
-    [[nodiscard]] bool ok() const noexcept;
+    // On hosts where UIA is unavailable (very rare on Win10+) every
+    // method below short-circuits to a benign no-op, so handlers stay
+    // correct without checking.
 
     // ---- queries ---------------------------------------------------------
 

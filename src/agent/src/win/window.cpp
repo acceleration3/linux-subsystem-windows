@@ -1,25 +1,19 @@
 #include "lsw/agent/win/window.hpp"
-#include "lsw/agent/util/text_encoding.hpp"
 
-#include "lsw/agent/win/icon_extractor.hpp"
 #include "lsw/agent/log.hpp"
+#include "lsw/agent/util/text_encoding.hpp"
+#include "lsw/agent/win/process_info.hpp"
 
 // clang-format off
 #include <windows.h>
-#include <objidl.h>
-#include <gdiplus.h>
-#include <psapi.h>
 #include <dwmapi.h>
 // clang-format on
 
-#include <cstring>
 #include <vector>
 
 namespace lsw::agent::win {
 
 namespace {
-
-constexpr UINT kPwRenderFullContent = 0x00000002U;  // PW_RENDERFULLCONTENT (Win8.1+)
 
 // The window's frame rect: the DWM extended frame bounds (the visible
 // window, drop shadow excluded), falling back to GetWindowRect.
@@ -33,55 +27,11 @@ constexpr UINT kPwRenderFullContent = 0x00000002U;  // PW_RENDERFULLCONTENT (Win
 // conversion between them.
 RECT frame_rect_of(HWND hwnd) {
     RECT fr{};
-    if (FAILED(::DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &fr,
-                                       sizeof(fr)))
-        || fr.right - fr.left <= 0 || fr.bottom - fr.top <= 0) {
+    if (FAILED(::DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &fr, sizeof(fr))) ||
+        fr.right - fr.left <= 0 || fr.bottom - fr.top <= 0) {
         ::GetWindowRect(hwnd, &fr);
     }
     return fr;
-}
-
-// Which part of ``frame`` is on screen, relative to the frame's own
-// top-left. See DiscoveredWindow::visible_x.
-RECT visible_within(HWND hwnd, const RECT& frame) {
-    RECT whole{0, 0, frame.right - frame.left, frame.bottom - frame.top};
-    if (::IsZoomed(hwnd) == FALSE) {
-        // A window the user dragged half off-screen is still rendered in
-        // full by DWM, and the mirror is happy to show all of it. Only a
-        // maximized window has a frame that reaches somewhere nothing is
-        // ever painted.
-        return whole;
-    }
-    HMONITOR mon = ::MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
-    MONITORINFO mi{};
-    mi.cbSize = sizeof(mi);
-    if (mon == nullptr || ::GetMonitorInfoW(mon, &mi) == 0) {
-        return whole;
-    }
-    RECT on_screen{};
-    if (::IntersectRect(&on_screen, &frame, &mi.rcWork) == FALSE
-        || on_screen.right - on_screen.left <= 0
-        || on_screen.bottom - on_screen.top <= 0) {
-        return whole;
-    }
-    return {on_screen.left - frame.left, on_screen.top - frame.top,
-            on_screen.right - frame.left, on_screen.bottom - frame.top};
-}
-
-
-std::string exe_path_for(DWORD pid) {
-    HANDLE h = ::OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-    if (h == nullptr) {
-        return {};
-    }
-    wchar_t buf[MAX_PATH] = {};
-    DWORD n = MAX_PATH;
-    std::string out;
-    if (::QueryFullProcessImageNameW(h, 0, buf, &n) != 0) {
-        out = util::TextEncoding::to_utf8(std::wstring(buf, n));
-    }
-    ::CloseHandle(h);
-    return out;
 }
 
 BOOL CALLBACK enum_proc(HWND hwnd, LPARAM lparam) {
@@ -93,9 +43,8 @@ BOOL CALLBACK enum_proc(HWND hwnd, LPARAM lparam) {
     // actually shown — UWP/packaged apps keep many such ghost
     // top-levels. Capturing them spawns dead black mirrors.
     int cloaked = 0;
-    if (::DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))
-            == S_OK
-        && cloaked != 0) {
+    if (::DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked)) == S_OK &&
+        cloaked != 0) {
         return TRUE;
     }
     // NOTE: we deliberately do NOT filter by title or WS_EX_TOOLWINDOW
@@ -121,16 +70,12 @@ BOOL CALLBACK enum_proc(HWND hwnd, LPARAM lparam) {
 
     DWORD pid = 0;
     ::GetWindowThreadProcessId(hwnd, &pid);
-    const std::string exe = exe_path_for(pid);
+    const std::wstring image = ProcessInfo::image_path(pid);
     // Skip our own agent process so we don't capture ourselves
     // (mostly relevant when running --console rather than as a
     // service, but cheap to filter unconditionally).
-    {
-        wchar_t self[MAX_PATH] = {};
-        ::GetModuleFileNameW(nullptr, self, MAX_PATH);
-        if (util::TextEncoding::to_utf8(self) == exe) {
-            return TRUE;
-        }
+    if (!image.empty() && image == ProcessInfo::self_path()) {
+        return TRUE;
     }
 
     // FULL-WINDOW model: the mirror shows the whole window (title bar,
@@ -155,62 +100,19 @@ BOOL CALLBACK enum_proc(HWND hwnd, LPARAM lparam) {
     // For a window with no owner it returns the window itself; treat
     // that as "no owner".
     HWND root = ::GetAncestor(hwnd, GA_ROOTOWNER);
-    w.owner = (root != nullptr && root != hwnd)
-                  ? reinterpret_cast<std::uintptr_t>(root)
-                  : 0;
+    w.owner = (root != nullptr && root != hwnd) ? reinterpret_cast<std::uintptr_t>(root) : 0;
     w.pid = static_cast<std::uint32_t>(pid);
     w.title = util::TextEncoding::to_utf8(title);
-    w.exe_path = exe;
-    w.client_w = fr.right - fr.left;   // now the WINDOW size
+    w.exe_path = util::TextEncoding::to_utf8(image);
+    w.client_w = fr.right - fr.left;  // now the WINDOW size
     w.client_h = fr.bottom - fr.top;
-    w.screen_x = fr.left;              // now the WINDOW origin
+    w.screen_x = fr.left;  // now the WINDOW origin
     w.screen_y = fr.top;
     w.minimized = ::IsIconic(hwnd) != FALSE;
     w.maximized = ::IsZoomed(hwnd) != FALSE;
-    w.has_caption =
-        (::GetWindowLongW(hwnd, GWL_STYLE) & WS_CAPTION) == WS_CAPTION;
+    w.has_caption = (::GetWindowLongW(hwnd, GWL_STYLE) & WS_CAPTION) == WS_CAPTION;
     out->push_back(std::move(w));
     return TRUE;
-}
-
-// Encode a GDI+ bitmap to PNG bytes (shared by window + cursor
-// capture). Empty on failure.
-std::vector<std::uint8_t> encode_png(Gdiplus::Bitmap& bitmap) {
-    CLSID clsid;
-    UINT n = 0;
-    UINT size = 0;
-    Gdiplus::GetImageEncodersSize(&n, &size);
-    if (size == 0) {
-        return {};
-    }
-    auto* info =
-        static_cast<Gdiplus::ImageCodecInfo*>(::HeapAlloc(::GetProcessHeap(), 0, size));
-    Gdiplus::GetImageEncoders(n, size, info);
-    bool found = false;
-    for (UINT i = 0; i < n; ++i) {
-        if (wcscmp(info[i].MimeType, L"image/png") == 0) {
-            clsid = info[i].Clsid;
-            found = true;
-            break;
-        }
-    }
-    ::HeapFree(::GetProcessHeap(), 0, info);
-    if (!found) {
-        return {};
-    }
-    IStream* stream = nullptr;
-    ::CreateStreamOnHGlobal(nullptr, TRUE, &stream);
-    bitmap.Save(stream, &clsid, nullptr);
-    HGLOBAL hg = nullptr;
-    ::GetHGlobalFromStream(stream, &hg);
-    const SIZE_T sz = ::GlobalSize(hg);
-    std::vector<std::uint8_t> png(sz);
-    if (void* p = ::GlobalLock(hg); p != nullptr) {
-        std::memcpy(png.data(), p, sz);
-        ::GlobalUnlock(hg);
-    }
-    stream->Release();
-    return png;
 }
 
 }  // namespace
@@ -235,24 +137,23 @@ bool Window::system_command(std::uintptr_t hwnd_raw, const std::string& command)
     // thread has no reason to wait for that — nor to hang behind an
     // application that is busy.
     const BOOL ok = ::PostMessageW(hwnd, WM_SYSCOMMAND, sc, 0);
-    LSW_AGENT_INFO(std::string{"window_command: "} + command + " hwnd="
-                   + std::to_string(hwnd_raw) + (ok != FALSE ? " ok" : " FAILED"));
+    LSW_AGENT_INFO("window_command: {} hwnd={} {}", command, hwnd_raw,
+                   ok != FALSE ? "ok" : "FAILED");
     return ok != FALSE;
 }
 
 bool Window::close_window(std::uintptr_t hwnd_raw) {
     auto* hwnd = reinterpret_cast<HWND>(hwnd_raw);
     if (hwnd == nullptr || ::IsWindow(hwnd) == FALSE) {
-        LSW_AGENT_WARN(std::string{"window_capture: close_window invalid hwnd="}
-                       + std::to_string(hwnd_raw));
+        LSW_AGENT_WARN("window_capture: close_window invalid hwnd={}", hwnd_raw);
         return false;
     }
     // PostMessage (not SendMessage) so we don't block on the target
     // window's message loop — the app processes WM_CLOSE on its own
     // schedule, possibly putting up a save-changes dialog.
     const bool ok = ::PostMessageW(hwnd, WM_CLOSE, 0, 0) != FALSE;
-    LSW_AGENT_INFO(std::string{"window_capture: close_window hwnd="} + std::to_string(hwnd_raw)
-                   + (ok ? " posted" : " post FAILED"));
+    LSW_AGENT_INFO("window_capture: close_window hwnd={} {}", hwnd_raw,
+                   ok ? "posted" : "post FAILED");
     return ok;
 }
 

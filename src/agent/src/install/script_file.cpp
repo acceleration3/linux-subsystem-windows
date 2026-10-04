@@ -2,6 +2,8 @@
 
 #include "lsw/agent/install/work_dir.hpp"
 #include "lsw/agent/util/text_encoding.hpp"
+#include "lsw/agent/win/error_text.hpp"
+#include "lsw/agent/win/unique_handle.hpp"
 
 #include <windows.h>
 
@@ -29,16 +31,15 @@ ScriptFile::ScriptFile(const std::string& job_id, const std::wstring& suffix,
                        const std::string& body)
     : path_(WorkDir::staged_path(job_id, suffix)) {
     const std::string crlf = to_crlf(body);
-    HANDLE h = ::CreateFileW(path_.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
-                             FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (h == INVALID_HANDLE_VALUE) {
-        error_ = "CreateFileW(" + util::TextEncoding::to_utf8(path_)
-                 + ") failed err=" + std::to_string(::GetLastError());
+    const win::UniqueHandle file{::CreateFileW(path_.c_str(), GENERIC_WRITE, 0, nullptr,
+                                               CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr)};
+    if (!file) {
+        const std::string err = win::ErrorText::last_error();
+        error_ = "CreateFileW(" + util::TextEncoding::to_utf8(path_) + ") failed err=" + err;
         return;
     }
     DWORD wrote = 0;
-    ::WriteFile(h, crlf.data(), static_cast<DWORD>(crlf.size()), &wrote, nullptr);
-    ::CloseHandle(h);
+    ::WriteFile(file.get(), crlf.data(), static_cast<DWORD>(crlf.size()), &wrote, nullptr);
     ok_ = true;
 }
 

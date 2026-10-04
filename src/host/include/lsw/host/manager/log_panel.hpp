@@ -26,10 +26,8 @@ class LogPanel : public QWidget {
 public:
     explicit LogPanel(apps::LogStore& store, QWidget* parent = nullptr);
 
-    // How many records are on screen, for the rail's marker.
-    [[nodiscard]] int record_count() const noexcept { return shown_; }
-
 Q_SIGNALS:
+    // How many records are on screen, for the rail's marker.
     void record_count_changed(int count);
 
 private Q_SLOTS:
@@ -42,6 +40,8 @@ private Q_SLOTS:
 
 private:
     void rebuild_all();
+    // The next match for the find box, wrapping round once.
+    void find(bool backward);
     [[nodiscard]] bool passes(const apps::LogRecord& record) const;
     static QString format_record(const apps::LogRecord& r);
 

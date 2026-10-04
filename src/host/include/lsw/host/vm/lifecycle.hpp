@@ -1,16 +1,15 @@
 #pragma once
 
 #include "lsw/host/config/vm_state.hpp"
+#include "lsw/host/vm/domain_handle.hpp"
 #include "lsw/host/vm/domain_xml_builder.hpp"
 #include "lsw/host/vm/ivshmem_server.hpp"
-#include "lsw/host/vm/domain_handle.hpp"
 #include "lsw/host/vm/libvirt_connection.hpp"
 #include "lsw/host/vm/render_server.hpp"
 #include "lsw/host/vm/shmem_region.hpp"
 
 #include <QObject>
 #include <QUuid>
-
 #include <memory>
 #include <unordered_map>
 
@@ -85,8 +84,10 @@ public:
     // the vda virtio-blk system disk are untouched, so this carries
     // none of the controller-swap INACCESSIBLE_BOOT_DEVICE risk.
     // Applied LIVE+CONFIG when running, CONFIG-only otherwise.
-    // Best-effort: a missing/already-empty drive is not an error.
-    [[nodiscard]] int eject_install_media(const QUuid& uuid);
+    // Best-effort: a missing/already-empty drive is not an error, and
+    // neither is a missing domain, so there is nothing to return —
+    // each drive's outcome is logged.
+    void eject_install_media(const QUuid& uuid);
 
     // Live ShmemRegion / IvshmemServer for ``uuid`` (the WGC capture
     // transport). Non-null only while the VM is running. The manager's
@@ -133,17 +134,20 @@ private:
         // the region is: the name is derived from the UUID.
         std::unique_ptr<RenderServer> render;
     };
+
     [[nodiscard]] DomainHandle lookup(const QUuid& uuid) const;
     // Create + bind the per-VM region and server. Returns the socket
     // path (substituted into domain XML) or empty on failure.
     [[nodiscard]] QString ensure_shmem(const QUuid& uuid, int size_mib);
+    // A render server for ``uuid``, its log forwarded, already asked to
+    // start. Whether it did is not checked: see the implementation.
+    [[nodiscard]] std::unique_ptr<RenderServer> make_render_server(const QUuid& uuid);
     void teardown_shmem(const QUuid& uuid);
 
     struct QUuidHash {
-        std::size_t operator()(const QUuid& u) const noexcept {
-            return qHash(u);
-        }
+        std::size_t operator()(const QUuid& u) const noexcept { return qHash(u); }
     };
+
     LibvirtConnection& conn_;
     std::unordered_map<QUuid, ShmemBundle, QUuidHash> shmem_;
 };

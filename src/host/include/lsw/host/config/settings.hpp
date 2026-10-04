@@ -32,12 +32,17 @@ public:
     [[nodiscard]] QString isos_dir() const;
     [[nodiscard]] QString nvram_dir() const;
 
-    // UI preferences (persisted via QSettings into ``manager.toml``-style
-    // INI). Each accessor pair owns one key; the underlying QSettings is
-    // exposed for code that needs to roam outside this minimal set.
-    [[nodiscard]] QString last_iso_path() const;
-    void set_last_iso_path(const QString& path);
+    // Where the VM's own files live. Derived from ``kVmName`` rather
+    // than stored, so the pipeline that creates them and the importer
+    // that adopts them on the next start name the same files.
+    [[nodiscard]] QString vm_disk_path() const;         // disks/lsw.qcow2
+    [[nodiscard]] QString vm_nvram_path() const;        // nvram/lsw.fd
+    [[nodiscard]] QString vm_payload_iso_path() const;  // isos/lsw-payload.iso
+    // Where the virtio-win driver ISO is cached. Every domain definition
+    // names it, the media ejected or not.
+    [[nodiscard]] QString virtio_iso_path() const;  // isos/virtio-win.iso
 
+    // UI preferences, persisted via QSettings into ``manager.ini``.
     [[nodiscard]] bool is_first_run() const;
     void mark_first_run_complete();
 

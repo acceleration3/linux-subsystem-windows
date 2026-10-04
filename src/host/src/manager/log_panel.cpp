@@ -16,6 +16,29 @@
 
 namespace lsw::host::manager {
 
+namespace {
+
+// The severities the buttons filter by, in button order.
+enum Severity : int { kInfo = 0, kWarn = 1, kError = 2, kUnnamed = -1 };
+
+// Which button a record answers to. Debug counts as info; anything that
+// is not one of the named levels answers to none of them.
+Severity severity_of(const apps::LogRecord& record) {
+    const QString level = record.level.trimmed().toUpper();
+    if (level.startsWith(QLatin1Char('E'))) {
+        return kError;
+    }
+    if (level.startsWith(QLatin1Char('W'))) {
+        return kWarn;
+    }
+    if (level.startsWith(QLatin1Char('I')) || level.startsWith(QLatin1Char('D'))) {
+        return kInfo;
+    }
+    return kUnnamed;
+}
+
+}  // namespace
+
 LogPanel::LogPanel(apps::LogStore& store, QWidget* parent)
     : QWidget(parent), store_(store) {
     setWindowTitle(tr("Agent Log"));
@@ -44,18 +67,17 @@ LogPanel::LogPanel(apps::LogStore& store, QWidget* parent)
     // rest of the application uses for the same three meanings.
     const struct {
         const char* label;
-        const char* colour;
+        const char* tone;
     } kLevels[] = {
-        {"Info", ui::Theme::Color::kInfo},
-        {"Warn", ui::Theme::Color::kAmber},
-        {"Error", ui::Theme::Color::kBad},
+        {"Info", ui::Theme::Tone::kInfo},
+        {"Warn", ui::Theme::Tone::kAmber},
+        {"Error", ui::Theme::Tone::kBad},
     };
     for (int i = 0; i < 3; ++i) {
         auto* button = new QPushButton(tr(kLevels[i].label));
         button->setCheckable(true);
         button->setChecked(true);
-        button->setStyleSheet(QStringLiteral("color: %1;")
-                                  .arg(QString::fromLatin1(kLevels[i].colour)));
+        button->setProperty(ui::Theme::Tone::kProperty, kLevels[i].tone);
         connect(button, &QPushButton::toggled, this, [this, i](bool on) {
             level_shown_[i] = on;
             rebuild_all();
@@ -68,9 +90,7 @@ LogPanel::LogPanel(apps::LogStore& store, QWidget* parent)
     view_ = new QPlainTextEdit;
     view_->setReadOnly(true);
     view_->setLineWrapMode(QPlainTextEdit::NoWrap);
-    QFont mono(QStringLiteral("monospace"));
-    mono.setStyleHint(QFont::Monospace);
-    view_->setFont(mono);
+    view_->setFont(ui::Theme::mono_font(12));
     view_->setMaximumBlockCount(apps::LogStore::kCapacity + 1024);
     root->addWidget(view_, 1);
 
@@ -97,18 +117,16 @@ QString LogPanel::format_record(const apps::LogRecord& r) {
     const QDateTime dt =
         QDateTime::fromMSecsSinceEpoch(static_cast<qint64>(r.ts_ms)).toLocalTime();
     const QString level = r.level.trimmed().toUpper();
-    const char* colour = ui::Theme::Color::kInfo;
-    if (level.startsWith(QLatin1Char('E'))) {
-        colour = ui::Theme::Color::kBad;
-    } else if (level.startsWith(QLatin1Char('W'))) {
-        colour = ui::Theme::Color::kAmber;
-    }
+    const Severity severity = severity_of(r);
+    const char* colour = severity == kError  ? ui::Theme::Color::kBad
+                         : severity == kWarn ? ui::Theme::Color::kAmber
+                                             : ui::Theme::Color::kInfo;
     return QStringLiteral("<span style=\"color:%1\">%2</span>  "
                           "<span style=\"color:%3;font-weight:500\">%4</span>  "
                           "<span style=\"color:%5\">%6</span>")
         .arg(QString::fromLatin1(ui::Theme::Color::kFgFaint),
              dt.toString(QStringLiteral("HH:mm:ss.zzz")), QString::fromLatin1(colour),
-             level.leftJustified(5, QLatin1Char('\u00a0')),
+             level.leftJustified(5, QChar(u'\u00a0')),
              QString::fromLatin1(ui::Theme::Color::kFgDim), r.msg.toHtmlEscaped());
 }
 
@@ -116,17 +134,8 @@ bool LogPanel::passes(const apps::LogRecord& record) const {
     // Anything that is not one of the three named levels is shown
     // whatever the buttons say: a record nobody can filter is worse
     // than one nobody asked for.
-    const QString level = record.level.trimmed().toUpper();
-    if (level.startsWith(QLatin1Char('E'))) {
-        return level_shown_[2];
-    }
-    if (level.startsWith(QLatin1Char('W'))) {
-        return level_shown_[1];
-    }
-    if (level.startsWith(QLatin1Char('I')) || level.startsWith(QLatin1Char('D'))) {
-        return level_shown_[0];
-    }
-    return true;
+    const Severity severity = severity_of(record);
+    return severity == kUnnamed || level_shown_[severity];
 }
 
 void LogPanel::rebuild_all() {
@@ -195,42 +204,29 @@ void LogPanel::on_find_text_changed(const QString& s) {
 }
 
 void LogPanel::on_find_next() {
-    const auto needle = find_edit_->text();
-    if (needle.isEmpty()) {
-        return;
-    }
-    if (!view_->find(needle)) {
-        // Wrap to top.
-        auto c = view_->textCursor();
-        c.movePosition(QTextCursor::Start);
-        view_->setTextCursor(c);
-        if (view_->find(needle)) {
-            status_->setText(tr("(wrapped)"));
-        } else {
-            status_->setText(tr("no match"));
-        }
-    } else {
-        status_->setText({});
-    }
+    find(false);
 }
 
 void LogPanel::on_find_prev() {
+    find(true);
+}
+
+void LogPanel::find(bool backward) {
     const auto needle = find_edit_->text();
     if (needle.isEmpty()) {
         return;
     }
-    if (!view_->find(needle, QTextDocument::FindBackward)) {
-        auto c = view_->textCursor();
-        c.movePosition(QTextCursor::End);
-        view_->setTextCursor(c);
-        if (view_->find(needle, QTextDocument::FindBackward)) {
-            status_->setText(tr("(wrapped)"));
-        } else {
-            status_->setText(tr("no match"));
-        }
-    } else {
+    const QTextDocument::FindFlags flags =
+        backward ? QTextDocument::FindBackward : QTextDocument::FindFlags{};
+    if (view_->find(needle, flags)) {
         status_->setText({});
+        return;
     }
+    // Wrap to the far end and try once more.
+    auto c = view_->textCursor();
+    c.movePosition(backward ? QTextCursor::End : QTextCursor::Start);
+    view_->setTextCursor(c);
+    status_->setText(view_->find(needle, flags) ? tr("(wrapped)") : tr("no match"));
 }
 
 }  // namespace lsw::host::manager

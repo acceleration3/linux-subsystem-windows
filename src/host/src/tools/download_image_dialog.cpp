@@ -3,7 +3,10 @@
 #include "lsw/base/log.hpp"
 #include "lsw/host/config/settings.hpp"
 #include "lsw/host/provision/iso/downloader.hpp"
+#include "lsw/host/ui/dialog_chrome.hpp"
+#include "lsw/host/ui/format.hpp"
 #include "lsw/host/ui/theme.hpp"
+#include "lsw/host/ui/widgets.hpp"
 
 #include <QCheckBox>
 #include <QComboBox>
@@ -22,20 +25,9 @@ namespace lsw::host::tools {
 
 namespace {
 
+using ui::Format;
 using ui::Theme;
-
-QLabel* meta(const QString& text) {
-    auto* label = new QLabel(text);
-    label->setObjectName(QString::fromLatin1(Theme::Role::kMeta));
-    label->setWordWrap(true);
-    return label;
-}
-
-QLabel* caption(const QString& text) {
-    auto* label = new QLabel(text.toUpper());
-    label->setObjectName(QString::fromLatin1(Theme::Role::kCaption));
-    return label;
-}
+using ui::Widgets;
 
 // One of the three figures under the progress bar. A long wait earns
 // real numbers.
@@ -45,21 +37,12 @@ QWidget* tile(const QString& name, QLabel*& value_out) {
     auto* layout = new QVBoxLayout(box);
     layout->setContentsMargins(11, 9, 11, 9);
     layout->setSpacing(2);
-    layout->addWidget(caption(name));
+    layout->addWidget(Widgets::caption(name));
     value_out = new QLabel(QStringLiteral("—"));
     value_out->setObjectName(QString::fromLatin1(Theme::Role::kMono));
     value_out->setStyleSheet(QStringLiteral("font-size: 16px;"));
     layout->addWidget(value_out);
     return box;
-}
-
-QString duration(qint64 seconds) {
-    if (seconds < 0) {
-        return QStringLiteral("—");
-    }
-    return QStringLiteral("%1:%2")
-        .arg(seconds / 60, 2, 10, QLatin1Char('0'))
-        .arg(seconds % 60, 2, 10, QLatin1Char('0'));
 }
 
 }  // namespace
@@ -70,16 +53,8 @@ DownloadImageDialog::DownloadImageDialog(config::Settings& settings, QWidget* pa
     setModal(true);
     setMinimumWidth(620);
 
-    // The body carries the dialog's padding; the footer band beneath it
-    // runs edge to edge, which is what makes it a band.
-    auto* outer = new QVBoxLayout(this);
-    outer->setContentsMargins(0, 0, 0, 0);
-    outer->setSpacing(0);
-    auto* body_widget = new QWidget;
-    auto* root = new QVBoxLayout(body_widget);
-    root->setContentsMargins(20, 18, 20, 16);
-    outer->addWidget(body_widget, 1);
-    root->setSpacing(14);
+    const auto chrome = ui::DialogChrome::install(this);
+    auto* root = chrome.body;
 
     // ---- what to fetch --------------------------------------------
     auto* pickers = new QHBoxLayout;
@@ -87,7 +62,7 @@ DownloadImageDialog::DownloadImageDialog(config::Settings& settings, QWidget* pa
 
     auto* edition_col = new QVBoxLayout;
     edition_col->setSpacing(5);
-    edition_col->addWidget(caption(QStringLiteral("Edition")));
+    edition_col->addWidget(Widgets::caption(QStringLiteral("Edition")));
     edition_combo_ = new QComboBox;
     edition_combo_->setPlaceholderText(QStringLiteral("Select an edition"));
     edition_combo_->setEnabled(false);
@@ -95,7 +70,7 @@ DownloadImageDialog::DownloadImageDialog(config::Settings& settings, QWidget* pa
 
     auto* language_col = new QVBoxLayout;
     language_col->setSpacing(5);
-    language_col->addWidget(caption(QStringLiteral("Language")));
+    language_col->addWidget(Widgets::caption(QStringLiteral("Language")));
     language_combo_ = new QComboBox;
     language_combo_->setEnabled(false);
     language_col->addWidget(language_combo_);
@@ -104,11 +79,12 @@ DownloadImageDialog::DownloadImageDialog(config::Settings& settings, QWidget* pa
     pickers->addLayout(language_col, 1);
     root->addLayout(pickers);
 
-    source_status_ = meta(QStringLiteral("Asking microsoft.com for the current editions."));
+    source_status_ =
+        Widgets::meta(QStringLiteral("Asking microsoft.com for the current editions."), true);
     root->addWidget(source_status_);
 
     // ---- where it goes --------------------------------------------
-    root->addWidget(caption(QStringLiteral("Save to")));
+    root->addWidget(Widgets::caption(QStringLiteral("Save to")));
     auto* out_row = new QHBoxLayout;
     output_dir_ = new QLineEdit(settings_.isos_dir());
     auto* choose = new QPushButton(QStringLiteral("Choose folder"));
@@ -118,7 +94,7 @@ DownloadImageDialog::DownloadImageDialog(config::Settings& settings, QWidget* pa
 
     output_name_ = new QLineEdit(QStringLiteral("windows.iso"));
     root->addWidget(output_name_);
-    space_ = meta(QString{});
+    space_ = Widgets::meta(QString{}, true);
     root->addWidget(space_);
 
     use_box_ = new QCheckBox(
@@ -131,7 +107,7 @@ DownloadImageDialog::DownloadImageDialog(config::Settings& settings, QWidget* pa
     bar_->setRange(0, 100);
     bar_->setVisible(false);
     root->addWidget(bar_);
-    progress_text_ = meta(QString{});
+    progress_text_ = Widgets::meta(QString{}, true);
     root->addWidget(progress_text_);
 
     auto* tiles = new QHBoxLayout;
@@ -143,18 +119,13 @@ DownloadImageDialog::DownloadImageDialog(config::Settings& settings, QWidget* pa
 
     root->addStretch(1);
 
-    auto* foot_band = new QFrame;
-    Theme::surface(foot_band, Theme::Role::kDialogFoot);
-    auto* footer = new QHBoxLayout(foot_band);
-    footer->setContentsMargins(20, 12, 20, 12);
-    footer->addWidget(meta(QStringLiteral("Resumes if the connection drops.")), 1);
+    auto* footer = chrome.foot;
+    footer->addWidget(Widgets::meta(QStringLiteral("Resumes if the connection drops."), true), 1);
     close_button_ = new QPushButton(QStringLiteral("Close"));
-    run_button_ = new QPushButton(QStringLiteral("Download"));
-    run_button_->setObjectName(QString::fromLatin1(Theme::Role::kPrimary));
+    run_button_ = Widgets::button(QStringLiteral("Download"), Theme::Role::kPrimary);
     run_button_->setEnabled(false);
     footer->addWidget(close_button_);
     footer->addWidget(run_button_);
-    outer->addWidget(foot_band);
 
     connect(close_button_, &QPushButton::clicked, this, &QDialog::reject);
     connect(run_button_, &QPushButton::clicked, this, &DownloadImageDialog::start);
@@ -239,19 +210,19 @@ DownloadImageDialog::DownloadImageDialog(config::Settings& settings, QWidget* pa
                             if (total > 0) {
                                 bar_->setValue(static_cast<int>((received * 100) / total));
                                 progress_text_->setText(
-                                    QStringLiteral("%1 GiB of %2 GiB")
-                                        .arg(received / (1024.0 * 1024 * 1024), 0, 'f', 2)
-                                        .arg(total / (1024.0 * 1024 * 1024), 0, 'f', 2));
+                                    QStringLiteral("%1 of %2").arg(Format::gib(received, 2),
+                                                                   Format::gib(total, 2)));
                             }
                             const qint64 ms = clock_.elapsed();
                             if (ms > 0) {
-                                const double per_second = (received * 1000.0) / ms;
-                                rate_->setText(QStringLiteral("%1 MiB/s")
-                                                   .arg(per_second / (1024 * 1024), 0, 'f', 1));
-                                elapsed_->setText(duration(ms / 1000));
+                                const double per_second =
+                                    (static_cast<double>(received) * 1000.0)
+                                    / static_cast<double>(ms);
+                                rate_->setText(Format::mib_per_second(per_second));
+                                elapsed_->setText(Format::clock(ms / 1000, 2));
                                 if (total > received && per_second > 0) {
-                                    remaining_->setText(duration(
-                                        static_cast<qint64>((total - received) / per_second)));
+                                    remaining_->setText(Format::clock(static_cast<qint64>(
+                                        static_cast<double>(total - received) / per_second)));
                                 }
                             }
                         });
@@ -312,10 +283,8 @@ void DownloadImageDialog::refresh_free_space() {
         space_->setText(QString{});
         return;
     }
-    space_->setText(QStringLiteral("%1 GiB free on that volume.")
-                        .arg(static_cast<double>(target.bytesAvailable())
-                                 / (1024.0 * 1024 * 1024),
-                             0, 'f', 0));
+    space_->setText(
+        QStringLiteral("%1 free on that volume.").arg(Format::gib(target.bytesAvailable(), 0)));
 }
 
 void DownloadImageDialog::set_busy(bool busy) {
@@ -328,14 +297,12 @@ void DownloadImageDialog::set_busy(bool busy) {
 }
 
 void DownloadImageDialog::block(const QString& reason) {
-    blocked_ = true;
     resolving_ = false;
     edition_combo_->setEnabled(false);
     language_combo_->setEnabled(false);
     run_button_->setEnabled(false);
     source_status_->setText(reason);
-    source_status_->setStyleSheet(
-        QStringLiteral("color: %1;").arg(QString::fromLatin1(Theme::Color::kBad)));
+    Widgets::set_flag(source_status_, Theme::Tone::kProperty, Theme::Tone::kBad);
     LSW_WARN("download tool: {}", reason.toStdString());
 }
 

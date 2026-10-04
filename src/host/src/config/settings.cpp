@@ -1,6 +1,7 @@
 #include "lsw/host/config/settings.hpp"
 
 #include "lsw/base/log.hpp"
+#include "lsw/host/config/vm_name.hpp"
 
 #include <QDir>
 #include <QSettings>
@@ -67,14 +68,20 @@ QString Settings::nvram_dir() const {
     return join(data_root_, "nvram");
 }
 
-QString Settings::last_iso_path() const {
-    QSettings s{join(config_root_, "manager.ini"), QSettings::IniFormat};
-    return s.value("paths/last_iso").toString();
+QString Settings::vm_disk_path() const {
+    return join(disks_dir(), QStringLiteral("%1.qcow2").arg(QLatin1String(kVmName)));
 }
 
-void Settings::set_last_iso_path(const QString& path) {
-    QSettings s{join(config_root_, "manager.ini"), QSettings::IniFormat};
-    s.setValue("paths/last_iso", path);
+QString Settings::vm_nvram_path() const {
+    return join(nvram_dir(), QStringLiteral("%1.fd").arg(QLatin1String(kVmName)));
+}
+
+QString Settings::vm_payload_iso_path() const {
+    return join(isos_dir(), QStringLiteral("%1-payload.iso").arg(QLatin1String(kVmName)));
+}
+
+QString Settings::virtio_iso_path() const {
+    return join(isos_dir(), QStringLiteral("virtio-win.iso"));
 }
 
 bool Settings::is_first_run() const {

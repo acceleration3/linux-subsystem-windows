@@ -25,14 +25,6 @@
 
 namespace lsw::linkproto {
 
-// Channels start on a page boundary: the guest maps this memory
-// write-combined, where an unaligned start costs throughput.
-inline constexpr std::uint64_t kRegionPageSize = 4096;
-
-[[nodiscard]] inline constexpr std::uint64_t region_page_up(std::uint64_t v) {
-    return (v + kRegionPageSize - 1) & ~(kRegionPageSize - 1);
-}
-
 // Default region size. Messages are all that travel here now, and the
 // ring is a megabyte each way; the rest is room for a channel that has
 // not been added yet.

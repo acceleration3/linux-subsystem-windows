@@ -14,20 +14,20 @@ using K = ManagerSettings::Key;
 // than complete.
 QString label_for(const QString& key) {
     static const QHash<QString, QString> labels = {
-        {QLatin1String(K::kCpuCores), QStringLiteral("cores")},
-        {QLatin1String(K::kMemoryMib), QStringLiteral("memory")},
-        {QLatin1String(K::kDiskGib), QStringLiteral("disk")},
-        {QLatin1String(K::kGuestWidth), QStringLiteral("width")},
-        {QLatin1String(K::kGuestHeight), QStringLiteral("height")},
-        {QLatin1String(K::kMatchHostOutput), QStringLiteral("match output")},
-        {QLatin1String(K::kScalingPercent), QStringLiteral("scaling")},
-        {QLatin1String(K::kVramMib), QStringLiteral("video memory")},
-        {QLatin1String(K::kChannels), QStringLiteral("channels")},
-        {QLatin1String(K::kRingKib), QStringLiteral("ring")},
-        {QLatin1String(K::kReplyKib), QStringLiteral("reply")},
-        {QLatin1String(K::kBlobMib), QStringLiteral("blob")},
-        {QLatin1String(K::kHostShares), QStringLiteral("shared folders")},
-        {QLatin1String(K::kAgentPort), QStringLiteral("agent port")},
+        {K::kCpuCores, QStringLiteral("cores")},
+        {K::kMemoryMib, QStringLiteral("memory")},
+        {K::kDiskGib, QStringLiteral("disk")},
+        {K::kGuestWidth, QStringLiteral("width")},
+        {K::kGuestHeight, QStringLiteral("height")},
+        {K::kMatchHostOutput, QStringLiteral("match output")},
+        {K::kScalingPercent, QStringLiteral("scaling")},
+        {K::kVramMib, QStringLiteral("video memory")},
+        {K::kChannels, QStringLiteral("channels")},
+        {K::kRingKib, QStringLiteral("ring")},
+        {K::kReplyKib, QStringLiteral("reply")},
+        {K::kBlobMib, QStringLiteral("blob")},
+        {K::kHostShares, QStringLiteral("shared folders")},
+        {K::kAgentPort, QStringLiteral("agent port")},
     };
     return labels.value(key, key);
 }
@@ -35,11 +35,9 @@ QString label_for(const QString& key) {
 // A list-valued setting has no useful "8 becomes 12" form, so it says
 // how many entries it will have instead.
 QString render(const QString& key, const QVariant& value) {
-    if (key == QLatin1String(K::kHostShares)) {
-        const auto text = value.toString();
-        const int count =
-            text.isEmpty() ? 0 : static_cast<int>(text.count(QLatin1Char('\x1f')) + 1);
-        return QStringLiteral("%1 folders").arg(count);
+    if (key == K::kHostShares) {
+        return QStringLiteral("%1 folders")
+            .arg(ManagerSettings::decode_host_shares(value.toString()).size());
     }
     if (value.typeId() == QMetaType::Bool) {
         return value.toBool() ? QStringLiteral("on") : QStringLiteral("off");
@@ -68,10 +66,6 @@ bool PendingChanges::stage(const QString& key, const QVariant& value) {
     staged_.insert(key, value);
     Q_EMIT changed();
     return true;
-}
-
-bool PendingChanges::has(const QString& key) const {
-    return staged_.contains(key);
 }
 
 QVariant PendingChanges::staged_or_current(const QString& key) const {

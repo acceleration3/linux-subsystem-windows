@@ -1,7 +1,8 @@
+#include "lsw/agent/core/paths.hpp"
 #include "lsw/agent/rpc/auto_register.hpp"
 #include "lsw/agent/rpc/handler.hpp"
+#include "lsw/agent/util/text_encoding.hpp"
 #include "lsw/agent/win/mirror_process.hpp"
-
 #include "lsw/linkproto/commands.hpp"
 
 #include <cstdint>
@@ -18,16 +19,15 @@ namespace lsw::agent::rpc::handlers {
 struct StartWindowMirrorHandler : RpcHandler {
     nlohmann::json handle(const nlohmann::json& params, RpcContext& /*ctx*/) override {
         const auto port = params.value("port", std::uint32_t{0});
-        const auto exe = params.value(
-            "exe", std::string{"C:\\ProgramData\\LSW\\remotewin-guest.exe"});
+        const auto exe =
+            params.value("exe", util::TextEncoding::to_utf8(core::Paths::remotewin_guest_exe()));
         const auto log_path = params.value(
-            "log_path", std::string{"C:\\ProgramData\\LSW\\remotewin-guest.log"});
+            "log_path", util::TextEncoding::to_utf8(core::Paths::remotewin_guest_log()));
 
         std::string error;
-        const unsigned long pid = win::MirrorProcess::start(
-            exe, static_cast<std::uint16_t>(port), log_path, &error);
-        nlohmann::json r = {{"ok", pid != 0},
-                            {"pid", static_cast<std::uint64_t>(pid)}};
+        const unsigned long pid =
+            win::MirrorProcess::start(exe, static_cast<std::uint16_t>(port), log_path, &error);
+        nlohmann::json r = {{"ok", pid != 0}, {"pid", static_cast<std::uint64_t>(pid)}};
         if (pid == 0) {
             r["error"] = error;
         }
@@ -36,9 +36,9 @@ struct StartWindowMirrorHandler : RpcHandler {
 
     [[nodiscard]] std::string summarize(const nlohmann::json& reply) const override {
         const auto error = reply.value("error", std::string{});
-        return std::string{"ok="} + (reply.value("ok", false) ? "true" : "false")
-               + " pid=" + std::to_string(reply.value("pid", std::uint64_t{0}))
-               + (error.empty() ? "" : " err=" + error);
+        return std::string{"ok="} + (reply.value("ok", false) ? "true" : "false") +
+               " pid=" + std::to_string(reply.value("pid", std::uint64_t{0})) +
+               (error.empty() ? "" : " err=" + error);
     }
 };
 

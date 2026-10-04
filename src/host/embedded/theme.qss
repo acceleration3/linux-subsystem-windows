@@ -820,6 +820,34 @@ QLabel#PillRun  { color: #5aa9f0; border: 1px solid #2b4a6b; background-color: #
 QLabel#PillDone { color: #4ec98a; border: 1px solid #2c5c44; background-color: #16241d; }
 QLabel#PillFail { color: #f2555a; border: 1px solid #6b2f32; background-color: #24181a; }
 
+/* ---- tones ------------------------------------------------------- */
+
+/* A colour for what a widget says rather than for what it is. Each rule
+   names the role it recolours as well as the tone, because an id
+   selector outranks a bare attribute one and the role's own colour
+   would otherwise win. Nothing else changes: the role keeps its face
+   and its size. */
+QLabel#Caption[tone="amber"], QLabel#Meta[tone="amber"] { color: #ff9f45; }
+QLabel#Meta[tone="bad"] { color: #f2555a; }
+QLabel#Body[tone="warm"] { color: #f0c393; }
+QLabel[tone="ok"] { color: #4ec98a; }
+QLabel[tone="faint"] { color: #646d7e; }
+
+/* After the button rules above, so a tone outranks :disabled too. */
+QPushButton[tone="info"]  { color: #5aa9f0; }
+QPushButton[tone="amber"] { color: #ff9f45; }
+QPushButton[tone="bad"]   { color: #f2555a; }
+
+/* The now-or-restart tag beside a setting's name. Amber for restart
+   because it is the one that costs something; green for now because it
+   is already done. */
+QLabel#Meta[tone="restart"], QLabel#Meta[tone="now"] {
+    border-radius: 2px;
+    padding: 0px 4px;
+}
+QLabel#Meta[tone="restart"] { color: #ff9f45; border: 1px solid #a8672a; }
+QLabel#Meta[tone="now"]     { color: #4ec98a; border: 1px solid #2c5c44; }
+
 QWidget#WizardSide {
     background-color: #10141b;
     border-right: 1px solid #272d3a;

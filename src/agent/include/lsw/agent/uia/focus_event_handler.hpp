@@ -1,8 +1,11 @@
 #pragma once
 
-#include <uiautomation.h>
+#include "lsw/agent/win/com_object.hpp"
 
-#include <atomic>
+// clang-format off
+#include <windows.h>
+#include <uiautomation.h>
+// clang-format on
 
 namespace lsw::agent::uia {
 
@@ -14,19 +17,13 @@ class UiaEventQueue;
 // every focus change on the desktop, so the PID filter here is the whole
 // subscription. One registration therefore serves any number of host
 // mirrors that happen to share a PID.
-class FocusEventHandler final : public IUIAutomationFocusChangedEventHandler {
+class FocusEventHandler final : public win::ComObject<IUIAutomationFocusChangedEventHandler> {
 public:
-    FocusEventHandler(UiaEventQueue& queue, DWORD pid) noexcept
-        : queue_(queue), pid_(pid) {}
+    FocusEventHandler(UiaEventQueue& queue, DWORD pid) noexcept : queue_(queue), pid_(pid) {}
 
-    HRESULT __stdcall QueryInterface(REFIID iid, void** out) override;
-    ULONG __stdcall AddRef() override;
-    ULONG __stdcall Release() override;
-
-    HRESULT __stdcall HandleFocusChangedEvent(IUIAutomationElement* sender) override;
+    HRESULT STDMETHODCALLTYPE HandleFocusChangedEvent(IUIAutomationElement* sender) override;
 
 private:
-    std::atomic<ULONG> ref_{1};
     UiaEventQueue& queue_;
     DWORD pid_;
 };

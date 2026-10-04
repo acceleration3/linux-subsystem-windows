@@ -1,7 +1,7 @@
 #include "lsw/host/wizard/welcome_page.hpp"
-#include "lsw/host/wizard/page_chrome.hpp"
 
 #include "lsw/host/ui/theme.hpp"
+#include "lsw/host/ui/widgets.hpp"
 
 #include <QFrame>
 #include <QGridLayout>
@@ -24,10 +24,8 @@ QWidget* stage_card(const QString& number, const QString& title, const QString& 
     layout->setContentsMargins(13, 12, 13, 12);
     layout->setSpacing(5);
 
-    auto* heading = new QLabel(QStringLiteral("%1 · %2").arg(number, title.toUpper()));
-    heading->setObjectName(QString::fromLatin1(Theme::Role::kCaption));
-    heading->setStyleSheet(
-        QStringLiteral("color: %1;").arg(QString::fromLatin1(Theme::Color::kAmber)));
+    auto* heading = ui::Widgets::caption(QStringLiteral("%1 · %2").arg(number, title));
+    heading->setProperty(Theme::Tone::kProperty, Theme::Tone::kAmber);
 
     auto* text = new QLabel(body);
     text->setObjectName(QString::fromLatin1(Theme::Role::kDim));
@@ -40,11 +38,13 @@ QWidget* stage_card(const QString& number, const QString& title, const QString& 
 
 }  // namespace
 
-WelcomePage::WelcomePage(QWidget* parent) : QWizardPage(parent) {
+WelcomePage::WelcomePage(QWidget* parent) : WizardPage(parent) {
 
-    auto* root = PageChrome::install(this, QStringLiteral("Run Windows applications on Linux"), QStringLiteral("LSW installs a Windows guest and renders its windows onto "
-                               "your desktop. Four stages, roughly 25 minutes, mostly "
-                               "unattended."));
+    auto* root =
+        install_chrome(QStringLiteral("Run Windows applications on Linux"),
+                       QStringLiteral("LSW installs a Windows guest and renders its windows onto "
+                                      "your desktop. Four stages, roughly 25 minutes, mostly "
+                                      "unattended."));
 
     auto* grid = new QGridLayout;
     grid->setSpacing(10);

@@ -2,7 +2,6 @@
 
 #include <QHash>
 #include <QStringList>
-
 #include <thread>
 
 namespace lsw::host::config {
@@ -16,56 +15,56 @@ using K = ManagerSettings::Key;
 // say.
 const QHash<QString, QVariant>& defaults() {
     static const QHash<QString, QVariant> table = {
-        {QLatin1String(K::kCpuCores), 4},
-        {QLatin1String(K::kMemoryMib), 8192},
-        {QLatin1String(K::kDiskGib), 60},
+        {K::kCpuCores, 4},
+        {K::kMemoryMib, 8192},
+        {K::kDiskGib, 60},
 
-        {QLatin1String(K::kGuestWidth), 1920},
-        {QLatin1String(K::kGuestHeight), 1080},
-        {QLatin1String(K::kMatchHostOutput), false},
-        {QLatin1String(K::kScalingPercent), 100},
-        {QLatin1String(K::kRefreshHz), 60},
+        {K::kGuestWidth, 1920},
+        {K::kGuestHeight, 1080},
+        {K::kMatchHostOutput, false},
+        {K::kScalingPercent, 100},
+        {K::kRefreshHz, 60},
         // What the adapter admits to owning. Applications gate their
         // GPU path on this long before they open a driver, and a basic
         // display adapter reports zero.
-        {QLatin1String(K::kVramMib), 1024},
-        {QLatin1String(K::kLivePreview), true},
+        {K::kVramMib, 1024},
+        {K::kLivePreview, true},
 
         // The render server's own defaults, so a fresh install matches
         // what it would have done unasked.
-        {QLatin1String(K::kChannels), 4},
+        {K::kChannels, 4},
         // -1: whichever GPU drives the display, which is what EGL hands
         // out unasked. Named explicitly so a laptop's discrete card can
         // be chosen over the one wired to the screen.
-        {QLatin1String(K::kGlDevice), -1},
-        {QLatin1String(K::kRingKib), 1024},
-        {QLatin1String(K::kReplyKib), 8192},
+        {K::kGlDevice, -1},
+        {K::kRingKib, 1024},
+        {K::kReplyKib, 8192},
         // 512, not 256: the three areas plus the header round up to a
         // 1 GiB region, which is the size every domain defined so far
         // declares. A smaller default rounds to 512 and a guest whose
         // XML says 1024 then maps a region the server never made.
-        {QLatin1String(K::kBlobMib), 512},
-        {QLatin1String(K::kWarnCongestion), true},
-        {QLatin1String(K::kChannelBindings), QString{}},
-        {QLatin1String(K::kNothingFreePolicy), QStringLiteral("wait")},
-        {QLatin1String(K::kChannelWaitSeconds), 15},
+        {K::kBlobMib, 512},
+        {K::kWarnCongestion, true},
+        {K::kChannelBindings, QString{}},
+        {K::kNothingFreePolicy, QStringLiteral("wait")},
+        {K::kChannelWaitSeconds, 15},
 
-        {QLatin1String(K::kSmbEnabled), true},
-        {QLatin1String(K::kShareScope), QStringLiteral("C$")},
-        {QLatin1String(K::kBookmarkDolphin), true},
-        {QLatin1String(K::kBookmarkGtk), true},
-        {QLatin1String(K::kHostShares), QString{}},
-        {QLatin1String(K::kGuestUser), QStringLiteral("lsw")},
-        {QLatin1String(K::kGuestPassword), QStringLiteral("lsw")},
+        {K::kSmbEnabled, true},
+        {K::kShareScope, QStringLiteral("C$")},
+        {K::kBookmarkDolphin, true},
+        {K::kBookmarkGtk, true},
+        {K::kHostShares, QString{}},
+        {K::kGuestUser, QStringLiteral("lsw")},
+        {K::kGuestPassword, QStringLiteral("lsw")},
 
-        {QLatin1String(K::kPublishEntries), true},
-        {QLatin1String(K::kMenuCategory), QStringLiteral("Windows")},
-        {QLatin1String(K::kFileAssociations), false},
+        {K::kPublishEntries, true},
+        {K::kMenuCategory, QStringLiteral("Windows")},
+        {K::kFileAssociations, false},
 
-        {QLatin1String(K::kAgentPort), 5102},
-        {QLatin1String(K::kAutostart), false},
+        {K::kAgentPort, 5102},
+        {K::kAutostart, false},
 
-        {QLatin1String(K::kCloseToTray), true},
+        {K::kCloseToTray, true},
     };
     return table;
 }
@@ -74,14 +73,9 @@ const QHash<QString, QVariant>& defaults() {
 // command line, neither of which a running guest re-reads.
 const QStringList& restart_keys() {
     static const QStringList keys = {
-        QLatin1String(K::kCpuCores),    QLatin1String(K::kMemoryMib),
-        QLatin1String(K::kDiskGib),     QLatin1String(K::kGuestWidth),
-        QLatin1String(K::kGuestHeight), QLatin1String(K::kMatchHostOutput),
-        QLatin1String(K::kScalingPercent), QLatin1String(K::kVramMib),
-        QLatin1String(K::kChannels),    QLatin1String(K::kGlDevice),
-        QLatin1String(K::kRingKib),
-        QLatin1String(K::kReplyKib),    QLatin1String(K::kBlobMib),
-        QLatin1String(K::kHostShares),  QLatin1String(K::kAgentPort),
+        K::kCpuCores,        K::kMemoryMib,      K::kDiskGib, K::kGuestWidth, K::kGuestHeight,
+        K::kMatchHostOutput, K::kScalingPercent, K::kVramMib, K::kChannels,   K::kGlDevice,
+        K::kRingKib,         K::kReplyKib,       K::kBlobMib, K::kHostShares, K::kAgentPort,
     };
     return keys;
 }
@@ -92,16 +86,15 @@ constexpr QChar kFieldSep = QLatin1Char('\x1e');
 }  // namespace
 
 ManagerSettings::ManagerSettings(QObject* parent)
-    : QObject(parent),
-      store_(QSettings::IniFormat, QSettings::UserScope, QStringLiteral("lsw"),
-             QStringLiteral("manager")) {
+    : QObject(parent), store_(QSettings::IniFormat, QSettings::UserScope, QStringLiteral("lsw"),
+                              QStringLiteral("manager")) {
     // The wizard sizes the machine against the host it runs on, and a
     // four-core default on a twenty-thread box is a poor first
     // impression. Only used when nothing has been stored yet.
-    if (!store_.contains(QLatin1String(K::kCpuCores))) {
+    if (!store_.contains(K::kCpuCores)) {
         const auto threads = static_cast<int>(std::thread::hardware_concurrency());
         if (threads > 1) {
-            store_.setValue(QLatin1String(K::kCpuCores), qMin(threads, 8));
+            store_.setValue(K::kCpuCores, qMin(threads, 8));
         }
     }
 }
@@ -139,16 +132,38 @@ void ManagerSettings::set_value(const QString& key, const QVariant& v) {
     Q_EMIT changed(key);
 }
 
-QVector<HostShare> ManagerSettings::host_shares() const {
-    QVector<HostShare> out;
-    const QString blob = string_value(QLatin1String(K::kHostShares));
-    if (blob.isEmpty()) {
-        return out;
+QString ManagerSettings::encode_records(const QVector<QStringList>& records) {
+    QStringList joined;
+    joined.reserve(records.size());
+    for (const auto& fields : records) {
+        joined << fields.join(kFieldSep);
     }
+    return joined.join(kRecordSep);
+}
+
+QVector<QStringList> ManagerSettings::decode_records(const QString& blob) {
+    QVector<QStringList> out;
     const auto records = blob.split(kRecordSep, Qt::SkipEmptyParts);
     out.reserve(records.size());
     for (const auto& record : records) {
-        const auto fields = record.split(kFieldSep);
+        out.push_back(record.split(kFieldSep));
+    }
+    return out;
+}
+
+QString ManagerSettings::encode_host_shares(const QVector<HostShare>& shares) {
+    QVector<QStringList> records;
+    records.reserve(shares.size());
+    for (const auto& share : shares) {
+        records.push_back({share.host_path, share.drive,
+                           share.read_only ? QStringLiteral("ro") : QStringLiteral("rw")});
+    }
+    return encode_records(records);
+}
+
+QVector<HostShare> ManagerSettings::decode_host_shares(const QString& blob) {
+    QVector<HostShare> out;
+    for (const auto& fields : decode_records(blob)) {
         if (fields.size() < 2) {
             continue;
         }
@@ -161,31 +176,17 @@ QVector<HostShare> ManagerSettings::host_shares() const {
     return out;
 }
 
+QVector<HostShare> ManagerSettings::host_shares() const {
+    return decode_host_shares(string_value(K::kHostShares));
+}
+
 void ManagerSettings::set_host_shares(const QVector<HostShare>& shares) {
-    QStringList records;
-    records.reserve(shares.size());
-    for (const auto& share : shares) {
-        records << QStringList{share.host_path, share.drive,
-                               share.read_only ? QStringLiteral("ro")
-                                               : QStringLiteral("rw")}
-                       .join(kFieldSep);
-    }
-    set_value(QLatin1String(K::kHostShares), records.join(kRecordSep));
+    set_value(K::kHostShares, encode_host_shares(shares));
 }
 
 QVector<ChannelBinding> ManagerSettings::channel_bindings() const {
     QVector<ChannelBinding> out;
-    const QString blob = string_value(QLatin1String(K::kChannelBindings));
-    if (blob.isEmpty()) {
-        return out;
-    }
-    const auto records = blob.split(kRecordSep, Qt::SkipEmptyParts);
-    out.reserve(records.size());
-    for (const auto& record : records) {
-        const auto fields = record.split(kFieldSep);
-        if (fields.isEmpty()) {
-            continue;
-        }
+    for (const auto& fields : decode_records(string_value(K::kChannelBindings))) {
         ChannelBinding binding;
         binding.app_id = fields.at(0);
         binding.channel = fields.value(1, QStringLiteral("-1")).toInt();
@@ -196,14 +197,13 @@ QVector<ChannelBinding> ManagerSettings::channel_bindings() const {
 }
 
 void ManagerSettings::set_channel_bindings(const QVector<ChannelBinding>& bindings) {
-    QStringList records;
+    QVector<QStringList> records;
     records.reserve(bindings.size());
     for (const auto& binding : bindings) {
-        records << QStringList{binding.app_id, QString::number(binding.channel),
-                               policy_to_string(binding.busy)}
-                       .join(kFieldSep);
+        records.push_back(
+            {binding.app_id, QString::number(binding.channel), policy_to_string(binding.busy)});
     }
-    set_value(QLatin1String(K::kChannelBindings), records.join(kRecordSep));
+    set_value(K::kChannelBindings, encode_records(records));
 }
 
 QStringList ManagerSettings::free_drive_letters() const {

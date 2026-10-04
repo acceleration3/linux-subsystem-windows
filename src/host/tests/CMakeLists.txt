@@ -81,3 +81,28 @@ add_test(NAME lsw_host_provision_debloat_wim_test
          COMMAND lsw_host_provision_debloat_wim_test)
 # Rewriting seven gigabytes of WIM is not a sixty-second job.
 set_tests_properties(lsw_host_provision_debloat_wim_test PROPERTIES TIMEOUT 3600)
+
+# The agent channel's bookkeeping — reply decoding, reply-to-caller
+# matching, event subscriptions — with no agent and no socket.
+add_executable(lsw_host_link_test link_test.cpp)
+target_link_libraries(lsw_host_link_test
+    PRIVATE
+        lsw_host_core
+        LSW::CompileOptions
+        nlohmann_json::nlohmann_json
+)
+target_compile_definitions(lsw_host_link_test PRIVATE QT_NO_KEYWORDS)
+add_test(NAME lsw_host_link_test COMMAND lsw_host_link_test)
+
+# The domain definition with user-chosen paths in it: escaped, parsed
+# back, and built from settings the same way every time. Core only — no
+# libvirt, no VM.
+add_executable(lsw_host_domain_xml_test domain_xml_test.cpp)
+target_link_libraries(lsw_host_domain_xml_test
+    PRIVATE
+        lsw_host_core
+        LSW::CompileOptions
+        Qt6::Xml
+)
+target_compile_definitions(lsw_host_domain_xml_test PRIVATE QT_NO_KEYWORDS)
+add_test(NAME lsw_host_domain_xml_test COMMAND lsw_host_domain_xml_test)

@@ -1,20 +1,20 @@
 #include "lsw/host/manager/app_config_dialog.hpp"
 
 #include "lsw/base/log.hpp"
+#include "lsw/host/link/agent_reply.hpp"
 #include "lsw/host/link/agent_rpc_client.hpp"
 #include "lsw/host/manager/remote_file_dialog.hpp"
+#include "lsw/host/ui/dialog_chrome.hpp"
+#include "lsw/host/ui/field_stack.hpp"
 #include "lsw/host/ui/theme.hpp"
+#include "lsw/host/ui/widgets.hpp"
 
-#include <QByteArray>
 #include <QCheckBox>
 #include <QComboBox>
-#include <QFrame>
 #include <QHBoxLayout>
 #include <QPushButton>
-#include <QFutureWatcher>
 #include <QPixmap>
 #include <QVBoxLayout>
-#include <QtConcurrent>
 
 #include <nlohmann/json.hpp>
 
@@ -24,65 +24,12 @@ namespace lsw::host::manager {
 
 namespace {
 
+using ui::Theme;
+using ui::Widgets;
+
 constexpr int kIconPx = 64;
 constexpr int kEnvBoxPx = 72;  // ~3 lines; enough to see what is set
 constexpr int kPathIdleMs = 600;
-
-// Small RPC helper — synchronous get_icon over the shared channel.
-QString agent_rpc_get_icon(link::AgentRpcClient& rpc, const QString& path) {
-    nlohmann::json req = {
-        {"cmd", linkproto::cmd::kGetIcon},
-        {"params", {{"path", path.toStdString()}}},
-    };
-    const auto reply = rpc.call(req);
-    if (reply.isEmpty()) {
-        return {};
-    }
-    try {
-        const auto j = nlohmann::json::parse(reply.constData(),
-                                              reply.constData() + reply.size());
-        return QString::fromStdString(j.value("icon_png_base64", std::string{}));
-    } catch (const nlohmann::json::exception&) {
-        return {};
-    }
-}
-
-}  // namespace
-
-namespace {
-
-QLabel* field_label(const QString& text) {
-    auto* label = new QLabel(text.toUpper());
-    label->setObjectName(QString::fromLatin1(ui::Theme::Role::kCaption));
-    return label;
-}
-
-// A field: its name above it, and the control the full width of the
-// dialog. A two-column form would put a short caption beside a long
-// path and waste the width the path needs.
-class FieldStack {
-public:
-    explicit FieldStack(QVBoxLayout* into) : into_(into) {}
-
-    void add(const QString& name, QWidget* control) {
-        auto* column = new QVBoxLayout;
-        column->setContentsMargins(0, 0, 0, 0);
-        column->setSpacing(5);
-        column->addWidget(field_label(name));
-        column->addWidget(control);
-        into_->addLayout(column);
-    }
-
-    void add_note(const QString& text) {
-        auto* note = new QLabel(text);
-        note->setObjectName(QString::fromLatin1(ui::Theme::Role::kMeta));
-        note->setWordWrap(true);
-        into_->addWidget(note);
-    }
-
-private:
-    QVBoxLayout* into_;
-};
 
 }  // namespace
 
@@ -95,14 +42,8 @@ AppConfigDialog::AppConfigDialog(apps::AppConfig initial, link::AgentRpcClient& 
     setModal(true);
     setMinimumWidth(520);
 
-    auto* outer = new QVBoxLayout(this);
-    outer->setContentsMargins(0, 0, 0, 0);
-    outer->setSpacing(0);
-    auto* body_widget = new QWidget;
-    auto* root = new QVBoxLayout(body_widget);
-    root->setContentsMargins(20, 18, 20, 16);
-    root->setSpacing(14);
-    outer->addWidget(body_widget, 1);
+    const auto chrome = ui::DialogChrome::install(this);
+    auto* root = chrome.body;
 
     // Identity first. The dialog opens by confirming which application
     // this is, rather than making you read the path to find out.
@@ -116,23 +57,20 @@ AppConfigDialog::AppConfigDialog(apps::AppConfig initial, link::AgentRpcClient& 
     titles->setSpacing(3);
     identity_name_ = new QLabel(cfg_.name.isEmpty() ? QStringLiteral("New application")
                                                     : cfg_.name);
-    identity_name_->setObjectName(QString::fromLatin1(ui::Theme::Role::kHeading));
-    icon_status_ = new QLabel(QStringLiteral("no icon yet"));
-    icon_status_->setObjectName(QString::fromLatin1(ui::Theme::Role::kMeta));
-    icon_status_->setWordWrap(true);
+    identity_name_->setObjectName(QString::fromLatin1(Theme::Role::kHeading));
+    icon_status_ = Widgets::meta(QStringLiteral("no icon yet"), true);
     titles->addWidget(identity_name_);
     titles->addWidget(icon_status_);
     identity->addWidget(icon_label_);
     identity->addLayout(titles, 1);
-    auto* replace_icon = new QPushButton(QStringLiteral("Replace icon"));
-    replace_icon->setObjectName(QString::fromLatin1(ui::Theme::Role::kQuiet));
+    auto* replace_icon = Widgets::button(QStringLiteral("Replace icon"), Theme::Role::kQuiet);
     identity->addWidget(replace_icon, 0, Qt::AlignTop);
     root->addLayout(identity);
     connect(replace_icon, &QPushButton::clicked, this, &AppConfigDialog::fetch_icon);
 
     auto* form = new QVBoxLayout;
     form->setSpacing(12);
-    FieldStack fields{form};
+    ui::FieldStack fields{form};
 
     name_edit_ = new QLineEdit(cfg_.name);
     name_edit_->setPlaceholderText("Display name");
@@ -244,22 +182,16 @@ AppConfigDialog::AppConfigDialog(apps::AppConfig initial, link::AgentRpcClient& 
 
     // Remove sits apart from the pair that finish the dialog, and quiet,
     // because it is the one that destroys something.
-    auto* foot_band = new QFrame;
-    ui::Theme::surface(foot_band, ui::Theme::Role::kDialogFoot);
-    auto* footer = new QHBoxLayout(foot_band);
-    footer->setContentsMargins(20, 12, 20, 12);
-    auto* remove = new QPushButton(QStringLiteral("Remove"));
-    remove->setObjectName(QString::fromLatin1(ui::Theme::Role::kQuiet));
+    auto* footer = chrome.foot;
+    auto* remove = Widgets::button(QStringLiteral("Remove"), Theme::Role::kQuiet);
     remove->setVisible(!cfg_.id.isEmpty());
     auto* cancel = new QPushButton(QStringLiteral("Cancel"));
-    auto* save = new QPushButton(QStringLiteral("Save"));
-    save->setObjectName(QString::fromLatin1(ui::Theme::Role::kPrimary));
+    auto* save = Widgets::button(QStringLiteral("Save"), Theme::Role::kPrimary);
     save->setDefault(true);
     footer->addWidget(remove);
     footer->addStretch(1);
     footer->addWidget(cancel);
     footer->addWidget(save);
-    outer->addWidget(foot_band);
 
     connect(save, &QPushButton::clicked, this, &AppConfigDialog::on_accept);
     connect(cancel, &QPushButton::clicked, this, &QDialog::reject);
@@ -298,21 +230,18 @@ void AppConfigDialog::fetch_icon() {
         return;
     }
     icon_status_->setText("Fetching from guest agent...");
-    auto* watcher = new QFutureWatcher<QString>(this);
-    connect(watcher, &QFutureWatcher<QString>::finished, this, [this, watcher] {
-        const QString b64 = watcher->result();
-        watcher->deleteLater();
-        if (b64.isEmpty()) {
+    rpc_.request_async(linkproto::cmd::kGetIcon, {{"path", path.toStdString()}}, this,
+                       [this](const link::AgentReply& reply) {
+        const auto b64 = reply.ok ? reply.body.value("icon_png_base64", std::string{})
+                                  : std::string{};
+        if (b64.empty()) {
             icon_status_->setText("Could not fetch icon for that path.");
             return;
         }
-        cfg_.icon_png_base64 = b64;
+        cfg_.icon_png_base64 = QString::fromStdString(b64);
         update_icon_preview();
         icon_status_->setText("Icon fetched.");
     });
-    watcher->setFuture(QtConcurrent::run([this, path] {
-        return agent_rpc_get_icon(rpc_, path);
-    }));
 }
 
 void AppConfigDialog::update_icon_preview() {

@@ -2,8 +2,6 @@
 
 #include "lsw/agent/log.hpp"
 
-#include <algorithm>
-#include <cassert>
 #include <cstdlib>
 
 namespace lsw::agent::rpc {
@@ -13,13 +11,12 @@ RpcRegistry& RpcRegistry::instance() {
     return r;
 }
 
-void RpcRegistry::register_handler(std::string name,
-                                    std::unique_ptr<RpcHandler> h) {
+void RpcRegistry::register_handler(std::string name, std::unique_ptr<RpcHandler> h) {
     // Duplicate registration is always a coding error: two TUs both
     // claimed the same command. Log + abort — a silent overwrite would
     // route the command to whichever TU's static init won the race.
     if (handlers_.find(name) != handlers_.end()) {
-        LSW_AGENT_ERROR(std::string{"rpc: duplicate handler '"} + name + "'");
+        LSW_AGENT_ERROR("rpc: duplicate handler '{}'", name);
         std::abort();
     }
     handlers_.emplace(std::move(name), std::move(h));
@@ -32,16 +29,6 @@ RpcHandler* RpcRegistry::find(std::string_view name) const noexcept {
     // unordered_map which is C++20.
     const auto it = handlers_.find(std::string{name});
     return it == handlers_.end() ? nullptr : it->second.get();
-}
-
-std::vector<std::string> RpcRegistry::names() const {
-    std::vector<std::string> out;
-    out.reserve(handlers_.size());
-    for (const auto& kv : handlers_) {
-        out.push_back(kv.first);
-    }
-    std::sort(out.begin(), out.end());
-    return out;
 }
 
 }  // namespace lsw::agent::rpc

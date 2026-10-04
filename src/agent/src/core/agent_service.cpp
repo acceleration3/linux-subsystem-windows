@@ -1,8 +1,8 @@
 #include "lsw/agent/core/agent_service.hpp"
 
 #include "lsw/agent/apps/guest_drivers.hpp"
-#include "lsw/agent/transport/host_endpoint.hpp"
 #include "lsw/agent/log.hpp"
+#include "lsw/agent/transport/host_endpoint.hpp"
 
 #include <windows.h>
 
@@ -37,12 +37,7 @@ AgentService& AgentService::instance() {
 
 AgentService::AgentService() = default;
 
-AgentService::~AgentService() {
-    request_stop();
-    if (endpoint_thread_.joinable()) {
-        endpoint_thread_.join();
-    }
-}
+AgentService::~AgentService() = default;
 
 int AgentService::run() {
     ::SetConsoleCtrlHandler(&ctrl_handler, TRUE);
@@ -51,10 +46,9 @@ int AgentService::run() {
     // started before it is written finds no driver.
     apps::GuestDrivers::register_installed_icds();
     main_loop();
-    // Explicit pre-destructor teardown of long-lived services. Phase
-    // 6 needs this to release COM pointers while CoInitialize is
-    // still in effect; Phase 3 it's a no-op but the ordering is set
-    // up now so the later change doesn't have to touch this site.
+    // Explicit pre-destructor teardown of long-lived services: UIA
+    // detaches its subscriptions and releases its COM pointers while
+    // CoInitialize is still in effect.
     services_.shutdown();
     return 0;
 }
@@ -69,9 +63,10 @@ void AgentService::main_loop() {
     // on a separate port (:5103); subscribe/unsubscribe are now RPCs
     // on the main channel and frames arrive as events.
     LSW_AGENT_INFO("agent: starting main loop (host endpoint :5102)");
+    // On this thread: it has nothing else to do until the endpoint
+    // returns. Connections get threads of their own inside ``run``.
     transport::HostEndpoint endpoint{services_};
-    endpoint_thread_ = std::thread{[&]() { endpoint.run(stop_requested_); }};
-    endpoint_thread_.join();
+    endpoint.run(stop_requested_);
     LSW_AGENT_INFO("agent: main loop exited");
 }
 

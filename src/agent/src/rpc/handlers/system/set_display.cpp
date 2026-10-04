@@ -1,12 +1,13 @@
 #include "lsw/agent/rpc/auto_register.hpp"
 #include "lsw/agent/rpc/handler.hpp"
-
+#include "lsw/agent/win/reg_key.hpp"
 #include "lsw/linkproto/commands.hpp"
 
 // clang-format off
 #include <windows.h>
 // clang-format on
 
+#include <cstdint>
 #include <string>
 
 namespace lsw::agent::rpc::handlers {
@@ -17,40 +18,19 @@ namespace {
 // has. An application asks this before it ever opens a driver, and a
 // basic display adapter answers zero, which is enough for Photoshop to
 // decide there is no GPU worth using.
-constexpr const wchar_t* kAdapterClass =
-    L"SYSTEM\\CurrentControlSet\\Control\\Class\\"
-    L"{4d36e968-e325-11ce-bfc1-08002be10318}\\0000";
+constexpr const wchar_t* kAdapterClass = L"SYSTEM\\CurrentControlSet\\Control\\Class\\"
+                                         L"{4d36e968-e325-11ce-bfc1-08002be10318}\\0000";
 
-bool write_dword(HKEY root, const wchar_t* subkey, const wchar_t* name,
-                 std::uint32_t value) {
-    HKEY key = nullptr;
-    if (::RegCreateKeyExW(root, subkey, 0, nullptr, 0, KEY_SET_VALUE, nullptr, &key,
-                          nullptr)
-        != ERROR_SUCCESS) {
-        return false;
-    }
-    const bool ok =
-        ::RegSetValueExW(key, name, 0, REG_DWORD, reinterpret_cast<const BYTE*>(&value),
-                         sizeof(value))
-        == ERROR_SUCCESS;
-    ::RegCloseKey(key);
-    return ok;
+// Create-or-open ``root\subkey`` and write one value; false when either
+// step fails.
+bool write_dword(HKEY root, const wchar_t* subkey, const wchar_t* name, std::uint32_t value) {
+    const auto key = win::RegKey::create(root, subkey, KEY_SET_VALUE);
+    return key && key->write_dword(name, value) == ERROR_SUCCESS;
 }
 
-bool write_qword(HKEY root, const wchar_t* subkey, const wchar_t* name,
-                 std::uint64_t value) {
-    HKEY key = nullptr;
-    if (::RegCreateKeyExW(root, subkey, 0, nullptr, 0, KEY_SET_VALUE, nullptr, &key,
-                          nullptr)
-        != ERROR_SUCCESS) {
-        return false;
-    }
-    const bool ok =
-        ::RegSetValueExW(key, name, 0, REG_QWORD, reinterpret_cast<const BYTE*>(&value),
-                         sizeof(value))
-        == ERROR_SUCCESS;
-    ::RegCloseKey(key);
-    return ok;
+bool write_qword(HKEY root, const wchar_t* subkey, const wchar_t* name, std::uint64_t value) {
+    const auto key = win::RegKey::create(root, subkey, KEY_SET_VALUE);
+    return key && key->write_qword(name, value) == ERROR_SUCCESS;
 }
 
 }  // namespace
@@ -78,15 +58,14 @@ struct SetDisplayHandler : RpcHandler {
             DEVMODEW mode{};
             mode.dmSize = sizeof(mode);
             if (::EnumDisplaySettingsW(nullptr, ENUM_CURRENT_SETTINGS, &mode) != 0) {
-                if (static_cast<int>(mode.dmPelsWidth) != width
-                    || static_cast<int>(mode.dmPelsHeight) != height) {
+                if (static_cast<int>(mode.dmPelsWidth) != width ||
+                    static_cast<int>(mode.dmPelsHeight) != height) {
                     mode.dmPelsWidth = static_cast<DWORD>(width);
                     mode.dmPelsHeight = static_cast<DWORD>(height);
                     mode.dmFields = DM_PELSWIDTH | DM_PELSHEIGHT;
                     reply["resolution"] =
-                        ::ChangeDisplaySettingsExW(nullptr, &mode, nullptr,
-                                                   CDS_UPDATEREGISTRY, nullptr)
-                        == DISP_CHANGE_SUCCESSFUL;
+                        ::ChangeDisplaySettingsExW(nullptr, &mode, nullptr, CDS_UPDATEREGISTRY,
+                                                   nullptr) == DISP_CHANGE_SUCCESSFUL;
                 } else {
                     reply["resolution"] = true;
                 }
@@ -98,8 +77,8 @@ struct SetDisplayHandler : RpcHandler {
         // all.
         if (const int percent = params.value("scaling_percent", 0); percent > 0) {
             const auto dpi = static_cast<std::uint32_t>((percent * 96) / 100);
-            const bool a = write_dword(HKEY_CURRENT_USER, L"Control Panel\\Desktop",
-                                       L"LogPixels", dpi);
+            const bool a =
+                write_dword(HKEY_CURRENT_USER, L"Control Panel\\Desktop", L"LogPixels", dpi);
             const bool b = write_dword(HKEY_CURRENT_USER, L"Control Panel\\Desktop",
                                        L"Win8DpiScaling", percent == 100 ? 0U : 1U);
             reply["dpi"] = a && b;
@@ -118,10 +97,9 @@ struct SetDisplayHandler : RpcHandler {
             // the old spelling sees the largest it can express, and one
             // reading the QWORD sees the real figure.
             constexpr std::uint64_t kDwordMax = 0xFFFFFFFFULL;
-            const bool b = write_dword(HKEY_LOCAL_MACHINE, kAdapterClass,
-                                       L"HardwareInformation.MemorySize",
-                                       static_cast<std::uint32_t>(
-                                           bytes > kDwordMax ? kDwordMax : bytes));
+            const bool b =
+                write_dword(HKEY_LOCAL_MACHINE, kAdapterClass, L"HardwareInformation.MemorySize",
+                            static_cast<std::uint32_t>(bytes > kDwordMax ? kDwordMax : bytes));
             reply["vram"] = a && b;
         }
         return reply;
@@ -138,5 +116,4 @@ struct SetDisplayHandler : RpcHandler {
 
 }  // namespace lsw::agent::rpc::handlers
 
-LSW_REGISTER_RPC(lsw::agent::rpc::handlers::SetDisplayHandler,
-                 ::lsw::linkproto::cmd::kSetDisplay)
+LSW_REGISTER_RPC(lsw::agent::rpc::handlers::SetDisplayHandler, ::lsw::linkproto::cmd::kSetDisplay)

@@ -26,6 +26,11 @@ enum class FrameType : std::uint8_t {
 
 inline constexpr std::size_t kHeaderSize = 1 + 4;  // type + length
 
+// The guest-side listener the envelope travels to, reached from the host
+// through QEMU's user-mode ``hostfwd``. The domain XML template forwards
+// the same port; keep the two together.
+inline constexpr std::uint16_t kAgentTcpPort = 5102;
+
 // Write the 5-byte header into ``out``, which must have room for
 // ``kHeaderSize`` bytes.
 inline void write_header(std::uint8_t* out, FrameType type,

@@ -1,36 +1,22 @@
 #include "lsw/agent/uia/window_state_query.hpp"
 
+#include "lsw/agent/uia/element_pattern.hpp"
 #include "lsw/agent/uia/uia_window.hpp"
-
-// clang-format off
-#include <windows.h>
-#include <uiautomation.h>
-// clang-format on
 
 namespace lsw::agent::uia {
 
 WindowState WindowStateQuery::for_window(const UiaWindow& window) {
     WindowState out;
-    IUIAutomationElement* element = window.element();
-    if (element == nullptr) {
-        return out;
-    }
-    IUIAutomationWindowPattern* pattern = nullptr;
-    element->GetCurrentPatternAs(UIA_WindowPatternId,
-                                 __uuidof(IUIAutomationWindowPattern),
-                                 reinterpret_cast<void**>(&pattern));
-    if (pattern == nullptr) {
+    const auto pattern =
+        pattern_as<IUIAutomationWindowPattern>(window.element(), UIA_WindowPatternId);
+    if (!pattern) {
         return out;
     }
 
     out.present = true;
     WindowVisualState visual = WindowVisualState_Normal;
     if (SUCCEEDED(pattern->get_CurrentWindowVisualState(&visual))) {
-        switch (visual) {
-        case WindowVisualState_Normal:    out.visual_state = "normal";    break;
-        case WindowVisualState_Maximized: out.visual_state = "maximized"; break;
-        case WindowVisualState_Minimized: out.visual_state = "minimized"; break;
-        }
+        out.visual_state = visual_state_name(visual);
     }
     BOOL flag = FALSE;
     if (SUCCEEDED(pattern->get_CurrentIsModal(&flag))) {
@@ -39,8 +25,20 @@ WindowState WindowStateQuery::for_window(const UiaWindow& window) {
     if (SUCCEEDED(pattern->get_CurrentIsTopmost(&flag))) {
         out.is_topmost = flag != FALSE;
     }
-    pattern->Release();
     return out;
+}
+
+const char* WindowStateQuery::visual_state_name(int state) {
+    switch (state) {
+    case WindowVisualState_Normal:
+        return "normal";
+    case WindowVisualState_Maximized:
+        return "maximized";
+    case WindowVisualState_Minimized:
+        return "minimized";
+    default:
+        return "unknown";
+    }
 }
 
 }  // namespace lsw::agent::uia

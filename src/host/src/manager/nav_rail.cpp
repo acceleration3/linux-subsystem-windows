@@ -1,12 +1,12 @@
 #include "lsw/host/manager/nav_rail.hpp"
 
 #include "lsw/host/ui/theme.hpp"
+#include "lsw/host/ui/widgets.hpp"
 
 #include <QButtonGroup>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
-#include <QStyle>
 #include <QVBoxLayout>
 
 namespace lsw::host::manager {
@@ -14,6 +14,7 @@ namespace lsw::host::manager {
 namespace {
 
 using ui::Theme;
+using ui::Widgets;
 
 constexpr int kPageCount = static_cast<int>(NavRail::Page::Count);
 
@@ -33,13 +34,6 @@ constexpr ItemSpec kItems[kPageCount] = {
     {NavRail::Page::Render, "◎", "Render"},
     {NavRail::Page::Settings, "⚙", "Settings"},
 };
-
-QLabel* make_marker() {
-    auto* marker = new QLabel;
-    marker->setObjectName(QString::fromLatin1(Theme::Role::kMeta));
-    marker->setVisible(false);
-    return marker;
-}
 
 }  // namespace
 
@@ -64,9 +58,7 @@ NavRail::NavRail(QWidget* parent) : QWidget(parent) {
     name_font.setWeight(QFont::DemiBold);
     name_label_->setFont(name_font);
 
-    detail_label_ = new QLabel;
-    detail_label_->setObjectName(QString::fromLatin1(Theme::Role::kMeta));
-    detail_label_->setWordWrap(true);
+    detail_label_ = Widgets::meta(QString{}, true);
     // A shade smaller than the other captions: the machine's shape is
     // three facts on one line, and wrapping "60 GiB" onto a third line
     // makes the identity look like an error.
@@ -100,8 +92,7 @@ NavRail::NavRail(QWidget* parent) : QWidget(parent) {
         row->setContentsMargins(9, 4, 9, 4);
         row->setSpacing(10);
 
-        auto* glyph = new QLabel(QString::fromUtf8(spec.glyph));
-        glyph->setObjectName(QString::fromLatin1(Theme::Role::kMeta));
+        auto* glyph = Widgets::meta(QString::fromUtf8(spec.glyph));
         glyph->setFixedWidth(15);
         glyph->setAlignment(Qt::AlignCenter);
         glyph->setAttribute(Qt::WA_TransparentForMouseEvents);
@@ -109,7 +100,8 @@ NavRail::NavRail(QWidget* parent) : QWidget(parent) {
         auto* label = new QLabel(QString::fromLatin1(spec.label));
         label->setAttribute(Qt::WA_TransparentForMouseEvents);
 
-        auto* marker = make_marker();
+        auto* marker = Widgets::meta(QString{});
+        marker->setVisible(false);
         marker->setAttribute(Qt::WA_TransparentForMouseEvents);
 
         row->addWidget(glyph);
@@ -176,21 +168,14 @@ void NavRail::set_current(Page page) {
 
 void NavRail::set_agent_online(bool online) {
     badge_->setText(online ? QStringLiteral("\u25cf  ONLINE") : QStringLiteral("\u25cb  OFFLINE"));
-    badge_->setObjectName(QString::fromLatin1(online ? Theme::Role::kBadgeOnline
-                                                     : Theme::Role::kBadgeOffline));
-    // Qt does not re-evaluate a stylesheet when an object name changes.
-    badge_->style()->unpolish(badge_);
-    badge_->style()->polish(badge_);
+    Widgets::set_role(badge_, online ? Theme::Role::kBadgeOnline : Theme::Role::kBadgeOffline);
 }
 
 void NavRail::set_running(bool running) {
     running_ = running;
     power_->setText(running ? QStringLiteral("Stop the guest")
                             : QStringLiteral("Start the guest"));
-    power_->setObjectName(
-        QString::fromLatin1(running ? Theme::Role::kStop : Theme::Role::kGo));
-    power_->style()->unpolish(power_);
-    power_->style()->polish(power_);
+    Widgets::set_role(power_, running ? Theme::Role::kStop : Theme::Role::kGo);
 }
 
 void NavRail::set_marker(Page page, const QString& text, bool amber) {
@@ -201,9 +186,8 @@ void NavRail::set_marker(Page page, const QString& text, bool amber) {
     auto* marker = markers_[index];
     marker->setText(text);
     marker->setVisible(!text.isEmpty());
-    marker->setStyleSheet(amber ? QStringLiteral("color: %1;")
-                                      .arg(QString::fromLatin1(Theme::Color::kAmber))
-                                : QString{});
+    Widgets::set_flag(marker, Theme::Tone::kProperty,
+                      amber ? QVariant(Theme::Tone::kAmber) : QVariant());
 }
 
 void NavRail::set_guest_provisioned(bool provisioned) {

@@ -21,10 +21,14 @@ DomainHandle& DomainHandle::operator=(DomainHandle&& o) noexcept {
     return *this;
 }
 
-virDomainPtr DomainHandle::release() noexcept {
-    auto* d = d_;
-    d_ = nullptr;
-    return d;
+DomainHandle DomainHandle::lookup(virConnectPtr conn, const QUuid& uuid) {
+    if (conn == nullptr) {
+        return {};
+    }
+    // libvirt wants the 16 raw bytes, which is what RFC 4122 order is.
+    const QByteArray bytes = uuid.toRfc4122();
+    return DomainHandle{
+        ::virDomainLookupByUUID(conn, reinterpret_cast<const unsigned char*>(bytes.constData()))};
 }
 
 }  // namespace lsw::host::vm

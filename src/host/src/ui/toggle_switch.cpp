@@ -14,10 +14,6 @@ constexpr int kWidth = 34;
 constexpr int kHeight = 19;
 constexpr int kKnob = 13;
 
-QColor colour(const char* hex) {
-    return QColor{QString::fromLatin1(hex)};
-}
-
 }  // namespace
 
 ToggleSwitch::ToggleSwitch(QWidget* parent) : QAbstractButton(parent) {
@@ -35,17 +31,17 @@ void ToggleSwitch::paintEvent(QPaintEvent* /*event*/) {
     painter.setRenderHint(QPainter::Antialiasing, true);
 
     const bool on = isChecked();
-    const QColor amber = colour(Theme::Color::kAmber);
+    const QColor amber = Theme::color(Theme::Color::kAmber);
     const QRectF track{0.5, (height() - kHeight) / 2.0 + 0.5, kWidth - 1.0, kHeight - 1.0};
 
-    painter.setBrush(on ? QColor{255, 159, 69, 40} : colour("#20252f"));
-    painter.setPen(QPen{on ? colour("#a8672a") : colour(Theme::Color::kLine), 1.0});
+    painter.setBrush(on ? QColor{255, 159, 69, 40} : Theme::color("#20252f"));
+    painter.setPen(QPen{on ? Theme::color("#a8672a") : Theme::color(Theme::Color::kLine), 1.0});
     painter.drawRoundedRect(track, track.height() / 2, track.height() / 2);
 
     const qreal inset = (track.height() - kKnob) / 2.0;
     const qreal x = on ? track.right() - inset - kKnob : track.left() + inset;
     painter.setPen(Qt::NoPen);
-    painter.setBrush(on ? amber : colour(Theme::Color::kFgFaint));
+    painter.setBrush(on ? amber : Theme::color(Theme::Color::kFgFaint));
     painter.drawEllipse(QRectF{x, track.top() + inset, kKnob, kKnob});
 
     if (hasFocus()) {

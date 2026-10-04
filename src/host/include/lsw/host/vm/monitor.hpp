@@ -8,15 +8,13 @@
 #include <QObject>
 #include <QTimer>
 #include <QUuid>
-
 #include <atomic>
 
 namespace lsw::host::vm {
 
 // Live stats for one running VM. CPU%, memory used/total and disk
-// used/total come from the in-guest agent (``system_info`` RPC); the
-// render-server (when wired up) fills in ``vram``; libvirt is the
-// fallback when the agent isn't reachable yet.
+// used/total come from the in-guest agent (``system_info`` RPC);
+// libvirt is the fallback when the agent isn't reachable yet.
 // Polls libvirt (and, when wired, the guest agent) for per-VM stats
 // and emits ``stats_updated`` on a fixed cadence (default 2 s).
 // Stops automatically when no VMs are watched.
@@ -37,11 +35,6 @@ public:
     void unwatch(const QUuid& uuid);
 
     [[nodiscard]] VmStats latest(const QUuid& uuid) const;
-
-    // Optional hook from the render-server: per-VM VRAM tally.
-    void update_vram(const QUuid& uuid, quint64 bytes);
-
-    void set_interval_ms(int ms);
 
 Q_SIGNALS:
     void stats_updated(const QUuid& uuid, const VmStats& stats);

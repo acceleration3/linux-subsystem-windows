@@ -13,10 +13,6 @@ namespace lsw::host::ui {
 
 namespace {
 
-QColor colour(const char* hex) {
-    return QColor{QString::fromLatin1(hex)};
-}
-
 // A tick, drawn rather than typed: two strokes across the box, inset so
 // the joint has somewhere to sit.
 void draw_check(QPainter* painter, const QRect& box, const QColor& ink) {
@@ -81,11 +77,10 @@ void LswStyle::drawPrimitive(PrimitiveElement element, const QStyleOption* optio
     const bool enabled = (option->state & State_Enabled) != 0;
     const bool hovered = (option->state & State_MouseOver) != 0;
 
-    const QColor amber = colour(Theme::Color::kAmber);
-    const QColor line = colour(Theme::Color::kLine);
-    const QColor faint = colour(Theme::Color::kFgFaint);
-    const QColor base = colour("#0f131a");
-    const QColor ink = colour(Theme::Color::kInk);
+    const QColor amber = Theme::color(Theme::Color::kAmber);
+    const QColor faint = Theme::color(Theme::Color::kFgFaint);
+    const QColor base = Theme::color(Theme::Color::kBase);
+    const QColor ink = Theme::color(Theme::Color::kInk);
 
     switch (element) {
     case PE_IndicatorCheckBox: {
@@ -129,7 +124,7 @@ void LswStyle::drawPrimitive(PrimitiveElement element, const QStyleOption* optio
         path.lineTo(centre.x(), centre.y() + half);
         path.closeSubpath();
         painter->setPen(Qt::NoPen);
-        painter->setBrush(enabled ? colour(Theme::Color::kFgDim) : faint);
+        painter->setBrush(enabled ? Theme::color(Theme::Color::kFgDim) : faint);
         painter->drawPath(path);
         painter->restore();
         return;
@@ -137,7 +132,6 @@ void LswStyle::drawPrimitive(PrimitiveElement element, const QStyleOption* optio
     default:
         break;
     }
-    (void)line;
     QProxyStyle::drawPrimitive(element, option, painter, widget);
 }
 

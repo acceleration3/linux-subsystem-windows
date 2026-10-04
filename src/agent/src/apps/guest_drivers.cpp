@@ -1,7 +1,14 @@
 #include "lsw/agent/apps/guest_drivers.hpp"
 
+#include "lsw/agent/core/paths.hpp"
 #include "lsw/agent/log.hpp"
 #include "lsw/agent/util/text_encoding.hpp"
+#include "lsw/agent/util/wide_string.hpp"
+#include "lsw/agent/win/environment.hpp"
+#include "lsw/agent/win/error_text.hpp"
+#include "lsw/agent/win/file_system.hpp"
+#include "lsw/agent/win/reg_key.hpp"
+#include "lsw/agent/win/unique_handle.hpp"
 
 // clang-format off
 #include <windows.h>
@@ -10,7 +17,6 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <cwctype>
 #include <deque>
 #include <filesystem>
 #include <fstream>
@@ -26,12 +32,10 @@ namespace {
 
 enum class Arch { Unknown, X64, X86 };
 
-// Where the wizard installs each build of every driver. One directory
-// per architecture because a 32-bit process cannot load a 64-bit DLL,
-// and every D3D8 / D3D9 title is 32-bit.
-constexpr const char* kRoot = "C:\\ProgramData\\LSW";
-
-// What gets linked, and out of which per-architecture directory.
+// What gets linked, and out of which per-architecture directory under
+// core::Paths::root(), where the wizard installs each build of every
+// driver. One directory per architecture because a 32-bit process cannot
+// load a 64-bit DLL, and every D3D8 / D3D9 title is 32-bit.
 //
 // Only the libraries whose ONLY discovery mechanism is the DLL search
 // order. ``opengl32.dll`` and the Direct3D set are named by the loader
@@ -47,7 +51,7 @@ constexpr const char* kRoot = "C:\\ProgramData\\LSW";
 // directory when the Windows build ships none.
 struct Driver {
     const char* name;
-    const char* dir64;  // subdirectory of kRoot holding the x86-64 build
+    const char* dir64;  // subdirectory of the data root holding the x86-64 build
     const char* dir32;  // ... and the i686 one
 };
 
@@ -96,11 +100,6 @@ constexpr int kMaxArchProbes = 16;
 // read a path in the process code page, which is not UTF-8, so an
 // application installed under a name with any non-ASCII character in it
 // would have had its drivers placed somewhere else or nowhere.
-[[nodiscard]] std::wstring parent_dir(const std::wstring& path) {
-    const auto pos = path.find_last_of(L"\\/");
-    return pos == std::wstring::npos ? std::wstring{L"."} : path.substr(0, pos);
-}
-
 [[nodiscard]] std::wstring join(const std::wstring& dir, const std::wstring& leaf) {
     return dir + L"\\" + leaf;
 }
@@ -109,58 +108,38 @@ constexpr int kMaxArchProbes = 16;
     return join(dir, util::TextEncoding::to_wide(leaf));
 }
 
-[[nodiscard]] std::wstring lower(std::wstring s) {
-    for (wchar_t& c : s) {
-        c = static_cast<wchar_t>(::towlower(c));
-    }
-    return s;
-}
-
 // A directory path in the form everything below compares: lowercased,
 // with any trailing separator removed, so ``C:\Foo`` and ``c:\foo\``
 // are one key.
 [[nodiscard]] std::wstring dir_key(const std::wstring& dir) {
-    std::wstring s = lower(dir);
+    std::wstring s = util::WideString::lower(dir);
     while (s.size() > 1 && (s.back() == L'\\' || s.back() == L'/')) {
         s.pop_back();
     }
     return s;
 }
 
-[[nodiscard]] std::wstring expand(const wchar_t* spec) {
-    const DWORD n = ::ExpandEnvironmentStringsW(spec, nullptr, 0);
-    if (n == 0) {
-        return {};
-    }
-    std::wstring out(n, L'\0');
-    if (::ExpandEnvironmentStringsW(spec, out.data(), n) == 0) {
-        return {};
-    }
-    while (!out.empty() && out.back() == L'\0') {
-        out.pop_back();
-    }
-    return out;
-}
-
 // Read enough of the PE header to reach IMAGE_NT_HEADERS::FileHeader::Machine.
 [[nodiscard]] Arch detect_arch(const std::wstring& path) {
-    HANDLE h = ::CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
-                             nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (h == INVALID_HANDLE_VALUE) {
-        return Arch::Unknown;
-    }
     std::array<std::uint8_t, 4096> buf{};
     DWORD got = 0;
-    ::ReadFile(h, buf.data(), static_cast<DWORD>(buf.size()), &got, nullptr);
-    ::CloseHandle(h);
+    {
+        const win::UniqueHandle file{::CreateFileW(path.c_str(), GENERIC_READ,
+                                                   FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
+                                                   OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr)};
+        if (!file) {
+            return Arch::Unknown;
+        }
+        ::ReadFile(file.get(), buf.data(), static_cast<DWORD>(buf.size()), &got, nullptr);
+    }
     if (got < 0x40 + 4) {
         return Arch::Unknown;
     }
-    const std::uint32_t pe_off = std::uint32_t(buf[0x3C]) | (std::uint32_t(buf[0x3D]) << 8)
-                                 | (std::uint32_t(buf[0x3E]) << 16)
-                                 | (std::uint32_t(buf[0x3F]) << 24);
-    if (pe_off + 6 > got || buf[pe_off] != 'P' || buf[pe_off + 1] != 'E' || buf[pe_off + 2] != 0
-        || buf[pe_off + 3] != 0) {
+    const std::uint32_t pe_off = std::uint32_t(buf[0x3C]) | (std::uint32_t(buf[0x3D]) << 8) |
+                                 (std::uint32_t(buf[0x3E]) << 16) |
+                                 (std::uint32_t(buf[0x3F]) << 24);
+    if (pe_off + 6 > got || buf[pe_off] != 'P' || buf[pe_off + 1] != 'E' || buf[pe_off + 2] != 0 ||
+        buf[pe_off + 3] != 0) {
         return Arch::Unknown;
     }
     const std::uint16_t machine =
@@ -172,10 +151,6 @@ constexpr int kMaxArchProbes = 16;
         return Arch::X86;
     }
     return Arch::Unknown;
-}
-
-[[nodiscard]] bool exists(const std::wstring& path) {
-    return ::GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES;
 }
 
 // A path we placed: a symbolic link, or the hardlink/copy a link
@@ -194,14 +169,14 @@ constexpr int kMaxArchProbes = 16;
 // created, and would then answer for every Vulkan application in the
 // guest forever. Never stage into it.
 [[nodiscard]] bool under_windows_dir(const std::wstring& dir) {
-    static const std::wstring windows = dir_key(expand(L"%SystemRoot%"));
+    static const std::wstring windows = dir_key(win::Environment::expand(L"%SystemRoot%"));
     if (windows.empty()) {
         return false;
     }
     const std::wstring key = dir_key(dir);
-    return key == windows
-           || (key.size() > windows.size() && key.compare(0, windows.size(), windows) == 0
-               && key[windows.size()] == L'\\');
+    return key == windows ||
+           (key.size() > windows.size() && key.compare(0, windows.size(), windows) == 0 &&
+            key[windows.size()] == L'\\');
 }
 
 // A directory that holds unrelated applications rather than one
@@ -212,12 +187,12 @@ constexpr int kMaxArchProbes = 16;
 [[nodiscard]] bool is_container_dir(const std::wstring& dir) {
     static const std::vector<std::wstring> containers = [] {
         std::vector<std::wstring> out;
-        for (const wchar_t* spec : {L"%SystemDrive%\\", L"%ProgramFiles%", L"%ProgramW6432%",
-                                    L"%ProgramFiles(x86)%", L"%ProgramData%", L"%PUBLIC%",
-                                    L"%USERPROFILE%", L"%APPDATA%", L"%LOCALAPPDATA%",
-                                    L"%USERPROFILE%\\Desktop", L"%USERPROFILE%\\Downloads",
-                                    L"%USERPROFILE%\\Documents"}) {
-            std::wstring key = dir_key(expand(spec));
+        for (const wchar_t* spec :
+             {L"%SystemDrive%\\", L"%ProgramFiles%", L"%ProgramW6432%", L"%ProgramFiles(x86)%",
+              L"%ProgramData%", L"%PUBLIC%", L"%USERPROFILE%", L"%APPDATA%", L"%LOCALAPPDATA%",
+              L"%USERPROFILE%\\Desktop", L"%USERPROFILE%\\Downloads",
+              L"%USERPROFILE%\\Documents"}) {
+            std::wstring key = dir_key(win::Environment::expand(spec));
             if (!key.empty()) {
                 out.push_back(std::move(key));
             }
@@ -241,8 +216,8 @@ constexpr int kMaxArchProbes = 16;
 // every arrangement seen so far.
 [[nodiscard]] Arch dir_arch(const std::wstring& dir) {
     WIN32_FIND_DATAW found{};
-    HANDLE h = ::FindFirstFileW(join(dir, L"*.exe").c_str(), &found);
-    if (h == INVALID_HANDLE_VALUE) {
+    const win::UniqueFindHandle find{::FindFirstFileW(join(dir, L"*.exe").c_str(), &found)};
+    if (!find) {
         return Arch::Unknown;
     }
     int x64 = 0;
@@ -253,37 +228,30 @@ constexpr int kMaxArchProbes = 16;
             continue;
         }
         switch (detect_arch(join(dir, found.cFileName))) {
-            case Arch::X64:
-                ++x64;
-                break;
-            case Arch::X86:
-                ++x86;
-                break;
-            case Arch::Unknown:
-                break;
+        case Arch::X64:
+            ++x64;
+            break;
+        case Arch::X86:
+            ++x86;
+            break;
+        case Arch::Unknown:
+            break;
         }
         ++probes;
-    } while (probes < kMaxArchProbes && ::FindNextFileW(h, &found) != 0);
-    ::FindClose(h);
+    } while (probes < kMaxArchProbes && ::FindNextFileW(find.get(), &found) != 0);
     if (x64 == 0 && x86 == 0) {
         return Arch::Unknown;
     }
     if (x64 != x86) {
-        LSW_AGENT_DEBUG("guest_drivers: " + util::TextEncoding::to_utf8(dir) + " holds "
-                        + std::to_string(x64) + " x64 and " + std::to_string(x86)
-                        + " x86 executables");
+        LSW_AGENT_DEBUG("guest_drivers: {} holds {} x64 and {} x86 executables", dir, x64, x86);
     }
     return x86 > x64 ? Arch::X86 : Arch::X64;
 }
 
 [[nodiscard]] bool holds_executable(const std::wstring& dir) {
     WIN32_FIND_DATAW found{};
-    HANDLE h = ::FindFirstFileW(join(dir, L"*.exe").c_str(), &found);
-    if (h == INVALID_HANDLE_VALUE) {
-        return false;
-    }
-    ::FindClose(h);
-    return true;
+    return static_cast<bool>(
+        win::UniqueFindHandle{::FindFirstFileW(join(dir, L"*.exe").c_str(), &found)});
 }
 
 // Every directory of ``root``'s tree that holds an executable, ``root``
@@ -307,15 +275,15 @@ constexpr int kMaxArchProbes = 16;
             continue;
         }
         WIN32_FIND_DATAW found{};
-        HANDLE h = ::FindFirstFileW(join(dir, L"*").c_str(), &found);
-        if (h == INVALID_HANDLE_VALUE) {
+        const win::UniqueFindHandle find{::FindFirstFileW(join(dir, L"*").c_str(), &found)};
+        if (!find) {
             continue;
         }
         do {
             const std::wstring name = found.cFileName;
-            if ((found.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0
-                || (found.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0
-                || name == L"." || name == L"..") {
+            if ((found.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0 ||
+                (found.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0 || name == L"." ||
+                name == L"..") {
                 continue;
             }
             const std::wstring sub = join(dir, name);
@@ -323,8 +291,7 @@ constexpr int kMaxArchProbes = 16;
                 out.push_back(sub);
             }
             pending.emplace_back(sub, depth + 1);
-        } while (::FindNextFileW(h, &found) != 0);
-        ::FindClose(h);
+        } while (::FindNextFileW(find.get(), &found) != 0);
     }
     return out;
 }
@@ -374,10 +341,9 @@ void acquire_dir(const std::wstring& dir) {
 // broken one.
 [[nodiscard]] bool link_one(const std::wstring& target, const std::wstring& source,
                             std::string* error_out) {
-    if (exists(target)) {
+    if (win::FileSystem::exists(target)) {
         if (!is_our_link(target)) {
-            LSW_AGENT_INFO("guest_drivers: " + util::TextEncoding::to_utf8(target)
-                           + " is the application's own file; left alone");
+            LSW_AGENT_INFO("guest_drivers: {} is the application's own file; left alone", target);
             return true;
         }
         ::DeleteFileW(target.c_str());
@@ -385,23 +351,23 @@ void acquire_dir(const std::wstring& dir) {
     // SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE is rejected as an
     // invalid parameter on builds without Developer Mode, so the
     // privileged spelling is tried first and it is the fallback.
-    if (::CreateSymbolicLinkW(target.c_str(), source.c_str(), 0) != FALSE
-        || ::CreateSymbolicLinkW(target.c_str(), source.c_str(), 0x2 /* UNPRIVILEGED_CREATE */)
-               != FALSE) {
+    if (::CreateSymbolicLinkW(target.c_str(), source.c_str(), 0) != FALSE ||
+        ::CreateSymbolicLinkW(target.c_str(), source.c_str(), 0x2 /* UNPRIVILEGED_CREATE */) !=
+            FALSE) {
         return true;
     }
     const DWORD link_err = ::GetLastError();
-    if (::CreateHardLinkW(target.c_str(), source.c_str(), nullptr) != FALSE
-        || ::CopyFileW(source.c_str(), target.c_str(), FALSE) != FALSE) {
-        LSW_AGENT_DEBUG("guest_drivers: " + util::TextEncoding::to_utf8(target)
-                        + " placed without a symlink (err="
-                        + std::to_string(link_err) + ")");
+    if (::CreateHardLinkW(target.c_str(), source.c_str(), nullptr) != FALSE ||
+        ::CopyFileW(source.c_str(), target.c_str(), FALSE) != FALSE) {
+        LSW_AGENT_DEBUG("guest_drivers: {} placed without a symlink (err={})", target,
+                        win::ErrorText::win32(link_err));
         return true;
     }
     if (error_out != nullptr) {
-        *error_out = "cannot place " + util::TextEncoding::to_utf8(target)
-                     + " (symlink err=" + std::to_string(link_err)
-                     + ", copy err=" + std::to_string(::GetLastError()) + ")";
+        const std::string copy_err = win::ErrorText::last_error();
+        *error_out = "cannot place " + util::TextEncoding::to_utf8(target) +
+                     " (symlink err=" + win::ErrorText::win32(link_err) + ", copy err=" + copy_err +
+                     ")";
     }
     return false;
 }
@@ -424,8 +390,7 @@ void acquire_dir(const std::wstring& dir) {
     // Through std::filesystem::path: libstdc++ has no wide-string
     // ofstream constructor, and narrowing the path back would undo the
     // point of holding it wide.
-    std::ofstream out{std::filesystem::path{manifest},
-                      std::ios::trunc | std::ios::binary};
+    std::ofstream out{std::filesystem::path{manifest}, std::ios::trunc | std::ios::binary};
     if (!out) {
         if (error_out != nullptr) {
             *error_out = "cannot write " + util::TextEncoding::to_utf8(manifest);
@@ -448,10 +413,9 @@ void acquire_dir(const std::wstring& dir) {
     bool all_ok = true;
     for (const auto& driver : kDrivers) {
         const std::wstring source =
-            join(join(util::TextEncoding::to_wide(kRoot),
-                      arch == Arch::X64 ? driver.dir64 : driver.dir32),
+            join(join(core::Paths::root(), arch == Arch::X64 ? driver.dir64 : driver.dir32),
                  driver.name);
-        if (!exists(source)) {
+        if (!win::FileSystem::exists(source)) {
             continue;  // that driver is not installed in this guest
         }
         if (!link_one(join(dir, driver.name), source, error_out)) {
@@ -463,8 +427,7 @@ void acquire_dir(const std::wstring& dir) {
 
 }  // namespace
 
-GuestDrivers::Staging GuestDrivers::stage_for(const std::string& exe_path,
-                                              std::vector<EnvVar>* env,
+GuestDrivers::Staging GuestDrivers::stage_for(const std::string& exe_path, std::vector<EnvVar>* env,
                                               std::string* error_out) {
     Staging staged;
     const std::wstring exe = util::TextEncoding::to_wide(exe_path);
@@ -477,10 +440,10 @@ GuestDrivers::Staging GuestDrivers::stage_for(const std::string& exe_path,
         return staged;
     }
 
-    for (const std::wstring& dir : exe_dirs_under(parent_dir(exe))) {
+    for (const std::wstring& dir :
+         exe_dirs_under(util::WideString::parent_dir(exe).value_or(L"."))) {
         if (under_windows_dir(dir)) {
-            LSW_AGENT_INFO("guest_drivers: " + util::TextEncoding::to_utf8(dir)
-                           + " is inside Windows; nothing staged there");
+            LSW_AGENT_INFO("guest_drivers: {} is inside Windows; nothing staged there", dir);
             continue;
         }
         // A directory whose executables cannot be read falls back to the
@@ -490,8 +453,8 @@ GuestDrivers::Staging GuestDrivers::stage_for(const std::string& exe_path,
         if (arch == Arch::Unknown) {
             arch = launched_arch;
         }
-        LSW_AGENT_INFO("guest_drivers: staging " + std::string(arch == Arch::X64 ? "x64" : "x86")
-                       + " drivers in " + util::TextEncoding::to_utf8(dir));
+        LSW_AGENT_INFO("guest_drivers: staging {} drivers in {}", arch == Arch::X64 ? "x64" : "x86",
+                       dir);
 
         if (!stage_dir(dir, arch, error_out)) {
             staged.complete = false;
@@ -524,8 +487,8 @@ void GuestDrivers::unstage(const Staging& staging) {
     for (const std::string& utf8_dir : staging.dirs) {
         const std::wstring dir = util::TextEncoding::to_wide(utf8_dir);
         if (!release_dir(dir)) {
-            LSW_AGENT_DEBUG("guest_drivers: " + utf8_dir
-                            + " is still in use by another launch; left staged");
+            LSW_AGENT_DEBUG("guest_drivers: {} is still in use by another launch; left staged",
+                            utf8_dir);
             continue;
         }
         std::vector<std::wstring> names;
@@ -542,13 +505,12 @@ void GuestDrivers::unstage(const Staging& staging) {
                 continue;
             }
             if (::DeleteFileW(target.c_str()) == FALSE) {
-                LSW_AGENT_WARN("guest_drivers: cannot remove "
-                               + util::TextEncoding::to_utf8(target)
-                               + " err=" + std::to_string(::GetLastError()));
+                LSW_AGENT_WARN("guest_drivers: cannot remove {} err={}", target,
+                               win::ErrorText::last_error());
             }
         }
         ::DeleteFileW(join(dir, kIcdManifestName).c_str());
-        LSW_AGENT_INFO("guest_drivers: unstaged " + utf8_dir);
+        LSW_AGENT_INFO("guest_drivers: unstaged {}", utf8_dir);
     }
 }
 
@@ -558,10 +520,11 @@ void GuestDrivers::register_installed_icds() {
     // WOW6432Node and never sees the 64-bit key, so registering only one
     // leaves the other half of the guest with no driver at all.
     struct Arch {
-        const char* dir;    // subdirectory of kRoot holding this build
+        const char* dir;  // subdirectory of the data root holding this build
         REGSAM view;
         const char* label;
     };
+
     static constexpr std::array<Arch, 2> kArches = {{
         {"rvk", KEY_WOW64_64KEY, "x64"},
         {"rvk32", KEY_WOW64_32KEY, "x86"},
@@ -570,53 +533,45 @@ void GuestDrivers::register_installed_icds() {
     // Value NAME is the path, value DATA is a DWORD both loaders read as
     // "0 means use this one". An unusual shape, and the one Khronos
     // defines for each of these keys.
-    const auto register_one = [](REGSAM view, const wchar_t* subkey,
-                                 const std::wstring& path, const char* what) {
-        HKEY key = nullptr;
-        const LSTATUS opened =
-            ::RegCreateKeyExW(HKEY_LOCAL_MACHINE, subkey, 0, nullptr,
-                              REG_OPTION_NON_VOLATILE, KEY_SET_VALUE | view, nullptr,
-                              &key, nullptr);
-        if (opened != ERROR_SUCCESS) {
-            LSW_AGENT_WARN("guest_drivers: cannot open the " + std::string(what)
-                           + " key (err=" + std::to_string(opened) + ")");
+    const auto register_one = [](REGSAM view, const wchar_t* subkey, const std::wstring& path,
+                                 const char* what) {
+        long opened = ERROR_SUCCESS;
+        const auto key =
+            win::RegKey::create(HKEY_LOCAL_MACHINE, subkey, KEY_SET_VALUE | view, &opened);
+        if (!key) {
+            LSW_AGENT_WARN("guest_drivers: cannot open the {} key (err={})", what,
+                           win::ErrorText::win32(static_cast<unsigned long>(opened)));
             return;
         }
-        const DWORD enabled = 0;
-        const LSTATUS set =
-            ::RegSetValueExW(key, path.c_str(), 0, REG_DWORD,
-                             reinterpret_cast<const BYTE*>(&enabled), sizeof(enabled));
-        ::RegCloseKey(key);
+        const long set = key->write_dword(path.c_str(), 0);
         if (set != ERROR_SUCCESS) {
-            LSW_AGENT_WARN("guest_drivers: cannot register "
-                           + util::TextEncoding::to_utf8(path) + " as " + what
-                           + " (err=" + std::to_string(set) + ")");
+            LSW_AGENT_WARN("guest_drivers: cannot register {} as {} (err={})", path, what,
+                           win::ErrorText::win32(static_cast<unsigned long>(set)));
             return;
         }
-        LSW_AGENT_INFO("guest_drivers: registered " + util::TextEncoding::to_utf8(path)
-                       + " as the " + what);
+        LSW_AGENT_INFO("guest_drivers: registered {} as the {}", path, what);
     };
 
     for (const auto& arch : kArches) {
-        const std::wstring dir = join(util::TextEncoding::to_wide(kRoot), arch.dir);
+        const std::wstring dir = join(core::Paths::root(), arch.dir);
 
         // Vulkan: the key names a manifest, and the manifest names the
         // driver. It is written here rather than shipped on the payload
         // ISO because the path inside it is a guest path, which only the
         // guest knows.
-        if (exists(join(dir, "rvk_icd.dll"))) {
+        if (win::FileSystem::exists(join(dir, "rvk_icd.dll"))) {
             std::string manifest_err;
             if (write_icd_manifest(dir, &manifest_err)) {
                 register_one(arch.view, L"SOFTWARE\\Khronos\\Vulkan\\Drivers",
                              join(dir, kIcdManifestName),
                              (std::string{arch.label} + " Vulkan driver").c_str());
             } else {
-                LSW_AGENT_WARN("guest_drivers: " + manifest_err);
+                LSW_AGENT_WARN("guest_drivers: {}", manifest_err);
             }
         }
 
         // OpenCL: the key names the driver directly — no manifest.
-        if (exists(join(dir, "rvk_opencl.dll"))) {
+        if (win::FileSystem::exists(join(dir, "rvk_opencl.dll"))) {
             register_one(arch.view, L"SOFTWARE\\Khronos\\OpenCL\\Vendors",
                          join(dir, "rvk_opencl.dll"),
                          (std::string{arch.label} + " OpenCL driver").c_str());

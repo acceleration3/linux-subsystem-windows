@@ -1,25 +1,25 @@
 #include "lsw/host/apps/catalog.hpp"
 
 #include "lsw/base/log.hpp"
+#include "lsw/host/link/agent_reply.hpp"
 #include "lsw/host/link/agent_rpc_client.hpp"
 
 #include <QtConcurrent>
 #include <nlohmann/json.hpp>
 
+#include "lsw/linkproto/commands.hpp"
+
 namespace lsw::host::apps {
 
 namespace {
 
-QList<AppEntry> parse_reply(const QByteArray& payload) {
+QList<AppEntry> parse_reply(const link::AgentReply& reply) {
     QList<AppEntry> out;
-    nlohmann::json doc;
-    try {
-        doc = nlohmann::json::parse(payload.constData(),
-                                     payload.constData() + payload.size());
-    } catch (const nlohmann::json::exception& e) {
-        LSW_WARN("agent reply is not JSON: {}", e.what());
+    if (!reply.ok) {
+        LSW_WARN("list_apps: {}", reply.error);
         return out;
     }
+    const auto& doc = reply.body;
     if (!doc.is_object() || !doc.contains("apps") || !doc["apps"].is_array()) {
         return out;
     }
@@ -47,18 +47,14 @@ AppCatalog::AppCatalog(link::AgentRpcClient& rpc, QObject* parent)
     : QObject(parent), rpc_(rpc) {}
 
 void AppCatalog::refresh() {
-    auto* future_watcher = new QFutureWatcher<QList<AppEntry>>(this);
-    connect(future_watcher, &QFutureWatcher<QList<AppEntry>>::finished, this,
-            [this, future_watcher]() {
-                entries_ = future_watcher->result();
-                Q_EMIT loaded(entries_);
-                future_watcher->deleteLater();
-            });
-    auto fut = QtConcurrent::run([this]() -> QList<AppEntry> {
-        const auto reply = rpc_.call(QByteArrayLiteral("{\"cmd\":\"list_apps\"}"));
-        return parse_reply(reply);
-    });
-    future_watcher->setFuture(fut);
+    // The worker holds the channel, not ``this``: the catalog may be gone
+    // by the time the agent answers, and ``then(this, …)`` drops the
+    // continuation if so.
+    QtConcurrent::run([&rpc = rpc_] { return parse_reply(rpc.request(linkproto::cmd::kListApps)); })
+        .then(this, [this](QList<AppEntry> entries) {
+            entries_ = std::move(entries);
+            Q_EMIT loaded(entries_);
+        });
 }
 
 }  // namespace lsw::host::apps

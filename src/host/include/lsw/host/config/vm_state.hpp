@@ -24,11 +24,15 @@ public:
     // to the next free integer >= 100.
     QUuid add(VmRecord rec);
 
-    // Remove by uuid. No-op if not found.
-    void remove(const QUuid& uuid);
-
     // Lookup by uuid; nullptr if not found.
     [[nodiscard]] VmRecord* find(const QUuid& uuid);
+
+    // The VM, or nullptr before one has been provisioned or imported.
+    // There is only ever one; this is the question every caller of
+    // ``records()`` was actually asking.
+    [[nodiscard]] const VmRecord* primary() const noexcept {
+        return records_.isEmpty() ? nullptr : &records_.first();
+    }
 
 Q_SIGNALS:
     void changed();

@@ -1,10 +1,11 @@
 #include "lsw/host/wizard/iso_choice_page.hpp"
-#include "lsw/host/wizard/page_chrome.hpp"
 
 #include "lsw/host/services/host_services.hpp"
 #include "lsw/host/tools/download_image_dialog.hpp"
 #include "lsw/host/tools/trim_image_dialog.hpp"
+#include "lsw/host/ui/format.hpp"
 #include "lsw/host/ui/theme.hpp"
+#include "lsw/host/ui/widgets.hpp"
 #include "lsw/host/wizard/wizard.hpp"
 
 #include <QFileDialog>
@@ -49,14 +50,14 @@ QWidget* tool_card(const QString& title, const QString& blurb, QPushButton* butt
 }  // namespace
 
 IsoChoicePage::IsoChoicePage(Wizard& wizard, QWidget* parent)
-    : QWizardPage(parent), wizard_(wizard) {
+    : WizardPage(parent), wizard_(wizard) {
 
-    auto* root = PageChrome::install(this, QStringLiteral("Which Windows image should be installed"), QStringLiteral("Any retail or evaluation Windows 10 or 11 ISO. If you do "
-                               "not have one, download it here."));
+    auto* root =
+        install_chrome(QStringLiteral("Which Windows image should be installed"),
+                       QStringLiteral("Any retail or evaluation Windows 10 or 11 ISO. If you do "
+                                      "not have one, download it here."));
 
-    auto* label = new QLabel(QStringLiteral("IMAGE"));
-    label->setObjectName(QString::fromLatin1(Theme::Role::kCaption));
-    root->addWidget(label);
+    root->addWidget(ui::Widgets::caption(QStringLiteral("Image")));
 
     auto* row = new QHBoxLayout;
     path_edit_ = new QLineEdit;
@@ -66,19 +67,12 @@ IsoChoicePage::IsoChoicePage(Wizard& wizard, QWidget* parent)
     row->addWidget(browse);
     root->addLayout(row);
 
-    detail_ = new QLabel;
-    detail_->setObjectName(QString::fromLatin1(Theme::Role::kMeta));
-    detail_->setWordWrap(true);
+    detail_ = ui::Widgets::meta(QString{}, true);
     root->addWidget(detail_);
 
-    auto* separator = new QFrame;
-    separator->setObjectName(QString::fromLatin1(Theme::Role::kSeparator));
-    separator->setFixedHeight(1);
-    root->addWidget(separator);
+    root->addWidget(ui::Widgets::separator());
 
-    auto* tools_caption = new QLabel(QStringLiteral("IMAGE TOOLS, OPTIONAL"));
-    tools_caption->setObjectName(QString::fromLatin1(Theme::Role::kCaption));
-    root->addWidget(tools_caption);
+    root->addWidget(ui::Widgets::caption(QStringLiteral("Image tools, optional")));
 
     auto* download_button = new QPushButton(QStringLiteral("Download an image"));
     trim_button_ = new QPushButton(QStringLiteral("Trim this image"));
@@ -132,11 +126,8 @@ void IsoChoicePage::describe_image() {
                              : QStringLiteral("There is no file at that path."));
         return;
     }
-    detail_->setText(QStringLiteral("%1 GiB%2")
-                         .arg(static_cast<double>(info.size()) / (1024.0 * 1024 * 1024),
-                              0, 'f', 2)
-                         .arg(prepared_ ? QStringLiteral(", trimmed and ready")
-                                        : QString{}));
+    detail_->setText(ui::Format::gib(info.size(), 2)
+                     + (prepared_ ? QStringLiteral(", trimmed and ready") : QString{}));
 }
 
 void IsoChoicePage::open_download_tool() {

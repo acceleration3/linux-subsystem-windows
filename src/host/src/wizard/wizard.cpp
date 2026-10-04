@@ -10,20 +10,15 @@
 #include "lsw/host/wizard/vm_size_page.hpp"
 #include "lsw/host/wizard/welcome_page.hpp"
 
+#include "lsw/host/ui/format.hpp"
 #include "lsw/host/ui/theme.hpp"
 
 #include <QDir>
-#include <QFrame>
+#include <QFile>
 #include <QLabel>
-
-#include <QLayout>
 #include <QListWidget>
 #include <QPushButton>
-#include <QStyle>
-#include <QSizePolicy>
-#include <QVBoxLayout>
 #include <QStorageInfo>
-#include <QSysInfo>
 #include <QThread>
 
 namespace lsw::host::wizard {
@@ -58,7 +53,6 @@ Wizard::Wizard(services::HostServices& services, QWidget* parent) : QWizard(pare
     setOption(NoCancelButton, true);
     setOption(NoBackButtonOnStartPage, true);
 
-
     connect(this, &QWizard::currentIdChanged, this, [this](int id) {
         highlight_step(id);
     });
@@ -76,15 +70,16 @@ const QStringList& Wizard::step_names() {
 
 void Wizard::highlight_step(int page_id) {
     // The rail and the footer belong to the page being shown, so they
-    // are found on it. A side widget would have been one object rather
-    // than eight, but QWizard insets everything around one, out of a
-    // margin the stylesheet's style answers for and nothing can reach.
-    auto* shown = currentPage();
+    // are reached through it. A side widget would have been one object
+    // rather than eight, but QWizard insets everything around one, out
+    // of a margin the stylesheet's style answers for and nothing can
+    // reach.
+    auto* shown = qobject_cast<WizardPage*>(currentPage());
     if (shown == nullptr) {
         return;
     }
-    auto* steps = shown->findChild<QListWidget*>(
-        QString::fromLatin1(ui::Theme::Role::kWizardSteps));
+    const PageChrome& chrome = shown->chrome();
+    auto* steps = chrome.steps;
     if (steps == nullptr) {
         return;
     }
@@ -94,15 +89,11 @@ void Wizard::highlight_step(int page_id) {
         }
         steps->setFixedHeight(static_cast<int>(step_names().size()) * 30);
     }
-    if (auto* host = shown->findChild<QLabel*>(QStringLiteral("RailHost"))) {
-        host->setText(QStringLiteral("host: %1 threads, %2 GiB")
-                          .arg(state_.host_cpu_threads)
-                          .arg(state_.host_ram_mib / 1024));
-    }
-    if (auto* free_space = shown->findChild<QLabel*>(QStringLiteral("RailFree"))) {
-        free_space->setText(QStringLiteral("free: %1 GiB")
-                                .arg(state_.host_free_disk_bytes / (1024LL * 1024 * 1024)));
-    }
+    chrome.rail_host->setText(QStringLiteral("host: %1 threads, %2 GiB")
+                                  .arg(state_.host_cpu_threads)
+                                  .arg(state_.host_ram_mib / 1024));
+    chrome.rail_free->setText(
+        QStringLiteral("free: %1").arg(ui::Format::gib(state_.host_free_disk_bytes, 0)));
     // The ids are contiguous and in display order, so the page is the
     // row. Each row carries its own number until it is behind you, and
     // then a tick: the rail is a position in a sequence, and a sequence
@@ -118,43 +109,29 @@ void Wizard::highlight_step(int page_id) {
         auto font = item->font();
         font.setWeight(current ? QFont::Medium : QFont::Normal);
         item->setFont(font);
-        item->setForeground(QColor(QString::fromLatin1(
+        item->setForeground(ui::Theme::color(
             done ? ui::Theme::Color::kFgDim
-                 : (current ? ui::Theme::Color::kFg : ui::Theme::Color::kFgFaint))));
+                 : (current ? ui::Theme::Color::kFg : ui::Theme::Color::kFgFaint)));
     }
     steps->setCurrentRow(page_id);
 
-    // The footer belongs to the page being shown, so it is found there.
-    {
-        if (auto* counter = shown->findChild<QLabel*>(QStringLiteral("StepCounter"))) {
-            const bool locked = page_id == Payload || page_id == Install || page_id == Setup;
-            counter->setText((locked ? QStringLiteral("step %1 of %2, cannot go back")
-                                     : QStringLiteral("step %1 of %2"))
-                                 .arg(page_id + 1)
-                                 .arg(steps->count()));
-        }
-        auto* back = shown->findChild<QPushButton*>(QStringLiteral("WizBack"));
-        auto* next = shown->findChild<QPushButton*>(QStringLiteral("WizNext"));
-        auto* cancel = shown->findChild<QPushButton*>(QStringLiteral("WizCancel"));
-        const bool locked = page_id == Payload || page_id == Install || page_id == Setup;
-        if (back != nullptr) {
-            back->setVisible(!locked);
-            back->setEnabled(page_id != Welcome);
-        }
-        if (next != nullptr) {
-            next->setVisible(!locked);
-            next->setEnabled(shown->isComplete());
-            next->setText(page_id == Done ? QStringLiteral("Open the manager")
-                                          : QStringLiteral("Next"));
-        }
-        if (cancel != nullptr) {
-            cancel->setVisible(locked);
-            cancel->setText(page_id == Install ? QStringLiteral("Cancel install")
-                            : page_id == Payload ? QStringLiteral("Cancel")
-                                                 : QStringLiteral("View log"));
-        }
-    }
-
+    // Once the pipeline is running there is no going back to a page
+    // that fed it, so those pages trade Back and Next for a cancel.
+    const bool locked = page_id == Payload || page_id == Install || page_id == Setup;
+    chrome.counter->setText((locked ? QStringLiteral("step %1 of %2, cannot go back")
+                                    : QStringLiteral("step %1 of %2"))
+                                .arg(page_id + 1)
+                                .arg(steps->count()));
+    chrome.back->setVisible(!locked);
+    chrome.back->setEnabled(page_id != Welcome);
+    chrome.next->setVisible(!locked);
+    chrome.next->setEnabled(shown->isComplete());
+    chrome.next->setText(page_id == Done ? QStringLiteral("Open the manager")
+                                         : QStringLiteral("Next"));
+    chrome.cancel->setVisible(locked);
+    chrome.cancel->setText(page_id == Install   ? QStringLiteral("Cancel install")
+                           : page_id == Payload ? QStringLiteral("Cancel")
+                                                : QStringLiteral("View log"));
 }
 
 void Wizard::detect_host_caps() {

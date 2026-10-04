@@ -6,15 +6,13 @@
 #include "lsw/host/vm/domain_handle.hpp"
 #include "lsw/host/vm/libvirt_connection.hpp"
 
-#include <QDir>
 #include <QString>
 #include <QUuid>
 #include <libvirt/libvirt.h>
 
 namespace lsw::host::vm {
 
-bool DomainImporter::import_existing(LibvirtConnection& conn,
-                                     const config::Settings& settings,
+bool DomainImporter::import_existing(LibvirtConnection& conn, const config::Settings& settings,
                                      config::VmState& vms) {
     if (!conn.is_open()) {
         return false;
@@ -34,14 +32,11 @@ bool DomainImporter::import_existing(LibvirtConnection& conn,
     } else {
         rec.uuid = QUuid::createUuid();  // fallback — non-fatal
     }
-    const QString fixed = QString::fromLatin1(config::kVmName);
-    rec.disk_path = QDir(settings.disks_dir()).filePath(QStringLiteral("%1.qcow2").arg(fixed));
-    rec.nvram_path = QDir(settings.nvram_dir()).filePath(QStringLiteral("%1.fd").arg(fixed));
-    rec.payload_iso_path =
-        QDir(settings.isos_dir()).filePath(QStringLiteral("%1-payload.iso").arg(fixed));
+    rec.disk_path = settings.vm_disk_path();
+    rec.nvram_path = settings.vm_nvram_path();
+    rec.payload_iso_path = settings.vm_payload_iso_path();
     vms.add(std::move(rec));
-    LSW_INFO("found existing libvirt domain '{}', registered with manager",
-             config::kVmName);
+    LSW_INFO("found existing libvirt domain '{}', registered with manager", config::kVmName);
     return true;
 }
 
