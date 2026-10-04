@@ -1,22 +1,20 @@
 #include "lsw/agent/win/desktop_probe.hpp"
 
+#include "lsw/agent/core/paths.hpp"
 #include "lsw/agent/log.hpp"
 #include "lsw/agent/util/text_encoding.hpp"
-
-// clang-format off
-#include <windows.h>
-#include <tlhelp32.h>
-// clang-format on
+#include "lsw/agent/win/error_text.hpp"
+#include "lsw/agent/win/process_info.hpp"
+#include "lsw/agent/win/unique_handle.hpp"
 
 #include <iterator>
 #include <mutex>
 #include <vector>
+#include <windows.h>
 
 namespace lsw::agent::win {
 
 namespace {
-
-constexpr const wchar_t kProbeLogPath[] = L"C:\\ProgramData\\LSW\\desktop-probe.log";
 
 std::mutex g_write_mu;
 unsigned long g_sequence = 0;
@@ -31,9 +29,8 @@ unsigned long g_sequence = 0;
     }
     wchar_t buffer[256] = {};
     DWORD needed = 0;
-    if (::GetUserObjectInformationW(user_object, UOI_NAME, buffer, sizeof(buffer),
-                                    &needed)
-        == FALSE) {
+    if (::GetUserObjectInformationW(user_object, UOI_NAME, buffer, sizeof(buffer), &needed) ==
+        FALSE) {
         return {};
     }
     return std::wstring{buffer};
@@ -43,8 +40,8 @@ unsigned long g_sequence = 0;
     SYSTEMTIME st{};
     ::GetLocalTime(&st);
     char buf[32] = {};
-    std::snprintf(buf, sizeof(buf), "%04u-%02u-%02u %02u:%02u:%02u.%03u", st.wYear,
-                  st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, st.wMilliseconds);
+    std::snprintf(buf, sizeof(buf), "%04u-%02u-%02u %02u:%02u:%02u.%03u", st.wYear, st.wMonth,
+                  st.wDay, st.wHour, st.wMinute, st.wSecond, st.wMilliseconds);
     return buf;
 }
 
@@ -57,34 +54,12 @@ unsigned long g_sequence = 0;
 
 // ---- processes -------------------------------------------------------------
 
-struct ProcessRow {
-    DWORD pid = 0;
-    DWORD parent = 0;
-    std::wstring image;
-};
-
-[[nodiscard]] std::vector<ProcessRow> all_processes() {
-    std::vector<ProcessRow> rows;
-    HANDLE snap = ::CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-    if (snap == INVALID_HANDLE_VALUE) {
-        return rows;
-    }
-    PROCESSENTRY32W entry{};
-    entry.dwSize = sizeof(entry);
-    if (::Process32FirstW(snap, &entry) != FALSE) {
-        do {
-            rows.push_back({entry.th32ProcessID, entry.th32ParentProcessID,
-                            entry.szExeFile});
-        } while (::Process32NextW(snap, &entry) != FALSE);
-    }
-    ::CloseHandle(snap);
-    return rows;
-}
+using ProcessRow = ProcessInfo::Entry;
 
 [[nodiscard]] std::wstring image_for(const std::vector<ProcessRow>& procs, DWORD pid) {
     for (const auto& p : procs) {
         if (p.pid == pid) {
-            return p.image;
+            return p.exe_name;
         }
     }
     return {};
@@ -111,12 +86,9 @@ void describe_window(HWND window, WindowContext& ctx) {
     ::GetWindowThreadProcessId(window, &pid);
 
     char buf[256] = {};
-    std::snprintf(buf, sizeof(buf),
-                  "WIN desktop=%s depth=%d hwnd=%s parent=%s owner=%s pid=%lu",
-                  ctx.desktop, ctx.depth, hex(window).c_str(),
-                  hex(::GetParent(window)).c_str(),
-                  hex(::GetWindow(window, GW_OWNER)).c_str(),
-                  static_cast<unsigned long>(pid));
+    std::snprintf(buf, sizeof(buf), "WIN desktop=%s depth=%d hwnd=%s parent=%s owner=%s pid=%lu",
+                  ctx.desktop, ctx.depth, hex(window).c_str(), hex(::GetParent(window)).c_str(),
+                  hex(::GetWindow(window, GW_OWNER)).c_str(), static_cast<unsigned long>(pid));
     *ctx.out += buf;
 
     std::snprintf(buf, sizeof(buf), " vis=%d style=0x%08lx ex=0x%08lx rect=%ld,%ld,%ldx%ld",
@@ -174,63 +146,54 @@ void dump_desktop(const std::wstring& name, const std::vector<ProcessRow>& procs
                   std::string& out) {
     const std::string narrow_name = util::TextEncoding::to_utf8(name);
     ::SetLastError(0);
-    HDESK desk = ::OpenDesktopW(name.c_str(), 0, FALSE, DESKTOP_READOBJECTS
-                                                          | DESKTOP_ENUMERATE);
-    if (desk == nullptr) {
-        out += "DESKTOP name=" + narrow_name + " open=failed err="
-               + std::to_string(::GetLastError()) + "\n";
+    const UniqueDesktop desk{
+        ::OpenDesktopW(name.c_str(), 0, FALSE, DESKTOP_READOBJECTS | DESKTOP_ENUMERATE)};
+    if (!desk) {
+        out += "DESKTOP name=" + narrow_name + " open=failed err=" + ErrorText::last_error() + "\n";
         return;
     }
     out += "DESKTOP name=" + narrow_name + " open=ok\n";
     WindowContext ctx{&out, &procs, 0, narrow_name.c_str()};
-    ::EnumDesktopWindows(desk, &top_level_proc, reinterpret_cast<LPARAM>(&ctx));
-    ::CloseDesktop(desk);
+    ::EnumDesktopWindows(desk.get(), &top_level_proc, reinterpret_cast<LPARAM>(&ctx));
 }
 
 }  // namespace
 
 std::string DesktopProbe::snapshot(const char* reason) {
-    const auto procs = all_processes();
+    const auto procs = ProcessInfo::snapshot();
 
     std::string out;
     out.reserve(64 * 1024);
 
     // --- header: which desktop currently owns user input ---------------
     ::SetLastError(0);
-    HDESK input = ::OpenInputDesktop(0, FALSE, DESKTOP_READOBJECTS);
-    const DWORD input_err = (input == nullptr) ? ::GetLastError() : 0;
-    const std::wstring input_name = object_name(input);
-    if (input != nullptr) {
-        ::CloseDesktop(input);
-    }
-    const std::wstring our_desktop =
-        object_name(::GetThreadDesktop(::GetCurrentThreadId()));
+    const UniqueDesktop input{::OpenInputDesktop(0, FALSE, DESKTOP_READOBJECTS)};
+    const DWORD input_err = input ? 0 : ::GetLastError();
+    const std::wstring input_name = object_name(input.get());
+    const std::wstring our_desktop = object_name(::GetThreadDesktop(::GetCurrentThreadId()));
 
     HWND foreground = ::GetForegroundWindow();
     DWORD session = 0;
     ::ProcessIdToSessionId(::GetCurrentProcessId(), &session);
 
-    out += "=== seq=" + std::to_string(++g_sequence) + " time=" + timestamp()
-           + " reason=" + reason
-           + " input_desktop=" + narrow_or(input_name, "<unopenable>")
-           + " input_err=" + std::to_string(input_err)
-           + " our_desktop=" + narrow_or(our_desktop, "<unknown>")
-           + " session=" + std::to_string(session)
-           + " foreground=" + hex(foreground)
-           + " screen=" + std::to_string(::GetSystemMetrics(SM_CXSCREEN)) + "x"
-           + std::to_string(::GetSystemMetrics(SM_CYSCREEN)) + "\n";
+    out += "=== seq=" + std::to_string(++g_sequence) + " time=" + timestamp() +
+           " reason=" + reason + " input_desktop=" + narrow_or(input_name, "<unopenable>") +
+           " input_err=" + std::to_string(input_err) +
+           " our_desktop=" + narrow_or(our_desktop, "<unknown>") +
+           " session=" + std::to_string(session) + " foreground=" + hex(foreground) +
+           " screen=" + std::to_string(::GetSystemMetrics(SM_CXSCREEN)) + "x" +
+           std::to_string(::GetSystemMetrics(SM_CYSCREEN)) + "\n";
 
     // --- every process --------------------------------------------------
     for (const auto& p : procs) {
-        out += "PROC pid=" + std::to_string(p.pid) + " ppid=" + std::to_string(p.parent)
-               + " name=" + narrow_or(p.image, "<unknown>") + "\n";
+        out += "PROC pid=" + std::to_string(p.pid) + " ppid=" + std::to_string(p.parent) +
+               " name=" + narrow_or(p.exe_name, "<unknown>") + "\n";
     }
 
     // --- every desktop in this window station, and its windows ----------
     std::vector<std::wstring> desktops;
     if (HWINSTA station = ::GetProcessWindowStation(); station != nullptr) {
-        ::EnumDesktopsW(station, &desktop_name_proc,
-                        reinterpret_cast<LPARAM>(&desktops));
+        ::EnumDesktopsW(station, &desktop_name_proc, reinterpret_cast<LPARAM>(&desktops));
     }
     if (desktops.empty()) {
         desktops.push_back(our_desktop.empty() ? L"Default" : our_desktop);
@@ -257,22 +220,20 @@ void DesktopProbe::write(const std::string& text) {
     }
 
     const std::lock_guard<std::mutex> lock(g_write_mu);
-    HANDLE file = ::CreateFileW(kProbeLogPath, FILE_APPEND_DATA,
-                                FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
-                                OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (file == INVALID_HANDLE_VALUE) {
+    const UniqueHandle file{::CreateFileW(core::Paths::desktop_probe_log().c_str(),
+                                          FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                                          nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr)};
+    if (!file) {
         return;
     }
-    ::SetFilePointer(file, 0, nullptr, FILE_END);
+    ::SetFilePointer(file.get(), 0, nullptr, FILE_END);
     DWORD written = 0;
-    ::WriteFile(file, crlf.data(), static_cast<DWORD>(crlf.size()), &written, nullptr);
-    ::CloseHandle(file);
+    ::WriteFile(file.get(), crlf.data(), static_cast<DWORD>(crlf.size()), &written, nullptr);
 }
 
-void DesktopProbe::start(std::chrono::seconds duration,
-                         std::chrono::milliseconds interval) {
-    LSW_AGENT_INFO(std::string{"probe: capturing full session snapshots to "}
-                   + util::TextEncoding::to_utf8(kProbeLogPath));
+void DesktopProbe::start(std::chrono::seconds duration, std::chrono::milliseconds interval) {
+    LSW_AGENT_INFO("probe: capturing full session snapshots to {}",
+                   core::Paths::desktop_probe_log());
     thread_ = std::thread([this, duration, interval] {
         const auto deadline = std::chrono::steady_clock::now() + duration;
         while (!stop_.load() && std::chrono::steady_clock::now() < deadline) {
@@ -290,6 +251,8 @@ void DesktopProbe::stop() {
     }
 }
 
-DesktopProbe::~DesktopProbe() { stop(); }
+DesktopProbe::~DesktopProbe() {
+    stop();
+}
 
 }  // namespace lsw::agent::win

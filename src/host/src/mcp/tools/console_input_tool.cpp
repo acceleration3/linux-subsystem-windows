@@ -1,7 +1,9 @@
 #include "lsw/host/mcp/tools/console_input_tool.hpp"
 
-#include "lsw/host/mcp/agent_command.hpp"
+#include "lsw/host/link/agent_reply.hpp"
+#include "lsw/host/link/agent_rpc_client.hpp"
 #include "lsw/host/mcp/json_schema.hpp"
+#include "lsw/host/mcp/tool_args.hpp"
 #include "lsw/host/mcp/tool_result.hpp"
 
 #include "lsw/linkproto/commands.hpp"
@@ -24,15 +26,16 @@ nlohmann::json ConsoleInputTool::input_schema() const {
 }
 
 nlohmann::json ConsoleInputTool::call(const nlohmann::json& args) {
-    const auto session_id = args.value("session_id", std::string{});
+    const ToolArgs in{name(), args};
+    const auto session_id = in.string("session_id");
     if (session_id.empty()) {
-        return ToolResult::error("console_input: missing session_id");
+        return in.missing("session_id");
     }
-    const auto r = agent_.invoke(linkproto::cmd::kConsoleInput, {
+    const auto r = agent_.request(linkproto::cmd::kConsoleInput, {
         {"session_id", session_id},
-        {"data", args.value("data", std::string{})},
+        {"data", in.string("data")},
     });
-    return r.ok ? ToolResult::text("ok") : ToolResult::error(r.error);
+    return ToolResult::acknowledge(r);
 }
 
 }  // namespace lsw::host::mcp

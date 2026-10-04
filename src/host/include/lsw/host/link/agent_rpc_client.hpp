@@ -1,29 +1,31 @@
 #pragma once
 
+#include "lsw/host/link/event_bus.hpp"
+#include "lsw/host/link/event_subscription.hpp"
 #include "lsw/host/platform/vsock_client.hpp"
 #include "lsw/host/vm/ivshmem_server.hpp"
 #include "lsw/host/vm/shmem_region.hpp"
 
 #include <QByteArray>
-#include <QHash>
-#include <QList>
 #include <QObject>
-#include <QSet>
-#include <QString>
 #include <QTimer>
 
 #include <atomic>
 #include <chrono>
-#include <condition_variable>
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <mutex>
+#include <string_view>
 #include <thread>
 #include <vector>
 
 #include <nlohmann/json_fwd.hpp>
 
 namespace lsw::host::link {
+
+struct AgentReply;
+class PendingCalls;
 
 // Multiplexed channel to the guest agent. One TCP connection carries
 // everything: bidirectional RPCs and agent-pushed events (log records,
@@ -43,7 +45,7 @@ namespace lsw::host::link {
 //   * One reader thread reads frames continuously, demultiplexing
 //     replies (by id) and events (by topic) onto waiting callers and
 //     registered handlers respectively.
-//   * ``call()`` is thread-safe and non-serialized — multiple GUI /
+//   * ``request()`` is thread-safe and non-serialized — multiple GUI /
 //     worker threads can issue RPCs concurrently. Each gets its own
 //     id and waits on its own condvar slot.
 //   * Event handlers run on the reader thread; marshal onto the GUI
@@ -54,12 +56,7 @@ public:
     // Handler for a one-way agent-pushed event. Receives the parsed
     // frame (including the ``event`` topic field). Runs on the reader
     // thread — keep handlers fast.
-    using EventHandler = std::function<void(const nlohmann::json& frame)>;
-
-    // Opaque cookie returned by ``on_event`` and passed back to
-    // ``off_event`` to remove a single handler. 0 is reserved for
-    // "invalid".
-    using EventToken = std::uint64_t;
+    using EventHandler = EventBus::Handler;
 
     explicit AgentRpcClient(QObject* parent = nullptr);
     ~AgentRpcClient() override;
@@ -75,59 +72,40 @@ public:
         return cid_.load() != 0 && port_.load() != 0;
     }
 
-    // How long ``call`` waits for a reply before giving up. A wedged
+    // How long ``request`` waits for a reply before giving up. A wedged
     // guest-side handler (a UIA call into a hung app, an installer
     // subprocess that never exits) would otherwise strand the caller
     // forever — and several callers are on the GUI thread, so "forever"
     // means a frozen manager with no way back.
     static constexpr std::chrono::milliseconds kDefaultCallTimeout{10000};
 
-    // Issue an RPC. Blocks until the reply arrives, the connection
-    // drops, or ``timeout`` elapses. The returned bytes are the JSON
-    // object inside the ``result`` field (raw — caller parses); empty on
-    // failure (no target, connect failure, send/recv error, timeout, or
-    // the agent returned ``error``).
+    // Issue the RPC ``cmd`` (a ``linkproto::cmd`` name) and block until
+    // the reply arrives, the connection drops, or ``timeout`` elapses.
+    // Every way that can go wrong comes back as ``ok == false`` with a
+    // reason; see AgentReply.
     //
     // A reply that arrives after the timeout is discarded by the reader
-    // thread: the id is no longer registered, which is the same path a
-    // ``post_oneway`` reply takes.
-    //
-    // ``request_line`` may be the entire frame as a raw byte array
-    // (must contain a ``cmd`` field). ``id`` is allocated and
-    // injected automatically; if the caller's JSON already contains
-    // an ``id`` it'll be overwritten.
-    [[nodiscard]] QByteArray call(const QByteArray& request_line,
-                                  std::chrono::milliseconds timeout = kDefaultCallTimeout);
-    [[nodiscard]] QByteArray call(const nlohmann::json& request,
-                                  std::chrono::milliseconds timeout = kDefaultCallTimeout);
+    // thread: its id is no longer waited on.
+    [[nodiscard]] AgentReply request(std::string_view cmd);
+    [[nodiscard]] AgentReply request(std::string_view cmd, const nlohmann::json& params,
+                                     std::chrono::milliseconds timeout = kDefaultCallTimeout);
 
-    // Fire-and-forget: send a request frame and return immediately
-    // without waiting for (or matching) a reply. The agent still
-    // replies; the reader thread drops it (no Pending registered).
-    // For high-frequency, latency-sensitive, loss-tolerant traffic
-    // like input injection where a per-event blocking round-trip
-    // would stall the GUI thread. An ``id`` is allocated/injected so
-    // the frame is well-formed. No-op if not connected (the event is
-    // simply dropped — acceptable for input).
-    void post_oneway(const nlohmann::json& request);
+    // ``request`` on a pool thread, for callers on the GUI thread.
+    // ``done`` runs on ``context``'s thread, and not at all if
+    // ``context`` is destroyed first. The worker holds only this client,
+    // never ``context``, so closing a dialog mid-call is safe.
+    void request_async(std::string_view cmd, nlohmann::json params, QObject* context,
+                       std::function<void(const AgentReply&)> done);
 
-    // Register a handler for an agent-pushed event topic. Topics
-    // currently emitted by the agent:
-    //   "log"             {seq, ts_ms, level, msg}
-    //   "setup_progress"  {job_id, name, phase, bytes, total_bytes, ...}
-    //   "setup_done"      {job_id, name, ok, exit_code, ...}
-    //   "console_output"  {session_id, data_b64}
-    //   "console_closed"  {session_id, exit_code}
-    // Multiple handlers may register for the same topic; each one is
-    // invoked in registration order. The returned ``EventToken`` must
-    // be passed to ``off_event`` to remove the handler when its
-    // captured objects go out of scope — otherwise the handler will
-    // be called with a dangling capture.
-    [[nodiscard]] EventToken on_event(const QString& topic, EventHandler handler);
+    // ``request`` on a pool thread, its reply dropped. For commands
+    // whose caller has nothing to do with the answer.
+    void request_detached(std::string_view cmd, nlohmann::json params);
 
-    // Remove a handler previously installed via ``on_event``. Safe to
-    // call with a 0 / unknown token (no-op).
-    void off_event(EventToken token);
+    // Subscribe to an agent-pushed event topic (a ``linkproto::topic``
+    // name). Several handlers may share a topic; each is invoked in
+    // subscription order. The handler stays registered for as long as
+    // the returned subscription lives.
+    [[nodiscard]] EventSubscription subscribe(std::string_view topic, EventHandler handler);
 
     // Bind the per-VM IVSHMEM transport, which carries the RPC ring:
     // the manager listens for the channel doorbell and drains what the
@@ -142,45 +120,27 @@ private:
     bool ensure_connected_locked();           // caller holds io_mu_
     bool send_locked(const QByteArray& body); // caller holds io_mu_
     void drop_connection_locked();            // caller holds io_mu_
-    void dispatch_event(const nlohmann::json& frame);
-    void deliver_reply(quint64 id, QByteArray body);
 
-    // One control envelope off the wire: an event to fan out, or a reply
-    // to hand back to the waiting caller. Runs on the reader thread.
+    // One message off either transport: an event to fan out, or a reply
+    // for whoever is waiting on its id. The single place a message is
+    // classified, whichever pipe it came down.
+    void route_message(const nlohmann::json& message);
+
+    // One control envelope off the socket. Runs on the reader thread.
     void handle_control(const std::uint8_t* payload, std::size_t len);
-
-    // Per-outstanding-call state held in ``pending_`` (keyed by id).
-    struct Pending {
-        std::mutex mu;
-        std::condition_variable cv;
-        bool done = false;
-        QByteArray reply;  // contents of "result" object; empty on error
-    };
 
     mutable std::mutex io_mu_;
     platform::VsockClient client_;             // protected by io_mu_
 
     std::atomic<quint64> next_id_{1};
 
-    mutable std::mutex pending_mu_;
-    QHash<quint64, Pending*> pending_;  // value-pointers; owned by caller stack
+    std::unique_ptr<PendingCalls> pending_;
+    std::unique_ptr<EventBus> events_;
 
     std::atomic<quint32> cid_{0};
     std::atomic<quint32> port_{0};
     std::atomic<quint64> generation_{0};
     quint64 last_generation_ = 0;       // protected by io_mu_
-
-    // Event handlers — written from the GUI thread (on_event /
-    // off_event), read from the reader thread (dispatch_event). Each
-    // topic holds a list of (token, handler) entries; dispatch
-    // iterates the list in registration order. Guarded by handlers_mu_.
-    struct HandlerEntry {
-        EventToken token;
-        EventHandler handler;
-    };
-    mutable std::mutex handlers_mu_;
-    QHash<QString, QList<HandlerEntry>> handlers_;
-    std::atomic<EventToken> next_event_token_{1};
 
     std::atomic<bool> stop_{false};
     std::thread reader_;
@@ -210,7 +170,7 @@ private:
     // Purely informational today — the socket still carries every
     // request — but it is what a later "prefer shmem" switch tests.
     std::atomic<bool> shmem_channel_live_{false};
-    // Routing policy, not capability. See set_prefer_shmem_rpc.
+    // Routing policy, not capability. See send_locked.
     bool prefer_shmem_rpc_ = qEnvironmentVariableIntValue("LSW_RPC_OVER_SHMEM") != 0;
 
     // Reused drain buffer for the shared-memory channel; sized to the

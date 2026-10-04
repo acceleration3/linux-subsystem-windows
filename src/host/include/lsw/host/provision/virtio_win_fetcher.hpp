@@ -14,9 +14,9 @@ namespace lsw::host::provision {
 // Which is exactly what used to happen: fedorapeople sits behind an
 // anti-bot wall that serves a ~4 KB HTML challenge page to
 // QNetworkAccessManager, and the manager cheerfully saved that page as
-// virtio-win.iso. Hence two deliberate choices here — shell out to
-// ``curl`` (whose default user agent passes the wall) and verify the
-// ISO9660 magic before accepting the bytes.
+// virtio-win.iso. Hence two deliberate choices here — download with
+// ``CurlDownload`` (curl's default user agent passes the wall) and
+// verify the ISO9660 magic before accepting the bytes.
 class VirtioWinFetcher : public QObject {
     Q_OBJECT
 public:
@@ -39,10 +39,7 @@ Q_SIGNALS:
     void failed(const QString& message);
 
 private:
-    // HEAD first, so the UI can show a real percentage rather than a
-    // bare byte counter.
-    void probe_size_then_download(const QString& url, const QString& dest);
-    void download(const QString& url, const QString& dest, qint64 total_bytes);
+    void download(const QString& dest);
 };
 
 }  // namespace lsw::host::provision

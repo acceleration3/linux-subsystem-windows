@@ -1,7 +1,8 @@
 #include "lsw/host/mcp/agent_redeployer.hpp"
 
+#include "lsw/host/link/agent_reply.hpp"
+#include "lsw/host/link/agent_rpc_client.hpp"
 #include "lsw/host/mcp/agent_binary_server.hpp"
-#include "lsw/host/mcp/agent_command.hpp"
 #include "lsw/host/platform/agent_exe_path.hpp"
 
 #include <QFile>
@@ -17,9 +18,9 @@ namespace {
 
 // Runs inside the guest. ``start ""`` detaches the relaunched agent so it
 // survives both this cmd.exe and the agent process the script just
-// killed. The agent autostarts from HKLM\Run as the interactive user and
-// this script runs in that same context, so a plain start is enough — no
-// scheduled task, no token juggling.
+// killed. The script runs inside the agent's own (elevated, interactive)
+// context, so a plain start relaunches it the same way — no scheduled
+// task, no token juggling.
 constexpr const char* kSwapScript = R"BAT(@echo off
 setlocal
 set NEW=%TEMP%\lsw-agent-new.exe
@@ -73,7 +74,7 @@ AgentRedeployer::Outcome AgentRedeployer::run() {
 
     // Baseline version. Empty if the running agent predates the field —
     // in that case any non-empty value afterwards counts as a change.
-    const auto before = agent_.invoke(linkproto::cmd::kSystemInfo);
+    const auto before = agent_.request(linkproto::cmd::kSystemInfo);
     if (!before.ok) {
         return {false, "redeploy_agent: agent unreachable before swap: " + before.error};
     }
@@ -84,7 +85,7 @@ AgentRedeployer::Outcome AgentRedeployer::run() {
         return {false, "redeploy_agent: " + binary_server.error()};
     }
 
-    const auto ack = agent_.invoke("run_script", {
+    const auto ack = agent_.request(linkproto::cmd::kRunScript, {
         {"name", "redeploy agent"},
         {"script", swap_script_for(binary_server.port())},
     });
@@ -99,7 +100,7 @@ AgentRedeployer::Outcome AgentRedeployer::run() {
     std::string new_version;
     while (std::chrono::steady_clock::now() < deadline) {
         std::this_thread::sleep_for(kPollInterval);
-        const auto check = agent_.invoke(linkproto::cmd::kSystemInfo);
+        const auto check = agent_.request(linkproto::cmd::kSystemInfo);
         if (!check.ok) {
             continue;
         }

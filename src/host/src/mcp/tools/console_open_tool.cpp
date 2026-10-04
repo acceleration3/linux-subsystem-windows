@@ -1,6 +1,7 @@
 #include "lsw/host/mcp/tools/console_open_tool.hpp"
 
-#include "lsw/host/mcp/agent_command.hpp"
+#include "lsw/host/link/agent_reply.hpp"
+#include "lsw/host/link/agent_rpc_client.hpp"
 #include "lsw/host/mcp/json_schema.hpp"
 #include "lsw/host/mcp/tool_result.hpp"
 
@@ -19,7 +20,7 @@ std::string ConsoleOpenTool::description() const {
 nlohmann::json ConsoleOpenTool::input_schema() const { return JsonSchema::no_args(); }
 
 nlohmann::json ConsoleOpenTool::call(const nlohmann::json&) {
-    const auto r = agent_.invoke(linkproto::cmd::kConsoleOpen);
+    const auto r = agent_.request(linkproto::cmd::kConsoleOpen);
     if (!r.ok) {
         return ToolResult::error(r.error);
     }

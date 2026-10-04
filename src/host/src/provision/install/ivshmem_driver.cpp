@@ -1,16 +1,16 @@
 #include "lsw/host/provision/install/ivshmem_driver.hpp"
 
 #include "lsw/base/log.hpp"
+#include "lsw/host/platform/tool_process.hpp"
+#include "lsw/host/provision/install/seven_zip.hpp"
 
 #include <QDir>
 #include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
-#include <QProcess>
 #include <QStandardPaths>
 #include <QStringList>
 #include <QTemporaryDir>
-
 #include <algorithm>
 
 namespace lsw::host::provision::install {
@@ -23,12 +23,14 @@ namespace {
 // x64 Windows.
 constexpr const char* kRequiredSuffixes[] = {".inf", ".cat", ".sys"};
 
-// Looking Glass ships its host package as an NSIS installer. 7z and
+// Looking Glass ships its host package as an NSIS installer. 7-Zip and
 // innoextract can both unpack one; neither is worth making a hard
 // dependency, so whichever is present wins and the absence of both is
-// reported rather than worked around.
-[[nodiscard]] QString find_program(const QString& name) {
-    return QStandardPaths::findExecutable(name);
+// reported rather than worked around. 7-Zip is found the way every
+// other reader of an archive here finds it, under whichever name the
+// distribution installs.
+[[nodiscard]] QString find_innoextract() {
+    return QStandardPaths::findExecutable(QStringLiteral("innoextract"));
 }
 
 // Copy every driver file found anywhere under ``root`` into ``dest``.
@@ -56,35 +58,32 @@ constexpr const char* kRequiredSuffixes[] = {".inf", ".cat", ".sys"};
 // Unpack ``package`` into ``dest`` with whichever extractor is present.
 // Returns false when neither is installed (reported by the caller).
 [[nodiscard]] bool unpack_into(const QString& package, const QString& dest) {
-    const QString seven_zip = find_program(QStringLiteral("7z"));
-    const QString innoextract = find_program(QStringLiteral("innoextract"));
-    QString program;
-    QStringList args;
-    if (!seven_zip.isEmpty()) {
-        program = seven_zip;
-        args = {QStringLiteral("x"), QStringLiteral("-y"), QStringLiteral("-o") + dest, package};
-    } else if (!innoextract.isEmpty()) {
-        program = innoextract;
-        args = {QStringLiteral("-e"), QStringLiteral("-d"), dest, package};
+    constexpr int kTimeoutMs = 120000;
+    QDir().mkpath(dest);
+    QString error;
+    bool ok = false;
+    if (!find_seven_zip().isEmpty()) {
+        ok = run_seven_zip(
+            {QStringLiteral("x"), QStringLiteral("-y"), QStringLiteral("-o") + dest, package},
+            kTimeoutMs, &error);
+    } else if (const QString innoextract = find_innoextract(); !innoextract.isEmpty()) {
+        ok = platform::run_tool(innoextract,
+                                {QStringLiteral("-e"), QStringLiteral("-d"), dest, package},
+                                kTimeoutMs, nullptr, &error);
     } else {
         return false;
     }
-    QDir().mkpath(dest);
-    QProcess proc;
-    proc.start(program, args);
-    if (!proc.waitForFinished(120000) || proc.exitCode() != 0) {
-        LSW_WARN("ivshmem: {} failed to unpack {} (exit {})", program.toStdString(),
-                 package.toStdString(), proc.exitCode());
-        return false;
+    if (!ok) {
+        LSW_WARN("ivshmem: could not unpack {}: {}", package.toStdString(), error.toStdString());
     }
-    return true;
+    return ok;
 }
 
 // Archives that might contain the driver one level further down.
 [[nodiscard]] QStringList nested_archives(const QString& root) {
     QStringList out;
-    QDirIterator it(root, {QStringLiteral("*.exe"), QStringLiteral("*.zip"),
-                           QStringLiteral("*.msi")},
+    QDirIterator it(root,
+                    {QStringLiteral("*.exe"), QStringLiteral("*.zip"), QStringLiteral("*.msi")},
                     QDir::Files, QDirIterator::Subdirectories);
     while (it.hasNext()) {
         out.append(it.next());
@@ -93,6 +92,10 @@ constexpr const char* kRequiredSuffixes[] = {".inf", ".cat", ".sys"};
 }
 
 }  // namespace
+
+bool IvshmemDriver::has_extractor() {
+    return !find_seven_zip().isEmpty() || !find_innoextract().isEmpty();
+}
 
 QString IvshmemDriver::cache_path(const QString& cache_dir) {
     return QDir(cache_dir).filePath(QStringLiteral("ivshmem"));
@@ -114,21 +117,18 @@ bool IvshmemDriver::looks_like_driver_dir(const QString& dir) {
     return true;
 }
 
-bool IvshmemDriver::extract_from_package(const QString& package_path,
-                                         const QString& dest_dir) {
+bool IvshmemDriver::extract_from_package(const QString& package_path, const QString& dest_dir) {
     if (!QFileInfo::exists(package_path)) {
         return false;
     }
     QTemporaryDir unpacked;
     if (!unpacked.isValid()) {
-        LSW_ERROR("ivshmem: could not create a temp dir to unpack {}",
-                  package_path.toStdString());
+        LSW_ERROR("ivshmem: could not create a temp dir to unpack {}", package_path.toStdString());
         return false;
     }
 
-    if (find_program(QStringLiteral("7z")).isEmpty()
-        && find_program(QStringLiteral("innoextract")).isEmpty()) {
-        LSW_WARN("ivshmem: no extractor available (install p7zip or innoextract), or set "
+    if (!has_extractor()) {
+        LSW_WARN("ivshmem: no extractor available (install 7-Zip or innoextract), or set "
                  "LSW_IVSHMEM_DRIVER_DIR to an unpacked driver directory");
         return false;
     }
@@ -164,12 +164,10 @@ bool IvshmemDriver::extract_from_package(const QString& package_path,
 QString IvshmemDriver::locate(const QString& cache_dir) {
     // 1. Explicit override. Checked first so a broken cache can always be
     //    stepped around without clearing anything.
-    QString override_dir =
-        QString::fromLocal8Bit(qgetenv("LSW_IVSHMEM_DRIVER_DIR")).trimmed();
+    QString override_dir = QString::fromLocal8Bit(qgetenv("LSW_IVSHMEM_DRIVER_DIR")).trimmed();
     if (!override_dir.isEmpty()) {
         if (looks_like_driver_dir(override_dir)) {
-            LSW_INFO("ivshmem driver: using LSW_IVSHMEM_DRIVER_DIR={}",
-                     override_dir.toStdString());
+            LSW_INFO("ivshmem driver: using LSW_IVSHMEM_DRIVER_DIR={}", override_dir.toStdString());
             return override_dir;
         }
         LSW_WARN("ivshmem driver: LSW_IVSHMEM_DRIVER_DIR={} does not contain "
@@ -185,14 +183,13 @@ QString IvshmemDriver::locate(const QString& cache_dir) {
 
     // 3. A package sitting in the cache, waiting to be unpacked.
     const QDir dir{cache_dir};
-    const auto packages = dir.entryInfoList(
-        {QStringLiteral("looking-glass-host*.exe"), QStringLiteral("looking-glass-host*.zip"),
-         QStringLiteral("*ivshmem*.zip")},
-        QDir::Files, QDir::Time);
+    const auto packages = dir.entryInfoList({QStringLiteral("looking-glass-host*.exe"),
+                                             QStringLiteral("looking-glass-host*.zip"),
+                                             QStringLiteral("*ivshmem*.zip")},
+                                            QDir::Files, QDir::Time);
     for (const auto& package : packages) {
         if (extract_from_package(package.absoluteFilePath(), cached)) {
-            LSW_INFO("ivshmem driver: unpacked from {}",
-                     package.fileName().toStdString());
+            LSW_INFO("ivshmem driver: unpacked from {}", package.fileName().toStdString());
             return cached;
         }
     }

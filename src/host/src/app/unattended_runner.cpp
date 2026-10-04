@@ -57,7 +57,7 @@ void UnattendedRunner::start() {
                  "valid Windows license)."), 2);
         return;
     }
-    if (!services_.vms().records().isEmpty()) {
+    if (services_.vms().primary() != nullptr) {
         fail(QStringLiteral(
                  "a VM is already defined; refusing to run the install pipeline a second "
                  "time. Use the manager UI or remove the existing domain first."), 3);

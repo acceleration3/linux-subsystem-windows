@@ -1,9 +1,11 @@
 #pragma once
 
 #include <QObject>
+#include <QDateTime>
 #include <QProcess>
 #include <QString>
 #include <QUuid>
+#include <QVector>
 
 namespace lsw::host::vm {
 
@@ -40,14 +42,54 @@ public:
     // is backed by, for ``uuid``. This is what goes in the domain XML's
     // ``<shmem name='...'/>``, and it is ``region_prefix`` plus the
     // session index the server appends.
-    [[nodiscard]] static QString region_name(const QUuid& uuid);
+    // ``index`` is the session, which is also the ivshmem device's
+    // position on the bus: the server addresses its sessions by device
+    // index, so the order the domain declares them in is the order the
+    // guest finds them.
+    [[nodiscard]] static QString region_name(const QUuid& uuid, int index = 0);
 
-    // How large that region is, in MiB. Matches what the command line
-    // below asks for once ``--vm`` has rounded it up to a power of two,
-    // which it must be: the region is a PCI BAR, and a BAR's size is
-    // decoded by address bits, so QEMU does not round — it asserts, and
-    // the VM dies before the guest exists.
-    static constexpr int kRegionMib = 1024;
+    // How the region is carved up, and how many of them there are.
+    //
+    // These used to be constants with a comment saying they wanted to
+    // be settings. They are settings now: the manager reads them from
+    // ManagerSettings and installs them here before starting anything,
+    // because the server takes them on its command line and a running
+    // server cannot be told otherwise.
+    struct Sizing {
+        int sessions = 1;
+        int ring_kib = 1024;
+        int reply_kib = 8192;
+        int blob_mib = 512;
+        // Which GPU the server draws on, as an index into gl_devices();
+        // -1 leaves the choice to EGL, which answers with whichever
+        // card drives the display — on a laptop, the slow one.
+        int gl_device = -1;
+    };
+
+    static void set_sizing(const Sizing& sizing);
+    [[nodiscard]] static Sizing sizing();
+
+    // A GPU the server could render on: the index RVK_GL_DEVICE names,
+    // and what the driver calls itself.
+    struct GlDevice {
+        int index = -1;
+        QString vendor;
+        QString renderer;
+    };
+
+    // The GPUs the render server reports, by asking it. Runs the binary
+    // with --list-gl-devices, which makes a context on each device and
+    // exits; the answer is cached, because it costs a process and the
+    // set of cards in a machine does not change while the manager is
+    // open. Empty when there is no binary to ask or it said nothing.
+    [[nodiscard]] static QVector<GlDevice> gl_devices();
+
+    // How large one region is, in MiB. The region is a PCI BAR, and a
+    // BAR's size is decoded by address bits, so it must be a power of
+    // two: QEMU does not round, it asserts, and the VM dies before the
+    // guest exists. ``--vm`` rounds on the server's side; this is the
+    // same arithmetic so the domain XML agrees with it.
+    [[nodiscard]] static int region_mib();
 
     // Start the server for ``uuid`` if it is not already running, and
     // wait for the region file to appear. Returns false when the server
@@ -63,14 +105,30 @@ public:
 
     [[nodiscard]] bool running() const;
 
+Q_SIGNALS:
+    // The server process went away while it was serving a guest.
+    void died();
+
+    // Every line the server writes to its standard error. The manager
+    // reads its congestion warnings out of these, which is what makes a
+    // stalling ring visible without the server having to publish
+    // anything it does not already print.
+    void line_logged(const QString& line);
+
 private:
     // Absolute path to the executable, or empty when there is none.
     // ``$LSW_RENDER_SERVER`` wins so a developer can point at a
     // specific build; otherwise the build tree beside the manager.
     [[nodiscard]] static QString executable_path();
 
+    void drain_output();
+
     QProcess process_;
     QUuid serving_;
+    // When the process now running was started, so a newer build on
+    // disk can be noticed at the next boot.
+    QDateTime started_;
+    QByteArray pending_;
 };
 
 }  // namespace lsw::host::vm

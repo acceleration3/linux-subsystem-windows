@@ -18,9 +18,7 @@ LogStore::LogStore(QObject* parent) : QObject(parent) {
 void LogStore::attach(link::AgentRpcClient& rpc) {
     // Handler runs on the rpc reader thread — marshal onto our own
     // (GUI) thread so the records_/signals stay single-threaded.
-    // LogStore lives for the App's lifetime, so we don't keep the
-    // token — the handler is fine to outlive any individual call.
-    (void)rpc.on_event(QString::fromLatin1(linkproto::topic::kLog), [this](const nlohmann::json& frame) {
+    log_sub_ = rpc.subscribe(linkproto::topic::kLog, [this](const nlohmann::json& frame) {
         LogRecord rec;
         rec.seq = frame.value("seq", std::uint64_t{0});
         rec.ts_ms = frame.value("ts_ms", std::uint64_t{0});

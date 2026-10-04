@@ -1,14 +1,14 @@
 #pragma once
 
-#include <string>
+#include <nlohmann/json.hpp>
 
 namespace lsw::agent::system {
 
-// Reports OS version, RAM, disk, hostname, primary IP. Result is a
-// JSON object literal (no fancy formatting; the host parses with Qt).
+// Reports OS version, RAM, CPU load, disk, hostname, primary IP and the
+// agent's build stamp, as the ``system_info`` reply object.
 class Info {
 public:
-    [[nodiscard]] static std::string collect_json();
+    [[nodiscard]] static nlohmann::json collect();
 };
 
 }  // namespace lsw::agent::system

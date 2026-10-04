@@ -58,6 +58,9 @@ private:
 
     void show_main_window();
     void show_wizard();
+    // Render every page of both windows into ``dir`` and exit. See
+    // CliOptions::screenshot_dir for why this exists.
+    [[nodiscard]] int capture_screens(const QString& dir);
 
     // Stand up the MCP server (manager mode only). Localhost-only, no
     // auth. Bind failure is non-fatal — logged and skipped. Not started

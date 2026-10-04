@@ -8,7 +8,18 @@ void ToolRegistry::add(std::unique_ptr<IMcpTool> tool) {
     if (tool == nullptr) {
         return;
     }
-    by_name_[tool->name()] = tool.get();
+    auto& slot = by_name_[tool->name()];
+    if (slot != nullptr) {
+        // Replace in place, keeping the earlier entry's position.
+        for (auto& existing : order_) {
+            if (existing.get() == slot) {
+                slot = tool.get();
+                existing = std::move(tool);
+                return;
+            }
+        }
+    }
+    slot = tool.get();
     order_.push_back(std::move(tool));
 }
 

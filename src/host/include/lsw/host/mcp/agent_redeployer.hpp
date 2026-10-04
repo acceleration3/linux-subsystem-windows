@@ -2,9 +2,9 @@
 
 #include <string>
 
-namespace lsw::host::mcp {
+namespace lsw::host::link { class AgentRpcClient; }
 
-class AgentCommand;
+namespace lsw::host::mcp {
 
 // Hot-swaps the guest agent for the locally-built binary, without
 // rebooting the VM.
@@ -26,13 +26,13 @@ public:
         std::string message;  // human-readable, shown to the model either way
     };
 
-    explicit AgentRedeployer(AgentCommand& agent) noexcept : agent_(agent) {}
+    explicit AgentRedeployer(link::AgentRpcClient& agent) noexcept : agent_(agent) {}
 
     // Blocking; up to ~45 s. Called on an HTTP worker thread.
     [[nodiscard]] Outcome run();
 
 private:
-    AgentCommand& agent_;
+    link::AgentRpcClient& agent_;
 };
 
 }  // namespace lsw::host::mcp

@@ -1,27 +1,15 @@
-#include "lsw/host/vm/domain_handle.hpp"
 #include "lsw/host/vm/monitor.hpp"
 
 #include "lsw/base/log.hpp"
+#include "lsw/host/vm/domain_handle.hpp"
 
 #include <QDateTime>
-#include <QFileInfo>
-#include <QMetaObject>
-#include <QPointer>
 #include <QtConcurrent>
-#include <libvirt/libvirt.h>
-
 #include <algorithm>
+#include <libvirt/libvirt.h>
 #include <memory>
 
 namespace lsw::host::vm {
-
-namespace {
-
-[[nodiscard]] QByteArray uuid_bytes(const QUuid& u) {
-    return u.toRfc4122();
-}
-
-}  // namespace
 
 Monitor::Monitor(LibvirtConnection& conn, QObject* parent) : QObject(parent), conn_(conn) {
     timer_.setInterval(2000);
@@ -30,10 +18,6 @@ Monitor::Monitor(LibvirtConnection& conn, QObject* parent) : QObject(parent), co
 
 void Monitor::set_guest_probe(IGuestStatsProbe* probe) {
     probe_ = probe;
-}
-
-void Monitor::set_interval_ms(int ms) {
-    timer_.setInterval(ms);
 }
 
 void Monitor::watch(const QUuid& uuid) {
@@ -63,12 +47,6 @@ VmStats Monitor::latest(const QUuid& uuid) const {
     return stats_.value(uuid, VmStats{});
 }
 
-void Monitor::update_vram(const QUuid& uuid, quint64 bytes) {
-    auto& s = stats_[uuid];
-    s.vram_used_bytes = bytes;
-    Q_EMIT stats_updated(uuid, s);
-}
-
 void Monitor::on_tick() {
     // Copy the key list before iterating — poll_one may emit signals
     // that reach back into the monitor (unlikely, but safer).
@@ -83,13 +61,10 @@ void Monitor::poll_one(const QUuid& uuid) {
     if (!conn_.is_open()) {
         return;
     }
-    const auto bytes = uuid_bytes(uuid);
-    auto* d = ::virDomainLookupByUUID(conn_.raw(),
-                                      reinterpret_cast<const unsigned char*>(bytes.constData()));
-    if (d == nullptr) {
+    const DomainHandle dom = DomainHandle::lookup(conn_.raw(), uuid);
+    if (!dom.valid()) {
         return;
     }
-    DomainHandle dom{d};
 
     VmStats s = stats_.value(uuid);
 
@@ -104,11 +79,11 @@ void Monitor::poll_one(const QUuid& uuid) {
         const auto last_ns = last_cpu_ns_.value(uuid, 0);
         const auto last_ms = last_sample_ms_.value(uuid, now_ms);
         if (last_ns != 0 && now_ms > last_ms) {
-            const quint64 elapsed_ns = (now_ms - last_ms) * 1'000'000ULL;
+            const auto elapsed_ns = static_cast<quint64>(now_ms - last_ms) * 1'000'000ULL;
             const quint64 delta = now_ns > last_ns ? now_ns - last_ns : 0;
             const int vcpus = info.nrVirtCpu > 0 ? info.nrVirtCpu : 1;
-            const auto fallback_pct =
-                static_cast<int>(std::min<quint64>(100, (delta * 100ULL) / (elapsed_ns * vcpus)));
+            const auto fallback_pct = static_cast<int>(std::min<quint64>(
+                100, (delta * 100ULL) / (elapsed_ns * static_cast<quint64>(vcpus))));
             // Only adopt the libvirt number if we don't have a fresh
             // agent value yet (the agent path is preferred — it
             // reflects what's actually busy inside Windows rather
@@ -154,39 +129,36 @@ void Monitor::kick_agent_poll(const QUuid& uuid) {
         return;  // previous poll still pending — skip this tick
     }
 
-    auto* probe = probe_;
-    const QPointer<Monitor> self{this};
-    (void)QtConcurrent::run([self, probe, uuid, in_flight]() {
-        // ``sample`` blocks on the worker; the GUI thread keeps serving
-        // paints and clicks.
+    // ``sample`` blocks on the worker; the GUI thread keeps serving
+    // paints and clicks. The merge is dropped if the monitor is gone by
+    // the time the sample lands.
+    (void)QtConcurrent::run([probe = probe_, in_flight] {
         const GuestStatsSample g = probe->sample();
         in_flight->store(false);
-        if (!g.valid || !self) {
-            return;
+        return g;
+    }).then(this, [this, uuid](const GuestStatsSample& g) {
+        if (!g.valid || !stats_.contains(uuid)) {
+            return;  // no answer, or unwatched while in flight
         }
-        QMetaObject::invokeMethod(self.data(), [self, uuid, g]() {
-            if (!self) return;
-            if (!self->stats_.contains(uuid)) return;  // unwatched while in flight
-            VmStats s = self->stats_.value(uuid);
-            if (g.cpu_percent >= 0) {
-                s.cpu_percent = std::clamp(g.cpu_percent, 0, 100);
-            }
-            if (g.mem_total > 0) {
-                s.memory_total_bytes = g.mem_total;
-                s.memory_used_bytes = g.mem_avail <= g.mem_total ? g.mem_total - g.mem_avail : 0;
-            }
-            if (g.disk_total > 0) {
-                s.disk_total_bytes = g.disk_total;
-                s.disk_used_bytes = g.disk_avail <= g.disk_total ? g.disk_total - g.disk_avail : 0;
-            }
-            // A successful merge is the heartbeat — record it so poll_one
-            // can flip ``agent_reachable`` back off if we go silent for
-            // ``kAgentStaleMs``.
-            self->last_agent_ms_[uuid] = QDateTime::currentMSecsSinceEpoch();
-            s.agent_reachable = true;
-            self->stats_[uuid] = s;
-            Q_EMIT self->stats_updated(uuid, s);
-        }, Qt::QueuedConnection);
+        VmStats s = stats_.value(uuid);
+        if (g.cpu_percent >= 0) {
+            s.cpu_percent = std::clamp(g.cpu_percent, 0, 100);
+        }
+        if (g.mem_total > 0) {
+            s.memory_total_bytes = g.mem_total;
+            s.memory_used_bytes = g.mem_avail <= g.mem_total ? g.mem_total - g.mem_avail : 0;
+        }
+        if (g.disk_total > 0) {
+            s.disk_total_bytes = g.disk_total;
+            s.disk_used_bytes = g.disk_avail <= g.disk_total ? g.disk_total - g.disk_avail : 0;
+        }
+        // A successful merge is the heartbeat — record it so poll_one
+        // can flip ``agent_reachable`` back off if we go silent for
+        // ``kAgentStaleMs``.
+        last_agent_ms_[uuid] = QDateTime::currentMSecsSinceEpoch();
+        s.agent_reachable = true;
+        stats_[uuid] = s;
+        Q_EMIT stats_updated(uuid, s);
     });
 }
 

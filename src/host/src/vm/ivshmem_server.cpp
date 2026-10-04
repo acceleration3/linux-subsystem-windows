@@ -27,8 +27,12 @@ IvshmemServer::IvshmemServer(const QUuid& vm_uuid, ShmemRegion& region,
                              QObject* parent)
     : QObject(parent), uuid_(vm_uuid), region_(region) {
     eventfds_.fill(-1);
-    socket_path_ = QStringLiteral("/tmp/lsw-ivshmem-%1.sock")
-                       .arg(vm_uuid.toString(QUuid::WithoutBraces));
+    socket_path_ = socket_path_for(vm_uuid);
+}
+
+QString IvshmemServer::socket_path_for(const QUuid& uuid) {
+    return QStringLiteral("/tmp/lsw-ivshmem-%1.sock")
+        .arg(uuid.toString(QUuid::WithoutBraces));
 }
 
 IvshmemServer::~IvshmemServer() { stop(); }

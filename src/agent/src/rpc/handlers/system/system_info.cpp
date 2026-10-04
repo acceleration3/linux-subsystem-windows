@@ -1,15 +1,13 @@
-#include "lsw/agent/rpc/handler.hpp"
 #include "lsw/agent/rpc/auto_register.hpp"
-
-#include "lsw/linkproto/commands.hpp"
+#include "lsw/agent/rpc/handler.hpp"
 #include "lsw/agent/system/info.hpp"
+#include "lsw/linkproto/commands.hpp"
 
 namespace lsw::agent::rpc::handlers {
 
 struct SystemInfoHandler : RpcHandler {
-    nlohmann::json handle(const nlohmann::json& /*params*/,
-                          RpcContext& /*ctx*/) override {
-        return nlohmann::json::parse(system::Info::collect_json());
+    nlohmann::json handle(const nlohmann::json& /*params*/, RpcContext& /*ctx*/) override {
+        return system::Info::collect();
     }
 };
 

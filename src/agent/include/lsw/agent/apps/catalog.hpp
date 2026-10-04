@@ -1,21 +1,22 @@
 #pragma once
 
-#include <string>
+#include <nlohmann/json.hpp>
 
 namespace lsw::agent::apps {
 
-// Discovers Start menu apps and serializes them as a JSON object
-// matching the manager's parser:
+// Lists the installed applications as a JSON object matching the
+// manager's parser:
 //   { "apps": [ {"id": "...", "name": "...", "exe_path": "...",
 //                 "icon_png_base64": "..."}, ... ] }
 //
-// Sources:
-//   * PowerShell ``Get-StartApps`` for AUMID-style modern apps.
-//   * ``%ProgramData%\Microsoft\Windows\Start Menu\Programs`` and
-//     the per-user equivalent for traditional .lnk installs.
+// Source: the machine-wide Add/Remove Programs entries — the
+// ``Uninstall`` registry key, in both the 64-bit and 32-bit views — with
+// system components, updates and redistributables filtered out. An entry
+// is listed only if it resolves to an .exe, through DisplayIcon or the
+// first executable in InstallLocation.
 class Catalog {
 public:
-    [[nodiscard]] static std::string list_json();
+    [[nodiscard]] static nlohmann::json list();
 };
 
 }  // namespace lsw::agent::apps

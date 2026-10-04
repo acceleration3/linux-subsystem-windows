@@ -1,13 +1,15 @@
 #include "lsw/agent/win/desktop_session.hpp"
 
+#include "lsw/agent/core/paths.hpp"
 #include "lsw/agent/log.hpp"
-
-#include <windows.h>
+#include "lsw/agent/win/file_system.hpp"
+#include "lsw/agent/win/unique_handle.hpp"
 
 #include <cstdio>
 #include <iterator>
 #include <string>
 #include <thread>
+#include <windows.h>
 
 namespace lsw::agent::win {
 
@@ -15,8 +17,6 @@ namespace {
 
 // Written once the gate has legitimately opened, so later boots can skip
 // the first-boot overlay wait. Its absence is what "first boot" means.
-constexpr const wchar_t kDesktopReadyFlag[] =
-    L"C:\\ProgramData\\LSW\\desktop-ready.flag";
 
 // A window counts as screen-filling if it spans the primary monitor,
 // compared with a little slack so an off-by-a-pixel window still counts.
@@ -46,8 +46,8 @@ BOOL CALLBACK overlay_proc(HWND window, LPARAM param) {
     if (::GetWindowRect(window, &rect) == FALSE) {
         return TRUE;
     }
-    if (rect.right - rect.left < ::GetSystemMetrics(SM_CXSCREEN) - kCoverSlackPx
-        || rect.bottom - rect.top < ::GetSystemMetrics(SM_CYSCREEN) - kCoverSlackPx) {
+    if (rect.right - rect.left < ::GetSystemMetrics(SM_CXSCREEN) - kCoverSlackPx ||
+        rect.bottom - rect.top < ::GetSystemMetrics(SM_CYSCREEN) - kCoverSlackPx) {
         return TRUE;
     }
     scan->found = true;
@@ -64,35 +64,31 @@ BOOL CALLBACK overlay_proc(HWND window, LPARAM param) {
     return scan;
 }
 
-[[nodiscard]] bool flag_exists() {
-    return ::GetFileAttributesW(kDesktopReadyFlag) != INVALID_FILE_ATTRIBUTES;
-}
-
 void write_flag() {
-    HANDLE file = ::CreateFileW(kDesktopReadyFlag, GENERIC_WRITE, 0, nullptr,
-                                CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (file == INVALID_HANDLE_VALUE) {
-        return;
-    }
-    ::CloseHandle(file);
+    // Created and closed at once: the file existing is the whole flag.
+    const UniqueHandle file{::CreateFileW(core::Paths::desktop_ready_flag().c_str(), GENERIC_WRITE,
+                                          0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL,
+                                          nullptr)};
 }
 
 }  // namespace
 
-bool DesktopSession::shell_ready() { return ::GetShellWindow() != nullptr; }
+bool DesktopSession::shell_ready() {
+    return ::GetShellWindow() != nullptr;
+}
 
-bool DesktopSession::overlay_present() { return scan_for_overlay().found; }
-
-bool DesktopSession::desktop_usable() { return shell_ready() && !overlay_present(); }
+bool DesktopSession::overlay_present() {
+    return scan_for_overlay().found;
+}
 
 std::string DesktopSession::diagnostics() {
     const OverlayScan scan = scan_for_overlay();
-    std::string out = std::string{"progman="} + (shell_ready() ? "yes" : "no")
-                      + " overlay=" + (scan.found ? "yes" : "no");
+    std::string out = std::string{"progman="} + (shell_ready() ? "yes" : "no") +
+                      " overlay=" + (scan.found ? "yes" : "no");
     if (scan.found) {
         char buf[320] = {};
-        std::snprintf(buf, sizeof(buf), " overlay_cls=%ls overlay_title=\"%ls\"",
-                      scan.klass, scan.title);
+        std::snprintf(buf, sizeof(buf), " overlay_cls=%ls overlay_title=\"%ls\"", scan.klass,
+                      scan.title);
         out += buf;
     }
     return out;
@@ -109,7 +105,7 @@ bool DesktopSession::wait_for_desktop(std::chrono::seconds timeout,
     // "no overlay yet" is indistinguishable from "overlay already gone"
     // until we have actually seen one. Later boots have the flag and
     // skip this entirely.
-    const bool first_boot = !flag_exists();
+    const bool first_boot = !FileSystem::exists(core::Paths::desktop_ready_flag());
     bool overlay_seen = false;
     const auto grace_ends = started + first_boot_grace;
 
@@ -127,16 +123,14 @@ bool DesktopSession::wait_for_desktop(std::chrono::seconds timeout,
         }
         // Still inside the first-boot grace and no overlay has appeared:
         // do not trust its absence yet.
-        const bool awaiting_first_overlay =
-            first_boot && !overlay_seen && now < grace_ends;
+        const bool awaiting_first_overlay = first_boot && !overlay_seen && now < grace_ends;
         const bool ready = shell_ready() && !covered && !awaiting_first_overlay;
 
         if (now >= next_trace) {
             next_trace = now + kTraceEvery;
-            LSW_AGENT_INFO(std::string{"desktop: "} + (ready ? "ready " : "waiting ")
-                           + diagnostics() + " first_boot="
-                           + (first_boot ? "yes" : "no") + " overlay_seen="
-                           + (overlay_seen ? "yes" : "no"));
+            LSW_AGENT_INFO("desktop: {} {} first_boot={} overlay_seen={}",
+                           ready ? "ready" : "waiting", diagnostics(), first_boot ? "yes" : "no",
+                           overlay_seen ? "yes" : "no");
         }
 
         if (ready) {
@@ -145,10 +139,8 @@ bool DesktopSession::wait_for_desktop(std::chrono::seconds timeout,
                 usable_since = now;
             }
             if (now - usable_since >= stable_for) {
-                const auto waited =
-                    std::chrono::duration_cast<std::chrono::seconds>(now - started);
-                LSW_AGENT_INFO(std::string{"desktop: ready after "}
-                               + std::to_string(waited.count()) + "s — " + diagnostics());
+                const auto waited = std::chrono::duration_cast<std::chrono::seconds>(now - started);
+                LSW_AGENT_INFO("desktop: ready after {}s — {}", waited.count(), diagnostics());
                 write_flag();
                 return true;
             }
@@ -159,7 +151,7 @@ bool DesktopSession::wait_for_desktop(std::chrono::seconds timeout,
         }
         std::this_thread::sleep_for(poll_interval);
     }
-    LSW_AGENT_WARN(std::string{"desktop: gave up waiting — "} + diagnostics());
+    LSW_AGENT_WARN("desktop: gave up waiting — {}", diagnostics());
     return false;
 }
 

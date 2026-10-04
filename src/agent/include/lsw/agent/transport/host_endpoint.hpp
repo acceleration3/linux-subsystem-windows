@@ -24,9 +24,11 @@ namespace lsw::agent::transport {
 // Per connection the endpoint owns:
 //   * an ``EnvelopeWriter`` — the write half of the socket,
 //   * an ``EventPump`` — every ``rpc::EventSource`` that pushes to the
-//     manager (logs, installer, console, UIA, move/resize),
-//   * an ``rpc::Session`` — per-connection state (window subscriptions,
-//     UIA subscriptions) torn down when the connection closes.
+//     manager (logs, installer, console, UIA).
+//
+// Nothing a connection attaches is torn down when it closes: UIA
+// subscriptions outlive it, and the host is responsible for
+// unsubscribing them.
 //
 // Adding a command means adding a handler TU; adding a push-event kind
 // means registering one more source in ``handle_connection``. Neither
@@ -75,6 +77,7 @@ private:
         std::thread thread;
         std::atomic<bool> finished{false};
     };
+
     std::mutex connections_mu_;
     std::vector<std::unique_ptr<Connection>> connections_;
 

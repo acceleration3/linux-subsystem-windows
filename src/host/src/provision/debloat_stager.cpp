@@ -2,13 +2,14 @@
 
 #include "lsw/base/log.hpp"
 #include "lsw/host/provision/debloat/wim_debloater.hpp"
+#include "lsw/host/provision/install/install_image.hpp"
+#include "lsw/host/provision/install/seven_zip.hpp"
 #include "lsw/host/provision/install/windows_iso_builder.hpp"
 
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QPointer>
-#include <QProcess>
 #include <QStorageInfo>
 #include <QTemporaryDir>
 #include <QtConcurrent>
@@ -23,32 +24,6 @@ namespace {
 // beside it. The compressed entry on the ISO is most of the ISO, and
 // the rebuild is a second copy of what survives.
 constexpr qint64 kFreeSpaceSlackBytes = 2LL * 1024 * 1024 * 1024;
-
-// Pull ``entry`` out of the ISO with 7z into ``dir``. Returns the
-// extracted path, or empty on failure.
-//
-// 7z rather than libisofs, which is already this project's answer to
-// this question — see WimEditionLister. Windows media is UDF and
-// libisofs reads ISO9660 and Joliet only.
-[[nodiscard]] QString extract_entry(const QString& iso_path, const QString& entry,
-                                    const QString& dir) {
-    QProcess seven_zip;
-    seven_zip.start(QStringLiteral("7z"),
-                    {QStringLiteral("e"), QStringLiteral("-y"), QStringLiteral("-bso0"),
-                     QStringLiteral("-bsp0"), iso_path, entry, QStringLiteral("-o%1").arg(dir)});
-    if (!seven_zip.waitForStarted(5000)) {
-        LSW_WARN("debloat: 7z failed to start (is it installed?)");
-        return {};
-    }
-    if (!seven_zip.waitForFinished(900000) || seven_zip.exitStatus() != QProcess::NormalExit
-        || seven_zip.exitCode() != 0) {
-        LSW_WARN("debloat: 7z extract of {} failed (exit={})", entry.toStdString(),
-                 seven_zip.exitCode());
-        return {};
-    }
-    const QString out = QDir(dir).filePath(QFileInfo(entry).fileName());
-    return QFile::exists(out) ? out : QString{};
-}
 
 // Scratch directories from a previous run that did not get to remove
 // its own. Only a crash or a kill leaves one behind, but each is the
@@ -72,11 +47,19 @@ DebloatStager::DebloatStager(QObject* parent) : QObject(parent) {}
 DebloatStager::~DebloatStager() = default;
 
 void DebloatStager::trim(const QString& iso_path, const QString& output_dir,
-                         int image_index, debloat::DebloatLevel level) {
+                         int image_index, debloat::DebloatLevel level, const QString& file_name) {
     // Beside the output, not in QDir::tempPath(). /tmp is tmpfs on a
     // normal desktop — a few gigabytes of RAM — and this unpacks a
     // Windows ISO twice over. The default location fails instantly, and
     // fails by filling memory rather than by saying it is out of space.
+    // Before anything expensive: without 7-Zip nothing here can read
+    // the source ISO at all, and the failure is worth naming up front
+    // rather than after a scratch directory and a free-space check.
+    if (install::find_seven_zip().isEmpty()) {
+        Q_EMIT failed(install::seven_zip_missing_message());
+        return;
+    }
+
     QDir().mkpath(output_dir);
     remove_stale_scratch(output_dir);
 
@@ -106,7 +89,11 @@ void DebloatStager::trim(const QString& iso_path, const QString& output_dir,
     }
 
     const QPointer<DebloatStager> self{this};
-    (void)QtConcurrent::run([self, scratch, iso_path, output_dir, dir, image_index, level]() {
+    const QString out_name = file_name.isEmpty()
+                                 ? QStringLiteral("windows-trimmed.iso")
+                                 : file_name;
+    (void)QtConcurrent::run([self, scratch, iso_path, output_dir, dir, image_index, level,
+                             out_name]() {
         auto report = [self](const QString& detail, int percent) {
             QMetaObject::invokeMethod(self.data(), [self, detail, percent] {
                 if (self) {
@@ -123,15 +110,14 @@ void DebloatStager::trim(const QString& iso_path, const QString& output_dir,
         };
 
         report(QStringLiteral("Extracting the Windows image..."), 0);
-        // Win11 media ships install.wim; some SKUs ship install.esd,
-        // which wimlib reads and writes just the same.
-        QString wim = extract_entry(iso_path, QStringLiteral("sources/install.wim"), dir);
-        if (wim.isEmpty()) {
-            wim = extract_entry(iso_path, QStringLiteral("sources/install.esd"), dir);
-        }
-        if (wim.isEmpty()) {
-            fail(QStringLiteral("could not extract sources/install.wim or install.esd from %1")
-                     .arg(iso_path));
+        // Whichever of the three forms this medium carries — one .wim,
+        // one .esd, or a split .swm and its parts. Which one it is
+        // changes what has to be handed to wimlib below and nothing
+        // else.
+        install::StagedInstallImage image;
+        QString stage_error;
+        if (!install::stage_install_image(iso_path, dir, &image, &stage_error)) {
+            fail(stage_error);
             return;
         }
 
@@ -144,12 +130,17 @@ void DebloatStager::trim(const QString& iso_path, const QString& output_dir,
         report(QStringLiteral("Isolating the chosen edition..."), 5);
         const QString single = QDir(dir).filePath(QStringLiteral("install-single.wim"));
         QString isolate_error;
-        if (!debloat::WimDebloater::isolate_edition(wim, image_index, single, &isolate_error)) {
+        if (!debloat::WimDebloater::isolate_edition(image.path, image.extra_parts, image_index,
+                                                    single, &isolate_error)) {
             fail(isolate_error);
             return;
         }
-        QFile::remove(wim);
-        wim = single;
+        // Every part of the source, not just the first: a split image
+        // is most of the media and the scratch directory still has to
+        // hold the rebuilt ISO.
+        for (const QString& part : image.all_files()) {
+            QFile::remove(part);
+        }
 
         // Lives on this thread for the length of the call. Its progress
         // signal is emitted here and marshalled back by ``report``,
@@ -162,7 +153,7 @@ void DebloatStager::trim(const QString& iso_path, const QString& output_dir,
 
         QString error;
         // Index 1: the isolated file has exactly one image in it.
-        if (!debloater.apply(wim, 1, debloat::DebloatPlan{level}, &error)) {
+        if (!debloater.apply(single, 1, debloat::DebloatPlan{level}, &error)) {
             fail(error);
             return;
         }
@@ -175,10 +166,9 @@ void DebloatStager::trim(const QString& iso_path, const QString& output_dir,
         // anything can go looking for a second CD, so a path on the
         // payload ISO is not one it can be given.
         report(QStringLiteral("Rebuilding the Windows ISO..."), 70);
-        const QString out_iso =
-            QDir(output_dir).filePath(QStringLiteral("windows-trimmed.iso"));
+        const QString out_iso = QDir(output_dir).filePath(out_name);
         QString iso_error;
-        if (!install::WindowsIsoBuilder::build(iso_path, wim, out_iso, dir, &iso_error)) {
+        if (!install::WindowsIsoBuilder::build(iso_path, single, out_iso, dir, &iso_error)) {
             fail(iso_error);
             return;
         }

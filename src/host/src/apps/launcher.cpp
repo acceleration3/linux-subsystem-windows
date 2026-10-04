@@ -1,6 +1,7 @@
 #include "lsw/host/apps/launcher.hpp"
 
 #include "lsw/base/log.hpp"
+#include "lsw/host/link/agent_reply.hpp"
 #include "lsw/host/link/agent_rpc_client.hpp"
 
 #include <QtConcurrent>
@@ -11,14 +12,6 @@
 namespace lsw::host::apps {
 
 namespace {
-
-// Carry both the error string and the spawned PID across the
-// QtConcurrent boundary. Empty error + non-zero pid = success.
-struct LaunchResult {
-    QString error;
-    quint32 pid = 0;
-    QString job;
-};
 
 // ``NAME=value`` per line → a JSON object for the agent.
 //
@@ -55,52 +48,23 @@ Launcher::Launcher(link::AgentRpcClient& rpc, QObject* parent)
 
 void Launcher::launch(const QString& app_id, const QString& args,
                       const QString& env) {
-    auto* watcher = new QFutureWatcher<LaunchResult>(this);
-    connect(watcher, &QFutureWatcher<LaunchResult>::finished, this, [this, watcher, app_id]() {
-        const LaunchResult r = watcher->result();
-        if (r.error.isEmpty()) {
-            Q_EMIT launched(app_id, r.pid, r.job);
-        } else {
-            Q_EMIT failed(app_id, r.error);
+    nlohmann::json params = {{"app_id", app_id.toStdString()}};
+    if (!args.trimmed().isEmpty()) {
+        params["args"] = args.toStdString();
+    }
+    if (auto vars = env_object(env); !vars.empty()) {
+        params["env"] = std::move(vars);
+    }
+    QtConcurrent::run([&rpc = rpc_, params = std::move(params)] {
+        return rpc.request(linkproto::cmd::kLaunch, params);
+    }).then(this, [this, app_id](const link::AgentReply& reply) {
+        if (!reply.ok) {
+            Q_EMIT failed(app_id, QString::fromStdString("agent: " + reply.error));
+            return;
         }
-        watcher->deleteLater();
+        Q_EMIT launched(app_id, static_cast<quint32>(reply.body.value("pid", std::uint64_t{0})),
+                        QString::fromStdString(reply.body.value("job", std::string{})));
     });
-    auto fut = QtConcurrent::run([this, app_id, args, env]() -> LaunchResult {
-        LaunchResult out;
-        nlohmann::json params = {{"app_id", app_id.toStdString()}};
-        if (!args.trimmed().isEmpty()) {
-            params["args"] = args.toStdString();
-        }
-        if (auto vars = env_object(env); !vars.empty()) {
-            params["env"] = std::move(vars);
-        }
-        nlohmann::json req = {
-            {"cmd", linkproto::cmd::kLaunch},
-            {"params", std::move(params)},
-        };
-        const auto reply = rpc_.call(req);
-        if (reply.isEmpty()) {
-            out.error = QStringLiteral("agent unreachable / no reply");
-            return out;
-        }
-        try {
-            const auto j = nlohmann::json::parse(reply.constData(),
-                                                  reply.constData() + reply.size());
-            if (!j.value("ok", false)) {
-                const auto detail = j.value("error", std::string{});
-                out.error = detail.empty()
-                                 ? QStringLiteral("agent reported launch failure (no detail)")
-                                 : QString::fromStdString("agent: " + detail);
-                return out;
-            }
-            out.pid = static_cast<quint32>(j.value("pid", std::uint64_t{0}));
-            out.job = QString::fromStdString(j.value("job", std::string{}));
-        } catch (const nlohmann::json::exception& e) {
-            out.error = QString::fromStdString(e.what());
-        }
-        return out;
-    });
-    watcher->setFuture(fut);
 }
 
 }  // namespace lsw::host::apps

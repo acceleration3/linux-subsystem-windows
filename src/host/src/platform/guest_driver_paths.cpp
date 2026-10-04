@@ -1,8 +1,6 @@
 #include "lsw/host/platform/guest_driver_paths.hpp"
 
-#include <QCoreApplication>
-#include <QDir>
-#include <QFile>
+#include "lsw/host/platform/build_artifact.hpp"
 
 #include <utility>
 
@@ -23,17 +21,10 @@ QString GuestDriverPaths::locate(const char* name, const char* relative) const {
     // The i686 overrides keep their _X86 suffix: they name a specific
     // file, and a developer setting one is saying which build of that
     // architecture to use.
-    const QString variable = env_prefix_ + QLatin1Char('_') + QLatin1String(name)
-                             + (build_tree_.endsWith(QLatin1String("32"))
-                                    ? QStringLiteral("_X86")
-                                    : QString{});
-    QString from_env = qEnvironmentVariable(variable.toLatin1().constData());
-    if (!from_env.isEmpty() && QFile::exists(from_env)) {
-        return from_env;
-    }
-    const QString candidate = QDir::cleanPath(QCoreApplication::applicationDirPath()
-                                              + build_tree_ + QLatin1String(relative));
-    return QFile::exists(candidate) ? candidate : QString{};
+    const QString variable =
+        env_prefix_ + QLatin1Char('_') + QLatin1String(name) +
+        (build_tree_.endsWith(QLatin1String("32")) ? QStringLiteral("_X86") : QString{});
+    return locate_build_artifact(variable, build_tree_ + QLatin1String(relative));
 }
 
 QString GuestDriverPaths::vulkan_icd() const {

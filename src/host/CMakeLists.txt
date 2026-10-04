@@ -1,4 +1,4 @@
-# Host-side (Linux) code. Four libraries plus the executable.
+# Host-side (Linux) code. Five libraries plus the executable.
 #
 # One include/ tree and one src/ tree, subdivided by concern:
 #
@@ -18,12 +18,15 @@
 #                       apps      guest app catalog, per-app config, launch, logs
 #                       mirror    the window mirror a launch starts, one per
 #                                 application
-#                       ui        widgets shared by both UIs (VncView)
+#                       ui        widgets and theme shared by both UIs
 #                       services  HostServices — the container everything takes
 #
 #   lsw_host_provision  provision first-run install pipeline (ISO, autounattend,
 #                                 setup steps). No widgets; two consumers, the
 #                                 wizard UI and the --unattended CLI.
+#
+#   lsw_host_tools      tools     the image tools (download, trim), opened by
+#                                 both the wizard and the manager
 #
 #   lsw_host_wizard     wizard    the first-run QWizard and its pages
 #   lsw_host_manager    manager   the everyday window
@@ -69,11 +72,27 @@ set(_core_embed "${CMAKE_CURRENT_BINARY_DIR}/embedded/core")
 file(MAKE_DIRECTORY "${_core_embed}")
 embed_text_file("${CMAKE_CURRENT_SOURCE_DIR}/embedded/domain.xml"
                 "${_core_embed}/domain_template.hpp" kDomainTemplate)
+# The stylesheet both applications wear (ui/theme.cpp). Embedded for the
+# same reason: a theme read from disk is one more thing to install, and
+# a manager that cannot find it looks broken rather than plain.
+embed_text_file("${CMAKE_CURRENT_SOURCE_DIR}/embedded/theme.qss"
+                "${_core_embed}/theme_qss.hpp" kThemeQss)
 
 lsw_host_sources(LSW_CORE_SOURCES ${LSW_CORE_CONCERNS})
-add_library(lsw_host_core STATIC ${LSW_CORE_SOURCES})
+# The stylesheet's images. See embedded/resources.qrc for why there are
+# any at all.
+set(CMAKE_AUTORCC ON)
+add_library(lsw_host_core STATIC ${LSW_CORE_SOURCES}
+    ${CMAKE_CURRENT_SOURCE_DIR}/embedded/resources.qrc)
 target_include_directories(lsw_host_core PUBLIC ${LSW_HOST_INCLUDE_DIR})
-target_include_directories(lsw_host_core PRIVATE $<BUILD_INTERFACE:${_core_embed}>)
+# vm/render_stats.cpp reads the render server's region header. Its
+# layout is the contract between the two, so the header itself is
+# included rather than mirrored: a mirror is a copy that drifts, and it
+# drifts silently because both sides still compile.
+set(_rvk_wire_include
+    "${LSW_RENDER_SERVER_DIR}/src/wire/include")
+target_include_directories(lsw_host_core
+    PRIVATE $<BUILD_INTERFACE:${_core_embed}> $<BUILD_INTERFACE:${_rvk_wire_include}>)
 target_link_libraries(lsw_host_core
     PUBLIC
         Qt6::Widgets Qt6::Network Qt6::DBus Qt6::Xml Qt6::Concurrent
@@ -117,12 +136,26 @@ target_link_libraries(lsw_host_provision
 )
 target_compile_definitions(lsw_host_provision PRIVATE QT_NO_KEYWORDS)
 
+# ---- lsw_host_tools ------------------------------------------------------
+# The image tools: download one, trim one. They used to be wizard pages,
+# which meant they could only run once, in one place, on the way to
+# something else. Both the wizard and the manager open them now, so they
+# live in a target of their own that neither owns.
+lsw_host_sources(LSW_TOOLS_SOURCES tools)
+add_library(lsw_host_tools STATIC ${LSW_TOOLS_SOURCES})
+target_include_directories(lsw_host_tools PUBLIC ${LSW_HOST_INCLUDE_DIR})
+target_link_libraries(lsw_host_tools
+    PUBLIC  lsw_host_provision
+    PRIVATE LSW::CompileOptions
+)
+target_compile_definitions(lsw_host_tools PRIVATE QT_NO_KEYWORDS)
+
 # ---- lsw_host_wizard -----------------------------------------------------
 lsw_host_sources(LSW_WIZARD_SOURCES wizard)
 add_library(lsw_host_wizard STATIC ${LSW_WIZARD_SOURCES})
 target_include_directories(lsw_host_wizard PUBLIC ${LSW_HOST_INCLUDE_DIR})
 target_link_libraries(lsw_host_wizard
-    PUBLIC  lsw_host_provision
+    PUBLIC  lsw_host_provision lsw_host_tools
     PRIVATE LSW::CompileOptions nlohmann_json::nlohmann_json
 )
 target_compile_definitions(lsw_host_wizard PRIVATE QT_NO_KEYWORDS)
@@ -132,7 +165,7 @@ lsw_host_sources(LSW_MANAGER_SOURCES manager mcp)
 add_library(lsw_host_manager STATIC ${LSW_MANAGER_SOURCES})
 target_include_directories(lsw_host_manager PUBLIC ${LSW_HOST_INCLUDE_DIR})
 target_link_libraries(lsw_host_manager
-    PUBLIC  lsw_host_core
+    PUBLIC  lsw_host_core lsw_host_tools
     PRIVATE LSW::CompileOptions nlohmann_json::nlohmann_json
 )
 target_compile_definitions(lsw_host_manager PRIVATE QT_NO_KEYWORDS)

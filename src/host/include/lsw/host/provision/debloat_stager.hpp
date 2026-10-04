@@ -40,8 +40,13 @@ public:
     // ``DebloatLevel::None`` still runs: the setup bypasses live in the
     // offline registry and this domain has no TPM, so an untouched
     // image is one Windows Setup refuses outright.
+    // ``file_name`` names the result; empty keeps the historical
+    // ``windows-trimmed.iso``. It is a separate argument from the
+    // directory because the tool that drives this lets people put the
+    // image anywhere, under any name, and joining the two here would
+    // make "the folder" and "the file" one field in the UI as well.
     void trim(const QString& iso_path, const QString& output_dir, int image_index,
-              debloat::DebloatLevel level);
+              debloat::DebloatLevel level, const QString& file_name = {});
 
 Q_SIGNALS:
     // Path to the rebuilt Windows ISO, which the domain boots in place

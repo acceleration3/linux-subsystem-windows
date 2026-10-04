@@ -1,35 +1,11 @@
 #include "lsw/agent/uia/focus_event_handler.hpp"
 
-#include "lsw/agent/uia/bstr_text.hpp"
 #include "lsw/agent/uia/uia_event_queue.hpp"
+#include "lsw/agent/win/bstr.hpp"
 
 #include <cstdint>
 
 namespace lsw::agent::uia {
-
-HRESULT FocusEventHandler::QueryInterface(REFIID iid, void** out) {
-    if (out == nullptr) {
-        return E_POINTER;
-    }
-    if (iid == __uuidof(IUnknown)
-        || iid == __uuidof(IUIAutomationFocusChangedEventHandler)) {
-        *out = static_cast<IUIAutomationFocusChangedEventHandler*>(this);
-        AddRef();
-        return S_OK;
-    }
-    *out = nullptr;
-    return E_NOINTERFACE;
-}
-
-ULONG FocusEventHandler::AddRef() { return ++ref_; }
-
-ULONG FocusEventHandler::Release() {
-    const ULONG remaining = --ref_;
-    if (remaining == 0) {
-        delete this;
-    }
-    return remaining;
-}
 
 HRESULT FocusEventHandler::HandleFocusChangedEvent(IUIAutomationElement* sender) {
     if (sender == nullptr) {
@@ -45,19 +21,15 @@ HRESULT FocusEventHandler::HandleFocusChangedEvent(IUIAutomationElement* sender)
 
     UIA_HWND raw = nullptr;
     sender->get_CurrentNativeWindowHandle(&raw);
-    BSTR name = nullptr;
-    BSTR automation_id = nullptr;
-    sender->get_CurrentName(&name);
-    sender->get_CurrentAutomationId(&automation_id);
+    win::Bstr name;
+    win::Bstr automation_id;
+    sender->get_CurrentName(name.put());
+    sender->get_CurrentAutomationId(automation_id.put());
 
     queue_.post({"uia_focus_changed",
-                 {{"hwnd", static_cast<std::uint64_t>(
-                               reinterpret_cast<std::uintptr_t>(raw))},
-                  {"name", BstrText::to_utf8(name)},
-                  {"automation_id", BstrText::to_utf8(automation_id)}}});
-
-    if (name != nullptr) ::SysFreeString(name);
-    if (automation_id != nullptr) ::SysFreeString(automation_id);
+                 {{"hwnd", static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(raw))},
+                  {"name", name.utf8()},
+                  {"automation_id", automation_id.utf8()}}});
     return S_OK;
 }
 

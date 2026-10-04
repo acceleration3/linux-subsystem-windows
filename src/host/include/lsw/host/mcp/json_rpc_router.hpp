@@ -2,9 +2,10 @@
 
 #include <nlohmann/json_fwd.hpp>
 
+namespace lsw::host::link { class AgentRpcClient; }
+
 namespace lsw::host::mcp {
 
-class AgentCommand;
 class ToolRegistry;
 
 // Turns a JSON-RPC frame into the right MCP response.
@@ -14,7 +15,7 @@ class ToolRegistry;
 // about HTTP or about what any individual tool does.
 class JsonRpcRouter {
 public:
-    JsonRpcRouter(ToolRegistry& tools, AgentCommand& agent) noexcept
+    JsonRpcRouter(ToolRegistry& tools, link::AgentRpcClient& agent) noexcept
         : tools_(tools), agent_(agent) {}
 
     // Never throws: a tool that throws becomes an internal-error reply.
@@ -26,7 +27,7 @@ private:
     [[nodiscard]] nlohmann::json on_tools_call(const nlohmann::json& params);
 
     ToolRegistry& tools_;
-    AgentCommand& agent_;
+    link::AgentRpcClient& agent_;
 };
 
 }  // namespace lsw::host::mcp

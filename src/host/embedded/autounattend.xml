@@ -326,41 +326,6 @@
 					<Description>LSW: install the 32-bit Vulkan loader if Windows ships none</Description>
 					<Path>cmd.exe /c if not exist %windir%\SysWOW64\vulkan-1.dll if exist C:\ProgramData\LSW\rvk32\vulkan-1.dll copy /y C:\ProgramData\LSW\rvk32\vulkan-1.dll %windir%\SysWOW64\vulkan-1.dll</Path>
 				</RunSynchronousCommand>
-				<!-- How much video memory the display adapter admits to.
-
-				     A VM with no GPU enumerates the Microsoft Basic
-				     Display Adapter, whose HardwareInformation.MemorySize
-				     is 0 — and applications gate their GPU path on that
-				     number long before they ever open a driver.
-				     Photoshop's sniffer reads exactly this key, reported
-				     "video RAM(MB): 0", and disabled the GPU with a
-				     working OpenGL sitting underneath it. Nothing in the
-				     render server can influence the value: it is read
-				     from the registry, not from DXVK.
-
-				     1 GiB. Comfortably over the 256 MB minimum the
-				     applications that check this ask for, and under the
-				     4 GiB where the DWORD form of it stops being
-				     representable. Takes effect with no reboot.
-
-				     Both spellings, because consumers are split between
-				     them: the QWORD is what a WDDM adapter reports today
-				     and the DWORD is what the older path reads. -->
-				<RunSynchronousCommand wcm:action="add">
-					<Order>29</Order>
-					<Description>LSW: report video memory on the display adapter</Description>
-					<Path>%windir%\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$class = 'HKLM:\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}'; Get-ChildItem $class -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -match '^[0-9]{4}$' } | ForEach-Object { New-ItemProperty -LiteralPath $_.PSPath -Name 'HardwareInformation.qwMemorySize' -Value 1073741824 -PropertyType QWord -Force; New-ItemProperty -LiteralPath $_.PSPath -Name 'HardwareInformation.MemorySize' -Value 1073741824 -PropertyType DWord -Force }"</Path>
-				</RunSynchronousCommand>
-				<!-- The same values on 0000 whether or not it exists yet.
-				     The adapter is enumerated by PnP, and on an image
-				     where that has not happened by this point the loop
-				     above matches nothing and writes nowhere; 0000 is the
-				     subkey the first adapter takes. -->
-				<RunSynchronousCommand wcm:action="add">
-					<Order>30</Order>
-					<Description>LSW: video memory fallback for an adapter not yet enumerated</Description>
-					<Path>cmd.exe /c reg add "HKLM\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}\0000" /v HardwareInformation.qwMemorySize /t REG_QWORD /d 1073741824 /f &amp; reg add "HKLM\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}\0000" /v HardwareInformation.MemorySize /t REG_DWORD /d 1073741824 /f</Path>
-				</RunSynchronousCommand>
 				<!-- The agent autostarts from the 'lsw-agent' scheduled
 				     task (registered by LswPromote.ps1 at SetupComplete,
 				     once the wizard account exists), NOT from HKLM\Run.
@@ -670,6 +635,44 @@ $scripts = @(
 	};
 	{
 		reg.exe add "HKU\.DEFAULT\Control Panel\Accessibility\StickyKeys" /v Flags /t REG_SZ /d 10 /f;
+	};
+	{
+		# How much video memory the display adapter admits to.
+		#
+		# A VM with no GPU enumerates the Microsoft Basic Display
+		# Adapter, whose HardwareInformation.MemorySize is 0 - and
+		# applications gate their GPU path on that number long before
+		# they ever open a driver. Photoshop's sniffer reads exactly
+		# this key, reported "video RAM(MB): 0", and disabled the GPU
+		# with a working OpenGL sitting underneath it. Nothing in the
+		# render server can influence the value: it is read from the
+		# registry, not from DXVK.
+		#
+		# 1 GiB. Comfortably over the 256 MB minimum the applications
+		# that check this ask for, and under the 4 GiB where the DWORD
+		# form of it stops being representable. Takes effect with no
+		# reboot.
+		#
+		# Both spellings, because consumers are split between them: the
+		# QWORD is what a WDDM adapter reports today and the DWORD is
+		# what the older path reads.
+		#
+		# This lives here rather than in a RunSynchronousCommand
+		# because Path there is capped at 259 characters, and a longer
+		# one does not fail on its own - setup rejects the WHOLE answer
+		# file with 0x80220005 and the install dies at specialize.
+		$class = 'HKLM:\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}';
+		Get-ChildItem $class -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -match '^[0-9]{4}$' } | ForEach-Object {
+			New-ItemProperty -LiteralPath $_.PSPath -Name 'HardwareInformation.qwMemorySize' -Value 1073741824 -PropertyType QWord -Force;
+			New-ItemProperty -LiteralPath $_.PSPath -Name 'HardwareInformation.MemorySize' -Value 1073741824 -PropertyType DWord -Force;
+		};
+		# The same values on 0000 whether or not it exists yet. The
+		# adapter is enumerated by PnP, and on an image where that has
+		# not happened by this point the loop above matches nothing and
+		# writes nowhere; 0000 is the subkey the first adapter takes.
+		New-Item -Path "$class\0000" -Force -ErrorAction SilentlyContinue | Out-Null;
+		New-ItemProperty -LiteralPath "$class\0000" -Name 'HardwareInformation.qwMemorySize' -Value 1073741824 -PropertyType QWord -Force;
+		New-ItemProperty -LiteralPath "$class\0000" -Name 'HardwareInformation.MemorySize' -Value 1073741824 -PropertyType DWord -Force;
 	};
 );
 

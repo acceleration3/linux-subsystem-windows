@@ -1,10 +1,10 @@
 #include "lsw/host/provision/install/wim_edition_lister.hpp"
 
 #include "lsw/base/log.hpp"
+#include "lsw/host/provision/install/install_image.hpp"
 
 #include <QDir>
 #include <QFileInfo>
-#include <QProcess>
 #include <QStorageInfo>
 #include <QTemporaryDir>
 
@@ -17,33 +17,6 @@ namespace {
 // Headroom over the on-ISO compressed size — the extracted WIM is
 // larger than its ISO entry, and we don't want to fill the disk.
 constexpr qint64 kFreeSpaceSlackBytes = 2LL * 1024 * 1024 * 1024;  // 2 GiB
-
-// Pull ``sources/<name>`` out of the ISO with 7z into ``dir``. Returns
-// the extracted file path, or empty on failure. 7z reads the UDF
-// filesystem Windows media uses (libisofs/xorriso only do
-// ISO9660/Joliet) and streams the entry sequentially.
-[[nodiscard]] QString extract_entry(const QString& iso_path, const QString& entry,
-                                     const QString& dir) {
-    QProcess p;
-    p.start(QStringLiteral("7z"),
-            {QStringLiteral("e"), QStringLiteral("-y"), QStringLiteral("-bso0"),
-             QStringLiteral("-bsp0"), iso_path, entry,
-             QStringLiteral("-o%1").arg(dir)});
-    if (!p.waitForStarted(5000)) {
-        LSW_WARN("wim_editions: 7z failed to start (is it installed?)");
-        return {};
-    }
-    // Up to ~8 GB sequential read off an ISO — generous ceiling so a
-    // slow spinning disk doesn't get cut off mid-extract.
-    if (!p.waitForFinished(900000) || p.exitStatus() != QProcess::NormalExit
-        || p.exitCode() != 0) {
-        LSW_WARN("wim_editions: 7z extract of {} failed (exit={})",
-                 entry.toStdString(), p.exitCode());
-        return {};
-    }
-    const QString out = QDir(dir).filePath(QFileInfo(entry).fileName());
-    return QFile::exists(out) ? out : QString{};
-}
 
 }  // namespace
 
@@ -86,21 +59,18 @@ QVector<WimEdition> WimEditionLister::list(const QString& iso_path, const QStrin
         return fail(QStringLiteral("could not create a temp dir under %1").arg(base));
     }
 
-    // Win11 media ships install.wim; some SKUs / older builds ship a
-    // compressed install.esd. libwim reads both.
-    QString wim = extract_entry(iso_path, QStringLiteral("sources/install.wim"), tmp.path());
-    if (wim.isEmpty()) {
-        wim = extract_entry(iso_path, QStringLiteral("sources/install.esd"), tmp.path());
-    }
-    if (wim.isEmpty()) {
-        return fail(QStringLiteral("could not extract sources/install.wim or install.esd "
-                                     "from %1 (is 7z installed and is this a Windows ISO "
-                                     "with enough scratch space?)")
-                        .arg(iso_path));
+    StagedInstallImage image;
+    QString stage_error;
+    if (!stage_install_image(iso_path, tmp.path(), &image, &stage_error)) {
+        return fail(stage_error);
     }
 
+    // No reference to the other parts of a split image, deliberately.
+    // The edition table is metadata and all of it is in part 1; nothing
+    // below reads a single byte of file data, so the parts that carry
+    // it are not needed to answer this question.
     WIMStruct* w = nullptr;
-    const int rc = ::wimlib_open_wim(wim.toUtf8().constData(), 0, &w);
+    const int rc = ::wimlib_open_wim(image.path.toUtf8().constData(), 0, &w);
     if (rc != 0 || w == nullptr) {
         return fail(QStringLiteral("wimlib_open_wim failed: %1")
                         .arg(QString::fromUtf8(::wimlib_get_error_string(

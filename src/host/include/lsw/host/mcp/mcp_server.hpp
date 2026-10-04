@@ -1,6 +1,5 @@
 #pragma once
 
-#include "lsw/host/mcp/agent_command.hpp"
 #include "lsw/host/mcp/console_session_buffer.hpp"
 #include "lsw/host/mcp/http_server.hpp"
 #include "lsw/host/mcp/json_rpc_router.hpp"
@@ -41,10 +40,9 @@ public:
 private:
     void register_tools(apps::LogStore& log_store);
 
-    // Order is load-bearing: the router holds references to the registry
-    // and the command, and the tools hold references to the command and
-    // the console buffer.
-    AgentCommand agent_;
+    // Order is load-bearing: the router holds references to the registry,
+    // and the tools hold references to the console buffer.
+    link::AgentRpcClient& agent_;
     ConsoleSessionBuffer consoles_;
     ToolRegistry tools_;
     JsonRpcRouter router_;

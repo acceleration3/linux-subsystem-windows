@@ -6,7 +6,6 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
-#include <vector>
 
 namespace lsw::agent::rpc {
 
@@ -21,7 +20,7 @@ class RpcRegistry {
 public:
     static RpcRegistry& instance();
 
-    // Insert a handler. ABORTS on duplicate name (logged + assert) —
+    // Insert a handler. ABORTS on duplicate name (logged + abort) —
     // duplicates are always a coding error, never a runtime
     // condition.
     void register_handler(std::string name, std::unique_ptr<RpcHandler> h);
@@ -29,10 +28,6 @@ public:
     // Look up by command name. Returns nullptr if no handler is
     // registered.
     [[nodiscard]] RpcHandler* find(std::string_view name) const noexcept;
-
-    // For diagnostic / smoke-test paths (e.g. ``--list-rpcs`` on the
-    // agent CLI): every registered command name, in sorted order.
-    [[nodiscard]] std::vector<std::string> names() const;
 
 private:
     RpcRegistry() = default;

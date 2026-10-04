@@ -36,6 +36,8 @@ CliOptions CliParser::parse(const QStringList& argv) {
         "VM memory in MiB.", "mib");
     QCommandLineOption disk_opt({"disk", "d"},
         "VM disk size in GiB.", "gib");
+    QCommandLineOption screenshot_opt("screenshot",
+        "Render every manager and wizard page into DIR as PNGs, then exit.", "dir");
     QCommandLineOption launch_opt("launch",
         "Launch the named guest app and exit (forwards to a running "
         "manager via D-Bus; starts one if none is up).", "app-id");
@@ -51,6 +53,7 @@ CliOptions CliParser::parse(const QStringList& argv) {
     p.addOption(mem_opt);
     p.addOption(disk_opt);
     p.addOption(launch_opt);
+    p.addOption(screenshot_opt);
 
     p.process(argv);
 
@@ -72,6 +75,7 @@ CliOptions CliParser::parse(const QStringList& argv) {
         o.disk_gib = p.value(disk_opt).toInt();
     }
     o.launch_app_id = p.value(launch_opt);
+    o.screenshot_dir = p.value(screenshot_opt);
     return o;
 }
 
