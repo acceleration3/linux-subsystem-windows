@@ -8,7 +8,6 @@
 #include "lsw/host/ui/widgets.hpp"
 
 #include <QFrame>
-#include <QHBoxLayout>
 #include <QVBoxLayout>
 
 namespace lsw::host::wizard {
@@ -21,14 +20,13 @@ InstallPage::InstallPage(Wizard& wizard, QWidget* parent) : PipelinePage(parent)
     // In the title band with the title: the wait is what this page is,
     // and how long it has been going is the first thing to read.
     auto* head = chrome().head;
-    auto* progress_row = new QHBoxLayout;
-    progress_row->setSpacing(12);
     bar_ = new QProgressBar;
     bar_->setRange(0, 0);  // indeterminate
-    elapsed_ = ui::Widgets::meta(QString{});
-    progress_row->addWidget(bar_, 1);
-    progress_row->addWidget(elapsed_);
-    head->addLayout(progress_row);
+    head->addWidget(bar_);
+    // The phase on a line of its own under the bar: phases are whole
+    // sentences, and beside the bar they were squeezed into a column.
+    elapsed_ = ui::Widgets::meta(QString{}, /*wrap=*/true);
+    head->addWidget(elapsed_);
 
     status_ = new QLabel(QStringLiteral("Windows setup usually takes 10 to 30 minutes "
                                         "and reboots itself several times."));
@@ -53,13 +51,17 @@ InstallPage::InstallPage(Wizard& wizard, QWidget* parent) : PipelinePage(parent)
 
 void InstallPage::set_phase(const QString& text) {
     // The head keeps its sentence about how long this takes; the phase
-    // rides beside the elapsed time, where the eye already is.
+    // is the line under the bar.
     phase_ = text;
     elapsed_->setText(text);
 }
 
 void InstallPage::initializePage() {
     reset_complete();
+    // A retry starts clean: no red reason left over from the last run.
+    ui::Widgets::set_flag(status_, ui::Theme::Tone::kProperty, QVariant{});
+    status_->setText(QStringLiteral("Windows setup usually takes 10 to 30 minutes and reboots "
+                                    "itself several times."));
 
     auto* p = wizard_.pipeline();
     if (p == nullptr) {
@@ -85,8 +87,8 @@ void InstallPage::initializePage() {
             [this, is_install_phase](Step s, double frac, const QString& detail) {
                 if (!is_install_phase(s)) return;
                 if (!detail.isEmpty()) set_phase(detail);
-                // A real fraction (e.g. the virtio-win.iso download
-                // inside BuildingPayloadIso) → determinate bar;
+                // A real fraction (e.g. the Windows ISO download
+                // or the image trim) → determinate bar;
                 // anything indeterminate → busy spinner.
                 if (frac >= 0.0 && frac <= 1.0) {
                     bar_->setRange(0, 100);
@@ -98,7 +100,14 @@ void InstallPage::initializePage() {
     connect(p, &::lsw::host::provision::Pipeline::failed, this,
             [this, is_install_phase](Step s, const QString& err) {
                 if (!is_install_phase(s)) return;
-                set_phase(QStringLiteral("Install failed: %1").arg(err));
+                // The reason gets the sentence under the bar, which wraps;
+                // beside the bar is a one-word slot, and a whole libvirt
+                // error squeezed into it is unreadable.
+                bar_->setRange(0, 1);
+                bar_->setValue(0);
+                set_phase(QStringLiteral("Failed"));
+                status_->setText(QStringLiteral("The install could not continue: %1").arg(err));
+                ui::Widgets::set_flag(status_, ui::Theme::Tone::kProperty, ui::Theme::Tone::kBad);
             });
     // The Pipeline emits step_finished(WaitingForAgent) right before
     // it transitions into the Setup phase — that's our signal to

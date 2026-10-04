@@ -73,8 +73,11 @@ public:
     [[nodiscard]] QString summary() const;
 
     // Empty unless the level costs something the user should be told
-    // about before choosing it.
+    // about before choosing it. One sentence, because it appears in the
+    // middle of a dialog the moment the level is picked; the whole cost
+    // is ``warning_detail``, for wherever there is room to read it.
     [[nodiscard]] QString warning() const;
+    [[nodiscard]] QString warning_detail() const;
 
     [[nodiscard]] static QString to_string(DebloatLevel level);
     [[nodiscard]] static DebloatLevel from_string(const QString& text);

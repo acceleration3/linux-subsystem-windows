@@ -19,7 +19,7 @@ std::string RecentLogsTool::name() const { return "recent_logs"; }
 
 std::string RecentLogsTool::description() const {
     return "Return the last N log records the agent has pushed to the manager. "
-           "Useful when debugging — these are the same lines as in ``Open Log``. "
+           "Useful when debugging: these are the same lines as in ``Open Log``. "
            "Args: ``count`` (default 100).";
 }
 

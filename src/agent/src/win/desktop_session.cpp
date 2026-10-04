@@ -140,7 +140,7 @@ bool DesktopSession::wait_for_desktop(std::chrono::seconds timeout,
             }
             if (now - usable_since >= stable_for) {
                 const auto waited = std::chrono::duration_cast<std::chrono::seconds>(now - started);
-                LSW_AGENT_INFO("desktop: ready after {}s — {}", waited.count(), diagnostics());
+                LSW_AGENT_INFO("desktop: ready after {}s ({})", waited.count(), diagnostics());
                 write_flag();
                 return true;
             }
@@ -151,7 +151,7 @@ bool DesktopSession::wait_for_desktop(std::chrono::seconds timeout,
         }
         std::this_thread::sleep_for(poll_interval);
     }
-    LSW_AGENT_WARN("desktop: gave up waiting — {}", diagnostics());
+    LSW_AGENT_WARN("desktop: gave up waiting ({})", diagnostics());
     return false;
 }
 

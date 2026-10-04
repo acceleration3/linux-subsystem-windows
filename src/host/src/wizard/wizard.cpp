@@ -178,12 +178,12 @@ void Wizard::start_pipeline() {
     in.iso_local_path = state_.chosen_iso_path;
     in.iso_download_url = state_.fido_download_url;
     in.iso_display_label = state_.fido_edition_label;
-    in.virtio_iso_path = state_.virtio_iso_path;
     in.user_name = state_.user_name;
     in.user_password = state_.user_password;
     in.computer_name = state_.computer_name;
     in.sizing = state_.draft.sizing;
     in.image_index = state_.image_index;
+    in.edition_id = state_.edition_id;
     in.debloat = state_.debloat;
     // Only the trim tool leaves an image that has already been through
     // the preparation pass. Everything else still needs it, because the

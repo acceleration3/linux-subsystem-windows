@@ -5,7 +5,6 @@
 #include "lsw/host/services/vm_status.hpp"
 #include "lsw/host/vm/avgpu_log.hpp"
 #include "lsw/host/vm/monitor.hpp"
-#include "lsw/host/vm/renderer_watcher.hpp"
 
 #include <QElapsedTimer>
 #include <QObject>
@@ -30,13 +29,13 @@ namespace lsw::host::services {
 //
 // The machine (libvirt's view and the guest agent's figures, through
 // vm::Monitor) and the guest's graphics (the host's GPUs and APIs, the
-// device's live modes, the renderer process, the agent's gpu_status, the
-// driver's log, the display GPU's VRAM) each have a snapshot here, kept
+// device's live modes, the agent's gpu_status, the driver's log, the
+// display GPU's VRAM) each have a snapshot here, kept
 // current on the cadence that suits it. Widgets read the snapshots and
 // listen for ``changed``; none of them polls anything itself.
 //
 // The machine's shape — cores, memory, the system disk, the GPU devices
-// with their host window and renderer — is read from libvirt's own
+// with their host window — is read from libvirt's own
 // definition of the domain, never from the settings: the live one while
 // it runs, the stored one while it is off, re-read whenever it starts or
 // stops. The settings only show through as what a restart would change.
@@ -101,8 +100,6 @@ private:
     // The domain's definition, live or stored as the machine is, and
     // what follows from it.
     void read_definition();
-    // The shared region's size and doorbells, which follow the VM.
-    void read_transport();
     void rematch();
     // What the settings would change at the next restart.
     void compare_settings();
@@ -115,7 +112,6 @@ private:
     VmStatus vm_;
     GraphicsStatus graphics_;
     GuestSessions sessions_;
-    vm::RendererWatcher renderer_;
     vm::AvgpuLog log_;
     QTimer graphics_timer_;
     int graphics_ticks_ = 0;
@@ -124,7 +120,6 @@ private:
     // that offers them is on screen, and once when the agent arrives.
     QTimer sessions_timer_;
     bool probing_ = false;
-    bool scanning_ = false;
     // Which state the definition was last read for: read again when the
     // machine starts or stops.
     bool definition_read_ = false;

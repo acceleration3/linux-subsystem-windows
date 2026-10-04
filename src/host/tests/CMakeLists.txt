@@ -50,20 +50,6 @@ target_compile_definitions(lsw_host_provision_autounattend_test PRIVATE QT_NO_KE
 add_test(NAME lsw_host_provision_autounattend_test
          COMMAND lsw_host_provision_autounattend_test)
 
-# A4: the host-side half — a package in the cache becomes an unpacked
-# driver directory, including the two-archives-deep layout the real
-# looking-glass.io download has. No network, no VM.
-add_executable(lsw_host_provision_ivshmem_driver_test ivshmem_driver_test.cpp)
-target_link_libraries(lsw_host_provision_ivshmem_driver_test
-    PRIVATE
-        lsw_host_provision
-        LSW::CompileOptions
-)
-target_compile_definitions(lsw_host_provision_ivshmem_driver_test PRIVATE QT_NO_KEYWORDS)
-add_test(NAME lsw_host_provision_ivshmem_driver_test
-         COMMAND lsw_host_provision_ivshmem_driver_test)
-set_tests_properties(lsw_host_provision_ivshmem_driver_test PROPERTIES TIMEOUT 120)
-
 # The debloater against real Windows media. Opt-in: without
 # $LSW_TEST_WIM pointing at a writable install.wim copy it reports
 # skipped and passes, because CI has no Windows media and the questions

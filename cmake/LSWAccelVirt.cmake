@@ -11,8 +11,7 @@
 #                       drivers for x64 and x86, installed as the
 #                       guest's C:\av, plus the OpenCL loaders
 #   accel_virt_host     the host half: the patched QEMU with the
-#                       virtio-gpu-av-pci device, libav_executor.so and
-#                       av-renderer
+#                       virtio-gpu-av-pci device and libav_executor.so
 #   accel_virt_d3d      the host's Direct3D: DXVK and vkd3d-proton,
 #                       built natively, which the executor loads
 #
@@ -37,7 +36,6 @@
 #   ${CMAKE_BINARY_DIR}/accel-virt/qemu/             LSW_AV_QEMU_BUILD
 #       qemu/qemu-system-x86_64                      (QEMU_MODULE_DIR is qemu/)
 #       libav_executor.so                            the device's executor=
-#       av-renderer                                  the device's renderer=
 #   ${CMAKE_BINARY_DIR}/accel-virt/d3d/lib/          LSW_AV_D3D_PATH
 #       libdxvk_*.so, libvkd3d-proton-*.so           AV_D3D_PATH for QEMU
 #
@@ -50,7 +48,7 @@
 # them there relative to its own binary in the same way:
 #
 #   lib/lsw/accel-virt/qemu/          qemu-system-x86_64, the modules it
-#                                     loads, libav_executor.so, av-renderer
+#                                     loads, libav_executor.so
 #   lib/lsw/accel-virt/qemu/share/    its firmware, ROMs and keymaps (-L)
 #   lib/lsw/accel-virt/d3d/           libdxvk_*.so, libvkd3d-proton-*.so
 #   share/lsw/guest/av-drivers/       the driver tree
@@ -203,10 +201,14 @@ ExternalProject_Add_Step(accel_virt_drivers loaders
     COMMENT "accel-virt: packaging the OpenCL loaders into av-drivers/loaders"
 )
 
-# ---- the host half: QEMU, the executor, the renderer ----
+# ---- the host half: QEMU and the executor ----
 # AV_QEMU switches accel-virt to its host configuration: the default
 # target then builds QEMU 11.1.1 with the device patched in (its
-# ``qemu`` target), and the executor library and av-renderer beside it.
+# ``qemu`` target), and the executor library beside it. It builds
+# av-renderer too, the process the device's renderer= option runs the
+# executor in; LSW neither uses nor installs it, because libvirt's
+# seccomp sandbox (spawn=deny) does not let QEMU start it, and the
+# executor runs inside QEMU instead (DomainXmlBuilder).
 # Release, because this is what the guest runs on; unoptimized, every
 # command the guest sends pays for it. accel-virt installs none of it —
 # QEMU runs from its build tree with QEMU_MODULE_DIR pointing at it — so
@@ -225,7 +227,7 @@ ExternalProject_Add(accel_virt_host
                      -DAV_QEMU=ON
                      # Linked as the rest of this host build is: a
                      # release's hardening (scripts/package-release.sh)
-                     # reaches the executor and av-renderer too. Only
+                     # reaches the executor too. Only
                      # this half: the guest half links Windows images.
                      "-DCMAKE_EXE_LINKER_FLAGS=${CMAKE_EXE_LINKER_FLAGS}"
                      "-DCMAKE_SHARED_LINKER_FLAGS=${CMAKE_SHARED_LINKER_FLAGS}"
@@ -236,7 +238,6 @@ ExternalProject_Add(accel_virt_host
     DEPENDS          accel_virt_fetch
     BUILD_BYPRODUCTS "${LSW_AV_BUILD_DIR}/qemu/qemu/qemu-system-x86_64"
                      "${LSW_AV_BUILD_DIR}/qemu/libav_executor.so"
-                     "${LSW_AV_BUILD_DIR}/qemu/av-renderer"
     USES_TERMINAL_CONFIGURE ON
     USES_TERMINAL_BUILD     ON
 )
@@ -284,7 +285,6 @@ set(_lsw_av_exec_perms
     OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
 
 install(PROGRAMS "${_lsw_av_qemu_build}/qemu/qemu-system-x86_64"
-                 "${_lsw_av_qemu_build}/av-renderer"
         DESTINATION ${_lsw_av_qemu_dest}
         COMPONENT ${LSW_INSTALL_COMPONENT})
 # QEMU's modules, beside the binary: QEMU_MODULE_DIR is the binary's

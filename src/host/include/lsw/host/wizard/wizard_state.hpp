@@ -18,7 +18,6 @@ namespace lsw::host::wizard {
 struct WizardState {
     config::VmRecord draft;           // accumulated by the pages
     QString chosen_iso_path;          // either downloaded or user-picked
-    QString virtio_iso_path;          // downloaded virtio-win.iso
     QString payload_iso_path;         // built by the pipeline
     int host_cpu_threads = 4;         // detected at construction
     int host_ram_mib = 8192;          // detected at construction
@@ -46,6 +45,9 @@ struct WizardState {
     // 1-based WIM image index chosen on VmSizePage (which Windows
     // edition to install). 1 when unknown / Microsoft-download path.
     int image_index = 1;
+    // That edition's EDITIONID ("Core", "Professional", ...), which picks
+    // the product key. Empty when the editions were not read.
+    QString edition_id;
     // Microsoft download-portal state. ``ms_edition_ids`` is the list of
     // ``productEditionId`` values returned by IsoSourceFetcher.
     QList<int> fido_edition_ids;

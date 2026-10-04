@@ -158,7 +158,6 @@ void VmDetailPanel::set_target(const QUuid& uuid) {
         follow_preview(false);
         app_list_->clear_target();
         stats_->clear();
-        rpc.detach_shmem();
         rpc.clear_target();
         services_.log_store().clear();
         return;

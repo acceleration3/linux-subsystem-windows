@@ -162,9 +162,9 @@ const QStringList kWinSxSKeep = {
 
 // Driver packages a guest on this domain will never bind.
 //
-// The domain gives the guest virtio storage, virtio net, a virtio
-// serial channel, a balloon, an emulated PS/2-and-USB input path, no
-// sound device and either no display adapter or a basic one.
+// The domain gives the guest an NVMe disk, an e1000e NIC, SATA CD
+// drives, an emulated PS/2-and-USB input path, no sound device and
+// either no display adapter or a basic one.
 //
 // Worth knowing before adding to this list: on its own it frees
 // nothing. Every file in the driver store is hardlinked to a copy in
@@ -209,9 +209,8 @@ const QStringList kDriverRemove = {
     // TPM, including the virtual smart card that rides on it. The
     // domain has no TPM and setup is told not to look for one.
     "tpm",
-    // HD Audio. The domain declares no sound device; adding one later
-    // means taking this line out again.
-    "hdaudio",
+    // Not HD Audio: the domain has an ich9 sound card (PipeWire on the
+    // host), and hdaudio is its driver.
 };
 
 }  // namespace
@@ -255,9 +254,17 @@ QString DebloatPlan::warning() const {
     if (level_ != DebloatLevel::Maximum) {
         return {};
     }
+    return QStringLiteral("Cannot be undone: Windows Update, repair, most drivers and WebView2 go "
+                          "with it. For a disposable guest.");
+}
+
+QString DebloatPlan::warning_detail() const {
+    if (level_ != DebloatLevel::Maximum) {
+        return {};
+    }
     return QStringLiteral(
         "This cannot be undone from inside the guest. Gutting the component store takes "
-        "Windows Update with it — including security updates — along with sfc, DISM "
+        "Windows Update with it, security updates included, along with sfc, DISM "
         "repair, update rollback, and any way to add a feature or a language later. "
         "It also drops the drivers for hardware this VM does not have, so printing, "
         "Bluetooth, Wi-Fi, scanners, sensors and audio are gone and a device passed "

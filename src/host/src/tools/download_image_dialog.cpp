@@ -38,7 +38,7 @@ QWidget* tile(const QString& name, QLabel*& value_out) {
     layout->setContentsMargins(11, 9, 11, 9);
     layout->setSpacing(2);
     layout->addWidget(Widgets::caption(name));
-    value_out = new QLabel(QStringLiteral("—"));
+    value_out = new QLabel(QStringLiteral("-"));
     value_out->setObjectName(QString::fromLatin1(Theme::Role::kMono));
     value_out->setStyleSheet(QStringLiteral("font-size: 16px;"));
     layout->addWidget(value_out);

@@ -15,7 +15,7 @@ std::string LaunchTool::name() const { return "launch"; }
 std::string LaunchTool::description() const {
     return "Spawn an app in the user session. ``app_id`` is an absolute path to "
            "an .exe or .lnk (use ``list_apps`` to find one). Returns the spawned "
-           "PID — feed that to ``list_windows`` filtering to find the new window. "
+           "PID; feed that to ``list_windows`` filtering to find the new window. "
            "``session`` picks a Windows session other than the console's (see the "
            "``list_sessions`` RPC); ``session: 0`` starts it as SYSTEM in session 0.";
 }

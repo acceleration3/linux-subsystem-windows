@@ -23,6 +23,9 @@ namespace {
 
 using ui::Widgets;
 
+// Where each edition's EDITIONID rides in the combo, beside its index.
+constexpr int kEditionIdRole = Qt::UserRole + 1;
+
 // A sizing slider, starting at ``initial``, with room beside it for the
 // number and its unit.
 ui::SliderSpin* make_slider(const ui::MachineLimits::Range& range, int initial,
@@ -186,17 +189,9 @@ void VmSizePage::on_editions_ready() {
     }
     for (const auto& e : editions) {
         edition_combo_->addItem(e.name, e.index);
+        edition_combo_->setItemData(edition_combo_->count() - 1, e.edition_id, kEditionIdRole);
     }
-    // Default to the first edition that looks like "Pro" if present —
-    // it's the most useful for an LSW app-host VM — else image 1.
-    int def = 0;
-    for (int i = 0; i < editions.size(); ++i) {
-        if (editions[i].name.contains(QStringLiteral("Pro"), Qt::CaseInsensitive)) {
-            def = i;
-            break;
-        }
-    }
-    edition_combo_->setCurrentIndex(def);
+    edition_combo_->setCurrentIndex(provision::install::WimEditionLister::preferred(editions));
     edition_combo_->setEnabled(true);
     edition_status_->setText(QStringLiteral("%1 editions found.").arg(editions.size()));
     editions_loaded_ = true;
@@ -229,6 +224,7 @@ bool VmSizePage::validatePage() {
     // path or unreadable ISO).
     const QVariant idx = edition_combo_->currentData();
     s.image_index = idx.isValid() ? idx.toInt() : 1;
+    s.edition_id = edition_combo_->currentData(kEditionIdRole).toString();
 
     // This is the last page that gathers anything, so the pipeline
     // starts here. It used to start on the trim page, which no longer

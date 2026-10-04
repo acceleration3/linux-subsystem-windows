@@ -16,7 +16,6 @@ struct PipelineInputs {
     QString iso_local_path;
     QString iso_download_url;
     QString iso_display_label;
-    QString virtio_iso_path;
     QString user_name;
     QString user_password;
     QString computer_name;  // Windows hostname; empty → VM name
@@ -24,6 +23,9 @@ struct PipelineInputs {
     // 1-based WIM image index (which Windows edition to install).
     // Resolved from the ISO via install::WimEditionLister::list().
     int image_index = 1;
+    // The chosen image's EDITIONID; the product key is chosen by it.
+    // Empty when it was never read (the Microsoft download path).
+    QString edition_id;
     // How much of Windows to take out of the image before installing.
     debloat::DebloatLevel debloat = debloat::DebloatLevel::Sane;
     // Set when ``iso_local_path`` already names a trimmed image, which

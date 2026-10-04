@@ -10,7 +10,7 @@ namespace lsw::host::config {
 //
 // Layout (per the spec):
 //   ~/.local/share/lsw/disks/      qcow2 files
-//   ~/.local/share/lsw/isos/       cached Windows + payload + virtio ISOs
+//   ~/.local/share/lsw/isos/       cached Windows + payload ISOs
 //   ~/.local/share/lsw/nvram/      per-VM OVMF_VARS files
 //   ~/.local/share/lsw/logs/       logs the VM writes on the host
 //   ~/.config/lsw/manager.toml     UI preferences
@@ -45,9 +45,6 @@ public:
     // guest reboots and a bugcheck, which nothing inside the guest does.
     // Written by QEMU, one file per QEMU run.
     [[nodiscard]] QString vm_avgpu_log_path() const;  // logs/lsw-avgpu.log
-    // Where the virtio-win driver ISO is cached. Every domain definition
-    // names it, the media ejected or not.
-    [[nodiscard]] QString virtio_iso_path() const;  // isos/virtio-win.iso
 
     // UI preferences, persisted via QSettings into ``manager.ini``.
     [[nodiscard]] bool is_first_run() const;

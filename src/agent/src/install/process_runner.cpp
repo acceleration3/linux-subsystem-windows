@@ -54,7 +54,7 @@ ProcessOutcome ProcessRunner::run(const std::wstring& command_line, const win::R
 
     outcome.completed = true;
     if (::WaitForSingleObject(process, timeout_ms) == WAIT_TIMEOUT) {
-        LSW_AGENT_ERROR("process: pid={} TIMED OUT after {}s — killing process tree", spawned->pid,
+        LSW_AGENT_ERROR("process: pid={} TIMED OUT after {}s, killing process tree", spawned->pid,
                         timeout_ms / 1000);
         if (job) {
             ::TerminateJobObject(job.get(), 1);

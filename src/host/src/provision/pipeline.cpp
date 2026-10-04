@@ -5,11 +5,9 @@
 #include "lsw/host/provision/debloat_stager.hpp"
 #include "lsw/host/provision/install/post_install.hpp"
 #include "lsw/host/provision/iso/downloader.hpp"
-#include "lsw/host/provision/ivshmem_driver_fetcher.hpp"
 #include "lsw/host/provision/payload_iso_stager.hpp"
 #include "lsw/host/provision/press_any_key_prompter.hpp"
 #include "lsw/host/provision/setup_stage_runner.hpp"
-#include "lsw/host/provision/virtio_win_fetcher.hpp"
 #include "lsw/host/provision/vnc_port_resolver.hpp"
 #include "lsw/host/services/domain_inputs.hpp"
 #include "lsw/host/services/host_services.hpp"
@@ -32,10 +30,9 @@ namespace {
 constexpr quint32 kAgentPort = 5102;
 
 // Row indices in the payload phase's UI table. Mirrored by
-// PayloadPage's row labels.
-constexpr int kPayloadRowVirtio = 0;
-constexpr int kPayloadRowIvshmem = 1;
-constexpr int kPayloadRowBuild = 2;
+// PayloadPage's row labels. One row: there is no driver media to fetch,
+// since the domain's disk and NIC have in-box Windows drivers.
+constexpr int kPayloadRowBuild = 0;
 
 // How the restart into the steady-state machine waits on the guest.
 // Windows answers an ACPI power button in seconds once it is at a
@@ -109,6 +106,7 @@ void Pipeline::emit_status(Step step, const QString& detail) {
 }
 
 void Pipeline::emit_failed(Step step, const QString& error) {
+    LSW_WARN("pipeline: step {} failed: {}", static_cast<int>(step), error.toStdString());
     if (setup_runner_ != nullptr) {
         setup_runner_->detach();
     }
@@ -158,8 +156,6 @@ void Pipeline::run_download() {
     downloader_->start(inputs_.iso_download_url, dest);
 }
 
-// ----- Fetch virtio drivers, then build the payload ISO --------------------
-
 // ----- Trim the Windows image, on the HOST ---------------------------------
 //
 // Before the payload ISO is built, because the trimmed install.wim is
@@ -174,6 +170,16 @@ void Pipeline::run_trim_image() {
         // the index that chose it is not the index that finds it. See
         // the same line on the path that does the trimming.
         inputs_.image_index = 1;
+        run_build_payload();
+        return;
+    }
+    if (inputs_.debloat == debloat::DebloatLevel::None) {
+        // Nothing to take out, so nothing to rebuild: the source ISO is
+        // installed as it is, with the edition it was chosen by. A trim
+        // at this level would still isolate the edition and write a new
+        // ISO of the whole image — minutes of work, and a step that can
+        // fail, for an image identical to the one already here.
+        LSW_INFO("pipeline: no trim level chosen; installing the image as it is");
         run_build_payload();
         return;
     }
@@ -206,76 +212,12 @@ void Pipeline::run_trim_image() {
                           inputs_.image_index, inputs_.debloat);
 }
 
+// ----- Build the payload ISO -----------------------------------------------
+
 void Pipeline::run_build_payload() {
     Q_EMIT step_started(Step::BuildingPayloadIso,
                         QStringLiteral("Preparing the install payload..."));
-    Q_EMIT payload_step_started(kPayloadRowVirtio);
 
-    virtio_fetcher_ = new VirtioWinFetcher(this);
-    connect(virtio_fetcher_, &VirtioWinFetcher::progress, this,
-            [this](double fraction, const QString& detail) {
-        Q_EMIT payload_step_progress(kPayloadRowVirtio, detail);
-        Q_EMIT step_progress(Step::BuildingPayloadIso, fraction, detail);
-    });
-    connect(virtio_fetcher_, &VirtioWinFetcher::failed, this,
-            [this](const QString& message) {
-        Q_EMIT payload_step_finished(kPayloadRowVirtio, false, message);
-        emit_failed(Step::BuildingPayloadIso,
-                    QStringLiteral("virtio-win.iso: %1").arg(message));
-    });
-    connect(virtio_fetcher_, &VirtioWinFetcher::finished, this,
-            [this](const QString& iso_path) {
-        inputs_.virtio_iso_path = iso_path;
-        Q_EMIT payload_step_finished(kPayloadRowVirtio, true, QStringLiteral("done"));
-        run_fetch_ivshmem_driver();
-    });
-    virtio_fetcher_->fetch(inputs_.virtio_iso_path, services_.settings().isos_dir());
-}
-
-// ----- Fetch the ivshmem driver, on the HOST -------------------------------
-//
-// Before the payload ISO is built, because the ISO is what carries the
-// driver into the offline image — and on the host, because the device
-// the driver enables is the transport. A guest-side fetch would need
-// the channel it is meant to provide.
-//
-// A failure here does not stop the install. The guest boots without the
-// shared-memory device: no window mirroring, no shmem command stream,
-// but a working Windows. That is worth having on a machine with no
-// extractor installed, and it is reported in its own row rather than
-// discovered later as a missing PCI device.
-
-void Pipeline::run_fetch_ivshmem_driver() {
-    Q_EMIT payload_step_started(kPayloadRowIvshmem);
-
-    ivshmem_fetcher_ = new IvshmemDriverFetcher(this);
-    const auto generation = generation_;
-    connect(ivshmem_fetcher_, &IvshmemDriverFetcher::progress, this,
-            [this, generation](double fraction, const QString& detail) {
-        if (generation != generation_) return;
-        Q_EMIT payload_step_progress(kPayloadRowIvshmem, detail);
-        Q_EMIT step_progress(Step::BuildingPayloadIso, fraction, detail);
-    });
-    connect(ivshmem_fetcher_, &IvshmemDriverFetcher::failed, this,
-            [this, generation](const QString& message) {
-        if (generation != generation_) return;
-        LSW_WARN("provision: ivshmem driver unavailable: {}", message.toStdString());
-        Q_EMIT payload_step_finished(kPayloadRowIvshmem, false, message);
-        run_build_payload_iso();
-    });
-    connect(ivshmem_fetcher_, &IvshmemDriverFetcher::finished, this,
-            [this, generation](const QString& driver_dir) {
-        if (generation != generation_) return;
-        Q_EMIT payload_step_finished(kPayloadRowIvshmem, true, QStringLiteral("done"));
-        static_cast<void>(driver_dir);  // PayloadIsoStager re-locates it
-        run_build_payload_iso();
-    });
-    ivshmem_fetcher_->fetch(services_.settings().data_dir());
-}
-
-// ----- Build the payload ISO -----------------------------------------------
-
-void Pipeline::run_build_payload_iso() {
     // Identifiers and paths all derive from the single-VM constants.
     record_ = config::VmRecord{};
     record_.uuid = QUuid::createUuid();
@@ -326,6 +268,16 @@ void Pipeline::run_create_disk() {
         QStringLiteral("Allocating the qcow2 system disk (%1 GiB)...")
             .arg(record_.sizing.disk_gib));
 
+    // A new install replaces the machine: the old definition goes, and
+    // with it the record the manager knew it by. Before the disk, which
+    // is recreated at the same path.
+    QString replace_error;
+    if (!services_.lifecycle().remove_existing(record_.name, &replace_error)) {
+        emit_failed(Step::CreatingDisk, replace_error);
+        return;
+    }
+    services_.vms().clear();
+
     auto* lifecycle = &services_.lifecycle();
     const QString disk_path = record_.disk_path;
     const int size_gib = record_.sizing.disk_gib;
@@ -363,8 +315,11 @@ void Pipeline::run_start_vm() {
     // is installed it is a display with nothing to show on.
     if (services_.lifecycle().define_and_start(record_, domain_inputs(/*install_display=*/true))
         != 0) {
+        const QString& why = services_.lifecycle().last_error();
         emit_failed(Step::StartingVm,
-                    QStringLiteral("libvirt rejected the domain — see manager logs"));
+                    why.isEmpty() ? QStringLiteral("the virtual machine could not be started")
+                                  : QStringLiteral("the virtual machine could not be started: %1")
+                                        .arg(why));
         return;
     }
     Q_EMIT step_finished(Step::StartingVm);
@@ -470,7 +425,7 @@ void Pipeline::run_restart_vm() {
     if (services_.lifecycle().redefine(record_, domain_inputs(/*install_display=*/false)) != 0) {
         emit_failed(Step::ShuttingDown,
                     QStringLiteral("libvirt refused the VM's steady-state definition, so it still "
-                                   "has the install-time VGA adapter — see manager logs"));
+                                   "has the install-time VGA adapter (see manager logs)"));
         return;
     }
     if (!services_.lifecycle().is_running(record_.uuid)) {
@@ -520,7 +475,7 @@ void Pipeline::run_start_steady_vm() {
     if (services_.lifecycle().start(record_.uuid, /*first_boot_done=*/true) != 0) {
         emit_failed(Step::StartingVmVirtio,
                     QStringLiteral("libvirt would not start the VM on its steady-state "
-                                   "definition — see manager logs"));
+                                   "definition (see manager logs)"));
         return;
     }
     Q_EMIT step_finished(Step::StartingVmVirtio);
@@ -573,13 +528,6 @@ vm::DomainXmlInputs Pipeline::domain_inputs(bool install_display) const {
     vm::DomainXmlInputs inputs =
         services::domain_inputs_from_settings(services_.settings(), services_.manager_settings());
     inputs.install_display = install_display;
-    // Where the fetcher actually put virtio-win.iso, which is the
-    // settings' path unless the caller handed one in. The install needs
-    // the real file; afterwards the media is ejected, but naming a file
-    // that exists keeps every definition one libvirt can start.
-    if (!inputs_.virtio_iso_path.isEmpty()) {
-        inputs.virtio_iso = inputs_.virtio_iso_path;
-    }
     return inputs;
 }
 

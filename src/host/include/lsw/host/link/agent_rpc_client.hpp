@@ -3,12 +3,9 @@
 #include "lsw/host/link/event_bus.hpp"
 #include "lsw/host/link/event_subscription.hpp"
 #include "lsw/host/platform/vsock_client.hpp"
-#include "lsw/host/vm/ivshmem_server.hpp"
-#include "lsw/host/vm/shmem_region.hpp"
 
 #include <QByteArray>
 #include <QObject>
-#include <QTimer>
 
 #include <atomic>
 #include <chrono>
@@ -18,7 +15,6 @@
 #include <mutex>
 #include <string_view>
 #include <thread>
-#include <vector>
 
 #include <nlohmann/json_fwd.hpp>
 
@@ -110,13 +106,6 @@ public:
     // the returned subscription lives.
     [[nodiscard]] EventSubscription subscribe(std::string_view topic, EventHandler handler);
 
-    // Bind the per-VM IVSHMEM transport, which carries the RPC ring:
-    // the manager listens for the channel doorbell and drains what the
-    // guest wrote, or sweeps for it when this manager did not start the
-    // VM and so has no doorbells.
-    void attach_shmem(vm::IvshmemServer* server, vm::ShmemRegion* region);
-    void detach_shmem();
-
 private:
     void reader_loop();
 
@@ -124,9 +113,9 @@ private:
     bool send_locked(const QByteArray& body); // caller holds io_mu_
     void drop_connection_locked();            // caller holds io_mu_
 
-    // One message off either transport: an event to fan out, or a reply
-    // for whoever is waiting on its id. The single place a message is
-    // classified, whichever pipe it came down.
+    // One message off the socket: an event to fan out, or a reply for
+    // whoever is waiting on its id. The single place a message is
+    // classified.
     void route_message(const nlohmann::json& message);
 
     // One control envelope off the socket. Runs on the reader thread.
@@ -147,39 +136,6 @@ private:
 
     std::atomic<bool> stop_{false};
     std::thread reader_;
-
-    // IVSHMEM transport binding. Set by ``attach_shmem`` on the GUI
-    // thread; signal connection wired then too. Cleared by
-    // ``detach_shmem`` / dtor. Non-owning pointers.
-    vm::IvshmemServer* shmem_server_ = nullptr;
-    vm::ShmemRegion*   shmem_region_ = nullptr;
-
-    // Doorbell-free path: drain the channel on a timer.
-    //
-    // Runs when the region was attached rather than created — a manager
-    // that did not start the VM has no doorbells, because the ivshmem
-    // device handshook with the process that did.
-    Q_SLOT void poll_shmem();
-
-    // Timer driving ``poll_shmem``; null whenever doorbells work.
-    QTimer* shmem_poll_ = nullptr;
-
-    // The guest doorbelled a message channel: drain it and route what it
-    // finds exactly like socket traffic. ``kind`` is a
-    // ``linkproto::kChannel*`` value.
-    Q_SLOT void on_shmem_channel_ready(unsigned kind);
-
-    // True once the guest has announced the shared-memory RPC channel.
-    // Purely informational today — the socket still carries every
-    // request — but it is what a later "prefer shmem" switch tests.
-    std::atomic<bool> shmem_channel_live_{false};
-    // Routing policy, not capability. See send_locked.
-    bool prefer_shmem_rpc_ = qEnvironmentVariableIntValue("LSW_RPC_OVER_SHMEM") != 0;
-
-    // Reused drain buffer for the shared-memory channel; sized to the
-    // ring's maximum message on first use. Touched only on the GUI
-    // thread (the doorbell arrives as a queued signal).
-    std::vector<std::uint8_t> shmem_scratch_;
 };
 
 }  // namespace lsw::host::link

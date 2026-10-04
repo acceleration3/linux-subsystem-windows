@@ -63,14 +63,14 @@ void MicrosoftResolver::match_and_fetch_skus() {
         if (want_edition_.isEmpty()
             || e.display.contains(want_edition_, Qt::CaseInsensitive)
             || (!e.version.isEmpty()
-                && QStringLiteral("%1 — %2").arg(e.version, e.display)
+                && QStringLiteral("%1, %2").arg(e.version, e.display)
                        .contains(want_edition_, Qt::CaseInsensitive))) {
             matched_idx = i;
             break;
         }
     }
     if (matched_idx < 0) {
-        Q_EMIT failed(QStringLiteral("no edition matched '%1' — try one of the labels "
+        Q_EMIT failed(QStringLiteral("no edition matched '%1'; try one of the labels "
                                        "shown in the wizard's Edition dropdown")
                           .arg(want_edition_),
                       /*banned=*/false);
@@ -132,7 +132,7 @@ void MicrosoftResolver::on_ms_failed(const QString& msg) {
 void MicrosoftResolver::on_ms_banned() {
     Q_EMIT failed(
         QStringLiteral("Temporarily banned from the Microsoft downloads page "
-                       "(error 715-123130) — supply a local --iso instead."),
+                       "(error 715-123130). Supply a local --iso instead."),
         /*banned=*/true);
 }
 

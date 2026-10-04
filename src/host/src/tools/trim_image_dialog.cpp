@@ -29,6 +29,8 @@
 #include <QVBoxLayout>
 #include <QtConcurrent>
 
+#include <memory>
+
 namespace lsw::host::tools {
 
 namespace {
@@ -57,12 +59,8 @@ double retained_fraction(DebloatLevel level) {
 
 }  // namespace
 
-TrimImageDialog::TrimImageDialog(config::Settings& settings, QString source_iso,
-                                 int image_index, QWidget* parent)
-    : QDialog(parent),
-      settings_(settings),
-      source_iso_(std::move(source_iso)),
-      image_index_(image_index) {
+TrimImageDialog::TrimImageDialog(config::Settings& settings, QString source_iso, QWidget* parent)
+    : QDialog(parent), settings_(settings), source_iso_(std::move(source_iso)) {
     setWindowTitle(QStringLiteral("Trim a Windows image"));
     setModal(true);
     setMinimumWidth(620);
@@ -82,12 +80,20 @@ TrimImageDialog::TrimImageDialog(config::Settings& settings, QString source_iso,
     source_row->addWidget(browse);
     source_box->addLayout(source_row);
 
+    root->addLayout(source_box);
+
+    // ---- edition --------------------------------------------------
+    // Its own question, not a detail of the source: trimming keeps one
+    // edition, so what is picked here is all the new image will hold.
+    auto* edition_box = new QVBoxLayout;
+    edition_box->setSpacing(6);
+    edition_box->addWidget(Widgets::caption(QStringLiteral("Edition to keep")));
     edition_combo_ = new QComboBox;
     edition_combo_->setEnabled(false);
-    edition_combo_->setVisible(false);
-    source_box->addWidget(edition_combo_);
-    root->addLayout(source_box);
-    root->addWidget(Widgets::separator());
+    edition_box->addWidget(edition_combo_);
+    edition_note_ = Widgets::meta(QString{}, true);
+    edition_box->addWidget(edition_note_);
+    root->addLayout(edition_box);
 
     // ---- level ----------------------------------------------------
     root->addWidget(Widgets::separator());
@@ -152,7 +158,6 @@ TrimImageDialog::TrimImageDialog(config::Settings& settings, QString source_iso,
     warning_->setProperty(Theme::Tone::kProperty, Theme::Tone::kWarm);
     warning_->setVisible(false);
     root->addWidget(warning_);
-    root->addWidget(Widgets::separator());
 
     // ---- output ---------------------------------------------------
     root->addWidget(Widgets::separator());
@@ -233,33 +238,55 @@ void TrimImageDialog::list_editions() {
     const int listing = ++listing_;
     edition_combo_->clear();
     edition_combo_->setEnabled(false);
-    edition_combo_->setVisible(false);
+    run_button_->setEnabled(false);
     if (!QFileInfo(source_iso_).isFile()) {
+        edition_combo_->setPlaceholderText(QStringLiteral("Pick an image first"));
+        edition_note_->setText(QString{});
         return;
     }
+    edition_combo_->setPlaceholderText(QStringLiteral("Reading the editions..."));
+    edition_note_->setText(QString{});
+    auto error = std::make_shared<QString>();
     auto* watcher = new QFutureWatcher<QVector<provision::install::WimEdition>>(this);
     connect(watcher, &QFutureWatcher<QVector<provision::install::WimEdition>>::finished, this,
-            [this, watcher, listing] {
+            [this, watcher, listing, error] {
                 watcher->deleteLater();
                 if (listing != listing_) {
                     return;  // another image was picked meanwhile
                 }
                 const auto editions = watcher->result();
                 edition_combo_->clear();
+                if (editions.isEmpty()) {
+                    // Nothing to keep is nothing to trim: Trim stays off.
+                    edition_combo_->setPlaceholderText(QStringLiteral("No editions"));
+                    edition_note_->setText(
+                        QStringLiteral("Could not read the editions from this image: %1")
+                            .arg(error->isEmpty() ? QStringLiteral("no reason given") : *error));
+                    return;
+                }
                 for (const auto& edition : editions) {
                     edition_combo_->addItem(edition.name, edition.index);
                 }
-                if (!editions.isEmpty()) {
-                    const int wanted = edition_combo_->findData(image_index_);
-                    edition_combo_->setCurrentIndex(wanted >= 0 ? wanted : 0);
-                    edition_combo_->setEnabled(true);
-                    edition_combo_->setVisible(true);
-                }
+                // Trimming keeps one edition, so this choice is final:
+                // start where the wizard would, not at image 1, which on
+                // Microsoft's media is Home.
+                edition_combo_->setCurrentIndex(
+                    provision::install::WimEditionLister::preferred(editions));
+                edition_combo_->setEnabled(true);
+                run_button_->setEnabled(true);
+                const auto others = editions.size() - 1;
+                edition_note_->setText(
+                    others == 0 ? QStringLiteral("The image has only this edition.")
+                    : others == 1
+                        ? QStringLiteral("The trimmed image holds only this one; the other is left out.")
+                        : QStringLiteral("The trimmed image holds only this one; the other %1 are "
+                                         "left out.")
+                              .arg(others));
             });
     const QString iso = source_iso_;
     const QString scratch = settings_.cache_dir();
-    watcher->setFuture(QtConcurrent::run([iso, scratch] {
-        return provision::install::WimEditionLister::list(iso, scratch, nullptr);
+    watcher->setFuture(QtConcurrent::run([iso, scratch, error] {
+        return provision::install::WimEditionLister::list(iso, scratch, error.get());
     }));
 }
 
@@ -280,7 +307,12 @@ bool TrimImageDialog::use_for_install() const {
 
 void TrimImageDialog::refresh_estimate() {
     const auto level = static_cast<DebloatLevel>(level_group_->checkedId());
-    warning_->setText(DebloatPlan{level}.warning());
+    // The sentence fits on a line, so picking the level does not push
+    // the rest of the dialog off its bottom; the whole cost is a hover
+    // away, on the sentence itself.
+    const DebloatPlan plan{level};
+    warning_->setText(plan.warning());
+    warning_->setToolTip(plan.warning_detail());
     warning_->setVisible(!warning_->text().isEmpty());
 
     const qint64 source_bytes = QFileInfo(source_iso_).size();
@@ -303,7 +335,7 @@ void TrimImageDialog::set_busy(bool busy) {
     edition_combo_->setEnabled(!busy && edition_combo_->count() > 0);
     output_dir_->setEnabled(!busy);
     output_name_->setEnabled(!busy);
-    run_button_->setEnabled(!busy);
+    run_button_->setEnabled(!busy && edition_combo_->count() > 0);
     for (auto* button : level_group_->buttons()) {
         button->setEnabled(!busy);
     }
@@ -324,9 +356,11 @@ void TrimImageDialog::start() {
 
     const auto level = static_cast<DebloatLevel>(level_group_->checkedId());
     const QVariant index = edition_combo_->currentData();
-    if (index.isValid()) {
-        image_index_ = index.toInt();
+    if (!index.isValid()) {
+        status_->setText(QStringLiteral("Pick the edition to keep first."));
+        return;
     }
+    const int image_index = index.toInt();
 
     set_busy(true);
     status_->setText(QStringLiteral("Preparing"));
@@ -357,7 +391,7 @@ void TrimImageDialog::start() {
         close_button_->setText(QStringLiteral("Done"));
         accept();
     });
-    stager->trim(source_iso_, dir, image_index_, level, output_name_->text());
+    stager->trim(source_iso_, dir, image_index, level, output_name_->text());
 }
 
 }  // namespace lsw::host::tools

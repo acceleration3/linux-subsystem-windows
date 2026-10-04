@@ -142,8 +142,7 @@ void IsoChoicePage::open_download_tool() {
 }
 
 void IsoChoicePage::open_trim_tool() {
-    tools::TrimImageDialog dialog{wizard_.services().settings(), path_edit_->text(),
-                                  wizard_.state().image_index, this};
+    tools::TrimImageDialog dialog{wizard_.services().settings(), path_edit_->text(), this};
     if (dialog.exec() == QDialog::Accepted && !dialog.result_path().isEmpty()) {
         if (dialog.use_for_install()) {
             // The tool rebuilt the image, which is also what writes the

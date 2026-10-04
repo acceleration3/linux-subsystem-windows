@@ -87,6 +87,8 @@ QVector<WimEdition> WimEditionLister::list(const QString& iso_path, const QStrin
             e.name = (name != nullptr && *name != '\0')
                          ? QString::fromUtf8(name)
                          : QStringLiteral("Image %1").arg(i);
+            const char* edition_id = ::wimlib_get_image_property(w, i, "WINDOWS/EDITIONID");
+            e.edition_id = edition_id != nullptr ? QString::fromUtf8(edition_id) : QString{};
             out.push_back(std::move(e));
         }
     }
@@ -97,6 +99,23 @@ QVector<WimEdition> WimEditionLister::list(const QString& iso_path, const QStrin
     }
     LSW_INFO("wim_editions: {} editions in {}", out.size(), iso_path.toStdString());
     return out;
+}
+
+int WimEditionLister::preferred(const QVector<WimEdition>& editions) {
+    for (int i = 0; i < editions.size(); ++i) {
+        if (editions[i].edition_id.compare(QStringLiteral("Professional"), Qt::CaseInsensitive) ==
+            0) {
+            return i;
+        }
+    }
+    // No EDITIONID to go by: the name, as the edition table spells it.
+    for (int i = 0; i < editions.size(); ++i) {
+        if (editions[i].edition_id.isEmpty() &&
+            editions[i].name.contains(QStringLiteral("Pro"), Qt::CaseInsensitive)) {
+            return i;
+        }
+    }
+    return 0;
 }
 
 }  // namespace lsw::host::provision::install

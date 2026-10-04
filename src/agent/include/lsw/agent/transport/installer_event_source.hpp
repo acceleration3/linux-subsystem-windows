@@ -12,9 +12,9 @@ namespace lsw::agent::transport {
 // Publishes install-job progress as ``setup_progress`` / ``setup_done``.
 //
 // The one source that implements ``undeliverable``: the wizard blocks on
-// ``setup_done``, so a batch lost to a connection dying mid-drain — the
-// classic case being guest-tools resetting the NetKVM NIC this very
-// channel rides on — must be redelivered rather than dropped. The typed
+// ``setup_done``, so a batch lost to a connection dying mid-drain — a
+// NIC reset under a driver install, say — must be redelivered rather
+// than dropped. The typed
 // notifications are kept alongside the events precisely so they can go
 // back on the installer's queue unchanged.
 class InstallerEventSource : public rpc::EventSource {

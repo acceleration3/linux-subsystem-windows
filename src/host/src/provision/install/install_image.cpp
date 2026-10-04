@@ -125,7 +125,7 @@ bool stage_install_image(const QString& iso_path, const QString& dir, StagedInst
     if (wanted.isEmpty()) {
         if (error_out != nullptr) {
             *error_out = QStringLiteral("%1 has no sources/install.wim, install.esd or "
-                                        "install.swm — it is not Windows installation media")
+                                        "install.swm, so it is not Windows installation media")
                              .arg(iso_path);
         }
         return false;

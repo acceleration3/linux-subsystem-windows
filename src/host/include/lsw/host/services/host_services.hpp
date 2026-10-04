@@ -48,10 +48,6 @@ public:
     // disabled, the rest of the UI still works).
     [[nodiscard]] bool open();
 
-    // Bind to the shared region of any VM that is already running —
-    // one this process did not start. Call once the VM list is known.
-    void attach_running_vms();
-
     [[nodiscard]] config::Settings& settings() noexcept { return settings_; }
 
     [[nodiscard]] config::VmState& vms() noexcept { return vms_; }
@@ -78,10 +74,8 @@ public:
 
     [[nodiscard]] config::PendingChanges& pending_changes() noexcept { return pending_changes_; }
 
-    // Point the agent channel at ``uuid``'s guest: its shared region
-    // first, so the first frame after connecting already routes through
-    // shared memory rather than the TCP envelope path, then the agent's
-    // port. False if there is no such VM.
+    // Point the agent channel at ``uuid``'s guest. False if there is no
+    // such VM.
     bool bind_agent(const QUuid& uuid);
 
     // Start ``uuid``'s domain. Whether the guest has booted before
@@ -93,7 +87,8 @@ public:
     // places they actually live: the XDG applications directory, the
     // menu fragment, and the two bookmark files. Called at startup and
     // whenever one of those settings changes, so a toggle takes effect
-    // where the toggle says it does.
+    // where the toggle says it does. Two of the integrations depend on
+    // there being a VM, so it runs again once the VM list is known.
     void apply_integrations();
 
 private:

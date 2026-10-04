@@ -53,7 +53,7 @@ fi
 
 EXE="${LSW_AGENT_EXE:-${ROOT}/build-agent/src/agent/lsw-guest-agent.exe}"
 if [[ ! -f "$EXE" ]]; then
-    echo "redeploy-agent: $EXE not found — run scripts/build-agent.sh first" >&2
+    echo "redeploy-agent: $EXE not found; run scripts/build-agent.sh first" >&2
     exit 1
 fi
 SIZE=$(stat -c%s "$EXE")

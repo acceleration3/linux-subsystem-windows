@@ -279,7 +279,7 @@ void MicrosoftClient::on_locale_check_finished() {
     (void)finish_reply(reply, "locale", &status);
     if (status != 200) {
         if (locale_ != "en-US") {
-            LSW_INFO("microsoft: locale {} not available — falling back to en-US",
+            LSW_INFO("microsoft: locale {} not available, falling back to en-US",
                      locale_.toStdString());
             locale_ = "en-US";
         } else {

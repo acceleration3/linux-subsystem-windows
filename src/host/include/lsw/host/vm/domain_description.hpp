@@ -26,23 +26,15 @@ struct DomainDescription {
         bool display = true;
         // The host window, hostmem=; 0 when the line names none.
         int hostmem_mib = 0;
-        // The av-renderer the device runs its GPU work in; empty when it
-        // runs inside QEMU.
-        QString renderer;
         // The modes= list, commas restored; unset when the line has none.
         std::optional<QString> modes;
-
-        [[nodiscard]] bool isolated() const noexcept { return !renderer.isEmpty(); }
     };
 
     int vcpus = 0;
     qint64 memory_mib = 0;
     // The system disk (the first <disk device='disk'>).
     QString disk_path;
-    QString disk_bus;  // its <target bus=...>: "virtio", "sata", ...
-    bool disk_iothread = false;
-    // The ivshmem-doorbell device's MSI vectors; 0 when it has none.
-    int shmem_vectors = 0;
+    QString disk_bus;  // its <target bus=...>: "nvme", "sata", ...
     // In command-line order, which DomainXmlBuilder makes display first.
     QVector<GpuDevice> gpus;
 

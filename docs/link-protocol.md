@@ -12,7 +12,7 @@ are carried by [remotewin](../external/remotewin), one connection per
 application; GPU work by [accel-virt](../external/accel-virt), through
 the `virtio-gpu-av-pci` device the VM has for a display adapter — its
 rings live in guest memory and its doorbells in the device's BAR, so it
-needs no region, port or connection of LSW's. What is left is the
+needs no port or connection of LSW's. What is left is the
 control plane: asking the agent to do things, and hearing what it has
 to say.
 
@@ -114,9 +114,8 @@ their top 32 bits, so `uia_unsubscribe` needs no `session`.
 
 Agent-pushed, one-way, delivered on the connection's tick. Topics are in
 the same header (`linkproto::topic`): agent logs, install-job progress
-and completion, console output and exit, the shared-memory channel's
-`channel_hello`, and the UI Automation notifications (raised in a session
-helper and forwarded unchanged).
+and completion, console output and exit, and the UI Automation
+notifications (raised in a session helper and forwarded unchanged).
 
 The agent does not listen on 5102 at all until a user's desktop is
 genuinely usable (not just logged on: the first-logon "Preparing
@@ -132,76 +131,3 @@ blocks on `setup_done`.
 Manager-side, `AgentRpcClient::subscribe` returns an `EventSubscription`
 that unregisters its handler when destroyed, waiting out a call already
 in progress on the reader thread.
-
-## The shared region (IVSHMEM)
-
-The manager creates a POSIX shm region and hands the fd to QEMU; the
-guest maps the same memory through the IVSHMEM PCI BAR. It is divided
-into **channels**, described by a table at the front
-(`lsw/linkproto/region.hpp`, region format version 3):
-
-    0x0000  region header    magic 'LSWF', version, channel count,
-                             entry size, table offset, region size
-    0x0040  channel table    up to 8 x ChannelDescriptor {kind, flags,
-                             offset, size}
-    0x1000  first channel
-            ...
-
-Channels are located **by kind, never by offset** — the manager owns the
-layout and may move or resize anything by rewriting one table entry. A
-kind the guest does not know about costs it nothing. Contents are
-addressed relative to the channel's own base.
-
-The layout is a pure function of the region size
-(`lsw/linkproto/region_layout.hpp`, `plan_region` / `lay_out_region`),
-so the manager, the local loopback and the parity test all derive the
-same table instead of three agreeing copies of it.
-
-One channel exists today: `rpc` (kind 2).
-
-The magic has never changed. A peer checks the version, so one that
-knows an older format refuses a newer region cleanly instead of reading
-the table as whatever it used to be.
-
-### Doorbells
-
-The guest wakes the manager with an IVSHMEM MSI-X doorbell, one vector
-per channel: `rpc` is vector 0. `<msi vectors='N'/>` in domain.xml
-mirrors `linkproto::kDoorbellVectorCount`.
-
-There is no interrupt in the other direction — the manager's in-process
-ivshmem server holds only its own eventfds — so host→guest messages are
-picked up on the agent's existing tick rather than on a wakeup. A
-manager that attached to a VM it did not start has no doorbells either,
-and sweeps the ring on a timer instead.
-
-### The rpc channel
-
-Duplex: two independent single-producer/single-consumer message rings
-back to back, guest→host in the first half, host→guest in the second
-(`lsw/linkproto/byte_ring.hpp`).
-
-A ring is a 64-byte control block — monotonic `write_pos` and `read_pos`,
-a power-of-two `capacity`, a `dropped` counter — followed by the data
-area. `write_pos` is written only by the producer and `read_pos` only by
-the consumer, which is what makes the ring lock-free without a
-compare-and-swap. Records are `[len:u32][payload]` in native byte order
-(this is memory, not a network protocol), and writes are all-or-nothing:
-a message that does not fit is refused whole, so a reader never sees half
-a record. A record claiming more than was published means the two ends
-have lost sync; the consumer discards what is outstanding and resumes
-from the producer's position rather than wedging forever.
-
-The guest maps the BAR write-combined, which is weakly ordered in both
-directions, so every publish and consume goes through the explicit
-fences in `region_fence.hpp` rather than relying on
-`std::atomic_thread_fence`, which compiles to nothing on x86.
-
-The channel carries exactly the control messages described above — same
-requests, replies and events as the socket, so the two transports are
-interchangeable at the message level. The agent announces the channel
-with a `channel_hello` event as soon as it maps the region; requests
-arriving on the ring are dispatched by the same registry and answered on
-the ring they came from. The socket remains the primary path: moving
-traffic onto shared memory is a policy change (`$LSW_RPC_OVER_SHMEM=1`
-on the manager), not a protocol one.

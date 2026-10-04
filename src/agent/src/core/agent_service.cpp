@@ -44,12 +44,12 @@ int AgentService::run(Mode mode) {
     // The install gate. See the class comment.
     const auto gate_started = std::chrono::steady_clock::now();
     if (services->sessions().wait_for_desktop(gate_started + kGateTimeout, stop_requested_)) {
-        LSW_AGENT_INFO("agent: desktop usable after {}s — opening the listener",
+        LSW_AGENT_INFO("agent: desktop usable after {}s, opening the listener",
                        std::chrono::duration_cast<std::chrono::seconds>(
                            std::chrono::steady_clock::now() - gate_started)
                            .count());
     } else if (!stop_requested_.load()) {
-        LSW_AGENT_WARN("agent: desktop never became usable after 30 min — starting anyway");
+        LSW_AGENT_WARN("agent: desktop never became usable after 30 min; starting anyway");
     }
     if (stop_requested_.load()) {
         services->shutdown();

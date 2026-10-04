@@ -4,10 +4,10 @@
 #
 #   * ``--service`` — the ``lsw-agent`` Windows service, LocalSystem, in
 #     session 0, registered by the autounattend's LswPromote.ps1 at
-#     SetupComplete. Owns the manager link (TCP 5102 + the IVSHMEM ring),
-#     RPC dispatch, installs, consoles, and process launching into any
-#     session as that session's user (WTSQueryUserToken +
-#     CreateProcessAsUserW, the user's full token by default).
+#     SetupComplete. Owns the manager link (TCP 5102), RPC dispatch,
+#     installs, consoles, and process launching into any session as
+#     that session's user (WTSQueryUserToken + CreateProcessAsUserW,
+#     the user's full token by default).
 #   * ``--session --pipe NAME`` — a session helper the service keeps in
 #     each user session, for what only works from inside one: window
 #     enumeration and commands, UI Automation, HKCU, and the desktop gate
@@ -79,9 +79,6 @@ set(_lsw_agent_transport_sources
     src/transport/log_event_source.cpp
     src/transport/console_event_source.cpp
     src/transport/installer_event_source.cpp
-    src/transport/shmem.cpp
-    src/transport/ivshmem_region.cpp
-    src/transport/shmem_channel.cpp
 )
 set(_lsw_agent_rpc_sources
     src/rpc/registry.cpp
@@ -242,7 +239,7 @@ target_link_libraries(lsw-guest-agent
         winhttp       # Installer: HTTP(S) downloads
         dwmapi        # DWMWA_CLOAKED / EXTENDED_FRAME_BOUNDS
         runtimeobject # WinRT (RoInitialize / RoGetActivationFactory)
-        setupapi      # SetupDi* — locate the IVSHMEM PCI device
+        setupapi      # SetupDi* — enumerate the PCI display devices
         cfgmgr32      # CM_* helpers used by setupapi
         ole32         # COM (CoInitializeEx / CoCreateInstance for UIA)
         oleaut32      # COM BSTR/VARIANT used by UIA

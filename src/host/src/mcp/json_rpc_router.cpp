@@ -65,7 +65,7 @@ nlohmann::json JsonRpcRouter::on_tools_call(const nlohmann::json& params) {
         return ToolResult::error("unknown tool: " + name);
     }
     if (tool->requires_agent() && !agent_.has_target()) {
-        return ToolResult::error("No VM is currently targeted — cannot reach the agent.");
+        return ToolResult::error("No VM is currently targeted, so the agent cannot be reached.");
     }
     return tool->call(args);
 }

@@ -71,7 +71,7 @@ endif()
 #   bin/lsw-manager
 #   lib/lsw/remotewin                       the mirror's host half
 #   lib/lsw/accel-virt/qemu/                QEMU, its modules and data,
-#                                           the executor, av-renderer
+#                                           the executor
 #   lib/lsw/accel-virt/d3d/                 DXVK and vkd3d-proton
 #   share/lsw/guest/                        the agent, remotewin-guest.exe,
 #                                           av-drivers/, loaders/x64|x86/
@@ -95,8 +95,8 @@ set(LSW_INSTALL_GUESTDIR "share/lsw/guest")
 include(LSWDependencies)
 
 # ---- Subprojects ----
-# linkproto is the shared-memory region layout: the byte-for-byte
-# contract between the two ends of the VM boundary. Header-only, depends
+# linkproto is the wire contract: the byte-for-byte agreement between
+# the two ends of the VM boundary. Header-only, depends
 # on nothing but the standard library, and added unconditionally because
 # every configuration needs it — including a cross-build that compiles
 # nothing else here.
@@ -146,9 +146,9 @@ endif()
 # provisioning Windows or mirroring its windows.
 #
 # LSW consumes it as artifacts and links none of them. On the host it is
-# a patched QEMU with the virtio-gpu-av-pci device, libav_executor.so
-# and av-renderer, which the VM runs on, and DXVK and vkd3d-proton for
-# the host's Direct3D; for the guest it is the av-drivers tree —
+# a patched QEMU with the virtio-gpu-av-pci device and libav_executor.so,
+# which the VM runs on, and DXVK and vkd3d-proton for the host's
+# Direct3D; for the guest it is the av-drivers tree —
 # avgpu.sys, the user-mode drivers, provision.ps1 — which the payload
 # ISO carries and the guest installs as C:\av.
 #

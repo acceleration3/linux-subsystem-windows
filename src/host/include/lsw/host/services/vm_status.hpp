@@ -24,11 +24,6 @@ struct VmStatus {
     std::optional<vm::DomainDescription> next_boot;
     // The system disk image's virtual size, as its header says.
     std::optional<quint64> disk_bytes;
-    // The agent transport's shared region while the VM runs: its size,
-    // and whether this manager has its doorbells (it started the VM) or
-    // sweeps the ring on a timer (it attached to one already running).
-    quint64 region_bytes = 0;
-    bool doorbells = false;
 
     [[nodiscard]] bool running() const noexcept { return stats.running; }
     [[nodiscard]] bool agent_online() const noexcept { return stats.agent_reachable; }

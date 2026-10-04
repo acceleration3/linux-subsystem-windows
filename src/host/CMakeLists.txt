@@ -14,7 +14,7 @@
 #   lsw_host_core       platform  OS plumbing: DBus single-instance, vsock, XDG
 #                       config    persisted settings + the VM manifest
 #                       vm        libvirt lifecycle, the domain (accel-virt GPU
-#                                 included), stats, shared-memory transport
+#                                 included), stats
 #                       link      the multiplexed JSON channel to the guest agent
 #                       apps      guest app catalog, per-app config, launch, logs
 #                       mirror    the window mirror a launch starts, one per

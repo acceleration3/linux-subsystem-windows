@@ -25,7 +25,7 @@ depends=(
     # lsw-manager, remotewin
     'qt6-base' 'libvirt' 'libisofs' 'libvncserver' 'wimlib' 'hivex'
     'spdlog' 'fmt' 'zlib'
-    # accel-virt: the executor, av-renderer, QEMU and its modules
+    # accel-virt: the executor, QEMU and its modules
     'vulkan-icd-loader' 'ocl-icd' 'libglvnd' 'libpipewire'
     'glib2' 'pixman' 'gnutls' 'libpng' 'libjpeg-turbo' 'libsasl' 'snappy' 'lzo'
     'zstd' 'numactl' 'keyutils' 'libslirp' 'libbpf'

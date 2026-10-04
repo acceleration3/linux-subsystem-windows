@@ -17,7 +17,7 @@
 // Convenience: drop the spdlog macros into the lsw namespace under
 // shorter names. They expand to no-ops below the configured level.
 //
-//   LSW_TRACE("shmem: drained {} bytes", n);
+//   LSW_TRACE("frame_reader: drained {} bytes", n);
 //   LSW_DEBUG("connection {} accepted", peer.fd);
 //   LSW_INFO("listening on {}", listener.description());
 //   LSW_WARN("agent_rpc_client: id={} timed out", id);

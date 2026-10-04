@@ -15,22 +15,22 @@ namespace lsw::host::platform {
 // exists, which a caller treats as "not available here".
 //
 //   LSW_AV_DRIVERS      the driver tree (the guest's C:\av)
-//   LSW_AV_QEMU_BUILD   the directory holding qemu/, libav_executor.so
-//                       and av-renderer, as accel-virt's build-qemu does
+//   LSW_AV_QEMU_BUILD   the directory holding qemu/ and
+//                       libav_executor.so, as accel-virt's build-qemu does
 //   LSW_AV_D3D_PATH     DXVK's and vkd3d-proton's native libraries
 //
 // The QEMU override names a directory rather than each file because
-// the three only work together: a device built by one QEMU tree loads
+// the two only work together: a device built by one QEMU tree loads
 // the executor ABI that tree was built against. For the same reason the
-// three are looked up as a set — the first of the override, the build
-// tree and the installed tree that has the QEMU binary supplies all of
-// them, so a stale build tree never pairs its QEMU with an installed
+// two are looked up as a set — the first of the override, the build
+// tree and the installed tree that has the QEMU binary supplies both,
+// so a stale build tree never pairs its QEMU with an installed
 // executor.
 //
 // Installed, relative to <prefix>:
 //
 //   lib/lsw/accel-virt/qemu/          qemu-system-x86_64, its modules,
-//                                     libav_executor.so, av-renderer
+//                                     libav_executor.so
 //   lib/lsw/accel-virt/qemu/share/    QEMU's firmware and ROMs (-L)
 //   lib/lsw/accel-virt/d3d/           DXVK and vkd3d-proton
 //   share/lsw/guest/av-drivers/       the driver tree
@@ -52,11 +52,8 @@ public:
     // qemu-bundle/ next to itself and needs no help.
     [[nodiscard]] static QString qemu_data_dir();
     // The device's executor= library, which runs guest commands on the
-    // host GPU.
+    // host GPU, inside QEMU.
     [[nodiscard]] static QString executor();
-    // The device's renderer=, the process the executor runs in when the
-    // host GPU stack is isolated from QEMU.
-    [[nodiscard]] static QString renderer();
     // AV_D3D_PATH. Without it the host serves no Direct3D and the
     // guest's desktop crash-loops.
     [[nodiscard]] static QString d3d_lib_dir();
@@ -72,11 +69,11 @@ public:
     [[nodiscard]] static QString vulkan_loader(bool x86);
 
 private:
-    // The directory the QEMU binary, the executor and the renderer are
-    // looked up in, given where the binary itself sits within it:
-    // ``$LSW_AV_QEMU_BUILD`` or the build tree's accel-virt/qemu (the
-    // binary under qemu/), else the installed lib/lsw/accel-virt/qemu
-    // (the binary at its top). Empty paths when none has the binary.
+    // The directory the QEMU binary and the executor are looked up in,
+    // given where the binary itself sits within it: ``$LSW_AV_QEMU_BUILD``
+    // or the build tree's accel-virt/qemu (the binary under qemu/), else
+    // the installed lib/lsw/accel-virt/qemu (the binary at its top).
+    // Empty paths when none has the binary.
     struct QemuTree {
         QString dir;
         QString binary;

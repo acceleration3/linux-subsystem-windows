@@ -11,8 +11,8 @@ namespace lsw::host::wizard {
 class Wizard;
 
 // SetupPage-style view of the BuildingPayloadIso stage. Two fixed
-// task rows — "Download virtio-win.iso" (with live %) and "Build LSW
-// payload ISO" — driven by the pipeline's payload_step_* signals.
+// rows, lsw-payload.iso and the avgpu driver package staged onto it,
+// driven by the pipeline's payload_step_* signals.
 // Auto-advances to Install when the stage finishes.
 class PayloadPage : public PipelinePage {
     Q_OBJECT

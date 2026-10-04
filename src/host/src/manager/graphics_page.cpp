@@ -162,6 +162,15 @@ public:
         auto* caption = Widgets::caption(key);
         auto* line = new QHBoxLayout;
         line->setSpacing(6);
+        // Nothing known but a reason: the reason is the row. A lone "-"
+        // in front of it reads as a bullet point, not as "unknown".
+        if (value == QLatin1String("-") && !note.isEmpty()) {
+            line->addWidget(Widgets::meta(note, true), 1);
+            grid_->addWidget(caption, row_, 0, Qt::AlignLeft | Qt::AlignVCenter);
+            grid_->addLayout(line, row_, 1);
+            ++row_;
+            return line;
+        }
         auto* shown = new QLabel(value);
         if (tone != nullptr) {
             shown->setProperty(Theme::Tone::kProperty, QString::fromLatin1(tone));
@@ -299,12 +308,8 @@ QStringList GraphicsPage::status_facts() const {
         facts << QStringLiteral("host-gpu %1")
                      .arg(device != nullptr ? short_uuid(device->host_gpu) : QStringLiteral("auto"));
     }
-    if (device != nullptr) {
-        if (device->hostmem_mib > 0) {
-            facts << QStringLiteral("hostmem %1").arg(window_size(device->hostmem_mib));
-        }
-        facts << (device->isolated() ? QStringLiteral("renderer av-renderer")
-                                     : QStringLiteral("renderer in QEMU"));
+    if (device != nullptr && device->hostmem_mib > 0) {
+        facts << QStringLiteral("hostmem %1").arg(window_size(device->hostmem_mib));
     }
     const QString preferred = g.live_modes.value_or(QString{}).section(QLatin1Char(','), 0, 0);
     if (const auto mode = config::DisplayModes::parse(preferred)) {
@@ -318,10 +323,6 @@ QStringList GraphicsPage::status_facts() const {
         QStringList what;
         if (g.pending.host_window_mib) {
             what << QStringLiteral("hostmem %1").arg(window_size(*g.pending.host_window_mib));
-        }
-        if (g.pending.isolate_renderer) {
-            what << (*g.pending.isolate_renderer ? QStringLiteral("av-renderer")
-                                                 : QStringLiteral("renderer in QEMU"));
         }
         if (g.pending.adapters) {
             what << QStringLiteral("adapters");
@@ -359,8 +360,7 @@ QString GraphicsPage::signature() const {
     const auto& facts = g.log_facts;
     parts << QString::number(status_.vm().running()) << QString::number(guest.valid)
           << QString::number(guest.test_signing) << QString::number(guest.driver_search_off)
-          << g.live_modes.value_or(QStringLiteral("-")) << QString::number(g.renderer_pid)
-          << QString::number(g.renderer_restarts) << QString::number(g.probed)
+          << g.live_modes.value_or(QStringLiteral("-")) << QString::number(g.probed)
           << QString::number(facts.host_window_taken.value_or(false))
           << QString::number(facts.host_window_taken.has_value())
           << QString::number(facts.user_mode_submission.value_or(false))
@@ -379,13 +379,11 @@ QString GraphicsPage::signature() const {
     if (const vm::DomainDescription* definition = vm.definition()) {
         for (const auto& device : definition->gpus) {
             parts << device.host_gpu << QString::number(device.display)
-                  << QString::number(device.hostmem_mib) << QString::number(device.isolated());
+                  << QString::number(device.hostmem_mib);
         }
     }
     parts << QString::number(g.pending.host_window_mib.value_or(0))
-          << QString::number(g.pending.isolate_renderer.has_value())
-          << QString::number(g.pending.isolate_renderer.value_or(false))
-          << QString::number(g.pending.adapters) << QString::number(g.renderer_available);
+          << QString::number(g.pending.adapters);
     return parts.join(QLatin1Char('\x1f'));
 }
 
@@ -454,12 +452,6 @@ QWidget* GraphicsPage::build_warnings() {
                     this, [this] { status_.refresh(Area::Host); });
             break;
         case Warning::Kind::DisplayNotRunning:
-            connect(strip->add_button(QStringLiteral("Open the driver log")),
-                    &QPushButton::clicked, this, &GraphicsPage::open_log);
-            break;
-        case Warning::Kind::RendererRestarted:
-            connect(strip->add_button(QStringLiteral("Dismiss"), Theme::Role::kQuiet),
-                    &QPushButton::clicked, &alerts_, &GraphicsAlerts::dismiss_restart);
             connect(strip->add_button(QStringLiteral("Open the driver log")),
                     &QPushButton::clicked, this, &GraphicsPage::open_log);
             break;
@@ -610,7 +602,7 @@ QWidget* GraphicsPage::build_device() {
     KeyValues rows(panel.body);
 
     if (device == nullptr) {
-        rows.add(QStringLiteral("Host window"), QStringLiteral("—"), Theme::Tone::kFaint,
+        rows.add(QStringLiteral("Host window"), QStringLiteral("-"), Theme::Tone::kFaint,
                  QStringLiteral("no machine is defined"));
     } else {
         QString window_note = live ? QStringLiteral("write-back")
@@ -628,43 +620,8 @@ QWidget* GraphicsPage::build_device() {
             window_tone = Theme::Tone::kAmber;
         }
         rows.add(QStringLiteral("Host window"),
-                 device->hostmem_mib > 0 ? window_size(device->hostmem_mib) : QStringLiteral("—"),
+                 device->hostmem_mib > 0 ? window_size(device->hostmem_mib) : QStringLiteral("-"),
                  window_tone, window_note);
-    }
-
-    if (device != nullptr) {
-        QString note;
-        const char* tone = Theme::Tone::kOk;
-        QString value = QStringLiteral("Isolated");
-        if (!device->isolated()) {
-            value = QStringLiteral("In QEMU");
-            tone = nullptr;
-            note = settings_.bool_value(K::kIsolateRenderer) && !g.renderer_available
-                       ? QStringLiteral("av-renderer is not installed; a host driver crash ends "
-                                        "the guest")
-                       : QStringLiteral("a host driver crash ends the guest");
-        } else if (!vm.running()) {
-            note = QStringLiteral("starts with the guest");
-        } else if (g.renderer_pid == 0) {
-            tone = Theme::Tone::kAmber;
-            note = QStringLiteral("no av-renderer process found");
-        } else {
-            const QString restarts =
-                g.renderer_restarts == 0
-                    ? QStringLiteral("no restarts")
-                    : QStringLiteral("%1 restart%2, the last at %3")
-                          .arg(g.renderer_restarts)
-                          .arg(g.renderer_restarts == 1 ? QString{} : QStringLiteral("s"))
-                          .arg(g.last_renderer_restart.toString(QStringLiteral("HH:mm")));
-            note = QStringLiteral("pid %1, %2").arg(g.renderer_pid).arg(restarts);
-        }
-        if (g.pending.isolate_renderer) {
-            note += QStringLiteral("; %1 after a restart")
-                        .arg(*g.pending.isolate_renderer ? QStringLiteral("isolated")
-                                                         : QStringLiteral("in QEMU"));
-            tone = Theme::Tone::kAmber;
-        }
-        rows.add(QStringLiteral("Renderer"), value, tone, note);
     }
 
     QString preferred = offered.value(0);
@@ -739,7 +696,7 @@ QWidget* GraphicsPage::build_guest_driver() const {
                                 ? QStringLiteral("Device")
                                 : short_name(platform::HostGpus::adapter_name(adapter.gpu));
         if (!known) {
-            rows.add(key, QStringLiteral("—"), Theme::Tone::kFaint, off_note);
+            rows.add(key, QStringLiteral("-"), Theme::Tone::kFaint, off_note);
         } else if (!adapter.guest) {
             rows.add(key, QStringLiteral("Absent"), Theme::Tone::kBad,
                      QStringLiteral("Windows lists no adapter for it"));
@@ -755,9 +712,9 @@ QWidget* GraphicsPage::build_guest_driver() const {
         }
     }
     if (!known) {
-        rows.add(QStringLiteral("Test signing"), QStringLiteral("—"), Theme::Tone::kFaint,
+        rows.add(QStringLiteral("Test signing"), QStringLiteral("-"), Theme::Tone::kFaint,
                  QStringLiteral("the driver needs it"));
-        rows.add(QStringLiteral("Driver search"), QStringLiteral("—"), Theme::Tone::kFaint,
+        rows.add(QStringLiteral("Driver search"), QStringLiteral("-"), Theme::Tone::kFaint,
                  QStringLiteral("must be off"));
     } else {
         rows.add(QStringLiteral("Test signing"),
@@ -779,7 +736,7 @@ QWidget* GraphicsPage::build_guest_driver() const {
     const std::optional<bool> fences =
         facts.native_fences.has_value() ? facts.native_fences : guest.native_fences;
     if (!ums.has_value()) {
-        rows.add(QStringLiteral("Submission"), QStringLiteral("—"), Theme::Tone::kFaint,
+        rows.add(QStringLiteral("Submission"), QStringLiteral("-"), Theme::Tone::kFaint,
                  QStringLiteral("not reported yet"));
     } else {
         rows.add(QStringLiteral("Submission"),

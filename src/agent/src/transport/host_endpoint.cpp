@@ -11,9 +11,6 @@
 #include "lsw/agent/transport/event_pump.hpp"
 #include "lsw/agent/transport/installer_event_source.hpp"
 #include "lsw/agent/transport/log_event_source.hpp"
-#include "lsw/agent/transport/shmem.hpp"
-#include "lsw/agent/transport/shmem_channel.hpp"
-#include "lsw/linkproto/commands.hpp"
 #include "lsw/linkproto/envelope.hpp"
 #include "lsw/linkproto/frame_reader.hpp"
 
@@ -94,8 +91,6 @@ struct ConnectionStats {
 class RequestDispatcher {
 public:
     // ``reply`` sends one JSON message back the way the request came.
-    // A request that arrived over the shared-memory channel is answered
-    // there, not on the socket — same messages, different pipe.
     using ReplySink = std::function<bool(const nlohmann::json&)>;
 
     RequestDispatcher(rpc::RpcContext& ctx, ConnectionStats& stats) : ctx_(&ctx), stats_(&stats) {}
@@ -242,21 +237,11 @@ bool HostEndpoint::run(std::atomic<bool>& stop_flag) {
 
         reap_finished_connections();
 
-        // At most one connection produces onto the region's RPC ring.
-        // ``exchange`` is the claim: whoever gets false takes it.
-        const bool owns_shmem = !shmem_channel_claimed_.exchange(true);
-
         auto conn = std::make_unique<Connection>();
         Connection* raw = conn.get();
-        raw->thread = std::thread([this, c, peer_desc, owns_shmem, raw] {
-            handle_connection(static_cast<std::intptr_t>(c), owns_shmem);
+        raw->thread = std::thread([this, c, peer_desc, raw] {
+            handle_connection(static_cast<std::intptr_t>(c));
             ::closesocket(c);
-            if (owns_shmem) {
-                // Release the ring so the next connection can take it —
-                // otherwise a manager restart would leave the channel
-                // permanently unclaimed.
-                shmem_channel_claimed_.store(false);
-            }
             LSW_AGENT_INFO("host_endpoint: connection closed (peer {})", peer_desc);
             raw->finished.store(true);
         });
@@ -303,7 +288,7 @@ void HostEndpoint::reap_finished_connections() {
     }
 }
 
-void HostEndpoint::handle_connection(std::intptr_t accepted_fd, bool owns_shmem_channel) {
+void HostEndpoint::handle_connection(std::intptr_t accepted_fd) {
     auto s = static_cast<SOCKET>(accepted_fd);
     const std::string peer = peer_address(s);
 
@@ -312,29 +297,8 @@ void HostEndpoint::handle_connection(std::intptr_t accepted_fd, bool owns_shmem_
     EnvelopeWriter writer{accepted_fd, peer};
     RequestDispatcher dispatcher{rpc_ctx, stats};
 
-    // Second transport for the same messages: the shared region's RPC
-    // channel. Opening the device here rather than waiting for the first
-    // captured window means the channel is usable for control traffic
-    // even if nothing is ever mirrored. Failure is expected and fine on
-    // a guest whose IVSHMEM driver is not installed yet — the socket
-    // carries everything either way.
-    //
-    // Only the connection that claimed the ring touches it. A second
-    // connection producing onto the same single-producer ring would
-    // interleave two message streams into one, and the consumer is in
-    // another address space, so there is no lock that could help.
-    ShmemChannel shmem_channel{shmem()};
-    if (owns_shmem_channel && !shmem().available()) {
-        (void)shmem().open();
-    }
-    const bool shmem_usable = owns_shmem_channel && shmem_channel.available();
     const auto reply_over_socket = [&](const nlohmann::json& message) {
         return writer.send_control(message);
-    };
-    const auto reply_over_shmem = [&](const nlohmann::json& message) {
-        // A dropped reply is not fatal to the connection: the manager
-        // times the call out and retries. Losing the SOCKET is.
-        return shmem_channel.send(message) || true;
     };
 
     // Everything that pushes to the manager, in one list. Ordering is the
@@ -380,32 +344,6 @@ void HostEndpoint::handle_connection(std::intptr_t accepted_fd, bool owns_shmem_
         return dispatcher.handle(frame, reply_over_socket);
     };
 
-    // Announce the channel to the manager as soon as the connection is
-    // up, so the two ends agree it works before anything depends on it.
-    if (shmem_usable) {
-        (void)shmem_channel.send(nlohmann::json{
-            {"event", linkproto::topic::kChannelHello},
-            {"ring_bytes", shmem().rpc_to_host().capacity()},
-        });
-        LSW_AGENT_INFO("host_endpoint: shmem rpc channel available ({} KiB each way)",
-                       shmem().rpc_to_host().capacity() / 1024);
-    }
-
-    // Requests arriving over the shared region are dispatched exactly
-    // like socket ones and answered on the ring they came from.
-    const auto drain_shmem_channel = [&] {
-        if (!shmem_usable) {
-            // Not our ring. Draining it here would steal requests from
-            // the connection that owns it.
-            return;
-        }
-        for (auto& message : shmem_channel.receive()) {
-            if (is_request(message)) {
-                (void)dispatcher.handle(message, reply_over_shmem);
-            }
-        }
-    };
-
     for (;;) {
         if (stop_flag_ != nullptr && stop_flag_->load()) {
             LSW_AGENT_INFO("host_endpoint: closing the connection from {}: the agent is "
@@ -445,8 +383,6 @@ void HostEndpoint::handle_connection(std::intptr_t accepted_fd, bool owns_shmem_
                 return;
             }
         }
-
-        drain_shmem_channel();
 
         if (!pump.drain(send_event)) {
             return;

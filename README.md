@@ -41,9 +41,9 @@ card. It has two halves, and LSW builds both:
   which the VM runs on in place of the distribution's QEMU, and
   `libav_executor.so`, which runs every command the guest sends on the
   host's own Vulkan, EGL and OpenCL — with DXVK and vkd3d-proton, built
-  natively, for Direct3D. `av-renderer` can hold that executor in a
-  process of its own, so a host driver crash costs the guest a device
-  reset rather than the VM.
+  natively, for Direct3D. The executor runs inside QEMU: libvirt
+  confines QEMU with a seccomp filter that lets it start no process,
+  so accel-virt's separate renderer process is not used.
 - *In the guest*, `avgpu.sys`, a WDDM 3.2 kernel-mode display miniport,
   and the user-mode drivers beside it — `avumd.dll` for Direct3D,
   `avvk.dll`, `avgl.dll` and `avcl.dll`, each again for 32-bit
@@ -74,8 +74,8 @@ What this repository adds is the VM around both: provisioning Windows,
 running it, and presenting its applications as native Linux windows.
 
 `src/linkproto/` is the one module the Linux manager and the Windows
-guest agent both compile: envelope framing, the IVSHMEM region layout,
-and the RPC command vocabulary. It is header-only and depends on
+guest agent both compile: envelope framing, stream reassembly, and the
+RPC command vocabulary. It is header-only and depends on
 nothing but the standard library — no Qt, no spdlog, no POSIX, no Win32.
 Anything either side could change unilaterally and still compile does
 not belong there.
@@ -93,7 +93,7 @@ src/host/
 
   platform/   DBus single-instance, vsock, XDG places
   config/     settings + the VM manifest
-  vm/         libvirt lifecycle, stats, shared-memory transport
+  vm/         libvirt lifecycle, the domain, stats
   link/       the multiplexed JSON channel to the guest agent
   apps/       guest app catalog, per-app config, launch, logs
   mirror/     the window mirror a launch starts, one per application
@@ -153,7 +153,7 @@ build/
                               package/ (avgpu.sys, avgpu.inf, the user-mode
                               drivers, package.sha256), loaders/{x64,x86}/OpenCL.dll
   accel-virt/qemu/            qemu/qemu-system-x86_64 and its modules,
-                              libav_executor.so, av-renderer
+                              libav_executor.so
   accel-virt/d3d/lib/         DXVK and vkd3d-proton for the host
 ```
 

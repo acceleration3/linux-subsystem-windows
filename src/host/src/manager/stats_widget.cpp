@@ -17,7 +17,7 @@ namespace {
 
 // What a gauge says when there is nothing to read.
 QString dash() {
-    return QStringLiteral("—");
+    return QStringLiteral("-");
 }
 
 }  // namespace
@@ -87,7 +87,7 @@ void StatsWidget::update_stats(const vm::VmStats& s) {
     if (s.agent_reachable && s.memory_total_bytes > 0) {
         show_usage(ram_, s.memory_used_bytes, s.memory_total_bytes);
     } else if (s.memory_total_bytes > 0) {
-        ram_.set(0, QStringLiteral("— / %1").arg(ui::Format::gib(
+        ram_.set(0, QStringLiteral("- / %1").arg(ui::Format::gib(
                         static_cast<qint64>(s.memory_total_bytes))));
     } else {
         ram_.set(0, dash());

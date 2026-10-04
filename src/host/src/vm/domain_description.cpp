@@ -58,8 +58,6 @@ DomainDescription::GpuDevice gpu_from(const QStringList& options) {
                             || value == QLatin1StringView("no"));
         } else if (key == QLatin1StringView("hostmem")) {
             gpu.hostmem_mib = DomainDescription::size_mib(value);
-        } else if (key == QLatin1StringView("renderer")) {
-            gpu.renderer = value;
         } else if (key == QLatin1StringView("modes")) {
             gpu.modes = value;
         }
@@ -134,7 +132,6 @@ std::optional<DomainDescription> DomainDescription::parse(const QString& xml) {
     bool saw_domain = false;
     bool in_devices = false;
     bool in_disk = false;
-    bool in_shmem = false;
     bool in_commandline = false;
     bool disk_done = false;
     QString previous_arg;
@@ -148,8 +145,6 @@ std::optional<DomainDescription> DomainDescription::parse(const QString& xml) {
             } else if (name == QLatin1StringView("disk") && in_disk) {
                 in_disk = false;
                 disk_done = true;
-            } else if (name == QLatin1StringView("shmem")) {
-                in_shmem = false;
             } else if (name == QLatin1StringView("commandline")) {
                 in_commandline = false;
             }
@@ -174,16 +169,10 @@ std::optional<DomainDescription> DomainDescription::parse(const QString& xml) {
         } else if (in_devices && name == QLatin1StringView("disk") && !disk_done
                    && attrs.value(QLatin1StringView("device")) == QLatin1StringView("disk")) {
             in_disk = true;
-        } else if (in_disk && name == QLatin1StringView("driver")) {
-            out.disk_iothread = !attrs.value(QLatin1StringView("iothread")).isEmpty();
         } else if (in_disk && name == QLatin1StringView("source")) {
             out.disk_path = attrs.value(QLatin1StringView("file")).toString();
         } else if (in_disk && name == QLatin1StringView("target")) {
             out.disk_bus = attrs.value(QLatin1StringView("bus")).toString();
-        } else if (in_devices && name == QLatin1StringView("shmem")) {
-            in_shmem = true;
-        } else if (in_shmem && name == QLatin1StringView("msi")) {
-            out.shmem_vectors = attrs.value(QLatin1StringView("vectors")).toInt();
         } else if (name == QLatin1StringView("commandline")) {
             in_commandline = true;
         } else if (in_commandline && name == QLatin1StringView("arg")) {

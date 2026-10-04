@@ -56,6 +56,14 @@ void StatusPill::set_cell(QTableWidget* table, int row, int column, State state,
     if (table == nullptr || row < 0 || row >= table->rowCount()) {
         return;
     }
+    // The view deletes a replaced cell widget with deleteLater, so until
+    // the event loop next runs the old pill is still a child of the
+    // viewport — at whatever geometry it last had, which for one set
+    // before the table was laid out is the top-left corner, over the
+    // first row's text. Hidden now, it cannot be seen in the meantime.
+    if (QWidget* previous = table->cellWidget(row, column)) {
+        previous->hide();
+    }
     auto* holder = new QWidget;
     auto* layout = new QHBoxLayout(holder);
     layout->setContentsMargins(8, 0, 8, 0);

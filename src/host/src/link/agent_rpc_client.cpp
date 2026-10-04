@@ -2,15 +2,12 @@
 
 #include "lsw/host/link/agent_reply.hpp"
 #include "lsw/host/link/pending_calls.hpp"
-#include "lsw/host/vm/ivshmem_server.hpp"
-#include "lsw/host/vm/shmem_region.hpp"
 
 #include "lsw/base/log.hpp"
 
 #include "lsw/linkproto/commands.hpp"
 #include "lsw/linkproto/envelope.hpp"
 #include "lsw/linkproto/frame_reader.hpp"
-#include "lsw/linkproto/region.hpp"
 
 #include <QtConcurrent>
 
@@ -27,12 +24,6 @@ namespace {
 
 constexpr int kRecvChunk = 64 * 1024;
 constexpr int kReconnectBackoffMs = 500;
-
-// Sweep interval for a region with no doorbells. Fast enough that a
-// mirror of a 60 Hz window misses at most one frame's worth of latency,
-// and cheap enough to leave running: a sweep that finds nothing reads
-// two words per slot.
-constexpr int kShmemPollMs = 8;
 
 // The envelope framing, the big-endian codecs and the command names all
 // come from lsw/linkproto — the same headers the guest agent compiles.
@@ -79,99 +70,6 @@ void AgentRpcClient::clear_target() {
     set_target(0, 0);
 }
 
-void AgentRpcClient::attach_shmem(vm::IvshmemServer* server, vm::ShmemRegion* region) {
-    if (shmem_server_ == server && shmem_region_ == region) {
-        return;
-    }
-    detach_shmem();
-    shmem_server_ = server;
-    shmem_region_ = region;
-    if (shmem_server_ != nullptr) {
-        LSW_INFO("shmem: attached to ivshmem server (region={})",
-                 static_cast<const void*>(shmem_region_));
-        connect(shmem_server_, &vm::IvshmemServer::channel_ready, this,
-                &AgentRpcClient::on_shmem_channel_ready);
-        return;
-    }
-    if (shmem_region_ != nullptr) {
-        // A region with no server: this manager attached to a VM it did
-        // not start, so nothing will ring a doorbell here. Sweep instead.
-        LSW_INFO("shmem: attached to a region with no doorbells — polling it every "
-                 "{} ms",
-                 kShmemPollMs);
-        shmem_poll_ = new QTimer(this);
-        shmem_poll_->setInterval(kShmemPollMs);
-        connect(shmem_poll_, &QTimer::timeout, this, &AgentRpcClient::poll_shmem);
-        shmem_poll_->start();
-    }
-}
-
-void AgentRpcClient::poll_shmem() {
-    if (shmem_region_ == nullptr) {
-        return;
-    }
-    // The guest rings a doorbell we will never hear, so the ring is
-    // drained on a sweep instead. Empty is the common case and costs
-    // one load.
-    on_shmem_channel_ready(linkproto::kChannelRpc);
-}
-
-void AgentRpcClient::detach_shmem() {
-    if (shmem_poll_ != nullptr) {
-        shmem_poll_->stop();
-        shmem_poll_->deleteLater();
-        shmem_poll_ = nullptr;
-    }
-    if (shmem_server_ != nullptr) {
-        disconnect(shmem_server_, &vm::IvshmemServer::channel_ready, this,
-                   &AgentRpcClient::on_shmem_channel_ready);
-        shmem_server_ = nullptr;
-    }
-    shmem_region_ = nullptr;
-    shmem_channel_live_.store(false);
-}
-
-void AgentRpcClient::on_shmem_channel_ready(unsigned kind) {
-    if (shmem_region_ == nullptr || kind != linkproto::kChannelRpc) {
-        // The command-stream channel has no consumer yet; its doorbell
-        // is ignored rather than mistaken for control traffic.
-        return;
-    }
-    auto& ring = shmem_region_->rpc_from_guest();
-    if (!ring.valid()) {
-        return;
-    }
-    if (shmem_scratch_.size() < ring.max_message()) {
-        shmem_scratch_.resize(ring.max_message());
-    }
-    // Every read either consumes a record or resynchronises the ring, so
-    // draining to empty terminates.
-    while (!ring.empty()) {
-        const std::size_t n = ring.read(shmem_scratch_.data(), shmem_scratch_.size());
-        if (n == 0) {
-            continue;
-        }
-        const auto message = nlohmann::json::parse(shmem_scratch_.data(),
-                                                   shmem_scratch_.data() + n, nullptr,
-                                                   /*allow_exceptions=*/false);
-        if (message.is_discarded()) {
-            LSW_WARN("agent_rpc_client: malformed shmem message ({} bytes)", n);
-            continue;
-        }
-        // The one message only this pipe carries. Everything else is
-        // routed exactly like its socket-borne twin.
-        const auto topic = message.is_object() ? message.find("event") : message.end();
-        if (topic != message.end() && *topic == linkproto::topic::kChannelHello) {
-            shmem_channel_live_.store(true);
-            LSW_INFO("agent_rpc_client: guest announced the shmem RPC channel "
-                     "({} KiB rings)",
-                     message.value("ring_bytes", std::uint64_t{0}) / 1024);
-            continue;
-        }
-        route_message(message);
-    }
-}
-
 EventSubscription AgentRpcClient::subscribe(std::string_view topic, EventHandler handler) {
     return events_->subscribe(topic, std::move(handler));
 }
@@ -216,35 +114,6 @@ bool AgentRpcClient::ensure_connected_locked() {
 // Send one envelope frame on the wire. ``payload`` is the raw bytes
 // after the 5-byte header. Caller holds io_mu_.
 bool AgentRpcClient::send_locked(const QByteArray& body) {
-    // Prefer the shared-memory RPC channel when it is live AND policy
-    // says to use it.
-    //
-    // The two transports carry identical messages — same requests, same
-    // replies, same ids — so this really is a routing decision and not a
-    // protocol one. What it is NOT is free: the ring path has never
-    // carried the control plane end to end on a real guest, and the
-    // failure mode of getting it wrong is a VM that boots and then does
-    // not answer. So the default stays TCP until the guest path has been
-    // exercised (plan phase E3), and ``$LSW_RPC_OVER_SHMEM=1`` is how it
-    // gets exercised.
-    if (prefer_shmem_rpc_ && shmem_channel_live_.load() && shmem_region_ != nullptr) {
-        auto& ring = shmem_region_->rpc_to_guest();
-        if (ring.valid()
-            && ring.write(reinterpret_cast<const std::uint8_t*>(body.constData()),
-                          static_cast<std::size_t>(body.size()))) {
-            // No doorbell in this direction, and there cannot be one:
-            // the manager's ivshmem server holds only its OWN eventfds,
-            // so there is no interrupt from host to guest. The agent
-            // picks the message up on its next tick (~16 ms), which is
-            // the latency this direction has and the reason the guest
-            // polls rather than sleeps.
-            return true;
-        }
-        // A full ring or a channel that went away: fall through to the
-        // socket rather than dropping the request. The socket is still
-        // connected — that is the whole reason it is kept.
-    }
-
     // ``body`` is a JSON message; wrap it as a control envelope.
     if (!client_.is_open()) return false;
     std::uint8_t header[linkproto::kHeaderSize];

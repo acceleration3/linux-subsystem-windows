@@ -155,7 +155,7 @@ bool Launcher::launch(const std::string& app_id, const std::string& extra_args,
             LSW_AGENT_WARN("launch: environment overrides are lost on the shell "
                            "fallback path (packaged app / alias / document)");
         }
-        LSW_AGENT_WARN("launch: direct spawn failed (GetLastError={}) — retrying via shell "
+        LSW_AGENT_WARN("launch: direct spawn failed (GetLastError={}); retrying via shell "
                        "(explorer)",
                        win::ErrorText::win32(err));
         win::SpawnOptions shell;
