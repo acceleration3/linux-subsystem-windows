@@ -50,7 +50,8 @@ it:
 
 ```sh
 distrobox enter Arch -- sudo pacman -Syu --needed \
-    base-devel git cmake ninja python meson glslang clang lld llvm \
+    base-devel git cmake ninja python meson glslang clang lld llvm sdl3 \
+    wine \
     mingw-w64-gcc \
     qt6-base libvirt vulkan-headers vulkan-icd-loader libisofs libvncserver \
     libxcb wimlib hivex zlib spdlog fmt nlohmann-json \
@@ -60,6 +61,12 @@ distrobox enter Arch -- sudo pacman -Syu --needed \
     systemd-libs fuse3 pam libcbor \
     curl unzip xz zstd
 ```
+
+Two of those are easy to wonder about: `wine` is there only for `widl`, the
+IDL compiler vkd3d-proton's build needs, and `sdl3` because DXVK's native
+build will not configure without a window-system backend (it also loads
+SDL3 at run time, which is why the package depends on it).
+
 
 The second half of that list is QEMU's: it links what it finds, and
 what it links becomes a dependency of the package, so the container
