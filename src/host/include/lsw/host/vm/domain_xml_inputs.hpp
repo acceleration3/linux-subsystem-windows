@@ -3,6 +3,7 @@
 #include "lsw/linkproto/region_layout.hpp"
 
 #include <QString>
+#include <QStringList>
 #include <QVector>
 
 namespace lsw::host::vm {
@@ -45,18 +46,48 @@ struct DomainXmlInputs {
     int ivshmem_size_mib = linkproto::kDefaultRegionMib;
 
     // Folders on this machine the guest can see, as virtiofs devices.
-    //
-    // Empty by default and that matters: virtiofs needs the guest's RAM
-    // shared, which changes how QEMU backs it, and it needs virtiofsd
-    // on the host. A domain with no shares emits neither the shared
-    // backing nor the devices, so the ordinary case is byte for byte
-    // what it was.
+    // They need virtiofsd on the host and the guest's RAM shared, and
+    // the RAM is shared regardless now (the GPU needs it too), so a
+    // share costs only its own device.
     QVector<DomainShare> shares;
 
-    // How much video memory the emulated adapter has, in KiB. Bounds
-    // the modes the guest can set, so it follows the resolution the
-    // user asked for rather than capping it at a constant.
-    int video_vram_kib = 16384;
+    // ---- The GPU: accel-virt's virtio-gpu-av-pci ----------------------
+
+    // The first definition, made while Windows Setup runs, also gets a
+    // plain VGA adapter as the primary display. Until avgpu.sys is
+    // installed nothing gives the GPU device a firmware framebuffer, so
+    // Setup and the install console would be black. Every later
+    // definition leaves it out: a second display adapter takes the
+    // desktop from the real one.
+    bool install_display = false;
+    // The display adapter's host GPU: a Vulkan device UUID, or empty for
+    // the device's own "auto".
+    QString host_gpu_uuid;
+    // One render-only adapter (display=off) per UUID, for the host's
+    // other GPUs. Frames drawn on one are shown through the display
+    // adapter.
+    QStringList render_only_gpu_uuids;
+    // The device's host window, ``hostmem=``, in MiB.
+    int host_window_mib = 8192;
+    // Run the host GPU stack in av-renderer rather than in QEMU, so a
+    // host driver crash is a device reset rather than a dead VM.
+    bool isolate_renderer = true;
+    // The resolutions the display offers, the device's ``modes``: WxH
+    // entries between commas, the first preferred. Empty is the host
+    // monitors' own modes.
+    QString display_modes;
+    // The file the driver's log (I/O port 0x402) is written to. Empty
+    // leaves the debug console out.
+    QString avgpu_log;
+
+    // accel-virt's host half. Empty is "look it up": Lifecycle fills
+    // each from platform::AccelVirtPaths before it defines the domain,
+    // so only a caller that wants a specific build sets them.
+    QString qemu_binary;      // <emulator>
+    QString qemu_module_dir;  // QEMU_MODULE_DIR
+    QString executor;         // executor=
+    QString renderer;         // renderer=, when isolate_renderer
+    QString d3d_lib_dir;      // AV_D3D_PATH
 };
 
 }  // namespace lsw::host::vm

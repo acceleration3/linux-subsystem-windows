@@ -58,13 +58,13 @@ WelcomePage::WelcomePage(QWidget* parent) : WizardPage(parent) {
                                               "local Windows account.")),
                     0, 1);
     grid->addWidget(stage_card(QStringLiteral("03"), QStringLiteral("Payload"),
-                               QStringLiteral("The answer file, the guest binaries, and "
-                                              "the drivers that must exist on the very "
-                                              "first boot.")),
+                               QStringLiteral("Answer file, guest binaries, and the "
+                                              "drivers that must exist on the first boot, "
+                                              "the avgpu package among them.")),
                     1, 0);
     grid->addWidget(stage_card(QStringLiteral("04"), QStringLiteral("Install"),
                                QStringLiteral("Unattended Windows setup, then the guest "
-                                              "agent, DXVK and VKD3D-Proton.")),
+                                              "agent and the avgpu display driver.")),
                     1, 1);
     root->addLayout(grid);
 

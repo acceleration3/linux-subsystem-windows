@@ -31,7 +31,7 @@ constexpr ItemSpec kItems[kPageCount] = {
     {NavRail::Page::Overview, "□", "Overview"},
     {NavRail::Page::Console, ">_", "Console"},
     {NavRail::Page::Log, "≡", "Log"},
-    {NavRail::Page::Render, "◎", "Render"},
+    {NavRail::Page::Graphics, "◎", "Graphics"},
     {NavRail::Page::Settings, "⚙", "Settings"},
 };
 
@@ -178,7 +178,7 @@ void NavRail::set_running(bool running) {
     Widgets::set_role(power_, running ? Theme::Role::kStop : Theme::Role::kGo);
 }
 
-void NavRail::set_marker(Page page, const QString& text, bool amber) {
+void NavRail::set_marker(Page page, const QString& text, const char* tone) {
     const int index = static_cast<int>(page);
     if (index < 0 || index >= kPageCount) {
         return;
@@ -187,28 +187,29 @@ void NavRail::set_marker(Page page, const QString& text, bool amber) {
     marker->setText(text);
     marker->setVisible(!text.isEmpty());
     Widgets::set_flag(marker, Theme::Tone::kProperty,
-                      amber ? QVariant(Theme::Tone::kAmber) : QVariant());
+                      tone != nullptr ? QVariant(QString::fromLatin1(tone)) : QVariant());
 }
 
 void NavRail::set_guest_provisioned(bool provisioned) {
-    for (const auto page : {Page::Console, Page::Log, Page::Render}) {
+    for (const auto page : {Page::Console, Page::Log, Page::Graphics}) {
         items_[static_cast<int>(page)]->setEnabled(provisioned);
     }
     power_->setEnabled(provisioned);
 }
 
 void NavRail::set_log_count(int records) {
-    set_marker(Page::Log, records > 0 ? QString::number(records) : QString{}, false);
+    set_marker(Page::Log, records > 0 ? QString::number(records) : QString{}, nullptr);
 }
 
 void NavRail::set_pending_changes(int count) {
-    set_marker(Page::Settings, count > 0 ? QString::number(count) : QString{}, true);
+    set_marker(Page::Settings, count > 0 ? QString::number(count) : QString{},
+               Theme::Tone::kAmber);
 }
 
-void NavRail::set_render_warning(bool warned) {
-    // A dot rather than a number: the count of congested areas is not
-    // the interesting part, the fact that any of them is congested is.
-    set_marker(Page::Render, warned ? QStringLiteral("●") : QString{}, true);
+void NavRail::set_graphics_warning(const char* tone) {
+    // A dot rather than a number: how many things are wrong is not the
+    // interesting part, that something is, and how badly, is.
+    set_marker(Page::Graphics, tone != nullptr ? QStringLiteral("●") : QString{}, tone);
 }
 
 }  // namespace lsw::host::manager

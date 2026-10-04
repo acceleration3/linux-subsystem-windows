@@ -103,6 +103,8 @@ PageChrome PageChrome::install(QWizardPage* page, const QString& title,
     sub->setVisible(!subtitle.isEmpty());
     head_layout->addWidget(sub);
     root->addWidget(head);
+    chrome.title = heading;
+    chrome.subtitle = sub;
 
     // ---- body -----------------------------------------------------
     auto* body_widget = new QWidget;

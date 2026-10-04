@@ -2,6 +2,7 @@
 
 #include "lsw/agent/install/job_notification.hpp"
 #include "lsw/agent/install/process_outcome.hpp"
+#include "lsw/agent/win/run_as.hpp"
 
 #include <cstdint>
 #include <optional>
@@ -18,7 +19,10 @@ class NotificationQueue;
 // manager. Adding a job kind is adding a subclass.
 class InstallJob {
 public:
-    InstallJob(std::string id, std::string name, NotificationQueue& queue);
+    // ``as`` is who the job's processes run as: SYSTEM in session 0, or
+    // the user of the session the request named. Downloads and staging
+    // always happen in the service itself.
+    InstallJob(std::string id, std::string name, NotificationQueue& queue, win::RunAs as);
     virtual ~InstallJob() = default;
 
     InstallJob(const InstallJob&) = delete;
@@ -53,6 +57,7 @@ protected:
 
     std::string id_;
     std::string name_;
+    win::RunAs as_;
 
 private:
     NotificationQueue& queue_;

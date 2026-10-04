@@ -13,8 +13,9 @@
 namespace lsw::agent::install {
 
 DownloadExtractJob::DownloadExtractJob(std::string id, std::string name, NotificationQueue& queue,
-                                       std::string url, std::string extract_to, std::string script)
-    : InstallJob(std::move(id), std::move(name), queue), url_(std::move(url)),
+                                       std::string url, std::string extract_to, std::string script,
+                                       win::RunAs as)
+    : InstallJob(std::move(id), std::move(name), queue, std::move(as)), url_(std::move(url)),
       extract_to_(std::move(extract_to)), script_(std::move(script)) {}
 
 void DownloadExtractJob::run() {
@@ -37,6 +38,8 @@ void DownloadExtractJob::run() {
     // tar.exe is the built-in BSD libarchive (Win10 1803+): it groks
     // .zip / .tar / .tar.gz / .tar.xz with nothing else installed.
     const std::wstring tar_cmd = L"tar.exe -xf \"" + archive + L"\" -C \"" + extract_dir + L"\"";
+    // tar runs in the service: the archive and the target are files, and
+    // the follow-up script below is what runs as the requested identity.
     const auto extract = ProcessRunner::run(tar_cmd);
     if (!extract.completed || extract.exit_code != 0) {
         LSW_AGENT_ERROR("installer: extract failed job={} err={} exit={}", id_, extract.error,
@@ -80,7 +83,7 @@ bool DownloadExtractJob::run_follow_up_script(const std::wstring& extract_dir,
         return false;
     }
 
-    const auto outcome = ProcessRunner::run(file.command_line());
+    const auto outcome = ProcessRunner::run(file.command_line(), as_);
     if (!outcome.completed || outcome.exit_code != 0) {
         LSW_AGENT_ERROR("installer: script failed job={} exit={} err={}", id_, outcome.exit_code,
                         outcome.error);

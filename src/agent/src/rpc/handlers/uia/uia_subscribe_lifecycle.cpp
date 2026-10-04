@@ -11,8 +11,7 @@ namespace lsw::agent::rpc::handlers {
 
 // ``uia_subscribe_lifecycle``: watch ``pid`` for window-opened /
 // window-closed events. Reply carries the subscription id the host
-// later passes to ``uia_unsubscribe`` (or its older alias
-// ``uia_unsubscribe_lifecycle``). Nothing cleans these up on
+// later passes to ``uia_unsubscribe``. Nothing cleans these up on
 // disconnect; the host is responsible for unsubscribing when it tears
 // down its mirrors.
 struct UiaSubscribeLifecycleHandler : RpcHandler {
@@ -21,6 +20,10 @@ struct UiaSubscribeLifecycleHandler : RpcHandler {
         const auto id = ctx.services.uia().subscribe_pid_lifecycle(pid);
         return {{"ok", id != 0}, {"sub_id", id}};
     }
+
+    // Window handles, UI Automation and HKCU belong to the user's
+    // session: served by the session helper there.
+    [[nodiscard]] Placement placement() const override { return Placement::UserSession; }
 };
 
 }  // namespace lsw::agent::rpc::handlers

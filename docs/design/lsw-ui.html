@@ -342,7 +342,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 }
 
 /* setup table */
-.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl{width:100%;border-collapse:collapse;font-size:13px;color:var(--fg)}
 .tbl th{
   text-align:left;font-family:"JetBrains Mono",monospace;font-size:10px;font-weight:500;
   letter-spacing:0.13em;text-transform:uppercase;color:var(--fg-faint);
@@ -361,6 +361,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 .pill.run{color:var(--info);border-color:#2b4a6b;background:var(--info-wash)}
 .pill.done{color:var(--ok);border-color:#2c5c44;background:var(--ok-wash)}
 .pill.fail{color:var(--bad);border-color:#6b2f32;background:var(--bad-wash)}
+.pill.warn{color:var(--amber);border-color:#a8672a;background:#1d1712}
 
 /* ── manager ────────────────────────────────────────────── */
 .badge{
@@ -493,7 +494,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 .warnstrip.crit{border-bottom-color:#6b2f32;background:#1f1315}
 .warnstrip .wdot{width:7px;height:7px;border-radius:50%;background:var(--amber);flex:none}
 .warnstrip.crit .wdot{background:var(--bad)}
-.warnstrip .msg{font-size:12.5px;color:#f0c393}
+.warnstrip .msg{font-size:12.5px;color:#f0c393;flex:1 1 320px;min-width:0}
 .warnstrip.crit .msg{color:#f0b0b2}
 .warnstrip .msg b{color:var(--fg);font-weight:500}
 .warnstrip .acts{margin-left:auto;display:flex;gap:8px}
@@ -510,59 +511,29 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 .area > header .cap{font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--fg-faint)}
 .area > header .right{margin-left:auto;display:flex;align-items:center;gap:10px}
 .area .in{padding:12px;display:flex;flex-direction:column;gap:11px}
-.meter{height:7px;border-radius:4px;background:#20252f;overflow:hidden;display:flex}
-.meter i{display:block;height:100%}
-.meter i.used{background:var(--ok)}
-.meter i.used.hot{background:var(--amber)}
-.meter i.used.crit{background:var(--bad)}
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:1px;background:var(--line);
   border:1px solid var(--line);border-radius:var(--r-sm);overflow:hidden}
-.kpi{background:var(--surface);padding:9px 11px;display:flex;flex-direction:column;gap:3px}
+.kpi{background:var(--surface);padding:9px 11px;display:flex;flex-direction:column;gap:3px;min-width:0}
 .kpi .k{font-family:"JetBrains Mono",monospace;font-size:9.5px;letter-spacing:0.12em;
   text-transform:uppercase;color:var(--fg-faint)}
-.kpi .v{font-family:"JetBrains Mono",monospace;font-size:15px;font-variant-numeric:tabular-nums}
-.kpi .v.hot{color:var(--amber)}
-.kpi .v.ok{color:var(--ok)}
-.advice{
-  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
-  border-left:2px solid var(--amber);background:var(--amber-wash);padding:9px 12px;
-  border-radius:0 var(--r-sm) var(--r-sm) 0;font-size:12.5px;color:#f0c393;line-height:1.5;
-}
-.advice .btn{margin-left:auto}
-.spark{display:flex;align-items:flex-end;gap:2px;height:26px}
-.spark i{flex:1;background:#2b3240;border-radius:1px 1px 0 0}
-.spark i.hot{background:var(--amber)}
+.kpi .v{font-family:"JetBrains Mono",monospace;font-size:15px;font-variant-numeric:tabular-nums;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
-/* ── channel strip, editable lists ────────────────────────── */
-.chanstrip{display:flex;gap:8px;padding:12px 14px 2px;flex-wrap:wrap}
-.chan{
-  border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface);
-  padding:9px 11px;min-width:158px;display:flex;flex-direction:column;gap:7px;
-  text-align:left;cursor:pointer;
-}
-.chan:hover{background:var(--raised)}
-.chan.on{border-color:var(--amber-dim);background:#1b1a19}
-.chan .top{display:flex;align-items:center;gap:8px}
-.chan .cn{font-size:12.5px;font-weight:600}
-.chan .st{width:7px;height:7px;border-radius:50%;margin-left:auto;flex:none}
-.chan .st.free{background:#39414f}
-.chan .st.ok{background:var(--ok)}
-.chan .st.hot{background:var(--amber)}
-.chan .st.crit{background:var(--bad)}
-.chan .own{
-  font-family:"JetBrains Mono",monospace;font-size:10px;color:var(--fg-faint);
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px;
-}
-.chan.on .own{color:var(--fg-dim)}
-.chan .mini{display:flex;gap:3px}
-.chan .mini i{flex:1;height:3px;border-radius:2px;background:#2b3240}
-.chan .mini i.f{background:var(--ok)}
-.chan .mini i.f.hot{background:var(--amber)}
-.chan .mini i.f.crit{background:var(--bad)}
-.chan.add{align-items:center;justify-content:center;border-style:dashed;color:var(--fg-faint);
-  min-width:110px;font-size:12.5px}
-.chan.add:hover{color:var(--fg);border-color:var(--fg-faint)}
+/* ── graphics: fact lists, API checks ─────────────────────── */
+.kv{display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px 16px;margin:0;align-items:baseline}
+.kv dt{font-family:"JetBrains Mono",monospace;font-size:9.5px;letter-spacing:0.12em;
+  text-transform:uppercase;color:var(--fg-faint);white-space:nowrap}
+.kv dd{margin:0;font-size:12.5px;color:var(--fg);min-width:0}
+.kv dd .meta{margin-left:4px}
+.yes{color:var(--ok)}
+.no{color:var(--bad)}
+.warn{color:var(--amber)}
+.radio{display:inline-block;width:13px;height:13px;border-radius:50%;border:1px solid #39415a;background:var(--base,#0f131a);vertical-align:middle}
+.radio.on{border-color:var(--amber);box-shadow:inset 0 0 0 3px #0f131a;background:var(--amber)}
+.tbl.tight td{padding:6px 12px}
+.tbl.tight th{padding:0 12px 6px}
 
+/* ── editable lists ───────────────────────────────────────── */
 .editlist{border:1px solid var(--line);border-radius:var(--r-sm);overflow:hidden}
 .editlist table{width:100%;border-collapse:collapse}
 .editlist th{
@@ -697,7 +668,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
       <h2>Manager surfaces</h2>
       <ul>
         <li><button data-view="m-main" aria-current="true">Overview</button></li>
-        <li><button data-view="m-render">Render channel</button></li>
+        <li><button data-view="m-gpu">Graphics</button></li>
         <li><button data-view="m-settings">Settings</button></li>
         <li><button data-view="m-console">Console</button></li>
         <li><button data-view="m-log">Log</button></li>
@@ -746,7 +717,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
     <div class="stage-head">
       <span class="eyebrow">Manager</span>
       <h1>Overview</h1>
-      <p>The row of buttons across the top is gone. Navigation moved to a rail on the left, which is also where the machine's identity, its state, and the one power control live. A congested render channel says so here rather than only in a log.</p>
+      <p>The row of buttons across the top is gone. Navigation moved to a rail on the left, which is also where the machine's identity, its state, and the one power control live. The identity under the name ends with the GPU the guest's adapter runs on, because with accel-virt that is the GPU Windows sees.</p>
     </div>
 
     <div class="frame">
@@ -759,13 +730,13 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
         <aside class="nav">
           <div class="id">
             <span class="n">lsw</span>
-            <span class="m">Windows 11 Pro 26200<br>8 cores &middot; 8 GiB &middot; 60 GiB</span>
+            <span class="m">Windows 11 Pro 26200<br>8 cores &middot; 8 GiB &middot; 60 GiB<br>AMD Radeon RX 9070 XT +1 render</span>
           </div>
           <ul>
             <li><button class="navitem on"><span class="g">&#9633;</span> Overview</button></li>
             <li><button class="navitem"><span class="g">&gt;_</span> Console</button></li>
             <li><button class="navitem"><span class="g">&#8801;</span> Log <span class="count">1 284</span></button></li>
-            <li><button class="navitem"><span class="g">&#9678;</span> Render <span class="wdot"></span></button></li>
+            <li><button class="navitem"><span class="g">&#9678;</span> Graphics</button></li>
             <li><button class="navitem"><span class="g">&#9881;</span> Settings <span class="count" style="color:var(--amber)">3</span></button></li>
           </ul>
           <div class="power">
@@ -779,15 +750,6 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
             <span class="sub">up 04:12:38</span>
             <span class="acts">
               <button class="btn quiet">Pop out preview</button>
-            </span>
-          </div>
-
-          <div class="warnstrip">
-            <span class="wdot"></span>
-            <span class="msg"><b>The command ring is congested.</b> 214 commands were split across several passes, each waiting for the server to drain.</span>
-            <span class="acts">
-              <button class="btn quiet">Dismiss</button>
-              <button class="btn">Show the render channel</button>
             </span>
           </div>
 
@@ -806,7 +768,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
                 <div class="in gauges">
                   <div class="gauge"><span class="k">CPU</span><span class="bar"><i class="ok" style="width:23%"></i></span><span class="v">23 %</span></div>
                   <div class="gauge"><span class="k">RAM</span><span class="bar"><i class="ok" style="width:64%"></i></span><span class="v">5.1 / 8.0 GB</span></div>
-                  <div class="gauge"><span class="k">VRAM</span><span class="bar"><i class="warn" style="width:41%"></i></span><span class="v">0.4 / 1.0 GB</span></div>
+                  <div class="gauge"><span class="k">VRAM</span><span class="bar"><i class="ok" style="width:19%"></i></span><span class="v">3.1 / 16.0 GB</span></div>
                   <div class="gauge"><span class="k">Disk</span><span class="bar"><i class="ok" style="width:57%"></i></span><span class="v">34.2 / 60.0 GB</span></div>
                 </div>
               </div>
@@ -837,11 +799,11 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
           <div class="statusbar">
             <span><b>agent</b> 127.0.0.1:5102</span>
             <span class="sep"></span>
-            <span><b>transport</b> ivshmem 1.0 GiB, vector 0</span>
+            <span><b>transport</b> ivshmem 256 MiB, doorbell</span>
             <span class="sep"></span>
-            <span><b>disk</b> virtio-blk, iothread</span>
+            <span><b>disk</b> virtio-blk, iothread, 60 GiB</span>
             <span class="sep"></span>
-            <span><b>render</b> remotewin, 2 windows</span>
+            <span><b>windows</b> remotewin, 2 mirrored</span>
           </div>
         </div>
       </div>
@@ -852,35 +814,37 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
       <div class="note"><dt>One power button</dt><dd>It reads <code>Stop the guest</code> while running and <code>Start the guest</code> while off. The state badge above it is the thing that changes color, not the button.</dd></div>
       <div class="note"><dt>Console and log</dt><dd>Now sections in the same window rather than separate top level windows. <code>Pop out</code> is still there for anyone who wants a second window.</dd></div>
       <div class="note"><dt>Status bar</dt><dd>The transport facts that currently only exist in logs: <code>ivshmem</code> region, doorbell vector, agent port, virtio backing.</dd></div>
-      <div class="note"><dt>Warning strip</dt><dd>Appears only when an area of the shared region is actually running out. Amber for tight, red for repeated splitting. Dismissing hides it until the count doubles, which is the same rule the render server uses for its own warnings.</dd></div>
+      <div class="note"><dt>GPU line</dt><dd>The third line of the identity is the display adapter's host GPU, by its Vulkan device name, which is also the adapter's name inside Windows, and how many render-only adapters sit beside it. It is in the rail, so it is on every page; the Graphics page has the rest.</dd></div>
+      <div class="note"><dt>VRAM gauge</dt><dd>The host GPU's used and total VRAM, read on the host (<code>mem_info_vram_used</code> and <code>mem_info_vram_total</code> for amdgpu, NVML for NVIDIA), because what the guest allocates lives there. It counts everything on that GPU, the host desktop included. Windows' own dedicated memory figure is a budget the driver reports, not a place anything is put, so it is not a gauge. A host GPU that exposes neither hides the row.</dd></div>
+      <div class="note"><dt>Warning strip</dt><dd>Not shown here, because nothing is wrong. It appears on the overview only for the two Graphics warnings that break the guest: the host serves no Direct3D, or Windows is not running avgpu.sys. Its button opens the Graphics page. A renderer restart stays on the Graphics page and the rail dot.</dd></div>
     </dl>
   </section>
 
-  <!-- ─────────── MANAGER: RENDER CHANNEL ─────────── -->
-  <section data-view="m-render" hidden>
+  <!-- ─────────── MANAGER: GRAPHICS ─────────── -->
+  <section data-view="m-gpu" hidden>
     <div class="stage-head">
       <span class="eyebrow">Manager</span>
-      <h1>Render channel</h1>
-      <p>The server runs several channels, one per drawing process, and each is three areas that run out separately. This is where you see which process holds which channel, how hard each area is being pushed, and what size would have avoided the last stall. The server already counts all of it.</p>
+      <h1>Graphics</h1>
+      <p>The guest's graphics adapters are this machine's GPUs. accel-virt gives Windows one paravirtual device per host GPU passed to it, named after that GPU, with its IDs and its VRAM, and every Direct3D, Vulkan, OpenGL and OpenCL call crosses to the host and runs on the host's own drivers. One adapter is the display; any others are render only, with no outputs, and applications pick between them as they would between two cards. There is nothing to assign per application. This page says which GPUs those are, what the host can serve on them, and whether the guest's driver runs on each.</p>
     </div>
 
     <div class="frame">
       <div class="titlebar">
         <span class="dot"></span><span class="dot"></span><span class="dot"></span>
         <span class="t">LSW</span>
-        <span class="spacer mono">1000 &times; 620</span>
+        <span class="spacer mono">1000 &times; 1076, scrolls</span>
       </div>
-      <div class="mgr2">
+      <div class="mgr2" style="min-height:1060px">
         <aside class="nav">
           <div class="id">
             <span class="n">lsw</span>
-            <span class="m">Windows 11 Pro 26200<br>8 cores &middot; 8 GiB &middot; 60 GiB</span>
+            <span class="m">Windows 11 Pro 26200<br>8 cores &middot; 8 GiB &middot; 60 GiB<br>AMD Radeon RX 9070 XT +1 render</span>
           </div>
           <ul>
             <li><button class="navitem"><span class="g">&#9633;</span> Overview</button></li>
             <li><button class="navitem"><span class="g">&gt;_</span> Console</button></li>
             <li><button class="navitem"><span class="g">&#8801;</span> Log <span class="count">1 284</span></button></li>
-            <li><button class="navitem on"><span class="g">&#9678;</span> Render <span class="wdot"></span></button></li>
+            <li><button class="navitem on"><span class="g">&#9678;</span> Graphics</button></li>
             <li><button class="navitem"><span class="g">&#9881;</span> Settings <span class="count" style="color:var(--amber)">3</span></button></li>
           </ul>
           <div class="power">
@@ -891,149 +855,182 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 
         <div class="content">
           <div class="cbar">
-            <h4>Render channel</h4>
-            <span class="sub">4 channels &middot; 3 in use &middot; 4.0 GiB reserved</span>
+            <h4>Graphics</h4>
+            <span class="sub">accel-virt &middot; 2 adapters &middot; avgpu.sys started on 1</span>
             <span class="acts">
-              <span class="meta">source <b>counters</b></span>
-              <button class="btn quiet">Reset counts</button>
-            </span>
-          </div>
-
-          <div class="chanstrip">
-            <button class="chan on">
-              <span class="top"><span class="cn">Channel 0</span><span class="st crit"></span></span>
-              <span class="own">Photoshop.exe, pid 6104</span>
-              <span class="mini"><i class="f crit" style="flex:94"></i><i style="flex:6"></i></span>
-            </button>
-            <button class="chan">
-              <span class="top"><span class="cn">Channel 1</span><span class="st ok"></span></span>
-              <span class="own">Photoshop.exe, pid 6132</span>
-              <span class="mini"><i class="f" style="flex:31"></i><i style="flex:69"></i></span>
-            </button>
-            <button class="chan">
-              <span class="top"><span class="cn">Channel 2</span><span class="st hot"></span></span>
-              <span class="own">th06.exe, pid 4088</span>
-              <span class="mini"><i class="f hot" style="flex:72"></i><i style="flex:28"></i></span>
-            </button>
-            <button class="chan">
-              <span class="top"><span class="cn">Channel 3</span><span class="st free"></span></span>
-              <span class="own">free</span>
-              <span class="mini"><i style="flex:100"></i></span>
-            </button>
-            <button class="chan add">+ Add a channel</button>
-          </div>
-
-          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 14px 2px">
-            <span class="meta">Channel 0 &middot; <b>1.0 GiB</b> &middot; sizes inherited from Settings &middot; claimed 04:11 ago</span>
-            <span style="margin-left:auto;display:flex;gap:8px">
-              <button class="btn quiet">Give this channel its own sizes</button>
-              <button class="btn quiet">Release it</button>
-            </span>
-          </div>
-
-          <div class="warnstrip">
-            <span class="wdot"></span>
-            <span class="msg"><b>The command ring is congested.</b> 214 commands were sent in several passes, each waiting for the server to drain. 1 MiB is not enough for what this application sends.</span>
-            <span class="acts">
-              <button class="btn">Raise the ring to 4 MiB</button>
+              <button class="btn quiet">Change in Settings</button>
             </span>
           </div>
 
           <div class="areas" style="flex:1">
-            <div class="area hot">
+            <div class="area">
               <header>
-                <span class="nm">Command ring</span>
-                <span class="cap">1024 KiB</span>
-                <span class="right">
-                  <span class="pill fail">Congested</span>
-                </span>
+                <span class="nm">AMD Radeon RX 9070 XT</span>
+                <span class="cap">display adapter</span>
+                <span class="right"><span class="pill done">Started</span></span>
               </header>
               <div class="in">
-                <div class="meter"><i class="used hot" style="width:94%"></i></div>
                 <div class="kpis">
-                  <div class="kpi"><span class="k">Fill</span><span class="v hot">94 %</span></div>
-                  <div class="kpi"><span class="k">Space waits</span><span class="v hot">1 807</span></div>
-                  <div class="kpi"><span class="k">Split commands</span><span class="v hot">214</span></div>
-                  <div class="kpi"><span class="k">Largest command</span><span class="v">3.4 MiB</span></div>
-                  <div class="kpi"><span class="k">Doorbells</span><span class="v">48 210</span></div>
-                </div>
-                <div class="spark">
-                  <i style="height:20%"></i><i style="height:34%"></i><i style="height:28%"></i><i style="height:52%"></i>
-                  <i style="height:44%"></i><i class="hot" style="height:78%"></i><i class="hot" style="height:96%"></i>
-                  <i class="hot" style="height:88%"></i><i class="hot" style="height:100%"></i><i class="hot" style="height:92%"></i>
-                  <i class="hot" style="height:84%"></i><i class="hot" style="height:97%"></i>
-                </div>
-                <div class="advice">
-                  A command larger than the ring is sent in pieces, and every piece waits for the server to drain the one before it. The server's own suggestion for the largest it has seen is <b>4096 KiB</b>.
-                  <button class="btn">Stage 4096 KiB</button>
+                  <div class="kpi"><span class="k">Dedicated memory</span><span class="v">16 GiB</span></div>
+                  <div class="kpi"><span class="k">Vendor : device</span><span class="v">1002:7550</span></div>
+                  <div class="kpi"><span class="k">Vulkan UUID</span><span class="v">5f2c91d0&hellip;e83a</span></div>
+                  <div class="kpi"><span class="k">Host driver</span><span class="v">RADV, Mesa 25.2.3</span></div>
                 </div>
               </div>
             </div>
 
             <div class="area">
               <header>
-                <span class="nm">Reply slot</span>
-                <span class="cap">8 MiB</span>
-                <span class="right"><span class="pill run">Tight</span></span>
+                <span class="nm">Intel UHD Graphics 770</span>
+                <span class="cap">render only, no outputs</span>
+                <span class="right"><span class="pill warn">No driver</span></span>
               </header>
               <div class="in">
-                <div class="meter"><i class="used" style="width:61%"></i></div>
                 <div class="kpis">
-                  <div class="kpi"><span class="k">Peak answer</span><span class="v">4.9 MiB</span></div>
-                  <div class="kpi"><span class="k">Split answers</span><span class="v">6</span></div>
-                  <div class="kpi"><span class="k">Extra trips</span><span class="v">18</span></div>
-                  <div class="kpi"><span class="k">Largest</span><span class="v">11.2 MiB</span></div>
-                </div>
-                <div class="advice">
-                  Six answers did not fit and were collected in 18 extra round trips. <b>16 MiB</b> would have taken every one of them whole.
-                  <button class="btn">Stage 16 MiB</button>
+                  <div class="kpi"><span class="k">Dedicated memory</span><span class="v">shared</span></div>
+                  <div class="kpi"><span class="k">Vendor : device</span><span class="v">8086:4680</span></div>
+                  <div class="kpi"><span class="k">Vulkan UUID</span><span class="v">8086a780&hellip;0c11</span></div>
+                  <div class="kpi"><span class="k">Host driver</span><span class="v">ANV, Mesa 25.2.3</span></div>
                 </div>
               </div>
             </div>
 
             <div class="area">
               <header>
-                <span class="nm">Blob arena</span>
-                <span class="cap">256 MiB</span>
-                <span class="right"><span class="pill done">Healthy</span></span>
+                <span class="nm">Host APIs</span>
+                <span class="cap">served on every adapter</span>
               </header>
               <div class="in">
-                <div class="meter"><i class="used" style="width:43%"></i></div>
-                <div class="kpis">
-                  <div class="kpi"><span class="k">In use</span><span class="v">110 MiB</span></div>
-                  <div class="kpi"><span class="k">Peak</span><span class="v">168 MiB</span></div>
-                  <div class="kpi"><span class="k">Blocks</span><span class="v">312</span></div>
-                  <div class="kpi"><span class="k">Failed allocations</span><span class="v ok">0</span></div>
+                <table class="tbl tight">
+                  <thead><tr><th style="width:112px">API</th><th>The host runs it on</th><th style="width:110px">State</th></tr></thead>
+                  <tbody>
+                    <tr><td>Vulkan</td><td class="kind">RADV and ANV, the host Vulkan drivers</td><td><span class="pill done">Served</span></td></tr>
+                    <tr><td>OpenGL</td><td class="kind">EGL, radeonsi</td><td><span class="pill done">Served</span></td></tr>
+                    <tr><td>OpenCL</td><td class="kind">rusticl</td><td><span class="pill done">Served</span></td></tr>
+                    <tr><td>Direct3D 11</td><td class="kind">DXVK 2.7.1, native</td><td><span class="pill done">Served</span></td></tr>
+                    <tr><td>Direct3D 12</td><td class="kind">vkd3d-proton, native</td><td><span class="pill done">Served</span></td></tr>
+                  </tbody>
+                </table>
+                <span class="meta">Direct3D from <b>~/.local/share/lsw/d3d</b>.</span>
+              </div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px">
+              <div class="area">
+                <header>
+                  <span class="nm">Device</span>
+                  <span class="cap">virtio-gpu-av-pci &times; 2</span>
+                  <span class="input select" style="margin-left:auto;display:inline-block;padding:1px 22px 1px 7px;font-size:11px">Switch resolution</span>
+                </header>
+                <div class="in">
+                  <dl class="kv">
+                    <dt>Host window</dt><dd>8 GiB <span class="meta">write-back, taken by the driver</span></dd>
+                    <dt>Renderer</dt><dd><span class="yes">Isolated</span> <span class="meta">pid 48211, no restarts</span></dd>
+                    <dt>Display</dt><dd>2560 &times; 1440 at 60 Hz <span class="meta">3 modes offered</span></dd>
+                    <dt>Adapters</dt><dd>2 <span class="meta">1 display, 1 render only</span></dd>
+                  </dl>
                 </div>
-                <span class="meta">Frames on their way to a window are carved out of this too, so it moves with the size of the guest's display.</span>
+              </div>
+
+              <div class="area">
+                <header>
+                  <span class="nm">Guest driver</span>
+                  <span class="cap">avgpu.sys 0.9.0.41</span>
+                  <span class="right"><span class="pill warn">1 of 2</span></span>
+                </header>
+                <div class="in">
+                  <dl class="kv">
+                    <dt>RX 9070 XT</dt><dd><span class="yes">Running</span> <span class="meta">no problem code</span></dd>
+                    <dt>UHD 770</dt><dd><span class="warn">No driver</span> <span class="meta">problem code 28</span></dd>
+                    <dt>Test signing</dt><dd><span class="yes">On</span> <span class="meta">the driver needs it</span></dd>
+                    <dt>Driver search</dt><dd><span class="yes">Off</span> <span class="meta">Update cannot replace it</span></dd>
+                    <dt>Submission</dt><dd>User mode <span class="meta">native fences on</span></dd>
+                  </dl>
+                </div>
+              </div>
+            </div>
+
+            <div class="panel">
+              <header>Driver log
+                <span class="meta" style="letter-spacing:0;text-transform:none">avgpu.log &middot; 1 906 lines &middot; live</span>
+                <span class="tools"><button class="btn quiet" style="padding:2px 9px;font-size:12px;letter-spacing:0;text-transform:none;font-family:Archivo,sans-serif">Open the full log</button></span>
+              </header>
+              <div class="term" style="padding:9px 14px;font-size:11.5px;line-height:1.7">
+                <div><span class="d">avgpu: device capset status 0x00000000</span></div>
+                <div><span class="d">avgpu: presents are moved by the device's present engine</span></div>
+                <div><span class="d">avgpu: the host offers 4 modes, 4 taken, preferred 2560x1440</span></div>
+                <div><span class="d">avgpu: StartDevice</span></div>
+                <div><span class="d">avgpu: av context on doorbell 4 message 3 status 0x00000000</span></div>
+                <div>avgpu: av context on doorbell 5 message 4 status 0x00000000</div>
               </div>
             </div>
           </div>
 
           <div class="statusbar">
-            <span><b>channel 0</b> lsw-rvk-0, 1.0 GiB</span>
+            <span><b>host-gpu</b> 5f2c91d0&hellip;e83a</span>
             <span class="sep"></span>
-            <span><b>ring</b> 1024 KiB</span>
+            <span><b>render</b> 8086a780&hellip;0c11</span>
             <span class="sep"></span>
-            <span><b>reply</b> 8 MiB</span>
+            <span><b>hostmem</b> 8 GiB</span>
             <span class="sep"></span>
-            <span><b>blob</b> 256 MiB</span>
+            <span><b>renderer</b> av-renderer</span>
             <span class="sep"></span>
-            <span><b>owner</b> pid 6104, Photoshop.exe</span>
+            <span><b>display</b> 2560 &times; 1440, 60 Hz</span>
           </div>
         </div>
       </div>
     </div>
 
+    <h3 style="margin:26px 0 12px;font-size:14px">What it warns about</h3>
+    <div class="frame">
+      <div class="titlebar">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <span class="t">LSW, Graphics, warning strips</span>
+      </div>
+      <div style="background:var(--ink)">
+        <div class="warnstrip crit">
+          <span class="wdot"></span>
+          <span class="msg"><b>The host serves no Direct3D.</b> DXVK and vkd3d-proton were not found, and Windows draws its desktop with Direct3D 11, so it will keep restarting until they are.</span>
+          <span class="acts"><button class="btn">Check again</button></span>
+        </div>
+        <div class="warnstrip crit">
+          <span class="wdot"></span>
+          <span class="msg"><b>Windows is not running avgpu.sys.</b> The adapter reports problem code 52: test signing is off, so Windows refused the driver's signature.</span>
+          <span class="acts"><button class="btn">Open the driver log</button></span>
+        </div>
+        <div class="warnstrip">
+          <span class="wdot"></span>
+          <span class="msg"><b>The host graphics driver crashed at 14:02.</b> av-renderer was restarted and Windows recovered from a device reset. Application windows that were drawing may need a repaint.</span>
+          <span class="acts"><button class="btn quiet">Dismiss</button><button class="btn">Open the driver log</button></span>
+        </div>
+        <div class="warnstrip" style="border-bottom:none">
+          <span class="wdot"></span>
+          <span class="msg"><b>Windows has no driver for Intel UHD Graphics 770.</b> It was added as an adapter after the driver package was installed, so Windows has not matched it to avgpu.sys yet.</span>
+          <span class="acts"><button class="btn">Install the driver for new adapters</button></span>
+        </div>
+        <div class="warnstrip" style="border-bottom:none">
+          <span class="wdot"></span>
+          <span class="msg"><b>Installing the driver for new adapters.</b> Signing a fresh copy of the package for their IDs, then pnputil. About a minute.</span>
+          <span class="acts"><span class="meta">signing</span></span>
+        </div>
+      </div>
+    </div>
+
     <dl class="notes">
-      <div class="note"><dt>Where the numbers come from</dt><dd>The render server already keeps them: <code>ring.space_waits</code>, <code>wire.chunked_commands</code>, <code>wire.partial_replies</code>, <code>blob.bytes_in_use</code>. Preferred plan is a small counters block in the region header the server writes and the host reads directly, which costs a load and no round trip.</dd></div>
-      <div class="note"><dt>Fallback if that lands later</dt><dd>Parse the warnings the server already prints. They carry the command id, the byte count, the number of passes, and the exact flag: <code>start the server with --ring-kib 4096 to carry this one in a single pass</code>. The suggested value in the panel is that number, not one LSW invented.</dd></div>
-      <div class="note"><dt>Three states per area</dt><dd><b>Healthy</b>, nothing waited. <b>Tight</b>, the area is filling or a handful of operations split. <b>Congested</b>, operations are splitting repeatedly, which is round trips per frame and shows up as frame time.</dd></div>
-      <div class="note"><dt>Stage, not apply</dt><dd>Each suggestion stages the matching setting. The server takes these sizes at startup, so they land through the same restart bar as cores and memory.</dd></div>
-      <div class="note"><dt>One channel, one process</dt><dd>A channel carries a single command stream, so two processes cannot share one; the second would interleave its commands into nonsense. That is why the strip shows Photoshop twice: Wine starts several processes and each one that draws claims a channel of its own.</dd></div>
-      <div class="note"><dt>Managing them</dt><dd>Add or remove channels from the strip, and give one its own sizes when a single application needs a bigger ring than the rest deserve. Both are startup arguments to the server, so both stage for the next restart.</dd></div>
-      <div class="note"><dt>Release</dt><dd>Clears a claim left behind by a process that died without letting go. Refuses while the owner is still alive, because taking a channel from a running process corrupts its stream.</dd></div>
-      <div class="note"><dt>Assignment</dt><dd>Set in Settings. An application can be pinned to a channel, and each pin says what to do when that channel is already taken: wait for it, take any free one, or do not start. Unpinned applications take the first free channel, which is what happens today.</dd></div>
+      <div class="note"><dt>The adapters</dt><dd>One card per host GPU passed to the guest, the display adapter first and each render-only one after it. Name, IDs, UUID, memory and driver come from the host's own Vulkan enumeration, the same data <code>list_gpus.py</code> reads: <code>deviceName</code>, <code>vendorID</code> and <code>deviceID</code>, <code>deviceUUID</code>, the device-local heap, <code>driverName</code> and <code>driverInfo</code>. Windows sees exactly these names and IDs in Device Manager, dxdiag and DXGI, so what this page says and what an application says agree. Which GPUs are passed, and which one is the display, is set in Settings, under Graphics.</dd></div>
+      <div class="note"><dt>State per adapter</dt><dd>The pill on each card is Windows' side of that adapter, from the agent: <code>Started</code>, <code>No driver</code> (problem code 28, an adapter Windows has no driver for), or <code>Problem code N</code>. The agent's adapters are matched to the cards by vendor and device ID, then by name.</dd></div>
+      <div class="note"><dt>Dedicated memory</dt><dd>The host GPU's VRAM, reported to Windows as dedicated video memory. It is a budget, not a place: nothing is ever put in that segment, and what applications allocate lives on the host GPU. That is why the card gives no "used" figure for it. An integrated GPU has no device-local heap of its own and reads <code>shared</code>.</dd></div>
+      <div class="note"><dt>API checks</dt><dd>Probed on the host, off the window's thread, when the manager starts, at every boot and on <code>Check again</code>, the way the executor decides: a Vulkan driver, EGL with desktop OpenGL, an OpenCL ICD, and DXVK's and vkd3d-proton's native libraries in the folder LSW passes as <code>AV_D3D_PATH</code>. One block for every adapter, because each one's executor makes the same checks; where the Vulkan drivers differ the row names each. An API the host lacks is not offered to the guest, and its row reads <code>Not served</code> in grey. Applications that need it fail as they would on a card without it.</dd></div>
+      <div class="note"><dt>Only what was found</dt><dd>"The host runs it on" is what the host probe found and nothing else: driver names from Vulkan, EGL and the OpenCL ICDs, and a DXVK or vkd3d-proton version only where the library's file name carries one. What Windows makes of each API is not shown: only the guest could say, and nothing asks it.</dd></div>
+      <div class="note"><dt>Direct3D is different</dt><dd>Windows composes its desktop with Direct3D 11. Without DXVK and vkd3d-proton on the host, DWM crash-loops with <code>0x889800B2</code>. So these two rows go red with <code>Missing</code>, the rail gets a red dot, and the strip above shows on the overview too. <code>Check again</code> repeats the probe; it does not need a restart to clear the warning, but the guest needs one to get Direct3D.</dd></div>
+      <div class="note"><dt>Device</dt><dd>What the running domain's live definition has on its <code>virtio-gpu-av-pci</code> lines, read back from libvirt rather than from the settings: <code>host-gpu</code>, <code>hostmem</code>, <code>renderer</code>, and one <code>display=off</code> device per render-only GPU; with the machine off, the stored definition the next start boots. Fixed for the life of the machine; change them in Settings, under Graphics, and they land at the next restart, which the row says beside the value ("16 GiB after a restart") until then. "Taken by the driver" is the driver's own <code>host window status</code> line.</dd></div>
+      <div class="note"><dt>Display is live</dt><dd>Read from the display adapter's <code>modes</code> property and updated when it changes. The <code>Switch resolution</code> list in the card's header holds the modes offered; picking one makes it preferred, in Settings as well, and is a <code>qom-set</code> on that property: the device raises a display event, the driver replugs its monitor, and Windows switches. No restart. Vsync is a fixed 60 Hz.</dd></div>
+      <div class="note"><dt>Renderer</dt><dd>With isolation on, the host GPU stack runs in <code>av-renderer</code>, a child of QEMU. LSW watches its pid. A new pid means the old one died inside a host driver: the guest saw a device reset, and the amber strip says when. With isolation off there is no row to watch, because the same crash ends the guest.</dd></div>
+      <div class="note"><dt>Guest driver</dt><dd>From the agent, once per boot and after an install: every accel-virt adapter, found by its subsystem <code>1af4:5256</code> or the <code>avgpu</code> service, with its problem code and installed <code>DriverVersion</code>, one line each; <code>TESTSIGNING</code> in the boot options; and the driver search policy provisioning set. Windows Update would otherwise offer the vendor's real driver for these IDs, and on this device the real driver bugchecks. Submission comes from the driver log's <code>user-mode submission</code> and <code>native fences</code> lines.</dd></div>
+      <div class="note"><dt>New adapters</dt><dd>The driver package is signed for the PCI IDs present when Windows was installed, so a GPU passed later is an adapter Windows has no driver for. <code>Install the driver for new adapters</code> runs, through the agent, a re-sign of a clean copy of the package (<code>C:\av\pristine</code>, kept by setup, mirrored to <code>C:\av\resign</code>) and <code>provision.ps1 -Stage install</code>. A clean copy, because signing rewrites the INF and signs <code>avgpu.sys</code>, which no longer match the package's own checksums. Progress shows in the strip; when the installer asks for one, the strip offers a restart, and the card reads <code>Started</code> after it.</dd></div>
+      <div class="note"><dt>Driver log</dt><dd><code>avgpu.sys</code> writes <code>avgpu: ...</code> lines to I/O port 0x402. An <code>isa-debugcon</code> device on the machine puts them in <code>avgpu.log</code> in the data folder, across reboots and up to a bugcheck, so it still has the last line when Windows does not. The panel tails the file; the button opens all of it in the host's text editor.</dd></div>
+      <div class="note"><dt>What warns</dt><dd>Four things, each something the user can act on. No Direct3D on the host, red. The display adapter not running avgpu.sys, red: a problem code from the agent, usually a refused signature or a replaced driver. A render-only adapter with no driver, amber, with the install button. A renderer restart, amber, dismissable until the next one. The rail dot takes the worst color present. Nothing else on the page changes color.</dd></div>
+      <div class="note"><dt>Nothing per application</dt><dd>Every process opens the adapters through Windows' own loaders, so there is nothing to claim, pin, wait for or release. Applications pick a render-only GPU the way they pick between two physical cards.</dd></div>
     </dl>
   </section>
 
@@ -1042,7 +1039,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
     <div class="stage-head">
       <span class="eyebrow">Manager</span>
       <h1>Settings</h1>
-      <p>Machine, display, file manager integration, desktop entries. Every row says whether it takes effect now or at the next boot; restart changes collect at the bottom, and nothing reboots until you say so.</p>
+      <p>Machine, display, graphics, file manager integration, desktop entries. Every row says whether it takes effect now or at the next boot; restart changes collect at the bottom, and nothing reboots until you say so. Graphics is the accel-virt devices: which host GPUs the guest gets as adapters and which of them is the display, their host window, and whether the host driver runs in a process of its own. The resolution is now set on the running device, so it no longer waits for a restart.</p>
     </div>
 
     <div class="frame">
@@ -1055,13 +1052,13 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
         <aside class="nav">
           <div class="id">
             <span class="n">lsw</span>
-            <span class="m">Windows 11 Pro 26200<br>8 cores &middot; 8 GiB &middot; 60 GiB</span>
+            <span class="m">Windows 11 Pro 26200<br>8 cores &middot; 8 GiB &middot; 60 GiB<br>AMD Radeon RX 9070 XT +1 render</span>
           </div>
           <ul>
             <li><button class="navitem"><span class="g">&#9633;</span> Overview</button></li>
             <li><button class="navitem"><span class="g">&gt;_</span> Console</button></li>
             <li><button class="navitem"><span class="g">&#8801;</span> Log <span class="count">1 284</span></button></li>
-            <li><button class="navitem"><span class="g">&#9678;</span> Render <span class="wdot"></span></button></li>
+            <li><button class="navitem"><span class="g">&#9678;</span> Graphics</button></li>
             <li><button class="navitem on"><span class="g">&#9881;</span> Settings <span class="count" style="color:var(--amber)">3</span></button></li>
           </ul>
           <div class="power">
@@ -1115,17 +1112,58 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 
             <div class="sgroup">
               <h5>Display</h5>
-              <div class="srow">
+              <div class="srow wide">
                 <span>
-                  <span class="k">Guest resolution <span class="tagr">restart</span></span>
-                  <span class="d">The size of the virtual monitor Windows sees. Application windows are mirrored individually, so this is the ceiling a maximised window can reach.</span>
+                  <span class="k">Resolutions <span class="tagr live">now</span></span>
+                  <span class="d">The sizes the guest's monitor offers, as Windows lists them in Settings &rarr; Display. Windows uses the preferred one. Any size works, from 100 &times; 100 up to 4095 on an edge; a change reaches a running guest at once, as if a monitor were replugged. Application windows are mirrored individually, so the preferred size is the ceiling a maximised window can reach.</span>
                 </span>
-                <span class="ctl"><span class="input select" style="width:180px">2560 &times; 1440</span></span>
+                <div class="editlist">
+                  <table>
+                    <thead>
+                      <tr><th style="width:88px">Preferred</th><th>Resolution</th><th style="width:90px">Aspect</th><th class="tight"></th></tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td><span class="radio on"></span></td>
+                        <td><span class="mono" style="color:var(--fg)">2560 &times; 1440</span></td>
+                        <td class="mono" style="color:var(--fg-faint);font-size:11.5px">16:9</td>
+                        <td class="tight"><button class="rm" style="display:inline-grid" title="Move up" disabled>&uarr;</button> <button class="rm" style="display:inline-grid" title="Move down">&darr;</button> <button class="rm" style="display:inline-grid" title="Remove">&times;</button></td>
+                      </tr>
+                      <tr>
+                        <td><span class="radio"></span></td>
+                        <td><span class="mono" style="color:var(--fg)">1920 &times; 1080</span></td>
+                        <td class="mono" style="color:var(--fg-faint);font-size:11.5px">16:9</td>
+                        <td class="tight"><button class="rm" style="display:inline-grid" title="Move up">&uarr;</button> <button class="rm" style="display:inline-grid" title="Move down">&darr;</button> <button class="rm" style="display:inline-grid" title="Remove">&times;</button></td>
+                      </tr>
+                      <tr>
+                        <td><span class="radio"></span></td>
+                        <td><span class="mono" style="color:var(--fg)">3440 &times; 1440</span></td>
+                        <td class="mono" style="color:var(--fg-faint);font-size:11.5px">43:18</td>
+                        <td class="tight"><button class="rm" style="display:inline-grid" title="Move up">&uarr;</button> <button class="rm" style="display:inline-grid" title="Move down" disabled>&darr;</button> <button class="rm" style="display:inline-grid" title="Remove">&times;</button></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <div class="foot" style="flex-wrap:wrap">
+                    <span class="input select" style="width:200px;white-space:nowrap">3840 &times; 2160 &middot; DP-1</span>
+                    <span class="input mono" style="width:64px;text-align:right">5120</span>
+                    <span class="meta">&times;</span>
+                    <span class="input mono" style="width:64px;text-align:right">2880</span>
+                    <button class="btn" disabled style="white-space:nowrap">Add a resolution</button>
+                    <span class="meta" style="color:var(--bad);flex-basis:100%">5120 &times; 2880 cannot be offered: 4095 is the most an edge can be.</span>
+                  </div>
+                </div>
               </div>
               <div class="srow">
                 <span>
-                  <span class="k">Match the monitor the manager is on <span class="tagr">restart</span></span>
-                  <span class="d">Takes the resolution from your current output instead of the list above. Turn it off for a fixed size that survives moving the window.</span>
+                  <span class="k">Offer the host monitors' own modes instead <span class="tagr live">now</span></span>
+                  <span class="d">Leaves the list empty, which is accel-virt's default: the guest's monitor offers the modes of the monitors connected to this machine, the largest one's best mode preferred.</span>
+                </span>
+                <span class="ctl"><span class="toggle"><i></i></span></span>
+              </div>
+              <div class="srow">
+                <span>
+                  <span class="k">Match the monitor the manager is on <span class="tagr live">now</span></span>
+                  <span class="d">Puts the size of the monitor this window is on first, preferred, ahead of the list above, and follows when the window moves to another one.</span>
                 </span>
                 <span class="ctl"><span class="toggle"><i></i></span></span>
               </div>
@@ -1138,22 +1176,58 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
               </div>
               <div class="srow">
                 <span>
-                  <span class="k">Refresh rate <span class="tagr live">now</span></span>
-                  <span class="d">How often a mirrored window is repainted. Lower it to spend less host CPU on an idle guest.</span>
-                </span>
-                <span class="ctl"><span class="input select" style="width:180px">60 Hz</span></span>
-              </div>
-              <div class="srow">
-                <span>
-                  <span class="k">Video memory the adapter reports <span class="tagr">restart</span></span>
-                  <span class="d">Applications gate their GPU path on this number before they ever open a driver. Written into the guest registry.</span>
-                </span>
-                <span class="ctl"><span class="input select" style="width:180px">2048 MiB</span></span>
-              </div>
-              <div class="srow">
-                <span>
                   <span class="k">Live preview <span class="tagr live">now</span></span>
                   <span class="d">Streams the whole guest desktop into the overview. Independent of the mirrored windows.</span>
+                </span>
+                <span class="ctl"><span class="toggle on"><i></i></span></span>
+              </div>
+            </div>
+
+            <div class="sgroup">
+              <h5>Graphics</h5>
+              <div class="srow wide">
+                <span>
+                  <span class="k">Adapters <span class="tagr">restart</span></span>
+                  <span class="d">Each host GPU can be the guest's display adapter, a render-only adapter with no outputs, or left out. Windows names every adapter after its GPU and reports its VRAM. Exactly one is the display; until you pick one, it is the first Vulkan device.</span>
+                </span>
+                <div class="editlist">
+                  <table>
+                    <thead>
+                      <tr><th>Host GPU</th><th style="width:84px">IDs</th><th style="width:70px">Memory</th><th style="width:150px">Host driver</th><th style="width:160px">Role</th></tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td><span class="input" style="border-color:transparent;background:none;padding-left:0">AMD Radeon RX 9070 XT</span></td>
+                        <td class="mono" style="color:var(--fg-faint);font-size:11.5px">1002:7550</td>
+                        <td class="mono" style="color:var(--fg-faint);font-size:11.5px">16 GiB</td>
+                        <td class="mono" style="color:var(--fg-faint);font-size:11.5px">RADV, Mesa 25.2.3</td>
+                        <td><span class="input select">Display (auto)</span></td>
+                      </tr>
+                      <tr>
+                        <td><span class="input" style="border-color:transparent;background:none;padding-left:0">Intel UHD Graphics 770</span></td>
+                        <td class="mono" style="color:var(--fg-faint);font-size:11.5px">8086:4680</td>
+                        <td class="mono" style="color:var(--fg-faint);font-size:11.5px">shared</td>
+                        <td class="mono" style="color:var(--fg-faint);font-size:11.5px">ANV, Mesa 25.2.3</td>
+                        <td><span class="input select">Render only</span></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <div class="foot">
+                    <span class="meta">A GPU added after Windows was installed has no driver in the guest yet; the Graphics page installs it.</span>
+                  </div>
+                </div>
+              </div>
+              <div class="srow">
+                <span>
+                  <span class="k">Host window <span class="tagr">restart</span></span>
+                  <span class="d">Host memory the guest maps write-back, for uploads, readbacks and host-visible Vulkan memory. Used on demand; 8 GiB runs real applications.</span>
+                </span>
+                <span class="ctl"><span class="input select" style="width:180px">8 GiB</span></span>
+              </div>
+              <div class="srow">
+                <span>
+                  <span class="k">Isolate the host graphics driver <span class="tagr">restart</span></span>
+                  <span class="d">Runs the host's GPU stack in a process of its own. A host driver crash then costs a device reset, which Windows recovers from, instead of the whole guest.</span>
                 </span>
                 <span class="ctl"><span class="toggle on"><i></i></span></span>
               </div>
@@ -1271,107 +1345,6 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
             </div>
 
             <div class="sgroup">
-              <h5>Render channels</h5>
-              <div class="srow">
-                <span>
-                  <span class="k">Channels <span class="tagr">restart</span></span>
-                  <span class="d">Each drawing process claims one. A channel carries a single command stream, so two processes can never share one, and Wine starts several processes per application.</span>
-                </span>
-                <span class="ctl"><span class="input select" style="width:180px">4 channels</span></span>
-              </div>
-              <div class="srow">
-                <span>
-                  <span class="k">Command ring <span class="tagr">restart</span></span>
-                  <span class="d">Where commands queue on the way to the server. A command bigger than this is sent in pieces, each waiting for the one before it to drain. Power of two.</span>
-                </span>
-                <span class="ctl"><span class="input select" style="width:180px">1024 KiB</span></span>
-              </div>
-              <div class="srow">
-                <span>
-                  <span class="k">Reply slot <span class="tagr">restart</span></span>
-                  <span class="d">Where answers land. An answer that does not fit is collected in extra round trips instead of arriving whole.</span>
-                </span>
-                <span class="ctl"><span class="input select" style="width:180px">8 MiB</span></span>
-              </div>
-              <div class="srow">
-                <span>
-                  <span class="k">Blob arena <span class="tagr">restart</span></span>
-                  <span class="d">Large command streams, host visible device memory, and the frames on their way to a window. The largest of the three by far.</span>
-                </span>
-                <span class="ctl"><span class="input select" style="width:180px">256 MiB</span></span>
-              </div>
-              <div class="srow">
-                <span>
-                  <span class="k">Total reserved</span>
-                  <span class="d">Each channel is rounded to a power of two because the guest sees it as a PCI BAR. Sizes are the default for every channel; one channel can be given its own on the Render page.</span>
-                </span>
-                <span class="ctl"><span class="input mono" style="width:180px;text-align:right;color:var(--fg-faint)">4 &times; 1.0 GiB</span></span>
-              </div>
-              <div class="srow">
-                <span>
-                  <span class="k">Warn when an area is congested <span class="tagr live">now</span></span>
-                  <span class="d">Reads the counters the server publishes. Falls back to reading its log if this build does not publish them.</span>
-                </span>
-                <span class="ctl"><span class="toggle on"><i></i></span></span>
-              </div>
-            </div>
-
-            <div class="sgroup">
-              <h5>Which application uses which channel</h5>
-              <div class="srow wide">
-                <span>
-                  <span class="k">Assignments <span class="tagr live">now</span></span>
-                  <span class="d">Anything not listed takes the first free channel. Pin an application when you want its sizes, or its counters, kept separate from everything else.</span>
-                </span>
-                <div class="editlist">
-                  <table>
-                    <thead>
-                      <tr><th>Application</th><th style="width:132px">Channel</th><th style="width:186px">If it is already in use</th><th class="tight"></th></tr>
-                    </thead>
-                    <tbody>
-                      <tr>
-                        <td><span style="display:flex;align-items:center;gap:8px"><span class="ic" style="width:20px;height:20px;border-radius:4px;background:#5aa9f0;display:grid;place-items:center;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:9px;color:#0d0f14">Ps</span> Photoshop 2024</span></td>
-                        <td><span class="input select">Channel 0</span></td>
-                        <td><span class="input select">Wait for it</span></td>
-                        <td class="tight"><button class="rm" title="Remove">&times;</button></td>
-                      </tr>
-                      <tr>
-                        <td><span style="display:flex;align-items:center;gap:8px"><span class="ic" style="width:20px;height:20px;border-radius:4px;background:#e05a8a;display:grid;place-items:center;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:9px;color:#0d0f14">&#26481;</span> Touhou 06</span></td>
-                        <td><span class="input select">Channel 2</span></td>
-                        <td><span class="input select">Take any free one</span></td>
-                        <td class="tight"><button class="rm" title="Remove">&times;</button></td>
-                      </tr>
-                      <tr>
-                        <td><span style="display:flex;align-items:center;gap:8px"><span class="ic" style="width:20px;height:20px;border-radius:4px;background:#5f9ea0;display:grid;place-items:center;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:9px;color:#0d0f14">Vs</span> VS Code</span></td>
-                        <td><span class="input select">Any</span></td>
-                        <td><span class="input select" style="color:var(--fg-faint)">Take any free one</span></td>
-                        <td class="tight"><button class="rm" title="Remove">&times;</button></td>
-                      </tr>
-                    </tbody>
-                  </table>
-                  <div class="foot">
-                    <button class="btn">Pin an application</button>
-                    <span class="meta">2 pinned &middot; 1 channel left unpinned</span>
-                  </div>
-                </div>
-              </div>
-              <div class="srow">
-                <span>
-                  <span class="k">When nothing is free <span class="tagr live">now</span></span>
-                  <span class="d">Every channel claimed and another process wants one. Waiting blocks that process until one is released; refusing lets it fail at startup with a message instead of hanging.</span>
-                </span>
-                <span class="ctl"><span class="input select" style="width:180px">Wait, then refuse</span></span>
-              </div>
-              <div class="srow">
-                <span>
-                  <span class="k">How long to wait <span class="tagr live">now</span></span>
-                  <span class="d">Before refusing. A process that gives up says so in the log and the application falls back to software rendering.</span>
-                </span>
-                <span class="ctl"><span class="input mono" style="width:180px;text-align:right">15 s</span></span>
-              </div>
-            </div>
-
-            <div class="sgroup">
               <h5>Guest</h5>
               <div class="srow">
                 <span>
@@ -1379,13 +1352,6 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
                   <span class="d">Set at install and baked into the answer file. Change it from inside Windows.</span>
                 </span>
                 <span class="ctl"><span class="input" style="width:180px;color:var(--fg-faint)">lsw</span></span>
-              </div>
-              <div class="srow">
-                <span>
-                  <span class="k">Agent port <span class="tagr">restart</span></span>
-                  <span class="d">Forwarded from the host loopback into the guest. Change it if something else on this machine wants 5102.</span>
-                </span>
-                <span class="ctl"><span class="input mono" style="width:180px;text-align:right">5102</span></span>
               </div>
               <div class="srow">
                 <span>
@@ -1448,7 +1414,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
             <span class="diffs">
               <span class="diff">cores <span class="f">8</span> <span class="t">12</span></span>
               <span class="diff">memory <span class="f">8192</span> <span class="t">12288 MiB</span></span>
-              <span class="diff">resolution <span class="f">1920 &times; 1080</span> <span class="t">2560 &times; 1440</span></span>
+              <span class="diff">render GPUs <span class="f">0</span> <span class="t">1</span></span>
             </span>
             <span class="acts">
               <button class="btn quiet">Revert</button>
@@ -1465,7 +1431,9 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
       <div class="note"><dt>Pending count</dt><dd>The rail shows an amber count next to Settings, so a staged change is visible from any other section.</dd></div>
       <div class="note"><dt>Files</dt><dd>The SMB path already exists: the machine forwards <code>127.0.0.1:5445</code> to the guest's 445, and the bookmark is served in userspace by the file manager rather than mounted, so Windows junctions never turn into a pile of extra mounts. The new part is the GTK bookmark file beside the KDE one, the choice of what to share, and a host folder going the other way.</dd></div>
       <div class="note"><dt>Desktop entries</dt><dd>Publishing already writes a .desktop and a menu fragment per application. The page adds the category name, a per-application choice, file type handlers, and a rewrite button for when a launcher is showing a stale icon.</dd></div>
-      <div class="note"><dt>Display</dt><dd>Resolution and DPI are the virtual monitor and the guest logon, so both restart. Refresh rate is how often a mirrored window repaints, which is a host side number and applies immediately.</dd></div>
+      <div class="note"><dt>Display</dt><dd>The host decides which modes the guest's display offers, and can change them while Windows runs. The list is the device's <code>modes</code> property, <code>WxH</code> between commas, the first preferred; LSW sets it with a <code>qom-set</code>, the device raises a display event, the driver replugs its monitor, and Windows switches when the list lacks the mode it is showing. So the list, the preferred mode and matching the monitor all apply now. An empty list is the host monitors' own modes. DPI is still read at the guest logon, so it restarts. The adapter's video memory is no longer a setting: it is the host GPU's VRAM.</dd></div>
+      <div class="note"><dt>Resolution limits</dt><dd>The editor refuses what the driver would silently drop, with the reason beside the field: an edge under 100 (the smallest source mode dxgkrnl accepts), an edge over 4095, or a pixel clock over 655.35 MHz. The driver times every mode at 60 Hz with 160 pixels of horizontal blanking and one blank line per 24 active ones, so the clock is <code>(W + 160) &times; (H + H/24) &times; 60</code>, which an EDID detailed timing stores in 10 kHz units up to 65535. 3840 &times; 2160 is 540 MHz and fits. The device carries at most 32 modes. Presets are the common sizes and the monitors connected to this machine, by connector; any other size is typed. Duplicates are refused.</dd></div>
+      <div class="note"><dt>Graphics</dt><dd>All three rows are properties of the <code>virtio-gpu-av-pci</code> device lines, so all three restart. The adapter table lists every host Vulkan device with its vendor and device IDs, VRAM and driver; software rasterizers such as llvmpipe are left out unless they are the only device. Its Display row is <code>host-gpu</code> on the display device: <code>auto</code>, shown as <code>Display (auto)</code> on the first device, until a row is picked, then that GPU's Vulkan UUID, which survives reboots and driver updates where enumeration order does not. Picking Display on another row moves the display there and makes the old one render only; the display row offers no other role, because there is always exactly one. Each Render only row adds one <code>display=off</code> device bound to that GPU, up to eight. Host window is <code>hostmem</code>: the CPU reads GPU results from it cached instead of uncached, host memory backs it only as chunks are placed, and what does not fit falls back to guest RAM. At 256 MiB applications run out, so the list starts at 2 GiB. Isolation is <code>renderer=</code>, on by default.</dd></div>
       <div class="note"><dt>Scrolling</dt><dd>Shown in full here. In the window the list scrolls and the amber bar stays pinned to the bottom.</dd></div>
       <div class="note"><dt>Where the tools went</dt><dd>Settings, under Images. The wizard's ISO page has the other entry point.</dd></div>
     </dl>
@@ -1487,13 +1455,13 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
         <aside class="nav">
           <div class="id">
             <span class="n">lsw</span>
-            <span class="m">Windows 11 Pro 26200<br>8 cores &middot; 8 GiB &middot; 60 GiB</span>
+            <span class="m">Windows 11 Pro 26200<br>8 cores &middot; 8 GiB &middot; 60 GiB<br>AMD Radeon RX 9070 XT +1 render</span>
           </div>
           <ul>
             <li><button class="navitem"><span class="g">&#9633;</span> Overview</button></li>
             <li><button class="navitem on"><span class="g">&gt;_</span> Console</button></li>
             <li><button class="navitem"><span class="g">&#8801;</span> Log <span class="count">1 284</span></button></li>
-            <li><button class="navitem"><span class="g">&#9678;</span> Render <span class="wdot"></span></button></li>
+            <li><button class="navitem"><span class="g">&#9678;</span> Graphics</button></li>
             <li><button class="navitem"><span class="g">&#9881;</span> Settings <span class="count" style="color:var(--amber)">3</span></button></li>
           </ul>
           <div class="power">
@@ -1504,7 +1472,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
         <div class="content">
           <div class="cbar">
             <h4>Console</h4>
-            <span class="sub">cmd.exe &middot; session 1 &middot; running as lsw</span>
+            <span class="sub">cmd.exe &middot; Windows session 1 &middot; lsw, elevated</span>
             <span class="acts">
               <button class="btn quiet">Clear</button>
               <button class="btn quiet">Pop out</button>
@@ -1516,12 +1484,13 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
             <div><span class="p">C:\Users\lsw&gt;</span> where vulkan-1.dll</div>
             <div><span class="d">C:\Windows\System32\vulkan-1.dll</span></div>
             <div>&nbsp;</div>
-            <div><span class="p">C:\Users\lsw&gt;</span> reg query "HKLM\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}\0000" /v HardwareInformation.qwMemorySize</div>
-            <div><span class="d">&nbsp;&nbsp;&nbsp;&nbsp;HardwareInformation.qwMemorySize&nbsp;&nbsp;&nbsp;&nbsp;REG_QWORD&nbsp;&nbsp;&nbsp;&nbsp;0x40000000</span></div>
+            <div><span class="p">C:\Users\lsw&gt;</span> powershell -c "(Get-CimInstance Win32_VideoController).Name"</div>
+            <div><span class="d">AMD Radeon RX 9070 XT</span></div>
             <div>&nbsp;</div>
             <div><span class="p">C:\Users\lsw&gt;</span> <span class="caret"></span></div>
           </div>
           <div style="display:flex;gap:8px;padding:10px 14px;border-top:1px solid var(--line);background:var(--surface)">
+            <span class="input select" style="width:170px">Session 1 &middot; lsw</span>
             <span class="input mono" style="flex:1;color:var(--fg-faint)">Type a command and press Enter</span>
             <button class="btn primary">Send</button>
           </div>
@@ -1546,13 +1515,13 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
         <aside class="nav">
           <div class="id">
             <span class="n">lsw</span>
-            <span class="m">Windows 11 Pro 26200<br>8 cores &middot; 8 GiB &middot; 60 GiB</span>
+            <span class="m">Windows 11 Pro 26200<br>8 cores &middot; 8 GiB &middot; 60 GiB<br>AMD Radeon RX 9070 XT +1 render</span>
           </div>
           <ul>
             <li><button class="navitem"><span class="g">&#9633;</span> Overview</button></li>
             <li><button class="navitem"><span class="g">&gt;_</span> Console</button></li>
             <li><button class="navitem on"><span class="g">&#8801;</span> Log <span class="count">1 284</span></button></li>
-            <li><button class="navitem"><span class="g">&#9678;</span> Render <span class="wdot"></span></button></li>
+            <li><button class="navitem"><span class="g">&#9678;</span> Graphics</button></li>
             <li><button class="navitem"><span class="g">&#9881;</span> Settings <span class="count" style="color:var(--amber)">3</span></button></li>
           </ul>
           <div class="power">
@@ -1593,7 +1562,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
     <div class="stage-head">
       <span class="eyebrow">Manager</span>
       <h1>Starting the guest</h1>
-      <p>What you get when you click a Windows application in your launcher and the VM is off. It is the only LSW window most people will see on a normal day, so it names the application, says which part is slow, and stays out of the way.</p>
+      <p>What you get when you click a Windows application in your launcher and the VM is off. It is the only LSW window most people will see on a normal day, so it names the application, says which part is slow, and stays out of the way. Graphics needs no step of its own: the application opens the guest's adapter like any program on a real card.</p>
     </div>
 
     <div class="frame dlg" style="max-width:420px">
@@ -1614,7 +1583,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
           <div class="bar"><i style="width:58%"></i></div>
           <div style="display:flex;justify-content:space-between" class="meta">
             <span>Waiting for the guest agent</span>
-            <span><b>0:22</b> of about 0:40</span>
+            <span><b>0:22</b> &middot; last boot took 0:37</span>
           </div>
         </div>
 
@@ -1627,9 +1596,6 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
           </div>
           <div style="display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--fg)">
             <span style="color:var(--amber);width:13px;text-align:center">&#9679;</span> Agent answering
-          </div>
-          <div style="display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--fg-faint)">
-            <span style="width:13px;text-align:center">&#9675;</span> Render channel claimed
           </div>
           <div style="display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--fg-faint)">
             <span style="width:13px;text-align:center">&#9675;</span> Photoshop 2024 running
@@ -1648,7 +1614,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
       </div>
     </div>
 
-    <h3 style="margin:26px 0 12px;font-size:14px">The two ways it ends badly</h3>
+    <h3 style="margin:26px 0 12px;font-size:14px">When it ends badly</h3>
     <div style="display:flex;gap:16px;flex-wrap:wrap">
       <div class="frame dlg" style="max-width:420px;flex:1;min-width:320px">
         <div class="titlebar">
@@ -1671,35 +1637,13 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
           <button class="btn primary">Restart the guest</button>
         </div>
       </div>
-
-      <div class="frame dlg" style="max-width:420px;flex:1;min-width:320px">
-        <div class="titlebar">
-          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
-          <span class="t">Touhou 06</span>
-        </div>
-        <div style="padding:20px 22px;display:flex;flex-direction:column;gap:14px;background:var(--ink)">
-          <div style="display:flex;gap:13px;align-items:center">
-            <span class="ic" style="width:44px;height:44px;border-radius:10px;background:#e05a8a;display:grid;place-items:center;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:15px;color:#0d0f14">&#26481;</span>
-            <div style="display:flex;flex-direction:column;gap:3px">
-              <span style="font-size:14px;font-weight:600">Channel 2 is busy</span>
-              <span style="font-size:12.5px;color:var(--fg-dim)">Touhou 06 is pinned to it, and Photoshop is using it. Waiting 15 seconds.</span>
-            </div>
-          </div>
-          <div class="bar"><i style="width:70%"></i></div>
-          <span class="meta">A channel carries one command stream, so it cannot be shared.</span>
-        </div>
-        <div class="dlg-foot">
-          <button class="btn quiet">Cancel</button>
-          <button class="btn">Use any free channel</button>
-        </div>
-      </div>
     </div>
 
     <dl class="notes">
       <div class="note"><dt>When it appears</dt><dd>Only when the guest is not already up. Launching into a running guest opens the application's window directly, with no splash at all.</dd></div>
-      <div class="note"><dt>Named phases</dt><dd>Machine, Windows, agent, channel, application. A cold start is around 40 seconds and the slow part moves around, so a single spinner would tell you nothing about whether it is stuck.</dd></div>
+      <div class="note"><dt>Named phases</dt><dd>Machine, Windows, agent, application. A cold start is around 40 seconds and the slow part moves around, so a single spinner would tell you nothing about whether it is stuck.</dd></div>
       <div class="note"><dt>Hide, not cancel</dt><dd>Hide sends it to the tray and the application still opens when it is ready. Cancel stops the launch and, if the manager started the guest for this, offers to stop it again.</dd></div>
-      <div class="note"><dt>Channel busy</dt><dd>The second failure card is the policy from Settings made visible. It only appears for a pinned application whose channel is taken, and it offers the fallback the policy refused to take on its own.</dd></div>
+      <div class="note"><dt>No graphics phase</dt><dd>Every process opens the guest's one adapter through Windows' own loaders, so there is nothing to claim or wait for between the agent answering and the application running. A guest whose adapter is broken still boots; the Graphics page and the overview say why.</dd></div>
     </dl>
   </section>
 
@@ -1741,7 +1685,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
           </span>
         </div>
         <div class="field"><label>Arguments</label><span class="input ph">Optional, passed after the executable</span></div>
-        <div class="field"><label>Environment</label><span class="input" style="min-height:60px;line-height:1.7">DXVK_HUD=fps<br>RVK_QUEUE_DEPTH=3</span></div>
+        <div class="field"><label>Environment</label><span class="input" style="min-height:60px;line-height:1.7">__COMPAT_LAYER=HighDpiAware<br>TEMP=X:\scratch</span></div>
       </div>
       <div class="dlg-foot">
         <button class="btn quiet">Remove</button>
@@ -1752,6 +1696,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
     <dl class="notes">
       <div class="note"><dt>Identity first</dt><dd>Icon, name, and where the icon came from sit above the form, so the dialog opens by confirming what you are editing.</dd></div>
       <div class="note"><dt>Browse the guest</dt><dd>The path field is a Windows path, so the button opens a picker that reads the guest rather than your own disk. Working folder gets the same treatment and defaults to wherever the program lives.</dd></div>
+      <div class="note"><dt>No graphics fields</dt><dd>An application gets the guest's adapter the way it would get a physical card, so there is no channel, GPU or renderer to choose per application. One that wants the render-only GPU picks it itself, as it would between two cards.</dd></div>
       <div class="note"><dt>Destructive left</dt><dd>Remove is separated from Cancel and Save, quiet by default, and confirms before it deletes the entry and its .desktop file.</dd></div>
     </dl>
   </section>
@@ -1895,7 +1840,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
             <li><button class="navitem on"><span class="g">&#9633;</span> Overview</button></li>
             <li><button class="navitem" style="opacity:.45"><span class="g">&gt;_</span> Console</button></li>
             <li><button class="navitem" style="opacity:.45"><span class="g">&#8801;</span> Log</button></li>
-            <li><button class="navitem" style="opacity:.45"><span class="g">&#9678;</span> Render</button></li>
+            <li><button class="navitem" style="opacity:.45"><span class="g">&#9678;</span> Graphics</button></li>
             <li><button class="navitem"><span class="g">&#9881;</span> Settings</button></li>
           </ul>
           <div class="power">
@@ -1969,11 +1914,11 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
               </div>
               <div style="border:1px solid var(--line);border-radius:5px;padding:12px 13px;background:var(--surface)">
                 <div class="meta" style="color:var(--amber)">03 &middot; PAYLOAD</div>
-                <div style="margin-top:5px;color:var(--fg-dim);font-size:12.5px;line-height:1.55">Answer file, guest binaries, and the drivers that must exist on the first boot.</div>
+                <div style="margin-top:5px;color:var(--fg-dim);font-size:12.5px;line-height:1.55">Answer file, guest binaries, and the drivers that must exist on the first boot, the avgpu package among them.</div>
               </div>
               <div style="border:1px solid var(--line);border-radius:5px;padding:12px 13px;background:var(--surface)">
                 <div class="meta" style="color:var(--amber)">04 &middot; INSTALL</div>
-                <div style="margin-top:5px;color:var(--fg-dim);font-size:12.5px;line-height:1.55">Unattended Windows setup, then the guest agent, DXVK and VKD3D-Proton.</div>
+                <div style="margin-top:5px;color:var(--fg-dim);font-size:12.5px;line-height:1.55">Unattended Windows setup, then the guest agent and the avgpu display driver.</div>
               </div>
             </div>
             <p>Nothing on this machine is modified outside <span class="mono" style="color:var(--amber)">~/.local/share/lsw</span>. The guest is a single qcow2 file you can delete.</p>
@@ -2337,7 +2282,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
                 <tr><td>lsw-agent.exe, remotewin-guest.exe</td><td class="kind">local build</td><td><span class="pill done">Done</span></td></tr>
                 <tr><td>virtio-win.iso</td><td class="kind">fedorapeople</td><td><span class="pill run">877 MiB, 71 %</span></td></tr>
                 <tr><td>ivshmem driver</td><td class="kind">Looking Glass host package</td><td><span class="pill pend">Pending</span></td></tr>
-                <tr><td>rvk, rvk32 guest drivers</td><td class="kind">local build</td><td><span class="pill pend">Pending</span></td></tr>
+                <tr><td>avgpu driver package, x64 and x86</td><td class="kind">accel-virt, local build</td><td><span class="pill pend">Pending</span></td></tr>
               </tbody>
             </table>
             <span class="meta">The shared memory driver is injected offline, because a driver delivered over the channel it provides cannot bootstrap that channel.</span>
@@ -2396,39 +2341,37 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
     <div class="stage-head">
       <span class="eyebrow">Wizard, step 07</span>
       <h1>Setup steps</h1>
-      <p>The steps from <span class="mono">setup-steps.json</span>, live from the guest agent. Parallel steps in a stage are visibly grouped.</p>
+      <p>The steps from <span class="mono">setup-steps.json</span>, live from the guest agent. Parallel steps in a stage are visibly grouped. Graphics is not a step: there is no DXVK or VKD3D-Proton in the guest any more, because accel-virt's driver package carries Direct3D, Vulkan, OpenGL and OpenCL drivers of its own, and Windows installs it from the payload before the first logon.</p>
     </div>
     <div class="frame narrow">
       <div class="titlebar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="t">LSW first-run wizard</span></div>
       <div class="wiz">
         <aside class="wiz-side"><div class="cap">Setup</div><ol class="wiz-steps" data-steps data-current="7"></ol>
-          <div class="foot"><span>agent: online</span><span>stage 1 of 1</span></div></aside>
+          <div class="foot"><span>agent: online</span><span>1 step</span></div></aside>
         <div class="wiz-main">
           <div class="wiz-head">
-            <h3>Installing runtimes inside the guest</h3>
-            <p>Reported live by the agent. Steps inside one stage run in parallel.</p>
+            <h3>Finishing setup inside the guest</h3>
+            <p>Reported live by the agent. The display driver is already in: Windows installed it at the end of setup, from the payload.</p>
           </div>
           <div class="wiz-body">
             <div class="meta" style="display:flex;align-items:center;gap:8px">
               <span style="width:7px;height:7px;border-radius:2px;background:var(--amber)"></span>
-              STAGE 1, 3 STEPS IN PARALLEL
+              1 STEP
             </div>
             <table class="tbl">
               <thead><tr><th>Step</th><th style="width:150px">Type</th><th style="width:190px">Status</th></tr></thead>
               <tbody>
-                <tr><td>DXVK 2.7.1</td><td class="kind">download + extract</td><td><span class="pill done">Done, 12.4 MiB</span></td></tr>
-                <tr><td>VKD3D-Proton 3.0.1</td><td class="kind">download + extract</td><td><span class="pill run">Extracting</span></td></tr>
                 <tr><td>Tune Windows for VM use</td><td class="kind">run script</td><td><span class="pill run">Applying registry</span></td></tr>
               </tbody>
             </table>
             <div style="margin-top:auto;display:flex;flex-direction:column;gap:8px">
-              <div class="bar"><i style="width:55%"></i></div>
-              <span class="meta">Then the VM shuts down, restarts on the virtio configuration, and the agent reconnects.</span>
+              <div class="bar"><i style="width:40%"></i></div>
+              <span class="meta">Then the VM shuts down, restarts on its own display driver, and the agent reconnects.</span>
             </div>
           </div>
           <div class="wiz-foot">
             <span class="hint">step 7 of 8, cannot go back</span>
-            <button class="btn quiet">View log</button>
+            <button class="btn quiet">Cancel setup</button>
           </div>
         </div>
       </div>
@@ -2459,11 +2402,11 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
               <div style="border:1px solid var(--line);border-radius:5px;padding:11px 13px;background:var(--surface);display:flex;justify-content:space-between;align-items:baseline">
                 <span class="meta">MACHINE</span><span class="mono" style="font-size:12.5px">8 cores, 8 GiB, 60 GiB</span></div>
               <div style="border:1px solid var(--line);border-radius:5px;padding:11px 13px;background:var(--surface);display:flex;justify-content:space-between;align-items:baseline">
-                <span class="meta">TRIM</span><span class="mono" style="font-size:12.5px">3.1 GiB removed</span></div>
+                <span class="meta">AGENT</span><span class="mono" style="font-size:12.5px">answering</span></div>
               <div style="border:1px solid var(--line);border-radius:5px;padding:11px 13px;background:var(--surface);display:flex;justify-content:space-between;align-items:baseline">
-                <span class="meta">RUNTIMES</span><span class="mono" style="font-size:12.5px">DXVK, VKD3D-Proton</span></div>
+                <span class="meta">GRAPHICS</span><span class="mono" style="font-size:12.5px">RX 9070 XT, avgpu.sys started</span></div>
             </div>
-            <p>The manager lists the applications found inside the guest. Double click one and its window opens on your desktop, rendered through the LSW render server. Installing more Windows software is done from inside the guest.</p>
+            <p>The manager lists the applications found inside the guest. Double click one and its window opens on your desktop, drawn on this machine's GPU through the guest's accel-virt adapter. Installing more Windows software is done from inside the guest.</p>
           </div>
           <div class="wiz-foot">
             <span class="hint">step 8 of 8</span>
@@ -2568,21 +2511,26 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
     <div class="specimen" style="display:flex;flex-direction:column;gap:10px;align-items:stretch;padding:0;overflow:hidden">
       <div class="warnstrip" style="border-bottom:none">
         <span class="wdot"></span>
-        <span class="msg"><b>The reply slot is tight.</b> Six answers were collected in 18 extra round trips.</span>
-        <span class="acts"><button class="btn">Stage 16 MiB</button></span>
+        <span class="msg"><b>The host graphics driver crashed at 14:02.</b> Windows recovered from a device reset.</span>
+        <span class="acts"><button class="btn">Open the driver log</button></span>
       </div>
       <div class="warnstrip crit" style="border-bottom:none">
         <span class="wdot"></span>
-        <span class="msg"><b>The command ring is congested.</b> 214 commands split across several passes.</span>
-        <span class="acts"><button class="btn">Raise the ring</button></span>
+        <span class="msg"><b>The host serves no Direct3D.</b> Windows' desktop will keep restarting.</span>
+        <span class="acts"><button class="btn">Check again</button></span>
       </div>
     </div>
 
-    <h3 style="margin:24px 0 10px;font-size:14px">Pressure</h3>
+    <h3 style="margin:24px 0 10px;font-size:14px">Facts</h3>
     <div class="specimen" style="display:flex;flex-direction:column;gap:12px;align-items:stretch">
-      <div><div class="meta" style="margin-bottom:6px">Healthy, under half</div><div class="meter"><i class="used" style="width:43%"></i></div></div>
-      <div><div class="meta" style="margin-bottom:6px">Tight, filling</div><div class="meter"><i class="used hot" style="width:78%"></i></div></div>
-      <div><div class="meta" style="margin-bottom:6px">Congested, operations splitting</div><div class="meter"><i class="used crit" style="width:96%"></i></div></div>
+      <div class="kpis">
+        <div class="kpi"><span class="k">Dedicated memory</span><span class="v">16 GiB</span></div>
+        <div class="kpi"><span class="k">Vendor : device</span><span class="v">1002:7550</span></div>
+      </div>
+      <dl class="kv">
+        <dt>Renderer</dt><dd><span class="yes">Isolated</span> <span class="meta">av-renderer, pid 48211</span></dd>
+        <dt>Test signing</dt><dd><span class="no">Off</span> <span class="meta">the driver needs it</span></dd>
+      </dl>
     </div>
 
     <h3 style="margin:24px 0 10px;font-size:14px">Input</h3>
@@ -2637,15 +2585,11 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
           <li><b>File manager bookmarks.</b> <span class="mono">DolphinPlaces</span> gains an uninstall and a folder argument, and a sibling writes <span class="mono">~/.config/gtk-3.0/bookmarks</span> for GNOME Files and Thunar. Both are toggles over the same SMB URL.</li>
           <li><b>Host folder into the guest.</b> A <span class="mono">&lt;filesystem type='mount' accessmode='passthrough'&gt;</span> virtiofs device in <span class="mono">domain.xml</span>, plus the drive letter mapping in the guest. Restart only, hence the tag.</li>
           <li><b>Desktop entries.</b> <span class="mono">DesktopLauncher</span> gains the category name as a parameter, a per-application publish flag on <span class="mono">AppConfig</span>, MIME registration, and a rewrite-all entry point for the button.</li>
-          <li><b>Resolution and DPI.</b> Written into the guest at boot by the agent, and the virtual monitor size goes in the domain XML, so both land through the same Apply path as cores and memory.</li>
-          <li><b>Render channel sizes.</b> Three fields that become <span class="mono">--ring-kib</span>, <span class="mono">--reply-kib</span> and <span class="mono">--blob-mib</span> on the render server command line, plus <span class="mono">--sessions</span>. The derived region size must match the <span class="mono">&lt;shmem&gt;</span> size in <span class="mono">domain.xml</span>, so both are written from one number.</li>
-          <li><b>Congestion counters, preferred.</b> A counters block in <span class="mono">RegionHeader</span> that the server updates where it already calls <span class="mono">RVK_PROF_COUNTER</span>: <span class="mono">space_waits</span>, <span class="mono">chunked_commands</span>, <span class="mono">partial_replies</span>, <span class="mono">reply_fetches</span>, <span class="mono">blob_in_use</span>, <span class="mono">blob_failures</span>, plus each area's suggested size, which the server already computes for its warning text. LSW maps the region read only and polls it.</li>
-          <li><b>Congestion counters, fallback.</b> A parser over the render server log for the three warning lines it already emits. They carry the counts and the recommended flag value verbatim, so the panel shows the server's number either way.</li>
-          <li><b>Channel list.</b> <span class="mono">owner_pid</span> is already in <span class="mono">RegionHeader</span>, claimed with a compare exchange. Reading each region's header gives the whole strip: who holds it, its sizes, its counters. Release is a compare exchange back to zero, refused while the pid is alive.</li>
-          <li><b>Per channel sizes.</b> The server takes one <span class="mono">--ring-kib</span> for every session today. An override needs the flags to accept a per index form, or a small config file the server reads at startup. This is the one item on the page that needs a render server change beyond counters.</li>
-          <li><b>Assignment and the busy policy.</b> Host side. <span class="mono">AppConfig</span> gains a channel index and a busy policy; the launcher passes the index to the ICD through the environment it already builds, and the ICD's claim loop honours wait, fall back, or fail.</li>
+          <li><b>Resolution.</b> Live: a <span class="mono">qom-set</span> of the device's <span class="mono">modes</span> property (<span class="mono">WxH</span> between commas, first preferred; empty means the host monitors' modes), sent through libvirt's monitor passthrough, exactly what accel-virt's <span class="mono">vm_resolution.py</span> does over QMP. Also written on the device line so a boot starts at it. DPI is still written by the agent and lands through Apply.</li>
+          <li><b>Graphics settings.</b> Four keys that become properties on the <span class="mono">-device virtio-gpu-av-pci</span> line in <span class="mono">domain.xml</span>'s <span class="mono">&lt;qemu:commandline&gt;</span>: <span class="mono">host-gpu</span>, <span class="mono">hostmem</span>, <span class="mono">renderer</span>, plus one <span class="mono">display=off</span> device per other GPU. The <span class="mono">&lt;video&gt;</span> VGA goes (<span class="mono">-vga none</span>, or another adapter takes the desktop), guest RAM becomes a shared memfd, and an <span class="mono">isa-debugcon</span> on port 0x402 writes <span class="mono">avgpu.log</span>.</li>
+          <li><b>Graphics page.</b> Host facts from Vulkan enumeration and an API probe (Vulkan, EGL, OpenCL ICD, DXVK and vkd3d-proton in <span class="mono">AV_D3D_PATH</span>); device facts from the settings it booted with and <span class="mono">qom-get modes</span>; the renderer's pid from QEMU's children; guest driver state from one new agent query; and a tail of <span class="mono">avgpu.log</span>.</li>
           <li><b>Host folders.</b> A list of <span class="mono">&lt;filesystem&gt;</span> devices in <span class="mono">domain.xml</span> rather than one, each with a tag the guest maps to a drive letter.</li>
-          <li><b>Launch splash.</b> A frameless QDialog the manager shows when <span class="mono">--launch &lt;app-id&gt;</span> arrives and the domain is not running. Phases come from signals that already exist on <span class="mono">Lifecycle</span> and <span class="mono">Monitor</span>, plus one new one for the channel claim.</li>
+          <li><b>Launch splash.</b> A frameless QDialog the manager shows when <span class="mono">--launch &lt;app-id&gt;</span> arrives and the domain is not running. Phases come from signals that already exist on <span class="mono">Lifecycle</span> and <span class="mono">Monitor</span>.</li>
           <li><b>Remote file picker.</b> A new agent command <span class="mono">list_dir</span> (path, cursor, filter in; name, is_dir, size, mtime, icon id out, paged), and a <span class="mono">RemoteFileDialog</span> on the host: a QListWidget of places beside a QTreeView over a small model that fetches a page at a time and asks <span class="mono">get_icon</span> only for visible rows. Shortcut resolution happens agent side, so the host stores the target rather than the .lnk.</li>
           <li><b>Manager status bar.</b> A QStatusBar fed from Lifecycle and AgentRpcClient.</li>
           <li><b>Empty state.</b> A second page in a QStackedWidget inside the panel.</li>
@@ -2671,11 +2615,10 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
           <li>new <span class="mono">src/host/src/manager/settings_page.cpp</span> and <span class="mono">src/host/src/config/pending_changes.cpp</span></li>
           <li><span class="mono">src/host/src/platform/dolphin_places.cpp</span>, plus a new <span class="mono">gtk_bookmarks.cpp</span> beside it</li>
           <li><span class="mono">src/host/src/apps/desktop_launcher.cpp</span>, category and MIME handling</li>
-          <li>new <span class="mono">src/host/src/link/render_stats.cpp</span>, region counters and the log fallback</li>
+          <li><span class="mono">src/host/src/manager/render_panel.cpp</span> and <span class="mono">pressure_meter.cpp</span> give way to a new <span class="mono">graphics_page.cpp</span></li>
+          <li><span class="mono">src/host/embedded/domain.xml</span> and <span class="mono">src/host/src/vm/domain_xml_builder.cpp</span>, the accel-virt device line</li>
           <li>new <span class="mono">src/host/src/manager/launch_splash.cpp</span></li>
           <li>new <span class="mono">src/host/src/manager/remote_file_dialog.cpp</span>, and <span class="mono">list_dir</span> in <span class="mono">src/agent/src/rpc/</span> plus <span class="mono">src/linkproto/include/lsw/linkproto/commands.hpp</span></li>
-          <li><span class="mono">src/host/src/apps/app_config.cpp</span>, channel index and busy policy per application</li>
-          <li>render server: a counters block in <span class="mono">src/wire/include/rvk/wire/region_layout.hpp</span>, written where <span class="mono">ring_producer.cpp</span>, <span class="mono">ring_transport.cpp</span> and <span class="mono">blob_allocator.cpp</span> already count</li>
           <li><span class="mono">src/host/src/manager/stats_widget.cpp</span>, gauges</li>
           <li><span class="mono">src/host/src/manager/app_list.cpp</span>, tile metrics</li>
           <li><span class="mono">src/host/src/wizard/*.cpp</span>, all eight pages</li>

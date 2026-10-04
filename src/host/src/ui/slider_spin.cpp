@@ -38,6 +38,11 @@ void SliderSpin::set_value(int value) {
     slider_->setValue(value);
 }
 
+void SliderSpin::set_minimum(int min) {
+    spin_->setMinimum(min);
+    slider_->setMinimum(min);
+}
+
 void SliderSpin::set_maximum(int max) {
     spin_->setMaximum(max);
     slider_->setMaximum(max);

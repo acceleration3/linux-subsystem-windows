@@ -26,12 +26,8 @@ namespace lsw::host::vm {
 // this side only.
 //
 // Channels today:
-//   frames      the window-frame slot table + pixel buffers (the
-//               original contents of the whole region)
 //   rpc         duplex message rings, for control traffic that does not
 //               want to be on TCP-over-hostfwd
-//
-// The aliases below exist so callers keep reading
 class ShmemRegion {
 public:
     static constexpr quint32 kMagic   = linkproto::kRegionMagic;

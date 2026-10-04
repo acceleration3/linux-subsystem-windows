@@ -11,6 +11,7 @@
 
 #include <QColor>
 #include <QHeaderView>
+#include <QStyledItemDelegate>
 #include <QTableWidget>
 #include <QWidget>
 
@@ -41,6 +42,26 @@ namespace {
     return fallback;
 }
 
+// The row lists' cells inset their text by the stylesheet's item padding
+// (12 px either side). A control or a pill set into a cell is placed by
+// the delegate too, and the stock one hands it the *text* rectangle: the
+// item's padding taken off every side, vertical included, so a 24 px
+// button in a 38 px row with 9 px of padding above and below was cut to
+// 20. This one gives a cell widget the whole height of its row (less the
+// hairline under it) and the same 12 px either side the text has, so
+// controls line up with the column's text and are never clipped.
+class CellWidgetDelegate : public QStyledItemDelegate {
+public:
+    using QStyledItemDelegate::QStyledItemDelegate;
+
+    static constexpr int kInset = 12;
+
+    void updateEditorGeometry(QWidget* editor, const QStyleOptionViewItem& option,
+                              const QModelIndex& /*index*/) const override {
+        editor->setGeometry(option.rect.adjusted(kInset, 0, -kInset, -1));
+    }
+};
+
 }  // namespace
 
 void Theme::surface(QWidget* widget, const char* role) {
@@ -65,6 +86,8 @@ void Theme::rows_table(QTableWidget* table, const QStringList& headers) {
     table->setSelectionMode(QAbstractItemView::NoSelection);
     table->setFocusPolicy(Qt::NoFocus);
     table->setWordWrap(false);
+    table->setTextElideMode(Qt::ElideRight);
+    table->setItemDelegate(new CellWidgetDelegate(table));
 
     auto* head = table->horizontalHeader();
     head->setDefaultAlignment(Qt::AlignLeft | Qt::AlignBottom);
@@ -90,9 +113,26 @@ QTableWidgetItem* Theme::kind_cell(const QString& text) {
 void Theme::fit_rows(QTableWidget* table) {
     int height = table->horizontalHeader()->height();
     for (int row = 0; row < table->rowCount(); ++row) {
-        height += table->rowHeight(row);
+        // Tall enough for every control in the row at its own height,
+        // with a little air: a row sized for text alone clips a combo
+        // or a button set into it.
+        int needed = table->rowHeight(row);
+        for (int column = 0; column < table->columnCount(); ++column) {
+            if (QWidget* cell = table->cellWidget(row, column)) {
+                cell->ensurePolished();
+                needed = qMax(needed, cell->sizeHint().height() + 8);
+            }
+        }
+        if (needed != table->rowHeight(row)) {
+            table->setRowHeight(row, needed);
+        }
+        height += needed;
     }
     table->setFixedHeight(height + 2);
+}
+
+int Theme::cell_inset() {
+    return CellWidgetDelegate::kInset;
 }
 
 QFont Theme::mono_font(int pixel_size) {

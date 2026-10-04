@@ -12,10 +12,10 @@ namespace lsw::agent::rpc {
 // subclass, registered at static-init via ``LSW_REGISTER_RPC``.
 //
 // Handlers are instantiated ONCE at process startup and called from
-// the single dispatch thread of each connection — they must be safe
-// to call repeatedly but can assume no concurrent reentry on a single
-// instance. Any per-command persistent state belongs on the relevant
-// service (``Installer``, ``Console``, ``Uia``), not the handler.
+// every connection's dispatch thread (and, in a session helper, from its
+// worker threads) — they must be safe to call concurrently. Any
+// per-command persistent state belongs on the relevant service
+// (``Installer``, ``Console``, ``Uia``), not the handler.
 //
 // Throwing is the error path: handlers throw ``std::invalid_argument``
 // for bad params, ``std::runtime_error`` for runtime failures. The
@@ -23,6 +23,17 @@ namespace lsw::agent::rpc {
 // ``{"error": "..."}`` reply.
 class RpcHandler {
 public:
+    // Which process runs the command. The agent is a LocalSystem service
+    // in session 0, and a few things only work from inside the user's
+    // own session: enumerating and messaging its windows (window handles
+    // do not cross sessions), UI Automation, and anything written to
+    // HKCU. Those commands are served by the session helper the service
+    // keeps in each user session; the service forwards them there.
+    enum class Placement {
+        Service,      // runs in the service, whatever session it concerns
+        UserSession,  // forwarded to the helper in the target session
+    };
+
     virtual ~RpcHandler() = default;
     [[nodiscard]] virtual nlohmann::json handle(const nlohmann::json& params,
                                                  RpcContext& ctx) = 0;
@@ -43,6 +54,15 @@ public:
     [[nodiscard]] virtual std::string summarize(const nlohmann::json& reply) const {
         return std::to_string(reply.dump().size()) + "B json";
     }
+
+    // Where ``handle`` runs. Declared by the handler, like ``silent``,
+    // so the dispatcher knows no command names.
+    [[nodiscard]] virtual Placement placement() const { return Placement::Service; }
+
+    // For a ``UserSession`` command: adjust the helper's reply in the
+    // service before it goes to the manager, with what only the service
+    // knows (which launch a process belongs to, say). Default: nothing.
+    virtual void complete_in_service(nlohmann::json& reply) const { (void)reply; }
 };
 
 }  // namespace lsw::agent::rpc

@@ -14,7 +14,8 @@ std::string RawRpcTool::description() const {
     return "Escape hatch: forward an arbitrary RPC frame to the agent. ``cmd`` is "
            "the verb (e.g. ``close_window``), ``params`` is the args object. "
            "Returns the raw reply body. Use this for verbs not exposed as a "
-           "dedicated tool.";
+           "dedicated tool. Session-aware verbs take ``session`` inside ``params`` "
+           "(``list_sessions`` lists them).";
 }
 
 nlohmann::json RawRpcTool::input_schema() const {

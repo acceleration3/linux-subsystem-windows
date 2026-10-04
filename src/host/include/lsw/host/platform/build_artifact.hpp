@@ -5,7 +5,7 @@
 namespace lsw::host::platform {
 
 // Find something this project builds but does not install: the guest
-// agent, the mirror's two halves, the render server, the guest drivers.
+// agent, the mirror's two halves, accel-virt's QEMU and guest drivers.
 //
 // One rule for all of them, so a developer learns it once. An
 // environment variable wins if it names an existing file — that is how

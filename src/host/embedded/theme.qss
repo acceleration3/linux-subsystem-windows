@@ -49,7 +49,7 @@ QLabel, QCheckBox, QRadioButton, QGroupBox {
     background: transparent;
 }
 
-/* The scroll areas the settings and render pages live in. Without
+/* The scroll areas the settings and graphics pages live in. Without
    this the viewport paints Base (an input colour) behind the page. */
 QScrollArea, QAbstractScrollArea, QAbstractScrollArea > QWidget > QWidget {
     background: transparent;
@@ -313,6 +313,11 @@ QTableWidget#Rows::item, QTableView#Rows::item {
     border-bottom: 1px solid #1b202a;
     padding: 9px 12px;
 }
+/* A row list whose cells hold controls (a role combo, move buttons):
+   the item padding would be taken out of the controls' height too. */
+QTableWidget#Rows[controls="true"]::item {
+    padding: 0px 12px;
+}
 /* The heading is a line of small caps over a rule, not a filled band:
    a band reads as a second surface inside the panel. */
 QTableWidget#Rows QHeaderView, QTableView#Rows QHeaderView {
@@ -433,33 +438,27 @@ QFrame#KpiGrid {
     border-radius: 3px;
 }
 
-/* A channel in the strip: a card you pick, marked by its edge. */
-QPushButton#ChannelCard {
-    background-color: #151922;
-    border: 1px solid #272d3a;
-    border-radius: 5px;
-    padding: 0px;
-    text-align: left;
+/* The figure in a tile: mono, a size up from the body. */
+QLabel#KpiValue {
+    font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace;
+    font-size: 15px;
+    color: #e4e8f0;
 }
-QPushButton#ChannelCard:hover   { background-color: #1c212c; }
-QPushButton#ChannelCard:checked { background-color: #1b1a19; border-color: #a8672a; }
 
-/* Adding one: an outline where a card would be. */
-QPushButton#AddCard {
-    background: transparent;
-    border: 1px dashed #39415a;
-    border-radius: 5px;
+/* A card's name in its header, beside the mono caption. */
+QLabel#CardName {
+    font-size: 13px;
+    font-weight: 600;
+}
+
+/* The tail of a log a machine wrote, on black. Older lines faint; the
+   newest is in the foreground, set in the text itself. */
+QLabel#Term {
+    background-color: #05070a;
     color: #646d7e;
-    padding: 0px 14px;
-    font-weight: 400;
-}
-QPushButton#AddCard:hover { color: #e4e8f0; border-color: #646d7e; }
-
-/* What the server suggests, and the button that stages it. */
-QFrame#Advice {
-    background-color: #1d1712;
-    border-left: 2px solid #ff9f45;
-    border-radius: 0px 3px 3px 0px;
+    font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace;
+    font-size: 11px;
+    padding: 9px 14px;
 }
 
 /* The guest's console on the install page. */
@@ -500,47 +499,21 @@ QLabel#Callout {
     padding: 10px 13px;
 }
 
-/* A pressure bar: green while there is room, amber as it fills, red
-   when operations are splitting. The id is named alongside the property
-   because an id selector outranks a bare attribute one, and the chunk
-   would otherwise keep the default fill whatever the pressure says. */
-QProgressBar#MiniBar {
-    background-color: #20252f;
-    border: none;
-    border-radius: 3px;
-    min-height: 3px;
-    max-height: 3px;
-}
-QProgressBar#MiniBar::chunk {
-    border-radius: 3px;
-    background-color: #4ec98a;
-}
-QProgressBar#MiniBar[pressure="hot"]::chunk  { background-color: #ff9f45; }
-QProgressBar#MiniBar[pressure="crit"]::chunk { background-color: #f2555a; }
-
-/* The area meter paints two readings, so it is a widget of its own and
-   takes its colours as properties rather than as a chunk fill. Same
-   three pressure colours as the mini bar above; the paler band behind
-   the live figure is derived from `fill` in the widget, because it is
-   the same reading at its worst and wants the same hue. */
-/* Selected through QWidget, not through the class's own name: the
-   class lives in a namespace, so its metaobject name is
-   lsw::host::manager::PressureMeter and a stylesheet type selector for
-   it has to be spelled lsw--host--manager--PressureMeter. A type
-   selector matches subclasses, and nothing else in this window is
-   called Meter, so the base class and the object name are enough — and
-   they cannot be silently invalidated by the class moving namespace.
-   The widget sizes itself; only the colours come from here. */
-QWidget#Meter {
-    qproperty-track: #20252f;
-    qproperty-fill: #4ec98a;
-}
-QWidget#Meter[pressure="hot"]  { qproperty-fill: #ff9f45; }
-QWidget#Meter[pressure="crit"] { qproperty-fill: #f2555a; }
+/* A bar whose colour says how it is going: green while there is room,
+   amber as it fills, red when it is out. The id is named alongside the
+   property because an id selector outranks a bare attribute one. */
+QProgressBar#Meter::chunk { background-color: #4ec98a; border-radius: 3px; }
+QProgressBar#Meter[pressure="hot"]::chunk  { background-color: #ff9f45; }
+QProgressBar#Meter[pressure="crit"]::chunk { background-color: #f2555a; }
 
 QWidget#PanelHeader {
     background-color: #131720;
     border-bottom: 1px solid #272d3a;
+}
+
+QWidget#ListFoot {
+    background-color: #131720;
+    border-top: 1px solid #272d3a;
 }
 
 QFrame#Separator {
@@ -808,7 +781,7 @@ QFrame#DialogFoot {
 
 /* A status word with its dot, in a pill. Pending, running, done and
    failed each keep the colour that means that everywhere else. */
-QLabel#Pill, QLabel#PillRun, QLabel#PillDone, QLabel#PillFail {
+QLabel#Pill, QLabel#PillRun, QLabel#PillDone, QLabel#PillFail, QLabel#PillWarn {
     font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace;
     font-size: 11px;
     font-weight: 500;
@@ -819,6 +792,7 @@ QLabel#Pill     { color: #646d7e; border: 1px solid #2b313d; background-color: #
 QLabel#PillRun  { color: #5aa9f0; border: 1px solid #2b4a6b; background-color: #16202c; }
 QLabel#PillDone { color: #4ec98a; border: 1px solid #2c5c44; background-color: #16241d; }
 QLabel#PillFail { color: #f2555a; border: 1px solid #6b2f32; background-color: #24181a; }
+QLabel#PillWarn { color: #ff9f45; border: 1px solid #a8672a; background-color: #1d1712; }
 
 /* ---- tones ------------------------------------------------------- */
 
@@ -831,6 +805,8 @@ QLabel#Caption[tone="amber"], QLabel#Meta[tone="amber"] { color: #ff9f45; }
 QLabel#Meta[tone="bad"] { color: #f2555a; }
 QLabel#Body[tone="warm"] { color: #f0c393; }
 QLabel[tone="ok"] { color: #4ec98a; }
+QLabel[tone="amber"] { color: #ff9f45; }
+QLabel[tone="bad"] { color: #f2555a; }
 QLabel[tone="faint"] { color: #646d7e; }
 
 /* After the button rules above, so a tone outranks :disabled too. */

@@ -17,6 +17,12 @@ public:
 
     [[nodiscard]] static QString build(const config::VmRecord& vm, const DomainXmlInputs& inputs);
 
+    // The id ``build`` gives the GPU's display adapter on QEMU's command
+    // line, and so the last element of its QOM path,
+    // /machine/peripheral/<id>, which is where its ``modes`` are set on
+    // a running VM. Render-only adapters are "<id>-1", "<id>-2", ...
+    [[nodiscard]] static QString gpu_device_id();
+
     // Test hook — exposed so unit tests can pin the exact output.
     [[nodiscard]] static QString render_template(const QString& tmpl,
                                                  const QHash<QString, QString>& vars);

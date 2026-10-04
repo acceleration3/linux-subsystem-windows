@@ -5,9 +5,14 @@
 #include <QWidget>
 #include <QString>
 
+#include <optional>
+
+class QComboBox;
 class QPlainTextEdit;
 class QLineEdit;
 class QLabel;
+
+namespace lsw::host::services { class StatusHub; }
 
 namespace lsw::host::manager {
 
@@ -22,10 +27,19 @@ namespace lsw::host::manager {
 // the page is destroyed or explicitly released, so a manager left on
 // the Overview page is not holding a cmd.exe open inside the guest.
 // Ctrl+D on an empty line still ends the session.
+//
+// The agent is a session-0 service, so "the guest" is not one place: the
+// picker in the input band chooses the Windows session cmd.exe runs in —
+// a user's, as that user and elevated, or session 0 as SYSTEM. The list
+// is the hub's; it is only polled while this page is on screen.
 class ConsolePanel : public QWidget {
     Q_OBJECT
 public:
-    explicit ConsolePanel(link::AgentRpcClient& rpc, QWidget* parent = nullptr);
+    // ``status`` says whether the agent answers — a session does not
+    // survive it going away, and one is opened when it comes back — and
+    // which Windows sessions there are to open one in.
+    ConsolePanel(link::AgentRpcClient& rpc, services::StatusHub& status,
+                 QWidget* parent = nullptr);
     ~ConsolePanel() override;
 
     // Ends the guest-side session if one is open. Called when the page
@@ -37,8 +51,16 @@ public:
     // this is the transcript, not the shell.
     void clear_transcript();
 
+    // The page's one-line detail: where the open shell runs and as whom,
+    // or why there is none. ``summary_changed`` when that changes.
+    [[nodiscard]] QString summary() const;
+
+Q_SIGNALS:
+    void summary_changed();
+
 protected:
     void showEvent(QShowEvent* e) override;
+    void hideEvent(QHideEvent* e) override;
     bool eventFilter(QObject* watched, QEvent* event) override;
 
 private Q_SLOTS:
@@ -48,15 +70,32 @@ private Q_SLOTS:
 
 private:
     void open_session();
+    // The hub's session list changed: re-fill the picker, keeping the
+    // choice when it still exists.
+    void rebuild_picker();
+    // The user picked a Windows session: the shell moves there.
+    void on_picker(int index);
+    // The agent started or stopped answering.
+    void on_agent(bool online);
     void append_output(const QString& text);
     static QString sanitize(const QByteArray& raw);
 
     link::AgentRpcClient& rpc_;
+    services::StatusHub& hub_;
+    bool agent_online_ = false;
     QString session_id_;
     bool opening_ = false;
     QPlainTextEdit* output_ = nullptr;
     QLineEdit* input_ = nullptr;
     QLabel* status_ = nullptr;
+    QComboBox* picker_ = nullptr;
+    // The Windows session asked for; unset means the agent's default
+    // (the console user's). ``shell_session_`` is where the open shell
+    // actually runs, as the agent reported it.
+    std::optional<int> wanted_session_;
+    std::optional<int> shell_session_;
+    QString shell_user_;
+    bool shell_elevated_ = false;
 
     // The console_output / console_closed handlers capture ``this``;
     // the destructor drops these first, which waits out a handler the

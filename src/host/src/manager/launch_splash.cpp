@@ -18,10 +18,6 @@ namespace {
 using ui::Theme;
 using ui::Widgets;
 
-// What a cold start costs, measured: the domain boots, Windows reaches
-// a logon, the agent's scheduled task fires. Shown as an expectation
-// rather than a countdown, because it is one.
-constexpr int kExpectedSeconds = 40;
 constexpr int kTickMs = 500;
 
 const char* const kPhaseNames[] = {
@@ -32,8 +28,11 @@ const char* const kPhaseNames[] = {
 
 }  // namespace
 
-LaunchSplash::LaunchSplash(QString application, QIcon icon, QWidget* parent)
-    : QWidget(parent, Qt::Window), application_(std::move(application)) {
+LaunchSplash::LaunchSplash(QString application, QIcon icon, std::optional<qint64> last_boot_ms,
+                           QWidget* parent)
+    : QWidget(parent, Qt::Window), application_(std::move(application)),
+      expected_seconds_(last_boot_ms ? static_cast<int>(qMax<qint64>(1, *last_boot_ms / 1000))
+                                     : 0) {
     setWindowTitle(application_);
     setAttribute(Qt::WA_DeleteOnClose);
     setFixedWidth(420);
@@ -71,8 +70,10 @@ LaunchSplash::LaunchSplash(QString application, QIcon icon, QWidget* parent)
     root->addLayout(head);
 
     // ---- progress -------------------------------------------------
+    // Against the last boot when there was one, as an expectation
+    // rather than a countdown, because it is one; busy otherwise.
     bar_ = new QProgressBar;
-    bar_->setRange(0, kExpectedSeconds);
+    bar_->setRange(0, expected_seconds_);
     root->addWidget(bar_);
     timing_ = Widgets::meta(QString{}, true);
     root->addWidget(timing_);
@@ -87,6 +88,7 @@ LaunchSplash::LaunchSplash(QString application, QIcon icon, QWidget* parent)
         steps->addWidget(steps_[i]);
     }
     root->addLayout(steps);
+    show_phases();
 
     stall_text_ = Widgets::prose(QString{});
     stall_text_->setProperty(Theme::Tone::kProperty, Theme::Tone::kWarm);
@@ -130,12 +132,7 @@ LaunchSplash::LaunchSplash(QString application, QIcon icon, QWidget* parent)
         hide();
     });
     connect(open_log, &QPushButton::clicked, this, &LaunchSplash::log_requested);
-    connect(keep, &QPushButton::clicked, this, [this] {
-        stall_text_->setVisible(false);
-        stalled_footer_->setVisible(false);
-        footer_->setVisible(true);
-        clock_.restart();
-    });
+    connect(keep, &QPushButton::clicked, this, &LaunchSplash::resume);
     connect(restart, &QPushButton::clicked, this, &LaunchSplash::restart_requested);
 
     clock_.start();
@@ -147,9 +144,13 @@ LaunchSplash::LaunchSplash(QString application, QIcon icon, QWidget* parent)
 
 void LaunchSplash::tick() {
     const int seconds = static_cast<int>(clock_.elapsed() / 1000);
-    bar_->setValue(qMin(seconds, kExpectedSeconds));
-    timing_->setText(QStringLiteral("%1 of about %2")
-                         .arg(ui::Format::clock(seconds), ui::Format::clock(kExpectedSeconds)));
+    if (expected_seconds_ <= 0) {
+        timing_->setText(ui::Format::clock(seconds));
+        return;
+    }
+    bar_->setValue(qMin(seconds, expected_seconds_));
+    timing_->setText(QStringLiteral("%1 · last boot took %2")
+                         .arg(ui::Format::clock(seconds), ui::Format::clock(expected_seconds_)));
 }
 
 void LaunchSplash::reach(Phase phase) {
@@ -158,20 +159,7 @@ void LaunchSplash::reach(Phase phase) {
         return;
     }
     reached_ = index;
-    for (int i = 0; i < static_cast<int>(Phase::Count); ++i) {
-        const bool done = i <= reached_;
-        const bool current = i == reached_ + 1;
-        steps_[i]->setText(QStringLiteral("%1  %2")
-                               .arg(done ? QStringLiteral("✓")
-                                         : (current ? QStringLiteral("●")
-                                                    : QStringLiteral("○")),
-                                    QString::fromLatin1(kPhaseNames[i])));
-        // The current phase is in the plain foreground, which is no tone.
-        Widgets::set_flag(steps_[i], Theme::Tone::kProperty,
-                          done      ? QVariant(Theme::Tone::kOk)
-                          : current ? QVariant()
-                                    : QVariant(Theme::Tone::kFaint));
-    }
+    show_phases();
     switch (phase) {
     case Phase::MachineStarted:
         subtitle_->setText(QStringLiteral("Windows is booting"));
@@ -186,6 +174,32 @@ void LaunchSplash::reach(Phase phase) {
     case Phase::Count:
         break;
     }
+}
+
+void LaunchSplash::show_phases() {
+    // Done up to the one reached, the next one current, the rest to come.
+    for (int i = 0; i < static_cast<int>(Phase::Count); ++i) {
+        const bool done = i <= reached_;
+        const bool current = i == reached_ + 1;
+        steps_[i]->setText(QStringLiteral("%1  %2")
+                               .arg(done ? QStringLiteral("✓")
+                                         : (current ? QStringLiteral("●")
+                                                    : QStringLiteral("○")),
+                                    QString::fromLatin1(kPhaseNames[i])));
+        // The current phase is in the plain foreground, which is no tone.
+        Widgets::set_flag(steps_[i], Theme::Tone::kProperty,
+                          done      ? QVariant(Theme::Tone::kOk)
+                          : current ? QVariant()
+                                    : QVariant(Theme::Tone::kFaint));
+    }
+}
+
+void LaunchSplash::resume() {
+    stall_text_->setVisible(false);
+    stalled_footer_->setVisible(false);
+    footer_->setVisible(true);
+    clock_.restart();
+    tick();
 }
 
 void LaunchSplash::stall(const QString& reason) {

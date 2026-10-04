@@ -13,6 +13,8 @@
 #include <QProgressBar>
 #include <QVBoxLayout>
 
+#include <algorithm>
+
 namespace lsw::host::wizard {
 
 namespace {
@@ -38,9 +40,9 @@ constexpr int kColStatus = 2;
 SetupPage::SetupPage(Wizard& wizard, QWidget* parent) : PipelinePage(parent), wizard_(wizard) {
 
     auto* lay = install_chrome(
-        QStringLiteral("Installing runtimes inside the guest"),
-        QStringLiteral("Reported live by the agent. Steps inside one stage run in "
-                       "parallel."));
+        QStringLiteral("Finishing setup inside the guest"),
+        QStringLiteral("Reported live by the agent. The display driver is already in: "
+                       "Windows installed it at the end of setup, from the payload."));
 
     // Which stage the table is showing, and whether its steps run at
     // the same time. The square is the design's: a stage is a group,
@@ -85,7 +87,7 @@ SetupPage::SetupPage(Wizard& wizard, QWidget* parent) : PipelinePage(parent), wi
     lay->addWidget(progress_);
 
     status_label_ = ui::Widgets::meta(
-        QStringLiteral("Then the VM shuts down, restarts on the virtio configuration, and the "
+        QStringLiteral("Then the VM shuts down, restarts on its own display driver, and the "
                        "agent reconnects."),
         true);
     lay->addWidget(status_label_);
@@ -109,8 +111,10 @@ void SetupPage::initializePage() {
     if (!p->setup_plan().isEmpty()) {
         populate_from_plan(p->setup_plan());
     }
-    connect(p, &::lsw::host::provision::Pipeline::setup_step_started, this,
-            [this](int row) { set_row_status(row, RowStatus::Running); });
+    connect(p, &::lsw::host::provision::Pipeline::setup_step_started, this, [this](int row) {
+        set_row_status(row, RowStatus::Running);
+        show_stage(row);
+    });
     connect(p, &::lsw::host::provision::Pipeline::setup_step_progress, this,
             [this](int row, const QString& detail) {
                 set_row_status(row, RowStatus::Running, detail);
@@ -142,7 +146,7 @@ void SetupPage::initializePage() {
             });
     connect(p, &::lsw::host::provision::Pipeline::completed, this, [this](const QUuid&) {
         progress_->setValue(100);
-        status_label_->setText("Setup is complete. The VM is on the virtio configuration.");
+        status_label_->setText("Setup is complete. The VM runs on its own display driver.");
         finish_and_advance();
     });
 }
@@ -151,16 +155,14 @@ void SetupPage::demo_fill() {
     using ::lsw::host::provision::SetupStage;
     using ::lsw::host::provision::StepKind;
     SetupStage stage;
-    stage.steps.push_back({QStringLiteral("DXVK 2.7.1"), StepKind::DownloadExtract});
-    stage.steps.push_back({QStringLiteral("VKD3D-Proton 3.0.1"), StepKind::DownloadExtract});
+    // The plan as setup-steps.json has it: one step. Graphics is not one
+    // of them any more; the driver package went in with Windows.
     stage.steps.push_back({QStringLiteral("Tune Windows for VM use"), StepKind::RunScript});
     populate_from_plan({stage});
-    set_row_status(0, RowStatus::Done, QStringLiteral("Done, 12.4 MiB"));
-    set_row_status(1, RowStatus::Running, QStringLiteral("Extracting"));
-    set_row_status(2, RowStatus::Running, QStringLiteral("Applying registry"));
-    progress_->setValue(55);
+    set_row_status(0, RowStatus::Running, QStringLiteral("Applying registry"));
+    progress_->setValue(40);
     status_label_->setText(QStringLiteral(
-        "Then the VM shuts down, restarts on the virtio configuration, and the agent "
+        "Then the VM shuts down, restarts on its own display driver, and the agent "
         "reconnects."));
 }
 
@@ -170,10 +172,9 @@ int SetupPage::nextId() const {
 
 void SetupPage::populate_from_plan(const QVector<::lsw::host::provision::SetupStage>& stages) {
     int total = 0;
-    int parallel_groups = 0;
+    stage_sizes_.clear();
     for (const auto& st : stages) {
         total += static_cast<int>(st.steps.size());
-        if (st.steps.size() > 1) ++parallel_groups;
     }
     table_->setRowCount(total);
     int row = 0;
@@ -198,15 +199,40 @@ void SetupPage::populate_from_plan(const QVector<::lsw::host::provision::SetupSt
             QStringLiteral("No setup steps are configured, so there is nothing to do."));
         return;
     }
-    const int first = static_cast<int>(stages.front().steps.size());
-    stage_label_->setText(first > 1
-                              ? QStringLiteral("STAGE 1 OF %1, %2 STEPS IN PARALLEL")
-                                    .arg(stages.size())
-                                    .arg(first)
-                              : QStringLiteral("STAGE 1 OF %1").arg(stages.size()));
-    if (parallel_groups == 0) {
-        stage_label_->setText(QStringLiteral("%1 STEPS, ONE AT A TIME").arg(total));
+    for (const auto& st : stages) {
+        stage_sizes_ << static_cast<int>(st.steps.size());
     }
+    show_stage(0);
+}
+
+void SetupPage::show_stage(int row) {
+    // The stage the running step belongs to, and whether its steps run
+    // together; a plan of single steps is just a count.
+    const int total = total_steps_;
+    if (stage_sizes_.isEmpty()) {
+        return;
+    }
+    if (std::all_of(stage_sizes_.begin(), stage_sizes_.end(), [](int n) { return n <= 1; })) {
+        stage_label_->setText(total == 1 ? QStringLiteral("1 STEP")
+                                         : QStringLiteral("%1 STEPS, ONE AT A TIME").arg(total));
+        return;
+    }
+    int stage = 0;
+    for (int first = 0; stage < stage_sizes_.size(); ++stage) {
+        if (row < first + stage_sizes_.at(stage)) {
+            break;
+        }
+        first += stage_sizes_.at(stage);
+    }
+    stage = qMin(stage, static_cast<int>(stage_sizes_.size()) - 1);
+    const int size = stage_sizes_.at(stage);
+    stage_label_->setText(size > 1 ? QStringLiteral("STAGE %1 OF %2, %3 STEPS IN PARALLEL")
+                                         .arg(stage + 1)
+                                         .arg(stage_sizes_.size())
+                                         .arg(size)
+                                   : QStringLiteral("STAGE %1 OF %2")
+                                         .arg(stage + 1)
+                                         .arg(stage_sizes_.size()));
 }
 
 void SetupPage::set_row_status(int row, RowStatus s, const QString& detail) {

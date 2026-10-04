@@ -9,8 +9,9 @@
 namespace lsw::agent::install {
 
 RunScriptJob::RunScriptJob(std::string id, std::string name, NotificationQueue& queue,
-                           std::string script)
-    : InstallJob(std::move(id), std::move(name), queue), script_(std::move(script)) {}
+                           std::string script, win::RunAs as)
+    : InstallJob(std::move(id), std::move(name), queue, std::move(as)),
+      script_(std::move(script)) {}
 
 void RunScriptJob::run() {
     const ScriptFile file{id_, L".cmd", script_};
@@ -24,7 +25,7 @@ void RunScriptJob::run() {
 
     report_status("script", "running script");
 
-    const auto outcome = ProcessRunner::run(file.command_line(), kTimeoutMs);
+    const auto outcome = ProcessRunner::run(file.command_line(), as_, kTimeoutMs);
     if (!outcome.completed) {
         report_done("script", false, outcome.exit_code, outcome.error);
         LSW_AGENT_INFO("installer: done job={} ok=false", id_);

@@ -158,12 +158,10 @@ bool Window::close_window(std::uintptr_t hwnd_raw) {
 }
 
 std::vector<DiscoveredWindow> Window::enumerate() {
-    // This is the in-session implementation. When called from the
-    // service process (session 0) it sees nothing because top-level
-    // windows live on the user session's desktop. The host_endpoint
-    // forwards list_windows to the user-session GuiHelper which
-    // ends up calling this function; in the helper's process, we ARE
-    // the user session, so EnumWindows works natively.
+    // Only meaningful inside the user's session: from the service
+    // (session 0) EnumWindows sees session 0's windows, not the user's.
+    // list_windows is therefore a UserSession command — the service
+    // forwards it to the session helper, which calls this.
     std::vector<DiscoveredWindow> out;
     ::EnumWindows(&enum_proc, reinterpret_cast<LPARAM>(&out));
     return out;  // no per-call log: enumerate runs at the watcher poll

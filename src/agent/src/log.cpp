@@ -9,6 +9,7 @@
 // clang-format on
 
 #include <array>
+#include <chrono>
 #include <condition_variable>
 #include <cstdio>
 #include <cstring>
@@ -25,19 +26,28 @@ namespace {
 // against the manager being disconnected for a long time.
 constexpr size_t kRingCapacity = 5000;
 
+// Everything here is deliberately never destroyed: the file writer is a
+// detached thread still waiting on these when the process exits, and a
+// mutex or condition variable torn down under a waiter is a crash at
+// exit — which, for a service, the SCM would count as a failure.
 std::mutex& mu() {
-    static std::mutex m;
-    return m;
+    static auto* m = new std::mutex;
+    return *m;
 }
 
 std::deque<Record>& ring() {
-    static std::deque<Record> r;
-    return r;
+    static auto* r = new std::deque<Record>;
+    return *r;
 }
 
 std::uint64_t& seq_counter() {
     static std::uint64_t s = 0;
     return s;
+}
+
+std::wstring& file_path() {
+    static auto* p = new std::wstring;
+    return *p;
 }
 
 std::uint64_t now_ms() {
@@ -72,18 +82,30 @@ void format_prefix(char* out, size_t cap, std::uint64_t ts_ms, Level level) {
 // writes batched, never blocking a logging caller.
 
 std::mutex& file_mu() {
-    static std::mutex m;
-    return m;
+    static auto* m = new std::mutex;
+    return *m;
 }
 
 std::condition_variable& file_cv() {
-    static std::condition_variable cv;
-    return cv;
+    static auto* cv = new std::condition_variable;
+    return *cv;
+}
+
+// Signalled by the writer each time it has written a batch, for flush().
+std::condition_variable& written_cv() {
+    static auto* cv = new std::condition_variable;
+    return *cv;
 }
 
 std::deque<Record>& file_q() {
-    static std::deque<Record> q;
-    return q;
+    static auto* q = new std::deque<Record>;
+    return *q;
+}
+
+// Records taken off the queue but not yet written. Guarded by file_mu().
+std::size_t& in_writer() {
+    static std::size_t n = 0;
+    return n;
 }
 
 // Cap the pending-write backlog. If the disk wedges hard we drop
@@ -92,34 +114,47 @@ constexpr size_t kFileQueueCap = 20000;
 
 void writer_thread_body() {
     ::CreateDirectoryW(core::Paths::root().c_str(), nullptr);
+    std::wstring path;
+    {
+        const std::lock_guard<std::mutex> lock(file_mu());
+        path = file_path().empty() ? core::Paths::agent_log() : file_path();
+    }
     // Open ONCE and keep it. FILE_APPEND_DATA keeps appends atomic
     // even though we no longer reopen. No FILE_FLAG_WRITE_THROUGH /
     // FlushFileBuffers — those force the qcow2 fsync stalls we're
     // eliminating; the OS lazily flushes the buffered handle, which is
     // fine for a debug log (the wire path already has every line).
-    HANDLE h = ::CreateFileW(core::Paths::agent_log().c_str(), FILE_APPEND_DATA,
-                             FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_ALWAYS,
-                             FILE_ATTRIBUTE_NORMAL, nullptr);
+    HANDLE h = ::CreateFileW(path.c_str(), FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                             nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
     std::deque<Record> batch;
+    std::string line;
     for (;;) {
         {
             std::unique_lock<std::mutex> lock(file_mu());
             file_cv().wait(lock, [] { return !file_q().empty(); });
             batch.swap(file_q());
+            in_writer() = batch.size();
         }
         for (const auto& r : batch) {
             if (h == INVALID_HANDLE_VALUE) {
                 continue;  // keep draining the queue even if the file is unusable
             }
+            // One write per record, so a line is never split by another
+            // writer appending to the same file.
             char prefix[64];
             format_prefix(prefix, sizeof(prefix), r.ts_ms, r.level);
+            line.assign(prefix);
+            line += r.msg;
+            line += "\r\n";
             DWORD wrote = 0;
-            ::WriteFile(h, prefix, static_cast<DWORD>(std::strlen(prefix)), &wrote, nullptr);
-            ::WriteFile(h, r.msg.data(), static_cast<DWORD>(r.msg.size()), &wrote, nullptr);
-            static constexpr char nl[] = "\r\n";
-            ::WriteFile(h, nl, 2, &wrote, nullptr);
+            ::WriteFile(h, line.data(), static_cast<DWORD>(line.size()), &wrote, nullptr);
         }
         batch.clear();
+        {
+            const std::lock_guard<std::mutex> lock(file_mu());
+            in_writer() = 0;
+        }
+        written_cv().notify_all();
     }
 }
 
@@ -152,6 +187,30 @@ void append_wide(std::string& out, std::wstring_view value) {
 }
 
 }  // namespace detail
+
+Level level_from_name(std::string_view name) {
+    if (name == "DEBUG") {
+        return Level::Debug;
+    }
+    if (name == "WARN") {
+        return Level::Warn;
+    }
+    if (name == "ERROR") {
+        return Level::Error;
+    }
+    return Level::Info;
+}
+
+void set_file(const std::wstring& path) {
+    const std::lock_guard<std::mutex> lock(file_mu());
+    file_path() = path;
+}
+
+void flush(unsigned timeout_ms) {
+    std::unique_lock<std::mutex> lock(file_mu());
+    written_cv().wait_for(lock, std::chrono::milliseconds(timeout_ms),
+                          [] { return file_q().empty() && in_writer() == 0; });
+}
 
 const char* level_name(Level lvl) {
     switch (lvl) {

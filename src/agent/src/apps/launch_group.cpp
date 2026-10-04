@@ -1,19 +1,17 @@
 #include "lsw/agent/apps/launch_group.hpp"
 
-#include "lsw/agent/apps/guest_drivers.hpp"
 #include "lsw/agent/log.hpp"
 #include "lsw/agent/util/text_encoding.hpp"
 #include "lsw/agent/util/wide_string.hpp"
 #include "lsw/agent/win/error_text.hpp"
 #include "lsw/agent/win/process_info.hpp"
+#include "lsw/agent/win/security_attributes.hpp"
 #include "lsw/agent/win/unique_handle.hpp"
 
-#include <atomic>
 #include <chrono>
 #include <iterator>
 #include <mutex>
 #include <string>
-#include <thread>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -41,9 +39,6 @@ struct Group {
     // what keeps the directory rule from adopting an instance the user
     // already had open.
     std::uint64_t started = 0;
-    // The driver directories this launch staged, removed when it
-    // retires.
-    GuestDrivers::Staging staging;
 };
 
 // One process as a scan found it.
@@ -64,9 +59,8 @@ struct State {
 };
 
 State& state() {
-    // Never destroyed. The reaper below outlives static destruction in
-    // any ordering that matters, and a process exiting has nothing to
-    // gain from tearing this down first.
+    // Never destroyed: a process exiting has nothing to gain from
+    // tearing this down first.
     static State* s = new State{};
     return *s;
 }
@@ -123,9 +117,7 @@ std::vector<Proc> scan_processes() {
 }
 
 // Rebuild ``owner_of``, dropping groups that have gone empty. Caller
-// holds the lock, and gets each retired launch's driver staging through
-// ``retired`` to undo after releasing it — removing files is not work to
-// do while the window enumeration is waiting on this mutex.
+// holds the lock.
 //
 // Three ways a process is attributed to a launch, because no one of them
 // covers what real applications do:
@@ -146,7 +138,7 @@ std::vector<Proc> scan_processes() {
 // Attribution is sticky: a process keeps the launch it was assigned to
 // for as long as it lives, so an intermediate exiting cannot orphan the
 // application it started.
-void rebuild_locked(State& s, std::vector<GuestDrivers::Staging>* retired) {
+void rebuild_locked(State& s) {
     const std::vector<Proc> procs = scan_processes();
 
     std::unordered_map<unsigned long, unsigned long> next;
@@ -168,7 +160,7 @@ void rebuild_locked(State& s, std::vector<GuestDrivers::Staging>* retired) {
         const unsigned long root = it->first;
         // Never asked of a null handle: QueryInformationJobObject reads
         // that as "the job this process is in", which is the agent's own
-        // when the task scheduler started it inside one.
+        // whenever something started it inside one.
         if (it->second.job) {
             for (const unsigned long pid : pids_in(it->second.job.get())) {
                 next[pid] = root;
@@ -231,9 +223,6 @@ void rebuild_locked(State& s, std::vector<GuestDrivers::Staging>* retired) {
             // Nothing is running in it to be affected — and it carries no
             // limits regardless.
             const unsigned long dead = it->first;
-            if (retired != nullptr && !it->second.staging.dirs.empty()) {
-                retired->push_back(std::move(it->second.staging));
-            }
             it = s.groups.erase(it);
             for (auto n = next.begin(); n != next.end();) {
                 n = n->second == dead ? next.erase(n) : std::next(n);
@@ -247,79 +236,26 @@ void rebuild_locked(State& s, std::vector<GuestDrivers::Staging>* retired) {
     s.built = std::chrono::steady_clock::now();
 }
 
-void refresh_locked(State& s, std::vector<GuestDrivers::Staging>* retired) {
+void refresh_locked(State& s) {
     if (std::chrono::steady_clock::now() - s.built < kSnapshotMaxAge) {
         return;
     }
-    rebuild_locked(s, retired);
-}
-
-// Undo what the launches that just retired had staged. Called with the
-// state lock released.
-void unstage_all(const std::vector<GuestDrivers::Staging>& retired) {
-    for (const GuestDrivers::Staging& staging : retired) {
-        GuestDrivers::unstage(staging);
-    }
-}
-
-// How often a launch is checked for having ended.
-//
-// Retirement used to happen only inside ``root_of``, which the host
-// calls once per enumerated window. That makes the one moment it is
-// needed — the last window of the last launch closing — the one moment
-// nothing calls it again, and an application's drivers stayed staged
-// until some unrelated launch happened to enumerate a window. So the
-// check gets its own clock: one process scan a second while any launch
-// is open, and a sleeping thread the rest of the time.
-constexpr auto kReapInterval = std::chrono::seconds(1);
-
-struct Reaper {
-    std::thread thread;
-    std::atomic<bool> stop{false};
-
-    ~Reaper() {
-        stop.store(true);
-        if (thread.joinable()) {
-            thread.join();
-        }
-    }
-};
-
-void start_reaper_once() {
-    static Reaper reaper;
-    static const bool started = [] {
-        reaper.thread = std::thread{[] {
-            while (!reaper.stop.load()) {
-                std::this_thread::sleep_for(kReapInterval);
-                std::vector<GuestDrivers::Staging> retired;
-                {
-                    State& s = state();
-                    const std::lock_guard lock(s.mu);
-                    if (s.groups.empty()) {
-                        continue;  // nothing open: no scan, no cost
-                    }
-                    rebuild_locked(s, &retired);
-                }
-                unstage_all(retired);
-            }
-        }};
-        return true;
-    }();
-    (void)started;
+    rebuild_locked(s);
 }
 
 }  // namespace
 
 std::string LaunchGroup::job_name(unsigned long pid) {
-    // Session-local: the mirror runs in the same session as the agent,
-    // and a global name would collide across sessions on a machine with
-    // more than one user signed in.
-    return "Local\\lsw-launch-" + std::to_string(pid);
+    // Global: the agent creates the job from session 0, and the mirror
+    // that opens it runs in the application's session — a Local\ name
+    // would be looked up in the mirror's own session's namespace and not
+    // found. A PID is unique machine-wide while the process lives, so
+    // launches in two sessions cannot collide.
+    return "Global\\lsw-launch-" + std::to_string(pid);
 }
 
-bool LaunchGroup::adopt(void* process, unsigned long pid, GuestDrivers::Staging staging) {
+bool LaunchGroup::adopt(void* process, unsigned long pid) {
     Group g;
-    g.staging = std::move(staging);
     // Record where and when before anything can be attributed, so the
     // directory rule has a floor to compare against.
     const auto handle = static_cast<HANDLE>(process);
@@ -329,8 +265,16 @@ bool LaunchGroup::adopt(void* process, unsigned long pid, GuestDrivers::Staging 
         g.dir_lc = image.substr(0, dir->size() + 1);  // keep the separator
     }
 
+    // The job is created as SYSTEM, whose default DACL would leave the
+    // user's mirror unable to open it. Query is all anyone else needs:
+    // SYSTEM and administrators keep full control, interactive users
+    // (which is who the mirror runs as, elevated or not) get
+    // JOB_OBJECT_QUERY | READ_CONTROL | SYNCHRONIZE (0x120004) — spelled
+    // out rather than GR, so nothing depends on the job type's generic
+    // mapping.
     const std::wstring name = util::TextEncoding::to_wide(job_name(pid));
-    g.job.reset(::CreateJobObjectW(nullptr, name.c_str()));
+    win::SecurityAttributes security{L"D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;0x120004;;;IU)"};
+    g.job.reset(::CreateJobObjectW(security.ok() ? security.get() : nullptr, name.c_str()));
     if (!g.job) {
         LSW_AGENT_WARN("launch_group: CreateJobObject failed (err={}); this launch is tracked "
                        "by parentage and image path only",
@@ -341,29 +285,17 @@ bool LaunchGroup::adopt(void* process, unsigned long pid, GuestDrivers::Staging 
         g.job.reset();
     }
 
-    std::vector<GuestDrivers::Staging> retired;
-    {
-        State& s = state();
-        const std::lock_guard lock(s.mu);
-        // A PID the OS has recycled onto a new launch: the old group is
-        // stale by definition, so let go of it rather than answering with it.
-        if (auto old = s.groups.find(pid); old != s.groups.end()) {
-            retired.push_back(std::move(old->second.staging));
-            s.groups.erase(old);
-        }
-        s.groups[pid] = std::move(g);
-        // The launch's own PID answers immediately — before any scan runs —
-        // because a window can appear in the very next enumeration.
-        s.owner_of[pid] = pid;
-        // Force the next lookup to scan: this launch is not in the snapshot.
-        s.built = {};
-    }
-    // After the new staging was recorded, so a directory both launches
-    // share keeps its links.
-    unstage_all(retired);
-    // Cheap after the first call, and there is nothing to reap until a
-    // launch exists.
-    start_reaper_once();
+    State& s = state();
+    const std::lock_guard lock(s.mu);
+    // A PID the OS has recycled onto a new launch: the old group is
+    // stale by definition, so let go of it rather than answering with it.
+    s.groups.erase(pid);
+    s.groups[pid] = std::move(g);
+    // The launch's own PID answers immediately — before any scan runs —
+    // because a window can appear in the very next enumeration.
+    s.owner_of[pid] = pid;
+    // Force the next lookup to scan: this launch is not in the snapshot.
+    s.built = {};
     return true;
 }
 
@@ -371,20 +303,14 @@ unsigned long LaunchGroup::root_of(unsigned long pid) {
     if (pid == 0) {
         return 0;
     }
-    std::vector<GuestDrivers::Staging> retired;
-    unsigned long root = 0;
-    {
-        State& s = state();
-        const std::lock_guard lock(s.mu);
-        if (s.groups.empty()) {
-            return 0;
-        }
-        refresh_locked(s, &retired);
-        const auto it = s.owner_of.find(pid);
-        root = it == s.owner_of.end() ? 0 : it->second;
+    State& s = state();
+    const std::lock_guard lock(s.mu);
+    if (s.groups.empty()) {
+        return 0;
     }
-    unstage_all(retired);
-    return root;
+    refresh_locked(s);
+    const auto it = s.owner_of.find(pid);
+    return it == s.owner_of.end() ? 0 : it->second;
 }
 
 }  // namespace lsw::agent::apps

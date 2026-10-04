@@ -14,9 +14,9 @@
 namespace lsw::host::manager {
 
 AppListWidget::AppListWidget(apps::AppConfigStore& store, link::AgentRpcClient& rpc,
-                             const config::ManagerSettings& settings, QWidget* parent)
+                             QWidget* parent)
     : QWidget(parent), store_(store), rpc_(rpc), catalog_(rpc),
-      launcher_(rpc, settings) {
+      launcher_(rpc) {
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(0, 0, 0, 0);
 
@@ -88,6 +88,10 @@ void AppListWidget::rebuild() {
 }
 
 void AppListWidget::on_refresh_clicked() {
+    refresh();
+}
+
+void AppListWidget::refresh() {
     if (rpc_.has_target()) {
         catalog_.refresh();
     }

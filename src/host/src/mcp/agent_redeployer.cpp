@@ -16,27 +16,48 @@ namespace lsw::host::mcp {
 
 namespace {
 
-// Runs inside the guest. ``start ""`` detaches the relaunched agent so it
-// survives both this cmd.exe and the agent process the script just
-// killed. The script runs inside the agent's own (elevated, interactive)
-// context, so a plain start relaunches it the same way — no scheduled
-// task, no token juggling.
+// Runs inside the guest, started by the agent's own run_script — as
+// SYSTEM in session 0, since the agent is the ``lsw-agent`` service.
+//
+// It stops that service, which ends the agent process. The script lives
+// on regardless: run_script's job object has no KILL_ON_JOB_CLOSE (see
+// install::ProcessRunner), and a service's children are not ended with
+// it. ``taskkill`` then clears whatever still maps the old binary — the
+// session helpers, which the service normally ends itself — because a
+// mapped image cannot be overwritten. Then the swap, and the service is
+// started again; it is started even when the move failed, so a failed
+// swap still leaves the old agent running.
+//
+// Delays use ping: ``timeout`` wants a console input it does not have.
 constexpr const char* kSwapScript = R"BAT(@echo off
 setlocal
-set NEW=%TEMP%\lsw-agent-new.exe
-set LOG=%TEMP%\lsw-swap.log
-> "%LOG%" echo [swap] start %DATE% %TIME%
-curl --fail -L -o "%NEW%" http://10.0.2.2:__PORT__/lsw-guest-agent.exe >> "%LOG%" 2>&1
+set DIR=C:\ProgramData\LSW
+set EXE=%DIR%\lsw-agent.exe
+set NEW=%DIR%\lsw-agent.new.exe
+set LOG=%DIR%\lsw-swap.log
+> "%LOG%" echo [swap] start %DATE% %TIME% as %USERNAME%
+curl.exe --fail -L -o "%NEW%" http://10.0.2.2:__PORT__/lsw-guest-agent.exe >> "%LOG%" 2>&1
 if errorlevel 1 ( echo [swap] download failed >> "%LOG%" & exit /b 1 )
 for %%I in ("%NEW%") do echo [swap] downloaded size=%%~zI >> "%LOG%"
-timeout /t 1 /nobreak >nul
-echo [swap] killing agent... >> "%LOG%"
+ping -n 2 127.0.0.1 >nul
+echo [swap] stopping the service >> "%LOG%"
+sc.exe stop lsw-agent >> "%LOG%" 2>&1
+set /a N=0
+:wait_stopped
+sc.exe query lsw-agent | find "STOPPED" >nul && goto stopped
+set /a N+=1
+if %N% geq 30 ( echo [swap] still not stopped after 30 s >> "%LOG%" & goto stopped )
+ping -n 2 127.0.0.1 >nul
+goto wait_stopped
+:stopped
+echo [swap] ending anything still running the old binary >> "%LOG%"
 taskkill /F /IM lsw-agent.exe >> "%LOG%" 2>&1
-timeout /t 3 /nobreak >nul
+ping -n 3 127.0.0.1 >nul
 echo [swap] moving binary >> "%LOG%"
-move /Y "%NEW%" "C:\ProgramData\LSW\lsw-agent.exe" >> "%LOG%" 2>&1
-echo [swap] relaunching >> "%LOG%"
-start "" "C:\ProgramData\LSW\lsw-agent.exe"
+move /Y "%NEW%" "%EXE%" >> "%LOG%" 2>&1
+if errorlevel 1 ( echo [swap] move failed, retrying >> "%LOG%" & ping -n 4 127.0.0.1 >nul & move /Y "%NEW%" "%EXE%" >> "%LOG%" 2>&1 )
+echo [swap] starting the service >> "%LOG%"
+sc.exe start lsw-agent >> "%LOG%" 2>&1
 echo [swap] done >> "%LOG%"
 exit /b 0
 )BAT";
@@ -72,13 +93,15 @@ AgentRedeployer::Outcome AgentRedeployer::run() {
         return {false, "redeploy_agent: " + exe_path.toStdString() + " is empty"};
     }
 
-    // Baseline version. Empty if the running agent predates the field —
-    // in that case any non-empty value afterwards counts as a change.
+    // Baseline version: the swap is done once a different one answers.
     const auto before = agent_.request(linkproto::cmd::kSystemInfo);
     if (!before.ok) {
         return {false, "redeploy_agent: agent unreachable before swap: " + before.error};
     }
     const std::string previous_version = before.body.value("agent_version", std::string{});
+    if (previous_version.empty()) {
+        return {false, "redeploy_agent: the running agent's system_info has no agent_version"};
+    }
 
     AgentBinaryServer binary_server{exe_bytes};
     if (!binary_server.start()) {
@@ -94,8 +117,9 @@ AgentRedeployer::Outcome AgentRedeployer::run() {
     }
 
     // Poll until a *different* binary answers. The channel reconnects on
-    // a 500 ms backoff after the script kills the old agent, and the new
-    // one usually listens within a second or two of relaunch.
+    // a 500 ms backoff after the script stops the old agent; the new one
+    // listens once its session helper has confirmed the desktop, a few
+    // seconds after the service starts.
     const auto deadline = std::chrono::steady_clock::now() + kPollWindow;
     std::string new_version;
     while (std::chrono::steady_clock::now() < deadline) {
@@ -117,7 +141,7 @@ AgentRedeployer::Outcome AgentRedeployer::run() {
         return {false, "redeploy_agent: timed out (45 s) waiting for new agent. Served "
                        + served + " download(s) on port " + port + ", prev_version='"
                        + previous_version
-                       + "'. Check %TEMP%\\lsw-swap.log on the guest for details."};
+                       + "'. Check C:\\ProgramData\\LSW\\lsw-swap.log on the guest for details."};
     }
     return {true, "redeploy_agent: success — agent_version '" + previous_version + "' -> '"
                   + new_version + "' (" + served + " download(s) served on port " + port + ")"};

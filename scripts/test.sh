@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# Manual integration test: wipe any prior VM, rebuild agent + manager,
-# launch the manager with LSW_AGENT_EXE pointing at the freshly-built
-# guest agent so it gets bundled into the payload ISO.
+# Manual integration test: wipe any prior VM, rebuild agent + manager +
+# accel-virt, launch the manager with LSW_AGENT_EXE pointing at the
+# freshly-built guest agent so it gets bundled into the payload ISO. The
+# GPU's pieces — build/av-drivers for the payload, and the patched QEMU
+# under build/accel-virt — the manager finds beside its own executable.
 #
 # Click through the wizard yourself; the install is unattended after
 # that and the wizard auto-advances to "Open manager" once the guest
@@ -19,7 +21,7 @@ say() { printf '\033[1;36m==>\033[0m %s\n' "$*"; }
 say "Reset VM state"
 "${ROOT}/scripts/reset-vm.sh"
 
-say "Build agent + manager"
+say "Build agent + manager + GPU"
 "${ROOT}/scripts/build.sh"
 
 AGENT_EXE="${ROOT}/build-agent/src/agent/lsw-guest-agent.exe"

@@ -9,7 +9,6 @@
 #include <QUuid>
 #include <QWidget>
 
-namespace lsw::host::config { class ManagerSettings; }
 namespace lsw::host::link { class AgentRpcClient; }
 
 namespace lsw::host::manager {
@@ -26,7 +25,7 @@ class AppListWidget : public QWidget {
     Q_OBJECT
 public:
     AppListWidget(apps::AppConfigStore& store, link::AgentRpcClient& rpc,
-                  const config::ManagerSettings& settings, QWidget* parent = nullptr);
+                  QWidget* parent = nullptr);
 
     // The toolbar the grid builds for itself. The Overview page lifts
     // it into the panel's caption row, so refresh and add sit on the
@@ -34,6 +33,8 @@ public:
     [[nodiscard]] QToolBar* toolbar() const noexcept { return toolbar_; }
 
     void set_target(const QUuid& vm_uuid);
+    // Ask the agent for the installed applications again.
+    void refresh();
     void clear_target();
 
 private Q_SLOTS:

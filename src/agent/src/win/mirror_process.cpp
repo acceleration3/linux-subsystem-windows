@@ -6,8 +6,10 @@
 #include "lsw/agent/win/error_text.hpp"
 #include "lsw/agent/win/file_system.hpp"
 #include "lsw/agent/win/process.hpp"
+#include "lsw/agent/win/run_as.hpp"
 
 #include <utility>
+#include <vector>
 
 namespace lsw::agent::win {
 
@@ -26,7 +28,8 @@ void set_error(std::string* into, std::string text) {
 }  // namespace
 
 unsigned long MirrorProcess::start(const std::string& exe, std::uint16_t port,
-                                   const std::string& log_path, std::string* error_out) {
+                                   const std::string& log_path, const RunAs& as,
+                                   std::string* error_out) {
     if (exe.empty() || port == 0) {
         set_error(error_out, "start_window_mirror: an executable and a port are required");
         return 0;
@@ -47,18 +50,28 @@ unsigned long MirrorProcess::start(const std::string& exe, std::uint16_t port,
     options.creation_flags = CREATE_UNICODE_ENVIRONMENT | CREATE_NO_WINDOW;
     // Where the mirror says what happened. Its output would otherwise go
     // to a console it was given none of.
+    std::vector<Environment::Override> overrides;
     if (!log_path.empty()) {
-        options.environment = Environment::block_with({{"RWIN_LOG_FILE", log_path}});
+        overrides.emplace_back("RWIN_LOG_FILE", log_path);
+    }
+    try {
+        options.environment = as.environment(overrides);
+        as.apply(options);
+    } catch (const std::exception& e) {
+        set_error(error_out, std::string{"start_window_mirror: cannot start it as "} +
+                                 as.describe() + ": " + e.what());
+        return 0;
     }
 
     DWORD error = 0;
     const auto spawned = Process::spawn(options, &error);
     if (!spawned) {
-        set_error(error_out, "start_window_mirror: CreateProcessW failed (err=" +
-                                 ErrorText::win32(error) + ")");
+        set_error(error_out, "start_window_mirror: CreateProcess as " + as.describe() +
+                                 " failed (err=" + ErrorText::win32(error) + ")");
         return 0;
     }
-    LSW_AGENT_INFO("start_window_mirror: pid={} port={}", spawned->pid, port);
+    LSW_AGENT_INFO("start_window_mirror: pid={} port={} as {}", spawned->pid, port,
+                   as.describe());
     return spawned->pid;
 }
 

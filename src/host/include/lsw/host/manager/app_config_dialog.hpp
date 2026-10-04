@@ -47,12 +47,11 @@ private:
     QLineEdit* cmdline_edit_ = nullptr;
     QLineEdit* workdir_edit_ = nullptr;
     QPlainTextEdit* env_edit_ = nullptr;
-    // Where this application shows up on the host, and which render
-    // channel it draws on. Both are per application because both are
-    // choices about one application, not about all of them.
+    // Where this application shows up on the host: a choice about one
+    // application, not about all of them. There is no graphics field: an
+    // application gets the guest's adapters as it would a physical card.
     QCheckBox* publish_box_ = nullptr;
     QLineEdit* mime_edit_ = nullptr;
-    QComboBox* channel_combo_ = nullptr;
     QLabel* identity_name_ = nullptr;
     // Set when the dialog was closed by Remove rather than Save, so the
     // caller knows the difference between "keep this" and "delete it".

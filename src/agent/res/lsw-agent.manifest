@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!-- lsw-agent.exe runs three ways (see src/main.cpp): as the lsw-agent
+     service (LocalSystem already), as a session helper the service starts
+     with a user's token, and by hand for debugging. asInvoker for all of
+     them: a helper must start without a UAC prompt — the service hands it
+     the user's full token itself when it should be elevated. -->
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+  <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
+    <security>
+      <requestedPrivileges>
+        <requestedExecutionLevel level="asInvoker" uiAccess="false"/>
+      </requestedPrivileges>
+    </security>
+  </trustInfo>
+</assembly>

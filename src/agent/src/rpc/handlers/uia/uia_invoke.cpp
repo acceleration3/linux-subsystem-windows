@@ -25,6 +25,10 @@ struct UiaInvokeHandler : RpcHandler {
         }
         return {{"ok", ctx.services.uia().invoke_by_selector(hwnd, selector)}};
     }
+
+    // Window handles, UI Automation and HKCU belong to the user's
+    // session: served by the session helper there.
+    [[nodiscard]] Placement placement() const override { return Placement::UserSession; }
 };
 
 }  // namespace lsw::agent::rpc::handlers

@@ -53,6 +53,10 @@ public:
     // the page.
     static void fit_rows(QTableWidget* table);
 
+    // How far a widget set into a rows_table cell is inset from the
+    // cell's edges on either side, the same as the cell's text.
+    [[nodiscard]] static int cell_inset();
+
     // The mono face at ``pixel_size``, for the places a font is set in
     // code rather than by the stylesheet: painted headings, item
     // delegates, and widgets that want the face before they are polished.
@@ -79,15 +83,17 @@ public:
         static constexpr const char* kTile = "Tile";
         // A whole choice as one target: the option and what it costs.
         static constexpr const char* kOptionCard = "OptionCard";
-        static constexpr const char* kChannelCard = "ChannelCard";
         static constexpr const char* kKpiGrid = "KpiGrid";
-        static constexpr const char* kAdvice = "Advice";
+        // The figure in a KpiGrid tile.
+        static constexpr const char* kKpiValue = "KpiValue";
+        // A card's own name in its header: an adapter, the device.
+        static constexpr const char* kCardName = "CardName";
+        // Lines a machine wrote, on black: the driver log's tail.
+        static constexpr const char* kTerm = "Term";
         // The guest's console, framed like a panel and black inside.
         static constexpr const char* kScreen = "Screen";
         // Bars whose colour follows a "pressure" property.
         static constexpr const char* kMeter = "Meter";
-        static constexpr const char* kMiniBar = "MiniBar";
-        static constexpr const char* kAddCard = "AddCard";
         // A consequence, set apart from the explanation above it.
         static constexpr const char* kCallout = "Callout";
         static constexpr const char* kStatusStrip = "StatusStrip";
@@ -95,6 +101,8 @@ public:
         static constexpr const char* kHeading = "Heading";
         static constexpr const char* kPanel = "Panel";
         static constexpr const char* kPanelHeader = "PanelHeader";
+        // The add row under an editable list, on the header's ground.
+        static constexpr const char* kListFoot = "ListFoot";
         static constexpr const char* kSeparator = "Separator";
         static constexpr const char* kBadge = "Badge";
         static constexpr const char* kBadgeOnline = "BadgeOnline";
@@ -122,6 +130,8 @@ public:
         static constexpr const char* kPillRun = "PillRun";
         static constexpr const char* kPillDone = "PillDone";
         static constexpr const char* kPillFail = "PillFail";
+        // Something to act on that is not broken: no driver yet.
+        static constexpr const char* kPillWarn = "PillWarn";
     };
 
     // Values of the "tone" property, which recolours a widget for what

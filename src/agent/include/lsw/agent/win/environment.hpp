@@ -33,6 +33,13 @@ public:
     // nullptr and the child inherits ours directly — no copy, no chance
     // of this code mangling an environment nobody asked it to touch.
     [[nodiscard]] static std::vector<wchar_t> block_with(const std::vector<Override>& overrides);
+
+    // ``base`` — a block in the same layout, such as CreateEnvironmentBlock
+    // builds for another user — with ``overrides`` applied, keyed and
+    // sorted the same way. Never empty: a process started as someone
+    // else must be given their environment, not left to inherit ours.
+    [[nodiscard]] static std::vector<wchar_t> block_from(const wchar_t* base,
+                                                         const std::vector<Override>& overrides);
 };
 
 }  // namespace lsw::agent::win

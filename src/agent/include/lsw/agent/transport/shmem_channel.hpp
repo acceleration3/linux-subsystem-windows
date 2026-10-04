@@ -26,8 +26,8 @@ class ShmemChannel {
 public:
     explicit ShmemChannel(Shmem& shmem) : shmem_(&shmem) {}
 
-    // False when the region has no RPC channel (an older manager) or the
-    // device never opened. Callers fall back to the socket.
+    // False when the region has no RPC channel or the device never
+    // opened. Callers fall back to the socket.
     [[nodiscard]] bool available() const;
 
     // Serialise and enqueue one message, then doorbell the manager.

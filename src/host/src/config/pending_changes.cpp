@@ -17,17 +17,11 @@ QString label_for(const QString& key) {
         {K::kCpuCores, QStringLiteral("cores")},
         {K::kMemoryMib, QStringLiteral("memory")},
         {K::kDiskGib, QStringLiteral("disk")},
-        {K::kGuestWidth, QStringLiteral("width")},
-        {K::kGuestHeight, QStringLiteral("height")},
-        {K::kMatchHostOutput, QStringLiteral("match output")},
-        {K::kScalingPercent, QStringLiteral("scaling")},
-        {K::kVramMib, QStringLiteral("video memory")},
-        {K::kChannels, QStringLiteral("channels")},
-        {K::kRingKib, QStringLiteral("ring")},
-        {K::kReplyKib, QStringLiteral("reply")},
-        {K::kBlobMib, QStringLiteral("blob")},
+        {K::kHostGpu, QStringLiteral("display GPU")},
+        {K::kHostWindowMib, QStringLiteral("host window")},
+        {K::kIsolateRenderer, QStringLiteral("isolated renderer")},
+        {K::kRenderGpus, QStringLiteral("render GPUs")},
         {K::kHostShares, QStringLiteral("shared folders")},
-        {K::kAgentPort, QStringLiteral("agent port")},
     };
     return labels.value(key, key);
 }
@@ -38,6 +32,18 @@ QString render(const QString& key, const QVariant& value) {
     if (key == K::kHostShares) {
         return QStringLiteral("%1 folders")
             .arg(ManagerSettings::decode_host_shares(value.toString()).size());
+    }
+    // A GPU list says how many; a UUID is long, and its first group is
+    // what a person matches against the Graphics page.
+    if (value.typeId() == QMetaType::QStringList) {
+        return QString::number(value.toStringList().size());
+    }
+    if (key == K::kHostGpu) {
+        const QString uuid = value.toString();
+        return uuid.size() > 8 ? uuid.left(8) : uuid;
+    }
+    if (key == K::kHostWindowMib && value.toInt() % 1024 == 0) {
+        return QStringLiteral("%1 GiB").arg(value.toInt() / 1024);
     }
     if (value.typeId() == QMetaType::Bool) {
         return value.toBool() ? QStringLiteral("on") : QStringLiteral("off");

@@ -89,6 +89,12 @@ void Wizard::highlight_step(int page_id) {
         }
         steps->setFixedHeight(static_cast<int>(step_names().size()) * 30);
     }
+    // The free space moves while the wizard runs (an image downloaded, a
+    // disk created), so it is read again for every page rather than once.
+    if (const qint64 free = QStorageInfo{QDir(services_.settings().disks_dir())}.bytesAvailable();
+        free > 0) {
+        state_.host_free_disk_bytes = free;
+    }
     chrome.rail_host->setText(QStringLiteral("host: %1 threads, %2 GiB")
                                   .arg(state_.host_cpu_threads)
                                   .arg(state_.host_ram_mib / 1024));
@@ -129,9 +135,12 @@ void Wizard::highlight_step(int page_id) {
     chrome.next->setText(page_id == Done ? QStringLiteral("Open the manager")
                                          : QStringLiteral("Next"));
     chrome.cancel->setVisible(locked);
+    // The button closes the wizard on every page (PageChrome wires it to
+    // reject), so it says so; it used to read "View log" on the setup
+    // page, where it opened nothing and ended the run.
     chrome.cancel->setText(page_id == Install   ? QStringLiteral("Cancel install")
                            : page_id == Payload ? QStringLiteral("Cancel")
-                                                : QStringLiteral("View log"));
+                                                : QStringLiteral("Cancel setup"));
 }
 
 void Wizard::detect_host_caps() {
@@ -160,6 +169,11 @@ void Wizard::start_pipeline() {
         return;
     }
     pipeline_ = new ::lsw::host::provision::Pipeline(services_, this);
+    state_.failure.clear();
+    connect(pipeline_, &::lsw::host::provision::Pipeline::failed, this,
+            [this](::lsw::host::provision::Pipeline::Step, const QString& error) {
+                state_.failure = error;
+            });
     ::lsw::host::provision::PipelineInputs in;
     in.iso_local_path = state_.chosen_iso_path;
     in.iso_download_url = state_.fido_download_url;

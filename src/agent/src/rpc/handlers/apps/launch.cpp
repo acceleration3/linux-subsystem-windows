@@ -1,6 +1,9 @@
 #include "lsw/agent/apps/launch_group.hpp"
 #include "lsw/agent/apps/launcher.hpp"
+#include "lsw/agent/core/services.hpp"
 #include "lsw/agent/rpc/handler.hpp"
+#include "lsw/agent/session/session_manager.hpp"
+#include "lsw/agent/win/run_as.hpp"
 #include "lsw/agent/rpc/auto_register.hpp"
 
 #include "lsw/linkproto/commands.hpp"
@@ -10,9 +13,13 @@
 
 namespace lsw::agent::rpc::handlers {
 
+// ``launch``: start an application.
+//
+//   params: app_id, args?, env?, session? (default: the console user's
+//           session; 0 = SYSTEM in session 0), elevated? (default true)
+//   reply:  {ok, pid, job?, session, elevated, error?}
 struct LaunchHandler : RpcHandler {
-    nlohmann::json handle(const nlohmann::json& params,
-                          RpcContext& /*ctx*/) override {
+    nlohmann::json handle(const nlohmann::json& params, RpcContext& ctx) override {
         const auto app_id = params.value("app_id", std::string{});
 
         // Extra arguments, and per-launch environment overrides as a
@@ -31,10 +38,16 @@ struct LaunchHandler : RpcHandler {
             }
         }
 
+        const win::RunAs as = ctx.services.sessions().run_as(
+            params, linkproto::cmd::kLaunch, session::SessionManager::Default::UserSession);
+
         unsigned long pid = 0;
         std::string err;
-        const bool ok = apps::Launcher::launch(app_id, args, env, &pid, &err);
-        nlohmann::json r = {{"ok", ok}, {"pid", static_cast<std::uint64_t>(pid)}};
+        const bool ok = apps::Launcher::launch(app_id, args, env, as, &pid, &err);
+        nlohmann::json r = {{"ok", ok},
+                            {"pid", static_cast<std::uint64_t>(pid)},
+                            {"session", as.session()},
+                            {"elevated", as.elevated()}};
         // What this launch is, for anything that has to recognise its
         // windows later. The caller is spared the naming convention.
         if (ok && pid != 0) {

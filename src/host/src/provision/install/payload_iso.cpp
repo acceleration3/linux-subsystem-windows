@@ -4,16 +4,35 @@
 #include "lsw/host/provision/install/iso_writer.hpp"
 
 #include <QDir>
+#include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
 #include <QTemporaryDir>
 
 namespace lsw::host::provision::install {
 
-QStringList PayloadIsoBuilder::stage_files(const PayloadInputs& in, const QString& staging_dir) {
-    QStringList created;
+namespace {
+
+bool set_error(QString* error_out, const QString& message) {
+    LSW_ERROR("payload: {}", message.toStdString());
+    if (error_out != nullptr) {
+        *error_out = message;
+    }
+    return false;
+}
+
+}  // namespace
+
+bool PayloadIsoBuilder::stage_files(const PayloadInputs& in, const QString& staging_dir,
+                                    QStringList* created_out, QString* error_out) {
+    QStringList discard;
+    QStringList& created = created_out != nullptr ? *created_out : discard;
     QDir dir{staging_dir};
-    dir.mkpath(".");
+    if (!dir.mkpath(".")) {
+        return set_error(
+            error_out,
+            QStringLiteral("could not create the staging directory %1").arg(staging_dir));
+    }
 
     // autounattend.xml at the root — Windows setup auto-detects this.
     // All bootstrap steps (firewall rules, HKLM\Run registration, agent
@@ -21,11 +40,17 @@ QStringList PayloadIsoBuilder::stage_files(const PayloadInputs& in, const QStrin
     // RunSynchronous block; we no longer ship a separate
     // post-install.cmd / SetupComplete.cmd.
     const QString unattend_path = dir.filePath("autounattend.xml");
+    // A missing or short answer file is the failure with nothing to say
+    // why: the ISO attaches and Windows shows its interactive installer.
     QFile uf{unattend_path};
-    if (uf.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        uf.write(in.autounattend_xml.toUtf8());
-        created << unattend_path;
+    const QByteArray unattend = in.autounattend_xml.toUtf8();
+    if (!uf.open(QIODevice::WriteOnly | QIODevice::Truncate) ||
+        uf.write(unattend) != unattend.size() || !uf.flush()) {
+        return set_error(error_out, QStringLiteral("could not write the answer file to %1: %2")
+                                        .arg(unattend_path, uf.errorString()));
     }
+    uf.close();
+    created << unattend_path;
 
     auto stage_optional = [&](const QString& src, const QString& dest_name) {
         if (src.isEmpty()) {
@@ -59,54 +84,75 @@ QStringList PayloadIsoBuilder::stage_files(const PayloadInputs& in, const QStrin
         }
     }
 
-    // Each architecture's drivers go in a directory of their own, so
-    // the whole set copies to the guest with one xcopy — and so a
-    // 32-bit driver can never shadow its 64-bit namesake, which
-    // ``opengl32.dll`` would otherwise do.
-    //
-    // Names on the ISO are the names the guest wants, not the names the
-    // cross-build produced: the mingw ``lib`` prefix means nothing to
-    // Windows, and ``rvk_icd.dll`` is what the agent's manifest points
-    // at.
-    auto stage_drivers = [&](const QString& subdir, const QString& vulkan_icd,
-                             const QString& opengl_icd, const QString& opencl_icd,
-                             const QString& loader) {
-        if (vulkan_icd.isEmpty() && opengl_icd.isEmpty() && opencl_icd.isEmpty()) {
-            return;
-        }
-        const QString driver_dir = dir.filePath(subdir);
-        QDir().mkpath(driver_dir);
-        auto stage_one = [&](const QString& src, const QString& name) {
-            if (src.isEmpty()) {
-                return;
+    // The accel-virt driver package, whole, as ``\av``. Copied as a
+    // tree rather than file by file so the layout ``cmake --install``
+    // produced is the layout the guest gets: provision.ps1 finds its
+    // package in ``C:\av\package`` and its adapter names in
+    // ``C:\av\adapters.txt``, and the sign stage checks every file
+    // against package.sha256. A file that failed to copy is a package
+    // pnputil refuses, so unlike the optional files above it fails the
+    // build.
+    if (!in.av_driver_tree.isEmpty()) {
+        const QDir src_root{in.av_driver_tree};
+        for (const char* required : {"provision.ps1", "package/avgpu.inf", "package/avgpu.sys"}) {
+            if (!QFileInfo::exists(src_root.filePath(QLatin1String(required)))) {
+                return set_error(error_out,
+                                 QStringLiteral("%1 is not an accel-virt driver package: it has no "
+                                                "%2. Build it with `cmake --build build --target "
+                                                "drivers && cmake --install build` in "
+                                                "external/accel-virt, or point $LSW_AV_DRIVERS at "
+                                                "an installed package")
+                                     .arg(in.av_driver_tree, QLatin1String(required)));
             }
-            const QString dest = QDir(driver_dir).filePath(name);
-            if (!QFile::copy(src, dest)) {
-                LSW_WARN("failed to stage {} -> {}", src.toStdString(), dest.toStdString());
-                return;
+        }
+        const QString dest_root = dir.filePath(QStringLiteral("av"));
+        QDirIterator it{in.av_driver_tree, QDir::Files | QDir::NoDotAndDotDot,
+                        QDirIterator::Subdirectories};
+        while (it.hasNext()) {
+            const QString src = it.next();
+            const QString relative = src_root.relativeFilePath(src);
+            const QString dest = QDir(dest_root).filePath(relative);
+            if (!QDir().mkpath(QFileInfo(dest).absolutePath()) || !QFile::copy(src, dest)) {
+                return set_error(error_out,
+                                 QStringLiteral("could not stage %1 from the accel-virt driver "
+                                                "package into the payload")
+                                     .arg(relative));
             }
             created << dest;
-        };
-        stage_one(vulkan_icd, "rvk_icd.dll");
-        stage_one(opengl_icd, "opengl32.dll");
-        stage_one(opencl_icd, "rvk_opencl.dll");
-        // The loader ships beside the drivers rather than in a
-        // directory of its own: the agent links both out of the same
-        // per-architecture folder, and one folder is one xcopy.
-        stage_one(loader, "vulkan-1.dll");
+        }
+    }
+
+    // The Vulkan loaders, beside the package's OpenCL ones so the guest
+    // installs every loader out of one folder per architecture. Not in
+    // the package because accel-virt does not build them; they come from
+    // this project's own cross builds.
+    auto stage_loader = [&](const QString& src, const QString& arch) {
+        if (src.isEmpty()) {
+            return true;
+        }
+        const QString dest_dir = dir.filePath(QStringLiteral("av/loaders/%1").arg(arch));
+        const QString dest = QDir(dest_dir).filePath(QStringLiteral("vulkan-1.dll"));
+        // Ours replaces any the package might carry one day: it is the
+        // one this host built and tested against.
+        QFile::remove(dest);
+        if (!QDir().mkpath(dest_dir) || !QFile::copy(src, dest)) {
+            return set_error(error_out, QStringLiteral("could not stage the %1 Vulkan loader %2 "
+                                                       "into the payload")
+                                            .arg(arch, src));
+        }
+        created << dest;
+        return true;
     };
-    stage_drivers("rvk", in.vulkan_icd_path, in.opengl_icd_path, in.opencl_icd_path,
-                  in.vulkan_loader_path);
-    stage_drivers("rvk32", in.vulkan_icd32_path, in.opengl_icd32_path, in.opencl_icd32_path,
-                  in.vulkan32_loader_path);
+    if (!stage_loader(in.vulkan_loader_x64_path, QStringLiteral("x64")) ||
+        !stage_loader(in.vulkan_loader_x86_path, QStringLiteral("x86"))) {
+        return false;
+    }
 
     stage_optional(in.lsw_msi_path, "lsw.msi");
-    stage_optional(in.dxvk_archive_path, "dxvk.tar.gz");
-    stage_optional(in.vkd3d_archive_path, "vkd3d.tar.gz");
     stage_optional(in.agent_exe_path, "lsw-agent.exe");
     stage_optional(in.mirror_exe_path, "remotewin-guest.exe");
 
-    return created;
+    return true;
 }
 
 bool PayloadIsoBuilder::build(const PayloadInputs& in, QString* error_out) {
@@ -120,7 +166,9 @@ bool PayloadIsoBuilder::build(const PayloadInputs& in, QString* error_out) {
         }
         return false;
     }
-    (void)stage_files(in, staging.path());
+    if (!stage_files(in, staging.path(), nullptr, error_out)) {
+        return false;
+    }
 
     IsoWriteOptions options;
     options.volume_id = QStringLiteral("LSW_PAYLOAD");

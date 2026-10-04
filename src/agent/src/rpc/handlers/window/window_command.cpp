@@ -34,6 +34,10 @@ struct WindowCommandHandler : RpcHandler {
     [[nodiscard]] std::string summarize(const nlohmann::json& reply) const override {
         return std::string{"ok="} + (reply.value("ok", false) ? "true" : "false");
     }
+
+    // Window handles, UI Automation and HKCU belong to the user's
+    // session: served by the session helper there.
+    [[nodiscard]] Placement placement() const override { return Placement::UserSession; }
 };
 
 }  // namespace lsw::agent::rpc::handlers

@@ -94,7 +94,9 @@ int main(int argc, char** argv) {
     QTemporaryDir staging;
     PayloadInputs payload;
     payload.autounattend_xml = xml;
-    const auto staged = PayloadIsoBuilder::stage_files(payload, staging.path());
+    QStringList staged;
+    check(PayloadIsoBuilder::stage_files(payload, staging.path(), &staged, nullptr),
+          "stage_files() succeeds with only an answer file");
     check(!staged.isEmpty(), "stage_files() reports a staged answer file");
     const QString staged_path = QDir(staging.path()).filePath("autounattend.xml");
     check(QFile::exists(staged_path), "autounattend.xml exists in the staging dir");
@@ -130,68 +132,151 @@ int main(int argc, char** argv) {
     PayloadInputs with_driver;
     with_driver.autounattend_xml = xml;
     with_driver.ivshmem_driver_dir = driver_src.path();
-    (void)PayloadIsoBuilder::stage_files(with_driver, staging2.path());
+    check(PayloadIsoBuilder::stage_files(with_driver, staging2.path(), nullptr, nullptr),
+          "stage_files() succeeds with the ivshmem driver");
     for (const char* name : {"ivshmem.inf", "ivshmem.cat", "ivshmem.sys"}) {
         const QString on_iso =
             QDir(staging2.path()).filePath(QStringLiteral("ivshmem/") + QLatin1String(name));
         check(QFile::exists(on_iso), "driver file staged into \\ivshmem on the ISO");
     }
 
-    // E2: the guest drivers. All four files per architecture have to
-    // land in \\rvk (and \\rvk32) on the ISO under the names the guest
-    // wants, and the answer file has to copy them in — nothing
-    // registers them, because the agent points each launch at the set
-    // it staged beside that application.
-    check(xml.contains(QStringLiteral("C:\\ProgramData\\LSW\\rvk")),
-          "autounattend copies the guest drivers to ProgramData");
-    check(xml.contains(QStringLiteral("C:\\ProgramData\\LSW\\rvk32")),
-          "and the 32-bit set, which is what a D3D8 / D3D9 title loads");
+    // The display driver. accel-virt's package has to reach C:\av, and
+    // SetupComplete has to sign it and install it — in that order, with
+    // install's -NoVerifier, because the verifier is for testing — and
+    // put the loaders where a process of either bitness finds them.
+    check(!xml.contains(QStringLiteral("rvk")), "nothing of the render server's drivers is left");
+    check(xml.contains(QStringLiteral("%i:\\av\\provision.ps1 xcopy /E /I /Y %i:\\av C:\\av")),
+          "specialize copies \\av off the payload CD to C:\\av");
+    // An untouched package for a GPU added after the install: the first
+    // sign invalidates C:\av\package against its own package.sha256.
+    check(xml.contains(QStringLiteral("xcopy /E /I /Y %i:\\av\\package C:\\av\\pristine\\package")),
+          "specialize keeps a pristine copy of the package for later adapters");
+    check(xml.contains(QStringLiteral("$avScript = 'C:\\av\\provision.ps1'")),
+          "SetupComplete runs C:\\av\\provision.ps1");
+    // Sign in specialize, install at SetupComplete: sign turns test
+    // signing on, and only the reboot that ends specialize puts it in
+    // force before pnputil runs.
+    {
+        const qsizetype copy = xml.indexOf(QStringLiteral("xcopy /E /I /Y %i:\\av C:\\av"));
+        const qsizetype sign_cmd =
+            xml.indexOf(QStringLiteral("-File \"C:\\Windows\\Setup\\Scripts\\LswAvSign.ps1\""));
+        check(copy >= 0 && sign_cmd > copy,
+              "specialize runs LswAvSign.ps1 after copying the package");
+        check(sign_cmd >= 0 &&
+                  sign_cmd < xml.indexOf(QStringLiteral("<settings pass=\"oobeSystem\">")),
+              "and that command is in the specialize pass");
+    }
+    check(xml.contains(QStringLiteral("-File $avScript -Stage sign")) &&
+              xml.contains(QStringLiteral("C:\\ProgramData\\LSW\\av-sign.log")),
+          "LswAvSign.ps1 runs the sign stage and logs it");
+    {
+        const qsizetype resign = xml.indexOf(QStringLiteral("if (-not (AvSigned))"));
+        const qsizetype install =
+            xml.indexOf(QStringLiteral("AvStage @('-Stage', 'install', '-NoVerifier')"));
+        check(resign >= 0 && install > resign,
+              "SetupComplete signs again only if the catalog is not signed, then installs "
+              "-NoVerifier");
+    }
+    check(xml.contains(QStringLiteral("$rc -eq 3010")),
+          "a stage asking for a reboot is not a failure");
+    check(xml.contains(QStringLiteral("@('x86', 'SysWOW64')")) &&
+              xml.contains(QStringLiteral("@('x64', 'System32')")),
+          "both loader sets are installed, the x86 one into SysWOW64");
+    check(xml.contains(QStringLiteral("DontSearchWindowsUpdate")),
+          "driver searches on Windows Update are off before OOBE has the network");
 
-    QTemporaryDir drv_src;
-    for (const char* name :
-         {"librvk_icd.dll", "opengl32.dll", "librvk_opencl.dll", "vulkan-1.dll"}) {
-        QFile f{QDir(drv_src.path()).filePath(QLatin1String(name))};
-        check(f.open(QIODevice::WriteOnly), "created a fake guest driver");
+    // The agent is a LocalSystem service now, not a logon task as the
+    // wizard user: registered with automatic start and restart-on-failure
+    // at SetupComplete, ahead of the promotion's early exits, and started
+    // there (SetupComplete is followed by the first logon, not a reboot).
+    check(!xml.contains(QStringLiteral("Register-ScheduledTask -TaskName 'lsw-agent'")) &&
+              !xml.contains(QStringLiteral("<LogonType>InteractiveToken</LogonType>")),
+          "no lsw-agent logon task is registered any more");
+    check(xml.contains(QStringLiteral("$svcBin = 'C:\\ProgramData\\LSW\\lsw-agent.exe --service'")),
+          "the service runs the deployed exe in --service mode");
+    check(xml.contains(QStringLiteral(
+              "sc.exe create $svc binPath= $svcBin start= auto obj= LocalSystem")),
+          "the service is created as LocalSystem with automatic start");
+    check(xml.contains(QStringLiteral(
+              "sc.exe config $svc binPath= $svcBin start= auto obj= LocalSystem")),
+          "an existing service is reconfigured, so a second SetupComplete run is harmless");
+    check(xml.contains(QStringLiteral(
+              "sc.exe failure $svc reset= 86400 actions= restart/5000/restart/5000/restart/30000")) &&
+              xml.contains(QStringLiteral("sc.exe failureflag $svc 1")),
+          "the SCM restarts a failed agent, including one that exits non-zero");
+    {
+        const qsizetype promote = xml.indexOf(QStringLiteral("<File path=\"C:\\Windows\\Setup\\Scripts\\LswPromote.ps1\">"));
+        const qsizetype create = xml.indexOf(QStringLiteral("sc.exe create $svc"));
+        const qsizetype start = xml.indexOf(QStringLiteral("sc.exe start $svc"));
+        const qsizetype early_exit = xml.indexOf(QStringLiteral("promoted.flag present - skipping"));
+        check(promote >= 0 && create > promote && start > create && early_exit > start,
+              "LswPromote.ps1 registers and starts the service before the promotion can exit");
+    }
+    check(xml.contains(QStringLiteral("localport=5102")),
+          "the agent's port stays open in the firewall");
+    check(xml.contains(QStringLiteral("HKU\\DefaultUser\\Control Panel\\Desktop\" /v ScreenSaveActive")),
+          "the screen saver is off for new accounts, since setup steps no longer run as the user");
+
+    // The package stages whole, as \av, and the Vulkan loaders land
+    // beside its OpenCL ones.
+    QTemporaryDir av_src;
+    const QDir av_root{av_src.path()};
+    const char* const av_files[] = {
+        "provision.ps1",          "adapters.txt",           "package/avgpu.sys",
+        "package/avgpu.inf",      "package/avumd.dll",      "package/avvk32.json",
+        "package/package.sha256", "loaders/x64/OpenCL.dll", "loaders/x86/OpenCL.dll",
+    };
+    for (const char* name : av_files) {
+        const QString path = av_root.filePath(QLatin1String(name));
+        QDir().mkpath(QFileInfo(path).absolutePath());
+        QFile f{path};
+        check(f.open(QIODevice::WriteOnly), "created a fake driver package file");
+        f.write(QByteArray("stub for ") + name);
+    }
+    QTemporaryDir loader_src;
+    const QString vulkan64 = QDir(loader_src.path()).filePath(QStringLiteral("vulkan-1.dll"));
+    const QString vulkan32 = QDir(loader_src.path()).filePath(QStringLiteral("vulkan-1-x86.dll"));
+    for (const QString& path : {vulkan64, vulkan32}) {
+        QFile f{path};
+        check(f.open(QIODevice::WriteOnly), "created a fake Vulkan loader");
         f.write("MZstub");
     }
-    const QString vk_icd = QDir(drv_src.path()).filePath(QStringLiteral("librvk_icd.dll"));
-    const QString gl_icd = QDir(drv_src.path()).filePath(QStringLiteral("opengl32.dll"));
-    const QString cl_icd = QDir(drv_src.path()).filePath(QStringLiteral("librvk_opencl.dll"));
-    const QString loader = QDir(drv_src.path()).filePath(QStringLiteral("vulkan-1.dll"));
 
     QTemporaryDir staging3;
-    PayloadInputs with_drivers;
-    with_drivers.autounattend_xml = xml;
-    with_drivers.vulkan_icd_path = vk_icd;
-    with_drivers.opengl_icd_path = gl_icd;
-    with_drivers.opencl_icd_path = cl_icd;
-    with_drivers.vulkan_loader_path = loader;
-    (void)PayloadIsoBuilder::stage_files(with_drivers, staging3.path());
-    // The names on the ISO are the guest's names, not the cross-build's:
-    // the mingw ``lib`` prefix means nothing to Windows, and the agent's
-    // manifest points at rvk_icd.dll.
-    for (const char* name : {"rvk_icd.dll", "opengl32.dll", "rvk_opencl.dll", "vulkan-1.dll"}) {
-        const QString on_iso =
-            QDir(staging3.path()).filePath(QStringLiteral("rvk/") + QLatin1String(name));
-        check(QFile::exists(on_iso), "guest driver staged into \\rvk on the ISO");
+    PayloadInputs with_av;
+    with_av.autounattend_xml = xml;
+    with_av.av_driver_tree = av_src.path();
+    with_av.vulkan_loader_x64_path = vulkan64;
+    with_av.vulkan_loader_x86_path = vulkan32;
+    QString av_error;
+    check(PayloadIsoBuilder::stage_files(with_av, staging3.path(), nullptr, &av_error),
+          "stage_files() succeeds with the driver package");
+    if (!av_error.isEmpty()) {
+        std::printf("       %s\n", qPrintable(av_error));
+    }
+    for (const char* name : av_files) {
+        check(QFile::exists(
+                  QDir(staging3.path()).filePath(QStringLiteral("av/") + QLatin1String(name))),
+              "driver package file staged under \\av, at its place in the tree");
+    }
+    for (const char* name : {"av/loaders/x64/vulkan-1.dll", "av/loaders/x86/vulkan-1.dll"}) {
+        check(QFile::exists(QDir(staging3.path()).filePath(QLatin1String(name))),
+              "Vulkan loader staged beside the package's OpenCL loader");
     }
 
-    // The i686 set stages into its own directory. It has to be a
-    // separate one rather than a suffix: opengl32.dll is found by the
-    // DLL search order, so two builds in one folder would shadow each
-    // other.
+    // A directory that is not the package is refused, not half-staged:
+    // pnputil refuses a package missing a file its INF names, and that
+    // would surface as a guest with no display after a full install.
+    QTemporaryDir not_av;
+    PayloadInputs with_bad_av;
+    with_bad_av.autounattend_xml = xml;
+    with_bad_av.av_driver_tree = not_av.path();
     QTemporaryDir staging4;
-    PayloadInputs with_drivers32 = with_drivers;
-    with_drivers32.vulkan_icd32_path = vk_icd;
-    with_drivers32.opengl_icd32_path = gl_icd;
-    with_drivers32.opencl_icd32_path = cl_icd;
-    with_drivers32.vulkan32_loader_path = loader;
-    (void)PayloadIsoBuilder::stage_files(with_drivers32, staging4.path());
-    for (const char* name : {"rvk_icd.dll", "opengl32.dll", "rvk_opencl.dll", "vulkan-1.dll"}) {
-        const QString on_iso =
-            QDir(staging4.path()).filePath(QStringLiteral("rvk32/") + QLatin1String(name));
-        check(QFile::exists(on_iso), "32-bit guest driver staged into \\rvk32");
-    }
+    QString bad_error;
+    check(!PayloadIsoBuilder::stage_files(with_bad_av, staging4.path(), nullptr, &bad_error),
+          "a directory with no provision.ps1 is refused as a driver package");
+    check(bad_error.contains(QStringLiteral("LSW_AV_DRIVERS")),
+          "and the error says how to point at a real one");
 
     // End to end: build a real ISO and read the answer file back out of
     // it. This is the step that actually failed in the field — the file
@@ -201,6 +286,9 @@ int main(int argc, char** argv) {
     PayloadInputs iso_inputs;
     iso_inputs.autounattend_xml = xml;
     iso_inputs.output_iso_path = QDir(iso_dir.path()).filePath("payload.iso");
+    // The driver package too: it is the one nested tree on the ISO.
+    iso_inputs.av_driver_tree = av_src.path();
+    iso_inputs.vulkan_loader_x64_path = vulkan64;
     // Optional: stage a real agent binary too, so the test exercises the
     // same multi-file staging the wizard does rather than a lone XML.
     if (argc > 1) {
@@ -226,6 +314,12 @@ int main(int argc, char** argv) {
         found_non_empty = raw.contains("LSW-TEST") && raw.contains("<unattend");
     }
     check(found_non_empty, "autounattend.xml on the ISO is not empty");
+    {
+        QFile again{iso_inputs.output_iso_path};
+        const QByteArray raw = again.open(QIODevice::ReadOnly) ? again.readAll() : QByteArray{};
+        check(raw.contains("stub for package/avgpu.inf"),
+              "the driver package's nested files are in the ISO");
+    }
 
     std::printf("%s\n", failures == 0 ? "PASS" : "FAIL");
     return failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;

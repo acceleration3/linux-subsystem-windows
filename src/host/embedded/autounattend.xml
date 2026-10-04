@@ -18,14 +18,34 @@
 	       * user/password/computer-name/locale/image-index are
 	         template-substituted ({{...}}).
 	       * specialize "LSW bootstrap": mkdir C:\ProgramData\LSW, copy
-	         lsw-agent.exe off the payload CD. The lsw-agent scheduled
-	         task is registered later by LswPromote.ps1 (SetupComplete,
-	         once the wizard account exists) — NOT in specialize, since
-	         its Principal is that not-yet-created user. DXVK/VKD3D run
-	         later in the agent-driven setup phase.
+	         lsw-agent.exe off the payload CD, and the accel-virt driver
+	         package (\av on the payload CD) to C:\av. The agent runs as
+	         the 'lsw-agent' Windows service (LocalSystem, session 0, auto
+	         start, restart on failure), registered and started by
+	         LswPromote.ps1 at SetupComplete, so it first runs after
+	         OOBE. It starts a helper in each
+	         user's session for what has to happen there, and keeps its
+	         port closed until the wizard user's desktop is usable.
+	       * accel-virt, the guest's GPU: a test-signed WDDM driver
+	         (avgpu.sys + native D3D11/12, Vulkan, OpenGL and OpenCL
+	         user-mode drivers) for the virtio-gpu-av-pci device.
+	         Specialize (LswAvSign.ps1) runs C:\av\provision.ps1 -Stage
+	         sign, which turns test signing on, so the reboot that ends
+	         specialize brings it into force; LswPromote.ps1 (SetupComplete,
+	         SYSTEM) then runs -Stage install -NoVerifier and installs the
+	         Vulkan/OpenCL loaders Windows lacks. Needs Windows 11 24H2
+	         (build 26100) or later, and test signing, which needs UEFI
+	         WITHOUT enrolled Secure Boot keys: the domain boots
+	         OVMF_CODE.4m.fd with an OVMF_VARS.4m.fd template that has
+	         none, and the LabConfig BypassSecureBootCheck in the
+	         win11-bypass block is what lets setup.exe accept that.
+	         Install-time the domain also has a plain VGA adapter (the av
+	         device has no firmware framebuffer before avgpu.sys loads);
+	         the manager redefines it without one once setup is done.
 	       * AutoLogon persistent (LogonCount=9999); UserOnce.ps1's
 	         last customization step writes C:\ProgramData\LSW\installed.txt
-	         (the agent's start gate). -->
+	         (a marker that the per-user setup ran; the agent's gate is
+	         the usable desktop, not this file). -->
 
 	<settings pass="offlineServicing">
 		<!-- Inject the virtio storage/net drivers into the just-applied
@@ -241,9 +261,11 @@
 
 				<!-- LSW bootstrap. The install ISO + LSW payload ISO are
 				     still attached at specialize time; Windows assigns the
-				     next free drive letters (scan D..N). Only the agent is
-				     staged here — DXVK / VKD3D-Proton are installed later
-				     by the agent-driven post-install setup phase. -->
+				     next free drive letters (scan D..N). Only files are
+				     staged here, plus the display driver's signing — it is
+				     installed at SetupComplete by LswPromote.ps1, and the
+				     rest of the setup by the agent-driven post-install
+				     phase. -->
 				<RunSynchronousCommand wcm:action="add">
 					<Order>20</Order>
 					<Description>LSW: create C:\ProgramData\LSW and grant Users:Modify (inheritable) so the SYSTEM agent and the wizard user's setup processes can share staged files</Description>
@@ -269,71 +291,62 @@
 					<Description>LSW: firewall rule for stream port</Description>
 					<Path>netsh advfirewall firewall add rule name="LSW Stream" dir=in action=allow protocol=TCP localport=5103 profile=any</Path>
 				</RunSynchronousCommand>
-				<!-- The render server's guest drivers, and the Khronos
-				     Vulkan loader beside them.
+				<!-- The accel-virt driver package: provision.ps1,
+				     adapters.txt, package\ (avgpu.sys/.inf, the x64 and x86
+				     user-mode drivers, package.sha256) and loaders\x64,
+				     loaders\x86 (vulkan-1.dll, OpenCL.dll). C:\av is where
+				     provision.ps1 expects all of it. Copied now, while the
+				     payload CD is attached, and signed by the next command;
+				     LswPromote.ps1 installs it.
 
-				     Two mechanisms, because the libraries divide in two.
-				     opengl32.dll and the Direct3D set are named by the
-				     DLL search order and by nothing else, so the agent
-				     symlinks those into an application's own directory
-				     at launch. The two ICDs are named by their loaders
-				     through HKLM\SOFTWARE\Khronos, which the agent
-				     writes at startup: a Khronos loader reads
-				     VK_DRIVER_FILES and OCL_ICD_FILENAMES through a
-				     secure-getenv that hands nothing to an elevated
-				     process, and every launch of ours is elevated, so
-				     the environment was being set for an application
-				     that could not read it. -->
+				     xcopy WITHOUT /K, on purpose: files on a CD carry the
+				     read-only attribute and plain xcopy drops it, and the
+				     sign stage rewrites avgpu.inf and writes avgpu.cat in
+				     place. -->
 				<RunSynchronousCommand wcm:action="add">
 					<Order>25</Order>
-					<Description>LSW: copy the guest drivers + Vulkan loader from payload CD</Description>
-					<Path>cmd.exe /c for %i in (D E F G H I J K L M N) do @if exist %i:\rvk\rvk_icd.dll xcopy /E /I /Y %i:\rvk C:\ProgramData\LSW\rvk</Path>
+					<Description>LSW: copy the accel-virt driver package from payload CD</Description>
+					<Path>cmd.exe /c for %i in (D E F G H I J K L M N) do @if exist %i:\av\provision.ps1 xcopy /E /I /Y %i:\av C:\av</Path>
 				</RunSynchronousCommand>
-				<!-- The same set built for i686. A 32-bit process cannot
-				     load a 64-bit driver, and every D3D8 and D3D9 title is
-				     32-bit — so without this set they find nothing. Its own
-				     directory rather than a suffix: opengl32.dll is named
-				     by the DLL search order, so the two builds cannot share
-				     a folder without one shadowing the other. -->
+				<!-- Sign the package here, in specialize, and not at
+				     SetupComplete beside the install: the sign stage turns
+				     test signing on, which the kernel reads at boot, and
+				     specialize ends with a reboot. So by the time
+				     LswPromote.ps1 installs, test signing is in force and
+				     pnputil puts the driver into a system that will load
+				     it. Everything sign uses works here as SYSTEM: the
+				     av device is enumerated (PCI, driver or not), and the
+				     LocalMachine certificate stores, Authenticode signing,
+				     New-FileCatalog and bcdedit need no user profile.
+				     LswAvSign.ps1 logs to C:\ProgramData\LSW\av-sign.log
+				     and always exits 0: a failed sign is retried by
+				     LswPromote.ps1, not by failing specialize. -->
 				<RunSynchronousCommand wcm:action="add">
 					<Order>26</Order>
-					<Description>LSW: copy the 32-bit guest drivers from payload CD</Description>
-					<Path>cmd.exe /c for %i in (D E F G H I J K L M N) do @if exist %i:\rvk32\rvk_icd.dll xcopy /E /I /Y %i:\rvk32 C:\ProgramData\LSW\rvk32</Path>
+					<Description>LSW: sign the accel-virt driver package and turn test signing on</Description>
+					<Path>powershell.exe -WindowStyle "Normal" -ExecutionPolicy "Bypass" -NoProfile -File "C:\Windows\Setup\Scripts\LswAvSign.ps1"</Path>
 				</RunSynchronousCommand>
-				<!-- The Vulkan loader, and only if this Windows ships
-				     none of its own.
-
-				     vulkan-1.dll is the one library here that no registry
-				     key can name: DXVK and VKD3D resolve it by the DLL
-				     search order like any other import, so it has to be
-				     somewhere on that path before either can reach a
-				     driver. Recent builds carry one (26200 has 1.3.300.0
-				     in both views) and that one is kept — it is newer
-				     than ours and serves the whole machine. A build that
-				     ships none, or a debloat that trimmed it, gets ours.
-
-				     Machine-wide on purpose, unlike everything the agent
-				     stages: a loader is not per-application, and putting
-				     it beside each executable would shadow whatever the
-				     system has with an older copy. -->
+				<!-- A second, untouched copy of package\, for a GPU added
+				     after this install. The sign stage names the PCI IDs
+				     of the adapters present when it runs, and it refuses a
+				     package that no longer matches package.sha256 — which
+				     the first sign makes true of C:\av\package by rewriting
+				     avgpu.inf and signing avgpu.sys. So a new adapter is
+				     signed for from a fresh copy of this one (the
+				     manager's "Install the driver for new adapters" mirrors
+				     it to C:\av\resign and signs and installs that). -->
 				<RunSynchronousCommand wcm:action="add">
 					<Order>27</Order>
-					<Description>LSW: install the Vulkan loader if Windows ships none</Description>
-					<Path>cmd.exe /c if not exist %windir%\System32\vulkan-1.dll if exist C:\ProgramData\LSW\rvk\vulkan-1.dll copy /y C:\ProgramData\LSW\rvk\vulkan-1.dll %windir%\System32\vulkan-1.dll</Path>
+					<Description>LSW: keep a pristine copy of the accel-virt driver package</Description>
+					<Path>cmd.exe /c for %i in (D E F G H I J K L M N) do @if exist %i:\av\package\avgpu.inf xcopy /E /I /Y %i:\av\package C:\av\pristine\package</Path>
 				</RunSynchronousCommand>
-				<RunSynchronousCommand wcm:action="add">
-					<Order>28</Order>
-					<Description>LSW: install the 32-bit Vulkan loader if Windows ships none</Description>
-					<Path>cmd.exe /c if not exist %windir%\SysWOW64\vulkan-1.dll if exist C:\ProgramData\LSW\rvk32\vulkan-1.dll copy /y C:\ProgramData\LSW\rvk32\vulkan-1.dll %windir%\SysWOW64\vulkan-1.dll</Path>
-				</RunSynchronousCommand>
-				<!-- The agent autostarts from the 'lsw-agent' scheduled
-				     task (registered by LswPromote.ps1 at SetupComplete,
-				     once the wizard account exists), NOT from HKLM\Run.
-				     The task runs the agent AS THE WIZARD USER, in their
-				     interactive session, elevated (InteractiveToken +
-				     HighestAvailable; the account is a local admin) — so
-				     window capture and app launch are native and
-				     installers still have admin rights. -->
+				<!-- The agent runs as the 'lsw-agent' Windows service,
+				     registered and started by LswPromote.ps1 at
+				     SetupComplete: LocalSystem in session 0, launching
+				     applications into the user's session with the user's
+				     full token, and keeping a helper in that session for
+				     windows, UI Automation and HKCU. The firewall rules
+				     above are by port, so they hold for the service. -->
 			</RunSynchronous>
 		</component>
 	</settings>
@@ -593,17 +606,12 @@ $scripts = @(
 		Register-ScheduledTask -TaskName 'MoveActiveHours' -Xml $( Get-Content -LiteralPath 'C:\Windows\Setup\Scripts\MoveActiveHours.xml' -Raw );
 	};
 	{
-		# The 'lsw-agent' scheduled task is registered by LswPromote.ps1
-		# at SetupComplete (post-OOBE), NOT here in Specialize. At
-		# specialize time the wizard user account doesn't exist yet
-		# (oobeSystem creates it), so Register-ScheduledTask -UserId
-		# can't resolve the principal and the task is silently never
-		# created. LswPromote.ps1 already runs after the account
-		# materializes, as SYSTEM — that's the right hook for tasks
-		# bound to the wizard user.
-		# (Intentionally no autostart write here. Don't reintroduce
-		# the HKLM\Run path either — Explorer's Run-key processor
-		# refuses to silent-elevate the manifested-as-admin agent.)
+		# The 'lsw-agent' service is registered by LswPromote.ps1 at
+		# SetupComplete (post-OOBE), NOT here in Specialize: registered
+		# here with automatic start it would first run during OOBE, and
+		# its install gate would have OOBE's own sessions to reason
+		# about. (No HKLM\Run or logon-task autostart either: the
+		# service starts the per-session helpers itself.)
 	};
 	{
 		reg.exe add "HKLM\SOFTWARE\Policies\Microsoft\Dsh" /v AllowNewsAndInterests /t REG_DWORD /d 0 /f;
@@ -637,6 +645,22 @@ $scripts = @(
 		reg.exe add "HKU\.DEFAULT\Control Panel\Accessibility\StickyKeys" /v Flags /t REG_SZ /d 10 /f;
 	};
 	{
+		# No driver searches on Windows Update, from here on.
+		#
+		# The accel-virt device presents its host GPU's PCI vendor and
+		# device IDs, so a guest with a network finds that vendor's real
+		# WHQL driver on Windows Update, ranks it above the test-signed
+		# avgpu and installs it over the device - which then bugchecks
+		# at the next boot. provision.ps1's install stage turns driver
+		# searches off too, but that is SetupComplete, and OOBE has had
+		# the network and the device since the first boot. These are the
+		# same policies it writes; it also stops the update services.
+		reg.exe add "HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate" /v ExcludeWUDriversInQualityUpdate /t REG_DWORD /d 1 /f;
+		reg.exe add "HKLM\SOFTWARE\Policies\Microsoft\Windows\DriverSearching" /v DontSearchWindowsUpdate /t REG_DWORD /d 1 /f;
+		reg.exe add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\DriverSearching" /v SearchOrderConfig /t REG_DWORD /d 0 /f;
+		reg.exe add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Device Metadata" /v PreventDeviceMetadataFromNetwork /t REG_DWORD /d 1 /f;
+	};
+	{
 		# How much video memory the display adapter admits to.
 		#
 		# A VM with no GPU enumerates the Microsoft Basic Display
@@ -644,9 +668,13 @@ $scripts = @(
 		# applications gate their GPU path on that number long before
 		# they ever open a driver. Photoshop's sniffer reads exactly
 		# this key, reported "video RAM(MB): 0", and disabled the GPU
-		# with a working OpenGL sitting underneath it. Nothing in the
-		# render server can influence the value: it is read from the
-		# registry, not from DXVK.
+		# with a working OpenGL sitting underneath it. It is read from
+		# the registry, not asked of any driver.
+		#
+		# What this reaches is whatever the Basic Display driver has
+		# bound by specialize - the install-time VGA adapter. avgpu is
+		# installed later, at SetupComplete, under a class key this
+		# never sees.
 		#
 		# 1 GiB. Comfortably over the 256 MB minimum the applications
 		# that check this ask for, and under the 4 GiB where the DWORD
@@ -716,11 +744,10 @@ $scripts = @(
 	};
 	{
 		New-Item -ItemType Directory -Force -Path 'C:\ProgramData\LSW' | Out-Null;
-		# Record the wizard-chosen account name so the SYSTEM agent can
-		# promote exactly THIS user to local Administrators (not whoever
-		# happens to hold the console session). Written before
-		# installed.txt so it is guaranteed present once the agent's
-		# sentinel gate opens.
+		# Record the wizard-chosen account name. The agent service reads
+		# it (after Winlogon's AutoLogon DefaultUserName) to know whose
+		# session is the wizard user's. installed.txt marks that this
+		# per-user setup ran; nothing gates on it.
 		Set-Content -LiteralPath 'C:\ProgramData\LSW\user.txt' -Value '{{user_name}}' -Encoding Ascii -Force;
 		Set-Content -LiteralPath 'C:\ProgramData\LSW\installed.txt' -Value (Get-Date -Format s) -Encoding Ascii -Force;
 	}
@@ -806,6 +833,15 @@ $scripts = @(
 		reg.exe add "HKU\DefaultUser\Control Panel\Accessibility\StickyKeys" /v Flags /t REG_SZ /d 10 /f;
 	};
 	{
+		# Screen saver off, no password on resume, for every account
+		# created from here on. The tune-windows setup step writes the
+		# same values to HKCU, but setup steps run as the agent service
+		# (SYSTEM) now, whose HKCU is not the user's.
+		reg.exe add "HKU\DefaultUser\Control Panel\Desktop" /v ScreenSaveActive /t REG_SZ /d 0 /f;
+		reg.exe add "HKU\DefaultUser\Control Panel\Desktop" /v ScreenSaverIsSecure /t REG_SZ /d 0 /f;
+		reg.exe add "HKU\DefaultUser\Control Panel\Desktop" /v ScreenSaveTimeOut /t REG_SZ /d 0 /f;
+	};
+	{
 		reg.exe add "HKU\DefaultUser\Software\Microsoft\Windows\CurrentVersion\RunOnce" /v "UnattendedSetup" /t REG_SZ /d "powershell.exe -WindowStyle \""Normal\"" -ExecutionPolicy \""Unrestricted\"" -NoProfile -File \""C:\Windows\Setup\Scripts\UserOnce.ps1\""" /f;
 	};
 );
@@ -866,6 +902,23 @@ $scripts = @(
   }
 } *&gt;&amp;1 | Out-String -Width 1KB -Stream &gt;&gt; "C:\Windows\Setup\Scripts\FirstLogon.log";
 		</File>
+		<!-- Run by specialize (Order 26). See the comment there. -->
+		<File path="C:\Windows\Setup\Scripts\LswAvSign.ps1">
+$ErrorActionPreference = 'Continue';
+New-Item -ItemType Directory -Force -Path 'C:\ProgramData\LSW' | Out-Null;
+$log = 'C:\ProgramData\LSW\av-sign.log';
+function L($m) { ('{0} {1}' -f (Get-Date -Format s), $m) | Add-Content -LiteralPath $log -Encoding Ascii; }
+$avScript = 'C:\av\provision.ps1';
+if (-not (Test-Path -LiteralPath $avScript)) { L ($avScript + ' missing - the payload carried no driver package'); exit 0; }
+L ('sign start; ctx=' + [System.Security.Principal.WindowsIdentity]::GetCurrent().Name);
+$out = &amp; powershell.exe -NoProfile -ExecutionPolicy Bypass -File $avScript -Stage sign 2&gt;&amp;1 | Out-String;
+$rc = $LASTEXITCODE;
+if ($out) { $out.TrimEnd() | Add-Content -LiteralPath $log -Encoding Ascii; }
+# 3010 is provision.ps1 asking for the reboot specialize ends with anyway.
+if ($rc -eq 0 -or $rc -eq 3010) { L ('provision.ps1 -Stage sign exited ' + $rc + ' - signed'); }
+else { L ('provision.ps1 -Stage sign exited ' + $rc + ' - FAILED; LswPromote.ps1 tries again'); }
+exit 0;
+		</File>
 		<!-- Windows auto-runs C:\Windows\Setup\Scripts\SetupComplete.cmd
 		     as SYSTEM at the end of Setup, BEFORE the first interactive
 		     AutoLogon. That is the only autounattend hook that is both
@@ -878,7 +931,13 @@ $scripts = @(
 		     is LIVE-PROVEN not to stick on Win11 26200, and
 		     `net localgroup /add` fails 1317 there, so promotion uses
 		     PowerShell Add-LocalGroupMember. Tiny .cmd launcher (ANSI,
-		     no XML-entity hazards) → LswPromote.ps1. -->
+		     no XML-entity hazards) → LswPromote.ps1.
+
+		     LswPromote.ps1 also installs the accel-virt display driver
+		     from C:\av (signed in specialize; install here) and the
+		     Vulkan/OpenCL loaders: SYSTEM, after the specialize reboot,
+		     with test signing in force. All of it logs to
+		     C:\ProgramData\LSW\promote.log. -->
 		<File path="C:\Windows\Setup\Scripts\SetupComplete.cmd">
 @echo off
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Windows\Setup\Scripts\LswPromote.ps1
@@ -889,6 +948,112 @@ $ErrorActionPreference = 'Continue';
 New-Item -ItemType Directory -Force -Path 'C:\ProgramData\LSW' | Out-Null;
 $log = 'C:\ProgramData\LSW\promote.log';
 function L($m) { ('{0} {1}' -f (Get-Date -Format s), $m) | Add-Content -LiteralPath $log -Encoding Ascii; }
+# The accel-virt display driver, first: it needs nothing from the
+# account below, and the promotion has exits this must not sit behind.
+#
+# Specialize signed the package (LswAvSign.ps1, av-sign.log) and turned
+# test signing on, and the reboot that ended specialize put it in force;
+# what is left is the install stage, which is here because pnputil and
+# the PnP stack want a fully booted Windows. As SYSTEM because it writes
+# the driver store and GraphicsDrivers. The av device is present in this
+# boot - the install-time domain has it beside the VGA adapter - so
+# pnputil installs onto it and avgpu.sys can start straight away; the
+# VGA adapter stays the display until the manager restarts the VM into
+# its steady-state shape once setup is done.
+#
+# Sign again only when the catalog is missing or not validly signed,
+# i.e. when specialize's sign did not finish: sign is not re-runnable
+# over its own output, because it first checks every file against
+# package.sha256 and its first run rewrote avgpu.inf and signed
+# avgpu.sys. A sign that has to happen here leaves test signing for the
+# next boot, which the retry task below then covers.
+#
+# Test signing is only possible because Secure Boot has no keys here
+# (OVMF_CODE.4m.fd, OVMF_VARS.4m.fd): with keys enrolled, bcdedit
+# refuses testsigning outright.
+$avFlag = 'C:\ProgramData\LSW\av-installed.flag';
+$avScript = 'C:\av\provision.ps1';
+$avCatalog = 'C:\av\package\avgpu.cat';
+$avRetryTask = 'lsw-av-install';
+function AvStage([string[]] $stageArgs) {
+    $out = &amp; powershell.exe -NoProfile -ExecutionPolicy Bypass -File $avScript @stageArgs 2&gt;&amp;1 | Out-String;
+    $rc = $LASTEXITCODE;
+    if ($out) { $out.TrimEnd() | Add-Content -LiteralPath $log -Encoding Ascii; }
+    L ('provision.ps1 ' + ($stageArgs -join ' ') + ' exited ' + $rc);
+    # 3010 is provision.ps1 asking for a reboot, not a failure.
+    return ($rc -eq 0 -or $rc -eq 3010);
+}
+function AvSigned {
+    if (-not (Test-Path -LiteralPath $avCatalog)) { return $false; }
+    return ((Get-AuthenticodeSignature -LiteralPath $avCatalog).Status -eq 'Valid');
+}
+if (Test-Path -LiteralPath $avFlag) {
+    L 'av-installed.flag present - driver already installed';
+} elseif (-not (Test-Path -LiteralPath $avScript)) {
+    L ($avScript + ' missing - the payload carried no driver package');
+} else {
+    L ('test signing: ' + ((bcdedit.exe /enum '{current}' | Select-String -Pattern 'testsigning') -join ' '));
+    $avOk = $true;
+    if (-not (AvSigned)) {
+        L ($avCatalog + ' missing or unsigned - specialize did not sign (see av-sign.log); signing here');
+        $avOk = AvStage @('-Stage', 'sign');
+    }
+    if ($avOk -and (AvStage @('-Stage', 'install', '-NoVerifier'))) {
+        Set-Content -LiteralPath $avFlag -Value (Get-Date -Format s) -Encoding Ascii -Force;
+        schtasks.exe /Delete /TN $avRetryTask /F 2&gt;&amp;1 | Out-Null;
+        L 'accel-virt driver installed';
+    } else {
+        # Tried again at every boot, as SYSTEM, until it takes: this
+        # whole script is the retry, since the driver block runs ahead of
+        # the promotion's flag and the success above deletes the task.
+        schtasks.exe /Create /TN $avRetryTask /RU SYSTEM /SC ONSTART /RL HIGHEST /F /TR 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Windows\Setup\Scripts\LswPromote.ps1' 2&gt;&amp;1 | Out-Null;
+        L ('accel-virt driver install FAILED - see provision.ps1 output above; retrying at boot (task ' + $avRetryTask + ')');
+    }
+}
+# The loaders the driver's ICDs are found through. Windows ships no
+# OpenCL.dll and, depending on the build, no vulkan-1.dll; one it does
+# ship is kept, because it serves the whole machine and may be newer
+# than ours. Machine-wide on purpose: a loader is not per-application.
+# A 32-bit process looks in SysWOW64, so the x86 pair goes there.
+foreach ($target in @(@('x64', 'System32'), @('x86', 'SysWOW64'))) {
+    foreach ($dll in @('vulkan-1.dll', 'OpenCL.dll')) {
+        $src = 'C:\av\loaders\' + $target[0] + '\' + $dll;
+        $dst = $env:windir + '\' + $target[1] + '\' + $dll;
+        if (-not (Test-Path -LiteralPath $src)) { continue; }
+        if (Test-Path -LiteralPath $dst) { L ($dst + ' already present - kept'); continue; }
+        try {
+            Copy-Item -LiteralPath $src -Destination $dst -Force -ErrorAction Stop;
+            L ('installed ' + $dst);
+        } catch {
+            L ('installing ' + $dst + ' FAILED: ' + $_.Exception.Message);
+        }
+    }
+}
+# The guest agent: the 'lsw-agent' Windows service. LocalSystem, in
+# session 0, automatic start; the SCM restarts it if it fails (after 5 s,
+# 5 s, then 30 s; the count resets after a day), and failureflag makes a
+# non-zero exit count as a failure too - which is how the agent reports
+# a port it could not bind. Here, at SetupComplete, and not in
+# specialize: it first runs after OOBE, so its install gate (port 5102
+# stays closed until a helper in the wizard user's session sees a usable
+# desktop) never meets OOBE's own sessions. Ahead of the promotion below, which has early exits; a
+# service needs no account. Idempotent, because SetupComplete can run
+# twice: an existing service is reconfigured, and starting a running one
+# is a harmless error.
+$svc = 'lsw-agent';
+$svcBin = 'C:\ProgramData\LSW\lsw-agent.exe --service';
+if (Get-Service -Name $svc -ErrorAction SilentlyContinue) {
+    $out = sc.exe config $svc binPath= $svcBin start= auto obj= LocalSystem 2&gt;&amp;1 | Out-String;
+} else {
+    $out = sc.exe create $svc binPath= $svcBin start= auto obj= LocalSystem DisplayName= 'LSW Guest Agent' 2&gt;&amp;1 | Out-String;
+}
+L ('lsw-agent service: ' + $out.Trim());
+sc.exe description $svc 'The LSW manager''s control channel into this VM.' 2&gt;&amp;1 | Out-Null;
+$out = sc.exe failure $svc reset= 86400 actions= restart/5000/restart/5000/restart/30000 2&gt;&amp;1 | Out-String;
+L ('lsw-agent recovery: ' + $out.Trim());
+sc.exe failureflag $svc 1 2&gt;&amp;1 | Out-Null;
+$out = sc.exe start $svc 2&gt;&amp;1 | Out-String;
+L ('lsw-agent start: ' + $out.Trim());
 $flag = 'C:\ProgramData\LSW\promoted.flag';
 # SetupComplete.cmd can run twice on Win11 (SYSTEM during setup, then
 # again post first-logon); the sentinel makes the second run a no-op.
@@ -916,70 +1081,6 @@ if ($members -contains $lu.SID.Value) {
         L ('Add-LocalGroupMember FAILED: ' + $_.Exception.Message);
         exit 0;
     }
-}
-# Register the 'lsw-agent' scheduled task that autostarts the
-# agent at autologon. Must happen HERE (post-OOBE, SYSTEM, user
-# account exists) not in Specialize — Specialize runs before
-# oobeSystem creates the local account. We need a task rather
-# than HKLM\Run because the agent EXE is manifested as
-# requireAdministrator (children inherit a full token for sc.exe
-# / pnputil / driver work) and Explorer's Run-key processor
-# refuses to silent-elevate Run entries at autologon.
-# RunLevel=HighestAvailable + LogonType=InteractiveToken honors
-# the manifest at trigger time.
-#
-# Register via raw XML (NOT the New-ScheduledTask* cmdlets):
-# their cmdlet-generated XML trips Task Scheduler's principal
-# validator with HRESULT 0x80070057 ("(7,21):UserId:lsw") even
-# when every argument is documented as valid. The raw-XML form
-# is the same one UnlockStartLayout and MoveActiveHours use
-# elsewhere in this autounattend and is the proven-good path.
-# UserId is the user's SID, not their name — SIDs always
-# resolve unambiguously regardless of casing or domain prefix.
-$sid = $lu.SID.Value;
-$xml = @"
-&lt;?xml version="1.0" encoding="UTF-16"?&gt;
-&lt;Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task"&gt;
-  &lt;Triggers&gt;
-    &lt;LogonTrigger&gt;
-      &lt;Enabled&gt;true&lt;/Enabled&gt;
-      &lt;UserId&gt;$sid&lt;/UserId&gt;
-    &lt;/LogonTrigger&gt;
-  &lt;/Triggers&gt;
-  &lt;Principals&gt;
-    &lt;Principal id="Author"&gt;
-      &lt;UserId&gt;$sid&lt;/UserId&gt;
-      &lt;LogonType&gt;InteractiveToken&lt;/LogonType&gt;
-      &lt;RunLevel&gt;HighestAvailable&lt;/RunLevel&gt;
-    &lt;/Principal&gt;
-  &lt;/Principals&gt;
-  &lt;Settings&gt;
-    &lt;MultipleInstancesPolicy&gt;IgnoreNew&lt;/MultipleInstancesPolicy&gt;
-    &lt;DisallowStartIfOnBatteries&gt;false&lt;/DisallowStartIfOnBatteries&gt;
-    &lt;StopIfGoingOnBatteries&gt;false&lt;/StopIfGoingOnBatteries&gt;
-    &lt;AllowHardTerminate&gt;true&lt;/AllowHardTerminate&gt;
-    &lt;StartWhenAvailable&gt;true&lt;/StartWhenAvailable&gt;
-    &lt;AllowStartOnDemand&gt;true&lt;/AllowStartOnDemand&gt;
-    &lt;Enabled&gt;true&lt;/Enabled&gt;
-    &lt;ExecutionTimeLimit&gt;PT0S&lt;/ExecutionTimeLimit&gt;
-    &lt;Priority&gt;7&lt;/Priority&gt;
-    &lt;RestartOnFailure&gt;
-      &lt;Interval&gt;PT1M&lt;/Interval&gt;
-      &lt;Count&gt;3&lt;/Count&gt;
-    &lt;/RestartOnFailure&gt;
-  &lt;/Settings&gt;
-  &lt;Actions Context="Author"&gt;
-    &lt;Exec&gt;
-      &lt;Command&gt;C:\ProgramData\LSW\lsw-agent.exe&lt;/Command&gt;
-    &lt;/Exec&gt;
-  &lt;/Actions&gt;
-&lt;/Task&gt;
-"@;
-try {
-    Register-ScheduledTask -TaskName 'lsw-agent' -Xml $xml -Force | Out-Null;
-    L ('lsw-agent scheduled task registered for SID ' + $sid);
-} catch {
-    L ('lsw-agent task registration FAILED: ' + $_.Exception.Message);
 }
 Set-Content -LiteralPath $flag -Value (Get-Date -Format s) -Encoding Ascii -Force;
 ( Get-LocalGroupMember -Group 'Administrators' | Format-Table Name, SID -AutoSize | Out-String ) | Add-Content -LiteralPath $log -Encoding Ascii;

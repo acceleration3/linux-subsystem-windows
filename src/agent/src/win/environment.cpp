@@ -30,12 +30,21 @@ std::vector<wchar_t> Environment::block_with(const std::vector<Override>& overri
     if (overrides.empty()) {
         return {};
     }
+    wchar_t* block = ::GetEnvironmentStringsW();
+    std::vector<wchar_t> out = block_from(block, overrides);
+    if (block != nullptr) {
+        ::FreeEnvironmentStringsW(block);
+    }
+    return out;
+}
 
+std::vector<wchar_t> Environment::block_from(const wchar_t* base,
+                                             const std::vector<Override>& overrides) {
     // Existing variables, keyed by upper-cased name so an override
     // replaces a differently-cased one rather than adding a twin.
     std::map<std::wstring, std::pair<std::wstring, std::wstring>> vars;  // KEY -> (name, value)
-    if (wchar_t* block = ::GetEnvironmentStringsW(); block != nullptr) {
-        for (const wchar_t* p = block; *p != L'\0';) {
+    if (base != nullptr) {
+        for (const wchar_t* p = base; *p != L'\0';) {
             const std::wstring entry(p);
             p += entry.size() + 1;
             // Skip the "=C:=C:\..." drive-current-directory entries:
@@ -47,7 +56,6 @@ std::vector<wchar_t> Environment::block_with(const std::vector<Override>& overri
             const std::wstring name = entry.substr(0, eq);
             vars[util::WideString::upper(name)] = {name, entry.substr(eq + 1)};
         }
-        ::FreeEnvironmentStringsW(block);
     }
     for (const auto& [name, value] : overrides) {
         const std::wstring wname = util::TextEncoding::to_wide(name);
@@ -62,6 +70,9 @@ std::vector<wchar_t> Environment::block_with(const std::vector<Override>& overri
         const std::wstring entry = pair.first + L"=" + pair.second;
         out.insert(out.end(), entry.begin(), entry.end());
         out.push_back(L'\0');
+    }
+    if (out.empty()) {
+        out.push_back(L'\0');  // an empty block is still two NULs
     }
     out.push_back(L'\0');  // block terminator
     return out;

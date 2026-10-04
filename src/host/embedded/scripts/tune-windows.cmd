@@ -9,9 +9,12 @@ rem wizard's SetupPage as a ``run_script`` step. Referenced from
 rem setup-steps.json via ``"script_ref": "tune-windows"``. To edit, change
 rem this file and rebuild — no manual JSON escaping.
 rem
-rem Run *as the interactive user* (the agent dispatches via cmd /c). Some
-rem registry tweaks are HKLM (machine-wide); the HKCU ones rely on the
-rem agent running in the user's session, which it does (Run-key autostart).
+rem Runs as SYSTEM in session 0: the agent is a service, and setup steps
+rem run there unless they ask for a session. So everything here is
+rem machine-wide (HKLM, powercfg) — an HKCU write would land in SYSTEM's
+rem own hive, not the user's. Per-user defaults belong in the
+rem autounattend's DefaultUser.ps1, which writes the default profile
+rem before the wizard user exists.
 rem ---------------------------------------------------------------------------
 
 rem Disable hibernation — no point in a VM and saves the hiberfil.sys disk.
@@ -45,11 +48,8 @@ reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\Personalization" /v NoLockScre
 rem Disable Win+L / policy-driven workstation lock.
 reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" /v DisableLockWorkstation /t REG_DWORD /d 1 /f >nul 2>&1
 
-rem Screen-saver: off + no password-on-resume. HKCU is the user hive; we
-rem run as the user so this writes to the right one.
-reg add "HKCU\Control Panel\Desktop" /v ScreenSaveActive   /t REG_SZ /d 0 /f >nul 2>&1
-reg add "HKCU\Control Panel\Desktop" /v ScreenSaverIsSecure /t REG_SZ /d 0 /f >nul 2>&1
-reg add "HKCU\Control Panel\Desktop" /v ScreenSaveTimeOut  /t REG_SZ /d 0 /f >nul 2>&1
+rem Screen-saver off and no password on resume: per-user, so it is set in
+rem the default profile by the autounattend's DefaultUser.ps1, not here.
 
 rem Disable Windows Update auto-reboot while a user is logged in.
 reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU" /v NoAutoRebootWithLoggedOnUsers /t REG_DWORD /d 1 /f >nul 2>&1

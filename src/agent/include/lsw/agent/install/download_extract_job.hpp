@@ -9,14 +9,15 @@ namespace lsw::agent::install {
 //
 // Extraction uses the built-in tar.exe (BSD libarchive, Win10 1803+),
 // which handles .zip / .tar / .tar.gz / .tar.xz with no extra tooling in
-// the guest. The optional follow-up script is how "unpack DXVK and put
-// the DLLs somewhere" gets expressed without teaching the agent about
-// DXVK: it runs with ``LSW_EXTRACT_DIR`` and ``LSW_DOWNLOAD_PATH`` in the
-// environment.
+// the guest. The optional follow-up script is how "unpack this tool and
+// put its files somewhere" gets expressed without teaching the agent
+// about the tool: it runs with ``LSW_EXTRACT_DIR`` and
+// ``LSW_DOWNLOAD_PATH`` in the environment.
 class DownloadExtractJob final : public InstallJob {
 public:
     DownloadExtractJob(std::string id, std::string name, NotificationQueue& queue,
-                       std::string url, std::string extract_to, std::string script);
+                       std::string url, std::string extract_to, std::string script,
+                       win::RunAs as);
 
     void run() override;
 

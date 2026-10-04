@@ -19,11 +19,24 @@ Default options:
 
 - `LSW_BUILD_MANAGER` (Linux only)
 - `LSW_BUILD_AGENT` (Windows only)
-- `LSW_BUILD_RENDER_SERVER` — the render server on Linux, the guest's
-  OpenCL / OpenGL / Vulkan drivers on the mingw cross-build
+- `LSW_BUILD_ACCEL_VIRT` — the GPU (Linux host build only): accel-virt's
+  patched QEMU, executor and host Direct3D, and its guest driver package,
+  installed to `build/av-drivers`. Needs the clang/LLVM toolchain; see
+  [README.md](README.md#building)
+- `LSW_BUILD_REMOTEWIN` — the window mirror on Linux, its guest half on
+  the mingw cross-build
 - `LSW_BUILD_TESTS`
 
-Disable any with `-DLSW_BUILD_X=OFF`.
+Disable any with `-DLSW_BUILD_X=OFF`. `-DAV_WINDOWS_KIT_DIR=<dir>`
+points accel-virt at a Windows kit fetched elsewhere instead of fetching
+one into the submodule.
+
+The accel-virt targets, each part of `all` in the host build:
+`accel_virt_fetch` (what it pins and does not commit), `accel_virt_drivers`
+(builds and installs the driver package, then adds the OpenCL loaders),
+`accel_virt_host` (QEMU, `libav_executor.so`, `av-renderer`) and
+`accel_virt_d3d` (DXVK and vkd3d-proton); `accel_virt` is all four.
+`cmake/LSWAccelVirt.cmake` says where each output lands.
 
 The Windows half is cross-built, not built here:
 
@@ -31,18 +44,27 @@ The Windows half is cross-built, not built here:
 ./scripts/build-agent.sh
 ```
 
-That produces `lsw-guest-agent.exe`, the three guest drivers and the
-Vulkan loader, for x86-64 and i686, under `build-agent/` and
-`build-agent32/`. The wizard picks all of them up from there.
+That produces `lsw-guest-agent.exe` and `remotewin-guest.exe` under
+`build-agent/`, and the Vulkan loader for x86-64 and i686 under
+`build-agent/` and `build-agent32/`. The wizard picks all of them up from
+there. The GPU drivers are not part of it: they are built by the host
+build, with accel-virt's own toolchains.
 
-## Changing the graphics proxy
+## Changing the GPU
 
-The drivers and the server live in the
-[render-server](external/render-server) submodule, which has its own
-build, its own tests and its own contributing rules (see its
-`CLAUDE.md`). Change it there and bump the submodule pointer here; the
-codegen that produces its Vulkan, OpenGL and OpenCL wire format is its
-own too.
+The kernel driver, the user-mode drivers, the QEMU device and the
+executor all live in the [accel-virt](external/accel-virt) submodule,
+which has its own build, its own tests and its own contributing rules
+(see its `CLAUDE.md`). Change it there and bump the submodule pointer
+here; the codegen that produces its Vulkan, OpenGL, OpenCL and Direct3D
+wire format is its own too. Do not edit it in place from this
+repository — the build here only drives it, through its `drivers`
+target and install component and its `AV_QEMU` configuration.
+
+What LSW owns is everything around it: which host GPU a VM's
+`virtio-gpu-av-pci` device binds, the domain XML that puts the device
+and the patched QEMU in the VM, staging `build/av-drivers` onto the
+payload ISO, and running `provision.ps1` in the guest.
 
 ## Style
 
@@ -66,7 +88,11 @@ Adding a guest RPC: one new TU under
 `lsw/linkproto/commands.hpp`, and the TU listed in
 `src/agent/CMakeLists.txt`. The transport is not involved — including
 for log verbosity and reply summaries, which are handler overrides
-(`RpcHandler::silent`, `RpcHandler::summarize`).
+(`RpcHandler::silent`, `RpcHandler::summarize`), and for where it runs:
+the agent is a LocalSystem service in session 0, and a command that has
+to run inside the user's session (windows, UI Automation, HKCU) says so
+with `RpcHandler::placement()`; the service then forwards it to its
+session helper there.
 
 Adding an agent-pushed event: implement `rpc::EventSource` and register
 it with the connection's `EventPump` in `host_endpoint.cpp`.

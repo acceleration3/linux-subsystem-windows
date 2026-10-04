@@ -19,9 +19,15 @@ public:
     void initializePage() override;
 
 private:
+    // The two tiles read from the status hub: the guest's display adapter
+    // and whether its agent answers, as they are now.
+    void show_guest();
+
     Wizard& wizard_;
     QLabel* edition_value_ = nullptr;
     QLabel* machine_value_ = nullptr;
+    QLabel* graphics_value_ = nullptr;
+    QLabel* agent_value_ = nullptr;
 };
 
 }  // namespace lsw::host::wizard

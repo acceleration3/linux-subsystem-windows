@@ -33,6 +33,9 @@ public:
 
     void watch(const QUuid& uuid);
     void unwatch(const QUuid& uuid);
+    // Read ``uuid`` now rather than at the next tick: a newly watched VM
+    // is then shown as it is from the start, not as "off" for a tick.
+    void poll_now(const QUuid& uuid);
 
     [[nodiscard]] VmStats latest(const QUuid& uuid) const;
 

@@ -16,6 +16,20 @@ namespace lsw::linkproto::cmd {
 
 // -- system ---------------------------------------------------------------
 inline constexpr const char* kSystemInfo = "system_info";
+// The guest half of the manager's Graphics page: the display adapters,
+// each one's problem code and driver version, test signing, the driver
+// search policy and the WDDM feature flags avgpu.sys needs. Read-only.
+inline constexpr const char* kGpuStatus = "gpu_status";
+// The Windows sessions with a user logged on:
+// ``{"sessions": [{id, user, state, console, helper}], "default": id|null}``.
+// The agent is a service in session 0 and acts for a user's session on
+// request: ``launch``, ``console_open``, ``start_window_mirror``,
+// ``run_script``, ``download_install``, ``download_extract``, and every
+// window and UI Automation command take an optional integer ``session``
+// (default: the console user's session — except the install commands,
+// which default to SYSTEM in session 0; ``session: 0`` asks for SYSTEM
+// where that makes sense).
+inline constexpr const char* kListSessions = "list_sessions";
 
 // -- installed apps -------------------------------------------------------
 inline constexpr const char* kListApps = "list_apps";
@@ -30,11 +44,10 @@ inline constexpr const char* kGetIcon  = "get_icon";
 // drives. ``resolve_shortcut`` turns a .lnk into what it points at, so
 // an application configured by picking one from the Start menu keeps
 // working after the shortcut is deleted.
-// The virtual monitor's size, the guest's DPI, and how much video
-// memory the adapter admits to owning. All three are settings on the
-// host and all three live in the guest, so the manager pushes them
-// across once the agent answers. The resolution takes effect at once;
-// the other two are registry state Windows reads at logon and at boot.
+// ``set_display`` carries the guest's DPI, a host setting that lives in
+// the guest's registry and that Windows reads at logon. The resolution
+// is not part of it: the host sets the display device's modes and
+// Windows follows the adapter.
 inline constexpr const char* kSetDisplay      = "set_display";
 inline constexpr const char* kListDir         = "list_dir";
 inline constexpr const char* kResolveShortcut = "resolve_shortcut";
@@ -75,7 +88,6 @@ inline constexpr const char* kUiaSetValue              = "uia_set_value";
 inline constexpr const char* kUiaGetText               = "uia_get_text";
 inline constexpr const char* kUiaTreeDump              = "uia_tree_dump";
 inline constexpr const char* kUiaSubscribeLifecycle    = "uia_subscribe_lifecycle";
-inline constexpr const char* kUiaUnsubscribeLifecycle  = "uia_unsubscribe_lifecycle";
 inline constexpr const char* kUiaSubscribeFocus        = "uia_subscribe_focus";
 inline constexpr const char* kUiaSubscribeProperties   = "uia_subscribe_properties";
 inline constexpr const char* kUiaUnsubscribe           = "uia_unsubscribe";
@@ -94,8 +106,8 @@ inline constexpr const char* kConsoleClosed = "console_closed";
 
 // Sent by the agent on the shared-memory RPC channel as soon as it maps
 // the region: proof to the manager that the channel is live, and the
-// ring size it may write. Absent means "socket only" — an agent too old
-// for the channel, or a guest without the IVSHMEM driver.
+// ring size it may write. Absent means "socket only" — a guest without
+// the IVSHMEM driver.
 inline constexpr const char* kChannelHello = "channel_hello";
 
 inline constexpr const char* kUiaWindowOpened  = "uia_window_opened";

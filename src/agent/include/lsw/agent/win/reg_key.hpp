@@ -2,7 +2,6 @@
 
 #include "lsw/agent/win/unique_handle.hpp"
 
-#include <cstdint>
 #include <optional>
 #include <string>
 #include <vector>
@@ -11,9 +10,9 @@ namespace lsw::agent::win {
 
 // An open registry key, closed when it goes.
 //
-// The agent reads the Uninstall hive, registers ICDs and writes display
-// settings, and each of those carried its own RegOpenKeyExW /
-// RegQueryValueExW / RegCloseKey sequence — with a RegCloseKey to
+// The agent reads the Uninstall hive and writes display settings, and
+// each of those carried its own RegOpenKeyExW / RegQueryValueExW /
+// RegCloseKey sequence — with a RegCloseKey to
 // remember on every ``continue`` of an enumeration loop, and its own idea
 // of whether REG_EXPAND_SZ gets expanded.
 //
@@ -44,7 +43,6 @@ public:
 
     // Win32 status of the write; ERROR_SUCCESS (0) when it took.
     [[nodiscard]] long write_dword(const wchar_t* name, DWORD value) const;
-    [[nodiscard]] long write_qword(const wchar_t* name, std::uint64_t value) const;
 
     // Names of the immediate subkeys. One that cannot be read is
     // skipped rather than ending the enumeration.

@@ -62,7 +62,12 @@ void Launcher::launch(const QString& app_id, const QString& args,
             Q_EMIT failed(app_id, QString::fromStdString("agent: " + reply.error));
             return;
         }
-        Q_EMIT launched(app_id, static_cast<quint32>(reply.body.value("pid", std::uint64_t{0})),
+        const auto pid = static_cast<quint32>(reply.body.value("pid", std::uint64_t{0}));
+        if (pid == 0) {
+            Q_EMIT failed(app_id, QStringLiteral("agent: the launch reply carries no pid"));
+            return;
+        }
+        Q_EMIT launched(app_id, pid,
                         QString::fromStdString(reply.body.value("job", std::string{})));
     });
 }

@@ -5,12 +5,18 @@
 #include "lsw/host/provision/pipeline_step.hpp"
 #include "lsw/host/provision/setup_stage.hpp"
 
+#include <QElapsedTimer>
 #include <QObject>
+
+#include <optional>
 #include <QString>
 #include <QUuid>
 #include <QVector>
 
 namespace lsw::host::services { class HostServices; }
+namespace lsw::host::vm { struct DomainXmlInputs; }
+
+class QTimer;
 
 namespace lsw::host::provision {
 
@@ -68,6 +74,15 @@ public:
     // guard against connecting after ``setup_plan_ready`` already fired.
     [[nodiscard]] const QVector<SetupStage>& setup_plan() const noexcept { return plan_; }
 
+    // The step last started, its description, and the VNC port once one
+    // is known: a page that connects after the signal fired (the install
+    // page is shown a turn after the disk step has begun) reads these.
+    [[nodiscard]] std::optional<Step> current_step() const noexcept { return current_step_; }
+    [[nodiscard]] const QString& current_description() const noexcept {
+        return current_description_;
+    }
+    [[nodiscard]] int vnc_port() const noexcept { return vnc_port_; }
+
 Q_SIGNALS:
     // ``description`` is a status line suitable for a single label.
     void step_started(Step step, QString description);
@@ -111,7 +126,22 @@ private:
     void run_start_vm();
     void run_wait_for_agent();
     void run_setup_phase();
+    // After setup: the domain is redefined without the install-time VGA
+    // adapter and restarted, which is also the first boot that loads the
+    // display driver SetupComplete installed. Shut down, start, and wait
+    // for the agent again.
+    void run_restart_vm();
+    void poll_shutdown();
+    void run_start_steady_vm();
+    void run_wait_for_agent_after_restart();
     void finish();
+
+    // The domain inputs for this VM, from settings like every other
+    // definition the manager writes, with the virtio-win ISO this run
+    // fetched. ``install_display`` adds the VGA adapter Windows Setup
+    // needs, since the accel-virt device shows nothing until its driver
+    // is installed.
+    [[nodiscard]] vm::DomainXmlInputs domain_inputs(bool install_display) const;
 
     // Terminal emit helpers. Use these rather than raw Q_EMIT so the
     // setup runner is always detached from the channel before consumers
@@ -142,7 +172,16 @@ private:
     VncPortResolver* vnc_resolver_ = nullptr;
     SetupStageRunner* setup_runner_ = nullptr;
 
+    // The restart into the steady-state machine.
+    QTimer* shutdown_poll_ = nullptr;
+    QElapsedTimer shutdown_clock_;
+    int shutdown_ticks_ = 0;
+    QTimer* restart_deadline_ = nullptr;
+
     QVector<SetupStage> plan_;
+    std::optional<Step> current_step_;
+    QString current_description_;
+    int vnc_port_ = -1;
 };
 
 }  // namespace lsw::host::provision

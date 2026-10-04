@@ -38,8 +38,8 @@ public:
     // ---- Message channels ----------------------------------------------
     // The mirror image of the manager's endpoints: this side produces
     // guest→host and consumes host→guest. Invalid endpoints mean the
-    // region has no such channel (an older manager), which callers must
-    // treat as "use the socket instead", not as a failure.
+    // region has no such channel, which callers must treat as "use the
+    // socket instead", not as a failure.
 
     [[nodiscard]] linkproto::ByteRingProducer& rpc_to_host() { return rpc_to_host_; }
 
@@ -57,10 +57,9 @@ private:
     void bind_duplex_channel(std::uint32_t kind, linkproto::ByteRingProducer& to_host,
                              linkproto::ByteRingConsumer& from_host);
 
-    // The mapping itself, shared with the guest ICD: one implementation
-    // of "map the IVSHMEM BAR", not two. ``base_`` / ``size_`` are
-    // cached copies of the region's, so the hot frame path is a member
-    // read rather than a virtual call.
+    // The mapping itself: one implementation of "map the IVSHMEM BAR",
+    // not two. ``base_`` / ``size_`` are cached copies of the region's,
+    // so the hot frame path is a member read rather than a virtual call.
     IvshmemRegion region_;
     void* base_ = nullptr;
     std::uint64_t size_ = 0;

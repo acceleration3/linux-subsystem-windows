@@ -5,6 +5,10 @@
 #include <string>
 #include <vector>
 
+namespace lsw::agent::win {
+class RunAs;
+}
+
 namespace lsw::agent::console {
 
 // Manages an embedded ``cmd.exe`` session whose stdin / stdout /
@@ -36,11 +40,11 @@ public:
         int exit_code = 0;               // populated for Closed
     };
 
-    // Spawn a fresh ``cmd.exe`` (the user's local %COMSPEC% if set,
-    // otherwise the system one) with stdin/stdout/stderr redirected
-    // to pipes. Returns the new session id, or an empty string on
-    // failure (CreatePipe / CreateProcessW errors get logged).
-    [[nodiscard]] std::string open();
+    // Spawn a fresh ``cmd.exe`` as ``as`` — SYSTEM in session 0, or a
+    // user in their session — with stdin/stdout/stderr redirected to
+    // pipes. Returns the new session id, or an empty string on failure
+    // (CreatePipe / CreateProcess errors get logged).
+    [[nodiscard]] std::string open(const win::RunAs& as);
 
     // Append ``data`` to the session's stdin. Newlines are passed
     // through verbatim — cmd.exe is line-buffered so the typical

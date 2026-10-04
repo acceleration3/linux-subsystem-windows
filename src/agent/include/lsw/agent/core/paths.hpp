@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <string>
 
 namespace lsw::agent::core {
@@ -21,6 +22,11 @@ public:
 
     // ``agent.log`` — the file side of the log ring.
     [[nodiscard]] static std::wstring agent_log();
+
+    // ``agent-session-<N>.log`` — the session helper's own file in
+    // session N. Its records also reach agent.log through the service,
+    // once it is connected; this file has what happened before that.
+    [[nodiscard]] static std::wstring session_helper_log(std::uint32_t session);
 
     // ``desktop-probe.log`` — DesktopProbe's session snapshots.
     [[nodiscard]] static std::wstring desktop_probe_log();

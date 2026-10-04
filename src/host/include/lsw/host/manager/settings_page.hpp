@@ -5,13 +5,18 @@
 #include "lsw/host/config/pending_changes.hpp"
 #include "lsw/host/ui/machine_limits.hpp"
 
+#include <QHash>
 #include <QVector>
 #include <QWidget>
+
+#include <functional>
 
 class QLabel;
 class QPushButton;
 class QVBoxLayout;
 class QTableWidget;
+
+namespace lsw::host::services { class StatusHub; }
 
 namespace lsw::host::manager {
 
@@ -25,8 +30,10 @@ namespace lsw::host::manager {
 class SettingsPage : public QWidget {
     Q_OBJECT
 public:
+    // ``status`` has the host's Vulkan devices, for the adapter table.
     SettingsPage(config::ManagerSettings& settings, config::PendingChanges& pending,
-                 apps::AppConfigStore& apps, QWidget* parent = nullptr);
+                 apps::AppConfigStore& apps, services::StatusHub& status,
+                 QWidget* parent = nullptr);
 
 Q_SIGNALS:
     // The apply bar. The window owns the guest, so it does the stopping
@@ -43,13 +50,19 @@ private:
     void build();
     void refresh_apply_bar();
     void rebuild_shares_table();
-    void rebuild_bindings_table();
 
     // A group is a titled block of rows; a row is a label, an
     // explanation, a now-or-restart tag, and a control.
     QVBoxLayout* new_group(const QString& title);
+    // The tag follows the key unless ``tag`` says otherwise: "restart"
+    // or "now", for a row whose effect and storage differ (the DPI is
+    // written at once and read at the next logon).
     QWidget* add_row(QVBoxLayout* group, const QString& key, const QString& label,
-                     const QString& description, QWidget* control);
+                     const QString& description, QWidget* control, const char* tag = nullptr);
+    // A row whose control is too wide for the control column: the name
+    // and the explanation, then ``control`` the full width under them.
+    void add_wide_row(QVBoxLayout* group, bool restart, const QString& label,
+                      const QString& description, QWidget* control);
     // A row whose control is one button that leads somewhere else:
     // ``clicked`` is the signal it emits. ``role`` dresses the button.
     void add_action_row(QVBoxLayout* group, const QString& label, const QString& description,
@@ -61,13 +74,14 @@ private:
                          const QString& suffix);
     QWidget* make_choice(const QString& key, const QVector<QPair<QString, QVariant>>& options);
 
-    // The GPUs to offer for the OpenGL device, asked of the render
-    // server. Static because it depends on the host rather than on any
-    // page state, and because it is worth asking only once.
-    [[nodiscard]] static QVector<QPair<QString, QVariant>> gl_device_choices();
     QWidget* make_toggle(const QString& key);
-    QWidget* make_number(const QString& key, int min, int max);
     QWidget* make_text(const QString& key);
+
+    // Each control shows the staged value, or the stored one: Revert,
+    // Apply, and a change made somewhere else (the Graphics page's
+    // resolution switch, another manager) all move what it shows.
+    void follow(const QString& key, std::function<void()> show);
+    void show_current(const QString& key);
 
     // Writes a live key straight through, or stages a restart key.
     void put(const QString& key, const QVariant& value);
@@ -82,13 +96,14 @@ private:
     config::ManagerSettings& settings_;
     config::PendingChanges& pending_;
     apps::AppConfigStore& apps_;
+    services::StatusHub& status_;
 
     QVBoxLayout* content_ = nullptr;
     QWidget* apply_bar_ = nullptr;
     QLabel* apply_count_ = nullptr;
     QLabel* apply_diffs_ = nullptr;
     QTableWidget* shares_table_ = nullptr;
-    QTableWidget* bindings_table_ = nullptr;
+    QHash<QString, std::function<void()>> shows_;
 };
 
 }  // namespace lsw::host::manager

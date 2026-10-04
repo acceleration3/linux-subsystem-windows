@@ -9,9 +9,12 @@ the bug.
 
 An application's windows and its GPU work do not travel here. Windows
 are carried by [remotewin](../external/remotewin), one connection per
-application; GPU calls by [render-server](../external/render-server),
-over a shared-memory region of its own. What is left is the control
-plane: asking the agent to do things, and hearing what it has to say.
+application; GPU work by [accel-virt](../external/accel-virt), through
+the `virtio-gpu-av-pci` device the VM has for a display adapter — its
+rings live in guest memory and its doorbells in the device's BAR, so it
+needs no region, port or connection of LSW's. What is left is the
+control plane: asking the agent to do things, and hearing what it has
+to say.
 
 ## Transport
 
@@ -33,11 +36,8 @@ contain anything without escaping.
 | type | name               | payload                                     |
 |-----:|--------------------|---------------------------------------------|
 | 1    | `Control`          | one JSON object, UTF-8, no trailing newline |
-| 2    | `RetiredFrame`     | retired — was window pixels                 |
-| 3    | `RetiredFrameGone` | retired — was "this window's slot is dead"  |
 
-The retired ids stay burnt so an old peer's frames are never mistaken
-for something else. Big-endian because that is still the network byte
+Big-endian because that is still the network byte
 order convention and it keeps packet dumps readable.
 
 Implementation: `lsw/linkproto/envelope.hpp`, `byte_order.hpp`, and
@@ -86,12 +86,42 @@ Each command is one agent-side handler TU under
 command names at all — including for logging, which asks the handler
 (`RpcHandler::silent`, `RpcHandler::summarize`).
 
+### Sessions
+
+The agent is a Windows service (`lsw-agent`, LocalSystem, session 0),
+and a Windows machine can have several user sessions. Commands that act
+for a user take an optional integer `session` param:
+
+| command | default without `session` | `session: 0` |
+|---|---|---|
+| `launch`, `console_open`, `start_window_mirror` | the console user's session, as that user, elevated (`elevated: false` for the filtered token); `start_window_mirror` with a `pid` defaults to that process's session | SYSTEM in session 0 |
+| `run_script`, `download_install`, `download_extract` | SYSTEM in session 0 | the same |
+| `list_windows`, `close_window`, `window_command`, `set_display`, every `uia_*` | the console user's session | refused: session 0 has no desktop |
+
+Replies of the process-starting commands carry the `session` they ran
+in (`launch` and `console_open` also `elevated`). The commands of the
+last row are served by a helper process the agent keeps in each user
+session; a request for a session without one fails with an error reply
+("no user session N", "the session helper in session N is not running")
+rather than timing out. UI Automation `sub_id`s carry their session in
+their top 32 bits, so `uia_unsubscribe` needs no `session`.
+
+`list_sessions` answers which sessions there are:
+`{"sessions": [{"id", "user", "state": "active"|"connected"|"disconnected",
+"console", "helper"}], "default": id|null}`. Session 0 is not listed.
+
 ### Events
 
 Agent-pushed, one-way, delivered on the connection's tick. Topics are in
 the same header (`linkproto::topic`): agent logs, install-job progress
 and completion, console output and exit, the shared-memory channel's
-`channel_hello`, and the UI Automation notifications.
+`channel_hello`, and the UI Automation notifications (raised in a session
+helper and forwarded unchanged).
+
+The agent does not listen on 5102 at all until a user's desktop is
+genuinely usable (not just logged on: the first-logon "Preparing
+Windows" overlay is gone), or 30 minutes have passed; the manager's
+post-install watcher relies on that.
 
 Agent-side, every event source implements `rpc::EventSource` and is
 registered with the connection's `EventPump`; adding a topic touches no
@@ -127,9 +157,7 @@ The layout is a pure function of the region size
 so the manager, the local loopback and the parity test all derive the
 same table instead of three agreeing copies of it.
 
-One channel exists today: `rpc` (kind 2). Kinds 1, 3 and 4 were the
-frame ring, the Vulkan command stream and its memory arena; they are
-retired, not reused, because the values are a wire contract.
+One channel exists today: `rpc` (kind 2).
 
 The magic has never changed. A peer checks the version, so one that
 knows an older format refuses a newer region cleanly instead of reading
@@ -139,8 +167,7 @@ the table as whatever it used to be.
 
 The guest wakes the manager with an IVSHMEM MSI-X doorbell, one vector
 per channel: `rpc` is vector 0. `<msi vectors='N'/>` in domain.xml
-mirrors `linkproto::kDoorbellVectorCount`; a device that exposes more is
-a VM defined by an older manager, and the extra vectors go unused.
+mirrors `linkproto::kDoorbellVectorCount`.
 
 There is no interrupt in the other direction — the manager's in-process
 ivshmem server holds only its own eventfds — so host→guest messages are

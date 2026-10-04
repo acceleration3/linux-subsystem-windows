@@ -117,12 +117,11 @@ int IvshmemRegion::open() {
     }
     // Every IVSHMEM function on the bus, not the first one.
     //
-    // The guest has more than one: this region carries the agent's
-    // control channel, and the render server's region —
-    // a different device, created by a different process on the host —
-    // sits beside it. Which one Windows enumerates first is not ours to
-    // decide, so the region is identified by what is written in it
-    // rather than by where it turned up.
+    // This region carries the agent's control channel, and nothing
+    // guarantees it is the only IVSHMEM device in the guest. Which one
+    // Windows enumerates first is not ours to decide, so the region is
+    // identified by what is written in it rather than by where it
+    // turned up. With a single device the loop simply ends after it.
     int last_error = -ENODEV;
     for (DWORD index = 0;; ++index) {
         const std::wstring path = ivshmem_device_path(index);

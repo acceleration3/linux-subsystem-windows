@@ -71,6 +71,9 @@ public:
     [[nodiscard]] bool has_target() const noexcept {
         return cid_.load() != 0 && port_.load() != 0;
     }
+    // The port the channel connects to on the host loopback; 0 with no
+    // target.
+    [[nodiscard]] quint32 port() const noexcept { return port_.load(); }
 
     // How long ``request`` waits for a reply before giving up. A wedged
     // guest-side handler (a UIA call into a hung app, an installer

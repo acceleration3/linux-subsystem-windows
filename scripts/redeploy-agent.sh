@@ -7,12 +7,17 @@
 # (http://127.0.0.1:5105/). The manager:
 #   1. Reads the local agent binary into memory.
 #   2. Spawns a one-shot HTTP server on a free localhost port.
-#   3. Sends a "swap script" to the agent via run_script RPC; the
-#      script curls the new binary from 10.0.2.2:<port>, kills the
-#      running agent, moves the file into C:\ProgramData\LSW\, and
-#      relaunches.
+#   3. Sends a "swap script" to the agent via run_script RPC (it runs
+#      as SYSTEM, outliving the agent it stops); the script curls the
+#      new binary from 10.0.2.2:<port>, stops the ``lsw-agent`` service,
+#      ends anything still running the old binary (the session helpers),
+#      moves the file into C:\ProgramData\LSW\, and starts the service
+#      again.
 #   4. Polls system_info until ``agent_version`` changes, confirming
-#      the new binary is live.
+#      the new binary is live (the new service opens :5102 once its
+#      session helper has confirmed the desktop, a few seconds in).
+#
+# The script's own log is C:\ProgramData\LSW\lsw-swap.log in the guest.
 #
 # Usage:
 #   scripts/redeploy-agent.sh             # build, then swap

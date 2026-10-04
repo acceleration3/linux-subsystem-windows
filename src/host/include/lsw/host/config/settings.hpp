@@ -12,6 +12,7 @@ namespace lsw::host::config {
 //   ~/.local/share/lsw/disks/      qcow2 files
 //   ~/.local/share/lsw/isos/       cached Windows + payload + virtio ISOs
 //   ~/.local/share/lsw/nvram/      per-VM OVMF_VARS files
+//   ~/.local/share/lsw/logs/       logs the VM writes on the host
 //   ~/.config/lsw/manager.toml     UI preferences
 //
 // We deliberately don't persist a vms.json manifest — there's exactly
@@ -31,6 +32,7 @@ public:
     [[nodiscard]] QString disks_dir() const;
     [[nodiscard]] QString isos_dir() const;
     [[nodiscard]] QString nvram_dir() const;
+    [[nodiscard]] QString logs_dir() const;
 
     // Where the VM's own files live. Derived from ``kVmName`` rather
     // than stored, so the pipeline that creates them and the importer
@@ -38,6 +40,11 @@ public:
     [[nodiscard]] QString vm_disk_path() const;         // disks/lsw.qcow2
     [[nodiscard]] QString vm_nvram_path() const;        // nvram/lsw.fd
     [[nodiscard]] QString vm_payload_iso_path() const;  // isos/lsw-payload.iso
+    // The guest GPU driver's own log. avgpu.sys writes its lines to I/O
+    // port 0x402 and QEMU's isa-debugcon puts them here, so they survive
+    // guest reboots and a bugcheck, which nothing inside the guest does.
+    // Written by QEMU, one file per QEMU run.
+    [[nodiscard]] QString vm_avgpu_log_path() const;  // logs/lsw-avgpu.log
     // Where the virtio-win driver ISO is cached. Every domain definition
     // names it, the media ejected or not.
     [[nodiscard]] QString virtio_iso_path() const;  // isos/virtio-win.iso

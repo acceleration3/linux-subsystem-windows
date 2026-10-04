@@ -19,29 +19,32 @@ void Installer::spawn(std::unique_ptr<InstallJob> job) {
 }
 
 std::string Installer::start_download_install(const std::string& name, const std::string& url,
-                                              const std::string& args) {
+                                              const std::string& args, const win::RunAs& as) {
     const std::string job_id = ids_.next();
-    LSW_AGENT_INFO("installer: start download_install job={} name={} url={}", job_id, name, url);
-    spawn(std::make_unique<DownloadInstallJob>(job_id, name, queue_, url, args));
+    LSW_AGENT_INFO("installer: start download_install job={} name={} url={} as {}", job_id, name,
+                   url, as.describe());
+    spawn(std::make_unique<DownloadInstallJob>(job_id, name, queue_, url, args, as));
     return job_id;
 }
 
-std::string Installer::start_run_script(const std::string& name, const std::string& script) {
+std::string Installer::start_run_script(const std::string& name, const std::string& script,
+                                        const win::RunAs& as) {
     const std::string job_id = ids_.next();
-    LSW_AGENT_INFO("installer: start run_script job={} name={} bytes={}", job_id, name,
-                   script.size());
-    spawn(std::make_unique<RunScriptJob>(job_id, name, queue_, script));
+    LSW_AGENT_INFO("installer: start run_script job={} name={} bytes={} as {}", job_id, name,
+                   script.size(), as.describe());
+    spawn(std::make_unique<RunScriptJob>(job_id, name, queue_, script, as));
     return job_id;
 }
 
 std::string Installer::start_download_extract(const std::string& name, const std::string& url,
                                               const std::string& extract_to,
-                                              const std::string& script) {
+                                              const std::string& script, const win::RunAs& as) {
     const std::string job_id = ids_.next();
     LSW_AGENT_INFO("installer: start download_extract job={} name={} url={} extract_to={} "
-                   "script_bytes={}",
-                   job_id, name, url, extract_to, script.size());
-    spawn(std::make_unique<DownloadExtractJob>(job_id, name, queue_, url, extract_to, script));
+                   "script_bytes={} as {}",
+                   job_id, name, url, extract_to, script.size(), as.describe());
+    spawn(std::make_unique<DownloadExtractJob>(job_id, name, queue_, url, extract_to, script,
+                                               as));
     return job_id;
 }
 

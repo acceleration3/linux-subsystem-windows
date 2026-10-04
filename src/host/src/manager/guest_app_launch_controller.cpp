@@ -6,6 +6,7 @@
 #include "lsw/host/manager/guest_app_launcher.hpp"
 #include "lsw/host/manager/launch_splash.hpp"
 #include "lsw/host/services/host_services.hpp"
+#include "lsw/host/vm/graceful_shutdown.hpp"
 
 #include <QCursor>
 #include <QGuiApplication>
@@ -20,16 +21,20 @@ namespace lsw::host::manager {
 namespace {
 
 // How long a guest may take to answer before the splash stops
-// pretending this is normal. A cold boot is around forty seconds; three
-// minutes is not a slow boot, it is something wrong.
+// pretending this is normal: three minutes, or three times the last
+// measured boot if that is longer. A slow boot is not a stuck one.
 constexpr int kStallMs = 180000;
+
+int stall_ms(std::optional<qint64> last_boot_ms) {
+    return static_cast<int>(qMax<qint64>(kStallMs, 3 * last_boot_ms.value_or(0)));
+}
 
 }  // namespace
 
 GuestAppLaunchController::GuestAppLaunchController(services::HostServices& services,
                                                    QObject* parent)
     : QObject(parent), services_(services),
-      launcher_(new GuestAppLauncher(services.rpc(), services.manager_settings(), this)) {
+      launcher_(new GuestAppLauncher(services.rpc(), this)) {
     connect(launcher_, &GuestAppLauncher::launched, this,
             &GuestAppLaunchController::application_running);
 }
@@ -58,7 +63,10 @@ void GuestAppLaunchController::launch(const QString& app_id) {
     // XDG launcher to open a guest app, not to bring up the manager.
     ensure_channel_target(uuid);
 
-    if (services_.monitor().latest(uuid).agent_reachable) {
+    // The hub watches one VM; with no manager window open nobody has
+    // pointed it at this one yet.
+    services_.status().set_target(uuid);
+    if (services_.status().vm().agent_online()) {
         LSW_INFO("launch_app({}): firing immediately path={}",
                  app_id.toStdString(), guest_path.toStdString());
         launcher_->launch(*cfg);
@@ -95,7 +103,6 @@ void GuestAppLaunchController::start_vm_and_wait(const QUuid& uuid, const QStrin
             LSW_WARN("launch_app({}): lifecycle.start rc={}", app_id.toStdString(), rc);
         }
     }
-    services_.monitor().watch(uuid);
 
     // Parentless top-level so the splash is not tied to the (possibly
     // hidden) main window, and so it gets its own taskbar slot. Centred
@@ -112,7 +119,7 @@ void GuestAppLaunchController::start_vm_and_wait(const QUuid& uuid, const QStrin
         }
     }
 
-    auto* splash = new LaunchSplash(display_name, icon);
+    auto* splash = new LaunchSplash(display_name, icon, services_.status().last_boot_ms());
     if (QScreen* screen = QGuiApplication::screenAt(QCursor::pos());
         screen != nullptr || (screen = QGuiApplication::primaryScreen()) != nullptr) {
         splash->adjustSize();
@@ -128,7 +135,7 @@ void GuestAppLaunchController::start_vm_and_wait(const QUuid& uuid, const QStrin
     // help: the log, and a restart.
     auto* patience = new QTimer(this);
     patience->setSingleShot(true);
-    patience->setInterval(kStallMs);
+    patience->setInterval(stall_ms(services_.status().last_boot_ms()));
     connect(patience, &QTimer::timeout, this, [splash_ptr] {
         if (splash_ptr) {
             splash_ptr->stall(QStringLiteral(
@@ -138,14 +145,18 @@ void GuestAppLaunchController::start_vm_and_wait(const QUuid& uuid, const QStrin
     });
     patience->start();
 
-    // The monitor emits stats_updated periodically. Wait for the first
-    // reachable flip (or a cancel), then fire the launch.
+    // The status hub reads the machine every couple of seconds. Wait
+    // for the agent to answer (or a cancel), then fire the launch.
     auto* wait = new QObject(this);
-    connect(&services_.monitor(), &vm::Monitor::stats_updated, wait,
+    connect(&services_.status(), &services::StatusHub::changed, wait,
             [this, wait, uuid, app_id, guest_path, splash_ptr, patience]
-            (const QUuid& u, const vm::VmStats& s) {
-        if (u != uuid || !s.agent_reachable) return;
+            (services::StatusHub::Area area) {
+        const auto& vm = services_.status().vm();
+        if (area != services::StatusHub::Area::Vm || vm.uuid != uuid) return;
         if (pending_app_id_ != app_id) return;  // cancelled / superseded
+        // The phases follow the hub's readings: QEMU up, then the agent.
+        if (vm.running() && splash_ptr) splash_ptr->reach(LaunchSplash::Phase::MachineStarted);
+        if (!vm.agent_online()) return;
         pending_app_id_.clear();
         patience->stop();
         if (splash_ptr) splash_ptr->reach(LaunchSplash::Phase::GuestAnswering);
@@ -167,12 +178,20 @@ void GuestAppLaunchController::start_vm_and_wait(const QUuid& uuid, const QStrin
         if (pending_app_id_ == app_id) pending_app_id_.clear();
         wait->deleteLater();
     });
-    connect(splash, &LaunchSplash::restart_requested, this, [this, uuid, splash_ptr] {
-        (void)services_.lifecycle().shutdown(uuid);
-        (void)services_.start_vm(uuid);
+    connect(splash, &LaunchSplash::restart_requested, this, [this, uuid, splash_ptr, patience] {
+        // A start while the old QEMU still runs does nothing, so the start
+        // waits for the stop, as the manager's own restart does.
         if (splash_ptr) {
-            splash_ptr->reach(LaunchSplash::Phase::MachineStarted);
+            splash_ptr->resume();
         }
+        patience->start();
+        auto* restart = new vm::GracefulShutdown(services_.lifecycle(), uuid,
+                                                 vm::GracefulShutdown::kDefaultDeadlineMs, this);
+        connect(restart, &vm::GracefulShutdown::finished, this, [this, restart, uuid] {
+            restart->deleteLater();
+            (void)services_.start_vm(uuid);
+        });
+        restart->start();
     });
     connect(splash, &LaunchSplash::log_requested, this,
             &GuestAppLaunchController::log_requested);

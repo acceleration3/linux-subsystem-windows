@@ -5,6 +5,8 @@
 
 namespace lsw::agent::win {
 
+class RunAs;
+
 // Starts remotewin's guest half beside an application being mirrored.
 //
 // Its own spawn rather than the one applications go through: that path
@@ -15,6 +17,11 @@ namespace lsw::agent::win {
 //
 // One process per mirrored application: it dials out to the port the
 // manager's mirror process is listening on and ends when that ends.
+//
+// It has to run in the application's own session — window handles,
+// capture and input injection do not cross sessions — and elevated when
+// the application is, or Windows refuses it input into the application's
+// windows (UIPI). ``as`` says so; the handler picks the session.
 class MirrorProcess {
 public:
     MirrorProcess() = delete;
@@ -25,7 +32,7 @@ public:
     // what went wrong. Returns the process id, or 0 with ``error_out``
     // set.
     [[nodiscard]] static unsigned long start(const std::string& exe, std::uint16_t port,
-                                             const std::string& log_path,
+                                             const std::string& log_path, const RunAs& as,
                                              std::string* error_out);
 };
 

@@ -4,19 +4,25 @@
 
 #include <string>
 
+namespace lsw::agent::win {
+class RunAs;
+}
+
 namespace lsw::agent::install {
 
 // Spawns a child process and waits for it.
 //
-// The agent runs as the user, in-session, elevated-admin (HKLM\Run
-// autostart), so a plain CreateProcessW suffices — the child inherits
-// the elevated token and the interactive desktop. No session bridging.
+// As SYSTEM in session 0 by default — the agent is a LocalSystem
+// service, so a plain CreateProcessW is that — or as a session's user
+// when the job was asked to run there (``win::RunAs``). Either way the
+// child gets no window: CREATE_NO_WINDOW and SW_HIDE.
 //
 // A Job Object wraps the child purely so a timeout can kill the WHOLE
 // tree: a wedged installer is often a grandchild of the cmd.exe we
-// spawned. Notably NOT kill-on-close — the agent-redeploy script kills
-// the agent mid-run on purpose and then relaunches it, and kill-on-close
-// would take the still-running swap script down with it.
+// spawned. Notably NOT kill-on-close: the agent-redeploy script stops
+// the agent's service mid-run on purpose and then starts it again, and
+// kill-on-close would take the still-running swap script down with the
+// service process.
 class ProcessRunner {
 public:
     ProcessRunner() = delete;
@@ -27,6 +33,11 @@ public:
 
     // Blocking. On timeout the process tree is terminated and the
     // outcome reports ``completed == false`` with a "timed out" message.
+    [[nodiscard]] static ProcessOutcome run(const std::wstring& command_line,
+                                            const win::RunAs& as,
+                                            unsigned long timeout_ms = kNoTimeout);
+
+    // As this process (SYSTEM, for the service).
     [[nodiscard]] static ProcessOutcome run(const std::wstring& command_line,
                                             unsigned long timeout_ms = kNoTimeout);
 };

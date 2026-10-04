@@ -41,7 +41,7 @@ Settings::Settings(QObject* parent) : QObject(parent) {
 
 bool Settings::ensure_directories() const {
     return mkpath(data_root_) && mkpath(config_root_) && mkpath(cache_root_) &&
-           mkpath(disks_dir()) && mkpath(isos_dir()) && mkpath(nvram_dir());
+           mkpath(disks_dir()) && mkpath(isos_dir()) && mkpath(nvram_dir()) && mkpath(logs_dir());
 }
 
 QString Settings::data_dir() const {
@@ -68,6 +68,10 @@ QString Settings::nvram_dir() const {
     return join(data_root_, "nvram");
 }
 
+QString Settings::logs_dir() const {
+    return join(data_root_, "logs");
+}
+
 QString Settings::vm_disk_path() const {
     return join(disks_dir(), QStringLiteral("%1.qcow2").arg(QLatin1String(kVmName)));
 }
@@ -78,6 +82,10 @@ QString Settings::vm_nvram_path() const {
 
 QString Settings::vm_payload_iso_path() const {
     return join(isos_dir(), QStringLiteral("%1-payload.iso").arg(QLatin1String(kVmName)));
+}
+
+QString Settings::vm_avgpu_log_path() const {
+    return join(logs_dir(), QStringLiteral("%1-avgpu.log").arg(QLatin1String(kVmName)));
 }
 
 QString Settings::virtio_iso_path() const {

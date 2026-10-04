@@ -2,19 +2,21 @@
 
 #include "lsw/base/log.hpp"
 #include "lsw/host/config/vm_name.hpp"
+#include "lsw/host/provision/debloat_stager.hpp"
 #include "lsw/host/provision/install/post_install.hpp"
 #include "lsw/host/provision/iso/downloader.hpp"
 #include "lsw/host/provision/ivshmem_driver_fetcher.hpp"
-#include "lsw/host/provision/debloat_stager.hpp"
 #include "lsw/host/provision/payload_iso_stager.hpp"
 #include "lsw/host/provision/press_any_key_prompter.hpp"
 #include "lsw/host/provision/setup_stage_runner.hpp"
 #include "lsw/host/provision/virtio_win_fetcher.hpp"
 #include "lsw/host/provision/vnc_port_resolver.hpp"
+#include "lsw/host/services/domain_inputs.hpp"
 #include "lsw/host/services/host_services.hpp"
 #include "lsw/host/vm/domain_xml_inputs.hpp"
 
 #include <QDir>
+#include <QElapsedTimer>
 #include <QMetaObject>
 #include <QPointer>
 #include <QTimer>
@@ -35,10 +37,29 @@ constexpr int kPayloadRowVirtio = 0;
 constexpr int kPayloadRowIvshmem = 1;
 constexpr int kPayloadRowBuild = 2;
 
+// How the restart into the steady-state machine waits on the guest.
+// Windows answers an ACPI power button in seconds once it is at a
+// desktop; the deadline is for a guest stuck behind something, and
+// only then is the VM pulled. The button is pressed again now and then
+// because a press during logon or a screen change can go unheard.
+constexpr int kShutdownPollMs = 2000;
+constexpr qint64 kShutdownDeadlineMs = 5 * 60 * 1000;
+constexpr int kShutdownRepressTicks = 15;
+// The first boot of avgpu.sys. A driver that bugchecks reboots the
+// guest in a loop and the agent never answers, so this wait, unlike the
+// install's, has an end.
+constexpr int kAgentAfterRestartDeadlineMs = 10 * 60 * 1000;
+
 }  // namespace
 
 Pipeline::Pipeline(services::HostServices& services, QObject* parent)
-    : QObject(parent), services_(services) {}
+    : QObject(parent), services_(services) {
+    connect(this, &Pipeline::step_started, this, [this](Step step, const QString& description) {
+        current_step_ = step;
+        current_description_ = description;
+    });
+    connect(this, &Pipeline::vnc_port_available, this, [this](int port) { vnc_port_ = port; });
+}
 
 Pipeline::~Pipeline() {
     // The setup runner holds channel event handlers. Detaching is
@@ -77,6 +98,8 @@ void Pipeline::cancel() {
     if (prompter_ != nullptr) prompter_->stop();
     if (vnc_resolver_ != nullptr) vnc_resolver_->stop();
     if (agent_watcher_ != nullptr) agent_watcher_->stop();
+    if (shutdown_poll_ != nullptr) shutdown_poll_->stop();
+    if (restart_deadline_ != nullptr) restart_deadline_->stop();
     if (downloader_ != nullptr) downloader_->cancel();
     if (setup_runner_ != nullptr) setup_runner_->detach();
 }
@@ -259,11 +282,8 @@ void Pipeline::run_build_payload_iso() {
     record_.name = config::kVmName;
     record_.iso_path = inputs_.iso_local_path;
     record_.sizing = inputs_.sizing;
-    const QString name = QLatin1String(config::kVmName);
-    record_.disk_path = QDir(services_.settings().disks_dir())
-                            .filePath(QStringLiteral("%1.qcow2").arg(name));
-    record_.nvram_path = QDir(services_.settings().nvram_dir())
-                             .filePath(QStringLiteral("%1.fd").arg(name));
+    record_.disk_path = services_.settings().vm_disk_path();
+    record_.nvram_path = services_.settings().vm_nvram_path();
 
     Q_EMIT payload_step_started(kPayloadRowBuild);
     emit_status(Step::BuildingPayloadIso,
@@ -336,9 +356,13 @@ void Pipeline::run_start_vm() {
     // both look it up here.
     record_ = *services_.vms().find(services_.vms().add(record_));
 
-    vm::DomainXmlInputs domain_inputs;
-    domain_inputs.virtio_iso = inputs_.virtio_iso_path;
-    if (services_.lifecycle().define_and_start(record_, domain_inputs) != 0) {
+    // The install-time shape: the steady-state definition, so the first
+    // boot already has the resolution's video memory and the shared
+    // folders, plus the VGA adapter Windows Setup draws on. Nothing gives
+    // the accel-virt device a firmware framebuffer, so until avgpu.sys
+    // is installed it is a display with nothing to show on.
+    if (services_.lifecycle().define_and_start(record_, domain_inputs(/*install_display=*/true))
+        != 0) {
         emit_failed(Step::StartingVm,
                     QStringLiteral("libvirt rejected the domain — see manager logs"));
         return;
@@ -410,22 +434,153 @@ void Pipeline::run_setup_phase() {
                         QStringLiteral("one or more setup steps failed"));
             return;
         }
-        finish();
+        run_restart_vm();
     });
     setup_runner_->run();
+}
+
+// ----- Restart into the steady-state machine -------------------------------
+//
+// The install ran on a domain with a VGA adapter beside the accel-virt
+// device; the machine the user keeps has the accel-virt device alone,
+// because a second display adapter would take the desktop. A domain
+// definition is read when QEMU starts and a reboot from inside the
+// guest keeps the same QEMU, so nothing short of a stop and a start
+// brings the new one in. Nothing after this pipeline restarts the VM
+// either - the manager attaches to the one it finds running - so this
+// is the place.
+//
+// It is also the boot the display driver needs. SetupComplete signed
+// and installed avgpu.sys and turned test signing on, which the kernel
+// reads at boot; the boot after this stop is the first one that loads
+// the driver.
+
+void Pipeline::run_restart_vm() {
+    Q_EMIT step_started(Step::ShuttingDown,
+                        QStringLiteral("Shutting Windows down to restart it on its own display "
+                                       "driver..."));
+
+    // The guest has run: from here a start may drop install media
+    // still attached, including the CDs the redefine below names again
+    // (the template needs a source for each).
+    record_.first_boot_done = true;
+    if (auto* stored = services_.vms().find(record_.uuid); stored != nullptr) {
+        stored->first_boot_done = true;
+    }
+    if (services_.lifecycle().redefine(record_, domain_inputs(/*install_display=*/false)) != 0) {
+        emit_failed(Step::ShuttingDown,
+                    QStringLiteral("libvirt refused the VM's steady-state definition, so it still "
+                                   "has the install-time VGA adapter — see manager logs"));
+        return;
+    }
+    if (!services_.lifecycle().is_running(record_.uuid)) {
+        run_start_steady_vm();
+        return;
+    }
+    if (services_.lifecycle().shutdown(record_.uuid) != 0) {
+        // The poll below presses again and, at the deadline, pulls the
+        // plug; one refused request is not the end of it.
+        LSW_WARN("provision: the first shutdown request was refused; retrying");
+    }
+
+    shutdown_clock_.start();
+    shutdown_ticks_ = 0;
+    shutdown_poll_ = new QTimer(this);
+    shutdown_poll_->setInterval(kShutdownPollMs);
+    connect(shutdown_poll_, &QTimer::timeout, this, &Pipeline::poll_shutdown);
+    shutdown_poll_->start();
+}
+
+void Pipeline::poll_shutdown() {
+    auto& lifecycle = services_.lifecycle();
+    if (!lifecycle.is_running(record_.uuid)) {
+        shutdown_poll_->stop();
+        shutdown_poll_->deleteLater();
+        shutdown_poll_ = nullptr;
+        run_start_steady_vm();
+        return;
+    }
+    if (shutdown_clock_.elapsed() >= kShutdownDeadlineMs) {
+        LSW_WARN("provision: the guest did not shut down within {} s; forcing it off",
+                 kShutdownDeadlineMs / 1000);
+        (void)lifecycle.force_off(record_.uuid);
+        return;  // the next tick sees it stopped
+    }
+    if (++shutdown_ticks_ % kShutdownRepressTicks == 0) {
+        (void)lifecycle.shutdown(record_.uuid);
+    }
+}
+
+void Pipeline::run_start_steady_vm() {
+    Q_EMIT step_finished(Step::ShuttingDown);
+    Q_EMIT step_started(Step::StartingVmVirtio,
+                        QStringLiteral("Starting the VM on its accel-virt display..."));
+    // first_boot_done: start() ejects the install media before QEMU
+    // comes up, which is what finishing an install means.
+    if (services_.lifecycle().start(record_.uuid, /*first_boot_done=*/true) != 0) {
+        emit_failed(Step::StartingVmVirtio,
+                    QStringLiteral("libvirt would not start the VM on its steady-state "
+                                   "definition — see manager logs"));
+        return;
+    }
+    Q_EMIT step_finished(Step::StartingVmVirtio);
+    run_wait_for_agent_after_restart();
+}
+
+void Pipeline::run_wait_for_agent_after_restart() {
+    Q_EMIT step_started(Step::WaitingForAgentAfterSwap,
+                        QStringLiteral("Waiting for the guest agent on the first boot with the "
+                                       "display driver..."));
+    if (agent_watcher_ != nullptr) {
+        agent_watcher_->stop();
+        agent_watcher_->deleteLater();
+    }
+    agent_watcher_ =
+        new install::PostInstallWatcher(record_.uuid, record_.vsock_cid, kAgentPort, this);
+    restart_deadline_ = new QTimer(this);
+    restart_deadline_->setSingleShot(true);
+    restart_deadline_->setInterval(kAgentAfterRestartDeadlineMs);
+    connect(agent_watcher_, &install::PostInstallWatcher::ready, this, [this](const QUuid&) {
+        restart_deadline_->stop();
+        Q_EMIT step_finished(Step::WaitingForAgentAfterSwap);
+        finish();
+    });
+    connect(restart_deadline_, &QTimer::timeout, this, [this] {
+        agent_watcher_->stop();
+        emit_failed(Step::WaitingForAgentAfterSwap,
+                    QStringLiteral("the guest agent did not answer within %1 minutes of the "
+                                   "restart onto the accel-virt display. If the guest is "
+                                   "rebooting in a loop, avgpu.sys is failing to start: "
+                                   "C:\\ProgramData\\LSW\\promote.log in the guest has the "
+                                   "driver install's output")
+                        .arg(kAgentAfterRestartDeadlineMs / 60000));
+    });
+    restart_deadline_->start();
+    agent_watcher_->start();
 }
 
 // ----- Done -----------------------------------------------------------------
 
 void Pipeline::finish() {
-    // Nothing to swap: the VM installed and booted on virtio from the
-    // start, via the PnP-injected viostor driver. All that is left is to
-    // eject the install media so reboots stop re-prompting the El-Torito
-    // CD and the ISOs are freed. Ejecting CD-ROM *media* leaves the vda
-    // system disk untouched.
-    LSW_INFO("provision: setup complete; ejecting install media and finishing");
-    (void)services_.lifecycle().eject_install_media(record_.uuid);
+    // Nothing left to eject: the restart's start() took the install
+    // media out before QEMU came up (first_boot_done), so the guest no
+    // longer shows the installer as drives and the ISOs are free.
+    LSW_INFO("provision: the guest is up on its steady-state definition; finishing");
     emit_completed(record_.uuid);
+}
+
+vm::DomainXmlInputs Pipeline::domain_inputs(bool install_display) const {
+    vm::DomainXmlInputs inputs =
+        services::domain_inputs_from_settings(services_.settings(), services_.manager_settings());
+    inputs.install_display = install_display;
+    // Where the fetcher actually put virtio-win.iso, which is the
+    // settings' path unless the caller handed one in. The install needs
+    // the real file; afterwards the media is ejected, but naming a file
+    // that exists keeps every definition one libvirt can start.
+    if (!inputs_.virtio_iso_path.isEmpty()) {
+        inputs.virtio_iso = inputs_.virtio_iso_path;
+    }
+    return inputs;
 }
 
 }  // namespace lsw::host::provision

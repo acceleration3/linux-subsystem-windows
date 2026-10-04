@@ -3,6 +3,7 @@
 #include "lsw/agent/install/job_id_generator.hpp"
 #include "lsw/agent/install/job_notification.hpp"
 #include "lsw/agent/install/notification_queue.hpp"
+#include "lsw/agent/win/run_as.hpp"
 
 #include <memory>
 #include <string>
@@ -28,22 +29,27 @@ public:
     Installer(const Installer&) = delete;
     Installer& operator=(const Installer&) = delete;
 
+    // Every job's processes run as ``as``: SYSTEM in session 0 unless
+    // the request named a session, in which case its user.
+
     // Download ``url`` and run it with ``args``. Returns the new job id.
     [[nodiscard]] std::string start_download_install(const std::string& name,
                                                      const std::string& url,
-                                                     const std::string& args);
+                                                     const std::string& args,
+                                                     const win::RunAs& as);
 
-    // Write ``script`` to a temp .cmd and run it via cmd.exe. Runs in the
-    // agent's context — the elevated-admin wizard user, in-session.
+    // Write ``script`` to a temp .cmd and run it via cmd.exe.
     [[nodiscard]] std::string start_run_script(const std::string& name,
-                                               const std::string& script);
+                                               const std::string& script,
+                                               const win::RunAs& as);
 
     // Download the archive at ``url``, extract into ``extract_to`` (or a
     // temp dir when empty), then run ``script`` if non-empty.
     [[nodiscard]] std::string start_download_extract(const std::string& name,
                                                      const std::string& url,
                                                      const std::string& extract_to,
-                                                     const std::string& script);
+                                                     const std::string& script,
+                                                     const win::RunAs& as);
 
     // Drain everything the running jobs have reported. Called by the
     // transport on its select tick.

@@ -57,6 +57,9 @@ private:
     bool ms_ready_ = false;
     bool resolving_ = false;
     QElapsedTimer clock_;
+    // What the first progress report said was there already: a resumed
+    // download's rate is of the bytes this run fetched.
+    qint64 resumed_from_ = -1;
 
     QComboBox* edition_combo_ = nullptr;
     QComboBox* language_combo_ = nullptr;

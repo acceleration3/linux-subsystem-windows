@@ -3,9 +3,6 @@
 #include "lsw/host/manager/app_list.hpp"
 #include "lsw/host/manager/stats_widget.hpp"
 #include "lsw/host/ui/vnc_view.hpp"
-#include "lsw/host/vm/vm_stats.hpp"
-
-#include <QTimer>
 #include <QUuid>
 #include <QWidget>
 
@@ -24,11 +21,12 @@ namespace lsw::host::manager {
 // window that knows where you are and what the machine is doing. What
 // is left here is the content of one page.
 //
-// The panel still owns the polling, because it already holds the
-// services the polling needs. It reports what
-// it learns upward instead of drawing it: the rail renders the state,
-// the window fills its status bar, and neither has to poll a second
-// time.
+// It polls nothing: the machine's state and figures are the status
+// hub's (HostServices::status), read when the hub says they changed.
+// The two transitions the window cares about — the domain coming up or
+// going down, the agent starting or stopping answering — are reported
+// upward as signals, so the rail and the status bar follow them without
+// a reading of their own.
 class VmDetailPanel : public QWidget {
     Q_OBJECT
 public:
@@ -40,6 +38,7 @@ public:
     [[nodiscard]] bool is_running() const noexcept { return last_running_; }
     [[nodiscard]] bool is_agent_online() const noexcept { return last_agent_reachable_; }
 
+
 public Q_SLOTS:
     // Hand the preview to a window of its own, and take it back when
     // that window closes. One VNC connection either way: a second one
@@ -47,8 +46,9 @@ public Q_SLOTS:
     // sharing.
     void pop_out_preview();
 
-    // Driven by the rail's single power button.
-    void start_guest();
+    // Driven by the rail's single power button. False when libvirt
+    // would not start it.
+    bool start_guest();
     void stop_guest();
 
 Q_SIGNALS:
@@ -60,9 +60,13 @@ Q_SIGNALS:
     // reports "running" a minute or two before a guest is interactive.
     void agent_online_changed(bool online);
 
-private Q_SLOTS:
-    void on_stats_updated(const QUuid& uuid, const vm::VmStats& stats);
-    void on_state_tick();
+private:
+    // The hub has a new reading of the machine, or of its graphics (the
+    // VRAM gauge is the display GPU's).
+    void on_status();
+    // The preview and its tag, for a machine that is (or is not)
+    // running, as the Live preview setting says.
+    void follow_preview(bool running);
 
 private:
     // Hoisted up to App so the wizard and MCP server share the same
@@ -72,7 +76,6 @@ private:
     QUuid uuid_;
     bool last_running_ = false;
     bool last_agent_reachable_ = false;
-    QTimer state_timer_;
 
     lsw::host::ui::VncView* preview_ = nullptr;
     QVBoxLayout* preview_slot_ = nullptr;

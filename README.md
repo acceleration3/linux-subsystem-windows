@@ -1,6 +1,6 @@
 # Linux Subsystem for Windows (LSW)
 
-A "reverse WSL" — run Windows applications on a Linux host with per-application native windows, their windows mirrored out of the guest and their GPU work replayed on the host.
+A "reverse WSL" — run Windows applications on a Linux host with per-application native windows, their windows mirrored out of the guest and their GPU work run on the host's GPU.
 
 ## Status
 
@@ -10,13 +10,13 @@ Greenfield. Phase 0 scaffolding.
 
 ```
 src/
-  agent/          lsw-guest-agent.exe — runs inside the Windows VM
+  agent/          lsw-guest-agent.exe — the Windows service inside the VM
   base/           logging for the host (the agent has its own)
   linkproto/      the host <-> guest wire contract
   host/           the Linux manager
 external/
   remotewin/      the window mirror: an application's windows, host and guest halves
-  render-server/  the GPU proxy: OpenCL, OpenGL and Vulkan drivers + server
+  accel-virt/     the GPU: a paravirtual WDDM adapter, its QEMU device and its guest drivers
 ```
 
 There are two paths across the VM boundary and they are independent.
@@ -32,18 +32,43 @@ lives in [remotewin](external/remotewin), a submodule; it knows how to
 move a Windows application's windows across a boundary and nothing about
 virtual machines.
 
-**The render server** carries GPU work. An application's OpenCL, OpenGL
-and Vulkan calls are encoded by drivers the agent links into that
-application's own directory, travel over a second IVSHMEM region, and
-are replayed by `rvk-render-server` against the host's real GPU. That
-half lives in [render-server](external/render-server), a submodule; it
-knows how to move a graphics API across a shared-memory transport and
-nothing about virtual machines, so it builds and tests entirely on its
-own:
+**accel-virt** carries GPU work. The guest gets a real display adapter,
+named after the host GPU it runs on, and its applications use Direct3D
+11 and 12, Vulkan, OpenGL and OpenCL on it as they would on a physical
+card. It has two halves, and LSW builds both:
+
+- *On the host*, a patched QEMU with the `virtio-gpu-av-pci` device,
+  which the VM runs on in place of the distribution's QEMU, and
+  `libav_executor.so`, which runs every command the guest sends on the
+  host's own Vulkan, EGL and OpenCL — with DXVK and vkd3d-proton, built
+  natively, for Direct3D. `av-renderer` can hold that executor in a
+  process of its own, so a host driver crash costs the guest a device
+  reset rather than the VM.
+- *In the guest*, `avgpu.sys`, a WDDM 3.2 kernel-mode display miniport,
+  and the user-mode drivers beside it — `avumd.dll` for Direct3D,
+  `avvk.dll`, `avgl.dll` and `avcl.dll`, each again for 32-bit
+  processes. They are built on the host, with accel-virt's own clang-cl
+  toolchains, into `build/av-drivers`; the payload ISO carries that tree
+  and the guest installs it as `C:\av` with accel-virt's
+  `provision.ps1`.
+
+The desktop runs on it too: DWM composes on the host GPU and the host
+scans the result out without copying it back into the guest. That half
+lives in [accel-virt](external/accel-virt), a submodule; it knows how to
+carry a graphics API across a virtio-gpu device and nothing about
+provisioning Windows or mirroring its windows, so it builds and tests
+entirely on its own:
 
 ```sh
 git submodule update --init --recursive
 ```
+
+It sets the guest's floor. The driver declares WDDM 3.2, which Windows
+refuses below **Windows 11 24H2** (build 26100), and it is
+**test-signed**: the guest runs with test signing on, which means UEFI
+without enrolled Secure Boot keys. accel-virt's
+[README](external/accel-virt/README.md) has the rest — what each API
+offers, and where it falls short.
 
 What this repository adds is the VM around both: provisioning Windows,
 running it, and presenting its applications as native Linux windows.
@@ -94,10 +119,52 @@ cmake -S . -B build -G Ninja
 cmake --build build
 ```
 
-Requires CMake 3.25+, a C++20 compiler, Qt 6, libvirt, and — for the
-render server — Vulkan, OpenGL (EGL) and OpenCL development packages on
-the host. `scripts/build-agent.sh` cross-builds the Windows half with
-mingw-w64.
+or `scripts/build.sh`, which does the same and cross-builds the Windows
+half first.
+
+Requires CMake 3.25+, a C++20 compiler, Qt 6, libvirt (with
+`libvirt-qemu`), and the Vulkan development package. accel-virt brings
+its own requirements, because the host build is also where its guest
+drivers are built:
+
+- clang and clang++, clang-cl, lld (`lld-link`), `llvm-lib`, `llvm-rc`
+  and `llvm-mt` — accel-virt builds with nothing else, so it is driven
+  as an external project with its own compiler rather than as part of
+  this build;
+- Python 3.11+, meson and glslang (DXVK and vkd3d-proton), and QEMU's
+  own build dependencies — glib2, pixman, gtk3, libepoxy, libslirp;
+- on the host at run time: KVM, the `udmabuf` module, and a Vulkan
+  driver, EGL and an OpenCL ICD for each API the guest should have.
+
+The first build fetches what accel-virt pins and does not commit — the
+Windows kit subset, the Khronos registries, QEMU's tarball, the OpenCL
+loader's source — and compiles QEMU, DXVK and vkd3d-proton, so it takes
+a while. The Windows kit is cut from multi-gigabyte WDK and SDK
+packages; with one already fetched elsewhere, pass
+`-DAV_WINDOWS_KIT_DIR=<accel-virt>/third_party/windows-kit`.
+`-DLSW_BUILD_ACCEL_VIRT=OFF` builds the manager without any of it, and
+without a GPU for its VMs.
+
+What the GPU build leaves, beside the manager in `build/`:
+
+```
+build/
+  av-drivers/                 the guest's C:\av: provision.ps1, adapters.txt,
+                              package/ (avgpu.sys, avgpu.inf, the user-mode
+                              drivers, package.sha256), loaders/{x64,x86}/OpenCL.dll
+  accel-virt/qemu/            qemu/qemu-system-x86_64 and its modules,
+                              libav_executor.so, av-renderer
+  accel-virt/d3d/lib/         DXVK and vkd3d-proton for the host
+```
+
+The manager looks for them there, relative to its own executable;
+`LSW_AV_DRIVERS`, `LSW_AV_QEMU_BUILD` and `LSW_AV_D3D_PATH` point it
+elsewhere.
+
+`scripts/build-agent.sh` cross-builds the rest of the Windows half with
+mingw-w64: the guest agent, `remotewin-guest.exe`, and the Vulkan loader
+for x64 and x86, which Windows does not ship and accel-virt does not
+package.
 
 ## License
 

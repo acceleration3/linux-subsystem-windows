@@ -48,11 +48,16 @@ protected:
 private:
     void start();
     void refresh_estimate();
+    // The source's editions, read out of its WIM in the background.
+    void list_editions();
     void set_busy(bool busy);
 
     config::Settings& settings_;
     QString source_iso_;
     int image_index_ = 1;
+    // Which listing is the current one: an answer for an image no longer
+    // picked is dropped.
+    int listing_ = 0;
     QString result_path_;
 
     QLineEdit* source_edit_ = nullptr;

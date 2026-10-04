@@ -25,12 +25,16 @@ constexpr int kPrivilegeCount =
 
 }  // namespace
 
-int TokenPrivileges::enable_install_privileges() {
-    UniqueHandle token;
-    if (!::OpenProcessToken(::GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY,
-                            token.put())) {
-        LSW_AGENT_WARN("privileges: OpenProcessToken failed err={}", ErrorText::last_error());
-        return 0;
+int TokenPrivileges::enable_install_privileges(void* given) {
+    UniqueHandle own;
+    HANDLE token = static_cast<HANDLE>(given);
+    if (token == nullptr) {
+        if (!::OpenProcessToken(::GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY,
+                                own.put())) {
+            LSW_AGENT_WARN("privileges: OpenProcessToken failed err={}", ErrorText::last_error());
+            return 0;
+        }
+        token = own.get();
     }
     int enabled = 0;
     for (const auto* name : kInstallPrivileges) {
@@ -40,14 +44,14 @@ int TokenPrivileges::enable_install_privileges() {
             continue;
         }
         privilege.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
-        if (::AdjustTokenPrivileges(token.get(), FALSE, &privilege, sizeof(privilege), nullptr,
+        if (::AdjustTokenPrivileges(token, FALSE, &privilege, sizeof(privilege), nullptr,
                                     nullptr) &&
             ::GetLastError() == ERROR_SUCCESS) {
             ++enabled;
         }
     }
-    LSW_AGENT_INFO("privileges: enabled {} of {} install-relevant token privileges", enabled,
-                   kPrivilegeCount);
+    LSW_AGENT_INFO("privileges: enabled {} of {} install-relevant privileges on {} token",
+                   enabled, kPrivilegeCount, given == nullptr ? "the agent's own" : "a child's");
     return enabled;
 }
 

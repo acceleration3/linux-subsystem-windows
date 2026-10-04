@@ -68,6 +68,11 @@ public:
     // The result has one image, so callers debloat index 1 of it. It is
     // a whole WIM however the source arrived: isolating one edition is
     // what makes the file small enough to stop being split at all.
+    //
+    // Refuses an edition older than Windows 11 24H2 (build 26100), the
+    // first the guest's display driver loads on, with ``error_out``
+    // saying so: every install passes through here before anything is
+    // written, so it is where unusable media is cheapest to turn away.
     [[nodiscard]] static bool isolate_edition(const QString& src_path,
                                               const QStringList& extra_parts, int image_index,
                                               const QString& dest_path, QString* error_out);
