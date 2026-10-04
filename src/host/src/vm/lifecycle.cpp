@@ -1,36 +1,28 @@
-#include "lsw/host/vm/domain_handle.hpp"
 #include "lsw/host/vm/lifecycle.hpp"
 
 #include "lsw/base/log.hpp"
+#include "lsw/host/platform/tool_process.hpp"
+#include "lsw/host/vm/domain_handle.hpp"
 #include "lsw/host/vm/ivshmem_server.hpp"
 #include "lsw/host/vm/shmem_region.hpp"
 
-#include <QProcess>
 #include <QRegularExpression>
+#include <cstdint>
 #include <libvirt/libvirt.h>
 
-#include <cstdint>
-
 namespace lsw::host::vm {
-
-namespace {
-
-[[nodiscard]] QByteArray uuid_bytes(const QUuid& u) {
-    // libvirt wants the 16 raw bytes; QUuid::toRfc4122 gives them.
-    return u.toRfc4122();
-}
-
-}  // namespace
 
 Lifecycle::Lifecycle(LibvirtConnection& conn, QObject* parent) : QObject(parent), conn_(conn) {}
 
 int Lifecycle::create_disk(const QString& path, int size_gib) {
     // ``qemu-img create -f qcow2 path SIZE`` — sparse by default.
-    QProcess p;
-    p.start("qemu-img", {"create", "-f", "qcow2", path, QStringLiteral("%1G").arg(size_gib)});
-    if (!p.waitForFinished(30'000) || p.exitCode() != 0) {
+    QString error;
+    if (!platform::run_tool(QStringLiteral("qemu-img"),
+                            {QStringLiteral("create"), QStringLiteral("-f"),
+                             QStringLiteral("qcow2"), path, QStringLiteral("%1G").arg(size_gib)},
+                            30'000, nullptr, &error)) {
         LSW_ERROR("qemu-img create {} {}G failed: {}", path.toStdString(), size_gib,
-                  QString::fromUtf8(p.readAllStandardError()).toStdString());
+                  error.toStdString());
         return -1;
     }
     LSW_INFO("created qcow2 disk {} ({} GiB sparse)", path.toStdString(), size_gib);
@@ -79,8 +71,7 @@ int Lifecycle::redefine(const config::VmRecord& vm, const DomainXmlInputs& input
     // redefine under a running guest names the same chardev it is
     // already attached to rather than inventing a second.
     if (filled.ivshmem_socket.isEmpty()) {
-        if (auto it = shmem_.find(vm.uuid);
-            it != shmem_.end() && it->second.server) {
+        if (auto it = shmem_.find(vm.uuid); it != shmem_.end() && it->second.server) {
             filled.ivshmem_socket = it->second.server->socket_path();
         }
     }
@@ -127,7 +118,7 @@ int Lifecycle::start(const QUuid& uuid, bool first_boot_done) {
     // pinned. Doing it here as well makes it self-correcting, and it
     // costs one no-op call per start otherwise.
     if (first_boot_done) {
-        (void)eject_install_media(uuid);
+        eject_install_media(uuid);
     }
 
     // The VM's persistent XML already references the chardev path;
@@ -147,10 +138,7 @@ DomainHandle Lifecycle::lookup(const QUuid& uuid) const {
     if (!conn_.is_open()) {
         return {};
     }
-    const auto bytes = uuid_bytes(uuid);
-    auto* d = ::virDomainLookupByUUID(conn_.raw(),
-                                      reinterpret_cast<const unsigned char*>(bytes.constData()));
-    return DomainHandle{d};
+    return DomainHandle::lookup(conn_.raw(), uuid);
 }
 
 int Lifecycle::shutdown(const QUuid& uuid) {
@@ -204,8 +192,7 @@ int Lifecycle::vnc_port(const QUuid& uuid) const {
     }
     const QString text = QString::fromUtf8(xml);
     ::free(xml);
-    static const QRegularExpression re(
-        QStringLiteral("<graphics type='vnc'[^>]*port='(-?\\d+)'"));
+    static const QRegularExpression re(QStringLiteral("<graphics type='vnc'[^>]*port='(-?\\d+)'"));
     const auto m = re.match(text);
     if (!m.hasMatch()) {
         return -1;
@@ -215,11 +202,11 @@ int Lifecycle::vnc_port(const QUuid& uuid) const {
     return (ok && port > 0) ? port : -1;
 }
 
-int Lifecycle::eject_install_media(const QUuid& uuid) {
+void Lifecycle::eject_install_media(const QUuid& uuid) {
     auto dom = lookup(uuid);
     if (!dom.valid()) {
         LSW_ERROR("eject: domain {} not found", uuid.toString().toStdString());
-        return -1;
+        return;
     }
     unsigned int flags = VIR_DOMAIN_AFFECT_CONFIG;
     if (::virDomainIsActive(dom.raw()) == 1) {
@@ -230,24 +217,19 @@ int Lifecycle::eject_install_media(const QUuid& uuid) {
     // <target dev=...>; the system disk (vda, virtio) is never named
     // here so it can't be affected.
     static const char* kTargets[] = {"sdb", "sdc", "sdd"};
-    int rc = 0;
     for (const char* tgt : kTargets) {
-        const QString xml =
-            QStringLiteral("<disk type='file' device='cdrom'>"
-                           "<driver name='qemu' type='raw'/>"
-                           "<target dev='%1' bus='sata'/>"
-                           "<readonly/></disk>")
-                .arg(QString::fromLatin1(tgt));
-        if (::virDomainUpdateDeviceFlags(dom.raw(), xml.toUtf8().constData(),
-                                         flags) < 0) {
+        const QString xml = QStringLiteral("<disk type='file' device='cdrom'>"
+                                           "<driver name='qemu' type='raw'/>"
+                                           "<target dev='%1' bus='sata'/>"
+                                           "<readonly/></disk>")
+                                .arg(QString::fromLatin1(tgt));
+        if (::virDomainUpdateDeviceFlags(dom.raw(), xml.toUtf8().constData(), flags) < 0) {
             // Not fatal — the drive may already be empty, or absent.
-            LSW_WARN("eject: {} not ejected ({})", tgt,
-                     conn_.last_error().toStdString());
+            LSW_WARN("eject: {} not ejected ({})", tgt, conn_.last_error().toStdString());
         } else {
             LSW_INFO("eject: {} media removed", tgt);
         }
     }
-    return rc;
 }
 
 ShmemRegion* Lifecycle::shmem_region(const QUuid& uuid) const {
@@ -297,10 +279,7 @@ bool Lifecycle::attach_running(const QUuid& uuid) {
     // application reached "attached to render server at ivshmem-0" and
     // then timed out on its first command with "head is 0", which reads
     // like a driver fault and is not one.
-    bundle.render = std::make_unique<RenderServer>();
-    connect(bundle.render.get(), &RenderServer::line_logged, this,
-            &Lifecycle::render_server_logged);
-    (void)bundle.render->ensure_running(uuid);
+    bundle.render = make_render_server(uuid);
     shmem_.emplace(uuid, std::move(bundle));
     Q_EMIT shmem_ready(uuid);
     return true;
@@ -336,8 +315,7 @@ QString Lifecycle::ensure_shmem(const QUuid& uuid, int size_mib) {
     ShmemBundle bundle;
     bundle.region = std::make_unique<ShmemRegion>();
     const std::uint64_t bytes =
-        static_cast<std::uint64_t>(size_mib > 0 ? size_mib : 256)
-        * 1024ULL * 1024ULL;
+        static_cast<std::uint64_t>(size_mib > 0 ? size_mib : 256) * 1024U * 1024U;
     if (bundle.region->open(uuid, bytes) != 0) {
         return {};
     }
@@ -346,17 +324,21 @@ QString Lifecycle::ensure_shmem(const QUuid& uuid, int size_mib) {
         bundle.region->close();
         return {};
     }
-    // Not fatal, and deliberately so: a guest that boots and reports no
-    // GPU driver can be looked at, and one that will not start cannot.
-    // The warning is in RenderServer.
-    bundle.render = std::make_unique<RenderServer>();
-    connect(bundle.render.get(), &RenderServer::line_logged, this,
-            &Lifecycle::render_server_logged);
-    (void)bundle.render->ensure_running(uuid);
+    bundle.render = make_render_server(uuid);
     const QString sock = bundle.server->socket_path();
     shmem_.emplace(uuid, std::move(bundle));
     Q_EMIT shmem_ready(uuid);
     return sock;
+}
+
+std::unique_ptr<RenderServer> Lifecycle::make_render_server(const QUuid& uuid) {
+    auto render = std::make_unique<RenderServer>();
+    connect(render.get(), &RenderServer::line_logged, this, &Lifecycle::render_server_logged);
+    // Not fatal, and deliberately so: a guest that boots and reports no
+    // GPU driver can be looked at, and one that will not start cannot.
+    // The warning is in RenderServer.
+    (void)render->ensure_running(uuid);
+    return render;
 }
 
 void Lifecycle::teardown_shmem(const QUuid& uuid) {

@@ -1,6 +1,7 @@
 #include "lsw/host/wizard/page_chrome.hpp"
 
 #include "lsw/host/ui/theme.hpp"
+#include "lsw/host/ui/widgets.hpp"
 
 #include <QFrame>
 #include <QHBoxLayout>
@@ -26,7 +27,7 @@ using ui::Theme;
 // the widget, and the stylesheet's style answers first. With no side
 // widget the page fills the window exactly, so the rail lives here and
 // the page is the whole of what QWizard lays out.
-QWidget* build_rail() {
+QWidget* build_rail(PageChrome& chrome) {
     auto* rail = new QWidget;
     Theme::surface(rail, Theme::Role::kWizardSide);
     rail->setFixedWidth(212);
@@ -35,8 +36,7 @@ QWidget* build_rail() {
     layout->setContentsMargins(0, 18, 0, 14);
     layout->setSpacing(0);
 
-    auto* caption = new QLabel(QStringLiteral("SETUP"));
-    caption->setObjectName(QString::fromLatin1(Theme::Role::kCaption));
+    auto* caption = ui::Widgets::caption(QStringLiteral("Setup"));
     caption->setContentsMargins(18, 0, 18, 12);
     layout->addWidget(caption);
 
@@ -50,37 +50,33 @@ QWidget* build_rail() {
     steps->setAttribute(Qt::WA_TransparentForMouseEvents);
     layout->addWidget(steps);
     layout->addStretch(1);
+    chrome.steps = steps;
 
     auto* foot = new QFrame;
     Theme::surface(foot, Theme::Role::kWizardSideFoot);
     auto* foot_layout = new QVBoxLayout(foot);
     foot_layout->setContentsMargins(18, 12, 18, 0);
     foot_layout->setSpacing(3);
-    for (const char* name : {"RailHost", "RailFree"}) {
-        auto* line = new QLabel;
-        line->setObjectName(QString::fromLatin1(name));
-        line->setProperty("lswRole", QString::fromLatin1(Theme::Role::kMeta));
-        foot_layout->addWidget(line);
-    }
+    // Named for the stylesheet, which sets them in mono.
+    chrome.rail_host = new QLabel;
+    chrome.rail_host->setObjectName(QStringLiteral("RailHost"));
+    chrome.rail_free = new QLabel;
+    chrome.rail_free->setObjectName(QStringLiteral("RailFree"));
+    foot_layout->addWidget(chrome.rail_host);
+    foot_layout->addWidget(chrome.rail_free);
     layout->addWidget(foot);
     return rail;
 }
 
 }  // namespace
 
-QVBoxLayout* PageChrome::head_of(QWizardPage* page) {
-    auto* head =
-        page->findChild<QFrame*>(QString::fromLatin1(ui::Theme::Role::kWizardHead));
-    return head == nullptr ? nullptr
-                           : qobject_cast<QVBoxLayout*>(head->layout());
-}
-
-QVBoxLayout* PageChrome::install(QWizardPage* page, const QString& title,
-                                 const QString& subtitle) {
+PageChrome PageChrome::install(QWizardPage* page, const QString& title,
+                               const QString& subtitle) {
+    PageChrome chrome;
     auto* columns = new QHBoxLayout(page);
     columns->setContentsMargins(0, 0, 0, 0);
     columns->setSpacing(0);
-    columns->addWidget(build_rail());
+    columns->addWidget(build_rail(chrome));
 
     auto* right = new QWidget;
     auto* root = new QVBoxLayout(right);
@@ -91,10 +87,10 @@ QVBoxLayout* PageChrome::install(QWizardPage* page, const QString& title,
     // ---- title band -----------------------------------------------
     auto* head = new QFrame;
     Theme::surface(head, Theme::Role::kWizardHead);
-    head->setProperty("lswHead", true);
     auto* head_layout = new QVBoxLayout(head);
     head_layout->setContentsMargins(26, 22, 26, 18);
     head_layout->setSpacing(6);
+    chrome.head = head_layout;
 
     auto* heading = new QLabel(title);
     heading->setObjectName(QString::fromLatin1(Theme::Role::kWizardTitle));
@@ -114,6 +110,7 @@ QVBoxLayout* PageChrome::install(QWizardPage* page, const QString& title,
     body->setContentsMargins(26, 22, 26, 22);
     body->setSpacing(16);
     root->addWidget(body_widget, 1);
+    chrome.body = body;
 
     // ---- footer ---------------------------------------------------
     // Beside the rail, not under it: the design's footer belongs to the
@@ -143,6 +140,10 @@ QVBoxLayout* PageChrome::install(QWizardPage* page, const QString& title,
     next->setObjectName(QStringLiteral("WizNext"));
     foot_layout->addWidget(next);
     root->addWidget(foot);
+    chrome.counter = counter;
+    chrome.cancel = cancel;
+    chrome.back = back;
+    chrome.next = next;
 
     // QWizardPage::wizard() is protected; the wizard is the page's
     // top-level window, which is not.
@@ -171,7 +172,7 @@ QVBoxLayout* PageChrome::install(QWizardPage* page, const QString& title,
     // the page is shown.
     QObject::connect(page, &QWizardPage::completeChanged, next,
                      [page, next] { next->setEnabled(page->isComplete()); });
-    return body;
+    return chrome;
 }
 
 }  // namespace lsw::host::wizard

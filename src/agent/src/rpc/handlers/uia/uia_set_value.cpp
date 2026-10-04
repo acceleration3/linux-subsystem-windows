@@ -1,29 +1,25 @@
 #include "lsw/agent/core/services.hpp"
-#include "lsw/agent/rpc/handler.hpp"
 #include "lsw/agent/rpc/auto_register.hpp"
-
-#include "lsw/linkproto/commands.hpp"
+#include "lsw/agent/rpc/handler.hpp"
+#include "lsw/agent/rpc/params.hpp"
 #include "lsw/agent/uia/uia.hpp"
+#include "lsw/linkproto/commands.hpp"
 
 #include <cstdint>
-#include <stdexcept>
 #include <string>
 
 namespace lsw::agent::rpc::handlers {
 
 struct UiaSetValueHandler : RpcHandler {
-    nlohmann::json handle(const nlohmann::json& params,
-                          RpcContext& ctx) override {
-        const auto hwnd = params.value("hwnd", std::uint64_t{0});
-        const auto selector = params.value("selector", std::string{});
-        const auto value = params.value("value", std::string{});
+    nlohmann::json handle(const nlohmann::json& params, RpcContext& ctx) override {
+        const Params p{params, linkproto::cmd::kUiaSetValue};
+        const auto hwnd = p.hwnd();
+        const auto selector = p.get("selector", std::string{});
+        const auto value = p.get("value", std::string{});
         if (hwnd == 0 || selector.empty()) {
-            throw std::invalid_argument(
-                "uia_set_value: missing hwnd or selector");
+            p.fail_missing("hwnd or selector");
         }
-        const bool ok = ctx.services.uia().set_value(
-            static_cast<std::uintptr_t>(hwnd), selector, value);
-        return {{"ok", ok}};
+        return {{"ok", ctx.services.uia().set_value(hwnd, selector, value)}};
     }
 };
 

@@ -75,6 +75,18 @@ public:
     // What the render server is saying about its own congestion.
     [[nodiscard]] vm::RenderStats& render_stats() noexcept { return render_stats_; }
 
+    // Point the agent channel at ``uuid``'s guest: its shared region
+    // first, so the first frame after connecting already routes through
+    // shared memory rather than the TCP envelope path, then the agent's
+    // port. False if there is no such VM.
+    bool bind_agent(const QUuid& uuid);
+
+    // Start ``uuid``'s domain. Whether the guest has booted before
+    // decides whether it should still be carrying the install media,
+    // which is where a VM provisioned before the eject existed gets
+    // noticed. Returns Lifecycle::start's code.
+    [[nodiscard]] int start_vm(const QUuid& uuid);
+
     // Push the render-channel sizes from settings into RenderServer, so
     // the next server started uses them. A running server keeps the
     // sizes it was started with, which is why they are restart keys.

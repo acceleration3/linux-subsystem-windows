@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -32,9 +33,8 @@ public:
         Kind kind;
         std::string session_id;
         std::vector<std::uint8_t> data;  // raw bytes for Output; empty for Closed
-        int exit_code = 0;                // populated for Closed
+        int exit_code = 0;               // populated for Closed
     };
-
 
     // Spawn a fresh ``cmd.exe`` (the user's local %COMSPEC% if set,
     // otherwise the system one) with stdin/stdout/stderr redirected
@@ -62,9 +62,10 @@ public:
     Console& operator=(const Console&) = delete;
 
 private:
-
     struct Impl;
-    Impl* impl_;
+    // Shared, not owned: each session's reader thread holds a reference
+    // too, so it can finish posting after this object is gone.
+    std::shared_ptr<Impl> impl_;
 };
 
 }  // namespace lsw::agent::console

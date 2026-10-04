@@ -44,9 +44,6 @@ public:
     // screen-sized and always present.
     [[nodiscard]] static bool overlay_present();
 
-    // Shell up and nothing covering it.
-    [[nodiscard]] static bool desktop_usable();
-
     // Block until the desktop is usable and has stayed that way for
     // ``stable_for``, or until ``timeout``. Returns false on timeout;
     // callers should proceed anyway, because an agent that never starts

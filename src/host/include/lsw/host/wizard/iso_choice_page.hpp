@@ -1,6 +1,6 @@
 #pragma once
 
-#include <QWizardPage>
+#include "lsw/host/wizard/wizard_page.hpp"
 
 class QLabel;
 class QLineEdit;
@@ -21,7 +21,7 @@ class Wizard;
 // download flow with its own edition list, session, SKU query and ban
 // state. Downloading is not an alternative way to answer the question
 // this page asks, it is a thing that produces an answer.
-class IsoChoicePage : public QWizardPage {
+class IsoChoicePage : public WizardPage {
     Q_OBJECT
 public:
     explicit IsoChoicePage(Wizard& wizard, QWidget* parent = nullptr);

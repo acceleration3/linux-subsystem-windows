@@ -16,7 +16,6 @@ class QTreeWidget;
 class QTreeWidgetItem;
 class QComboBox;
 class QHBoxLayout;
-class QJsonObject;
 
 namespace lsw::host::manager {
 
@@ -60,7 +59,7 @@ private:
     void highlight_place(const QString& path);
     void add_place_heading(const QString& text);
     void refresh_places();
-    void render_entries(const QJsonObject& reply);
+    void render_entries(const link::AgentReply& reply);
     void set_breadcrumb(const QString& path);
     void choose();
     void accept_current();

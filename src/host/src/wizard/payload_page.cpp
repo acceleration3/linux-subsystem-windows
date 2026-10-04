@@ -1,34 +1,32 @@
 #include "lsw/host/wizard/payload_page.hpp"
-#include "lsw/host/wizard/page_chrome.hpp"
 
-#include "lsw/host/wizard/wizard.hpp"
 #include "lsw/host/provision/pipeline.hpp"
-
-#include <QBrush>
+#include "lsw/host/ui/status_pill.hpp"
 #include "lsw/host/ui/theme.hpp"
+#include "lsw/host/ui/widgets.hpp"
+#include "lsw/host/wizard/wizard.hpp"
 
-#include <QBrush>
-#include <QColor>
-#include <QHBoxLayout>
-#include <QLabel>
 #include <QHeaderView>
-#include <QTimer>
+#include <QLabel>
 #include <QVBoxLayout>
-#include <QWizard>
 
 namespace lsw::host::wizard {
 
 namespace {
+
+using RowStatus = ui::StatusPill::State;
+
 constexpr int kColTask = 0;
 constexpr int kColSource = 1;
 constexpr int kColStatus = 2;
+
 }  // namespace
 
 PayloadPage::PayloadPage(Wizard& wizard, QWidget* parent)
-    : QWizardPage(parent), wizard_(wizard) {
+    : PipelinePage(parent), wizard_(wizard) {
 
-    auto* lay = PageChrome::install(
-        this, QStringLiteral("Building the install payload"),
+    auto* lay = install_chrome(
+        QStringLiteral("Building the install payload"),
         QStringLiteral("The answer file, the guest binaries and the drivers that must be "
                        "present on the very first boot."));
     table_ = new QTableWidget(3, 3);
@@ -61,15 +59,12 @@ PayloadPage::PayloadPage(Wizard& wizard, QWidget* parent)
 
     // Why one of those rows exists at all. Static, and separate from
     // the status line, which the pipeline overwrites.
-    auto* footnote = new QLabel(QStringLiteral(
-        "The shared memory driver is injected offline, because a driver delivered over "
-        "the channel it provides cannot bootstrap that channel."));
-    footnote->setObjectName(QString::fromLatin1(lsw::host::ui::Theme::Role::kMeta));
-    footnote->setWordWrap(true);
+    auto* footnote = ui::Widgets::meta(
+        QStringLiteral("The shared memory driver is injected offline, because a driver "
+                       "delivered over the channel it provides cannot bootstrap that channel."),
+        true);
 
-    status_label_ = new QLabel;
-    status_label_->setObjectName(QString::fromLatin1(lsw::host::ui::Theme::Role::kMeta));
-    status_label_->setWordWrap(true);
+    status_label_ = ui::Widgets::meta(QString{}, true);
 
     lay->addWidget(table_);
     lay->addWidget(footnote);
@@ -78,11 +73,10 @@ PayloadPage::PayloadPage(Wizard& wizard, QWidget* parent)
 }
 
 void PayloadPage::initializePage() {
-    complete_ = false;
     set_row_status(0, RowStatus::Pending);
     set_row_status(1, RowStatus::Pending);
     set_row_status(2, RowStatus::Pending);
-    Q_EMIT completeChanged();
+    reset_complete();
 
     auto* p = wizard_.pipeline();
     if (p == nullptr) {
@@ -108,11 +102,7 @@ void PayloadPage::initializePage() {
     connect(p, &::lsw::host::provision::Pipeline::step_finished, this, [this](Step s) {
         if (s != Step::BuildingPayloadIso) return;
         status_label_->setText("Payload ready.");
-        complete_ = true;
-        Q_EMIT completeChanged();
-        QTimer::singleShot(0, this, [this] {
-            if (auto* w = wizard()) w->next();
-        });
+        finish_and_advance();
     });
     connect(p, &::lsw::host::provision::Pipeline::failed, this,
             [this](Step s, const QString& err) {
@@ -128,46 +118,12 @@ void PayloadPage::demo_fill() {
     status_label_->setText(QStringLiteral("Downloading the virtio-win media."));
 }
 
-bool PayloadPage::isComplete() const {
-    return complete_;
-}
-
 int PayloadPage::nextId() const {
     return Wizard::Install;
 }
 
 void PayloadPage::set_row_status(int row, RowStatus s, const QString& detail) {
-    if (table_ == nullptr || row < 0 || row >= table_->rowCount()) {
-        return;
-    }
-    QString text;
-    const char* role = ui::Theme::Role::kPill;
-    switch (s) {
-    case RowStatus::Pending:
-        text = QStringLiteral("Pending");
-        break;
-    case RowStatus::Running:
-        text = detail.isEmpty() ? QStringLiteral("Running") : detail;
-        role = ui::Theme::Role::kPillRun;
-        break;
-    case RowStatus::Done:
-        text = detail.isEmpty() ? QStringLiteral("Done") : detail;
-        role = ui::Theme::Role::kPillDone;
-        break;
-    case RowStatus::Failed:
-        text = detail.isEmpty() ? QStringLiteral("Failed")
-                                : QStringLiteral("Failed: %1").arg(detail);
-        role = ui::Theme::Role::kPillFail;
-        break;
-    }
-    auto* holder = new QWidget;
-    auto* layout = new QHBoxLayout(holder);
-    layout->setContentsMargins(8, 0, 8, 0);
-    auto* pill = new QLabel(QStringLiteral("\u25cf  %1").arg(text));
-    pill->setObjectName(QString::fromLatin1(role));
-    layout->addWidget(pill, 0, Qt::AlignLeft | Qt::AlignVCenter);
-    layout->addStretch(1);
-    table_->setCellWidget(row, kColStatus, holder);
+    ui::StatusPill::set_cell(table_, row, kColStatus, s, detail);
 }
 
 }  // namespace lsw::host::wizard

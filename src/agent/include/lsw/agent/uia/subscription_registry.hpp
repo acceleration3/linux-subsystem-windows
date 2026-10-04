@@ -6,8 +6,6 @@
 #include <mutex>
 #include <unordered_map>
 
-struct IUIAutomation;
-
 namespace lsw::agent::uia {
 
 class UiaEventQueue;
@@ -40,9 +38,18 @@ public:
     // Detach and release. No-op for unknown ids.
     void unsubscribe(std::uint64_t id);
 
+    // Detach and release every subscription. Called while the UIA root
+    // and the COM apartment are both still alive: a handler left
+    // registered past that point can still be called, into an event
+    // queue that is being destroyed.
+    void clear();
+
 private:
     // Insert under a fresh id.
     [[nodiscard]] std::uint64_t store(Subscription sub);
+
+    // The kind-specific Remove*EventHandler calls, then the release.
+    void detach(Subscription& sub);
 
     IUIAutomation* root_;  // borrowed from UiaRoot
     UiaEventQueue& queue_;

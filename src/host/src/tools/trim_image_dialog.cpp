@@ -4,12 +4,14 @@
 #include "lsw/host/provision/debloat_stager.hpp"
 #include "lsw/host/provision/install/wim_edition.hpp"
 #include "lsw/host/provision/install/wim_edition_lister.hpp"
+#include "lsw/host/ui/dialog_chrome.hpp"
+#include "lsw/host/ui/format.hpp"
 #include "lsw/host/ui/theme.hpp"
+#include "lsw/host/ui/widgets.hpp"
 
 #include <QButtonGroup>
 #include <QCheckBox>
 #include <QComboBox>
-#include <QDialogButtonBox>
 #include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -23,7 +25,6 @@
 #include <QEvent>
 #include <QMouseEvent>
 #include <QRadioButton>
-#include <QStyle>
 #include <QStorageInfo>
 #include <QVBoxLayout>
 #include <QtConcurrent>
@@ -34,34 +35,9 @@ namespace {
 
 using provision::debloat::DebloatLevel;
 using provision::debloat::DebloatPlan;
+using ui::Format;
 using ui::Theme;
-
-QLabel* meta(const QString& text) {
-    auto* label = new QLabel(text);
-    label->setObjectName(QString::fromLatin1(Theme::Role::kMeta));
-    label->setWordWrap(true);
-    return label;
-}
-
-QLabel* prose(const QString& text) {
-    auto* label = new QLabel(text);
-    label->setObjectName(QString::fromLatin1(Theme::Role::kBody));
-    label->setWordWrap(true);
-    return label;
-}
-
-QLabel* caption(const QString& text) {
-    auto* label = new QLabel(text.toUpper());
-    label->setObjectName(QString::fromLatin1(Theme::Role::kCaption));
-    return label;
-}
-
-QFrame* separator() {
-    auto* line = new QFrame;
-    line->setObjectName(QString::fromLatin1(Theme::Role::kSeparator));
-    line->setFixedHeight(1);
-    return line;
-}
+using ui::Widgets;
 
 // What the level is expected to leave behind, as a fraction of the
 // source. Rough on purpose: the exact number is only known once the WIM
@@ -91,21 +67,13 @@ TrimImageDialog::TrimImageDialog(config::Settings& settings, QString source_iso,
     setModal(true);
     setMinimumWidth(620);
 
-    // The body carries the dialog's padding; the footer band beneath it
-    // runs edge to edge, which is what makes it a band.
-    auto* outer = new QVBoxLayout(this);
-    outer->setContentsMargins(0, 0, 0, 0);
-    outer->setSpacing(0);
-    auto* body_widget = new QWidget;
-    auto* root = new QVBoxLayout(body_widget);
-    root->setContentsMargins(20, 18, 20, 16);
-    outer->addWidget(body_widget, 1);
-    root->setSpacing(14);
+    const auto chrome = ui::DialogChrome::install(this);
+    auto* root = chrome.body;
 
     // ---- source ---------------------------------------------------
     auto* source_box = new QVBoxLayout;
     source_box->setSpacing(6);
-    source_box->addWidget(caption(QStringLiteral("Source image")));
+    source_box->addWidget(Widgets::caption(QStringLiteral("Source image")));
     auto* source_row = new QHBoxLayout;
     source_edit_ = new QLineEdit(source_iso_);
     source_edit_->setPlaceholderText(QStringLiteral("Path to a Windows ISO"));
@@ -119,11 +87,11 @@ TrimImageDialog::TrimImageDialog(config::Settings& settings, QString source_iso,
     edition_combo_->setVisible(false);
     source_box->addWidget(edition_combo_);
     root->addLayout(source_box);
-    root->addWidget(separator());
+    root->addWidget(Widgets::separator());
 
     // ---- level ----------------------------------------------------
-    root->addWidget(separator());
-    root->addWidget(caption(QStringLiteral("How much to remove")));
+    root->addWidget(Widgets::separator());
+    root->addWidget(Widgets::caption(QStringLiteral("How much to remove")));
     level_group_ = new QButtonGroup(this);
     level_group_->setExclusive(true);
 
@@ -173,25 +141,22 @@ TrimImageDialog::TrimImageDialog(config::Settings& settings, QString source_iso,
         cards_.push_back(card);
         root->addWidget(card);
 
-        connect(radio, &QRadioButton::toggled, card, [card](bool on) {
-            card->setProperty("selected", on);
-            card->style()->unpolish(card);
-            card->style()->polish(card);
-        });
+        connect(radio, &QRadioButton::toggled, card,
+                [card](bool on) { Widgets::set_flag(card, "selected", on); });
         if (entry.level == DebloatLevel::Sane) {
             radio->setChecked(true);
         }
     }
 
-    warning_ = prose(QString{});
-    warning_->setStyleSheet(QStringLiteral("color: #f0c393;"));
+    warning_ = Widgets::prose(QString{});
+    warning_->setProperty(Theme::Tone::kProperty, Theme::Tone::kWarm);
     warning_->setVisible(false);
     root->addWidget(warning_);
-    root->addWidget(separator());
+    root->addWidget(Widgets::separator());
 
     // ---- output ---------------------------------------------------
-    root->addWidget(separator());
-    root->addWidget(caption(QStringLiteral("Write the new image to")));
+    root->addWidget(Widgets::separator());
+    root->addWidget(Widgets::caption(QStringLiteral("Write the new image to")));
     auto* out_row = new QHBoxLayout;
     output_dir_ = new QLineEdit(settings_.isos_dir());
     auto* choose = new QPushButton(QStringLiteral("Choose folder"));
@@ -201,7 +166,7 @@ TrimImageDialog::TrimImageDialog(config::Settings& settings, QString source_iso,
 
     output_name_ = new QLineEdit(QStringLiteral("windows-trimmed.iso"));
     root->addWidget(output_name_);
-    estimate_ = meta(QString{});
+    estimate_ = Widgets::meta(QString{}, true);
     root->addWidget(estimate_);
 
     use_box_ = new QCheckBox(
@@ -214,25 +179,20 @@ TrimImageDialog::TrimImageDialog(config::Settings& settings, QString source_iso,
     bar_->setRange(0, 100);
     bar_->setVisible(false);
     root->addWidget(bar_);
-    status_ = meta(QString{});
+    status_ = Widgets::meta(QString{}, true);
     root->addWidget(status_);
 
     root->addStretch(1);
 
     // ---- footer ---------------------------------------------------
-    auto* foot_band = new QFrame;
-    Theme::surface(foot_band, Theme::Role::kDialogFoot);
-    auto* footer = new QHBoxLayout(foot_band);
-    footer->setContentsMargins(20, 12, 20, 12);
-    footer->addWidget(meta(QStringLiteral("The source image is read only and is never "
-                                          "modified.")),
-                      1);
+    auto* footer = chrome.foot;
+    footer->addWidget(
+        Widgets::meta(QStringLiteral("The source image is read only and is never modified."), true),
+        1);
     close_button_ = new QPushButton(QStringLiteral("Close"));
-    run_button_ = new QPushButton(QStringLiteral("Trim image"));
-    run_button_->setObjectName(QString::fromLatin1(Theme::Role::kPrimary));
+    run_button_ = Widgets::button(QStringLiteral("Trim image"), Theme::Role::kPrimary);
     footer->addWidget(close_button_);
     footer->addWidget(run_button_);
-    outer->addWidget(foot_band);
 
     connect(close_button_, &QPushButton::clicked, this, &QDialog::reject);
     connect(run_button_, &QPushButton::clicked, this, &TrimImageDialog::start);
@@ -312,16 +272,13 @@ void TrimImageDialog::refresh_estimate() {
     const QStorageInfo target{output_dir_->text()};
     QStringList parts;
     if (source_bytes > 0) {
-        const double out_gib =
-            (static_cast<double>(source_bytes) * retained_fraction(level))
-            / (1024.0 * 1024.0 * 1024.0);
-        parts << QStringLiteral("Roughly %1 GiB out").arg(out_gib, 0, 'f', 1);
+        const auto out_bytes =
+            static_cast<qint64>(static_cast<double>(source_bytes) * retained_fraction(level));
+        parts << QStringLiteral("Roughly %1 out").arg(Format::gib(out_bytes));
     }
     if (target.isValid() && target.bytesAvailable() > 0) {
-        parts << QStringLiteral("%1 GiB free on that volume")
-                     .arg(static_cast<double>(target.bytesAvailable())
-                              / (1024.0 * 1024.0 * 1024.0),
-                          0, 'f', 0);
+        parts << QStringLiteral("%1 free on that volume")
+                     .arg(Format::gib(target.bytesAvailable(), 0));
     }
     estimate_->setText(parts.join(QStringLiteral(". ")));
 }

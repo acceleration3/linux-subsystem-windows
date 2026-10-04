@@ -8,15 +8,16 @@
 #include "lsw/host/manager/render_panel.hpp"
 #include "lsw/host/manager/settings_page.hpp"
 #include "lsw/host/manager/vm_detail_panel.hpp"
-#include "lsw/host/apps/desktop_launcher.hpp"
+#include "lsw/host/platform/guest_smb_share.hpp"
+#include "lsw/host/services/domain_inputs.hpp"
 #include "lsw/host/services/host_services.hpp"
 #include "lsw/host/tools/download_image_dialog.hpp"
 #include "lsw/host/tools/trim_image_dialog.hpp"
 #include "lsw/host/ui/theme.hpp"
+#include "lsw/host/ui/widgets.hpp"
 
 #include <QCloseEvent>
 #include <QDesktopServices>
-#include <QDir>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QMenu>
@@ -27,7 +28,6 @@
 #include <QUrl>
 #include <QScreen>
 #include <QVBoxLayout>
-#include <QtConcurrent>
 
 #include <nlohmann/json.hpp>
 
@@ -38,6 +38,7 @@ namespace lsw::host::manager {
 namespace {
 
 using ui::Theme;
+using ui::Widgets;
 using K = config::ManagerSettings::Key;
 
 struct PageInfo {
@@ -84,8 +85,7 @@ MainWindow::MainWindow(services::HostServices& services, QWidget* parent)
     title_font.setPixelSize(14);
     title_font.setWeight(QFont::DemiBold);
     content_title_->setFont(title_font);
-    content_detail_ = new QLabel;
-    content_detail_->setObjectName(QString::fromLatin1(Theme::Role::kMeta));
+    content_detail_ = Widgets::meta(QString{});
     bar_layout->addWidget(content_title_);
     bar_layout->addWidget(content_detail_);
     bar_layout->addStretch(1);
@@ -93,8 +93,7 @@ MainWindow::MainWindow(services::HostServices& services, QWidget* parent)
     // case and wrong for the one where you want to watch the log while
     // doing something else. So they can still be a window.
     const auto bar_action = [&](const QString& text) {
-        auto* button = new QPushButton(text);
-        button->setObjectName(QString::fromLatin1(Theme::Role::kQuiet));
+        auto* button = Widgets::button(text, Theme::Role::kQuiet);
         button->setVisible(false);
         bar_layout->addWidget(button);
         return button;
@@ -145,8 +144,7 @@ MainWindow::MainWindow(services::HostServices& services, QWidget* parent)
     warn_text_ = new QLabel;
     warn_text_->setObjectName(QString::fromLatin1(Theme::Role::kWarnText));
     warn_text_->setWordWrap(true);
-    auto* dismiss = new QPushButton(QStringLiteral("Dismiss"));
-    dismiss->setObjectName(QString::fromLatin1(Theme::Role::kQuiet));
+    auto* dismiss = Widgets::button(QStringLiteral("Dismiss"), Theme::Role::kQuiet);
     auto* show_render = new QPushButton(QStringLiteral("Show the render channel"));
     warn_layout->addWidget(warn_text_, 1);
     warn_layout->addWidget(dismiss);
@@ -172,8 +170,7 @@ MainWindow::MainWindow(services::HostServices& services, QWidget* parent)
     Theme::surface(strip, Theme::Role::kStatusStrip);
     auto* strip_layout = new QHBoxLayout(strip);
     strip_layout->setContentsMargins(14, 5, 14, 5);
-    status_left_ = new QLabel;
-    status_left_->setObjectName(QString::fromLatin1(Theme::Role::kMeta));
+    status_left_ = Widgets::meta(QString{});
     strip_layout->addWidget(status_left_, 1);
     right_layout->addWidget(strip);
 
@@ -205,15 +202,15 @@ MainWindow::MainWindow(services::HostServices& services, QWidget* parent)
 
     // Single-VM model: pin the pages to whatever record App populated
     // for the lone ``lsw`` domain on startup.
-    if (!services_.vms().records().isEmpty()) {
-        const QUuid uuid = services_.vms().records().first().uuid;
-        overview_->set_target(uuid);
+    const config::VmRecord* record = services_.vms().primary();
+    if (record != nullptr) {
+        overview_->set_target(record->uuid);
         // The render regions are named after the VM, so the page has
         // nothing to read until there is one.
         render_->set_region_prefix(
-            vm::RenderServer::region_name(uuid, 0).chopped(2));
+            vm::RenderServer::region_name(record->uuid, 0).chopped(2));
     }
-    const bool provisioned = !services_.vms().records().isEmpty();
+    const bool provisioned = record != nullptr;
     overview_stack_->setCurrentIndex(provisioned ? 0 : 1);
     rail_->set_guest_provisioned(provisioned);
     refresh_identity();
@@ -223,9 +220,7 @@ MainWindow::MainWindow(services::HostServices& services, QWidget* parent)
 }
 
 void MainWindow::build_pages() {
-    overview_ = new VmDetailPanel(services_.vms(), services_.lifecycle(),
-                                  services_.monitor(), services_.app_configs(),
-                                  services_.rpc(), services_.log_store(), this);
+    overview_ = new VmDetailPanel(services_, this);
     console_ = new ConsolePanel(services_.rpc(), this);
     log_ = new LogPanel(services_.log_store(), this);
     render_ = new RenderPanel(services_.render_stats(), services_.manager_settings(),
@@ -256,26 +251,25 @@ void MainWindow::build_pages() {
         dialog.exec();
     });
     connect(settings_page_, &SettingsPage::trim_tool_requested, this, [this] {
-        const QString source = services_.vms().records().isEmpty()
-                                   ? QString{}
-                                   : services_.vms().records().first().iso_path;
+        const config::VmRecord* record = services_.vms().primary();
+        const QString source = record != nullptr ? record->iso_path : QString{};
         tools::TrimImageDialog dialog{services_.settings(), source, 1, this};
         dialog.exec();
     });
     connect(settings_page_, &SettingsPage::rewrite_entries_requested, this, [this] {
         // Idempotent, and the point of the button is the case where the
         // files on disk have drifted from what the store says.
-        apps::DesktopLauncher::sync(services_.app_configs().configs());
+        services_.apply_integrations();
     });
     connect(settings_page_, &SettingsPage::open_share_requested, this, [this] {
         // The share is served in userspace by the file manager, so this
-        // is a URL rather than a mount.
-        const auto* record = services_.vms().records().isEmpty()
-                                 ? nullptr
-                                 : &services_.vms().records().first();
-        Q_UNUSED(record);
-        QDesktopServices::openUrl(
-            QUrl(QStringLiteral("smb://127.0.0.1:5445/C$")));
+        // is a URL rather than a mount. The whole disk, whatever the
+        // bookmarks' scope: the row says it opens C:. Signed in as the
+        // account the bookmarks use, so the file manager does not ask.
+        const auto& settings = services_.manager_settings();
+        QDesktopServices::openUrl(QUrl(platform::GuestSmbShare::url(
+            settings.string_value(K::kGuestUser), settings.string_value(K::kGuestPassword),
+            QStringLiteral("C$"))));
     });
 }
 
@@ -317,8 +311,7 @@ QWidget* MainWindow::build_empty_state() {
     column->setSpacing(14);
     column->setAlignment(Qt::AlignHCenter);
 
-    auto* eyebrow = new QLabel(QStringLiteral("NOTHING INSTALLED"));
-    eyebrow->setObjectName(QString::fromLatin1(Theme::Role::kCaption));
+    auto* eyebrow = Widgets::caption(QStringLiteral("NOTHING INSTALLED"));
     eyebrow->setAlignment(Qt::AlignCenter);
 
     auto* heading =
@@ -335,8 +328,7 @@ QWidget* MainWindow::build_empty_state() {
     body->setAlignment(Qt::AlignCenter);
     body->setMaximumWidth(420);
 
-    auto* run = new QPushButton(QStringLiteral("Run the first-run wizard"));
-    run->setObjectName(QString::fromLatin1(Theme::Role::kPrimary));
+    auto* run = Widgets::button(QStringLiteral("Run the first-run wizard"), Theme::Role::kPrimary);
     connect(run, &QPushButton::clicked, this, &MainWindow::wizard_requested);
 
     column->addWidget(eyebrow);
@@ -373,18 +365,19 @@ void MainWindow::show_page(NavRail::Page page) {
 }
 
 void MainWindow::refresh_identity() {
-    if (services_.vms().records().isEmpty()) {
+    const config::VmRecord* primary = services_.vms().primary();
+    if (primary == nullptr) {
         rail_->set_identity(QStringLiteral("lsw"), QStringLiteral("not provisioned"));
         return;
     }
-    const auto& record = services_.vms().records().first();
+    const auto& record = *primary;
     auto& settings = services_.manager_settings();
     const QString detail =
         QStringLiteral("%1\n%2 cores · %3 GiB · %4 GiB")
             .arg(record.edition.isEmpty() ? QStringLiteral("Windows") : record.edition)
-            .arg(settings.int_value(QLatin1String(K::kCpuCores)))
-            .arg(settings.int_value(QLatin1String(K::kMemoryMib)) / 1024)
-            .arg(settings.int_value(QLatin1String(K::kDiskGib)));
+            .arg(settings.int_value(K::kCpuCores))
+            .arg(settings.int_value(K::kMemoryMib) / 1024)
+            .arg(settings.int_value(K::kDiskGib));
     rail_->set_identity(record.name.isEmpty() ? QStringLiteral("lsw") : record.name, detail);
 }
 
@@ -396,7 +389,7 @@ QString MainWindow::page_detail(NavRail::Page page) const {
                    ? QStringLiteral("running")
                    : QStringLiteral("stopped");
     case NavRail::Page::Render: {
-        const int channels = settings.int_value(QLatin1String(K::kChannels));
+        const int channels = settings.int_value(K::kChannels);
         int claimed = 0;
         for (const auto& channel : services_.render_stats().channels()) {
             claimed += channel.claimed ? 1 : 0;
@@ -418,12 +411,12 @@ QString MainWindow::page_detail(NavRail::Page page) const {
 
 void MainWindow::refresh_status_bar() {
     auto& settings = services_.manager_settings();
-    const int channels = settings.int_value(QLatin1String(K::kChannels));
+    const int channels = settings.int_value(K::kChannels);
     // The facts, with a rule between each, which is what makes a row of
     // them read as a row rather than as a sentence.
     const QStringList facts = {
         QStringLiteral("agent 127.0.0.1:%1")
-            .arg(settings.int_value(QLatin1String(K::kAgentPort))),
+            .arg(settings.int_value(K::kAgentPort)),
         QStringLiteral("transport ivshmem %1 GiB, vector 0")
             .arg(vm::RenderServer::region_mib() / 1024.0, 0, 'f', 1),
         QStringLiteral("disk virtio-blk, iothread"),
@@ -440,7 +433,7 @@ void MainWindow::refresh_status_bar() {
 void MainWindow::refresh_warning() {
     rail_->set_render_warning(services_.render_stats().worst()
                               != vm::AreaPressure::State::Healthy);
-    if (!services_.manager_settings().bool_value(QLatin1String(K::kWarnCongestion))) {
+    if (!services_.manager_settings().bool_value(K::kWarnCongestion)) {
         warn_strip_->setVisible(false);
         return;
     }
@@ -452,14 +445,10 @@ void MainWindow::refresh_warning() {
     }
     const bool critical =
         services_.render_stats().worst() == vm::AreaPressure::State::Congested;
-    warn_strip_->setObjectName(QString::fromLatin1(
-        critical ? Theme::Role::kWarnStripCritical : Theme::Role::kWarnStrip));
-    warn_text_->setObjectName(QString::fromLatin1(
-        critical ? Theme::Role::kWarnTextCritical : Theme::Role::kWarnText));
-    warn_strip_->style()->unpolish(warn_strip_);
-    warn_strip_->style()->polish(warn_strip_);
-    warn_text_->style()->unpolish(warn_text_);
-    warn_text_->style()->polish(warn_text_);
+    Widgets::set_role(warn_strip_,
+                      critical ? Theme::Role::kWarnStripCritical : Theme::Role::kWarnStrip);
+    Widgets::set_role(warn_text_,
+                      critical ? Theme::Role::kWarnTextCritical : Theme::Role::kWarnText);
     warn_text_->setText(headline);
     warn_strip_->setVisible(!warning_dismissed_);
 }
@@ -472,25 +461,21 @@ void MainWindow::push_display_settings() {
     // registry state Windows reads at logon and at boot, which is why
     // they are tagged as restart settings in the page that sets them.
     auto& settings = services_.manager_settings();
-    int width = settings.int_value(QLatin1String(K::kGuestWidth));
-    int height = settings.int_value(QLatin1String(K::kGuestHeight));
-    if (settings.bool_value(QLatin1String(K::kMatchHostOutput))) {
+    int width = settings.int_value(K::kGuestWidth);
+    int height = settings.int_value(K::kGuestHeight);
+    if (settings.bool_value(K::kMatchHostOutput)) {
         if (const QScreen* screen = this->screen(); screen != nullptr) {
             width = screen->geometry().width();
             height = screen->geometry().height();
         }
     }
 
-    const nlohmann::json request = {
-        {"cmd", linkproto::cmd::kSetDisplay},
-        {"params",
-         {{"width", width},
-          {"height", height},
-          {"scaling_percent", settings.int_value(QLatin1String(K::kScalingPercent))},
-          {"vram_mib", settings.int_value(QLatin1String(K::kVramMib))}}},
-    };
-    auto* rpc = &services_.rpc();
-    (void)QtConcurrent::run([rpc, request] { (void)rpc->call(request); });
+    services_.rpc().request_detached(
+        linkproto::cmd::kSetDisplay,
+        {{"width", width},
+         {"height", height},
+         {"scaling_percent", settings.int_value(K::kScalingPercent)},
+         {"vram_mib", settings.int_value(K::kVramMib)}});
 }
 
 void MainWindow::restart_guest() {
@@ -499,43 +484,16 @@ void MainWindow::restart_guest() {
     // the adapter's video memory are the domain definition rather than
     // properties of a running guest, so the definition is rewritten
     // between the stop and the start.
-    if (services_.vms().records().isEmpty()) {
+    const config::VmRecord* primary = services_.vms().primary();
+    if (primary == nullptr) {
         return;
     }
     services_.apply_render_sizing();
 
-    auto& settings = services_.manager_settings();
-    config::VmRecord record = services_.vms().records().first();
-    record.sizing.cpu_cores = settings.int_value(QLatin1String(K::kCpuCores));
-    record.sizing.memory_mib = settings.int_value(QLatin1String(K::kMemoryMib));
-    record.sizing.disk_gib = settings.int_value(QLatin1String(K::kDiskGib));
-
-    vm::DomainXmlInputs inputs;
-    // The template names all three CDs, so the definition has to carry
-    // them even for a guest that has already ejected the media: an
-    // empty source is a definition libvirt will not take. The Windows
-    // and payload paths live on the record; virtio-win is where the
-    // pipeline put it.
-    inputs.virtio_iso =
-        QDir(services_.settings().isos_dir()).filePath(QStringLiteral("virtio-win.iso"));
-    // The adapter's memory bounds the modes the guest can set, so it
-    // follows the resolution rather than capping it: enough for the
-    // asked-for mode at 32 bits per pixel, doubled for a back buffer,
-    // and never below what QEMU's VGA wants anyway.
-    const int width = settings.int_value(QLatin1String(K::kGuestWidth));
-    const int height = settings.int_value(QLatin1String(K::kGuestHeight));
-    const int needed_kib = ((width * height * 4 * 2) / 1024) + 1024;
-    inputs.video_vram_kib = qMax(16384, needed_kib);
-
-    for (const auto& share : settings.host_shares()) {
-        vm::DomainShare mapped;
-        // The tag is what the guest mounts by, and a drive letter is a
-        // guest-side idea, so the letter is the tag: "Z:" becomes "z".
-        mapped.tag = share.drive.left(1).toLower();
-        mapped.host_path = share.host_path;
-        mapped.read_only = share.read_only;
-        inputs.shares.push_back(mapped);
-    }
+    config::VmRecord record = *primary;
+    record.sizing = services::vm_sizing_from_settings(services_.manager_settings());
+    const vm::DomainXmlInputs inputs =
+        services::domain_inputs_from_settings(services_.settings(), services_.manager_settings());
 
     overview_->stop_guest();
     if (services_.lifecycle().redefine(record, inputs) != 0) {
@@ -559,11 +517,7 @@ void MainWindow::setup_tray() {
     tray_->setIcon(style()->standardIcon(QStyle::SP_ComputerIcon));
     tray_->setToolTip(QStringLiteral("LSW"));
     auto* menu = new QMenu(this);
-    menu->addAction(QStringLiteral("Show"), this, [this]() {
-        show();
-        raise();
-        activateWindow();
-    });
+    menu->addAction(QStringLiteral("Show"), this, [this] { Widgets::bring_to_front(this); });
     menu->addAction(QStringLiteral("Settings"), this,
                     [this] { show_page(NavRail::Page::Settings); show(); raise(); });
     menu->addSeparator();
@@ -578,16 +532,14 @@ void MainWindow::on_tray_activated(QSystemTrayIcon::ActivationReason reason) {
         if (isVisible()) {
             hide();
         } else {
-            show();
-            raise();
-            activateWindow();
+            Widgets::bring_to_front(this);
         }
     }
 }
 
 void MainWindow::closeEvent(QCloseEvent* e) {
     const bool to_tray =
-        services_.manager_settings().bool_value(QLatin1String(K::kCloseToTray));
+        services_.manager_settings().bool_value(K::kCloseToTray);
     if (tray_ != nullptr && to_tray) {
         hide();
         e->ignore();

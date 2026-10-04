@@ -2,18 +2,14 @@
 
 #include "lsw/base/log.hpp"
 #include "lsw/host/config/settings.hpp"
-#include "lsw/host/config/vm_name.hpp"
 #include "lsw/host/platform/agent_exe_path.hpp"
-#include "lsw/host/platform/mirror_exe_paths.hpp"
-#include "lsw/host/platform/guest_driver_paths.hpp"
 #include "lsw/host/platform/dolphin_places.hpp"
+#include "lsw/host/platform/guest_driver_paths.hpp"
+#include "lsw/host/platform/mirror_exe_paths.hpp"
 #include "lsw/host/provision/install/autounattend.hpp"
 #include "lsw/host/provision/install/ivshmem_driver.hpp"
 #include "lsw/host/provision/install/payload_iso.hpp"
 
-#include <QDir>
-#include <QMetaObject>
-#include <QPointer>
 #include <QtConcurrent>
 
 namespace lsw::host::provision {
@@ -23,8 +19,7 @@ PayloadIsoStager::PayloadIsoStager(config::Settings& settings, QObject* parent)
 
 void PayloadIsoStager::build(const config::VmRecord& record, const PipelineInputs& inputs) {
     install::AutounattendInputs answers;
-    answers.computer_name =
-        inputs.computer_name.isEmpty() ? record.name : inputs.computer_name;
+    answers.computer_name = inputs.computer_name.isEmpty() ? record.name : inputs.computer_name;
     answers.user_name = inputs.user_name;
     answers.user_password = inputs.user_password;
     answers.image_index = inputs.image_index;
@@ -41,8 +36,7 @@ void PayloadIsoStager::build(const config::VmRecord& record, const PipelineInput
                                                              inputs.user_password);
 
     install::PayloadInputs payload;
-    payload.output_iso_path = QDir(settings_.isos_dir())
-        .filePath(QStringLiteral("%1-payload.iso").arg(QLatin1String(config::kVmName)));
+    payload.output_iso_path = settings_.vm_payload_iso_path();
     payload.autounattend_xml = install::Autounattend::render(answers);
 
     // The shared-memory device has to exist on the first boot: it is the
@@ -93,10 +87,8 @@ void PayloadIsoStager::build(const config::VmRecord& record, const PipelineInput
                  "LSW_VULKAN_ICD_DLL and LSW_VULKAN_LOADER");
     } else {
         LSW_INFO("provision: bundling guest drivers vulkan={} opengl={} opencl={} loader={}",
-                 payload.vulkan_icd_path.toStdString(),
-                 payload.opengl_icd_path.toStdString(),
-                 payload.opencl_icd_path.toStdString(),
-                 payload.vulkan_loader_path.toStdString());
+                 payload.vulkan_icd_path.toStdString(), payload.opengl_icd_path.toStdString(),
+                 payload.opencl_icd_path.toStdString(), payload.vulkan_loader_path.toStdString());
     }
 
     // The i686 set is what a 32-bit application loads, and every D3D8
@@ -113,20 +105,23 @@ void PayloadIsoStager::build(const config::VmRecord& record, const PipelineInput
                  "LSW_VULKAN_ICD_DLL_X86 and LSW_VULKAN_LOADER_X86");
     }
 
-    // libisofs writes hundreds of megabytes; off the GUI thread.
-    const QPointer<PayloadIsoStager> self{this};
-    (void)QtConcurrent::run([self, payload]() {
-        const int rc = install::PayloadIsoBuilder::build(payload);
-        QMetaObject::invokeMethod(self.data(), [self, rc, payload]() {
-            if (!self) {
-                return;
-            }
-            if (rc != 0) {
-                Q_EMIT self->failed(QStringLiteral("payload ISO build failed"));
-                return;
-            }
-            Q_EMIT self->finished(payload.output_iso_path);
-        }, Qt::QueuedConnection);
+    // libisofs writes hundreds of megabytes; off the GUI thread. The
+    // continuation is dropped if the stager is gone by the time it lands.
+    struct Outcome {
+        bool ok = false;
+        QString error;
+    };
+
+    (void)QtConcurrent::run([payload] {
+        Outcome outcome;
+        outcome.ok = install::PayloadIsoBuilder::build(payload, &outcome.error);
+        return outcome;
+    }).then(this, [this, path = payload.output_iso_path](const Outcome& outcome) {
+        if (!outcome.ok) {
+            Q_EMIT failed(QStringLiteral("payload ISO build failed: %1").arg(outcome.error));
+            return;
+        }
+        Q_EMIT finished(path);
     });
 }
 

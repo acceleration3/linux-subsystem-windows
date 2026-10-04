@@ -16,7 +16,7 @@ namespace lsw::host::vm {
 // layer takes a tag and a path and knows nothing about drive letters,
 // which are a guest-side idea.
 struct DomainShare {
-    QString tag;        // what the guest mounts by
+    QString tag;  // what the guest mounts by
     QString host_path;
     bool read_only = false;
 };
@@ -43,9 +43,6 @@ struct DomainXmlInputs {
     //
     // Must stay a power of two: the region backs the ivshmem PCI BAR.
     int ivshmem_size_mib = linkproto::kDefaultRegionMib;
-    // Retained for source stability only. There is one domain template
-    // now (domain.xml, virtio-from-install); this selects nothing.
-    bool use_virtio = false;
 
     // Folders on this machine the guest can see, as virtiofs devices.
     //

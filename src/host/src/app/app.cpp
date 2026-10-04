@@ -2,7 +2,6 @@
 
 #include "lsw/base/log.hpp"
 #include "lsw/host/app/unattended_runner.hpp"
-#include "lsw/host/apps/desktop_launcher.hpp"
 #include "lsw/host/manager/guest_app_launch_controller.hpp"
 #include "lsw/host/manager/app_config_dialog.hpp"
 #include "lsw/host/manager/launch_splash.hpp"
@@ -12,6 +11,7 @@
 #include "lsw/host/tools/trim_image_dialog.hpp"
 #include "lsw/host/mcp/mcp_server.hpp"
 #include "lsw/host/ui/theme.hpp"
+#include "lsw/host/ui/widgets.hpp"
 #include "lsw/host/vm/domain_importer.hpp"
 #include "lsw/host/wizard/payload_page.hpp"
 #include "lsw/host/wizard/setup_page.hpp"
@@ -123,7 +123,7 @@ int App::run() {
         unattended_ = std::make_unique<UnattendedRunner>(services_, cli_, this);
         connect(unattended_.get(), &UnattendedRunner::finished, this, &App::exit);
         unattended_->start();
-    } else if (services_.settings().is_first_run() || services_.vms().records().isEmpty()) {
+    } else if (services_.settings().is_first_run() || services_.vms().primary() == nullptr) {
         // Wizard mode: no MCP server — there is no provisioned app to
         // drive yet, and binding the port now would deny it to the
         // manager process the wizard spawns on completion.
@@ -228,11 +228,7 @@ int App::capture_screens(const QString& dir) {
         if (auto* setup = qobject_cast<wizard::SetupPage*>(wiz->currentPage())) {
             setup->demo_fill();
         }
-        shoot(wiz, QStringLiteral("wizard-%1-%2")
-                       .arg(id + 1, 2, 10, QLatin1Char('0'))
-                       .arg(QString::fromLatin1(wiz->currentPage()->objectName().isEmpty()
-                                                    ? "page"
-                                                    : "page")));
+        shoot(wiz, QStringLiteral("wizard-%1-page").arg(id + 1, 2, 10, QLatin1Char('0')));
     }
     wiz->deleteLater();
 
@@ -245,9 +241,7 @@ void App::show_wizard() {
         wizard_ = new wizard::Wizard(services_);
         connect(wizard_, &wizard::Wizard::complete, this, &App::on_wizard_complete);
     }
-    wizard_->show();
-    wizard_->raise();
-    wizard_->activateWindow();
+    ui::Widgets::bring_to_front(wizard_);
 }
 
 void App::show_main_window() {
@@ -258,9 +252,7 @@ void App::show_main_window() {
         connect(main_window_, &manager::MainWindow::wizard_requested, this,
                 &App::show_wizard);
     }
-    main_window_->show();
-    main_window_->raise();
-    main_window_->activateWindow();
+    ui::Widgets::bring_to_front(main_window_);
 }
 
 void App::start_mcp_server() {
@@ -311,9 +303,7 @@ void App::on_raise_request() {
     if (w == nullptr) {
         return;
     }
-    w->show();
-    w->raise();
-    w->activateWindow();
+    ui::Widgets::bring_to_front(w);
 }
 
 void App::on_launch_app_request(const QString& app_id) {

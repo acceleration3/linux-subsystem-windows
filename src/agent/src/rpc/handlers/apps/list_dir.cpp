@@ -1,7 +1,9 @@
 #include "lsw/agent/rpc/auto_register.hpp"
 #include "lsw/agent/rpc/handler.hpp"
 #include "lsw/agent/util/text_encoding.hpp"
-
+#include "lsw/agent/util/wide_string.hpp"
+#include "lsw/agent/win/file_time.hpp"
+#include "lsw/agent/win/unique_handle.hpp"
 #include "lsw/linkproto/commands.hpp"
 
 // clang-format off
@@ -22,19 +24,6 @@ namespace {
 constexpr int kDefaultLimit = 250;
 constexpr int kMaxLimit = 1000;
 
-// FILETIME is 100ns ticks since 1601; Unix time is seconds since 1970.
-constexpr std::uint64_t kTicksPerSecond = 10000000ULL;
-constexpr std::uint64_t kEpochDelta = 11644473600ULL;
-
-std::uint64_t to_unix_seconds(const FILETIME& ft) {
-    const std::uint64_t ticks =
-        (static_cast<std::uint64_t>(ft.dwHighDateTime) << 32) | ft.dwLowDateTime;
-    if (ticks == 0) {
-        return 0;
-    }
-    return (ticks / kTicksPerSecond) - kEpochDelta;
-}
-
 // The drives, for an empty path. A fixed disk and whatever host folders
 // have been mapped in look the same from here, which is the point: the
 // picker's sidebar lists them together.
@@ -47,8 +36,8 @@ nlohmann::json list_drives() {
         }
         const std::wstring root{static_cast<wchar_t>(L'A' + i), L':', L'\\'};
         wchar_t label[MAX_PATH + 1]{};
-        if (::GetVolumeInformationW(root.c_str(), label, MAX_PATH, nullptr, nullptr,
-                                    nullptr, nullptr, 0) == 0) {
+        if (::GetVolumeInformationW(root.c_str(), label, MAX_PATH, nullptr, nullptr, nullptr,
+                                    nullptr, 0) == 0) {
             label[0] = L'\0';
         }
         entries.push_back({
@@ -60,19 +49,6 @@ nlohmann::json list_drives() {
         });
     }
     return entries;
-}
-
-bool matches(const std::wstring& name, const std::wstring& suffix) {
-    if (suffix.empty()) {
-        return true;
-    }
-    if (name.size() < suffix.size()) {
-        return false;
-    }
-    return std::equal(suffix.rbegin(), suffix.rend(), name.rbegin(),
-                      [](wchar_t a, wchar_t b) {
-                          return ::towlower(a) == ::towlower(b);
-                      });
 }
 
 }  // namespace
@@ -88,11 +64,9 @@ struct ListDirHandler : RpcHandler {
     nlohmann::json handle(const nlohmann::json& params, RpcContext& /*ctx*/) override {
         const auto path = params.value("path", std::string{});
         const int cursor = std::max(0, params.value("cursor", 0));
-        const int limit =
-            std::clamp(params.value("limit", kDefaultLimit), 1, kMaxLimit);
+        const int limit = std::clamp(params.value("limit", kDefaultLimit), 1, kMaxLimit);
         const bool dirs_only = params.value("dirs_only", false);
-        const auto suffix = util::TextEncoding::to_wide(
-            params.value("suffix", std::string{}));
+        const auto suffix = util::TextEncoding::to_wide(params.value("suffix", std::string{}));
 
         if (path.empty()) {
             return {{"path", ""}, {"entries", list_drives()}};
@@ -104,17 +78,16 @@ struct ListDirHandler : RpcHandler {
         }
 
         WIN32_FIND_DATAW found{};
-        HANDLE handle = ::FindFirstFileExW((wide + L"*").c_str(), FindExInfoBasic, &found,
-                                           FindExSearchNameMatch, nullptr,
-                                           FIND_FIRST_EX_LARGE_FETCH);
-        if (handle == INVALID_HANDLE_VALUE) {
+        const win::UniqueFindHandle find{::FindFirstFileExW((wide + L"*").c_str(), FindExInfoBasic,
+                                                            &found, FindExSearchNameMatch, nullptr,
+                                                            FIND_FIRST_EX_LARGE_FETCH)};
+        if (!find) {
             const DWORD error = ::GetLastError();
             return {
                 {"path", path},
                 {"entries", nlohmann::json::array()},
-                {"error", error == ERROR_ACCESS_DENIED
-                              ? "Windows would not open this folder"
-                              : "This folder could not be read"},
+                {"error", error == ERROR_ACCESS_DENIED ? "Windows would not open this folder"
+                                                       : "This folder could not be read"},
                 {"error_code", static_cast<std::uint32_t>(error)},
             };
         }
@@ -128,24 +101,21 @@ struct ListDirHandler : RpcHandler {
             if (name == L"." || name == L"..") {
                 continue;
             }
-            const bool is_dir =
-                (found.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
-            if (!is_dir && (dirs_only || !matches(name, suffix))) {
+            const bool is_dir = (found.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+            if (!is_dir && (dirs_only || !util::WideString::iends_with(name, suffix))) {
                 continue;
             }
             const std::uint64_t size =
-                (static_cast<std::uint64_t>(found.nFileSizeHigh) << 32)
-                | found.nFileSizeLow;
+                (static_cast<std::uint64_t>(found.nFileSizeHigh) << 32) | found.nFileSizeLow;
             nlohmann::json entry = {
                 {"name", util::TextEncoding::to_utf8(name)},
                 {"is_dir", is_dir},
                 {"size", is_dir ? 0 : size},
-                {"mtime", to_unix_seconds(found.ftLastWriteTime)},
+                {"mtime", win::FileTime::to_unix_ms(found.ftLastWriteTime) / 1000},
                 {"hidden", (found.dwFileAttributes & FILE_ATTRIBUTE_HIDDEN) != 0},
             };
             (is_dir ? dirs : files).push_back(std::move(entry));
-        } while (::FindNextFileW(handle, &found) != 0);
-        ::FindClose(handle);
+        } while (::FindNextFileW(find.get(), &found) != 0);
 
         const auto by_name = [](const nlohmann::json& a, const nlohmann::json& b) {
             return a.value("name", std::string{}) < b.value("name", std::string{});
@@ -176,8 +146,8 @@ struct ListDirHandler : RpcHandler {
     }
 
     [[nodiscard]] std::string summarize(const nlohmann::json& reply) const override {
-        return std::to_string(reply.value("entries", nlohmann::json::array()).size())
-               + " of " + std::to_string(reply.value("total", 0)) + " entries";
+        return std::to_string(reply.value("entries", nlohmann::json::array()).size()) + " of " +
+               std::to_string(reply.value("total", 0)) + " entries";
     }
 };
 

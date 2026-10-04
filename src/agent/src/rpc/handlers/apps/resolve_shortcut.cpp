@@ -1,16 +1,10 @@
 #include "lsw/agent/rpc/auto_register.hpp"
 #include "lsw/agent/rpc/handler.hpp"
+#include "lsw/agent/rpc/params.hpp"
 #include "lsw/agent/util/text_encoding.hpp"
-
+#include "lsw/agent/win/shell_link.hpp"
 #include "lsw/linkproto/commands.hpp"
 
-// clang-format off
-#include <windows.h>
-#include <shlobj.h>
-#include <shobjidl.h>
-// clang-format on
-
-#include <stdexcept>
 #include <string>
 
 namespace lsw::agent::rpc::handlers {
@@ -24,46 +18,15 @@ namespace lsw::agent::rpc::handlers {
 // once, and the entry keeps its arguments and working folder too.
 struct ResolveShortcutHandler : RpcHandler {
     nlohmann::json handle(const nlohmann::json& params, RpcContext& /*ctx*/) override {
-        const auto path = params.value("path", std::string{});
-        if (path.empty()) {
-            throw std::invalid_argument("resolve_shortcut: missing path");
-        }
-
-        // The agent's threads are not guaranteed to have COM up, and
-        // asking twice is not an error worth failing over.
-        const HRESULT init = ::CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-        const bool uninit = SUCCEEDED(init);
+        const auto path = Params{params, linkproto::cmd::kResolveShortcut}.require_string("path");
 
         nlohmann::json reply = {{"target", ""}, {"args", ""}, {"workdir", ""}};
-        IShellLinkW* link = nullptr;
-        if (SUCCEEDED(::CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER,
-                                         IID_IShellLinkW,
-                                         reinterpret_cast<void**>(&link)))) {
-            IPersistFile* file = nullptr;
-            if (SUCCEEDED(link->QueryInterface(IID_IPersistFile,
-                                               reinterpret_cast<void**>(&file)))) {
-                if (SUCCEEDED(file->Load(util::TextEncoding::to_wide(path).c_str(),
-                                         STGM_READ))) {
-                    wchar_t buffer[MAX_PATH]{};
-                    if (SUCCEEDED(link->GetPath(buffer, MAX_PATH, nullptr,
-                                                SLGP_UNCPRIORITY))) {
-                        reply["target"] = util::TextEncoding::to_utf8(buffer);
-                    }
-                    wchar_t args[INFOTIPSIZE]{};
-                    if (SUCCEEDED(link->GetArguments(args, INFOTIPSIZE))) {
-                        reply["args"] = util::TextEncoding::to_utf8(args);
-                    }
-                    wchar_t dir[MAX_PATH]{};
-                    if (SUCCEEDED(link->GetWorkingDirectory(dir, MAX_PATH))) {
-                        reply["workdir"] = util::TextEncoding::to_utf8(dir);
-                    }
-                }
-                file->Release();
-            }
-            link->Release();
-        }
-        if (uninit) {
-            ::CoUninitialize();
+        const auto link = win::ShellLink::resolve(util::TextEncoding::to_wide(path),
+                                                  win::ShellLink::PathMode::UncPriority);
+        if (link) {
+            reply["target"] = util::TextEncoding::to_utf8(link->path);
+            reply["args"] = util::TextEncoding::to_utf8(link->args);
+            reply["workdir"] = util::TextEncoding::to_utf8(link->working_dir);
         }
         return reply;
     }

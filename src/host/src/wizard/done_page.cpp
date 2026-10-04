@@ -1,8 +1,8 @@
 #include "lsw/host/wizard/done_page.hpp"
-#include "lsw/host/wizard/page_chrome.hpp"
 #include "lsw/host/wizard/wizard.hpp"
 
 #include "lsw/host/ui/theme.hpp"
+#include "lsw/host/ui/widgets.hpp"
 
 #include <QFrame>
 #include <QGridLayout>
@@ -13,10 +13,10 @@
 
 namespace lsw::host::wizard {
 
-DonePage::DonePage(Wizard& wizard, QWidget* parent)
-    : QWizardPage(parent), wizard_(wizard) {
+DonePage::DonePage(Wizard& wizard, QWidget* parent) : WizardPage(parent), wizard_(wizard) {
 
-    auto* lay = PageChrome::install(this, QStringLiteral("Installation finished"), QStringLiteral("The guest agent is online. The VM is ready."));
+    auto* lay = install_chrome(QStringLiteral("Installation finished"),
+                               QStringLiteral("The guest agent is online. The VM is ready."));
     // What was actually built, as four tiles, then where to go.
     auto* grid = new QGridLayout;
     grid->setSpacing(8);
@@ -25,8 +25,7 @@ DonePage::DonePage(Wizard& wizard, QWidget* parent)
         ui::Theme::surface(frame, ui::Theme::Role::kPanel);
         auto* row = new QHBoxLayout(frame);
         row->setContentsMargins(13, 11, 13, 11);
-        auto* k = new QLabel(key.toUpper());
-        k->setObjectName(QString::fromLatin1(ui::Theme::Role::kCaption));
+        auto* k = ui::Widgets::caption(key);
         auto* v = new QLabel(value);
         v->setObjectName(QString::fromLatin1(ui::Theme::Role::kMono));
         v->setStyleSheet(QStringLiteral("font-size: 12px;"));

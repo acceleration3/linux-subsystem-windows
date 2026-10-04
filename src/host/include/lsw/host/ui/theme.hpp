@@ -1,5 +1,7 @@
 #pragma once
 
+#include <QColor>
+#include <QFont>
 #include <QString>
 #include <QStringList>
 
@@ -50,6 +52,15 @@ public:
     // follows it sits under the last row rather than at the bottom of
     // the page.
     static void fit_rows(QTableWidget* table);
+
+    // The mono face at ``pixel_size``, for the places a font is set in
+    // code rather than by the stylesheet: painted headings, item
+    // delegates, and widgets that want the face before they are polished.
+    [[nodiscard]] static QFont mono_font(int pixel_size);
+
+    // A hex colour, usually one of the Color constants below, as the
+    // QColor a painter wants.
+    [[nodiscard]] static QColor color(const char* hex);
 
     // Object names the stylesheet selects on. Widgets set these instead
     // of carrying inline stylesheets of their own, so the whole look
@@ -113,12 +124,33 @@ public:
         static constexpr const char* kPillFail = "PillFail";
     };
 
+    // Values of the "tone" property, which recolours a widget for what
+    // it says without changing what it is: a caption that counts
+    // pending changes, a sentence that warns. The stylesheet pairs each
+    // with the roles that use it; the role keeps the face and the size.
+    struct Tone {
+        static constexpr const char* kProperty = "tone";
+        static constexpr const char* kAmber = "amber";
+        // The pale amber of warning text.
+        static constexpr const char* kWarm = "warm";
+        static constexpr const char* kOk = "ok";
+        static constexpr const char* kInfo = "info";
+        static constexpr const char* kBad = "bad";
+        static constexpr const char* kFaint = "faint";
+        // The now-or-restart tags beside a setting's name.
+        static constexpr const char* kRestart = "restart";
+        static constexpr const char* kNow = "now";
+    };
+
     // Colours the stylesheet cannot reach: painted widgets, item
     // delegates, and the status words in the setup table.
     struct Color {
         static constexpr const char* kInk = "#0d0f14";
         static constexpr const char* kSurface = "#151922";
         static constexpr const char* kRaised = "#1c212c";
+        // What text fields and indicators are filled with: a shade
+        // under the ground, so an input reads as a hole in it.
+        static constexpr const char* kBase = "#0f131a";
         static constexpr const char* kLine = "#272d3a";
         static constexpr const char* kFg = "#e4e8f0";
         static constexpr const char* kFgDim = "#9aa3b4";

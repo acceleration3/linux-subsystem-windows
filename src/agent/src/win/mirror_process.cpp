@@ -2,12 +2,12 @@
 
 #include "lsw/agent/log.hpp"
 #include "lsw/agent/util/text_encoding.hpp"
+#include "lsw/agent/win/environment.hpp"
+#include "lsw/agent/win/error_text.hpp"
+#include "lsw/agent/win/file_system.hpp"
+#include "lsw/agent/win/process.hpp"
 
-// clang-format off
-#include <windows.h>
-// clang-format on
-
-#include <vector>
+#include <utility>
 
 namespace lsw::agent::win {
 
@@ -33,58 +33,33 @@ unsigned long MirrorProcess::start(const std::string& exe, std::uint16_t port,
     }
 
     const std::wstring path = util::TextEncoding::to_wide(exe);
-    if (::GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES) {
+    if (!FileSystem::exists(path)) {
         set_error(error_out, "start_window_mirror: no such file: " + exe);
         return 0;
     }
 
-    std::wstring command = L"\"" + path + L"\" --host "
-                           + util::TextEncoding::to_wide(kHostAddress) + L" --port "
-                           + std::to_wstring(port);
-    std::vector<wchar_t> mutable_command(command.begin(), command.end());
-    mutable_command.push_back(L'\0');
-
+    SpawnOptions options;
+    options.application = path;
+    options.command_line = Process::quote(path) + L" --host " +
+                           util::TextEncoding::to_wide(kHostAddress) + L" --port " +
+                           std::to_wstring(port);
+    // CREATE_NO_WINDOW: a console program with nobody to read it.
+    options.creation_flags = CREATE_UNICODE_ENVIRONMENT | CREATE_NO_WINDOW;
     // Where the mirror says what happened. Its output would otherwise go
     // to a console it was given none of.
-    std::wstring environment;
     if (!log_path.empty()) {
-        environment = L"RWIN_LOG_FILE=" + util::TextEncoding::to_wide(log_path);
-    }
-    std::vector<wchar_t> block;
-    if (!environment.empty()) {
-        for (const wchar_t* copy = ::GetEnvironmentStringsW(); copy != nullptr;) {
-            const wchar_t* cursor = copy;
-            while (*cursor != L'\0') {
-                const std::size_t length = ::wcslen(cursor);
-                block.insert(block.end(), cursor, cursor + length + 1);
-                cursor += length + 1;
-            }
-            ::FreeEnvironmentStringsW(const_cast<wchar_t*>(copy));
-            break;
-        }
-        block.insert(block.end(), environment.begin(), environment.end());
-        block.push_back(L'\0');
-        block.push_back(L'\0');
+        options.environment = Environment::block_with({{"RWIN_LOG_FILE", log_path}});
     }
 
-    STARTUPINFOW startup{};
-    startup.cb = sizeof(startup);
-    PROCESS_INFORMATION spawned{};
-    // CREATE_NO_WINDOW: a console program with nobody to read it.
-    const BOOL ok = ::CreateProcessW(
-        path.c_str(), mutable_command.data(), nullptr, nullptr, FALSE,
-        CREATE_UNICODE_ENVIRONMENT | CREATE_NO_WINDOW,
-        block.empty() ? nullptr : block.data(), nullptr, &startup, &spawned);
-    if (ok == 0) {
-        set_error(error_out, "start_window_mirror: CreateProcessW failed (err="
-                                 + std::to_string(::GetLastError()) + ")");
+    DWORD error = 0;
+    const auto spawned = Process::spawn(options, &error);
+    if (!spawned) {
+        set_error(error_out, "start_window_mirror: CreateProcessW failed (err=" +
+                                 ErrorText::win32(error) + ")");
         return 0;
     }
-    ::CloseHandle(spawned.hProcess);
-    ::CloseHandle(spawned.hThread);
-    LSW_AGENT_INFO("start_window_mirror: pid=" + std::to_string(spawned.dwProcessId)
-                   + " port=" + std::to_string(port));
-    return spawned.dwProcessId;
+    LSW_AGENT_INFO("start_window_mirror: pid={} port={}", spawned->pid, port);
+    return spawned->pid;
 }
 
 }  // namespace lsw::agent::win

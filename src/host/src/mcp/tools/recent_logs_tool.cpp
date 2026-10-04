@@ -2,12 +2,16 @@
 
 #include "lsw/host/apps/log_store.hpp"
 #include "lsw/host/mcp/json_schema.hpp"
+#include "lsw/host/mcp/tool_args.hpp"
 #include "lsw/host/mcp/tool_result.hpp"
 
 #include <nlohmann/json.hpp>
 
 #include <QDateTime>
 #include <QString>
+
+#include <algorithm>
+#include <cstdint>
 
 namespace lsw::host::mcp {
 
@@ -24,7 +28,8 @@ nlohmann::json RecentLogsTool::input_schema() const {
 }
 
 nlohmann::json RecentLogsTool::call(const nlohmann::json& args) {
-    const qsizetype count = args.value("count", 100);
+    const auto count = static_cast<qsizetype>(std::max<std::int64_t>(
+        0, ToolArgs{name(), args}.integer("count", 100)));
     const auto& records = log_store_.records();
     const qsizetype start = records.size() > count ? records.size() - count : 0;
     QString out;

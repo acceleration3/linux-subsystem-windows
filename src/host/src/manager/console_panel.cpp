@@ -1,8 +1,11 @@
 #include "lsw/host/manager/console_panel.hpp"
 
+#include "lsw/host/ui/dialog_chrome.hpp"
 #include "lsw/host/ui/theme.hpp"
+#include "lsw/host/ui/widgets.hpp"
 
 #include "lsw/base/log.hpp"
+#include "lsw/host/link/agent_reply.hpp"
 #include "lsw/host/link/agent_rpc_client.hpp"
 
 #include <QByteArray>
@@ -11,16 +14,13 @@
 #include <QHBoxLayout>
 #include <QKeyEvent>
 #include <QLabel>
-#include <QFrame>
 #include <QLineEdit>
 #include <QPushButton>
 #include <QMetaObject>
 #include <QPlainTextEdit>
-#include <QPointer>
 #include <QScrollBar>
 #include <QStringList>
 #include <QTextCursor>
-#include <QtConcurrent>
 #include <QVBoxLayout>
 
 #include <nlohmann/json.hpp>
@@ -47,77 +47,50 @@ ConsolePanel::ConsolePanel(link::AgentRpcClient& rpc, QWidget* parent)
     output_->setReadOnly(true);
     output_->setLineWrapMode(QPlainTextEdit::WidgetWidth);
     output_->setMaximumBlockCount(kMaxBufferLines);
-    {
-        QFont mono(QStringLiteral("monospace"));
-        mono.setStyleHint(QFont::Monospace);
-        output_->setFont(mono);
-    }
+    output_->setFont(ui::Theme::mono_font(12));
     output_->setObjectName(QString::fromLatin1(ui::Theme::Role::kMono));
     root->addWidget(output_, 1);
 
     // The input lives in a band under the transcript, on the surface
     // colour with a rule over it, with a Send button for the case where
     // Enter is not the habit.
-    auto* band = new QFrame;
-    ui::Theme::surface(band, ui::Theme::Role::kDialogFoot);
-    auto* row = new QHBoxLayout(band);
-    row->setContentsMargins(14, 10, 14, 10);
-    row->setSpacing(8);
+    auto* row = ui::DialogChrome::foot_band(root, QMargins(14, 10, 14, 10), 8);
     input_ = new QLineEdit;
     input_->setPlaceholderText(tr("Type a command and press Enter"));
-    {
-        QFont mono(QStringLiteral("monospace"));
-        mono.setStyleHint(QFont::Monospace);
-        input_->setFont(mono);
-    }
+    input_->setFont(ui::Theme::mono_font(12));
     input_->setObjectName(QString::fromLatin1(ui::Theme::Role::kMono));
     input_->installEventFilter(this);  // catch Ctrl+C / Ctrl+D
     row->addWidget(input_, 1);
-    auto* send = new QPushButton(QStringLiteral("Send"));
-    send->setObjectName(QString::fromLatin1(ui::Theme::Role::kPrimary));
+    auto* send = ui::Widgets::button(QStringLiteral("Send"), ui::Theme::Role::kPrimary);
     connect(send, &QPushButton::clicked, this, &ConsolePanel::on_input_submitted);
     row->addWidget(send);
-    root->addWidget(band);
 
-    status_ = new QLabel(tr("Spawning cmd.exe..."));
-    status_->setObjectName(QString::fromLatin1(ui::Theme::Role::kMeta));
+    status_ = ui::Widgets::meta(tr("Spawning cmd.exe..."));
     root->addWidget(status_);
 
     connect(input_, &QLineEdit::returnPressed, this, &ConsolePanel::on_input_submitted);
 
-    // Register event handlers for console output/close. The agent
-    // fires the same topic for every session, so we filter by
-    // session_id in the slot. The lambdas capture ``this``, so the
-    // dtor must off_event them before the dialog is torn down — see
-    // WA_DeleteOnClose. A QPointer guard inside each lambda is a belt
-    // for the brace in case an event arrives between off_event and
-    // the actual deletion on the reader thread.
-    const QPointer<ConsolePanel> self{this};
-    output_token_ = rpc_.on_event(QString::fromLatin1(linkproto::topic::kConsoleOutput),
-                                    [self](const nlohmann::json& f) {
-        if (!self) return;
+    // The agent fires the same topic for every session, so the slots
+    // filter by session_id.
+    output_sub_ = rpc_.subscribe(linkproto::topic::kConsoleOutput, [this](const nlohmann::json& f) {
         const auto sid = QString::fromStdString(f.value("session_id", std::string{}));
         const auto b64 = QByteArray::fromStdString(f.value("data_b64", std::string{}));
         const auto bytes = QByteArray::fromBase64(b64);
-        QMetaObject::invokeMethod(
-            self.data(), "on_output_event", Qt::QueuedConnection,
-            Q_ARG(QString, sid), Q_ARG(QByteArray, bytes));
+        QMetaObject::invokeMethod(this, "on_output_event", Qt::QueuedConnection,
+                                  Q_ARG(QString, sid), Q_ARG(QByteArray, bytes));
     });
-    closed_token_ = rpc_.on_event(QString::fromLatin1(linkproto::topic::kConsoleClosed),
-                                    [self](const nlohmann::json& f) {
-        if (!self) return;
+    closed_sub_ = rpc_.subscribe(linkproto::topic::kConsoleClosed, [this](const nlohmann::json& f) {
         const auto sid = QString::fromStdString(f.value("session_id", std::string{}));
         const auto exit_code = f.value("exit_code", 0);
-        QMetaObject::invokeMethod(
-            self.data(), "on_closed_event", Qt::QueuedConnection,
-            Q_ARG(QString, sid), Q_ARG(int, exit_code));
+        QMetaObject::invokeMethod(this, "on_closed_event", Qt::QueuedConnection,
+                                  Q_ARG(QString, sid), Q_ARG(int, exit_code));
     });
 }
 
 ConsolePanel::~ConsolePanel() {
+    output_sub_.reset();
+    closed_sub_.reset();
     release_session();
-    rpc_.off_event(output_token_);
-    rpc_.off_event(closed_token_);
 }
 
 void ConsolePanel::showEvent(QShowEvent* e) {
@@ -132,41 +105,20 @@ void ConsolePanel::showEvent(QShowEvent* e) {
 }
 
 void ConsolePanel::open_session() {
-    // Async — don't block the GUI on the RPC. ``call`` blocks until
-    // the reply arrives, so wrap in QtConcurrent and marshal the
-    // session_id back via QueuedConnection.
-    const QPointer<ConsolePanel> self{this};
-    (void)QtConcurrent::run([self]() {
-        if (!self) return;
-        const nlohmann::json req = {{"cmd", linkproto::cmd::kConsoleOpen}};
-        const auto reply = self->rpc_.call(req);
-        QString sid;
-        if (!reply.isEmpty()) {
-            try {
-                const auto j = nlohmann::json::parse(reply.constData(),
-                                                      reply.constData() + reply.size());
-                if (j.value("ok", false)) {
-                    sid = QString::fromStdString(j.value("session_id", std::string{}));
-                }
-            } catch (const nlohmann::json::exception& e) {
-                // sid stays empty, which the caller reports as a console
-                // that would not open. Say which reply did it.
-                LSW_WARN("console: open reply did not parse: {}", e.what());
-            }
+    rpc_.request_async(linkproto::cmd::kConsoleOpen, nlohmann::json::object(), this,
+                       [this](const link::AgentReply& reply) {
+        const auto sid = reply.ok
+                             ? QString::fromStdString(reply.body.value("session_id", std::string{}))
+                             : QString{};
+        if (sid.isEmpty()) {
+            LSW_WARN("console: open failed: {}", reply.ok ? "no session_id" : reply.error);
+            status_->setText(tr("Could not open a console. The agent is not answering."));
+            input_->setEnabled(false);
+            return;
         }
-        QMetaObject::invokeMethod(
-            self.data(), [self, sid]() {
-                if (!self) return;
-                if (sid.isEmpty()) {
-                    self->status_->setText(self->tr("Could not open a console. The agent is not answering."));
-                    self->input_->setEnabled(false);
-                    return;
-                }
-                self->session_id_ = sid;
-                self->status_->setText(self->tr("Session %1. Type a command and press Enter.").arg(sid));
-                self->input_->setFocus();
-            },
-            Qt::QueuedConnection);
+        session_id_ = sid;
+        status_->setText(tr("Session %1. Type a command and press Enter.").arg(sid));
+        input_->setFocus();
     });
 }
 
@@ -211,19 +163,9 @@ void ConsolePanel::on_input_submitted() {
     // redirected stdin).
     append_output(QStringLiteral("> ") + line + QChar('\n'));
     const QString to_send = line + QStringLiteral("\r\n");
-    const QString sid = session_id_;
-    // Capture the rpc by pointer (it outlives the dialog — owned by
-    // App) instead of ``this`` so the worker is safe even if the
-    // dialog closes while the call is in flight.
-    auto* rpc = &rpc_;
-    (void)QtConcurrent::run([rpc, sid, to_send]() {
-        nlohmann::json req = {
-            {"cmd", linkproto::cmd::kConsoleInput},
-            {"params", {{"session_id", sid.toStdString()},
-                         {"data", to_send.toStdString()}}},
-        };
-        (void)rpc->call(req);
-    });
+    rpc_.request_detached(linkproto::cmd::kConsoleInput,
+                          {{"session_id", session_id_.toStdString()},
+                           {"data", to_send.toStdString()}});
 }
 
 bool ConsolePanel::eventFilter(QObject* watched, QEvent* event) {
@@ -251,16 +193,7 @@ void ConsolePanel::release_session() {
     const QString sid = session_id_;
     session_id_.clear();
     opening_ = false;
-    // The worker only needs the rpc reference, which the App owns and
-    // outlives this page.
-    auto* rpc = &rpc_;
-    (void)QtConcurrent::run([rpc, sid]() {
-        nlohmann::json req = {
-            {"cmd", linkproto::cmd::kConsoleClose},
-            {"params", {{"session_id", sid.toStdString()}}},
-        };
-        (void)rpc->call(req);
-    });
+    rpc_.request_detached(linkproto::cmd::kConsoleClose, {{"session_id", sid.toStdString()}});
 }
 
 }  // namespace lsw::host::manager

@@ -1,25 +1,24 @@
 #include "lsw/host/wizard/setup_page.hpp"
-#include "lsw/host/wizard/page_chrome.hpp"
 
-#include "lsw/host/wizard/wizard.hpp"
 #include "lsw/host/provision/pipeline.hpp"
-
+#include "lsw/host/ui/status_pill.hpp"
 #include "lsw/host/ui/theme.hpp"
+#include "lsw/host/ui/widgets.hpp"
+#include "lsw/host/wizard/wizard.hpp"
 
-#include <QBrush>
 #include <QFrame>
+#include <QHBoxLayout>
+#include <QHeaderView>
 #include <QLabel>
 #include <QProgressBar>
-#include <QColor>
-#include <QHeaderView>
-#include <QTimer>
-#include <QHBoxLayout>
 #include <QVBoxLayout>
-#include <QWizard>
 
 namespace lsw::host::wizard {
 
 namespace {
+
+using RowStatus = ui::StatusPill::State;
+
 constexpr int kColName = 0;
 constexpr int kColKind = 1;
 constexpr int kColStatus = 2;
@@ -33,12 +32,13 @@ constexpr int kColStatus = 2;
     }
     return {};
 }
+
 }  // namespace
 
-SetupPage::SetupPage(Wizard& wizard, QWidget* parent) : QWizardPage(parent), wizard_(wizard) {
+SetupPage::SetupPage(Wizard& wizard, QWidget* parent) : PipelinePage(parent), wizard_(wizard) {
 
-    auto* lay = PageChrome::install(
-        this, QStringLiteral("Installing runtimes inside the guest"),
+    auto* lay = install_chrome(
+        QStringLiteral("Installing runtimes inside the guest"),
         QStringLiteral("Reported live by the agent. Steps inside one stage run in "
                        "parallel."));
 
@@ -54,8 +54,7 @@ SetupPage::SetupPage(Wizard& wizard, QWidget* parent) : QWizardPage(parent), wiz
     dot->setStyleSheet(QStringLiteral("background-color: %1; border-radius: 2px;")
                            .arg(QString::fromLatin1(ui::Theme::Color::kAmber)));
     stage_layout->addWidget(dot);
-    stage_label_ = new QLabel(QStringLiteral("READING THE PLAN"));
-    stage_label_->setObjectName(QString::fromLatin1(ui::Theme::Role::kCaption));
+    stage_label_ = ui::Widgets::caption(QStringLiteral("Reading the plan"));
     stage_layout->addWidget(stage_label_);
     stage_layout->addStretch(1);
     lay->addWidget(stage_row);
@@ -85,17 +84,15 @@ SetupPage::SetupPage(Wizard& wizard, QWidget* parent) : QWizardPage(parent), wiz
     progress_->setValue(0);
     lay->addWidget(progress_);
 
-    status_label_ = new QLabel(QStringLiteral(
-        "Then the VM shuts down, restarts on the virtio configuration, and the agent "
-        "reconnects."));
-    status_label_->setObjectName(QString::fromLatin1(ui::Theme::Role::kMeta));
-    status_label_->setWordWrap(true);
+    status_label_ = ui::Widgets::meta(
+        QStringLiteral("Then the VM shuts down, restarts on the virtio configuration, and the "
+                       "agent reconnects."),
+        true);
     lay->addWidget(status_label_);
 }
 
 void SetupPage::initializePage() {
-    complete_ = false;
-    Q_EMIT completeChanged();
+    reset_complete();
 
     auto* p = wizard_.pipeline();
     if (p == nullptr) {
@@ -103,7 +100,6 @@ void SetupPage::initializePage() {
         return;
     }
     using Step = ::lsw::host::provision::Pipeline::Step;
-    using StepKind = ::lsw::host::provision::StepKind;
     using Stage = ::lsw::host::provision::SetupStage;
 
     connect(p, &::lsw::host::provision::Pipeline::setup_plan_ready, this,
@@ -141,23 +137,14 @@ void SetupPage::initializePage() {
                     status_label_->setText(QStringLiteral("Setup failed: %1").arg(err));
                     // Terminal — let the wizard advance to Done so the user
                     // can read the message and (manually) open the manager.
-                    complete_ = true;
-                    Q_EMIT completeChanged();
-                    QTimer::singleShot(0, this, [this] {
-                        if (auto* w = wizard()) w->next();
-                    });
+                    finish_and_advance();
                 }
             });
     connect(p, &::lsw::host::provision::Pipeline::completed, this, [this](const QUuid&) {
         progress_->setValue(100);
         status_label_->setText("Setup is complete. The VM is on the virtio configuration.");
-        complete_ = true;
-        Q_EMIT completeChanged();
-        QTimer::singleShot(0, this, [this] {
-            if (auto* w = wizard()) w->next();
-        });
+        finish_and_advance();
     });
-    (void)StepKind{};  // silence unused-using if the compiler is strict
 }
 
 void SetupPage::demo_fill() {
@@ -175,10 +162,6 @@ void SetupPage::demo_fill() {
     status_label_->setText(QStringLiteral(
         "Then the VM shuts down, restarts on the virtio configuration, and the agent "
         "reconnects."));
-}
-
-bool SetupPage::isComplete() const {
-    return complete_;
 }
 
 int SetupPage::nextId() const {
@@ -227,40 +210,10 @@ void SetupPage::populate_from_plan(const QVector<::lsw::host::provision::SetupSt
 }
 
 void SetupPage::set_row_status(int row, RowStatus s, const QString& detail) {
-    if (row < 0 || row >= table_->rowCount()) {
-        return;
-    }
     // A pill rather than coloured text: the state reads from its shape
     // and its dot before the word is read, which is what a column of
     // them is for.
-    QString text;
-    const char* role = ui::Theme::Role::kPill;
-    switch (s) {
-    case RowStatus::Pending:
-        text = QStringLiteral("Pending");
-        break;
-    case RowStatus::Running:
-        text = detail.isEmpty() ? QStringLiteral("Running") : detail;
-        role = ui::Theme::Role::kPillRun;
-        break;
-    case RowStatus::Done:
-        text = detail.isEmpty() ? QStringLiteral("Done") : detail;
-        role = ui::Theme::Role::kPillDone;
-        break;
-    case RowStatus::Failed:
-        text = detail.isEmpty() ? QStringLiteral("Failed")
-                                : QStringLiteral("Failed: %1").arg(detail);
-        role = ui::Theme::Role::kPillFail;
-        break;
-    }
-    auto* holder = new QWidget;
-    auto* layout = new QHBoxLayout(holder);
-    layout->setContentsMargins(8, 0, 8, 0);
-    auto* pill = new QLabel(QStringLiteral("\u25cf  %1").arg(text));
-    pill->setObjectName(QString::fromLatin1(role));
-    layout->addWidget(pill, 0, Qt::AlignLeft | Qt::AlignVCenter);
-    layout->addStretch(1);
-    table_->setCellWidget(row, kColStatus, holder);
+    ui::StatusPill::set_cell(table_, row, kColStatus, s, detail);
 }
 
 }  // namespace lsw::host::wizard

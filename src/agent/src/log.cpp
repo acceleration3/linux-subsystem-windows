@@ -1,5 +1,9 @@
 #include "lsw/agent/log.hpp"
 
+#include "lsw/agent/core/paths.hpp"
+#include "lsw/agent/util/text_encoding.hpp"
+#include "lsw/agent/win/file_time.hpp"
+
 // clang-format off
 #include <windows.h>
 // clang-format on
@@ -21,9 +25,6 @@ namespace {
 // against the manager being disconnected for a long time.
 constexpr size_t kRingCapacity = 5000;
 
-constexpr const wchar_t kLogPath[] = L"C:\\ProgramData\\LSW\\agent.log";
-constexpr const wchar_t kLogDir[] = L"C:\\ProgramData\\LSW";
-
 std::mutex& mu() {
     static std::mutex m;
     return m;
@@ -42,28 +43,17 @@ std::uint64_t& seq_counter() {
 std::uint64_t now_ms() {
     FILETIME ft{};
     ::GetSystemTimeAsFileTime(&ft);
-    ULARGE_INTEGER u{};
-    u.LowPart = ft.dwLowDateTime;
-    u.HighPart = ft.dwHighDateTime;
-    // FILETIME is 100-ns intervals since 1601-01-01; unix epoch is
-    // 11644473600 seconds later.
-    constexpr std::uint64_t kEpochDiff100ns = 116444736000000000ULL;
-    return (u.QuadPart - kEpochDiff100ns) / 10000ULL;
+    return win::FileTime::to_unix_ms(ft);
 }
 
 void format_prefix(char* out, size_t cap, std::uint64_t ts_ms, Level level) {
     SYSTEMTIME st{};
-    FILETIME ft{};
-    ULARGE_INTEGER u{};
-    u.QuadPart = ts_ms * 10000ULL + 116444736000000000ULL;
-    ft.dwLowDateTime = u.LowPart;
-    ft.dwHighDateTime = u.HighPart;
+    const FILETIME ft = win::FileTime::from_unix_ms(ts_ms);
     ::FileTimeToSystemTime(&ft, &st);
     SYSTEMTIME local{};
     ::SystemTimeToTzSpecificLocalTime(nullptr, &st, &local);
-    std::snprintf(out, cap, "[%04u-%02u-%02u %02u:%02u:%02u.%03u %-5s] ",
-                  local.wYear, local.wMonth, local.wDay,
-                  local.wHour, local.wMinute, local.wSecond, local.wMilliseconds,
+    std::snprintf(out, cap, "[%04u-%02u-%02u %02u:%02u:%02u.%03u %-5s] ", local.wYear, local.wMonth,
+                  local.wDay, local.wHour, local.wMinute, local.wSecond, local.wMilliseconds,
                   level_name(level));
 }
 
@@ -101,16 +91,15 @@ std::deque<Record>& file_q() {
 constexpr size_t kFileQueueCap = 20000;
 
 void writer_thread_body() {
-    ::CreateDirectoryW(kLogDir, nullptr);
+    ::CreateDirectoryW(core::Paths::root().c_str(), nullptr);
     // Open ONCE and keep it. FILE_APPEND_DATA keeps appends atomic
     // even though we no longer reopen. No FILE_FLAG_WRITE_THROUGH /
     // FlushFileBuffers — those force the qcow2 fsync stalls we're
     // eliminating; the OS lazily flushes the buffered handle, which is
     // fine for a debug log (the wire path already has every line).
-    HANDLE h = ::CreateFileW(kLogPath, FILE_APPEND_DATA,
-                              FILE_SHARE_READ | FILE_SHARE_WRITE,
-                              nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL,
-                              nullptr);
+    HANDLE h = ::CreateFileW(core::Paths::agent_log().c_str(), FILE_APPEND_DATA,
+                             FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_ALWAYS,
+                             FILE_ATTRIBUTE_NORMAL, nullptr);
     std::deque<Record> batch;
     for (;;) {
         {
@@ -125,10 +114,8 @@ void writer_thread_body() {
             char prefix[64];
             format_prefix(prefix, sizeof(prefix), r.ts_ms, r.level);
             DWORD wrote = 0;
-            ::WriteFile(h, prefix, static_cast<DWORD>(std::strlen(prefix)), &wrote,
-                        nullptr);
-            ::WriteFile(h, r.msg.data(), static_cast<DWORD>(r.msg.size()), &wrote,
-                        nullptr);
+            ::WriteFile(h, prefix, static_cast<DWORD>(std::strlen(prefix)), &wrote, nullptr);
+            ::WriteFile(h, r.msg.data(), static_cast<DWORD>(r.msg.size()), &wrote, nullptr);
             static constexpr char nl[] = "\r\n";
             ::WriteFile(h, nl, 2, &wrote, nullptr);
         }
@@ -141,9 +128,7 @@ void ensure_writer_started() {
     // threads. No join: logging has no shutdown hook and the OS
     // reclaims the handle on exit.
     static std::once_flag once;
-    std::call_once(once, [] {
-        std::thread{writer_thread_body}.detach();
-    });
+    std::call_once(once, [] { std::thread{writer_thread_body}.detach(); });
 }
 
 void enqueue_for_file(const Record& r) {
@@ -160,12 +145,24 @@ void enqueue_for_file(const Record& r) {
 
 }  // namespace
 
+namespace detail {
+
+void append_wide(std::string& out, std::wstring_view value) {
+    out += util::TextEncoding::to_utf8(std::wstring{value});
+}
+
+}  // namespace detail
+
 const char* level_name(Level lvl) {
     switch (lvl) {
-    case Level::Debug: return "DEBUG";
-    case Level::Info:  return "INFO";
-    case Level::Warn:  return "WARN";
-    case Level::Error: return "ERROR";
+    case Level::Debug:
+        return "DEBUG";
+    case Level::Info:
+        return "INFO";
+    case Level::Warn:
+        return "WARN";
+    case Level::Error:
+        return "ERROR";
     }
     return "?";
 }

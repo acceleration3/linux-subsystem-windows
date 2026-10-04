@@ -1,17 +1,22 @@
 #include "lsw/agent/apps/catalog.hpp"
-#include "lsw/agent/util/text_encoding.hpp"
 
-#include "lsw/agent/win/icon_extractor.hpp"
 #include "lsw/agent/log.hpp"
+#include "lsw/agent/util/text_encoding.hpp"
+#include "lsw/agent/util/wide_string.hpp"
+#include "lsw/agent/win/file_system.hpp"
+#include "lsw/agent/win/icon_extractor.hpp"
+#include "lsw/agent/win/reg_key.hpp"
+#include "lsw/agent/win/unique_handle.hpp"
 
 // clang-format off
 #include <windows.h>
 // clang-format on
 
 #include <array>
-#include <cwchar>
+#include <cwctype>
 #include <nlohmann/json.hpp>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace lsw::agent::apps {
@@ -37,29 +42,6 @@ struct RegEntry {
     std::wstring install_location;
     std::wstring publisher;
 };
-
-bool ends_with_icase(const std::wstring& s, const wchar_t* suffix) {
-    const size_t n = std::wcslen(suffix);
-    if (s.size() < n) {
-        return false;
-    }
-    return _wcsicmp(s.c_str() + s.size() - n, suffix) == 0;
-}
-
-bool starts_with_icase(const std::wstring& s, const wchar_t* prefix) {
-    const size_t n = std::wcslen(prefix);
-    if (s.size() < n) {
-        return false;
-    }
-    return _wcsnicmp(s.c_str(), prefix, n) == 0;
-}
-
-bool file_exists(const std::wstring& path) {
-    if (path.empty()) {
-        return false;
-    }
-    return ::GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES;
-}
 
 // DisplayIcon is often ``"C:\Path\foo.exe",N`` with optional quoting
 // and a trailing icon-resource index. Strip both so the result is the
@@ -99,8 +81,8 @@ std::wstring find_first_exe(const std::wstring& dir) {
     }
     pattern += L"*.exe";
     WIN32_FIND_DATAW fd{};
-    HANDLE h = ::FindFirstFileW(pattern.c_str(), &fd);
-    if (h == INVALID_HANDLE_VALUE) {
+    const win::UniqueFindHandle find{::FindFirstFileW(pattern.c_str(), &fd)};
+    if (!find) {
         return {};
     }
     std::wstring out;
@@ -114,58 +96,8 @@ std::wstring find_first_exe(const std::wstring& dir) {
         }
         out += fd.cFileName;
         break;
-    } while (::FindNextFileW(h, &fd));
-    ::FindClose(h);
+    } while (::FindNextFileW(find.get(), &fd));
     return out;
-}
-
-// Read a REG_SZ / REG_EXPAND_SZ value as wstring. Empty on absent /
-// wrong type. REG_EXPAND_SZ values are passed through
-// ExpandEnvironmentStringsW so callers see the resolved path.
-bool reg_read_string(HKEY key, const wchar_t* value, std::wstring& out) {
-    DWORD type = 0;
-    DWORD size = 0;
-    LONG rc = ::RegQueryValueExW(key, value, nullptr, &type, nullptr, &size);
-    if (rc != ERROR_SUCCESS || (type != REG_SZ && type != REG_EXPAND_SZ) || size == 0) {
-        return false;
-    }
-    std::wstring buf(size / sizeof(wchar_t), L'\0');
-    rc = ::RegQueryValueExW(key, value, nullptr, nullptr,
-                             reinterpret_cast<BYTE*>(buf.data()), &size);
-    if (rc != ERROR_SUCCESS) {
-        return false;
-    }
-    while (!buf.empty() && buf.back() == L'\0') {
-        buf.pop_back();
-    }
-    if (type == REG_EXPAND_SZ && !buf.empty()) {
-        const DWORD n = ::ExpandEnvironmentStringsW(buf.c_str(), nullptr, 0);
-        if (n > 0) {
-            std::wstring ex(n, L'\0');
-            const DWORD got = ::ExpandEnvironmentStringsW(buf.c_str(), ex.data(), n);
-            if (got > 0) {
-                while (!ex.empty() && ex.back() == L'\0') {
-                    ex.pop_back();
-                }
-                out = std::move(ex);
-                return true;
-            }
-        }
-    }
-    out = std::move(buf);
-    return true;
-}
-
-DWORD reg_read_dword(HKEY key, const wchar_t* value, DWORD fallback) {
-    DWORD data = fallback;
-    DWORD size = sizeof(data);
-    DWORD type = 0;
-    if (::RegQueryValueExW(key, value, nullptr, &type,
-                            reinterpret_cast<BYTE*>(&data), &size) != ERROR_SUCCESS
-        || type != REG_DWORD) {
-        return fallback;
-    }
-    return data;
 }
 
 // Filter out registry entries that aren't real user-launchable apps:
@@ -176,64 +108,46 @@ bool looks_like_app(const RegEntry& e) {
         return false;
     }
     static constexpr std::array<const wchar_t*, 7> kJunkPrefixes = {
-        L"KB", L"Security Update", L"Update for", L"Hotfix for",
-        L"Microsoft Visual C++", L"Microsoft .NET", L"Windows SDK",
+        L"KB",          L"Security Update",      L"Update for",
+        L"Hotfix for",  L"Microsoft Visual C++", L"Microsoft .NET",
+        L"Windows SDK",
     };
     for (const auto* p : kJunkPrefixes) {
-        if (starts_with_icase(e.display_name, p)) {
+        if (util::WideString::istarts_with(e.display_name, p)) {
             return false;
         }
     }
     return true;
 }
 
-void enumerate_uninstall_view(HKEY root, REGSAM view_flag,
-                                std::vector<RegEntry>& out) {
-    HKEY base = nullptr;
-    if (::RegOpenKeyExW(root, kUninstallKey, 0, KEY_READ | view_flag, &base)
-        != ERROR_SUCCESS) {
+void enumerate_uninstall_view(HKEY root, REGSAM view_flag, std::vector<RegEntry>& out) {
+    const auto base = win::RegKey::open(root, kUninstallKey, KEY_READ | view_flag);
+    if (!base) {
         return;
     }
-    DWORD index = 0;
-    wchar_t name[256];
-    while (true) {
-        DWORD nlen = static_cast<DWORD>(sizeof(name) / sizeof(wchar_t));
-        const LONG rc = ::RegEnumKeyExW(base, index++, name, &nlen, nullptr,
-                                          nullptr, nullptr, nullptr);
-        if (rc == ERROR_NO_MORE_ITEMS) {
-            break;
-        }
-        if (rc != ERROR_SUCCESS) {
-            continue;
-        }
-        HKEY sub = nullptr;
-        if (::RegOpenKeyExW(base, name, 0, KEY_READ | view_flag, &sub)
-            != ERROR_SUCCESS) {
-            continue;
-        }
-        if (reg_read_dword(sub, L"SystemComponent", 0) != 0) {
-            ::RegCloseKey(sub);
+    for (const std::wstring& name : base->subkey_names()) {
+        const auto sub = base->open_subkey(name.c_str(), KEY_READ | view_flag);
+        if (!sub || sub->read_dword(L"SystemComponent").value_or(0) != 0) {
             continue;
         }
         RegEntry e;
-        if (!reg_read_string(sub, L"DisplayName", e.display_name)) {
-            ::RegCloseKey(sub);
+        auto display_name = sub->read_string(L"DisplayName");
+        if (!display_name) {
             continue;
         }
-        reg_read_string(sub, L"DisplayIcon", e.display_icon);
-        reg_read_string(sub, L"InstallLocation", e.install_location);
-        reg_read_string(sub, L"Publisher", e.publisher);
-        ::RegCloseKey(sub);
+        e.display_name = std::move(*display_name);
+        e.display_icon = sub->read_string(L"DisplayIcon").value_or(std::wstring{});
+        e.install_location = sub->read_string(L"InstallLocation").value_or(std::wstring{});
+        e.publisher = sub->read_string(L"Publisher").value_or(std::wstring{});
         if (looks_like_app(e)) {
             out.push_back(std::move(e));
         }
     }
-    ::RegCloseKey(base);
 }
 
 }  // namespace
 
-std::string Catalog::list_json() {
+nlohmann::json Catalog::list() {
     LSW_AGENT_INFO("app_catalog: enumerating Uninstall registry");
 
     std::vector<RegEntry> entries;
@@ -241,8 +155,7 @@ std::string Catalog::list_json() {
     enumerate_uninstall_view(HKEY_LOCAL_MACHINE, KEY_WOW64_64KEY, entries);
     enumerate_uninstall_view(HKEY_LOCAL_MACHINE, KEY_WOW64_32KEY, entries);
 
-    LSW_AGENT_DEBUG(std::string{"app_catalog: "} + std::to_string(entries.size())
-                    + " registry entries after junk filter");
+    LSW_AGENT_DEBUG("app_catalog: {} registry entries after junk filter", entries.size());
 
     nlohmann::json doc = nlohmann::json::object();
     auto& arr_out = doc["apps"] = nlohmann::json::array();
@@ -256,7 +169,8 @@ std::string Catalog::list_json() {
         // .exe in InstallLocation.
         const auto icon_path = strip_icon_suffix(e.display_icon);
         std::wstring exe_path;
-        if (ends_with_icase(icon_path, L".exe") && file_exists(icon_path)) {
+        if (util::WideString::iends_with(icon_path, L".exe") &&
+            win::FileSystem::exists(icon_path)) {
             exe_path = icon_path;
         } else if (!e.install_location.empty()) {
             exe_path = find_first_exe(e.install_location);
@@ -282,11 +196,10 @@ std::string Catalog::list_json() {
         arr_out.push_back(std::move(o));
     }
 
-    LSW_AGENT_INFO(std::string{"app_catalog: "} + std::to_string(arr_out.size())
-                   + " launchable apps (" + std::to_string(with_icon)
-                   + " with icon, skipped " + std::to_string(skipped_no_exe)
-                   + " without resolvable exe)");
-    return doc.dump();
+    LSW_AGENT_INFO("app_catalog: {} launchable apps ({} with icon, skipped {} without "
+                   "resolvable exe)",
+                   arr_out.size(), with_icon, skipped_no_exe);
+    return doc;
 }
 
 }  // namespace lsw::agent::apps

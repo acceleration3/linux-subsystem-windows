@@ -1,11 +1,11 @@
 #include "lsw/host/vm/render_server.hpp"
 
 #include "lsw/base/log.hpp"
+#include "lsw/host/platform/build_artifact.hpp"
+#include "lsw/host/platform/tool_process.hpp"
 
-#include <QCoreApplication>
 #include <QDateTime>
 #include <QDeadlineTimer>
-#include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QProcessEnvironment>
@@ -30,8 +30,7 @@ constexpr int kRegionPollMs = 50;
 [[nodiscard]] QString region_prefix(const QUuid& uuid) {
     // Per VM, so two domains never share a region — and short, because
     // this ends up as a file name and as an XML attribute.
-    return QStringLiteral("lsw-rvk-%1")
-        .arg(uuid.toString(QUuid::WithoutBraces).left(8));
+    return QStringLiteral("lsw-rvk-%1").arg(uuid.toString(QUuid::WithoutBraces).left(8));
 }
 
 }  // namespace
@@ -42,24 +41,22 @@ RenderServer::RenderServer(QObject* parent) : QObject(parent) {
     // terminal where nothing can. Standard output still carries
     // everything it did, because drain_output logs each line on.
     process_.setProcessChannelMode(QProcess::MergedChannels);
-    connect(&process_, &QProcess::readyReadStandardOutput, this,
-            &RenderServer::drain_output);
+    connect(&process_, &QProcess::readyReadStandardOutput, this, &RenderServer::drain_output);
     // A server that exits while a guest is using it cannot simply be
     // started again: the guest's ring position and a fresh server's
     // disagree, and every command after that fails. Saying so is worth
     // more than a silent restart that looks like a driver fault.
-    connect(&process_, &QProcess::finished, this,
-            [this](int code, QProcess::ExitStatus status) {
-                if (serving_.isNull()) {
-                    return;
-                }
-                LSW_ERROR("render server: exited ({}, code {}) while serving {} — "
-                          "guest applications have lost the GPU until the guest is "
-                          "restarted",
-                          status == QProcess::CrashExit ? "crashed" : "stopped", code,
-                          serving_.toString().toStdString());
-                Q_EMIT died();
-            });
+    connect(&process_, &QProcess::finished, this, [this](int code, QProcess::ExitStatus status) {
+        if (serving_.isNull()) {
+            return;
+        }
+        LSW_ERROR("render server: exited ({}, code {}) while serving {} — "
+                  "guest applications have lost the GPU until the guest is "
+                  "restarted",
+                  status == QProcess::CrashExit ? "crashed" : "stopped", code,
+                  serving_.toString().toStdString());
+        Q_EMIT died();
+    });
 }
 
 void RenderServer::set_sizing(const Sizing& sizing) {
@@ -74,8 +71,8 @@ int RenderServer::region_mib() {
     // The three areas plus the header, rounded up to a power of two,
     // which is what ``--vm`` does on the server's side. Both ends have
     // to agree: the domain XML declares the size QEMU decodes as a BAR.
-    const int wanted = g_sizing.blob_mib + (g_sizing.ring_kib / 1024)
-                       + (g_sizing.reply_kib / 1024) + 1;
+    const int wanted =
+        g_sizing.blob_mib + (g_sizing.ring_kib / 1024) + (g_sizing.reply_kib / 1024) + 1;
     int rounded = 1;
     while (rounded < wanted) {
         rounded <<= 1;
@@ -85,7 +82,7 @@ int RenderServer::region_mib() {
 
 void RenderServer::drain_output() {
     pending_ += process_.readAllStandardOutput();
-    int newline = pending_.indexOf('\n');
+    qsizetype newline = pending_.indexOf('\n');
     while (newline >= 0) {
         const QString line = QString::fromUtf8(pending_.left(newline)).trimmed();
         pending_.remove(0, newline + 1);
@@ -97,7 +94,9 @@ void RenderServer::drain_output() {
     }
 }
 
-RenderServer::~RenderServer() { stop(); }
+RenderServer::~RenderServer() {
+    stop();
+}
 
 QString RenderServer::region_name(const QUuid& uuid, int index) {
     // The server appends the session index to the name it is given.
@@ -105,14 +104,9 @@ QString RenderServer::region_name(const QUuid& uuid, int index) {
 }
 
 QString RenderServer::executable_path() {
-    QString from_env = qEnvironmentVariable("LSW_RENDER_SERVER");
-    if (!from_env.isEmpty() && QFile::exists(from_env)) {
-        return from_env;
-    }
-    const QString candidate = QDir::cleanPath(
-        QCoreApplication::applicationDirPath()
-        + QStringLiteral("/../../render-server/src/server/rvk-render-server"));
-    return QFile::exists(candidate) ? candidate : QString{};
+    return platform::locate_build_artifact(
+        QStringLiteral("LSW_RENDER_SERVER"),
+        QStringLiteral("/../../render-server/src/server/rvk-render-server"));
 }
 
 QVector<RenderServer::GlDevice> RenderServer::gl_devices() {
@@ -130,15 +124,17 @@ QVector<RenderServer::GlDevice> RenderServer::gl_devices() {
         LSW_WARN("render server: no binary to ask which GPUs it could draw on");
         return cached;
     }
-    QProcess listing;
-    listing.start(exe, {QStringLiteral("--list-gl-devices")});
-    if (!listing.waitForStarted(kRegionWaitMs)
-        || !listing.waitForFinished(kRegionWaitMs)) {
-        LSW_WARN("render server: --list-gl-devices did not answer: {}",
-                 listing.errorString().toStdString());
-        return cached;
+    QByteArray listing;
+    QString error;
+    if (!platform::run_tool(exe, {QStringLiteral("--list-gl-devices")}, kRegionWaitMs, &listing,
+                            &error)) {
+        LSW_WARN("render server: --list-gl-devices did not answer cleanly: {}",
+                 error.toStdString());
     }
-    const QString text = QString::fromUtf8(listing.readAllStandardOutput());
+    // A listing that exits badly after printing still printed: a driver
+    // that faults while tearing its context down has already named its
+    // device, and that is all this is asking.
+    const QString text = QString::fromUtf8(listing);
     for (const QString& line : text.split(QLatin1Char('\n'), Qt::SkipEmptyParts)) {
         // index<tab>vendor<tab>renderer. Anything else on the stream is
         // the server's own logging, which has no tabs in it.
@@ -170,10 +166,10 @@ bool RenderServer::ensure_running(const QUuid& uuid) {
         // leaves the ring positions of the two sides disagreeing, which
         // surfaces as every command failing at once.
         const QFileInfo binary{executable_path()};
-        if (binary.exists() && started_.isValid()
-            && binary.lastModified() > started_) {
+        if (binary.exists() && started_.isValid() && binary.lastModified() > started_) {
             LSW_INFO("render server: {} is newer than the one running; restarting it "
-                     "for this boot", executable_path().toStdString());
+                     "for this boot",
+                     executable_path().toStdString());
         } else {
             return true;
         }
@@ -188,16 +184,21 @@ bool RenderServer::ensure_running(const QUuid& uuid) {
     }
 
     const QStringList args = {
-        QStringLiteral("--name"), QStringLiteral("/") + region_prefix(uuid),
-        QStringLiteral("--sessions"), QString::number(g_sizing.sessions),
+        QStringLiteral("--name"),
+        QStringLiteral("/") + region_prefix(uuid),
+        QStringLiteral("--sessions"),
+        QString::number(g_sizing.sessions),
         // Sizes the region for a guest that reaches it as an ivshmem
         // BAR: rounded to a power of two, its backing file reused
         // across restarts, and the ring polled rather than waited on —
         // a futex wake does not cross the VM boundary.
         QStringLiteral("--vm"),
-        QStringLiteral("--ring-kib"), QString::number(g_sizing.ring_kib),
-        QStringLiteral("--reply-kib"), QString::number(g_sizing.reply_kib),
-        QStringLiteral("--blob-mib"), QString::number(g_sizing.blob_mib),
+        QStringLiteral("--ring-kib"),
+        QString::number(g_sizing.ring_kib),
+        QStringLiteral("--reply-kib"),
+        QString::number(g_sizing.reply_kib),
+        QStringLiteral("--blob-mib"),
+        QString::number(g_sizing.blob_mib),
     };
     // Which GPU, when the user named one. EGL's default display is
     // whichever card drives the screen, so a machine with two draws on
@@ -205,15 +206,13 @@ bool RenderServer::ensure_running(const QUuid& uuid) {
     // reads the choice from its environment.
     if (g_sizing.gl_device >= 0) {
         QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
-        environment.insert(QStringLiteral("RVK_GL_DEVICE"),
-                           QString::number(g_sizing.gl_device));
+        environment.insert(QStringLiteral("RVK_GL_DEVICE"), QString::number(g_sizing.gl_device));
         process_.setProcessEnvironment(environment);
         LSW_INFO("render server: drawing on GPU {}", g_sizing.gl_device);
     } else {
         process_.setProcessEnvironment(QProcessEnvironment::systemEnvironment());
     }
-    LSW_INFO("render server: {} {}", exe.toStdString(),
-             args.join(QLatin1Char(' ')).toStdString());
+    LSW_INFO("render server: {} {}", exe.toStdString(), args.join(QLatin1Char(' ')).toStdString());
     process_.start(exe, args);
     if (!process_.waitForStarted(kRegionWaitMs)) {
         LSW_ERROR("render server: {} did not start: {}", exe.toStdString(),
@@ -234,8 +233,8 @@ bool RenderServer::ensure_running(const QUuid& uuid) {
             return true;
         }
         if (!running()) {
-            LSW_ERROR("render server: exited with code {} before creating {}",
-                      process_.exitCode(), region.toStdString());
+            LSW_ERROR("render server: exited with code {} before creating {}", process_.exitCode(),
+                      region.toStdString());
             return false;
         }
         QThread::msleep(kRegionPollMs);

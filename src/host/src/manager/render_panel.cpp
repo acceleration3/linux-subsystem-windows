@@ -1,27 +1,31 @@
 #include "lsw/host/manager/render_panel.hpp"
 
+#include "lsw/host/manager/pressure_meter.hpp"
+#include "lsw/host/ui/format.hpp"
+#include "lsw/host/ui/panel.hpp"
+#include "lsw/host/ui/status_pill.hpp"
 #include "lsw/host/ui/theme.hpp"
+#include "lsw/host/ui/widgets.hpp"
 
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLocale>
-
-#include <algorithm>
 #include <QProgressBar>
-
-#include "lsw/host/manager/pressure_meter.hpp"
 #include <QPushButton>
 #include <QScrollArea>
-#include <QSizePolicy>
 #include <QTimer>
 #include <QVBoxLayout>
+
+#include <algorithm>
 
 namespace lsw::host::manager {
 
 namespace {
 
+using ui::Format;
 using ui::Theme;
+using ui::Widgets;
 using vm::AreaPressure;
 using vm::ChannelPressure;
 using K = config::ManagerSettings::Key;
@@ -32,25 +36,6 @@ using K = config::ManagerSettings::Key;
 constexpr int kCardHeight = 62;
 // What the band around the cards adds to their height.
 constexpr int kStripPadding = 18;
-
-QLabel* caption(const QString& text) {
-    auto* label = new QLabel(text.toUpper());
-    label->setObjectName(QString::fromLatin1(Theme::Role::kCaption));
-    return label;
-}
-
-QLabel* meta(const QString& text) {
-    auto* label = new QLabel(text);
-    label->setObjectName(QString::fromLatin1(Theme::Role::kMeta));
-    return label;
-}
-
-QLabel* prose(const QString& text) {
-    auto* label = new QLabel(text);
-    label->setObjectName(QString::fromLatin1(Theme::Role::kBody));
-    label->setWordWrap(true);
-    return label;
-}
 
 const char* colour_for(AreaPressure::State state) {
     switch (state) {
@@ -64,16 +49,18 @@ const char* colour_for(AreaPressure::State state) {
     return Theme::Color::kOk;
 }
 
-const char* pill_for(AreaPressure::State state) {
+// An area's state as a pill: congested reads as a failure, tight as
+// something in progress, healthy as done.
+ui::StatusPill::State pill_for(AreaPressure::State state) {
     switch (state) {
     case AreaPressure::State::Congested:
-        return Theme::Role::kPillFail;
+        return ui::StatusPill::State::Failed;
     case AreaPressure::State::Tight:
-        return Theme::Role::kPillRun;
+        return ui::StatusPill::State::Running;
     case AreaPressure::State::Healthy:
         break;
     }
-    return Theme::Role::kPillDone;
+    return ui::StatusPill::State::Done;
 }
 
 // The property the stylesheet colours a bar by.
@@ -161,23 +148,6 @@ QString word_for(AreaPressure::State state) {
     return QStringLiteral("Healthy");
 }
 
-QString size_label(quint64 kib) {
-    if (kib >= 1024 && (kib % 1024) == 0) {
-        return QStringLiteral("%1 MiB").arg(kib / 1024);
-    }
-    return QStringLiteral("%1 KiB").arg(kib);
-}
-
-QString bytes_label(quint64 bytes) {
-    if (bytes >= 1024ULL * 1024ULL) {
-        return QStringLiteral("%1 MiB").arg(bytes / (1024.0 * 1024.0), 0, 'f', 1);
-    }
-    if (bytes >= 1024) {
-        return QStringLiteral("%1 KiB").arg(bytes / 1024);
-    }
-    return QStringLiteral("%1 B").arg(bytes);
-}
-
 // A key/value tile. Several sit in a row under each area's meter.
 QWidget* kpi(const QString& key, const QString& value, const char* colour) {
     auto* box = new QWidget;
@@ -185,7 +155,7 @@ QWidget* kpi(const QString& key, const QString& value, const char* colour) {
     auto* layout = new QVBoxLayout(box);
     layout->setContentsMargins(11, 9, 11, 9);
     layout->setSpacing(3);
-    layout->addWidget(caption(key));
+    layout->addWidget(Widgets::caption(key));
     auto* number = new QLabel(value);
     number->setObjectName(QString::fromLatin1(Theme::Role::kMono));
     number->setStyleSheet(QStringLiteral("font-size: 15px; color: %1;")
@@ -198,12 +168,12 @@ QWidget* kpi(const QString& key, const QString& value, const char* colour) {
 // right one.
 QString key_for_area(const QString& name) {
     if (name.startsWith(QLatin1String("Command"))) {
-        return QLatin1String(K::kRingKib);
+        return K::kRingKib;
     }
     if (name.startsWith(QLatin1String("Reply"))) {
-        return QLatin1String(K::kReplyKib);
+        return K::kReplyKib;
     }
-    return QLatin1String(K::kBlobMib);
+    return K::kBlobMib;
 }
 
 }  // namespace
@@ -226,9 +196,8 @@ RenderPanel::RenderPanel(vm::RenderStats& stats, config::ManagerSettings& settin
     strip_->setSpacing(8);
     root->addWidget(strip_holder_);
 
-    summary_ = meta(QString{});
+    summary_ = Widgets::meta(QString{}, true);
     summary_->setContentsMargins(14, 6, 14, 0);
-    summary_->setWordWrap(true);
     root->addWidget(summary_);
 
     auto* scroll = new QScrollArea;
@@ -276,11 +245,10 @@ QString RenderPanel::rate_line(const vm::ChannelPressure& channel) {
     if (channel.commands_per_second < 1.0 && channel.frames_per_second < 0.5) {
         return QStringLiteral("idle");
     }
-    const double mib = channel.bytes_per_second / (1024.0 * 1024.0);
     QString text = QStringLiteral("%1 cmd/s").arg(
         QLocale::system().toString(channel.commands_per_second, 'f', 0));
-    if (mib >= 0.05) {
-        text += QStringLiteral("  ·  %1 MiB/s").arg(mib, 0, 'f', 1);
+    if (channel.bytes_per_second >= 0.05 * 1024.0 * 1024.0) {
+        text += QStringLiteral("  ·  ") + Format::mib_per_second(channel.bytes_per_second);
     }
     if (channel.frames_per_second >= 0.5) {
         text += QStringLiteral("  ·  %1 fps").arg(channel.frames_per_second, 0, 'f', 0);
@@ -345,7 +313,7 @@ void RenderPanel::rebuild() {
         top->addWidget(dot);
         layout->addLayout(top);
 
-        auto* owner = meta(channel.claimed
+        auto* owner = Widgets::meta(channel.claimed
                                ? (channel.owner_is_guest()
                                       ? QStringLiteral("guest pid %1").arg(channel.owner())
                                       : QStringLiteral("pid %1").arg(channel.owner()))
@@ -355,7 +323,7 @@ void RenderPanel::rebuild() {
 
         // What it is carrying right now. A claimed channel that is
         // drawing nothing reads "idle" rather than a row of zeroes.
-        auto* rate = meta(channel.claimed ? rate_line(channel) : QString{});
+        auto* rate = Widgets::meta(channel.claimed ? rate_line(channel) : QString{});
         rate->setAttribute(Qt::WA_TransparentForMouseEvents);
         rate->setVisible(channel.claimed);
         layout->addWidget(rate);
@@ -388,8 +356,8 @@ void RenderPanel::rebuild() {
     add->setFixedHeight(card_height_);
     add->setCursor(Qt::PointingHandCursor);
     connect(add, &QPushButton::clicked, this, [this] {
-        const int now = pending_.staged_or_current(QLatin1String(K::kChannels)).toInt();
-        pending_.stage(QLatin1String(K::kChannels), qMin(8, now + 1));
+        const int now = pending_.staged_or_current(K::kChannels).toInt();
+        pending_.stage(K::kChannels, qMin(8, now + 1));
         Q_EMIT settings_requested();
     });
     strip_->addWidget(add);
@@ -415,9 +383,9 @@ void RenderPanel::rebuild() {
     const int region_mib =
         region_kib > 0
             ? static_cast<int>(region_kib / 1024)
-            : settings_.int_value(QLatin1String(K::kBlobMib))
-                  + settings_.int_value(QLatin1String(K::kRingKib)) / 1024
-                  + settings_.int_value(QLatin1String(K::kReplyKib)) / 1024;
+            : settings_.int_value(K::kBlobMib)
+                  + settings_.int_value(K::kRingKib) / 1024
+                  + settings_.int_value(K::kReplyKib) / 1024;
     summary_->setText(
         QStringLiteral("Channel %1  ·  about %2 MiB  ·  %3")
             .arg(channel.index)
@@ -443,21 +411,20 @@ void RenderPanel::rebuild() {
         const bool stale = channel.owner_pid != 0 && !channel.claimed;
         if (stale) {
             layout->addWidget(
-                prose(QStringLiteral("The process that claimed this channel is gone. "
+                Widgets::prose(QStringLiteral("The process that claimed this channel is gone. "
                                      "Nothing else can take it until the claim is "
                                      "cleared.")),
                 1);
         } else {
             layout->addStretch(1);
         }
-        auto* own_sizes = new QPushButton(QStringLiteral("Give this channel its own sizes"));
-        own_sizes->setObjectName(QString::fromLatin1(Theme::Role::kQuiet));
+        auto* own_sizes = Widgets::button(QStringLiteral("Give this channel its own sizes"),
+                                          Theme::Role::kQuiet);
         connect(own_sizes, &QPushButton::clicked, this,
                 &RenderPanel::settings_requested);
         layout->addWidget(own_sizes);
 
-        auto* release = new QPushButton(QStringLiteral("Release it"));
-        release->setObjectName(QString::fromLatin1(Theme::Role::kQuiet));
+        auto* release = Widgets::button(QStringLiteral("Release it"), Theme::Role::kQuiet);
         release->setEnabled(stale);
         connect(release, &QPushButton::clicked, this, [this, index = channel.index] {
             (void)stats_.release_channel(region_prefix_, index);
@@ -467,28 +434,15 @@ void RenderPanel::rebuild() {
     }
 
     for (const auto& area : channel.areas) {
-        auto* frame = new QFrame;
-        Theme::surface(frame, Theme::Role::kPanel);
-        auto* outer = new QVBoxLayout(frame);
-        outer->setContentsMargins(0, 0, 0, 0);
-        outer->setSpacing(0);
-
-        auto* header = new QWidget;
-        Theme::surface(header, Theme::Role::kPanelHeader);
-        auto* header_layout = new QHBoxLayout(header);
-        header_layout->setContentsMargins(12, 8, 12, 8);
-        header_layout->setSpacing(10);
-        auto* name = new QLabel(area.name);
-        header_layout->addWidget(name);
-        header_layout->addWidget(meta(size_label(area.configured_kib)));
-        header_layout->addStretch(1);
-        auto* state = new QLabel(QStringLiteral("\u25cf  %1").arg(word_for(area.state)));
-        state->setObjectName(QString::fromLatin1(pill_for(area.state)));
-        header_layout->addWidget(state);
-        outer->addWidget(header);
-
-        auto* body = new QVBoxLayout;
-        body->setContentsMargins(12, 12, 12, 12);
+        // Named in the interface face rather than as a caption: the
+        // header also carries the area's size and its state.
+        const auto panel = ui::Panel::make();
+        panel.header->setSpacing(10);
+        panel.header->addWidget(new QLabel(area.name));
+        panel.header->addWidget(Widgets::meta(Format::kib(area.configured_kib)));
+        panel.header->addStretch(1);
+        panel.header->addWidget(ui::StatusPill::make(pill_for(area.state), word_for(area.state)));
+        auto* body = panel.body;
         body->setSpacing(11);
 
         // How full it is now, over how full it has ever been. Two
@@ -514,12 +468,12 @@ void RenderPanel::rebuild() {
         // reason the page exists, and it does not belong inside the
         // first one's label.
         row->addWidget(kpi(QStringLiteral("Used"),
-                           area.measured ? bytes_label(area.used_bytes)
+                           area.measured ? Format::bytes(area.used_bytes)
                                          : QStringLiteral("—"),
                            area.measured ? Theme::Color::kFgDim
                                          : Theme::Color::kFgFaint));
         row->addWidget(kpi(QStringLiteral("Peak"),
-                           area.measured ? bytes_label(area.peak_bytes)
+                           area.measured ? Format::bytes(area.peak_bytes)
                                          : QStringLiteral("—"),
                            area.measured ? Theme::Color::kFgDim
                                          : Theme::Color::kFgFaint));
@@ -555,12 +509,12 @@ void RenderPanel::rebuild() {
         // blob arena is carved in the guest so nothing here ever
         // measures it.
         row->addWidget(kpi(QStringLiteral("Largest"),
-                           area.largest_bytes > 0 ? bytes_label(area.largest_bytes)
+                           area.largest_bytes > 0 ? Format::bytes(area.largest_bytes)
                                                   : QStringLiteral("—"),
                            area.largest_bytes > 0 ? Theme::Color::kFgDim
                                                   : Theme::Color::kFgFaint));
         row->addWidget(kpi(QStringLiteral("Suggested"),
-                           area.suggested_kib > 0 ? size_label(area.suggested_kib)
+                           area.suggested_kib > 0 ? Format::kib(area.suggested_kib)
                                                   : QStringLiteral("—"),
                            area.suggested_kib > 0 ? Theme::Color::kAmber
                                                   : Theme::Color::kFgFaint));
@@ -576,14 +530,14 @@ void RenderPanel::rebuild() {
             auto* advice_row = new QHBoxLayout(advice_frame);
             advice_row->setContentsMargins(12, 9, 12, 9);
             advice_row->setSpacing(10);
-            auto* text = prose(advice);
-            text->setStyleSheet(QStringLiteral("color: #f0c393;"));
+            auto* text = Widgets::prose(advice);
+            text->setProperty(Theme::Tone::kProperty, Theme::Tone::kWarm);
             advice_row->addWidget(text, 1);
 
             auto* stage = new QPushButton(
-                QStringLiteral("Stage %1").arg(size_label(area.suggested_kib)));
+                QStringLiteral("Stage %1").arg(Format::kib(area.suggested_kib)));
             const QString key = key_for_area(area.name);
-            const int value = key == QLatin1String(K::kBlobMib)
+            const int value = key == K::kBlobMib
                                   ? static_cast<int>(area.suggested_kib / 1024)
                                   : static_cast<int>(area.suggested_kib);
             connect(stage, &QPushButton::clicked, this, [this, key, value] {
@@ -594,8 +548,7 @@ void RenderPanel::rebuild() {
             body->addWidget(advice_frame);
         }
 
-        outer->addLayout(body);
-        areas_->addWidget(frame);
+        areas_->addWidget(panel.frame);
     }
     areas_->addStretch(1);
 }

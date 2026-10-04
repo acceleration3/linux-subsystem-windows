@@ -3,6 +3,7 @@
 #include "lsw/host/apps/app_config_store.hpp"
 #include "lsw/host/config/manager_settings.hpp"
 #include "lsw/host/config/pending_changes.hpp"
+#include "lsw/host/ui/machine_limits.hpp"
 
 #include <QVector>
 #include <QWidget>
@@ -49,9 +50,14 @@ private:
     QVBoxLayout* new_group(const QString& title);
     QWidget* add_row(QVBoxLayout* group, const QString& key, const QString& label,
                      const QString& description, QWidget* control);
+    // A row whose control is one button that leads somewhere else:
+    // ``clicked`` is the signal it emits. ``role`` dresses the button.
+    void add_action_row(QVBoxLayout* group, const QString& label, const QString& description,
+                        const QString& button_text, void (SettingsPage::*clicked)(),
+                        const char* role = nullptr);
 
     // Controls, each wired to write or stage on its own.
-    QWidget* make_slider(const QString& key, int min, int max, int step,
+    QWidget* make_slider(const QString& key, const ui::MachineLimits::Range& range,
                          const QString& suffix);
     QWidget* make_choice(const QString& key, const QVector<QPair<QString, QVariant>>& options);
 
@@ -65,6 +71,13 @@ private:
 
     // Writes a live key straight through, or stages a restart key.
     void put(const QString& key, const QVariant& value);
+
+    // The shared folders as they will be after the next Apply: the
+    // staged list if there is one, the stored one otherwise. Every edit
+    // starts from this, so a second folder added before Apply keeps the
+    // first.
+    [[nodiscard]] QVector<config::HostShare> staged_shares() const;
+    void stage_shares(const QVector<config::HostShare>& shares);
 
     config::ManagerSettings& settings_;
     config::PendingChanges& pending_;

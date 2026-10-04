@@ -1,8 +1,8 @@
 #pragma once
 
+#include "lsw/agent/transport/ivshmem_region.hpp"
 #include "lsw/linkproto/byte_ring.hpp"
 #include "lsw/linkproto/region.hpp"
-#include "lsw/agent/transport/ivshmem_region.hpp"
 
 #include <cstdint>
 #include <string>
@@ -23,8 +23,6 @@ namespace lsw::agent::transport {
 // headers the manager compiles.
 class Shmem {
 public:
-    static constexpr std::uint32_t kVersion = linkproto::kRegionVersion;
-
     // Open the device, verify the region header, and resolve every
     // channel. Returns true if the BAR is mapped and the region is one
     // this build understands.
@@ -37,7 +35,6 @@ public:
     // True once ``open`` has succeeded.
     [[nodiscard]] bool available() const { return base_ != nullptr; }
 
-    // Give the BAR back to the driver, and take it again.
     // ---- Message channels ----------------------------------------------
     // The mirror image of the manager's endpoints: this side produces
     // guest→host and consumes host→guest. Invalid endpoints mean the
@@ -45,6 +42,7 @@ public:
     // treat as "use the socket instead", not as a failure.
 
     [[nodiscard]] linkproto::ByteRingProducer& rpc_to_host() { return rpc_to_host_; }
+
     [[nodiscard]] linkproto::ByteRingConsumer& rpc_from_host() { return rpc_from_host_; }
 
     // Wake the manager on the rpc channel. Writing to a ring is silent

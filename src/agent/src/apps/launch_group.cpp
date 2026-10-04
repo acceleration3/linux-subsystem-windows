@@ -3,23 +3,21 @@
 #include "lsw/agent/apps/guest_drivers.hpp"
 #include "lsw/agent/log.hpp"
 #include "lsw/agent/util/text_encoding.hpp"
-
-// clang-format off
-#include <windows.h>
-#include <tlhelp32.h>
-// clang-format on
+#include "lsw/agent/util/wide_string.hpp"
+#include "lsw/agent/win/error_text.hpp"
+#include "lsw/agent/win/process_info.hpp"
+#include "lsw/agent/win/unique_handle.hpp"
 
 #include <atomic>
 #include <chrono>
-#include <cwctype>
 #include <iterator>
 #include <mutex>
 #include <string>
 #include <thread>
-#include <utility>
 #include <unordered_map>
-#include <unordered_set>
+#include <utility>
 #include <vector>
+#include <windows.h>
 
 namespace lsw::agent::apps {
 
@@ -32,19 +30,10 @@ namespace {
 // poll.
 constexpr auto kSnapshotMaxAge = std::chrono::milliseconds(200);
 
-std::uint64_t as_u64(const FILETIME& ft) {
-    return (static_cast<std::uint64_t>(ft.dwHighDateTime) << 32) | ft.dwLowDateTime;
-}
-
-std::wstring lower(std::wstring s) {
-    for (wchar_t& c : s) {
-        c = static_cast<wchar_t>(::towlower(c));
-    }
-    return s;
-}
-
 struct Group {
-    HANDLE job = nullptr;
+    // Empty when the job could not be created or assigned; the launch is
+    // then tracked by parentage and image path alone.
+    win::UniqueHandle job;
     // The launched executable's own directory, lowercased and ending in
     // a separator. Anything running out of this tree is this launch.
     std::wstring dir_lc;
@@ -89,19 +78,17 @@ std::vector<unsigned long> pids_in(HANDLE job) {
     // not fit, so size the buffer up until everything fits.
     DWORD capacity = 64;
     for (int attempt = 0; attempt < 6; ++attempt) {
-        const DWORD bytes =
-            static_cast<DWORD>(sizeof(JOBOBJECT_BASIC_PROCESS_ID_LIST)
-                               + (capacity - 1) * sizeof(ULONG_PTR));
+        const DWORD bytes = static_cast<DWORD>(sizeof(JOBOBJECT_BASIC_PROCESS_ID_LIST) +
+                                               (capacity - 1) * sizeof(ULONG_PTR));
         std::vector<unsigned char> buf(bytes, 0);
         auto* list = reinterpret_cast<JOBOBJECT_BASIC_PROCESS_ID_LIST*>(buf.data());
         DWORD returned = 0;
-        const BOOL ok = ::QueryInformationJobObject(
-            job, JobObjectBasicProcessIdList, list, bytes, &returned);
+        const BOOL ok =
+            ::QueryInformationJobObject(job, JobObjectBasicProcessIdList, list, bytes, &returned);
         if (ok == 0 && ::GetLastError() != ERROR_MORE_DATA) {
             return {};
         }
-        if (ok == 0 || list->NumberOfProcessIdsInList
-                           < list->NumberOfAssignedProcesses) {
+        if (ok == 0 || list->NumberOfProcessIdsInList < list->NumberOfAssignedProcesses) {
             capacity = list->NumberOfAssignedProcesses + 16;
             continue;
         }
@@ -121,43 +108,18 @@ std::vector<unsigned long> pids_in(HANDLE job) {
 // nothing else.
 std::vector<Proc> scan_processes() {
     std::vector<Proc> out;
-    HANDLE snap = ::CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-    if (snap == INVALID_HANDLE_VALUE) {
-        return out;
+    for (const win::ProcessInfo::Entry& e : win::ProcessInfo::snapshot()) {
+        Proc p;
+        p.pid = e.pid;
+        p.ppid = e.parent;
+        const win::UniqueHandle h{::OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, p.pid)};
+        if (h) {
+            p.image_lc = util::WideString::lower(win::ProcessInfo::image_path(h.get()));
+            p.started = win::ProcessInfo::creation_time(h.get()).value_or(0);
+        }
+        out.push_back(std::move(p));
     }
-    PROCESSENTRY32W e{};
-    e.dwSize = sizeof(e);
-    if (::Process32FirstW(snap, &e) != 0) {
-        do {
-            Proc p;
-            p.pid = e.th32ProcessID;
-            p.ppid = e.th32ParentProcessID;
-            HANDLE h = ::OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, p.pid);
-            if (h != nullptr) {
-                wchar_t buf[MAX_PATH * 2] = {};
-                DWORD n = MAX_PATH * 2;
-                if (::QueryFullProcessImageNameW(h, 0, buf, &n) != 0) {
-                    p.image_lc = lower(std::wstring(buf, n));
-                }
-                FILETIME created{};
-                FILETIME exited{};
-                FILETIME kernel{};
-                FILETIME user{};
-                if (::GetProcessTimes(h, &created, &exited, &kernel, &user) != 0) {
-                    p.started = as_u64(created);
-                }
-                ::CloseHandle(h);
-            }
-            out.push_back(std::move(p));
-        } while (::Process32NextW(snap, &e) != 0);
-    }
-    ::CloseHandle(snap);
     return out;
-}
-
-bool starts_with(const std::wstring& s, const std::wstring& prefix) {
-    return !prefix.empty() && s.size() >= prefix.size()
-           && s.compare(0, prefix.size(), prefix) == 0;
 }
 
 // Rebuild ``owner_of``, dropping groups that have gone empty. Caller
@@ -204,8 +166,13 @@ void rebuild_locked(State& s, std::vector<GuestDrivers::Staging>* retired) {
 
     for (auto it = s.groups.begin(); it != s.groups.end();) {
         const unsigned long root = it->first;
-        for (const unsigned long pid : pids_in(it->second.job)) {
-            next[pid] = root;
+        // Never asked of a null handle: QueryInformationJobObject reads
+        // that as "the job this process is in", which is the agent's own
+        // when the task scheduler started it inside one.
+        if (it->second.job) {
+            for (const unsigned long pid : pids_in(it->second.job.get())) {
+                next[pid] = root;
+            }
         }
         // The launched process itself, whether or not it is still alive:
         // a window can be enumerated in the same instant the stub exits.
@@ -216,8 +183,7 @@ void rebuild_locked(State& s, std::vector<GuestDrivers::Staging>* retired) {
                 if (next.count(p.pid) != 0) {
                     continue;
                 }
-                if (starts_with(p.image_lc, it->second.dir_lc)
-                    && p.started >= it->second.started) {
+                if (p.image_lc.starts_with(it->second.dir_lc) && p.started >= it->second.started) {
                     next[p.pid] = root;
                 }
             }
@@ -240,8 +206,7 @@ void rebuild_locked(State& s, std::vector<GuestDrivers::Staging>* retired) {
             // PID reuse: a recycled parent PID would otherwise adopt
             // processes older than the launch itself.
             const auto* pp = by_pid.count(p.ppid) != 0 ? by_pid[p.ppid] : nullptr;
-            if (pp != nullptr && p.started != 0 && pp->started != 0
-                && p.started < pp->started) {
+            if (pp != nullptr && p.started != 0 && pp->started != 0 && p.started < pp->started) {
                 continue;
             }
             next[p.pid] = parent->second;
@@ -262,9 +227,9 @@ void rebuild_locked(State& s, std::vector<GuestDrivers::Staging>* retired) {
             }
         }
         if (!any) {
-            // Closing the handle destroys the job. Nothing is running in
-            // it to be affected — and it carries no limits regardless.
-            ::CloseHandle(it->second.job);
+            // Erasing the group closes its handle, which destroys the job.
+            // Nothing is running in it to be affected — and it carries no
+            // limits regardless.
             const unsigned long dead = it->first;
             if (retired != nullptr && !it->second.staging.dirs.empty()) {
                 retired->push_back(std::move(it->second.staging));
@@ -357,39 +322,23 @@ bool LaunchGroup::adopt(void* process, unsigned long pid, GuestDrivers::Staging 
     g.staging = std::move(staging);
     // Record where and when before anything can be attributed, so the
     // directory rule has a floor to compare against.
-    FILETIME created{};
-    FILETIME exited{};
-    FILETIME kernel{};
-    FILETIME user{};
-    if (::GetProcessTimes(static_cast<HANDLE>(process), &created, &exited, &kernel,
-                          &user)
-        != 0) {
-        g.started = as_u64(created);
-    }
-    {
-        wchar_t buf[MAX_PATH * 2] = {};
-        DWORD n = MAX_PATH * 2;
-        if (::QueryFullProcessImageNameW(static_cast<HANDLE>(process), 0, buf, &n) != 0) {
-            const std::wstring image = lower(std::wstring(buf, n));
-            const auto slash = image.find_last_of(L"\\/");
-            if (slash != std::wstring::npos) {
-                g.dir_lc = image.substr(0, slash + 1);
-            }
-        }
+    const auto handle = static_cast<HANDLE>(process);
+    g.started = win::ProcessInfo::creation_time(handle).value_or(0);
+    const std::wstring image = util::WideString::lower(win::ProcessInfo::image_path(handle));
+    if (const auto dir = util::WideString::parent_dir(image)) {
+        g.dir_lc = image.substr(0, dir->size() + 1);  // keep the separator
     }
 
     const std::wstring name = util::TextEncoding::to_wide(job_name(pid));
-    g.job = ::CreateJobObjectW(nullptr, name.c_str());
-    if (g.job == nullptr) {
-        LSW_AGENT_WARN(std::string{"launch_group: CreateJobObject failed (err="}
-                       + std::to_string(::GetLastError())
-                       + "); this launch is tracked by parentage and image path only");
-    } else if (::AssignProcessToJobObject(g.job, static_cast<HANDLE>(process)) == 0) {
-        LSW_AGENT_WARN(std::string{"launch_group: AssignProcessToJobObject failed (err="}
-                       + std::to_string(::GetLastError()) + ") for pid "
-                       + std::to_string(pid));
-        ::CloseHandle(g.job);
-        g.job = nullptr;
+    g.job.reset(::CreateJobObjectW(nullptr, name.c_str()));
+    if (!g.job) {
+        LSW_AGENT_WARN("launch_group: CreateJobObject failed (err={}); this launch is tracked "
+                       "by parentage and image path only",
+                       win::ErrorText::last_error());
+    } else if (::AssignProcessToJobObject(g.job.get(), static_cast<HANDLE>(process)) == 0) {
+        LSW_AGENT_WARN("launch_group: AssignProcessToJobObject failed (err={}) for pid {}",
+                       win::ErrorText::last_error(), pid);
+        g.job.reset();
     }
 
     std::vector<GuestDrivers::Staging> retired;
@@ -399,9 +348,6 @@ bool LaunchGroup::adopt(void* process, unsigned long pid, GuestDrivers::Staging 
         // A PID the OS has recycled onto a new launch: the old group is
         // stale by definition, so let go of it rather than answering with it.
         if (auto old = s.groups.find(pid); old != s.groups.end()) {
-            if (old->second.job != nullptr) {
-                ::CloseHandle(old->second.job);
-            }
             retired.push_back(std::move(old->second.staging));
             s.groups.erase(old);
         }
@@ -439,28 +385,6 @@ unsigned long LaunchGroup::root_of(unsigned long pid) {
     }
     unstage_all(retired);
     return root;
-}
-
-bool LaunchGroup::alive(unsigned long root) {
-    if (root == 0) {
-        return false;
-    }
-    std::vector<GuestDrivers::Staging> retired;
-    bool still_alive = false;
-    {
-        State& s = state();
-        const std::lock_guard lock(s.mu);
-        if (s.groups.find(root) == s.groups.end()) {
-            return false;
-        }
-        // Deliberately not the cached snapshot: the caller is deciding
-        // whether a launch has finished, and acting a fifth of a second
-        // early on that is worse than one extra scan.
-        rebuild_locked(s, &retired);
-        still_alive = s.groups.find(root) != s.groups.end();
-    }
-    unstage_all(retired);
-    return still_alive;
 }
 
 }  // namespace lsw::agent::apps

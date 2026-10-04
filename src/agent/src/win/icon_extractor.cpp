@@ -1,9 +1,10 @@
 #include "lsw/agent/win/icon_extractor.hpp"
 
-#include "lsw/agent/util/base64.hpp"
-#include "lsw/agent/win/gdiplus_runtime.hpp"
-
 #include "lsw/agent/log.hpp"
+#include "lsw/agent/util/base64.hpp"
+#include "lsw/agent/win/com_ptr.hpp"
+#include "lsw/agent/win/error_text.hpp"
+#include "lsw/agent/win/gdiplus_runtime.hpp"
 
 // clang-format off
 // gdiplus.h needs windows.h + objidl.h visible first.
@@ -11,17 +12,14 @@
 #include <objidl.h>
 #include <gdiplus.h>
 #include <shellapi.h>
-#include <psapi.h>
 // clang-format on
 
 #include <cstring>
-#include <memory>
-#include <mutex>
+#include <vector>
 
 namespace lsw::agent::win {
 
 namespace {
-
 
 int find_png_encoder_clsid(CLSID* out) {
     UINT n = 0;
@@ -29,8 +27,7 @@ int find_png_encoder_clsid(CLSID* out) {
     Gdiplus::GetImageEncodersSize(&n, &size);
     if (size == 0)
         return -1;
-    auto* info =
-        static_cast<Gdiplus::ImageCodecInfo*>(::HeapAlloc(::GetProcessHeap(), 0, size));
+    auto* info = static_cast<Gdiplus::ImageCodecInfo*>(::HeapAlloc(::GetProcessHeap(), 0, size));
     Gdiplus::GetImageEncoders(n, size, info);
     int rc = -1;
     for (UINT i = 0; i < n; ++i) {
@@ -49,23 +46,21 @@ std::vector<std::uint8_t> bitmap_to_png_bytes(Gdiplus::Bitmap& bmp) {
     if (find_png_encoder_clsid(&clsid) != 0) {
         return {};
     }
-    IStream* stream = nullptr;
-    if (::CreateStreamOnHGlobal(nullptr, TRUE, &stream) != S_OK) {
+    ComPtr<IStream> stream;
+    if (::CreateStreamOnHGlobal(nullptr, TRUE, stream.GetAddressOf()) != S_OK) {
         return {};
     }
-    if (bmp.Save(stream, &clsid, nullptr) != Gdiplus::Ok) {
-        stream->Release();
+    if (bmp.Save(stream.Get(), &clsid, nullptr) != Gdiplus::Ok) {
         return {};
     }
     HGLOBAL hg = nullptr;
-    ::GetHGlobalFromStream(stream, &hg);
+    ::GetHGlobalFromStream(stream.Get(), &hg);
     const SIZE_T sz = ::GlobalSize(hg);
     std::vector<std::uint8_t> out(sz);
     if (void* p = ::GlobalLock(hg); p != nullptr) {
         std::memcpy(out.data(), p, sz);
         ::GlobalUnlock(hg);
     }
-    stream->Release();
     return out;
 }
 
@@ -90,15 +85,16 @@ std::vector<std::uint8_t> bitmap_to_png_bytes(Gdiplus::Bitmap& bmp) {
     }
     ICONINFO ii{};
     if (!::GetIconInfo(hicon, &ii)) {
-        LSW_AGENT_WARN(std::string{"gdi: GetIconInfo failed last_err="}
-                       + std::to_string(::GetLastError()));
+        LSW_AGENT_WARN("gdi: GetIconInfo failed last_err={}", ErrorText::last_error());
         return {};
     }
     BITMAP bm{};
     HBITMAP src = ii.hbmColor != nullptr ? ii.hbmColor : ii.hbmMask;
     if (::GetObjectW(src, sizeof(bm), &bm) == 0 || bm.bmWidth <= 0 || bm.bmHeight <= 0) {
-        if (ii.hbmColor) ::DeleteObject(ii.hbmColor);
-        if (ii.hbmMask)  ::DeleteObject(ii.hbmMask);
+        if (ii.hbmColor)
+            ::DeleteObject(ii.hbmColor);
+        if (ii.hbmMask)
+            ::DeleteObject(ii.hbmMask);
         return {};
     }
     const int w = bm.bmWidth;
@@ -114,10 +110,10 @@ std::vector<std::uint8_t> bitmap_to_png_bytes(Gdiplus::Bitmap& bmp) {
     bmi.bmiHeader.biBitCount = 32;
     bmi.bmiHeader.biCompression = BI_RGB;
 
-    std::vector<std::uint8_t> pixels(static_cast<size_t>(w) * h * 4, 0);
+    std::vector<std::uint8_t> pixels(static_cast<size_t>(w) * static_cast<size_t>(h) * 4, 0);
     HDC hdc = ::GetDC(nullptr);
     if (ii.hbmColor != nullptr) {
-        ::GetDIBits(hdc, ii.hbmColor, 0, h, pixels.data(), &bmi, DIB_RGB_COLORS);
+        ::GetDIBits(hdc, ii.hbmColor, 0, static_cast<UINT>(h), pixels.data(), &bmi, DIB_RGB_COLORS);
     }
 
     // Detect whether the color bitmap actually carried an alpha
@@ -135,17 +131,19 @@ std::vector<std::uint8_t> bitmap_to_png_bytes(Gdiplus::Bitmap& bmp) {
         // ``1`` = transparent, ``0`` = opaque. Reading it as a
         // 32-bit DIB gives us 0xFFFFFFFF for set bits and 0x00000000
         // for clear bits — invert and clamp to alpha.
-        std::vector<std::uint8_t> mask(static_cast<size_t>(w) * h * 4, 0);
+        std::vector<std::uint8_t> mask(static_cast<size_t>(w) * static_cast<size_t>(h) * 4, 0);
         BITMAPINFO mbmi = bmi;
-        ::GetDIBits(hdc, ii.hbmMask, 0, h, mask.data(), &mbmi, DIB_RGB_COLORS);
+        ::GetDIBits(hdc, ii.hbmMask, 0, static_cast<UINT>(h), mask.data(), &mbmi, DIB_RGB_COLORS);
         for (size_t i = 0; i < pixels.size(); i += 4) {
             const bool transparent = mask[i] != 0;
             pixels[i + 3] = transparent ? 0 : 255;
         }
     }
     ::ReleaseDC(nullptr, hdc);
-    if (ii.hbmColor) ::DeleteObject(ii.hbmColor);
-    if (ii.hbmMask)  ::DeleteObject(ii.hbmMask);
+    if (ii.hbmColor)
+        ::DeleteObject(ii.hbmColor);
+    if (ii.hbmMask)
+        ::DeleteObject(ii.hbmMask);
 
     // Build a GDI+ bitmap that references ``pixels`` and PNG-encode
     // it. ``PixelFormat32bppARGB`` matches the GetDIBits layout
@@ -161,8 +159,6 @@ std::vector<std::uint8_t> bitmap_to_png_bytes(Gdiplus::Bitmap& bmp) {
 
 }  // namespace
 
-
-
 std::string IconExtractor::from_executable(const std::wstring& path) {
     GdiPlusRuntime::ensure_started();
 
@@ -176,16 +172,15 @@ std::string IconExtractor::from_executable(const std::wstring& path) {
     // a 256px source preserves crispness at every render size.
     HICON hicon = nullptr;
     UINT extracted = 0;
-    ::PrivateExtractIconsW(path.c_str(), 0, 256, 256, &hicon, &extracted, 1,
-                            LR_DEFAULTCOLOR);
+    ::PrivateExtractIconsW(path.c_str(), 0, 256, 256, &hicon, &extracted, 1, LR_DEFAULTCOLOR);
     if (hicon == nullptr || extracted == 0) {
         // PrivateExtractIcons fails for shell virtual items (Control
         // Panel applets, Store apps, .lnk targets, ...). Fall back to
         // SHGetFileInfo which resolves through the system icon cache
         // — lower resolution (32x32) but covers far more cases.
         SHFILEINFOW info{};
-        if (::SHGetFileInfoW(path.c_str(), 0, &info, sizeof(info),
-                              SHGFI_ICON | SHGFI_LARGEICON) == 0) {
+        if (::SHGetFileInfoW(path.c_str(), 0, &info, sizeof(info), SHGFI_ICON | SHGFI_LARGEICON) ==
+            0) {
             LSW_AGENT_DEBUG("gdi: no icon source for path");
             return {};
         }
@@ -198,67 +193,6 @@ std::string IconExtractor::from_executable(const std::wstring& path) {
     const std::string out = hicon_to_png_base64(hicon);
     ::DestroyIcon(hicon);
     return out;
-}
-
-std::string IconExtractor::from_window(void* hwnd_p) {
-    GdiPlusRuntime::ensure_started();
-    auto hwnd = static_cast<HWND>(hwnd_p);
-    if (hwnd == nullptr || !::IsWindow(hwnd)) {
-        return {};
-    }
-
-    // Probe in size order so the manager gets the biggest icon
-    // available — Win11 taskbars/Alt-Tab use 32x32+ and downscale if
-    // needed. ``SendMessageTimeoutW`` returns nonzero ON SUCCESS; the
-    // actual WM_GETICON reply (the HICON) comes back via the
-    // ``lpdwResult`` out-pointer. Earlier code passed nullptr and
-    // mistakenly cast the success code itself as the icon, which
-    // either crashed in GDI+ or just produced an empty PNG depending
-    // on the message dispatch path. Capture the out-pointer here.
-    // ``SendMessage(WM_GETICON)`` does NOT transfer ownership; the
-    // class-icon GCLP_HICON[SM] variants are owned by the window
-    // class. Either way: do NOT ``DestroyIcon`` these.
-    auto probe = [hwnd](WPARAM which) -> HICON {
-        DWORD_PTR result = 0;
-        const LRESULT ok = ::SendMessageTimeoutW(
-            hwnd, WM_GETICON, which, 0,
-            SMTO_ABORTIFHUNG | SMTO_NOTIMEOUTIFNOTHUNG, 200, &result);
-        return ok != 0 ? reinterpret_cast<HICON>(result) : nullptr;
-    };
-    HICON hicon = probe(ICON_BIG);
-    if (hicon == nullptr) hicon = probe(ICON_SMALL2);
-    if (hicon == nullptr) hicon = probe(ICON_SMALL);
-    if (hicon == nullptr) {
-        hicon = reinterpret_cast<HICON>(::GetClassLongPtrW(hwnd, GCLP_HICON));
-    }
-    if (hicon == nullptr) {
-        hicon = reinterpret_cast<HICON>(::GetClassLongPtrW(hwnd, GCLP_HICONSM));
-    }
-    if (hicon != nullptr) {
-        return hicon_to_png_base64(hicon);
-    }
-
-    // Final fallback: the window neither has WM_GETICON nor a class
-    // icon set (rare — happens with bare CreateWindow apps). Use the
-    // process's main executable's icon, which is what the Win32 Alt-Tab
-    // does in the same situation.
-    DWORD pid = 0;
-    ::GetWindowThreadProcessId(hwnd, &pid);
-    if (pid == 0) {
-        return {};
-    }
-    HANDLE proc = ::OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-    if (proc == nullptr) {
-        return {};
-    }
-    wchar_t exe_path[MAX_PATH] = {};
-    DWORD len = MAX_PATH;
-    const BOOL ok = ::QueryFullProcessImageNameW(proc, 0, exe_path, &len);
-    ::CloseHandle(proc);
-    if (!ok || exe_path[0] == L'\0') {
-        return {};
-    }
-    return IconExtractor::from_executable(exe_path);
 }
 
 }  // namespace lsw::agent::win

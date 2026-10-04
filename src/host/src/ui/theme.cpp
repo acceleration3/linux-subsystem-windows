@@ -73,7 +73,7 @@ void Theme::rows_table(QTableWidget* table, const QStringList& headers) {
     // Letter spacing is the one thing the heading needs and a
     // stylesheet cannot say.
     QFont font = head->font();
-    font.setFamilies({QStringLiteral("JetBrains Mono"), QStringLiteral("DejaVu Sans Mono")});
+    font.setFamilies(mono_font(10).families());
     font.setPixelSize(10);
     font.setWeight(QFont::Medium);
     font.setLetterSpacing(QFont::PercentageSpacing, 113);
@@ -82,11 +82,8 @@ void Theme::rows_table(QTableWidget* table, const QStringList& headers) {
 
 QTableWidgetItem* Theme::kind_cell(const QString& text) {
     auto* item = new QTableWidgetItem(text);
-    QFont font;
-    font.setFamilies({QStringLiteral("JetBrains Mono"), QStringLiteral("DejaVu Sans Mono")});
-    font.setPixelSize(12);
-    item->setFont(font);
-    item->setForeground(QColor{QString::fromLatin1(Color::kFgFaint)});
+    item->setFont(mono_font(12));
+    item->setForeground(color(Color::kFgFaint));
     return item;
 }
 
@@ -96,6 +93,18 @@ void Theme::fit_rows(QTableWidget* table) {
         height += table->rowHeight(row);
     }
     table->setFixedHeight(height + 2);
+}
+
+QFont Theme::mono_font(int pixel_size) {
+    QFont font;
+    font.setFamilies({QStringLiteral("JetBrains Mono"), QStringLiteral("DejaVu Sans Mono")});
+    font.setStyleHint(QFont::Monospace);
+    font.setPixelSize(pixel_size);
+    return font;
+}
+
+QColor Theme::color(const char* hex) {
+    return QColor{QString::fromLatin1(hex)};
 }
 
 QString Theme::stylesheet() {
@@ -133,18 +142,17 @@ void Theme::apply() {
     // thing the stylesheet does or half the window is light.
     app->setStyle(new LswStyle);
 
-    const QColor ink{QString::fromLatin1(Color::kInk)};
-    const QColor surface{QString::fromLatin1(Color::kSurface)};
-    const QColor raised{QString::fromLatin1(Color::kRaised)};
-    const QColor text{QString::fromLatin1(Color::kFg)};
-    const QColor dim{QString::fromLatin1(Color::kFgDim)};
-    const QColor faint{QString::fromLatin1(Color::kFgFaint)};
-    const QColor amber{QString::fromLatin1(Color::kAmber)};
+    const QColor ink = color(Color::kInk);
+    const QColor surface = color(Color::kSurface);
+    const QColor raised = color(Color::kRaised);
+    const QColor text = color(Color::kFg);
+    const QColor faint = color(Color::kFgFaint);
+    const QColor amber = color(Color::kAmber);
 
     QPalette palette;
     palette.setColor(QPalette::Window, ink);
     palette.setColor(QPalette::WindowText, text);
-    palette.setColor(QPalette::Base, QColor{QStringLiteral("#0f131a")});
+    palette.setColor(QPalette::Base, color(Color::kBase));
     palette.setColor(QPalette::AlternateBase, surface);
     palette.setColor(QPalette::Text, text);
     palette.setColor(QPalette::PlaceholderText, faint);

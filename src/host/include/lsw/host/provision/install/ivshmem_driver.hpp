@@ -47,10 +47,14 @@ public:
 
     // Unpack a Looking Glass host installer into ``dest_dir`` and keep
     // the driver files. Returns false when no extractor is available
-    // (logged) — NSIS needs 7z or innoextract; neither is a hard
+    // (logged) — NSIS needs 7-Zip or innoextract; neither is a hard
     // dependency of LSW.
     [[nodiscard]] static bool extract_from_package(const QString& package_path,
                                                    const QString& dest_dir);
+
+    // Whether either extractor is installed, so a caller whose package
+    // would not unpack can tell "install something" from "bad package".
+    [[nodiscard]] static bool has_extractor();
 };
 
 }  // namespace lsw::host::provision::install

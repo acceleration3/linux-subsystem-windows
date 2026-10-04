@@ -1,5 +1,6 @@
 #include "lsw/agent/install/work_dir.hpp"
 
+#include "lsw/agent/core/paths.hpp"
 #include "lsw/agent/util/text_encoding.hpp"
 
 #include <windows.h>
@@ -7,9 +8,8 @@
 namespace lsw::agent::install {
 
 std::wstring WorkDir::path() {
-    const wchar_t* base = L"C:\\ProgramData\\LSW";
-    ::CreateDirectoryW(base, nullptr);
-    const std::wstring work = std::wstring{base} + L"\\work";
+    ::CreateDirectoryW(core::Paths::root().c_str(), nullptr);
+    const std::wstring work = core::Paths::work_dir();
     ::CreateDirectoryW(work.c_str(), nullptr);
     return work + L"\\";
 }

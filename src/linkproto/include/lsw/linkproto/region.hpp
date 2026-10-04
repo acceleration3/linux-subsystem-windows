@@ -8,15 +8,12 @@
 
 // The shared-memory region, divided into channels.
 //
-// The region started as one thing: a ring of window-frame slots. That
-// was enough while pixels were the only payload, but the missing
-// vhost_vsock pushed the RPC channel onto TCP-over-hostfwd, and the
-// Vulkan command stream — the point of the whole project — has nowhere
-// to go at all. Both want exactly what the frames already have: shared
-// pages between host and guest.
-//
-// So the region now begins with a channel table, and the frame ring is
-// one channel among several rather than the whole region:
+// The region started as one thing: a ring of window-frame slots. It
+// became a channel table so that other traffic could share the pages;
+// today the frames are the window mirror's business and the Vulkan
+// stream is the render server's, each in a region of its own, and what
+// is left here is the RPC channel. The table stays, so a channel can be
+// added without another format change:
 //
 //   0x0000  RegionHeader
 //   0x0040  channel table (kMaxChannels x ChannelDescriptor)
@@ -33,10 +30,11 @@ namespace lsw::linkproto {
 
 // What a channel carries. Values are a wire contract; never renumber.
 inline constexpr std::uint32_t kChannelRpc = 2;        // duplex control messages
-// 3 and 4 were the Vulkan proxy's command stream and its host-memory
-// arena. The proxy is the render server's now, in a region of its own,
-// and this one carries frames and control traffic. Retired rather than
-// reused: the values are a wire contract.
+// 1 was the window-frame ring; frames are the window mirror's now. 3 and
+// 4 were the Vulkan proxy's command stream and its host-memory arena;
+// the proxy is the render server's, in a region of its own. This region
+// carries control traffic only. Retired rather than reused: the values
+// are a wire contract.
 
 struct ChannelDescriptor {
     std::uint32_t kind;      // 0x00  one of the kChannel* values
@@ -56,11 +54,11 @@ struct RegionHeader {
     std::uint64_t reserved[4];          // 0x20
 };
 
-// Region format version. Bumped from 1 (single implicit frame channel)
-// to 2 (channel table) — the magic is deliberately unchanged, so an old
-// guest agent mapping a new region reads a version it does not know and
-// refuses cleanly instead of interpreting the channel table as a slot
-// table.
+// Region format version. 1 was a single implicit frame channel, 2 added
+// the channel table, 3 retired the frame, command-stream and arena
+// channels. The magic is deliberately unchanged, so an old guest agent
+// mapping a new region reads a version it does not know and refuses
+// cleanly instead of interpreting the table as something it used to be.
 inline constexpr std::uint32_t kRegionVersion = 3;
 
 // 'LSWF' little-endian. Unchanged from the format that carried window

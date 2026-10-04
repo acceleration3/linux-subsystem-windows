@@ -9,12 +9,11 @@
 #include "lsw/host/provision/install/ivshmem_driver.hpp"
 #include "lsw/host/provision/install/payload_iso.hpp"
 
+#include <QDir>
 #include <QDomDocument>
 #include <QFile>
-#include <QDir>
 #include <QFileInfo>
 #include <QTemporaryDir>
-
 #include <cstdio>
 #include <cstdlib>
 
@@ -49,9 +48,8 @@ int main(int argc, char** argv) {
     // rather than by scanning for "{{", because the template's own
     // comments talk about the placeholder syntax.
     bool any_left = false;
-    for (const char* key : {"locale", "timezone", "computer_name", "user_name",
-                            "user_password", "product_key", "image_index",
-                            "win11_bypass_block"}) {
+    for (const char* key : {"locale", "timezone", "computer_name", "user_name", "user_password",
+                            "product_key", "image_index", "win11_bypass_block"}) {
         if (xml.contains(QStringLiteral("{{%1}}").arg(QLatin1String(key)))) {
             std::printf("       unsubstituted: {{%s}}\n", key);
             any_left = true;
@@ -150,8 +148,8 @@ int main(int argc, char** argv) {
           "and the 32-bit set, which is what a D3D8 / D3D9 title loads");
 
     QTemporaryDir drv_src;
-    for (const char* name : {"librvk_icd.dll", "opengl32.dll", "librvk_opencl.dll",
-                             "vulkan-1.dll"}) {
+    for (const char* name :
+         {"librvk_icd.dll", "opengl32.dll", "librvk_opencl.dll", "vulkan-1.dll"}) {
         QFile f{QDir(drv_src.path()).filePath(QLatin1String(name))};
         check(f.open(QIODevice::WriteOnly), "created a fake guest driver");
         f.write("MZstub");
@@ -209,8 +207,12 @@ int main(int argc, char** argv) {
         iso_inputs.agent_exe_path = QString::fromLocal8Bit(argv[1]);
         std::printf("       also staging: %s\n", argv[1]);
     }
-    const int rc = PayloadIsoBuilder::build(iso_inputs);
-    check(rc == 0, "PayloadIsoBuilder::build() succeeds");
+    QString build_error;
+    const bool built = PayloadIsoBuilder::build(iso_inputs, &build_error);
+    if (!built) {
+        std::printf("       %s\n", qPrintable(build_error));
+    }
+    check(built, "PayloadIsoBuilder::build() succeeds");
     check(QFileInfo(iso_inputs.output_iso_path).size() > 0, "ISO was written");
 
     // Look for the answer file's CONTENT in the image, not just its

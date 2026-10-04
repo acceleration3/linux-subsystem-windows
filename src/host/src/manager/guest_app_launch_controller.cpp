@@ -2,54 +2,41 @@
 
 #include "lsw/base/log.hpp"
 #include "lsw/host/apps/app_config_store.hpp"
-#include "lsw/host/apps/desktop_launcher.hpp"
-#include "lsw/host/apps/launcher.hpp"
-#include "lsw/host/config/manager_settings.hpp"
 #include "lsw/host/config/vm_state.hpp"
+#include "lsw/host/manager/guest_app_launcher.hpp"
 #include "lsw/host/manager/launch_splash.hpp"
-#include "lsw/host/mirror/window_mirror.hpp"
 #include "lsw/host/services/host_services.hpp"
 
 #include <QCursor>
+#include <QGuiApplication>
 #include <QIcon>
 #include <QPixmap>
-#include <QGuiApplication>
 #include <QPointer>
 #include <QScreen>
-
 #include <QTimer>
-
-#include <algorithm>
 
 namespace lsw::host::manager {
 
 namespace {
-
-// The agent's RPC port inside the guest. Fixed by the agent build.
-constexpr quint32 kAgentPort = 5102;
 
 // How long a guest may take to answer before the splash stops
 // pretending this is normal. A cold boot is around forty seconds; three
 // minutes is not a slow boot, it is something wrong.
 constexpr int kStallMs = 180000;
 
-// Derive an exe basename from a guest path (Windows backslashes) for the
-// watcher's packaged/alias window matching.
-[[nodiscard]] QString exe_basename_of(const QString& guest_path) {
-    const qsizetype sep = std::max(guest_path.lastIndexOf(QLatin1Char('\\')),
-                                   guest_path.lastIndexOf(QLatin1Char('/')));
-    return sep < 0 ? guest_path : guest_path.mid(sep + 1);
-}
-
 }  // namespace
 
 GuestAppLaunchController::GuestAppLaunchController(services::HostServices& services,
                                                    QObject* parent)
-    : QObject(parent), services_(services) {}
+    : QObject(parent), services_(services),
+      launcher_(new GuestAppLauncher(services.rpc(), services.manager_settings(), this)) {
+    connect(launcher_, &GuestAppLauncher::launched, this,
+            &GuestAppLaunchController::application_running);
+}
 
 void GuestAppLaunchController::launch(const QString& app_id) {
-    auto& vms = services_.vms();
-    if (vms.records().isEmpty()) {
+    const config::VmRecord* vm = services_.vms().primary();
+    if (vm == nullptr) {
         LSW_WARN("launch_app({}): no VM defined", app_id.toStdString());
         return;
     }
@@ -65,7 +52,7 @@ void GuestAppLaunchController::launch(const QString& app_id) {
         return;
     }
     const QString guest_path = cfg->path;
-    const QUuid uuid = vms.records().first().uuid;
+    const QUuid uuid = vm->uuid;
 
     // Intentionally do NOT show the main window — the user clicked an
     // XDG launcher to open a guest app, not to bring up the manager.
@@ -74,102 +61,29 @@ void GuestAppLaunchController::launch(const QString& app_id) {
     if (services_.monitor().latest(uuid).agent_reachable) {
         LSW_INFO("launch_app({}): firing immediately path={}",
                  app_id.toStdString(), guest_path.toStdString());
-        fire_launch(guest_path);
+        launcher_->launch(*cfg);
         return;
     }
     start_vm_and_wait(uuid, app_id, guest_path);
 }
 
-void GuestAppLaunchController::ensure_channel_target(const QUuid& uuid) {
-    auto& rpc = services_.rpc();
-    if (rpc.has_target()) {
+void GuestAppLaunchController::fire_when_ready(const QString& app_id, const QString& guest_path) {
+    // Looked up again rather than carried over from the request: the
+    // guest has been booting for a while, and the config may have been
+    // edited in the meantime. One removed since launches its path bare.
+    if (const auto* cfg = services_.app_configs().find(app_id); cfg != nullptr) {
+        launcher_->launch(*cfg);
         return;
     }
-    auto* rec = services_.vms().find(uuid);
-    if (rec == nullptr) {
-        return;
-    }
-    rpc.attach_shmem(services_.lifecycle().ivshmem_server(uuid),
-                     services_.lifecycle().shmem_region(uuid));
-    rpc.set_target(rec->vsock_cid, kAgentPort);
+    apps::AppConfig bare;
+    bare.path = guest_path;
+    launcher_->launch(bare);
 }
 
-void GuestAppLaunchController::fire_launch(const QString& guest_path) {
-    // The config is looked up by path because that is what this path
-    // carries — the .desktop entry launches by id, which was resolved
-    // to a path before we got here.
-    QString args;
-    QString env;
-    // And the identity its windows will present to the task manager.
-    // Taken from the same config as the arguments, in the same pass:
-    // this path was reached from an id that was already resolved to a
-    // path, so the config is the only thing that still knows which
-    // application this is.
-    QString desktop_id;
-    int channel = -1;
-    for (const auto& cfg : services_.app_configs().configs()) {
-        if (cfg.path == guest_path) {
-            args = cfg.cmdline;
-            env = cfg.env;
-            desktop_id = apps::DesktopLauncher::entry_id(cfg.id);
-            channel = cfg.channel;
-            break;
-        }
+void GuestAppLaunchController::ensure_channel_target(const QUuid& uuid) {
+    if (!services_.rpc().has_target()) {
+        (void)services_.bind_agent(uuid);
     }
-
-    // Pinning an application to a render channel is done here, in the
-    // environment the guest process is started with, because the only
-    // thing that can act on it is the driver inside that process. A
-    // channel carries one command stream and cannot be shared, so the
-    // policy says what to do when the pinned one is busy rather than
-    // pretending it can be joined.
-    if (channel >= 0) {
-        using K = config::ManagerSettings::Key;
-        auto& settings = services_.manager_settings();
-        const auto& bindings = settings.channel_bindings();
-        auto policy = config::ChannelBusyPolicy::TakeAnyFree;
-        for (const auto& binding : bindings) {
-            if (binding.channel == channel) {
-                policy = binding.busy;
-                break;
-            }
-        }
-        QStringList lines = env.isEmpty()
-                                ? QStringList{}
-                                : env.split(QLatin1Char('\n'), Qt::SkipEmptyParts);
-        lines << QStringLiteral("RVK_CHANNEL=%1").arg(channel);
-        lines << QStringLiteral("RVK_CHANNEL_BUSY=%1")
-                     .arg(config::ManagerSettings::policy_to_string(policy));
-        lines << QStringLiteral("RVK_CHANNEL_WAIT_MS=%1")
-                     .arg(settings.int_value(QLatin1String(K::kChannelWaitSeconds)) * 1000);
-        env = lines.join(QLatin1Char('\n'));
-    }
-
-    auto* launcher = new apps::Launcher(services_.rpc(), this);
-    connect(launcher, &apps::Launcher::launched, this,
-            [this, launcher, desktop_id](const QString& /*reported_path*/, quint32 pid,
-                                         const QString& job) {
-        launcher->deleteLater();
-        if (pid == 0) {
-            LSW_WARN("launch_app: agent returned pid=0 — old agent?");
-            return;
-        }
-        Q_EMIT application_running();
-        // Without this the agent dutifully starts the application inside
-        // the guest and nothing of it appears here: the mirror is what
-        // carries its windows onto this desktop.
-        auto* mirror = new mirror::WindowMirror(services_.rpc(), pid, job, desktop_id, this);
-        connect(mirror, &mirror::WindowMirror::finished, mirror, &QObject::deleteLater);
-        if (!mirror->start()) {
-            mirror->deleteLater();
-        }
-    });
-    connect(launcher, &apps::Launcher::failed, launcher,
-            [launcher](const QString& id, const QString& err) {
-                LSW_WARN("launch_app({}) failed: {}", id.toStdString(), err.toStdString());
-                launcher->deleteLater();
-            });
-    launcher->launch(guest_path, args, env);
 }
 
 void GuestAppLaunchController::start_vm_and_wait(const QUuid& uuid, const QString& app_id,
@@ -177,10 +91,7 @@ void GuestAppLaunchController::start_vm_and_wait(const QUuid& uuid, const QStrin
     pending_app_id_ = app_id;
     auto& lifecycle = services_.lifecycle();
     if (!lifecycle.is_running(uuid)) {
-        const auto* record = services_.vms().find(uuid);
-        if (const int rc =
-                lifecycle.start(uuid, record != nullptr && record->first_boot_done);
-            rc != 0) {
+        if (const int rc = services_.start_vm(uuid); rc != 0) {
             LSW_WARN("launch_app({}): lifecycle.start rc={}", app_id.toStdString(), rc);
         }
     }
@@ -238,7 +149,7 @@ void GuestAppLaunchController::start_vm_and_wait(const QUuid& uuid, const QStrin
         pending_app_id_.clear();
         patience->stop();
         if (splash_ptr) splash_ptr->reach(LaunchSplash::Phase::GuestAnswering);
-        fire_launch(guest_path);
+        fire_when_ready(app_id, guest_path);
         // The splash closes itself once the application is actually
         // running, which the launcher reports; until then it stays up
         // saying what it is waiting for.
@@ -258,9 +169,7 @@ void GuestAppLaunchController::start_vm_and_wait(const QUuid& uuid, const QStrin
     });
     connect(splash, &LaunchSplash::restart_requested, this, [this, uuid, splash_ptr] {
         (void)services_.lifecycle().shutdown(uuid);
-        const auto* record = services_.vms().find(uuid);
-        (void)services_.lifecycle().start(uuid,
-                                          record != nullptr && record->first_boot_done);
+        (void)services_.start_vm(uuid);
         if (splash_ptr) {
             splash_ptr->reach(LaunchSplash::Phase::MachineStarted);
         }

@@ -1,23 +1,11 @@
 #include "lsw/agent/transport/shmem.hpp"
 
 #include "lsw/agent/log.hpp"
-
 #include "lsw/agent/transport/ivshmem_region.hpp"
 
-#include <atomic>
-#include <cstring>
+#include <cerrno>
 
 namespace lsw::agent::transport {
-
-namespace {
-
-// The region layout comes from the shared contract — the same headers
-// the manager compiles. This file used to keep its own list of magic
-// offsets, which had already drifted from the manager's copy.
-namespace region_off = linkproto::region_off;
-using linkproto::load_field;
-
-}  // namespace
 
 Shmem& shmem() {
     static Shmem g;
@@ -50,8 +38,8 @@ bool Shmem::open() {
             // INVALID_FUNCTION for three different causes, and
             // collapsing them into one line cost a debugging round trip
             // once already.
-            LSW_AGENT_WARN("shmem: could not map the IVSHMEM BAR (rc={}, GetLastError={})",
-                           rc, region_.last_os_error());
+            LSW_AGENT_WARN("shmem: could not map the IVSHMEM BAR (rc={}, GetLastError={})", rc,
+                           region_.last_os_error());
             break;
         }
         return false;
@@ -63,8 +51,8 @@ bool Shmem::open() {
     bind_duplex_channel(linkproto::kChannelRpc, rpc_to_host_, rpc_from_host_);
 
     LSW_AGENT_INFO("shmem: opened (size={} MiB, rpc_ring={} KiB, peerID={}, vectors={})",
-                   size_ / (1024 * 1024), rpc_to_host_.capacity() / 1024,
-                   region_.peer_id(), region_.msi_vectors());
+                   size_ / (1024 * 1024), rpc_to_host_.capacity() / 1024, region_.peer_id(),
+                   region_.msi_vectors());
     if (region_.msi_vectors() < linkproto::kDoorbellVectorCount) {
         // A doorbell that is never rung leaves a channel that looks
         // alive and never wakes the manager, so say so once.
@@ -76,7 +64,7 @@ bool Shmem::open() {
 }
 
 void Shmem::bind_duplex_channel(std::uint32_t kind, linkproto::ByteRingProducer& to_host,
-                                 linkproto::ByteRingConsumer& from_host) {
+                                linkproto::ByteRingConsumer& from_host) {
     const auto channel = linkproto::find_channel(base_, kind);
     if (!channel.valid()) {
         // An older manager simply has no such channel. Callers check
@@ -84,10 +72,10 @@ void Shmem::bind_duplex_channel(std::uint32_t kind, linkproto::ByteRingProducer&
         return;
     }
     auto* channel_base = static_cast<std::uint8_t*>(base_) + channel.offset;
-    to_host = linkproto::ByteRingProducer{
-        channel_base + linkproto::guest_to_host_ring_offset(channel.size)};
-    from_host = linkproto::ByteRingConsumer{
-        channel_base + linkproto::host_to_guest_ring_offset(channel.size)};
+    to_host = linkproto::ByteRingProducer{channel_base +
+                                          linkproto::guest_to_host_ring_offset(channel.size)};
+    from_host = linkproto::ByteRingConsumer{channel_base +
+                                            linkproto::host_to_guest_ring_offset(channel.size)};
 }
 
 void Shmem::ring_doorbell(std::uint16_t vector) {

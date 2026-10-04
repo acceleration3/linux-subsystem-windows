@@ -1,5 +1,6 @@
 #include "lsw/host/mirror/window_mirror.hpp"
 
+#include "lsw/host/link/agent_reply.hpp"
 #include "lsw/host/link/agent_rpc_client.hpp"
 #include "lsw/host/platform/mirror_exe_paths.hpp"
 
@@ -72,27 +73,9 @@ bool WindowMirror::start() {
     LSW_INFO("mirror: {} listening on {} for pid {} job '{}'", exe.toStdString(), port,
              pid_, job_.toStdString());
 
-    const nlohmann::json request = {
-        {"cmd", linkproto::cmd::kStartWindowMirror},
-        {"params", {{"port", port}}},
-    };
-    const QByteArray reply = rpc_.call(request);
-    if (reply.isEmpty()) {
-        LSW_WARN("mirror: the agent did not answer; killing the mirror for pid {}", pid_);
-        host_end_->kill();
-        return false;
-    }
-    try {
-        const auto answer = nlohmann::json::parse(reply.constData(),
-                                                  reply.constData() + reply.size());
-        if (!answer.value("ok", false)) {
-            LSW_WARN("mirror: the guest half did not start: {}",
-                     answer.value("error", std::string{"no detail"}));
-            host_end_->kill();
-            return false;
-        }
-    } catch (const nlohmann::json::exception& e) {
-        LSW_WARN("mirror: unreadable reply from the agent: {}", e.what());
+    const auto reply = rpc_.request(linkproto::cmd::kStartWindowMirror, {{"port", port}});
+    if (!reply.ok) {
+        LSW_WARN("mirror: the guest half did not start for pid {}: {}", pid_, reply.error);
         host_end_->kill();
         return false;
     }

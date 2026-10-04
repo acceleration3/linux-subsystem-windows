@@ -1,8 +1,8 @@
 # lsw-guest-agent: Windows process that lives inside each LSW VM.
-# Autostarted from ``HKLM\...\Run\lsw-agent`` (value written by the
-# autounattend's Specialize.ps1). The shell processes Run values only
-# at a real interactive logon — the post-OOBE AutoLogon of the wizard
-# user — so the agent runs AS THAT USER, IN their session. Window
+# Autostarted from the ``lsw-agent`` scheduled task that the
+# autounattend's LswPromote.ps1 registers (logon trigger on the wizard
+# user, interactive token, highest run level), so the agent runs AS
+# THAT USER, IN their session. Window
 # enumeration (``EnumWindows``) and app launch (plain
 # ``CreateProcessW``) are all native — no SYSTEM,
 # no session bridging. The account is a local admin; UAC stays
@@ -32,7 +32,8 @@ endif()
 # .rc compiler (windres on mingw) — needed to embed the UAC manifest
 # resource so Windows auto-elevates the agent at launch. Without it
 # the agent inherits the wizard user's filtered (Medium-integrity)
-# token via HKLM\Run; with it the agent runs High-integrity silently
+# token whenever something other than its RunLevel-Highest scheduled
+# task starts it; with it the agent runs High-integrity silently
 # (UAC config in the autounattend is ConsentPromptBehaviorAdmin=0 +
 # PromptOnSecureDesktop=0, so no prompt is shown).
 enable_language(RC)
@@ -46,6 +47,7 @@ set(_lsw_agent_core_sources
     src/main.cpp
     src/log.cpp
     src/core/agent_service.cpp
+    src/core/paths.cpp
 )
 set(_lsw_agent_transport_sources
     src/transport/host_endpoint.cpp
@@ -63,6 +65,7 @@ set(_lsw_agent_transport_sources
 )
 set(_lsw_agent_rpc_sources
     src/rpc/registry.cpp
+    src/rpc/params.cpp
     # Per-RPC handler TUs — one per command. Each TU registers itself
     # at static-init via LSW_REGISTER_RPC; the transport dispatcher
     # is now a single registry lookup. Adding a new RPC means a new
@@ -105,17 +108,25 @@ set(_lsw_agent_win_sources
     src/win/desktop_session.cpp
     src/win/desktop_probe.cpp
     src/win/token_privileges.cpp
+    src/win/error_text.cpp
+    src/win/bstr.cpp
+    src/win/reg_key.cpp
+    src/win/environment.cpp
+    src/win/file_system.cpp
+    src/win/process_info.cpp
+    src/win/shell_link.cpp
+    src/win/process.cpp
 )
 set(_lsw_agent_util_sources
     src/util/base64.cpp
     src/util/text_encoding.cpp
+    src/util/wide_string.cpp
 )
 set(_lsw_agent_uia_sources
     src/uia/uia.cpp
     src/uia/uia_window.cpp
     src/uia/uia_root.cpp
     src/uia/uia_event_queue.cpp
-    src/uia/bstr_text.cpp
     src/uia/element_locator.cpp
     src/uia/window_state_query.cpp
     src/uia/element_invoker.cpp

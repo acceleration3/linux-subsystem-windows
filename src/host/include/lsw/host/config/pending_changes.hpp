@@ -28,9 +28,10 @@ public:
     // what is stored.
     bool stage(const QString& key, const QVariant& value);
 
-    [[nodiscard]] bool has(const QString& key) const;
     [[nodiscard]] QVariant staged_or_current(const QString& key) const;
+
     [[nodiscard]] int count() const noexcept { return static_cast<int>(staged_.size()); }
+
     [[nodiscard]] bool empty() const noexcept { return staged_.isEmpty(); }
 
     // One line per change, in the form the apply bar shows: the key's

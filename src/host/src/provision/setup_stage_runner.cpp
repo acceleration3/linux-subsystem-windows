@@ -1,6 +1,7 @@
 #include "lsw/host/provision/setup_stage_runner.hpp"
 
 #include "lsw/base/log.hpp"
+#include "lsw/host/link/agent_reply.hpp"
 #include "lsw/host/link/agent_rpc_client.hpp"
 #include "lsw/host/platform/byte_size.hpp"
 #include "lsw/host/provision/setup_plan_parser.hpp"
@@ -17,30 +18,33 @@ namespace lsw::host::provision {
 
 namespace {
 
-// Build the RPC frame for one step. The verb and its parameters are the
-// only thing that differs between step kinds.
-[[nodiscard]] nlohmann::json request_for(const SetupStep& step) {
+// The RPC for one step. The verb and its parameters are the only thing
+// that differs between step kinds.
+struct StepRequest {
+    const char* cmd = nullptr;
     nlohmann::json params = nlohmann::json::object();
-    params["name"] = step.name.toStdString();
-    nlohmann::json request = nlohmann::json::object();
+};
+
+[[nodiscard]] StepRequest request_for(const SetupStep& step) {
+    StepRequest request;
+    request.params["name"] = step.name.toStdString();
     switch (step.kind) {
     case StepKind::DownloadInstall:
-        request["cmd"] = linkproto::cmd::kDownloadInstall;
-        params["url"] = step.url.toStdString();
-        params["args"] = step.args.toStdString();
+        request.cmd = linkproto::cmd::kDownloadInstall;
+        request.params["url"] = step.url.toStdString();
+        request.params["args"] = step.args.toStdString();
         break;
     case StepKind::RunScript:
-        request["cmd"] = linkproto::cmd::kRunScript;
-        params["script"] = step.script.toStdString();
+        request.cmd = linkproto::cmd::kRunScript;
+        request.params["script"] = step.script.toStdString();
         break;
     case StepKind::DownloadExtract:
-        request["cmd"] = linkproto::cmd::kDownloadExtract;
-        params["url"] = step.url.toStdString();
-        params["extract_to"] = step.extract_to.toStdString();
-        params["script"] = step.script.toStdString();
+        request.cmd = linkproto::cmd::kDownloadExtract;
+        request.params["url"] = step.url.toStdString();
+        request.params["extract_to"] = step.extract_to.toStdString();
+        request.params["script"] = step.script.toStdString();
         break;
     }
-    request["params"] = std::move(params);
     return request;
 }
 
@@ -52,17 +56,8 @@ SetupStageRunner::SetupStageRunner(link::AgentRpcClient& rpc, QObject* parent)
 SetupStageRunner::~SetupStageRunner() { detach(); }
 
 void SetupStageRunner::detach() {
-    if (rpc_ == nullptr) {
-        return;
-    }
-    if (progress_token_ != 0) {
-        rpc_->off_event(progress_token_);
-        progress_token_ = 0;
-    }
-    if (done_token_ != 0) {
-        rpc_->off_event(done_token_);
-        done_token_ = 0;
-    }
+    progress_sub_.reset();
+    done_sub_.reset();
     rpc_ = nullptr;
 }
 
@@ -88,8 +83,8 @@ void SetupStageRunner::run() {
 void SetupStageRunner::subscribe_to_agent_events() {
     // Handlers run on the channel's reader thread; everything they touch
     // is marshalled back here first.
-    progress_token_ = rpc_->on_event(QString::fromLatin1(linkproto::topic::kSetupProgress),
-                                     [this](const nlohmann::json& frame) {
+    progress_sub_ = rpc_->subscribe(linkproto::topic::kSetupProgress,
+                                    [this](const nlohmann::json& frame) {
         const auto job = QString::fromStdString(frame.value("job_id", std::string{}));
         const auto message = QString::fromStdString(frame.value("message", std::string{}));
         const auto bytes = frame.value("bytes", std::uint64_t{0});
@@ -118,8 +113,8 @@ void SetupStageRunner::subscribe_to_agent_events() {
         }, Qt::QueuedConnection);
     });
 
-    done_token_ = rpc_->on_event(QString::fromLatin1(linkproto::topic::kSetupDone),
-                                 [this](const nlohmann::json& frame) {
+    done_sub_ = rpc_->subscribe(linkproto::topic::kSetupDone,
+                                [this](const nlohmann::json& frame) {
         const auto job = QString::fromStdString(frame.value("job_id", std::string{}));
         const auto ok = frame.value("ok", false);
         const auto code = frame.value("exit_code", 0);
@@ -151,45 +146,27 @@ void SetupStageRunner::subscribe_to_agent_events() {
 bool SetupStageRunner::dispatch_step(const SetupStep& step, int row) {
     const auto request = request_for(step);
     LSW_INFO("provision: dispatch setup step row={} kind={} name='{}'", row,
-             request["cmd"].get<std::string>(), step.name.toStdString());
+             request.cmd, step.name.toStdString());
     Q_EMIT step_started(row);
 
     // Blocking, but only until the agent acks with a job id — the work
     // itself runs in the guest and streams back as events. On a healthy
     // channel the ack is immediate, so the GUI thread is fine here.
-    const auto reply = rpc_->call(request);
-    if (reply.isEmpty()) {
+    const auto reply = rpc_->request(request.cmd, request.params);
+    const auto job_id = reply.body.is_object()
+                            ? QString::fromStdString(reply.body.value("job_id", std::string{}))
+                            : QString{};
+    if (!reply.ok || job_id.isEmpty()) {
         any_failure_ = true;
-        Q_EMIT step_finished(row, false, QStringLiteral("RPC failed (no reply)"));
+        Q_EMIT step_finished(row, false,
+                             reply.ok ? QStringLiteral("agent returned no job_id")
+                                      : QString::fromStdString(reply.error));
         return false;
     }
-    try {
-        const auto json = nlohmann::json::parse(reply.constData(),
-                                                reply.constData() + reply.size());
-        if (!json.value("ok", false)) {
-            any_failure_ = true;
-            Q_EMIT step_finished(row, false,
-                                 QString::fromStdString(
-                                     json.value("error", std::string{"agent error"})));
-            return false;
-        }
-        const auto job_id = QString::fromStdString(json.value("job_id", std::string{}));
-        if (job_id.isEmpty()) {
-            any_failure_ = true;
-            Q_EMIT step_finished(row, false,
-                                 QStringLiteral("agent returned no job_id"));
-            return false;
-        }
-        job_to_row_.insert(job_id, row);
-        LSW_INFO("provision: setup step row={} accepted by agent job_id={}", row,
-                 job_id.toStdString());
-        return true;
-    } catch (const nlohmann::json::exception& e) {
-        LSW_WARN("provision: malformed setup ack: {}", e.what());
-        any_failure_ = true;
-        Q_EMIT step_finished(row, false, QStringLiteral("malformed ack"));
-        return false;
-    }
+    job_to_row_.insert(job_id, row);
+    LSW_INFO("provision: setup step row={} accepted by agent job_id={}", row,
+             job_id.toStdString());
+    return true;
 }
 
 void SetupStageRunner::start_stage(int index) {
