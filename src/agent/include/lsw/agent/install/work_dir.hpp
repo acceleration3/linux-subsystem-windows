@@ -7,11 +7,11 @@ namespace lsw::agent::install {
 // Where staged job files live: downloaded installers, extracted
 // archives, generated .cmd scripts.
 //
-// Deliberately NOT %TEMP%. The agent has historically run as SYSTEM, for
-// which GetTempPath returns a directory under
-// ``C:\Windows\System32\config\systemprofile`` that the wizard user —
-// which setup children run as — cannot read, so cmd.exe and tar fail
-// with access denied. ``C:\ProgramData\LSW`` carries an inheritable
+// Deliberately NOT %TEMP%. The agent runs as SYSTEM, for which
+// GetTempPath returns a directory (C:\Windows\Temp, or under
+// ``C:\Windows\System32\config\systemprofile``) that a job started as
+// the session's user cannot read, so cmd.exe and tar would fail with
+// access denied. ``C:\ProgramData\LSW`` carries an inheritable
 // Users:Modify ACE granted by the autounattend, so a work subdirectory
 // under it is readable and writable by both.
 class WorkDir {

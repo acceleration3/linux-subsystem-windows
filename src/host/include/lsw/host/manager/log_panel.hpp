@@ -26,6 +26,10 @@ class LogPanel : public QWidget {
 public:
     explicit LogPanel(apps::LogStore& store, QWidget* parent = nullptr);
 
+    // How many records are on screen now, what record_count_changed
+    // last said.
+    [[nodiscard]] int shown() const noexcept { return shown_; }
+
 Q_SIGNALS:
     // How many records are on screen, for the rail's marker.
     void record_count_changed(int count);

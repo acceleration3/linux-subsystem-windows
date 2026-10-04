@@ -10,8 +10,7 @@
 #include "lsw/host/link/agent_rpc_client.hpp"
 #include "lsw/host/vm/libvirt_connection.hpp"
 #include "lsw/host/vm/lifecycle.hpp"
-#include "lsw/host/vm/monitor.hpp"
-#include "lsw/host/vm/render_stats.hpp"
+#include "lsw/host/services/status_hub.hpp"
 
 #include <QObject>
 
@@ -30,8 +29,8 @@ namespace lsw::host::services {
 //
 // Construction order is load-bearing:
 //   1. ``settings_``  — every path below is derived from it.
-//   2. ``libvirt_``   — the connection ``lifecycle_``/``monitor_`` wrap.
-//   3. ``rpc_``       — attached to by ``log_store_`` and ``monitor_``.
+//   2. ``libvirt_``   — the connection ``lifecycle_``/``status_`` wrap.
+//   3. ``rpc_``       — attached to by ``log_store_`` and ``status_``.
 // Member order encodes it; do not reorder.
 //
 // Teardown order is the reverse, which matters for ``log_store_``: its
@@ -54,26 +53,30 @@ public:
     void attach_running_vms();
 
     [[nodiscard]] config::Settings& settings() noexcept { return settings_; }
+
     [[nodiscard]] config::VmState& vms() noexcept { return vms_; }
+
     [[nodiscard]] vm::LibvirtConnection& libvirt() noexcept { return libvirt_; }
+
     [[nodiscard]] vm::Lifecycle& lifecycle() noexcept { return lifecycle_; }
-    [[nodiscard]] vm::Monitor& monitor() noexcept { return monitor_; }
+
+    // Every status the UI shows, polled in one place: read it, listen
+    // to it, and poll nothing yourself.
+    [[nodiscard]] StatusHub& status() noexcept { return status_; }
+
     [[nodiscard]] link::AgentRpcClient& rpc() noexcept { return rpc_; }
+
     // The one guest-window enumeration every consumer shares.
     [[nodiscard]] apps::AppConfigStore& app_configs() noexcept { return app_configs_; }
+
     [[nodiscard]] apps::LogStore& log_store() noexcept { return log_store_; }
 
     // Everything the settings page reads and writes, plus what has been
-    // edited and not yet applied. Shared, because the render page also
-    // stages sizes and the launcher reads the channel bindings.
-    [[nodiscard]] config::ManagerSettings& manager_settings() noexcept {
-        return manager_settings_;
-    }
-    [[nodiscard]] config::PendingChanges& pending_changes() noexcept {
-        return pending_changes_;
-    }
-    // What the render server is saying about its own congestion.
-    [[nodiscard]] vm::RenderStats& render_stats() noexcept { return render_stats_; }
+    // edited and not yet applied. Shared, because more than one page
+    // stages restart keys and one apply bar commits them all.
+    [[nodiscard]] config::ManagerSettings& manager_settings() noexcept { return manager_settings_; }
+
+    [[nodiscard]] config::PendingChanges& pending_changes() noexcept { return pending_changes_; }
 
     // Point the agent channel at ``uuid``'s guest: its shared region
     // first, so the first frame after connecting already routes through
@@ -82,15 +85,9 @@ public:
     bool bind_agent(const QUuid& uuid);
 
     // Start ``uuid``'s domain. Whether the guest has booted before
-    // decides whether it should still be carrying the install media,
-    // which is where a VM provisioned before the eject existed gets
-    // noticed. Returns Lifecycle::start's code.
+    // decides whether it should still be carrying the install media.
+    // Returns Lifecycle::start's code.
     [[nodiscard]] int start_vm(const QUuid& uuid);
-
-    // Push the render-channel sizes from settings into RenderServer, so
-    // the next server started uses them. A running server keeps the
-    // sizes it was started with, which is why they are restart keys.
-    void apply_render_sizing();
 
     // Push the desktop-entry and file-manager settings out to the
     // places they actually live: the XDG applications directory, the
@@ -104,18 +101,18 @@ private:
     config::ManagerSettings manager_settings_;
     // Declared after manager_settings_: it holds a reference to it.
     config::PendingChanges pending_changes_;
-    vm::RenderStats render_stats_;
     config::VmState vms_;
     vm::LibvirtConnection libvirt_;
     vm::Lifecycle lifecycle_;
-    vm::Monitor monitor_;
     link::AgentRpcClient rpc_;
     // Declared after rpc_: it registers UIA event handlers on it and
     // detaches them in its destructor.
-    // Adapter handed to monitor_ so the VM layer can read in-guest
+    // Adapter handed to status_ so the VM layer can read in-guest
     // numbers without depending on the agent channel. Declared after
     // rpc_ (it holds a reference to it).
     link::AgentGuestStatsProbe guest_probe_;
+    // Declared after everything it reads.
+    StatusHub status_;
     apps::AppConfigStore app_configs_;
     apps::LogStore log_store_;  // declared after rpc_: detaches from it in ~LogStore
 };

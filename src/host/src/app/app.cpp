@@ -131,6 +131,14 @@ int App::run() {
     } else {
         start_mcp_server();
         show_main_window();
+        // "Start the guest when the manager opens", for the manager that
+        // opens on its own; a --launch click starts it anyway.
+        const config::VmRecord* primary = services_.vms().primary();
+        if (services_.manager_settings().bool_value(config::ManagerSettings::Key::kAutostart)
+            && primary != nullptr && cli_.launch_app_id.isEmpty()
+            && !services_.lifecycle().is_running(primary->uuid)) {
+            (void)services_.start_vm(primary->uuid);
+        }
     }
 
     // Invoked as ``lsw-manager --launch <id>`` with no other manager
@@ -168,17 +176,31 @@ int App::capture_screens(const QString& dir) {
 
     auto* window = new manager::MainWindow(services_);
     window->resize(1000, 620);
+    // The host probe runs in the background; a picture of the Graphics
+    // page before it answers is a picture of "asking".
+    for (int i = 0; i < 100 && !services_.status().graphics().probed; ++i) {
+        processEvents(QEventLoop::AllEvents, 50);
+    }
+    // Each at the height the design draws it at: the Graphics and
+    // Settings pages are drawn taller than the window opens, and a
+    // picture of their first screenful would compare against half of it.
     static constexpr struct {
         manager::NavRail::Page page;
         const char* name;
+        int height;
     } kPages[] = {
-        {manager::NavRail::Page::Overview, "manager-01-overview"},
-        {manager::NavRail::Page::Console, "manager-02-console"},
-        {manager::NavRail::Page::Log, "manager-03-log"},
-        {manager::NavRail::Page::Render, "manager-04-render"},
-        {manager::NavRail::Page::Settings, "manager-05-settings"},
+        {manager::NavRail::Page::Overview, "manager-01-overview", 620},
+        {manager::NavRail::Page::Console, "manager-02-console", 620},
+        {manager::NavRail::Page::Log, "manager-03-log", 620},
+        {manager::NavRail::Page::Graphics, "manager-04-graphics", 860},
+        {manager::NavRail::Page::Settings, "manager-05-settings", 900},
+        // The whole settings page at once: the tables further down are
+        // where rows of controls get clipped, and the first screenful
+        // does not reach them.
+        {manager::NavRail::Page::Settings, "manager-06-settings-full", 2200},
     };
     for (const auto& entry : kPages) {
+        window->resize(1000, entry.height);
         window->show_page(entry.page);
         shoot(window, QString::fromLatin1(entry.name));
     }
@@ -206,7 +228,8 @@ int App::capture_screens(const QString& dir) {
                                          manager::RemoteFileDialog::Mode::Program};
         shoot(&picker, QStringLiteral("dialog-4-browse"));
 
-        manager::LaunchSplash splash{QStringLiteral("Photoshop 2024"), QIcon{}};
+        manager::LaunchSplash splash{QStringLiteral("Photoshop 2024"), QIcon{},
+                                     services_.status().last_boot_ms()};
         splash.reach(manager::LaunchSplash::Phase::MachineStarted);
         shoot(&splash, QStringLiteral("dialog-5-starting"));
     }

@@ -1,9 +1,11 @@
 #pragma once
 
+#include "lsw/host/config/display_modes.hpp"
 #include "lsw/host/manager/nav_rail.hpp"
 
 #include <QMainWindow>
 #include <QSystemTrayIcon>
+#include <optional>
 
 class QLabel;
 class QPushButton;
@@ -11,13 +13,17 @@ class QStackedWidget;
 
 namespace lsw::host::services { class HostServices; }
 
+namespace lsw::host::vm { class GracefulShutdown; }
+
 namespace lsw::host::manager {
 
 class ConsolePanel;
+class GraphicsAlerts;
+class GraphicsPage;
 class LogPanel;
-class RenderPanel;
 class SettingsPage;
 class VmDetailPanel;
+class WarningStrip;
 
 // Manager shell: a navigation rail down the left, one page at a time
 // beside it, and a status bar carrying the facts that used to live only
@@ -57,9 +63,19 @@ private:
     void refresh_identity();
     [[nodiscard]] QString page_detail(NavRail::Page page) const;
     void refresh_status_bar();
+    // The overview's strip and the rail's dot, from the Graphics page's
+    // warnings.
     void refresh_warning();
-    void push_display_settings();
+    // The resolutions, to the running device (a qom-set; no agent
+    // needed), and the DPI, to the agent (read at the next logon).
+    void push_display_modes();
+    void push_dpi();
+    // The monitor this window is on, for "match the monitor".
+    [[nodiscard]] std::optional<config::DisplayMode> current_output() const;
+    // Rewrite the definition, then stop the guest — waiting until it is
+    // off, forcing it at a deadline — and start it on the new one.
     void restart_guest();
+    void on_graphics_changed();
 
     services::HostServices& services_;
 
@@ -74,10 +90,17 @@ private:
     QPushButton* preview_button_ = nullptr;
     QPushButton* clear_button_ = nullptr;
     QPushButton* config_folder_button_ = nullptr;
-    QPushButton* reset_counts_button_ = nullptr;
-    QWidget* warn_strip_ = nullptr;
-    QLabel* warn_text_ = nullptr;
+    QPushButton* change_settings_button_ = nullptr;
+    // The two Graphics warnings that break the guest, repeated on the
+    // overview with a way to the page that says more.
+    WarningStrip* warn_strip_ = nullptr;
     QLabel* status_left_ = nullptr;
+    // Something this window did that the status bar says ahead of the
+    // facts until it is over: a restart in progress, a resolution the
+    // device refused. The facts themselves are redrawn from the status
+    // hub on every reading, so a message written straight into the bar
+    // would be gone two seconds later.
+    QString notice_;
 
     // Overview is two pages: the machine, and the state where there is
     // no machine yet. A manager that opens with dead buttons and blank
@@ -86,11 +109,13 @@ private:
     VmDetailPanel* overview_ = nullptr;
     ConsolePanel* console_ = nullptr;
     LogPanel* log_ = nullptr;
-    RenderPanel* render_ = nullptr;
+    GraphicsAlerts* alerts_ = nullptr;
+    GraphicsPage* graphics_page_ = nullptr;
     SettingsPage* settings_page_ = nullptr;
     QSystemTrayIcon* tray_ = nullptr;
-
-    bool warning_dismissed_ = false;
+    // A restart in progress: the guest is being stopped so it can be
+    // started on a new definition.
+    vm::GracefulShutdown* restart_ = nullptr;
 };
 
 }  // namespace lsw::host::manager

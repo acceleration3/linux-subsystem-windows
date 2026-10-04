@@ -58,7 +58,12 @@ AppConfigDialog::AppConfigDialog(apps::AppConfig initial, link::AgentRpcClient& 
     identity_name_ = new QLabel(cfg_.name.isEmpty() ? QStringLiteral("New application")
                                                     : cfg_.name);
     identity_name_->setObjectName(QString::fromLatin1(Theme::Role::kHeading));
-    icon_status_ = Widgets::meta(QStringLiteral("no icon yet"), true);
+    // What the slot beside it shows: the icon kept with the
+    // configuration, or none.
+    icon_status_ = Widgets::meta(cfg_.icon_image().isNull()
+                                     ? QStringLiteral("no icon yet")
+                                     : QStringLiteral("the icon kept from the last read"),
+                                 true);
     titles->addWidget(identity_name_);
     titles->addWidget(icon_status_);
     identity->addWidget(icon_label_);
@@ -163,20 +168,6 @@ AppConfigDialog::AppConfigDialog(apps::AppConfig initial, link::AgentRpcClient& 
         QStringLiteral("image/vnd.adobe.photoshop, application/x-ms-dos-executable"));
     fields.add(QStringLiteral("Opens file types"), mime_edit_);
 
-    // -1 is "any", which is what every application did before there was
-    // a choice, and is still the right default: pinning matters only
-    // when you want one application's counters or its ring size kept
-    // apart from everything else.
-    channel_combo_ = new QComboBox;
-    channel_combo_->addItem(QStringLiteral("Any free channel"), -1);
-    for (int i = 0; i < 8; ++i) {
-        channel_combo_->addItem(QStringLiteral("Channel %1").arg(i), i);
-    }
-    if (const int index = channel_combo_->findData(cfg_.channel); index >= 0) {
-        channel_combo_->setCurrentIndex(index);
-    }
-    fields.add(QStringLiteral("Render channel"), channel_combo_);
-
     root->addLayout(form);
     root->addStretch(1);
 
@@ -226,21 +217,24 @@ void AppConfigDialog::fetch_icon() {
         return;
     }
     if (!rpc_.has_target()) {
-        icon_status_->setText("Windows is not running, so there is no icon to read.");
+        icon_status_->setText(QStringLiteral("No guest is set up, so there is no icon to read."));
         return;
     }
-    icon_status_->setText("Fetching from guest agent...");
+    icon_status_->setText(QStringLiteral("Asking the guest for its icon"));
     rpc_.request_async(linkproto::cmd::kGetIcon, {{"path", path.toStdString()}}, this,
                        [this](const link::AgentReply& reply) {
         const auto b64 = reply.ok ? reply.body.value("icon_png_base64", std::string{})
                                   : std::string{};
         if (b64.empty()) {
-            icon_status_->setText("Could not fetch icon for that path.");
+            icon_status_->setText(
+                reply.ok ? QStringLiteral("Windows has no icon for that path.")
+                         : QStringLiteral("The agent did not answer: %1")
+                               .arg(QString::fromStdString(reply.error)));
             return;
         }
         cfg_.icon_png_base64 = QString::fromStdString(b64);
         update_icon_preview();
-        icon_status_->setText("Icon fetched.");
+        icon_status_->setText(QStringLiteral("Read from the guest just now."));
     });
 }
 
@@ -262,7 +256,6 @@ void AppConfigDialog::on_accept() {
     cfg_.workdir = workdir_edit_->text().trimmed();
     cfg_.env = env_edit_->toPlainText();
     cfg_.publish_entry = publish_box_->isChecked();
-    cfg_.channel = channel_combo_->currentData().toInt();
     // Typed with commas because that is how people write a list; stored
     // one per line because that is how the .desktop file wants them.
     QStringList types;

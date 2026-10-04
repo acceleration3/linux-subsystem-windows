@@ -31,6 +31,15 @@ struct SpawnOptions {
     HANDLE std_error = nullptr;
     // STARTF_USESHOWWINDOW with SW_HIDE.
     bool hide_window = false;
+    // A primary token to start the process as (CreateProcessAsUserW);
+    // null starts it as this process (CreateProcessW). Borrowed, not
+    // owned. Set by RunAs::apply, which also supplies the user's
+    // environment block — a token without one would hand the child the
+    // service's environment.
+    HANDLE token = nullptr;
+    // lpDesktop, e.g. ``winsta0\default``. Empty passes nullptr: the
+    // child gets this process's window station and desktop.
+    std::wstring desktop;
 };
 
 // A process CreateProcessW started, with both of its handles owned.
@@ -41,6 +50,16 @@ struct SpawnedProcess {
 };
 
 // Starts processes.
+//
+// Inheritance is explicit: with ``inherit_handles`` set, only the three
+// standard handles are inherited (PROC_THREAD_ATTRIBUTE_HANDLE_LIST),
+// never whatever else happens to be inheritable in the agent at that
+// moment — another console's pipe end leaking into this child would keep
+// that console from ever seeing EOF.
+//
+// A non-empty environment block is always passed as UTF-16
+// (CREATE_UNICODE_ENVIRONMENT is added), since that is what every block
+// the agent builds is.
 class Process {
 public:
     Process() = delete;

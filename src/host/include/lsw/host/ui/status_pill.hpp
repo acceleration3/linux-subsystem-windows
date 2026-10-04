@@ -9,11 +9,11 @@ class QTableWidget;
 namespace lsw::host::ui {
 
 // A status word with its dot, in a pill: Pending, Running, Done,
-// Failed. Each state keeps the colour that means that everywhere else,
+// Failed, and Warning for something to act on that is not broken. Each state keeps the colour that means that everywhere else,
 // so a column of them reads from shape and colour before the word is.
 class StatusPill {
 public:
-    enum class State : std::uint8_t { Pending, Running, Done, Failed };
+    enum class State : std::uint8_t { Pending, Running, Done, Failed, Warning };
 
     StatusPill() = delete;
 

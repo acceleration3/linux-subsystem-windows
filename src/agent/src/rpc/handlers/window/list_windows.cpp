@@ -20,13 +20,9 @@ struct ListWindowsHandler : RpcHandler {
                 {"hwnd", static_cast<std::uint64_t>(w.hwnd)},
                 {"owner", static_cast<std::uint64_t>(w.owner)},
                 {"pid", static_cast<std::uint64_t>(w.pid)},
-                // Which launch this window's process came from, following
-                // through any stub that spawned it. 0 for a process the
-                // agent did not start. The host scopes a watcher to this
-                // rather than to ``pid``, or an application whose first
-                // process is a launcher loses every window it opens.
-                {"root_pid", static_cast<std::uint64_t>(
-                                 apps::LaunchGroup::root_of(w.pid))},
+                // Filled in by the service (complete_in_service): the
+                // launches are tracked there, not in this helper.
+                {"root_pid", std::uint64_t{0}},
                 {"title", w.title},
                 {"exe_path", w.exe_path},
                 {"client_w", w.client_w},
@@ -41,6 +37,22 @@ struct ListWindowsHandler : RpcHandler {
         return {{"windows", std::move(arr)}};
     }
 
+    // Which launch each window's process came from, following through
+    // any stub that spawned it; 0 for a process the agent did not start.
+    // The host scopes a watcher to this rather than to ``pid``, or an
+    // application whose first process is a launcher loses every window
+    // it opens. Answered here because the service is what launched them.
+    void complete_in_service(nlohmann::json& reply) const override {
+        auto it = reply.find("windows");
+        if (it == reply.end() || !it->is_array()) {
+            return;
+        }
+        for (auto& w : *it) {
+            const auto pid = static_cast<unsigned long>(w.value("pid", std::uint64_t{0}));
+            w["root_pid"] = static_cast<std::uint64_t>(apps::LaunchGroup::root_of(pid));
+        }
+    }
+
     // Polled by every window watcher at ~45 Hz; a REQ/REP pair each
     // would leave room for nothing else in the log ring.
     [[nodiscard]] bool silent() const override { return true; }
@@ -49,6 +61,10 @@ struct ListWindowsHandler : RpcHandler {
         return std::to_string(reply.value("windows", nlohmann::json::array()).size())
                + " windows";
     }
+
+    // Window handles, UI Automation and HKCU belong to the user's
+    // session: served by the session helper there.
+    [[nodiscard]] Placement placement() const override { return Placement::UserSession; }
 };
 
 }  // namespace lsw::agent::rpc::handlers

@@ -114,6 +114,14 @@ void InstallPage::initializePage() {
         LSW_INFO("install_page: attaching ui::VncView to 127.0.0.1:{}", port);
         vnc_->connect_to("127.0.0.1", port);
     });
+    // The payload page advances on a zero-delay timer, by which time the
+    // disk step has already started: what was missed is read back.
+    if (const auto step = p->current_step(); step && is_install_phase(*step)) {
+        set_phase(p->current_description());
+    }
+    if (p->vnc_port() > 0) {
+        vnc_->connect_to("127.0.0.1", p->vnc_port());
+    }
 }
 
 int InstallPage::nextId() const {

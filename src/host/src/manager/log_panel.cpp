@@ -174,7 +174,9 @@ void LogPanel::on_appended(const QVector<apps::LogRecord>& batch) {
     if (autoscroll_->isChecked() || was_at_bottom) {
         view_->moveCursor(QTextCursor::End);
     }
-    shown_ += added;
+    // The store keeps a bounded window and so does the view; the count
+    // is of what is still there, not of everything ever appended.
+    shown_ = qMin(shown_ + added, static_cast<int>(store_.records().size()));
     Q_EMIT record_count_changed(shown_);
 }
 

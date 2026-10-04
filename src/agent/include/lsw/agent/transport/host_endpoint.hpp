@@ -24,11 +24,15 @@ namespace lsw::agent::transport {
 // Per connection the endpoint owns:
 //   * an ``EnvelopeWriter`` — the write half of the socket,
 //   * an ``EventPump`` — every ``rpc::EventSource`` that pushes to the
-//     manager (logs, installer, console, UIA).
+//     manager (logs, installer, console, and the session helpers' UIA).
 //
 // Nothing a connection attaches is torn down when it closes: UIA
-// subscriptions outlive it, and the host is responsible for
-// unsubscribing them.
+// subscriptions (held by the session helpers) outlive it, and the host
+// is responsible for unsubscribing them.
+//
+// Session-bound commands — the handlers whose Placement is UserSession —
+// are not run here: the dispatcher hands them to the SessionManager,
+// which forwards them to the helper in the target session.
 //
 // Adding a command means adding a handler TU; adding a push-event kind
 // means registering one more source in ``handle_connection``. Neither
@@ -54,9 +58,14 @@ public:
     HostEndpoint(const HostEndpoint&) = delete;
     HostEndpoint& operator=(const HostEndpoint&) = delete;
 
-    // Blocks accepting connections until ``stop_flag`` is set. ``run``
-    // is the only entry — fully self-contained, owns its socket fd.
-    void run(std::atomic<bool>& stop_flag);
+    // Blocks accepting connections until ``stop_flag`` is set and
+    // ``stop`` is called. Returns false if the port could not be bound —
+    // which, for the service, is a failure the SCM should restart it for.
+    [[nodiscard]] bool run(std::atomic<bool>& stop_flag);
+
+    // Unblock ``run`` from another thread: closes the listening socket.
+    // Connections notice ``stop_flag`` on their next tick and end.
+    void stop();
 
 private:
     [[nodiscard]] bool open_listen();
@@ -71,7 +80,8 @@ private:
     core::AgentServices* services_;
     // SOCKET, kept as intptr_t so this header does not have to pull in
     // <winsock2.h> (which must precede <windows.h> wherever it appears).
-    std::intptr_t listen_fd_ = -1;
+    std::atomic<std::intptr_t> listen_fd_{-1};
+    std::atomic<bool>* stop_flag_ = nullptr;
 
     struct Connection {
         std::thread thread;

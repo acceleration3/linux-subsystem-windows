@@ -5,6 +5,7 @@
 #include "lsw/agent/rpc/context.hpp"
 #include "lsw/agent/rpc/event_source.hpp"
 #include "lsw/agent/rpc/registry.hpp"
+#include "lsw/agent/session/session_manager.hpp"
 #include "lsw/agent/transport/console_event_source.hpp"
 #include "lsw/agent/transport/envelope_writer.hpp"
 #include "lsw/agent/transport/event_pump.hpp"
@@ -121,7 +122,14 @@ public:
             LSW_AGENT_WARN("host_endpoint: unknown command {}", cmd);
         } else {
             try {
-                reply["result"] = handler->handle(params, *ctx_);
+                if (handler->placement() == rpc::RpcHandler::Placement::UserSession) {
+                    // Runs in the user's session, in the helper there.
+                    nlohmann::json result = ctx_->services.sessions().route(cmd, params);
+                    handler->complete_in_service(result);
+                    reply["result"] = std::move(result);
+                } else {
+                    reply["result"] = handler->handle(params, *ctx_);
+                }
             } catch (const std::exception& e) {
                 reply["error"] = e.what();
                 LSW_AGENT_WARN("host_endpoint: cmd={} threw: {}", cmd, e.what());
@@ -155,10 +163,16 @@ HostEndpoint::HostEndpoint(core::AgentServices& services) : services_(&services)
 }
 
 HostEndpoint::~HostEndpoint() {
-    if (listen_fd_ >= 0) {
-        ::closesocket(static_cast<SOCKET>(listen_fd_));
-    }
+    stop();
     ::WSACleanup();
+}
+
+void HostEndpoint::stop() {
+    const std::intptr_t fd = listen_fd_.exchange(-1);
+    if (fd >= 0) {
+        // Unblocks accept() in run().
+        ::closesocket(static_cast<SOCKET>(fd));
+    }
 }
 
 bool HostEndpoint::open_listen() {
@@ -184,25 +198,32 @@ bool HostEndpoint::open_listen() {
         ::closesocket(s);
         return false;
     }
-    listen_fd_ = static_cast<std::intptr_t>(s);
+    listen_fd_.store(static_cast<std::intptr_t>(s));
     LSW_AGENT_INFO("host_endpoint: listening on :{}", linkproto::kAgentTcpPort);
     return true;
 }
 
-void HostEndpoint::run(std::atomic<bool>& stop_flag) {
+bool HostEndpoint::run(std::atomic<bool>& stop_flag) {
+    stop_flag_ = &stop_flag;
     if (!open_listen()) {
-        return;
+        return false;
     }
     while (!stop_flag.load()) {
+        const std::intptr_t fd = listen_fd_.load();
+        if (fd < 0) {
+            break;  // stop() closed it
+        }
         sockaddr_in peer{};
         int peer_len = sizeof(peer);
-        SOCKET c = ::accept(static_cast<SOCKET>(listen_fd_), reinterpret_cast<sockaddr*>(&peer),
+        SOCKET c = ::accept(static_cast<SOCKET>(fd), reinterpret_cast<sockaddr*>(&peer),
                             &peer_len);
         if (c == INVALID_SOCKET) {
-            if (stop_flag.load()) {
+            if (stop_flag.load() || listen_fd_.load() < 0) {
                 break;
             }
             LSW_AGENT_WARN("host_endpoint: accept failed wsa_err={}", ::WSAGetLastError());
+            // Not a tight loop if the socket has gone bad for good.
+            ::Sleep(100);
             continue;
         }
         // Nagle off on this side too. Replies to input are not sent at
@@ -257,6 +278,7 @@ void HostEndpoint::run(std::atomic<bool>& stop_flag) {
             conn->thread.join();
         }
     }
+    return true;
 }
 
 void HostEndpoint::reap_finished_connections() {
@@ -325,7 +347,7 @@ void HostEndpoint::handle_connection(std::intptr_t accepted_fd, bool owns_shmem_
     pump.add(logs);
     pump.add(installer);
     pump.add(console);
-    pump.add(services_->uia());
+    pump.add(services_->sessions());
 
     const EventPump::Sender send_event = [&](const rpc::Event& ev) {
         nlohmann::json message = ev.payload;
@@ -385,6 +407,12 @@ void HostEndpoint::handle_connection(std::intptr_t accepted_fd, bool owns_shmem_
     };
 
     for (;;) {
+        if (stop_flag_ != nullptr && stop_flag_->load()) {
+            LSW_AGENT_INFO("host_endpoint: closing the connection from {}: the agent is "
+                           "stopping",
+                           peer);
+            return;
+        }
         fd_set rd;
         FD_ZERO(&rd);
         FD_SET(s, &rd);

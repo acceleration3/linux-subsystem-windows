@@ -30,11 +30,6 @@ namespace lsw::linkproto {
 
 // What a channel carries. Values are a wire contract; never renumber.
 inline constexpr std::uint32_t kChannelRpc = 2;        // duplex control messages
-// 1 was the window-frame ring; frames are the window mirror's now. 3 and
-// 4 were the Vulkan proxy's command stream and its host-memory arena;
-// the proxy is the render server's, in a region of its own. This region
-// carries control traffic only. Retired rather than reused: the values
-// are a wire contract.
 
 struct ChannelDescriptor {
     std::uint32_t kind;      // 0x00  one of the kChannel* values
@@ -115,8 +110,7 @@ inline constexpr std::uint64_t kDefaultRpcChannelBytes = 1ULL << 20;        // 1
 
 // ---- Doorbell vectors ---------------------------------------------------
 // The guest signals the host with an IVSHMEM MSI-X doorbell. One
-// channel, one vector. A device that exposes more than this asks for is
-// a VM defined by an older manager, and the extra vectors go unused.
+// channel, one vector.
 
 inline constexpr std::uint16_t kRpcDoorbellVector = 0;
 // Total vectors the device must expose. Mirrored by <msi vectors='N'/>
@@ -150,8 +144,7 @@ struct ChannelView {
 };
 
 // Find a channel by kind. Returns an invalid view when the region has no
-// such channel — which is the expected answer for an older peer, not an
-// error.
+// such channel.
 [[nodiscard]] inline ChannelView find_channel(const void* region_base,
                                               std::uint32_t kind) {
     ChannelView out;

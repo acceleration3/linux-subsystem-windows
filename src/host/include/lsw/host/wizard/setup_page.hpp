@@ -7,6 +7,7 @@
 #include <QLabel>
 #include <QProgressBar>
 #include <QTableWidget>
+#include <QVector>
 
 namespace lsw::host::wizard {
 
@@ -41,6 +42,10 @@ private:
     QLabel* status_label_ = nullptr;
     int total_steps_ = 0;
     int finished_steps_ = 0;
+    // The plan's stages as row ranges: each stage's size, in order, so
+    // the caption can follow the step that is running.
+    QVector<int> stage_sizes_;
+    void show_stage(int row);
 };
 
 }  // namespace lsw::host::wizard

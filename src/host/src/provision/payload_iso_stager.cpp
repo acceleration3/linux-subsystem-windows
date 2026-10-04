@@ -2,15 +2,17 @@
 
 #include "lsw/base/log.hpp"
 #include "lsw/host/config/settings.hpp"
+#include "lsw/host/platform/accel_virt_paths.hpp"
 #include "lsw/host/platform/agent_exe_path.hpp"
 #include "lsw/host/platform/dolphin_places.hpp"
-#include "lsw/host/platform/guest_driver_paths.hpp"
 #include "lsw/host/platform/mirror_exe_paths.hpp"
 #include "lsw/host/provision/install/autounattend.hpp"
 #include "lsw/host/provision/install/ivshmem_driver.hpp"
 #include "lsw/host/provision/install/payload_iso.hpp"
 
 #include <QtConcurrent>
+
+#include <utility>
 
 namespace lsw::host::provision {
 
@@ -73,36 +75,35 @@ void PayloadIsoStager::build(const config::VmRecord& record, const PipelineInput
                  mirror_exe.toStdString());
     }
 
-    // The guest drivers. Absent means the guest installs normally and
-    // the agent runs; only the GPU path is missing, so this is a
-    // warning rather than a failure.
-    const auto x64 = platform::GuestDriverPaths::x86_64();
-    payload.vulkan_icd_path = x64.vulkan_icd();
-    payload.opengl_icd_path = x64.opengl_icd();
-    payload.opencl_icd_path = x64.opencl_icd();
-    payload.vulkan_loader_path = x64.vulkan_loader();
-    if (payload.vulkan_icd_path.isEmpty() || payload.vulkan_loader_path.isEmpty()) {
-        LSW_WARN("provision: no guest Vulkan driver / loader found; the guest will install "
-                 "without the GPU path. Run scripts/build-agent.sh, or set "
-                 "LSW_VULKAN_ICD_DLL and LSW_VULKAN_LOADER");
-    } else {
-        LSW_INFO("provision: bundling guest drivers vulkan={} opengl={} opencl={} loader={}",
-                 payload.vulkan_icd_path.toStdString(), payload.opengl_icd_path.toStdString(),
-                 payload.opencl_icd_path.toStdString(), payload.vulkan_loader_path.toStdString());
+    // The display driver. Not optional, unlike everything above: the
+    // steady-state machine has the accel-virt adapter as its only
+    // display, so a guest installed without the package boots to a
+    // device with no driver and no desktop. Refusing here, before the
+    // disk exists, is the cheapest place to find out.
+    payload.av_driver_tree = platform::AccelVirtPaths::driver_tree();
+    if (payload.av_driver_tree.isEmpty()) {
+        Q_EMIT failed(QStringLiteral(
+            "the accel-virt driver package was not found, and the guest's only display "
+            "adapter needs it. Build it (`cmake --build build --target drivers && cmake "
+            "--install build` in external/accel-virt), or set $LSW_AV_DRIVERS to an "
+            "installed package: the directory holding provision.ps1 and package/"));
+        return;
     }
+    LSW_INFO("provision: bundling the accel-virt driver package from {}",
+             payload.av_driver_tree.toStdString());
 
-    // The i686 set is what a 32-bit application loads, and every D3D8
-    // and D3D9 title is one. Its absence costs only those, so it is a
-    // note rather than a warning.
-    const auto x86 = platform::GuestDriverPaths::i686();
-    payload.vulkan_icd32_path = x86.vulkan_icd();
-    payload.opengl_icd32_path = x86.opengl_icd();
-    payload.opencl_icd32_path = x86.opencl_icd();
-    payload.vulkan32_loader_path = x86.vulkan_loader();
-    if (payload.vulkan_icd32_path.isEmpty() || payload.vulkan32_loader_path.isEmpty()) {
-        LSW_INFO("provision: no 32-bit guest drivers; 32-bit applications will have no "
-                 "driver. Run scripts/build-agent.sh (it builds both), or set "
-                 "LSW_VULKAN_ICD_DLL_X86 and LSW_VULKAN_LOADER_X86");
+    // The Vulkan loaders. Windows 11 may ship one (26200 carries
+    // 1.3.300.0 in both views) and the guest keeps it when it does, so
+    // a missing build of ours costs only a guest whose Windows has none.
+    payload.vulkan_loader_x64_path = platform::AccelVirtPaths::vulkan_loader(false);
+    payload.vulkan_loader_x86_path = platform::AccelVirtPaths::vulkan_loader(true);
+    for (const auto& [path, bits] : {std::pair{payload.vulkan_loader_x64_path, "64"},
+                                     std::pair{payload.vulkan_loader_x86_path, "32"}}) {
+        if (path.isEmpty()) {
+            LSW_WARN("provision: no {}-bit Vulkan loader built; if this Windows ships none, "
+                     "{}-bit applications will find no Vulkan. Run scripts/build-agent.sh",
+                     bits, bits);
+        }
     }
 
     // libisofs writes hundreds of megabytes; off the GUI thread. The

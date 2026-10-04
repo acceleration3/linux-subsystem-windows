@@ -13,7 +13,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Static libs may end up linked into shared libs (the guest ICDs).
+# Static libs may end up linked into shared libs.
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
@@ -30,11 +30,12 @@ option(LSW_BUILD_MANAGER "Build the VM manager UI (Linux only)"   ON)
 option(LSW_BUILD_AGENT   "Build the Windows guest agent"          ${WIN32})
 option(LSW_BUILD_TESTS   "Build unit tests"                       ON)
 
-# The render server, and the guest drivers that talk to it. On Linux
-# this is the ``rvk-render-server`` binary the manager spawns; on the
-# mingw cross build it is the guest's OpenCL, OpenGL and Vulkan ICDs.
-# One switch, because it is one submodule either way.
-option(LSW_BUILD_RENDER_SERVER "Build the render server / guest ICDs" ON)
+# accel-virt, the GPU. Both of its halves are built by the Linux host
+# build — the patched QEMU and executor for the host, and the guest's
+# avgpu.sys and user-mode drivers with accel-virt's own clang-cl
+# toolchains — so the mingw cross build has nothing to do with it. Off
+# builds a manager whose VMs have no paravirtual GPU.
+option(LSW_BUILD_ACCEL_VIRT "Build the paravirtual GPU (host QEMU + guest drivers)" ON)
 
 # remotewin, the window half. On Linux this is the ``remotewin`` binary
 # the manager spawns for a launched application; on the mingw cross
@@ -73,31 +74,6 @@ include(LSWDependencies)
 add_subdirectory(src/linkproto)
 add_subdirectory(src/base)
 
-# The render server is a project of its own: it knows how to move
-# OpenCL, OpenGL and Vulkan across a shared-memory transport and nothing
-# about virtual machines, so it builds and tests without any of this.
-#
-# LSW consumes it as two artifacts and links neither. On Linux it is the
-# ``rvk-render-server`` executable the manager spawns per VM; on the
-# mingw cross build it is the guest drivers — ``librvk_icd.dll``,
-# ``opengl32.dll``, ``librvk_opencl.dll`` — that the agent links into an
-# application's own directory before starting it.
-set(LSW_RENDER_SERVER_DIR "${CMAKE_SOURCE_DIR}/external/render-server"
-    CACHE PATH "Location of the render-server checkout")
-if(LSW_BUILD_RENDER_SERVER)
-    if(NOT EXISTS "${LSW_RENDER_SERVER_DIR}/CMakeLists.txt")
-        message(FATAL_ERROR
-            "render-server is missing from ${LSW_RENDER_SERVER_DIR}.\n"
-            "It is a submodule: git submodule update --init --recursive")
-    endif()
-    # No demo applications and no test suite: LSW wants the server and
-    # the drivers, and the rest is that project's own business when it
-    # is built on its own.
-    set(RVK_BUILD_GUEST_TOOLS OFF CACHE BOOL "" FORCE)
-    set(RVK_BUILD_TESTS       OFF CACHE BOOL "" FORCE)
-    add_subdirectory("${LSW_RENDER_SERVER_DIR}" render-server)
-endif()
-
 # The window half, and a project of its own for the same reason: it
 # knows how to move a Windows application's windows, its input and its
 # cursors across a boundary, and nothing about virtual machines.
@@ -122,6 +98,32 @@ if(LSW_BUILD_REMOTEWIN)
     add_subdirectory("${LSW_REMOTEWIN_DIR}" remotewin)
 endif()
 
+# The GPU, and a project of its own as well: a WDDM paravirtual adapter
+# for a Windows 11 guest on QEMU/KVM, which knows how to carry Direct3D,
+# Vulkan, OpenGL and OpenCL across a virtio-gpu device and nothing about
+# provisioning Windows or mirroring its windows.
+#
+# LSW consumes it as artifacts and links none of them. On the host it is
+# a patched QEMU with the virtio-gpu-av-pci device, libav_executor.so
+# and av-renderer, which the VM runs on, and DXVK and vkd3d-proton for
+# the host's Direct3D; for the guest it is the av-drivers tree —
+# avgpu.sys, the user-mode drivers, provision.ps1 — which the payload
+# ISO carries and the guest installs as C:\av.
+#
+# Not add_subdirectory: accel-virt builds only with clang, and brings
+# its own Windows toolchains. cmake/LSWAccelVirt.cmake drives it as
+# external projects instead, and says where everything lands.
+set(LSW_ACCEL_VIRT_DIR "${CMAKE_SOURCE_DIR}/external/accel-virt"
+    CACHE PATH "Location of the accel-virt checkout")
+if(LSW_BUILD_MANAGER AND LSW_BUILD_ACCEL_VIRT)
+    if(NOT EXISTS "${LSW_ACCEL_VIRT_DIR}/CMakeLists.txt")
+        message(FATAL_ERROR
+            "accel-virt is missing from ${LSW_ACCEL_VIRT_DIR}.\n"
+            "It is a submodule: git submodule update --init --recursive")
+    endif()
+    include(LSWAccelVirt)
+endif()
+
 if(LSW_BUILD_MANAGER)
     # Dependencies shared by the host-side modules under src/host.
     # Resolved once here, in the parent scope, so every subdirectory sees
@@ -131,6 +133,13 @@ if(LSW_BUILD_MANAGER)
     find_package(PkgConfig REQUIRED)
     find_package(ZLIB REQUIRED)  # MicrosoftClient: defensive gunzip fallback
     pkg_check_modules(LIBVIRT REQUIRED IMPORTED_TARGET libvirt)
+    # virDomainQemuMonitorCommand: QMP passed through libvirt, which is
+    # how a resolution change reaches the running virtio-gpu-av device
+    # (its ``modes`` property) without a restart.
+    pkg_check_modules(LIBVIRT_QEMU REQUIRED IMPORTED_TARGET libvirt-qemu)
+    # Host GPU enumeration: each virtio-gpu-av-pci device binds one host
+    # GPU by its Vulkan device UUID, so that is what the manager lists.
+    find_package(Vulkan REQUIRED)
     pkg_check_modules(LIBISOFS REQUIRED IMPORTED_TARGET libisofs-1)  # PayloadIsoBuilder
     pkg_check_modules(LIBVNCCLIENT REQUIRED IMPORTED_TARGET libvncclient)  # VncView
     # xcb: per-window WM_CLASS on each mirror (X11 taskbar ungrouping).
@@ -168,6 +177,10 @@ message(STATUS "  Build type:       ${CMAKE_BUILD_TYPE}")
 message(STATUS "  C++ compiler:     ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}")
 message(STATUS "  Manager:          ${LSW_BUILD_MANAGER}")
 message(STATUS "  Agent:            ${LSW_BUILD_AGENT}")
-message(STATUS "  Render server:    ${LSW_BUILD_RENDER_SERVER}")
+if(LSW_BUILD_MANAGER AND LSW_BUILD_ACCEL_VIRT)
+    message(STATUS "  accel-virt:       ON (${LSW_ACCEL_VIRT_DIR})")
+else()
+    message(STATUS "  accel-virt:       OFF")
+endif()
 message(STATUS "  Tests:            ${LSW_BUILD_TESTS}")
 message(STATUS "")

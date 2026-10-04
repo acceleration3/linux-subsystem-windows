@@ -28,7 +28,7 @@ SCREENS = [
     ("manager-01-overview", "m-main", 1000, 700),
     ("manager-02-console", "m-console", 1000, 660),
     ("manager-03-log", "m-log", 1000, 660),
-    ("manager-04-render", "m-render", 1000, 760),
+    ("manager-04-graphics", "m-gpu", 1000, 860),
     ("manager-05-settings", "m-settings", 1000, 900),
     ("wizard-01-page", "w-1", 880, 660),
     ("wizard-02-page", "w-2", 880, 620),

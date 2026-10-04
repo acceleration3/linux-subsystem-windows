@@ -12,9 +12,10 @@ namespace lsw::host::provision {
 
 // Builds the payload ISO that rides alongside the Windows media.
 //
-// It carries the rendered autounattend.xml plus the guest agent binary,
-// and is what turns a stock Windows ISO into an unattended install that
-// comes up already talking to the manager.
+// It carries the rendered autounattend.xml, the guest agent binary and
+// the accel-virt display driver package, and is what turns a stock
+// Windows ISO into an unattended install that comes up already talking
+// to the manager, on its own GPU driver.
 //
 // Runs the actual ISO build on a worker thread — libisofs writes
 // hundreds of megabytes and would otherwise freeze the wizard.
@@ -24,7 +25,9 @@ public:
     explicit PayloadIsoStager(config::Settings& settings, QObject* parent = nullptr);
 
     // Render the answer file for ``inputs`` and build the ISO for
-    // ``record``. Emits exactly one of ``finished`` / ``failed``.
+    // ``record``. Emits exactly one of ``finished`` / ``failed`` —
+    // ``failed`` possibly before this returns, when something the guest
+    // cannot do without (the driver package) is not on this machine.
     void build(const config::VmRecord& record, const PipelineInputs& inputs);
 
 Q_SIGNALS:

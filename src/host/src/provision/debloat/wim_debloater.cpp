@@ -6,11 +6,9 @@
 #include <QDir>
 #include <QFile>
 #include <QTemporaryDir>
-
-#include <wimlib.h>
-
 #include <deque>
 #include <vector>
+#include <wimlib.h>
 
 namespace lsw::host::provision::debloat {
 
@@ -44,6 +42,13 @@ const QStringList kHivePaths = {
     const wimlib_tchar* text = wimlib_get_error_string(static_cast<wimlib_error_code>(rc));
     return text != nullptr ? QString::fromUtf8(text) : QStringLiteral("wimlib error %1").arg(rc);
 }
+
+// The oldest Windows build the guest's display driver loads on.
+// avgpu.sys declares WDDM 3.2, and Windows 11 refuses a driver that
+// declares an older level than its own, so there is no build of it for
+// anything before 24H2 - and a guest installed from older media comes
+// up with no display driver at all.
+constexpr int kMinimumWindowsBuild = 26100;
 
 // Collects the immediate children of a directory. wimlib hands each
 // entry to this callback; the context is the list being filled.
@@ -132,6 +137,29 @@ bool WimDebloater::isolate_edition(const QString& src_path, const QStringList& e
             *error_out = QStringLiteral("cannot open %1: %2").arg(src_path, wim_error(rc));
         }
         return false;
+    }
+    // The cheapest moment to refuse media the guest cannot use: the
+    // edition's metadata is open, and nothing has been written yet. A
+    // build wimlib cannot read is let through rather than guessed at.
+    if (const wimlib_tchar* build =
+            wimlib_get_image_property(src, image_index, "WINDOWS/VERSION/BUILD");
+        build != nullptr) {
+        bool numeric = false;
+        const int number = QString::fromUtf8(build).toInt(&numeric);
+        if (numeric && number < kMinimumWindowsBuild) {
+            wimlib_free(src);
+            if (error_out != nullptr) {
+                *error_out = QStringLiteral("this image is Windows build %1, and the guest's "
+                                            "display driver (accel-virt) needs Windows 11 24H2, "
+                                            "build %2, or later. Use newer Windows 11 media")
+                                 .arg(number)
+                                 .arg(kMinimumWindowsBuild);
+            }
+            return false;
+        }
+    } else {
+        LSW_WARN("debloat: edition {} of {} names no build; not checking it against {}",
+                 image_index, src_path.toStdString(), kMinimumWindowsBuild);
     }
     // A split image's metadata is all in part 1, so the open above
     // succeeds and reports the edition perfectly well — and then the

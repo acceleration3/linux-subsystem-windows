@@ -13,7 +13,8 @@
 #
 #   lsw_host_core       platform  OS plumbing: DBus single-instance, vsock, XDG
 #                       config    persisted settings + the VM manifest
-#                       vm        libvirt lifecycle, stats, shared-memory transport
+#                       vm        libvirt lifecycle, the domain (accel-virt GPU
+#                                 included), stats, shared-memory transport
 #                       link      the multiplexed JSON channel to the guest agent
 #                       apps      guest app catalog, per-app config, launch, logs
 #                       mirror    the window mirror a launch starts, one per
@@ -85,14 +86,7 @@ set(CMAKE_AUTORCC ON)
 add_library(lsw_host_core STATIC ${LSW_CORE_SOURCES}
     ${CMAKE_CURRENT_SOURCE_DIR}/embedded/resources.qrc)
 target_include_directories(lsw_host_core PUBLIC ${LSW_HOST_INCLUDE_DIR})
-# vm/render_stats.cpp reads the render server's region header. Its
-# layout is the contract between the two, so the header itself is
-# included rather than mirrored: a mirror is a copy that drifts, and it
-# drifts silently because both sides still compile.
-set(_rvk_wire_include
-    "${LSW_RENDER_SERVER_DIR}/src/wire/include")
-target_include_directories(lsw_host_core
-    PRIVATE $<BUILD_INTERFACE:${_core_embed}> $<BUILD_INTERFACE:${_rvk_wire_include}>)
+target_include_directories(lsw_host_core PRIVATE $<BUILD_INTERFACE:${_core_embed}>)
 target_link_libraries(lsw_host_core
     PUBLIC
         Qt6::Widgets Qt6::Network Qt6::DBus Qt6::Xml Qt6::Concurrent
@@ -103,6 +97,8 @@ target_link_libraries(lsw_host_core
         LSW::CompileOptions
         nlohmann_json::nlohmann_json
         PkgConfig::LIBVNCCLIENT  # ui/vnc_view.cpp
+        Vulkan::Vulkan           # platform/host_gpus.cpp: which host GPUs exist
+        PkgConfig::LIBVIRT_QEMU  # vm/lifecycle.cpp: QMP, for the GPU's live modes
 )
 target_compile_definitions(lsw_host_core PRIVATE QT_NO_KEYWORDS)
 

@@ -68,12 +68,7 @@ void test_envelope_header() {
     write_header(header, FrameType::Control, 8);
     check(read_type(header) == FrameType::Control, "type round-trips");
     check(read_payload_len(header) == 8, "length round-trips");
-
-    // The retired types stay burnt: an old peer's frames must never be
-    // mistaken for a live one.
     check(static_cast<int>(FrameType::Control) == 1, "control is type 1");
-    check(static_cast<int>(FrameType::RetiredFrame) == 2, "type 2 stays reserved");
-    check(static_cast<int>(FrameType::RetiredFrameGone) == 3, "type 3 stays reserved");
 }
 
 // Append one framed message to ``out``.
@@ -204,8 +199,10 @@ void test_command_names_unique() {
         cmd::kConsoleInput,   cmd::kConsoleClose,   cmd::kUiaState,
         cmd::kUiaInvoke,      cmd::kUiaSetValue,    cmd::kUiaGetText,
         cmd::kUiaTreeDump,    cmd::kUiaSubscribeLifecycle,
-        cmd::kUiaUnsubscribeLifecycle, cmd::kUiaSubscribeFocus,
+        cmd::kUiaSubscribeFocus,
         cmd::kUiaSubscribeProperties, cmd::kUiaUnsubscribe,
+        cmd::kGpuStatus,      cmd::kSetDisplay,     cmd::kListDir,
+        cmd::kResolveShortcut, cmd::kListSessions,
     };
     std::set<std::string> seen;
     for (const char* name : commands) {

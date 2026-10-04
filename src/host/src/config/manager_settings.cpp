@@ -1,5 +1,7 @@
 #include "lsw/host/config/manager_settings.hpp"
 
+#include "lsw/host/config/display_modes.hpp"
+
 #include <QHash>
 #include <QStringList>
 #include <thread>
@@ -19,35 +21,23 @@ const QHash<QString, QVariant>& defaults() {
         {K::kMemoryMib, 8192},
         {K::kDiskGib, 60},
 
-        {K::kGuestWidth, 1920},
-        {K::kGuestHeight, 1080},
+        // accel-virt's default: the host monitors' own modes.
+        {K::kDisplayModes, QStringList{}},
         {K::kMatchHostOutput, false},
         {K::kScalingPercent, 100},
-        {K::kRefreshHz, 60},
-        // What the adapter admits to owning. Applications gate their
-        // GPU path on this long before they open a driver, and a basic
-        // display adapter reports zero.
-        {K::kVramMib, 1024},
         {K::kLivePreview, true},
 
-        // The render server's own defaults, so a fresh install matches
-        // what it would have done unasked.
-        {K::kChannels, 4},
-        // -1: whichever GPU drives the display, which is what EGL hands
-        // out unasked. Named explicitly so a laptop's discrete card can
-        // be chosen over the one wired to the screen.
-        {K::kGlDevice, -1},
-        {K::kRingKib, 1024},
-        {K::kReplyKib, 8192},
-        // 512, not 256: the three areas plus the header round up to a
-        // 1 GiB region, which is the size every domain defined so far
-        // declares. A smaller default rounds to 512 and a guest whose
-        // XML says 1024 then maps a region the server never made.
-        {K::kBlobMib, 512},
-        {K::kWarnCongestion, true},
-        {K::kChannelBindings, QString{}},
-        {K::kNothingFreePolicy, QStringLiteral("wait")},
-        {K::kChannelWaitSeconds, 15},
+        // "auto" is the device's own default, so a fresh install binds
+        // the same GPU QEMU would have picked unasked.
+        {K::kHostGpu, QStringLiteral("auto")},
+        // What runs real applications. At 256 MiB the per-context arenas
+        // run out and applications fail to create devices.
+        {K::kHostWindowMib, 8192},
+        {K::kIsolateRenderer, true},
+        // None: a second adapter is a second device the guest's driver
+        // package has to be signed for, and most hosts have one GPU worth
+        // using.
+        {K::kRenderGpus, QStringList{}},
 
         {K::kSmbEnabled, true},
         {K::kShareScope, QStringLiteral("C$")},
@@ -61,21 +51,22 @@ const QHash<QString, QVariant>& defaults() {
         {K::kMenuCategory, QStringLiteral("Windows")},
         {K::kFileAssociations, false},
 
-        {K::kAgentPort, 5102},
         {K::kAutostart, false},
 
         {K::kCloseToTray, true},
+
+        {K::kLastBootMs, 0},
     };
     return table;
 }
 
-// Changing one of these rewrites the domain XML or the render server's
-// command line, neither of which a running guest re-reads.
+// Changing one of these rewrites the domain XML, which a running guest
+// does not re-read. The display keys are not here: the resolution is
+// pushed into the running device over QMP.
 const QStringList& restart_keys() {
     static const QStringList keys = {
-        K::kCpuCores,        K::kMemoryMib,      K::kDiskGib, K::kGuestWidth, K::kGuestHeight,
-        K::kMatchHostOutput, K::kScalingPercent, K::kVramMib, K::kChannels,   K::kGlDevice,
-        K::kRingKib,         K::kReplyKib,       K::kBlobMib, K::kHostShares, K::kAgentPort,
+        K::kCpuCores,        K::kMemoryMib,      K::kDiskGib,    K::kHostGpu,   K::kHostWindowMib,
+        K::kIsolateRenderer, K::kRenderGpus, K::kHostShares,
     };
     return keys;
 }
@@ -99,6 +90,10 @@ ManagerSettings::ManagerSettings(QObject* parent)
     }
 }
 
+QString ManagerSettings::file_path() const {
+    return store_.fileName();
+}
+
 bool ManagerSettings::needs_restart(const QString& key) {
     return restart_keys().contains(key);
 }
@@ -108,7 +103,16 @@ QVariant ManagerSettings::default_value(const QString& key) {
 }
 
 QVariant ManagerSettings::value(const QString& key) const {
-    return store_.value(key, default_value(key));
+    const QVariant fallback = default_value(key);
+    const QVariant stored = store_.value(key, fallback);
+    // A list comes back from the INI file as whatever it looks like: an
+    // empty one as an invalid variant, a one-element one as a string. Read
+    // as the type the default has, so a staged list compares equal to the
+    // same list stored.
+    if (fallback.typeId() == QMetaType::QStringList) {
+        return stored.toStringList();
+    }
+    return stored;
 }
 
 int ManagerSettings::int_value(const QString& key) const {
@@ -123,8 +127,12 @@ QString ManagerSettings::string_value(const QString& key) const {
     return value(key).toString();
 }
 
+QStringList ManagerSettings::string_list_value(const QString& key) const {
+    return value(key).toStringList();
+}
+
 void ManagerSettings::set_value(const QString& key, const QVariant& v) {
-    if (store_.value(key, default_value(key)) == v) {
+    if (value(key) == v) {
         return;
     }
     store_.setValue(key, v);
@@ -184,28 +192,6 @@ void ManagerSettings::set_host_shares(const QVector<HostShare>& shares) {
     set_value(K::kHostShares, encode_host_shares(shares));
 }
 
-QVector<ChannelBinding> ManagerSettings::channel_bindings() const {
-    QVector<ChannelBinding> out;
-    for (const auto& fields : decode_records(string_value(K::kChannelBindings))) {
-        ChannelBinding binding;
-        binding.app_id = fields.at(0);
-        binding.channel = fields.value(1, QStringLiteral("-1")).toInt();
-        binding.busy = policy_from_string(fields.value(2));
-        out.push_back(binding);
-    }
-    return out;
-}
-
-void ManagerSettings::set_channel_bindings(const QVector<ChannelBinding>& bindings) {
-    QVector<QStringList> records;
-    records.reserve(bindings.size());
-    for (const auto& binding : bindings) {
-        records.push_back(
-            {binding.app_id, QString::number(binding.channel), policy_to_string(binding.busy)});
-    }
-    set_value(K::kChannelBindings, encode_records(records));
-}
-
 QStringList ManagerSettings::free_drive_letters() const {
     QStringList taken;
     for (const auto& share : host_shares()) {
@@ -221,40 +207,6 @@ QStringList ManagerSettings::free_drive_letters() const {
         }
     }
     return out;
-}
-
-QString ManagerSettings::policy_to_string(ChannelBusyPolicy policy) {
-    switch (policy) {
-    case ChannelBusyPolicy::Wait:
-        return QStringLiteral("wait");
-    case ChannelBusyPolicy::Refuse:
-        return QStringLiteral("refuse");
-    case ChannelBusyPolicy::TakeAnyFree:
-        break;
-    }
-    return QStringLiteral("any");
-}
-
-ChannelBusyPolicy ManagerSettings::policy_from_string(const QString& text) {
-    if (text == QLatin1String("wait")) {
-        return ChannelBusyPolicy::Wait;
-    }
-    if (text == QLatin1String("refuse")) {
-        return ChannelBusyPolicy::Refuse;
-    }
-    return ChannelBusyPolicy::TakeAnyFree;
-}
-
-QString ManagerSettings::policy_label(ChannelBusyPolicy policy) {
-    switch (policy) {
-    case ChannelBusyPolicy::Wait:
-        return QStringLiteral("Wait for it");
-    case ChannelBusyPolicy::Refuse:
-        return QStringLiteral("Do not start");
-    case ChannelBusyPolicy::TakeAnyFree:
-        break;
-    }
-    return QStringLiteral("Take any free one");
 }
 
 }  // namespace lsw::host::config

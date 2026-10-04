@@ -3,6 +3,7 @@
 #include "lsw/agent/log.hpp"
 #include "lsw/agent/win/error_text.hpp"
 #include "lsw/agent/win/process.hpp"
+#include "lsw/agent/win/run_as.hpp"
 #include "lsw/agent/win/unique_handle.hpp"
 
 #include <windows.h>
@@ -10,6 +11,11 @@
 namespace lsw::agent::install {
 
 ProcessOutcome ProcessRunner::run(const std::wstring& command_line, unsigned long timeout_ms) {
+    return run(command_line, win::RunAs::self(), timeout_ms);
+}
+
+ProcessOutcome ProcessRunner::run(const std::wstring& command_line, const win::RunAs& as,
+                                  unsigned long timeout_ms) {
     ProcessOutcome outcome;
 
     const win::UniqueHandle job{::CreateJobObjectW(nullptr, nullptr)};
@@ -21,10 +27,17 @@ ProcessOutcome ProcessRunner::run(const std::wstring& command_line, unsigned lon
     // survives a timeout kill.
     options.creation_flags = CREATE_NO_WINDOW | CREATE_SUSPENDED;
     options.hide_window = true;
+    try {
+        as.apply(options);
+    } catch (const std::exception& e) {
+        outcome.error = std::string{"cannot run as "} + as.describe() + ": " + e.what();
+        return outcome;
+    }
     DWORD error = 0;
     const auto spawned = win::Process::spawn(options, &error);
     if (!spawned) {
-        outcome.error = "CreateProcessW failed err=" + win::ErrorText::win32(error);
+        outcome.error = "CreateProcess as " + as.describe() +
+                        " failed err=" + win::ErrorText::win32(error);
         return outcome;
     }
     const HANDLE process = spawned->process.get();
@@ -33,7 +46,8 @@ ProcessOutcome ProcessRunner::run(const std::wstring& command_line, unsigned lon
     }
     ::ResumeThread(spawned->thread.get());
 
-    LSW_AGENT_INFO("process: spawned pid={} timeout={} cmd={}", spawned->pid,
+    LSW_AGENT_INFO("process: spawned pid={} as {} timeout={} cmd={}", spawned->pid,
+                   as.describe(),
                    timeout_ms == kNoTimeout ? std::string{"none"}
                                             : std::to_string(timeout_ms / 1000) + "s",
                    command_line);

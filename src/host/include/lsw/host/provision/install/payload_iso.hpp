@@ -17,9 +17,13 @@ public:
     // failure, with ``error_out`` saying which step failed and why.
     [[nodiscard]] static bool build(const PayloadInputs& in, QString* error_out);
 
-    // Visible for testing — what we put on the ISO.
-    [[nodiscard]] static QStringList stage_files(const PayloadInputs& in,
-                                                 const QString& staging_dir);
+    // Visible for testing — lay out in ``staging_dir`` what goes on
+    // the ISO, appending each file written to ``created_out`` when it
+    // is given. Optional files that fail to copy are logged and left
+    // out; the answer file and the driver package are not optional, so
+    // a failure there is false with ``error_out`` saying which file.
+    [[nodiscard]] static bool stage_files(const PayloadInputs& in, const QString& staging_dir,
+                                          QStringList* created_out, QString* error_out);
 };
 
 }  // namespace lsw::host::provision::install

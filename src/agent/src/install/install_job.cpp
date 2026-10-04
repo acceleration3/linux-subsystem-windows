@@ -11,8 +11,9 @@
 
 namespace lsw::agent::install {
 
-InstallJob::InstallJob(std::string id, std::string name, NotificationQueue& queue)
-    : id_(std::move(id)), name_(std::move(name)), queue_(queue) {}
+InstallJob::InstallJob(std::string id, std::string name, NotificationQueue& queue,
+                       win::RunAs as)
+    : id_(std::move(id)), name_(std::move(name)), as_(std::move(as)), queue_(queue) {}
 
 void InstallJob::report_status(const std::string& phase, const std::string& message) {
     JobNotification n;

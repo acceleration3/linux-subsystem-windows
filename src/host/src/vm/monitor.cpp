@@ -43,6 +43,13 @@ void Monitor::unwatch(const QUuid& uuid) {
     }
 }
 
+void Monitor::poll_now(const QUuid& uuid) {
+    if (stats_.contains(uuid)) {
+        poll_one(uuid);
+        kick_agent_poll(uuid);
+    }
+}
+
 VmStats Monitor::latest(const QUuid& uuid) const {
     return stats_.value(uuid, VmStats{});
 }
@@ -69,47 +76,58 @@ void Monitor::poll_one(const QUuid& uuid) {
     VmStats s = stats_.value(uuid);
 
     virDomainInfo info{};
-    if (::virDomainGetInfo(dom.raw(), &info) == 0) {
-        s.running = info.state == VIR_DOMAIN_RUNNING;
-        // Fallback CPU% from libvirt cpu_time delta — overwritten by
-        // the agent poll when it lands, but useful before the agent
-        // is reachable and as a sanity check.
-        const quint64 now_ns = info.cpuTime;
-        const qint64 now_ms = QDateTime::currentMSecsSinceEpoch();
-        const auto last_ns = last_cpu_ns_.value(uuid, 0);
-        const auto last_ms = last_sample_ms_.value(uuid, now_ms);
-        if (last_ns != 0 && now_ms > last_ms) {
-            const auto elapsed_ns = static_cast<quint64>(now_ms - last_ms) * 1'000'000ULL;
-            const quint64 delta = now_ns > last_ns ? now_ns - last_ns : 0;
-            const int vcpus = info.nrVirtCpu > 0 ? info.nrVirtCpu : 1;
-            const auto fallback_pct = static_cast<int>(std::min<quint64>(
-                100, (delta * 100ULL) / (elapsed_ns * static_cast<quint64>(vcpus))));
-            // Only adopt the libvirt number if we don't have a fresh
-            // agent value yet (the agent path is preferred — it
-            // reflects what's actually busy inside Windows rather
-            // than the qemu process's host-side CPU footprint).
-            if (s.cpu_percent == 0) {
-                s.cpu_percent = fallback_pct;
-            }
-        }
-        last_cpu_ns_[uuid] = now_ns;
-        last_sample_ms_[uuid] = now_ms;
-        // libvirt's ``info.memory`` is "memory available to the
-        // domain" — without virtio-balloon that equals maxMem, so
-        // it's useless as a "used" gauge. Keep maxMem as the total
-        // and leave the agent poll to fill in real usage.
-        if (s.memory_total_bytes == 0) {
-            s.memory_total_bytes = info.maxMem * 1024ULL;
-        }
+    if (::virDomainGetInfo(dom.raw(), &info) != 0) {
+        return;
+    }
+    s.running = info.state == VIR_DOMAIN_RUNNING;
+    const qint64 now_ms = QDateTime::currentMSecsSinceEpoch();
+    if (!s.running) {
+        // A machine that is off has no guest figures and no agent: what
+        // the last one said would otherwise stay on screen as if it were
+        // still true, and "online" would outlive the VM by the staleness
+        // window.
+        s = VmStats{};
+        last_cpu_ns_.remove(uuid);
+        last_sample_ms_.remove(uuid);
+        last_agent_ms_.remove(uuid);
+        stats_[uuid] = s;
+        Q_EMIT stats_updated(uuid, s);
+        return;
     }
 
     // Agent reachability — derived from the recency of the last
     // successful system_info reply. The actual poll is kicked off in
     // ``kick_agent_poll`` (async); here we just decide whether the
     // stored timestamp is fresh enough to call the agent "alive".
-    const qint64 now_ms = QDateTime::currentMSecsSinceEpoch();
     const auto last_agent = last_agent_ms_.value(uuid, 0);
     s.agent_reachable = (last_agent != 0) && (now_ms - last_agent <= kAgentStaleMs);
+
+    // The host's view of the CPU, from libvirt's cpu_time delta. It is
+    // what the gauge shows until the agent answers, and again whenever
+    // it stops: the agent's figure (what is busy inside Windows) only
+    // counts while it is fresh.
+    const quint64 now_ns = info.cpuTime;
+    const auto last_ns = last_cpu_ns_.value(uuid, 0);
+    const auto last_ms = last_sample_ms_.value(uuid, now_ms);
+    if (!s.agent_reachable) {
+        s.cpu_percent = 0;
+        if (last_ns != 0 && now_ms > last_ms) {
+            const auto elapsed_ns = static_cast<quint64>(now_ms - last_ms) * 1'000'000ULL;
+            const quint64 delta = now_ns > last_ns ? now_ns - last_ns : 0;
+            const int vcpus = info.nrVirtCpu > 0 ? info.nrVirtCpu : 1;
+            s.cpu_percent = static_cast<int>(std::min<quint64>(
+                100, (delta * 100ULL) / (elapsed_ns * static_cast<quint64>(vcpus))));
+        }
+        // Without the agent there is no "used" to give. libvirt's
+        // ``info.memory`` is the memory available to the domain, which
+        // without ballooning equals maxMem: a total, not a use.
+        s.memory_used_bytes = 0;
+        s.memory_total_bytes = info.maxMem * 1024ULL;
+        s.disk_used_bytes = 0;
+        s.disk_total_bytes = 0;
+    }
+    last_cpu_ns_[uuid] = now_ns;
+    last_sample_ms_[uuid] = now_ms;
 
     stats_[uuid] = s;
     Q_EMIT stats_updated(uuid, s);
@@ -141,6 +159,9 @@ void Monitor::kick_agent_poll(const QUuid& uuid) {
             return;  // no answer, or unwatched while in flight
         }
         VmStats s = stats_.value(uuid);
+        if (!s.running) {
+            return;  // an answer that left before the machine stopped
+        }
         if (g.cpu_percent >= 0) {
             s.cpu_percent = std::clamp(g.cpu_percent, 0, 100);
         }

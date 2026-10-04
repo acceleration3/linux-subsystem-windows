@@ -65,8 +65,9 @@ RemoteFileDialog::RemoteFileDialog(link::AgentRpcClient& rpc, Mode mode, QWidget
     build();
 
     if (!rpc_.has_target()) {
-        status_->setText(QStringLiteral("Windows is not running. There is nothing to "
-                                        "browse until the guest is up."));
+        // No target is no guest at all; a guest that is off is the
+        // failed read below, which says so in the agent's words.
+        status_->setText(QStringLiteral("No guest is set up, so there is nothing to browse."));
         entries_->setEnabled(false);
         places_->setEnabled(false);
         return;
@@ -371,7 +372,9 @@ void RemoteFileDialog::render_entries(const link::AgentReply& reply) {
         // A refusal carries the folder's own entries field; a transport
         // failure carries nothing. They read differently.
         if (!reply.body.is_object()) {
-            status_->setText(QStringLiteral("The guest did not answer. It may still be booting."));
+            status_->setText(QStringLiteral("The guest did not answer (%1). It may be off or "
+                                            "still booting.")
+                                 .arg(QString::fromStdString(reply.error)));
             return;
         }
         // The agent runs as the wizard user, so a folder belonging to

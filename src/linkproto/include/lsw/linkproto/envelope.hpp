@@ -16,12 +16,6 @@ namespace lsw::linkproto {
 enum class FrameType : std::uint8_t {
     // JSON control message: request, reply or event.
     Control = 1,
-    // Retired. Window pixels rode the socket as PNG, then a shared
-    // memory frame ring; a window's pixels are the mirror's business
-    // now and reach this process not at all. Both ids stay burnt so an
-    // old peer's frames are never mistaken for something else.
-    RetiredFrame = 2,
-    RetiredFrameGone = 3,
 };
 
 inline constexpr std::size_t kHeaderSize = 1 + 4;  // type + length

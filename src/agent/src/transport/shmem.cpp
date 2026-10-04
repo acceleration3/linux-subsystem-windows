@@ -16,12 +16,11 @@ bool Shmem::open() {
     if (base_ != nullptr) {
         return true;
     }
-    // The mapping is ``IvshmemRegion`` — the same class
-    // the guest ICD uses, and the same interface the host side satisfies
-    // with POSIX shared memory. This file used to open the device and
-    // drive the IOCTLs itself, which meant two implementations of the
-    // one thing rule 1 allows to differ between local and VM. There is
-    // now one, and the agent and the ICD share it.
+    // The mapping is ``IvshmemRegion``, the guest end of the interface
+    // the host side satisfies with POSIX shared memory. This file used
+    // to open the device and drive the IOCTLs itself, which meant two
+    // implementations of the one thing rule 1 allows to differ between
+    // local and VM. There is now one.
     if (const int rc = region_.open(); rc != 0) {
         switch (rc) {
         case -ENODEV:
@@ -67,8 +66,8 @@ void Shmem::bind_duplex_channel(std::uint32_t kind, linkproto::ByteRingProducer&
                                 linkproto::ByteRingConsumer& from_host) {
     const auto channel = linkproto::find_channel(base_, kind);
     if (!channel.valid()) {
-        // An older manager simply has no such channel. Callers check
-        // ``valid()`` and fall back to the socket.
+        // No such channel in this region. Callers check ``valid()`` and
+        // fall back to the socket.
         return;
     }
     auto* channel_base = static_cast<std::uint8_t*>(base_) + channel.offset;

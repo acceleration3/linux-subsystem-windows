@@ -58,7 +58,6 @@ QString AppConfig::to_json() const {
     j["discovered_via_agent"] = discovered_via_agent;
     j["last_seen_unix"] = static_cast<std::int64_t>(last_seen_unix);
     j["publish_entry"] = publish_entry;
-    j["channel"] = channel;
     j["mime_types"] = mime_types.toStdString();
     return QString::fromStdString(j.dump(2));
 }
@@ -87,10 +86,7 @@ AppConfig AppConfig::from_json(const QString& s, bool* ok) {
     out.icon_png_base64 = QString::fromStdString(j.value("icon_png_base64", std::string{}));
     out.discovered_via_agent = j.value("discovered_via_agent", false);
     out.last_seen_unix = j.value("last_seen_unix", static_cast<std::int64_t>(0));
-    // Default true and -1 so an entry written before these existed
-    // keeps behaving as it did.
     out.publish_entry = j.value("publish_entry", true);
-    out.channel = j.value("channel", -1);
     out.mime_types = QString::fromStdString(j.value("mime_types", std::string{}));
     if (ok != nullptr) {
         *ok = !out.id.isEmpty();

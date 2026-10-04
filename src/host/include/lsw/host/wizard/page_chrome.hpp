@@ -26,6 +26,10 @@ struct PageChrome {
     // The title band's own layout, for the one page that puts its
     // progress up there with the title rather than in the body.
     QVBoxLayout* head = nullptr;
+    // The title band's two lines, for a page whose outcome decides what
+    // they say.
+    QLabel* title = nullptr;
+    QLabel* subtitle = nullptr;
     // Where the page's own content goes.
     QVBoxLayout* body = nullptr;
 

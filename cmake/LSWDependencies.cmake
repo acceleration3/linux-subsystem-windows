@@ -45,10 +45,13 @@ set(JSON_Install    OFF CACHE INTERNAL "")
 FetchContent_MakeAvailable(nlohmann_json)
 
 # ---- Vulkan-Loader (guest only) ----
-# A VM with no GPU driver has no vulkan-1.dll, and without one nothing
-# in the guest can find a driver — the loader is the thing that reads
-# HKLM\SOFTWARE\Khronos\Vulkan\Drivers and loads what it names. DXVK
-# calls into it, and the render server's rvk_icd.dll is what it finds.
+# Windows ships no vulkan-1.dll, and without one nothing in the guest
+# can find a Vulkan driver — the loader is the thing that reads the
+# display adapter's VulkanDriverName (VulkanDriverNameWow for a 32-bit
+# process) and loads what it names. Applications and DXVK call into it,
+# and accel-virt's avvk.dll / avvk32.dll, which its avgpu.inf registers
+# there, is what it finds. Both architectures are built: x86-64 here,
+# i686 in build-agent32 (scripts/build-agent.sh).
 #
 # So this is not something LSW links. It is a FILE the wizard stages
 # into the guest, and it is built from source because the Vulkan SDK is

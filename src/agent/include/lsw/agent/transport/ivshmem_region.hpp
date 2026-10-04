@@ -36,10 +36,10 @@ public:
     // what is there is a region this build understands.
     //
     // Every IVSHMEM function on the bus is tried, not just the first:
-    // the guest also carries the render server's region, a separate
-    // device whose enumeration order relative to this one is not ours
-    // to decide. The region is recognised by its header rather than by
-    // its position. Returns 0, or a negative errno-style code:
+    // nothing guarantees this is the only one, and where another device
+    // lands in the enumeration order is not ours to decide. The region
+    // is recognised by its header rather than by its position. Returns
+    // 0, or a negative errno-style code:
     //
     //   -ENODEV   no IVSHMEM device carries a region of ours (driver
     //             missing, or no <shmem/> in the domain)
@@ -47,7 +47,8 @@ public:
     //   -EBUSY    the device is there but would not hand out a mapping.
     //             The usual cause is that another process in this guest
     //             already has one: the driver tracks a single owner, so
-    //             the agent and the ICD cannot both map the BAR.
+    //             a second process cannot map the BAR while one holds
+    //             it.
     //   -EPROTO   a device is there but no mapping on the bus is an LSW
     //             region of this version — the expected outcome of a
     //             half-finished redeploy, and refused loudly rather

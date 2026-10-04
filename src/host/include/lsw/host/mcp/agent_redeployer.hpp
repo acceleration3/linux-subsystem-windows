@@ -13,8 +13,8 @@ namespace lsw::host::mcp {
 //   1. locate the .exe and read it
 //   2. sample the running agent's ``agent_version`` as a baseline
 //   3. stand up an AgentBinaryServer the guest can download from
-//   4. fire a ``run_script`` that curls it, kills the old agent, moves
-//      the file into place and relaunches detached
+//   4. fire a ``run_script`` that curls it, stops the ``lsw-agent``
+//      service, moves the file into place and starts the service again
 //   5. poll ``system_info`` until ``agent_version`` changes
 //
 // Step 5 is the whole reason this is a class and not a fire-and-forget

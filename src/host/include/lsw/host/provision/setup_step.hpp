@@ -10,9 +10,11 @@ enum class StepKind { DownloadInstall, RunScript, DownloadExtract };
 
 // One unit of post-install setup work.
 //
-// No per-step elevation flag: the agent runs as the elevated-admin
-// wizard user in-session, so every step already has the rights that
-// msiexec / HKLM writes need.
+// No per-step elevation flag: the agent is a LocalSystem service and
+// runs a step as SYSTEM in session 0 unless asked for a session, so
+// every step already has the rights msiexec and HKLM writes need. The
+// flip side: a step must not write HKCU, which would be SYSTEM's hive —
+// per-user defaults go in the autounattend's DefaultUser.ps1.
 struct SetupStep {
     QString name;
     StepKind kind = StepKind::DownloadInstall;

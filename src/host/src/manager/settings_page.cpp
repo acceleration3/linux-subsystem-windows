@@ -1,13 +1,16 @@
 #include "lsw/host/manager/settings_page.hpp"
 
-#include "lsw/host/vm/render_server.hpp"
-
+#include "lsw/host/manager/adapter_roles.hpp"
+#include "lsw/host/manager/resolution_editor.hpp"
 #include "lsw/host/ui/machine_limits.hpp"
 #include "lsw/host/ui/panel.hpp"
+#include "lsw/host/services/status_hub.hpp"
 #include "lsw/host/ui/slider_spin.hpp"
 #include "lsw/host/ui/theme.hpp"
 #include "lsw/host/ui/toggle_switch.hpp"
 #include "lsw/host/ui/widgets.hpp"
+
+#include <algorithm>
 
 #include <QAbstractItemView>
 #include <QCheckBox>
@@ -30,8 +33,6 @@ namespace {
 
 using ui::Theme;
 using ui::Widgets;
-using config::ChannelBinding;
-using config::ChannelBusyPolicy;
 using config::HostShare;
 using K = config::ManagerSettings::Key;
 
@@ -98,19 +99,36 @@ QTableWidget* make_table(const QStringList& headers) {
 }  // namespace
 
 SettingsPage::SettingsPage(config::ManagerSettings& settings, config::PendingChanges& pending,
-                           apps::AppConfigStore& apps, QWidget* parent)
-    : QWidget(parent), settings_(settings), pending_(pending), apps_(apps) {
+                           apps::AppConfigStore& apps, services::StatusHub& status,
+                           QWidget* parent)
+    : QWidget(parent), settings_(settings), pending_(pending), apps_(apps), status_(status) {
     build();
     connect(&pending_, &config::PendingChanges::changed, this,
             &SettingsPage::refresh_apply_bar);
-    connect(&apps_, &apps::AppConfigStore::changed, this,
-            &SettingsPage::rebuild_bindings_table);
     // The shares table shows the staged list, so whatever changes what
     // is staged (an add, a remove, Revert, Apply) redraws it. Queued,
     // because a remove is clicked from inside the table it rebuilds.
     connect(&pending_, &config::PendingChanges::changed, this,
             &SettingsPage::rebuild_shares_table, Qt::QueuedConnection);
+    // Revert throws the staged values away; every control shows what is
+    // stored again rather than the edit that is no longer pending.
+    connect(&pending_, &config::PendingChanges::changed, this, [this] {
+        for (auto it = shows_.constBegin(); it != shows_.constEnd(); ++it) {
+            it.value()();
+        }
+    });
+    connect(&settings_, &config::ManagerSettings::changed, this, &SettingsPage::show_current);
     refresh_apply_bar();
+}
+
+void SettingsPage::follow(const QString& key, std::function<void()> show) {
+    shows_.insert(key, std::move(show));
+}
+
+void SettingsPage::show_current(const QString& key) {
+    if (const auto it = shows_.constFind(key); it != shows_.constEnd()) {
+        it.value()();
+    }
 }
 
 void SettingsPage::build() {
@@ -137,127 +155,113 @@ void SettingsPage::build() {
     add_row(machine, K::kMemoryMib, QStringLiteral("Memory"),
             QStringLiteral("Ballooned, so the guest gives memory back when it is idle."),
             make_slider(K::kMemoryMib, ui::MachineLimits::kMemoryMib, QStringLiteral(" MiB")));
+    auto* disk = static_cast<ui::SliderSpin*>(
+        make_slider(K::kDiskGib, ui::MachineLimits::kDiskGib, QStringLiteral(" GiB")));
     add_row(machine, K::kDiskGib, QStringLiteral("Disk"),
-            QStringLiteral("Grows only. Windows extends the volume on the next boot."),
-            make_slider(K::kDiskGib, ui::MachineLimits::kDiskGib, QStringLiteral(" GiB")));
+            QStringLiteral("Grows only: the image is grown when the guest restarts, and Windows "
+                           "extends C: into the new space as it starts."),
+            disk);
+    // The floor is the image as it is now, not the template's minimum: a
+    // smaller number is a shrink, which the restart refuses, so the
+    // slider does not offer it.
+    const auto follow_disk = [this, disk] {
+        const auto bytes = status_.vm().disk_bytes;
+        if (!bytes) {
+            return;
+        }
+        const int gib = static_cast<int>((*bytes + (1ULL << 30) - 1) >> 30);
+        const QSignalBlocker quiet(disk);
+        disk->set_minimum(std::max(ui::MachineLimits::kDiskGib.min, gib));
+        disk->set_value(pending_.staged_or_current(K::kDiskGib).toInt());
+    };
+    connect(&status_, &services::StatusHub::changed, this,
+            [follow_disk](services::StatusHub::Area area) {
+                if (area == services::StatusHub::Area::Vm) {
+                    follow_disk();
+                }
+            });
+    follow_disk();
 
     // ---- display --------------------------------------------------
     auto* display = new_group(QStringLiteral("Display"));
-    add_row(display, K::kGuestWidth, QStringLiteral("Guest resolution"),
-            QStringLiteral("The size of the virtual monitor Windows sees, and the ceiling "
-                           "a maximised window can reach."),
-            make_choice(K::kGuestWidth,
-                        Choices{{QStringLiteral("1280 x 720"), 1280},
-                                {QStringLiteral("1920 x 1080"), 1920},
-                                {QStringLiteral("2560 x 1440"), 2560},
-                                {QStringLiteral("3840 x 2160"), 3840}}));
+    auto* resolutions = new ResolutionEditor(settings_);
+    add_wide_row(display, false, QStringLiteral("Resolutions"),
+                 QStringLiteral("The sizes the guest's monitor offers, as Windows lists them in "
+                                "Settings → Display. Windows uses the preferred one. Any size "
+                                "works, from 100 × 100 up to 4095 on an edge; a change reaches a "
+                                "running guest at once, as if a monitor were replugged. "
+                                "Application windows are mirrored individually, so the preferred "
+                                "size is the ceiling a maximised window can reach."),
+                 resolutions);
+    {
+        auto* host_modes = new ui::ToggleSwitch;
+        host_modes->setChecked(settings_.string_list_value(K::kDisplayModes).isEmpty());
+        connect(host_modes, &ui::ToggleSwitch::toggled, resolutions,
+                &ResolutionEditor::use_host_modes);
+        connect(&settings_, &config::ManagerSettings::changed, host_modes,
+                [this, host_modes](const QString& key) {
+                    if (key == K::kDisplayModes) {
+                        const QSignalBlocker quiet(host_modes);
+                        host_modes->setChecked(
+                            settings_.string_list_value(K::kDisplayModes).isEmpty());
+                    }
+                });
+        auto* toggle_box = new QWidget;
+        auto* row = new QHBoxLayout(toggle_box);
+        row->setContentsMargins(0, 0, 0, 0);
+        row->addStretch(1);
+        row->addWidget(host_modes);
+        add_row(display, K::kDisplayModes,
+                QStringLiteral("Offer the host monitors' own modes instead"),
+                QStringLiteral("Leaves the list empty, which is accel-virt's default: the guest's "
+                               "monitor offers the modes of the monitors connected to this "
+                               "machine, the largest one's best mode preferred."),
+                toggle_box);
+    }
     add_row(display, K::kMatchHostOutput,
             QStringLiteral("Match the monitor the manager is on"),
-            QStringLiteral("Takes the resolution from your current output instead."),
+            QStringLiteral("Puts the size of the monitor this window is on first, preferred, "
+                           "ahead of the list above, and follows when the window moves to "
+                           "another one."),
             make_toggle(K::kMatchHostOutput));
     add_row(display, K::kScalingPercent, QStringLiteral("Scaling"),
-            QStringLiteral("Windows DPI, applied at the guest logon."),
+            QStringLiteral("Windows DPI. Applied at the guest logon, so it takes a restart to "
+                           "change."),
             make_choice(K::kScalingPercent,
                         Choices{{QStringLiteral("100 % (96 DPI)"), 100},
                                 {QStringLiteral("125 % (120 DPI)"), 125},
                                 {QStringLiteral("150 % (144 DPI)"), 150},
-                                {QStringLiteral("200 % (192 DPI)"), 200}}));
-    add_row(display, K::kRefreshHz, QStringLiteral("Refresh rate"),
-            QStringLiteral("How often a mirrored window repaints. Lower it to spend less "
-                           "host CPU on an idle guest."),
-            make_choice(K::kRefreshHz,
-                        Choices{{QStringLiteral("30 Hz"), 30},
-                                {QStringLiteral("60 Hz"), 60},
-                                {QStringLiteral("120 Hz"), 120}}));
-    add_row(display, K::kVramMib,
-            QStringLiteral("Video memory the adapter reports"),
-            QStringLiteral("Applications gate their GPU path on this number before they "
-                           "ever open a driver."),
-            make_choice(K::kVramMib,
-                        Choices{{QStringLiteral("512 MiB"), 512},
-                                {QStringLiteral("1024 MiB"), 1024},
-                                {QStringLiteral("2048 MiB"), 2048},
-                                {QStringLiteral("3072 MiB"), 3072},
-                                {QStringLiteral("4096 MiB"), 4096},
-                                {QStringLiteral("6144 MiB"), 6144},
-                                {QStringLiteral("8192 MiB"), 8192}}));
+                                {QStringLiteral("200 % (192 DPI)"), 200}}),
+            Theme::Tone::kRestart);
     add_row(display, K::kLivePreview, QStringLiteral("Live preview"),
-            QStringLiteral("Streams the whole guest desktop into the overview."),
+            QStringLiteral("Streams the whole guest desktop into the overview. Independent of "
+                           "the mirrored windows."),
             make_toggle(K::kLivePreview));
 
-    // ---- render channels ------------------------------------------
-    auto* render = new_group(QStringLiteral("Render channels"));
-    add_row(render, K::kChannels, QStringLiteral("Channels"),
-            QStringLiteral("Each drawing process claims one. A channel carries a single "
-                           "command stream, so two processes can never share one."),
-            make_choice(K::kChannels,
-                        Choices{{QStringLiteral("1 channel"), 1},
-                                {QStringLiteral("2 channels"), 2},
-                                {QStringLiteral("4 channels"), 4},
-                                {QStringLiteral("8 channels"), 8}}));
-    add_row(render, K::kGlDevice, QStringLiteral("OpenGL GPU"),
-            QStringLiteral("Which card guest applications draw on. Left to itself, "
-                           "the driver picks whichever GPU drives this screen — on a "
-                           "laptop, the integrated one."),
-            make_choice(K::kGlDevice, gl_device_choices()));
-    add_row(render, K::kRingKib, QStringLiteral("Command ring"),
-            QStringLiteral("A command bigger than this is sent in pieces, each waiting "
-                           "for the one before it to drain."),
-            make_choice(K::kRingKib,
-                        Choices{{QStringLiteral("256 KiB"), 256},
-                                {QStringLiteral("512 KiB"), 512},
-                                {QStringLiteral("1024 KiB"), 1024},
-                                {QStringLiteral("4096 KiB"), 4096},
-                                {QStringLiteral("16384 KiB"), 16384}}));
-    add_row(render, K::kReplyKib, QStringLiteral("Reply slot"),
-            QStringLiteral("An answer that does not fit is collected in extra round "
-                           "trips instead of arriving whole."),
-            make_choice(K::kReplyKib,
-                        Choices{{QStringLiteral("2 MiB"), 2048},
-                                {QStringLiteral("8 MiB"), 8192},
-                                {QStringLiteral("16 MiB"), 16384},
-                                {QStringLiteral("64 MiB"), 65536}}));
-    add_row(render, K::kBlobMib, QStringLiteral("Blob arena"),
-            QStringLiteral("Large command streams, host visible device memory, and the "
-                           "frames on their way to a window."),
-            make_choice(K::kBlobMib,
-                        Choices{{QStringLiteral("256 MiB"), 256},
-                                {QStringLiteral("512 MiB"), 512},
-                                {QStringLiteral("1024 MiB"), 1024},
-                                {QStringLiteral("2048 MiB"), 2048}}));
-    add_row(render, K::kWarnCongestion,
-            QStringLiteral("Warn when an area is congested"),
-            QStringLiteral("Reads the counters the render server publishes, and falls "
-                           "back to reading its log."),
-            make_toggle(K::kWarnCongestion));
-
-    // ---- assignments ----------------------------------------------
-    auto* bindings = new_group(QStringLiteral("Which application uses which channel"));
-    bindings_table_ = make_table({QStringLiteral("Application"), QStringLiteral("Channel"),
-                                  QStringLiteral("If it is already in use")});
-    auto* bindings_row = new QWidget;
-    auto* bindings_layout = new QVBoxLayout(bindings_row);
-    bindings_layout->setContentsMargins(12, 10, 12, 12);
-    bindings_layout->setSpacing(8);
-    bindings_layout->addWidget(Widgets::caption(QStringLiteral("Assignments")));
-    bindings_layout->addWidget(
-        Widgets::meta(QStringLiteral("Anything left on Any takes the first free channel.")));
-    bindings_layout->addWidget(bindings_table_);
-    bindings->addWidget(bindings_row);
-    rebuild_bindings_table();
-
-    add_row(bindings, K::kNothingFreePolicy,
-            QStringLiteral("When nothing is free"),
-            QStringLiteral("Every channel claimed and another process wants one."),
-            make_choice(K::kNothingFreePolicy,
-                        Choices{{QStringLiteral("Wait, then refuse"),
-                                 QStringLiteral("wait")},
-                                {QStringLiteral("Refuse immediately"),
-                                 QStringLiteral("refuse")}}));
-    add_row(bindings, K::kChannelWaitSeconds,
-            QStringLiteral("How long to wait"),
-            QStringLiteral("Before refusing. A process that gives up says so in the log."),
-            make_number(K::kChannelWaitSeconds, 1, 120));
+    // ---- graphics -------------------------------------------------
+    // The accel-virt devices. Every row is a property of their lines on
+    // the QEMU command line, read once when the device is realized.
+    auto* graphics = new_group(QStringLiteral("Graphics"));
+    add_wide_row(graphics, true, QStringLiteral("Adapters"),
+                 QStringLiteral("Each host GPU can be the guest's display adapter, a render-only "
+                                "adapter with no outputs, or left out. Windows names every "
+                                "adapter after its GPU and reports its VRAM. Exactly one is the "
+                                "display; until you pick one, it is the first Vulkan device."),
+                 new AdapterRoles(pending_, status_));
+    add_row(graphics, K::kHostWindowMib, QStringLiteral("Host window"),
+            QStringLiteral("Host memory the guest maps write-back, for uploads, readbacks and "
+                           "host-visible Vulkan memory. Used on demand; 8 GiB runs real "
+                           "applications."),
+            make_choice(K::kHostWindowMib,
+                        Choices{{QStringLiteral("2 GiB"), 2048},
+                                {QStringLiteral("4 GiB"), 4096},
+                                {QStringLiteral("8 GiB"), 8192},
+                                {QStringLiteral("16 GiB"), 16384}}));
+    add_row(graphics, K::kIsolateRenderer, QStringLiteral("Isolate the host graphics driver"),
+            QStringLiteral("Runs the host's GPU stack in a process of its own. A host driver "
+                           "crash then costs a device reset, which Windows recovers from, "
+                           "instead of the whole guest."),
+            make_toggle(K::kIsolateRenderer));
 
     // ---- files ----------------------------------------------------
     auto* files = new_group(QStringLiteral("Files"));
@@ -344,9 +348,6 @@ void SettingsPage::build() {
 
     // ---- guest ----------------------------------------------------
     auto* guest = new_group(QStringLiteral("Guest"));
-    add_row(guest, K::kAgentPort, QStringLiteral("Agent port"),
-            QStringLiteral("Forwarded from the host loopback into the guest."),
-            make_number(K::kAgentPort, 1024, 65535));
     add_row(guest, K::kAutostart,
             QStringLiteral("Start the guest when the manager opens"),
             QStringLiteral("Otherwise it starts the first time you launch an application."),
@@ -417,7 +418,7 @@ QVBoxLayout* SettingsPage::new_group(const QString& title) {
 }
 
 QWidget* SettingsPage::add_row(QVBoxLayout* group, const QString& key, const QString& label,
-                               const QString& description, QWidget* control) {
+                               const QString& description, QWidget* control, const char* tag_tone) {
     auto* row = new QWidget;
     auto* layout = new QHBoxLayout(row);
     layout->setContentsMargins(12, 10, 12, 10);
@@ -429,7 +430,9 @@ QWidget* SettingsPage::add_row(QVBoxLayout* group, const QString& key, const QSt
     head->setSpacing(8);
     auto* name = new QLabel(label);
     head->addWidget(name);
-    if (!key.isEmpty()) {
+    if (tag_tone != nullptr) {
+        head->addWidget(tag(QLatin1StringView(tag_tone) == QLatin1StringView(Theme::Tone::kRestart)));
+    } else if (!key.isEmpty()) {
         head->addWidget(tag(config::ManagerSettings::needs_restart(key)));
     }
     head->addStretch(1);
@@ -449,6 +452,25 @@ QWidget* SettingsPage::add_row(QVBoxLayout* group, const QString& key, const QSt
     // own border closes the group.
     group->addWidget(Widgets::separator());
     return row;
+}
+
+void SettingsPage::add_wide_row(QVBoxLayout* group, bool restart, const QString& label,
+                                const QString& description, QWidget* control) {
+    auto* row = new QWidget;
+    auto* layout = new QVBoxLayout(row);
+    layout->setContentsMargins(12, 10, 12, 12);
+    layout->setSpacing(3);
+    auto* head = new QHBoxLayout;
+    head->setSpacing(8);
+    head->addWidget(new QLabel(label));
+    head->addWidget(tag(restart));
+    head->addStretch(1);
+    layout->addLayout(head);
+    layout->addWidget(Widgets::prose(description));
+    layout->addSpacing(7);
+    layout->addWidget(control);
+    group->addWidget(row);
+    group->addWidget(Widgets::separator());
 }
 
 void SettingsPage::add_action_row(QVBoxLayout* group, const QString& label,
@@ -473,56 +495,13 @@ QWidget* SettingsPage::make_slider(const QString& key, const ui::MachineLimits::
     slider->set_value(pending_.staged_or_current(key).toInt());
     connect(slider, &ui::SliderSpin::value_changed, this,
             [this, key](int value) { put(key, value); });
+    follow(key, [this, key, slider] {
+        const QSignalBlocker quiet(slider);
+        slider->set_value(pending_.staged_or_current(key).toInt());
+    });
     return slider;
 }
 
-
-// The GPUs to offer, as the render server enumerates them.
-//
-// Asking costs a process, so it is asked once and the answer stands for
-// the life of the page. A host that answers with nothing still gets the
-// automatic entry: a chooser with no choices in it would say the
-// machine has no GPU, which is not what "we could not enumerate" means.
-QVector<QPair<QString, QVariant>> SettingsPage::gl_device_choices() {
-    // What a driver calls itself is written for a log, not for a
-    // control: the trailing bus and instruction-set notes, and the
-    // registered-trademark marks, cost the width the card's actual name
-    // needs. Only decoration is dropped — no name is invented.
-    const auto shorten = [](QString name) {
-        name.remove(QStringLiteral("(R)"));
-        name.remove(QStringLiteral("(TM)"));
-        if (const qsizetype bus = name.indexOf(QStringLiteral("/PCIe")); bus > 0) {
-            name.truncate(bus);
-        }
-        // "Mesa Intel Iris Xe Graphics (ADL GT2)" names the stack, the
-        // vendor, the card and the silicon revision. The card is the
-        // part being chosen between.
-        if (name.startsWith(QStringLiteral("Mesa "), Qt::CaseInsensitive)) {
-            name.remove(0, 5);
-        }
-        if (name.contains(QStringLiteral("llvmpipe"), Qt::CaseInsensitive)) {
-            return QStringLiteral("llvmpipe (software)");
-        }
-        if (const qsizetype detail = name.lastIndexOf(QLatin1Char('('));
-            detail > 0 && name.endsWith(QLatin1Char(')'))) {
-            name.truncate(detail);
-        }
-        return name.simplified();
-    };
-
-    QVector<QPair<QString, QVariant>> choices{{QStringLiteral("Automatic"), -1}};
-    for (const auto& device : vm::RenderServer::gl_devices()) {
-        // A device with no context is still listed: leaving it out
-        // would renumber the ones after it, and the number is the
-        // setting.
-        const QString label =
-            device.renderer.isEmpty()
-                ? QStringLiteral("%1 — no OpenGL").arg(device.index)
-                : QStringLiteral("%1 — %2").arg(device.index).arg(shorten(device.renderer));
-        choices.push_back({label, device.index});
-    }
-    return choices;
-}
 
 QWidget* SettingsPage::make_choice(const QString& key, const Choices& options) {
     auto* combo = new QComboBox;
@@ -542,6 +521,12 @@ QWidget* SettingsPage::make_choice(const QString& key, const Choices& options) {
         combo->setToolTip(combo->itemText(i));
         put(key, combo->itemData(i));
     });
+    follow(key, [this, key, combo] {
+        const QSignalBlocker quiet(combo);
+        const int at = combo->findData(pending_.staged_or_current(key));
+        combo->setCurrentIndex(at >= 0 ? at : 0);
+        combo->setToolTip(combo->currentText());
+    });
     return combo;
 }
 
@@ -551,6 +536,10 @@ QWidget* SettingsPage::make_toggle(const QString& key) {
     auto* box = new ui::ToggleSwitch;
     box->setChecked(pending_.staged_or_current(key).toBool());
     connect(box, &ui::ToggleSwitch::toggled, this, [this, key](bool on) { put(key, on); });
+    follow(key, [this, key, box] {
+        const QSignalBlocker quiet(box);
+        box->setChecked(pending_.staged_or_current(key).toBool());
+    });
 
     // The control column is right aligned, and a bare checkbox floating
     // there reads as unfinished; the wrapper gives it the same right
@@ -563,20 +552,15 @@ QWidget* SettingsPage::make_toggle(const QString& key) {
     return row;
 }
 
-QWidget* SettingsPage::make_number(const QString& key, int min, int max) {
-    auto* spin = new QSpinBox;
-    spin->setRange(min, max);
-    spin->setObjectName(QString::fromLatin1(Theme::Role::kMono));
-    spin->setValue(pending_.staged_or_current(key).toInt());
-    connect(spin, &QSpinBox::valueChanged, this,
-            [this, key](int value) { put(key, value); });
-    return spin;
-}
-
 QWidget* SettingsPage::make_text(const QString& key) {
     auto* edit = new QLineEdit(pending_.staged_or_current(key).toString());
     connect(edit, &QLineEdit::editingFinished, this,
             [this, key, edit] { put(key, edit->text()); });
+    follow(key, [this, key, edit] {
+        if (!edit->hasFocus()) {
+            edit->setText(pending_.staged_or_current(key).toString());
+        }
+    });
     return edit;
 }
 
@@ -618,66 +602,6 @@ void SettingsPage::rebuild_shares_table() {
             stage_shares(remaining);
         });
         shares_table_->setCellWidget(row, 3, remove);
-    }
-}
-
-void SettingsPage::rebuild_bindings_table() {
-    const auto& configs = apps_.configs();
-    auto bindings = settings_.channel_bindings();
-    const int channels = pending_.staged_or_current(K::kChannels).toInt();
-
-    bindings_table_->setRowCount(static_cast<int>(configs.size()));
-    int row = 0;
-    for (const auto& cfg : configs) {
-        const auto existing =
-            std::find_if(bindings.begin(), bindings.end(),
-                         [&cfg](const ChannelBinding& b) { return b.app_id == cfg.id; });
-        const bool pinned = existing != bindings.end();
-
-        bindings_table_->setItem(row, 0, new QTableWidgetItem(cfg.name));
-
-        auto* channel = new QComboBox;
-        channel->addItem(QStringLiteral("Any"), -1);
-        for (int i = 0; i < channels; ++i) {
-            channel->addItem(QStringLiteral("Channel %1").arg(i), i);
-        }
-        channel->setCurrentIndex(
-            channel->findData(pinned ? existing->channel : -1));
-
-        auto* policy = new QComboBox;
-        for (const auto p : {ChannelBusyPolicy::TakeAnyFree, ChannelBusyPolicy::Wait,
-                             ChannelBusyPolicy::Refuse}) {
-            policy->addItem(config::ManagerSettings::policy_label(p),
-                            config::ManagerSettings::policy_to_string(p));
-        }
-        policy->setCurrentIndex(policy->findData(config::ManagerSettings::policy_to_string(
-            pinned ? existing->busy : ChannelBusyPolicy::TakeAnyFree)));
-        // A policy only means anything for a pinned application: there
-        // is nothing to wait for when any channel will do.
-        policy->setEnabled(pinned && existing->channel >= 0);
-
-        const QString app_id = cfg.id;
-        auto write = [this, app_id, channel, policy] {
-            auto all = settings_.channel_bindings();
-            all.removeIf([&app_id](const ChannelBinding& b) { return b.app_id == app_id; });
-            const int index = channel->currentData().toInt();
-            if (index >= 0) {
-                ChannelBinding binding;
-                binding.app_id = app_id;
-                binding.channel = index;
-                binding.busy =
-                    config::ManagerSettings::policy_from_string(policy->currentData().toString());
-                all.push_back(binding);
-            }
-            settings_.set_channel_bindings(all);
-            policy->setEnabled(index >= 0);
-        };
-        connect(channel, &QComboBox::currentIndexChanged, this, [write](int) { write(); });
-        connect(policy, &QComboBox::currentIndexChanged, this, [write](int) { write(); });
-
-        bindings_table_->setCellWidget(row, 1, channel);
-        bindings_table_->setCellWidget(row, 2, policy);
-        ++row;
     }
 }
 

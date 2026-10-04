@@ -19,6 +19,10 @@ struct UiaSubscribePropertiesHandler : RpcHandler {
         const auto id = ctx.services.uia().subscribe_window_properties(hwnd);
         return {{"ok", id != 0}, {"sub_id", id}};
     }
+
+    // Window handles, UI Automation and HKCU belong to the user's
+    // session: served by the session helper there.
+    [[nodiscard]] Placement placement() const override { return Placement::UserSession; }
 };
 
 }  // namespace lsw::agent::rpc::handlers

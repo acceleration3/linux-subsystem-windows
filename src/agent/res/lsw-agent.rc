@@ -1,0 +1,3 @@
+// The application manifest, as resource 1 of type RT_MANIFEST (24):
+// CREATEPROCESS_MANIFEST_RESOURCE_ID, the one the loader reads for an EXE.
+1 24 "lsw-agent.manifest"

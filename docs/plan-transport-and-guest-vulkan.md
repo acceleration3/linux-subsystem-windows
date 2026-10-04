@@ -1,5 +1,13 @@
 # Plan — transport, threading, and the guest Vulkan path
 
+> **Historical.** The guest GPU path this plan builds towards — the
+> render server, its ICDs, and a command stream over IVSHMEM — has been
+> replaced by [accel-virt](../external/accel-virt): a WDDM paravirtual
+> adapter whose own QEMU device, `virtio-gpu-av-pci`, carries GPU work,
+> with no region of LSW's involved. Read it as the record of how the
+> transport got its shape; [link-protocol.md](link-protocol.md) is what
+> is true now.
+
 Everything discussed, ordered by what unblocks what. Sizes are S / M / L
 relative to each other, not calendar time.
 

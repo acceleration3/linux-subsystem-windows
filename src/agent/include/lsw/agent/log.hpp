@@ -20,6 +20,20 @@ enum class Level : int {
 
 [[nodiscard]] const char* level_name(Level lvl);
 
+// The inverse of ``level_name``; Info for anything unrecognised.
+[[nodiscard]] Level level_from_name(std::string_view name);
+
+// Where the file side of the log goes. Call before the first record is
+// appended — the file is opened once, by the first record. Defaults to
+// ``agent.log``; a session helper writes a file of its own, so two
+// processes never interleave lines in one.
+void set_file(const std::wstring& path);
+
+// Wait (up to ``timeout_ms``) for every record appended so far to reach
+// the file. For a process about to exit: the writer is a detached thread
+// and the last lines are the ones that say why.
+void flush(unsigned timeout_ms);
+
 // One log record. ``seq`` is monotonically increasing per agent
 // process — the manager polls with the highest seq it has seen.
 struct Record {

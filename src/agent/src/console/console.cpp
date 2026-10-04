@@ -3,6 +3,7 @@
 #include "lsw/agent/log.hpp"
 #include "lsw/agent/win/error_text.hpp"
 #include "lsw/agent/win/process.hpp"
+#include "lsw/agent/win/run_as.hpp"
 #include "lsw/agent/win/unique_handle.hpp"
 
 // clang-format off
@@ -77,7 +78,7 @@ Console::~Console() {
     }
 }
 
-std::string Console::open() {
+std::string Console::open(const win::RunAs& as) {
     SECURITY_ATTRIBUTES sa{};
     sa.nLength = sizeof(sa);
     sa.bInheritHandle = TRUE;
@@ -103,18 +104,23 @@ std::string Console::open() {
     win::SpawnOptions options;
     options.application = resolve_cmd_path();
     options.command_line = win::Process::quote(options.application) + L" /Q";
-    // CREATE_NO_WINDOW so cmd.exe doesn't briefly flash a console
-    // window. The child runs without a console of its own — fine for
-    // pipe I/O.
+    // CREATE_NO_WINDOW so cmd.exe gets a console nobody sees instead of
+    // a window on the user's desktop. Its I/O is the pipes.
     options.creation_flags = CREATE_NO_WINDOW;
     options.inherit_handles = true;
     options.std_input = stdin_r.get();
     options.std_output = stdout_w.get();
     options.std_error = stdout_w.get();
+    try {
+        as.apply(options);
+    } catch (const std::exception& e) {
+        LSW_AGENT_ERROR("console: cannot start cmd.exe as {}: {}", as.describe(), e.what());
+        return {};
+    }
     DWORD error = 0;
     auto spawned = win::Process::spawn(options, &error);
     if (!spawned) {
-        LSW_AGENT_ERROR("console: CreateProcess(cmd.exe) failed err={}",
+        LSW_AGENT_ERROR("console: CreateProcess(cmd.exe) as {} failed err={}", as.describe(),
                         win::ErrorText::win32(error));
         return {};
     }
@@ -165,7 +171,7 @@ std::string Console::open() {
         sess->alive.store(false);
     }}.detach();
 
-    LSW_AGENT_INFO("console: session {} opened pid={}", sid, spawned->pid);
+    LSW_AGENT_INFO("console: session {} opened pid={} as {}", sid, spawned->pid, as.describe());
     return sid;
 }
 

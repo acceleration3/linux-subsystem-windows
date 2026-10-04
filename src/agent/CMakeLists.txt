@@ -1,25 +1,33 @@
-# lsw-guest-agent: Windows process that lives inside each LSW VM.
-# Autostarted from the ``lsw-agent`` scheduled task that the
-# autounattend's LswPromote.ps1 registers (logon trigger on the wizard
-# user, interactive token, highest run level), so the agent runs AS
-# THAT USER, IN their session. Window
-# enumeration (``EnumWindows``) and app launch (plain
-# ``CreateProcessW``) are all native — no SYSTEM,
-# no session bridging. The account is a local admin; UAC stays
-# enabled (EnableLUA=1) with silent elevation
-# (ConsentPromptBehaviorAdmin=0).
+# lsw-guest-agent: the Windows program inside each LSW VM, deployed as
+# C:\ProgramData\LSW\lsw-agent.exe. One executable, three roles
+# (src/main.cpp):
+#
+#   * ``--service`` — the ``lsw-agent`` Windows service, LocalSystem, in
+#     session 0, registered by the autounattend's LswPromote.ps1 at
+#     SetupComplete. Owns the manager link (TCP 5102 + the IVSHMEM ring),
+#     RPC dispatch, installs, consoles, and process launching into any
+#     session as that session's user (WTSQueryUserToken +
+#     CreateProcessAsUserW, the user's full token by default).
+#   * ``--session --pipe NAME`` — a session helper the service keeps in
+#     each user session, for what only works from inside one: window
+#     enumeration and commands, UI Automation, HKCU, and the desktop gate
+#     that holds the service's listener closed until the desktop is
+#     usable. Talks to the service over a named pipe in the link's own
+#     envelope framing.
+#   * no arguments — the service's work in the foreground, for debugging.
+#
+# A GUI-subsystem program (WIN32_EXECUTABLE): nothing it is or starts for
+# itself ever shows a console window. It logs to C:\ProgramData\LSW.
 #
 # Responsibilities:
 #   * Report OS / RAM / disk / hostname / IP.
 #   * List installed apps (Uninstall registry).
-#   * Launch apps via plain ``CreateProcessW`` (we are already the
-#     user, in the user's session — no ``CreateProcessAsUser`` dance).
-#   * Enumerate the user's windows, and start the window mirror's
-#     guest half beside a launched application. The windows
-#     themselves — their pixels and their input — belong to that
-#     mirror and travel on its own connection, not this one.
-#   * Push log records back to the manager over the bidirectional
-#     RPC channel on TCP 5102.
+#   * Launch apps into a user session, and start the window mirror's
+#     guest half beside them. The windows themselves — their pixels and
+#     their input — belong to that mirror and travel on its own
+#     connection, not this one.
+#   * Push log records back to the manager over the bidirectional RPC
+#     channel on TCP 5102.
 #
 # Build:
 #   * Native Windows (MSVC) when LSW_BUILD_AGENT is set.
@@ -29,13 +37,9 @@ if(NOT WIN32)
     return()
 endif()
 
-# .rc compiler (windres on mingw) — needed to embed the UAC manifest
-# resource so Windows auto-elevates the agent at launch. Without it
-# the agent inherits the wizard user's filtered (Medium-integrity)
-# token whenever something other than its RunLevel-Highest scheduled
-# task starts it; with it the agent runs High-integrity silently
-# (UAC config in the autounattend is ConsentPromptBehaviorAdmin=0 +
-# PromptOnSecureDesktop=0, so no prompt is shown).
+# .rc compiler (windres on mingw) — embeds the application manifest
+# (res/lsw-agent.manifest: asInvoker, so the service can start a session
+# helper as a user without a UAC prompt).
 enable_language(RC)
 
 # Sources are grouped by module — each subdirectory is one feature
@@ -47,7 +51,23 @@ set(_lsw_agent_core_sources
     src/main.cpp
     src/log.cpp
     src/core/agent_service.cpp
+    src/core/command_line.cpp
     src/core/paths.cpp
+    src/core/service_host.cpp
+    src/core/services.cpp
+    res/lsw-agent.rc
+)
+# The session layer: which sessions exist, the helper in each, and the
+# pipe between it and the service. The first four TUs are platform-free
+# and also built into the host-native tests (tests/CMakeLists.txt).
+set(_lsw_agent_session_sources
+    src/session/session_selector.cpp
+    src/session/session_routing.cpp
+    src/session/pipe_codec.cpp
+    src/session/pending_calls.cpp
+    src/session/helper_channel.cpp
+    src/session/session_manager.cpp
+    src/session/session_host.cpp
 )
 set(_lsw_agent_transport_sources
     src/transport/host_endpoint.cpp
@@ -73,6 +93,8 @@ set(_lsw_agent_rpc_sources
     # land under src/rpc/handlers/uia/ in Phase 8+).
     src/rpc/handlers/system/system_info.cpp
     src/rpc/handlers/system/set_display.cpp
+    src/rpc/handlers/system/gpu_status.cpp
+    src/rpc/handlers/system/list_sessions.cpp
     src/rpc/handlers/apps/list_apps.cpp
     src/rpc/handlers/apps/launch.cpp
     src/rpc/handlers/apps/get_icon.cpp
@@ -94,7 +116,6 @@ set(_lsw_agent_rpc_sources
     src/rpc/handlers/uia/uia_get_text.cpp
     src/rpc/handlers/uia/uia_tree_dump.cpp
     src/rpc/handlers/uia/uia_subscribe_lifecycle.cpp
-    src/rpc/handlers/uia/uia_unsubscribe_lifecycle.cpp
     src/rpc/handlers/uia/uia_subscribe_focus.cpp
     src/rpc/handlers/uia/uia_subscribe_properties.cpp
     src/rpc/handlers/uia/uia_unsubscribe.cpp
@@ -116,6 +137,10 @@ set(_lsw_agent_win_sources
     src/win/process_info.cpp
     src/win/shell_link.cpp
     src/win/process.cpp
+    src/win/run_as.cpp
+    src/win/wts_sessions.cpp
+    src/win/security_attributes.cpp
+    src/win/overlapped_pipe.cpp
 )
 set(_lsw_agent_util_sources
     src/util/base64.cpp
@@ -142,7 +167,6 @@ set(_lsw_agent_apps_sources
     src/apps/catalog.cpp
     src/apps/launch_group.cpp
     src/apps/launcher.cpp
-    src/apps/guest_drivers.cpp
 )
 set(_lsw_agent_install_sources
     src/install/installer.cpp
@@ -164,10 +188,12 @@ set(_lsw_agent_console_sources
 )
 set(_lsw_agent_system_sources
     src/system/info.cpp
+    src/system/volume_grower.cpp
 )
 
 add_executable(lsw-guest-agent
     ${_lsw_agent_core_sources}
+    ${_lsw_agent_session_sources}
     ${_lsw_agent_transport_sources}
     ${_lsw_agent_rpc_sources}
     ${_lsw_agent_util_sources}
@@ -211,7 +237,7 @@ target_link_libraries(lsw-guest-agent
         iphlpapi      # GetAdaptersAddresses
         gdi32         # icon bitmaps
         gdiplus       # PNG encoding
-        advapi32      # registry / SetConsoleCtrlHandler
+        advapi32      # registry, tokens, the service control manager
         shlwapi       # PathMatchSpec etc.
         winhttp       # Installer: HTTP(S) downloads
         dwmapi        # DWMWA_CLOAKED / EXTENDED_FRAME_BOUNDS
@@ -221,6 +247,8 @@ target_link_libraries(lsw-guest-agent
         ole32         # COM (CoInitializeEx / CoCreateInstance for UIA)
         oleaut32      # COM BSTR/VARIANT used by UIA
         uuid          # CLSID_CUIAutomation, IID_IUIAutomation*
+        wtsapi32      # WTSEnumerateSessions / WTSQueryUserToken
+        userenv       # CreateEnvironmentBlock / ExpandEnvironmentStringsForUser
 )
 
 target_compile_definitions(lsw-guest-agent PRIVATE
@@ -229,11 +257,22 @@ target_compile_definitions(lsw-guest-agent PRIVATE
     NOMINMAX
 )
 
+# GUI subsystem: no console window for the service, a helper or a
+# debugging run. The entry point stays wmain().
+set_target_properties(lsw-guest-agent PROPERTIES WIN32_EXECUTABLE TRUE)
+
 # main() is wmain() — wide-char entry point. Mingw-w64 needs
 # ``-municode`` at link time to swap in the wmain-aware startup
-# object, otherwise the linker complains about an undefined
-# ``WinMain``/``main``. Applied per-target so it doesn't interfere
-# with CMake's compiler probe (which uses plain main).
+# object (which it uses for the GUI subsystem too), otherwise the
+# linker complains about an undefined ``WinMain``/``main``. MSVC is
+# told the same with its entry point. Applied per-target so it doesn't
+# interfere with CMake's compiler probe (which uses plain main).
+#
+# The mingw toolchain files put ``-mconsole`` in every executable's link
+# flags (cmake/toolchain-mingw-w64.cmake), which beats WIN32_EXECUTABLE's
+# ``-mwindows``; the linker's own option, given last, settles it.
 if(MINGW)
-    target_link_options(lsw-guest-agent PRIVATE -municode)
+    target_link_options(lsw-guest-agent PRIVATE -municode -Wl,--subsystem,windows)
+elseif(MSVC)
+    target_link_options(lsw-guest-agent PRIVATE /ENTRY:wmainCRTStartup)
 endif()

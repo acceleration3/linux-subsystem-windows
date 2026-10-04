@@ -1,6 +1,7 @@
 #include "lsw/host/manager/vm_detail_panel.hpp"
 
 #include "lsw/host/services/host_services.hpp"
+#include "lsw/host/config/manager_settings.hpp"
 #include "lsw/host/ui/panel.hpp"
 
 #include <QFrame>
@@ -12,8 +13,6 @@
 namespace lsw::host::manager {
 
 namespace {
-
-constexpr int kStatePollMs = 2000;
 
 // A panel whose caption row can carry buttons beside the name, which
 // is where the app grid's refresh and add live.
@@ -51,7 +50,7 @@ VmDetailPanel::VmDetailPanel(services::HostServices& services, QWidget* parent)
     preview_panel.body->setContentsMargins(10, 10, 10, 10);
     preview_panel.body->setSpacing(8);
     // What the picture is, for when there is not one yet.
-    preview_tag_ = new QLabel(QStringLiteral("VNC 127.0.0.1"));
+    preview_tag_ = new QLabel(QStringLiteral("VNC, no guest"));
     preview_tag_->setObjectName(QStringLiteral("ScreenTag"));
     preview_panel.body->addWidget(preview_tag_, 0, Qt::AlignLeft | Qt::AlignTop);
     preview_ = new lsw::host::ui::VncView;
@@ -70,8 +69,7 @@ VmDetailPanel::VmDetailPanel(services::HostServices& services, QWidget* parent)
 
     auto apps_panel = make_panel(QStringLiteral("Installed applications"));
     apps_panel.body->setContentsMargins(0, 0, 0, 0);
-    app_list_ = new AppListWidget(services_.app_configs(), services_.rpc(),
-                                  services_.manager_settings());
+    app_list_ = new AppListWidget(services_.app_configs(), services_.rpc());
     // The list carries its own toolbar; hoisting its actions into the
     // panel header is what makes the two panels read as one object.
     if (auto* toolbar = app_list_->toolbar()) {
@@ -86,11 +84,40 @@ VmDetailPanel::VmDetailPanel(services::HostServices& services, QWidget* parent)
     splitter->setSizes({400, 640});
     root->addWidget(splitter, 1);
 
-    connect(&services_.monitor(), &vm::Monitor::stats_updated, this,
-            &VmDetailPanel::on_stats_updated);
+    connect(&services_.status(), &services::StatusHub::changed, this, &VmDetailPanel::on_status);
+    // The preview switch in Settings is live: it starts or stops the
+    // stream on a running guest at once.
+    connect(&services_.manager_settings(), &config::ManagerSettings::changed, this,
+            [this](const QString& key) {
+                if (key == config::ManagerSettings::Key::kLivePreview) {
+                    follow_preview(last_running_);
+                }
+            });
+}
 
-    state_timer_.setInterval(kStatePollMs);
-    connect(&state_timer_, &QTimer::timeout, this, &VmDetailPanel::on_state_tick);
+void VmDetailPanel::follow_preview(bool running) {
+    if (uuid_.isNull() || !running) {
+        preview_->stop();
+        preview_tag_->setText(uuid_.isNull() ? QStringLiteral("VNC, no guest")
+                                             : QStringLiteral("VNC, the guest is off"));
+        return;
+    }
+    // The port libvirt assigned this boot; it changes from one to the next.
+    const int vp = services_.lifecycle().vnc_port(uuid_);
+    if (vp <= 0) {
+        preview_->stop();
+        preview_tag_->setText(QStringLiteral("VNC, no display port yet"));
+        return;
+    }
+    if (!services_.manager_settings().bool_value(config::ManagerSettings::Key::kLivePreview)) {
+        preview_->stop();
+        preview_tag_->setText(QStringLiteral("VNC 127.0.0.1:%1, preview off in Settings").arg(vp));
+        return;
+    }
+    preview_tag_->setText(QStringLiteral("VNC 127.0.0.1:%1").arg(vp));
+    if (!preview_->is_streaming()) {
+        preview_->connect_to(QStringLiteral("127.0.0.1"), vp);
+    }
 }
 
 void VmDetailPanel::pop_out_preview() {
@@ -117,13 +144,10 @@ void VmDetailPanel::pop_out_preview() {
 }
 
 void VmDetailPanel::set_target(const QUuid& uuid) {
-    auto& monitor = services_.monitor();
     auto& lifecycle = services_.lifecycle();
     auto& rpc = services_.rpc();
-    if (!uuid_.isNull() && uuid_ != uuid) {
-        monitor.unwatch(uuid_);
-    }
     uuid_ = uuid;
+    services_.status().set_target(uuid);
     // Start every new target as offline until the Monitor's next agent
     // poll proves otherwise, so switching targets never flashes the
     // previous one's online badge.
@@ -131,62 +155,32 @@ void VmDetailPanel::set_target(const QUuid& uuid) {
     Q_EMIT agent_online_changed(false);
 
     if (uuid_.isNull()) {
-        preview_->stop();
+        follow_preview(false);
         app_list_->clear_target();
         stats_->clear();
         rpc.detach_shmem();
         rpc.clear_target();
         services_.log_store().clear();
-        state_timer_.stop();
         return;
     }
-    monitor.watch(uuid_);
     if (services_.bind_agent(uuid_)) {
-        const int vp = lifecycle.vnc_port(uuid_);
-        if (vp > 0) {
-            preview_tag_->setText(QStringLiteral("VNC 127.0.0.1:%1").arg(vp));
-            preview_->connect_to(QStringLiteral("127.0.0.1"), vp);
-        } else {
-            preview_->stop();
-        }
+        // libvirt's word now, before the hub's first reading: the
+        // transition that reading reports is what the window follows.
+        follow_preview(lifecycle.is_running(uuid_));
         app_list_->set_target(uuid_);
         services_.log_store().clear();
     }
-    state_timer_.start();
-    on_state_tick();
+    on_status();
 }
 
-void VmDetailPanel::on_state_tick() {
+bool VmDetailPanel::start_guest() {
     if (uuid_.isNull()) {
-        return;
-    }
-    const bool running = services_.lifecycle().is_running(uuid_);
-    if (running != last_running_) {
-        last_running_ = running;
-        Q_EMIT running_changed(running);
-        // Track the live preview to the domain lifecycle, but only on
-        // the transition, so a user who stopped the preview by hand is
-        // not overridden every tick.
-        if (!running) {
-            preview_->stop();
-        } else if (!preview_->is_streaming()) {
-            const int vp = services_.lifecycle().vnc_port(uuid_);
-            if (vp > 0) {
-                preview_->connect_to(QStringLiteral("127.0.0.1"), vp);
-            }
-        }
-    }
-}
-
-void VmDetailPanel::start_guest() {
-    if (uuid_.isNull()) {
-        return;
+        return false;
     }
     // ``start`` rather than ``define_and_start``: the wizard leaves the
     // live XML in the virtio shape, and redefining here would silently
     // revert it to the manager's defaults.
-    (void)services_.start_vm(uuid_);
-    on_state_tick();
+    return services_.start_vm(uuid_) == 0;
 }
 
 void VmDetailPanel::stop_guest() {
@@ -194,16 +188,31 @@ void VmDetailPanel::stop_guest() {
         return;
     }
     (void)services_.lifecycle().shutdown(uuid_);
-    on_state_tick();
 }
 
-void VmDetailPanel::on_stats_updated(const QUuid& uuid, const vm::VmStats& stats) {
-    if (uuid != uuid_) {
+void VmDetailPanel::on_status() {
+    const auto& status = services_.status();
+    stats_->set_vram(status.graphics().vram);
+    if (uuid_.isNull() || status.vm().uuid != uuid_) {
         return;
+    }
+    const auto& stats = status.vm().stats;
+    if (stats.running != last_running_) {
+        last_running_ = stats.running;
+        Q_EMIT running_changed(last_running_);
+        // Track the live preview to the domain lifecycle, but only on
+        // the transition, so a user who stopped the preview by hand is
+        // not overridden every tick.
+        follow_preview(last_running_);
     }
     if (stats.agent_reachable != last_agent_reachable_) {
         last_agent_reachable_ = stats.agent_reachable;
         Q_EMIT agent_online_changed(last_agent_reachable_);
+        // What is installed is the agent's to say; the grid shows the
+        // stored list until it can.
+        if (last_agent_reachable_) {
+            app_list_->refresh();
+        }
     }
     stats_->update_stats(stats);
 }

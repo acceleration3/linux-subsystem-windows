@@ -1,13 +1,19 @@
 #include "lsw/host/vm/lifecycle.hpp"
 
 #include "lsw/base/log.hpp"
+#include "lsw/host/platform/accel_virt_paths.hpp"
 #include "lsw/host/platform/tool_process.hpp"
+#include "lsw/host/vm/domain_description.hpp"
 #include "lsw/host/vm/domain_handle.hpp"
 #include "lsw/host/vm/ivshmem_server.hpp"
 #include "lsw/host/vm/shmem_region.hpp"
 
+#include <QFileInfo>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QRegularExpression>
 #include <cstdint>
+#include <libvirt/libvirt-qemu.h>
 #include <libvirt/libvirt.h>
 
 namespace lsw::host::vm {
@@ -29,15 +35,41 @@ int Lifecycle::create_disk(const QString& path, int size_gib) {
     return 0;
 }
 
+bool Lifecycle::grow_disk(const QString& path, int size_gib, QString* error_out) {
+    const quint64 target = static_cast<quint64>(size_gib) << 30;
+    const auto current = DiskImage::virtual_size(path);
+    if (!current) {
+        if (error_out != nullptr) {
+            *error_out = QStringLiteral("could not read the size of %1").arg(path);
+        }
+        return false;
+    }
+    if (target <= *current) {
+        return true;
+    }
+    if (!platform::run_tool(QStringLiteral("qemu-img"),
+                            {QStringLiteral("resize"), QStringLiteral("-f"),
+                             QStringLiteral("qcow2"), path, QStringLiteral("%1G").arg(size_gib)},
+                            60'000, nullptr, error_out)) {
+        LSW_ERROR("qemu-img resize {} {}G failed", path.toStdString(), size_gib);
+        return false;
+    }
+    LSW_INFO("grew {} from {} to {} GiB", path.toStdString(), *current >> 30, size_gib);
+    return true;
+}
+
 int Lifecycle::define_and_start(const config::VmRecord& vm, const DomainXmlInputs& inputs) {
     if (!conn_.is_open()) {
         LSW_ERROR("libvirt not connected");
         return -1;
     }
+    DomainXmlInputs filled = inputs;
+    if (!fill_accel_virt(filled)) {
+        return -1;
+    }
     // The IVSHMEM server socket MUST exist before virDomainCreate or
     // QEMU's chardev setup fails outright. We bring up the region +
     // server here, then pass the socket path to the XML builder.
-    DomainXmlInputs filled = inputs;
     const QString sock = ensure_shmem(vm.uuid, filled.ivshmem_size_mib);
     if (sock.isEmpty()) {
         return -1;
@@ -67,6 +99,9 @@ int Lifecycle::redefine(const config::VmRecord& vm, const DomainXmlInputs& input
         return -1;
     }
     DomainXmlInputs filled = inputs;
+    if (!fill_accel_virt(filled)) {
+        return -1;
+    }
     // Reuse the socket path the region already has when one is up, so a
     // redefine under a running guest names the same chardev it is
     // already attached to rather than inventing a second.
@@ -111,9 +146,8 @@ int Lifecycle::start(const QUuid& uuid, bool first_boot_done) {
     // the installer.
     //
     // Provisioning ejects the media when it finishes, but that only
-    // covers a run that reached the end WITH that step present: a VM
-    // installed before it existed, or one whose run failed partway and
-    // was picked up by hand, keeps the ISOs for good. The guest then
+    // covers a run that reached the end: one that failed partway and
+    // was picked up by hand keeps the ISOs for good. The guest then
     // shows the install media as drives every boot, and the files stay
     // pinned. Doing it here as well makes it self-correcting, and it
     // costs one no-op call per start otherwise.
@@ -179,6 +213,20 @@ bool Lifecycle::is_running(const QUuid& uuid) const {
     }
     int active = ::virDomainIsActive(dom.raw());
     return active == 1;
+}
+
+QString Lifecycle::domain_xml(const QUuid& uuid, bool stored) const {
+    auto dom = lookup(uuid);
+    if (!dom.valid()) {
+        return {};
+    }
+    char* xml = ::virDomainGetXMLDesc(dom.raw(), stored ? VIR_DOMAIN_XML_INACTIVE : 0);
+    if (xml == nullptr) {
+        return {};
+    }
+    QString out = QString::fromUtf8(xml);
+    ::free(xml);  // NOLINT(cppcoreguidelines-no-malloc): libvirt's allocation
+    return out;
 }
 
 int Lifecycle::vnc_port(const QUuid& uuid) const {
@@ -267,19 +315,6 @@ bool Lifecycle::attach_running(const QUuid& uuid) {
              "session (the VM was started by an earlier manager), so frames are "
              "polled instead",
              uuid.toString().toStdString());
-    // A RenderServer, though, because none of the above applies to it.
-    // It is a child process of the manager, so the one that was serving
-    // this domain died with the manager that started it; and its region
-    // is the second ivshmem device — a plain memory-backend-file that
-    // QEMU maps directly, with no handshake to have missed. A fresh
-    // server opens that same file and serves it.
-    //
-    // Without this, a manager restarted while its VM kept running left
-    // the guest attaching to a region nobody was consuming: every
-    // application reached "attached to render server at ivshmem-0" and
-    // then timed out on its first command with "head is 0", which reads
-    // like a driver fault and is not one.
-    bundle.render = make_render_server(uuid);
     shmem_.emplace(uuid, std::move(bundle));
     Q_EMIT shmem_ready(uuid);
     return true;
@@ -291,16 +326,6 @@ QString Lifecycle::ensure_shmem(const QUuid& uuid, int size_mib) {
     // across VM ACPI shutdowns so late frames don't crash the manager.
     if (auto it = shmem_.find(uuid); it != shmem_.end()) {
         if (it->second.server) {
-            // The bundle survives an ACPI shutdown, and so does this
-            // path on the next start — but the render server is a
-            // separate process that may not have. One that crashed, was
-            // killed, or was replaced by a newer build leaves the guest
-            // attaching to a region nobody consumes, which reads as a
-            // driver fault in every application at once. Asking costs
-            // nothing when it is already running.
-            if (it->second.render) {
-                (void)it->second.render->ensure_running(uuid);
-            }
             return it->second.server->socket_path();
         }
         // An attached bundle: no server, and the region belongs to a VM
@@ -324,30 +349,146 @@ QString Lifecycle::ensure_shmem(const QUuid& uuid, int size_mib) {
         bundle.region->close();
         return {};
     }
-    bundle.render = make_render_server(uuid);
     const QString sock = bundle.server->socket_path();
     shmem_.emplace(uuid, std::move(bundle));
     Q_EMIT shmem_ready(uuid);
     return sock;
 }
 
-std::unique_ptr<RenderServer> Lifecycle::make_render_server(const QUuid& uuid) {
-    auto render = std::make_unique<RenderServer>();
-    connect(render.get(), &RenderServer::line_logged, this, &Lifecycle::render_server_logged);
-    // Not fatal, and deliberately so: a guest that boots and reports no
-    // GPU driver can be looked at, and one that will not start cannot.
-    // The warning is in RenderServer.
-    (void)render->ensure_running(uuid);
-    return render;
+bool Lifecycle::fill_accel_virt(DomainXmlInputs& inputs) {
+    const auto fill = [](QString& field, QString (*lookup)()) {
+        if (field.isEmpty()) {
+            field = lookup();
+        }
+    };
+    fill(inputs.qemu_binary, &platform::AccelVirtPaths::qemu_binary);
+    fill(inputs.executor, &platform::AccelVirtPaths::executor);
+    fill(inputs.renderer, &platform::AccelVirtPaths::renderer);
+    fill(inputs.d3d_lib_dir, &platform::AccelVirtPaths::d3d_lib_dir);
+
+    // QEMU's modules are beside it, whichever build it came from.
+    if (inputs.qemu_module_dir.isEmpty() && !inputs.qemu_binary.isEmpty()) {
+        inputs.qemu_module_dir = QFileInfo(inputs.qemu_binary).absolutePath();
+    }
+    // The distribution's QEMU cannot load the GPU device, so there is no
+    // falling back to it: the domain would not start, and libvirt's
+    // reason names a device rather than a missing build.
+    if (inputs.qemu_binary.isEmpty()) {
+        LSW_ERROR("accel-virt's QEMU was not found: build the accel_virt_host target, or "
+                  "point LSW_AV_QEMU_BUILD at a build that has qemu/qemu-system-x86_64");
+        return false;
+    }
+    // Without an executor the device is a plain 2D virtio-gpu with no
+    // av capset, and the guest's driver has nothing to drive.
+    if (inputs.executor.isEmpty()) {
+        LSW_ERROR("accel-virt's libav_executor.so was not found: build the accel_virt_host "
+                  "target, or point LSW_AV_QEMU_BUILD at a build that has it");
+        return false;
+    }
+    if (inputs.isolate_renderer && inputs.renderer.isEmpty()) {
+        LSW_WARN("av-renderer was not found; the host GPU stack runs inside QEMU, so a host "
+                 "driver crash takes the VM with it");
+    }
+    if (inputs.d3d_lib_dir.isEmpty()) {
+        LSW_WARN("DXVK / vkd3d-proton were not found (accel_virt_d3d, or LSW_AV_D3D_PATH): the "
+                 "host serves no Direct3D, and the guest desktop will crash-loop");
+    }
+    return true;
+}
+
+bool Lifecycle::set_display_modes(const QUuid& uuid, const QString& modes, QString* error_out) {
+    const auto fail = [error_out](const QString& why) {
+        LSW_WARN("display modes: {}", why.toStdString());
+        if (error_out != nullptr) {
+            *error_out = why;
+        }
+        return false;
+    };
+    // Checked here rather than left to QEMU because the device takes any
+    // string and the guest's driver then quietly drops what it cannot
+    // parse, which reads as a resolution change that did nothing.
+    static const QRegularExpression list(
+        QStringLiteral("^(\\d{1,5}x\\d{1,5})(,\\d{1,5}x\\d{1,5})*$"));
+    const QString value = modes.trimmed().toLower();
+    if (!value.isEmpty() && !list.match(value).hasMatch()) {
+        return fail(QStringLiteral("'%1' is not a list of WxH sizes").arg(modes));
+    }
+    // Built as JSON rather than spliced into a string, so the value is
+    // quoted by the one thing that knows how.
+    const QJsonObject command{
+        {QStringLiteral("execute"), QStringLiteral("qom-set")},
+        {QStringLiteral("arguments"),
+         QJsonObject{
+             {QStringLiteral("path"),
+              QStringLiteral("/machine/peripheral/%1").arg(DomainXmlBuilder::gpu_device_id())},
+             {QStringLiteral("property"), QStringLiteral("modes")},
+             {QStringLiteral("value"), value},
+         }},
+    };
+    QString why;
+    if (!qmp(uuid, command, &why)) {
+        return fail(why);
+    }
+    LSW_INFO("display modes: now '{}'",
+             value.isEmpty() ? std::string("the host monitors' modes") : value.toStdString());
+    return true;
+}
+
+std::optional<QString> Lifecycle::display_modes(const QUuid& uuid, QString* error_out) const {
+    const QJsonObject command{
+        {QStringLiteral("execute"), QStringLiteral("qom-get")},
+        {QStringLiteral("arguments"),
+         QJsonObject{
+             {QStringLiteral("path"),
+              QStringLiteral("/machine/peripheral/%1").arg(DomainXmlBuilder::gpu_device_id())},
+             {QStringLiteral("property"), QStringLiteral("modes")},
+         }},
+    };
+    const auto answer = qmp(uuid, command, error_out);
+    if (!answer) {
+        return std::nullopt;
+    }
+    return answer->toString();
+}
+
+std::optional<QJsonValue> Lifecycle::qmp(const QUuid& uuid, const QJsonObject& command,
+                                         QString* error_out) const {
+    const auto fail = [error_out](const QString& why) -> std::optional<QJsonValue> {
+        if (error_out != nullptr) {
+            *error_out = why;
+        }
+        return std::nullopt;
+    };
+    auto dom = lookup(uuid);
+    if (!dom.valid() || ::virDomainIsActive(dom.raw()) != 1) {
+        return fail(QStringLiteral("the VM is not running"));
+    }
+    const QByteArray json = QJsonDocument(command).toJson(QJsonDocument::Compact);
+    // libvirt marks the domain tainted ("custom-monitor") the first time
+    // this runs. That is a note in its log, not a change in behaviour,
+    // and there is no libvirt API for a property of a device it does
+    // not know.
+    char* reply = nullptr;
+    if (::virDomainQemuMonitorCommand(dom.raw(), json.constData(), &reply,
+                                      VIR_DOMAIN_QEMU_MONITOR_COMMAND_DEFAULT) < 0) {
+        return fail(QStringLiteral("QEMU refused it: %1").arg(conn_.last_error()));
+    }
+    const QJsonObject answer = QJsonDocument::fromJson(QByteArray(reply)).object();
+    ::free(reply);
+    if (answer.contains(QStringLiteral("error"))) {
+        return fail(QStringLiteral("QEMU refused it: %1")
+                        .arg(answer.value(QStringLiteral("error"))
+                                 .toObject()
+                                 .value(QStringLiteral("desc"))
+                                 .toString()));
+    }
+    return answer.value(QStringLiteral("return"));
 }
 
 void Lifecycle::teardown_shmem(const QUuid& uuid) {
     auto it = shmem_.find(uuid);
     if (it == shmem_.end()) {
         return;
-    }
-    if (it->second.render) {
-        it->second.render->stop();
     }
     if (it->second.server) {
         it->second.server->stop();

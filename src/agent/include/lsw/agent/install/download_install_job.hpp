@@ -12,7 +12,7 @@ namespace lsw::agent::install {
 class DownloadInstallJob final : public InstallJob {
 public:
     DownloadInstallJob(std::string id, std::string name, NotificationQueue& queue,
-                       std::string url, std::string args);
+                       std::string url, std::string args, win::RunAs as);
 
     void run() override;
 

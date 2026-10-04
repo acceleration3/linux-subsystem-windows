@@ -22,6 +22,10 @@ struct UiaTreeDumpHandler : RpcHandler {
         const int max_depth = p.get("max_depth", 4);
         return {{"tree", ctx.services.uia().dump_tree(hwnd, max_depth)}};
     }
+
+    // Window handles, UI Automation and HKCU belong to the user's
+    // session: served by the session helper there.
+    [[nodiscard]] Placement placement() const override { return Placement::UserSession; }
 };
 
 }  // namespace lsw::agent::rpc::handlers

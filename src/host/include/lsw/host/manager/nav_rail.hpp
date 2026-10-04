@@ -22,7 +22,7 @@ class NavRail : public QWidget {
     Q_OBJECT
 public:
     // Order is the order they appear. ``Count`` is not a page.
-    enum class Page { Overview, Console, Log, Render, Settings, Count };
+    enum class Page { Overview, Console, Log, Graphics, Settings, Count };
 
     explicit NavRail(QWidget* parent = nullptr);
 
@@ -42,7 +42,9 @@ public:
     // hides the marker rather than showing an empty one.
     void set_log_count(int records);
     void set_pending_changes(int count);
-    void set_render_warning(bool warned);
+    // The Graphics page's dot, in the colour of the worst warning there:
+    // ``tone`` is a Theme::Tone (amber or bad), null for none.
+    void set_graphics_warning(const char* tone);
 
     // The pages that need a guest to have been installed at all. With
     // none, they are shown but not selectable, which says more than
@@ -56,7 +58,7 @@ Q_SIGNALS:
     void stop_requested();
 
 private:
-    void set_marker(Page page, const QString& text, bool amber);
+    void set_marker(Page page, const QString& text, const char* tone);
 
     QLabel* name_label_ = nullptr;
     QLabel* detail_label_ = nullptr;

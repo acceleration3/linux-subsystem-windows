@@ -13,17 +13,37 @@
   cache=none/io=native, full Hyper-V enlightenment suite, TSC native
   clock with invtsc, virtio-net (mq), virtio-rng.
 
-  Substituted variables (DomainXmlBuilder::build):
-    {{domain_name}}, {{uuid}}, {{ram_mib}}, {{cpus}}
-    {{ovmf_code}}, {{ovmf_vars_template}}, {{nvram_path}}
-    {{disk_path}}, {{windows_iso}}, {{payload_iso}}, {{virtio_iso}}
-    {{xdg_env_inner}}      (one <qemu:env> line or empty)
+  The GPU is accel-virt's virtio-gpu-av-pci, a device of a patched
+  QEMU (the distribution's cannot load it), which runs every guest
+  Direct3D / Vulkan / OpenGL / OpenCL command on a host GPU. It is not
+  a device libvirt knows, so it goes in through <qemu:commandline>,
+  and the QEMU that has it is named in <emulator>.
+
+  Substituted variables (DomainXmlBuilder::build), each written in
+  double braces where it lands. Not here: this comment is part of the
+  template, and a name in braces would be substituted in it too.
+    domain_name, uuid, ram_mib, cpus
+    ovmf_code, ovmf_vars_template, nvram_path
+    disk_path, windows_iso, payload_iso, virtio_iso
+    emulator           accel-virt's qemu-system-x86_64
+    ivshmem_socket     the agent transport's doorbell server
+    video_inner        <video>: none, or VGA during Windows setup
+    host_shares_inner  one <filesystem> per shared folder, or empty
+    qemu_env_inner     <qemu:env> lines (module dir, D3D, XDG)
+    gpu_args_inner     the GPU device(s) and the driver log
 -->
 <domain type='kvm' xmlns:qemu='http://libvirt.org/schemas/domain/qemu/1.0'>
   <name>{{domain_name}}</name>
   <uuid>{{uuid}}</uuid>
   <memory unit='MiB'>{{ram_mib}}</memory>
-{{memory_backing_inner}}
+  <!-- Guest RAM is a shared memfd, always. The GPU's host side imports
+       guest pages as dma-bufs and av-renderer, a separate process,
+       maps them, so the RAM has to be a mapping another process can
+       share; virtiofs reads it directly for the same reason. -->
+  <memoryBacking>
+    <source type='memfd'/>
+    <access mode='shared'/>
+  </memoryBacking>
   <currentMemory unit='MiB'>{{ram_mib}}</currentMemory>
   <vcpu placement='static'>{{cpus}}</vcpu>
   <!-- Dedicated iothread for the virtio-blk system disk (pinned via
@@ -88,7 +108,7 @@
   <on_crash>restart</on_crash>
 
   <devices>
-    <emulator>/usr/bin/qemu-system-x86_64</emulator>
+    <emulator>{{emulator}}</emulator>
 
     <!-- virtio-blk system disk from the very first boot. cache='none'
          + io='native' + dedicated iothread + per-vcpu queues =
@@ -131,14 +151,13 @@
       <readonly/>
     </disk>
 
-    <!-- Plain VGA — real 3D goes through the render-server over
-         shared memory; this is just for the VNC install console and
-         the manager's preview. ``vram`` bounds the modes the guest can
-         set, so it follows the resolution the user asked for rather
-         than a constant that quietly caps it. -->
-    <video>
-      <model type='vga' vram='{{video_vram_kib}}' heads='1' primary='yes'/>
-    </video>
+    <!-- No emulated display adapter (QEMU's -vga none): the GPU device
+         below is the display, and another adapter would take the
+         desktop from it. VNC still works without one: with no GL
+         display backend QEMU transfers the device's scanout to the
+         console. The one exception is the definition made for Windows
+         setup; see DomainXmlBuilder::build. -->
+{{video_inner}}
 
     <!-- sharePolicy='ignore': QEMU's default 'allow-exclusive' drops
          a connecting client when the display is contended or on a
@@ -167,42 +186,15 @@
     </memballoon>
 {{host_shares_inner}}
 
-    <!-- IVSHMEM-plain: the render server's region.
-
-         The guest's OpenCL, OpenGL and Vulkan drivers put their command
-         streams here and rvk-render-server, on the host, replays them
-         against the host's real GPU. Plain, not doorbell: a doorbell
-         needs an ivshmem-server in between and buys an interrupt
-         neither side waits on, because the rings are polled — a futex
-         wake does not cross the VM boundary.
-
-         DECLARED FIRST, and that is load-bearing. It is the file
-         rvk-render-server created, and the server addresses its
-         sessions by device index: session 0 is the first ivshmem
-         function on the bus. The manager's own region is found by the
-         header written into it instead (see IvshmemRegion::open), so
-         it does not care which position it ends up in and this one
-         does.
-
-         The size must match the region the server made — a PCI BAR's
-         size is decoded by address bits, so QEMU does not round it,
-         it asserts and the VM dies before the guest exists.
-
-         One device per channel, in order, because the server addresses
-         its sessions by device index and a guest with four channels
-         configured and one device has three of them nowhere. -->
-{{rvk_regions_inner}}
-
     <!-- IVSHMEM-doorbell: the message transport. lsw-manager runs the
-         doorbell-server protocol in-process at {{ivshmem_socket}}; the
-         agent's ivshmem.sys (installed as a post-install setup step)
+         doorbell-server protocol in-process at the socket below; the
+         agent's ivshmem.sys (injected into the offline image at install)
          maps the shared region into user-mode and reads and writes the
          ring in it. MSI vectors=1 mirrors
          linkproto::kDoorbellVectorCount — one channel, one doorbell;
          the region size comes from the ftruncate'd shm fd the server
          hands over via SCM_RIGHTS, NOT from the XML (libvirt rejects
-         <size> for ivshmem-doorbell). A VM defined by an older manager
-         has sixty-five of them and uses the first. -->
+         <size> for ivshmem-doorbell). -->
     <shmem name='lsw-{{uuid}}'>
       <model type='ivshmem-doorbell'/>
       <server path='{{ivshmem_socket}}'/>
@@ -213,7 +205,8 @@
   </devices>
 
   <qemu:commandline>
-{{xdg_env_inner}}
+{{qemu_env_inner}}
+{{gpu_args_inner}}
     <!-- virtio-net + QEMU user-net hostfwd: the agent transport is
          TCP 127.0.0.1:5102 (5103 reserved). vsock was attempted but
          this class of host kernel has no working vhost_vsock

@@ -20,6 +20,11 @@ constexpr int kColTask = 0;
 constexpr int kColSource = 1;
 constexpr int kColStatus = 2;
 
+// The pipeline reports rows 0 to 2; the driver package row follows the
+// payload ISO it is staged onto.
+constexpr int kRowPayloadIso = 2;
+constexpr int kRowAvgpu = 3;
+
 }  // namespace
 
 PayloadPage::PayloadPage(Wizard& wizard, QWidget* parent)
@@ -29,7 +34,7 @@ PayloadPage::PayloadPage(Wizard& wizard, QWidget* parent)
         QStringLiteral("Building the install payload"),
         QStringLiteral("The answer file, the guest binaries and the drivers that must be "
                        "present on the very first boot."));
-    table_ = new QTableWidget(3, 3);
+    table_ = new QTableWidget(4, 3);
     ui::Theme::rows_table(table_, QStringList{QStringLiteral("ARTIFACT"),
                                               QStringLiteral("SOURCE"),
                                               QStringLiteral("STATE")});
@@ -48,6 +53,11 @@ PayloadPage::PayloadPage(Wizard& wizard, QWidget* parent)
     // only discovered much later, as a PCI device that is not there.
     table_->setItem(1, kColTask, new QTableWidgetItem("ivshmem driver"));
     table_->setItem(2, kColTask, new QTableWidgetItem("lsw-payload.iso"));
+    // The guest's display driver, x64 and the x86 user-mode drivers
+    // 32-bit processes load. It is staged onto the payload ISO, so it is
+    // ready when that is, and Windows installs it before the first logon.
+    table_->setItem(kRowAvgpu, kColTask,
+                    new QTableWidgetItem("avgpu driver package, x64 and x86"));
 
     // Where each one comes from. The shared-memory driver is the one
     // whose source is worth naming: it is not in Red Hat's virtio-win
@@ -55,6 +65,7 @@ PayloadPage::PayloadPage(Wizard& wizard, QWidget* parent)
     table_->setItem(0, kColSource, ui::Theme::kind_cell("fedorapeople"));
     table_->setItem(1, kColSource, ui::Theme::kind_cell("Looking Glass host package"));
     table_->setItem(2, kColSource, ui::Theme::kind_cell("local build"));
+    table_->setItem(kRowAvgpu, kColSource, ui::Theme::kind_cell("accel-virt, local build"));
     ui::Theme::fit_rows(table_);
 
     // Why one of those rows exists at all. Static, and separate from
@@ -73,9 +84,9 @@ PayloadPage::PayloadPage(Wizard& wizard, QWidget* parent)
 }
 
 void PayloadPage::initializePage() {
-    set_row_status(0, RowStatus::Pending);
-    set_row_status(1, RowStatus::Pending);
-    set_row_status(2, RowStatus::Pending);
+    for (int row = 0; row < table_->rowCount(); ++row) {
+        set_row_status(row, RowStatus::Pending);
+    }
     reset_complete();
 
     auto* p = wizard_.pipeline();
@@ -115,6 +126,7 @@ void PayloadPage::demo_fill() {
     set_row_status(0, RowStatus::Running, QStringLiteral("877 MiB, 71 %"));
     set_row_status(1, RowStatus::Pending);
     set_row_status(2, RowStatus::Pending);
+    set_row_status(kRowAvgpu, RowStatus::Pending);
     status_label_->setText(QStringLiteral("Downloading the virtio-win media."));
 }
 
@@ -124,6 +136,11 @@ int PayloadPage::nextId() const {
 
 void PayloadPage::set_row_status(int row, RowStatus s, const QString& detail) {
     ui::StatusPill::set_cell(table_, row, kColStatus, s, detail);
+    // The driver package travels on the payload ISO: its row says what
+    // the ISO's does.
+    if (row == kRowPayloadIso) {
+        ui::StatusPill::set_cell(table_, kRowAvgpu, kColStatus, s, detail);
+    }
 }
 
 }  // namespace lsw::host::wizard

@@ -5,17 +5,18 @@
 // a line of generated XML rather than the folder.
 //
 // This pins the escaping, the single-pass substitution that keeps a
-// substituted value from being substituted again, and the settings
-// half of the definition (DomainXmlInputs from ManagerSettings). No
-// libvirt, no VM.
+// substituted value from being substituted again, the GPU's shape
+// (accel-virt's virtio-gpu-av-pci on its own QEMU, a shared memfd under
+// the guest's RAM, no emulated adapter except during Windows setup) and
+// the settings half of the definition. No libvirt, no VM.
 
 #include "lsw/host/config/manager_settings.hpp"
-#include "lsw/host/services/domain_inputs.hpp"
 #include "lsw/host/vm/domain_xml_builder.hpp"
 
 #include <QCoreApplication>
 #include <QDomDocument>
 #include <QHash>
+#include <QStringList>
 #include <QUuid>
 #include <cstdio>
 #include <cstdlib>
@@ -36,6 +37,60 @@ void check(bool ok, const char* label) {
     if (!ok) {
         ++g_failures;
     }
+}
+
+QDomDocument parse(const QString& xml, const char* label) {
+    QDomDocument doc;
+    const QDomDocument::ParseResult parsed = doc.setContent(xml);
+    if (!parsed) {
+        std::printf("       line %lld: %s\n", static_cast<long long>(parsed.errorLine),
+                    qPrintable(parsed.errorMessage));
+    }
+    check(static_cast<bool>(parsed), label);
+    return doc;
+}
+
+// Every <qemu:arg value=...>, in order, as QEMU will receive them.
+QStringList qemu_args(const QDomDocument& doc) {
+    QStringList out;
+    const QDomNodeList args = doc.elementsByTagName(QStringLiteral("qemu:arg"));
+    for (int i = 0; i < args.count(); ++i) {
+        out << args.at(i).toElement().attribute(QStringLiteral("value"));
+    }
+    return out;
+}
+
+// The argument after each ``flag`` whose value starts with ``prefix``.
+QStringList args_after(const QStringList& args, const QString& flag, const QString& prefix) {
+    QStringList out;
+    for (qsizetype i = 0; i + 1 < args.size(); ++i) {
+        if (args.at(i) == flag && args.at(i + 1).startsWith(prefix)) {
+            out << args.at(i + 1);
+        }
+    }
+    return out;
+}
+
+QString qemu_env(const QDomDocument& doc, const QString& name) {
+    const QDomNodeList envs = doc.elementsByTagName(QStringLiteral("qemu:env"));
+    for (int i = 0; i < envs.count(); ++i) {
+        const QDomElement e = envs.at(i).toElement();
+        if (e.attribute(QStringLiteral("name")) == name) {
+            return e.attribute(QStringLiteral("value"));
+        }
+    }
+    return {};
+}
+
+QString video_model(const QDomDocument& doc) {
+    const QDomNodeList videos = doc.elementsByTagName(QStringLiteral("video"));
+    if (videos.count() != 1) {
+        return QStringLiteral("<%1 video elements>").arg(videos.count());
+    }
+    return videos.at(0)
+        .toElement()
+        .firstChildElement(QStringLiteral("model"))
+        .attribute(QStringLiteral("type"));
 }
 
 }  // namespace
@@ -74,14 +129,22 @@ int main(int argc, char** argv) {
     const QString hostile = QStringLiteral("/home/me/Tom's & Jerry's <stuff>");
     inputs.shares.push_back(DomainShare{QStringLiteral("z"), hostile, true});
 
+    // The GPU, as the settings would have it, with paths a user could
+    // have: an apostrophe for XML, a comma for QEMU's option parser.
+    inputs.qemu_binary = QStringLiteral("/opt/o'av/qemu/qemu-system-x86_64");
+    inputs.qemu_module_dir = QStringLiteral("/opt/o'av/qemu");
+    inputs.executor = QStringLiteral("/opt/a,b/libav_executor.so");
+    inputs.renderer = QStringLiteral("/opt/av/av-renderer");
+    inputs.d3d_lib_dir = QStringLiteral("/opt/av & d3d/lib");
+    inputs.host_gpu_uuid = QStringLiteral("01234567-89ab-cdef-0123-456789abcdef");
+    inputs.render_only_gpu_uuids = {QStringLiteral("fedcba98-7654-3210-fedc-ba9876543210")};
+    inputs.host_window_mib = 4096;
+    inputs.isolate_renderer = true;
+    inputs.display_modes = QStringLiteral("2560x1440,1920x1080");
+    inputs.avgpu_log = QStringLiteral("/home/o'brien/.local/share/lsw/logs/lsw-avgpu.log");
+
     const QString xml = DomainXmlBuilder::build(vm, inputs);
-    QDomDocument doc;
-    const QDomDocument::ParseResult parsed = doc.setContent(xml);
-    if (!parsed) {
-        std::printf("       line %lld: %s\n", static_cast<long long>(parsed.errorLine),
-                    qPrintable(parsed.errorMessage));
-    }
-    check(static_cast<bool>(parsed), "a definition with hostile paths is well-formed XML");
+    const QDomDocument doc = parse(xml, "a definition with hostile paths is well-formed XML");
 
     const QDomElement fs = doc.elementsByTagName(QStringLiteral("filesystem")).at(0).toElement();
     check(fs.firstChildElement(QStringLiteral("source")).attribute(QStringLiteral("dir")) ==
@@ -100,11 +163,121 @@ int main(int argc, char** argv) {
     check(disk_found, "the disk path with an apostrophe reads back exactly");
     check(!xml.contains(QStringLiteral("{{")), "no placeholder is left unsubstituted");
 
-    // The settings half. Video memory follows the mode.
-    check(lsw::host::services::video_vram_kib_for(640, 480) == 16384,
-          "small modes get the 16 MiB floor");
-    check(lsw::host::services::video_vram_kib_for(3840, 2160) == (3840 * 2160 * 8 / 1024) + 1024,
-          "a 4K mode gets two 32-bit buffers plus slack");
+    // accel-virt's QEMU and its environment.
+    check(doc.elementsByTagName(QStringLiteral("emulator")).at(0).toElement().text() ==
+              inputs.qemu_binary,
+          "the emulator is accel-virt's QEMU, read back exactly");
+    check(qemu_env(doc, QStringLiteral("QEMU_MODULE_DIR")) == inputs.qemu_module_dir,
+          "QEMU_MODULE_DIR is passed, read back exactly");
+    check(qemu_env(doc, QStringLiteral("AV_D3D_PATH")) == inputs.d3d_lib_dir,
+          "AV_D3D_PATH is passed, read back exactly");
+
+    // The guest's RAM is a shared memfd.
+    const QDomElement backing =
+        doc.elementsByTagName(QStringLiteral("memoryBacking")).at(0).toElement();
+    check(
+        backing.firstChildElement(QStringLiteral("source")).attribute(QStringLiteral("type")) ==
+                QStringLiteral("memfd") &&
+            backing.firstChildElement(QStringLiteral("access")).attribute(QStringLiteral("mode")) ==
+                QStringLiteral("shared"),
+        "guest RAM is a shared memfd");
+
+    check(video_model(doc) == QStringLiteral("none"), "steady state has no emulated adapter");
+
+    // The GPU devices.
+    const QStringList args = qemu_args(doc);
+    const QStringList gpus =
+        args_after(args, QStringLiteral("-device"), QStringLiteral("virtio-gpu-av-pci,"));
+    check(gpus.size() == 2, "one display adapter and one render-only adapter");
+    const QString display = gpus.value(0);
+    check(display.startsWith(QStringLiteral("virtio-gpu-av-pci,id=lsw-gpu,bus=pcie.0,addr=0x11,")),
+          "the display adapter has the stable id and its own PCI slot");
+    check(DomainXmlBuilder::gpu_device_id() == QStringLiteral("lsw-gpu"),
+          "the id the QMP path uses is the one the device has");
+    check(display.contains(QStringLiteral(",host-gpu=01234567-89ab-cdef-0123-456789abcdef,")),
+          "the display adapter is bound by UUID");
+    check(display.contains(QStringLiteral(",executor=/opt/a,,b/libav_executor.so,")),
+          "a comma in the executor path is doubled for QEMU");
+    check(display.contains(QStringLiteral(",max_outputs=1,")), "one output");
+    check(display.contains(QStringLiteral(",vectors=11,hostmem=4096M,")),
+          "MSI-X vectors and the host window");
+    check(display.contains(QStringLiteral(",renderer=/opt/av/av-renderer")),
+          "the renderer isolates the host GPU stack");
+    check(display.endsWith(QStringLiteral(",modes=2560x1440,,1920x1080")),
+          "the mode list's commas are doubled for QEMU");
+    check(!display.contains(QStringLiteral("display=off")), "the display adapter displays");
+    const QString render_only = gpus.value(1);
+    check(render_only.startsWith(
+              QStringLiteral("virtio-gpu-av-pci,id=lsw-gpu-1,bus=pcie.0,addr=0x12,")),
+          "the render-only adapter takes the next slot");
+    check(render_only.contains(QStringLiteral(",host-gpu=fedcba98-7654-3210-fedc-ba9876543210,")) &&
+              render_only.contains(QStringLiteral(",display=off,")) &&
+              render_only.contains(QStringLiteral(",hostmem=4096M")) &&
+              !render_only.contains(QStringLiteral("modes=")),
+          "the render-only adapter is display=off on its own GPU");
+
+    // The driver's log.
+    check(args_after(args, QStringLiteral("-chardev"), QStringLiteral("file,id=avgpu-log,path="))
+                  .value(0) == QStringLiteral("file,id=avgpu-log,path=") + inputs.avgpu_log,
+          "the driver log's chardev writes the log file");
+    check(args_after(args, QStringLiteral("-device"), QStringLiteral("isa-debugcon,")).value(0) ==
+              QStringLiteral("isa-debugcon,iobase=0x402,chardev=avgpu-log"),
+          "the debug console listens on port 0x402");
+
+    // The agent transport stays; the render server's regions are gone.
+    const QDomNodeList shmems = doc.elementsByTagName(QStringLiteral("shmem"));
+    check(shmems.count() == 1 &&
+              shmems.at(0)
+                      .toElement()
+                      .firstChildElement(QStringLiteral("model"))
+                      .attribute(QStringLiteral("type")) == QStringLiteral("ivshmem-doorbell"),
+          "the only shmem is the agent's ivshmem-doorbell");
+    check(!xml.contains(QStringLiteral("rvk")) && !xml.contains(QStringLiteral("ivshmem-plain")),
+          "nothing of the render server is left");
+
+    // Windows setup: a VGA primary as well, the GPU device still there.
+    DomainXmlInputs install = inputs;
+    install.install_display = true;
+    install.shares.clear();
+    install.render_only_gpu_uuids.clear();
+    install.renderer.clear();
+    install.display_modes.clear();
+    install.host_gpu_uuid.clear();
+    const QDomDocument install_doc =
+        parse(DomainXmlBuilder::build(vm, install), "the install definition is well-formed XML");
+    check(video_model(install_doc) == QStringLiteral("vga"),
+          "the install definition has a VGA adapter");
+    check(install_doc.elementsByTagName(QStringLiteral("video"))
+                  .at(0)
+                  .firstChildElement(QStringLiteral("model"))
+                  .attribute(QStringLiteral("primary")) == QStringLiteral("yes"),
+          "the VGA is the primary display");
+    const QStringList install_gpus = args_after(qemu_args(install_doc), QStringLiteral("-device"),
+                                                QStringLiteral("virtio-gpu-av-pci,"));
+    check(install_gpus.size() == 1, "the GPU device is present during setup");
+    check(install_gpus.value(0).contains(QStringLiteral(",host-gpu=auto,")),
+          "no UUID is host-gpu=auto");
+    check(!install_gpus.value(0).contains(QStringLiteral("renderer=")) &&
+              !install_gpus.value(0).contains(QStringLiteral("modes=")),
+          "no renderer path and no modes leave both options out");
+    check(!install_doc.elementsByTagName(QStringLiteral("memoryBacking")).isEmpty(),
+          "guest RAM is a shared memfd with no shares too");
+
+    // The display settings are live; the GPU's are not.
+    check(!ManagerSettings::needs_restart(ManagerSettings::Key::kDisplayModes) &&
+              !ManagerSettings::needs_restart(ManagerSettings::Key::kMatchHostOutput),
+          "the resolution applies without a restart");
+    check(ManagerSettings::needs_restart(ManagerSettings::Key::kHostGpu) &&
+              ManagerSettings::needs_restart(ManagerSettings::Key::kHostWindowMib) &&
+              ManagerSettings::needs_restart(ManagerSettings::Key::kIsolateRenderer) &&
+              ManagerSettings::needs_restart(ManagerSettings::Key::kRenderGpus),
+          "the GPU device's settings need a restart");
+    check(ManagerSettings::default_value(ManagerSettings::Key::kHostGpu) ==
+                  QStringLiteral("auto") &&
+              ManagerSettings::default_value(ManagerSettings::Key::kHostWindowMib) == 8192 &&
+              ManagerSettings::default_value(ManagerSettings::Key::kRenderGpus).toStringList()
+                  .isEmpty(),
+          "the GPU defaults are auto, no render GPUs and an 8 GiB window");
 
     // The stored form of the share list round-trips, read-only flag
     // and all, and an empty list is the empty string.

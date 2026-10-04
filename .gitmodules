@@ -1,6 +1,6 @@
-[submodule "external/render-server"]
-	path = external/render-server
-	url = ../render-server
 [submodule "external/remotewin"]
 	path = external/remotewin
 	url = ../remotewin
+[submodule "external/accel-virt"]
+	path = external/accel-virt
+	url = ../accel-virt

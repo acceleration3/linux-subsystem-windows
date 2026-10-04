@@ -18,6 +18,8 @@ const char* role_for(StatusPill::State state) {
         return Theme::Role::kPillDone;
     case StatusPill::State::Failed:
         return Theme::Role::kPillFail;
+    case StatusPill::State::Warning:
+        return Theme::Role::kPillWarn;
     case StatusPill::State::Pending:
         break;
     }
@@ -33,6 +35,8 @@ QString word_for(StatusPill::State state, const QString& detail) {
     case StatusPill::State::Failed:
         return detail.isEmpty() ? QStringLiteral("Failed")
                                 : QStringLiteral("Failed: %1").arg(detail);
+    case StatusPill::State::Warning:
+        return detail.isEmpty() ? QStringLiteral("Warning") : detail;
     case StatusPill::State::Pending:
         break;
     }

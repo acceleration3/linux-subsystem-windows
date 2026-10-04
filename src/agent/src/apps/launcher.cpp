@@ -1,6 +1,5 @@
 #include "lsw/agent/apps/launcher.hpp"
 
-#include "lsw/agent/apps/guest_drivers.hpp"
 #include "lsw/agent/apps/launch_group.hpp"
 #include "lsw/agent/log.hpp"
 #include "lsw/agent/util/text_encoding.hpp"
@@ -8,6 +7,7 @@
 #include "lsw/agent/win/environment.hpp"
 #include "lsw/agent/win/error_text.hpp"
 #include "lsw/agent/win/process.hpp"
+#include "lsw/agent/win/run_as.hpp"
 #include "lsw/agent/win/shell_link.hpp"
 
 #include <string>
@@ -29,12 +29,12 @@ void set_err(std::string* error_out, const std::string& s) {
 }  // namespace
 
 bool Launcher::launch(const std::string& app_id, const std::string& extra_args,
-                      const std::vector<EnvVar>& env, unsigned long* pid_out,
-                      std::string* error_out) {
+                      const std::vector<EnvVar>& env, const win::RunAs& as,
+                      unsigned long* pid_out, std::string* error_out) {
     if (pid_out != nullptr) {
         *pid_out = 0;
     }
-    LSW_AGENT_INFO("launch: app_id={}", app_id);
+    LSW_AGENT_INFO("launch: app_id={} as {}", app_id, as.describe());
 
     // Resolve .lnk → real exe + args + working dir. For raw .exe /
     // .bat paths we just hand the path straight to CreateProcessW.
@@ -60,10 +60,12 @@ bool Launcher::launch(const std::string& app_id, const std::string& extra_args,
     // ``%windir%\system32\charmap.exe``. CreateProcess does not expand
     // these in the application name argument, so the launch fails with
     // ERROR_PATH_NOT_FOUND (3). Manager-supplied raw paths get the same
-    // treatment in case they were typed with variables too.
-    path = win::Environment::expand(path);
-    working_dir = win::Environment::expand(working_dir);
-    args = win::Environment::expand(args);
+    // treatment in case they were typed with variables too. Expanded
+    // against the identity the process will run as: %APPDATA% is the
+    // user's, not the service's.
+    path = as.expand(path);
+    working_dir = as.expand(working_dir);
+    args = as.expand(args);
 
     // Default the working directory to the executable's own folder.
     //
@@ -71,9 +73,9 @@ bool Launcher::launch(const std::string& app_id, const std::string& extra_args,
     // that opens a data file by a relative name — a config, an archive,
     // a save — reads it relative to the working directory, not to the
     // image. Launched with none, the child inherits the agent's, which
-    // is C:\ProgramData\LSW, and an application that finds none of its
-    // own files there fails in whatever way it fails when its data is
-    // missing. Touhou 6 gets far enough to try creating a Direct3D
+    // for a service is C:\Windows\System32, and an application that
+    // finds none of its own files there fails in whatever way it fails
+    // when its data is missing. Touhou 6 gets far enough to try creating a Direct3D
     // device and then reports that every mode failed, which names
     // neither the missing config nor this.
     //
@@ -95,60 +97,42 @@ bool Launcher::launch(const std::string& app_id, const std::string& extra_args,
     // The configured arguments come last, after whatever a .lnk
     // carried, so an app config can add to a shortcut rather than
     // having to restate it.
-    if (const std::wstring extra =
-            win::Environment::expand(util::TextEncoding::to_wide(extra_args));
+    if (const std::wstring extra = as.expand(util::TextEncoding::to_wide(extra_args));
         !extra.empty()) {
         cmdline += L" ";
         cmdline += extra;
     }
 
-    // The drivers go into the tree of the RESOLVED executable, which is
-    // the only path any of the loaders will search — a .lnk's own
-    // directory is not on it. That is why this is here rather than in
-    // the RPC handler: the handler has the shortcut, this has the image.
-    //
-    // Before CreateProcessW, because the environment the loaders read is
-    // built from what this returns and a child cannot be told about a
-    // driver staged after it started.
-    //
-    // A failure is logged and the launch goes ahead. Without the
-    // drivers the application finds whatever Windows has, which on a
-    // guest with no GPU means WARP: slow, and far better than an
-    // application that refuses to start.
-    std::vector<EnvVar> launch_env = env;
-    std::string driver_err;
-    GuestDrivers::Staging staging =
-        GuestDrivers::stage_for(util::TextEncoding::to_utf8(path), &launch_env, &driver_err);
-    if (!staging.complete) {
-        LSW_AGENT_WARN("launch: guest drivers not fully staged: {}", driver_err);
-    }
-
-    // Empty unless this launch overrides something, in which case the
-    // child gets a copy of ours with the overrides applied. The app
-    // config's own overrides come first, so a user who sets one of
-    // these by hand wins over what was just staged.
+    // The environment ``as`` gets, with the overrides applied. For the
+    // agent itself with nothing to override that is empty, and the child
+    // inherits ours.
     win::SpawnOptions options;
     options.application = path;
     options.command_line = cmdline;
-    options.environment = win::Environment::block_with(launch_env);
+    try {
+        options.environment = as.environment(env);
+        as.apply(options);
+    } catch (const std::exception& e) {
+        set_err(error_out, std::string{"launch: cannot start a process as "} + as.describe() +
+                               ": " + e.what());
+        return false;
+    }
     options.working_dir = working_dir;
-    if (!launch_env.empty()) {
+    if (!env.empty()) {
         std::string names;
-        for (const auto& [name, value] : launch_env) {
+        for (const auto& [name, value] : env) {
             names += (names.empty() ? "" : " ") + name;
         }
         LSW_AGENT_INFO("launch: environment overrides: {}", names);
     }
 
-    // The agent runs AS THE USER, in their interactive session (the
-    // lsw-agent scheduled task, at the wizard user's logon; the account
-    // is a local admin). So a plain CreateProcessW lands the app on the
-    // user's real desktop with the agent's elevated-admin token. No
-    // session bridging, no token gymnastics.
+    // ``as.apply`` has pointed the spawn at the user's token and their
+    // session's interactive desktop (CreateProcessAsUserW), so the app
+    // lands on the user's real desktop.
     //
     // CREATE_NO_WINDOW so the child doesn't briefly flash a console
-    // window for non-GUI exes; CREATE_UNICODE_ENVIRONMENT because we
-    // implicitly inherit our (UTF-16) environment.
+    // window for non-GUI exes; CREATE_UNICODE_ENVIRONMENT because every
+    // environment block here is UTF-16.
     //
     // CREATE_SUSPENDED so the process can be put in its launch's job
     // before it executes an instruction. A launcher stub can spawn the
@@ -159,8 +143,8 @@ bool Launcher::launch(const std::string& app_id, const std::string& extra_args,
     DWORD err = 0;
     const auto spawned = win::Process::spawn(options, &err);
     if (!spawned) {
-        // Same shell fallback as the user-session path: not a plain
-        // PE (alias / packaged / document) → let the shell open it.
+        // Not a plain PE (alias / packaged / document): let the shell
+        // open it.
         //
         // Environment overrides do not survive this: the shell starts
         // the application from its own process, with its own
@@ -174,20 +158,22 @@ bool Launcher::launch(const std::string& app_id, const std::string& extra_args,
         LSW_AGENT_WARN("launch: direct spawn failed (GetLastError={}) — retrying via shell "
                        "(explorer)",
                        win::ErrorText::win32(err));
-        // Nothing will be tracked through the shell, so nothing will
-        // ever retire and clean these up. Take them back now: without
-        // the environment the loaders need, the drivers left in place
-        // would do nothing but sit there.
-        GuestDrivers::unstage(staging);
         win::SpawnOptions shell;
-        shell.application = win::Environment::expand(L"%windir%\\explorer.exe");
+        shell.application = as.expand(L"%windir%\\explorer.exe");
         shell.command_line =
             win::Process::quote(shell.application) + L" " + win::Process::quote(path);
         shell.creation_flags = CREATE_UNICODE_ENVIRONMENT;
+        try {
+            as.apply(shell);
+        } catch (const std::exception& e) {
+            set_err(error_out, std::string{"launch: shell fallback as "} + as.describe() +
+                                   " failed: " + e.what());
+            return false;
+        }
         DWORD shell_err = 0;
         if (!win::Process::spawn(shell, &shell_err)) {
             set_err(error_out,
-                    "launch failed: direct CreateProcessW err=" + win::ErrorText::win32(err) +
+                    "launch failed: direct CreateProcess err=" + win::ErrorText::win32(err) +
                         ", shell fallback err=" + win::ErrorText::win32(shell_err) +
                         ", cmdline=" + util::TextEncoding::to_utf8(cmdline));
             return false;
@@ -201,7 +187,7 @@ bool Launcher::launch(const std::string& app_id, const std::string& extra_args,
     // Job first, then let it run. Whether the adoption worked or not the
     // thread has to be resumed — a process left suspended is a process
     // that never starts.
-    (void)LaunchGroup::adopt(spawned->process.get(), spawned->pid, std::move(staging));
+    (void)LaunchGroup::adopt(spawned->process.get(), spawned->pid);
     ::ResumeThread(spawned->thread.get());
 
     LSW_AGENT_INFO("launch: spawned pid={}", spawned->pid);

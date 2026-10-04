@@ -19,6 +19,10 @@ enum class PipelineStep {
     StartingVm,
     WaitingForAgent,           // the press-any-key prompter runs alongside
     RunningSetup,
+    // The restart onto the steady-state definition: no install-time VGA
+    // adapter, and the first boot that loads the accel-virt driver. The
+    // last two names are from the virtio controller swap this restart
+    // once did, kept because the wizard and the CLI switch on them.
     ShuttingDown,
     StartingVmVirtio,
     WaitingForAgentAfterSwap,

@@ -26,8 +26,8 @@ public:
                 const QString& env = {});
 
 Q_SIGNALS:
-    // ``pid`` is the spawned process id (0 if the agent couldn't
-    // resolve it) and ``job`` the Job Object the agent named the launch
+    // ``pid`` is the spawned process id (a reply without one is a
+    // failure) and ``job`` the Job Object the agent named the launch
     // with. Both scope a mirror to this instance, so simultaneous
     // launches of the same application do not show each other's
     // windows; the job is the better of the two, because a launcher

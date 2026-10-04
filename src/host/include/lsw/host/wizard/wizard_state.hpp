@@ -22,7 +22,10 @@ struct WizardState {
     QString payload_iso_path;         // built by the pipeline
     int host_cpu_threads = 4;         // detected at construction
     int host_ram_mib = 8192;          // detected at construction
-    qint64 host_free_disk_bytes = 0;  // detected at construction
+    qint64 host_free_disk_bytes = 0;  // read again at every page
+    // Why the pipeline stopped, when it failed; empty while it runs and
+    // once it has finished. The last page reads it.
+    QString failure;
     // Local Windows account credentials baked into autounattend.xml.
     QString user_name = "lsw";
     QString user_password = "lsw";

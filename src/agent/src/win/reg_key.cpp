@@ -78,11 +78,6 @@ long RegKey::write_dword(const wchar_t* name, DWORD value) const {
                             sizeof(value));
 }
 
-long RegKey::write_qword(const wchar_t* name, std::uint64_t value) const {
-    return ::RegSetValueExW(key_.get(), name, 0, REG_QWORD, reinterpret_cast<const BYTE*>(&value),
-                            sizeof(value));
-}
-
 std::vector<std::wstring> RegKey::subkey_names() const {
     std::vector<std::wstring> names;
     // 255 characters is the registry's own limit on a key name.

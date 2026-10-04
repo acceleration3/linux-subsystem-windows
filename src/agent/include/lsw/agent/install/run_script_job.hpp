@@ -14,7 +14,7 @@ public:
     static constexpr unsigned long kTimeoutMs = 30UL * 60UL * 1000UL;
 
     RunScriptJob(std::string id, std::string name, NotificationQueue& queue,
-                 std::string script);
+                 std::string script, win::RunAs as);
 
     void run() override;
 

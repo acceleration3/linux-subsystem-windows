@@ -5,25 +5,16 @@
 #include "lsw/host/platform/dolphin_places.hpp"
 #include "lsw/host/platform/gtk_bookmarks.hpp"
 #include "lsw/host/platform/guest_smb_share.hpp"
-#include "lsw/host/vm/render_server.hpp"
+#include "lsw/linkproto/envelope.hpp"
 
 #include <QDir>
 #include <QSet>
-
-#include "lsw/linkproto/envelope.hpp"
 
 namespace lsw::host::services {
 
 namespace {
 
 using K = config::ManagerSettings::Key;
-
-// What apply_render_sizing reads. Keep in step with it.
-const QSet<QString>& render_sizing_keys() {
-    static const QSet<QString> keys = {K::kChannels, K::kRingKib, K::kReplyKib, K::kBlobMib,
-                                       K::kGlDevice};
-    return keys;
-}
 
 // What apply_integrations reads. Keep in step with it.
 const QSet<QString>& integration_keys() {
@@ -38,15 +29,15 @@ const QSet<QString>& integration_keys() {
 
 HostServices::HostServices(QObject* parent)
     : QObject(parent), settings_(this), manager_settings_(this),
-      pending_changes_(manager_settings_, this), render_stats_(this), vms_(this), libvirt_(this),
-      lifecycle_(libvirt_, this), monitor_(libvirt_, this), rpc_(this), guest_probe_(rpc_),
+      pending_changes_(manager_settings_, this), vms_(this), libvirt_(this),
+      lifecycle_(libvirt_, this), rpc_(this), guest_probe_(rpc_),
+      status_(libvirt_, lifecycle_, rpc_, guest_probe_, settings_, manager_settings_, this),
       app_configs_(QDir(settings_.data_dir()).filePath("apps"), this), log_store_(this) {
     // Wire the two services that consume the agent channel. Done here,
     // not by the UI, so records and stats are collected from the moment
     // the channel connects — the manager window may never be shown at
     // all (``--launch`` opens a guest app directly).
     log_store_.attach(rpc_);
-    monitor_.set_guest_probe(&guest_probe_);
     // Frame transport follows the region's lifetime, not the UI's. The
     // region exists only from VM start to force-off; every UI-side
     // binding point runs outside that window on a cold start, so they
@@ -57,28 +48,16 @@ HostServices::HostServices(QObject* parent)
     connect(&lifecycle_, &vm::Lifecycle::shmem_gone, this,
             [this](const QUuid&) { rpc_.detach_shmem(); });
 
-    // The render server takes its sizes on the command line, so they
-    // have to be in place before anything starts one.
-    apply_render_sizing();
     apply_integrations();
     // Filtered by key: apply_integrations rewrites every desktop entry
     // and both bookmark files, which is a lot of disk to touch because a
     // slider on another page moved.
     connect(&manager_settings_, &config::ManagerSettings::changed, this,
             [this](const QString& key) {
-                if (render_sizing_keys().contains(key)) {
-                    apply_render_sizing();
-                }
                 if (integration_keys().contains(key)) {
                     apply_integrations();
                 }
             });
-
-    // Every line the server prints goes past the congestion parser. It
-    // already counts stalls and already knows what size would have
-    // avoided them; none of that was reaching anybody.
-    connect(&lifecycle_, &vm::Lifecycle::render_server_logged, this,
-            [this](const QString& line) { render_stats_.ingest(line); });
 }
 
 void HostServices::apply_integrations() {
@@ -125,20 +104,13 @@ bool HostServices::bind_agent(const QUuid& uuid) {
 
 int HostServices::start_vm(const QUuid& uuid) {
     const auto* record = vms_.find(uuid);
-    return lifecycle_.start(uuid, record != nullptr && record->first_boot_done);
-}
-
-void HostServices::apply_render_sizing() {
-    vm::RenderServer::Sizing sizing;
-    sizing.sessions = manager_settings_.int_value(K::kChannels);
-    sizing.ring_kib = manager_settings_.int_value(K::kRingKib);
-    sizing.reply_kib = manager_settings_.int_value(K::kReplyKib);
-    sizing.blob_mib = manager_settings_.int_value(K::kBlobMib);
-    sizing.gl_device = manager_settings_.int_value(K::kGlDevice);
-    vm::RenderServer::set_sizing(sizing);
-
-    render_stats_.set_channel_count(sizing.sessions);
-    render_stats_.set_area_sizes(sizing.ring_kib, sizing.reply_kib, sizing.blob_mib);
+    // A start of a machine already up is a no-op, not a boot to time.
+    const bool cold = !lifecycle_.is_running(uuid);
+    const int rc = lifecycle_.start(uuid, record != nullptr && record->first_boot_done);
+    if (rc == 0 && cold) {
+        status_.boot_started(uuid);
+    }
+    return rc;
 }
 
 HostServices::~HostServices() = default;

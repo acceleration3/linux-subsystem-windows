@@ -204,6 +204,7 @@ DownloadImageDialog::DownloadImageDialog(config::Settings& settings, QWidget* pa
                 const QString dest = QDir(output_dir_->text()).filePath(output_name_->text());
                 QDir().mkpath(output_dir_->text());
                 clock_.start();
+                resumed_from_ = -1;
                 downloader_ = new provision::iso::Downloader(this);
                 connect(downloader_, &provision::iso::Downloader::progress, this,
                         [this](qint64 received, qint64 total) {
@@ -213,10 +214,16 @@ DownloadImageDialog::DownloadImageDialog(config::Settings& settings, QWidget* pa
                                     QStringLiteral("%1 of %2").arg(Format::gib(received, 2),
                                                                    Format::gib(total, 2)));
                             }
+                            // A resumed download counts what was already
+                            // on disk in ``received``; the rate is of what
+                            // this run has fetched.
+                            if (resumed_from_ < 0) {
+                                resumed_from_ = received;
+                            }
                             const qint64 ms = clock_.elapsed();
                             if (ms > 0) {
                                 const double per_second =
-                                    (static_cast<double>(received) * 1000.0)
+                                    (static_cast<double>(received - resumed_from_) * 1000.0)
                                     / static_cast<double>(ms);
                                 rate_->setText(Format::mib_per_second(per_second));
                                 elapsed_->setText(Format::clock(ms / 1000, 2));
@@ -268,6 +275,7 @@ DownloadImageDialog::DownloadImageDialog(config::Settings& settings, QWidget* pa
         ms_.fetch_skus(edition.product_edition_ids.first());
     });
 
+    connect(output_dir_, &QLineEdit::textChanged, this, [this] { refresh_free_space(); });
     refresh_free_space();
     fetcher_.fetch();
     ms_.initialize();

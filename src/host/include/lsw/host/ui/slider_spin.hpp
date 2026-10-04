@@ -23,6 +23,7 @@ public:
 
     // Narrow the range to what this host can give. Both halves follow,
     // so the slider cannot travel past what the number will accept.
+    void set_minimum(int min);
     void set_maximum(int max);
 
     // For the pages that dress the number differently.

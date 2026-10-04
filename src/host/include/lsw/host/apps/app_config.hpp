@@ -38,10 +38,6 @@ struct AppConfig {
     // decides which, because a guest with forty shortcuts in its Start
     // menu should not put forty entries in somebody's launcher.
     bool publish_entry = true;
-    // Which render channel it draws on, and what to do when that
-    // channel is taken. -1 is "any", which is what everything did
-    // before there was a choice.
-    int channel = -1;
     // Windows file types this application should open on the host,
     // one MIME type per line. Empty means it registers for none.
     QString mime_types;

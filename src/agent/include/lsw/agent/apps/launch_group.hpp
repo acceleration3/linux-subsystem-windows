@@ -1,7 +1,5 @@
 #pragma once
 
-#include "lsw/agent/apps/guest_drivers.hpp"
-
 #include <string>
 
 namespace lsw::agent::apps {
@@ -40,21 +38,16 @@ public:
     // Put a freshly created process — and everything it goes on to
     // start — under a new job identified by ``pid``. Call before the
     // process runs, or a child it spawns first will be outside.
-    // ``process`` is the handle from CreateProcessW; it is not consumed.
+    // ``process`` is the handle from CreateProcess*; it is not consumed.
     // Returns false if the job could not be created or assigned, which
     // costs descendant tracking and nothing else.
-    //
-    // ``staging`` is what ``GuestDrivers::stage_for`` placed for this
-    // launch. It is unstaged when the launch retires, which is the
-    // moment the last process attributed to it exits — the only moment
-    // at which the drivers are known to be unused, since the launched
-    // PID is a stub that exits long before the application does.
-    static bool adopt(void* process, unsigned long pid, GuestDrivers::Staging staging);
+    static bool adopt(void* process, unsigned long pid);
 
     // The name of the Job Object holding ``pid``'s launch.
     //
-    // Named rather than anonymous so something outside this process can
-    // ask what a launch contains. A window mirror has to know which
+    // Named rather than anonymous, and in the Global namespace, so
+    // something outside this process — and outside session 0 — can ask
+    // what a launch contains. A window mirror has to know which
     // windows belong to the application it was started for, and the job
     // is the only answer that stays right when the launched process is a
     // stub that exits — the payload it spawned is in the job, whatever

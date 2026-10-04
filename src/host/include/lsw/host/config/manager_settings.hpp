@@ -6,7 +6,6 @@
 #include <QString>
 #include <QVariant>
 #include <QVector>
-#include <cstdint>
 
 namespace lsw::host::config {
 
@@ -20,25 +19,6 @@ struct HostShare {
     [[nodiscard]] bool operator==(const HostShare& other) const noexcept {
         return host_path == other.host_path && drive == other.drive && read_only == other.read_only;
     }
-};
-
-// Which channel an application draws on, and what to do when that
-// channel is already claimed.
-//
-// A channel carries one command stream, so two processes cannot share
-// one: the ring is single-producer by construction and a second writer
-// interleaves its commands into nonsense. That leaves exactly three
-// honest answers, and all three are here.
-enum class ChannelBusyPolicy : std::uint8_t {
-    TakeAnyFree,  // what happens today for everything
-    Wait,         // block until the pinned channel is released
-    Refuse,       // fail the launch and say why
-};
-
-struct ChannelBinding {
-    QString app_id;
-    int channel = -1;  // -1 means "any", which is the default for everything
-    ChannelBusyPolicy busy = ChannelBusyPolicy::TakeAnyFree;
 };
 
 // Every setting the manager owns, typed, with its default, and marked
@@ -63,27 +43,40 @@ public:
         static constexpr QLatin1StringView kCpuCores{"machine/cpu_cores"};
         static constexpr QLatin1StringView kMemoryMib{"machine/memory_mib"};
         static constexpr QLatin1StringView kDiskGib{"machine/disk_gib"};
-        // Display
-        static constexpr QLatin1StringView kGuestWidth{"display/width"};
-        static constexpr QLatin1StringView kGuestHeight{"display/height"};
+        // Display (live). The resolutions reach a running guest as the
+        // GPU device's ``modes`` over QMP (Lifecycle::set_display_modes),
+        // so none of these needs a restart; the domain definition carries
+        // the same value for the next boot.
+        //
+        // The sizes the guest's monitor offers: a QStringList of "WxH",
+        // the first preferred (see DisplayModes). Empty, the default, is
+        // the host monitors' own modes.
+        static constexpr QLatin1StringView kDisplayModes{"display/modes"};
+        // Put the size of the monitor the manager is on first, preferred.
         static constexpr QLatin1StringView kMatchHostOutput{"display/match_host_output"};
         static constexpr QLatin1StringView kScalingPercent{"display/scaling_percent"};
-        static constexpr QLatin1StringView kRefreshHz{"display/refresh_hz"};  // live
-        static constexpr QLatin1StringView kVramMib{"display/vram_mib"};
-        static constexpr QLatin1StringView kLivePreview{"display/live_preview"};  // live
-        // Render channels (restart, except the warning toggle)
-        static constexpr QLatin1StringView kChannels{"render/channels"};
-        // Which GPU the render server draws on: an index into the
-        // devices EGL enumerates, or -1 for whichever drives the
-        // display. See RenderServer::gl_devices.
-        static constexpr QLatin1StringView kGlDevice{"render/gl_device"};
-        static constexpr QLatin1StringView kRingKib{"render/ring_kib"};
-        static constexpr QLatin1StringView kReplyKib{"render/reply_kib"};
-        static constexpr QLatin1StringView kBlobMib{"render/blob_mib"};
-        static constexpr QLatin1StringView kWarnCongestion{"render/warn_congestion"};   // live
-        static constexpr QLatin1StringView kChannelBindings{"render/bindings"};         // live
-        static constexpr QLatin1StringView kNothingFreePolicy{"render/nothing_free"};   // live
-        static constexpr QLatin1StringView kChannelWaitSeconds{"render/wait_seconds"};  // live
+        static constexpr QLatin1StringView kLivePreview{"display/live_preview"};
+        // Graphics (restart): the accel-virt GPU device's own properties,
+        // which QEMU reads once, when the device is realized.
+        //
+        // Which host GPU the guest's display adapter runs on: "auto"
+        // (whatever the device's host-gpu=auto takes, the first Vulkan
+        // device) or a Vulkan device UUID, which survives reboots and
+        // driver updates where enumeration order does not. See HostGpus.
+        static constexpr QLatin1StringView kHostGpu{"graphics/host_gpu"};
+        // The device's host window (``hostmem=``), in MiB: the BAR of
+        // host memory uploads, readbacks and host-visible Vulkan memory
+        // live in.
+        static constexpr QLatin1StringView kHostWindowMib{"graphics/host_window_mib"};
+        // Run the host GPU stack in av-renderer rather than inside QEMU,
+        // so a host driver crash costs the guest a device reset rather
+        // than the whole VM.
+        static constexpr QLatin1StringView kIsolateRenderer{"graphics/isolate_renderer"};
+        // The host GPUs passed as render-only adapters (display=off),
+        // one device each: a QStringList of Vulkan device UUIDs, empty by
+        // default. One that is also the display GPU, or that is no longer
+        // on the host, is left out when the domain is defined.
+        static constexpr QLatin1StringView kRenderGpus{"graphics/render_gpus"};
         // Files (live, except the shares)
         static constexpr QLatin1StringView kSmbEnabled{"files/smb_enabled"};
         static constexpr QLatin1StringView kShareScope{"files/share_scope"};
@@ -103,10 +96,13 @@ public:
         static constexpr QLatin1StringView kMenuCategory{"desktop/category"};
         static constexpr QLatin1StringView kFileAssociations{"desktop/mime"};
         // Guest
-        static constexpr QLatin1StringView kAgentPort{"guest/agent_port"};  // restart
         static constexpr QLatin1StringView kAutostart{"guest/autostart"};   // live
         // Host (live)
         static constexpr QLatin1StringView kCloseToTray{"host/close_to_tray"};
+        // Not a setting: how long the last boot took, from the start to
+        // the agent answering, in milliseconds (0: none measured yet).
+        // StatusHub writes it; the launch splash quotes it.
+        static constexpr QLatin1StringView kLastBootMs{"state/last_boot_ms"};
     };
 
     explicit ManagerSettings(QObject* parent = nullptr);
@@ -124,19 +120,17 @@ public:
     [[nodiscard]] int int_value(const QString& key) const;
     [[nodiscard]] bool bool_value(const QString& key) const;
     [[nodiscard]] QString string_value(const QString& key) const;
+    [[nodiscard]] QStringList string_list_value(const QString& key) const;
 
     // Writes immediately. Use this for live keys, and for restart keys
     // only once the user has agreed to the restart.
     void set_value(const QString& key, const QVariant& value);
 
-    // Typed helpers for the two settings that are lists rather than
-    // scalars. Both round-trip through the string form QSettings can
-    // store, so nothing else has to know how they are encoded.
+    // Typed helpers for the one setting that is a list rather than a
+    // scalar. It round-trips through the string form QSettings can
+    // store, so nothing else has to know how it is encoded.
     [[nodiscard]] QVector<HostShare> host_shares() const;
     void set_host_shares(const QVector<HostShare>& shares);
-
-    [[nodiscard]] QVector<ChannelBinding> channel_bindings() const;
-    void set_channel_bindings(const QVector<ChannelBinding>& bindings);
 
     // The string form ``kHostShares`` is stored in. Public for the
     // settings page, which stages an edited list as that string before
@@ -148,19 +142,17 @@ public:
     // person would pick them.
     [[nodiscard]] QStringList free_drive_letters() const;
 
-    [[nodiscard]] static QString policy_to_string(ChannelBusyPolicy policy);
-    [[nodiscard]] static ChannelBusyPolicy policy_from_string(const QString& text);
-    [[nodiscard]] static QString policy_label(ChannelBusyPolicy policy);
+    // The file the settings are stored in.
+    [[nodiscard]] QString file_path() const;
 
 Q_SIGNALS:
     void changed(const QString& key);
 
 private:
-    // Both list settings are records of fields, joined with two ASCII
-    // control characters no path or app id contains: 0x1F between
-    // records and 0x1E between fields — the reverse of their names, and
-    // kept that way for what is already stored. Written once so the two
-    // settings cannot disagree about which is which.
+    // The list setting is records of fields, joined with two ASCII
+    // control characters no path contains: 0x1F between records and
+    // 0x1E between fields — the reverse of their names, and kept that
+    // way for what is already stored.
     [[nodiscard]] static QString encode_records(const QVector<QStringList>& records);
     [[nodiscard]] static QVector<QStringList> decode_records(const QString& blob);
 

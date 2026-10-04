@@ -20,6 +20,10 @@ struct UiaGetTextHandler : RpcHandler {
         const int max_chars = p.get("max_chars", 32 * 1024);
         return {{"text", ctx.services.uia().get_text(hwnd, max_chars)}};
     }
+
+    // Window handles, UI Automation and HKCU belong to the user's
+    // session: served by the session helper there.
+    [[nodiscard]] Placement placement() const override { return Placement::UserSession; }
 };
 
 }  // namespace lsw::agent::rpc::handlers

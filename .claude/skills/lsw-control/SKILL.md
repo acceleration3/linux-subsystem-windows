@@ -5,7 +5,7 @@ description: Drive the LSW Windows VM — enumerate installed apps, launch a pro
 
 # Drive the LSW guest
 
-The agent already runs inside the guest (autostarted via Run key). These tools turn it into a remote-control surface — useful for smoke tests, demos, and one-off "do X in the VM" jobs that don't fit a console session.
+The agent already runs inside the guest (the `lsw-agent` service, as SYSTEM in session 0, with a helper in each logged-on user's session). These tools turn it into a remote-control surface — useful for smoke tests, demos, and one-off "do X in the VM" jobs that don't fit a console session.
 
 ## Tools
 
@@ -14,15 +14,15 @@ Enumerates Add/Remove Programs entries with a launchable .exe. Returns `[{id, na
 
 Use `id` (an absolute path to the .exe or .lnk) as the `app_id` for `launch`.
 
-### `launch` (`app_id`: string)
-Spawns the executable in the active interactive user session (not as SYSTEM). Returns `{ok, pid, error?}`.
+### `launch` (`app_id`: string, `session`: optional int)
+Spawns the executable as the logged-on user, elevated (their full token), in the console session — or in `session` if given; `session: 0` starts it as SYSTEM in session 0, where nobody sees it. Returns `{ok, pid, job, session, elevated, error?}`. `rpc cmd="list_sessions"` lists the sessions (`{sessions: [{id, user, state, console, helper}], default}`).
 - `ok=true, pid=N`: the process started. Doesn't mean a window has appeared yet — Windows can take seconds to spin up large apps.
 - `ok=false, error=...`: spawn failed; usually a missing path or the user session wasn't active.
 
 After a successful launch, poll `list_windows` until you see a row whose `pid` matches.
 
 ### `list_windows` (no args)
-Top-level visible windows in the guest. Each entry: `{hwnd, pid, title, exe_path, client_w, client_h}`. `client_w/h` are the window's content rect, useful for screenshot sizing.
+Top-level visible windows in the console user's session (another session: `rpc cmd="list_windows" params={"session": N}`). Each entry: `{hwnd, pid, title, exe_path, client_w, client_h}`. `client_w/h` are the window's content rect, useful for screenshot sizing.
 
 ### `rpc cmd="close_window" params={"hwnd": <int>}`
 Posts WM_CLOSE to the window. The app gets a chance to refuse (e.g., "save changes?" dialogs); for force-close use `taskkill` via a console session.
@@ -59,6 +59,6 @@ rpc cmd="close_window" params={"hwnd": <hwnd>}
 
 ## Caveats
 
-- **Interactive session required**: `launch` spawns in the active user session. If the VM is at a lock screen or no user is logged in, processes start but you won't see their windows.
+- **Interactive session required**: `launch` spawns in a user session. With nobody logged in it fails ("no user is logged on") unless you pass `session: 0`; at a lock screen processes start but you won't see their windows. Window and UI Automation RPCs fail with "the session helper in session N is not running" if that session's helper is down — the service relaunches it within seconds (`list_sessions` shows `helper`).
 - **Per-call cost**: `screenshot` returns ~250 KB of base64 PNG by default (1280×800 desktop). Cheap to call once, expensive in a tight loop — prefer subscribing to window mirrors via the agent's `subscribe_window` RPC if you need a stream.
 - **HWNDs are unstable**: window handles change every time the app is launched. Re-fetch via `list_windows` before each `close_window` / window-targeted RPC.

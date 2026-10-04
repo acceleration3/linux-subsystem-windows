@@ -83,8 +83,8 @@ if (( fails > 0 )); then
      type C:\ProgramData\LSW\promote.log
 
      It logs every step of SetupComplete: creating the wizard account,
-     promoting it to Administrators, and registering the agent's
-     scheduled task. An empty or missing file means SetupComplete.cmd
+     promoting it to Administrators, and registering the lsw-agent
+     service. An empty or missing file means SetupComplete.cmd
      never ran.
 
   2. Was the agent .exe copied off the payload CD?
@@ -107,18 +107,16 @@ if (( fails > 0 )); then
      anything is broken. Check the agent log for the "waiting for the
      interactive shell" line.
 
-  4. Is the agent's scheduled task registered and running?
-     schtasks /query /tn lsw-agent /v /fo list
+  4. Is the agent's service registered and running?
+     sc query lsw-agent
 
-     The task runs the agent AS THE WIZARD USER in their interactive
-     session (InteractiveToken + HighestAvailable), which is what makes
-     window capture and app launch native.
+     The service runs as LocalSystem in session 0 and starts a helper
+     in the wizard user's session for windows and app launch.
 
-       Last Result 0, task Running  -> agent is up but vsock is not
-                                       reaching the host
-       Registered but never run     -> no interactive logon yet; check
-                                       that AutoLogon is configured
-       "cannot find the file"       -> LswPromote.ps1 did not get that
+       RUNNING                      -> agent is up but the transport is
+                                       not reaching the host
+       STOPPED                      -> see C:\ProgramData\LSW\agent.log
+       "does not exist"             -> LswPromote.ps1 did not get that
                                        far; see promote.log above
 
   5. Connect the VNC viewer:

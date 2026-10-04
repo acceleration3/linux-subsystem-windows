@@ -21,8 +21,8 @@ namespace {
 }  // namespace
 
 DownloadInstallJob::DownloadInstallJob(std::string id, std::string name, NotificationQueue& queue,
-                                       std::string url, std::string args)
-    : InstallJob(std::move(id), std::move(name), queue), url_(std::move(url)),
+                                       std::string url, std::string args, win::RunAs as)
+    : InstallJob(std::move(id), std::move(name), queue, std::move(as)), url_(std::move(url)),
       args_(std::move(args)) {}
 
 void DownloadInstallJob::run() {
@@ -39,7 +39,7 @@ void DownloadInstallJob::run() {
     if (!args_.empty()) {
         command_line += L" " + util::TextEncoding::to_wide(args_);
     }
-    const auto outcome = ProcessRunner::run(command_line);
+    const auto outcome = ProcessRunner::run(command_line, as_);
     ::DeleteFileW(dest.c_str());
 
     if (!outcome.completed) {

@@ -217,13 +217,33 @@ TrimImageDialog::TrimImageDialog(config::Settings& settings, QString source_iso,
     connect(source_edit_, &QLineEdit::textChanged, this, [this](const QString& path) {
         source_iso_ = path;
         refresh_estimate();
+        list_editions();
     });
+    connect(output_dir_, &QLineEdit::textChanged, this, [this] { refresh_estimate(); });
 
     // The edition list comes out of the image's own WIM, which takes a
-    // few seconds; the dialog is usable while it arrives.
+    // few seconds; the dialog is usable while it arrives. Read again for
+    // every image picked, so the list is always the one in the source.
+    list_editions();
+
+    refresh_estimate();
+}
+
+void TrimImageDialog::list_editions() {
+    const int listing = ++listing_;
+    edition_combo_->clear();
+    edition_combo_->setEnabled(false);
+    edition_combo_->setVisible(false);
+    if (!QFileInfo(source_iso_).isFile()) {
+        return;
+    }
     auto* watcher = new QFutureWatcher<QVector<provision::install::WimEdition>>(this);
     connect(watcher, &QFutureWatcher<QVector<provision::install::WimEdition>>::finished, this,
-            [this, watcher] {
+            [this, watcher, listing] {
+                watcher->deleteLater();
+                if (listing != listing_) {
+                    return;  // another image was picked meanwhile
+                }
                 const auto editions = watcher->result();
                 edition_combo_->clear();
                 for (const auto& edition : editions) {
@@ -235,17 +255,12 @@ TrimImageDialog::TrimImageDialog(config::Settings& settings, QString source_iso,
                     edition_combo_->setEnabled(true);
                     edition_combo_->setVisible(true);
                 }
-                watcher->deleteLater();
             });
-    if (!source_iso_.isEmpty()) {
-        const QString iso = source_iso_;
-        const QString scratch = settings_.cache_dir();
-        watcher->setFuture(QtConcurrent::run([iso, scratch] {
-            return provision::install::WimEditionLister::list(iso, scratch, nullptr);
-        }));
-    }
-
-    refresh_estimate();
+    const QString iso = source_iso_;
+    const QString scratch = settings_.cache_dir();
+    watcher->setFuture(QtConcurrent::run([iso, scratch] {
+        return provision::install::WimEditionLister::list(iso, scratch, nullptr);
+    }));
 }
 
 bool TrimImageDialog::eventFilter(QObject* watched, QEvent* event) {
