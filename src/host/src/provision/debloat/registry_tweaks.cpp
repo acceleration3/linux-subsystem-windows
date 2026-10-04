@@ -86,8 +86,8 @@ constexpr auto kNtUser = "NTUSER";
     };
 }
 
-// Setup-time gates. LSW's domain has no TPM and presents a plain
-// virtio disk, so an unmodified Windows 11 installer refuses to run at
+// Setup-time gates. LSW's domain has no TPM and boots firmware with no
+// Secure Boot keys, so an unmodified Windows 11 installer refuses to run at
 // all — these are what make the guest installable rather than what make
 // it smaller, and they apply at every level including None.
 [[nodiscard]] QVector<RegistryTweak> setup_bypasses() {

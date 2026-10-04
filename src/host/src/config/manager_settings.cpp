@@ -1,4 +1,5 @@
 #include "lsw/host/config/manager_settings.hpp"
+#include "lsw/host/config/vm_sizing.hpp"
 
 #include "lsw/host/config/display_modes.hpp"
 
@@ -17,14 +18,14 @@ using K = ManagerSettings::Key;
 // say.
 const QHash<QString, QVariant>& defaults() {
     static const QHash<QString, QVariant> table = {
-        {K::kCpuCores, 4},
+        {K::kCpuCores, VmSizing::host_cores()},
         {K::kMemoryMib, 8192},
         {K::kDiskGib, 60},
 
         // accel-virt's default: the host monitors' own modes.
         {K::kDisplayModes, QStringList{}},
         {K::kMatchHostOutput, false},
-        {K::kScalingPercent, 100},
+        {K::kScalingPercent, 0},
         {K::kLivePreview, true},
 
         // "auto" is the device's own default, so a fresh install binds
@@ -33,7 +34,6 @@ const QHash<QString, QVariant>& defaults() {
         // What runs real applications. At 256 MiB the per-context arenas
         // run out and applications fail to create devices.
         {K::kHostWindowMib, 8192},
-        {K::kIsolateRenderer, true},
         // None: a second adapter is a second device the guest's driver
         // package has to be signed for, and most hosts have one GPU worth
         // using.
@@ -65,8 +65,8 @@ const QHash<QString, QVariant>& defaults() {
 // pushed into the running device over QMP.
 const QStringList& restart_keys() {
     static const QStringList keys = {
-        K::kCpuCores,        K::kMemoryMib,      K::kDiskGib,    K::kHostGpu,   K::kHostWindowMib,
-        K::kIsolateRenderer, K::kRenderGpus, K::kHostShares,
+        K::kCpuCores,      K::kMemoryMib,  K::kDiskGib,    K::kHostGpu,
+        K::kHostWindowMib, K::kRenderGpus, K::kHostShares,
     };
     return keys;
 }
@@ -79,15 +79,6 @@ constexpr QChar kFieldSep = QLatin1Char('\x1e');
 ManagerSettings::ManagerSettings(QObject* parent)
     : QObject(parent), store_(QSettings::IniFormat, QSettings::UserScope, QStringLiteral("lsw"),
                               QStringLiteral("manager")) {
-    // The wizard sizes the machine against the host it runs on, and a
-    // four-core default on a twenty-thread box is a poor first
-    // impression. Only used when nothing has been stored yet.
-    if (!store_.contains(K::kCpuCores)) {
-        const auto threads = static_cast<int>(std::thread::hardware_concurrency());
-        if (threads > 1) {
-            store_.setValue(K::kCpuCores, qMin(threads, 8));
-        }
-    }
 }
 
 QString ManagerSettings::file_path() const {

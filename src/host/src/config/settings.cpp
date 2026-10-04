@@ -88,10 +88,6 @@ QString Settings::vm_avgpu_log_path() const {
     return join(logs_dir(), QStringLiteral("%1-avgpu.log").arg(QLatin1String(kVmName)));
 }
 
-QString Settings::virtio_iso_path() const {
-    return join(isos_dir(), QStringLiteral("virtio-win.iso"));
-}
-
 bool Settings::is_first_run() const {
     QSettings s{join(config_root_, "manager.ini"), QSettings::IniFormat};
     return !s.value("setup/wizard_complete", false).toBool();

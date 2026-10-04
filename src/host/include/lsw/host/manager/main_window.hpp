@@ -50,6 +50,7 @@ Q_SIGNALS:
 
 protected:
     void closeEvent(QCloseEvent* e) override;
+    bool event(QEvent* e) override;
 
 private Q_SLOTS:
     void on_quit();

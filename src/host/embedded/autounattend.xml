@@ -1,16 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <unattend xmlns="urn:schemas-microsoft-com:unattend" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
 	<!-- LSW autounattend.xml — schneegans.de/windows/unattend-generator
-	     base, declarative install onto a high-performance virtio-blk
-	     disk from the FIRST boot (one domain.xml, no pre/post split, no
-	     controller swap). Key pieces:
-	       * offlineServicing + windowsPE Microsoft-Windows-PnpCustomizations
-	         inject viostor/NetKVM/viosock/Balloon/viorng from the
-	         attached virtio-win.iso so WinPE sees the virtio disk AND
-	         the booted image has the boot-critical + vsock drivers
-	         (Win11 24H2+ does not auto-carry them — the
-	         INACCESSIBLE_BOOT_DEVICE fix). viosock is what makes the
-	         vsock-only agent transport reachable.
+	     base, declarative install onto the NVMe system disk from the
+	     FIRST boot (one domain.xml, no pre/post split, no controller
+	     swap). Key pieces:
+	       * no driver injection: the disk is NVMe (stornvme.sys) and the
+	         NIC an e1000e, both driven by in-box drivers in WinPE and in
+	         the installed image alike, so no driver path is handed to
+	         Setup and there is no driver CD. Windows 11 24H2+ does not carry
+	         a WinPE-loaded driver into the image, which is what made the
+	         old virtio disk an INACCESSIBLE_BOOT_DEVICE away from a
+	         missed injection.
 	       * windowsPE Microsoft-Windows-Setup declaratively partitions
 	         (GPT EFI/MSR/Windows) and installs the WIM image index
 	         {{image_index}}; {{win11_bypass_block}} re-adds the LabConfig
@@ -47,63 +47,6 @@
 	         (a marker that the per-user setup ran; the agent's gate is
 	         the usable desktop, not this file). -->
 
-	<settings pass="offlineServicing">
-		<!-- Inject the virtio storage/net drivers into the just-applied
-		     offline image so Windows can boot off the virtio-blk system
-		     disk on the FIRST boot. Windows 11 24H2+ does not auto-carry
-		     the boot-critical driver from WinPE, so this is mandatory to
-		     avoid INACCESSIBLE_BOOT_DEVICE. The virtio-win.iso CD letter
-		     in this environment is not deterministic, so every plausible
-		     letter is listed; missing ones are skipped with a warning.
-
-		     The IVSHMEM driver is injected here too, from the payload
-		     ISO's \ivshmem folder. It used to be fetched and installed
-		     by a post-install setup step, which is a bootstrap that
-		     cannot work once the shared-memory channel is the ONLY
-		     channel: the driver would have arrived over the transport it
-		     is supposed to provide. Staged on the ISO and injected
-		     offline, the device is live on the first boot, before the
-		     agent starts. (Red Hat's virtio-win iso does not ship
-		     ivshmem.sys; the signed binary comes from the Looking Glass
-		     host package — see IvshmemDriver on the host side.)
-
-		     Payload-ISO letters are as unpredictable as virtio-win's, so
-		     the same sweep applies. -->
-		<component name="Microsoft-Windows-PnpCustomizationsNonWinPE" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
-			<DriverPaths>
-				<PathAndCredentials wcm:action="add" wcm:keyValue="1"><Path>D:\viostor\w11\amd64</Path></PathAndCredentials>
-				<PathAndCredentials wcm:action="add" wcm:keyValue="2"><Path>D:\NetKVM\w11\amd64</Path></PathAndCredentials>
-				<PathAndCredentials wcm:action="add" wcm:keyValue="3"><Path>D:\viosock\w11\amd64</Path></PathAndCredentials>
-				<PathAndCredentials wcm:action="add" wcm:keyValue="4"><Path>D:\Balloon\w11\amd64</Path></PathAndCredentials>
-				<PathAndCredentials wcm:action="add" wcm:keyValue="5"><Path>D:\viorng\w11\amd64</Path></PathAndCredentials>
-				<PathAndCredentials wcm:action="add" wcm:keyValue="6"><Path>E:\viostor\w11\amd64</Path></PathAndCredentials>
-				<PathAndCredentials wcm:action="add" wcm:keyValue="7"><Path>E:\NetKVM\w11\amd64</Path></PathAndCredentials>
-				<PathAndCredentials wcm:action="add" wcm:keyValue="8"><Path>E:\viosock\w11\amd64</Path></PathAndCredentials>
-				<PathAndCredentials wcm:action="add" wcm:keyValue="9"><Path>E:\Balloon\w11\amd64</Path></PathAndCredentials>
-				<PathAndCredentials wcm:action="add" wcm:keyValue="10"><Path>E:\viorng\w11\amd64</Path></PathAndCredentials>
-				<PathAndCredentials wcm:action="add" wcm:keyValue="11"><Path>F:\viostor\w11\amd64</Path></PathAndCredentials>
-				<PathAndCredentials wcm:action="add" wcm:keyValue="12"><Path>F:\NetKVM\w11\amd64</Path></PathAndCredentials>
-				<PathAndCredentials wcm:action="add" wcm:keyValue="13"><Path>F:\viosock\w11\amd64</Path></PathAndCredentials>
-				<PathAndCredentials wcm:action="add" wcm:keyValue="14"><Path>F:\Balloon\w11\amd64</Path></PathAndCredentials>
-				<PathAndCredentials wcm:action="add" wcm:keyValue="15"><Path>F:\viorng\w11\amd64</Path></PathAndCredentials>
-				<PathAndCredentials wcm:action="add" wcm:keyValue="16"><Path>G:\viostor\w11\amd64</Path></PathAndCredentials>
-				<PathAndCredentials wcm:action="add" wcm:keyValue="17"><Path>G:\NetKVM\w11\amd64</Path></PathAndCredentials>
-				<PathAndCredentials wcm:action="add" wcm:keyValue="18"><Path>G:\viosock\w11\amd64</Path></PathAndCredentials>
-				<PathAndCredentials wcm:action="add" wcm:keyValue="19"><Path>G:\Balloon\w11\amd64</Path></PathAndCredentials>
-				<PathAndCredentials wcm:action="add" wcm:keyValue="20"><Path>G:\viorng\w11\amd64</Path></PathAndCredentials>
-				<PathAndCredentials wcm:action="add" wcm:keyValue="21"><Path>H:\viostor\w11\amd64</Path></PathAndCredentials>
-				<PathAndCredentials wcm:action="add" wcm:keyValue="22"><Path>H:\NetKVM\w11\amd64</Path></PathAndCredentials>
-				<PathAndCredentials wcm:action="add" wcm:keyValue="23"><Path>H:\viosock\w11\amd64</Path></PathAndCredentials>
-				<PathAndCredentials wcm:action="add" wcm:keyValue="24"><Path>H:\Balloon\w11\amd64</Path></PathAndCredentials>
-				<PathAndCredentials wcm:action="add" wcm:keyValue="25"><Path>H:\viorng\w11\amd64</Path></PathAndCredentials>
-				<PathAndCredentials wcm:action="add" wcm:keyValue="26"><Path>D:\ivshmem</Path></PathAndCredentials>
-				<PathAndCredentials wcm:action="add" wcm:keyValue="27"><Path>E:\ivshmem</Path></PathAndCredentials>
-				<PathAndCredentials wcm:action="add" wcm:keyValue="28"><Path>F:\ivshmem</Path></PathAndCredentials>
-				<PathAndCredentials wcm:action="add" wcm:keyValue="29"><Path>G:\ivshmem</Path></PathAndCredentials>
-				<PathAndCredentials wcm:action="add" wcm:keyValue="30"><Path>H:\ivshmem</Path></PathAndCredentials>
-			</DriverPaths>
-		</component>
-	</settings>
 	<settings pass="windowsPE">
 		<component name="Microsoft-Windows-International-Core-WinPE" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
 			<SetupUILanguage>
@@ -190,45 +133,11 @@
 				</OSImage>
 			</ImageInstall>
 			<UserData>
-				<ProductKey>
-					<Key>{{product_key}}</Key>
-					<WillShowUI>OnError</WillShowUI>
-				</ProductKey>
+{{product_key_block}}
 				<AcceptEula>true</AcceptEula>
 			</UserData>
 			<UseConfigurationSet>false</UseConfigurationSet>
 {{win11_bypass_block}}
-		</component>
-		<!-- Load virtio storage/net drivers into WinPE so Setup can
-		     see + partition the virtio-blk system disk. -->
-		<component name="Microsoft-Windows-PnpCustomizationsWinPE" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
-			<DriverPaths>
-				<PathAndCredentials wcm:action="add" wcm:keyValue="1"><Path>D:\viostor\w11\amd64</Path></PathAndCredentials>
-				<PathAndCredentials wcm:action="add" wcm:keyValue="2"><Path>D:\NetKVM\w11\amd64</Path></PathAndCredentials>
-				<PathAndCredentials wcm:action="add" wcm:keyValue="3"><Path>D:\viosock\w11\amd64</Path></PathAndCredentials>
-				<PathAndCredentials wcm:action="add" wcm:keyValue="4"><Path>D:\Balloon\w11\amd64</Path></PathAndCredentials>
-				<PathAndCredentials wcm:action="add" wcm:keyValue="5"><Path>D:\viorng\w11\amd64</Path></PathAndCredentials>
-				<PathAndCredentials wcm:action="add" wcm:keyValue="6"><Path>E:\viostor\w11\amd64</Path></PathAndCredentials>
-				<PathAndCredentials wcm:action="add" wcm:keyValue="7"><Path>E:\NetKVM\w11\amd64</Path></PathAndCredentials>
-				<PathAndCredentials wcm:action="add" wcm:keyValue="8"><Path>E:\viosock\w11\amd64</Path></PathAndCredentials>
-				<PathAndCredentials wcm:action="add" wcm:keyValue="9"><Path>E:\Balloon\w11\amd64</Path></PathAndCredentials>
-				<PathAndCredentials wcm:action="add" wcm:keyValue="10"><Path>E:\viorng\w11\amd64</Path></PathAndCredentials>
-				<PathAndCredentials wcm:action="add" wcm:keyValue="11"><Path>F:\viostor\w11\amd64</Path></PathAndCredentials>
-				<PathAndCredentials wcm:action="add" wcm:keyValue="12"><Path>F:\NetKVM\w11\amd64</Path></PathAndCredentials>
-				<PathAndCredentials wcm:action="add" wcm:keyValue="13"><Path>F:\viosock\w11\amd64</Path></PathAndCredentials>
-				<PathAndCredentials wcm:action="add" wcm:keyValue="14"><Path>F:\Balloon\w11\amd64</Path></PathAndCredentials>
-				<PathAndCredentials wcm:action="add" wcm:keyValue="15"><Path>F:\viorng\w11\amd64</Path></PathAndCredentials>
-				<PathAndCredentials wcm:action="add" wcm:keyValue="16"><Path>G:\viostor\w11\amd64</Path></PathAndCredentials>
-				<PathAndCredentials wcm:action="add" wcm:keyValue="17"><Path>G:\NetKVM\w11\amd64</Path></PathAndCredentials>
-				<PathAndCredentials wcm:action="add" wcm:keyValue="18"><Path>G:\viosock\w11\amd64</Path></PathAndCredentials>
-				<PathAndCredentials wcm:action="add" wcm:keyValue="19"><Path>G:\Balloon\w11\amd64</Path></PathAndCredentials>
-				<PathAndCredentials wcm:action="add" wcm:keyValue="20"><Path>G:\viorng\w11\amd64</Path></PathAndCredentials>
-				<PathAndCredentials wcm:action="add" wcm:keyValue="21"><Path>H:\viostor\w11\amd64</Path></PathAndCredentials>
-				<PathAndCredentials wcm:action="add" wcm:keyValue="22"><Path>H:\NetKVM\w11\amd64</Path></PathAndCredentials>
-				<PathAndCredentials wcm:action="add" wcm:keyValue="23"><Path>H:\viosock\w11\amd64</Path></PathAndCredentials>
-				<PathAndCredentials wcm:action="add" wcm:keyValue="24"><Path>H:\Balloon\w11\amd64</Path></PathAndCredentials>
-				<PathAndCredentials wcm:action="add" wcm:keyValue="25"><Path>H:\viorng\w11\amd64</Path></PathAndCredentials>
-			</DriverPaths>
 		</component>
 	</settings>
 	<settings pass="generalize"></settings>

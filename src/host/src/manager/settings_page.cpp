@@ -4,6 +4,7 @@
 #include "lsw/host/manager/resolution_editor.hpp"
 #include "lsw/host/ui/machine_limits.hpp"
 #include "lsw/host/ui/panel.hpp"
+#include "lsw/host/config/vm_sizing.hpp"
 #include "lsw/host/services/status_hub.hpp"
 #include "lsw/host/ui/slider_spin.hpp"
 #include "lsw/host/ui/theme.hpp"
@@ -151,9 +152,16 @@ void SettingsPage::build() {
     auto* machine = new_group(QStringLiteral("Machine"));
     add_row(machine, K::kCpuCores, QStringLiteral("Processor cores"),
             QStringLiteral("One socket, cores only, no SMT."),
-            make_slider(K::kCpuCores, ui::MachineLimits::kCores, QString{}));
+            [this] {
+                // No more vCPUs than the host has threads: past that they
+                // only take turns on the same cores.
+                auto* cores = static_cast<ui::SliderSpin*>(
+                    make_slider(K::kCpuCores, ui::MachineLimits::kCores, QString{}));
+                cores->set_maximum(config::VmSizing::host_cores());
+                return cores;
+            }());
     add_row(machine, K::kMemoryMib, QStringLiteral("Memory"),
-            QStringLiteral("Ballooned, so the guest gives memory back when it is idle."),
+            QStringLiteral("Fixed: the guest holds all of it while it runs."),
             make_slider(K::kMemoryMib, ui::MachineLimits::kMemoryMib, QStringLiteral(" MiB")));
     auto* disk = static_cast<ui::SliderSpin*>(
         make_slider(K::kDiskGib, ui::MachineLimits::kDiskGib, QStringLiteral(" GiB")));
@@ -225,10 +233,13 @@ void SettingsPage::build() {
                            "another one."),
             make_toggle(K::kMatchHostOutput));
     add_row(display, K::kScalingPercent, QStringLiteral("Scaling"),
-            QStringLiteral("Windows DPI. Applied at the guest logon, so it takes a restart to "
-                           "change."),
+            QStringLiteral("Windows DPI. Matching this desktop takes the scale of the monitor "
+                           "the manager is on, so mirrored windows come out one guest pixel to "
+                           "one screen pixel, at the size of the apps beside them. Applied at "
+                           "the guest logon, so it takes a restart to change."),
             make_choice(K::kScalingPercent,
-                        Choices{{QStringLiteral("100 % (96 DPI)"), 100},
+                        Choices{{QStringLiteral("Match this desktop"), 0},
+                                {QStringLiteral("100 % (96 DPI)"), 100},
                                 {QStringLiteral("125 % (120 DPI)"), 125},
                                 {QStringLiteral("150 % (144 DPI)"), 150},
                                 {QStringLiteral("200 % (192 DPI)"), 200}}),
@@ -257,11 +268,6 @@ void SettingsPage::build() {
                                 {QStringLiteral("4 GiB"), 4096},
                                 {QStringLiteral("8 GiB"), 8192},
                                 {QStringLiteral("16 GiB"), 16384}}));
-    add_row(graphics, K::kIsolateRenderer, QStringLiteral("Isolate the host graphics driver"),
-            QStringLiteral("Runs the host's GPU stack in a process of its own. A host driver "
-                           "crash then costs a device reset, which Windows recovers from, "
-                           "instead of the whole guest."),
-            make_toggle(K::kIsolateRenderer));
 
     // ---- files ----------------------------------------------------
     auto* files = new_group(QStringLiteral("Files"));

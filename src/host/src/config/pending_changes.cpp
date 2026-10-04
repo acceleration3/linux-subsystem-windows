@@ -19,7 +19,6 @@ QString label_for(const QString& key) {
         {K::kDiskGib, QStringLiteral("disk")},
         {K::kHostGpu, QStringLiteral("display GPU")},
         {K::kHostWindowMib, QStringLiteral("host window")},
-        {K::kIsolateRenderer, QStringLiteral("isolated renderer")},
         {K::kRenderGpus, QStringLiteral("render GPUs")},
         {K::kHostShares, QStringLiteral("shared folders")},
     };

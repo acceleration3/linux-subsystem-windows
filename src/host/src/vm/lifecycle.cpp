@@ -5,14 +5,11 @@
 #include "lsw/host/platform/tool_process.hpp"
 #include "lsw/host/vm/domain_description.hpp"
 #include "lsw/host/vm/domain_handle.hpp"
-#include "lsw/host/vm/ivshmem_server.hpp"
-#include "lsw/host/vm/shmem_region.hpp"
 
 #include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QRegularExpression>
-#include <cstdint>
 #include <libvirt/libvirt-qemu.h>
 #include <libvirt/libvirt.h>
 
@@ -58,6 +55,12 @@ bool Lifecycle::grow_disk(const QString& path, int size_gib, QString* error_out)
     return true;
 }
 
+int Lifecycle::fail(const char* call) {
+    last_error_ = conn_.last_error();
+    LSW_ERROR("{} failed: {}", call, last_error_.toStdString());
+    return -1;
+}
+
 int Lifecycle::define_and_start(const config::VmRecord& vm, const DomainXmlInputs& inputs) {
     if (!conn_.is_open()) {
         LSW_ERROR("libvirt not connected");
@@ -67,27 +70,14 @@ int Lifecycle::define_and_start(const config::VmRecord& vm, const DomainXmlInput
     if (!fill_accel_virt(filled)) {
         return -1;
     }
-    // The IVSHMEM server socket MUST exist before virDomainCreate or
-    // QEMU's chardev setup fails outright. We bring up the region +
-    // server here, then pass the socket path to the XML builder.
-    const QString sock = ensure_shmem(vm.uuid, filled.ivshmem_size_mib);
-    if (sock.isEmpty()) {
-        return -1;
-    }
-    filled.ivshmem_socket = sock;
-
     const QString xml = DomainXmlBuilder::build(vm, filled);
     auto* d = ::virDomainDefineXML(conn_.raw(), xml.toUtf8().constData());
     if (d == nullptr) {
-        LSW_ERROR("virDomainDefineXML failed: {}", conn_.last_error().toStdString());
-        teardown_shmem(vm.uuid);
-        return -1;
+        return fail("virDomainDefineXML");
     }
     DomainHandle dom{d};
     if (::virDomainCreate(dom.raw()) < 0) {
-        LSW_ERROR("virDomainCreate failed: {}", conn_.last_error().toStdString());
-        teardown_shmem(vm.uuid);
-        return -1;
+        return fail("virDomainCreate");
     }
     LSW_INFO("VM started: {} (cid={})", vm.name.toStdString(), vm.vsock_cid);
     return 0;
@@ -102,25 +92,10 @@ int Lifecycle::redefine(const config::VmRecord& vm, const DomainXmlInputs& input
     if (!fill_accel_virt(filled)) {
         return -1;
     }
-    // Reuse the socket path the region already has when one is up, so a
-    // redefine under a running guest names the same chardev it is
-    // already attached to rather than inventing a second.
-    if (filled.ivshmem_socket.isEmpty()) {
-        if (auto it = shmem_.find(vm.uuid); it != shmem_.end() && it->second.server) {
-            filled.ivshmem_socket = it->second.server->socket_path();
-        }
-    }
-    if (filled.ivshmem_socket.isEmpty()) {
-        // Nothing is up: the socket will be made when the VM next
-        // starts, and the path it takes is derived from the UUID, so
-        // naming it now is safe and keeps the definition complete.
-        filled.ivshmem_socket = IvshmemServer::socket_path_for(vm.uuid);
-    }
     const QString xml = DomainXmlBuilder::build(vm, filled);
     auto* d = ::virDomainDefineXML(conn_.raw(), xml.toUtf8().constData());
     if (d == nullptr) {
-        LSW_ERROR("virDomainDefineXML failed: {}", conn_.last_error().toStdString());
-        return -1;
+        return fail("virDomainDefineXML");
     }
     DomainHandle dom{d};
     LSW_INFO("VM redefined: {}", vm.name.toStdString());
@@ -134,13 +109,7 @@ int Lifecycle::start(const QUuid& uuid, bool first_boot_done) {
         return -1;
     }
     if (::virDomainIsActive(dom.raw()) == 1) {
-        // Idempotent — but a VM that is already up was started by some
-        // earlier manager, so attach to the region it left rather than
-        // running blind.
-        if (!shmem_.contains(uuid)) {
-            (void)attach_running(uuid);
-        }
-        return 0;
+        return 0;  // idempotent
     }
     // A VM whose guest has already run has no business still holding
     // the installer.
@@ -155,15 +124,8 @@ int Lifecycle::start(const QUuid& uuid, bool first_boot_done) {
         eject_install_media(uuid);
     }
 
-    // The VM's persistent XML already references the chardev path;
-    // ensure the matching server is up before QEMU connects to it.
-    if (ensure_shmem(uuid, 256).isEmpty()) {
-        return -1;
-    }
     if (::virDomainCreate(dom.raw()) < 0) {
-        LSW_ERROR("virDomainCreate failed: {}", conn_.last_error().toStdString());
-        teardown_shmem(uuid);
-        return -1;
+        return fail("virDomainCreate");
     }
     return 0;
 }
@@ -180,10 +142,6 @@ int Lifecycle::shutdown(const QUuid& uuid) {
     if (!dom.valid()) {
         return -1;
     }
-    // Don't tear shmem here — ACPI shutdown is asynchronous; the
-    // server stays up so we can still service late doorbells from a
-    // guest that hasn't yet acted on the shutdown signal. The
-    // ``force_off`` path is what reaps the region.
     return ::virDomainShutdown(dom.raw());
 }
 
@@ -192,9 +150,7 @@ int Lifecycle::force_off(const QUuid& uuid) {
     if (!dom.valid()) {
         return -1;
     }
-    const int rc = ::virDomainDestroy(dom.raw());
-    teardown_shmem(uuid);
-    return rc;
+    return ::virDomainDestroy(dom.raw());
 }
 
 int Lifecycle::undefine(const QUuid& uuid) {
@@ -202,8 +158,41 @@ int Lifecycle::undefine(const QUuid& uuid) {
     if (!dom.valid()) {
         return -1;
     }
-    teardown_shmem(uuid);
     return ::virDomainUndefine(dom.raw());
+}
+
+bool Lifecycle::remove_existing(const QString& name, QString* error_out) {
+    const auto refuse = [this, error_out](const QString& why) {
+        last_error_ = why;
+        LSW_ERROR("{}", why.toStdString());
+        if (error_out != nullptr) {
+            *error_out = why;
+        }
+        return false;
+    };
+    if (!conn_.is_open()) {
+        return refuse(QStringLiteral("libvirt is not connected"));
+    }
+    DomainHandle dom{::virDomainLookupByName(conn_.raw(), name.toUtf8().constData())};
+    if (!dom.valid()) {
+        return true;
+    }
+    // Its disk is about to be recreated at the same path, which under a
+    // running QEMU would be writing over a disk in use.
+    if (::virDomainIsActive(dom.raw()) == 1) {
+        return refuse(QStringLiteral("the existing virtual machine '%1' is running; shut it "
+                                     "down before installing a new one")
+                          .arg(name));
+    }
+    const unsigned int flags = VIR_DOMAIN_UNDEFINE_NVRAM | VIR_DOMAIN_UNDEFINE_MANAGED_SAVE
+                               | VIR_DOMAIN_UNDEFINE_SNAPSHOTS_METADATA
+                               | VIR_DOMAIN_UNDEFINE_CHECKPOINTS_METADATA;
+    if (::virDomainUndefineFlags(dom.raw(), flags) < 0) {
+        return refuse(QStringLiteral("could not remove the existing virtual machine '%1': %2")
+                          .arg(name, conn_.last_error()));
+    }
+    LSW_INFO("removed the existing domain '{}' to install a new one", name.toStdString());
+    return true;
 }
 
 bool Lifecycle::is_running(const QUuid& uuid) const {
@@ -262,9 +251,9 @@ void Lifecycle::eject_install_media(const QUuid& uuid) {
     }
     // A <disk device='cdrom'> with no <source> = ejected media.
     // virDomainUpdateDeviceFlags matches the existing device by
-    // <target dev=...>; the system disk (vda, virtio) is never named
-    // here so it can't be affected.
-    static const char* kTargets[] = {"sdb", "sdc", "sdd"};
+    // <target dev=...>; the system disk (nvme0n1) is never named here
+    // so it can't be affected.
+    static const char* kTargets[] = {"sdb", "sdc"};
     for (const char* tgt : kTargets) {
         const QString xml = QStringLiteral("<disk type='file' device='cdrom'>"
                                            "<driver name='qemu' type='raw'/>"
@@ -280,90 +269,14 @@ void Lifecycle::eject_install_media(const QUuid& uuid) {
     }
 }
 
-ShmemRegion* Lifecycle::shmem_region(const QUuid& uuid) const {
-    auto it = shmem_.find(uuid);
-    return (it != shmem_.end()) ? it->second.region.get() : nullptr;
-}
-
-IvshmemServer* Lifecycle::ivshmem_server(const QUuid& uuid) const {
-    auto it = shmem_.find(uuid);
-    return (it != shmem_.end()) ? it->second.server.get() : nullptr;
-}
-
-bool Lifecycle::attach_running(const QUuid& uuid) {
-    if (shmem_.contains(uuid)) {
-        return true;
-    }
-    if (!is_running(uuid)) {
-        return false;
-    }
-    ShmemBundle bundle;
-    bundle.region = std::make_unique<ShmemRegion>();
-    if (bundle.region->attach(uuid) != 0) {
-        LSW_WARN("attach: VM {} is running but its shared region is gone — window "
-                 "mirrors will be black until the VM is restarted from here",
-                 uuid.toString().toStdString());
-        return false;
-    }
-    // No IvshmemServer: QEMU handshook its device against the socket and
-    // eventfds of whichever manager started the VM, and that handshake
-    // is one-shot — a new server here would never be connected to. The
-    // doorbells are therefore gone for this session, and consumers fall
-    // back to polling the region. Everything else about it is intact,
-    // because the memory is QEMU's for as long as the domain lives.
-    LSW_INFO("attach: reattached to the running VM {} — no frame doorbells this "
-             "session (the VM was started by an earlier manager), so frames are "
-             "polled instead",
-             uuid.toString().toStdString());
-    shmem_.emplace(uuid, std::move(bundle));
-    Q_EMIT shmem_ready(uuid);
-    return true;
-}
-
-QString Lifecycle::ensure_shmem(const QUuid& uuid, int size_mib) {
-    // Reuse an existing bundle (start-without-define on an already
-    // running VM hits this path). The shm region + server stay live
-    // across VM ACPI shutdowns so late frames don't crash the manager.
-    if (auto it = shmem_.find(uuid); it != shmem_.end()) {
-        if (it->second.server) {
-            return it->second.server->socket_path();
-        }
-        // An attached bundle: no server, and the region belongs to a VM
-        // that is about to be started again. Both have to be made
-        // fresh — the guest that was using it is gone, and the new QEMU
-        // needs a socket to hand shake against.
-        LSW_INFO("shmem: replacing the attached region for {} with a fresh one for "
-                 "the new VM run",
-                 uuid.toString().toStdString());
-        teardown_shmem(uuid);
-    }
-    ShmemBundle bundle;
-    bundle.region = std::make_unique<ShmemRegion>();
-    const std::uint64_t bytes =
-        static_cast<std::uint64_t>(size_mib > 0 ? size_mib : 256) * 1024U * 1024U;
-    if (bundle.region->open(uuid, bytes) != 0) {
-        return {};
-    }
-    bundle.server = std::make_unique<IvshmemServer>(uuid, *bundle.region);
-    if (bundle.server->start() != 0) {
-        bundle.region->close();
-        return {};
-    }
-    const QString sock = bundle.server->socket_path();
-    shmem_.emplace(uuid, std::move(bundle));
-    Q_EMIT shmem_ready(uuid);
-    return sock;
-}
-
 bool Lifecycle::fill_accel_virt(DomainXmlInputs& inputs) {
-    const auto fill = [](QString& field, QString (*lookup)()) {
+    const auto fill = [](QString& field, QString (*locate)()) {
         if (field.isEmpty()) {
-            field = lookup();
+            field = locate();
         }
     };
     fill(inputs.qemu_binary, &platform::AccelVirtPaths::qemu_binary);
     fill(inputs.executor, &platform::AccelVirtPaths::executor);
-    fill(inputs.renderer, &platform::AccelVirtPaths::renderer);
     fill(inputs.d3d_lib_dir, &platform::AccelVirtPaths::d3d_lib_dir);
 
     // QEMU's modules are beside it, whichever build it came from.
@@ -377,20 +290,20 @@ bool Lifecycle::fill_accel_virt(DomainXmlInputs& inputs) {
     // falling back to it: the domain would not start, and libvirt's
     // reason names a device rather than a missing build.
     if (inputs.qemu_binary.isEmpty()) {
-        LSW_ERROR("accel-virt's QEMU was not found: build the accel_virt_host target, or "
-                  "point LSW_AV_QEMU_BUILD at a build that has qemu/qemu-system-x86_64");
+        last_error_ = QStringLiteral(
+            "accel-virt's QEMU was not found: build the accel_virt_host target, or point "
+            "LSW_AV_QEMU_BUILD at a build that has qemu/qemu-system-x86_64");
+        LSW_ERROR("{}", last_error_.toStdString());
         return false;
     }
     // Without an executor the device is a plain 2D virtio-gpu with no
     // av capset, and the guest's driver has nothing to drive.
     if (inputs.executor.isEmpty()) {
-        LSW_ERROR("accel-virt's libav_executor.so was not found: build the accel_virt_host "
-                  "target, or point LSW_AV_QEMU_BUILD at a build that has it");
+        last_error_ = QStringLiteral(
+            "accel-virt's libav_executor.so was not found: build the accel_virt_host target, "
+            "or point LSW_AV_QEMU_BUILD at a build that has it");
+        LSW_ERROR("{}", last_error_.toStdString());
         return false;
-    }
-    if (inputs.isolate_renderer && inputs.renderer.isEmpty()) {
-        LSW_WARN("av-renderer was not found; the host GPU stack runs inside QEMU, so a host "
-                 "driver crash takes the VM with it");
     }
     if (inputs.d3d_lib_dir.isEmpty()) {
         LSW_WARN("DXVK / vkd3d-proton were not found (accel_virt_d3d, or LSW_AV_D3D_PATH): the "
@@ -486,26 +399,6 @@ std::optional<QJsonValue> Lifecycle::qmp(const QUuid& uuid, const QJsonObject& c
                                  .toString()));
     }
     return answer.value(QStringLiteral("return"));
-}
-
-void Lifecycle::teardown_shmem(const QUuid& uuid) {
-    auto it = shmem_.find(uuid);
-    if (it == shmem_.end()) {
-        return;
-    }
-    if (it->second.server) {
-        it->second.server->stop();
-    }
-    if (it->second.region) {
-        // Unlink, not just unmap: this path runs when the VM is off or
-        // failed to start, and a region no VM is using should not be
-        // left behind for the next manager to attach to.
-        it->second.region->discard();
-    }
-    shmem_.erase(it);
-    // After the erase: a consumer that re-queries in the slot handler
-    // must see the bundle already gone, not a dangling pointer.
-    Q_EMIT shmem_gone(uuid);
 }
 
 }  // namespace lsw::host::vm

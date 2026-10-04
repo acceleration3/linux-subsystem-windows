@@ -4,7 +4,12 @@
 > render server, its ICDs, and a command stream over IVSHMEM — has been
 > replaced by [accel-virt](../external/accel-virt): a WDDM paravirtual
 > adapter whose own QEMU device, `virtio-gpu-av-pci`, carries GPU work,
-> with no region of LSW's involved. Read it as the record of how the
+> with no region of LSW's involved. The IVSHMEM region, its doorbell
+> server, the guest's ivshmem.sys and the shared-memory RPC ring this
+> plan describes have since been removed outright: the agent link is a
+> TCP connection and nothing else. So has virtio-win: the VM's disk is
+> NVMe and its NIC an e1000e, both driven by Windows' in-box drivers,
+> and no driver ISO is fetched or attached. Read it as the record of how the
 > transport got its shape; [link-protocol.md](link-protocol.md) is what
 > is true now.
 

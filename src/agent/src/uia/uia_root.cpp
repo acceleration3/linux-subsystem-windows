@@ -18,7 +18,7 @@ UiaRoot::UiaRoot() {
     const HRESULT hr = ::CoCreateInstance(__uuidof(CUIAutomation), nullptr, CLSCTX_INPROC_SERVER,
                                           __uuidof(IUIAutomation), reinterpret_cast<void**>(&root));
     if (FAILED(hr) || root == nullptr) {
-        LSW_AGENT_WARN("uia: CoCreateInstance(CUIAutomation) failed hr={} — UIA RPCs will be "
+        LSW_AGENT_WARN("uia: CoCreateInstance(CUIAutomation) failed hr={}; UIA RPCs will be "
                        "unavailable",
                        win::ErrorText::hresult(hr));
         return;

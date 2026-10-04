@@ -6,8 +6,9 @@
 // interactive installer — with nothing anywhere saying why.
 
 #include "lsw/host/provision/install/autounattend.hpp"
-#include "lsw/host/provision/install/ivshmem_driver.hpp"
 #include "lsw/host/provision/install/payload_iso.hpp"
+#include "lsw/host/provision/install/product_keys.hpp"
+#include "lsw/host/provision/install/wim_edition_lister.hpp"
 
 #include <QDir>
 #include <QDomDocument>
@@ -38,6 +39,7 @@ int main(int argc, char** argv) {
     in.user_name = QStringLiteral("tester");
     in.user_password = QStringLiteral("hunter2");
     in.image_index = 6;
+    in.product_key = ProductKeys::for_edition(QStringLiteral("Core"));
 
     const QString xml = Autounattend::render(in);
 
@@ -49,7 +51,7 @@ int main(int argc, char** argv) {
     // comments talk about the placeholder syntax.
     bool any_left = false;
     for (const char* key : {"locale", "timezone", "computer_name", "user_name", "user_password",
-                            "product_key", "image_index", "win11_bypass_block"}) {
+                            "product_key_block", "image_index", "win11_bypass_block"}) {
         if (xml.contains(QStringLiteral("{{%1}}").arg(QLatin1String(key)))) {
             std::printf("       unsubstituted: {{%s}}\n", key);
             any_left = true;
@@ -59,6 +61,38 @@ int main(int argc, char** argv) {
 
     // The inputs must actually reach the output.
     check(xml.contains(QStringLiteral("LSW-TEST")), "computer_name substituted");
+    check(xml.contains(QStringLiteral("<Key>YTMG3-N6DKC-DKB77-7M9GH-8HVX7</Key>")),
+          "a Home image gets the Home key, not Pro's");
+    {
+        AutounattendInputs keyless = in;
+        keyless.product_key.clear();
+        const QString bare = Autounattend::render(keyless);
+        check(!bare.contains(QStringLiteral("<ProductKey>")) &&
+                  bare.contains(QStringLiteral("<AcceptEula>true</AcceptEula>")),
+              "no key leaves <ProductKey> out and keeps the rest of <UserData>");
+    }
+    check(ProductKeys::for_edition(QStringLiteral("professional")) ==
+              QStringLiteral("W269N-WFGWX-YVC9B-4J6C9-T83GX"),
+          "editions match whatever their case");
+    check(ProductKeys::fallback() == ProductKeys::for_edition(QStringLiteral("Professional")),
+          "an edition never read gets Pro's key");
+    check(ProductKeys::for_edition(QStringLiteral("ServerDatacenter")).isEmpty() &&
+              ProductKeys::for_edition(QString{}).isEmpty(),
+          "an edition the table does not know gets no key");
+    {
+        // Microsoft's Windows 11 media: Home is image 1, Pro image 6.
+        const QVector<WimEdition> media{{1, QStringLiteral("Windows 11 Home"), QStringLiteral("Core")},
+                                        {2, QStringLiteral("Windows 11 Home N"), QStringLiteral("CoreN")},
+                                        {3, QStringLiteral("Windows 11 Pro N"), QStringLiteral("ProfessionalN")},
+                                        {4, QStringLiteral("Windows 11 Pro"), QStringLiteral("Professional")}};
+        check(WimEditionLister::preferred(media) == 3, "Pro is offered first, not image 1");
+        check(WimEditionLister::preferred({{1, QStringLiteral("Windows 11 Home"), QStringLiteral("Core")}}) == 0,
+              "media without Pro offers its first image");
+        check(WimEditionLister::preferred({{1, QStringLiteral("Windows 11 Home"), {}},
+                                           {2, QStringLiteral("Windows 11 Pro"), {}}}) == 1,
+              "with no EDITIONID the name decides");
+        check(WimEditionLister::preferred({}) == 0, "an empty list gives 0");
+    }
     check(xml.contains(QStringLiteral("tester")), "user_name substituted");
 
     QDomDocument doc;
@@ -102,43 +136,16 @@ int main(int argc, char** argv) {
     check(QFile::exists(staged_path), "autounattend.xml exists in the staging dir");
     check(QFileInfo(staged_path).size() > 1000, "staged autounattend.xml is not empty");
 
-    // The shared-memory device must be live on the FIRST boot: it is the
-    // transport the agent talks over, so the driver cannot arrive as a
-    // guest setup step. That means two things have to hold together —
-    // the answer file has to ask for the injection, and the files have
-    // to actually be on the ISO for it to find.
-    check(xml.contains(QStringLiteral("\\ivshmem")),
-          "autounattend injects the payload ISO's ivshmem driver directory");
-
-    QTemporaryDir driver_src;
-    for (const char* name : {"ivshmem.inf", "ivshmem.cat", "ivshmem.sys"}) {
-        QFile f{QDir(driver_src.path()).filePath(QLatin1String(name))};
-        check(f.open(QIODevice::WriteOnly), "created a fake driver file");
-        f.write("stub");
-    }
-    check(IvshmemDriver::looks_like_driver_dir(driver_src.path()),
-          "a dir with .inf/.cat/.sys is recognised as a driver");
-
-    QTemporaryDir partial;
-    {
-        QFile f{QDir(partial.path()).filePath(QStringLiteral("ivshmem.inf"))};
-        check(f.open(QIODevice::WriteOnly), "created a lone .inf");
-        f.write("stub");
-    }
-    check(!IvshmemDriver::looks_like_driver_dir(partial.path()),
-          "an .inf without its catalog and binary is refused — DISM would reject it");
-
-    QTemporaryDir staging2;
-    PayloadInputs with_driver;
-    with_driver.autounattend_xml = xml;
-    with_driver.ivshmem_driver_dir = driver_src.path();
-    check(PayloadIsoBuilder::stage_files(with_driver, staging2.path(), nullptr, nullptr),
-          "stage_files() succeeds with the ivshmem driver");
-    for (const char* name : {"ivshmem.inf", "ivshmem.cat", "ivshmem.sys"}) {
-        const QString on_iso =
-            QDir(staging2.path()).filePath(QStringLiteral("ivshmem/") + QLatin1String(name));
-        check(QFile::exists(on_iso), "driver file staged into \\ivshmem on the ISO");
-    }
+    // No driver injection: the disk (NVMe) and the NIC (e1000e) have
+    // in-box drivers, so neither Setup nor the offline image is handed a
+    // driver path, and nothing points at a virtio-win CD.
+    check(!xml.contains(QStringLiteral("PnpCustomizations")) &&
+              !xml.contains(QStringLiteral("DriverPaths")) &&
+              !xml.contains(QStringLiteral("offlineServicing")),
+          "the answer file injects no drivers");
+    check(!xml.contains(QStringLiteral("viostor"), Qt::CaseInsensitive) &&
+              !xml.contains(QStringLiteral("NetKVM"), Qt::CaseInsensitive),
+          "nothing of virtio-win is left");
 
     // The display driver. accel-virt's package has to reach C:\av, and
     // SetupComplete has to sign it and install it — in that order, with
@@ -279,7 +286,7 @@ int main(int argc, char** argv) {
         check(PayloadIsoBuilder::stage_files(unnamed, staging_unnamed.path(), nullptr, nullptr) &&
                   !QFile::exists(
                       QDir(staging_unnamed.path()).filePath(QStringLiteral("av/adapters.txt"))),
-              "with no host GPU to name, no adapters.txt — not the package's");
+              "with no host GPU to name, no adapters.txt, not even the package's");
     }
 
     // A directory that is not the package is refused, not half-staged:

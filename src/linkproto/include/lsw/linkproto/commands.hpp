@@ -104,12 +104,6 @@ inline constexpr const char* kSetupDone     = "setup_done";
 inline constexpr const char* kConsoleOutput = "console_output";
 inline constexpr const char* kConsoleClosed = "console_closed";
 
-// Sent by the agent on the shared-memory RPC channel as soon as it maps
-// the region: proof to the manager that the channel is live, and the
-// ring size it may write. Absent means "socket only" — a guest without
-// the IVSHMEM driver.
-inline constexpr const char* kChannelHello = "channel_hello";
-
 inline constexpr const char* kUiaWindowOpened  = "uia_window_opened";
 inline constexpr const char* kUiaWindowClosed  = "uia_window_closed";
 inline constexpr const char* kUiaFocusChanged  = "uia_focus_changed";

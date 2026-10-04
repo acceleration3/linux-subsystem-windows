@@ -43,9 +43,9 @@ else
     actual_bytes=$((actual_blocks * 512))
     actual_gib=$((actual_bytes / 1024 / 1024 / 1024))
     if (( actual_bytes < 4 * 1024 * 1024 * 1024 )); then
-        fail "disk only ${actual_gib} GiB used — Windows hasn't unpacked yet"
+        fail "disk only ${actual_gib} GiB used; Windows hasn't unpacked yet"
     else
-        pass "disk ${actual_gib} GiB used — install proceeded past unpacking"
+        pass "disk ${actual_gib} GiB used, so the install got past unpacking"
     fi
 fi
 
@@ -62,7 +62,7 @@ except OSError as e:
     print(f'{e.errno}:{e.strerror}')
 " 2>&1)
 if [[ "${agent_msg}" == "connected" ]]; then
-    pass "agent reachable — install pipeline complete"
+    pass "agent reachable: install pipeline complete"
 else
     fail "vsock connect failed: ${agent_msg}"
     fail "  next step: VNC into the VM and check the in-guest log files"
@@ -77,7 +77,7 @@ if (( fails > 0 )); then
     cat <<'EOF'
 
 === in-VM verification (open a VNC viewer to the running VM and run
-    these in cmd.exe — Win+R "cmd") ===
+    these in cmd.exe (Win+R "cmd")) ===
 
   1. Did the post-OOBE promote script run?
      type C:\ProgramData\LSW\promote.log
@@ -91,7 +91,7 @@ if (( fails > 0 )); then
      dir C:\ProgramData\LSW\lsw-agent.exe
 
      Copied during the specialize pass. Missing means the payload ISO
-     was not mounted, or did not contain lsw-agent.exe — rebuild it
+     was not mounted, or did not contain lsw-agent.exe; rebuild it
      with scripts/build-agent.sh before re-running the wizard.
 
   3. Did the specialize pass and the finalize scripts finish?

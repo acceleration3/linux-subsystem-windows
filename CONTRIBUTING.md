@@ -34,7 +34,7 @@ one into the submodule.
 The accel-virt targets, each part of `all` in the host build:
 `accel_virt_fetch` (what it pins and does not commit), `accel_virt_drivers`
 (builds and installs the driver package, then adds the OpenCL loaders),
-`accel_virt_host` (QEMU, `libav_executor.so`, `av-renderer`) and
+`accel_virt_host` (QEMU and `libav_executor.so`) and
 `accel_virt_d3d` (DXVK and vkd3d-proton); `accel_virt` is all four.
 `cmake/LSWAccelVirt.cmake` says where each output lands.
 
@@ -93,13 +93,12 @@ payload ISO, and running `provision.ps1` in the guest.
 ## Changing the host↔guest link
 
 Anything the Linux manager and the Windows guest agent must agree on —
-the envelope framing, the RPC command names and event topics, the
-IVSHMEM frame-ring layout — lives in `src/linkproto/`, which BOTH
-toolchains compile, and is specified in
-[docs/link-protocol.md](docs/link-protocol.md). Change it there, once;
-do not restate a constant on either side. The offsets are pinned by
-`static_assert` and covered by `lsw_linkproto_test`, so a divergence is
-a build failure rather than a garbled frame at runtime.
+the envelope framing and the RPC command names and event topics —
+lives in `src/linkproto/`, which BOTH toolchains compile, and is
+specified in [docs/link-protocol.md](docs/link-protocol.md). Change it
+there, once; do not restate a constant on either side. The framing is
+covered by `lsw_linkproto_test`, so a divergence is a failed test
+rather than a garbled frame at runtime.
 
 Adding a guest RPC: one new TU under
 `src/agent/src/rpc/handlers/<group>/`, its command name added to

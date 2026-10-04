@@ -6,9 +6,9 @@
 //       The ``lsw-agent`` Windows service: LocalSystem, session 0,
 //       automatic start, restarted by the SCM if it fails. Registered by
 //       the autounattend's LswPromote.ps1 at SetupComplete. Owns the
-//       manager link (TCP 5102 and the shared-memory ring), installs,
-//       consoles and process launching — into any session, as that
-//       session's user (win::RunAs).
+//       manager link (TCP 5102), installs, consoles and process
+//       launching — into any session, as that session's user
+//       (win::RunAs).
 //
 //   lsw-agent.exe --session --pipe NAME
 //       A session helper, started by the service in each user session as

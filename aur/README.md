@@ -17,7 +17,7 @@ x86_64 and i686 cross builds):
 usr/bin/lsw-manager
 usr/lib/lsw/remotewin                     the window mirror's host half
 usr/lib/lsw/accel-virt/qemu/              accel-virt's QEMU, its modules,
-                                          libav_executor.so, av-renderer
+                                          libav_executor.so
 usr/lib/lsw/accel-virt/qemu/share/        QEMU's x86 firmware, ROMs, keymaps (-L)
 usr/lib/lsw/accel-virt/d3d/               DXVK and vkd3d-proton
 usr/share/lsw/guest/                      lsw-guest-agent.exe, remotewin-guest.exe,

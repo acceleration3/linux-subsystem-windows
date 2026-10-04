@@ -7,7 +7,6 @@
 #include "lsw/host/platform/accel_virt_paths.hpp"
 #include "lsw/host/vm/domain_description.hpp"
 #include "lsw/host/vm/lifecycle.hpp"
-#include "lsw/host/vm/shmem_region.hpp"
 #include "lsw/linkproto/commands.hpp"
 
 #include <QtConcurrent/QtConcurrentRun>
@@ -60,8 +59,7 @@ StatusHub::StatusHub(vm::LibvirtConnection& libvirt, vm::Lifecycle& lifecycle,
     // only decide what is pending, and with no domain defined at all
     // they stand in for it.
     connect(&manager_settings_, &config::ManagerSettings::changed, this, [this](const QString& key) {
-        if (key == K::kHostGpu || key == K::kRenderGpus || key == K::kHostWindowMib
-            || key == K::kIsolateRenderer) {
+        if (key == K::kHostGpu || key == K::kRenderGpus || key == K::kHostWindowMib) {
             rematch();
             read_vram();
             Q_EMIT changed(Area::Graphics);
@@ -81,7 +79,6 @@ void StatusHub::set_target(const QUuid& uuid) {
     vm_.uuid = uuid;
     definition_read_ = false;
     boot_clock_.invalidate();
-    renderer_.reset();
     graphics_.guest = GuestGpuStatus{};
     graphics_.live_modes.reset();
     graphics_timer_.stop();
@@ -108,7 +105,6 @@ void StatusHub::on_stats(const QUuid& uuid, const vm::VmStats& stats) {
     if (!definition_read_ || stats.running != definition_live_) {
         read_definition();
     }
-    read_transport();
     if (!stats.running) {
         boot_clock_.invalidate();
     } else if (stats.agent_reachable && !was_online && boot_clock_.isValid()) {
@@ -206,15 +202,7 @@ void StatusHub::read_definition() {
             (definition_live_ ? vm_.running_device : vm_.next_boot) = std::move(parsed);
         }
     }
-    graphics_.renderer_available = !platform::AccelVirtPaths::renderer().isEmpty();
     rematch();
-}
-
-void StatusHub::read_transport() {
-    const vm::ShmemRegion* region =
-        vm_.stats.running ? lifecycle_.shmem_region(vm_.uuid) : nullptr;
-    vm_.region_bytes = region != nullptr ? region->size() : 0;
-    vm_.doorbells = region != nullptr && lifecycle_.ivshmem_server(vm_.uuid) != nullptr;
 }
 
 void StatusHub::set_detail(Area area, bool on) {
@@ -255,28 +243,6 @@ void StatusHub::tick_graphics() {
     if (changed_now) {
         Q_EMIT changed(Area::Graphics);
     }
-
-    // /proc is read on a worker: a few hundred small files, but files.
-    if (scanning_) {
-        return;
-    }
-    scanning_ = true;
-    (void)QtConcurrent::run([uuid = vm_.uuid, known = renderer_.qemu_pid()] {
-        return vm::RendererWatcher::scan(uuid, known);
-    }).then(this, [this, uuid = vm_.uuid](const vm::RendererWatcher::Sample& sample) {
-        scanning_ = false;
-        if (uuid != vm_.uuid) {
-            return;
-        }
-        const qint64 before = graphics_.renderer_pid;
-        renderer_.update(sample);
-        graphics_.renderer_pid = renderer_.renderer_pid();
-        graphics_.renderer_restarts = renderer_.restarts();
-        graphics_.last_renderer_restart = renderer_.last_restart();
-        if (graphics_.renderer_pid != before) {
-            Q_EMIT changed(Area::Graphics);
-        }
-    });
 }
 
 void StatusHub::probe_host() {
@@ -441,13 +407,6 @@ void StatusHub::compare_settings() {
         const int window = manager_settings_.int_value(K::kHostWindowMib);
         if (display->hostmem_mib != 0 && window != display->hostmem_mib) {
             pending.host_window_mib = window;
-        }
-        // Isolation a restart can give: without av-renderer installed the
-        // definition gets the renderer in QEMU whatever the setting says.
-        const bool isolate =
-            manager_settings_.bool_value(K::kIsolateRenderer) && graphics_.renderer_available;
-        if (isolate != display->isolated()) {
-            pending.isolate_renderer = isolate;
         }
     }
     // The GPUs, by the UUIDs they resolve to: "auto" in one and the first

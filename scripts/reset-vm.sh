@@ -9,7 +9,6 @@
 #
 # Preserves:
 #   * the downloaded Windows ISO (~/.local/share/lsw/isos/windows.iso)
-#   * the cached virtio-win ISO
 
 set -u
 

@@ -16,8 +16,8 @@ namespace {
 // does not know about anything passed through <qemu:commandline> and
 // would happily put one of its own devices where QEMU then puts this.
 // It allocates from the low slots up (video at 0x01, root ports from
-// 0x02), keeps 0x1b and 0x1f for sound and the chipset, and virtio-net
-// already sits at 0x10, so the GPUs take the run after it.
+// 0x02), keeps 0x1b and 0x1f for sound and the chipset, and the e1000e
+// NIC already sits at 0x10, so the GPUs take the run after it.
 constexpr int kGpuSlot = 0x11;
 // Render-only adapters, one slot each, stopping short of 0x1b.
 constexpr int kMaxRenderOnlyGpus = 8;
@@ -46,6 +46,13 @@ QString qemu_arg(const QString& value) {
 // executor that runs commands on it, and the host window. vectors=11 is
 // the INF's MessageNumberLimit: three for the device's own interrupt
 // sources and eight the contexts' fence queues share.
+//
+// The executor runs inside QEMU, always: there is no ``renderer=``.
+// That option has the device start av-renderer, a process of its own,
+// to hold the host GPU stack, but libvirt runs QEMU under its seccomp
+// sandbox with spawn=deny, so QEMU cannot start a process at all and
+// the device fails to realize. Executing in-process needs no process,
+// works under the sandbox as it is, and the sandbox stays on.
 QString gpu_common(const DomainXmlInputs& inputs, const QString& host_gpu) {
     QString out = QStringLiteral(",host-gpu=%1").arg(qemu_opt(host_gpu));
     if (!inputs.executor.isEmpty()) {
@@ -55,11 +62,7 @@ QString gpu_common(const DomainXmlInputs& inputs, const QString& host_gpu) {
 }
 
 QString gpu_tail(const DomainXmlInputs& inputs) {
-    QString out = QStringLiteral(",vectors=11,hostmem=%1M").arg(inputs.host_window_mib);
-    if (inputs.isolate_renderer && !inputs.renderer.isEmpty()) {
-        out += QStringLiteral(",renderer=%1").arg(qemu_opt(inputs.renderer));
-    }
-    return out;
+    return QStringLiteral(",vectors=11,hostmem=%1M").arg(inputs.host_window_mib);
 }
 
 }  // namespace
@@ -140,21 +143,12 @@ QString DomainXmlBuilder::build(const config::VmRecord& vm, const DomainXmlInput
     vars["disk_path"] = esc(vm.disk_path);
     vars["cid"] = QString::number(vm.vsock_cid);
 
-    // Install media. The single domain template always references all
-    // three: the Windows ISO (boot), the LSW payload ISO
-    // (autounattend + agent), and virtio-win.iso (the viostor/NetKVM
-    // drivers the autounattend injects so the virtio-blk system disk
-    // is bootable from first boot — no controller swap).
+    // Install media: the Windows ISO (boot) and the LSW payload ISO
+    // (autounattend + agent). Nothing else: the disk and the NIC are
+    // devices Windows has in-box drivers for, so there is no driver
+    // media to attach.
     vars["windows_iso"] = esc(vm.iso_path);
     vars["payload_iso"] = esc(vm.payload_iso_path);
-    vars["virtio_iso"] = esc(inputs.virtio_iso);
-
-    // IVSHMEM-doorbell wiring. ``ivshmem_socket`` is the chardev path
-    // ``IvshmemServer`` binds before ``virDomainCreate`` and is the
-    // same path libvirt's ``<shmem><server>`` element points to.
-    // Size matches the manager-side ``ShmemRegion`` allocation.
-    vars["ivshmem_socket"] = esc(inputs.ivshmem_socket);
-    vars["ivshmem_size_mib"] = QString::number(inputs.ivshmem_size_mib);
 
     // accel-virt's QEMU, which is the only one that has the GPU device.
     vars["emulator"] = esc(inputs.qemu_binary);
@@ -227,10 +221,24 @@ QString DomainXmlBuilder::build(const config::VmRecord& vm, const DomainXmlInput
                           .arg(kGpuSlot, 0, 16);
     display += gpu_common(inputs, inputs.host_gpu_uuid.isEmpty() ? QStringLiteral("auto")
                                                                  : inputs.host_gpu_uuid);
-    display += QStringLiteral(",max_outputs=1");
-    display += gpu_tail(inputs);
-    if (!inputs.display_modes.isEmpty()) {
-        display += QStringLiteral(",modes=%1").arg(qemu_opt(inputs.display_modes));
+    if (inputs.install_display) {
+        // No outputs while Setup runs. QEMU's VNC server shows the
+        // first graphical console there is, and the GPU's comes before
+        // the VGA's; it stays black until avgpu.sys is installed, so
+        // the install console would show nothing while the VGA draws
+        // Setup. display=off is not enough: it disables the output but
+        // the console is still made, one per max_outputs. With none the
+        // device is still on the bus with its IDs, which is all the
+        // sign stage needs, and avgpu starts on it with its default
+        // source.
+        display += QStringLiteral(",max_outputs=0");
+        display += gpu_tail(inputs);
+    } else {
+        display += QStringLiteral(",max_outputs=1");
+        display += gpu_tail(inputs);
+        if (!inputs.display_modes.isEmpty()) {
+            display += QStringLiteral(",modes=%1").arg(qemu_opt(inputs.display_modes));
+        }
     }
     gpu_lines << qemu_arg(QStringLiteral("-device")) << qemu_arg(display);
     const qsizetype render_only =
@@ -278,7 +286,7 @@ QString DomainXmlBuilder::build(const config::VmRecord& vm, const DomainXmlInput
     }
     vars["host_shares_inner"] = shares_inner;
 
-    // One template — the high-performance virtio-from-install shape.
+    // One template, for install and steady state alike.
     return render_template(QString::fromUtf8(embedded::kDomainTemplate), vars);
 }
 

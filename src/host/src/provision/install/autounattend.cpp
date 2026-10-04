@@ -20,7 +20,14 @@ QString Autounattend::render(const AutounattendInputs& in) {
     out = sub(out, "computer_name", in.computer_name);
     out = sub(out, "user_name", in.user_name);
     out = sub(out, "user_password", in.user_password);
-    out = sub(out, "product_key", in.product_key);
+    out = sub(out, "product_key_block",
+              in.product_key.isEmpty()
+                  ? QString{}
+                  : QStringLiteral("\t\t\t\t<ProductKey>\n"
+                                   "\t\t\t\t\t<Key>%1</Key>\n"
+                                   "\t\t\t\t\t<WillShowUI>OnError</WillShowUI>\n"
+                                   "\t\t\t\t</ProductKey>")
+                        .arg(in.product_key));
     out = sub(out, "image_index", QString::number(in.image_index));
     // The whole element or none of it: Setup has no way to be told
     // "the default path" once a <Path> is present.

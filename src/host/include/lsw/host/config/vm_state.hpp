@@ -24,6 +24,9 @@ public:
     // to the next free integer >= 100.
     QUuid add(VmRecord rec);
 
+    // Forget every record: the wizard is replacing the machine.
+    void clear();
+
     // Lookup by uuid; nullptr if not found.
     [[nodiscard]] VmRecord* find(const QUuid& uuid);
 

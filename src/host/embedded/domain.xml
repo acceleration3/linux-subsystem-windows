@@ -1,17 +1,20 @@
 <!--
-  LSW domain XML — the single, high-performance shape used for BOTH
-  install and steady-state. There is no longer a pre/post-virtio
-  split or a controller swap: Windows installs straight onto a
-  virtio-blk disk because the autounattend loads the viostor driver
-  into WinPE (Microsoft-Windows-PnpCustomizationsWinPE) and injects it
-  into the offline image (Microsoft-Windows-PnpCustomizationsNonWinPE)
-  from the attached virtio-win.iso. That eliminates the
-  INACCESSIBLE_BOOT_DEVICE class entirely.
+  LSW domain XML: the single shape used for BOTH install and steady
+  state. Every device Windows has to drive is one it carries an INBOX
+  driver for, so nothing has to be injected into Setup or the installed
+  image and no driver ISO is attached:
+    system disk  NVMe (stornvme.sys), from the very first boot
+    network      Intel 82574L, QEMU's e1000e (an in-box Intel driver)
+    install CDs  SATA (storahci.sys)
+  The paravirtual devices this replaces (virtio-blk, virtio-net,
+  virtio-rng, the virtio balloon) each needed a driver Windows does not
+  ship. Setup could not see a virtio disk without one loaded into WinPE,
+  and Windows 11 24H2+ does not carry a WinPE-loaded driver into the
+  installed image, so a missed injection was INACCESSIBLE_BOOT_DEVICE.
 
-  Every perf knob that matters for a running Windows guest is on from
-  the first boot: dedicated virtio-blk iothread + multiqueue,
-  cache=none/io=native, full Hyper-V enlightenment suite, TSC native
-  clock with invtsc, virtio-net (mq), virtio-rng.
+  The rest of the performance knobs are on from the first boot:
+  cache=none/io=native on the disk, the full Hyper-V enlightenment
+  suite, and a native TSC clock with invtsc.
 
   The GPU is accel-virt's virtio-gpu-av-pci, a device of a patched
   QEMU (the distribution's cannot load it), which runs every guest
@@ -24,9 +27,8 @@
   template, and a name in braces would be substituted in it too.
     domain_name, uuid, ram_mib, cpus
     ovmf_code, ovmf_vars_template, nvram_path
-    disk_path, windows_iso, payload_iso, virtio_iso
+    disk_path, windows_iso, payload_iso
     emulator           accel-virt's qemu-system-x86_64
-    ivshmem_socket     the agent transport's doorbell server
     video_inner        <video>: none, or VGA during Windows setup
     host_shares_inner  one <filesystem> per shared folder, or empty
     qemu_env_inner     <qemu:env> lines (module dir, D3D, XDG)
@@ -38,24 +40,26 @@
   <uuid>{{uuid}}</uuid>
   <memory unit='MiB'>{{ram_mib}}</memory>
   <!-- Guest RAM is a shared memfd, always. The GPU's host side imports
-       guest pages as dma-bufs and av-renderer, a separate process,
-       maps them, so the RAM has to be a mapping another process can
-       share; virtiofs reads it directly for the same reason. -->
+       guest pages as dma-bufs through /dev/udmabuf, which takes pages
+       of a memfd and nothing else; virtiofsd, a separate process,
+       reads the RAM directly, so it has to be a mapping another
+       process can share. -->
   <memoryBacking>
     <source type='memfd'/>
     <access mode='shared'/>
   </memoryBacking>
   <currentMemory unit='MiB'>{{ram_mib}}</currentMemory>
   <vcpu placement='static'>{{cpus}}</vcpu>
-  <!-- Dedicated iothread for the virtio-blk system disk (pinned via
-       iothread='1' below) — keeps disk I/O off the vcpu threads. -->
-  <iothreads>1</iothreads>
+  <!-- No <iothreads>: the only device that took one was the virtio-blk
+       disk, and libvirt gives an NVMe controller none (iothreads are
+       for virtio controllers only), so its I/O runs in QEMU's main
+       loop. An iothread nothing is pinned to is a thread for nothing. -->
 
   <os>
     <type arch='x86_64' machine='q35'>hvm</type>
     <loader readonly='yes' type='pflash'>{{ovmf_code}}</loader>
     <nvram template='{{ovmf_vars_template}}'>{{nvram_path}}</nvram>
-    <!-- The install ISO is boot entry 1, the virtio system disk
+    <!-- The install ISO is boot entry 1, the NVMe system disk
          entry 2. On first boot Setup runs off the ISO; once Windows
          is installed the ISO's El-Torito "press any key" times out
          and firmware falls through to the disk. -->
@@ -68,8 +72,10 @@
     <!-- Full Hyper-V enlightenment suite — each line is a measurable
          win for a running Windows guest (relaxed timers, virtual
          APIC, spinlock hinting, synthetic interrupt controller +
-         timers, MSR-based TLB flush / IPI, direct TSC frequency,
-         enlightened VMCS on Intel). -->
+         timers, MSR-based TLB flush / IPI, direct TSC frequency).
+         Enlightened VMCS is left out on purpose: it exists only on
+         Intel, it only helps a guest that runs Hyper-V itself, and on
+         an AMD host QEMU refuses to start with it. -->
     <hyperv mode='custom'>
       <relaxed         state='on'/>
       <vapic           state='on'/>
@@ -83,7 +89,6 @@
       <reenlightenment state='on'/>
       <tlbflush        state='on'/>
       <ipi             state='on'/>
-      <evmcs           state='on'/>
     </hyperv>
     <vmport state='off'/>
   </features>
@@ -111,17 +116,30 @@
   <devices>
     <emulator>{{emulator}}</emulator>
 
-    <!-- virtio-blk system disk from the very first boot. cache='none'
-         + io='native' + dedicated iothread + per-vcpu queues =
-         maximum throughput with no host page-cache double buffering.
-         boot order 2 (the install ISO is 1). -->
+    <!-- The system disk is NVMe, from the very first boot: Windows
+         Setup and the installed image both drive it with stornvme.sys,
+         which is in the box, so there is nothing to inject and no
+         INACCESSIBLE_BOOT_DEVICE to get wrong. libvirt's own NVMe
+         support (bus='nvme', libvirt 11.5+) rather than raw QEMU
+         arguments, so it stays a disk libvirt knows: it labels the
+         image, reads it back in the live XML, and keeps it out of the
+         PCI slots the GPU lines take. The disk is namespace 1 of
+         controller 0 (the drive address); libvirt refuses an NVMe
+         controller with no serial, and copies the disk's to it.
+         cache='none' + io='native' keeps the host page cache from
+         double-buffering the guest's own. No iothread and no queues=:
+         libvirt takes an iothread only on virtio controllers, and
+         QEMU's nvme device sizes its own queue pairs (up to 64). boot
+         order 2 (the install ISO is 1). -->
+    <controller type='nvme' index='0'/>
     <disk type='file' device='disk'>
       <driver name='qemu' type='qcow2'
-              cache='none' io='native' discard='unmap' detect_zeroes='unmap'
-              iothread='1' queues='{{cpus}}'/>
+              cache='none' io='native' discard='unmap' detect_zeroes='unmap'/>
       <source file='{{disk_path}}'/>
-      <target dev='vda' bus='virtio'/>
+      <target dev='nvme0n1' bus='nvme'/>
+      <serial>LSW-SYSTEM</serial>
       <boot order='2'/>
+      <address type='drive' controller='0' bus='0' target='0' unit='0'/>
     </disk>
 
     <!-- Windows install ISO (boots first). SATA so WinPE reads it
@@ -139,16 +157,6 @@
       <driver name='qemu' type='raw'/>
       <source file='{{payload_iso}}'/>
       <target dev='sdc' bus='sata'/>
-      <readonly/>
-    </disk>
-
-    <!-- virtio-win.iso: the viostor / vioscsi / NetKVM drivers the
-         autounattend PnP customizations inject into WinPE + the
-         offline image so the virtio-blk system disk is bootable. -->
-    <disk type='file' device='cdrom'>
-      <driver name='qemu' type='raw'/>
-      <source file='{{virtio_iso}}'/>
-      <target dev='sdd' bus='sata'/>
       <readonly/>
     </disk>
 
@@ -177,30 +185,15 @@
     </sound>
     <audio id='1' type='pipewire'/>
 
-    <!-- virtio-rng: host entropy so guest CNG / OpenSSL never blocks. -->
-    <rng model='virtio'>
-      <backend model='random'>/dev/urandom</backend>
-    </rng>
-
-    <memballoon model='virtio'>
-      <stats period='5'/>
-    </memballoon>
+    <!-- No balloon: the guest's RAM is fixed at <memory>. Spelled out
+         because libvirt adds a virtio balloon to a definition that does
+         not say, and Windows has no driver for one, so it would sit in
+         Device Manager as an unknown device doing nothing. No RNG
+         device either, for the same reason: Windows gathers its own
+         entropy (RDRAND among it, which host-passthrough exposes), and
+         an entropy device it cannot drive adds nothing. -->
+    <memballoon model='none'/>
 {{host_shares_inner}}
-
-    <!-- IVSHMEM-doorbell: the message transport. lsw-manager runs the
-         doorbell-server protocol in-process at the socket below; the
-         agent's ivshmem.sys (injected into the offline image at install)
-         maps the shared region into user-mode and reads and writes the
-         ring in it. MSI vectors=1 mirrors
-         linkproto::kDoorbellVectorCount — one channel, one doorbell;
-         the region size comes from the ftruncate'd shm fd the server
-         hands over via SCM_RIGHTS, NOT from the XML (libvirt rejects
-         <size> for ivshmem-doorbell). -->
-    <shmem name='lsw-{{uuid}}'>
-      <model type='ivshmem-doorbell'/>
-      <server path='{{ivshmem_socket}}'/>
-      <msi vectors='1' ioeventfd='on'/>
-    </shmem>
 
     <panic model='isa'/>
   </devices>
@@ -208,7 +201,7 @@
   <qemu:commandline>
 {{qemu_env_inner}}
 {{gpu_args_inner}}
-    <!-- virtio-net + QEMU user-net hostfwd: the agent transport is
+    <!-- e1000e + QEMU user-net hostfwd: the agent transport is
          TCP 127.0.0.1:5102 (5103 reserved). vsock was attempted but
          this class of host kernel has no working vhost_vsock
          (/dev/vhost-vsock open -> ENODEV), so TCP-over-hostfwd is the
@@ -218,10 +211,14 @@
          ``vm::HostSmbMounter`` once the agent answers). We can't
          hostfwd on host :445 because qemu user-net runs unprivileged
          and :445 is in the reserved <1024 range; mount.cifs is told
-         ``port=5445`` to compensate. -->
+         ``port=5445`` to compensate.
+         The NIC is QEMU's e1000e, an Intel 82574L, because Windows
+         drives it with an in-box driver from the first boot of Setup
+         on; virtio-net needed NetKVM, which Windows does not ship. It
+         has a single queue pair, so there is no mq=. -->
     <qemu:arg value='-netdev'/>
     <qemu:arg value='user,id=lsw-net,hostfwd=tcp:127.0.0.1:5102-:5102,hostfwd=tcp:127.0.0.1:5103-:5103,hostfwd=tcp:127.0.0.1:5445-:445'/>
     <qemu:arg value='-device'/>
-    <qemu:arg value='virtio-net-pci,netdev=lsw-net,id=lsw-nic,bus=pcie.0,addr=0x10,mq=on'/>
+    <qemu:arg value='e1000e,netdev=lsw-net,id=lsw-nic,bus=pcie.0,addr=0x10'/>
   </qemu:commandline>
 </domain>

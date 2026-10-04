@@ -9,10 +9,12 @@
 #include "lsw/host/platform/mirror_exe_paths.hpp"
 #include "lsw/host/provision/install/adapter_names.hpp"
 #include "lsw/host/provision/install/autounattend.hpp"
-#include "lsw/host/provision/install/ivshmem_driver.hpp"
 #include "lsw/host/provision/install/payload_iso.hpp"
+#include "lsw/host/provision/install/product_keys.hpp"
 
 #include <QtConcurrent>
+
+#include <string>
 
 #include <utility>
 
@@ -27,6 +29,21 @@ void PayloadIsoStager::build(const config::VmRecord& record, const PipelineInput
     answers.user_name = inputs.user_name;
     answers.user_password = inputs.user_password;
     answers.image_index = inputs.image_index;
+    // The key has to be the installed edition's, or Setup stops on its
+    // product key page. An edition the table does not know gets none,
+    // and Setup asks: better than a key that cannot match.
+    if (inputs.edition_id.isEmpty()) {
+        answers.product_key = install::ProductKeys::fallback();
+    } else {
+        answers.product_key = install::ProductKeys::for_edition(inputs.edition_id);
+        if (answers.product_key.isEmpty()) {
+            LSW_WARN("provision: no product key known for edition {}; Setup will ask for one",
+                     inputs.edition_id.toStdString());
+        }
+    }
+    LSW_INFO("provision: edition {}, product key {}",
+             inputs.edition_id.isEmpty() ? std::string{"not read"} : inputs.edition_id.toStdString(),
+             answers.product_key.isEmpty() ? std::string{"none"} : answers.product_key.toStdString());
     // install_from_path stays empty, and deliberately: the trimmed
     // image IS the install.wim on the media being booted, so Setup's
     // own default is already the right answer. A <Path> here would name
@@ -42,20 +59,6 @@ void PayloadIsoStager::build(const config::VmRecord& record, const PipelineInput
     install::PayloadInputs payload;
     payload.output_iso_path = settings_.vm_payload_iso_path();
     payload.autounattend_xml = install::Autounattend::render(answers);
-
-    // The shared-memory device has to exist on the first boot: it is the
-    // transport the agent talks over, so a driver installed later — over
-    // that same transport — never gets the chance.
-    payload.ivshmem_driver_dir = install::IvshmemDriver::locate(settings_.data_dir());
-    if (payload.ivshmem_driver_dir.isEmpty()) {
-        // Last chance to notice: the ISO is being built now, and a
-        // driver absent from it is absent from the first boot.
-        LSW_WARN("provision: no ivshmem driver to stage — the guest will boot WITHOUT the "
-                 "shared-memory device, so window frames and the shmem channel will be "
-                 "unavailable. Put an unpacked driver in {}/ivshmem or set "
-                 "LSW_IVSHMEM_DRIVER_DIR.",
-                 settings_.data_dir().toStdString());
-    }
 
     const QString agent_exe = platform::AgentExePath::locate();
     if (agent_exe.isEmpty()) {

@@ -78,7 +78,7 @@ constexpr qint64 kSwmPartBytes = 3800LL * 1024 * 1024;  // NOLINT: qint64 litera
         return true;
     }
 
-    LSW_INFO("iso: trimmed image is {} MiB, past the ISO9660 file limit — splitting",
+    LSW_INFO("iso: trimmed image is {} MiB, past the ISO9660 file limit; splitting",
              size / (1024 * 1024));
     WIMStruct* wim = nullptr;
     if (const int rc = wimlib_open_wim(trimmed_wim.toUtf8().constData(), 0, &wim); rc != 0) {
@@ -114,7 +114,7 @@ bool WindowsIsoBuilder::build(const QString& source_iso, const QString& trimmed_
     const QString sources = QDir(tree).filePath(QStringLiteral("sources"));
     if (!QDir(sources).exists()) {
         if (error_out != nullptr) {
-            *error_out = QStringLiteral("%1 has no sources directory — not Windows media")
+            *error_out = QStringLiteral("%1 has no sources directory, so it is not Windows media")
                              .arg(source_iso);
         }
         return false;

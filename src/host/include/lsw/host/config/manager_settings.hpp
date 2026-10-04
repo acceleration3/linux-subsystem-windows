@@ -68,10 +68,6 @@ public:
         // host memory uploads, readbacks and host-visible Vulkan memory
         // live in.
         static constexpr QLatin1StringView kHostWindowMib{"graphics/host_window_mib"};
-        // Run the host GPU stack in av-renderer rather than inside QEMU,
-        // so a host driver crash costs the guest a device reset rather
-        // than the whole VM.
-        static constexpr QLatin1StringView kIsolateRenderer{"graphics/isolate_renderer"};
         // The host GPUs passed as render-only adapters (display=off),
         // one device each: a QStringList of Vulkan device UUIDs, empty by
         // default. One that is also the display GPU, or that is no longer

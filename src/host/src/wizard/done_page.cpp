@@ -42,8 +42,8 @@ DonePage::DonePage(Wizard& wizard, QWidget* parent) : WizardPage(parent), wizard
     grid->addWidget(tile(QStringLiteral("Machine"), QString{}, &machine_value_), 0, 1);
     // The guest as it is now, from the status hub: the display adapter
     // and whether Windows started avgpu.sys on it, and the agent.
-    grid->addWidget(tile(QStringLiteral("Graphics"), QStringLiteral("—"), &graphics_value_), 1, 0);
-    grid->addWidget(tile(QStringLiteral("Agent"), QStringLiteral("—"), &agent_value_), 1, 1);
+    grid->addWidget(tile(QStringLiteral("Graphics"), QStringLiteral("-"), &graphics_value_), 1, 0);
+    grid->addWidget(tile(QStringLiteral("Agent"), QStringLiteral("-"), &agent_value_), 1, 1);
     connect(&wizard_.services().status(), &services::StatusHub::changed, this,
             &DonePage::show_guest);
     lay->addLayout(grid);

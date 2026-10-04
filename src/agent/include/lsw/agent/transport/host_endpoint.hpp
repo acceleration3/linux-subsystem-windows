@@ -43,13 +43,6 @@ namespace lsw::agent::transport {
 // the manager blocked each other: whichever connected first held the
 // agent until it disconnected, and the other sat in a TCP backlog
 // looking like a hung guest.
-//
-// One thing is deliberately not per-connection: the shared region's RPC
-// ring. A ByteRing has exactly one producer by construction, so the
-// FIRST connection to arrive claims it and the rest use the socket
-// only. That is a real constraint of the transport rather than a policy
-// — two producers on one ring is not a thing that can be made to work
-// with a lock, because the reader is in another address space.
 class HostEndpoint {
 public:
     explicit HostEndpoint(core::AgentServices& services);
@@ -69,9 +62,7 @@ public:
 
 private:
     [[nodiscard]] bool open_listen();
-    // ``owns_shmem_channel`` is true for the one connection that claimed
-    // the region's RPC ring.
-    void handle_connection(std::intptr_t accepted_fd, bool owns_shmem_channel);
+    void handle_connection(std::intptr_t accepted_fd);
 
     // Join threads whose connection has finished, so a long-lived agent
     // does not accumulate them.
@@ -90,10 +81,6 @@ private:
 
     std::mutex connections_mu_;
     std::vector<std::unique_ptr<Connection>> connections_;
-
-    // Cleared when the owning connection ends, so the next one to
-    // connect picks the ring up.
-    std::atomic<bool> shmem_channel_claimed_{false};
 };
 
 }  // namespace lsw::agent::transport

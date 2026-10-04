@@ -30,12 +30,6 @@ config::VmSizing vm_sizing_from_settings(const config::ManagerSettings& manager_
 vm::DomainXmlInputs domain_inputs_from_settings(const config::Settings& settings,
                                                 const config::ManagerSettings& manager_settings) {
     vm::DomainXmlInputs inputs;
-    // The template names all three CDs, so the definition has to carry
-    // them even for a guest that has already ejected the media: an
-    // empty source is a definition libvirt will not take. The Windows
-    // and payload paths live on the record; virtio-win is where the
-    // pipeline put it.
-    inputs.virtio_iso = settings.virtio_iso_path();
     for (const auto& share : manager_settings.host_shares()) {
         vm::DomainShare mapped;
         // The tag is what the guest mounts by, and a drive letter is a
@@ -47,7 +41,6 @@ vm::DomainXmlInputs domain_inputs_from_settings(const config::Settings& settings
     }
 
     inputs.host_window_mib = manager_settings.int_value(K::kHostWindowMib);
-    inputs.isolate_renderer = manager_settings.bool_value(K::kIsolateRenderer);
     inputs.display_modes = display_modes_from_settings(manager_settings);
     inputs.avgpu_log = settings.vm_avgpu_log_path();
 

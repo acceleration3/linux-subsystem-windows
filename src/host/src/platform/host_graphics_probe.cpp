@@ -159,8 +159,9 @@ HostApi HostGraphicsProbe::opengl() {
     if (get_proc != nullptr && initialize != nullptr && terminate != nullptr && query != nullptr
         && bind != nullptr) {
         // The executor's own choice: a display with no window system,
-        // which is what a renderer process has. Mesa's surfaceless
-        // platform where there is one, the default display otherwise.
+        // since it draws for the guest and never on a host window.
+        // Mesa's surfaceless platform where there is one, the default
+        // display otherwise.
         EGLDisplay display = nullptr;
         if (auto* platform =
                 reinterpret_cast<GetPlatformDisplay>(get_proc("eglGetPlatformDisplay"))) {

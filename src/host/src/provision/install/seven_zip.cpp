@@ -115,7 +115,7 @@ QString find_seven_zip() {
 
 QString seven_zip_missing_message() {
     return QStringLiteral(
-        "7-Zip is not installed, and reading a Windows ISO needs it — the media is UDF, "
+        "7-Zip is not installed, and reading a Windows ISO needs it: the media is UDF, "
         "which the ISO libraries here do not read. Install it (Arch: 7zip, Debian/Ubuntu: "
         "p7zip-full, Fedora: p7zip-plugins) and try again.");
 }

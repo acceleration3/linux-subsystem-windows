@@ -38,15 +38,6 @@ HostServices::HostServices(QObject* parent)
     // the channel connects — the manager window may never be shown at
     // all (``--launch`` opens a guest app directly).
     log_store_.attach(rpc_);
-    // Frame transport follows the region's lifetime, not the UI's. The
-    // region exists only from VM start to force-off; every UI-side
-    // binding point runs outside that window on a cold start, so they
-    // all bound null and no window mirror ever received a frame.
-    connect(&lifecycle_, &vm::Lifecycle::shmem_ready, this, [this](const QUuid& uuid) {
-        rpc_.attach_shmem(lifecycle_.ivshmem_server(uuid), lifecycle_.shmem_region(uuid));
-    });
-    connect(&lifecycle_, &vm::Lifecycle::shmem_gone, this,
-            [this](const QUuid&) { rpc_.detach_shmem(); });
 
     apply_integrations();
     // Filtered by key: apply_integrations rewrites every desktop entry
@@ -97,7 +88,6 @@ bool HostServices::bind_agent(const QUuid& uuid) {
     if (record == nullptr) {
         return false;
     }
-    rpc_.attach_shmem(lifecycle_.ivshmem_server(uuid), lifecycle_.shmem_region(uuid));
     rpc_.set_target(record->vsock_cid, linkproto::kAgentTcpPort);
     return true;
 }
@@ -121,28 +111,9 @@ bool HostServices::open() {
         return false;
     }
     if (libvirt_.open() != 0) {
-        LSW_WARN("libvirt unavailable — VM controls disabled");
+        LSW_WARN("libvirt unavailable; VM controls disabled");
     }
     return true;
-}
-
-void HostServices::attach_running_vms() {
-    // The VM list is only known by the time this runs, and two of the
-    // integrations depend on there being one.
-    apply_integrations();
-
-    // A VM the user left running when they closed the last manager. Its
-    // shared region outlived that process, so take it over rather than
-    // making them restart Windows to get their mirrors back.
-    //
-    // Separate from ``open`` because the VM list is not known until the
-    // domain importer has run, which needs an open libvirt — so this is
-    // the first moment there is anything to attach to.
-    for (const auto& record : vms_.records()) {
-        if (lifecycle_.is_running(record.uuid)) {
-            (void)lifecycle_.attach_running(record.uuid);
-        }
-    }
 }
 
 }  // namespace lsw::host::services

@@ -3,17 +3,13 @@
 #include "lsw/host/config/vm_state.hpp"
 #include "lsw/host/vm/domain_handle.hpp"
 #include "lsw/host/vm/domain_xml_builder.hpp"
-#include "lsw/host/vm/ivshmem_server.hpp"
 #include "lsw/host/vm/libvirt_connection.hpp"
-#include "lsw/host/vm/shmem_region.hpp"
 
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QObject>
 #include <QUuid>
-#include <memory>
 #include <optional>
-#include <unordered_map>
 
 namespace lsw::host::vm {
 
@@ -49,6 +45,11 @@ public:
     // would otherwise revert it to pre-virtio on the next click).
     [[nodiscard]] int define_and_start(const config::VmRecord& vm, const DomainXmlInputs& inputs);
 
+    // Why the last define or start failed, in libvirt's words — which for
+    // a QEMU that would not start carry QEMU's own reason. What a person
+    // is shown instead of "see the logs".
+    [[nodiscard]] const QString& last_error() const noexcept { return last_error_; }
+
     // ``virDomainCreate`` on the already-defined domain. Doesn't
     // touch the persistent XML — what's defined stays defined.
     // Returns 0/-1.
@@ -64,9 +65,7 @@ public:
     // properties of a running machine and cannot be told to one: they
     // are the domain definition. The manager stops the guest, calls
     // this, and starts it again, which is the whole of what "apply and
-    // restart" means. Kept separate from ``define_and_start`` because
-    // that one also brings the shared-memory region up, and a redefine
-    // must not disturb a region a guest may still be holding.
+    // restart" means.
     [[nodiscard]] int redefine(const config::VmRecord& vm, const DomainXmlInputs& inputs);
 
     // ACPI shutdown request (``virDomainShutdown``). The guest may
@@ -78,6 +77,12 @@ public:
 
     // Undefine (delete persistent config, NOT the disk).
     [[nodiscard]] int undefine(const QUuid& uuid);
+
+    // Make room for a new machine called ``name``: undefine the domain
+    // of that name, with its firmware variables and any saved state,
+    // unless it is running — then nothing is touched and ``error_out``
+    // says to shut it down first. True when there was nothing to remove.
+    [[nodiscard]] bool remove_existing(const QString& name, QString* error_out);
 
     // Whether libvirt knows about this VM and it's currently running.
     [[nodiscard]] bool is_running(const QUuid& uuid) const;
@@ -94,11 +99,9 @@ public:
     // live-preview surface.
     [[nodiscard]] int vnc_port(const QUuid& uuid) const;
 
-    // Eject the install media (Windows ISO sdb, payload ISO sdc,
-    // virtio-win ISO sdd) once install + setup are done. Only the
-    // CD-ROM *media* is removed; the cdrom devices and — crucially —
-    // the vda virtio-blk system disk are untouched, so this carries
-    // none of the controller-swap INACCESSIBLE_BOOT_DEVICE risk.
+    // Eject the install media (Windows ISO sdb, payload ISO sdc) once
+    // install + setup are done. Only the CD-ROM *media* is removed; the
+    // cdrom devices and the NVMe system disk are untouched.
     // Applied LIVE+CONFIG when running, CONFIG-only otherwise.
     // Best-effort: a missing/already-empty drive is not an error, and
     // neither is a missing domain, so there is nothing to return —
@@ -129,41 +132,10 @@ public:
     [[nodiscard]] std::optional<QString> display_modes(const QUuid& uuid,
                                                        QString* error_out) const;
 
-    // Live ShmemRegion / IvshmemServer for ``uuid`` (the WGC capture
-    // transport). Non-null only while the VM is running. The manager's
-    // ``AgentRpcClient`` uses these to receive frame doorbells and
-    // decode them out of the shared region. Returns null otherwise.
-    [[nodiscard]] ShmemRegion* shmem_region(const QUuid& uuid) const;
-    [[nodiscard]] IvshmemServer* ivshmem_server(const QUuid& uuid) const;
-
-    // Take over the region of a VM that is already running — one this
-    // manager did not start, because the previous one was closed and
-    // the VM was left up. Emits ``shmem_ready`` on success, exactly as
-    // starting the VM would, so every consumer binds the same way.
-    //
-    // The one thing that does not come back is the frame doorbell: the
-    // ivshmem device handshakes once, with whoever was serving the
-    // socket when QEMU started. Consumers poll instead.
-    //
-    // Returns false when the VM is not running or left no region.
-    bool attach_running(const QUuid& uuid);
-
-Q_SIGNALS:
-    // The bundle for ``uuid`` just came up / went away. Consumers bind
-    // here rather than at their own construction time: the bundle only
-    // exists between VM start and force-off, which is a window neither
-    // the UI nor the launch path is inside when it first runs. Binding
-    // on a timer of one's own choosing means binding to null, silently,
-    // and never being asked again — which is exactly how the frame
-    // doorbells ended up connected to nothing.
-    void shmem_ready(const QUuid& uuid);
-    void shmem_gone(const QUuid& uuid);
-
 private:
-    struct ShmemBundle {
-        std::unique_ptr<ShmemRegion> region;
-        std::unique_ptr<IvshmemServer> server;
-    };
+    // Record libvirt's error for ``call``, log it, and return -1.
+    int fail(const char* call);
+    QString last_error_;
 
     [[nodiscard]] DomainHandle lookup(const QUuid& uuid) const;
     // One QMP command on ``uuid``'s running QEMU, through libvirt's
@@ -171,23 +143,14 @@ private:
     // reason in ``error_out``.
     [[nodiscard]] std::optional<QJsonValue> qmp(const QUuid& uuid, const QJsonObject& command,
                                                 QString* error_out) const;
-    // Create + bind the per-VM region and server. Returns the socket
-    // path (substituted into domain XML) or empty on failure.
-    [[nodiscard]] QString ensure_shmem(const QUuid& uuid, int size_mib);
     // ``inputs`` with every empty accel-virt path filled in from
     // platform::AccelVirtPaths. False, logged, when QEMU or the executor
     // cannot be found: a domain without them does not start, or starts
     // with a GPU that accelerates nothing, and either reads as a fault
     // somewhere else.
-    [[nodiscard]] static bool fill_accel_virt(DomainXmlInputs& inputs);
-    void teardown_shmem(const QUuid& uuid);
-
-    struct QUuidHash {
-        std::size_t operator()(const QUuid& u) const noexcept { return qHash(u); }
-    };
+    [[nodiscard]] bool fill_accel_virt(DomainXmlInputs& inputs);
 
     LibvirtConnection& conn_;
-    std::unordered_map<QUuid, ShmemBundle, QUuidHash> shmem_;
 };
 
 }  // namespace lsw::host::vm

@@ -66,27 +66,6 @@ bool PayloadIsoBuilder::stage_files(const PayloadInputs& in, const QString& stag
         }
         created << dest;
     };
-    // The IVSHMEM driver goes in its own directory: the autounattend's
-    // DriverPaths point at a folder, not at files.
-    if (!in.ivshmem_driver_dir.isEmpty()) {
-        const QString dest_dir = dir.filePath("ivshmem");
-        QDir().mkpath(dest_dir);
-        const QDir src_dir{in.ivshmem_driver_dir};
-        const auto entries = src_dir.entryInfoList(QDir::Files | QDir::NoDotAndDotDot);
-        if (entries.isEmpty()) {
-            LSW_WARN("ivshmem driver dir {} is empty; nothing staged",
-                     in.ivshmem_driver_dir.toStdString());
-        }
-        for (const auto& entry : entries) {
-            const QString dest = QDir(dest_dir).filePath(entry.fileName());
-            if (!QFile::copy(entry.absoluteFilePath(), dest)) {
-                LSW_WARN("failed to stage ivshmem driver file {}", entry.fileName().toStdString());
-                continue;
-            }
-            created << dest;
-        }
-    }
-
     // The accel-virt driver package, whole, as ``\av``. Copied as a
     // tree rather than file by file so the layout ``cmake --install``
     // produced is the layout the guest gets: provision.ps1 finds its

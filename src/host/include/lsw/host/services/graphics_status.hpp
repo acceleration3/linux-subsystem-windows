@@ -6,7 +6,6 @@
 #include "lsw/host/services/guest_gpu_status.hpp"
 #include "lsw/host/vm/avgpu_log.hpp"
 
-#include <QDateTime>
 #include <QString>
 #include <QStringList>
 #include <QVector>
@@ -27,13 +26,10 @@ struct GraphicsAdapter {
 // unset, or false, when the two agree.
 struct PendingGraphics {
     std::optional<int> host_window_mib;
-    std::optional<bool> isolate_renderer;
     // The display GPU or the render-only set differs.
     bool adapters = false;
 
-    [[nodiscard]] bool any() const noexcept {
-        return host_window_mib.has_value() || isolate_renderer.has_value() || adapters;
-    }
+    [[nodiscard]] bool any() const noexcept { return host_window_mib.has_value() || adapters; }
 };
 
 // Everything about the guest's graphics StatusHub last saw: the host's
@@ -56,19 +52,11 @@ struct GraphicsStatus {
     // settings stand in only when there is no definition to read.
     QVector<GraphicsAdapter> adapters;
     PendingGraphics pending;
-    // av-renderer is installed: without it a definition asking for an
-    // isolated renderer gets one in QEMU, so a setting saying "isolate"
-    // is not a change a restart would make.
-    bool renderer_available = false;
 
     // ---- the device ----------------------------------------------
     // Its ``modes`` as QEMU holds it now; unset while the VM is off or
     // QEMU did not say.
     std::optional<QString> live_modes;
-    // The av-renderer process; 0 when there is none.
-    qint64 renderer_pid = 0;
-    int renderer_restarts = 0;
-    QDateTime last_renderer_restart;
 
     // ---- the guest -----------------------------------------------
     GuestGpuStatus guest;

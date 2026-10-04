@@ -57,11 +57,6 @@ GraphicsAlerts::GraphicsAlerts(services::StatusHub& status, link::AgentRpcClient
     });
 }
 
-void GraphicsAlerts::dismiss_restart() {
-    dismissed_restart_ = status_.graphics().last_renderer_restart;
-    Q_EMIT changed();
-}
-
 void GraphicsAlerts::install_driver() {
     install_result_ = InstallResult::None;
     install_error_.clear();
@@ -97,14 +92,6 @@ QVector<GraphicsAlerts::Warning> GraphicsAlerts::warnings() const {
                                  .arg(services::GuestGpuStatus::explain(code, g.guest.test_signing))
                            : QStringLiteral("The adapter has not started.")});
         }
-    }
-    if (g.last_renderer_restart.isValid() && g.last_renderer_restart != dismissed_restart_) {
-        out.push_back({Warning::Kind::RendererRestarted, false,
-                       QStringLiteral("The host graphics driver crashed at %1.")
-                           .arg(g.last_renderer_restart.toString(QStringLiteral("HH:mm"))),
-                       QStringLiteral("av-renderer was restarted and Windows recovered from a "
-                                      "device reset. Application windows that were drawing may "
-                                      "need a repaint.")});
     }
     if (installer_.running()) {
         out.push_back({Warning::Kind::Installing, false,

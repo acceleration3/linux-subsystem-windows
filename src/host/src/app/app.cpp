@@ -108,7 +108,6 @@ void App::log_artifacts() {
         {"qemu", AccelVirtPaths::qemu_binary()},
         {"qemu data (-L)", AccelVirtPaths::qemu_data_dir()},
         {"executor", AccelVirtPaths::executor()},
-        {"renderer", AccelVirtPaths::renderer()},
         {"host d3d", AccelVirtPaths::d3d_lib_dir()},
         {"driver tree", AccelVirtPaths::driver_tree()},
         {"vulkan-1.dll x64", AccelVirtPaths::vulkan_loader(false)},
@@ -143,10 +142,9 @@ int App::run() {
     }
     (void)vm::DomainImporter::import_existing(services_.libvirt(), services_.settings(),
                                               services_.vms());
-    // Now that we know which VMs exist, pick up any that are still
-    // running from a previous manager — closing the manager is not
-    // supposed to cost a VM restart.
-    services_.attach_running_vms();
+    // Now that we know which VMs exist, the integrations that need one
+    // can be published.
+    services_.apply_integrations();
 
     if (cli_.unattended()) {
         unattended_ = std::make_unique<UnattendedRunner>(services_, cli_, this);
@@ -242,8 +240,8 @@ int App::capture_screens(const QString& dir) {
         download.resize(620, 620);
         shoot(&download, QStringLiteral("dialog-1-download"));
 
-        tools::TrimImageDialog trim{services_.settings(), QString{}, 1};
-        trim.resize(620, 720);
+        tools::TrimImageDialog trim{services_.settings(), QString{}};
+        trim.resize(620, 790);
         shoot(&trim, QStringLiteral("dialog-2-trim"));
 
         apps::AppConfig sample;
@@ -336,7 +334,7 @@ void App::spawn_manager_and_quit() {
     // No --launch / wizard flags: first-run is now marked complete, so a
     // bare invocation boots straight into the manager.
     if (QProcess::startDetached(exe, QStringList{})) {
-        LSW_INFO("wizard complete — spawned manager process, exiting wizard");
+        LSW_INFO("wizard complete: spawned manager process, exiting wizard");
         quit();
         return;
     }

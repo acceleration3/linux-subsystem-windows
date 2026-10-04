@@ -21,16 +21,6 @@ struct PayloadInputs {
     // manager runs for it
     QString mirror_exe_path;
 
-
-    // Directory holding the IVSHMEM driver (ivshmem.inf/.cat/.sys).
-    // Copied to ``\\ivshmem`` on the ISO so the autounattend can inject
-    // it into the offline image — the shared-memory channel has to exist
-    // on the FIRST boot, because it is what the agent talks over. A
-    // driver installed later, over the channel it is supposed to
-    // provide, is a bootstrap that only works if something else (TCP)
-    // carries it.
-    QString ivshmem_driver_dir;  // optional; empty = not staged
-
     // The accel-virt driver package, as ``cmake --install`` lays it
     // out (``AccelVirtPaths::driver_tree``): provision.ps1, package\ with
     // avgpu.sys/.inf, the user-mode drivers for both architectures and

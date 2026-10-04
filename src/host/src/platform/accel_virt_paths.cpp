@@ -77,10 +77,6 @@ QString AccelVirtPaths::executor() {
     return in_qemu_tree(QStringLiteral("libav_executor.so"));
 }
 
-QString AccelVirtPaths::renderer() {
-    return in_qemu_tree(QStringLiteral("av-renderer"));
-}
-
 QString AccelVirtPaths::d3d_lib_dir() {
     return locate_build_artifact(QStringLiteral("LSW_AV_D3D_PATH"),
                                  QStringLiteral("/../../accel-virt/d3d/lib"),

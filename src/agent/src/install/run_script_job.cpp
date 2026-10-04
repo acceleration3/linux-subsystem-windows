@@ -20,7 +20,7 @@ void RunScriptJob::run() {
         report_done("script", false, 0, file.error());
         return;
     }
-    LSW_AGENT_INFO("installer: run_script job={} name='{}' wrote {} bytes to {} — executing", id_,
+    LSW_AGENT_INFO("installer: run_script job={} name='{}' wrote {} bytes to {}, executing", id_,
                    name_, script_.size(), file.path());
 
     report_status("script", "running script");

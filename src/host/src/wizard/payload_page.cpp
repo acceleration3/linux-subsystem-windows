@@ -20,10 +20,11 @@ constexpr int kColTask = 0;
 constexpr int kColSource = 1;
 constexpr int kColStatus = 2;
 
-// The pipeline reports rows 0 to 2; the driver package row follows the
-// payload ISO it is staged onto.
-constexpr int kRowPayloadIso = 2;
-constexpr int kRowAvgpu = 3;
+// The pipeline reports row 0; the driver package row follows the
+// payload ISO it is staged onto. There is no driver media row: the
+// domain's disk and NIC have in-box Windows drivers.
+constexpr int kRowPayloadIso = 0;
+constexpr int kRowAvgpu = 1;
 
 }  // namespace
 
@@ -32,9 +33,9 @@ PayloadPage::PayloadPage(Wizard& wizard, QWidget* parent)
 
     auto* lay = install_chrome(
         QStringLiteral("Building the install payload"),
-        QStringLiteral("The answer file, the guest binaries and the drivers that must be "
-                       "present on the very first boot."));
-    table_ = new QTableWidget(4, 3);
+        QStringLiteral("The answer file, the guest binaries and the GPU driver Windows "
+                       "installs before the first logon."));
+    table_ = new QTableWidget(2, 3);
     ui::Theme::rows_table(table_, QStringList{QStringLiteral("ARTIFACT"),
                                               QStringLiteral("SOURCE"),
                                               QStringLiteral("STATE")});
@@ -47,38 +48,21 @@ PayloadPage::PayloadPage(Wizard& wizard, QWidget* parent)
     table_->setColumnWidth(kColStatus, 190);
     // The artifacts, named as themselves. A row says what is being made
     // or fetched; the verb is in the state column, where it changes.
-    table_->setItem(0, kColTask, new QTableWidgetItem("virtio-win.iso"));
-    // Its own row because it can fail on its own without stopping the
-    // install — and because a missing shared-memory device is otherwise
-    // only discovered much later, as a PCI device that is not there.
-    table_->setItem(1, kColTask, new QTableWidgetItem("ivshmem driver"));
-    table_->setItem(2, kColTask, new QTableWidgetItem("lsw-payload.iso"));
+    table_->setItem(kRowPayloadIso, kColTask, new QTableWidgetItem("lsw-payload.iso"));
     // The guest's display driver, x64 and the x86 user-mode drivers
     // 32-bit processes load. It is staged onto the payload ISO, so it is
     // ready when that is, and Windows installs it before the first logon.
     table_->setItem(kRowAvgpu, kColTask,
                     new QTableWidgetItem("avgpu driver package, x64 and x86"));
 
-    // Where each one comes from. The shared-memory driver is the one
-    // whose source is worth naming: it is not in Red Hat's virtio-win
-    // media and has to be taken out of the Looking Glass host package.
-    table_->setItem(0, kColSource, ui::Theme::kind_cell("fedorapeople"));
-    table_->setItem(1, kColSource, ui::Theme::kind_cell("Looking Glass host package"));
-    table_->setItem(2, kColSource, ui::Theme::kind_cell("local build"));
+    // Where each one comes from.
+    table_->setItem(kRowPayloadIso, kColSource, ui::Theme::kind_cell("local build"));
     table_->setItem(kRowAvgpu, kColSource, ui::Theme::kind_cell("accel-virt, local build"));
     ui::Theme::fit_rows(table_);
-
-    // Why one of those rows exists at all. Static, and separate from
-    // the status line, which the pipeline overwrites.
-    auto* footnote = ui::Widgets::meta(
-        QStringLiteral("The shared memory driver is injected offline, because a driver "
-                       "delivered over the channel it provides cannot bootstrap that channel."),
-        true);
 
     status_label_ = ui::Widgets::meta(QString{}, true);
 
     lay->addWidget(table_);
-    lay->addWidget(footnote);
     lay->addWidget(status_label_);
     lay->addStretch(1);
 }
@@ -106,9 +90,21 @@ void PayloadPage::initializePage() {
             [this](int row, bool ok, const QString& detail) {
                 set_row_status(row, ok ? RowStatus::Done : RowStatus::Failed, detail);
             });
+    // The trim runs before the payload, while this page is on screen, so
+    // its progress and its failure are this page's to show: without them
+    // a trim that fails leaves every row at Pending and nothing moving.
     connect(p, &::lsw::host::provision::Pipeline::step_started, this,
             [this](Step s, const QString& desc) {
-                if (s == Step::BuildingPayloadIso) status_label_->setText(desc);
+                if (s == Step::BuildingPayloadIso || s == Step::TrimmingImage) {
+                    status_label_->setText(desc);
+                }
+            });
+    connect(p, &::lsw::host::provision::Pipeline::step_progress, this,
+            [this](Step s, double, const QString& detail) {
+                if (s == Step::TrimmingImage && !detail.isEmpty()) {
+                    status_label_->setText(QStringLiteral("Trimming the Windows image: %1")
+                                               .arg(detail));
+                }
             });
     connect(p, &::lsw::host::provision::Pipeline::step_finished, this, [this](Step s) {
         if (s != Step::BuildingPayloadIso) return;
@@ -117,17 +113,16 @@ void PayloadPage::initializePage() {
     });
     connect(p, &::lsw::host::provision::Pipeline::failed, this,
             [this](Step s, const QString& err) {
-                if (s != Step::BuildingPayloadIso) return;
-                status_label_->setText(QStringLiteral("Payload step failed: %1").arg(err));
+                status_label_->setText(s == Step::TrimmingImage
+                                           ? QStringLiteral("Trimming the image failed: %1")
+                                                 .arg(err)
+                                           : QStringLiteral("Payload step failed: %1").arg(err));
             });
 }
 
 void PayloadPage::demo_fill() {
-    set_row_status(0, RowStatus::Running, QStringLiteral("877 MiB, 71 %"));
-    set_row_status(1, RowStatus::Pending);
-    set_row_status(2, RowStatus::Pending);
-    set_row_status(kRowAvgpu, RowStatus::Pending);
-    status_label_->setText(QStringLiteral("Downloading the virtio-win media."));
+    set_row_status(kRowPayloadIso, RowStatus::Running);
+    status_label_->setText(QStringLiteral("Preparing the install payload..."));
 }
 
 int PayloadPage::nextId() const {

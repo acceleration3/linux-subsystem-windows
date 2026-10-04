@@ -79,7 +79,7 @@ constexpr auto kPollInterval = std::chrono::seconds(1);
 AgentRedeployer::Outcome AgentRedeployer::run() {
     const QString exe_path = platform::AgentExePath::locate();
     if (exe_path.isEmpty()) {
-        return {false, "redeploy_agent: cannot find lsw-guest-agent.exe — "
+        return {false, "redeploy_agent: cannot find lsw-guest-agent.exe; "
                        "set $LSW_AGENT_EXE or run scripts/build-agent.sh"};
     }
     QFile file{exe_path};
@@ -143,7 +143,7 @@ AgentRedeployer::Outcome AgentRedeployer::run() {
                        + previous_version
                        + "'. Check C:\\ProgramData\\LSW\\lsw-swap.log on the guest for details."};
     }
-    return {true, "redeploy_agent: success — agent_version '" + previous_version + "' -> '"
+    return {true, "redeploy_agent: success, agent_version '" + previous_version + "' -> '"
                   + new_version + "' (" + served + " download(s) served on port " + port + ")"};
 }
 

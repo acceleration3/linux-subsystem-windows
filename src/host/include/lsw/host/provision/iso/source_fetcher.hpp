@@ -1,6 +1,5 @@
 #pragma once
 
-#include "lsw/host/provision/iso/catalog.hpp"
 #include "lsw/host/provision/iso/windows_edition.hpp"
 
 #include <QList>

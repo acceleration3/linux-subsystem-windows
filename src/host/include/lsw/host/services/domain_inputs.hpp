@@ -17,13 +17,12 @@ namespace lsw::host::services {
 // one. Each of them assembling DomainXmlInputs by hand is how a share
 // or a GPU setting ends up in one definition and not the other.
 
-// Everything ``DomainXmlInputs`` takes from settings: the virtio-win
-// ISO where the pipeline caches it, the shared folders, the GPU device
-// (host GPU, render-only GPUs, host window, isolation, resolution) and
-// the driver log's path. The host GPUs are enumerated here to check the
+// Everything ``DomainXmlInputs`` takes from settings: the shared
+// folders, the GPU device (host GPU, render-only GPUs, host window,
+// isolation, resolution) and the driver log's path. The host GPUs are enumerated here to check the
 // chosen one still exists. ``install_display`` is left false — only the
-// pipeline's first define sets it — and the shared-memory and
-// accel-virt path fields are left empty; Lifecycle fills those in.
+// pipeline's first define sets it — and the accel-virt path fields
+// are left empty; Lifecycle fills those in.
 [[nodiscard]] vm::DomainXmlInputs
 domain_inputs_from_settings(const config::Settings& settings,
                             const config::ManagerSettings& manager_settings);

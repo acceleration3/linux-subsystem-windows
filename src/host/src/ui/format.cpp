@@ -39,7 +39,7 @@ QString Format::mib_per_second(double bytes_per_second) {
 
 QString Format::clock(qint64 seconds, int minute_digits) {
     if (seconds < 0) {
-        return QStringLiteral("—");
+        return QStringLiteral("-");
     }
     return QStringLiteral("%1:%2")
         .arg(seconds / 60, minute_digits, 10, QLatin1Char('0'))

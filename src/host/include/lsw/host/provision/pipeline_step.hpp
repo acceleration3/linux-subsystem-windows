@@ -14,7 +14,7 @@ Q_NAMESPACE
 enum class PipelineStep {
     DownloadingIso,            // skipped when a local ISO was supplied
     TrimmingImage,             // pulls install.wim out and debloats it
-    BuildingPayloadIso,        // also fetches the latest virtio-win.iso
+    BuildingPayloadIso,
     CreatingDisk,
     StartingVm,
     WaitingForAgent,           // the press-any-key prompter runs alongside

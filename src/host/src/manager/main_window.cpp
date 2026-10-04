@@ -11,6 +11,7 @@
 #include "lsw/host/vm/domain_xml_inputs.hpp"
 #include "lsw/host/vm/graceful_shutdown.hpp"
 #include "lsw/host/platform/guest_smb_share.hpp"
+#include "lsw/host/platform/host_scale.hpp"
 #include "lsw/host/services/domain_inputs.hpp"
 #include "lsw/host/services/host_services.hpp"
 #include "lsw/host/tools/download_image_dialog.hpp"
@@ -19,6 +20,7 @@
 #include "lsw/host/ui/theme.hpp"
 #include "lsw/host/ui/widgets.hpp"
 
+#include <QEvent>
 #include <QCloseEvent>
 #include <QDesktopServices>
 #include <QDir>
@@ -294,7 +296,7 @@ void MainWindow::build_pages() {
     connect(settings_page_, &SettingsPage::trim_tool_requested, this, [this] {
         const config::VmRecord* record = services_.vms().primary();
         const QString source = record != nullptr ? record->iso_path : QString{};
-        tools::TrimImageDialog dialog{services_.settings(), source, 1, this};
+        tools::TrimImageDialog dialog{services_.settings(), source, this};
         dialog.exec();
     });
     connect(settings_page_, &SettingsPage::rewrite_entries_requested, this, [this] {
@@ -485,27 +487,16 @@ void MainWindow::refresh_status_bar() {
     } else {
         // The facts, with a rule between each, which is what makes a row
         // of them read as a row rather than as a sentence. Each is read:
-        // the channel's own target, the region the running VM has, and
-        // the disk as its definition declares it.
+        // the channel's own target and the disk as its definition
+        // declares it.
         const auto& vm = services_.status().vm();
         const quint32 port = services_.rpc().port();
         facts << (port != 0 ? QStringLiteral("agent 127.0.0.1:%1").arg(port)
                             : QStringLiteral("agent not targeted"));
-        if (vm.region_bytes > 0) {
-            facts << QStringLiteral("transport ivshmem %1, %2")
-                         .arg(ui::Format::kib(vm.region_bytes / 1024),
-                              vm.doorbells ? QStringLiteral("doorbell")
-                                           : QStringLiteral("polled"));
-        } else {
-            facts << QStringLiteral("transport down");
-        }
         if (const vm::DomainDescription* definition = vm.definition()) {
-            QString disk = definition->disk_bus == QLatin1StringView("virtio")
-                               ? QStringLiteral("virtio-blk")
+            QString disk = definition->disk_bus == QLatin1StringView("nvme")
+                               ? QStringLiteral("NVMe")
                                : definition->disk_bus;
-            if (definition->disk_iothread) {
-                disk += QStringLiteral(", iothread");
-            }
             if (vm.disk_bytes) {
                 disk += QStringLiteral(", ") + ui::Format::gib(static_cast<qint64>(*vm.disk_bytes), 0);
             }
@@ -590,7 +581,9 @@ void MainWindow::push_dpi() {
     }
     services_.rpc().request_detached(
         linkproto::cmd::kSetDisplay,
-        {{"scaling_percent", services_.manager_settings().int_value(K::kScalingPercent)}});
+        {{"scaling_percent", platform::HostScale::resolve(services_.manager_settings().int_value(
+                                                             K::kScalingPercent),
+                                                         this)}});
 }
 
 void MainWindow::restart_guest() {
@@ -629,7 +622,7 @@ void MainWindow::restart_guest() {
         if (vm::Lifecycle::grow_disk(record.disk_path, record.sizing.disk_gib, &error)) {
             return {};
         }
-        return QStringLiteral(" — the disk was not grown: %1").arg(error);
+        return QStringLiteral("; the disk was not grown: %1").arg(error);
     };
     if (!services_.lifecycle().is_running(record.uuid)) {
         const QString disk = grow_disk();
@@ -691,6 +684,19 @@ void MainWindow::on_tray_activated(QSystemTrayIcon::ActivationReason reason) {
             Widgets::bring_to_front(this);
         }
     }
+}
+
+bool MainWindow::event(QEvent* e) {
+    // "Match this desktop" is this window's scale, which is not known
+    // until the compositor has mapped it (a Wayland screen says 2 for
+    // 1.2 until then) and changes when it moves to another monitor. So
+    // the guest is told again whenever it changes; Windows takes it at
+    // its next logon either way.
+    if (e->type() == QEvent::DevicePixelRatioChange &&
+        services_.manager_settings().int_value(K::kScalingPercent) == 0) {
+        push_dpi();
+    }
+    return QMainWindow::event(e);
 }
 
 void MainWindow::closeEvent(QCloseEvent* e) {

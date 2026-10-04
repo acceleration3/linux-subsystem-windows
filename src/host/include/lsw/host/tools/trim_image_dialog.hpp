@@ -32,8 +32,7 @@ namespace lsw::host::tools {
 class TrimImageDialog : public QDialog {
     Q_OBJECT
 public:
-    TrimImageDialog(config::Settings& settings, QString source_iso, int image_index,
-                    QWidget* parent = nullptr);
+    TrimImageDialog(config::Settings& settings, QString source_iso, QWidget* parent = nullptr);
 
     // The image that was written, or empty when nothing was. The caller
     // decides what to do with it; the checkbox only says what the user
@@ -54,7 +53,6 @@ private:
 
     config::Settings& settings_;
     QString source_iso_;
-    int image_index_ = 1;
     // Which listing is the current one: an answer for an image no longer
     // picked is dropped.
     int listing_ = 0;
@@ -62,6 +60,8 @@ private:
 
     QLineEdit* source_edit_ = nullptr;
     QComboBox* edition_combo_ = nullptr;
+    // Under the edition: how many are left out, or why none can be read.
+    QLabel* edition_note_ = nullptr;
     QButtonGroup* level_group_ = nullptr;
     QVector<QFrame*> cards_;
     QLabel* warning_ = nullptr;

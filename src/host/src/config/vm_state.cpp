@@ -22,6 +22,14 @@ QUuid VmState::add(VmRecord rec) {
     return records_.last().uuid;
 }
 
+void VmState::clear() {
+    if (records_.isEmpty()) {
+        return;
+    }
+    records_.clear();
+    Q_EMIT changed();
+}
+
 VmRecord* VmState::find(const QUuid& uuid) {
     for (auto& r : records_) {
         if (r.uuid == uuid) {

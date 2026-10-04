@@ -28,8 +28,8 @@ public:
     // Put undelivered notes back at the FRONT, preserving order, so the
     // next connection redelivers them.
     //
-    // Needed because a drain can fail mid-send — installing
-    // virtio-win-guest-tools resets the NIC the RPC channel rides on.
+    // Needed because a drain can fail mid-send: anything that resets
+    // the NIC the RPC channel rides on cuts the connection under it.
     // Without this a drained-but-unsent ``setup_done`` is simply lost
     // and the wizard waits forever.
     void requeue_front(std::vector<JobNotification> notes);

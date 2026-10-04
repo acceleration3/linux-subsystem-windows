@@ -26,14 +26,12 @@ class DebloatStager;
 class PayloadIsoStager;
 class PressAnyKeyPrompter;
 class SetupStageRunner;
-class VirtioWinFetcher;
-class IvshmemDriverFetcher;
 class VncPortResolver;
 
 // Sequences a first-run install, headlessly.
 //
 // One concern: what happens next. Each phase is owned by a collaborator
-// — fetch the drivers, build the payload, run the setup plan — and the
+// — trim the image, build the payload, run the setup plan — and the
 // Pipeline decides the order, forwards their progress as ``step_*``
 // signals, and stops the whole thing on the first failure.
 //
@@ -105,8 +103,8 @@ Q_SIGNALS:
     void setup_step_finished(int row, bool ok, QString detail);
 
     // Per-task signals for the payload phase, so PayloadPage can render
-    // a table like the setup one. Two fixed rows: 0 = fetch
-    // virtio-win.iso, 1 = build the LSW payload ISO.
+    // a table like the setup one. One fixed row: 0 = build the LSW
+    // payload ISO.
     void payload_step_started(int row);
     void payload_step_progress(int row, QString detail);
     void payload_step_finished(int row, bool ok, QString detail);
@@ -117,11 +115,6 @@ private:
     void run_download();
     void run_trim_image();
     void run_build_payload();
-    // Between the virtio fetch and the ISO build: the driver has to be
-    // on the host before the ISO that carries it into the offline image
-    // is assembled.
-    void run_fetch_ivshmem_driver();
-    void run_build_payload_iso();
     void run_create_disk();
     void run_start_vm();
     void run_wait_for_agent();
@@ -137,8 +130,7 @@ private:
     void finish();
 
     // The domain inputs for this VM, from settings like every other
-    // definition the manager writes, with the virtio-win ISO this run
-    // fetched. ``install_display`` adds the VGA adapter Windows Setup
+    // definition the manager writes. ``install_display`` adds the VGA adapter Windows Setup
     // needs, since the accel-virt device shows nothing until its driver
     // is installed.
     [[nodiscard]] vm::DomainXmlInputs domain_inputs(bool install_display) const;
@@ -163,8 +155,6 @@ private:
 
     // Phase collaborators. All QObject children of this.
     iso::Downloader* downloader_ = nullptr;
-    VirtioWinFetcher* virtio_fetcher_ = nullptr;
-    IvshmemDriverFetcher* ivshmem_fetcher_ = nullptr;
     DebloatStager* debloat_stager_ = nullptr;
     PayloadIsoStager* payload_stager_ = nullptr;
     install::PostInstallWatcher* agent_watcher_ = nullptr;

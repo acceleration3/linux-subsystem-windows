@@ -23,6 +23,13 @@ public:
     [[nodiscard]] static QVector<WimEdition> list(const QString& iso_path,
                                                   const QString& scratch_dir = {},
                                                   QString* error = nullptr);
+
+    // Which of ``editions`` to offer first: Pro, the most useful for an
+    // LSW app-host VM, when the image has it, else the first. A position
+    // in the list, 0 for an empty one. The trim tool and the wizard both
+    // start from it, so the image trimmed is the edition the wizard
+    // would have installed.
+    [[nodiscard]] static int preferred(const QVector<WimEdition>& editions);
 };
 
 }  // namespace lsw::host::provision::install
