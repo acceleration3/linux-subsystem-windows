@@ -96,7 +96,8 @@ QString size_label(quint64 kib) {
 // the same events, and the header is the one that cannot be behind: a
 // warning is printed on the first occurrence and then on every power of
 // two, so between two of them the log's count is stale by design.
-void adopt(ChannelPressure& channel, const rvk::wire::RegionCounters& counters) {
+template <class Counters>
+void adopt(ChannelPressure& channel, const Counters& counters) {
     auto& ring = channel.areas[kRing];
     if (counters.chunked_commands > 0) {
         ring.events = counters.chunked_commands;
@@ -125,7 +126,8 @@ void adopt(ChannelPressure& channel, const rvk::wire::RegionCounters& counters) 
 //
 // ``published_ns`` of zero is a guest that predates this block. Its
 // zeroes are not measurements and nothing here is taken from them.
-void adopt_client(ChannelPressure& channel, const rvk::wire::RegionClientUsage& client) {
+template <class ClientUsage>
+void adopt_client(ChannelPressure& channel, const ClientUsage& client) {
     if (client.published_ns == 0) {
         return;
     }
@@ -203,8 +205,8 @@ constexpr std::uint32_t kGuestClaim = 0x80000000U;
 // nothing about time, which is right: it has no idea how often anything
 // is looking. Two samples and the clock between them are the reader's
 // business.
-void adopt_throughput(ChannelPressure& channel,
-                      const rvk::wire::RegionThroughput& totals) {
+template <class Throughput>
+void adopt_throughput(ChannelPressure& channel, const Throughput& totals) {
     const qint64 now = QDateTime::currentMSecsSinceEpoch();
     const qint64 elapsed = now - channel.last_sampled_ms;
     // A first sample has nothing to subtract from, and a counter that
@@ -267,6 +269,27 @@ void adopt_throughput(ChannelPressure& channel,
     channel.last_bytes = totals.command_bytes + totals.reply_bytes;
     channel.last_frames = totals.frames;
     channel.last_sampled_ms = now;
+}
+
+// Whatever pressure blocks this build's wire header carries.
+//
+// The counter, throughput and client-usage blocks are newer than the
+// header itself: a render server that predates them publishes sizes and
+// ownership only, and the cards fall back to what its log says. Asking
+// the type rather than pinning one layout is what lets the manager build
+// against either; a template, because only inside one is a member that
+// does not exist a ``false`` and not an error.
+template <class Header>
+void adopt_pressure(ChannelPressure& channel, const Header& header) {
+    if constexpr (requires { header.counters; }) {
+        adopt(channel, header.counters);
+    }
+    if constexpr (requires { header.throughput; }) {
+        adopt_throughput(channel, header.throughput);
+    }
+    if constexpr (requires { header.client; }) {
+        adopt_client(channel, header.client);
+    }
 }
 
 bool alive(std::uint32_t claim) {
@@ -474,9 +497,7 @@ void RenderStats::poll_regions(const QString& region_prefix) {
                 channel.areas[kRing].configured_kib = header.ring_buffer_bytes >> 10;
                 channel.areas[kReply].configured_kib = header.reply_bytes >> 10;
                 channel.areas[kBlob].configured_kib = header.blob_bytes >> 10;
-                adopt(channel, header.counters);
-                adopt_throughput(channel, header.throughput);
-                adopt_client(channel, header.client);
+                adopt_pressure(channel, header);
             }
         }
         touched = touched || channel.claimed != was_claimed
