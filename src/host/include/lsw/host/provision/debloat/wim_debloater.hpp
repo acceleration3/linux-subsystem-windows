@@ -60,8 +60,16 @@ public:
     // single image drops every resource the others were holding, and
     // the guest only installs one edition anyway.
     //
-    // The result has one image, so callers debloat index 1 of it.
-    [[nodiscard]] static bool isolate_edition(const QString& src_path, int image_index,
+    // ``extra_parts`` are the parts after the first when ``src_path``
+    // is part 1 of a split WIM, and empty otherwise. Part 1 carries the
+    // metadata but only some of the file data, so an export that is not
+    // given the rest fails on the first resource it cannot find.
+    //
+    // The result has one image, so callers debloat index 1 of it. It is
+    // a whole WIM however the source arrived: isolating one edition is
+    // what makes the file small enough to stop being split at all.
+    [[nodiscard]] static bool isolate_edition(const QString& src_path,
+                                              const QStringList& extra_parts, int image_index,
                                               const QString& dest_path, QString* error_out);
 
     // What the last ``apply`` removed, one entry per deleted path. For

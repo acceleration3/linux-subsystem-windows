@@ -147,6 +147,10 @@ void Pipeline::run_trim_image() {
     if (inputs_.image_already_trimmed) {
         // The wizard did it, on the page that asked for the level.
         LSW_INFO("pipeline: image already trimmed; skipping");
+        // Trimmed media holds one edition whatever it held before, so
+        // the index that chose it is not the index that finds it. See
+        // the same line on the path that does the trimming.
+        inputs_.image_index = 1;
         run_build_payload();
         return;
     }
@@ -165,6 +169,13 @@ void Pipeline::run_trim_image() {
         // swap is the whole of the wiring. The source ISO is left alone
         // and stays reusable for the next VM.
         inputs_.iso_local_path = iso_path;
+        // The index chose an edition out of the eleven on the source
+        // media; the trimmed media has only that one, at index 1. The
+        // answer file is written after this point and asks Setup for
+        // /IMAGE/INDEX, so leaving the old number here asks for an
+        // image that is no longer there — and Setup fails in the
+        // windowsPE pass with nothing on screen to say why.
+        inputs_.image_index = 1;
         Q_EMIT step_finished(Step::TrimmingImage);
         run_build_payload();
     });
