@@ -22,16 +22,6 @@ QUuid VmState::add(VmRecord rec) {
     return records_.last().uuid;
 }
 
-void VmState::remove(const QUuid& uuid) {
-    const auto before = records_.size();
-    records_.erase(std::remove_if(records_.begin(), records_.end(),
-                                  [&](const VmRecord& r) { return r.uuid == uuid; }),
-                   records_.end());
-    if (records_.size() != before) {
-        Q_EMIT changed();
-    }
-}
-
 VmRecord* VmState::find(const QUuid& uuid) {
     for (auto& r : records_) {
         if (r.uuid == uuid) {

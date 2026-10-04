@@ -1,5 +1,7 @@
 #pragma once
 
+#include "lsw/host/link/event_subscription.hpp"
+
 #include <QByteArray>
 #include <QHash>
 #include <QString>
@@ -27,7 +29,6 @@ public:
     static constexpr std::size_t kCapacity = 256 * 1024;
 
     explicit ConsoleSessionBuffer(link::AgentRpcClient& rpc);
-    ~ConsoleSessionBuffer();
 
     ConsoleSessionBuffer(const ConsoleSessionBuffer&) = delete;
     ConsoleSessionBuffer& operator=(const ConsoleSessionBuffer&) = delete;
@@ -42,14 +43,13 @@ public:
 private:
     void on_output(const QString& session_id, const QByteArray& bytes);
 
-    link::AgentRpcClient& rpc_;
     mutable std::mutex mu_;
     QHash<QString, QByteArray> sessions_;
 
-    // Retained so the destructor unregisters cleanly — the reader thread
-    // must not call back into a destroyed buffer.
-    unsigned long long output_token_ = 0;
-    unsigned long long closed_token_ = 0;
+    // Last, so they are destroyed first: the reader thread must not call
+    // back into a buffer whose sessions are already gone.
+    link::EventSubscription output_sub_;
+    link::EventSubscription closed_sub_;
 };
 
 }  // namespace lsw::host::mcp

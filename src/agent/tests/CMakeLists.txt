@@ -12,9 +12,13 @@ add_executable(lsw_agent_logic_test
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/util/base64.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/install/url_file_name.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/install/job_id_generator.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/util/wide_string.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/rpc/params.cpp
 )
 
 target_include_directories(lsw_agent_logic_test
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../include)
+
+target_link_libraries(lsw_agent_logic_test PRIVATE nlohmann_json::nlohmann_json)
 
 add_test(NAME lsw_agent_logic_test COMMAND lsw_agent_logic_test)

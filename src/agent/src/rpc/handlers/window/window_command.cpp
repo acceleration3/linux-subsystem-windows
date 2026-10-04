@@ -1,11 +1,10 @@
-#include "lsw/agent/rpc/handler.hpp"
 #include "lsw/agent/rpc/auto_register.hpp"
-
-#include "lsw/linkproto/commands.hpp"
+#include "lsw/agent/rpc/handler.hpp"
+#include "lsw/agent/rpc/params.hpp"
 #include "lsw/agent/win/window.hpp"
+#include "lsw/linkproto/commands.hpp"
 
 #include <cstdint>
-#include <stdexcept>
 #include <string>
 
 namespace lsw::agent::rpc::handlers {
@@ -20,15 +19,11 @@ namespace lsw::agent::rpc::handlers {
 // the host learns the outcome from the show state on the next window
 // enumeration.
 struct WindowCommandHandler : RpcHandler {
-    nlohmann::json handle(const nlohmann::json& params,
-                          RpcContext& /*ctx*/) override {
-        const auto hwnd = params.value("hwnd", std::uint64_t{0});
-        if (hwnd == 0) {
-            throw std::invalid_argument("window_command: missing hwnd");
-        }
-        const auto command = params.value("command", std::string{});
-        const bool ok = win::Window::system_command(
-            static_cast<std::uintptr_t>(hwnd), command);
+    nlohmann::json handle(const nlohmann::json& params, RpcContext& /*ctx*/) override {
+        const Params p{params, linkproto::cmd::kWindowCommand};
+        const auto hwnd = p.require_hwnd();
+        const auto command = p.get("command", std::string{});
+        const bool ok = win::Window::system_command(hwnd, command);
         nlohmann::json r = {{"ok", ok}};
         if (!ok) {
             r["error"] = "unknown or unsupported command: " + command;

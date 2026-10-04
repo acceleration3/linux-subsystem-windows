@@ -18,39 +18,36 @@ void Installer::spawn(std::unique_ptr<InstallJob> job) {
     t.detach();
 }
 
-std::string Installer::start_download_install(const std::string& name,
-                                              const std::string& url,
+std::string Installer::start_download_install(const std::string& name, const std::string& url,
                                               const std::string& args) {
     const std::string job_id = ids_.next();
-    LSW_AGENT_INFO(std::string{"installer: start download_install job="} + job_id
-                   + " name=" + name + " url=" + url);
+    LSW_AGENT_INFO("installer: start download_install job={} name={} url={}", job_id, name, url);
     spawn(std::make_unique<DownloadInstallJob>(job_id, name, queue_, url, args));
     return job_id;
 }
 
-std::string Installer::start_run_script(const std::string& name,
-                                        const std::string& script) {
+std::string Installer::start_run_script(const std::string& name, const std::string& script) {
     const std::string job_id = ids_.next();
-    LSW_AGENT_INFO(std::string{"installer: start run_script job="} + job_id
-                   + " name=" + name + " bytes=" + std::to_string(script.size()));
+    LSW_AGENT_INFO("installer: start run_script job={} name={} bytes={}", job_id, name,
+                   script.size());
     spawn(std::make_unique<RunScriptJob>(job_id, name, queue_, script));
     return job_id;
 }
 
-std::string Installer::start_download_extract(const std::string& name,
-                                              const std::string& url,
+std::string Installer::start_download_extract(const std::string& name, const std::string& url,
                                               const std::string& extract_to,
                                               const std::string& script) {
     const std::string job_id = ids_.next();
-    LSW_AGENT_INFO(std::string{"installer: start download_extract job="} + job_id
-                   + " name=" + name + " url=" + url + " extract_to=" + extract_to
-                   + " script_bytes=" + std::to_string(script.size()));
-    spawn(std::make_unique<DownloadExtractJob>(job_id, name, queue_, url, extract_to,
-                                               script));
+    LSW_AGENT_INFO("installer: start download_extract job={} name={} url={} extract_to={} "
+                   "script_bytes={}",
+                   job_id, name, url, extract_to, script.size());
+    spawn(std::make_unique<DownloadExtractJob>(job_id, name, queue_, url, extract_to, script));
     return job_id;
 }
 
-std::vector<JobNotification> Installer::collect_pending() { return queue_.collect(); }
+std::vector<JobNotification> Installer::collect_pending() {
+    return queue_.collect();
+}
 
 void Installer::requeue_front(std::vector<JobNotification> notes) {
     queue_.requeue_front(std::move(notes));

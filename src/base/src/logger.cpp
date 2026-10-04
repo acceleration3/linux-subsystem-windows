@@ -41,17 +41,6 @@ void Logger::init(const char* component) noexcept {
     if (const char* path = std::getenv("LSW_LOG_FILE"); path != nullptr && *path != '\0') {
         file_path = path;
     }
-#if defined(_WIN32)
-    else {
-        // In the guest, default to a file. Almost everything the ICD is
-        // loaded into is a GUI-subsystem process with no console at all,
-        // so stderr goes nowhere and the only sign of a problem is the
-        // loader reporting "cannot find a compatible ICD" — which says
-        // nothing about why. A driver that cannot explain itself is a
-        // driver that costs a VM round trip per question.
-        file_path = "C:\\ProgramData\\LSW\\icd.log";
-    }
-#endif
     if (!file_path.empty()) {
         try {
             auto file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(

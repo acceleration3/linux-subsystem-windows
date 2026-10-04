@@ -4,7 +4,11 @@
 #include "lsw/host/wizard/wizard_state.hpp"
 #include "lsw/host/provision/pipeline.hpp"
 
+#include <QStringList>
 #include <QWizard>
+
+class QLabel;
+class QListWidget;
 
 namespace lsw::host::services { class HostServices; }
 
@@ -13,16 +17,23 @@ namespace lsw::host::wizard {
 class WelcomePage;
 class LicensePage;
 class IsoChoicePage;
-class DownloadPage;
 class VmSizePage;
 class PayloadPage;
 class InstallPage;
 class SetupPage;
 class DonePage;
 
-// First-run wizard: walks the user through ISO acquisition, VM sizing,
-// VM creation, unattended install, payload install, and confirmation.
+// First-run wizard: an image, a machine, an unattended install, and the
+// guest payload.
 //
+// Eight steps, and a rail down the left showing all of them, so the
+// length of the process is visible from the first screen rather than
+// discovered one Next at a time.
+//
+// Two things that used to be steps are not any more. Downloading an
+// image and trimming one are tools: they produce an ISO, they are
+// optional, and a wizard page could only run them once, in one place,
+// with no way back once it had committed.
 class Wizard : public QWizard {
     Q_OBJECT
 public:
@@ -31,8 +42,6 @@ public:
         License,
         IsoChoice,
         VmSize,
-        Download,
-        Debloat,
         Payload,
         Install,
         Setup,
@@ -64,6 +73,11 @@ protected:
 
 private:
     void detect_host_caps();
+    // The step rail down the left, and the slot that keeps it in step
+    // with the page being shown.
+    // The eight names, in order, shared by the rail and the highlight.
+    [[nodiscard]] static const QStringList& step_names();
+    void highlight_step(int page_id);
 
     services::HostServices& services_;
     WizardState state_;

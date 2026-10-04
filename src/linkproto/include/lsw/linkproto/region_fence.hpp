@@ -7,7 +7,7 @@ namespace lsw::linkproto {
 // Fences for data that crosses through the shared region.
 //
 // The guest maps the IVSHMEM BAR write-combined (see
-// ``protocol/src/ivshmem_region.cpp``), and write-combining is the one
+// ``src/agent/src/transport/ivshmem_region.cpp``), and write-combining is the one
 // x86 memory type that is genuinely weakly ordered — in BOTH directions.
 // Stores sit in the WC buffers and may reach memory late and out of
 // order; loads may likewise be reordered against each other.

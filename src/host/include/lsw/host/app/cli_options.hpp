@@ -32,6 +32,15 @@ struct CliOptions {
     // RPC, then keep the manager up).
     QString launch_app_id;
 
+    // --screenshot DIR: render every page of the manager and every page
+    // of the wizard into DIR as PNGs, then exit.
+    //
+    // A UI that is described in a design and built in another language
+    // drifts, and the only way to see that it has is to look. Looking
+    // by hand is a thing nobody repeats, so this is the thing that
+    // does. It talks to no VM and starts no server.
+    QString screenshot_dir;
+
     // True iff any wizard-driving flag was supplied. We treat this as
     // "the user asked us to skip past everything we can" — pages with
     // all required inputs auto-advance, the welcome and done pages

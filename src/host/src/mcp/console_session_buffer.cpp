@@ -8,9 +8,8 @@
 
 namespace lsw::host::mcp {
 
-ConsoleSessionBuffer::ConsoleSessionBuffer(link::AgentRpcClient& rpc) : rpc_(rpc) {
-    output_token_ = rpc_.on_event(QString::fromLatin1(linkproto::topic::kConsoleOutput),
-                                  [this](const nlohmann::json& f) {
+ConsoleSessionBuffer::ConsoleSessionBuffer(link::AgentRpcClient& rpc) {
+    output_sub_ = rpc.subscribe(linkproto::topic::kConsoleOutput, [this](const nlohmann::json& f) {
         const auto sid = QString::fromStdString(f.value("session_id", std::string{}));
         if (sid.isEmpty()) {
             return;
@@ -20,8 +19,7 @@ ConsoleSessionBuffer::ConsoleSessionBuffer(link::AgentRpcClient& rpc) : rpc_(rpc
     });
     // A closed session gets a synthetic tail line rather than silence, so
     // a model polling console_read can tell "nothing yet" from "it ended".
-    closed_token_ = rpc_.on_event(QString::fromLatin1(linkproto::topic::kConsoleClosed),
-                                  [this](const nlohmann::json& f) {
+    closed_sub_ = rpc.subscribe(linkproto::topic::kConsoleClosed, [this](const nlohmann::json& f) {
         const auto sid = QString::fromStdString(f.value("session_id", std::string{}));
         if (sid.isEmpty()) {
             return;
@@ -29,11 +27,6 @@ ConsoleSessionBuffer::ConsoleSessionBuffer(link::AgentRpcClient& rpc) : rpc_(rpc
         const auto code = f.value("exit_code", 0);
         on_output(sid, QStringLiteral("\n[session exited, code=%1]\n").arg(code).toUtf8());
     });
-}
-
-ConsoleSessionBuffer::~ConsoleSessionBuffer() {
-    rpc_.off_event(output_token_);
-    rpc_.off_event(closed_token_);
 }
 
 void ConsoleSessionBuffer::on_output(const QString& session_id, const QByteArray& bytes) {

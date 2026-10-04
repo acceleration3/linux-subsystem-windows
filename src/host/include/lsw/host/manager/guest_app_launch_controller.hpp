@@ -8,14 +8,16 @@ namespace lsw::host::services { class HostServices; }
 
 namespace lsw::host::manager {
 
+class GuestAppLauncher;
+
 // Drives one "open this guest app" request end to end.
 //
 // The interesting case is a cold VM: the request arrives (from an XDG
 // launcher click routed over DBus, or from ``--launch``) while Windows
 // is not running. The controller then has to start the domain, show the
 // user something while it boots, wait for the agent to become reachable,
-// fire the launch RPC, and finally attach an AppWindowWatcher so the
-// app's windows surface as host mirrors.
+// and finally hand the launch to GuestAppLauncher, which starts the
+// application and mirrors its windows.
 //
 // Split out of ``App`` because none of that is composition: it is a
 // stateful, multi-step interaction with its own cancellation path.
@@ -29,10 +31,17 @@ public:
     // first if needed. Repeated calls supersede the pending request.
     void launch(const QString& app_id);
 
+Q_SIGNALS:
+    // The agent has started the application. The splash retires on
+    // this, rather than on the agent merely being reachable.
+    void application_running();
+    // The splash's "open the log" button, forwarded to whoever owns a
+    // window to show it in.
+    void log_requested();
+
 private:
-    // Fire the launch RPC now — the agent is known reachable. Spawns the
-    // AppWindowWatcher that turns the new PID's windows into mirrors.
-    void fire_launch(const QString& guest_path);
+    // The deferred half of a cold launch, once the agent answers.
+    void fire_when_ready(const QString& app_id, const QString& guest_path);
 
     // Cold path: start the domain if it is down, show the boot splash,
     // and arm a one-shot wait on the monitor's agent_reachable flip.
@@ -44,6 +53,8 @@ private:
     void ensure_channel_target(const QUuid& uuid);
 
     services::HostServices& services_;
+    // The launch itself, shared in kind with the app grid's.
+    GuestAppLauncher* launcher_ = nullptr;
 
     // The app id whose launch is waiting on the VM to come up. Cleared
     // when it fires, when the user cancels the splash, or when a newer

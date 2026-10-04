@@ -1,81 +1,62 @@
 #include "lsw/agent/install/process_runner.hpp"
 
 #include "lsw/agent/log.hpp"
-#include "lsw/agent/util/text_encoding.hpp"
+#include "lsw/agent/win/error_text.hpp"
+#include "lsw/agent/win/process.hpp"
+#include "lsw/agent/win/unique_handle.hpp"
 
 #include <windows.h>
 
-#include <vector>
-
 namespace lsw::agent::install {
 
-ProcessOutcome ProcessRunner::run(const std::wstring& command_line,
-                                  unsigned long timeout_ms) {
+ProcessOutcome ProcessRunner::run(const std::wstring& command_line, unsigned long timeout_ms) {
     ProcessOutcome outcome;
 
-    HANDLE job = ::CreateJobObjectW(nullptr, nullptr);
+    const win::UniqueHandle job{::CreateJobObjectW(nullptr, nullptr)};
 
-    STARTUPINFOW si{};
-    si.cb = sizeof(si);
-    si.dwFlags = STARTF_USESHOWWINDOW;
-    si.wShowWindow = SW_HIDE;
-    PROCESS_INFORMATION pi{};
-
-    // CreateProcessW writes into the command-line buffer, so it must be
-    // mutable.
-    std::vector<wchar_t> mutable_cmd(command_line.begin(), command_line.end());
-    mutable_cmd.push_back(L'\0');
-
+    win::SpawnOptions options;
+    options.command_line = command_line;
     // CREATE_SUSPENDED so the process joins the job BEFORE it can spawn
     // descendants — otherwise an early grandchild escapes the job and
     // survives a timeout kill.
-    if (!::CreateProcessW(nullptr, mutable_cmd.data(), nullptr, nullptr, FALSE,
-                          CREATE_NO_WINDOW | CREATE_SUSPENDED, nullptr, nullptr,
-                          &si, &pi)) {
-        outcome.error = std::string{"CreateProcessW failed err="}
-                        + std::to_string(::GetLastError());
-        if (job != nullptr) {
-            ::CloseHandle(job);
-        }
+    options.creation_flags = CREATE_NO_WINDOW | CREATE_SUSPENDED;
+    options.hide_window = true;
+    DWORD error = 0;
+    const auto spawned = win::Process::spawn(options, &error);
+    if (!spawned) {
+        outcome.error = "CreateProcessW failed err=" + win::ErrorText::win32(error);
         return outcome;
     }
-    if (job != nullptr) {
-        ::AssignProcessToJobObject(job, pi.hProcess);
+    const HANDLE process = spawned->process.get();
+    if (job) {
+        ::AssignProcessToJobObject(job.get(), process);
     }
-    ::ResumeThread(pi.hThread);
+    ::ResumeThread(spawned->thread.get());
 
-    LSW_AGENT_INFO(std::string{"process: spawned pid="} + std::to_string(pi.dwProcessId)
-                   + " timeout="
-                   + (timeout_ms == kNoTimeout ? std::string{"none"}
-                                               : std::to_string(timeout_ms / 1000) + "s")
-                   + " cmd=" + util::TextEncoding::to_utf8(command_line));
+    LSW_AGENT_INFO("process: spawned pid={} timeout={} cmd={}", spawned->pid,
+                   timeout_ms == kNoTimeout ? std::string{"none"}
+                                            : std::to_string(timeout_ms / 1000) + "s",
+                   command_line);
 
     outcome.completed = true;
-    if (::WaitForSingleObject(pi.hProcess, timeout_ms) == WAIT_TIMEOUT) {
-        LSW_AGENT_ERROR(std::string{"process: pid="} + std::to_string(pi.dwProcessId)
-                        + " TIMED OUT after " + std::to_string(timeout_ms / 1000)
-                        + "s — killing process tree");
-        if (job != nullptr) {
-            ::TerminateJobObject(job, 1);
+    if (::WaitForSingleObject(process, timeout_ms) == WAIT_TIMEOUT) {
+        LSW_AGENT_ERROR("process: pid={} TIMED OUT after {}s — killing process tree", spawned->pid,
+                        timeout_ms / 1000);
+        if (job) {
+            ::TerminateJobObject(job.get(), 1);
         } else {
-            ::TerminateProcess(pi.hProcess, 1);
+            ::TerminateProcess(process, 1);
         }
-        ::WaitForSingleObject(pi.hProcess, 5000);
-        outcome.error = "timed out after " + std::to_string(timeout_ms / 1000)
-                        + "s (process tree killed)";
+        ::WaitForSingleObject(process, 5000);
+        outcome.error =
+            "timed out after " + std::to_string(timeout_ms / 1000) + "s (process tree killed)";
         outcome.completed = false;
     }
 
     DWORD code = 0;
-    ::GetExitCodeProcess(pi.hProcess, &code);
+    ::GetExitCodeProcess(process, &code);
     if (outcome.completed) {
-        LSW_AGENT_INFO(std::string{"process: pid="} + std::to_string(pi.dwProcessId)
-                       + " exited code=" + std::to_string(code));
-    }
-    ::CloseHandle(pi.hThread);
-    ::CloseHandle(pi.hProcess);
-    if (job != nullptr) {
-        ::CloseHandle(job);
+        LSW_AGENT_INFO("process: pid={} exited code={}", spawned->pid, code);
     }
     outcome.exit_code = static_cast<int>(code);
     return outcome;

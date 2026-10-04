@@ -68,12 +68,6 @@ public:
     // timer, because the caller is the window enumeration and asks once
     // per window at poll rate.
     [[nodiscard]] static unsigned long root_of(unsigned long pid);
-
-    // Whether ``root``'s job still has any live process in it. A launch
-    // whose stub has exited is still alive by this measure as long as
-    // what it started is running — which is what "the application is
-    // still open" means for a stub-launched application.
-    [[nodiscard]] static bool alive(unsigned long root);
 };
 
 }  // namespace lsw::agent::apps

@@ -1,8 +1,11 @@
 #pragma once
 
-#include <uiautomation.h>
+#include "lsw/agent/win/com_object.hpp"
 
-#include <atomic>
+// clang-format off
+#include <windows.h>
+#include <uiautomation.h>
+// clang-format on
 
 namespace lsw::agent::uia {
 
@@ -17,20 +20,14 @@ class UiaEventQueue;
 // filter is why the PID is a member rather than a subscription detail.
 //
 // Lives on UIA's thread pool; posts into the queue and returns.
-class LifecycleEventHandler final : public IUIAutomationEventHandler {
+class LifecycleEventHandler final : public win::ComObject<IUIAutomationEventHandler> {
 public:
-    LifecycleEventHandler(UiaEventQueue& queue, DWORD pid) noexcept
-        : queue_(queue), pid_(pid) {}
+    LifecycleEventHandler(UiaEventQueue& queue, DWORD pid) noexcept : queue_(queue), pid_(pid) {}
 
-    HRESULT __stdcall QueryInterface(REFIID iid, void** out) override;
-    ULONG __stdcall AddRef() override;
-    ULONG __stdcall Release() override;
-
-    HRESULT __stdcall HandleAutomationEvent(IUIAutomationElement* sender,
-                                            EVENTID event_id) override;
+    HRESULT STDMETHODCALLTYPE HandleAutomationEvent(IUIAutomationElement* sender,
+                                                    EVENTID event_id) override;
 
 private:
-    std::atomic<ULONG> ref_{1};
     UiaEventQueue& queue_;
     DWORD pid_;
 };

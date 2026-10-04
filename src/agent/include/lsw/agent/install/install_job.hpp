@@ -1,8 +1,10 @@
 #pragma once
 
 #include "lsw/agent/install/job_notification.hpp"
+#include "lsw/agent/install/process_outcome.hpp"
 
 #include <cstdint>
+#include <optional>
 #include <string>
 
 namespace lsw::agent::install {
@@ -36,8 +38,18 @@ protected:
     void report_bytes(const std::string& phase, std::uint64_t received, std::uint64_t total);
 
     // Terminal. Exactly one per job.
-    void report_done(const std::string& phase, bool ok, int exit_code,
-                     const std::string& message);
+    void report_done(const std::string& phase, bool ok, int exit_code, const std::string& message);
+
+    // Fetch ``url`` into this job's staging area, reporting progress as
+    // phase "download". Returns the downloaded file's path, or nullopt
+    // after logging and posting the terminal failure — the caller only
+    // has to return.
+    [[nodiscard]] std::optional<std::wstring> download(const std::string& url);
+
+    // What a failed child process reports as its message: the runner's
+    // own error when it has one (spawn failed, timed out), else
+    // "<what> exit code N".
+    [[nodiscard]] static std::string exit_message(const ProcessOutcome& outcome, const char* what);
 
     std::string id_;
     std::string name_;

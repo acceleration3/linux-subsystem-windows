@@ -14,15 +14,13 @@ class UiaRoot {
 public:
     // Creates the IUIAutomation instance. Requires COM to already be
     // initialised on this thread (AgentServices guarantees that by
-    // member order). Failure is not fatal — ``ok()`` reports it and
+    // member order). Failure is not fatal — ``get()`` returns null and
     // every caller degrades to a no-op.
     UiaRoot();
     ~UiaRoot();
 
     UiaRoot(const UiaRoot&) = delete;
     UiaRoot& operator=(const UiaRoot&) = delete;
-
-    [[nodiscard]] bool ok() const noexcept { return root_ != nullptr; }
 
     // Borrowed. Null when UIA is unavailable — callers must check.
     [[nodiscard]] IUIAutomation* get() const noexcept { return root_; }

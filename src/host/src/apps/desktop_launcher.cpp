@@ -18,7 +18,12 @@ namespace lsw::host::apps {
 namespace {
 
 constexpr const char* kEntryPrefix = "lsw-app-";
-constexpr const char* kCategoryName = "Windows";
+// The submenu's name is a setting; its id is not, because the id is in
+// the file names and renaming those would orphan every entry already
+// written. So the id stays and the name is what the menus show.
+QString g_category_name = QStringLiteral("Windows");
+bool g_publishing = true;
+bool g_file_associations = false;
 constexpr const char* kCategoryId = "lsw-windows";
 
 QString xdg_data_home() {
@@ -98,7 +103,7 @@ void unhide_windows_category_in_kmenuedit() {
         QDomElement m = menus.at(i).toElement();
         if (m.isNull()) continue;
         QDomElement name = m.firstChildElement(QStringLiteral("Name"));
-        if (name.isNull() || name.text() != QStringLiteral("Windows")) continue;
+        if (name.isNull() || name.text() != g_category_name) continue;
         QDomElement deleted = m.firstChildElement(QStringLiteral("Deleted"));
         if (deleted.isNull()) continue;
         targets.append(m);
@@ -131,7 +136,7 @@ void ensure_windows_category() {
                        "Type=Directory\n"
                        "Name=%1\n"
                        "Icon=preferences-system-windows-actions\n")
-            .arg(kCategoryName).toUtf8();
+            .arg(g_category_name).toUtf8();
     QFile dirf(dir_path);
     bool needs_write = true;
     if (dirf.open(QIODevice::ReadOnly)) {
@@ -163,7 +168,7 @@ void ensure_windows_category() {
             "    </Include>\n"
             "  </Menu>\n"
             "</Menu>\n")
-            .arg(kCategoryName, kCategoryId).toUtf8();
+            .arg(g_category_name, QString::fromLatin1(kCategoryId)).toUtf8();
     QFile mf(menu_path);
     needs_write = true;
     if (mf.open(QIODevice::ReadOnly)) {
@@ -182,6 +187,28 @@ QString DesktopLauncher::entry_id(const QString& app_config_id) {
     const QByteArray digest = QCryptographicHash::hash(
         app_config_id.toUtf8(), QCryptographicHash::Sha1).toHex().left(16);
     return QString::fromUtf8(kEntryPrefix) + QString::fromUtf8(digest);
+}
+
+void DesktopLauncher::set_category(const QString& name) {
+    if (!name.trimmed().isEmpty()) {
+        g_category_name = name.trimmed();
+    }
+}
+
+QString DesktopLauncher::category() {
+    return g_category_name;
+}
+
+void DesktopLauncher::set_publishing(bool enabled) {
+    g_publishing = enabled;
+}
+
+bool DesktopLauncher::publishing() {
+    return g_publishing;
+}
+
+void DesktopLauncher::set_file_associations(bool enabled) {
+    g_file_associations = enabled;
 }
 
 bool DesktopLauncher::install(const AppConfig& cfg) {
@@ -239,13 +266,23 @@ bool DesktopLauncher::install(const AppConfig& cfg) {
         s << "Icon=" << icon_abs << "\n";
     }
     s << "Exec=" << lsw_manager_executable() << " --launch '" << exec_id << "'\n"
-      << "Categories=" << kCategoryName << ";\n"
+      << "Categories=" << g_category_name << ";\n"
       // StartupWMClass is the X11 grouping hint; on Wayland the taskbar
       // matches against the app id the mirror presents, which is this
       // entry's own, so this is mostly for the launcher-side bounce /
       // startup-id flow on X11.
       << "StartupNotify=true\n"
       << "Terminal=false\n";
+    // Opening a .psd on the host in the guest's Photoshop. Declared
+    // only when the application named types and the setting is on: a
+    // handler registered without being asked for is how somebody's
+    // double-click starts a virtual machine they did not want.
+    if (g_file_associations && !cfg.mime_types.isEmpty()) {
+        const QStringList types = cfg.mime_types.split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+        if (!types.isEmpty()) {
+            s << "MimeType=" << types.join(QLatin1Char(';')) << ";\n";
+        }
+    }
     df.close();
     return true;
 }
@@ -266,6 +303,10 @@ void DesktopLauncher::sync(const QList<AppConfig>& live) {
     QSet<QString> live_bases;
     for (const auto& cfg : live) {
         if (cfg.id.isEmpty() || cfg.path.isEmpty()) continue;
+        // An application the user un-published, or a manager with
+        // publishing off entirely, leaves no basename behind, so the
+        // prune pass below removes whatever it had.
+        if (!g_publishing || !cfg.publish_entry) continue;
         (void)install(cfg);
         live_bases.insert(entry_basename(cfg));
     }

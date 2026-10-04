@@ -1,14 +1,16 @@
 #pragma once
 
 #include "lsw/host/provision/install/wim_edition_lister.hpp"
+#include "lsw/host/wizard/wizard_page.hpp"
 
 #include <QComboBox>
+#include <QFormLayout>
 #include <QFutureWatcher>
 #include <QLabel>
 #include <QLineEdit>
-#include <QSpinBox>
 #include <QVector>
-#include <QWizardPage>
+
+namespace lsw::host::ui { class SliderSpin; }
 
 namespace lsw::host::wizard {
 
@@ -20,7 +22,7 @@ class Wizard;
 // edition combo box populated asynchronously by reading the chosen
 // ISO's WIM image table (provision::install::WimEditionLister::list, run off-thread
 // because it shells out to 7z). The VM name is fixed (config::kVmName).
-class VmSizePage : public QWizardPage {
+class VmSizePage : public WizardPage {
     Q_OBJECT
 public:
     explicit VmSizePage(Wizard& wizard, QWidget* parent = nullptr);
@@ -34,13 +36,17 @@ private Q_SLOTS:
     void on_editions_ready();
 
 private:
+    QFormLayout* form_ = nullptr;
+    QLabel* footnote_ = nullptr;
+
+    void refresh_footnote();
     Wizard& wizard_;
     QLineEdit* user_edit_ = nullptr;
     QLineEdit* pass_edit_ = nullptr;
     QLineEdit* computer_edit_ = nullptr;
-    QSpinBox* cpu_spin_ = nullptr;
-    QSpinBox* mem_spin_ = nullptr;
-    QSpinBox* disk_spin_ = nullptr;
+    ui::SliderSpin* cpu_slider_ = nullptr;
+    ui::SliderSpin* mem_slider_ = nullptr;
+    ui::SliderSpin* disk_slider_ = nullptr;
     QComboBox* edition_combo_ = nullptr;
     QLabel* edition_status_ = nullptr;
 

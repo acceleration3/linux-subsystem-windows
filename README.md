@@ -11,7 +11,7 @@ Greenfield. Phase 0 scaffolding.
 ```
 src/
   agent/          lsw-guest-agent.exe — runs inside the Windows VM
-  base/           logging, shared by both sides
+  base/           logging for the host (the agent has its own)
   linkproto/      the host <-> guest wire contract
   host/           the Linux manager
 external/
@@ -71,16 +71,18 @@ src/host/
   vm/         libvirt lifecycle, stats, shared-memory transport
   link/       the multiplexed JSON channel to the guest agent
   apps/       guest app catalog, per-app config, launch, logs
-  ui/         widgets shared by both UIs
+  mirror/     the window mirror a launch starts, one per application
+  ui/         widgets and theme shared by both UIs
   services/   HostServices — the container every feature takes
   provision/  first-run install pipeline (ISO, autounattend, setup)
+  tools/      the image tools, opened by the wizard and the manager
   wizard/     the first-run QWizard and its pages
   manager/    the everyday window
   mcp/        MCP automation surface over localhost HTTP
   app/        composition root + entry point
 ```
 
-Those twelve concerns are linked as four libraries plus the executable —
+Those fourteen concerns are linked as five libraries plus the executable —
 see the header comment in `src/host/CMakeLists.txt`. Include paths never
 name a target, so moving a concern between libraries touches no source.
 

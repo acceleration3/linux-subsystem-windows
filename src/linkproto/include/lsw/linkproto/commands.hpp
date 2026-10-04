@@ -22,6 +22,23 @@ inline constexpr const char* kListApps = "list_apps";
 inline constexpr const char* kLaunch   = "launch";
 inline constexpr const char* kGetIcon  = "get_icon";
 
+// -- browsing the guest ---------------------------------------------------
+// The manager's file picker. ``list_dir`` takes a Windows path and a
+// cursor and answers with one page of entries, because
+// C:\Windows\System32 is five thousand of them and the reply slot is
+// not where anybody wants to discover that. An empty path lists the
+// drives. ``resolve_shortcut`` turns a .lnk into what it points at, so
+// an application configured by picking one from the Start menu keeps
+// working after the shortcut is deleted.
+// The virtual monitor's size, the guest's DPI, and how much video
+// memory the adapter admits to owning. All three are settings on the
+// host and all three live in the guest, so the manager pushes them
+// across once the agent answers. The resolution takes effect at once;
+// the other two are registry state Windows reads at logon and at boot.
+inline constexpr const char* kSetDisplay      = "set_display";
+inline constexpr const char* kListDir         = "list_dir";
+inline constexpr const char* kResolveShortcut = "resolve_shortcut";
+
 // -- the window mirror ----------------------------------------------------
 // Start remotewin's guest half, which dials back out to the mirror
 // process the manager started for one application and carries that

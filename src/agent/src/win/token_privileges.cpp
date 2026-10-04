@@ -1,10 +1,11 @@
 #include "lsw/agent/win/token_privileges.hpp"
 
 #include "lsw/agent/log.hpp"
-
-#include <windows.h>
+#include "lsw/agent/win/error_text.hpp"
+#include "lsw/agent/win/unique_handle.hpp"
 
 #include <string>
+#include <windows.h>
 
 namespace lsw::agent::win {
 
@@ -25,11 +26,10 @@ constexpr int kPrivilegeCount =
 }  // namespace
 
 int TokenPrivileges::enable_install_privileges() {
-    HANDLE token = nullptr;
-    if (!::OpenProcessToken(::GetCurrentProcess(),
-                            TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &token)) {
-        LSW_AGENT_WARN(std::string{"privileges: OpenProcessToken failed err="}
-                       + std::to_string(::GetLastError()));
+    UniqueHandle token;
+    if (!::OpenProcessToken(::GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY,
+                            token.put())) {
+        LSW_AGENT_WARN("privileges: OpenProcessToken failed err={}", ErrorText::last_error());
         return 0;
     }
     int enabled = 0;
@@ -40,16 +40,14 @@ int TokenPrivileges::enable_install_privileges() {
             continue;
         }
         privilege.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
-        if (::AdjustTokenPrivileges(token, FALSE, &privilege, sizeof(privilege), nullptr,
-                                    nullptr)
-            && ::GetLastError() == ERROR_SUCCESS) {
+        if (::AdjustTokenPrivileges(token.get(), FALSE, &privilege, sizeof(privilege), nullptr,
+                                    nullptr) &&
+            ::GetLastError() == ERROR_SUCCESS) {
             ++enabled;
         }
     }
-    ::CloseHandle(token);
-    LSW_AGENT_INFO(std::string{"privileges: enabled "} + std::to_string(enabled) + " of "
-                   + std::to_string(kPrivilegeCount)
-                   + " install-relevant token privileges");
+    LSW_AGENT_INFO("privileges: enabled {} of {} install-relevant token privileges", enabled,
+                   kPrivilegeCount);
     return enabled;
 }
 

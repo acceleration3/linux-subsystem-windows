@@ -1,5 +1,6 @@
 #pragma once
 
+#include "lsw/host/link/event_subscription.hpp"
 #include "lsw/host/provision/setup_stage.hpp"
 #include "lsw/host/provision/setup_step.hpp"
 
@@ -63,8 +64,8 @@ private:
     [[nodiscard]] bool dispatch_step(const SetupStep& step, int row);
 
     link::AgentRpcClient* rpc_;  // cleared by detach()
-    unsigned long long progress_token_ = 0;
-    unsigned long long done_token_ = 0;
+    link::EventSubscription progress_sub_;
+    link::EventSubscription done_sub_;
 
     QVector<SetupStage> stages_;
     int current_stage_ = -1;

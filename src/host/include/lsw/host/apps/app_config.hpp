@@ -25,9 +25,26 @@ struct AppConfig {
     // real executable from the launch tracking that scopes mirrors to
     // an instance.
     QString env;
+    // Where the program starts. Empty means the folder it lives in,
+    // which is what its own shortcut would have done; a .lnk that
+    // named one contributes it when the picker resolves it.
+    QString workdir;
     QString icon_png_base64;     // cached icon, ASCII-clean
     bool discovered_via_agent = false;  // came from start-menu enum
     qint64 last_seen_unix = 0;          // bumped on each successful refresh
+
+    // Whether this one gets a .desktop entry in the host's menu. The
+    // global switch in Settings decides whether any of them do; this
+    // decides which, because a guest with forty shortcuts in its Start
+    // menu should not put forty entries in somebody's launcher.
+    bool publish_entry = true;
+    // Which render channel it draws on, and what to do when that
+    // channel is taken. -1 is "any", which is what everything did
+    // before there was a choice.
+    int channel = -1;
+    // Windows file types this application should open on the host,
+    // one MIME type per line. Empty means it registers for none.
+    QString mime_types;
 
     // Lossy helpers — Qt-friendly views into icon_png_base64.
     [[nodiscard]] QImage icon_image() const;

@@ -1,6 +1,9 @@
 #include "lsw/agent/console/console.hpp"
 
 #include "lsw/agent/log.hpp"
+#include "lsw/agent/win/error_text.hpp"
+#include "lsw/agent/win/process.hpp"
+#include "lsw/agent/win/unique_handle.hpp"
 
 // clang-format off
 #include <windows.h>
@@ -13,18 +16,25 @@
 #include <string>
 #include <thread>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace lsw::agent::console {
 
+// One cmd.exe. Shared between the session map and the session's reader
+// thread, so whichever lets go last closes the handles — the reader is
+// still inside ReadFile on ``stdout_r`` when ``close`` erases the map
+// entry, and must not have it closed underneath it.
 struct Session {
-    HANDLE process = nullptr;
-    HANDLE stdin_w = nullptr;
-    HANDLE stdout_r = nullptr;
-    std::thread reader;
+    win::UniqueHandle process;
+    win::UniqueHandle stdin_w;
+    win::UniqueHandle stdout_r;  // read only by the reader thread
     std::atomic<bool> alive{true};
 };
 
+// Shared with every reader thread, which are detached: a reader can
+// still be pushing its last notes after ~Console, so the state it pushes
+// into has to outlive the Console that created it.
 struct Console::Impl {
     std::mutex mu;
     std::uint64_t next_id = 1;
@@ -47,26 +57,24 @@ std::wstring resolve_cmd_path() {
 
 }  // namespace
 
-Console::Console() : impl_(new Impl) {}
+Console::Console() : impl_(std::make_shared<Impl>()) {}
 
 Console::~Console() {
+    std::unordered_map<std::string, std::shared_ptr<Session>> sessions;
     {
-        std::lock_guard<std::mutex> lock(impl_->mu);
-        for (auto& kv : impl_->sessions) {
-            auto& s = kv.second;
-            s->alive.store(false);
-            if (s->process != nullptr) {
-                ::TerminateProcess(s->process, 1);
-            }
-            if (s->stdin_w != nullptr) ::CloseHandle(s->stdin_w);
-            if (s->stdout_r != nullptr) ::CloseHandle(s->stdout_r);
-        }
+        const std::lock_guard<std::mutex> lock(impl_->mu);
+        sessions.swap(impl_->sessions);
     }
-    // Threads detect alive=false on next ReadFile completion. We
-    // don't join them here — they're detached lambdas that clean
-    // themselves up. The process handle is already closed by
-    // TerminateProcess + the reader's CloseHandle.
-    delete impl_;
+    // Killing the process breaks its end of the stdout pipe, so each
+    // reader's ReadFile returns, it posts its Closed note into the Impl
+    // it co-owns, and the last reference to the session closes the
+    // handles. Nothing to join: the readers are detached and need
+    // nothing from this object.
+    for (auto& [sid, sess] : sessions) {
+        sess->alive.store(false);
+        ::TerminateProcess(sess->process.get(), 1);
+        sess->stdin_w.reset();
+    }
 }
 
 std::string Console::open() {
@@ -75,64 +83,51 @@ std::string Console::open() {
     sa.bInheritHandle = TRUE;
     sa.lpSecurityDescriptor = nullptr;
 
-    HANDLE stdin_r = nullptr;
-    HANDLE stdin_w = nullptr;
-    HANDLE stdout_r = nullptr;
-    HANDLE stdout_w = nullptr;
-    if (!::CreatePipe(&stdin_r, &stdin_w, &sa, 0)) {
-        LSW_AGENT_ERROR(std::string{"console: stdin CreatePipe failed err="}
-                        + std::to_string(::GetLastError()));
+    win::UniqueHandle stdin_r;
+    win::UniqueHandle stdin_w;
+    win::UniqueHandle stdout_r;
+    win::UniqueHandle stdout_w;
+    if (!::CreatePipe(stdin_r.put(), stdin_w.put(), &sa, 0)) {
+        LSW_AGENT_ERROR("console: stdin CreatePipe failed err={}", win::ErrorText::last_error());
         return {};
     }
-    if (!::CreatePipe(&stdout_r, &stdout_w, &sa, 0)) {
-        LSW_AGENT_ERROR(std::string{"console: stdout CreatePipe failed err="}
-                        + std::to_string(::GetLastError()));
-        ::CloseHandle(stdin_r);
-        ::CloseHandle(stdin_w);
+    if (!::CreatePipe(stdout_r.put(), stdout_w.put(), &sa, 0)) {
+        LSW_AGENT_ERROR("console: stdout CreatePipe failed err={}", win::ErrorText::last_error());
         return {};
     }
     // The child inherits the read end of stdin and the write end of
     // stdout; we keep the opposite ends to talk to it.
-    ::SetHandleInformation(stdin_w, HANDLE_FLAG_INHERIT, 0);
-    ::SetHandleInformation(stdout_r, HANDLE_FLAG_INHERIT, 0);
+    ::SetHandleInformation(stdin_w.get(), HANDLE_FLAG_INHERIT, 0);
+    ::SetHandleInformation(stdout_r.get(), HANDLE_FLAG_INHERIT, 0);
 
-    STARTUPINFOW si{};
-    si.cb = sizeof(si);
-    si.dwFlags = STARTF_USESTDHANDLES;
-    si.hStdInput = stdin_r;
-    si.hStdOutput = stdout_w;
-    si.hStdError = stdout_w;
-
-    std::wstring cmd_path = resolve_cmd_path();
-    // CreateProcessW writes through the cmdline buffer.
-    std::wstring cmdline = L"\"" + cmd_path + L"\" /Q";
-    std::vector<wchar_t> mut(cmdline.begin(), cmdline.end());
-    mut.push_back(L'\0');
-
-    PROCESS_INFORMATION pi{};
+    win::SpawnOptions options;
+    options.application = resolve_cmd_path();
+    options.command_line = win::Process::quote(options.application) + L" /Q";
     // CREATE_NO_WINDOW so cmd.exe doesn't briefly flash a console
     // window. The child runs without a console of its own — fine for
     // pipe I/O.
-    const BOOL ok = ::CreateProcessW(cmd_path.c_str(), mut.data(), nullptr, nullptr,
-                                       TRUE, CREATE_NO_WINDOW, nullptr, nullptr,
-                                       &si, &pi);
-    // Whether spawn succeeded or not, we no longer need the child's
-    // ends locally.
-    ::CloseHandle(stdin_r);
-    ::CloseHandle(stdout_w);
-    if (!ok) {
-        LSW_AGENT_ERROR(std::string{"console: CreateProcess(cmd.exe) failed err="}
-                        + std::to_string(::GetLastError()));
-        ::CloseHandle(stdin_w);
-        ::CloseHandle(stdout_r);
+    options.creation_flags = CREATE_NO_WINDOW;
+    options.inherit_handles = true;
+    options.std_input = stdin_r.get();
+    options.std_output = stdout_w.get();
+    options.std_error = stdout_w.get();
+    DWORD error = 0;
+    auto spawned = win::Process::spawn(options, &error);
+    if (!spawned) {
+        LSW_AGENT_ERROR("console: CreateProcess(cmd.exe) failed err={}",
+                        win::ErrorText::win32(error));
         return {};
     }
-    ::CloseHandle(pi.hThread);
+    // The child has its own copies of these now. Ours must go, or the
+    // stdout pipe never reports EOF when the child exits — this process
+    // would still hold a write end.
+    stdin_r.reset();
+    stdout_w.reset();
 
     auto sess = std::make_shared<Session>();
-    sess->process = pi.hProcess;
-    sess->stdin_w = stdin_w;
-    sess->stdout_r = stdout_r;
+    sess->process = std::move(spawned->process);
+    sess->stdin_w = std::move(stdin_w);
+    sess->stdout_r = std::move(stdout_r);
 
     std::string sid;
     {
@@ -141,16 +136,15 @@ std::string Console::open() {
         impl_->sessions[sid] = sess;
     }
 
-    // Reader thread: drains stdout_r until EOF (cmd.exe exits) or
-    // alive flips. Output goes into the pending queue, drained by
+    // Reader thread: drains stdout_r until EOF (cmd.exe exits) or the
+    // pipe breaks. Output goes into the pending queue, drained by
     // collect_pending and pushed over the wire as console_output
     // events.
-    Impl* impl = impl_;
-    sess->reader = std::thread{[impl, sid, sess]() {
+    std::thread{[impl = impl_, sid, sess]() {
         std::uint8_t buf[4096];
         for (;;) {
             DWORD got = 0;
-            const BOOL r = ::ReadFile(sess->stdout_r, buf, sizeof(buf), &got, nullptr);
+            const BOOL r = ::ReadFile(sess->stdout_r.get(), buf, sizeof(buf), &got, nullptr);
             if (!r || got == 0) {
                 break;  // EOF (child exited) or pipe broken
             }
@@ -160,10 +154,8 @@ std::string Console::open() {
         }
         // Process exit code + final "Closed" notification.
         DWORD exit_code = 0;
-        if (sess->process != nullptr) {
-            ::WaitForSingleObject(sess->process, 5000);
-            ::GetExitCodeProcess(sess->process, &exit_code);
-        }
+        ::WaitForSingleObject(sess->process.get(), 5000);
+        ::GetExitCodeProcess(sess->process.get(), &exit_code);
         std::lock_guard<std::mutex> lock(impl->mu);
         Console::Note done;
         done.kind = Console::Kind::Closed;
@@ -171,11 +163,9 @@ std::string Console::open() {
         done.exit_code = static_cast<int>(exit_code);
         impl->pending.push_back(std::move(done));
         sess->alive.store(false);
-    }};
-    sess->reader.detach();
+    }}.detach();
 
-    LSW_AGENT_INFO(std::string{"console: session "} + sid + " opened pid="
-                   + std::to_string(pi.dwProcessId));
+    LSW_AGENT_INFO("console: session {} opened pid={}", sid, spawned->pid);
     return sid;
 }
 
@@ -184,15 +174,16 @@ bool Console::write(const std::string& sid, const std::string& data) {
     {
         std::lock_guard<std::mutex> lock(impl_->mu);
         const auto it = impl_->sessions.find(sid);
-        if (it == impl_->sessions.end()) return false;
+        if (it == impl_->sessions.end())
+            return false;
         sess = it->second;
     }
-    if (!sess->alive.load()) return false;
+    if (!sess->alive.load())
+        return false;
     DWORD wrote = 0;
-    if (!::WriteFile(sess->stdin_w, data.data(),
-                      static_cast<DWORD>(data.size()), &wrote, nullptr)) {
-        LSW_AGENT_WARN(std::string{"console: write to "} + sid
-                       + " failed err=" + std::to_string(::GetLastError()));
+    if (!::WriteFile(sess->stdin_w.get(), data.data(), static_cast<DWORD>(data.size()), &wrote,
+                     nullptr)) {
+        LSW_AGENT_WARN("console: write to {} failed err={}", sid, win::ErrorText::last_error());
         return false;
     }
     return true;
@@ -203,26 +194,23 @@ void Console::close(const std::string& sid) {
     {
         std::lock_guard<std::mutex> lock(impl_->mu);
         const auto it = impl_->sessions.find(sid);
-        if (it == impl_->sessions.end()) return;
+        if (it == impl_->sessions.end())
+            return;
         sess = it->second;
         impl_->sessions.erase(it);
     }
     sess->alive.store(false);
-    if (sess->stdin_w != nullptr) {
-        // Closing stdin_w lets cmd.exe see EOF on stdin and exit
-        // naturally. If it doesn't (e.g. mid-command), the
-        // TerminateProcess below ensures cleanup.
-        ::CloseHandle(sess->stdin_w);
-        sess->stdin_w = nullptr;
+    // Closing stdin_w lets cmd.exe see EOF on stdin and exit naturally.
+    // If it doesn't (e.g. mid-command), the TerminateProcess below
+    // ensures cleanup. The process and stdout handles stay with the
+    // reader thread, which closes them once the pipe reports the exit.
+    sess->stdin_w.reset();
+    // 100 ms grace, then force-kill. cmd.exe responds to stdin EOF
+    // quickly so this rarely fires.
+    if (::WaitForSingleObject(sess->process.get(), 100) == WAIT_TIMEOUT) {
+        ::TerminateProcess(sess->process.get(), 1);
     }
-    if (sess->process != nullptr) {
-        // 100 ms grace, then force-kill. cmd.exe responds to stdin
-        // EOF quickly so this rarely fires.
-        if (::WaitForSingleObject(sess->process, 100) == WAIT_TIMEOUT) {
-            ::TerminateProcess(sess->process, 1);
-        }
-    }
-    LSW_AGENT_INFO(std::string{"console: session "} + sid + " closed");
+    LSW_AGENT_INFO("console: session {} closed", sid);
 }
 
 std::vector<Console::Note> Console::collect_pending() {

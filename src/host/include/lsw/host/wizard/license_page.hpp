@@ -1,13 +1,14 @@
 #pragma once
 
+#include "lsw/host/wizard/wizard_page.hpp"
+
 #include <QCheckBox>
-#include <QWizardPage>
 
 namespace lsw::host::wizard {
 
 // Step 2: shows a brief Windows license blurb pointing to Microsoft's
 // EULA URL; user must check ``I accept`` to proceed (page completes).
-class LicensePage : public QWizardPage {
+class LicensePage : public WizardPage {
     Q_OBJECT
 public:
     explicit LicensePage(QWidget* parent = nullptr);

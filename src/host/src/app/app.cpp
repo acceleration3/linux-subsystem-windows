@@ -2,13 +2,23 @@
 
 #include "lsw/base/log.hpp"
 #include "lsw/host/app/unattended_runner.hpp"
-#include "lsw/host/apps/desktop_launcher.hpp"
 #include "lsw/host/manager/guest_app_launch_controller.hpp"
+#include "lsw/host/manager/app_config_dialog.hpp"
+#include "lsw/host/manager/launch_splash.hpp"
 #include "lsw/host/manager/main_window.hpp"
+#include "lsw/host/manager/remote_file_dialog.hpp"
+#include "lsw/host/tools/download_image_dialog.hpp"
+#include "lsw/host/tools/trim_image_dialog.hpp"
 #include "lsw/host/mcp/mcp_server.hpp"
+#include "lsw/host/ui/theme.hpp"
+#include "lsw/host/ui/widgets.hpp"
 #include "lsw/host/vm/domain_importer.hpp"
+#include "lsw/host/wizard/payload_page.hpp"
+#include "lsw/host/wizard/setup_page.hpp"
 #include "lsw/host/wizard/wizard.hpp"
 
+#include <QDir>
+#include <QIcon>
 #include <QMetaObject>
 #include <QProcess>
 
@@ -20,13 +30,20 @@ App::App(int& argc, char** argv)
     setOrganizationName("lsw");
     setOrganizationDomain("lsw");
 
+    // Before any window exists, so the wizard and the manager and every
+    // dialog either of them opens are all wearing it from their first
+    // paint. Widgets carry object names, not stylesheets of their own.
+    ui::Theme::apply();
+
     // Sync the host's XDG menu with whatever app configs are already on
     // disk — covers opening a .desktop entry that has been there a while
     // without first opening the manager UI.
+    // Through the services rather than straight at DesktopLauncher, so
+    // the category, the publish switch and the file-type handlers are
+    // all applied from settings on the same pass.
     auto& configs = services_.app_configs();
-    apps::DesktopLauncher::sync(configs.configs());
     connect(&configs, &apps::AppConfigStore::changed, this,
-            [this] { apps::DesktopLauncher::sync(services_.app_configs().configs()); });
+            [this] { services_.apply_integrations(); });
 
     // Turned OFF only once a real, tray-backed main window is up (see
     // ``show_main_window``). During the wizard phase we keep it ON so
@@ -46,6 +63,16 @@ manager::GuestAppLaunchController& App::launch_controller() {
     if (launch_controller_ == nullptr) {
         launch_controller_ =
             std::make_unique<manager::GuestAppLaunchController>(services_, this);
+        // The splash offers the log when a guest goes quiet during a
+        // launch, and the log lives in the manager window, which this
+        // path deliberately never shows on its own.
+        connect(launch_controller_.get(),
+                &manager::GuestAppLaunchController::log_requested, this, [this] {
+                    show_main_window();
+                    if (main_window_ != nullptr) {
+                        main_window_->show_page(manager::NavRail::Page::Log);
+                    }
+                });
     }
     return *launch_controller_;
 }
@@ -70,6 +97,15 @@ bool App::forward_to_primary() {
 }
 
 int App::run() {
+    // Before the single-instance check: a screenshot run must not
+    // forward itself to whatever manager happens to be open, and it
+    // owns nothing another one would mind.
+    if (!cli_.screenshot_dir.isEmpty()) {
+        (void)services_.open();
+        (void)vm::DomainImporter::import_existing(services_.libvirt(),
+                                                  services_.settings(), services_.vms());
+        return capture_screens(cli_.screenshot_dir);
+    }
     if (forward_to_primary()) {
         return 0;
     }
@@ -87,7 +123,7 @@ int App::run() {
         unattended_ = std::make_unique<UnattendedRunner>(services_, cli_, this);
         connect(unattended_.get(), &UnattendedRunner::finished, this, &App::exit);
         unattended_->start();
-    } else if (services_.settings().is_first_run() || services_.vms().records().isEmpty()) {
+    } else if (services_.settings().is_first_run() || services_.vms().primary() == nullptr) {
         // Wizard mode: no MCP server — there is no provisioned app to
         // drive yet, and binding the port now would deny it to the
         // manager process the wizard spawns on completion.
@@ -108,23 +144,115 @@ int App::run() {
     return exec();
 }
 
+int App::capture_screens(const QString& dir) {
+    QDir().mkpath(dir);
+    int saved = 0;
+
+    const auto shoot = [&](QWidget* widget, const QString& name) {
+        // Show it, let the layout settle, grab it. Offscreen is enough:
+        // the grab renders the widget itself rather than reading a
+        // framebuffer, so no display server is needed to see what the
+        // stylesheet did.
+        widget->show();
+        for (int i = 0; i < 4; ++i) {
+            processEvents(QEventLoop::AllEvents, 50);
+        }
+        const QString path = QDir(dir).filePath(name + QStringLiteral(".png"));
+        if (widget->grab().save(path)) {
+            ++saved;
+            LSW_INFO("screenshot: {}", path.toStdString());
+        } else {
+            LSW_WARN("screenshot: could not write {}", path.toStdString());
+        }
+    };
+
+    auto* window = new manager::MainWindow(services_);
+    window->resize(1000, 620);
+    static constexpr struct {
+        manager::NavRail::Page page;
+        const char* name;
+    } kPages[] = {
+        {manager::NavRail::Page::Overview, "manager-01-overview"},
+        {manager::NavRail::Page::Console, "manager-02-console"},
+        {manager::NavRail::Page::Log, "manager-03-log"},
+        {manager::NavRail::Page::Render, "manager-04-render"},
+        {manager::NavRail::Page::Settings, "manager-05-settings"},
+    };
+    for (const auto& entry : kPages) {
+        window->show_page(entry.page);
+        shoot(window, QString::fromLatin1(entry.name));
+    }
+    window->deleteLater();
+
+    // The dialogs, too. They are where most of the controls live, and a
+    // screenshot set that skips them checks the easy half.
+    {
+        tools::DownloadImageDialog download{services_.settings()};
+        download.resize(620, 620);
+        shoot(&download, QStringLiteral("dialog-1-download"));
+
+        tools::TrimImageDialog trim{services_.settings(), QString{}, 1};
+        trim.resize(620, 720);
+        shoot(&trim, QStringLiteral("dialog-2-trim"));
+
+        apps::AppConfig sample;
+        sample.name = QStringLiteral("Photoshop 2024");
+        sample.path = QStringLiteral("C:\\Program Files\\Adobe\\Photoshop.exe");
+        manager::AppConfigDialog config{sample, services_.rpc()};
+        config.resize(560, 520);
+        shoot(&config, QStringLiteral("dialog-3-application"));
+
+        manager::RemoteFileDialog picker{services_.rpc(),
+                                         manager::RemoteFileDialog::Mode::Program};
+        shoot(&picker, QStringLiteral("dialog-4-browse"));
+
+        manager::LaunchSplash splash{QStringLiteral("Photoshop 2024"), QIcon{}};
+        splash.reach(manager::LaunchSplash::Phase::MachineStarted);
+        shoot(&splash, QStringLiteral("dialog-5-starting"));
+    }
+
+    auto* wiz = new wizard::Wizard(services_);
+    wiz->resize(880, 620);
+    for (int id = wizard::Wizard::Welcome; id <= wizard::Wizard::Done; ++id) {
+        // Straight to the page rather than through next(): the later
+        // ones validate inputs the earlier ones collect, and this is a
+        // picture of a page, not a run of the wizard.
+        wiz->setStartId(id);
+        wiz->restart();
+        // Two pages are tables the pipeline fills, and there is no
+        // pipeline here. An empty table is a picture of nothing, so
+        // they are asked for a plausible run instead.
+        if (auto* payload = qobject_cast<wizard::PayloadPage*>(wiz->currentPage())) {
+            payload->demo_fill();
+        }
+        if (auto* setup = qobject_cast<wizard::SetupPage*>(wiz->currentPage())) {
+            setup->demo_fill();
+        }
+        shoot(wiz, QStringLiteral("wizard-%1-page").arg(id + 1, 2, 10, QLatin1Char('0')));
+    }
+    wiz->deleteLater();
+
+    LSW_INFO("screenshot: {} images written to {}", saved, dir.toStdString());
+    return saved > 0 ? 0 : 1;
+}
+
 void App::show_wizard() {
     if (wizard_ == nullptr) {
         wizard_ = new wizard::Wizard(services_);
         connect(wizard_, &wizard::Wizard::complete, this, &App::on_wizard_complete);
     }
-    wizard_->show();
-    wizard_->raise();
-    wizard_->activateWindow();
+    ui::Widgets::bring_to_front(wizard_);
 }
 
 void App::show_main_window() {
     if (main_window_ == nullptr) {
         main_window_ = new manager::MainWindow(services_);
+        // A manager opened on a machine with no guest offers the wizard,
+        // which is the application's flow rather than the window's.
+        connect(main_window_, &manager::MainWindow::wizard_requested, this,
+                &App::show_wizard);
     }
-    main_window_->show();
-    main_window_->raise();
-    main_window_->activateWindow();
+    ui::Widgets::bring_to_front(main_window_);
 }
 
 void App::start_mcp_server() {
@@ -175,9 +303,7 @@ void App::on_raise_request() {
     if (w == nullptr) {
         return;
     }
-    w->show();
-    w->raise();
-    w->activateWindow();
+    ui::Widgets::bring_to_front(w);
 }
 
 void App::on_launch_app_request(const QString& app_id) {

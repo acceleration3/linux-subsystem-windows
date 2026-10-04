@@ -1,11 +1,11 @@
 #include "lsw/host/provision/install/windows_iso_builder.hpp"
 
 #include "lsw/base/log.hpp"
+#include "lsw/host/provision/install/seven_zip.hpp"
 
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
-#include <QProcess>
 
 // We don't link libburn — tell libisofs to expose its own copy of
 // ``struct burn_source`` rather than forward-declaring the libburn one.
@@ -41,38 +41,29 @@ constexpr short kBiosLoadSectors = 8;
 constexpr qint64 kSwmPartBytes = 3800LL * 1024 * 1024;  // NOLINT: qint64 literal
 
 [[nodiscard]] bool unpack_iso(const QString& iso_path, const QString& dir, QString* error_out) {
-    QProcess seven_zip;
     // ``x`` and not ``e``: the tree's shape is the media's shape, and
-    // flattening it loses the boot paths above.
-    seven_zip.start(QStringLiteral("7z"),
-                    {QStringLiteral("x"), QStringLiteral("-y"), QStringLiteral("-bso0"),
-                     QStringLiteral("-bsp0"), iso_path, QStringLiteral("-o%1").arg(dir)});
-    if (!seven_zip.waitForStarted(5000)) {
-        if (error_out != nullptr) {
-            *error_out = QStringLiteral("7z did not start (is it installed?)");
-        }
-        return false;
-    }
-    // Unpacking most of a 6 GiB ISO onto a slow disk.
-    if (!seven_zip.waitForFinished(1800000) || seven_zip.exitStatus() != QProcess::NormalExit
-        || seven_zip.exitCode() != 0) {
-        if (error_out != nullptr) {
-            *error_out = QStringLiteral("7z could not unpack %1 (exit %2)")
-                             .arg(iso_path)
-                             .arg(seven_zip.exitCode());
-        }
-        return false;
-    }
-    return true;
+    // flattening it loses the boot paths above. The timeout is for
+    // unpacking most of a 6 GiB ISO onto a slow disk.
+    return run_seven_zip({QStringLiteral("x"), QStringLiteral("-y"), QStringLiteral("-bso0"),
+                          QStringLiteral("-bsp0"), iso_path, QStringLiteral("-o%1").arg(dir)},
+                         1800000, error_out);
 }
 
 // Put the trimmed image into the unpacked tree, splitting it if
 // ISO9660 cannot hold it whole.
 [[nodiscard]] bool place_image(const QString& trimmed_wim, const QString& sources_dir,
                                QString* error_out) {
-    // Whatever the media shipped goes first, whichever form it was in.
-    for (const char* name : {"install.wim", "install.esd"}) {
-        QFile::remove(QDir(sources_dir).filePath(QLatin1String(name)));
+    // Whatever the media shipped goes first, whichever form it was in —
+    // the numbered .swm parts of a split one included. Media that was
+    // itself built here arrives split, and a part left behind is both a
+    // stale gigabyte on the new ISO and a second answer to the question
+    // Setup asks when it goes looking for the image.
+    QDir sources{sources_dir};
+    for (const QString& name :
+         sources.entryList({QStringLiteral("install.wim"), QStringLiteral("install.esd"),
+                            QStringLiteral("install*.swm")},
+                           QDir::Files)) {
+        QFile::remove(sources.filePath(name));
     }
 
     const qint64 size = QFileInfo(trimmed_wim).size();

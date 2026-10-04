@@ -6,11 +6,17 @@
 # no spdlog, no POSIX, no Win32.
 #
 # It owns everything the manager and the guest agent must agree on:
-#   envelope.hpp     the [type][len][payload] framing
-#   byte_order.hpp   the big-endian codecs that framing uses
-#   frame_reader.hpp stream reassembly (both ends run the same loop)
-#   frame_ring.hpp   the IVSHMEM frame-ring layout, offsets static_asserted
-#   commands.hpp     the RPC command names and event topics
+#   envelope.hpp      the [type][len][payload] framing, and the agent's port
+#   byte_order.hpp    the big-endian codecs that framing uses
+#   frame_reader.hpp  stream reassembly (both ends run the same loop)
+#   commands.hpp      the RPC command names and event topics
+#   region.hpp        the IVSHMEM region header and channel table
+#   region_layout.hpp where each channel goes, as a function of region size
+#   byte_ring.hpp     the SPSC message ring a duplex channel is made of
+#   region_fence.hpp  the fences write-combined shared memory needs
+#   field.hpp         memcpy loads and stores for shared-memory fields
+#
+# The prose specification is docs/link-protocol.md.
 #
 # Membership rule: if one side could change it unilaterally and still
 # compile, it does not belong here.

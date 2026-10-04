@@ -1,0 +1,13 @@
+<!DOCTYPE RCC>
+<!-- The images the stylesheet needs.
+
+     A combo box that a stylesheet has touched draws its own arrow or
+     none at all, and the only arrow a stylesheet can name is an image.
+     So the caret is one, in the binary, rather than a triangle made out
+     of borders that Qt renders as a filled box. -->
+<RCC version="1.0">
+  <qresource prefix="/lsw">
+    <file>caret.png</file>
+    <file>caret-disabled.png</file>
+  </qresource>
+</RCC>

@@ -18,11 +18,12 @@
 #include <iphlpapi.h>
 #include <windows.h>
 #include <sysinfoapi.h>
+// Includes <windows.h> itself, so it goes after the WinSock headers too.
+#include "lsw/agent/win/file_time.hpp"
 // clang-format on
 
 #include <atomic>
 #include <cstdint>
-
 #include <nlohmann/json.hpp>
 
 namespace lsw::agent::system {
@@ -36,17 +37,10 @@ namespace {
 // Stored as a packed 128-bit "snapshot" inside two atomics so the
 // stats-poll path can update without taking a mutex. ``valid`` tells
 // the next call whether the previous sample is usable.
-std::atomic<bool>          g_cpu_baseline_valid{false};
+std::atomic<bool> g_cpu_baseline_valid{false};
 std::atomic<std::uint64_t> g_cpu_last_idle_100ns{0};
 std::atomic<std::uint64_t> g_cpu_last_kernel_100ns{0};
 std::atomic<std::uint64_t> g_cpu_last_user_100ns{0};
-
-// FILETIME is a 64-bit count of 100-nanosecond intervals. Combine
-// the dwLowDateTime / dwHighDateTime halves into one ``uint64``.
-[[nodiscard]] std::uint64_t filetime_to_u64(const FILETIME& ft) {
-    return (static_cast<std::uint64_t>(ft.dwHighDateTime) << 32)
-         |  static_cast<std::uint64_t>(ft.dwLowDateTime);
-}
 
 // Sample GetSystemTimes; compute CPU% relative to the prior sample.
 // Returns an int in [0, 100]. First call returns 0 (no baseline).
@@ -57,9 +51,9 @@ std::atomic<std::uint64_t> g_cpu_last_user_100ns{0};
     if (::GetSystemTimes(&idle, &kernel, &user) == 0) {
         return 0;
     }
-    const auto idle_now = filetime_to_u64(idle);
-    const auto kernel_now = filetime_to_u64(kernel);
-    const auto user_now = filetime_to_u64(user);
+    const auto idle_now = win::FileTime::to_u64(idle);
+    const auto kernel_now = win::FileTime::to_u64(kernel);
+    const auto user_now = win::FileTime::to_u64(user);
 
     int pct = 0;
     if (g_cpu_baseline_valid.load(std::memory_order_acquire)) {
@@ -75,8 +69,10 @@ std::atomic<std::uint64_t> g_cpu_last_user_100ns{0};
         if (total > 0 && total >= idle_delta) {
             const std::uint64_t busy = total - idle_delta;
             pct = static_cast<int>((busy * 100ULL) / total);
-            if (pct > 100) pct = 100;
-            if (pct < 0)   pct = 0;
+            if (pct > 100)
+                pct = 100;
+            if (pct < 0)
+                pct = 0;
         }
     }
     g_cpu_last_idle_100ns.store(idle_now, std::memory_order_relaxed);
@@ -124,7 +120,7 @@ std::string get_primary_ipv4() {
 
 }  // namespace
 
-std::string Info::collect_json() {
+nlohmann::json Info::collect() {
     LSW_AGENT_DEBUG("system_info: collecting");
     MEMORYSTATUSEX ms{};
     ms.dwLength = sizeof(ms);
@@ -164,13 +160,11 @@ std::string Info::collect_json() {
     // differ from what the previous agent reported before the script
     // killed it.
     j["agent_version"] = LSW_BUILD_STAMP;
-    LSW_AGENT_INFO(std::string{"system_info: hostname="} + hostname + " ipv4=" + ipv4
-                   + " mem_total=" + std::to_string(ms.ullTotalPhys >> 20) + "MiB"
-                   + " mem_avail=" + std::to_string(ms.ullAvailPhys >> 20) + "MiB"
-                   + " cpu=" + std::to_string(cpu_pct) + "%"
-                   + " disk_total=" + std::to_string(disk_total.QuadPart >> 30) + "GiB"
-                   + " disk_avail=" + std::to_string(disk_free.QuadPart >> 30) + "GiB");
-    return j.dump();
+    LSW_AGENT_INFO("system_info: hostname={} ipv4={} mem_total={}MiB mem_avail={}MiB cpu={}% "
+                   "disk_total={}GiB disk_avail={}GiB",
+                   hostname, ipv4, ms.ullTotalPhys >> 20, ms.ullAvailPhys >> 20, cpu_pct,
+                   disk_total.QuadPart >> 30, disk_free.QuadPart >> 30);
+    return j;
 }
 
 }  // namespace lsw::agent::system

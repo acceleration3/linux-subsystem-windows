@@ -1,7 +1,9 @@
 #include "lsw/host/mcp/tools/launch_tool.hpp"
 
-#include "lsw/host/mcp/agent_command.hpp"
+#include "lsw/host/link/agent_reply.hpp"
+#include "lsw/host/link/agent_rpc_client.hpp"
 #include "lsw/host/mcp/json_schema.hpp"
+#include "lsw/host/mcp/tool_args.hpp"
 #include "lsw/host/mcp/tool_result.hpp"
 
 #include "lsw/linkproto/commands.hpp"
@@ -21,12 +23,12 @@ nlohmann::json LaunchTool::input_schema() const {
 }
 
 nlohmann::json LaunchTool::call(const nlohmann::json& args) {
-    const auto app_id = args.value("app_id", std::string{});
+    const ToolArgs in{name(), args};
+    const auto app_id = in.string("app_id");
     if (app_id.empty()) {
-        return ToolResult::error("launch: missing app_id");
+        return in.missing("app_id");
     }
-    const auto r = agent_.invoke(linkproto::cmd::kLaunch, {{"app_id", app_id}});
-    return r.ok ? ToolResult::json_body(r.body) : ToolResult::error(r.error);
+    return ToolResult::from_reply(agent_.request(linkproto::cmd::kLaunch, {{"app_id", app_id}}));
 }
 
 }  // namespace lsw::host::mcp

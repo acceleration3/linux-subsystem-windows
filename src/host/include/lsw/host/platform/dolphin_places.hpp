@@ -32,8 +32,15 @@ public:
     // Adds an ``smb://<username>:<password>@127.0.0.1:5445/C$``
     // bookmark titled "Windows" to user-places.xbel. Idempotent.
     // Returns true on success (or when the entry already exists).
-    [[nodiscard]] static bool register_windows_bookmark(
-        const QString& username, const QString& password);
+    [[nodiscard]] static bool register_windows_bookmark(const QString& username,
+                                                        const QString& password,
+                                                        const QString& share
+                                                        = QStringLiteral("C$"));
+
+    // Takes it out again, for when the setting is turned off. A
+    // bookmark that outlives the thing it points at is worse than never
+    // having written one.
+    static void remove_windows_bookmark();
 };
 
 }  // namespace lsw::host::platform

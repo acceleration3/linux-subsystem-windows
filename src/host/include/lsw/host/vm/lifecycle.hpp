@@ -1,16 +1,15 @@
 #pragma once
 
 #include "lsw/host/config/vm_state.hpp"
+#include "lsw/host/vm/domain_handle.hpp"
 #include "lsw/host/vm/domain_xml_builder.hpp"
 #include "lsw/host/vm/ivshmem_server.hpp"
-#include "lsw/host/vm/domain_handle.hpp"
 #include "lsw/host/vm/libvirt_connection.hpp"
 #include "lsw/host/vm/render_server.hpp"
 #include "lsw/host/vm/shmem_region.hpp"
 
 #include <QObject>
 #include <QUuid>
-
 #include <memory>
 #include <unordered_map>
 
@@ -48,6 +47,18 @@ public:
     // attached before starting. See the note in the implementation.
     [[nodiscard]] int start(const QUuid& uuid, bool first_boot_done = false);
 
+    // Rewrite the persisted domain XML for a VM that already exists,
+    // without starting it.
+    //
+    // Settings like cores, memory and the shared folders are not
+    // properties of a running machine and cannot be told to one: they
+    // are the domain definition. The manager stops the guest, calls
+    // this, and starts it again, which is the whole of what "apply and
+    // restart" means. Kept separate from ``define_and_start`` because
+    // that one also brings the shared-memory region up, and a redefine
+    // must not disturb a region a guest may still be holding.
+    [[nodiscard]] int redefine(const config::VmRecord& vm, const DomainXmlInputs& inputs);
+
     // ACPI shutdown request (``virDomainShutdown``). The guest may
     // ignore — pair with a UI timeout that escalates to ``destroy``.
     [[nodiscard]] int shutdown(const QUuid& uuid);
@@ -73,8 +84,10 @@ public:
     // the vda virtio-blk system disk are untouched, so this carries
     // none of the controller-swap INACCESSIBLE_BOOT_DEVICE risk.
     // Applied LIVE+CONFIG when running, CONFIG-only otherwise.
-    // Best-effort: a missing/already-empty drive is not an error.
-    [[nodiscard]] int eject_install_media(const QUuid& uuid);
+    // Best-effort: a missing/already-empty drive is not an error, and
+    // neither is a missing domain, so there is nothing to return —
+    // each drive's outcome is logged.
+    void eject_install_media(const QUuid& uuid);
 
     // Live ShmemRegion / IvshmemServer for ``uuid`` (the WGC capture
     // transport). Non-null only while the VM is running. The manager's
@@ -106,6 +119,12 @@ Q_SIGNALS:
     void shmem_ready(const QUuid& uuid);
     void shmem_gone(const QUuid& uuid);
 
+    // Forwarded from whichever render server is running. The manager
+    // parses its congestion warnings out of these; the server has been
+    // counting stalls and recommending sizes all along, into a log
+    // nobody read.
+    void render_server_logged(const QString& line);
+
 private:
     struct ShmemBundle {
         std::unique_ptr<ShmemRegion> region;
@@ -115,17 +134,20 @@ private:
         // the region is: the name is derived from the UUID.
         std::unique_ptr<RenderServer> render;
     };
+
     [[nodiscard]] DomainHandle lookup(const QUuid& uuid) const;
     // Create + bind the per-VM region and server. Returns the socket
     // path (substituted into domain XML) or empty on failure.
     [[nodiscard]] QString ensure_shmem(const QUuid& uuid, int size_mib);
+    // A render server for ``uuid``, its log forwarded, already asked to
+    // start. Whether it did is not checked: see the implementation.
+    [[nodiscard]] std::unique_ptr<RenderServer> make_render_server(const QUuid& uuid);
     void teardown_shmem(const QUuid& uuid);
 
     struct QUuidHash {
-        std::size_t operator()(const QUuid& u) const noexcept {
-            return qHash(u);
-        }
+        std::size_t operator()(const QUuid& u) const noexcept { return qHash(u); }
     };
+
     LibvirtConnection& conn_;
     std::unordered_map<QUuid, ShmemBundle, QUuidHash> shmem_;
 };

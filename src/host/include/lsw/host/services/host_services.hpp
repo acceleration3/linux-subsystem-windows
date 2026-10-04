@@ -2,6 +2,8 @@
 
 #include "lsw/host/apps/app_config_store.hpp"
 #include "lsw/host/apps/log_store.hpp"
+#include "lsw/host/config/manager_settings.hpp"
+#include "lsw/host/config/pending_changes.hpp"
 #include "lsw/host/config/settings.hpp"
 #include "lsw/host/config/vm_state.hpp"
 #include "lsw/host/link/agent_guest_stats_probe.hpp"
@@ -9,6 +11,7 @@
 #include "lsw/host/vm/libvirt_connection.hpp"
 #include "lsw/host/vm/lifecycle.hpp"
 #include "lsw/host/vm/monitor.hpp"
+#include "lsw/host/vm/render_stats.hpp"
 
 #include <QObject>
 
@@ -60,8 +63,48 @@ public:
     [[nodiscard]] apps::AppConfigStore& app_configs() noexcept { return app_configs_; }
     [[nodiscard]] apps::LogStore& log_store() noexcept { return log_store_; }
 
+    // Everything the settings page reads and writes, plus what has been
+    // edited and not yet applied. Shared, because the render page also
+    // stages sizes and the launcher reads the channel bindings.
+    [[nodiscard]] config::ManagerSettings& manager_settings() noexcept {
+        return manager_settings_;
+    }
+    [[nodiscard]] config::PendingChanges& pending_changes() noexcept {
+        return pending_changes_;
+    }
+    // What the render server is saying about its own congestion.
+    [[nodiscard]] vm::RenderStats& render_stats() noexcept { return render_stats_; }
+
+    // Point the agent channel at ``uuid``'s guest: its shared region
+    // first, so the first frame after connecting already routes through
+    // shared memory rather than the TCP envelope path, then the agent's
+    // port. False if there is no such VM.
+    bool bind_agent(const QUuid& uuid);
+
+    // Start ``uuid``'s domain. Whether the guest has booted before
+    // decides whether it should still be carrying the install media,
+    // which is where a VM provisioned before the eject existed gets
+    // noticed. Returns Lifecycle::start's code.
+    [[nodiscard]] int start_vm(const QUuid& uuid);
+
+    // Push the render-channel sizes from settings into RenderServer, so
+    // the next server started uses them. A running server keeps the
+    // sizes it was started with, which is why they are restart keys.
+    void apply_render_sizing();
+
+    // Push the desktop-entry and file-manager settings out to the
+    // places they actually live: the XDG applications directory, the
+    // menu fragment, and the two bookmark files. Called at startup and
+    // whenever one of those settings changes, so a toggle takes effect
+    // where the toggle says it does.
+    void apply_integrations();
+
 private:
     config::Settings settings_;
+    config::ManagerSettings manager_settings_;
+    // Declared after manager_settings_: it holds a reference to it.
+    config::PendingChanges pending_changes_;
+    vm::RenderStats render_stats_;
     config::VmState vms_;
     vm::LibvirtConnection libvirt_;
     vm::Lifecycle lifecycle_;

@@ -123,14 +123,41 @@ QStringList WimDebloater::children_not_keeping(void* wim, int image_index, const
     return doomed;
 }
 
-bool WimDebloater::isolate_edition(const QString& src_path, int image_index,
-                                   const QString& dest_path, QString* error_out) {
+bool WimDebloater::isolate_edition(const QString& src_path, const QStringList& extra_parts,
+                                   int image_index, const QString& dest_path,
+                                   QString* error_out) {
     WIMStruct* src = nullptr;
     if (const int rc = wimlib_open_wim(src_path.toUtf8().constData(), 0, &src); rc != 0) {
         if (error_out != nullptr) {
             *error_out = QStringLiteral("cannot open %1: %2").arg(src_path, wim_error(rc));
         }
         return false;
+    }
+    // A split image's metadata is all in part 1, so the open above
+    // succeeds and reports the edition perfectly well — and then the
+    // export below reads file data, most of which is in the parts that
+    // have not been mentioned yet. Hand them over before that happens.
+    if (!extra_parts.isEmpty()) {
+        std::vector<QByteArray> held;
+        std::vector<const char*> refs;
+        held.reserve(static_cast<std::size_t>(extra_parts.size()));
+        refs.reserve(static_cast<std::size_t>(extra_parts.size()));
+        for (const QString& part : extra_parts) {
+            held.push_back(part.toUtf8());
+            refs.push_back(held.back().constData());
+        }
+        if (const int rc = wimlib_reference_resource_files(
+                src, refs.data(), static_cast<unsigned>(refs.size()), 0, 0);
+            rc != 0) {
+            wimlib_free(src);
+            if (error_out != nullptr) {
+                *error_out = QStringLiteral("cannot read the other %1 parts of the split "
+                                            "image: %2")
+                                 .arg(extra_parts.size())
+                                 .arg(wim_error(rc));
+            }
+            return false;
+        }
     }
     WIMStruct* dest = nullptr;
     // LZX rather than the media's XPRESS: this file is written once on
