@@ -25,6 +25,10 @@ struct HostGpu {
     // does not offer the extension (or the device is not on PCI).
     QString pci_address;
     bool cpu = false;        // a software rasterizer such as llvmpipe
+    // A GPU sharing the processor's package. RADV names one after its
+    // processor, so the guest's adapter takes its name from elsewhere
+    // (provision::install::AdapterNames).
+    bool integrated = false;
 };
 
 // The host GPUs a guest adapter can run on.

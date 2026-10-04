@@ -50,6 +50,24 @@ That produces `lsw-guest-agent.exe` and `remotewin-guest.exe` under
 there. The GPU drivers are not part of it: they are built by the host
 build, with accel-virt's own toolchains.
 
+## Installing and releasing
+
+Every build tree installs its part with `cmake --install <tree>
+--component lsw` (the component keeps out what the fetched Vulkan-Loader
+would install of its own). Installed to one prefix, the host tree and
+the two cross trees make a working install: `bin/lsw-manager`, the
+private binaries and accel-virt's host half under `lib/lsw`, the guest
+files under `share/lsw/guest`. The manager finds each artifact through
+`platform::locate_build_artifact`: an environment override first, then
+the build tree beside its binary, then the installed tree beside its
+binary, so a staged `DESTDIR` works as it stands. It logs where it
+found each one at startup (`artifact:` lines).
+
+`scripts/package-release.sh` builds all three trees from scratch in
+`build-release/` and packs that install as
+`dist/lsw-<version>-x86_64.tar.zst`, which the AUR package in `aur/`
+(`lsw-bin`) installs; `aur/README.md` has the release procedure.
+
 ## Changing the GPU
 
 The kernel driver, the user-mode drivers, the QEMU device and the

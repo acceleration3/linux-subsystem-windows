@@ -15,8 +15,9 @@ public:
     AgentExePath() = delete;
 
     // ``$LSW_AGENT_EXE`` wins if it points at an existing file;
-    // otherwise the build-tree default relative to the manager binary.
-    // Empty when neither exists.
+    // otherwise the build tree's, then the installed one under
+    // share/lsw/guest, both relative to the manager binary. Empty when
+    // none exists.
     [[nodiscard]] static QString locate();
 };
 

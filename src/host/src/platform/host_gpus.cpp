@@ -81,6 +81,7 @@ HostGpu describe(VkPhysicalDevice device) {
     gpu.vendor_id = properties.properties.vendorID;
     gpu.device_id = properties.properties.deviceID;
     gpu.cpu = properties.properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_CPU;
+    gpu.integrated = properties.properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU;
     if (knows_driver) {
         gpu.driver = QString::fromUtf8(driver.driverName);
         gpu.driver_info = QString::fromUtf8(driver.driverInfo);

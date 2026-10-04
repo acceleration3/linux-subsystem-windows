@@ -62,6 +62,35 @@ if(LSW_BUILD_TESTS)
     enable_testing()
 endif()
 
+# ---- Install layout ----
+# What ``cmake --install <tree> --component lsw`` lays out under the
+# prefix. The three build trees (this host tree, the mingw x86_64 tree
+# and the i686 one, scripts/build-agent.sh) install into the same
+# prefix, each its own part:
+#
+#   bin/lsw-manager
+#   lib/lsw/remotewin                       the mirror's host half
+#   lib/lsw/accel-virt/qemu/                QEMU, its modules and data,
+#                                           the executor, av-renderer
+#   lib/lsw/accel-virt/d3d/                 DXVK and vkd3d-proton
+#   share/lsw/guest/                        the agent, remotewin-guest.exe,
+#                                           av-drivers/, loaders/x64|x86/
+#   share/applications/lsw-manager.desktop
+#   lib/modules-load.d/lsw.conf, lib/udev/rules.d/70-lsw-udmabuf.rules
+#
+# Literal directories rather than GNUInstallDirs: the manager finds all
+# of it relative to its own binary (platform::locate_build_artifact), so
+# the shape is fixed — a lib64 or a multiarch libdir would only move the
+# files away from where it looks. Relative to the prefix, so a DESTDIR
+# staging tree is a working install as it stands.
+#
+# A component of its own because the cross trees fetch Vulkan-Loader,
+# whose own install rules (headers, an import library, CMake config) are
+# in the default component and have no business in a package.
+set(LSW_INSTALL_COMPONENT lsw)
+set(LSW_INSTALL_LIBDIR   "lib/lsw")
+set(LSW_INSTALL_GUESTDIR "share/lsw/guest")
+
 # ---- Dependencies ----
 include(LSWDependencies)
 
@@ -96,6 +125,19 @@ if(LSW_BUILD_REMOTEWIN)
     # and it wants a Qt that a cross build has no reason to have.
     set(RWIN_BUILD_TESTS OFF CACHE BOOL "" FORCE)
     add_subdirectory("${LSW_REMOTEWIN_DIR}" remotewin)
+    # The host half is a private executable the manager spawns, so it
+    # goes beside the manager's other private files, not on PATH; the
+    # guest half is a file the payload ISO carries.
+    if(TARGET remotewin)
+        install(TARGETS remotewin
+                RUNTIME DESTINATION ${LSW_INSTALL_LIBDIR}
+                COMPONENT ${LSW_INSTALL_COMPONENT})
+    endif()
+    if(TARGET remotewin-guest)
+        install(TARGETS remotewin-guest
+                RUNTIME DESTINATION ${LSW_INSTALL_GUESTDIR}
+                COMPONENT ${LSW_INSTALL_COMPONENT})
+    endif()
 endif()
 
 # The GPU, and a project of its own as well: a WDDM paravirtual adapter
@@ -153,6 +195,19 @@ if(LSW_BUILD_MANAGER)
     find_path(HIVEX_INCLUDE_DIR NAMES hivex.h REQUIRED)
 
     add_subdirectory(src/host)
+
+    # The desktop entry, and what accel-virt needs of the host system:
+    # /dev/udmabuf, loaded at boot and open to the logged-in user, whose
+    # QEMU the session-mode libvirt runs. See packaging/ for each.
+    install(FILES packaging/lsw-manager.desktop
+            DESTINATION share/applications
+            COMPONENT ${LSW_INSTALL_COMPONENT})
+    install(FILES packaging/lsw-udmabuf.conf
+            DESTINATION lib/modules-load.d RENAME lsw.conf
+            COMPONENT ${LSW_INSTALL_COMPONENT})
+    install(FILES packaging/70-lsw-udmabuf.rules
+            DESTINATION lib/udev/rules.d
+            COMPONENT ${LSW_INSTALL_COMPONENT})
 endif()
 
 if(LSW_BUILD_AGENT)

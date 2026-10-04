@@ -30,7 +30,8 @@
     video_inner        <video>: none, or VGA during Windows setup
     host_shares_inner  one <filesystem> per shared folder, or empty
     qemu_env_inner     <qemu:env> lines (module dir, D3D, XDG)
-    gpu_args_inner     the GPU device(s) and the driver log
+    gpu_args_inner     QEMU's data directory (-L, installed only), the
+                       GPU device(s) and the driver log
 -->
 <domain type='kvm' xmlns:qemu='http://libvirt.org/schemas/domain/qemu/1.0'>
   <name>{{domain_name}}</name>

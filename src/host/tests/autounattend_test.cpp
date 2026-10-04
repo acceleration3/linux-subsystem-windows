@@ -248,6 +248,7 @@ int main(int argc, char** argv) {
     with_av.av_driver_tree = av_src.path();
     with_av.vulkan_loader_x64_path = vulkan64;
     with_av.vulkan_loader_x86_path = vulkan32;
+    with_av.av_adapter_names = QStringLiteral("1002\t7550\tAMD Radeon RX 9070 XT\n");
     QString av_error;
     check(PayloadIsoBuilder::stage_files(with_av, staging3.path(), nullptr, &av_error),
           "stage_files() succeeds with the driver package");
@@ -262,6 +263,23 @@ int main(int argc, char** argv) {
     for (const char* name : {"av/loaders/x64/vulkan-1.dll", "av/loaders/x86/vulkan-1.dll"}) {
         check(QFile::exists(QDir(staging3.path()).filePath(QLatin1String(name))),
               "Vulkan loader staged beside the package's OpenCL loader");
+    }
+    // The package's adapters.txt names the GPUs of the machine that
+    // built it; the guest gets this machine's.
+    {
+        QFile names{QDir(staging3.path()).filePath(QStringLiteral("av/adapters.txt"))};
+        check(names.open(QIODevice::ReadOnly) &&
+                  names.readAll() == with_av.av_adapter_names.toUtf8(),
+              "\\av\\adapters.txt is this host's GPU names, not the package's");
+    }
+    {
+        QTemporaryDir staging_unnamed;
+        PayloadInputs unnamed = with_av;
+        unnamed.av_adapter_names.clear();
+        check(PayloadIsoBuilder::stage_files(unnamed, staging_unnamed.path(), nullptr, nullptr) &&
+                  !QFile::exists(
+                      QDir(staging_unnamed.path()).filePath(QStringLiteral("av/adapters.txt"))),
+              "with no host GPU to name, no adapters.txt — not the package's");
     }
 
     // A directory that is not the package is refused, not half-staged:

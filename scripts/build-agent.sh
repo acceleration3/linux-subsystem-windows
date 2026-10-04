@@ -21,11 +21,16 @@
 # The wizard's payload-ISO step picks the agent path up automatically
 # (see lsw::host::platform::AgentExePath), as does
 # scripts/redeploy-agent.sh. Override either with $LSW_AGENT_EXE.
+#
+# $LSW_AGENT_BUILD and $LSW_AGENT32_BUILD put the two trees somewhere
+# else (scripts/package-release.sh builds its own), and
+# $LSW_REQUIRE_I686=1 makes a missing i686 compiler an error rather than
+# a skipped loader: a release without the 32-bit loader is incomplete.
 
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-BUILD="${ROOT}/build-agent"
+BUILD="${LSW_AGENT_BUILD:-${ROOT}/build-agent}"
 TOOLCHAIN="${ROOT}/cmake/toolchain-mingw-w64.cmake"
 
 echo ">>> Configuring agent cross-build (mingw-w64) -> ${BUILD}"
@@ -50,9 +55,11 @@ cmake --build "${BUILD}" --target lsw-guest-agent remotewin-guest vulkan
 # or a D3D8 / D3D9 title running on DXVK's d3d9.dll, finds no avvk32.dll
 # even though the driver package installed one. Only the loader is
 # built here: the agent is our own program and nothing loads it into a
-# 32-bit process.
+# 32-bit process, and remotewin-guest.exe is configured out so that
+# installing this tree (cmake --install --component lsw) lays out the
+# loader and nothing it did not build.
 LOADER_TREES=("${BUILD}")
-BUILD32="${ROOT}/build-agent32"
+BUILD32="${LSW_AGENT32_BUILD:-${ROOT}/build-agent32}"
 TOOLCHAIN32="${ROOT}/cmake/toolchain-mingw-w64-i686.cmake"
 if command -v i686-w64-mingw32-g++ >/dev/null 2>&1; then
     echo ">>> Configuring 32-bit loader cross-build (mingw-w64 i686) -> ${BUILD32}"
@@ -61,10 +68,14 @@ if command -v i686-w64-mingw32-g++ >/dev/null 2>&1; then
         -DCMAKE_BUILD_TYPE=Release \
         -DLSW_BUILD_MANAGER=OFF \
         -DLSW_BUILD_AGENT=OFF \
+        -DLSW_BUILD_REMOTEWIN=OFF \
         -DLSW_BUILD_TESTS=OFF
     echo ">>> Building 32-bit Vulkan loader"
     cmake --build "${BUILD32}" --target vulkan
     LOADER_TREES+=("${BUILD32}")
+elif [[ "${LSW_REQUIRE_I686:-0}" == 1 ]]; then
+    echo "!!! i686-w64-mingw32-g++ not found, and the 32-bit loader is required" >&2
+    exit 1
 else
     echo "!!! i686-w64-mingw32-g++ not found; skipping the 32-bit loader." >&2
     echo "    32-bit Vulkan applications in the guest will find no loader." >&2

@@ -370,6 +370,9 @@ bool Lifecycle::fill_accel_virt(DomainXmlInputs& inputs) {
     if (inputs.qemu_module_dir.isEmpty() && !inputs.qemu_binary.isEmpty()) {
         inputs.qemu_module_dir = QFileInfo(inputs.qemu_binary).absolutePath();
     }
+    // Its firmware and ROMs are beside it only when it is installed; a
+    // build tree's QEMU finds its own, and this stays empty.
+    fill(inputs.qemu_data_dir, &platform::AccelVirtPaths::qemu_data_dir);
     // The distribution's QEMU cannot load the GPU device, so there is no
     // falling back to it: the domain would not start, and libvirt's
     // reason names a device rather than a missing build.

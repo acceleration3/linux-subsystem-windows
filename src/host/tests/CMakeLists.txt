@@ -109,6 +109,18 @@ add_test(NAME lsw_host_domain_xml_test COMMAND lsw_host_domain_xml_test)
 
 # Which host GPU "auto" or a UUID names, agreeing with accel-virt's
 # device. Pure over a list; also prints what this host enumerates.
+# The guest's adapter names, written into the payload on the user's
+# machine: accel-virt's naming rules against a fake sysfs and fake ID
+# databases.
+add_executable(lsw_host_adapter_names_test adapter_names_test.cpp)
+target_link_libraries(lsw_host_adapter_names_test
+    PRIVATE
+        lsw_host_provision
+        LSW::CompileOptions
+)
+target_compile_definitions(lsw_host_adapter_names_test PRIVATE QT_NO_KEYWORDS)
+add_test(NAME lsw_host_adapter_names_test COMMAND lsw_host_adapter_names_test)
+
 add_executable(lsw_host_gpus_test host_gpus_test.cpp)
 target_link_libraries(lsw_host_gpus_test
     PRIVATE

@@ -213,6 +213,13 @@ QString DomainXmlBuilder::build(const config::VmRecord& vm, const DomainXmlInput
     // the host monitors' own); then, optionally, a render-only adapter
     // per other host GPU.
     QStringList gpu_lines;
+    // Where an installed QEMU finds its firmware and option ROMs. It was
+    // configured for /usr/local and only finds them unaided in its own
+    // build tree; -L puts this directory first on its search path, ahead
+    // of the compiled-in one, so no other QEMU's ROMs are picked up.
+    if (!inputs.qemu_data_dir.isEmpty()) {
+        gpu_lines << qemu_arg(QStringLiteral("-L")) << qemu_arg(inputs.qemu_data_dir);
+    }
     gpu_lines << QStringLiteral(
         "    <!-- accel-virt's virtio-gpu-av-pci: the guest's GPU, on a host GPU. -->");
     QString display = QStringLiteral("virtio-gpu-av-pci,id=%1,bus=pcie.0,addr=0x%2")

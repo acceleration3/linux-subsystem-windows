@@ -44,6 +44,16 @@
 # The guest's vulkan-1.dll loaders (x64 and x86) are not part of this:
 # they come from our own mingw cross builds (scripts/build-agent.sh) and
 # the payload stager adds them beside the tree.
+#
+# Installed (``cmake --install --component lsw``, at the end of this
+# file), the same pieces move under the prefix, and the manager finds
+# them there relative to its own binary in the same way:
+#
+#   lib/lsw/accel-virt/qemu/          qemu-system-x86_64, the modules it
+#                                     loads, libav_executor.so, av-renderer
+#   lib/lsw/accel-virt/qemu/share/    its firmware, ROMs and keymaps (-L)
+#   lib/lsw/accel-virt/d3d/           libdxvk_*.so, libvkd3d-proton-*.so
+#   share/lsw/guest/av-drivers/       the driver tree
 
 include(ExternalProject)
 
@@ -198,8 +208,9 @@ ExternalProject_Add_Step(accel_virt_drivers loaders
 # target then builds QEMU 11.1.1 with the device patched in (its
 # ``qemu`` target), and the executor library and av-renderer beside it.
 # Release, because this is what the guest runs on; unoptimized, every
-# command the guest sends pays for it. Nothing is installed — QEMU runs
-# from its build tree with QEMU_MODULE_DIR pointing at it.
+# command the guest sends pays for it. accel-virt installs none of it —
+# QEMU runs from its build tree with QEMU_MODULE_DIR pointing at it — so
+# what this project installs is picked out of that tree below.
 #
 # BUILD_ALWAYS here: these are host builds with honest depfiles, and the
 # inner Ninja (and QEMU's own, behind build_qemu.sh) answers "nothing to
@@ -212,6 +223,13 @@ ExternalProject_Add(accel_virt_host
     CMAKE_ARGS       ${_lsw_av_cmake_args}
                      -DCMAKE_BUILD_TYPE=Release
                      -DAV_QEMU=ON
+                     # Linked as the rest of this host build is: a
+                     # release's hardening (scripts/package-release.sh)
+                     # reaches the executor and av-renderer too. Only
+                     # this half: the guest half links Windows images.
+                     "-DCMAKE_EXE_LINKER_FLAGS=${CMAKE_EXE_LINKER_FLAGS}"
+                     "-DCMAKE_SHARED_LINKER_FLAGS=${CMAKE_SHARED_LINKER_FLAGS}"
+                     "-DCMAKE_MODULE_LINKER_FLAGS=${CMAKE_MODULE_LINKER_FLAGS}"
     BUILD_COMMAND    ${CMAKE_COMMAND} --build <BINARY_DIR>
     BUILD_ALWAYS     ON
     INSTALL_COMMAND  ""
@@ -237,8 +255,13 @@ ExternalProject_Add(accel_virt_host
 #
 # Without these the host serves no Direct3D and DWM crash-loops in the
 # guest, so they are as much a part of the GPU as QEMU is.
+#
+# Its meson builds take their link flags from LDFLAGS when they are first
+# set up; this build's shared-library flags are passed as that, for the
+# same reason as the host half's above.
 add_custom_target(accel_virt_d3d ALL
-    COMMAND "${LSW_ACCEL_VIRT_DIR}/tools/build_d3d_runtime.sh"
+    COMMAND ${CMAKE_COMMAND} -E env "LDFLAGS=${CMAKE_SHARED_LINKER_FLAGS}"
+            "${LSW_ACCEL_VIRT_DIR}/tools/build_d3d_runtime.sh"
     COMMAND ${CMAKE_COMMAND}
         -DSTEP=d3d
         "-DSRC=${LSW_ACCEL_VIRT_DIR}/build-d3d/lib"
@@ -250,3 +273,81 @@ add_dependencies(accel_virt_d3d accel_virt_fetch)
 
 add_custom_target(accel_virt)
 add_dependencies(accel_virt accel_virt_drivers accel_virt_host accel_virt_d3d)
+
+# ---- install ----
+# Only what runs, out of build trees that are mostly not: QEMU's holds
+# objects, its configure log and every module the build machine happened
+# to have the libraries for.
+set(_lsw_av_qemu_build "${LSW_AV_BUILD_DIR}/qemu")
+set(_lsw_av_qemu_dest  "${LSW_INSTALL_LIBDIR}/accel-virt/qemu")
+set(_lsw_av_exec_perms
+    OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
+
+install(PROGRAMS "${_lsw_av_qemu_build}/qemu/qemu-system-x86_64"
+                 "${_lsw_av_qemu_build}/av-renderer"
+        DESTINATION ${_lsw_av_qemu_dest}
+        COMPONENT ${LSW_INSTALL_COMPONENT})
+# QEMU's modules, beside the binary: QEMU_MODULE_DIR is the binary's
+# directory either way (AccelVirtPaths::qemu_module_dir). Only the ones
+# a domain here loads — the GPU device and what it is built on, and the
+# PipeWire audio the domain names. QEMU's configure builds a module for
+# every optional library it finds, and each one installed would be a
+# dependency of the install; a module that is absent is skipped quietly
+# when QEMU enumerates its devices, where one that is present without
+# its library is an error on every start. The module table itself is
+# compiled into the binary, so the .modinfo files stay behind.
+install(FILES
+            "${_lsw_av_qemu_build}/libav_executor.so"
+            "${_lsw_av_qemu_build}/qemu/hw-display-virtio-gpu.so"
+            "${_lsw_av_qemu_build}/qemu/hw-display-virtio-gpu-pci.so"
+            "${_lsw_av_qemu_build}/qemu/hw-display-virtio-gpu-av.so"
+            "${_lsw_av_qemu_build}/qemu/hw-display-virtio-gpu-pci-av.so"
+            "${_lsw_av_qemu_build}/qemu/audio-pipewire.so"
+        PERMISSIONS ${_lsw_av_exec_perms}
+        DESTINATION ${_lsw_av_qemu_dest}
+        COMPONENT ${LSW_INSTALL_COMPONENT})
+# QEMU's data: the x86 firmware and option ROMs, and the VNC keymaps.
+# QEMU was configured for /usr/local and finds these unaided only in its
+# own build tree (qemu-bundle/), so the install puts them in share/ and
+# the domain passes that directory as -L (AccelVirtPaths::qemu_data_dir).
+# The other architectures' firmware — tens of megabytes of edk2 images
+# for arm and riscv among it — stays behind. Globbed when installing,
+# because which ROMs QEMU ships is QEMU's business and changes with it.
+install(CODE "
+    file(GLOB _lsw_qemu_roms LIST_DIRECTORIES false
+        \"${_lsw_av_qemu_build}/source/pc-bios/bios*.bin\"
+        \"${_lsw_av_qemu_build}/source/pc-bios/vgabios*.bin\"
+        \"${_lsw_av_qemu_build}/source/pc-bios/efi-*.rom\"
+        \"${_lsw_av_qemu_build}/source/pc-bios/pxe-*.rom\"
+        \"${_lsw_av_qemu_build}/source/pc-bios/kvmvapic.bin\"
+        \"${_lsw_av_qemu_build}/source/pc-bios/linuxboot*.bin\"
+        \"${_lsw_av_qemu_build}/source/pc-bios/multiboot*.bin\"
+        \"${_lsw_av_qemu_build}/source/pc-bios/pvh.bin\")
+    if(NOT _lsw_qemu_roms)
+        message(FATAL_ERROR \"no QEMU ROMs in ${_lsw_av_qemu_build}/source/pc-bios: build accel_virt_host first\")
+    endif()
+    file(INSTALL \${_lsw_qemu_roms}
+         DESTINATION \"\${CMAKE_INSTALL_PREFIX}/${_lsw_av_qemu_dest}/share\")
+    file(INSTALL \"${_lsw_av_qemu_build}/qemu/pc-bios/keymaps\"
+         DESTINATION \"\${CMAKE_INSTALL_PREFIX}/${_lsw_av_qemu_dest}/share\")
+    " COMPONENT ${LSW_INSTALL_COMPONENT})
+
+# DXVK and vkd3d-proton, with the .so -> .so.0 -> .so.0.x symlinks kept
+# as they are: the executor loads them by those names.
+install(DIRECTORY "${LSW_AV_BUILD_DIR}/d3d/lib/"
+        DESTINATION ${LSW_INSTALL_LIBDIR}/accel-virt/d3d
+        USE_SOURCE_PERMISSIONS
+        COMPONENT ${LSW_INSTALL_COMPONENT}
+        FILES_MATCHING PATTERN "*.so" PATTERN "*.so.*"
+        PATTERN "pkgconfig" EXCLUDE)
+
+# The guest's driver tree, but for adapters.txt: accel-virt's install
+# writes the names of the GPUs on the machine that built it there, which
+# for an installed package is the wrong machine. The payload stager
+# writes the file from the user's own GPUs instead
+# (provision::install::AdapterNames), and ignores the tree's copy.
+install(DIRECTORY "${LSW_AV_DRIVERS_DIR}/"
+        DESTINATION ${LSW_INSTALL_GUESTDIR}/av-drivers
+        COMPONENT ${LSW_INSTALL_COMPONENT}
+        PATTERN "adapters.txt" EXCLUDE)
+

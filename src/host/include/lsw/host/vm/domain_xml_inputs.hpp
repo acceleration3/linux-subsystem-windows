@@ -85,6 +85,7 @@ struct DomainXmlInputs {
     // so only a caller that wants a specific build sets them.
     QString qemu_binary;      // <emulator>
     QString qemu_module_dir;  // QEMU_MODULE_DIR
+    QString qemu_data_dir;    // -L, for an installed QEMU; empty leaves it out
     QString executor;         // executor=
     QString renderer;         // renderer=, when isolate_renderer
     QString d3d_lib_dir;      // AV_D3D_PATH

@@ -56,6 +56,13 @@ private:
     // the DBus name, so we forward whatever we were asked to do and quit.
     [[nodiscard]] bool forward_to_primary();
 
+    // One log line per artifact the manager ships beside itself (QEMU,
+    // the executor, the driver tree, the guest agent, the mirror ...),
+    // naming where it was found or that it was not. A build tree and an
+    // install find them in different places, and this is the first
+    // thing to read when an install behaves like it is missing a part.
+    static void log_artifacts();
+
     void show_main_window();
     void show_wizard();
     // Render every page of both windows into ``dir`` and exit. See

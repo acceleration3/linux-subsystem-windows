@@ -10,6 +10,9 @@
 #include "lsw/host/tools/download_image_dialog.hpp"
 #include "lsw/host/tools/trim_image_dialog.hpp"
 #include "lsw/host/mcp/mcp_server.hpp"
+#include "lsw/host/platform/accel_virt_paths.hpp"
+#include "lsw/host/platform/agent_exe_path.hpp"
+#include "lsw/host/platform/mirror_exe_paths.hpp"
 #include "lsw/host/ui/theme.hpp"
 #include "lsw/host/ui/widgets.hpp"
 #include "lsw/host/vm/domain_importer.hpp"
@@ -21,6 +24,9 @@
 #include <QIcon>
 #include <QMetaObject>
 #include <QProcess>
+
+#include <string>
+#include <utility>
 
 namespace lsw::host::app {
 
@@ -96,11 +102,33 @@ bool App::forward_to_primary() {
     return true;
 }
 
+void App::log_artifacts() {
+    using platform::AccelVirtPaths;
+    const std::pair<const char*, QString> found[] = {
+        {"qemu", AccelVirtPaths::qemu_binary()},
+        {"qemu data (-L)", AccelVirtPaths::qemu_data_dir()},
+        {"executor", AccelVirtPaths::executor()},
+        {"renderer", AccelVirtPaths::renderer()},
+        {"host d3d", AccelVirtPaths::d3d_lib_dir()},
+        {"driver tree", AccelVirtPaths::driver_tree()},
+        {"vulkan-1.dll x64", AccelVirtPaths::vulkan_loader(false)},
+        {"vulkan-1.dll x86", AccelVirtPaths::vulkan_loader(true)},
+        {"guest agent", platform::AgentExePath::locate()},
+        {"mirror (host)", platform::MirrorExePaths::host()},
+        {"mirror (guest)", platform::MirrorExePaths::guest()},
+    };
+    for (const auto& [what, path] : found) {
+        LSW_INFO("artifact: {:<17} {}", what,
+                 path.isEmpty() ? std::string{"(not found)"} : path.toStdString());
+    }
+}
+
 int App::run() {
     // Before the single-instance check: a screenshot run must not
     // forward itself to whatever manager happens to be open, and it
     // owns nothing another one would mind.
     if (!cli_.screenshot_dir.isEmpty()) {
+        log_artifacts();
         (void)services_.open();
         (void)vm::DomainImporter::import_existing(services_.libvirt(),
                                                   services_.settings(), services_.vms());
@@ -109,6 +137,7 @@ int App::run() {
     if (forward_to_primary()) {
         return 0;
     }
+    log_artifacts();
     if (!services_.open()) {
         return 1;
     }
