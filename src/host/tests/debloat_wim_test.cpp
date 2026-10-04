@@ -68,7 +68,10 @@ int main(int argc, char** argv) {
     // file still reference the same resources.
     const QString single = wim + QStringLiteral(".single");
     QString isolate_error;
-    const bool isolated = WimDebloater::isolate_edition(wim, index, single, &isolate_error);
+    // No extra parts: the test takes a single .wim by path. A split
+    // source is DebloatStager's business, not the debloater's.
+    const bool isolated =
+        WimDebloater::isolate_edition(wim, {}, index, single, &isolate_error);
     check(isolated, "isolate_edition() succeeded");
     if (!isolated) {
         std::printf("  error: %s\n", qPrintable(isolate_error));
