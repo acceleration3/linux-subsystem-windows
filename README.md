@@ -80,6 +80,15 @@ offers, and where it falls short.
 What this repository adds is the VM around both: provisioning Windows,
 running it, and presenting its applications as native Linux windows.
 
+The manager's desktop preview uses RemoteWin's WGC monitor capture, with
+shared GPU surfaces when available. **Play preview** starts capture once the
+guest agent is online; **Pause preview** stops capture. It defaults to paused,
+also detaches while hidden, and offers a retry on failure. The preview is
+read-only; use **Open desktop** to send pointer and keyboard input.
+Installed VMs need no VNC display, and accel-virt never reads accelerated
+desktop images back into QEMU's CPU console surface. VNC remains only for the installer's plain VGA
+display, before Windows and WGC are available.
+
 With Windows running, **Run on VM…** in the manager's Overview lets you
 browse a local EXE, MSI/MSP installer, COM/SCR program, BAT/CMD batch file,
 or PS1/VBS/JS/WSF script, copy it to the VM with progress and cancellation,

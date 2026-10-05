@@ -2,7 +2,6 @@
 
 #include "lsw/host/manager/app_list.hpp"
 #include "lsw/host/manager/stats_widget.hpp"
-#include "lsw/host/ui/vnc_view.hpp"
 #include <QUuid>
 #include <QWidget>
 
@@ -11,6 +10,8 @@ class QLabel;
 namespace lsw::host::services { class HostServices; }
 
 namespace lsw::host::manager {
+
+class DesktopPreview;
 
 // The Overview page: the preview, the four gauges, and the grid of
 // applications found inside the guest.
@@ -58,11 +59,8 @@ private:
     // VRAM gauge is the display GPU's).
     void on_status();
     // The preview and its tag, for a machine that is (or is not)
-    // running. A running one gets a paused start.
+    // running, once its agent can start WGC capture.
     void follow_preview(bool running);
-    // The tag for a preview with a port: its address, and whether it
-    // is paused.
-    void tag_preview();
 
 private:
     // Hoisted up to App so the wizard and MCP server share the same
@@ -73,7 +71,7 @@ private:
     bool last_running_ = false;
     bool last_agent_reachable_ = false;
 
-    lsw::host::ui::VncView* preview_ = nullptr;
+    DesktopPreview* preview_ = nullptr;
     QLabel* preview_tag_ = nullptr;
     StatsWidget* stats_ = nullptr;
     AppListWidget* app_list_ = nullptr;

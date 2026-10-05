@@ -188,3 +188,13 @@ target_link_libraries(lsw_host_guest_file_transfer_test
 target_compile_definitions(lsw_host_guest_file_transfer_test PRIVATE QT_NO_KEYWORDS)
 add_test(NAME lsw_host_guest_file_transfer_test COMMAND lsw_host_guest_file_transfer_test)
 set_tests_properties(lsw_host_guest_file_transfer_test PROPERTIES TIMEOUT 60)
+
+if(TARGET rwin_host)
+    add_executable(lsw_host_desktop_preview_test desktop_preview_test.cpp)
+    target_link_libraries(lsw_host_desktop_preview_test
+        PRIVATE lsw_host_manager rwin::host LSW::CompileOptions nlohmann_json::nlohmann_json)
+    target_compile_definitions(lsw_host_desktop_preview_test PRIVATE QT_NO_KEYWORDS)
+    add_test(NAME lsw_host_desktop_preview_test COMMAND lsw_host_desktop_preview_test)
+    set_tests_properties(lsw_host_desktop_preview_test PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)
+endif()

@@ -107,7 +107,8 @@ add_subdirectory(src/base)
 # knows how to move a Windows application's windows, its input and its
 # cursors across a boundary, and nothing about virtual machines.
 #
-# LSW consumes it as two artifacts and links neither. On Linux it is the
+# Applications use its two executable artifacts. The manager also links its
+# host library for the embedded WGC desktop preview. On Linux it is the
 # ``remotewin`` executable the manager spawns for each launched
 # application, one process per application, owning that application's
 # windows on this desktop; on the mingw cross build it is

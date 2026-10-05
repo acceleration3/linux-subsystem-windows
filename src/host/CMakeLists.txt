@@ -165,6 +165,10 @@ target_link_libraries(lsw_host_manager
     PRIVATE LSW::CompileOptions nlohmann_json::nlohmann_json
 )
 target_compile_definitions(lsw_host_manager PRIVATE QT_NO_KEYWORDS)
+if(TARGET rwin_host)
+    target_link_libraries(lsw_host_manager PRIVATE rwin::host)
+    target_compile_definitions(lsw_host_manager PRIVATE LSW_HAVE_REMOTEWIN=1)
+endif()
 
 # window_view.cpp stamps a per-window WM_CLASS via xcb on X11.
 if(TARGET PkgConfig::XCB)
