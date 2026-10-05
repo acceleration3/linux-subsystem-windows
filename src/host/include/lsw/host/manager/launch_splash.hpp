@@ -3,7 +3,6 @@
 #include <QElapsedTimer>
 #include <QTimer>
 #include <QWidget>
-
 #include <optional>
 
 class QLabel;
@@ -49,11 +48,13 @@ public:
     void stall(const QString& reason);
     // Waiting again, from now: "Keep waiting", or a restart under way.
     void resume();
+    void fail(const QString& reason);
 
 Q_SIGNALS:
     void cancelled();
     void log_requested();
     void restart_requested();
+    void retry_requested();
 
 private:
     void tick();
@@ -72,6 +73,7 @@ private:
     QLabel* steps_[static_cast<int>(Phase::Count)]{};
     QWidget* footer_ = nullptr;
     QWidget* stalled_footer_ = nullptr;
+    QWidget* failed_footer_ = nullptr;
     QLabel* stall_text_ = nullptr;
 };
 

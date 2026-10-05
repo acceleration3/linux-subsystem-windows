@@ -2,15 +2,14 @@
 
 #include "lsw/host/config/vm_state.hpp"
 #include "lsw/host/manager/console_panel.hpp"
-#include "lsw/host/manager/graphics_page.hpp"
 #include "lsw/host/manager/graphics_alerts.hpp"
+#include "lsw/host/manager/graphics_page.hpp"
 #include "lsw/host/manager/log_panel.hpp"
+#include "lsw/host/manager/run_on_vm_dialog.hpp"
 #include "lsw/host/manager/settings_page.hpp"
 #include "lsw/host/manager/vm_detail_panel.hpp"
 #include "lsw/host/manager/warning_strip.hpp"
 #include "lsw/host/mirror/window_mirror.hpp"
-#include "lsw/host/vm/domain_xml_inputs.hpp"
-#include "lsw/host/vm/graceful_shutdown.hpp"
 #include "lsw/host/platform/guest_smb_share.hpp"
 #include "lsw/host/platform/host_scale.hpp"
 #include "lsw/host/services/domain_inputs.hpp"
@@ -20,26 +19,26 @@
 #include "lsw/host/ui/format.hpp"
 #include "lsw/host/ui/theme.hpp"
 #include "lsw/host/ui/widgets.hpp"
+#include "lsw/host/vm/domain_xml_inputs.hpp"
+#include "lsw/host/vm/graceful_shutdown.hpp"
+#include "lsw/linkproto/commands.hpp"
 
-#include <QEvent>
 #include <QCloseEvent>
 #include <QDesktopServices>
 #include <QDir>
+#include <QEvent>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QMenu>
 #include <QPushButton>
+#include <QScreen>
 #include <QStackedWidget>
 #include <QStatusBar>
 #include <QStyle>
 #include <QUrl>
-#include <QScreen>
 #include <QVBoxLayout>
 #include <QWindow>
-
 #include <nlohmann/json.hpp>
-
-#include "lsw/linkproto/commands.hpp"
 
 namespace lsw::host::manager {
 
@@ -57,11 +56,7 @@ struct PageInfo {
 // The details that are not status are descriptions of the page; the
 // rest come from the status hub (see MainWindow::page_detail).
 const PageInfo kPages[] = {
-    {"Overview", ""},
-    {"Console", ""},
-    {"Log", ""},
-    {"Graphics", ""},
-    {"Settings", ""},
+    {"Overview", ""}, {"Console", ""}, {"Log", ""}, {"Graphics", ""}, {"Settings", ""},
 };
 
 // A path under the home directory as people write it: "~/.config/...".
@@ -118,14 +113,23 @@ MainWindow::MainWindow(services::HostServices& services, QWidget* parent)
         return button;
     };
     desktop_button_ = bar_action(QStringLiteral("Open desktop"));
+    run_on_vm_button_ = bar_action(QStringLiteral("Run on VM…"));
     clear_button_ = bar_action(QStringLiteral("Clear"));
     change_settings_button_ = bar_action(QStringLiteral("Change in Settings"));
     config_folder_button_ = bar_action(QStringLiteral("Open config folder"));
     pop_out_button_ = bar_action(QStringLiteral("Pop out"));
 
-    connect(pop_out_button_, &QPushButton::clicked, this,
-            [this] { pop_out(rail_->current()); });
+    connect(pop_out_button_, &QPushButton::clicked, this, [this] { pop_out(rail_->current()); });
     connect(desktop_button_, &QPushButton::clicked, this, &MainWindow::open_desktop);
+    connect(run_on_vm_button_, &QPushButton::clicked, this, [this] {
+        if (!run_on_vm_dialog_) {
+            run_on_vm_dialog_ = new RunOnVmDialog(services_.rpc(), services_.app_launcher(), this);
+            run_on_vm_dialog_->set_agent_online(overview_->is_agent_online());
+        }
+        run_on_vm_dialog_->show();
+        run_on_vm_dialog_->raise();
+        run_on_vm_dialog_->activateWindow();
+    });
     connect(clear_button_, &QPushButton::clicked, this, [this] {
         if (rail_->current() == NavRail::Page::Console) {
             if (console_ != nullptr) {
@@ -138,8 +142,7 @@ MainWindow::MainWindow(services::HostServices& services, QWidget* parent)
     connect(change_settings_button_, &QPushButton::clicked, this,
             [this] { show_page(NavRail::Page::Settings); });
     connect(config_folder_button_, &QPushButton::clicked, this, [this] {
-        QDesktopServices::openUrl(
-            QUrl::fromLocalFile(services_.settings().config_dir()));
+        QDesktopServices::openUrl(QUrl::fromLocalFile(services_.settings().config_dir()));
     });
     right_layout->addWidget(bar);
 
@@ -233,8 +236,8 @@ MainWindow::MainWindow(services::HostServices& services, QWidget* parent)
                 } else if (key == K::kScalingPercent) {
                     push_dpi();
                 }
-                if (key == K::kCpuCores || key == K::kMemoryMib || key == K::kDiskGib
-                    || key.startsWith(QLatin1StringView("graphics/"))) {
+                if (key == K::kCpuCores || key == K::kMemoryMib || key == K::kDiskGib ||
+                    key.startsWith(QLatin1StringView("graphics/"))) {
                     refresh_identity();
                     refresh_status_bar();
                 }
@@ -261,10 +264,9 @@ void MainWindow::build_pages() {
     console_ = new ConsolePanel(services_.rpc(), services_.status(), this);
     log_ = new LogPanel(services_.log_store(), this);
     alerts_ = new GraphicsAlerts(services_.status(), services_.rpc(), this);
-    graphics_page_ = new GraphicsPage(services_.status(), *alerts_, services_.manager_settings(),
-                                      this);
-    settings_page_ = new SettingsPage(services_.manager_settings(),
-                                      services_.pending_changes(),
+    graphics_page_ =
+        new GraphicsPage(services_.status(), *alerts_, services_.manager_settings(), this);
+    settings_page_ = new SettingsPage(services_.manager_settings(), services_.pending_changes(),
                                       services_.app_configs(), services_.status(), this);
 
     overview_stack_ = new QStackedWidget;
@@ -281,8 +283,7 @@ void MainWindow::build_pages() {
     connect(graphics_page_, &GraphicsPage::settings_requested, this,
             [this] { show_page(NavRail::Page::Settings); });
     connect(graphics_page_, &GraphicsPage::restart_requested, this, &MainWindow::restart_guest);
-    connect(settings_page_, &SettingsPage::restart_requested, this,
-            &MainWindow::restart_guest);
+    connect(settings_page_, &SettingsPage::restart_requested, this, &MainWindow::restart_guest);
     // The image tools are the same dialogs the wizard opens. Nothing
     // about them needs a guest, so they work with the machine off.
     connect(settings_page_, &SettingsPage::download_tool_requested, this, [this] {
@@ -341,6 +342,11 @@ void MainWindow::pop_out(NavRail::Page page) {
 }
 
 void MainWindow::follow_agent_for_desktop(bool online) {
+    run_on_vm_button_->setEnabled(online);
+    run_on_vm_button_->setToolTip(
+        online ? QStringLiteral("Copy a local Windows program or installer to the VM and run it")
+               : QStringLiteral("Needs Windows running: the agent is offline"));
+    if (run_on_vm_dialog_) run_on_vm_dialog_->set_agent_online(online);
     desktop_button_->setEnabled(online);
     desktop_button_->setToolTip(
         online ? QStringLiteral("The guest's whole screen in a window of its own")
@@ -358,17 +364,18 @@ void MainWindow::open_desktop() {
     desktop_ = mirror::WindowMirror::of_desktop(services_.rpc(),
                                                 QStringLiteral("%1 desktop").arg(name), this);
     connect(desktop_, &mirror::WindowMirror::finished, desktop_, &QObject::deleteLater);
-    const QString failed = QStringLiteral("The desktop did not open (the manager's own log says why)");
+    connect(desktop_, &mirror::WindowMirror::failed, this, [this](const QString& reason) {
+        notice_ = reason;
+        refresh_status_bar();
+    });
+    connect(desktop_, &mirror::WindowMirror::ready, this, [this] {
+        notice_.clear();
+        refresh_status_bar();
+    });
     if (!desktop_->start()) {
         desktop_->deleteLater();
         desktop_ = nullptr;
-        notice_ = failed;
-        refresh_status_bar();
         return;
-    }
-    if (notice_ == failed) {
-        notice_.clear();
-        refresh_status_bar();
     }
 }
 
@@ -385,15 +392,14 @@ QWidget* MainWindow::build_empty_state() {
     auto* eyebrow = Widgets::caption(QStringLiteral("NOTHING INSTALLED"));
     eyebrow->setAlignment(Qt::AlignCenter);
 
-    auto* heading =
-        new QLabel(QStringLiteral("There is no Windows guest on this machine yet"));
+    auto* heading = new QLabel(QStringLiteral("There is no Windows guest on this machine yet"));
     heading->setObjectName(QString::fromLatin1(Theme::Role::kHeading));
     heading->setAlignment(Qt::AlignCenter);
 
-    auto* body = new QLabel(
-        QStringLiteral("The first run builds one: pick or download an image, size the "
-                       "machine, and let the unattended installer do the rest. Around "
-                       "25 minutes, mostly unattended."));
+    auto* body =
+        new QLabel(QStringLiteral("The first run builds one: pick or download an image, size the "
+                                  "machine, and let the unattended installer do the rest. Around "
+                                  "25 minutes, mostly unattended."));
     body->setObjectName(QString::fromLatin1(Theme::Role::kDim));
     body->setWordWrap(true);
     body->setAlignment(Qt::AlignCenter);
@@ -425,11 +431,10 @@ void MainWindow::show_page(NavRail::Page page) {
     rail_->set_current(page);
     content_title_->setText(QString::fromLatin1(kPages[index].title));
     content_detail_->setText(page_detail(page));
-    pop_out_button_->setVisible(page == NavRail::Page::Console
-                                || page == NavRail::Page::Log);
+    pop_out_button_->setVisible(page == NavRail::Page::Console || page == NavRail::Page::Log);
     desktop_button_->setVisible(page == NavRail::Page::Overview);
-    clear_button_->setVisible(page == NavRail::Page::Log
-                              || page == NavRail::Page::Console);
+    run_on_vm_button_->setVisible(page == NavRail::Page::Overview);
+    clear_button_->setVisible(page == NavRail::Page::Log || page == NavRail::Page::Console);
     change_settings_button_->setVisible(page == NavRail::Page::Graphics);
     config_folder_button_->setVisible(page == NavRail::Page::Settings);
 
@@ -459,8 +464,9 @@ void MainWindow::refresh_identity() {
     const int cores = definition != nullptr ? definition->vcpus : settings.int_value(K::kCpuCores);
     const qint64 memory_mib =
         definition != nullptr ? definition->memory_mib : settings.int_value(K::kMemoryMib);
-    const QString disk = vm.disk_bytes ? ui::Format::gib(static_cast<qint64>(*vm.disk_bytes), 0)
-                                       : QStringLiteral("%1 GiB").arg(settings.int_value(K::kDiskGib));
+    const QString disk = vm.disk_bytes
+                             ? ui::Format::gib(static_cast<qint64>(*vm.disk_bytes), 0)
+                             : QStringLiteral("%1 GiB").arg(settings.int_value(K::kDiskGib));
     QString detail = QStringLiteral("%1\n%2 cores · %3 GiB · %4")
                          .arg(record.edition.isEmpty() ? QStringLiteral("Windows") : record.edition)
                          .arg(cores)
@@ -526,11 +532,12 @@ void MainWindow::refresh_status_bar() {
                                ? QStringLiteral("NVMe")
                                : definition->disk_bus;
             if (vm.disk_bytes) {
-                disk += QStringLiteral(", ") + ui::Format::gib(static_cast<qint64>(*vm.disk_bytes), 0);
+                disk +=
+                    QStringLiteral(", ") + ui::Format::gib(static_cast<qint64>(*vm.disk_bytes), 0);
             }
             facts << QStringLiteral("disk %1").arg(disk);
         }
-        facts << (!vm.running()        ? QStringLiteral("guest off")
+        facts << (!vm.running()       ? QStringLiteral("guest off")
                   : vm.agent_online() ? QStringLiteral("agent answering")
                                       : QStringLiteral("agent not answering yet"));
     }
@@ -554,8 +561,8 @@ void MainWindow::refresh_warning() {
     // rest are the Graphics page's to say.
     std::optional<GraphicsAlerts::Warning> shown;
     for (const auto& warning : alerts_->warnings()) {
-        if (warning.kind == GraphicsAlerts::Warning::Kind::NoDirect3d
-            || warning.kind == GraphicsAlerts::Warning::Kind::DisplayNotRunning) {
+        if (warning.kind == GraphicsAlerts::Warning::Kind::NoDirect3d ||
+            warning.kind == GraphicsAlerts::Warning::Kind::DisplayNotRunning) {
             shown = warning;
             break;
         }
@@ -609,9 +616,9 @@ void MainWindow::push_dpi() {
     }
     services_.rpc().request_detached(
         linkproto::cmd::kSetDisplay,
-        {{"scaling_percent", platform::HostScale::resolve(services_.manager_settings().int_value(
-                                                             K::kScalingPercent),
-                                                         this)}});
+        {{"scaling_percent",
+          platform::HostScale::resolve(services_.manager_settings().int_value(K::kScalingPercent),
+                                       this)}});
 }
 
 void MainWindow::restart_guest() {
@@ -657,8 +664,8 @@ void MainWindow::restart_guest() {
         notice_ = (overview_->start_guest()
                        ? QStringLiteral("Starting the guest on the new definition")
                        : QStringLiteral("libvirt would not start the guest (the manager's own "
-                                        "log says why)"))
-                  + disk;
+                                        "log says why)")) +
+                  disk;
         refresh_status_bar();
         return;
     }
@@ -695,8 +702,11 @@ void MainWindow::setup_tray() {
     tray_->setToolTip(QStringLiteral("LSW"));
     auto* menu = new QMenu(this);
     menu->addAction(QStringLiteral("Show"), this, [this] { Widgets::bring_to_front(this); });
-    menu->addAction(QStringLiteral("Settings"), this,
-                    [this] { show_page(NavRail::Page::Settings); show(); raise(); });
+    menu->addAction(QStringLiteral("Settings"), this, [this] {
+        show_page(NavRail::Page::Settings);
+        show();
+        raise();
+    });
     menu->addSeparator();
     menu->addAction(QStringLiteral("Quit"), this, &MainWindow::on_quit);
     tray_->setContextMenu(menu);
@@ -728,8 +738,7 @@ bool MainWindow::event(QEvent* e) {
 }
 
 void MainWindow::closeEvent(QCloseEvent* e) {
-    const bool to_tray =
-        services_.manager_settings().bool_value(K::kCloseToTray);
+    const bool to_tray = services_.manager_settings().bool_value(K::kCloseToTray);
     if (tray_ != nullptr && to_tray) {
         hide();
         e->ignore();

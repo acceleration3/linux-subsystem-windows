@@ -80,6 +80,20 @@ offers, and where it falls short.
 What this repository adds is the VM around both: provisioning Windows,
 running it, and presenting its applications as native Linux windows.
 
+With Windows running, **Run on VM…** in the manager's Overview lets you
+browse a local EXE, MSI/MSP installer, COM/SCR program, BAT/CMD batch file,
+or PS1/VBS/JS/WSF script, copy it to the VM with progress and cancellation,
+and run it with optional Windows command-line arguments. Its windows use
+the same mirroring path as installed applications. Copies remain under
+`C:\ProgramData\LSW\uploads`; only the selected file is transferred, not
+companion files. This requires a guest agent built with `upload_file` support.
+
+MSIX/MSIXBundle and APPX/APPXBundle files open Windows' normal **App Installer**
+window on a mirrored guest desktop, just like double-clicking them in Windows 11.
+Review the package and click **Install** there; LSW does not silently install it
+or bypass Windows' publisher/signature checks. App Installer must be installed
+in the guest; this path also requires the agent's `open_package` command.
+
 `src/linkproto/` is the one module the Linux manager and the Windows
 guest agent both compile: envelope framing, stream reassembly, and the
 RPC command vocabulary. It is header-only and depends on

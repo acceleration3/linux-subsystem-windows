@@ -1,6 +1,7 @@
 #pragma once
 
 #include "lsw/host/apps/app_config_store.hpp"
+#include "lsw/host/apps/guest_app_launcher.hpp"
 #include "lsw/host/apps/log_store.hpp"
 #include "lsw/host/config/manager_settings.hpp"
 #include "lsw/host/config/pending_changes.hpp"
@@ -8,9 +9,9 @@
 #include "lsw/host/config/vm_state.hpp"
 #include "lsw/host/link/agent_guest_stats_probe.hpp"
 #include "lsw/host/link/agent_rpc_client.hpp"
+#include "lsw/host/services/status_hub.hpp"
 #include "lsw/host/vm/libvirt_connection.hpp"
 #include "lsw/host/vm/lifecycle.hpp"
-#include "lsw/host/services/status_hub.hpp"
 
 #include <QObject>
 
@@ -67,6 +68,8 @@ public:
 
     [[nodiscard]] apps::LogStore& log_store() noexcept { return log_store_; }
 
+    [[nodiscard]] apps::GuestAppLauncher& app_launcher() noexcept { return app_launcher_; }
+
     // Everything the settings page reads and writes, plus what has been
     // edited and not yet applied. Shared, because more than one page
     // stages restart keys and one apply bar commits them all.
@@ -110,6 +113,7 @@ private:
     StatusHub status_;
     apps::AppConfigStore app_configs_;
     apps::LogStore log_store_;  // declared after rpc_: detaches from it in ~LogStore
+    apps::GuestAppLauncher app_launcher_;
 };
 
 }  // namespace lsw::host::services

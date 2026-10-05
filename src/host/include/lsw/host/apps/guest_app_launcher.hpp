@@ -1,12 +1,24 @@
 #pragma once
 
+#include <QHash>
 #include <QObject>
+#include <QPointer>
+#include <QSet>
 #include <QString>
 
-namespace lsw::host::apps { struct AppConfig; }
-namespace lsw::host::link { class AgentRpcClient; }
+namespace lsw::host::apps {
+struct AppConfig;
+}
 
-namespace lsw::host::manager {
+namespace lsw::host::link {
+class AgentRpcClient;
+}
+
+namespace lsw::host::mirror {
+class WindowMirror;
+}
+
+namespace lsw::host::apps {
 
 // Starts a configured application in the guest and carries its windows
 // onto this desktop.
@@ -32,9 +44,18 @@ Q_SIGNALS:
     // The agent has started it, and a mirror is carrying its windows.
     void launched(const QString& guest_path, quint32 pid);
     void failed(const QString& guest_path, const QString& error);
+    void changed();
+
+public:
+    [[nodiscard]] bool opening(const apps::AppConfig& app) const;
+    [[nodiscard]] bool running(const apps::AppConfig& app) const;
 
 private:
+    [[nodiscard]] QString key(const apps::AppConfig& app) const;
     link::AgentRpcClient& rpc_;
+    QSet<QString> pending_;
+    QHash<QString, QPointer<mirror::WindowMirror>> mirrors_;
+    QHash<QString, quint32> pids_;
 };
 
-}  // namespace lsw::host::manager
+}  // namespace lsw::host::apps

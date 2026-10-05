@@ -1,5 +1,6 @@
 #include "lsw/agent/core/services.hpp"
 
+#include "lsw/agent/core/paths.hpp"
 #include "lsw/agent/session/session_manager.hpp"
 #include "lsw/agent/uia/uia.hpp"
 
@@ -8,7 +9,8 @@
 
 namespace lsw::agent::core {
 
-AgentServices::AgentServices(Role role) : role_(role) {
+AgentServices::AgentServices(Role role)
+    : role_(role), uploads_(std::filesystem::path(Paths::root()) / L"uploads") {
     if (role_ == Role::SessionHelper) {
         uia_ = std::make_unique<uia::Uia>();
     }

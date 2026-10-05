@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace lsw::agent::util {
@@ -17,6 +18,8 @@ public:
     Base64() = delete;
 
     [[nodiscard]] static std::string encode(const std::vector<std::uint8_t>& bytes);
+    // Strict RFC 4648 decoding; malformed input throws invalid_argument.
+    [[nodiscard]] static std::vector<std::uint8_t> decode(std::string_view text);
 };
 
 }  // namespace lsw::agent::util

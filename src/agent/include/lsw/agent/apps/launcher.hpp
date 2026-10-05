@@ -22,6 +22,7 @@ class Launcher {
 public:
     // One ``NAME=value`` override for the child's environment.
     using EnvVar = std::pair<std::string, std::string>;
+    enum class Mode { NewInstance, Open };
 
     // ``app_id`` may be a .exe or a .lnk path. .lnk targets are
     // resolved via IShellLink and ``%ENVVAR%`` references are expanded
@@ -42,10 +43,14 @@ public:
     // and the alternatives are all worse: a machine-wide variable
     // reaches every process and needs a logon to take effect, and a
     // batch wrapper hides the real executable from the launch tracking.
+    // ``visible_pids`` is the target session's titled-window owners. In Open
+    // mode a process without a visible window needs its normal activation command.
     [[nodiscard]] static bool launch(const std::string& app_id, const std::string& args,
                                      const std::vector<EnvVar>& env, const win::RunAs& as,
                                      unsigned long* pid_out = nullptr,
-                                     std::string* error_out = nullptr);
+                                     std::string* error_out = nullptr,
+                                      Mode mode = Mode::NewInstance,
+                                      const std::vector<unsigned long>& visible_pids = {});
 };
 
 }  // namespace lsw::agent::apps

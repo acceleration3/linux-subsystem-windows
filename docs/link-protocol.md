@@ -87,6 +87,84 @@ Each command is one agent-side handler TU under
 command names at all — including for logging, which asks the handler
 (`RpcHandler::silent`, `RpcHandler::summarize`).
 
+#### Opening an application
+
+`launch` takes `app_id` (an executable or shortcut path), optional `args`
+and `env`, and optional `reuse_existing` (default `false`, preserving
+explicit new-instance launches). With `reuse_existing: true`, a bare
+executable launch may return an existing live process with the same full
+image path and elevation in the requested session, preferring the oldest
+process over same-image renderer/helper processes. Shortcut targets are resolved first.
+Reuse skips execution only when that process or its descendants have a visible
+titled window. A tray-only app runs its normal activation command, but returns
+the original PID rather than the short-lived handoff process.
+Arguments, including those carried by a shortcut, and environment
+overrides prevent guest-side reuse: they cannot be silently applied to an
+existing process. A successful reply carries `pid`, `session`, `elevated`,
+and, when tracked, `job` naming the launch group that owns that process.
+The job's root need not be the returned process id.
+
+LSW's UI shares pending/running launches between entry points. Opening an
+already mirrored bare app sends another reuse-enabled `launch` RPC to restore
+tray-hidden UI, then raises the same mirror. Configs with arguments or environment
+overrides only raise their existing mirror. A successful
+RPC only means the Windows process exists; the UI reports success after
+RemoteWin receives its first frame. Mirror failure does not terminate the
+Windows application. `start_window_mirror` requires a listening port in
+`1..65535`; invalid ports are refused rather than truncated to 16 bits.
+
+`launch` also accepts MSI/MSP installers, batch files and Windows scripts.
+These start a tracked runner in the requested interactive session:
+`msiexec /i` (MSI), `msiexec /p` (MSP), `cmd /d /s /c` (BAT/CMD),
+`powershell -NoLogo -NoProfile -ExecutionPolicy Bypass -File` (PS1), or
+`wscript` (VBS/JS/WSF). Installer UI is not suppressed. Arguments follow
+the file argument, and the working directory remains the file's folder.
+
+MSIX/MSIXBundle and APPX/APPXBundle use `open_package` instead of `launch`.
+It takes `path` and optional `session`, runs in that user's session helper,
+and uses `ShellExecuteExW` with the `open` verb to activate the registered
+Windows App Installer UI. Missing file associations/activation failures are
+reported as errors; no silent Add-AppxPackage installation or signature
+bypass is performed. Package activation does not accept launch arguments or
+environment overrides. A successful reply is `{ok: true, pid: 0}`: shell
+activation has no reliable application PID/job, so the host shows the native
+installer on a mirrored guest desktop rather than tracking an activation
+broker. UI success means the installer desktop is visible, not that the
+package has been installed. The user completes installation in App Installer.
+
+#### Uploading a local file
+
+The manager's **Run on VM…** action uploads one local file, then calls
+`launch` on the returned guest path through the shared application launcher.
+The file is not executed until the entire upload has been acknowledged.
+`upload_file` runs in the service and takes an `action`:
+
+| action | parameters | successful result |
+|---|---|---|
+| `begin` | `name` (UTF-8 basename), `size` (unsigned byte count) | `{ok: true, upload_id}` |
+| `chunk` | `upload_id`, `offset` (unsigned), `data` (strict padded RFC 4648 base64) | `{ok: true, offset}` (next byte offset) |
+| `finish` | `upload_id` | `{ok: true, path}` (absolute Windows path) |
+| `abort` | `upload_id` | `{ok: true}` (idempotent) |
+
+Files must be non-empty and at most 16 GiB; chunks are at most 192 KiB
+decoded (`lsw/linkproto/file_transfer.hpp`). Chunks must be sequential and
+must not exceed the declared size. Finish requires exactly that size,
+flushes/closes the file, and renames the partial file to its original name.
+No arbitrary guest destination is accepted: each upload gets a unique
+directory under `C:\ProgramData\LSW\uploads`. Unsafe Windows names
+(including path separators, device names, alternate streams, `%` and `!`)
+are refused. At most eight incomplete uploads are kept; ones inactive for
+five minutes are removed on the next begin/chunk/finish request. Service
+teardown also discards unfinished uploads. Abort never deletes a completed
+file. Completed files are retained, including if launching fails, so an
+installer or running program can still access its source.
+
+The host sends only one chunk at a time asynchronously, reports acknowledged
+bytes as progress, and aborts on errors or cancellation. Cancellation racing
+with finish may retain the completed file but never starts it. Closing during
+a pending begin waits for its ID so the partial file can be aborted. Only the
+selected file is copied, not adjacent DLLs or other companion files.
+
 ### Sessions
 
 The agent is a Windows service (`lsw-agent`, LocalSystem, session 0),
@@ -98,6 +176,7 @@ for a user take an optional integer `session` param:
 | `launch`, `console_open`, `start_window_mirror` | the console user's session, as that user, elevated (`elevated: false` for the filtered token); `start_window_mirror` with a `pid` defaults to that process's session | SYSTEM in session 0 |
 | `run_script`, `download_install`, `download_extract` | SYSTEM in session 0 | the same |
 | `list_windows`, `close_window`, `window_command`, `set_display`, every `uia_*` | the console user's session | refused: session 0 has no desktop |
+| `open_package` | the console user's session, using its file associations | refused: session 0 has no desktop |
 
 Replies of the process-starting commands carry the `session` they ran
 in (`launch` and `console_open` also `elevated`). The commands of the

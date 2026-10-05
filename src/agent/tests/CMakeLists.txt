@@ -30,3 +30,13 @@ target_link_libraries(lsw_agent_logic_test PRIVATE
     nlohmann_json::nlohmann_json)
 
 add_test(NAME lsw_agent_logic_test COMMAND lsw_agent_logic_test)
+
+add_executable(lsw_agent_upload_test
+    upload_test.cpp
+    ../src/apps/upload_store.cpp
+    ../src/apps/launch_command.cpp
+    ../src/util/base64.cpp
+    ../src/util/wide_string.cpp)
+target_include_directories(lsw_agent_upload_test PRIVATE ../include)
+target_link_libraries(lsw_agent_upload_test PRIVATE LSW::CompileOptions LSW::LinkProto)
+add_test(NAME lsw_agent_upload_test COMMAND lsw_agent_upload_test)

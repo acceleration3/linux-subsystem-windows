@@ -37,6 +37,9 @@ namespace lsw::agent::rpc::handlers {
 struct StartWindowMirrorHandler : RpcHandler {
     nlohmann::json handle(const nlohmann::json& params, RpcContext& ctx) override {
         const auto port = params.value("port", std::uint32_t{0});
+        if (port == 0 || port > 65535) {
+            return {{"ok", false}, {"error", "port must be between 1 and 65535"}};
+        }
         const auto exe =
             params.value("exe", util::TextEncoding::to_utf8(core::Paths::remotewin_guest_exe()));
         const auto log_path = params.value(
@@ -52,11 +55,10 @@ struct StartWindowMirrorHandler : RpcHandler {
             params, linkproto::cmd::kStartWindowMirror, app_pid);
 
         std::string error;
-        const unsigned long pid = win::MirrorProcess::start(
-            exe, static_cast<std::uint16_t>(port), log_path, as, &error);
-        nlohmann::json r = {{"ok", pid != 0},
-                            {"pid", static_cast<std::uint64_t>(pid)},
-                            {"session", as.session()}};
+        const unsigned long pid =
+            win::MirrorProcess::start(exe, static_cast<std::uint16_t>(port), log_path, as, &error);
+        nlohmann::json r = {
+            {"ok", pid != 0}, {"pid", static_cast<std::uint64_t>(pid)}, {"session", as.session()}};
         if (pid == 0) {
             r["error"] = error;
         }

@@ -97,6 +97,8 @@ set(_lsw_agent_rpc_sources
     src/rpc/handlers/apps/get_icon.cpp
     src/rpc/handlers/apps/list_dir.cpp
     src/rpc/handlers/apps/resolve_shortcut.cpp
+    src/rpc/handlers/apps/upload_file.cpp
+    src/rpc/handlers/apps/open_package.cpp
     src/rpc/handlers/window/start_window_mirror.cpp
     src/rpc/handlers/window/list_windows.cpp
     src/rpc/handlers/window/close_window.cpp
@@ -163,7 +165,9 @@ set(_lsw_agent_uia_sources
 set(_lsw_agent_apps_sources
     src/apps/catalog.cpp
     src/apps/launch_group.cpp
+    src/apps/launch_command.cpp
     src/apps/launcher.cpp
+    src/apps/upload_store.cpp
 )
 set(_lsw_agent_install_sources
     src/install/installer.cpp
@@ -236,6 +240,7 @@ target_link_libraries(lsw-guest-agent
         gdiplus       # PNG encoding
         advapi32      # registry, tokens, the service control manager
         shlwapi       # PathMatchSpec etc.
+        shell32       # ShellExecuteExW: Windows App Installer activation
         winhttp       # Installer: HTTP(S) downloads
         dwmapi        # DWMWA_CLOAKED / EXTENDED_FRAME_BOUNDS
         runtimeobject # WinRT (RoInitialize / RoGetActivationFactory)

@@ -51,10 +51,9 @@ LaunchSplash::LaunchSplash(QString application, QIcon icon, std::optional<qint64
         badge->setPixmap(icon.pixmap(48, 48));
     } else {
         badge->setText(application_.left(2));
-        badge->setStyleSheet(
-            QStringLiteral("background: %1; border-radius: 11px; color: #0d0f14; "
-                           "font-weight: 700; font-size: 17px;")
-                .arg(QString::fromLatin1(Theme::Color::kAmber)));
+        badge->setStyleSheet(QStringLiteral("background: %1; border-radius: 11px; color: #0d0f14; "
+                                            "font-weight: 700; font-size: 17px;")
+                                 .arg(QString::fromLatin1(Theme::Color::kAmber)));
     }
     auto* titles = new QVBoxLayout;
     titles->setSpacing(3);
@@ -82,8 +81,7 @@ LaunchSplash::LaunchSplash(QString application, QIcon icon, std::optional<qint64
     auto* steps = new QVBoxLayout;
     steps->setSpacing(7);
     for (int i = 0; i < static_cast<int>(Phase::Count); ++i) {
-        steps_[i] = new QLabel(QStringLiteral("○  %1")
-                                   .arg(QString::fromLatin1(kPhaseNames[i])));
+        steps_[i] = new QLabel(QStringLiteral("○  %1").arg(QString::fromLatin1(kPhaseNames[i])));
         steps_[i]->setProperty(Theme::Tone::kProperty, Theme::Tone::kFaint);
         steps->addWidget(steps_[i]);
     }
@@ -121,6 +119,25 @@ LaunchSplash::LaunchSplash(QString application, QIcon icon, std::optional<qint64
     stalled_layout->addWidget(restart);
     stalled_footer_->setVisible(false);
     root->addWidget(stalled_footer_);
+    failed_footer_ = new QWidget;
+    auto* failed_layout = new QHBoxLayout(failed_footer_);
+    failed_layout->setContentsMargins(0, 0, 0, 0);
+    failed_layout->addStretch(1);
+    auto* failure_log = new QPushButton(QStringLiteral("Open the log"));
+    auto* dismiss = new QPushButton(QStringLiteral("Close"));
+    auto* retry = new QPushButton(QStringLiteral("Try again"));
+    failed_layout->addWidget(failure_log);
+    failed_layout->addWidget(dismiss);
+    failed_layout->addWidget(retry);
+    failed_footer_->hide();
+    root->addWidget(failed_footer_);
+    connect(failure_log, &QPushButton::clicked, this, &LaunchSplash::log_requested);
+    connect(dismiss, &QPushButton::clicked, this, &QWidget::close);
+    connect(retry, &QPushButton::clicked, this, [this] {
+        resume();
+        subtitle_->setText(QStringLiteral("Opening %1").arg(application_));
+        Q_EMIT retry_requested();
+    });
 
     connect(cancel, &QPushButton::clicked, this, [this] {
         Q_EMIT cancelled();
@@ -181,11 +198,9 @@ void LaunchSplash::show_phases() {
     for (int i = 0; i < static_cast<int>(Phase::Count); ++i) {
         const bool done = i <= reached_;
         const bool current = i == reached_ + 1;
-        steps_[i]->setText(QStringLiteral("%1  %2")
-                               .arg(done ? QStringLiteral("✓")
-                                         : (current ? QStringLiteral("●")
-                                                    : QStringLiteral("○")),
-                                    QString::fromLatin1(kPhaseNames[i])));
+        steps_[i]->setText(QStringLiteral("%1  %2").arg(
+            done ? QStringLiteral("✓") : (current ? QStringLiteral("●") : QStringLiteral("○")),
+            QString::fromLatin1(kPhaseNames[i])));
         // The current phase is in the plain foreground, which is no tone.
         Widgets::set_flag(steps_[i], Theme::Tone::kProperty,
                           done      ? QVariant(Theme::Tone::kOk)
@@ -195,11 +210,26 @@ void LaunchSplash::show_phases() {
 }
 
 void LaunchSplash::resume() {
+    failed_footer_->hide();
     stall_text_->setVisible(false);
     stalled_footer_->setVisible(false);
     footer_->setVisible(true);
     clock_.restart();
+    ticker_.start();
     tick();
+}
+
+void LaunchSplash::fail(const QString& reason) {
+    ticker_.stop();
+    bar_->setRange(0, 1);
+    bar_->setValue(0);
+    subtitle_->setText(QStringLiteral("Could not open %1").arg(application_));
+    stall_text_->setText(reason);
+    stall_text_->show();
+    footer_->hide();
+    stalled_footer_->hide();
+    failed_footer_->show();
+    show();
 }
 
 void LaunchSplash::stall(const QString& reason) {
