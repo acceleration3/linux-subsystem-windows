@@ -1,4 +1,4 @@
-#include "lsw/host/mcp/agent_binary_server.hpp"
+#include "lsw/host/mcp/guest_file_server.hpp"
 
 #include <arpa/inet.h>
 #include <cerrno>
@@ -8,15 +8,51 @@
 #include <sys/select.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#include <utility>
 
 namespace lsw::host::mcp {
 
-AgentBinaryServer::AgentBinaryServer(QByteArray payload) noexcept
-    : payload_(std::move(payload)) {}
+namespace {
 
-AgentBinaryServer::~AgentBinaryServer() { stop(); }
+void send_all(int connection, const char* bytes, std::size_t size) {
+    while (size > 0) {
+        const ssize_t written = ::send(connection, bytes, size, MSG_NOSIGNAL);
+        if (written <= 0) {
+            return;
+        }
+        bytes += written;
+        size -= static_cast<std::size_t>(written);
+    }
+}
 
-bool AgentBinaryServer::start() {
+}  // namespace
+
+GuestFileServer::GuestFileServer(Files files) noexcept : files_(std::move(files)) {}
+
+GuestFileServer::~GuestFileServer() { stop(); }
+
+std::string_view GuestFileServer::requested_name(std::string_view request) {
+    // "GET /name HTTP/1.1"
+    const auto method_end = request.find(' ');
+    if (method_end == std::string_view::npos) {
+        return {};
+    }
+    const auto path_start = method_end + 1;
+    const auto path_end = request.find_first_of(" \r\n", path_start);
+    if (path_end == std::string_view::npos) {
+        return {};
+    }
+    std::string_view path = request.substr(path_start, path_end - path_start);
+    if (const auto query = path.find('?'); query != std::string_view::npos) {
+        path = path.substr(0, query);
+    }
+    if (path.empty() || path.front() != '/') {
+        return {};
+    }
+    return path.substr(1);
+}
+
+bool GuestFileServer::start() {
     listen_fd_ = ::socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, IPPROTO_TCP);
     if (listen_fd_ < 0) {
         error_ = std::string{"socket: "} + std::strerror(errno);
@@ -48,7 +84,7 @@ bool AgentBinaryServer::start() {
     return true;
 }
 
-void AgentBinaryServer::serve_loop() {
+void GuestFileServer::serve_loop() {
     while (!stop_.load()) {
         sockaddr_in peer{};
         socklen_t plen = sizeof(peer);
@@ -59,9 +95,8 @@ void AgentBinaryServer::serve_loop() {
             }
             continue;
         }
-        // Drain the request without parsing it: this server has exactly
-        // one resource, so the request line cannot change the answer.
-        // Bounded so a peer that never finishes cannot pin the loop.
+        // Read the request head, bounded so a peer that never finishes
+        // cannot pin the loop.
         std::string request;
         request.reserve(512);
         char buf[4096];
@@ -82,30 +117,30 @@ void AgentBinaryServer::serve_loop() {
                 break;
             }
         }
-
-        const std::string header =
-            std::string{"HTTP/1.1 200 OK\r\n"}
-            + "Content-Type: application/octet-stream\r\n"
-            + "Content-Length: " + std::to_string(payload_.size()) + "\r\n"
-            + "Connection: close\r\n\r\n";
-        (void)::send(conn, header.data(), header.size(), MSG_NOSIGNAL);
-
-        const char* p = payload_.constData();
-        qsizetype left = payload_.size();
-        while (left > 0) {
-            const ssize_t written = ::send(conn, p, static_cast<std::size_t>(left), MSG_NOSIGNAL);
-            if (written <= 0) {
-                break;
-            }
-            p += written;
-            left -= written;
-        }
+        answer(conn, request);
         ::close(conn);
-        ++served_;
     }
 }
 
-void AgentBinaryServer::stop() {
+void GuestFileServer::answer(int connection, std::string_view request) {
+    const auto file = files_.find(requested_name(request));
+    if (file == files_.end()) {
+        constexpr std::string_view kNotFound =
+            "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+        send_all(connection, kNotFound.data(), kNotFound.size());
+        return;
+    }
+    const QByteArray& payload = file->second;
+    const std::string header = std::string{"HTTP/1.1 200 OK\r\n"}
+                               + "Content-Type: application/octet-stream\r\n"
+                               + "Content-Length: " + std::to_string(payload.size()) + "\r\n"
+                               + "Connection: close\r\n\r\n";
+    send_all(connection, header.data(), header.size());
+    send_all(connection, payload.constData(), static_cast<std::size_t>(payload.size()));
+    ++served_;
+}
+
+void GuestFileServer::stop() {
     if (listen_fd_ < 0) {
         return;
     }

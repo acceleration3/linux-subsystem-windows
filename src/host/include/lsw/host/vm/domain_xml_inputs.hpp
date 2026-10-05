@@ -53,6 +53,11 @@ struct DomainXmlInputs {
     // The file the driver's log (I/O port 0x402) is written to. Empty
     // leaves the debug console out.
     QString avgpu_log;
+    // The display adapter's export socket (``export-socket=``), where a
+    // mirror is handed the guest's frames as host GPU memory. Empty is
+    // "look it up" (vm::ExportSocket), as the accel-virt paths below are;
+    // still empty after, the device has none and mirrors take pixels.
+    QString export_socket;
 
     // accel-virt's host half. Empty is "look it up": Lifecycle fills
     // each from platform::AccelVirtPaths before it defines the domain,

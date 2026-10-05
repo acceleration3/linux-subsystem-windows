@@ -30,7 +30,8 @@ void GuestAppLauncher::launch(const apps::AppConfig& app) {
                 // Without this the agent dutifully starts the application
                 // inside the guest and nothing of it appears here: the
                 // mirror is what carries its windows onto this desktop.
-                auto* mirror = new mirror::WindowMirror(rpc_, pid, job, desktop_id, this);
+                auto* mirror =
+                    mirror::WindowMirror::of_application(rpc_, pid, job, desktop_id, this);
                 connect(mirror, &mirror::WindowMirror::finished, mirror, &QObject::deleteLater);
                 if (!mirror->start()) {
                     mirror->deleteLater();

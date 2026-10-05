@@ -1,21 +1,29 @@
 #!/usr/bin/env bash
 # Hot-swap the running guest agent inside the LSW VM with a fresh
-# cross-build of lsw-guest-agent.exe. No VM reboot, no manual
-# scp/console juggling.
+# cross-build of lsw-guest-agent.exe, and the window mirror's guest half
+# (remotewin-guest.exe) with it. No VM reboot, no manual scp/console
+# juggling.
 #
 # Mechanism: forwards to the running manager's MCP server
 # (http://127.0.0.1:5105/). The manager:
-#   1. Reads the local agent binary into memory.
-#   2. Spawns a one-shot HTTP server on a free localhost port.
+#   1. Reads the local agent binary, and remotewin-guest.exe when there
+#      is one ($LSW_REMOTEWIN_GUEST or build-agent/), into memory.
+#   2. Serves both on a free localhost port, each under its own name.
 #   3. Sends a "swap script" to the agent via run_script RPC (it runs
 #      as SYSTEM, outliving the agent it stops); the script curls the
-#      new binary from 10.0.2.2:<port>, stops the ``lsw-agent`` service,
-#      ends anything still running the old binary (the session helpers),
-#      moves the file into C:\ProgramData\LSW\, and starts the service
-#      again.
+#      new binaries from 10.0.2.2:<port>, renames the guest's
+#      remotewin-guest.exe aside (Windows renames a running image but
+#      will not replace it; the aside copy is deleted by a later swap
+#      once nothing runs it) and moves the new one in, stops the
+#      ``lsw-agent`` service, ends anything still running the old agent
+#      (the session helpers), moves the agent into C:\ProgramData\LSW\,
+#      and starts the service again.
 #   4. Polls system_info until ``agent_version`` changes, confirming
 #      the new binary is live (the new service opens :5102 once its
-#      session helper has confirmed the desktop, a few seconds in).
+#      session helper has confirmed the desktop, a few seconds in), then
+#      checks the guest's remotewin-guest.exe is the size of the one
+#      served. Mirrors already running keep the old guest half; the next
+#      application launched gets the new one.
 #
 # The script's own log is C:\ProgramData\LSW\lsw-swap.log in the guest.
 #
@@ -24,7 +32,9 @@
 #   scripts/redeploy-agent.sh --no-build  # use existing build-agent/ output
 #
 # Requires: a running lsw-manager (with MCP enabled on :5105) and a
-# running VM with the current agent reachable.
+# running VM with the current agent reachable. The manager's own build
+# decides what it serves: one older than this checkout serves the agent
+# alone.
 
 set -euo pipefail
 
@@ -58,6 +68,12 @@ if [[ ! -f "$EXE" ]]; then
 fi
 SIZE=$(stat -c%s "$EXE")
 echo ">>> Will deploy $EXE ($SIZE bytes)"
+MIRROR="${LSW_REMOTEWIN_GUEST:-${ROOT}/build-agent/remotewin/source/guest/remotewin-guest.exe}"
+if [[ -f "$MIRROR" ]]; then
+    echo ">>> and $MIRROR ($(stat -c%s "$MIRROR") bytes)"
+else
+    echo ">>> no $MIRROR: the guest keeps its remotewin-guest.exe"
+fi
 
 # Forward to the manager. The manager owns the deploy state machine
 # (HTTP server, RPC, version polling); we're just calling tools/call.
@@ -85,7 +101,6 @@ for c in res.get("content", []):
         parts.append(c.get("text", ""))
 print("\n".join(parts))
 sys.exit(1 if is_err else 0)
-')
-RC=$?
+') && RC=0 || RC=$?
 echo "$TEXT"
 exit $RC

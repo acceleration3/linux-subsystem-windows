@@ -23,9 +23,15 @@ namespace lsw::agent::rpc::handlers {
 //
 // The mirror has to run in the application's session (window handles,
 // capture and input do not cross sessions), as that session's user,
-// elevated like the application by default:
+// elevated like the application by default.
 //
-//   params: port, exe?, log_path?, session?, pid? (the mirrored
+// Or for the guest's whole desktop ("Open desktop"): the same guest half,
+// which learns from the host end, once connected, that it is to capture
+// the monitor rather than an application. ``desktop`` only names its log
+// apart, so a desktop mirror and an application's do not write over each
+// other's.
+//
+//   params: port, exe?, log_path?, desktop?, session?, pid? (the mirrored
 //           application: its session is the default), elevated?
 //   reply:  {ok, pid, session, error?}
 struct StartWindowMirrorHandler : RpcHandler {
@@ -34,7 +40,9 @@ struct StartWindowMirrorHandler : RpcHandler {
         const auto exe =
             params.value("exe", util::TextEncoding::to_utf8(core::Paths::remotewin_guest_exe()));
         const auto log_path = params.value(
-            "log_path", util::TextEncoding::to_utf8(core::Paths::remotewin_guest_log()));
+            "log_path", util::TextEncoding::to_utf8(params.value("desktop", false)
+                                                        ? core::Paths::remotewin_desktop_log()
+                                                        : core::Paths::remotewin_guest_log()));
 
         std::optional<std::uint32_t> app_pid;
         if (const auto v = params.value("pid", std::uint64_t{0}); v != 0) {

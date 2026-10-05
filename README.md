@@ -19,7 +19,14 @@ external/
   accel-virt/     the GPU: a paravirtual WDDM adapter, its QEMU device and its guest drivers
 ```
 
-There are two paths across the VM boundary and they are independent.
+There are two paths across the VM boundary. They meet in one place: a
+mirrored window's frames, which the guest half copies into shared
+textures on the guest's GPU and remotewin imports from accel-virt's
+device as the host GPU memory they are in (the device's export socket,
+`$XDG_RUNTIME_DIR/lsw-export.sock`, which the domain names and every
+`remotewin` is given). Without it - an older QEMU, another GPU, a VM
+defined before it - frames cross as pixels over the guest's network, as
+they always did.
 
 **remotewin** carries windows. Launching an application starts a
 `remotewin` process for it, which owns that application's windows on this
@@ -123,7 +130,15 @@ or `scripts/build.sh`, which does the same and cross-builds the Windows
 half first.
 
 Requires CMake 3.25+, a C++20 compiler, Qt 6, libvirt (with
-`libvirt-qemu`), and the Vulkan development package. accel-virt brings
+`libvirt-qemu`), and the Vulkan development package. The window mirror's
+host half (remotewin) adds a C compiler, pkg-config, `wayland-client`,
+`wayland-scanner`, `wayland-protocols` and EGL, and Qt's DBus, OpenGL and
+OpenGLWidgets modules and its private Gui and WaylandClient modules (in
+`qt6-base` on Arch's Qt 6.11, `qt6-wayland` before): configure names
+whichever is missing, and
+`-DLSW_BUILD_REMOTEWIN=OFF` builds without the mirror. The private API
+ties the built `remotewin` to the Qt it was built against; rebuild it
+after a Qt update (aur/README.md says what a mismatch costs). accel-virt brings
 its own requirements, because the host build is also where its guest
 drivers are built:
 
