@@ -34,6 +34,7 @@ inline constexpr const char* kListSessions = "list_sessions";
 // -- installed apps -------------------------------------------------------
 inline constexpr const char* kListApps = "list_apps";
 inline constexpr const char* kLaunch   = "launch";
+inline constexpr const char* kOpenPackage = "open_package";
 inline constexpr const char* kGetIcon  = "get_icon";
 
 // -- browsing the guest ---------------------------------------------------
@@ -51,6 +52,7 @@ inline constexpr const char* kGetIcon  = "get_icon";
 inline constexpr const char* kSetDisplay      = "set_display";
 inline constexpr const char* kListDir         = "list_dir";
 inline constexpr const char* kResolveShortcut = "resolve_shortcut";
+inline constexpr const char* kUploadFile      = "upload_file";
 
 // -- the window mirror ----------------------------------------------------
 // Start remotewin's guest half, which dials back out to the mirror

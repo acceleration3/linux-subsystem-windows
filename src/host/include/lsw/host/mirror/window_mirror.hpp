@@ -1,13 +1,16 @@
 #pragma once
 
+#include <QByteArray>
 #include <QObject>
 #include <QProcess>
 #include <QString>
 #include <QStringList>
-
+#include <QTimer>
 #include <cstdint>
 
-namespace lsw::host::link { class AgentRpcClient; }
+namespace lsw::host::link {
+class AgentRpcClient;
+}
 
 namespace lsw::host::mirror {
 
@@ -31,6 +34,7 @@ namespace lsw::host::mirror {
 class WindowMirror : public QObject {
     Q_OBJECT
 public:
+    ~WindowMirror() override;
     // An application's windows. ``job`` is the Job Object naming the
     // launch, as the ``launch`` reply gave it: it survives a launcher stub
     // that starts the real application and exits, which a process id does
@@ -39,8 +43,7 @@ public:
     // entry the mirrored windows present as, so they group under the
     // application's own name rather than the manager's.
     [[nodiscard]] static WindowMirror* of_application(link::AgentRpcClient& rpc, quint32 pid,
-                                                      const QString& job,
-                                                      const QString& desktop_id,
+                                                      const QString& job, const QString& desktop_id,
                                                       QObject* parent = nullptr);
 
     // The guest's whole primary monitor, as one window titled ``title``
@@ -49,9 +52,8 @@ public:
     [[nodiscard]] static WindowMirror* of_desktop(link::AgentRpcClient& rpc, const QString& title,
                                                   QObject* parent = nullptr);
 
-    // Starts the host end, then asks the agent for the guest end. False
-    // if the mirror could not be started at all, in which case nothing
-    // of it shows.
+    // Starts asynchronously. ready means the first window frame arrived;
+    // failed names startup and runtime failures.
     bool start();
 
     // Asks the compositor to bring the mirror's windows to the front.
@@ -61,6 +63,8 @@ Q_SIGNALS:
     // The mirror ended: every window it had closed, or what it mirrored
     // did.
     void finished();
+    void ready();
+    void failed(const QString& reason);
 
 private:
     // ``what`` names the mirror in the log. ``host_arguments`` follow the
@@ -69,12 +73,11 @@ private:
     WindowMirror(link::AgentRpcClient& rpc, QString what, QStringList host_arguments,
                  quint32 guest_pid, bool desktop, QObject* parent);
 
-    // A port nothing else is on. Asked for by binding one and letting go
-    // of it: the mirror binds it a moment later, and this host is not
-    // handing out ports fast enough for anything to slip in between.
-    [[nodiscard]] static quint16 free_port();
-
     void on_host_end_finished(int code, QProcess::ExitStatus status);
+    void read_status();
+    void start_guest(quint16 port);
+    void fail(const QString& reason);
+    void announce_ready();
 
     link::AgentRpcClient& rpc_;
     QString what_;
@@ -82,6 +85,14 @@ private:
     quint32 guest_pid_;
     bool desktop_;
     QProcess* host_end_;
+    QTimer deadline_;
+    QByteArray status_buffer_;
+    bool started_ = false;
+    bool guest_started_ = false;
+    bool guest_confirmed_ = false;
+    bool first_frame_ = false;
+    bool ready_ = false;
+    bool failed_ = false;
 };
 
 }  // namespace lsw::host::mirror

@@ -1,16 +1,23 @@
 #include "lsw/agent/apps/launcher.hpp"
 
 #include "lsw/agent/apps/launch_group.hpp"
+#include "lsw/agent/apps/launch_command.hpp"
 #include "lsw/agent/log.hpp"
 #include "lsw/agent/util/text_encoding.hpp"
 #include "lsw/agent/util/wide_string.hpp"
 #include "lsw/agent/win/environment.hpp"
 #include "lsw/agent/win/error_text.hpp"
 #include "lsw/agent/win/process.hpp"
+#include "lsw/agent/win/process_info.hpp"
 #include "lsw/agent/win/run_as.hpp"
 #include "lsw/agent/win/shell_link.hpp"
+#include "lsw/agent/win/unique_handle.hpp"
 
+#include <algorithm>
+#include <limits>
+#include <optional>
 #include <string>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 #include <windows.h>
@@ -26,18 +33,69 @@ void set_err(std::string* error_out, const std::string& s) {
     }
 }
 
+std::optional<unsigned long> existing_process(const std::wstring& path, const win::RunAs& as) {
+    const std::wstring image = util::WideString::lower(path);
+    std::optional<unsigned long> chosen;
+    auto oldest = std::numeric_limits<std::uint64_t>::max();
+    for (const auto& entry : win::ProcessInfo::snapshot()) {
+        DWORD session = 0;
+        if (!::ProcessIdToSessionId(entry.pid, &session) || session != as.session())
+            continue;
+        const win::UniqueHandle process{
+            ::OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, entry.pid)};
+        if (!process ||
+            util::WideString::lower(win::ProcessInfo::image_path(process.get())) != image)
+            continue;
+        DWORD exit_code = 0;
+        if (!::GetExitCodeProcess(process.get(), &exit_code) || exit_code != STILL_ACTIVE)
+            continue;
+        win::UniqueHandle token;
+        TOKEN_ELEVATION elevation{};
+        DWORD bytes = 0;
+        if (!::OpenProcessToken(process.get(), TOKEN_QUERY, token.put()) ||
+            !::GetTokenInformation(token.get(), TokenElevation, &elevation, sizeof(elevation),
+                                   &bytes) ||
+            (elevation.TokenIsElevated != 0) != as.elevated())
+            continue;
+        // The oldest image is normally the browser/application, not one of its
+        // later same-image renderer/helper processes that has no windows.
+        const auto created = win::ProcessInfo::creation_time(process.get());
+        if (created && *created < oldest) {
+            chosen = entry.pid;
+            oldest = *created;
+        }
+    }
+    return chosen;
+}
+
+bool has_application_window(unsigned long pid, const std::vector<unsigned long>& visible_pids) {
+    const auto processes = win::ProcessInfo::snapshot();
+    std::unordered_set<unsigned long> family{pid};
+    for (std::size_t pass = 0; pass < processes.size(); ++pass) {
+        bool grew = false;
+        for (const auto& process : processes) {
+            if (family.contains(process.parent) && family.insert(process.pid).second)
+                grew = true;
+        }
+        if (!grew)
+            break;
+    }
+    return std::any_of(visible_pids.begin(), visible_pids.end(),
+                       [&](unsigned long candidate) { return family.contains(candidate); });
+}
+
 }  // namespace
 
 bool Launcher::launch(const std::string& app_id, const std::string& extra_args,
-                      const std::vector<EnvVar>& env, const win::RunAs& as,
-                      unsigned long* pid_out, std::string* error_out) {
+                      const std::vector<EnvVar>& env, const win::RunAs& as, unsigned long* pid_out,
+                      std::string* error_out, Mode mode,
+                      const std::vector<unsigned long>& visible_pids) {
     if (pid_out != nullptr) {
         *pid_out = 0;
     }
     LSW_AGENT_INFO("launch: app_id={} as {}", app_id, as.describe());
 
-    // Resolve .lnk → real exe + args + working dir. For raw .exe /
-    // .bat paths we just hand the path straight to CreateProcessW.
+    // Resolve .lnk → real exe + args + working dir.
     std::wstring path = util::TextEncoding::to_wide(app_id);
     std::wstring args;
     std::wstring working_dir;
@@ -66,6 +124,21 @@ bool Launcher::launch(const std::string& app_id, const std::string& extra_args,
     path = as.expand(path);
     working_dir = as.expand(working_dir);
     args = as.expand(args);
+    // Never consume a document/profile argument or pretend environment overrides
+    // were applied to an existing process. Match the full image, not its basename.
+    std::optional<unsigned long> existing;
+    if (mode == Mode::Open && args.empty() && extra_args.empty() && env.empty() &&
+        util::WideString::iends_with(path, L".exe")) {
+        existing = existing_process(path, as);
+        if (existing && has_application_window(*existing, visible_pids)) {
+            LSW_AGENT_INFO("launch: reusing pid={} for {}", *existing, app_id);
+            if (pid_out)
+                *pid_out = *existing;
+            return true;
+        }
+        // A tray-only process needs its normal launch/IPC handoff to reopen.
+        // Keep mirroring the original process, not the short-lived activation stub.
+    }
 
     // Default the working directory to the executable's own folder.
     //
@@ -88,26 +161,24 @@ bool Launcher::launch(const std::string& app_id, const std::string& extra_args,
     }
     LSW_AGENT_DEBUG("launch: expanded path={} working_dir={}", path, working_dir);
 
-    // Quote the exe path so spaces work; append args.
-    std::wstring cmdline = win::Process::quote(path);
-    if (!args.empty()) {
-        cmdline += L" ";
-        cmdline += args;
-    }
     // The configured arguments come last, after whatever a .lnk
     // carried, so an app config can add to a shortcut rather than
     // having to restate it.
     if (const std::wstring extra = as.expand(util::TextEncoding::to_wide(extra_args));
         !extra.empty()) {
-        cmdline += L" ";
-        cmdline += extra;
+        if (!args.empty()) {
+            args += L" ";
+        }
+        args += extra;
     }
+    const LaunchCommand command(path, as.expand(L"%windir%"), args);
+    const auto& cmdline = command.command_line;
 
     // The environment ``as`` gets, with the overrides applied. For the
     // agent itself with nothing to override that is empty, and the child
     // inherits ours.
     win::SpawnOptions options;
-    options.application = path;
+    options.application = command.application;
     options.command_line = cmdline;
     try {
         options.environment = as.environment(env);
@@ -192,7 +263,7 @@ bool Launcher::launch(const std::string& app_id, const std::string& extra_args,
 
     LSW_AGENT_INFO("launch: spawned pid={}", spawned->pid);
     if (pid_out != nullptr) {
-        *pid_out = spawned->pid;
+        *pid_out = existing.value_or(spawned->pid);
     }
     return true;
 }

@@ -24,6 +24,7 @@ class ConsolePanel;
 class GraphicsAlerts;
 class GraphicsPage;
 class LogPanel;
+class RunOnVmDialog;
 class SettingsPage;
 class VmDetailPanel;
 class WarningStrip;
@@ -98,6 +99,8 @@ private:
     // belong to and hidden for the rest, rather than each page growing
     // a toolbar of its own.
     QPushButton* desktop_button_ = nullptr;
+    QPushButton* run_on_vm_button_ = nullptr;
+    QPointer<RunOnVmDialog> run_on_vm_dialog_;
     QPushButton* clear_button_ = nullptr;
     QPushButton* config_folder_button_ = nullptr;
     QPushButton* change_settings_button_ = nullptr;

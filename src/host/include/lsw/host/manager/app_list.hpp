@@ -2,14 +2,18 @@
 
 #include "lsw/host/apps/app_config_store.hpp"
 #include "lsw/host/apps/catalog.hpp"
-#include "lsw/host/manager/guest_app_launcher.hpp"
+#include "lsw/host/apps/guest_app_launcher.hpp"
 
 #include <QListWidget>
 #include <QToolBar>
 #include <QUuid>
 #include <QWidget>
 
-namespace lsw::host::link { class AgentRpcClient; }
+class QLabel;
+
+namespace lsw::host::link {
+class AgentRpcClient;
+}
 
 namespace lsw::host::manager {
 
@@ -25,7 +29,7 @@ class AppListWidget : public QWidget {
     Q_OBJECT
 public:
     AppListWidget(apps::AppConfigStore& store, link::AgentRpcClient& rpc,
-                  QWidget* parent = nullptr);
+                  apps::GuestAppLauncher& launcher, QWidget* parent = nullptr);
 
     // The toolbar the grid builds for itself. The Overview page lifts
     // it into the panel's caption row, so refresh and add sit on the
@@ -51,10 +55,9 @@ private:
     apps::AppConfigStore& store_;
     link::AgentRpcClient& rpc_;
     apps::AppCatalog catalog_;
-    // Each double-click starts another instance with a mirror of its
-    // own, so two instances of one application do not share a set of
-    // windows. The mirrors are the launcher's children.
-    GuestAppLauncher launcher_;
+    apps::GuestAppLauncher& launcher_;
+    void update_launch_state();
+    QLabel* launch_notice_ = nullptr;
     QToolBar* toolbar_ = nullptr;
     QListWidget* list_ = nullptr;
 

@@ -70,7 +70,8 @@ VmDetailPanel::VmDetailPanel(services::HostServices& services, QWidget* parent)
 
     auto apps_panel = make_panel(QStringLiteral("Installed applications"));
     apps_panel.body->setContentsMargins(0, 0, 0, 0);
-    app_list_ = new AppListWidget(services_.app_configs(), services_.rpc());
+    app_list_ =
+        new AppListWidget(services_.app_configs(), services_.rpc(), services_.app_launcher());
     // The list carries its own toolbar; hoisting its actions into the
     // panel header is what makes the two panels read as one object.
     if (auto* toolbar = app_list_->toolbar()) {

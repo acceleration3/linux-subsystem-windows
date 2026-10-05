@@ -170,3 +170,21 @@ target_link_libraries(lsw_host_guest_swap_test
     PRIVATE lsw_host_manager LSW::CompileOptions)
 target_compile_definitions(lsw_host_guest_swap_test PRIVATE QT_NO_KEYWORDS)
 add_test(NAME lsw_host_guest_swap_test COMMAND lsw_host_guest_swap_test)
+
+add_executable(lsw_host_guest_app_launcher_test guest_app_launcher_test.cpp)
+target_link_libraries(lsw_host_guest_app_launcher_test
+    PRIVATE lsw_host_core LSW::CompileOptions nlohmann_json::nlohmann_json)
+target_compile_definitions(lsw_host_guest_app_launcher_test PRIVATE QT_NO_KEYWORDS)
+add_test(NAME lsw_host_guest_app_launcher_test COMMAND lsw_host_guest_app_launcher_test)
+set_tests_properties(lsw_host_guest_app_launcher_test PROPERTIES TIMEOUT 30)
+
+add_executable(lsw_host_guest_file_transfer_test
+    guest_file_transfer_test.cpp
+    ../../agent/src/apps/upload_store.cpp
+    ../../agent/src/util/base64.cpp)
+target_include_directories(lsw_host_guest_file_transfer_test PRIVATE ../../agent/include)
+target_link_libraries(lsw_host_guest_file_transfer_test
+    PRIVATE lsw_host_core LSW::CompileOptions nlohmann_json::nlohmann_json)
+target_compile_definitions(lsw_host_guest_file_transfer_test PRIVATE QT_NO_KEYWORDS)
+add_test(NAME lsw_host_guest_file_transfer_test COMMAND lsw_host_guest_file_transfer_test)
+set_tests_properties(lsw_host_guest_file_transfer_test PROPERTIES TIMEOUT 60)

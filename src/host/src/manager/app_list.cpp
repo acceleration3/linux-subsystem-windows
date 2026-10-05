@@ -2,21 +2,22 @@
 
 #include "lsw/base/log.hpp"
 #include "lsw/host/apps/desktop_launcher.hpp"
-#include "lsw/host/manager/app_config_dialog.hpp"
 #include "lsw/host/link/agent_rpc_client.hpp"
+#include "lsw/host/manager/app_config_dialog.hpp"
 
 #include <QAction>
+#include <QLabel>
 #include <QListWidgetItem>
 #include <QMenu>
 #include <QPixmap>
+#include <QShortcut>
 #include <QVBoxLayout>
 
 namespace lsw::host::manager {
 
 AppListWidget::AppListWidget(apps::AppConfigStore& store, link::AgentRpcClient& rpc,
-                             QWidget* parent)
-    : QWidget(parent), store_(store), rpc_(rpc), catalog_(rpc),
-      launcher_(rpc) {
+                             apps::GuestAppLauncher& launcher, QWidget* parent)
+    : QWidget(parent), store_(store), rpc_(rpc), catalog_(rpc), launcher_(launcher) {
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(0, 0, 0, 0);
 
@@ -44,14 +45,31 @@ AppListWidget::AppListWidget(apps::AppConfigStore& store, link::AgentRpcClient& 
     list_->setWordWrap(true);
     list_->setContextMenuPolicy(Qt::CustomContextMenu);
     root->addWidget(list_, 1);
+    launch_notice_ = new QLabel;
+    launch_notice_->setWordWrap(true);
+    launch_notice_->setTextFormat(Qt::PlainText);
+    launch_notice_->hide();
+    root->addWidget(launch_notice_);
+    connect(&launcher_, &apps::GuestAppLauncher::changed, this,
+            &AppListWidget::update_launch_state);
+    connect(&launcher_, &apps::GuestAppLauncher::failed, this,
+            [this](const QString& path, const QString& error) {
+                launch_notice_->setText(QStringLiteral("Could not open %1: %2").arg(path, error));
+                launch_notice_->show();
+            });
 
     connect(&catalog_, &apps::AppCatalog::loaded, this, &AppListWidget::on_loaded);
     // Use itemDoubleClicked rather than itemActivated — the latter is
     // style-dependent (single-click on some platforms, double on
     // others). Explicit double-click is what the user sees.
     connect(list_, &QListWidget::itemDoubleClicked, this, &AppListWidget::on_item_activated);
-    connect(list_, &QListWidget::customContextMenuRequested, this,
-            &AppListWidget::on_context_menu);
+    for (const auto key : {Qt::Key_Return, Qt::Key_Enter}) {
+        auto* open = new QShortcut(QKeySequence(key), list_);
+        open->setContext(Qt::WidgetShortcut);
+        connect(open, &QShortcut::activated, this,
+                [this] { on_item_activated(list_->currentItem()); });
+    }
+    connect(list_, &QListWidget::customContextMenuRequested, this, &AppListWidget::on_context_menu);
     connect(refresh_act, &QAction::triggered, this, &AppListWidget::on_refresh_clicked);
     connect(new_act, &QAction::triggered, this, &AppListWidget::on_new_clicked);
     // The XDG menu follows the store too, but App owns that: it reapplies
@@ -84,6 +102,24 @@ void AppListWidget::rebuild() {
         }
         item->setData(Qt::UserRole, cfg.id);
         item->setToolTip(cfg.path);
+    }
+    update_launch_state();
+}
+
+void AppListWidget::update_launch_state() {
+    for (int row = 0; row < list_->count(); ++row) {
+        auto* item = list_->item(row);
+        const auto* cfg = store_.find(item->data(Qt::UserRole).toString());
+        if (!cfg)
+            continue;
+        const bool opening = launcher_.opening(*cfg);
+        const bool running = launcher_.running(*cfg);
+        item->setText(cfg->name + (opening   ? QStringLiteral("\nOpening…")
+                                   : running ? QStringLiteral("\nRunning")
+                                             : QString{}));
+        item->setToolTip(cfg->path + (opening   ? QStringLiteral("\nWaiting for a window")
+                                      : running ? QStringLiteral("\nOpen to bring it forward")
+                                                : QString{}));
     }
 }
 
@@ -129,6 +165,7 @@ void AppListWidget::on_item_activated(QListWidgetItem* item) {
         LSW_WARN("app_list: no config for id={}", id.toStdString());
         return;
     }
+    launch_notice_->hide();
     launcher_.launch(*cfg);
 }
 
@@ -139,7 +176,9 @@ void AppListWidget::on_context_menu(const QPoint& pos) {
     }
     const QString id = item->data(Qt::UserRole).toString();
     QMenu menu(this);
-    auto* open_act = menu.addAction("Open");
+    const auto* config = store_.find(id);
+    auto* open_act =
+        menu.addAction(config && launcher_.running(*config) ? "Bring to front" : "Open");
     menu.setDefaultAction(open_act);
     menu.addSeparator();
     auto* cfg_act = menu.addAction("Configure...");

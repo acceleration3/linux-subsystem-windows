@@ -1,5 +1,6 @@
 #pragma once
 
+#include "lsw/agent/apps/upload_store.hpp"
 #include "lsw/agent/console/console.hpp"
 #include "lsw/agent/install/installer.hpp"
 #include "lsw/agent/win/com.hpp"
@@ -48,6 +49,7 @@ public:
     [[nodiscard]] install::Installer& installer() noexcept { return installer_; }
 
     [[nodiscard]] console::Console& console() noexcept { return console_; }
+    [[nodiscard]] apps::UploadStore& uploads() noexcept { return uploads_; }
 
     // SessionHelper only.
     [[nodiscard]] uia::Uia& uia();
@@ -67,6 +69,7 @@ private:
     Role role_;
     install::Installer installer_;
     console::Console console_;
+    apps::UploadStore uploads_;
     win::Apartment apartment_;  // must initialise BEFORE uia_
     std::unique_ptr<uia::Uia> uia_;
     std::unique_ptr<session::SessionManager> sessions_;

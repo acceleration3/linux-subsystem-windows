@@ -3,11 +3,11 @@
 #include "lsw/base/log.hpp"
 #include "lsw/host/link/agent_reply.hpp"
 #include "lsw/host/link/agent_rpc_client.hpp"
+#include "lsw/linkproto/app_package.hpp"
+#include "lsw/linkproto/commands.hpp"
 
 #include <QtConcurrent>
 #include <nlohmann/json.hpp>
-
-#include "lsw/linkproto/commands.hpp"
 
 namespace lsw::host::apps {
 
@@ -43,27 +43,36 @@ nlohmann::json env_object(const QString& text) {
 
 }  // namespace
 
-Launcher::Launcher(link::AgentRpcClient& rpc, QObject* parent)
-    : QObject(parent), rpc_(rpc) {}
+Launcher::Launcher(link::AgentRpcClient& rpc, QObject* parent) : QObject(parent), rpc_(rpc) {}
 
-void Launcher::launch(const QString& app_id, const QString& args,
-                      const QString& env) {
-    nlohmann::json params = {{"app_id", app_id.toStdString()}};
+void Launcher::launch(const QString& app_id, const QString& args, const QString& env) {
+    const bool package = linkproto::is_app_package(app_id.toStdString());
+    if (package && (!args.trimmed().isEmpty() || !env.trimmed().isEmpty())) {
+        Q_EMIT failed(
+            app_id,
+            QStringLiteral(
+                "App Installer packages do not accept launch arguments or environment overrides"));
+        return;
+    }
+    nlohmann::json params =
+        package ? nlohmann::json{{"path", app_id.toStdString()}}
+                : nlohmann::json{{"app_id", app_id.toStdString()}, {"reuse_existing", true}};
     if (!args.trimmed().isEmpty()) {
         params["args"] = args.toStdString();
     }
     if (auto vars = env_object(env); !vars.empty()) {
         params["env"] = std::move(vars);
     }
-    QtConcurrent::run([&rpc = rpc_, params = std::move(params)] {
-        return rpc.request(linkproto::cmd::kLaunch, params);
-    }).then(this, [this, app_id](const link::AgentReply& reply) {
+    QtConcurrent::run([&rpc = rpc_, package, params = std::move(params)] {
+        return rpc.request(package ? linkproto::cmd::kOpenPackage : linkproto::cmd::kLaunch,
+                           params);
+    }).then(this, [this, app_id, package](const link::AgentReply& reply) {
         if (!reply.ok) {
             Q_EMIT failed(app_id, QString::fromStdString("agent: " + reply.error));
             return;
         }
         const auto pid = static_cast<quint32>(reply.body.value("pid", std::uint64_t{0}));
-        if (pid == 0) {
+        if (pid == 0 && !package) {
             Q_EMIT failed(app_id, QStringLiteral("agent: the launch reply carries no pid"));
             return;
         }

@@ -49,6 +49,26 @@ The Windows half is cross-built, not built here:
 ./scripts/build-agent.sh
 ```
 
+RemoteWin launch/reopen regression checks run without a VM:
+
+```sh
+cmake --build build --target lsw_host_guest_app_launcher_test
+ctest --test-dir build -R lsw_host_guest_app_launcher_test --output-on-failure
+```
+
+An opt-in live check starts Character Map, verifies repeated opens and
+reattachment to the same Windows PID, then closes only its own window:
+
+```sh
+LSW_REMOTEWIN="$PWD/build/remotewin/source/host/remotewin" \
+  build/src/host/tests/lsw_host_guest_app_launcher_test --live
+```
+
+This requires the running guest agent on `127.0.0.1:5102`, matching
+RemoteWin halves, and a working desktop session. It refuses to run if
+Character Map is already open. RemoteWin's standalone test suite also
+covers parent-pipe lifecycle and malformed window counts.
+
 That produces `lsw-guest-agent.exe` and `remotewin-guest.exe` under
 `build-agent/`, and the Vulkan loader for x86-64 and i686 under
 `build-agent/` and `build-agent32/`. The wizard picks all of them up from
