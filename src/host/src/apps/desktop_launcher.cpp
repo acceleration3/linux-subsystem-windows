@@ -1,5 +1,7 @@
 #include "lsw/host/apps/desktop_launcher.hpp"
 
+#include "lsw/host/apps/windows_badge.hpp"
+
 #include "lsw/base/log.hpp"
 
 #include <QByteArray>
@@ -226,8 +228,10 @@ bool DesktopLauncher::install(const AppConfig& cfg) {
     // icon theme.
     QString icon_abs;
     if (!cfg.icon_png_base64.isEmpty()) {
+        // Marked as Windows', so its mirrored windows are told apart from
+        // the host's own on the task manager, which shows this icon.
         const QByteArray png =
-            QByteArray::fromBase64(cfg.icon_png_base64.toUtf8());
+            WindowsBadge::applied(QByteArray::fromBase64(cfg.icon_png_base64.toUtf8()));
         if (!png.isEmpty()) {
             const QString ip = icon_path(cfg);
             QFile pf(ip);

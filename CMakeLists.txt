@@ -241,11 +241,14 @@ if(LSW_BUILD_MANAGER)
 
     add_subdirectory(src/host)
 
-    # The desktop entry, and what accel-virt needs of the host system:
+    # The desktop entry and its icon, and what accel-virt needs of the host system:
     # /dev/udmabuf, loaded at boot and open to the logged-in user, whose
     # QEMU the session-mode libvirt runs. See packaging/ for each.
     install(FILES packaging/lsw-manager.desktop
             DESTINATION share/applications
+            COMPONENT ${LSW_INSTALL_COMPONENT})
+    install(FILES packaging/lsw-manager.svg
+            DESTINATION share/icons/hicolor/scalable/apps
             COMPONENT ${LSW_INSTALL_COMPONENT})
     install(FILES packaging/lsw-udmabuf.conf
             DESTINATION lib/modules-load.d RENAME lsw.conf

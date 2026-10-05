@@ -1,5 +1,5 @@
 <!DOCTYPE RCC>
-<!-- The images the stylesheet needs.
+<!-- The images the stylesheet needs, and the application's icon.
 
      A combo box that a stylesheet has touched draws its own arrow or
      none at all, and the only arrow a stylesheet can name is an image.
@@ -9,5 +9,6 @@
   <qresource prefix="/lsw">
     <file>caret.png</file>
     <file>caret-disabled.png</file>
+    <file alias="lsw-manager.svg">../../../packaging/lsw-manager.svg</file>
   </qresource>
 </RCC>
