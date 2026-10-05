@@ -236,6 +236,13 @@ QString DomainXmlBuilder::build(const config::VmRecord& vm, const DomainXmlInput
     } else {
         display += QStringLiteral(",max_outputs=1");
         display += gpu_tail(inputs);
+        // The guest's shared surfaces, handed to a mirror as the host GPU
+        // memory they are in. QEMU binds it as it starts and replaces a
+        // socket a QEMU that was killed left behind; it does not make the
+        // directory, which is why the path is one that always exists.
+        if (!inputs.export_socket.isEmpty()) {
+            display += QStringLiteral(",export-socket=%1").arg(qemu_opt(inputs.export_socket));
+        }
         if (!inputs.display_modes.isEmpty()) {
             display += QStringLiteral(",modes=%1").arg(qemu_opt(inputs.display_modes));
         }

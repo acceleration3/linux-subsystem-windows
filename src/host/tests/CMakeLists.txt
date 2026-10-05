@@ -162,3 +162,11 @@ target_link_libraries(lsw_host_guest_sessions_test
     PRIVATE lsw_host_core LSW::CompileOptions nlohmann_json::nlohmann_json)
 target_compile_definitions(lsw_host_guest_sessions_test PRIVATE QT_NO_KEYWORDS)
 add_test(NAME lsw_host_guest_sessions_test COMMAND lsw_host_guest_sessions_test)
+
+# The redeploy's guest side: the file server's names and the swap
+# script's handling of the window mirror's guest half.
+add_executable(lsw_host_guest_swap_test guest_swap_test.cpp)
+target_link_libraries(lsw_host_guest_swap_test
+    PRIVATE lsw_host_manager LSW::CompileOptions)
+target_compile_definitions(lsw_host_guest_swap_test PRIVATE QT_NO_KEYWORDS)
+add_test(NAME lsw_host_guest_swap_test COMMAND lsw_host_guest_swap_test)

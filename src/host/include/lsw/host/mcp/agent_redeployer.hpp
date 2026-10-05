@@ -1,24 +1,34 @@
 #pragma once
 
+#include <QtGlobal>
+
 #include <string>
 
 namespace lsw::host::link { class AgentRpcClient; }
 
 namespace lsw::host::mcp {
 
-// Hot-swaps the guest agent for the locally-built binary, without
-// rebooting the VM.
+// Hot-swaps the guest agent for the locally-built binary, and the window
+// mirror's guest half beside it, without rebooting the VM.
 //
 // The sequence, in one place because every step depends on the last:
-//   1. locate the .exe and read it
+//   1. locate the agent .exe (required) and remotewin-guest.exe (when
+//      there is one) and read them
 //   2. sample the running agent's ``agent_version`` as a baseline
-//   3. stand up an AgentBinaryServer the guest can download from
-//   4. fire a ``run_script`` that curls it, stops the ``lsw-agent``
-//      service, moves the file into place and starts the service again
+//   3. stand up a GuestFileServer the guest can download both from
+//   4. fire a ``run_script`` (GuestSwapScript) that curls them, renames
+//      the mirror's guest half aside and moves the new one in, stops the
+//      ``lsw-agent`` service, moves its file into place and starts the
+//      service again
 //   5. poll ``system_info`` until ``agent_version`` changes
+//   6. ask the new agent for C:\ProgramData\LSW and check that the
+//      mirror's guest half there is the size of the one served
 //
 // Step 5 is the whole reason this is a class and not a fire-and-forget
-// RPC: the swap is only real once a *different* binary answers.
+// RPC: the swap is only real once a *different* binary answers. Step 6
+// is the same for the mirror, which has no version to ask: its guest half
+// and the host's remotewin check each other's wire version when they
+// connect, and refuse a mismatch.
 class AgentRedeployer {
 public:
     struct Outcome {
@@ -32,6 +42,10 @@ public:
     [[nodiscard]] Outcome run();
 
 private:
+    // The mirror's guest half in the guest, against what was served: a
+    // sentence for the outcome either way.
+    [[nodiscard]] std::string check_mirror(qsizetype served_size);
+
     link::AgentRpcClient& agent_;
 };
 

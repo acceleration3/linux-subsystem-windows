@@ -8,6 +8,7 @@
 #include "lsw/host/manager/settings_page.hpp"
 #include "lsw/host/manager/vm_detail_panel.hpp"
 #include "lsw/host/manager/warning_strip.hpp"
+#include "lsw/host/mirror/window_mirror.hpp"
 #include "lsw/host/vm/domain_xml_inputs.hpp"
 #include "lsw/host/vm/graceful_shutdown.hpp"
 #include "lsw/host/platform/guest_smb_share.hpp"
@@ -116,7 +117,7 @@ MainWindow::MainWindow(services::HostServices& services, QWidget* parent)
         bar_layout->addWidget(button);
         return button;
     };
-    preview_button_ = bar_action(QStringLiteral("Pop out preview"));
+    desktop_button_ = bar_action(QStringLiteral("Open desktop"));
     clear_button_ = bar_action(QStringLiteral("Clear"));
     change_settings_button_ = bar_action(QStringLiteral("Change in Settings"));
     config_folder_button_ = bar_action(QStringLiteral("Open config folder"));
@@ -124,14 +125,7 @@ MainWindow::MainWindow(services::HostServices& services, QWidget* parent)
 
     connect(pop_out_button_, &QPushButton::clicked, this,
             [this] { pop_out(rail_->current()); });
-    connect(preview_button_, &QPushButton::clicked, this, [this] {
-        // The preview is one VNC connection and the panel owns it, so
-        // this hands the widget itself to a window and takes it back
-        // when that window closes rather than opening a second stream.
-        if (overview_ != nullptr) {
-            overview_->pop_out_preview();
-        }
-    });
+    connect(desktop_button_, &QPushButton::clicked, this, &MainWindow::open_desktop);
     connect(clear_button_, &QPushButton::clicked, this, [this] {
         if (rail_->current() == NavRail::Page::Console) {
             if (console_ != nullptr) {
@@ -199,8 +193,10 @@ MainWindow::MainWindow(services::HostServices& services, QWidget* parent)
             notice_.clear();
         }
     });
+    follow_agent_for_desktop(overview_->is_agent_online());
     connect(overview_, &VmDetailPanel::agent_online_changed, this, [this](bool online) {
         rail_->set_agent_online(online);
+        follow_agent_for_desktop(online);
         if (online) {
             // A restart is over once Windows answers again.
             if (restart_ == nullptr) {
@@ -344,6 +340,38 @@ void MainWindow::pop_out(NavRail::Page page) {
     window->show();
 }
 
+void MainWindow::follow_agent_for_desktop(bool online) {
+    desktop_button_->setEnabled(online);
+    desktop_button_->setToolTip(
+        online ? QStringLiteral("The guest's whole screen in a window of its own")
+               : QStringLiteral("Needs Windows running: the agent is offline"));
+}
+
+void MainWindow::open_desktop() {
+    if (desktop_ != nullptr) {
+        desktop_->raise();
+        return;
+    }
+    const config::VmRecord* record = services_.vms().primary();
+    const QString name =
+        record == nullptr || record->name.isEmpty() ? QStringLiteral("lsw") : record->name;
+    desktop_ = mirror::WindowMirror::of_desktop(services_.rpc(),
+                                                QStringLiteral("%1 desktop").arg(name), this);
+    connect(desktop_, &mirror::WindowMirror::finished, desktop_, &QObject::deleteLater);
+    const QString failed = QStringLiteral("The desktop did not open (the manager's own log says why)");
+    if (!desktop_->start()) {
+        desktop_->deleteLater();
+        desktop_ = nullptr;
+        notice_ = failed;
+        refresh_status_bar();
+        return;
+    }
+    if (notice_ == failed) {
+        notice_.clear();
+        refresh_status_bar();
+    }
+}
+
 QWidget* MainWindow::build_empty_state() {
     auto* page = new QWidget;
     auto* outer = new QVBoxLayout(page);
@@ -399,7 +427,7 @@ void MainWindow::show_page(NavRail::Page page) {
     content_detail_->setText(page_detail(page));
     pop_out_button_->setVisible(page == NavRail::Page::Console
                                 || page == NavRail::Page::Log);
-    preview_button_->setVisible(page == NavRail::Page::Overview);
+    desktop_button_->setVisible(page == NavRail::Page::Overview);
     clear_button_->setVisible(page == NavRail::Page::Log
                               || page == NavRail::Page::Console);
     change_settings_button_->setVisible(page == NavRail::Page::Graphics);

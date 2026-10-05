@@ -26,7 +26,6 @@ const QHash<QString, QVariant>& defaults() {
         {K::kDisplayModes, QStringList{}},
         {K::kMatchHostOutput, false},
         {K::kScalingPercent, 0},
-        {K::kLivePreview, true},
 
         // "auto" is the device's own default, so a fresh install binds
         // the same GPU QEMU would have picked unasked.

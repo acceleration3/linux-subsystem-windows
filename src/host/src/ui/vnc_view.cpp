@@ -1,13 +1,13 @@
 #include "lsw/host/ui/vnc_view.hpp"
 
 #include "lsw/base/log.hpp"
+#include "lsw/host/ui/theme.hpp"
 
 #include <QEnterEvent>
 #include <QEvent>
 #include <QMetaObject>
+#include <QMouseEvent>
 #include <QPainter>
-#include <QPushButton>
-#include <QResizeEvent>
 #include <rfb/rfbclient.h>
 
 #include <cstdlib>
@@ -18,7 +18,38 @@ namespace lsw::host::ui {
 namespace {
 constexpr int kClientDataSlot = 0;  // arbitrary, unique to us
 constexpr int kRetryMs = 2000;      // reconnect cadence while desired
+
+// A paused start's frame. QEMU answers a new client first with its own
+// copy of the screen, which it stops refreshing while nobody is
+// connected, so that first complete update is stale (black, on a guest
+// that has been up a while); the real picture follows on its next
+// refresh tick, some 100ms later. So the frame is taken once updates
+// have been quiet this long after the first one, or, for a guest that
+// never stops drawing, at the cap.
+constexpr int kSettleMs = 500;
+constexpr int kSettleCapMs = 3000;
+
+// The preview's paused look, as the design draws it: the surface before
+// any frame exists, how far a paused frame is dimmed once desaturated,
+// and the dim over a live frame while the pointer is on it.
+constexpr const char* kPlaceholder = "#2b2f36";
+const QColor kPausedDim{13, 15, 20, 115};
+const QColor kHoverDim{13, 15, 20, 70};
+
+// The badge: a 56px disc with two bars, and a mono caption under it.
+constexpr qreal kDisc = 56.0;
+constexpr qreal kBarW = 6.0;
+constexpr qreal kBarH = 20.0;
+constexpr qreal kBarGap = 6.0;
+constexpr qreal kCaptionGap = 10.0;
+
+// ``size`` letterboxed into ``area``, centred.
+QRect fit(QSize size, const QRect& area) {
+    const QSize target = size.scaled(area.size(), Qt::KeepAspectRatio);
+    return {area.x() + (area.width() - target.width()) / 2,
+            area.y() + (area.height() - target.height()) / 2, target.width(), target.height()};
 }
+}  // namespace
 
 VncView::VncView(QWidget* parent) : QWidget(parent) {
     setAttribute(Qt::WA_OpaquePaintEvent);  // we always cover the full rect
@@ -27,87 +58,121 @@ VncView::VncView(QWidget* parent) : QWidget(parent) {
     setMinimumHeight(360);
     setStyleSheet("background-color: black;");
     retry_timer_.setSingleShot(true);
+    settle_timer_.setSingleShot(true);
+    QObject::connect(&settle_timer_, &QTimer::timeout, this, [this] {
+        if (streaming_ && pause_on_frame_.load()) {
+            pause();
+        }
+    });
     QObject::connect(&retry_timer_, &QTimer::timeout, this, [this] {
         if (streaming_ && last_port_ > 0 && !last_host_.isEmpty()) {
-            connect_to(last_host_, last_port_);
+            open_session(pause_on_frame_.load());
         }
     });
 }
 
-void VncView::set_controls_visible(bool on) {
-    controls_visible_ = on;
-    if (on && toggle_btn_ == nullptr) {
-        toggle_btn_ = new QPushButton(this);
-        toggle_btn_->setCursor(Qt::PointingHandCursor);
-        toggle_btn_->setStyleSheet(
-            "QPushButton{color:white;background:rgba(20,20,20,180);"
-            "border:1px solid rgba(255,255,255,140);border-radius:6px;"
-            "padding:8px 20px;font-weight:600;}"
-            "QPushButton:hover{background:rgba(40,40,40,210);}");
-        QObject::connect(toggle_btn_, &QPushButton::clicked, this, [this] {
-            if (streaming_) {
-                stop();
-            } else {
-                start();
-            }
-        });
-        refresh_button();
-        reposition_button();
-    }
-    if (toggle_btn_ != nullptr) {
-        toggle_btn_->setVisible(on && hovered_);
-    }
-    update();
-}
-
-void VncView::refresh_button() {
-    if (toggle_btn_ == nullptr) {
-        return;
-    }
-    toggle_btn_->setText(streaming_ ? QStringLiteral("Stop preview")
-                                    : QStringLiteral("Start preview"));
-    toggle_btn_->adjustSize();
-}
-
-void VncView::reposition_button() {
-    if (toggle_btn_ == nullptr) {
-        return;
-    }
-    const QSize bs = toggle_btn_->sizeHint();
-    toggle_btn_->setGeometry((width() - bs.width()) / 2,
-                             (height() - bs.height()) / 2, bs.width(),
-                             bs.height());
-}
-
-void VncView::start() {
-    if (last_port_ > 0 && !last_host_.isEmpty()) {
-        connect_to(last_host_, last_port_);  // sets streaming_ + refreshes
-    }
-}
-
-void VncView::stop() {
-    streaming_ = false;  // set first so no in-flight retry reschedules
-    retry_timer_.stop();
+VncView::~VncView() {
     disconnect();
-    refresh_button();
-    update();
 }
 
-void VncView::resizeEvent(QResizeEvent* e) {
-    QWidget::resizeEvent(e);
-    reposition_button();
+void VncView::set_preview(bool on) {
+    const bool was_paused = is_paused();
+    preview_ = on;
+    state_changed(was_paused);
+}
+
+bool VncView::is_paused() const {
+    return preview_ && last_port_ > 0 && (!streaming_ || pause_on_frame_.load());
+}
+
+void VncView::state_changed(bool was_paused) {
+    const bool paused = is_paused();
+    // Something to click only where there is something to play.
+    setCursor(preview_ && last_port_ > 0 ? Qt::PointingHandCursor : Qt::ArrowCursor);
+    update();
+    if (paused != was_paused) {
+        Q_EMIT paused_changed(paused);
+    }
+}
+
+void VncView::connect_to(const QString& host, int port) {
+    const bool was_paused = is_paused();
+    last_host_ = host;
+    last_port_ = port;
+    // A new target's picture is not the old one's.
+    frozen_ = QImage();
+    open_session(preview_);
+    state_changed(was_paused);
+}
+
+void VncView::clear() {
+    const bool was_paused = is_paused();
+    streaming_ = false;  // set first so no in-flight retry reschedules
+    pause_on_frame_.store(false);
+    retry_timer_.stop();
+    settle_timer_.stop();
+    disconnect();
+    last_host_.clear();
+    last_port_ = -1;
+    frozen_ = QImage();
+    {
+        QMutexLocker lock(&image_mutex_);
+        image_ = QImage();
+        fb_width_ = 0;
+        fb_height_ = 0;
+        content_w_ = 0;
+        content_h_ = 0;
+    }
+    state_changed(was_paused);
+}
+
+void VncView::play() {
+    if (last_port_ <= 0 || last_host_.isEmpty()) {
+        return;
+    }
+    const bool was_paused = is_paused();
+    if (streaming_ && pause_on_frame_.load()) {
+        // Still waiting on a paused start's frame: the connection is
+        // already there, so it simply stays.
+        pause_on_frame_.store(false);
+        settle_timer_.stop();
+    } else if (!streaming_) {
+        open_session(false);
+    }
+    state_changed(was_paused);
+}
+
+void VncView::pause() {
+    const bool was_paused = is_paused();
+    streaming_ = false;  // set first so no in-flight retry reschedules
+    pause_on_frame_.store(false);
+    retry_timer_.stop();
+    settle_timer_.stop();
+    disconnect();  // the worker is gone, so the frame holds still
+    freeze_frame();
+    state_changed(was_paused);
+}
+
+void VncView::freeze_frame() {
+    QImage frame;
+    {
+        QMutexLocker lock(&image_mutex_);
+        if (image_.isNull() || content_w_ == 0 || content_h_ == 0) {
+            return;  // nothing new arrived: keep the frame we had
+        }
+        frame = image_.copy(0, 0, content_w_, content_h_);
+    }
+    // Desaturated, then dimmed, once: paintEvent only scales it.
+    frozen_ = frame.convertToFormat(QImage::Format_Grayscale8)
+                  .convertToFormat(QImage::Format_RGB32);
+    QPainter p{&frozen_};
+    p.fillRect(frozen_.rect(), kPausedDim);
 }
 
 void VncView::enterEvent(QEnterEvent* e) {
     QWidget::enterEvent(e);
     hovered_ = true;
-    if (controls_visible_ && toggle_btn_ != nullptr) {
-        refresh_button();
-        reposition_button();
-        toggle_btn_->setVisible(true);
-        toggle_btn_->raise();
-    }
-    if (controls_visible_) {
+    if (preview_) {
         update();
     }
 }
@@ -115,24 +180,43 @@ void VncView::enterEvent(QEnterEvent* e) {
 void VncView::leaveEvent(QEvent* e) {
     QWidget::leaveEvent(e);
     hovered_ = false;
-    if (toggle_btn_ != nullptr) {
-        toggle_btn_->setVisible(false);
-    }
-    if (controls_visible_) {
+    if (preview_) {
         update();
     }
 }
 
-VncView::~VncView() {
-    disconnect();
+void VncView::mousePressEvent(QMouseEvent* e) {
+    if (preview_ && e->button() == Qt::LeftButton) {
+        e->accept();  // so the release comes here too
+        return;
+    }
+    QWidget::mousePressEvent(e);
 }
 
-void VncView::connect_to(const QString& host, int port) {
+void VncView::mouseReleaseEvent(QMouseEvent* e) {
+    if (!preview_ || e->button() != Qt::LeftButton || last_port_ <= 0
+        || !rect().contains(e->position().toPoint())) {
+        QWidget::mouseReleaseEvent(e);
+        return;
+    }
+    if (is_paused()) {
+        play();
+    } else {
+        pause();
+    }
+}
+
+void VncView::open_session(bool pause_on_frame) {
     disconnect();
-    last_host_ = host;
-    last_port_ = port;
+    const auto& host = last_host_;
+    const int port = last_port_;
     streaming_ = true;
-    refresh_button();
+    pause_on_frame_.store(pause_on_frame);
+    settle_timer_.stop();
+    first_frame_clock_.invalidate();
+    // The worker reads this; it is only written here, with no worker
+    // running, before the next one starts.
+    ++session_;
     {
         QMutexLocker lock(&image_mutex_);
         image_ = QImage();
@@ -157,6 +241,7 @@ void VncView::connect_to(const QString& host, int port) {
     }
     ::rfbClientSetClientData(client_, reinterpret_cast<void*>(kClientDataSlot), this);
     client_->GotFrameBufferUpdate = &VncView::on_framebuffer_update_static;
+    client_->FinishedFrameBufferUpdate = &VncView::on_finished_update_static;
     client_->MallocFrameBuffer = &VncView::on_malloc_framebuffer_static;
     client_->serverHost = ::strdup(host.toUtf8().constData());
     client_->serverPort = port;
@@ -183,7 +268,7 @@ void VncView::connect_to(const QString& host, int port) {
         LSW_ERROR("rfbInitClient failed for vnc {}:{}", host.toStdString(), port);
         client_ = nullptr;
         // The VM may not be up yet, or QEMU dropped us — keep trying
-        // as long as the preview is meant to be streaming.
+        // as long as a connection is wanted.
         if (streaming_) {
             retry_timer_.start(kRetryMs);
         }
@@ -296,30 +381,115 @@ void VncView::on_framebuffer_update_static(_rfbClient* c, int x, int y, int w, i
     QMetaObject::invokeMethod(self, [self] { self->update(); }, Qt::QueuedConnection);
 }
 
-void VncView::paintEvent(QPaintEvent* /*e*/) {
-    QPainter p{this};
-    p.fillRect(rect(), Qt::black);
-    QImage snapshot;
+void VncView::on_finished_update_static(_rfbClient* c) {
+    auto* self = static_cast<VncView*>(
+        ::rfbClientGetClientData(c, reinterpret_cast<void*>(kClientDataSlot)));
+    if (self == nullptr || !self->pause_on_frame_.load()) {
+        return;
+    }
     {
-        QMutexLocker lock(&image_mutex_);
-        if (image_.isNull() || content_w_ == 0 || content_h_ == 0) {
+        // A whole update message is done. Until one has drawn something
+        // there is no frame yet: an update that only resized the
+        // framebuffer drew nothing (resize_buffer zeroes the extent).
+        QMutexLocker lock(&self->image_mutex_);
+        if (self->content_w_ == 0 || self->content_h_ == 0) {
             return;
         }
-        // Crop to the actual painted region (full image is over-allocated).
-        snapshot = image_.copy(0, 0, content_w_, content_h_);
     }
-    const QSize target = snapshot.size().scaled(size(), Qt::KeepAspectRatio);
-    const QRect dst{(width() - target.width()) / 2, (height() - target.height()) / 2,
-                    target.width(), target.height()};
-    p.drawImage(dst, snapshot);
+    // The pause joins this thread, so the settling is timed on the GUI
+    // thread. A click to play may get there first, and a newer session
+    // may have replaced this one: both are checked there.
+    const int session = self->session_;
+    QMetaObject::invokeMethod(
+        self, [self, session] { self->frame_arrived(session); }, Qt::QueuedConnection);
+}
 
-    // Preview hover affordance: dim the image toward grey so the
-    // centered Start/Stop button (a child widget painted on top of
-    // this) reads clearly. Only when controls are enabled (never in
-    // the wizard) and the pointer is over the surface.
-    if (controls_visible_ && hovered_) {
-        p.fillRect(rect(), QColor(128, 128, 128, 110));
+void VncView::frame_arrived(int session) {
+    if (session != session_ || !streaming_ || !pause_on_frame_.load()) {
+        return;
     }
+    if (!first_frame_clock_.isValid()) {
+        first_frame_clock_.start();
+    }
+    if (first_frame_clock_.elapsed() >= kSettleCapMs) {
+        pause();
+        return;
+    }
+    settle_timer_.start(kSettleMs);  // restarted by every update
+}
+
+void VncView::paintEvent(QPaintEvent* /*e*/) {
+    QPainter p{this};
+    const bool paused = is_paused();
+    bool drew = false;
+    if (!paused) {
+        // Drawn straight from the framebuffer, cropped to the painted
+        // region (the buffer is over-allocated), with no copy of it.
+        QMutexLocker lock(&image_mutex_);
+        if (!image_.isNull() && content_w_ > 0 && content_h_ > 0) {
+            const QRect src{0, 0, content_w_, content_h_};
+            p.fillRect(rect(), Qt::black);
+            p.drawImage(fit(src.size(), rect()), image_, src);
+            drew = true;
+        }
+    }
+    if (!drew && preview_ && !frozen_.isNull() && last_port_ > 0) {
+        // Paused, or playing with the new stream not drawn yet: the
+        // last frame, greyed.
+        p.fillRect(rect(), Qt::black);
+        p.drawImage(fit(frozen_.size(), rect()), frozen_);
+        drew = true;
+    }
+    if (!drew) {
+        // The wizard's view stays black until the guest draws; the
+        // preview is grey, so an empty one never reads as a dark screen.
+        p.fillRect(rect(), preview_ ? Theme::color(kPlaceholder) : QColor(Qt::black));
+    }
+    if (!preview_ || last_port_ <= 0) {
+        return;
+    }
+    if (paused) {
+        paint_badge(p, true);
+    } else if (hovered_) {
+        p.fillRect(rect(), kHoverDim);
+        paint_badge(p, false);
+    }
+}
+
+void VncView::paint_badge(QPainter& p, bool paused) const {
+    p.save();
+    p.setRenderHint(QPainter::Antialiasing, true);
+    QFont font = Theme::mono_font(10);
+    font.setCapitalization(QFont::AllUppercase);
+    font.setLetterSpacing(QFont::AbsoluteSpacing, 1.4);
+    const QFontMetricsF metrics{font};
+    const qreal block = kDisc + kCaptionGap + metrics.height();
+    const QRectF disc{(width() - kDisc) / 2.0, (height() - block) / 2.0, kDisc, kDisc};
+
+    // Paused, the badge turns amber under the pointer: it is the thing
+    // that plays. Playing, the control only appears under the pointer.
+    const bool hot = paused && hovered_;
+    const QColor ink = hot ? Theme::color(Theme::Color::kAmber) : Theme::color(Theme::Color::kFg);
+    QColor ring = Theme::color(Theme::Color::kFg);
+    ring.setAlpha(90);
+    p.setPen(QPen{hot ? ink : ring, 1.0});
+    p.setBrush(QColor{13, 15, 20, 191});
+    p.drawEllipse(disc.adjusted(0.5, 0.5, -0.5, -0.5));
+
+    p.setPen(Qt::NoPen);
+    p.setBrush(ink);
+    const qreal top = disc.center().y() - kBarH / 2.0;
+    const qreal left = disc.center().x() - kBarGap / 2.0 - kBarW;
+    p.drawRoundedRect(QRectF{left, top, kBarW, kBarH}, 1.5, 1.5);
+    p.drawRoundedRect(QRectF{left + kBarW + kBarGap, top, kBarW, kBarH}, 1.5, 1.5);
+
+    p.setFont(font);
+    p.setPen(Theme::color(Theme::Color::kFgDim));
+    const QRectF caption{0.0, disc.bottom() + kCaptionGap, static_cast<qreal>(width()),
+                         metrics.height()};
+    p.drawText(caption, Qt::AlignHCenter | Qt::AlignTop,
+               paused ? QStringLiteral("click to play") : QStringLiteral("click to pause"));
+    p.restore();
 }
 
 }  // namespace lsw::host::ui

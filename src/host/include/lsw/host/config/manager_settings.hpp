@@ -55,7 +55,6 @@ public:
         // Put the size of the monitor the manager is on first, preferred.
         static constexpr QLatin1StringView kMatchHostOutput{"display/match_host_output"};
         static constexpr QLatin1StringView kScalingPercent{"display/scaling_percent"};
-        static constexpr QLatin1StringView kLivePreview{"display/live_preview"};
         // Graphics (restart): the accel-virt GPU device's own properties,
         // which QEMU reads once, when the device is realized.
         //

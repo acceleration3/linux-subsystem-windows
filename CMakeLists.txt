@@ -121,8 +121,53 @@ if(LSW_BUILD_REMOTEWIN)
             "remotewin is missing from ${LSW_REMOTEWIN_DIR}.\n"
             "It is a submodule: git submodule update --init --recursive")
     endif()
+    # The host half speaks Wayland below Qt (pointer constraints, the
+    # relative pointer, a viewport for 1:1 cursors), places its windows
+    # through KWin over D-Bus, and reaches into Qt's private Gui and
+    # WaylandClient modules. Checked here, all at once, so a missing one is
+    # named with the package that has it rather than as whichever
+    # find_package inside remotewin happens to fail first.
+    if(NOT WIN32)
+        include(CheckLanguage)
+        check_language(C)
+        # remotewin says why it uses them; known, so not warned about here.
+        set(QT_NO_PRIVATE_MODULE_WARNING ON)
+        find_package(Qt6 QUIET COMPONENTS DBus GuiPrivate WaylandClientPrivate)
+        find_package(PkgConfig QUIET)
+        set(_lsw_rwin_missing "")
+        if(NOT CMAKE_C_COMPILER)
+            list(APPEND _lsw_rwin_missing "a C compiler (the generated Wayland protocol code)")
+        endif()
+        if(NOT PkgConfig_FOUND)
+            list(APPEND _lsw_rwin_missing "pkg-config (pkgconf)")
+        else()
+            foreach(_lsw_pc wayland-client wayland-scanner wayland-protocols)
+                pkg_check_modules(_lsw_rwin_${_lsw_pc} QUIET ${_lsw_pc})
+                if(NOT _lsw_rwin_${_lsw_pc}_FOUND)
+                    list(APPEND _lsw_rwin_missing "${_lsw_pc} (pkg-config)")
+                endif()
+            endforeach()
+        endif()
+        foreach(_lsw_qt DBus GuiPrivate WaylandClientPrivate)
+            if(NOT Qt6${_lsw_qt}_FOUND)
+                list(APPEND _lsw_rwin_missing "Qt6 ${_lsw_qt}")
+            endif()
+        endforeach()
+        if(_lsw_rwin_missing)
+            list(JOIN _lsw_rwin_missing "\n  " _lsw_rwin_missing)
+            message(FATAL_ERROR
+                "remotewin's host half needs, and this system lacks:\n  ${_lsw_rwin_missing}\n"
+                "On Arch: pacman -S --needed gcc pkgconf wayland wayland-protocols qt6-base "
+                "(Arch's Qt 6.11 carries QtWaylandClient and its private headers in qt6-base; "
+                "an older Qt has them in qt6-wayland).\n"
+                "-DLSW_BUILD_REMOTEWIN=OFF builds the manager without the window mirror.")
+        endif()
+        enable_language(C)
+    endif()
     # Its own test suite is its own business when it is built on its own,
-    # and it wants a Qt that a cross build has no reason to have.
+    # and it wants a Qt that a cross build has no reason to have. Its
+    # conformance harness and probe are out of every default build too
+    # (EXCLUDE_FROM_ALL there): built by name only, never installed.
     set(RWIN_BUILD_TESTS OFF CACHE BOOL "" FORCE)
     add_subdirectory("${LSW_REMOTEWIN_DIR}" remotewin)
     # The host half is a private executable the manager spawns, so it

@@ -208,6 +208,7 @@ int main(int argc, char** argv) {
     inputs.host_window_mib = 4096;
     inputs.display_modes = QStringLiteral("2560x1440,1920x1080");
     inputs.avgpu_log = QStringLiteral("/home/o'brien/.local/share/lsw/logs/lsw-avgpu.log");
+    inputs.export_socket = QStringLiteral("/run/user/1000/o'b,c-export.sock");
 
     const QString xml = DomainXmlBuilder::build(vm, inputs);
     const QDomDocument doc = parse(xml, "a definition with hostile paths is well-formed XML");
@@ -280,6 +281,9 @@ int main(int argc, char** argv) {
     check(display.endsWith(QStringLiteral(",modes=2560x1440,,1920x1080")),
           "the mode list's commas are doubled for QEMU");
     check(!display.contains(QStringLiteral("display=off")), "the display adapter displays");
+    check(display.contains(QStringLiteral(",export-socket=/run/user/1000/o'b,,c-export.sock,")),
+          "the display adapter has the export socket, its comma doubled for QEMU");
+    check(xml.count(QStringLiteral("export-socket=")) == 1, "and no other adapter has one");
     const QString render_only = gpus.value(1);
     check(render_only.startsWith(
               QStringLiteral("virtio-gpu-av-pci,id=lsw-gpu-1,bus=pcie.0,addr=0x12,")),
@@ -326,6 +330,12 @@ int main(int argc, char** argv) {
     const QStringList install_gpus = args_after(qemu_args(install_doc), QStringLiteral("-device"),
                                                 QStringLiteral("virtio-gpu-av-pci,"));
     check(install_gpus.size() == 1, "the GPU device is present during setup");
+    check(!install_gpus.value(0).contains(QStringLiteral("export-socket=")),
+          "nothing is mirrored during setup, so there is no export socket");
+    DomainXmlInputs unsocketed = inputs;
+    unsocketed.export_socket.clear();
+    check(!DomainXmlBuilder::build(vm, unsocketed).contains(QStringLiteral("export-socket")),
+          "without a runtime directory there is no export socket");
     check(install_gpus.value(0).contains(QStringLiteral(",host-gpu=auto,")),
           "no UUID is host-gpu=auto");
     check(!install_gpus.value(0).contains(QStringLiteral("modes=")),

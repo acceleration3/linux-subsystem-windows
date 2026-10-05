@@ -4,6 +4,7 @@
 #include "lsw/host/manager/nav_rail.hpp"
 
 #include <QMainWindow>
+#include <QPointer>
 #include <QSystemTrayIcon>
 #include <optional>
 
@@ -14,6 +15,8 @@ class QStackedWidget;
 namespace lsw::host::services { class HostServices; }
 
 namespace lsw::host::vm { class GracefulShutdown; }
+
+namespace lsw::host::mirror { class WindowMirror; }
 
 namespace lsw::host::manager {
 
@@ -60,6 +63,12 @@ private:
     void build_pages();
     QWidget* build_empty_state();
     void pop_out(NavRail::Page page);
+    // The guest's whole desktop in a window of its own (a desktop
+    // mirror), or that window brought forward when it is open already.
+    void open_desktop();
+    // Open desktop is for a guest whose agent answers: the capture runs
+    // inside Windows.
+    void follow_agent_for_desktop(bool online);
     void setup_tray();
     void refresh_identity();
     [[nodiscard]] QString page_detail(NavRail::Page page) const;
@@ -88,7 +97,7 @@ private:
     // Per-page actions in the content bar. Shown for the page they
     // belong to and hidden for the rest, rather than each page growing
     // a toolbar of its own.
-    QPushButton* preview_button_ = nullptr;
+    QPushButton* desktop_button_ = nullptr;
     QPushButton* clear_button_ = nullptr;
     QPushButton* config_folder_button_ = nullptr;
     QPushButton* change_settings_button_ = nullptr;
@@ -117,6 +126,8 @@ private:
     // A restart in progress: the guest is being stopped so it can be
     // started on a new definition.
     vm::GracefulShutdown* restart_ = nullptr;
+    // The desktop mirror while it is open; it deletes itself as it ends.
+    QPointer<mirror::WindowMirror> desktop_;
 };
 
 }  // namespace lsw::host::manager

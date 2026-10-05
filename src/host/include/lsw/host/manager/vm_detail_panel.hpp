@@ -7,13 +7,12 @@
 #include <QWidget>
 
 class QLabel;
-class QVBoxLayout;
 
 namespace lsw::host::services { class HostServices; }
 
 namespace lsw::host::manager {
 
-// The Overview page: live preview, the four gauges, and the grid of
+// The Overview page: the preview, the four gauges, and the grid of
 // applications found inside the guest.
 //
 // It used to carry a header of its own with a status badge and four
@@ -40,12 +39,6 @@ public:
 
 
 public Q_SLOTS:
-    // Hand the preview to a window of its own, and take it back when
-    // that window closes. One VNC connection either way: a second one
-    // would be a second client on a display the guest is already
-    // sharing.
-    void pop_out_preview();
-
     // Driven by the rail's single power button. False when libvirt
     // would not start it.
     bool start_guest();
@@ -65,8 +58,11 @@ private:
     // VRAM gauge is the display GPU's).
     void on_status();
     // The preview and its tag, for a machine that is (or is not)
-    // running, as the Live preview setting says.
+    // running. A running one gets a paused start.
     void follow_preview(bool running);
+    // The tag for a preview with a port: its address, and whether it
+    // is paused.
+    void tag_preview();
 
 private:
     // Hoisted up to App so the wizard and MCP server share the same
@@ -78,7 +74,6 @@ private:
     bool last_agent_reachable_ = false;
 
     lsw::host::ui::VncView* preview_ = nullptr;
-    QVBoxLayout* preview_slot_ = nullptr;
     QLabel* preview_tag_ = nullptr;
     StatsWidget* stats_ = nullptr;
     AppListWidget* app_list_ = nullptr;

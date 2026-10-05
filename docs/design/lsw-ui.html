@@ -338,8 +338,40 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 .screen .tag{
   position:absolute;left:9px;top:9px;font-family:"JetBrains Mono",monospace;font-size:9.5px;
   letter-spacing:0.12em;text-transform:uppercase;color:var(--fg-faint);
-  border:1px solid var(--line);border-radius:2px;padding:2px 6px;background:#0b0e13cc;
+  border:1px solid var(--line);border-radius:2px;padding:2px 6px;background:#0b0e13cc;z-index:1;
 }
+
+/* overview preview: it starts paused (see the overview's notes).
+   .desk stands in for the guest's frame; paused, the app draws it
+   desaturated and dimmed, which is the filter here. Before a frame
+   exists the screen is flat grey, never black. */
+.screen.ph{background:#2b2f36}
+.screen .desk{
+  position:absolute;inset:0;
+  background:linear-gradient(160deg,#1f4f86,#2d7fb8 55%,#7cb6d9);
+}
+.screen .desk::after{
+  content:"";position:absolute;left:0;right:0;bottom:0;height:7%;background:#1b1f26e6;
+}
+.screen.paused .desk{filter:grayscale(1) brightness(.55)}
+.screen .hoverdim{position:absolute;inset:0;background:#0d0f1446}
+.pbadge{position:relative;display:flex;flex-direction:column;align-items:center;gap:10px}
+.pbadge .disc{
+  width:56px;height:56px;border-radius:50%;background:#0d0f14bf;
+  border:1px solid #e4e8f05a;display:flex;align-items:center;justify-content:center;gap:6px;
+}
+.pbadge .disc i{width:6px;height:20px;border-radius:1.5px;background:var(--fg)}
+.pbadge.hot .disc{border-color:var(--amber)}
+.pbadge.hot .disc i{background:var(--amber)}
+.pbadge .cap{
+  font-family:"JetBrains Mono",monospace;font-size:10px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--fg-dim);
+}
+.pstates{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;padding:14px;background:var(--ink)}
+@media (max-width:640px){.pstates{grid-template-columns:1fr}}
+.pstates figure{margin:0;display:flex;flex-direction:column;gap:8px}
+.pstates .screen{flex:none;height:170px}
+.pstates figcaption{font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--fg-faint)}
 
 /* setup table */
 .tbl{width:100%;border-collapse:collapse;font-size:13px;color:var(--fg)}
@@ -749,18 +781,18 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
             <h4>Overview</h4>
             <span class="sub">up 04:12:38</span>
             <span class="acts">
-              <button class="btn quiet">Pop out preview</button>
+              <button class="btn quiet">Open desktop</button>
             </span>
           </div>
 
           <div class="mgr-body" style="flex:1">
             <div class="left-col">
               <div class="panel" style="flex:1">
-                <header>Live preview</header>
-                <div class="screen" style="border:none;border-radius:0">
-                  <span class="tag">vnc 127.0.0.1:5900</span>
-                  <div class="scan"></div>
-                  <div class="plate">guest desktop<br>1920 &times; 1080 &middot; 30 fps</div>
+                <header>Preview</header>
+                <div class="screen paused" style="border:none;border-radius:0">
+                  <span class="tag">vnc 127.0.0.1:5900, paused</span>
+                  <div class="desk"></div>
+                  <div class="pbadge"><span class="disc"><i></i><i></i></span><span class="cap">click to play</span></div>
                 </div>
               </div>
               <div class="panel">
@@ -807,7 +839,73 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
       </div>
     </div>
 
+    <h3 style="margin:26px 0 12px;font-size:14px">The preview's three looks</h3>
+    <div class="frame">
+      <div class="titlebar">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <span class="t">LSW, Overview, preview</span>
+      </div>
+      <div class="pstates">
+        <figure>
+          <div class="screen ph paused">
+            <span class="tag">vnc 127.0.0.1:5900, paused</span>
+            <div class="pbadge"><span class="disc"><i></i><i></i></span><span class="cap">click to play</span></div>
+          </div>
+          <figcaption>No frame yet: flat grey, the badge, the tag already paused.</figcaption>
+        </figure>
+        <figure>
+          <div class="screen paused">
+            <span class="tag">vnc 127.0.0.1:5900, paused</span>
+            <div class="desk"></div>
+            <div class="pbadge hot"><span class="disc"><i></i><i></i></span><span class="cap">click to play</span></div>
+          </div>
+          <figcaption>Paused, pointer over it: the badge turns amber.</figcaption>
+        </figure>
+        <figure>
+          <div class="screen">
+            <span class="tag">vnc 127.0.0.1:5900</span>
+            <div class="desk"></div>
+            <div class="hoverdim"></div>
+            <div class="pbadge"><span class="disc"><i></i><i></i></span><span class="cap">click to pause</span></div>
+          </div>
+          <figcaption>Playing, pointer over it: the pause control. Off the surface it is the bare stream.</figcaption>
+        </figure>
+      </div>
+    </div>
+
+    <h3 style="margin:26px 0 12px;font-size:14px">Open desktop</h3>
+    <div class="frame">
+      <div class="titlebar">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <span class="t">lsw desktop</span>
+      </div>
+      <div class="pstates">
+        <figure>
+          <div class="screen" style="background:#000;border-radius:0">
+            <span style="font-size:12px;color:var(--fg-faint)">Waiting for the guest to connect</span>
+          </div>
+          <figcaption>Just opened: black, saying what it waits for. Then "Waiting for the guest's first frame" once the guest half has connected.</figcaption>
+        </figure>
+        <figure>
+          <div class="screen" style="background:#000;border-radius:0">
+            <div class="desk" style="inset:0 16%"></div>
+          </div>
+          <figcaption>Narrower than the guest's screen at one to one: scaled down to fit, black bars beside it. With room, the picture is one to one and centred.</figcaption>
+        </figure>
+        <figure>
+          <div class="cbar" style="border:1px solid var(--line);border-radius:var(--r-md)">
+            <h4>Overview</h4>
+            <span class="sub">running</span>
+            <span class="acts"><button class="btn quiet" disabled title="Needs Windows running: the agent is offline">Open desktop</button></span>
+          </div>
+          <figcaption>Agent offline: disabled, its tooltip saying why.</figcaption>
+        </figure>
+      </div>
+    </div>
+
     <dl class="notes">
+      <div class="note"><dt>Why it starts paused</dt><dd>A live stream costs host CPU to decode and scale and costs the guest display work to encode, all for a thumbnail nobody may be watching. So the preview connects, takes one frame, and drops the connection. The frame is the screen once updates go quiet after the first complete one (<code>FinishedFrameBufferUpdate</code>), half a second, or three seconds at most on a guest that never stops drawing: QEMU answers a new client first with its own copy of the screen, which it stops refreshing while nobody watches, so that first update is stale. The frame stays, desaturated and dimmed, with the pause badge over it and the tag ending in <code>paused</code>, so a still picture is never mistaken for a live one. A click plays it live; a second click pauses it again on the last frame. There is no setting for this any more. With no guest, or the guest off, the screen is flat grey with no badge, because there is nothing to play.</dd></div>
+      <div class="note"><dt>Open desktop</dt><dd>The guest's whole screen in a window of its own, a real one: the window mirror captures the primary monitor inside Windows (Windows Graphics Capture) and draws it one guest pixel to one screen pixel, centred, when the window has room, and scaled down and letterboxed in black when it has not. The pointer and the keyboard go into the guest, and the guest's cursor is this window's own cursor rather than painted into the picture, so it follows the pointer with no lag. Its title is the machine's name and <code>desktop</code>, <code>lsw desktop</code> here. One window at a time: with it open, the button brings it to the front. Disabled, with nothing else on the bar changing, while the agent is offline: the capture runs inside Windows, so there is nothing to open until Windows answers. The preview above stays VNC, which needs nothing in the guest and shows the machine from power on.</dd></div>
       <div class="note"><dt>Why the rail</dt><dd>Four buttons in a row said nothing about where you were, and two of them were always disabled. The rail marks the current section, keeps the count of unread log records and pending settings in view, and leaves one power control instead of a Start and a Stop that take turns being dead.</dd></div>
       <div class="note"><dt>One power button</dt><dd>It reads <code>Stop the guest</code> while running and <code>Start the guest</code> while off. The state badge above it is the thing that changes color, not the button.</dd></div>
       <div class="note"><dt>Console and log</dt><dd>Now sections in the same window rather than separate top level windows. <code>Pop out</code> is still there for anyone who wants a second window.</dd></div>
@@ -1162,13 +1260,6 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
                   <span class="d">Windows DPI. Matching this desktop takes the scale of the monitor the manager is on, so mirrored windows come out one guest pixel to one screen pixel, at the size of the apps beside them. Applied at the guest logon, so it takes a restart to change.</span>
                 </span>
                 <span class="ctl"><span class="input select" style="width:220px">Match this desktop</span></span>
-              </div>
-              <div class="srow">
-                <span>
-                  <span class="k">Live preview <span class="tagr live">now</span></span>
-                  <span class="d">Streams the whole guest desktop into the overview. Independent of the mirrored windows.</span>
-                </span>
-                <span class="ctl"><span class="toggle on"><i></i></span></span>
               </div>
             </div>
 

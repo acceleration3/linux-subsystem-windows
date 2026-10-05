@@ -171,6 +171,11 @@ install -Dm644 "${WORK}/agent/_deps/vulkanloader-src/LICENSE.txt"             "$
 # name every user's adapter after this machine's.
 [[ ! -e "${STAGE}/usr/share/lsw/guest/av-drivers/adapters.txt" ]] \
     || fail "the staged driver tree carries the build machine's adapters.txt"
+# remotewin's conformance harness and probe are tools for whoever works
+# on the mirror, built by name only; a release that carried them would
+# ship a test rig.
+stray="$(find "${STAGE}" \( -name 'remotewin-conform*' -o -name 'remotewin-probe*' \) -print -quit)"
+[[ -z "${stray}" ]] || fail "the release carries remotewin's test rig: ${stray}"
 
 # The ELF files the install did not strip: --strip covers only what
 # CMake installs as targets, and QEMU, its modules, the executor and

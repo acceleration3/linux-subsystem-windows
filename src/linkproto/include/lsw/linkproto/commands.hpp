@@ -54,9 +54,10 @@ inline constexpr const char* kResolveShortcut = "resolve_shortcut";
 
 // -- the window mirror ----------------------------------------------------
 // Start remotewin's guest half, which dials back out to the mirror
-// process the manager started for one application and carries that
-// application's windows, input and cursors over a connection of its own.
-// Nothing else about the mirror crosses this channel.
+// process the manager started for one application - or for the guest's
+// whole desktop (``desktop: true``) - and carries its windows, input and
+// cursors over a connection of its own. Nothing else about the mirror
+// crosses this channel.
 inline constexpr const char* kStartWindowMirror = "start_window_mirror";
 
 // -- windows --------------------------------------------------------------

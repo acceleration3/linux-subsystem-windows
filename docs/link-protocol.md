@@ -9,7 +9,8 @@ the bug.
 
 An application's windows and its GPU work do not travel here. Windows
 are carried by [remotewin](../external/remotewin), one connection per
-application; GPU work by [accel-virt](../external/accel-virt), through
+application, and one for the whole desktop when the manager's Open
+desktop has it open; GPU work by [accel-virt](../external/accel-virt), through
 the `virtio-gpu-av-pci` device the VM has for a display adapter — its
 rings live in guest memory and its doorbells in the device's BAR, so it
 needs no port or connection of LSW's. What is left is the

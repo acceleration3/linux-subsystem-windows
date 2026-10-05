@@ -42,4 +42,8 @@ std::wstring Paths::remotewin_guest_log() {
     return under_root(L"remotewin-guest.log");
 }
 
+std::wstring Paths::remotewin_desktop_log() {
+    return under_root(L"remotewin-desktop.log");
+}
+
 }  // namespace lsw::agent::core

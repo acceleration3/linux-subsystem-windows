@@ -1,7 +1,6 @@
 #include "lsw/host/manager/vm_detail_panel.hpp"
 
 #include "lsw/host/services/host_services.hpp"
-#include "lsw/host/config/manager_settings.hpp"
 #include "lsw/host/ui/panel.hpp"
 
 #include <QFrame>
@@ -46,7 +45,7 @@ VmDetailPanel::VmDetailPanel(services::HostServices& services, QWidget* parent)
     left_layout->setContentsMargins(0, 0, 0, 0);
     left_layout->setSpacing(14);
 
-    auto preview_panel = make_panel(QStringLiteral("Live preview"));
+    auto preview_panel = make_panel(QStringLiteral("Preview"));
     preview_panel.body->setContentsMargins(10, 10, 10, 10);
     preview_panel.body->setSpacing(8);
     // What the picture is, for when there is not one yet.
@@ -55,9 +54,11 @@ VmDetailPanel::VmDetailPanel(services::HostServices& services, QWidget* parent)
     preview_panel.body->addWidget(preview_tag_, 0, Qt::AlignLeft | Qt::AlignTop);
     preview_ = new lsw::host::ui::VncView;
     preview_->setMinimumHeight(220);
-    preview_->set_controls_visible(true);
-    preview_slot_ = preview_panel.body;
-    preview_slot_->addWidget(preview_, 1);
+    // Paused until clicked: see VncView. The tag says which it is.
+    preview_->set_preview(true);
+    connect(preview_, &lsw::host::ui::VncView::paused_changed, this,
+            [this](bool /*paused*/) { tag_preview(); });
+    preview_panel.body->addWidget(preview_, 1);
     left_layout->addWidget(preview_panel.frame, 1);
 
     auto stats_panel = make_panel(QStringLiteral("System"));
@@ -85,19 +86,11 @@ VmDetailPanel::VmDetailPanel(services::HostServices& services, QWidget* parent)
     root->addWidget(splitter, 1);
 
     connect(&services_.status(), &services::StatusHub::changed, this, &VmDetailPanel::on_status);
-    // The preview switch in Settings is live: it starts or stops the
-    // stream on a running guest at once.
-    connect(&services_.manager_settings(), &config::ManagerSettings::changed, this,
-            [this](const QString& key) {
-                if (key == config::ManagerSettings::Key::kLivePreview) {
-                    follow_preview(last_running_);
-                }
-            });
 }
 
 void VmDetailPanel::follow_preview(bool running) {
     if (uuid_.isNull() || !running) {
-        preview_->stop();
+        preview_->clear();
         preview_tag_->setText(uuid_.isNull() ? QStringLiteral("VNC, no guest")
                                              : QStringLiteral("VNC, the guest is off"));
         return;
@@ -105,42 +98,25 @@ void VmDetailPanel::follow_preview(bool running) {
     // The port libvirt assigned this boot; it changes from one to the next.
     const int vp = services_.lifecycle().vnc_port(uuid_);
     if (vp <= 0) {
-        preview_->stop();
+        preview_->clear();
         preview_tag_->setText(QStringLiteral("VNC, no display port yet"));
         return;
     }
-    if (!services_.manager_settings().bool_value(config::ManagerSettings::Key::kLivePreview)) {
-        preview_->stop();
-        preview_tag_->setText(QStringLiteral("VNC 127.0.0.1:%1, preview off in Settings").arg(vp));
-        return;
-    }
-    preview_tag_->setText(QStringLiteral("VNC 127.0.0.1:%1").arg(vp));
-    if (!preview_->is_streaming()) {
+    // Same port, same boot: whatever the preview is doing, playing or
+    // paused, it goes on doing.
+    if (preview_->port() != vp) {
         preview_->connect_to(QStringLiteral("127.0.0.1"), vp);
     }
+    tag_preview();
 }
 
-void VmDetailPanel::pop_out_preview() {
-    if (preview_ == nullptr || preview_->window() != window()) {
-        return;  // already out
+void VmDetailPanel::tag_preview() {
+    const int vp = preview_->port();
+    if (vp <= 0) {
+        return;  // follow_preview has said why there is no picture
     }
-    auto* holder = new QWidget(nullptr, Qt::Window);
-    holder->setAttribute(Qt::WA_DeleteOnClose);
-    holder->setWindowTitle(QStringLiteral("LSW preview"));
-    holder->resize(960, 600);
-    auto* layout = new QVBoxLayout(holder);
-    layout->setContentsMargins(0, 0, 0, 0);
-    layout->addWidget(preview_);
-
-    // Back into the panel when the window goes, so the page is not
-    // left with a hole in it.
-    connect(holder, &QObject::destroyed, this, [this] {
-        if (preview_slot_ != nullptr && preview_ != nullptr) {
-            preview_slot_->addWidget(preview_);
-            preview_->show();
-        }
-    });
-    holder->show();
+    preview_tag_->setText(preview_->is_paused() ? QStringLiteral("VNC 127.0.0.1:%1, paused").arg(vp)
+                                                : QStringLiteral("VNC 127.0.0.1:%1").arg(vp));
 }
 
 void VmDetailPanel::set_target(const QUuid& uuid) {
@@ -199,9 +175,9 @@ void VmDetailPanel::on_status() {
     if (stats.running != last_running_) {
         last_running_ = stats.running;
         Q_EMIT running_changed(last_running_);
-        // Track the live preview to the domain lifecycle, but only on
-        // the transition, so a user who stopped the preview by hand is
-        // not overridden every tick.
+        // Track the preview to the domain lifecycle, but only on the
+        // transition, so a user who played or paused it by hand is not
+        // overridden every tick.
         follow_preview(last_running_);
     }
     if (stats.agent_reachable != last_agent_reachable_) {

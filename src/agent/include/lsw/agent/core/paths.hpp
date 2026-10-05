@@ -38,9 +38,12 @@ public:
     // ``work`` — staged setup files (see WorkDir).
     [[nodiscard]] static std::wstring work_dir();
 
-    // The window mirror's guest half, and where it logs.
+    // The window mirror's guest half, and where it logs: an
+    // application's mirror, and the whole desktop's, each in a file of
+    // its own so one does not overwrite the other's.
     [[nodiscard]] static std::wstring remotewin_guest_exe();
     [[nodiscard]] static std::wstring remotewin_guest_log();
+    [[nodiscard]] static std::wstring remotewin_desktop_log();
 };
 
 }  // namespace lsw::agent::core

@@ -244,10 +244,6 @@ void SettingsPage::build() {
                                 {QStringLiteral("150 % (144 DPI)"), 150},
                                 {QStringLiteral("200 % (192 DPI)"), 200}}),
             Theme::Tone::kRestart);
-    add_row(display, K::kLivePreview, QStringLiteral("Live preview"),
-            QStringLiteral("Streams the whole guest desktop into the overview. Independent of "
-                           "the mirrored windows."),
-            make_toggle(K::kLivePreview));
 
     // ---- graphics -------------------------------------------------
     // The accel-virt devices. Every row is a property of their lines on
