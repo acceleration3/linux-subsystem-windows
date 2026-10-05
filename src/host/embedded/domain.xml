@@ -160,25 +160,10 @@
       <readonly/>
     </disk>
 
-    <!-- No emulated display adapter (QEMU's -vga none): the GPU device
-         below is the display, and another adapter would take the
-         desktop from it. VNC still works without one: with no GL
-         display backend QEMU transfers the device's scanout to the
-         console. The one exception is the definition made for Windows
-         setup; see DomainXmlBuilder::build. -->
+     <!-- WGC captures the installed guest's desktop. Only Windows setup
+          needs an emulated VGA and VNC console. -->
 {{video_inner}}
-
-    <!-- sharePolicy='ignore': QEMU's default 'allow-exclusive' drops
-         a connecting client when the display is contended or on a
-         connect/reconnect race, which makes the manager's live
-         preview fail right after VNC auth ("server closed
-         connection"). 'ignore' = allow any number of clients and
-         never disconnect anyone, so the wizard install view, the
-         manager preview, and any virt-viewer can coexist and the
-         preview can freely (re)connect. -->
-    <graphics type='vnc' autoport='yes' listen='127.0.0.1' sharePolicy='ignore'>
-      <listen type='address' address='127.0.0.1'/>
-    </graphics>
+{{graphics_inner}}
 
     <sound model='ich9'>
       <audio id='1'/>

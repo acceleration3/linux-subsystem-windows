@@ -1,5 +1,6 @@
 #include "lsw/host/manager/vm_detail_panel.hpp"
 
+#include "lsw/host/manager/desktop_preview.hpp"
 #include "lsw/host/services/host_services.hpp"
 #include "lsw/host/ui/panel.hpp"
 
@@ -49,15 +50,12 @@ VmDetailPanel::VmDetailPanel(services::HostServices& services, QWidget* parent)
     preview_panel.body->setContentsMargins(10, 10, 10, 10);
     preview_panel.body->setSpacing(8);
     // What the picture is, for when there is not one yet.
-    preview_tag_ = new QLabel(QStringLiteral("VNC, no guest"));
+    preview_tag_ = new QLabel(QStringLiteral("WGC, no guest"));
     preview_tag_->setObjectName(QStringLiteral("ScreenTag"));
     preview_panel.body->addWidget(preview_tag_, 0, Qt::AlignLeft | Qt::AlignTop);
-    preview_ = new lsw::host::ui::VncView;
+    preview_ = new DesktopPreview(services_.rpc());
     preview_->setMinimumHeight(220);
-    // Paused until clicked: see VncView. The tag says which it is.
-    preview_->set_preview(true);
-    connect(preview_, &lsw::host::ui::VncView::paused_changed, this,
-            [this](bool /*paused*/) { tag_preview(); });
+    connect(preview_, &DesktopPreview::status_changed, preview_tag_, &QLabel::setText);
     preview_panel.body->addWidget(preview_, 1);
     left_layout->addWidget(preview_panel.frame, 1);
 
@@ -92,37 +90,18 @@ VmDetailPanel::VmDetailPanel(services::HostServices& services, QWidget* parent)
 void VmDetailPanel::follow_preview(bool running) {
     if (uuid_.isNull() || !running) {
         preview_->clear();
-        preview_tag_->setText(uuid_.isNull() ? QStringLiteral("VNC, no guest")
-                                             : QStringLiteral("VNC, the guest is off"));
+        preview_tag_->setText(uuid_.isNull() ? QStringLiteral("WGC, no guest")
+                                              : QStringLiteral("WGC, the guest is off"));
         return;
     }
-    // The port libvirt assigned this boot; it changes from one to the next.
-    const int vp = services_.lifecycle().vnc_port(uuid_);
-    if (vp <= 0) {
-        preview_->clear();
-        preview_tag_->setText(QStringLiteral("VNC, no display port yet"));
-        return;
-    }
-    // Same port, same boot: whatever the preview is doing, playing or
-    // paused, it goes on doing.
-    if (preview_->port() != vp) {
-        preview_->connect_to(QStringLiteral("127.0.0.1"), vp);
-    }
-    tag_preview();
-}
-
-void VmDetailPanel::tag_preview() {
-    const int vp = preview_->port();
-    if (vp <= 0) {
-        return;  // follow_preview has said why there is no picture
-    }
-    preview_tag_->setText(preview_->is_paused() ? QStringLiteral("VNC 127.0.0.1:%1, paused").arg(vp)
-                                                : QStringLiteral("VNC 127.0.0.1:%1").arg(vp));
+    preview_->set_available(last_agent_reachable_);
+    preview_tag_->setText(preview_->status());
 }
 
 void VmDetailPanel::set_target(const QUuid& uuid) {
     auto& lifecycle = services_.lifecycle();
     auto& rpc = services_.rpc();
+    preview_->clear();
     uuid_ = uuid;
     services_.status().set_target(uuid);
     // Start every new target as offline until the Monitor's next agent
@@ -176,14 +155,12 @@ void VmDetailPanel::on_status() {
     if (stats.running != last_running_) {
         last_running_ = stats.running;
         Q_EMIT running_changed(last_running_);
-        // Track the preview to the domain lifecycle, but only on the
-        // transition, so a user who played or paused it by hand is not
-        // overridden every tick.
         follow_preview(last_running_);
     }
     if (stats.agent_reachable != last_agent_reachable_) {
         last_agent_reachable_ = stats.agent_reachable;
         Q_EMIT agent_online_changed(last_agent_reachable_);
+        follow_preview(stats.running);
         // What is installed is the agent's to say; the grid shows the
         // stored list until it can.
         if (last_agent_reachable_) {

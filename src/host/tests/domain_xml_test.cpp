@@ -309,6 +309,8 @@ int main(int argc, char** argv) {
     check(!xml.contains(QStringLiteral("rvk")), "nothing of the render server is left");
 
     check_inbox_devices(doc);
+    check(doc.elementsByTagName(QStringLiteral("graphics")).isEmpty(),
+          "steady-state VMs have no VNC or desktop readback backend");
 
     // Windows setup: a VGA primary as well, the GPU device still there.
     DomainXmlInputs install = inputs;
@@ -322,6 +324,10 @@ int main(int argc, char** argv) {
         parse(DomainXmlBuilder::build(vm, install), "the install definition is well-formed XML");
     check(video_model(install_doc) == QStringLiteral("vga"),
           "the install definition has a VGA adapter");
+    check(install_doc.elementsByTagName(QStringLiteral("graphics")).count() == 1 &&
+              install_doc.elementsByTagName(QStringLiteral("graphics")).at(0).toElement()
+                  .attribute(QStringLiteral("type")) == QStringLiteral("vnc"),
+          "Windows setup keeps the plain VGA VNC console until WGC is available");
     check(install_doc.elementsByTagName(QStringLiteral("video"))
                   .at(0)
                   .firstChildElement(QStringLiteral("model"))

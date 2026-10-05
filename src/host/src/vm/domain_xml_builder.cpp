@@ -199,7 +199,12 @@ QString DomainXmlBuilder::build(const config::VmRecord& vm, const DomainXmlInput
                              "    </video>")
             : QStringLiteral("    <video>\n"
                              "      <model type='none'/>\n"
-                             "    </video>");
+                              "    </video>");
+    vars["graphics_inner"] = inputs.install_display
+        ? QStringLiteral("    <graphics type='vnc' autoport='yes' listen='127.0.0.1' sharePolicy='ignore'>\n"
+                         "      <listen type='address' address='127.0.0.1'/>\n"
+                         "    </graphics>")
+        : QString{};
 
     // The GPU itself, as QEMU arguments: libvirt has no element for a
     // device it does not know. One display adapter on the chosen host
