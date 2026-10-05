@@ -35,6 +35,10 @@ App::App(int& argc, char** argv)
     setApplicationName("lsw-manager");
     setOrganizationName("lsw");
     setOrganizationDomain("lsw");
+    // The installed entry's icon, and the one every window wears where the
+    // desktop does not look the entry up (packaging/gen-icon.py draws it).
+    setDesktopFileName(QStringLiteral("lsw-manager"));
+    setWindowIcon(QIcon(QStringLiteral(":/lsw/lsw-manager.svg")));
 
     // Before any window exists, so the wizard and the manager and every
     // dialog either of them opens are all wearing it from their first
