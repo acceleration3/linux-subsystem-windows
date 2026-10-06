@@ -33,6 +33,7 @@ add_test(NAME lsw_agent_logic_test COMMAND lsw_agent_logic_test)
 
 add_executable(lsw_agent_upload_test
     upload_test.cpp
+    ../src/apps/app_installer_window.cpp
     ../src/apps/upload_store.cpp
     ../src/apps/launch_command.cpp
     ../src/util/base64.cpp

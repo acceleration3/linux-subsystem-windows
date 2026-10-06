@@ -96,6 +96,9 @@ public:
         static constexpr const char* kMeter = "Meter";
         // A consequence, set apart from the explanation above it.
         static constexpr const char* kCallout = "Callout";
+        // The callout in the warning strip's red: something that failed,
+        // said inside a dialog.
+        static constexpr const char* kCalloutCritical = "CalloutCritical";
         static constexpr const char* kStatusStrip = "StatusStrip";
         static constexpr const char* kCaption = "Caption";
         static constexpr const char* kHeading = "Heading";

@@ -69,6 +69,18 @@ RemoteWin halves, and a working desktop session. It refuses to run if
 Character Map is already open. RemoteWin's standalone test suite also
 covers parent-pipe lifecycle and malformed window counts.
 
+To check MSIX/APPX mirroring against a package already copied to the guest:
+
+```sh
+LSW_REMOTEWIN="$PWD/build/remotewin/source/host/remotewin" \
+  build/src/host/tests/lsw_host_guest_app_launcher_test \
+  --live-package 'C:\ProgramData\LSW\uploads\<id>\package.msix'
+```
+
+This opens App Installer, verifies a real frame in application/PID mode
+(never desktop mode), and closes only the test's host mirror. It does not
+click Install or close the native installer window.
+
 That produces `lsw-guest-agent.exe` and `remotewin-guest.exe` under
 `build-agent/`, and the Vulkan loader for x86-64 and i686 under
 `build-agent/` and `build-agent32/`. The wizard picks all of them up from

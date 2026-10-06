@@ -198,3 +198,18 @@ if(TARGET rwin_host)
     set_tests_properties(lsw_host_desktop_preview_test PROPERTIES
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)
 endif()
+
+add_executable(lsw_host_store_app_dialog_test store_app_dialog_test.cpp)
+target_link_libraries(lsw_host_store_app_dialog_test
+    PRIVATE lsw_host_manager LSW::CompileOptions nlohmann_json::nlohmann_json)
+target_compile_definitions(lsw_host_store_app_dialog_test PRIVATE QT_NO_KEYWORDS)
+add_test(NAME lsw_host_store_app_dialog_test COMMAND lsw_host_store_app_dialog_test)
+set_tests_properties(lsw_host_store_app_dialog_test PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)
+
+add_executable(lsw_host_notice_board_test notice_board_test.cpp)
+target_link_libraries(lsw_host_notice_board_test PRIVATE lsw_host_manager LSW::CompileOptions)
+target_compile_definitions(lsw_host_notice_board_test PRIVATE QT_NO_KEYWORDS)
+add_test(NAME lsw_host_notice_board_test COMMAND lsw_host_notice_board_test)
+set_tests_properties(lsw_host_notice_board_test PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)

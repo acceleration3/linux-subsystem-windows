@@ -57,12 +57,12 @@ LaunchSplash::LaunchSplash(QString application, QIcon icon, std::optional<qint64
     }
     auto* titles = new QVBoxLayout;
     titles->setSpacing(3);
-    auto* name = new QLabel(application_);
-    name->setObjectName(QString::fromLatin1(Theme::Role::kHeading));
+    heading_ = new QLabel(application_);
+    heading_->setObjectName(QString::fromLatin1(Theme::Role::kHeading));
     // Sentences, not values: the subtitle and the footnote are prose and
     // read in the interface face.
     subtitle_ = Widgets::prose(QStringLiteral("Starting Windows so it has somewhere to run"));
-    titles->addWidget(name);
+    titles->addWidget(heading_);
     titles->addWidget(subtitle_);
     head->addWidget(badge);
     head->addLayout(titles, 1);
@@ -71,11 +71,17 @@ LaunchSplash::LaunchSplash(QString application, QIcon icon, std::optional<qint64
     // ---- progress -------------------------------------------------
     // Against the last boot when there was one, as an expectation
     // rather than a countdown, because it is one; busy otherwise.
+    // The progress and the phases go together, and give way together to
+    // the reason when the launch stalls or fails.
+    progress_ = new QWidget;
+    auto* progress = new QVBoxLayout(progress_);
+    progress->setContentsMargins(0, 0, 0, 0);
+    progress->setSpacing(16);
     bar_ = new QProgressBar;
     bar_->setRange(0, expected_seconds_);
-    root->addWidget(bar_);
+    progress->addWidget(bar_);
     timing_ = Widgets::meta(QString{}, true);
-    root->addWidget(timing_);
+    progress->addWidget(timing_);
 
     // ---- phases ---------------------------------------------------
     auto* steps = new QVBoxLayout;
@@ -85,11 +91,16 @@ LaunchSplash::LaunchSplash(QString application, QIcon icon, std::optional<qint64
         steps_[i]->setProperty(Theme::Tone::kProperty, Theme::Tone::kFaint);
         steps->addWidget(steps_[i]);
     }
-    root->addLayout(steps);
+    progress->addLayout(steps);
+    root->addWidget(progress_);
     show_phases();
 
-    stall_text_ = Widgets::prose(QString{});
-    stall_text_->setProperty(Theme::Tone::kProperty, Theme::Tone::kWarm);
+    // The reason, as the design's callout: amber for a guest gone quiet,
+    // red for a launch that failed.
+    stall_text_ = new QLabel;
+    stall_text_->setObjectName(QString::fromLatin1(Theme::Role::kCallout));
+    stall_text_->setWordWrap(true);
+    stall_text_->setTextFormat(Qt::PlainText);
     stall_text_->setVisible(false);
     root->addWidget(stall_text_);
 
@@ -122,11 +133,11 @@ LaunchSplash::LaunchSplash(QString application, QIcon icon, std::optional<qint64
     failed_footer_ = new QWidget;
     auto* failed_layout = new QHBoxLayout(failed_footer_);
     failed_layout->setContentsMargins(0, 0, 0, 0);
-    failed_layout->addStretch(1);
-    auto* failure_log = new QPushButton(QStringLiteral("Open the log"));
+    auto* failure_log = Widgets::button(QStringLiteral("Open the log"), Theme::Role::kQuiet);
     auto* dismiss = new QPushButton(QStringLiteral("Close"));
-    auto* retry = new QPushButton(QStringLiteral("Try again"));
+    auto* retry = Widgets::button(QStringLiteral("Try again"), Theme::Role::kPrimary);
     failed_layout->addWidget(failure_log);
+    failed_layout->addStretch(1);
     failed_layout->addWidget(dismiss);
     failed_layout->addWidget(retry);
     failed_footer_->hide();
@@ -135,6 +146,7 @@ LaunchSplash::LaunchSplash(QString application, QIcon icon, std::optional<qint64
     connect(dismiss, &QPushButton::clicked, this, &QWidget::close);
     connect(retry, &QPushButton::clicked, this, [this] {
         resume();
+        heading_->setText(application_);
         subtitle_->setText(QStringLiteral("Opening %1").arg(application_));
         Q_EMIT retry_requested();
     });
@@ -212,6 +224,8 @@ void LaunchSplash::show_phases() {
 void LaunchSplash::resume() {
     failed_footer_->hide();
     stall_text_->setVisible(false);
+    progress_->show();
+    heading_->setText(application_);
     stalled_footer_->setVisible(false);
     footer_->setVisible(true);
     clock_.restart();
@@ -223,9 +237,14 @@ void LaunchSplash::fail(const QString& reason) {
     ticker_.stop();
     bar_->setRange(0, 1);
     bar_->setValue(0);
-    subtitle_->setText(QStringLiteral("Could not open %1").arg(application_));
+    heading_->setText(QStringLiteral("Could not open %1").arg(application_));
+    subtitle_->setText(reached_ >= static_cast<int>(Phase::GuestAnswering)
+                           ? QStringLiteral("Windows is running; the application is what failed.")
+                           : QStringLiteral("Windows did not get far enough to open it."));
+    Widgets::set_role(stall_text_, Theme::Role::kCalloutCritical);
     stall_text_->setText(reason);
     stall_text_->show();
+    progress_->hide();
     footer_->hide();
     stalled_footer_->hide();
     failed_footer_->show();
@@ -233,11 +252,15 @@ void LaunchSplash::fail(const QString& reason) {
 }
 
 void LaunchSplash::stall(const QString& reason) {
+    Widgets::set_role(stall_text_, Theme::Role::kCallout);
     stall_text_->setText(reason);
+    progress_->hide();
+    heading_->setText(QStringLiteral("Windows did not answer"));
     stall_text_->setVisible(true);
     footer_->setVisible(false);
     stalled_footer_->setVisible(true);
-    subtitle_->setText(QStringLiteral("Windows did not answer"));
+    subtitle_->setText(QStringLiteral("The machine is running but the agent has been silent for %1.")
+                           .arg(ui::Format::clock(static_cast<int>(clock_.elapsed() / 1000))));
 }
 
 }  // namespace lsw::host::manager

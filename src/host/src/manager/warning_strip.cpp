@@ -46,6 +46,11 @@ QPushButton* WarningStrip::add_button(const QString& text, const char* role) {
     return button;
 }
 
+void WarningStrip::add_dismiss() {
+    connect(add_button(QStringLiteral("Dismiss"), Theme::Role::kQuiet), &QPushButton::clicked, this,
+            &WarningStrip::dismissed);
+}
+
 void WarningStrip::clear_buttons() {
     while (auto* item = buttons_->takeAt(0)) {
         if (auto* widget = item->widget()) {

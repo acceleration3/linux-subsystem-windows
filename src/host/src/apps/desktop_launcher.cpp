@@ -214,7 +214,7 @@ void DesktopLauncher::set_file_associations(bool enabled) {
 }
 
 bool DesktopLauncher::install(const AppConfig& cfg) {
-    if (cfg.id.isEmpty() || cfg.path.isEmpty()) {
+    if (cfg.id.isEmpty() || cfg.target().isEmpty()) {
         LSW_WARN("DesktopLauncher::install: empty id/path; skipping");
         return false;
     }
@@ -253,7 +253,7 @@ bool DesktopLauncher::install(const AppConfig& cfg) {
     }
     QTextStream s(&df);
     s.setEncoding(QStringConverter::Utf8);
-    const QString name = sanitise_name(cfg.name.isEmpty() ? cfg.path : cfg.name);
+    const QString name = sanitise_name(cfg.name.isEmpty() ? cfg.target() : cfg.name);
     // ``Exec`` quotes the app id in case it contains spaces (Windows
     // paths often do — "C:\\Program Files\\..."). XDG escapes the
     // contained backslashes via doubled escape; we use single quotes
@@ -306,7 +306,7 @@ void DesktopLauncher::sync(const QList<AppConfig>& live) {
     // distinguish "ours, current" from "ours, orphan".
     QSet<QString> live_bases;
     for (const auto& cfg : live) {
-        if (cfg.id.isEmpty() || cfg.path.isEmpty()) continue;
+        if (cfg.id.isEmpty() || cfg.target().isEmpty()) continue;
         // An application the user un-published, or a manager with
         // publishing off entirely, leaves no basename behind, so the
         // prune pass below removes whatever it had.

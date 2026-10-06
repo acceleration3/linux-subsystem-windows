@@ -35,6 +35,8 @@ private Q_SLOTS:
     void on_path_idle();
     void on_accept();
     void fetch_icon();
+    // A store application's icon, by its ID: it has no file to read one from.
+    void fetch_store_icon();
 
 private:
     void update_icon_preview();

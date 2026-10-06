@@ -324,7 +324,24 @@ QTableWidget#Rows QHeaderView, QTableView#Rows QHeaderView {
     background: transparent;
     border: none;
 }
-QTableWidget#Rows QHeaderView::section, QTableView#Rows QHeaderView::section {
+QTableWidget#Rows QHeaderView::section, QTableView#Rows /* The store app list runs edge to edge between the search and the button
+   band, on the ink, as the design's list does; its rows are drawn by the
+   dialog's delegate. */
+QListWidget#StoreApps, QWidget#StoreAppsEmpty {
+    background-color: #0d0f14;
+    border: none;
+    border-top: 1px solid #272d3a;
+    border-radius: 0px;
+}
+QListWidget#StoreApps > QWidget {
+    background-color: #0d0f14;
+}
+QListWidget#StoreApps::item {
+    padding: 0px;
+    border-radius: 0px;
+}
+
+QHeaderView::section {
     background: transparent;
     color: #646d7e;
     border: none;
@@ -478,7 +495,8 @@ QSpinBox#SliderValue {
 }
 
 /* The label on the guest's console, so the black rectangle says what
-   it is before there is anything in it. */
+   it is before there is anything in it. It sits on the picture, so it
+   carries a ground of its own. */
 QLabel#ScreenTag {
     font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace;
     font-size: 9px;
@@ -487,6 +505,7 @@ QLabel#ScreenTag {
     border: 1px solid #272d3a;
     border-radius: 2px;
     padding: 2px 6px;
+    background: rgba(11, 14, 19, 204);
 }
 
 /* Something the next click will do, rather than something being
@@ -496,6 +515,14 @@ QLabel#Callout {
     border-left: 2px solid #ff9f45;
     border-radius: 0px 3px 3px 0px;
     color: #f0c393;
+    padding: 10px 13px;
+}
+/* The same for something that failed, in the warning strip's red. */
+QLabel#CalloutCritical {
+    background-color: #1f1315;
+    border-left: 2px solid #f2555a;
+    border-radius: 0px 3px 3px 0px;
+    color: #f0b0b2;
     padding: 10px 13px;
 }
 
@@ -700,6 +727,19 @@ QToolButton:hover {
     background-color: #1c212c;
     border-color: #272d3a;
     color: #e4e8f0;
+}
+/* A tool button that opens a menu (the add button): the combo box's caret
+   beside its label, not the style's own arrow tucked under it. */
+QToolButton[popupMode="2"] {
+    padding-right: 20px;
+}
+QToolButton::menu-indicator {
+    image: url(:/lsw/caret.png);
+    subcontrol-origin: padding;
+    subcontrol-position: center right;
+    right: 6px;
+    width: 8px;
+    height: 5px;
 }
 
 /* ---- wizard ------------------------------------------------------ */

@@ -98,7 +98,8 @@ the same mirroring path as installed applications. Copies remain under
 companion files. This requires a guest agent built with `upload_file` support.
 
 MSIX/MSIXBundle and APPX/APPXBundle files open Windows' normal **App Installer**
-window on a mirrored guest desktop, just like double-clicking them in Windows 11.
+window, mirrored individually just like other applications. Opening the package
+uses the same file association as double-clicking it in Windows 11.
 Review the package and click **Install** there; LSW does not silently install it
 or bypass Windows' publisher/signature checks. App Installer must be installed
 in the guest; this path also requires the agent's `open_package` command.

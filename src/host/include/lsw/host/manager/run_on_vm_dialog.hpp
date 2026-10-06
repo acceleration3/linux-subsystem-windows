@@ -40,6 +40,7 @@ private:
     QPushButton* run_ = nullptr;
     QPushButton* close_ = nullptr;
     QLabel* status_ = nullptr;
+    QLabel* error_ = nullptr;
     QProgressBar* progress_ = nullptr;
     QString guest_path_;
     bool busy_ = false;

@@ -11,7 +11,6 @@
 #include <QCursor>
 #include <QGuiApplication>
 #include <QIcon>
-#include <QMessageBox>
 #include <QPixmap>
 #include <QPointer>
 #include <QScreen>
@@ -28,6 +27,12 @@ constexpr int kStallMs = 180000;
 
 int stall_ms(std::optional<qint64> last_boot_ms) {
     return static_cast<int>(qMax<qint64>(kStallMs, 3 * last_boot_ms.value_or(0)));
+}
+
+// A store application's ID is its package family, '!', and the
+// application's name; a Windows path always has a backslash.
+bool is_store_target(const QString& target) {
+    return target.contains(QLatin1Char('!')) && !target.contains(QLatin1Char('\\'));
 }
 
 }  // namespace
@@ -51,12 +56,7 @@ GuestAppLaunchController::GuestAppLaunchController(services::HostServices& servi
                     splash_->fail(error);
                     return;
                 }
-                auto* notice = new QMessageBox(QMessageBox::Warning,
-                                               QStringLiteral("Could not open application"), error,
-                                               QMessageBox::Close);
-                notice->setTextFormat(Qt::PlainText);
-                notice->setAttribute(Qt::WA_DeleteOnClose);
-                notice->open();
+                show_failure(path, error);
             });
 }
 
@@ -71,13 +71,13 @@ void GuestAppLaunchController::launch(const QString& app_id) {
     // because that is robust to spaces/backslashes and survives the app
     // moving on the guest side. The agent's launch RPC needs the path.
     const auto* cfg = services_.app_configs().find(app_id);
-    if (cfg == nullptr || cfg->path.isEmpty()) {
+    if (cfg == nullptr || cfg->target().isEmpty()) {
         LSW_WARN("launch_app({}): no matching config (was the manager "
                  "ever run with this app installed in the guest?)",
                  app_id.toStdString());
         return;
     }
-    const QString guest_path = cfg->path;
+    const QString guest_path = cfg->target();
     requested_paths_.insert(guest_path);
     const QUuid uuid = vm->uuid;
 
@@ -106,8 +106,46 @@ void GuestAppLaunchController::fire_when_ready(const QString& app_id, const QStr
         return;
     }
     apps::AppConfig bare;
-    bare.path = guest_path;
+    (is_store_target(guest_path) ? bare.aumid : bare.path) = guest_path;
     launcher_->launch(bare);
+}
+
+void GuestAppLaunchController::show_failure(const QString& target, const QString& error) {
+    // Launched from the launcher into a guest already up, there was no
+    // splash; the failure gets one of its own, in its failed state, since
+    // with the manager's window closed there is nowhere else to say it.
+    QString name = target.section(QLatin1Char('\\'), -1);
+    QIcon icon;
+    const apps::AppConfig* config = nullptr;
+    for (const auto& app : services_.app_configs().configs()) {
+        if (app.target() == target) {
+            config = &app;
+            break;
+        }
+    }
+    if (config != nullptr) {
+        if (!config->name.isEmpty()) name = config->name;
+        if (const QImage image = config->icon_image(); !image.isNull()) {
+            icon = QIcon{QPixmap::fromImage(image)};
+        }
+    }
+    if (splash_) splash_->close();
+    auto* splash = new LaunchSplash(name, icon, services_.status().last_boot_ms());
+    splash_ = splash;
+    splash_path_ = target;
+    splash->reach(LaunchSplash::Phase::GuestAnswering);
+    connect(splash, &LaunchSplash::log_requested, this, &GuestAppLaunchController::log_requested);
+    const QString app_id = config != nullptr ? config->id : QString{};
+    connect(splash, &LaunchSplash::retry_requested, this, [this, target, app_id] {
+        requested_paths_.insert(target);
+        fire_when_ready(app_id, target);
+    });
+    if (QScreen* screen = QGuiApplication::screenAt(QCursor::pos());
+        screen != nullptr || (screen = QGuiApplication::primaryScreen()) != nullptr) {
+        splash->adjustSize();
+        splash->move(screen->availableGeometry().center() - splash->rect().center());
+    }
+    splash->fail(error);
 }
 
 void GuestAppLaunchController::ensure_channel_target(const QUuid& uuid) {
@@ -167,8 +205,8 @@ void GuestAppLaunchController::start_vm_and_wait(const QUuid& uuid, const QStrin
     connect(patience, &QTimer::timeout, this, [splash_ptr] {
         if (splash_ptr) {
             splash_ptr->stall(QStringLiteral(
-                "The machine is running but the agent has not answered. Usually a guest "
-                "still finishing an update; the log says so if the agent crashed."));
+                "Usually a guest still finishing an update. The log will say if the agent "
+                "crashed."));
         }
     });
     patience->start();

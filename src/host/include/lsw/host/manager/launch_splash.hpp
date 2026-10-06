@@ -67,7 +67,9 @@ private:
     QTimer ticker_;
     int reached_ = -1;
 
+    QLabel* heading_ = nullptr;
     QLabel* subtitle_ = nullptr;
+    QWidget* progress_ = nullptr;
     QProgressBar* bar_ = nullptr;
     QLabel* timing_ = nullptr;
     QLabel* steps_[static_cast<int>(Phase::Count)]{};

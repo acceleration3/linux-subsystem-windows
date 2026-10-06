@@ -9,7 +9,6 @@
 #include <QUuid>
 #include <QWidget>
 
-class QLabel;
 
 namespace lsw::host::link {
 class AgentRpcClient;
@@ -47,17 +46,19 @@ private Q_SLOTS:
     void on_context_menu(const QPoint& pos);
     void on_refresh_clicked();
     void on_new_clicked();
+    void add_store_app();
 
 private:
     void open_config_dialog(const apps::AppConfig& initial);
     void rebuild();
+    // Make the tile for ``id`` the current one, in view.
+    void select(const QString& id);
 
     apps::AppConfigStore& store_;
     link::AgentRpcClient& rpc_;
     apps::AppCatalog catalog_;
     apps::GuestAppLauncher& launcher_;
     void update_launch_state();
-    QLabel* launch_notice_ = nullptr;
     QToolBar* toolbar_ = nullptr;
     QListWidget* list_ = nullptr;
 

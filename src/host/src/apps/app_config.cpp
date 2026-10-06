@@ -51,6 +51,7 @@ QString AppConfig::to_json() const {
     j["id"] = id.toStdString();
     j["name"] = name.toStdString();
     j["path"] = path.toStdString();
+    j["aumid"] = aumid.toStdString();
     j["cmdline"] = cmdline.toStdString();
     j["env"] = env.toStdString();
     j["workdir"] = workdir.toStdString();
@@ -80,6 +81,7 @@ AppConfig AppConfig::from_json(const QString& s, bool* ok) {
     out.id = QString::fromStdString(j.value("id", std::string{}));
     out.name = QString::fromStdString(j.value("name", std::string{}));
     out.path = QString::fromStdString(j.value("path", std::string{}));
+    out.aumid = QString::fromStdString(j.value("aumid", std::string{}));
     out.cmdline = QString::fromStdString(j.value("cmdline", std::string{}));
     out.env = QString::fromStdString(j.value("env", std::string{}));
     out.workdir = QString::fromStdString(j.value("workdir", std::string{}));

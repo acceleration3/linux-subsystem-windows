@@ -5,7 +5,6 @@
 #include <QUuid>
 #include <QWidget>
 
-class QLabel;
 
 namespace lsw::host::services { class HostServices; }
 
@@ -72,7 +71,6 @@ private:
     bool last_agent_reachable_ = false;
 
     DesktopPreview* preview_ = nullptr;
-    QLabel* preview_tag_ = nullptr;
     StatsWidget* stats_ = nullptr;
     AppListWidget* app_list_ = nullptr;
 };

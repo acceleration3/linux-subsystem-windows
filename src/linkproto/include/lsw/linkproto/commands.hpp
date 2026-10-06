@@ -36,6 +36,13 @@ inline constexpr const char* kListApps = "list_apps";
 inline constexpr const char* kLaunch   = "launch";
 inline constexpr const char* kOpenPackage = "open_package";
 inline constexpr const char* kGetIcon  = "get_icon";
+// Packaged (Microsoft Store, MSIX) applications, named by their
+// Application User Model ID rather than a path: ``list_store_apps``
+// answers what the session's user has, with icons, and
+// ``launch_store_app`` activates one. Both run in the user's session
+// helper, since packages are per user.
+inline constexpr const char* kListStoreApps  = "list_store_apps";
+inline constexpr const char* kLaunchStoreApp = "launch_store_app";
 
 // -- browsing the guest ---------------------------------------------------
 // The manager's file picker. ``list_dir`` takes a Windows path and a

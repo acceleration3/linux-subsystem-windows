@@ -57,6 +57,8 @@ private:
     // Bind the agent channel to ``uuid`` if the manager window (which
     // normally does this) was never shown for this launch.
     void ensure_channel_target(const QUuid& uuid);
+    // A failed launch with no splash up: one in its failed state.
+    void show_failure(const QString& target, const QString& error);
 
     services::HostServices& services_;
     // The launch itself, shared in kind with the app grid's.

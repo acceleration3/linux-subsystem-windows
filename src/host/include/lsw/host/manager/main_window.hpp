@@ -27,6 +27,7 @@ class LogPanel;
 class RunOnVmDialog;
 class SettingsPage;
 class VmDetailPanel;
+class NoticeBoard;
 class WarningStrip;
 
 // Manager shell: a navigation rail down the left, one page at a time
@@ -107,13 +108,20 @@ private:
     // The two Graphics warnings that break the guest, repeated on the
     // overview with a way to the page that says more.
     WarningStrip* warn_strip_ = nullptr;
+    // What this window tried that did not work, each until it is dismissed
+    // or stops being true: a strip per failure across the top of every page.
+    NoticeBoard* notices_ = nullptr;
     QLabel* status_left_ = nullptr;
-    // Something this window did that the status bar says ahead of the
-    // facts until it is over: a restart in progress, a resolution the
-    // device refused. The facts themselves are redrawn from the status
-    // hub on every reading, so a message written straight into the bar
-    // would be gone two seconds later.
+    // Something this window is doing that the status bar says ahead of the
+    // facts until it is over: a restart in progress. The facts themselves
+    // are redrawn from the status hub on every reading, so a message
+    // written straight into the bar would be gone two seconds later.
+    // Failures are notices, not this.
     QString notice_;
+    // A failure that keeps the guest from starting, as a notice.
+    void notice_start_refused(const QString& headline);
+    // The launch failures of applications, as notices until they open.
+    void follow_launches();
 
     // Overview is two pages: the machine, and the state where there is
     // no machine yet. A manager that opens with dead buttons and blank

@@ -1,3 +1,4 @@
+#include "lsw/agent/apps/app_installer_window.hpp"
 #include "lsw/agent/apps/launch_command.hpp"
 #include "lsw/agent/apps/upload_store.hpp"
 #include "lsw/agent/util/base64.hpp"
@@ -88,6 +89,77 @@ void commands() {
               "Windows scripts use wscript");
 }
 
+void installer_windows() {
+    using lsw::agent::apps::AppInstallerWindow;
+    using lsw::agent::win::DiscoveredWindow;
+    const auto window = [](std::uintptr_t hwnd, std::uint32_t pid, const char* path,
+                           const char* title) {
+        DiscoveredWindow found{};
+        found.hwnd = hwnd;
+        found.pid = pid;
+        found.exe_path = path;
+        found.title = title;
+        return found;
+    };
+    const auto explorer = window(1, 100, "C:\\Windows\\explorer.exe", "Program Manager");
+    const auto broker = window(2, 200, "C:\\Windows\\ApplicationFrameHost.exe", "App Installer");
+    const auto installer = window(
+        3, 2224,
+        "C:\\Program Files\\WindowsApps\\Microsoft.DesktopAppInstaller_1.29_x64\\AppInstaller.exe",
+        "App Installer");
+    const AppInstallerWindow fresh({explorer, broker});
+    check(!fresh.select({explorer, broker}, 1, true),
+          "desktop and activation broker are never installer roots");
+    check(fresh.select({explorer, broker, installer}, 1, false) == 2224,
+          "new actual App Installer window selected instead of shell process");
+    const auto localized =
+        window(4, 3333, "C:\\WindowsApps\\APPINSTALLER.EXE", "Programme d'installation");
+    check(fresh.select({localized}, 0, false) == 3333,
+          "process image is case insensitive and does not depend on localized title");
+    const auto unrelated = window(5, 4444, "C:\\AppInstaller.exe.helper.exe", "App Installer");
+    check(!fresh.select({unrelated}, 5, true), "similar image names do not match");
+    auto untitled = installer;
+    untitled.title.clear();
+    check(!fresh.select({untitled}, 3, true), "titleless startup placeholders ignored");
+    const AppInstallerWindow reused({explorer, installer});
+    check(!reused.select({explorer, installer}, 1, false),
+          "unchanged reused window waits for activation grace period");
+    check(!reused.select({explorer, installer}, 3, false),
+          "old foreground installer waits rather than masking a pending new activation");
+    check(reused.select({explorer, installer}, 3, true) == 2224,
+          "foreground reused installer selected after activation grace period");
+    check(reused.select({explorer, installer}, 1, true) == 2224,
+          "unique reused App Installer process is accepted after grace period");
+    auto changed = installer;
+    changed.title = "A different package";
+    check(reused.select({explorer, changed}, 1, false) == 2224,
+          "changed existing window recognized");
+    const AppInstallerWindow multiple({installer, localized});
+    check(!multiple.select({installer, localized}, 1, true),
+          "ambiguous unrelated existing installer instances are not guessed");
+    check(multiple.select({installer, localized}, 4, true) == 3333,
+          "foreground installer disambiguates multiple instances");
+    check(reused.select({installer, localized}, 0, false) == 3333,
+          "new instance preferred over old visible installer");
+    check(reused.select({installer, localized}, 3, true) == 3333,
+          "new activation is preferred even while the old installer still has focus");
+    check(!fresh.select({installer, localized}, 0, true),
+          "ambiguous new instances are not guessed");
+    auto second_window = installer;
+    second_window.hwnd = 6;
+    const AppInstallerWindow same_process({installer, second_window});
+    check(same_process.select({installer, second_window}, 1, true) == 2224,
+          "multiple windows in one installer process are not ambiguous");
+    auto popup = installer;
+    popup.hwnd = 7;
+    popup.owner = 3;
+    check(reused.select({popup}, 3, false) == 2224,
+          "foreground owned installer dialog identifies its application");
+    auto missing_pid = installer;
+    missing_pid.pid = 0;
+    check(!fresh.select({missing_pid}, 3, true), "missing PID never selects desktop mirroring");
+}
+
 void uploads(const std::filesystem::path& root) {
     using lsw::agent::apps::UploadStore;
     std::filesystem::path completed;
@@ -143,6 +215,7 @@ int main() {
                        std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     base64();
     commands();
+    installer_windows();
     uploads(root);
     // Only the unique test-owned directory is removed.
     std::filesystem::remove_all(root);

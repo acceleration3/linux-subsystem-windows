@@ -159,6 +159,35 @@ std::vector<std::uint8_t> bitmap_to_png_bytes(Gdiplus::Bitmap& bmp) {
 
 }  // namespace
 
+std::string IconExtractor::from_premultiplied_bitmap(HBITMAP bitmap) {
+    GdiPlusRuntime::ensure_started();
+    BITMAP bm{};
+    if (bitmap == nullptr || ::GetObjectW(bitmap, sizeof(bm), &bm) == 0 || bm.bmWidth <= 0 ||
+        bm.bmHeight <= 0) {
+        return {};
+    }
+    const int w = bm.bmWidth;
+    const int h = bm.bmHeight;
+    BITMAPINFO bmi{};
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = w;
+    bmi.bmiHeader.biHeight = -h;  // top-down
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+    std::vector<std::uint8_t> pixels(static_cast<size_t>(w) * static_cast<size_t>(h) * 4, 0);
+    HDC hdc = ::GetDC(nullptr);
+    const int rows = ::GetDIBits(hdc, bitmap, 0, static_cast<UINT>(h), pixels.data(), &bmi, DIB_RGB_COLORS);
+    ::ReleaseDC(nullptr, hdc);
+    if (rows != h) {
+        LSW_AGENT_WARN("gdi: GetDIBits read {} of {} rows", rows, h);
+        return {};
+    }
+    Gdiplus::Bitmap gdi_bmp(w, h, w * 4, PixelFormat32bppPARGB, pixels.data());
+    const auto png = bitmap_to_png_bytes(gdi_bmp);
+    return png.empty() ? std::string{} : util::Base64::encode(png);
+}
+
 std::string IconExtractor::from_executable(const std::wstring& path) {
     GdiPlusRuntime::ensure_started();
 

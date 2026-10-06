@@ -101,8 +101,6 @@ private:
     void frame_arrived(int session);
     // Keep the frame just drawn, greyed, for painting while paused.
     void freeze_frame();
-    // The badge (paused) or the hover control (playing) in the middle.
-    void paint_badge(QPainter& p, bool paused) const;
     // Emits ``paused_changed`` when ``is_paused()`` moved off
     // ``was_paused``, and refreshes the cursor and the surface.
     void state_changed(bool was_paused);

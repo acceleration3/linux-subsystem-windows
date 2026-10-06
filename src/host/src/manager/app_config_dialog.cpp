@@ -30,6 +30,9 @@ using ui::Widgets;
 constexpr int kIconPx = 64;
 constexpr int kEnvBoxPx = 72;  // ~3 lines; enough to see what is set
 constexpr int kPathIdleMs = 600;
+// A store application's icon is drawn by Windows at any size; this one is
+// kept for the launcher, which HiDPI menus draw large.
+constexpr int kStoreIconPx = 256;
 
 }  // namespace
 
@@ -84,7 +87,11 @@ AppConfigDialog::AppConfigDialog(apps::AppConfig initial, link::AgentRpcClient& 
     // The path is a Windows path, so browsing for it has to happen
     // inside Windows. The button opens a picker that reads the guest
     // over the agent connection, not this machine's disk.
-    path_edit_ = new QLineEdit(cfg_.path);
+    // A store application has no path: Windows starts it by its ID,
+    // from a folder the user may not run anything in, and takes neither a
+    // working folder nor an environment from whoever asks.
+    const bool store = !cfg_.aumid.isEmpty();
+    path_edit_ = new QLineEdit(cfg_.target());
     path_edit_->setCursorPosition(0);
     path_edit_->setPlaceholderText("C:\\Program Files\\App\\app.exe");
     auto* path_row = new QWidget;
@@ -94,9 +101,16 @@ AppConfigDialog::AppConfigDialog(apps::AppConfig initial, link::AgentRpcClient& 
     auto* browse = new QPushButton(QStringLiteral("Browse the guest"));
     path_layout->addWidget(path_edit_, 1);
     path_layout->addWidget(browse);
-    fields.add(QStringLiteral("Path in Windows"), path_row);
-    fields.add_note(QStringLiteral("Browsing opens a file picker that reads the guest, "
-                                   "not this machine."));
+    if (store) {
+        path_edit_->setReadOnly(true);
+        browse->hide();
+        fields.add(QStringLiteral("Store application"), path_row);
+        fields.add_note(QStringLiteral("Windows starts it by this ID; there is no path to change."));
+    } else {
+        fields.add(QStringLiteral("Path in Windows"), path_row);
+        fields.add_note(QStringLiteral("Browsing opens a file picker that reads the guest, "
+                                       "not this machine."));
+    }
 
     connect(browse, &QPushButton::clicked, this, [this] {
         RemoteFileDialog picker{rpc_, RemoteFileDialog::Mode::Program, this};
@@ -132,7 +146,12 @@ AppConfigDialog::AppConfigDialog(apps::AppConfig initial, link::AgentRpcClient& 
     auto* browse_dir = new QPushButton(QStringLiteral("Browse"));
     workdir_layout->addWidget(workdir_edit_, 1);
     workdir_layout->addWidget(browse_dir);
-    fields.add(QStringLiteral("Working folder"), workdir_row);
+    if (store) {
+        workdir_row->setParent(this);
+        workdir_row->hide();
+    } else {
+        fields.add(QStringLiteral("Working folder"), workdir_row);
+    }
     connect(browse_dir, &QPushButton::clicked, this, [this] {
         RemoteFileDialog picker{rpc_, RemoteFileDialog::Mode::Directory, this};
         if (picker.exec() == QDialog::Accepted && !picker.selected_path().isEmpty()) {
@@ -151,7 +170,12 @@ AppConfigDialog::AppConfigDialog(apps::AppConfig initial, link::AgentRpcClient& 
     env_edit_ = new QPlainTextEdit(cfg_.env);
     env_edit_->setPlaceholderText("One per line, e.g.\nGALLIUM_DRIVER=llvmpipe");
     env_edit_->setFixedHeight(kEnvBoxPx);
-    fields.add(QStringLiteral("Environment"), env_edit_);
+    if (store) {
+        env_edit_->setParent(this);
+        env_edit_->hide();
+    } else {
+        fields.add(QStringLiteral("Environment"), env_edit_);
+    }
 
     // Where it appears on this desktop. The switch in Settings decides
     // whether any application is published; this decides whether this
@@ -211,6 +235,10 @@ void AppConfigDialog::on_path_idle() {
 }
 
 void AppConfigDialog::fetch_icon() {
+    if (!cfg_.aumid.isEmpty()) {
+        fetch_store_icon();
+        return;
+    }
     const QString path = path_edit_->text().trimmed();
     if (path.isEmpty()) {
         icon_status_->setText("(no path)");
@@ -238,6 +266,33 @@ void AppConfigDialog::fetch_icon() {
     });
 }
 
+void AppConfigDialog::fetch_store_icon() {
+    if (!rpc_.has_target()) {
+        icon_status_->setText(QStringLiteral("No guest is set up, so there is no icon to read."));
+        return;
+    }
+    icon_status_->setText(QStringLiteral("Asking the guest for its icon"));
+    rpc_.request_async(linkproto::cmd::kListStoreApps,
+                       {{"aumid", cfg_.aumid.toStdString()}, {"icon_size", kStoreIconPx}}, this,
+                       [this](const link::AgentReply& reply) {
+        const auto apps = reply.ok ? reply.body.value("apps", nlohmann::json::array())
+                                   : nlohmann::json::array();
+        const auto b64 = apps.empty() ? std::string{}
+                                      : apps.front().value("icon_png_base64", std::string{});
+        if (b64.empty()) {
+            icon_status_->setText(
+                !reply.ok ? QStringLiteral("The agent did not answer: %1")
+                                .arg(QString::fromStdString(reply.error))
+                : apps.empty() ? QStringLiteral("Windows no longer has this application.")
+                               : QStringLiteral("Windows has no icon for it."));
+            return;
+        }
+        cfg_.icon_png_base64 = QString::fromStdString(b64);
+        update_icon_preview();
+        icon_status_->setText(QStringLiteral("Read from the guest just now."));
+    });
+}
+
 void AppConfigDialog::update_icon_preview() {
     QImage img = cfg_.icon_image();
     if (img.isNull()) {
@@ -251,7 +306,9 @@ void AppConfigDialog::update_icon_preview() {
 
 void AppConfigDialog::on_accept() {
     cfg_.name = name_edit_->text().trimmed();
-    cfg_.path = path_edit_->text().trimmed();
+    if (cfg_.aumid.isEmpty()) {
+        cfg_.path = path_edit_->text().trimmed();
+    }
     cfg_.cmdline = cmdline_edit_->text();
     cfg_.workdir = workdir_edit_->text().trimmed();
     cfg_.env = env_edit_->toPlainText();
@@ -266,12 +323,12 @@ void AppConfigDialog::on_accept() {
         }
     }
     cfg_.mime_types = types.join(QLatin1Char('\n'));
-    if (cfg_.id.isEmpty() && !cfg_.path.isEmpty()) {
-        cfg_.id = apps::AppConfig::make_id(cfg_.path);
+    if (cfg_.id.isEmpty() && !cfg_.target().isEmpty()) {
+        cfg_.id = apps::AppConfig::make_id(cfg_.target());
     } else if (cfg_.id.isEmpty()) {
         cfg_.id = apps::AppConfig::make_id(cfg_.name);
     }
-    if (cfg_.name.isEmpty() || cfg_.path.isEmpty()) {
+    if (cfg_.name.isEmpty() || cfg_.target().isEmpty()) {
         // Nothing useful to save.
         return;
     }

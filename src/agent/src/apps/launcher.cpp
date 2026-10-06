@@ -33,7 +33,15 @@ void set_err(std::string* error_out, const std::string& s) {
     }
 }
 
-std::optional<unsigned long> existing_process(const std::wstring& path, const win::RunAs& as) {
+// Whether a running instance must share the launch's elevation to count.
+enum class Elevation { Same, Any };
+
+// How long a new process is given to pass its launch to the instance
+// already running and exit, as a single-instance application does.
+constexpr DWORD kHandOffMs = 3000;
+
+std::optional<unsigned long> existing_process(const std::wstring& path, const win::RunAs& as,
+                                              Elevation elevation_rule = Elevation::Same) {
     const std::wstring image = util::WideString::lower(path);
     std::optional<unsigned long> chosen;
     auto oldest = std::numeric_limits<std::uint64_t>::max();
@@ -49,6 +57,14 @@ std::optional<unsigned long> existing_process(const std::wstring& path, const wi
         DWORD exit_code = 0;
         if (!::GetExitCodeProcess(process.get(), &exit_code) || exit_code != STILL_ACTIVE)
             continue;
+        if (elevation_rule == Elevation::Any) {
+            const auto created = win::ProcessInfo::creation_time(process.get());
+            if (created && *created < oldest) {
+                chosen = entry.pid;
+                oldest = *created;
+            }
+            continue;
+        }
         win::UniqueHandle token;
         TOKEN_ELEVATION elevation{};
         DWORD bytes = 0;
@@ -139,6 +155,14 @@ bool Launcher::launch(const std::string& app_id, const std::string& extra_args,
         // A tray-only process needs its normal launch/IPC handoff to reopen.
         // Keep mirroring the original process, not the short-lived activation stub.
     }
+    // Any instance at all, whatever its elevation: the one a single-instance
+    // application hands this launch to. Steam restarted by its own updater
+    // runs with the user's filtered token, and the elevated launch's new
+    // Steam.exe passes the launch to it and exits.
+    const std::optional<unsigned long> running =
+        mode == Mode::Open && util::WideString::iends_with(path, L".exe")
+            ? existing_process(path, as, Elevation::Any)
+            : std::nullopt;
 
     // Default the working directory to the executable's own folder.
     //
@@ -262,8 +286,14 @@ bool Launcher::launch(const std::string& app_id, const std::string& extra_args,
     ::ResumeThread(spawned->thread.get());
 
     LSW_AGENT_INFO("launch: spawned pid={}", spawned->pid);
+    unsigned long pid = existing.value_or(spawned->pid);
+    if (running && ::WaitForSingleObject(spawned->process.get(), kHandOffMs) == WAIT_OBJECT_0) {
+        LSW_AGENT_INFO("launch: pid={} handed off to the running pid={} and exited", spawned->pid,
+                       *running);
+        pid = *running;
+    }
     if (pid_out != nullptr) {
-        *pid_out = existing.value_or(spawned->pid);
+        *pid_out = pid;
     }
     return true;
 }
