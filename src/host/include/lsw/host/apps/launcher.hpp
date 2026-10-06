@@ -24,6 +24,10 @@ public:
     // applied to that launch alone.
     void launch(const QString& app_id, const QString& args = {},
                 const QString& env = {});
+    // A packaged application, by its Application User Model ID. Windows'
+    // activation starts it with ``args`` and no environment of ours; its
+    // process is in no job of the agent's, so ``launched`` carries none.
+    void activate(const QString& aumid, const QString& args = {});
 
 Q_SIGNALS:
     // ``pid`` is the spawned process id (a reply without one is a

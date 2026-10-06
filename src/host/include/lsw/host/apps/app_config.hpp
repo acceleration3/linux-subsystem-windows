@@ -14,6 +14,10 @@ struct AppConfig {
     QString id;            // stable file-name token (sha1-prefix of path or sanitised name)
     QString name;          // user-facing label
     QString path;          // Windows path, e.g. C:\Windows\notepad.exe or .lnk
+    // A packaged (Microsoft Store, MSIX) application's Application User
+    // Model ID, ``<package family>!<application>``, in place of a path:
+    // Windows starts those by activation, never from their executable.
+    QString aumid;
     QString cmdline;       // extra args appended at launch time
     // Per-launch environment overrides, one ``NAME=value`` per line.
     //
@@ -41,6 +45,9 @@ struct AppConfig {
     // Windows file types this application should open on the host,
     // one MIME type per line. Empty means it registers for none.
     QString mime_types;
+
+    // What the guest starts: the store application's ID, or the path.
+    [[nodiscard]] const QString& target() const noexcept { return aumid.isEmpty() ? path : aumid; }
 
     // Lossy helpers — Qt-friendly views into icon_png_base64.
     [[nodiscard]] QImage icon_image() const;

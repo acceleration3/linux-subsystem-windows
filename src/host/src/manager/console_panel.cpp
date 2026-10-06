@@ -168,10 +168,10 @@ void ConsolePanel::open_session() {
         if (sid.isEmpty()) {
             LSW_WARN("console: open failed: {}", reply.ok ? "no session_id" : reply.error);
             opening_ = false;
-            status_->setText(tr("Could not open a console: %1")
-                                 .arg(reply.ok ? tr("the agent gave no session")
-                                               : QString::fromStdString(reply.error)));
+            status_->setText(tr("No console. Leave the page and come back to try again."));
             input_->setEnabled(false);
+            Q_EMIT open_failed(reply.ok ? tr("The agent gave no session.")
+                                        : QString::fromStdString(reply.error));
             return;
         }
         if (!opening_) {
@@ -193,6 +193,7 @@ void ConsolePanel::open_session() {
                              .arg(shell_user_.isEmpty() ? tr("an unnamed user") : shell_user_,
                                   shell_elevated_ ? tr(", elevated") : QString{}));
         input_->setEnabled(true);
+        Q_EMIT opened();
         input_->setFocus();
         rebuild_picker();
         Q_EMIT summary_changed();

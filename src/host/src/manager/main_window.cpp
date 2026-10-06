@@ -5,8 +5,11 @@
 #include "lsw/host/manager/graphics_alerts.hpp"
 #include "lsw/host/manager/graphics_page.hpp"
 #include "lsw/host/manager/log_panel.hpp"
+#include "lsw/host/manager/notice_board.hpp"
 #include "lsw/host/manager/run_on_vm_dialog.hpp"
 #include "lsw/host/manager/settings_page.hpp"
+#include "lsw/host/apps/app_config_store.hpp"
+#include "lsw/host/apps/guest_app_launcher.hpp"
 #include "lsw/host/manager/vm_detail_panel.hpp"
 #include "lsw/host/manager/warning_strip.hpp"
 #include "lsw/host/mirror/window_mirror.hpp"
@@ -152,6 +155,8 @@ MainWindow::MainWindow(services::HostServices& services, QWidget* parent)
     warn_strip_ = new WarningStrip;
     warn_strip_->setVisible(false);
     right_layout->addWidget(warn_strip_);
+    notices_ = new NoticeBoard;
+    right_layout->addWidget(notices_);
 
     stack_ = new QStackedWidget;
     right_layout->addWidget(stack_, 1);
@@ -174,11 +179,10 @@ MainWindow::MainWindow(services::HostServices& services, QWidget* parent)
     build_pages();
 
     connect(rail_, &NavRail::page_selected, this, &MainWindow::show_page);
+    follow_launches();
     connect(rail_, &NavRail::start_requested, this, [this] {
         if (!overview_->start_guest()) {
-            notice_ = QStringLiteral("libvirt would not start the guest (the manager's own "
-                                     "log says why)");
-            refresh_status_bar();
+            notice_start_refused(QStringLiteral("libvirt would not start the guest."));
         }
     });
     connect(rail_, &NavRail::stop_requested, overview_, &VmDetailPanel::stop_guest);
@@ -188,9 +192,7 @@ MainWindow::MainWindow(services::HostServices& services, QWidget* parent)
         // The device takes the resolutions the moment QEMU is up; the
         // definition may carry an older list than the settings now hold.
         if (running) {
-            if (notice_.startsWith(QLatin1StringView("libvirt would not start"))) {
-                notice_.clear();
-            }
+            notices_->withdraw(QStringLiteral("start"));
             push_display_modes();
         } else if (restart_ == nullptr) {
             notice_.clear();
@@ -215,6 +217,12 @@ MainWindow::MainWindow(services::HostServices& services, QWidget* parent)
         content_detail_->setText(page_detail(rail_->current()));
         refresh_identity();
     });
+    connect(console_, &ConsolePanel::open_failed, this, [this](const QString& reason) {
+        notices_->post(QStringLiteral("console"), false, QStringLiteral("Could not open a console."),
+                       reason);
+    });
+    connect(console_, &ConsolePanel::opened, this,
+            [this] { notices_->withdraw(QStringLiteral("console")); });
     connect(console_, &ConsolePanel::summary_changed, this, [this] {
         if (rail_->current() == NavRail::Page::Console) {
             content_detail_->setText(page_detail(NavRail::Page::Console));
@@ -365,13 +373,11 @@ void MainWindow::open_desktop() {
                                                 QStringLiteral("%1 desktop").arg(name), this);
     connect(desktop_, &mirror::WindowMirror::finished, desktop_, &QObject::deleteLater);
     connect(desktop_, &mirror::WindowMirror::failed, this, [this](const QString& reason) {
-        notice_ = reason;
-        refresh_status_bar();
+        notices_->post(QStringLiteral("desktop"), false,
+                       QStringLiteral("The desktop could not be opened."), reason);
     });
-    connect(desktop_, &mirror::WindowMirror::ready, this, [this] {
-        notice_.clear();
-        refresh_status_bar();
-    });
+    connect(desktop_, &mirror::WindowMirror::ready, this,
+            [this] { notices_->withdraw(QStringLiteral("desktop")); });
     if (!desktop_->start()) {
         desktop_->deleteLater();
         desktop_ = nullptr;
@@ -598,13 +604,11 @@ void MainWindow::push_display_modes() {
     const QString modes =
         services::display_modes_from_settings(services_.manager_settings(), current_output());
     if (!services_.lifecycle().set_display_modes(record->uuid, modes, &error)) {
-        notice_ = QStringLiteral("The resolution did not reach the guest: %1").arg(error);
-        refresh_status_bar();
+        notices_->post(QStringLiteral("resolution"), false,
+                       QStringLiteral("The resolution did not reach the guest."), error);
         return;
     }
-    if (notice_.startsWith(QLatin1StringView("The resolution"))) {
-        notice_.clear();
-    }
+    notices_->withdraw(QStringLiteral("resolution"));
     services_.status().refresh(services::StatusHub::Area::Graphics);
 }
 
@@ -640,8 +644,11 @@ void MainWindow::restart_guest() {
         // A definition libvirt refused is one the guest must not be
         // started against, and the old one is still on disk, so the
         // honest thing is to say nothing was applied.
-        notice_ = QStringLiteral("libvirt refused the new machine definition; nothing changed");
-        refresh_status_bar();
+        notices_->post(QStringLiteral("definition"), true,
+                       QStringLiteral("libvirt refused the new machine definition."),
+                       QStringLiteral("Nothing changed: the guest keeps the definition it had. "
+                                      "The manager's own log says why."),
+                       {{QStringLiteral("Open the log"), [this] { show_page(NavRail::Page::Log); }}});
         return;
     }
     // The stored definition is new: what is pending, and what the next
@@ -652,21 +659,25 @@ void MainWindow::restart_guest() {
     // so it grows between the stop and the start, never on a running
     // guest. A refusal is reported and the guest still starts: on its old
     // size, which is a working machine, rather than not at all.
-    const auto grow_disk = [record]() -> QString {
+    notices_->withdraw(QStringLiteral("definition"));
+    const auto grow_disk = [this, record] {
         QString error;
         if (vm::Lifecycle::grow_disk(record.disk_path, record.sizing.disk_gib, &error)) {
-            return {};
+            notices_->withdraw(QStringLiteral("disk"));
+            return;
         }
-        return QStringLiteral("; the disk was not grown: %1").arg(error);
+        notices_->post(QStringLiteral("disk"), false,
+                       QStringLiteral("The disk was not grown."),
+                       QStringLiteral("The guest starts on its old size: %1").arg(error));
     };
     if (!services_.lifecycle().is_running(record.uuid)) {
-        const QString disk = grow_disk();
-        notice_ = (overview_->start_guest()
-                       ? QStringLiteral("Starting the guest on the new definition")
-                       : QStringLiteral("libvirt would not start the guest (the manager's own "
-                                        "log says why)")) +
-                  disk;
-        refresh_status_bar();
+        grow_disk();
+        if (overview_->start_guest()) {
+            notice_ = QStringLiteral("Starting the guest on the new definition");
+            refresh_status_bar();
+        } else {
+            notice_start_refused(QStringLiteral("libvirt would not start the guest."));
+        }
         return;
     }
     // A start while the old QEMU still runs does nothing, so the start
@@ -679,18 +690,44 @@ void MainWindow::restart_guest() {
     connect(restart_, &vm::GracefulShutdown::finished, this, [this, grow_disk](bool forced) {
         restart_->deleteLater();
         restart_ = nullptr;
-        const QString disk = grow_disk();
+        grow_disk();
         notice_ = forced ? QStringLiteral("Windows did not shut down in time and was stopped; "
                                           "starting it again")
                          : QStringLiteral("Starting the guest again");
         if (!overview_->start_guest()) {
-            notice_ = QStringLiteral("libvirt would not start the guest again (the "
-                                     "manager's own log says why)");
+            notice_.clear();
+            notice_start_refused(QStringLiteral("libvirt would not start the guest again."));
         }
-        notice_ += disk;
         refresh_status_bar();
     });
     restart_->start();
+}
+
+void MainWindow::notice_start_refused(const QString& headline) {
+    notices_->post(QStringLiteral("start"), true, headline,
+                   QStringLiteral("The manager's own log says why."),
+                   {{QStringLiteral("Open the log"), [this] { show_page(NavRail::Page::Log); }}});
+}
+
+void MainWindow::follow_launches() {
+    auto& launcher = services_.app_launcher();
+    connect(&launcher, &apps::GuestAppLauncher::failed, this,
+            [this](const QString& target, const QString& error) {
+        QString name = target.section(QLatin1Char('\\'), -1);
+        for (const auto& app : services_.app_configs().configs()) {
+            if (app.target() == target && !app.name.isEmpty()) {
+                name = app.name;
+                break;
+            }
+        }
+        notices_->post(QStringLiteral("launch:") + target, false,
+                       QStringLiteral("Could not open %1.").arg(name), error,
+                       {{QStringLiteral("Open desktop"), [this] { open_desktop(); }}});
+    });
+    connect(&launcher, &apps::GuestAppLauncher::launched, this,
+            [this](const QString& target, quint32) {
+        notices_->withdraw(QStringLiteral("launch:") + target);
+    });
 }
 
 void MainWindow::setup_tray() {

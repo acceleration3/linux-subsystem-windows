@@ -57,6 +57,9 @@ public:
 
 Q_SIGNALS:
     void summary_changed();
+    // The agent would not open a shell, and why; ``opened`` when one is.
+    void open_failed(const QString& reason);
+    void opened();
 
 protected:
     void showEvent(QShowEvent* e) override;

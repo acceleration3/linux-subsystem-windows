@@ -323,8 +323,11 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
   padding:10px 13px;border-radius:0 var(--r-md) var(--r-md) 0;
   font-size:12.5px;color:#f0c393;line-height:1.55;max-width:62ch;
 }
+/* the same inside a dialog for something that failed rather than
+   something to mind: the strip's red */
+.callout.crit{border-left-color:var(--bad);background:#1f1315;color:#f0b0b2}
 
-/* screen inside the wizard (VNC preview) */
+/* a guest screen: the wizard's console (VNC) and the overview's preview (WGC) */
 .screen{
   border:1px solid var(--line);border-radius:var(--r-md);background:#05070a;
   flex:1;min-height:150px;display:grid;place-items:center;position:relative;overflow:hidden;
@@ -449,6 +452,42 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 }
 .app .nm{font-size:11.5px;color:var(--fg-dim);line-height:1.35;word-break:break-word}
 .app[aria-selected="true"] .nm{color:var(--fg)}
+/* what the manager has opened of an application: a solid green dot
+   while its windows are mirrored here, a hollow amber ring while it is
+   being opened. Nothing when it is not open. */
+.app .ic{position:relative}
+.app .ic .st{position:absolute;right:-5px;bottom:-5px;width:13px;height:13px;border-radius:50%;
+  border:2px solid var(--surface)}
+.app .ic .st.run{background:var(--ok)}
+.app .ic .st.open{background:var(--surface);box-shadow:inset 0 0 0 2px var(--amber)}
+.app:hover .ic .st{border-color:var(--raised)}
+.app[aria-selected="true"] .ic .st{border-color:#241d14}
+
+/* a button's menu (QMenu): the add button's two kinds of application */
+.icon-btn.menu-btn{width:auto;padding:0 6px;grid-auto-flow:column;gap:4px}
+.icon-btn.menu-btn .car{font-size:8px;color:var(--fg-faint)}
+.menu{position:absolute;right:10px;top:36px;z-index:5;min-width:180px;background:#151922;
+  border:1px solid var(--line);border-radius:var(--r-md);padding:4px;box-shadow:0 10px 28px #000a;
+  display:flex;flex-direction:column;gap:1px;text-transform:none;letter-spacing:0}
+.menu button{all:unset;display:flex;flex-direction:column;gap:2px;padding:6px 12px;border-radius:4px;
+  cursor:pointer;font-family:Inter,system-ui,sans-serif;font-size:12.5px;color:var(--fg)}
+.menu button:hover,.menu button.on{background:#242a37}
+
+/* the store app list: icon, name, and the package family under it */
+.slist{background:var(--ink);border-top:1px solid var(--line);border-bottom:1px solid var(--line);
+  max-height:360px;overflow:hidden;display:flex;flex-direction:column}
+.strow{display:flex;gap:11px;align-items:center;
+  padding:7px 16px;border-left:2px solid transparent;cursor:pointer}
+.strow:hover{background:var(--raised)}
+.strow.sel{background:#241d14;border-left-color:var(--amber)}
+.strow .ic3{flex:none;width:28px;height:28px;border-radius:6px;display:grid;place-items:center;
+  font-family:"JetBrains Mono",monospace;font-weight:700;font-size:11px;color:#0d0f14}
+.strow .who{flex:1;display:flex;flex-direction:column;align-items:flex-start;gap:1px;min-width:0;text-align:left}
+.strow .n{font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.strow .f{font-family:"JetBrains Mono",monospace;font-size:10.5px;color:var(--fg-faint);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sempty{padding:44px 24px;display:grid;place-items:center;text-align:center;gap:10px;
+  font-size:12.5px;color:var(--fg-dim);line-height:1.6;background:var(--ink)}
 
 .statusbar{
   display:flex;align-items:center;gap:16px;flex-wrap:wrap;
@@ -709,6 +748,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
         <li><button data-view="m-log">Log</button></li>
         <li><button data-view="m-splash">Starting the guest</button></li>
         <li><button data-view="m-cfg">Configure application</button></li>
+        <li><button data-view="m-store">Add a store app</button></li>
         <li><button data-view="m-picker">Browse the guest</button></li>
         <li><button data-view="m-empty">No guest yet</button></li>
       </ul>
@@ -793,7 +833,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
               <div class="panel" style="flex:1">
                 <header>Preview</header>
                 <div class="screen paused" style="border:none;border-radius:0">
-                  <span class="tag">vnc 127.0.0.1:5900, paused</span>
+                  <span class="tag">wgc, paused</span>
                   <div class="desk"></div>
                   <div class="pbadge"><span class="disc"><i></i><i></i></span><span class="cap">click to play</span></div>
                 </div>
@@ -813,12 +853,13 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
               <header>Installed applications
                 <span class="tools">
                   <button class="icon-btn" title="Refresh">&#8635;</button>
-                  <button class="icon-btn" title="Add">+</button>
+                  <button class="icon-btn menu-btn" title="Add an application">+<span class="car">&#9662;</span></button>
                 </span>
               </header>
               <div class="apps" id="appGrid">
-                <button class="app" aria-selected="true"><span class="ic" style="background:#5aa9f0">Ps</span><span class="nm">Photoshop 2024</span></button>
-                <button class="app"><span class="ic" style="background:#e05a8a">&#26481;</span><span class="nm">Touhou 06</span></button>
+                <button class="app" aria-selected="true" title="Running: open it to bring it forward"><span class="ic" style="background:#5aa9f0">Ps<span class="st run"></span></span><span class="nm">Photoshop 2024</span></button>
+                <button class="app" title="Opening: waiting for a window"><span class="ic" style="background:#e05a8a">&#26481;<span class="st open"></span></span><span class="nm">Touhou 06</span></button>
+                <button class="app" title="9P7HXL6HV2CL!App"><span class="ic" style="background:#c84cd8">Af</span><span class="nm">Affinity Photo 2</span></button>
                 <button class="app"><span class="ic" style="background:#8b93a4">Nt</span><span class="nm">Notepad</span></button>
                 <button class="app"><span class="ic" style="background:#4ec98a">fb</span><span class="nm">foobar2000</span></button>
                 <button class="app"><span class="ic" style="background:#ff9f45">Iv</span><span class="nm">IrfanView</span></button>
@@ -842,6 +883,27 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
       </div>
     </div>
 
+    <h3 style="margin:26px 0 12px;font-size:14px">Notices</h3>
+    <div class="frame">
+      <div class="titlebar">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <span class="t">LSW, Overview, notices</span>
+      </div>
+      <div style="background:var(--ink)">
+        <div class="warnstrip crit">
+          <span class="wdot"></span>
+          <span class="msg"><b>libvirt would not start the guest.</b> The manager's own log says why.</span>
+          <span class="acts"><button class="btn">Open the log</button><button class="btn quiet">Dismiss</button></span>
+        </div>
+        <div class="warnstrip">
+          <span class="wdot"></span>
+          <span class="msg"><b>Could not open Affinity.</b> The application or its mirror exited before a window appeared.</span>
+          <span class="acts"><button class="btn">Open desktop</button><button class="btn quiet">Dismiss</button></span>
+        </div>
+        <div style="padding:16px 14px" class="meta">the page itself, under them</div>
+      </div>
+    </div>
+
     <h3 style="margin:26px 0 12px;font-size:14px">The preview's three looks</h3>
     <div class="frame">
       <div class="titlebar">
@@ -851,14 +913,14 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
       <div class="pstates">
         <figure>
           <div class="screen ph paused">
-            <span class="tag">vnc 127.0.0.1:5900, paused</span>
+            <span class="tag">wgc, paused</span>
             <div class="pbadge"><span class="disc"><i></i><i></i></span><span class="cap">click to play</span></div>
           </div>
           <figcaption>No frame yet: flat grey, the badge, the tag already paused.</figcaption>
         </figure>
         <figure>
           <div class="screen paused">
-            <span class="tag">vnc 127.0.0.1:5900, paused</span>
+            <span class="tag">wgc, paused</span>
             <div class="desk"></div>
             <div class="pbadge hot"><span class="disc"><i></i><i></i></span><span class="cap">click to play</span></div>
           </div>
@@ -866,7 +928,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
         </figure>
         <figure>
           <div class="screen">
-            <span class="tag">vnc 127.0.0.1:5900</span>
+            <span class="tag">wgc, gpu</span>
             <div class="desk"></div>
             <div class="hoverdim"></div>
             <div class="pbadge"><span class="disc"><i></i><i></i></span><span class="cap">click to pause</span></div>
@@ -907,14 +969,15 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
     </div>
 
     <dl class="notes">
-      <div class="note"><dt>Why it starts paused</dt><dd>A live stream costs host CPU to decode and scale and costs the guest display work to encode, all for a thumbnail nobody may be watching. So the preview connects, takes one frame, and drops the connection. The frame is the screen once updates go quiet after the first complete one (<code>FinishedFrameBufferUpdate</code>), half a second, or three seconds at most on a guest that never stops drawing: QEMU answers a new client first with its own copy of the screen, which it stops refreshing while nobody watches, so that first update is stale. The frame stays, desaturated and dimmed, with the pause badge over it and the tag ending in <code>paused</code>, so a still picture is never mistaken for a live one. A click plays it live; a second click pauses it again on the last frame. There is no setting for this any more. With no guest, or the guest off, the screen is flat grey with no badge, because there is nothing to play.</dd></div>
-      <div class="note"><dt>Open desktop</dt><dd>The guest's whole screen in a window of its own, a real one: the window mirror captures the primary monitor inside Windows (Windows Graphics Capture) and draws it one guest pixel to one screen pixel, centred, when the window has room, and scaled down and letterboxed in black when it has not. The pointer and the keyboard go into the guest, and the guest's cursor is this window's own cursor rather than painted into the picture, so it follows the pointer with no lag. Its title is the machine's name and <code>desktop</code>, <code>lsw desktop</code> here. One window at a time: with it open, the button brings it to the front. Disabled, with nothing else on the bar changing, while the agent is offline: the capture runs inside Windows, so there is nothing to open until Windows answers. The preview above stays VNC, which needs nothing in the guest and shows the machine from power on.</dd></div>
+      <div class="note"><dt>Why it starts paused</dt><dd>The preview is the guest's primary monitor captured inside Windows (Windows Graphics Capture), sent the way the window mirrors send theirs, and drawn read-only: no pointer, wheel or key reaches the guest from it. A live capture costs the guest's GPU a copy of every frame and the host a draw of it, all for a thumbnail nobody may be watching. So the preview asks the agent for a capture, takes the first frame, and lets the capture go. The frame stays, desaturated and dimmed, with the pause badge over it and the tag ending in <code>paused</code>, so a still picture is never mistaken for a live one. A click plays it live, the tag saying how the frames come (<code>wgc, gpu</code> when they stay on the GPU, <code>wgc, pixels</code> when they do not); a second click pauses it again on the frame it was showing. Hidden, it captures nothing, and a preview that was playing plays again when it is shown. With no guest, the guest off, or its agent not answering yet, the screen is flat grey with no badge and the tag says which, because there is nothing to play. A capture that fails says why in the tag and goes back to the paused look; the badge then tries again.</dd></div>
+      <div class="note"><dt>Open desktop</dt><dd>The guest's whole screen in a window of its own, a real one: the window mirror captures the primary monitor inside Windows (Windows Graphics Capture) and draws it one guest pixel to one screen pixel, centred, when the window has room, and scaled down and letterboxed in black when it has not. The pointer and the keyboard go into the guest, and the guest's cursor is this window's own cursor rather than painted into the picture, so it follows the pointer with no lag. Its title is the machine's name and <code>desktop</code>, <code>lsw desktop</code> here. One window at a time: with it open, the button brings it to the front. Disabled, with nothing else on the bar changing, while the agent is offline: the capture runs inside Windows, so there is nothing to open until Windows answers. The preview above is the same capture, read-only and paused until clicked.</dd></div>
       <div class="note"><dt>Why the rail</dt><dd>Four buttons in a row said nothing about where you were, and two of them were always disabled. The rail marks the current section, keeps the count of unread log records and pending settings in view, and leaves one power control instead of a Start and a Stop that take turns being dead.</dd></div>
       <div class="note"><dt>One power button</dt><dd>It reads <code>Stop the guest</code> while running and <code>Start the guest</code> while off. The state badge above it is the thing that changes color, not the button.</dd></div>
       <div class="note"><dt>Console and log</dt><dd>Now sections in the same window rather than separate top level windows. <code>Pop out</code> is still there for anyone who wants a second window.</dd></div>
       <div class="note"><dt>Status bar</dt><dd>The transport facts that currently only exist in logs: the agent's port and the bus the disk sits on.</dd></div>
       <div class="note"><dt>GPU line</dt><dd>The third line of the identity is the display adapter's host GPU, by its Vulkan device name, which is also the adapter's name inside Windows, and how many render-only adapters sit beside it. It is in the rail, so it is on every page; the Graphics page has the rest.</dd></div>
       <div class="note"><dt>VRAM gauge</dt><dd>The host GPU's used and total VRAM, read on the host (<code>mem_info_vram_used</code> and <code>mem_info_vram_total</code> for amdgpu, NVML for NVIDIA), because what the guest allocates lives there. It counts everything on that GPU, the host desktop included. Windows' own dedicated memory figure is a budget the driver reports, not a place anything is put, so it is not a gauge. A host GPU that exposes neither hides the row.</dd></div>
+      <div class="note"><dt>Notices</dt><dd>Something the manager tried that did not work is said once, in a strip across the top of the page, under the header: an application that could not be opened, libvirt refusing to start the guest or to take a new definition, the resolution not reaching the guest, the disk not growing, the desktop not opening. Red when the guest cannot run because of it, amber otherwise. The headline names what failed, the rest says why in the words that came back, and the buttons are what helps: <code>Open the log</code>, <code>Open desktop</code>, then <code>Dismiss</code>, quiet and last, on every one. They show on every page, newest first, one per kind of failure: the same failure again replaces its strip, and one that stops being true (the guest starts after all, the application opens on a second try) takes its strip away. Progress (<code>Restarting the guest</code>) is not a notice; it is a fact in the status bar while it lasts. Nothing pops up a message box.</dd></div>
       <div class="note"><dt>Warning strip</dt><dd>Not shown here, because nothing is wrong. It appears on the overview only for the two Graphics warnings that break the guest: the host serves no Direct3D, or Windows is not running avgpu.sys. Its button opens the Graphics page.</dd></div>
     </dl>
   </section>
@@ -1714,7 +1777,31 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
       </div>
     </div>
 
+    <h3 style="margin:26px 0 12px;font-size:14px">When the application does not open</h3>
+    <div class="frame dlg" style="max-width:420px">
+      <div class="titlebar">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <span class="t">Affinity</span>
+      </div>
+      <div style="padding:20px 22px;display:flex;flex-direction:column;gap:14px;background:var(--ink)">
+        <div style="display:flex;gap:13px;align-items:center">
+          <span class="ic" style="width:44px;height:44px;border-radius:10px;background:#a6e86b;display:grid;place-items:center;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:15px;color:#0d0f14">Af</span>
+          <div style="display:flex;flex-direction:column;gap:3px">
+            <span style="font-size:14px;font-weight:600">Could not open Affinity</span>
+            <span style="font-size:12.5px;color:var(--fg-dim)">Windows is running; the application is what failed.</span>
+          </div>
+        </div>
+        <div class="callout crit" style="font-size:12px">The application or its mirror exited before a window appeared.</div>
+      </div>
+      <div class="dlg-foot">
+        <button class="btn quiet" style="margin-right:auto">Open the log</button>
+        <button class="btn">Close</button>
+        <button class="btn primary">Try again</button>
+      </div>
+    </div>
+
     <dl class="notes">
+      <div class="note"><dt>A launch that fails</dt><dd>From the launcher, with the manager's own window closed, there is nowhere for a notice to go, so a failed launch is this same window in its failed state: whether the guest had to be started for it or was already up. The reason is a red callout in the words that came back, and the buttons are the log, Close, and Try again. Launched from the grid, the failure is a notice on the overview instead.</dd></div>
       <div class="note"><dt>When it appears</dt><dd>Only when the guest is not already up. Launching into a running guest opens the application's window directly, with no splash at all.</dd></div>
       <div class="note"><dt>Named phases</dt><dd>Machine, Windows, agent, application. A cold start is around 40 seconds and the slow part moves around, so a single spinner would tell you nothing about whether it is stuck.</dd></div>
       <div class="note"><dt>Hide, not cancel</dt><dd>Hide sends it to the tray and the application still opens when it is ready. Cancel stops the launch and, if the manager started the guest for this, offers to stop it again.</dd></div>
@@ -1772,7 +1859,77 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
       <div class="note"><dt>Identity first</dt><dd>Icon, name, and where the icon came from sit above the form, so the dialog opens by confirming what you are editing.</dd></div>
       <div class="note"><dt>Browse the guest</dt><dd>The path field is a Windows path, so the button opens a picker that reads the guest rather than your own disk. Working folder gets the same treatment and defaults to wherever the program lives.</dd></div>
       <div class="note"><dt>No graphics fields</dt><dd>An application gets the guest's adapter the way it would get a physical card, so there is no channel or GPU to choose per application. One that wants the render-only GPU picks it itself, as it would between two cards.</dd></div>
+      <div class="note"><dt>A store application</dt><dd>One added from the Microsoft Store has no path: Windows starts it by its Application User Model ID. The path field becomes <code>Store application</code>, showing that ID read-only with no Browse button, and Working folder and Environment are gone, because Windows' activation takes neither from whoever asks. Arguments stay. Replace icon asks Windows for the application's own logo again.</dd></div>
       <div class="note"><dt>Destructive left</dt><dd>Remove is separated from Cancel and Save, quiet by default, and confirms before it deletes the entry and its .desktop file.</dd></div>
+    </dl>
+  </section>
+
+  <!-- ─────────── MANAGER: ADD A STORE APP ─────────── -->
+  <section data-view="m-store" hidden>
+    <div class="stage-head">
+      <span class="eyebrow">Manager</span>
+      <h1>Add a store app</h1>
+      <p>An application from the Microsoft Store has no executable anybody may run, so there is no path to browse to. The dialog lists what the guest's user has installed from the Store, with the icons Windows shows for them, and adds the one picked.</p>
+    </div>
+
+    <div class="frame dlg">
+      <div class="titlebar">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <span class="t">Add a store app</span>
+      </div>
+      <div class="dlg-body" style="padding-bottom:12px">
+        <span class="input focused">affin</span>
+      </div>
+      <div class="slist">
+        <div class="strow sel"><span class="ic3" style="background:#c84cd8">Af</span><span class="who"><span class="n">Affinity Photo 2</span><span class="f">SerifEuropeLtd.AffinityPhoto2_3cqzy0nppv2rt</span></span></div>
+        <div class="strow"><span class="ic3" style="background:#e3a13b">Af</span><span class="who"><span class="n">Affinity Publisher 2</span><span class="f">SerifEuropeLtd.AffinityPublisher2_3cqzy0nppv2rt</span></span></div>
+      </div>
+      <div class="dlg-foot">
+        <span class="meta" style="margin-right:auto">2 of 31 store apps</span>
+        <button class="btn">Cancel</button>
+        <button class="btn primary">Add</button>
+      </div>
+    </div>
+
+    <h3 style="margin:26px 0 12px;font-size:14px">The add button</h3>
+    <div class="frame" style="max-width:520px">
+      <div class="panel" style="border:none;border-radius:0;position:relative;min-height:150px">
+        <header>Installed applications
+          <span class="tools">
+            <button class="icon-btn" title="Refresh">&#8635;</button>
+            <button class="icon-btn menu-btn" title="Add an application" style="border-color:var(--amber-dim)">+<span class="car">&#9662;</span></button>
+          </span>
+        </header>
+        <div class="menu">
+          <button class="on" title="A program or shortcut, by its path in Windows">Add a regular app</button>
+          <button title="One installed from the Microsoft Store">Add a store app</button>
+        </div>
+      </div>
+    </div>
+
+    <h3 style="margin:26px 0 12px;font-size:14px">Before the list, and when nothing matches</h3>
+    <div style="display:flex;gap:16px;flex-wrap:wrap">
+      <div class="frame dlg" style="max-width:360px;flex:1;min-width:280px">
+        <div class="titlebar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="t">Add a store app</span></div>
+        <div class="sempty"><span class="pill run">Reading</span><span>Asking Windows for its store apps and their icons</span></div>
+      </div>
+      <div class="frame dlg" style="max-width:360px;flex:1;min-width:280px">
+        <div class="titlebar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="t">Add a store app</span></div>
+        <div class="sempty"><span>No store app is called <b>zzz</b></span></div>
+      </div>
+      <div class="frame dlg" style="max-width:360px;flex:1;min-width:280px">
+        <div class="titlebar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="t">Add a store app</span></div>
+        <div class="sempty"><span class="badge off">OFFLINE</span><span>Windows is not running, so there is nothing to list until the guest is up.</span></div>
+      </div>
+    </div>
+
+    <dl class="notes">
+      <div class="note"><dt>Two kinds behind one button</dt><dd>The add button in the applications panel opens a menu: <code>Add a regular app</code> is the configure dialog with an empty path, as before; <code>Add a store app</code> is this list. Each item's tooltip says what it is for, because "regular" means nothing until you have met the other kind.</dd></div>
+      <div class="note"><dt>What is listed</dt><dd>The packaged applications in the guest user's All apps list (the shell's AppsFolder), by name, sorted, each with the package family under it in mono so two of a name can be told apart. The agent answers it from the user's own session (<code>list_store_apps</code>), since packages are installed per user and the service sees none. Icons come with the list, drawn by Windows at the row's size, so the list arrives whole in one round trip.</dd></div>
+      <div class="note"><dt>Search</dt><dd>The field has the focus when the dialog opens, and narrows the list as you type, by name or package family, ignoring case. The footer counts what is shown against what there is. Enter adds the selected row; a double-click adds the one clicked.</dd></div>
+      <div class="note"><dt>What Add makes</dt><dd>An application entry like any other, named and iconed as Windows shows it, its icon read again at 256 pixels for the launcher. Its Configure dialog shows the store application's ID where a path would be (see Configure application). Adding one already in the grid selects that entry instead of making a second.</dd></div>
+      <div class="note"><dt>Starting one</dt><dd>Windows starts a store application by activation (<code>launch_store_app</code>), not from its executable. The process comes from Windows' broker, in no job of the agent's, so the mirror follows it by the process Windows names, and everything that process starts.</dd></div>
+      <div class="note"><dt>Open and opening</dt><dd>A tile carries a mark on its icon's corner instead of a line of text under its name: a hollow amber ring while the application is being opened, a solid green dot while its windows are mirrored here, nothing otherwise. The tooltip says which in words. A failed launch still says why under the grid.</dd></div>
     </dl>
   </section>
 

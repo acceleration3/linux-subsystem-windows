@@ -11,7 +11,6 @@
 #include <QEventLoop>
 #include <QKeyEvent>
 #include <QMouseEvent>
-#include <QPushButton>
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QThreadPool>
@@ -37,6 +36,18 @@ bool wait_for(const std::function<bool()>& done, int milliseconds = 3000) {
     QTimer::singleShot(milliseconds, &loop, &QEventLoop::quit);
     if (!done()) loop.exec();
     return done();
+}
+// A click on the picture, where the play and pause badge is.
+void click(QWidget& preview) {
+    QWidget* surface = preview.childAt(preview.rect().center());
+    if (surface == nullptr) return;
+    const QPointF at(surface->rect().center());
+    QMouseEvent press(QEvent::MouseButtonPress, at, surface->mapToGlobal(at), Qt::LeftButton,
+                      Qt::LeftButton, Qt::NoModifier);
+    QMouseEvent release(QEvent::MouseButtonRelease, at, surface->mapToGlobal(at), Qt::LeftButton,
+                        Qt::NoButton, Qt::NoModifier);
+    QApplication::sendEvent(surface, &press);
+    QApplication::sendEvent(surface, &release);
 }
 void send(QTcpSocket& socket, rwin::MessageWriter message) {
     const auto bytes = message.take();
@@ -67,12 +78,12 @@ int main(int argc, char** argv) {
             check(preview.grab().save(QStringLiteral("/tmp/opencode/wgc-preview.png")),
                   "save diagnostic preview snapshot");
         }
-        preview.findChild<QPushButton*>(QStringLiteral("PreviewPlayback"))->click();
+        click(preview);
         QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
         check(preview.is_paused() && preview.status() == QStringLiteral("WGC, paused") &&
                   preview.findChildren<rwin::host::MonitorWindow*>().isEmpty(),
               "live Pause releases the GPU capture session");
-        preview.findChild<QPushButton*>(QStringLiteral("PreviewPlayback"))->click();
+        click(preview);
         swaps = 0;
         if (auto* picture = preview.findChild<rwin::host::GpuPicture*>()) {
             QObject::connect(picture, &QOpenGLWidget::frameSwapped, &app, [&] { ++swaps; });
@@ -141,12 +152,14 @@ int main(int argc, char** argv) {
         preview.set_available(true);
         check(starts == 0, "hidden preview starts no capture");
         preview.show();
-        check(starts == 0 && preview.is_paused(), "preview defaults to paused until Play is clicked");
-        preview.findChild<QPushButton*>(QStringLiteral("PreviewPlayback"))->click();
-        check(wait_for([&] { return preview.status() == QStringLiteral("WGC, pixels"); }),
-              "WGC frame appears without a VNC connection");
+        check(wait_for([&] { return starts == 1 && guest.state() == QAbstractSocket::UnconnectedState; }) &&
+                  preview.is_paused() && preview.status() == QStringLiteral("WGC, paused"),
+              "a paused start takes one frame and lets the capture go");
+        click(preview);
+        check(wait_for([&] { return starts == 2 && preview.status() == QStringLiteral("WGC, pixels"); }),
+              "a click plays the WGC capture live");
         preview.set_available(true);
-        check(starts == 1, "repeated agent status does not duplicate captures");
+        check(starts == 2, "repeated agent status does not duplicate captures");
         const auto views = preview.findChildren<rwin::host::MonitorWindow*>();
         check(views.size() == 1 && !views.first()->isWindow() &&
                   views.first()->size().width() >= 300,
@@ -185,32 +198,32 @@ int main(int argc, char** argv) {
         check(wait_for([&] { return guest.state() == QAbstractSocket::UnconnectedState; }),
               "hiding preview detaches guest capture");
         preview.show();
-        check(wait_for([&] { return starts == 2 && preview.status() == QStringLiteral("WGC, pixels"); }),
+        check(wait_for([&] { return starts == 3 && preview.status() == QStringLiteral("WGC, pixels"); }),
               "showing preview reconnects with a fresh session");
-        preview.findChild<QPushButton*>(QStringLiteral("PreviewPlayback"))->click();
+        click(preview);
         check(wait_for([&] { return guest.state() == QAbstractSocket::UnconnectedState; }) &&
                   preview.is_paused() && preview.status() == QStringLiteral("WGC, paused"),
               "Pause stops capture instead of merely suppressing repaint");
         preview.set_available(true);
-        check(starts == 2 && preview.is_paused(), "agent polling cannot override manual pause");
-        preview.findChild<QPushButton*>(QStringLiteral("PreviewPlayback"))->click();
-        check(wait_for([&] { return starts == 3 && preview.status() == QStringLiteral("WGC, pixels"); }),
+        check(starts == 3 && preview.is_paused(), "agent polling cannot override manual pause");
+        click(preview);
+        check(wait_for([&] { return starts == 4 && preview.status() == QStringLiteral("WGC, pixels"); }),
               "Play resumes WGC capture with a fresh connection");
         guest.disconnectFromHost();
         check(wait_for([&] { return preview.status().contains(QStringLiteral("disconnected")); }),
               "guest disconnect gives an actionable preview failure");
         refuse = true;
-        preview.findChild<QPushButton*>(QStringLiteral("PreviewRetry"))->click();
+        click(preview);
         check(wait_for([&] { return preview.status().contains(QStringLiteral("test refusal")); }),
               "retry reports the agent's startup refusal");
         refuse = false;
-        preview.findChild<QPushButton*>(QStringLiteral("PreviewRetry"))->click();
-        check(wait_for([&] { return starts == 5 && preview.status() == QStringLiteral("WGC, pixels"); }),
+        click(preview);
+        check(wait_for([&] { return starts == 6 && preview.status() == QStringLiteral("WGC, pixels"); }),
               "retry recovers without a VM restart");
-        preview.clear();
+        preview.clear(QStringLiteral("WGC, the guest is off"));
         check(wait_for([&] { return guest.state() == QAbstractSocket::UnconnectedState; }),
               "target change releases old monitor capture");
-        check(preview.status() == QStringLiteral("WGC, waiting for guest agent"),
+        check(preview.status() == QStringLiteral("WGC, the guest is off"),
               "cleared preview cannot show the previous VM as connected");
     }
     QThreadPool::globalInstance()->waitForDone();

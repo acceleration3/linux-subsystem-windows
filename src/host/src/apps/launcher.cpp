@@ -72,12 +72,38 @@ void Launcher::launch(const QString& app_id, const QString& args, const QString&
             return;
         }
         const auto pid = static_cast<quint32>(reply.body.value("pid", std::uint64_t{0}));
-        if (pid == 0 && !package) {
-            Q_EMIT failed(app_id, QStringLiteral("agent: the launch reply carries no pid"));
+        // A package's reply names the App Installer window's process; one
+        // without it comes from an agent too old to find that window, and
+        // mirroring nothing would leave the installer out of sight.
+        if (pid == 0) {
+            Q_EMIT failed(app_id, package ? QStringLiteral("agent: App Installer opened but the agent "
+                                                           "named no window of it; update the guest agent")
+                                          : QStringLiteral("agent: the launch reply carries no pid"));
             return;
         }
         Q_EMIT launched(app_id, pid,
                         QString::fromStdString(reply.body.value("job", std::string{})));
+    });
+}
+
+void Launcher::activate(const QString& aumid, const QString& args) {
+    nlohmann::json params{{"aumid", aumid.toStdString()}};
+    if (!args.trimmed().isEmpty()) {
+        params["args"] = args.toStdString();
+    }
+    QtConcurrent::run([&rpc = rpc_, params = std::move(params)] {
+        return rpc.request(linkproto::cmd::kLaunchStoreApp, params);
+    }).then(this, [this, aumid](const link::AgentReply& reply) {
+        if (!reply.ok) {
+            Q_EMIT failed(aumid, QString::fromStdString("agent: " + reply.error));
+            return;
+        }
+        const auto pid = static_cast<quint32>(reply.body.value("pid", std::uint64_t{0}));
+        if (pid == 0) {
+            Q_EMIT failed(aumid, QStringLiteral("agent: Windows started it but named no process"));
+            return;
+        }
+        Q_EMIT launched(aumid, pid, QString{});
     });
 }
 

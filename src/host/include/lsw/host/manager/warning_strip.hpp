@@ -23,6 +23,11 @@ public:
     QPushButton* add_button(const QString& text, const char* role = nullptr);
     // Drop every button, for a strip that is about something else now.
     void clear_buttons();
+    // A quiet Dismiss after the other buttons, which emits ``dismissed``.
+    void add_dismiss();
+
+Q_SIGNALS:
+    void dismissed();
 
 private:
     QLabel* dot_ = nullptr;

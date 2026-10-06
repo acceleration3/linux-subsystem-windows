@@ -180,6 +180,62 @@ int live_smoke(QCoreApplication& app) {
     QThreadPool::globalInstance()->waitForDone();
     return failures == 0 ? 0 : 1;
 }
+
+int live_package_smoke(QCoreApplication& app, const QString& path) {
+    if (path.isEmpty()) {
+        std::fprintf(stderr, "--live-package requires a package path already in the guest\n");
+        return 1;
+    }
+    lsw::host::link::AgentRpcClient rpc;
+    rpc.set_target(1, 5102);
+    {
+        lsw::host::apps::GuestAppLauncher launcher(rpc);
+        lsw::host::apps::AppConfig config;
+        config.path = path;
+        quint32 pid = 0;
+        QString error;
+        QObject::connect(&launcher, &lsw::host::apps::GuestAppLauncher::launched, &app,
+                         [&](const QString&, quint32 value) { pid = value; });
+        QObject::connect(&launcher, &lsw::host::apps::GuestAppLauncher::failed, &app,
+                         [&](const QString&, const QString& why) { error = why; });
+        launcher.launch(config);
+        check(wait_for([&] { return pid != 0 || !error.isEmpty(); }, 30000),
+              "live package activation and first installer frame complete");
+        if (!error.isEmpty())
+            std::fprintf(stderr, "%s\n", error.toUtf8().constData());
+        check(error.isEmpty() && pid != 0 && launcher.running(config),
+              "live App Installer window is mirrored");
+        const auto processes = launcher.findChildren<QProcess*>();
+        check(processes.size() == 1, "one application mirror owns the installer windows");
+        if (processes.size() == 1) {
+            const auto arguments = processes.first()->arguments();
+            const auto index = arguments.indexOf(QStringLiteral("--pid"));
+            check(!arguments.contains(QStringLiteral("--desktop")) && index >= 0 &&
+                      index + 1 < arguments.size() && arguments[index + 1] == QString::number(pid),
+                  "real mirror runs in application mode for the discovered installer PID");
+        }
+        if (pid != 0) {
+            const auto listed = rpc.request("list_windows");
+            bool actual_installer = false;
+            for (const auto& window : listed.body.value("windows", nlohmann::json::array())) {
+                const auto image = QString::fromStdString(window.value("exe_path", std::string{}));
+                if (window.value("pid", quint32{0}) == pid &&
+                    image.endsWith(QStringLiteral("\\AppInstaller.exe"), Qt::CaseInsensitive)) {
+                    actual_installer = true;
+                    std::printf("App Installer PID %u: %s (%dx%d)\n", pid,
+                                window.value("title", std::string{}).c_str(),
+                                window.value("client_w", 0), window.value("client_h", 0));
+                }
+            }
+            check(listed.ok && actual_installer,
+                  "mirror root is the visible App Installer, not Explorer or an activation broker");
+        }
+        // Close only this test's host mirror. Leave the native installer
+        // window alone, and never click Install or modify the package.
+    }
+    QThreadPool::globalInstance()->waitForDone();
+    return failures == 0 ? 0 : 1;
+}
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -188,6 +244,8 @@ int main(int argc, char** argv) {
         return fake_mirror(app);
     if (app.arguments().contains(QStringLiteral("--live")))
         return live_smoke(app);
+    if (const auto index = app.arguments().indexOf(QStringLiteral("--live-package")); index >= 0)
+        return live_package_smoke(app, app.arguments().value(index + 1));
     QTemporaryDir directory;
     check(directory.isValid(), "temporary directory available");
     const QString frame = directory.filePath("frame");
@@ -201,6 +259,8 @@ int main(int argc, char** argv) {
     int launches = 0;
     int mirrors = 0;
     int packages = 0;
+    quint32 package_pid = 789;
+    quint32 mirror_pid = 0;
     bool desktop_mirror = false;
     bool reject_mirror = false;
     bool reject_launch = false;
@@ -234,10 +294,11 @@ int main(int argc, char** argv) {
                     body = reject_launch
                                ? nlohmann::json{{"ok", false},
                                                 {"error", "App Installer is not installed"}}
-                               : nlohmann::json{{"ok", true}, {"pid", 0}};
+                               : nlohmann::json{{"ok", true}, {"pid", package_pid}};
                 } else {
                     ++mirrors;
                     desktop_mirror = message["params"].value("desktop", false);
+                    mirror_pid = message["params"].value("pid", quint32{0});
                     check(message["params"]["port"] == 43210, "guest gets the actual bound port");
                     body = reject_mirror
                                ? nlohmann::json{{"ok", false}, {"error", "missing guest mirror"}}
@@ -323,23 +384,31 @@ int main(int argc, char** argv) {
         const int before = launches;
         launcher.launch(config);
         check(wait_for([&] { return opened == 1 || errors; }),
-              "package opens without a tracked executable PID");
-        check(packages == 1 && launches == before && errors == 0 && pid == 0,
+              "package opens using the actual App Installer window PID");
+        check(packages == 1 && launches == before && errors == 0 && pid == 789,
               "MSIX uses shell activation, not CreateProcess");
-        check(desktop_mirror && launcher.running(config),
-              "App Installer UI shown through desktop mirror");
+        check(!desktop_mirror && mirror_pid == 789 && launcher.running(config),
+              "only the App Installer application is mirrored, never the desktop");
         launcher.launch(config);
         check(wait_for([&] { return opened == 2; }),
-              "reopen package reuses and raises the installer desktop");
+              "reopen package reuses and raises the installer application mirror");
         reject_launch = true;
         launcher.launch(config);
         check(wait_for([&] { return errors == 1; }), "missing App Installer error reaches caller");
         reject_launch = false;
+        package_pid = 0;
+        const int before_mirrors = mirrors;
+        launcher.launch(config);
+        check(wait_for([&] { return errors == 2; }),
+              "old agent with no installer PID reports an error");
+        check(mirrors == before_mirrors && !desktop_mirror,
+              "missing package PID cannot fall back to a desktop mirror");
+        package_pid = 789;
         config.path = QStringLiteral("C:\\args.msix");
         config.cmdline = QStringLiteral("--silent");
         const int before_packages = packages;
         launcher.launch(config);
-        check(errors == 2 && packages == before_packages,
+        check(errors == 3 && packages == before_packages,
               "MSIX arguments rejected instead of ignored");
     }
     QFile::remove(frame);

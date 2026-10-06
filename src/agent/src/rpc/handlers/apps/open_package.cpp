@@ -1,3 +1,4 @@
+#include "lsw/agent/apps/app_installer_window.hpp"
 #include "lsw/agent/rpc/auto_register.hpp"
 #include "lsw/agent/rpc/handler.hpp"
 #include "lsw/agent/rpc/params.hpp"
@@ -6,11 +7,14 @@
 #include "lsw/agent/win/com.hpp"
 #include "lsw/agent/win/error_text.hpp"
 #include "lsw/agent/win/unique_handle.hpp"
+#include "lsw/agent/win/window.hpp"
 #include "lsw/linkproto/app_package.hpp"
 #include "lsw/linkproto/commands.hpp"
 
+#include <chrono>
 #include <shellapi.h>
 #include <stdexcept>
+#include <thread>
 #include <windows.h>
 
 namespace lsw::agent::rpc::handlers {
@@ -31,6 +35,7 @@ struct OpenPackageHandler : RpcHandler {
         const win::Apartment apartment(win::Apartment::Model::SingleThreaded);
         if (!apartment.ok())
             throw std::runtime_error("cannot initialize the Windows shell");
+        const apps::AppInstallerWindow installer(win::Window::enumerate());
         const auto directory = util::WideString::parent_dir(wide);
         SHELLEXECUTEINFOW info{};
         info.cbSize = sizeof(info);
@@ -45,9 +50,22 @@ struct OpenPackageHandler : RpcHandler {
                 ". Ensure App Installer is installed in the guest.");
         }
         const win::UniqueHandle process(info.hProcess);
-        // Shell/AppModel activation may reuse a process, return no process,
-        // or return a short-lived broker. None is a reliable UI mirror root.
-        return {{"ok", true}, {"pid", 0}};
+        // ShellExecute's process can be absent, reused or a short-lived
+        // broker. Wait for the actual visible AppInstaller.exe window in
+        // this session and use its owning process as the mirror root.
+        const auto started = std::chrono::steady_clock::now();
+        do {
+            const auto foreground = reinterpret_cast<std::uintptr_t>(
+                ::GetAncestor(::GetForegroundWindow(), GA_ROOTOWNER));
+            const auto now = std::chrono::steady_clock::now();
+            if (const auto pid = installer.select(win::Window::enumerate(), foreground,
+                                                  now - started >= std::chrono::seconds(1))) {
+                return {{"ok", true}, {"pid", *pid}};
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        } while (std::chrono::steady_clock::now() - started < std::chrono::seconds(6));
+        throw std::runtime_error("App Installer opened but no installer window could be found. "
+                                 "Check App Installer in Windows and try again.");
     }
 };
 

@@ -99,6 +99,8 @@ set(_lsw_agent_rpc_sources
     src/rpc/handlers/apps/resolve_shortcut.cpp
     src/rpc/handlers/apps/upload_file.cpp
     src/rpc/handlers/apps/open_package.cpp
+    src/rpc/handlers/apps/list_store_apps.cpp
+    src/rpc/handlers/apps/launch_store_app.cpp
     src/rpc/handlers/window/start_window_mirror.cpp
     src/rpc/handlers/window/list_windows.cpp
     src/rpc/handlers/window/close_window.cpp
@@ -163,6 +165,8 @@ set(_lsw_agent_uia_sources
     src/uia/subscription_registry.cpp
 )
 set(_lsw_agent_apps_sources
+    src/apps/app_installer_window.cpp
+    src/apps/store_apps.cpp
     src/apps/catalog.cpp
     src/apps/launch_group.cpp
     src/apps/launch_command.cpp

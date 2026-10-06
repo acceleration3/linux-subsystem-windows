@@ -1,6 +1,7 @@
 #include "lsw/host/ui/vnc_view.hpp"
 
 #include "lsw/base/log.hpp"
+#include "lsw/host/ui/play_badge.hpp"
 #include "lsw/host/ui/theme.hpp"
 
 #include <QEnterEvent>
@@ -35,13 +36,6 @@ constexpr int kSettleCapMs = 3000;
 constexpr const char* kPlaceholder = "#2b2f36";
 const QColor kPausedDim{13, 15, 20, 115};
 const QColor kHoverDim{13, 15, 20, 70};
-
-// The badge: a 56px disc with two bars, and a mono caption under it.
-constexpr qreal kDisc = 56.0;
-constexpr qreal kBarW = 6.0;
-constexpr qreal kBarH = 20.0;
-constexpr qreal kBarGap = 6.0;
-constexpr qreal kCaptionGap = 10.0;
 
 // ``size`` letterboxed into ``area``, centred.
 QRect fit(QSize size, const QRect& area) {
@@ -449,47 +443,11 @@ void VncView::paintEvent(QPaintEvent* /*e*/) {
         return;
     }
     if (paused) {
-        paint_badge(p, true);
+        PlayBadge{true, hovered_}.paint(p, rect());
     } else if (hovered_) {
         p.fillRect(rect(), kHoverDim);
-        paint_badge(p, false);
+        PlayBadge{false, false}.paint(p, rect());
     }
-}
-
-void VncView::paint_badge(QPainter& p, bool paused) const {
-    p.save();
-    p.setRenderHint(QPainter::Antialiasing, true);
-    QFont font = Theme::mono_font(10);
-    font.setCapitalization(QFont::AllUppercase);
-    font.setLetterSpacing(QFont::AbsoluteSpacing, 1.4);
-    const QFontMetricsF metrics{font};
-    const qreal block = kDisc + kCaptionGap + metrics.height();
-    const QRectF disc{(width() - kDisc) / 2.0, (height() - block) / 2.0, kDisc, kDisc};
-
-    // Paused, the badge turns amber under the pointer: it is the thing
-    // that plays. Playing, the control only appears under the pointer.
-    const bool hot = paused && hovered_;
-    const QColor ink = hot ? Theme::color(Theme::Color::kAmber) : Theme::color(Theme::Color::kFg);
-    QColor ring = Theme::color(Theme::Color::kFg);
-    ring.setAlpha(90);
-    p.setPen(QPen{hot ? ink : ring, 1.0});
-    p.setBrush(QColor{13, 15, 20, 191});
-    p.drawEllipse(disc.adjusted(0.5, 0.5, -0.5, -0.5));
-
-    p.setPen(Qt::NoPen);
-    p.setBrush(ink);
-    const qreal top = disc.center().y() - kBarH / 2.0;
-    const qreal left = disc.center().x() - kBarGap / 2.0 - kBarW;
-    p.drawRoundedRect(QRectF{left, top, kBarW, kBarH}, 1.5, 1.5);
-    p.drawRoundedRect(QRectF{left + kBarW + kBarGap, top, kBarW, kBarH}, 1.5, 1.5);
-
-    p.setFont(font);
-    p.setPen(Theme::color(Theme::Color::kFgDim));
-    const QRectF caption{0.0, disc.bottom() + kCaptionGap, static_cast<qreal>(width()),
-                         metrics.height()};
-    p.drawText(caption, Qt::AlignHCenter | Qt::AlignTop,
-               paused ? QStringLiteral("click to play") : QStringLiteral("click to pause"));
-    p.restore();
 }
 
 }  // namespace lsw::host::ui

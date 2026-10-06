@@ -19,7 +19,7 @@ void GuestAppLauncher::launch(const apps::AppConfig& app) {
     const auto existing = mirrors_.value(identity);
     if (existing && (!app.cmdline.trimmed().isEmpty() || !app.env.trimmed().isEmpty())) {
         existing->raise();
-        Q_EMIT launched(app.path, pids_.value(identity));
+        Q_EMIT launched(app.target(), pids_.value(identity));
         return;
     }
     pending_.insert(identity);
@@ -54,13 +54,7 @@ void GuestAppLauncher::launch(const apps::AppConfig& app) {
             // Without this the agent dutifully starts the application
             // inside the guest and nothing of it appears here: the
             // mirror is what carries its windows onto this desktop.
-            // App Installer is shell-activated and has no reliable PID/job.
-            // Show its native UI on the guest desktop, including any broker
-            // dialogs, rather than mirror a short-lived activation stub.
-            auto* mirror =
-                pid == 0 ? mirror::WindowMirror::of_desktop(
-                               rpc_, QStringLiteral("Windows App Installer"), this)
-                         : mirror::WindowMirror::of_application(rpc_, pid, job, desktop_id, this);
+            auto* mirror = mirror::WindowMirror::of_application(rpc_, pid, job, desktop_id, this);
             mirrors_.insert(identity, mirror);
             pids_.insert(identity, pid);
             connect(mirror, &mirror::WindowMirror::ready, this, [this, identity, path, pid] {
@@ -97,13 +91,25 @@ void GuestAppLauncher::launch(const apps::AppConfig& app) {
                 LSW_WARN("launch {} failed: {}", path.toStdString(), error.toStdString());
                 Q_EMIT failed(path, error);
             });
-    LSW_INFO("launch {}", app.path.toStdString());
-    launcher->launch(app.path, app.cmdline, app.env);
+    LSW_INFO("launch {}", app.target().toStdString());
+    if (app.aumid.isEmpty()) {
+        launcher->launch(app.path, app.cmdline, app.env);
+    } else if (!app.env.trimmed().isEmpty()) {
+        // Activation starts the process from Windows' broker, which takes
+        // no environment from whoever asked.
+        launcher->deleteLater();
+        pending_.remove(identity);
+        Q_EMIT changed();
+        Q_EMIT failed(app.aumid, QStringLiteral("Store applications cannot take environment "
+                                                "overrides; remove them in Configure"));
+    } else {
+        launcher->activate(app.aumid, app.cmdline);
+    }
 }
 
 QString GuestAppLauncher::key(const apps::AppConfig& app) const {
     return QString::number(rpc_.port()) + QLatin1Char(':') +
-           (app.id.isEmpty() ? app.path.toCaseFolded() : app.id);
+           (app.id.isEmpty() ? app.target().toCaseFolded() : app.id);
 }
 
 bool GuestAppLauncher::opening(const apps::AppConfig& app) const {

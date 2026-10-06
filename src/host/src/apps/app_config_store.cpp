@@ -89,7 +89,7 @@ bool AppConfigStore::write_file(const AppConfig& cfg) {
 
 void AppConfigStore::upsert(AppConfig cfg) {
     if (cfg.id.isEmpty()) {
-        cfg.id = AppConfig::make_id(cfg.path.isEmpty() ? cfg.name : cfg.path);
+        cfg.id = AppConfig::make_id(cfg.target().isEmpty() ? cfg.name : cfg.target());
     }
     if (!write_file(cfg)) {
         return;

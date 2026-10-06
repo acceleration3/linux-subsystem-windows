@@ -126,11 +126,41 @@ and uses `ShellExecuteExW` with the `open` verb to activate the registered
 Windows App Installer UI. Missing file associations/activation failures are
 reported as errors; no silent Add-AppxPackage installation or signature
 bypass is performed. Package activation does not accept launch arguments or
-environment overrides. A successful reply is `{ok: true, pid: 0}`: shell
-activation has no reliable application PID/job, so the host shows the native
-installer on a mirrored guest desktop rather than tracking an activation
-broker. UI success means the installer desktop is visible, not that the
-package has been installed. The user completes installation in App Installer.
+environment overrides. Shell activation has no reliable process handle: it
+can return no process or a short-lived activation broker. The helper instead
+waits up to six seconds for the actual visible `AppInstaller.exe` window in
+its session, preferring new/changed windows (especially the foreground one),
+and allowing a foreground or unique reused instance after a one-second grace
+period. A successful reply
+is `{ok: true, pid}` with that window's nonzero owning PID. Missing or ambiguous
+installer windows fail rather than falling back to a desktop mirror. The host
+mirrors only that application's windows. UI success means the installer is
+visible, not that the package has been installed; the user completes
+installation in App Installer.
+
+#### Store applications
+
+Packaged (Microsoft Store, MSIX) applications have no path anybody may
+run; Windows starts them by their Application User Model ID,
+`<package family>!<application>`. Both commands run in the user's session
+helper, because packages are installed per user and SYSTEM in session 0
+sees none of them.
+
+`list_store_apps` takes optional `icon_size` (pixels, 16 to 256, default 48),
+`aumid` (answer for that one application only) and `session`. It walks the
+shell's AppsFolder, the Start menu's All apps list, and keeps the items
+whose ID names a package. The reply is
+`{apps: [{aumid, name, family, icon_png_base64}]}`, sorted by name, each
+icon drawn by Windows at `icon_size` with its transparency.
+
+`launch_store_app` takes `aumid`, optional `args` and `session`, and
+activates the application through `IApplicationActivationManager`. The
+reply is `{ok: true, pid}`: the process Windows started, or for a
+single-instance application already running, the existing one. The
+process comes from Windows' activation broker, not the agent, so it is in
+no job of the agent's and the reply carries no `job`; the host mirrors it
+by `pid`. Activation takes no environment overrides, and the host refuses
+to send any.
 
 #### Uploading a local file
 
@@ -177,6 +207,7 @@ for a user take an optional integer `session` param:
 | `run_script`, `download_install`, `download_extract` | SYSTEM in session 0 | the same |
 | `list_windows`, `close_window`, `window_command`, `set_display`, every `uia_*` | the console user's session | refused: session 0 has no desktop |
 | `open_package` | the console user's session, using its file associations | refused: session 0 has no desktop |
+| `list_store_apps`, `launch_store_app` | the console user's session, as that user (packages are per user) | refused: session 0 has no desktop |
 
 Replies of the process-starting commands carry the `session` they ran
 in (`launch` and `console_open` also `elevated`). The commands of the

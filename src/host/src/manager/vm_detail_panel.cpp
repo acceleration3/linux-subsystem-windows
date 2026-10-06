@@ -6,7 +6,6 @@
 
 #include <QFrame>
 #include <QHBoxLayout>
-#include <QLabel>
 #include <QSplitter>
 #include <QVBoxLayout>
 
@@ -47,15 +46,11 @@ VmDetailPanel::VmDetailPanel(services::HostServices& services, QWidget* parent)
     left_layout->setSpacing(14);
 
     auto preview_panel = make_panel(QStringLiteral("Preview"));
-    preview_panel.body->setContentsMargins(10, 10, 10, 10);
-    preview_panel.body->setSpacing(8);
-    // What the picture is, for when there is not one yet.
-    preview_tag_ = new QLabel(QStringLiteral("WGC, no guest"));
-    preview_tag_->setObjectName(QStringLiteral("ScreenTag"));
-    preview_panel.body->addWidget(preview_tag_, 0, Qt::AlignLeft | Qt::AlignTop);
+    // The picture fills the panel under its header, edge to edge.
+    preview_panel.body->setContentsMargins(0, 0, 0, 0);
     preview_ = new DesktopPreview(services_.rpc());
     preview_->setMinimumHeight(220);
-    connect(preview_, &DesktopPreview::status_changed, preview_tag_, &QLabel::setText);
+    preview_->clear(QStringLiteral("WGC, no guest"));
     preview_panel.body->addWidget(preview_, 1);
     left_layout->addWidget(preview_panel.frame, 1);
 
@@ -89,19 +84,17 @@ VmDetailPanel::VmDetailPanel(services::HostServices& services, QWidget* parent)
 
 void VmDetailPanel::follow_preview(bool running) {
     if (uuid_.isNull() || !running) {
-        preview_->clear();
-        preview_tag_->setText(uuid_.isNull() ? QStringLiteral("WGC, no guest")
-                                              : QStringLiteral("WGC, the guest is off"));
+        preview_->clear(uuid_.isNull() ? QStringLiteral("WGC, no guest")
+                                       : QStringLiteral("WGC, the guest is off"));
         return;
     }
     preview_->set_available(last_agent_reachable_);
-    preview_tag_->setText(preview_->status());
 }
 
 void VmDetailPanel::set_target(const QUuid& uuid) {
     auto& lifecycle = services_.lifecycle();
     auto& rpc = services_.rpc();
-    preview_->clear();
+    preview_->clear(QStringLiteral("WGC, the guest is off"));
     uuid_ = uuid;
     services_.status().set_target(uuid);
     // Start every new target as offline until the Monitor's next agent

@@ -4,6 +4,7 @@
 #include "lsw/host/apps/guest_app_launcher.hpp"
 #include "lsw/host/apps/guest_file_transfer.hpp"
 #include "lsw/host/ui/format.hpp"
+#include "lsw/host/ui/theme.hpp"
 #include "lsw/linkproto/app_package.hpp"
 
 #include <QFileDialog>
@@ -27,8 +28,8 @@ RunOnVmDialog::RunOnVmDialog(link::AgentRpcClient& rpc, apps::GuestAppLauncher& 
     auto* layout = new QVBoxLayout(this);
     auto* hint = new QLabel(QStringLiteral(
         "Choose a Windows program or installer from this computer. LSW copies it into "
-        "Windows and opens its windows here. MSIX packages open App Installer on the guest "
-        "desktop. Only run files you trust."));
+        "Windows and opens its windows here. MSIX packages open App Installer in its own "
+        "mirrored window. Only run files you trust."));
     hint->setWordWrap(true);
     layout->addWidget(hint);
 
@@ -52,6 +53,14 @@ RunOnVmDialog::RunOnVmDialog(link::AgentRpcClient& rpc, apps::GuestAppLauncher& 
     status_->setWordWrap(true);
     status_->setTextFormat(Qt::PlainText);
     layout->addWidget(status_);
+    // What went wrong, apart from the progress line: the design's red
+    // callout, until the next attempt.
+    error_ = new QLabel;
+    error_->setObjectName(QString::fromLatin1(ui::Theme::Role::kCalloutCritical));
+    error_->setWordWrap(true);
+    error_->setTextFormat(Qt::PlainText);
+    error_->hide();
+    layout->addWidget(error_);
     progress_ = new QProgressBar;
     progress_->setRange(0, 100);
     progress_->setValue(0);
@@ -104,7 +113,7 @@ RunOnVmDialog::RunOnVmDialog(link::AgentRpcClient& rpc, apps::GuestAppLauncher& 
                 progress_->setValue(100);
                 status_->setText(
                     linkproto::is_app_package(path.toStdString())
-                        ? QStringLiteral("App Installer is open on the guest desktop. Review the "
+                        ? QStringLiteral("App Installer is open in its own window. Review the "
                                          "package and click Install there. File saved at %1")
                               .arg(path)
                         : QStringLiteral("Running in Windows. File saved at %1").arg(path));
@@ -157,6 +166,7 @@ void RunOnVmDialog::run() {
         return;
     guest_path_.clear();
     closing_ = false;
+    error_->hide();
     progress_->setRange(0, 100);
     progress_->setValue(0);
     progress_->show();
@@ -169,11 +179,11 @@ void RunOnVmDialog::run() {
 void RunOnVmDialog::show_error(const QString& error) {
     set_busy(false);
     progress_->setRange(0, 100);
-    status_->setText(
-        QStringLiteral("Could not run on VM: %1%2")
-            .arg(error, guest_path_.isEmpty()
-                            ? QString{}
-                            : QStringLiteral("\nThe copied file remains at %1").arg(guest_path_)));
+    progress_->hide();
+    status_->setText(guest_path_.isEmpty() ? QStringLiteral("Nothing was run.")
+                                           : QStringLiteral("The copied file remains at %1.").arg(guest_path_));
+    error_->setText(QStringLiteral("Could not run on VM: %1").arg(error));
+    error_->show();
 }
 
 void RunOnVmDialog::reject() {
