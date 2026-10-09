@@ -4,6 +4,8 @@
 
 #include "lsw/base/log.hpp"
 
+#include <algorithm>
+
 #include <QByteArray>
 #include <QCoreApplication>
 #include <QCryptographicHash>
@@ -11,6 +13,7 @@
 #include <QDomDocument>
 #include <QFile>
 #include <QFileInfo>
+#include <QGuiApplication>
 #include <QSet>
 #include <QStandardPaths>
 #include <QTextStream>
@@ -344,6 +347,56 @@ void DesktopLauncher::sync(const QList<AppConfig>& live) {
             }
         }
     }
+}
+
+void DesktopLauncher::sync_manager_entry() {
+    const QString file_name = QGuiApplication::desktopFileName() + QStringLiteral(".desktop");
+    const QString own = QDir(applications_dir()).filePath(file_name);
+    const QString own_icon = QDir(icons_dir()).filePath(QStringLiteral("lsw-manager.svg"));
+    const QStringList found =
+        QStandardPaths::locateAll(QStandardPaths::ApplicationsLocation, file_name);
+    if (std::any_of(found.begin(), found.end(), [&](const QString& path) {
+            return QFileInfo(path).absoluteFilePath() != QFileInfo(own).absoluteFilePath();
+        })) {
+        QFile::remove(own);
+        QFile::remove(own_icon);
+        return;
+    }
+
+    QDir().mkpath(applications_dir());
+    QDir().mkpath(icons_dir());
+    QFile::remove(own_icon);
+    if (!QFile::copy(QStringLiteral(":/lsw/lsw-manager.svg"), own_icon)) {
+        LSW_WARN("DesktopLauncher: cannot write {}", own_icon.toStdString());
+        return;
+    }
+    // Copied out of the resources read-only; rewritten on the next run.
+    QFile::setPermissions(own_icon, QFile::ReadOwner | QFile::WriteOwner | QFile::ReadGroup |
+                                        QFile::ReadOther);
+
+    const QByteArray body =
+        QStringLiteral("[Desktop Entry]\n"
+                       "Type=Application\n"
+                       "Name=LSW Manager\n"
+                       "GenericName=Windows Virtual Machine Manager\n"
+                       "Comment=Run Windows applications in a managed virtual machine\n"
+                       "Exec=%1\n"
+                       "Icon=%2\n"
+                       "Terminal=false\n"
+                       "Categories=System;Emulator;\n"
+                       "StartupWMClass=%3\n")
+            .arg(lsw_manager_executable(), own_icon, QGuiApplication::desktopFileName())
+            .toUtf8();
+    QFile entry(own);
+    if (entry.open(QIODevice::ReadOnly) && entry.readAll() == body) {
+        return;
+    }
+    entry.close();
+    if (!entry.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        LSW_WARN("DesktopLauncher: cannot write {}", own.toStdString());
+        return;
+    }
+    entry.write(body);
 }
 
 }  // namespace lsw::host::apps

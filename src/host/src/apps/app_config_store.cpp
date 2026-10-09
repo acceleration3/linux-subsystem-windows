@@ -6,6 +6,7 @@
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
+#include <QSet>
 
 namespace lsw::host::apps {
 
@@ -120,8 +121,10 @@ void AppConfigStore::remove(const QString& id) {
 void AppConfigStore::merge_from_agent(const QList<AppEntry>& entries) {
     const auto now = QDateTime::currentSecsSinceEpoch();
     bool any_changed = false;
+    QSet<QString> reported;
     for (const auto& e : entries) {
         const QString id = AppConfig::make_id(e.id.isEmpty() ? e.name : e.id);
+        reported.insert(id);
         if (auto* existing = find(id); existing != nullptr) {
             existing->last_seen_unix = now;
             // Refresh agent-derived fields only if the user hasn't
@@ -147,6 +150,17 @@ void AppConfigStore::merge_from_agent(const QList<AppEntry>& entries) {
             configs_.append(std::move(cfg));
             any_changed = true;
         }
+    }
+    // What the agent no longer reports is gone from the guest, or was
+    // never an application: an uninstaller an older catalog took for one.
+    for (auto it = configs_.begin(); it != configs_.end();) {
+        if (!it->discovered_via_agent || reported.contains(it->id)) {
+            ++it;
+            continue;
+        }
+        QFile::remove(file_for(it->id));
+        it = configs_.erase(it);
+        any_changed = true;
     }
     if (any_changed) {
         Q_EMIT changed();

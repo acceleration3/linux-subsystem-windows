@@ -44,9 +44,10 @@ public:
     // Merge agent-discovered entries: for each ``e`` in ``entries``,
     // either create a new config or refresh the matched one's
     // ``last_seen_unix`` (and ``icon_png_base64`` if not user-set).
-    // Configs the user created by hand (``discovered_via_agent ==
+    // Discovered configs the agent no longer reports are removed;
+    // configs the user created or edited (``discovered_via_agent ==
     // false``) are left alone. Emits ``changed`` if anything was
-    // added or modified.
+    // added, modified or removed.
     void merge_from_agent(const QList<AppEntry>& entries);
 
 Q_SIGNALS:

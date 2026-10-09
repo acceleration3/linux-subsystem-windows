@@ -81,6 +81,15 @@ public:
     // every entry that no longer should exist, including the ones an
     // application was just un-published from. Idempotent.
     static void sync(const QList<AppConfig>& live);
+
+    // The manager's own entry, for a manager that was not installed with
+    // one (a build-tree run): its icon on the task manager, and the
+    // application id the desktop portal registers it under, both come
+    // from an entry named after the desktop file name. Written to
+    // ``$XDG_DATA_HOME/applications/lsw-manager.desktop`` with its icon
+    // beside the guest apps', and removed again once a packaged entry is
+    // installed, so that one is the one found.
+    static void sync_manager_entry();
 };
 
 }  // namespace lsw::host::apps

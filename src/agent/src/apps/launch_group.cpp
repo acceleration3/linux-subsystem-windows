@@ -28,7 +28,28 @@ namespace {
 // poll.
 constexpr auto kSnapshotMaxAge = std::chrono::milliseconds(200);
 
+// How long a launch is kept with nothing of it running, in FILETIME ticks
+// (100 ns): a stub that relaunches itself through the shell has exited
+// before the shell starts the replacement. The mirror gives an application
+// as long (remotewin's LaunchScope), and reads the launch from the process
+// held here to recognise the replacement.
+constexpr std::uint64_t kRelaunchTicks = 5ULL * 10'000'000ULL;
+
+std::uint64_t now_ticks() {
+    FILETIME now{};
+    ::GetSystemTimeAsFileTime(&now);
+    return (static_cast<std::uint64_t>(now.dwHighDateTime) << 32) | now.dwLowDateTime;
+}
+
 struct Group {
+    // The launched process, held after it exits: its image and start time
+    // stay readable while a handle is open, and the mirror reads them from
+    // the PID to find the rest of the application. Firefox started elevated
+    // relaunches itself unelevated through Explorer - outside the job, and
+    // not its child - and exits within a tenth of a second, before the
+    // mirror is up. Held, the PID also cannot be recycled onto another
+    // process while the launch lives.
+    win::UniqueHandle process;
     // Empty when the job could not be created or assigned; the launch is
     // then tracked by parentage and image path alone.
     win::UniqueHandle job;
@@ -209,8 +230,13 @@ void rebuild_locked(State& s) {
         }
     }
 
-    // Retire launches with nothing left running.
+    // Retire launches with nothing left running, once past the relaunch.
+    const std::uint64_t now = now_ticks();
     for (auto it = s.groups.begin(); it != s.groups.end();) {
+        if (it->second.started != 0 && now - it->second.started < kRelaunchTicks) {
+            ++it;
+            continue;
+        }
         bool any = false;
         for (const auto& [pid, root] : next) {
             if (root == it->first && by_pid.count(pid) != 0) {
@@ -259,6 +285,12 @@ bool LaunchGroup::adopt(void* process, unsigned long pid) {
     // Record where and when before anything can be attributed, so the
     // directory rule has a floor to compare against.
     const auto handle = static_cast<HANDLE>(process);
+    if (::DuplicateHandle(::GetCurrentProcess(), handle, ::GetCurrentProcess(),
+                          g.process.put(), PROCESS_QUERY_LIMITED_INFORMATION, FALSE, 0) == 0) {
+        LSW_AGENT_WARN("launch_group: cannot hold pid {} (err={}); a mirror started after it "
+                       "exits will not find the application by its directory",
+                       pid, win::ErrorText::last_error());
+    }
     g.started = win::ProcessInfo::creation_time(handle).value_or(0);
     const std::wstring image = util::WideString::lower(win::ProcessInfo::image_path(handle));
     if (const auto dir = util::WideString::parent_dir(image)) {

@@ -323,7 +323,11 @@ void AppListWidget::open_config_dialog(const apps::AppConfig& initial) {
         }
         return;
     }
-    store_.upsert(dlg.result());
+    // Edited, it is the user's: the agent no longer reporting its program
+    // is not a reason to drop it.
+    apps::AppConfig edited = dlg.result();
+    edited.discovered_via_agent = false;
+    store_.upsert(std::move(edited));
 }
 
 }  // namespace lsw::host::manager

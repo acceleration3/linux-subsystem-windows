@@ -7,22 +7,28 @@
 #include <QtConcurrent>
 #include <nlohmann/json.hpp>
 
+#include <optional>
+
 #include "lsw/linkproto/commands.hpp"
 
 namespace lsw::host::apps {
 
 namespace {
 
-QList<AppEntry> parse_reply(const link::AgentReply& reply) {
-    QList<AppEntry> out;
+// Nothing for a reply that is not a listing: an empty list would say the
+// guest has no applications, and the store drops what the agent stops
+// reporting.
+std::optional<QList<AppEntry>> parse_reply(const link::AgentReply& reply) {
     if (!reply.ok) {
         LSW_WARN("list_apps: {}", reply.error);
-        return out;
+        return std::nullopt;
     }
     const auto& doc = reply.body;
     if (!doc.is_object() || !doc.contains("apps") || !doc["apps"].is_array()) {
-        return out;
+        LSW_WARN("list_apps: the reply has no \"apps\" array");
+        return std::nullopt;
     }
+    QList<AppEntry> out;
     for (const auto& o : doc["apps"]) {
         if (!o.is_object()) {
             continue;
@@ -51,8 +57,12 @@ void AppCatalog::refresh() {
     // by the time the agent answers, and ``then(this, …)`` drops the
     // continuation if so.
     QtConcurrent::run([&rpc = rpc_] { return parse_reply(rpc.request(linkproto::cmd::kListApps)); })
-        .then(this, [this](QList<AppEntry> entries) {
-            entries_ = std::move(entries);
+        .then(this, [this](std::optional<QList<AppEntry>> entries) {
+            if (!entries) {
+                Q_EMIT failed(QStringLiteral("the agent did not list its applications"));
+                return;
+            }
+            entries_ = std::move(*entries);
             Q_EMIT loaded(entries_);
         });
 }
