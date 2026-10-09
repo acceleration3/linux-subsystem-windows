@@ -2,6 +2,7 @@
 
 #include "lsw/base/log.hpp"
 #include "lsw/host/app/unattended_runner.hpp"
+#include "lsw/host/apps/desktop_launcher.hpp"
 #include "lsw/host/manager/guest_app_launch_controller.hpp"
 #include "lsw/host/manager/app_config_dialog.hpp"
 #include "lsw/host/manager/launch_splash.hpp"
@@ -39,6 +40,9 @@ App::App(int& argc, char** argv)
     // desktop does not look the entry up (packaging/gen-icon.py draws it).
     setDesktopFileName(QStringLiteral("lsw-manager"));
     setWindowIcon(QIcon(QStringLiteral(":/lsw/lsw-manager.svg")));
+    // Before the event loop: the desktop portal registration Qt queues for
+    // its first turn looks the entry up by that name.
+    apps::DesktopLauncher::sync_manager_entry();
 
     // Before any window exists, so the wizard and the manager and every
     // dialog either of them opens are all wearing it from their first

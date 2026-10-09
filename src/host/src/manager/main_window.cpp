@@ -32,6 +32,7 @@
 #include <QEvent>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QApplication>
 #include <QMenu>
 #include <QPushButton>
 #include <QScreen>
@@ -735,7 +736,7 @@ void MainWindow::setup_tray() {
         return;
     }
     tray_ = new QSystemTrayIcon(this);
-    tray_->setIcon(style()->standardIcon(QStyle::SP_ComputerIcon));
+    tray_->setIcon(QApplication::windowIcon());
     tray_->setToolTip(QStringLiteral("LSW"));
     auto* menu = new QMenu(this);
     menu->addAction(QStringLiteral("Show"), this, [this] { Widgets::bring_to_front(this); });
