@@ -48,6 +48,9 @@ struct WizardState {
     // That edition's EDITIONID ("Core", "Professional", ...), which picks
     // the product key. Empty when the editions were not read.
     QString edition_id;
+    // The language picked from the ones the image carries; empty for its
+    // default.
+    QString language;
     // Microsoft download-portal state. ``ms_edition_ids`` is the list of
     // ``productEditionId`` values returned by IsoSourceFetcher.
     QList<int> fido_edition_ids;

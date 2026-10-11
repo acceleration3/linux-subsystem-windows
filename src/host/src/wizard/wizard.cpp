@@ -184,6 +184,7 @@ void Wizard::start_pipeline() {
     in.sizing = state_.draft.sizing;
     in.image_index = state_.image_index;
     in.edition_id = state_.edition_id;
+    in.language = state_.language;
     in.debloat = state_.debloat;
     // Only the trim tool leaves an image that has already been through
     // the preparation pass. Everything else still needs it, because the
