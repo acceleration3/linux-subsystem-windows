@@ -160,6 +160,17 @@ nlohmann::json Info::collect() {
     // differ from what the previous agent reported before the script
     // killed it.
     j["agent_version"] = LSW_BUILD_STAMP;
+    // When this agent process started, in FILETIME ticks: the swap is
+    // done once another process answers, which the version alone does not
+    // say when the binary swapped in is the same one (only the mirror's
+    // guest half was new).
+    {
+        FILETIME created{}, exited{}, kernel{}, user{};
+        if (::GetProcessTimes(::GetCurrentProcess(), &created, &exited, &kernel, &user) != FALSE) {
+            j["agent_started"] = (static_cast<std::uint64_t>(created.dwHighDateTime) << 32U) |
+                                 created.dwLowDateTime;
+        }
+    }
     LSW_AGENT_INFO("system_info: hostname={} ipv4={} mem_total={}MiB mem_avail={}MiB cpu={}% "
                    "disk_total={}GiB disk_avail={}GiB",
                    hostname, ipv4, ms.ullTotalPhys >> 20, ms.ullAvailPhys >> 20, cpu_pct,

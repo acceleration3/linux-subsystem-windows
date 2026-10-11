@@ -2,7 +2,7 @@
 
 #include <string>
 
-namespace lsw::host::mcp {
+namespace lsw::host::services {
 
 // The batch file a redeploy runs in the guest: it downloads the new
 // binaries from a GuestFileServer at ``10.0.2.2:<port>`` and puts them in
@@ -24,6 +24,9 @@ public:
     // The names the files are served under (GuestFileServer).
     static constexpr const char* kAgentFile = "lsw-guest-agent.exe";
     static constexpr const char* kMirrorFile = "remotewin-guest.exe";
+    // Where the script puts them in the guest.
+    static constexpr const char* kGuestAgent = "C:\\ProgramData\\LSW\\lsw-agent.exe";
+    static constexpr const char* kGuestMirror = "C:\\ProgramData\\LSW\\remotewin-guest.exe";
 
     // ``port`` is the GuestFileServer's; it serves the agent always and
     // the mirror's guest half when ``with_mirror``.
@@ -37,4 +40,4 @@ private:
     bool with_mirror_;
 };
 
-}  // namespace lsw::host::mcp
+}  // namespace lsw::host::services

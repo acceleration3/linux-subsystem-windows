@@ -181,6 +181,7 @@ MainWindow::MainWindow(services::HostServices& services, QWidget* parent)
 
     connect(rail_, &NavRail::page_selected, this, &MainWindow::show_page);
     follow_launches();
+    follow_upkeep();
     connect(rail_, &NavRail::start_requested, this, [this] {
         if (!overview_->start_guest()) {
             notice_start_refused(QStringLiteral("libvirt would not start the guest."));
@@ -520,6 +521,9 @@ void MainWindow::refresh_status_bar() {
     if (!notice_.isEmpty()) {
         facts << notice_;
     }
+    if (services_.upkeep().state() == services::GuestUpkeep::State::Updating) {
+        facts << QStringLiteral("Updating LSW in Windows");
+    }
     if (rail_->current() == NavRail::Page::Graphics && graphics_page_ != nullptr) {
         facts << graphics_page_->status_facts();
     } else {
@@ -707,6 +711,20 @@ void MainWindow::notice_start_refused(const QString& headline) {
     notices_->post(QStringLiteral("start"), true, headline,
                    QStringLiteral("The manager's own log says why."),
                    {{QStringLiteral("Open the log"), [this] { show_page(NavRail::Page::Log); }}});
+}
+
+void MainWindow::follow_upkeep() {
+    auto& upkeep = services_.upkeep();
+    connect(&upkeep, &services::GuestUpkeep::changed, this, [this, &upkeep] {
+        refresh_status_bar();
+        if (upkeep.state() != services::GuestUpkeep::State::Failed) {
+            notices_->withdraw(QStringLiteral("upkeep"));
+            return;
+        }
+        notices_->post(QStringLiteral("upkeep"), false,
+                       QStringLiteral("Could not update LSW in Windows."), upkeep.error(),
+                       {{QStringLiteral("Try again"), [&upkeep] { upkeep.retry(); }}});
+    });
 }
 
 void MainWindow::follow_launches() {

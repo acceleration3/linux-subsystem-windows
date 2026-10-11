@@ -55,4 +55,21 @@ int TokenPrivileges::enable_install_privileges(void* given) {
     return enabled;
 }
 
+bool TokenPrivileges::enable(const wchar_t* name) {
+    UniqueHandle token;
+    if (!::OpenProcessToken(::GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY,
+                            token.put())) {
+        return false;
+    }
+    TOKEN_PRIVILEGES privilege{};
+    privilege.PrivilegeCount = 1;
+    if (!::LookupPrivilegeValueW(nullptr, name, &privilege.Privileges[0].Luid)) {
+        return false;
+    }
+    privilege.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+    return ::AdjustTokenPrivileges(token.get(), FALSE, &privilege, sizeof(privilege), nullptr,
+                                   nullptr) != FALSE &&
+           ::GetLastError() == ERROR_SUCCESS;
+}
+
 }  // namespace lsw::agent::win

@@ -10,6 +10,7 @@
 #include "lsw/host/link/agent_guest_stats_probe.hpp"
 #include "lsw/host/link/agent_rpc_client.hpp"
 #include "lsw/host/services/guest_shells.hpp"
+#include "lsw/host/services/guest_upkeep.hpp"
 #include "lsw/host/services/status_hub.hpp"
 #include "lsw/host/vm/libvirt_connection.hpp"
 #include "lsw/host/vm/lifecycle.hpp"
@@ -68,6 +69,10 @@ public:
     // Windows session, kept for as long as the manager runs.
     [[nodiscard]] GuestShells& shells() noexcept { return shells_; }
 
+    // LSW's half inside Windows, kept as current as this LSW: the agent,
+    // the mirror's guest half, the time zone and the clock.
+    [[nodiscard]] GuestUpkeep& upkeep() noexcept { return upkeep_; }
+
     // The one guest-window enumeration every consumer shares.
     [[nodiscard]] apps::AppConfigStore& app_configs() noexcept { return app_configs_; }
 
@@ -117,6 +122,7 @@ private:
     // Declared after everything it reads.
     StatusHub status_;
     GuestShells shells_;  // declared after rpc_ and status_: it holds both
+    GuestUpkeep upkeep_;  // declared after rpc_ and status_: it holds both
     apps::AppConfigStore app_configs_;
     apps::LogStore log_store_;  // declared after rpc_: detaches from it in ~LogStore
     apps::GuestAppLauncher app_launcher_;

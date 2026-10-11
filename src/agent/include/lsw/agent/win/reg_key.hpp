@@ -38,6 +38,10 @@ public:
     // when absent, of another type, or zero-length.
     [[nodiscard]] std::optional<std::wstring> read_string(const wchar_t* name) const;
 
+    // Every string of a REG_MULTI_SZ value, in order; empty when absent
+    // or of another type.
+    [[nodiscard]] std::vector<std::wstring> read_strings(const wchar_t* name) const;
+
     // A REG_DWORD value, or nullopt when absent or of another type.
     [[nodiscard]] std::optional<DWORD> read_dword(const wchar_t* name) const;
 

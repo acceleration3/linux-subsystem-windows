@@ -1,8 +1,8 @@
-#include "lsw/host/mcp/guest_swap_script.hpp"
+#include "lsw/host/services/guest_swap_script.hpp"
 
 #include <string_view>
 
-namespace lsw::host::mcp {
+namespace lsw::host::services {
 
 namespace {
 
@@ -84,4 +84,4 @@ std::string GuestSwapScript::text() const {
     return script;
 }
 
-}  // namespace lsw::host::mcp
+}  // namespace lsw::host::services

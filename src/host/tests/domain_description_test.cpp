@@ -116,6 +116,13 @@ int main(int argc, char** argv) {
         check(built->gpus.size() == 3
                   && built->gpus.at(2).host_gpu == inputs.render_only_gpu_uuids.at(1),
               "each render-only device keeps its own GPU");
+        check(!built->installing, "the steady definition is a guest whose setup has finished");
+    }
+    {
+        DomainXmlInputs install = inputs;
+        install.install_display = true;
+        const auto during = DomainDescription::parse(DomainXmlBuilder::build(vm, install));
+        check(during && during->installing, "the install-time one, with its VGA, is not");
     }
 
     // No modes, auto: what the line leaves out reads as such.

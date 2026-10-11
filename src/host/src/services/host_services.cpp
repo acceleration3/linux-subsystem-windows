@@ -33,6 +33,7 @@ HostServices::HostServices(QObject* parent)
       lifecycle_(libvirt_, this), rpc_(this), guest_probe_(rpc_),
       status_(libvirt_, lifecycle_, rpc_, guest_probe_, settings_, manager_settings_, this),
       shells_(rpc_, status_, this),
+      upkeep_(status_, rpc_, this),
       app_configs_(QDir(settings_.data_dir()).filePath("apps"), this), log_store_(this),
       app_launcher_(rpc_, this) {
     // Wire the two services that consume the agent channel. Done here,

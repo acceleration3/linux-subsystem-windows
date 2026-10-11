@@ -1,6 +1,6 @@
 #include "lsw/host/mcp/tools/redeploy_agent_tool.hpp"
 
-#include "lsw/host/mcp/agent_redeployer.hpp"
+#include "lsw/host/services/agent_redeployer.hpp"
 #include "lsw/host/mcp/json_schema.hpp"
 #include "lsw/host/mcp/tool_result.hpp"
 
@@ -29,7 +29,7 @@ std::string RedeployAgentTool::description() const {
 nlohmann::json RedeployAgentTool::input_schema() const { return JsonSchema::no_args(); }
 
 nlohmann::json RedeployAgentTool::call(const nlohmann::json&) {
-    AgentRedeployer redeployer{agent_};
+    services::AgentRedeployer redeployer{agent_};
     const auto outcome = redeployer.run();
     return outcome.ok ? ToolResult::text(outcome.message)
                       : ToolResult::error(outcome.message);

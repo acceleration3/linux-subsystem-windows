@@ -1,4 +1,4 @@
-#include "lsw/host/mcp/guest_file_server.hpp"
+#include "lsw/host/services/guest_file_server.hpp"
 
 #include <arpa/inet.h>
 #include <cerrno>
@@ -10,7 +10,7 @@
 #include <unistd.h>
 #include <utility>
 
-namespace lsw::host::mcp {
+namespace lsw::host::services {
 
 namespace {
 
@@ -155,4 +155,4 @@ void GuestFileServer::stop() {
     }
 }
 
-}  // namespace lsw::host::mcp
+}  // namespace lsw::host::services
