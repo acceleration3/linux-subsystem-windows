@@ -173,20 +173,23 @@ launched applications show no windows until the package is rebuilt.
 
 ### 4. Push to the AUR
 
-The AUR repository holds only these files, at its root, on `master`.
-From the main repository, push this directory's history as that branch:
+The AUR repository holds only the package's files, at its root, on
+`master`, with a history of its own: one commit per release, none of
+them this repository's. So a `git subtree push` of this directory is
+refused (it is not a fast-forward of that history, and it would bring
+this README along). Keep a clone of the AUR repository, fetching over
+HTTPS and pushing over SSH, and copy the files into it:
 
 ```sh
-git subtree push --prefix aur ssh://aur@aur.archlinux.org/lsw-bin.git master
-```
-
-or keep a separate clone of the AUR repository and copy the files over:
-
-```sh
-git clone ssh://aur@aur.archlinux.org/lsw-bin.git ~/aur/lsw-bin
+git clone https://aur.archlinux.org/lsw-bin.git ~/aur/lsw-bin    # once
+git -C ~/aur/lsw-bin remote set-url --push origin ssh://aur@aur.archlinux.org/lsw-bin.git
+git -C ~/aur/lsw-bin pull
 cp aur/PKGBUILD aur/.SRCINFO aur/lsw-bin.install aur/.gitignore ~/aur/lsw-bin/
-cd ~/aur/lsw-bin && git add -A && git commit -m "Update to <version>" && git push
+cd ~/aur/lsw-bin && git add -A && git commit -m "lsw-bin <version>" && git push
 ```
+
+The push authenticates with the AUR key, `~/.ssh/aur`: `~/.ssh/config`
+names it for `aur.archlinux.org`.
 
 ## After installing
 
