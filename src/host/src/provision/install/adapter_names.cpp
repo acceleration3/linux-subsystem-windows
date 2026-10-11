@@ -13,18 +13,31 @@ namespace {
 // GpuIdentity::name_bytes - 1).
 constexpr qsizetype kNameBytes = 47;
 
-// The vendor's name as its own Windows driver prefixes a product, for
-// the PCI ID database's names, which carry none.
-const char* vendor_prefix(quint32 vendor) {
+// An AMD integrated GPU that AMD's table does not name. The PCI ID
+// database is no help there: its bracket lists whatever a device ID was
+// sold as ("Granite Ridge [Radeon 610M]" for a desktop Ryzen 9000's,
+// whose GPU was never called that), and AMD's own Windows driver names
+// these "AMD Radeon(TM) Graphics".
+constexpr const char* kAmdIntegrated = "AMD Radeon(TM) Graphics";
+
+// The vendor as its own Windows driver prefixes a product, and the word
+// the PCI ID database may already start a product with ("Intel Graphics"),
+// which the prefix replaces rather than repeats.
+struct Vendor {
+    const char* prefix;
+    const char* word;
+};
+
+std::optional<Vendor> vendor_of(quint32 vendor) {
     switch (vendor) {
     case 0x1002:
-        return "AMD";
+        return Vendor{"AMD", "AMD"};
     case 0x8086:
-        return "Intel(R)";
+        return Vendor{"Intel(R)", "Intel"};
     case 0x10de:
-        return "NVIDIA";
+        return Vendor{"NVIDIA", "NVIDIA"};
     default:
-        return nullptr;
+        return std::nullopt;
     }
 }
 
@@ -54,6 +67,8 @@ QString AdapterNames::name(const platform::HostGpu& gpu) const {
     platform::HostGpu named = gpu;
     if (auto amd = amdgpu_name(id)) {
         named.name = *amd;
+    } else if (gpu.integrated && id.vendor == 0x1002) {
+        named.name = QLatin1String(kAmdIntegrated);
     } else if (auto pci = gpu.integrated ? pci_ids_name(id) : std::nullopt) {
         named.name = *pci;
     }
@@ -123,8 +138,8 @@ std::optional<QString> AdapterNames::amdgpu_name(const PciIdentity& id) const {
 }
 
 std::optional<QString> AdapterNames::pci_ids_name(const PciIdentity& id) const {
-    const char* prefix = vendor_prefix(id.vendor);
-    if (prefix == nullptr) {
+    const auto vendor = vendor_of(id.vendor);
+    if (!vendor) {
         return std::nullopt;
     }
     const QString vendor_line = QStringLiteral("%1  ").arg(id.vendor, 4, 16, QLatin1Char('0'));
@@ -148,8 +163,12 @@ std::optional<QString> AdapterNames::pci_ids_name(const PciIdentity& id) const {
             if (in_vendor && line.startsWith(device_line)) {
                 const QString product = line.mid(device_line.size());
                 const QRegularExpressionMatch m = bracketed.match(product);
-                return QStringLiteral("%1 %2").arg(QLatin1String(prefix),
-                                                   m.hasMatch() ? m.captured(1) : product);
+                QString picked = m.hasMatch() ? m.captured(1) : product;
+                const QString word = QLatin1String(vendor->word) + QLatin1Char(' ');
+                if (picked.startsWith(word)) {
+                    picked.remove(0, word.size());
+                }
+                return QStringLiteral("%1 %2").arg(QLatin1String(vendor->prefix), picked);
             }
         }
     }

@@ -28,11 +28,13 @@ namespace lsw::host::provision::install {
 //     the ones the device presents to the guest. A GPU without one
 //     keeps virtio-gpu's own, 1af4:1050.
 //   * The name is AMD's product table (libdrm's amdgpu.ids) by device
-//     and revision first; then, for an integrated GPU, which RADV names
-//     after its processor, the PCI ID database's product name; else the
-//     Vulkan deviceName without the driver's parenthesised suffix
-//     (HostGpus::adapter_name). Cut to the 47 bytes the device's capset
-//     carries, never inside a UTF-8 character.
+//     and revision first. Then, for an integrated GPU, which RADV names
+//     after its processor: an AMD one is "AMD Radeon(TM) Graphics", as
+//     AMD's Windows driver calls those its table leaves out; another
+//     vendor's is the PCI ID database's product name after the vendor's,
+//     not repeating it. Else the Vulkan deviceName without the driver's
+//     parenthesised suffix (HostGpus::adapter_name). Cut to the 47 bytes
+//     the device's capset carries, never inside a UTF-8 character.
 class AdapterNames {
 public:
     // Where the lookups read from. The defaults are the system's; a
