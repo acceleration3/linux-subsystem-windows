@@ -644,7 +644,27 @@ $scripts = @(
 		Set-ItemProperty -LiteralPath 'Registry::HKCU\Software\Microsoft\Windows\CurrentVersion\Search' -Name 'SearchboxTaskbarMode' -Type 'DWord' -Value 0;
 	};
 	{
-		Set-ItemProperty -LiteralPath 'Registry::HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects' -Name 'VisualFXSetting' -Type 'DWord' -Value 2 -Force;
+		# "Adjust for best performance" less one effect, as Custom (3): a
+		# window keeps its contents while it is dragged instead of leaving
+		# an outline behind, which a mirrored window cannot follow. Each
+		# value is the one the best-performance preset writes, set here
+		# because a preset would be applied whole again.
+		Set-ItemProperty -LiteralPath 'Registry::HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects' -Name 'VisualFXSetting' -Type 'DWord' -Value 3 -Force;
+		Set-ItemProperty -LiteralPath 'Registry::HKEY_CURRENT_USER\Control Panel\Desktop' -Name 'UserPreferencesMask' -Type 'Binary' -Value ([byte[]](0x90, 0x12, 0x03, 0x80, 0x10, 0x00, 0x00, 0x00)) -Force;
+		Set-ItemProperty -LiteralPath 'Registry::HKEY_CURRENT_USER\Control Panel\Desktop' -Name 'DragFullWindows' -Type 'String' -Value '1' -Force;
+		Set-ItemProperty -LiteralPath 'Registry::HKEY_CURRENT_USER\Control Panel\Desktop\WindowMetrics' -Name 'MinAnimate' -Type 'String' -Value '0' -Force;
+		foreach( $name in 'ListviewAlphaSelect', 'ListviewShadow', 'TaskbarAnimations' ) {
+			Set-ItemProperty -LiteralPath 'Registry::HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' -Name $name -Type 'DWord' -Value 0 -Force;
+		}
+		Set-ItemProperty -LiteralPath 'Registry::HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' -Name 'IconsOnly' -Type 'DWord' -Value 1 -Force;
+		# Not New-Item -Force on its own: on a key that exists, that
+		# empties it.
+		if( -not ( Test-Path -LiteralPath 'Registry::HKEY_CURRENT_USER\Software\Microsoft\Windows\DWM' ) ) {
+			New-Item -Path 'Registry::HKEY_CURRENT_USER\Software\Microsoft\Windows\DWM' | Out-Null;
+		}
+		foreach( $name in 'EnableAeroPeek', 'AlwaysHibernateThumbnails' ) {
+			Set-ItemProperty -LiteralPath 'Registry::HKEY_CURRENT_USER\Software\Microsoft\Windows\DWM' -Name $name -Type 'DWord' -Value 0 -Force;
+		}
 	};
 	{
 		Get-Process -Name 'explorer' -ErrorAction 'SilentlyContinue' | Where-Object -FilterScript {

@@ -42,6 +42,10 @@ CliOptions CliParser::parse(const QStringList& argv) {
         "Launch the named guest app and exit (forwards to a running "
         "manager via D-Bus; starts one if none is up).", "app-id");
 
+    QCommandLineOption reinstall_opt("reinstall",
+        "Run the first-run wizard over the existing guest. Its install replaces "
+        "the guest; closing the wizard before then returns to the manager.");
+
     p.addOption(accept_license);
     p.addOption(iso_opt);
     p.addOption(edition_opt);
@@ -54,6 +58,7 @@ CliOptions CliParser::parse(const QStringList& argv) {
     p.addOption(disk_opt);
     p.addOption(launch_opt);
     p.addOption(screenshot_opt);
+    p.addOption(reinstall_opt);
 
     p.process(argv);
 
@@ -76,6 +81,7 @@ CliOptions CliParser::parse(const QStringList& argv) {
     }
     o.launch_app_id = p.value(launch_opt);
     o.screenshot_dir = p.value(screenshot_opt);
+    o.reinstall = p.isSet(reinstall_opt);
     return o;
 }
 

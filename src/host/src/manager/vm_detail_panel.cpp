@@ -72,6 +72,7 @@ VmDetailPanel::VmDetailPanel(services::HostServices& services, QWidget* parent)
         apps_panel.header->addWidget(toolbar);
     }
     apps_panel.body->addWidget(app_list_, 1);
+    connect(app_list_, &AppListWidget::launch_requested, this, &VmDetailPanel::launch_requested);
     splitter->addWidget(apps_panel.frame);
 
     splitter->setStretchFactor(0, 38);
@@ -101,6 +102,7 @@ void VmDetailPanel::set_target(const QUuid& uuid) {
     // poll proves otherwise, so switching targets never flashes the
     // previous one's online badge.
     last_agent_reachable_ = false;
+    app_list_->set_agent_online(false);
     Q_EMIT agent_online_changed(false);
 
     if (uuid_.isNull()) {
@@ -152,6 +154,7 @@ void VmDetailPanel::on_status() {
     }
     if (stats.agent_reachable != last_agent_reachable_) {
         last_agent_reachable_ = stats.agent_reachable;
+        app_list_->set_agent_online(last_agent_reachable_);
         Q_EMIT agent_online_changed(last_agent_reachable_);
         follow_preview(stats.running);
         // What is installed is the agent's to say; the grid shows the

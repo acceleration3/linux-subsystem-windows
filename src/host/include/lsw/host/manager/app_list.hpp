@@ -23,7 +23,10 @@ namespace lsw::host::manager {
 //
 // Double-click launches the app in the guest through GuestAppLauncher,
 // which starts a ``mirror::WindowMirror`` for it: one mirror process per
-// launch, which owns that application's windows on this desktop.
+// launch, which owns that application's windows on this desktop. With
+// the agent not answering yet it asks for the launch instead
+// (``launch_requested``), and whoever owns the boot splash waits for
+// Windows first.
 class AppListWidget : public QWidget {
     Q_OBJECT
 public:
@@ -39,6 +42,13 @@ public:
     // Ask the agent for the installed applications again.
     void refresh();
     void clear_target();
+    // Whether a launch can go to the agent now or has to wait for it.
+    void set_agent_online(bool online);
+
+Q_SIGNALS:
+    // An application opened while the agent is not answering: one for
+    // GuestAppLaunchController, which boots the guest first.
+    void launch_requested(const QString& app_id);
 
 private Q_SLOTS:
     void on_loaded(const QList<apps::AppEntry>& entries);
@@ -63,6 +73,7 @@ private:
     QListWidget* list_ = nullptr;
 
     QUuid uuid_;
+    bool agent_online_ = false;
 };
 
 }  // namespace lsw::host::manager

@@ -86,6 +86,24 @@ constexpr auto kNtUser = "NTUSER";
     };
 }
 
+// Game Bar, whose package goes with the Xbox apps. Its files go, but
+// Windows still asks for it when a game starts or the controller's Xbox
+// button is pressed, and with nothing to answer ``ms-gamingoverlay:``
+// the shell puts up "Get an app to open this link" over the game. That
+// window is no application's, so it is never mirrored, and it takes
+// every click meant for the window under it.
+[[nodiscard]] QVector<RegistryTweak> game_bar() {
+    return {
+        {kSoftware, QStringLiteral("Policies\\Microsoft\\Windows\\GameDVR"),
+         QStringLiteral("AllowGameDVR"), 0},
+        {kNtUser, QStringLiteral("System\\GameConfigStore"), QStringLiteral("GameDVR_Enabled"), 0},
+        {kNtUser, QStringLiteral("Software\\Microsoft\\Windows\\CurrentVersion\\GameDVR"),
+         QStringLiteral("AppCaptureEnabled"), 0},
+        {kNtUser, QStringLiteral("Software\\Microsoft\\GameBar"),
+         QStringLiteral("UseNexusForGameBarEnabled"), 0},
+    };
+}
+
 // Setup-time gates. LSW's domain has no TPM and boots firmware with no
 // Secure Boot keys, so an unmodified Windows 11 installer refuses to run at
 // all — these are what make the guest installable rather than what make
@@ -164,6 +182,7 @@ QVector<RegistryTweak> RegistryTweaks::for_level(DebloatLevel level) {
     out += content_delivery();
     out += privacy();
     out += shell();
+    out += game_bar();
     if (level == DebloatLevel::Maximum) {
         out += disable_servicing();
     }

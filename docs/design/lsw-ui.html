@@ -1541,7 +1541,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
               <div class="srow">
                 <span>
                   <span class="k">Reinstall the guest</span>
-                  <span class="d">Deletes the current disk and runs the first-run wizard again. Applications inside the guest are lost.</span>
+                  <span class="d">Runs the first-run wizard again. Its install replaces the current disk, and applications inside the guest are lost; closing the wizard before then changes nothing.</span>
                 </span>
                 <span class="ctl"><button class="btn stop">Reinstall</button></span>
               </div>
@@ -2299,6 +2299,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
               </div>
             </div>
             <span class="meta">Leaves <b>352 GiB</b> free on the host. The disk is sparse and grows as the guest fills it.</span>
+            <div class="callout crit" hidden>Next starts the install, which replaces the current guest. It is shut down, its disk is deleted, and every application installed in Windows goes with it.</div>
           </div>
           <div class="wiz-foot">
             <span class="hint">step 4 of 8</span>
@@ -2310,6 +2311,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
     </div>
     <dl class="notes">
       <div class="note"><dt>Consequence line</dt><dd>The footnote recalculates as the disk slider moves. Sizing decisions are easier when the cost is spelled out next to the control.</dd></div>
+      <div class="note"><dt>Reinstall</dt><dd>Settings' Reinstall opens this wizard over a guest that exists, still running. Nothing happens to it until the install starts, so this page, whose Next starts it, says in a red callout under the footnote that the guest is shut down and replaced. It is absent on a first run. Closing the wizard before then returns to the manager.</dd></div>
     </dl>
   </section>
 

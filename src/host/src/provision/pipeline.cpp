@@ -12,6 +12,7 @@
 #include "lsw/host/services/domain_inputs.hpp"
 #include "lsw/host/services/host_services.hpp"
 #include "lsw/host/vm/domain_xml_inputs.hpp"
+#include "lsw/host/vm/graceful_shutdown.hpp"
 
 #include <QDir>
 #include <QElapsedTimer>
@@ -268,6 +269,36 @@ void Pipeline::run_create_disk() {
         QStringLiteral("Allocating the qcow2 system disk (%1 GiB)...")
             .arg(record_.sizing.disk_gib));
 
+    // A reinstall reaches here with the old guest still running: the
+    // manager hands over to the wizard without stopping it, so that a
+    // wizard closed before this step costs nothing. Its disk is about to
+    // be recreated at the same path, so it is shut down first, the way a
+    // person would, and pulled at the deadline.
+    const config::VmRecord* old = services_.vms().primary();
+    if (old == nullptr || !services_.lifecycle().is_running(old->uuid)) {
+        replace_machine();
+        return;
+    }
+    Q_EMIT step_progress(Step::CreatingDisk, -1.0,
+                         QStringLiteral("Shutting the current guest down..."));
+    auto* stop = new vm::GracefulShutdown(services_.lifecycle(), old->uuid,
+                                          vm::GracefulShutdown::kDefaultDeadlineMs, this);
+    const auto generation = generation_;
+    connect(stop, &vm::GracefulShutdown::finished, this, [this, stop, generation](bool forced) {
+        stop->deleteLater();
+        if (generation != generation_) return;
+        if (forced) {
+            LSW_WARN("provision: the current guest did not shut down in time and was stopped");
+        }
+        Q_EMIT step_progress(Step::CreatingDisk, -1.0,
+                             QStringLiteral("Allocating the qcow2 system disk (%1 GiB)...")
+                                 .arg(record_.sizing.disk_gib));
+        replace_machine();
+    });
+    stop->start();
+}
+
+void Pipeline::replace_machine() {
     // A new install replaces the machine: the old definition goes, and
     // with it the record the manager knew it by. Before the disk, which
     // is recreated at the same path.

@@ -200,6 +200,7 @@ MainWindow::MainWindow(services::HostServices& services, QWidget* parent)
         }
     });
     follow_agent_for_desktop(overview_->is_agent_online());
+    connect(overview_, &VmDetailPanel::launch_requested, this, &MainWindow::launch_requested);
     connect(overview_, &VmDetailPanel::agent_online_changed, this, [this](bool online) {
         rail_->set_agent_online(online);
         follow_agent_for_desktop(online);
@@ -305,6 +306,8 @@ void MainWindow::build_pages() {
         tools::TrimImageDialog dialog{services_.settings(), source, this};
         dialog.exec();
     });
+    connect(settings_page_, &SettingsPage::reinstall_requested, this,
+            &MainWindow::reinstall_requested);
     connect(settings_page_, &SettingsPage::rewrite_entries_requested, this, [this] {
         // Idempotent, and the point of the button is the case where the
         // files on disk have drifted from what the store says.

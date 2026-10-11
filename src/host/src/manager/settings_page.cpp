@@ -373,8 +373,9 @@ void SettingsPage::build() {
                                   "folder. Does not touch the running guest."),
                    QStringLiteral("Open the image tool"), &SettingsPage::trim_tool_requested);
     add_action_row(images, QStringLiteral("Reinstall the guest"),
-                   QStringLiteral("Deletes the current disk and runs the first-run wizard "
-                                  "again. Applications inside the guest are lost."),
+                   QStringLiteral("Runs the first-run wizard again. Its install replaces the "
+                                  "current disk, and applications inside the guest are lost; "
+                                  "closing the wizard before then changes nothing."),
                    QStringLiteral("Reinstall"), &SettingsPage::reinstall_requested,
                    Theme::Role::kStop);
 
