@@ -74,6 +74,7 @@ int main(int argc, char** argv) {
     pci_function(sysfs, "0000:03:00.0", "0x1002", "0x7550", "0xc0");  // discrete AMD
     pci_function(sysfs, "0000:10:00.0", "0x1002", "0x13c0", "0xc1");  // integrated AMD
     pci_function(sysfs, "0000:00:02.0", "0x8086", "0x7d67", "0x06");  // integrated Intel
+    pci_function(sysfs, "0000:00:02.1", "0x8086", "0x46a6", "0x0c");  // integrated Intel
     pci_function(sysfs, "0000:01:00.0", "0x10de", "0x2684", "0xa1");  // discrete NVIDIA
     write(sources.amdgpu_ids, "# List of AMDGPU IDs\n"
                               "#\n"
@@ -83,9 +84,10 @@ int main(int argc, char** argv) {
     write(dir.filePath(QStringLiteral("pci.ids")),
           "# pci.ids\n"
           "1002  Advanced Micro Devices, Inc. [AMD/ATI]\n"
-          "\t13c0  Granite Ridge [Radeon Graphics]\n"
+          "\t13c0  Granite Ridge [Radeon 610M]\n"
           "\t7550  Navi 48 [Radeon RX 9070/9070 XT/9070 GRE]\n"
           "8086  Intel Corporation\n"
+          "\t46a6  Alder Lake-P GT2 [Iris Xe Graphics]\n"
           "\t7d67  Arrow Lake-S [Intel Graphics]\n"
           "10de  NVIDIA Corporation\n"
           "\t2684  AD102 [GeForce RTX 4090]\n");
@@ -96,11 +98,14 @@ int main(int argc, char** argv) {
               QStringLiteral("AMD Radeon RX 9070 XT"),
           "an AMD GPU takes libdrm's product name by device and revision");
     check(names.name(gpu("AMD Ryzen 9 9950X3D 16-Core Processor (RADV RAPHAEL_MENDOCINO)",
-                         "0000:10:00.0", true)) == QStringLiteral("AMD Radeon Graphics"),
-          "an integrated GPU libdrm does not list takes pci.ids' bracketed name");
+                         "0000:10:00.0", true)) == QStringLiteral("AMD Radeon(TM) Graphics"),
+          "an integrated AMD GPU libdrm does not list is AMD's generic name, not pci.ids'");
     check(names.name(gpu("Intel(R) Graphics (ARL)", "0000:00:02.0", true)) ==
-              QStringLiteral("Intel(R) Intel Graphics"),
-          "an integrated Intel GPU takes pci.ids' name after the vendor's");
+              QStringLiteral("Intel(R) Graphics"),
+          "an integrated Intel GPU takes pci.ids' name after the vendor's, not repeating it");
+    check(names.name(gpu("Intel(R) Iris(R) Xe Graphics (ADL GT2)", "0000:00:02.1", true)) ==
+              QStringLiteral("Intel(R) Iris Xe Graphics"),
+          "a pci.ids name without the vendor gets the vendor's prefix");
     check(names.name(gpu("NVIDIA GeForce RTX 4090", "0000:01:00.0")) ==
               QStringLiteral("NVIDIA GeForce RTX 4090"),
           "a discrete GPU outside AMD's table keeps its Vulkan name");
