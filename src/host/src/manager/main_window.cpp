@@ -561,13 +561,14 @@ void MainWindow::refresh_warning() {
     rail_->set_graphics_warning(worst == Severity::Red     ? Theme::Tone::kBad
                                 : worst == Severity::Amber ? Theme::Tone::kAmber
                                                            : nullptr);
-    // Only the ones that break the guest, and only on the overview: the
-    // rest are the Graphics page's to say.
+    // Only the ones that break the guest, and a driver update so it is not
+    // missed, and only on the overview: the rest are the Graphics page's.
     std::optional<GraphicsAlerts::Warning> shown;
     for (const auto& warning : alerts_->warnings()) {
         if (warning.kind == GraphicsAlerts::Warning::Kind::NoDirect3d ||
             warning.kind == GraphicsAlerts::Warning::Kind::DisplayNotRunning ||
-            warning.kind == GraphicsAlerts::Warning::Kind::DisplayNoDriver) {
+            warning.kind == GraphicsAlerts::Warning::Kind::DisplayNoDriver ||
+            warning.kind == GraphicsAlerts::Warning::Kind::DriverUpdate) {
             shown = warning;
             break;
         }

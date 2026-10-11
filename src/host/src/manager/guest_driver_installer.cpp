@@ -23,10 +23,12 @@ constexpr int kRestartNeeded = 3010;
 GuestDriverInstaller::GuestDriverInstaller(link::AgentRpcClient& rpc, QObject* parent)
     : QObject(parent), rpc_(rpc) {}
 
-QString GuestDriverInstaller::script() {
+QString GuestDriverInstaller::script(const QString& staging) {
     return QStringLiteral(
-        "@echo off\r\n"
-        "setlocal\r\n"
+               "@echo off\r\n"
+               "setlocal\r\n") +
+           staging +
+           QStringLiteral(
         "if not exist C:\\av\\pristine\\package (\r\n"
         "  echo C:\\av\\pristine has no package: this guest was set up before LSW kept one\r\n"
         "  exit /b 2\r\n"
@@ -47,7 +49,7 @@ QString GuestDriverInstaller::script() {
         "exit /b %INSTALLED%\r\n");
 }
 
-bool GuestDriverInstaller::start() {
+bool GuestDriverInstaller::start(const QString& staging) {
     if (running()) {
         return true;
     }
@@ -80,8 +82,9 @@ bool GuestDriverInstaller::start() {
     awaiting_id_ = true;
     Q_EMIT progress(QStringLiteral("Starting"));
     rpc_.request_async(linkproto::cmd::kRunScript,
-                       {{"name", "install avgpu for new adapters"},
-                        {"script", script().toStdString()}},
+                       {{"name", staging.isEmpty() ? "install avgpu for new adapters"
+                                                   : "update avgpu"},
+                        {"script", script(staging).toStdString()}},
                        this, [this](const link::AgentReply& reply) {
                            if (!awaiting_id_) {
                                return;  // abandoned while the call was out
@@ -96,7 +99,7 @@ bool GuestDriverInstaller::start() {
                                                  .arg(QString::fromStdString(reply.error)));
                                return;
                            }
-                           LSW_INFO("graphics: installing avgpu for new adapters, job {}", id);
+                           LSW_INFO("graphics: installing avgpu, job {}", id);
                            on_job_id(QString::fromStdString(id));
                        });
     return true;
