@@ -52,6 +52,22 @@ int main(int argc, char** argv) {
     AgentRpcClient rpc;  // no target: nothing is sent anywhere
 
     {
+        const QString plain = GuestDriverInstaller::script();
+        check(plain.contains(QStringLiteral("if not defined SOURCE set SOURCE=C:\\av\\pristine\r\n")) &&
+                  plain.contains(QStringLiteral("robocopy %SOURCE% C:\\av\\resign ")),
+              "with no staging, the package setup kept is the one installed");
+        const QString staged =
+            GuestDriverInstaller::script(QStringLiteral("set SOURCE=C:\\av\\incoming\r\n"));
+        const qsizetype install = staged.indexOf(QStringLiteral("-Stage install"));
+        const qsizetype failed = staged.indexOf(
+            QStringLiteral("if not \"%INSTALLED%\"==\"0\" if not \"%INSTALLED%\"==\"3010\" exit /b"));
+        const qsizetype kept = staged.indexOf(
+            QStringLiteral("robocopy %SOURCE%\\package C:\\av\\pristine\\package /MIR"));
+        check(install >= 0 && failed > install && kept > failed,
+              "a staged package becomes the pristine one only once it is installed");
+    }
+
+    {
         GuestDriverInstaller installer{rpc};
         Seen seen;
         watch(installer, seen);

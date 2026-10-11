@@ -40,7 +40,9 @@ GuestDriverUpdate::GuestDriverUpdate(link::AgentRpcClient& rpc, GuestDriverInsta
             [this] { stop(QStringLiteral("the upload was cancelled")); });
 }
 
-QVector<GuestDriverUpdate::File> GuestDriverUpdate::files_of(const QString& tree) {
+QVector<GuestDriverUpdate::File> GuestDriverUpdate::files_of(const QString& tree,
+                                                            const QString& vulkan_x64,
+                                                            const QString& vulkan_x86) {
     const QDir root{tree};
     const QDir package{root.filePath(QStringLiteral("package"))};
     if (!package.exists(QStringLiteral("package.sha256"))) {
@@ -49,28 +51,47 @@ QVector<GuestDriverUpdate::File> GuestDriverUpdate::files_of(const QString& tree
     QVector<File> out;
     for (const QFileInfo& file : package.entryInfoList(QDir::Files, QDir::Name)) {
         out.push_back({file.filePath(),
-                       QStringLiteral("C:\\av\\pristine\\package\\") + file.fileName()});
+                       QStringLiteral("C:\\av\\incoming\\package\\") + file.fileName()});
     }
     if (root.exists(QStringLiteral("provision.ps1"))) {
         out.push_back({root.filePath(QStringLiteral("provision.ps1")),
                        QStringLiteral("C:\\av\\provision.ps1")});
     }
+    static const QString kVulkan = QStringLiteral("vulkan-1.dll");
     for (const QString& arch : {QStringLiteral("x64"), QStringLiteral("x86")}) {
+        const QString guest = QStringLiteral("C:\\av\\loaders\\%1\\").arg(arch);
+        const QString& vulkan = arch == QLatin1String("x64") ? vulkan_x64 : vulkan_x86;
         const QDir loaders{root.filePath(QStringLiteral("loaders/") + arch)};
         for (const QFileInfo& file : loaders.entryInfoList(QDir::Files, QDir::Name)) {
-            out.push_back({file.filePath(), QStringLiteral("C:\\av\\loaders\\%1\\%2")
-                                                .arg(arch, file.fileName())});
+            // Ours goes in its place, as setup put it: the one this host
+            // built and tested against.
+            if (!vulkan.isEmpty() && file.fileName().compare(kVulkan, Qt::CaseInsensitive) == 0) {
+                continue;
+            }
+            out.push_back({file.filePath(), guest + file.fileName()});
+        }
+        if (!vulkan.isEmpty() && QFileInfo::exists(vulkan)) {
+            out.push_back({vulkan, guest + kVulkan});
         }
     }
     return out;
+}
+
+QString GuestDriverUpdate::manifest_name(const File& file) {
+    static const QString kRoot = QStringLiteral("C:\\av\\");
+    static const QString kPackage = QStringLiteral("C:\\av\\incoming\\package\\");
+    if (file.guest.startsWith(kPackage) || !file.guest.startsWith(kRoot)) {
+        return {};
+    }
+    return file.guest.mid(kRoot.size()).replace(QLatin1Char('\\'), QLatin1Char('/'));
 }
 
 QString GuestDriverUpdate::staging(const QVector<File>& files, const QStringList& uploaded) {
     const QString fail = QStringLiteral(" || exit /b %1\r\n").arg(kStagingFailed);
     QString out = QStringLiteral(
         "echo Putting the new driver package in place\r\n"
-        "if exist C:\\av\\pristine\\package rmdir /s /q C:\\av\\pristine\\package\r\n"
-        "mkdir C:\\av\\pristine\\package") + fail;
+        "if exist C:\\av\\incoming rmdir /s /q C:\\av\\incoming\r\n"
+        "mkdir C:\\av\\incoming\\package") + fail;
     for (qsizetype i = 0; i < files.size() && i < uploaded.size(); ++i) {
         const QString& to = files[i].guest;
         const QString& from = uploaded[i];
@@ -95,20 +116,20 @@ QString GuestDriverUpdate::staging(const QVector<File>& files, const QStringList
         const QString upload_dir = from.left(from.lastIndexOf(QLatin1Char('\\')));
         out += QStringLiteral("rmdir /s /q %1\r\n").arg(quoted(upload_dir));
     }
-    return out;
+    return out + QStringLiteral("set SOURCE=C:\\av\\incoming\r\n");
 }
 
-bool GuestDriverUpdate::start(const QString& tree) {
+bool GuestDriverUpdate::start(const QVector<File>& files) {
     if (uploading() || installer_.running()) {
         return true;
     }
-    files_ = files_of(tree);
+    files_ = files;
     uploaded_.clear();
     if (files_.isEmpty()) {
-        Q_EMIT failed(QStringLiteral("LSW has no driver package at %1").arg(tree));
+        Q_EMIT failed(QStringLiteral("LSW has no driver package to install"));
         return false;
     }
-    LSW_INFO("graphics: updating avgpu from {}, {} files", tree.toStdString(), files_.size());
+    LSW_INFO("graphics: updating avgpu, {} files", files_.size());
     next();
     return true;
 }

@@ -33,7 +33,9 @@ public:
     // as shipped in C:\av\pristine; it is mirrored to C:\av\resign and
     // signed and installed from there. 3010 from either stage is
     // "done, restart Windows", passed back as the script's exit code.
-    // ``staging`` is batch lines run before it, to put a package in place.
+    // ``staging`` is batch lines run before it, to put a package in place;
+    // one that sets SOURCE to the folder it put it in has it installed from
+    // there, and mirrored to C:\av\pristine once it is.
     [[nodiscard]] static QString script(const QString& staging = {});
 
     // Start it, after ``staging``. False, with ``failed`` emitted, when the

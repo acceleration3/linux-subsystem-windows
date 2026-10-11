@@ -61,5 +61,23 @@ int main() {
           "read gives the file's manifest");
     check(DriverManifest::read(QDir(dir.path()).filePath(QStringLiteral("missing"))).empty(),
           "a file that is not there reads as empty");
+
+    QTemporaryDir tree;
+    const QString script = QDir(tree.path()).filePath(QStringLiteral("provision.ps1"));
+    QFile out{script};
+    check(out.open(QIODevice::WriteOnly) && out.write("abc") == 3, "a file to add is written");
+    out.close();
+    DriverManifest shipped_tree{QStringLiteral("%1  avgpu.sys\n").arg(kA)};
+    shipped_tree.add(QStringLiteral("provision.ps1"), script);
+    shipped_tree.add(QStringLiteral("loaders/x64/vulkan-1.dll"),
+                     QDir(tree.path()).filePath(QStringLiteral("missing.dll")));
+    // sha256("abc"), as the agent reports the guest's copy.
+    const QString abc =
+        QStringLiteral("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+    check(shipped_tree
+              .differences(DriverManifest{
+                  QStringLiteral("%1  avgpu.sys\n%2  PROVISION.PS1\n").arg(kA, abc)})
+              .isEmpty(),
+          "a file added is named and hashed as the guest's is, and one not there is not added");
     return g_failures == 0 ? 0 : 1;
 }
