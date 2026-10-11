@@ -1,6 +1,6 @@
 pkgbase = lsw-bin
 	pkgdesc = Linux Subsystem for Windows: Windows applications as native windows, from a KVM guest with a paravirtual GPU
-	pkgver = 0.1.0
+	pkgver = 0.1.2
 	pkgrel = 1
 	url = https://github.com/acceleration3/linux-subsystem-windows
 	install = lsw-bin.install
@@ -55,6 +55,7 @@ pkgbase = lsw-bin
 	depends = qemu-img
 	depends = 7zip
 	depends = curl
+	depends = hicolor-icon-theme
 	depends = sdl3
 	optdepends = virtiofsd: shared folders between the host and the guest
 	optdepends = opencl-driver: OpenCL in the guest, run on the host GPU
@@ -63,7 +64,7 @@ pkgbase = lsw-bin
 	conflicts = lsw
 	options = !strip
 	options = !debug
-	source = https://github.com/acceleration3/linux-subsystem-windows/releases/download/v0.1.0/lsw-0.1.0-x86_64.tar.zst
-	sha256sums = 842a793bd96e5e331e77eeb9c774291e6b06e843bcfae9f466384e802c744874
+	source = https://github.com/acceleration3/linux-subsystem-windows/releases/download/v0.1.2/lsw-0.1.2-x86_64.tar.zst
+	sha256sums = 8683a57454a355bcd5ceb0bb44aaeaaca9892b41fed71f073e59bb72111b16fb
 
 pkgname = lsw-bin
