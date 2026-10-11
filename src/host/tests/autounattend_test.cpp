@@ -61,6 +61,13 @@ int main(int argc, char** argv) {
 
     // The inputs must actually reach the output.
     check(xml.contains(QStringLiteral("LSW-TEST")), "computer_name substituted");
+    {
+        AutounattendInputs lisbon = in;
+        lisbon.timezone = QStringLiteral("GMT Standard Time");
+        check(Autounattend::render(lisbon).contains(
+                  QStringLiteral("<TimeZone>GMT Standard Time</TimeZone>")),
+              "the time zone reaches specialize, so the RTC's local time is read as the host's");
+    }
     check(xml.contains(QStringLiteral("<Key>YTMG3-N6DKC-DKB77-7M9GH-8HVX7</Key>")),
           "a Home image gets the Home key, not Pro's");
     {
