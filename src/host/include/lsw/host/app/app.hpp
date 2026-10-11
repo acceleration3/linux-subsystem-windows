@@ -51,6 +51,10 @@ private Q_SLOTS:
     // the (VM may be cold) start / wait / launch / mirror sequence.
     void on_launch_app_request(const QString& app_id);
 
+    // The settings page's Reinstall: this manager hands over to a wizard
+    // process (``--reinstall``) and quits.
+    void on_reinstall_request();
+
 private:
     // True when this process is a secondary invocation: the primary owns
     // the DBus name, so we forward whatever we were asked to do and quit.
@@ -81,6 +85,11 @@ private:
     // quit this process. Falls back to an in-process manager window if
     // the spawn fails.
     void spawn_manager_and_quit();
+    // Hand this run over to a fresh copy of this binary started with
+    // ``args``, and quit. The single-instance lock goes first, or the
+    // copy would forward itself back here. False, with the lock held
+    // again and this process still running, when the copy did not start.
+    [[nodiscard]] bool hand_over(const QStringList& args);
 
     [[nodiscard]] manager::GuestAppLaunchController& launch_controller();
 

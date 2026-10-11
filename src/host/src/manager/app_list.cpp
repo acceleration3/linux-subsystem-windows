@@ -153,6 +153,10 @@ void AppListWidget::clear_target() {
     rebuild();
 }
 
+void AppListWidget::set_agent_online(bool online) {
+    agent_online_ = online;
+}
+
 void AppListWidget::rebuild() {
     list_->clear();
     for (const auto& cfg : store_.configs()) {
@@ -271,6 +275,12 @@ void AppListWidget::on_item_activated(QListWidgetItem* item) {
     const auto* cfg = store_.find(id);
     if (cfg == nullptr || cfg->target().isEmpty()) {
         LSW_WARN("app_list: no config for id={}", id.toStdString());
+        return;
+    }
+    // Straight to an agent that would only drop the request, the launch
+    // fails at once; it waits for the guest instead.
+    if (!agent_online_) {
+        Q_EMIT launch_requested(id);
         return;
     }
     launcher_.launch(*cfg);

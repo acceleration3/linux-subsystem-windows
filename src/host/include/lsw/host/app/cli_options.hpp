@@ -32,6 +32,12 @@ struct CliOptions {
     // RPC, then keep the manager up).
     QString launch_app_id;
 
+    // --reinstall: the first-run wizard over a guest that already
+    // exists, which is what the settings page's Reinstall starts. The
+    // old guest is untouched until the wizard's install replaces it, so
+    // a wizard closed before then hands back to the manager.
+    bool reinstall = false;
+
     // --screenshot DIR: render every page of the manager and every page
     // of the wizard into DIR as PNGs, then exit.
     //

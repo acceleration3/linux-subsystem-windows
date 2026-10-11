@@ -158,7 +158,8 @@ int App::run() {
         unattended_ = std::make_unique<UnattendedRunner>(services_, cli_, this);
         connect(unattended_.get(), &UnattendedRunner::finished, this, &App::exit);
         unattended_->start();
-    } else if (services_.settings().is_first_run() || services_.vms().primary() == nullptr) {
+    } else if (cli_.reinstall || services_.settings().is_first_run()
+               || services_.vms().primary() == nullptr) {
         // Wizard mode: no MCP server — there is no provisioned app to
         // drive yet, and binding the port now would deny it to the
         // manager process the wizard spawns on completion.
@@ -298,6 +299,13 @@ void App::show_wizard() {
     if (wizard_ == nullptr) {
         wizard_ = new wizard::Wizard(services_);
         connect(wizard_, &wizard::Wizard::complete, this, &App::on_wizard_complete);
+        // Closed before its install replaced the guest, a reinstall
+        // leaves the guest as it was, and the manager comes back to it.
+        // Closed after, the manager finds no guest and offers the wizard
+        // again.
+        if (cli_.reinstall) {
+            connect(wizard_, &QDialog::rejected, this, &App::spawn_manager_and_quit);
+        }
     }
     ui::Widgets::bring_to_front(wizard_);
 }
@@ -309,6 +317,10 @@ void App::show_main_window() {
         // which is the application's flow rather than the window's.
         connect(main_window_, &manager::MainWindow::wizard_requested, this,
                 &App::show_wizard);
+        connect(main_window_, &manager::MainWindow::launch_requested, this,
+                &App::on_launch_app_request);
+        connect(main_window_, &manager::MainWindow::reinstall_requested, this,
+                &App::on_reinstall_request);
     }
     ui::Widgets::bring_to_front(main_window_);
 }
@@ -335,24 +347,39 @@ void App::on_wizard_complete() {
 }
 
 void App::spawn_manager_and_quit() {
-    // Drop the single-instance lock FIRST, otherwise the child sees us as
-    // the primary and forwards a raise() back to this (dying) process.
-    single_instance_.release();
-    const QString exe = QCoreApplication::applicationFilePath();
     // No --launch / wizard flags: first-run is now marked complete, so a
     // bare invocation boots straight into the manager.
-    if (QProcess::startDetached(exe, QStringList{})) {
-        LSW_INFO("wizard complete: spawned manager process, exiting wizard");
-        quit();
+    if (hand_over({})) {
+        LSW_INFO("wizard done: spawned manager process, exiting wizard");
         return;
     }
     // Spawn failed (rare). Do not strand the user post-install: fall back
-    // to bringing the manager up in this very process. Re-acquire the
-    // lock we just dropped so a later second invocation still finds us.
+    // to bringing the manager up in this very process.
     LSW_WARN("could not spawn manager process; showing it in-process");
-    (void)single_instance_.acquire();
     start_mcp_server();
     show_main_window();
+}
+
+bool App::hand_over(const QStringList& args) {
+    single_instance_.release();
+    if (QProcess::startDetached(QCoreApplication::applicationFilePath(), args)) {
+        quit();
+        return true;
+    }
+    (void)single_instance_.acquire();
+    return false;
+}
+
+void App::on_reinstall_request() {
+    // A process of its own, as on a first run: the wizard and the
+    // manager are kept apart, and the wizard's pipeline wants the agent
+    // channel, the status hub and the MCP port this manager holds. The
+    // guest is left running; the install stops it when it gets there.
+    if (hand_over({QStringLiteral("--reinstall")})) {
+        LSW_INFO("reinstall: spawned the wizard process, exiting the manager");
+        return;
+    }
+    LSW_WARN("reinstall: could not spawn the wizard process");
 }
 
 void App::on_raise_request() {

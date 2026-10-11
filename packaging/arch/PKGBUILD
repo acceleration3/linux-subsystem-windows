@@ -1,0 +1,34 @@
+# Maintainer: acceleration3 <acceleration23 at gmail dot com>
+#
+# lsw-bin from this checkout: the release tarball scripts/package-release.sh
+# wrote to dist/, instead of the one attached to the GitHub release. For
+# installing a release before it is published, or one never published.
+#
+#   scripts/package-release.sh --version <V>     (aur/README.md, step 1)
+#   cd packaging/arch && makepkg -si
+#
+# Everything but the version and where the tarball comes from is
+# aur/PKGBUILD's, sourced as it is, so the depends stay the AUR package's.
+# The version is the newest tarball's in dist/.
+
+_root="$(realpath "${startdir}/../..")"
+source "${_root}/aur/PKGBUILD"
+
+_tarball="$(printf '%s\n' "${_root}"/dist/lsw-*-x86_64.tar.zst | sort -V | tail -1)"
+if [[ ! -f "${_tarball}" ]]; then
+    error "No release tarball in ${_root}/dist; run scripts/package-release.sh first."
+    exit 1
+fi
+pkgver="$(basename "${_tarball}" | sed 's/^lsw-\(.*\)-x86_64\.tar\.zst$/\1/')"
+pkgrel=1
+# Unpacked straight from dist/ in package(): as a source, makepkg would
+# copy it next to this file and, on the next run of the same version,
+# reuse that copy rather than a rebuilt tarball.
+source=()
+sha256sums=()
+
+package() {
+    (cd "${_root}/dist" && sha256sum --quiet -c "lsw-${pkgver}-x86_64.tar.zst.sha256")
+    bsdtar -xf "${_tarball}" -C "${pkgdir}" --no-same-owner
+    mv "${pkgdir}/usr/share/licenses/lsw" "${pkgdir}/usr/share/licenses/${pkgname}"
+}

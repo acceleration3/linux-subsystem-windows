@@ -116,6 +116,9 @@ private:
     void run_trim_image();
     void run_build_payload();
     void run_create_disk();
+    // The old domain undefined and the disk recreated, once nothing runs
+    // on it.
+    void replace_machine();
     void run_start_vm();
     void run_wait_for_agent();
     void run_setup_phase();

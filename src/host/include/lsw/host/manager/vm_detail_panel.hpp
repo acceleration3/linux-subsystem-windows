@@ -52,6 +52,8 @@ Q_SIGNALS:
     // actually usable. The badge follows this one, because libvirt
     // reports "running" a minute or two before a guest is interactive.
     void agent_online_changed(bool online);
+    // The grid opened an application the guest is not ready for.
+    void launch_requested(const QString& app_id);
 
 private:
     // The hub has a new reading of the machine, or of its graphics (the

@@ -52,6 +52,11 @@ Q_SIGNALS:
     // There is no guest, and the only thing that leads anywhere is the
     // wizard. The application owns that flow, not this window.
     void wizard_requested();
+    // An application opened from the grid before Windows answers. The
+    // boot splash that waits for it is the application's too.
+    void launch_requested(const QString& app_id);
+    // The settings page's Reinstall. The wizard is the application's.
+    void reinstall_requested();
 
 protected:
     void closeEvent(QCloseEvent* e) override;

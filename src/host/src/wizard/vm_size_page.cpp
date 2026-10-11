@@ -7,6 +7,7 @@
 #include "lsw/host/ui/field_stack.hpp"
 #include "lsw/host/ui/machine_limits.hpp"
 #include "lsw/host/ui/slider_spin.hpp"
+#include "lsw/host/ui/theme.hpp"
 #include "lsw/host/ui/widgets.hpp"
 #include "lsw/host/wizard/wizard.hpp"
 
@@ -104,6 +105,17 @@ VmSizePage::VmSizePage(Wizard& wizard, QWidget* parent) : WizardPage(parent), wi
     // What the sizing costs, next to the control that decides it.
     footnote_ = Widgets::meta(QString{}, true);
     body->addWidget(footnote_);
+
+    // A reinstall: this page's Next starts the install, and the install
+    // replaces the guest there is. Said on the page whose button does it.
+    if (wizard_.services().vms().primary() != nullptr) {
+        auto* replaces = new QLabel(QStringLiteral(
+            "Next starts the install, which replaces the current guest. It is shut down, its "
+            "disk is deleted, and every application installed in Windows goes with it."));
+        replaces->setObjectName(QString::fromLatin1(ui::Theme::Role::kCalloutCritical));
+        replaces->setWordWrap(true);
+        body->addWidget(replaces);
+    }
     body->addStretch(1);
 
     connect(disk_slider_, &ui::SliderSpin::value_changed, this,
