@@ -82,6 +82,14 @@ QVector<GraphicsAlerts::Warning> GraphicsAlerts::warnings() const {
             out.push_back({Warning::Kind::DisplayNotRunning, true,
                            QStringLiteral("Windows is not running avgpu.sys."),
                            QStringLiteral("Windows lists no accel-virt adapter at all.")});
+        } else if (display->guest->no_driver()) {
+            out.push_back({Warning::Kind::DisplayNoDriver, true,
+                           QStringLiteral("Windows has no driver for %1.")
+                               .arg(platform::HostGpus::adapter_name(display->gpu)),
+                           QStringLiteral("The machine's GPU was switched after the driver package "
+                                          "was installed, and the adapter carries the new GPU's "
+                                          "PCI ID, so Windows has not matched it to avgpu.sys "
+                                          "yet.")});
         } else if (!display->guest->running()) {
             const quint32 code = display->guest->problem_code;
             out.push_back(

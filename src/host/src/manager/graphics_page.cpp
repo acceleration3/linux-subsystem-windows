@@ -455,6 +455,12 @@ QWidget* GraphicsPage::build_warnings() {
             connect(strip->add_button(QStringLiteral("Open the driver log")),
                     &QPushButton::clicked, this, &GraphicsPage::open_log);
             break;
+        case Warning::Kind::DisplayNoDriver:
+            connect(strip->add_button(QStringLiteral("Open the driver log")),
+                    &QPushButton::clicked, this, &GraphicsPage::open_log);
+            connect(strip->add_button(QStringLiteral("Install the driver for new adapters")),
+                    &QPushButton::clicked, &alerts_, &GraphicsAlerts::install_driver);
+            break;
         case Warning::Kind::NoDriver:
         case Warning::Kind::InstallFailed:
             connect(strip->add_button(QStringLiteral("Install the driver for new adapters")),
