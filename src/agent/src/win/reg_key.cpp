@@ -61,6 +61,29 @@ std::optional<std::wstring> RegKey::read_string(const wchar_t* name) const {
     return buf;
 }
 
+std::vector<std::wstring> RegKey::read_strings(const wchar_t* name) const {
+    DWORD type = 0;
+    DWORD size = 0;
+    LSTATUS rc = ::RegQueryValueExW(key_.get(), name, nullptr, &type, nullptr, &size);
+    if (rc != ERROR_SUCCESS || type != REG_MULTI_SZ || size == 0) {
+        return {};
+    }
+    // Room for the two terminators a value written without them lacks.
+    std::wstring buf(size / sizeof(wchar_t) + 2, L'\0');
+    rc = ::RegQueryValueExW(key_.get(), name, nullptr, nullptr, reinterpret_cast<BYTE*>(buf.data()),
+                            &size);
+    if (rc != ERROR_SUCCESS) {
+        return {};
+    }
+    std::vector<std::wstring> out;
+    for (std::size_t at = 0; at < buf.size() && buf[at] != L'\0';) {
+        const std::size_t end = buf.find(L'\0', at);
+        out.push_back(buf.substr(at, end - at));
+        at = end + 1;
+    }
+    return out;
+}
+
 std::optional<DWORD> RegKey::read_dword(const wchar_t* name) const {
     DWORD data = 0;
     DWORD size = sizeof(data);

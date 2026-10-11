@@ -92,6 +92,8 @@ set(_lsw_agent_rpc_sources
     src/rpc/handlers/system/set_display.cpp
     src/rpc/handlers/system/gpu_status.cpp
     src/rpc/handlers/system/list_sessions.cpp
+    src/rpc/handlers/system/file_hashes.cpp
+    src/rpc/handlers/system/set_clock.cpp
     src/rpc/handlers/apps/list_apps.cpp
     src/rpc/handlers/apps/launch.cpp
     src/rpc/handlers/apps/get_icon.cpp
@@ -136,6 +138,7 @@ set(_lsw_agent_win_sources
     src/win/reg_key.cpp
     src/win/environment.cpp
     src/win/file_system.cpp
+    src/win/file_digest.cpp
     src/win/process_info.cpp
     src/win/shell_link.cpp
     src/win/process.cpp
@@ -252,6 +255,7 @@ target_link_libraries(lsw-guest-agent
         runtimeobject # WinRT (RoInitialize / RoGetActivationFactory)
         setupapi      # SetupDi* — enumerate the PCI display devices
         cfgmgr32      # CM_* helpers used by setupapi
+        bcrypt        # SHA-256 of the files the manager compares with its own
         ole32         # COM (CoInitializeEx / CoCreateInstance for UIA)
         oleaut32      # COM BSTR/VARIANT used by UIA
         uuid          # CLSID_CUIAutomation, IID_IUIAutomation*

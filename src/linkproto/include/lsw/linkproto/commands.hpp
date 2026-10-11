@@ -57,6 +57,17 @@ inline constexpr const char* kLaunchStoreApp = "launch_store_app";
 // is not part of it: the host sets the display device's modes and
 // Windows follows the adapter.
 inline constexpr const char* kSetDisplay      = "set_display";
+// ``file_hashes`` answers ``{"hashes": {path: sha256|null}}`` for the
+// ``paths`` it is given: what the manager compares the agent, the
+// mirror's guest half and the driver package with, to know whether an
+// LSW update brought newer ones. An agent that does not know it is older
+// than the comparison, which is answer enough.
+inline constexpr const char* kFileHashes      = "file_hashes";
+// ``set_clock`` gives Windows the host's time zone (``time_zone``, a
+// Windows name: "GMT Standard Time") and, when its clock is more than two
+// seconds off, the host's time (``utc_ms``). The VM's RTC runs on the
+// host's local time, which Windows reads in its own zone.
+inline constexpr const char* kSetClock        = "set_clock";
 inline constexpr const char* kListDir         = "list_dir";
 inline constexpr const char* kResolveShortcut = "resolve_shortcut";
 inline constexpr const char* kUploadFile      = "upload_file";

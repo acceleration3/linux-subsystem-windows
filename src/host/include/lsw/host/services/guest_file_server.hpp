@@ -8,7 +8,7 @@
 #include <string_view>
 #include <thread>
 
-namespace lsw::host::mcp {
+namespace lsw::host::services {
 
 // Serves a few fixed files over HTTP on a loopback port, each under its
 // own name, for as long as it is alive.
@@ -66,4 +66,4 @@ private:
     std::string error_;
 };
 
-}  // namespace lsw::host::mcp
+}  // namespace lsw::host::services

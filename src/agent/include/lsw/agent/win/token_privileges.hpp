@@ -23,6 +23,11 @@ public:
     // ``token`` is a token handle opened with TOKEN_ADJUST_PRIVILEGES |
     // TOKEN_QUERY; null means this process's own.
     static int enable_install_privileges(void* token = nullptr);
+
+    // Enable one privilege (an SE_*_NAME) on this process's own token:
+    // SE_SYSTEMTIME_NAME and SE_TIME_ZONE_NAME, which SYSTEM holds and
+    // leaves off. False when the token does not hold it.
+    static bool enable(const wchar_t* name);
 };
 
 }  // namespace lsw::agent::win

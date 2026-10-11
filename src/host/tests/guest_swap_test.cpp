@@ -3,8 +3,8 @@
 // in-use file renamed aside before the new one moves in, never replaced
 // in place, and nothing of it at all when there is no mirror to send.
 
-#include "lsw/host/mcp/guest_file_server.hpp"
-#include "lsw/host/mcp/guest_swap_script.hpp"
+#include "lsw/host/services/guest_file_server.hpp"
+#include "lsw/host/services/guest_swap_script.hpp"
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -15,8 +15,8 @@
 #include <string>
 #include <string_view>
 
-using lsw::host::mcp::GuestFileServer;
-using lsw::host::mcp::GuestSwapScript;
+using lsw::host::services::GuestFileServer;
+using lsw::host::services::GuestSwapScript;
 
 namespace {
 

@@ -37,6 +37,11 @@ struct DomainDescription {
     QString disk_bus;  // its <target bus=...>: "nvme", "sata", ...
     // In command-line order, which DomainXmlBuilder makes display first.
     QVector<GpuDevice> gpus;
+    // The install-time definition: a VGA adapter beside the GPU device,
+    // for Setup to draw on. Setup's end redefines the domain without it,
+    // so a definition without one is a guest whose setup has finished,
+    // whatever release made it.
+    bool installing = false;
 
     // The display adapter, or null when there is no GPU device at all.
     [[nodiscard]] const GpuDevice* display() const noexcept;

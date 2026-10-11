@@ -133,6 +133,7 @@ std::optional<DomainDescription> DomainDescription::parse(const QString& xml) {
     bool in_devices = false;
     bool in_disk = false;
     bool in_commandline = false;
+    bool in_video = false;
     bool disk_done = false;
     QString previous_arg;
 
@@ -147,6 +148,8 @@ std::optional<DomainDescription> DomainDescription::parse(const QString& xml) {
                 disk_done = true;
             } else if (name == QLatin1StringView("commandline")) {
                 in_commandline = false;
+            } else if (name == QLatin1StringView("video")) {
+                in_video = false;
             }
             continue;
         }
@@ -173,6 +176,12 @@ std::optional<DomainDescription> DomainDescription::parse(const QString& xml) {
             out.disk_path = attrs.value(QLatin1StringView("file")).toString();
         } else if (in_disk && name == QLatin1StringView("target")) {
             out.disk_bus = attrs.value(QLatin1StringView("bus")).toString();
+        } else if (in_devices && name == QLatin1StringView("video")) {
+            in_video = true;
+        } else if (in_video && name == QLatin1StringView("model")) {
+            if (attrs.value(QLatin1StringView("type")) == QLatin1StringView("vga")) {
+                out.installing = true;
+            }
         } else if (name == QLatin1StringView("commandline")) {
             in_commandline = true;
         } else if (in_commandline && name == QLatin1StringView("arg")) {

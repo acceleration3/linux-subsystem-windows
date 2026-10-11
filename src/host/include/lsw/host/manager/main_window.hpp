@@ -127,6 +127,9 @@ private:
     void notice_start_refused(const QString& headline);
     // The launch failures of applications, as notices until they open.
     void follow_launches();
+    // LSW's half inside Windows being brought up to date: a fact in the
+    // status bar while it runs, a notice when it fails.
+    void follow_upkeep();
 
     // Overview is two pages: the machine, and the state where there is
     // no machine yet. A manager that opens with dead buttons and blank
