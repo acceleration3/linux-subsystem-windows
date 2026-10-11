@@ -44,6 +44,10 @@ public:
     // Win32 status of the write; ERROR_SUCCESS (0) when it took.
     [[nodiscard]] long write_dword(const wchar_t* name, DWORD value) const;
 
+    // Win32 status of the delete; ERROR_FILE_NOT_FOUND when there was no
+    // such value.
+    [[nodiscard]] long delete_value(const wchar_t* name) const;
+
     // Names of the immediate subkeys. One that cannot be read is
     // skipped rather than ending the enumeration.
     [[nodiscard]] std::vector<std::wstring> subkey_names() const;

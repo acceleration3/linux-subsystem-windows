@@ -17,6 +17,7 @@
 #include "lsw/agent/session/pipe_codec.hpp"
 #include "lsw/agent/session/session_routing.hpp"
 #include "lsw/agent/session/session_selector.hpp"
+#include "lsw/agent/system/scale_steps.hpp"
 #include "lsw/agent/util/base64.hpp"
 #include "lsw/agent/util/wide_string.hpp"
 
@@ -442,6 +443,32 @@ void test_command_line() {
     check(!CommandLine::parse({L"--srevice"}).error.empty(), "a typo is an error, not the foreground");
 }
 
+void test_scale_steps() {
+    using lsw::agent::system::ScaleSteps;
+    // A display recommended at 100 % that goes up to 200 %.
+    const ScaleSteps at_100{0, 4};
+    check(at_100.relative_for(120) == 1 && at_100.percent_at(1) == 125,
+          "1.2 is the 125 % step, one above a 100 % recommendation");
+    check(at_100.relative_for(100) == 0, "the recommended scale is no step at all");
+    check(at_100.relative_for(112) == 0 && at_100.relative_for(113) == 1,
+          "each percentage goes to the nearer step");
+    check(at_100.relative_for(500) == 4 && at_100.percent_at(4) == 200,
+          "past the display's largest step is that step");
+    check(at_100.relative_for(50) == 0, "below 100 % is 100 %");
+
+    // Recommended at 150 %: steps are counted from there.
+    const ScaleSteps at_150{2, 2};
+    check(at_150.relative_for(120) == -1 && at_150.percent_at(-1) == 125,
+          "below the recommendation is a negative step");
+    check(at_150.relative_for(200) == 2, "up to the display's largest step");
+
+    // Halfway between 250 and 300 % goes to the lower.
+    const ScaleSteps wide{0, 11};
+    check(wide.relative_for(275) == 6 && wide.percent_at(6) == 250, "a tie goes down");
+    check(wide.percent_at(40) == 500 && wide.percent_at(-3) == 100,
+          "a step outside the display's range is its nearest end");
+}
+
 }  // namespace
 
 int main() {
@@ -461,6 +488,7 @@ int main() {
     test_pipe_codec();
     test_pending_calls();
     test_command_line();
+    test_scale_steps();
     std::printf("agent logic: %d checks passed\n", g_checks);
     return 0;
 }

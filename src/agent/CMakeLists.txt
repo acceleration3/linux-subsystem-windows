@@ -129,6 +129,7 @@ set(_lsw_agent_win_sources
     src/win/com.cpp
     src/win/desktop_session.cpp
     src/win/desktop_probe.cpp
+    src/win/display_scale.cpp
     src/win/token_privileges.cpp
     src/win/error_text.cpp
     src/win/bstr.cpp
@@ -194,6 +195,7 @@ set(_lsw_agent_console_sources
 set(_lsw_agent_system_sources
     src/system/info.cpp
     src/system/volume_grower.cpp
+    src/system/scale_steps.cpp
 )
 
 add_executable(lsw-guest-agent

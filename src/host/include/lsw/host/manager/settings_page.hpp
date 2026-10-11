@@ -54,11 +54,10 @@ private:
     // A group is a titled block of rows; a row is a label, an
     // explanation, a now-or-restart tag, and a control.
     QVBoxLayout* new_group(const QString& title);
-    // The tag follows the key unless ``tag`` says otherwise: "restart"
-    // or "now", for a row whose effect and storage differ (the DPI is
-    // written at once and read at the next logon).
+    // The tag follows the key: "restart" for one that is staged until the
+    // guest restarts, else "now".
     QWidget* add_row(QVBoxLayout* group, const QString& key, const QString& label,
-                     const QString& description, QWidget* control, const char* tag = nullptr);
+                     const QString& description, QWidget* control);
     // A row whose control is too wide for the control column: the name
     // and the explanation, then ``control`` the full width under them.
     void add_wide_row(QVBoxLayout* group, bool restart, const QString& label,

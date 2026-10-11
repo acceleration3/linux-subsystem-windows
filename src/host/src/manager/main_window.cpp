@@ -612,8 +612,8 @@ void MainWindow::push_display_modes() {
 }
 
 void MainWindow::push_dpi() {
-    // The DPI is registry state Windows reads at logon, so it goes to the
-    // agent; the resolution is the device's and is not sent here.
+    // The scale is Windows' own, set by the agent in the user's session
+    // while it runs; the resolution is the device's and is not sent here.
     if (!services_.status().vm().agent_online()) {
         return;
     }
@@ -764,8 +764,7 @@ bool MainWindow::event(QEvent* e) {
     // "Match this desktop" is this window's scale, which is not known
     // until the compositor has mapped it (a Wayland screen says 2 for
     // 1.2 until then) and changes when it moves to another monitor. So
-    // the guest is told again whenever it changes; Windows takes it at
-    // its next logon either way.
+    // the guest is told again whenever it changes.
     if (e->type() == QEvent::DevicePixelRatioChange &&
         services_.manager_settings().int_value(K::kScalingPercent) == 0) {
         push_dpi();
