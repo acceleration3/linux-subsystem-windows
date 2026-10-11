@@ -10,14 +10,17 @@ namespace lsw::host::link { class AgentRpcClient; }
 
 namespace lsw::host::manager {
 
-// Installs avgpu.sys for adapters Windows has no driver for.
+// Installs avgpu.sys: for adapters Windows has no driver for, and as the
+// last step of a driver update.
 //
 // The driver package is signed for the PCI IDs present when Windows was
 // installed, so a host GPU passed to the guest later is an adapter with
 // problem code 28. Fixing it is accel-virt's own provision.ps1: sign the
 // package for the IDs present now, then install it. That runs in the
 // guest as an agent script job, whose progress and end come back as
-// setup_progress and setup_done events like any setup step.
+// setup_progress and setup_done events like any setup step. An update
+// (GuestDriverUpdate) first puts the new package in place, as the
+// script's staging.
 class GuestDriverInstaller : public QObject {
     Q_OBJECT
 public:
@@ -30,10 +33,12 @@ public:
     // as shipped in C:\av\pristine; it is mirrored to C:\av\resign and
     // signed and installed from there. 3010 from either stage is
     // "done, restart Windows", passed back as the script's exit code.
-    [[nodiscard]] static QString script();
+    // ``staging`` is batch lines run before it, to put a package in place.
+    [[nodiscard]] static QString script(const QString& staging = {});
 
-    // Start it. False, with ``failed`` emitted, when the agent would not.
-    bool start();
+    // Start it, after ``staging``. False, with ``failed`` emitted, when the
+    // agent would not.
+    bool start(const QString& staging = {});
     [[nodiscard]] bool running() const noexcept { return awaiting_id_ || !job_.isEmpty(); }
 
     // The agent went away with the job in flight: its end will never be

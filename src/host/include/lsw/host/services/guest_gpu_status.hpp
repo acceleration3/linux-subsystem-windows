@@ -41,6 +41,9 @@ struct GuestGpuStatus {
     bool driver_search_off = false;
     std::optional<bool> user_mode_submission;
     std::optional<bool> native_fences;
+    // The package.sha256 of the driver package the guest last installed
+    // (C:\av\pristine\package), as text; empty when it has none.
+    QString driver_manifest;
 
     // The reply's body. A missing or mistyped field reads as unknown
     // rather than failing the whole answer.

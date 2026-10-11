@@ -12,6 +12,8 @@
 
 #include <algorithm>
 #include <cwchar>
+#include <filesystem>
+#include <fstream>
 #include <cwctype>
 #include <optional>
 #include <string>
@@ -228,6 +230,27 @@ nlohmann::json feature_enabled(int id) {
     return *enabled != 0;
 }
 
+// The driver package's manifest as setup or the last update left it: the
+// sha256sum of every file in C:\av\pristine\package, which the manager
+// compares with the package it ships. Null when there is none, or when it
+// is too large to be a manifest.
+nlohmann::json pristine_manifest() {
+    constexpr std::streamsize kLimit = 64 * 1024;
+    std::ifstream file(std::filesystem::path(L"C:\\av\\pristine\\package\\package.sha256"),
+                       std::ios::binary);
+    if (!file) {
+        return nullptr;
+    }
+    std::string text(static_cast<std::size_t>(kLimit) + 1, '\0');
+    file.read(text.data(), kLimit + 1);
+    const std::streamsize got = file.gcount();
+    if (got > kLimit) {
+        return nullptr;
+    }
+    text.resize(static_cast<std::size_t>(got));
+    return text;
+}
+
 }  // namespace
 
 // The guest's side of the Graphics page: every accel-virt adapter, the
@@ -239,7 +262,8 @@ nlohmann::json feature_enabled(int id) {
 //                  "location", "service", "driver_version",
 //                  "problem_code", "started"}],
 //    "test_signing": bool, "driver_search_off": bool,
-//    "user_mode_submission": bool|null, "native_fences": bool|null}
+//    "user_mode_submission": bool|null, "native_fences": bool|null,
+//    "driver_manifest": string|null}
 //
 // The two feature flags are the policy provisioning wrote (features 4
 // and 37). Whether the driver actually got them is its own log's to say.
@@ -251,6 +275,7 @@ struct GpuStatusHandler : RpcHandler {
             {"driver_search_off", driver_search_off()},
             {"user_mode_submission", feature_enabled(4)},
             {"native_fences", feature_enabled(37)},
+            {"driver_manifest", pristine_manifest()},
         };
     }
 

@@ -150,6 +150,12 @@ target_link_libraries(lsw_host_guest_driver_installer_test
 target_compile_definitions(lsw_host_guest_driver_installer_test PRIVATE QT_NO_KEYWORDS)
 add_test(NAME lsw_host_guest_driver_installer_test COMMAND lsw_host_guest_driver_installer_test)
 
+# A driver update's files and the staging that puts them where setup did.
+add_executable(lsw_host_guest_driver_update_test guest_driver_update_test.cpp)
+target_link_libraries(lsw_host_guest_driver_update_test PRIVATE lsw_host_manager LSW::CompileOptions)
+target_compile_definitions(lsw_host_guest_driver_update_test PRIVATE QT_NO_KEYWORDS)
+add_test(NAME lsw_host_guest_driver_update_test COMMAND lsw_host_guest_driver_update_test)
+
 # The Settings page's disk size, on a real qcow2: grows, never shrinks.
 add_executable(lsw_host_disk_grow_test disk_grow_test.cpp)
 target_link_libraries(lsw_host_disk_grow_test PRIVATE lsw_host_core LSW::CompileOptions)
@@ -162,6 +168,12 @@ target_link_libraries(lsw_host_guest_sessions_test
     PRIVATE lsw_host_core LSW::CompileOptions nlohmann_json::nlohmann_json)
 target_compile_definitions(lsw_host_guest_sessions_test PRIVATE QT_NO_KEYWORDS)
 add_test(NAME lsw_host_guest_sessions_test COMMAND lsw_host_guest_sessions_test)
+
+# The driver package the manager ships against the guest's: which files changed.
+add_executable(lsw_host_driver_manifest_test driver_manifest_test.cpp)
+target_link_libraries(lsw_host_driver_manifest_test PRIVATE lsw_host_core LSW::CompileOptions)
+target_compile_definitions(lsw_host_driver_manifest_test PRIVATE QT_NO_KEYWORDS)
+add_test(NAME lsw_host_driver_manifest_test COMMAND lsw_host_driver_manifest_test)
 
 # The redeploy's guest side: the file server's names and the swap
 # script's handling of the window mirror's guest half.
