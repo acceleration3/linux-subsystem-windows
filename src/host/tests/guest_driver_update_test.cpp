@@ -9,6 +9,7 @@
 #include <QFile>
 #include <QTemporaryDir>
 
+#include <algorithm>
 #include <cstdio>
 
 using lsw::host::manager::GuestDriverInstaller;
@@ -37,20 +38,39 @@ void touch(const QDir& root, const QString& path) {
 int main() {
     QTemporaryDir dir;
     const QDir root{dir.path()};
-    check(GuestDriverUpdate::files_of(root.path()).isEmpty(),
+    check(GuestDriverUpdate::files_of(root.path(), {}, {}).isEmpty(),
           "a tree without a package is nothing to update");
 
     touch(root, QStringLiteral("package/package.sha256"));
     touch(root, QStringLiteral("package/avgpu.sys"));
     touch(root, QStringLiteral("provision.ps1"));
     touch(root, QStringLiteral("loaders/x86/OpenCL.dll"));
-    const auto files = GuestDriverUpdate::files_of(root.path());
+    const auto files = GuestDriverUpdate::files_of(root.path(), {}, {});
     check(files.size() == 4, "the package, provision.ps1 and the loaders");
-    check(files.size() == 4 && files[0].guest == QStringLiteral("C:\\av\\pristine\\package\\avgpu.sys") &&
-              files[1].guest == QStringLiteral("C:\\av\\pristine\\package\\package.sha256") &&
+    check(files.size() == 4 && files[0].guest == QStringLiteral("C:\\av\\incoming\\package\\avgpu.sys") &&
+              files[1].guest == QStringLiteral("C:\\av\\incoming\\package\\package.sha256") &&
               files[2].guest == QStringLiteral("C:\\av\\provision.ps1") &&
               files[3].guest == QStringLiteral("C:\\av\\loaders\\x86\\OpenCL.dll"),
-          "each goes where setup put it");
+          "the package goes beside the installed one, the rest where setup put it");
+    check(files.size() == 4 && GuestDriverUpdate::manifest_name(files[0]).isEmpty() &&
+              GuestDriverUpdate::manifest_name(files[2]) == QStringLiteral("provision.ps1") &&
+              GuestDriverUpdate::manifest_name(files[3]) == QStringLiteral("loaders/x86/OpenCL.dll"),
+          "beside the package's own names, each is named as the guest's gpu_status names it");
+
+    // The Vulkan loaders come from this project's builds, not the tree, and
+    // go where setup put them; one the tree carries gives way to ours.
+    touch(root, QStringLiteral("loaders/x64/vulkan-1.dll"));
+    touch(root, QStringLiteral("ours/vulkan-1.dll"));
+    const auto with_vulkan = GuestDriverUpdate::files_of(
+        root.path(), root.filePath(QStringLiteral("ours/vulkan-1.dll")),
+        root.filePath(QStringLiteral("ours/missing.dll")));
+    const auto vulkan = std::find_if(with_vulkan.begin(), with_vulkan.end(), [](const auto& file) {
+        return file.guest == QStringLiteral("C:\\av\\loaders\\x64\\vulkan-1.dll");
+    });
+    check(with_vulkan.size() == 5 && vulkan != with_vulkan.end() &&
+              vulkan->local.endsWith(QStringLiteral("ours/vulkan-1.dll")) &&
+              GuestDriverUpdate::manifest_name(*vulkan) == QStringLiteral("loaders/x64/vulkan-1.dll"),
+          "our x64 Vulkan loader replaces the tree's, and an x86 one not built is left out");
 
     const QStringList uploaded = {
         QStringLiteral("C:\\ProgramData\\LSW\\uploads\\a\\avgpu.sys"),
@@ -59,11 +79,15 @@ int main() {
         QStringLiteral("C:\\ProgramData\\LSW\\uploads\\d\\OpenCL.dll"),
     };
     const QString staging = GuestDriverUpdate::staging(files, uploaded);
-    check(staging.contains(QStringLiteral("rmdir /s /q C:\\av\\pristine\\package\r\n")),
-          "the old package goes, so no file of it is left beside the new one");
+    check(staging.contains(QStringLiteral("rmdir /s /q C:\\av\\incoming\r\n")),
+          "an earlier update's package goes, so no file of it is left beside the new one");
+    check(!staging.contains(QStringLiteral("pristine")),
+          "the installed package is left alone until the new one is installed");
+    check(staging.endsWith(QStringLiteral("set SOURCE=C:\\av\\incoming\r\n")),
+          "and the installer is told to install from where it was put");
     check(staging.contains(QStringLiteral(
               "copy /y \"C:\\ProgramData\\LSW\\uploads\\a\\avgpu.sys\" "
-              "\"C:\\av\\pristine\\package\\avgpu.sys\" >nul || exit /b 4\r\n")),
+              "\"C:\\av\\incoming\\package\\avgpu.sys\" >nul || exit /b 4\r\n")),
           "an upload is copied to its place, and a copy that fails stops the update");
     check(staging.contains(QStringLiteral("rmdir /s /q \"C:\\ProgramData\\LSW\\uploads\\a\"\r\n")),
           "and its upload is cleaned up");

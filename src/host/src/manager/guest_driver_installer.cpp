@@ -29,12 +29,13 @@ QString GuestDriverInstaller::script(const QString& staging) {
                "setlocal\r\n") +
            staging +
            QStringLiteral(
-        "if not exist C:\\av\\pristine\\package (\r\n"
-        "  echo C:\\av\\pristine has no package: this guest was set up before LSW kept one\r\n"
+        "if not defined SOURCE set SOURCE=C:\\av\\pristine\r\n"
+        "if not exist %SOURCE%\\package (\r\n"
+        "  echo %SOURCE% has no package: this guest was set up before LSW kept one\r\n"
         "  exit /b 2\r\n"
         ")\r\n"
         "echo Copying the package as shipped\r\n"
-        "robocopy C:\\av\\pristine C:\\av\\resign /MIR /NFL /NDL /NJH /NJS /NP >nul\r\n"
+        "robocopy %SOURCE% C:\\av\\resign /MIR /NFL /NDL /NJH /NJS /NP >nul\r\n"
         "if %ERRORLEVEL% GEQ 8 exit /b %ERRORLEVEL%\r\n"
         "echo Signing it for the adapters present now\r\n"
         "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\av\\provision.ps1 "
@@ -45,6 +46,12 @@ QString GuestDriverInstaller::script(const QString& staging) {
         "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\av\\provision.ps1 "
         "-Package C:\\av\\resign\\package -Stage install -NoVerifier\r\n"
         "set INSTALLED=%ERRORLEVEL%\r\n"
+        "if not \"%INSTALLED%\"==\"0\" if not \"%INSTALLED%\"==\"3010\" exit /b %INSTALLED%\r\n"
+        "if /i not \"%SOURCE%\"==\"C:\\av\\pristine\" (\r\n"
+        "  echo Keeping it as the package installed\r\n"
+        "  robocopy %SOURCE%\\package C:\\av\\pristine\\package /MIR /NFL /NDL /NJH /NJS /NP >nul\r\n"
+        "  rmdir /s /q %SOURCE%\r\n"
+        ")\r\n"
         "if \"%INSTALLED%\"==\"0\" if \"%SIGNED%\"==\"3010\" exit /b 3010\r\n"
         "exit /b %INSTALLED%\r\n");
 }

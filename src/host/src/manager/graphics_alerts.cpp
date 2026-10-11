@@ -11,9 +11,28 @@ namespace {
 
 using Area = services::StatusHub::Area;
 
+// What an update brings: the driver tree LSW ships and the Vulkan loaders
+// beside it.
+QVector<GuestDriverUpdate::File> shipped_files() {
+    return GuestDriverUpdate::files_of(platform::AccelVirtPaths::driver_tree(),
+                                       platform::AccelVirtPaths::vulkan_loader(false),
+                                       platform::AccelVirtPaths::vulkan_loader(true));
+}
+
+// Those files as the guest's gpu_status reports its own: the package by its
+// package.sha256, the rest by their place under C:\av.
 services::DriverManifest shipped_manifest() {
-    return services::DriverManifest::read(
+    services::DriverManifest out = services::DriverManifest::read(
         QDir(platform::AccelVirtPaths::driver_tree()).filePath(QStringLiteral("package/package.sha256")));
+    if (out.empty()) {
+        return out;
+    }
+    for (const GuestDriverUpdate::File& file : shipped_files()) {
+        if (const QString name = GuestDriverUpdate::manifest_name(file); !name.isEmpty()) {
+            out.add(name, file.local);
+        }
+    }
+    return out;
 }
 
 }  // namespace
@@ -88,7 +107,7 @@ void GraphicsAlerts::update_driver() {
     install_result_ = InstallResult::None;
     install_error_.clear();
     updating_ = true;
-    (void)update_.start(platform::AccelVirtPaths::driver_tree());
+    (void)update_.start(shipped_files());
     Q_EMIT changed();
 }
 

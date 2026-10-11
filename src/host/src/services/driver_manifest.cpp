@@ -1,5 +1,6 @@
 #include "lsw/host/services/driver_manifest.hpp"
 
+#include <QCryptographicHash>
 #include <QFile>
 #include <QRegularExpression>
 #include <QSet>
@@ -23,6 +24,14 @@ DriverManifest DriverManifest::read(const QString& path) {
         return {};
     }
     return DriverManifest{QString::fromUtf8(file.readAll())};
+}
+
+void DriverManifest::add(const QString& name, const QString& path) {
+    QFile file{path};
+    QCryptographicHash hash{QCryptographicHash::Sha256};
+    if (file.open(QIODevice::ReadOnly) && hash.addData(&file)) {
+        files_.insert(name.toLower(), QString::fromLatin1(hash.result().toHex()));
+    }
 }
 
 QStringList DriverManifest::differences(const DriverManifest& other) const {
