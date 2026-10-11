@@ -233,17 +233,16 @@ void SettingsPage::build() {
                            "another one."),
             make_toggle(K::kMatchHostOutput));
     add_row(display, K::kScalingPercent, QStringLiteral("Scaling"),
-            QStringLiteral("Windows DPI. Matching this desktop takes the scale of the monitor "
-                           "the manager is on, so mirrored windows come out one guest pixel to "
-                           "one screen pixel, at the size of the apps beside them. Applied at "
-                           "the guest logon, so it takes a restart to change."),
+            QStringLiteral("Windows' display scale, changed while Windows runs. Matching this "
+                           "desktop takes the scale of the monitor the manager is on, as the "
+                           "nearest step Windows has (1.2 is 125 %); mirrored windows stay one "
+                           "guest pixel to one screen pixel."),
             make_choice(K::kScalingPercent,
                         Choices{{QStringLiteral("Match this desktop"), 0},
                                 {QStringLiteral("100 % (96 DPI)"), 100},
                                 {QStringLiteral("125 % (120 DPI)"), 125},
                                 {QStringLiteral("150 % (144 DPI)"), 150},
-                                {QStringLiteral("200 % (192 DPI)"), 200}}),
-            Theme::Tone::kRestart);
+                                {QStringLiteral("200 % (192 DPI)"), 200}}));
 
     // ---- graphics -------------------------------------------------
     // The accel-virt devices. Every row is a property of their lines on
@@ -421,7 +420,7 @@ QVBoxLayout* SettingsPage::new_group(const QString& title) {
 }
 
 QWidget* SettingsPage::add_row(QVBoxLayout* group, const QString& key, const QString& label,
-                               const QString& description, QWidget* control, const char* tag_tone) {
+                               const QString& description, QWidget* control) {
     auto* row = new QWidget;
     auto* layout = new QHBoxLayout(row);
     layout->setContentsMargins(12, 10, 12, 10);
@@ -433,9 +432,7 @@ QWidget* SettingsPage::add_row(QVBoxLayout* group, const QString& key, const QSt
     head->setSpacing(8);
     auto* name = new QLabel(label);
     head->addWidget(name);
-    if (tag_tone != nullptr) {
-        head->addWidget(tag(QLatin1StringView(tag_tone) == QLatin1StringView(Theme::Tone::kRestart)));
-    } else if (!key.isEmpty()) {
+    if (!key.isEmpty()) {
         head->addWidget(tag(config::ManagerSettings::needs_restart(key)));
     }
     head->addStretch(1);

@@ -19,6 +19,7 @@ add_executable(lsw_agent_logic_test
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/session/session_routing.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/session/pipe_codec.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/session/pending_calls.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/system/scale_steps.cpp
 )
 
 target_include_directories(lsw_agent_logic_test
