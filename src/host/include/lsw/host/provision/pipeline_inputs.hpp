@@ -26,6 +26,10 @@ struct PipelineInputs {
     // The chosen image's EDITIONID; the product key is chosen by it.
     // Empty when it was never read (the Microsoft download path).
     QString edition_id;
+    // The language Windows is installed in, one the medium carries
+    // (install::MediaLanguage), e.g. "en-GB". Empty takes the medium's
+    // default.
+    QString language;
     // How much of Windows to take out of the image before installing.
     debloat::DebloatLevel debloat = debloat::DebloatLevel::Sane;
     // Set when ``iso_local_path`` already names a trimmed image, which

@@ -3,6 +3,7 @@
 #include "lsw/host/config/settings.hpp"
 #include "lsw/host/config/vm_sizing.hpp"
 #include "lsw/host/config/vm_state.hpp"
+#include "lsw/host/provision/install/media_language.hpp"
 #include "lsw/host/services/host_services.hpp"
 #include "lsw/host/ui/field_stack.hpp"
 #include "lsw/host/ui/machine_limits.hpp"
@@ -14,6 +15,7 @@
 #include <QFormLayout>
 #include <QGridLayout>
 #include <QLabel>
+#include <QLocale>
 #include <QSpinBox>
 #include <QVBoxLayout>
 #include <QtConcurrent>
@@ -66,6 +68,11 @@ VmSizePage::VmSizePage(Wizard& wizard, QWidget* parent) : WizardPage(parent), wi
     edition_combo_->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
     edition_combo_->setMinimumContentsLength(16);
     edition_status_ = Widgets::meta(QString{}, true);
+    language_combo_ = new QComboBox;
+    language_combo_->setEnabled(false);
+    language_combo_->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+    language_combo_->setMinimumContentsLength(16);
+    language_status_ = Widgets::meta(QString{}, true);
 
     using ui::FieldStack;
     account->addLayout(FieldStack::column(QStringLiteral("Username"), user_edit_), 0, 0);
@@ -73,6 +80,8 @@ VmSizePage::VmSizePage(Wizard& wizard, QWidget* parent) : WizardPage(parent), wi
     account->addLayout(FieldStack::column(QStringLiteral("Computer name"), computer_edit_), 1, 0);
     account->addLayout(FieldStack::column(QStringLiteral("Edition"), edition_combo_), 1, 1);
     account->addWidget(edition_status_, 2, 1);
+    account->addLayout(FieldStack::column(QStringLiteral("Language"), language_combo_), 3, 0);
+    account->addWidget(language_status_, 4, 0);
     account->setColumnStretch(0, 1);
     account->setColumnStretch(1, 1);
     body->addLayout(account);
@@ -126,6 +135,9 @@ VmSizePage::VmSizePage(Wizard& wizard, QWidget* parent) : WizardPage(parent), wi
     edition_watcher_ = new QFutureWatcher<QVector<provision::install::WimEdition>>(this);
     connect(edition_watcher_, &QFutureWatcher<QVector<provision::install::WimEdition>>::finished, this,
             &VmSizePage::on_editions_ready);
+    language_watcher_ = new QFutureWatcher<QStringList>(this);
+    connect(language_watcher_, &QFutureWatcher<QStringList>::finished, this,
+            &VmSizePage::on_languages_ready);
 }
 
 void VmSizePage::initializePage() {
@@ -161,7 +173,12 @@ void VmSizePage::initializePage() {
         edition_combo_->setEnabled(false);
         edition_status_->setText(
             QStringLiteral("Pick an image first: the editions are read out of it."));
+        language_combo_->clear();
+        language_combo_->setPlaceholderText(QStringLiteral("Read from the image"));
+        language_combo_->setEnabled(false);
+        language_status_->clear();
         editions_loaded_ = true;
+        languages_loaded_ = true;
         Q_EMIT completeChanged();
         return;
     }
@@ -171,13 +188,56 @@ void VmSizePage::initializePage() {
     }
     probed_iso_ = iso;
     editions_loaded_ = false;
+    languages_loaded_ = false;
     edition_combo_->clear();
     edition_combo_->setEnabled(false);
     edition_status_->setText("Reading editions from the ISO (this can take ~10 s)...");
+    language_combo_->clear();
+    language_combo_->setEnabled(false);
+    language_status_->setText(QStringLiteral("Reading the languages from the ISO..."));
     Q_EMIT completeChanged();
     const QString scratch = wizard_.services().settings().cache_dir();
     edition_watcher_->setFuture(QtConcurrent::run(
         [iso, scratch] { return provision::install::WimEditionLister::list(iso, scratch, nullptr); }));
+    language_watcher_->setFuture(QtConcurrent::run([iso, scratch] {
+        return provision::install::MediaLanguage::of(iso, scratch, nullptr);
+    }));
+}
+
+namespace {
+
+// A language as people know it, then as the answer file spells it:
+// "English (United Kingdom) · en-GB".
+QString language_label(const QString& tag) {
+    const QLocale locale{tag};
+    if (locale.language() == QLocale::C) {
+        return tag;
+    }
+    const QString territory = locale.territory() == QLocale::AnyTerritory
+                                  ? QString{}
+                                  : QStringLiteral(" (%1)").arg(QLocale::territoryToString(locale.territory()));
+    return QStringLiteral("%1%2 \u00b7 %3")
+        .arg(QLocale::languageToString(locale.language()), territory, tag);
+}
+
+}  // namespace
+
+void VmSizePage::on_languages_ready() {
+    const QStringList languages = language_watcher_->result();
+    language_combo_->clear();
+    for (const QString& tag : languages) {
+        language_combo_->addItem(language_label(tag), tag);
+    }
+    language_combo_->setEnabled(languages.size() > 1);
+    language_status_->setText(
+        languages.isEmpty()
+            ? QStringLiteral("Could not read the languages from this image. Windows is "
+                             "installed in its default one.")
+        : languages.size() == 1 ? QStringLiteral("The only language this image carries.")
+                                : QStringLiteral("%1 languages; the first is the image's "
+                                                 "default.").arg(languages.size()));
+    languages_loaded_ = true;
+    Q_EMIT completeChanged();
 }
 
 // How much of the host the sizing leaves behind. A number next to the
@@ -213,7 +273,7 @@ void VmSizePage::on_editions_ready() {
 bool VmSizePage::isComplete() const {
     // Block Next until the edition probe has settled so the pipeline
     // doesn't start with an unknown image index.
-    return editions_loaded_;
+    return editions_loaded_ && languages_loaded_;
 }
 
 bool VmSizePage::validatePage() {
@@ -237,6 +297,9 @@ bool VmSizePage::validatePage() {
     const QVariant idx = edition_combo_->currentData();
     s.image_index = idx.isValid() ? idx.toInt() : 1;
     s.edition_id = edition_combo_->currentData(kEditionIdRole).toString();
+    // Empty when the languages were not read: the install takes the
+    // image's default.
+    s.language = language_combo_->currentData().toString();
 
     // This is the last page that gathers anything, so the pipeline
     // starts here. It used to start on the trim page, which no longer

@@ -9,6 +9,7 @@
 #include "lsw/host/platform/mirror_exe_paths.hpp"
 #include "lsw/host/provision/install/adapter_names.hpp"
 #include "lsw/host/provision/install/autounattend.hpp"
+#include "lsw/host/provision/install/media_language.hpp"
 #include "lsw/host/provision/install/payload_iso.hpp"
 #include "lsw/host/provision/install/product_keys.hpp"
 
@@ -44,6 +45,22 @@ void PayloadIsoStager::build(const config::VmRecord& record, const PipelineInput
     LSW_INFO("provision: edition {}, product key {}",
              inputs.edition_id.isEmpty() ? std::string{"not read"} : inputs.edition_id.toStdString(),
              answers.product_key.isEmpty() ? std::string{"none"} : answers.product_key.toStdString());
+    // Setup runs in a language the medium carries or not at all: named one
+    // it lacks, it stops on its language page. The one picked, else the
+    // medium's default, else Setup's own default.
+    answers.locale = inputs.language;
+    if (answers.locale.isEmpty()) {
+        QString why;
+        answers.locale = install::MediaLanguage::of(inputs.iso_local_path,
+                                                    settings_.cache_dir(), &why)
+                             .value(0);
+        if (answers.locale.isEmpty()) {
+            LSW_WARN("provision: the image's language could not be read ({}); answering en-US",
+                     why.toStdString());
+            answers.locale = QStringLiteral("en-US");
+        }
+    }
+    LSW_INFO("provision: Windows in {}", answers.locale.toStdString());
     // install_from_path stays empty, and deliberately: the trimmed
     // image IS the install.wim on the media being booted, so Setup's
     // own default is already the right answer. A <Path> here would name

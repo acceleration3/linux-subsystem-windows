@@ -7,6 +7,8 @@ namespace lsw::host::provision::install {
 // Inputs the wizard captures and bakes into ``autounattend.xml``.
 struct AutounattendInputs {
     QString computer_name = "LSW-VM";
+    // Setup's language, the locales and the keyboard: one the medium
+    // carries (MediaLanguage), or Setup stops on its language page.
     QString locale = "en-US";
     QString timezone = "UTC";
     QString user_name = "lsw";

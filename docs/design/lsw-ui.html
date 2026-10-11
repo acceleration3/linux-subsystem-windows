@@ -2285,6 +2285,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
               <div class="field"><label>Password</label><span class="input">&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;</span></div>
               <div class="field"><label>Computer name</label><span class="input">lsw</span></div>
               <div class="field"><label>Edition</label><span class="input select">Windows 11 Pro</span></div>
+              <div class="field"><label>Language</label><span class="input select">English (United Kingdom) &middot; en-GB</span></div>
             </div>
             <div style="height:1px;background:var(--line);margin:2px 0"></div>
             <div style="display:flex;flex-direction:column;gap:13px">
@@ -2316,6 +2317,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
       </div>
     </div>
     <dl class="notes">
+      <div class="note"><dt>Language</dt><dd>The languages the image carries, from its <code>sources/lang.ini</code>, read in the background like the editions; the image's own default is selected. Windows Setup runs in it, and it is the answer file's UI language, locales and keyboard: an answer naming a language the image lacks is one Setup cannot apply, and it stops on its language page. A British image carries <code>en-GB</code> and no <code>en-US</code>. An image whose languages cannot be read says so, and the install takes its default.</dd></div>
       <div class="note"><dt>Consequence line</dt><dd>The footnote recalculates as the disk slider moves. Sizing decisions are easier when the cost is spelled out next to the control.</dd></div>
       <div class="note"><dt>Reinstall</dt><dd>Settings' Reinstall opens this wizard over a guest that exists, still running. Nothing happens to it until the install starts, so this page, whose Next starts it, says in a red callout under the footnote that the guest is shut down and replaced. It is absent on a first run. Closing the wizard before then returns to the manager.</dd></div>
     </dl>

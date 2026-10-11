@@ -39,6 +39,12 @@ target_compile_definitions(lsw_host_provision_microsoft_client_record PRIVATE
 
 # Guards the answer file end to end: rendered non-empty, fully
 # substituted, well-formed, and non-empty once staged for the ISO.
+# The languages a Windows medium carries, which the answer file may name.
+add_executable(lsw_host_media_language_test media_language_test.cpp)
+target_link_libraries(lsw_host_media_language_test PRIVATE lsw_host_provision LSW::CompileOptions)
+target_compile_definitions(lsw_host_media_language_test PRIVATE QT_NO_KEYWORDS)
+add_test(NAME lsw_host_media_language_test COMMAND lsw_host_media_language_test)
+
 add_executable(lsw_host_provision_autounattend_test autounattend_test.cpp)
 target_link_libraries(lsw_host_provision_autounattend_test
     PRIVATE

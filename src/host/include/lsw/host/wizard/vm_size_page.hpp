@@ -8,6 +8,7 @@
 #include <QFutureWatcher>
 #include <QLabel>
 #include <QLineEdit>
+#include <QStringList>
 #include <QVector>
 
 namespace lsw::host::ui { class SliderSpin; }
@@ -21,7 +22,9 @@ class Wizard;
 // local-account username/password baked into autounattend.xml, and an
 // edition combo box populated asynchronously by reading the chosen
 // ISO's WIM image table (provision::install::WimEditionLister::list, run off-thread
-// because it shells out to 7z). The VM name is fixed (config::kVmName).
+// because it shells out to 7z), and a language combo box of the languages
+// the ISO carries (provision::install::MediaLanguage), read the same way.
+// The VM name is fixed (config::kVmName).
 class VmSizePage : public WizardPage {
     Q_OBJECT
 public:
@@ -34,6 +37,7 @@ public:
 
 private Q_SLOTS:
     void on_editions_ready();
+    void on_languages_ready();
 
 private:
     QFormLayout* form_ = nullptr;
@@ -49,12 +53,16 @@ private:
     ui::SliderSpin* disk_slider_ = nullptr;
     QComboBox* edition_combo_ = nullptr;
     QLabel* edition_status_ = nullptr;
+    QComboBox* language_combo_ = nullptr;
+    QLabel* language_status_ = nullptr;
 
     // Async WIM-edition probe. ``probed_iso_`` guards against
     // re-probing the same ISO every time the page is revisited.
     QFutureWatcher<QVector<provision::install::WimEdition>>* edition_watcher_ = nullptr;
+    QFutureWatcher<QStringList>* language_watcher_ = nullptr;
     QString probed_iso_;
     bool editions_loaded_ = false;
+    bool languages_loaded_ = false;
 };
 
 }  // namespace lsw::host::wizard
