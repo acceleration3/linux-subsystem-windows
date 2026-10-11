@@ -24,6 +24,10 @@ public:
         enum class Kind {
             NoDirect3d,
             DisplayNotRunning,
+            // The display adapter with no driver at all (problem code 28):
+            // the machine's GPU was switched since the install, and the
+            // adapter wears the new GPU's PCI ID.
+            DisplayNoDriver,
             NoDriver,
             Installing,
             InstallFinished,
