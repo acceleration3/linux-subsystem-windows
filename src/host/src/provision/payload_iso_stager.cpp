@@ -13,6 +13,7 @@
 #include "lsw/host/provision/install/payload_iso.hpp"
 #include "lsw/host/provision/install/product_keys.hpp"
 
+#include <QTimeZone>
 #include <QtConcurrent>
 
 #include <string>
@@ -61,6 +62,14 @@ void PayloadIsoStager::build(const config::VmRecord& record, const PipelineInput
         }
     }
     LSW_INFO("provision: Windows in {}", answers.locale.toStdString());
+    answers.timezone = QString::fromUtf8(
+        QTimeZone::ianaIdToWindowsId(QTimeZone::systemTimeZoneId()));
+    if (answers.timezone.isEmpty()) {
+        LSW_WARN("provision: Windows has no name for the time zone {}; answering UTC",
+                 QTimeZone::systemTimeZoneId().toStdString());
+        answers.timezone = QStringLiteral("UTC");
+    }
+    LSW_INFO("provision: time zone {}", answers.timezone.toStdString());
     // install_from_path stays empty, and deliberately: the trimmed
     // image IS the install.wim on the media being booted, so Setup's
     // own default is already the right answer. A <Path> here would name

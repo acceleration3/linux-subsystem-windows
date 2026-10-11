@@ -10,6 +10,9 @@ struct AutounattendInputs {
     // Setup's language, the locales and the keyboard: one the medium
     // carries (MediaLanguage), or Setup stops on its language page.
     QString locale = "en-US";
+    // Windows' name for the host's time zone. The RTC runs on the host's
+    // local time (domain.xml's clock offset), which Windows reads as its
+    // own: in another zone its clock is hours off after every boot.
     QString timezone = "UTC";
     QString user_name = "lsw";
     QString user_password = "lsw";  // local user, dev convenience
