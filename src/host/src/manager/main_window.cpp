@@ -271,7 +271,7 @@ MainWindow::MainWindow(services::HostServices& services, QWidget* parent)
 
 void MainWindow::build_pages() {
     overview_ = new VmDetailPanel(services_, this);
-    console_ = new ConsolePanel(services_.rpc(), services_.status(), this);
+    console_ = new ConsolePanel(services_.shells(), services_.status(), this);
     log_ = new LogPanel(services_.log_store(), this);
     alerts_ = new GraphicsAlerts(services_.status(), services_.rpc(), this);
     graphics_page_ =
@@ -327,13 +327,13 @@ void MainWindow::build_pages() {
 
 void MainWindow::pop_out(NavRail::Page page) {
     // A second instance rather than reparenting the embedded one: the
-    // page keeps working where it is, and each console gets its own
-    // session id from the agent anyway, which is what makes two of them
-    // a sensible thing to have.
+    // page keeps working where it is. Two consoles are two views: on the
+    // same Windows session they show the same shell, so the pop-out can
+    // sit on SYSTEM's while the page stays on the user's.
     QWidget* content = nullptr;
     QString title;
     if (page == NavRail::Page::Console) {
-        content = new ConsolePanel(services_.rpc(), services_.status());
+        content = new ConsolePanel(services_.shells(), services_.status());
         title = QStringLiteral("Console");
     } else if (page == NavRail::Page::Log) {
         content = new LogPanel(services_.log_store());
@@ -450,12 +450,6 @@ void MainWindow::show_page(NavRail::Page page) {
 
     refresh_warning();
     refresh_status_bar();
-
-    // A console nobody is looking at should not be holding a shell open
-    // in the guest.
-    if (page != NavRail::Page::Console && console_ != nullptr) {
-        console_->release_session();
-    }
 }
 
 void MainWindow::refresh_identity() {

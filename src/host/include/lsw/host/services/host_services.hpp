@@ -9,6 +9,7 @@
 #include "lsw/host/config/vm_state.hpp"
 #include "lsw/host/link/agent_guest_stats_probe.hpp"
 #include "lsw/host/link/agent_rpc_client.hpp"
+#include "lsw/host/services/guest_shells.hpp"
 #include "lsw/host/services/status_hub.hpp"
 #include "lsw/host/vm/libvirt_connection.hpp"
 #include "lsw/host/vm/lifecycle.hpp"
@@ -63,6 +64,10 @@ public:
 
     [[nodiscard]] link::AgentRpcClient& rpc() noexcept { return rpc_; }
 
+    // The guest shells the Console page and its pop-outs show: one per
+    // Windows session, kept for as long as the manager runs.
+    [[nodiscard]] GuestShells& shells() noexcept { return shells_; }
+
     // The one guest-window enumeration every consumer shares.
     [[nodiscard]] apps::AppConfigStore& app_configs() noexcept { return app_configs_; }
 
@@ -111,6 +116,7 @@ private:
     link::AgentGuestStatsProbe guest_probe_;
     // Declared after everything it reads.
     StatusHub status_;
+    GuestShells shells_;  // declared after rpc_ and status_: it holds both
     apps::AppConfigStore app_configs_;
     apps::LogStore log_store_;  // declared after rpc_: detaches from it in ~LogStore
     apps::GuestAppLauncher app_launcher_;

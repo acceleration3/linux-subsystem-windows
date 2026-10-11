@@ -4,13 +4,9 @@
 #include "lsw/host/ui/theme.hpp"
 #include "lsw/host/ui/widgets.hpp"
 
-#include "lsw/base/log.hpp"
-#include "lsw/host/link/agent_reply.hpp"
-#include "lsw/host/link/agent_rpc_client.hpp"
+#include "lsw/host/services/guest_shells.hpp"
 #include "lsw/host/services/status_hub.hpp"
 
-#include <QByteArray>
-#include <QCloseEvent>
 #include <QComboBox>
 #include <QFont>
 #include <QHBoxLayout>
@@ -18,17 +14,11 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
-#include <QMetaObject>
 #include <QPlainTextEdit>
 #include <QSignalBlocker>
 #include <QScrollBar>
-#include <QStringList>
 #include <QTextCursor>
 #include <QVBoxLayout>
-
-#include <nlohmann/json.hpp>
-
-#include "lsw/linkproto/commands.hpp"
 
 namespace lsw::host::manager {
 
@@ -38,9 +28,9 @@ constexpr int kMaxBufferLines = 5000;
 
 }  // namespace
 
-ConsolePanel::ConsolePanel(link::AgentRpcClient& rpc, services::StatusHub& status,
+ConsolePanel::ConsolePanel(services::GuestShells& shells, services::StatusHub& status,
                            QWidget* parent)
-    : QWidget(parent), rpc_(rpc), hub_(status) {
+    : QWidget(parent), shells_(shells), hub_(status) {
     setWindowTitle(tr("Command Line"));
 
     auto* root = new QVBoxLayout(this);
@@ -67,7 +57,7 @@ ConsolePanel::ConsolePanel(link::AgentRpcClient& rpc, services::StatusHub& statu
     input_->setPlaceholderText(tr("Type a command and press Enter"));
     input_->setFont(ui::Theme::mono_font(12));
     input_->setObjectName(QString::fromLatin1(ui::Theme::Role::kMono));
-    input_->installEventFilter(this);  // catch Ctrl+C / Ctrl+D
+    input_->installEventFilter(this);  // catch Ctrl+L
     row->addWidget(input_, 1);
     auto* send = ui::Widgets::button(QStringLiteral("Send"), ui::Theme::Role::kPrimary);
     connect(send, &QPushButton::clicked, this, &ConsolePanel::on_input_submitted);
@@ -76,8 +66,8 @@ ConsolePanel::ConsolePanel(link::AgentRpcClient& rpc, services::StatusHub& statu
     status_ = ui::Widgets::meta(QString{});
     root->addWidget(status_);
     agent_online_ = hub_.vm().agent_online();
-    on_agent(agent_online_);
     rebuild_picker();
+    refresh();
     connect(&hub_, &services::StatusHub::changed, this, [this](services::StatusHub::Area area) {
         if (area == services::StatusHub::Area::Sessions) {
             rebuild_picker();
@@ -91,27 +81,13 @@ ConsolePanel::ConsolePanel(link::AgentRpcClient& rpc, services::StatusHub& statu
 
     connect(input_, &QLineEdit::returnPressed, this, &ConsolePanel::on_input_submitted);
 
-    // The agent fires the same topic for every session, so the slots
-    // filter by session_id.
-    output_sub_ = rpc_.subscribe(linkproto::topic::kConsoleOutput, [this](const nlohmann::json& f) {
-        const auto sid = QString::fromStdString(f.value("session_id", std::string{}));
-        const auto b64 = QByteArray::fromStdString(f.value("data_b64", std::string{}));
-        const auto bytes = QByteArray::fromBase64(b64);
-        QMetaObject::invokeMethod(this, "on_output_event", Qt::QueuedConnection,
-                                  Q_ARG(QString, sid), Q_ARG(QByteArray, bytes));
+    connect(&shells_, &services::GuestShells::output, this,
+            [this](int session, const QString& text) {
+        if (shown_ == session) {
+            append_output(text);
+        }
     });
-    closed_sub_ = rpc_.subscribe(linkproto::topic::kConsoleClosed, [this](const nlohmann::json& f) {
-        const auto sid = QString::fromStdString(f.value("session_id", std::string{}));
-        const auto exit_code = f.value("exit_code", 0);
-        QMetaObject::invokeMethod(this, "on_closed_event", Qt::QueuedConnection,
-                                  Q_ARG(QString, sid), Q_ARG(int, exit_code));
-    });
-}
-
-ConsolePanel::~ConsolePanel() {
-    output_sub_.reset();
-    closed_sub_.reset();
-    release_session();
+    connect(&shells_, &services::GuestShells::changed, this, &ConsolePanel::on_shell_changed);
 }
 
 void ConsolePanel::hideEvent(QHideEvent* e) {
@@ -122,96 +98,87 @@ void ConsolePanel::hideEvent(QHideEvent* e) {
 void ConsolePanel::showEvent(QShowEvent* e) {
     QWidget::showEvent(e);
     hub_.set_detail(services::StatusHub::Area::Sessions, true);
-    // Lazily, and once. A manager sitting on the Overview page has no
-    // business holding a cmd.exe open inside the guest, and opening the
-    // session in the constructor did exactly that.
-    if (session_id_.isEmpty() && !opening_ && agent_online_) {
-        open_session();
+    // Lazily: a manager sitting on the Overview page has no business
+    // holding a cmd.exe open inside the guest. Once open, it stays.
+    if (shown_) {
+        shells_.open(*shown_);
     }
 }
 
 void ConsolePanel::on_agent(bool online) {
-    if (online) {
-        if (session_id_.isEmpty() && !opening_ && isVisible()) {
-            open_session();
-        } else if (session_id_.isEmpty() && !opening_) {
-            status_->setText(tr("Windows is answering. The console opens when this page is shown."));
-        }
-        return;
+    if (online && shown_ && isVisible()) {
+        shells_.open(*shown_);
     }
-    // A session is a cmd.exe the agent holds; with the agent gone, so
-    // is the shell, whatever the transcript still shows.
-    if (!session_id_.isEmpty()) {
-        append_output(QStringLiteral("\n[the agent stopped answering; session %1 is gone]\n")
-                          .arg(session_id_));
-    }
-    session_id_.clear();
-    shell_session_.reset();
-    opening_ = false;
-    input_->setEnabled(false);
-    status_->setText(tr("Windows is not answering. The console opens when it does."));
-    Q_EMIT summary_changed();
-}
-
-void ConsolePanel::open_session() {
-    opening_ = true;
-    status_->setText(tr("Opening cmd.exe in the guest"));
-    nlohmann::json params = nlohmann::json::object();
-    if (wanted_session_) {
-        params["session"] = *wanted_session_;
-    }
-    rpc_.request_async(linkproto::cmd::kConsoleOpen, std::move(params), this,
-                       [this](const link::AgentReply& reply) {
-        const auto sid = reply.ok
-                             ? QString::fromStdString(reply.body.value("session_id", std::string{}))
-                             : QString{};
-        if (sid.isEmpty()) {
-            LSW_WARN("console: open failed: {}", reply.ok ? "no session_id" : reply.error);
-            opening_ = false;
-            status_->setText(tr("No console. Leave the page and come back to try again."));
-            input_->setEnabled(false);
-            Q_EMIT open_failed(reply.ok ? tr("The agent gave no session.")
-                                        : QString::fromStdString(reply.error));
-            return;
-        }
-        if (!opening_) {
-            // Released, or the agent went away, while the reply was on its
-            // way: the shell it opened is not wanted.
-            rpc_.request_detached(linkproto::cmd::kConsoleClose,
-                                  {{"session_id", sid.toStdString()}});
-            return;
-        }
-        opening_ = false;
-        session_id_ = sid;
-        shell_session_ = reply.body.value("session", 0);
-        shell_user_ = QString::fromStdString(reply.body.value("user", std::string{}));
-        shell_elevated_ = reply.body.value("elevated", false);
-        status_->setText(tr("Console %1 in Windows session %2 as %3%4. Type a command and press "
-                            "Enter.")
-                             .arg(sid)
-                             .arg(*shell_session_)
-                             .arg(shell_user_.isEmpty() ? tr("an unnamed user") : shell_user_,
-                                  shell_elevated_ ? tr(", elevated") : QString{}));
-        input_->setEnabled(true);
-        Q_EMIT opened();
-        input_->setFocus();
-        rebuild_picker();
-        Q_EMIT summary_changed();
-    });
+    refresh();
 }
 
 QString ConsolePanel::summary() const {
-    if (session_id_.isEmpty()) {
-        if (opening_) {
-            return QStringLiteral("cmd.exe · opening");
-        }
-        return agent_online_ ? QStringLiteral("cmd.exe · no shell open")
-                             : QStringLiteral("cmd.exe · agent not answering");
+    if (!agent_online_) {
+        return QStringLiteral("cmd.exe · agent not answering");
+    }
+    const auto* shell = shown_ ? shells_.find(*shown_) : nullptr;
+    if (shell == nullptr || shell->state != services::GuestShells::State::Open) {
+        return shell != nullptr && shell->state == services::GuestShells::State::Opening
+                   ? QStringLiteral("cmd.exe · opening")
+                   : QStringLiteral("cmd.exe · no shell open");
     }
     return QStringLiteral("cmd.exe · Windows session %1 · %2%3")
-        .arg(shell_session_.value_or(0))
-        .arg(shell_user_.isEmpty() ? QStringLiteral("unnamed user") : shell_user_,
-             shell_elevated_ ? QStringLiteral(", elevated") : QString{});
+        .arg(*shown_)
+        .arg(shell->user.isEmpty() ? QStringLiteral("unnamed user") : shell->user,
+             shell->elevated ? QStringLiteral(", elevated") : QString{});
+}
+
+void ConsolePanel::refresh() {
+    using State = services::GuestShells::State;
+    const auto* shell = shown_ ? shells_.find(*shown_) : nullptr;
+    QString text;
+    bool typing = true;
+    if (!agent_online_) {
+        text = tr("Windows is not answering. The console opens when it does.");
+        typing = false;
+    } else if (!shown_) {
+        text = tr("Asking Windows which sessions there are.");
+        typing = false;
+    } else if (shell == nullptr || shell->state == State::Idle) {
+        text = tr("The console opens when this page is shown.");
+    } else if (shell->state == State::Opening) {
+        text = tr("Opening cmd.exe in Windows session %1.").arg(*shown_);
+    } else if (shell->state == State::Open) {
+        text = tr("cmd.exe in Windows session %1 as %2%3. Type a command and press Enter.")
+                   .arg(*shown_)
+                   .arg(shell->user.isEmpty() ? tr("an unnamed user") : shell->user,
+                        shell->elevated ? tr(", elevated") : QString{});
+    } else if (shell->state == State::Exited) {
+        text = tr("cmd.exe exited (code %1). Press Enter for a new one.").arg(shell->exit_code);
+    } else if (shell->state == State::Failed) {
+        text = tr("No console: %1. Press Enter to try again.").arg(shell->error);
+    } else {
+        text = tr("That cmd.exe went with the agent. Press Enter for a new one.");
+    }
+    status_->setText(text);
+    input_->setEnabled(typing);
+    Q_EMIT summary_changed();
+}
+
+void ConsolePanel::on_shell_changed(int session) {
+    if (shown_ != session) {
+        return;
+    }
+    const auto* shell = shells_.find(session);
+    if (shell != nullptr) {
+        if (shell->transcript.isEmpty()) {
+            output_->clear();  // cleared from this view or another
+        }
+        if (shell->state == services::GuestShells::State::Open) {
+            Q_EMIT opened();
+            if (isVisible()) {
+                input_->setFocus();
+            }
+        } else if (shell->state == services::GuestShells::State::Failed) {
+            Q_EMIT open_failed(shell->error);
+        }
+    }
+    refresh();
 }
 
 void ConsolePanel::rebuild_picker() {
@@ -219,10 +186,11 @@ void ConsolePanel::rebuild_picker() {
     picker_->clear();
     const auto& sessions = hub_.sessions();
     if (!sessions.valid) {
-        // Nothing to choose from while the agent is away; a shell opened
-        // then goes wherever the agent puts it.
-        picker_->addItem(tr("Default session"));
+        // Nothing to choose from while the agent is away. The shell on
+        // screen stays there, transcript and all.
+        picker_->addItem(shown_ ? tr("Session %1").arg(*shown_) : tr("Default session"));
         picker_->setEnabled(false);
+        refresh();
         return;
     }
     for (const auto& session : sessions.sessions) {
@@ -234,13 +202,13 @@ void ConsolePanel::rebuild_picker() {
         picker_->addItem(label, session.id);
     }
     picker_->addItem(tr("Session 0 · SYSTEM"), 0);
-    // What is selected is the shell that is open, else what was asked
-    // for, else the agent's default.
-    const std::optional<int> selected =
-        shell_session_ ? shell_session_ : (wanted_session_ ? wanted_session_ : sessions.default_id);
+    // What is selected is what was asked for, else the agent's default,
+    // else the first there is.
+    const std::optional<int> selected = wanted_ ? wanted_ : sessions.default_id;
     const int index = selected ? picker_->findData(*selected) : -1;
     picker_->setCurrentIndex(index >= 0 ? index : 0);
     picker_->setEnabled(true);
+    show_shell(picker_->currentData().toInt());
 }
 
 void ConsolePanel::on_picker(int index) {
@@ -248,27 +216,22 @@ void ConsolePanel::on_picker(int index) {
     if (!item.isValid()) {
         return;
     }
-    const int chosen = item.toInt();
-    if (shell_session_ == chosen || (!shell_session_ && wanted_session_ == chosen)) {
-        return;
-    }
-    wanted_session_ = chosen;
-    if (!session_id_.isEmpty()) {
-        append_output(QStringLiteral("\n[moving to Windows session %1]\n").arg(chosen));
-        release_session();
-    }
-    if (agent_online_ && isVisible() && !opening_) {
-        open_session();
-    }
+    wanted_ = item.toInt();
+    show_shell(*wanted_);
 }
 
-QString ConsolePanel::sanitize(const QByteArray& raw) {
-    // cmd.exe spits out CR-LF; QPlainTextEdit handles both, but
-    // strip stray \r so the cursor doesn't bounce.
-    QString s = QString::fromLocal8Bit(raw);
-    s.replace(QStringLiteral("\r\n"), QStringLiteral("\n"));
-    s.remove(QChar('\r'));
-    return s;
+void ConsolePanel::show_shell(int session) {
+    if (shown_ == session) {
+        return;
+    }
+    shown_ = session;
+    const auto* shell = shells_.find(session);
+    output_->setPlainText(shell != nullptr ? shell->transcript : QString{});
+    output_->moveCursor(QTextCursor::End);
+    if (isVisible()) {
+        shells_.open(session);
+    }
+    refresh();
 }
 
 void ConsolePanel::append_output(const QString& text) {
@@ -282,35 +245,13 @@ void ConsolePanel::append_output(const QString& text) {
     }
 }
 
-void ConsolePanel::on_output_event(const QString& session_id, const QByteArray& bytes) {
-    if (session_id != session_id_) return;
-    append_output(sanitize(bytes));
-}
-
-void ConsolePanel::on_closed_event(const QString& session_id, int exit_code) {
-    if (session_id != session_id_) return;
-    status_->setText(tr("Session %1 exited (code=%2). Leave the page and come back for a new "
-                        "one.")
-                         .arg(session_id)
-                         .arg(exit_code));
-    input_->setEnabled(false);
-    session_id_.clear();
-    shell_session_.reset();
-    Q_EMIT summary_changed();
-}
-
 void ConsolePanel::on_input_submitted() {
-    if (session_id_.isEmpty()) return;
+    if (!shown_ || !input_->isEnabled()) {
+        return;
+    }
     const QString line = input_->text();
     input_->clear();
-    // Echo what the user typed into the output pane so they can see
-    // their command above cmd's response (cmd doesn't echo via
-    // redirected stdin).
-    append_output(QStringLiteral("> ") + line + QChar('\n'));
-    const QString to_send = line + QStringLiteral("\r\n");
-    rpc_.request_detached(linkproto::cmd::kConsoleInput,
-                          {{"session_id", session_id_.toStdString()},
-                           {"data", to_send.toStdString()}});
+    shells_.send(*shown_, line);
 }
 
 bool ConsolePanel::eventFilter(QObject* watched, QEvent* event) {
@@ -320,29 +261,17 @@ bool ConsolePanel::eventFilter(QObject* watched, QEvent* event) {
     auto* ke = static_cast<QKeyEvent*>(event);
     // Ctrl+L clears the output buffer — convenient and Bash-ish.
     if (ke->modifiers().testFlag(Qt::ControlModifier) && ke->key() == Qt::Key_L) {
-        output_->clear();
+        clear_transcript();
         return true;
     }
     return QWidget::eventFilter(watched, event);
 }
 
 void ConsolePanel::clear_transcript() {
-    output_->clear();
-}
-
-void ConsolePanel::release_session() {
-    if (session_id_.isEmpty()) {
-        opening_ = false;
-        return;
+    if (shown_) {
+        shells_.clear(*shown_);
     }
-    const QString sid = session_id_;
-    session_id_.clear();
-    shell_session_.reset();
-    opening_ = false;
-    input_->setEnabled(false);
-    status_->setText(tr("Session %1 closed. A new one opens when this page is shown.").arg(sid));
-    rpc_.request_detached(linkproto::cmd::kConsoleClose, {{"session_id", sid.toStdString()}});
-    Q_EMIT summary_changed();
+    output_->clear();
 }
 
 }  // namespace lsw::host::manager
