@@ -40,6 +40,9 @@ public:
     [[nodiscard]] QString vm_disk_path() const;         // disks/lsw.qcow2
     [[nodiscard]] QString vm_nvram_path() const;        // nvram/lsw.fd
     [[nodiscard]] QString vm_payload_iso_path() const;  // isos/lsw-payload.iso
+    // The Windows ISO as the domain boots it, a qcow2 overlay on it
+    // (see install::NoPromptMedia).
+    [[nodiscard]] QString vm_install_media_path() const;  // isos/lsw-install.qcow2
     // The guest GPU driver's own log. avgpu.sys writes its lines to I/O
     // port 0x402 and QEMU's isa-debugcon puts them here, so they survive
     // guest reboots and a bugcheck, which nothing inside the guest does.

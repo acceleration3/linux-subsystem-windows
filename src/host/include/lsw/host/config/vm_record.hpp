@@ -18,6 +18,7 @@ struct VmRecord {
     QString disk_path;         // qcow2 path under disks/
     QString nvram_path;        // OVMF_VARS path under nvram/
     QString iso_path;          // path of the Windows ISO used at install
+    QString install_media_path;  // the qcow2 over iso_path the domain boots
     QString payload_iso_path;  // path of the LSW payload ISO
     VmSizing sizing;
     bool first_boot_done = false;  // flipped when the guest agent first pings

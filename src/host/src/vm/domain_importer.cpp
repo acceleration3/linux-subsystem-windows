@@ -35,6 +35,7 @@ bool DomainImporter::import_existing(LibvirtConnection& conn, const config::Sett
     rec.disk_path = settings.vm_disk_path();
     rec.nvram_path = settings.vm_nvram_path();
     rec.payload_iso_path = settings.vm_payload_iso_path();
+    rec.install_media_path = settings.vm_install_media_path();
     vms.add(std::move(rec));
     LSW_INFO("found existing libvirt domain '{}', registered with manager", config::kVmName);
     return true;

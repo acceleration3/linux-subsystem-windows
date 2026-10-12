@@ -24,7 +24,6 @@ namespace iso { class Downloader; }
 namespace install { class PostInstallWatcher; }
 class DebloatStager;
 class PayloadIsoStager;
-class PressAnyKeyPrompter;
 class SetupStageRunner;
 class VncPortResolver;
 
@@ -161,7 +160,6 @@ private:
     DebloatStager* debloat_stager_ = nullptr;
     PayloadIsoStager* payload_stager_ = nullptr;
     install::PostInstallWatcher* agent_watcher_ = nullptr;
-    PressAnyKeyPrompter* prompter_ = nullptr;
     VncPortResolver* vnc_resolver_ = nullptr;
     SetupStageRunner* setup_runner_ = nullptr;
 
