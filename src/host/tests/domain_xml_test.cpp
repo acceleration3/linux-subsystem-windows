@@ -191,6 +191,7 @@ int main(int argc, char** argv) {
     vm.disk_path = QStringLiteral("/home/o'brien/disks/lsw.qcow2");
     vm.nvram_path = QStringLiteral("/tmp/nvram.fd");
     vm.iso_path = QStringLiteral("/tmp/windows.iso");
+    vm.install_media_path = QStringLiteral("/tmp/lsw-install.qcow2");
     vm.payload_iso_path = QStringLiteral("/tmp/payload.iso");
     DomainXmlInputs inputs;
     const QString hostile = QStringLiteral("/home/me/Tom's & Jerry's <stuff>");

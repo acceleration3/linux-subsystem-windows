@@ -84,6 +84,10 @@ QString Settings::vm_payload_iso_path() const {
     return join(isos_dir(), QStringLiteral("%1-payload.iso").arg(QLatin1String(kVmName)));
 }
 
+QString Settings::vm_install_media_path() const {
+    return join(isos_dir(), QStringLiteral("%1-install.qcow2").arg(QLatin1String(kVmName)));
+}
+
 QString Settings::vm_avgpu_log_path() const {
     return join(logs_dir(), QStringLiteral("%1-avgpu.log").arg(QLatin1String(kVmName)));
 }

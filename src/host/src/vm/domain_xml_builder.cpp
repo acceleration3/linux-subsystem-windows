@@ -143,11 +143,11 @@ QString DomainXmlBuilder::build(const config::VmRecord& vm, const DomainXmlInput
     vars["disk_path"] = esc(vm.disk_path);
     vars["cid"] = QString::number(vm.vsock_cid);
 
-    // Install media: the Windows ISO (boot) and the LSW payload ISO
-    // (autounattend + agent). Nothing else: the disk and the NIC are
-    // devices Windows has in-box drivers for, so there is no driver
-    // media to attach.
-    vars["windows_iso"] = esc(vm.iso_path);
+    // Install media: the Windows ISO, by the overlay that boots it
+    // without a prompt, and the LSW payload ISO (autounattend + agent).
+    // Nothing else: the disk and the NIC are devices Windows has in-box
+    // drivers for, so there is no driver media to attach.
+    vars["install_media"] = esc(vm.install_media_path);
     vars["payload_iso"] = esc(vm.payload_iso_path);
 
     // accel-virt's QEMU, which is the only one that has the GPU device.

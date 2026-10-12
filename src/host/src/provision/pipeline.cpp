@@ -3,10 +3,10 @@
 #include "lsw/base/log.hpp"
 #include "lsw/host/config/vm_name.hpp"
 #include "lsw/host/provision/debloat_stager.hpp"
+#include "lsw/host/provision/install/no_prompt_media.hpp"
 #include "lsw/host/provision/install/post_install.hpp"
 #include "lsw/host/provision/iso/downloader.hpp"
 #include "lsw/host/provision/payload_iso_stager.hpp"
-#include "lsw/host/provision/press_any_key_prompter.hpp"
 #include "lsw/host/provision/setup_stage_runner.hpp"
 #include "lsw/host/provision/vnc_port_resolver.hpp"
 #include "lsw/host/services/domain_inputs.hpp"
@@ -93,7 +93,6 @@ void Pipeline::cancel() {
     }
     cancelled_ = true;
     ++generation_;
-    if (prompter_ != nullptr) prompter_->stop();
     if (vnc_resolver_ != nullptr) vnc_resolver_->stop();
     if (agent_watcher_ != nullptr) agent_watcher_->stop();
     if (shutdown_poll_ != nullptr) shutdown_poll_->stop();
@@ -224,6 +223,7 @@ void Pipeline::run_build_payload() {
     record_.uuid = QUuid::createUuid();
     record_.name = config::kVmName;
     record_.iso_path = inputs_.iso_local_path;
+    record_.install_media_path = services_.settings().vm_install_media_path();
     record_.sizing = inputs_.sizing;
     record_.disk_path = services_.settings().vm_disk_path();
     record_.nvram_path = services_.settings().vm_nvram_path();
@@ -312,15 +312,24 @@ void Pipeline::replace_machine() {
     auto* lifecycle = &services_.lifecycle();
     const QString disk_path = record_.disk_path;
     const int size_gib = record_.sizing.disk_gib;
+    // The install media's overlay goes with the disk: both are the old
+    // machine's until it is removed above, and both are qemu-img.
+    const QString iso_path = record_.iso_path;
+    const QString media_path = record_.install_media_path;
     const auto generation = generation_;
     const QPointer<Pipeline> self{this};
-    (void)QtConcurrent::run([self, lifecycle, disk_path, size_gib, generation]() {
-        const int rc = lifecycle->create_disk(disk_path, size_gib);
-        QMetaObject::invokeMethod(self.data(), [self, rc, generation]() {
+    (void)QtConcurrent::run([self, lifecycle, disk_path, size_gib, iso_path, media_path,
+                             generation]() {
+        QString error;
+        if (lifecycle->create_disk(disk_path, size_gib) != 0) {
+            error = QStringLiteral("qemu-img create failed");
+        } else if (QString why; !install::NoPromptMedia::make(iso_path, media_path, &why)) {
+            error = QStringLiteral("the install media could not be prepared: %1").arg(why);
+        }
+        QMetaObject::invokeMethod(self.data(), [self, error, generation]() {
             if (!self || self->generation_ != generation) return;
-            if (rc != 0) {
-                self->emit_failed(Step::CreatingDisk,
-                                  QStringLiteral("qemu-img create failed"));
+            if (!error.isEmpty()) {
+                self->emit_failed(Step::CreatingDisk, error);
                 return;
             }
             Q_EMIT self->step_finished(Step::CreatingDisk);
@@ -355,10 +364,7 @@ void Pipeline::run_start_vm() {
     }
     Q_EMIT step_finished(Step::StartingVm);
 
-    // Both run alongside the agent-reachability wait.
-    prompter_ = new PressAnyKeyPrompter(services_.libvirt(), this);
-    prompter_->start(record_.uuid);
-
+    // Runs alongside the agent-reachability wait.
     vnc_resolver_ = new VncPortResolver(services_.lifecycle(), this);
     connect(vnc_resolver_, &VncPortResolver::resolved, this,
             [this](int port) { Q_EMIT vnc_port_available(port); });

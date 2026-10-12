@@ -27,7 +27,7 @@
   template, and a name in braces would be substituted in it too.
     domain_name, uuid, ram_mib, cpus
     ovmf_code, ovmf_vars_template, nvram_path
-    disk_path, windows_iso, payload_iso
+    disk_path, install_media, payload_iso
     emulator           accel-virt's qemu-system-x86_64
     video_inner        <video>: none, or VGA during Windows setup
     host_shares_inner  one <filesystem> per shared folder, or empty
@@ -59,10 +59,11 @@
     <type arch='x86_64' machine='q35'>hvm</type>
     <loader readonly='yes' type='pflash'>{{ovmf_code}}</loader>
     <nvram template='{{ovmf_vars_template}}'>{{nvram_path}}</nvram>
-    <!-- The install ISO is boot entry 1, the NVMe system disk
-         entry 2. On first boot Setup runs off the ISO; once Windows
-         is installed the ISO's El-Torito "press any key" times out
-         and firmware falls through to the disk. -->
+    <!-- The NVMe system disk is boot entry 1, the install media entry
+         2. On first boot the disk is empty, firmware falls through to
+         the media, and Setup runs off it with no "press any key" (see
+         install::NoPromptMedia). Once Setup has put Windows on the
+         disk, the disk boots and the media is never reached again. -->
     <bootmenu enable='no'/>
   </os>
 
@@ -130,7 +131,7 @@
          double-buffering the guest's own. No iothread and no queues=:
          libvirt takes an iothread only on virtio controllers, and
          QEMU's nvme device sizes its own queue pairs (up to 64). boot
-         order 2 (the install ISO is 1). -->
+         order 1 (the install media is 2). -->
     <controller type='nvme' index='0'/>
     <disk type='file' device='disk'>
       <driver name='qemu' type='qcow2'
@@ -138,18 +139,20 @@
       <source file='{{disk_path}}'/>
       <target dev='nvme0n1' bus='nvme'/>
       <serial>LSW-SYSTEM</serial>
-      <boot order='2'/>
+      <boot order='1'/>
       <address type='drive' controller='0' bus='0' target='0' unit='0'/>
     </disk>
 
-    <!-- Windows install ISO (boots first). SATA so WinPE reads it
-         with no extra driver. -->
+    <!-- Windows install ISO, by the qcow2 overlay that boots it
+         without a prompt (boots while the disk is empty). SATA so WinPE
+         reads it with no extra driver. Optional: an installed machine
+         never reads it, and starts without it when the ISO is gone. -->
     <disk type='file' device='cdrom'>
-      <driver name='qemu' type='raw'/>
-      <source file='{{windows_iso}}'/>
+      <driver name='qemu' type='qcow2'/>
+      <source file='{{install_media}}' startupPolicy='optional'/>
       <target dev='sdb' bus='sata'/>
       <readonly/>
-      <boot order='1'/>
+      <boot order='2'/>
     </disk>
 
     <!-- Payload ISO: autounattend.xml + lsw-agent.exe. -->

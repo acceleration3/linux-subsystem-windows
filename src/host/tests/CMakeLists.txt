@@ -45,6 +45,13 @@ target_link_libraries(lsw_host_media_language_test PRIVATE lsw_host_provision LS
 target_compile_definitions(lsw_host_media_language_test PRIVATE QT_NO_KEYWORDS)
 add_test(NAME lsw_host_media_language_test COMMAND lsw_host_media_language_test)
 
+# Writes a small El Torito ISO and runs 7-Zip and qemu-img over it, as
+# the install does over the Windows ISO.
+add_executable(lsw_host_no_prompt_media_test no_prompt_media_test.cpp)
+target_link_libraries(lsw_host_no_prompt_media_test PRIVATE lsw_host_provision LSW::CompileOptions)
+target_compile_definitions(lsw_host_no_prompt_media_test PRIVATE QT_NO_KEYWORDS)
+add_test(NAME lsw_host_no_prompt_media_test COMMAND lsw_host_no_prompt_media_test)
+
 add_executable(lsw_host_provision_autounattend_test autounattend_test.cpp)
 target_link_libraries(lsw_host_provision_autounattend_test
     PRIVATE
