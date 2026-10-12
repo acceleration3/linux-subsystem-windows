@@ -162,6 +162,8 @@ add_library(lsw_host_manager STATIC ${LSW_MANAGER_SOURCES})
 target_include_directories(lsw_host_manager PUBLIC ${LSW_HOST_INCLUDE_DIR})
 target_link_libraries(lsw_host_manager
     PUBLIC  lsw_host_core lsw_host_tools
+    # guest_driver_installer.cpp: the host's GPUs named as setup names them
+    PRIVATE lsw_host_provision
     PRIVATE LSW::CompileOptions nlohmann_json::nlohmann_json
 )
 target_compile_definitions(lsw_host_manager PRIVATE QT_NO_KEYWORDS)

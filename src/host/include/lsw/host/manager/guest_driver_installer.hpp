@@ -36,10 +36,19 @@ public:
     // ``staging`` is batch lines run before it, to put a package in place;
     // one that sets SOURCE to the folder it put it in has it installed from
     // there, and mirrored to C:\av\pristine once it is.
-    [[nodiscard]] static QString script(const QString& staging = {});
+    //
+    // ``adapter_names`` (provision::install::AdapterNames) replaces
+    // C:\av\adapters.txt before the signing, which names each model it
+    // writes from that file. Setup's copy names the GPUs the host had when
+    // Windows was installed; a GPU passed through since would get the
+    // INF's generic name, and DXGI's adapter description is the name the
+    // adapter was set up with, whatever avgpu.sys writes later. Empty
+    // keeps the guest's file.
+    [[nodiscard]] static QString script(const QString& staging = {},
+                                        const QString& adapter_names = {});
 
-    // Start it, after ``staging``. False, with ``failed`` emitted, when the
-    // agent would not.
+    // Start it, after ``staging``, with this host's GPUs named. False,
+    // with ``failed`` emitted, when the agent would not.
     bool start(const QString& staging = {});
     [[nodiscard]] bool running() const noexcept { return awaiting_id_ || !job_.isEmpty(); }
 

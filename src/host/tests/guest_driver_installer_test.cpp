@@ -65,6 +65,21 @@ int main(int argc, char** argv) {
             QStringLiteral("robocopy %SOURCE%\\package C:\\av\\pristine\\package /MIR"));
         check(install >= 0 && failed > install && kept > failed,
               "a staged package becomes the pristine one only once it is installed");
+
+        // A name with batch syntax in it, and one that is not ASCII.
+        const QString names = QStringLiteral("10de\t2c05\tNVIDIA GeForce RTX 5070 Ti & \"%PATH%\"\n"
+                                             "1002\t7550\tRadeon™ RX 9070 XT\n");
+        const QString named = GuestDriverInstaller::script({}, names);
+        const QString encoded = QString::fromLatin1(names.toUtf8().toBase64());
+        const qsizetype write = named.indexOf(
+            QStringLiteral("[IO.File]::WriteAllBytes('C:\\av\\adapters.txt', "
+                           "[Convert]::FromBase64String('%1'))").arg(encoded));
+        check(write >= 0 && write < named.indexOf(QStringLiteral("-Stage sign")),
+              "this host's GPU names replace adapters.txt before the signing reads it");
+        check(!named.contains(QStringLiteral("%PATH%")) && !named.contains(QStringLiteral("GeForce")),
+              "the names reach the guest encoded, never as batch");
+        check(!plain.contains(QStringLiteral("adapters.txt")),
+              "no names keeps the guest's file");
     }
 
     {

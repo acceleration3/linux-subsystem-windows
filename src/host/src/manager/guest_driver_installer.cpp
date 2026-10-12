@@ -3,6 +3,8 @@
 #include "lsw/base/log.hpp"
 #include "lsw/host/link/agent_reply.hpp"
 #include "lsw/host/link/agent_rpc_client.hpp"
+#include "lsw/host/platform/host_gpus.hpp"
+#include "lsw/host/provision/install/adapter_names.hpp"
 #include "lsw/linkproto/commands.hpp"
 
 #include <QMetaObject>
@@ -23,11 +25,21 @@ constexpr int kRestartNeeded = 3010;
 GuestDriverInstaller::GuestDriverInstaller(link::AgentRpcClient& rpc, QObject* parent)
     : QObject(parent), rpc_(rpc) {}
 
-QString GuestDriverInstaller::script(const QString& staging) {
+QString GuestDriverInstaller::script(const QString& staging, const QString& adapter_names) {
+    // Base64 through PowerShell: a GPU's name is UTF-8 and may hold
+    // anything batch would read as syntax; base64 holds nothing it does.
+    const QString names =
+        adapter_names.isEmpty()
+            ? QString{}
+            : QStringLiteral("echo Naming this host's GPUs\r\n"
+                             "powershell -NoProfile -Command \"[IO.File]::WriteAllBytes("
+                             "'C:\\av\\adapters.txt', [Convert]::FromBase64String('%1'))\"\r\n"
+                             "if errorlevel 1 exit /b 1\r\n")
+                  .arg(QString::fromLatin1(adapter_names.toUtf8().toBase64()));
     return QStringLiteral(
                "@echo off\r\n"
                "setlocal\r\n") +
-           staging +
+           staging + names +
            QStringLiteral(
         "if not defined SOURCE set SOURCE=C:\\av\\pristine\r\n"
         "if not exist %SOURCE%\\package (\r\n"
@@ -84,6 +96,12 @@ bool GuestDriverInstaller::start(const QString& staging) {
     done_sub_ = rpc_.subscribe(linkproto::topic::kSetupDone,
                                [deliver](const nlohmann::json& frame) { deliver(frame, true); });
 
+    const QString adapter_names =
+        provision::install::AdapterNames{}.render(platform::HostGpus::enumerate());
+    if (adapter_names.isEmpty()) {
+        LSW_WARN("graphics: no host GPU found to name; the guest's adapters.txt is kept");
+    }
+
     job_.clear();
     early_.clear();
     awaiting_id_ = true;
@@ -91,7 +109,7 @@ bool GuestDriverInstaller::start(const QString& staging) {
     rpc_.request_async(linkproto::cmd::kRunScript,
                        {{"name", staging.isEmpty() ? "install avgpu for new adapters"
                                                    : "update avgpu"},
-                        {"script", script(staging).toStdString()}},
+                        {"script", script(staging, adapter_names).toStdString()}},
                        this, [this](const link::AgentReply& reply) {
                            if (!awaiting_id_) {
                                return;  // abandoned while the call was out
