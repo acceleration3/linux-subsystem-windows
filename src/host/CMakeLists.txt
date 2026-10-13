@@ -93,9 +93,9 @@ target_link_libraries(lsw_host_core
         PkgConfig::LIBVIRT      # virConnectPtr / virDomainPtr are in the headers
         LSW::Base
         LSW::LinkProto          # wire contract shared with the guest agent
+        nlohmann_json::nlohmann_json  # link/event_bus.hpp includes json_fwd.hpp
     PRIVATE
         LSW::CompileOptions
-        nlohmann_json::nlohmann_json
         PkgConfig::LIBVNCCLIENT  # ui/vnc_view.cpp
         Vulkan::Vulkan           # platform/host_gpus.cpp: which host GPUs exist
         PkgConfig::LIBVIRT_QEMU  # vm/lifecycle.cpp: QMP, for the GPU's live modes
