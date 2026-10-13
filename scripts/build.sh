@@ -24,11 +24,11 @@ BUILD="${ROOT}/build"
 cd "${ROOT}"
 
 BUILD_AGENT=1
-HOST_TARGETS=(lsw-manager accel_virt)
+HOST_TARGETS=(lsw-manager remotewin accel_virt)
 
 for arg in "$@"; do
     case "$arg" in
-        --no-gpu)    HOST_TARGETS=(lsw-manager) ;;
+        --no-gpu)    HOST_TARGETS=(lsw-manager remotewin) ;;
         --host-only) BUILD_AGENT=0 ;;
         -h|--help)   sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *)           echo "build: unknown argument '$arg'" >&2; exit 2 ;;
@@ -70,6 +70,12 @@ fi
 if grep -q '^LSW_BUILD_ACCEL_VIRT:BOOL=OFF' "${BUILD}/CMakeCache.txt" 2>/dev/null; then
     HOST_TARGETS=("${HOST_TARGETS[@]/accel_virt}")
 fi
+# The same for the window mirror's host half, -DLSW_BUILD_REMOTEWIN=OFF.
+# Nothing the manager links needs it, so building only lsw-manager left
+# every launch without a mirror.
+if grep -q '^LSW_BUILD_REMOTEWIN:BOOL=OFF' "${BUILD}/CMakeCache.txt" 2>/dev/null; then
+    HOST_TARGETS=("${HOST_TARGETS[@]/remotewin}")
+fi
 for target in "${HOST_TARGETS[@]}"; do
     [[ -n "${target}" ]] || continue
     [[ "${target}" == accel_virt ]] && say "Building accel-virt: driver package, QEMU, host Direct3D"
@@ -84,6 +90,8 @@ for target in "${HOST_TARGETS[@]}"; do
     case "$target" in
         lsw-manager)
             echo "  manager:       ${BUILD}/src/host/lsw-manager" ;;
+        remotewin)
+            echo "  mirror:        ${BUILD}/remotewin/source/host/remotewin" ;;
         accel_virt)
             echo "  av-drivers:    ${BUILD}/av-drivers"
             echo "  qemu:          ${BUILD}/accel-virt/qemu/qemu/qemu-system-x86_64"
