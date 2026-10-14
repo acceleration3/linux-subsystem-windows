@@ -23,8 +23,6 @@ usr/lib/lsw/accel-virt/d3d/               DXVK and vkd3d-proton
 usr/share/lsw/guest/                      lsw-guest-agent.exe, remotewin-guest.exe,
                                           av-drivers/, loaders/{x64,x86}/vulkan-1.dll
 usr/share/applications/lsw-manager.desktop
-usr/lib/modules-load.d/lsw.conf           udmabuf at boot
-usr/lib/udev/rules.d/70-lsw-udmabuf.rules /dev/udmabuf for the logged-in user
 usr/share/licenses/lsw/                   LSW's license, and QEMU's, DXVK's,
                                           vkd3d-proton's and the Vulkan loader's
 ```
@@ -195,9 +193,6 @@ names it for `aur.archlinux.org`.
 
 `lsw-bin.install` says this too:
 
-- `/dev/udmabuf` is loaded at boot; before the first reboot,
-  `sudo modprobe udmabuf`. The logged-in user gets access to it through
-  udev's `uaccess` tag (systemd 256 and later grant it themselves).
 - VMs run under the user's own libvirt session, `qemu:///session`: no
   `libvirt` group, no system `libvirtd`.
 - Shared folders need `virtiofsd`; OpenCL in the guest needs an OpenCL

@@ -172,8 +172,8 @@ drivers are built:
   this build;
 - Python 3.11+, meson and glslang (DXVK and vkd3d-proton), and QEMU's
   own build dependencies — glib2, pixman, gtk3, libepoxy, libslirp;
-- on the host at run time: KVM, the `udmabuf` module, and a Vulkan
-  driver, EGL and an OpenCL ICD for each API the guest should have.
+- on the host at run time: KVM, and a Vulkan driver, EGL and an OpenCL
+  ICD for each API the guest should have.
 
 The first build fetches what accel-virt pins and does not commit — the
 Windows kit subset, the Khronos registries, QEMU's tarball, the OpenCL

@@ -39,10 +39,8 @@
   <name>{{domain_name}}</name>
   <uuid>{{uuid}}</uuid>
   <memory unit='MiB'>{{ram_mib}}</memory>
-  <!-- Guest RAM is a shared memfd, always. The GPU's host side imports
-       guest pages as dma-bufs through /dev/udmabuf, which takes pages
-       of a memfd and nothing else; virtiofsd, a separate process,
-       reads the RAM directly, so it has to be a mapping another
+  <!-- Guest RAM is a shared memfd, always: virtiofsd, a separate
+       process, reads the RAM directly, so it has to be a mapping another
        process can share. -->
   <memoryBacking>
     <source type='memfd'/>

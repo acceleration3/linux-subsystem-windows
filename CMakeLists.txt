@@ -76,7 +76,6 @@ endif()
 #   share/lsw/guest/                        the agent, remotewin-guest.exe,
 #                                           av-drivers/, loaders/x64|x86/
 #   share/applications/lsw-manager.desktop
-#   lib/modules-load.d/lsw.conf, lib/udev/rules.d/70-lsw-udmabuf.rules
 #
 # Literal directories rather than GNUInstallDirs: the manager finds all
 # of it relative to its own binary (platform::locate_build_artifact), so
@@ -242,20 +241,14 @@ if(LSW_BUILD_MANAGER)
 
     add_subdirectory(src/host)
 
-    # The desktop entry and its icon, and what accel-virt needs of the host system:
-    # /dev/udmabuf, loaded at boot and open to the logged-in user, whose
-    # QEMU the session-mode libvirt runs. See packaging/ for each.
+    # The desktop entry and its icon. accel-virt needs nothing of the host
+    # system beyond KVM and a GPU driver: every byte the guest shares with
+    # the host GPU is that GPU's own memory (docs/host-memory.md).
     install(FILES packaging/lsw-manager.desktop
             DESTINATION share/applications
             COMPONENT ${LSW_INSTALL_COMPONENT})
     install(FILES packaging/lsw-manager.svg
             DESTINATION share/icons/hicolor/scalable/apps
-            COMPONENT ${LSW_INSTALL_COMPONENT})
-    install(FILES packaging/lsw-udmabuf.conf
-            DESTINATION lib/modules-load.d RENAME lsw.conf
-            COMPONENT ${LSW_INSTALL_COMPONENT})
-    install(FILES packaging/70-lsw-udmabuf.rules
-            DESTINATION lib/udev/rules.d
             COMPONENT ${LSW_INSTALL_COMPONENT})
 endif()
 
