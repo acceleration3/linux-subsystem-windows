@@ -76,29 +76,16 @@ if(WIN32)
     # from the same tag; say so.
     string(REGEX REPLACE "^v" "" _lsw_vulkan_version "${LSW_VULKAN_LOADER_TAG}")
     set(VulkanHeaders_VERSION "${_lsw_vulkan_version}")
-    # Its GAS trampolines for x86-64 take their arguments as the System V ABI
-    # passes them, which only Linux and macOS ever assembled them for: a
-    # MinGW build's every unknown-function call read its handle from rdi
-    # instead of rcx and crashed the process. The patch gives them the
-    # Windows x64 convention.
     FetchContent_Declare(VulkanLoader
         GIT_REPOSITORY https://github.com/KhronosGroup/Vulkan-Loader.git
         GIT_TAG        ${LSW_VULKAN_LOADER_TAG}
         GIT_SHALLOW    TRUE
-        PATCH_COMMAND  git apply ${CMAKE_CURRENT_LIST_DIR}/patches/vulkan-loader-gas-win64.patch
-        UPDATE_DISCONNECTED TRUE
     )
     set(BUILD_TESTS  OFF CACHE INTERNAL "")
     set(UPDATE_DEPS  OFF CACHE INTERNAL "")
     set(BUILD_WSI_XCB_SUPPORT     OFF CACHE INTERNAL "")
     set(BUILD_WSI_XLIB_SUPPORT    OFF CACHE INTERNAL "")
     set(BUILD_WSI_WAYLAND_SUPPORT OFF CACHE INTERNAL "")
-    # Its Windows default is MASM, which a MinGW cross build only has as
-    # jwasm or uasm. Without an assembler the loader drops its unknown-function
-    # trampolines, and vkGetInstanceProcAddr answers NULL for every command it
-    # was not generated with - accel-virt's vkAvForceContextFault and
-    # vkAvLastKernelStatus among them. MinGW's own GAS assembles them.
-    set(USE_GAS ON CACHE INTERNAL "")
     FetchContent_MakeAvailable(VulkanLoader)
 
     # Into the guest files, by architecture: the payload stager puts
