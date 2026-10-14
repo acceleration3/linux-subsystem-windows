@@ -86,6 +86,12 @@ if(WIN32)
     set(BUILD_WSI_XCB_SUPPORT     OFF CACHE INTERNAL "")
     set(BUILD_WSI_XLIB_SUPPORT    OFF CACHE INTERNAL "")
     set(BUILD_WSI_WAYLAND_SUPPORT OFF CACHE INTERNAL "")
+    # Its Windows default is MASM, which a MinGW cross build only has as
+    # jwasm or uasm. Without an assembler the loader drops its unknown-function
+    # trampolines, and vkGetInstanceProcAddr answers NULL for every command it
+    # was not generated with - accel-virt's vkAvForceContextFault and
+    # vkAvLastKernelStatus among them. MinGW's own GAS assembles them.
+    set(USE_GAS ON CACHE INTERNAL "")
     FetchContent_MakeAvailable(VulkanLoader)
 
     # Into the guest files, by architecture: the payload stager puts
