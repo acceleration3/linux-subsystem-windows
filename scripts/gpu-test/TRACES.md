@@ -412,6 +412,28 @@ avgpu and WARP): only the canvas border and the selection box differ in
 `gpu-test.sh run local -- --suites traces --traces affinity` (run
 `affinity-local-1`, 2026-10-16): both GPUs pass all twelve traces.
 
+On accel's RTX 3070 Ti (run `final-accel-1`) `affinity/text` frame 64 is a
+note, the same on every replay: PSNR 32.5 dB, 19.6% of pixels off, where the
+Iris Xe matches at 70 dB. It is legitimate. From frame 55 on (its last call 30649),
+when the view follows the text, Affinity draws its canvas tiles - 512x512
+textures it fills on the CPU, point-sampled - with their left edge at x =
+201.2 in its 1212-wide logical space, which at 125% is pixel 251.49999: the
+tiles are drawn 1:1, every pixel centre on a texel edge. The draw's inputs
+are the same bytes on avgpu and WARP (d3dretrace `-D 30093`: every texture,
+constant and state), and 93% of the pixels that differ are WARP's left
+neighbour's colour: the RTX 3070 Ti takes texel k-1 where WARP takes k. D3D
+leaves that choice open: interpolation follows the float rules (15.16.2),
+and point sampling converts the texel coordinate to "at least 16.8" fixed
+point before taking its integer part (7.18.7), so a coordinate a few ULPs
+under k is texel k with 8 fractional bits rounded and k-1 with more. A
+Vulkan program on the accel host itself, no VM or DXVK, drawing that quad
+with Affinity's vertices and matrix shows the same: NVIDIA 580 interpolates
+u*512 a few ULPs under k at every pixel and samples k-1 on 261121 of 261632
+pixels; Mesa's Iris Xe interpolates exactly k and samples k; RADV on the
+RX 9070 XT lands under k on half the pixels and samples k there only with
+coordinate truncation off, which RADV's driconf does for DXVK and vkd3d
+(`radv_disable_trunc_coord`). NVIDIA's Vulkan driver has no such control.
+
 To record one again (VM held, Affinity signed in, the window, persona and
 tool state as `affinity/drive.ps1` describes, the photo copied to
 `C:\av\affinity\photo.jpg`):
@@ -482,10 +504,44 @@ replay (`traces.py promote`). The GL traces' viewers are black in a replay:
 Resolve's pictures reach them through CL-GL interop, which apitrace does not
 record. `fx-blur-gl` frame 44 is not judged - its vectorscope texture is
 interop-filled and undefined (garbage on the Iris Xe). The OpenCL traces are
-judged with `itol 5` and `max_bad_fraction 0.025`: Resolve builds with
-`-cl-fast-relaxed-math -cl-mad-enable`, and on the Iris Xe up to 2% of some
-byte masks flip and 8-bit values round off by a few (the RTX 3070 Ti
-reproduces all 429 kernels bit for bit). Six kernels' outputs are not judged
+judged with `itol 5` and `max_bad_fraction 0.025`: on the Iris Xe up to 2% of
+the bytes of some outputs differ from Resolve's (the RTX 3070 Ti, the GPU
+they were recorded on, reproduces all 429 kernels bit for bit). Those
+outputs are `ushort*` buffers of half floats, which the judge compares byte
+by byte: a value one half-float ULP off is a byte off by 1, or by 255 when
+it carries, and a sign flip at zero is 128. Measured as half floats, most
+differ by 1 or 2 ULPs (the worst kernel, `z9ebd7fdd...`, by up to 0.0017 in
+values up to 1.17); the float outputs by at most 1.2e-5 absolute.
+
+This is Intel's OpenCL arithmetic, not avgpu's, and not only Resolve's
+relaxed math. Ten of the worst kernels (from `deliver-cl`, `dissolve-cl`,
+`edit-cl`, `qualifier-cl` and `fx-blur-cl`; 48 outputs) were replayed in the
+VM and natively on the accel host (pyopencl's `run.py` on the host's own
+OpenCL platforms: Intel compute-runtime 26.31 and NVIDIA 580), each as
+recorded and with `-cl-mad-enable -cl-fast-relaxed-math` taken out of its
+build options:
+
+- avgpu reproduces the host driver bit for bit: every output of the VM's
+  replay on the Iris Xe has the same sha256 as Intel compute-runtime's
+  native run, with Resolve's options and without them, and likewise on the
+  RTX 3070 Ti against NVIDIA's native run.
+- Taking the options out does not make the Iris Xe match: Intel's compiler
+  gives the same bytes with or without them for 8 of the 10 kernels (the
+  other two move by a float ULP here and there), and 19 of the 48 outputs
+  still differ from Resolve's.
+- NVIDIA honours the options: without them its outputs move away from the
+  recording in 8 of the 10 kernels (the same kinds of 1-ULP half and float
+  differences). For one, `zedae1078...` (`fx-blur-cl` 180), the Iris Xe's
+  output is the RTX 3070 Ti's without relaxed math, byte for byte.
+- Adding `-cl-fp32-correctly-rounded-divide-sqrt` does not bring the two
+  together either. The worst kernel's program calls `native_sin`, `native_exp`,
+  `native_divide`, `native_powr` and others, whose precision OpenCL leaves
+  entirely to the implementation, `exp`, `pow`, `log2` and `rsqrt`,
+  which OpenCL allows several ULPs, and `mad`. OpenCL C also contracts
+  `a*b+c` into an fma by default (`FP_CONTRACT` is on unless a program turns
+  it off). So two conformant drivers legitimately differ in the last bit.
+
+Six kernels' outputs are not judged
 (`fx-sharpen-cl` 17, 18, 54 and `scopes-cl` 217, 283, 302; each manifest's
 `captured.mended` says so): both GPUs' replays agree with each other bit for
 bit and differ from what Resolve's run recorded, so the recording, not the
