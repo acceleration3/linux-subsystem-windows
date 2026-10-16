@@ -22,10 +22,6 @@ std::wstring Paths::session_helper_log(std::uint32_t session) {
     return root() + L"\\agent-session-" + std::to_wstring(session) + L".log";
 }
 
-std::wstring Paths::desktop_probe_log() {
-    return under_root(L"desktop-probe.log");
-}
-
 std::wstring Paths::desktop_ready_flag() {
     return under_root(L"desktop-ready.flag");
 }

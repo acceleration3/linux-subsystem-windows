@@ -7,7 +7,6 @@
 #include "lsw/agent/session/helper_protocol.hpp"
 #include "lsw/agent/session/pipe_codec.hpp"
 #include "lsw/agent/uia/uia.hpp"
-#include "lsw/agent/win/desktop_probe.hpp"
 #include "lsw/agent/win/desktop_session.hpp"
 #include "lsw/agent/win/error_text.hpp"
 #include "lsw/agent/win/overlapped_pipe.hpp"
@@ -147,9 +146,6 @@ void run_gate(Shared& shared) {
     if (!ready) {
         LSW_AGENT_WARN("helper: desktop never became usable after 30 min");
     }
-    // Stamp the exact state at the instant the gate decided, so it can be
-    // lined up against the probe trace either side of it.
-    win::DesktopProbe::write(win::DesktopProbe::snapshot("gate-released"));
     const auto waited = std::chrono::duration_cast<std::chrono::seconds>(
         std::chrono::steady_clock::now() - started);
     shared.send({{"event", helper_topic::kDesktop},
@@ -228,14 +224,6 @@ int SessionHost::run(const std::wstring& pipe_name) {
                   {"pid", static_cast<std::uint64_t>(::GetCurrentProcessId())},
                   {"session", session}});
 
-    // Sample every readiness signal for the whole boot, independently of
-    // the gate. The first-logon "Preparing Windows" phase happens once
-    // per install and cannot be reproduced by rebooting, so there is no
-    // second chance to observe it — the trace has to be captured on the
-    // run that matters. Keeps going after the gate opens, because the
-    // diagnostic question is "what was still false when we let go".
-    auto* probe = new win::DesktopProbe;
-    probe->start(std::chrono::minutes(20), std::chrono::milliseconds(500));
     std::thread{[shared] { run_gate(*shared); }}.detach();
 
     std::thread pump{[shared, services] { run_pump(*shared, services->uia()); }};

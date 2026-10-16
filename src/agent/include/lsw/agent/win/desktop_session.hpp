@@ -7,7 +7,7 @@ namespace lsw::agent::win {
 
 // Answers "can the user actually see and use their desktop yet?".
 //
-// Derived from a full session trace of a real first boot (DesktopProbe),
+// Derived from a full session trace of a real first boot,
 // after several plausible-sounding guesses each proved wrong:
 //
 //   * The task's LogonTrigger fires when LSA mints the session token,

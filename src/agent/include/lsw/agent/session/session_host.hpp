@@ -11,8 +11,7 @@ namespace lsw::agent::session {
 // and messaging windows, UI Automation and its event subscriptions,
 // HKCU — for the commands whose handlers say so
 // (RpcHandler::Placement::UserSession), and it runs the desktop gate
-// (DesktopSession::wait_for_desktop, with the DesktopProbe trace beside
-// it) exactly as the agent did when it was itself started at logon,
+// (DesktopSession::wait_for_desktop) exactly as the agent did when it was itself started at logon,
 // reporting the outcome to the service.
 //
 // It dials the service's pipe, refuses a server that is not in session 0,

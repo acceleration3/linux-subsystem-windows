@@ -130,7 +130,6 @@ set(_lsw_agent_win_sources
     src/win/gdiplus_runtime.cpp
     src/win/com.cpp
     src/win/desktop_session.cpp
-    src/win/desktop_probe.cpp
     src/win/display_scale.cpp
     src/win/token_privileges.cpp
     src/win/error_text.cpp

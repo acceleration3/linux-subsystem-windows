@@ -28,9 +28,6 @@ public:
     // once it is connected; this file has what happened before that.
     [[nodiscard]] static std::wstring session_helper_log(std::uint32_t session);
 
-    // ``desktop-probe.log`` — DesktopProbe's session snapshots.
-    [[nodiscard]] static std::wstring desktop_probe_log();
-
     // ``desktop-ready.flag`` — present once the desktop gate has opened
     // on this install; its absence is what "first boot" means.
     [[nodiscard]] static std::wstring desktop_ready_flag();
