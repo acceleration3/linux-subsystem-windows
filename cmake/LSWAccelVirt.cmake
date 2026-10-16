@@ -232,7 +232,10 @@ ExternalProject_Add(accel_virt_host
                      "-DCMAKE_EXE_LINKER_FLAGS=${CMAKE_EXE_LINKER_FLAGS}"
                      "-DCMAKE_SHARED_LINKER_FLAGS=${CMAKE_SHARED_LINKER_FLAGS}"
                      "-DCMAKE_MODULE_LINKER_FLAGS=${CMAKE_MODULE_LINKER_FLAGS}"
+    # What LSW ships, not the tree's smoke-test doubles (echo/null-ops
+    # executors), which accel-virt's own build and suites carry.
     BUILD_COMMAND    ${CMAKE_COMMAND} --build <BINARY_DIR>
+                     --target qemu av_executor av-renderer avrecord
     BUILD_ALWAYS     ON
     INSTALL_COMMAND  ""
     DEPENDS          accel_virt_fetch
