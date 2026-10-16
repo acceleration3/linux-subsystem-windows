@@ -147,15 +147,19 @@ class Replayer:
         self.files.console(f'if exist "{self.run_dir}" rmdir /s /q "{self.run_dir}"')
         self.files.share.make_directories(self.run_dir)
 
-    def run(self, name, exe, arguments, env=None, timeout=None, binary_stdout=False, arch="x64", linger=None):
+    def run(self, name, exe, arguments, env=None, timeout=None, binary_stdout=False, arch="x64", linger=None,
+            share_console=False):
         """One pass: trace-replay.ps1's result, with its stderr (and its stdout,
-        unless that is a binary stream, which is left in out/NAME.out)."""
+        unless that is a binary stream, which is left in out/NAME.out).
+        share_console runs the program in trace-replay.ps1's own (hidden)
+        console rather than one of its own: gfxrecon-replay ends by waiting
+        for a key press in a console that is only its own."""
         timeout = timeout or self.manifest.replay["timeout_s"]
         config = {"exe": exe, "args": suite_command_line(arguments), "cwd": self.store_dir,
                   "env": {**self.manifest.replay["env"], **self.env, **(env or {})},
                   "stdout": f"{self.run_dir}\\{name}.out", "stderr": f"{self.run_dir}\\{name}.err",
                   "result": f"{self.run_dir}\\{name}.json", "timeout_s": timeout, "sample_ms": 500,
-                  "modules": MODULES, "linger_s": linger}
+                  "modules": MODULES, "linger_s": linger, "share_console": share_console}
         self.files.share.put_bytes(json.dumps(config).encode(), f"{self.run_dir}\\{name}.config.json")
         say(f"  {name}: {pathlib.PureWindowsPath(exe).name} {config['args'][:160]}")
         self.desktop.run(f'{POWERSHELL[arch]} -NoProfile -ExecutionPolicy Bypass -File {GUEST_HARNESS}\\trace-replay.ps1 '
@@ -275,7 +279,7 @@ def replay_gfxreconstruct(replayer):
         replayer.files.share.make_directories(shots)
         arguments += ["--screenshots", ",".join(str(frame) for frame in wanted), "--screenshot-format", "bmp",
                       "--screenshot-dir", shots, "--screenshot-prefix", "shot"]
-    findings["passes"]["check"] = replayer.run("check", replay, [*arguments, capture])
+    findings["passes"]["check"] = replayer.run("check", replay, [*arguments, capture], share_console=True)
     for name in replayer.files.listing(shots) if wanted else []:
         found = re.match(r"shot_frame_(\d+).*\.bmp$", name)
         if not found or int(found.group(1)) in findings["frames"]:
@@ -291,7 +295,38 @@ def replay_gfxreconstruct(replayer):
         findings["frames"].setdefault(frame, None)
     findings["references"] = {frame: judge.read_png(path) for frame, path in manifest.references().items()
                               if frame in wanted}
+    if not findings["references"] and wanted and manifest.judge["reference"] == "warp" and manifest.api == "d3d12":
+        findings["references"] = gfxr_warp_frames(replayer, replay, capture, wanted, findings)
     return findings
+
+
+def gfxr_warp_frames(replayer, replay, capture, wanted, findings):
+    """A D3D12 trace's frames rendered by WARP - the adapter warp_gpu names -
+    for a trace judged against WARP with no promoted reference yet."""
+    out = replayer.out
+    shots = guest_path(replayer.run_dir, "warp-shots")
+    replayer.files.share.make_directories(shots)
+    arguments = ["--gpu", str(replayer.manifest.replay["warp_gpu"]), *replayer.manifest.replay["extra_args"],
+                 "--screenshots", ",".join(str(frame) for frame in wanted), "--screenshot-format", "bmp",
+                 "--screenshot-dir", shots, "--screenshot-prefix", "shot", capture]
+    findings["passes"]["warp"] = replayer.run("warp", replay, arguments, share_console=True)
+    warp = {}
+    (out / "warp").mkdir(exist_ok=True)
+    for name in replayer.files.listing(shots):
+        found = re.match(r"shot_frame_(\d+).*\.bmp$", name)
+        if not found:
+            continue
+        local = out / name
+        try:
+            replayer.files.share.get(f"{shots}\\{name}", local)
+            warp[int(found.group(1))] = judge.read_bmp(local)
+            judge.write_png(out / "warp" / f"frame-{found.group(1)}.png", warp[int(found.group(1))])
+        except (LinkError, OSError, ValueError) as error:
+            findings["notes"].append({"case": name, "detail": str(error)})
+        local.unlink(missing_ok=True)
+    findings["notes"].append({"case": "reference", "detail": f"rendered by WARP in this run ({len(warp)} frames): "
+                                                             "traces.py promote --warp keeps them"})
+    return warp
 
 
 def replay_opencl(replayer):

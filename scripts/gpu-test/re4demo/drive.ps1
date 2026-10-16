@@ -1,11 +1,11 @@
-# drive.ps1: scripted keyboard and mouse for the Resident Evil 4 Chainsaw Demo in the
-# desktop, put before each scene's script by traces.py capture --drive.
-#
-# The game reads the keyboard by scan code and the camera from relative mouse
-# motion (raw input), so keys are sent as scan codes and the mouse as
-# relative moves. DSR's keyboard defaults: W A S D move, mouse turns the
-# camera, E confirms and interacts, Q backs out, Esc opens the menu, left
-# click attacks, Space rolls, Tab locks on.
+# drive.ps1: scripted keyboard and mouse for the Resident Evil 4 Chainsaw Demo
+# in the VM's desktop, put before each scene's script by traces.py capture
+# --drive (DSR's helpers: keys as scan codes, the client area read back).
+# The demo's keyboard: Enter confirms, Esc backs out, the arrows move
+# through a menu, Q and E change an options tab, Space skips; F12 is
+# GFXReconstruct's capture trigger (traces.py capture --gfxr-trigger F12).
+# Where the game is, is told by looking (Screen): the title's logo, a menu's
+# entry at the top left.
 Add-Type @"
 using System; using System.Runtime.InteropServices;
 public static class G {
@@ -108,7 +108,8 @@ function Mean($bmp, $fx, $fy, $fw, $fh) {
 function Screen {
   $b = Client; if (-not $b) { return 'none' }
   try {
-    if ((Mean $b 0.30 0.27 0.40 0.20) -gt 0.25) { return 'title' }
+    # The logo, and START GAME under it: an engine logo alone is bright too.
+    if ((Mean $b 0.30 0.27 0.40 0.20) -gt 0.25 -and (Mean $b 0.47 0.725 0.06 0.03) -gt 0.08) { return 'title' }
     if ((Mean $b 0.06 0.21 0.08 0.03) -gt 0.08) { return 'menu' }
     'other'
   } finally { $b.Dispose() }
@@ -120,6 +121,6 @@ function WaitScreen($want, $seconds = 300) {
 }
 # From the launch to the title: the logos and the development notice pass by
 # themselves (Enter on them would skip ahead unevenly).
-function ToTitle { WaitGame; WaitScreen title 400; Start-Sleep 3; Focus }
+function ToTitle { WaitGame 600; WaitScreen title 900; Start-Sleep 3; Focus }
 # From the title to the main menu (MAIN STORY, OPTIONS, ONLINE STORE, EXIT).
-function ToMenu { ToTitle; Press enter 1000; WaitScreen menu 60; Start-Sleep 2 }
+function ToMenu { ToTitle; Hold enter 1500; WaitScreen menu 300; Start-Sleep 2 }

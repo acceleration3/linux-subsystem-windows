@@ -58,7 +58,7 @@ DEFAULT_JUDGE = {
     # Pictures, against reference/ and across GPUs. A pixel differs when a
     # channel is off by more than pixel_tolerance; the limits are those the
     # sample suites call a match (tools/d3d11_report.py).
-    "reference": "promoted",      # "promoted" (a run's frames, traces.py promote) or "warp" (D3D10+ only)
+    "reference": "promoted",      # "promoted" (a run's frames, traces.py promote) or "warp" (D3D10+, D3D12 only)
     "pixel_tolerance": 2,
     "psnr_min": 40.0,
     "changed_max_pct": 1.0,
@@ -73,13 +73,16 @@ DEFAULT_JUDGE = {
     "itol": 0,
     "max_bad_fraction": 0.0,
 }
-DEFAULT_REPLAY = {"timeout_s": 900, "benchmark": False, "env": {}, "extra_args": [], "cl_platform": "avgpu"}
+DEFAULT_REPLAY = {"timeout_s": 900, "benchmark": False, "env": {}, "extra_args": [], "cl_platform": "avgpu",
+                  "warp_gpu": 1}
 """benchmark adds a pass of its own (apitrace -b) for the frame rate; without
 it the rate is the checking pass's frames over its seconds, which also
 counts loading and the snapshots - one pass instead of two, as a replay of a
 game's minute takes minutes. extra_args go to the retracer or gfxrecon-replay before the trace; env is
 added to the replay's environment (AV_D3D11_TRACE, say); cl_platform is the
-OpenCL platform name part an OpenCL replay runs on."""
+OpenCL platform name part an OpenCL replay runs on; warp_gpu is the adapter
+gfxrecon-replay --gpu renders a D3D12 trace's WARP reference on (it lists the
+VM's two Microsoft Basic Render Driver adapters first)."""
 
 
 class StoreError(Exception):
@@ -101,7 +104,7 @@ class Manifest:
       check          {"frames": [n, ...]}: frame numbers whose pictures are judged
                      (apitrace: 0-based; negative counts from the end; gfxreconstruct:
                      1-based as it counts), [] for none
-      replay         {"timeout_s", "benchmark", "env", "extra_args", "cl_platform"}
+      replay         {"timeout_s", "benchmark", "env", "extra_args", "cl_platform", "warp_gpu"}
       judge          DEFAULT_JUDGE's keys, any of them overridden
       captured       {"date", "host", "gpu", "app_version", "how", "command", ...}
     """
@@ -190,8 +193,9 @@ class Manifest:
             found.append(f"replay has unknown keys {sorted(unknown)}")
         if data.get("judge", {}).get("reference", "promoted") not in ("promoted", "warp"):
             found.append("judge.reference is neither promoted nor warp")
-        if data.get("judge", {}).get("reference") == "warp" and data.get("api") != "dxgi":
-            found.append("judge.reference warp needs a dxgi (D3D10/11) trace: D3D9 and GL have no WARP")
+        if data.get("judge", {}).get("reference") == "warp" and data.get("api") not in ("dxgi", "d3d12"):
+            found.append("judge.reference warp needs a dxgi (D3D10/11) or d3d12 trace: D3D9, GL and Vulkan "
+                         "have no WARP")
         return found
 
     def missing_files(self):

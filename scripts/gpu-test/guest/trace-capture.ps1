@@ -30,6 +30,9 @@
 # -GfxrTrigger F12 [-GfxrTriggerFrames N] captures nothing until the key is
 # pressed, then N frames (until it is pressed again without N).
 #
+# -Environment "NAME=VALUE;..." sets more of GFXReconstruct's settings for
+# the launch (GFXRECON_MEMORY_TRACKING_MODE=unassisted).
+#
 # -GlOut DIR (with -Tool clintercept): the same run's OpenGL calls too,
 # through apitrace's opengl32.dll wrapper beside -Exe, as a second capture in
 # DIR (capture.trace, frames.txt, capture.json, capture.done): one session
@@ -61,6 +64,7 @@ param(
     [string]$GfxrFrames = '',
     [string]$GfxrTrigger = '',
     [int]$GfxrTriggerFrames = 0,
+    [string]$Environment = '',
     [string]$GlOut = '',
     [string]$ClearFirst = '',
     [switch]$Repack
@@ -243,6 +247,15 @@ try {
     $arch = Arch-Of $Exe
     $exeDir = Split-Path -Parent $Exe
     Log "capturing $Exe ($arch) with $Tool$(if ($GlOut) { ' and apitrace (gl, wrappers)' })"
+    # A Steam game started directly finds Steam or restarts itself through
+    # it - without the capture: Steam is started first when it is not running.
+    if ($SteamApp -and -not (Get-Process steam -ErrorAction SilentlyContinue)) {
+        Start-Process -FilePath (Join-Path $Steam 'steam.exe') -ArgumentList '-silent' | Out-Null
+        $until = (Get-Date).AddSeconds(120)
+        while (-not (Get-Process steamwebhelper -ErrorAction SilentlyContinue) -and (Get-Date) -lt $until) { Start-Sleep 2 }
+        Start-Sleep 20
+        Log "started Steam"
+    }
     foreach ($path in @($ClearFirst.Split(';') | Where-Object { $_.Trim() })) {
         $path = [Environment]::ExpandEnvironmentVariables($path.Trim())
         if (Test-Path -LiteralPath $path) { Remove-Item -Recurse -Force -LiteralPath $path; Log "deleted $path" }
@@ -358,6 +371,12 @@ try {
         $env:GFXRECON_CAPTURE_FILE = $capture
         $env:GFXRECON_CAPTURE_FILE_TIMESTAMP = 'false'
         if ($GfxrFrames) { $env:GFXRECON_CAPTURE_FRAMES = $GfxrFrames }
+        # More of the layer's settings (GFXRECON_MEMORY_TRACKING_MODE=unassisted...).
+        foreach ($pair in @($Environment.Split(';') | Where-Object { $_ -match '=' })) {
+            $name, $value = $pair.Split('=', 2)
+            Set-Item -Path "env:$($name.Trim())" -Value $value
+            Log "$($name.Trim())=$value"
+        }
         # A hotkey (F12...) that starts a trimmed capture of -GfxrTriggerFrames
         # frames: the scene, reached by scripted input, without what led to it.
         if ($GfxrTrigger) {

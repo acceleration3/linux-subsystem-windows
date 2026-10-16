@@ -1017,6 +1017,58 @@ class Direct3D12(unittest.TestCase):
         self.assertEqual(sorted(findings["frames"]), [5, 9])
         self.assertEqual(findings["frames"][5][:2], (2, 2))
         self.assertTrue(findings["notes"])  # frame 0 is not a GFXReconstruct frame
+        # Judged against promoted references: no WARP pass.
+        self.assertEqual(len(runs), 1)
+        self.assertEqual(findings["references"], {})
+
+    def test_a_d3d12_trace_judged_against_warp_renders_its_reference_on_the_warp_adapter(self):
+        with tempfile.TemporaryDirectory() as directory:
+            out = pathlib.Path(directory)
+            manifest = trace_store.Manifest(manifest_data(api="d3d12", capture="capture.gfxr", check={"frames": [3]},
+                                                          judge={"reference": "warp"}), out)
+            self.assertEqual(manifest.problems() if hasattr(manifest, "problems") else [], [])
+            runs = []
+            bmp = out / "shot.bmp"
+            width, height = 2, 2
+            row = bytes([0, 255, 0] * width) + b"\0" * ((4 - (3 * width) % 4) % 4)
+            pixels = row * height
+            bmp.write_bytes(b"BM" + struct.pack("<IHHI", 54 + len(pixels), 0, 0, 54)
+                            + struct.pack("<IiiHHIIiiII", 40, width, height, 1, 24, 0, len(pixels), 0, 0, 0, 0)
+                            + pixels)
+
+            class Files:
+                def __init__(self):
+                    self.share = self
+
+                def make_directories(self, directory):
+                    pass
+
+                def listing(self, directory):
+                    return ["shot_frame_3.bmp"]
+
+                def get(self, guest_path, local):
+                    pathlib.Path(local).write_bytes(bmp.read_bytes())
+
+            class Replayer:
+                def __init__(self):
+                    self.manifest, self.out, self.store_dir, self.run_dir = manifest, out, "C:\\s", "C:\\r"
+                    self.files = Files()
+
+                def tool_dir(self, name):
+                    return f"C:\\t\\{name}"
+
+                def run(self, name, exe, arguments, **options):
+                    runs.append((name, arguments))
+                    return {"exit_code": 0, "seconds": 2.0, "samples": [], "output": ""}
+
+            findings = trace_suite.replay_gfxreconstruct(Replayer())
+            self.assertEqual([name for name, _ in runs], ["check", "warp"])
+            warp_arguments = runs[1][1]
+            self.assertEqual(warp_arguments[:2], ["--gpu", "1"])
+            self.assertIn("C:\\r\\warp-shots", warp_arguments)
+            self.assertEqual(sorted(findings["references"]), [3])
+            self.assertTrue((out / "warp" / "frame-3.png").exists())
+            self.assertIn("warp", findings["passes"])
 
 
 if __name__ == "__main__":

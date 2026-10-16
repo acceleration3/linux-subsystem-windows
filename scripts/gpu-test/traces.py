@@ -140,7 +140,8 @@ def capture_command(args):
     for option, value in (("Exe", args.exe), ("Arguments", args.arguments), ("Package", args.package),
                           ("AppId", args.app_id), ("Process", args.process), ("Mode", args.mode),
                           ("ClKernelName", args.cl_kernel_name), ("GfxrFrames", args.gfxr_frames),
-                          ("GfxrTrigger", getattr(args, "gfxr_trigger", ""))):
+                          ("GfxrTrigger", getattr(args, "gfxr_trigger", "")),
+                          ("Environment", ";".join(getattr(args, "capture_env", []) or []))):
         if value:
             parts.append(f"-{option}:{ps_quote(value)}")
     for option, value in (("SteamApp", args.steam_app), ("Seconds", args.seconds), ("ClKernels", args.cl_kernels),
@@ -562,6 +563,8 @@ def main():
                          help="GFXReconstruct: capture nothing until KEY (F12) is pressed - by --drive's script in the scene")
     capture.add_argument("--gfxr-trigger-frames", type=int, default=0, metavar="N",
                          help="GFXReconstruct: with --gfxr-trigger, the frames captured once it is pressed")
+    capture.add_argument("--env", dest="capture_env", action="append", default=[], metavar="NAME=VALUE",
+                         help="GFXReconstruct: set for the launch, e.g. GFXRECON_MEMORY_TRACKING_MODE=unassisted")
     capture.add_argument("--repack", action="store_true", help="apitrace: recompress the trace with zstd")
     capture.add_argument("--gl-trace", default="", metavar="APP/FUNC",
                          help="CLIntercept: the same run's OpenGL through apitrace's opengl32.dll wrapper, as this trace")

@@ -88,8 +88,8 @@ traces/
 | `arch` | `x64` or `x86`: the apitrace build that replays it (the application's bitness) |
 | `capture`, `files` | the trace, and every file the replay needs with its size and sha256 |
 | `check.frames` | frames whose pictures are judged: apitrace 0-based, negative from the end; GFXR 1-based; `[]` for none |
-| `replay` | `timeout_s` (900), `benchmark` (false; true adds a separate timed `-b` pass, else fps = frames / the check pass's seconds), `env`, `extra_args` (to the retracer), `cl_platform` (`avgpu`) |
-| `judge` | `reference` (`promoted`, or `warp` for dxgi), `pixel_tolerance` 2, `psnr_min` 40, `changed_max_pct` 1, `psnr_warn` 30, `memory_growth_mib_max` 256, `min_fps` null, OpenCL `rtol` 1e-3 `atol` 1e-5 `itol` 0 `max_bad_fraction` 0 |
+| `replay` | `timeout_s` (900), `benchmark` (false; true adds a separate timed `-b` pass, else fps = frames / the check pass's seconds), `env`, `extra_args` (to the retracer), `cl_platform` (`avgpu`), `warp_gpu` (1: the adapter a D3D12 trace's WARP pass renders on) |
+| `judge` | `reference` (`promoted`, or `warp` for dxgi and d3d12), `pixel_tolerance` 2, `psnr_min` 40, `changed_max_pct` 1, `psnr_warn` 30, `memory_growth_mib_max` 256, `min_fps` null, OpenCL `rtol` 1e-3 `atol` 1e-5 `itol` 0 `max_bad_fraction` 0 |
 | `captured` | capture.json, plus `how`: what was done in the application, so it can be recorded again |
 
 ## How a replay is judged
@@ -170,7 +170,15 @@ On the builder, with the LSW VM running (lsw-manager, or `gpu_matrix.py hold
    hand: the script (with a `drive.ps1` beside it put first) runs in the VM's
    desktop once the capture started, and should quit the application at its
    end; `--wait N` then waits for the capture to finish (the Affinity suite
-   below is recorded this way).
+   below is recorded this way). GFXReconstruct: `--gfxr-frames 100-200`
+   trims the capture to those frames, `--gfxr-trigger F12
+   --gfxr-trigger-frames N` records nothing until the drive script presses
+   F12 and then N frames (the scene without the launch and load before it;
+   the trimmed file, `capture_trim_trigger.gfxr`, becomes `capture.gfxr`),
+   and `--env NAME=VALUE` sets more of the layer's settings for the launch.
+   A Steam game started directly needs Steam running (otherwise it restarts
+   itself through Steam, without the capture): trace-capture.ps1 starts it
+   with `-silent` first.
 5. `traces.py pull hl2/trainstation --title "..." --how "what you did"` copies the
    capture into the store and writes `manifest.json` (five frames spread over the
    trace past its first tenth, `--frames` to choose; `dxgi` traces judged against WARP).
@@ -195,7 +203,28 @@ A capture made on another host's VM: `traces.py pull` there, then
 ## Limits
 
 - D3D9 and OpenGL have no WARP: their references are promoted from a GPU (or
-  from a bare-metal Windows machine's replay, if one is ever available).
+  from a bare-metal Windows machine's replay, if one is ever available). A
+  D3D12 trace judged against WARP (`judge.reference: warp`) gets a second
+  `gfxrecon-replay` pass on adapter `replay.warp_gpu` (1: the VM's adapters
+  are listed Microsoft Basic Render Driver first), which must load
+  `d3d10warp.dll`.
+- gfxrecon-replay ends with "Press any key to close this window" in a
+  console of its own, and waited there until the pass timed out: its passes
+  run in trace-replay.ps1's hidden console (`share_console`).
+- GFXReconstruct's D3D12 capture tracks mapped memory by default with
+  `GFXRECON_PAGE_GUARD_EXTERNAL_MEMORY`: it backs each upload or readback
+  heap with write-watched memory of its own, opened as an existing heap.
+  Under avgpu the heap's mapping is avumd's own memory, not those pages
+  (GetWriteWatch error 87 for every heap in the layer's log), so nothing the
+  application wrote through a mapping was recorded and Resident Evil 4's
+  replays were black or white. Capture D3D12 with `--env
+  GFXRECON_PAGE_GUARD_EXTERNAL_MEMORY=false` (shadow copies: correct, but
+  the game ran at a frame every few seconds under it).
+- A capture the VM went down in the middle of leaves GFXReconstruct's
+  `d3d12.dll`, `dxgi.dll`, `d3d12_capture.dll` and a `steam_appid.txt` in the
+  game's folder (trace-capture.ps1 then refuses to overwrite them, and the
+  game started any other way loads them): remove them before anything else
+  runs the game.
 - apitrace cannot trim a Direct3D trace; keep captures short, use `--repack`
   (zstd), and cap the frame rate in games (`+fps_max 30` in Source).
 - WGC (Windows.Graphics.Capture) frames arrive from DWM as cross-process shared
@@ -313,7 +342,9 @@ frame), so these three are judged at `pixel_tolerance` 16 and `psnr_min` 38.
 The RX 9070 XT and the Radeon 610M render every judged frame within 2 levels
 of each other on all but a few pixels (at most 9). `gpu-test.sh run local --
 --suites traces --traces dsr` (run `dsr-local-1`): both GPUs pass all four
-traces; 36 to 44 fps in-game, memory growth about 44 MiB.
+traces; 36 to 44 fps in-game, memory growth about 44 MiB. Run `games2-local-1`
+(accel-virt `blob-lease-ahead`'s driver and executor) passed all four on
+both GPUs again.
 
 To record one again, with the VM held (`gpu_matrix.py hold`):
 
@@ -335,34 +366,106 @@ covers about a third of what it does untraced: an arcade scene (the shade
 under the courtyard's arches) never got past the bonfire in two attempts
 and was left out.
 
-### Resident Evil 4 Chainsaw Demo (`re4demo`, Direct3D 12): not recorded
+### Resident Evil 4 Chainsaw Demo (`re4demo`, Direct3D 12)
 
-`traces.py capture re4demo/... --tool gfxr --api d3d12` records it (the
-`gfxreconstruct_d3d12` tool's capture DLLs beside re4demo.exe, started
-directly with steam_appid.txt), and a D3D12 trace replays and is judged like
-a Vulkan one (`--screenshots`, 1-based frames, five past the first tenth by
-default, the frame count from gfxrecon-info). No trace is in the store:
+One trace, the title screen, recorded on the builder's RX 9070 XT on
+2026-10-16 (accel-virt `blob-lease-ahead`, below): re4demo.exe started
+directly (steam_appid.txt, Steam running) with the `gfxreconstruct_d3d12`
+capture DLLs beside it, `GFXRECON_PAGE_GUARD_EXTERNAL_MEMORY=false` (see
+Limits) and the F12 trigger, the game at its defaults (1920x1080 swap chain
+in a window, DX12, HDR off).
 
-- The game quit at its start with "Fatal D3D error (30)": avumd answered
-  D3D12's pipeline library slots E_NOTIMPL and the runtime removed the
-  device. Fixed on accel-virt branch `d3d12-pipeline-library` (not yet
-  deployed), with the D3D12 probe's `pipeline_library` step.
-- With that fix the game reaches its menus, but the host then refused some
-  of its compute pipelines (70 to 85 KB DXIL programs, which cross through
-  the blob arena): the bytes the executor read were not the program the
-  command named - another shader's header with a different size, or noise -
-  and the device was removed. Not yet found.
+| Trace | Frames | Size | What the script does |
+|---|---|---|---|
+| `re4demo/title` | 20 | 873 MiB | `re4demo/title.ps1`: the logos and the development notice left to pass, the title (its logo and START GAME, told apart from an engine logo by looking) waited for, F12, a minute on the title: the RESIDENT EVIL 4 logo over the animated misty forest |
+
+A trimmed GFXReconstruct capture opens with the state of every live object
+and the contents of every resource, so the 20 frames carry the title's whole
+resident set (most of the 873 MiB): pipelines, heaps, the forest's textures.
+Under the shadow-memory tracking the game ran at a frame every few seconds,
+which is why the trigger's 90 frames came out as 20 before the script closed
+it. The replay takes about 80 s (load, then 3 to 8 fps).
+
+References are promoted from the RX 9070 XT, not WARP's: `judge.reference:
+warp` replays the trace a second time on WARP (the suite's new D3D12 WARP
+pass), and WARP renders the title's forest sharp and lit where avgpu (and the
+live game on avgpu) renders it blurred and dark - PSNR 27 to 31 dB, 65 to
+85% of pixels off, all in the background; the logo and text match. Which is
+right needs a bare-metal Windows replay; until then the trace guards avgpu
+against itself and across GPUs. `gpu-test.sh run local -- --suites traces
+--traces hl2,re4demo,dsr` (run `games2-local-1`): both GPUs pass - the RX
+9070 XT identical to its reference, the Radeon 610M at PSNR 76 dB with no
+pixel off by more than 2; 8.5 and 3.2 fps, memory growth 92 and 127 MiB.
+
+To record it again, with the VM held:
+
+    traces.py capture re4demo/title --tool gfxr --api d3d12 \
+      --exe 'C:\Program Files (x86)\Steam\steamapps\common\RESIDENT EVIL 4  BIOHAZARD RE4 Chainsaw Demo\re4demo.exe' \
+      --steam-app 2231770 --seconds 1500 --gfxr-trigger F12 --gfxr-trigger-frames 90 \
+      --env GFXRECON_PAGE_GUARD_EXTERNAL_MEMORY=false --drive scripts/gpu-test/re4demo/title.ps1 --wait 900
+    traces.py pull re4demo/title --replace
+
+`re4demo/drive.ps1` (DSR's helpers, put before each scene) tells the title
+and the menus apart by looking (`Screen`), holds keys rather than tapping
+them, and waits up to 10 minutes for the first window (a cold boot's first
+launch takes minutes). `re4demo/options.ps1` (the OPTIONS tabs) and
+`re4demo/intro.ps1` (NEW GAME into the opening cutscene) are written but not
+recorded: under the capture's shadow-memory tracking the game stopped taking
+input at the title (its busy cursor over START GAME for minutes), and
+untraced, the load into the cutscene twice ended in "Fatal D3D error (26)" at
+the moment Windows logged a bad block in `re_chunk_000.pak` (below).
+
+What getting here took:
+
+- **Blob leases lent again before their batch was sent** (accel-virt
+  `blob-lease-ahead`, "Direct3D: a heap's import waits behind the commands
+  the stream holds"). The Direct3D command stream batches commands whose
+  arrays are in blob leases (a shader's DXIL past 4 KB); a Direct3D 12
+  upload or readback heap is imported with a command of the transport's
+  own, sent under the same lock. Published and answered ahead of the
+  stream's batch, it retired those leases, the next shader was copied over
+  the previous one, and the host built a pipeline from another shader's
+  code - or refused it ("CreateComputePipeline12 refused") and removed the
+  device, which was the game's "Fatal D3D error (24)" a few seconds into
+  its start. The transport now has the stream send what it holds first.
+  Reproduced and guarded by the D3D12 samples' new `shaderstream` (eight
+  11 KB compute shaders with an upload between each two: before, the
+  device was removed; now each band paints its own colour) and unit tests
+  of the transport and the stream.
+- **The executor's object table full at 24576** (same branch, "D3D executor:
+  a session holds 196608 objects, its table mapped as it fills"). A minute
+  into loading its first area the game held three quarters of the 32768-slot
+  table, and every create after was refused (CreateHeap12,
+  CreatePlacedResource12) and the device removed. The table now has 262144
+  slots, mapped at its first insert and given back on clear, and a refused
+  create says why in QEMU's log.
+- The game folder was checked clean before every run (no GFXReconstruct
+  DLL, no steam_appid.txt); a capture cut short by the VM going down does
+  leave them (see Limits).
 - The VM's disk image on this builder's btrfs reads back with checksum
-  errors (`csum failed` on lsw.qcow2 in the kernel log, Windows' disk event
-  7 "has a bad block"), which the game's 10 GiB pack is exposed to.
+  errors (`csum failed` on lsw.qcow2, `aio failed` in QEMU's log, Windows'
+  disk event 7). Mapped to files with `fsutil volume querycluster` they are
+  in `re_chunk_000.pak`, `pagefile.sys`, the registry's SOFTWARE hive, Steam's
+  CEF files and the font cache; the game's "Fatal D3D error (26)" fell on
+  the second a block of the pack failed to read, and launched through Steam
+  it also stopped at the title with error (24) and no refusal in the host's
+  log. Left as it is (the user's call); a whole-file read of the pack
+  afterwards succeeded, so the errors come and go.
 
-### Half-Life 2 (`hl2`, Direct3D 9 and Vulkan): not recorded
+### Half-Life 2 (`hl2`, Direct3D 9 and Vulkan)
 
-Planned as `hl2/<scene>` (D3D9, apitrace, as `hl2/trainstation`) and
-`hl2/<scene>-vk` (`-vulkan`, GFXReconstruct's layer), the same scenes in
-both. The VM's disk was grown to 100 GiB, but C: cannot take the space: the
-recovery partition sits right after it (C: ends at 63.6 GB, the recovery
-partition follows, 40 GiB free after that).
+Only `hl2/trainstation` (recorded on the test host's Arc, above) is in the
+store; the planned D3D9 and Vulkan scene pairs (`hl2/<scene>` and
+`hl2-vulkan/<scene>`) are not recorded, because Half-Life 2 is not installed
+in this VM. The 100 GiB disk now has a 40 GiB NTFS volume after the recovery
+partition, `G:` "Games" (D: and E: are LSW's installer and payload CDs),
+with `G:\SteamLibrary` made for it; adding it as a Steam library and
+installing the game needs Steam's own UI (this session was not allowed to
+edit Steam's library files or start an install), so: in the VM, Steam >
+Settings > Storage > the drive menu > Add Drive > G:, then Library >
+Half-Life 2 > Install > Install to G:\SteamLibrary > Install. `hl2/trainstation`
+passes on both of the builder's GPUs against its Arc reference (PSNR 54 dB,
+0.4% of pixels off by more than 2, run `games2-local-1`).
 
 ## The Affinity suite
 

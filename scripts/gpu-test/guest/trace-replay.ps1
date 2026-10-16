@@ -2,9 +2,14 @@
 # The config (written by trace_suite.py) names the program, its argument line,
 # its working directory, extra environment, where standard output and error go,
 # where the result goes, a timeout and how often to sample memory:
-#   {"exe", "args", "cwd", "env": {}, "stdout", "stderr", "result", "timeout_s", "sample_ms", "modules", "linger_s"}
+#   {"exe", "args", "cwd", "env": {}, "stdout", "stderr", "result", "timeout_s", "sample_ms", "modules", "linger_s",
+#    "share_console"}
 # linger_s: the program is closed (its main window, then killed) after this
 # long, and "closed" says so - for a retracer told to keep its window (-w).
+# share_console: the program runs in this script's console (hidden, as the
+# desktop task starts it) instead of a new one of its own - gfxrecon-replay
+# ends with "Press any key to close this window" in a console only it holds,
+# and waited there until the pass timed out.
 # The result is JSON: exit_code, seconds, timed_out, error, samples as
 # [seconds, private bytes, working set] while the process ran, and the loaded
 # DLLs whose names match the "modules" pattern (which driver it really used).
@@ -24,7 +29,7 @@ try {
     $psi.Arguments = $c.args
     $psi.WorkingDirectory = $c.cwd
     $psi.UseShellExecute = $false
-    $psi.CreateNoWindow = $true
+    $psi.CreateNoWindow = -not $c.share_console
     $psi.RedirectStandardInput = $true
     $psi.RedirectStandardOutput = $true
     $psi.RedirectStandardError = $true
