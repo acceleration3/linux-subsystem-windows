@@ -1,0 +1,12 @@
+# Rectangle Tool: a rectangle dragged (default fill); Pen Tool: a curve of four clicks and a drag, back to its first node; Esc.
+Ready
+Click 344 1032 800
+Drag @(760,620, 1000,860) 15 15 1000
+Click 344 988 800
+Click 760 1000 500
+Click 900 940 500
+Drag @(1050,1000, 1150,900) 10 15 500
+Click 1000 1150 500
+Click 760 1000 800
+Press esc 800
+QuitNoSave

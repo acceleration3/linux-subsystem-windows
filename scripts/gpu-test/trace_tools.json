@@ -1,0 +1,97 @@
+{
+ "apitrace": {
+  "version": "14.0",
+  "license": "MIT (apitrace); its bundled libraries' licenses are in x64/doc and x86/doc",
+  "home": "https://github.com/apitrace/apitrace",
+  "role": "records and replays Direct3D 8/9/10/11 (DXGI) and OpenGL: apitrace trace, d3dretrace, glretrace",
+  "downloads": [
+   {"url": "https://github.com/apitrace/apitrace/releases/download/14.0/apitrace-14.0-win64.7z",
+    "sha256": "32c702683770ba00b06a12a95fe1afdd7d7353cf519adf2073e6433f78147dc3",
+    "unpack": "7z", "strip": "apitrace-14.0-win64", "into": "x64",
+    "keep": ["bin/apitrace.exe", "bin/d3dretrace.exe", "bin/glretrace.exe", "bin/inject.exe",
+             "bin/injectee_iat.dll", "bin/injectee_mhook.dll", "bin/D3Dcompiler_47.dll",
+             "lib/wrappers/*.dll", "doc/LICENSE*", "doc/USAGE.markdown"]},
+   {"url": "https://github.com/apitrace/apitrace/releases/download/14.0/apitrace-14.0-win32.7z",
+    "sha256": "3f2548621ea25a714198ac367f429f6c6f095f04fbeb2a610e534131ed8febbe",
+    "unpack": "7z", "strip": "apitrace-14.0-win32", "into": "x86",
+    "keep": ["bin/apitrace.exe", "bin/d3dretrace.exe", "bin/glretrace.exe", "bin/inject.exe",
+             "bin/injectee_iat.dll", "bin/injectee_mhook.dll", "bin/D3Dcompiler_47.dll",
+             "lib/wrappers/*.dll", "doc/LICENSE*"]}
+  ]
+ },
+ "clintercept": {
+  "version": "3.0.6",
+  "license": "MIT (Intel's Intercept Layer for OpenCL Applications); the release publishes no hash, so the sha256 is the one measured when it was pinned",
+  "home": "https://github.com/intel/opencl-intercept-layer",
+  "role": "records OpenCL kernels with their inputs and outputs (CaptureReplay), each replayed by the run.py it writes beside them",
+  "downloads": [
+   {"url": "https://github.com/intel/opencl-intercept-layer/releases/download/v3.0.6/clintercept-3.0.6-win64.zip",
+    "sha256": "d95bd9582a414a70e391b2114187740a21139397ea568104a6f9d2d550073e51",
+    "unpack": "zip", "strip": "clintercept-3.0.6-win64/Release", "into": "x64",
+    "keep": ["cliloader.exe", "OpenCL.dll"]},
+   {"url": "https://github.com/intel/opencl-intercept-layer/releases/download/v3.0.6/clintercept-3.0.6-win32.zip",
+    "sha256": "3724e1a512b186d041c67e548940646941046a283bb12196fc20aece28d322fe",
+    "unpack": "zip", "strip": "clintercept-3.0.6-win32/Release", "into": "x86",
+    "keep": ["cliloader.exe", "OpenCL.dll"]}
+  ]
+ },
+ "gfxreconstruct": {
+  "version": "1.4.363.0",
+  "license": "MIT (GFXReconstruct), from LunarG's Vulkan SDK 1.4.363.0 for Windows, whose published sha256 this is",
+  "home": "https://github.com/LunarG/gfxreconstruct",
+  "role": "records Vulkan through its layer and replays Vulkan and D3D12 captures (gfxrecon-replay); D3D12 capture DLLs are not in the SDK",
+  "downloads": [
+   {"url": "https://sdk.lunarg.com/sdk/download/1.4.363.0/windows/vulkansdk-windows-X64-1.4.363.0.exe",
+    "sha256": "94a82d378f7a5e3e54c9db7d2fb7016af136e14ac0a18dbf0f2f67a36352d141",
+    "unpack": "7z", "strip": "Bin", "into": "x64",
+    "keep": ["gfxrecon-replay.exe", "gfxrecon-info.exe", "gfxrecon-compress.exe",
+             "VkLayer_gfxreconstruct.dll", "VkLayer_gfxreconstruct.json"]}
+  ]
+ },
+ "gfxreconstruct_d3d12": {
+  "version": "dev-280a0ac",
+  "license": "MIT (GFXReconstruct; its third-party licenses in x64/LICENSE_ThirdParty.txt); x64/D3D12 is Microsoft's DirectX 12 Agility SDK runtime and dxcompiler.dll the DirectX Shader Compiler, redistributed with gfxrecon-replay as LunarG's build ships them",
+  "home": "https://github.com/LunarG/gfxreconstruct",
+  "role": "records Direct3D 12 (its d3d12.dll, dxgi.dll and d3d12_capture.dll beside the executable) and replays D3D12 captures with gfxrecon-replay; no release ships the D3D12 capture DLLs, so this is LunarG's own CI build (Windows MSVC Release) of dev at 280a0ac, the Actions artifact whose digest GitHub publishes",
+  "downloads": [
+   {"url": "https://api.github.com/repos/LunarG/gfxreconstruct/actions/artifacts/11917414057/zip",
+    "file": "gfxreconstruct-dev-windows-msvc-release-280a0ac.zip", "gh_artifact": true,
+    "sha256": "e6a64ebaa1725bbe6b5e2cecd5e59b17ce00284876bcafeb404cabcc6fd116b8",
+    "unpack": "zip", "into": "x64",
+    "keep": ["gfxrecon-replay.exe", "gfxrecon-info.exe", "dxcompiler.dll", "D3D12/*.dll", "d3d12_capture/*.dll",
+             "LICENSE*.txt", "USAGE_desktop_D3D12.md"]}
+  ]
+ },
+ "python": {
+  "version": "3.13.16",
+  "license": "PSF (CPython embeddable); numpy BSD-3-Clause and others; pyopencl MIT (bundles the Khronos ICD loader, Apache-2.0); pytools MIT; platformdirs MIT; siphash24 Apache-2.0 OR LGPL-2.1+; typing_extensions PSF",
+  "home": "https://www.python.org/downloads/windows/",
+  "role": "runs CLIntercept's run.py replays (pyopencl, numpy) and guest/clreplay.py in the guest",
+  "downloads": [
+   {"url": "https://www.python.org/ftp/python/3.13.16/python-3.13.16-embed-amd64.zip",
+    "sha256": "97dae5274cc54867065e8d5a3226e48c35017ed332a0fdb0e27d5b5821961297",
+    "unpack": "zip", "into": "x64"},
+   {"url": "https://files.pythonhosted.org/packages/da/62/2c8d5524430c6b419b59b1b0679787df78c3ee75e7b7a75f7e81e9fe6b01/pyopencl-2026.1.4-cp313-cp313-win_amd64.whl",
+    "sha256": "e7a24694dbbd693efc5782ba9f1128cede10ef4dd3484b996b2b3d9831b5cc45",
+    "unpack": "wheel", "into": "x64/Lib/site-packages"},
+   {"url": "https://files.pythonhosted.org/packages/90/8c/140a40398a66b4471211be1affdb6ed24c486d581bd28d07b7f2fcb69540/numpy-2.5.4-cp313-cp313-win_amd64.whl",
+    "sha256": "8b4d2fd2d34e5f8c9235ee787de5631a37a28402b15cb80814df973d2be54129",
+    "unpack": "wheel", "into": "x64/Lib/site-packages"},
+   {"url": "https://files.pythonhosted.org/packages/bb/45/32a4b57ff351213094a533067db1846494db9bba5f3348b75223b94f3d22/pytools-2026.1.1-py3-none-any.whl",
+    "sha256": "1f6d9a39c871b6dc761893373792f10b67886c83e38f2aa09b66e11f8c021436",
+    "unpack": "wheel", "into": "x64/Lib/site-packages"},
+   {"url": "https://files.pythonhosted.org/packages/8d/15/1633010b26e88e872c93b67c0b6c5e174fb74cb6fb5c1472b4d51d4a8f22/platformdirs-4.13.0-py3-none-any.whl",
+    "sha256": "3dbcf4cd708f21cf876c4eaa90e58412bc4f033d87143f41b1493ff77c25b7e1",
+    "unpack": "wheel", "into": "x64/Lib/site-packages"},
+   {"url": "https://files.pythonhosted.org/packages/b1/ae/0ae957dd525850e8eb6d4f107267202744468b55b06b70e09c8634266a90/siphash24-1.9-cp313-cp313-win_amd64.whl",
+    "sha256": "1da60d05b6014b3a6946a9829d83359b21a7e104ab5cf71dd2d835c1b78a7ebd",
+    "unpack": "wheel", "into": "x64/Lib/site-packages"},
+   {"url": "https://files.pythonhosted.org/packages/49/d3/b8441a820a491ddfc024b0b0cf0393375b75ea13866d9c66727e54c2fc80/typing_extensions-4.16.0-py3-none-any.whl",
+    "sha256": "481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8",
+    "unpack": "wheel", "into": "x64/Lib/site-packages"}
+  ],
+  "write": {
+   "x64/python313._pth": ["python313.zip", ".", "Lib\\site-packages"]
+  }
+ }
+}

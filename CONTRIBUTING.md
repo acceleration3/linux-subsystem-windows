@@ -158,3 +158,6 @@ it with the connection's `EventPump` in `host_endpoint.cpp`.
   and what does not.
 - [docs/link-protocol.md](docs/link-protocol.md) — the normative
   host↔guest spec.
+- [docs/gpu-testing.md](docs/gpu-testing.md) — running every graphics
+  suite and the app/game trace suites on every GPU of the test machines
+  (`scripts/gpu-test/`).
