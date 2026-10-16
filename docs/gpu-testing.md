@@ -148,8 +148,8 @@ new feature, and each suite's table.
 | `affinity` | open-image, zoom-pan, brush, selection-mask, layers-blend, vector-shapes, text, adjustments, live-filters, transform, export-png, login-wpf | D3D11 |
 | `resolve` | media, edit, dissolve, title, grade, nodes, qualifier, fx-blur, fx-glow, fx-vignette, fx-sharpen, scopes, fusion, fairlight, deliver, each as `-cl` and `-gl`; plus opencl-media, ui | OpenCL, OpenGL |
 | `dsr` | title, courtyard, combat, menus | D3D11 |
-| `hl2`, `hl2-vulkan` | trainstation (D3D9); further scenes being recorded | D3D9, Vulkan |
-| `re4demo` | being recorded | D3D12 |
+| `hl2` | trainstation (D3D9); more scenes and `hl2-vulkan` once HL2 is installed in the builder's VM | D3D9 (Vulkan planned) |
+| `re4demo` | title | D3D12 (GFXReconstruct) |
 
 The store holds the traces, their references and the pinned capture and
 replay tools. It is about 13 GB, so it is kept outside git in
