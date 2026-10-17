@@ -75,6 +75,11 @@ SHIPPED_LIBRARIES = TREE / "libs"
 LOSS_LAYER = AV / "build" / "gpu_fault" / "libav_device_loss_layer.so"
 EXECUTOR = TREE / "build" / "accel-virt" / "qemu" / "libav_executor.so"
 D3D_LIB = TREE / "build" / "accel-virt" / "d3d" / "lib"
+# Where the host drivers keep QEMU's compiled shaders across boots: the
+# same directory and variables lsw-manager's domain uses.
+SHADER_CACHE = pathlib.Path.home() / ".cache" / "lsw" / "shader-cache"
+SHADER_CACHE_ENV = ("MESA_SHADER_CACHE_DIR", "__GL_SHADER_DISK_CACHE_PATH", "DXVK_STATE_CACHE_PATH",
+                    "VKD3D_SHADER_CACHE_PATH")
 DRIVERS = TREE / "build" / "av-drivers"
 VULKAN_LOADERS = {"x64": TREE / "build-agent" / "_deps" / "vulkanloader-build" / "loader" / "vulkan-1.dll",
                   "x86": TREE / "build-agent32" / "_deps" / "vulkanloader-build" / "loader" / "vulkan-1.dll"}
@@ -239,6 +244,15 @@ def retarget(xml, gpus, qemu_env=()):
             env.set("value", str(QEMU_MODULES))
         elif env.get("name") == "AV_D3D_PATH":
             env.set("value", str(D3D_LIB))
+    # The host drivers' shader caches kept across boots, as lsw-manager's
+    # domain keeps them: libvirt's per-domain XDG_CACHE_HOME is deleted at
+    # shutdown, and a cold cache made RE4's trace take 285 s where a warm
+    # one took 29 s on the NVIDIA host.
+    SHADER_CACHE.mkdir(parents=True, exist_ok=True)
+    for name in SHADER_CACHE_ENV:
+        for env in [env for env in environment if env.get("name") == name]:
+            commandline.remove(env)
+        ET.SubElement(commandline, f"{{{QEMU_NS}}}env", name=name, value=str(SHADER_CACHE))
     for pair in qemu_env:
         name, _, value = pair.partition("=")
         for env in [env for env in environment if env.get("name") == name]:

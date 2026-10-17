@@ -67,6 +67,10 @@ struct DomainXmlInputs {
     QString qemu_data_dir;    // -L, for an installed QEMU; empty leaves it out
     QString executor;         // executor=
     QString d3d_lib_dir;      // AV_D3D_PATH
+    // Where the host GPU drivers keep compiled shaders for QEMU: libvirt
+    // hands each domain a cache directory it deletes at shutdown, so
+    // without this every boot recompiles every shader from cold.
+    QString shader_cache_dir;
 };
 
 }  // namespace lsw::host::vm

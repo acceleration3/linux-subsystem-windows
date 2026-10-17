@@ -7,10 +7,12 @@
 #include "lsw/host/vm/domain_handle.hpp"
 #include "lsw/host/vm/export_socket.hpp"
 
+#include <QDir>
 #include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QRegularExpression>
+#include <QStandardPaths>
 #include <libvirt/libvirt-qemu.h>
 #include <libvirt/libvirt.h>
 
@@ -280,6 +282,15 @@ bool Lifecycle::fill_accel_virt(DomainXmlInputs& inputs) {
     fill(inputs.executor, &platform::AccelVirtPaths::executor);
     fill(inputs.d3d_lib_dir, &platform::AccelVirtPaths::d3d_lib_dir);
     fill(inputs.export_socket, &ExportSocket::path);
+    if (inputs.shader_cache_dir.isEmpty()) {
+        const QString dir = QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation) +
+                            QStringLiteral("/lsw/shader-cache");
+        if (QDir().mkpath(dir)) {
+            inputs.shader_cache_dir = dir;
+        } else {
+            LSW_WARN("shader cache: {} could not be made; shaders recompile every boot", dir.toStdString());
+        }
+    }
 
     // QEMU's modules are beside it, whichever build it came from.
     if (inputs.qemu_module_dir.isEmpty() && !inputs.qemu_binary.isEmpty()) {

@@ -166,10 +166,19 @@ QString DomainXmlBuilder::build(const config::VmRecord& vm, const DomainXmlInput
     //   XDG_RUNTIME_DIR  the PipeWire audio backend's socket lives under
     //                    it. Absent on the host, the line is left out and
     //                    QEMU fails closed at startup with a clear error.
+    //   *_CACHE_*        each host driver's own shader cache, kept across
+    //                    boots: libvirt points XDG_CACHE_HOME at a
+    //                    per-domain directory it deletes at shutdown, so
+    //                    Mesa, NVIDIA, DXVK and vkd3d-proton are pointed
+    //                    past it by their own variables.
     const std::pair<const char*, QString> env[] = {
         {"QEMU_MODULE_DIR", inputs.qemu_module_dir},
         {"AV_D3D_PATH", inputs.d3d_lib_dir},
         {"XDG_RUNTIME_DIR", QProcessEnvironment::systemEnvironment().value("XDG_RUNTIME_DIR")},
+        {"MESA_SHADER_CACHE_DIR", inputs.shader_cache_dir},
+        {"__GL_SHADER_DISK_CACHE_PATH", inputs.shader_cache_dir},
+        {"DXVK_STATE_CACHE_PATH", inputs.shader_cache_dir},
+        {"VKD3D_SHADER_CACHE_PATH", inputs.shader_cache_dir},
     };
     QStringList env_lines;
     for (const auto& [name, value] : env) {
