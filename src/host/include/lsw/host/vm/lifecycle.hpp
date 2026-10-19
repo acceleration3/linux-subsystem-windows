@@ -149,6 +149,15 @@ private:
     // with a GPU that accelerates nothing, and either reads as a fault
     // somewhere else.
     [[nodiscard]] bool fill_accel_virt(DomainXmlInputs& inputs);
+    // The stored domain of ``uuid`` pointed at this LSW's own accel-virt
+    // host files - QEMU, its modules and firmware, the executor, DXVK and
+    // vkd3d-proton - and redefined when any differed. The guest drivers
+    // this LSW installs speak to its own host and no other, and a domain
+    // keeps the paths it was defined with: after an upgrade, or one made
+    // by another build, it would start a host its drivers cannot talk to.
+    // False, with the reason in last_error(), when this LSW's own QEMU or
+    // executor cannot be found or the domain cannot be redefined.
+    [[nodiscard]] bool retarget_host(const QUuid& uuid);
 
     LibvirtConnection& conn_;
 };

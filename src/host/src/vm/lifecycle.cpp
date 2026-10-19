@@ -7,6 +7,7 @@
 #include "lsw/host/vm/domain_handle.hpp"
 #include "lsw/host/vm/export_socket.hpp"
 
+#include <QDomDocument>
 #include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -124,11 +125,100 @@ int Lifecycle::start(const QUuid& uuid, bool first_boot_done) {
     if (first_boot_done) {
         eject_install_media(uuid);
     }
+    if (!retarget_host(uuid)) {
+        return -1;
+    }
 
     if (::virDomainCreate(dom.raw()) < 0) {
         return fail("virDomainCreate");
     }
     return 0;
+}
+
+bool Lifecycle::retarget_host(const QUuid& uuid) {
+    DomainXmlInputs own;
+    if (!fill_accel_virt(own)) {
+        return false;
+    }
+    QDomDocument doc;
+    if (!doc.setContent(domain_xml(uuid, /*stored=*/true))) {
+        return true;  // no stored definition to correct; the start says why
+    }
+    const QDomElement root = doc.documentElement();
+    QDomElement commandline = root.firstChildElement(QStringLiteral("qemu:commandline"));
+    if (commandline.isNull()) {
+        return true;  // not an accel-virt domain
+    }
+    QStringList changed;
+    const auto set_text = [&changed](QDomElement element, const QString& value, const char* what) {
+        if (element.isNull() || value.isEmpty() || element.text() == value) {
+            return;
+        }
+        while (element.hasChildNodes()) {
+            element.removeChild(element.firstChild());
+        }
+        element.appendChild(element.ownerDocument().createTextNode(value));
+        changed << QLatin1String(what);
+    };
+    const auto set_value = [&changed](QDomElement element, const QString& value, const char* what) {
+        if (value.isEmpty() || element.attribute(QStringLiteral("value")) == value) {
+            return;
+        }
+        element.setAttribute(QStringLiteral("value"), value);
+        changed << QLatin1String(what);
+    };
+
+    set_text(root.firstChildElement(QStringLiteral("devices")).firstChildElement(QStringLiteral("emulator")),
+             own.qemu_binary, "QEMU");
+
+    static const QRegularExpression executor(QStringLiteral("(executor=)[^,]*"));
+    QDomElement data_flag;
+    QDomElement data_dir;
+    for (QDomElement e = commandline.firstChildElement(); !e.isNull(); e = e.nextSiblingElement()) {
+        const QString name = e.attribute(QStringLiteral("name"));
+        const QString value = e.attribute(QStringLiteral("value"));
+        if (e.tagName() == QStringLiteral("qemu:env") && name == QStringLiteral("QEMU_MODULE_DIR")) {
+            set_value(e, own.qemu_module_dir, "QEMU's modules");
+        } else if (e.tagName() == QStringLiteral("qemu:env") && name == QStringLiteral("AV_D3D_PATH")) {
+            set_value(e, own.d3d_lib_dir, "DXVK and vkd3d-proton");
+        } else if (e.tagName() == QStringLiteral("qemu:arg") && value.contains(QStringLiteral("executor="))) {
+            QString retargeted = value;
+            retargeted.replace(executor, QStringLiteral("\\1") + own.executor);
+            set_value(e, retargeted, "the executor");
+        } else if (e.tagName() == QStringLiteral("qemu:arg") && value == QStringLiteral("-L")) {
+            data_flag = e;
+            data_dir = e.nextSiblingElement();
+        }
+    }
+    // An installed QEMU finds its firmware through -L; a build tree's
+    // finds its own, and carries none.
+    if (!data_flag.isNull() && own.qemu_data_dir.isEmpty()) {
+        commandline.removeChild(data_dir);
+        commandline.removeChild(data_flag);
+        changed << QStringLiteral("QEMU's firmware");
+    } else if (!data_flag.isNull()) {
+        set_value(data_dir, own.qemu_data_dir, "QEMU's firmware");
+    } else if (!own.qemu_data_dir.isEmpty()) {
+        for (const QString& arg : {QStringLiteral("-L"), own.qemu_data_dir}) {
+            QDomElement e = doc.createElement(QStringLiteral("qemu:arg"));
+            e.setAttribute(QStringLiteral("value"), arg);
+            commandline.appendChild(e);
+        }
+        changed << QStringLiteral("QEMU's firmware");
+    }
+
+    if (changed.isEmpty()) {
+        return true;
+    }
+    changed.removeDuplicates();
+    auto* d = ::virDomainDefineXML(conn_.raw(), doc.toString(2).toUtf8().constData());
+    if (d == nullptr) {
+        return fail("virDomainDefineXML") == 0;
+    }
+    DomainHandle redefined{d};
+    LSW_INFO("VM pointed at this LSW's host files ({}): {}", changed.join(QStringLiteral(", ")).toStdString(),
+             own.qemu_binary.toStdString());
+    return true;
 }
 
 DomainHandle Lifecycle::lookup(const QUuid& uuid) const {
