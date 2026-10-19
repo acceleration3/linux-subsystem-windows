@@ -5,7 +5,8 @@
 #include "host/mirror/monitor_window.hpp"
 #include "host/mirror/gpu_picture.hpp"
 #include "proto/message_writer.hpp"
-#include "proto/wire_hello.hpp"
+#include "proto/hello.hpp"
+#include "proto/window_id.hpp"
 
 #include <QApplication>
 #include <QEventLoop>
@@ -135,10 +136,10 @@ int main(int argc, char** argv) {
     });
     QObject::connect(&guest, &QTcpSocket::connected, &app, [&] {
         rwin::MessageWriter hello(rwin::MessageId::GuestHello);
-        rwin::WireHello{}.write(hello);
+        rwin::Hello::ours().write(hello);
         send(guest, std::move(hello));
         rwin::MessageWriter frame(rwin::MessageId::Frame);
-        frame.put_u64(rwin::kMonitorWindow);
+        rwin::kMonitorWindow.write(frame);
         frame.put_u32(2);
         frame.put_u32(1);
         frame.put_u32(0xffffffff);

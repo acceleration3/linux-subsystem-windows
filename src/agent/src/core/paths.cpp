@@ -1,8 +1,14 @@
 #include "lsw/agent/core/paths.hpp"
 
+#include <cctype>
+
 namespace lsw::agent::core {
 
 namespace {
+
+// A mirror's log is named after its application; a name longer than this
+// is not one anybody reads in a file listing.
+constexpr std::size_t kMostLogNameChars = 64;
 
 [[nodiscard]] std::wstring under_root(const wchar_t* leaf) {
     return Paths::root() + L"\\" + leaf;
@@ -34,8 +40,14 @@ std::wstring Paths::remotewin_guest_exe() {
     return under_root(L"remotewin-guest.exe");
 }
 
-std::wstring Paths::remotewin_guest_log() {
-    return under_root(L"remotewin-guest.log");
+std::wstring Paths::remotewin_guest_log(std::string_view name) {
+    std::wstring leaf = L"remotewin-guest";
+    if (!name.empty()) leaf += L'-';
+    for (const char c : name.substr(0, kMostLogNameChars)) {
+        const bool kept = std::isalnum(static_cast<unsigned char>(c)) != 0 || c == '-' || c == '_' || c == '.';
+        leaf += kept ? static_cast<wchar_t>(c) : L'_';
+    }
+    return under_root((leaf + L".log").c_str());
 }
 
 std::wstring Paths::remotewin_desktop_log() {

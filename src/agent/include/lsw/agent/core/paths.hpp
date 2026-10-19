@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <string>
+#include <string_view>
 
 namespace lsw::agent::core {
 
@@ -35,11 +36,13 @@ public:
     // ``work`` — staged setup files (see WorkDir).
     [[nodiscard]] static std::wstring work_dir();
 
-    // The window mirror's guest half, and where it logs: an
-    // application's mirror, and the whole desktop's, each in a file of
-    // its own so one does not overwrite the other's.
+    // The window mirror's guest half, and where it logs: each
+    // application's mirror in a file named after the application
+    // (``remotewin-guest-<name>.log``, the name cut to letters, digits,
+    // ``-``, ``_`` and ``.``), and the whole desktop's in its own, so no
+    // mirror truncates another's log as it starts.
     [[nodiscard]] static std::wstring remotewin_guest_exe();
-    [[nodiscard]] static std::wstring remotewin_guest_log();
+    [[nodiscard]] static std::wstring remotewin_guest_log(std::string_view name);
     [[nodiscard]] static std::wstring remotewin_desktop_log();
 };
 

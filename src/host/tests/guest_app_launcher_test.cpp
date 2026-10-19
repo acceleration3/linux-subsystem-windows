@@ -424,7 +424,7 @@ int main(int argc, char** argv) {
                 (mode == "failed-start" ? bad_executable : QCoreApplication::applicationFilePath())
                     .toUtf8());
         std::unique_ptr<lsw::host::mirror::WindowMirror> mirror(
-            lsw::host::mirror::WindowMirror::of_application(rpc, 123, {}, {}));
+            lsw::host::mirror::WindowMirror::of_application(rpc, {123, {}, {}, {}, {}}));
         QString reason;
         int errors = 0;
         int finished = 0;

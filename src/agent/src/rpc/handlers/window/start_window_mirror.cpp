@@ -27,12 +27,12 @@ namespace lsw::agent::rpc::handlers {
 //
 // Or for the guest's whole desktop ("Open desktop"): the same guest half,
 // which learns from the host end, once connected, that it is to capture
-// the monitor rather than an application. ``desktop`` only names its log
-// apart, so a desktop mirror and an application's do not write over each
-// other's.
+// the monitor rather than an application. ``desktop`` and ``name`` (the
+// application's) only name its log apart, so no two mirrors write over
+// each other's.
 //
-//   params: port, exe?, log_path?, desktop?, session?, pid? (the mirrored
-//           application: its session is the default), elevated?
+//   params: port, exe?, log_path?, desktop?, name?, session?, pid? (the
+//           mirrored application: its session is the default), elevated?
 //   reply:  {ok, pid, session, error?}
 struct StartWindowMirrorHandler : RpcHandler {
     nlohmann::json handle(const nlohmann::json& params, RpcContext& ctx) override {
@@ -45,7 +45,8 @@ struct StartWindowMirrorHandler : RpcHandler {
         const auto log_path = params.value(
             "log_path", util::TextEncoding::to_utf8(params.value("desktop", false)
                                                         ? core::Paths::remotewin_desktop_log()
-                                                        : core::Paths::remotewin_guest_log()));
+                                                        : core::Paths::remotewin_guest_log(
+                                                              params.value("name", std::string{}))));
 
         std::optional<std::uint32_t> app_pid;
         if (const auto v = params.value("pid", std::uint64_t{0}); v != 0) {

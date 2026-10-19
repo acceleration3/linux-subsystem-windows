@@ -22,7 +22,7 @@
 #include "host/export/shared_frame_feed.hpp"
 #include "host/link/guest_link.hpp"
 #include "host/mirror/monitor_session.hpp"
-#include "proto/message_id.hpp"
+#include "proto/window_id.hpp"
 #endif
 
 #include <memory>
@@ -304,11 +304,11 @@ void DesktopPreview::start() {
         surface_->update();
     };
     connect(&session->frames, &rwin::host::SharedFrameFeed::frame_ready, this,
-            [framed](quint64 window, const rwin::host::SharedFrame&) {
+            [framed](rwin::WindowId window, const rwin::host::SharedFrame&) {
                 if (window == rwin::kMonitorWindow) framed(QStringLiteral("WGC, GPU"));
             });
     connect(&session->link, &rwin::host::GuestLink::frame_arrived, this,
-            [framed](quint64 window, const QImage&) {
+            [framed](rwin::WindowId window, const QImage&) {
                 if (window == rwin::kMonitorWindow) framed(QStringLiteral("WGC, pixels"));
             });
     session->settle.setSingleShot(true);

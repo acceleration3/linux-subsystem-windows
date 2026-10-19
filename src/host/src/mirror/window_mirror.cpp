@@ -16,8 +16,8 @@ namespace lsw::host::mirror {
 namespace {
 
 // remotewin's exit status for a guest half from another build: the two
-// halves say their wire version to each other first, and refuse a
-// mismatch rather than misread it (remotewin's WireHello).
+// halves say which features they speak first, and refuse a peer without
+// what a mirror needs rather than misread it (remotewin's Hello).
 constexpr int kExitWireMismatch = 3;
 
 // The launcher entry the desktop's window presents as: the manager's
@@ -26,32 +26,38 @@ constexpr const char* kManagerDesktopId = "lsw-manager";
 
 }  // namespace
 
-WindowMirror* WindowMirror::of_application(link::AgentRpcClient& rpc, quint32 pid,
-                                           const QString& job, const QString& desktop_id,
+WindowMirror* WindowMirror::of_application(link::AgentRpcClient& rpc, const Application& application,
                                            QObject* parent) {
-    QStringList arguments{QStringLiteral("--pid"), QString::number(pid)};
-    if (!job.isEmpty()) {
-        arguments << QStringLiteral("--job") << job;
+    QStringList arguments{QStringLiteral("--pid"), QString::number(application.pid)};
+    if (!application.image.isEmpty()) {
+        arguments << QStringLiteral("--image") << application.image;
     }
-    if (!desktop_id.isEmpty()) {
-        arguments << QStringLiteral("--app-id") << desktop_id;
+    if (!application.aumid.isEmpty()) {
+        arguments << QStringLiteral("--aumid") << application.aumid;
     }
-    return new WindowMirror(rpc, QStringLiteral("pid %1 job '%2'").arg(pid).arg(job),
-                            std::move(arguments), pid, false, parent);
+    if (!application.desktop_id.isEmpty()) {
+        arguments << QStringLiteral("--app-id") << application.desktop_id;
+    }
+    return new WindowMirror(rpc,
+                            QStringLiteral("pid %1 '%2'")
+                                .arg(application.pid)
+                                .arg(application.aumid.isEmpty() ? application.image : application.aumid),
+                            std::move(arguments), application.pid, false, application.log_name, parent);
 }
 
 WindowMirror* WindowMirror::of_desktop(link::AgentRpcClient& rpc, const QString& title,
                                        QObject* parent) {
     QStringList arguments{QStringLiteral("--desktop"), QStringLiteral("--title"), title,
                           QStringLiteral("--app-id"), QLatin1String(kManagerDesktopId)};
-    return new WindowMirror(rpc, QStringLiteral("the desktop"), std::move(arguments), 0, true,
+    return new WindowMirror(rpc, QStringLiteral("the desktop"), std::move(arguments), 0, true, QString(),
                             parent);
 }
 
 WindowMirror::WindowMirror(link::AgentRpcClient& rpc, QString what, QStringList host_arguments,
-                           quint32 guest_pid, bool desktop, QObject* parent)
+                           quint32 guest_pid, bool desktop, QString log_name, QObject* parent)
     : QObject(parent), rpc_(rpc), what_(std::move(what)),
       host_arguments_(std::move(host_arguments)), guest_pid_(guest_pid), desktop_(desktop),
+      log_name_(std::move(log_name)),
       host_end_(new QProcess(this)), deadline_(this) {
     deadline_.setSingleShot(true);
     connect(&deadline_, &QTimer::timeout, this, [this] {
@@ -84,7 +90,7 @@ void WindowMirror::on_host_end_finished(int code, QProcess::ExitStatus status) {
     read_status();
     deadline_.stop();
     if (status == QProcess::NormalExit && code == kExitWireMismatch) {
-        // remotewin has said which versions on its own stderr, just above.
+        // remotewin has said what the guest half lacks on its own stderr, just above.
         LSW_WARN("mirror: {} refused the guest's remotewin-guest.exe: it is from another "
                  "build than this manager's remotewin. Redeploy it (scripts/redeploy-agent.sh, "
                  "or the redeploy_agent MCP tool)",
@@ -152,6 +158,13 @@ void WindowMirror::read_status() {
         } else if (line == "READY" && guest_started_) {
             first_frame_ = true;
             announce_ready();
+        } else if (line.startsWith("APP ")) {
+            const QString aumid = QString::fromUtf8(line.mid(4));
+            if (!aumid.isEmpty() && !app_ids_.contains(aumid)) {
+                app_ids_ << aumid;
+                LSW_INFO("mirror: {} shows the windows of {}", what_.toStdString(), aumid.toStdString());
+                Q_EMIT app_identified(aumid);
+            }
         }
     }
     if (status_buffer_.size() > 4096) {
@@ -168,6 +181,9 @@ void WindowMirror::start_guest(quint16 port) {
     }
     if (desktop_) {
         params["desktop"] = true;
+    }
+    if (!log_name_.isEmpty()) {
+        params["name"] = log_name_.toStdString();
     }
     rpc_.request_async(linkproto::cmd::kStartWindowMirror, std::move(params), this,
                        [this](const link::AgentReply& reply) {

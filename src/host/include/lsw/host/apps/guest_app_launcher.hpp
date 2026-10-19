@@ -52,10 +52,18 @@ public:
 
 private:
     [[nodiscard]] QString key(const apps::AppConfig& app) const;
+    // ``identity``'s mirror found ``aumid`` among its windows: the
+    // application's identity as Windows' taskbar has it. A second mirror
+    // of an application another mirror already shows would show the same
+    // windows twice; the one there first keeps them.
+    void identified(const QString& identity, const QString& aumid, const QString& path);
+    void forget(const QString& identity);
     link::AgentRpcClient& rpc_;
     QSet<QString> pending_;
     QHash<QString, QPointer<mirror::WindowMirror>> mirrors_;
     QHash<QString, quint32> pids_;
+    // Which identity's mirror shows each AppUserModelID.
+    QHash<QString, QString> shown_by_;
 };
 
 }  // namespace lsw::host::apps
