@@ -1,7 +1,7 @@
 pkgbase = lsw-bin
 	pkgdesc = Linux Subsystem for Windows: Windows applications as native windows, from a KVM guest with a paravirtual GPU
 	pkgver = 0.1.8
-	pkgrel = 2
+	pkgrel = 3
 	url = https://github.com/acceleration3/linux-subsystem-windows
 	install = lsw-bin.install
 	arch = x86_64
@@ -9,6 +9,9 @@ pkgbase = lsw-bin
 	license = GPL-2.0-only
 	license = LGPL-2.1-or-later
 	license = Zlib
+	license = BSD-3-Clause
+	license = GPL-3.0-only
+	license = LicenseRef-WinFsp-FLOSS-exception
 	depends = qt6-base>=6.12
 	depends = qt6-base<6.13
 	depends = libvirt
@@ -65,6 +68,6 @@ pkgbase = lsw-bin
 	options = !strip
 	options = !debug
 	source = https://github.com/acceleration3/linux-subsystem-windows/releases/download/v0.1.8/lsw-0.1.8-x86_64.tar.zst
-	sha256sums = b42d4209ada01de9418f05a7d8e5d55159eede3d16f8836fc81c643ef59592c2
+	sha256sums = 4f937906156748ff5c5454423f330804419079dfec6e9dfb9ab0ec01b0547f83
 
 pkgname = lsw-bin

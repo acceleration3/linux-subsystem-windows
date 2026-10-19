@@ -9,13 +9,15 @@
 
 pkgname=lsw-bin
 pkgver=0.1.8
-pkgrel=2
+pkgrel=3
 pkgdesc="Linux Subsystem for Windows: Windows applications as native windows, from a KVM guest with a paravirtual GPU"
 arch=('x86_64')
 url="https://github.com/acceleration3/linux-subsystem-windows"
-# LSW itself; QEMU and its firmware; vkd3d-proton; DXVK. The texts are
-# in /usr/share/licenses/lsw-bin.
-license=('Apache-2.0' 'GPL-2.0-only' 'LGPL-2.1-or-later' 'Zlib')
+# LSW itself; QEMU and its firmware; vkd3d-proton; DXVK; virtio-win's
+# viofs driver and virtiofs.exe; WinFsp's installer, under its FLOSS
+# exception. The texts are in /usr/share/licenses/lsw-bin.
+license=('Apache-2.0' 'GPL-2.0-only' 'LGPL-2.1-or-later' 'Zlib' 'BSD-3-Clause'
+         'GPL-3.0-only' 'LicenseRef-WinFsp-FLOSS-exception')
 provides=('lsw')
 conflicts=('lsw')
 # The libraries the shipped ELF files link (the release's .depends file,
@@ -59,7 +61,7 @@ install=lsw-bin.install
 # makepkg to strip, and a debug package would be empty.
 options=('!strip' '!debug')
 source=("https://github.com/acceleration3/linux-subsystem-windows/releases/download/v${pkgver}/lsw-${pkgver}-${CARCH}.tar.zst")
-sha256sums=('b42d4209ada01de9418f05a7d8e5d55159eede3d16f8836fc81c643ef59592c2')
+sha256sums=('4f937906156748ff5c5454423f330804419079dfec6e9dfb9ab0ec01b0547f83')
 
 package() {
     cp -a --no-preserve=ownership "${srcdir}/usr" "${pkgdir}/"
