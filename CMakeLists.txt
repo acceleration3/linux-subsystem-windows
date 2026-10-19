@@ -74,7 +74,8 @@ endif()
 #                                           the executor
 #   lib/lsw/accel-virt/d3d/                 DXVK and vkd3d-proton
 #   share/lsw/guest/                        the agent, remotewin-guest.exe,
-#                                           av-drivers/, loaders/x64|x86/
+#                                           av-drivers/, loaders/x64|x86/,
+#                                           virtiofs/ (shared folders)
 #   share/applications/lsw-manager.desktop
 #
 # Literal directories rather than GNUInstallDirs: the manager finds all
@@ -240,6 +241,11 @@ if(LSW_BUILD_MANAGER)
     find_path(HIVEX_INCLUDE_DIR NAMES hivex.h REQUIRED)
 
     add_subdirectory(src/host)
+
+    # The guest's half of the shared folders: virtio-win's viofs driver
+    # and virtiofs.exe, WinFsp, and the script that installs and mounts
+    # them, as share/lsw/guest/virtiofs.
+    include(LSWGuestShares)
 
     # The desktop entry and its icon. accel-virt needs nothing of the host
     # system beyond KVM and a GPU driver: every byte the guest shares with

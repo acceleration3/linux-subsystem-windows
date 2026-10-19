@@ -147,6 +147,26 @@ bool PayloadIsoBuilder::stage_files(const PayloadInputs& in, const QString& stag
         return false;
     }
 
+    // The shared folders' guest half, flat, as ``\virtiofs``. A file that
+    // failed to copy is a package the guest cannot install, so it fails
+    // the build like the driver tree does.
+    if (!in.virtiofs_tree.isEmpty()) {
+        const QDir src_root{in.virtiofs_tree};
+        const QString dest_root = dir.filePath(QStringLiteral("virtiofs"));
+        if (!QDir().mkpath(dest_root)) {
+            return set_error(error_out, QStringLiteral("could not create %1").arg(dest_root));
+        }
+        for (const QString& name : src_root.entryList(QDir::Files, QDir::Name)) {
+            const QString dest = QDir(dest_root).filePath(name);
+            if (!QFile::copy(src_root.filePath(name), dest)) {
+                return set_error(error_out, QStringLiteral("could not stage %1 from %2 into the "
+                                                           "payload")
+                                                .arg(name, in.virtiofs_tree));
+            }
+            created << dest;
+        }
+    }
+
     stage_optional(in.lsw_msi_path, "lsw.msi");
     stage_optional(in.agent_exe_path, "lsw-agent.exe");
     stage_optional(in.mirror_exe_path, "remotewin-guest.exe");

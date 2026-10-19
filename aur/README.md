@@ -22,9 +22,13 @@ usr/lib/lsw/accel-virt/qemu/share/        QEMU's x86 firmware, ROMs, keymaps (-L
 usr/lib/lsw/accel-virt/d3d/               DXVK and vkd3d-proton
 usr/share/lsw/guest/                      lsw-guest-agent.exe, remotewin-guest.exe,
                                           av-drivers/, loaders/{x64,x86}/vulkan-1.dll
+usr/share/lsw/guest/virtiofs/             the shared folders' guest half: virtio-win's
+                                          viofs driver and virtiofs.exe, the WinFsp
+                                          installer, lsw-shares.ps1
 usr/share/applications/lsw-manager.desktop
 usr/share/licenses/lsw/                   LSW's license, and QEMU's, DXVK's,
-                                          vkd3d-proton's and the Vulkan loader's
+                                          vkd3d-proton's, the Vulkan loader's,
+                                          virtio-win's and WinFsp's
 ```
 
 The manager finds all of it relative to its own binary, so the same

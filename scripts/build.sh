@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Build everything: the cross-compiled Windows guest agent, the
 # host-side Linux binaries, and accel-virt — the GPU's patched QEMU and
-# host libraries, and the guest driver package (build/av-drivers).
+# host libraries, and the guest driver package (build/av-drivers). The
+# host configure also fetches the shared folders' guest half, pinned
+# (build/guest-virtiofs, cmake/LSWGuestShares.cmake).
 #
 # Order matters — the manager bakes the agent's path into the payload
 # ISO, so the agent has to exist first.
@@ -89,7 +91,8 @@ fi
 for target in "${HOST_TARGETS[@]}"; do
     case "$target" in
         lsw-manager)
-            echo "  manager:       ${BUILD}/src/host/lsw-manager" ;;
+            echo "  manager:       ${BUILD}/src/host/lsw-manager"
+            echo "  shares:        ${BUILD}/guest-virtiofs" ;;
         remotewin)
             echo "  mirror:        ${BUILD}/remotewin/source/host/remotewin" ;;
         accel_virt)

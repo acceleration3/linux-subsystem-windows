@@ -715,8 +715,22 @@ void MainWindow::notice_start_refused(const QString& headline) {
 
 void MainWindow::follow_upkeep() {
     auto& upkeep = services_.upkeep();
-    connect(&upkeep, &services::GuestUpkeep::changed, this, [this, &upkeep] {
+    // The shares' notice follows its own error, posted once each time it
+    // changes, so a dismissed one stays dismissed until there is news.
+    connect(&upkeep, &services::GuestUpkeep::changed, this,
+            [this, &upkeep, shown = QString{}]() mutable {
         refresh_status_bar();
+        if (upkeep.shares_error() != shown) {
+            shown = upkeep.shares_error();
+            if (shown.isEmpty()) {
+                notices_->withdraw(QStringLiteral("shares"));
+            } else {
+                notices_->post(QStringLiteral("shares"), false,
+                               QStringLiteral("The shared folders are not mounted in Windows."),
+                               shown,
+                               {{QStringLiteral("Try again"), [&upkeep] { upkeep.retry(); }}});
+            }
+        }
         if (upkeep.state() != services::GuestUpkeep::State::Failed) {
             notices_->withdraw(QStringLiteral("upkeep"));
             return;

@@ -300,8 +300,13 @@ void SettingsPage::build() {
     auto* add_share = small_button(QStringLiteral("Add a folder"));
     shares_head->addWidget(add_share);
     shares_layout->addLayout(shares_head);
-    shares_layout->addWidget(
-        Widgets::meta(QStringLiteral("Each one becomes a virtiofs device and a drive letter.")));
+    // The second sentence is the notice WinFsp's FLOSS exception asks for
+    // in the interface (packaging/licenses/winfsp-LICENSE).
+    shares_layout->addWidget(Widgets::meta(
+        QStringLiteral("Each one becomes a virtiofs device and a drive letter in Windows, mounted "
+                       "with WinFsp - Windows File System Proxy, Copyright (C) Bill "
+                       "Zissimopoulos (github.com/winfsp/winfsp)."),
+        true));
     shares_table_ = make_table({QStringLiteral("Folder on this machine"),
                                 QStringLiteral("Drive"), QStringLiteral("Access"),
                                 QString{}});

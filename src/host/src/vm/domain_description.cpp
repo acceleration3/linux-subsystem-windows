@@ -135,6 +135,10 @@ std::optional<DomainDescription> DomainDescription::parse(const QString& xml) {
     bool in_commandline = false;
     bool in_video = false;
     bool disk_done = false;
+    // Inside a <filesystem>, and whether its driver is virtiofs.
+    bool in_filesystem = false;
+    bool filesystem_virtiofs = false;
+    Share share;
     QString previous_arg;
 
     while (!reader.atEnd()) {
@@ -150,6 +154,11 @@ std::optional<DomainDescription> DomainDescription::parse(const QString& xml) {
                 in_commandline = false;
             } else if (name == QLatin1StringView("video")) {
                 in_video = false;
+            } else if (name == QLatin1StringView("filesystem") && in_filesystem) {
+                in_filesystem = false;
+                if (filesystem_virtiofs && !share.tag.isEmpty()) {
+                    out.shares.push_back(share);
+                }
             }
             continue;
         }
@@ -176,6 +185,18 @@ std::optional<DomainDescription> DomainDescription::parse(const QString& xml) {
             out.disk_path = attrs.value(QLatin1StringView("file")).toString();
         } else if (in_disk && name == QLatin1StringView("target")) {
             out.disk_bus = attrs.value(QLatin1StringView("bus")).toString();
+        } else if (in_devices && name == QLatin1StringView("filesystem")) {
+            in_filesystem = true;
+            filesystem_virtiofs = false;
+            share = {};
+        } else if (in_filesystem && name == QLatin1StringView("driver")) {
+            filesystem_virtiofs = attrs.value(QLatin1StringView("type")) == QLatin1StringView("virtiofs");
+        } else if (in_filesystem && name == QLatin1StringView("source")) {
+            share.host_path = attrs.value(QLatin1StringView("dir")).toString();
+        } else if (in_filesystem && name == QLatin1StringView("target")) {
+            share.tag = attrs.value(QLatin1StringView("dir")).toString();
+        } else if (in_filesystem && name == QLatin1StringView("readonly")) {
+            share.read_only = true;
         } else if (in_devices && name == QLatin1StringView("video")) {
             in_video = true;
         } else if (in_video && name == QLatin1StringView("model")) {

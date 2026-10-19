@@ -11,6 +11,7 @@ Greenfield. Phase 0 scaffolding.
 ```
 src/
   agent/          lsw-guest-agent.exe — the Windows service inside the VM
+  guest/          what else runs inside the VM: lsw-shares.ps1, the shared folders
   base/           logging for the host (the agent has its own)
   linkproto/      the host <-> guest wire contract
   host/           the Linux manager
@@ -96,6 +97,18 @@ and run it with optional Windows command-line arguments. Its windows use
 the same mirroring path as installed applications. Copies remain under
 `C:\ProgramData\LSW\uploads`; only the selected file is transferred, not
 companion files. This requires a guest agent built with `upload_file` support.
+
+**Shared folders** (Settings, Files) give Windows a folder of this
+machine as a drive letter: each is a virtio-fs device (virtiofsd on the
+host) and, in Windows, one instance of virtio-win's `virtiofs.exe` under
+WinFsp's launcher, so every session sees the drive. LSW ships what Windows
+needs — virtio-win's viofs driver and `virtiofs.exe`, and the WinFsp
+installer, each pinned and checksummed at build time — and installs it
+when Windows is set up, or in a guest set up before it once the manager
+next finds it running; the drives come back at every start of Windows.
+`C:\ProgramData\LSW\shares.log` in the guest says what was done. The
+mounts are made with WinFsp - Windows File System Proxy, Copyright (C)
+Bill Zissimopoulos, <https://github.com/winfsp/winfsp>.
 
 MSIX/MSIXBundle and APPX/APPXBundle files open Windows' normal **App Installer**
 window, mirrored individually just like other applications. Opening the package

@@ -30,6 +30,14 @@ struct DomainDescription {
         std::optional<QString> modes;
     };
 
+    // One <filesystem> with a virtiofs driver: a host folder the guest
+    // mounts by its tag.
+    struct Share {
+        QString tag;
+        QString host_path;
+        bool read_only = false;
+    };
+
     int vcpus = 0;
     qint64 memory_mib = 0;
     // The system disk (the first <disk device='disk'>).
@@ -42,6 +50,8 @@ struct DomainDescription {
     // so a definition without one is a guest whose setup has finished,
     // whatever release made it.
     bool installing = false;
+    // The shared folders, in definition order.
+    QVector<Share> shares;
 
     // The display adapter, or null when there is no GPU device at all.
     [[nodiscard]] const GpuDevice* display() const noexcept;

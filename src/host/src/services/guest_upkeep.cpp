@@ -6,6 +6,7 @@
 #include "lsw/host/services/agent_redeployer.hpp"
 #include "lsw/host/services/guest_swap_script.hpp"
 #include "lsw/host/services/status_hub.hpp"
+#include "lsw/host/vm/domain_description.hpp"
 
 #include <QDateTime>
 #include <QMetaObject>
@@ -34,7 +35,11 @@ GuestUpkeep::GuestUpkeep(StatusHub& status, link::AgentRpcClient& rpc, QObject* 
             attempted_.insert(result.attempted);
         }
         error_ = result.error;
-        set_state(result.ok ? State::Current : State::Failed);
+        const bool shares_changed = shares_error_ != result.shares_error;
+        shares_error_ = result.shares_error;
+        if (!set_state(result.ok ? State::Current : State::Failed) && shares_changed) {
+            Q_EMIT changed();
+        }
         // An agent swapped in reports the driver package anew.
         status_.refresh(StatusHub::Area::Graphics);
     });
@@ -63,7 +68,11 @@ void GuestUpkeep::on_status() {
     }
     if (!status_.vm().running()) {
         passed_ = false;
-        set_state(State::Idle);
+        const bool had_shares_error = !shares_error_.isEmpty();
+        shares_error_.clear();
+        if (!set_state(State::Idle) && had_shares_error) {
+            Q_EMIT changed();
+        }
         return;
     }
     if (!passed_ && ready()) {
@@ -78,19 +87,27 @@ void GuestUpkeep::start() {
     passed_ = true;
     set_state(State::Checking);
     error_.clear();
-    watcher_.setFuture(
-        QtConcurrent::run([this, attempted = attempted_] { return pass(attempted); }));
+    // The shares the machine has now: its live definition, which is what
+    // gave Windows its virtio-fs devices.
+    QVector<GuestShares::Mount> mounts;
+    if (const vm::DomainDescription* definition = status_.vm().definition()) {
+        mounts = GuestShares::mounts_of(*definition);
+    }
+    watcher_.setFuture(QtConcurrent::run(
+        [this, attempted = attempted_, mounts] { return pass(attempted, mounts); }));
 }
 
-void GuestUpkeep::set_state(State state) {
+bool GuestUpkeep::set_state(State state) {
     if (state == state_) {
-        return;
+        return false;
     }
     state_ = state;
     Q_EMIT changed();
+    return true;
 }
 
-GuestUpkeep::Result GuestUpkeep::pass(QSet<QString> attempted) {
+GuestUpkeep::Result GuestUpkeep::pass(QSet<QString> attempted,
+                                      const QVector<GuestShares::Mount>& mounts) {
     Result result;
 
     // 1. The agent and the mirror's guest half, against the shipped ones.
@@ -140,7 +157,16 @@ GuestUpkeep::Result GuestUpkeep::pass(QSet<QString> attempted) {
         }
     }
 
-    // 2. The time zone and the clock, as the host's.
+    // 2. The shared folders.
+    const GuestShares::Outcome shares = GuestShares{rpc_}.run(mounts);
+    if (shares.ok) {
+        LSW_INFO("upkeep: shared folders: {}", shares.message.toStdString());
+    } else {
+        LSW_WARN("upkeep: shared folders: {}", shares.message.toStdString());
+        result.shares_error = shares.message;
+    }
+
+    // 3. The time zone and the clock, as the host's.
     const QByteArray zone = QTimeZone::ianaIdToWindowsId(QTimeZone::systemTimeZoneId());
     if (zone.isEmpty()) {
         LSW_WARN("upkeep: Windows has no name for the host's time zone {}; its clock is left",

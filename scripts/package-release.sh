@@ -156,7 +156,9 @@ for tree in host agent agent32; do
 done
 # Licenses: LSW's, and those of what the tarball carries built from
 # someone else's source — QEMU and its firmware, DXVK, vkd3d-proton, the
-# Vulkan loader.
+# Vulkan loader — or as someone else released it: virtio-win's viofs
+# driver and virtiofs.exe, and WinFsp's installer (the shared folders'
+# guest half, cmake/LSWGuestShares.cmake).
 licenses="${STAGE}/usr/share/licenses/lsw"
 install -Dm644 "${ROOT}/LICENSE" "${licenses}/LICENSE"
 qemu_src="${WORK}/host/accel-virt/qemu/source"
@@ -166,6 +168,17 @@ install -Dm644 "${qemu_src}/pc-bios/README"    "${licenses}/qemu-firmware-README
 install -Dm644 "${ROOT}/external/accel-virt/third_party/dxvk/LICENSE"         "${licenses}/dxvk-LICENSE"
 install -Dm644 "${ROOT}/external/accel-virt/third_party/vkd3d-proton/LICENSE" "${licenses}/vkd3d-proton-LICENSE"
 install -Dm644 "${WORK}/agent/_deps/vulkanloader-src/LICENSE.txt"             "${licenses}/vulkan-loader-LICENSE"
+install -Dm644 "${ROOT}/packaging/licenses/virtio-win-LICENSE"                "${licenses}/virtio-win-LICENSE"
+install -Dm644 "${ROOT}/packaging/licenses/winfsp-LICENSE"                    "${licenses}/winfsp-LICENSE"
+# The shared folders' guest half, whole: without it a share is a device
+# Windows has no driver for. The configure that fetched it checked every
+# file against its pin.
+for f in viofs.inf viofs.sys viofs.cat virtiofs.exe lsw-shares.ps1; do
+    [[ -f "${STAGE}/usr/share/lsw/guest/virtiofs/${f}" ]] \
+        || fail "the staged guest tree has no virtiofs/${f}"
+done
+compgen -G "${STAGE}/usr/share/lsw/guest/virtiofs/winfsp-*.msi" >/dev/null \
+    || fail "the staged guest tree has no WinFsp installer"
 # The install leaves the build machine's GPU names out of the driver
 # tree (cmake/LSWAccelVirt.cmake); a release that carried them would
 # name every user's adapter after this machine's.

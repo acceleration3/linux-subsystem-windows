@@ -250,6 +250,16 @@
 					<Description>LSW: keep a pristine copy of the accel-virt driver package</Description>
 					<Path>cmd.exe /c for %i in (D E F G H I J K L M N) do @if exist %i:\av\package\avgpu.inf xcopy /E /I /Y %i:\av\package C:\av\pristine\package</Path>
 				</RunSynchronousCommand>
+				<!-- The shared folders' guest half: virtio-win's viofs
+				     driver and virtiofs.exe, the WinFsp installer and
+				     lsw-shares.ps1. LswPromote.ps1 installs it; the
+				     manager says which shares to mount once the agent
+				     answers. -->
+				<RunSynchronousCommand wcm:action="add">
+					<Order>28</Order>
+					<Description>LSW: copy the shared folders' guest half from payload CD</Description>
+					<Path>cmd.exe /c for %i in (D E F G H I J K L M N) do @if exist %i:\virtiofs\lsw-shares.ps1 xcopy /I /Y %i:\virtiofs C:\ProgramData\LSW\virtiofs</Path>
+				</RunSynchronousCommand>
 				<!-- The agent runs as the 'lsw-agent' Windows service,
 				     registered and started by LswPromote.ps1 at
 				     SetupComplete: LocalSystem in session 0, launching
@@ -958,6 +968,21 @@ foreach ($target in @(@('x64', 'System32'), @('x86', 'SysWOW64'))) {
             L ('installing ' + $dst + ' FAILED: ' + $_.Exception.Message);
         }
     }
+}
+# The shared folders: virtio-win's viofs driver, WinFsp and virtiofs.exe,
+# from the payload's copy in C:\ProgramData\LSW\virtiofs, installed here
+# as SYSTEM so a share works from the machine's first steady boot. Which
+# shares to mount is the manager's to say once the agent answers
+# (services::GuestShares); the lsw-shares task the script registers
+# mounts the same list at every start of Windows after that. Its steps
+# are in C:\ProgramData\LSW\shares.log. A failure here is retried by the
+# manager, which runs the same script at every boot.
+$sharesScript = 'C:\ProgramData\LSW\virtiofs\lsw-shares.ps1';
+if (Test-Path -LiteralPath $sharesScript) {
+    &amp; powershell.exe -NoProfile -ExecutionPolicy Bypass -File $sharesScript -Install 2&gt;&amp;1 | Out-Null;
+    L ('lsw-shares.ps1 -Install exited ' + $LASTEXITCODE + ' - see shares.log');
+} else {
+    L ($sharesScript + ' missing - the payload carried no shared-folder files');
 }
 # The guest agent: the 'lsw-agent' Windows service. LocalSystem, in
 # session 0, automatic start; the SCM restarts it if it fails (after 5 s,

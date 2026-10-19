@@ -48,6 +48,13 @@ struct PayloadInputs {
     // where Windows has none, and recent builds ship one.
     QString vulkan_loader_x64_path;
     QString vulkan_loader_x86_path;
+    // The guest half of the shared folders (platform::GuestVirtiofsPath):
+    // virtio-win's viofs driver and virtiofs.exe, the WinFsp installer and
+    // lsw-shares.ps1. Staged as ``\virtiofs``; the specialize pass copies
+    // it to ``C:\ProgramData\LSW\virtiofs`` and SetupComplete installs it.
+    // Empty stages nothing, and the manager installs it later instead
+    // (services::GuestShares).
+    QString virtiofs_tree;
 };
 
 }  // namespace lsw::host::provision::install

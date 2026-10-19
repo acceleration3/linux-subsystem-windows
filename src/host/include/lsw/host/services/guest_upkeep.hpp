@@ -1,9 +1,12 @@
 #pragma once
 
+#include "lsw/host/services/guest_shares.hpp"
+
 #include <QFutureWatcher>
 #include <QObject>
 #include <QSet>
 #include <QString>
+#include <QVector>
 
 #include <string>
 
@@ -26,7 +29,12 @@ class StatusHub;
 //      file_hashes is older than this, so it is swapped too. A pair of
 //      shipped binaries is tried once per run of the manager, so a swap
 //      that keeps failing does not loop; ``retry`` tries it again.
-//   2. Windows is given the host's time zone and, when its clock is off,
+//   2. the shared folders: the guest half LSW ships (virtio-fs driver,
+//      WinFsp, virtiofs.exe) is installed or brought up to date, and the
+//      machine's shares are mounted at their drive letters, any other
+//      unmounted (GuestShares). Its own outcome: a share that does not
+//      mount is ``shares_error``, not a failed pass.
+//   3. Windows is given the host's time zone and, when its clock is off,
 //      the host's time (the agent's set_clock): the VM's RTC runs on the
 //      host's local time, which Windows reads in its own zone.
 // The driver package is not part of this: it changes the display driver,
@@ -50,6 +58,9 @@ public:
 
     [[nodiscard]] State state() const noexcept { return state_; }
     [[nodiscard]] const QString& error() const noexcept { return error_; }
+    // Why the shared folders are not mounted in Windows, after this
+    // boot's pass; empty when they are, or there are none.
+    [[nodiscard]] const QString& shares_error() const noexcept { return shares_error_; }
 
     // A failed pass again, the swap included.
     void retry();
@@ -63,21 +74,25 @@ private:
         QString error;
         // The shipped pair a swap was tried for, to try once.
         QString attempted;
+        QString shares_error;
     };
 
     void on_status();
     // Whether this boot's guest is one to keep: answering, set up.
     [[nodiscard]] bool ready() const;
     void start();
-    void set_state(State state);
-    // The worker's pass: compare, swap, clock.
-    [[nodiscard]] Result pass(QSet<QString> attempted);
+    // True when it changed (and ``changed`` was emitted).
+    bool set_state(State state);
+    // The worker's pass: compare, swap, shares, clock. ``mounts`` are the
+    // running machine's shares, read here before it starts.
+    [[nodiscard]] Result pass(QSet<QString> attempted, const QVector<GuestShares::Mount>& mounts);
 
     StatusHub& status_;
     link::AgentRpcClient& rpc_;
     QFutureWatcher<Result> watcher_;
     State state_ = State::Idle;
     QString error_;
+    QString shares_error_;
     // A pass ran for this boot: the next is for the next one.
     bool passed_ = false;
     // Shipped pairs (their hashes) a swap was tried for in this run.

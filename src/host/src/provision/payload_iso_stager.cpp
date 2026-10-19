@@ -5,6 +5,7 @@
 #include "lsw/host/platform/accel_virt_paths.hpp"
 #include "lsw/host/platform/agent_exe_path.hpp"
 #include "lsw/host/platform/dolphin_places.hpp"
+#include "lsw/host/platform/guest_virtiofs_path.hpp"
 #include "lsw/host/platform/host_gpus.hpp"
 #include "lsw/host/platform/mirror_exe_paths.hpp"
 #include "lsw/host/provision/install/adapter_names.hpp"
@@ -145,6 +146,18 @@ void PayloadIsoStager::build(const config::VmRecord& record, const PipelineInput
                      "{}-bit applications will find no Vulkan. Run scripts/build-agent.sh",
                      bits, bits);
         }
+    }
+
+    // The shared folders' guest half. Optional: without it the guest is
+    // installed without, and the manager puts it in once the agent
+    // answers, from the same tree - so a missing one is only a warning.
+    payload.virtiofs_tree = platform::GuestVirtiofsPath::locate();
+    if (payload.virtiofs_tree.isEmpty()) {
+        LSW_WARN("provision: no shared-folder guest files found (share/lsw/guest/virtiofs, or "
+                 "$LSW_GUEST_VIRTIOFS); Windows gets them later, if this LSW has them at all");
+    } else {
+        LSW_INFO("provision: bundling the shared folders' guest half from {}",
+                 payload.virtiofs_tree.toStdString());
     }
 
     // libisofs writes hundreds of megabytes; off the GUI thread. The
