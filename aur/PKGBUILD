@@ -24,14 +24,13 @@ conflicts=('lsw')
 # from readelf and pacman -Qo in the build container), then what the
 # manager runs or reads without linking it.
 depends=(
-    # lsw-manager, remotewin. remotewin speaks Wayland below Qt and uses
-    # Qt's private Gui and WaylandClient API (both in qt6-base since Qt
-    # 6.10), so it runs on the Qt minor it was built with and no other:
-    # an older one refuses it (qt_version_tag), a newer one may have
-    # moved the private API. A Qt update calls for a rebuild of this
-    # package; see README.md.
-    'qt6-base>=6.12' 'qt6-base<6.13' 'libvirt' 'libisofs' 'libvncserver' 'wimlib' 'hivex'
-    'spdlog' 'fmt' 'zlib' 'wayland'
+    # lsw-manager: Qt's public API only, so any Qt from the one it was
+    # built against on (an older one refuses it, qt_version_tag).
+    # remotewin: a Wayland client of its own, with no Qt - libwayland,
+    # xkbcommon for the keymap, libdrm for explicit sync, sd-bus
+    # (systemd-libs, below) for KWin.
+    'qt6-base>=6.12' 'libvirt' 'libisofs' 'libvncserver' 'wimlib' 'hivex'
+    'spdlog' 'fmt' 'zlib' 'wayland' 'libxkbcommon' 'libdrm'
     # accel-virt: the executor, QEMU and its modules
     'vulkan-icd-loader' 'ocl-icd' 'libglvnd' 'libpipewire'
     'glib2' 'pixman' 'gnutls' 'libpng' 'libjpeg-turbo' 'libsasl' 'snappy' 'lzo'

@@ -31,6 +31,11 @@ struct CliOptions {
     // manager is running, we self-host (start the VM, run the launch
     // RPC, then keep the manager up).
     QString launch_app_id;
+    // $XDG_ACTIVATION_TOKEN, which the launcher handed the --launch click:
+    // what lets the application's first window come to the front. Taken
+    // out of the environment as it is read, so nothing started later
+    // inherits a token that has been used.
+    QString activation_token;
 
     // --reinstall: the first-run wizard over a guest that already
     // exists, which is what the settings page's Reinstall starts. The

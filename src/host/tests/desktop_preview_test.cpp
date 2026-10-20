@@ -2,8 +2,6 @@
 #include "lsw/host/link/agent_rpc_client.hpp"
 #include "lsw/linkproto/envelope.hpp"
 
-#include "host/mirror/monitor_window.hpp"
-#include "host/mirror/gpu_picture.hpp"
 #include "proto/message_writer.hpp"
 #include "proto/hello.hpp"
 #include "proto/window_id.hpp"
@@ -67,30 +65,20 @@ int main(int argc, char** argv) {
         preview.set_paused(false);
         preview.show();
         preview.set_available(true);
-        int swaps = 0;
-        if (auto* picture = preview.findChild<rwin::host::GpuPicture*>()) {
-            QObject::connect(picture, &QOpenGLWidget::frameSwapped, &app, [&] { ++swaps; });
-        }
-        check(wait_for([&] { return preview.status() == QStringLiteral("WGC, GPU") && swaps > 0; }, 30000),
-              "real guest monitor reaches embedded GPU preview");
+        check(wait_for([&] { return preview.status() == QStringLiteral("WGC, pixels"); }, 30000),
+              "real guest monitor reaches the embedded preview");
         if (failures != 0) std::fprintf(stderr, "%s\n", qPrintable(preview.status()));
         if (app.arguments().contains(QStringLiteral("--snapshot"))) {
-            // Diagnostic only: grabbing the host widget reads its framebuffer.
             check(preview.grab().save(QStringLiteral("/tmp/opencode/wgc-preview.png")),
                   "save diagnostic preview snapshot");
         }
         click(preview);
         QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
-        check(preview.is_paused() && preview.status() == QStringLiteral("WGC, paused") &&
-                  preview.findChildren<rwin::host::MonitorWindow*>().isEmpty(),
-              "live Pause releases the GPU capture session");
+        check(preview.is_paused() && preview.status() == QStringLiteral("WGC, paused"),
+              "live Pause releases the capture session");
         click(preview);
-        swaps = 0;
-        if (auto* picture = preview.findChild<rwin::host::GpuPicture*>()) {
-            QObject::connect(picture, &QOpenGLWidget::frameSwapped, &app, [&] { ++swaps; });
-        }
-        check(wait_for([&] { return preview.status() == QStringLiteral("WGC, GPU") && swaps > 0; }, 30000),
-              "live Play resumes GPU rendering without readback");
+        check(wait_for([&] { return preview.status() == QStringLiteral("WGC, pixels"); }, 30000),
+              "live Play resumes the capture");
         preview.hide();
         QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
         QThreadPool::globalInstance()->waitForDone();
@@ -161,39 +149,27 @@ int main(int argc, char** argv) {
               "a click plays the WGC capture live");
         preview.set_available(true);
         check(starts == 2, "repeated agent status does not duplicate captures");
-        const auto views = preview.findChildren<rwin::host::MonitorWindow*>();
-        check(views.size() == 1 && !views.first()->isWindow() &&
-                  views.first()->size().width() >= 300,
-              "monitor is embedded and first frame cannot resize its container");
-        if (views.size() == 1) {
-            auto* view = views.first();
-            check(view->focusPolicy() == Qt::NoFocus &&
-                      view->testAttribute(Qt::WA_TransparentForMouseEvents),
-                  "preview cannot take keyboard focus or pointer input");
-            // Drain the handshake, FrameRoute and WatchMonitor before input.
+        {
+            QWidget* surface = preview.childAt(preview.rect().center());
+            check(surface != nullptr && surface->focusPolicy() == Qt::NoFocus,
+                  "the preview's picture takes no keyboard focus");
+            // Drain the handshake and WatchMonitor before input.
             QCoreApplication::processEvents();
             guest.readAll();
-            const QPointF at(view->rect().center());
-            QMouseEvent move(QEvent::MouseMove, at, at,
-                             Qt::NoButton, Qt::NoButton, Qt::NoModifier);
-            QMouseEvent press(QEvent::MouseButtonPress, at, at,
-                              Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
-            QMouseEvent release(QEvent::MouseButtonRelease, at, at,
-                                Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
-            QWheelEvent wheel(at, at, QPoint(), QPoint(0, 120),
-                              Qt::NoButton, Qt::NoModifier, Qt::NoScrollPhase, false);
-            QKeyEvent down(QEvent::KeyPress, Qt::Key_A, Qt::NoModifier, QStringLiteral("a"));
-            QKeyEvent up(QEvent::KeyRelease, Qt::Key_A, Qt::NoModifier, QStringLiteral("a"));
-            const std::array<QEvent*, 6> events{&move, &press, &release, &wheel, &down, &up};
-            for (QEvent* event : events)
-                QApplication::sendEvent(view, event);
+            if (surface != nullptr) {
+                const QPointF at(surface->rect().center());
+                QMouseEvent move(QEvent::MouseMove, at, surface->mapToGlobal(at), Qt::NoButton, Qt::NoButton,
+                                 Qt::NoModifier);
+                QWheelEvent wheel(at, surface->mapToGlobal(at), QPoint(), QPoint(0, 120), Qt::NoButton,
+                                  Qt::NoModifier, Qt::NoScrollPhase, false);
+                QKeyEvent down(QEvent::KeyPress, Qt::Key_A, Qt::NoModifier, QStringLiteral("a"));
+                QKeyEvent up(QEvent::KeyRelease, Qt::Key_A, Qt::NoModifier, QStringLiteral("a"));
+                for (QEvent* event : std::array<QEvent*, 4>{&move, &wheel, &down, &up}) {
+                    QApplication::sendEvent(surface, event);
+                }
+            }
             check(!wait_for([&] { return guest.bytesAvailable() != 0; }, 100),
-                  "preview forwards no move, button, wheel or key messages");
-            view->set_interactive(true);
-            for (QEvent* event : events) QApplication::sendEvent(view, event);
-            check(wait_for([&] { return guest.bytesAvailable() != 0; }),
-                  "ordinary desktop views still transmit input");
-            view->set_interactive(false);
+                  "preview forwards no move, wheel or key messages");
         }
         preview.hide();
         check(wait_for([&] { return guest.state() == QAbstractSocket::UnconnectedState; }),

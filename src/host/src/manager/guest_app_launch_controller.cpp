@@ -60,7 +60,8 @@ GuestAppLaunchController::GuestAppLaunchController(services::HostServices& servi
             });
 }
 
-void GuestAppLaunchController::launch(const QString& app_id) {
+void GuestAppLaunchController::launch(const QString& app_id, const QString& activation_token) {
+    activation_token_ = activation_token;
     const config::VmRecord* vm = services_.vms().primary();
     if (vm == nullptr) {
         LSW_WARN("launch_app({}): no VM defined", app_id.toStdString());
@@ -91,7 +92,7 @@ void GuestAppLaunchController::launch(const QString& app_id) {
     if (services_.status().vm().agent_online()) {
         LSW_INFO("launch_app({}): firing immediately path={}", app_id.toStdString(),
                  guest_path.toStdString());
-        launcher_->launch(*cfg);
+        launcher_->launch(*cfg, std::exchange(activation_token_, QString()));
         return;
     }
     start_vm_and_wait(uuid, app_id, guest_path);
@@ -102,12 +103,12 @@ void GuestAppLaunchController::fire_when_ready(const QString& app_id, const QStr
     // guest has been booting for a while, and the config may have been
     // edited in the meantime. One removed since launches its path bare.
     if (const auto* cfg = services_.app_configs().find(app_id); cfg != nullptr) {
-        launcher_->launch(*cfg);
+        launcher_->launch(*cfg, std::exchange(activation_token_, QString()));
         return;
     }
     apps::AppConfig bare;
     (is_store_target(guest_path) ? bare.aumid : bare.path) = guest_path;
-    launcher_->launch(bare);
+    launcher_->launch(bare, std::exchange(activation_token_, QString()));
 }
 
 void GuestAppLaunchController::show_failure(const QString& target, const QString& error) {
@@ -243,10 +244,12 @@ void GuestAppLaunchController::start_vm_and_wait(const QUuid& uuid, const QStrin
     });
     connect(splash, &LaunchSplash::retry_requested, splash, [this, app_id, guest_path] {
         requested_paths_.insert(guest_path);
+        // The launcher's token, if the launch never fired, is still the
+        // one its first window is to be activated with.
         if (services_.status().vm().agent_online())
             fire_when_ready(app_id, guest_path);
         else
-            launch(app_id);
+            launch(app_id, QString(activation_token_));
     });
     connect(splash, &LaunchSplash::restart_requested, splash, [this, uuid, splash_ptr, patience] {
         // A start while the old QEMU still runs does nothing, so the start

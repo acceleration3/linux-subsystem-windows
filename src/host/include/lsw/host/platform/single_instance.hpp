@@ -35,22 +35,23 @@ public:
     // true if the call was delivered.
     [[nodiscard]] bool raise_existing();
 
-    // Tell the existing instance to launch ``app_id`` in the guest.
+    // Tell the existing instance to launch ``app_id`` in the guest, with
+    // the xdg-activation token the click came with (empty for none).
     // Returns true if the message was delivered. Used by the second
     // invocation triggered from an XDG launcher click.
-    [[nodiscard]] bool launch_app_existing(const QString& app_id);
+    [[nodiscard]] bool launch_app_existing(const QString& app_id, const QString& activation_token);
 
 public Q_SLOTS:
     // DBus-callable: a second invocation calls these on the primary.
     void raise();
-    void launch_app(const QString& app_id);
+    void launch_app(const QString& app_id, const QString& activation_token);
 
 Q_SIGNALS:
     // Fired in the primary process when another instance asked to raise.
     void raise_requested();
     // Fired in the primary when an external launcher click forwarded a
     // request to launch ``app_id`` inside the guest.
-    void launch_app_requested(const QString& app_id);
+    void launch_app_requested(const QString& app_id, const QString& activation_token);
 
 private:
     bool primary_ = false;

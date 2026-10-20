@@ -102,7 +102,7 @@ RunOnVmDialog::RunOnVmDialog(link::AgentRpcClient& rpc, apps::GuestAppLauncher& 
         app.path = path;
         app.name = QFileInfo(path_->text()).fileName();
         app.cmdline = args_->text();
-        launcher_.launch(app);
+        launcher_.launch(app, QString());
     });
     connect(&launcher_, &apps::GuestAppLauncher::launched, this,
             [this](const QString& path, quint32) {

@@ -189,7 +189,7 @@ int main(int argc, char** argv) {
         grid.show();
         // The fake agent refuses the activation; until it answers the tile
         // is opening.
-        launcher.launch(store.configs().front());
+        launcher.launch(store.configs().front(), QString());
         QCoreApplication::processEvents();
         grid.grab().save(snapshots + QStringLiteral("/grid-opening.png"));
         wait_for([] { return false; }, 300);

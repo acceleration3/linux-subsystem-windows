@@ -13,7 +13,6 @@ pkgbase = lsw-bin
 	license = GPL-3.0-only
 	license = LicenseRef-WinFsp-FLOSS-exception
 	depends = qt6-base>=6.12
-	depends = qt6-base<6.13
 	depends = libvirt
 	depends = libisofs
 	depends = libvncserver
@@ -23,6 +22,8 @@ pkgbase = lsw-bin
 	depends = fmt
 	depends = zlib
 	depends = wayland
+	depends = libxkbcommon
+	depends = libdrm
 	depends = vulkan-icd-loader
 	depends = ocl-icd
 	depends = libglvnd

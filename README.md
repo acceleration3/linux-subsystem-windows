@@ -168,14 +168,11 @@ half first.
 
 Requires CMake 3.25+, a C++20 compiler, Qt 6, libvirt (with
 `libvirt-qemu`), and the Vulkan development package. The window mirror's
-host half (remotewin) adds a C compiler, pkg-config, `wayland-client`,
-`wayland-scanner`, `wayland-protocols` and EGL, and Qt's DBus, OpenGL and
-OpenGLWidgets modules and its private Gui and WaylandClient modules (in
-`qt6-base` on Arch's Qt 6.11, `qt6-wayland` before): configure names
-whichever is missing, and
-`-DLSW_BUILD_REMOTEWIN=OFF` builds without the mirror. The private API
-ties the built `remotewin` to the Qt it was built against; rebuild it
-after a Qt update (aur/README.md says what a mismatch costs). accel-virt brings
+host half (remotewin) is a Wayland client of its own, without Qt, and adds a
+C compiler, pkg-config, `wayland-client`, `wayland-scanner`,
+`wayland-protocols` (1.38 or newer), `xkbcommon`, `libdrm` (2.4.116 or
+newer) and `libsystemd`: configure names whichever is missing, and
+`-DLSW_BUILD_REMOTEWIN=OFF` builds without the mirror. accel-virt brings
 its own requirements, because the host build is also where its guest
 drivers are built:
 

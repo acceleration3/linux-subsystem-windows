@@ -167,8 +167,8 @@ target_link_libraries(lsw_host_manager
     PRIVATE LSW::CompileOptions nlohmann_json::nlohmann_json
 )
 target_compile_definitions(lsw_host_manager PRIVATE QT_NO_KEYWORDS)
-if(TARGET rwin_host)
-    target_link_libraries(lsw_host_manager PRIVATE rwin::host)
+if(TARGET rwin_link)
+    target_link_libraries(lsw_host_manager PRIVATE rwin::link)
     target_compile_definitions(lsw_host_manager PRIVATE LSW_HAVE_REMOTEWIN=1)
 endif()
 

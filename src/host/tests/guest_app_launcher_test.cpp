@@ -121,7 +121,7 @@ int live_smoke(QCoreApplication& app) {
                          });
         QObject::connect(&launcher, &lsw::host::apps::GuestAppLauncher::failed, &app,
                          [&](const QString&, const QString& why) { error = why; });
-        launcher.launch(config);
+        launcher.launch(config, QString());
         check(wait_for([&] { return opened || !error.isEmpty(); }, 30000),
               "live mirror startup completes");
         if (!error.isEmpty())
@@ -135,7 +135,7 @@ int live_smoke(QCoreApplication& app) {
         else
             check(pid == original_pid,
                   "reattach after host mirror closes reuses the Windows process");
-        launcher.launch(config);
+        launcher.launch(config, QString());
         check(wait_for([&] { return opened == 2; }) && pid == original_pid,
               "repeated open raises the existing live mirror");
         check(launcher.findChildren<lsw::host::mirror::WindowMirror*>().size() == 1,
@@ -161,7 +161,7 @@ int live_smoke(QCoreApplication& app) {
                     return false;
                 };
                 check(wait_for(is_minimized), "guest minimization takes effect");
-                launcher.launch(config);
+                launcher.launch(config, QString());
                 check(wait_for([&] { return !is_minimized(); }),
                       "open again restores the minimized guest app");
                 break;
@@ -198,7 +198,7 @@ int live_package_smoke(QCoreApplication& app, const QString& path) {
                          [&](const QString&, quint32 value) { pid = value; });
         QObject::connect(&launcher, &lsw::host::apps::GuestAppLauncher::failed, &app,
                          [&](const QString&, const QString& why) { error = why; });
-        launcher.launch(config);
+        launcher.launch(config, QString());
         check(wait_for([&] { return pid != 0 || !error.isEmpty(); }, 30000),
               "live package activation and first installer frame complete");
         if (!error.isEmpty())
@@ -327,8 +327,8 @@ int main(int argc, char** argv) {
                          [&](const QString&, quint32) { ++opened; });
         QObject::connect(&launcher, &lsw::host::apps::GuestAppLauncher::failed, &app,
                          [&](const QString&, const QString&) { ++errors; });
-        launcher.launch(config);
-        launcher.launch(config);
+        launcher.launch(config, QString());
+        launcher.launch(config, QString());
         check(launcher.opening(config), "launch immediately shows opening state");
         check(wait_for([&] { return mirrors == 1; }),
               "mirror startup does not block the event loop");
@@ -340,20 +340,20 @@ int main(int argc, char** argv) {
         check(wait_for([&] { return opened == 1; }), "first frame reports launch success");
         check(launcher.running(config) && !launcher.opening(config),
               "running state follows readiness");
-        launcher.launch(config);
+        launcher.launch(config, QString());
         check(wait_for([&] { return QFile::exists(raised); }),
               "open again sends RAISE to the existing mirror");
         check(launches == 2 && mirrors == 1 && errors == 0,
               "open again asks Windows to reactivate but reuses the host mirror");
         reject_launch = true;
-        launcher.launch(config);
+        launcher.launch(config, QString());
         check(wait_for([&] { return errors == 1; }), "reactivation failure reaches the caller");
         check(launcher.running(config) && !launcher.opening(config),
               "reactivation failure preserves the existing mirror");
         reject_launch = false;
         const int before = launches;
         config.cmdline = QStringLiteral("--profile test");
-        launcher.launch(config);
+        launcher.launch(config, QString());
         check(launches == before && mirrors == 1,
               "configured arguments are not executed again for an existing mirror");
         config.cmdline.clear();
@@ -361,7 +361,7 @@ int main(int argc, char** argv) {
             delete mirror;
         check(!launcher.running(config), "destroyed mirror is not treated as running");
         reject_mirror = true;
-        launcher.launch(config);
+        launcher.launch(config, QString());
         check(wait_for([&] { return errors == 2; }), "guest startup failure reaches the caller");
         check(!launcher.opening(config) && !launcher.running(config),
               "failed startup clears state for retry");
@@ -382,23 +382,23 @@ int main(int argc, char** argv) {
         QObject::connect(&launcher, &lsw::host::apps::GuestAppLauncher::failed, &app,
                          [&](const QString&, const QString&) { ++errors; });
         const int before = launches;
-        launcher.launch(config);
+        launcher.launch(config, QString());
         check(wait_for([&] { return opened == 1 || errors; }),
               "package opens using the actual App Installer window PID");
         check(packages == 1 && launches == before && errors == 0 && pid == 789,
               "MSIX uses shell activation, not CreateProcess");
         check(!desktop_mirror && mirror_pid == 789 && launcher.running(config),
               "only the App Installer application is mirrored, never the desktop");
-        launcher.launch(config);
+        launcher.launch(config, QString());
         check(wait_for([&] { return opened == 2; }),
               "reopen package reuses and raises the installer application mirror");
         reject_launch = true;
-        launcher.launch(config);
+        launcher.launch(config, QString());
         check(wait_for([&] { return errors == 1; }), "missing App Installer error reaches caller");
         reject_launch = false;
         package_pid = 0;
         const int before_mirrors = mirrors;
-        launcher.launch(config);
+        launcher.launch(config, QString());
         check(wait_for([&] { return errors == 2; }),
               "old agent with no installer PID reports an error");
         check(mirrors == before_mirrors && !desktop_mirror,
@@ -407,7 +407,7 @@ int main(int argc, char** argv) {
         config.path = QStringLiteral("C:\\args.msix");
         config.cmdline = QStringLiteral("--silent");
         const int before_packages = packages;
-        launcher.launch(config);
+        launcher.launch(config, QString());
         check(errors == 3 && packages == before_packages,
               "MSIX arguments rejected instead of ignored");
     }

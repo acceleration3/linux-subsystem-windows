@@ -38,7 +38,10 @@ public:
     // its windows grouped under its launcher entry.
     // A config with no id has no entry, and its windows group under the
     // manager.
-    void launch(const apps::AppConfig& app);
+    // ``activation_token`` is an xdg-activation token the launch came with
+    // - a launcher click's - which its first window, or an already open
+    // mirror raised again, is activated with; empty for none.
+    void launch(const apps::AppConfig& app, const QString& activation_token);
 
 Q_SIGNALS:
     // The agent has started it, and a mirror is carrying its windows.

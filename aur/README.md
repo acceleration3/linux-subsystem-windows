@@ -57,7 +57,7 @@ distrobox enter Arch -- sudo pacman -Syu --needed \
     mingw-w64-gcc \
     qt6-base libvirt vulkan-headers vulkan-icd-loader libisofs libvncserver \
     libxcb wimlib hivex zlib spdlog fmt nlohmann-json \
-    wayland wayland-protocols pkgconf \
+    wayland wayland-protocols libxkbcommon libdrm pkgconf \
     ocl-icd libglvnd \
     glib2 pixman libslirp libpipewire libaio liburing libseccomp dtc capstone \
     gnutls libpng libjpeg-turbo libsasl snappy lzo zstd numactl keyutils \
@@ -65,15 +65,18 @@ distrobox enter Arch -- sudo pacman -Syu --needed \
     curl unzip xz zstd
 ```
 
-`wayland`, `wayland-protocols` and `pkgconf` are remotewin's: its host
-half generates the client code of the pointer-constraint, relative-pointer
-and viewporter protocols from the system's protocol files
-(`wayland-scanner`, found through pkg-config) and links
-`libwayland-client`. Its Qt private headers (QtGui's and QtWaylandClient's)
-are in `qt6-base` as Arch packages Qt 6.11 (an older Qt had them in
-`qt6-wayland`).
-The conformance harness and probe that live beside it are never part of
-the release: they are only built by name.
+`wayland`, `wayland-protocols`, `libxkbcommon`, `libdrm` and `pkgconf` are
+remotewin's. Its host half is a Wayland client of its own, without Qt: it
+generates the client code of the protocols it speaks (xdg-shell, the
+linux-dmabuf and linux-drm-syncobj buffers, viewporter and
+fractional-scale, cursor-shape, pointer constraints, xdg-activation,
+xdg-toplevel-icon and the rest) from the system's protocol files
+(`wayland-scanner`, found through pkg-config, needing wayland-protocols
+1.38 or newer), links `libwayland-client`, reads the compositor's keymap
+with `libxkbcommon`, waits on DRM syncobj timelines with `libdrm`, and
+places windows through KWin over `sd-bus` (`systemd-libs`).
+The probe that lives beside it is never part of the release: it is only
+built by name.
 
 Two of those are easy to wonder about: `wine` is there only for `widl`, the
 IDL compiler vkd3d-proton's build needs, and `sdl3` because DXVK's native
@@ -156,22 +159,10 @@ In `aur/`:
 
 ### Rebuilding on a Qt update
 
-`usr/lib/lsw/remotewin`, the window mirror's host half, uses Qt's private
-API: QtWaylandClient's own cursor surface, through which a guest cursor is
-drawn one guest pixel to one screen pixel at a fractional scale. Private
-API has no compatibility promise from one Qt release to the next, so the
-release is rebuilt - and `pkgrel` bumped - whenever Arch moves `qt6-base`
-to a new version, as Arch does for its own packages that use it.
-
-Until then, on a Qt other than the one it was built against (`qVersion()`
-is compared with the build's `QT_VERSION_STR` before any private class is
-touched), the mirror leaves that path alone and resamples its pixel
-cursors instead: right on the glass, a little soft, and everything else
-unchanged. What that check cannot cover is the dynamic linker: remotewin
-imports a handful of private symbols (`Qt_6_PRIVATE_API`), and a Qt that
-drops or renames one of them stops the mirror from starting at all: the
-manager's log then has the loader's error and remotewin's exit (127), and
-launched applications show no windows until the package is rebuilt.
+The manager links only Qt's public API, so a Qt update calls for no
+rebuild beyond what Arch's own soname bumps call for: the package needs
+the Qt it was built against or newer (`qt6-base>=`). remotewin, the window
+mirror's host half, links no Qt at all.
 
 ### 4. Push to the AUR
 

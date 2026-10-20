@@ -8,6 +8,7 @@
 #include "lsw/host/vm/export_socket.hpp"
 #include "lsw/linkproto/commands.hpp"
 
+#include <QProcessEnvironment>
 #include <nlohmann/json.hpp>
 #include <utility>
 
@@ -42,7 +43,8 @@ WindowMirror* WindowMirror::of_application(link::AgentRpcClient& rpc, const Appl
                             QStringLiteral("pid %1 '%2'")
                                 .arg(application.pid)
                                 .arg(application.aumid.isEmpty() ? application.image : application.aumid),
-                            std::move(arguments), application.pid, false, application.log_name, parent);
+                            std::move(arguments), application.pid, false, application.log_name,
+                            application.activation_token, parent);
 }
 
 WindowMirror* WindowMirror::of_desktop(link::AgentRpcClient& rpc, const QString& title,
@@ -50,14 +52,15 @@ WindowMirror* WindowMirror::of_desktop(link::AgentRpcClient& rpc, const QString&
     QStringList arguments{QStringLiteral("--desktop"), QStringLiteral("--title"), title,
                           QStringLiteral("--app-id"), QLatin1String(kManagerDesktopId)};
     return new WindowMirror(rpc, QStringLiteral("the desktop"), std::move(arguments), 0, true, QString(),
-                            parent);
+                            QString(), parent);
 }
 
 WindowMirror::WindowMirror(link::AgentRpcClient& rpc, QString what, QStringList host_arguments,
-                           quint32 guest_pid, bool desktop, QString log_name, QObject* parent)
+                           quint32 guest_pid, bool desktop, QString log_name, QString activation_token,
+                           QObject* parent)
     : QObject(parent), rpc_(rpc), what_(std::move(what)),
       host_arguments_(std::move(host_arguments)), guest_pid_(guest_pid), desktop_(desktop),
-      log_name_(std::move(log_name)),
+      log_name_(std::move(log_name)), activation_token_(std::move(activation_token)),
       host_end_(new QProcess(this)), deadline_(this) {
     deadline_.setSingleShot(true);
     connect(&deadline_, &QTimer::timeout, this, [this] {
@@ -132,8 +135,16 @@ bool WindowMirror::start() {
         arguments << QStringLiteral("--export-socket") << socket;
     }
     arguments << host_arguments_;
-    // The mirror's own diagnostics belong beside the manager's.
+    // The mirror's own diagnostics belong beside the manager's. The
+    // launcher's activation token is its first window's to use, and no
+    // other token reaches it.
     host_end_->setProcessChannelMode(QProcess::ForwardedErrorChannel);
+    QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
+    environment.remove(QStringLiteral("XDG_ACTIVATION_TOKEN"));
+    if (!activation_token_.isEmpty()) {
+        environment.insert(QStringLiteral("XDG_ACTIVATION_TOKEN"), std::exchange(activation_token_, QString()));
+    }
+    host_end_->setProcessEnvironment(environment);
     deadline_.start(60000);
     host_end_->start(exe, arguments);
     return true;
@@ -215,8 +226,14 @@ void WindowMirror::fail(const QString& reason) {
     Q_EMIT failed(reason);
 }
 
-void WindowMirror::raise() const {
+// A token lets remotewin activate the window itself (xdg_activation_v1),
+// which every compositor honours; without one, KWin's scripting is asked.
+void WindowMirror::raise(const QString& activation_token) const {
     if (host_end_->state() != QProcess::Running) {
+        return;
+    }
+    if (!activation_token.isEmpty()) {
+        host_end_->write("RAISE " + activation_token.toUtf8() + "\n");
         return;
     }
     host_end_->write("RAISE\n");

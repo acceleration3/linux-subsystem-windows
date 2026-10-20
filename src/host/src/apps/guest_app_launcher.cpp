@@ -15,13 +15,13 @@ namespace lsw::host::apps {
 GuestAppLauncher::GuestAppLauncher(link::AgentRpcClient& rpc, QObject* parent)
     : QObject(parent), rpc_(rpc) {}
 
-void GuestAppLauncher::launch(const apps::AppConfig& app) {
+void GuestAppLauncher::launch(const apps::AppConfig& app, const QString& activation_token) {
     const QString identity = key(app);
     if (pending_.contains(identity))
         return;
     const auto existing = mirrors_.value(identity);
     if (existing && (!app.cmdline.trimmed().isEmpty() || !app.env.trimmed().isEmpty())) {
-        existing->raise();
+        existing->raise(activation_token);
         Q_EMIT launched(app.target(), pids_.value(identity));
         return;
     }
@@ -49,14 +49,14 @@ void GuestAppLauncher::launch(const apps::AppConfig& app) {
     connect(
         launcher, &apps::Launcher::launched, this,
         [this, launcher, desktop_id, identity, existing, app_path = app.path, app_aumid = app.aumid,
-         executable, log_name](const QString& path, quint32 pid, const QString& /*job*/) {
+         executable, log_name, activation_token](const QString& path, quint32 pid, const QString& /*job*/) {
             launcher->deleteLater();
             LSW_INFO("launch {}: opened, pid {}", path.toStdString(), pid);
             // Reopening a tray app must reach Windows too, so its normal
             // activation handoff runs. It still uses the same host mirror.
             if (existing && mirrors_.value(identity) == existing && pids_.value(identity) == pid) {
                 pending_.remove(identity);
-                existing->raise();
+                existing->raise(activation_token);
                 Q_EMIT changed();
                 Q_EMIT launched(path, pid);
                 return;
@@ -67,7 +67,7 @@ void GuestAppLauncher::launch(const apps::AppConfig& app) {
             // inside the guest and nothing of it appears here: the
             // mirror is what carries its windows onto this desktop.
             const mirror::WindowMirror::Application application{
-                pid, executable ? app_path : QString(), app_aumid, desktop_id, log_name};
+                pid, executable ? app_path : QString(), app_aumid, desktop_id, log_name, activation_token};
             auto* mirror = mirror::WindowMirror::of_application(rpc_, application, this);
             mirrors_.insert(identity, mirror);
             pids_.insert(identity, pid);
@@ -133,7 +133,7 @@ void GuestAppLauncher::identified(const QString& identity, const QString& aumid,
     const auto duplicate = mirrors_.value(identity);
     forget(identity);
     pending_.remove(identity);
-    other->raise();
+    other->raise(QString());
     Q_EMIT changed();
     Q_EMIT launched(path, pids_.value(shown_by));
     if (!duplicate.isNull()) duplicate->deleteLater();

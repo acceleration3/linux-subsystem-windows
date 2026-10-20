@@ -283,7 +283,7 @@ void AppListWidget::on_item_activated(QListWidgetItem* item) {
         Q_EMIT launch_requested(id);
         return;
     }
-    launcher_.launch(*cfg);
+    launcher_.launch(*cfg, QString());
 }
 
 void AppListWidget::on_context_menu(const QPoint& pos) {

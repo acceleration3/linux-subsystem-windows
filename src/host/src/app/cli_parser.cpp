@@ -80,6 +80,12 @@ CliOptions CliParser::parse(const QStringList& argv) {
         o.disk_gib = p.value(disk_opt).toInt();
     }
     o.launch_app_id = p.value(launch_opt);
+    // A --launch click's token is the application's; without --launch it is
+    // left to Qt, which activates the manager's own first window with it.
+    if (!o.launch_app_id.isEmpty()) {
+        o.activation_token = qEnvironmentVariable("XDG_ACTIVATION_TOKEN");
+        qunsetenv("XDG_ACTIVATION_TOKEN");
+    }
     o.screenshot_dir = p.value(screenshot_opt);
     o.reinstall = p.isSet(reinstall_opt);
     return o;

@@ -36,7 +36,9 @@ public:
 
     // Resolve ``app_id`` to a guest path and launch it, starting the VM
     // first if needed. Repeated calls supersede the pending request.
-    void launch(const QString& app_id);
+    // ``activation_token`` is the launcher's xdg-activation token, which the
+    // application's first window is activated with.
+    void launch(const QString& app_id, const QString& activation_token);
 
 Q_SIGNALS:
     // The agent has started the application. The splash retires on
@@ -68,6 +70,8 @@ private:
     // when it fires, when the user cancels the splash, or when a newer
     // request supersedes it.
     QString pending_app_id_;
+    // The token of the latest launch request, for the launch it fires.
+    QString activation_token_;
     QPointer<LaunchSplash> splash_;
     QString splash_path_;
     QSet<QString> requested_paths_;

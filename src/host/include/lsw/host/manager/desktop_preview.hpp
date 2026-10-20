@@ -14,8 +14,9 @@ class AgentRpcClient;
 namespace lsw::host::manager {
 
 // The overview's preview of the guest's desktop: its primary monitor
-// captured inside Windows (WGC) over remotewin's monitor mirror, drawn
-// read-only, as docs/design/lsw-ui.html draws it.
+// captured inside Windows (WGC) and sent over remotewin's guest link as
+// pixels - the frame, then the tiles that change - drawn read-only by this
+// widget itself, as docs/design/lsw-ui.html draws it.
 //
 // It starts paused: shown with a guest to capture, it takes one frame and
 // lets the capture go, and keeps that frame desaturated and dimmed under

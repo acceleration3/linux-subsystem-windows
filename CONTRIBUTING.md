@@ -24,12 +24,12 @@ Default options:
   installed to `build/av-drivers`. Needs the clang/LLVM toolchain; see
   [README.md](README.md#building)
 - `LSW_BUILD_REMOTEWIN` — the window mirror on Linux, its guest half on
-  the mingw cross-build. The host half needs Wayland's client library,
-  scanner and protocols (pkg-config), a C compiler and Qt's private Gui
-  and WaylandClient modules; configure stops with the list of what is
-  missing (README.md). remotewin's conformance harness and probe
-  (`remotewin-conform`, `remotewin-probe`) are never in `all` and never
-  installed: build them by name, or with `scripts/remotewin-conform.sh`
+  the mingw cross-build. The host half is a Wayland client without Qt:
+  it needs Wayland's client library, scanner and protocols, xkbcommon,
+  libdrm and libsystemd (pkg-config) and a C compiler; configure stops
+  with the list of what is missing (README.md). remotewin's probe
+  (`remotewin-probe`) is never in `all` and never installed: build it by
+  name
 - `LSW_BUILD_TESTS`
 
 Disable any with `-DLSW_BUILD_X=OFF`. `-DAV_WINDOWS_KIT_DIR=<dir>`

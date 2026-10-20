@@ -368,7 +368,7 @@ void MainWindow::follow_agent_for_desktop(bool online) {
 
 void MainWindow::open_desktop() {
     if (desktop_ != nullptr) {
-        desktop_->raise();
+        desktop_->raise(QString());
         return;
     }
     const config::VmRecord* record = services_.vms().primary();

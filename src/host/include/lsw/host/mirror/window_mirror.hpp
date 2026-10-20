@@ -51,6 +51,9 @@ public:
         QString desktop_id;
         // Names the guest half's log apart from other mirrors'.
         QString log_name;
+        // The xdg-activation token the launch came with, which the first
+        // window shown is activated with; empty for none.
+        QString activation_token;
     };
 
     ~WindowMirror() override;
@@ -67,8 +70,10 @@ public:
     // failed names startup and runtime failures.
     bool start();
 
-    // Asks the compositor to bring the mirror's windows to the front.
-    void raise() const;
+    // Asks the compositor to bring the mirror's windows to the front: with
+    // ``activation_token`` (xdg_activation_v1) where there is one, through
+    // KWin's scripting where there is not.
+    void raise(const QString& activation_token) const;
 
     // The AppUserModelIDs this mirror's windows have, as remotewin found them.
     [[nodiscard]] const QStringList& app_ids() const noexcept { return app_ids_; }
@@ -87,7 +92,8 @@ private:
     // port on the host end's command line; ``guest_pid`` (0 for none),
     // ``desktop`` and ``log_name`` go to the agent's start_window_mirror.
     WindowMirror(link::AgentRpcClient& rpc, QString what, QStringList host_arguments,
-                 quint32 guest_pid, bool desktop, QString log_name, QObject* parent);
+                 quint32 guest_pid, bool desktop, QString log_name, QString activation_token,
+                 QObject* parent);
 
     void on_host_end_finished(int code, QProcess::ExitStatus status);
     void read_status();
@@ -101,6 +107,7 @@ private:
     quint32 guest_pid_;
     bool desktop_;
     QString log_name_;
+    QString activation_token_;
     QStringList app_ids_;
     QProcess* host_end_;
     QTimer deadline_;

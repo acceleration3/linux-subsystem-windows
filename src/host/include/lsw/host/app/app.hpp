@@ -49,7 +49,7 @@ private Q_SLOTS:
     // SingleInstance "launch_app <id>" delivered via DBus from an XDG
     // launcher click. Delegated to the launch controller, which owns
     // the (VM may be cold) start / wait / launch / mirror sequence.
-    void on_launch_app_request(const QString& app_id);
+    void on_launch_app_request(const QString& app_id, const QString& activation_token);
 
     // The settings page's Reinstall: this manager hands over to a wizard
     // process (``--reinstall``) and quits.

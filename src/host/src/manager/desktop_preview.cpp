@@ -4,7 +4,6 @@
 #include "lsw/host/link/agent_rpc_client.hpp"
 #include "lsw/host/ui/play_badge.hpp"
 #include "lsw/host/ui/theme.hpp"
-#include "lsw/host/vm/export_socket.hpp"
 #include "lsw/linkproto/commands.hpp"
 
 #include <QEnterEvent>
@@ -19,12 +18,15 @@
 #include <nlohmann/json.hpp>
 
 #ifdef LSW_HAVE_REMOTEWIN
-#include "host/export/shared_frame_feed.hpp"
 #include "host/link/guest_link.hpp"
-#include "host/mirror/monitor_session.hpp"
+#include "host/link/pixels_view.hpp"
+#include "lsw/host/manager/qt_event_loop.hpp"
+#include "proto/feature.hpp"
 #include "proto/window_id.hpp"
 #endif
 
+#include <cstddef>
+#include <cstring>
 #include <memory>
 
 namespace lsw::host::manager {
@@ -54,16 +56,20 @@ QRect fit(QSize size, const QRect& area) {
 }
 }  // namespace
 
+// One capture of the guest's monitor: remotewin's link, on this process's
+// own loop, and the picture as the guest last made it whole. Frames come
+// as pixels - the guest's frame and the tiles that changed since - and are
+// drawn by the preview itself: it is a picture in a widget, with nothing
+// of a window system's own under it.
 class DesktopPreview::Session : public QObject {
 public:
     explicit Session(QObject* parent) : QObject(parent) {}
 
-    // The view releases its fenced slot leases before the feed and link go.
 #ifdef LSW_HAVE_REMOTEWIN
-    rwin::host::GuestLink link;
-    rwin::host::SharedFrameFeed frames{link};
-    std::unique_ptr<rwin::host::MonitorSession> monitor;
+    QtEventLoop loop;
+    rwin::host::GuestLink link{loop};
 #endif
+    QImage picture;
     QTimer deadline;
     QTimer settle;
     bool framed = false;
@@ -189,9 +195,6 @@ void DesktopPreview::resizeEvent(QResizeEvent* event) {
 }
 
 void DesktopPreview::lay_out() {
-#ifdef LSW_HAVE_REMOTEWIN
-    if (session_ != nullptr && session_->monitor) session_->monitor->view().setGeometry(rect());
-#endif
     surface_->setGeometry(rect());
     surface_->raise();
     tag_->move(kTagInset, kTagInset);
@@ -200,13 +203,13 @@ void DesktopPreview::lay_out() {
 
 void DesktopPreview::paint_surface(QPainter& p, const QRect& area) const {
     const bool live = session_ != nullptr && !paused_;
-    if (!live) {
-        if (frozen_.isNull()) {
-            p.fillRect(area, ui::Theme::color(kPlaceholder));
-        } else {
-            p.fillRect(area, Qt::black);
-            p.drawImage(fit(frozen_.deviceIndependentSize().toSize(), area), frozen_);
-        }
+    const QImage& shown = live ? session_->picture : frozen_;
+    if (shown.isNull()) {
+        p.fillRect(area, ui::Theme::color(kPlaceholder));
+    } else {
+        p.fillRect(area, Qt::black);
+        p.setRenderHint(QPainter::SmoothPixmapTransform);
+        p.drawImage(fit(shown.size(), area), shown);
     }
     if (!available_) return;
     if (paused_) {
@@ -218,22 +221,14 @@ void DesktopPreview::paint_surface(QPainter& p, const QRect& area) const {
 }
 
 void DesktopPreview::freeze() {
-#ifdef LSW_HAVE_REMOTEWIN
-    if (session_ == nullptr || !session_->framed || !session_->monitor) return;
-    const QImage frame = session_->monitor->view().grab().toImage();
-    if (frame.isNull()) return;
-    frozen_ = frame.convertToFormat(QImage::Format_Grayscale8).convertToFormat(QImage::Format_RGB32);
-    frozen_.setDevicePixelRatio(frame.devicePixelRatio());
+    if (session_ == nullptr || !session_->framed || session_->picture.isNull()) return;
+    frozen_ = session_->picture.convertToFormat(QImage::Format_Grayscale8).convertToFormat(QImage::Format_RGB32);
     QPainter p{&frozen_};
     p.fillRect(QRect(QPoint(0, 0), frozen_.size()), kPausedDim);
-#endif
 }
 
 void DesktopPreview::stop() {
     if (session_ == nullptr) return;
-#ifdef LSW_HAVE_REMOTEWIN
-    if (session_->monitor) session_->monitor->view().hide();
-#endif
     // A frame or disconnect signal may be on the stack. Retire the session
     // after that dispatch, without closing any Windows application.
     session_->deadline.stop();
@@ -264,53 +259,68 @@ void DesktopPreview::start() {
 #else
     auto* session = new Session(this);
     session_ = session;
-    const QString socket = vm::ExportSocket::path();
-    if (!socket.isEmpty()) session->frames.open(socket.toStdString());
-    if (!session->link.listen(0, QHostAddress::LocalHost)) {
+    rwin::host::GuestLink& link = session->link;
+    if (!link.listen(0, true)) {
         fail(QStringLiteral("cannot listen for the guest"));
         return;
     }
-    session->monitor = std::make_unique<rwin::host::MonitorSession>(
-        session->link, session->frames, QStringLiteral("Guest preview"), session, this);
-    auto& view = session->monitor->view();
-    view.set_interactive(false);
     lay_out();
-    view.show();
     if (!isVisible()) {
         stop();
         return;
     }
-    connect(&session->link, &rwin::host::GuestLink::mismatched, this,
-            [this, session](const QString& reason) {
-                if (session_ == session) fail(reason);
-            });
-    connect(&session->link, &rwin::host::GuestLink::disconnected, this, [this, session] {
+    // Asked once the guest has said it speaks this wire: asked before, the
+    // request goes to nobody, and asked again, a capture is made again.
+    link.connected.connect([this, session] {
+        if (session_ != session) return;
+        if (!session->link.features().has(rwin::Feature::kMonitor)) {
+            fail(QStringLiteral("the guest's remotewin cannot capture its monitor"));
+            return;
+        }
+        session->link.watch_monitor();
+    });
+    link.mismatched.connect([this, session](const std::string& reason) {
+        if (session_ == session) fail(QString::fromStdString(reason));
+    });
+    link.disconnected.connect([this, session] {
         if (session_ == session) fail(QStringLiteral("guest capture disconnected"));
     });
-    connect(session->monitor.get(), &rwin::host::MonitorSession::finished, this, [this, session] {
-        if (session_ == session) fail(QStringLiteral("guest monitor capture stopped"));
+    link.surface_lost.connect([this, session](rwin::WindowId window) {
+        if (session_ == session && window == rwin::kMonitorWindow) fail(QStringLiteral("guest monitor capture stopped"));
     });
-    connect(session->monitor.get(), &rwin::host::MonitorSession::ready, this, [session] {
-        session->deadline.stop();
-    });
-    const auto framed = [this, session](const QString& route) {
+    const auto framed = [this, session] {
         if (session_ != session) return;
         if (!session->framed) {
             session->framed = true;
             session->deadline.stop();
             session->settle.start(kSettleMs);
         }
+        const QString route = QStringLiteral("WGC, pixels");
         if (!paused_ && status_ != route) note(route);
         surface_->update();
     };
-    connect(&session->frames, &rwin::host::SharedFrameFeed::frame_ready, this,
-            [framed](rwin::WindowId window, const rwin::host::SharedFrame&) {
-                if (window == rwin::kMonitorWindow) framed(QStringLiteral("WGC, GPU"));
-            });
-    connect(&session->link, &rwin::host::GuestLink::frame_arrived, this,
-            [framed](rwin::WindowId window, const QImage&) {
-                if (window == rwin::kMonitorWindow) framed(QStringLiteral("WGC, pixels"));
-            });
+    // Copied out of the message as it comes; the tiles that changed since
+    // are painted over it, and a tile of a picture of another size waits
+    // for that picture.
+    link.frame_arrived.connect([session, framed](rwin::WindowId window, const rwin::host::PixelsView& pixels) {
+        if (window != rwin::kMonitorWindow) return;
+        const QImage frame(pixels.bgra, pixels.width, pixels.height, pixels.stride,
+                           QImage::Format_ARGB32_Premultiplied);
+        session->picture = frame.convertToFormat(QImage::Format_RGB32);
+        framed();
+    });
+    link.frame_patched.connect([session](rwin::WindowId window, rwin::host::Size picture, rwin::host::Point at,
+                                         const rwin::host::PixelsView& pixels) {
+        if (window != rwin::kMonitorWindow || session->picture.size() != QSize(picture.width, picture.height)) return;
+        for (int row = 0; row < pixels.height; ++row) {
+            std::memcpy(session->picture.scanLine(at.y + row) + static_cast<std::ptrdiff_t>(at.x) * 4,
+                        pixels.bgra + static_cast<std::ptrdiff_t>(row) * pixels.stride,
+                        static_cast<std::size_t>(pixels.width) * 4);
+        }
+    });
+    link.frame_patches_done.connect([framed](rwin::WindowId window) {
+        if (window == rwin::kMonitorWindow) framed();
+    });
     session->settle.setSingleShot(true);
     connect(&session->settle, &QTimer::timeout, this, [this, session] {
         if (session_ != session || !paused_) return;
@@ -323,7 +333,7 @@ void DesktopPreview::start() {
     });
     session->deadline.start(kStartTimeoutMs);
     rpc_.request_async(linkproto::cmd::kStartWindowMirror,
-                       {{"port", session->link.port()}, {"desktop", true}}, session,
+                       {{"port", link.port()}, {"desktop", true}}, session,
                        [this, session](const link::AgentReply& reply) {
                            if (session_ == session && !reply.ok) {
                                fail(QString::fromStdString(reply.error));

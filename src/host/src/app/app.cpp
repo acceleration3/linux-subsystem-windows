@@ -102,7 +102,7 @@ bool App::forward_to_primary() {
     if (!cli_.launch_app_id.isEmpty()) {
         LSW_INFO("forwarding --launch to running manager: {}",
                  cli_.launch_app_id.toStdString());
-        (void)single_instance_.launch_app_existing(cli_.launch_app_id);
+        (void)single_instance_.launch_app_existing(cli_.launch_app_id, cli_.activation_token);
     } else {
         LSW_INFO("another lsw-manager is already running; raising it");
         (void)single_instance_.raise_existing();
@@ -182,7 +182,8 @@ int App::run() {
     // slot so the event loop is up and the main window has shown.
     if (!cli_.launch_app_id.isEmpty()) {
         const QString id = cli_.launch_app_id;
-        QMetaObject::invokeMethod(this, [this, id] { on_launch_app_request(id); },
+        const QString token = cli_.activation_token;
+        QMetaObject::invokeMethod(this, [this, id, token] { on_launch_app_request(id, token); },
                                   Qt::QueuedConnection);
     }
     return exec();
@@ -318,7 +319,7 @@ void App::show_main_window() {
         connect(main_window_, &manager::MainWindow::wizard_requested, this,
                 &App::show_wizard);
         connect(main_window_, &manager::MainWindow::launch_requested, this,
-                &App::on_launch_app_request);
+                [this](const QString& app_id) { on_launch_app_request(app_id, QString()); });
         connect(main_window_, &manager::MainWindow::reinstall_requested, this,
                 &App::on_reinstall_request);
     }
@@ -391,8 +392,8 @@ void App::on_raise_request() {
     ui::Widgets::bring_to_front(w);
 }
 
-void App::on_launch_app_request(const QString& app_id) {
-    launch_controller().launch(app_id);
+void App::on_launch_app_request(const QString& app_id, const QString& activation_token) {
+    launch_controller().launch(app_id, activation_token);
 }
 
 }  // namespace lsw::host::app
