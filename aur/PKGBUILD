@@ -8,8 +8,8 @@
 # why this package does not.
 
 pkgname=lsw-bin
-pkgver=0.1.8
-pkgrel=3
+pkgver=0.1.9
+pkgrel=1
 pkgdesc="Linux Subsystem for Windows: Windows applications as native windows, from a KVM guest with a paravirtual GPU"
 arch=('x86_64')
 url="https://github.com/acceleration3/linux-subsystem-windows"
@@ -60,7 +60,7 @@ install=lsw-bin.install
 # makepkg to strip, and a debug package would be empty.
 options=('!strip' '!debug')
 source=("https://github.com/acceleration3/linux-subsystem-windows/releases/download/v${pkgver}/lsw-${pkgver}-${CARCH}.tar.zst")
-sha256sums=('4f937906156748ff5c5454423f330804419079dfec6e9dfb9ab0ec01b0547f83')
+sha256sums=('b032ebe91766606f1afb1734bb8595f86704b663c264e5129b7dde9391a123de')
 
 package() {
     cp -a --no-preserve=ownership "${srcdir}/usr" "${pkgdir}/"
