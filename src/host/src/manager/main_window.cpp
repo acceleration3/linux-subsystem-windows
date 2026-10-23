@@ -374,8 +374,8 @@ void MainWindow::open_desktop() {
     const config::VmRecord* record = services_.vms().primary();
     const QString name =
         record == nullptr || record->name.isEmpty() ? QStringLiteral("lsw") : record->name;
-    desktop_ = mirror::WindowMirror::of_desktop(services_.rpc(),
-                                                QStringLiteral("%1 desktop").arg(name), this);
+    desktop_ = mirror::WindowMirror::of_desktop(services_.rpc(), QStringLiteral("%1 desktop").arg(name),
+                                                screen() != nullptr ? screen()->name() : QString(), this);
     connect(desktop_, &mirror::WindowMirror::finished, desktop_, &QObject::deleteLater);
     connect(desktop_, &mirror::WindowMirror::failed, this, [this](const QString& reason) {
         notices_->post(QStringLiteral("desktop"), false,
@@ -743,6 +743,7 @@ void MainWindow::follow_upkeep() {
 
 void MainWindow::follow_launches() {
     auto& launcher = services_.app_launcher();
+    launcher.set_output_source([this] { return screen() != nullptr ? screen()->name() : QString(); });
     connect(&launcher, &apps::GuestAppLauncher::failed, this,
             [this](const QString& target, const QString& error) {
         QString name = target.section(QLatin1Char('\\'), -1);

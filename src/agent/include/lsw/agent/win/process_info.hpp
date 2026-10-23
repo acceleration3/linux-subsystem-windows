@@ -36,6 +36,10 @@ public:
     // When the process started, as FILETIME ticks; nullopt when it
     // cannot be read.
     [[nodiscard]] static std::optional<std::uint64_t> creation_time(HANDLE process);
+    // The same for the process ``pid`` names now; 0 when it cannot be
+    // opened (gone, or protected). A launch reply carries it with the pid:
+    // Windows gives a pid out again, and only the pair names the process.
+    [[nodiscard]] static std::uint64_t creation_time_of(DWORD pid);
 
     // This process's own image path. Read once and cached: the window
     // enumeration compares every window it finds against it, at poll

@@ -66,6 +66,16 @@ std::optional<std::uint64_t> ProcessInfo::creation_time(HANDLE process) {
     return FileTime::to_u64(created);
 }
 
+std::uint64_t ProcessInfo::creation_time_of(DWORD pid) {
+    HANDLE process = ::OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (process == nullptr) {
+        return 0;
+    }
+    const auto created = creation_time(process);
+    ::CloseHandle(process);
+    return created.value_or(0);
+}
+
 const std::wstring& ProcessInfo::self_path() {
     static const std::wstring self = grow_until_fits(
         [](wchar_t* buf, DWORD* length) {

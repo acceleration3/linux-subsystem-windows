@@ -81,8 +81,8 @@ void Launcher::launch(const QString& app_id, const QString& args, const QString&
                                           : QStringLiteral("agent: the launch reply carries no pid"));
             return;
         }
-        Q_EMIT launched(app_id, pid,
-                        QString::fromStdString(reply.body.value("job", std::string{})));
+        Q_EMIT launched(app_id, pid, QString::fromStdString(reply.body.value("job", std::string{})),
+                        reply.body.value("pid_created", std::uint64_t{0}));
     });
 }
 
@@ -103,7 +103,7 @@ void Launcher::activate(const QString& aumid, const QString& args) {
             Q_EMIT failed(aumid, QStringLiteral("agent: Windows started it but named no process"));
             return;
         }
-        Q_EMIT launched(aumid, pid, QString{});
+        Q_EMIT launched(aumid, pid, QString{}, reply.body.value("pid_created", std::uint64_t{0}));
     });
 }
 

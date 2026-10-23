@@ -30,6 +30,9 @@ constexpr const char* kManagerDesktopId = "lsw-manager";
 WindowMirror* WindowMirror::of_application(link::AgentRpcClient& rpc, const Application& application,
                                            QObject* parent) {
     QStringList arguments{QStringLiteral("--pid"), QString::number(application.pid)};
+    if (application.pid_created != 0) {
+        arguments << QStringLiteral("--pid-created") << QString::number(application.pid_created);
+    }
     if (!application.image.isEmpty()) {
         arguments << QStringLiteral("--image") << application.image;
     }
@@ -39,6 +42,9 @@ WindowMirror* WindowMirror::of_application(link::AgentRpcClient& rpc, const Appl
     if (!application.desktop_id.isEmpty()) {
         arguments << QStringLiteral("--app-id") << application.desktop_id;
     }
+    if (!application.output.isEmpty()) {
+        arguments << QStringLiteral("--output") << application.output;
+    }
     return new WindowMirror(rpc,
                             QStringLiteral("pid %1 '%2'")
                                 .arg(application.pid)
@@ -47,10 +53,11 @@ WindowMirror* WindowMirror::of_application(link::AgentRpcClient& rpc, const Appl
                             application.activation_token, parent);
 }
 
-WindowMirror* WindowMirror::of_desktop(link::AgentRpcClient& rpc, const QString& title,
+WindowMirror* WindowMirror::of_desktop(link::AgentRpcClient& rpc, const QString& title, const QString& output,
                                        QObject* parent) {
     QStringList arguments{QStringLiteral("--desktop"), QStringLiteral("--title"), title,
                           QStringLiteral("--app-id"), QLatin1String(kManagerDesktopId)};
+    if (!output.isEmpty()) arguments << QStringLiteral("--output") << output;
     return new WindowMirror(rpc, QStringLiteral("the desktop"), std::move(arguments), 0, true, QString(),
                             QString(), parent);
 }

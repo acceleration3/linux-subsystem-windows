@@ -4,6 +4,7 @@
 #include "lsw/agent/rpc/params.hpp"
 #include "lsw/agent/util/text_encoding.hpp"
 #include "lsw/agent/win/com.hpp"
+#include "lsw/agent/win/process_info.hpp"
 #include "lsw/linkproto/commands.hpp"
 
 #include <cstdint>
@@ -28,7 +29,9 @@ struct LaunchStoreAppHandler : RpcHandler {
         const win::Apartment apartment(win::Apartment::Model::SingleThreaded);
         const unsigned long pid = apps::StoreApps::activate(util::TextEncoding::to_wide(aumid),
                                                             util::TextEncoding::to_wide(args));
-        return {{"ok", true}, {"pid", static_cast<std::uint64_t>(pid)}};
+        return {{"ok", true},
+                {"pid", static_cast<std::uint64_t>(pid)},
+                {"pid_created", pid != 0 ? win::ProcessInfo::creation_time_of(pid) : std::uint64_t{0}}};
     }
 
     [[nodiscard]] std::string summarize(const nlohmann::json& reply) const override {

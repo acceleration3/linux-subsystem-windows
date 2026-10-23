@@ -6,6 +6,7 @@
 #include "lsw/agent/util/wide_string.hpp"
 #include "lsw/agent/win/com.hpp"
 #include "lsw/agent/win/error_text.hpp"
+#include "lsw/agent/win/process_info.hpp"
 #include "lsw/agent/win/unique_handle.hpp"
 #include "lsw/agent/win/window.hpp"
 #include "lsw/linkproto/app_package.hpp"
@@ -60,7 +61,8 @@ struct OpenPackageHandler : RpcHandler {
             const auto now = std::chrono::steady_clock::now();
             if (const auto pid = installer.select(win::Window::enumerate(), foreground,
                                                   now - started >= std::chrono::seconds(1))) {
-                return {{"ok", true}, {"pid", *pid}};
+                return {{"ok", true}, {"pid", *pid},
+                        {"pid_created", win::ProcessInfo::creation_time_of(static_cast<DWORD>(*pid))}};
             }
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
         } while (std::chrono::steady_clock::now() - started < std::chrono::seconds(6));

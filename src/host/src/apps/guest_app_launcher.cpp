@@ -49,7 +49,8 @@ void GuestAppLauncher::launch(const apps::AppConfig& app, const QString& activat
     connect(
         launcher, &apps::Launcher::launched, this,
         [this, launcher, desktop_id, identity, existing, app_path = app.path, app_aumid = app.aumid,
-         executable, log_name, activation_token](const QString& path, quint32 pid, const QString& /*job*/) {
+         executable, log_name, activation_token](const QString& path, quint32 pid, const QString& /*job*/,
+                                                  quint64 pid_created) {
             launcher->deleteLater();
             LSW_INFO("launch {}: opened, pid {}", path.toStdString(), pid);
             // Reopening a tray app must reach Windows too, so its normal
@@ -67,7 +68,8 @@ void GuestAppLauncher::launch(const apps::AppConfig& app, const QString& activat
             // inside the guest and nothing of it appears here: the
             // mirror is what carries its windows onto this desktop.
             const mirror::WindowMirror::Application application{
-                pid, executable ? app_path : QString(), app_aumid, desktop_id, log_name, activation_token};
+                pid, executable ? app_path : QString(), app_aumid, desktop_id, log_name, activation_token,
+                output_source_ ? output_source_() : QString(), pid_created};
             auto* mirror = mirror::WindowMirror::of_application(rpc_, application, this);
             mirrors_.insert(identity, mirror);
             pids_.insert(identity, pid);

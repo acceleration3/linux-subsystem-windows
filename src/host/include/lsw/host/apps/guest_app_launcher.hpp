@@ -6,6 +6,8 @@
 #include <QSet>
 #include <QString>
 
+#include <functional>
+
 namespace lsw::host::apps {
 struct AppConfig;
 }
@@ -43,6 +45,11 @@ public:
     // mirror raised again, is activated with; empty for none.
     void launch(const apps::AppConfig& app, const QString& activation_token);
 
+    // The host output (Wayland output name) that stands for the guest's
+    // monitor, asked for at each launch: the screen the manager's window is
+    // on, which is the one the guest's display is sized from.
+    void set_output_source(std::function<QString()> source) { output_source_ = std::move(source); }
+
 Q_SIGNALS:
     // The agent has started it, and a mirror is carrying its windows.
     void launched(const QString& guest_path, quint32 pid);
@@ -62,6 +69,7 @@ private:
     void identified(const QString& identity, const QString& aumid, const QString& path);
     void forget(const QString& identity);
     link::AgentRpcClient& rpc_;
+    std::function<QString()> output_source_;
     QSet<QString> pending_;
     QHash<QString, QPointer<mirror::WindowMirror>> mirrors_;
     QHash<QString, quint32> pids_;

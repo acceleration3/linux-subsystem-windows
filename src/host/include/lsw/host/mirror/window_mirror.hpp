@@ -54,6 +54,13 @@ public:
         // The xdg-activation token the launch came with, which the first
         // window shown is activated with; empty for none.
         QString activation_token;
+        // The host output (Wayland output name, "DP-2") that stands for the
+        // guest's monitor; empty for remotewin's first.
+        QString output;
+        // When the launched process was created (FILETIME ticks), 0 for
+        // unknown: with it a window of another process that was given its pid
+        // later is not the application's.
+        quint64 pid_created = 0;
     };
 
     ~WindowMirror() override;
@@ -64,7 +71,7 @@ public:
     // (remotewin --desktop), captured inside Windows rather than read off
     // QEMU's display: it needs the agent, and Windows running.
     [[nodiscard]] static WindowMirror* of_desktop(link::AgentRpcClient& rpc, const QString& title,
-                                                  QObject* parent = nullptr);
+                                                  const QString& output, QObject* parent = nullptr);
 
     // Starts asynchronously. ready means the first window frame arrived;
     // failed names startup and runtime failures.

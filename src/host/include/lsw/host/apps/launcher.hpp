@@ -38,7 +38,7 @@ Q_SIGNALS:
     // stub that starts the real application and exits leaves a process
     // id that names nothing while everything it started is still in the
     // job. Empty when the agent could not make one.
-    void launched(const QString& app_id, quint32 pid, const QString& job);
+    void launched(const QString& app_id, quint32 pid, const QString& job, quint64 pid_created);
     void failed(const QString& app_id, const QString& error_message);
 
 private:

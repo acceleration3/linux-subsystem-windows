@@ -4,6 +4,7 @@
 #include "lsw/agent/rpc/auto_register.hpp"
 #include "lsw/agent/rpc/handler.hpp"
 #include "lsw/agent/session/session_manager.hpp"
+#include "lsw/agent/win/process_info.hpp"
 #include "lsw/agent/win/run_as.hpp"
 #include "lsw/agent/win/window.hpp"
 #include "lsw/linkproto/commands.hpp"
@@ -71,6 +72,7 @@ struct LaunchHandler : RpcHandler {
         // What this launch is, for anything that has to recognise its
         // windows later. The caller is spared the naming convention.
         if (ok && pid != 0) {
+            r["pid_created"] = win::ProcessInfo::creation_time_of(pid);
             if (const auto root = apps::LaunchGroup::root_of(pid); root != 0) {
                 r["job"] = apps::LaunchGroup::job_name(root);
             }
