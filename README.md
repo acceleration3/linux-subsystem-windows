@@ -24,7 +24,7 @@ LSW is WSL in reverse. It installs Windows 11 into a virtual machine and keeps i
 | Vulkan | 1.3, with the host device's extensions |
 | OpenGL | Up to 4.6, core and compatibility profiles |
 | OpenCL | 3.0 |
-| Direct3D 9 | No native driver yet |
+| Direct3D 9 | Native driver |
 
 All of these work in 32-bit processes too.
 
