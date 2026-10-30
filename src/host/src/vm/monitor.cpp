@@ -34,6 +34,7 @@ void Monitor::watch(const QUuid& uuid) {
 
 void Monitor::unwatch(const QUuid& uuid) {
     stats_.remove(uuid);
+    domain_ids_.remove(uuid);
     last_cpu_ns_.remove(uuid);
     last_sample_ms_.remove(uuid);
     agent_poll_in_flight_.remove(uuid);
@@ -82,18 +83,22 @@ void Monitor::poll_one(const QUuid& uuid) {
     s.running = info.state == VIR_DOMAIN_RUNNING;
     const qint64 now_ms = QDateTime::currentMSecsSinceEpoch();
     if (!s.running) {
-        // A machine that is off has no guest figures and no agent: what
-        // the last one said would otherwise stay on screen as if it were
-        // still true, and "online" would outlive the VM by the staleness
-        // window.
-        s = VmStats{};
-        last_cpu_ns_.remove(uuid);
-        last_sample_ms_.remove(uuid);
-        last_agent_ms_.remove(uuid);
-        stats_[uuid] = s;
-        Q_EMIT stats_updated(uuid, s);
+        report_stopped(uuid);
         return;
     }
+
+    // libvirt numbers every start of a domain. A new number on a running
+    // machine is a stop and a start that fell between two ticks, as a
+    // restart's do: it is reported as the stop it was, so everything that
+    // follows the machine's boots sees this one.
+    const unsigned int domain_id = ::virDomainGetID(dom.raw());
+    const auto seen_id = domain_ids_.constFind(uuid);
+    if (seen_id != domain_ids_.constEnd() && *seen_id != domain_id) {
+        report_stopped(uuid);
+        s = VmStats{};
+        s.running = true;
+    }
+    domain_ids_[uuid] = domain_id;
 
     // Agent reachability — derived from the recency of the last
     // successful system_info reply. The actual poll is kicked off in
@@ -129,6 +134,19 @@ void Monitor::poll_one(const QUuid& uuid) {
     last_cpu_ns_[uuid] = now_ns;
     last_sample_ms_[uuid] = now_ms;
 
+    stats_[uuid] = s;
+    Q_EMIT stats_updated(uuid, s);
+}
+
+void Monitor::report_stopped(const QUuid& uuid) {
+    // A machine that is off has no guest figures and no agent: what the
+    // last one said would otherwise stay on screen as if it were still
+    // true, and "online" would outlive the VM by the staleness window.
+    const VmStats s{};
+    domain_ids_.remove(uuid);
+    last_cpu_ns_.remove(uuid);
+    last_sample_ms_.remove(uuid);
+    last_agent_ms_.remove(uuid);
     stats_[uuid] = s;
     Q_EMIT stats_updated(uuid, s);
 }

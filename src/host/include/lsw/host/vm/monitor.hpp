@@ -47,6 +47,7 @@ private Q_SLOTS:
 
 private:
     void poll_one(const QUuid& uuid);
+    void report_stopped(const QUuid& uuid);
     // Kick off an async ``system_info`` call on the rpc, then merge
     // the reply into ``stats_[uuid]`` and emit. Runs on a QtConcurrent
     // worker so a slow guest never blocks the GUI thread.
@@ -56,6 +57,8 @@ private:
     IGuestStatsProbe* probe_ = nullptr;  // non-owning; may be null
     QTimer timer_;
     QHash<QUuid, VmStats> stats_;
+    // The libvirt id of the start each running VM was last seen on.
+    QHash<QUuid, unsigned int> domain_ids_;
     // For libvirt-side fallback CPU% we need the delta between samples.
     QHash<QUuid, quint64> last_cpu_ns_;
     QHash<QUuid, qint64> last_sample_ms_;
