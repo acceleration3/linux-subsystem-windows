@@ -1,220 +1,179 @@
 # Linux Subsystem for Windows (LSW)
 
-A "reverse WSL" — run Windows applications on a Linux host with per-application native windows, their windows mirrored out of the guest and their GPU work run on the host's GPU.
+Run Windows applications on Linux as native desktop windows, with their graphics running on your real GPU.
 
-## Status
+LSW is WSL in reverse. It installs Windows 11 into a virtual machine and keeps it out of your way: each application gets its own windows, taskbar entry and input on your Linux desktop, instead of living inside a VM window.
 
-Greenfield. Phase 0 scaffolding.
+> **Status:** early and moving fast. Expect rough edges, and expect things to break between releases.
+
+## Features
+
+- **Per-application windows.** Each Windows application appears as its own native Wayland windows, including its menus and popups.
+- **GPU acceleration.** Windows sees a real display adapter named after your host GPU, and the work runs on that GPU.
+- **Guided setup.** A first-run wizard installs Windows unattended, from your own ISO or a download from Microsoft.
+- **Shared folders.** Any host folder can appear in Windows as a drive letter.
+- **Run on VM.** Pick a local program, installer or script, and LSW copies it into Windows and runs it.
+- **Desktop access.** A live preview of the Windows desktop in the manager, and a full desktop window when you need one.
+
+### Graphics APIs
+
+| API | Offered |
+|---|---|
+| Direct3D 12 | What vkd3d-proton offers on the host GPU |
+| Direct3D 11 | Feature levels up to 12_1 |
+| Vulkan | 1.3, with the host device's extensions |
+| OpenGL | Up to 4.6, core and compatibility profiles |
+| OpenCL | 3.0 |
+| Direct3D 9 | No native driver yet |
+
+All of these work in 32-bit processes too.
+
+## Requirements
+
+**Host**
+
+- x86-64 Linux with KVM, where your user can open `/dev/kvm`
+- A Wayland desktop. LSW places windows through KWin, and KDE Plasma is what it is tested on
+- A Vulkan driver for your GPU; AMD, Intel and NVIDIA are the ones tested
+- Optional: `virtiofsd` for shared folders, an OpenCL driver for OpenCL in the guest, and Mesa for OpenGL in the guest on AMD or Intel
+
+**Guest**
+
+- Windows 11 24H2 (build 26100) or newer, which the GPU driver's WDDM 3.2 requires
+- The guest runs with test signing on, because the driver is test-signed. That means UEFI without enrolled Secure Boot keys
+
+VMs run under your user's libvirt session (`qemu:///session`), so you don't need a system `libvirtd` or membership of the `libvirt` group.
+
+## Install
+
+On Arch Linux, install [`lsw-bin`](https://aur.archlinux.org/packages/lsw-bin) from the AUR:
+
+```sh
+yay -S lsw-bin
+```
+
+Other distributions can use the `lsw-<version>-x86_64.tar.zst` tarball from [GitHub releases](https://github.com/acceleration3/linux-subsystem-windows/releases). It is built against Arch's libraries, so it may need the same library versions.
+
+## Getting started
+
+1. Start **LSW Manager** from your application menu, or run `lsw-manager`.
+2. Follow the wizard: accept the Windows licence, choose an ISO or a download, then set the VM's size and your Windows account.
+3. Wait for the unattended install to finish. The wizard moves on when Windows is ready.
+4. Launch applications from the manager. Their windows open on your desktop.
+
+To install without the GUI, pass the install flags; `lsw-manager --help` lists them.
+
+## Building
+
+> The `accel-virt` and `remotewin` submodules are currently private, so a public clone cannot fetch them. Without access to them, use the AUR package or a release tarball.
+
+```sh
+git clone --recurse-submodules https://github.com/acceleration3/linux-subsystem-windows
+cd linux-subsystem-windows
+./scripts/build.sh
+```
+
+`build.sh` cross-builds the Windows guest half, then builds the manager, the window mirror and the GPU stack.
+
+| Command | Builds |
+|---|---|
+| `./scripts/build.sh` | Everything |
+| `./scripts/build.sh --no-gpu` | Skips `accel-virt`; quickest when working on the manager |
+| `./scripts/build.sh --host-only` | Skips the mingw cross-build |
+
+To run the host build directly with CMake:
+
+```sh
+cmake -S . -B build -G Ninja
+cmake --build build
+```
+
+Run the result with `./build/src/host/lsw-manager`.
+
+The first GPU build fetches about 550 MB (a Windows kit subset, the Khronos registries, QEMU's source and the OpenCL loader) and compiles QEMU, DXVK and vkd3d-proton, so it takes a while. Later builds are incremental.
+
+### Build dependencies
+
+- **Core:** CMake 3.25+, a C++20 compiler, Qt 6, libvirt, Vulkan headers and loader
+- **Window mirror:** a C compiler, pkg-config, `wayland-client`, `wayland-scanner`, `wayland-protocols` 1.38+, `xkbcommon`, `libdrm` 2.4.116+, `libsystemd`
+- **GPU stack:** clang, clang-cl, `lld`, `llvm-lib`, `llvm-rc`, `llvm-mt`, Python 3.11+, meson, glslang, and QEMU's build dependencies (glib2, pixman, gtk3, libepoxy, libslirp)
+- **Guest half:** mingw-w64
+
+Configure names whichever window-mirror dependency is missing. For the exact package list on Arch, see [aur/README.md](aur/README.md).
+
+### Build options
+
+| Option | Effect when `OFF` |
+|---|---|
+| `LSW_BUILD_ACCEL_VIRT` | No GPU stack, and no GPU for VMs |
+| `LSW_BUILD_REMOTEWIN` | No window mirror |
+| `LSW_BUILD_TESTS` | No unit tests |
+
+If you already have a Windows kit, `-DAV_WINDOWS_KIT_DIR=<dir>` avoids downloading another.
+
+### Tests
+
+```sh
+ctest --test-dir build --output-on-failure
+```
+
+`scripts/verify-install.sh` checks that an installed VM is up, and [docs/gpu-testing.md](docs/gpu-testing.md) covers the GPU suites.
+
+## How it works
+
+```
+ Linux desktop                         Windows VM
+┌──────────────────────┐              ┌───────────────────────────┐
+│ lsw-manager          │  guest link  │ lsw-guest-agent.exe       │
+│                      │◄────────────►│                           │
+│ remotewin            │   windows    │ remotewin-guest.exe       │
+│ (one per app)        │◄────────────►│ (beside the application)  │
+│                      │              │                           │
+│ QEMU with accel-virt │  GPU work    │ avgpu.sys + API drivers   │
+│ runs on the host GPU │◄────────────►│ (D3D, Vulkan, GL, CL)     │
+└──────────────────────┘              └───────────────────────────┘
+```
+
+- **The manager** provisions Windows, runs the VM through libvirt, and keeps LSW's files inside the guest up to date. The guest agent is a Windows service that does its work inside the VM.
+- **[remotewin](external/remotewin)** carries windows. Each application gets its own `remotewin` process on the host, which owns that application's pixels, input, menus and taskbar identity.
+- **[accel-virt](external/accel-virt)** carries GPU work. A WDDM kernel driver and user-mode drivers in the guest send commands through a patched QEMU device, and the host runs them on its own Vulkan, EGL and OpenCL, using DXVK and vkd3d-proton for Direct3D.
+
+The two meet at a mirrored window's frames, which stay on the GPU instead of being copied back through the guest where the setup allows it. Otherwise frames cross as pixels over the guest's network.
+
+Shared folders use a virtio-fs device per folder, with virtio-win's driver and WinFsp in the guest.
 
 ## Layout
 
 ```
 src/
-  agent/          lsw-guest-agent.exe — the Windows service inside the VM
-  guest/          what else runs inside the VM: lsw-shares.ps1, the shared folders
-  base/           logging for the host (the agent has its own)
-  linkproto/      the host <-> guest wire contract
-  host/           the Linux manager
+  host/        the Linux manager
+  agent/       lsw-guest-agent.exe, the Windows service inside the VM
+  guest/       other files that run in the VM, such as lsw-shares.ps1
+  linkproto/   the host <-> guest wire contract, compiled by both sides
+  base/        logging for the host
 external/
-  remotewin/      the window mirror: an application's windows, host and guest halves
-  accel-virt/     the GPU: a paravirtual WDDM adapter, its QEMU device and its guest drivers
+  remotewin/   the window mirror
+  accel-virt/  the GPU stack
+scripts/       building, packaging, testing
+docs/          protocol and testing documents
+aur/           the lsw-bin AUR package and the release procedure
 ```
 
-There are two paths across the VM boundary. They meet in one place: a
-mirrored window's frames, which the guest half copies into shared
-textures on the guest's GPU and remotewin imports from accel-virt's
-device as the host GPU memory they are in (the device's export socket,
-`$XDG_RUNTIME_DIR/lsw-export.sock`, which the domain names and every
-`remotewin` is given). Without it - an older QEMU, another GPU, a VM
-defined before it - frames cross as pixels over the guest's network, as
-they always did.
+Every module has one `include/` tree and one `src/` tree, with one class per header, so includes read `lsw/<module>/<concern>/<class>.hpp`.
 
-**remotewin** carries windows. Launching an application starts a
-`remotewin` process for it, which owns that application's windows on this
-desktop — their pixels, their input, their menus and their taskbar
-identity — and a `remotewin-guest.exe` beside the application in the
-guest, which dials back out to it. One process per application, because
-a menu has to be a popup of the window it was opened from and no
-compositor lets one process place a surface against another's. That half
-lives in [remotewin](external/remotewin), a submodule; it knows how to
-move a Windows application's windows across a boundary and nothing about
-virtual machines.
+## Contributing
 
-**accel-virt** carries GPU work. The guest gets a real display adapter,
-named after the host GPU it runs on, and its applications use Direct3D
-11 and 12, Vulkan, OpenGL and OpenCL on it as they would on a physical
-card. It has two halves, and LSW builds both:
+Start with [CONTRIBUTING.md](CONTRIBUTING.md), which covers development setup, style and how to change each part. In short:
 
-- *On the host*, a patched QEMU with the `virtio-gpu-av-pci` device,
-  which the VM runs on in place of the distribution's QEMU, and
-  `libav_executor.so`, which runs every command the guest sends on the
-  host's own Vulkan, EGL and OpenCL — with DXVK and vkd3d-proton, built
-  natively, for Direct3D. The executor runs inside QEMU: libvirt
-  confines QEMU with a seccomp filter that lets it start no process,
-  so accel-virt's separate renderer process is not used.
-- *In the guest*, `avgpu.sys`, a WDDM 3.2 kernel-mode display miniport,
-  and the user-mode drivers beside it — `avumd.dll` for Direct3D,
-  `avvk.dll`, `avgl.dll` and `avcl.dll`, each again for 32-bit
-  processes. They are built on the host, with accel-virt's own clang-cl
-  toolchains, into `build/av-drivers`; the payload ISO carries that tree
-  and the guest installs it as `C:\av` with accel-virt's
-  `provision.ps1`.
+- Format C++ with `clang-format`, using the repo's `.clang-format` and `.clang-tidy`.
+- Write commit subjects in the imperative mood, around 70 characters.
+- Make GPU changes in `accel-virt` and window changes in `remotewin`, then bump the submodule pointer here.
+- Anything the manager and the guest agent must agree on belongs in `src/linkproto/`, specified in [docs/link-protocol.md](docs/link-protocol.md).
 
-The desktop runs on it too: DWM composes on the host GPU and the host
-scans the result out without copying it back into the guest. That half
-lives in [accel-virt](external/accel-virt), a submodule; it knows how to
-carry a graphics API across a virtio-gpu device and nothing about
-provisioning Windows or mirroring its windows, so it builds and tests
-entirely on its own:
-
-```sh
-git submodule update --init --recursive
-```
-
-It sets the guest's floor. The driver declares WDDM 3.2, which Windows
-refuses below **Windows 11 24H2** (build 26100), and it is
-**test-signed**: the guest runs with test signing on, which means UEFI
-without enrolled Secure Boot keys. accel-virt's
-[README](external/accel-virt/README.md) has the rest — what each API
-offers, and where it falls short.
-
-What this repository adds is the VM around both: provisioning Windows,
-running it, and presenting its applications as native Linux windows.
-
-The manager's desktop preview uses RemoteWin's WGC monitor capture, with
-shared GPU surfaces when available. **Play preview** starts capture once the
-guest agent is online; **Pause preview** stops capture. It defaults to paused,
-also detaches while hidden, and offers a retry on failure. The preview is
-read-only; use **Open desktop** to send pointer and keyboard input.
-Installed VMs need no VNC display, and accel-virt never reads accelerated
-desktop images back into QEMU's CPU console surface. VNC remains only for the installer's plain VGA
-display, before Windows and WGC are available.
-
-With Windows running, **Run on VM…** in the manager's Overview lets you
-browse a local EXE, MSI/MSP installer, COM/SCR program, BAT/CMD batch file,
-or PS1/VBS/JS/WSF script, copy it to the VM with progress and cancellation,
-and run it with optional Windows command-line arguments. Its windows use
-the same mirroring path as installed applications. Copies remain under
-`C:\ProgramData\LSW\uploads`; only the selected file is transferred, not
-companion files. This requires a guest agent built with `upload_file` support.
-
-**Shared folders** (Settings, Files) give Windows a folder of this
-machine as a drive letter: each is a virtio-fs device (virtiofsd on the
-host) and, in Windows, one instance of virtio-win's `virtiofs.exe` under
-WinFsp's launcher, so every session sees the drive. LSW ships what Windows
-needs — virtio-win's viofs driver and `virtiofs.exe`, and the WinFsp
-installer, each pinned and checksummed at build time — and installs it
-when Windows is set up, or in a guest set up before it once the manager
-next finds it running; the drives come back at every start of Windows.
-`C:\ProgramData\LSW\shares.log` in the guest says what was done. The
-mounts are made with WinFsp - Windows File System Proxy, Copyright (C)
-Bill Zissimopoulos, <https://github.com/winfsp/winfsp>.
-
-MSIX/MSIXBundle and APPX/APPXBundle files open Windows' normal **App Installer**
-window, mirrored individually just like other applications. Opening the package
-uses the same file association as double-clicking it in Windows 11.
-Review the package and click **Install** there; LSW does not silently install it
-or bypass Windows' publisher/signature checks. App Installer must be installed
-in the guest; this path also requires the agent's `open_package` command.
-
-`src/linkproto/` is the one module the Linux manager and the Windows
-guest agent both compile: envelope framing, stream reassembly, and the
-RPC command vocabulary. It is header-only and depends on
-nothing but the standard library — no Qt, no spdlog, no POSIX, no Win32.
-Anything either side could change unilaterally and still compile does
-not belong there.
-
-Every module has exactly one `include/` tree and one `src/` tree, so every
-include in the repo reads `lsw/<module>/<concern>/<class>.hpp`. One class
-per header, one header/.cpp pair per class.
-
-`src/host/` subdivides by concern:
-
-```
-src/host/
-  include/lsw/host/<concern>/*.hpp
-  src/<concern>/*.cpp
-
-  platform/   DBus single-instance, vsock, XDG places
-  config/     settings + the VM manifest
-  vm/         libvirt lifecycle, the domain, stats
-  link/       the multiplexed JSON channel to the guest agent
-  apps/       guest app catalog, per-app config, launch, logs
-  mirror/     the window mirror a launch starts, one per application
-  ui/         widgets and theme shared by both UIs
-  services/   HostServices — the container every feature takes
-  provision/  first-run install pipeline (ISO, autounattend, setup)
-  tools/      the image tools, opened by the wizard and the manager
-  wizard/     the first-run QWizard and its pages
-  manager/    the everyday window
-  mcp/        MCP automation surface over localhost HTTP
-  app/        composition root + entry point
-```
-
-Those fourteen concerns are linked as five libraries plus the executable —
-see the header comment in `src/host/CMakeLists.txt`. Include paths never
-name a target, so moving a concern between libraries touches no source.
-
-## Building
-
-```sh
-git submodule update --init --recursive
-cmake -S . -B build -G Ninja
-cmake --build build
-```
-
-or `scripts/build.sh`, which does the same and cross-builds the Windows
-half first.
-
-Requires CMake 3.25+, a C++20 compiler, Qt 6, libvirt (with
-`libvirt-qemu`), and the Vulkan development package. The window mirror's
-host half (remotewin) is a Wayland client of its own, without Qt, and adds a
-C compiler, pkg-config, `wayland-client`, `wayland-scanner`,
-`wayland-protocols` (1.38 or newer), `xkbcommon`, `libdrm` (2.4.116 or
-newer) and `libsystemd`: configure names whichever is missing, and
-`-DLSW_BUILD_REMOTEWIN=OFF` builds without the mirror. accel-virt brings
-its own requirements, because the host build is also where its guest
-drivers are built:
-
-- clang and clang++, clang-cl, lld (`lld-link`), `llvm-lib`, `llvm-rc`
-  and `llvm-mt` — accel-virt builds with nothing else, so it is driven
-  as an external project with its own compiler rather than as part of
-  this build;
-- Python 3.11+, meson and glslang (DXVK and vkd3d-proton), and QEMU's
-  own build dependencies — glib2, pixman, gtk3, libepoxy, libslirp;
-- on the host at run time: KVM, and a Vulkan driver, EGL and an OpenCL
-  ICD for each API the guest should have.
-
-The first build fetches what accel-virt pins and does not commit — the
-Windows kit subset, the Khronos registries, QEMU's tarball, the OpenCL
-loader's source — and compiles QEMU, DXVK and vkd3d-proton, so it takes
-a while. The Windows kit is cut from multi-gigabyte WDK and SDK
-packages; with one already fetched elsewhere, pass
-`-DAV_WINDOWS_KIT_DIR=<accel-virt>/third_party/windows-kit`.
-`-DLSW_BUILD_ACCEL_VIRT=OFF` builds the manager without any of it, and
-without a GPU for its VMs.
-
-What the GPU build leaves, beside the manager in `build/`:
-
-```
-build/
-  av-drivers/                 the guest's C:\av: provision.ps1, adapters.txt,
-                              package/ (avgpu.sys, avgpu.inf, the user-mode
-                              drivers, package.sha256), loaders/{x64,x86}/OpenCL.dll
-  accel-virt/qemu/            qemu/qemu-system-x86_64 and its modules,
-                              libav_executor.so
-  accel-virt/d3d/lib/         DXVK and vkd3d-proton for the host
-```
-
-The manager looks for them there, relative to its own executable;
-`LSW_AV_DRIVERS`, `LSW_AV_QEMU_BUILD` and `LSW_AV_D3D_PATH` point it
-elsewhere.
-
-`scripts/build-agent.sh` cross-builds the rest of the Windows half with
-mingw-w64: the guest agent, `remotewin-guest.exe`, and the Vulkan loader
-for x64 and x86, which Windows does not ship and accel-virt does not
-package.
+When reporting a bug, include your distribution, GPU and LSW version. The manager's log and, for shared folders, `C:\ProgramData\LSW\shares.log` in the guest are the most useful things to attach.
 
 ## License
 
-Apache-2.0. See [LICENSE](LICENSE).
+LSW is licensed under Apache-2.0; see [LICENSE](LICENSE). Bundled third-party components keep their own licences, and release packages carry their texts in `usr/share/licenses`.
+
+Shared folders are mounted with **WinFsp - Windows File System Proxy, Copyright (C) Bill Zissimopoulos**, <https://github.com/winfsp/winfsp>.
