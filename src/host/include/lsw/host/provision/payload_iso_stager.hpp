@@ -7,6 +7,7 @@
 #include <QString>
 
 namespace lsw::host::config { class Settings; }
+namespace lsw::host::provision::install { struct PayloadInputs; }
 
 namespace lsw::host::provision {
 
@@ -25,9 +26,12 @@ public:
     explicit PayloadIsoStager(config::Settings& settings, QObject* parent = nullptr);
 
     // Render the answer file for ``inputs`` and build the ISO for
-    // ``record``. Emits exactly one of ``finished`` / ``failed`` —
-    // ``failed`` possibly before this returns, when something the guest
-    // cannot do without (the driver package) is not on this machine.
+    // ``record``. Looks up this host's GPUs' current driver versions in
+    // the Microsoft Update Catalog on the way (DriverCatalog), which takes
+    // up to a few seconds with the GUI thread free. Emits exactly one of
+    // ``finished`` / ``failed`` — ``failed`` possibly before this returns,
+    // when something the guest cannot do without (the driver package) is
+    // not on this machine.
     void build(const config::VmRecord& record, const PipelineInputs& inputs);
 
 Q_SIGNALS:
@@ -35,6 +39,10 @@ Q_SIGNALS:
     void failed(const QString& message);
 
 private:
+    // The rest of the build, once the adapter names are as they will be
+    // carried: the vendor loaders, the shared folders' files, the ISO.
+    void build_iso(install::PayloadInputs payload);
+
     config::Settings& settings_;
 };
 

@@ -10,10 +10,12 @@
 
 #include <QCoreApplication>
 #include <QStringList>
+#include <QUrl>
 #include <cstdio>
 
 using lsw::host::link::AgentRpcClient;
 using lsw::host::manager::GuestDriverInstaller;
+using lsw::host::provision::install::DriverCatalog;
 using Event = GuestDriverInstaller::Event;
 
 namespace {
@@ -25,6 +27,11 @@ void check(bool ok, const char* label) {
     if (!ok) {
         ++g_failures;
     }
+}
+
+// A catalog that is offline, so no test reaches the network.
+void offline(const QUrl&, DriverCatalog::Done done) {
+    done({}, QStringLiteral("offline"));
 }
 
 struct Seen {
@@ -83,7 +90,7 @@ int main(int argc, char** argv) {
     }
 
     {
-        GuestDriverInstaller installer{rpc};
+        GuestDriverInstaller installer{rpc, offline};
         Seen seen;
         watch(installer, seen);
         (void)installer.start();
@@ -108,7 +115,7 @@ int main(int argc, char** argv) {
     }
 
     {
-        GuestDriverInstaller installer{rpc};
+        GuestDriverInstaller installer{rpc, offline};
         Seen seen;
         watch(installer, seen);
         (void)installer.start();

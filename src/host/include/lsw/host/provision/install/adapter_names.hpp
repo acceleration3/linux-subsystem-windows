@@ -14,7 +14,10 @@ namespace lsw::host::provision::install {
 // it writes for that GPU with — and so what Device Manager calls the
 // adapter. One "<vendor>\t<device>\t<name>\n" line per GPU, the IDs in
 // lowercase hex, CPU devices left out: the format of accel-virt's
-// tools/host/list_gpus.py --adapter-names.
+// tools/host/list_gpus.py --adapter-names. A line gains a fourth field,
+// "\t<version>", once DriverCatalog has found the GPU's current Windows
+// driver version (render writes three), which provision.ps1 stamps the
+// user-mode driver with.
 //
 // Written when the payload is built, on the machine the guest will run
 // on. accel-virt's own install writes one too, but it describes the

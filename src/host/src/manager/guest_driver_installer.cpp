@@ -22,8 +22,10 @@ constexpr int kRestartNeeded = 3010;
 
 }  // namespace
 
-GuestDriverInstaller::GuestDriverInstaller(link::AgentRpcClient& rpc, QObject* parent)
-    : QObject(parent), rpc_(rpc) {}
+GuestDriverInstaller::GuestDriverInstaller(link::AgentRpcClient& rpc,
+                                           provision::install::DriverCatalog::Fetch fetch,
+                                           QObject* parent)
+    : QObject(parent), rpc_(rpc), fetch_(std::move(fetch)) {}
 
 QString GuestDriverInstaller::script(const QString& staging, const QString& adapter_names) {
     // Base64 through PowerShell: a GPU's name is UTF-8 and may hold
@@ -100,8 +102,28 @@ bool GuestDriverInstaller::start(const QString& staging) {
         provision::install::AdapterNames{}.render(platform::HostGpus::enumerate());
     if (adapter_names.isEmpty()) {
         LSW_WARN("graphics: no host GPU found to name; the guest's adapters.txt is kept");
+        run(staging, adapter_names);
+        return true;
     }
+    // The search ends the lookup however it went, so running() holds until
+    // then and abandon() can end it: the catalog is dropped with its answer.
+    auto* const catalog = new provision::install::DriverCatalog(fetch_, this);
+    lookup_ = catalog;
+    connect(catalog, &provision::install::DriverCatalog::completed, this,
+            [this, catalog, staging](const QString& versioned) {
+                catalog->deleteLater();
+                if (lookup_ != catalog) {
+                    return;
+                }
+                lookup_.clear();
+                run(staging, versioned);
+            });
+    Q_EMIT progress(QStringLiteral("Looking up current driver versions"));
+    catalog->lookup(adapter_names);
+    return true;
+}
 
+void GuestDriverInstaller::run(const QString& staging, const QString& adapter_names) {
     job_.clear();
     early_.clear();
     awaiting_id_ = true;
@@ -127,7 +149,6 @@ bool GuestDriverInstaller::start(const QString& staging) {
                            LSW_INFO("graphics: installing avgpu, job {}", id);
                            on_job_id(QString::fromStdString(id));
                        });
-    return true;
 }
 
 void GuestDriverInstaller::on_event(const Event& event) {
@@ -164,6 +185,11 @@ void GuestDriverInstaller::handle(const Event& event) {
 void GuestDriverInstaller::abandon(const QString& reason) {
     if (!running()) {
         return;
+    }
+    if (lookup_) {
+        lookup_->disconnect(this);
+        lookup_->deleteLater();
+        lookup_.clear();
     }
     awaiting_id_ = false;
     early_.clear();

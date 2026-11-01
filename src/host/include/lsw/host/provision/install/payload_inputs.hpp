@@ -38,7 +38,9 @@ struct PayloadInputs {
     // names each GPU's INF model with (AdapterNames::render). Written in
     // place of any adapters.txt the tree carries, which names the GPUs
     // of whatever machine built the package. Empty writes none, and the
-    // guest names each model as the INF's static one.
+    // guest names each model as the INF's static one. A line is
+    // "<vendor>\t<device>\t<name>[\t<version>]": the version is the GPU's
+    // current Windows driver, from DriverCatalog, absent where it found none.
     QString av_adapter_names;
     // The Khronos Vulkan loaders, which the driver package does not
     // carry: ``vulkan-1.dll`` for x64 and for x86, staged as

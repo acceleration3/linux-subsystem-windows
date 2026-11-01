@@ -10,6 +10,7 @@
 #include "lsw/host/platform/mirror_exe_paths.hpp"
 #include "lsw/host/provision/install/adapter_names.hpp"
 #include "lsw/host/provision/install/autounattend.hpp"
+#include "lsw/host/provision/install/driver_catalog.hpp"
 #include "lsw/host/provision/install/media_language.hpp"
 #include "lsw/host/provision/install/payload_iso.hpp"
 #include "lsw/host/provision/install/product_keys.hpp"
@@ -129,11 +130,25 @@ void PayloadIsoStager::build(const config::VmRecord& record, const PipelineInput
     if (payload.av_adapter_names.isEmpty()) {
         LSW_WARN("provision: no host GPU found to name; the guest's adapter takes the "
                  "driver's static model name");
-    } else {
-        LSW_INFO("provision: guest adapter names:\n{}",
-                 payload.av_adapter_names.trimmed().toStdString());
+        build_iso(std::move(payload));
+        return;
     }
+    // And the driver version the vendor's current Windows driver has, which
+    // the guest stamps its user-mode driver with. The lookup runs beside the
+    // GUI thread and ends however it went, so the build always continues.
+    auto* const catalog = new install::DriverCatalog({}, this);
+    connect(catalog, &install::DriverCatalog::completed, this,
+            [this, catalog, payload](const QString& versioned) mutable {
+                catalog->deleteLater();
+                payload.av_adapter_names = versioned;
+                LSW_INFO("provision: guest adapter names:\n{}",
+                         payload.av_adapter_names.trimmed().toStdString());
+                build_iso(std::move(payload));
+            });
+    catalog->lookup(payload.av_adapter_names);
+}
 
+void PayloadIsoStager::build_iso(install::PayloadInputs payload) {
     // The Vulkan loaders. Windows 11 may ship one (26200 carries
     // 1.3.300.0 in both views) and the guest keeps it when it does, so
     // a missing build of ours costs only a guest whose Windows has none.

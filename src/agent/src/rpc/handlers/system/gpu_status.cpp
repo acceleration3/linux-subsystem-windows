@@ -280,8 +280,9 @@ std::optional<std::string> small_file(const std::filesystem::path& path, std::st
 // the manager to compare with what it ships:
 //   - each file C:\av\pristine\package\package.sha256 names. The driver
 //     store's copy is the one Windows runs, so a file is given its hash
-//     there; but avgpu.sys and avgpu.inf, which signing rewrites, keep
-//     pristine's, as does a file the store does not have.
+//     there; but avgpu.sys, avgpu.inf, avumd.dll and avumd32.dll, which
+//     signing rewrites (the first two signed, the DLLs stamped with a
+//     version), keep pristine's, as does a file the store does not have.
 //   - C:\av\provision.ps1, as provision.ps1, and every OpenCL loader in
 //     C:\av\loaders, as loaders/<arch>/<name>: an update brings those too.
 // Null when there is no pristine package: a guest set up before LSW kept
@@ -304,7 +305,9 @@ nlohmann::json installed_manifest(const std::wstring& store) {
         std::string hash = line.substr(0, 64);
         const std::string name = line.substr(line[65] == ' ' || line[65] == '*' ? 66 : 65);
         const std::wstring upper_name = upper(util::TextEncoding::to_wide(name));
-        if (!store.empty() && upper_name != L"AVGPU.SYS" && upper_name != L"AVGPU.INF") {
+        const bool rewritten = upper_name == L"AVGPU.SYS" || upper_name == L"AVGPU.INF" ||
+                               upper_name == L"AVUMD.DLL" || upper_name == L"AVUMD32.DLL";
+        if (!store.empty() && !rewritten) {
             const std::string installed = win::FileDigest::sha256(
                 std::filesystem::path(store) / util::TextEncoding::to_wide(name));
             if (!installed.empty()) {

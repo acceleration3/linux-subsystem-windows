@@ -1,8 +1,10 @@
 #pragma once
 
 #include "lsw/host/link/event_subscription.hpp"
+#include "lsw/host/provision/install/driver_catalog.hpp"
 
 #include <QObject>
+#include <QPointer>
 #include <QString>
 #include <QVector>
 
@@ -24,7 +26,10 @@ namespace lsw::host::manager {
 class GuestDriverInstaller : public QObject {
     Q_OBJECT
 public:
-    explicit GuestDriverInstaller(link::AgentRpcClient& rpc, QObject* parent = nullptr);
+    // ``fetch`` is how the driver catalog is searched; empty is the network.
+    explicit GuestDriverInstaller(link::AgentRpcClient& rpc,
+                                  provision::install::DriverCatalog::Fetch fetch = {},
+                                  QObject* parent = nullptr);
 
     // The script, once, here. It signs a fresh copy because provision.ps1
     // -Stage sign first checks the package against its package.sha256,
@@ -43,14 +48,21 @@ public:
     // Windows was installed; a GPU passed through since would get the
     // INF's generic name, and DXGI's adapter description is the name the
     // adapter was set up with, whatever avgpu.sys writes later. Empty
-    // keeps the guest's file.
+    // keeps the guest's file. Each line is
+    // "<vendor>\t<device>\t<name>[\t<version>]\n": the version, where start
+    // found one in the Microsoft Update Catalog, is the driver version
+    // provision.ps1 stamps the user-mode driver with.
     [[nodiscard]] static QString script(const QString& staging = {},
                                         const QString& adapter_names = {});
 
-    // Start it, after ``staging``, with this host's GPUs named. False,
-    // with ``failed`` emitted, when the agent would not.
+    // Start it, after ``staging``, with this host's GPUs named and their
+    // current driver versions looked up (DriverCatalog), which takes up to
+    // a few seconds with ``progress`` saying so. An agent that will not run
+    // it is reported by ``failed``, later.
     bool start(const QString& staging = {});
-    [[nodiscard]] bool running() const noexcept { return awaiting_id_ || !job_.isEmpty(); }
+    [[nodiscard]] bool running() const noexcept {
+        return !lookup_.isNull() || awaiting_id_ || !job_.isEmpty();
+    }
 
     // The agent went away with the job in flight: its end will never be
     // reported, so it ends here, as a failure that says why.
@@ -81,10 +93,15 @@ Q_SIGNALS:
 
 private:
     void finish(bool ok, int exit_code, const QString& message);
+    // The run_script request, once the names are as they will be sent.
+    void run(const QString& staging, const QString& adapter_names);
 
     void handle(const Event& event);
 
     link::AgentRpcClient& rpc_;
+    provision::install::DriverCatalog::Fetch fetch_;
+    // The catalog search start is waiting on, if one is.
+    QPointer<provision::install::DriverCatalog> lookup_;
     QString job_;
     // Between run_script going out and its reply: the job has no id yet,
     // and a script that ends fast reports its end before the reply that

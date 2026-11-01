@@ -120,6 +120,17 @@ target_link_libraries(lsw_host_adapter_names_test
 target_compile_definitions(lsw_host_adapter_names_test PRIVATE QT_NO_KEYWORDS)
 add_test(NAME lsw_host_adapter_names_test COMMAND lsw_host_adapter_names_test)
 
+# The Update Catalog's answer read for a GPU's current driver version, and
+# the lookup over a fake fetch: no network.
+add_executable(lsw_host_driver_catalog_test driver_catalog_test.cpp)
+target_link_libraries(lsw_host_driver_catalog_test
+    PRIVATE
+        lsw_host_provision
+        LSW::CompileOptions
+)
+target_compile_definitions(lsw_host_driver_catalog_test PRIVATE QT_NO_KEYWORDS)
+add_test(NAME lsw_host_driver_catalog_test COMMAND lsw_host_driver_catalog_test)
+
 add_executable(lsw_host_gpus_test host_gpus_test.cpp)
 target_link_libraries(lsw_host_gpus_test
     PRIVATE
