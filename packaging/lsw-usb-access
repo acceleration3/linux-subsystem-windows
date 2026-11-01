@@ -1,0 +1,58 @@
+#!/bin/sh
+# Lets the logged-in user open one kind of USB device, so QEMU (which
+# runs as them) can hand it to the guest.
+#
+#   lsw-usb-access VENDOR PRODUCT      both four lowercase hex digits
+#
+# Run as root, through pkexec, by the manager. /dev/bus/usb nodes are
+# root-owned, and what a person may open there is udev's to say: this
+# writes one rule for one vendor:product that tags the device "uaccess",
+# which gives whoever is at the seat an ACL on its node. It is per
+# device type and it persists across replugs, so a device is asked about
+# once, and the rest of the bus stays as closed as it was.
+#
+# The arguments come from an unprivileged caller and end up in a file
+# root's udev reads, so they are checked before anything else is done.
+set -eu
+
+if [ "$#" -ne 2 ]; then
+    echo "usage: lsw-usb-access VENDOR PRODUCT" >&2
+    exit 2
+fi
+vendor=$1
+product=$2
+
+# Exactly four lowercase hex digits, nothing else: no quotes, no
+# newlines, no glob characters. case's patterns do this without
+# letting the shell or a regex library interpret the value.
+valid() {
+    case "$1" in
+        [0-9a-f][0-9a-f][0-9a-f][0-9a-f]) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+if ! valid "$vendor" || ! valid "$product"; then
+    echo "lsw-usb-access: vendor and product must be four lowercase hex digits" >&2
+    exit 2
+fi
+
+# Before 73-seat-late.rules, which is where uaccess is acted on.
+rules_dir=/etc/udev/rules.d
+rule="$rules_dir/70-lsw-usb-$vendor-$product.rules"
+mkdir -p "$rules_dir"
+
+# Written whole and renamed into place, so udev never reads half a rule.
+tmp=$(mktemp "$rules_dir/.lsw-usb-XXXXXX")
+trap 'rm -f "$tmp"' EXIT
+printf 'SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="%s", ATTR{idProduct}=="%s", TAG+="uaccess"\n' \
+    "$vendor" "$product" > "$tmp"
+chmod 0644 "$tmp"
+mv -f "$tmp" "$rule"
+trap - EXIT
+
+# The device is plugged in already: reload and re-run its rules, so the
+# ACL appears now rather than at the next replug.
+udevadm control --reload-rules
+udevadm trigger --action=change --subsystem-match=usb \
+    --attr-match=idVendor="$vendor" --attr-match=idProduct="$product"
+udevadm settle

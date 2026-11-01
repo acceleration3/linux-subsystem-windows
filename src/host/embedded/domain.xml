@@ -115,6 +115,15 @@
   <devices>
     <emulator>{{emulator}}</emulator>
 
+    <!-- USB 3, written out so the port count is ours and not a default
+         that may change under us: enough ports for the host devices
+         handed to the guest, which take one each beside the guest's own.
+         Windows' xHCI driver is in the box, so nothing is injected. The
+         host devices themselves are never in this definition: they are
+         attached live (see UsbPassthrough), so one that is unplugged at
+         the next start cannot stop the machine booting. -->
+    <controller type='usb' index='0' model='qemu-xhci' ports='15'/>
+
     <!-- The system disk is NVMe, from the very first boot: Windows
          Setup and the installed image both drive it with stornvme.sys,
          which is in the box, so there is nothing to inject and no

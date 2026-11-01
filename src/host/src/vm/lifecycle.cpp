@@ -424,6 +424,50 @@ bool Lifecycle::fill_accel_virt(DomainXmlInputs& inputs) {
     return true;
 }
 
+QString Lifecycle::usb_hostdev_xml(const DomainDescription::UsbDevice& device) {
+    return QStringLiteral("<hostdev mode='subsystem' type='usb'><source>"
+                          "<vendor id='0x%1'/><product id='0x%2'/>"
+                          "<address bus='%3' device='%4'/></source></hostdev>")
+        .arg(device.vendor, 4, 16, QLatin1Char('0'))
+        .arg(device.product, 4, 16, QLatin1Char('0'))
+        .arg(device.bus)
+        .arg(device.device);
+}
+
+bool Lifecycle::attach_usb(const QUuid& uuid, const DomainDescription::UsbDevice& device,
+                           QString* error_out) {
+    auto dom = lookup(uuid);
+    const QString xml = usb_hostdev_xml(device);
+    if (dom.valid() && ::virDomainAttachDeviceFlags(dom.raw(), xml.toUtf8().constData(),
+                                                    VIR_DOMAIN_AFFECT_LIVE) == 0) {
+        return true;
+    }
+    const QString why = dom.valid() ? conn_.last_error() : QStringLiteral("the guest is not running");
+    LSW_WARN("attach USB {:04x}:{:04x} (bus {} device {}): {}", device.vendor, device.product,
+             device.bus, device.device, why.toStdString());
+    if (error_out != nullptr) {
+        *error_out = why;
+    }
+    return false;
+}
+
+bool Lifecycle::detach_usb(const QUuid& uuid, const DomainDescription::UsbDevice& device,
+                           QString* error_out) {
+    auto dom = lookup(uuid);
+    const QString xml = usb_hostdev_xml(device);
+    if (dom.valid() && ::virDomainDetachDeviceFlags(dom.raw(), xml.toUtf8().constData(),
+                                                    VIR_DOMAIN_AFFECT_LIVE) == 0) {
+        return true;
+    }
+    const QString why = dom.valid() ? conn_.last_error() : QStringLiteral("the guest is not running");
+    LSW_WARN("detach USB {:04x}:{:04x} (bus {} device {}): {}", device.vendor, device.product,
+             device.bus, device.device, why.toStdString());
+    if (error_out != nullptr) {
+        *error_out = why;
+    }
+    return false;
+}
+
 bool Lifecycle::set_display_modes(const QUuid& uuid, const QString& modes, QString* error_out) {
     const auto fail = [error_out](const QString& why) {
         LSW_WARN("display modes: {}", why.toStdString());

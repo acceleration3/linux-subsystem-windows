@@ -1,6 +1,7 @@
 #pragma once
 
 #include "lsw/host/config/vm_state.hpp"
+#include "lsw/host/vm/domain_description.hpp"
 #include "lsw/host/vm/domain_handle.hpp"
 #include "lsw/host/vm/domain_xml_builder.hpp"
 #include "lsw/host/vm/libvirt_connection.hpp"
@@ -136,6 +137,22 @@ public:
     // given, if the VM is not running or QEMU would not say.
     [[nodiscard]] std::optional<QString> display_modes(const QUuid& uuid,
                                                        QString* error_out) const;
+
+    // The XML virDomainAttachDeviceFlags and virDomainDetachDeviceFlags take
+    // for a host USB device: found by vendor, product and where it is on the
+    // bus now. One function, so what is attached is what is detached.
+    [[nodiscard]] static QString usb_hostdev_xml(const DomainDescription::UsbDevice& device);
+
+    // Hand a host USB device to the running guest, or take it back. Live
+    // only: the definition keeps no hostdev, so a device that is missing
+    // at the next start cannot stop the machine booting (the manager
+    // attaches again instead). False, with libvirt's reason in
+    // ``error_out`` when given and in the log in full, if the guest is not
+    // running or libvirt or QEMU refused.
+    [[nodiscard]] bool attach_usb(const QUuid& uuid, const DomainDescription::UsbDevice& device,
+                                  QString* error_out);
+    [[nodiscard]] bool detach_usb(const QUuid& uuid, const DomainDescription::UsbDevice& device,
+                                  QString* error_out);
 
 private:
     // Record libvirt's error for ``call``, log it, and return -1.

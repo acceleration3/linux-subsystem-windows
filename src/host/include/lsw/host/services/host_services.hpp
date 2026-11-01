@@ -12,6 +12,7 @@
 #include "lsw/host/services/guest_shells.hpp"
 #include "lsw/host/services/guest_upkeep.hpp"
 #include "lsw/host/services/status_hub.hpp"
+#include "lsw/host/services/usb_passthrough.hpp"
 #include "lsw/host/vm/libvirt_connection.hpp"
 #include "lsw/host/vm/lifecycle.hpp"
 
@@ -73,6 +74,9 @@ public:
     // the mirror's guest half, the time zone and the clock.
     [[nodiscard]] GuestUpkeep& upkeep() noexcept { return upkeep_; }
 
+    // Passing USB devices to the guest: the one place that acts on them.
+    [[nodiscard]] UsbPassthrough& usb() noexcept { return usb_; }
+
     // The one guest-window enumeration every consumer shares.
     [[nodiscard]] apps::AppConfigStore& app_configs() noexcept { return app_configs_; }
 
@@ -123,6 +127,7 @@ private:
     StatusHub status_;
     GuestShells shells_;  // declared after rpc_ and status_: it holds both
     GuestUpkeep upkeep_;  // declared after rpc_ and status_: it holds both
+    UsbPassthrough usb_;  // declared after status_ and lifecycle_: it holds both
     apps::AppConfigStore app_configs_;
     apps::LogStore log_store_;  // declared after rpc_: detaches from it in ~LogStore
     apps::GuestAppLauncher app_launcher_;

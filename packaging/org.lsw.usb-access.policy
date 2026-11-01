@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<policyconfig>
+  <vendor>LSW</vendor>
+  <vendor_url>https://github.com/acceleration3/linux-subsystem-windows</vendor_url>
+
+  <action id="org.lsw.usb-access">
+    <description>Let LSW open a USB device</description>
+    <message>Authentication is required to let LSW pass this USB device to Windows</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/lsw/lsw-usb-access</annotate>
+  </action>
+</policyconfig>

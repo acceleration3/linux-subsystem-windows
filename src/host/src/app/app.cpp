@@ -278,7 +278,7 @@ int App::capture_screens(const QString& dir) {
         // The whole settings page at once: the tables further down are
         // where rows of controls get clipped, and the first screenful
         // does not reach them.
-        {manager::NavRail::Page::Settings, "manager-06-settings-full", 2200},
+        {manager::NavRail::Page::Settings, "manager-06-settings-full", 2700},
     };
     for (const auto& entry : kPages) {
         window->resize(1000, entry.height);

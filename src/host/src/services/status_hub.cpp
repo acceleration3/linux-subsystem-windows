@@ -5,6 +5,7 @@
 #include "lsw/host/link/agent_reply.hpp"
 #include "lsw/host/link/agent_rpc_client.hpp"
 #include "lsw/host/platform/accel_virt_paths.hpp"
+#include "lsw/host/platform/host_usb_devices.hpp"
 #include "lsw/host/vm/domain_description.hpp"
 #include "lsw/host/vm/lifecycle.hpp"
 #include "lsw/linkproto/commands.hpp"
@@ -28,6 +29,7 @@ constexpr int kSessionsPollMs = 5000;
 // The device's modes change only when somebody sets them, which goes
 // through here anyway; read them now and then in case it was not us.
 constexpr int kModesEveryTicks = 5;
+constexpr int kUsbPollMs = 2000;
 
 struct HostAnswer {
     QVector<platform::HostGpu> gpus;
@@ -54,6 +56,8 @@ StatusHub::StatusHub(vm::LibvirtConnection& libvirt, vm::Lifecycle& lifecycle,
     connect(&graphics_timer_, &QTimer::timeout, this, &StatusHub::tick_graphics);
     sessions_timer_.setInterval(kSessionsPollMs);
     connect(&sessions_timer_, &QTimer::timeout, this, &StatusHub::ask_sessions);
+    usb_timer_.setInterval(kUsbPollMs);
+    connect(&usb_timer_, &QTimer::timeout, this, &StatusHub::read_usb);
 
     // Which GPUs are passed is the definition's to say. The settings
     // only decide what is pending, and with no domain defined at all
@@ -63,6 +67,9 @@ StatusHub::StatusHub(vm::LibvirtConnection& libvirt, vm::Lifecycle& lifecycle,
             rematch();
             read_vram();
             Q_EMIT changed(Area::Graphics);
+        } else if (key == K::kUsbAlways && usb_.read) {
+            // Before the first reading, "nothing plugged in" would be a claim.
+            rebuild_usb();
         }
     });
     probe_host();
@@ -82,6 +89,8 @@ void StatusHub::set_target(const QUuid& uuid) {
     graphics_.guest = GuestGpuStatus{};
     graphics_.live_modes.reset();
     graphics_timer_.stop();
+    usb_ = UsbStatus{};
+    update_usb_timer();
     if (!uuid.isNull()) {
         monitor_.watch(uuid);
     }
@@ -109,6 +118,8 @@ void StatusHub::on_stats(const QUuid& uuid, const vm::VmStats& stats) {
         // (the USB devices handed over, the definition read) is the new one's
         // to learn again.
         definition_read_ = false;
+        usb_live_.clear();
+        read_usb();
     }
     if (!definition_read_ || stats.running != definition_live_) {
         read_definition();
@@ -126,6 +137,10 @@ void StatusHub::on_stats(const QUuid& uuid, const vm::VmStats& stats) {
     Q_EMIT changed(Area::Vm);
 
     if (stats.running != was_running) {
+        // The guest's devices are all back on the host once it is off, and
+        // not yet known to be anywhere once it is on.
+        update_usb_timer();
+        read_usb();
         if (stats.running) {
             // A boot is when the device line is read, so the host's
             // answer is worth having again.
@@ -180,6 +195,9 @@ void StatusHub::refresh(Area area) {
     case Area::Sessions:
         ask_sessions();
         break;
+    case Area::Usb:
+        read_usb();
+        break;
     }
 }
 
@@ -220,6 +238,14 @@ void StatusHub::set_detail(Area area, bool on) {
             sessions_timer_.start();
         } else {
             sessions_timer_.stop();
+        }
+        return;
+    }
+    if (area == Area::Usb) {
+        usb_detail_ = on;
+        update_usb_timer();
+        if (on) {
+            read_usb();
         }
         return;
     }
@@ -318,6 +344,69 @@ void StatusHub::read_modes() {
         graphics_.live_modes = modes;
         Q_EMIT changed(Area::Graphics);
     }
+}
+
+void StatusHub::update_usb_timer() {
+    if (vm_.running() || usb_detail_) {
+        if (!usb_timer_.isActive()) {
+            usb_timer_.start();
+        }
+    } else {
+        usb_timer_.stop();
+    }
+}
+
+void StatusHub::read_usb() {
+    if (usb_reading_) {
+        return;
+    }
+    usb_reading_ = true;
+    struct Reading {
+        QVector<platform::HostUsbDevice> devices;
+        // nullopt: not read, or libvirt did not answer.
+        std::optional<QVector<vm::DomainDescription::UsbDevice>> live;
+        bool asked = false;
+    };
+    const bool running = vm_.running();
+    const QUuid uuid = vm_.uuid;
+    // sysfs, a few mount tables and libvirt's live definition: none of it
+    // for the GUI thread, on a machine with many devices or a slow disk.
+    (void)QtConcurrent::run([this, running, uuid] {
+        Reading reading;
+        reading.devices = platform::HostUsbDevices::enumerate();
+        if (running) {
+            reading.asked = true;
+            const QString xml = lifecycle_.domain_xml(uuid);
+            if (const auto parsed = xml.isEmpty() ? std::nullopt : vm::DomainDescription::parse(xml)) {
+                reading.live = parsed->usb_devices;
+            }
+        }
+        return reading;
+    }).then(this, [this](const Reading& reading) {
+        usb_reading_ = false;
+        usb_host_ = reading.devices;
+        for (const auto& device : reading.devices) {
+            usb_names_.insert(device.identity(), device.name);
+        }
+        if (!vm_.running()) {
+            usb_live_.clear();
+        } else if (reading.live) {
+            usb_live_ = *reading.live;
+        }  // else: the last list stands
+        rebuild_usb();
+    });
+}
+
+void StatusHub::rebuild_usb() {
+    // The live definition is what is attached, not what was asked for.
+    UsbStatus next = UsbStatus::build(usb_host_, vm_.running() ? usb_live_ : QVector<vm::DomainDescription::UsbDevice>{},
+                                      manager_settings_.string_list_value(K::kUsbAlways), vm_.running(),
+                                      vm_.domain_id, usb_names_);
+    if (usb_.read && next == usb_) {
+        return;
+    }
+    usb_ = std::move(next);
+    Q_EMIT changed(Area::Usb);
 }
 
 void StatusHub::read_vram() {

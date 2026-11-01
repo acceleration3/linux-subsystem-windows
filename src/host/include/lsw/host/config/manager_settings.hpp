@@ -90,6 +90,10 @@ public:
         static constexpr QLatin1StringView kPublishEntries{"desktop/publish"};
         static constexpr QLatin1StringView kMenuCategory{"desktop/category"};
         static constexpr QLatin1StringView kFileAssociations{"desktop/mime"};
+        // USB (live): the devices to pass to the guest whenever they are
+        // plugged in and it is running, as identities - "vvvv:pppp", or
+        // "vvvv:pppp:serial" for a device that has one. A QStringList.
+        static constexpr QLatin1StringView kUsbAlways{"usb/always"};
         // Guest
         static constexpr QLatin1StringView kAutostart{"guest/autostart"};   // live
         // Host (live)

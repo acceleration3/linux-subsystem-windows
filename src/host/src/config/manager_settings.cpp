@@ -52,6 +52,7 @@ const QHash<QString, QVariant>& defaults() {
         // on the host handles, and no default is touched.
         {K::kFileAssociations, true},
 
+        {K::kUsbAlways, QStringList{}},
 
         {K::kAutostart, false},
 

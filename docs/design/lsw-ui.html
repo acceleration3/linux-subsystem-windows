@@ -1500,6 +1500,61 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
             </div>
 
             <div class="sgroup">
+              <h5>USB devices</h5>
+              <div class="srow wide">
+                <span>
+                  <span class="k">Pass USB devices to the guest <span class="tagr live">now</span></span>
+                  <span class="d">A device passed to the guest disappears from this machine until you return it.</span>
+                </span>
+                <div class="editlist">
+                  <table>
+                    <thead>
+                      <tr><th>Device</th><th style="width:150px">Where</th><th class="tight">Always</th><th class="tight"></th></tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td>Wacom Intuos S<br><span class="mono" style="color:var(--fg-faint);font-size:11.5px">056a:0374</span></td>
+                        <td>On this machine</td>
+                        <td class="tight"><span class="toggle"><i></i></span></td>
+                        <td class="tight"><button class="btn">Pass to guest</button></td>
+                      </tr>
+                      <tr>
+                        <td>YubiKey OTP+FIDO+CCID<br><span class="mono" style="color:var(--fg-faint);font-size:11.5px">1050:0407</span></td>
+                        <td>In the guest</td>
+                        <td class="tight"><span class="toggle"><i></i></span></td>
+                        <td class="tight"><button class="btn">Return</button></td>
+                      </tr>
+                      <tr>
+                        <td>Elgato Stream Deck<br><span class="mono" style="color:var(--fg-faint);font-size:11.5px">0fd9:0060</span></td>
+                        <td>Needs access</td>
+                        <td class="tight"><span class="toggle"><i></i></span></td>
+                        <td class="tight"><button class="btn">Allow</button></td>
+                      </tr>
+                      <tr>
+                        <td>SanDisk Ultra<br><span class="mono" style="color:var(--fg-faint);font-size:11.5px">0781:5581</span></td>
+                        <td>Mounted here</td>
+                        <td class="tight"><span class="toggle"><i></i></span></td>
+                        <td class="tight"><button class="btn" disabled>Pass to guest</button></td>
+                      </tr>
+                      <tr>
+                        <td>Focusrite Scarlett 2i2<br><span class="mono" style="color:var(--fg-faint);font-size:11.5px">1235:8210</span></td>
+                        <td>Not plugged in</td>
+                        <td class="tight"><span class="toggle on"><i></i></span></td>
+                        <td class="tight"><button class="rm" title="Forget it">&times;</button></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <div class="foot">
+                    <span class="meta">Always: pass it to the guest whenever it is plugged in and the guest is running. Allow asks for your password once per device type.</span>
+                  </div>
+                  <div class="foot">
+                    <span class="meta">With the guest off the buttons are disabled and this line reads: Start the guest to pass a device.</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="sgroup">
               <h5>Guest</h5>
               <div class="srow">
                 <span>

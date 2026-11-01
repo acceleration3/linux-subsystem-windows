@@ -139,6 +139,11 @@ std::optional<DomainDescription> DomainDescription::parse(const QString& xml) {
     bool in_filesystem = false;
     bool filesystem_virtiofs = false;
     Share share;
+    // Inside a USB <hostdev>, and inside its <source>, whose bus and
+    // device numbers are the host's (the <address> after it is the guest's).
+    bool in_usb_hostdev = false;
+    bool in_hostdev_source = false;
+    UsbDevice usb;
     QString previous_arg;
 
     while (!reader.atEnd()) {
@@ -154,6 +159,11 @@ std::optional<DomainDescription> DomainDescription::parse(const QString& xml) {
                 in_commandline = false;
             } else if (name == QLatin1StringView("video")) {
                 in_video = false;
+            } else if (name == QLatin1StringView("source") && in_usb_hostdev) {
+                in_hostdev_source = false;
+            } else if (name == QLatin1StringView("hostdev") && in_usb_hostdev) {
+                in_usb_hostdev = false;
+                out.usb_devices.push_back(usb);
             } else if (name == QLatin1StringView("filesystem") && in_filesystem) {
                 in_filesystem = false;
                 if (filesystem_virtiofs && !share.tag.isEmpty()) {
@@ -185,6 +195,19 @@ std::optional<DomainDescription> DomainDescription::parse(const QString& xml) {
             out.disk_path = attrs.value(QLatin1StringView("file")).toString();
         } else if (in_disk && name == QLatin1StringView("target")) {
             out.disk_bus = attrs.value(QLatin1StringView("bus")).toString();
+        } else if (in_devices && name == QLatin1StringView("hostdev")
+                   && attrs.value(QLatin1StringView("type")) == QLatin1StringView("usb")) {
+            in_usb_hostdev = true;
+            usb = {};
+        } else if (in_usb_hostdev && name == QLatin1StringView("source")) {
+            in_hostdev_source = true;
+        } else if (in_hostdev_source && name == QLatin1StringView("vendor")) {
+            usb.vendor = attrs.value(QLatin1StringView("id")).toString().toInt(nullptr, 0);
+        } else if (in_hostdev_source && name == QLatin1StringView("product")) {
+            usb.product = attrs.value(QLatin1StringView("id")).toString().toInt(nullptr, 0);
+        } else if (in_hostdev_source && name == QLatin1StringView("address")) {
+            usb.bus = attrs.value(QLatin1StringView("bus")).toString().toInt();
+            usb.device = attrs.value(QLatin1StringView("device")).toString().toInt();
         } else if (in_devices && name == QLatin1StringView("filesystem")) {
             in_filesystem = true;
             filesystem_virtiofs = false;

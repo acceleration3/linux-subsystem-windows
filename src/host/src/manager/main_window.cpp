@@ -278,7 +278,7 @@ void MainWindow::build_pages() {
     graphics_page_ =
         new GraphicsPage(services_.status(), *alerts_, services_.manager_settings(), this);
     settings_page_ = new SettingsPage(services_.manager_settings(), services_.pending_changes(),
-                                      services_.app_configs(), services_.status(), this);
+                                      services_.app_configs(), services_.status(), services_.usb(), this);
 
     overview_stack_ = new QStackedWidget;
     overview_stack_->addWidget(overview_);

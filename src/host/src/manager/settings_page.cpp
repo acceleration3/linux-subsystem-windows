@@ -2,6 +2,7 @@
 
 #include "lsw/host/manager/adapter_roles.hpp"
 #include "lsw/host/manager/resolution_editor.hpp"
+#include "lsw/host/manager/usb_devices_panel.hpp"
 #include "lsw/host/ui/machine_limits.hpp"
 #include "lsw/host/ui/panel.hpp"
 #include "lsw/host/config/vm_sizing.hpp"
@@ -80,8 +81,9 @@ QTableWidget* make_table(const QStringList& headers) {
 
 SettingsPage::SettingsPage(config::ManagerSettings& settings, config::PendingChanges& pending,
                            apps::AppConfigStore& apps, services::StatusHub& status,
-                           QWidget* parent)
-    : QWidget(parent), settings_(settings), pending_(pending), apps_(apps), status_(status) {
+                           services::UsbPassthrough& usb, QWidget* parent)
+    : QWidget(parent), settings_(settings), pending_(pending), apps_(apps), status_(status),
+      usb_(usb) {
     build();
     connect(&pending_, &config::PendingChanges::changed, this,
             &SettingsPage::refresh_apply_bar);
@@ -99,6 +101,16 @@ SettingsPage::SettingsPage(config::ManagerSettings& settings, config::PendingCha
     });
     connect(&settings_, &config::ManagerSettings::changed, this, &SettingsPage::show_current);
     refresh_apply_bar();
+}
+
+void SettingsPage::showEvent(QShowEvent* event) {
+    QWidget::showEvent(event);
+    status_.set_detail(services::StatusHub::Area::Usb, true);
+}
+
+void SettingsPage::hideEvent(QHideEvent* event) {
+    QWidget::hideEvent(event);
+    status_.set_detail(services::StatusHub::Area::Usb, false);
 }
 
 void SettingsPage::follow(const QString& key, std::function<void()> show) {
@@ -331,6 +343,13 @@ void SettingsPage::build() {
     add_action_row(entries, QStringLiteral("Rewrite the entries"),
                    QStringLiteral("Regenerates every .desktop file and icon."),
                    QStringLiteral("Rewrite now"), &SettingsPage::rewrite_entries_requested);
+
+    // ---- usb ------------------------------------------------------
+    auto* usb = new_group(QStringLiteral("USB devices"));
+    add_wide_row(usb, false, QStringLiteral("Pass USB devices to the guest"),
+                 QStringLiteral("A device passed to the guest disappears from this machine until "
+                                "you return it."),
+                 new UsbDevicesPanel(status_, usb_));
 
     // ---- guest ----------------------------------------------------
     auto* guest = new_group(QStringLiteral("Guest"));

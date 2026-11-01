@@ -36,7 +36,7 @@ depends=(
     'glib2' 'pixman' 'gnutls' 'libpng' 'libjpeg-turbo' 'libsasl' 'snappy' 'lzo'
     'zstd' 'numactl' 'keyutils' 'libslirp' 'libbpf'
     'libelf' 'libcbor' 'systemd-libs' 'libseccomp' 'dtc' 'pam' 'fuse3'
-    'libaio' 'liburing' 'capstone'
+    'libaio' 'liburing' 'capstone' 'libusb'
     'glibc' 'libgcc' 'libstdc++'
     # At run time: the host GPU's Vulkan driver, the UEFI firmware the
     # guest boots, the disk tool, the install-media reader, downloads
@@ -53,6 +53,7 @@ optdepends=(
     'virtiofsd: shared folders between the host and the guest'
     'opencl-driver: OpenCL in the guest, run on the host GPU'
     'mesa: OpenGL in the guest on an AMD or Intel GPU (the host EGL driver)'
+    'polkit: the one password prompt that lets a USB device be passed to the guest'
 )
 install=lsw-bin.install
 # Stripped when the release was built (cmake --install --strip), and

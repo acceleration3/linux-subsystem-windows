@@ -16,7 +16,10 @@ class QPushButton;
 class QVBoxLayout;
 class QTableWidget;
 
-namespace lsw::host::services { class StatusHub; }
+namespace lsw::host::services {
+class StatusHub;
+class UsbPassthrough;
+}  // namespace lsw::host::services
 
 namespace lsw::host::manager {
 
@@ -33,7 +36,7 @@ public:
     // ``status`` has the host's Vulkan devices, for the adapter table.
     SettingsPage(config::ManagerSettings& settings, config::PendingChanges& pending,
                  apps::AppConfigStore& apps, services::StatusHub& status,
-                 QWidget* parent = nullptr);
+                 services::UsbPassthrough& usb, QWidget* parent = nullptr);
 
 Q_SIGNALS:
     // The apply bar. The window owns the guest, so it does the stopping
@@ -45,6 +48,11 @@ Q_SIGNALS:
     void reinstall_requested();
     void open_share_requested();
     void rewrite_entries_requested();
+
+protected:
+    // The USB list is read closely only while this page is looking at it.
+    void showEvent(QShowEvent* event) override;
+    void hideEvent(QHideEvent* event) override;
 
 private:
     void build();
@@ -96,6 +104,7 @@ private:
     config::PendingChanges& pending_;
     apps::AppConfigStore& apps_;
     services::StatusHub& status_;
+    services::UsbPassthrough& usb_;
 
     QVBoxLayout* content_ = nullptr;
     QWidget* apply_bar_ = nullptr;

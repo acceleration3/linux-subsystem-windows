@@ -7,6 +7,7 @@
 
 #include "lsw/host/vm/domain_description.hpp"
 #include "lsw/host/vm/domain_xml_builder.hpp"
+#include "lsw/host/vm/lifecycle.hpp"
 
 #include <QCoreApplication>
 #include <QTemporaryFile>
@@ -148,6 +149,40 @@ int main(int argc, char** argv) {
               "the live GPU lines read back");
         check(live->gpus.size() == 2 && !live->gpus.at(1).display, "display=off read");
     }
+    check(live && live->usb_devices.isEmpty(), "a definition with no hostdev has no USB devices");
+
+    // ---- passed-through USB devices -------------------------------------
+    // The host's bus and device are in <source>; the <address> after it
+    // is where the guest sees the device, and is not the host's.
+    const auto with_usb = DomainDescription::parse(QStringLiteral(
+        "<domain><devices>"
+        "<hostdev mode='subsystem' type='usb' managed='no'><source>"
+        "<vendor id='0x056a'/><product id='0x0374'/><address bus='3' device='12'/></source>"
+        "<address type='usb' bus='0' port='1'/></hostdev>"
+        "<hostdev mode='subsystem' type='pci' managed='yes'><source>"
+        "<address domain='0x0000' bus='0x01' slot='0x00' function='0x0'/></source></hostdev>"
+        "<hostdev mode='subsystem' type='usb'><source>"
+        "<vendor id='0x1050'/><product id='0x0407'/><address bus='1' device='4'/></source>"
+        "</hostdev></devices></domain>"));
+    check(with_usb && with_usb->usb_devices.size() == 2, "two USB hostdevs, the PCI one not counted");
+    if (with_usb && with_usb->usb_devices.size() == 2) {
+        const auto& first = with_usb->usb_devices.at(0);
+        check(first.vendor == 0x056a && first.product == 0x0374 && first.bus == 3
+                  && first.device == 12,
+              "a USB hostdev's vendor, product, bus and device read back");
+        check(with_usb->usb_devices.at(1).vendor == 0x1050 && with_usb->usb_devices.at(1).device == 4,
+              "the second USB hostdev reads back");
+    }
+    check(lsw::host::vm::Lifecycle::usb_hostdev_xml({0x56a, 0x374, 3, 12}) ==
+              QStringLiteral("<hostdev mode='subsystem' type='usb'><source>"
+                             "<vendor id='0x056a'/><product id='0x0374'/>"
+                             "<address bus='3' device='12'/></source></hostdev>"),
+          "the attach XML names the device by vendor, product and bus address");
+    check(DomainDescription::parse(lsw::host::vm::Lifecycle::usb_hostdev_xml({0x1, 0x2, 1, 2})
+                                   .prepend(QStringLiteral("<domain><devices>"))
+                                   .append(QStringLiteral("</devices></domain>")))
+              ->usb_devices.size() == 1,
+          "the attach XML is what the description reads");
     check(!DomainDescription::parse(QStringLiteral("<network/>")).has_value(),
           "something that is not a domain is refused");
     check(!DomainDescription::parse(QStringLiteral("<domain><vcpu>")).has_value(),

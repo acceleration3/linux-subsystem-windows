@@ -76,6 +76,8 @@ endif()
 #   share/lsw/guest/                        the agent, remotewin-guest.exe,
 #                                           av-drivers/, loaders/x64|x86/,
 #                                           virtiofs/ (shared folders)
+#   lib/lsw/lsw-usb-access                  root helper for USB access
+#   share/polkit-1/actions/org.lsw.usb-access.policy
 #   share/applications/lsw-manager.desktop
 #
 # Literal directories rather than GNUInstallDirs: the manager finds all
@@ -248,6 +250,16 @@ if(LSW_BUILD_MANAGER)
             COMPONENT ${LSW_INSTALL_COMPONENT})
     install(FILES packaging/lsw-manager.svg
             DESTINATION share/icons/hicolor/scalable/apps
+            COMPONENT ${LSW_INSTALL_COMPONENT})
+    # The root helper that lets the user open one kind of USB device, and
+    # the polkit action it is run under (platform::UsbAccess). The action
+    # names /usr/lib/lsw/lsw-usb-access, which is where a package puts
+    # this.
+    install(PROGRAMS packaging/lsw-usb-access
+            DESTINATION ${LSW_INSTALL_LIBDIR}
+            COMPONENT ${LSW_INSTALL_COMPONENT})
+    install(FILES packaging/org.lsw.usb-access.policy
+            DESTINATION share/polkit-1/actions
             COMPONENT ${LSW_INSTALL_COMPONENT})
 endif()
 

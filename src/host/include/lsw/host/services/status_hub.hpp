@@ -2,11 +2,13 @@
 
 #include "lsw/host/services/graphics_status.hpp"
 #include "lsw/host/services/guest_sessions.hpp"
+#include "lsw/host/services/usb_status.hpp"
 #include "lsw/host/services/vm_status.hpp"
 #include "lsw/host/vm/avgpu_log.hpp"
 #include "lsw/host/vm/monitor.hpp"
 
 #include <QElapsedTimer>
+#include <QHash>
 #include <QObject>
 #include <QTimer>
 #include <QUuid>
@@ -40,6 +42,10 @@ namespace lsw::host::services {
 // it runs, the stored one while it is off, re-read whenever it starts or
 // stops. The settings only show through as what a restart would change.
 //
+// The USB devices are a snapshot too (Area::Usb): sysfs and the live
+// definition's hostdevs, read every two seconds while the machine runs or
+// the Settings page is on screen, and announced only when they differ.
+//
 // Cadences: the machine every two seconds while there is a VM to watch;
 // the graphics sources every two seconds while it runs, and not at all
 // while it is off, apart from the host probe, which runs at start-up,
@@ -52,7 +58,7 @@ public:
     // the graphics snapshot — its GPUs and the APIs it serves — kept
     // apart for refresh only, because probing it loads drivers; its
     // answers are announced as a Graphics change like the rest.
-    enum class Area { Vm, Graphics, Host, Sessions };
+    enum class Area { Vm, Graphics, Host, Sessions, Usb };
 
     StatusHub(vm::LibvirtConnection& libvirt, vm::Lifecycle& lifecycle,
               link::AgentRpcClient& rpc, vm::IGuestStatsProbe& guest_probe,
@@ -65,6 +71,7 @@ public:
     [[nodiscard]] const VmStatus& vm() const noexcept { return vm_; }
     [[nodiscard]] const GraphicsStatus& graphics() const noexcept { return graphics_; }
     [[nodiscard]] const GuestSessions& sessions() const noexcept { return sessions_; }
+    [[nodiscard]] const UsbStatus& usb() const noexcept { return usb_; }
 
     // Ask now rather than at the next tick: Host for "Check again",
     // Graphics after a driver install or a resolution just set (the
@@ -97,6 +104,11 @@ private:
     void ask_sessions();
     void read_modes();
     void read_vram();
+    // The USB bus, read off the GUI thread, and the snapshot it makes.
+    void read_usb();
+    void rebuild_usb();
+    // Polled while the machine runs or the Settings page is looking.
+    void update_usb_timer();
     // The domain's definition, live or stored as the machine is, and
     // what follows from it.
     void read_definition();
@@ -120,6 +132,18 @@ private:
     // that offers them is on screen, and once when the agent arrives.
     QTimer sessions_timer_;
     bool probing_ = false;
+    QTimer usb_timer_;
+    bool usb_detail_ = false;
+    bool usb_reading_ = false;
+    UsbStatus usb_;
+    // The last sysfs reading, which a change of the always list or of the
+    // live definition is combined with without reading it again.
+    QVector<platform::HostUsbDevice> usb_host_;
+    // Names devices had when last seen, for the unplugged ones remembered.
+    QHash<QString, QString> usb_names_;
+    // The hostdevs of the live definition as last read. Kept when a read
+    // fails: an unanswered libvirt is not a guest with no devices.
+    QVector<vm::DomainDescription::UsbDevice> usb_live_;
     // Which state the definition was last read for: read again when the
     // machine starts or stops.
     bool definition_read_ = false;

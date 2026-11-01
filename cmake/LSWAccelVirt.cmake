@@ -293,7 +293,9 @@ install(PROGRAMS "${_lsw_av_qemu_build}/qemu/qemu-system-x86_64"
 # QEMU's modules, beside the binary: QEMU_MODULE_DIR is the binary's
 # directory either way (AccelVirtPaths::qemu_module_dir). Only the ones
 # a domain here loads — the GPU device and what it is built on, and the
-# PipeWire audio the domain names. QEMU's configure builds a module for
+# PipeWire audio the domain names, and usb-host, which hands a host USB
+# device to the guest (UsbPassthrough; it links libusb, a dependency of
+# the package). QEMU's configure builds a module for
 # every optional library it finds, and each one installed would be a
 # dependency of the install; a module that is absent is skipped quietly
 # when QEMU enumerates its devices, where one that is present without
@@ -306,6 +308,7 @@ install(FILES
             "${_lsw_av_qemu_build}/qemu/hw-display-virtio-gpu-av.so"
             "${_lsw_av_qemu_build}/qemu/hw-display-virtio-gpu-pci-av.so"
             "${_lsw_av_qemu_build}/qemu/audio-pipewire.so"
+            "${_lsw_av_qemu_build}/qemu/hw-usb-host.so"
         PERMISSIONS ${_lsw_av_exec_perms}
         DESTINATION ${_lsw_av_qemu_dest}
         COMPONENT ${LSW_INSTALL_COMPONENT})

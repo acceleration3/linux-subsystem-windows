@@ -38,6 +38,18 @@ struct DomainDescription {
         bool read_only = false;
     };
 
+    // One <hostdev type='usb'>: a host USB device handed to the guest. The
+    // vendor and product are the device's type; the bus and device number
+    // say which of that type, and change at every replug.
+    struct UsbDevice {
+        int vendor = 0;
+        int product = 0;
+        int bus = 0;
+        int device = 0;
+
+        [[nodiscard]] bool operator==(const UsbDevice&) const = default;
+    };
+
     int vcpus = 0;
     qint64 memory_mib = 0;
     // The system disk (the first <disk device='disk'>).
@@ -52,6 +64,9 @@ struct DomainDescription {
     bool installing = false;
     // The shared folders, in definition order.
     QVector<Share> shares;
+    // The USB devices passed through. The stored definition has none by
+    // design (see UsbPassthrough); the live one has what was attached.
+    QVector<UsbDevice> usb_devices;
 
     // The display adapter, or null when there is no GPU device at all.
     [[nodiscard]] const GpuDevice* display() const noexcept;

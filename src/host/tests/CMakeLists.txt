@@ -238,6 +238,18 @@ target_compile_definitions(lsw_host_notice_board_test PRIVATE QT_NO_KEYWORDS)
 add_test(NAME lsw_host_notice_board_test COMMAND lsw_host_notice_board_test)
 set_tests_properties(lsw_host_notice_board_test PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)
+
+# The USB devices offered to the guest, read from a sysfs built in a
+# temporary directory: what is a device, what is in use, what is HID.
+add_executable(lsw_host_usb_devices_test host_usb_devices_test.cpp)
+target_link_libraries(lsw_host_usb_devices_test
+    PRIVATE
+        lsw_host_core
+        LSW::CompileOptions
+)
+target_compile_definitions(lsw_host_usb_devices_test PRIVATE QT_NO_KEYWORDS)
+add_test(NAME lsw_host_usb_devices_test COMMAND lsw_host_usb_devices_test)
+
 # Where a host file is in Windows, by the share that holds it, and the
 # names Windows cannot spell.
 add_executable(lsw_host_guest_document_path_test guest_document_path_test.cpp)
