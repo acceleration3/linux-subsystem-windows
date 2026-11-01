@@ -10,10 +10,12 @@
 # started by launchctl. The launcher is a LocalSystem service, so each
 # drive is made in the global namespace and every session sees it.
 #
-#   lsw-shares.ps1 -Install [-Shares z=Z:,y=Y:]   install or update, then mount
-#   lsw-shares.ps1 [-Shares z=Z:,y=Y:]            mount
+#   lsw-shares.ps1 -Install [-Shares z=Z:=TmFtZQ==,y=Y:]   install or update, then mount
+#   lsw-shares.ps1 [-Shares z=Z:=TmFtZQ==,y=Y:]            mount
 #
-# -Shares is the whole list, tag=drive, comma-separated, or "none". It is
+# -Shares is the whole list, tag=drive=name, comma-separated, or "none". The
+# name is what Explorer calls the drive, in base64 of its UTF-8 because a
+# folder's name can hold anything a command line cannot, and may be left out. It is
 # saved, and an instance not in it is stopped. Without -Shares the saved
 # list is mounted, which is what the lsw-shares task does at every start
 # of Windows: the drives come back after a restart whether the manager is
@@ -74,13 +76,34 @@ function Parse-Shares([string] $Text) {
     foreach ($item in ($Text -split '[,\r\n]+')) {
         $item = $item.Trim()
         if (-not $item) { continue }
-        if ($item -notmatch '^([A-Za-z0-9_.-]+)=([A-Za-z]):?$') {
-            Fail 1 ('not a share: "' + $item + '" (want tag=X:)')
+        if ($item -notmatch '^([A-Za-z0-9_.-]+)=([A-Za-z]):?(?:=([A-Za-z0-9+/]*={0,2}))?$') {
+            Fail 1 ('not a share: "' + $item + '" (want tag=X:=name)')
             return $null
         }
-        $list += [pscustomobject]@{ Tag = $Matches[1]; Drive = $Matches[2].ToUpper() + ':' }
+        $list += [pscustomobject]@{ Tag = $Matches[1]; Drive = $Matches[2].ToUpper() + ':'; Name = [string] $Matches[3] }
     }
     return ,$list
+}
+
+# ---- the drives' names ----
+
+# virtiofs.exe labels its volume with the tag, which is the drive's letter again
+# and says nothing. The tag cannot change, as it is what the device is found by,
+# so the name is Explorer's own per-drive setting, set before the drive appears.
+function Set-DriveNames($Wanted, $Before) {
+    $icons = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\DriveIcons'
+    foreach ($share in @($Before)) {
+        if (@($Wanted | Where-Object { $_.Drive -eq $share.Drive }).Count -eq 0) {
+            Remove-Item -LiteralPath (Join-Path $icons $share.Drive.TrimEnd(':')) -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+    foreach ($share in @($Wanted)) {
+        if (-not $share.Name) { continue }
+        $name = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($share.Name))
+        $key = Join-Path (Join-Path $icons $share.Drive.TrimEnd(':')) 'DefaultLabel'
+        New-Item -Path $key -Force | Out-Null
+        Set-Item -LiteralPath $key -Value $name
+    }
 }
 
 # ---- WinFsp ----
@@ -322,6 +345,11 @@ try {
        $(if ($PSBoundParameters.ContainsKey('Shares')) { '-Shares ' + $Shares } else { '(saved list)' }) +
        ' as ' + [System.Security.Principal.WindowsIdentity]::GetCurrent().Name)
 
+    # What was mounted before, whose names go if their drives do.
+    $before = @()
+    if (Test-Path -LiteralPath $SavedList) {
+        $before = @(Parse-Shares ((Get-Content -LiteralPath $SavedList) -join ','))
+    }
     if ($PSBoundParameters.ContainsKey('Shares')) {
         $wanted = Parse-Shares $Shares
     } elseif (Test-Path -LiteralPath $SavedList) {
@@ -347,9 +375,10 @@ try {
 
     if ($PSBoundParameters.ContainsKey('Shares') -and $script:Result -eq 0) {
         New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
-        Set-Content -LiteralPath $SavedList -Encoding Ascii -Value @($wanted | ForEach-Object { $_.Tag + '=' + $_.Drive })
+        Set-Content -LiteralPath $SavedList -Encoding Ascii -Value @($wanted | ForEach-Object { $_.Tag + '=' + $_.Drive + $(if ($_.Name) { '=' + $_.Name } else { '' }) })
     }
     if ($script:Result -eq 0) {
+        Set-DriveNames $wanted $before
         Mount-Shares $wanted
     }
     L ('done, exit ' + $script:Result)

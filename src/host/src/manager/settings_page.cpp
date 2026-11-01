@@ -294,7 +294,8 @@ void SettingsPage::build() {
     // The second sentence is the notice WinFsp's FLOSS exception asks for
     // in the interface (packaging/licenses/winfsp-LICENSE).
     shares_layout->addWidget(Widgets::meta(
-        QStringLiteral("Each one becomes a virtiofs device and a drive letter in Windows, mounted "
+        QStringLiteral("Each one becomes a virtiofs device and a drive letter in Windows, named "
+                       "after the folder and mounted "
                        "with WinFsp - Windows File System Proxy, Copyright (C) Bill "
                        "Zissimopoulos (github.com/winfsp/winfsp)."),
         true));
@@ -306,8 +307,8 @@ void SettingsPage::build() {
     rebuild_shares_table();
 
     connect(add_share, &QPushButton::clicked, this, [this] {
-        const QString dir = QFileDialog::getExistingDirectory(
-            this, QStringLiteral("Share a folder with the guest"), QDir::homePath());
+        const QString dir = QDir::cleanPath(QFileDialog::getExistingDirectory(
+            this, QStringLiteral("Share a folder with the guest"), QDir::homePath()));
         if (dir.isEmpty()) {
             return;
         }

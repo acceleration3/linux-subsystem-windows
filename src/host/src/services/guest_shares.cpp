@@ -11,6 +11,7 @@
 #include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QRegularExpression>
 
 #include <nlohmann/json.hpp>
@@ -92,7 +93,10 @@ QVector<GuestShares::Mount> GuestShares::mounts_of(const vm::DomainDescription& 
                      share.tag.toStdString(), share.host_path.toStdString());
             continue;
         }
-        mounts.push_back({share.tag, share.tag.toUpper() + QLatin1Char(':')});
+        // The root of the host has no name of its own to go by.
+        const QString folder = QFileInfo(QDir::cleanPath(share.host_path)).fileName();
+        mounts.push_back({share.tag, share.tag.toUpper() + QLatin1Char(':'),
+                          folder.isEmpty() ? QStringLiteral("Host") : folder});
     }
     return mounts;
 }
@@ -100,9 +104,18 @@ QVector<GuestShares::Mount> GuestShares::mounts_of(const vm::DomainDescription& 
 QString GuestShares::shares_argument(const QVector<Mount>& mounts) {
     QStringList items;
     for (const auto& mount : mounts) {
-        items << mount.tag + QLatin1Char('=') + mount.drive;
+        items << mount.tag + QLatin1Char('=') + mount.drive + QLatin1Char('=')
+                     + QString::fromLatin1(mount.name.toUtf8().toBase64());
     }
     return items.isEmpty() ? QStringLiteral("none") : items.join(QLatin1Char(','));
+}
+
+QString GuestShares::describe(const QVector<Mount>& mounts) {
+    QStringList items;
+    for (const auto& mount : mounts) {
+        items << mount.drive + QLatin1Char(' ') + mount.name;
+    }
+    return items.isEmpty() ? QStringLiteral("none") : items.join(QStringLiteral(", "));
 }
 
 std::string GuestShares::script(unsigned short port, const QStringList& fetch,
@@ -225,7 +238,7 @@ GuestShares::Outcome GuestShares::run(const QVector<Mount>& mounts) {
     if (mounts.isEmpty() && !installed) {
         return {true, QStringLiteral("no shared folders, and none set up in Windows")};
     }
-    LSW_INFO("shares: mounting {} in Windows; {}", shares_argument(mounts).toStdString(),
+    LSW_INFO("shares: mounting {} in Windows; {}", describe(mounts).toStdString(),
              fetch.isEmpty() ? std::string{"its files are current"}
                              : "copying " + fetch.join(QStringLiteral(", ")).toStdString());
 
@@ -270,7 +283,7 @@ GuestShares::Outcome GuestShares::run(const QVector<Mount>& mounts) {
     }
     return {true, mounts.isEmpty()
                       ? QStringLiteral("no shared folders; none mounted in Windows")
-                      : QStringLiteral("mounted in Windows: %1").arg(shares_argument(mounts))};
+                      : QStringLiteral("mounted in Windows: %1").arg(describe(mounts))};
 }
 
 }  // namespace lsw::host::services

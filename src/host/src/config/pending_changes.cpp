@@ -1,5 +1,6 @@
 #include "lsw/host/config/pending_changes.hpp"
 
+#include <QDir>
 #include <QHash>
 #include <algorithm>
 #include <QStringList>
@@ -102,7 +103,8 @@ std::optional<HostShare> PendingChanges::add_share(const QString& folder) {
     // A staged share of the folder, or of a parent: already the answer.
     std::optional<HostShare> chosen;
     for (const auto& share : std::as_const(staged)) {
-        if (folder == share.host_path || folder.startsWith(share.host_path + QLatin1Char('/'))) {
+        const QString root = QDir::cleanPath(share.host_path);
+        if (folder == root || folder.startsWith(root + QLatin1Char('/'))) {
             chosen = share;
             break;
         }

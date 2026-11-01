@@ -44,6 +44,7 @@ public:
     struct Mount {
         QString tag;    // the virtio-fs device's
         QString drive;  // "Z:"
+        QString name;   // what Explorer calls the drive: the folder's name
     };
 
     struct Outcome {
@@ -62,8 +63,12 @@ public:
     // of LSW's and is left out.
     [[nodiscard]] static QVector<Mount> mounts_of(const vm::DomainDescription& definition);
 
-    // lsw-shares.ps1's -Shares for ``mounts``: "z=Z:,y=Y:", or "none".
+    // lsw-shares.ps1's -Shares for ``mounts``: tag=drive=name between commas,
+    // the name in base64 of its UTF-8, or "none".
     [[nodiscard]] static QString shares_argument(const QVector<Mount>& mounts);
+
+    // ``mounts`` as a log line or a message says them: "Y: Games, Z: Music".
+    [[nodiscard]] static QString describe(const QVector<Mount>& mounts);
 
     // The batch file run in the guest: fetch ``fetch`` (names in the tree)
     // from 10.0.2.2:``port`` into kGuestDir, then install and mount.

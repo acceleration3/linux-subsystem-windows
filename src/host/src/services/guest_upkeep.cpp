@@ -170,10 +170,12 @@ GuestUpkeep::Result GuestUpkeep::pass(QSet<QString> attempted,
             }, Qt::QueuedConnection);
             const auto outcome = AgentRedeployer{rpc_}.run();
             LSW_INFO("upkeep: {}", outcome.message);
+            // Shared folders do not depend on which agent answers, so a swap
+            // that failed says so and the pass goes on: Windows has the
+            // devices either way, and nothing else would mount them this boot.
             if (!outcome.ok) {
                 result.ok = false;
                 result.error = QString::fromStdString(outcome.message);
-                return result;
             }
         }
     }

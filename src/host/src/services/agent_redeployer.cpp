@@ -24,7 +24,10 @@ namespace lsw::host::services {
 
 namespace {
 
-constexpr auto kPollWindow = std::chrono::seconds(45);
+// Windows may still be booting when a swap runs, and the new service opens its
+// port only once a user's desktop is usable: 45 s has run out on a swap that
+// went on to succeed.
+constexpr auto kPollWindow = std::chrono::seconds(120);
 constexpr auto kPollInterval = std::chrono::seconds(1);
 
 // A file's bytes, or why there are none.
@@ -142,7 +145,8 @@ AgentRedeployer::Outcome AgentRedeployer::run() {
     const std::string served = std::to_string(binary_server.downloads_served());
     const std::string port = std::to_string(binary_server.port());
     if (!after.ok) {
-        return {false, "redeploy_agent: timed out (45 s) waiting for the new agent. Served " +
+        return {false, "redeploy_agent: timed out (" + std::to_string(kPollWindow.count()) +
+                           " s) waiting for the new agent. Served " +
                            served + " download(s) on port " + port + ", prev_version='" +
                            before.version +
                            "'. Check C:\\ProgramData\\LSW\\lsw-swap.log on the guest for details."};

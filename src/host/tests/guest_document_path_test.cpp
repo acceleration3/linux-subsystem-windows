@@ -60,6 +60,12 @@ int main(int argc, char** argv) {
     check(map("/mnt/scratch/a.txt", {share("x", "/")}) == QStringLiteral("X:\\mnt\\scratch\\a.txt"),
           "a share of / holds everything");
 
+    check(map("/home/u/Documents/a.txt", {share("y", "/home/u/Documents/")}) ==
+              QStringLiteral("Y:\\a.txt"),
+          "a share spelled with a trailing slash still holds its files");
+    check(map("/home/u/Documentsx/a.txt", {share("y", "/home/u/Documents/")}) == std::nullopt,
+          "and not its neighbour's");
+
     check(map("/home/u/Documents/a:b.txt", shares) == std::nullopt, "a colon is illegal");
     check(map("/home/u/Documents/what?.txt", shares) == std::nullopt, "a question mark is illegal");
     check(map("/home/u/Documents/a\"b", shares) == std::nullopt, "a quote is illegal");
