@@ -137,6 +137,9 @@ set(_lsw_av_cmake_args
     -DAV_SANITIZE=OFF
     -DAV_COVERAGE=OFF
     -DAV_FUZZ=OFF
+    # Invariant walks over whole tables on every mutation: for accel-virt's
+    # own gates and tests, and what a running guest should not pay for.
+    -DAV_CHECKED=OFF
 )
 
 # ---- the guest half: the driver package ----
