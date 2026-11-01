@@ -68,6 +68,8 @@ public:
     [[nodiscard]] QString error_for(const QString& identity, int bus, int device) const;
     // Waiting for the password prompt.
     [[nodiscard]] bool granting(const QString& identity, int bus, int device) const;
+    // A pass or a return of it is under way.
+    [[nodiscard]] bool busy(const QString& identity, int bus, int device) const;
 
 Q_SIGNALS:
     // An error appeared or went, or a request started or ended.

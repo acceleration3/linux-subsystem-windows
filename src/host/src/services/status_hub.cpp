@@ -391,43 +391,67 @@ void StatusHub::update_usb_timer() {
 }
 
 void StatusHub::read_usb() {
+    read_usb_host();
+    read_usb_live();
+}
+
+// sysfs and a few mount tables: not for the GUI thread. A device being reset
+// holds its lock, and its string attributes wait on that for as long as the
+// reset takes (44 s for a phone a guest has just let go of), so this is apart
+// from what the guest has: a device returned shows as returned at once.
+void StatusHub::read_usb_host() {
     if (usb_reading_) {
         return;
     }
     usb_reading_ = true;
-    struct Reading {
-        QVector<platform::HostUsbDevice> devices;
-        // nullopt: not read, or libvirt did not answer.
-        std::optional<QVector<vm::DomainDescription::UsbDevice>> live;
-        bool asked = false;
-    };
-    const bool running = vm_.running();
-    const QUuid uuid = vm_.uuid;
-    // sysfs, a few mount tables and libvirt's live definition: none of it
-    // for the GUI thread, on a machine with many devices or a slow disk.
-    (void)QtConcurrent::run([this, running, uuid] {
-        Reading reading;
-        reading.devices = platform::HostUsbDevices::enumerate();
-        if (running) {
-            reading.asked = true;
-            const QString xml = lifecycle_.domain_xml(uuid);
-            if (const auto parsed = xml.isEmpty() ? std::nullopt : vm::DomainDescription::parse(xml)) {
-                reading.live = parsed->usb_devices;
+    (void)QtConcurrent::run([] { return platform::HostUsbDevices::enumerate(); })
+        .then(this, [this](const QVector<platform::HostUsbDevice>& devices) {
+            usb_reading_ = false;
+            usb_host_ = devices;
+            for (const auto& device : devices) {
+                usb_names_.insert(device.identity(), device.name);
             }
+            rebuild_usb();
+        });
+}
+
+void StatusHub::read_usb_live() {
+    if (!vm_.running()) {
+        usb_live_.clear();
+        if (usb_.read) {
+            rebuild_usb();
         }
-        return reading;
-    }).then(this, [this](const Reading& reading) {
-        usb_reading_ = false;
-        usb_host_ = reading.devices;
-        for (const auto& device : reading.devices) {
-            usb_names_.insert(device.identity(), device.name);
+        return;
+    }
+    // A read under way may be from before what asked for this one.
+    if (usb_live_reading_) {
+        usb_live_again_ = true;
+        return;
+    }
+    usb_live_reading_ = true;
+    const QUuid uuid = vm_.uuid;
+    (void)QtConcurrent::run([this, uuid] {
+        std::optional<QVector<vm::DomainDescription::UsbDevice>> live;
+        const QString xml = lifecycle_.domain_xml(uuid);
+        if (const auto parsed = xml.isEmpty() ? std::nullopt : vm::DomainDescription::parse(xml)) {
+            live = parsed->usb_devices;
         }
+        return live;
+    }).then(this, [this](const std::optional<QVector<vm::DomainDescription::UsbDevice>>& live) {
+        usb_live_reading_ = false;
         if (!vm_.running()) {
             usb_live_.clear();
-        } else if (reading.live) {
-            usb_live_ = *reading.live;
+        } else if (live) {
+            usb_live_ = *live;
         }  // else: the last list stands
-        rebuild_usb();
+        // Not before the bus has been read: no rows is not no devices.
+        if (usb_.read) {
+            rebuild_usb();
+        }
+        if (usb_live_again_) {
+            usb_live_again_ = false;
+            read_usb_live();
+        }
     });
 }
 

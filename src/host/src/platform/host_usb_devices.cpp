@@ -198,6 +198,10 @@ QVector<HostUsbDevice> HostUsbDevices::enumerate(const UsbRoots& roots) {
         HostUsbDevice device;
         device.vendor = attribute(dir, QStringLiteral("idVendor")).toInt(&vendor_ok, 16);
         device.product = attribute(dir, QStringLiteral("idProduct")).toInt(&product_ok, 16);
+        // Waits on the device's lock, which a reset holds (44 s for a phone a
+        // guest has just let go of). Through a reset devnum reads 0, and the
+        // device would look unplugged; after it, the number is the real one.
+        (void)attribute(dir, QStringLiteral("bConfigurationValue"));
         device.bus = attribute(dir, QStringLiteral("busnum")).toInt();
         device.device = attribute(dir, QStringLiteral("devnum")).toInt();
         if (!vendor_ok || !product_ok || device.bus <= 0 || device.device <= 0) {
