@@ -96,9 +96,18 @@ private:
     // The resolutions, to the running device (a qom-set; no agent
     // needed), and the DPI, to the agent (read at the next logon).
     void push_display_modes();
+    // The refresh rate, to the running device the same way: Windows is told
+    // the new rate and switches without a restart.
+    void push_display_refresh();
     void push_dpi();
-    // The monitor this window is on, for "match the monitor".
+    // The monitor this window is on, for "match the monitor" and for the
+    // refresh rate "same as monitor" follows.
     [[nodiscard]] std::optional<config::DisplayMode> current_output() const;
+    [[nodiscard]] std::optional<quint32> current_refresh_millihz() const;
+    // The rate of the screen the window is on, said to the hub and pushed
+    // again when it changed: a screen's mode, the window moving to another
+    // screen, a screen coming or going.
+    void follow_monitor_refresh();
     void on_graphics_changed();
     // The definition from the settings, rewritten; false (with a notice) when
     // libvirt refuses it.

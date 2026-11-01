@@ -27,8 +27,9 @@ depends=(
     # lsw-manager: Qt's public API only, so any Qt from the one it was
     # built against on (an older one refuses it, qt_version_tag).
     # remotewin: a Wayland client of its own, with no Qt - libwayland,
-    # xkbcommon for the keymap, libdrm for explicit sync, sd-bus
-    # (systemd-libs, below) for KWin.
+    # xkbcommon for the keymap, libdrm for explicit sync (and, in the
+    # manager, for the monitors' refresh rates), sd-bus (systemd-libs,
+    # below) for KWin.
     'qt6-base>=6.12' 'libvirt' 'libisofs' 'libvncserver' 'wimlib' 'hivex'
     'spdlog' 'fmt' 'zlib' 'wayland' 'libxkbcommon' 'libdrm'
     # accel-virt: the executor, QEMU and its modules

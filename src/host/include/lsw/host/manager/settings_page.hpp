@@ -3,6 +3,7 @@
 #include "lsw/host/apps/app_config_store.hpp"
 #include "lsw/host/config/manager_settings.hpp"
 #include "lsw/host/config/pending_changes.hpp"
+#include "lsw/host/platform/host_monitor_rates.hpp"
 #include "lsw/host/ui/machine_limits.hpp"
 
 #include <QHash>
@@ -83,6 +84,10 @@ private:
 
     QWidget* make_toggle(const QString& key);
     QWidget* make_text(const QString& key);
+    // The refresh-rate row: a choice of the monitors' rates, drawn from the
+    // hub's snapshot, and its explanation, which follows the same data.
+    void add_refresh_row(QVBoxLayout* group);
+    [[nodiscard]] static QString refresh_description(const QVector<platform::RateChoice>& rates);
 
     // Each control shows the staged value, or the stored one: Revert,
     // Apply, and a change made somewhere else (the Graphics page's

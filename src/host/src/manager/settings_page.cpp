@@ -1,5 +1,6 @@
 #include "lsw/host/manager/settings_page.hpp"
 
+#include "lsw/host/config/display_refresh.hpp"
 #include "lsw/host/manager/adapter_roles.hpp"
 #include "lsw/host/manager/resolution_editor.hpp"
 #include "lsw/host/manager/usb_devices_panel.hpp"
@@ -13,6 +14,7 @@
 #include "lsw/host/ui/widgets.hpp"
 
 #include <algorithm>
+#include <functional>
 
 #include <QAbstractItemView>
 #include <QCheckBox>
@@ -223,6 +225,7 @@ void SettingsPage::build() {
                            "ahead of the list above, and follows when the window moves to "
                            "another one."),
             make_toggle(K::kMatchHostOutput));
+    add_refresh_row(display);
     add_row(display, K::kScalingPercent, QStringLiteral("Scaling"),
             QStringLiteral("Windows' display scale, changed while Windows runs. Matching this "
                            "desktop takes the scale of the monitor the manager is on, as the "
@@ -443,7 +446,10 @@ QWidget* SettingsPage::add_row(QVBoxLayout* group, const QString& key, const QSt
     head->addStretch(1);
     text->addLayout(head);
 
-    text->addWidget(Widgets::prose(description));
+    auto* prose = Widgets::prose(description);
+    // Found again by a row whose explanation follows the data.
+    prose->setObjectName(QStringLiteral("rowDescription"));
+    text->addWidget(prose);
 
     layout->addLayout(text, 1);
     // The control column is a fixed share of the row, so a slider has
@@ -507,6 +513,97 @@ QWidget* SettingsPage::make_slider(const QString& key, const ui::MachineLimits::
     return slider;
 }
 
+
+// "Applies at once; more GPU work", and, where the monitors do not all run
+// at the same rates, which of them support which.
+QString SettingsPage::refresh_description(const QVector<platform::RateChoice>& rates) {
+    QString text = QStringLiteral(
+        "Windows' refresh rate, changed while Windows runs: it switches to the new rate at once, "
+        "without a restart. Same as monitor follows the screen the manager is on. A higher rate "
+        "means more GPU work on the host.");
+    QStringList all;
+    for (const auto& rate : rates) {
+        for (const QString& monitor : rate.monitors) {
+            if (!all.contains(monitor)) {
+                all << monitor;
+            }
+        }
+    }
+    bool differ = false;
+    for (const auto& rate : rates) {
+        differ = differ || rate.monitors.size() != all.size();
+    }
+    if (differ) {
+        QStringList parts;
+        for (const auto& rate : rates) {
+            parts << QStringLiteral("%1 on %2")
+                         .arg(config::DisplayRefresh::label(static_cast<quint32>(rate.millihz)),
+                              rate.monitors.join(QStringLiteral(", ")));
+        }
+        text += QStringLiteral(" Supported by: %1.").arg(parts.join(QStringLiteral("; ")));
+    }
+    return text;
+}
+
+void SettingsPage::add_refresh_row(QVBoxLayout* group) {
+    using config::DisplayRefresh;
+    auto* combo = new QComboBox;
+    auto* row = add_row(group, K::kDisplayRefresh, QStringLiteral("Refresh rate"), QString{}, combo);
+    auto* description = row->findChild<QLabel*>(QStringLiteral("rowDescription"));
+
+    // The monitors' rates, high to low, behind "same as monitor"; the saved
+    // rate stays a choice when no monitor offers it any more, so the
+    // setting never changes by the list changing.
+    const auto show = [this, combo, description] {
+        const auto& graphics = status_.graphics();
+        const std::optional<quint32> stored = DisplayRefresh::fixed(settings_.string_value(K::kDisplayRefresh));
+        QVector<QPair<QString, QString>> wanted;
+        wanted.push_back({QStringLiteral("Same as monitor (%1)")
+                              .arg(DisplayRefresh::label(graphics.monitor_refresh_millihz)),
+                          QString::fromLatin1(DisplayRefresh::kMonitor)});
+        QVector<quint32> rates;
+        for (const auto& choice : graphics.monitor_rates) {
+            rates.push_back(static_cast<quint32>(choice.millihz));
+        }
+        if (stored && !rates.contains(*stored)) {
+            rates.push_back(*stored);
+            std::sort(rates.begin(), rates.end(), std::greater<>());
+        }
+        for (const quint32 millihz : rates) {
+            wanted.push_back({DisplayRefresh::label(millihz), DisplayRefresh::text(millihz)});
+        }
+        bool same = combo->count() == wanted.size();
+        for (qsizetype i = 0; same && i < wanted.size(); ++i) {
+            same = combo->itemText(static_cast<int>(i)) == wanted.at(i).first &&
+                   combo->itemData(static_cast<int>(i)).toString() == wanted.at(i).second;
+        }
+        const QSignalBlocker quiet(combo);
+        if (!same) {
+            combo->clear();
+            for (const auto& item : wanted) {
+                combo->addItem(item.first, item.second);
+            }
+        }
+        const int at = stored ? combo->findData(DisplayRefresh::text(*stored)) : 0;
+        combo->setCurrentIndex(at >= 0 ? at : 0);
+        combo->setToolTip(combo->currentText());
+        combo->view()->setMinimumWidth(combo->sizeHint().width());
+        if (description != nullptr) {
+            description->setText(refresh_description(graphics.monitor_rates));
+        }
+    };
+    connect(combo, &QComboBox::activated, this, [this, combo](int index) {
+        put(K::kDisplayRefresh, combo->itemData(index));
+    });
+    connect(&status_, &services::StatusHub::changed, combo,
+            [show](services::StatusHub::Area area) {
+                if (area == services::StatusHub::Area::Graphics) {
+                    show();
+                }
+            });
+    follow(K::kDisplayRefresh, show);
+    show();
+}
 
 QWidget* SettingsPage::make_choice(const QString& key, const Choices& options) {
     auto* combo = new QComboBox;

@@ -138,6 +138,22 @@ public:
     [[nodiscard]] std::optional<QString> display_modes(const QUuid& uuid,
                                                        QString* error_out) const;
 
+    // Sets the running GPU device's ``refresh`` property (QMP qom-set, as
+    // set_display_modes): the rate in millihertz the guest's modes state and
+    // its display blanks at, from the next blank. The guest's driver
+    // re-reads its modes and Windows switches to the new rate without a
+    // restart. Only the running device changes. False, with the reason in
+    // ``error_out`` when given, if the VM is not running, the rate is out of
+    // the device's range, or QEMU refused it (a QEMU built before the
+    // property has none: "Property ... not found").
+    [[nodiscard]] bool set_display_refresh(const QUuid& uuid, quint32 millihz, QString* error_out);
+
+    // What the running device's ``refresh`` holds now (qom-get), in
+    // millihertz. nullopt, with the reason in ``error_out`` when given, if
+    // the VM is not running or QEMU would not say.
+    [[nodiscard]] std::optional<quint32> display_refresh(const QUuid& uuid,
+                                                         QString* error_out) const;
+
     // The XML virDomainAttachDeviceFlags and virDomainDetachDeviceFlags take
     // for a host USB device: found by vendor, product and where it is on the
     // bus now. One function, so what is attached is what is detached.

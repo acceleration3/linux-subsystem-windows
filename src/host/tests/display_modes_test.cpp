@@ -57,13 +57,9 @@ int main(int argc, char** argv) {
     // ---- the driver's limits ---------------------------------------
     check(fits(100, 100) && !fits(99, 100) && !fits(100, 99), "100 is the smallest edge");
     check(fits(4095, 1000) && !fits(4096, 1000) && !fits(1000, 4096), "4095 is the largest edge");
-    check(DisplayModes::pixel_clock_hz(DisplayMode{3840, 2160}) == 540'000'000,
-          "3840x2160 is a 540 MHz clock, as the driver times it");
-    check(fits(3840, 2160), "3840x2160 fits");
-    check(!fits(4095, 4095), "4095x4095 is past the clock");
-    // (4000 + 160) * (2300 + 95) * 60 = 597.8 MHz; (4095 + 160) * (2600 +
-    // 108) * 60 = 691.1 MHz.
-    check(fits(4000, 2300) && !fits(4095, 2600), "the clock limit is 655.35 MHz");
+    // The EDID's pixel clock is no limit on a size: the driver states a
+    // mode too fast for it at a slower rate and gives Windows the real one.
+    check(fits(3840, 2160) && fits(4095, 4095), "no size is refused for its pixel clock");
     check(DisplayModes::refusal(DisplayMode{5120, 2880}).contains(QStringLiteral("4095")),
           "a refusal says why");
 

@@ -96,6 +96,7 @@ int main(int argc, char** argv) {
                                     QStringLiteral("11111111-2222-3333-4444-555555555555")};
     inputs.host_window_mib = 4096;
     inputs.display_modes = QStringLiteral("2560x1440,1920x1080");
+    inputs.display_refresh_millihz = 359980;
     const auto built = DomainDescription::parse(DomainXmlBuilder::build(vm, inputs));
     check(built.has_value(), "the builder's definition parses");
     if (built) {
@@ -111,6 +112,7 @@ int main(int argc, char** argv) {
             check(display->host_gpu == inputs.host_gpu_uuid, "the display's host-gpu");
             check(display->hostmem_mib == 4096, "the display's host window");
             check(display->modes == inputs.display_modes, "the display's modes, commas restored");
+            check(display->refresh_millihz == 359980u, "the display's refresh, in millihertz");
         }
         check(built->gpus.size() == 3 && !built->gpus.at(1).display && !built->gpus.at(2).display,
               "the render-only devices are display=off");
@@ -130,10 +132,11 @@ int main(int argc, char** argv) {
     inputs.host_gpu_uuid.clear();
     inputs.render_only_gpu_uuids.clear();
     inputs.display_modes.clear();
+    inputs.display_refresh_millihz = 0;
     const auto plain = DomainDescription::parse(DomainXmlBuilder::build(vm, inputs));
     check(plain && plain->gpus.size() == 1 && plain->gpus.first().host_gpu == QStringLiteral("auto")
-              && !plain->gpus.first().modes.has_value(),
-          "auto, no modes: read back as such");
+              && !plain->gpus.first().modes.has_value() && !plain->gpus.first().refresh_millihz.has_value(),
+          "auto, no modes, no refresh: read back as such");
 
     // ---- libvirt's live shape -----------------------------------------
     const auto live = DomainDescription::parse(QString::fromUtf8(kLiveXml));

@@ -6,6 +6,8 @@
 #include "lsw/host/config/vm_sizing.hpp"
 #include "lsw/host/vm/domain_xml_inputs.hpp"
 
+#include <optional>
+
 namespace lsw::host::services {
 
 // The domain definition's half that comes from settings, built in one
@@ -25,7 +27,17 @@ namespace lsw::host::services {
 // are left empty; Lifecycle fills those in.
 [[nodiscard]] vm::DomainXmlInputs
 domain_inputs_from_settings(const config::Settings& settings,
-                            const config::ManagerSettings& manager_settings);
+                            const config::ManagerSettings& manager_settings,
+                            std::optional<quint32> monitor_refresh_millihz = std::nullopt);
+
+// The refresh rate, in millihertz, the display settings ask for: the stored
+// rate, or the monitor the manager is on (``monitor``, when the caller knows
+// it) for "same as monitor". nullopt when neither is known, and the device
+// is left at its own 60 Hz. The same number goes into the definition and,
+// on a running VM, through Lifecycle::set_display_refresh.
+[[nodiscard]] std::optional<quint32>
+display_refresh_from_settings(const config::ManagerSettings& manager_settings,
+                              std::optional<quint32> monitor = std::nullopt);
 
 // Cores, memory and disk as the settings have them.
 [[nodiscard]] config::VmSizing

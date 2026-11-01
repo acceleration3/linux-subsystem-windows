@@ -54,6 +54,10 @@ public:
         static constexpr QLatin1StringView kDisplayModes{"display/modes"};
         // Put the size of the monitor the manager is on first, preferred.
         static constexpr QLatin1StringView kMatchHostOutput{"display/match_host_output"};
+        // The refresh rate Windows is given, for every mode: "monitor"
+        // (the default: the rate of the monitor the manager is on) or a
+        // rate in millihertz, the device's ``refresh`` (see DisplayRefresh).
+        static constexpr QLatin1StringView kDisplayRefresh{"display/refresh"};
         static constexpr QLatin1StringView kScalingPercent{"display/scaling_percent"};
         // Graphics (restart): the accel-virt GPU device's own properties,
         // which QEMU reads once, when the device is realized.

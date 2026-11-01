@@ -1,5 +1,6 @@
 #include "lsw/host/manager/main_window.hpp"
 
+#include "lsw/host/config/display_refresh.hpp"
 #include "lsw/host/config/vm_state.hpp"
 #include "lsw/host/manager/console_panel.hpp"
 #include "lsw/host/manager/graphics_alerts.hpp"
@@ -33,6 +34,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QApplication>
+#include <QGuiApplication>
 #include <QMenu>
 #include <QPushButton>
 #include <QScreen>
@@ -196,6 +198,7 @@ MainWindow::MainWindow(services::HostServices& services, QWidget* parent)
         if (running) {
             notices_->withdraw(QStringLiteral("start"));
             push_display_modes();
+            push_display_refresh();
         } else if (restart_ == nullptr) {
             notice_.clear();
         }
@@ -244,6 +247,8 @@ MainWindow::MainWindow(services::HostServices& services, QWidget* parent)
             [this](const QString& key) {
                 if (key == K::kDisplayModes || key == K::kMatchHostOutput) {
                     push_display_modes();
+                } else if (key == K::kDisplayRefresh) {
+                    push_display_refresh();
                 } else if (key == K::kScalingPercent) {
                     push_dpi();
                 }
@@ -268,6 +273,25 @@ MainWindow::MainWindow(services::HostServices& services, QWidget* parent)
     show_page(NavRail::Page::Overview);
     on_graphics_changed();
     setup_tray();
+
+    // "Same as monitor" follows the screen the window is on: its rate, which
+    // the compositor may change, and which screen that is.
+    const auto watch = [this](QScreen* screen) {
+        connect(screen, &QScreen::refreshRateChanged, this, [this] { follow_monitor_refresh(); });
+    };
+    for (QScreen* screen : QGuiApplication::screens()) {
+        watch(screen);
+    }
+    connect(qGuiApp, &QGuiApplication::screenAdded, this, [this, watch](QScreen* screen) {
+        watch(screen);
+        services_.status().refresh(services::StatusHub::Area::Host);
+        follow_monitor_refresh();
+    });
+    connect(qGuiApp, &QGuiApplication::screenRemoved, this, [this] {
+        services_.status().refresh(services::StatusHub::Area::Host);
+        follow_monitor_refresh();
+    });
+    follow_monitor_refresh();
 }
 
 void MainWindow::build_pages() {
@@ -589,6 +613,46 @@ void MainWindow::refresh_warning() {
     warn_strip_->setVisible(true);
 }
 
+std::optional<quint32> MainWindow::current_refresh_millihz() const {
+    const QScreen* screen = this->screen();
+    if (screen == nullptr) {
+        return std::nullopt;
+    }
+    return config::DisplayRefresh::from_hertz(screen->refreshRate());
+}
+
+void MainWindow::follow_monitor_refresh() {
+    services_.status().set_monitor_refresh(current_refresh_millihz());
+    push_display_refresh();
+}
+
+void MainWindow::push_display_refresh() {
+    const config::VmRecord* record = services_.vms().primary();
+    if (record == nullptr || !services_.status().vm().running()) {
+        return;
+    }
+    const auto rate = services::display_refresh_from_settings(services_.manager_settings(),
+                                                              current_refresh_millihz());
+    // Nothing known to push: the device keeps the rate it has.
+    if (!rate) {
+        return;
+    }
+    // A rate set again is a display event again, and Windows re-reads its
+    // monitor for it, so the one the device holds is not set twice.
+    if (services_.status().graphics().live_refresh == rate) {
+        notices_->withdraw(QStringLiteral("refresh"));
+        return;
+    }
+    QString error;
+    if (!services_.lifecycle().set_display_refresh(record->uuid, *rate, &error)) {
+        notices_->post(QStringLiteral("refresh"), false,
+                       QStringLiteral("The refresh rate did not reach the guest."), error);
+        return;
+    }
+    notices_->withdraw(QStringLiteral("refresh"));
+    services_.status().refresh(services::StatusHub::Area::Graphics);
+}
+
 std::optional<config::DisplayMode> MainWindow::current_output() const {
     const QScreen* screen = this->screen();
     if (screen == nullptr) {
@@ -633,7 +697,8 @@ bool MainWindow::redefine_now(const config::VmRecord& primary) {
     config::VmRecord record = primary;
     record.sizing = services::vm_sizing_from_settings(services_.manager_settings());
     const vm::DomainXmlInputs inputs =
-        services::domain_inputs_from_settings(services_.settings(), services_.manager_settings());
+        services::domain_inputs_from_settings(services_.settings(), services_.manager_settings(),
+                                              current_refresh_millihz());
     if (services_.lifecycle().redefine(record, inputs) != 0) {
         // A definition libvirt refused is one the guest must not be
         // started against, and the old one is still on disk, so the
@@ -840,6 +905,10 @@ bool MainWindow::event(QEvent* e) {
     if (e->type() == QEvent::DevicePixelRatioChange &&
         services_.manager_settings().int_value(K::kScalingPercent) == 0) {
         push_dpi();
+    }
+    // The refresh rate of the screen it moved to, likewise.
+    if (e->type() == QEvent::ScreenChangeInternal) {
+        follow_monitor_refresh();
     }
     return QMainWindow::event(e);
 }

@@ -260,6 +260,9 @@ QString DomainXmlBuilder::build(const config::VmRecord& vm, const DomainXmlInput
         if (!inputs.display_modes.isEmpty()) {
             display += QStringLiteral(",modes=%1").arg(qemu_opt(inputs.display_modes));
         }
+        if (inputs.display_refresh_millihz != 0) {
+            display += QStringLiteral(",refresh=%1").arg(inputs.display_refresh_millihz);
+        }
     }
     gpu_lines << qemu_arg(QStringLiteral("-device")) << qemu_arg(display);
     const qsizetype render_only =

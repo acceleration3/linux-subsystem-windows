@@ -225,6 +225,9 @@ if(LSW_BUILD_MANAGER)
     find_package(Vulkan REQUIRED)
     pkg_check_modules(LIBISOFS REQUIRED IMPORTED_TARGET libisofs-1)  # PayloadIsoBuilder
     pkg_check_modules(LIBVNCCLIENT REQUIRED IMPORTED_TARGET libvncclient)  # VncView
+    # The monitors' modes, for the refresh rates the guest can be given
+    # (platform::HostMonitorRates); the mirror's own libdrm check is above.
+    pkg_check_modules(LIBDRM REQUIRED IMPORTED_TARGET libdrm>=2.4.116)
     # xcb: per-window WM_CLASS on each mirror (X11 taskbar ungrouping).
     pkg_check_modules(XCB IMPORTED_TARGET xcb)
     # libwim (wimlib) — ships no pkg-config / CMake config; resolve by hand.

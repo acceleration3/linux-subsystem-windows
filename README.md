@@ -14,6 +14,7 @@ LSW is WSL in reverse. It installs Windows 11 into a virtual machine and keeps i
 - **Shared folders.** Any host folder can appear in Windows as a drive letter.
 - **Open files from the host.** Double-click a `.xlsx` in your file manager and it opens in Excel, in its own window, and saving writes your file. A file in a folder Windows cannot see can have the folder shared, or open as a copy.
 - **USB devices.** Pass a USB device to Windows from Settings, once or whenever it is plugged in. Letting LSW open a device asks for your password once per kind of device.
+- **Refresh rate.** Windows runs at the refresh rate of your monitor by default, or at any rate your monitors support, and a change applies while Windows runs, with no restart. A higher rate means more GPU work on the host.
 - **Run on VM.** Pick a local program, installer or script, and LSW copies it into Windows and runs it.
 - **Desktop access.** A live preview of the Windows desktop in the manager, and a full desktop window when you need one.
 
