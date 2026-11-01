@@ -66,9 +66,6 @@ Other distributions can use the `lsw-<version>-x86_64.tar.zst` tarball from [Git
 To install without the GUI, pass the install flags; `lsw-manager --help` lists them.
 
 ## Building
-
-> The `accel-virt` and `remotewin` submodules are currently private, so a public clone cannot fetch them. Without access to them, use the AUR package or a release tarball.
-
 ```sh
 git clone --recurse-submodules https://github.com/acceleration3/linux-subsystem-windows
 cd linux-subsystem-windows
