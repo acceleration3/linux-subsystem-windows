@@ -78,6 +78,10 @@ bool UsbPassthrough::granting(const QString& identity, int bus, int device) cons
     });
 }
 
+bool UsbPassthrough::busy(const QString& identity, int bus, int device) const {
+    return busy_.contains(UsbStatus::identity_key(identity, bus, device));
+}
+
 void UsbPassthrough::attach(const QString& identity, int bus, int device) {
     const auto* found = status_.usb().find(identity, bus, device);
     if (found == nullptr || !found->present) {
@@ -104,6 +108,7 @@ void UsbPassthrough::run_attach(const UsbStatus::Device& row) {
         return;
     }
     busy_.insert(key);
+    Q_EMIT changed();
     const QUuid uuid = status_.vm().uuid;
     const auto usb = row.usb();
     const QString identity = row.identity;
@@ -161,6 +166,7 @@ void UsbPassthrough::run_detach(const UsbStatus::Device& row, bool by_hand) {
     const QUuid uuid = status_.vm().uuid;
     const auto usb = row.usb();
     const bool always = row.always;
+    Q_EMIT changed();
     (void)QtConcurrent::run([this, uuid, usb] {
         Outcome out;
         out.ok = lifecycle_.detach_usb(uuid, usb, &out.error);

@@ -233,6 +233,9 @@ void UsbDevicesPanel::rebuild() {
                 QMetaObject::invokeMethod(this, [this, identity] { usb_.set_always(identity, false); },
                                           Qt::QueuedConnection);
             });
+        } else if (usb_.busy(identity, bus, number)) {
+            button = action_button(device.attached() ? QStringLiteral("Returning...")
+                                                     : QStringLiteral("Passing..."), false);
         } else if (device.attached()) {
             button = action_button(QStringLiteral("Return"), true);
             connect(button, &QPushButton::clicked, this, [this, identity, bus, number] {

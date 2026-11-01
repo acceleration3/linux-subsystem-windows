@@ -116,6 +116,8 @@ private:
     void read_vram();
     // The USB bus, read off the GUI thread, and the snapshot it makes.
     void read_usb();
+    void read_usb_host();
+    void read_usb_live();
     void rebuild_usb();
     // Polled while the machine runs or the Settings page is looking.
     void update_usb_timer();
@@ -146,6 +148,8 @@ private:
     QTimer usb_timer_;
     bool usb_detail_ = false;
     bool usb_reading_ = false;
+    bool usb_live_reading_ = false;
+    bool usb_live_again_ = false;
     UsbStatus usb_;
     // The last sysfs reading, which a change of the always list or of the
     // live definition is combined with without reading it again.
