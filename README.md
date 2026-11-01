@@ -140,6 +140,8 @@ ctest --test-dir build --output-on-failure
 
 The two meet at a mirrored window's frames, which stay on the GPU instead of being copied back through the guest where the setup allows it. Otherwise frames cross as pixels over the guest's network.
 
+LSW looks up the current Windows driver version for your GPU in the Microsoft Update Catalog, which sends your GPU's PCI IDs to Microsoft, and falls back to a built-in version offline.
+
 Shared folders use a virtio-fs device per folder, with virtio-win's driver and WinFsp in the guest.
 
 ## Layout
