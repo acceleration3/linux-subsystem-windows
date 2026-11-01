@@ -20,6 +20,7 @@ add_executable(lsw_agent_logic_test
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/session/pipe_codec.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/session/pending_calls.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/system/scale_steps.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/apps/start_menu_filter.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/apps/program_command.cpp
 )
 

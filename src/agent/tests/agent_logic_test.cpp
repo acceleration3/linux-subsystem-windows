@@ -10,6 +10,7 @@
 // Same hand-rolled style as the other tests in this repo.
 
 #include "lsw/agent/apps/program_command.hpp"
+#include "lsw/agent/apps/start_menu_filter.hpp"
 #include "lsw/agent/core/command_line.hpp"
 #include "lsw/agent/install/job_id_generator.hpp"
 #include "lsw/agent/install/url_file_name.hpp"
@@ -486,6 +487,57 @@ void test_document_command() {
     check(none.program.empty() && !none.placeholder, "nothing in, nothing out");
 }
 
+void test_start_menu_filter() {
+    using lsw::agent::apps::StartMenuEntry;
+    using lsw::agent::apps::StartMenuFilter;
+    const std::wstring windir = L"C:\\WINDOWS";
+    const auto everything_exists = [](const std::wstring&) { return true; };
+    const std::vector<StartMenuEntry> entries = {
+        {L"Excel", L"C:\\Program Files\\Microsoft Office\\root\\Office16\\EXCEL.EXE", L""},
+        {L"Sticky Notes (new)", L"C:\\Program Files\\Microsoft Office\\root\\Office16\\ONENOTE.EXE",
+         L"/memoryWindow"},
+        {L"OneNote", L"C:\\Program Files\\Microsoft Office\\root\\Office16\\onenote.exe", L""},
+        {L"Blackmagic Proxy Generator Lite", L"C:\\Program Files\\Resolve\\Resolve.exe", L"-pg"},
+        {L"Docs", L"https://example.com/docs", L""},
+        {L"Steam", L"steam://open/main", L""},
+        {L"Network", L"::{F02C1A0D-BE21-4350-88B0-7367FC96EF3C}", L""},
+        {L"Computer Management", L"C:\\WINDOWS\\system32\\compmgmt.msc", L""},
+        {L"Notepad", L"C:\\Windows\\System32\\notepad.exe", L""},
+        {L"Uninstall Steam", L"C:\\Program Files (x86)\\Steam\\uninstall.exe", L""},
+        {L"Remove Foo", L"C:\\Foo\\unins000.exe", L""},
+        {L"Gone", L"C:\\Gone\\gone.exe", L""},
+        {L"", L"C:\\Foo\\nameless.exe", L""},
+        {L"WindowsApps lookalike", L"C:\\WINDOWSX\\tool.exe", L""},
+    };
+    const auto kept = StartMenuFilter::applications(
+        entries, windir, [](const std::wstring& path) { return path.find(L"Gone") == std::wstring::npos; });
+    std::vector<std::wstring> names;
+    for (const auto& e : kept) names.push_back(e.name);
+    const std::vector<std::wstring> expected = {L"Excel", L"OneNote", L"Blackmagic Proxy Generator Lite",
+                                                L"WindowsApps lookalike"};
+    // (Sticky Notes is absorbed by OneNote; the proxy generator has no plain
+    // sibling, so it stays, with its arguments.)
+    check(names == expected,
+          "programs only; URLs, shell folders, .msc, Windows' own, uninstallers and missing files go; "
+          "OneNote beats the shortcut with arguments");
+    check(kept.size() == 4 && kept[2].arguments == L"-pg",
+          "a program with only an argument shortcut keeps its arguments");
+    check(StartMenuFilter::applications(entries, windir, everything_exists).size() == 5,
+          "a program that exists is kept, whatever else is");
+    check(StartMenuFilter::applications({}, windir, everything_exists).empty(), "nothing in, nothing out");
+    const auto first_wins = StartMenuFilter::applications(
+        {{L"A", L"C:\\x\\p.exe", L"-a"}, {L"B", L"C:\\X\\P.EXE", L"-b"}}, windir, everything_exists);
+    check(first_wins.size() == 2 && first_wins[0].name == L"A" && first_wins[1].name == L"B",
+          "with no plain shortcut each one with arguments stays, and paths compare without case");
+    const auto twins = StartMenuFilter::applications(
+        {{L"A", L"C:\\x\\p.exe", L"-a"}, {L"A again", L"C:\\x\\p.exe", L"-a"}}, windir, everything_exists);
+    check(twins.size() == 1, "the same arguments twice are one");
+    const auto absorbed = StartMenuFilter::applications(
+        {{L"A", L"C:\\x\\p.exe", L"-a"}, {L"P", L"C:\\x\\p.exe", L""}, {L"B", L"C:\\x\\p.exe", L"-b"}},
+        windir, everything_exists);
+    check(absorbed.size() == 1 && absorbed[0].name == L"P", "a plain shortcut absorbs those with arguments");
+}
+
 }  // namespace
 
 int main() {
@@ -506,6 +558,7 @@ int main() {
     test_pending_calls();
     test_command_line();
     test_scale_steps();
+    test_start_menu_filter();
     test_document_command();
     std::printf("agent logic: %d checks passed\n", g_checks);
     return 0;

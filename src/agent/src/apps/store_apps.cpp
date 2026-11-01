@@ -1,5 +1,6 @@
 #include "lsw/agent/apps/store_apps.hpp"
 
+#include "lsw/agent/apps/apps_folder.hpp"
 #include "lsw/agent/apps/file_associations.hpp"
 #include "lsw/agent/log.hpp"
 #include "lsw/agent/win/error_text.hpp"
@@ -44,26 +45,6 @@ struct StoreApp {
     std::wstring name;
     std::string icon;
 };
-
-std::wstring display_name(IShellItem& item, SIGDN form) {
-    PWSTR text = nullptr;
-    if (FAILED(item.GetDisplayName(form, &text)) || text == nullptr) return {};
-    std::wstring out{text};
-    ::CoTaskMemFree(text);
-    return out;
-}
-
-std::string icon_of(IShellItem& item, int size) {
-    win::ComPtr<IShellItemImageFactory> images;
-    if (FAILED(item.QueryInterface(IID_PPV_ARGS(images.GetAddressOf())))) return {};
-    HBITMAP bitmap = nullptr;
-    if (FAILED(images->GetImage(SIZE{size, size}, SIIGBF_ICONONLY, &bitmap)) || bitmap == nullptr) {
-        return {};
-    }
-    std::string png = win::IconExtractor::from_premultiplied_bitmap(bitmap);
-    ::DeleteObject(bitmap);
-    return png;
-}
 
 // How long a new process is given to hand an activation to the instance
 // already running and exit, as a single-instance application does.
@@ -110,33 +91,15 @@ bool exits_within(DWORD pid, DWORD ms) {
     return !process || ::WaitForSingleObject(process.get(), ms) == WAIT_OBJECT_0;
 }
 
-std::string hresult_text(HRESULT hr) {
-    char text[16];
-    std::snprintf(text, sizeof text, "0x%08lx", static_cast<unsigned long>(hr));
-    return text;
-}
 
 }  // namespace
 
 nlohmann::json StoreApps::list(int icon_size, const std::wstring& only) {
-    win::ComPtr<IShellItem> folder;
-    HRESULT hr = ::SHGetKnownFolderItem(FOLDERID_AppsFolder, KF_FLAG_DEFAULT, nullptr,
-                                        IID_PPV_ARGS(folder.GetAddressOf()));
-    if (FAILED(hr)) throw std::runtime_error("cannot open the Start menu's apps: " + hresult_text(hr));
-    win::ComPtr<IEnumShellItems> items;
-    hr = folder->BindToHandler(nullptr, BHID_EnumItems, IID_PPV_ARGS(items.GetAddressOf()));
-    if (FAILED(hr)) throw std::runtime_error("cannot list the Start menu's apps: " + hresult_text(hr));
-
     std::vector<StoreApp> found;
-    for (;;) {
-        win::ComPtr<IShellItem> item;
-        if (items->Next(1, item.GetAddressOf(), nullptr) != S_OK) break;
-        std::wstring aumid = display_name(*item.Get(), SIGDN_PARENTRELATIVEPARSING);
-        if (aumid.find(kFamilySeparator) == std::wstring::npos) continue;
-        if (!only.empty() && _wcsicmp(aumid.c_str(), only.c_str()) != 0) continue;
-        std::wstring name = display_name(*item.Get(), SIGDN_NORMALDISPLAY);
-        if (name.empty()) continue;
-        found.push_back({std::move(aumid), std::move(name), icon_of(*item.Get(), icon_size)});
+    for (const AppsFolderItem& item : AppsFolder::items()) {
+        if (!item.packaged() || item.name.empty()) continue;
+        if (!only.empty() && _wcsicmp(item.parsing_name.c_str(), only.c_str()) != 0) continue;
+        found.push_back({item.parsing_name, item.name, AppsFolder::icon(*item.shell.Get(), icon_size)});
     }
     std::sort(found.begin(), found.end(), [](const StoreApp& a, const StoreApp& b) {
         return _wcsicmp(a.name.c_str(), b.name.c_str()) < 0;

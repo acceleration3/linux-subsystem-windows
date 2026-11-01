@@ -173,6 +173,9 @@ set(_lsw_agent_apps_sources
     src/apps/store_apps.cpp
     src/apps/catalog.cpp
     src/apps/program_command.cpp
+    src/apps/apps_folder.cpp
+    src/apps/start_menu_watcher.cpp
+    src/apps/start_menu_filter.cpp
     src/apps/file_associations.cpp
     src/apps/launch_group.cpp
     src/apps/launch_command.cpp

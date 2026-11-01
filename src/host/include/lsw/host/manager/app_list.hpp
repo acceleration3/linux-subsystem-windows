@@ -7,6 +7,7 @@
 #include <QListWidget>
 #include <QToolBar>
 #include <QUuid>
+#include <QTimer>
 #include <QWidget>
 
 
@@ -43,7 +44,9 @@ public:
     void refresh();
     void clear_target();
     // Whether a launch can go to the agent now or has to wait for it.
-    void set_agent_online(bool online);
+    // ``boot_id`` is libvirt's id of the boot the agent answers in
+    // (VmStatus::domain_id), -1 if not known.
+    void set_agent_online(bool online, int boot_id = -1);
 
 Q_SIGNALS:
     // An application opened while the agent is not answering: one for
@@ -67,6 +70,7 @@ private:
     apps::AppConfigStore& store_;
     link::AgentRpcClient& rpc_;
     apps::AppCatalog catalog_;
+    int refreshed_boot_ = -2;
     apps::GuestAppLauncher& launcher_;
     void update_launch_state();
     QToolBar* toolbar_ = nullptr;

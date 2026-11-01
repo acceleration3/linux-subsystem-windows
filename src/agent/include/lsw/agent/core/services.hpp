@@ -1,5 +1,6 @@
 #pragma once
 
+#include "lsw/agent/apps/start_menu_watcher.hpp"
 #include "lsw/agent/apps/upload_store.hpp"
 #include "lsw/agent/console/console.hpp"
 #include "lsw/agent/install/installer.hpp"
@@ -50,6 +51,8 @@ public:
 
     [[nodiscard]] console::Console& console() noexcept { return console_; }
     [[nodiscard]] apps::UploadStore& uploads() noexcept { return uploads_; }
+    // Service only: watches the Start menu for installs.
+    [[nodiscard]] apps::StartMenuWatcher& start_menu() noexcept { return start_menu_; }
 
     // SessionHelper only.
     [[nodiscard]] uia::Uia& uia();
@@ -70,6 +73,7 @@ private:
     install::Installer installer_;
     console::Console console_;
     apps::UploadStore uploads_;
+    apps::StartMenuWatcher start_menu_;
     win::Apartment apartment_;  // must initialise BEFORE uia_
     std::unique_ptr<uia::Uia> uia_;
     std::unique_ptr<session::SessionManager> sessions_;

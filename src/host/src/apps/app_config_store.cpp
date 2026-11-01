@@ -6,6 +6,7 @@
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
+#include <QSaveFile>
 #include <QSet>
 
 namespace lsw::host::apps {
@@ -78,13 +79,20 @@ const AppConfig* AppConfigStore::find(const QString& id) const {
 }
 
 bool AppConfigStore::write_file(const AppConfig& cfg) {
-    QFile f{file_for(cfg.id)};
-    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        LSW_WARN("could not write app config {}: {}", file_for(cfg.id).toStdString(),
-                 f.errorString().toStdString());
+    const QString path = file_for(cfg.id);
+    const QByteArray body = cfg.to_json().toUtf8();
+    // Only when it changed: every refresh of the list passes each config
+    // through here, and rewriting them all is a lot of disk for nothing.
+    if (QFile current{path}; current.open(QIODevice::ReadOnly) && current.readAll() == body) {
+        return true;
+    }
+    // All or nothing: a config half written when the disk fills or the
+    // manager dies is one that no longer parses.
+    QSaveFile f{path};
+    if (!f.open(QIODevice::WriteOnly) || f.write(body) != body.size() || !f.commit()) {
+        LSW_WARN("could not write app config {}: {}", path.toStdString(), f.errorString().toStdString());
         return false;
     }
-    f.write(cfg.to_json().toUtf8());
     return true;
 }
 
@@ -128,7 +136,13 @@ void AppConfigStore::merge_from_agent(const QList<AppEntry>& entries) {
         if (auto* existing = find(id); existing != nullptr) {
             existing->last_seen_unix = now;
             // Refresh agent-derived fields only if the user hasn't
-            // diverged from the default. Names/cmdlines stay as-is.
+            // diverged from the default: an entry the user edited keeps
+            // its name and arguments.
+            if (existing->discovered_via_agent && (existing->name != e.name || existing->cmdline != e.args)) {
+                existing->name = e.name;
+                existing->cmdline = e.args;
+                any_changed = true;
+            }
             if (existing->discovered_via_agent && !e.icon.isNull()) {
                 const QString fresh = png_base64_from_image(e.icon);
                 if (!fresh.isEmpty() && fresh != existing->icon_png_base64) {
@@ -143,6 +157,7 @@ void AppConfigStore::merge_from_agent(const QList<AppEntry>& entries) {
         cfg.id = id;
         cfg.name = e.name;
         cfg.path = e.exe_path;
+        cfg.cmdline = e.args;
         cfg.discovered_via_agent = true;
         cfg.last_seen_unix = now;
         cfg.icon_png_base64 = png_base64_from_image(e.icon);

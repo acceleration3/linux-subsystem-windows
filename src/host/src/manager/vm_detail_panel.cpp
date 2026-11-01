@@ -154,14 +154,11 @@ void VmDetailPanel::on_status() {
     }
     if (stats.agent_reachable != last_agent_reachable_) {
         last_agent_reachable_ = stats.agent_reachable;
-        app_list_->set_agent_online(last_agent_reachable_);
+        // Which also reads the list, once per boot: what is installed is the
+        // agent's to say, and the grid shows the stored list until it can.
+        app_list_->set_agent_online(last_agent_reachable_, status.vm().domain_id);
         Q_EMIT agent_online_changed(last_agent_reachable_);
         follow_preview(stats.running);
-        // What is installed is the agent's to say; the grid shows the
-        // stored list until it can.
-        if (last_agent_reachable_) {
-            app_list_->refresh();
-        }
     }
     stats_->update_stats(stats);
 }

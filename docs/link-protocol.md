@@ -121,6 +121,17 @@ it: `{exe_path, name}`, or `{aumid, name}` for a packaged handler. It is an
 error reply when nothing is registered for the type. It runs in the user's
 session (the user's default overrides the machine's).
 
+`list_apps` runs in the user's session, because the Start menu and per-user
+installs are the user's: `{apps: [{id, name, exe_path, args?, extensions,
+icon_png_base64}]}`. The primary source is the shell's AppsFolder, whose
+shortcuts name the program (`exe_path`) and the arguments (`args`, present
+only when the shortcut keeps some) they start; the machine-wide Uninstall
+entries add what has no shortcut. `extensions` are the file types
+(".xlsx") the program is registered for in `HKEY_CLASSES_ROOT`;
+`list_store_apps` carries the same per aumid. With nobody logged on the
+command is refused, which the manager reads as "unknown", not "no
+applications".
+
 LSW's UI shares pending/running launches between entry points. Opening an
 already mirrored bare app sends another reuse-enabled `launch` RPC to restore
 tray-hidden UI, then raises the same mirror. Configs with arguments or environment
@@ -244,6 +255,13 @@ Agent-pushed, one-way, delivered on the connection's tick. Topics are in
 the same header (`linkproto::topic`): agent logs, install-job progress
 and completion, console output and exit, and the UI Automation
 notifications (raised in a session helper and forwarded unchanged).
+`apps_changed` (no payload) says the Start menu changed, that is an
+application was installed or removed, and `list_apps` is out of date: the
+agent watches both `Start Menu\Programs` trees (the machine's and each
+user profile's), recursively, and sends it about two seconds after the last
+change, since an installer writes many files. One that happens with no
+manager connected is delivered to the next connection. The manager reads
+the list again on receiving it.
 
 The agent does not listen on 5102 at all until a user's desktop is
 genuinely usable (not just logged on: the first-logon "Preparing

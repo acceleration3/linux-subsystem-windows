@@ -155,8 +155,18 @@ void AppListWidget::clear_target() {
     rebuild();
 }
 
-void AppListWidget::set_agent_online(bool online) {
+void AppListWidget::set_agent_online(bool online, int boot_id) {
+    const bool came_back = online && !agent_online_;
     agent_online_ = online;
+    catalog_.set_agent_online(online);
+    // The list is the user's Start menu, which exists once somebody is
+    // logged on: read it when the agent first answers in a boot, and not
+    // again when only the agent came back inside the same one (a swap of it
+    // changes nothing in the Start menu, and the read is not cheap).
+    if (came_back && rpc_.has_target() && (boot_id < 0 || boot_id != refreshed_boot_)) {
+        refreshed_boot_ = boot_id;
+        catalog_.refresh();
+    }
 }
 
 void AppListWidget::rebuild() {

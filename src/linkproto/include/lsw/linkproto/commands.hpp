@@ -129,6 +129,10 @@ inline constexpr const char* kSetupProgress = "setup_progress";
 inline constexpr const char* kSetupDone     = "setup_done";
 inline constexpr const char* kConsoleOutput = "console_output";
 inline constexpr const char* kConsoleClosed = "console_closed";
+// The Start menu changed - an application was installed or removed - and
+// the list ``list_apps`` gave is out of date. No payload. Sent about two
+// seconds after the last change.
+inline constexpr const char* kAppsChanged   = "apps_changed";
 
 inline constexpr const char* kUiaWindowOpened  = "uia_window_opened";
 inline constexpr const char* kUiaWindowClosed  = "uia_window_closed";

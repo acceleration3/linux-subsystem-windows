@@ -312,6 +312,8 @@ void HostEndpoint::handle_connection(std::intptr_t accepted_fd) {
     pump.add(installer);
     pump.add(console);
     pump.add(services_->sessions());
+    services_->start_menu().start();
+    pump.add(services_->start_menu());
 
     const EventPump::Sender send_event = [&](const rpc::Event& ev) {
         nlohmann::json message = ev.payload;

@@ -1,9 +1,14 @@
 #include "lsw/agent/apps/catalog.hpp"
 
+#include "lsw/agent/apps/apps_folder.hpp"
+#include "lsw/agent/apps/file_associations.hpp"
+#include "lsw/agent/apps/program_command.hpp"
+#include "lsw/agent/apps/start_menu_filter.hpp"
 #include "lsw/agent/log.hpp"
 #include "lsw/agent/util/text_encoding.hpp"
 #include "lsw/agent/util/wide_string.hpp"
 #include "lsw/agent/win/file_system.hpp"
+#include "lsw/agent/win/environment.hpp"
 #include "lsw/agent/win/icon_extractor.hpp"
 #include "lsw/agent/win/reg_key.hpp"
 #include "lsw/agent/win/unique_handle.hpp"
@@ -13,8 +18,10 @@
 // clang-format on
 
 #include <array>
+#include <chrono>
 #include <cwctype>
 #include <nlohmann/json.hpp>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <unordered_set>
@@ -72,18 +79,6 @@ std::wstring strip_icon_suffix(std::wstring s) {
     return s;
 }
 
-// The program a command line starts: quoted, or up to its ".exe" -
-// uninstallers and services are as often registered unquoted, spaces
-// and all.
-std::wstring program_of(const std::wstring& command_line) {
-    if (!command_line.empty() && command_line.front() == L'"') {
-        const auto end = command_line.find(L'"', 1);
-        return end == std::wstring::npos ? std::wstring{} : command_line.substr(1, end - 1);
-    }
-    const auto exe = util::WideString::lower(command_line).find(L".exe");
-    return exe == std::wstring::npos ? command_line : command_line.substr(0, exe + 4);
-}
-
 std::wstring file_name_of(const std::wstring& path) {
     const auto slash = path.find_last_of(L"\\/");
     return slash == std::wstring::npos ? path : path.substr(slash + 1);
@@ -107,14 +102,15 @@ bool is_uninstaller(const std::wstring& exe, const RegEntry& e) {
     if (util::WideString::istarts_with(file_name_of(exe), L"unins")) {
         return true;
     }
-    const auto uninstall_program = program_of(e.uninstall_string);
+    const auto uninstall_program = ProgramCommand::program_of(e.uninstall_string);
     return !uninstall_program.empty() &&
            util::WideString::lower(exe) == util::WideString::lower(uninstall_program);
 }
 
 // An .exe directly under ``dir`` (non-recursive) that is not the
-// uninstaller: the one named like the entry when there is one - Steam's
-// folder has steam.exe beside gameoverlayui.exe - else the first.
+// uninstaller and is named like the entry - Steam's folder has steam.exe
+// beside gameoverlayui.exe. Nothing when none is: guessing "the first
+// exe" is how a Microsoft 365 entry came to start appvcleaner.exe.
 std::wstring find_program_in(const std::wstring& dir, const RegEntry& e) {
     if (dir.empty()) {
         return {};
@@ -131,7 +127,6 @@ std::wstring find_program_in(const std::wstring& dir, const RegEntry& e) {
     }
     constexpr size_t kMinNameMatch = 3;
     const auto entry_key = name_key(e.display_name);
-    std::wstring first;
     do {
         if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0) {
             continue;
@@ -146,27 +141,20 @@ std::wstring find_program_in(const std::wstring& dir, const RegEntry& e) {
         if (stem_key.size() >= kMinNameMatch && entry_key.find(stem_key) != std::wstring::npos) {
             return path;
         }
-        if (first.empty()) {
-            first = std::move(path);
-        }
     } while (::FindNextFileW(find.get(), &fd));
-    return first;
+    return {};
 }
 
-// The program to launch for an entry: its DisplayIcon when that is an
-// .exe other than the uninstaller, else one from InstallLocation, else
-// one beside the uninstaller - which is where Steam's is.
+// The program of an Uninstall entry that has no Start menu shortcut: its
+// DisplayIcon when that names an existing .exe other than the
+// uninstaller, else an .exe in InstallLocation that is named like the
+// entry. Nothing otherwise.
 std::wstring resolve_program(const RegEntry& e, const std::wstring& icon_path) {
     if (util::WideString::iends_with(icon_path, L".exe") && !is_uninstaller(icon_path, e) &&
         win::FileSystem::exists(icon_path)) {
         return icon_path;
     }
-    if (auto found = find_program_in(e.install_location, e); !found.empty()) {
-        return found;
-    }
-    const auto beside = icon_path.empty() ? program_of(e.uninstall_string) : icon_path;
-    const auto dir = util::WideString::parent_dir(beside);
-    return dir ? find_program_in(*dir, e) : std::wstring{};
+    return find_program_in(e.install_location, e);
 }
 
 // The programs Windows runs as services, lowercase. An entry whose
@@ -184,7 +172,7 @@ std::unordered_set<std::wstring> service_programs() {
             continue;
         }
         if (auto image = service->read_string(L"ImagePath")) {
-            out.insert(util::WideString::lower(program_of(*image)));
+            out.insert(util::WideString::lower(ProgramCommand::program_of(*image)));
         }
     }
     return out;
@@ -236,58 +224,133 @@ void enumerate_uninstall_view(HKEY root, REGSAM view_flag, std::vector<RegEntry>
     }
 }
 
+// The extensions of a program as a JSON array of ".ext" strings.
+nlohmann::json extensions_json(const FileAssociations::Table& table, const std::wstring& program) {
+    auto out = nlohmann::json::array();
+    for (const std::wstring& extension : FileAssociations::of(table, program)) {
+        out.push_back(util::TextEncoding::to_utf8(extension));
+    }
+    return out;
+}
+
 }  // namespace
 
 nlohmann::json Catalog::list() {
-    LSW_AGENT_INFO("app_catalog: enumerating Uninstall registry");
-
-    std::vector<RegEntry> entries;
-    // Both Wow64 views so 32-bit apps on 64-bit Windows show up too.
-    enumerate_uninstall_view(HKEY_LOCAL_MACHINE, KEY_WOW64_64KEY, entries);
-    enumerate_uninstall_view(HKEY_LOCAL_MACHINE, KEY_WOW64_32KEY, entries);
-
-    LSW_AGENT_DEBUG("app_catalog: {} registry entries after junk filter", entries.size());
+    LSW_AGENT_INFO("app_catalog: reading the Start menu and the Uninstall registry");
+    const auto started = std::chrono::steady_clock::now();
+    const auto associations = FileAssociations::scan();
 
     nlohmann::json doc = nlohmann::json::object();
     auto& arr_out = doc["apps"] = nlohmann::json::array();
-
-    const auto services = service_programs();
-    size_t skipped_no_exe = 0;
-    size_t skipped_service = 0;
+    std::unordered_set<std::wstring> listed;         // lowercase programs
+    std::unordered_set<std::wstring> listed_folders;  // lowercase parents of those
     size_t with_icon = 0;
 
+    // The Start menu is the primary source: it says exactly what each
+    // shortcut starts, which is what the person sees in All apps.
+    std::vector<StartMenuEntry> shortcuts;
+    std::vector<AppsFolderItem> items = AppsFolder::items();
+    for (const AppsFolderItem& item : items) {
+        if (!item.packaged()) {
+            shortcuts.push_back({item.name, item.target, item.arguments});
+        }
+    }
+    const std::wstring windows_dir = win::Environment::expand(L"%windir%");
+    const auto chosen = StartMenuFilter::applications(
+        shortcuts, windows_dir, [](const std::wstring& path) { return win::FileSystem::exists(path); });
+    constexpr int kIconPx = 64;
+    for (const StartMenuEntry& entry : chosen) {
+        // The item itself, for its icon: the one the dedupe kept.
+        const AppsFolderItem* item = nullptr;
+        for (const AppsFolderItem& candidate : items) {
+            if (!candidate.packaged() && candidate.name == entry.name && candidate.target == entry.target &&
+                candidate.arguments == entry.arguments) {
+                item = &candidate;
+                break;
+            }
+        }
+        const auto exe_u8 = util::TextEncoding::to_utf8(entry.target);
+        nlohmann::json o = nlohmann::json::object();
+        // Several applications can be one program with different arguments
+        // (Chrome's web apps): the id has them in it, so it is stable and
+        // none shares another's.
+        o["id"] = entry.arguments.empty() ? exe_u8 : exe_u8 + " " + util::TextEncoding::to_utf8(entry.arguments);
+        o["name"] = util::TextEncoding::to_utf8(entry.name);
+        o["exe_path"] = exe_u8;
+        if (!entry.arguments.empty()) {
+            o["args"] = util::TextEncoding::to_utf8(entry.arguments);
+        }
+        std::string icon = item != nullptr ? AppsFolder::icon(*item->shell.Get(), kIconPx) : std::string{};
+        if (icon.empty()) {
+            icon = win::IconExtractor::from_executable(entry.target);
+        }
+        if (!icon.empty()) {
+            ++with_icon;
+        }
+        o["icon_png_base64"] = icon;
+        o["extensions"] = extensions_json(associations, entry.target);
+        const std::wstring lowered = util::WideString::lower(entry.target);
+        listed.insert(lowered);
+        if (const auto parent = util::WideString::parent_dir(lowered)) {
+            listed_folders.insert(*parent);
+        }
+        arr_out.push_back(std::move(o));
+    }
+    const size_t from_start_menu = arr_out.size();
+
+    // Things with no Start menu shortcut (a Steam game has only its
+    // Uninstall entry), from the Uninstall registry in both views.
+    std::vector<RegEntry> entries;
+    enumerate_uninstall_view(HKEY_LOCAL_MACHINE, KEY_WOW64_64KEY, entries);
+    enumerate_uninstall_view(HKEY_LOCAL_MACHINE, KEY_WOW64_32KEY, entries);
+    const auto services = service_programs();
+    size_t skipped_service = 0;
     for (const auto& e : entries) {
         const auto icon_path = strip_icon_suffix(e.display_icon);
         const auto exe_path = resolve_program(e, icon_path);
         if (exe_path.empty()) {
-            ++skipped_no_exe;
             continue;
         }
-        if (services.contains(util::WideString::lower(exe_path))) {
+        const std::wstring lowered = util::WideString::lower(exe_path);
+        if (services.contains(lowered)) {
             ++skipped_service;
             continue;
         }
-
-        const auto icon_src =
-            icon_path.empty() || is_uninstaller(icon_path, e) ? exe_path : icon_path;
+        // Already listed, or a program of the same folder is: the entry is
+        // the application the shortcut already names (OneDrive's uninstall
+        // entry points at its updater beside OneDrive.exe).
+        const auto parent = util::WideString::parent_dir(lowered);
+        if (listed.contains(lowered) || (parent && listed_folders.contains(*parent))) {
+            continue;
+        }
         const auto exe_u8 = util::TextEncoding::to_utf8(exe_path);
-        const auto name_u8 = util::TextEncoding::to_utf8(e.display_name);
-
         nlohmann::json o = nlohmann::json::object();
         o["id"] = exe_u8;
-        o["name"] = name_u8;
+        o["name"] = util::TextEncoding::to_utf8(e.display_name);
         o["exe_path"] = exe_u8;
-        const auto b64 = win::IconExtractor::from_executable(icon_src);
+        const auto b64 = win::IconExtractor::from_executable(exe_path);
         if (!b64.empty()) {
             ++with_icon;
         }
         o["icon_png_base64"] = b64;
+        o["extensions"] = extensions_json(associations, exe_path);
+        listed.insert(lowered);
         arr_out.push_back(std::move(o));
     }
 
-    LSW_AGENT_INFO("app_catalog: {} launchable apps ({} with icon, skipped {} without "
-                   "resolvable exe, {} that are services)",
-                   arr_out.size(), with_icon, skipped_no_exe, skipped_service);
+    if (arr_out.empty()) {
+        // A read that found no program at all is more likely a shell that
+        // was not ready than a guest with none; the manager drops what an
+        // answer leaves out, so this is an error, not an empty list.
+        throw std::runtime_error("the Start menu listed no programs");
+    }
+    const auto took_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                             std::chrono::steady_clock::now() - started)
+                             .count();
+    LSW_AGENT_INFO("app_catalog: {} apps ({} from the Start menu, {} from the Uninstall registry, "
+                   "{} with an icon, {} services skipped); {} programs with file types; took {} ms",
+                   arr_out.size(), from_start_menu, arr_out.size() - from_start_menu, with_icon,
+                   skipped_service, associations.size(), took_ms);
     return doc;
 }
 
