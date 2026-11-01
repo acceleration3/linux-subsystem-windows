@@ -293,8 +293,8 @@ void MainWindow::build_pages() {
 
     connect(graphics_page_, &GraphicsPage::settings_requested, this,
             [this] { show_page(NavRail::Page::Settings); });
-    connect(graphics_page_, &GraphicsPage::restart_requested, this, &MainWindow::restart_guest);
-    connect(settings_page_, &SettingsPage::restart_requested, this, &MainWindow::restart_guest);
+    connect(graphics_page_, &GraphicsPage::restart_requested, this, [this] { (void)restart_guest(); });
+    connect(settings_page_, &SettingsPage::restart_requested, this, [this] { (void)restart_guest(); });
     // The image tools are the same dialogs the wizard opens. Nothing
     // about them needs a guest, so they work with the machine off.
     connect(settings_page_, &SettingsPage::download_tool_requested, this, [this] {
@@ -629,18 +629,8 @@ void MainWindow::push_dpi() {
                                        this)}});
 }
 
-void MainWindow::restart_guest() {
-    // The values are current by the time this runs; what is left is to
-    // make the machine take them. Cores, memory, the shared folders and
-    // the GPU devices are the domain definition rather than properties
-    // of a running guest, so the definition is rewritten first — libvirt
-    // keeps it for the next start — and the guest is stopped and started
-    // on it.
-    const config::VmRecord* primary = services_.vms().primary();
-    if (primary == nullptr || restart_ != nullptr) {
-        return;
-    }
-    config::VmRecord record = *primary;
+bool MainWindow::redefine_now(const config::VmRecord& primary) {
+    config::VmRecord record = primary;
     record.sizing = services::vm_sizing_from_settings(services_.manager_settings());
     const vm::DomainXmlInputs inputs =
         services::domain_inputs_from_settings(services_.settings(), services_.manager_settings());
@@ -653,20 +643,54 @@ void MainWindow::restart_guest() {
                        QStringLiteral("Nothing changed: the guest keeps the definition it had. "
                                       "The manager's own log says why."),
                        {{QStringLiteral("Open the log"), [this] { show_page(NavRail::Page::Log); }}});
-        return;
+        return false;
     }
     // The stored definition is new: what is pending, and what the next
     // start boots, follow from it.
     services_.status().refresh(services::StatusHub::Area::Vm);
+    notices_->withdraw(QStringLiteral("definition"));
+    return true;
+}
+
+RestartResult MainWindow::restart_guest(QString* reason) {
+    // The values are current by the time this runs; what is left is to
+    // make the machine take them. Cores, memory, the shared folders and
+    // the GPU devices are the domain definition rather than properties
+    // of a running guest, so the definition is rewritten first - libvirt
+    // keeps it for the next start - and the guest is stopped and started
+    // on it.
+    const config::VmRecord* primary = services_.vms().primary();
+    if (primary == nullptr) {
+        if (reason != nullptr) {
+            *reason = QStringLiteral("there is no Windows machine to restart");
+        }
+        return RestartResult::Refused;
+    }
+    if (restart_ != nullptr) {
+        // Under way, with the definition it was started with: written again
+        // in its finished handler, just before the start, so this request's
+        // changes are in what boots.
+        redefine_again_ = true;
+        return RestartResult::Pending;
+    }
+    if (!redefine_now(*primary)) {
+        if (reason != nullptr) {
+            *reason = services_.lifecycle().last_error().isEmpty()
+                          ? QStringLiteral("libvirt refused the new machine definition")
+                          : services_.lifecycle().last_error();
+        }
+        return RestartResult::Refused;
+    }
+    const config::VmRecord record = *primary;
     // The disk is the one part of the machine that is a file rather than
     // the definition, and it can only grow while QEMU does not hold it —
     // so it grows between the stop and the start, never on a running
     // guest. A refusal is reported and the guest still starts: on its old
     // size, which is a working machine, rather than not at all.
-    notices_->withdraw(QStringLiteral("definition"));
     const auto grow_disk = [this, record] {
         QString error;
-        if (vm::Lifecycle::grow_disk(record.disk_path, record.sizing.disk_gib, &error)) {
+        const auto sizing = services::vm_sizing_from_settings(services_.manager_settings());
+        if (vm::Lifecycle::grow_disk(record.disk_path, sizing.disk_gib, &error)) {
             notices_->withdraw(QStringLiteral("disk"));
             return;
         }
@@ -679,10 +703,15 @@ void MainWindow::restart_guest() {
         if (overview_->start_guest()) {
             notice_ = QStringLiteral("Starting the guest on the new definition");
             refresh_status_bar();
-        } else {
-            notice_start_refused(QStringLiteral("libvirt would not start the guest."));
+            return RestartResult::Started;
         }
-        return;
+        notice_start_refused(QStringLiteral("libvirt would not start the guest."));
+        if (reason != nullptr) {
+            *reason = services_.lifecycle().last_error().isEmpty()
+                          ? QStringLiteral("libvirt would not start the guest")
+                          : services_.lifecycle().last_error();
+        }
+        return RestartResult::Refused;
     }
     // A start while the old QEMU still runs does nothing, so the start
     // waits for the stop: asked politely, asked again, and at the
@@ -691,9 +720,17 @@ void MainWindow::restart_guest() {
     refresh_status_bar();
     restart_ = new vm::GracefulShutdown(services_.lifecycle(), record.uuid,
                                         vm::GracefulShutdown::kDefaultDeadlineMs, this);
-    connect(restart_, &vm::GracefulShutdown::finished, this, [this, grow_disk](bool forced) {
+    connect(restart_, &vm::GracefulShutdown::finished, this, [this, grow_disk, record](bool forced) {
         restart_->deleteLater();
         restart_ = nullptr;
+        // Something asked for a restart while this one waited: its changes
+        // (a shared folder) are in the settings by now, and not in the
+        // definition this restart wrote.
+        if (std::exchange(redefine_again_, false)) {
+            if (const config::VmRecord* now = services_.vms().primary(); now != nullptr) {
+                (void)redefine_now(*now);
+            }
+        }
         grow_disk();
         notice_ = forced ? QStringLiteral("Windows did not shut down in time and was stopped; "
                                           "starting it again")
@@ -705,6 +742,7 @@ void MainWindow::restart_guest() {
         refresh_status_bar();
     });
     restart_->start();
+    return RestartResult::Started;
 }
 
 void MainWindow::notice_start_refused(const QString& headline) {

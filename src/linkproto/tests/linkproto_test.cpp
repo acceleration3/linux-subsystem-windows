@@ -13,6 +13,7 @@
 #include "lsw/linkproto/byte_order.hpp"
 #include "lsw/linkproto/commands.hpp"
 #include "lsw/linkproto/envelope.hpp"
+#include "lsw/linkproto/file_name.hpp"
 #include "lsw/linkproto/frame_reader.hpp"
 
 #include <cstdio>
@@ -221,6 +222,31 @@ void test_command_names_unique() {
 
 }  // namespace
 
+void test_file_names() {
+    using lsw::linkproto::WindowsFileName;
+    check(WindowsFileName::legal("report.xlsx"), "an ordinary name is legal");
+    check(WindowsFileName::legal("100%.txt") && WindowsFileName::legal("hello!.docx"),
+          "% and ! are legal names");
+    check(WindowsFileName::legal("\xc3\xa9t\xc3\xa9.txt"), "non-ASCII is legal");
+    for (const char* bad : {"", "a:b", "a?b", "a*b", "a<b", "a>b", "a|b", "a\"b", "a/b", "a\\b", "a.", "a ",
+                            "a\tb", "CON", "nul.txt", "Com1.log", "LPT9", "CONIN$"}) {
+        check(!WindowsFileName::legal(bad), "an illegal or reserved name is refused");
+    }
+    check(WindowsFileName::legal("COM0") && WindowsFileName::legal("console.txt"), "COM0 and console are not reserved");
+    check(!WindowsFileName::legal(std::string(241, 'a')), "too long is refused");
+    check(WindowsFileName::sanitised("report.xlsx") == "report.xlsx", "a legal name is unchanged");
+    check(WindowsFileName::sanitised("a:b?.txt") == "a_b_.txt", "illegal characters become _");
+    check(WindowsFileName::sanitised("name. ") == "name", "trailing dots and spaces go");
+    check(WindowsFileName::sanitised("nul.txt") == "_nul.txt", "a device name gets a _ in front");
+    check(WindowsFileName::sanitised("") == "file" && WindowsFileName::sanitised("...") == "file",
+          "an empty name becomes file");
+    const std::string cut = WindowsFileName::sanitised(std::string(300, 'a') + ".docx");
+    check(cut.size() <= 240 && cut.ends_with(".docx") && WindowsFileName::legal(cut),
+          "a long name is cut, its extension kept");
+    check(WindowsFileName::legal(WindowsFileName::sanitised("x\xc3\xa9" + std::string(300, 'y'))),
+          "whatever comes out is legal");
+}
+
 int main() {
     test_byte_order_roundtrip();
     test_envelope_header();
@@ -230,6 +256,7 @@ int main() {
     test_frame_reader_aborts_on_handler_false();
     test_frame_reader_reset();
     test_command_names_unique();
+    test_file_names();
     std::printf("linkproto: %d checks passed\n", g_checks);
     return 0;
 }

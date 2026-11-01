@@ -288,6 +288,15 @@ bool Lifecycle::remove_existing(const QString& name, QString* error_out) {
     return true;
 }
 
+int Lifecycle::domain_id(const QUuid& uuid) const {
+    auto dom = lookup(uuid);
+    if (!dom.valid()) {
+        return -1;
+    }
+    const unsigned int id = ::virDomainGetID(dom.raw());
+    return id == static_cast<unsigned int>(-1) ? -1 : static_cast<int>(id);
+}
+
 bool Lifecycle::is_running(const QUuid& uuid) const {
     auto dom = lookup(uuid);
     if (!dom.valid()) {

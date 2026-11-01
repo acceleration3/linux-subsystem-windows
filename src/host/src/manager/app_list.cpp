@@ -119,6 +119,8 @@ AppListWidget::AppListWidget(apps::AppConfigStore& store, link::AgentRpcClient& 
             &AppListWidget::update_launch_state);
 
     connect(&catalog_, &apps::AppCatalog::loaded, this, &AppListWidget::on_loaded);
+    connect(&catalog_, &apps::AppCatalog::store_extensions_loaded, &store_,
+            &apps::AppConfigStore::set_store_extensions);
     // Use itemDoubleClicked rather than itemActivated — the latter is
     // style-dependent (single-click on some platforms, double on
     // others). Explicit double-click is what the user sees.

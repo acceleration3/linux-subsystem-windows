@@ -20,7 +20,7 @@ struct UploadFileHandler : RpcHandler {
                 throw std::invalid_argument("upload size must be an unsigned integer");
             return {{"ok", true},
                     {"upload_id", uploads.begin(params.at("name").get<std::string>(),
-                                                size.get<std::uint64_t>())}};
+                                                size.get<std::uint64_t>(), params.value("document", false))}};
         }
         const auto id = params.at("upload_id").get<std::string>();
         if (action == "chunk") {

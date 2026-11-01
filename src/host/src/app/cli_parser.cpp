@@ -1,10 +1,40 @@
 #include "lsw/host/app/cli_parser.hpp"
 
+#include "lsw/base/log.hpp"
+
 #include <QCommandLineOption>
 #include <QCommandLineParser>
 #include <QCoreApplication>
+#include <QDir>
+#include <QFileInfo>
+#include <QRegularExpression>
+#include <QTextStream>
+#include <QUrl>
 
 namespace lsw::host::app {
+
+QString CliParser::normalise_file(const QString& argument, const QString& cwd, QString* error) {
+    static const QRegularExpression scheme(QStringLiteral("^[a-zA-Z][a-zA-Z0-9+.-]*:(//|$)"));
+    QString path = argument;
+    if (scheme.match(argument).hasMatch()) {
+        const QUrl url(argument);
+        if (!url.isLocalFile()) {
+            if (error != nullptr) {
+                *error = QStringLiteral("%1 is not a local file").arg(argument);
+            }
+            return {};
+        }
+        path = url.toLocalFile();
+    }
+    path = QDir::cleanPath(QDir(cwd).absoluteFilePath(path));
+    if (!QFileInfo::exists(path)) {
+        if (error != nullptr) {
+            *error = QStringLiteral("%1 does not exist").arg(path);
+        }
+        return {};
+    }
+    return path;
+}
 
 CliOptions CliParser::parse(const QStringList& argv) {
     QCommandLineParser p;
@@ -14,6 +44,11 @@ CliOptions CliParser::parse(const QStringList& argv) {
         "install pipeline headlessly and prints step transitions / progress to "
         "stdout, exiting with code 0 on success and non-zero on failure.");
     p.addHelpOption();
+    p.addPositionalArgument(QStringLiteral("files"),
+                            QStringLiteral("Files to open in Windows, with --launch in that "
+                                           "application, without in the program Windows has for "
+                                           "their type."),
+                            QStringLiteral("[files...]"));
 
     QCommandLineOption accept_license({"accept-license", "L"},
         "Pre-check the Windows license acceptance box.");
@@ -80,9 +115,22 @@ CliOptions CliParser::parse(const QStringList& argv) {
         o.disk_gib = p.value(disk_opt).toInt();
     }
     o.launch_app_id = p.value(launch_opt);
-    // A --launch click's token is the application's; without --launch it is
-    // left to Qt, which activates the manager's own first window with it.
-    if (!o.launch_app_id.isEmpty()) {
+    // A forwarded call is run by a manager somewhere else, so what leaves
+    // here is absolute.
+    for (const QString& argument : p.positionalArguments()) {
+        QString why;
+        const QString file = normalise_file(argument, QDir::currentPath(), &why);
+        if (file.isEmpty()) {
+            LSW_WARN("not opening {}", why.toStdString());
+            QTextStream(stderr) << "lsw-manager: not opening " << why << "\n";
+            continue;
+        }
+        o.files << file;
+    }
+    // A --launch click's token, and a file opened from a file manager's, is
+    // the application's; otherwise it is left to Qt, which activates the
+    // manager's own first window with it.
+    if (!o.launch_app_id.isEmpty() || !o.files.isEmpty()) {
         o.activation_token = qEnvironmentVariable("XDG_ACTIVATION_TOKEN");
         qunsetenv("XDG_ACTIVATION_TOKEN");
     }

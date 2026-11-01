@@ -9,7 +9,7 @@
 #include <memory>
 
 namespace lsw::host::mcp { class McpServer; }
-namespace lsw::host::manager { class MainWindow; class GuestAppLaunchController; }
+namespace lsw::host::manager { class DocumentOpener; class MainWindow; class GuestAppLaunchController; }
 namespace lsw::host::wizard { class Wizard; }
 
 namespace lsw::host::app {
@@ -50,6 +50,12 @@ private Q_SLOTS:
     // launcher click. Delegated to the launch controller, which owns
     // the (VM may be cold) start / wait / launch / mirror sequence.
     void on_launch_app_request(const QString& app_id, const QString& activation_token);
+
+    // SingleInstance "open_documents" delivered via DBus from a file
+    // manager (or ``--launch <id> file...``): the files to open in the
+    // guest, with ``app_id``'s application or Windows' default for each.
+    void on_open_documents_request(const QString& app_id, const QStringList& files,
+                                   const QString& activation_token);
 
     // The settings page's Reinstall: this manager hands over to a wizard
     // process (``--reinstall``) and quits.
@@ -92,6 +98,10 @@ private:
     [[nodiscard]] bool hand_over(const QStringList& args);
 
     [[nodiscard]] manager::GuestAppLaunchController& launch_controller();
+    [[nodiscard]] manager::DocumentOpener& document_opener();
+    // The manager window, made but not shown when it was never opened: a
+    // restart the documents ask for belongs to it even then.
+    [[nodiscard]] manager::MainWindow& main_window();
 
     CliOptions cli_;
     platform::SingleInstance single_instance_;
@@ -102,6 +112,7 @@ private:
     std::unique_ptr<mcp::McpServer> mcp_server_;
     std::unique_ptr<UnattendedRunner> unattended_;
     std::unique_ptr<manager::GuestAppLaunchController> launch_controller_;
+    std::unique_ptr<manager::DocumentOpener> document_opener_;
     manager::MainWindow* main_window_ = nullptr;
     wizard::Wizard* wizard_ = nullptr;
 };

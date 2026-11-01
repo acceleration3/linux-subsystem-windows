@@ -56,6 +56,9 @@ public:
     // skipped rather than ending the enumeration.
     [[nodiscard]] std::vector<std::wstring> subkey_names() const;
 
+    // Names of the values, the default one (named "") included when set.
+    [[nodiscard]] std::vector<std::wstring> value_names() const;
+
     [[nodiscard]] HKEY get() const noexcept { return key_.get(); }
 
 private:

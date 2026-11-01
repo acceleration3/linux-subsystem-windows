@@ -2,6 +2,7 @@
 
 #include <QImage>
 #include <QString>
+#include <QStringList>
 
 namespace lsw::host::apps {
 
@@ -45,6 +46,11 @@ struct AppConfig {
     // Windows file types this application should open on the host,
     // one MIME type per line. Empty means it registers for none.
     QString mime_types;
+    // The file types Windows says this program handles (".xlsx"), read by
+    // the agent from its registry and refreshed with the app list, for the
+    // user's edits as much as for the discovered entries. The MIME types
+    // the entry registers are these and ``mime_types`` together.
+    QStringList file_extensions;
 
     // What the guest starts: the store application's ID, or the path.
     [[nodiscard]] const QString& target() const noexcept { return aumid.isEmpty() ? path : aumid; }

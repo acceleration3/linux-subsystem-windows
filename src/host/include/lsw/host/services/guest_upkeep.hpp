@@ -62,6 +62,12 @@ public:
     // boot's pass; empty when they are, or there are none.
     [[nodiscard]] const QString& shares_error() const noexcept { return shares_error_; }
 
+    // This boot's pass got as far as the shared folders (mounted, or
+    // refused with a ``shares_error``). A pass that stopped before - the
+    // agent could not be swapped - has not, and a document in a shared
+    // folder is not to be opened as if it had.
+    [[nodiscard]] bool shares_ready() const noexcept { return shares_reached_; }
+
     // A failed pass again, the swap included.
     void retry();
 
@@ -75,6 +81,8 @@ private:
         // The shipped pair a swap was tried for, to try once.
         QString attempted;
         QString shares_error;
+        // The pass got as far as the shared folders.
+        bool shares_reached = false;
     };
 
     void on_status();
@@ -95,6 +103,10 @@ private:
     QString shares_error_;
     // A pass ran for this boot: the next is for the next one.
     bool passed_ = false;
+    bool shares_reached_ = false;
+    // The machine was seen to stop while a pass ran: that pass is about a boot
+    // that is over, and the next one has not had its own.
+    bool stopped_during_pass_ = false;
     // Shipped pairs (their hashes) a swap was tried for in this run.
     QSet<QString> attempted_;
 };

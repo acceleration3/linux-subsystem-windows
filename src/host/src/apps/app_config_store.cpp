@@ -151,6 +151,20 @@ void AppConfigStore::merge_from_agent(const QList<AppEntry>& entries) {
             any_changed = true;
         }
     }
+    // The file types, by target: a config the user edited keeps everything
+    // else, and still opens what Windows says its program opens.
+    QHash<QString, QStringList> extensions_of;
+    for (const auto& e : entries) {
+        extensions_of.insert(e.exe_path.toLower(), e.extensions);
+    }
+    for (auto& cfg : configs_) {
+        const auto found = extensions_of.constFind(cfg.path.toLower());
+        if (cfg.aumid.isEmpty() && found != extensions_of.constEnd() && *found != cfg.file_extensions) {
+            cfg.file_extensions = *found;
+            (void)write_file(cfg);
+            any_changed = true;
+        }
+    }
     // What the agent no longer reports is gone from the guest, or was
     // never an application: an uninstaller an older catalog took for one.
     for (auto it = configs_.begin(); it != configs_.end();) {
@@ -161,6 +175,24 @@ void AppConfigStore::merge_from_agent(const QList<AppEntry>& entries) {
         QFile::remove(file_for(it->id));
         it = configs_.erase(it);
         any_changed = true;
+    }
+    if (any_changed) {
+        Q_EMIT changed();
+    }
+}
+
+void AppConfigStore::set_store_extensions(const QHash<QString, QStringList>& extensions) {
+    bool any_changed = false;
+    for (auto& cfg : configs_) {
+        if (cfg.aumid.isEmpty()) {
+            continue;
+        }
+        const auto found = extensions.constFind(cfg.aumid.toLower());
+        if (found != extensions.constEnd() && *found != cfg.file_extensions) {
+            cfg.file_extensions = *found;
+            (void)write_file(cfg);
+            any_changed = true;
+        }
     }
     if (any_changed) {
         Q_EMIT changed();

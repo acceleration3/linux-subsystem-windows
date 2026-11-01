@@ -31,6 +31,19 @@ GuestUpkeep::GuestUpkeep(StatusHub& status, link::AgentRpcClient& rpc, QObject* 
     });
     connect(&watcher_, &QFutureWatcher<Result>::finished, this, [this] {
         const Result result = watcher_.result();
+        if (stopped_during_pass_) {
+            // The boot this was a pass for is gone, and so is what it found.
+            stopped_during_pass_ = false;
+            passed_ = false;
+            shares_reached_ = false;
+            shares_error_.clear();
+            error_.clear();
+            set_state(State::Idle);
+            Q_EMIT changed();
+            on_status();
+            return;
+        }
+        shares_reached_ = result.shares_reached;
         if (!result.attempted.isEmpty()) {
             attempted_.insert(result.attempted);
         }
@@ -64,10 +77,16 @@ bool GuestUpkeep::ready() const {
 // brings it back while the pass runs, which is the same boot.
 void GuestUpkeep::on_status() {
     if (watcher_.isRunning()) {
+        // A stop seen now is the end of the boot being passed, which the
+        // finished pass must not be taken for the next one's.
+        if (!status_.vm().running()) {
+            stopped_during_pass_ = true;
+        }
         return;
     }
     if (!status_.vm().running()) {
         passed_ = false;
+        shares_reached_ = false;
         const bool had_shares_error = !shares_error_.isEmpty();
         shares_error_.clear();
         if (!set_state(State::Idle) && had_shares_error) {
@@ -85,6 +104,8 @@ void GuestUpkeep::start() {
         return;
     }
     passed_ = true;
+    shares_reached_ = false;
+    stopped_during_pass_ = false;
     set_state(State::Checking);
     error_.clear();
     // The shares the machine has now: its live definition, which is what
@@ -158,6 +179,7 @@ GuestUpkeep::Result GuestUpkeep::pass(QSet<QString> attempted,
     }
 
     // 2. The shared folders.
+    result.shares_reached = true;
     const GuestShares::Outcome shares = GuestShares{rpc_}.run(mounts);
     if (shares.ok) {
         LSW_INFO("upkeep: shared folders: {}", shares.message.toStdString());

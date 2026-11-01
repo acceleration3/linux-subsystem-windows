@@ -14,6 +14,10 @@ namespace lsw::host::services {
 struct VmStatus {
     QUuid uuid;  // null: no VM to watch
     vm::VmStats stats;
+    // libvirt's id of the running domain: different for every boot, so a
+    // restart quicker than the readings is still seen. -1 while it is off
+    // or not yet read.
+    int domain_id = -1;
 
     // The running domain's live definition: what this boot actually has,
     // whatever the settings say now. Unset while the VM is off.

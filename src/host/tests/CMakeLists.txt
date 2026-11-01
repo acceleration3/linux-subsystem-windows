@@ -238,3 +238,24 @@ target_compile_definitions(lsw_host_notice_board_test PRIVATE QT_NO_KEYWORDS)
 add_test(NAME lsw_host_notice_board_test COMMAND lsw_host_notice_board_test)
 set_tests_properties(lsw_host_notice_board_test PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)
+# Where a host file is in Windows, by the share that holds it, and the
+# names Windows cannot spell.
+add_executable(lsw_host_guest_document_path_test guest_document_path_test.cpp)
+target_link_libraries(lsw_host_guest_document_path_test
+    PRIVATE
+        lsw_host_core
+        LSW::CompileOptions
+)
+target_compile_definitions(lsw_host_guest_document_path_test PRIVATE QT_NO_KEYWORDS)
+add_test(NAME lsw_host_guest_document_path_test COMMAND lsw_host_guest_document_path_test)
+
+# What publishing a MimeType must never do: take over the host's default
+# for a type. The pins in mimeapps.list, and the extension rule.
+add_executable(lsw_host_mime_defaults_test mime_defaults_test.cpp)
+target_link_libraries(lsw_host_mime_defaults_test
+    PRIVATE
+        lsw_host_core
+        LSW::CompileOptions
+)
+target_compile_definitions(lsw_host_mime_defaults_test PRIVATE QT_NO_KEYWORDS)
+add_test(NAME lsw_host_mime_defaults_test COMMAND lsw_host_mime_defaults_test)

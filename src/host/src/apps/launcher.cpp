@@ -41,17 +41,31 @@ nlohmann::json env_object(const QString& text) {
     return obj;
 }
 
+// ``documents`` as the JSON array both launch commands take.
+nlohmann::json documents_array(const QStringList& documents) {
+    auto out = nlohmann::json::array();
+    for (const QString& document : documents) {
+        out.push_back(document.toStdString());
+    }
+    return out;
+}
+
 }  // namespace
 
 Launcher::Launcher(link::AgentRpcClient& rpc, QObject* parent) : QObject(parent), rpc_(rpc) {}
 
-void Launcher::launch(const QString& app_id, const QString& args, const QString& env) {
+void Launcher::launch(const QString& app_id, const QString& args, const QString& env,
+                      const QStringList& documents) {
     const bool package = linkproto::is_app_package(app_id.toStdString());
     if (package && (!args.trimmed().isEmpty() || !env.trimmed().isEmpty())) {
         Q_EMIT failed(
             app_id,
             QStringLiteral(
                 "App Installer packages do not accept launch arguments or environment overrides"));
+        return;
+    }
+    if (package && !documents.isEmpty()) {
+        Q_EMIT failed(app_id, QStringLiteral("App Installer packages cannot open documents"));
         return;
     }
     nlohmann::json params =
@@ -62,6 +76,9 @@ void Launcher::launch(const QString& app_id, const QString& args, const QString&
     }
     if (auto vars = env_object(env); !vars.empty()) {
         params["env"] = std::move(vars);
+    }
+    if (!documents.isEmpty() && !package) {
+        params["documents"] = documents_array(documents);
     }
     QtConcurrent::run([&rpc = rpc_, package, params = std::move(params)] {
         return rpc.request(package ? linkproto::cmd::kOpenPackage : linkproto::cmd::kLaunch,
@@ -82,14 +99,18 @@ void Launcher::launch(const QString& app_id, const QString& args, const QString&
             return;
         }
         Q_EMIT launched(app_id, pid, QString::fromStdString(reply.body.value("job", std::string{})),
-                        reply.body.value("pid_created", std::uint64_t{0}));
+                        reply.body.value("pid_created", std::uint64_t{0}),
+                        QString::fromStdString(reply.body.value("image", std::string{})));
     });
 }
 
-void Launcher::activate(const QString& aumid, const QString& args) {
+void Launcher::activate(const QString& aumid, const QString& args, const QStringList& documents) {
     nlohmann::json params{{"aumid", aumid.toStdString()}};
     if (!args.trimmed().isEmpty()) {
         params["args"] = args.toStdString();
+    }
+    if (!documents.isEmpty()) {
+        params["documents"] = documents_array(documents);
     }
     QtConcurrent::run([&rpc = rpc_, params = std::move(params)] {
         return rpc.request(linkproto::cmd::kLaunchStoreApp, params);
@@ -103,7 +124,7 @@ void Launcher::activate(const QString& aumid, const QString& args) {
             Q_EMIT failed(aumid, QStringLiteral("agent: Windows started it but named no process"));
             return;
         }
-        Q_EMIT launched(aumid, pid, QString{}, reply.body.value("pid_created", std::uint64_t{0}));
+        Q_EMIT launched(aumid, pid, QString{}, reply.body.value("pid_created", std::uint64_t{0}), QString{});
     });
 }
 

@@ -6,6 +6,7 @@
 #include <QObject>
 #include <QString>
 #include <QVariant>
+#include <optional>
 
 namespace lsw::host::config {
 
@@ -37,6 +38,15 @@ public:
     // One line per change, in the form the apply bar shows: the key's
     // label, what it is, and what it would become.
     [[nodiscard]] QStringList summary() const;
+
+    // Share ``folder`` with the guest, read-write, as it must be both in what
+    // is stored (it is wanted by the restart that follows) and in what is
+    // staged, if a list of shares is staged: otherwise applying that list
+    // later would drop it. The drive letter is the next free one from
+    // both lists together, so the two never disagree. A staged share that
+    // covers the folder already is the one stored. nullopt when no letter
+    // is free.
+    std::optional<HostShare> add_share(const QString& folder);
 
     // Write every staged value through to the settings store. The
     // caller restarts the guest; this only makes the values current.

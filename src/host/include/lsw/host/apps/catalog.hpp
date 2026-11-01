@@ -2,9 +2,11 @@
 
 #include "lsw/host/apps/app_entry.hpp"
 
+#include <QHash>
 #include <QList>
 #include <QObject>
 #include <QString>
+#include <QStringList>
 
 namespace lsw::host::link { class AgentRpcClient; }
 
@@ -23,6 +25,8 @@ public:
 
 Q_SIGNALS:
     void loaded(const QList<AppEntry>& entries);
+    // The file types of the packaged applications, by lowercase AUMID.
+    void store_extensions_loaded(const QHash<QString, QStringList>& extensions);
     void failed(const QString& error_message);
 
 private:

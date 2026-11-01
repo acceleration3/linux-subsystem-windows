@@ -2,6 +2,7 @@
 
 #include <QObject>
 #include <QString>
+#include <QStringList>
 
 namespace lsw::host::platform {
 
@@ -41,10 +42,18 @@ public:
     // invocation triggered from an XDG launcher click.
     [[nodiscard]] bool launch_app_existing(const QString& app_id, const QString& activation_token);
 
+    // Tell the existing instance to open ``files`` (absolute paths) in the
+    // guest: with ``app_id``'s application, or with Windows' default for
+    // each type when it is empty.
+    [[nodiscard]] bool open_documents_existing(const QString& app_id, const QStringList& files,
+                                               const QString& activation_token);
+
 public Q_SLOTS:
     // DBus-callable: a second invocation calls these on the primary.
     void raise();
     void launch_app(const QString& app_id, const QString& activation_token);
+    void open_documents(const QString& app_id, const QStringList& files,
+                        const QString& activation_token);
 
 Q_SIGNALS:
     // Fired in the primary process when another instance asked to raise.
@@ -52,6 +61,9 @@ Q_SIGNALS:
     // Fired in the primary when an external launcher click forwarded a
     // request to launch ``app_id`` inside the guest.
     void launch_app_requested(const QString& app_id, const QString& activation_token);
+    // The same for files to open: ``app_id`` empty means Windows' default.
+    void open_documents_requested(const QString& app_id, const QStringList& files,
+                                  const QString& activation_token);
 
 private:
     bool primary_ = false;

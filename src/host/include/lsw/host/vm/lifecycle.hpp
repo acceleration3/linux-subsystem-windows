@@ -84,6 +84,11 @@ public:
     // says to shut it down first. True when there was nothing to remove.
     [[nodiscard]] bool remove_existing(const QString& name, QString* error_out);
 
+    // libvirt's id of the running domain, which changes at every start: what
+    // tells one boot from the next when a restart is quicker than the
+    // status is read. -1 when it is not running.
+    [[nodiscard]] int domain_id(const QUuid& uuid) const;
+
     // Whether libvirt knows about this VM and it's currently running.
     [[nodiscard]] bool is_running(const QUuid& uuid) const;
 

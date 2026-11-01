@@ -12,6 +12,7 @@ LSW is WSL in reverse. It installs Windows 11 into a virtual machine and keeps i
 - **GPU acceleration.** Windows sees a real display adapter named after your host GPU, and the work runs on that GPU.
 - **Guided setup.** A first-run wizard installs Windows unattended, from your own ISO or a download from Microsoft.
 - **Shared folders.** Any host folder can appear in Windows as a drive letter.
+- **Open files from the host.** Double-click a `.xlsx` in your file manager and it opens in Excel, in its own window, and saving writes your file. A file in a folder Windows cannot see can have the folder shared, or open as a copy.
 - **Run on VM.** Pick a local program, installer or script, and LSW copies it into Windows and runs it.
 - **Desktop access.** A live preview of the Windows desktop in the manager, and a full desktop window when you need one.
 

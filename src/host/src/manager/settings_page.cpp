@@ -54,27 +54,6 @@ QPushButton* small_button(const QString& text) {
     return button;
 }
 
-// Drive letters no share in ``shares`` has taken, backwards from Z,
-// which is where people put a mapped drive, and stopping before the
-// letters Windows has already spoken for. The same rule as
-// ManagerSettings::free_drive_letters, applied to the staged list:
-// that one reads what is stored, and two folders added before an
-// Apply would otherwise both be offered Z:.
-QStringList free_drive_letters(const QVector<HostShare>& shares) {
-    QStringList taken;
-    for (const auto& share : shares) {
-        taken << share.drive.toUpper();
-    }
-    QStringList out;
-    for (char letter = 'Z'; letter >= 'E'; --letter) {
-        const QString candidate = QString(QLatin1Char(letter)) + QLatin1Char(':');
-        if (!taken.contains(candidate)) {
-            out << candidate;
-        }
-    }
-    return out;
-}
-
 QTableWidget* make_table(const QStringList& headers) {
     auto* table = new QTableWidget(0, static_cast<int>(headers.size()));
     QStringList upper;
@@ -321,7 +300,7 @@ void SettingsPage::build() {
             return;
         }
         auto shares = staged_shares();
-        const auto letters = free_drive_letters(shares);
+        const auto letters = config::ManagerSettings::free_drive_letters(shares);
         if (letters.isEmpty()) {
             return;
         }
@@ -345,8 +324,9 @@ void SettingsPage::build() {
             make_text(K::kMenuCategory));
     add_row(entries, K::kFileAssociations,
             QStringLiteral("Open Windows file types with these applications"),
-            QStringLiteral("Registers MIME handlers. An existing default is never "
-                           "replaced without asking."),
+            QStringLiteral("Windows applications open the file types nothing on this machine "
+                           "handles. For the rest, use Make it the default in an application's "
+                           "settings."),
             make_toggle(K::kFileAssociations));
     add_action_row(entries, QStringLiteral("Rewrite the entries"),
                    QStringLiteral("Regenerates every .desktop file and icon."),

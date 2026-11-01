@@ -51,7 +51,7 @@ void GuestFileTransfer::cancel() {
     cancel_requested_ = true;
 }
 
-void GuestFileTransfer::start(const QString& local_path) {
+void GuestFileTransfer::start(const QString& local_path, const QString& guest_name, bool document) {
     if (busy_)
         return;
     cancel_requested_ = false;
@@ -68,16 +68,18 @@ void GuestFileTransfer::start(const QString& local_path) {
         return;
     }
     size_ = file_.size();
-    if (size_ <= 0 || static_cast<std::uint64_t>(size_) > linkproto::kMaxUploadBytes) {
-        fail(QStringLiteral("Choose a non-empty file no larger than 16 GiB"));
+    if ((size_ <= 0 && !document) || static_cast<std::uint64_t>(size_) > linkproto::kMaxUploadBytes) {
+        fail(document ? QStringLiteral("The file is larger than 16 GiB")
+                      : QStringLiteral("Choose a non-empty file no larger than 16 GiB"));
         return;
     }
     busy_ = true;
     Q_EMIT progress(0, size_);
     rpc_.request_async(linkproto::cmd::kUploadFile,
                        {{"action", "begin"},
-                        {"name", info.fileName().toStdString()},
-                        {"size", static_cast<std::uint64_t>(size_)}},
+                        {"name", (guest_name.isEmpty() ? info.fileName() : guest_name).toStdString()},
+                        {"size", static_cast<std::uint64_t>(size_)},
+                        {"document", document}},
                        this, [this](const link::AgentReply& reply) {
                            if (reply.ok)
                                upload_id_ = QString::fromStdString(

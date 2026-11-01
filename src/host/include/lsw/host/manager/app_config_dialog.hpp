@@ -8,6 +8,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QPlainTextEdit>
+#include <QPushButton>
 #include <QTimer>
 
 namespace lsw::host::link { class AgentRpcClient; }
@@ -40,6 +41,9 @@ private Q_SLOTS:
 
 private:
     void update_icon_preview();
+    // The "Make it the default" button: asks, naming what is the default
+    // now, and only on a yes runs xdg-mime.
+    void make_default();
 
     apps::AppConfig cfg_;
     link::AgentRpcClient& rpc_;
@@ -54,6 +58,7 @@ private:
     // application gets the guest's adapters as it would a physical card.
     QCheckBox* publish_box_ = nullptr;
     QLineEdit* mime_edit_ = nullptr;
+    QPushButton* make_default_ = nullptr;
     QLabel* identity_name_ = nullptr;
     // Set when the dialog was closed by Remove rather than Save, so the
     // caller knows the difference between "keep this" and "delete it".

@@ -1,10 +1,13 @@
 #include "lsw/host/apps/desktop_launcher.hpp"
 
+#include "lsw/host/apps/host_mime_handlers.hpp"
 #include "lsw/host/apps/windows_badge.hpp"
+#include "lsw/host/platform/tool_process.hpp"
 
 #include "lsw/base/log.hpp"
 
 #include <algorithm>
+#include <utility>
 
 #include <QByteArray>
 #include <QCoreApplication>
@@ -14,7 +17,11 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QGuiApplication>
+#include <QHash>
+#include <QMimeDatabase>
+#include <QProcess>
 #include <QSet>
+#include <optional>
 #include <QStandardPaths>
 #include <QTextStream>
 
@@ -28,7 +35,12 @@ constexpr const char* kEntryPrefix = "lsw-app-";
 // written. So the id stays and the name is what the menus show.
 QString g_category_name = QStringLiteral("Windows");
 bool g_publishing = true;
-bool g_file_associations = false;
+bool g_file_associations = true;
+// Whether an entry was written or removed since update-desktop-database
+// last ran, and whether it is running now.
+bool g_entries_changed = false;
+QProcess* g_database_update = nullptr;
+bool g_database_update_again = false;
 constexpr const char* kCategoryId = "lsw-windows";
 
 QString xdg_data_home() {
@@ -186,6 +198,59 @@ void ensure_windows_category() {
     }
 }
 
+// ``update-desktop-database`` over the applications directory, so the MIME
+// handlers just written are in the cache the file managers' Open With reads
+// (mimeinfo.cache). Run behind the GUI thread's back, one at a time, and
+// skipped when the tool is not installed: the cache is then built by
+// whatever else the desktop runs.
+void update_desktop_database() {
+    if (g_database_update != nullptr) {
+        g_database_update_again = true;
+        return;
+    }
+    const QString tool = QStandardPaths::findExecutable(QStringLiteral("update-desktop-database"));
+    if (tool.isEmpty()) {
+        return;
+    }
+    g_database_update = new QProcess(QCoreApplication::instance());
+    QObject::connect(g_database_update, &QProcess::finished, g_database_update,
+                     [](int code, QProcess::ExitStatus) {
+                         if (code != 0) {
+                             LSW_WARN("update-desktop-database exited with {}", code);
+                         }
+                         g_database_update->deleteLater();
+                         g_database_update = nullptr;
+                         if (std::exchange(g_database_update_again, false)) {
+                             update_desktop_database();
+                         }
+                     });
+    QObject::connect(g_database_update, &QProcess::errorOccurred, g_database_update,
+                     [](QProcess::ProcessError error) {
+                         if (error == QProcess::FailedToStart) {
+                             g_database_update->deleteLater();
+                             g_database_update = nullptr;
+                         }
+                     });
+    g_database_update->start(tool, {applications_dir()});
+}
+
+// Written only when it differs, so an unchanged entry neither touches the
+// file nor asks for the database to be rebuilt.
+bool write_if_changed(const QString& path, const QByteArray& body) {
+    QFile current(path);
+    if (current.open(QIODevice::ReadOnly) && current.readAll() == body) {
+        return true;
+    }
+    current.close();
+    QFile out(path);
+    if (!out.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        return false;
+    }
+    out.write(body);
+    g_entries_changed = true;
+    return true;
+}
+
 }  // namespace
 
 QString DesktopLauncher::entry_id(const QString& app_config_id) {
@@ -216,7 +281,134 @@ void DesktopLauncher::set_file_associations(bool enabled) {
     g_file_associations = enabled;
 }
 
+bool DesktopLauncher::file_associations() {
+    return g_file_associations;
+}
+
+QStringList DesktopLauncher::mime_types_of(const AppConfig& cfg) {
+    QStringList types = cfg.mime_types.split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+    for (QString& type : types) {
+        type = type.trimmed();
+    }
+    types << mime_types_of_extensions(cfg.file_extensions);
+    QStringList out;
+    for (const QString& type : std::as_const(types)) {
+        if (!type.isEmpty() && type != QLatin1String("application/octet-stream") && !out.contains(type)) {
+            out << type;
+        }
+    }
+    return out;
+}
+
+QStringList DesktopLauncher::declared_mime_types(const AppConfig& cfg, const HostMimeHandlers& handlers) {
+    // What the person typed is an explicit request: always declared.
+    QStringList out;
+    for (QString type : cfg.mime_types.split(QLatin1Char('\n'), Qt::SkipEmptyParts)) {
+        type = type.trimmed();
+        if (!type.isEmpty() && type != QLatin1String("application/octet-stream") && !out.contains(type)) {
+            out << type;
+        }
+    }
+    const QString entry = entry_basename(cfg) + QStringLiteral(".desktop");
+    for (const QString& type : mime_types_of_extensions(cfg.file_extensions)) {
+        // What Windows says it opens, where nothing on this machine does, or
+        // where the person's mimeapps.list already chose this entry for it.
+        if ((!handlers.has_host_handler(type) || handlers.explicit_default(type, entry)) && !out.contains(type)) {
+            out << type;
+        }
+    }
+    return out;
+}
+
+QStringList DesktopLauncher::mime_types_of_extensions(const QStringList& extensions) {
+    const QMimeDatabase database;
+    // What the host's database calls a file of each extension.
+    QList<QStringList> candidates;
+    for (const QString& extension : extensions) {
+        const QString name = QStringLiteral("file") +
+                             (extension.startsWith(QLatin1Char('.')) ? QString{} : QStringLiteral(".")) + extension;
+        QStringList names;
+        for (const QMimeType& type : database.mimeTypesForFileName(name)) {
+            if (type.name() != QLatin1String("application/octet-stream") && !names.contains(type.name())) {
+                names << type.name();
+            }
+        }
+        candidates.append(names);
+    }
+    const auto top_level = [](const QString& type) { return type.section(QLatin1Char('/'), 0, 0); };
+
+    // The kind of thing this application opens: the top-level type most of
+    // its extensions have one candidate for.
+    QHash<QString, int> votes;
+    for (const QStringList& names : candidates) {
+        if (names.size() == 1) {
+            ++votes[top_level(names.first())];
+        }
+    }
+    QString dominant;
+    int best = 0;
+    for (auto it = votes.constBegin(); it != votes.constEnd(); ++it) {
+        if (it.value() > best || (it.value() == best && it.key() < dominant)) {
+            dominant = it.key();
+            best = it.value();
+        }
+    }
+
+    // Text types the host's database hands out for odd extensions (.asd as
+    // Lisp for Word's autosave) are not what a document application opens;
+    // these few are.
+    static const QSet<QString> kPlainTexts = {
+        QStringLiteral("text/plain"), QStringLiteral("text/html"), QStringLiteral("text/csv"),
+        QStringLiteral("text/xml"), QStringLiteral("text/markdown"), QStringLiteral("text/rtf"),
+        QStringLiteral("text/richtext"), QStringLiteral("text/calendar"), QStringLiteral("text/vcard"),
+        QStringLiteral("text/tab-separated-values")};
+
+    // Never declared, for any application: what the host's database calls an
+    // extension that Windows uses for a document, and that is not one.
+    static const QSet<QString> kNeverDocuments = {QStringLiteral("text/x-ssh-public-key")};
+
+    QStringList out;
+    for (QStringList names : candidates) {
+        names.removeIf([](const QString& n) { return kNeverDocuments.contains(n); });
+        if (dominant != QLatin1String("text")) {
+            // An application of documents or media is not offered other kinds of text.
+            names.removeIf([&](const QString& n) {
+                return top_level(n) == QLatin1String("text") && !kPlainTexts.contains(n);
+            });
+        }
+        if (names.size() > 1) {
+            // .pub is Publisher and an SSH key, .ts is video and a Qt
+            // linguist file: the application's own kind of thing decides,
+            // else the one that is not text, else none - a wrong default is
+            // worse than no entry for the type.
+            QStringList kept;
+            for (const QString& n : std::as_const(names)) {
+                if (top_level(n) == dominant) {
+                    kept << n;
+                }
+            }
+            if (kept.isEmpty()) {
+                for (const QString& n : std::as_const(names)) {
+                    if (top_level(n) != QLatin1String("text")) {
+                        kept << n;
+                    }
+                }
+            }
+            names = kept;
+        }
+        if (names.size() == 1) {
+            out << names.first();
+        }
+    }
+    out.removeDuplicates();
+    return out;
+}
+
 bool DesktopLauncher::install(const AppConfig& cfg) {
+    return install(cfg, HostMimeHandlers{HostMimeHandlers::Dirs::from_environment()});
+}
+
+bool DesktopLauncher::install(const AppConfig& cfg, const HostMimeHandlers& handlers) {
     if (cfg.id.isEmpty() || cfg.target().isEmpty()) {
         LSW_WARN("DesktopLauncher::install: empty id/path; skipping");
         return false;
@@ -249,13 +441,8 @@ bool DesktopLauncher::install(const AppConfig& cfg) {
     }
 
     const QString dp = desktop_path(cfg);
-    QFile df(dp);
-    if (!df.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        LSW_WARN("DesktopLauncher: cannot write {}", dp.toStdString());
-        return false;
-    }
-    QTextStream s(&df);
-    s.setEncoding(QStringConverter::Utf8);
+    QString body;
+    QTextStream s(&body);
     const QString name = sanitise_name(cfg.name.isEmpty() ? cfg.target() : cfg.name);
     // ``Exec`` quotes the app id in case it contains spaces (Windows
     // paths often do — "C:\\Program Files\\..."). XDG escapes the
@@ -264,6 +451,8 @@ bool DesktopLauncher::install(const AppConfig& cfg) {
     QString exec_id = cfg.id;
     exec_id.replace(QChar('\\'), QStringLiteral("\\\\"));
     exec_id.replace(QChar('\''), QStringLiteral("\\'"));
+    // %F: the files a file manager opens with it, which the second
+    // process hands to the running manager (see CliParser).
     s << "[Desktop Entry]\n"
       << "Type=Application\n"
       << "Version=1.0\n"
@@ -272,7 +461,7 @@ bool DesktopLauncher::install(const AppConfig& cfg) {
     if (!icon_abs.isEmpty()) {
         s << "Icon=" << icon_abs << "\n";
     }
-    s << "Exec=" << lsw_manager_executable() << " --launch '" << exec_id << "'\n"
+    s << "Exec=" << lsw_manager_executable() << " --launch '" << exec_id << "' %F\n"
       << "Categories=" << g_category_name << ";\n"
       // StartupWMClass is the X11 grouping hint; on Wayland the taskbar
       // matches against the app id the mirror presents, which is this
@@ -280,18 +469,64 @@ bool DesktopLauncher::install(const AppConfig& cfg) {
       // startup-id flow on X11.
       << "StartupNotify=true\n"
       << "Terminal=false\n";
-    // Opening a .psd on the host in the guest's Photoshop. Declared
-    // only when the application named types and the setting is on: a
-    // handler registered without being asked for is how somebody's
-    // double-click starts a virtual machine they did not want.
-    if (g_file_associations && !cfg.mime_types.isEmpty()) {
-        const QStringList types = cfg.mime_types.split(QLatin1Char('\n'), Qt::SkipEmptyParts);
-        if (!types.isEmpty()) {
+    // The Windows file types this application opens that nothing on this
+    // machine does, so the application is their handler and a double click
+    // on one starts it in Windows. The others are the host's: which of
+    // several applications the desktop picks for a type is not something an
+    // entry can influence (KDE's choice varies from one rebuild of its cache
+    // to the next, whatever preference an entry names), and putting this one
+    // among them would sometimes take a person's default. Those are the
+    // application's own "Make it the default", an explicit choice.
+    if (g_file_associations) {
+        if (const QStringList types = declared_mime_types(cfg, handlers); !types.isEmpty()) {
             s << "MimeType=" << types.join(QLatin1Char(';')) << ";\n";
         }
     }
-    df.close();
+    s.flush();
+    if (!write_if_changed(dp, body.toUtf8())) {
+        LSW_WARN("DesktopLauncher: cannot write {}", dp.toStdString());
+        return false;
+    }
     return true;
+}
+
+std::optional<DesktopLauncher::DefaultHandler> DesktopLauncher::default_handler(const QString& mime_type) {
+    QByteArray out;
+    if (!platform::run_tool(QStringLiteral("xdg-mime"),
+                            {QStringLiteral("query"), QStringLiteral("default"), mime_type}, 10'000,
+                            &out, nullptr)) {
+        return std::nullopt;
+    }
+    const QString entry = QString::fromUtf8(out).trimmed();
+    if (entry.isEmpty()) {
+        return std::nullopt;
+    }
+    DefaultHandler handler{entry, QString{}};
+    // The entry's own Name, from the applications directories.
+    const QString file = QStandardPaths::locate(QStandardPaths::ApplicationsLocation, entry);
+    QFile f(file);
+    if (!file.isEmpty() && f.open(QIODevice::ReadOnly)) {
+        for (const QByteArray& line : f.readAll().split('\n')) {
+            if (line.startsWith("Name=")) {
+                handler.name = QString::fromUtf8(line.mid(5)).trimmed();
+                break;
+            }
+        }
+    }
+    return handler;
+}
+
+bool DesktopLauncher::make_default(const AppConfig& cfg, QString* error) {
+    const QStringList types = mime_types_of(cfg);
+    if (types.isEmpty()) {
+        if (error != nullptr) {
+            *error = QStringLiteral("it opens no file types");
+        }
+        return false;
+    }
+    QStringList arguments{QStringLiteral("default"), entry_basename(cfg) + QStringLiteral(".desktop")};
+    arguments << types;
+    return platform::run_tool(QStringLiteral("xdg-mime"), arguments, 10'000, nullptr, error);
 }
 
 void DesktopLauncher::uninstall(const AppConfig& cfg) {
@@ -304,6 +539,11 @@ bool DesktopLauncher::is_installed(const AppConfig& cfg) {
 }
 
 void DesktopLauncher::sync(const QList<AppConfig>& live) {
+    // The caches are read once for the whole pass.
+    write_entries(live, HostMimeHandlers{HostMimeHandlers::Dirs::from_environment()});
+}
+
+void DesktopLauncher::write_entries(const QList<AppConfig>& live, const HostMimeHandlers& handlers) {
     // First pass: install/refresh entries for every live config. Build
     // the set of basenames we just produced so the prune pass can
     // distinguish "ours, current" from "ours, orphan".
@@ -314,7 +554,7 @@ void DesktopLauncher::sync(const QList<AppConfig>& live) {
         // publishing off entirely, leaves no basename behind, so the
         // prune pass below removes whatever it had.
         if (!g_publishing || !cfg.publish_entry) continue;
-        (void)install(cfg);
+        (void)install(cfg, handlers);
         live_bases.insert(entry_basename(cfg));
     }
 
@@ -331,6 +571,7 @@ void DesktopLauncher::sync(const QList<AppConfig>& live) {
             base.chop(QStringLiteral(".desktop").size());
             if (!live_bases.contains(base)) {
                 QFile::remove(apps.filePath(name));
+                g_entries_changed = true;
             }
         }
     }
@@ -346,6 +587,9 @@ void DesktopLauncher::sync(const QList<AppConfig>& live) {
                 QFile::remove(icons.filePath(name));
             }
         }
+    }
+    if (std::exchange(g_entries_changed, false)) {
+        update_desktop_database();
     }
 }
 
@@ -380,7 +624,7 @@ void DesktopLauncher::sync_manager_entry() {
                        "Name=LSW Manager\n"
                        "GenericName=Windows Virtual Machine Manager\n"
                        "Comment=Run Windows applications in a managed virtual machine\n"
-                       "Exec=%1\n"
+                       "Exec=%1 %F\n"
                        "Icon=%2\n"
                        "Terminal=false\n"
                        "Categories=System;Emulator;\n"

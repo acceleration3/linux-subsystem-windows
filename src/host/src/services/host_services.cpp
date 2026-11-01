@@ -42,7 +42,10 @@ HostServices::HostServices(QObject* parent)
     // all (``--launch`` opens a guest app directly).
     log_store_.attach(rpc_);
 
-    apply_integrations();
+    // No apply_integrations() here: it rewrites the desktop entries, and this
+    // runs in every process, including the second one a file manager starts
+    // for each double click, which hands its request to the first and exits.
+    // App::run applies them once it is the one that stays.
     // Filtered by key: apply_integrations rewrites every desktop entry
     // and both bookmark files, which is a lot of disk to touch because a
     // slider on another page moved.

@@ -3,10 +3,12 @@
 #include "lsw/base/log.hpp"
 #include "lsw/host/app/unattended_runner.hpp"
 #include "lsw/host/apps/desktop_launcher.hpp"
+#include "lsw/host/manager/document_opener.hpp"
 #include "lsw/host/manager/guest_app_launch_controller.hpp"
 #include "lsw/host/manager/app_config_dialog.hpp"
 #include "lsw/host/manager/launch_splash.hpp"
 #include "lsw/host/manager/main_window.hpp"
+#include "lsw/host/manager/open_document_dialog.hpp"
 #include "lsw/host/manager/remote_file_dialog.hpp"
 #include "lsw/host/tools/download_image_dialog.hpp"
 #include "lsw/host/tools/trim_image_dialog.hpp"
@@ -40,9 +42,6 @@ App::App(int& argc, char** argv)
     // desktop does not look the entry up (packaging/gen-icon.py draws it).
     setDesktopFileName(QStringLiteral("lsw-manager"));
     setWindowIcon(QIcon(QStringLiteral(":/lsw/lsw-manager.svg")));
-    // Before the event loop: the desktop portal registration Qt queues for
-    // its first turn looks the entry up by that name.
-    apps::DesktopLauncher::sync_manager_entry();
 
     // Before any window exists, so the wizard and the manager and every
     // dialog either of them opens are all wearing it from their first
@@ -69,6 +68,8 @@ App::App(int& argc, char** argv)
             this, &App::on_raise_request);
     connect(&single_instance_, &platform::SingleInstance::launch_app_requested,
             this, &App::on_launch_app_request);
+    connect(&single_instance_, &platform::SingleInstance::open_documents_requested,
+            this, &App::on_open_documents_request);
 }
 
 App::~App() = default;
@@ -91,6 +92,30 @@ manager::GuestAppLaunchController& App::launch_controller() {
     return *launch_controller_;
 }
 
+manager::DocumentOpener& App::document_opener() {
+    if (document_opener_ == nullptr) {
+        document_opener_ = std::make_unique<manager::DocumentOpener>(services_, launch_controller(), this);
+        // Sharing a folder to open a file from it is a restart of the guest,
+        // which is the manager window's to do.
+        document_opener_->set_restarter(
+            [this](QString* reason) { return main_window().restart_guest(reason); });
+    }
+    return *document_opener_;
+}
+
+manager::MainWindow& App::main_window() {
+    if (main_window_ == nullptr) {
+        // Shown by show_main_window when somebody asks for it.
+        main_window_ = new manager::MainWindow(services_);
+        connect(main_window_, &manager::MainWindow::wizard_requested, this, &App::show_wizard);
+        connect(main_window_, &manager::MainWindow::launch_requested, this,
+                [this](const QString& app_id) { on_launch_app_request(app_id, QString()); });
+        connect(main_window_, &manager::MainWindow::reinstall_requested, this,
+                &App::on_reinstall_request);
+    }
+    return *main_window_;
+}
+
 bool App::forward_to_primary() {
     if (single_instance_.acquire()) {
         return false;
@@ -98,8 +123,15 @@ bool App::forward_to_primary() {
     // Another manager owns the DBus name. If we were invoked with
     // ``--launch <id>`` (an XDG launcher click on a guest app entry),
     // forward the id to that instance and exit — the primary pops the
-    // splash and drives the VM. Bare re-invocations raise its window.
-    if (!cli_.launch_app_id.isEmpty()) {
+    // splash and drives the VM. Files to open go the same way, with the
+    // application or with none. Bare re-invocations raise its window.
+    if (!cli_.files.isEmpty()) {
+        LSW_INFO("forwarding {} file(s) to running manager (application: {})", cli_.files.size(),
+                 cli_.launch_app_id.isEmpty() ? std::string{"Windows' default"}
+                                              : cli_.launch_app_id.toStdString());
+        (void)single_instance_.open_documents_existing(cli_.launch_app_id, cli_.files,
+                                                       cli_.activation_token);
+    } else if (!cli_.launch_app_id.isEmpty()) {
         LSW_INFO("forwarding --launch to running manager: {}",
                  cli_.launch_app_id.toStdString());
         (void)single_instance_.launch_app_existing(cli_.launch_app_id, cli_.activation_token);
@@ -144,6 +176,11 @@ int App::run() {
     if (forward_to_primary()) {
         return 0;
     }
+    // Not before the check above: a second process that hands its request on
+    // and exits (every file opened from a file manager) writes nothing. Still
+    // before the event loop, whose first turn has the desktop portal look the
+    // entry up by this name.
+    apps::DesktopLauncher::sync_manager_entry();
     log_artifacts();
     if (!services_.open()) {
         return 1;
@@ -171,7 +208,7 @@ int App::run() {
         // opens on its own; a --launch click starts it anyway.
         const config::VmRecord* primary = services_.vms().primary();
         if (services_.manager_settings().bool_value(config::ManagerSettings::Key::kAutostart)
-            && primary != nullptr && cli_.launch_app_id.isEmpty()
+            && primary != nullptr && cli_.launch_app_id.isEmpty() && cli_.files.isEmpty()
             && !services_.lifecycle().is_running(primary->uuid)) {
             (void)services_.start_vm(primary->uuid);
         }
@@ -180,7 +217,14 @@ int App::run() {
     // Invoked as ``lsw-manager --launch <id>`` with no other manager
     // running: we are the primary and own the launch. Defer to a queued
     // slot so the event loop is up and the main window has shown.
-    if (!cli_.launch_app_id.isEmpty()) {
+    if (!cli_.files.isEmpty()) {
+        const QString id = cli_.launch_app_id;
+        const QStringList files = cli_.files;
+        const QString token = cli_.activation_token;
+        QMetaObject::invokeMethod(
+            this, [this, id, files, token] { on_open_documents_request(id, files, token); },
+            Qt::QueuedConnection);
+    } else if (!cli_.launch_app_id.isEmpty()) {
         const QString id = cli_.launch_app_id;
         const QString token = cli_.activation_token;
         QMetaObject::invokeMethod(this, [this, id, token] { on_launch_app_request(id, token); },
@@ -269,6 +313,15 @@ int App::capture_screens(const QString& dir) {
                                      services_.status().last_boot_ms()};
         splash.reach(manager::LaunchSplash::Phase::MachineStarted);
         shoot(&splash, QStringLiteral("dialog-5-starting"));
+
+        manager::OpenDocumentDialog open_document{
+            {QStringLiteral("/home/accel/Documents/work/report.xlsx")},
+            {QStringLiteral("/home/accel/Documents/work")},
+            QStringLiteral("Excel"),
+            true,
+            0};
+        open_document.resize(560, 290);
+        shoot(&open_document, QStringLiteral("dialog-6-open-document"));
     }
 
     auto* wiz = new wizard::Wizard(services_);
@@ -312,18 +365,7 @@ void App::show_wizard() {
 }
 
 void App::show_main_window() {
-    if (main_window_ == nullptr) {
-        main_window_ = new manager::MainWindow(services_);
-        // A manager opened on a machine with no guest offers the wizard,
-        // which is the application's flow rather than the window's.
-        connect(main_window_, &manager::MainWindow::wizard_requested, this,
-                &App::show_wizard);
-        connect(main_window_, &manager::MainWindow::launch_requested, this,
-                [this](const QString& app_id) { on_launch_app_request(app_id, QString()); });
-        connect(main_window_, &manager::MainWindow::reinstall_requested, this,
-                &App::on_reinstall_request);
-    }
-    ui::Widgets::bring_to_front(main_window_);
+    ui::Widgets::bring_to_front(&main_window());
 }
 
 void App::start_mcp_server() {
@@ -390,6 +432,11 @@ void App::on_raise_request() {
         return;
     }
     ui::Widgets::bring_to_front(w);
+}
+
+void App::on_open_documents_request(const QString& app_id, const QStringList& files,
+                                    const QString& activation_token) {
+    document_opener().open(app_id, files, activation_token);
 }
 
 void App::on_launch_app_request(const QString& app_id, const QString& activation_token) {

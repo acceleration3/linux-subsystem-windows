@@ -103,6 +103,7 @@ set(_lsw_agent_rpc_sources
     src/rpc/handlers/apps/open_package.cpp
     src/rpc/handlers/apps/list_store_apps.cpp
     src/rpc/handlers/apps/launch_store_app.cpp
+    src/rpc/handlers/apps/file_handler.cpp
     src/rpc/handlers/window/start_window_mirror.cpp
     src/rpc/handlers/window/list_windows.cpp
     src/rpc/handlers/window/close_window.cpp
@@ -171,6 +172,8 @@ set(_lsw_agent_apps_sources
     src/apps/app_installer_window.cpp
     src/apps/store_apps.cpp
     src/apps/catalog.cpp
+    src/apps/program_command.cpp
+    src/apps/file_associations.cpp
     src/apps/launch_group.cpp
     src/apps/launch_command.cpp
     src/apps/launcher.cpp

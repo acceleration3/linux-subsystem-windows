@@ -43,6 +43,15 @@ public:
     // and the alternatives are all worse: a machine-wide variable
     // reaches every process and needs a logon to take effect, and a
     // batch wrapper hides the real executable from the launch tracking.
+    // ``documents`` are Windows paths the application is to open. They
+    // follow the arguments, each quoted, and are not expanded: a literal
+    // ``%`` in a file name must reach the program as it is. An
+    // application already running is not reused for them, as it is not
+    // for ``args``, and one that can only be started through the shell
+    // fails rather than lose them.
+    // ``image_out`` gets the program that was started once a shortcut is
+    // resolved and its variables expanded: what a window mirror matches a
+    // second process of the same application by.
     // ``visible_pids`` is the target session's titled-window owners. In Open
     // mode a process without a visible window needs its normal activation command.
     [[nodiscard]] static bool launch(const std::string& app_id, const std::string& args,
@@ -50,7 +59,9 @@ public:
                                      unsigned long* pid_out = nullptr,
                                      std::string* error_out = nullptr,
                                       Mode mode = Mode::NewInstance,
-                                      const std::vector<unsigned long>& visible_pids = {});
+                                      const std::vector<unsigned long>& visible_pids = {},
+                                      const std::vector<std::string>& documents = {},
+                                      std::wstring* image_out = nullptr);
 };
 
 }  // namespace lsw::agent::apps

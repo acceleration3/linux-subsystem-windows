@@ -102,6 +102,14 @@ void StatusHub::on_stats(const QUuid& uuid, const vm::VmStats& stats) {
     const bool was_running = vm_.stats.running;
     const bool was_online = vm_.stats.agent_reachable;
     vm_.stats = stats;
+    const int previous_boot = vm_.domain_id;
+    vm_.domain_id = stats.running ? lifecycle_.domain_id(uuid) : -1;
+    if (vm_.domain_id != previous_boot && previous_boot != -1 && vm_.domain_id != -1) {
+        // A boot the readings never saw end: what belongs to the last one
+        // (the USB devices handed over, the definition read) is the new one's
+        // to learn again.
+        definition_read_ = false;
+    }
     if (!definition_read_ || stats.running != definition_live_) {
         read_definition();
     }

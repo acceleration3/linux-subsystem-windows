@@ -9,12 +9,13 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace lsw::agent::rpc::handlers {
 
 // ``launch_store_app``: activate a packaged application by its ID.
 //
-//   params: aumid, args?, session?
+//   params: aumid, args?, documents? (Windows paths to open), session?
 //   reply:  {ok, pid}
 //
 // The process is started by Windows' activation broker, not by the
@@ -26,9 +27,17 @@ struct LaunchStoreAppHandler : RpcHandler {
     nlohmann::json handle(const nlohmann::json& params, RpcContext& /*ctx*/) override {
         const auto aumid = Params{params, linkproto::cmd::kLaunchStoreApp}.require_string("aumid");
         const auto args = params.value("args", std::string{});
+        std::vector<std::wstring> documents;
+        if (const auto it = params.find("documents"); it != params.end() && it->is_array()) {
+            for (const auto& document : *it) {
+                if (document.is_string() && !document.get<std::string>().empty()) {
+                    documents.push_back(util::TextEncoding::to_wide(document.get<std::string>()));
+                }
+            }
+        }
         const win::Apartment apartment(win::Apartment::Model::SingleThreaded);
-        const unsigned long pid = apps::StoreApps::activate(util::TextEncoding::to_wide(aumid),
-                                                            util::TextEncoding::to_wide(args));
+        const unsigned long pid = apps::StoreApps::activate(
+            util::TextEncoding::to_wide(aumid), util::TextEncoding::to_wide(args), documents);
         return {{"ok", true},
                 {"pid", static_cast<std::uint64_t>(pid)},
                 {"pid_created", pid != 0 ? win::ProcessInfo::creation_time_of(pid) : std::uint64_t{0}}};

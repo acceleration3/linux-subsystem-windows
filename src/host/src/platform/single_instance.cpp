@@ -72,12 +72,31 @@ bool SingleInstance::launch_app_existing(const QString& app_id, const QString& a
     return reply.type() == QDBusMessage::ReplyMessage;
 }
 
+bool SingleInstance::open_documents_existing(const QString& app_id, const QStringList& files,
+                                             const QString& activation_token) {
+    auto bus = QDBusConnection::sessionBus();
+    if (!bus.isConnected()) {
+        return false;
+    }
+    QDBusInterface ifc{kBusName, kObjectPath, kInterface, bus};
+    if (!ifc.isValid()) {
+        return false;
+    }
+    auto reply = ifc.call("open_documents", app_id, files, activation_token);
+    return reply.type() == QDBusMessage::ReplyMessage;
+}
+
 void SingleInstance::raise() {
     Q_EMIT raise_requested();
 }
 
 void SingleInstance::launch_app(const QString& app_id, const QString& activation_token) {
     Q_EMIT launch_app_requested(app_id, activation_token);
+}
+
+void SingleInstance::open_documents(const QString& app_id, const QStringList& files,
+                                    const QString& activation_token) {
+    Q_EMIT open_documents_requested(app_id, files, activation_token);
 }
 
 }  // namespace lsw::host::platform

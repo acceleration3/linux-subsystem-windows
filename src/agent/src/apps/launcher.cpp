@@ -105,7 +105,8 @@ bool has_application_window(unsigned long pid, const std::vector<unsigned long>&
 bool Launcher::launch(const std::string& app_id, const std::string& extra_args,
                       const std::vector<EnvVar>& env, const win::RunAs& as, unsigned long* pid_out,
                       std::string* error_out, Mode mode,
-                      const std::vector<unsigned long>& visible_pids) {
+                      const std::vector<unsigned long>& visible_pids,
+                      const std::vector<std::string>& documents, std::wstring* image_out) {
     if (pid_out != nullptr) {
         *pid_out = 0;
     }
@@ -138,12 +139,15 @@ bool Launcher::launch(const std::string& app_id, const std::string& extra_args,
     // against the identity the process will run as: %APPDATA% is the
     // user's, not the service's.
     path = as.expand(path);
+    if (image_out != nullptr) {
+        *image_out = path;
+    }
     working_dir = as.expand(working_dir);
     args = as.expand(args);
     // Never consume a document/profile argument or pretend environment overrides
     // were applied to an existing process. Match the full image, not its basename.
     std::optional<unsigned long> existing;
-    if (mode == Mode::Open && args.empty() && extra_args.empty() && env.empty() &&
+    if (mode == Mode::Open && args.empty() && extra_args.empty() && documents.empty() && env.empty() &&
         util::WideString::iends_with(path, L".exe")) {
         existing = existing_process(path, as);
         if (existing && has_application_window(*existing, visible_pids)) {
@@ -194,6 +198,14 @@ bool Launcher::launch(const std::string& app_id, const std::string& extra_args,
             args += L" ";
         }
         args += extra;
+    }
+    // The documents last, after the arguments, and as they are: not
+    // expanded, so a ``%`` in a file name survives.
+    for (const std::string& document : documents) {
+        if (!args.empty()) {
+            args += L" ";
+        }
+        args += win::Process::quote(util::TextEncoding::to_wide(document));
     }
     const LaunchCommand command(path, as.expand(L"%windir%"), args);
     const auto& cmdline = command.command_line;
@@ -246,6 +258,12 @@ bool Launcher::launch(const std::string& app_id, const std::string& extra_args,
         // environment. Nothing can be done about that from here — a
         // packaged app is started by the shell by definition — so it is
         // logged rather than silently ignored.
+        if (!documents.empty()) {
+            set_err(error_out, "launch: " + app_id + " cannot be started directly (CreateProcess err=" +
+                                   win::ErrorText::win32(err) +
+                                   "), and the shell fallback cannot open documents with it");
+            return false;
+        }
         if (!env.empty()) {
             LSW_AGENT_WARN("launch: environment overrides are lost on the shell "
                            "fallback path (packaged app / alias / document)");

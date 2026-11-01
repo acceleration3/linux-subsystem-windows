@@ -1,5 +1,6 @@
 #include "lsw/agent/apps/upload_store.hpp"
 
+#include "lsw/linkproto/file_name.hpp"
 #include "lsw/linkproto/file_transfer.hpp"
 
 #include <random>
@@ -74,10 +75,17 @@ void UploadStore::reap() {
     }
 }
 
-std::string UploadStore::begin(const std::string& name, std::uint64_t size) {
-    validate_name(name);
-    if (size == 0 || size > linkproto::kMaxUploadBytes)
-        throw std::invalid_argument("file must be between 1 byte and 16 GiB");
+std::string UploadStore::begin(const std::string& name, std::uint64_t size, bool document) {
+    if (document) {
+        if (!linkproto::WindowsFileName::legal(name))
+            throw std::invalid_argument("not a name Windows can create");
+        if (size > linkproto::kMaxUploadBytes)
+            throw std::invalid_argument("file must be at most 16 GiB");
+    } else {
+        validate_name(name);
+        if (size == 0 || size > linkproto::kMaxUploadBytes)
+            throw std::invalid_argument("file must be between 1 byte and 16 GiB");
+    }
     std::lock_guard lock(mutex_);
     reap();
     if (uploads_.size() >= 8)
@@ -96,6 +104,7 @@ std::string UploadStore::begin(const std::string& name, std::uint64_t size) {
         discard(upload);
         throw std::runtime_error("cannot create guest upload file");
     }
+    upload.document = document;
     upload.size = size;
     upload.touched = std::chrono::steady_clock::now();
     uploads_.emplace(id, std::move(upload));
@@ -130,6 +139,16 @@ std::filesystem::path UploadStore::finish(const std::string& id) {
         throw std::runtime_error("cannot flush guest upload file");
     std::filesystem::rename(upload.directory / "upload.part", upload.destination);
     auto path = upload.destination;
+    if (upload.document) {
+        // Read-only, so the application says so when it is saved to: the
+        // copy is the application's to read, and what it writes would only
+        // stay here.
+        std::error_code error;
+        std::filesystem::permissions(path,
+                                     std::filesystem::perms::owner_write | std::filesystem::perms::group_write |
+                                         std::filesystem::perms::others_write,
+                                     std::filesystem::perm_options::remove, error);
+    }
     uploads_.erase(id);
     return path;
 }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QString>
+#include <QStringList>
 
 namespace lsw::host::app {
 
@@ -36,6 +37,13 @@ struct CliOptions {
     // out of the environment as it is read, so nothing started later
     // inherits a token that has been used.
     QString activation_token;
+
+    // The files named on the command line, to open in Windows: absolute
+    // local paths that exist, which is all CliParser lets through. A file
+    // manager gives them to an entry's ``%F``. With ``--launch`` they are
+    // opened with that application, without with the program Windows has
+    // for their type.
+    QStringList files;
 
     // --reinstall: the first-run wizard over a guest that already
     // exists, which is what the settings page's Reinstall starts. The

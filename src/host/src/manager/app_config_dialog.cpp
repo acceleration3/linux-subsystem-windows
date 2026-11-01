@@ -1,6 +1,7 @@
 #include "lsw/host/manager/app_config_dialog.hpp"
 
 #include "lsw/base/log.hpp"
+#include "lsw/host/apps/desktop_launcher.hpp"
 #include "lsw/host/link/agent_reply.hpp"
 #include "lsw/host/link/agent_rpc_client.hpp"
 #include "lsw/host/manager/remote_file_dialog.hpp"
@@ -12,6 +13,7 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QHBoxLayout>
+#include <QMessageBox>
 #include <QPushButton>
 #include <QPixmap>
 #include <QVBoxLayout>
@@ -185,12 +187,40 @@ AppConfigDialog::AppConfigDialog(apps::AppConfig initial, link::AgentRpcClient& 
     publish_box_->setChecked(cfg_.publish_entry);
     form->addWidget(publish_box_);
 
+    // What Windows says this program opens, read by the agent: not edited
+    // here, because it is Windows' to say. The button makes the entry the
+    // one a double click uses; nothing else does that.
+    auto* found_row = new QWidget;
+    auto* found_layout = new QHBoxLayout(found_row);
+    found_layout->setContentsMargins(0, 0, 0, 0);
+    found_layout->setSpacing(8);
+    auto* found = new QLineEdit(cfg_.file_extensions.isEmpty() ? QStringLiteral("-")
+                                                                : cfg_.file_extensions.join(QLatin1Char(' ')));
+    found->setReadOnly(true);
+    found->setCursorPosition(0);
+    make_default_ = new QPushButton(QStringLiteral("Make it the default"));
+    // The entry has to exist for the desktop to be told anything about it.
+    // The types need not be ones it declares: an explicit default is
+    // honoured whatever the entry says.
+    const bool declared = !cfg_.id.isEmpty() && cfg_.publish_entry && apps::DesktopLauncher::publishing() &&
+                          !apps::DesktopLauncher::mime_types_of(cfg_).isEmpty();
+    make_default_->setEnabled(declared);
+    make_default_->setToolTip(declared ? QStringLiteral("Make a double click on these files start this application")
+                                       : QStringLiteral("Needs file types Windows lists for it, and an entry in your menu"));
+    found_layout->addWidget(found, 1);
+    found_layout->addWidget(make_default_);
+    fields.add(QStringLiteral("Opens these file types"), found_row);
+    fields.add_note(QStringLiteral("Found in Windows. Types nothing on this machine opens start this "
+                                   "application on a double click; Make it the default also does it "
+                                   "for the rest."));
+    connect(make_default_, &QPushButton::clicked, this, [this] { make_default(); });
+
     mime_edit_ = new QLineEdit(cfg_.mime_types.split(QLatin1Char('\n'),
                                                      Qt::SkipEmptyParts)
                                    .join(QStringLiteral(", ")));
     mime_edit_->setPlaceholderText(
-        QStringLiteral("image/vnd.adobe.photoshop, application/x-ms-dos-executable"));
-    fields.add(QStringLiteral("Opens file types"), mime_edit_);
+        QStringLiteral("Optional, added to the ones found: image/vnd.adobe.photoshop"));
+    fields.add(QStringLiteral("MIME types"), mime_edit_);
 
     root->addLayout(form);
     root->addStretch(1);
@@ -224,6 +254,32 @@ AppConfigDialog::AppConfigDialog(apps::AppConfig initial, link::AgentRpcClient& 
     connect(&path_idle_timer_, &QTimer::timeout, this, &AppConfigDialog::on_path_idle);
 
     update_icon_preview();
+}
+
+void AppConfigDialog::make_default() {
+    // Every type it opens, not only the ones its entry declares.
+    const QStringList types = apps::DesktopLauncher::mime_types_of(cfg_);
+    if (types.isEmpty()) {
+        return;
+    }
+    QString question = QStringLiteral("Make %1 the application that opens %2 file types on a double click?")
+                           .arg(cfg_.name.isEmpty() ? QStringLiteral("this application") : cfg_.name)
+                           .arg(types.size());
+    if (!cfg_.file_extensions.isEmpty()) {
+        question += QStringLiteral("\n\n%1").arg(cfg_.file_extensions.join(QLatin1Char(' ')));
+    }
+    if (const auto current = apps::DesktopLauncher::default_handler(types.first())) {
+        question += QStringLiteral("\n\nFor %1 that is %2 now.")
+                        .arg(types.first(), current->name.isEmpty() ? current->entry : current->name);
+    }
+    if (QMessageBox::question(this, QStringLiteral("Make it the default"), question) != QMessageBox::Yes) {
+        return;
+    }
+    QString why;
+    if (!apps::DesktopLauncher::make_default(cfg_, &why)) {
+        QMessageBox::warning(this, QStringLiteral("Make it the default"),
+                             QStringLiteral("The default was not changed: %1").arg(why));
+    }
 }
 
 void AppConfigDialog::on_path_changed(const QString& /*text*/) {

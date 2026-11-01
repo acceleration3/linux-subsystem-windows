@@ -3,6 +3,7 @@
 #include <nlohmann/json.hpp>
 
 #include <string>
+#include <vector>
 
 namespace lsw::agent::apps {
 
@@ -19,7 +20,8 @@ class StoreApps {
 public:
     StoreApps() = delete;
 
-    // ``{"apps": [{"aumid", "name", "family", "icon_png_base64"}]}``,
+    // ``{"apps": [{"aumid", "name", "family", "extensions", "icon_png_base64"}]}``,
+    // ``extensions`` being the file types the application is registered for,
     // sorted by name, icons ``icon_size`` pixels square. ``only``
     // non-empty answers for that one ID.
     [[nodiscard]] static nlohmann::json list(int icon_size, const std::wstring& only);
@@ -27,8 +29,12 @@ public:
     // The started (or, for a single-instance application already
     // running, the existing) process. Throws std::runtime_error with
     // Windows' reason.
-    [[nodiscard]] static unsigned long activate(const std::wstring& aumid,
-                                                const std::wstring& args);
+    //
+    // ``documents`` (Windows paths) are opened with the application
+    // instead: a packaged application takes no file on a command line,
+    // only an activation for files, and ``args`` cannot go along.
+    [[nodiscard]] static unsigned long activate(const std::wstring& aumid, const std::wstring& args,
+                                                const std::vector<std::wstring>& documents = {});
 };
 
 }  // namespace lsw::agent::apps

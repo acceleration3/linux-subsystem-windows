@@ -1,6 +1,8 @@
 #include "lsw/agent/apps/store_apps.hpp"
 
+#include "lsw/agent/apps/file_associations.hpp"
 #include "lsw/agent/log.hpp"
+#include "lsw/agent/win/error_text.hpp"
 #include "lsw/agent/util/text_encoding.hpp"
 #include "lsw/agent/win/com_ptr.hpp"
 #include "lsw/agent/win/icon_extractor.hpp"
@@ -140,32 +142,77 @@ nlohmann::json StoreApps::list(int icon_size, const std::wstring& only) {
         return _wcsicmp(a.name.c_str(), b.name.c_str()) < 0;
     });
 
+    const auto associations = FileAssociations::scan();
     auto apps = nlohmann::json::array();
     for (const StoreApp& app : found) {
         const std::wstring family = app.aumid.substr(0, app.aumid.find(kFamilySeparator));
+        auto extensions = nlohmann::json::array();
+        for (const std::wstring& extension : FileAssociations::of(associations, app.aumid)) {
+            extensions.push_back(util::TextEncoding::to_utf8(extension));
+        }
         apps.push_back({{"aumid", util::TextEncoding::to_utf8(app.aumid)},
                         {"name", util::TextEncoding::to_utf8(app.name)},
                         {"family", util::TextEncoding::to_utf8(family)},
+                        {"extensions", std::move(extensions)},
                         {"icon_png_base64", app.icon}});
     }
     return {{"apps", std::move(apps)}};
 }
 
-unsigned long StoreApps::activate(const std::wstring& aumid, const std::wstring& args) {
+namespace {
+
+// The shell items for ``paths``, as ActivateForFile wants them.
+win::ComPtr<IShellItemArray> items_of(const std::vector<std::wstring>& paths) {
+    std::vector<PIDLIST_ABSOLUTE> ids;
+    HRESULT hr = S_OK;
+    for (const std::wstring& path : paths) {
+        PIDLIST_ABSOLUTE id = nullptr;
+        hr = ::SHParseDisplayName(path.c_str(), nullptr, &id, 0, nullptr);
+        if (FAILED(hr) || id == nullptr) {
+            for (PIDLIST_ABSOLUTE made : ids) ::CoTaskMemFree(made);
+            throw std::runtime_error("Windows cannot find " + util::TextEncoding::to_utf8(path) +
+                                     ": " + win::ErrorText::hresult(hr));
+        }
+        ids.push_back(id);
+    }
+    win::ComPtr<IShellItemArray> array;
+    hr = ::SHCreateShellItemArrayFromIDLists(static_cast<UINT>(ids.size()),
+                                             const_cast<PCIDLIST_ABSOLUTE_ARRAY>(ids.data()),
+                                             array.GetAddressOf());
+    for (PIDLIST_ABSOLUTE made : ids) ::CoTaskMemFree(made);
+    if (FAILED(hr)) {
+        throw std::runtime_error("cannot hand the documents to Windows: " + win::ErrorText::hresult(hr));
+    }
+    return array;
+}
+
+}  // namespace
+
+unsigned long StoreApps::activate(const std::wstring& aumid, const std::wstring& args,
+                                  const std::vector<std::wstring>& documents) {
     win::ComPtr<IApplicationActivationManager> activation;
     HRESULT hr = ::CoCreateInstance(kApplicationActivationManager, nullptr, CLSCTX_LOCAL_SERVER,
                                     IID_PPV_ARGS(activation.GetAddressOf()));
     if (FAILED(hr)) {
-        throw std::runtime_error("cannot reach Windows' application activation: " + hresult_text(hr));
+        throw std::runtime_error("cannot reach Windows' application activation: " + win::ErrorText::hresult(hr));
     }
     const std::wstring family = aumid.substr(0, aumid.find(kFamilySeparator));
     const bool was_running = !family_processes(family).empty();
     DWORD pid = 0;
-    hr = activation->ActivateApplication(aumid.c_str(), args.empty() ? nullptr : args.c_str(),
-                                         AO_NONE, &pid);
+    if (!documents.empty()) {
+        if (!args.empty()) {
+            LSW_AGENT_WARN("store app {}: arguments cannot go along with documents; dropped",
+                           util::TextEncoding::to_utf8(aumid));
+        }
+        const auto items = items_of(documents);
+        hr = activation->ActivateForFile(aumid.c_str(), items.Get(), L"open", &pid);
+    } else {
+        hr = activation->ActivateApplication(aumid.c_str(),
+                                             args.empty() ? nullptr : args.c_str(), AO_NONE, &pid);
+    }
     if (FAILED(hr)) {
         throw std::runtime_error("Windows could not start " + util::TextEncoding::to_utf8(aumid) +
-                                 ": " + hresult_text(hr));
+                                 ": " + win::ErrorText::hresult(hr));
     }
     // Already running, a single-instance application starts a process that
     // passes the activation to the running one and exits; the instance to

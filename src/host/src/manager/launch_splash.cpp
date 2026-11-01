@@ -233,6 +233,10 @@ void LaunchSplash::resume() {
     tick();
 }
 
+void LaunchSplash::say(const QString& what) {
+    subtitle_->setText(what);
+}
+
 void LaunchSplash::fail(const QString& reason) {
     ticker_.stop();
     bar_->setRange(0, 1);

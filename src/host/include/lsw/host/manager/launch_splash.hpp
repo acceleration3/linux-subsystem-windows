@@ -49,6 +49,8 @@ public:
     // Waiting again, from now: "Keep waiting", or a restart under way.
     void resume();
     void fail(const QString& reason);
+    // What the wait is on right now, in words, under the application's name.
+    void say(const QString& what);
 
 Q_SIGNALS:
     void cancelled();

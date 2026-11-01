@@ -136,6 +136,10 @@ public:
     // Drive letters not already taken by a share, in the order a
     // person would pick them.
     [[nodiscard]] QStringList free_drive_letters() const;
+    // The same for any list of shares, such as one staged and not yet
+    // stored: two folders added before an Apply would otherwise both be
+    // offered Z:.
+    [[nodiscard]] static QStringList free_drive_letters(const QVector<HostShare>& shares);
 
     // The file the settings are stored in.
     [[nodiscard]] QString file_path() const;

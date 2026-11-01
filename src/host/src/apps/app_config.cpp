@@ -60,6 +60,11 @@ QString AppConfig::to_json() const {
     j["last_seen_unix"] = static_cast<std::int64_t>(last_seen_unix);
     j["publish_entry"] = publish_entry;
     j["mime_types"] = mime_types.toStdString();
+    auto extensions = json::array();
+    for (const QString& extension : file_extensions) {
+        extensions.push_back(extension.toStdString());
+    }
+    j["file_extensions"] = std::move(extensions);
     return QString::fromStdString(j.dump(2));
 }
 
@@ -90,6 +95,13 @@ AppConfig AppConfig::from_json(const QString& s, bool* ok) {
     out.last_seen_unix = j.value("last_seen_unix", static_cast<std::int64_t>(0));
     out.publish_entry = j.value("publish_entry", true);
     out.mime_types = QString::fromStdString(j.value("mime_types", std::string{}));
+    if (const auto it = j.find("file_extensions"); it != j.end() && it->is_array()) {
+        for (const auto& extension : *it) {
+            if (extension.is_string()) {
+                out.file_extensions << QString::fromStdString(extension.get<std::string>());
+            }
+        }
+    }
     if (ok != nullptr) {
         *ok = !out.id.isEmpty();
     }

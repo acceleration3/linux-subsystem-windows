@@ -1,0 +1,108 @@
+#include "lsw/agent/apps/program_command.hpp"
+#include "lsw/agent/rpc/auto_register.hpp"
+#include "lsw/agent/rpc/handler.hpp"
+#include "lsw/agent/rpc/params.hpp"
+#include "lsw/agent/util/text_encoding.hpp"
+#include "lsw/agent/util/wide_string.hpp"
+#include "lsw/linkproto/commands.hpp"
+
+// clang-format off
+#include <windows.h>
+#include <shlwapi.h>
+// clang-format on
+
+#include <stdexcept>
+#include <string>
+
+namespace lsw::agent::rpc::handlers {
+
+namespace {
+
+// One of the shell's answers about a file type, empty when it has none.
+std::wstring associated(ASSOCSTR what, const std::wstring& extension) {
+    DWORD length = 0;
+    const ASSOCF flags = ASSOCF_NOTRUNCATE | ASSOCF_REMAPRUNDLL;
+    const HRESULT sized = ::AssocQueryStringW(flags, what, extension.c_str(), L"open", nullptr, &length);
+    if (sized != S_FALSE && FAILED(sized)) {
+        return {};
+    }
+    if (length == 0) {
+        return {};
+    }
+    std::wstring text(length, L'\0');
+    if (FAILED(::AssocQueryStringW(flags, what, extension.c_str(), L"open", text.data(), &length))) {
+        return {};
+    }
+    text.resize(wcsnlen(text.c_str(), text.size()));
+    return text;
+}
+
+}  // namespace
+
+// ``file_handler``: the program Windows opens a file with.
+//
+//   params: path (a Windows path, or just an extension), session?
+//   reply:  {exe_path | aumid, name}; an error when nothing is registered
+//
+// Asked in the user's session because the answer is the user's: their
+// choice of default overrides the machine's.
+struct FileHandlerHandler : RpcHandler {
+    [[nodiscard]] Placement placement() const override { return Placement::UserSession; }
+
+    nlohmann::json handle(const nlohmann::json& params, RpcContext& /*ctx*/) override {
+        const std::wstring path = util::TextEncoding::to_wide(
+            Params{params, linkproto::cmd::kFileHandler}.require_string("path"));
+        const auto dot = path.find_last_of(L'.');
+        const auto slash = path.find_last_of(L"\\/");
+        if (dot == std::wstring::npos || (slash != std::wstring::npos && dot < slash) ||
+            dot + 1 == path.size()) {
+            throw std::runtime_error("the file has no extension, so Windows has no program for it");
+        }
+        const std::wstring extension = util::WideString::lower(path.substr(dot));
+
+        const std::wstring name = associated(ASSOCSTR_FRIENDLYAPPNAME, extension);
+        // A packaged handler has an application ID of the form
+        // family!application; any other handler's is not one.
+        if (const std::wstring aumid = associated(ASSOCSTR_APPID, extension);
+            aumid.find(L'!') != std::wstring::npos) {
+            return {{"aumid", util::TextEncoding::to_utf8(aumid)},
+                    {"name", util::TextEncoding::to_utf8(name)}};
+        }
+        // The verb's command line says what comes before the document: a
+        // .jar is opened by ``java.exe -jar "%1"``, and the program alone
+        // would start java with a document it takes for a class name.
+        const auto command = apps::ProgramCommand::split_for_document(
+            associated(ASSOCSTR_COMMAND, extension));
+        std::wstring exe = command.program.empty() ? associated(ASSOCSTR_EXECUTABLE, extension) : command.program;
+        if (exe.empty()) {
+            throw std::runtime_error("no program is registered for " +
+                                     util::TextEncoding::to_utf8(extension) + " files");
+        }
+        if (util::WideString::iends_with(exe, L"\\rundll32.exe") || util::WideString::lower(exe) == L"rundll32.exe") {
+            // Opened by a DLL's entry point, which no command line of ours
+            // can reach with a path.
+            throw std::runtime_error(util::TextEncoding::to_utf8(extension) +
+                                     " files are opened by rundll32, which cannot be asked to open a file from here");
+        }
+        // What Windows falls back to for a type nothing handles: its picker,
+        // whose choice starts a process no mirror follows.
+        if (util::WideString::iends_with(exe, L"\\openwith.exe") || util::WideString::lower(exe) == L"openwith.exe") {
+            throw std::runtime_error("no program is registered for " +
+                                     util::TextEncoding::to_utf8(extension) + " files");
+        }
+        nlohmann::json reply = {{"exe_path", util::TextEncoding::to_utf8(exe)},
+                                {"name", util::TextEncoding::to_utf8(name)}};
+        if (!command.leading_args.empty()) {
+            reply["args"] = util::TextEncoding::to_utf8(command.leading_args);
+        }
+        return reply;
+    }
+
+    [[nodiscard]] std::string summarize(const nlohmann::json& reply) const override {
+        return reply.value("exe_path", reply.value("aumid", std::string{}));
+    }
+};
+
+}  // namespace lsw::agent::rpc::handlers
+
+LSW_REGISTER_RPC(lsw::agent::rpc::handlers::FileHandlerHandler, ::lsw::linkproto::cmd::kFileHandler)

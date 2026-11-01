@@ -123,4 +123,22 @@ std::vector<std::wstring> RegKey::subkey_names() const {
     return names;
 }
 
+std::vector<std::wstring> RegKey::value_names() const {
+    std::vector<std::wstring> names;
+    // 16383 characters is the registry's own limit on a value name.
+    std::wstring name(16384, L'\0');
+    for (DWORD index = 0;; ++index) {
+        DWORD length = static_cast<DWORD>(name.size());
+        const LSTATUS rc = ::RegEnumValueW(key_.get(), index, name.data(), &length, nullptr, nullptr,
+                                           nullptr, nullptr);
+        if (rc == ERROR_NO_MORE_ITEMS) {
+            break;
+        }
+        if (rc == ERROR_SUCCESS) {
+            names.emplace_back(name.data(), length);
+        }
+    }
+    return names;
+}
+
 }  // namespace lsw::agent::win

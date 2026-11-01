@@ -48,7 +48,10 @@ const QHash<QString, QVariant>& defaults() {
 
         {K::kPublishEntries, true},
         {K::kMenuCategory, QStringLiteral("Windows")},
-        {K::kFileAssociations, false},
+        // On: Windows applications are the handlers of the file types nothing
+        // on the host handles, and no default is touched.
+        {K::kFileAssociations, true},
+
 
         {K::kAutostart, false},
 
@@ -183,8 +186,12 @@ void ManagerSettings::set_host_shares(const QVector<HostShare>& shares) {
 }
 
 QStringList ManagerSettings::free_drive_letters() const {
+    return free_drive_letters(host_shares());
+}
+
+QStringList ManagerSettings::free_drive_letters(const QVector<HostShare>& shares) {
     QStringList taken;
-    for (const auto& share : host_shares()) {
+    for (const auto& share : shares) {
         taken << share.drive.toUpper();
     }
     QStringList out;

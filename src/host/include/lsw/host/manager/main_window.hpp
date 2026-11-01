@@ -1,6 +1,8 @@
 #pragma once
 
 #include "lsw/host/config/display_modes.hpp"
+#include "lsw/host/config/vm_record.hpp"
+#include "lsw/host/manager/guest_restart.hpp"
 #include "lsw/host/manager/nav_rail.hpp"
 
 #include <QMainWindow>
@@ -48,6 +50,14 @@ public:
     // hands off to another.
     void show_page(NavRail::Page page);
 
+    // Rewrite the definition, then stop the guest - waiting until it is
+    // off, forcing it at a deadline - and start it on the new one; just
+    // start it when it is off. The apply bar's restart, and what opening a
+    // file from a folder that is not shared yet asks for once the folder is.
+    // ``reason`` gets why when it is refused. A restart already under way
+    // takes the new definition too: it is rewritten again before the start.
+    RestartResult restart_guest(QString* reason = nullptr);
+
 Q_SIGNALS:
     // There is no guest, and the only thing that leads anywhere is the
     // wizard. The application owns that flow, not this window.
@@ -89,10 +99,10 @@ private:
     void push_dpi();
     // The monitor this window is on, for "match the monitor".
     [[nodiscard]] std::optional<config::DisplayMode> current_output() const;
-    // Rewrite the definition, then stop the guest — waiting until it is
-    // off, forcing it at a deadline — and start it on the new one.
-    void restart_guest();
     void on_graphics_changed();
+    // The definition from the settings, rewritten; false (with a notice) when
+    // libvirt refuses it.
+    [[nodiscard]] bool redefine_now(const config::VmRecord& primary);
 
     services::HostServices& services_;
 
@@ -123,6 +133,8 @@ private:
     // written straight into the bar would be gone two seconds later.
     // Failures are notices, not this.
     QString notice_;
+    // A restart was asked for while one was under way.
+    bool redefine_again_ = false;
     // A failure that keeps the guest from starting, as a notice.
     void notice_start_refused(const QString& headline);
     // The launch failures of applications, as notices until they open.

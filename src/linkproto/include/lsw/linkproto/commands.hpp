@@ -43,6 +43,11 @@ inline constexpr const char* kGetIcon  = "get_icon";
 // helper, since packages are per user.
 inline constexpr const char* kListStoreApps  = "list_store_apps";
 inline constexpr const char* kLaunchStoreApp = "launch_store_app";
+// ``launch`` and ``launch_store_app`` take ``documents``, an array of
+// Windows paths the application is to open. ``file_handler`` answers
+// which program Windows opens a file with: ``{exe_path | aumid, name}``
+// for a ``path``, an error when none is registered.
+inline constexpr const char* kFileHandler    = "file_handler";
 
 // -- browsing the guest ---------------------------------------------------
 // The manager's file picker. ``list_dir`` takes a Windows path and a

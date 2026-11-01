@@ -3,9 +3,11 @@
 #include "lsw/host/apps/app_config.hpp"
 #include "lsw/host/apps/catalog.hpp"
 
+#include <QHash>
 #include <QList>
 #include <QObject>
 #include <QString>
+#include <QStringList>
 
 namespace lsw::host::apps {
 
@@ -48,7 +50,12 @@ public:
     // configs the user created or edited (``discovered_via_agent ==
     // false``) are left alone. Emits ``changed`` if anything was
     // added, modified or removed.
+    // The file types an entry handles are refreshed by its target for every
+    // config, the user's edits included: they are Windows's to say.
     void merge_from_agent(const QList<AppEntry>& entries);
+
+    // The same for packaged applications, by lowercase AUMID.
+    void set_store_extensions(const QHash<QString, QStringList>& extensions);
 
 Q_SIGNALS:
     void changed();

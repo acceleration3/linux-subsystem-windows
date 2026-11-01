@@ -9,6 +9,7 @@
 //
 // Same hand-rolled style as the other tests in this repo.
 
+#include "lsw/agent/apps/program_command.hpp"
 #include "lsw/agent/core/command_line.hpp"
 #include "lsw/agent/install/job_id_generator.hpp"
 #include "lsw/agent/install/url_file_name.hpp"
@@ -469,6 +470,22 @@ void test_scale_steps() {
           "a step outside the display's range is its nearest end");
 }
 
+void test_document_command() {
+    using lsw::agent::apps::ProgramCommand;
+    const auto jar = ProgramCommand::split_for_document(L"\"C:\\Program Files\\Java\\bin\\java.exe\" -jar \"%1\" %*");
+    check(jar.program == L"C:\\Program Files\\Java\\bin\\java.exe" && jar.leading_args == L"-jar" && jar.placeholder,
+          "a .jar is java.exe with -jar before the document");
+    const auto excel = ProgramCommand::split_for_document(L"\"C:\\Office\\EXCEL.EXE\" \"%1\"");
+    check(excel.program == L"C:\\Office\\EXCEL.EXE" && excel.leading_args.empty() && excel.placeholder,
+          "a program that takes the document first has no leading arguments");
+    const auto plain = ProgramCommand::split_for_document(L"C:\\Windows\\notepad.exe %1");
+    check(plain.program == L"C:\\Windows\\notepad.exe" && plain.leading_args.empty(), "unquoted, as notepad is");
+    const auto many = ProgramCommand::split_for_document(L"\"X.exe\" /new \"C:\\a b\" /open %L /x");
+    check(many.leading_args == L"/new \"C:\\a b\" /open", "quoted arguments stay whole, what follows is dropped");
+    const auto none = ProgramCommand::split_for_document(L"");
+    check(none.program.empty() && !none.placeholder, "nothing in, nothing out");
+}
+
 }  // namespace
 
 int main() {
@@ -489,6 +506,7 @@ int main() {
     test_pending_calls();
     test_command_line();
     test_scale_steps();
+    test_document_command();
     std::printf("agent logic: %d checks passed\n", g_checks);
     return 0;
 }

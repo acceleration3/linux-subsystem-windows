@@ -749,6 +749,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
         <li><button data-view="m-splash">Starting the guest</button></li>
         <li><button data-view="m-cfg">Configure application</button></li>
         <li><button data-view="m-store">Add a store app</button></li>
+        <li><button data-view="m-opendoc">Windows can't see this file</button></li>
         <li><button data-view="m-picker">Browse the guest</button></li>
         <li><button data-view="m-empty">No guest yet</button></li>
       </ul>
@@ -1476,9 +1477,9 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
               <div class="srow">
                 <span>
                   <span class="k">Open Windows file types with these applications <span class="tagr live">now</span></span>
-                  <span class="d">Registers MIME handlers, so double clicking a .psd on the host opens it in the guest. Your existing default for a type is never replaced without asking.</span>
+                  <span class="d">Windows applications open the file types nothing on this machine handles. For the rest, use Make it the default in an application's settings.</span>
                 </span>
-                <span class="ctl"><span class="toggle"><i></i></span></span>
+                <span class="ctl"><span class="toggle on"><i></i></span></span>
               </div>
               <div class="srow">
                 <span>
@@ -1861,6 +1862,15 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
         </div>
         <div class="field"><label>Arguments</label><span class="input ph">Optional, passed after the executable</span></div>
         <div class="field"><label>Environment</label><span class="input" style="min-height:60px;line-height:1.7">__COMPAT_LAYER=HighDpiAware<br>TEMP=X:\scratch</span></div>
+        <div class="field">
+          <label>Opens these file types</label>
+          <span style="display:flex;gap:8px;align-items:center">
+            <span class="input" style="flex:1;color:var(--fg-dim)">.xlsx .xlsm .csv</span>
+            <button class="btn">Make it the default</button>
+          </span>
+          <span class="meta">Found in Windows. Types nothing on this machine opens start this application on a double click; Make it the default also does it for the rest.</span>
+        </div>
+        <div class="field"><label>MIME types</label><span class="input ph">Optional, one per line, added to the ones found</span></div>
       </div>
       <div class="dlg-foot">
         <button class="btn quiet">Remove</button>
@@ -1874,6 +1884,39 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
       <div class="note"><dt>No graphics fields</dt><dd>An application gets the guest's adapter the way it would get a physical card, so there is no channel or GPU to choose per application. One that wants the render-only GPU picks it itself, as it would between two cards.</dd></div>
       <div class="note"><dt>A store application</dt><dd>One added from the Microsoft Store has no path: Windows starts it by its Application User Model ID. The path field becomes <code>Store application</code>, showing that ID read-only with no Browse button, and Working folder and Environment are gone, because Windows' activation takes neither from whoever asks. Arguments stay. Replace icon asks Windows for the application's own logo again.</dd></div>
       <div class="note"><dt>Destructive left</dt><dd>Remove is separated from Cancel and Save, quiet by default, and confirms before it deletes the entry and its .desktop file.</dd></div>
+    </dl>
+  </section>
+
+  <!-- ─────────── MANAGER: OPEN A FILE WINDOWS CANNOT SEE ─────────── -->
+  <section data-view="m-opendoc" hidden>
+    <div class="stage-head">
+      <span class="eyebrow">Manager</span>
+      <h1>Windows can't see this file</h1>
+      <p>Shown when a file is opened from the host's file manager and its folder is not one of the folders shared with the guest. It names the file and its folder, and offers the two ways forward: share the folder, which restarts Windows once, or open a copy that stays in Windows.</p>
+    </div>
+
+    <div class="frame dlg" style="max-width:560px">
+      <div class="titlebar">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <span class="t">Windows can't see this file</span>
+      </div>
+      <div class="dlg-body">
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <span style="font-size:15px;font-weight:600">report.xlsx</span>
+          <span class="meta mono">/home/accel/Documents/work</span>
+        </div>
+        <span style="font-size:12.5px;color:var(--fg-dim);line-height:1.55">That folder is not shared with Windows. Share it and Excel opens the file itself, and saving writes it back here. Or open a read-only copy, which Windows keeps to itself.</span>
+        <span class="meta">Sharing needs Windows to restart, which closes the applications running in it. A copy's changes stay in Windows.</span>
+      </div>
+      <div class="dlg-foot">
+        <button class="btn">Cancel</button>
+        <button class="btn">Open a read-only copy</button>
+        <button class="btn primary">Share the folder and restart Windows</button>
+      </div>
+    </div>
+    <dl class="notes">
+      <div class="note"><dt>Several files</dt><dd>Files from several folders get one dialog that lists every folder. Sharing adds all of them; a copy is made of each file.</dd></div>
+      <div class="note"><dt>Nothing replaces your defaults</dt><dd>Opening a file this way never changes which application a file type opens with.</dd></div>
     </dl>
   </section>
 

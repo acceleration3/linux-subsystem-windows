@@ -4,6 +4,8 @@
 #include "lsw/agent/rpc/auto_register.hpp"
 #include "lsw/agent/rpc/handler.hpp"
 #include "lsw/agent/session/session_manager.hpp"
+#include "lsw/agent/util/text_encoding.hpp"
+#include "lsw/agent/util/wide_string.hpp"
 #include "lsw/agent/win/process_info.hpp"
 #include "lsw/agent/win/run_as.hpp"
 #include "lsw/agent/win/window.hpp"
@@ -16,7 +18,7 @@ namespace lsw::agent::rpc::handlers {
 
 // ``launch``: start an application.
 //
-//   params: app_id, args?, env?, session? (default: the console user's
+//   params: app_id, args?, documents? (Windows paths to open), env?, session? (default: the console user's
 //           session; 0 = SYSTEM in session 0), elevated? (default true)
 //   reply:  {ok, pid, job?, session, elevated, error?}
 struct LaunchHandler : RpcHandler {
@@ -34,6 +36,15 @@ struct LaunchHandler : RpcHandler {
             for (const auto& [name, value] : it->items()) {
                 if (!name.empty() && value.is_string()) {
                     env.emplace_back(name, value.get<std::string>());
+                }
+            }
+        }
+
+        std::vector<std::string> documents;
+        if (const auto it = params.find("documents"); it != params.end() && it->is_array()) {
+            for (const auto& document : *it) {
+                if (document.is_string() && !document.get<std::string>().empty()) {
+                    documents.push_back(document.get<std::string>());
                 }
             }
         }
@@ -63,8 +74,9 @@ struct LaunchHandler : RpcHandler {
                 }
             }
         }
+        std::wstring image;
         const bool ok = apps::Launcher::launch(app_id, args, env, as, &pid, &err, mode,
-                                              visible_pids);
+                                              visible_pids, documents, &image);
         nlohmann::json r = {{"ok", ok},
                             {"pid", static_cast<std::uint64_t>(pid)},
                             {"session", as.session()},
@@ -76,6 +88,11 @@ struct LaunchHandler : RpcHandler {
             if (const auto root = apps::LaunchGroup::root_of(pid); root != 0) {
                 r["job"] = apps::LaunchGroup::job_name(root);
             }
+        }
+        // The program, with a shortcut resolved, for the mirror to match the
+        // windows of a second process by.
+        if (ok && util::WideString::iends_with(image, L".exe")) {
+            r["image"] = util::TextEncoding::to_utf8(image);
         }
         if (!ok && !err.empty()) {
             r["error"] = err;

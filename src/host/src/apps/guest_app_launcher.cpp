@@ -15,12 +15,25 @@ namespace lsw::host::apps {
 GuestAppLauncher::GuestAppLauncher(link::AgentRpcClient& rpc, QObject* parent)
     : QObject(parent), rpc_(rpc) {}
 
-void GuestAppLauncher::launch(const apps::AppConfig& app, const QString& activation_token) {
+void GuestAppLauncher::launch(const apps::AppConfig& app, const QString& activation_token,
+                              const QStringList& documents) {
     const QString identity = key(app);
-    if (pending_.contains(identity))
+    if (pending_.contains(identity)) {
+        // A second request for what is already opening is the first's. Not
+        // when it carries documents: those are sent as soon as the agent
+        // has answered the one in flight, so the mirror of that launch is
+        // there to take them.
+        if (!documents.isEmpty()) {
+            Queued& queued = queued_[identity];
+            queued.app = app;
+            queued.activation_token = activation_token;
+            queued.documents << documents;
+        }
         return;
+    }
     const auto existing = mirrors_.value(identity);
-    if (existing && (!app.cmdline.trimmed().isEmpty() || !app.env.trimmed().isEmpty())) {
+    if (documents.isEmpty() && existing &&
+        (!app.cmdline.trimmed().isEmpty() || !app.env.trimmed().isEmpty())) {
         existing->raise(activation_token);
         Q_EMIT launched(app.target(), pids_.value(identity));
         return;
@@ -49,26 +62,36 @@ void GuestAppLauncher::launch(const apps::AppConfig& app, const QString& activat
     connect(
         launcher, &apps::Launcher::launched, this,
         [this, launcher, desktop_id, identity, existing, app_path = app.path, app_aumid = app.aumid,
-         executable, log_name, activation_token](const QString& path, quint32 pid, const QString& /*job*/,
-                                                  quint64 pid_created) {
+         executable, log_name, activation_token, documents](
+            const QString& path, quint32 pid, const QString& /*job*/, quint64 pid_created,
+            const QString& image) {
+            const bool has_documents = !documents.isEmpty();
             launcher->deleteLater();
             LSW_INFO("launch {}: opened, pid {}", path.toStdString(), pid);
             // Reopening a tray app must reach Windows too, so its normal
             // activation handoff runs. It still uses the same host mirror.
-            if (existing && mirrors_.value(identity) == existing && pids_.value(identity) == pid) {
+            //
+            // A document is opened by a process of its own, with a pid of its
+            // own, and the mirror already there is the one that shows its
+            // windows (by image and AppUserModelID): it is kept, whatever the
+            // pid, because dropping it would close the windows of every
+            // document opened before this one.
+            if (existing && mirrors_.value(identity) == existing &&
+                (has_documents || pids_.value(identity) == pid)) {
                 pending_.remove(identity);
                 existing->raise(activation_token);
                 Q_EMIT changed();
                 Q_EMIT launched(path, pid);
+                flush_queued(identity);
                 return;
             }
-            if (existing)
+            if (existing && !has_documents)
                 existing->deleteLater();
             // Without this the agent dutifully starts the application
             // inside the guest and nothing of it appears here: the
             // mirror is what carries its windows onto this desktop.
             const mirror::WindowMirror::Application application{
-                pid, executable ? app_path : QString(), app_aumid, desktop_id, log_name, activation_token,
+                pid, !image.isEmpty() ? image : executable ? app_path : QString(), app_aumid, desktop_id, log_name, activation_token,
                 output_source_ ? output_source_() : QString(), pid_created};
             auto* mirror = mirror::WindowMirror::of_application(rpc_, application, this);
             mirrors_.insert(identity, mirror);
@@ -79,13 +102,15 @@ void GuestAppLauncher::launch(const apps::AppConfig& app, const QString& activat
                 pending_.remove(identity);
                 Q_EMIT changed();
                 Q_EMIT launched(path, pid);
+                flush_queued(identity);
             });
             connect(mirror, &mirror::WindowMirror::failed, this,
-                    [this, identity, path](const QString& error) {
+                    [this, identity, path, documents](const QString& error) {
                         pending_.remove(identity);
                         forget(identity);
                         Q_EMIT changed();
-                        Q_EMIT failed(path, error);
+                        Q_EMIT failed(path, error, documents);
+                        flush_queued(identity);
                     });
             connect(mirror, &mirror::WindowMirror::finished, this, [this, identity, mirror] {
                 if (mirrors_.value(identity) == mirror) {
@@ -93,6 +118,9 @@ void GuestAppLauncher::launch(const apps::AppConfig& app, const QString& activat
                     pending_.remove(identity);
                     Q_EMIT changed();
                 }
+                // Documents that waited for this launch have no mirror to
+                // join now, and are opened with a new one rather than lost.
+                flush_queued(identity);
             });
             connect(mirror, &mirror::WindowMirror::finished, mirror, &QObject::deleteLater);
             if (!mirror->start()) {
@@ -100,16 +128,17 @@ void GuestAppLauncher::launch(const apps::AppConfig& app, const QString& activat
             }
         });
     connect(launcher, &apps::Launcher::failed, this,
-            [this, launcher, identity](const QString& path, const QString& error) {
+            [this, launcher, identity, documents](const QString& path, const QString& error) {
                 launcher->deleteLater();
                 pending_.remove(identity);
                 Q_EMIT changed();
                 LSW_WARN("launch {} failed: {}", path.toStdString(), error.toStdString());
-                Q_EMIT failed(path, error);
+                Q_EMIT failed(path, error, documents);
+                flush_queued(identity);
             });
     LSW_INFO("launch {}", app.target().toStdString());
     if (app.aumid.isEmpty()) {
-        launcher->launch(app.path, app.cmdline, app.env);
+        launcher->launch(app.path, app.cmdline, app.env, documents);
     } else if (!app.env.trimmed().isEmpty()) {
         // Activation starts the process from Windows' broker, which takes
         // no environment from whoever asked.
@@ -117,10 +146,19 @@ void GuestAppLauncher::launch(const apps::AppConfig& app, const QString& activat
         pending_.remove(identity);
         Q_EMIT changed();
         Q_EMIT failed(app.aumid, QStringLiteral("Store applications cannot take environment "
-                                                "overrides; remove them in Configure"));
+                                                "overrides; remove them in Configure"),
+                      documents);
     } else {
-        launcher->activate(app.aumid, app.cmdline);
+        launcher->activate(app.aumid, app.cmdline, documents);
     }
+}
+
+void GuestAppLauncher::flush_queued(const QString& identity) {
+    if (!queued_.contains(identity) || pending_.contains(identity)) {
+        return;
+    }
+    const Queued queued = queued_.take(identity);
+    launch(queued.app, queued.activation_token, queued.documents);
 }
 
 void GuestAppLauncher::identified(const QString& identity, const QString& aumid, const QString& path) {
@@ -139,6 +177,7 @@ void GuestAppLauncher::identified(const QString& identity, const QString& aumid,
     Q_EMIT changed();
     Q_EMIT launched(path, pids_.value(shown_by));
     if (!duplicate.isNull()) duplicate->deleteLater();
+    flush_queued(identity);
 }
 
 void GuestAppLauncher::forget(const QString& identity) {

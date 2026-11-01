@@ -104,6 +104,23 @@ existing process. A successful reply carries `pid`, `session`, `elevated`,
 and, when tracked, `job` naming the launch group that owns that process.
 The job's root need not be the returned process id.
 
+Both `launch` and `launch_store_app` take an optional `documents` array of
+Windows paths the application is to open. For `launch` they are appended to
+the command line after the arguments, each quoted and not expanded (a
+literal `%` in a file name reaches the program as written), and they
+prevent guest-side reuse as arguments do; an application that can only be
+started through the shell fallback fails with an error rather than lose
+them. For `launch_store_app` they are opened with
+`IApplicationActivationManager::ActivateForFile` on an `IShellItemArray`
+(a packaged application takes no file on a command line), and `args` is
+ignored.
+
+`file_handler` takes a `path` (a Windows path, or only an extension) and
+answers which program Windows opens it with, as the session's user has
+it: `{exe_path, name}`, or `{aumid, name}` for a packaged handler. It is an
+error reply when nothing is registered for the type. It runs in the user's
+session (the user's default overrides the machine's).
+
 LSW's UI shares pending/running launches between entry points. Opening an
 already mirrored bare app sends another reuse-enabled `launch` RPC to restore
 tray-hidden UI, then raises the same mirror. Configs with arguments or environment
