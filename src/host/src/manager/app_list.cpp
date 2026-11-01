@@ -10,15 +10,20 @@
 #include "lsw/linkproto/commands.hpp"
 
 #include <QAction>
+#include <QApplication>
 #include <QListWidgetItem>
 #include <QMenu>
 #include <QPainter>
 #include <QPixmap>
 #include <QShortcut>
 #include <QStyledItemDelegate>
+#include <QTextLayout>
+#include <QTextOption>
 #include <QToolButton>
 #include <QVBoxLayout>
 #include <nlohmann/json.hpp>
+
+#include <cmath>
 
 namespace lsw::host::manager {
 
@@ -36,21 +41,84 @@ constexpr qreal kMarkOverhang = 4.0;
 // draw large; the list's own is the size of its rows.
 constexpr int kStoreIconPx = 256;
 
-// A tile as Qt draws it, and its launch mark over the icon's corner.
+// The tile's width is fixed so the columns stay aligned; its height is
+// what its name needs. A row of the grid is as tall as its tallest tile.
+constexpr int kTileWidth = 96;
+constexpr int kTilePad = 4;
+constexpr int kTileTop = 6;
+constexpr int kIconSide = 64;
+constexpr int kIconGap = 4;
+// A one line tile is this tall, which is what every tile used to be.
+constexpr int kTileMinHeight = 104;
+
+// The name laid out in the tile's text width, breaking at words and, for a
+// word wider than the tile, anywhere: nothing is elided.
+int lay_out_name(QTextLayout& layout, const QString& name, const QFont& font) {
+    QTextOption option;
+    option.setAlignment(Qt::AlignHCenter);
+    option.setWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
+    layout.setFont(font);
+    layout.setText(name);
+    layout.setTextOption(option);
+    const qreal width = kTileWidth - 2 * kTilePad;
+    qreal height = 0;
+    layout.beginLayout();
+    for (;;) {
+        QTextLine line = layout.createLine();
+        if (!line.isValid()) break;
+        line.setLineWidth(width);
+        line.setPosition(QPointF(0, height));
+        height += line.height();
+    }
+    layout.endLayout();
+    return static_cast<int>(std::ceil(height));
+}
+
+// A tile: the icon at the top, the whole name under it, and the launch
+// mark over the icon's corner. The icon and the mark keep their place
+// whatever the name; the tile grows downward.
 class AppTileDelegate : public QStyledItemDelegate {
 public:
     using QStyledItemDelegate::QStyledItemDelegate;
 
+    [[nodiscard]] QSize sizeHint(const QStyleOptionViewItem& option,
+                                 const QModelIndex& index) const override {
+        QTextLayout layout;
+        const int text = lay_out_name(layout, index.data(Qt::DisplayRole).toString(), option.font);
+        return {kTileWidth, qMax(kTileMinHeight, kTileTop + kIconSide + kIconGap + text + kTilePad)};
+    }
+
     void paint(QPainter* p, const QStyleOptionViewItem& option,
                const QModelIndex& index) const override {
-        QStyledItemDelegate::paint(p, option, index);
+        // The ground (hover, selection) is the style's, over the whole tile.
+        QStyleOptionViewItem ground = option;
+        initStyleOption(&ground, index);
+        ground.text.clear();
+        ground.icon = QIcon{};
+        ground.features &= ~QStyleOptionViewItem::HasDisplay;
+        ground.features &= ~QStyleOptionViewItem::HasDecoration;
+        const QWidget* widget = option.widget;
+        const QStyle* style = widget != nullptr ? widget->style() : QApplication::style();
+        style->drawPrimitive(QStyle::PE_PanelItemViewItem, &ground, p, widget);
+
+        const QRect icon(option.rect.left() + (option.rect.width() - kIconSide) / 2,
+                         option.rect.top() + kTileTop, kIconSide, kIconSide);
+        const QIcon tile_icon = index.data(Qt::DecorationRole).value<QIcon>();
+        tile_icon.paint(p, icon, Qt::AlignCenter, (option.state & QStyle::State_Selected) != 0
+                                                       ? QIcon::Selected
+                                                       : QIcon::Normal);
+
+        QTextLayout layout;
+        lay_out_name(layout, index.data(Qt::DisplayRole).toString(), option.font);
+        p->save();
+        p->setPen(option.palette.color((option.state & QStyle::State_Selected) != 0
+                                           ? QPalette::HighlightedText
+                                           : QPalette::Text));
+        layout.draw(p, QPointF(option.rect.left() + kTilePad, icon.bottom() + 1 + kIconGap));
+        p->restore();
+
         const auto mark = static_cast<LaunchMark>(index.data(kLaunchRole).toInt());
         if (mark == LaunchMark::None) return;
-        QStyleOptionViewItem tile = option;
-        initStyleOption(&tile, index);
-        const QStyle* style = option.widget != nullptr ? option.widget->style() : nullptr;
-        if (style == nullptr) return;
-        const QRect icon = style->subElementRect(QStyle::SE_ItemViewItemDecoration, &tile, option.widget);
         const QRectF dot(icon.right() + kMarkOverhang - kMarkPx, icon.bottom() + kMarkOverhang - kMarkPx,
                          kMarkPx, kMarkPx);
         p->save();
@@ -105,12 +173,11 @@ AppListWidget::AppListWidget(apps::AppConfigStore& store, link::AgentRpcClient& 
     list_->setMovement(QListView::Static);
     list_->setResizeMode(QListView::Adjust);
     list_->setIconSize({64, 64});
-    list_->setSpacing(8);
-    list_->setUniformItemSizes(true);
-    // Every tile is exactly this size and never grows to fit a long
-    // name; instead the name word-wraps onto extra lines within the
-    // fixed cell.
-    list_->setGridSize({96, 104});
+    // No grid and no uniform size: a tile is as wide as the columns need
+    // and as tall as its whole name (AppTileDelegate::sizeHint), and a row
+    // of the layout is as tall as its tallest tile. The delegate's sizes
+    // include the old 96 x 104 pitch, so there is no spacing to add.
+    list_->setSpacing(0);
     list_->setWordWrap(true);
     list_->setContextMenuPolicy(Qt::CustomContextMenu);
     list_->setItemDelegate(new AppTileDelegate(list_));
@@ -178,7 +245,7 @@ void AppListWidget::rebuild() {
             item->setIcon(QIcon{QPixmap::fromImage(img)});
         }
         item->setData(Qt::UserRole, cfg.id);
-        item->setToolTip(cfg.target());
+        item->setToolTip(cfg.name + QLatin1Char('\n') + cfg.target());
     }
     update_launch_state();
 }
@@ -195,7 +262,7 @@ void AppListWidget::update_launch_state() {
                                 : running ? LaunchMark::Running
                                           : LaunchMark::None;
         item->setData(kLaunchRole, static_cast<int>(mark));
-        item->setToolTip(cfg->target() + (opening   ? QStringLiteral("\nOpening: waiting for a window")
+        item->setToolTip(cfg->name + QLatin1Char('\n') + cfg->target() + (opening   ? QStringLiteral("\nOpening: waiting for a window")
                                           : running ? QStringLiteral("\nRunning: open it to bring it forward")
                                                     : QString{}));
     }

@@ -438,9 +438,9 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 .gauge .bar > i.warn{background:var(--amber)}
 
 .apps{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:6px;padding:12px;
-  align-content:start;overflow:hidden}
+  align-content:start;align-items:start;overflow:hidden}
 .app{
-  display:flex;flex-direction:column;align-items:center;gap:8px;padding:12px 6px 10px;
+  display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:8px;padding:12px 6px 10px;
   border-radius:var(--r-md);border:1px solid transparent;cursor:pointer;text-align:center;
 }
 .app:hover{background:var(--raised);border-color:var(--line)}
@@ -869,6 +869,8 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
                 <button class="app"><span class="ic" style="background:#2f3644;color:#cfd6e2">&gt;_</span><span class="nm">Command Prompt</span></button>
                 <button class="app"><span class="ic" style="background:#d06a4a">Wm</span><span class="nm">Media Player</span></button>
                 <button class="app"><span class="ic" style="background:#5f9ea0">Vs</span><span class="nm">VS Code</span></button>
+                <button class="app" title="Windows Defender Firewall with Advanced Security&#10;C:\Windows\System32\WF.msc"><span class="ic" style="background:#d9534f">Fw</span><span class="nm">Windows Defender Firewall with Advanced Security</span></button>
+                <button class="app"><span class="ic" style="background:#e0763c">Ff</span><span class="nm">Mozilla Firefox (x64 en-US)</span></button>
               </div>
             </div>
           </div>
