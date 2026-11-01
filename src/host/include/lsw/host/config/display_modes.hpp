@@ -33,16 +33,12 @@ struct DisplayMode {
 class DisplayModes {
 public:
     // What avgpu.sys can describe (src/miniport/display/display_mode.*):
-    // the smallest source mode dxgkrnl accepts, the largest edge an EDID
-    // detailed timing holds, and its pixel clock field (10 kHz units).
+    // the smallest source mode dxgkrnl accepts and the largest edge an
+    // EDID detailed timing holds. Its pixel clock field is no limit: a mode
+    // too fast for it is stated at a slower rate there, and Windows gets
+    // the real one (DisplayRefresh).
     static constexpr int kMinEdge = 100;
     static constexpr int kMaxEdge = 4095;
-    static constexpr qint64 kMaxPixelClockHz = 655'350'000;
-    // The timing the driver gives every mode: 60 Hz, 160 pixels of
-    // horizontal blanking, one blank line per 24 active ones.
-    static constexpr int kRefreshHz = 60;
-    static constexpr int kHorizontalBlank = 160;
-    static constexpr int kLinesPerBlankLine = 24;
     // The most the device carries (DisplayModeSet::max_modes).
     static constexpr int kMaxModes = 32;
 
@@ -51,9 +47,6 @@ public:
     // "2560x1440" (either x, surrounding space allowed) as a mode, or
     // nullopt when it is not one.
     [[nodiscard]] static std::optional<DisplayMode> parse(const QString& text);
-
-    // The pixel clock the driver times ``mode`` at, in Hz.
-    [[nodiscard]] static qint64 pixel_clock_hz(const DisplayMode& mode);
 
     // Why the driver would leave ``mode`` out, as a sentence; empty when
     // it fits. The driver drops such a mode silently, so the editor says

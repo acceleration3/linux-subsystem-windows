@@ -65,6 +65,12 @@ public:
               const config::Settings& settings, config::ManagerSettings& manager_settings,
               QObject* parent = nullptr);
 
+    // The rate of the monitor the manager's window is on (MainWindow), which
+    // "same as monitor" follows; unset when the window has no screen. Said
+    // here, not read here, because only the window knows which screen it is
+    // on.
+    void set_monitor_refresh(std::optional<quint32> millihz);
+
     // The VM to watch; null stops watching.
     void set_target(const QUuid& uuid);
 
@@ -103,6 +109,10 @@ private:
     void ask_guest();
     void ask_sessions();
     void read_modes();
+    // The monitors' rates as the kernel listed them (off the GUI thread,
+    // with the host probe), merged on the GUI thread with the desktop's own
+    // screens.
+    void rebuild_monitor_rates();
     void read_vram();
     // The USB bus, read off the GUI thread, and the snapshot it makes.
     void read_usb();
@@ -123,6 +133,7 @@ private:
 
     VmStatus vm_;
     GraphicsStatus graphics_;
+    QVector<platform::MonitorRates> drm_monitors_;
     GuestSessions sessions_;
     vm::AvgpuLog log_;
     QTimer graphics_timer_;

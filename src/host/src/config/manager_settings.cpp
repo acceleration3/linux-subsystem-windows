@@ -25,6 +25,8 @@ const QHash<QString, QVariant>& defaults() {
         // accel-virt's default: the host monitors' own modes.
         {K::kDisplayModes, QStringList{}},
         {K::kMatchHostOutput, false},
+        // The monitor's own rate: the same as the modes' sizes follow it.
+        {K::kDisplayRefresh, QStringLiteral("monitor")},
         {K::kScalingPercent, 0},
 
         // "auto" is the device's own default, so a fresh install binds

@@ -1,15 +1,19 @@
 #include "lsw/host/services/status_hub.hpp"
 
+#include "lsw/host/config/display_refresh.hpp"
 #include "lsw/host/config/manager_settings.hpp"
 #include "lsw/host/config/settings.hpp"
 #include "lsw/host/link/agent_reply.hpp"
 #include "lsw/host/link/agent_rpc_client.hpp"
 #include "lsw/host/platform/accel_virt_paths.hpp"
+#include "lsw/host/platform/host_monitor_rates.hpp"
 #include "lsw/host/platform/host_usb_devices.hpp"
 #include "lsw/host/vm/domain_description.hpp"
 #include "lsw/host/vm/lifecycle.hpp"
 #include "lsw/linkproto/commands.hpp"
 
+#include <QGuiApplication>
+#include <QScreen>
 #include <QtConcurrent/QtConcurrentRun>
 
 #include <nlohmann/json.hpp>
@@ -34,6 +38,7 @@ constexpr int kUsbPollMs = 2000;
 struct HostAnswer {
     QVector<platform::HostGpu> gpus;
     QVector<platform::HostApi> apis;
+    QVector<platform::MonitorRates> monitors;
 };
 
 }  // namespace
@@ -88,6 +93,7 @@ void StatusHub::set_target(const QUuid& uuid) {
     boot_clock_.invalidate();
     graphics_.guest = GuestGpuStatus{};
     graphics_.live_modes.reset();
+    graphics_.live_refresh.reset();
     graphics_timer_.stop();
     usb_ = UsbStatus{};
     update_usb_timer();
@@ -152,6 +158,7 @@ void StatusHub::on_stats(const QUuid& uuid, const vm::VmStats& stats) {
             graphics_timer_.stop();
             graphics_.guest = GuestGpuStatus{};
             graphics_.live_modes.reset();
+            graphics_.live_refresh.reset();
             // The log once more, for the last lines QEMU wrote.
             if (log_.poll()) {
                 graphics_.log_lines = log_.lines();
@@ -291,11 +298,14 @@ void StatusHub::probe_host() {
         answer.gpus = platform::HostGpus::enumerate();
         answer.apis =
             platform::HostGraphicsProbe::probe(answer.gpus, platform::AccelVirtPaths::d3d_lib_dir());
+        answer.monitors = platform::HostMonitorRates::read();
         return answer;
     }).then(this, [this](const HostAnswer& answer) {
         probing_ = false;
         graphics_.host_gpus = answer.gpus;
         graphics_.apis = answer.apis;
+        drm_monitors_ = answer.monitors;
+        rebuild_monitor_rates();
         graphics_.probed = true;
         rematch();
         read_vram();
@@ -340,10 +350,34 @@ void StatusHub::read_modes() {
     // A QMP command through libvirt, which is thread-affine and local:
     // a round trip on the socket QEMU already has open.
     const auto modes = lifecycle_.display_modes(vm_.uuid, nullptr);
-    if (modes != graphics_.live_modes) {
+    // The rate is read the same way; a QEMU without the property says
+    // nothing, which is "unknown" and not a rate.
+    const auto refresh = lifecycle_.display_refresh(vm_.uuid, nullptr);
+    if (modes != graphics_.live_modes || refresh != graphics_.live_refresh) {
         graphics_.live_modes = modes;
+        graphics_.live_refresh = refresh;
         Q_EMIT changed(Area::Graphics);
     }
+}
+
+void StatusHub::set_monitor_refresh(std::optional<quint32> millihz) {
+    if (millihz == graphics_.monitor_refresh_millihz) {
+        return;
+    }
+    graphics_.monitor_refresh_millihz = millihz;
+    // The screen's rate is on the list whatever the kernel's modes say.
+    rebuild_monitor_rates();
+    Q_EMIT changed(Area::Graphics);
+}
+
+void StatusHub::rebuild_monitor_rates() {
+    QVector<platform::MonitorRates> screens;
+    for (const QScreen* screen : QGuiApplication::screens()) {
+        if (const auto rate = config::DisplayRefresh::from_hertz(screen->refreshRate())) {
+            screens.push_back({screen->name(), {static_cast<qint64>(*rate)}});
+        }
+    }
+    graphics_.monitor_rates = platform::HostMonitorRates::merge(drm_monitors_, screens);
 }
 
 void StatusHub::update_usb_timer() {

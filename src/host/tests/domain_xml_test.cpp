@@ -347,6 +347,8 @@ int main(int argc, char** argv) {
           "no UUID is host-gpu=auto");
     check(!install_gpus.value(0).contains(QStringLiteral("modes=")),
           "no modes leave the option out");
+    check(!install_gpus.value(0).contains(QStringLiteral("refresh=")),
+          "no refresh leaves the option out, and the device keeps its own 60 Hz");
     check(install_gpus.value(0).contains(QStringLiteral(",max_outputs=0")) &&
               !install_gpus.value(0).contains(QStringLiteral("max_outputs=1")),
           "during setup the GPU has no outputs, so the VNC console is the VGA's");
@@ -359,6 +361,21 @@ int main(int argc, char** argv) {
         check(!with_modes_gpus.value(0).contains(QStringLiteral("modes=")),
               "a GPU with no outputs is given no modes even when some are set");
     }
+    {
+        DomainXmlInputs steady = install;
+        steady.install_display = false;
+        steady.display_refresh_millihz = 359980;
+        const QStringList steady_gpus =
+            args_after(qemu_args(parse(DomainXmlBuilder::build(vm, steady), "")),
+                       QStringLiteral("-device"), QStringLiteral("virtio-gpu-av-pci,"));
+        check(steady_gpus.value(0).contains(QStringLiteral(",refresh=359980")),
+              "the device is given the refresh in millihertz");
+        steady.display_refresh_millihz = 0;
+        const QStringList plain_gpus =
+            args_after(qemu_args(parse(DomainXmlBuilder::build(vm, steady), "")),
+                       QStringLiteral("-device"), QStringLiteral("virtio-gpu-av-pci,"));
+        check(!plain_gpus.value(0).contains(QStringLiteral("refresh=")), "none known, none given");
+    }
     check(!qemu_args(install_doc).contains(QStringLiteral("-L")),
           "a build tree's QEMU, with no data directory, gets no -L");
     check(!install_doc.elementsByTagName(QStringLiteral("memoryBacking")).isEmpty(),
@@ -367,8 +384,12 @@ int main(int argc, char** argv) {
 
     // The display settings are live; the GPU's are not.
     check(!ManagerSettings::needs_restart(ManagerSettings::Key::kDisplayModes) &&
-              !ManagerSettings::needs_restart(ManagerSettings::Key::kMatchHostOutput),
-          "the resolution applies without a restart");
+              !ManagerSettings::needs_restart(ManagerSettings::Key::kMatchHostOutput) &&
+              !ManagerSettings::needs_restart(ManagerSettings::Key::kDisplayRefresh),
+          "the resolution and the refresh apply without a restart");
+    check(ManagerSettings::default_value(ManagerSettings::Key::kDisplayRefresh) ==
+              QStringLiteral("monitor"),
+          "the refresh follows the monitor unless told otherwise");
     check(ManagerSettings::needs_restart(ManagerSettings::Key::kHostGpu) &&
               ManagerSettings::needs_restart(ManagerSettings::Key::kHostWindowMib) &&
               ManagerSettings::needs_restart(ManagerSettings::Key::kRenderGpus),

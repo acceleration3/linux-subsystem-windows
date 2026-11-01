@@ -30,12 +30,6 @@ std::optional<DisplayMode> DisplayModes::parse(const QString& text) {
     return DisplayMode{match.captured(1).toInt(), match.captured(2).toInt()};
 }
 
-qint64 DisplayModes::pixel_clock_hz(const DisplayMode& mode) {
-    const qint64 total_width = qint64{mode.width} + kHorizontalBlank;
-    const qint64 total_height = qint64{mode.height} + mode.height / kLinesPerBlankLine;
-    return total_width * total_height * kRefreshHz;
-}
-
 QString DisplayModes::refusal(const DisplayMode& mode) {
     if (mode.width < kMinEdge || mode.height < kMinEdge) {
         return QStringLiteral("%1 is under %2 on an edge, the smallest Windows accepts.")
@@ -46,14 +40,6 @@ QString DisplayModes::refusal(const DisplayMode& mode) {
         return QStringLiteral("%1 cannot be offered: %2 is the most an edge can be.")
             .arg(mode.label())
             .arg(kMaxEdge);
-    }
-    // The EDID field counts whole 10 kHz units, so the driver compares
-    // the truncated count against 65535; this is the same test in Hz.
-    const qint64 clock = pixel_clock_hz(mode);
-    if (clock / 10'000 > kMaxPixelClockHz / 10'000) {
-        return QStringLiteral("%1 needs a %2 MHz pixel clock at 60 Hz; the most is 655.35 MHz.")
-            .arg(mode.label())
-            .arg(static_cast<double>(clock) / 1e6, 0, 'f', 2);
     }
     return {};
 }

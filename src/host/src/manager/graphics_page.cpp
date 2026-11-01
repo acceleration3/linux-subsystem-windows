@@ -1,6 +1,7 @@
 #include "lsw/host/manager/graphics_page.hpp"
 
 #include "lsw/host/config/display_modes.hpp"
+#include "lsw/host/config/display_refresh.hpp"
 #include "lsw/host/config/manager_settings.hpp"
 #include "lsw/host/manager/graphics_alerts.hpp"
 #include "lsw/host/services/status_hub.hpp"
@@ -313,9 +314,8 @@ QStringList GraphicsPage::status_facts() const {
     }
     const QString preferred = g.live_modes.value_or(QString{}).section(QLatin1Char(','), 0, 0);
     if (const auto mode = config::DisplayModes::parse(preferred)) {
-        facts << QStringLiteral("display %1, %2 Hz")
-                     .arg(mode->label())
-                     .arg(config::DisplayModes::kRefreshHz);
+        facts << QStringLiteral("display %1, %2")
+                     .arg(mode->label(), config::DisplayRefresh::label(g.live_refresh));
     } else if (status_.vm().running()) {
         facts << QStringLiteral("display host monitors' modes");
     }
@@ -643,7 +643,7 @@ QWidget* GraphicsPage::build_device() {
     const auto mode = config::DisplayModes::parse(preferred);
     rows.add(
         QStringLiteral("Display"),
-        mode ? QStringLiteral("%1 at %2 Hz").arg(mode->label()).arg(config::DisplayModes::kRefreshHz)
+        mode ? QStringLiteral("%1 at %2").arg(mode->label(), config::DisplayRefresh::label(g.live_refresh))
              : QStringLiteral("Host monitors' modes"),
         nullptr,
         count <= 0 ? QString{}

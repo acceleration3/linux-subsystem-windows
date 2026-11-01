@@ -140,6 +140,17 @@ target_link_libraries(lsw_host_display_modes_test
 target_compile_definitions(lsw_host_display_modes_test PRIVATE QT_NO_KEYWORDS)
 add_test(NAME lsw_host_display_modes_test COMMAND lsw_host_display_modes_test)
 
+# The guest's refresh rate: the setting, a mode's exact rate, and the list
+# of the monitors' rates the settings offer.
+add_executable(lsw_host_display_refresh_test display_refresh_test.cpp)
+target_link_libraries(lsw_host_display_refresh_test
+    PRIVATE
+        lsw_host_core
+        LSW::CompileOptions
+)
+target_compile_definitions(lsw_host_display_refresh_test PRIVATE QT_NO_KEYWORDS)
+add_test(NAME lsw_host_display_refresh_test COMMAND lsw_host_display_refresh_test)
+
 # The domain definition read back, which is where the running machine's
 # status comes from: the virtio-gpu-av-pci argument parser against the
 # builder's output and libvirt's live shape, and the qcow2 size.

@@ -97,6 +97,7 @@ target_link_libraries(lsw_host_core
     PRIVATE
         LSW::CompileOptions
         PkgConfig::LIBVNCCLIENT  # ui/vnc_view.cpp
+        PkgConfig::LIBDRM        # platform/host_monitor_rates.cpp: the monitors' refresh rates
         Vulkan::Vulkan           # platform/host_gpus.cpp: which host GPUs exist
         PkgConfig::LIBVIRT_QEMU  # vm/lifecycle.cpp: QMP, for the GPU's live modes
 )

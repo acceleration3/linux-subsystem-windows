@@ -28,6 +28,8 @@ struct DomainDescription {
         int hostmem_mib = 0;
         // The modes= list, commas restored; unset when the line has none.
         std::optional<QString> modes;
+        // The refresh= rate in millihertz; unset when the line has none.
+        std::optional<quint32> refresh_millihz;
     };
 
     // One <filesystem> with a virtiofs driver: a host folder the guest

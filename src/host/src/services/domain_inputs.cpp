@@ -1,6 +1,7 @@
 #include "lsw/host/services/domain_inputs.hpp"
 
 #include "lsw/base/log.hpp"
+#include "lsw/host/config/display_refresh.hpp"
 #include "lsw/host/platform/host_gpus.hpp"
 
 namespace lsw::host::services {
@@ -27,8 +28,14 @@ config::VmSizing vm_sizing_from_settings(const config::ManagerSettings& manager_
     return sizing;
 }
 
+std::optional<quint32> display_refresh_from_settings(const config::ManagerSettings& manager_settings,
+                                                     std::optional<quint32> monitor) {
+    return config::DisplayRefresh::resolve(manager_settings.string_value(K::kDisplayRefresh), monitor);
+}
+
 vm::DomainXmlInputs domain_inputs_from_settings(const config::Settings& settings,
-                                                const config::ManagerSettings& manager_settings) {
+                                                const config::ManagerSettings& manager_settings,
+                                                std::optional<quint32> monitor_refresh_millihz) {
     vm::DomainXmlInputs inputs;
     for (const auto& share : manager_settings.host_shares()) {
         vm::DomainShare mapped;
@@ -42,6 +49,8 @@ vm::DomainXmlInputs domain_inputs_from_settings(const config::Settings& settings
 
     inputs.host_window_mib = manager_settings.int_value(K::kHostWindowMib);
     inputs.display_modes = display_modes_from_settings(manager_settings);
+    inputs.display_refresh_millihz =
+        display_refresh_from_settings(manager_settings, monitor_refresh_millihz).value_or(0);
     inputs.avgpu_log = settings.vm_avgpu_log_path();
 
     // The host GPU. A UUID is checked against what is plugged in now: a

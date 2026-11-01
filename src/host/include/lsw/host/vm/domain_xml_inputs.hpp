@@ -50,6 +50,9 @@ struct DomainXmlInputs {
     // entries between commas, the first preferred. Empty is the host
     // monitors' own modes.
     QString display_modes;
+    // The refresh rate every mode runs at, the device's ``refresh``, in
+    // millihertz. 0 leaves it out, which is the device's own 60 Hz.
+    quint32 display_refresh_millihz = 0;
     // The file the driver's log (I/O port 0x402) is written to. Empty
     // leaves the debug console out.
     QString avgpu_log;

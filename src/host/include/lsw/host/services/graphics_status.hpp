@@ -3,6 +3,7 @@
 #include "lsw/host/platform/gpu_memory_usage.hpp"
 #include "lsw/host/platform/host_gpus.hpp"
 #include "lsw/host/platform/host_graphics_probe.hpp"
+#include "lsw/host/platform/host_monitor_rates.hpp"
 #include "lsw/host/services/guest_gpu_status.hpp"
 #include "lsw/host/vm/avgpu_log.hpp"
 
@@ -45,6 +46,14 @@ struct GraphicsStatus {
     // The display GPU's VRAM in use, whole device; unset where its
     // driver does not say.
     std::optional<platform::GpuMemoryUsage::Reading> vram;
+    // The refresh rates the monitors on this host can run at, highest
+    // first, each with the monitors that support it: the kernel's mode
+    // lists, and the desktop's current rate of every screen besides, so the
+    // list always has what the manager is on now.
+    QVector<platform::RateChoice> monitor_rates;
+    // The rate of the monitor the manager's window is on, in millihertz,
+    // as the window says it (MainWindow); unset until it has.
+    std::optional<quint32> monitor_refresh_millihz;
 
     // ---- the GPUs passed, display first ---------------------------
     // As the domain definition has them (VmStatus::definition): the
@@ -57,6 +66,9 @@ struct GraphicsStatus {
     // Its ``modes`` as QEMU holds it now; unset while the VM is off or
     // QEMU did not say.
     std::optional<QString> live_modes;
+    // Its ``refresh`` in millihertz, the rate Windows is told, read the same
+    // way; unset likewise.
+    std::optional<quint32> live_refresh;
 
     // ---- the guest -----------------------------------------------
     GuestGpuStatus guest;

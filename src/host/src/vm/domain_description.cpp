@@ -60,6 +60,12 @@ DomainDescription::GpuDevice gpu_from(const QStringList& options) {
             gpu.hostmem_mib = DomainDescription::size_mib(value);
         } else if (key == QLatin1StringView("modes")) {
             gpu.modes = value;
+        } else if (key == QLatin1StringView("refresh")) {
+            bool ok = false;
+            const quint32 millihz = value.toUInt(&ok);
+            if (ok) {
+                gpu.refresh_millihz = millihz;
+            }
         }
     }
     return gpu;

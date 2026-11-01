@@ -1,6 +1,7 @@
 #include "lsw/host/vm/lifecycle.hpp"
 
 #include "lsw/base/log.hpp"
+#include "lsw/host/config/display_refresh.hpp"
 #include "lsw/host/platform/accel_virt_paths.hpp"
 #include "lsw/host/platform/tool_process.hpp"
 #include "lsw/host/vm/domain_description.hpp"
@@ -521,6 +522,56 @@ std::optional<QString> Lifecycle::display_modes(const QUuid& uuid, QString* erro
         return std::nullopt;
     }
     return answer->toString();
+}
+
+bool Lifecycle::set_display_refresh(const QUuid& uuid, quint32 millihz, QString* error_out) {
+    const auto fail = [error_out](const QString& why) {
+        LSW_WARN("display refresh: {}", why.toStdString());
+        if (error_out != nullptr) {
+            *error_out = why;
+        }
+        return false;
+    };
+    if (millihz < config::DisplayRefresh::kLeastMillihz || millihz > config::DisplayRefresh::kMostMillihz) {
+        return fail(QStringLiteral("%1 mHz is not between 1 and 1000 Hz").arg(millihz));
+    }
+    const QJsonObject command{
+        {QStringLiteral("execute"), QStringLiteral("qom-set")},
+        {QStringLiteral("arguments"),
+         QJsonObject{
+             {QStringLiteral("path"),
+              QStringLiteral("/machine/peripheral/%1").arg(DomainXmlBuilder::gpu_device_id())},
+             {QStringLiteral("property"), QStringLiteral("refresh")},
+             {QStringLiteral("value"), static_cast<qint64>(millihz)},
+         }},
+    };
+    QString why;
+    if (!qmp(uuid, command, &why)) {
+        return fail(why);
+    }
+    LSW_INFO("display refresh: now {}", config::DisplayRefresh::label(millihz).toStdString());
+    return true;
+}
+
+std::optional<quint32> Lifecycle::display_refresh(const QUuid& uuid, QString* error_out) const {
+    const QJsonObject command{
+        {QStringLiteral("execute"), QStringLiteral("qom-get")},
+        {QStringLiteral("arguments"),
+         QJsonObject{
+             {QStringLiteral("path"),
+              QStringLiteral("/machine/peripheral/%1").arg(DomainXmlBuilder::gpu_device_id())},
+             {QStringLiteral("property"), QStringLiteral("refresh")},
+         }},
+    };
+    const auto answer = qmp(uuid, command, error_out);
+    if (!answer || !answer->isDouble()) {
+        return std::nullopt;
+    }
+    const double value = answer->toDouble();
+    if (value < config::DisplayRefresh::kLeastMillihz || value > config::DisplayRefresh::kMostMillihz) {
+        return std::nullopt;
+    }
+    return static_cast<quint32>(value);
 }
 
 std::optional<QJsonValue> Lifecycle::qmp(const QUuid& uuid, const QJsonObject& command,
