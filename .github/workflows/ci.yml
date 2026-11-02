@@ -135,7 +135,7 @@ jobs:
       - name: PowerShell parser and PSScriptAnalyzer
         shell: pwsh
         run: |
-          Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
+          if (-not (Get-Module -ListAvailable PSScriptAnalyzer)) { Install-Module PSScriptAnalyzer -Force -Scope CurrentUser }
           $files = @(Get-ChildItem -Recurse -Filter *.ps1 -Path src, scripts, packaging, build/embedded-ps -ErrorAction SilentlyContinue)
           $bad = 0
           foreach ($f in $files) {
@@ -146,7 +146,7 @@ jobs:
                   $bad++
               }
           }
-          $found = Invoke-ScriptAnalyzer -Path $files.FullName -Severity Error, Warning
+          $found = foreach ($f in $files) { Invoke-ScriptAnalyzer -Path $f.FullName -Severity Error, Warning }
           foreach ($r in $found) {
               $level = if ($r.Severity -eq 'Error') { 'error' } else { 'warning' }
               Write-Host "::$level file=$($r.ScriptPath),line=$($r.Line)::$($r.RuleName): $($r.Message)"
