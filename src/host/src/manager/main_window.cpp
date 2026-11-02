@@ -858,9 +858,6 @@ void MainWindow::follow_launches() {
 }
 
 void MainWindow::setup_tray() {
-    if (!QSystemTrayIcon::isSystemTrayAvailable()) {
-        return;
-    }
     tray_ = new QSystemTrayIcon(this);
     tray_->setIcon(QApplication::windowIcon());
     tray_->setToolTip(QStringLiteral("LSW"));
@@ -901,7 +898,7 @@ bool MainWindow::event(QEvent* e) {
 
 void MainWindow::closeEvent(QCloseEvent* e) {
     const bool to_tray = services_.manager_settings().bool_value(K::kCloseToTray);
-    if (tray_ != nullptr && to_tray) {
+    if (tray_ != nullptr && to_tray && QSystemTrayIcon::isSystemTrayAvailable()) {
         hide();
         e->ignore();
         return;
