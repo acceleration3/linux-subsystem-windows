@@ -33,7 +33,7 @@ DEPS_ARCH=(
     ocl-icd libglvnd
     glib2 pixman libslirp libpipewire libaio liburing libseccomp dtc capstone
     gnutls libpng libjpeg-turbo libsasl snappy lzo zstd numactl keyutils
-    systemd-libs fuse3 pam libcbor libbpf libusb
+    systemd-libs fuse3 pam libcbor libbpf libusb smbclient
     curl unzip xz
 )
 DEPS_DEB=(
@@ -47,7 +47,7 @@ DEPS_DEB=(
     libseccomp-dev libfdt-dev libcapstone-dev
     libgnutls28-dev libpng-dev libjpeg-turbo8-dev libsasl2-dev libsnappy-dev liblzo2-dev
     libzstd-dev libnuma-dev libkeyutils-dev
-    libsystemd-dev libfuse3-dev libpam0g-dev libcbor-dev libbpf-dev libusb-1.0-0-dev
+    libsystemd-dev libfuse3-dev libpam0g-dev libcbor-dev libbpf-dev libusb-1.0-0-dev libsmbclient-dev
     curl unzip xz-utils zstd
 )
 DEPS_RPM=(
@@ -63,7 +63,7 @@ DEPS_RPM=(
     gnutls-devel libpng-devel libjpeg-turbo-devel cyrus-sasl-devel snappy-devel lzo-devel
     libzstd-devel numactl-devel keyutils-libs-devel
     systemd-devel fuse3-devel pam-devel libcbor-devel libbpf-devel elfutils-libelf-devel
-    libusb1-devel
+    libusb1-devel libsmbclient-devel
     curl unzip xz zstd
 )
 

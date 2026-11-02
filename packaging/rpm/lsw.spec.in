@@ -17,6 +17,7 @@ Requires:       edk2-ovmf
 Requires:       qemu-img
 Requires:       7zip
 Requires:       curl
+Requires:       fuse3
 Requires:       hicolor-icon-theme
 Requires:       SDL3
 Recommends:     virtiofsd

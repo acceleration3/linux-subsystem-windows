@@ -6,7 +6,7 @@ Installed-Size: @SIZE@
 Section: otherosfs
 Priority: optional
 Homepage: https://github.com/acceleration3/linux-subsystem-windows
-Depends: @SHLIBS@, libvirt-daemon, libvirt-daemon-driver-qemu, ovmf, qemu-utils, 7zip, curl, hicolor-icon-theme, libsdl3-0
+Depends: @SHLIBS@, libvirt-daemon, libvirt-daemon-driver-qemu, ovmf, qemu-utils, 7zip, curl, fuse3, hicolor-icon-theme, libsdl3-0
 Recommends: virtiofsd, pkexec, mesa-vulkan-drivers | vulkan-icd
 Suggests: mesa-opencl-icd | opencl-icd, libegl-mesa0
 Description: Linux Subsystem for Windows

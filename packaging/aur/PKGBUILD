@@ -19,7 +19,7 @@ depends=(
     'libelf' 'libcbor' 'systemd-libs' 'libseccomp' 'dtc' 'pam' 'fuse3'
     'libaio' 'liburing' 'capstone' 'libusb'
     'glibc' 'libgcc' 'libstdc++'
-    'vulkan-driver' 'edk2-ovmf' 'qemu-img' '7zip' 'curl'
+    'vulkan-driver' 'edk2-ovmf' 'qemu-img' '7zip' 'curl' 'smbclient'
     'hicolor-icon-theme'
     'sdl3'
 )

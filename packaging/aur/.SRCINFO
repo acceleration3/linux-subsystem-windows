@@ -60,6 +60,7 @@ pkgbase = lsw-bin
 	depends = qemu-img
 	depends = 7zip
 	depends = curl
+	depends = smbclient
 	depends = hicolor-icon-theme
 	depends = sdl3
 	optdepends = virtiofsd: shared folders between the host and the guest
