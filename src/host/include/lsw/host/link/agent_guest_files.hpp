@@ -5,6 +5,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace lsw::host::link {
 
@@ -29,6 +30,15 @@ public:
         std::string error;
     };
     [[nodiscard]] Packed pack_logs();
+
+    struct Cleared {
+        bool ok = false;
+        int deleted = 0;
+        int emptied = 0;
+        std::vector<std::string> skipped;
+        std::string error;
+    };
+    [[nodiscard]] Cleared clear_logs();
 
 private:
     AgentRpcClient& rpc_;

@@ -41,6 +41,8 @@ void set_source(std::string source);
 
 void flush(unsigned timeout_ms);
 
+void clear_file();
+
 struct Record {
     std::uint64_t seq = 0;
     std::uint64_t ts_ms = 0;

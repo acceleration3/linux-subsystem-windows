@@ -4,6 +4,7 @@
 
 #include <QByteArray>
 #include <QString>
+#include <QStringList>
 
 #include <memory>
 #include <string_view>
@@ -18,8 +19,13 @@ public:
     };
 
     explicit MirrorLog(const QString& name);
+    ~MirrorLog();
+    MirrorLog(const MirrorLog&) = delete;
+    MirrorLog& operator=(const MirrorLog&) = delete;
 
     static void set_directory(const QString& directory);
+
+    [[nodiscard]] static QStringList truncate_all();
 
     [[nodiscard]] static Parsed parse(std::string_view line);
 

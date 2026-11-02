@@ -44,6 +44,10 @@ Q_SIGNALS:
     void rewrite_entries_requested();
     void open_log_folder_requested();
     void collect_logs_requested();
+    void clear_logs_requested();
+
+public:
+    void set_logs_busy(bool busy);
 
 protected:
     void showEvent(QShowEvent* event) override;
@@ -99,6 +103,7 @@ private:
     QPushButton* update_button_ = nullptr;
     QPushButton* debug_button_ = nullptr;
     QPushButton* debug_stop_ = nullptr;
+    QPushButton* clear_logs_button_ = nullptr;
     QTimer debug_clock_;
     QHash<QString, std::function<void()>> shows_;
 };

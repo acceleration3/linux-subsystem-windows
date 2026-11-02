@@ -50,6 +50,9 @@ HostServices::HostServices(QObject* parent)
                          return inputs;
                      },
                      this),
+      log_cleaner_(settings_, rpc_, log_store_,
+                   [this] { return status_.vm().agent_online(); },
+                   [this] { return status_.vm().running(); }, this),
       app_launcher_(rpc_, this) {
     log_store_.attach(rpc_);
 

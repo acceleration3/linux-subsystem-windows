@@ -465,6 +465,16 @@ void SettingsPage::build_logs_group() {
                                   "archive. Window titles and file names appear in logs; read it "
                                   "before you share it."),
                    QStringLiteral("Collect logs"), &SettingsPage::collect_logs_requested);
+    clear_logs_button_ = small_button(QStringLiteral("Clear all logs"));
+    connect(clear_logs_button_, &QPushButton::clicked, this, &SettingsPage::clear_logs_requested);
+    add_row(logs, QString{}, QStringLiteral("Clear all logs"),
+            QStringLiteral("Deletes the logs of the manager, the window mirrors, the GPU driver "
+                           "and Windows. Collected archives stay."),
+            clear_logs_button_);
+}
+
+void SettingsPage::set_logs_busy(bool busy) {
+    clear_logs_button_->setEnabled(!busy);
 }
 
 void SettingsPage::refresh_debug_row() {

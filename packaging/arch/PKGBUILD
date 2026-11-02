@@ -1,7 +1,7 @@
 # Maintainer: acceleration3 <acceleration23 at gmail dot com>
 
 _root="$(realpath "${startdir}/../..")"
-source "${_root}/aur/PKGBUILD"
+source "${_root}/packaging/aur/PKGBUILD"
 
 _tarball="$(printf '%s\n' "${_root}"/dist/lsw-*-x86_64.tar.zst | sort -V | tail -1)"
 if [[ ! -f "${_tarball}" ]]; then

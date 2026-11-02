@@ -288,3 +288,9 @@ target_link_libraries(lsw_host_log_collector_test PRIVATE lsw_host_core LSW::Com
 target_compile_definitions(lsw_host_log_collector_test PRIVATE QT_NO_KEYWORDS)
 add_test(NAME lsw_host_log_collector_test COMMAND lsw_host_log_collector_test)
 set_tests_properties(lsw_host_log_collector_test PROPERTIES TIMEOUT 120)
+
+add_executable(lsw_host_log_cleaner_test log_cleaner_test.cpp)
+target_link_libraries(lsw_host_log_cleaner_test PRIVATE lsw_host_core LSW::CompileOptions)
+target_compile_definitions(lsw_host_log_cleaner_test PRIVATE QT_NO_KEYWORDS)
+add_test(NAME lsw_host_log_cleaner_test COMMAND lsw_host_log_cleaner_test)
+set_tests_properties(lsw_host_log_cleaner_test PROPERTIES TIMEOUT 120)

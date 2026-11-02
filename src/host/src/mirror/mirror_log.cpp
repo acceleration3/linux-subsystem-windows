@@ -6,8 +6,10 @@
 #include <QDateTime>
 #include <QDir>
 
+#include <algorithm>
 #include <cstdio>
 #include <mutex>
+#include <vector>
 
 namespace lsw::host::mirror {
 
@@ -15,6 +17,8 @@ namespace {
 
 std::mutex g_directory_mutex;
 QString g_directory;
+std::mutex g_live_mutex;
+std::vector<MirrorLog*> g_live;
 
 QString file_name_of(const QString& name) {
     QString out;
@@ -55,7 +59,26 @@ std::string_view next_token(std::string_view& s) {
 }
 
 MirrorLog::MirrorLog(const QString& name)
-    : name_(file_name_of(name)), source_(QStringLiteral("mirror ") + name_) {}
+    : name_(file_name_of(name)), source_(QStringLiteral("mirror ") + name_) {
+    const std::lock_guard lock{g_live_mutex};
+    g_live.push_back(this);
+}
+
+MirrorLog::~MirrorLog() {
+    const std::lock_guard lock{g_live_mutex};
+    g_live.erase(std::remove(g_live.begin(), g_live.end(), this), g_live.end());
+}
+
+QStringList MirrorLog::truncate_all() {
+    QStringList emptied;
+    const std::lock_guard lock{g_live_mutex};
+    for (MirrorLog* log : g_live) {
+        if (log->file_ && log->file_->truncate()) {
+            emptied << QString::fromStdString(log->file_->path().string());
+        }
+    }
+    return emptied;
+}
 
 void MirrorLog::set_directory(const QString& directory) {
     const std::lock_guard lock{g_directory_mutex};

@@ -25,6 +25,8 @@ public:
 
     void roll_now();
 
+    bool truncate();
+
     [[nodiscard]] const std::filesystem::path& path() const noexcept { return path_; }
 
     [[nodiscard]] static std::filesystem::path numbered(const std::filesystem::path& path,

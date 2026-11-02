@@ -87,7 +87,7 @@ That produces `lsw-guest-agent.exe` and `remotewin-guest.exe` under
 there. The GPU drivers are not part of it: they are built by the host
 build, with accel-virt's own toolchains.
 
-## Installing and releasing
+## Installing
 
 Every build tree installs its part with `cmake --install <tree>
 --component lsw` (the component keeps out what the fetched Vulkan-Loader
@@ -100,13 +100,93 @@ the build tree beside its binary, then the installed tree beside its
 binary, so a staged `DESTDIR` works as it stands. It logs where it
 found each one at startup (`artifact:` lines).
 
-`scripts/dist.sh` builds all three trees from scratch, in distroboxes
-(the guest half once, on Arch; the host tree on each distribution a
-release ships for), and packs that install as
-`dist/lsw-<version>-x86_64.tar.zst` (Arch: what the AUR package in
-`aur/`, `lsw-bin`, installs), `dist/lsw_<version>-1_amd64.deb` (Ubuntu)
-and `dist/lsw-<version>-1.fc45.x86_64.rpm` (Fedora); `aur/README.md`
-has the release procedure.
+
+## Releasing
+
+Packaging files live in `packaging/`:
+
+| folder | what |
+| --- | --- |
+| `packaging/aur/` | the `lsw-bin` AUR package, exactly what is pushed to the AUR |
+| `packaging/arch/` | builds `lsw-bin` from a local `dist/` tarball, for testing before a release |
+| `packaging/deb/` | the deb's control template and postinst |
+| `packaging/rpm/` | the rpm spec template |
+
+### 1. Build the packages
+
+`scripts/dist.sh` builds every package in a clean distrobox of its
+distribution, never on the development machine, because the binaries
+link the libraries of the system that builds them.
+
+| target | distrobox | output in `dist/` |
+| --- | --- | --- |
+| `arch` | `Arch` | `lsw-<version>-x86_64.tar.zst`, `.sha256`, `.depends` |
+| `deb` | `Ubuntu` 26.04 | `lsw_<version>-1_amd64.deb` |
+| `rpm` | `Fedora` 45 | `lsw-<version>-1.fc45.x86_64.rpm` |
+
+```sh
+git status          # the release is built from what is checked out
+scripts/dist.sh     # all targets; or name some: scripts/dist.sh arch rpm
+```
+
+- A missing distrobox is created with its build dependencies on first
+  use. `--setup` updates an existing one. The package lists are in
+  `dist.sh`.
+- The Windows half (agent, mirror, loaders, accel-virt's drivers) is
+  built once in the `Arch` box and shared by every package.
+- The first run downloads about 550 MB that accel-virt needs (Windows
+  kit subset, Khronos registries, QEMU source, OpenCL loader source).
+- The version comes from `project(LSW VERSION ...)` in `CMakeLists.txt`;
+  `--version` overrides it.
+- The deb and rpm work out their library dependencies themselves. Tools
+  the manager runs without linking them are listed in
+  `packaging/deb/control.in` and `packaging/rpm/lsw.spec.in`.
+
+The tarball's root is a `usr/` tree: `bin/lsw-manager`, the host
+binaries and accel-virt's QEMU under `lib/lsw`, the Windows files under
+`share/lsw/guest`, the desktop file, and the licenses.
+
+### 2. Publish the GitHub release
+
+```sh
+gh release create v<version> \
+    dist/lsw-<version>-x86_64.tar.zst \
+    dist/lsw_<version>-1_amd64.deb \
+    dist/lsw-<version>-1.fc45.x86_64.rpm \
+    --title "LSW <version>" --notes "..."
+```
+
+The deb and rpm are installed straight from the release.
+
+### 3. Update the AUR package
+
+In `packaging/aur/`:
+
+1. Set `pkgver` to the version and `pkgrel=1`.
+2. Set `sha256sums` from `dist/lsw-<version>-x86_64.tar.zst.sha256`, or
+   run `updpkgsums` once the release is up.
+3. Bring the library part of `depends` in line with
+   `dist/lsw-<version>-x86_64.depends`.
+4. `makepkg --printsrcinfo > .SRCINFO`
+5. Check with `namcap PKGBUILD`, `makepkg -f` and
+   `namcap lsw-bin-<version>-1-x86_64.pkg.tar.zst`.
+
+A Qt update needs no rebuild: the package only requires the Qt it was
+built against or newer.
+
+The AUR repository has its own history, so copy the files into a clone
+of it and push from there:
+
+```sh
+git clone https://aur.archlinux.org/lsw-bin.git ~/aur/lsw-bin    # once
+git -C ~/aur/lsw-bin remote set-url --push origin ssh://aur@aur.archlinux.org/lsw-bin.git
+git -C ~/aur/lsw-bin pull
+cp packaging/aur/{PKGBUILD,.SRCINFO,lsw-bin.install,.gitignore} ~/aur/lsw-bin/
+cd ~/aur/lsw-bin && git add -A && git commit -m "lsw-bin <version>" && git push
+```
+
+The push uses the AUR SSH key named for `aur.archlinux.org` in
+`~/.ssh/config`.
 
 ## Changing the GPU
 
@@ -144,7 +224,7 @@ Adding a guest RPC: one new TU under
 `lsw/linkproto/commands.hpp`, and the TU listed in
 `src/agent/CMakeLists.txt`. The transport is not involved — including
 for log verbosity and reply summaries, which are handler overrides
-(`RpcHandler::silent`, `RpcHandler::summarize`), and for where it runs:
+(`RpcHandler::request_level`, `RpcHandler::summarize`), and for where it runs:
 the agent is a LocalSystem service in session 0, and a command that has
 to run inside the user's session (windows, UI Automation, HKCU) says so
 with `RpcHandler::placement()`; the service then forwards it to its
@@ -152,6 +232,37 @@ session helper there.
 
 Adding an agent-pushed event: implement `rpc::EventSource` and register
 it with the connection's `EventPump` in `host_endpoint.cpp`.
+
+## Reporting a bug
+
+Attach a log archive. In the manager, open the Log page or Settings, Logs,
+and press **Collect logs**. It writes
+`~/.local/share/lsw/logs/lsw-logs-<date>-<time>.tar.gz` and shows where.
+The archive holds:
+
+- the manager's log, each window mirror's log and the VM's logs (QEMU,
+  virtiofsd and the GPU driver);
+- Windows' logs: the agent, the mirrors, LSW updates, shared folders,
+  Windows setup and the GPU drivers (when Windows is running);
+- `system.txt`: LSW version and release, distribution, kernel, desktop,
+  Qt and libvirt versions, the host GPUs and drivers, and the VM's
+  definition;
+- `settings.txt`: LSW's settings, with passwords and keys removed.
+
+Logs can contain window titles and file names. Look through the archive
+before posting it publicly.
+
+To capture more detail:
+
+1. In Settings, Logs, press **Clear all logs** so the archive only holds
+   the new run.
+2. Press **Debug logging for 30 minutes**, or raise the level of the part
+   you suspect.
+3. Reproduce the problem, then press **Collect logs**.
+
+On disk, the host's logs are in `~/.local/share/lsw/logs/` and Windows'
+are in `C:\ProgramData\LSW\logs\`. The manager also writes a
+`crash-<date>-<time>.log` there if it crashes; include it.
 
 ## Where to find what
 

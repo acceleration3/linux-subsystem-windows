@@ -23,6 +23,14 @@ void LogTail::append(std::string_view line) {
     next_.fetch_add(1, std::memory_order_release);
 }
 
+void LogTail::clear() {
+    const std::lock_guard lock{mutex_};
+    for (auto& length : lengths_) {
+        length = 0;
+    }
+    next_.store(0, std::memory_order_release);
+}
+
 void LogTail::dump(int fd) const noexcept {
     const std::size_t total = next_.load(std::memory_order_acquire);
     const std::size_t first = total > kLines ? total - kLines : 0;

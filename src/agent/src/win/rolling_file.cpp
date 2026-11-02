@@ -93,6 +93,19 @@ bool RollingFile::append(std::string_view text) {
     return true;
 }
 
+bool RollingFile::truncate() {
+    close();
+    const HANDLE file = ::CreateFileW(path_.c_str(), GENERIC_WRITE,
+                                      FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+                                      OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE) {
+        return ::GetLastError() == ERROR_FILE_NOT_FOUND;
+    }
+    const bool emptied = ::SetEndOfFile(file) != FALSE;
+    ::CloseHandle(file);
+    return emptied;
+}
+
 void RollingFile::roll_now() {
     close();
     WIN32_FILE_ATTRIBUTE_DATA info{};

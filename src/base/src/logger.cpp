@@ -152,6 +152,12 @@ void Logger::detach() noexcept {
     out.file.reset();
 }
 
+bool Logger::truncate() {
+    auto& out = Output::instance();
+    const std::lock_guard lock{out.mutex};
+    return out.file && out.file->truncate();
+}
+
 void Logger::set_level(spdlog::level::level_enum level) noexcept {
     if (!g_overridden.load()) {
         g_log_threshold.store(static_cast<int>(level));

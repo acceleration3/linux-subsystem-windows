@@ -60,6 +60,9 @@ private:
     QWidget* build_empty_state();
     void pop_out(NavRail::Page page);
     void collect_logs();
+    void clear_logs();
+    void refresh_log_buttons();
+    void show_cleared();
     void open_desktop();
     void follow_agent_for_desktop(bool online);
     void setup_tray();

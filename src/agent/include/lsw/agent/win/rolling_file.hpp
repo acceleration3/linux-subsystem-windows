@@ -24,6 +24,8 @@ public:
 
     void roll_now();
 
+    bool truncate();
+
     [[nodiscard]] static std::wstring numbered(const std::wstring& path, int index);
 
 private:

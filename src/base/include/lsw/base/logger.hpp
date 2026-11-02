@@ -22,6 +22,8 @@ public:
                        Observer observer);
     static void detach() noexcept;
 
+    static bool truncate();
+
     static void set_level(spdlog::level::level_enum level) noexcept;
     [[nodiscard]] static spdlog::level::level_enum level() noexcept;
     [[nodiscard]] static bool level_overridden() noexcept;

@@ -15,6 +15,8 @@ public:
 
     void append(std::string_view line);
 
+    void clear();
+
     void dump(int fd) const noexcept;
 
 private:

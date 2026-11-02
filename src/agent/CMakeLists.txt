@@ -44,6 +44,7 @@ set(_lsw_agent_rpc_sources
     src/rpc/handlers/system/set_log_level.cpp
     src/rpc/handlers/system/read_file.cpp
     src/rpc/handlers/system/pack_logs.cpp
+    src/rpc/handlers/system/clear_logs.cpp
     src/rpc/handlers/apps/list_apps.cpp
     src/rpc/handlers/apps/launch.cpp
     src/rpc/handlers/apps/get_icon.cpp
@@ -157,6 +158,7 @@ set(_lsw_agent_system_sources
     src/system/volume_grower.cpp
     src/system/scale_steps.cpp
     src/system/log_packer.cpp
+    src/system/log_clearer.cpp
     src/system/driver_log_pruner.cpp
 )
 

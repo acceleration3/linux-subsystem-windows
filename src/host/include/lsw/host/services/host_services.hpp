@@ -11,6 +11,7 @@
 #include "lsw/host/link/agent_rpc_client.hpp"
 #include "lsw/host/services/agent_log_levels.hpp"
 #include "lsw/host/services/guest_shells.hpp"
+#include "lsw/host/services/log_cleaner.hpp"
 #include "lsw/host/services/log_collector.hpp"
 #include "lsw/host/services/host_logging.hpp"
 #include "lsw/host/services/guest_update.hpp"
@@ -60,6 +61,7 @@ public:
     [[nodiscard]] config::LogVerbosity& log_verbosity() noexcept { return logging_.verbosity(); }
     [[nodiscard]] vm::VmLogFiles& vm_logs() noexcept { return vm_logs_; }
     [[nodiscard]] LogCollector& log_collector() noexcept { return log_collector_; }
+    [[nodiscard]] LogCleaner& log_cleaner() noexcept { return log_cleaner_; }
 
     [[nodiscard]] apps::GuestAppLauncher& app_launcher() noexcept { return app_launcher_; }
 
@@ -94,6 +96,7 @@ private:
     HostLogging logging_;
     AgentLogLevels agent_log_levels_;
     LogCollector log_collector_;
+    LogCleaner log_cleaner_;
     apps::GuestAppLauncher app_launcher_;
 };
 

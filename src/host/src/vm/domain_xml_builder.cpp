@@ -187,7 +187,7 @@ QString DomainXmlBuilder::build(const config::VmRecord& vm, const DomainXmlInput
     if (!inputs.avgpu_log.isEmpty()) {
         gpu_lines
             << qemu_arg(QStringLiteral("-chardev"))
-            << qemu_arg(QStringLiteral("file,id=avgpu-log,path=%1").arg(qemu_opt(inputs.avgpu_log)))
+            << qemu_arg(QStringLiteral("file,id=avgpu-log,path=%1,append=on").arg(qemu_opt(inputs.avgpu_log)))
             << qemu_arg(QStringLiteral("-device"))
             << qemu_arg(QStringLiteral("isa-debugcon,iobase=0x402,chardev=avgpu-log"));
     }

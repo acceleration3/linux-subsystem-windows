@@ -19,6 +19,7 @@ inline constexpr const char* kSetClock        = "set_clock";
 inline constexpr const char* kSetLogLevel     = "set_log_level";
 inline constexpr const char* kReadFile        = "read_file";
 inline constexpr const char* kPackLogs        = "pack_logs";
+inline constexpr const char* kClearLogs       = "clear_logs";
 inline constexpr const char* kListDir         = "list_dir";
 inline constexpr const char* kResolveShortcut = "resolve_shortcut";
 inline constexpr const char* kUploadFile      = "upload_file";

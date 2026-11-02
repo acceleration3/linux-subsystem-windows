@@ -99,6 +99,15 @@ bool RollingFile::append(std::string_view text) {
     return true;
 }
 
+bool RollingFile::truncate() {
+    const std::lock_guard lock{mutex_};
+    size_ = 0;
+    if (fd_ >= 0) {
+        return ::ftruncate(fd_, 0) == 0;
+    }
+    return ::truncate(path_.c_str(), 0) == 0 || errno == ENOENT;
+}
+
 void RollingFile::roll_now() {
     const std::lock_guard lock{mutex_};
     close_locked();

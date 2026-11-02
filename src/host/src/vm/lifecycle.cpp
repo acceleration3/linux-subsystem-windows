@@ -199,7 +199,7 @@ bool Lifecycle::retarget_host(const QUuid& uuid) {
     if (!avgpu_log_.isEmpty()) {
         QString option = avgpu_log_;
         option.replace(QLatin1Char(','), QStringLiteral(",,"));
-        const QString wanted = QStringLiteral("file,id=avgpu-log,path=") + option;
+        const QString wanted = QStringLiteral("file,id=avgpu-log,path=") + option + QStringLiteral(",append=on");
         bool present = false;
         for (QDomElement e = commandline.firstChildElement(QStringLiteral("qemu:arg")); !e.isNull();
              e = e.nextSiblingElement(QStringLiteral("qemu:arg"))) {

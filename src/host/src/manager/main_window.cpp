@@ -38,11 +38,13 @@
 #include <QApplication>
 #include <QGuiApplication>
 #include <QMenu>
+#include <QMessageBox>
 #include <QPushButton>
 #include <QScreen>
 #include <QStackedWidget>
 #include <QStatusBar>
 #include <QStyle>
+#include <QTimer>
 #include <QUrl>
 #include <QVBoxLayout>
 #include <QWindow>
@@ -55,6 +57,8 @@ namespace {
 using ui::Theme;
 using ui::Widgets;
 using K = config::ManagerSettings::Key;
+
+constexpr int kClearedNoticeMs = 6000;
 
 struct PageInfo {
     const char* title;
@@ -138,7 +142,7 @@ MainWindow::MainWindow(services::HostServices& services, QWidget* parent)
             }
             return;
         }
-        services_.log_store().clear();
+        clear_logs();
     });
     connect(change_settings_button_, &QPushButton::clicked, this,
             [this] { show_page(NavRail::Page::Settings); });
@@ -307,6 +311,15 @@ void MainWindow::build_pages() {
         dialog.exec();
     });
     connect(settings_page_, &SettingsPage::collect_logs_requested, this, &MainWindow::collect_logs);
+    connect(settings_page_, &SettingsPage::clear_logs_requested, this, &MainWindow::clear_logs);
+    auto& collector = services_.log_collector();
+    auto& cleaner = services_.log_cleaner();
+    connect(&collector, &services::LogCollector::step_started, this, &MainWindow::refresh_log_buttons);
+    connect(&collector, &services::LogCollector::finished, this, &MainWindow::refresh_log_buttons);
+    connect(&collector, &services::LogCollector::failed, this, &MainWindow::refresh_log_buttons);
+    connect(&cleaner, &services::LogCleaner::started, this, &MainWindow::refresh_log_buttons);
+    connect(&cleaner, &services::LogCleaner::finished, this, &MainWindow::refresh_log_buttons);
+    connect(&cleaner, &services::LogCleaner::finished, this, &MainWindow::show_cleared);
     connect(settings_page_, &SettingsPage::open_log_folder_requested, this, [this] {
         QDir{}.mkpath(services_.settings().logs_dir());
         QDesktopServices::openUrl(QUrl::fromLocalFile(services_.settings().logs_dir()));
@@ -329,7 +342,46 @@ void MainWindow::build_pages() {
     });
 }
 
+void MainWindow::clear_logs() {
+    if (services_.log_cleaner().running() || services_.log_collector().running()) {
+        return;
+    }
+    QMessageBox ask{this};
+    ask.setIcon(QMessageBox::Question);
+    ask.setWindowTitle(tr("Clear all logs?"));
+    ask.setText(tr("Clear all logs?"));
+    ask.setInformativeText(tr("This deletes the logs of the manager, the window mirrors, the GPU "
+                              "driver and Windows. Collected archives stay."));
+    QPushButton* clear = ask.addButton(tr("Clear"), QMessageBox::AcceptRole);
+    ask.addButton(tr("Cancel"), QMessageBox::RejectRole);
+    ask.setDefaultButton(static_cast<QPushButton*>(ask.button(QMessageBox::Cancel)));
+    ask.exec();
+    if (ask.clickedButton() == clear) {
+        services_.log_cleaner().start();
+    }
+}
+
+void MainWindow::refresh_log_buttons() {
+    const bool busy = services_.log_cleaner().running() || services_.log_collector().running();
+    clear_button_->setEnabled(!busy || rail_->current() != NavRail::Page::Log);
+    if (settings_page_ != nullptr) {
+        settings_page_->set_logs_busy(busy);
+    }
+}
+
+void MainWindow::show_cleared() {
+    const auto& result = services_.log_cleaner().result();
+    const QString key = QStringLiteral("logs-cleared");
+    notices_->post(key, false, result.headline(), result.detail());
+    if (result.complete()) {
+        QTimer::singleShot(kClearedNoticeMs, this, [this, key] { notices_->withdraw(key); });
+    }
+}
+
 void MainWindow::collect_logs() {
+    if (services_.log_cleaner().running()) {
+        return;
+    }
     auto* dialog = new CollectLogsDialog(services_.log_collector(), this);
     services_.log_collector().start();
     dialog->show();
@@ -452,6 +504,9 @@ void MainWindow::show_page(NavRail::Page page) {
     desktop_button_->setVisible(page == NavRail::Page::Overview);
     run_on_vm_button_->setVisible(page == NavRail::Page::Overview);
     clear_button_->setVisible(page == NavRail::Page::Log || page == NavRail::Page::Console);
+    clear_button_->setText(page == NavRail::Page::Log ? QStringLiteral("Clear all logs")
+                                                      : QStringLiteral("Clear"));
+    refresh_log_buttons();
     change_settings_button_->setVisible(page == NavRail::Page::Graphics);
     config_folder_button_->setVisible(page == NavRail::Page::Settings);
 

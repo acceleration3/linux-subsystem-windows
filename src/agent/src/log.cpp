@@ -105,6 +105,11 @@ std::deque<Record>& file_q() {
     return *q;
 }
 
+bool& clear_pending() {
+    static bool pending = false;
+    return pending;
+}
+
 std::size_t& in_writer() {
     static std::size_t n = 0;
     return n;
@@ -147,11 +152,18 @@ void writer_thread_body() {
 
     for (;;) {
         bool idle = false;
+        bool clear = false;
         {
             std::unique_lock<std::mutex> lock(file_mu());
-            idle = !file_cv().wait_for(lock, kRepeatTick, [] { return !file_q().empty(); });
+            idle = !file_cv().wait_for(lock, kRepeatTick,
+                                       [] { return !file_q().empty() || clear_pending(); });
+            clear = clear_pending();
+            clear_pending() = false;
             batch.swap(file_q());
-            in_writer() = batch.size();
+            in_writer() = batch.size() + (clear ? 1 : 0);
+        }
+        if (clear) {
+            (void)file.truncate();
         }
         if (idle) {
             if (const auto note = collapser.due(mono_ms())) {
@@ -246,6 +258,16 @@ void set_file(const std::wstring& path, win::RollingFile::Limits limits) {
     const std::lock_guard<std::mutex> lock(file_mu());
     file_path() = path;
     file_limits() = limits;
+}
+
+void clear_file() {
+    ensure_writer_started();
+    std::unique_lock<std::mutex> lock(file_mu());
+    file_q().clear();
+    clear_pending() = true;
+    file_cv().notify_one();
+    written_cv().wait_for(lock, std::chrono::seconds(5),
+                          [] { return !clear_pending() && in_writer() == 0; });
 }
 
 void set_source(std::string source) {

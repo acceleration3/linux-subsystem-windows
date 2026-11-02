@@ -330,7 +330,7 @@ void App::start_mcp_server() {
     if (mcp_server_ != nullptr) {
         return;
     }
-    mcp_server_ = std::make_unique<mcp::McpServer>(services_.rpc(), services_.log_store(), services_.guest_update(), services_.status(), services_.log_collector(), this);
+    mcp_server_ = std::make_unique<mcp::McpServer>(services_.rpc(), services_.log_store(), services_.guest_update(), services_.status(), services_.log_collector(), services_.log_cleaner(), this);
     (void)mcp_server_->listen();
 }
 

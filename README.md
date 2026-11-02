@@ -119,7 +119,7 @@ The first GPU build fetches about 550 MB (a Windows kit subset, the Khronos regi
 - **GPU stack:** clang, clang-cl, `lld`, `llvm-lib`, `llvm-rc`, `llvm-mt`, Python 3.11+, meson, glslang, and QEMU's build dependencies (glib2, pixman, gtk3, libepoxy, libslirp)
 - **Guest half:** mingw-w64
 
-Configure names whichever window-mirror dependency is missing. For the exact package list on Arch, see [aur/README.md](aur/README.md).
+Configure names whichever window-mirror dependency is missing. For the exact package lists, see `scripts/dist.sh`.
 
 ### Build options
 
@@ -177,8 +177,8 @@ external/
   remotewin/   the window mirror
   accel-virt/  the GPU stack
 scripts/       building, packaging, testing
+packaging/     the AUR, deb and rpm package files, icons and licenses
 docs/          the UI design mockup
-aur/           the lsw-bin AUR package and the release procedure
 ```
 
 Every module has one `include/` tree and one `src/` tree, with one class per header, so includes read `lsw/<module>/<concern>/<class>.hpp`.
@@ -192,7 +192,7 @@ Start with [CONTRIBUTING.md](CONTRIBUTING.md), which covers development setup, s
 - Make GPU changes in `accel-virt` and window changes in `remotewin`, then bump the submodule pointer here.
 - Anything the manager and the guest agent must agree on belongs in `src/linkproto/`.
 
-When reporting a bug, include your distribution, GPU and LSW version. The manager's log and, for shared folders, `C:\ProgramData\LSW\logs\shares.log` in the guest are the most useful things to attach.
+When reporting a bug, attach the archive from **Collect logs** (Log page or Settings). [CONTRIBUTING.md](CONTRIBUTING.md#reporting-a-bug) says what is in it and how to capture more detail.
 
 ## License
 

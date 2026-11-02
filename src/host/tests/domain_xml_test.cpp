@@ -267,8 +267,8 @@ int main(int argc, char** argv) {
           "the render-only adapter is display=off on its own GPU");
 
     check(args_after(args, QStringLiteral("-chardev"), QStringLiteral("file,id=avgpu-log,path="))
-                  .value(0) == QStringLiteral("file,id=avgpu-log,path=") + inputs.avgpu_log,
-          "the driver log's chardev writes the log file");
+                  .value(0) == QStringLiteral("file,id=avgpu-log,path=") + inputs.avgpu_log + QStringLiteral(",append=on"),
+          "the driver log's chardev appends to the log file");
     check(args_after(args, QStringLiteral("-device"), QStringLiteral("isa-debugcon,")).value(0) ==
               QStringLiteral("isa-debugcon,iobase=0x402,chardev=avgpu-log"),
           "the debug console listens on port 0x402");

@@ -1,5 +1,6 @@
 #include "lsw/host/mcp/mcp_server.hpp"
 
+#include "lsw/host/mcp/tools/clear_logs_tool.hpp"
 #include "lsw/host/mcp/tools/collect_logs_tool.hpp"
 #include "lsw/host/mcp/tools/console_close_tool.hpp"
 #include "lsw/host/mcp/tools/console_input_tool.hpp"
@@ -22,9 +23,10 @@ namespace lsw::host::mcp {
 
 McpServer::McpServer(link::AgentRpcClient& rpc, apps::LogStore& log_store,
                      services::GuestUpdate& update, services::StatusHub& status,
-                     services::LogCollector& collector, QObject* parent)
+                     services::LogCollector& collector, services::LogCleaner& cleaner,
+                     QObject* parent)
     : QObject(parent), agent_(rpc), consoles_(rpc), router_(tools_, agent_), http_(this) {
-    register_tools(log_store, update, status, collector);
+    register_tools(log_store, update, status, collector, cleaner);
     http_.set_handler([this](const std::string& body) -> std::string {
         nlohmann::json request;
         try {
@@ -39,7 +41,8 @@ McpServer::McpServer(link::AgentRpcClient& rpc, apps::LogStore& log_store,
 McpServer::~McpServer() = default;
 
 void McpServer::register_tools(apps::LogStore& log_store, services::GuestUpdate& update,
-                               services::StatusHub& status, services::LogCollector& collector) {
+                               services::StatusHub& status, services::LogCollector& collector,
+                               services::LogCleaner& cleaner) {
     tools_.add(std::make_unique<SystemInfoTool>(agent_));
     tools_.add(std::make_unique<ListAppsTool>(agent_));
     tools_.add(std::make_unique<ListWindowsTool>(agent_));
@@ -53,6 +56,7 @@ void McpServer::register_tools(apps::LogStore& log_store, services::GuestUpdate&
     tools_.add(std::make_unique<RedeployAgentTool>(agent_));
     tools_.add(std::make_unique<GuestUpdateTool>(update, status));
     tools_.add(std::make_unique<CollectLogsTool>(collector));
+    tools_.add(std::make_unique<ClearLogsTool>(cleaner));
 }
 
 bool McpServer::listen(std::uint16_t port) { return http_.listen(port); }
