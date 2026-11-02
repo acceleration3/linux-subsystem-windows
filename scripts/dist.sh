@@ -26,7 +26,7 @@ image_of() {
 }
 
 DEPS_ARCH=(
-    base-devel git cmake ninja python meson glslang clang lld llvm sdl3 wine mingw-w64-gcc
+    base-devel git file which findutils tar patch ca-certificates cmake ninja python meson glslang clang lld llvm sdl3 wine mingw-w64-gcc
     qt6-base libvirt vulkan-headers vulkan-icd-loader libisofs libvncserver
     libxcb wimlib hivex zlib spdlog fmt nlohmann-json
     wayland wayland-protocols libxkbcommon libdrm pkgconf
@@ -37,7 +37,7 @@ DEPS_ARCH=(
     curl unzip xz
 )
 DEPS_DEB=(
-    build-essential dpkg-dev fakeroot git cmake ninja-build python3 python3-venv meson
+    build-essential dpkg-dev fakeroot git file findutils tar patch ca-certificates cmake ninja-build python3 python3-venv meson
     glslang-tools clang lld llvm libsdl3-dev wine64-tools
     qt6-base-dev libvirt-dev libvulkan-dev libisofs-dev libvncserver-dev
     libxcb1-dev libwim-dev libhivex-dev zlib1g-dev libspdlog-dev libfmt-dev nlohmann-json3-dev
@@ -51,7 +51,7 @@ DEPS_DEB=(
     curl unzip xz-utils zstd
 )
 DEPS_RPM=(
-    gcc gcc-c++ make git cmake ninja-build python3 meson rpm-build
+    gcc gcc-c++ make git file which findutils tar patch ca-certificates cmake ninja-build python3 meson rpm-build
     glslang clang lld llvm SDL3-devel wine-devel
     qt6-qtbase-devel libvirt-devel vulkan-headers vulkan-loader-devel libisofs-devel
     libvncserver-devel libxcb-devel wimlib-devel hivex-devel zlib-ng-compat-devel spdlog-devel
@@ -68,13 +68,15 @@ DEPS_RPM=(
 )
 
 install_deps() {
+    local su=()
+    (( EUID == 0 )) || su=(sudo)
     case "$1" in
-        arch) sudo pacman -Syu --needed --noconfirm "${DEPS_ARCH[@]}" ;;
+        arch) "${su[@]}" pacman -Syu --needed --noconfirm "${DEPS_ARCH[@]}" ;;
         deb)
-            sudo apt-get update
-            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${DEPS_DEB[@]}"
+            "${su[@]}" apt-get update
+            "${su[@]}" env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${DEPS_DEB[@]}"
             ;;
-        rpm) sudo dnf -y install --setopt=install_weak_deps=False "${DEPS_RPM[@]}" ;;
+        rpm) "${su[@]}" dnf -y install --setopt=install_weak_deps=False "${DEPS_RPM[@]}" ;;
     esac
 }
 
@@ -89,9 +91,13 @@ TARGET is arch, deb, rpm or all (the default).
   --kit DIR      an already fetched accel-virt Windows kit
   --setup        install or update the build dependencies in each distrobox
   --incremental  reuse the release trees of the last run
+  --deps TARGET  only install the build dependencies of arch, deb or rpm here
 
 The distroboxes are named by LSW_BOX_ARCH, LSW_BOX_DEB and LSW_BOX_RPM.
 Packages are written to dist/.
+
+The release workflow runs the steps itself, in containers:
+  scripts/dist.sh --in-box guest|arch|deb|rpm [--setup] [--version V]
 EOF
 }
 
@@ -109,6 +115,7 @@ while (( $# )); do
         --incremental) INCREMENTAL=1; shift ;;
         --setup)       SETUP=1; shift ;;
         --in-box)      IN_BOX="$2"; shift 2 ;;
+        --deps)        install_deps "$2"; exit 0 ;;
         -h|--help)     usage; exit 0 ;;
         all)           targets+=("${TARGETS_ALL[@]}"); shift ;;
         arch|deb|rpm)  targets+=("$1"); shift ;;
