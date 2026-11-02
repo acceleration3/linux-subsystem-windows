@@ -28,6 +28,7 @@ class GraphicsPage;
 class LogPanel;
 class RunOnVmDialog;
 class SettingsPage;
+class UpdateDialog;
 class VmDetailPanel;
 class NoticeBoard;
 class WarningStrip;
@@ -162,6 +163,7 @@ private:
     GraphicsAlerts* alerts_ = nullptr;
     GraphicsPage* graphics_page_ = nullptr;
     SettingsPage* settings_page_ = nullptr;
+    UpdateDialog* update_dialog_ = nullptr;
     QSystemTrayIcon* tray_ = nullptr;
     // A restart in progress: the guest is being stopped so it can be
     // started on a new definition.

@@ -12,7 +12,7 @@ namespace lsw::host::services {
 // folder it sits in.
 //
 // A shared folder is a virtio-fs device tagged with its drive letter
-// (see GuestShares), so a file under one has the path ``Z:\rel\path`` in
+// (see GuestBundle::mounts_of), so a file under one has the path ``Z:\rel\path`` in
 // the guest. A file under none cannot be opened there, and neither can
 // one whose name Windows cannot spell.
 class GuestDocumentPath {

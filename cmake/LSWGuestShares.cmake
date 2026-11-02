@@ -30,7 +30,7 @@
 # installed as share/lsw/guest/virtiofs, which the manager finds the way
 # it finds av-drivers (platform::GuestVirtiofsPath), stages on the
 # payload ISO for a new install (C:\ProgramData\LSW\virtiofs) and copies
-# into an existing guest (services::GuestShares).
+# into an existing guest (services::GuestBundle).
 #
 # To move a pin: change the version and the package's hash, configure,
 # and take the extracted files' new hashes from the error it stops with.

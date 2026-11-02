@@ -5,7 +5,7 @@
 //   lsw-agent.exe --service
 //       The ``lsw-agent`` Windows service: LocalSystem, session 0,
 //       automatic start, restarted by the SCM if it fails. Registered by
-//       the autounattend's LswPromote.ps1 at SetupComplete. Owns the
+//       lsw-guest-update.ps1 (at SetupComplete, and on every update). Owns the
 //       manager link (TCP 5102), installs, consoles and process
 //       launching — into any session, as that session's user
 //       (win::RunAs).

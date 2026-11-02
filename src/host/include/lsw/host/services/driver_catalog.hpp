@@ -10,7 +10,7 @@
 #include <functional>
 #include <optional>
 
-namespace lsw::host::provision::install {
+namespace lsw::host::services {
 
 // What the Microsoft Update Catalog says each host GPU's current Windows
 // display driver is, so the guest's user-mode driver can be stamped with a
@@ -23,6 +23,12 @@ namespace lsw::host::provision::install {
 // vendor:device. A search that fails, or finds no driver, leaves its
 // lines as they were: provision.ps1 then stamps the version of its own
 // table. A lookup is one use of the object.
+//
+// The versions it found are kept in a small JSON file (``cache_path``), per
+// "<vendor>:<device>": a search that fails then falls back to the last
+// version found, and only with neither does a line stay unversioned. Without
+// that, a lookup that failed one day would change the lines, and so the
+// release GuestBundle makes of them, for no reason in the machine.
 class DriverCatalog : public QObject {
     Q_OBJECT
 public:
@@ -31,8 +37,9 @@ public:
     using Done = std::function<void(const QByteArray& page, const QString& error)>;
     using Fetch = std::function<void(const QUrl& url, Done done)>;
 
-    // ``fetch`` empty is the catalog over the network.
-    explicit DriverCatalog(Fetch fetch = {}, QObject* parent = nullptr);
+    // ``fetch`` empty is the catalog over the network; ``cache_path`` empty
+    // keeps nothing between lookups.
+    explicit DriverCatalog(Fetch fetch = {}, QString cache_path = {}, QObject* parent = nullptr);
 
     // The highest version among the page's result rows (<tr id="<guid>_R<n>">),
     // each row's title ending in its four-part version, compared number by
@@ -54,6 +61,8 @@ Q_SIGNALS:
 private:
     void answer(const QString& key, const QByteArray& page, const QString& error);
     void complete();
+    void load_cache();
+    void save_cache() const;
 
     Fetch fetch_;
     QNetworkAccessManager nam_;
@@ -61,8 +70,10 @@ private:
     // The distinct "<vendor>:<device>" not yet answered, and the versions found.
     QHash<QString, bool> pending_;
     QHash<QString, QString> versions_;
+    QString cache_path_;
+    QHash<QString, QString> cached_;
     bool started_ = false;
     bool completed_ = false;
 };
 
-}  // namespace lsw::host::provision::install
+}  // namespace lsw::host::services

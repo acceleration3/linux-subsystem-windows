@@ -48,6 +48,9 @@ public:
     // guest reboots and a bugcheck, which nothing inside the guest does.
     // Written by QEMU, one file per QEMU run.
     [[nodiscard]] QString vm_avgpu_log_path() const;  // logs/lsw-avgpu.log
+    // The driver version the Microsoft Update Catalog last listed for each
+    // host GPU (services::DriverCatalog's cache).
+    [[nodiscard]] QString driver_versions_path() const;  // driver-versions.json
 
     // UI preferences, persisted via QSettings into ``manager.ini``.
     [[nodiscard]] bool is_first_run() const;

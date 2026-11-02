@@ -4,6 +4,7 @@
 #include "lsw/host/mcp/tools/console_input_tool.hpp"
 #include "lsw/host/mcp/tools/console_open_tool.hpp"
 #include "lsw/host/mcp/tools/console_read_tool.hpp"
+#include "lsw/host/mcp/tools/guest_update_tool.hpp"
 #include "lsw/host/mcp/tools/launch_tool.hpp"
 #include "lsw/host/mcp/tools/list_apps_tool.hpp"
 #include "lsw/host/mcp/tools/list_windows_tool.hpp"
@@ -18,9 +19,10 @@
 
 namespace lsw::host::mcp {
 
-McpServer::McpServer(link::AgentRpcClient& rpc, apps::LogStore& log_store, QObject* parent)
+McpServer::McpServer(link::AgentRpcClient& rpc, apps::LogStore& log_store,
+                     services::GuestUpdate& update, services::StatusHub& status, QObject* parent)
     : QObject(parent), agent_(rpc), consoles_(rpc), router_(tools_, agent_), http_(this) {
-    register_tools(log_store);
+    register_tools(log_store, update, status);
     http_.set_handler([this](const std::string& body) -> std::string {
         nlohmann::json request;
         try {
@@ -34,7 +36,8 @@ McpServer::McpServer(link::AgentRpcClient& rpc, apps::LogStore& log_store, QObje
 
 McpServer::~McpServer() = default;
 
-void McpServer::register_tools(apps::LogStore& log_store) {
+void McpServer::register_tools(apps::LogStore& log_store, services::GuestUpdate& update,
+                               services::StatusHub& status) {
     // Advertised to the model in this order.
     tools_.add(std::make_unique<SystemInfoTool>(agent_));
     tools_.add(std::make_unique<ListAppsTool>(agent_));
@@ -47,6 +50,7 @@ void McpServer::register_tools(apps::LogStore& log_store) {
     tools_.add(std::make_unique<RecentLogsTool>(log_store));
     tools_.add(std::make_unique<RawRpcTool>(agent_));
     tools_.add(std::make_unique<RedeployAgentTool>(agent_));
+    tools_.add(std::make_unique<GuestUpdateTool>(update, status));
 }
 
 bool McpServer::listen(std::uint16_t port) { return http_.listen(port); }

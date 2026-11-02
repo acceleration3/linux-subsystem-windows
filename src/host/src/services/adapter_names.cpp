@@ -1,11 +1,11 @@
-#include "lsw/host/provision/install/adapter_names.hpp"
+#include "lsw/host/services/adapter_names.hpp"
 
 #include <QDir>
 #include <QFile>
 #include <QRegularExpression>
 #include <utility>
 
-namespace lsw::host::provision::install {
+namespace lsw::host::services {
 
 namespace {
 
@@ -190,4 +190,4 @@ QString AdapterNames::fitted(const QString& name) {
     return QString::fromUtf8(bytes);
 }
 
-}  // namespace lsw::host::provision::install
+}  // namespace lsw::host::services

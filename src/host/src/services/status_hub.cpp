@@ -205,7 +205,22 @@ void StatusHub::refresh(Area area) {
     case Area::Usb:
         read_usb();
         break;
+    case Area::Update:
+        break;  // pushed by GuestUpdate, nothing to ask
     }
+}
+
+void StatusHub::set_vm(const VmStatus& status) {
+    vm_ = status;
+    Q_EMIT changed(Area::Vm);
+}
+
+void StatusHub::set_update(const GuestUpdateStatus& status) {
+    if (status == update_) {
+        return;
+    }
+    update_ = status;
+    Q_EMIT changed(Area::Update);
 }
 
 void StatusHub::boot_started(const QUuid& uuid) {

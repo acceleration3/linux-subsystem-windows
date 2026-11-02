@@ -44,6 +44,7 @@ SCREENS = [
     ("dialog-4-browse", "m-picker", 800, 620),
     ("dialog-5-starting", "m-splash", 440, 560),
     ("dialog-6-open-document", "m-opendoc", 560, 290),
+    ("dialog-7-update", "m-update", 520, 470),
 ]
 
 

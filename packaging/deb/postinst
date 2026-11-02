@@ -1,0 +1,15 @@
+#!/bin/sh
+# Says what a VM's first start needs; there is nothing to configure.
+set -e
+if [ "$1" = configure ] && [ -z "$2" ]; then
+    cat <<'MSG'
+LSW: before the first VM start
+  - /dev/kvm must be usable by your user: on Debian and Ubuntu that is
+    membership of the kvm group (sudo usermod -aG kvm "$USER", then log
+    in again).
+  - VMs run under your user's libvirt session (qemu:///session): no
+    libvirt group membership and no system libvirtd are needed.
+  Start "LSW Manager" from the application menu, or run lsw-manager.
+MSG
+fi
+exit 0

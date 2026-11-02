@@ -1,10 +1,10 @@
 # Maintainer: acceleration3 <acceleration23 at gmail dot com>
 #
-# lsw-bin from this checkout: the release tarball scripts/package-release.sh
+# lsw-bin from this checkout: the release tarball scripts/dist.sh arch
 # wrote to dist/, instead of the one attached to the GitHub release. For
 # installing a release before it is published, or one never published.
 #
-#   scripts/package-release.sh --version <V>     (aur/README.md, step 1)
+#   scripts/dist.sh --version <V> arch           (aur/README.md, step 1)
 #   cd packaging/arch && makepkg -si
 #
 # Everything but the version and where the tarball comes from is
@@ -16,7 +16,7 @@ source "${_root}/aur/PKGBUILD"
 
 _tarball="$(printf '%s\n' "${_root}"/dist/lsw-*-x86_64.tar.zst | sort -V | tail -1)"
 if [[ ! -f "${_tarball}" ]]; then
-    error "No release tarball in ${_root}/dist; run scripts/package-release.sh first."
+    error "No release tarball in ${_root}/dist; run scripts/dist.sh arch first."
     exit 1
 fi
 pkgver="$(basename "${_tarball}" | sed 's/^lsw-\(.*\)-x86_64\.tar\.zst$/\1/')"

@@ -100,10 +100,13 @@ the build tree beside its binary, then the installed tree beside its
 binary, so a staged `DESTDIR` works as it stands. It logs where it
 found each one at startup (`artifact:` lines).
 
-`scripts/package-release.sh` builds all three trees from scratch in
-`build-release/` and packs that install as
-`dist/lsw-<version>-x86_64.tar.zst`, which the AUR package in `aur/`
-(`lsw-bin`) installs; `aur/README.md` has the release procedure.
+`scripts/dist.sh` builds all three trees from scratch, in distroboxes
+(the guest half once, on Arch; the host tree on each distribution a
+release ships for), and packs that install as
+`dist/lsw-<version>-x86_64.tar.zst` (Arch: what the AUR package in
+`aur/`, `lsw-bin`, installs), `dist/lsw_<version>-1_amd64.deb` (Ubuntu)
+and `dist/lsw-<version>-1.fc45.x86_64.rpm` (Fedora); `aur/README.md`
+has the release procedure.
 
 ## Changing the GPU
 

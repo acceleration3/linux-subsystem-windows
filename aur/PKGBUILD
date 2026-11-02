@@ -1,6 +1,6 @@
 # Maintainer: acceleration3 <acceleration23 at gmail dot com>
 #
-# A prebuilt release: scripts/package-release.sh builds the tarball in a
+# A prebuilt release: scripts/dist.sh arch builds the tarball in a
 # clean Arch userland and it is attached to the GitHub release v$pkgver
 # (README.md in this directory has the whole procedure). Building from
 # source takes a WDK subset Microsoft does not allow redistributing, a

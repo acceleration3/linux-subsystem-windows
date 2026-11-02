@@ -458,24 +458,8 @@ QWidget* GraphicsPage::build_warnings() {
         case Warning::Kind::DisplayNoDriver:
             connect(strip->add_button(QStringLiteral("Open the driver log")),
                     &QPushButton::clicked, this, &GraphicsPage::open_log);
-            connect(strip->add_button(QStringLiteral("Install the driver for new adapters")),
-                    &QPushButton::clicked, &alerts_, &GraphicsAlerts::install_driver);
             break;
         case Warning::Kind::NoDriver:
-        case Warning::Kind::InstallFailed:
-            connect(strip->add_button(QStringLiteral("Install the driver for new adapters")),
-                    &QPushButton::clicked, &alerts_, &GraphicsAlerts::install_driver);
-            break;
-        case Warning::Kind::DriverUpdate:
-        case Warning::Kind::UpdateFailed:
-            connect(strip->add_button(QStringLiteral("Update the driver")),
-                    &QPushButton::clicked, &alerts_, &GraphicsAlerts::update_driver);
-            break;
-        case Warning::Kind::InstallFinished:
-            connect(strip->add_button(QStringLiteral("Restart the guest")),
-                    &QPushButton::clicked, this, &GraphicsPage::restart_requested);
-            break;
-        case Warning::Kind::Installing:
             break;
         }
         column->addWidget(strip);

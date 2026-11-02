@@ -8,9 +8,8 @@ namespace lsw::host::platform {
 // cmake/LSWGuestShares.cmake lays out, with virtio-win's viofs driver and
 // virtiofs.exe, the WinFsp installer and lsw-shares.ps1.
 //
-// Two consumers: the payload stager puts it on the ISO for a new
-// install, and services::GuestShares copies it into a guest that has an
-// older one, or none.
+// Its consumer is services::GuestBundle, which ships it into the guest at
+// install (on the payload ISO) and at every update.
 class GuestVirtiofsPath {
 public:
     GuestVirtiofsPath() = delete;

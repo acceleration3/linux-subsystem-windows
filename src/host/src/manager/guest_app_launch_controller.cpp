@@ -224,14 +224,10 @@ bool GuestAppLaunchController::shares_ready_for(const Request& request, const QS
     using State = services::GuestUpkeep::State;
     const QString shown = target.isEmpty() ? request.documents.value(0) : target;
     if (upkeep.shares_ready()) {
-        if (!upkeep.shares_error().isEmpty()) {
-            show_failure(shown, upkeep.shares_error(), request);
-            return false;
-        }
         return true;
     }
-    // A pass that ended without getting to the shared folders (the swap of the
-    // agent failed) is not a guest that has them.
+    // A pass that ended without getting to the shared folders (the update
+    // failed) is not a guest that has them.
     if (upkeep.state() == State::Failed) {
         show_failure(shown,
                      QStringLiteral("Windows' shared folders were not set up: %1").arg(upkeep.error()),
@@ -245,7 +241,7 @@ bool GuestAppLaunchController::shares_ready_for(const Request& request, const QS
         splash_->say(upkeep.state() == State::Updating
                          ? QStringLiteral("Updating LSW's files in Windows")
                      : upkeep.state() == State::Checking
-                         ? QStringLiteral("Mounting the shared folders in Windows")
+                         ? QStringLiteral("Checking LSW's files in Windows")
                          : QStringLiteral("Waiting for Windows to finish starting"));
     }
     auto* waiter = new QObject(this);

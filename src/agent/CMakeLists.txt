@@ -3,8 +3,8 @@
 # (src/main.cpp):
 #
 #   * ``--service`` — the ``lsw-agent`` Windows service, LocalSystem, in
-#     session 0, registered by the autounattend's LswPromote.ps1 at
-#     SetupComplete. Owns the manager link (TCP 5102), RPC dispatch,
+#     session 0, registered by lsw-guest-update.ps1 (run by the
+#     autounattend's LswPromote.ps1 at SetupComplete, and on every update). Owns the manager link (TCP 5102), RPC dispatch,
 #     installs, consoles, and process launching into any session as
 #     that session's user (WTSQueryUserToken + CreateProcessAsUserW,
 #     the user's full token by default).

@@ -6,7 +6,7 @@ namespace lsw::host::platform {
 
 // Finds the cross-built ``lsw-guest-agent.exe`` on the host.
 //
-// Two consumers with the same question: the wizard bundles it onto the
+// Two consumers with the same question: the wizard's bundle puts it on the
 // payload ISO, and the MCP redeploy tool serves it to a running guest.
 // One lookup rule, so a developer who sets ``$LSW_AGENT_EXE`` gets it
 // honoured in both.

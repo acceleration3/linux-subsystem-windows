@@ -3,14 +3,11 @@
 #include "lsw/base/log.hpp"
 #include "lsw/host/link/agent_reply.hpp"
 #include "lsw/host/link/agent_rpc_client.hpp"
-#include "lsw/host/services/agent_redeployer.hpp"
-#include "lsw/host/services/guest_swap_script.hpp"
+#include "lsw/host/services/guest_update.hpp"
 #include "lsw/host/services/status_hub.hpp"
 #include "lsw/host/vm/domain_description.hpp"
 
 #include <QDateTime>
-#include <QMetaObject>
-#include <QPointer>
 #include <QTimeZone>
 #include <QtConcurrent>
 
@@ -22,47 +19,74 @@
 
 namespace lsw::host::services {
 
-GuestUpkeep::GuestUpkeep(StatusHub& status, link::AgentRpcClient& rpc, QObject* parent)
-    : QObject(parent), status_(status), rpc_(rpc) {
+GuestUpkeep::GuestUpkeep(StatusHub& status, link::AgentRpcClient& rpc, GuestUpdate& update,
+                         QObject* parent)
+    : QObject(parent), status_(status), rpc_(rpc), update_(update) {
     connect(&status_, &StatusHub::changed, this, [this](StatusHub::Area area) {
         if (area == StatusHub::Area::Vm) {
             on_status();
         }
     });
-    connect(&watcher_, &QFutureWatcher<Result>::finished, this, [this] {
-        const Result result = watcher_.result();
-        if (stopped_during_pass_) {
-            // The boot this was a pass for is gone, and so is what it found.
-            stopped_during_pass_ = false;
-            passed_ = false;
-            shares_reached_ = false;
-            shares_error_.clear();
-            error_.clear();
-            set_state(State::Idle);
-            Q_EMIT changed();
-            on_status();
+    connect(&probe_watcher_, &QFutureWatcher<Probe>::finished, this, [this] {
+        const Probe probe = probe_watcher_.result();
+        if (end_if_stopped()) {
             return;
         }
-        shares_reached_ = result.shares_reached;
-        if (!result.attempted.isEmpty()) {
-            attempted_.insert(result.attempted);
+        if (!probe.ok) {
+            finish_pass(false, probe.error);
+            return;
         }
-        error_ = result.error;
-        const bool shares_changed = shares_error_ != result.shares_error;
-        shares_error_ = result.shares_error;
-        if (!set_state(result.ok ? State::Current : State::Failed) && shares_changed) {
-            Q_EMIT changed();
+        // While it runs nothing else here touches the guest: the pass goes
+        // on from its end.
+        awaiting_update_ = true;
+        update_.run_if_stale(probe.release, probe.version);
+        if (update_.running()) {
+            set_state(State::Updating);
         }
-        // An agent swapped in reports the driver package anew.
-        status_.refresh(StatusHub::Area::Graphics);
+    });
+    connect(&update_, &GuestUpdate::succeeded, this, [this] {
+        // A retry from the dialog or Settings is not a pass of ours, but one
+        // that ended Failed is completed by it.
+        if (!awaiting_update_ && state_ != State::Failed) {
+            return;
+        }
+        awaiting_update_ = false;
+        if (end_if_stopped()) {
+            return;
+        }
+        // The update mounts the shared folders; a pass that did not get that
+        // far has not, and a document in a shared folder is not to be opened
+        // as if it had.
+        shares_reached_ = true;
+        set_state(State::Checking);
+        clock_watcher_.setFuture(QtConcurrent::run([this] { return set_clock(); }));
+    });
+    connect(&update_, &GuestUpdate::failed, this, [this](const QString& message) {
+        if (!awaiting_update_) {
+            return;
+        }
+        awaiting_update_ = false;
+        if (end_if_stopped()) {
+            return;
+        }
+        finish_pass(false, message);
+    });
+    connect(&clock_watcher_, &QFutureWatcher<Clock>::finished, this, [this] {
+        const Clock clock = clock_watcher_.result();
+        if (end_if_stopped()) {
+            return;
+        }
+        finish_pass(clock.ok, clock.error);
     });
 }
 
-GuestUpkeep::~GuestUpkeep() { watcher_.waitForFinished(); }
+GuestUpkeep::~GuestUpkeep() {
+    probe_watcher_.waitForFinished();
+    clock_watcher_.waitForFinished();
+}
 
 void GuestUpkeep::retry() {
-    attempted_.clear();
-    if (ready()) {
+    if (ready() && !busy()) {
         start();
     }
 }
@@ -73,10 +97,14 @@ bool GuestUpkeep::ready() const {
     return vm.running() && vm.agent_online() && definition != nullptr && !definition->installing;
 }
 
-// A machine that stops ends the boot. The swap takes the agent away and
+bool GuestUpkeep::busy() const {
+    return probe_watcher_.isRunning() || clock_watcher_.isRunning() || awaiting_update_;
+}
+
+// A machine that stops ends the boot. The update takes the agent away and
 // brings it back while the pass runs, which is the same boot.
 void GuestUpkeep::on_status() {
-    if (watcher_.isRunning()) {
+    if (busy()) {
         // A stop seen now is the end of the boot being passed, which the
         // finished pass must not be taken for the next one's.
         if (!status_.vm().running()) {
@@ -87,11 +115,7 @@ void GuestUpkeep::on_status() {
     if (!status_.vm().running()) {
         passed_ = false;
         shares_reached_ = false;
-        const bool had_shares_error = !shares_error_.isEmpty();
-        shares_error_.clear();
-        if (!set_state(State::Idle) && had_shares_error) {
-            Q_EMIT changed();
-        }
+        set_state(State::Idle);
         return;
     }
     if (!passed_ && ready()) {
@@ -99,8 +123,23 @@ void GuestUpkeep::on_status() {
     }
 }
 
+bool GuestUpkeep::end_if_stopped() {
+    if (!stopped_during_pass_) {
+        return false;
+    }
+    // The boot this was a pass for is gone, and so is what it found.
+    stopped_during_pass_ = false;
+    passed_ = false;
+    shares_reached_ = false;
+    error_.clear();
+    set_state(State::Idle);
+    Q_EMIT changed();
+    on_status();
+    return true;
+}
+
 void GuestUpkeep::start() {
-    if (watcher_.isRunning()) {
+    if (busy()) {
         return;
     }
     passed_ = true;
@@ -108,14 +147,16 @@ void GuestUpkeep::start() {
     stopped_during_pass_ = false;
     set_state(State::Checking);
     error_.clear();
-    // The shares the machine has now: its live definition, which is what
-    // gave Windows its virtio-fs devices.
-    QVector<GuestShares::Mount> mounts;
-    if (const vm::DomainDescription* definition = status_.vm().definition()) {
-        mounts = GuestShares::mounts_of(*definition);
+    probe_watcher_.setFuture(QtConcurrent::run([this] { return probe(); }));
+}
+
+void GuestUpkeep::finish_pass(bool ok, const QString& error) {
+    error_ = error;
+    if (!set_state(ok ? State::Current : State::Failed)) {
+        Q_EMIT changed();
     }
-    watcher_.setFuture(QtConcurrent::run(
-        [this, attempted = attempted_, mounts] { return pass(attempted, mounts); }));
+    // A driver put in place reports anew.
+    status_.refresh(StatusHub::Area::Graphics);
 }
 
 bool GuestUpkeep::set_state(State state) {
@@ -127,92 +168,46 @@ bool GuestUpkeep::set_state(State state) {
     return true;
 }
 
-GuestUpkeep::Result GuestUpkeep::pass(QSet<QString> attempted,
-                                      const QVector<GuestShares::Mount>& mounts) {
-    Result result;
-
-    // 1. The agent and the mirror's guest half, against the shipped ones.
-    const AgentRedeployer::Shipped shipped = AgentRedeployer::shipped();
-    if (shipped.agent.isEmpty()) {
-        // Nothing to compare with: a build without the guest's binaries.
-        LSW_INFO("upkeep: no agent shipped here ({}); the guest's is left as it is",
-                 shipped.error);
-    } else {
-        const std::string agent_hash = AgentRedeployer::sha256(shipped.agent);
-        const std::string mirror_hash =
-            shipped.mirror.isEmpty() ? std::string{} : AgentRedeployer::sha256(shipped.mirror);
-        nlohmann::json paths = nlohmann::json::array({GuestSwapScript::kGuestAgent});
-        if (!mirror_hash.empty()) {
-            paths.push_back(GuestSwapScript::kGuestMirror);
-        }
-        const auto reply = rpc_.request(linkproto::cmd::kFileHashes, {{"paths", paths}});
-        const auto in_guest = [&reply](const char* path) {
-            const auto found = reply.body.value("hashes", nlohmann::json::object());
-            return found.contains(path) && found[path].is_string()
-                       ? found[path].get<std::string>()
-                       : std::string{};
-        };
-        const bool agent_stale = !reply.ok || in_guest(GuestSwapScript::kGuestAgent) != agent_hash;
-        const bool mirror_stale =
-            reply.ok && !mirror_hash.empty() && in_guest(GuestSwapScript::kGuestMirror) != mirror_hash;
-        const QString pair = QString::fromStdString(agent_hash + mirror_hash);
-        if ((agent_stale || mirror_stale) && !attempted.contains(pair)) {
-            LSW_INFO("upkeep: the guest's {} differ from the ones shipped; swapping them",
-                     !reply.ok      ? "agent (too old for file_hashes) and mirror"
-                     : agent_stale  ? "agent and mirror"
-                                    : "mirror");
-            result.attempted = pair;
-            QPointer<GuestUpkeep> self(this);
-            QMetaObject::invokeMethod(this, [self] {
-                if (self) {
-                    self->set_state(State::Updating);
-                }
-            }, Qt::QueuedConnection);
-            const auto outcome = AgentRedeployer{rpc_}.run();
-            LSW_INFO("upkeep: {}", outcome.message);
-            // Shared folders do not depend on which agent answers, so a swap
-            // that failed says so and the pass goes on: Windows has the
-            // devices either way, and nothing else would mount them this boot.
-            if (!outcome.ok) {
-                result.ok = false;
-                result.error = QString::fromStdString(outcome.message);
-            }
-        }
+GuestUpkeep::Probe GuestUpkeep::probe() {
+    const auto info = rpc_.request(linkproto::cmd::kSystemInfo);
+    if (!info.ok) {
+        LSW_WARN("upkeep: system_info: {}", info.error);
+        return {false, {}, {},
+                QStringLiteral("Windows did not say which LSW release it has: %1")
+                    .arg(QString::fromStdString(info.error))};
     }
+    // An agent from before releases reports none, which is a release that
+    // differs from every shipped one.
+    const auto text = [&info](const char* key) {
+        const auto value = info.body.value(key, nlohmann::json{});
+        return value.is_string() ? QString::fromStdString(value.get<std::string>()) : QString{};
+    };
+    return {true, text("release"), text("release_version"), {}};
+}
 
-    // 2. The shared folders.
-    result.shares_reached = true;
-    const GuestShares::Outcome shares = GuestShares{rpc_}.run(mounts);
-    if (shares.ok) {
-        LSW_INFO("upkeep: shared folders: {}", shares.message.toStdString());
-    } else {
-        LSW_WARN("upkeep: shared folders: {}", shares.message.toStdString());
-        result.shares_error = shares.message;
-    }
-
-    // 3. The time zone and the clock, as the host's.
+// The time zone and the clock, as the host's.
+GuestUpkeep::Clock GuestUpkeep::set_clock() {
     const QByteArray zone = QTimeZone::ianaIdToWindowsId(QTimeZone::systemTimeZoneId());
     if (zone.isEmpty()) {
         LSW_WARN("upkeep: Windows has no name for the host's time zone {}; its clock is left",
                  QTimeZone::systemTimeZoneId().toStdString());
-        return result;
+        return {};
     }
     const auto clock = rpc_.request(
         linkproto::cmd::kSetClock,
         {{"time_zone", zone.toStdString()}, {"utc_ms", QDateTime::currentMSecsSinceEpoch()}});
     if (!clock.ok) {
-        result.ok = false;
-        result.error = QStringLiteral("Windows' clock was not set: %1")
-                           .arg(QString::fromStdString(clock.error));
-        LSW_WARN("upkeep: {}", result.error.toStdString());
-        return result;
+        const QString error = QStringLiteral("Windows' clock was not set: %1")
+                                  .arg(QString::fromStdString(clock.error));
+        LSW_WARN("upkeep: {}", error.toStdString());
+        return {false, error};
     }
     LSW_INFO("upkeep: Windows' time zone {} (was {}), its clock {} ms off{}",
              clock.body.value("time_zone", std::string{}),
              clock.body.value("time_zone_was", std::string{}),
              clock.body.value("clock_off_ms", 0LL),
              clock.body.value("clock_set", false) ? ", set to the host's" : "");
-    return result;
+    return {};
 }
 
 }  // namespace lsw::host::services

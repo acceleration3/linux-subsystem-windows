@@ -1,7 +1,6 @@
 #include "lsw/agent/rpc/auto_register.hpp"
 #include "lsw/agent/rpc/handler.hpp"
 #include "lsw/agent/util/text_encoding.hpp"
-#include "lsw/agent/win/file_digest.hpp"
 #include "lsw/agent/win/reg_key.hpp"
 #include "lsw/linkproto/commands.hpp"
 
@@ -13,13 +12,9 @@
 
 #include <algorithm>
 #include <cwchar>
-#include <filesystem>
-#include <fstream>
 #include <cwctype>
 #include <optional>
-#include <sstream>
 #include <string>
-#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -68,27 +63,6 @@ std::wstring driver_version(HDEVINFO set, SP_DEVINFO_DATA& device) {
         return {};
     }
     return key->read_string(L"DriverVersion").value_or(std::wstring{});
-}
-
-// The driver store folder the installed driver runs from: where its
-// software key's UserModeDriverName, the first user-mode driver, lies.
-// Empty with no driver.
-std::wstring driver_store(HDEVINFO set, SP_DEVINFO_DATA& device) {
-    const std::wstring driver_key = device_property(set, device, SPDRP_DRIVER);
-    if (driver_key.empty()) {
-        return {};
-    }
-    const std::wstring path = L"SYSTEM\\CurrentControlSet\\Control\\Class\\" + driver_key;
-    const auto key = RegKey::open(HKEY_LOCAL_MACHINE, path.c_str(), kRead);
-    if (!key) {
-        return {};
-    }
-    for (const std::wstring& name : key->read_strings(L"UserModeDriverName")) {
-        if (!name.empty() && name != L"<>") {
-            return std::filesystem::path(name).parent_path().wstring();
-        }
-    }
-    return {};
 }
 
 // Every string of a REG_MULTI_SZ device property, most specific first.
@@ -184,9 +158,8 @@ nlohmann::json describe_adapter(HDEVINFO set, SP_DEVINFO_DATA& device,
 // Enumerated across all classes rather than the display class, because
 // an adapter with no driver has no class yet. Empty when nothing can be
 // enumerated, which the manager reads as "no adapter" rather than as an
-// error, because that is what it is to the user. ``store`` gets the
-// driver store folder of the first one avgpu.sys runs.
-nlohmann::json av_adapters(std::wstring& store) {
+// error, because that is what it is to the user.
+nlohmann::json av_adapters() {
     nlohmann::json out = nlohmann::json::array();
     HDEVINFO set =
         ::SetupDiGetClassDevsW(nullptr, L"PCI", nullptr, DIGCF_PRESENT | DIGCF_ALLCLASSES);
@@ -200,9 +173,6 @@ nlohmann::json av_adapters(std::wstring& store) {
         const std::wstring service = device_property(set, device, SPDRP_SERVICE);
         if (is_av_adapter(hardware_ids, service)) {
             out.push_back(describe_adapter(set, device, hardware_ids, service));
-            if (store.empty() && upper(service) == L"AVGPU") {
-                store = driver_store(set, device);
-            }
         }
     }
     ::SetupDiDestroyDeviceInfoList(set);
@@ -259,84 +229,6 @@ nlohmann::json feature_enabled(int id) {
     return *enabled != 0;
 }
 
-// A whole small file's text, or nullopt when it is not there or is
-// larger than ``limit``.
-std::optional<std::string> small_file(const std::filesystem::path& path, std::streamsize limit) {
-    std::ifstream file(path, std::ios::binary);
-    if (!file) {
-        return std::nullopt;
-    }
-    std::string text(static_cast<std::size_t>(limit) + 1, '\0');
-    file.read(text.data(), limit + 1);
-    const std::streamsize got = file.gcount();
-    if (got > limit) {
-        return std::nullopt;
-    }
-    text.resize(static_cast<std::size_t>(got));
-    return text;
-}
-
-// The driver package as this guest has it, in package.sha256's form, for
-// the manager to compare with what it ships:
-//   - each file C:\av\pristine\package\package.sha256 names. The driver
-//     store's copy is the one Windows runs, so a file is given its hash
-//     there; but avgpu.sys, avgpu.inf, avumd.dll and avumd32.dll, which
-//     signing rewrites (the first two signed, the DLLs stamped with a
-//     version), keep pristine's, as does a file the store does not have.
-//   - C:\av\provision.ps1, as provision.ps1, and every OpenCL loader in
-//     C:\av\loaders, as loaders/<arch>/<name>: an update brings those too.
-// Null when there is no pristine package: a guest set up before LSW kept
-// one, which the manager cannot compare.
-nlohmann::json installed_manifest(const std::wstring& store) {
-    const auto pristine =
-        small_file(std::filesystem::path(L"C:\\av\\pristine\\package\\package.sha256"), 64 * 1024);
-    if (!pristine) {
-        return nullptr;
-    }
-    std::string out;
-    std::istringstream lines(*pristine);
-    for (std::string line; std::getline(lines, line);) {
-        if (!line.empty() && line.back() == '\r') {
-            line.pop_back();
-        }
-        if (line.size() < 66 || line[64] != ' ') {
-            continue;
-        }
-        std::string hash = line.substr(0, 64);
-        const std::string name = line.substr(line[65] == ' ' || line[65] == '*' ? 66 : 65);
-        const std::wstring upper_name = upper(util::TextEncoding::to_wide(name));
-        const bool rewritten = upper_name == L"AVGPU.SYS" || upper_name == L"AVGPU.INF" ||
-                               upper_name == L"AVUMD.DLL" || upper_name == L"AVUMD32.DLL";
-        if (!store.empty() && !rewritten) {
-            const std::string installed = win::FileDigest::sha256(
-                std::filesystem::path(store) / util::TextEncoding::to_wide(name));
-            if (!installed.empty()) {
-                hash = installed;
-            }
-        }
-        out += hash + "  " + name + "\n";
-    }
-    const std::string script = win::FileDigest::sha256(std::filesystem::path(L"C:\\av\\provision.ps1"));
-    if (!script.empty()) {
-        out += script + "  provision.ps1\n";
-    }
-    for (const wchar_t* arch : {L"x64", L"x86"}) {
-        std::error_code error;
-        const std::filesystem::path folder = std::filesystem::path(L"C:\\av\\loaders") / arch;
-        for (const auto& entry : std::filesystem::directory_iterator(folder, error)) {
-            if (!entry.is_regular_file(error)) {
-                continue;
-            }
-            const std::string digest = win::FileDigest::sha256(entry.path());
-            if (!digest.empty()) {
-                out += digest + "  loaders/" + util::TextEncoding::to_utf8(arch) + "/" +
-                       util::TextEncoding::to_utf8(entry.path().filename().wstring()) + "\n";
-            }
-        }
-    }
-    return out;
-}
-
 }  // namespace
 
 // The guest's side of the Graphics page: every accel-virt adapter, the
@@ -348,22 +240,19 @@ nlohmann::json installed_manifest(const std::wstring& store) {
 //                  "location", "service", "driver_version",
 //                  "problem_code", "started"}],
 //    "test_signing": bool, "driver_search_off": bool,
-//    "user_mode_submission": bool|null, "native_fences": bool|null,
-//    "driver_manifest": string|null}
+//    "user_mode_submission": bool|null, "native_fences": bool|null}
 //
 // The two feature flags are the policy provisioning wrote (features 4
 // and 37). Whether the driver actually got them is its own log's to say.
 struct GpuStatusHandler : RpcHandler {
     nlohmann::json handle(const nlohmann::json& /*params*/, RpcContext& /*ctx*/) override {
-        std::wstring store;
-        nlohmann::json adapters = av_adapters(store);
+        nlohmann::json adapters = av_adapters();
         return {
             {"adapters", std::move(adapters)},
             {"test_signing", test_signing()},
             {"driver_search_off", driver_search_off()},
             {"user_mode_submission", feature_enabled(4)},
             {"native_fences", feature_enabled(37)},
-            {"driver_manifest", installed_manifest(store)},
         };
     }
 

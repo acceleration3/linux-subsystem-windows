@@ -26,7 +26,7 @@
   double braces where it lands. Not here: this comment is part of the
   template, and a name in braces would be substituted in it too.
     domain_name, uuid, ram_mib, cpus
-    ovmf_code, ovmf_vars_template, nvram_path
+    nvram_path
     disk_path, install_media, payload_iso
     emulator           accel-virt's qemu-system-x86_64
     video_inner        <video>: none, or VGA during Windows setup
@@ -53,10 +53,21 @@
        for virtio controllers only), so its I/O runs in QEMU's main
        loop. An iothread nothing is pinned to is a thread for nothing. -->
 
-  <os>
+  <!-- UEFI, as the distribution installs it: libvirt picks the image
+       and its variables template from QEMU's firmware descriptors
+       (/usr/share/qemu/firmware), which name it on every distribution,
+       where a path would name it on one (edk2/x64/OVMF_CODE.4m.fd is
+       Arch's, OVMF/OVMF_CODE_4M.fd Debian's, Fedora's is qcow2). No
+       Secure Boot and no enrolled keys: test signing, which the guest
+       driver needs, is refused once keys are enrolled. -->
+  <os firmware='efi'>
     <type arch='x86_64' machine='q35'>hvm</type>
-    <loader readonly='yes' type='pflash'>{{ovmf_code}}</loader>
-    <nvram template='{{ovmf_vars_template}}'>{{nvram_path}}</nvram>
+    <firmware>
+      <feature enabled='no' name='enrolled-keys'/>
+      <feature enabled='no' name='secure-boot'/>
+    </firmware>
+    <loader readonly='yes' type='pflash'/>
+    <nvram>{{nvram_path}}</nvram>
     <!-- The NVMe system disk is boot entry 1, the install media entry
          2. On first boot the disk is empty, firmware falls through to
          the media, and Setup runs off it with no "press any key" (see

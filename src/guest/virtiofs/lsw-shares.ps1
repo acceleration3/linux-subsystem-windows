@@ -27,7 +27,7 @@
 # script, for the task, and virtiofs.exe, for the launcher - is copied to
 # C:\Program Files\LSW\virtiofs first, where only administrators write.
 #
-# Exit codes, which the manager names (services::GuestShares):
+# Exit codes, which lsw-guest-update.ps1 reads:
 #   0  done
 #   1  bad arguments, or a file of the package missing
 #   2  the viofs driver did not install

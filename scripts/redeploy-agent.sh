@@ -20,9 +20,9 @@
 #      and starts the service again.
 #   4. Polls system_info until ``agent_version`` changes, confirming
 #      the new binary is live (the new service opens :5102 once its
-#      session helper has confirmed the desktop, a few seconds in), then
-#      checks the guest's remotewin-guest.exe is the size of the one
-#      served. Mirrors already running keep the old guest half; the next
+#      session helper has confirmed the desktop, a few seconds in; it
+#      waits up to 120 s), then checks, by SHA-256 (file_hashes), that the
+#      guest's agent and remotewin-guest.exe are the ones served. Mirrors already running keep the old guest half; the next
 #      application launched gets the new one.
 #
 # The script's own log is C:\ProgramData\LSW\lsw-swap.log in the guest.

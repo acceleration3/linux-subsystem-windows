@@ -10,6 +10,7 @@
 #include "lsw/host/link/agent_guest_stats_probe.hpp"
 #include "lsw/host/link/agent_rpc_client.hpp"
 #include "lsw/host/services/guest_shells.hpp"
+#include "lsw/host/services/guest_update.hpp"
 #include "lsw/host/services/guest_upkeep.hpp"
 #include "lsw/host/services/status_hub.hpp"
 #include "lsw/host/services/host_shutdown_watch.hpp"
@@ -73,6 +74,7 @@ public:
 
     // LSW's half inside Windows, kept as current as this LSW: the agent,
     // the mirror's guest half, the time zone and the clock.
+    [[nodiscard]] GuestUpdate& guest_update() noexcept { return guest_update_; }
     [[nodiscard]] GuestUpkeep& upkeep() noexcept { return upkeep_; }
 
     // Passing USB devices to the guest: the one place that acts on them.
@@ -128,7 +130,8 @@ private:
     // Declared after everything it reads.
     StatusHub status_;
     GuestShells shells_;  // declared after rpc_ and status_: it holds both
-    GuestUpkeep upkeep_;  // declared after rpc_ and status_: it holds both
+    GuestUpdate guest_update_;  // declared after settings_, rpc_ and status_: it holds them
+    GuestUpkeep upkeep_;        // and after guest_update_
     UsbPassthrough usb_;  // declared after status_ and lifecycle_: it holds both
     HostShutdownWatch host_shutdown_;  // declared after status_ and lifecycle_: it holds both
     apps::AppConfigStore app_configs_;

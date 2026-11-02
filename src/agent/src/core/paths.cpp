@@ -32,6 +32,14 @@ std::wstring Paths::desktop_ready_flag() {
     return under_root(L"desktop-ready.flag");
 }
 
+std::wstring Paths::release_file() {
+    return under_root(L"release.json");
+}
+
+std::wstring Paths::update_result_file() {
+    return under_root(L"update-result.json");
+}
+
 std::wstring Paths::work_dir() {
     return under_root(L"work");
 }

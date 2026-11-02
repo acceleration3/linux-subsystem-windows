@@ -8,7 +8,7 @@ namespace lsw::host::platform {
 //
 // remotewin builds as part of this project but is not linked into it:
 // the manager spawns the host half for each launched application, and
-// the guest half is bundled onto the payload ISO the way the agent is,
+// the guest half is in the guest's bundle the way the agent is,
 // then started inside the guest beside the application it mirrors.
 //
 // Both follow the rule the agent's path follows — an environment

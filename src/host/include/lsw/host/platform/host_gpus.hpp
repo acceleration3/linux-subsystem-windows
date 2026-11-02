@@ -27,7 +27,7 @@ struct HostGpu {
     bool cpu = false;        // a software rasterizer such as llvmpipe
     // A GPU sharing the processor's package. RADV names one after its
     // processor, so the guest's adapter takes its name from elsewhere
-    // (provision::install::AdapterNames).
+    // (services::AdapterNames).
     bool integrated = false;
 };
 

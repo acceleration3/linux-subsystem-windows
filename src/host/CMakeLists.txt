@@ -83,6 +83,9 @@ lsw_host_sources(LSW_CORE_SOURCES ${LSW_CORE_CONCERNS})
 # The stylesheet's images. See embedded/resources.qrc for why there are
 # any at all.
 set(CMAKE_AUTORCC ON)
+# The version the bundle is made by, in the one file that names it.
+set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/src/services/guest_bundle.cpp
+    PROPERTIES COMPILE_DEFINITIONS "LSW_VERSION=\"${PROJECT_VERSION}\"")
 add_library(lsw_host_core STATIC ${LSW_CORE_SOURCES}
     ${CMAKE_CURRENT_SOURCE_DIR}/embedded/resources.qrc)
 target_include_directories(lsw_host_core PUBLIC ${LSW_HOST_INCLUDE_DIR})
@@ -163,8 +166,6 @@ add_library(lsw_host_manager STATIC ${LSW_MANAGER_SOURCES})
 target_include_directories(lsw_host_manager PUBLIC ${LSW_HOST_INCLUDE_DIR})
 target_link_libraries(lsw_host_manager
     PUBLIC  lsw_host_core lsw_host_tools
-    # guest_driver_installer.cpp: the host's GPUs named as setup names them
-    PRIVATE lsw_host_provision
     PRIVATE LSW::CompileOptions nlohmann_json::nlohmann_json
 )
 target_compile_definitions(lsw_host_manager PRIVATE QT_NO_KEYWORDS)

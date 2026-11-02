@@ -245,6 +245,9 @@ if(LSW_BUILD_MANAGER)
     # them, as share/lsw/guest/virtiofs.
     include(LSWGuestShares)
 
+    # The script that brings the guest to the manager's release.
+    include(LSWGuestUpdate)
+
     # The desktop entry and its icon. accel-virt needs nothing of the host
     # system beyond KVM and a GPU driver: every byte the guest shares with
     # the host GPU is that GPU's own memory (docs/host-memory.md).

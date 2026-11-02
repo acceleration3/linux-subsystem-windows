@@ -5,7 +5,7 @@
 // its list_gpus.py use, against a fake sysfs and fake ID databases.
 // No GPU, no Vulkan.
 
-#include "lsw/host/provision/install/adapter_names.hpp"
+#include "lsw/host/services/adapter_names.hpp"
 
 #include <QCoreApplication>
 #include <QDir>
@@ -16,7 +16,7 @@
 #include <cstdlib>
 
 using lsw::host::platform::HostGpu;
-using lsw::host::provision::install::AdapterNames;
+using lsw::host::services::AdapterNames;
 
 namespace {
 

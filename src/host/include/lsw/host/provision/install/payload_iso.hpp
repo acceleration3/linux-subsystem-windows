@@ -19,9 +19,8 @@ public:
 
     // Visible for testing — lay out in ``staging_dir`` what goes on
     // the ISO, appending each file written to ``created_out`` when it
-    // is given. Optional files that fail to copy are logged and left
-    // out; the answer file and the driver package are not optional, so
-    // a failure there is false with ``error_out`` saying which file.
+    // is given. The answer file and the bundle are both required: a
+    // failure is false with ``error_out`` saying which.
     [[nodiscard]] static bool stage_files(const PayloadInputs& in, const QString& staging_dir,
                                           QStringList* created_out, QString* error_out);
 };

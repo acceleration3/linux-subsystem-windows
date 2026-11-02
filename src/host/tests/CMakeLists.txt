@@ -174,23 +174,6 @@ target_link_libraries(lsw_host_domain_description_test
 target_compile_definitions(lsw_host_domain_description_test PRIVATE QT_NO_KEYWORDS)
 add_test(NAME lsw_host_domain_description_test COMMAND lsw_host_domain_description_test)
 
-# The avgpu install job's end can arrive before the reply naming the
-# job: it is kept and replayed, never missed.
-add_executable(lsw_host_guest_driver_installer_test guest_driver_installer_test.cpp)
-target_link_libraries(lsw_host_guest_driver_installer_test
-    PRIVATE
-        lsw_host_manager
-        LSW::CompileOptions
-)
-target_compile_definitions(lsw_host_guest_driver_installer_test PRIVATE QT_NO_KEYWORDS)
-add_test(NAME lsw_host_guest_driver_installer_test COMMAND lsw_host_guest_driver_installer_test)
-
-# A driver update's files and the staging that puts them where setup did.
-add_executable(lsw_host_guest_driver_update_test guest_driver_update_test.cpp)
-target_link_libraries(lsw_host_guest_driver_update_test PRIVATE lsw_host_manager LSW::CompileOptions)
-target_compile_definitions(lsw_host_guest_driver_update_test PRIVATE QT_NO_KEYWORDS)
-add_test(NAME lsw_host_guest_driver_update_test COMMAND lsw_host_guest_driver_update_test)
-
 # The Settings page's disk size, on a real qcow2: grows, never shrinks.
 add_executable(lsw_host_disk_grow_test disk_grow_test.cpp)
 target_link_libraries(lsw_host_disk_grow_test PRIVATE lsw_host_core LSW::CompileOptions)
@@ -203,12 +186,6 @@ target_link_libraries(lsw_host_guest_sessions_test
     PRIVATE lsw_host_core LSW::CompileOptions nlohmann_json::nlohmann_json)
 target_compile_definitions(lsw_host_guest_sessions_test PRIVATE QT_NO_KEYWORDS)
 add_test(NAME lsw_host_guest_sessions_test COMMAND lsw_host_guest_sessions_test)
-
-# The driver package the manager ships against the guest's: which files changed.
-add_executable(lsw_host_driver_manifest_test driver_manifest_test.cpp)
-target_link_libraries(lsw_host_driver_manifest_test PRIVATE lsw_host_core LSW::CompileOptions)
-target_compile_definitions(lsw_host_driver_manifest_test PRIVATE QT_NO_KEYWORDS)
-add_test(NAME lsw_host_driver_manifest_test COMMAND lsw_host_driver_manifest_test)
 
 # The redeploy's guest side: the file server's names and the swap
 # script's handling of the window mirror's guest half.
@@ -293,3 +270,47 @@ target_link_libraries(lsw_host_mime_defaults_test
 )
 target_compile_definitions(lsw_host_mime_defaults_test PRIVATE QT_NO_KEYWORDS)
 add_test(NAME lsw_host_mime_defaults_test COMMAND lsw_host_mime_defaults_test)
+
+# What a guest update ships and decides, with no guest: the bundle's manifest
+# and release from files in a temporary directory, the run's decision on each
+# system_info reply, and the batch files' text and exit codes.
+add_executable(lsw_host_guest_bundle_test guest_bundle_test.cpp)
+target_link_libraries(lsw_host_guest_bundle_test PRIVATE lsw_host_core LSW::CompileOptions)
+target_compile_definitions(lsw_host_guest_bundle_test PRIVATE QT_NO_KEYWORDS)
+add_test(NAME lsw_host_guest_bundle_test COMMAND lsw_host_guest_bundle_test)
+set_tests_properties(lsw_host_guest_bundle_test PROPERTIES TIMEOUT 60)
+
+add_executable(lsw_host_update_verdict_test update_verdict_test.cpp)
+target_link_libraries(lsw_host_update_verdict_test
+    PRIVATE lsw_host_core LSW::CompileOptions nlohmann_json::nlohmann_json)
+target_compile_definitions(lsw_host_update_verdict_test PRIVATE QT_NO_KEYWORDS)
+add_test(NAME lsw_host_update_verdict_test COMMAND lsw_host_update_verdict_test)
+
+add_executable(lsw_host_update_batch_test update_batch_test.cpp)
+target_link_libraries(lsw_host_update_batch_test PRIVATE lsw_host_core LSW::CompileOptions)
+target_compile_definitions(lsw_host_update_batch_test PRIVATE QT_NO_KEYWORDS)
+add_test(NAME lsw_host_update_batch_test COMMAND lsw_host_update_batch_test)
+
+# The payload ISO's tree: each bundle file in real directories under
+# update/, the lists beside them.
+add_executable(lsw_host_payload_iso_test payload_iso_test.cpp)
+target_link_libraries(lsw_host_payload_iso_test PRIVATE lsw_host_provision LSW::CompileOptions)
+target_compile_definitions(lsw_host_payload_iso_test PRIVATE QT_NO_KEYWORDS)
+add_test(NAME lsw_host_payload_iso_test COMMAND lsw_host_payload_iso_test)
+
+# GuestUpkeep's pass per boot against a fake agent and a stand-in for the
+# update; the update dialog's opening, its lack of a way out and its size.
+add_executable(lsw_host_guest_upkeep_test guest_upkeep_test.cpp)
+target_link_libraries(lsw_host_guest_upkeep_test
+    PRIVATE lsw_host_core LSW::CompileOptions nlohmann_json::nlohmann_json)
+target_compile_definitions(lsw_host_guest_upkeep_test PRIVATE QT_NO_KEYWORDS)
+add_test(NAME lsw_host_guest_upkeep_test COMMAND lsw_host_guest_upkeep_test)
+set_tests_properties(lsw_host_guest_upkeep_test PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 60)
+
+add_executable(lsw_host_update_dialog_test update_dialog_test.cpp)
+target_link_libraries(lsw_host_update_dialog_test PRIVATE lsw_host_manager LSW::CompileOptions)
+target_compile_definitions(lsw_host_update_dialog_test PRIVATE QT_NO_KEYWORDS)
+add_test(NAME lsw_host_update_dialog_test COMMAND lsw_host_update_dialog_test)
+set_tests_properties(lsw_host_update_dialog_test PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)

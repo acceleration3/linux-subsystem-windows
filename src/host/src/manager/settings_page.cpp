@@ -7,6 +7,7 @@
 #include "lsw/host/ui/machine_limits.hpp"
 #include "lsw/host/ui/panel.hpp"
 #include "lsw/host/config/vm_sizing.hpp"
+#include "lsw/host/services/guest_update_status.hpp"
 #include "lsw/host/services/status_hub.hpp"
 #include "lsw/host/ui/slider_spin.hpp"
 #include "lsw/host/ui/theme.hpp"
@@ -379,6 +380,22 @@ void SettingsPage::build() {
                    QStringLiteral("Build a smaller install ISO from one you have, into any "
                                   "folder. Does not touch the running guest."),
                    QStringLiteral("Open the image tool"), &SettingsPage::trim_tool_requested);
+    auto* update_button = small_button(QStringLiteral("Update"));
+    connect(update_button, &QPushButton::clicked, this, &SettingsPage::update_requested);
+    auto* update_row = add_row(images, QString{}, QStringLiteral("Update LSW in Windows"),
+                               QString{}, update_button);
+    update_button_ = update_button;
+    update_note_ = update_row->findChild<QLabel*>(QStringLiteral("rowDescription"));
+    update_note_->setToolTip(QStringLiteral(
+        "Replaces every LSW file in Windows: the agent, the window mirror, the GPU driver, the "
+        "graphics loaders and the shared folders' half. Restarts Windows when the driver "
+        "changes."));
+    connect(&status_, &services::StatusHub::changed, this, [this](services::StatusHub::Area area) {
+        if (area == services::StatusHub::Area::Update || area == services::StatusHub::Area::Vm) {
+            refresh_update_row();
+        }
+    });
+    refresh_update_row();
     add_action_row(images, QStringLiteral("Reinstall the guest"),
                    QStringLiteral("Runs the first-run wizard again. Its install replaces the "
                                   "current disk, and applications inside the guest are lost; "
@@ -415,6 +432,35 @@ void SettingsPage::build() {
         pending_.commit();
         Q_EMIT restart_requested();
     });
+}
+
+void SettingsPage::refresh_update_row() {
+    using State = services::GuestUpdateStatus::State;
+    const auto& update = status_.update();
+    // The first 12 hex of a release, or "-" when it is not known.
+    const auto brief = [](const QString& release) {
+        return release.isEmpty() ? QStringLiteral("-") : release.left(12);
+    };
+    QString note;
+    switch (update.state) {
+    case State::Running:
+        note = QStringLiteral("%1...").arg(update.step.isEmpty() ? QStringLiteral("Updating")
+                                                                   : update.step);
+        break;
+    case State::Failed:
+        note = QStringLiteral("Could not update: %1").arg(update.message);
+        break;
+    case State::Idle:
+    case State::Succeeded:
+        note = !update.guest_release.isEmpty() && update.guest_release == update.shipped_release
+                   ? QStringLiteral("Windows has this release (%1)").arg(brief(update.guest_release))
+                   : QStringLiteral("Windows has %1, this LSW ships %2")
+                         .arg(brief(update.guest_release), brief(update.shipped_release));
+        break;
+    }
+    update_note_->setText(note);
+    const auto& vm = status_.vm();
+    update_button_->setEnabled(!update.running() && vm.running() && vm.agent_online());
 }
 
 QVBoxLayout* SettingsPage::new_group(const QString& title) {

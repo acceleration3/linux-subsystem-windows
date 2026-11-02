@@ -17,11 +17,9 @@ struct DomainShare {
 };
 
 // Per-spec extras the manager needs to thread into the XML on top of
-// the persisted ``VmRecord``: paths to OVMF firmware, shared folders,
-// the GPU device. Defaults match a stock Arch / Fedora / Debian setup.
+// the persisted ``VmRecord``: shared folders, the GPU device. The
+// firmware is libvirt's choice (domain.xml), so no path to it is here.
 struct DomainXmlInputs {
-    QString ovmf_code = "/usr/share/edk2/x64/OVMF_CODE.4m.fd";
-    QString ovmf_vars_template = "/usr/share/edk2/x64/OVMF_VARS.4m.fd";
     // Folders on this machine the guest can see, as virtiofs devices.
     // They need virtiofsd on the host and the guest's RAM shared, and
     // the RAM is shared regardless now (the GPU needs it too), so a

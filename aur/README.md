@@ -4,8 +4,8 @@ This directory is the AUR repository of `lsw-bin`: a `PKGBUILD` that
 installs a prebuilt LSW release tarball, its `.SRCINFO`, and the
 `lsw-bin.install` notes pacman prints. Nothing is compiled on the
 user's machine. The tarball is built once per release by
-`scripts/package-release.sh` and attached to the GitHub release
-`v<version>`.
+`scripts/dist.sh arch` and attached to the GitHub release
+`v<version>`, next to the release's deb and rpm packages.
 
 ## What the tarball holds
 
@@ -37,104 +37,83 @@ anywhere.
 
 ## Cutting a release
 
-Releases are built in a clean Arch Linux userland, never on a
-developer's own system: the binaries link against the libraries of the
-system that builds them, and QEMU's configure enables every optional
-feature whose library it finds there. A distribution with its own
-library builds or CPU-tuned repositories (CachyOS's znver4 repos, say)
-would produce a package that is wrong for plain Arch.
+A release is built once per distribution it ships for, each time in a
+clean userland of that distribution, never on a developer's own system:
+the binaries link against the libraries of the system that builds them,
+and QEMU's configure enables every optional feature whose library it
+finds there. A distribution with its own library builds or CPU-tuned
+repositories (CachyOS's znver4 repos, say) would produce packages that
+are wrong for everyone else.
 
-### 1. Build the tarball in an Arch container
+### 1. Build the packages
 
-The release machine has a distrobox called `Arch` (plain Arch, core and
-extra only, sharing `/home`). Once, install the build dependencies in
-it:
+`scripts/dist.sh` builds each target in a distrobox of its own
+distribution, which shares `/home`, so each sees the checkout at the
+same path:
 
-```sh
-distrobox enter Arch -- sudo pacman -Syu --needed \
-    base-devel git cmake ninja python meson glslang clang lld llvm sdl3 \
-    wine \
-    mingw-w64-gcc \
-    qt6-base libvirt vulkan-headers vulkan-icd-loader libisofs libvncserver \
-    libxcb wimlib hivex zlib spdlog fmt nlohmann-json \
-    wayland wayland-protocols libxkbcommon libdrm pkgconf \
-    ocl-icd libglvnd \
-    glib2 pixman libslirp libpipewire libaio liburing libseccomp dtc capstone \
-    gnutls libpng libjpeg-turbo libsasl snappy lzo zstd numactl keyutils \
-    systemd-libs fuse3 pam libcbor \
-    curl unzip xz zstd
-```
-
-`wayland`, `wayland-protocols`, `libxkbcommon`, `libdrm` and `pkgconf` are
-remotewin's. Its host half is a Wayland client of its own, without Qt: it
-generates the client code of the protocols it speaks (xdg-shell, the
-linux-dmabuf and linux-drm-syncobj buffers, viewporter and
-fractional-scale, cursor-shape, pointer constraints, xdg-activation,
-xdg-toplevel-icon and the rest) from the system's protocol files
-(`wayland-scanner`, found through pkg-config, needing wayland-protocols
-1.38 or newer), links `libwayland-client`, reads the compositor's keymap
-with `libxkbcommon`, waits on DRM syncobj timelines with `libdrm`, and
-places windows through KWin over `sd-bus` (`systemd-libs`).
-The probe that lives beside it is never part of the release: it is only
-built by name.
-
-Two of those are easy to wonder about: `wine` is there only for `widl`, the
-IDL compiler vkd3d-proton's build needs, and `sdl3` because DXVK's native
-build will not configure without a window-system backend (it also loads
-SDL3 at run time, which is why the package depends on it).
-
-
-The second half of that list is QEMU's: it links what it finds, and
-what it links becomes a dependency of the package, so the container
-should hold the libraries listed here and not much more.
-
-Then, from the checkout (the container sees it at the same path):
+| target | distrobox | writes to `dist/` |
+| --- | --- | --- |
+| `arch` | `Arch` (plain Arch, core and extra only) | `lsw-<version>-x86_64.tar.zst`, its `.sha256`, and `.depends`: the packages the shipped ELF files link |
+| `deb` | `Ubuntu` (26.04) | `lsw_<version>-1_amd64.deb` |
+| `rpm` | `Fedora` (45) | `lsw-<version>-1.fc45.x86_64.rpm` |
 
 ```sh
 cd ~/Coding/linux-subsystem-windows
 git status                     # a release is built from what is checked out
-distrobox enter Arch -- scripts/package-release.sh
+scripts/dist.sh                # all three; or name some: scripts/dist.sh arch rpm
 ```
 
-`package-release.sh` builds in its own `build-release/` trees, started
-over on every run, so nothing configured on the host is reused. It
-fetches what accel-virt pins and does not commit — the Windows kit
-subset (cut from the WDK and SDK NuGet packages, 270 MB to download,
-44 MB kept; their licence forbids redistributing them, so they are
-never committed), the Khronos registries (120 MB), QEMU's tarball
-(140 MB), the OpenCL loader's source — unless they are already in the
-checkout. Roughly 550 MB the first time, plus the dxvk and
-vkd3d-proton submodules if they were never initialised. It drops `CFLAGS`/`LDFLAGS` from the environment, checks
-that gcc and clang target generic x86-64, and fails if any build file
-carries a CPU-specific flag. It writes:
+A distrobox that does not exist yet is created, and its build
+dependencies installed, on first use; `--setup` installs or updates them
+in an existing one. The package lists are in `dist.sh`. The second half
+of each is QEMU's: it links what it finds, and what it links becomes a
+dependency of the package, so a box should hold the libraries listed
+there and not much more. remotewin's host half is a Wayland client of
+its own, without Qt: it generates the client code of the protocols it
+speaks from the system's protocol files (wayland-protocols 1.38 or
+newer), links `libwayland-client`, reads the compositor's keymap with
+`libxkbcommon`, waits on DRM syncobj timelines with `libdrm`, and places
+windows through KWin over `sd-bus`. Wine is there only for `widl`, the
+IDL compiler vkd3d-proton's build needs, and SDL3 because DXVK's native
+build will not configure without a window-system backend (it also
+loads SDL3 at run time, which is why every package depends on it).
 
-```
-dist/lsw-<version>-x86_64.tar.zst
-dist/lsw-<version>-x86_64.tar.zst.sha256
-dist/lsw-<version>-x86_64.depends      the packages the shipped ELF files link
-```
+The guest half - the agent, remotewin's guest half, the Vulkan loaders,
+and accel-virt's drivers and OpenCL loaders - does not depend on the
+host's distribution: it is built once, in the `Arch` box, into
+`build-release/guest/`, and every package carries the same files. Then
+the targets build their host halves one after another, each in its own
+`build-release/<target>/` trees, installing that driver tree rather
+than building one (`LSW_AV_PREBUILT_DRIVERS`). Every tree starts over on
+every run, so nothing configured on the host is reused. The first run fetches what
+accel-virt pins and does not commit, into the checkout, where every
+target shares it: the Windows kit subset (cut from the WDK and SDK
+NuGet packages, 270 MB to download, 44 MB kept; their licence forbids
+redistributing them, so they are never committed), the Khronos
+registries (120 MB), QEMU's tarball (140 MB), the OpenCL loader's
+source. Roughly 550 MB the first time, plus the dxvk and vkd3d-proton
+submodules if they were never initialised. Each build drops
+`CFLAGS`/`LDFLAGS` from the environment, checks that gcc and clang
+target generic x86-64, and fails if any build file carries a
+CPU-specific flag. It runs on the CPUs `dist.sh` itself may use.
 
 The version is `project(LSW VERSION ...)` in the top-level
 `CMakeLists.txt`; `--version` overrides it.
 
-#### Without distrobox: a devtools chroot
+The deb's library dependencies come from `dpkg-shlibdeps` and the rpm's
+from rpmbuild's own soname scan, so those packages need no list kept by
+hand. What the manager runs without linking it (the libvirt session
+daemon, the UEFI firmware, `qemu-img`, 7-Zip, curl, SDL3) is in
+`packaging/deb/control.in` and `packaging/rpm/lsw.spec.in`, by each
+distribution's package names.
 
-The same build in a throwaway chroot, with `devtools` installed:
-
-```sh
-CHROOT=$HOME/chroots/lsw
-mkdir -p "$CHROOT"
-mkarchroot "$CHROOT/root" base-devel
-arch-nspawn "$CHROOT/root" pacman -Syu --needed --noconfirm <the package list above>
-sudo arch-nspawn --bind="$PWD" "$CHROOT/root" \
-    bash -c "cd '$PWD' && git config --global --add safe.directory '*' && scripts/package-release.sh"
-sudo chown -R "$USER:" build-release dist external/accel-virt/build-d3d
-```
-
-### 2. Publish the tarball
+### 2. Publish the release
 
 ```sh
-gh release create v<version> dist/lsw-<version>-x86_64.tar.zst \
+gh release create v<version> \
+    dist/lsw-<version>-x86_64.tar.zst \
+    dist/lsw_<version>-1_amd64.deb \
+    dist/lsw-<version>-1.fc45.x86_64.rpm \
     --title "LSW <version>" --notes "..."
 ```
 

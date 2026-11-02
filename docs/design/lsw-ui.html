@@ -747,6 +747,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
         <li><button data-view="m-console">Console</button></li>
         <li><button data-view="m-log">Log</button></li>
         <li><button data-view="m-splash">Starting the guest</button></li>
+        <li><button data-view="m-update">Updating LSW in Windows</button></li>
         <li><button data-view="m-cfg">Configure application</button></li>
         <li><button data-view="m-store">Add a store app</button></li>
         <li><button data-view="m-opendoc">Windows can't see this file</button></li>
@@ -1169,18 +1170,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
         </div>
         <div class="warnstrip" style="border-bottom:none">
           <span class="wdot"></span>
-          <span class="msg"><b>Windows has no driver for Intel UHD Graphics 770.</b> It was added as an adapter after the driver package was installed, so Windows has not matched it to avgpu.sys yet.</span>
-          <span class="acts"><button class="btn">Install the driver for new adapters</button></span>
-        </div>
-        <div class="warnstrip">
-          <span class="wdot"></span>
-          <span class="msg"><b>A driver update is ready for the guest.</b> LSW was updated with a different avgpu.sys package than Windows has: 9 of its 12 files changed.</span>
-          <span class="acts"><button class="btn">Update the driver</button></span>
-        </div>
-        <div class="warnstrip" style="border-bottom:none">
-          <span class="wdot"></span>
-          <span class="msg"><b>Installing the driver for new adapters.</b> Signing a fresh copy of the package for their IDs, then pnputil. About a minute.</span>
-          <span class="acts"><span class="meta">signing</span></span>
+          <span class="msg"><b>Windows has no driver for Intel UHD Graphics 770.</b> It was added as an adapter after the driver package was installed, so Windows has not matched it to avgpu.sys yet. LSW's next update of Windows, at the next boot, installs the driver for it.</span>
         </div>
       </div>
     </div>
@@ -1195,8 +1185,8 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
       <div class="note"><dt>Device</dt><dd>What the running domain's live definition has on its <code>virtio-gpu-av-pci</code> lines, read back from libvirt rather than from the settings: <code>host-gpu</code>, <code>hostmem</code>, and one <code>display=off</code> device per render-only GPU; with the machine off, the stored definition the next start boots. Fixed for the life of the machine; change them in Settings, under Graphics, and they land at the next restart, which the row says beside the value ("16 GiB after a restart") until then. "Taken by the driver" is the driver's own <code>host window status</code> line.</dd></div>
       <div class="note"><dt>Display is live</dt><dd>Read from the display adapter's <code>modes</code> property and updated when it changes. The <code>Switch resolution</code> list in the card's header holds the modes offered; picking one makes it preferred, in Settings as well, and is a <code>qom-set</code> on that property: the device raises a display event, the driver replugs its monitor, and Windows switches. No restart. The rate is the device's <code>refresh</code> property, read the same way (<code>qom-get</code>), and shown as <code>-</code> when QEMU does not say; it is the one rate Windows is told for every mode.</dd></div>
       <div class="note"><dt>Guest driver</dt><dd>From the agent, once per boot and after an install: every accel-virt adapter, found by its subsystem <code>1af4:5256</code> or the <code>avgpu</code> service, with its problem code and installed <code>DriverVersion</code>, one line each; <code>TESTSIGNING</code> in the boot options; and the driver search policy provisioning set. Windows Update would otherwise offer the vendor's real driver for these IDs, and on this device the real driver bugchecks. Submission comes from the driver log's <code>user-mode submission</code> and <code>native fences</code> lines.</dd></div>
-      <div class="note"><dt>New adapters</dt><dd>The driver package is signed for the PCI IDs present when Windows was installed, and the accel-virt adapter wears the PCI ID of the host GPU behind it, so a GPU passed later is an adapter Windows has no driver for. So is the display adapter once the machine's GPU is switched to another one: then it is the red strip, <b>Windows has no driver for</b> the new GPU, with the same install button and the driver log beside it, and the overview carries it too. <code>Install the driver for new adapters</code> runs, through the agent, a re-sign of a clean copy of the package (<code>C:\av\pristine</code>, kept by setup, mirrored to <code>C:\av\resign</code>) and <code>provision.ps1 -Stage install</code>. A clean copy, because signing rewrites the INF and signs <code>avgpu.sys</code>, which no longer match the package's own checksums. Progress shows in the strip; when the installer asks for one, the strip offers a restart, and the card reads <code>Started</code> after it.</dd></div>
-      <div class="note"><dt>Driver updates</dt><dd>The driver package ships with LSW (<code>share/lsw/guest/av-drivers</code>), so an LSW update can carry a new one. Its <code>package.sha256</code>, the checksum of every file, is compared with the one in the guest's <code>C:\av\pristine\package</code>, which the agent reports with the adapters. When they differ the amber strip <b>A driver update is ready for the guest</b> says how many files changed, and the overview carries it too. <code>Update the driver</code> uploads the package, <code>provision.ps1</code> and the OpenCL loaders through the agent, puts them in <code>C:\av</code> and <code>C:\av\pristine</code>, and then runs the same re-sign and install as for new adapters, with the same progress and restart in the strip. A guest set up before setup kept a pristine copy reports none and is not offered the update.</dd></div>
+      <div class="note"><dt>New adapters</dt><dd>The driver package is signed for the PCI IDs of the host's GPUs, listed in <code>adapters.txt</code>, which is part of the release the manager ships to Windows (docs/guest-update.md). A GPU added to the host, or a switch of the machine's GPU, changes that list and so the release, and the update at the next boot of Windows signs and installs the driver for it. Until then the card shows the red strip, <b>Windows has no driver for</b> the new GPU, with the driver log beside it, and no button: the update does the install.</dd></div>
+      <div class="note"><dt>Driver updates</dt><dd>The driver is one of the files LSW keeps in Windows, brought to the shipped release by the guest update (Settings, <code>Update LSW in Windows</code>, and on its own at each boot when Windows has another release). There is no driver offer on this page: the update dialog shows the driver step with the others.</dd></div>
       <div class="note"><dt>Driver log</dt><dd><code>avgpu.sys</code> writes <code>avgpu: ...</code> lines to I/O port 0x402. An <code>isa-debugcon</code> device on the machine puts them in <code>avgpu.log</code> in the data folder, across reboots and up to a bugcheck, so it still has the last line when Windows does not. The panel tails the file; the button opens all of it in the host's text editor.</dd></div>
       <div class="note"><dt>What warns</dt><dd>Three things, each something the user can act on. No Direct3D on the host, red. The display adapter not running avgpu.sys, red: a problem code from the agent, usually a refused signature or a replaced driver; for problem code 28, a GPU switched since the install, the strip offers the install instead of only the log. A render-only adapter with no driver, amber, with the install button. A driver update LSW brought, amber, with the update button. The rail dot takes the worst color present. Nothing else on the page changes color.</dd></div>
       <div class="note"><dt>Nothing per application</dt><dd>Every process opens the adapters through Windows' own loaders, so there is nothing to claim, pin, wait for or release. Applications pick a render-only GPU the way they pick between two physical cards.</dd></div>
@@ -1624,6 +1614,13 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
               </div>
               <div class="srow">
                 <span>
+                  <span class="k">Update LSW in Windows</span>
+                  <span class="d" title="Replaces every LSW file in Windows: the agent, the window mirror, the GPU driver, the graphics loaders and the shared folders' half. Restarts Windows when the driver changes.">Windows has this release (3f9c1ab07d52)</span>
+                </span>
+                <span class="ctl"><button class="btn">Update</button></span>
+              </div>
+              <div class="srow">
+                <span>
                   <span class="k">Reinstall the guest</span>
                   <span class="d">Runs the first-run wizard again. Its install replaces the current disk, and applications inside the guest are lost; closing the wizard before then changes nothing.</span>
                 </span>
@@ -1987,6 +1984,45 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
     <dl class="notes">
       <div class="note"><dt>Several files</dt><dd>Files from several folders get one dialog that lists every folder. Sharing adds all of them; a copy is made of each file.</dd></div>
       <div class="note"><dt>Nothing replaces your defaults</dt><dd>Opening a file this way never changes which application a file type opens with.</dd></div>
+    </dl>
+  </section>
+
+  <section data-view="m-update" hidden>
+    <div class="stage-head">
+      <span class="eyebrow">Manager</span>
+      <h1>Updating LSW in Windows</h1>
+      <p>Opens by itself whenever a run starts: at boot, when Windows has a different LSW release than this manager ships, or from Settings. It names the versions, follows the host's steps, and has no way out while it runs, because the agent is being replaced and nothing in the app can use Windows. A check that finds Windows current never opens it.</p>
+    </div>
+
+    <div class="frame dlg" style="max-width:480px">
+      <div class="titlebar">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <span class="t">Updating LSW in Windows</span>
+      </div>
+      <div style="padding:22px 22px 18px;display:flex;flex-direction:column;gap:14px;background:var(--ink)">
+        <span style="font-size:15px;font-weight:600">Updating LSW in Windows</span>
+        <span style="font-size:12.5px;color:var(--fg-dim)">Windows has LSW 0.1.0, updating to 0.2.0</span>
+        <div style="display:flex;flex-direction:column;gap:7px">
+          <div style="display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--fg-dim)">
+            <span style="color:var(--ok);width:13px;text-align:center">&#10003;</span> Preparing files
+          </div>
+          <div style="display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--fg-dim)">
+            <span style="color:var(--ok);width:13px;text-align:center">&#10003;</span> Sending files to Windows
+          </div>
+          <div style="display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--fg)">
+            <span style="color:var(--amber);width:13px;text-align:center">&#9679;</span> Updating Windows
+          </div>
+          <div style="display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--fg-faint)">
+            <span style="color:;width:13px;text-align:center">&#9675;</span> Done
+          </div>
+        </div>
+        <span class="meta">Apps in Windows cannot be opened until this finishes.</span>
+      </div>
+    </div>
+    <dl class="notes">
+      <div class="note"><dt>Versions</dt><dd>With no version known for Windows it reads "Windows has an earlier LSW, updating to 0.2.0".</dd></div>
+      <div class="note"><dt>Restarting Windows</dt><dd>Listed only once the run reaches it, between Updating Windows and Done.</dd></div>
+      <div class="note"><dt>When it ends</dt><dd>Success reads "Windows has LSW 0.2.0", lists each step Windows took as updated or already current, and has Close. A failure shows the message, which names C:\ProgramData\LSW\update.log, the step it stopped on marked, and Try again beside Close.</dd></div>
     </dl>
   </section>
 

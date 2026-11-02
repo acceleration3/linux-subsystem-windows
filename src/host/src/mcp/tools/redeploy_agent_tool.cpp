@@ -21,9 +21,10 @@ std::string RedeployAgentTool::description() const {
            "aside and replaced, the agent service stopped, its binary moved in, "
            "the service started), then polls ``system_info`` until the "
            "``agent_version`` field changes to confirm the new agent is running, "
-           "and checks the size of the guest's remotewin-guest.exe against the "
-           "one served. Running mirrors keep the old guest half; new ones start "
-           "the new one. Blocks for up to ~45 s.";
+           "and checks the SHA-256 of the guest's lsw-agent.exe and "
+           "remotewin-guest.exe against the ones served. Running mirrors keep "
+           "the old guest half; new ones start the new one. Blocks for up to "
+           "120 s.";
 }
 
 nlohmann::json RedeployAgentTool::input_schema() const { return JsonSchema::no_args(); }

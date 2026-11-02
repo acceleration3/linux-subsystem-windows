@@ -11,6 +11,10 @@
 
 namespace lsw::host::apps { class LogStore; }
 namespace lsw::host::link { class AgentRpcClient; }
+namespace lsw::host::services {
+class GuestUpdate;
+class StatusHub;
+}
 
 namespace lsw::host::mcp {
 
@@ -29,6 +33,7 @@ class McpServer : public QObject {
     Q_OBJECT
 public:
     McpServer(link::AgentRpcClient& rpc, apps::LogStore& log_store,
+              services::GuestUpdate& update, services::StatusHub& status,
               QObject* parent = nullptr);
     ~McpServer() override;
 
@@ -38,7 +43,8 @@ public:
     [[nodiscard]] std::uint16_t port() const noexcept;
 
 private:
-    void register_tools(apps::LogStore& log_store);
+    void register_tools(apps::LogStore& log_store, services::GuestUpdate& update,
+                        services::StatusHub& status);
 
     // Order is load-bearing: the router holds references to the registry,
     // and the tools hold references to the console buffer.

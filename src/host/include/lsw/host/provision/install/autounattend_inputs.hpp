@@ -30,6 +30,12 @@ struct AutounattendInputs {
     // default: an <InstallFrom><Path> naming a file that is not there
     // fails the install outright, with no fallback.
     QString install_from_path;
+    // The release the payload ISO carries (GuestBundle::Contents::release)
+    // and the LSW version that made it: SetupComplete stages the ISO's
+    // ``\update`` under the release's first 16 hex digits and passes both to
+    // lsw-guest-update.ps1, which records them in release.json.
+    QString release;
+    QString version;
 };
 
 }  // namespace lsw::host::provision::install

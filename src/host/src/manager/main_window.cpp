@@ -9,6 +9,7 @@
 #include "lsw/host/manager/notice_board.hpp"
 #include "lsw/host/manager/run_on_vm_dialog.hpp"
 #include "lsw/host/manager/settings_page.hpp"
+#include "lsw/host/manager/update_dialog.hpp"
 #include "lsw/host/apps/app_config_store.hpp"
 #include "lsw/host/apps/guest_app_launcher.hpp"
 #include "lsw/host/manager/vm_detail_panel.hpp"
@@ -298,7 +299,7 @@ void MainWindow::build_pages() {
     overview_ = new VmDetailPanel(services_, this);
     console_ = new ConsolePanel(services_.shells(), services_.status(), this);
     log_ = new LogPanel(services_.log_store(), this);
-    alerts_ = new GraphicsAlerts(services_.status(), services_.rpc(), this);
+    alerts_ = new GraphicsAlerts(services_.status(), this);
     graphics_page_ =
         new GraphicsPage(services_.status(), *alerts_, services_.manager_settings(), this);
     settings_page_ = new SettingsPage(services_.manager_settings(), services_.pending_changes(),
@@ -317,7 +318,6 @@ void MainWindow::build_pages() {
 
     connect(graphics_page_, &GraphicsPage::settings_requested, this,
             [this] { show_page(NavRail::Page::Settings); });
-    connect(graphics_page_, &GraphicsPage::restart_requested, this, [this] { (void)restart_guest(); });
     connect(settings_page_, &SettingsPage::restart_requested, this, [this] { (void)restart_guest(); });
     // The image tools are the same dialogs the wizard opens. Nothing
     // about them needs a guest, so they work with the machine off.
@@ -331,6 +331,12 @@ void MainWindow::build_pages() {
         tools::TrimImageDialog dialog{services_.settings(), source, this};
         dialog.exec();
     });
+    connect(settings_page_, &SettingsPage::update_requested, this,
+            [this] { services_.guest_update().run(true); });
+    // Opens itself when a run starts, from whoever asked for it.
+    update_dialog_ = new UpdateDialog(services_.status(), this);
+    connect(update_dialog_, &UpdateDialog::retry_requested, this,
+            [this] { services_.guest_update().retry(); });
     connect(settings_page_, &SettingsPage::reinstall_requested, this,
             &MainWindow::reinstall_requested);
     connect(settings_page_, &SettingsPage::rewrite_entries_requested, this, [this] {
@@ -545,7 +551,7 @@ void MainWindow::refresh_status_bar() {
     if (!notice_.isEmpty()) {
         facts << notice_;
     }
-    if (services_.upkeep().state() == services::GuestUpkeep::State::Updating) {
+    if (services_.status().update().running()) {
         facts << QStringLiteral("Updating LSW in Windows");
     }
     if (rail_->current() == NavRail::Page::Graphics && graphics_page_ != nullptr) {
@@ -589,14 +595,12 @@ void MainWindow::refresh_warning() {
     rail_->set_graphics_warning(worst == Severity::Red     ? Theme::Tone::kBad
                                 : worst == Severity::Amber ? Theme::Tone::kAmber
                                                            : nullptr);
-    // Only the ones that break the guest, and a driver update so it is not
-    // missed, and only on the overview: the rest are the Graphics page's.
+    // Only the ones that break the guest, and only on the overview: the rest are the Graphics page's.
     std::optional<GraphicsAlerts::Warning> shown;
     for (const auto& warning : alerts_->warnings()) {
         if (warning.kind == GraphicsAlerts::Warning::Kind::NoDirect3d ||
             warning.kind == GraphicsAlerts::Warning::Kind::DisplayNotRunning ||
-            warning.kind == GraphicsAlerts::Warning::Kind::DisplayNoDriver ||
-            warning.kind == GraphicsAlerts::Warning::Kind::DriverUpdate) {
+            warning.kind == GraphicsAlerts::Warning::Kind::DisplayNoDriver) {
             shown = warning;
             break;
         }
@@ -818,30 +822,31 @@ void MainWindow::notice_start_refused(const QString& headline) {
 
 void MainWindow::follow_upkeep() {
     auto& upkeep = services_.upkeep();
-    // The shares' notice follows its own error, posted once each time it
-    // changes, so a dismissed one stays dismissed until there is news.
-    connect(&upkeep, &services::GuestUpkeep::changed, this,
-            [this, &upkeep, shown = QString{}]() mutable {
+    // The update's state comes from StatusHub; the upkeep's own failures
+    // (the clock, the release probe) have no snapshot of theirs.
+    const auto refresh = [this, &upkeep] {
         refresh_status_bar();
-        if (upkeep.shares_error() != shown) {
-            shown = upkeep.shares_error();
-            if (shown.isEmpty()) {
-                notices_->withdraw(QStringLiteral("shares"));
-            } else {
-                notices_->post(QStringLiteral("shares"), false,
-                               QStringLiteral("The shared folders are not mounted in Windows."),
-                               shown,
-                               {{QStringLiteral("Try again"), [&upkeep] { upkeep.retry(); }}});
-            }
-        }
-        if (upkeep.state() != services::GuestUpkeep::State::Failed) {
+        const auto& update = services_.status().update();
+        QString why;
+        if (update.state == services::GuestUpdateStatus::State::Failed) {
+            why = update.message;
+        } else if (upkeep.state() == services::GuestUpkeep::State::Failed) {
+            why = upkeep.error();
+        } else {
             notices_->withdraw(QStringLiteral("upkeep"));
             return;
         }
         notices_->post(QStringLiteral("upkeep"), false,
-                       QStringLiteral("Could not update LSW in Windows."), upkeep.error(),
+                       QStringLiteral("Could not update LSW in Windows."), why,
                        {{QStringLiteral("Try again"), [&upkeep] { upkeep.retry(); }}});
-    });
+    };
+    connect(&upkeep, &services::GuestUpkeep::changed, this, refresh);
+    connect(&services_.status(), &services::StatusHub::changed, this,
+            [refresh](services::StatusHub::Area area) {
+                if (area == services::StatusHub::Area::Update) {
+                    refresh();
+                }
+            });
 }
 
 void MainWindow::follow_launches() {

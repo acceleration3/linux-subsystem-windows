@@ -33,6 +33,12 @@ public:
     // on this install; its absence is what "first boot" means.
     [[nodiscard]] static std::wstring desktop_ready_flag();
 
+    // The guest update's two records (lsw-guest-update.ps1, docs/guest-update.md):
+    // ``release.json``, written only once every step succeeded, and
+    // ``update-result.json``, the last run's outcome either way.
+    [[nodiscard]] static std::wstring release_file();
+    [[nodiscard]] static std::wstring update_result_file();
+
     // ``work`` — staged setup files (see WorkDir).
     [[nodiscard]] static std::wstring work_dir();
 

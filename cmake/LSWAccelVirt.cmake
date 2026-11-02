@@ -86,7 +86,22 @@ else()
 endif()
 
 set(LSW_AV_BUILD_DIR   "${CMAKE_BINARY_DIR}/accel-virt")
-set(LSW_AV_DRIVERS_DIR "${CMAKE_BINARY_DIR}/av-drivers")
+# A driver tree built by another tree of this project, installed as it
+# is and not built here: scripts/dist.sh builds the guest's drivers once,
+# on Arch, so that every distribution's package carries the same ones.
+# The manager of this tree does not find it (it looks in av-drivers/
+# beside the tree, or at $LSW_AV_DRIVERS); a package's install does.
+set(LSW_AV_PREBUILT_DRIVERS "" CACHE PATH
+    "An accel-virt driver tree to install instead of building one")
+if(LSW_AV_PREBUILT_DRIVERS)
+    if(NOT EXISTS "${LSW_AV_PREBUILT_DRIVERS}/provision.ps1")
+        message(FATAL_ERROR
+            "LSW_AV_PREBUILT_DRIVERS=${LSW_AV_PREBUILT_DRIVERS} is not a driver tree (no provision.ps1)")
+    endif()
+    set(LSW_AV_DRIVERS_DIR "${LSW_AV_PREBUILT_DRIVERS}")
+else()
+    set(LSW_AV_DRIVERS_DIR "${CMAKE_BINARY_DIR}/av-drivers")
+endif()
 set(_lsw_av_step       "${CMAKE_CURRENT_LIST_DIR}/LSWAccelVirtStep.cmake")
 
 # ---- prerequisites ----
@@ -160,49 +175,51 @@ set(_lsw_av_cmake_args
 # accel-virt's sources, its CMake, provision.ps1 and the fetch markers.
 # Editing any of them, or bumping the submodule, rebuilds the drivers;
 # nothing else does.
-file(GLOB_RECURSE _lsw_av_guest_inputs CONFIGURE_DEPENDS
-    "${LSW_ACCEL_VIRT_DIR}/src/*"
-    "${LSW_ACCEL_VIRT_DIR}/samples/*"
-    "${LSW_ACCEL_VIRT_DIR}/cmake/*"
-    "${LSW_ACCEL_VIRT_DIR}/tools/guest/*")
-list(APPEND _lsw_av_guest_inputs
-    "${LSW_ACCEL_VIRT_DIR}/CMakeLists.txt"
-    ${_lsw_av_fetch_markers})
-ExternalProject_Add(accel_virt_drivers
-    SOURCE_DIR       "${LSW_ACCEL_VIRT_DIR}"
-    BINARY_DIR       "${LSW_AV_BUILD_DIR}/drivers"
-    PREFIX           "${LSW_AV_BUILD_DIR}/drivers-ep"
-    CMAKE_GENERATOR  Ninja
-    CMAKE_ARGS       ${_lsw_av_cmake_args}
-                     -DCMAKE_BUILD_TYPE=Release
-                     -DCMAKE_INSTALL_PREFIX=${LSW_AV_DRIVERS_DIR}
-    BUILD_COMMAND    ${CMAKE_COMMAND} --build <BINARY_DIR> --target drivers
-    BUILD_ALWAYS     OFF
-    INSTALL_COMMAND  ${CMAKE_COMMAND} --install <BINARY_DIR> --component drivers
-                                      --prefix ${LSW_AV_DRIVERS_DIR}
-    DEPENDS          accel_virt_fetch
-    USES_TERMINAL_CONFIGURE ON
-    USES_TERMINAL_BUILD     ON
-    USES_TERMINAL_INSTALL   ON
-)
-ExternalProject_Add_StepDependencies(accel_virt_drivers build ${_lsw_av_guest_inputs})
-# The Khronos OpenCL loader, cross-built by the same guest trees once
-# its source is fetched. Windows ships no OpenCL.dll, and an OpenCL
-# application finds avcl.dll only through one, so it travels with the
-# package: x64 for System32, x86 for SysWOW64. Packaged after the
-# install, into the same tree, so the one directory is everything the
-# guest needs from accel-virt.
-ExternalProject_Add_Step(accel_virt_drivers loaders
-    COMMAND ${CMAKE_COMMAND}
-        -DSTEP=loaders
-        "-DBUILD_DIR=${LSW_AV_BUILD_DIR}/drivers"
-        "-DDRIVERS_DIR=${LSW_AV_DRIVERS_DIR}"
-        -P "${_lsw_av_step}"
-    DEPENDEES install
-    BYPRODUCTS "${LSW_AV_DRIVERS_DIR}/loaders/x64/OpenCL.dll"
-               "${LSW_AV_DRIVERS_DIR}/loaders/x86/OpenCL.dll"
-    COMMENT "accel-virt: packaging the OpenCL loaders into av-drivers/loaders"
-)
+if(NOT LSW_AV_PREBUILT_DRIVERS)
+    file(GLOB_RECURSE _lsw_av_guest_inputs CONFIGURE_DEPENDS
+        "${LSW_ACCEL_VIRT_DIR}/src/*"
+        "${LSW_ACCEL_VIRT_DIR}/samples/*"
+        "${LSW_ACCEL_VIRT_DIR}/cmake/*"
+        "${LSW_ACCEL_VIRT_DIR}/tools/guest/*")
+    list(APPEND _lsw_av_guest_inputs
+        "${LSW_ACCEL_VIRT_DIR}/CMakeLists.txt"
+        ${_lsw_av_fetch_markers})
+    ExternalProject_Add(accel_virt_drivers
+        SOURCE_DIR       "${LSW_ACCEL_VIRT_DIR}"
+        BINARY_DIR       "${LSW_AV_BUILD_DIR}/drivers"
+        PREFIX           "${LSW_AV_BUILD_DIR}/drivers-ep"
+        CMAKE_GENERATOR  Ninja
+        CMAKE_ARGS       ${_lsw_av_cmake_args}
+                         -DCMAKE_BUILD_TYPE=Release
+                         -DCMAKE_INSTALL_PREFIX=${LSW_AV_DRIVERS_DIR}
+        BUILD_COMMAND    ${CMAKE_COMMAND} --build <BINARY_DIR> --target drivers
+        BUILD_ALWAYS     OFF
+        INSTALL_COMMAND  ${CMAKE_COMMAND} --install <BINARY_DIR> --component drivers
+                                          --prefix ${LSW_AV_DRIVERS_DIR}
+        DEPENDS          accel_virt_fetch
+        USES_TERMINAL_CONFIGURE ON
+        USES_TERMINAL_BUILD     ON
+        USES_TERMINAL_INSTALL   ON
+    )
+    ExternalProject_Add_StepDependencies(accel_virt_drivers build ${_lsw_av_guest_inputs})
+    # The Khronos OpenCL loader, cross-built by the same guest trees once
+    # its source is fetched. Windows ships no OpenCL.dll, and an OpenCL
+    # application finds avcl.dll only through one, so it travels with the
+    # package: x64 for System32, x86 for SysWOW64. Packaged after the
+    # install, into the same tree, so the one directory is everything the
+    # guest needs from accel-virt.
+    ExternalProject_Add_Step(accel_virt_drivers loaders
+        COMMAND ${CMAKE_COMMAND}
+            -DSTEP=loaders
+            "-DBUILD_DIR=${LSW_AV_BUILD_DIR}/drivers"
+            "-DDRIVERS_DIR=${LSW_AV_DRIVERS_DIR}"
+            -P "${_lsw_av_step}"
+        DEPENDEES install
+        BYPRODUCTS "${LSW_AV_DRIVERS_DIR}/loaders/x64/OpenCL.dll"
+                   "${LSW_AV_DRIVERS_DIR}/loaders/x86/OpenCL.dll"
+        COMMENT "accel-virt: packaging the OpenCL loaders into av-drivers/loaders"
+    )
+endif()
 
 # ---- the host half: QEMU and the executor ----
 # AV_QEMU switches accel-virt to its host configuration: the default
@@ -229,7 +246,7 @@ ExternalProject_Add(accel_virt_host
                      -DCMAKE_BUILD_TYPE=Release
                      -DAV_QEMU=ON
                      # Linked as the rest of this host build is: a
-                     # release's hardening (scripts/package-release.sh)
+                     # release's hardening (scripts/dist.sh)
                      # reaches the executor too. Only
                      # this half: the guest half links Windows images.
                      "-DCMAKE_EXE_LINKER_FLAGS=${CMAKE_EXE_LINKER_FLAGS}"
@@ -279,7 +296,10 @@ add_custom_target(accel_virt_d3d ALL
 add_dependencies(accel_virt_d3d accel_virt_fetch)
 
 add_custom_target(accel_virt)
-add_dependencies(accel_virt accel_virt_drivers accel_virt_host accel_virt_d3d)
+add_dependencies(accel_virt accel_virt_host accel_virt_d3d)
+if(NOT LSW_AV_PREBUILT_DRIVERS)
+    add_dependencies(accel_virt accel_virt_drivers)
+endif()
 
 # ---- install ----
 # Only what runs, out of build trees that are mostly not: QEMU's holds

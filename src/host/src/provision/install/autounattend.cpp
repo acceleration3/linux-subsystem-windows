@@ -18,6 +18,8 @@ QString Autounattend::render(const AutounattendInputs& in) {
     out = sub(out, "locale", in.locale);
     out = sub(out, "timezone", in.timezone);
     out = sub(out, "computer_name", in.computer_name);
+    out = sub(out, "release", in.release);
+    out = sub(out, "version", in.version);
     out = sub(out, "user_name", in.user_name);
     out = sub(out, "user_password", in.user_password);
     out = sub(out, "product_key_block",

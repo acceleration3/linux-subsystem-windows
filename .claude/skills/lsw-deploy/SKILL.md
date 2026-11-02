@@ -12,7 +12,7 @@ The agent is the `lsw-agent` Windows service (LocalSystem, session 0, auto start
 1. Manager reads `lsw-guest-agent.exe` from `$LSW_AGENT_EXE` or `<repo>/build-agent/src/agent/lsw-guest-agent.exe`.
 2. Spins up a one-shot HTTP server on a free localhost port (guest reaches it at `10.0.2.2:<port>`).
 3. Sends a swap script via the `run_script` RPC (runs as SYSTEM in session 0): `curl` → `sc stop lsw-agent` (waits for STOPPED) → `taskkill /F /IM lsw-agent.exe` (session helpers / stragglers still mapping the old image) → `move /Y` → `sc start lsw-agent`. The script survives the service stopping: run_script's job object is not kill-on-close and the SCM does not end a service's children. It assumes the `lsw-agent` service exists.
-4. Polls `system_info` for ~45 s; success when the `agent_version` build marker changes (a stamp regenerated on every build). The new service only opens `:5102` once its session helper has confirmed a usable desktop (a few seconds when someone is logged on).
+4. Polls `system_info` for up to 120 s; success when the `agent_version` build marker changes (a stamp regenerated on every build). The new service only opens `:5102` once its session helper has confirmed a usable desktop (a few seconds when someone is logged on).
 5. Tears the HTTP server down.
 
 ## Two entry points, same machinery

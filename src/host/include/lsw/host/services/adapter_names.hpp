@@ -7,7 +7,7 @@
 #include <QVector>
 #include <optional>
 
-namespace lsw::host::provision::install {
+namespace lsw::host::services {
 
 // The C:\av\adapters.txt the payload carries: what each of this host's
 // GPUs is called, which accel-virt's provision.ps1 names the INF model
@@ -79,4 +79,4 @@ private:
     Sources sources_;
 };
 
-}  // namespace lsw::host::provision::install
+}  // namespace lsw::host::services

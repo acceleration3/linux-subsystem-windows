@@ -7,6 +7,8 @@
 #include "lsw/host/manager/guest_app_launch_controller.hpp"
 #include "lsw/host/manager/app_config_dialog.hpp"
 #include "lsw/host/manager/launch_splash.hpp"
+#include "lsw/host/manager/update_dialog.hpp"
+#include "lsw/host/services/guest_update_status.hpp"
 #include "lsw/host/manager/main_window.hpp"
 #include "lsw/host/manager/open_document_dialog.hpp"
 #include "lsw/host/manager/remote_file_dialog.hpp"
@@ -325,6 +327,20 @@ int App::capture_screens(const QString& dir) {
             0};
         open_document.resize(560, 290);
         shoot(&open_document, QStringLiteral("dialog-6-open-document"));
+
+        // A run halfway, as the hub would publish it.
+        services::GuestUpdateStatus demo;
+        demo.state = services::GuestUpdateStatus::State::Running;
+        demo.step = QStringLiteral("Updating Windows");
+        demo.guest_version = QStringLiteral("0.1.0");
+        demo.shipped_version = QStringLiteral("0.2.0");
+        const services::GuestUpdateStatus real_update = services_.status().update();
+        manager::UpdateDialog updating{services_.status()};
+        services_.status().set_update(demo);
+        shoot(&updating, QStringLiteral("dialog-7-update"));
+        // The snapshot is the hub's, not the picture's.
+        services_.status().set_update(real_update);
+        updating.close();
     }
 
     auto* wiz = new wizard::Wizard(services_);
@@ -377,7 +393,7 @@ void App::start_mcp_server() {
     }
     // Localhost-only, no auth — single-user assumption. A failed bind is
     // non-fatal; log and skip.
-    mcp_server_ = std::make_unique<mcp::McpServer>(services_.rpc(), services_.log_store(), this);
+    mcp_server_ = std::make_unique<mcp::McpServer>(services_.rpc(), services_.log_store(), services_.guest_update(), services_.status(), this);
     (void)mcp_server_->listen();
 }
 

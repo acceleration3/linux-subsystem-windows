@@ -1,6 +1,7 @@
 #pragma once
 
 #include "lsw/host/services/graphics_status.hpp"
+#include "lsw/host/services/guest_update_status.hpp"
 #include "lsw/host/services/guest_sessions.hpp"
 #include "lsw/host/services/usb_status.hpp"
 #include "lsw/host/services/vm_status.hpp"
@@ -46,6 +47,9 @@ namespace lsw::host::services {
 // definition's hostdevs, read every two seconds while the machine runs or
 // the Settings page is on screen, and announced only when they differ.
 //
+// Updating LSW in Windows is a snapshot as well (Area::Update), pushed by
+// GuestUpdate rather than polled.
+//
 // Cadences: the machine every two seconds while there is a VM to watch;
 // the graphics sources every two seconds while it runs, and not at all
 // while it is off, apart from the host probe, which runs at start-up,
@@ -58,7 +62,7 @@ public:
     // the graphics snapshot — its GPUs and the APIs it serves — kept
     // apart for refresh only, because probing it loads drivers; its
     // answers are announced as a Graphics change like the rest.
-    enum class Area { Vm, Graphics, Host, Sessions, Usb };
+    enum class Area { Vm, Graphics, Host, Sessions, Usb, Update };
 
     StatusHub(vm::LibvirtConnection& libvirt, vm::Lifecycle& lifecycle,
               link::AgentRpcClient& rpc, vm::IGuestStatsProbe& guest_probe,
@@ -78,6 +82,15 @@ public:
     [[nodiscard]] const GraphicsStatus& graphics() const noexcept { return graphics_; }
     [[nodiscard]] const GuestSessions& sessions() const noexcept { return sessions_; }
     [[nodiscard]] const UsbStatus& usb() const noexcept { return usb_; }
+    [[nodiscard]] const GuestUpdateStatus& update() const noexcept { return update_; }
+
+    // The machine as ``status`` says, announced as a reading of it would
+    // be. For tests, which have no libvirt to read one from.
+    void set_vm(const VmStatus& status);
+
+    // GuestUpdate's state, as it publishes it; announced when it differs.
+    // Held here, not polled: nothing but the update knows it.
+    void set_update(const GuestUpdateStatus& status);
 
     // Ask now rather than at the next tick: Host for "Check again",
     // Graphics after a driver install or a resolution just set (the
@@ -151,6 +164,7 @@ private:
     bool usb_live_reading_ = false;
     bool usb_live_again_ = false;
     UsbStatus usb_;
+    GuestUpdateStatus update_;
     // The last sysfs reading, which a change of the always list or of the
     // live definition is combined with without reading it again.
     QVector<platform::HostUsbDevice> usb_host_;

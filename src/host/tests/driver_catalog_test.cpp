@@ -3,14 +3,18 @@
 // the catalog answers with; the fetch is a fake, so nothing reaches the
 // network.
 
-#include "lsw/host/provision/install/driver_catalog.hpp"
+#include "lsw/host/services/driver_catalog.hpp"
 
 #include <QCoreApplication>
+#include <QFile>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QTemporaryDir>
 #include <QHash>
 #include <QUrl>
 #include <cstdio>
 
-using lsw::host::provision::install::DriverCatalog;
+using lsw::host::services::DriverCatalog;
 
 namespace {
 
@@ -102,6 +106,59 @@ int main(int argc, char** argv) {
         });
         catalog.lookup({});
         check(completions == 1, "no lines complete at once, with none");
+    }
+
+    // The versions found are kept, and a lookup that fails falls back on them.
+    {
+        QTemporaryDir dir;
+        const QString cache = dir.filePath(QStringLiteral("driver-versions.json"));
+        const QString names = QStringLiteral("1002\t7550\tAMD Radeon RX 9070 XT\n");
+        const auto lookup = [&](const QString& path, bool succeed, const char* version) {
+            DriverCatalog catalog{[&](const QUrl&, DriverCatalog::Done done) {
+                                      if (succeed) {
+                                          done(row(0, version), {});
+                                      } else {
+                                          done({}, QStringLiteral("offline"));
+                                      }
+                                  },
+                                  path};
+            QString result;
+            int completions = 0;
+            QObject::connect(&catalog, &DriverCatalog::completed, [&](const QString& v) {
+                result = v;
+                ++completions;
+            });
+            catalog.lookup(names);
+            check(completions == 1, "a lookup with a cache completes once");
+            return result;
+        };
+        const auto stored = [&] {
+            QFile file{cache};
+            return file.open(QIODevice::ReadOnly) ? QJsonDocument::fromJson(file.readAll()).object() : QJsonObject{};
+        };
+
+        check(lookup(cache, false, "") == names, "neither a lookup nor a cache leaves the lines as they were");
+        check(!QFile::exists(cache), "a failed lookup writes no cache");
+        check(lookup(cache, true, "AMD Driver (32.0.31044.16)")
+                  == QStringLiteral("1002\t7550\tAMD Radeon RX 9070 XT\t32.0.31044.16\n"),
+              "a successful lookup versions the line");
+        check(stored().value(QStringLiteral("1002:7550")).toString() == QStringLiteral("32.0.31044.16")
+                  && stored().size() == 1,
+              "a successful lookup is stored per vendor:device");
+        check(lookup(cache, false, "") == QStringLiteral("1002\t7550\tAMD Radeon RX 9070 XT\t32.0.31044.16\n"),
+              "a failed lookup uses the cached version (the release does not change)");
+        check(lookup({}, false, "") == names, "with no cache path a failed lookup leaves the fallback");
+        check(lookup(cache, true, "AMD Driver (32.0.40000.1)")
+                  == QStringLiteral("1002\t7550\tAMD Radeon RX 9070 XT\t32.0.40000.1\n")
+                  && stored().value(QStringLiteral("1002:7550")).toString() == QStringLiteral("32.0.40000.1"),
+              "a newer find replaces the cached version in the file");
+        check(lookup(cache, false, "") == QStringLiteral("1002\t7550\tAMD Radeon RX 9070 XT\t32.0.40000.1\n"),
+              "and the file round-trips into the next lookup");
+        QFile bad{cache};
+        bad.open(QIODevice::WriteOnly | QIODevice::Truncate);
+        bad.write("{not json");
+        bad.close();
+        check(lookup(cache, false, "") == names, "a cache file that is not JSON is as good as none");
     }
 
     std::printf("%d failure(s)\n", g_failures);

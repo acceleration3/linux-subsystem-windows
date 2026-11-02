@@ -242,7 +242,7 @@ void Pipeline::run_build_payload() {
         settings.set_value(QLatin1String(K::kGuestUser), inputs_.user_name);
         settings.set_value(QLatin1String(K::kGuestPassword), inputs_.user_password);
     }
-    payload_stager_ = new PayloadIsoStager(services_.settings(), this);
+    payload_stager_ = new PayloadIsoStager(services_.settings(), services_.manager_settings(), this);
     const auto generation = generation_;
     connect(payload_stager_, &PayloadIsoStager::failed, this,
             [this, generation](const QString& message) {

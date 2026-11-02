@@ -10,8 +10,8 @@ namespace lsw::host::services {
 
 // Hot-swaps the guest agent for the one LSW ships, and the window
 // mirror's guest half beside it, without rebooting the VM. The MCP
-// redeploy_agent tool runs it on demand; GuestUpkeep, whenever the guest's
-// differ from the ones shipped.
+// redeploy_agent tool runs it on demand, as a development quick swap;
+// updating the guest as a whole is GuestUpdate's.
 //
 // The sequence, in one place because every step depends on the last:
 //   1. read the agent .exe (required) and remotewin-guest.exe (when there
@@ -58,7 +58,7 @@ public:
 
     explicit AgentRedeployer(link::AgentRpcClient& agent) noexcept : agent_(agent) {}
 
-    // Blocking; up to ~45 s. Called on a worker thread.
+    // Blocking; up to 120 s. Called on a worker thread.
     [[nodiscard]] Outcome run();
 
 private:

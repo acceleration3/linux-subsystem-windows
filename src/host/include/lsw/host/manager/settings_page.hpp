@@ -47,6 +47,8 @@ Q_SIGNALS:
     void download_tool_requested();
     void trim_tool_requested();
     void reinstall_requested();
+    // "Update LSW in Windows": a forced update.
+    void update_requested();
     void open_share_requested();
     void rewrite_entries_requested();
 
@@ -59,6 +61,9 @@ private:
     void build();
     void refresh_apply_bar();
     void rebuild_shares_table();
+    // The update row's sub-line and button, from StatusHub's update and VM
+    // snapshots.
+    void refresh_update_row();
 
     // A group is a titled block of rows; a row is a label, an
     // explanation, a now-or-restart tag, and a control.
@@ -116,6 +121,8 @@ private:
     QLabel* apply_count_ = nullptr;
     QLabel* apply_diffs_ = nullptr;
     QTableWidget* shares_table_ = nullptr;
+    QLabel* update_note_ = nullptr;
+    QPushButton* update_button_ = nullptr;
     QHash<QString, std::function<void()>> shows_;
 };
 

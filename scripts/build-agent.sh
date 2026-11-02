@@ -23,7 +23,7 @@
 # scripts/redeploy-agent.sh. Override either with $LSW_AGENT_EXE.
 #
 # $LSW_AGENT_BUILD and $LSW_AGENT32_BUILD put the two trees somewhere
-# else (scripts/package-release.sh builds its own), and
+# else (scripts/dist.sh builds its own), and
 # $LSW_REQUIRE_I686=1 makes a missing i686 compiler an error rather than
 # a skipped loader: a release without the 32-bit loader is incomplete.
 

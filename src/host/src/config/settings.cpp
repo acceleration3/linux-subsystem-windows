@@ -92,6 +92,10 @@ QString Settings::vm_avgpu_log_path() const {
     return join(logs_dir(), QStringLiteral("%1-avgpu.log").arg(QLatin1String(kVmName)));
 }
 
+QString Settings::driver_versions_path() const {
+    return join(data_root_, QStringLiteral("driver-versions.json"));
+}
+
 bool Settings::is_first_run() const {
     QSettings s{join(config_root_, "manager.ini"), QSettings::IniFormat};
     return !s.value("setup/wizard_complete", false).toBool();

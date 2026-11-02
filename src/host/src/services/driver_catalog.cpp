@@ -1,18 +1,22 @@
-#include "lsw/host/provision/install/driver_catalog.hpp"
+#include "lsw/host/services/driver_catalog.hpp"
 
 #include "lsw/base/log.hpp"
 
+#include <QFile>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QPointer>
 #include <QRegularExpression>
+#include <QSaveFile>
 #include <QStringList>
 #include <QTimer>
 #include <QVersionNumber>
 
 #include <algorithm>
 
-namespace lsw::host::provision::install {
+namespace lsw::host::services {
 
 namespace {
 
@@ -44,8 +48,9 @@ const QRegularExpression& version_pattern() {
 
 }  // namespace
 
-DriverCatalog::DriverCatalog(Fetch fetch, QObject* parent)
-    : QObject(parent), fetch_(std::move(fetch)) {
+DriverCatalog::DriverCatalog(Fetch fetch, QString cache_path, QObject* parent)
+    : QObject(parent), fetch_(std::move(fetch)), cache_path_(std::move(cache_path)) {
+    load_cache();
     nam_.setRedirectPolicy(QNetworkRequest::NoLessSafeRedirectPolicy);
     if (!fetch_) {
         fetch_ = [this](const QUrl& url, Done done) {
@@ -147,6 +152,10 @@ void DriverCatalog::answer(const QString& key, const QByteArray& page, const QSt
                  key.toStdString(), error.toStdString());
     } else if (const auto version = newest(page)) {
         versions_.insert(key, *version);
+        if (cached_.value(key) != *version) {
+            cached_.insert(key, *version);
+            save_cache();
+        }
         LSW_INFO("provision: catalog lists driver {} for {}", version->toStdString(),
                  key.toStdString());
     } else {
@@ -159,6 +168,43 @@ void DriverCatalog::answer(const QString& key, const QByteArray& page, const QSt
     }
 }
 
+void DriverCatalog::load_cache() {
+    if (cache_path_.isEmpty()) {
+        return;
+    }
+    QFile file{cache_path_};
+    if (!file.open(QIODevice::ReadOnly)) {
+        return;
+    }
+    const QJsonObject object = QJsonDocument::fromJson(file.readAll()).object();
+    for (auto it = object.begin(); it != object.end(); ++it) {
+        if (it.value().isString() && !it.value().toString().isEmpty()) {
+            cached_.insert(it.key(), it.value().toString());
+        }
+    }
+}
+
+void DriverCatalog::save_cache() const {
+    if (cache_path_.isEmpty()) {
+        return;
+    }
+    QJsonObject object;
+    for (auto it = cached_.begin(); it != cached_.end(); ++it) {
+        object.insert(it.key(), it.value());
+    }
+    // Replaced whole, so an interrupted write leaves the old file.
+    QSaveFile file{cache_path_};
+    if (!file.open(QIODevice::WriteOnly)) {
+        LSW_WARN("provision: cannot keep the catalog's driver versions in {}: {}",
+                 cache_path_.toStdString(), file.errorString().toStdString());
+        return;
+    }
+    file.write(QJsonDocument(object).toJson(QJsonDocument::Compact));
+    if (!file.commit()) {
+        LSW_WARN("provision: cannot keep the catalog's driver versions in {}", cache_path_.toStdString());
+    }
+}
+
 void DriverCatalog::complete() {
     if (completed_) {
         return;
@@ -168,10 +214,12 @@ void DriverCatalog::complete() {
     for (const QString& line : names_.split(QLatin1Char('\n'), Qt::SkipEmptyParts)) {
         QStringList fields = line.split(QLatin1Char('\t'));
         if (fields.size() >= 3) {
-            const auto found = versions_.constFind(fields[0] + QLatin1Char(':') + fields[1]);
-            if (found != versions_.constEnd()) {
+            const QString key = fields[0] + QLatin1Char(':') + fields[1];
+            // A lookup that failed leaves the last version found.
+            const QString version = versions_.value(key, cached_.value(key));
+            if (!version.isEmpty()) {
                 fields = fields.mid(0, 3);
-                fields << *found;
+                fields << version;
             }
         }
         out += fields.join(QLatin1Char('\t')) + QLatin1Char('\n');
@@ -179,4 +227,4 @@ void DriverCatalog::complete() {
     Q_EMIT completed(out);
 }
 
-}  // namespace lsw::host::provision::install
+}  // namespace lsw::host::services

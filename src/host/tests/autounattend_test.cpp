@@ -9,6 +9,7 @@
 #include "lsw/host/provision/install/payload_iso.hpp"
 #include "lsw/host/provision/install/product_keys.hpp"
 #include "lsw/host/provision/install/wim_edition_lister.hpp"
+#include "lsw/host/services/guest_bundle.hpp"
 
 #include <QDir>
 #include <QDomDocument>
@@ -17,6 +18,7 @@
 #include <QTemporaryDir>
 #include <cstdio>
 #include <cstdlib>
+#include <memory>
 
 namespace {
 
@@ -31,7 +33,7 @@ void check(bool ok, const char* what) {
 
 }  // namespace
 
-int main(int argc, char** argv) {
+int main() {
     using namespace lsw::host::provision::install;
 
     AutounattendInputs in;
@@ -40,6 +42,8 @@ int main(int argc, char** argv) {
     in.user_password = QStringLiteral("hunter2");
     in.image_index = 6;
     in.product_key = ProductKeys::for_edition(QStringLiteral("Core"));
+    in.release = QStringLiteral("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef");
+    in.version = QStringLiteral("9.8.7");
 
     const QString xml = Autounattend::render(in);
 
@@ -51,7 +55,8 @@ int main(int argc, char** argv) {
     // comments talk about the placeholder syntax.
     bool any_left = false;
     for (const char* key : {"locale", "timezone", "computer_name", "user_name", "user_password",
-                            "product_key_block", "image_index", "win11_bypass_block"}) {
+                            "product_key_block", "image_index", "win11_bypass_block", "release",
+                            "version"}) {
         if (xml.contains(QStringLiteral("{{%1}}").arg(QLatin1String(key)))) {
             std::printf("       unsubstituted: {{%s}}\n", key);
             any_left = true;
@@ -135,9 +140,13 @@ int main(int argc, char** argv) {
     QTemporaryDir staging;
     PayloadInputs payload;
     payload.autounattend_xml = xml;
+    // The release the ISO carries is required: a guest without it has no desktop.
+    auto stub_bundle = std::make_shared<lsw::host::services::GuestBundle::Contents>();
+    stub_bundle->files.push_back({"C:\\ProgramData\\LSW\\lsw-agent.exe", "agent", "hash"});
+    payload.bundle = stub_bundle;
     QStringList staged;
     check(PayloadIsoBuilder::stage_files(payload, staging.path(), &staged, nullptr),
-          "stage_files() succeeds with only an answer file");
+          "stage_files() succeeds with an answer file and a bundle");
     check(!staged.isEmpty(), "stage_files() reports a staged answer file");
     const QString staged_path = QDir(staging.path()).filePath("autounattend.xml");
     check(QFile::exists(staged_path), "autounattend.xml exists in the staging dir");
@@ -154,161 +163,94 @@ int main(int argc, char** argv) {
               !xml.contains(QStringLiteral("NetKVM"), Qt::CaseInsensitive),
           "nothing of virtio-win is left");
 
-    // The display driver. accel-virt's package has to reach C:\av, and
-    // SetupComplete has to sign it and install it — in that order, with
-    // install's -NoVerifier, because the verifier is for testing — and
-    // put the loaders where a process of either bitness finds them.
+    // LSW's files. Setup copies nothing of them: SetupComplete finds the
+    // payload volume, stages its \update under the release and runs the
+    // update script from there, which signs and installs the driver, puts
+    // the loaders, the shares, the service and the firewall rules in place.
     check(!xml.contains(QStringLiteral("rvk")), "nothing of the render server's drivers is left");
-    check(xml.contains(QStringLiteral("%i:\\av\\provision.ps1 xcopy /E /I /Y %i:\\av C:\\av")),
-          "specialize copies \\av off the payload CD to C:\\av");
-    // An untouched package for a GPU added after the install: the first
-    // sign invalidates C:\av\package against its own package.sha256.
-    check(xml.contains(QStringLiteral("xcopy /E /I /Y %i:\\av\\package C:\\av\\pristine\\package")),
-          "specialize keeps a pristine copy of the package for later adapters");
-    check(xml.contains(QStringLiteral("$avScript = 'C:\\av\\provision.ps1'")),
-          "SetupComplete runs C:\\av\\provision.ps1");
-    // Sign in specialize, install at SetupComplete: sign turns test
-    // signing on, and only the reboot that ends specialize puts it in
-    // force before pnputil runs.
+    check(!xml.contains(QStringLiteral("LswAvSign")) && !xml.contains(QStringLiteral("pristine")) &&
+              !xml.contains(QStringLiteral("xcopy /E /I /Y %i:")) &&
+              !xml.contains(QStringLiteral("firewall add rule name=\"LSW Agent")) &&
+              !xml.contains(QStringLiteral("firewall add rule name=\"LSW Stream")) &&
+              !xml.contains(QStringLiteral("av-installed.flag")) &&
+              !xml.contains(QStringLiteral("lsw-av-install")),
+          "specialize copies, signs and opens nothing of LSW's any more");
+    check(xml.contains(QStringLiteral("md C:\\ProgramData\\LSW")) &&
+              xml.contains(QStringLiteral("icacls C:\\ProgramData\\LSW /grant")),
+          "specialize still makes C:\\ProgramData\\LSW with its ACL");
+    check(xml.contains(QStringLiteral("$releaseId = '0123456789abcdef0123456789abcdef"
+                                      "0123456789abcdef0123456789abcdef'")) &&
+              xml.contains(QStringLiteral("$bundleVersion = '9.8.7'")),
+          "the release and version reach SetupComplete");
     {
-        const qsizetype copy = xml.indexOf(QStringLiteral("xcopy /E /I /Y %i:\\av C:\\av"));
-        const qsizetype sign_cmd =
-            xml.indexOf(QStringLiteral("-File \"C:\\Windows\\Setup\\Scripts\\LswAvSign.ps1\""));
-        check(copy >= 0 && sign_cmd > copy,
-              "specialize runs LswAvSign.ps1 after copying the package");
-        check(sign_cmd >= 0 &&
-                  sign_cmd < xml.indexOf(QStringLiteral("<settings pass=\"oobeSystem\">")),
-              "and that command is in the specialize pass");
+        const qsizetype volume = xml.indexOf(QStringLiteral("$_.VolumeLabel -eq 'LSW_PAYLOAD'"));
+        const qsizetype stage = xml.indexOf(QStringLiteral("'C:\\ProgramData\\LSW\\update\\' + $releaseId.Substring(0, 16)"));
+        const qsizetype run = xml.indexOf(QStringLiteral("-File $updateScript -Stage $stageDir -Release $releaseId "
+                                                         "-Version $bundleVersion -NoRestart"));
+        const qsizetype promote = xml.indexOf(QStringLiteral("promoted.flag present - skipping"));
+        check(volume >= 0 && stage > volume && run > stage && promote > run,
+              "SetupComplete finds the payload, stages its \\update and runs the update script "
+              "with -NoRestart before it promotes the user");
     }
-    check(xml.contains(QStringLiteral("-File $avScript -Stage sign")) &&
-              xml.contains(QStringLiteral("C:\\ProgramData\\LSW\\av-sign.log")),
-          "LswAvSign.ps1 runs the sign stage and logs it");
-    {
-        const qsizetype resign = xml.indexOf(QStringLiteral("if (-not (AvSigned))"));
-        const qsizetype install =
-            xml.indexOf(QStringLiteral("AvStage @('-Stage', 'install', '-NoVerifier')"));
-        check(resign >= 0 && install > resign,
-              "SetupComplete signs again only if the catalog is not signed, then installs "
-              "-NoVerifier");
-    }
-    check(xml.contains(QStringLiteral("$rc -eq 3010")),
-          "a stage asking for a reboot is not a failure");
-    check(xml.contains(QStringLiteral("@('x86', 'SysWOW64')")) &&
-              xml.contains(QStringLiteral("@('x64', 'System32')")),
-          "both loader sets are installed, the x86 one into SysWOW64");
     check(xml.contains(QStringLiteral("DontSearchWindowsUpdate")),
           "driver searches on Windows Update are off before OOBE has the network");
-
-    // The agent is a LocalSystem service now, not a logon task as the
-    // wizard user: registered with automatic start and restart-on-failure
-    // at SetupComplete, ahead of the promotion's early exits, and started
-    // there (SetupComplete is followed by the first logon, not a reboot).
-    check(!xml.contains(QStringLiteral("Register-ScheduledTask -TaskName 'lsw-agent'")) &&
-              !xml.contains(QStringLiteral("<LogonType>InteractiveToken</LogonType>")),
-          "no lsw-agent logon task is registered any more");
-    check(xml.contains(QStringLiteral("$svcBin = 'C:\\ProgramData\\LSW\\lsw-agent.exe --service'")),
-          "the service runs the deployed exe in --service mode");
-    check(xml.contains(QStringLiteral(
-              "sc.exe create $svc binPath= $svcBin start= auto obj= LocalSystem")),
-          "the service is created as LocalSystem with automatic start");
-    check(xml.contains(QStringLiteral(
-              "sc.exe config $svc binPath= $svcBin start= auto obj= LocalSystem")),
-          "an existing service is reconfigured, so a second SetupComplete run is harmless");
-    check(xml.contains(QStringLiteral(
-              "sc.exe failure $svc reset= 86400 actions= restart/5000/restart/5000/restart/30000")) &&
-              xml.contains(QStringLiteral("sc.exe failureflag $svc 1")),
-          "the SCM restarts a failed agent, including one that exits non-zero");
-    {
-        const qsizetype promote = xml.indexOf(QStringLiteral("<File path=\"C:\\Windows\\Setup\\Scripts\\LswPromote.ps1\">"));
-        const qsizetype create = xml.indexOf(QStringLiteral("sc.exe create $svc"));
-        const qsizetype start = xml.indexOf(QStringLiteral("sc.exe start $svc"));
-        const qsizetype early_exit = xml.indexOf(QStringLiteral("promoted.flag present - skipping"));
-        check(promote >= 0 && create > promote && start > create && early_exit > start,
-              "LswPromote.ps1 registers and starts the service before the promotion can exit");
-    }
-    check(xml.contains(QStringLiteral("localport=5102")),
-          "the agent's port stays open in the firewall");
     check(xml.contains(QStringLiteral("HKU\\DefaultUser\\Control Panel\\Desktop\" /v ScreenSaveActive")),
           "the screen saver is off for new accounts, since setup steps no longer run as the user");
 
-    // The package stages whole, as \av, and the Vulkan loaders land
-    // beside its OpenCL ones.
-    QTemporaryDir av_src;
-    const QDir av_root{av_src.path()};
-    const char* const av_files[] = {
-        "provision.ps1",          "adapters.txt",           "package/avgpu.sys",
-        "package/avgpu.inf",      "package/avumd.dll",      "package/avvk32.json",
-        "package/package.sha256", "loaders/x64/OpenCL.dll", "loaders/x86/OpenCL.dll",
-    };
-    for (const char* name : av_files) {
-        const QString path = av_root.filePath(QLatin1String(name));
-        QDir().mkpath(QFileInfo(path).absolutePath());
-        QFile f{path};
-        check(f.open(QIODevice::WriteOnly), "created a fake driver package file");
-        f.write(QByteArray("stub for ") + name);
+    // The bundle stages as \update, each file under its guest path without
+    // the drive's colon, beside the manifest and the mount list.
+    using lsw::host::services::GuestBundle;
+    auto bundle = std::make_shared<GuestBundle::Contents>();
+    for (const char* guest_path : {"C:\\ProgramData\\LSW\\lsw-agent.exe", "C:\\av\\provision.ps1",
+                                   "C:\\av\\package\\avgpu.inf", "C:\\av\\loaders\\x64\\vulkan-1.dll"}) {
+        bundle->files.push_back({guest_path, QByteArray("stub for ") + guest_path, {}});
     }
-    QTemporaryDir loader_src;
-    const QString vulkan64 = QDir(loader_src.path()).filePath(QStringLiteral("vulkan-1.dll"));
-    const QString vulkan32 = QDir(loader_src.path()).filePath(QStringLiteral("vulkan-1-x86.dll"));
-    for (const QString& path : {vulkan64, vulkan32}) {
-        QFile f{path};
-        check(f.open(QIODevice::WriteOnly), "created a fake Vulkan loader");
-        f.write("MZstub");
-    }
+    bundle->manifest = "manifest text\n";
+    bundle->shares = "none";
 
     QTemporaryDir staging3;
-    PayloadInputs with_av;
-    with_av.autounattend_xml = xml;
-    with_av.av_driver_tree = av_src.path();
-    with_av.vulkan_loader_x64_path = vulkan64;
-    with_av.vulkan_loader_x86_path = vulkan32;
-    with_av.av_adapter_names = QStringLiteral("1002\t7550\tAMD Radeon RX 9070 XT\n");
-    QString av_error;
-    check(PayloadIsoBuilder::stage_files(with_av, staging3.path(), nullptr, &av_error),
-          "stage_files() succeeds with the driver package");
-    if (!av_error.isEmpty()) {
-        std::printf("       %s\n", qPrintable(av_error));
+    PayloadInputs with_bundle;
+    with_bundle.autounattend_xml = xml;
+    with_bundle.bundle = bundle;
+    QString bundle_error;
+    check(PayloadIsoBuilder::stage_files(with_bundle, staging3.path(), nullptr, &bundle_error),
+          "stage_files() succeeds with the bundle");
+    if (!bundle_error.isEmpty()) {
+        std::printf("       %s\n", qPrintable(bundle_error));
     }
-    for (const char* name : av_files) {
-        check(QFile::exists(
-                  QDir(staging3.path()).filePath(QStringLiteral("av/") + QLatin1String(name))),
-              "driver package file staged under \\av, at its place in the tree");
-    }
-    for (const char* name : {"av/loaders/x64/vulkan-1.dll", "av/loaders/x86/vulkan-1.dll"}) {
+    for (const char* name : {"update/C/ProgramData/LSW/lsw-agent.exe", "update/C/av/provision.ps1",
+                             "update/C/av/package/avgpu.inf", "update/C/av/loaders/x64/vulkan-1.dll",
+                             "update/manifest.txt", "update/shares.txt"}) {
         check(QFile::exists(QDir(staging3.path()).filePath(QLatin1String(name))),
-              "Vulkan loader staged beside the package's OpenCL loader");
-    }
-    // The package's adapters.txt names the GPUs of the machine that
-    // built it; the guest gets this machine's.
-    {
-        QFile names{QDir(staging3.path()).filePath(QStringLiteral("av/adapters.txt"))};
-        check(names.open(QIODevice::ReadOnly) &&
-                  names.readAll() == with_av.av_adapter_names.toUtf8(),
-              "\\av\\adapters.txt is this host's GPU names, not the package's");
+              "bundle file staged under \\update, where the update script reads it");
     }
     {
-        QTemporaryDir staging_unnamed;
-        PayloadInputs unnamed = with_av;
-        unnamed.av_adapter_names.clear();
-        check(PayloadIsoBuilder::stage_files(unnamed, staging_unnamed.path(), nullptr, nullptr) &&
-                  !QFile::exists(
-                      QDir(staging_unnamed.path()).filePath(QStringLiteral("av/adapters.txt"))),
-              "with no host GPU to name, no adapters.txt, not even the package's");
+        QFile staged_agent{QDir(staging3.path()).filePath(QStringLiteral("update/C/ProgramData/LSW/lsw-agent.exe"))};
+        check(staged_agent.open(QIODevice::ReadOnly) &&
+                  staged_agent.readAll() == bundle->files.at(0).bytes,
+              "a staged file is the bundle's bytes");
     }
+    check(!QDir(staging3.path()).exists(QStringLiteral("av")) &&
+              !QFile::exists(QDir(staging3.path()).filePath(QStringLiteral("lsw-agent.exe"))),
+          "nothing of the bundle is on the ISO anywhere else");
 
-    // A directory that is not the package is refused, not half-staged:
-    // pnputil refuses a package missing a file its INF names, and that
-    // would surface as a guest with no display after a full install.
-    QTemporaryDir not_av;
-    PayloadInputs with_bad_av;
-    with_bad_av.autounattend_xml = xml;
-    with_bad_av.av_driver_tree = not_av.path();
-    QTemporaryDir staging4;
-    QString bad_error;
-    check(!PayloadIsoBuilder::stage_files(with_bad_av, staging4.path(), nullptr, &bad_error),
-          "a directory with no provision.ps1 is refused as a driver package");
-    check(bad_error.contains(QStringLiteral("LSW_AV_DRIVERS")),
-          "and the error says how to point at a real one");
+    // No bundle, or one that could not be made, is refused, not half-staged:
+    // the guest would have no display after a full install.
+    {
+        QTemporaryDir staging4;
+        PayloadInputs none;
+        none.autounattend_xml = xml;
+        check(!PayloadIsoBuilder::stage_files(none, staging4.path(), nullptr, nullptr),
+              "a payload with no bundle is refused");
+        auto failed = std::make_shared<GuestBundle::Contents>();
+        failed->error = QStringLiteral("no driver package");
+        PayloadInputs bad = none;
+        bad.bundle = failed;
+        QString bad_error;
+        check(!PayloadIsoBuilder::stage_files(bad, staging4.path(), nullptr, &bad_error) &&
+                  bad_error.contains(QStringLiteral("no driver package")),
+              "and so is one that could not be made, with its reason");
+    }
 
     // End to end: build a real ISO and read the answer file back out of
     // it. This is the step that actually failed in the field — the file
@@ -318,15 +260,8 @@ int main(int argc, char** argv) {
     PayloadInputs iso_inputs;
     iso_inputs.autounattend_xml = xml;
     iso_inputs.output_iso_path = QDir(iso_dir.path()).filePath("payload.iso");
-    // The driver package too: it is the one nested tree on the ISO.
-    iso_inputs.av_driver_tree = av_src.path();
-    iso_inputs.vulkan_loader_x64_path = vulkan64;
-    // Optional: stage a real agent binary too, so the test exercises the
-    // same multi-file staging the wizard does rather than a lone XML.
-    if (argc > 1) {
-        iso_inputs.agent_exe_path = QString::fromLocal8Bit(argv[1]);
-        std::printf("       also staging: %s\n", argv[1]);
-    }
+    // The bundle too: its files are the nested tree on the ISO.
+    iso_inputs.bundle = bundle;
     QString build_error;
     const bool built = PayloadIsoBuilder::build(iso_inputs, &build_error);
     if (!built) {
@@ -349,8 +284,8 @@ int main(int argc, char** argv) {
     {
         QFile again{iso_inputs.output_iso_path};
         const QByteArray raw = again.open(QIODevice::ReadOnly) ? again.readAll() : QByteArray{};
-        check(raw.contains("stub for package/avgpu.inf"),
-              "the driver package's nested files are in the ISO");
+        check(raw.contains("stub for C:\\av\\package\\avgpu.inf"),
+              "the bundle's nested files are in the ISO");
     }
 
     std::printf("%s\n", failures == 0 ? "PASS" : "FAIL");

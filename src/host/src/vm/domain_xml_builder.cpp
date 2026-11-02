@@ -137,8 +137,6 @@ QString DomainXmlBuilder::build(const config::VmRecord& vm, const DomainXmlInput
     vars["uuid"] = vm.uuid.toString(QUuid::WithoutBraces);
     vars["ram_mib"] = QString::number(vm.sizing.memory_mib);
     vars["cpus"] = QString::number(vm.sizing.cpu_cores);
-    vars["ovmf_code"] = esc(inputs.ovmf_code);
-    vars["ovmf_vars_template"] = esc(inputs.ovmf_vars_template);
     vars["nvram_path"] = esc(vm.nvram_path);
     vars["disk_path"] = esc(vm.disk_path);
     vars["cid"] = QString::number(vm.vsock_cid);
@@ -274,6 +272,15 @@ QString DomainXmlBuilder::build(const config::VmRecord& vm, const DomainXmlInput
                              .arg(kGpuSlot + 1 + static_cast<int>(i), 0, 16);
         device += gpu_common(inputs, inputs.render_only_gpu_uuids.at(i));
         device += QStringLiteral(",display=off");
+        // display=off still makes the output's console, and while Setup
+        // runs VNC shows the first console there is: a render-only GPU's
+        // came before the VGA's, and the install console said "Display
+        // output is not active" all through Setup on a host with a second
+        // GPU. With no outputs, as the display adapter has then, there is
+        // no console to show.
+        if (inputs.install_display) {
+            device += QStringLiteral(",max_outputs=0");
+        }
         device += gpu_tail(inputs);
         gpu_lines << qemu_arg(QStringLiteral("-device")) << qemu_arg(device);
     }

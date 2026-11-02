@@ -57,7 +57,7 @@ public:
     // AV_D3D_PATH. Without it the host serves no Direct3D and the
     // guest's desktop crash-loops.
     [[nodiscard]] static QString d3d_lib_dir();
-    // The tree the payload ISO carries and the guest copies to C:\av:
+    // The tree services::GuestBundle ships to C:\av:
     // provision.ps1, the signed-at-install package, and the OpenCL
     // loaders under loaders/x64 and loaders/x86.
     [[nodiscard]] static QString driver_tree();

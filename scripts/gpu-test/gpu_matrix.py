@@ -455,7 +455,9 @@ def boot(domain, work, share):
 
 
 def driver_files():
-    """(local file, guest path) for the package update, as GuestDriverUpdate::files_of lays them out."""
+    """(local file, guest path) for the package update. The manager's own
+    mechanism is GuestUpdate (docs/guest-update.md); this stages the same
+    files by hand so that a test machine needs no manager."""
     files = [(path, f"C:\\av\\incoming\\package\\{path.name}")
              for path in sorted((DRIVERS / "package").iterdir()) if path.is_file()]
     files.append((DRIVERS / "provision.ps1", "C:\\av\\provision.ps1"))
@@ -470,8 +472,8 @@ def driver_files():
 
 
 def install_script(staged):
-    """The manager's driver update (GuestDriverUpdate::staging, then
-    GuestDriverInstaller::script) as one batch file: `staged` maps a file
+    """A by-hand copy of the driver step of lsw-guest-update.ps1
+    (docs/guest-update.md) as one batch file: `staged` maps a file
     pushed under C:\\av\\gputest-stage to where it belongs; empty, the package
     the guest already keeps is signed again for the adapters present now."""
     lines = ["@echo off", "setlocal"]
@@ -492,7 +494,7 @@ def install_script(staged):
                 lines.append(f'copy /y "{source}" "{target}" >nul || exit /b 4')
         lines.append("set SOURCE=C:\\av\\incoming")
     lines += [
-        "if not defined SOURCE set SOURCE=C:\\av\\pristine",
+        "if not defined SOURCE set SOURCE=C:\\av",
         "if not exist %SOURCE%\\package (echo %SOURCE% has no package & exit /b 2)",
         "robocopy %SOURCE% C:\\av\\resign /MIR /NFL /NDL /NJH /NJS /NP >nul",
         "if %ERRORLEVEL% GEQ 8 exit /b %ERRORLEVEL%",
@@ -502,10 +504,14 @@ def install_script(staged):
         "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\av\\provision.ps1 -Package C:\\av\\resign\\package -Stage install -NoVerifier",
         "set INSTALLED=%ERRORLEVEL%",
         'if not "%INSTALLED%"=="0" if not "%INSTALLED%"=="3010" exit /b %INSTALLED%',
-        'if /i not "%SOURCE%"=="C:\\av\\pristine" (',
-        "  robocopy %SOURCE%\\package C:\\av\\pristine\\package /MIR /NFL /NDL /NJH /NJS /NP >nul",
+        # C:\av\package is the copy the guest update installs from; a
+        # package put in by this tool is not the shipped one, so the update's
+        # marker goes and the next update installs the shipped driver again.
+        'if /i not "%SOURCE%"=="C:\\av" (',
+        "  robocopy %SOURCE%\\package C:\\av\\package /MIR /NFL /NDL /NJH /NJS /NP >nul",
         "  rmdir /s /q %SOURCE%",
         ")",
+        "if exist C:\\av\\installed.sha256 del /q C:\\av\\installed.sha256",
         'if "%INSTALLED%"=="0" if "%SIGNED%"=="3010" exit /b 3010',
         "exit /b %INSTALLED%",
     ]
@@ -526,7 +532,7 @@ def update_driver(guest, gpus, out, force):
     """The deployed package installed in the guest, if the guest's differs."""
     ours = (DRIVERS / "package" / "package.sha256").read_bytes()
     try:
-        theirs = guest.share.get_bytes("C:\\av\\pristine\\package\\package.sha256")
+        theirs = guest.share.get_bytes("C:\\av\\package\\package.sha256")
     except LinkError:
         theirs = b""
     guest.share.put_bytes(list_gpus.adapter_names(gpus).encode(), "C:\\av\\adapters.txt")

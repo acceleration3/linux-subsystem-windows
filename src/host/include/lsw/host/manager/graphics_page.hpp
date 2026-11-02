@@ -37,8 +37,6 @@ public:
 
 Q_SIGNALS:
     void settings_requested();
-    // The driver for new adapters is in and wants Windows restarted.
-    void restart_requested();
     // Anything the page shows changed, so the bars around it may too.
     void summary_changed();
 
