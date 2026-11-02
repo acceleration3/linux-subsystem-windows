@@ -112,6 +112,36 @@ Packaging files live in `packaging/`:
 | `packaging/deb/` | the deb's control template and postinst |
 | `packaging/rpm/` | the rpm spec template |
 
+### Releasing with CI
+
+`.github/workflows/release.yml` does the three steps below on GitHub,
+in containers of the same distributions, by running the same
+`scripts/dist.sh --in-box <step>` commands. Bump the version in
+`CMakeLists.txt`, commit, then push an annotated tag:
+
+```sh
+git tag -a v<version> -m "notes for the release"
+git push origin v<version>
+```
+
+The tag must equal `v` plus the project version. The workflow builds
+the Windows half once (`guest`), then `arch`, `deb` and `rpm`, creates
+the release `v<version>` titled "LSW <version>" with the tarball, its
+`.sha256`, the deb and the rpm (the notes are the tag's message), and
+then updates the AUR package and commits `packaging/aur` to `master`.
+
+- The `aur` job runs only when the repository secret `AUR_SSH_KEY` is
+  set: a private key without a passphrase whose public half is
+  registered on the AUR account that maintains `lsw-bin`. It fails,
+  asking for a manual review, when the tarball links a library whose
+  package `packaging/aur/PKGBUILD` does not list in `depends`.
+- Run the workflow by hand from the Actions tab (or `gh workflow run
+  release.yml -f publish=false`) to build and download the packages as
+  workflow artifacts without releasing anything. It also runs that way
+  every Monday, to notice when a distribution's libraries drift.
+
+The steps below are the same procedure done locally.
+
 ### 1. Build the packages
 
 `scripts/dist.sh` builds every package in a clean distrobox of its
@@ -187,6 +217,16 @@ cd ~/aur/lsw-bin && git add -A && git commit -m "lsw-bin <version>" && git push
 
 The push uses the AUR SSH key named for `aur.archlinux.org` in
 `~/.ssh/config`.
+
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on every push to `master` and every pull
+request: the manager and the host tests (`ctest -R "lsw_host_|linkproto|agent_"`,
+built without accel-virt's QEMU), the Windows agent and window mirror
+cross build, PowerShell checks (parser and PSScriptAnalyzer, including
+the scripts embedded in `src/host/embedded/autounattend.xml`), shellcheck
+and a clang-format check of the changed lines under `src/`. `remotewin`
+and `accel-virt` have their own workflows.
 
 ## Changing the GPU
 
