@@ -37,7 +37,8 @@ jobs:
       - name: Install the build dependencies
         run: |
           scripts/dist.sh --deps arch
-          pacman -S --noconfirm --needed ccache
+          pacman -S --noconfirm --needed ccache 7zip tzdata
+          ln -sf /usr/share/zoneinfo/UTC /etc/localtime
 
       - uses: actions/cache@v4
         with:
