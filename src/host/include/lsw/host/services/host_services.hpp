@@ -12,6 +12,7 @@
 #include "lsw/host/services/guest_shells.hpp"
 #include "lsw/host/services/guest_upkeep.hpp"
 #include "lsw/host/services/status_hub.hpp"
+#include "lsw/host/services/host_shutdown_watch.hpp"
 #include "lsw/host/services/usb_passthrough.hpp"
 #include "lsw/host/vm/libvirt_connection.hpp"
 #include "lsw/host/vm/lifecycle.hpp"
@@ -76,6 +77,7 @@ public:
 
     // Passing USB devices to the guest: the one place that acts on them.
     [[nodiscard]] UsbPassthrough& usb() noexcept { return usb_; }
+    [[nodiscard]] HostShutdownWatch& host_shutdown() noexcept { return host_shutdown_; }
 
     // The one guest-window enumeration every consumer shares.
     [[nodiscard]] apps::AppConfigStore& app_configs() noexcept { return app_configs_; }
@@ -128,6 +130,7 @@ private:
     GuestShells shells_;  // declared after rpc_ and status_: it holds both
     GuestUpkeep upkeep_;  // declared after rpc_ and status_: it holds both
     UsbPassthrough usb_;  // declared after status_ and lifecycle_: it holds both
+    HostShutdownWatch host_shutdown_;  // declared after status_ and lifecycle_: it holds both
     apps::AppConfigStore app_configs_;
     apps::LogStore log_store_;  // declared after rpc_: detaches from it in ~LogStore
     apps::GuestAppLauncher app_launcher_;

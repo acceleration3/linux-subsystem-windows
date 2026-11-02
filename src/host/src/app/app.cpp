@@ -190,6 +190,9 @@ int App::run() {
     // Now that we know which VMs exist, the integrations that need one
     // can be published.
     services_.apply_integrations();
+    // Here, as the process that stays: a host shutdown or reboot powers the
+    // guest off at once.
+    services_.host_shutdown().start();
 
     if (cli_.unattended()) {
         unattended_ = std::make_unique<UnattendedRunner>(services_, cli_, this);
