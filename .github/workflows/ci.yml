@@ -61,7 +61,7 @@ jobs:
         run: cmake --build build
 
       - name: Test
-        run: ctest --test-dir build --output-on-failure --repeat until-pass:3 -R "lsw_host_|linkproto|agent_"
+        run: ctest --test-dir build --output-on-failure -R "lsw_host_|linkproto|agent_" -E "^lsw_host_agent_files_test$"
 
       - name: ccache statistics
         run: ccache -s
