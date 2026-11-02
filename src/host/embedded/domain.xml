@@ -134,15 +134,18 @@
          PCI slots the GPU lines take. The disk is namespace 1 of
          controller 0 (the drive address); libvirt refuses an NVMe
          controller with no serial, and copies the disk's to it.
-         cache='none' + io='native' keeps the host page cache from
-         double-buffering the guest's own. No iothread and no queues=:
+         cache='none' keeps the host page cache from double-buffering the
+         guest's own. io='threads', not 'native': native submits from QEMU's
+         main loop, which holds the BQL and carries the mirror's network, and
+         on btrfs a submit blocks for up to 88 ms - the guest and the mirror
+         both stalled. No iothread and no queues=:
          libvirt takes an iothread only on virtio controllers, and
          QEMU's nvme device sizes its own queue pairs (up to 64). boot
          order 1 (the install media is 2). -->
     <controller type='nvme' index='0'/>
     <disk type='file' device='disk'>
       <driver name='qemu' type='qcow2'
-              cache='none' io='native' discard='unmap' detect_zeroes='unmap'/>
+              cache='none' io='threads' discard='unmap' detect_zeroes='unmap'/>
       <source file='{{disk_path}}'/>
       <target dev='nvme0n1' bus='nvme'/>
       <serial>LSW-SYSTEM</serial>
