@@ -188,6 +188,7 @@ void StatusHub::refresh(Area area) {
         read_usb();
         break;
     case Area::Update:
+    case Area::Files:
         break;
     }
 }
@@ -203,6 +204,14 @@ void StatusHub::set_update(const GuestUpdateStatus& status) {
     }
     update_ = status;
     Q_EMIT changed(Area::Update);
+}
+
+void StatusHub::set_mount(const MountStatus& status) {
+    if (status == mount_) {
+        return;
+    }
+    mount_ = status;
+    Q_EMIT changed(Area::Files);
 }
 
 void StatusHub::boot_started(const QUuid& uuid) {

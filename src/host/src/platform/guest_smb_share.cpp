@@ -1,6 +1,6 @@
 #include "lsw/host/platform/guest_smb_share.hpp"
 
-#include <QUrl>
+#include <QDir>
 
 namespace lsw::host::platform {
 
@@ -10,15 +10,20 @@ constexpr int kPort = 5445;
 
 }
 
-QString GuestSmbShare::url(const QString& username, const QString& password, const QString& share) {
-    QUrl url;
-    url.setScheme(QStringLiteral("smb"));
-    url.setHost(QLatin1String(kHost));
-    url.setPort(kPort);
-    url.setUserName(username);
-    url.setPassword(password);
-    url.setPath(QLatin1Char('/') + share);
-    return QString::fromUtf8(url.toEncoded());
+QString GuestSmbShare::endpoint(const QString& share) {
+    return QStringLiteral("%1:%2/%3").arg(QLatin1String(kHost)).arg(kPort).arg(share);
+}
+
+QString GuestSmbShare::mount_source(const QString& share) {
+    return QStringLiteral("//%1/%2").arg(QLatin1String(kHost), share);
+}
+
+bool GuestSmbShare::is_mount_source(const QString& source) {
+    return source == mount_source(QStringLiteral("C$")) || source == mount_source(QStringLiteral("Users"));
+}
+
+QString GuestSmbShare::mount_point() {
+    return QDir::homePath() + QStringLiteral("/Windows");
 }
 
 QString GuestSmbShare::signature() {

@@ -18,6 +18,7 @@
 #include "lsw/host/mcp/mcp_server.hpp"
 #include "lsw/host/platform/accel_virt_paths.hpp"
 #include "lsw/host/platform/agent_exe_path.hpp"
+#include "lsw/host/platform/guest_bookmark_cleanup.hpp"
 #include "lsw/host/platform/mirror_exe_paths.hpp"
 #include "lsw/host/ui/theme.hpp"
 #include "lsw/host/ui/widgets.hpp"
@@ -158,7 +159,13 @@ int App::run() {
     (void)vm::DomainImporter::import_existing(services_.libvirt(), services_.settings(),
                                               services_.vms());
     services_.apply_integrations();
+    platform::GuestBookmarkCleanup::run();
     services_.host_shutdown().start();
+    {
+        const config::VmRecord* primary = services_.vms().primary();
+        services_.windows_mount().start(primary != nullptr
+                                        && services_.lifecycle().is_running(primary->uuid));
+    }
 
     if (cli_.unattended()) {
         unattended_ = std::make_unique<UnattendedRunner>(services_, cli_, this);

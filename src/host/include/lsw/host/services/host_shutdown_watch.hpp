@@ -18,6 +18,9 @@ public:
 
     void start();
 
+Q_SIGNALS:
+    void shutting_down();
+
 private Q_SLOTS:
     void prepare_for_shutdown(bool starting);
 

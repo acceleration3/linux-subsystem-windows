@@ -9,6 +9,9 @@
 #include "lsw/host/config/vm_state.hpp"
 #include "lsw/host/link/agent_guest_stats_probe.hpp"
 #include "lsw/host/link/agent_rpc_client.hpp"
+#include "lsw/host/platform/fuse_windows_fs_launcher.hpp"
+#include "lsw/host/platform/indexer_exclusions.hpp"
+#include "lsw/host/platform/process_command_runner.hpp"
 #include "lsw/host/services/agent_log_levels.hpp"
 #include "lsw/host/services/guest_shells.hpp"
 #include "lsw/host/services/log_cleaner.hpp"
@@ -18,6 +21,7 @@
 #include "lsw/host/services/guest_upkeep.hpp"
 #include "lsw/host/services/status_hub.hpp"
 #include "lsw/host/services/host_shutdown_watch.hpp"
+#include "lsw/host/services/windows_mount.hpp"
 #include "lsw/host/services/usb_passthrough.hpp"
 #include "lsw/host/vm/libvirt_connection.hpp"
 #include "lsw/host/vm/lifecycle.hpp"
@@ -53,6 +57,7 @@ public:
 
     [[nodiscard]] UsbPassthrough& usb() noexcept { return usb_; }
     [[nodiscard]] HostShutdownWatch& host_shutdown() noexcept { return host_shutdown_; }
+    [[nodiscard]] WindowsMount& windows_mount() noexcept { return windows_mount_; }
 
     [[nodiscard]] apps::AppConfigStore& app_configs() noexcept { return app_configs_; }
 
@@ -90,6 +95,10 @@ private:
     GuestUpkeep upkeep_;
     UsbPassthrough usb_;
     HostShutdownWatch host_shutdown_;
+    platform::FuseWindowsFsLauncher mount_helper_;
+    platform::ProcessCommandRunner commands_;
+    platform::IndexerExclusions indexers_;
+    WindowsMount windows_mount_;
     apps::AppConfigStore app_configs_;
     apps::LogStore log_store_;
     vm::VmLogFiles vm_logs_;

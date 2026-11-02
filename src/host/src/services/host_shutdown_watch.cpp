@@ -59,6 +59,7 @@ void HostShutdownWatch::prepare_for_shutdown(bool starting) {
         }
         return;
     }
+    Q_EMIT shutting_down();
     const QUuid uuid = status_.vm().uuid;
     if (!uuid.isNull() && lifecycle_.is_running(uuid)) {
         LSW_INFO("the host is shutting down: powering the guest off");

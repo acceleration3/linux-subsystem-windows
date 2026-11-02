@@ -8,6 +8,7 @@
 #include "lsw/host/ui/machine_limits.hpp"
 #include "lsw/host/ui/panel.hpp"
 #include "lsw/host/config/vm_sizing.hpp"
+#include "lsw/host/platform/guest_smb_share.hpp"
 #include "lsw/host/services/guest_update_status.hpp"
 #include "lsw/host/services/status_hub.hpp"
 #include "lsw/host/ui/slider_spin.hpp"
@@ -253,25 +254,30 @@ void SettingsPage::build() {
 
     auto* files = new_group(QStringLiteral("Files"));
     add_row(files, K::kSmbEnabled,
-            QStringLiteral("Browse the guest from your file manager"),
-            QStringLiteral("Serves the guest over SMB on 127.0.0.1:5445, handled in "
-                           "userspace, so nothing is mounted and Windows junctions never "
-                           "turn into extra mounts."),
+            QStringLiteral("Mount Windows' files"),
+            QStringLiteral("Mounts the guest's disk as a folder, "
+                           "~/Windows, in your home folder while Windows runs, so every "
+                           "file manager and program on this machine can open it. No "
+                           "root needed. It is unmounted when Windows stops."),
             make_toggle(K::kSmbEnabled));
     add_row(files, K::kShareScope, QStringLiteral("Shared folder"),
-            QStringLiteral("What the bookmark opens."),
+            QStringLiteral("What gets mounted."),
             make_choice(K::kShareScope,
                         Choices{{QStringLiteral("Whole disk (C$)"), QStringLiteral("C$")},
                                 {QStringLiteral("The user's profile"),
                                  QStringLiteral("profile")}}));
-    add_row(files, K::kBookmarkDolphin,
-            QStringLiteral("Bookmark in Dolphin"),
-            QStringLiteral("Writes a Places entry titled Windows into user-places.xbel."),
-            make_toggle(K::kBookmarkDolphin));
-    add_row(files, K::kBookmarkGtk,
-            QStringLiteral("Bookmark in GNOME Files and Thunar"),
-            QStringLiteral("The same entry, in gtk-3.0/bookmarks."),
-            make_toggle(K::kBookmarkGtk));
+    auto* mount_button = small_button(QStringLiteral("Open folder"));
+    connect(mount_button, &QPushButton::clicked, this, &SettingsPage::open_share_requested);
+    auto* mount_row = add_row(files, QString{}, QStringLiteral("Mount status"), QString{},
+                              mount_button);
+    mount_button_ = mount_button;
+    mount_note_ = mount_row->findChild<QLabel*>(QStringLiteral("rowDescription"));
+    connect(&status_, &services::StatusHub::changed, this, [this](services::StatusHub::Area area) {
+        if (area == services::StatusHub::Area::Files) {
+            refresh_mount_row();
+        }
+    });
+    refresh_mount_row();
 
     auto* shares_row = new QWidget;
     auto* shares_layout = new QVBoxLayout(shares_row);
@@ -311,10 +317,6 @@ void SettingsPage::build() {
         shares.push_back(HostShare{dir, letters.first(), false});
         stage_shares(shares);
     });
-
-    add_action_row(files, QStringLiteral("Open the share"),
-                   QStringLiteral("Launches your file manager at the guest's C: drive."),
-                   QStringLiteral("Open Windows files"), &SettingsPage::open_share_requested);
 
     auto* entries = new_group(QStringLiteral("Desktop entries"));
     add_row(entries, K::kPublishEntries,
@@ -517,6 +519,18 @@ void SettingsPage::refresh_update_row() {
     update_note_->setText(note);
     const auto& vm = status_.vm();
     update_button_->setEnabled(!update.running() && vm.running() && vm.agent_online());
+}
+
+void SettingsPage::refresh_mount_row() {
+    const auto& mount = status_.mount();
+    QString note = mount.text();
+    using State = services::MountStatus::State;
+    if (mount.state != State::Mounted && mount.state != State::Mounting
+        && mount.state != State::Unmounting) {
+        note += QStringLiteral(" It mounts at %1.").arg(platform::GuestSmbShare::mount_point());
+    }
+    mount_note_->setText(note);
+    mount_button_->setEnabled(mount.mounted());
 }
 
 QVBoxLayout* SettingsPage::new_group(const QString& title) {

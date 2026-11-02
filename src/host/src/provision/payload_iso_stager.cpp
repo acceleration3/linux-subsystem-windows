@@ -3,7 +3,6 @@
 #include "lsw/base/log.hpp"
 #include "lsw/host/config/manager_settings.hpp"
 #include "lsw/host/config/settings.hpp"
-#include "lsw/host/platform/dolphin_places.hpp"
 #include "lsw/host/provision/install/autounattend.hpp"
 #include "lsw/host/provision/install/media_language.hpp"
 #include "lsw/host/provision/install/payload_iso.hpp"
@@ -62,9 +61,6 @@ void PayloadIsoStager::build(const config::VmRecord& record, const PipelineInput
         answers.timezone = QStringLiteral("UTC");
     }
     LSW_INFO("provision: time zone {}", answers.timezone.toStdString());
-
-    (void)platform::DolphinPlaces::register_windows_bookmark(inputs.user_name,
-                                                             inputs.user_password);
 
     const auto mounts = services::GuestBundle::mounts_of(manager_settings_);
     auto* const once = new QObject(this);

@@ -30,8 +30,6 @@ const QHash<QString, QVariant>& defaults() {
 
         {K::kSmbEnabled, true},
         {K::kShareScope, QStringLiteral("C$")},
-        {K::kBookmarkDolphin, true},
-        {K::kBookmarkGtk, true},
         {K::kHostShares, QString{}},
         {K::kGuestUser, QStringLiteral("lsw")},
         {K::kGuestPassword, QStringLiteral("lsw")},

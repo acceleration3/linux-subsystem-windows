@@ -35,8 +35,6 @@ public:
         static constexpr QLatin1StringView kRenderGpus{"graphics/render_gpus"};
         static constexpr QLatin1StringView kSmbEnabled{"files/smb_enabled"};
         static constexpr QLatin1StringView kShareScope{"files/share_scope"};
-        static constexpr QLatin1StringView kBookmarkDolphin{"files/bookmark_dolphin"};
-        static constexpr QLatin1StringView kBookmarkGtk{"files/bookmark_gtk"};
         static constexpr QLatin1StringView kHostShares{"files/host_shares"};
         static constexpr QLatin1StringView kGuestUser{"files/guest_user"};
         static constexpr QLatin1StringView kGuestPassword{"files/guest_password"};

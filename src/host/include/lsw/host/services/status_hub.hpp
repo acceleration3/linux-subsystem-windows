@@ -3,6 +3,7 @@
 #include "lsw/host/services/graphics_status.hpp"
 #include "lsw/host/services/guest_update_status.hpp"
 #include "lsw/host/services/guest_sessions.hpp"
+#include "lsw/host/services/mount_status.hpp"
 #include "lsw/host/services/usb_status.hpp"
 #include "lsw/host/services/vm_status.hpp"
 #include "lsw/host/vm/avgpu_log.hpp"
@@ -30,7 +31,7 @@ namespace lsw::host::services {
 class StatusHub : public QObject {
     Q_OBJECT
 public:
-    enum class Area { Vm, Graphics, Host, Sessions, Usb, Update };
+    enum class Area { Vm, Graphics, Host, Sessions, Usb, Update, Files };
 
     StatusHub(vm::LibvirtConnection& libvirt, vm::Lifecycle& lifecycle,
               link::AgentRpcClient& rpc, vm::IGuestStatsProbe& guest_probe,
@@ -46,10 +47,13 @@ public:
     [[nodiscard]] const GuestSessions& sessions() const noexcept { return sessions_; }
     [[nodiscard]] const UsbStatus& usb() const noexcept { return usb_; }
     [[nodiscard]] const GuestUpdateStatus& update() const noexcept { return update_; }
+    [[nodiscard]] const MountStatus& mount() const noexcept { return mount_; }
 
     void set_vm(const VmStatus& status);
 
     void set_update(const GuestUpdateStatus& status);
+
+    void set_mount(const MountStatus& status);
 
     void refresh(Area area);
 
@@ -102,6 +106,7 @@ private:
     bool usb_live_again_ = false;
     UsbStatus usb_;
     GuestUpdateStatus update_;
+    MountStatus mount_;
     QVector<platform::HostUsbDevice> usb_host_;
     QHash<QString, QString> usb_names_;
     QVector<vm::DomainDescription::UsbDevice> usb_live_;

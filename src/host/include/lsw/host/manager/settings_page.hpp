@@ -58,6 +58,7 @@ private:
     void refresh_apply_bar();
     void rebuild_shares_table();
     void refresh_update_row();
+    void refresh_mount_row();
     void build_logs_group();
     void refresh_debug_row();
 
@@ -100,6 +101,8 @@ private:
     QLabel* apply_diffs_ = nullptr;
     QTableWidget* shares_table_ = nullptr;
     QLabel* update_note_ = nullptr;
+    QLabel* mount_note_ = nullptr;
+    QPushButton* mount_button_ = nullptr;
     QPushButton* update_button_ = nullptr;
     QPushButton* debug_button_ = nullptr;
     QPushButton* debug_stop_ = nullptr;

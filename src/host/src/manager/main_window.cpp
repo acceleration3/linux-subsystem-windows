@@ -16,7 +16,6 @@
 #include "lsw/host/manager/vm_detail_panel.hpp"
 #include "lsw/host/manager/warning_strip.hpp"
 #include "lsw/host/mirror/window_mirror.hpp"
-#include "lsw/host/platform/guest_smb_share.hpp"
 #include "lsw/host/platform/host_scale.hpp"
 #include "lsw/host/services/domain_inputs.hpp"
 #include "lsw/host/services/host_services.hpp"
@@ -335,10 +334,10 @@ void MainWindow::build_pages() {
         services_.apply_integrations();
     });
     connect(settings_page_, &SettingsPage::open_share_requested, this, [this] {
-        const auto& settings = services_.manager_settings();
-        QDesktopServices::openUrl(QUrl(platform::GuestSmbShare::url(
-            settings.string_value(K::kGuestUser), settings.string_value(K::kGuestPassword),
-            QStringLiteral("C$"))));
+        const auto& mount = services_.status().mount();
+        if (mount.mounted()) {
+            QDesktopServices::openUrl(QUrl::fromLocalFile(mount.path));
+        }
     });
 }
 

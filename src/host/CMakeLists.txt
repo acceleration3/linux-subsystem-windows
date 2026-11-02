@@ -47,6 +47,8 @@ target_link_libraries(lsw_host_core
         LSW::CompileOptions
         PkgConfig::LIBVNCCLIENT
         PkgConfig::LIBDRM
+        PkgConfig::FUSE3
+        PkgConfig::SMBCLIENT
         Vulkan::Vulkan
         PkgConfig::LIBVIRT_QEMU
         ZLIB::ZLIB

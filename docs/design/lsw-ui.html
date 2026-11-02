@@ -1293,27 +1293,24 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
               <h5>Files</h5>
               <div class="srow">
                 <span>
-                  <span class="k">Browse the guest from your file manager <span class="tagr live">now</span></span>
-                  <span class="d">Serves the guest over SMB on <span class="mono">127.0.0.1:5445</span>, handled in userspace by the file manager. Nothing is mounted, so Windows junctions never appear as extra mounts.</span>
+                  <span class="k">Mount Windows' files <span class="tagr live">now</span></span>
+                  <span class="d">Mounts the guest's disk as a folder, ~/Windows, in your home folder while Windows runs, so every file manager and program on this machine can open it. No root needed. It is unmounted when Windows stops.</span>
                 </span>
                 <span class="ctl"><span class="toggle on"><i></i></span></span>
               </div>
               <div class="srow">
                 <span>
                   <span class="k">Shared folder</span>
-                  <span class="d">What the bookmark opens. The whole disk, or a single folder if you would rather not expose all of C:.</span>
+                  <span class="d">What gets mounted.</span>
                 </span>
                 <span class="ctl"><span class="input select" style="width:180px">Whole disk (C$)</span></span>
               </div>
               <div class="srow">
                 <span>
-                  <span class="k">Add a bookmark to <span class="tagr live">now</span></span>
-                  <span class="d">Writes a Places entry titled Windows. Dolphin reads <span class="mono">user-places.xbel</span>, GNOME Files and Thunar read <span class="mono">gtk-3.0/bookmarks</span>. Both can be on at once.</span>
+                  <span class="k">Mount status</span>
+                  <span class="d">Mounted at ~/Windows.</span>
                 </span>
-                <span class="ctl" style="flex-direction:column;align-items:flex-end;gap:7px">
-                  <span style="display:flex;align-items:center;gap:8px"><span style="font-size:12.5px;color:var(--fg-dim)">Dolphin</span><span class="toggle on"><i></i></span></span>
-                  <span style="display:flex;align-items:center;gap:8px"><span style="font-size:12.5px;color:var(--fg-dim)">GNOME Files, Thunar</span><span class="toggle on"><i></i></span></span>
-                </span>
+                <span class="ctl"><button class="btn">Open folder</button></span>
               </div>
               <div class="srow wide">
                 <span>
@@ -1351,13 +1348,6 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
                     <span class="meta">3 of 23 letters used</span>
                   </div>
                 </div>
-              </div>
-              <div class="srow">
-                <span>
-                  <span class="k">Open the share</span>
-                  <span class="d">Launches your file manager at the guest's C: drive.</span>
-                </span>
-                <span class="ctl"><button class="btn">Open Windows files</button></span>
               </div>
             </div>
 
@@ -2877,7 +2867,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
           <li><b>Manager nav rail.</b> A QListWidget beside a QStackedWidget replaces the header button row. <span class="mono">MainWindow</span> keeps its tray; <span class="mono">VmDetailPanel</span> becomes the Overview page of the stack.</li>
           <li><b>Console and log move into the stack.</b> <span class="mono">ConsoleWindow</span> and <span class="mono">LogViewer</span> become plain QWidgets that the stack owns; the pop out button reparents one into a QDialog.</li>
           <li><b>Settings page.</b> New <span class="mono">SettingsPage</span> over a <span class="mono">PendingChanges</span> object: live keys write straight to <span class="mono">Settings</span>, restart keys stage until Apply, which calls <span class="mono">Lifecycle::shutdown</span>, rewrites the domain XML from the template, and starts it again.</li>
-          <li><b>File manager bookmarks.</b> <span class="mono">DolphinPlaces</span> gains an uninstall and a folder argument, and a sibling writes <span class="mono">~/.config/gtk-3.0/bookmarks</span> for GNOME Files and Thunar. Both are toggles over the same SMB URL.</li>
+          <li><b>Mounted Windows files.</b> <span class="mono">WindowsMount</span> mounts the guest's SMB share at <span class="mono">~/Windows</span> while Windows runs and its agent answers, as a FUSE filesystem inside the manager (libfuse3 over a pool of libsmbclient connections, no root), and unmounts it when Windows stops, the setting goes off, the manager quits or the host shuts down. The folder is also added to Baloo's and Tracker's excluded folders. Every file manager sees a folder, so nothing is written into Dolphin, GNOME Files or Thunar.</li>
           <li><b>Host folder into the guest.</b> A <span class="mono">&lt;filesystem type='mount' accessmode='passthrough'&gt;</span> virtiofs device in <span class="mono">domain.xml</span>, plus the drive letter mapping in the guest. Restart only, hence the tag.</li>
           <li><b>Desktop entries.</b> <span class="mono">DesktopLauncher</span> gains the category name as a parameter, a per-application publish flag on <span class="mono">AppConfig</span>, MIME registration, and a rewrite-all entry point for the button.</li>
           <li><b>Resolution.</b> Live: a <span class="mono">qom-set</span> of the device's <span class="mono">modes</span> property (<span class="mono">WxH</span> between commas, first preferred; empty means the host monitors' modes), sent through libvirt's monitor passthrough, exactly what accel-virt's <span class="mono">vm_resolution.py</span> does over QMP. Also written on the device line so a boot starts at it. The refresh rate is live the same way: a <span class="mono">qom-set</span> of <span class="mono">refresh</span> in millihertz, resolved from the setting (<span class="mono">monitor</span> or a number) and the screen's rate by the manager, and on the device line as <span class="mono">refresh=</span> when a rate is known. The choices are read from libdrm's connectors (<span class="mono">HostMonitorRates</span>, with the host probe, off the GUI thread) and the desktop's screens. The scale is live too: the agent sets each display's DPI step in the user's session, where Settings sets it.</li>
@@ -2908,7 +2898,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
           <li><span class="mono">src/host/src/manager/main_window.cpp</span>, nav rail and the stacked pages</li>
           <li><span class="mono">src/host/src/manager/vm_detail_panel.cpp</span>, becomes the Overview page, header row deleted, stylesheet constant moves to a resource</li>
           <li>new <span class="mono">src/host/src/manager/settings_page.cpp</span> and <span class="mono">src/host/src/config/pending_changes.cpp</span></li>
-          <li><span class="mono">src/host/src/platform/dolphin_places.cpp</span>, plus a new <span class="mono">gtk_bookmarks.cpp</span> beside it</li>
+          <li>new <span class="mono">src/host/src/services/windows_mount.cpp</span> and <span class="mono">src/host/src/platform/windows_fs.cpp</span></li>
           <li><span class="mono">src/host/src/apps/desktop_launcher.cpp</span>, category and MIME handling</li>
           <li><span class="mono">src/host/src/manager/render_panel.cpp</span> and <span class="mono">pressure_meter.cpp</span> give way to a new <span class="mono">graphics_page.cpp</span></li>
           <li><span class="mono">src/host/embedded/domain.xml</span> and <span class="mono">src/host/src/vm/domain_xml_builder.cpp</span>, the accel-virt device line</li>

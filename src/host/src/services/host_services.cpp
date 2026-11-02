@@ -2,8 +2,6 @@
 
 #include "lsw/base/log.hpp"
 #include "lsw/host/apps/desktop_launcher.hpp"
-#include "lsw/host/platform/dolphin_places.hpp"
-#include "lsw/host/platform/gtk_bookmarks.hpp"
 #include "lsw/host/platform/guest_smb_share.hpp"
 #include "lsw/linkproto/envelope.hpp"
 
@@ -18,8 +16,9 @@ using K = config::ManagerSettings::Key;
 
 const QSet<QString>& integration_keys() {
     static const QSet<QString> keys = {
-        K::kMenuCategory,  K::kPublishEntries, K::kFileAssociations, K::kSmbEnabled,  K::kGuestUser,
-        K::kGuestPassword, K::kShareScope,     K::kBookmarkDolphin,  K::kBookmarkGtk,
+        K::kMenuCategory,
+        K::kPublishEntries,
+        K::kFileAssociations,
     };
     return keys;
 }
@@ -36,6 +35,10 @@ HostServices::HostServices(QObject* parent)
       upkeep_(status_, rpc_, guest_update_, this),
       usb_(lifecycle_, status_, manager_settings_, this),
       host_shutdown_(lifecycle_, status_, this),
+      mount_helper_(platform::GuestSmbShare::mount_point(), this),
+      indexers_(commands_, QDir::homePath()),
+      windows_mount_(status_, manager_settings_, mount_helper_, platform::GuestSmbShare::mount_point(),
+                     {}, [this](const QString& point) { indexers_.apply(point); }, this),
       app_configs_(QDir(settings_.data_dir()).filePath("apps"), this), log_store_(this),
       vm_logs_(settings_.vm_logs_dir()),
       logging_(settings_, manager_settings_, log_store_, this),
@@ -55,6 +58,8 @@ HostServices::HostServices(QObject* parent)
                    [this] { return status_.vm().running(); }, this),
       app_launcher_(rpc_, this) {
     log_store_.attach(rpc_);
+    connect(&host_shutdown_, &HostShutdownWatch::shutting_down, &windows_mount_,
+            &WindowsMount::unmount_for_shutdown, Qt::DirectConnection);
 
     lifecycle_.set_before_start([this] { vm_logs_.prepare_start(); });
     lifecycle_.set_avgpu_log_path(settings_.vm_avgpu_log_path());
@@ -79,23 +84,6 @@ void HostServices::apply_integrations() {
     apps::DesktopLauncher::set_file_associations(
         manager_settings_.bool_value(K::kFileAssociations));
     apps::DesktopLauncher::sync(app_configs_.configs());
-
-    const bool serving = manager_settings_.bool_value(K::kSmbEnabled) && vms_.primary() != nullptr;
-    const QString user = manager_settings_.string_value(K::kGuestUser);
-    const QString password = manager_settings_.string_value(K::kGuestPassword);
-    const QString share =
-        platform::GuestSmbShare::share_for_scope(manager_settings_.string_value(K::kShareScope));
-
-    if (serving && manager_settings_.bool_value(K::kBookmarkDolphin)) {
-        (void)platform::DolphinPlaces::register_windows_bookmark(user, password, share);
-    } else {
-        platform::DolphinPlaces::remove_windows_bookmark();
-    }
-    if (serving && manager_settings_.bool_value(K::kBookmarkGtk)) {
-        (void)platform::GtkBookmarks::register_windows_bookmark(user, password, share);
-    } else {
-        platform::GtkBookmarks::remove_windows_bookmark();
-    }
 }
 
 bool HostServices::bind_agent(const QUuid& uuid) {
@@ -117,7 +105,9 @@ int HostServices::start_vm(const QUuid& uuid) {
     return rc;
 }
 
-HostServices::~HostServices() = default;
+HostServices::~HostServices() {
+    windows_mount_.unmount_for_shutdown();
+}
 
 bool HostServices::open() {
     if (!settings_.ensure_directories()) {
