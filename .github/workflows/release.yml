@@ -13,9 +13,6 @@ on:
 permissions:
   contents: read
 
-env:
-  DL_CACHE_KEY: accel-virt-downloads-${{ hashFiles('external/accel-virt/tools/*pins.txt', 'external/accel-virt/tools/fetch_*.sh') }}
-
 jobs:
   guest:
     name: guest
@@ -45,7 +42,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: external/accel-virt/third_party/.cache
-          key: ${{ env.DL_CACHE_KEY }}
+          key: accel-virt-downloads-${{ hashFiles('external/accel-virt/tools/*pins.txt', 'external/accel-virt/tools/fetch_*.sh') }}
           restore-keys: accel-virt-downloads-
 
       - name: Build the guest half
@@ -111,7 +108,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: external/accel-virt/third_party/.cache
-          key: ${{ env.DL_CACHE_KEY }}
+          key: accel-virt-downloads-${{ hashFiles('external/accel-virt/tools/*pins.txt', 'external/accel-virt/tools/fetch_*.sh') }}
           restore-keys: accel-virt-downloads-
 
       - uses: actions/download-artifact@v4
