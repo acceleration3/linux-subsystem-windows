@@ -1,0 +1,196 @@
+name: ci
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  host:
+    name: manager and host tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    container:
+      image: archlinux:latest
+    env:
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_MAXSIZE: 1G
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - name: Bootstrap
+        run: pacman -Syu --noconfirm --needed git tar zstd ca-certificates
+
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Mark the workspace safe for git
+        run: git config --global --add safe.directory '*'
+
+      - name: Install the build dependencies
+        run: |
+          scripts/dist.sh --deps arch
+          pacman -S --noconfirm --needed ccache 7zip tzdata qemu-img
+          ln -sf /usr/share/zoneinfo/Europe/London /etc/localtime
+
+      - uses: actions/cache@v4
+        with:
+          path: .ccache
+          key: ccache-host-${{ github.ref_name }}-${{ github.sha }}
+          restore-keys: |
+            ccache-host-${{ github.ref_name }}-
+            ccache-host-master-
+
+      - name: Configure
+        run: >
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          -DLSW_BUILD_TESTS=ON
+          -DLSW_BUILD_ACCEL_VIRT=OFF
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure -R "lsw_host_|linkproto|agent_" -E "^lsw_host_agent_files_test$"
+
+      - name: ccache statistics
+        run: ccache -s
+
+  guest-cross:
+    name: Windows agent and mirror
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    container:
+      image: archlinux:latest
+    env:
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_MAXSIZE: 500M
+    steps:
+      - name: Bootstrap
+        run: pacman -Syu --noconfirm --needed git tar zstd ca-certificates
+
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Mark the workspace safe for git
+        run: git config --global --add safe.directory '*'
+
+      - name: Install the build dependencies
+        run: |
+          scripts/dist.sh --deps arch
+          pacman -S --noconfirm --needed ccache
+
+      - uses: actions/cache@v4
+        with:
+          path: .ccache
+          key: ccache-guest-${{ github.ref_name }}-${{ github.sha }}
+          restore-keys: |
+            ccache-guest-${{ github.ref_name }}-
+            ccache-guest-master-
+
+      - name: Build the agent and the window mirror
+        env:
+          CMAKE_C_COMPILER_LAUNCHER: ccache
+          CMAKE_CXX_COMPILER_LAUNCHER: ccache
+          LSW_REQUIRE_I686: '1'
+        run: scripts/build-agent.sh
+
+  scripts:
+    name: script checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract the PowerShell embedded in the unattend file
+        run: |
+          mkdir -p build/embedded-ps
+          python3 -I - <<'PY'
+          import pathlib, re, xml.etree.ElementTree as ET
+          root = ET.parse("src/host/embedded/autounattend.xml").getroot()
+          out = pathlib.Path("build/embedded-ps")
+          count = 0
+          for node in root.iter():
+              if node.tag.rsplit("}", 1)[-1] != "File":
+                  continue
+              path = node.get("path", "")
+              if path.lower().endswith(".ps1"):
+                  name = re.split(r"[\\/]", path)[-1]
+                  (out / name).write_text(node.text or "", encoding="utf-8-sig")
+                  count += 1
+          print(f"extracted {count} scripts")
+          assert count
+          PY
+
+      - name: PowerShell parser and PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          if (-not (Get-Module -ListAvailable PSScriptAnalyzer)) { Install-Module PSScriptAnalyzer -Force -Scope CurrentUser }
+          $files = @(Get-ChildItem -Recurse -Filter *.ps1 -Path src, scripts, packaging, build/embedded-ps -ErrorAction SilentlyContinue)
+          $bad = 0
+          foreach ($f in $files) {
+              $errors = $null
+              [void][System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$null, [ref]$errors)
+              foreach ($e in $errors) {
+                  Write-Host "::error file=$($f.FullName),line=$($e.Extent.StartLineNumber)::$($e.Message)"
+                  $bad++
+              }
+          }
+          $found = foreach ($f in $files) { Invoke-ScriptAnalyzer -Path $f.FullName -Severity Error, Warning }
+          foreach ($r in $found) {
+              $level = if ($r.Severity -eq 'Error') { 'error' } else { 'warning' }
+              Write-Host "::$level file=$($r.ScriptPath),line=$($r.Line)::$($r.RuleName): $($r.Message)"
+          }
+          $bad += @($found | Where-Object Severity -eq 'Error').Count
+          Write-Host "$($files.Count) scripts, $bad errors"
+          if ($bad) { exit 1 }
+
+      - name: shellcheck
+        run: |
+          mapfile -t files < <(git ls-files | while read -r f; do
+              case "$f" in external/*) continue ;; esac
+              if [[ "$f" == *.sh ]] || { [ -f "$f" ] && head -c 64 "$f" | head -1 | grep -qE '^#!.*(ba|da)?sh'; }; then echo "$f"; fi
+          done)
+          printf '%s\n' "${files[@]}"
+          shellcheck -S warning -f gcc "${files[@]}" || true
+          shellcheck -S error "${files[@]}"
+
+  format:
+    name: clang-format
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install clang-format
+        run: sudo apt-get install -y --no-install-recommends clang-format
+
+      - name: Check the changed lines
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          base="${BASE_SHA}"
+          if [ -z "${base}" ] || ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+              base="$(git rev-parse HEAD~1)"
+          fi
+          tool="$(compgen -c git-clang-format | sort -V | tail -1)"
+          out="$("${tool}" --diff --extensions c,cc,cpp,h,hpp "${base}" -- src || true)"
+          if grep -q '^diff ' <<< "${out}"; then
+              echo "${out}"
+              echo "::error::clang-format would change the lines this change touches"
+              exit 1
+          fi
+          echo "${out}"
