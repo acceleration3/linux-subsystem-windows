@@ -71,7 +71,7 @@ jobs:
         include:
           - target: arch
             image: archlinux:latest
-            output: dist/lsw-*-x86_64.tar.zst*
+            output: dist/lsw-*-x86_64.*
           - target: deb
             image: ubuntu:26.04
             output: dist/*.deb
