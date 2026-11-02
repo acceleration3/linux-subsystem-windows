@@ -91,6 +91,7 @@ TARGET is arch, deb, rpm or all (the default).
   --kit DIR      an already fetched accel-virt Windows kit
   --setup        install or update the build dependencies in each distrobox
   --incremental  reuse the release trees of the last run
+  --deps TARGET  only install the build dependencies of arch, deb or rpm here
 
 The distroboxes are named by LSW_BOX_ARCH, LSW_BOX_DEB and LSW_BOX_RPM.
 Packages are written to dist/.
@@ -114,6 +115,7 @@ while (( $# )); do
         --incremental) INCREMENTAL=1; shift ;;
         --setup)       SETUP=1; shift ;;
         --in-box)      IN_BOX="$2"; shift 2 ;;
+        --deps)        install_deps "$2"; exit 0 ;;
         -h|--help)     usage; exit 0 ;;
         all)           targets+=("${TARGETS_ALL[@]}"); shift ;;
         arch|deb|rpm)  targets+=("$1"); shift ;;
