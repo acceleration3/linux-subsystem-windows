@@ -1,0 +1,296 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Create the GitHub release and update the AUR after building
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  DL_CACHE_KEY: accel-virt-downloads-${{ hashFiles('external/accel-virt/tools/*pins.txt', 'external/accel-virt/tools/fetch_*.sh') }}
+
+jobs:
+  guest:
+    name: guest
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    container:
+      image: archlinux:latest
+      volumes:
+        - /usr/share/dotnet:/host/dotnet
+        - /usr/local/lib/android:/host/android
+        - /opt/ghc:/host/ghc
+    steps:
+      - name: Free disk space
+        run: rm -rf /host/dotnet/* /host/android/* /host/ghc/*; df -h /
+
+      - name: Bootstrap
+        run: pacman -Syu --noconfirm --needed git tar zstd ca-certificates
+
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Mark the workspace safe for git
+        run: git config --global --add safe.directory '*'
+
+      - uses: actions/cache@v4
+        with:
+          path: external/accel-virt/third_party/.cache
+          key: ${{ env.DL_CACHE_KEY }}
+          restore-keys: accel-virt-downloads-
+
+      - name: Build the guest half
+        run: scripts/dist.sh --in-box guest --setup
+
+      - name: Pack the guest half
+        run: tar -C build-release --zstd -cf guest.tar.zst guest/stage guest/drivers/av-drivers
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: guest
+          path: guest.tar.zst
+          compression-level: 0
+          if-no-files-found: error
+
+  host:
+    name: ${{ matrix.target }}
+    needs: guest
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: arch
+            image: archlinux:latest
+            output: dist/lsw-*-x86_64.tar.zst*
+          - target: deb
+            image: ubuntu:26.04
+            output: dist/*.deb
+          - target: rpm
+            image: fedora:45
+            output: dist/*.rpm
+    container:
+      image: ${{ matrix.image }}
+      volumes:
+        - /usr/share/dotnet:/host/dotnet
+        - /usr/local/lib/android:/host/android
+        - /opt/ghc:/host/ghc
+    steps:
+      - name: Free disk space
+        run: rm -rf /host/dotnet/* /host/android/* /host/ghc/*; df -h /
+
+      - name: Bootstrap
+        run: |
+          if command -v pacman >/dev/null; then
+              pacman -Syu --noconfirm --needed git tar zstd ca-certificates
+          elif command -v apt-get >/dev/null; then
+              apt-get update
+              DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git tar zstd ca-certificates
+          else
+              dnf -y install git tar zstd ca-certificates
+          fi
+
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Mark the workspace safe for git
+        run: git config --global --add safe.directory '*'
+
+      - uses: actions/cache@v4
+        with:
+          path: external/accel-virt/third_party/.cache
+          key: ${{ env.DL_CACHE_KEY }}
+          restore-keys: accel-virt-downloads-
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: guest
+
+      - name: Unpack the guest half
+        run: |
+          mkdir -p build-release
+          tar -C build-release --zstd -xf guest.tar.zst
+          rm guest.tar.zst
+
+      - name: Build and package
+        run: scripts/dist.sh --in-box ${{ matrix.target }} --setup
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.target }}
+          path: ${{ matrix.output }}
+          compression-level: 0
+          if-no-files-found: error
+
+  release:
+    name: release
+    needs: host
+    if: startsWith(github.ref, 'refs/tags/v') || inputs.publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      aur: ${{ steps.aur.outputs.enabled }}
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Version and tag
+        id: version
+        run: |
+          version="$(sed -n 's/^ *VERSION \([0-9][0-9.]*\)$/\1/p' CMakeLists.txt | head -1)"
+          [ -n "${version}" ] || { echo "::error::no version in CMakeLists.txt"; exit 1; }
+          if [ "${GITHUB_REF_TYPE}" = tag ]; then
+              [ "${GITHUB_REF_NAME}" = "v${version}" ] \
+                  || { echo "::error::tag ${GITHUB_REF_NAME} does not match the project version ${version}"; exit 1; }
+          fi
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: dist-*
+          merge-multiple: true
+          path: dist
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          tag="v${VERSION}"
+          if [ "${GITHUB_REF_TYPE}" = tag ]; then
+              git fetch --force --tags origin
+              git tag -l --format='%(contents)' "${tag}" > notes.md
+          fi
+          if ! grep -q '[^[:space:]]' notes.md 2>/dev/null; then
+              git log -1 --format=%B "${GITHUB_SHA}" > notes.md
+          fi
+          ls -l dist
+          gh release create "${tag}" --title "LSW ${VERSION}" --notes-file notes.md --target "${GITHUB_SHA}" \
+              dist/lsw-"${VERSION}"-x86_64.tar.zst dist/lsw-"${VERSION}"-x86_64.tar.zst.sha256 \
+              dist/lsw_"${VERSION}"-1_amd64.deb dist/lsw-"${VERSION}"-1.*.x86_64.rpm
+
+      - name: Check for the AUR key
+        id: aur
+        env:
+          AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
+        run: |
+          if [ -n "${AUR_SSH_KEY}" ]; then
+              echo "enabled=true" >> "${GITHUB_OUTPUT}"
+          else
+              echo "enabled=false" >> "${GITHUB_OUTPUT}"
+              echo "::notice::The AUR_SSH_KEY secret is not set, so the AUR package was not updated"
+          fi
+
+  aur:
+    name: aur
+    needs: release
+    if: needs.release.outputs.aur == 'true'
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+    permissions:
+      contents: write
+    steps:
+      - name: Bootstrap
+        run: pacman -Syu --noconfirm --needed base-devel git namcap openssh
+
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+
+      - name: Mark the workspace safe for git
+        run: git config --global --add safe.directory '*'
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist-arch
+          path: dist
+
+      - name: Update the PKGBUILD
+        env:
+          VERSION: ${{ needs.release.outputs.version }}
+        run: |
+          tarball="dist/lsw-${VERSION}-x86_64.tar.zst"
+          sum="$(cut -d' ' -f1 "${tarball}.sha256")"
+          [ -n "${sum}" ] || { echo "::error::empty checksum"; exit 1; }
+          cd packaging/aur
+          sed -i -e "s/^pkgver=.*/pkgver=${VERSION}/" -e 's/^pkgrel=.*/pkgrel=1/' \
+              -e "s/^sha256sums=.*/sha256sums=('${sum}')/" PKGBUILD
+          mapfile -t listed < <(bash -c 'source PKGBUILD; printf "%s\n" "${depends[@]}"' | sed 's/[<>=].*//')
+          missing=()
+          while read -r lib; do
+              [ -n "${lib}" ] || continue
+              printf '%s\n' "${listed[@]}" | grep -qxF "${lib}" && continue
+              provided="$(LC_ALL=C pacman -Si "${lib}" | sed -n 's/^Provides *: *//p' | tr ' ' '\n' | sed 's/[<>=].*//')"
+              grep -qxFf <(printf '%s\n' "${listed[@]}") <<< "${provided}" && continue
+              missing+=("${lib}")
+          done < "../../dist/lsw-${VERSION}-x86_64.depends"
+          if (( ${#missing[@]} )); then
+              echo "::error::The tarball links libraries from packages that packaging/aur/PKGBUILD does not depend on: ${missing[*]}. Review the depends array by hand and release again."
+              exit 1
+          fi
+
+      - name: SRCINFO and namcap
+        run: |
+          useradd -m builder
+          chown -R builder .
+          cd packaging/aur
+          su builder -c 'makepkg --printsrcinfo' > .SRCINFO
+          chown builder .SRCINFO
+          namcap PKGBUILD | tee namcap.txt
+          ! grep -q ' E: ' namcap.txt
+          rm namcap.txt
+
+      - name: Push to the AUR
+        env:
+          AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
+          VERSION: ${{ needs.release.outputs.version }}
+        run: |
+          install -d -m700 ~/.ssh
+          printf '%s\n' "${AUR_SSH_KEY}" > ~/.ssh/aur
+          chmod 600 ~/.ssh/aur
+          ssh-keyscan -t ed25519,rsa aur.archlinux.org > ~/.ssh/known_hosts
+          export GIT_SSH_COMMAND='ssh -i ~/.ssh/aur -o IdentitiesOnly=yes -o UserKnownHostsFile=~/.ssh/known_hosts'
+          git clone ssh://aur@aur.archlinux.org/lsw-bin.git ../aur-repo
+          for f in PKGBUILD .SRCINFO lsw-bin.install .gitignore; do
+              cp packaging/aur/"${f}" ../aur-repo/
+          done
+          cd ../aur-repo
+          git config user.name acceleration3
+          git config user.email acceleration23@gmail.com
+          git add PKGBUILD .SRCINFO lsw-bin.install .gitignore
+          if git diff --cached --quiet; then
+              echo "the AUR already has this version"
+          else
+              git commit -m "lsw-bin ${VERSION}"
+              git push origin HEAD:master
+          fi
+
+      - name: Commit packaging/aur to master
+        env:
+          VERSION: ${{ needs.release.outputs.version }}
+        run: |
+          git config user.name github-actions
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add packaging/aur
+          if git diff --cached --quiet; then
+              echo "packaging/aur is up to date"
+          else
+              git commit -m "lsw-bin ${VERSION}"
+              git push origin HEAD:master
+          fi
