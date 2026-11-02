@@ -1,12 +1,3 @@
-// The host half of the agent channel, without an agent.
-//
-// What is under test is the bookkeeping that used to live inline in
-// AgentRpcClient and could only be exercised with a VM on the other end:
-// how a reply frame is judged a success or a failure, how a reply finds
-// the caller waiting for it (and what happens when that caller has
-// already given up), and how an event subscription goes away while the
-// reader thread may be inside its handler.
-
 #include "lsw/host/link/agent_reply.hpp"
 #include "lsw/host/link/event_bus.hpp"
 #include "lsw/host/link/event_subscription.hpp"
@@ -87,7 +78,6 @@ void test_pending_calls() {
         check(!ticket.wait(20ms).has_value(), "a reply for another id does not wake a ticket");
     }
     {
-        // The ticket is gone; a late reply must land nowhere.
         calls.deliver(2, AgentReply::from_frame({{"result", 1}}));
         check(true, "a reply after its ticket closed is dropped");
     }
@@ -101,8 +91,6 @@ void test_pending_calls() {
               "fail_all releases every waiter with the reason");
     }
     {
-        // Replies racing timeouts: nothing may write into a ticket that
-        // has returned. Run under ASan to make this test bite.
         std::atomic<bool> stop{false};
         std::atomic<std::uint64_t> next{100};
         std::thread reader{[&] {
@@ -172,7 +160,6 @@ void test_event_bus() {
     }
 
     {
-        // Removal waits for a handler already running on another thread.
         std::atomic<bool> entered{false};
         std::atomic<bool> finished{false};
         auto slow = bus.subscribe("slow", [&](const nlohmann::json&) {
@@ -190,7 +177,7 @@ void test_event_bus() {
     }
 }
 
-}  // namespace
+}
 
 int main() {
     test_reply_decoding();

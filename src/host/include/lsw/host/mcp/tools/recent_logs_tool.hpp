@@ -5,11 +5,6 @@
 namespace lsw::host::apps { class LogStore; }
 
 namespace lsw::host::mcp {
-
-// Returns the tail of the agent log the manager has already collected.
-//
-// Deliberately usable with no VM targeted: when the agent is unreachable
-// the log is often the only thing that explains why.
 class RecentLogsTool final : public IMcpTool {
 public:
     explicit RecentLogsTool(apps::LogStore& log_store) noexcept : log_store_(log_store) {}
@@ -24,4 +19,4 @@ private:
     apps::LogStore& log_store_;
 };
 
-}  // namespace lsw::host::mcp
+}

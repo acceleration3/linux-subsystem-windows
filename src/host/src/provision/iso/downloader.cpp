@@ -12,11 +12,6 @@ Downloader::Downloader(QObject* parent) : QObject(parent) {}
 void Downloader::start(const QString& url, const QString& dest_path) {
     cancel();
 
-    // Open ReadWrite (not Append) so we can seek/truncate later if the
-    // server ignores our Range request. Append mode forces every write
-    // to the end of file regardless of pos(), which is exactly the
-    // foot-gun we hit when a CDN returns 200 to a Range request and we
-    // dump the full body after the existing prefix.
     out_.setFileName(dest_path);
     QFileInfo fi{dest_path};
     resume_offset_ = fi.exists() ? fi.size() : 0;
@@ -66,11 +61,6 @@ void Downloader::on_ready_read() {
         return;
     }
     if (!wrote_body_) {
-        // First body chunk — by now QNAM has parsed the response
-        // headers (and followed any redirects) so the status code is
-        // final. If we asked for a Range and the server returned 200
-        // anyway (CDN didn't honor Range), it's giving us the full
-        // body — truncate the partial file and write fresh.
         const auto status = reply_->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
         if (requested_range_ && status == 200) {
             LSW_WARN("download server ignored Range (status 200); "
@@ -102,4 +92,4 @@ void Downloader::on_finished() {
     Q_EMIT finished(dest);
 }
 
-}  // namespace lsw::host::provision::iso
+}

@@ -1,6 +1,3 @@
-// The two batch files a guest update sends to Windows and what their exit
-// codes mean (UpdateBatch): the text is read, not run.
-
 #include "lsw/host/services/update_batch.hpp"
 
 #include <cstdio>
@@ -39,7 +36,7 @@ GuestBundle::Contents contents() {
     return c;
 }
 
-}  // namespace
+}
 
 int main() {
     const std::string release = "0123456789abcdef0123456789abcdef";
@@ -70,7 +67,6 @@ int main() {
     check(has(plain, "exit /b 9)") && count(plain, "exit /b 9)") == 2, "creating or starting the task failing exits 9");
     check(plain.rfind("exit /b 0\r\n") == plain.size() - std::string{"exit /b 0\r\n"}.size(), "it ends exit 0");
 
-    // The stage is not cleared under a running task.
     const auto query = plain.find("schtasks /Query /TN lsw-update");
     const auto remove = plain.find("rd /s /q");
     const auto first_fetch = plain.find("curl.exe");
@@ -85,7 +81,6 @@ int main() {
     check(plain.find('\n') != std::string::npos && count(plain, "\r\n") == count(plain, "\n"),
           "every line ends CRLF");
 
-    // The result reader.
     const std::string read = UpdateBatch::read_result("2026-11-02T10:00:00.000Z");
     check(has(read, "if not exist \"C:\\ProgramData\\LSW\\update-result.json\" exit /b 20"), "no result file is 20");
     check(has(read, "findstr /c:\"2026-11-02T10:00:00.000Z\" \"C:\\ProgramData\\LSW\\update-result.json\" >nul && exit /b 20"),
@@ -94,8 +89,7 @@ int main() {
     check(read.rfind("exit /b 23\r\n") == read.size() - std::string{"exit /b 23\r\n"}.size(), "an ok result of this run is 23");
     check(!has(UpdateBatch::read_result(""), "findstr /c:\"\""), "with no stamp before the run there is nothing to compare");
 
-    // Exit codes.
-    const QString log = QStringLiteral("C:\\ProgramData\\LSW\\update.log");
+    const QString log = QStringLiteral("C:\\ProgramData\\LSW\\logs\\update.log");
     const auto fail = [](bool ok, int code, const char* msg = "") { return UpdateBatch::send_failure(ok, code, msg); };
     check(fail(true, 8) && fail(true, 8)->contains(QStringLiteral("could not be copied")) && fail(true, 8)->contains(log),
           "exit 8 is the files not copied, with the log's place");

@@ -41,10 +41,6 @@ using ui::Format;
 using ui::Theme;
 using ui::Widgets;
 
-// What the level is expected to leave behind, as a fraction of the
-// source. Rough on purpose: the exact number is only known once the WIM
-// has been rewritten, and a figure that moves as you choose is more
-// useful than none at all.
 double retained_fraction(DebloatLevel level) {
     switch (level) {
     case DebloatLevel::Maximum:
@@ -57,7 +53,7 @@ double retained_fraction(DebloatLevel level) {
     return 1.0;
 }
 
-}  // namespace
+}
 
 TrimImageDialog::TrimImageDialog(config::Settings& settings, QString source_iso, QWidget* parent)
     : QDialog(parent), settings_(settings), source_iso_(std::move(source_iso)) {
@@ -68,7 +64,6 @@ TrimImageDialog::TrimImageDialog(config::Settings& settings, QString source_iso,
     const auto chrome = ui::DialogChrome::install(this);
     auto* root = chrome.body;
 
-    // ---- source ---------------------------------------------------
     auto* source_box = new QVBoxLayout;
     source_box->setSpacing(6);
     source_box->addWidget(Widgets::caption(QStringLiteral("Source image")));
@@ -82,9 +77,6 @@ TrimImageDialog::TrimImageDialog(config::Settings& settings, QString source_iso,
 
     root->addLayout(source_box);
 
-    // ---- edition --------------------------------------------------
-    // Its own question, not a detail of the source: trimming keeps one
-    // edition, so what is picked here is all the new image will hold.
     auto* edition_box = new QVBoxLayout;
     edition_box->setSpacing(6);
     edition_box->addWidget(Widgets::caption(QStringLiteral("Edition to keep")));
@@ -95,7 +87,6 @@ TrimImageDialog::TrimImageDialog(config::Settings& settings, QString source_iso,
     edition_box->addWidget(edition_note_);
     root->addLayout(edition_box);
 
-    // ---- level ----------------------------------------------------
     root->addWidget(Widgets::separator());
     root->addWidget(Widgets::caption(QStringLiteral("How much to remove")));
     level_group_ = new QButtonGroup(this);
@@ -110,17 +101,12 @@ TrimImageDialog::TrimImageDialog(config::Settings& settings, QString source_iso,
         {DebloatLevel::Maximum, "Strip it to the minimum"},
     };
     for (const auto& entry : kLevels) {
-        // A card, not a radio with a paragraph under it: the choice and
-        // what it costs are one target, and the selected one says so
-        // with its own border rather than with a dot alone.
         auto* card = new QFrame;
         Theme::surface(card, Theme::Role::kOptionCard);
         auto* card_layout = new QVBoxLayout(card);
         card_layout->setContentsMargins(13, 10, 13, 11);
         card_layout->setSpacing(0);
 
-        // The dial and one flow of text: the name of the level, then
-        // what it costs, which is the same sentence a person reads.
         auto* row = new QHBoxLayout;
         row->setContentsMargins(0, 0, 0, 0);
         row->setSpacing(10);
@@ -140,8 +126,6 @@ TrimImageDialog::TrimImageDialog(config::Settings& settings, QString source_iso,
         row->addWidget(text, 1);
         card_layout->addLayout(row);
 
-        // Clicking anywhere on the card picks it. A card you have to
-        // hit the dot of is a card pretending to be clickable.
         card->installEventFilter(this);
         card->setProperty("lswRadio", QVariant::fromValue(static_cast<QObject*>(radio)));
         cards_.push_back(card);
@@ -159,7 +143,6 @@ TrimImageDialog::TrimImageDialog(config::Settings& settings, QString source_iso,
     warning_->setVisible(false);
     root->addWidget(warning_);
 
-    // ---- output ---------------------------------------------------
     root->addWidget(Widgets::separator());
     root->addWidget(Widgets::caption(QStringLiteral("Write the new image to")));
     auto* out_row = new QHBoxLayout;
@@ -179,7 +162,6 @@ TrimImageDialog::TrimImageDialog(config::Settings& settings, QString source_iso,
     use_box_->setChecked(true);
     root->addWidget(use_box_);
 
-    // ---- progress -------------------------------------------------
     bar_ = new QProgressBar;
     bar_->setRange(0, 100);
     bar_->setVisible(false);
@@ -189,7 +171,6 @@ TrimImageDialog::TrimImageDialog(config::Settings& settings, QString source_iso,
 
     root->addStretch(1);
 
-    // ---- footer ---------------------------------------------------
     auto* footer = chrome.foot;
     footer->addWidget(
         Widgets::meta(QStringLiteral("The source image is read only and is never modified."), true),
@@ -226,9 +207,6 @@ TrimImageDialog::TrimImageDialog(config::Settings& settings, QString source_iso,
     });
     connect(output_dir_, &QLineEdit::textChanged, this, [this] { refresh_estimate(); });
 
-    // The edition list comes out of the image's own WIM, which takes a
-    // few seconds; the dialog is usable while it arrives. Read again for
-    // every image picked, so the list is always the one in the source.
     list_editions();
 
     refresh_estimate();
@@ -252,12 +230,11 @@ void TrimImageDialog::list_editions() {
             [this, watcher, listing, error] {
                 watcher->deleteLater();
                 if (listing != listing_) {
-                    return;  // another image was picked meanwhile
+                    return;
                 }
                 const auto editions = watcher->result();
                 edition_combo_->clear();
                 if (editions.isEmpty()) {
-                    // Nothing to keep is nothing to trim: Trim stays off.
                     edition_combo_->setPlaceholderText(QStringLiteral("No editions"));
                     edition_note_->setText(
                         QStringLiteral("Could not read the editions from this image: %1")
@@ -267,9 +244,6 @@ void TrimImageDialog::list_editions() {
                 for (const auto& edition : editions) {
                     edition_combo_->addItem(edition.name, edition.index);
                 }
-                // Trimming keeps one edition, so this choice is final:
-                // start where the wizard would, not at image 1, which on
-                // Microsoft's media is Home.
                 edition_combo_->setCurrentIndex(
                     provision::install::WimEditionLister::preferred(editions));
                 edition_combo_->setEnabled(true);
@@ -307,9 +281,6 @@ bool TrimImageDialog::use_for_install() const {
 
 void TrimImageDialog::refresh_estimate() {
     const auto level = static_cast<DebloatLevel>(level_group_->checkedId());
-    // The sentence fits on a line, so picking the level does not push
-    // the rest of the dialog off its bottom; the whole cost is a hover
-    // away, on the sentence itself.
     const DebloatPlan plan{level};
     warning_->setText(plan.warning());
     warning_->setToolTip(plan.warning_detail());
@@ -366,9 +337,6 @@ void TrimImageDialog::start() {
     status_->setText(QStringLiteral("Preparing"));
     bar_->setValue(0);
 
-    // Deletes itself once it has spoken, so a retry after a failure
-    // does not leave the previous attempt parented here for the life of
-    // the dialog.
     auto* stager = new provision::DebloatStager(this);
     connect(stager, &provision::DebloatStager::finished, stager, &QObject::deleteLater);
     connect(stager, &provision::DebloatStager::failed, stager, &QObject::deleteLater);
@@ -378,8 +346,6 @@ void TrimImageDialog::start() {
                 status_->setText(detail);
             });
     connect(stager, &provision::DebloatStager::failed, this, [this](const QString& message) {
-        // Recoverable: the source is untouched, so another level or
-        // another folder can be tried immediately.
         status_->setText(QStringLiteral("Could not prepare the image: %1").arg(message));
         set_busy(false);
     });
@@ -394,4 +360,4 @@ void TrimImageDialog::start() {
     stager->trim(source_iso_, dir, image_index, level, output_name_->text());
 }
 
-}  // namespace lsw::host::tools
+}

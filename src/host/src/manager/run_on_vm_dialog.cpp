@@ -53,8 +53,6 @@ RunOnVmDialog::RunOnVmDialog(link::AgentRpcClient& rpc, apps::GuestAppLauncher& 
     status_->setWordWrap(true);
     status_->setTextFormat(Qt::PlainText);
     layout->addWidget(status_);
-    // What went wrong, apart from the progress line: the design's red
-    // callout, until the next attempt.
     error_ = new QLabel;
     error_->setObjectName(QString::fromLatin1(ui::Theme::Role::kCalloutCritical));
     error_->setWordWrap(true);
@@ -197,4 +195,4 @@ void RunOnVmDialog::reject() {
     QDialog::reject();
 }
 
-}  // namespace lsw::host::manager
+}

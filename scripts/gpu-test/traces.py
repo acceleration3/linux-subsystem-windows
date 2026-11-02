@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The trace store's tools: fetch the pinned capture/replay tools, record a
 functionality's trace in the LSW VM, add it to the store, give it reference
-pictures. TRACES.md walks through recording a new one.
+pictures.
 
   traces.py fetch-tools [--from DIR ...]     the pinned tools into the store (builder)
   traces.py list                             what the store holds
@@ -47,11 +47,7 @@ def say(line):
     print(line, flush=True)
 
 
-# ------------------------------------------------------------------ the VM
-
 class Vm:
-    """The running VM's desktop, as the suites drive it."""
-
     def __init__(self, args):
         import gpu_matrix
         from app_suites import Desktop
@@ -60,8 +56,6 @@ class Vm:
         self.guest = gpu_matrix.Guest(self.work, GuestShare(args.user, args.password))
         held = gpu_matrix.bridge_directory("hold") / "agent.sock"
         if held.exists():
-            # gpu_matrix.py hold serves a bridge already: a second link to
-            # the agent would work too, but one is enough.
             self.guest.agent = gpu_matrix.wait_for_bridge(str(held), time.monotonic() + 30, 600.0)
         else:
             self.guest.connect()
@@ -105,8 +99,6 @@ def split_id(trace_id):
 
 
 def ps_quote(text):
-    """An argument of `powershell -File`, which the C runtime splits: double
-    quotes (single ones would be part of the value)."""
     text = str(text)
     if '"' in text or text.endswith("\\"):
         raise SystemExit(f"{text!r}: a capture argument cannot hold a double quote or end in a backslash")
@@ -114,8 +106,6 @@ def ps_quote(text):
 
 
 def capture_api(args):
-    """The API a capture records: --api, by default d3d9 for apitrace and
-    vulkan for GFXReconstruct."""
     api = getattr(args, "api", None) or ("vulkan" if args.tool == "gfxr" else "d3d9")
     wanted = trace_store.GFXR_APIS if args.tool == "gfxr" else trace_store.APITRACE_APIS
     if args.tool in ("apitrace", "gfxr") and api not in wanted:
@@ -124,14 +114,12 @@ def capture_api(args):
 
 
 def capture_tool(args):
-    """The pinned tool a capture runs: GFXReconstruct's D3D12 build for D3D12."""
     if args.tool == "gfxr" and capture_api(args) == "d3d12":
         return trace_store.REPLAYER_OF_API["d3d12"]
     return TOOL_DIR_OF[args.tool]
 
 
 def capture_command(args):
-    """trace-capture.ps1's command line for these options."""
     import trace_suite
     script = f"{trace_suite.GUEST_HARNESS}\\trace-capture.ps1"
     parts = [f"-Tool {args.tool}", f"-Out:{ps_quote(capture_dir(args.trace))}"]
@@ -167,8 +155,6 @@ def wait_done(share, directory, wait):
                 return None
             time.sleep(10)
 
-
-# ---------------------------------------------------------------- commands
 
 def command_fetch_tools(args):
     store = Store()
@@ -280,10 +266,6 @@ def command_capture(args):
 
 
 def drive(vm, script):
-    """`script` run in the VM's desktop once the capture has started: the
-    functionality used by scripted input instead of by hand. A drive.ps1
-    beside it (its helpers: waiting for the window, clicks, drags, keys) is
-    put first."""
     import trace_suite
     library = script.with_name("drive.ps1")
     text = (library.read_text() + "\n" if library.exists() and library != script else "") + script.read_text()
@@ -298,9 +280,6 @@ def drive(vm, script):
 
 
 def pull_directory(vm, guest_directory, local):
-    """A guest directory's files into `local`: one by one when they are few
-    (a trace is most of the guest's free space, so it is not copied into a
-    tar first), through one tar when there are many (CLIntercept's)."""
     code, text = vm.desktop.run(f'dir /s /b /a-d "{guest_directory}"', 300)
     names = [line.strip() for line in text.splitlines() if line.strip().lower().startswith(guest_directory.lower())]
     if code == 0 and 0 < len(names) <= 32:
@@ -397,17 +376,12 @@ def command_pull(args):
 
 
 def gfxr_frame_count(info):
-    """The frames gfxrecon-info counted in a capture ("Total frames: N"), or 0."""
     import re
     found = re.search(r"Total frames:\s*(\d+)", info)
     return int(found.group(1)) if found else 0
 
 
 def first_frames(tool, count):
-    """The frames a new manifest judges: five spread over the trace past its
-    first tenth. apitrace counts from 0 and its last frame is whole (mending
-    ends the trace before a cut-off one); GFXReconstruct counts from 1, and
-    its last frame, cut by the application's exit, is left out."""
     if tool == "apitrace":
         return default_frames(count)
     if tool == "gfxreconstruct" and count > 1:
@@ -416,7 +390,6 @@ def first_frames(tool, count):
 
 
 def mended_note(mender):
-    """What trace_mend changed, for the manifest."""
     notes = []
     if mender.mended:
         calls = mender.mended
@@ -431,8 +404,6 @@ def mended_note(mender):
 
 
 def command_mend(args):
-    """Mends the traces already in the store, as pull would have: apitrace's
-    for d3dretrace, CLIntercept's device-binary kernels given their source."""
     manifests, problems = Store().select(",".join(args.traces))
     for manifest in manifests:
         if manifest.tool == "clintercept" and manifest.capture != "Programs":

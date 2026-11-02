@@ -36,6 +36,16 @@ void AgentServices::attach_sessions(std::unique_ptr<session::SessionManager> ses
     sessions_ = std::move(sessions);
 }
 
+std::string AgentServices::mirror_log_level() const {
+    const std::lock_guard lock(mirror_level_mu_);
+    return mirror_log_level_;
+}
+
+void AgentServices::set_mirror_log_level(std::string level) {
+    const std::lock_guard lock(mirror_level_mu_);
+    mirror_log_level_ = std::move(level);
+}
+
 void AgentServices::shutdown() {
     if (sessions_) {
         sessions_->stop();
@@ -45,4 +55,4 @@ void AgentServices::shutdown() {
     }
 }
 
-}  // namespace lsw::agent::core
+}

@@ -1,15 +1,6 @@
-# A prebuilt release: scripts/dist.sh builds and stages it in a Fedora
-# distrobox and hands the staged tree in as the _stage macro. Nothing is built
-# here.
-
-# Stripped when the release was staged, and QEMU and accel-virt build
-# without debug info: a debuginfo package would be empty.
 %global debug_package %{nil}
 %global _build_id_links none
 %global __strip /bin/true
-# The libraries the release carries itself (QEMU's modules, the
-# executor, DXVK, vkd3d-proton) are its own: nothing else may require
-# them, and no other package provides them.
 %global __provides_exclude_from ^%{_prefix}/lib/lsw/.*$
 %global __requires_exclude ^(@BUNDLED@)
 
@@ -17,17 +8,10 @@ Name:           lsw
 Version:        @VERSION@
 Release:        1%{?dist}
 Summary:        Linux Subsystem for Windows: Windows applications as native windows
-# LSW itself; QEMU and its firmware; vkd3d-proton; DXVK; virtio-win's
-# viofs driver and virtiofs.exe; WinFsp's installer, under its FLOSS
-# exception.
 License:        Apache-2.0 AND GPL-2.0-only AND LGPL-2.1-or-later AND Zlib AND BSD-3-Clause AND GPL-3.0-only AND LicenseRef-WinFsp-FLOSS-exception
 URL:            https://github.com/acceleration3/linux-subsystem-windows
 ExclusiveArch:  x86_64
 
-# What the manager runs or reads without linking it: the session daemon
-# the VMs run under, the UEFI firmware they boot, the disk tool, the
-# install-media reader, downloads. SDL3 is loaded, not linked: DXVK's
-# native build opens its window-system backend at start.
 Requires:       libvirt-daemon-driver-qemu
 Requires:       edk2-ovmf
 Requires:       qemu-img

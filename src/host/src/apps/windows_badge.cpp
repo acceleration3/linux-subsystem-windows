@@ -9,17 +9,12 @@
 namespace lsw::host::apps {
 
 namespace {
-
-// The mark's tile: this much of the icon's side, in its corner, its
-// corners this round; the panes inset and apart by these fractions of the
-// tile. Large enough to read at the 24 px a panel draws an icon at.
 constexpr double kTileFraction = 0.46;
 constexpr double kTileRounding = 0.22;
 constexpr double kPaneInset = 0.2;
 constexpr double kPaneGap = 0.07;
 
 void draw_mark(QPainter& painter, const QRectF& tile) {
-    // A ring of shadow first, so the white tile stands off a white icon.
     QPainterPath outline;
     const double radius = tile.width() * kTileRounding;
     outline.addRoundedRect(tile.adjusted(-3, -3, 3, 3), radius + 3, radius + 3);
@@ -44,7 +39,7 @@ void draw_mark(QPainter& painter, const QRectF& tile) {
     }
 }
 
-}  // namespace
+}
 
 QByteArray WindowsBadge::applied(const QByteArray& png) {
     QImage icon;
@@ -69,4 +64,4 @@ QByteArray WindowsBadge::applied(const QByteArray& png) {
     return out;
 }
 
-}  // namespace lsw::host::apps
+}

@@ -8,4 +8,4 @@ bool FileSystem::exists(const std::wstring& path) {
     return !path.empty() && ::GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES;
 }
 
-}  // namespace lsw::agent::win
+}

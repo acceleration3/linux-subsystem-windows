@@ -19,8 +19,6 @@ HRESULT PropertyEventHandler::HandlePropertyChangedEvent(IUIAutomationElement* s
     const auto hwnd = static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(raw));
 
     if (property == UIA_WindowWindowVisualStatePropertyId) {
-        // -1 is no WindowVisualState, so a value of the wrong type reads
-        // as "unknown" rather than as whatever its bits happen to be.
         const int state = new_value.vt == VT_I4 ? static_cast<int>(new_value.lVal) : -1;
         queue_.post(
             {"uia_state_changed",
@@ -35,4 +33,4 @@ HRESULT PropertyEventHandler::HandlePropertyChangedEvent(IUIAutomationElement* s
     return S_OK;
 }
 
-}  // namespace lsw::agent::uia
+}

@@ -1,9 +1,3 @@
-// The guest's resolution list: what accel-virt's driver will take, and
-// the forms the list is stored and sent in. The limits are the driver's
-// (external/accel-virt/src/miniport/display/display_mode.*): a mode the
-// editor accepts and the driver drops is a resolution that silently
-// never appears in Windows.
-
 #include "lsw/host/config/display_modes.hpp"
 #include "lsw/host/config/manager_settings.hpp"
 #include "lsw/host/services/domain_inputs.hpp"
@@ -34,12 +28,11 @@ bool fits(int w, int h) {
     return DisplayModes::refusal(DisplayMode{w, h}).isEmpty();
 }
 
-}  // namespace
+}
 
 int main(int argc, char** argv) {
     QCoreApplication app{argc, argv};
 
-    // ---- parsing and naming ----------------------------------------
     check(DisplayModes::parse(QStringLiteral("2560x1440")) == DisplayMode{2560, 1440},
           "WxH parses");
     check(DisplayModes::parse(QStringLiteral(" 1920 X 1080 ")) == DisplayMode{1920, 1080},
@@ -54,16 +47,12 @@ int main(int argc, char** argv) {
               DisplayMode{1920, 1200}.aspect() == QStringLiteral("8:5"),
           "aspect is the reduced ratio");
 
-    // ---- the driver's limits ---------------------------------------
     check(fits(100, 100) && !fits(99, 100) && !fits(100, 99), "100 is the smallest edge");
     check(fits(4095, 1000) && !fits(4096, 1000) && !fits(1000, 4096), "4095 is the largest edge");
-    // The EDID's pixel clock is no limit on a size: the driver states a
-    // mode too fast for it at a slower rate and gives Windows the real one.
     check(fits(3840, 2160) && fits(4095, 4095), "no size is refused for its pixel clock");
     check(DisplayModes::refusal(DisplayMode{5120, 2880}).contains(QStringLiteral("4095")),
           "a refusal says why");
 
-    // ---- the list ---------------------------------------------------
     const QStringList list = {QStringLiteral("2560x1440"), QStringLiteral("1920X1080"),
                               QStringLiteral("2560x1440"), QStringLiteral("junk"),
                               QStringLiteral("5000x5000")};
@@ -89,7 +78,6 @@ int main(int argc, char** argv) {
               QStringLiteral("2560x1440,1920x1080"),
           "the property is the list between commas");
 
-    // ---- settings ---------------------------------------------------
     QTemporaryDir dir;
     QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, dir.path());
     {

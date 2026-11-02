@@ -26,7 +26,7 @@ namespace {
 
 constexpr int kMaxBufferLines = 5000;
 
-}  // namespace
+}
 
 ConsolePanel::ConsolePanel(services::GuestShells& shells, services::StatusHub& status,
                            QWidget* parent)
@@ -45,9 +45,6 @@ ConsolePanel::ConsolePanel(services::GuestShells& shells, services::StatusHub& s
     output_->setObjectName(QString::fromLatin1(ui::Theme::Role::kMono));
     root->addWidget(output_, 1);
 
-    // The input lives in a band under the transcript, on the surface
-    // colour with a rule over it, with a Send button for the case where
-    // Enter is not the habit.
     auto* row = ui::DialogChrome::foot_band(root, QMargins(14, 10, 14, 10), 8);
     picker_ = new QComboBox;
     picker_->setToolTip(tr("The Windows session cmd.exe runs in"));
@@ -57,7 +54,7 @@ ConsolePanel::ConsolePanel(services::GuestShells& shells, services::StatusHub& s
     input_->setPlaceholderText(tr("Type a command and press Enter"));
     input_->setFont(ui::Theme::mono_font(12));
     input_->setObjectName(QString::fromLatin1(ui::Theme::Role::kMono));
-    input_->installEventFilter(this);  // catch Ctrl+L
+    input_->installEventFilter(this);
     row->addWidget(input_, 1);
     auto* send = ui::Widgets::button(QStringLiteral("Send"), ui::Theme::Role::kPrimary);
     connect(send, &QPushButton::clicked, this, &ConsolePanel::on_input_submitted);
@@ -98,8 +95,6 @@ void ConsolePanel::hideEvent(QHideEvent* e) {
 void ConsolePanel::showEvent(QShowEvent* e) {
     QWidget::showEvent(e);
     hub_.set_detail(services::StatusHub::Area::Sessions, true);
-    // Lazily: a manager sitting on the Overview page has no business
-    // holding a cmd.exe open inside the guest. Once open, it stays.
     if (shown_) {
         shells_.open(*shown_);
     }
@@ -167,7 +162,7 @@ void ConsolePanel::on_shell_changed(int session) {
     const auto* shell = shells_.find(session);
     if (shell != nullptr) {
         if (shell->transcript.isEmpty()) {
-            output_->clear();  // cleared from this view or another
+            output_->clear();
         }
         if (shell->state == services::GuestShells::State::Open) {
             Q_EMIT opened();
@@ -186,8 +181,6 @@ void ConsolePanel::rebuild_picker() {
     picker_->clear();
     const auto& sessions = hub_.sessions();
     if (!sessions.valid) {
-        // Nothing to choose from while the agent is away. The shell on
-        // screen stays there, transcript and all.
         picker_->addItem(shown_ ? tr("Session %1").arg(*shown_) : tr("Default session"));
         picker_->setEnabled(false);
         refresh();
@@ -202,8 +195,6 @@ void ConsolePanel::rebuild_picker() {
         picker_->addItem(label, session.id);
     }
     picker_->addItem(tr("Session 0 · SYSTEM"), 0);
-    // What is selected is what was asked for, else the agent's default,
-    // else the first there is.
     const std::optional<int> selected = wanted_ ? wanted_ : sessions.default_id;
     const int index = selected ? picker_->findData(*selected) : -1;
     picker_->setCurrentIndex(index >= 0 ? index : 0);
@@ -259,7 +250,6 @@ bool ConsolePanel::eventFilter(QObject* watched, QEvent* event) {
         return QWidget::eventFilter(watched, event);
     }
     auto* ke = static_cast<QKeyEvent*>(event);
-    // Ctrl+L clears the output buffer — convenient and Bash-ish.
     if (ke->modifiers().testFlag(Qt::ControlModifier) && ke->key() == Qt::Key_L) {
         clear_transcript();
         return true;
@@ -274,4 +264,4 @@ void ConsolePanel::clear_transcript() {
     output_->clear();
 }
 
-}  // namespace lsw::host::manager
+}

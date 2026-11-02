@@ -11,8 +11,6 @@ namespace {
 constexpr const char* kSubId = "sub_id";
 constexpr std::uint64_t kLocalMask = 0xFFFFFFFFULL;
 
-// A sub_id as a number, whichever way the JSON holds it (a value built in
-// code is signed, one parsed off the wire is unsigned).
 std::optional<std::uint64_t> sub_id_of(const nlohmann::json& v) {
     if (v.is_number_unsigned()) {
         return v.get<std::uint64_t>();
@@ -23,7 +21,7 @@ std::optional<std::uint64_t> sub_id_of(const nlohmann::json& v) {
     return std::nullopt;
 }
 
-}  // namespace
+}
 
 std::optional<std::uint32_t> SessionRouting::requested(const nlohmann::json& params,
                                                        std::string_view cmd) {
@@ -53,7 +51,7 @@ std::optional<std::uint32_t> SessionRouting::requested(const nlohmann::json& par
         return static_cast<std::uint32_t>(v);
     }
     refuse();
-    return std::nullopt;  // unreachable
+    return std::nullopt;
 }
 
 bool SessionRouting::elevated(const nlohmann::json& params) {
@@ -66,7 +64,7 @@ bool SessionRouting::elevated(const nlohmann::json& params) {
 
 std::uint64_t SessionRouting::global_sub_id(std::uint32_t session, std::uint64_t local) {
     if (local == 0) {
-        return 0;  // "no subscription" stays that
+        return 0;
     }
     return (static_cast<std::uint64_t>(session) << 32) | (local & kLocalMask);
 }
@@ -87,8 +85,6 @@ std::optional<std::uint32_t> SessionRouting::target(const nlohmann::json& params
     if (params.is_object()) {
         const auto it = params.find(kSubId);
         if (it != params.end()) {
-            // An id with no session in it goes wherever the caller's
-            // default goes.
             if (const auto id = sub_id_of(*it); id && session_of_sub_id(*id) != 0) {
                 return session_of_sub_id(*id);
             }
@@ -119,4 +115,4 @@ void SessionRouting::globalize_reply(nlohmann::json& reply, std::uint32_t sessio
     }
 }
 
-}  // namespace lsw::agent::session
+}

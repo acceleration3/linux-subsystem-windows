@@ -11,8 +11,6 @@ HRESULT FocusEventHandler::HandleFocusChangedEvent(IUIAutomationElement* sender)
     if (sender == nullptr) {
         return S_OK;
     }
-    // Focus subscriptions are desktop-wide; the PID filter is the whole
-    // subscription.
     int sender_pid = 0;
     sender->get_CurrentProcessId(&sender_pid);
     if (static_cast<DWORD>(sender_pid) != pid_) {
@@ -33,4 +31,4 @@ HRESULT FocusEventHandler::HandleFocusChangedEvent(IUIAutomationElement* sender)
     return S_OK;
 }
 
-}  // namespace lsw::agent::uia
+}

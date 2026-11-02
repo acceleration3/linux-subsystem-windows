@@ -43,33 +43,25 @@ using Adapter = services::GraphicsAdapter;
 using Warning = GraphicsAlerts::Warning;
 using Area = services::StatusHub::Area;
 
-// How many of the driver's last lines the panel shows.
 constexpr int kLogLines = 6;
 
-// "5f2c91d0…e83a": enough of a UUID to tell two apart and to find it
-// in the settings or in vulkaninfo.
 QString short_uuid(const QString& uuid) {
     if (uuid.size() < 16) {
         return uuid;
     }
     const QString ends = uuid.left(8) + uuid.right(4);
-    // RADV builds its UUIDs from the PCI address, zeros either side of
-    // the bus; the ends then say nothing, and the middle says it all.
     if (ends.count(QLatin1Char('0')) == ends.size()) {
         return QStringLiteral("…%1…").arg(uuid.mid(9, 9));
     }
     return uuid.left(8) + QStringLiteral("…") + uuid.right(4);
 }
 
-// "1002:7550".
 QString ids(const platform::HostGpu& gpu) {
     return QStringLiteral("%1:%2")
         .arg(gpu.vendor_id, 4, 16, QLatin1Char('0'))
         .arg(gpu.device_id, 4, 16, QLatin1Char('0'));
 }
 
-// An integrated GPU's device-local heap is system memory; there is no
-// figure of its own to give.
 QString memory(const platform::HostGpu& gpu) {
     if (gpu.vram_bytes == 0) {
         return QStringLiteral("shared");
@@ -77,8 +69,6 @@ QString memory(const platform::HostGpu& gpu) {
     return Format::gib(static_cast<qint64>(gpu.vram_bytes), 0);
 }
 
-// The card's model without the vendor's words, for a row label:
-// "AMD Radeon RX 9070 XT" is "RX 9070 XT".
 QString short_name(const QString& name) {
     static const QStringList vendor_words = {
         QStringLiteral("AMD"),    QStringLiteral("Radeon"),   QStringLiteral("Intel"),
@@ -89,14 +79,11 @@ QString short_name(const QString& name) {
         return vendor_words.contains(w) || w == QLatin1StringView("Processor")
                || w.endsWith(QLatin1StringView("-Core"));
     });
-    // A name in brackets after the model, "(RADV NAVI48)", is the driver's.
     const qsizetype bracket = words.indexOf(QRegularExpression(QStringLiteral("^\\(.*")));
     if (bracket > 0) {
         words = words.mid(0, bracket);
     }
     QString out = words.isEmpty() ? name : words.join(QLatin1Char(' '));
-    // A row label, not a title: past a dozen characters it pushes the
-    // values off the card.
     constexpr qsizetype kMost = 12;
     if (out.size() > kMost) {
         out = out.left(kMost - 1) + QStringLiteral("…");
@@ -104,8 +91,6 @@ QString short_name(const QString& name) {
     return out;
 }
 
-// A labelled row in a card's header: the name, a mono caption, and
-// whatever sits at the right.
 ui::Panel card(const QString& name, const QString& caption, QWidget* right = nullptr) {
     auto panel = ui::Panel::make();
     panel.header->setContentsMargins(12, 8, 12, 8);
@@ -121,7 +106,6 @@ ui::Panel card(const QString& name, const QString& caption, QWidget* right = nul
     return panel;
 }
 
-// Figures side by side, a hairline between each.
 QWidget* kpi_grid(const QVector<QPair<QString, QString>>& figures) {
     auto* grid = new QFrame;
     Theme::surface(grid, Theme::Role::kKpiGrid);
@@ -138,7 +122,6 @@ QWidget* kpi_grid(const QVector<QPair<QString, QString>>& figures) {
         auto* figure = new QLabel(value);
         figure->setObjectName(QString::fromLatin1(Theme::Role::kKpiValue));
         figure->setToolTip(value);
-        // Clipped rather than widening the page: the tooltip has it all.
         figure->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
         figure->setMinimumWidth(0);
         column->addWidget(figure);
@@ -147,8 +130,6 @@ QWidget* kpi_grid(const QVector<QPair<QString, QString>>& figures) {
     return grid;
 }
 
-// A key and its value down a card, the way a definition list reads:
-// mono caption, the value in its colour, and a faint note after it.
 class KeyValues {
 public:
     explicit KeyValues(QVBoxLayout* body) : grid_(new QGridLayout) {
@@ -163,8 +144,6 @@ public:
         auto* caption = Widgets::caption(key);
         auto* line = new QHBoxLayout;
         line->setSpacing(6);
-        // Nothing known but a reason: the reason is the row. A lone "-"
-        // in front of it reads as a bullet point, not as "unknown".
         if (value == QLatin1String("-") && !note.isEmpty()) {
             line->addWidget(Widgets::meta(note, true), 1);
             grid_->addWidget(caption, row_, 0, Qt::AlignLeft | Qt::AlignVCenter);
@@ -178,8 +157,6 @@ public:
         }
         line->addWidget(shown);
         if (!note.isEmpty()) {
-            // Wrapping, so two cards side by side fit the page however
-            // long a note runs.
             line->addWidget(Widgets::meta(note, true), 1);
         } else {
             line->addStretch(1);
@@ -195,7 +172,6 @@ private:
     int row_ = 0;
 };
 
-// Windows' side of one adapter, as the pill on its card says it.
 QLabel* adapter_pill(const services::StatusHub& status, const Adapter& adapter) {
     if (!status.vm().running()) {
         return StatusPill::make(StatusPill::State::Pending, QStringLiteral("Guest off"));
@@ -216,13 +192,11 @@ QLabel* adapter_pill(const services::StatusHub& status, const Adapter& adapter) 
                             QStringLiteral("Problem code %1").arg(adapter.guest->problem_code));
 }
 
-// The host window, "8 GiB".
 QString window_size(int mib) {
     return mib % 1024 == 0 ? QStringLiteral("%1 GiB").arg(mib / 1024)
                            : QStringLiteral("%1 MiB").arg(mib);
 }
 
-// A path under the home directory as people write it: "~/.local/...".
 QString tilde(const QString& path) {
     const QString home = QDir::homePath();
     if (path.startsWith(home + QLatin1Char('/'))) {
@@ -231,7 +205,7 @@ QString tilde(const QString& path) {
     return path;
 }
 
-}  // namespace
+}
 
 GraphicsPage::GraphicsPage(services::StatusHub& status, GraphicsAlerts& alerts,
                            config::ManagerSettings& settings, QWidget* parent)
@@ -292,9 +266,6 @@ QString GraphicsPage::summary() const {
 }
 
 QStringList GraphicsPage::status_facts() const {
-    // The running machine's devices, from its live definition; with the
-    // machine off, the stored one the next start boots. The settings
-    // appear only as what a restart would change.
     const auto& g = status_.graphics();
     const vm::DomainDescription* definition = status_.vm().definition();
     const vm::DomainDescription::GpuDevice* device =
@@ -371,8 +342,6 @@ QString GraphicsPage::signature() const {
           << QString::number(guest.native_fences.value_or(false))
           << QString::number(guest.native_fences.has_value())
           << settings_.string_list_value(K::kDisplayModes).join(QLatin1Char(','));
-    // The definition the Device card reads, and what a restart would
-    // change of it.
     const auto& vm = status_.vm();
     parts << QString::number(vm.running_device.has_value())
           << QString::number(vm.next_boot.has_value());
@@ -506,7 +475,6 @@ QWidget* GraphicsPage::build_apis() const {
         const auto& api = apis.at(row);
         table->setItem(row, 0, new QTableWidgetItem(api.name));
         table->setItem(row, 1, Theme::kind_cell(api.runs_on));
-        // Missing in red only where Windows cannot do without it.
         auto* holder = new QWidget;
         auto* line = new QHBoxLayout(holder);
         line->setContentsMargins(8, 0, 8, 0);
@@ -516,8 +484,6 @@ QWidget* GraphicsPage::build_apis() const {
                                                          QStringLiteral("Missing"))
                                       : StatusPill::make(StatusPill::State::Pending,
                                                          QStringLiteral("Not served"));
-        // Measured in the stylesheet's face, not the default one it has
-        // before it is shown, or the word is cut short.
         pill->ensurePolished();
         pill->setMinimumWidth(pill->sizeHint().width());
         line->addWidget(pill, 0, Qt::AlignLeft | Qt::AlignVCenter);
@@ -544,17 +510,11 @@ QWidget* GraphicsPage::build_device() {
     const auto& g = status_.graphics();
     const auto& vm = status_.vm();
     const auto& facts = g.log_facts;
-    // What the machine has: the running VM's live definition, or the
-    // stored one the next start boots. Settings that differ from it are
-    // pending, and said so beside the value they will replace.
     const vm::DomainDescription* definition = vm.definition();
     const vm::DomainDescription::GpuDevice* device =
         definition != nullptr ? definition->display() : nullptr;
     const bool live = vm.running_device.has_value();
 
-    // What the device offers now, if QEMU said; what the settings will
-    // offer at the next boot (the window pushes them to the device the
-    // moment it is up), if not.
     QStringList offered;
     if (g.live_modes.has_value()) {
         offered = config::DisplayModes::normalized(
@@ -563,9 +523,6 @@ QWidget* GraphicsPage::build_device() {
         offered = config::DisplayModes::normalized(settings_.string_list_value(K::kDisplayModes));
     }
 
-    // A quick switch among the sizes offered, in the card's header where
-    // it has room: picking one makes it the preferred one, in the
-    // settings too, and the window pushes that to the running device.
     QComboBox* pick = nullptr;
     if (offered.size() > 1) {
         pick = new QComboBox;
@@ -631,8 +588,6 @@ QWidget* GraphicsPage::build_device() {
              : QStringLiteral("Host monitors' modes"),
         nullptr,
         count <= 0 ? QString{}
-        // Live from the device while it runs; otherwise what the settings
-        // will offer at the next boot, and it says so.
         : g.live_modes.has_value() || facts.modes_taken > 0
             ? QStringLiteral("%1 mode%2 offered").arg(count).arg(count == 1 ? "" : "s")
             : QStringLiteral("%1 mode%2 at boot").arg(count).arg(count == 1 ? "" : "s"));
@@ -685,7 +640,6 @@ QWidget* GraphicsPage::build_guest_driver() const {
     const bool known = status_.vm().running() && guest.valid;
     const QString off_note = status_.vm().running() ? QStringLiteral("the agent has not answered")
                                               : QStringLiteral("the guest is off");
-    // One line per adapter; with only one, it is simply "the device".
     for (const auto& adapter : adapters) {
         const QString key = adapters.size() == 1
                                 ? QStringLiteral("Device")
@@ -722,8 +676,6 @@ QWidget* GraphicsPage::build_guest_driver() const {
                  guest.driver_search_off ? QStringLiteral("Update cannot replace it")
                                          : QStringLiteral("Update may replace it"));
     }
-    // From the driver's own lines when it has said; the policy
-    // provisioning wrote otherwise.
     const auto& facts = status_.graphics().log_facts;
     const std::optional<bool> ums =
         facts.user_mode_submission.has_value() ? facts.user_mode_submission
@@ -788,7 +740,6 @@ void GraphicsPage::update_log() {
     const qsizetype from = qMax<qsizetype>(0, lines.size() - kLogLines);
     for (qsizetype i = from; i < lines.size(); ++i) {
         const QString text = lines.at(i).toHtmlEscaped();
-        // The newest line in the foreground: it is the one that changes.
         shown << (i + 1 == lines.size()
                       ? QStringLiteral("<span style=\"color:%1\">%2</span>")
                             .arg(QString::fromLatin1(Theme::Color::kFg), text)
@@ -801,4 +752,4 @@ void GraphicsPage::open_log() const {
     QDesktopServices::openUrl(QUrl::fromLocalFile(status_.graphics().log_path));
 }
 
-}  // namespace lsw::host::manager
+}

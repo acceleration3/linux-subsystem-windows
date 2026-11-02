@@ -16,12 +16,10 @@ struct UiaSubscribeFocusHandler : RpcHandler {
         return {{"ok", id != 0}, {"sub_id", id}};
     }
 
-    // Window handles, UI Automation and HKCU belong to the user's
-    // session: served by the session helper there.
     [[nodiscard]] Placement placement() const override { return Placement::UserSession; }
 };
 
-}  // namespace lsw::agent::rpc::handlers
+}
 
 LSW_REGISTER_RPC(lsw::agent::rpc::handlers::UiaSubscribeFocusHandler,
                  ::lsw::linkproto::cmd::kUiaSubscribeFocus)

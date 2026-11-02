@@ -10,10 +10,6 @@
 namespace lsw::host::platform {
 
 namespace {
-
-// 8-4-4-4-12, lowercase, the bytes in order: what vulkaninfo prints and
-// accel-virt's list_gpus.py passes through untouched, so a UUID copied
-// from either names the same GPU here.
 QString format_uuid(const std::uint8_t (&bytes)[VK_UUID_SIZE]) {
     QString out;
     out.reserve(36);
@@ -47,15 +43,11 @@ HostGpu describe(VkPhysicalDevice device) {
     VkPhysicalDeviceProperties basic{};
     vkGetPhysicalDeviceProperties(device, &basic);
 
-    // The driver name is a 1.2 struct (or VK_KHR_driver_properties), and
-    // chaining a struct the device does not know is invalid usage rather
-    // than something it ignores, so it is only asked for when known.
     const bool knows_driver = VK_API_VERSION_MINOR(basic.apiVersion) >= 2 ||
                               VK_API_VERSION_MAJOR(basic.apiVersion) > 1 ||
                               has_extension(device, VK_KHR_DRIVER_PROPERTIES_EXTENSION_NAME);
     VkPhysicalDeviceDriverProperties driver{};
     driver.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES;
-    // Same rule for the bus address: only chained where the extension is.
     const bool knows_pci = has_extension(device, VK_EXT_PCI_BUS_INFO_EXTENSION_NAME);
     VkPhysicalDevicePCIBusInfoPropertiesEXT pci{};
     pci.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PCI_BUS_INFO_PROPERTIES_EXT;
@@ -93,8 +85,6 @@ HostGpu describe(VkPhysicalDevice device) {
                               .arg(pci.pciDevice, 2, 16, QLatin1Char('0'))
                               .arg(pci.pciFunction);
     }
-    // The same sum the device reports to Windows as dedicated video
-    // memory, so the number a settings page shows is the one dxdiag will.
     for (std::uint32_t heap = 0; heap < memory.memoryHeapCount; ++heap) {
         if ((memory.memoryHeaps[heap].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) != 0) {
             gpu.vram_bytes += memory.memoryHeaps[heap].size;
@@ -103,13 +93,9 @@ HostGpu describe(VkPhysicalDevice device) {
     return gpu;
 }
 
-}  // namespace
+}
 
 QVector<HostGpu> HostGpus::enumerate() {
-    // The instance QEMU's device creates, near enough: API 1.1, no
-    // layers asked for, no extensions. Asking for more would not change
-    // which devices exist, but it could change whether the instance can
-    // be made at all.
     VkApplicationInfo application{};
     application.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
     application.pApplicationName = "lsw-manager";
@@ -127,8 +113,6 @@ QVector<HostGpu> HostGpus::enumerate() {
     std::uint32_t count = 0;
     if (vkEnumeratePhysicalDevices(instance, &count, nullptr) == VK_SUCCESS && count > 0) {
         QVector<VkPhysicalDevice> devices(static_cast<qsizetype>(count));
-        // VK_INCOMPLETE still fills what fits, so anything not an error
-        // is a list worth reading.
         if (vkEnumeratePhysicalDevices(instance, &count, devices.data()) >= 0) {
             out.reserve(static_cast<qsizetype>(count));
             for (std::uint32_t i = 0; i < count; ++i) {
@@ -152,16 +136,12 @@ QString HostGpus::adapter_name(const HostGpu& gpu) {
 
 std::optional<HostGpu> HostGpus::resolve(const QVector<HostGpu>& gpus, const QString& setting) {
     const QString wanted = setting.trimmed();
-    // The device's rule exactly: "auto" or nothing binds index 0,
-    // whatever kind of device that is.
     if (wanted.isEmpty() || wanted == QLatin1StringView("auto")) {
         if (gpus.isEmpty()) {
             return std::nullopt;
         }
         return gpus.first();
     }
-    // The device parses hex digits in either case, so a UUID typed in
-    // upper case still names the GPU it means.
     for (const auto& gpu : gpus) {
         if (gpu.uuid.compare(wanted, Qt::CaseInsensitive) == 0) {
             return gpu;
@@ -170,4 +150,4 @@ std::optional<HostGpu> HostGpus::resolve(const QVector<HostGpu>& gpus, const QSt
     return std::nullopt;
 }
 
-}  // namespace lsw::host::platform
+}

@@ -20,4 +20,4 @@ void PipelinePage::finish_and_advance() {
     });
 }
 
-}  // namespace lsw::host::wizard
+}

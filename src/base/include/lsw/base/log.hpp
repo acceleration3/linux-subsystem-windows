@@ -1,29 +1,30 @@
 #pragma once
 
-// Logging macros. Configuration of the underlying sinks lives in
-// ``lsw::base::Logger`` (lsw/base/logger.hpp) — include that only where
-// the process is actually set up; everything else needs the macros only.
-
-// Compile every level in: ``LSW_TRACE`` and ``LSW_DEBUG`` would otherwise
-// expand to nothing because spdlog's default ``SPDLOG_ACTIVE_LEVEL`` is
-// ``SPDLOG_LEVEL_INFO``. Setting it here means the runtime level
-// (``$LSW_LOG`` env var) actually controls what's printed.
 #ifndef SPDLOG_ACTIVE_LEVEL
 #define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_TRACE
 #endif
 
+#include <atomic>
 #include <spdlog/spdlog.h>
 
-// Convenience: drop the spdlog macros into the lsw namespace under
-// shorter names. They expand to no-ops below the configured level.
-//
-//   LSW_TRACE("frame_reader: drained {} bytes", n);
-//   LSW_DEBUG("connection {} accepted", peer.fd);
-//   LSW_INFO("listening on {}", listener.description());
-//   LSW_WARN("agent_rpc_client: id={} timed out", id);
-//   LSW_ERROR("virDomainCreate failed: {}", message);
-#define LSW_TRACE(...) SPDLOG_TRACE(__VA_ARGS__)
-#define LSW_DEBUG(...) SPDLOG_DEBUG(__VA_ARGS__)
-#define LSW_INFO(...) SPDLOG_INFO(__VA_ARGS__)
-#define LSW_WARN(...) SPDLOG_WARN(__VA_ARGS__)
-#define LSW_ERROR(...) SPDLOG_ERROR(__VA_ARGS__)
+namespace lsw::base {
+inline std::atomic<int> g_log_threshold{spdlog::level::info};
+
+[[nodiscard]] inline bool level_enabled(spdlog::level::level_enum level) noexcept {
+    return static_cast<int>(level) >= g_log_threshold.load(std::memory_order_relaxed);
+}
+
+}
+
+#define LSW_LOG_AT(level, macro, ...)                         \
+    do {                                                      \
+        if (::lsw::base::level_enabled(level)) {              \
+            macro(__VA_ARGS__);                               \
+        }                                                     \
+    } while (0)
+
+#define LSW_TRACE(...) LSW_LOG_AT(::spdlog::level::trace, SPDLOG_TRACE, __VA_ARGS__)
+#define LSW_DEBUG(...) LSW_LOG_AT(::spdlog::level::debug, SPDLOG_DEBUG, __VA_ARGS__)
+#define LSW_INFO(...) LSW_LOG_AT(::spdlog::level::info, SPDLOG_INFO, __VA_ARGS__)
+#define LSW_WARN(...) LSW_LOG_AT(::spdlog::level::warn, SPDLOG_WARN, __VA_ARGS__)
+#define LSW_ERROR(...) LSW_LOG_AT(::spdlog::level::err, SPDLOG_ERROR, __VA_ARGS__)

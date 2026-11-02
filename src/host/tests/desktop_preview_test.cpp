@@ -36,7 +36,6 @@ bool wait_for(const std::function<bool()>& done, int milliseconds = 3000) {
     if (!done()) loop.exec();
     return done();
 }
-// A click on the picture, where the play and pause badge is.
 void click(QWidget& preview) {
     QWidget* surface = preview.childAt(preview.rect().center());
     if (surface == nullptr) return;
@@ -85,8 +84,6 @@ int main(int argc, char** argv) {
         return failures == 0 ? 0 : 1;
     }
 
-    // No real export socket, guest or VM: exercise the WGC pixel fallback
-    // and lifecycle with a fake agent and a real RemoteWin connection.
     qputenv("XDG_RUNTIME_DIR", "/tmp/opencode/preview-test-no-export");
     QTcpServer agent;
     check(agent.listen(QHostAddress::LocalHost, 0), "fake agent listening");
@@ -153,7 +150,6 @@ int main(int argc, char** argv) {
             QWidget* surface = preview.childAt(preview.rect().center());
             check(surface != nullptr && surface->focusPolicy() == Qt::NoFocus,
                   "the preview's picture takes no keyboard focus");
-            // Drain the handshake and WatchMonitor before input.
             QCoreApplication::processEvents();
             guest.readAll();
             if (surface != nullptr) {

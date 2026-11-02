@@ -5,16 +5,11 @@
 #include <QString>
 
 namespace lsw::host::provision::iso {
-
-// One Windows edition Microsoft is currently advertising on its
-// download portal. Populated at runtime by ``IsoSourceFetcher`` —
-// scraped straight from microsoft.com so the wizard tracks whatever
-// edition list MS happens to publish today.
 struct WindowsEdition {
-    QString display;                 // wizard combo box label
-    QString version;                 // "Windows 11" / "Windows 10"
-    QString release;                 // unused for live entries
-    QList<int> product_edition_ids;  // ProductEditionId values
+    QString display;
+    QString version;
+    QString release;
+    QList<int> product_edition_ids;
 };
 
-}  // namespace lsw::host::provision::iso
+}

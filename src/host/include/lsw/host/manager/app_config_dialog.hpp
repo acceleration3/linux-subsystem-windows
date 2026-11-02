@@ -14,12 +14,6 @@
 namespace lsw::host::link { class AgentRpcClient; }
 
 namespace lsw::host::manager {
-
-// Modal "configure application" dialog. Used both for editing an
-// existing config and creating a new one. The icon preview auto-
-// refreshes when the path field stops changing for ~600ms — the
-// fetch goes out to the guest agent's ``get_icon`` RPC over the
-// agent connection, so it only works when the VM is running.
 class AppConfigDialog : public QDialog {
     Q_OBJECT
 public:
@@ -28,7 +22,6 @@ public:
 
     [[nodiscard]] apps::AppConfig result() const { return cfg_; }
 
-    // True when the dialog was closed by Remove rather than Save.
     [[nodiscard]] bool removal_requested() const noexcept { return removal_requested_; }
 
 private Q_SLOTS:
@@ -36,13 +29,10 @@ private Q_SLOTS:
     void on_path_idle();
     void on_accept();
     void fetch_icon();
-    // A store application's icon, by its ID: it has no file to read one from.
     void fetch_store_icon();
 
 private:
     void update_icon_preview();
-    // The "Make it the default" button: asks, naming what is the default
-    // now, and only on a yes runs xdg-mime.
     void make_default();
 
     apps::AppConfig cfg_;
@@ -53,19 +43,14 @@ private:
     QLineEdit* cmdline_edit_ = nullptr;
     QLineEdit* workdir_edit_ = nullptr;
     QPlainTextEdit* env_edit_ = nullptr;
-    // Where this application shows up on the host: a choice about one
-    // application, not about all of them. There is no graphics field: an
-    // application gets the guest's adapters as it would a physical card.
     QCheckBox* publish_box_ = nullptr;
     QLineEdit* mime_edit_ = nullptr;
     QPushButton* make_default_ = nullptr;
     QLabel* identity_name_ = nullptr;
-    // Set when the dialog was closed by Remove rather than Save, so the
-    // caller knows the difference between "keep this" and "delete it".
     bool removal_requested_ = false;
     QLabel* icon_label_ = nullptr;
     QLabel* icon_status_ = nullptr;
     QTimer path_idle_timer_;
 };
 
-}  // namespace lsw::host::manager
+}

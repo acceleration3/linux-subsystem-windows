@@ -18,7 +18,7 @@ QString bookmarks_path() {
     return QDir(config).filePath(QStringLiteral("gtk-3.0/bookmarks"));
 }
 
-}  // namespace
+}
 
 bool GtkBookmarks::register_windows_bookmark(const QString& username, const QString& password,
                                              const QString& share) {
@@ -31,8 +31,6 @@ bool GtkBookmarks::register_windows_bookmark(const QString& username, const QStr
         lines = QString::fromUtf8(file.readAll()).split(QLatin1Char('\n'));
         file.close();
     }
-    // Drop any previous LSW line before appending, so a rotated
-    // password or a changed share replaces rather than accumulates.
     const QString signature = GuestSmbShare::signature();
     lines.removeIf([&](const QString& line) { return line.contains(signature); });
     lines.removeIf([](const QString& line) { return line.trimmed().isEmpty(); });
@@ -68,4 +66,4 @@ void GtkBookmarks::remove_windows_bookmark() {
     }
 }
 
-}  // namespace lsw::host::platform
+}

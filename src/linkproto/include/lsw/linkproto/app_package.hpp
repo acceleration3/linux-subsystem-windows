@@ -3,8 +3,6 @@
 #include <string_view>
 
 namespace lsw::linkproto {
-
-// File types opened by Windows App Installer, rather than CreateProcess.
 [[nodiscard]] constexpr bool is_app_package(std::string_view path) noexcept {
     constexpr std::string_view suffixes[] = {".msix", ".msixbundle", ".appx", ".appxbundle"};
     for (const auto suffix : suffixes) {
@@ -27,4 +25,4 @@ namespace lsw::linkproto {
     return false;
 }
 
-}  // namespace lsw::linkproto
+}

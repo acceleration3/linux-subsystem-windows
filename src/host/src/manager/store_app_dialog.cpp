@@ -30,7 +30,6 @@ using ui::Widgets;
 
 namespace {
 constexpr int kIconPx = 28;
-// Read at twice the row's size, so a HiDPI screen draws it sharp.
 constexpr int kListIconPx = 2 * kIconPx;
 constexpr int kRowPx = 44;
 constexpr int kRowInset = 16;
@@ -40,10 +39,8 @@ constexpr int kFamilyRole = Qt::UserRole + 1;
 constexpr int kAumidRole = Qt::UserRole;
 constexpr const char* kSelectedGround = "#241d14";
 constexpr const char* kHoverGround = Theme::Color::kRaised;
-}  // namespace
+}
 
-// A row as the design draws it: the icon, the name, and the package family
-// under it in mono, so two of a name can be told apart.
 class StoreAppDialog::RowDelegate : public QStyledItemDelegate {
 public:
     using QStyledItemDelegate::QStyledItemDelegate;
@@ -77,8 +74,6 @@ public:
                                             text.width()));
         p->setFont(family_font);
         p->setPen(Theme::color(Theme::Color::kFgFaint));
-        // Taller than the line by the underline's reach: package families
-        // are full of underscores, and the line's own box clips them.
         p->drawText(QRect(text.left(), top + name_metrics.height() + 1, text.width(),
                           family_metrics.height() + family_metrics.underlinePos() + 1),
                     Qt::AlignLeft,
@@ -154,7 +149,6 @@ StoreAppDialog::StoreAppDialog(link::AgentRpcClient& rpc, QWidget* parent)
     connect(list_, &QListWidget::currentItemChanged, this,
             [this](QListWidgetItem* current) { add_->setEnabled(current != nullptr); });
     connect(search_, &QLineEdit::textChanged, this, &StoreAppDialog::filter);
-    // The search keeps the focus; the arrows still walk the list.
     for (const auto key : {Qt::Key_Down, Qt::Key_Up}) {
         auto* walk = new QShortcut(QKeySequence(key), search_, nullptr, nullptr, Qt::WidgetShortcut);
         connect(walk, &QShortcut::activated, this, [this, key] {
@@ -259,4 +253,4 @@ void StoreAppDialog::choose() {
     }
 }
 
-}  // namespace lsw::host::manager
+}

@@ -53,7 +53,7 @@ enum class Mode {
     CancelFinish,
     DropChunk
 };
-}  // namespace
+}
 
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
@@ -189,7 +189,7 @@ int main(int argc, char** argv) {
                              acknowledged = sent;
                          });
         transfer.start(path);
-        transfer.start(path);  // Ignored while busy.
+        transfer.start(path);
         check(wait_for([&] { return !transfer.busy(); }),
               "transfer completes without blocking GUI");
         if (mode == Mode::Normal) {

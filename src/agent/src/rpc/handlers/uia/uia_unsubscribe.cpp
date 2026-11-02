@@ -7,9 +7,6 @@
 #include <cstdint>
 
 namespace lsw::agent::rpc::handlers {
-
-// Generic unsubscribe: works for any sub_id returned by
-// ``uia_subscribe_lifecycle`` / ``_focus`` / ``_properties``.
 struct UiaUnsubscribeHandler : RpcHandler {
     nlohmann::json handle(const nlohmann::json& params, RpcContext& ctx) override {
         const auto id = params.value("sub_id", std::uint64_t{0});
@@ -17,12 +14,10 @@ struct UiaUnsubscribeHandler : RpcHandler {
         return {{"ok", true}};
     }
 
-    // Window handles, UI Automation and HKCU belong to the user's
-    // session: served by the session helper there.
     [[nodiscard]] Placement placement() const override { return Placement::UserSession; }
 };
 
-}  // namespace lsw::agent::rpc::handlers
+}
 
 LSW_REGISTER_RPC(lsw::agent::rpc::handlers::UiaUnsubscribeHandler,
                  ::lsw::linkproto::cmd::kUiaUnsubscribe)

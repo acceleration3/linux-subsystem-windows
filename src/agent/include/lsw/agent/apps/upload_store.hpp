@@ -16,10 +16,6 @@ public:
     explicit UploadStore(std::filesystem::path root);
     ~UploadStore();
 
-    // ``document``: a copy of a file the person opened from the host. It
-    // takes any name Windows can create (the stricter rule below keeps
-    // ``%`` and ``!`` out of what may be run), may be empty, and is left
-    // read-only, since changes to it would only stay in Windows.
     [[nodiscard]] std::string begin(const std::string& name, std::uint64_t size, bool document = false);
     [[nodiscard]] std::uint64_t append(const std::string& id, std::uint64_t offset,
                                        std::span<const std::uint8_t> bytes);
@@ -45,4 +41,4 @@ private:
     std::unordered_map<std::string, Upload> uploads_;
 };
 
-}  // namespace lsw::agent::apps
+}

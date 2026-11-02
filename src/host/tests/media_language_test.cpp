@@ -1,6 +1,3 @@
-// The languages a Windows medium carries, from its sources/lang.ini: what
-// the answer file may name, the default first.
-
 #include "lsw/host/provision/install/media_language.hpp"
 
 #include <cstdio>
@@ -18,10 +15,9 @@ void check(bool ok, const char* label) {
     }
 }
 
-}  // namespace
+}
 
 int main() {
-    // A British medium, as Microsoft ships it.
     check(MediaLanguage::parse(QStringLiteral("[Available UI Languages]\r\n"
                                               "en-GB = 3\r\n"
                                               "\r\n"
@@ -40,7 +36,6 @@ int main() {
     check(MediaLanguage::parse(QStringLiteral("[available ui languages]\nen-US=3\n")) ==
               QStringList{QStringLiteral("en-US")},
           "the section name's case and the spacing around = do not matter");
-    // Microsoft's own en-US medium (Win11_25H2_English_x64), byte for byte.
     check(MediaLanguage::parse(QStringLiteral("\r\n[Available UI Languages]\r\nen-us = 3\r\n\r\n"
                                               "[Fallback Languages]\r\nen-us = en-us\r\n")) ==
               QStringList{QStringLiteral("en-US")},

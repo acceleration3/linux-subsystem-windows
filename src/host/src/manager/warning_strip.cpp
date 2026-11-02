@@ -34,7 +34,6 @@ void WarningStrip::set_message(bool critical, const QString& headline, const QSt
     Widgets::set_role(text_, critical ? Theme::Role::kWarnTextCritical : Theme::Role::kWarnText);
     Widgets::set_flag(dot_, Theme::Tone::kProperty,
                       QVariant(critical ? Theme::Tone::kBad : Theme::Tone::kAmber));
-    // The headline in the plain foreground, the rest in the strip's tint.
     text_->setText(QStringLiteral("<span style=\"color:%1;font-weight:500\">%2</span> %3")
                        .arg(QString::fromLatin1(Theme::Color::kFg), headline.toHtmlEscaped(),
                             detail.toHtmlEscaped()));
@@ -54,8 +53,6 @@ void WarningStrip::add_dismiss() {
 void WarningStrip::clear_buttons() {
     while (auto* item = buttons_->takeAt(0)) {
         if (auto* widget = item->widget()) {
-            // Out of the layout it keeps its last geometry until the
-            // deferred delete, painted over whatever moves in.
             widget->hide();
             widget->deleteLater();
         }
@@ -63,4 +60,4 @@ void WarningStrip::clear_buttons() {
     }
 }
 
-}  // namespace lsw::host::manager
+}

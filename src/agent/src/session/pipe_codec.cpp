@@ -33,9 +33,6 @@ bool PipeCodec::drain(std::vector<nlohmann::json>& out) {
     if (!intact) {
         return false;
     }
-    // Whatever remains is one incomplete frame. Past the cap it is a
-    // frame that would be refused once it arrived — a corrupt length — so
-    // stop reading now rather than buffer whatever it claims.
     return reader_.buffered() <= linkproto::kHeaderSize + kMaxMessageBytes;
 }
 
@@ -53,4 +50,4 @@ bool PipeCodec::is_event(const nlohmann::json& m) {
     return m.is_object() && m.contains("event") && m["event"].is_string();
 }
 
-}  // namespace lsw::agent::session
+}

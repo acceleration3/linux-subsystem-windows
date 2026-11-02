@@ -21,4 +21,4 @@ nlohmann::json JsonRpcFrame::result(const nlohmann::json& id, nlohmann::json res
     };
 }
 
-}  // namespace lsw::host::mcp
+}

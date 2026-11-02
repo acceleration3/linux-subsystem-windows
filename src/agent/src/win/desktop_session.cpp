@@ -14,12 +14,6 @@
 namespace lsw::agent::win {
 
 namespace {
-
-// Written once the gate has legitimately opened, so later boots can skip
-// the first-boot overlay wait. Its absence is what "first boot" means.
-
-// A window counts as screen-filling if it spans the primary monitor,
-// compared with a little slack so an off-by-a-pixel window still counts.
 constexpr int kCoverSlackPx = 2;
 
 struct OverlayScan {
@@ -35,8 +29,6 @@ BOOL CALLBACK overlay_proc(HWND window, LPARAM param) {
     if (window == scan->shell || ::IsWindowVisible(window) == FALSE) {
         return TRUE;
     }
-    // Progman is screen-sized and always there; so is the taskbar's
-    // parent chain. Anything the shell owns is the desktop, not a cover.
     DWORD pid = 0;
     ::GetWindowThreadProcessId(window, &pid);
     if (pid == scan->shell_pid) {
@@ -53,7 +45,7 @@ BOOL CALLBACK overlay_proc(HWND window, LPARAM param) {
     scan->found = true;
     ::GetClassNameW(window, scan->klass, static_cast<int>(std::size(scan->klass)));
     ::GetWindowTextW(window, scan->title, static_cast<int>(std::size(scan->title)));
-    return FALSE;  // one is enough
+    return FALSE;
 }
 
 [[nodiscard]] OverlayScan scan_for_overlay() {
@@ -65,13 +57,12 @@ BOOL CALLBACK overlay_proc(HWND window, LPARAM param) {
 }
 
 void write_flag() {
-    // Created and closed at once: the file existing is the whole flag.
     const UniqueHandle file{::CreateFileW(core::Paths::desktop_ready_flag().c_str(), GENERIC_WRITE,
                                           0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL,
                                           nullptr)};
 }
 
-}  // namespace
+}
 
 bool DesktopSession::shell_ready() {
     return ::GetShellWindow() != nullptr;
@@ -101,10 +92,6 @@ bool DesktopSession::wait_for_desktop(std::chrono::seconds timeout,
     const auto started = std::chrono::steady_clock::now();
     const auto deadline = started + timeout;
 
-    // On a first boot the overlay and this agent both start at logon, so
-    // "no overlay yet" is indistinguishable from "overlay already gone"
-    // until we have actually seen one. Later boots have the flag and
-    // skip this entirely.
     const bool first_boot = !FileSystem::exists(core::Paths::desktop_ready_flag());
     bool overlay_seen = false;
     const auto grace_ends = started + first_boot_grace;
@@ -121,8 +108,6 @@ bool DesktopSession::wait_for_desktop(std::chrono::seconds timeout,
         if (covered) {
             overlay_seen = true;
         }
-        // Still inside the first-boot grace and no overlay has appeared:
-        // do not trust its absence yet.
         const bool awaiting_first_overlay = first_boot && !overlay_seen && now < grace_ends;
         const bool ready = shell_ready() && !covered && !awaiting_first_overlay;
 
@@ -145,8 +130,6 @@ bool DesktopSession::wait_for_desktop(std::chrono::seconds timeout,
                 return true;
             }
         } else {
-            // The shell restarts as OOBE finishes; restart the stability
-            // window rather than counting time from before the restart.
             usable = false;
         }
         std::this_thread::sleep_for(poll_interval);
@@ -155,4 +138,4 @@ bool DesktopSession::wait_for_desktop(std::chrono::seconds timeout,
     return false;
 }
 
-}  // namespace lsw::agent::win
+}

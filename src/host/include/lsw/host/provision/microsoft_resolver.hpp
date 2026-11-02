@@ -9,38 +9,11 @@
 #include <QString>
 
 namespace lsw::host::provision {
-
-// Resolves a Microsoft "Download Windows" edition + language label to
-// a concrete .iso download URL by driving ``IsoSourceFetcher`` and
-// ``MicrosoftClient`` end-to-end:
-//
-//   1. ``fetch`` scrapes the live edition list from microsoft.com.
-//   2. Matches the caller's edition label (case-insensitive substring
-//      against ``WindowsEdition::display``) and picks the first
-//      matching ``productEditionId``.
-//   3. ``MicrosoftClient::initialize`` opens a session, then
-//      ``fetch_skus`` for that edition, then matches the caller's
-//      language label (case-insensitive substring against
-//      ``MsSku::language``).
-//   4. ``fetch_download_url`` resolves the chosen SKU to an ESD URL.
-//
-// Used by both the wizard's ``IsoChoicePage`` (the UI flow is the same
-// dance, just driven by user clicks instead of static labels) and the
-// unattended CLI runner (where ``--edition`` and ``--language`` are
-// fed in as strings on the command line).
-//
-// Fires ``resolved(url)`` on success. Fires ``failed(reason, banned)``
-// on any error; ``banned == true`` is the 715-123130 (Type=9) ban
-// case, which is sticky and should propagate non-zero out of the CLI
-// runner rather than retry-spin.
 class MicrosoftResolver : public QObject {
     Q_OBJECT
 public:
     explicit MicrosoftResolver(QObject* parent = nullptr);
 
-    // Begin resolving. Both labels are matched as case-insensitive
-    // substrings against the live Microsoft catalog. Empty
-    // ``language_label`` means "first SKU labelled English".
     void resolve(const QString& edition_label, const QString& language_label);
 
 Q_SIGNALS:
@@ -75,4 +48,4 @@ private:
     bool waiting_on_skus_ = false;
 };
 
-}  // namespace lsw::host::provision
+}

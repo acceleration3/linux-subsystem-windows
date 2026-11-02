@@ -38,4 +38,4 @@ nlohmann::json ConsoleInputTool::call(const nlohmann::json& args) {
     return ToolResult::acknowledge(r);
 }
 
-}  // namespace lsw::host::mcp
+}

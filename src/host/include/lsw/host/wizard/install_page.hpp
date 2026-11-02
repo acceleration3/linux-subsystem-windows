@@ -10,11 +10,6 @@ namespace lsw::host::wizard {
 
 class Wizard;
 
-// Shows VM-install progress + live VNC view. Pure presentation:
-// subscribes to the wizard's Pipeline (BuildingPayloadIso..WaitingForAgent
-// phases) for status updates; the pipeline emits vnc_port_available
-// when libvirt has assigned a graphics port, and we connect the
-// ui::VncView to it then.
 class InstallPage : public PipelinePage {
     Q_OBJECT
 public:
@@ -34,4 +29,4 @@ private:
     ui::VncView* vnc_ = nullptr;
 };
 
-}  // namespace lsw::host::wizard
+}

@@ -34,4 +34,4 @@ nlohmann::json RawRpcTool::call(const nlohmann::json& args) {
     return ToolResult::from_reply(agent_.request(cmd, in.object("params")));
 }
 
-}  // namespace lsw::host::mcp
+}

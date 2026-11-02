@@ -16,7 +16,7 @@ constexpr qreal kBarGap = 6.0;
 constexpr qreal kCaptionGap = 10.0;
 const QColor kDiscFill{13, 15, 20, 191};
 constexpr int kRingAlpha = 90;
-}  // namespace
+}
 
 PlayBadge::PlayBadge(bool paused, bool hot) noexcept : paused_(paused), hot_(hot) {}
 
@@ -54,4 +54,4 @@ void PlayBadge::paint(QPainter& p, const QRect& area) const {
     p.restore();
 }
 
-}  // namespace lsw::host::ui
+}

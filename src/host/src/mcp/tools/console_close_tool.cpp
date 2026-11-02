@@ -30,10 +30,8 @@ nlohmann::json ConsoleCloseTool::call(const nlohmann::json& args) {
         return in.missing("session_id");
     }
     const auto r = agent_.request(linkproto::cmd::kConsoleClose, {{"session_id", session_id}});
-    // Forget the buffer either way: if the close failed the session is in
-    // an unknown state, and stale bytes would be worse than none.
     buffer_.forget(QString::fromStdString(session_id));
     return ToolResult::acknowledge(r);
 }
 
-}  // namespace lsw::host::mcp
+}

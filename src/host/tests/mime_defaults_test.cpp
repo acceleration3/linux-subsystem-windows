@@ -1,12 +1,3 @@
-// Which file types an entry of LSW's declares. It must never take a type a
-// host application opens, because the desktop's choice among several
-// handlers is not one an entry can steer (KDE's varies from one rebuild of
-// its cache to the next), and a double click on a .xlsx must not start
-// Excel in Windows for somebody who has ONLYOFFICE. So an entry declares
-// the types nothing else handles, what the person typed, and what their
-// mimeapps.list already names it for; and nothing is written anywhere.
-// Also the extension to MIME type rule that keeps .pub away from SSH keys.
-
 #include "lsw/host/apps/desktop_launcher.hpp"
 #include "lsw/host/apps/host_mime_handlers.hpp"
 
@@ -44,7 +35,7 @@ QByteArray read(const QString& path) {
     return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray{};
 }
 
-}  // namespace
+}
 
 int main(int argc, char** argv) {
     QCoreApplication app{argc, argv};
@@ -55,8 +46,6 @@ int main(int argc, char** argv) {
     dirs.data_home = root + QStringLiteral("/data");
     dirs.data_dirs = {root + QStringLiteral("/flatpak"), root + QStringLiteral("/usr")};
 
-    // The applications that exist (one cached name has no file), and what the
-    // caches say opens what.
     for (const QString& id : {QStringLiteral("onlyoffice.desktop"), QStringLiteral("vlc.desktop"),
                               QStringLiteral("kate.desktop"), QStringLiteral("ark.desktop")}) {
         write(root + QStringLiteral("/flatpak/applications/") + id, "[Desktop Entry]\n");
@@ -96,8 +85,6 @@ int main(int argc, char** argv) {
               !host.explicit_default(QStringLiteral("image/png"), QStringLiteral("lsw-app-0123.desktop")),
           "mimeapps.list's default for a type, for that entry");
 
-    // What an entry declares. Its id makes its entry name lsw-app-<hash>; the
-    // explicit default below names that one.
     AppConfig excel;
     excel.id = QStringLiteral("excel-1");
     excel.name = QStringLiteral("Excel");
@@ -114,7 +101,6 @@ int main(int argc, char** argv) {
     const QStringList with_typed = DesktopLauncher::declared_mime_types(excel, host);
     check(with_typed.contains(QStringLiteral("video/x-matroska")) && with_typed.contains(QStringLiteral("application/x-typed")),
           "what the person typed is declared, host handler or not");
-    // An explicit default of the entry's own is declared too.
     AppConfig gif;
     gif.id = QStringLiteral("gif-viewer");
     gif.path = QStringLiteral("C:\\Gif.exe");
@@ -131,7 +117,6 @@ int main(int argc, char** argv) {
     check(!DesktopLauncher::declared_mime_types(gif, HostMimeHandlers{without}).contains(QStringLiteral("image/gif")),
           "and without that choice it is not");
 
-    // A host application installed later takes the type out at the next sync.
     write(root + QStringLiteral("/usr/applications/mimeinfo.cache"),
           "[MIME Cache]\napplication/vnd.ms-publisher=kate.desktop;\n");
     const HostMimeHandlers later{dirs};
@@ -141,7 +126,6 @@ int main(int argc, char** argv) {
           "and mimeapps.list was only read");
     (void)mimeapps;
 
-    // ---- which MIME types an application has -------------------------
     const auto words = DesktopLauncher::mime_types_of_extensions(
         {QStringLiteral(".doc"), QStringLiteral(".docx"), QStringLiteral(".docm"), QStringLiteral(".dot"),
          QStringLiteral(".dotx"), QStringLiteral(".rtf"), QStringLiteral(".asd"), QStringLiteral(".txt")});

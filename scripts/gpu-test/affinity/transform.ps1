@@ -1,4 +1,3 @@
-# Ctrl+J duplicates the photo; Move Tool: the copy rotated by its rotation handle, then moved.
 Ready
 Press "ctrl+j" 1000
 Press v 400

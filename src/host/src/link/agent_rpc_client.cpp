@@ -25,12 +25,9 @@ namespace {
 constexpr int kRecvChunk = 64 * 1024;
 constexpr int kReconnectBackoffMs = 500;
 
-// The envelope framing, the big-endian codecs and the command names all
-// come from lsw/linkproto — the same headers the guest agent compiles.
-// This file used to carry its own copy of each.
 using linkproto::FrameType;
 
-}  // namespace
+}
 
 AgentRpcClient::AgentRpcClient(QObject* parent)
     : QObject(parent),
@@ -51,13 +48,6 @@ AgentRpcClient::~AgentRpcClient() {
 }
 
 void AgentRpcClient::set_target(quint32 cid, quint32 port) {
-    // Idempotent: if the target hasn't actually changed, don't bump
-    // the generation. The wizard's SetupPage and the manager's
-    // VmDetailPanel both call set_target with the same (cid, port) at
-    // handoff time; bumping every call forced a reconnect that raced
-    // with the reader thread (which would observe EOF on the old fd
-    // and then close the freshly-opened replacement under io_mu_,
-    // leaving the in-flight call() to wait on a dead connection).
     if (cid_.load() == cid && port_.load() == port) {
         return;
     }
@@ -75,18 +65,10 @@ EventSubscription AgentRpcClient::subscribe(std::string_view topic, EventHandler
 }
 
 void AgentRpcClient::drop_connection_locked() {
+    if (announced_.exchange(false)) {
+        LSW_INFO("agent_rpc_client: disconnected from the agent");
+    }
     client_.close();
-    // Wake any in-flight callers so they don't hang forever waiting
-    // for a reply that can no longer arrive on this socket. Without
-    // this, a connect attempt that *succeeded* into a half-open
-    // transport (e.g. qemu hostfwd accepted the host connect but the
-    // guest agent wasn't actually listening yet during VM boot)
-    // leaves the call()'s pending.cv.wait stranded → kick_agent_poll's
-    // ``in_flight`` flag stays true → no further polls are ever
-    // attempted → the manager never detects the agent coming up
-    // until it's restarted. The reader's reconnect loop is fine; the
-    // pending caller just needs to be released so the next monitor
-    // tick can try again.
     pending_->fail_all(stop_.load() ? "the agent client is shutting down"
                                     : "the connection to the agent dropped");
 }
@@ -106,15 +88,14 @@ bool AgentRpcClient::ensure_connected_locked() {
         return false;
     }
     if (client_.connect(cid, port) != 0) {
+        LSW_TRACE("agent_rpc_client: connect to cid {} port {} failed", cid, port);
         return false;
     }
+    LSW_DEBUG("agent_rpc_client: connected to cid {} port {}", cid, port);
     return true;
 }
 
-// Send one envelope frame on the wire. ``payload`` is the raw bytes
-// after the 5-byte header. Caller holds io_mu_.
 bool AgentRpcClient::send_locked(const QByteArray& body) {
-    // ``body`` is a JSON message; wrap it as a control envelope.
     if (!client_.is_open()) return false;
     std::uint8_t header[linkproto::kHeaderSize];
     linkproto::write_header(header, FrameType::Control,
@@ -144,9 +125,7 @@ AgentReply AgentRpcClient::request(std::string_view cmd, const nlohmann::json& p
     const std::string body = message.dump();
     const QByteArray bytes(body.data(), static_cast<qsizetype>(body.size()));
 
-    // Opened once connected and just before the send, so neither the
-    // connect nor a reconnect — both of which release every waiter —
-    // can fail this call before it has been made.
+    const auto began = std::chrono::steady_clock::now();
     std::optional<PendingCalls::Ticket> ticket;
     {
         std::lock_guard<std::mutex> lock(io_mu_);
@@ -170,9 +149,6 @@ AgentReply AgentRpcClient::request(std::string_view cmd, const nlohmann::json& p
 
     auto reply = ticket->wait(timeout);
     if (!reply) {
-        // The agent took the request and never answered. Report it with
-        // the command so a wedged handler is identifiable; the ticket
-        // closes on return, so a late reply finds nobody waiting.
         LSW_WARN("agent_rpc_client: id={} cmd={} timed out after {} ms", id, cmd,
                  timeout.count());
         return AgentReply::failure("the agent did not answer " + std::string{cmd} + " within " +
@@ -181,6 +157,9 @@ AgentReply AgentRpcClient::request(std::string_view cmd, const nlohmann::json& p
     if (!reply->ok) {
         LSW_WARN("agent_rpc_client: id={} cmd={} failed: {}", id, cmd, reply->error);
     }
+    LSW_DEBUG("agent_rpc_client: cmd={} {} ms ok={}", cmd,
+              std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - began).count(),
+              reply->ok);
     return std::move(*reply);
 }
 
@@ -207,7 +186,7 @@ void AgentRpcClient::route_message(const nlohmann::json& message) {
         return;
     }
     if (message.contains("cmd")) {
-        return;  // agent-initiated request — none defined; drop.
+        return;
     }
     const auto id = message.find("id");
     if (id == message.end() || !id->is_number_unsigned()) {
@@ -218,7 +197,7 @@ void AgentRpcClient::route_message(const nlohmann::json& message) {
 
 void AgentRpcClient::handle_control(const std::uint8_t* payload, std::size_t len) {
     const auto message = nlohmann::json::parse(payload, payload + len, nullptr,
-                                               /*allow_exceptions=*/false);
+                                               false);
     if (message.is_discarded()) {
         LSW_WARN("agent_rpc_client: malformed control payload ({} bytes)", len);
         return;
@@ -247,6 +226,9 @@ void AgentRpcClient::reader_loop() {
             reader.reset();
             continue;
         }
+        if (!announced_.exchange(true)) {
+            LSW_INFO("agent_rpc_client: the agent answers (cid {}, port {})", cid_.load(), port_.load());
+        }
         reader.append(reinterpret_cast<const std::uint8_t*>(chunk.constData()),
                       static_cast<std::size_t>(chunk.size()));
 
@@ -266,4 +248,4 @@ void AgentRpcClient::reader_loop() {
     }
 }
 
-}  // namespace lsw::host::link
+}

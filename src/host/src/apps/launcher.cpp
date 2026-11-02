@@ -12,14 +12,6 @@
 namespace lsw::host::apps {
 
 namespace {
-
-// ``NAME=value`` per line → a JSON object for the agent.
-//
-// Blank lines and ``#`` comments are skipped so a config can be
-// annotated, and a line with no ``=`` is dropped rather than sent as a
-// nameless variable. The value keeps its spaces — a path may have them
-// — but the name is trimmed, because "NAME = value" is what everyone
-// types at least once.
 nlohmann::json env_object(const QString& text) {
     auto obj = nlohmann::json::object();
     const auto lines = text.split(QLatin1Char('\n'), Qt::SkipEmptyParts);
@@ -41,7 +33,6 @@ nlohmann::json env_object(const QString& text) {
     return obj;
 }
 
-// ``documents`` as the JSON array both launch commands take.
 nlohmann::json documents_array(const QStringList& documents) {
     auto out = nlohmann::json::array();
     for (const QString& document : documents) {
@@ -50,7 +41,7 @@ nlohmann::json documents_array(const QStringList& documents) {
     return out;
 }
 
-}  // namespace
+}
 
 Launcher::Launcher(link::AgentRpcClient& rpc, QObject* parent) : QObject(parent), rpc_(rpc) {}
 
@@ -89,9 +80,6 @@ void Launcher::launch(const QString& app_id, const QString& args, const QString&
             return;
         }
         const auto pid = static_cast<quint32>(reply.body.value("pid", std::uint64_t{0}));
-        // A package's reply names the App Installer window's process; one
-        // without it comes from an agent too old to find that window, and
-        // mirroring nothing would leave the installer out of sight.
         if (pid == 0) {
             Q_EMIT failed(app_id, package ? QStringLiteral("agent: App Installer opened but the agent "
                                                            "named no window of it; update the guest agent")
@@ -128,4 +116,4 @@ void Launcher::activate(const QString& aumid, const QString& args, const QString
     });
 }
 
-}  // namespace lsw::host::apps
+}

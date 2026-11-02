@@ -8,18 +8,8 @@
 #include <string>
 
 namespace lsw::agent::rpc::handlers {
-
-// Minimize / maximize / restore a window on the host's behalf.
-//
-// Sent when the host's own UI drives the guest window — its taskbar
-// entry, a keyboard shortcut, the user minimizing the mirror. The
-// reverse direction (the user clicking the buttons the application
-// itself draws, inside the mirror) needs none of this: that click is
-// forwarded as an ordinary click and the application acts on it, and
-// the host learns the outcome from the show state on the next window
-// enumeration.
 struct WindowCommandHandler : RpcHandler {
-    nlohmann::json handle(const nlohmann::json& params, RpcContext& /*ctx*/) override {
+    nlohmann::json handle(const nlohmann::json& params, RpcContext& ) override {
         const Params p{params, linkproto::cmd::kWindowCommand};
         const auto hwnd = p.require_hwnd();
         const auto command = p.get("command", std::string{});
@@ -35,12 +25,10 @@ struct WindowCommandHandler : RpcHandler {
         return std::string{"ok="} + (reply.value("ok", false) ? "true" : "false");
     }
 
-    // Window handles, UI Automation and HKCU belong to the user's
-    // session: served by the session helper there.
     [[nodiscard]] Placement placement() const override { return Placement::UserSession; }
 };
 
-}  // namespace lsw::agent::rpc::handlers
+}
 
 LSW_REGISTER_RPC(lsw::agent::rpc::handlers::WindowCommandHandler,
                  ::lsw::linkproto::cmd::kWindowCommand)

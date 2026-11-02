@@ -23,7 +23,7 @@ namespace lsw::agent::rpc::handlers {
 struct OpenPackageHandler : RpcHandler {
     [[nodiscard]] Placement placement() const override { return Placement::UserSession; }
 
-    nlohmann::json handle(const nlohmann::json& params, RpcContext& /*ctx*/) override {
+    nlohmann::json handle(const nlohmann::json& params, RpcContext& ) override {
         const auto path = Params{params, linkproto::cmd::kOpenPackage}.require_string("path");
         if (!linkproto::is_app_package(path))
             throw std::invalid_argument("open_package requires an MSIX/APPX package or bundle");
@@ -31,8 +31,6 @@ struct OpenPackageHandler : RpcHandler {
         const DWORD attributes = ::GetFileAttributesW(wide.c_str());
         if (attributes == INVALID_FILE_ATTRIBUTES || (attributes & FILE_ATTRIBUTE_DIRECTORY))
             throw std::runtime_error("cannot read package: " + path);
-        // Run inside the user's helper: file associations and App Installer
-        // activation belong to that user's shell, not the session-0 service.
         const win::Apartment apartment(win::Apartment::Model::SingleThreaded);
         if (!apartment.ok())
             throw std::runtime_error("cannot initialize the Windows shell");
@@ -51,9 +49,6 @@ struct OpenPackageHandler : RpcHandler {
                 ". Ensure App Installer is installed in the guest.");
         }
         const win::UniqueHandle process(info.hProcess);
-        // ShellExecute's process can be absent, reused or a short-lived
-        // broker. Wait for the actual visible AppInstaller.exe window in
-        // this session and use its owning process as the mirror root.
         const auto started = std::chrono::steady_clock::now();
         do {
             const auto foreground = reinterpret_cast<std::uintptr_t>(
@@ -71,6 +66,6 @@ struct OpenPackageHandler : RpcHandler {
     }
 };
 
-}  // namespace lsw::agent::rpc::handlers
+}
 
 LSW_REGISTER_RPC(lsw::agent::rpc::handlers::OpenPackageHandler, ::lsw::linkproto::cmd::kOpenPackage)

@@ -2,13 +2,6 @@
 
 #include <cstdint>
 
-// Big-endian integer codecs for the host<->agent link.
-//
-// The wire is big-endian because that is still the network-byte-order
-// convention and it makes packet dumps readable. These used to exist
-// twice — once in the agent's transport, once in the manager's link —
-// which is exactly the kind of pair that drifts.
-
 namespace lsw::linkproto {
 
 inline void write_u32_be(std::uint8_t* p, std::uint32_t v) noexcept {
@@ -39,4 +32,4 @@ inline void write_u64_be(std::uint8_t* p, std::uint64_t v) noexcept {
     return v;
 }
 
-}  // namespace lsw::linkproto
+}

@@ -1,4 +1,3 @@
-# Layers panel live filters: Gaussian Blur (radius dragged 0 to ~60 px), panel closed; Unsharp Mask added on top, its radius dragged up.
 Ready
 Click 1932 922 300
 Click 2050 1040 1500

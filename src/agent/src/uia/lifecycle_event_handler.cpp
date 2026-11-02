@@ -12,8 +12,6 @@ HRESULT LifecycleEventHandler::HandleAutomationEvent(IUIAutomationElement* sende
     if (sender == nullptr) {
         return S_OK;
     }
-    // Registered on the desktop root with subtree scope, so this fires
-    // for every process — filter to the one we were asked about.
     int sender_pid = 0;
     sender->get_CurrentProcessId(&sender_pid);
     if (static_cast<DWORD>(sender_pid) != pid_) {
@@ -29,8 +27,6 @@ HRESULT LifecycleEventHandler::HandleAutomationEvent(IUIAutomationElement* sende
         return S_OK;
     }
 
-    // Opened: carry title + control type so the host can decide which
-    // mirror to spawn without a follow-up round trip.
     win::Bstr name;
     sender->get_CurrentName(name.put());
     CONTROLTYPEID control_type = 0;
@@ -43,4 +39,4 @@ HRESULT LifecycleEventHandler::HandleAutomationEvent(IUIAutomationElement* sende
     return S_OK;
 }
 
-}  // namespace lsw::agent::uia
+}

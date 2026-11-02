@@ -18,7 +18,7 @@ namespace {
     }
 }
 
-}  // namespace
+}
 
 void HttpResponseWriter::send(QTcpSocket* socket, int status, const std::string& body) {
     if (socket == nullptr) {
@@ -43,4 +43,4 @@ void HttpResponseWriter::send(QTcpSocket* socket, int status, const std::string&
     socket->disconnectFromHost();
 }
 
-}  // namespace lsw::host::mcp
+}

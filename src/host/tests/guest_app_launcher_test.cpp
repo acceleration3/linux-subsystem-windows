@@ -230,13 +230,11 @@ int live_package_smoke(QCoreApplication& app, const QString& path) {
             check(listed.ok && actual_installer,
                   "mirror root is the visible App Installer, not Explorer or an activation broker");
         }
-        // Close only this test's host mirror. Leave the native installer
-        // window alone, and never click Install or modify the package.
     }
     QThreadPool::globalInstance()->waitForDone();
     return failures == 0 ? 0 : 1;
 }
-}  // namespace
+}
 
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);

@@ -1,8 +1,3 @@
-// What the Microsoft Update Catalog's answer is read as, and how a host's
-// GPU lines gain the version it names. The pages are made up in the shape
-// the catalog answers with; the fetch is a fake, so nothing reaches the
-// network.
-
 #include "lsw/host/services/driver_catalog.hpp"
 
 #include <QCoreApplication>
@@ -33,7 +28,7 @@ QByteArray row(int number, const char* title) {
            "<a href=\"#\">" + title + "</a> </td><td>Drivers</td><td>10/1/2026</td></tr>\n";
 }
 
-}  // namespace
+}
 
 int main(int argc, char** argv) {
     QCoreApplication app{argc, argv};
@@ -66,7 +61,7 @@ int main(int argc, char** argv) {
         const QHash<QString, QByteArray> pages{
             {QStringLiteral("PCI%5CVEN_1002%26DEV_7550"),
              row(0, "AMD Display Driver Update (32.0.31044.16)")},
-            {QStringLiteral("PCI%5CVEN_10DE%26DEV_2684"), QByteArray{}},  // a failure below
+            {QStringLiteral("PCI%5CVEN_10DE%26DEV_2684"), QByteArray{}},
         };
         int fetches = 0;
         DriverCatalog catalog{[&](const QUrl& url, DriverCatalog::Done done) {
@@ -108,7 +103,6 @@ int main(int argc, char** argv) {
         check(completions == 1, "no lines complete at once, with none");
     }
 
-    // The versions found are kept, and a lookup that fails falls back on them.
     {
         QTemporaryDir dir;
         const QString cache = dir.filePath(QStringLiteral("driver-versions.json"));

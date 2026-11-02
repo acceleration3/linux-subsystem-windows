@@ -1,10 +1,3 @@
-# drive.ps1: scripted mouse and keyboard for Affinity in the VM's desktop,
-# put before each functionality's script by traces.py capture --drive.
-#
-# Coordinates are physical pixels of the 2560x1440 desktop (125%), with
-# Affinity's window at its own last place and size, 1920x1010 at (320,320),
-# the photo fit at 34%, its UI shown (Tab), the Pixel persona and the
-# default Paint Brush (64 px, black): the state the traces were recorded in.
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type @"
 using System; using System.Runtime.InteropServices;
@@ -43,7 +36,6 @@ function Focus {
   Log "could not focus Affinity"
 }
 function Log($line) { "[$((Get-Date).ToString('HH:mm:ss.fff'))] $line" }
-# Combo "ctrl+shift+s", "alt+f4", "b", "enter"
 function Press($combo, $wait = 400) {
   $keys = @($combo -split '\+' | % { VkOf $_ })
   foreach ($k in $keys) { [D]::Key([byte]$k, $false); Start-Sleep -Milliseconds 30 }
@@ -63,7 +55,6 @@ function Click($x, $y, $wait = 400, [switch]$Right, [switch]$Double) {
   for ($i = 0; $i -lt $n; $i++) { [D]::mouse_event($down, 0, 0, 0, [IntPtr]::Zero); Start-Sleep -Milliseconds 50; [D]::mouse_event($up, 0, 0, 0, [IntPtr]::Zero); Start-Sleep -Milliseconds 70 }
   Start-Sleep -Milliseconds $wait
 }
-# Drag along points @(x0,y0, x1,y1, ...) with `steps` moves between each pair.
 function Drag([int[]]$pts, $steps = 12, $ms = 12, $wait = 400, [switch]$Middle) {
   $down, $up = if ($Middle) { 0x20, 0x40 } else { 2, 4 }
   MoveTo $pts[0] $pts[1]; Start-Sleep -Milliseconds 120
@@ -88,14 +79,11 @@ function WaitWindow($seconds = 120) {
   throw "Affinity showed no window"
 }
 function WinRect { $p = AffWindow; $r = New-Object D+RECT; [D]::GetWindowRect($p.MainWindowHandle, [ref]$r) | Out-Null; $r }
-# Alt+F4, "No" to saving changes, and wait for Affinity to exit.
 function QuitNoSave {
   Focus; Press "alt+f4" 2500
   if (Get-Process Affinity -ErrorAction SilentlyContinue) { Click 1268 860 1000 }
   $until = (Get-Date).AddSeconds(90); while ((Get-Process Affinity -ErrorAction SilentlyContinue) -and (Get-Date) -lt $until) { Start-Sleep 1 }
   Log "affinity exited: $(-not (Get-Process Affinity -ErrorAction SilentlyContinue))"
 }
-# Start of a functionality: the window up, the photo opened and drawn, the Move Tool chosen.
 function Ready { $p = WaitWindow 150; Start-Sleep 15; Focus; Press v 400; Log "ready" }
-# Affinity with the photo, outside any capture (to find coordinates).
 function Launch { Invoke-CommandInDesktopPackage -PackageFamilyName Canva.Affinity_8a0j1tnjnt4a4 -AppId Canva.Affinity -Command 'C:\Program Files\WindowsApps\Canva.Affinity_3.3.1.4940_x64__8a0j1tnjnt4a4\App\Affinity.exe' -Args 'C:\av\affinity\photo.jpg' }

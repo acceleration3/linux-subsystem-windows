@@ -11,8 +11,6 @@ namespace {
 
 constexpr auto kLswPrefix = "lsw-";
 
-// One section of an INI-like file as ``key -> values`` (the values split at
-// ';'), everything else ignored.
 QHash<QString, QStringList> section_of(const QString& path, const QString& section) {
     QHash<QString, QStringList> out;
     QFile file(path);
@@ -34,7 +32,6 @@ QHash<QString, QStringList> section_of(const QString& path, const QString& secti
     return out;
 }
 
-// The type and its aliases, canonical name first.
 QStringList spellings(const QString& type) {
     QStringList out;
     const QMimeType known = QMimeDatabase().mimeTypeForName(type);
@@ -48,7 +45,7 @@ QStringList spellings(const QString& type) {
     return out;
 }
 
-}  // namespace
+}
 
 HostMimeHandlers::Dirs HostMimeHandlers::Dirs::from_environment() {
     Dirs dirs;
@@ -116,4 +113,4 @@ bool HostMimeHandlers::explicit_default(const QString& type, const QString& entr
     return false;
 }
 
-}  // namespace lsw::host::apps
+}

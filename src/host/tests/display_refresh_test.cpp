@@ -1,6 +1,3 @@
-// The refresh rate the guest is given: what the setting holds and how a rate
-// reads, how a monitor's mode becomes a rate, and how the monitors' rates
-// become the list the settings offer.
 #include "lsw/host/config/display_refresh.hpp"
 #include "lsw/host/config/manager_settings.hpp"
 #include "lsw/host/platform/host_monitor_rates.hpp"
@@ -30,12 +27,11 @@ void check(bool ok, const char* label) {
     }
 }
 
-}  // namespace
+}
 
 int main(int argc, char** argv) {
     QCoreApplication app{argc, argv};
 
-    // ---- the setting -----------------------------------------------
     check(!DisplayRefresh::fixed(QStringLiteral("monitor")).has_value(), "monitor is no rate");
     check(DisplayRefresh::fixed(QStringLiteral("359980")) == 359980u, "a rate is its millihertz");
     check(DisplayRefresh::fixed(QStringLiteral(" 60000 ")) == 60000u, "spaces are allowed");
@@ -69,9 +65,6 @@ int main(int argc, char** argv) {
           "a rate reads without decimals when whole, else to three with trailing zeros dropped");
     check(DisplayRefresh::label(std::nullopt) == QStringLiteral("-"), "an unknown rate is a hyphen");
 
-    // ---- a mode's rate ---------------------------------------------
-    // The standard 1080p timings (148.5 MHz over 2200 x 1125), the same at
-    // NTSC's 1/1.001, and a 1 GHz clock over 2000 x 1389.
     check(HostMonitorRates::mode_millihz(148500, 2200, 1125) == 60000, "1080p60 is 60 Hz");
     check(HostMonitorRates::mode_millihz(148352, 2200, 1125) == 59940, "1080p59.94 is 59.94 Hz");
     check(HostMonitorRates::mode_millihz(1'000'000, 2000, 1389) == 359971,
@@ -82,7 +75,6 @@ int main(int argc, char** argv) {
           "a mode with no frame or no clock has no rate");
     check(HostMonitorRates::mode_millihz(0xFFFFFFFFu, 1, 1) > 0, "a huge clock overflows nothing");
 
-    // ---- the list --------------------------------------------------
     const QVector<MonitorRates> monitors = {
         {QStringLiteral("DP-2"), {360000, 239760, 144000, 60000, 59940}},
         {QStringLiteral("HDMI-A-1"), {144000, 119880, 60000}},
@@ -101,7 +93,6 @@ int main(int argc, char** argv) {
           "a rate both support names both");
     check(HostMonitorRates::merge({}, {}).isEmpty(), "nothing read and no screen is no choice");
     {
-        // What a real monitor lists round 60 and 75 Hz.
         const auto real = HostMonitorRates::merge(
             {{QStringLiteral("DP-2"), {75029, 75025, 75000, 74973, 74551, 72809, 60317, 60020, 60004, 60000, 59954, 59940}}},
             {});
@@ -114,16 +105,13 @@ int main(int argc, char** argv) {
               "with no node readable the screens' own rates are the list");
     }
     {
-        // Rates a hair under half a hertz apart are one; at half they are two.
         const auto edge = HostMonitorRates::merge({{QStringLiteral("A"), {60000, 59501, 59500}}}, {});
         check(edge.size() == 2 && edge[0].millihz == 60000 && edge[1].millihz == 59500,
               "499 mHz apart is one choice, 500 are two");
-        // A chain of nearby rates does not drift into one choice.
         const auto chain = HostMonitorRates::merge({{QStringLiteral("A"), {60000, 59700, 59400}}}, {});
         check(chain.size() == 2 && chain[1].millihz == 59400, "a choice reaches half a hertz from its highest only");
     }
 
-    // ---- the settings ----------------------------------------------
     QTemporaryDir dir;
     QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, dir.path());
     {

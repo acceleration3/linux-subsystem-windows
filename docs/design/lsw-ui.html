@@ -3,12 +3,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap">
 
-<style>
-/* ─────────────────────────────────────────────────────────────
-   PAGE CHROME TOKENS (theme aware: this is the presentation
-   surface, not the product). Light is the bare :root.
-   ───────────────────────────────────────────────────────────── */
-:root{
+<style>:root{
   --page-bg:#eceef2;
   --page-bg-grid:#dfe3ea;
   --page-fg:#171a22;
@@ -41,22 +36,17 @@
   --page-rail:#0f1117;
 }
 
-/* ─────────────────────────────────────────────────────────────
-   PRODUCT TOKENS. Fixed dark: LSW is a machine console and
-   commits to one visual world. Every value below is QSS safe:
-   flat fills, 1px borders, radii, linear gradients only.
-   ───────────────────────────────────────────────────────────── */
 :root{
-  --ink:#0d0f14;        /* window ground            */
-  --surface:#151922;    /* panel                    */
-  --raised:#1c212c;     /* control, table row       */
-  --raised-hi:#242a37;  /* hover                    */
-  --line:#272d3a;       /* hairline                 */
-  --line-hi:#39415260;  /* inner top highlight      */
+  --ink:#0d0f14;
+  --surface:#151922;
+  --raised:#1c212c;
+  --raised-hi:#242a37;
+  --line:#272d3a;
+  --line-hi:#39415260;
   --fg:#e4e8f0;
   --fg-dim:#9aa3b4;
   --fg-faint:#646d7e;
-  --amber:#ff9f45;      /* guest side, primary      */
+  --amber:#ff9f45;
   --amber-dim:#a8672a;
   --amber-wash:#ff9f451f;
   --ok:#4ec98a;
@@ -92,7 +82,6 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
   color:var(--page-muted);
 }
 
-/* ── page header ─────────────────────────────────────────── */
 .topbar{
   position:sticky;top:0;z-index:20;
   display:flex;align-items:center;gap:20px;flex-wrap:wrap;
@@ -127,7 +116,6 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
   box-shadow:inset 0 0 0 1px var(--page-line);
 }
 
-/* ── shell ───────────────────────────────────────────────── */
 .shell{display:grid;grid-template-columns:246px minmax(0,1fr);gap:0;align-items:start}
 @media (max-width:900px){.shell{grid-template-columns:1fr}}
 
@@ -161,23 +149,8 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 .stage{padding:32px 32px 72px;min-width:0}
 .stage-head{max-width:64ch;margin-bottom:20px;display:flex;flex-direction:column;gap:6px}
 .stage-head h1{font-size:25px}
-.stage-head p{color:var(--page-muted);font-size:14.5px}
 
-.notes{
-  margin-top:22px;display:grid;gap:1px;
-  border:1px solid var(--page-line);border-radius:var(--r-lg);overflow:hidden;
-  background:var(--page-line);
-}
-.note{background:var(--page-card);padding:13px 16px;display:grid;
-  grid-template-columns:minmax(120px,168px) minmax(0,1fr);gap:18px;align-items:start}
-@media (max-width:640px){.note{grid-template-columns:1fr;gap:4px}}
-.note dt{font-family:"JetBrains Mono",monospace;font-size:11.5px;color:var(--page-muted)}
-.note dd{margin:0;font-size:13.5px}
-.note dd code{font-family:"JetBrains Mono",monospace;font-size:12.5px;color:var(--page-accent)}
 
-/* ═════════════════════════════════════════════════════════
-   WINDOW FRAME
-   ═════════════════════════════════════════════════════════ */
 .frame{
   border-radius:var(--r-lg);overflow:hidden;
   border:1px solid #000;
@@ -199,7 +172,6 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 }
 .titlebar .spacer{margin-left:auto;display:flex;gap:14px;color:var(--fg-faint);font-size:12px}
 
-/* ── wizard ─────────────────────────────────────────────── */
 .wiz{display:grid;grid-template-columns:212px minmax(0,1fr);min-height:496px}
 @media (max-width:720px){.wiz{grid-template-columns:1fr}}
 .wiz-side{
@@ -245,7 +217,6 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 }
 .wiz-foot .hint{font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--fg-faint);margin-right:auto}
 
-/* ── controls (shared, QSS mappable) ────────────────────── */
 .btn{
   display:inline-flex;align-items:center;gap:7px;
   padding:6px 14px;border-radius:var(--r-md);
@@ -323,11 +294,8 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
   padding:10px 13px;border-radius:0 var(--r-md) var(--r-md) 0;
   font-size:12.5px;color:#f0c393;line-height:1.55;max-width:62ch;
 }
-/* the same inside a dialog for something that failed rather than
-   something to mind: the strip's red */
 .callout.crit{border-left-color:var(--bad);background:#1f1315;color:#f0b0b2}
 
-/* a guest screen: the wizard's console (VNC) and the overview's preview (WGC) */
 .screen{
   border:1px solid var(--line);border-radius:var(--r-md);background:#05070a;
   flex:1;min-height:150px;display:grid;place-items:center;position:relative;overflow:hidden;
@@ -346,10 +314,6 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
   border:1px solid var(--line);border-radius:2px;padding:2px 6px;background:#0b0e13cc;z-index:1;
 }
 
-/* overview preview: it starts paused (see the overview's notes).
-   .desk stands in for the guest's frame; paused, the app draws it
-   desaturated and dimmed, which is the filter here. Before a frame
-   exists the screen is flat grey, never black. */
 .screen.ph{background:#2b2f36}
 .screen .desk{
   position:absolute;inset:0;
@@ -376,9 +340,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 @media (max-width:640px){.pstates{grid-template-columns:1fr}}
 .pstates figure{margin:0;display:flex;flex-direction:column;gap:8px}
 .pstates .screen{flex:none;height:170px}
-.pstates figcaption{font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--fg-faint)}
 
-/* setup table */
 .tbl{width:100%;border-collapse:collapse;font-size:13px;color:var(--fg)}
 .tbl th{
   text-align:left;font-family:"JetBrains Mono",monospace;font-size:10px;font-weight:500;
@@ -400,7 +362,6 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 .pill.fail{color:var(--bad);border-color:#6b2f32;background:var(--bad-wash)}
 .pill.warn{color:var(--amber);border-color:#a8672a;background:#1d1712}
 
-/* ── manager ────────────────────────────────────────────── */
 .badge{
   display:inline-flex;align-items:center;gap:7px;
   font-family:"JetBrains Mono",monospace;font-size:11.5px;font-weight:500;letter-spacing:0.06em;
@@ -452,9 +413,6 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 }
 .app .nm{font-size:11.5px;color:var(--fg-dim);line-height:1.35;word-break:break-word}
 .app[aria-selected="true"] .nm{color:var(--fg)}
-/* what the manager has opened of an application: a solid green dot
-   while its windows are mirrored here, a hollow amber ring while it is
-   being opened. Nothing when it is not open. */
 .app .ic{position:relative}
 .app .ic .st{position:absolute;right:-5px;bottom:-5px;width:13px;height:13px;border-radius:50%;
   border:2px solid var(--surface)}
@@ -463,7 +421,6 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 .app:hover .ic .st{border-color:var(--raised)}
 .app[aria-selected="true"] .ic .st{border-color:#241d14}
 
-/* a button's menu (QMenu): the add button's two kinds of application */
 .icon-btn.menu-btn{width:auto;padding:0 6px;grid-auto-flow:column;gap:4px}
 .icon-btn.menu-btn .car{font-size:8px;color:var(--fg-faint)}
 .menu{position:absolute;right:10px;top:36px;z-index:5;min-width:180px;background:#151922;
@@ -473,7 +430,6 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
   cursor:pointer;font-family:Inter,system-ui,sans-serif;font-size:12.5px;color:var(--fg)}
 .menu button:hover,.menu button.on{background:#242a37}
 
-/* the store app list: icon, name, and the package family under it */
 .slist{background:var(--ink);border-top:1px solid var(--line);border-bottom:1px solid var(--line);
   max-height:360px;overflow:hidden;display:flex;flex-direction:column}
 .strow{display:flex;gap:11px;align-items:center;
@@ -497,7 +453,6 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 .statusbar .sep{width:1px;height:11px;background:var(--line)}
 .statusbar b{color:var(--fg-dim);font-weight:500}
 
-/* ── manager shell: nav rail, no button row ─────────────── */
 .mgr2{display:grid;grid-template-columns:186px minmax(0,1fr);min-height:566px;background:var(--ink)}
 @media (max-width:760px){.mgr2{grid-template-columns:1fr}}
 .nav{background:#0f131a;border-right:1px solid var(--line);display:flex;flex-direction:column}
@@ -524,7 +479,6 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 .cbar .sub{font-family:"JetBrains Mono",monospace;font-size:10.5px;color:var(--fg-faint)}
 .cbar .acts{margin-left:auto;display:flex;gap:7px;align-items:center}
 
-/* ── settings ────────────────────────────────────────────── */
 .settings{padding:14px;display:flex;flex-direction:column;gap:14px;overflow:hidden}
 .sgroup{border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface);overflow:hidden}
 .sgroup > h5{
@@ -559,7 +513,6 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 .applybar .diff .t{color:var(--amber)}
 .applybar .acts{margin-left:auto;display:flex;gap:8px}
 
-/* ── health, meters, warnings ─────────────────────────────── */
 .warnstrip{
   display:flex;align-items:center;gap:12px;flex-wrap:wrap;
   padding:9px 14px;border-bottom:1px solid var(--amber-dim);background:#1d1712;
@@ -592,7 +545,6 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 .kpi .v{font-family:"JetBrains Mono",monospace;font-size:15px;font-variant-numeric:tabular-nums;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
-/* ── graphics: fact lists, API checks ─────────────────────── */
 .kv{display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px 16px;margin:0;align-items:baseline}
 .kv dt{font-family:"JetBrains Mono",monospace;font-size:9.5px;letter-spacing:0.12em;
   text-transform:uppercase;color:var(--fg-faint);white-space:nowrap}
@@ -606,7 +558,6 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 .tbl.tight td{padding:6px 12px}
 .tbl.tight th{padding:0 12px 6px}
 
-/* ── editable lists ───────────────────────────────────────── */
 .editlist{border:1px solid var(--line);border-radius:var(--r-sm);overflow:hidden}
 .editlist table{width:100%;border-collapse:collapse}
 .editlist th{
@@ -626,7 +577,6 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 .editlist .foot{padding:8px 10px;background:#131720;border-top:1px solid var(--line);display:flex;gap:8px;align-items:center}
 .srow.wide{grid-template-columns:1fr;gap:10px}
 
-/* ── remote file picker ───────────────────────────────────── */
 .picker{display:grid;grid-template-columns:190px minmax(0,1fr);min-height:430px}
 @media (max-width:640px){.picker{grid-template-columns:1fr}}
 .places{background:#10141b;border-right:1px solid var(--line);padding:9px 8px;display:flex;
@@ -669,7 +619,6 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 .frow .sz,.frow .md{font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--fg-faint);
   font-variant-numeric:tabular-nums}
 
-/* console + log */
 .term{
   background:#07090d;padding:14px 16px;flex:1;overflow:hidden;
   font-family:"JetBrains Mono",monospace;font-size:12px;line-height:1.75;color:#b9c2d1;
@@ -688,7 +637,6 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 .logline .lv.w{color:var(--amber)}
 .logline .lv.e{color:var(--bad)}
 
-/* dialog */
 .dlg{max-width:560px}
 .dlg-body{padding:18px 20px;display:flex;flex-direction:column;gap:14px}
 .dlg-foot{display:flex;gap:8px;justify-content:flex-end;padding:12px 20px;
@@ -699,7 +647,6 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
   font-family:"JetBrains Mono",monospace;font-size:9.5px;color:var(--fg-faint);text-align:center;
 }
 
-/* ── design system view ─────────────────────────────────── */
 .swatches{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:10px}
 .sw{border:1px solid var(--page-line);border-radius:var(--r-md);overflow:hidden;background:var(--page-card)}
 .sw .chip{height:56px}
@@ -736,7 +683,6 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 </header>
 
 <div class="shell">
-  <!-- ══════════════ RAIL ══════════════ -->
   <nav class="rail">
     <div data-rail="mgr">
       <h2>Manager surfaces</h2>
@@ -748,6 +694,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
         <li><button data-view="m-log">Log</button></li>
         <li><button data-view="m-splash">Starting the guest</button></li>
         <li><button data-view="m-update">Updating LSW in Windows</button></li>
+        <li><button data-view="m-collect">Collect logs</button></li>
         <li><button data-view="m-cfg">Configure application</button></li>
         <li><button data-view="m-store">Add a store app</button></li>
         <li><button data-view="m-opendoc">Windows can't see this file</button></li>
@@ -786,15 +733,12 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
     </div>
   </nav>
 
-  <!-- ══════════════ STAGE ══════════════ -->
   <main class="stage">
 
-  <!-- ─────────── MANAGER: OVERVIEW ─────────── -->
   <section data-view="m-main">
     <div class="stage-head">
       <span class="eyebrow">Manager</span>
       <h1>Overview</h1>
-      <p>The row of buttons across the top is gone. Navigation moved to a rail on the left, which is also where the machine's identity, its state, and the one power control live. The identity under the name ends with the GPU the guest's adapter runs on, because with accel-virt that is the GPU Windows sees.</p>
     </div>
 
     <div class="frame">
@@ -925,7 +869,6 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
             <span class="tag">wgc, paused</span>
             <div class="pbadge"><span class="disc"><i></i><i></i></span><span class="cap">click to play</span></div>
           </div>
-          <figcaption>No frame yet: flat grey, the badge, the tag already paused.</figcaption>
         </figure>
         <figure>
           <div class="screen paused">
@@ -933,7 +876,6 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
             <div class="desk"></div>
             <div class="pbadge hot"><span class="disc"><i></i><i></i></span><span class="cap">click to play</span></div>
           </div>
-          <figcaption>Paused, pointer over it: the badge turns amber.</figcaption>
         </figure>
         <figure>
           <div class="screen">
@@ -942,7 +884,6 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
             <div class="hoverdim"></div>
             <div class="pbadge"><span class="disc"><i></i><i></i></span><span class="cap">click to pause</span></div>
           </div>
-          <figcaption>Playing, pointer over it: the pause control. Off the surface it is the bare stream.</figcaption>
         </figure>
       </div>
     </div>
@@ -958,13 +899,11 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
           <div class="screen" style="background:#000;border-radius:0">
             <span style="font-size:12px;color:var(--fg-faint)">Waiting for the guest to connect</span>
           </div>
-          <figcaption>Just opened: black, saying what it waits for. Then "Waiting for the guest's first frame" once the guest half has connected.</figcaption>
         </figure>
         <figure>
           <div class="screen" style="background:#000;border-radius:0">
             <div class="desk" style="inset:0 16%"></div>
           </div>
-          <figcaption>Narrower than the guest's screen at one to one: scaled down to fit, black bars beside it. With room, the picture is one to one and centred.</figcaption>
         </figure>
         <figure>
           <div class="cbar" style="border:1px solid var(--line);border-radius:var(--r-md)">
@@ -972,33 +911,16 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
             <span class="sub">running</span>
             <span class="acts"><button class="btn quiet" disabled title="Needs Windows running: the agent is offline">Open desktop</button></span>
           </div>
-          <figcaption>Agent offline: disabled, its tooltip saying why.</figcaption>
         </figure>
       </div>
     </div>
 
-    <dl class="notes">
-      <div class="note"><dt>Why it starts paused</dt><dd>The preview is the guest's primary monitor captured inside Windows (Windows Graphics Capture), sent the way the window mirrors send theirs, and drawn read-only: no pointer, wheel or key reaches the guest from it. A live capture costs the guest's GPU a copy of every frame and the host a draw of it, all for a thumbnail nobody may be watching. So the preview asks the agent for a capture, takes the first frame, and lets the capture go. The frame stays, desaturated and dimmed, with the pause badge over it and the tag ending in <code>paused</code>, so a still picture is never mistaken for a live one. A click plays it live, the tag saying how the frames come (<code>wgc, gpu</code> when they stay on the GPU, <code>wgc, pixels</code> when they do not); a second click pauses it again on the frame it was showing. Hidden, it captures nothing, and a preview that was playing plays again when it is shown. With no guest, the guest off, or its agent not answering yet, the screen is flat grey with no badge and the tag says which, because there is nothing to play. A capture that fails says why in the tag and goes back to the paused look; the badge then tries again.</dd></div>
-      <div class="note"><dt>Open desktop</dt><dd>The guest's whole screen in a window of its own, a real one: the window mirror captures the primary monitor inside Windows (Windows Graphics Capture) and draws it one guest pixel to one screen pixel, centred, when the window has room, and scaled down and letterboxed in black when it has not. The pointer and the keyboard go into the guest, and the guest's cursor is this window's own cursor rather than painted into the picture, so it follows the pointer with no lag. Its title is the machine's name and <code>desktop</code>, <code>lsw desktop</code> here. One window at a time: with it open, the button brings it to the front. Disabled, with nothing else on the bar changing, while the agent is offline: the capture runs inside Windows, so there is nothing to open until Windows answers. The preview above is the same capture, read-only and paused until clicked.</dd></div>
-      <div class="note"><dt>Why the rail</dt><dd>Four buttons in a row said nothing about where you were, and two of them were always disabled. The rail marks the current section, keeps the count of unread log records and pending settings in view, and leaves one power control instead of a Start and a Stop that take turns being dead.</dd></div>
-      <div class="note"><dt>One power button</dt><dd>It reads <code>Stop the guest</code> while running and <code>Start the guest</code> while off. The state badge above it is the thing that changes color, not the button.</dd></div>
-      <div class="note"><dt>Console and log</dt><dd>Now sections in the same window rather than separate top level windows. <code>Pop out</code> is still there for anyone who wants a second window.</dd></div>
-      <div class="note"><dt>Status bar</dt><dd>The transport facts that currently only exist in logs: the agent's port and the bus the disk sits on.</dd></div>
-      <div class="note"><dt>GPU line</dt><dd>The third line of the identity is the display adapter's host GPU, by its Vulkan device name, which is also the adapter's name inside Windows, and how many render-only adapters sit beside it. It is in the rail, so it is on every page; the Graphics page has the rest.</dd></div>
-      <div class="note"><dt>VRAM gauge</dt><dd>The host GPU's used and total VRAM, read on the host (<code>mem_info_vram_used</code> and <code>mem_info_vram_total</code> for amdgpu, NVML for NVIDIA), because what the guest allocates lives there. It counts everything on that GPU, the host desktop included. Windows' own dedicated memory figure is a budget the driver reports, not a place anything is put, so it is not a gauge. A host GPU that exposes neither hides the row.</dd></div>
-      <div class="note"><dt>Keeping Windows' half current</dt><dd>LSW's pieces inside Windows travel with LSW, so an LSW update brings new ones for every guest, including those set up by older releases. Each time the agent answers, once setup has finished, the manager compares the agent and the window mirror's guest half with the ones it ships and swaps any that differ, the agent restarting on the new binary; an agent too old to say what it is counts as different. While that runs, <code>Updating LSW in Windows</code> is a fact in the status bar. If it fails, the notice says why, with <code>Try again</code>; it is tried once per start of the manager otherwise, so a swap that keeps failing does not loop. The driver package is not part of this: it changes the display driver, so it waits for the user on the Graphics page.</dd></div>
-      <div class="note"><dt>Windows' clock</dt><dd>The VM's hardware clock runs on the host's local time, which Windows reads as its own: in another time zone, its clock is hours off after every boot. So the manager gives Windows the host's time zone, and the host's time when Windows' clock is more than two seconds off, each time the agent answers. Nothing is shown for it unless it fails, which is a notice like any other.</dd></div>
-      <div class="note"><dt>Notices</dt><dd>Something the manager tried that did not work is said once, in a strip across the top of the page, under the header: an application that could not be opened, libvirt refusing to start the guest or to take a new definition, the resolution not reaching the guest, the disk not growing, the desktop not opening. Red when the guest cannot run because of it, amber otherwise. The headline names what failed, the rest says why in the words that came back, and the buttons are what helps: <code>Open the log</code>, <code>Open desktop</code>, then <code>Dismiss</code>, quiet and last, on every one. They show on every page, newest first, one per kind of failure: the same failure again replaces its strip, and one that stops being true (the guest starts after all, the application opens on a second try) takes its strip away. Progress (<code>Restarting the guest</code>) is not a notice; it is a fact in the status bar while it lasts. Nothing pops up a message box.</dd></div>
-      <div class="note"><dt>Warning strip</dt><dd>Not shown here, because nothing is wrong. It appears on the overview for the Graphics warnings that break the guest: the host serves no Direct3D, or Windows is not running avgpu.sys (including having no driver for a display GPU switched since the install). It also appears for a driver update LSW brought, so it is not missed. Its button opens the Graphics page.</dd></div>
-    </dl>
   </section>
 
-  <!-- ─────────── MANAGER: GRAPHICS ─────────── -->
   <section data-view="m-gpu" hidden>
     <div class="stage-head">
       <span class="eyebrow">Manager</span>
       <h1>Graphics</h1>
-      <p>The guest's graphics adapters are this machine's GPUs. accel-virt gives Windows one paravirtual device per host GPU passed to it, named after that GPU, with its IDs and its VRAM, and every Direct3D, Vulkan, OpenGL and OpenCL call crosses to the host and runs on the host's own drivers. One adapter is the display; any others are render only, with no outputs, and applications pick between them as they would between two cards. There is nothing to assign per application. This page says which GPUs those are, what the host can serve on them, and whether the guest's driver runs on each.</p>
     </div>
 
     <div class="frame">
@@ -1175,30 +1097,12 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
       </div>
     </div>
 
-    <dl class="notes">
-      <div class="note"><dt>The adapters</dt><dd>One card per host GPU passed to the guest, the display adapter first and each render-only one after it. Name, IDs, UUID, memory and driver come from the host's own Vulkan enumeration, the same data <code>list_gpus.py</code> reads: <code>deviceName</code>, <code>vendorID</code> and <code>deviceID</code>, <code>deviceUUID</code>, the device-local heap, <code>driverName</code> and <code>driverInfo</code>. Windows sees exactly these names and IDs in Device Manager, dxdiag and DXGI, so what this page says and what an application says agree. Which GPUs are passed, and which one is the display, is set in Settings, under Graphics.</dd></div>
-      <div class="note"><dt>State per adapter</dt><dd>The pill on each card is Windows' side of that adapter, from the agent: <code>Started</code>, <code>No driver</code> (problem code 28, an adapter Windows has no driver for), or <code>Problem code N</code>. The agent's adapters are matched to the cards by vendor and device ID, then by name.</dd></div>
-      <div class="note"><dt>Dedicated memory</dt><dd>The host GPU's VRAM, reported to Windows as dedicated video memory. It is a budget, not a place: nothing is ever put in that segment, and what applications allocate lives on the host GPU. That is why the card gives no "used" figure for it. An integrated GPU has no device-local heap of its own and reads <code>shared</code>.</dd></div>
-      <div class="note"><dt>API checks</dt><dd>Probed on the host, off the window's thread, when the manager starts, at every boot and on <code>Check again</code>, the way the executor decides: a Vulkan driver, EGL with desktop OpenGL, an OpenCL ICD, and DXVK's and vkd3d-proton's native libraries in the folder LSW passes as <code>AV_D3D_PATH</code>. One block for every adapter, because each one's executor makes the same checks; where the Vulkan drivers differ the row names each. An API the host lacks is not offered to the guest, and its row reads <code>Not served</code> in grey. Applications that need it fail as they would on a card without it.</dd></div>
-      <div class="note"><dt>Only what was found</dt><dd>"The host runs it on" is what the host probe found and nothing else: driver names from Vulkan, EGL and the OpenCL ICDs, and a DXVK or vkd3d-proton version only where the library's file name carries one. What Windows makes of each API is not shown: only the guest could say, and nothing asks it.</dd></div>
-      <div class="note"><dt>Direct3D is different</dt><dd>Windows composes its desktop with Direct3D 11. Without DXVK and vkd3d-proton on the host, DWM crash-loops with <code>0x889800B2</code>. So these two rows go red with <code>Missing</code>, the rail gets a red dot, and the strip above shows on the overview too. <code>Check again</code> repeats the probe; it does not need a restart to clear the warning, but the guest needs one to get Direct3D.</dd></div>
-      <div class="note"><dt>Device</dt><dd>What the running domain's live definition has on its <code>virtio-gpu-av-pci</code> lines, read back from libvirt rather than from the settings: <code>host-gpu</code>, <code>hostmem</code>, and one <code>display=off</code> device per render-only GPU; with the machine off, the stored definition the next start boots. Fixed for the life of the machine; change them in Settings, under Graphics, and they land at the next restart, which the row says beside the value ("16 GiB after a restart") until then. "Taken by the driver" is the driver's own <code>host window status</code> line.</dd></div>
-      <div class="note"><dt>Display is live</dt><dd>Read from the display adapter's <code>modes</code> property and updated when it changes. The <code>Switch resolution</code> list in the card's header holds the modes offered; picking one makes it preferred, in Settings as well, and is a <code>qom-set</code> on that property: the device raises a display event, the driver replugs its monitor, and Windows switches. No restart. The rate is the device's <code>refresh</code> property, read the same way (<code>qom-get</code>), and shown as <code>-</code> when QEMU does not say; it is the one rate Windows is told for every mode.</dd></div>
-      <div class="note"><dt>Guest driver</dt><dd>From the agent, once per boot and after an install: every accel-virt adapter, found by its subsystem <code>1af4:5256</code> or the <code>avgpu</code> service, with its problem code and installed <code>DriverVersion</code>, one line each; <code>TESTSIGNING</code> in the boot options; and the driver search policy provisioning set. Windows Update would otherwise offer the vendor's real driver for these IDs, and on this device the real driver bugchecks. Submission comes from the driver log's <code>user-mode submission</code> and <code>native fences</code> lines.</dd></div>
-      <div class="note"><dt>New adapters</dt><dd>The driver package is signed for the PCI IDs of the host's GPUs, listed in <code>adapters.txt</code>, which is part of the release the manager ships to Windows (docs/guest-update.md). A GPU added to the host, or a switch of the machine's GPU, changes that list and so the release, and the update at the next boot of Windows signs and installs the driver for it. Until then the card shows the red strip, <b>Windows has no driver for</b> the new GPU, with the driver log beside it, and no button: the update does the install.</dd></div>
-      <div class="note"><dt>Driver updates</dt><dd>The driver is one of the files LSW keeps in Windows, brought to the shipped release by the guest update (Settings, <code>Update LSW in Windows</code>, and on its own at each boot when Windows has another release). There is no driver offer on this page: the update dialog shows the driver step with the others.</dd></div>
-      <div class="note"><dt>Driver log</dt><dd><code>avgpu.sys</code> writes <code>avgpu: ...</code> lines to I/O port 0x402. An <code>isa-debugcon</code> device on the machine puts them in <code>avgpu.log</code> in the data folder, across reboots and up to a bugcheck, so it still has the last line when Windows does not. The panel tails the file; the button opens all of it in the host's text editor.</dd></div>
-      <div class="note"><dt>What warns</dt><dd>Three things, each something the user can act on. No Direct3D on the host, red. The display adapter not running avgpu.sys, red: a problem code from the agent, usually a refused signature or a replaced driver; for problem code 28, a GPU switched since the install, the strip offers the install instead of only the log. A render-only adapter with no driver, amber, with the install button. A driver update LSW brought, amber, with the update button. The rail dot takes the worst color present. Nothing else on the page changes color.</dd></div>
-      <div class="note"><dt>Nothing per application</dt><dd>Every process opens the adapters through Windows' own loaders, so there is nothing to claim, pin, wait for or release. Applications pick a render-only GPU the way they pick between two physical cards.</dd></div>
-    </dl>
   </section>
 
-  <!-- ─────────── MANAGER: SETTINGS ─────────── -->
   <section data-view="m-settings" hidden>
     <div class="stage-head">
       <span class="eyebrow">Manager</span>
       <h1>Settings</h1>
-      <p>Machine, display, graphics, file manager integration, desktop entries. Every row says whether it takes effect now or at the next boot; restart changes collect at the bottom, and nothing reboots until you say so. Graphics is the accel-virt devices: which host GPUs the guest gets as adapters and which of them is the display, their host window, and whether the host driver runs in a process of its own. The resolution is now set on the running device, so it no longer waits for a restart.</p>
     </div>
 
     <div class="frame">
@@ -1597,6 +1501,66 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
             </div>
 
             <div class="sgroup">
+              <h5>Logs</h5>
+              <div class="srow">
+                <span>
+                  <span class="k">Manager <span class="tagr live">now</span></span>
+                  <span class="d">How much the manager says.</span>
+                </span>
+                <span class="ctl"><span class="input select" style="width:220px">Info</span></span>
+              </div>
+              <div class="srow">
+                <span>
+                  <span class="k">Window mirrors</span>
+                  <span class="d">Applies to mirrors started from now on.</span>
+                </span>
+                <span class="ctl"><span class="input select" style="width:220px">Info</span></span>
+              </div>
+              <div class="srow">
+                <span>
+                  <span class="k">Windows agent <span class="tagr live">now</span></span>
+                  <span class="d">How much the agent in Windows says.</span>
+                </span>
+                <span class="ctl"><span class="input select" style="width:220px">Info</span></span>
+              </div>
+              <div class="srow">
+                <span>
+                  <span class="k">Window mirrors in Windows</span>
+                  <span class="d">Applies to mirrors started from now on.</span>
+                </span>
+                <span class="ctl"><span class="input select" style="width:220px">Info</span></span>
+              </div>
+              <div class="srow">
+                <span>
+                  <span class="k">GPU</span>
+                  <span class="d">The GPU device, DXVK and vkd3d-proton. Applies the next time the guest starts.</span>
+                </span>
+                <span class="ctl"><span class="input select" style="width:220px">Warn</span></span>
+              </div>
+              <div class="srow">
+                <span>
+                  <span class="k">Debug logging</span>
+                  <span class="d">Every part at debug for 30 minutes, then back to the levels above.</span>
+                </span>
+                <span class="ctl"><button class="btn" disabled>Debug on, 24 min left</button><button class="btn">Stop</button></span>
+              </div>
+              <div class="srow">
+                <span>
+                  <span class="k">Log folder</span>
+                  <span class="d">Where every log is kept.</span>
+                </span>
+                <span class="ctl"><button class="btn">Open log folder</button></span>
+              </div>
+              <div class="srow">
+                <span>
+                  <span class="k">Collect logs for a bug report</span>
+                  <span class="d">Packs the logs, Windows' logs and system details into one archive. Window titles and file names appear in logs; read it before you share it.</span>
+                </span>
+                <span class="ctl"><button class="btn">Collect logs</button></span>
+              </div>
+            </div>
+
+            <div class="sgroup">
               <h5>Images</h5>
               <div class="srow">
                 <span>
@@ -1645,26 +1609,12 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
       </div>
     </div>
 
-    <dl class="notes">
-      <div class="note"><dt>Restart is explicit</dt><dd>Nothing reboots behind your back. Restart-only fields are tagged <code>restart</code>, edits stay staged, and the bar at the bottom shows exactly what changed before it offers the reboot.</dd></div>
-      <div class="note"><dt>Live fields apply on the spot</dt><dd>Tagged <code>now</code>, written to <code>manager.toml</code> as they change. Mixing the two kinds in one page is fine as long as each row says which it is.</dd></div>
-      <div class="note"><dt>Pending count</dt><dd>The rail shows an amber count next to Settings, so a staged change is visible from any other section.</dd></div>
-      <div class="note"><dt>Files</dt><dd>The SMB path already exists: the machine forwards <code>127.0.0.1:5445</code> to the guest's 445, and the bookmark is served in userspace by the file manager rather than mounted, so Windows junctions never turn into a pile of extra mounts. The new part is the GTK bookmark file beside the KDE one, the choice of what to share, and a host folder going the other way.</dd></div>
-      <div class="note"><dt>Desktop entries</dt><dd>Publishing already writes a .desktop and a menu fragment per application. The page adds the category name, a per-application choice, file type handlers, and a rewrite button for when a launcher is showing a stale icon.</dd></div>
-      <div class="note"><dt>Display</dt><dd>The host decides which modes the guest's display offers, and can change them while Windows runs. The list is the device's <code>modes</code> property, <code>WxH</code> between commas, the first preferred; LSW sets it with a <code>qom-set</code>, the device raises a display event, the driver replugs its monitor, and Windows switches when the list lacks the mode it is showing. So the list, the preferred mode and matching the monitor all apply now. So does the refresh rate: the device's <code>refresh</code> property, in millihertz, is one rate for every mode; setting it changes the blank clock and the mode list the driver reads, and the same display event has Windows switch to it. Same as monitor, the default, is the rate of the screen the manager is on, set again when that screen's rate changes or the window moves to another; the other choices are the rates the host's monitors list. An empty list is the host monitors' own modes. So does the scale: the agent sets it the way Windows' own Settings does, in the user's session, which only takes Windows' steps (100, 125, 150 %...), so a host scale between them goes to the nearest. The adapter's video memory is no longer a setting: it is the host GPU's VRAM.</dd></div>
-      <div class="note"><dt>Resolution limits</dt><dd>The editor refuses what the driver would silently drop, with the reason beside the field: an edge under 100 (the smallest source mode dxgkrnl accepts), or an edge over 4095. The pixel clock is no limit on a size: the driver times every mode with 160 pixels of horizontal blanking and one blank line per 24 active ones at the refresh the device states, so the clock is <code>(W + 160) &times; (H + H/24) &times; refresh</code>. An EDID detailed timing stores it in 10 kHz units up to 65535, so a mode too fast for that (2560 &times; 1440 at 360 Hz) is stated there at the fastest rate that fits, and Windows is told the real one. The device carries at most 32 modes. Presets are the common sizes and the monitors connected to this machine, by connector; any other size is typed. Duplicates are refused.</dd></div>
-      <div class="note"><dt>Graphics</dt><dd>Both rows are properties of the <code>virtio-gpu-av-pci</code> device lines, so both restart. The adapter table lists every host Vulkan device with its vendor and device IDs, VRAM and driver; software rasterizers such as llvmpipe are left out unless they are the only device. Its Display row is <code>host-gpu</code> on the display device: <code>auto</code>, shown as <code>Display (auto)</code> on the first device, until a row is picked, then that GPU's Vulkan UUID, which survives reboots and driver updates where enumeration order does not. Picking Display on another row moves the display there and makes the old one render only; the display row offers no other role, because there is always exactly one. Each Render only row adds one <code>display=off</code> device bound to that GPU, up to eight. Host window is <code>hostmem</code>: the CPU reads GPU results from it cached instead of uncached, host memory backs it only as chunks are placed, and what does not fit falls back to guest RAM. At 256 MiB applications run out, so the list starts at 2 GiB.</dd></div>
-      <div class="note"><dt>Scrolling</dt><dd>Shown in full here. In the window the list scrolls and the amber bar stays pinned to the bottom.</dd></div>
-      <div class="note"><dt>Where the tools went</dt><dd>Settings, under Images. The wizard's ISO page has the other entry point.</dd></div>
-    </dl>
   </section>
 
-  <!-- ─────────── MANAGER: CONSOLE ─────────── -->
   <section data-view="m-console" hidden>
     <div class="stage-head">
       <span class="eyebrow">Manager</span>
       <h1>Console</h1>
-      <p>A shell into the guest, in the same window. Same mono face as the log, so output pasted between the two lines up.</p>
     </div>
     <div class="frame">
       <div class="titlebar">
@@ -1719,12 +1669,10 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
     </div>
   </section>
 
-  <!-- ─────────── MANAGER: LOG ─────────── -->
   <section data-view="m-log" hidden>
     <div class="stage-head">
       <span class="eyebrow">Manager</span>
       <h1>Log</h1>
-      <p>Fixed columns, so severity scans down the left edge instead of hiding inside a sentence.</p>
     </div>
     <div class="frame">
       <div class="titlebar">
@@ -1752,36 +1700,85 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
         <div class="content">
           <div class="cbar">
             <h4>Log</h4>
-            <span class="sub">1 284 records &middot; live</span>
+            <span class="sub">live</span>
             <span class="acts">
-              <span class="input ph" style="width:180px">Filter</span>
-              <button class="btn">Info</button>
-              <button class="btn" style="color:var(--amber)">Warn</button>
-              <button class="btn" style="color:var(--bad)">Error</button>
-              <button class="btn quiet">Save</button>
+              <button class="btn quiet">Clear</button>
+              <button class="btn quiet">Pop out</button>
             </span>
           </div>
-          <div style="flex:1;padding:6px 0">
-            <div class="logline"><span class="ts">01:31:44.203</span><span class="lv i">INFO</span><span>rpc: session opened from 127.0.0.1:5102</span></div>
-            <div class="logline"><span class="ts">01:31:45.007</span><span class="lv i">INFO</span><span>catalog: 47 shortcuts enumerated in 812 ms</span></div>
-            <div class="logline"><span class="ts">01:32:02.551</span><span class="lv w">WARN</span><span>icon: get_icon fell back to shell extraction for C:\Program Files\Adobe\Photoshop 2024\Photoshop.exe</span></div>
-            <div class="logline"><span class="ts">01:32:19.884</span><span class="lv i">INFO</span><span>launch: started pid 6104, session 1, elevated linked token</span></div>
-            <div class="logline"><span class="ts">01:32:20.310</span><span class="lv i">INFO</span><span>remotewin-guest: attached to hwnd 0x000705AE, 1600 x 900</span></div>
-            <div class="logline"><span class="ts">01:34:58.006</span><span class="lv e">ERROR</span><span>rpc: reply dropped, ring full, backpressure for 42 ms</span></div>
-            <div class="logline"><span class="ts">01:35:01.442</span><span class="lv i">INFO</span><span>rpc: ring drained, throughput 118 MiB/s</span></div>
-            <div class="logline"><span class="ts">01:41:12.900</span><span class="lv i">INFO</span><span>stats: cpu 23 %, rss 5.1 GiB, disk 34.2 GiB</span></div>
+          <div class="cbar" style="gap:8px">
+            <span class="input select" style="width:170px;padding:5px 9px;font-size:12px">All</span>
+            <span class="input ph" style="flex:1;padding:5px 9px;font-size:12px">Find</span>
+            <button class="btn">&#9650;</button>
+            <button class="btn">&#9660;</button>
+            <span class="sub" style="display:flex;align-items:center;gap:5px"><span class="toggle on"><i></i></span> Autoscroll</span>
+            <button class="btn">Info</button>
+            <button class="btn" style="color:var(--amber)">Warn</button>
+            <button class="btn" style="color:var(--bad)">Error</button>
+          </div>
+          <div style="flex:1;padding:6px 0;background:#07090d">
+            <div class="logline"><span class="ts">01:31:44.203</span><span class="lv i">INFO</span><span>manager rpc: session opened from 127.0.0.1:5102</span></div>
+            <div class="logline"><span class="ts">01:31:45.007</span><span class="lv i">INFO</span><span>agent catalog: 47 shortcuts enumerated in 812 ms</span></div>
+            <div class="logline"><span class="ts">01:32:02.551</span><span class="lv w">WARN</span><span>agent session 1 icon: get_icon fell back to shell extraction for C:\Program Files\Adobe\Adobe Photoshop 2024\Photoshop.exe, which has no icon resource of its own and no shortcut that names one</span></div>
+            <div class="logline"><span class="ts">01:32:19.884</span><span class="lv i">INFO</span><span>agent launch: started pid 6104, session 1, elevated linked token</span></div>
+            <div class="logline"><span class="ts">01:32:20.310</span><span class="lv i">INFO</span><span>mirror photoshop: attached to hwnd 0x000705AE, 1600 x 900</span></div>
+            <div class="logline"><span class="ts">01:34:58.006</span><span class="lv e">ERROR</span><span>manager rpc: reply dropped, ring full, backpressure for 42 ms</span></div>
+            <div class="logline"><span class="ts">01:35:01.442</span><span class="lv i">INFO</span><span>manager rpc: ring drained, throughput 118 MiB/s</span></div>
+            <div class="logline"><span class="ts">01:41:12.900</span><span class="lv i">INFO</span><span>manager stats: cpu 23 %, rss 5.1 GiB, disk 34.2 GiB</span></div>
+          </div>
+          <div class="cbar" style="border-top:1px solid var(--line);border-bottom:none">
+            <button class="btn quiet">Open log folder</button>
+            <button class="btn quiet">Collect logs</button>
+            <span class="sub" style="margin-left:auto">1 284 records</span>
           </div>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- ─────────── MANAGER: LAUNCH SPLASH ─────────── -->
+  <section data-view="m-collect" hidden>
+    <div class="stage-head">
+      <span class="eyebrow">Manager</span>
+      <h1>Collect logs</h1>
+    </div>
+
+    <div class="frame dlg" style="max-width:520px">
+      <div class="titlebar">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <span class="t">Collect logs</span>
+      </div>
+      <div style="padding:22px 22px 18px;display:flex;flex-direction:column;gap:14px;background:var(--ink)">
+        <span style="font-size:15px;font-weight:600">Collect logs</span>
+        <div style="display:flex;flex-direction:column;gap:7px">
+          <div style="display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--fg-dim)">
+            <span style="color:var(--ok);width:13px;text-align:center">&#10003;</span> Collecting Windows' logs
+          </div>
+          <div style="display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--fg-dim)">
+            <span style="color:var(--ok);width:13px;text-align:center">&#10003;</span> Copying the host logs
+          </div>
+          <div style="display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--fg-dim)">
+            <span style="color:var(--ok);width:13px;text-align:center">&#10003;</span> Writing the system details
+          </div>
+          <div style="display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--fg-dim)">
+            <span style="color:var(--ok);width:13px;text-align:center">&#10003;</span> Writing the archive
+          </div>
+        </div>
+        <span style="font-size:12.5px;color:var(--fg-dim)">Saved as</span>
+        <span class="input" style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">~/.local/share/lsw/logs/lsw-logs-20261102-143518.tar.gz</span>
+        <span class="meta">Window titles and file names appear in logs. Read the archive before you share it.</span>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button class="btn quiet">Copy path</button>
+          <button class="btn">Show in folder</button>
+          <button class="btn primary">Close</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <section data-view="m-splash" hidden>
     <div class="stage-head">
       <span class="eyebrow">Manager</span>
       <h1>Starting the guest</h1>
-      <p>What you get when you click a Windows application in your launcher and the VM is off. It is the only LSW window most people will see on a normal day, so it names the application, says which part is slow, and stays out of the way. Graphics needs no step of its own: the application opens the guest's adapter like any program on a real card.</p>
     </div>
 
     <div class="frame dlg" style="max-width:420px">
@@ -1881,21 +1878,12 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
       </div>
     </div>
 
-    <dl class="notes">
-      <div class="note"><dt>A launch that fails</dt><dd>From the launcher, with the manager's own window closed, there is nowhere for a notice to go, so a failed launch is this same window in its failed state: whether the guest had to be started for it or was already up. The reason is a red callout in the words that came back, and the buttons are the log, Close, and Try again. Launched from the grid, the failure is a notice on the overview instead.</dd></div>
-      <div class="note"><dt>When it appears</dt><dd>Only when the guest is not already up. Launching into a running guest opens the application's window directly, with no splash at all.</dd></div>
-      <div class="note"><dt>Named phases</dt><dd>Machine, Windows, agent, application. A cold start is around 40 seconds and the slow part moves around, so a single spinner would tell you nothing about whether it is stuck.</dd></div>
-      <div class="note"><dt>Hide, not cancel</dt><dd>Hide sends it to the tray and the application still opens when it is ready. Cancel stops the launch and, if the manager started the guest for this, offers to stop it again.</dd></div>
-      <div class="note"><dt>No graphics phase</dt><dd>Every process opens the guest's one adapter through Windows' own loaders, so there is nothing to claim or wait for between the agent answering and the application running. A guest whose adapter is broken still boots; the Graphics page and the overview say why.</dd></div>
-    </dl>
   </section>
 
-  <!-- ─────────── MANAGER: CONFIG DIALOG ─────────── -->
   <section data-view="m-cfg" hidden>
     <div class="stage-head">
       <span class="eyebrow">Manager</span>
       <h1>Configure application</h1>
-      <p>Arguments and environment are different things and get different fields, because a variable typed into arguments reaches the app as a filename to open.</p>
     </div>
     <div class="frame dlg">
       <div class="titlebar">
@@ -1945,21 +1933,12 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
         <button class="btn primary">Save</button>
       </div>
     </div>
-    <dl class="notes">
-      <div class="note"><dt>Identity first</dt><dd>Icon, name, and where the icon came from sit above the form, so the dialog opens by confirming what you are editing.</dd></div>
-      <div class="note"><dt>Browse the guest</dt><dd>The path field is a Windows path, so the button opens a picker that reads the guest rather than your own disk. Working folder gets the same treatment and defaults to wherever the program lives.</dd></div>
-      <div class="note"><dt>No graphics fields</dt><dd>An application gets the guest's adapter the way it would get a physical card, so there is no channel or GPU to choose per application. One that wants the render-only GPU picks it itself, as it would between two cards.</dd></div>
-      <div class="note"><dt>A store application</dt><dd>One added from the Microsoft Store has no path: Windows starts it by its Application User Model ID. The path field becomes <code>Store application</code>, showing that ID read-only with no Browse button, and Working folder and Environment are gone, because Windows' activation takes neither from whoever asks. Arguments stay. Replace icon asks Windows for the application's own logo again.</dd></div>
-      <div class="note"><dt>Destructive left</dt><dd>Remove is separated from Cancel and Save, quiet by default, and confirms before it deletes the entry and its .desktop file.</dd></div>
-    </dl>
   </section>
 
-  <!-- ─────────── MANAGER: OPEN A FILE WINDOWS CANNOT SEE ─────────── -->
   <section data-view="m-opendoc" hidden>
     <div class="stage-head">
       <span class="eyebrow">Manager</span>
       <h1>Windows can't see this file</h1>
-      <p>Shown when a file is opened from the host's file manager and its folder is not one of the folders shared with the guest. It names the file and its folder, and offers the two ways forward: share the folder, which restarts Windows once, or open a copy that stays in Windows.</p>
     </div>
 
     <div class="frame dlg" style="max-width:560px">
@@ -1981,17 +1960,12 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
         <button class="btn primary">Share the folder and restart Windows</button>
       </div>
     </div>
-    <dl class="notes">
-      <div class="note"><dt>Several files</dt><dd>Files from several folders get one dialog that lists every folder. Sharing adds all of them; a copy is made of each file.</dd></div>
-      <div class="note"><dt>Nothing replaces your defaults</dt><dd>Opening a file this way never changes which application a file type opens with.</dd></div>
-    </dl>
   </section>
 
   <section data-view="m-update" hidden>
     <div class="stage-head">
       <span class="eyebrow">Manager</span>
       <h1>Updating LSW in Windows</h1>
-      <p>Opens by itself whenever a run starts: at boot, when Windows has a different LSW release than this manager ships, or from Settings. It names the versions, follows the host's steps, and has no way out while it runs, because the agent is being replaced and nothing in the app can use Windows. A check that finds Windows current never opens it.</p>
     </div>
 
     <div class="frame dlg" style="max-width:480px">
@@ -2019,19 +1993,12 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
         <span class="meta">Apps in Windows cannot be opened until this finishes.</span>
       </div>
     </div>
-    <dl class="notes">
-      <div class="note"><dt>Versions</dt><dd>With no version known for Windows it reads "Windows has an earlier LSW, updating to 0.2.0".</dd></div>
-      <div class="note"><dt>Restarting Windows</dt><dd>Listed only once the run reaches it, between Updating Windows and Done.</dd></div>
-      <div class="note"><dt>When it ends</dt><dd>Success reads "Windows has LSW 0.2.0", lists each step Windows took as updated or already current, and has Close. A failure shows the message, which names C:\ProgramData\LSW\update.log, the step it stopped on marked, and Try again beside Close.</dd></div>
-    </dl>
   </section>
 
-  <!-- ─────────── MANAGER: ADD A STORE APP ─────────── -->
   <section data-view="m-store" hidden>
     <div class="stage-head">
       <span class="eyebrow">Manager</span>
       <h1>Add a store app</h1>
-      <p>An application from the Microsoft Store has no executable anybody may run, so there is no path to browse to. The dialog lists what the guest's user has installed from the Store, with the icons Windows shows for them, and adds the one picked.</p>
     </div>
 
     <div class="frame dlg">
@@ -2085,22 +2052,12 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
       </div>
     </div>
 
-    <dl class="notes">
-      <div class="note"><dt>Two kinds behind one button</dt><dd>The add button in the applications panel opens a menu: <code>Add a regular app</code> is the configure dialog with an empty path, as before; <code>Add a store app</code> is this list. Each item's tooltip says what it is for, because "regular" means nothing until you have met the other kind.</dd></div>
-      <div class="note"><dt>What is listed</dt><dd>The packaged applications in the guest user's All apps list (the shell's AppsFolder), by name, sorted, each with the package family under it in mono so two of a name can be told apart. The agent answers it from the user's own session (<code>list_store_apps</code>), since packages are installed per user and the service sees none. Icons come with the list, drawn by Windows at the row's size, so the list arrives whole in one round trip.</dd></div>
-      <div class="note"><dt>Search</dt><dd>The field has the focus when the dialog opens, and narrows the list as you type, by name or package family, ignoring case. The footer counts what is shown against what there is. Enter adds the selected row; a double-click adds the one clicked.</dd></div>
-      <div class="note"><dt>What Add makes</dt><dd>An application entry like any other, named and iconed as Windows shows it, its icon read again at 256 pixels for the launcher. Its Configure dialog shows the store application's ID where a path would be (see Configure application). Adding one already in the grid selects that entry instead of making a second.</dd></div>
-      <div class="note"><dt>Starting one</dt><dd>Windows starts a store application by activation (<code>launch_store_app</code>), not from its executable. The process comes from Windows' broker, in no job of the agent's, so the mirror follows it by the process Windows names, and everything that process starts.</dd></div>
-      <div class="note"><dt>Open and opening</dt><dd>A tile carries a mark on its icon's corner instead of a line of text under its name: a hollow amber ring while the application is being opened, a solid green dot while its windows are mirrored here, nothing otherwise. The tooltip says which in words. A failed launch still says why under the grid.</dd></div>
-    </dl>
   </section>
 
-  <!-- ─────────── MANAGER: REMOTE FILE PICKER ─────────── -->
   <section data-view="m-picker" hidden>
     <div class="stage-head">
       <span class="eyebrow">Manager</span>
       <h1>Browse the guest</h1>
-      <p>A file picker that reads the guest over the agent connection, not your own disk. It opens where applications actually live, so picking one is two clicks rather than typing a Windows path from memory.</p>
     </div>
 
     <div class="frame" style="max-width:760px">
@@ -2203,21 +2160,12 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
       </div>
     </div>
 
-    <dl class="notes">
-      <div class="note"><dt>Needs one new command</dt><dd>The agent has <code>list_apps</code>, <code>launch</code> and <code>get_icon</code>, but nothing that lists a directory. This adds <code>list_dir</code>: a path in, one page of entries out, each with name, whether it is a folder, size, modified time and an icon id. Paging matters because <code>C:\\Windows\\System32</code> is five thousand entries and the reply slot is not the place to find that out.</dd></div>
-      <div class="note"><dt>Icons come from the same place as the app list</dt><dd><code>get_icon</code> already extracts one from an executable or a shortcut. The picker asks for them lazily, only for the rows on screen, so opening a folder is one round trip and not one per file.</dd></div>
-      <div class="note"><dt>Opens where applications are</dt><dd>Default location is the Start menu Programs folder, which is exactly what the catalog already enumerates. Program Files and the mapped host drives are one click away in the sidebar.</dd></div>
-      <div class="note"><dt>Shortcuts are resolved</dt><dd>Choosing a .lnk stores what it points at, plus its arguments and working folder, so the entry keeps working if the shortcut is deleted later.</dd></div>
-      <div class="note"><dt>Not the SMB share</dt><dd>The share in Settings exists for your file manager and can be turned off. The picker goes over the agent connection, so it works regardless, and it sees the guest as the account that will run the program.</dd></div>
-    </dl>
   </section>
 
-  <!-- ─────────── MANAGER: EMPTY ─────────── -->
   <section data-view="m-empty" hidden>
     <div class="stage-head">
       <span class="eyebrow">Manager</span>
       <h1>No guest yet</h1>
-      <p>What the manager shows before the wizard has ever run. The rail keeps its shape, the sections that need a guest are unavailable, and one action leads somewhere.</p>
     </div>
     <div class="frame">
       <div class="titlebar">
@@ -2260,19 +2208,12 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
         </div>
       </div>
     </div>
-    <dl class="notes">
-      <div class="note"><dt>Why</dt><dd>Today the panel opens with dead buttons and blank gauges. Naming the situation and offering the wizard removes the only genuinely confusing moment in the app.</dd></div>
-    </dl>
   </section>
 
-  <!-- ═══════════════ WIZARD ═══════════════ -->
-
-  <!-- 01 -->
   <section data-view="w-1" hidden>
     <div class="stage-head">
       <span class="eyebrow">Wizard, step 01</span>
       <h1>Welcome</h1>
-      <p>The wizard gains a permanent step rail, so the length of the process is visible from the first screen instead of being discovered one Next at a time.</p>
     </div>
     <div class="frame narrow">
       <div class="titlebar">
@@ -2323,18 +2264,12 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
         </div>
       </div>
     </div>
-    <dl class="notes">
-      <div class="note"><dt>Step rail</dt><dd><code>QWizard::setSideWidget()</code>. Costs one widget, and turns ten unlabelled screens into a visible sequence with the current one marked.</dd></div>
-      <div class="note"><dt>Copy</dt><dd>Four stage cards instead of a numbered paragraph. Same information, scannable, and it survives translation better than a run on sentence.</dd></div>
-    </dl>
   </section>
 
-  <!-- 02 -->
   <section data-view="w-2" hidden>
     <div class="stage-head">
       <span class="eyebrow">Wizard, step 02</span>
       <h1>Licensing</h1>
-      <p>A gate, not a wall of text. One paragraph, one checkbox, and the Next button stays disabled until it is ticked.</p>
     </div>
     <div class="frame narrow">
       <div class="titlebar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="t">LSW first-run wizard</span></div>
@@ -2361,12 +2296,10 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
     </div>
   </section>
 
-  <!-- 03 -->
   <section data-view="w-3" hidden>
     <div class="stage-head">
       <span class="eyebrow">Wizard, step 03</span>
       <h1>Windows ISO</h1>
-      <p>One field: the image to install. Getting an image and shrinking one are both tools, reachable from here, and neither is on the path to Next.</p>
     </div>
     <div class="frame narrow">
       <div class="titlebar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="t">LSW first-run wizard</span></div>
@@ -2412,18 +2345,12 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
         </div>
       </div>
     </div>
-    <dl class="notes">
-      <div class="note"><dt>What changed</dt><dd>The two radio cards are gone. Downloading is not an alternative way to answer this question, it is a thing that produces an answer, so it became a button that fills the field.</dd></div>
-      <div class="note"><dt>Either tool can be skipped</dt><dd>Both write an ISO and hand back its path. Neither blocks Next, and a failure in either leaves the field exactly as it was.</dd></div>
-    </dl>
   </section>
 
-  <!-- 04 -->
   <section data-view="w-4" hidden>
     <div class="stage-head">
       <span class="eyebrow">Wizard, step 04</span>
       <h1>Size and account</h1>
-      <p>Sliders bounded by the real host: 20 threads, 31 GiB of memory, 412 GiB free. The ceilings are facts, not guesses.</p>
     </div>
     <div class="frame narrow">
       <div class="titlebar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="t">LSW first-run wizard</span></div>
@@ -2472,19 +2399,12 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
         </div>
       </div>
     </div>
-    <dl class="notes">
-      <div class="note"><dt>Language</dt><dd>The languages the image carries, from its <code>sources/lang.ini</code>, read in the background like the editions; the image's own default is selected. Windows Setup runs in it, and it is the answer file's UI language, locales and keyboard: an answer naming a language the image lacks is one Setup cannot apply, and it stops on its language page. A British image carries <code>en-GB</code> and no <code>en-US</code>. An image whose languages cannot be read says so, and the install takes its default.</dd></div>
-      <div class="note"><dt>Consequence line</dt><dd>The footnote recalculates as the disk slider moves. Sizing decisions are easier when the cost is spelled out next to the control.</dd></div>
-      <div class="note"><dt>Reinstall</dt><dd>Settings' Reinstall opens this wizard over a guest that exists, still running. Nothing happens to it until the install starts, so this page, whose Next starts it, says in a red callout under the footnote that the guest is shut down and replaced. It is absent on a first run. Closing the wizard before then returns to the manager.</dd></div>
-    </dl>
   </section>
 
-  <!-- TOOL: DOWNLOAD -->
   <section data-view="w-download" hidden>
     <div class="stage-head">
       <span class="eyebrow">Tool, opens from a button</span>
       <h1>Download a Windows image</h1>
-      <p>Also not a step. Fetching an ISO is a thing you do once and keep, so it is a tool with its own output folder, openable from the wizard or from the manager, and skippable entirely if you already have an image.</p>
     </div>
 
     <div class="frame dlg" style="max-width:640px">
@@ -2555,19 +2475,12 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
       </div>
     </div>
 
-    <dl class="notes">
-      <div class="note"><dt>Why a tool</dt><dd>The download page could only ever run once, in one place, and a wizard that had already committed to downloading could not go back. As a tool it can run before the wizard, be cancelled without losing anything, and be reopened to fetch a second edition.</dd></div>
-      <div class="note"><dt>When Microsoft refuses</dt><dd>The portal rate limits automated requests. The dialog says so, keeps the edition list it already has, and closes without a file. The wizard is unaffected because it never depended on this succeeding.</dd></div>
-      <div class="note"><dt>Same shape as the trim tool</dt><dd>Source at the top, options in the middle, output folder and filename at the bottom, progress above the footer. Both dialogs are the same widget skeleton.</dd></div>
-    </dl>
   </section>
 
-  <!-- TOOL: TRIM -->
   <section data-view="w-trim" hidden>
     <div class="stage-head">
       <span class="eyebrow">Tool, opens from a button</span>
       <h1>Trim a Windows image</h1>
-      <p>No longer a step. It is a dialog you open when you want it, from the wizard's ISO page or from the manager, and it writes a new ISO wherever you point it. The source image is never modified.</p>
     </div>
 
     <div class="frame dlg" style="max-width:640px">
@@ -2651,21 +2564,12 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
       </div>
     </div>
 
-    <dl class="notes">
-      <div class="note"><dt>Edition to keep</dt><dd>Trimming keeps one edition, so the choice is made here, not later in the wizard. It starts on Pro when the image has it, as the wizard's edition question does; image 1 on Microsoft's media is Home. While the WIM is read the box says <i>Reading the editions...</i> and is disabled, and so is Trim. An image whose editions cannot be read says so. With no image picked it says <i>Pick an image first</i>.</dd></div>
-      <div class="note"><dt>Why a tool</dt><dd>Trimming is not part of installing. Forcing it into the sequence made a mandatory wait out of an optional optimisation, and gave the wizard a page that had to be re-run whenever the user went back.</dd></div>
-      <div class="note"><dt>Output path</dt><dd>Folder and filename are separate fields, so the ISO can land anywhere: an external disk, a shared images folder, next to the source. The default stays <code>~/.local/share/lsw/isos</code> for anyone who does not care.</dd></div>
-      <div class="note"><dt>Two entry points</dt><dd>From the wizard's ISO page, where the checkbox hands the result straight to the install. From the manager, where it is a standalone image tool and the checkbox is absent.</dd></div>
-      <div class="note"><dt>Try it</dt><dd>Click the third level. The warning and the estimated output size both change.</dd></div>
-    </dl>
   </section>
 
-  <!-- 07 -->
   <section data-view="w-7" hidden>
     <div class="stage-head">
       <span class="eyebrow">Wizard, step 05</span>
       <h1>Payload</h1>
-      <p>Two artifacts, each with its own state. A checklist beats one indeterminate bar for work that has parts.</p>
     </div>
     <div class="frame narrow">
       <div class="titlebar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="t">LSW first-run wizard</span></div>
@@ -2695,12 +2599,10 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
     </div>
   </section>
 
-  <!-- 08 -->
   <section data-view="w-8" hidden>
     <div class="stage-head">
       <span class="eyebrow">Wizard, step 06</span>
       <h1>Installing Windows</h1>
-      <p>The screen is the content. The status line above it says which phase the pipeline is in, and the guest console fills the rest.</p>
     </div>
     <div class="frame narrow">
       <div class="titlebar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="t">LSW first-run wizard</span></div>
@@ -2730,17 +2632,12 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
         </div>
       </div>
     </div>
-    <dl class="notes">
-      <div class="note"><dt>Failure</dt><dd>If setup rejects the answer file, the guest shows a dialog and the wizard would otherwise wait forever. The redesign watches for a stalled install and offers the setup log instead of an indeterminate bar that never ends.</dd></div>
-    </dl>
   </section>
 
-  <!-- 09 -->
   <section data-view="w-9" hidden>
     <div class="stage-head">
       <span class="eyebrow">Wizard, step 07</span>
       <h1>Setup steps</h1>
-      <p>The steps from <span class="mono">setup-steps.json</span>, live from the guest agent. Parallel steps in a stage are visibly grouped. Graphics is not a step: there is no DXVK or VKD3D-Proton in the guest any more, because accel-virt's driver package carries Direct3D, Vulkan, OpenGL and OpenCL drivers of its own, and Windows installs it from the payload before the first logon.</p>
     </div>
     <div class="frame narrow">
       <div class="titlebar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="t">LSW first-run wizard</span></div>
@@ -2777,12 +2674,10 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
     </div>
   </section>
 
-  <!-- 10 -->
   <section data-view="w-10" hidden>
     <div class="stage-head">
       <span class="eyebrow">Wizard, step 08</span>
       <h1>Finished</h1>
-      <p>A summary of what was actually built, then one button that goes where the user wants to be.</p>
     </div>
     <div class="frame narrow">
       <div class="titlebar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="t">LSW first-run wizard</span></div>
@@ -2817,12 +2712,10 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
     </div>
   </section>
 
-  <!-- ═══════════════ DESIGN SYSTEM ═══════════════ -->
   <section data-view="s-color" hidden>
     <div class="stage-head">
       <span class="eyebrow">Design system</span>
       <h1>Color</h1>
-      <p>Cool blue black for the host side, one warm amber reserved for the guest side and for the primary action. Semantic colors are separate from the accent and never used decoratively.</p>
     </div>
     <h3 style="margin:20px 0 10px;font-size:14px">Surfaces</h3>
     <div class="swatches">
@@ -2859,7 +2752,6 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
     <div class="stage-head">
       <span class="eyebrow">Design system</span>
       <h1>Type</h1>
-      <p>Archivo for interface text, JetBrains Mono for everything the machine said: paths, ports, sizes, timestamps, states.</p>
     </div>
     <div class="scale">
       <div class="row"><span class="spec">Archivo 600 &middot; 19px</span><span style="font-size:19px;font-weight:600">Size the machine and name the account</span></div>
@@ -2883,7 +2775,6 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
     <div class="stage-head">
       <span class="eyebrow">Design system</span>
       <h1>Components</h1>
-      <p>Every control in both applications, in every state it can be in.</p>
     </div>
 
     <h3 style="margin:20px 0 10px;font-size:14px">Buttons</h3>
@@ -2958,7 +2849,6 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
     <div class="stage-head">
       <span class="eyebrow">Design system</span>
       <h1>Qt mapping</h1>
-      <p>Nothing in this design needs a custom paint event. Every visual is reachable from a Qt stylesheet plus a handful of layout changes.</p>
     </div>
     <div class="grid2">
       <div class="block">
@@ -3035,7 +2925,6 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
   var STEPS = ["Welcome","Licensing","Windows ISO","Size and account",
                "Payload","Installing","Setup steps","Finished"];
 
-  // Build every wizard step rail from one list.
   document.querySelectorAll("[data-steps]").forEach(function(ol){
     var cur = parseInt(ol.getAttribute("data-current") || "1", 10);
     STEPS.forEach(function(name, i){
@@ -3065,30 +2954,18 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
     window.scrollTo({top:0, behavior:"instant"});
   }
 
-  // Capture mode. "?shot=<view>" strips the page's own chrome and
-  // leaves one mockup window, so a headless browser screenshot of the
-  // document is exactly the frame the design specifies. The compare
-  // tool in scripts/ drives this.
   var shot = new URLSearchParams(location.search).get("shot");
   if (shot) {
     showView(shot);
-    // display, not the hidden attribute: these all set an explicit
-    // display in the stylesheet, which wins over it.
     var gone = [".topbar", ".rail"];
     document.querySelectorAll(gone.join(",")).forEach(function(n){
       n.style.display = "none";
     });
-    // section, not [data-view]: the rail's buttons carry the same
-    // attribute and come first in the document.
     var section = document.querySelector('section[data-view="' + shot + '"]');
-    // :scope, so the mockup's own headings inside the frame survive.
-    section.querySelectorAll(":scope > .stage-head, :scope > .notes, :scope > h3")
+    section.querySelectorAll(":scope > .stage-head, :scope > h3")
       .forEach(function(n){
       n.style.display = "none";
     });
-    // Anything in the section that is not the mockup window goes too:
-    // the failure-state rows under some of the dialogs are a second
-    // frame, and the capture wants one.
     var first = section.querySelector(".frame");
     Array.prototype.forEach.call(section.children, function(child){
       if (child !== first && !child.contains(first)) {
@@ -3104,8 +2981,6 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
       first.style.boxShadow = "none";
       first.style.maxWidth = "none";
       first.style.border = "none";
-      // The window chrome the mockup draws is a picture of a title bar;
-      // the built application has a real one from the compositor.
       var bar = first.querySelector(".titlebar");
       if (bar) { bar.style.display = "none"; }
     }
@@ -3125,7 +3000,6 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
     b.addEventListener("click", function(){ showView(b.getAttribute("data-view")); });
   });
 
-  // Trim page: selecting the destructive level surfaces its warning.
   var trimBody = document.getElementById("trimBody");
   if (trimBody){
     var warn = document.getElementById("trimWarn");
@@ -3150,7 +3024,6 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
     trimBody.querySelector('[data-trim="sane"]').click();
   }
 
-  // App grid selection.
   var grid = document.getElementById("appGrid");
   if (grid){
     grid.querySelectorAll(".app").forEach(function(a){

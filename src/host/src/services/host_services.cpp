@@ -16,7 +16,6 @@ namespace {
 
 using K = config::ManagerSettings::Key;
 
-// What apply_integrations reads. Keep in step with it.
 const QSet<QString>& integration_keys() {
     static const QSet<QString> keys = {
         K::kMenuCategory,  K::kPublishEntries, K::kFileAssociations, K::kSmbEnabled,  K::kGuestUser,
@@ -25,7 +24,7 @@ const QSet<QString>& integration_keys() {
     return keys;
 }
 
-}  // namespace
+}
 
 HostServices::HostServices(QObject* parent)
     : QObject(parent), settings_(this), manager_settings_(this),
@@ -38,20 +37,31 @@ HostServices::HostServices(QObject* parent)
       usb_(lifecycle_, status_, manager_settings_, this),
       host_shutdown_(lifecycle_, status_, this),
       app_configs_(QDir(settings_.data_dir()).filePath("apps"), this), log_store_(this),
+      vm_logs_(settings_.vm_logs_dir()),
+      logging_(settings_, manager_settings_, log_store_, this),
+      agent_log_levels_(status_, rpc_, manager_settings_, logging_.verbosity(), this),
+      log_collector_(settings_, manager_settings_, rpc_,
+                     [this] {
+                         SystemReport::Inputs inputs;
+                         inputs.shipped_release = status_.update().shipped_release;
+                         inputs.guest_release = status_.update().guest_release;
+                         inputs.agent_online = status_.vm().agent_online();
+                         inputs.domain_xml = lifecycle_.domain_xml(status_.vm().uuid);
+                         return inputs;
+                     },
+                     this),
       app_launcher_(rpc_, this) {
-    // Wire the two services that consume the agent channel. Done here,
-    // not by the UI, so records and stats are collected from the moment
-    // the channel connects — the manager window may never be shown at
-    // all (``--launch`` opens a guest app directly).
     log_store_.attach(rpc_);
 
-    // No apply_integrations() here: it rewrites the desktop entries, and this
-    // runs in every process, including the second one a file manager starts
-    // for each double click, which hands its request to the first and exits.
-    // App::run applies them once it is the one that stays.
-    // Filtered by key: apply_integrations rewrites every desktop entry
-    // and both bookmark files, which is a lot of disk to touch because a
-    // slider on another page moved.
+    lifecycle_.set_before_start([this] { vm_logs_.prepare_start(); });
+    lifecycle_.set_avgpu_log_path(settings_.vm_avgpu_log_path());
+    lifecycle_.set_gpu_log_env([this] {
+        const QString level = config::LogVerbosity::effective(
+            manager_settings_, config::LogVerbosity::Part::Gpu);
+        return vm::Lifecycle::GpuLogEnv{config::LogVerbosity::dxvk_level(level),
+                                        config::LogVerbosity::vkd3d_level(level)};
+    });
+
     connect(&manager_settings_, &config::ManagerSettings::changed, this,
             [this](const QString& key) {
                 if (integration_keys().contains(key)) {
@@ -67,13 +77,6 @@ void HostServices::apply_integrations() {
         manager_settings_.bool_value(K::kFileAssociations));
     apps::DesktopLauncher::sync(app_configs_.configs());
 
-    // The bookmark is the same URL for both file managers, and both can
-    // be on at once: a KDE user and a GNOME user are not exclusive, and
-    // somebody with Dolphin and Thunar installed wants it in both.
-    // A bookmark pointing at a guest that does not exist is worse than
-    // no bookmark: it is a folder in somebody's sidebar that fails when
-    // clicked. So the share is only advertised once there is something
-    // behind it.
     const bool serving = manager_settings_.bool_value(K::kSmbEnabled) && vms_.primary() != nullptr;
     const QString user = manager_settings_.string_value(K::kGuestUser);
     const QString password = manager_settings_.string_value(K::kGuestPassword);
@@ -103,7 +106,6 @@ bool HostServices::bind_agent(const QUuid& uuid) {
 
 int HostServices::start_vm(const QUuid& uuid) {
     const auto* record = vms_.find(uuid);
-    // A start of a machine already up is a no-op, not a boot to time.
     const bool cold = !lifecycle_.is_running(uuid);
     const int rc = lifecycle_.start(uuid, record != nullptr && record->first_boot_done);
     if (rc == 0 && cold) {
@@ -119,10 +121,12 @@ bool HostServices::open() {
         LSW_ERROR("could not create LSW data directories");
         return false;
     }
+    logging_.start();
+    vm_logs_.refresh_links();
     if (libvirt_.open() != 0) {
         LSW_WARN("libvirt unavailable; VM controls disabled");
     }
     return true;
 }
 
-}  // namespace lsw::host::services
+}

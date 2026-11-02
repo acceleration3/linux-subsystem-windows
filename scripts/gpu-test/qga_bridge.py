@@ -1,22 +1,3 @@
-"""The QEMU guest agent's protocol, answered by an LSW VM.
-
-accel-virt's guest tools (tools/guest/guest_shell.py, ConsoleProgram in
-run_guest_suite.py, the tools/*_report.py sample reports) drive a guest
-through ``<work>/agent.sock``, a QEMU guest agent. An LSW VM has none: it
-has LSW's own agent and an SMB share. This serves the handful of guest
-agent commands those tools use from that pair, so they run unchanged:
-
-  guest-sync-delimited, guest-sync, guest-ping, guest-info
-  guest-exec, guest-exec-status      a process as SYSTEM in session 0, as the
-                                     guest agent runs it: LSW's run_script
-                                     starts a PowerShell launcher that writes
-                                     the process's output and exit code to
-                                     C:\\av\\qga, read back over the share
-  guest-file-open/read/write/close   a whole file over the share, at open
-                                     (read) or at close (write)
-
-Anything else is refused with an error object, never left unanswered.
-"""
 import base64
 import itertools
 import json
@@ -32,8 +13,6 @@ from lsw_link import GuestGone, LinkError
 
 EXEC_DIRECTORY = "C:\\av\\qga"
 DELIMITER = b"\xff"
-# How often guest-exec-status looks at the share: the tools poll every 250 ms
-# and each look is an smbclient process.
 STATUS_INTERVAL = 1.0
 LAUNCHER = r"""$ErrorActionPreference = 'Stop'
 $dir = '{directory}'
@@ -68,13 +47,10 @@ Move-Item -Force "$dir\$id.rc.tmp" "$dir\$id.rc"
 
 
 def command_line(arguments):
-    """Arguments joined as the Microsoft C runtime splits them back."""
     return subprocess.list2cmdline(arguments)
 
 
 class Guest:
-    """What the bridge does in the guest, shared by every connection."""
-
     def __init__(self, link, share):
         self.link = link
         self.share = share
@@ -229,8 +205,6 @@ class Server(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
 
 
 class Bridge:
-    """``<work>/agent.sock``, served on a thread until stopped."""
-
     def __init__(self, work, link, share):
         self.path = pathlib.Path(work) / "agent.sock"
         self.path.parent.mkdir(parents=True, exist_ok=True)

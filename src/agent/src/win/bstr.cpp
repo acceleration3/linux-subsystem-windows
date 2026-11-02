@@ -19,9 +19,7 @@ std::string Bstr::to_utf8(BSTR borrowed) {
     if (len == 0) {
         return {};
     }
-    // Length-delimited on purpose: a BSTR may contain embedded NULs, and
-    // treating it as a C string would truncate there.
     return util::TextEncoding::to_utf8(std::wstring(borrowed, len));
 }
 
-}  // namespace lsw::agent::win
+}

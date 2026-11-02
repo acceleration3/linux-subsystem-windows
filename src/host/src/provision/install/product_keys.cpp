@@ -6,10 +6,6 @@
 namespace lsw::host::provision::install {
 
 namespace {
-
-// KMS client keys: learn.microsoft.com/windows-server/get-started/kms-client-activation-keys.
-// The Core (Home) rows are the generic install keys, since Home has no
-// KMS key.
 constexpr std::array<std::pair<const char*, const char*>, 19> kKeys{{
     {"Core", "YTMG3-N6DKC-DKB77-7M9GH-8HVX7"},
     {"CoreN", "4CPRK-NM3K3-X6XXQ-RXX86-WXCHW"},
@@ -32,7 +28,7 @@ constexpr std::array<std::pair<const char*, const char*>, 19> kKeys{{
     {"IoTEnterpriseS", "KBN8V-HFGQ4-MGXVD-347P6-PDQGT"},
 }};
 
-}  // namespace
+}
 
 QString ProductKeys::for_edition(const QString& edition_id) {
     for (const auto& [edition, key] : kKeys) {
@@ -47,4 +43,4 @@ QString ProductKeys::fallback() {
     return for_edition(QStringLiteral("Professional"));
 }
 
-}  // namespace lsw::host::provision::install
+}

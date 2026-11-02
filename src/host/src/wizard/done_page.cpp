@@ -18,7 +18,6 @@ DonePage::DonePage(Wizard& wizard, QWidget* parent) : WizardPage(parent), wizard
 
     auto* lay = install_chrome(QStringLiteral("Installation finished"),
                                QStringLiteral("The guest agent is online. The VM is ready."));
-    // What was actually built, as four tiles, then where to go.
     auto* grid = new QGridLayout;
     grid->setSpacing(8);
     const auto tile = [](const QString& key, const QString& value, QLabel** value_out) {
@@ -40,8 +39,6 @@ DonePage::DonePage(Wizard& wizard, QWidget* parent) : WizardPage(parent), wizard
     };
     grid->addWidget(tile(QStringLiteral("Edition"), QString{}, &edition_value_), 0, 0);
     grid->addWidget(tile(QStringLiteral("Machine"), QString{}, &machine_value_), 0, 1);
-    // The guest as it is now, from the status hub: the display adapter
-    // and whether Windows started avgpu.sys on it, and the agent.
     grid->addWidget(tile(QStringLiteral("Graphics"), QStringLiteral("-"), &graphics_value_), 1, 0);
     grid->addWidget(tile(QStringLiteral("Agent"), QStringLiteral("-"), &agent_value_), 1, 1);
     connect(&wizard_.services().status(), &services::StatusHub::changed, this,
@@ -61,8 +58,6 @@ DonePage::DonePage(Wizard& wizard, QWidget* parent) : WizardPage(parent), wizard
 
 void DonePage::initializePage() {
     const auto& state = wizard_.state();
-    // The setup page hands over here when the run fails too, so the
-    // title says how it ended rather than assuming.
     if (!state.failure.isEmpty()) {
         chrome().title->setText(QStringLiteral("Installation did not finish"));
         chrome().subtitle->setText(state.failure);
@@ -71,8 +66,6 @@ void DonePage::initializePage() {
         chrome().subtitle->setText(QStringLiteral("The guest agent is online. The VM is ready."));
     }
     chrome().subtitle->setVisible(true);
-    // Watch the machine that was built, so the last two tiles are what
-    // it is doing rather than what it was meant to.
     auto& services = wizard_.services();
     if (const config::VmRecord* record = services.vms().primary()) {
         services.status().set_target(record->uuid);
@@ -122,4 +115,4 @@ void DonePage::show_guest() {
     graphics_value_->setText(QStringLiteral("%1, %2").arg(name, state));
 }
 
-}  // namespace lsw::host::wizard
+}

@@ -1,51 +1,3 @@
-# trace-capture.ps1: an application run under a capture tool, in the guest,
-# its trace left in -Out with what the replay suite needs beside it.
-#
-#   -Tool apitrace -Api d3d9|dxgi|gl|d3d8   Direct3D 8/9/10/11 or OpenGL calls
-#   -Tool clintercept                       OpenCL kernels with their inputs and outputs
-#   -Tool gfxr [-Api vulkan]                Vulkan, through the GFXReconstruct layer
-#   -Tool gfxr -Api d3d12                   Direct3D 12, GFXReconstruct's d3d12.dll, dxgi.dll and
-#                                           d3d12_capture.dll beside -Exe (its D3D12 build)
-#   -Tool probe -Process NAME               which graphics DLLs a running process loaded
-#
-# What is launched: -Exe PATH [-Arguments "..."], or -Package FAMILY [-AppId ID]
-# (an MSIX app, run inside its package with Invoke-CommandInDesktopPackage), or
-# -SteamApp ID with -Exe naming the game's executable (launched by Steam).
-#
-# -Mode, how the tool gets into the process (auto picks the first that fits):
-#   apitrace     inject (apitrace trace: DLL injection, the default; with -SteamApp a
-#                steam_appid.txt beside -Exe so the game starts outside Steam),
-#                wrappers (its DLLs copied beside -Exe: for an application that
-#                misbehaves injected - Resolve's plugins fail to load - from an
-#                elevated shell when -Exe is under Program Files; with -SteamApp it
-#                is launched by Steam)
-#   clintercept  system (System32's OpenCL.dll swapped for CLIntercept's, then put
-#                back: MSIX apps; needs an elevated shell), local (CLIntercept's
-#                OpenCL.dll beside -Exe), cliloader
-#   gfxr         layer (Vulkan); for D3D12 the capture DLLs beside -Exe, which is
-#                started directly (with -SteamApp, a steam_appid.txt beside it:
-#                a game Steam starts would not get the capture's environment)
-#
-# -GfxrFrames 100-200 trims a GFXReconstruct capture to those frames;
-# -GfxrTrigger F12 [-GfxrTriggerFrames N] captures nothing until the key is
-# pressed, then N frames (until it is pressed again without N).
-#
-# -Environment "NAME=VALUE;..." sets more of GFXReconstruct's settings for
-# the launch (GFXRECON_MEMORY_TRACKING_MODE=unassisted).
-#
-# -GlOut DIR (with -Tool clintercept): the same run's OpenGL calls too,
-# through apitrace's opengl32.dll wrapper beside -Exe, as a second capture in
-# DIR (capture.trace, frames.txt, capture.json, capture.done): one session
-# of an application that draws with OpenGL and computes with OpenCL (Resolve)
-# gives both traces. Like the wrappers mode, it needs an elevated shell when
-# -Exe is under Program Files.
-# -ClearFirst "PATH;PATH": files or directories deleted before the launch
-# (an application's OpenCL kernel cache, so CLIntercept records sources).
-#
-# The application is used by hand until it exits, or closed after -Seconds.
-# Then: apitrace's trace gets frames.txt (the call ending each frame, from
-# apitrace dump); CLIntercept's Replay directory is moved to -Out\Replay;
-# capture.json records what was run and on what; capture.done says ok or why not.
 param(
     [ValidateSet('apitrace', 'clintercept', 'gfxr', 'probe')][string]$Tool = 'apitrace',
     [ValidateSet('d3d8', 'd3d9', 'dxgi', 'gl', 'opencl', 'vulkan', 'd3d12')][string]$Api = 'd3d9',
@@ -72,16 +24,12 @@ param(
 $ErrorActionPreference = 'Stop'
 $Steam = 'C:\Program Files (x86)\Steam'
 
-# Straight to standard output, never into a function's return value.
 function Log($line) {
     $stamped = "[$((Get-Date).ToString('HH:mm:ss'))] $line"
     [Console]::Out.WriteLine($stamped)
     if ($script:LogFile) { Add-Content -LiteralPath $script:LogFile -Value $stamped }
 }
 
-# A console program run to its end, its output in a file: its exit code.
-# (Windows PowerShell turns a native program's stderr into errors, which
-# -ErrorAction Stop would throw on.)
 function Run-Native($program, $arguments, $output) {
     $p = Start-Process -FilePath $program -ArgumentList $arguments -NoNewWindow -Wait -PassThru `
         -RedirectStandardOutput $output -RedirectStandardError "$output.err"
@@ -141,8 +89,6 @@ function Launch($program, $arguments, $directory) {
     else { Start-Process -FilePath $program -WorkingDirectory $directory -PassThru }
 }
 
-# apitrace's wrapper DLLs for $Api copied beside the executable (each one
-# added to $script:cleanup), and the desktop's traces before the launch.
 function Place-Wrappers($at, $api, $exeDir) {
     $dlls = switch ($api) { 'd3d9' { @('d3d9.dll') } 'd3d8' { @('d3d8.dll') } 'gl' { @('opengl32.dll') } 'dxgi' { @('dxgitrace.dll', 'dxgi.dll', 'd3d11.dll') } }
     foreach ($dll in $dlls) {
@@ -155,7 +101,6 @@ function Place-Wrappers($at, $api, $exeDir) {
     @(Get-ChildItem -Path $desktop -Filter "$Process*.trace" -ErrorAction SilentlyContinue | ForEach-Object FullName)
 }
 
-# The trace the wrappers wrote (the largest new one on the desktop) moved to $trace.
 function Collect-Wrapped($before, $trace) {
     $desktop = [Environment]::GetFolderPath('Desktop')
     $new = Get-ChildItem -Path $desktop -Filter "$Process*.trace" -ErrorAction SilentlyContinue | Where-Object { $before -notcontains $_.FullName } | Sort-Object Length -Descending
@@ -164,8 +109,6 @@ function Collect-Wrapped($before, $trace) {
     if ($new.Count -gt 1) { Log "also made (left on the desktop): $(($new | Select-Object -Skip 1 | ForEach-Object Name) -join ', ')" }
 }
 
-# An apitrace capture finished: recompressed with -Repack, its frames listed
-# into frames.txt beside it. The frame call numbers.
 function Finish-Apitrace($at, $trace, $out) {
     if (-not (Test-Path -LiteralPath $trace)) { throw "no trace was written" }
     if ($Repack) {
@@ -185,7 +128,6 @@ function Finish-Apitrace($at, $trace, $out) {
     , $listed
 }
 
-# capture.json and capture.done for one capture directory.
 function Write-Result($out, $tool, $api, $mode, $count, $status) {
     $version = $null
     try { $version = (Get-Item -LiteralPath $Exe).VersionInfo.ProductVersion } catch { }
@@ -205,7 +147,6 @@ function Write-Result($out, $tool, $api, $mode, $count, $status) {
     Set-Content -LiteralPath (Join-Path $out 'capture.done') -Value $status
 }
 
-# ------------------------------------------------------------------ probe
 if ($Tool -eq 'probe') {
     if (-not $Process) { throw "-Tool probe needs -Process" }
     $pattern = '^(d3d8|d3d9|d3d10|d3d10_1|d3d11|d3d12|d3d12core|dxgi|ddraw|d2d1|dcomp|opengl32|vulkan-1|opencl|nvcuda|amdhip64|wpfgfx.*|d3dcompiler_\d+|av\w+|amdxc64|igd\w+|nvoglv64|atio6axx|windows\.graphics\.capture|graphicscapture)\.dll$'
@@ -247,8 +188,6 @@ try {
     $arch = Arch-Of $Exe
     $exeDir = Split-Path -Parent $Exe
     Log "capturing $Exe ($arch) with $Tool$(if ($GlOut) { ' and apitrace (gl, wrappers)' })"
-    # A Steam game started directly finds Steam or restarts itself through
-    # it - without the capture: Steam is started first when it is not running.
     if ($SteamApp -and -not (Get-Process steam -ErrorAction SilentlyContinue)) {
         Start-Process -FilePath (Join-Path $Steam 'steam.exe') -ArgumentList '-silent' | Out-Null
         $until = (Get-Date).AddSeconds(120)
@@ -265,8 +204,6 @@ try {
         $at = Join-Path (Tool-Dir 'apitrace') $arch
         $trace = Join-Path $Out 'capture.trace'
         Remove-Item -Force -ErrorAction SilentlyContinue $trace
-        # Injected, a Steam game started directly with a steam_appid.txt: the
-        # wrapper DLLs were never loaded by Half-Life 2 launched through Steam.
         if ($Mode -eq 'auto') { $Mode = 'inject' }
         if ($Mode -eq 'inject') {
             if ($SteamApp -and -not (Test-Path (Join-Path $exeDir 'steam_appid.txt'))) {
@@ -289,12 +226,7 @@ try {
         Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $dumpDir, (Join-Path $Out 'Replay')
         $key = 'HKCU:\Software\INTEL\IGFX\CLIntercept'
         $hadKey = Test-Path $key
-        # New-Item -Force on an existing key empties it: controls set there
-        # by hand (CallLogging, to see what an application calls) stay.
         if (-not $hadKey) { New-Item -Force -Path $key | Out-Null }
-        # Kernels with their buffers (CaptureReplay), and every program's
-        # source, options and build log (DumpProgramSource...): a program
-        # that does not build never reaches an enqueue to be captured.
         $controls = [ordered]@{ CaptureReplay = 1; CaptureReplayUniqueKernels = 1; CaptureReplayNumKernelEnqueuesCapture = $ClKernels;
                                 InitializeBuffers = 1; LogToFile = 1; ErrorLogging = 1; BuildLogging = 1;
                                 DumpProgramSource = 1; DumpProgramBuildLogs = 1; OmitProgramNumber = 1 }
@@ -371,22 +303,16 @@ try {
         $env:GFXRECON_CAPTURE_FILE = $capture
         $env:GFXRECON_CAPTURE_FILE_TIMESTAMP = 'false'
         if ($GfxrFrames) { $env:GFXRECON_CAPTURE_FRAMES = $GfxrFrames }
-        # More of the layer's settings (GFXRECON_MEMORY_TRACKING_MODE=unassisted...).
         foreach ($pair in @($Environment.Split(';') | Where-Object { $_ -match '=' })) {
             $name, $value = $pair.Split('=', 2)
             Set-Item -Path "env:$($name.Trim())" -Value $value
             Log "$($name.Trim())=$value"
         }
-        # A hotkey (F12...) that starts a trimmed capture of -GfxrTriggerFrames
-        # frames: the scene, reached by scripted input, without what led to it.
         if ($GfxrTrigger) {
             $env:GFXRECON_CAPTURE_TRIGGER = $GfxrTrigger
             if ($GfxrTriggerFrames -gt 0) { $env:GFXRECON_CAPTURE_TRIGGER_FRAMES = "$GfxrTriggerFrames" }
         }
         if ($Api -eq 'd3d12') {
-            # D3D12 is captured by DLL substitution: the application loads
-            # GFXReconstruct's d3d12.dll and dxgi.dll from its own directory,
-            # which forward to the system's through d3d12_capture.dll.
             $gfxr = Join-Path (Tool-Dir 'gfxreconstruct_d3d12') 'x64'
             $env:GFXRECON_CAPTURE_COMPRESSION_TYPE = 'ZSTD'
             foreach ($dll in @('d3d12.dll', 'dxgi.dll', 'd3d12_capture.dll')) {
@@ -406,8 +332,6 @@ try {
         }
         $launcher = Launch $Exe $Arguments $exeDir
         Wait-Target $Process $launcher
-        # A trimmed capture's name says how it was trimmed (capture_trim_trigger.gfxr,
-        # capture_frames_100_through_200.gfxr): it is the capture.
         if (-not (Test-Path -LiteralPath $capture)) {
             $trimmed = Get-ChildItem -Path $Out -Filter 'capture_*.gfxr' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime | Select-Object -Last 1
             if ($trimmed) { Move-Item -LiteralPath $trimmed.FullName -Destination $capture; Log "the trimmed capture $($trimmed.Name) is capture.gfxr" }

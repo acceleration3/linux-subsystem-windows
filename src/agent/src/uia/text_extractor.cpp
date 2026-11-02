@@ -21,4 +21,4 @@ std::string TextExtractor::from_window(const UiaWindow& window, int max_chars) {
     return text.utf8();
 }
 
-}  // namespace lsw::agent::uia
+}

@@ -7,8 +7,6 @@
 namespace lsw::host::platform {
 
 namespace {
-
-// One decimal number from a sysfs attribute, or nullopt.
 std::optional<quint64> read_number(const QString& path) {
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly)) {
@@ -22,21 +20,18 @@ std::optional<quint64> read_number(const QString& path) {
     return value;
 }
 
-}  // namespace
+}
 
 std::optional<GpuMemoryUsage::Reading> GpuMemoryUsage::read(const QString& pci_address) {
     if (pci_address.isEmpty()) {
         return std::nullopt;
     }
-    // Each card's ``device`` is a link to its PCI function's directory,
-    // whose name is the address. cardN rather than renderDN, because the
-    // counters hang off the device either way and every GPU has a card.
     const QDir drm(QStringLiteral("/sys/class/drm"));
     const QStringList cards =
         drm.entryList({QStringLiteral("card*")}, QDir::Dirs | QDir::System | QDir::NoDotAndDotDot);
     for (const QString& card : cards) {
         if (card.contains(QLatin1Char('-'))) {
-            continue;  // a connector, card0-DP-1
+            continue;
         }
         const QString device = drm.filePath(card + QStringLiteral("/device"));
         if (QFileInfo(QFileInfo(device).canonicalFilePath()).fileName()
@@ -53,4 +48,4 @@ std::optional<GpuMemoryUsage::Reading> GpuMemoryUsage::read(const QString& pci_a
     return std::nullopt;
 }
 
-}  // namespace lsw::host::platform
+}

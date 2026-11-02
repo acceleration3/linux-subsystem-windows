@@ -14,7 +14,7 @@ constexpr auto kBusName = "org.lsw.Manager";
 constexpr auto kObjectPath = "/org/lsw/Manager";
 constexpr auto kInterface = "org.lsw.Manager.Lifecycle";
 
-}  // namespace
+}
 
 SingleInstance::SingleInstance(QObject* parent) : QObject(parent) {}
 
@@ -99,4 +99,4 @@ void SingleInstance::open_documents(const QString& app_id, const QStringList& fi
     Q_EMIT open_documents_requested(app_id, files, activation_token);
 }
 
-}  // namespace lsw::host::platform
+}

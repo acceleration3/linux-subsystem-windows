@@ -13,14 +13,8 @@
 namespace lsw::agent::win {
 
 namespace {
-
-// The longest path Win32 can express (UNICODE_STRING_MAX_CHARS).
 constexpr std::size_t kMaxPathChars = 32767;
 
-// Call ``query(buffer, &length)`` — ``length`` in: capacity, out: chars
-// written — with a buffer that grows until the answer fits or the path
-// limit is reached. ``query`` returns false on failure, and
-// ``insufficient()`` says whether that failure meant "buffer too small".
 template<class Query, class Insufficient>
 [[nodiscard]] std::wstring grow_until_fits(Query query, Insufficient insufficient) {
     std::wstring buf(MAX_PATH, L'\0');
@@ -37,7 +31,7 @@ template<class Query, class Insufficient>
     }
 }
 
-}  // namespace
+}
 
 std::wstring ProcessInfo::image_path(DWORD pid) {
     const UniqueHandle process{::OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid)};
@@ -79,8 +73,6 @@ std::uint64_t ProcessInfo::creation_time_of(DWORD pid) {
 const std::wstring& ProcessInfo::self_path() {
     static const std::wstring self = grow_until_fits(
         [](wchar_t* buf, DWORD* length) {
-            // Returns the length copied; a result equal to the buffer
-            // size means it was truncated.
             const DWORD n = ::GetModuleFileNameW(nullptr, buf, *length);
             if (n == 0 || n >= *length) {
                 return false;
@@ -108,4 +100,4 @@ std::vector<ProcessInfo::Entry> ProcessInfo::snapshot() {
     return entries;
 }
 
-}  // namespace lsw::agent::win
+}

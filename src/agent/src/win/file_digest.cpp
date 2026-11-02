@@ -30,8 +30,6 @@ std::uint64_t join(DWORD high, DWORD low) {
     return (std::uint64_t{high} << 32U) | low;
 }
 
-// The digest of what ``file`` holds from where it is now to its end, or
-// empty when a read or CNG fails.
 std::string digest_of(HANDLE file) {
     BCRYPT_ALG_HANDLE algorithm = nullptr;
     if (!BCRYPT_SUCCESS(::BCryptOpenAlgorithmProvider(&algorithm, BCRYPT_SHA256_ALGORITHM, nullptr, 0))) {
@@ -71,7 +69,7 @@ std::string digest_of(HANDLE file) {
     return out;
 }
 
-}  // namespace
+}
 
 std::string FileDigest::sha256(const std::filesystem::path& path) {
     WIN32_FILE_ATTRIBUTE_DATA attributes{};
@@ -104,4 +102,4 @@ std::string FileDigest::sha256(const std::filesystem::path& path) {
     return digest;
 }
 
-}  // namespace lsw::agent::win
+}

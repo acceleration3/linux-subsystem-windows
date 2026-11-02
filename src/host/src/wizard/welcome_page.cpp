@@ -14,9 +14,6 @@ namespace {
 
 using ui::Theme;
 
-// One stage of the install. Four short cards rather than a numbered
-// paragraph: the same information, scannable, and it does not turn into
-// a run-on sentence in a language with longer words.
 QWidget* stage_card(const QString& number, const QString& title, const QString& body) {
     auto* frame = new QFrame;
     Theme::surface(frame, Theme::Role::kPanel);
@@ -36,7 +33,7 @@ QWidget* stage_card(const QString& number, const QString& title, const QString& 
     return frame;
 }
 
-}  // namespace
+}
 
 WelcomePage::WelcomePage(QWidget* parent) : WizardPage(parent) {
 
@@ -81,4 +78,4 @@ WelcomePage::WelcomePage(QWidget* parent) : WizardPage(parent) {
     root->addStretch(1);
 }
 
-}  // namespace lsw::host::wizard
+}

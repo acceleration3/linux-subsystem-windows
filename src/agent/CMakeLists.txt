@@ -1,65 +1,20 @@
-# lsw-guest-agent: the Windows program inside each LSW VM, deployed as
-# C:\ProgramData\LSW\lsw-agent.exe. One executable, three roles
-# (src/main.cpp):
-#
-#   * ``--service`` — the ``lsw-agent`` Windows service, LocalSystem, in
-#     session 0, registered by lsw-guest-update.ps1 (run by the
-#     autounattend's LswPromote.ps1 at SetupComplete, and on every update). Owns the manager link (TCP 5102), RPC dispatch,
-#     installs, consoles, and process launching into any session as
-#     that session's user (WTSQueryUserToken + CreateProcessAsUserW,
-#     the user's full token by default).
-#   * ``--session --pipe NAME`` — a session helper the service keeps in
-#     each user session, for what only works from inside one: window
-#     enumeration and commands, UI Automation, HKCU, and the desktop gate
-#     that holds the service's listener closed until the desktop is
-#     usable. Talks to the service over a named pipe in the link's own
-#     envelope framing.
-#   * no arguments — the service's work in the foreground, for debugging.
-#
-# A GUI-subsystem program (WIN32_EXECUTABLE): nothing it is or starts for
-# itself ever shows a console window. It logs to C:\ProgramData\LSW.
-#
-# Responsibilities:
-#   * Report OS / RAM / disk / hostname / IP.
-#   * List installed apps (Uninstall registry).
-#   * Launch apps into a user session, and start the window mirror's
-#     guest half beside them. The windows themselves — their pixels and
-#     their input — belong to that mirror and travel on its own
-#     connection, not this one.
-#   * Push log records back to the manager over the bidirectional RPC
-#     channel on TCP 5102.
-#
-# Build:
-#   * Native Windows (MSVC) when LSW_BUILD_AGENT is set.
-#   * Cross-build via MinGW-w64 from Linux (for development convenience).
-
 if(NOT WIN32)
     return()
 endif()
 
-# .rc compiler (windres on mingw) — embeds the application manifest
-# (res/lsw-agent.manifest: asInvoker, so the service can start a session
-# helper as a user without a UAC prompt).
 enable_language(RC)
 
-# Sources are grouped by module — each subdirectory is one feature
-# area. Adding a new RPC handler in Phase 4+ means a new TU under
-# src/rpc/handlers/<category>/<name>.cpp; that TU gets listed here
-# (no GLOB — explicit listing is more reliable, especially with the
-# MinGW + Ninja cross-build).
 set(_lsw_agent_core_sources
     src/main.cpp
     src/log.cpp
     src/core/agent_service.cpp
     src/core/command_line.cpp
     src/core/paths.cpp
+    src/core/startup_header.cpp
     src/core/service_host.cpp
     src/core/services.cpp
     res/lsw-agent.rc
 )
-# The session layer: which sessions exist, the helper in each, and the
-# pipe between it and the service. The first four TUs are platform-free
-# and also built into the host-native tests (tests/CMakeLists.txt).
 set(_lsw_agent_session_sources
     src/session/session_selector.cpp
     src/session/session_routing.cpp
@@ -73,9 +28,6 @@ set(_lsw_agent_transport_sources
     src/transport/host_endpoint.cpp
     src/transport/envelope_writer.cpp
     src/transport/event_pump.cpp
-    # One TU per push-event source. Each adapts a service's own typed
-    # notifications into rpc::Event, so the connection loop drains them
-    # all through the same EventPump.
     src/transport/log_event_source.cpp
     src/transport/console_event_source.cpp
     src/transport/installer_event_source.cpp
@@ -83,17 +35,15 @@ set(_lsw_agent_transport_sources
 set(_lsw_agent_rpc_sources
     src/rpc/registry.cpp
     src/rpc/params.cpp
-    # Per-RPC handler TUs — one per command. Each TU registers itself
-    # at static-init via LSW_REGISTER_RPC; the transport dispatcher
-    # is now a single registry lookup. Adding a new RPC means a new
-    # TU in this list (Phase 4 of the refactor; subsequent UIA RPCs
-    # land under src/rpc/handlers/uia/ in Phase 8+).
     src/rpc/handlers/system/system_info.cpp
     src/rpc/handlers/system/set_display.cpp
     src/rpc/handlers/system/gpu_status.cpp
     src/rpc/handlers/system/list_sessions.cpp
     src/rpc/handlers/system/file_hashes.cpp
     src/rpc/handlers/system/set_clock.cpp
+    src/rpc/handlers/system/set_log_level.cpp
+    src/rpc/handlers/system/read_file.cpp
+    src/rpc/handlers/system/pack_logs.cpp
     src/rpc/handlers/apps/list_apps.cpp
     src/rpc/handlers/apps/launch.cpp
     src/rpc/handlers/apps/get_icon.cpp
@@ -146,11 +96,13 @@ set(_lsw_agent_win_sources
     src/win/wts_sessions.cpp
     src/win/security_attributes.cpp
     src/win/overlapped_pipe.cpp
+    src/win/rolling_file.cpp
 )
 set(_lsw_agent_util_sources
     src/util/base64.cpp
     src/util/text_encoding.cpp
     src/util/wide_string.cpp
+    src/util/powershell_command.cpp
 )
 set(_lsw_agent_uia_sources
     src/uia/uia.cpp
@@ -204,6 +156,8 @@ set(_lsw_agent_system_sources
     src/system/info.cpp
     src/system/volume_grower.cpp
     src/system/scale_steps.cpp
+    src/system/log_packer.cpp
+    src/system/driver_log_pruner.cpp
 )
 
 add_executable(lsw-guest-agent
@@ -218,13 +172,9 @@ add_executable(lsw-guest-agent
     ${_lsw_agent_install_sources}
     ${_lsw_agent_console_sources}
     ${_lsw_agent_system_sources}
+    ${CMAKE_SOURCE_DIR}/src/base/src/repeat_collapser.cpp
 )
 
-# Build stamp: regenerated EVERY build so agent_version always
-# changes (redeploy_agent polls system_info until it does). The
-# custom target has no OUTPUT, only BYPRODUCTS, so it always runs;
-# OBJECT_DEPENDS forces system_info.cpp to recompile when the (always
-# freshly-written) stamp changes.
 set(_lsw_build_stamp "${CMAKE_CURRENT_BINARY_DIR}/lsw_build_stamp.h")
 add_custom_target(lsw_agent_stamp
     BYPRODUCTS "${_lsw_build_stamp}"
@@ -240,32 +190,33 @@ set_source_files_properties(src/system/info.cpp
 target_include_directories(lsw-guest-agent
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_SOURCE_DIR}/src/base/include
         ${CMAKE_CURRENT_BINARY_DIR}
 )
 
 target_link_libraries(lsw-guest-agent
     PRIVATE
         LSW::CompileOptions
-        LSW::LinkProto   # wire contract shared with the manager
+        LSW::LinkProto
         nlohmann_json::nlohmann_json
-        ws2_32        # WinSock2
-        iphlpapi      # GetAdaptersAddresses
-        gdi32         # icon bitmaps
-        gdiplus       # PNG encoding
-        advapi32      # registry, tokens, the service control manager
-        shlwapi       # PathMatchSpec etc.
-        shell32       # ShellExecuteExW: Windows App Installer activation
-        winhttp       # Installer: HTTP(S) downloads
-        dwmapi        # DWMWA_CLOAKED / EXTENDED_FRAME_BOUNDS
-        runtimeobject # WinRT (RoInitialize / RoGetActivationFactory)
-        setupapi      # SetupDi* — enumerate the PCI display devices
-        cfgmgr32      # CM_* helpers used by setupapi
-        bcrypt        # SHA-256 of the files the manager compares with its own
-        ole32         # COM (CoInitializeEx / CoCreateInstance for UIA)
-        oleaut32      # COM BSTR/VARIANT used by UIA
-        uuid          # CLSID_CUIAutomation, IID_IUIAutomation*
-        wtsapi32      # WTSEnumerateSessions / WTSQueryUserToken
-        userenv       # CreateEnvironmentBlock / ExpandEnvironmentStringsForUser
+        ws2_32
+        iphlpapi
+        gdi32
+        gdiplus
+        advapi32
+        shlwapi
+        shell32
+        winhttp
+        dwmapi
+        runtimeobject
+        setupapi
+        cfgmgr32
+        bcrypt
+        ole32
+        oleaut32
+        uuid
+        wtsapi32
+        userenv
 )
 
 target_compile_definitions(lsw-guest-agent PRIVATE
@@ -274,29 +225,14 @@ target_compile_definitions(lsw-guest-agent PRIVATE
     NOMINMAX
 )
 
-# GUI subsystem: no console window for the service, a helper or a
-# debugging run. The entry point stays wmain().
 set_target_properties(lsw-guest-agent PROPERTIES WIN32_EXECUTABLE TRUE)
 
-# main() is wmain() — wide-char entry point. Mingw-w64 needs
-# ``-municode`` at link time to swap in the wmain-aware startup
-# object (which it uses for the GUI subsystem too), otherwise the
-# linker complains about an undefined ``WinMain``/``main``. MSVC is
-# told the same with its entry point. Applied per-target so it doesn't
-# interfere with CMake's compiler probe (which uses plain main).
-#
-# The mingw toolchain files put ``-mconsole`` in every executable's link
-# flags (cmake/toolchain-mingw-w64.cmake), which beats WIN32_EXECUTABLE's
-# ``-mwindows``; the linker's own option, given last, settles it.
 if(MINGW)
     target_link_options(lsw-guest-agent PRIVATE -municode -Wl,--subsystem,windows)
 elseif(MSVC)
     target_link_options(lsw-guest-agent PRIVATE /ENTRY:wmainCRTStartup)
 endif()
 
-# A file the payload ISO carries, not a program for this machine: under
-# share/, by its build name (the stager names it lsw-agent.exe on the
-# ISO).
 install(TARGETS lsw-guest-agent
         RUNTIME DESTINATION ${LSW_INSTALL_GUESTDIR}
         COMPONENT ${LSW_INSTALL_COMPONENT})

@@ -14,8 +14,6 @@
 namespace lsw::agent::win {
 
 std::optional<ShellLink::Target> ShellLink::resolve(const std::wstring& lnk_path, PathMode mode) {
-    // Declared first so it is torn down last: every interface below must
-    // be released before CoUninitialize.
     const Apartment apartment{Apartment::Model::SingleThreaded};
 
     ComPtr<IShellLinkW> link;
@@ -35,7 +33,6 @@ std::optional<ShellLink::Target> ShellLink::resolve(const std::wstring& lnk_path
                       mode == PathMode::Raw ? SLGP_RAWPATH : SLGP_UNCPRIORITY) == S_OK) {
         target.path = path;
     }
-    // Twice INFOTIPSIZE: the shell's own limit on arguments, with room.
     wchar_t args[2 * INFOTIPSIZE] = {};
     if (link->GetArguments(args, static_cast<int>(std::size(args))) == S_OK) {
         target.args = args;
@@ -47,4 +44,4 @@ std::optional<ShellLink::Target> ShellLink::resolve(const std::wstring& lnk_path
     return target;
 }
 
-}  // namespace lsw::agent::win
+}

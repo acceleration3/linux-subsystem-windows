@@ -7,8 +7,6 @@
 #include <vector>
 
 namespace lsw::agent::apps {
-
-// Finds the actual App Installer UI, not a ShellExecute activation broker.
 class AppInstallerWindow {
 public:
     explicit AppInstallerWindow(std::vector<win::DiscoveredWindow> before);
@@ -22,4 +20,4 @@ private:
     std::vector<win::DiscoveredWindow> before_;
 };
 
-}  // namespace lsw::agent::apps
+}

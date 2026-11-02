@@ -7,17 +7,13 @@
 namespace lsw::agent::session {
 
 namespace {
-
-// Windows account names compare case-insensitively. ASCII folding is
-// enough for the comparisons made here: the wizard's account name is
-// typed into the manager, and OOBE's accounts are ASCII.
 [[nodiscard]] std::string fold(std::string s) {
     std::transform(s.begin(), s.end(), s.begin(),
                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
     return s;
 }
 
-}  // namespace
+}
 
 const char* state_name(SessionState state) {
     switch (state) {
@@ -84,4 +80,4 @@ bool SessionSelector::counts_for_gate(std::uint32_t id) const {
     return s && (s->console || is_wizard(*s));
 }
 
-}  // namespace lsw::agent::session
+}

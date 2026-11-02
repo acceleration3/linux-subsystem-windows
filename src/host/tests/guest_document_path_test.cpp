@@ -1,7 +1,3 @@
-// Where a file on this machine is in Windows: the drive of the shared
-// folder it sits in, by the longest share that contains it, and nothing
-// at all for a file under none or one Windows cannot name.
-
 #include "lsw/host/services/guest_document_path.hpp"
 
 #include <QCoreApplication>
@@ -35,7 +31,7 @@ std::optional<QString> map(const char* path, const QVector<DomainDescription::Sh
     return GuestDocumentPath::map(QString::fromUtf8(path), shares);
 }
 
-}  // namespace
+}
 
 int main(int argc, char** argv) {
     QCoreApplication app{argc, argv};
@@ -43,7 +39,7 @@ int main(int argc, char** argv) {
         share("z", "/home/u/Documents"),
         share("y", "/home/u/Documents/work"),
         share("x", "/mnt/scratch"),
-        share("shares", "/srv"),  // not a drive letter: not LSW's
+        share("shares", "/srv"),
     };
 
     check(map("/home/u/Documents/report.xlsx", shares) == QStringLiteral("Z:\\report.xlsx"),
@@ -91,7 +87,6 @@ int main(int argc, char** argv) {
     check(map("/home/u/Documents:odd/a.txt", {share("z", "/home/u/Documents:odd")}).has_value(),
           "the share's own path is not checked, only what is below it");
 
-    // canonical() resolves a link, which is the path virtiofsd would see.
     QTemporaryDir dir;
     QDir(dir.path()).mkpath(QStringLiteral("real"));
     QFile file(dir.path() + QStringLiteral("/real/a.txt"));

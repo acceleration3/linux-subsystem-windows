@@ -20,7 +20,7 @@ bool set_error(QString* error_out, const QString& message) {
     return false;
 }
 
-}  // namespace
+}
 
 bool PayloadIsoBuilder::stage_files(const PayloadInputs& in, const QString& staging_dir,
                                     QStringList* created_out, QString* error_out) {
@@ -33,11 +33,7 @@ bool PayloadIsoBuilder::stage_files(const PayloadInputs& in, const QString& stag
             QStringLiteral("could not create the staging directory %1").arg(staging_dir));
     }
 
-    // autounattend.xml at the root — Windows setup auto-detects this.
-    // It makes the SetupComplete that runs the release under ``\update``.
     const QString unattend_path = dir.filePath("autounattend.xml");
-    // A missing or short answer file is the failure with nothing to say
-    // why: the ISO attaches and Windows shows its interactive installer.
     QFile uf{unattend_path};
     const QByteArray unattend = in.autounattend_xml.toUtf8();
     if (!uf.open(QIODevice::WriteOnly | QIODevice::Truncate) ||
@@ -53,8 +49,6 @@ bool PayloadIsoBuilder::stage_files(const PayloadInputs& in, const QString& stag
                                                                "put together: %1").arg(in.bundle->error)
                                               : QStringLiteral("no files for Windows to carry"));
     }
-    // The release the way an update stages it, so that the script reads it
-    // from here exactly as it reads one it was sent.
     const QDir update{dir.filePath(QStringLiteral("update"))};
     const auto write = [&](const QString& relative, const QByteArray& bytes) {
         const QString dest = update.filePath(relative);
@@ -68,8 +62,6 @@ bool PayloadIsoBuilder::stage_files(const PayloadInputs& in, const QString& stag
         return true;
     };
     for (const auto& file : in.bundle->files) {
-        // The staged path is Windows': its backslashes are directories in the
-        // guest, and on this side would be part of one long file name.
         const QString relative =
             QString::fromStdString(services::GuestBundle::staged_path(file.guest_path)).replace(QLatin1Char('\\'), QLatin1Char('/'));
         if (!write(relative, file.bytes)) {
@@ -110,4 +102,4 @@ bool PayloadIsoBuilder::build(const PayloadInputs& in, QString* error_out) {
     return true;
 }
 
-}  // namespace lsw::host::provision::install
+}

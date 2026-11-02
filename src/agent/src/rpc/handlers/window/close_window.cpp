@@ -9,18 +9,14 @@
 namespace lsw::agent::rpc::handlers {
 
 struct CloseWindowHandler : RpcHandler {
-    nlohmann::json handle(const nlohmann::json& params, RpcContext& /*ctx*/) override {
-        // No refusal for a missing handle: closing nothing is a plain
-        // ``ok: false``.
+    nlohmann::json handle(const nlohmann::json& params, RpcContext& ) override {
         const auto hwnd = Params{params, linkproto::cmd::kCloseWindow}.hwnd();
         return {{"ok", hwnd != 0 && win::Window::close_window(hwnd)}};
     }
 
-    // Window handles, UI Automation and HKCU belong to the user's
-    // session: served by the session helper there.
     [[nodiscard]] Placement placement() const override { return Placement::UserSession; }
 };
 
-}  // namespace lsw::agent::rpc::handlers
+}
 
 LSW_REGISTER_RPC(lsw::agent::rpc::handlers::CloseWindowHandler, ::lsw::linkproto::cmd::kCloseWindow)

@@ -24,7 +24,7 @@ QString png_base64_from_image(const QImage& img) {
     return QString::fromLatin1(bytes.toBase64());
 }
 
-}  // namespace
+}
 
 AppConfigStore::AppConfigStore(QString dir, QObject* parent)
     : QObject(parent), dir_(std::move(dir)) {
@@ -81,13 +81,9 @@ const AppConfig* AppConfigStore::find(const QString& id) const {
 bool AppConfigStore::write_file(const AppConfig& cfg) {
     const QString path = file_for(cfg.id);
     const QByteArray body = cfg.to_json().toUtf8();
-    // Only when it changed: every refresh of the list passes each config
-    // through here, and rewriting them all is a lot of disk for nothing.
     if (QFile current{path}; current.open(QIODevice::ReadOnly) && current.readAll() == body) {
         return true;
     }
-    // All or nothing: a config half written when the disk fills or the
-    // manager dies is one that no longer parses.
     QSaveFile f{path};
     if (!f.open(QIODevice::WriteOnly) || f.write(body) != body.size() || !f.commit()) {
         LSW_WARN("could not write app config {}: {}", path.toStdString(), f.errorString().toStdString());
@@ -135,9 +131,6 @@ void AppConfigStore::merge_from_agent(const QList<AppEntry>& entries) {
         reported.insert(id);
         if (auto* existing = find(id); existing != nullptr) {
             existing->last_seen_unix = now;
-            // Refresh agent-derived fields only if the user hasn't
-            // diverged from the default: an entry the user edited keeps
-            // its name and arguments.
             if (existing->discovered_via_agent && (existing->name != e.name || existing->cmdline != e.args)) {
                 existing->name = e.name;
                 existing->cmdline = e.args;
@@ -166,8 +159,6 @@ void AppConfigStore::merge_from_agent(const QList<AppEntry>& entries) {
             any_changed = true;
         }
     }
-    // The file types, by target: a config the user edited keeps everything
-    // else, and still opens what Windows says its program opens.
     QHash<QString, QStringList> extensions_of;
     for (const auto& e : entries) {
         extensions_of.insert(e.exe_path.toLower(), e.extensions);
@@ -180,8 +171,6 @@ void AppConfigStore::merge_from_agent(const QList<AppEntry>& entries) {
             any_changed = true;
         }
     }
-    // What the agent no longer reports is gone from the guest, or was
-    // never an application: an uninstaller an older catalog took for one.
     for (auto it = configs_.begin(); it != configs_.end();) {
         if (!it->discovered_via_agent || reported.contains(it->id)) {
             ++it;
@@ -214,4 +203,4 @@ void AppConfigStore::set_store_extensions(const QHash<QString, QStringList>& ext
     }
 }
 
-}  // namespace lsw::host::apps
+}

@@ -1,22 +1,3 @@
-// MicrosoftClient end-to-end test.
-//
-// Spins an in-process MockHttp server and points MicrosoftClient at it
-// via ``set_host_overrides``. Each request gets one of five canned
-// responses keyed off the URL path. The canned bytes either come from
-// inline fixtures (the defaults below) or — when the env var
-// ``LSW_MICROSOFT_FIXTURE_DIR`` is set — from files dumped earlier by
-// ``MicrosoftClient::set_record_directory(...)``. That lets a
-// developer record one real session and replay it deterministically.
-//
-// Asserts:
-//   * initialize() drives locale -> visit and emits
-//     ``initialized``.
-//   * fetch_skus() parses the SKU list and emits ``skus_ready`` with
-//     the expected count.
-//   * fetch_download_url() pulls the Uri out and emits
-//     ``download_url_ready``.
-//   * record_directory writes one file per HTTP round-trip.
-
 #include "lsw/base/log.hpp"
 #include "lsw/base/logger.hpp"
 #include "lsw/host/provision/iso/microsoft_client.hpp"
@@ -46,17 +27,6 @@ void check(bool ok, const char* label) {
     std::fprintf(stderr, "  ok %s\n", label);
 }
 
-// ---------------------------------------------------------------------------
-// Fixtures.
-// Tiny synthetic JSON for the API endpoints; HTML pages are body-irrelevant
-// (the client only uses status + cookies). When env var
-// ``LSW_MICROSOFT_FIXTURE_DIR`` points at a directory of NN_<step>.bin files
-// dumped by record mode, those override the inline defaults.
-// ---------------------------------------------------------------------------
-
-// NB: explicit ``json`` delimiter — the JSON contains ``)"`` (e.g.
-// ``"Windows 11 (multi-edition ISO)"`` followed by the trailing quote)
-// which would close a default ``R"(...)"`` raw literal early.
 constexpr char kSkusJson[] = R"json({
   "Skus": [
     {
@@ -96,10 +66,6 @@ QByteArray load_fixture(const QString& step, const QByteArray& fallback) {
     return fallback;
 }
 
-// ---------------------------------------------------------------------------
-// Tiny single-handler HTTP server with optional Content-Length parsing for
-// future POST cases. Every reply is "Connection: close" — fine for tests.
-// ---------------------------------------------------------------------------
 class MockHttp : public QObject {
 public:
     using Handler = std::function<QByteArray(const QByteArray& request_headers)>;
@@ -181,7 +147,6 @@ void test_full_pipeline(const QString& tmp_dir) {
     int hits_skus = 0, hits_dl = 0;
 
     MockHttp srv([&](const QByteArray& headers) {
-        // First line is "GET /path HTTP/1.1".
         const auto first_eol = headers.indexOf("\r\n");
         const auto first = headers.left(first_eol);
         const auto sp1 = first.indexOf(' ');
@@ -197,9 +162,6 @@ void test_full_pipeline(const QString& tmp_dir) {
             return http_response(200, "OK", locale_html, "text/html");
         }
         if (path.startsWith("/tags")) {
-            // Nothing may ask for this. A real browser session never
-            // contacts vlscppe, so a request here means the client has
-            // grown the extra call back.
             ++hits_tags;
             return http_response(404, "Not Found", "");
         }
@@ -252,10 +214,6 @@ void test_full_pipeline(const QString& tmp_dir) {
     check(hits_skus == 1, "skus: hit SKU endpoint");
     check(skus.size() >= 1, "skus: parsed at least one SKU");
     if (using_real_fixtures) {
-        // Real Microsoft uses display names ("English", "French") for
-        // ``Language``, not BCP-47 codes — and the edition we end up
-        // recording may not have an en-US SKU at all (e.g. server preview
-        // editions are English-only with localised display names).
         check(!skus.first().language.isEmpty(), "skus: first sku has a Language");
     } else {
         check(skus.first().language == "en-US", "skus: first sku is en-US");
@@ -272,7 +230,6 @@ void test_full_pipeline(const QString& tmp_dir) {
                      });
     QObject::connect(&client, &lsw::host::provision::iso::MicrosoftClient::banned_detected, &client,
                      [&] { got_banned = true; });
-    // ``failed`` is reused for download-url errors; clear by reconnecting.
     QObject::disconnect(&client, &lsw::host::provision::iso::MicrosoftClient::failed, nullptr, nullptr);
     QObject::connect(&client, &lsw::host::provision::iso::MicrosoftClient::failed, &client,
                      [&](const QString& m) { url_err = m; });
@@ -281,11 +238,6 @@ void test_full_pipeline(const QString& tmp_dir) {
     wait_for([&] { return got_url || got_banned || !url_err.isEmpty(); });
     check(hits_dl == 1, "download_url: hit endpoint");
     if (using_real_fixtures && (got_banned || !url_err.isEmpty())) {
-        // Real recordings sometimes capture an Errors envelope:
-        //   * Type=9 → 715-123130 IP/region ban (banned_detected)
-        //   * Other Type → generic error (failed)
-        // Either way the parse path is what we care about; surface
-        // and continue.
         std::fprintf(stderr, "  note: real-fixture download_url returned %s\n",
                      got_banned ? "a Type=9 IP/region ban"
                                 : ("an envelope error: " + url_err.toStdString()).c_str());
@@ -301,7 +253,7 @@ void test_full_pipeline(const QString& tmp_dir) {
           "record: four files written (locale,visit,skus,download_url)");
 }
 
-}  // namespace
+}
 
 int main(int argc, char** argv) {
     ::lsw::base::Logger::init("microsoft_client_test");

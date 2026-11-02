@@ -10,8 +10,6 @@
 namespace lsw::agent::install {
 
 namespace {
-
-// cmd.exe mis-parses multi-line if/for blocks that arrive with bare LFs.
 [[nodiscard]] std::string to_crlf(const std::string& body) {
     std::string out;
     out.reserve(body.size() + 8);
@@ -25,7 +23,7 @@ namespace {
     return out;
 }
 
-}  // namespace
+}
 
 ScriptFile::ScriptFile(const std::string& job_id, const std::wstring& suffix,
                        const std::string& body)
@@ -53,4 +51,4 @@ std::wstring ScriptFile::command_line() const {
     return L"cmd.exe /c \"" + path_ + L"\"";
 }
 
-}  // namespace lsw::agent::install
+}

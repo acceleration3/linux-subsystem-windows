@@ -14,4 +14,4 @@ bool ElementInvoker::invoke(const UiaWindow& window, const std::string& selector
     return SUCCEEDED(pattern->Invoke());
 }
 
-}  // namespace lsw::agent::uia
+}

@@ -1,5 +1,6 @@
 #include "lsw/host/services/update_verdict.hpp"
 
+#include "lsw/base/log.hpp"
 #include "lsw/host/link/agent_reply.hpp"
 
 #include <QDateTime>
@@ -47,30 +48,27 @@ UpdateVerdict UpdateVerdict::judge(const link::AgentReply& info, const std::stri
                                    const std::string& shipped) {
     UpdateVerdict verdict;
     if (!info.ok) {
-        return verdict;  // restarted, or the guest is
+        return verdict;
     }
     const auto& last = info.body.value("last_update", nlohmann::json{});
     if (!is_mine(last, baseline)) {
         return verdict;
     }
     verdict.last = last;
-    // Its failure first: a failed run can leave the old release in place
-    // or, with the previous agent put back, a release that is not the new.
     if (!last.value("ok", false)) {
         verdict.kind = Kind::Failed;
         verdict.message = last.value("message", std::string{"-"});
+        LSW_DEBUG("update verdict: failed: {}", verdict.message);
         return verdict;
     }
     if (info.body.value("release", std::string{}) != shipped) {
         return verdict;
     }
-    // The script records the release and then restarts Windows when a
-    // step asked for it: until an agent of the new boot answers, the
-    // new driver is not running and the guest is about to go away.
     verdict.kind = !last.value("restart", false) || started_after(info, last.value("finished", std::string{}))
                        ? Kind::Succeeded
                        : Kind::RestartPending;
+    LSW_DEBUG("update verdict: {}", verdict.kind == Kind::Succeeded ? "succeeded" : "restart pending");
     return verdict;
 }
 
-}  // namespace lsw::host::services
+}

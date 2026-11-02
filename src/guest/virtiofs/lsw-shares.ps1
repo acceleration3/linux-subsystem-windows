@@ -1,43 +1,3 @@
-# lsw-shares.ps1 - LSW's shared folders, the Windows half.
-#
-# The host gives the guest one virtio-fs device per shared folder, tagged
-# with the folder's drive letter (DomainXmlBuilder). Windows needs three
-# things to mount one: virtio-win's viofs driver for the device, WinFsp,
-# and virtio-win's virtiofs.exe, which serves one device as a WinFsp file
-# system. This installs all three from the folder it is run from, and
-# mounts each share the way virtio-win documents for more than one: as an
-# instance of virtiofs.exe registered with WinFsp's launcher (fsreg) and
-# started by launchctl. The launcher is a LocalSystem service, so each
-# drive is made in the global namespace and every session sees it.
-#
-#   lsw-shares.ps1 -Install [-Shares z=Z:=TmFtZQ==,y=Y:]   install or update, then mount
-#   lsw-shares.ps1 [-Shares z=Z:=TmFtZQ==,y=Y:]            mount
-#
-# -Shares is the whole list, tag=drive=name, comma-separated, or "none". The
-# name is what Explorer calls the drive, in base64 of its UTF-8 because a
-# folder's name can hold anything a command line cannot, and may be left out. It is
-# saved, and an instance not in it is stopped. Without -Shares the saved
-# list is mounted, which is what the lsw-shares task does at every start
-# of Windows: the drives come back after a restart whether the manager is
-# there to ask or not.
-#
-# The manager stages this folder at C:\ProgramData\LSW\virtiofs (the
-# payload ISO for a new install, its upkeep pass for an existing one) and
-# runs it with -Install as SYSTEM. What runs later as SYSTEM - this
-# script, for the task, and virtiofs.exe, for the launcher - is copied to
-# C:\Program Files\LSW\virtiofs first, where only administrators write.
-#
-# Exit codes, which lsw-guest-update.ps1 reads:
-#   0  done
-#   1  bad arguments, or a file of the package missing
-#   2  the viofs driver did not install
-#   3  WinFsp did not install
-#   4  virtiofs could not be registered with WinFsp's launcher
-#   5  a virtio-fs device has no working driver
-#   6  a share did not mount
-#   7  Windows has to restart to finish
-# Every step is logged to C:\ProgramData\LSW\shares.log.
-
 param(
     [switch] $Install,
     [string] $Shares
@@ -48,15 +8,29 @@ $ProgressPreference = 'SilentlyContinue'
 
 $InstallDir = 'C:\Program Files\LSW\virtiofs'
 $SavedList = Join-Path $InstallDir 'shares.txt'
-$LogDir = 'C:\ProgramData\LSW'
+$LogDir = 'C:\ProgramData\LSW\logs'
 $Log = Join-Path $LogDir 'shares.log'
 $TaskName = 'lsw-shares'
 $FsClass = 'virtiofs'
 $DeviceMatch = 'PCI\VEN_1AF4&DEV_105A*'
-# Starting and stopping instances is for SYSTEM and administrators only.
 $LauncherSddl = 'D:P(A;;RPWPLC;;;SY)(A;;RPWPLC;;;BA)'
 
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
+
+function Roll-Log([string] $LogFile) {
+    try {
+        if ((Test-Path -LiteralPath $LogFile) -and (Get-Item -LiteralPath $LogFile).Length -gt 2MB) {
+            $stem = $LogFile.Substring(0, $LogFile.Length - 4)
+            Remove-Item -LiteralPath ($stem + '.2.log') -Force -ErrorAction SilentlyContinue
+            if (Test-Path -LiteralPath ($stem + '.1.log')) {
+                Move-Item -LiteralPath ($stem + '.1.log') -Destination ($stem + '.2.log') -Force
+            }
+            Move-Item -LiteralPath $LogFile -Destination ($stem + '.1.log') -Force
+        }
+    } catch { }
+}
+
+Roll-Log $Log
 
 function L([string] $Message) {
     ('{0} {1}' -f (Get-Date -Format s), $Message) | Add-Content -LiteralPath $Log -Encoding Ascii
@@ -67,8 +41,6 @@ function Fail([int] $Code, [string] $Message) {
     L ('FAILED: ' + $Message)
     if ($script:Result -eq 0) { $script:Result = $Code }
 }
-
-# ---- the share list ----
 
 function Parse-Shares([string] $Text) {
     $list = @()
@@ -85,11 +57,6 @@ function Parse-Shares([string] $Text) {
     return ,$list
 }
 
-# ---- the drives' names ----
-
-# virtiofs.exe labels its volume with the tag, which is the drive's letter again
-# and says nothing. The tag cannot change, as it is what the device is found by,
-# so the name is Explorer's own per-drive setting, set before the drive appears.
 function Set-DriveNames($Wanted, $Before) {
     $icons = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\DriveIcons'
     foreach ($share in @($Before)) {
@@ -105,8 +72,6 @@ function Set-DriveNames($Wanted, $Before) {
         Set-Item -LiteralPath $key -Value $name
     }
 }
-
-# ---- WinFsp ----
 
 function WinFsp-Dir {
     $key = Get-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\WOW6432Node\WinFsp' -ErrorAction SilentlyContinue
@@ -133,7 +98,6 @@ function Launchctl {
     return (Join-Path $dir 'bin\launchctl-x64.exe')
 }
 
-# The instances of our class the launcher runs: name -> command line.
 function Running-Instances {
     $running = @{}
     $launchctl = Launchctl
@@ -153,8 +117,6 @@ function Stop-Instance([string] $Name) {
     L ('stopped ' + $Name + ': ' + $out)
 }
 
-# ---- install ----
-
 function Install-Driver([string] $From) {
     $inf = Join-Path $From 'viofs.inf'
     $line = Select-String -LiteralPath $inf -Pattern '^\s*DriverVer\s*=\s*[^,]*,\s*([0-9.]+)' | Select-Object -First 1
@@ -163,8 +125,6 @@ function Install-Driver([string] $From) {
     $devices = @(Get-PnpDevice -PresentOnly -ErrorAction SilentlyContinue |
                  Where-Object { $_.InstanceId -like $DeviceMatch })
     if ($devices.Count -eq 0) {
-        # No share on this machine yet: the package goes into the driver
-        # store, and Windows installs it on the first device that appears.
         $out = (& pnputil.exe /add-driver $inf 2>&1) -join ' '
         $rc = $LASTEXITCODE
         L ('no virtio-fs device; pnputil /add-driver exited ' + $rc + ': ' + $out)
@@ -208,6 +168,7 @@ function Install-WinFsp([string] $From) {
     }
     L ('installing WinFsp ' + $want + ' (installed: ' + $(if ($have) { $have } else { 'none' }) + ')')
     $msiLog = Join-Path $LogDir 'winfsp-install.log'
+    Roll-Log $msiLog
     $process = Start-Process -FilePath msiexec.exe -Wait -PassThru -ArgumentList @(
         '/i', ('"' + $msi.FullName + '"'), '/qn', '/norestart', '/l*v', ('"' + $msiLog + '"'))
     $rc = $process.ExitCode
@@ -222,8 +183,6 @@ function Install-Files([string] $From) {
     $new = Join-Path $From 'virtiofs.exe'
     if (-not (Test-Path -LiteralPath $exe) -or
         (Get-FileHash -LiteralPath $exe).Hash -ne (Get-FileHash -LiteralPath $new).Hash) {
-        # A running image cannot be replaced: its instances stop, and the
-        # mount below starts them again on the new one.
         foreach ($name in (Running-Instances).Keys) { Stop-Instance $name }
         Start-Sleep -Seconds 1
         try {
@@ -243,8 +202,6 @@ function Register-Launcher {
     $dir = WinFsp-Dir
     if (-not $dir) { Fail 3 'WinFsp is not installed'; return }
     $exe = Join-Path $InstallDir 'virtiofs.exe'
-    # The arguments go through cmd.exe, which splits at ; - so the
-    # security descriptor is quoted for it.
     $out = (& (Join-Path $dir 'bin\fsreg.bat') $FsClass $exe '-t %1 -m %2' ('"' + $LauncherSddl + '"') 2>&1) -join ' '
     $rc = $LASTEXITCODE
     $key = Get-ItemProperty -LiteralPath ('HKLM:\SOFTWARE\WOW6432Node\WinFsp\Services\' + $FsClass) -ErrorAction SilentlyContinue
@@ -272,10 +229,7 @@ function Register-BootTask {
     }
 }
 
-# ---- mount ----
-
 function Wait-Ready {
-    # At boot the device and the launcher may still be starting.
     $deadline = (Get-Date).AddSeconds(90)
     while ((Get-Date) -lt $deadline) {
         $devices = @(Get-PnpDevice -PresentOnly -ErrorAction SilentlyContinue |
@@ -333,9 +287,6 @@ function Mount-Shares($Wanted) {
     }
 }
 
-# ---- main ----
-
-# One run at a time: the boot task and the manager's pass both start at boot.
 $mutex = New-Object System.Threading.Mutex($false, 'Global\lsw-shares')
 $owned = $false
 try { $owned = $mutex.WaitOne(300000) } catch [System.Threading.AbandonedMutexException] { $owned = $true }
@@ -345,7 +296,6 @@ try {
        $(if ($PSBoundParameters.ContainsKey('Shares')) { '-Shares ' + $Shares } else { '(saved list)' }) +
        ' as ' + [System.Security.Principal.WindowsIdentity]::GetCurrent().Name)
 
-    # What was mounted before, whose names go if their drives do.
     $before = @()
     if (Test-Path -LiteralPath $SavedList) {
         $before = @(Parse-Shares ((Get-Content -LiteralPath $SavedList) -join ','))

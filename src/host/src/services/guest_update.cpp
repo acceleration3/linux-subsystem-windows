@@ -29,22 +29,17 @@
 namespace lsw::host::services {
 
 namespace {
-
-// From the run_script's ack to the agent reporting the release: the files
-// are copied, the driver may be installed, the guest may restart.
 constexpr auto kRunWindow = std::chrono::minutes(15);
 constexpr auto kPollInterval = std::chrono::seconds(2);
-// The script that downloads and starts the task only copies files.
 constexpr auto kSendWindow = std::chrono::minutes(10);
 
-}  // namespace
+}
 
 GuestUpdate::GuestUpdate(config::Settings& settings, StatusHub& status, link::AgentRpcClient& rpc,
                          QObject* parent)
     : QObject(parent), status_(status), rpc_(rpc), bundle_(settings, this) {
     connect(&watcher_, &QFutureWatcher<Outcome>::finished, this,
             [this] { finish(watcher_.result()); });
-    // A machine that stops ends the run: the guest it was for is gone.
     connect(&status_, &StatusHub::changed, this, [this](StatusHub::Area area) {
         if (area == StatusHub::Area::Vm && running_ && !status_.vm().running()) {
             cancel_.store(true);
@@ -57,13 +52,11 @@ GuestUpdate::~GuestUpdate() {
     watcher_.waitForFinished();
 }
 
-// What the guest is known to have stays the baseline of a run asked for.
 void GuestUpdate::run(bool force) {
     begin(force, true, snapshot_.guest_release, snapshot_.guest_version);
 }
 
 void GuestUpdate::run_if_stale(const QString& guest_release, const QString& guest_version) {
-    // A check at boot that finds the guest current is not an update to show.
     begin(false, guest_release.isEmpty(), guest_release, guest_version);
 }
 
@@ -75,6 +68,8 @@ void GuestUpdate::begin(bool force, bool announce, const QString& current,
         return;
     }
     running_ = true;
+    LSW_DEBUG("update: checking (guest release {}{})", current.isEmpty() ? "unknown" : current.left(16).toStdString(),
+              force ? ", forced" : "");
     last_force_ = force;
     cancel_.store(false);
     snapshot_.guest_release = current;
@@ -84,7 +79,6 @@ void GuestUpdate::begin(bool force, bool announce, const QString& current,
         publish(GuestUpdateStatus::State::Running, QStringLiteral("Preparing files"), {});
     }
 
-    // The shares the machine has now: its live definition.
     QVector<GuestBundle::Mount> mounts;
     if (const vm::DomainDescription* definition = status_.vm().definition()) {
         mounts = GuestBundle::mounts_of(*definition);
@@ -160,10 +154,7 @@ GuestUpdate::Outcome GuestUpdate::carry_out(const std::shared_ptr<const GuestBun
                            .arg(QString::fromStdString(server.error()))};
     }
 
-    // What the last run left, to tell this run's failure from an old one's
-    // without comparing the guest's clock with ours.
-    // Without it a failure of an earlier run could be taken for this one's,
-    // so it is asked for again before the run is given up.
+    LSW_DEBUG("update: serving {} files on port {}", contents->files.size() + 2, server.port());
     link::AgentReply before;
     for (int attempt = 0; attempt < 3 && !cancel_.load(); ++attempt) {
         if (attempt > 0) {
@@ -195,10 +186,7 @@ GuestUpdate::Outcome GuestUpdate::carry_out(const std::shared_ptr<const GuestBun
                            .arg(QString::fromStdString(ack.error))};
     }
 
-    // The download and the task's start.
-    // The task stops the agent, and the script's end with it may never be
-    // reported: an agent that stops answering, or a result of this run,
-    // is as good as the end.
+    LSW_DEBUG("update: send job {} started", job);
     std::optional<JobEnd::End> end;
     bool moved_on = false;
     while (!end && !moved_on && !cancel_.load()
@@ -226,9 +214,8 @@ GuestUpdate::Outcome GuestUpdate::carry_out(const std::shared_ptr<const GuestBun
         LSW_INFO("update: send job {} not reported; the agent stopped or the result came", job);
     }
 
-    // The task is on its own now. The server stays up until the run ends:
-    // nothing more is fetched, but a retry of curl is not refused.
     say_step(QStringLiteral("Updating Windows"));
+    bool restart_noted = false;
     while (!cancel_.load() && std::chrono::steady_clock::now() - started < kRunWindow) {
         std::this_thread::sleep_for(kPollInterval);
         const auto info = rpc_.request(linkproto::cmd::kSystemInfo);
@@ -241,9 +228,14 @@ GuestUpdate::Outcome GuestUpdate::carry_out(const std::shared_ptr<const GuestBun
                                                      .arg(QString::fromStdString(verdict.message))),
                     steps_of(verdict.last)};
         case UpdateVerdict::Kind::RestartPending:
+            if (!restart_noted) {
+                restart_noted = true;
+                LSW_INFO("update: Windows is restarting to finish the update");
+            }
             say_step(QStringLiteral("Restarting Windows"));
             break;
         case UpdateVerdict::Kind::Succeeded:
+            LSW_DEBUG("update: the guest reports release {}", contents->release.substr(0, 16));
             return {true, {}, steps_of(verdict.last), true};
         }
     }
@@ -251,9 +243,7 @@ GuestUpdate::Outcome GuestUpdate::carry_out(const std::shared_ptr<const GuestBun
         return {false, QStringLiteral("Windows stopped during the update.")};
     }
 
-    // The window ended with nothing from this run. What the result file says
-    // is asked of the guest: the agent that would have reported it may be
-    // an older one that was put back.
+    LSW_INFO("update: no verdict in time; reading the result file");
     const auto read = rpc_.request(linkproto::cmd::kRunScript,
                                    {{"name", "read update result"},
                                     {"script", UpdateBatch::read_result(finished_before)}});
@@ -291,4 +281,4 @@ void GuestUpdate::finish(const Outcome& outcome) {
     Q_EMIT failed(outcome.message);
 }
 
-}  // namespace lsw::host::services
+}

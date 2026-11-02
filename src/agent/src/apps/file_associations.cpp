@@ -17,11 +17,6 @@
 namespace lsw::agent::apps {
 
 namespace {
-
-// What a ProgID opens a file with: the AppUserModelID of a packaged
-// application, else the program of its default verb. Empty for a ProgID
-// that delegates to a shell extension (DelegateExecute), which has no
-// program to name.
 std::wstring handler_of(const win::RegKey& classes, const std::wstring& prog_id) {
     const auto progid = classes.open_subkey(prog_id.c_str(), KEY_READ);
     if (!progid) {
@@ -37,7 +32,6 @@ std::wstring handler_of(const win::RegKey& classes, const std::wstring& prog_id)
         return {};
     }
     const std::wstring verb = shell->read_string(L"").value_or(std::wstring{L"open"});
-    // The verb list is comma separated; the first is the default.
     const std::wstring first = verb.substr(0, verb.find(L','));
     const auto verb_key = shell->open_subkey(first.empty() ? L"open" : first.c_str(), KEY_READ);
     const auto command = verb_key ? verb_key->open_subkey(L"command", KEY_READ) : std::nullopt;
@@ -48,13 +42,12 @@ std::wstring handler_of(const win::RegKey& classes, const std::wstring& prog_id)
     if (!line || line->empty()) {
         return {};
     }
-    // A REG_SZ command may carry variables of its own.
     const std::wstring program = ProgramCommand::program_of(win::Environment::expand(*line));
     return util::WideString::iends_with(program, L".exe") ? util::WideString::lower(program)
                                                           : std::wstring{};
 }
 
-}  // namespace
+}
 
 bool FileAssociations::excluded(const std::wstring& extension) {
     static const std::unordered_set<std::wstring> kNever = {
@@ -72,8 +65,6 @@ FileAssociations::Table FileAssociations::scan() {
     if (!classes) {
         return {};
     }
-    // A ProgID is shared by many extensions; resolving it once is the
-    // difference between a few hundred registry reads and many thousand.
     std::map<std::wstring, std::wstring> handlers;
     const auto handler = [&](const std::wstring& prog_id) -> const std::wstring& {
         auto [it, fresh] = handlers.try_emplace(prog_id);
@@ -111,11 +102,6 @@ FileAssociations::Table FileAssociations::scan() {
             }
         }
     }
-    // Applications that register through Capabilities rather than under the
-    // extension: a browser or Office puts its file types in a key named by
-    // RegisteredApplications (what Default apps shows), and not in
-    // HKCR\.html at all. Each value of its FileAssociations is an extension
-    // and the ProgID that opens it.
     for (const auto [root, view] : {std::pair{HKEY_LOCAL_MACHINE, static_cast<REGSAM>(KEY_WOW64_64KEY)},
                                     std::pair{HKEY_LOCAL_MACHINE, static_cast<REGSAM>(KEY_WOW64_32KEY)},
                                     std::pair{HKEY_CURRENT_USER, static_cast<REGSAM>(0)}}) {
@@ -156,4 +142,4 @@ std::vector<std::wstring> FileAssociations::of(const Table& table, const std::ws
     return it == table.end() ? std::vector<std::wstring>{} : it->second;
 }
 
-}  // namespace lsw::agent::apps
+}

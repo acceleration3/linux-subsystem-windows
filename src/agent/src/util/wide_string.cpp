@@ -10,7 +10,7 @@ namespace {
     return std::towlower(static_cast<std::wint_t>(a)) == std::towlower(static_cast<std::wint_t>(b));
 }
 
-}  // namespace
+}
 
 std::wstring WideString::lower(std::wstring s) {
     for (wchar_t& c : s) {
@@ -53,4 +53,4 @@ std::optional<std::wstring> WideString::parent_dir(const std::wstring& path) {
     return path.substr(0, slash);
 }
 
-}  // namespace lsw::agent::util
+}

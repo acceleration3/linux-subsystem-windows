@@ -3,6 +3,9 @@
 #include "lsw/agent/core/paths.hpp"
 #include "lsw/agent/util/text_encoding.hpp"
 #include "lsw/agent/win/file_time.hpp"
+#include "lsw/agent/win/rolling_file.hpp"
+
+#include "lsw/base/repeat_collapser.hpp"
 
 // clang-format off
 #include <windows.h>
@@ -11,6 +14,7 @@
 #include <array>
 #include <chrono>
 #include <condition_variable>
+#include <cctype>
 #include <cstdio>
 #include <cstring>
 #include <deque>
@@ -20,16 +24,8 @@
 namespace lsw::agent::log {
 
 namespace {
-
-// 5000 lines is plenty for a fresh launch + a few RPCs. The manager
-// polls regularly so fall-behind is unlikely; the ring just protects
-// against the manager being disconnected for a long time.
 constexpr size_t kRingCapacity = 5000;
 
-// Everything here is deliberately never destroyed: the file writer is a
-// detached thread still waiting on these when the process exits, and a
-// mutex or condition variable torn down under a waiter is a crash at
-// exit — which, for a service, the SCM would count as a failure.
 std::mutex& mu() {
     static auto* m = new std::mutex;
     return *m;
@@ -50,36 +46,44 @@ std::wstring& file_path() {
     return *p;
 }
 
+win::RollingFile::Limits& file_limits() {
+    static auto* l = new win::RollingFile::Limits{win::RollingFile::kAgentLimits};
+    return *l;
+}
+
+std::string& process_source() {
+    static auto* s = new std::string{"agent"};
+    return *s;
+}
+
 std::uint64_t now_ms() {
     FILETIME ft{};
     ::GetSystemTimeAsFileTime(&ft);
     return win::FileTime::to_unix_ms(ft);
 }
 
-void format_prefix(char* out, size_t cap, std::uint64_t ts_ms, Level level) {
+void append_line(std::string& out, const Record& r) {
     SYSTEMTIME st{};
-    const FILETIME ft = win::FileTime::from_unix_ms(ts_ms);
+    const FILETIME ft = win::FileTime::from_unix_ms(r.ts_ms);
     ::FileTimeToSystemTime(&ft, &st);
     SYSTEMTIME local{};
     ::SystemTimeToTzSpecificLocalTime(nullptr, &st, &local);
-    std::snprintf(out, cap, "[%04u-%02u-%02u %02u:%02u:%02u.%03u %-5s] ", local.wYear, local.wMonth,
-                  local.wDay, local.wHour, local.wMinute, local.wSecond, local.wMilliseconds,
-                  level_name(level));
+    char prefix[64];
+    std::snprintf(prefix, sizeof(prefix), "%04u-%02u-%02u %02u:%02u:%02u.%03u %-5s ", local.wYear,
+                  local.wMonth, local.wDay, local.wHour, local.wMinute, local.wSecond,
+                  local.wMilliseconds, level_name(r.level));
+    out += prefix;
+    out += r.source;
+    out += ' ';
+    out += r.msg;
+    out += '\n';
 }
 
-// ---- Async file writer -------------------------------------------------
-//
-// The file is a debug side-artifact; the in-memory ring (drained by
-// collect_since and shipped over the wire) is the source of truth the
-// manager actually reads. Writing the file SYNCHRONOUSLY from append()
-// — reopening C:\ProgramData\LSW\agent.log per line — stalled the
-// agent's single-threaded host_endpoint loop for *seconds* per log
-// call on the qcow2-backed guest disk (observed: identical system_info
-// path taking 26 ms vs 18 s, the whole gap between two consecutive log
-// lines). That starved RPC delivery and window-frame capture. So file
-// I/O is now off the hot path entirely: append() only enqueues; a
-// dedicated background thread owns a single persistent handle and
-// writes batched, never blocking a logging caller.
+std::int64_t mono_ms() {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+               std::chrono::steady_clock::now().time_since_epoch())
+        .count();
+}
 
 std::mutex& file_mu() {
     static auto* m = new std::mutex;
@@ -91,7 +95,6 @@ std::condition_variable& file_cv() {
     return *cv;
 }
 
-// Signalled by the writer each time it has written a batch, for flush().
 std::condition_variable& written_cv() {
     static auto* cv = new std::condition_variable;
     return *cv;
@@ -102,53 +105,75 @@ std::deque<Record>& file_q() {
     return *q;
 }
 
-// Records taken off the queue but not yet written. Guarded by file_mu().
 std::size_t& in_writer() {
     static std::size_t n = 0;
     return n;
 }
 
-// Cap the pending-write backlog. If the disk wedges hard we drop
-// file lines (the ring/wire still has them) rather than grow forever.
 constexpr size_t kFileQueueCap = 20000;
 
+constexpr size_t kWriteChunk = 32 * 1024;
+
+constexpr auto kRepeatTick = std::chrono::seconds(1);
+
 void writer_thread_body() {
-    ::CreateDirectoryW(core::Paths::root().c_str(), nullptr);
     std::wstring path;
+    win::RollingFile::Limits limits{};
     {
         const std::lock_guard<std::mutex> lock(file_mu());
         path = file_path().empty() ? core::Paths::agent_log() : file_path();
+        limits = file_limits();
     }
-    // Open ONCE and keep it. FILE_APPEND_DATA keeps appends atomic
-    // even though we no longer reopen. No FILE_FLAG_WRITE_THROUGH /
-    // FlushFileBuffers — those force the qcow2 fsync stalls we're
-    // eliminating; the OS lazily flushes the buffered handle, which is
-    // fine for a debug log (the wire path already has every line).
-    HANDLE h = ::CreateFileW(path.c_str(), FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE,
-                             nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    win::RollingFile file{path, limits};
+    lsw::base::RepeatCollapser collapser;
     std::deque<Record> batch;
-    std::string line;
+    std::string text;
+
+    const auto note_line = [&text](const lsw::base::RepeatCollapser::Note& note, std::uint64_t ts_ms) {
+        Record r;
+        r.ts_ms = ts_ms;
+        r.level = static_cast<Level>(note.level);
+        r.source = note.source;
+        r.msg = "last message repeated " + std::to_string(note.count) +
+                (note.count == 1 ? " time" : " times");
+        append_line(text, r);
+    };
+    const auto write_out = [&] {
+        if (!text.empty()) {
+            (void)file.append(text);
+            text.clear();
+        }
+    };
+
     for (;;) {
+        bool idle = false;
         {
             std::unique_lock<std::mutex> lock(file_mu());
-            file_cv().wait(lock, [] { return !file_q().empty(); });
+            idle = !file_cv().wait_for(lock, kRepeatTick, [] { return !file_q().empty(); });
             batch.swap(file_q());
             in_writer() = batch.size();
         }
-        for (const auto& r : batch) {
-            if (h == INVALID_HANDLE_VALUE) {
-                continue;  // keep draining the queue even if the file is unusable
+        if (idle) {
+            if (const auto note = collapser.due(mono_ms())) {
+                note_line(*note, now_ms());
+                write_out();
             }
-            // One write per record, so a line is never split by another
-            // writer appending to the same file.
-            char prefix[64];
-            format_prefix(prefix, sizeof(prefix), r.ts_ms, r.level);
-            line.assign(prefix);
-            line += r.msg;
-            line += "\r\n";
-            DWORD wrote = 0;
-            ::WriteFile(h, line.data(), static_cast<DWORD>(line.size()), &wrote, nullptr);
+            continue;
         }
+        for (const auto& r : batch) {
+            const auto verdict =
+                collapser.feed(static_cast<int>(r.level), r.source, r.msg, mono_ms());
+            if (verdict.note) {
+                note_line(*verdict.note, r.ts_ms);
+            }
+            if (verdict.write) {
+                append_line(text, r);
+            }
+            if (text.size() >= kWriteChunk) {
+                write_out();
+            }
+        }
+        write_out();
         batch.clear();
         {
             const std::lock_guard<std::mutex> lock(file_mu());
@@ -159,9 +184,6 @@ void writer_thread_body() {
 }
 
 void ensure_writer_started() {
-    // Detached, process-lifetime — same pattern as the console reader
-    // threads. No join: logging has no shutdown hook and the OS
-    // reclaims the handle on exit.
     static std::once_flag once;
     std::call_once(once, [] { std::thread{writer_thread_body}.detach(); });
 }
@@ -171,14 +193,14 @@ void enqueue_for_file(const Record& r) {
         std::lock_guard<std::mutex> lock(file_mu());
         auto& q = file_q();
         if (q.size() >= kFileQueueCap) {
-            q.pop_front();  // drop oldest unwritten line under sustained backlog
+            q.pop_front();
         }
         q.push_back(r);
     }
     file_cv().notify_one();
 }
 
-}  // namespace
+}
 
 namespace detail {
 
@@ -186,24 +208,49 @@ void append_wide(std::string& out, std::wstring_view value) {
     out += util::TextEncoding::to_utf8(std::wstring{value});
 }
 
-}  // namespace detail
+}
+
+namespace detail {
+std::atomic<int> g_min_level{static_cast<int>(Level::Info)};
+}
+
+void set_level(Level level) {
+    detail::g_min_level.store(static_cast<int>(level), std::memory_order_relaxed);
+}
+
+Level level() {
+    return static_cast<Level>(detail::g_min_level.load(std::memory_order_relaxed));
+}
 
 Level level_from_name(std::string_view name) {
-    if (name == "DEBUG") {
+    std::string lower;
+    for (const char c : name) {
+        lower += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    }
+    if (lower == "trace") {
+        return Level::Trace;
+    }
+    if (lower == "debug") {
         return Level::Debug;
     }
-    if (name == "WARN") {
+    if (lower == "warn" || lower == "warning") {
         return Level::Warn;
     }
-    if (name == "ERROR") {
+    if (lower == "error" || lower == "err") {
         return Level::Error;
     }
     return Level::Info;
 }
 
-void set_file(const std::wstring& path) {
+void set_file(const std::wstring& path, win::RollingFile::Limits limits) {
     const std::lock_guard<std::mutex> lock(file_mu());
     file_path() = path;
+    file_limits() = limits;
+}
+
+void set_source(std::string source) {
+    const std::lock_guard<std::mutex> lock(mu());
+    process_source() = std::move(source);
 }
 
 void flush(unsigned timeout_ms) {
@@ -214,29 +261,31 @@ void flush(unsigned timeout_ms) {
 
 const char* level_name(Level lvl) {
     switch (lvl) {
+    case Level::Trace:
+        return "trace";
     case Level::Debug:
-        return "DEBUG";
+        return "debug";
     case Level::Info:
-        return "INFO";
+        return "info";
     case Level::Warn:
-        return "WARN";
+        return "warn";
     case Level::Error:
-        return "ERROR";
+        return "error";
     }
     return "?";
 }
 
-void append(Level level, const std::string& msg) {
+namespace {
+
+void push(Level level, const std::string* source, const std::string& msg, std::uint64_t ts_ms) {
     ensure_writer_started();
     Record r;
     {
-        // Only the in-memory ring + seq are touched under mu() — this
-        // is the wire-facing state and must stay ordered/immediate.
-        // No file I/O here: that's the background writer's job.
         std::lock_guard<std::mutex> lock(mu());
         r.seq = ++seq_counter();
-        r.ts_ms = now_ms();
+        r.ts_ms = ts_ms != 0 ? ts_ms : now_ms();
         r.level = level;
+        r.source = source != nullptr ? *source : process_source();
         r.msg = msg;
         auto& q = ring();
         q.push_back(r);
@@ -245,6 +294,18 @@ void append(Level level, const std::string& msg) {
         }
     }
     enqueue_for_file(r);
+}
+
+}
+
+void append(Level level, const std::string& msg) {
+    push(level, nullptr, msg, 0);
+}
+
+void append_from(Level level, std::string_view source, const std::string& msg,
+                 std::uint64_t ts_ms) {
+    const std::string owned{source};
+    push(level, &owned, msg, ts_ms);
 }
 
 std::vector<Record> collect_since(std::uint64_t since, std::uint64_t& next_since) {
@@ -261,4 +322,4 @@ std::vector<Record> collect_since(std::uint64_t since, std::uint64_t& next_since
     return out;
 }
 
-}  // namespace lsw::agent::log
+}

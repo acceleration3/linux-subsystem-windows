@@ -35,7 +35,7 @@ constexpr int kColStatus = 2;
     return {};
 }
 
-}  // namespace
+}
 
 SetupPage::SetupPage(Wizard& wizard, QWidget* parent) : PipelinePage(parent), wizard_(wizard) {
 
@@ -44,9 +44,6 @@ SetupPage::SetupPage(Wizard& wizard, QWidget* parent) : PipelinePage(parent), wi
         QStringLiteral("Reported live by the agent. The display driver is already in: "
                        "Windows installed it at the end of setup, from the payload."));
 
-    // Which stage the table is showing, and whether its steps run at
-    // the same time. The square is the design's: a stage is a group,
-    // and a group deserves a mark that is not another word.
     auto* stage_row = new QWidget;
     auto* stage_layout = new QHBoxLayout(stage_row);
     stage_layout->setContentsMargins(0, 0, 0, 0);
@@ -68,16 +65,12 @@ SetupPage::SetupPage(Wizard& wizard, QWidget* parent) : PipelinePage(parent), wi
     table_->horizontalHeader()->setSectionResizeMode(kColName, QHeaderView::Stretch);
     table_->horizontalHeader()->setSectionResizeMode(kColKind, QHeaderView::Fixed);
     table_->setColumnWidth(kColKind, 170);
-    // Fixed: a column sized to its items measures the empty item behind
-    // the pill widget and clips it.
     table_->horizontalHeader()->setSectionResizeMode(kColStatus, QHeaderView::Fixed);
     table_->setColumnWidth(kColStatus, 210);
     ui::Theme::fit_rows(table_);
     lay->addWidget(table_);
     lay->addStretch(1);
 
-    // What is left, and what happens after it. Both belong at the foot
-    // of the page: they describe the whole run rather than a row.
     progress_ = new QProgressBar;
     progress_->setObjectName(QString::fromLatin1(ui::Theme::Role::kMeter));
     progress_->setProperty("pressure", QStringLiteral("hot"));
@@ -106,8 +99,6 @@ void SetupPage::initializePage() {
 
     connect(p, &::lsw::host::provision::Pipeline::setup_plan_ready, this,
             [this](const QVector<Stage>& stages) { populate_from_plan(stages); });
-    // If the pipeline already parsed the plan before we connected
-    // (page shown late), pull it now so the table still populates.
     if (!p->setup_plan().isEmpty()) {
         populate_from_plan(p->setup_plan());
     }
@@ -139,8 +130,6 @@ void SetupPage::initializePage() {
                 if (s == Step::RunningSetup || s == Step::ShuttingDown
                     || s == Step::StartingVmVirtio || s == Step::WaitingForAgentAfterSwap) {
                     status_label_->setText(QStringLiteral("Setup failed: %1").arg(err));
-                    // Terminal — let the wizard advance to Done so the user
-                    // can read the message and (manually) open the manager.
                     finish_and_advance();
                 }
             });
@@ -155,8 +144,6 @@ void SetupPage::demo_fill() {
     using ::lsw::host::provision::SetupStage;
     using ::lsw::host::provision::StepKind;
     SetupStage stage;
-    // The plan as setup-steps.json has it: one step. Graphics is not one
-    // of them any more; the driver package went in with Windows.
     stage.steps.push_back({QStringLiteral("Tune Windows for VM use"), StepKind::RunScript});
     populate_from_plan({stage});
     set_row_status(0, RowStatus::Running, QStringLiteral("Applying registry"));
@@ -191,8 +178,6 @@ void SetupPage::populate_from_plan(const QVector<::lsw::host::provision::SetupSt
     finished_steps_ = 0;
     progress_->setValue(0);
 
-    // The caption says where in the plan this is, in the design's own
-    // words: a stage, and whether its steps run together.
     if (stages.isEmpty()) {
         stage_label_->setText(QStringLiteral("NOTHING TO DO"));
         status_label_->setText(
@@ -206,8 +191,6 @@ void SetupPage::populate_from_plan(const QVector<::lsw::host::provision::SetupSt
 }
 
 void SetupPage::show_stage(int row) {
-    // The stage the running step belongs to, and whether its steps run
-    // together; a plan of single steps is just a count.
     const int total = total_steps_;
     if (stage_sizes_.isEmpty()) {
         return;
@@ -236,10 +219,7 @@ void SetupPage::show_stage(int row) {
 }
 
 void SetupPage::set_row_status(int row, RowStatus s, const QString& detail) {
-    // A pill rather than coloured text: the state reads from its shape
-    // and its dot before the word is read, which is what a column of
-    // them is for.
     ui::StatusPill::set_cell(table_, row, kColStatus, s, detail);
 }
 
-}  // namespace lsw::host::wizard
+}

@@ -44,4 +44,4 @@ void PendingCalls::fail_all(const std::string& why) {
     }
 }
 
-}  // namespace lsw::host::link
+}

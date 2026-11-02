@@ -1,6 +1,3 @@
-# re4demo/intro: MAIN STORY, NEW GAME, and the load into the opening
-# cutscene (in-engine: the car, the pistol, Leon in the back seat), recorded
-# for 150 frames from the F12 pressed once the load's black screen gives way.
 ToMenu
 Press enter 3000
 Press enter 3000

@@ -37,4 +37,4 @@ Panel Panel::make(const QString& caption) {
     return panel;
 }
 
-}  // namespace lsw::host::ui
+}

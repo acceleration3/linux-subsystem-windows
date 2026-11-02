@@ -34,7 +34,7 @@ constexpr int kColMemory = 2;
 constexpr int kColDriver = 3;
 constexpr int kColRole = 4;
 
-}  // namespace
+}
 
 AdapterRoles::AdapterRoles(config::PendingChanges& pending, const services::StatusHub& status,
                            QWidget* parent)
@@ -55,10 +55,6 @@ AdapterRoles::AdapterRoles(config::PendingChanges& pending, const services::Stat
                                QStringLiteral("ROLE")});
     table_->verticalHeader()->setDefaultSectionSize(42);
     table_->setProperty("controls", true);
-    // The IDs, the memory and the driver are short and must be read whole,
-    // so their columns are as wide as what is in them; the GPU's name
-    // takes what is left and is the one that elides. The role column is
-    // sized to its combos in rebuild.
     auto* head = table_->horizontalHeader();
     head->setSectionResizeMode(kColName, QHeaderView::Stretch);
     for (const int col : {kColIds, kColMemory, kColDriver}) {
@@ -77,16 +73,12 @@ AdapterRoles::AdapterRoles(config::PendingChanges& pending, const services::Stat
         true));
     column->addWidget(foot);
 
-    // Revert and Apply change what is staged; the rows follow.
     connect(&pending_, &config::PendingChanges::changed, this, &AdapterRoles::rebuild,
             Qt::QueuedConnection);
     connect(&status_, &services::StatusHub::changed, this, [this](services::StatusHub::Area area) {
         if (area != services::StatusHub::Area::Graphics) {
             return;
         }
-        // The list, and whether the host has answered at all: an answer
-        // of no GPUs is the same list as before it came, and the row
-        // that said "Asking the host" must still change.
         const auto& now = status_.graphics().host_gpus;
         const bool same = now.size() == gpus_.size()
                           && std::equal(now.begin(), now.end(), gpus_.begin(),
@@ -163,7 +155,6 @@ void AdapterRoles::rebuild() {
             role->addItem(QStringLiteral("Not used"), kNotUsed);
             role->setCurrentIndex(render.contains(gpu.uuid) ? 1 : 2);
         }
-        // Queued: a choice rebuilds the table the combo sits in.
         connect(role, &QComboBox::activated, this, [this, role, uuid = gpu.uuid](int index) {
             const int chosen = role->itemData(index).toInt();
             QMetaObject::invokeMethod(this, [this, uuid, chosen] { choose(uuid, chosen); },
@@ -175,8 +166,6 @@ void AdapterRoles::rebuild() {
 }
 
 void AdapterRoles::set_role_cell(int row, QComboBox* combo) {
-    // In a holder, centred at the combo's own height: set straight into
-    // the cell it would be stretched to the row's.
     auto* holder = new QWidget;
     auto* line = new QHBoxLayout(holder);
     line->setContentsMargins(0, 0, 0, 0);
@@ -194,12 +183,10 @@ void AdapterRoles::choose(const QString& uuid, int role) {
     const auto display = platform::HostGpus::resolve(gpus_, setting);
     QStringList render = pending_.staged_or_current(K::kRenderGpus).toStringList();
     if (display && display->uuid == uuid) {
-        return;  // the display row has no other role
+        return;
     }
     render.removeAll(uuid);
     if (role == kDisplay) {
-        // The display moves; the one it leaves keeps working, as a
-        // render-only adapter, rather than vanishing from the guest.
         if (display && !render.contains(display->uuid)) {
             render << display->uuid;
         }
@@ -207,7 +194,6 @@ void AdapterRoles::choose(const QString& uuid, int role) {
     } else if (role == kRenderOnly) {
         render << uuid;
     }
-    // In host order, so the same set is always the same list.
     QStringList ordered;
     for (const auto& gpu : gpus_) {
         if (render.contains(gpu.uuid)) {
@@ -218,4 +204,4 @@ void AdapterRoles::choose(const QString& uuid, int role) {
     rebuild();
 }
 
-}  // namespace lsw::host::manager
+}

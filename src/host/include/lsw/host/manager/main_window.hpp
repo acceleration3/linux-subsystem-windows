@@ -33,40 +33,18 @@ class VmDetailPanel;
 class NoticeBoard;
 class WarningStrip;
 
-// Manager shell: a navigation rail down the left, one page at a time
-// beside it, and a status bar carrying the facts that used to live only
-// in a log.
-//
-// The window used to be a single panel with four buttons across its
-// top. Those buttons could not say where you were, two of them were
-// always disabled, and everything they opened became a separate
-// top-level window. Now the pages are pages, the rail marks the current
-// one, and Start and Stop are one control that says what it does.
 class MainWindow : public QMainWindow {
     Q_OBJECT
 public:
     explicit MainWindow(services::HostServices& services, QWidget* parent = nullptr);
 
-    // Bring a specific page up, used by the pages themselves when one
-    // hands off to another.
     void show_page(NavRail::Page page);
 
-    // Rewrite the definition, then stop the guest - waiting until it is
-    // off, forcing it at a deadline - and start it on the new one; just
-    // start it when it is off. The apply bar's restart, and what opening a
-    // file from a folder that is not shared yet asks for once the folder is.
-    // ``reason`` gets why when it is refused. A restart already under way
-    // takes the new definition too: it is rewritten again before the start.
     RestartResult restart_guest(QString* reason = nullptr);
 
 Q_SIGNALS:
-    // There is no guest, and the only thing that leads anywhere is the
-    // wizard. The application owns that flow, not this window.
     void wizard_requested();
-    // An application opened from the grid before Windows answers. The
-    // boot splash that waits for it is the application's too.
     void launch_requested(const QString& app_id);
-    // The settings page's Reinstall. The wizard is the application's.
     void reinstall_requested();
 
 protected:
@@ -81,37 +59,21 @@ private:
     void build_pages();
     QWidget* build_empty_state();
     void pop_out(NavRail::Page page);
-    // The guest's whole desktop in a window of its own (a desktop
-    // mirror), or that window brought forward when it is open already.
+    void collect_logs();
     void open_desktop();
-    // Open desktop is for a guest whose agent answers: the capture runs
-    // inside Windows.
     void follow_agent_for_desktop(bool online);
     void setup_tray();
     void refresh_identity();
     [[nodiscard]] QString page_detail(NavRail::Page page) const;
     void refresh_status_bar();
-    // The overview's strip and the rail's dot, from the Graphics page's
-    // warnings.
     void refresh_warning();
-    // The resolutions, to the running device (a qom-set; no agent
-    // needed), and the DPI, to the agent (read at the next logon).
     void push_display_modes();
-    // The refresh rate, to the running device the same way: Windows is told
-    // the new rate and switches without a restart.
     void push_display_refresh();
     void push_dpi();
-    // The monitor this window is on, for "match the monitor" and for the
-    // refresh rate "same as monitor" follows.
     [[nodiscard]] std::optional<config::DisplayMode> current_output() const;
     [[nodiscard]] std::optional<quint32> current_refresh_millihz() const;
-    // The rate of the screen the window is on, said to the hub and pushed
-    // again when it changed: a screen's mode, the window moving to another
-    // screen, a screen coming or going.
     void follow_monitor_refresh();
     void on_graphics_changed();
-    // The definition from the settings, rewritten; false (with a notice) when
-    // libvirt refuses it.
     [[nodiscard]] bool redefine_now(const config::VmRecord& primary);
 
     services::HostServices& services_;
@@ -121,41 +83,21 @@ private:
     QLabel* content_title_ = nullptr;
     QLabel* content_detail_ = nullptr;
     QPushButton* pop_out_button_ = nullptr;
-    // Per-page actions in the content bar. Shown for the page they
-    // belong to and hidden for the rest, rather than each page growing
-    // a toolbar of its own.
     QPushButton* desktop_button_ = nullptr;
     QPushButton* run_on_vm_button_ = nullptr;
     QPointer<RunOnVmDialog> run_on_vm_dialog_;
     QPushButton* clear_button_ = nullptr;
     QPushButton* config_folder_button_ = nullptr;
     QPushButton* change_settings_button_ = nullptr;
-    // The two Graphics warnings that break the guest, repeated on the
-    // overview with a way to the page that says more.
     WarningStrip* warn_strip_ = nullptr;
-    // What this window tried that did not work, each until it is dismissed
-    // or stops being true: a strip per failure across the top of every page.
     NoticeBoard* notices_ = nullptr;
     QLabel* status_left_ = nullptr;
-    // Something this window is doing that the status bar says ahead of the
-    // facts until it is over: a restart in progress. The facts themselves
-    // are redrawn from the status hub on every reading, so a message
-    // written straight into the bar would be gone two seconds later.
-    // Failures are notices, not this.
     QString notice_;
-    // A restart was asked for while one was under way.
     bool redefine_again_ = false;
-    // A failure that keeps the guest from starting, as a notice.
     void notice_start_refused(const QString& headline);
-    // The launch failures of applications, as notices until they open.
     void follow_launches();
-    // LSW's half inside Windows being brought up to date: a fact in the
-    // status bar while it runs, a notice when it fails.
     void follow_upkeep();
 
-    // Overview is two pages: the machine, and the state where there is
-    // no machine yet. A manager that opens with dead buttons and blank
-    // gauges is the one genuinely confusing moment in the application.
     QStackedWidget* overview_stack_ = nullptr;
     VmDetailPanel* overview_ = nullptr;
     ConsolePanel* console_ = nullptr;
@@ -165,11 +107,8 @@ private:
     SettingsPage* settings_page_ = nullptr;
     UpdateDialog* update_dialog_ = nullptr;
     QSystemTrayIcon* tray_ = nullptr;
-    // A restart in progress: the guest is being stopped so it can be
-    // started on a new definition.
     vm::GracefulShutdown* restart_ = nullptr;
-    // The desktop mirror while it is open; it deletes itself as it ends.
     QPointer<mirror::WindowMirror> desktop_;
 };
 
-}  // namespace lsw::host::manager
+}

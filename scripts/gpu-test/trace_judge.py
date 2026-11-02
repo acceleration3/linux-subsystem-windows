@@ -1,19 +1,3 @@
-"""How a trace replay is judged, without a person: pure functions over what
-the guest wrote, so they are tested on their own (test_traces.py).
-
-A replay is judged on
-  - the replay process: its exit code, a timeout, a device lost or removed
-    that the retracer printed, and the guest's GPU resets during it;
-  - its pictures: the frames the manifest names, read back by the retracer,
-    against reference/ (PSNR and the share of pixels that differ) and, in
-    aggregate.py, against the same frames from every other GPU;
-  - OpenCL: every captured kernel's output buffers against the ones the
-    application's own run produced;
-  - the process's memory growth over the replay, and its frame rate.
-
-Images are (width, height, rgb bytes), top row first; PNG and PNM are read
-and written here with zlib alone, since hosts have no imaging library.
-"""
 import hashlib
 import json
 import math
@@ -32,7 +16,6 @@ DEVICE_LOST = {
     "88760870": "D3DERR_DEVICEREMOVED",
     "88760874": "D3DERR_DEVICEHUNG",
 }
-"""HRESULTs that mean the GPU went away, as the retracers print them."""
 CRASHES = {
     0xC0000005: "access violation",
     0xC0000374: "heap corruption",
@@ -43,8 +26,6 @@ CRASHES = {
 }
 
 
-# ---------------------------------------------------------------- images
-
 def image(width, height, rgb):
     if len(rgb) != width * height * 3:
         raise ValueError(f"{width}x{height} needs {width * height * 3} bytes, not {len(rgb)}")
@@ -52,9 +33,6 @@ def image(width, height, rgb):
 
 
 def parse_pnm_stream(data):
-    """Every image in apitrace's `-s -` stream: [(comment, image)]. The
-    comment is the call number the snapshot was taken at. P6 and P5 are 8-bit;
-    PF, Pf and apitrace's own PX (four floats) are floats, clamped to 8 bits."""
     images = []
     offset = 0
     while offset < len(data):
@@ -102,7 +80,6 @@ def parse_pnm_stream(data):
 
 
 def write_png(path, picture):
-    """An RGB PNG, every row unfiltered."""
     width, height, rgb = picture
     stride = width * 3
     raw = b"".join(b"\x00" + rgb[y * stride:(y + 1) * stride] for y in range(height))
@@ -117,7 +94,6 @@ def write_png(path, picture):
 
 
 def read_png(path):
-    """An 8-bit, non-interlaced PNG (grey, RGB, grey+alpha or RGBA) as RGB."""
     with open(path, "rb") as source:
         data = source.read()
     return decode_png(data)
@@ -187,7 +163,6 @@ def decode_png(data):
 
 
 def read_bmp(path):
-    """A 24- or 32-bit uncompressed BMP (gfxrecon-replay's screenshots) as RGB."""
     with open(path, "rb") as source:
         data = source.read()
     if data[:2] != b"BM":
@@ -212,10 +187,6 @@ def read_bmp(path):
 
 
 def compare_images(reference, got, pixel_tolerance=2):
-    """How far `got` is from `reference`: the largest channel difference, the
-    share of pixels with a channel off by more than `pixel_tolerance` (%),
-    and the PSNR over the RGB channels (inf when equal). Rows that are equal
-    are skipped, which across GPUs is most of them."""
     width, height, a = reference
     other_width, other_height, b = got
     if (width, height) != (other_width, other_height):
@@ -242,7 +213,6 @@ def compare_images(reference, got, pixel_tolerance=2):
 
 
 def difference_image(reference, got):
-    """A heat map of the largest channel difference (x8), dark where equal."""
     width, height, a = reference
     _, _, b = got
     heat = bytearray(width * height * 3)
@@ -253,7 +223,6 @@ def difference_image(reference, got):
 
 
 def picture_verdict(stats, limits):
-    """"identical", "matches", "close" (a note) or "differs" (a failure)."""
     if "size" in stats:
         return "differs"
     if stats["max"] == 0:
@@ -272,16 +241,12 @@ def describe(stats):
     return f"PSNR {psnr}, {stats['changed_pct']:.2f}% of pixels differ, worst channel {stats['max']}"
 
 
-# --------------------------------------------------------- the replay process
-
 def retrace_fps(text):
-    """apitrace's "Rendered N frames in S secs, average of F fps": (N, S, F)."""
     found = re.search(r"Rendered (\d+) frames in ([\d.]+) secs?, average of ([\d.]+) fps", text)
     return (int(found.group(1)), float(found.group(2)), float(found.group(3))) if found else None
 
 
 def device_lost(text):
-    """The device-lost HRESULTs the output names, once each, in order."""
     seen = []
     for code in re.findall(r"0x([0-9a-fA-F]{8})", text):
         name = DEVICE_LOST.get(code.lower())
@@ -294,7 +259,6 @@ def device_lost(text):
 
 
 def retrace_warnings(text):
-    """apitrace's per-call complaints: "<call>: warning: ..." and "... error: ..."."""
     return [line.strip() for line in text.splitlines() if re.match(r"^\s*\d+: (warning|error):", line)]
 
 
@@ -309,10 +273,6 @@ def exit_description(code):
 
 
 def memory_growth(samples):
-    """(growth MiB, peak MiB) of private bytes over a run sampled as
-    [seconds, private, working set]: the median of the last tenth less the
-    median of the samples a third of the way in - loading is over by then,
-    and a leak keeps going to the end. None when there are too few samples."""
     if not samples:
         return None, None
     private = [sample[1] for sample in samples if sample[1]]
@@ -333,8 +293,6 @@ def memory_growth(samples):
 
 
 def judge_process(label, result, judge):
-    """Failures and metrics of one replay pass from trace-replay.ps1's
-    result: {"exit_code", "seconds", "timed_out", "samples"} plus its output."""
     failures, metrics = [], {}
     if result is None:
         return [{"case": label, "detail": "the replay left no result"}], metrics
@@ -360,13 +318,9 @@ def judge_process(label, result, judge):
 
 
 DRIVER_OF_API = {"d3d8": "avumd", "d3d9": "avumd", "dxgi": "avumd", "d3d12": "avumd", "gl": "avgl", "vulkan": "avvk"}
-"""The avgpu user-mode driver a replay of each API must load (avumd32 and the
-like for a 32-bit replay)."""
 
 
 def judge_driver(label, result, api, warp=False):
-    """Whether a replay pass rendered on avgpu: failures, notes, and the
-    driver DLLs it loaded. A WARP pass must load WARP instead."""
     if not result or api not in DRIVER_OF_API:
         return [], [], []
     modules = [name.lower() for name in result.get("modules") or []]
@@ -387,9 +341,6 @@ def judge_driver(label, result, api, warp=False):
 
 
 def judge_frames(frames, references, judge):
-    """`frames` {frame: image or None} against `references` {frame: image}:
-    failures, notes and metrics. A frame the replay did not produce fails;
-    one with no reference is noted, and judged across GPUs only."""
     failures, notes, worst_psnr, worst_changed = [], [], math.inf, 0.0
     for frame, got in sorted(frames.items()):
         if got is None:
@@ -422,10 +373,6 @@ def judge_fps(fps, judge):
 
 
 def judge_opencl(result, judge, platform=None):
-    """clreplay.py's result: failures, notes and metrics. Each kernel must
-    replay on the platform whose name contains `platform`, and each output
-    buffer must hold what the application's own run left in it, element by
-    element within the tolerances clreplay applied."""
     failures, notes = [], []
     enqueues = result.get("enqueues", [])
     programs = result.get("programs", [])
@@ -489,20 +436,12 @@ def judge_opencl(result, judge, platform=None):
 
 
 def output_hashes(result):
-    """{"<enqueue> arg <n>": sha256} of every output clreplay hashed, for
-    comparing GPUs with each other."""
     return {f"{enqueue.get('name')} arg {argument.get('arg')}": argument["sha256"]
             for enqueue in result.get("enqueues", []) for argument in enqueue.get("arguments", [])
             if argument.get("sha256")}
 
 
-# ----------------------------------------------------------- across GPUs
-
 def across_gpus(passes, judge_of):
-    """Every trace frame from every GPU against the same frame from the first
-    GPU that has it. `passes` is [(label, {trace id: {"frames": {frame: png
-    path}, "hashes": {...}}})]; `judge_of(trace id)` its limits. Returns rows
-    (trace id, item, {label: text}, bad) for aggregate.py's table."""
     rows = []
     trace_ids = sorted({trace_id for _, traces in passes for trace_id in traces})
     for trace_id in trace_ids:
@@ -550,11 +489,7 @@ def sha256_bytes(data):
     return hashlib.sha256(data).hexdigest()
 
 
-# ------------------------------------------------------------- across GPUs
-
 def cross_gpu_section(run):
-    """aggregate.py's "Trace frames across GPUs": every collected pass's
-    frames and OpenCL hashes, each against the first GPU's."""
     passes, limits = [], {}
     for results_path in sorted(pathlib.Path(run).glob("*/*/results.json")):
         try:

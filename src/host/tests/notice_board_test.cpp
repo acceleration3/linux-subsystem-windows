@@ -1,6 +1,3 @@
-// Notices: one strip per key, newest first, replaced by the same key,
-// gone on Dismiss or when withdrawn. ``--snapshot <dir>`` saves the board
-// and the launch splash's failed state as drawn.
 #include "lsw/host/manager/launch_splash.hpp"
 #include "lsw/host/manager/notice_board.hpp"
 #include "lsw/host/manager/warning_strip.hpp"
@@ -21,7 +18,6 @@ void check(bool ok, const char* label) {
 }
 QList<lsw::host::manager::WarningStrip*> strips(lsw::host::manager::NoticeBoard& board) {
     QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
-    // In the board's own order, top to bottom.
     QList<lsw::host::manager::WarningStrip*> shown;
     for (int i = 0; i < board.layout()->count(); ++i) {
         auto* strip = qobject_cast<lsw::host::manager::WarningStrip*>(board.layout()->itemAt(i)->widget());
@@ -40,7 +36,7 @@ QPushButton* button(lsw::host::manager::WarningStrip* strip, const QString& text
     }
     return nullptr;
 }
-}  // namespace
+}
 
 int main(int argc, char** argv) {
     QApplication app(argc, argv);

@@ -16,7 +16,7 @@ constexpr auto kService = "org.freedesktop.login1";
 constexpr auto kPath = "/org/freedesktop/login1";
 constexpr auto kInterface = "org.freedesktop.login1.Manager";
 
-}  // namespace
+}
 
 HostShutdownWatch::HostShutdownWatch(vm::Lifecycle& lifecycle, StatusHub& status, QObject* parent)
     : QObject(parent), lifecycle_(lifecycle), status_(status) {}
@@ -40,9 +40,6 @@ void HostShutdownWatch::start() {
     take_lock();
 }
 
-// A delay lock, not a block: the shutdown still happens, but logind waits for
-// the lock (at most its InhibitDelayMaxSec) after announcing it, which is the
-// time the destroy needs.
 void HostShutdownWatch::take_lock() {
     QDBusInterface login{kService, kPath, kInterface, QDBusConnection::systemBus()};
     const QDBusReply<QDBusUnixFileDescriptor> reply =
@@ -57,7 +54,6 @@ void HostShutdownWatch::take_lock() {
 
 void HostShutdownWatch::prepare_for_shutdown(bool starting) {
     if (!starting) {
-        // A shutdown called off: the next one must wait for us again.
         if (!lock_.isValid()) {
             take_lock();
         }
@@ -73,4 +69,4 @@ void HostShutdownWatch::prepare_for_shutdown(bool starting) {
     lock_ = QDBusUnixFileDescriptor{};
 }
 
-}  // namespace lsw::host::services
+}

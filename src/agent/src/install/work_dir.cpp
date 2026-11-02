@@ -18,4 +18,4 @@ std::wstring WorkDir::staged_path(const std::string& job_id, const std::wstring&
     return path() + L"lsw-" + util::TextEncoding::to_wide(job_id) + suffix;
 }
 
-}  // namespace lsw::agent::install
+}

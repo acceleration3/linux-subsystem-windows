@@ -11,9 +11,6 @@ namespace {
 
 using K = ManagerSettings::Key;
 
-// What the apply bar calls each key. Short enough to fit several on one
-// line, because that bar's job is to be readable at a glance rather
-// than complete.
 QString label_for(const QString& key) {
     static const QHash<QString, QString> labels = {
         {K::kCpuCores, QStringLiteral("cores")},
@@ -27,15 +24,11 @@ QString label_for(const QString& key) {
     return labels.value(key, key);
 }
 
-// A list-valued setting has no useful "8 becomes 12" form, so it says
-// how many entries it will have instead.
 QString render(const QString& key, const QVariant& value) {
     if (key == K::kHostShares) {
         return QStringLiteral("%1 folders")
             .arg(ManagerSettings::decode_host_shares(value.toString()).size());
     }
-    // A GPU list says how many; a UUID is long, and its first group is
-    // what a person matches against the Graphics page.
     if (value.typeId() == QMetaType::QStringList) {
         return QString::number(value.toStringList().size());
     }
@@ -52,7 +45,7 @@ QString render(const QString& key, const QVariant& value) {
     return value.toString();
 }
 
-}  // namespace
+}
 
 PendingChanges::PendingChanges(ManagerSettings& settings, QObject* parent)
     : QObject(parent), settings_(settings) {}
@@ -60,8 +53,6 @@ PendingChanges::PendingChanges(ManagerSettings& settings, QObject* parent)
 bool PendingChanges::stage(const QString& key, const QVariant& value) {
     const QVariant current = settings_.value(key);
     if (current == value) {
-        // Back to where it started. Nothing to apply, and nothing to
-        // show in the bar.
         if (staged_.remove(key) > 0) {
             Q_EMIT changed();
         }
@@ -100,7 +91,6 @@ std::optional<HostShare> PendingChanges::add_share(const QString& folder) {
     QVector<HostShare> staged =
         has_staged ? ManagerSettings::decode_host_shares(staged_.value(K::kHostShares).toString()) : stored;
 
-    // A staged share of the folder, or of a parent: already the answer.
     std::optional<HostShare> chosen;
     for (const auto& share : std::as_const(staged)) {
         const QString root = QDir::cleanPath(share.host_path);
@@ -132,7 +122,6 @@ std::optional<HostShare> PendingChanges::add_share(const QString& folder) {
     if (!stored_already) {
         stored.push_back(*chosen);
         settings_.set_host_shares(stored);
-        // Stored now what the staged list also holds: no longer a difference.
         if (has_staged) {
             stage(K::kHostShares, ManagerSettings::encode_host_shares(staged));
         }
@@ -156,4 +145,4 @@ void PendingChanges::revert() {
     Q_EMIT changed();
 }
 
-}  // namespace lsw::host::config
+}

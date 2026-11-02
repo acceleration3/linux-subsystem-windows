@@ -1,4 +1,5 @@
 #include "lsw/agent/core/services.hpp"
+#include "lsw/agent/log.hpp"
 #include "lsw/agent/rpc/auto_register.hpp"
 #include "lsw/agent/rpc/handler.hpp"
 #include "lsw/agent/util/base64.hpp"
@@ -18,9 +19,12 @@ struct UploadFileHandler : RpcHandler {
             const auto size = params.at("size");
             if (!size.is_number_unsigned())
                 throw std::invalid_argument("upload size must be an unsigned integer");
-            return {{"ok", true},
-                    {"upload_id", uploads.begin(params.at("name").get<std::string>(),
-                                                size.get<std::uint64_t>(), params.value("document", false))}};
+            const auto name = params.at("name").get<std::string>();
+            const auto upload_id =
+                uploads.begin(name, size.get<std::uint64_t>(), params.value("document", false));
+            LSW_AGENT_INFO("upload_file: begin {} ({} bytes) id={}", name, size.get<std::uint64_t>(),
+                           upload_id);
+            return {{"ok", true}, {"upload_id", upload_id}};
         }
         const auto id = params.at("upload_id").get<std::string>();
         if (action == "chunk") {
@@ -35,19 +39,21 @@ struct UploadFileHandler : RpcHandler {
                     {"offset", uploads.append(id, offset.get<std::uint64_t>(), bytes)}};
         }
         if (action == "finish") {
-            return {{"ok", true},
-                    {"path", util::TextEncoding::to_utf8(uploads.finish(id).wstring())}};
+            const auto path = util::TextEncoding::to_utf8(uploads.finish(id).wstring());
+            LSW_AGENT_INFO("upload_file: finished id={} at {}", id, path);
+            return {{"ok", true}, {"path", path}};
         }
         if (action == "abort") {
             uploads.abort(id);
+            LSW_AGENT_INFO("upload_file: aborted id={}", id);
             return {{"ok", true}};
         }
         throw std::invalid_argument("unknown upload action");
     }
 
-    [[nodiscard]] bool silent() const override { return true; }
+    [[nodiscard]] log::Level request_level() const override { return log::Level::Trace; }
 };
 
-}  // namespace lsw::agent::rpc::handlers
+}
 
 LSW_REGISTER_RPC(lsw::agent::rpc::handlers::UploadFileHandler, ::lsw::linkproto::cmd::kUploadFile)

@@ -20,11 +20,8 @@ QImage AppConfig::icon_image() const {
 }
 
 QString AppConfig::make_id(const QString& path_or_name) {
-    // Stable, file-system-safe id: hex-sha1 of the input. We prefix
-    // with a short slug from the basename so the file names are
-    // human-readable when listing the directory.
     QString slug = path_or_name.section('\\', -1).section('/', -1);
-    slug.replace(QRegularExpression("\\.[^.]+$"), {});  // strip extension
+    slug.replace(QRegularExpression("\\.[^.]+$"), {});
     slug = slug.toLower();
     static const QRegularExpression non_token("[^a-z0-9]+");
     slug.replace(non_token, "-");
@@ -108,4 +105,4 @@ AppConfig AppConfig::from_json(const QString& s, bool* ok) {
     return out;
 }
 
-}  // namespace lsw::host::apps
+}

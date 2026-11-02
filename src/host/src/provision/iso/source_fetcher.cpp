@@ -17,9 +17,6 @@ constexpr auto kUserAgent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 
 constexpr auto kWin11Url = "https://www.microsoft.com/en-us/software-download/windows11";
 constexpr auto kWin10Url = "https://www.microsoft.com/en-us/software-download/windows10ISO";
 
-// Match every ``<option value="<digits>">label</option>`` inside the
-// page. ``value="null"`` and other non-numeric values are excluded by
-// the ``\d+`` capture.
 QList<WindowsEdition> parse_options(const QString& html, const QString& version) {
     QList<WindowsEdition> out;
     static const QRegularExpression kOption(
@@ -43,7 +40,7 @@ QList<WindowsEdition> parse_options(const QString& html, const QString& version)
     return out;
 }
 
-}  // namespace
+}
 
 IsoSourceFetcher::IsoSourceFetcher(QObject* parent) : QObject(parent) {
     nam_.setRedirectPolicy(QNetworkRequest::NoLessSafeRedirectPolicy);
@@ -116,4 +113,4 @@ void IsoSourceFetcher::maybe_emit() {
     }
 }
 
-}  // namespace lsw::host::provision::iso
+}

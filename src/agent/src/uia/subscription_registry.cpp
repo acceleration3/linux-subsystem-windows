@@ -6,6 +6,7 @@
 #include "lsw/agent/uia/lifecycle_event_handler.hpp"
 #include "lsw/agent/uia/property_event_handler.hpp"
 #include "lsw/agent/uia/uia_event_queue.hpp"
+#include "lsw/agent/win/error_text.hpp"
 
 #include <iterator>
 #include <utility>
@@ -16,6 +17,7 @@ std::uint64_t SubscriptionRegistry::store(Subscription sub) {
     const std::lock_guard<std::mutex> lock(mu_);
     const std::uint64_t id = next_id_++;
     subs_.emplace(id, std::move(sub));
+    LSW_AGENT_DEBUG("uia: subscription {} stored", id);
     return id;
 }
 
@@ -25,20 +27,17 @@ std::uint64_t SubscriptionRegistry::subscribe_pid_lifecycle(std::uint32_t pid) {
     }
     win::ComPtr<IUIAutomationElement> desktop;
     if (FAILED(root_->GetRootElement(desktop.GetAddressOf())) || !desktop) {
+        LSW_AGENT_WARN("uia: the desktop element could not be read for pid {}", pid);
         return 0;
     }
     const auto handler =
         win::make_com_object<LifecycleEventHandler>(queue_, static_cast<DWORD>(pid));
 
-    // Subtree scope catches the app's root window AND any dialogs or
-    // popups it spawns later; the handler filters by PID.
     const HRESULT opened = root_->AddAutomationEventHandler(
         UIA_Window_WindowOpenedEventId, desktop.Get(), TreeScope_Subtree, nullptr, handler.Get());
     const HRESULT closed = root_->AddAutomationEventHandler(
         UIA_Window_WindowClosedEventId, desktop.Get(), TreeScope_Subtree, nullptr, handler.Get());
     if (FAILED(opened) || FAILED(closed)) {
-        // Roll back whichever half succeeded so we do not leave a live
-        // handler with no id to detach it by.
         if (SUCCEEDED(opened)) {
             root_->RemoveAutomationEventHandler(UIA_Window_WindowOpenedEventId, desktop.Get(),
                                                 handler.Get());
@@ -47,7 +46,8 @@ std::uint64_t SubscriptionRegistry::subscribe_pid_lifecycle(std::uint32_t pid) {
             root_->RemoveAutomationEventHandler(UIA_Window_WindowClosedEventId, desktop.Get(),
                                                 handler.Get());
         }
-        LSW_AGENT_WARN("uia: AddAutomationEventHandler failed");
+        LSW_AGENT_WARN("uia: AddAutomationEventHandler failed for pid {}: opened {}, closed {}", pid,
+                       win::ErrorText::hresult(opened), win::ErrorText::hresult(closed));
         return 0;
     }
     return store({SubscriptionKind::Lifecycle, handler, desktop});
@@ -58,10 +58,11 @@ std::uint64_t SubscriptionRegistry::subscribe_pid_focus(std::uint32_t pid) {
         return 0;
     }
     const auto handler = win::make_com_object<FocusEventHandler>(queue_, static_cast<DWORD>(pid));
-    if (FAILED(root_->AddFocusChangedEventHandler(nullptr, handler.Get()))) {
+    if (const HRESULT hr = root_->AddFocusChangedEventHandler(nullptr, handler.Get()); FAILED(hr)) {
+        LSW_AGENT_WARN("uia: AddFocusChangedEventHandler failed for pid {}: {}", pid,
+                       win::ErrorText::hresult(hr));
         return 0;
     }
-    // Focus handlers are process-wide, so there is no scope element.
     return store({SubscriptionKind::Focus, handler, nullptr});
 }
 
@@ -71,6 +72,7 @@ std::uint64_t SubscriptionRegistry::subscribe_window_properties(std::uintptr_t h
     }
     const auto element = ElementLocator::from_window(root_, hwnd);
     if (!element) {
+        LSW_AGENT_WARN("uia: no element for window {} to watch", hwnd);
         return 0;
     }
     const auto handler = win::make_com_object<PropertyEventHandler>(queue_);
@@ -80,6 +82,8 @@ std::uint64_t SubscriptionRegistry::subscribe_window_properties(std::uintptr_t h
         element.Get(), TreeScope_Element, nullptr, handler.Get(), properties,
         static_cast<int>(std::size(properties)));
     if (FAILED(hr)) {
+        LSW_AGENT_WARN("uia: AddPropertyChangedEventHandler failed for window {}: {}", hwnd,
+                       win::ErrorText::hresult(hr));
         return 0;
     }
     return store({SubscriptionKind::Property, handler, element});
@@ -120,8 +124,6 @@ void SubscriptionRegistry::detach(Subscription& sub) {
     if (!sub.handler) {
         return;
     }
-    // Each kind detaches differently — this asymmetry is why Subscription
-    // carries a kind tag rather than a single polymorphic handle.
     switch (sub.kind) {
     case SubscriptionKind::Lifecycle: {
         win::ComPtr<IUIAutomationEventHandler> handler;
@@ -148,9 +150,8 @@ void SubscriptionRegistry::detach(Subscription& sub) {
         break;
     }
     }
-    // Scope before handler, the order the hand-written releases used.
     sub.scope.Reset();
     sub.handler.Reset();
 }
 
-}  // namespace lsw::agent::uia
+}

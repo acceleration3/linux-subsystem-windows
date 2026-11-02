@@ -7,4 +7,4 @@ std::string JobIdGenerator::next() {
     return "job-" + std::to_string(next_id_++);
 }
 
-}  // namespace lsw::agent::install
+}

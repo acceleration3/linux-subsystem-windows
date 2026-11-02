@@ -66,8 +66,6 @@ UsbStatus UsbStatus::build(const QVector<platform::HostUsbDevice>& host,
         }
         const auto& hostdev = live.at(i);
         out.stale.push_back(hostdev);
-        // Still in the guest, though the kernel has no such device: a row, so
-        // that it can be returned and a failure to is somewhere to be said.
         Device d;
         d.vendor = hostdev.vendor;
         d.product = hostdev.product;
@@ -86,8 +84,6 @@ UsbStatus UsbStatus::build(const QVector<platform::HostUsbDevice>& host,
         d.present = false;
         out.devices.push_back(std::move(d));
     }
-    // The remembered devices that are not plugged in. Their identity is all
-    // that was kept, so the vendor and product come back out of it.
     for (const QString& identity : always) {
         if (out.find(identity) != nullptr) {
             continue;
@@ -110,4 +106,4 @@ UsbStatus UsbStatus::build(const QVector<platform::HostUsbDevice>& host,
     return out;
 }
 
-}  // namespace lsw::host::services
+}

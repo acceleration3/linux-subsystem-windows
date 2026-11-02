@@ -16,12 +16,9 @@
 namespace lsw::host::mcp {
 
 namespace {
-
-// GuestUpdate and StatusHub live on the main thread; this runs on an HTTP
-// worker, so every touch of them is a blocking call into that thread.
 constexpr auto kPoll = std::chrono::seconds(1);
 
-}  // namespace
+}
 
 std::string GuestUpdateTool::name() const { return "guest_update"; }
 
@@ -80,4 +77,4 @@ nlohmann::json GuestUpdateTool::call(const nlohmann::json& args) {
     return ToolResult::text(body.dump(2), !ok);
 }
 
-}  // namespace lsw::host::mcp
+}

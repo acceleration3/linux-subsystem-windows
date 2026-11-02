@@ -30,13 +30,11 @@ using ui::Theme;
 using ui::Widgets;
 
 constexpr int kIconPx = 64;
-constexpr int kEnvBoxPx = 72;  // ~3 lines; enough to see what is set
+constexpr int kEnvBoxPx = 72;
 constexpr int kPathIdleMs = 600;
-// A store application's icon is drawn by Windows at any size; this one is
-// kept for the launcher, which HiDPI menus draw large.
 constexpr int kStoreIconPx = 256;
 
-}  // namespace
+}
 
 AppConfigDialog::AppConfigDialog(apps::AppConfig initial, link::AgentRpcClient& rpc,
                                  QWidget* parent)
@@ -50,8 +48,6 @@ AppConfigDialog::AppConfigDialog(apps::AppConfig initial, link::AgentRpcClient& 
     const auto chrome = ui::DialogChrome::install(this);
     auto* root = chrome.body;
 
-    // Identity first. The dialog opens by confirming which application
-    // this is, rather than making you read the path to find out.
     auto* identity = new QHBoxLayout;
     identity->setSpacing(14);
     icon_label_ = new QLabel;
@@ -63,8 +59,6 @@ AppConfigDialog::AppConfigDialog(apps::AppConfig initial, link::AgentRpcClient& 
     identity_name_ = new QLabel(cfg_.name.isEmpty() ? QStringLiteral("New application")
                                                     : cfg_.name);
     identity_name_->setObjectName(QString::fromLatin1(Theme::Role::kHeading));
-    // What the slot beside it shows: the icon kept with the
-    // configuration, or none.
     icon_status_ = Widgets::meta(cfg_.icon_image().isNull()
                                      ? QStringLiteral("no icon yet")
                                      : QStringLiteral("the icon kept from the last read"),
@@ -86,12 +80,6 @@ AppConfigDialog::AppConfigDialog(apps::AppConfig initial, link::AgentRpcClient& 
     name_edit_->setPlaceholderText("Display name");
     fields.add(QStringLiteral("Name"), name_edit_);
 
-    // The path is a Windows path, so browsing for it has to happen
-    // inside Windows. The button opens a picker that reads the guest
-    // over the agent connection, not this machine's disk.
-    // A store application has no path: Windows starts it by its ID,
-    // from a folder the user may not run anything in, and takes neither a
-    // working folder nor an environment from whoever asks.
     const bool store = !cfg_.aumid.isEmpty();
     path_edit_ = new QLineEdit(cfg_.target());
     path_edit_->setCursorPosition(0);
@@ -124,9 +112,6 @@ AppConfigDialog::AppConfigDialog(apps::AppConfig initial, link::AgentRpcClient& 
         if (!picker.selected_workdir().isEmpty() && workdir_edit_->text().isEmpty()) {
             workdir_edit_->setText(picker.selected_workdir());
         }
-        // A shortcut carries its own arguments and working folder, and
-        // dropping them is how an application ends up launching without
-        // the switches its Start menu entry always passed it.
         if (!picker.selected_arguments().isEmpty() && cmdline_edit_->text().isEmpty()) {
             cmdline_edit_->setText(picker.selected_arguments());
         }
@@ -136,8 +121,6 @@ AppConfigDialog::AppConfigDialog(apps::AppConfig initial, link::AgentRpcClient& 
         }
     });
 
-    // Where the program starts. Empty means the folder it lives in,
-    // which is what a shortcut would have done.
     workdir_edit_ = new QLineEdit(cfg_.workdir);
     workdir_edit_->setPlaceholderText(
         QStringLiteral("Defaults to the folder the program is in"));
@@ -165,10 +148,6 @@ AppConfigDialog::AppConfigDialog(apps::AppConfig initial, link::AgentRpcClient& 
     cmdline_edit_->setPlaceholderText("Optional extra arguments");
     fields.add(QStringLiteral("Arguments"), cmdline_edit_);
 
-    // Arguments and environment are not interchangeable, and the
-    // difference catches people out: a variable typed into Arguments
-    // reaches the application as a filename to open. Hence a field of
-    // its own, and a placeholder that shows the shape.
     env_edit_ = new QPlainTextEdit(cfg_.env);
     env_edit_->setPlaceholderText("One per line, e.g.\nGALLIUM_DRIVER=llvmpipe");
     env_edit_->setFixedHeight(kEnvBoxPx);
@@ -179,17 +158,10 @@ AppConfigDialog::AppConfigDialog(apps::AppConfig initial, link::AgentRpcClient& 
         fields.add(QStringLiteral("Environment"), env_edit_);
     }
 
-    // Where it appears on this desktop. The switch in Settings decides
-    // whether any application is published; this decides whether this
-    // one is, because a guest with forty Start menu shortcuts should
-    // not put forty entries in somebody's launcher.
     publish_box_ = new QCheckBox(QStringLiteral("Show in my application menu"));
     publish_box_->setChecked(cfg_.publish_entry);
     form->addWidget(publish_box_);
 
-    // What Windows says this program opens, read by the agent: not edited
-    // here, because it is Windows' to say. The button makes the entry the
-    // one a double click uses; nothing else does that.
     auto* found_row = new QWidget;
     auto* found_layout = new QHBoxLayout(found_row);
     found_layout->setContentsMargins(0, 0, 0, 0);
@@ -199,9 +171,6 @@ AppConfigDialog::AppConfigDialog(apps::AppConfig initial, link::AgentRpcClient& 
     found->setReadOnly(true);
     found->setCursorPosition(0);
     make_default_ = new QPushButton(QStringLiteral("Make it the default"));
-    // The entry has to exist for the desktop to be told anything about it.
-    // The types need not be ones it declares: an explicit default is
-    // honoured whatever the entry says.
     const bool declared = !cfg_.id.isEmpty() && cfg_.publish_entry && apps::DesktopLauncher::publishing() &&
                           !apps::DesktopLauncher::mime_types_of(cfg_).isEmpty();
     make_default_->setEnabled(declared);
@@ -225,8 +194,6 @@ AppConfigDialog::AppConfigDialog(apps::AppConfig initial, link::AgentRpcClient& 
     root->addLayout(form);
     root->addStretch(1);
 
-    // Remove sits apart from the pair that finish the dialog, and quiet,
-    // because it is the one that destroys something.
     auto* footer = chrome.foot;
     auto* remove = Widgets::button(QStringLiteral("Remove"), Theme::Role::kQuiet);
     remove->setVisible(!cfg_.id.isEmpty());
@@ -257,7 +224,6 @@ AppConfigDialog::AppConfigDialog(apps::AppConfig initial, link::AgentRpcClient& 
 }
 
 void AppConfigDialog::make_default() {
-    // Every type it opens, not only the ones its entry declares.
     const QStringList types = apps::DesktopLauncher::mime_types_of(cfg_);
     if (types.isEmpty()) {
         return;
@@ -282,8 +248,8 @@ void AppConfigDialog::make_default() {
     }
 }
 
-void AppConfigDialog::on_path_changed(const QString& /*text*/) {
-    path_idle_timer_.start();  // restart on every keystroke
+void AppConfigDialog::on_path_changed(const QString& ) {
+    path_idle_timer_.start();
 }
 
 void AppConfigDialog::on_path_idle() {
@@ -369,8 +335,6 @@ void AppConfigDialog::on_accept() {
     cfg_.workdir = workdir_edit_->text().trimmed();
     cfg_.env = env_edit_->toPlainText();
     cfg_.publish_entry = publish_box_->isChecked();
-    // Typed with commas because that is how people write a list; stored
-    // one per line because that is how the .desktop file wants them.
     QStringList types;
     for (const auto& piece : mime_edit_->text().split(QLatin1Char(','), Qt::SkipEmptyParts)) {
         const QString trimmed = piece.trimmed();
@@ -385,10 +349,9 @@ void AppConfigDialog::on_accept() {
         cfg_.id = apps::AppConfig::make_id(cfg_.name);
     }
     if (cfg_.name.isEmpty() || cfg_.target().isEmpty()) {
-        // Nothing useful to save.
         return;
     }
     accept();
 }
 
-}  // namespace lsw::host::manager
+}

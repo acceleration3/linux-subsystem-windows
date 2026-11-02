@@ -18,12 +18,8 @@ constexpr const char* kScripting = "/Scripting";
 constexpr const char* kScriptingInterface = "org.kde.kwin.Scripting";
 constexpr const char* kScriptInterface = "org.kde.kwin.Script";
 
-// KWin reads the file as the script runs, and the script runs a moment
-// after ``run`` returns; unloaded and deleted only once that is surely
-// over.
 constexpr int kUnloadAfterMs = 5000;
 
-// KWin 6's scripting API (workspace.windowList, workspace.activeWindow).
 constexpr const char* kScript = R"JS(
 workspace.windowList().forEach(function(w) {
     if (w.pid !== %1 || !w.normalWindow) return;
@@ -49,7 +45,7 @@ void unload(const QString& name) {
     }
 }
 
-}  // namespace
+}
 
 bool KWinActivation::activate(qint64 pid) {
     const QDBusConnection bus = QDBusConnection::sessionBus();
@@ -65,8 +61,6 @@ bool KWinActivation::activate(qint64 pid) {
         return false;
     }
     const QString name = QStringLiteral("lsw-raise-%1").arg(pid);
-    // A script of the same name still loaded from a raise a moment ago
-    // would make KWin refuse this one.
     unload(name);
     const QDBusMessage loaded = call(QLatin1String(kScripting), kScriptingInterface,
                                      "loadScript", {file->fileName(), name});
@@ -90,4 +84,4 @@ bool KWinActivation::activate(qint64 pid) {
     return true;
 }
 
-}  // namespace lsw::host::platform
+}

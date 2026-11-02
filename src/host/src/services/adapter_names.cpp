@@ -8,21 +8,10 @@
 namespace lsw::host::services {
 
 namespace {
-
-// The capset's name field less its terminator (accel-virt's
-// GpuIdentity::name_bytes - 1).
 constexpr qsizetype kNameBytes = 47;
 
-// An AMD integrated GPU that AMD's table does not name. The PCI ID
-// database is no help there: its bracket lists whatever a device ID was
-// sold as ("Granite Ridge [Radeon 610M]" for a desktop Ryzen 9000's,
-// whose GPU was never called that), and AMD's own Windows driver names
-// these "AMD Radeon(TM) Graphics".
 constexpr const char* kAmdIntegrated = "AMD Radeon(TM) Graphics";
 
-// The vendor as its own Windows driver prefixes a product, and the word
-// the PCI ID database may already start a product with ("Intel Graphics"),
-// which the prefix replaces rather than repeats.
 struct Vendor {
     const char* prefix;
     const char* word;
@@ -41,7 +30,7 @@ std::optional<Vendor> vendor_of(quint32 vendor) {
     }
 }
 
-}  // namespace
+}
 
 AdapterNames::AdapterNames() = default;
 
@@ -115,8 +104,6 @@ std::optional<QString> AdapterNames::amdgpu_name(const PciIdentity& id) const {
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
         return std::nullopt;
     }
-    // "<device>,\t<revision>,\t<name>" a line, hex without 0x; comments
-    // and the version line do not parse as two numbers.
     while (!file.atEnd()) {
         const QString line = QString::fromUtf8(file.readLine());
         const QStringList fields = line.split(QLatin1Char(','));
@@ -129,8 +116,6 @@ std::optional<QString> AdapterNames::amdgpu_name(const PciIdentity& id) const {
         const uint revision = fields.at(1).trimmed().toUInt(&revision_ok, 16);
         if (device_ok && revision_ok && device == id.device &&
             revision == static_cast<uint>(id.revision)) {
-            // The name may itself hold commas: everything after the
-            // second field.
             return fields.mid(2).join(QLatin1Char(',')).trimmed();
         }
     }
@@ -144,8 +129,6 @@ std::optional<QString> AdapterNames::pci_ids_name(const PciIdentity& id) const {
     }
     const QString vendor_line = QStringLiteral("%1  ").arg(id.vendor, 4, 16, QLatin1Char('0'));
     const QString device_line = QStringLiteral("\t%1  ").arg(id.device, 4, 16, QLatin1Char('0'));
-    // The product's bracketed marketing name where it has one: "Granite
-    // Ridge [Radeon Graphics]" is "Radeon Graphics".
     static const QRegularExpression bracketed(QStringLiteral("\\[([^\\]]+)\\][^\\[]*$"));
     for (const QString& database : sources_.pci_ids) {
         QFile file{database};
@@ -181,8 +164,6 @@ QString AdapterNames::fitted(const QString& name) {
         return name;
     }
     qsizetype end = kNameBytes;
-    // Back off a continuation byte (10xxxxxx) to the start of its
-    // character, which is then dropped whole.
     while (end > 0 && (static_cast<unsigned char>(bytes.at(end)) & 0xc0U) == 0x80U) {
         --end;
     }
@@ -190,4 +171,4 @@ QString AdapterNames::fitted(const QString& name) {
     return QString::fromUtf8(bytes);
 }
 
-}  // namespace lsw::host::services
+}

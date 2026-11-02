@@ -10,7 +10,7 @@ namespace {
     return value.is_string() ? value.get<std::string>() : value.dump();
 }
 
-}  // namespace
+}
 
 AgentReply AgentReply::failure(std::string why) {
     AgentReply reply;
@@ -47,4 +47,4 @@ AgentReply AgentReply::from_frame(const nlohmann::json& frame) {
     return reply;
 }
 
-}  // namespace lsw::host::link
+}

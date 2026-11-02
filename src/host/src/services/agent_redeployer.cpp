@@ -1,5 +1,6 @@
 #include "lsw/host/services/agent_redeployer.hpp"
 
+#include "lsw/base/log.hpp"
 #include "lsw/host/link/agent_reply.hpp"
 #include "lsw/host/link/agent_rpc_client.hpp"
 #include "lsw/host/platform/agent_exe_path.hpp"
@@ -23,14 +24,9 @@
 namespace lsw::host::services {
 
 namespace {
-
-// Windows may still be booting when a swap runs, and the new service opens its
-// port only once a user's desktop is usable: 45 s has run out on a swap that
-// went on to succeed.
 constexpr auto kPollWindow = std::chrono::seconds(120);
 constexpr auto kPollInterval = std::chrono::seconds(1);
 
-// A file's bytes, or why there are none.
 [[nodiscard]] QByteArray read_whole(const QString& path, std::string* error) {
     QFile file{path};
     if (!file.open(QIODevice::ReadOnly)) {
@@ -44,7 +40,6 @@ constexpr auto kPollInterval = std::chrono::seconds(1);
     return bytes;
 }
 
-// Which agent process answers: its build and when it started.
 struct Answering {
     bool ok = false;
     std::string version;
@@ -64,7 +59,7 @@ struct Answering {
             reply.body.value("agent_started", std::uint64_t{0})};
 }
 
-}  // namespace
+}
 
 AgentRedeployer::Shipped AgentRedeployer::shipped() {
     Shipped out;
@@ -94,6 +89,17 @@ std::string AgentRedeployer::sha256(const QByteArray& bytes) {
 }
 
 AgentRedeployer::Outcome AgentRedeployer::run() {
+    LSW_INFO("redeploy: swapping the guest agent");
+    Outcome outcome = swap();
+    if (outcome.ok) {
+        LSW_INFO("{}", outcome.message);
+    } else {
+        LSW_WARN("{}", outcome.message);
+    }
+    return outcome;
+}
+
+AgentRedeployer::Outcome AgentRedeployer::swap() {
     Shipped binaries = shipped();
     if (binaries.agent.isEmpty()) {
         return {false, "redeploy_agent: " + binaries.error};
@@ -101,19 +107,19 @@ AgentRedeployer::Outcome AgentRedeployer::run() {
     const std::string agent_hash = sha256(binaries.agent);
     const std::string mirror_hash = binaries.mirror.isEmpty() ? std::string{}
                                                               : sha256(binaries.mirror);
-    // The mirror's guest half goes with the agent when there is one to
-    // send; without it the guest keeps the one it has, and says so.
     GuestFileServer::Files files{{GuestSwapScript::kAgentFile, binaries.agent}};
     if (!binaries.mirror.isEmpty()) {
         files.emplace(GuestSwapScript::kMirrorFile, binaries.mirror);
     }
 
-    // Baseline: the swap is done once another process answers.
     const Answering before = answering(agent_);
     if (!before.ok) {
         return {false, "redeploy_agent: the agent is unreachable before the swap"};
     }
 
+    LSW_DEBUG("redeploy: agent {} bytes sha {}, mirror {} bytes; guest agent {} started {}",
+              binaries.agent.size(), agent_hash.substr(0, 12), binaries.mirror.size(), before.version,
+              before.started);
     GuestFileServer binary_server{std::move(files)};
     if (!binary_server.start()) {
         return {false, "redeploy_agent: " + binary_server.error()};
@@ -127,10 +133,7 @@ AgentRedeployer::Outcome AgentRedeployer::run() {
         return {false, "redeploy_agent: run_script RPC failed: " + ack.error};
     }
 
-    // Poll until another process answers. The channel reconnects on a
-    // 500 ms backoff after the script stops the old agent; the new one
-    // listens once its session helper has confirmed the desktop, a few
-    // seconds after the service starts.
+    LSW_DEBUG("redeploy: swap script started, serving on port {}", binary_server.port());
     const auto deadline = std::chrono::steady_clock::now() + kPollWindow;
     Answering after;
     while (std::chrono::steady_clock::now() < deadline) {
@@ -184,4 +187,4 @@ AgentRedeployer::Outcome AgentRedeployer::run() {
                       "). " + mirror_note};
 }
 
-}  // namespace lsw::host::services
+}

@@ -1,15 +1,3 @@
-// Hand-rolled (no test framework) downloader smoke tests.
-//
-// Spins an in-process QTcpServer that speaks just enough HTTP/1.1 to
-// exercise the Downloader end to end:
-//   * fresh GET of a fixed body
-//   * range-resume from an existing partial file
-//   * server-side 206 response with the trailing slice
-//   * server returns 200 on a Range request (the server ignored Range)
-//
-// Each scenario runs in a fresh QCoreApplication-driven event loop and
-// asserts the on-disk bytes match a known reference.
-
 #include "lsw/host/provision/iso/downloader.hpp"
 
 #include <QByteArray>
@@ -36,9 +24,6 @@ void check(bool ok, const char* label) {
     std::fprintf(stderr, "  ok %s\n", label);
 }
 
-// Tiny in-process HTTP/1.1 server. Each request line is dispatched to
-// ``handler``, which returns the full response (status line + headers +
-// body) as bytes. The connection is closed after the response.
 class MockHttp : public QObject {
 public:
     using Handler = std::function<QByteArray(const QByteArray& request_headers)>;
@@ -56,7 +41,7 @@ public:
                 buf.append(sock->readAll());
                 const auto end = buf.indexOf("\r\n\r\n");
                 if (end < 0) {
-                    return;  // wait for full headers
+                    return;
                 }
                 const auto reply = handler_(buf.left(end));
                 sock->write(reply);
@@ -92,7 +77,6 @@ QByteArray http_response(int status, const QByteArray& reason, const QByteArray&
     return r;
 }
 
-// Drive Qt's event loop until ``done`` flips or the timeout elapses.
 void wait_for(std::function<bool()> done, int timeout_ms = 5000) {
     QEventLoop loop;
     QTimer poll;
@@ -159,7 +143,6 @@ void test_range_resume_206(const QString& tmp) {
             got_range = true;
             const auto eol = headers.indexOf("\r\n", idx);
             const auto line = headers.mid(idx, eol - idx);
-            // "Range: bytes=1024-"
             const auto eq = line.indexOf('=');
             const auto dash = line.indexOf('-', eq + 1);
             range_from = line.mid(eq + 1, dash - eq - 1).toLongLong();
@@ -207,11 +190,6 @@ void test_range_resume_206(const QString& tmp) {
 }
 
 void test_server_ignores_range(const QString& tmp) {
-    // Server ignores the Range header and returns 200 with the full
-    // body. The downloader is appending to an existing partial file —
-    // a naive impl would corrupt the file (prefix + full body). The
-    // correct behavior is to truncate and write the full body fresh,
-    // OR to abort and surface an error.
     constexpr int kSize = 4096;
     constexpr int kPrefix = 1024;
     const QByteArray body = make_body(kSize);
@@ -240,9 +218,6 @@ void test_server_ignores_range(const QString& tmp) {
     QFile f{dest};
     check(f.open(QIODevice::ReadOnly), "ignored: open output");
     const auto on_disk = f.readAll();
-    // The file must be EITHER a clean fresh body OR the call must have
-    // failed cleanly. Anything else (e.g. prefix + body) means the
-    // downloader corrupted the file.
     const bool clean = on_disk == body;
     const bool failed_cleanly = !err.isEmpty() && on_disk.size() != kPrefix + kSize;
     check(clean || failed_cleanly, "ignored-range: server-ignored-range did not corrupt file");
@@ -266,7 +241,7 @@ void test_server_error(const QString& tmp) {
     check(got_failure, "5xx: emits failed");
 }
 
-}  // namespace
+}
 
 int main(int argc, char** argv) {
     QCoreApplication app{argc, argv};

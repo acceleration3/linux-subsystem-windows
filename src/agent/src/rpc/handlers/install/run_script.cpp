@@ -10,14 +10,9 @@
 #include <string>
 
 namespace lsw::agent::rpc::handlers {
-
-// Processes run as SYSTEM in session 0 by default; ``session: N`` runs
-// them as session N's user (``elevated``, default true, picks the full
-// token). Reply: {ok, job_id, session}.
 struct RunScriptHandler : RpcHandler {
     nlohmann::json handle(const nlohmann::json& params, RpcContext& ctx) override {
         const Params p{params, linkproto::cmd::kRunScript};
-        // SYSTEM in session 0 unless the request names a user session.
         const win::RunAs as = ctx.services.sessions().run_as(
             params, linkproto::cmd::kRunScript, session::SessionManager::Default::System);
         const auto script = p.require_string("script");
@@ -28,6 +23,6 @@ struct RunScriptHandler : RpcHandler {
     }
 };
 
-}  // namespace lsw::agent::rpc::handlers
+}
 
 LSW_REGISTER_RPC(lsw::agent::rpc::handlers::RunScriptHandler, ::lsw::linkproto::cmd::kRunScript)

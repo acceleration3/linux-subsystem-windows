@@ -27,4 +27,4 @@ QString locate_build_artifact(const QString& env_var, const QString& build_relat
     return {};
 }
 
-}  // namespace lsw::host::platform
+}

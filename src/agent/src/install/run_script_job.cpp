@@ -37,4 +37,4 @@ void RunScriptJob::run() {
                 ok ? std::string{} : exit_message(outcome, "script"));
 }
 
-}  // namespace lsw::agent::install
+}

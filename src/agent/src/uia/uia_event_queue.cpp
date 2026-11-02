@@ -7,7 +7,7 @@ namespace lsw::agent::uia {
 void UiaEventQueue::post(rpc::Event event) {
     const std::lock_guard<std::mutex> lock(mu_);
     if (pending_.size() >= kCapacity) {
-        pending_.pop_front();  // drop oldest
+        pending_.pop_front();
     }
     pending_.push_back(std::move(event));
 }
@@ -26,4 +26,4 @@ std::vector<rpc::Event> UiaEventQueue::collect_pending() {
     return out;
 }
 
-}  // namespace lsw::agent::uia
+}

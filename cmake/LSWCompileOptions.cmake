@@ -33,7 +33,6 @@ else()
     )
 endif()
 
-# Sanitizer options (opt-in)
 option(LSW_ENABLE_ASAN "Enable AddressSanitizer (Debug builds, non-MSVC)" OFF)
 option(LSW_ENABLE_UBSAN "Enable UndefinedBehaviorSanitizer (non-MSVC)" OFF)
 

@@ -1,4 +1,3 @@
-# Ctrl+wheel zooms in 4 steps at the sun, middle-drag pans, Ctrl+1 (100%), pan again, Ctrl+wheel out 6 steps, Ctrl+0 (fit).
 Ready
 Wheel 1360 760 4 @('ctrl') 400
 Drag @(1100,900, 900,750, 800,700) 20 20 800 -Middle

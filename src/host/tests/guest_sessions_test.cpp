@@ -1,7 +1,3 @@
-// The Console page's session list, as the agent's list_sessions reply
-// decodes: what is listed, what is skipped, and "not asked" versus
-// "nothing there".
-
 #include "lsw/host/services/guest_sessions.hpp"
 
 #include <nlohmann/json.hpp>
@@ -21,7 +17,7 @@ void check(bool ok, const char* label) {
     }
 }
 
-}  // namespace
+}
 
 int main() {
     const auto full = GuestSessions::from_json(nlohmann::json::parse(R"({

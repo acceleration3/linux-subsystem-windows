@@ -25,11 +25,6 @@ namespace lsw::host::wizard {
 
 Wizard::Wizard(services::HostServices& services, QWidget* parent) : QWizard(parent), services_(services) {
     setWindowTitle("LSW first-run wizard");
-    // Classic rather than Modern. Modern paints a header band of its
-    // own, from a palette role the stylesheet cannot reach, so the one
-    // light strip in the whole application was the wizard's title.
-    // Classic draws the same title and subtitle on the page's own
-    // ground, which is the ground everything else already uses.
     setWizardStyle(QWizard::ClassicStyle);
     setOption(QWizard::IndependentPages, false);
     setOption(QWizard::NoCancelButtonOnLastPage);
@@ -47,8 +42,6 @@ Wizard::Wizard(services::HostServices& services, QWidget* parent) : QWizard(pare
     setPage(Done, new DonePage(*this));
     setStartId(Welcome);
 
-    // No button row. Each page carries its own footer, beside the rail,
-    // which is where the design puts it; QWizard's would run under both.
     setButtonLayout({});
     setOption(NoCancelButton, true);
     setOption(NoBackButtonOnStartPage, true);
@@ -69,11 +62,6 @@ const QStringList& Wizard::step_names() {
 }
 
 void Wizard::highlight_step(int page_id) {
-    // The rail and the footer belong to the page being shown, so they
-    // are reached through it. A side widget would have been one object
-    // rather than eight, but QWizard insets everything around one, out
-    // of a margin the stylesheet's style answers for and nothing can
-    // reach.
     auto* shown = qobject_cast<WizardPage*>(currentPage());
     if (shown == nullptr) {
         return;
@@ -89,8 +77,6 @@ void Wizard::highlight_step(int page_id) {
         }
         steps->setFixedHeight(static_cast<int>(step_names().size()) * 30);
     }
-    // The free space moves while the wizard runs (an image downloaded, a
-    // disk created), so it is read again for every page rather than once.
     if (const qint64 free = QStorageInfo{QDir(services_.settings().disks_dir())}.bytesAvailable();
         free > 0) {
         state_.host_free_disk_bytes = free;
@@ -100,10 +86,6 @@ void Wizard::highlight_step(int page_id) {
                                   .arg(state_.host_ram_mib / 1024));
     chrome.rail_free->setText(
         QStringLiteral("free: %1").arg(ui::Format::gib(state_.host_free_disk_bytes, 0)));
-    // The ids are contiguous and in display order, so the page is the
-    // row. Each row carries its own number until it is behind you, and
-    // then a tick: the rail is a position in a sequence, and a sequence
-    // with no numbers is a list.
     for (int row = 0; row < steps->count(); ++row) {
         auto* item = steps->item(row);
         const bool done = row < page_id;
@@ -121,8 +103,6 @@ void Wizard::highlight_step(int page_id) {
     }
     steps->setCurrentRow(page_id);
 
-    // Once the pipeline is running there is no going back to a page
-    // that fed it, so those pages trade Back and Next for a cancel.
     const bool locked = page_id == Payload || page_id == Install || page_id == Setup;
     chrome.counter->setText((locked ? QStringLiteral("step %1 of %2, cannot go back")
                                     : QStringLiteral("step %1 of %2"))
@@ -135,9 +115,6 @@ void Wizard::highlight_step(int page_id) {
     chrome.next->setText(page_id == Done ? QStringLiteral("Open the manager")
                                          : QStringLiteral("Next"));
     chrome.cancel->setVisible(locked);
-    // The button closes the wizard on every page (PageChrome wires it to
-    // reject), so it says so; it used to read "View log" on the setup
-    // page, where it opened nothing and ended the run.
     chrome.cancel->setText(page_id == Install   ? QStringLiteral("Cancel install")
                            : page_id == Payload ? QStringLiteral("Cancel")
                                                 : QStringLiteral("Cancel setup"));
@@ -186,11 +163,6 @@ void Wizard::start_pipeline() {
     in.edition_id = state_.edition_id;
     in.language = state_.language;
     in.debloat = state_.debloat;
-    // Only the trim tool leaves an image that has already been through
-    // the preparation pass. Everything else still needs it, because the
-    // setup bypasses live in the offline registry and Windows Setup
-    // refuses this domain without them; at ``None`` the stager writes
-    // those and removes nothing.
     in.image_already_trimmed = state_.iso_prepared;
     pipeline_->set_inputs(in);
     pipeline_->start();
@@ -201,4 +173,4 @@ void Wizard::accept() {
     Q_EMIT complete();
 }
 
-}  // namespace lsw::host::wizard
+}

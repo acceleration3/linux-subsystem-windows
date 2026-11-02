@@ -12,7 +12,6 @@ namespace lsw::agent::apps {
 namespace {
 
 void validate_name(const std::string& name) {
-    // No path traversal, alternate streams, device names or cmd expansion.
     if (name.empty() || name.size() > 240 || name.back() == '.' || name.back() == ' ' ||
         name.find_first_of("/\\:<>\"|?*%!") != std::string::npos)
         throw std::invalid_argument("not a safe Windows filename");
@@ -47,7 +46,7 @@ std::string new_id() {
     return id;
 }
 
-}  // namespace
+}
 
 UploadStore::UploadStore(std::filesystem::path root) : root_(std::move(root)) {}
 
@@ -140,9 +139,6 @@ std::filesystem::path UploadStore::finish(const std::string& id) {
     std::filesystem::rename(upload.directory / "upload.part", upload.destination);
     auto path = upload.destination;
     if (upload.document) {
-        // Read-only, so the application says so when it is saved to: the
-        // copy is the application's to read, and what it writes would only
-        // stay here.
         std::error_code error;
         std::filesystem::permissions(path,
                                      std::filesystem::perms::owner_write | std::filesystem::perms::group_write |
@@ -161,4 +157,4 @@ void UploadStore::abort(const std::string& id) {
     }
 }
 
-}  // namespace lsw::agent::apps
+}

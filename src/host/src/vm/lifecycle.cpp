@@ -23,7 +23,6 @@ namespace lsw::host::vm {
 Lifecycle::Lifecycle(LibvirtConnection& conn, QObject* parent) : QObject(parent), conn_(conn) {}
 
 int Lifecycle::create_disk(const QString& path, int size_gib) {
-    // ``qemu-img create -f qcow2 path SIZE`` — sparse by default.
     QString error;
     if (!platform::run_tool(QStringLiteral("qemu-img"),
                             {QStringLiteral("create"), QStringLiteral("-f"),
@@ -81,6 +80,10 @@ int Lifecycle::define_and_start(const config::VmRecord& vm, const DomainXmlInput
         return fail("virDomainDefineXML");
     }
     DomainHandle dom{d};
+    LSW_DEBUG("VM defined: {}", vm.name.toStdString());
+    if (before_start_) {
+        before_start_();
+    }
     if (::virDomainCreate(dom.raw()) < 0) {
         return fail("virDomainCreate");
     }
@@ -114,27 +117,23 @@ int Lifecycle::start(const QUuid& uuid, bool first_boot_done) {
         return -1;
     }
     if (::virDomainIsActive(dom.raw()) == 1) {
-        return 0;  // idempotent
+        LSW_DEBUG("start: the VM is already running");
+        return 0;
     }
-    // A VM whose guest has already run has no business still holding
-    // the installer.
-    //
-    // Provisioning ejects the media when it finishes, but that only
-    // covers a run that reached the end: one that failed partway and
-    // was picked up by hand keeps the ISOs for good. The guest then
-    // shows the install media as drives every boot, and the files stay
-    // pinned. Doing it here as well makes it self-correcting, and it
-    // costs one no-op call per start otherwise.
     if (first_boot_done) {
         eject_install_media(uuid);
     }
     if (!retarget_host(uuid)) {
         return -1;
     }
+    if (before_start_) {
+        before_start_();
+    }
 
     if (::virDomainCreate(dom.raw()) < 0) {
         return fail("virDomainCreate");
     }
+    LSW_INFO("VM started: {}", uuid.toString(QUuid::WithoutBraces).toStdString());
     return 0;
 }
 
@@ -144,13 +143,13 @@ bool Lifecycle::retarget_host(const QUuid& uuid) {
         return false;
     }
     QDomDocument doc;
-    if (!doc.setContent(domain_xml(uuid, /*stored=*/true))) {
-        return true;  // no stored definition to correct; the start says why
+    if (!doc.setContent(domain_xml(uuid, true))) {
+        return true;
     }
     const QDomElement root = doc.documentElement();
     QDomElement commandline = root.firstChildElement(QStringLiteral("qemu:commandline"));
     if (commandline.isNull()) {
-        return true;  // not an accel-virt domain
+        return true;
     }
     QStringList changed;
     const auto set_text = [&changed](QDomElement element, const QString& value, const char* what) {
@@ -174,6 +173,52 @@ bool Lifecycle::retarget_host(const QUuid& uuid) {
     set_text(root.firstChildElement(QStringLiteral("devices")).firstChildElement(QStringLiteral("emulator")),
              own.qemu_binary, "QEMU");
 
+    if (gpu_log_env_) {
+        const GpuLogEnv levels = gpu_log_env_();
+        for (const auto& [name, value] : {std::pair{QStringLiteral("DXVK_LOG_LEVEL"), levels.dxvk},
+                                          std::pair{QStringLiteral("VKD3D_DEBUG"), levels.vkd3d}}) {
+            if (value.isEmpty()) {
+                continue;
+            }
+            QDomElement existing;
+            for (QDomElement e = commandline.firstChildElement(QStringLiteral("qemu:env")); !e.isNull();
+                 e = e.nextSiblingElement(QStringLiteral("qemu:env"))) {
+                if (e.attribute(QStringLiteral("name")) == name) {
+                    existing = e;
+                }
+            }
+            if (existing.isNull()) {
+                existing = doc.createElement(QStringLiteral("qemu:env"));
+                existing.setAttribute(QStringLiteral("name"), name);
+                commandline.insertBefore(existing, commandline.firstChild());
+            }
+            set_value(existing, value, "the GPU's log level");
+        }
+    }
+
+    if (!avgpu_log_.isEmpty()) {
+        QString option = avgpu_log_;
+        option.replace(QLatin1Char(','), QStringLiteral(",,"));
+        const QString wanted = QStringLiteral("file,id=avgpu-log,path=") + option;
+        bool present = false;
+        for (QDomElement e = commandline.firstChildElement(QStringLiteral("qemu:arg")); !e.isNull();
+             e = e.nextSiblingElement(QStringLiteral("qemu:arg"))) {
+            if (e.attribute(QStringLiteral("value")).startsWith(QStringLiteral("file,id=avgpu-log,"))) {
+                present = true;
+                set_value(e, wanted, "the GPU driver's log");
+            }
+        }
+        if (!present) {
+            for (const QString& arg : {QStringLiteral("-chardev"), wanted, QStringLiteral("-device"),
+                                       QStringLiteral("isa-debugcon,iobase=0x402,chardev=avgpu-log")}) {
+                QDomElement e = doc.createElement(QStringLiteral("qemu:arg"));
+                e.setAttribute(QStringLiteral("value"), arg);
+                commandline.appendChild(e);
+            }
+            changed << QStringLiteral("the GPU driver's log");
+        }
+    }
+
     static const QRegularExpression executor(QStringLiteral("(executor=)[^,]*"));
     QDomElement data_flag;
     QDomElement data_dir;
@@ -193,8 +238,6 @@ bool Lifecycle::retarget_host(const QUuid& uuid) {
             data_dir = e.nextSiblingElement();
         }
     }
-    // An installed QEMU finds its firmware through -L; a build tree's
-    // finds its own, and carries none.
     if (!data_flag.isNull() && own.qemu_data_dir.isEmpty()) {
         commandline.removeChild(data_dir);
         commandline.removeChild(data_flag);
@@ -236,7 +279,13 @@ int Lifecycle::shutdown(const QUuid& uuid) {
     if (!dom.valid()) {
         return -1;
     }
-    return ::virDomainShutdown(dom.raw());
+    const int result = ::virDomainShutdown(dom.raw());
+    if (result < 0) {
+        LSW_ERROR("virDomainShutdown failed: {}", conn_.last_error().toStdString());
+    } else {
+        LSW_INFO("VM shutdown requested");
+    }
+    return result;
 }
 
 int Lifecycle::force_off(const QUuid& uuid) {
@@ -244,7 +293,13 @@ int Lifecycle::force_off(const QUuid& uuid) {
     if (!dom.valid()) {
         return -1;
     }
-    return ::virDomainDestroy(dom.raw());
+    const int result = ::virDomainDestroy(dom.raw());
+    if (result < 0) {
+        LSW_ERROR("virDomainDestroy failed: {}", conn_.last_error().toStdString());
+    } else {
+        LSW_INFO("VM forced off");
+    }
+    return result;
 }
 
 int Lifecycle::undefine(const QUuid& uuid) {
@@ -252,7 +307,13 @@ int Lifecycle::undefine(const QUuid& uuid) {
     if (!dom.valid()) {
         return -1;
     }
-    return ::virDomainUndefine(dom.raw());
+    const int result = ::virDomainUndefine(dom.raw());
+    if (result < 0) {
+        LSW_ERROR("virDomainUndefine failed: {}", conn_.last_error().toStdString());
+    } else {
+        LSW_INFO("VM undefined");
+    }
+    return result;
 }
 
 bool Lifecycle::remove_existing(const QString& name, QString* error_out) {
@@ -271,8 +332,6 @@ bool Lifecycle::remove_existing(const QString& name, QString* error_out) {
     if (!dom.valid()) {
         return true;
     }
-    // Its disk is about to be recreated at the same path, which under a
-    // running QEMU would be writing over a disk in use.
     if (::virDomainIsActive(dom.raw()) == 1) {
         return refuse(QStringLiteral("the existing virtual machine '%1' is running; shut it "
                                      "down before installing a new one")
@@ -352,10 +411,6 @@ void Lifecycle::eject_install_media(const QUuid& uuid) {
     if (::virDomainIsActive(dom.raw()) == 1) {
         flags |= VIR_DOMAIN_AFFECT_LIVE;
     }
-    // A <disk device='cdrom'> with no <source> = ejected media.
-    // virDomainUpdateDeviceFlags matches the existing device by
-    // <target dev=...>; the system disk (nvme0n1) is never named here
-    // so it can't be affected.
     static const char* kTargets[] = {"sdb", "sdc"};
     for (const char* tgt : kTargets) {
         const QString xml = QStringLiteral("<disk type='file' device='cdrom'>"
@@ -364,7 +419,6 @@ void Lifecycle::eject_install_media(const QUuid& uuid) {
                                            "<readonly/></disk>")
                                 .arg(QString::fromLatin1(tgt));
         if (::virDomainUpdateDeviceFlags(dom.raw(), xml.toUtf8().constData(), flags) < 0) {
-            // Not fatal — the drive may already be empty, or absent.
             LSW_WARN("eject: {} not ejected ({})", tgt, conn_.last_error().toStdString());
         } else {
             LSW_INFO("eject: {} media removed", tgt);
@@ -392,16 +446,10 @@ bool Lifecycle::fill_accel_virt(DomainXmlInputs& inputs) {
         }
     }
 
-    // QEMU's modules are beside it, whichever build it came from.
     if (inputs.qemu_module_dir.isEmpty() && !inputs.qemu_binary.isEmpty()) {
         inputs.qemu_module_dir = QFileInfo(inputs.qemu_binary).absolutePath();
     }
-    // Its firmware and ROMs are beside it only when it is installed; a
-    // build tree's QEMU finds its own, and this stays empty.
     fill(inputs.qemu_data_dir, &platform::AccelVirtPaths::qemu_data_dir);
-    // The distribution's QEMU cannot load the GPU device, so there is no
-    // falling back to it: the domain would not start, and libvirt's
-    // reason names a device rather than a missing build.
     if (inputs.qemu_binary.isEmpty()) {
         last_error_ = QStringLiteral(
             "accel-virt's QEMU was not found: build the accel_virt_host target, or point "
@@ -409,8 +457,6 @@ bool Lifecycle::fill_accel_virt(DomainXmlInputs& inputs) {
         LSW_ERROR("{}", last_error_.toStdString());
         return false;
     }
-    // Without an executor the device is a plain 2D virtio-gpu with no
-    // av capset, and the guest's driver has nothing to drive.
     if (inputs.executor.isEmpty()) {
         last_error_ = QStringLiteral(
             "accel-virt's libav_executor.so was not found: build the accel_virt_host target, "
@@ -477,17 +523,12 @@ bool Lifecycle::set_display_modes(const QUuid& uuid, const QString& modes, QStri
         }
         return false;
     };
-    // Checked here rather than left to QEMU because the device takes any
-    // string and the guest's driver then quietly drops what it cannot
-    // parse, which reads as a resolution change that did nothing.
     static const QRegularExpression list(
         QStringLiteral("^(\\d{1,5}x\\d{1,5})(,\\d{1,5}x\\d{1,5})*$"));
     const QString value = modes.trimmed().toLower();
     if (!value.isEmpty() && !list.match(value).hasMatch()) {
         return fail(QStringLiteral("'%1' is not a list of WxH sizes").arg(modes));
     }
-    // Built as JSON rather than spliced into a string, so the value is
-    // quoted by the one thing that knows how.
     const QJsonObject command{
         {QStringLiteral("execute"), QStringLiteral("qom-set")},
         {QStringLiteral("arguments"),
@@ -586,11 +627,8 @@ std::optional<QJsonValue> Lifecycle::qmp(const QUuid& uuid, const QJsonObject& c
     if (!dom.valid() || ::virDomainIsActive(dom.raw()) != 1) {
         return fail(QStringLiteral("the VM is not running"));
     }
+    LSW_DEBUG("qmp: {}", command.value(QStringLiteral("execute")).toString().toStdString());
     const QByteArray json = QJsonDocument(command).toJson(QJsonDocument::Compact);
-    // libvirt marks the domain tainted ("custom-monitor") the first time
-    // this runs. That is a note in its log, not a change in behaviour,
-    // and there is no libvirt API for a property of a device it does
-    // not know.
     char* reply = nullptr;
     if (::virDomainQemuMonitorCommand(dom.raw(), json.constData(), &reply,
                                       VIR_DOMAIN_QEMU_MONITOR_COMMAND_DEFAULT) < 0) {
@@ -608,4 +646,4 @@ std::optional<QJsonValue> Lifecycle::qmp(const QUuid& uuid, const QJsonObject& c
     return answer.value(QStringLiteral("return"));
 }
 
-}  // namespace lsw::host::vm
+}

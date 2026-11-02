@@ -11,9 +11,6 @@
 namespace lsw::agent::install {
 
 void Installer::spawn(std::unique_ptr<InstallJob> job) {
-    // The thread owns the job for its lifetime and is detached: setup
-    // steps outlive the RPC that started them, and the manager tracks
-    // completion by job id, not by joining anything.
     std::thread t([owned = std::move(job)]() mutable { owned->run(); });
     t.detach();
 }
@@ -56,4 +53,4 @@ void Installer::requeue_front(std::vector<JobNotification> notes) {
     queue_.requeue_front(std::move(notes));
 }
 
-}  // namespace lsw::agent::install
+}

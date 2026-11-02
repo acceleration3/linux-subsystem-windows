@@ -13,17 +13,12 @@
 namespace lsw::agent::win {
 
 namespace {
-
-// The DPI scale requests of DisplayConfigGetDeviceInfo and
-// DisplayConfigSetDeviceInfo. Not in the SDK: they are what the Settings
-// app sends, and the layouts below are the ones it uses. -3 and -4 as the
-// 32-bit word the header carries; the enum's type here is unsigned.
 constexpr auto kGetDpiScale = static_cast<DISPLAYCONFIG_DEVICE_INFO_TYPE>(0xFFFFFFFDu);
 constexpr auto kSetDpiScale = static_cast<DISPLAYCONFIG_DEVICE_INFO_TYPE>(0xFFFFFFFCu);
 
 struct GetDpiScale {
     DISPLAYCONFIG_DEVICE_INFO_HEADER header;
-    std::int32_t min_relative;  // 100 %, as steps from the recommended scale
+    std::int32_t min_relative;
     std::int32_t current_relative;
     std::int32_t max_relative;
 };
@@ -33,8 +28,6 @@ struct SetDpiScale {
     std::int32_t relative;
 };
 
-// The active displays. The configuration can change between asking how
-// big it is and reading it; then it is asked again.
 std::vector<DISPLAYCONFIG_PATH_INFO> active_paths() {
     for (;;) {
         UINT32 path_count = 0;
@@ -59,7 +52,7 @@ std::vector<DISPLAYCONFIG_PATH_INFO> active_paths() {
     }
 }
 
-}  // namespace
+}
 
 DisplayScale::Outcome DisplayScale::apply(int percent) {
     Outcome outcome;
@@ -97,4 +90,4 @@ DisplayScale::Outcome DisplayScale::apply(int percent) {
     return outcome;
 }
 
-}  // namespace lsw::agent::win
+}

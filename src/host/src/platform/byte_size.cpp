@@ -13,4 +13,4 @@ QString ByteSize::human(quint64 bytes) {
     return QStringLiteral("%1 MiB").arg(value / (1024.0 * 1024.0), 0, 'f', 1);
 }
 
-}  // namespace lsw::host::platform
+}

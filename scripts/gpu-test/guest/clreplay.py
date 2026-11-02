@@ -35,18 +35,14 @@ import time
 
 try:
     import numpy
-except ImportError:  # the hosts' tests
+except ImportError:
     numpy = None
 
 FLOATS = {"float": ("f4", "f"), "double": ("f8", "d"), "half": ("f2", "e")}
 IMAGE_FLOAT_TYPES = {0x10DE: "float", 0x10DD: "half"}
-"""CL_FLOAT and CL_HALF_FLOAT: an image of either is compared as floats."""
 
 
 def argument_kinds(directory):
-    """{arg index: "float" | "double" | "half" | "bytes"} from
-    ArgumentDataTypes.txt (one type name per argument, in order), and from
-    each image's metadata."""
     kinds = {}
     path = directory / "ArgumentDataTypes.txt"
     if path.exists():
@@ -65,7 +61,6 @@ def argument_kinds(directory):
 
 
 def compare(reference, got, kind, rtol, atol, itol):
-    """How `got` differs from `reference`, both raw bytes of one buffer."""
     result = {"kind": kind, "bytes": len(reference), "sha256": hashlib.sha256(got).hexdigest()}
     if len(reference) != len(got):
         result.update(identical=False, size_mismatch=f"{len(got)} bytes, not {len(reference)}", elements=0, bad=0)
@@ -128,16 +123,11 @@ def enqueue_dirs(capture):
 
 
 READ_BACK = "cl.enqueue_copy(queue, output_images[pos], gpu_images[pos], region=shape, origin=(0,0,0))"
-"""CLIntercept 3.0.6's run.py reads every image back over `shape`, the
-extent of the last image it made: a kernel with images of two sizes (Resolve's
-745x72 and 1280x720) has its smaller one read past its end, which OpenCL
-refuses (CL_INVALID_VALUE). Each is read over its own extent instead."""
 OWN_EXTENT = ("cl.enqueue_copy(queue, output_images[pos], gpu_images[pos], "
               "region=get_image_metadata(pos)[1], origin=(0,0,0))")
 
 
 def runnable(text):
-    """run.py's text as it is replayed: each image read back over its own extent."""
     return text.replace(READ_BACK, OWN_EXTENT)
 
 
@@ -160,11 +150,6 @@ def replay(directory, platform, timeout):
 
 
 def replayed_output(directory, post):
-    """The file run.py wrote for `post`. CLIntercept names what it dumps
-    ..._Arg_4_Buffer_0000.bin or ..._Arg_7_Image_0006_1x1x1_32bpp.raw - the
-    dump's number, and an image's extent and texel size - while its run.py
-    writes ..._Arg_4_Buffer.bin and ..._Arg_7_Image.raw; either name is
-    taken."""
     test = directory / "Test" / post.name
     if test.exists():
         return test
@@ -191,7 +176,6 @@ def judge_enqueue(directory, args):
 
 
 def program_builds(directory):
-    """(source, options text, label) for every dumped program and build."""
     builds = []
     for source in sorted(directory.glob("CLI_*_source.cl")):
         prefix = source.name[:-len("_source.cl")]
@@ -204,7 +188,6 @@ def program_builds(directory):
 
 
 def build_one(source, options):
-    """In a process of its own: one program built on the chosen platform."""
     import pyopencl as cl
     context = cl.create_some_context(interactive=False)
     device = context.devices[0]
@@ -223,8 +206,6 @@ RAN_ON = re.compile(r"Running on platform: (.*)")
 
 
 def ran_on(output):
-    """The platform a build or a run.py named, found before its output is cut
-    to its end: a compiler's warnings can push the line out of what is kept."""
     found = RAN_ON.search(output)
     return found.group(1).strip() if found else None
 
@@ -269,7 +250,7 @@ def main():
     try:
         import pyopencl  # noqa: F401 - what run.py needs, checked once up front
         result["platforms"] = [platform.name for platform in pyopencl.get_platforms()]
-    except Exception as error:  # the replay below then fails with the same error
+    except Exception as error:
         result["error"] = f"pyopencl: {type(error).__name__}: {error}"
     if args.programs and args.programs.is_dir():
         result["programs"] = rebuild_programs(args.programs, args.platform, args.timeout)

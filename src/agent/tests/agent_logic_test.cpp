@@ -1,14 +1,3 @@
-// Host-native tests for the guest agent's platform-free logic.
-//
-// The agent only links on Windows, so historically none of it was
-// tested at all — including the parts that are plain C++ and have
-// nothing to do with Win32. Those TUs are compiled directly into this
-// executable by the host toolchain (see the sibling CMakeLists), which
-// costs nothing and covers the string handling most likely to be wrong
-// in a way a running VM would only show as a weird filename.
-//
-// Same hand-rolled style as the other tests in this repo.
-
 #include "lsw/agent/apps/program_command.hpp"
 #include "lsw/agent/apps/start_menu_filter.hpp"
 #include "lsw/agent/core/command_line.hpp"
@@ -49,14 +38,8 @@ std::vector<std::uint8_t> bytes_of(const std::string& s) {
     return {s.begin(), s.end()};
 }
 
-// ---- Base64 -------------------------------------------------------------
-// Console output and window icons both ride the JSON channel base64
-// encoded, so a padding bug here corrupts binary payloads in a way that
-// only shows up as an unreadable icon.
-
 void test_base64_vectors() {
     using lsw::agent::util::Base64;
-    // RFC 4648 test vectors — all three padding cases.
     check(Base64::encode(bytes_of("")) == "", "empty encodes to empty");
     check(Base64::encode(bytes_of("f")) == "Zg==", "1 byte gets two pad chars");
     check(Base64::encode(bytes_of("fo")) == "Zm8=", "2 bytes get one pad char");
@@ -68,21 +51,15 @@ void test_base64_vectors() {
 
 void test_base64_binary() {
     using lsw::agent::util::Base64;
-    // High bytes and NULs: console output is raw bytes, not text.
     const std::vector<std::uint8_t> data = {0x00, 0xFF, 0x80, 0x7F, 0x00};
     const std::string encoded = Base64::encode(data);
     check(encoded == "AP+AfwA=", "binary with NULs and high bytes encodes correctly");
 
-    // Output length is always a multiple of 4.
     for (std::size_t n = 0; n < 32; ++n) {
         const std::vector<std::uint8_t> blob(n, 0xAB);
         check(Base64::encode(blob).size() % 4 == 0, "encoded length is a multiple of 4");
     }
 }
-
-// ---- URL → filename -----------------------------------------------------
-// Used to name downloaded installers. A wrong answer here means the
-// installer is saved under a name Windows then refuses to execute.
 
 void test_url_file_name() {
     using lsw::agent::install::UrlFileName;
@@ -95,17 +72,11 @@ void test_url_file_name() {
     check(UrlFileName::of(L"https://example.com/setup.exe?a=1#b") == L"setup.exe",
           "query and fragment together");
 
-    // Degenerate inputs must still yield a usable filename rather than an
-    // empty one — an empty name would make the download path a directory.
     check(UrlFileName::of(L"https://example.com/") == L"download.bin", "trailing slash falls back");
     check(UrlFileName::of(L"") == L"download.bin", "empty url falls back");
     check(UrlFileName::of(L"https://example.com/?q=1") == L"download.bin",
           "query-only path falls back");
 }
-
-// ---- Job ids ------------------------------------------------------------
-// The manager keys install progress by job id; a repeat would merge two
-// steps' progress into one.
 
 void test_job_ids_unique() {
     lsw::agent::install::JobIdGenerator ids;
@@ -114,17 +85,10 @@ void test_job_ids_unique() {
         check(seen.insert(ids.next()).second, "job ids never repeat");
     }
 
-    // Independent generators are independent: a test can own one without
-    // being perturbed by another.
     lsw::agent::install::JobIdGenerator other;
     check(other.next() == lsw::agent::install::JobIdGenerator{}.next(),
           "a fresh generator starts from the same point");
 }
-
-// ---- Wide strings -------------------------------------------------------
-// Every path comparison in the agent goes through these: the .lnk test
-// that decides how an app is launched, the Uninstall-entry filter, the
-// directory a launch is attributed to.
 
 void test_wide_string_case() {
     using lsw::agent::util::WideString;
@@ -156,9 +120,6 @@ void test_wide_string_parent_dir() {
     check(WideString::parent_dir(L"\\th06.exe") == std::wstring{},
           "a root-relative name has an empty parent, not none");
 }
-
-// ---- RPC params ---------------------------------------------------------
-// The refusal wording is read by the host; it must not drift.
 
 std::string refusal_of(void (*call)()) {
     try {
@@ -204,12 +165,6 @@ void test_params_values() {
 }
 
 
-// ---- Session selection ---------------------------------------------------
-// Which session a request without ``session`` lands in, which sessions
-// get a helper, and whose "desktop ready" opens the install gate. A wrong
-// answer launches an application on a desktop nobody is looking at, or
-// declares the install finished over OOBE.
-
 using lsw::agent::session::SessionInfo;
 using lsw::agent::session::SessionSelector;
 using lsw::agent::session::SessionState;
@@ -224,14 +179,11 @@ SessionInfo session(std::uint32_t id, const char* user, SessionState state, bool
 }
 
 void test_selector_default() {
-    // The console user wins, whoever else is logged on.
     const SessionSelector a{{session(1, "Wizard", SessionState::Disconnected, false),
                              session(2, "bob", SessionState::Active, true)},
                             "wizard"};
     check(a.pick_default() == 2u, "the console session is the default");
 
-    // No real user on the console: the wizard user's active session, then
-    // any session of theirs, then any active one.
     const SessionSelector b{{session(1, "defaultuser0", SessionState::Active, true),
                              session(3, "bob", SessionState::Active, false),
                              session(4, "WIZARD", SessionState::Active, false)},
@@ -273,8 +225,6 @@ void test_selector_helpers_and_gate() {
     const SessionSelector console_only{{session(1, "alice", SessionState::Active, true)}, ""};
     check(console_only.counts_for_gate(1), "with the wizard unknown, the console counts");
 }
-
-// ---- Session routing -----------------------------------------------------
 
 void test_routing_requested() {
     using lsw::agent::session::SessionRouting;
@@ -318,7 +268,6 @@ void test_routing_sub_ids() {
     check(SessionRouting::global_sub_id(3, 0) == 0, "a failed subscription stays 0");
     check(g < (1ULL << 53), "small enough to survive a JSON double");
 
-    // The reply on the way up, the unsubscribe on the way down.
     nlohmann::json reply = {{"ok", true}, {"sub_id", 7}};
     SessionRouting::globalize_reply(reply, 3);
     check(reply["sub_id"].get<std::uint64_t>() == g, "a reply's sub_id is globalised");
@@ -339,8 +288,6 @@ void test_routing_sub_ids() {
     check(!no_sub.contains("sub_id"), "replies without a sub_id are left alone");
 }
 
-// ---- The service <-> helper pipe ------------------------------------------
-
 void test_pipe_codec() {
     using lsw::agent::session::PipeCodec;
     const nlohmann::json request = {{"id", 1}, {"cmd", "list_windows"}, {"params", {{"session", 1}}}};
@@ -348,7 +295,6 @@ void test_pipe_codec() {
     const std::string bytes = PipeCodec::encode(request) + PipeCodec::encode(event);
     check(bytes.size() > 10 && bytes[0] == 1, "a control envelope, type 1 first");
 
-    // Fed one byte at a time: a pipe read can split anywhere.
     PipeCodec codec;
     std::vector<nlohmann::json> out;
     for (const char c : bytes) {
@@ -363,7 +309,6 @@ void test_pipe_codec() {
     check(PipeCodec::is_reply({{"id", 1}, {"result", {}}}), "a result is a reply");
     check(PipeCodec::is_reply({{"id", 1}, {"error", "x"}}), "an error is a reply");
 
-    // A frame whose JSON does not parse is skipped, not fatal.
     PipeCodec bad;
     const std::uint8_t garbage[] = {1, 0, 0, 0, 3, '{', '{', '{'};
     bad.feed(garbage, sizeof(garbage));
@@ -373,7 +318,6 @@ void test_pipe_codec() {
     check(bad.drain(after) && after.size() == 1 && bad.malformed() == 1,
           "malformed JSON is skipped and the stream goes on");
 
-    // A length past the cap ends the stream once that much is buffered.
     PipeCodec huge;
     const std::uint8_t header[] = {1, 0x7F, 0xFF, 0xFF, 0xFF};
     huge.feed(header, sizeof(header));
@@ -400,8 +344,6 @@ void test_pending_calls() {
     check(!calls.complete(b, nlohmann::json::object()), "a late reply after a timeout is dropped");
     check(calls.in_flight() == 0, "nothing is left behind");
 
-    // A waiter blocked on a helper that goes away is woken with the
-    // reason, long before its timeout.
     const auto c = calls.open();
     std::thread closer{[&] {
         std::this_thread::sleep_for(20ms);
@@ -426,8 +368,6 @@ void test_pending_calls() {
     check(refused, "nothing new is sent on a closed channel");
 }
 
-// ---- Command line -----------------------------------------------------------
-
 void test_command_line() {
     using lsw::agent::core::CommandLine;
     check(CommandLine::parse({}).mode == CommandLine::Mode::Foreground,
@@ -447,7 +387,6 @@ void test_command_line() {
 
 void test_scale_steps() {
     using lsw::agent::system::ScaleSteps;
-    // A display recommended at 100 % that goes up to 200 %.
     const ScaleSteps at_100{0, 4};
     check(at_100.relative_for(120) == 1 && at_100.percent_at(1) == 125,
           "1.2 is the 125 % step, one above a 100 % recommendation");
@@ -458,13 +397,11 @@ void test_scale_steps() {
           "past the display's largest step is that step");
     check(at_100.relative_for(50) == 0, "below 100 % is 100 %");
 
-    // Recommended at 150 %: steps are counted from there.
     const ScaleSteps at_150{2, 2};
     check(at_150.relative_for(120) == -1 && at_150.percent_at(-1) == 125,
           "below the recommendation is a negative step");
     check(at_150.relative_for(200) == 2, "up to the display's largest step");
 
-    // Halfway between 250 and 300 % goes to the lower.
     const ScaleSteps wide{0, 11};
     check(wide.relative_for(275) == 6 && wide.percent_at(6) == 250, "a tie goes down");
     check(wide.percent_at(40) == 500 && wide.percent_at(-3) == 100,
@@ -515,8 +452,6 @@ void test_start_menu_filter() {
     for (const auto& e : kept) names.push_back(e.name);
     const std::vector<std::wstring> expected = {L"Excel", L"OneNote", L"Blackmagic Proxy Generator Lite",
                                                 L"WindowsApps lookalike"};
-    // (Sticky Notes is absorbed by OneNote; the proxy generator has no plain
-    // sibling, so it stays, with its arguments.)
     check(names == expected,
           "programs only; URLs, shell folders, .msc, Windows' own, uninstallers and missing files go; "
           "OneNote beats the shortcut with arguments");
@@ -538,7 +473,7 @@ void test_start_menu_filter() {
     check(absorbed.size() == 1 && absorbed[0].name == L"P", "a plain shortcut absorbs those with arguments");
 }
 
-}  // namespace
+}
 
 int main() {
     test_base64_vectors();

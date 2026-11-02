@@ -115,8 +115,6 @@ CliOptions CliParser::parse(const QStringList& argv) {
         o.disk_gib = p.value(disk_opt).toInt();
     }
     o.launch_app_id = p.value(launch_opt);
-    // A forwarded call is run by a manager somewhere else, so what leaves
-    // here is absolute.
     for (const QString& argument : p.positionalArguments()) {
         QString why;
         const QString file = normalise_file(argument, QDir::currentPath(), &why);
@@ -127,9 +125,6 @@ CliOptions CliParser::parse(const QStringList& argv) {
         }
         o.files << file;
     }
-    // A --launch click's token, and a file opened from a file manager's, is
-    // the application's; otherwise it is left to Qt, which activates the
-    // manager's own first window with it.
     if (!o.launch_app_id.isEmpty() || !o.files.isEmpty()) {
         o.activation_token = qEnvironmentVariable("XDG_ACTIVATION_TOKEN");
         qunsetenv("XDG_ACTIVATION_TOKEN");
@@ -139,4 +134,4 @@ CliOptions CliParser::parse(const QStringList& argv) {
     return o;
 }
 
-}  // namespace lsw::host::app
+}

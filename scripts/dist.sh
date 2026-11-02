@@ -1,76 +1,4 @@
 #!/usr/bin/env bash
-# Build LSW's release packages, each in a distrobox of the distribution
-# it is for.
-#
-#   scripts/dist.sh [--version V] [--kit DIR] [--setup] [--incremental] [TARGET...]
-#
-#   TARGET         arch, deb, rpm or all (the default: all three, one
-#                  after another)
-#                    arch  dist/lsw-<V>-x86_64.tar.zst, its .sha256 and
-#                          .depends: the tarball the AUR's lsw-bin
-#                          installs (aur/README.md), built on Arch
-#                    deb   dist/lsw_<V>-1_amd64.deb, built on Ubuntu
-#                    rpm   dist/lsw-<V>-1.<dist>.x86_64.rpm, built on Fedora
-#   --version V    the release version (default: project(LSW VERSION) in
-#                  CMakeLists.txt). The tarball, the tag (v<V>) and every
-#                  package carry it.
-#   --kit DIR      an already-fetched accel-virt Windows kit
-#                  (AV_WINDOWS_KIT_DIR), to skip fetching it again
-#   --setup        install or update the build dependencies in each
-#                  target's distrobox before building. A distrobox that
-#                  does not exist yet is created and set up regardless.
-#   --incremental  reuse the release trees from the last run instead of
-#                  starting them over: for iterating on this script, not
-#                  for a release
-#
-# The distroboxes are Arch, Ubuntu and Fedora, made from the images
-# below; LSW_BOX_ARCH, LSW_BOX_DEB and LSW_BOX_RPM name others. Each sees
-# this checkout at the same path (distrobox shares $HOME). The build runs
-# on the CPUs this script may use, which a container would otherwise not
-# be held to.
-#
-# Why one build per distribution. The binaries link against the
-# libraries of the system that builds them, and QEMU's configure enables
-# every optional feature whose library it finds there, so a build is
-# only right for the distribution it was made on, at the release it was
-# made on. A distribution with its own library builds or CPU-tuned
-# repositories (CachyOS's znver4 repos, say) would produce packages that
-# are wrong for everyone else, which is why nothing here builds on the
-# host.
-#
-# The guest half - the agent, remotewin's guest half and the Vulkan
-# loaders (Windows programs built with mingw-w64), and accel-virt's
-# drivers and OpenCL loaders (built with clang against the Windows kit) -
-# does not depend on the host's distribution, so it is built once, in the
-# Arch box, with the toolchains this project is developed against, and
-# every package carries the same files.
-#
-# The trees are this script's own, build-release/<target>/ and
-# build-release/guest/ (gitignored),
-# so a developer's build/ and build-agent*/ are neither used nor
-# touched, and they start over on every run, since a tree configured on
-# another system would be reused as it is. The one tree outside
-# build-release/ is accel-virt's own build-d3d/, where
-# tools/build_d3d_runtime.sh always builds DXVK and vkd3d-proton and has
-# no switch to build anywhere else: it is started over for every target,
-# which is why the targets build one after another. A developer's build
-# keeps its own copy of those libraries (build/accel-virt/d3d/lib) and is
-# unaffected until its next build, which then reuses these portable ones.
-# What accel-virt fetches - the Windows kit subset, the Khronos
-# registries, QEMU's tarball, the OpenCL loader's source, its submodules
-# - lands in the checkout and is shared by every target, so only the
-# first run needs the network for it.
-#
-# Portability. Whatever is built here runs on other people's machines,
-# so nothing may be tuned for this one. The compiler flags in the
-# environment are dropped and the compilers must target the generic
-# x86-64 baseline by default, which is checked, not assumed: accel-virt's
-# QEMU configure and its DXVK / vkd3d-proton meson builds take their
-# flags from the environment and the compiler's defaults, and there is
-# no one place to pass a -march to all of them. After the build every
-# generated build file is searched for a CPU-specific flag. The flags
-# that remain are the projects' own baselines (QEMU's -mcx16, DXVK's
-# -msse3), which upstream ships with everywhere.
 
 set -euo pipefail
 
@@ -97,16 +25,6 @@ image_of() {
     esac
 }
 
-# ---- build dependencies, per distribution ----
-# The first lines are the toolchains: a host compiler, clang and lld for
-# the Windows drivers, meson and glslang for DXVK and vkd3d-proton, widl
-# (from Wine) for vkd3d-proton's IDL, and on Arch the two mingw-w64
-# toolchains of the guest half, which is built there only (below). Then
-# the manager's and remotewin's libraries, then QEMU's: it links what it
-# finds, and what it links becomes a dependency of the package, so the
-# box holds what is listed here and not much more. sdl3 is there because
-# DXVK's native build will not configure without a window-system
-# backend.
 DEPS_ARCH=(
     base-devel git cmake ninja python meson glslang clang lld llvm sdl3 wine mingw-w64-gcc
     qt6-base libvirt vulkan-headers vulkan-icd-loader libisofs libvncserver
@@ -149,7 +67,6 @@ DEPS_RPM=(
     curl unzip xz zstd
 )
 
-# Runs inside the box.
 install_deps() {
     case "$1" in
         arch) sudo pacman -Syu --needed --noconfirm "${DEPS_ARCH[@]}" ;;
@@ -161,7 +78,24 @@ install_deps() {
     esac
 }
 
-# ---- arguments ----
+usage() {
+    cat <<'EOF'
+usage: scripts/dist.sh [--version V] [--kit DIR] [--setup] [--incremental] [TARGET...]
+
+Builds the release packages, each in a distrobox of its distribution.
+TARGET is arch, deb, rpm or all (the default).
+
+  --version V    release version (default: the project version in CMakeLists.txt)
+  --kit DIR      an already fetched accel-virt Windows kit
+  --setup        install or update the build dependencies in each distrobox
+  --incremental  reuse the release trees of the last run
+
+The distroboxes are named by LSW_BOX_ARCH, LSW_BOX_DEB and LSW_BOX_RPM.
+Packages are written to dist/.
+EOF
+}
+
+
 VERSION=""
 KIT=""
 INCREMENTAL=0
@@ -175,7 +109,7 @@ while (( $# )); do
         --incremental) INCREMENTAL=1; shift ;;
         --setup)       SETUP=1; shift ;;
         --in-box)      IN_BOX="$2"; shift 2 ;;
-        -h|--help)     sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help)     usage; exit 0 ;;
         all)           targets+=("${TARGETS_ALL[@]}"); shift ;;
         arch|deb|rpm)  targets+=("$1"); shift ;;
         *)             fail "unknown argument '$1' (--help)" ;;
@@ -186,11 +120,9 @@ if [[ -z "${VERSION}" ]]; then
 fi
 [[ -n "${VERSION}" ]] || fail "no version (pass --version)"
 
-# ============================================================ on the host
 if [[ -z "${IN_BOX}" ]]; then
     command -v distrobox >/dev/null || fail "distrobox not found"
     (( ${#targets[@]} )) || targets=("${TARGETS_ALL[@]}")
-    # Each target once, in the order given.
     declare -A seen=()
     order=()
     for t in "${targets[@]}"; do
@@ -199,14 +131,11 @@ if [[ -z "${IN_BOX}" ]]; then
     if [[ -n "$(git -C "${ROOT}" status --porcelain --untracked-files=no --ignore-submodules=dirty)" ]]; then
         echo "!!! the working tree has uncommitted changes; the release will contain them" >&2
     fi
-    # The CPUs this script may run on, which podman does not carry into
-    # the container.
     cpus="$(taskset -pc $$ | sed 's/.*: //')"
     pass=(--version "${VERSION}")
     [[ -n "${KIT}" ]] && pass+=(--kit "${KIT}")
     (( INCREMENTAL )) && pass+=(--incremental)
     declare -A set_up=()
-    # run_in_box <distribution target> <in-box step>
     run_in_box() {
         local box args=("${pass[@]}")
         box="$(box_of "$1")"
@@ -222,7 +151,6 @@ if [[ -z "${IN_BOX}" ]]; then
         say "$2: building in the ${box} distrobox, on CPUs ${cpus}"
         distrobox enter "${box}" -- taskset -c "${cpus}" "${SELF}" --in-box "$2" "${args[@]}"
     }
-    # The guest half first, once, on Arch: every package carries the same.
     run_in_box arch guest
     for t in "${order[@]}"; do
         run_in_box "$t" "$t"
@@ -239,17 +167,6 @@ if [[ -z "${IN_BOX}" ]]; then
     exit 0
 fi
 
-# ============================================================ in the box
-# Two kinds of step. "guest" builds the guest half once, in the Arch box:
-# the mingw-w64 programs into build-release/guest/stage, and accel-virt's
-# driver tree into build-release/guest/drivers/av-drivers. It is the same
-# for every distribution, so every package carries the same files, built
-# by the toolchains this project is developed against (Arch's mingw-w64
-# links the UCRT; Fedora's and Ubuntu's link msvcrt.dll, which lacks
-# functions the agent imports; their clang is another release). A
-# distribution target builds the host half on that distribution,
-# installing that driver tree rather than building one
-# (LSW_AV_PREBUILT_DRIVERS), and adds the mingw-w64 programs to it.
 TARGET="${IN_BOX}"
 case "${TARGET}" in guest|arch|deb|rpm) ;; *) fail "unknown step '${TARGET}'" ;; esac
 WORK="${ROOT}/build-release/${TARGET}"
@@ -261,9 +178,6 @@ if (( SETUP )); then
     if [[ "${TARGET}" == guest ]]; then install_deps arch; else install_deps "${TARGET}"; fi
 fi
 
-# ---- flags and compilers ----
-# A host's ccache launcher reaches the box through the environment and
-# the box has no ccache; the release trees start over anyway.
 unset CMAKE_C_COMPILER_LAUNCHER CMAKE_CXX_COMPILER_LAUNCHER
 unset CFLAGS CXXFLAGS CPPFLAGS LDFLAGS LTOFLAGS RUSTFLAGS DEBUG_CFLAGS DEBUG_CXXFLAGS
 for cc in gcc clang; do
@@ -280,9 +194,6 @@ if [[ "${TARGET}" == guest ]]; then
         || fail "i686-w64-mingw32-g++ not found: a release needs the 32-bit Vulkan loader"
 fi
 
-# ---- submodules ----
-# Only the missing ones, as scripts/build.sh does: an unconditional
-# update would move a submodule someone is working in.
 missing=()
 for sub in external/remotewin external/accel-virt; do
     [[ -f "${ROOT}/${sub}/CMakeLists.txt" ]] || missing+=("${sub}")
@@ -292,10 +203,6 @@ if (( ${#missing[@]} )); then
     git -C "${ROOT}" submodule update --init --recursive -- "${missing[@]}"
 fi
 
-# ---- build ----
-# Every compile command a build generated: CMake's, QEMU's meson, the
-# accel-virt guest trees', and the DXVK / vkd3d-proton meson trees,
-# which accel-virt keeps in its own build-d3d/.
 check_portable() {
     say "Checking the builds for CPU-specific compiler flags"
     local build_files tuned
@@ -340,11 +247,6 @@ if (( ! INCREMENTAL )); then
 fi
 
 say "Host tree (manager, remotewin, accel-virt) -> ${WORK}/host"
-# Link hardening for the host binaries - full RELRO, and no library
-# linked that nothing uses. Passed as CMake variables rather than
-# LDFLAGS, which every nested build would read, the Windows ones too;
-# cmake/LSWAccelVirt.cmake hands them on to accel-virt's host half and
-# its DXVK / vkd3d-proton builds.
 link_flags="-Wl,-O1 -Wl,--as-needed -Wl,-z,relro -Wl,-z,now"
 host_args=(-DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr -DLSW_BUILD_TESTS=OFF
            "-DCMAKE_EXE_LINKER_FLAGS=${link_flags}"
@@ -357,16 +259,10 @@ cmake --build "${WORK}/host"
 
 check_portable "${WORK}" "${ROOT}/external/accel-virt/build-d3d"
 
-# ---- stage ----
 say "Staging into ${STAGE}"
 rm -rf "${STAGE}"
 DESTDIR="${STAGE}" cmake --install "${WORK}/host" --prefix /usr --component lsw --strip
 cp -a "${GUEST}/stage/." "${STAGE}/"
-# Licenses: LSW's, and those of what the release carries built from
-# someone else's source - QEMU and its firmware, DXVK, vkd3d-proton, and
-# the Vulkan loader (staged with the guest half) - or as someone else
-# released it: virtio-win's viofs driver and virtiofs.exe, and WinFsp's
-# installer (the shared folders' guest half, cmake/LSWGuestShares.cmake).
 licenses="${STAGE}/usr/share/licenses/lsw"
 install -Dm644 "${ROOT}/LICENSE" "${licenses}/LICENSE"
 qemu_src="${WORK}/host/accel-virt/qemu/source"
@@ -377,42 +273,24 @@ install -Dm644 "${ROOT}/external/accel-virt/third_party/dxvk/LICENSE"         "$
 install -Dm644 "${ROOT}/external/accel-virt/third_party/vkd3d-proton/LICENSE" "${licenses}/vkd3d-proton-LICENSE"
 install -Dm644 "${ROOT}/packaging/licenses/virtio-win-LICENSE"                "${licenses}/virtio-win-LICENSE"
 install -Dm644 "${ROOT}/packaging/licenses/winfsp-LICENSE"                    "${licenses}/winfsp-LICENSE"
-# The shared folders' guest half, whole: without it a share is a device
-# Windows has no driver for. The configure that fetched it checked every
-# file against its pin.
 for f in viofs.inf viofs.sys viofs.cat virtiofs.exe lsw-shares.ps1; do
     [[ -f "${STAGE}/usr/share/lsw/guest/virtiofs/${f}" ]] \
         || fail "the staged guest tree has no virtiofs/${f}"
 done
 compgen -G "${STAGE}/usr/share/lsw/guest/virtiofs/winfsp-*.msi" >/dev/null \
     || fail "the staged guest tree has no WinFsp installer"
-# The install leaves the build machine's GPU names out of the driver
-# tree (cmake/LSWAccelVirt.cmake); a release that carried them would
-# name every user's adapter after this machine's.
 [[ ! -e "${STAGE}/usr/share/lsw/guest/av-drivers/adapters.txt" ]] \
     || fail "the staged driver tree carries the build machine's adapters.txt"
-# remotewin's probe is a tool for whoever works on the mirror, built by
-# name only; a release that carried it would ship a test rig.
 stray="$(find "${STAGE}" -name 'remotewin-probe*' -print -quit)"
 [[ -z "${stray}" ]] || fail "the release carries remotewin's test rig: ${stray}"
 
-# The ELF files the install did not strip: --strip covers only what
-# CMake installs as targets, and QEMU, its modules, the executor and
-# DXVK / vkd3d-proton are files picked out of other projects' build
-# trees. None carries debug info; their symbol tables are dead weight.
 mapfile -t elfs < <(find "${STAGE}" -type f -exec sh -c 'readelf -h "$1" >/dev/null 2>&1' _ {} \; -print)
 strip --strip-unneeded "${elfs[@]}"
 
-# The shared objects the release carries itself (QEMU's modules, the
-# executor, DXVK, vkd3d-proton), which no package provides and no
-# dependency may name.
-# By file and link name and by SONAME, which is what a NEEDED entry says.
 mapfile -t bundled < <({ find "${STAGE}" -name '*.so*' \( -type f -o -type l \) -printf '%f\n'
                          for f in "${elfs[@]}"; do
                              readelf -d "${f}" | sed -n 's/.*(SONAME).*\[\(.*\)\]/\1/p'
                          done; } | sort -u)
-# Every NEEDED library the release does not carry: what its packages
-# depend on.
 mapfile -t needed < <(for f in "${elfs[@]}"; do
                           readelf -d "${f}" | sed -n 's/.*(NEEDED).*\[\(.*\)\]/\1/p'
                       done | sort -u | grep -vxF -f <(printf '%s\n' "${bundled[@]}"))
@@ -427,17 +305,12 @@ mkdir -p "${DIST}"
 epoch="$(git -C "${ROOT}" log -1 --format=%ct)"
 export SOURCE_DATE_EPOCH="${epoch}"
 
-# ============================================================ arch
-# The tarball the AUR's lsw-bin installs, and the packages its ELF files
-# link, through pacman, for the PKGBUILD's depends (aur/README.md).
 package_arch() {
     local name="lsw-${VERSION}-x86_64"
     local deps="${DIST}/${name}.depends"
     for lib in "${needed[@]}"; do
         pacman -Qoq "$(lib_path "${lib}")"
     done | sort -u > "${deps}"
-    # Reproducible as far as tar goes: sorted, owned by root, every mtime
-    # the commit's, so the same tree packs to the same bytes.
     local tarball="${DIST}/${name}.tar.zst"
     say "Packing ${tarball}"
     tar -C "${STAGE}" --sort=name --owner=0 --group=0 --numeric-owner \
@@ -448,21 +321,15 @@ package_arch() {
     echo "  depends: $(tr '\n' ' ' < "${deps}")"
 }
 
-# ============================================================ deb
-# packaging/deb/control.in, with the libraries' packages and versions
-# from dpkg-shlibdeps (the symbols files of what is installed here).
 package_deb() {
     local root="${WORK}/pkg"
     local out="${DIST}/lsw_${VERSION}-1_amd64.deb"
     rm -rf "${root}"
     cp -a "${STAGE}" "${root}"
-    # Debian keeps a package's license texts with its documentation.
     mkdir -p "${root}/usr/share/doc"
     mv "${root}/usr/share/licenses/lsw" "${root}/usr/share/doc/lsw"
     rmdir --ignore-fail-on-non-empty "${root}/usr/share/licenses"
     cp "${ROOT}/LICENSE" "${root}/usr/share/doc/lsw/copyright"
-    # dpkg-shlibdeps reads debian/control from where it runs, and finds
-    # the carried libraries through -l.
     local scratch="${WORK}/shlibdeps"
     rm -rf "${scratch}"
     mkdir -p "${scratch}/debian"
@@ -492,18 +359,12 @@ package_deb() {
     echo "  depends: $(dpkg-deb -f "${out}" Depends)"
 }
 
-# ============================================================ rpm
-# packaging/rpm/lsw.spec.in. rpmbuild finds the libraries' sonames
-# itself; the ones the release carries are kept out of its requires and
-# provides.
 package_rpm() {
     local top="${WORK}/rpmbuild"
     rm -rf "${top}"
     mkdir -p "${top}/SPECS"
     local excl
     excl="$(printf '%s\n' "${bundled[@]}" | sed 's/[.+]/\\&/g' | paste -sd'|')"
-    # Substituted by bash, not sed: the pattern is full of sed's
-    # delimiters and escapes.
     local spec
     spec="$(<"${ROOT}/packaging/rpm/lsw.spec.in")"
     spec="${spec//@VERSION@/${VERSION}}"

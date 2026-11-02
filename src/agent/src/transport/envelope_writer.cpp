@@ -5,7 +5,6 @@
 #include "lsw/linkproto/byte_order.hpp"
 
 // clang-format off
-// Header order matters: <winsock2.h> before <windows.h>.
 #include <winsock2.h>
 #include <windows.h>
 // clang-format on
@@ -17,13 +16,10 @@
 namespace lsw::agent::transport {
 
 namespace {
-
-// WinSock's "connection aborted" / "connection reset by peer". A peer
-// that closed the window mid-send is routine, not a fault worth a WARN.
 constexpr int kWsaConnAborted = 10053;
 constexpr int kWsaConnReset   = 10054;
 
-}  // namespace
+}
 
 EnvelopeWriter::EnvelopeWriter(std::intptr_t socket, std::string peer)
     : socket_(socket), peer_(std::move(peer)) {}
@@ -57,8 +53,6 @@ bool EnvelopeWriter::send(linkproto::FrameType type, const std::uint8_t* payload
     }
     std::uint8_t header[linkproto::kHeaderSize];
     linkproto::write_header(header, type, static_cast<std::uint32_t>(payload_len));
-    // Two sends — TCP coalesces, and we avoid copying a big payload just
-    // to bolt a 5-byte header in front of it.
     if (!write_all(header, static_cast<int>(linkproto::kHeaderSize))) {
         return false;
     }
@@ -75,4 +69,4 @@ bool EnvelopeWriter::send_control(const nlohmann::json& message) {
 }
 
 
-}  // namespace lsw::agent::transport
+}

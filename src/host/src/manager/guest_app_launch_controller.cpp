@@ -32,41 +32,29 @@
 namespace lsw::host::manager {
 
 namespace {
-
-// How long a guest may take to answer before the splash stops
-// pretending this is normal: three minutes, or three times the last
-// measured boot if that is longer. A slow boot is not a stuck one.
 constexpr int kStallMs = 180000;
-// How long the shared folders are given to be mounted once the agent
-// answers; a guest whose setup never finishes would otherwise hold the
-// documents for good.
 constexpr int kSharesMs = 90000;
 
 int stall_ms(std::optional<qint64> last_boot_ms) {
     return static_cast<int>(qMax<qint64>(kStallMs, 3 * last_boot_ms.value_or(0)));
 }
 
-// A store application's ID is its package family, '!', and the
-// application's name; a Windows path always has a backslash.
 bool is_store_target(const QString& target) {
     return target.contains(QLatin1Char('!')) && !target.contains(QLatin1Char('\\'));
 }
 
-// The file name of a Windows path or a host path.
 QString file_name_of(QString path) {
     path.replace(QLatin1Char('\\'), QLatin1Char('/'));
     return QFileInfo(path).fileName();
 }
 
-// What Windows chose to open one document with.
 struct Handler {
     QString target;
-    // Arguments that go before the document (``-jar``).
     QString args;
     QString error;
 };
 
-}  // namespace
+}
 
 GuestAppLaunchController::GuestAppLaunchController(services::HostServices& services,
                                                    QObject* parent)
@@ -80,9 +68,6 @@ GuestAppLaunchController::GuestAppLaunchController(services::HostServices& servi
             });
     connect(launcher_, &apps::GuestAppLauncher::failed, this,
             [this](const QString& path, const QString& error, const QStringList& documents) {
-                // Always a failure splash of its own, with a retry that carries
-                // what the launch was asked to open: the boot splash's retry is
-                // about the wait, which is over by now, and would do nothing.
                 show_failure(path, error, request_for(path, documents));
             });
 }
@@ -127,17 +112,10 @@ void GuestAppLaunchController::open(Request request) {
     }
     QString target;
     if (!request.app_id.isEmpty()) {
-        // Resolve AppConfig id → guest Windows path. The .desktop entries
-        // ship the stable id (sha1-prefix of path) in their ``Exec=``
-        // because that is robust to spaces/backslashes and survives the app
-        // moving on the guest side. The agent's launch RPC needs the path.
         const auto* cfg = services_.app_configs().find(request.app_id);
         if (cfg != nullptr && !cfg->target().isEmpty()) {
             target = cfg->target();
         } else if (request.has_documents()) {
-            // An entry left in a file manager's Open With for an application
-            // that is gone from the list: the documents are still wanted, and
-            // Windows has a program for them.
             LSW_WARN("launch_app({}): no matching config; opening its documents with Windows' default",
                      request.app_id.toStdString());
             request.app_id.clear();
@@ -159,25 +137,15 @@ void GuestAppLaunchController::open(Request request) {
         } else if (!request.has_documents()) {
             return;
         }
-        // Without a target it is not known until Windows says what opens the
-        // first document; the splash goes by the file's name meanwhile.
     }
     const QUuid uuid = vm->uuid;
 
-    // Intentionally do NOT show the main window — the user clicked an
-    // XDG launcher to open a guest app, not to bring up the manager.
     ensure_channel_target(uuid);
 
-    // The hub watches one VM; with no manager window open nobody has
-    // pointed it at this one yet.
     services_.status().set_target(uuid);
     const bool restart = request.restart_from_id >= 0;
 
     if (waiting_active_) {
-        // A boot is being waited for: this request waits with it. A plain
-        // launch replaces the plain ones before it, as it always has; a
-        // request with documents replaces nothing, because every file asked
-        // for is to be opened.
         if (!request.has_documents()) {
             waiting_.removeIf([](const Waiting& w) { return !w.request.has_documents(); });
         }
@@ -206,9 +174,6 @@ void GuestAppLaunchController::fire(const Request& request, const QString& targe
 }
 
 void GuestAppLaunchController::launch_application(const Request& request, const QString& target) {
-    // Looked up again rather than carried over from the request: the
-    // guest has been booting for a while, and the config may have been
-    // edited in the meantime. One removed since launches its path bare.
     QString token = request.activation_token;
     if (const auto* cfg = services_.app_configs().find(request.app_id); cfg != nullptr) {
         launcher_->launch(*cfg, std::move(token));
@@ -226,17 +191,12 @@ bool GuestAppLaunchController::shares_ready_for(const Request& request, const QS
     if (upkeep.shares_ready()) {
         return true;
     }
-    // A pass that ended without getting to the shared folders (the update
-    // failed) is not a guest that has them.
     if (upkeep.state() == State::Failed) {
         show_failure(shown,
                      QStringLiteral("Windows' shared folders were not set up: %1").arg(upkeep.error()),
                      request);
         return false;
     }
-    // Still going: Checking and Updating run to the pass's own limit, with
-    // the phase on the splash; only an upkeep that has not started at all is
-    // given up on, after a while. A Cancel on the splash stops the wait.
     if (splash_) {
         splash_->say(upkeep.state() == State::Updating
                          ? QStringLiteral("Updating LSW's files in Windows")
@@ -291,25 +251,19 @@ void GuestAppLaunchController::upload_documents(const Request& original, Request
     connect(transfer, &apps::GuestFileTransfer::failed, this,
             [this, transfer, original, working, target, remaining, failed, failed_files, file](const QString& error) mutable {
                 transfer->deleteLater();
-                // The others still go: this one is reported at the end.
                 failed << QStringLiteral("%1 could not be copied to Windows: %2")
                               .arg(QFileInfo(file).fileName(), error);
                 failed_files << file;
                 upload_documents(original, std::move(working), target, remaining, failed, failed_files);
             });
-    // Called by a name Windows can create, whatever it is called here; the
-    // copy is read-only, since what is written to it would only stay there.
     const QString name = QString::fromStdString(
         linkproto::WindowsFileName::sanitised(QFileInfo(file).fileName().toStdString()));
-    transfer->start(file, name, /*document=*/true);
+    transfer->start(file, name, true);
 }
 
 void GuestAppLaunchController::resolve_handlers(const Request& request, const QString& target,
                                                 const QStringList& upload_failures,
                                                 const QStringList& failed_files) {
-    // One failure splash for everything that did not go: the copies that
-    // failed and the documents Windows has no program for. Its retry is of
-    // those alone.
     const auto report = [this, upload_failures, failed_files, request, target](
                             const QStringList& more, const QStringList& more_documents) {
         QStringList lines = upload_failures;
@@ -329,20 +283,15 @@ void GuestAppLaunchController::resolve_handlers(const Request& request, const QS
                                       : target,
                      lines.join(QLatin1Char('\n')), again);
     };
-    // Nothing is left to open: only failures.
     if (request.documents.isEmpty()) {
         report({}, {});
         return;
     }
-    // A program already chosen: the configured application, or one a
-    // retry remembers.
     if (!request.app_id.isEmpty() || !request.target.isEmpty()) {
         launch_group(request, target);
         report({}, {});
         return;
     }
-    // Windows' default for each document's type, asked in the user's
-    // session, since the answer is the user's own choice of default.
     auto& rpc = services_.rpc();
     const QStringList documents = request.documents;
     QtConcurrent::run([&rpc, documents] {
@@ -370,8 +319,6 @@ void GuestAppLaunchController::resolve_handlers(const Request& request, const QS
         }
         return found;
     }).then(this, [this, request, report](const QVector<Handler>& found) {
-        // Grouped by program and arguments, in the order the documents came,
-        // so each is launched once with all of its documents.
         QStringList order;
         QHash<QString, QStringList> groups;
         QHash<QString, Handler> first;
@@ -395,8 +342,6 @@ void GuestAppLaunchController::resolve_handlers(const Request& request, const QS
             group.documents = groups.value(key);
             group.target = first.value(key).target;
             group.leading_args = first.value(key).args;
-            // A configured application with that target opens them, with its
-            // own arguments and environment.
             for (const auto& cfg : services_.app_configs().configs()) {
                 if (cfg.target().compare(group.target, Qt::CaseInsensitive) == 0) {
                     group.app_id = cfg.id;
@@ -405,8 +350,6 @@ void GuestAppLaunchController::resolve_handlers(const Request& request, const QS
             }
             launch_group(group, group.target);
         }
-        // One splash for every file that has no program, and a retry of
-        // those alone.
         report(errors, failed_documents);
     });
 }
@@ -423,8 +366,6 @@ void GuestAppLaunchController::launch_group(const Request& request, const QStrin
         program = request.target;
     if (splash_path_.isEmpty() && splash_)
         splash_path_ = program;
-    // What a document needs before it on the command line, ahead of the
-    // application's own arguments.
     const auto with_leading = [&request](apps::AppConfig config) {
         if (!request.leading_args.isEmpty()) {
             config.cmdline = config.cmdline.trimmed().isEmpty()
@@ -476,9 +417,6 @@ void GuestAppLaunchController::describe(const Request& request, const QString& t
 
 void GuestAppLaunchController::show_failure(const QString& target, const QString& error,
                                             const Request& request) {
-    // Launched from the launcher into a guest already up, there was no
-    // splash; the failure gets one of its own, in its failed state, since
-    // with the manager's window closed there is nowhere else to say it.
     QString name = file_name_of(target);
     QIcon icon;
     describe(request, target, &name, &icon);
@@ -489,7 +427,6 @@ void GuestAppLaunchController::show_failure(const QString& target, const QString
     splash->reach(LaunchSplash::Phase::GuestAnswering);
     connect(splash, &LaunchSplash::log_requested, this, &GuestAppLaunchController::log_requested);
     connect(splash, &LaunchSplash::retry_requested, this, [this, target, request] {
-        // Fired again as it was asked, uploads included.
         fire(request, target);
     });
     if (QScreen* screen = QGuiApplication::screenAt(QCursor::pos());
@@ -521,9 +458,6 @@ void GuestAppLaunchController::start_vm_and_wait(const QUuid& uuid, const Waitin
         }
     }
 
-    // Parentless top-level so the splash is not tied to the (possibly
-    // hidden) main window, and so it gets its own taskbar slot. Centred
-    // on whichever screen the cursor is on at the moment of the click.
     QString display_name = first.request.app_id;
     QIcon icon;
     describe(first.request, first.target, &display_name, &icon);
@@ -541,9 +475,6 @@ void GuestAppLaunchController::start_vm_and_wait(const QUuid& uuid, const Waitin
         splash->reach(LaunchSplash::Phase::MachineStarted);
     }
 
-    // A guest that has not answered in this long is not merely slow.
-    // Rather than spin forever, say so and offer the two things that
-    // help: the log, and a restart.
     auto* patience = new QTimer(splash);
     patience->setSingleShot(true);
     patience->setInterval(stall_ms(services_.status().last_boot_ms()));
@@ -556,8 +487,6 @@ void GuestAppLaunchController::start_vm_and_wait(const QUuid& uuid, const Waitin
     });
     patience->start();
 
-    // The status hub reads the machine every couple of seconds. Wait
-    // for the agent to answer (or a cancel), then fire what waits.
     auto* wait = new QObject(splash);
     connect(&services_.status(), &services::StatusHub::changed, wait,
             [this, wait, uuid, splash_ptr, patience](services::StatusHub::Area area) {
@@ -565,17 +494,11 @@ void GuestAppLaunchController::start_vm_and_wait(const QUuid& uuid, const Waitin
                 if (area != services::StatusHub::Area::Vm || vm.uuid != uuid)
                     return;
                 if (!waiting_active_)
-                    return;  // cancelled / superseded
-                // A restart is over when the old boot is seen to have gone;
-                // until then neither its QEMU nor its agent is the one waited for.
+                    return;
                 if (restart_from_id_ >= 0) {
-                    // The boot that was ending is not the one waited for: the
-                    // new one has another id, which is seen even when the
-                    // restart was quicker than the readings.
                     if (!vm.running() || vm.domain_id < 0 || vm.domain_id == restart_from_id_)
                         return;
                 }
-                // The phases follow the hub's readings: QEMU up, then the agent.
                 if (vm.running() && splash_ptr)
                     splash_ptr->reach(LaunchSplash::Phase::MachineStarted);
                 if (!vm.agent_online())
@@ -596,7 +519,6 @@ void GuestAppLaunchController::start_vm_and_wait(const QUuid& uuid, const Waitin
         restart_from_id_ = -1;
         patience->stop();
         wait->deleteLater();
-        // A wait for the shared folders is part of the same request.
         for (const auto& waiter : std::exchange(upkeep_waiters_, {})) {
             delete waiter.data();
         }
@@ -609,17 +531,12 @@ void GuestAppLaunchController::start_vm_and_wait(const QUuid& uuid, const Waitin
                 fire(w.request, w.target);
             return;
         }
-        // The launcher's token, if the launch never fired, is still the
-        // one its first window is to be activated with: it rides in the
-        // request, which is asked again from the start.
         waiting_active_ = false;
         const QVector<Waiting> again = std::exchange(waiting_, {});
         for (const Waiting& w : again)
             open(w.request);
     });
     connect(splash, &LaunchSplash::restart_requested, splash, [this, uuid, splash_ptr, patience] {
-        // A start while the old QEMU still runs does nothing, so the start
-        // waits for the stop, as the manager's own restart does.
         if (splash_ptr) {
             splash_ptr->resume();
         }
@@ -637,7 +554,6 @@ void GuestAppLaunchController::start_vm_and_wait(const QUuid& uuid, const Waitin
     if (start_error != 0) {
         patience->stop();
         wait->deleteLater();
-        // What was asked for is kept: the splash's retry asks for it again.
         waiting_active_ = false;
         splash->fail(QStringLiteral("Windows could not start (error %1). Open the log for details, "
                                     "then try again.")
@@ -645,4 +561,4 @@ void GuestAppLaunchController::start_vm_and_wait(const QUuid& uuid, const Waitin
     }
 }
 
-}  // namespace lsw::host::manager
+}

@@ -8,12 +8,9 @@
 namespace lsw::host::wizard {
 
 namespace {
-
-// Prose stops at a readable measure rather than running the width of
-// the window, which on this page is most of it.
 constexpr int kProseWidth = 620;
 
-}  // namespace
+}
 
 LicensePage::LicensePage(QWidget* parent) : WizardPage(parent) {
 
@@ -28,8 +25,6 @@ LicensePage::LicensePage(QWidget* parent) : WizardPage(parent) {
     blurb->setMaximumWidth(kProseWidth);
     lay->addWidget(blurb);
 
-    // The consequence of pressing Next, set apart from the explanation
-    // of what the licence is.
     auto* callout = new QLabel(
         QStringLiteral("If you continue, you confirm you hold a valid license to install "
                        "and use Windows in this virtual machine."));
@@ -48,4 +43,4 @@ bool LicensePage::isComplete() const {
     return accept_box_ != nullptr && accept_box_->isChecked();
 }
 
-}  // namespace lsw::host::wizard
+}

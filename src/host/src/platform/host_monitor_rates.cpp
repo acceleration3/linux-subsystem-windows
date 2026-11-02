@@ -12,8 +12,6 @@
 namespace lsw::host::platform {
 
 namespace {
-
-// Closes a card node however the read leaves.
 struct Fd {
     explicit Fd(int fd) : value(fd) {}
     ~Fd() {
@@ -30,9 +28,6 @@ QVector<qint64> rates_of(const drmModeConnector& connector) {
     QVector<qint64> rates;
     for (int i = 0; i < connector.count_modes; ++i) {
         const drmModeModeInfo& mode = connector.modes[i];
-        // An interlaced mode shows half a frame per period and a double
-        // scan one line twice: neither is a rate a progressive guest
-        // display runs at.
         if ((mode.flags & (DRM_MODE_FLAG_INTERLACE | DRM_MODE_FLAG_DBLSCAN)) != 0) {
             continue;
         }
@@ -45,14 +40,13 @@ QVector<qint64> rates_of(const drmModeConnector& connector) {
     return rates;
 }
 
-}  // namespace
+}
 
 qint64 HostMonitorRates::mode_millihz(quint32 clock_khz, quint32 htotal, quint32 vtotal) {
     const qint64 frame = qint64{htotal} * vtotal;
     if (frame <= 0) {
         return 0;
     }
-    // kHz is 1000 Hz and a millihertz a thousandth of one: 10^6 in all.
     return (qint64{clock_khz} * 1'000'000 + frame / 2) / frame;
 }
 
@@ -73,9 +67,6 @@ QVector<MonitorRates> HostMonitorRates::read() {
             continue;
         }
         for (int i = 0; i < resources->count_connectors; ++i) {
-            // The kernel's current list, with no probe of the connector: a
-            // probe can blank a screen, and the list is as fresh as the
-            // last hotplug.
             drmModeConnector* connector =
                 drmModeGetConnectorCurrent(fd.value, resources->connectors[i]);
             if (connector == nullptr) {
@@ -115,11 +106,6 @@ QVector<RateChoice> HostMonitorRates::merge(const QVector<MonitorRates>& monitor
     std::sort(all.begin(), all.end(), [](const Entry& a, const Entry& b) {
         return a.millihz != b.millihz ? a.millihz > b.millihz : a.monitor < b.monitor;
     });
-    // A choice takes in the rates up to half a hertz below the highest of
-    // it, so a chain of nearby rates cannot drift into one. It is shown as
-    // the rate of it nearest a whole hertz (the higher on a tie): 60 for a
-    // monitor that lists 60.317, 60.02, 60 and 59.94, which is the number
-    // people know it by.
     QVector<RateChoice> choices;
     qint64 anchor = 0;
     for (const Entry& entry : all) {
@@ -131,7 +117,6 @@ QVector<RateChoice> HostMonitorRates::merge(const QVector<MonitorRates>& monitor
         if (off_whole(entry.millihz) < off_whole(choices.last().millihz)) {
             choices.last().millihz = entry.millihz;
         }
-        // A screen that has no name is a rate and no monitor to name.
         if (!entry.monitor.isEmpty() && !choices.last().monitors.contains(entry.monitor)) {
             choices.last().monitors.push_back(entry.monitor);
         }
@@ -139,4 +124,4 @@ QVector<RateChoice> HostMonitorRates::merge(const QVector<MonitorRates>& monitor
     return choices;
 }
 
-}  // namespace lsw::host::platform
+}

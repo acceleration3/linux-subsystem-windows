@@ -1,31 +1,4 @@
 #!/usr/bin/env bash
-# Run the in-VM scenario tests of lsw-guest-update.ps1 against the running
-# guest and print their log.
-#
-# Mechanism: through the running manager's MCP server
-# (http://127.0.0.1:5105/), like redeploy-agent.sh.
-#   1. The harness (src/guest/update/tests/lsw-guest-update.tests.ps1) and
-#      this checkout's src/guest/update/lsw-guest-update.ps1 are uploaded
-#      with the agent's upload_file and copied, from a SYSTEM console, to
-#      C:\ProgramData\LSW\update-tests\; their SHA-256 is checked in the
-#      guest (file_hashes). The installed script is not replaced: the
-#      harness stages the one under test.
-#   2. The harness is started as the one-shot scheduled task
-#      lsw-update-tests (SYSTEM), the way production runs the update script
-#      and not as a child of the agent, which the script under test stops.
-#   3. The summary line ("SUMMARY: <n> passed, <n> failed") in
-#      C:\ProgramData\LSW\update-tests.log is waited for (the agent goes
-#      away and comes back many times meanwhile), the log is printed, and the
-#      task, the uploaded files and the log are removed from the guest.
-#
-# Exit status: 0 when every check passed, 1 on any FAIL, 2 on a problem of
-# the driver (no summary in time, no manager).
-#
-# Usage:
-#   scripts/test-guest-update.sh [--only <scenario letters>] [--keep] [--timeout <minutes>]
-#
-# Requires a running lsw-manager (MCP on :5105) and a running VM with an
-# agent that answers. The scenarios restart the agent (never the guest).
 
 set -euo pipefail
 
@@ -39,13 +12,29 @@ ONLY=""
 KEEP=0
 TIMEOUT_MIN=60
 
+usage() {
+    cat <<'EOF'
+usage: scripts/test-guest-update.sh [--only LETTERS] [--keep] [--timeout MINUTES]
+
+Runs the in-VM scenario tests of lsw-guest-update.ps1 against the running
+guest through the manager's MCP server (127.0.0.1:5105) and prints their log.
+Exits 0 when every check passed, 1 on a failed check, 2 when the driver
+itself failed.
+
+  --only LETTERS     run only these scenarios
+  --keep             leave the uploaded files and the log in the guest
+  --timeout MINUTES  how long to wait for the summary line (default 60)
+EOF
+}
+
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --only) ONLY="$2"; shift 2 ;;
         --keep) KEEP=1; shift ;;
         --timeout) TIMEOUT_MIN="$2"; shift 2 ;;
         -h|--help)
-            sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//'
+            usage
             exit 0
             ;;
         *)
@@ -59,8 +48,6 @@ for f in "$HARNESS" "$SCRIPT"; do
     [[ -f "$f" ]] || { echo "test-guest-update: $f not found" >&2; exit 2; }
 done
 
-# mcp <tool> <arguments json>: the tool's text on stdout, non-zero when the
-# call failed or the tool said isError.
 mcp() {
     local reply
     reply=$(curl -sS --fail -X POST "$MCP_URL" -H "Content-Type: application/json" \
@@ -76,8 +63,6 @@ sys.exit(1 if res.get("isError", False) else 0)
 '
 }
 
-# guest_cmd <cmd.exe line> <seconds>: runs the line in a SYSTEM console and
-# prints what it wrote. Non-zero when no console could be had.
 guest_cmd() {
     local line="$1" wait="${2:-10}" sid out="" chunk i done_seen=0
     sid=$(mcp console_open '{"session":0}' 2>/dev/null | sed -n 's/^session_id=\([^ ]*\).*/\1/p') || return 1
@@ -88,7 +73,6 @@ guest_cmd() {
         sleep 0.5
         chunk=$(mcp console_read "{\"session_id\":\"$sid\"}" 2>/dev/null) || true
         out+="$chunk"
-        # Only the output has the number; the echoed command line has %errorlevel%.
         if grep -qE '__DONE_[0-9]+__' <<<"$out"; then done_seen=1; break; fi
     done
     mcp console_close "{\"session_id\":\"$sid\"}" >/dev/null 2>&1 || true
@@ -96,8 +80,6 @@ guest_cmd() {
     [[ "$done_seen" -eq 1 ]]
 }
 
-# upload <local file> <guest destination dir>: through the agent's
-# upload_file, then copied from the upload store, then checked by hash.
 upload() {
     local file="$1" dest="$2" name stored want got
     name="$(basename "$file")"
@@ -156,7 +138,6 @@ SUMMARY=""
 deadline=$((SECONDS + TIMEOUT_MIN * 60))
 while ((SECONDS < deadline)); do
     sleep 20
-    # The agent is away while the scenarios replace it; try again.
     if out=$(guest_cmd "findstr /c:\"SUMMARY:\" \"$GUEST_LOG\"" 10 2>/dev/null); then
         SUMMARY=$(grep -oE 'SUMMARY: [0-9]+ passed, [0-9]+ failed' <<<"$out" | tail -n1 || true)
         [[ -z "$SUMMARY" ]] || break
@@ -170,7 +151,6 @@ for _ in 1 2 3 4 5 6; do
 done
 echo
 echo "---- $GUEST_LOG ----"
-# Drop the console's banner and prompt lines.
 tr -d '\r' <<<"$LOG" | sed 's/^C:\\Windows\\System32>//' | grep -E '^[0-9]{2}:[0-9]{2}:[0-9]{2} |^===|^SUMMARY'
 echo "--------------------"
 

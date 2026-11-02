@@ -1,5 +1,8 @@
 #pragma once
 
+#include "lsw/agent/win/rolling_file.hpp"
+
+#include <atomic>
 #include <cstdint>
 #include <sstream>
 #include <string>
@@ -9,84 +12,57 @@
 
 namespace lsw::agent::log {
 
-// Severity levels in ascending order. The level is part of the wire
-// format and the file format; never renumber.
 enum class Level : int {
-    Debug = 0,
-    Info = 1,
-    Warn = 2,
-    Error = 3,
+    Trace = 0,
+    Debug = 1,
+    Info = 2,
+    Warn = 3,
+    Error = 4,
 };
 
 [[nodiscard]] const char* level_name(Level lvl);
 
-// The inverse of ``level_name``; Info for anything unrecognised.
 [[nodiscard]] Level level_from_name(std::string_view name);
 
-// Where the file side of the log goes. Call before the first record is
-// appended — the file is opened once, by the first record. Defaults to
-// ``agent.log``; a session helper writes a file of its own, so two
-// processes never interleave lines in one.
-void set_file(const std::wstring& path);
+namespace detail {
+extern std::atomic<int> g_min_level;
+}
 
-// Wait (up to ``timeout_ms``) for every record appended so far to reach
-// the file. For a process about to exit: the writer is a detached thread
-// and the last lines are the ones that say why.
+[[nodiscard]] inline bool enabled(Level level) {
+    return static_cast<int>(level) >= detail::g_min_level.load(std::memory_order_relaxed);
+}
+
+void set_level(Level level);
+[[nodiscard]] Level level();
+
+void set_file(const std::wstring& path, win::RollingFile::Limits limits);
+
+void set_source(std::string source);
+
 void flush(unsigned timeout_ms);
 
-// One log record. ``seq`` is monotonically increasing per agent
-// process — the manager polls with the highest seq it has seen.
 struct Record {
     std::uint64_t seq = 0;
-    std::uint64_t ts_ms = 0;  // wall-clock GetSystemTimeAsFileTime, ms since unix epoch
+    std::uint64_t ts_ms = 0;
     Level level = Level::Info;
+    std::string source;
     std::string msg;
 };
 
-// Append a record. Writes to ``C:\ProgramData\LSW\agent.log`` and
-// pushes onto the in-memory ring (kRingCapacity) for later
-// ``collect_since`` calls.
-//
-// Thread-safe; serialized internally so the file output stays line-
-// atomic across threads.
 void append(Level level, const std::string& msg);
 
-// Returns every record with ``seq > since``, oldest first. Also
-// fills ``next_since`` with the highest seq returned (or ``since`` if
-// nothing new). If the ring has wrapped past ``since`` (caller fell
-// way behind) the returned records start from the oldest still
-// retained — the caller will detect this from the gap.
+void append_from(Level level, std::string_view source, const std::string& msg,
+                 std::uint64_t ts_ms);
+
 [[nodiscard]] std::vector<Record> collect_since(std::uint64_t since, std::uint64_t& next_since);
 
-// ---- Message formatting -------------------------------------------------
-//
-// The host side logs with ``LSW_WARN("x={}", x)`` (spdlog). The agent
-// cannot use spdlog — there is no mingw package for it, and agent
-// records have to land in the ring above so they can be pushed to the
-// manager as ``log`` events. So the ring stays, and only the CALL SITE
-// converges: the macros below take the same brace-substitution form, and
-// the agent stops building messages by string concatenation.
-//
-// Substitution happens ONLY when arguments are supplied. A single
-// argument is logged verbatim — agent messages routinely carry JSON
-// dumps, and those are full of braces that must not be read as
-// placeholders.
-
-// Single argument: pass through untouched.
 [[nodiscard]] inline std::string format(std::string message) {
     return message;
 }
 
 namespace detail {
-
-// UTF-16 text — a Win32 path, a window title — converted to UTF-8. Out
-// of line, in log.cpp, so this header stays free of <windows.h>.
 void append_wide(std::string& out, std::wstring_view value);
 
-// Append one argument in the spdlog/fmt style: strings as-is, wide
-// strings as UTF-8, everything else through the stream operator. The
-// wide cases are tested first because the stream operator would accept
-// a ``wchar_t*`` too, and print its address.
 template<typename T>
 void append_arg(std::string& out, const T& value) {
     if constexpr (std::is_convertible_v<const T&, const wchar_t*>) {
@@ -113,20 +89,14 @@ inline void append_arg(std::string& out, bool value) {
     out += value ? "true" : "false";
 }
 
-}  // namespace detail
+}
 
-// Brace substitution. Each ``{}`` in ``fmt`` consumes the next argument;
-// surplus arguments are appended in a trailing " | " group rather than
-// dropped, because a log line that silently loses data is worse than an
-// ugly one. ``{{`` emits a literal brace.
 template<typename... Args>
     requires(sizeof...(Args) > 0)
 [[nodiscard]] std::string format(std::string_view fmt, const Args&... args) {
     std::string out;
     out.reserve(fmt.size() + (16 * sizeof...(Args)));
 
-    // Collect the arguments as strings first so the walk below is a
-    // plain loop rather than a parameter-pack dance.
     std::vector<std::string> rendered;
     rendered.reserve(sizeof...(Args));
     (..., (rendered.emplace_back(), detail::append_arg(rendered.back(), args)));
@@ -142,7 +112,7 @@ template<typename... Args>
             if (next < rendered.size()) {
                 out += rendered[next++];
             } else {
-                out += "{}";  // more placeholders than arguments
+                out += "{}";
             }
             ++i;
             continue;
@@ -156,22 +126,14 @@ template<typename... Args>
     return out;
 }
 
-}  // namespace lsw::agent::log
+}
 
-// Convenience macros mirroring lsw/base/log.hpp's shape, so both sides of
-// the VM boundary read the same at the call site:
-//
-//   LSW_AGENT_WARN("bind(:{}) failed wsa_err={}", port, err);
-//   LSW_AGENT_INFO(already_built_string);
-#define LSW_AGENT_INFO(...)                                                                        \
-    ::lsw::agent::log::append(::lsw::agent::log::Level::Info,                                      \
-                              ::lsw::agent::log::format(__VA_ARGS__))
-#define LSW_AGENT_WARN(...)                                                                        \
-    ::lsw::agent::log::append(::lsw::agent::log::Level::Warn,                                      \
-                              ::lsw::agent::log::format(__VA_ARGS__))
-#define LSW_AGENT_ERROR(...)                                                                       \
-    ::lsw::agent::log::append(::lsw::agent::log::Level::Error,                                     \
-                              ::lsw::agent::log::format(__VA_ARGS__))
-#define LSW_AGENT_DEBUG(...)                                                                       \
-    ::lsw::agent::log::append(::lsw::agent::log::Level::Debug,                                     \
-                              ::lsw::agent::log::format(__VA_ARGS__))
+#define LSW_AGENT_LOG(level, ...)                                                                  \
+    if (!::lsw::agent::log::enabled(level)) {                                                      \
+    } else                                                                                         \
+        ::lsw::agent::log::append(level, ::lsw::agent::log::format(__VA_ARGS__))
+#define LSW_AGENT_TRACE(...) LSW_AGENT_LOG(::lsw::agent::log::Level::Trace, __VA_ARGS__)
+#define LSW_AGENT_DEBUG(...) LSW_AGENT_LOG(::lsw::agent::log::Level::Debug, __VA_ARGS__)
+#define LSW_AGENT_INFO(...)  LSW_AGENT_LOG(::lsw::agent::log::Level::Info, __VA_ARGS__)
+#define LSW_AGENT_WARN(...)  LSW_AGENT_LOG(::lsw::agent::log::Level::Warn, __VA_ARGS__)
+#define LSW_AGENT_ERROR(...) LSW_AGENT_LOG(::lsw::agent::log::Level::Error, __VA_ARGS__)

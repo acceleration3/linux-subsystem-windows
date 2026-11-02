@@ -36,4 +36,4 @@ nlohmann::json RedeployAgentTool::call(const nlohmann::json&) {
                       : ToolResult::error(outcome.message);
 }
 
-}  // namespace lsw::host::mcp
+}

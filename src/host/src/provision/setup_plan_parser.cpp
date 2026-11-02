@@ -54,7 +54,7 @@ namespace {
     return false;
 }
 
-}  // namespace
+}
 
 QString SetupPlanParser::resolve_script_ref(const QString& ref) {
     if (ref == QStringLiteral("tune-windows")) {
@@ -68,9 +68,9 @@ QVector<SetupStage> SetupPlanParser::parse(const QByteArray& json, QString* erro
     nlohmann::json doc;
     try {
         doc = nlohmann::json::parse(json.constData(), json.constData() + json.size(),
-                                    /*cb=*/nullptr,
-                                    /*allow_exceptions=*/true,
-                                    /*ignore_comments=*/true);
+                                    nullptr,
+                                    true,
+                                    true);
     } catch (const nlohmann::json::exception& e) {
         if (error_out != nullptr) {
             *error_out = QString::fromUtf8(e.what());
@@ -105,4 +105,4 @@ QVector<SetupStage> SetupPlanParser::parse(const QByteArray& json, QString* erro
     return out;
 }
 
-}  // namespace lsw::host::provision
+}

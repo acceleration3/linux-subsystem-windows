@@ -1,16 +1,3 @@
-// The domain definition is built from strings a user chooses — shared
-// folder paths above all — and the template quotes its attributes with
-// '. A folder called "Tom's & Jerry's" used to go into the XML as it
-// was, which is a definition libvirt refuses, with an error that names
-// a line of generated XML rather than the folder.
-//
-// This pins the escaping, the single-pass substitution that keeps a
-// substituted value from being substituted again, the GPU's shape
-// (accel-virt's virtio-gpu-av-pci on its own QEMU, a shared memfd under
-// the guest's RAM, no emulated adapter except during Windows setup), the
-// devices Windows drives in-box (an NVMe disk, an e1000e NIC, no driver
-// ISO) and the settings half of the definition. No libvirt, no VM.
-
 #include "lsw/host/config/manager_settings.hpp"
 #include "lsw/host/vm/domain_xml_builder.hpp"
 
@@ -52,7 +39,6 @@ QDomDocument parse(const QString& xml, const char* label) {
     return doc;
 }
 
-// Every <qemu:arg value=...>, in order, as QEMU will receive them.
 QStringList qemu_args(const QDomDocument& doc) {
     QStringList out;
     const QDomNodeList args = doc.elementsByTagName(QStringLiteral("qemu:arg"));
@@ -62,7 +48,6 @@ QStringList qemu_args(const QDomDocument& doc) {
     return out;
 }
 
-// The argument after each ``flag`` whose value starts with ``prefix``.
 QStringList args_after(const QStringList& args, const QString& flag, const QString& prefix) {
     QStringList out;
     for (qsizetype i = 0; i + 1 < args.size(); ++i) {
@@ -84,7 +69,6 @@ QString qemu_env(const QDomDocument& doc, const QString& name) {
     return {};
 }
 
-// The <disk> elements of one ``device`` kind ("disk", "cdrom").
 QVector<QDomElement> disks(const QDomDocument& doc, const QString& device) {
     QVector<QDomElement> out;
     const QDomNodeList all = doc.elementsByTagName(QStringLiteral("disk"));
@@ -97,9 +81,6 @@ QVector<QDomElement> disks(const QDomDocument& doc, const QString& device) {
     return out;
 }
 
-// Every device is one Windows has an in-box driver for: the system disk
-// on NVMe, the NIC an e1000e, and nothing that wants virtio-win, whose
-// ISO is no longer attached. The same for both shapes of the domain.
 void check_inbox_devices(const QDomDocument& doc) {
     const QVector<QDomElement> system = disks(doc, QStringLiteral("disk"));
     const QDomElement target = system.value(0).firstChildElement(QStringLiteral("target"));
@@ -162,7 +143,7 @@ QString video_model(const QDomDocument& doc) {
         .attribute(QStringLiteral("type"));
 }
 
-}  // namespace
+}
 
 int main(int argc, char** argv) {
     QCoreApplication app{argc, argv};
@@ -174,7 +155,6 @@ int main(int argc, char** argv) {
               QStringLiteral("/home/ünïcode/plain"),
           "xml_escape leaves ordinary text alone");
 
-    // One pass: a value that looks like a placeholder is not expanded.
     QHash<QString, QString> vars;
     vars.insert(QStringLiteral("a"), QStringLiteral("{{b}}"));
     vars.insert(QStringLiteral("b"), QStringLiteral("B"));
@@ -182,8 +162,6 @@ int main(int argc, char** argv) {
               QStringLiteral("<{{b}}|B|{{c}}>"),
           "render_template substitutes once and leaves unknown placeholders");
 
-    // End to end: a hostile share path and a hostile disk path survive
-    // into a definition that parses and reads back as what was asked.
     VmRecord vm;
     vm.uuid = QUuid::createUuid();
     vm.name = QStringLiteral("lsw");
@@ -197,8 +175,6 @@ int main(int argc, char** argv) {
     const QString hostile = QStringLiteral("/home/me/Tom's & Jerry's <stuff>");
     inputs.shares.push_back(DomainShare{QStringLiteral("z"), hostile, true});
 
-    // The GPU, as the settings would have it, with paths a user could
-    // have: an apostrophe for XML, a comma for QEMU's option parser.
     inputs.qemu_binary = QStringLiteral("/opt/o'av/qemu/qemu-system-x86_64");
     inputs.qemu_module_dir = QStringLiteral("/opt/o'av/qemu");
     inputs.qemu_data_dir = QStringLiteral("/opt/o'av/qemu/share");
@@ -231,7 +207,6 @@ int main(int argc, char** argv) {
     check(disk_found, "the disk path with an apostrophe reads back exactly");
     check(!xml.contains(QStringLiteral("{{")), "no placeholder is left unsubstituted");
 
-    // accel-virt's QEMU and its environment.
     check(doc.elementsByTagName(QStringLiteral("emulator")).at(0).toElement().text() ==
               inputs.qemu_binary,
           "the emulator is accel-virt's QEMU, read back exactly");
@@ -247,7 +222,6 @@ int main(int argc, char** argv) {
               "an installed QEMU's data directory is passed once as -L, read back exactly");
     }
 
-    // The guest's RAM is a shared memfd.
     const QDomElement backing =
         doc.elementsByTagName(QStringLiteral("memoryBacking")).at(0).toElement();
     check(
@@ -259,7 +233,6 @@ int main(int argc, char** argv) {
 
     check(video_model(doc) == QStringLiteral("none"), "steady state has no emulated adapter");
 
-    // The GPU devices.
     const QStringList args = qemu_args(doc);
     const QStringList gpus =
         args_after(args, QStringLiteral("-device"), QStringLiteral("virtio-gpu-av-pci,"));
@@ -276,8 +249,6 @@ int main(int argc, char** argv) {
     check(display.contains(QStringLiteral(",max_outputs=1,")), "one output");
     check(display.contains(QStringLiteral(",vectors=11,hostmem=4096M,")),
           "MSI-X vectors and the host window");
-    // The executor runs inside QEMU: libvirt's seccomp sandbox
-    // (spawn=deny) would not let QEMU start a renderer process.
     check(!xml.contains(QStringLiteral("renderer")), "no device is given a renderer");
     check(display.endsWith(QStringLiteral(",modes=2560x1440,,1920x1080")),
           "the mode list's commas are doubled for QEMU");
@@ -295,7 +266,6 @@ int main(int argc, char** argv) {
               !render_only.contains(QStringLiteral("modes=")),
           "the render-only adapter is display=off on its own GPU");
 
-    // The driver's log.
     check(args_after(args, QStringLiteral("-chardev"), QStringLiteral("file,id=avgpu-log,path="))
                   .value(0) == QStringLiteral("file,id=avgpu-log,path=") + inputs.avgpu_log,
           "the driver log's chardev writes the log file");
@@ -303,8 +273,6 @@ int main(int argc, char** argv) {
               QStringLiteral("isa-debugcon,iobase=0x402,chardev=avgpu-log"),
           "the debug console listens on port 0x402");
 
-    // The agent talks TCP over the user-net hostfwd, and the render
-    // server's regions are gone: the domain has no shared memory device.
     check(doc.elementsByTagName(QStringLiteral("shmem")).isEmpty(),
           "the domain has no shmem device");
     check(!xml.contains(QStringLiteral("rvk")), "nothing of the render server is left");
@@ -313,7 +281,6 @@ int main(int argc, char** argv) {
     check(doc.elementsByTagName(QStringLiteral("graphics")).isEmpty(),
           "steady-state VMs have no VNC or desktop readback backend");
 
-    // Windows setup: a VGA primary as well, the GPU device still there.
     DomainXmlInputs install = inputs;
     install.install_display = true;
     install.shares.clear();
@@ -382,7 +349,6 @@ int main(int argc, char** argv) {
           "guest RAM is a shared memfd with no shares too");
     check_inbox_devices(install_doc);
 
-    // The display settings are live; the GPU's are not.
     check(!ManagerSettings::needs_restart(ManagerSettings::Key::kDisplayModes) &&
               !ManagerSettings::needs_restart(ManagerSettings::Key::kMatchHostOutput) &&
               !ManagerSettings::needs_restart(ManagerSettings::Key::kDisplayRefresh),
@@ -401,8 +367,6 @@ int main(int argc, char** argv) {
                   .isEmpty(),
           "the GPU defaults are auto, no render GPUs and an 8 GiB window");
 
-    // The stored form of the share list round-trips, read-only flag
-    // and all, and an empty list is the empty string.
     const QVector<HostShare> shares = {
         HostShare{QStringLiteral("/home/me/a b"), QStringLiteral("Z:"), false},
         HostShare{QStringLiteral("/srv/ro"), QStringLiteral("Y:"), true},

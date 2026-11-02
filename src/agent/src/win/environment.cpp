@@ -40,15 +40,11 @@ std::vector<wchar_t> Environment::block_with(const std::vector<Override>& overri
 
 std::vector<wchar_t> Environment::block_from(const wchar_t* base,
                                              const std::vector<Override>& overrides) {
-    // Existing variables, keyed by upper-cased name so an override
-    // replaces a differently-cased one rather than adding a twin.
-    std::map<std::wstring, std::pair<std::wstring, std::wstring>> vars;  // KEY -> (name, value)
+    std::map<std::wstring, std::pair<std::wstring, std::wstring>> vars;
     if (base != nullptr) {
         for (const wchar_t* p = base; *p != L'\0';) {
             const std::wstring entry(p);
             p += entry.size() + 1;
-            // Skip the "=C:=C:\..." drive-current-directory entries:
-            // they start with '=' and are the shell's business.
             const auto eq = entry.find(L'=', 1);
             if (entry.empty() || entry[0] == L'=' || eq == std::wstring::npos) {
                 continue;
@@ -66,16 +62,16 @@ std::vector<wchar_t> Environment::block_from(const wchar_t* base,
     }
 
     std::vector<wchar_t> out;
-    for (const auto& [key, pair] : vars) {  // std::map iterates sorted
+    for (const auto& [key, pair] : vars) {
         const std::wstring entry = pair.first + L"=" + pair.second;
         out.insert(out.end(), entry.begin(), entry.end());
         out.push_back(L'\0');
     }
     if (out.empty()) {
-        out.push_back(L'\0');  // an empty block is still two NULs
+        out.push_back(L'\0');
     }
-    out.push_back(L'\0');  // block terminator
+    out.push_back(L'\0');
     return out;
 }
 
-}  // namespace lsw::agent::win
+}

@@ -9,8 +9,6 @@ namespace {
 
 constexpr QLatin1StringView kGpuDriver{"virtio-gpu-av-pci"};
 
-// libvirt's <memory unit=...> in MiB. The units are libvirt's own list;
-// KiB is what it writes back and the default when none is named.
 qint64 in_mib(qint64 value, const QString& unit) {
     const QString u = unit.trimmed();
     constexpr qint64 kKi = 1024;
@@ -44,7 +42,7 @@ qint64 in_mib(qint64 value, const QString& unit) {
 
 DomainDescription::GpuDevice gpu_from(const QStringList& options) {
     DomainDescription::GpuDevice gpu;
-    gpu.host_gpu = QStringLiteral("auto");  // the device's own default
+    gpu.host_gpu = QStringLiteral("auto");
     for (const QString& option : options.mid(1)) {
         const qsizetype eq = option.indexOf(QLatin1Char('='));
         const QString key = eq < 0 ? option : option.left(eq);
@@ -71,7 +69,7 @@ DomainDescription::GpuDevice gpu_from(const QStringList& options) {
     return gpu;
 }
 
-}  // namespace
+}
 
 const DomainDescription::GpuDevice* DomainDescription::display() const noexcept {
     for (const auto& gpu : gpus) {
@@ -92,7 +90,7 @@ QStringList DomainDescription::split_options(const QString& line) {
             continue;
         }
         if (i + 1 < line.size() && line.at(i + 1) == QLatin1Char(',')) {
-            current += c;  // ",," is a comma inside the value
+            current += c;
             ++i;
             continue;
         }
@@ -116,7 +114,7 @@ int DomainDescription::size_mib(const QString& value) {
         return 0;
     }
     if (!has_suffix) {
-        return static_cast<int>(n / (1024 * 1024));  // bytes
+        return static_cast<int>(n / (1024 * 1024));
     }
     switch (suffix.unicode()) {
     case 'K':
@@ -141,12 +139,9 @@ std::optional<DomainDescription> DomainDescription::parse(const QString& xml) {
     bool in_commandline = false;
     bool in_video = false;
     bool disk_done = false;
-    // Inside a <filesystem>, and whether its driver is virtiofs.
     bool in_filesystem = false;
     bool filesystem_virtiofs = false;
     Share share;
-    // Inside a USB <hostdev>, and inside its <source>, whose bus and
-    // device numbers are the host's (the <address> after it is the guest's).
     bool in_usb_hostdev = false;
     bool in_hostdev_source = false;
     UsbDevice usb;
@@ -252,8 +247,6 @@ std::optional<DomainDescription> DomainDescription::parse(const QString& xml) {
 }
 
 std::optional<quint64> DiskImage::qcow2_virtual_size(const QByteArray& header) {
-    // "QFI\xfb", version, backing file offset and size, cluster bits,
-    // then the virtual size: a u64 at 24, big-endian like every field.
     constexpr qsizetype kSizeAt = 24;
     if (header.size() < kSizeAt + 8 || !header.startsWith(QByteArrayLiteral("QFI\xfb"))) {
         return std::nullopt;
@@ -276,4 +269,4 @@ std::optional<quint64> DiskImage::virtual_size(const QString& path) {
     return static_cast<quint64>(file.size());
 }
 
-}  // namespace lsw::host::vm
+}

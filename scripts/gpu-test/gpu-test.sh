@@ -1,39 +1,4 @@
 #!/usr/bin/env bash
-# Build here, deploy to every test machine, and run every graphics API's
-# tests on every GPU each machine has, in its LSW VM.
-#
-# This machine is the builder: it builds LSW and accel-virt once and rsyncs
-# what a run needs - the patched QEMU and executor, the guest driver package,
-# accel-virt's guest and host test programs and their runtimes - to
-# ~/.local/share/lsw-gpu-test/tree on each host, laid out as in this
-# checkout. Each host then runs scripts/gpu-test/gpu_matrix.py on itself:
-# its VM redefined with one accel-virt adapter per pass, bound to one GPU,
-# the probes and the D3D11, D3D12, Vulkan, OpenGL and OpenCL sample suites
-# run in it, and the VM's own definition put back at the end.
-#
-# Usage:
-#   scripts/gpu-test/gpu-test.sh build                  # LSW + the test programs
-#   scripts/gpu-test/gpu-test.sh deploy   [HOST...]     # rsync the tree, then preflight
-#   scripts/gpu-test/gpu-test.sh preflight [HOST...]    # what each host lacks
-#   scripts/gpu-test/gpu-test.sh run      [HOST...] [-- gpu_matrix.py run options]
-#   scripts/gpu-test/gpu-test.sh status   [RUN]
-#   scripts/gpu-test/gpu-test.sh wait     [RUN]         # until every host finished
-#   scripts/gpu-test/gpu-test.sh collect  [RUN]         # results into build/gpu-test/RUN
-#   scripts/gpu-test/gpu-test.sh report   [RUN]         # the failures, every host and GPU
-#   scripts/gpu-test/gpu-test.sh all      [HOST...] [-- run options]
-#   scripts/gpu-test/gpu-test.sh restore  [HOST...]     # the VM definition a killed run changed
-#   scripts/gpu-test/gpu-test.sh provision HOST [-- lsw-manager options]   # an LSW VM where none is
-#   scripts/gpu-test/gpu-test.sh setup-keys [HOST...]   # this machine's ssh key on each host
-#   scripts/gpu-test/gpu-test.sh traces-sync [HOST...]  # the trace store (TRACES.md) to each host
-#   scripts/gpu-test/gpu-test.sh traces-pull HOST APP/FUNC   # a trace recorded on HOST into this store
-#
-# HOST is a name from scripts/gpu-test/hosts (all of them when none is
-# given). RUN defaults to the last one started. Run options are
-# gpu_matrix.py's: --gpus 0,2, --suites probes,vulkan, --frames N, ...
-#
-# A run takes the VM over: lsw-manager must be closed on every host, and the
-# VM is shut down and restarted several times. Runs on different hosts go in
-# parallel; on one host, roughly 20-40 minutes per GPU.
 
 set -euo pipefail
 
@@ -41,13 +6,9 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 HERE="${ROOT}/scripts/gpu-test"
 AV="${ROOT}/external/accel-virt"
 HOSTS_FILE="${LSW_GPU_TEST_HOSTS:-${HERE}/hosts}"
-BASE=".local/share/lsw-gpu-test"   # under each host's home
+BASE=".local/share/lsw-gpu-test"
 RESULTS="${ROOT}/build/gpu-test"
-# The trace store (scripts/gpu-test/TRACES.md): this machine's is the master
-# copy; each host's is ~/${BASE}/traces, where gpu_matrix.py's traces suite reads it.
 TRACE_STORE="${LSW_GPU_TEST_TRACE_STORE:-${HOME}/${BASE}/traces}"
-# LSW_GPU_TEST_CONTROL_PATH reuses master connections opened some other way
-# (with a password, say), since every connection here is non-interactive.
 SSH_OPTS=(-o BatchMode=yes -o ConnectTimeout=10 -o ControlMaster=auto
           -o "ControlPath=${LSW_GPU_TEST_CONTROL_PATH:-/tmp/lsw-gpu-test-%C}" -o ControlPersist=10m)
 
@@ -57,7 +18,6 @@ die() { printf 'gpu-test: %s\n' "$*" >&2; exit 1; }
 target_of() { awk -v name="$1" '!/^[[:space:]]*#/ && $1 == name { print $2 }' "${HOSTS_FILE}"; }
 all_hosts() { awk '!/^[[:space:]]*#/ && NF >= 2 { print $1 }' "${HOSTS_FILE}"; }
 
-# The hosts named before a "--", or every host; what follows "--" is left in PASS.
 HOSTS=()
 PASS=()
 split_arguments() {
@@ -72,8 +32,6 @@ split_arguments() {
     if [[ ${#HOSTS[@]} -eq 0 ]]; then mapfile -t HOSTS < <(all_hosts); fi
 }
 
-# A bash script on stdin, run in HOST's home. The hosts' login shells need
-# not be bash, so nothing is passed on the command line.
 on() {
     local target
     target="$(target_of "$1")"
@@ -84,7 +42,6 @@ on() {
     fi
 }
 
-# rsync's destination for PATH under HOST's home.
 destination() {
     local target
     target="$(target_of "$1")"
@@ -103,12 +60,9 @@ run_hosts() {
     cat "${RESULTS}/$1/hosts"
 }
 
-# ---------------------------------------------------------------- building
-
 cmd_build() {
     say "Building LSW: agent, manager, mirror, accel-virt"
     "${ROOT}/scripts/build.sh"
-    # The app suites' capture benchmark, which the agent build leaves out.
     cmake --build "${ROOT}/build-agent" --target remotewin-wgcbench
     say "Building accel-virt's test programs"
     if [[ ! -f ${AV}/build/CMakeCache.txt ]]; then
@@ -116,8 +70,6 @@ cmd_build() {
     fi
     cmake --build "${AV}/build" --target avtest avd3d11samples_host avd3d12samples_host \
         avglsamples_host avclsamples_host av_device_loss_layer
-    # Always: it applies DXVK's and vkd3d-proton's patch series and rebuilds
-    # what changed, and a runtime built before a new patch would ship without it.
     (cd "${AV}" && tools/build_d3d_runtime.sh)
     (cd "${AV}" && tools/fetch_dxc.sh)
     (cd "${AV}" && tools/build_vulkan_samples.sh all)
@@ -129,11 +81,6 @@ cmd_build() {
     say "Built."
 }
 
-# --------------------------------------------------------------- deploying
-
-# What a host needs, relative to the checkout: the files and directories
-# rsync copies, symlinks followed (QEMU's qemu-bundle links into this
-# machine's build tree).
 bundle_paths() (
     local qemu=build/accel-virt/qemu
     cd "${ROOT}"
@@ -187,11 +134,6 @@ cmd_deploy() {
     cmd_preflight "${HOSTS[@]}"
 }
 
-# A CachyOS builder's glibc is built for x86-64-v4, and its crt1.o carries
-# that as an ISA-level note into every executable linked here, so a host
-# without AVX-512 refuses to start them ("CPU ISA level is lower than
-# required") although their code is baseline x86-64. The note is removed
-# from the deployed copies; the shared libraries never carry it.
 portable_executables() {
     on "$1" <<EOF
 cd ${BASE}/tree
@@ -205,10 +147,6 @@ find . -type f -perm -u+x ! -name '*.so' ! -name '*.so.*' ! -name '*.exe' ! -nam
 EOF
 }
 
-# The shared libraries QEMU links that HOST lacks (optional features this
-# machine's build picked up: RDMA, VDE, XDP, ...), copied from here into
-# tree/libs, which gpu_matrix.py puts on QEMU's LD_LIBRARY_PATH. Repeated
-# until nothing is missing, since a copied library may need others.
 ship_missing_libraries() {
     local host=$1 round missing name path staged
     staged="$(mktemp -d)"
@@ -243,14 +181,11 @@ python3 -B ${BASE}/tree/scripts/gpu-test/gpu_matrix.py gpus" || failed=1
     return "${failed}"
 }
 
-# ----------------------------------------------------------------- running
-
 cmd_run() {
     split_arguments "$@"
     local run
     run="${LSW_GPU_TEST_RUN:-$(date +%Y%m%d-%H%M%S)}"
     mkdir -p "${RESULTS}/${run}"
-    # A run restarted on some hosts keeps the others it already had.
     { cat "${RESULTS}/${run}/hosts" 2>/dev/null || true; printf '%s\n' "${HOSTS[@]}"; } | sort -u > "${RESULTS}/${run}/hosts.new"
     mv "${RESULTS}/${run}/hosts.new" "${RESULTS}/${run}/hosts"
     echo "${run}" > "${RESULTS}/last-run"
@@ -352,8 +287,6 @@ cmd_restore() {
     done
 }
 
-# An unattended LSW install with the deployed manager, run headless and
-# detached: it downloads Windows, so it takes the better part of an hour.
 cmd_provision() {
     [[ $# -ge 1 ]] || die "provision needs a host"
     local host=$1
@@ -370,9 +303,6 @@ echo "started: pid \$!"
 EOF
 }
 
-# The trace store mirrored to each host: rsync sends only what changed, and
-# --delete keeps a host's copy no bigger than this one. Run it after
-# traces.py fetch-tools or pull, before a run with --suites traces.
 cmd_traces_sync() {
     split_arguments "$@"
     [[ -d ${TRACE_STORE} ]] || die "no trace store at ${TRACE_STORE}: run scripts/gpu-test/traces.py fetch-tools"
@@ -389,7 +319,6 @@ cmd_traces_sync() {
     done
 }
 
-# A functionality traces.py pulled into HOST's store, into this machine's.
 cmd_traces_pull() {
     [[ $# -eq 2 ]] || die "traces-pull needs a host and an APP/FUNC"
     [[ -n "$(target_of "$1")" ]] || die "no host '$1' in ${HOSTS_FILE}"
@@ -411,7 +340,34 @@ cmd_setup_keys() {
     done
 }
 
-[[ $# -ge 1 ]] || { sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+usage() {
+    cat <<'EOF'
+usage: scripts/gpu-test/gpu-test.sh COMMAND [HOST...] [-- gpu_matrix.py run options]
+
+Builds here, deploys to the test machines listed in scripts/gpu-test/hosts and
+runs every graphics API's tests on every GPU of each machine, in its LSW VM.
+
+  build                     LSW and the test programs
+  deploy   [HOST...]        rsync the tree, then preflight
+  preflight [HOST...]       what each host lacks
+  run      [HOST...] [-- OPTIONS]
+  status   [RUN]
+  wait     [RUN]            until every host finished
+  collect  [RUN]            results into build/gpu-test/RUN
+  report   [RUN]            the failures, every host and GPU
+  all      [HOST...] [-- OPTIONS]
+  restore  [HOST...]        the VM definition a killed run changed
+  provision HOST [-- lsw-manager options]
+  setup-keys [HOST...]      this machine's ssh key on each host
+  traces-sync [HOST...]     the trace store to each host
+  traces-pull HOST APP/FUNC a trace recorded on HOST into this store
+
+RUN defaults to the last one started. A run takes the VM over: lsw-manager
+must be closed on every host.
+EOF
+}
+
+[[ $# -ge 1 ]] || { usage; exit 2; }
 command=$1
 shift
 case "${command}" in
@@ -429,6 +385,6 @@ case "${command}" in
     setup-keys) cmd_setup_keys "$@" ;;
     traces-sync) cmd_traces_sync "$@" ;;
     traces-pull) cmd_traces_pull "$@" ;;
-    -h|--help)  sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//' ;;
+    -h|--help)  usage ;;
     *)          die "unknown command '${command}' (see --help)" ;;
 esac

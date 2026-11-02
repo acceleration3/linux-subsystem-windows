@@ -14,4 +14,4 @@ QString ExportSocket::path() {
     return QStringLiteral("%1/%2-export.sock").arg(runtime, QLatin1String(config::kVmName));
 }
 
-}  // namespace lsw::host::vm
+}

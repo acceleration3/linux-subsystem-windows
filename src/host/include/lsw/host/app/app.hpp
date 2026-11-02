@@ -16,99 +16,50 @@ namespace lsw::host::app {
 
 class UnattendedRunner;
 
-// Composition root. One concern: deciding which of the three run modes
-// this process is in — first-run wizard, everyday manager, or headless
-// unattended install — and standing up exactly what that mode needs.
-//
-// It deliberately does NOT expose its services to the objects it
-// creates: they take a ``services::HostServices&`` instead, so nothing
-// below the composition root depends on the composition root.
 class App : public QApplication {
     Q_OBJECT
 public:
     App(int& argc, char** argv);
     ~App() override;
 
-    // Hand the CLI options to the App. Called from ``main`` after
-    // parsing argv, which needs a live QApplication.
     void set_cli_options(CliOptions opts) { cli_ = std::move(opts); }
 
-    // Show the wizard (first run) or main window (subsequent runs)
-    // based on ``Settings::is_first_run()``. If CLI options request
-    // unattended mode, drive the pipeline headlessly instead.
-    // Returns the QApp exit code.
     [[nodiscard]] int run();
 
 private Q_SLOTS:
-    // Wizard "Done" — persist and hand off to a fresh manager process.
     void on_wizard_complete();
 
-    // SingleInstance "raise" delivered via DBus.
     void on_raise_request();
 
-    // SingleInstance "launch_app <id>" delivered via DBus from an XDG
-    // launcher click. Delegated to the launch controller, which owns
-    // the (VM may be cold) start / wait / launch / mirror sequence.
     void on_launch_app_request(const QString& app_id, const QString& activation_token);
 
-    // SingleInstance "open_documents" delivered via DBus from a file
-    // manager (or ``--launch <id> file...``): the files to open in the
-    // guest, with ``app_id``'s application or Windows' default for each.
     void on_open_documents_request(const QString& app_id, const QStringList& files,
                                    const QString& activation_token);
 
-    // The settings page's Reinstall: this manager hands over to a wizard
-    // process (``--reinstall``) and quits.
     void on_reinstall_request();
 
 private:
-    // True when this process is a secondary invocation: the primary owns
-    // the DBus name, so we forward whatever we were asked to do and quit.
     [[nodiscard]] bool forward_to_primary();
 
-    // One log line per artifact the manager ships beside itself (QEMU,
-    // the executor, the driver tree, the guest agent, the mirror ...),
-    // naming where it was found or that it was not. A build tree and an
-    // install find them in different places, and this is the first
-    // thing to read when an install behaves like it is missing a part.
     static void log_artifacts();
 
     void show_main_window();
     void show_wizard();
-    // Render every page of both windows into ``dir`` and exit. See
-    // CliOptions::screenshot_dir for why this exists.
     [[nodiscard]] int capture_screens(const QString& dir);
 
-    // Stand up the MCP server (manager mode only). Localhost-only, no
-    // auth. Bind failure is non-fatal — logged and skipped. Not started
-    // in wizard / unattended mode: there's no app to drive yet, and it
-    // would hold the port the spawned manager wants.
     void start_mcp_server();
 
-    // First-run handoff: the wizard has finished provisioning. Release
-    // the single-instance lock, spawn a fresh copy of this binary (which
-    // — first-run now complete — boots straight into the manager) and
-    // quit this process. Falls back to an in-process manager window if
-    // the spawn fails.
     void spawn_manager_and_quit();
-    // Hand this run over to a fresh copy of this binary started with
-    // ``args``, and quit. The single-instance lock goes first, or the
-    // copy would forward itself back here. False, with the lock held
-    // again and this process still running, when the copy did not start.
     [[nodiscard]] bool hand_over(const QStringList& args);
 
     [[nodiscard]] manager::GuestAppLaunchController& launch_controller();
     [[nodiscard]] manager::DocumentOpener& document_opener();
-    // The manager window, made but not shown when it was never opened: a
-    // restart the documents ask for belongs to it even then.
     [[nodiscard]] manager::MainWindow& main_window();
 
     CliOptions cli_;
     platform::SingleInstance single_instance_;
     services::HostServices services_;
 
-    // Created lazily, per run mode. Widgets are owned by Qt's parent
-    // tree once shown; the rest by these pointers.
     std::unique_ptr<mcp::McpServer> mcp_server_;
     std::unique_ptr<UnattendedRunner> unattended_;
     std::unique_ptr<manager::GuestAppLaunchController> launch_controller_;
@@ -117,4 +68,4 @@ private:
     wizard::Wizard* wizard_ = nullptr;
 };
 
-}  // namespace lsw::host::app
+}

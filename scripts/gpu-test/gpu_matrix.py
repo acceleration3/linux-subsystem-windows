@@ -17,8 +17,7 @@ OpenGL, Vulkan and OpenCL in the guest all reach it by default; then:
   clgl     the OpenCL-OpenGL sharing samples (tools/clgl_samples.py), each
            judging the values it moved itself
   traces   (opt-in) API traces recorded from real applications, replayed and
-           judged on their pictures, buffers, memory and speed (trace_suite.py,
-           TRACES.md); --traces picks some
+           judged on their pictures, buffers, memory and speed (trace_suite.py); --traces picks some
 
 The guest is driven through qga_bridge.py (LSW's agent and the C$ share as
 lsw/lsw), so accel-virt's tools run unchanged. Before the first GPU the VM
@@ -70,13 +69,10 @@ SAVED_DOMAIN = STATE / "original-domain.xml"
 
 QEMU_BINARY = TREE / "build" / "accel-virt" / "qemu" / "qemu" / "qemu-system-x86_64"
 QEMU_MODULES = QEMU_BINARY.parent
-# Libraries QEMU links that this host lacks, shipped by gpu-test.sh deploy.
 SHIPPED_LIBRARIES = TREE / "libs"
 LOSS_LAYER = AV / "build" / "gpu_fault" / "libav_device_loss_layer.so"
 EXECUTOR = TREE / "build" / "accel-virt" / "qemu" / "libav_executor.so"
 D3D_LIB = TREE / "build" / "accel-virt" / "d3d" / "lib"
-# Where the host drivers keep QEMU's compiled shaders across boots: the
-# same directory and variables lsw-manager's domain uses.
 SHADER_CACHE = pathlib.Path.home() / ".cache" / "lsw" / "shader-cache"
 SHADER_CACHE_ENV = ("MESA_SHADER_CACHE_DIR", "__GL_SHADER_DISK_CACHE_PATH", "DXVK_STATE_CACHE_PATH",
                     "VKD3D_SHADER_CACHE_PATH")
@@ -103,7 +99,7 @@ PROBES = {
 SUMMARY = re.compile(r"^(av\w+probe): (\d+) passed, (\d+) failed\r?$", re.M)
 STEP = re.compile(r"^(ok|fail|FAIL|failed) (\w+)\.(\w+)(?: (.*?))?\r?$", re.M)
 NOTE = re.compile(r"^note (\w+)\.(\w+) (.*?)\r?$", re.M)
-BOOT_TIMEOUT = 35 * 60       # the agent listens only once the desktop is usable, or after 30 minutes
+BOOT_TIMEOUT = 35 * 60
 SHUTDOWN_TIMEOUT = 180
 REPORT_TIMEOUT = 90 * 60
 INSTALL_TIMEOUT = 20 * 60
@@ -115,14 +111,10 @@ def say(line):
 
 
 class RunFailed(Exception):
-    """A step the rest of a GPU's pass cannot go on without."""
+    pass
 
-
-# --------------------------------------------------------------------- the VM
 
 class Domain:
-    """The LSW VM's libvirt domain in the user's session."""
-
     def virsh(self, *arguments, check=True, timeout=300):
         done = subprocess.run(["virsh", "-c", URI, *arguments], capture_output=True, text=True, timeout=timeout,
                               env=dict(os.environ, LC_ALL="C"))
@@ -140,7 +132,6 @@ class Domain:
         return self.state() == "running"
 
     def shut_off(self):
-        # "in shutdown", "paused" and "crashed" are still active: start refuses them.
         return self.state() == "shut off"
 
     def definition(self):
@@ -176,8 +167,6 @@ class Domain:
 
 
 class DeviceProperties:
-    """A ``-device`` value: the driver and its properties, in order."""
-
     def __init__(self, value):
         driver, *pairs = value.split(",")
         self.driver = driver
@@ -201,9 +190,6 @@ class DeviceProperties:
 
 
 def emulator_path():
-    """The QEMU the domain names. With libraries shipped to this host, a
-    wrapper that puts them on the library path: libvirt also starts the
-    emulator to probe its capabilities, outside the domain's qemu:env."""
     if not SHIPPED_LIBRARIES.is_dir():
         return QEMU_BINARY
     wrapper = QEMU_BINARY.with_name(QEMU_BINARY.name + "-shipped-libs")
@@ -214,18 +200,12 @@ def emulator_path():
 
 
 def retarget(xml, gpus, qemu_env=()):
-    """The domain, running this tree's QEMU and executor, with one accel-virt
-    adapter per GPU in `gpus`: the first drives the display, the rest render.
-    `qemu_env` is NAME=VALUE pairs set in QEMU's environment, for an
-    experiment such as a host driver's debug flag."""
     ET.register_namespace("qemu", QEMU_NS)
     root = ET.fromstring(xml)
     emulator = root.find("./devices/emulator")
     if emulator is None:
         raise RunFailed("the domain names no emulator")
     emulator.text = str(emulator_path())
-    # A run started over ssh may have no PipeWire to play into, and QEMU does
-    # not start when its audio backend fails.
     for audio in root.findall("./devices/audio"):
         for child in list(audio):
             audio.remove(child)
@@ -244,10 +224,6 @@ def retarget(xml, gpus, qemu_env=()):
             env.set("value", str(QEMU_MODULES))
         elif env.get("name") == "AV_D3D_PATH":
             env.set("value", str(D3D_LIB))
-    # The host drivers' shader caches kept across boots, as lsw-manager's
-    # domain keeps them: libvirt's per-domain XDG_CACHE_HOME is deleted at
-    # shutdown, and a cold cache made RE4's trace take 285 s where a warm
-    # one took 29 s on the NVIDIA host.
     SHADER_CACHE.mkdir(parents=True, exist_ok=True)
     for name in SHADER_CACHE_ENV:
         for env in [env for env in environment if env.get("name") == name]:
@@ -296,16 +272,12 @@ def avgpu_log_path(xml):
     return pathlib.Path(found.group(1)) if found else None
 
 
-# --------------------------------------------------------------- the host GPUs
-
 def host_gpus():
     text = subprocess.run(["vulkaninfo"], capture_output=True, text=True, check=True).stdout
     return [gpu for gpu in list_gpus.parse(text) if gpu.kind != "cpu"]
 
 
 def short_name(gpu):
-    """The Vulkan name less the driver's parenthesised suffix: what a GL
-    renderer string or an OpenCL device name starts the same way."""
     return re.sub(r"\s*\([^()]*\)\s*$", "", gpu.name).strip()
 
 
@@ -314,8 +286,6 @@ def slug(gpu):
 
 
 def bridge_directory(name):
-    """Where a pass's agent.sock goes: a unix socket's path is at most 107
-    bytes, which a run directory under the home easily passes."""
     directory = pathlib.Path(f"/tmp/lsw-gpu-test-{os.getuid()}") / str(name)
     directory.mkdir(parents=True, exist_ok=True)
     return directory
@@ -326,10 +296,6 @@ def normalized(text):
 
 
 def opencl_device_index(gpu):
-    """The host OpenCL device avclsamples_host --device should take for `gpu`:
-    GPU devices only, numbered across platforms in the loader's order, as the
-    samples count them (samples/opencl/framework.cpp) - a CPU device listed
-    first would put every index one off. None when no GPU's name matches."""
     try:
         raw = subprocess.run(["clinfo", "--raw"], capture_output=True, text=True, timeout=60).stdout
     except (OSError, subprocess.SubprocessError):
@@ -355,7 +321,6 @@ def opencl_device_index(gpu):
 
 
 def host_environment(gpu):
-    """What makes the host halves of the sample suites run on `gpu` too."""
     environment = dict(os.environ)
     environment.update({
         "DXVK_FILTER_DEVICE_NAME": short_name(gpu),
@@ -364,15 +329,9 @@ def host_environment(gpu):
         "MESA_VK_DEVICE_SELECT_FORCE_DEFAULT_DEVICE": "1",
         "AV_GL_GPU": short_name(gpu),
     })
-    # DXVK's native WSI starts SDL's video subsystem even to render off
-    # screen. A run started over ssh has no display for it, and one that has
-    # a desktop should not draw on it; SDL's offscreen driver is the one
-    # that still offers Vulkan.
     environment["SDL_VIDEO_DRIVER"] = "offscreen"
     return environment
 
-
-# ------------------------------------------------------------------ preflight
 
 def preflight(allow_manager=False):
     problems = []
@@ -411,11 +370,7 @@ def preflight(allow_manager=False):
     return problems
 
 
-# ------------------------------------------------------------------- the guest
-
 class Guest:
-    """One boot of the VM: the agent link, the share and the bridge."""
-
     def __init__(self, work, share):
         self.work = work
         self.share = share
@@ -455,9 +410,6 @@ def boot(domain, work, share):
 
 
 def driver_files():
-    """(local file, guest path) for the package update. The manager's own
-    mechanism is GuestUpdate (docs/guest-update.md); this stages the same
-    files by hand so that a test machine needs no manager."""
     files = [(path, f"C:\\av\\incoming\\package\\{path.name}")
              for path in sorted((DRIVERS / "package").iterdir()) if path.is_file()]
     files.append((DRIVERS / "provision.ps1", "C:\\av\\provision.ps1"))
@@ -472,10 +424,6 @@ def driver_files():
 
 
 def install_script(staged):
-    """A by-hand copy of the driver step of lsw-guest-update.ps1
-    (docs/guest-update.md) as one batch file: `staged` maps a file
-    pushed under C:\\av\\gputest-stage to where it belongs; empty, the package
-    the guest already keeps is signed again for the adapters present now."""
     lines = ["@echo off", "setlocal"]
     if staged:
         lines += ["if exist C:\\av\\incoming rmdir /s /q C:\\av\\incoming",
@@ -504,9 +452,6 @@ def install_script(staged):
         "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\av\\provision.ps1 -Package C:\\av\\resign\\package -Stage install -NoVerifier",
         "set INSTALLED=%ERRORLEVEL%",
         'if not "%INSTALLED%"=="0" if not "%INSTALLED%"=="3010" exit /b %INSTALLED%',
-        # C:\av\package is the copy the guest update installs from; a
-        # package put in by this tool is not the shipped one, so the update's
-        # marker goes and the next update installs the shipped driver again.
         'if /i not "%SOURCE%"=="C:\\av" (',
         "  robocopy %SOURCE%\\package C:\\av\\package /MIR /NFL /NDL /NJH /NJS /NP >nul",
         "  rmdir /s /q %SOURCE%",
@@ -529,7 +474,6 @@ def run_install(guest, staged, log):
 
 
 def update_driver(guest, gpus, out, force):
-    """The deployed package installed in the guest, if the guest's differs."""
     ours = (DRIVERS / "package" / "package.sha256").read_bytes()
     try:
         theirs = guest.share.get_bytes("C:\\av\\package\\package.sha256")
@@ -552,7 +496,6 @@ def update_driver(guest, gpus, out, force):
 
 
 def adapter_state(guest, gpu):
-    """gpu_status's entry for the adapter bound to `gpu`, and the whole reply."""
     status = guest.link.call("gpu_status")
     vendor, device, _ = gpu.pci_identity()
     for adapter in status.get("adapters", []):
@@ -562,7 +505,6 @@ def adapter_state(guest, gpu):
 
 
 def pci_number(value):
-    """A PCI ID as gpu_status gives it: a number, or hex text."""
     if isinstance(value, int):
         return value
     try:
@@ -576,23 +518,14 @@ def bound(adapter):
             and adapter.get("started") and not adapter.get("problem_code"))
 
 
-# ------------------------------------------------------------------ the suites
-
 LOSS_STEPS = ("loss_lose", "loss_removed", "loss_reason", "loss_recreated", "loss_texel")
-"""What the D3D11 probe must pass when the host was started with the
-device-loss layer: its device lost, the removal told, a new one drawing."""
 LOSS_RECOVERY_SECONDS = 30
-"""How long the desktop may stay dark after the probe lost its device."""
 
 
 LOSS_LIT_KEPT = 0.9
-"""What share of what the desktop lit before the loss it must light again."""
 
 
 def desktop_recovered(desktop, before):
-    """Whether the desktop is drawn again within LOSS_RECOVERY_SECONDS of the
-    probe's device loss: as much of it lit as before the loss, whatever the
-    wallpaper, and the taskbar - explorer's own device - as bright."""
     deadline = time.monotonic() + LOSS_RECOVERY_SECONDS
     while True:
         shown = desktop.screenshot("after-loss")
@@ -605,9 +538,6 @@ def desktop_recovered(desktop, before):
 
 
 def run_probes(guest, out, device_loss=False):
-    """Each probe in the console session, judged on its summary and on every
-    step its API must report; with the device-loss layer, the D3D11 probe's
-    loss steps too, and the desktop composed again after them."""
     results = {}
     out.mkdir(parents=True, exist_ok=True)
     console = suite.ConsoleProgram(guest.agent, 900)
@@ -657,7 +587,6 @@ def run_probes(guest, out, device_loss=False):
             failures.append({"case": f"{program}.renderer", "detail": f"a software renderer: {renderer}"})
         results[api] = {"status": "fail" if failures else "pass", "failures": failures, "log": str(local),
                         "notes": notes}
-    # The probes' pictures, which they write to C:\av whatever their own directory.
     for name in [picture + ".bmp" for picture in
                  suite.VULKAN_PICTURES + suite.GL_PICTURES + suite.D3D_PICTURES]:
         try:
@@ -668,9 +597,6 @@ def run_probes(guest, out, device_loss=False):
 
 
 def console_user(guest, fallback):
-    """The console session's user as COMPUTER\\user: a bare name can be the
-    computer's own (LSW's VM is named lsw too), and a scheduled task's
-    principal then fails to register."""
     if "\\" in fallback:
         return fallback
     code, output = guest.powershell("(Get-CimInstance Win32_ComputerSystem).UserName", 120)
@@ -695,24 +621,15 @@ def report_command(api, work, out, args, gpu, user):
     return command
 
 
-# Samples whose native run cannot work on a GPU, each with why: (suite, sample,
-# a substring of the GPU's name, the reason). Anything else the host half did
-# not run to a picture fails the suite, since the VM's picture then has nothing
-# to be compared with. Empty: every sample runs natively on every GPU tested.
 HOST_EXCEPTIONS = ()
 
 
 def host_exception(api, name, gpu_name):
-    """Why `name` legitimately has no native picture on this GPU, or None."""
     return next((why for suite_name, sample, gpu_part, why in HOST_EXCEPTIONS
                  if suite_name == api and sample == name and gpu_part in gpu_name), None)
 
 
 def judge_summary(path, api, gpu_name):
-    """A sample suite's failures from its summary.json: a sample either half
-    did not run, or whose picture is unlike the host's. Only a sample in
-    HOST_EXCEPTIONS may lack its host half, and it is recorded with the
-    reason, not passed silently."""
     summary = json.loads(path.read_text())
     failures, notes = [], []
     for sample in summary.get("samples", []):
@@ -734,8 +651,6 @@ def judge_summary(path, api, gpu_name):
 
 
 def run_clgl(work, out, user):
-    """The OpenCL-OpenGL sharing samples: no host half, each sample checks
-    what it moved and prints "ok <name>" or "FAIL <name>: <why>"."""
     say("suite clgl")
     out.mkdir(parents=True, exist_ok=True)
     log = out / "run.log"
@@ -779,11 +694,7 @@ def run_report(api, work, out, args, gpu, user):
             "log": str(log), "report": str(out / "index.html")}
 
 
-# ------------------------------------------------------------------- one GPU
-
 class LogTail:
-    """The bytes a host log gained while a GPU's pass ran."""
-
     def __init__(self, path):
         self.path = path
         self.start = path.stat().st_size if path is not None and path.exists() else 0
@@ -798,9 +709,6 @@ class LogTail:
 
 
 def guest_clock(guest):
-    """The guest's own UTC time, as the cut-off for the logs a suite wrote: the
-    host's clock is no measure of the guest's file times, since nothing sets
-    the guest's clock or time zone while the manager is closed."""
     try:
         code, output = guest.powershell("(Get-Date).ToUniversalTime().ToString('o')", 60)
     except (AgentError, OSError):
@@ -824,8 +732,6 @@ def collect_guest_logs(guest, target, since):
 
 
 def crashed(result, name):
-    """The VM was gone after `name`: QEMU died under it, and the verdict says
-    so whatever the suite's own tool made of the silence."""
     say(f"the VM is not running after {name}: QEMU died during it")
     entry = {"case": f"{name}: the VM", "detail": "QEMU exited during the suite (see qemu.log and the host's "
                                                   "coredumpctl)"}
@@ -838,7 +744,6 @@ def crashed(result, name):
 
 
 def gpu_pass(domain, original, share, gpu, args, out):
-    """One GPU: the VM on it alone, its adapter bound, every suite run."""
     out.mkdir(parents=True, exist_ok=True)
     work = bridge_directory(gpu.index)
     result = {"gpu": {"index": gpu.index, "name": gpu.name, "uuid": gpu.uuid, "vendor": f"{gpu.vendor:04x}",
@@ -906,13 +811,10 @@ def gpu_pass(domain, original, share, gpu, args, out):
     return result
 
 
-# ------------------------------------------------------------------ commands
-
 def selected(gpus, selection):
     if not selection:
         return gpus
     wanted = [part.strip() for part in selection.split(",") if part.strip()]
-    # A number is an index, never part of a name: "1" is in "GFX1201".
     return [gpu for gpu in gpus if any(part == str(gpu.index) if part.isdigit()
                                        else part.lower() in gpu.name.lower() or part.lower() == gpu.uuid
                                        for part in wanted)]
@@ -923,10 +825,6 @@ def write_status(out, **fields):
 
 
 def loss_layer_environment(out):
-    """QEMU's environment for VK_LAYER_AV_device_loss, the test layer that
-    loses a host device on request: the D3D11 probe's loss steps lose its
-    device and judge that the guest is told and recovers. Its manifest is
-    written here, naming the library where this host has it."""
     manifest = out / "loss-layer" / "VkLayer_av_device_loss.json"
     manifest.parent.mkdir(parents=True, exist_ok=True)
     text = (AV / "tests" / "gpu_fault" / "VkLayer_av_device_loss.json.in").read_text()
@@ -1003,9 +901,6 @@ def command_run(args):
 
 
 def command_hold(args):
-    """The VM on one GPU with this tree's build, its bridge at
-    bridge_directory("hold")/agent.sock for accel-virt's guest tools, until
-    SIGTERM or SIGINT; then the VM's own definition again."""
     import signal
     gpus = selected(host_gpus(), args.gpu)
     if len(gpus) != 1:

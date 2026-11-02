@@ -6,8 +6,6 @@
 namespace lsw::host::vm {
 
 namespace {
-
-// "<what> status 0x0000000N" as the driver's log_status writes it.
 std::optional<quint32> status_of(const QString& line, QLatin1StringView what) {
     const QString prefix = QStringLiteral("avgpu: %1 status 0x").arg(what);
     if (!line.startsWith(prefix)) {
@@ -21,7 +19,7 @@ std::optional<quint32> status_of(const QString& line, QLatin1StringView what) {
     return value;
 }
 
-}  // namespace
+}
 
 void AvgpuLog::reset() {
     offset_ = 0;
@@ -62,7 +60,6 @@ bool AvgpuLog::poll() {
     const qint64 size = file.size();
     bool changed = false;
     if (size < offset_) {
-        // Truncated: QEMU started again, and this is a new run.
         reset();
         changed = true;
     }
@@ -76,8 +73,6 @@ bool AvgpuLog::poll() {
     partial_ = chunk.mid(last_newline + 1);
     chunk.truncate(last_newline + 1);
     for (const QByteArray& raw : chunk.split('\n')) {
-        // The debug console carries bytes as the driver wrote them,
-        // CRs included.
         const QString line = QString::fromUtf8(raw).trimmed();
         if (line.isEmpty()) {
             continue;
@@ -92,4 +87,4 @@ bool AvgpuLog::poll() {
     return true;
 }
 
-}  // namespace lsw::host::vm
+}

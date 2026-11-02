@@ -19,15 +19,9 @@ namespace {
 
 constexpr qint64 kSector = 2048;
 
-// The Boot Record volume descriptor El Torito puts at sector 17, and
-// the offset in it of the boot catalog's sector.
 constexpr qint64 kBootRecordSector = 17;
 constexpr int kCatalogPointer = 0x47;
 
-// Catalog entries are 32 bytes. The first is the validation entry,
-// which names the platform of the initial entry after it; the rest are
-// section headers (0x90, or 0x91 for the last) each followed by its
-// entries.
 constexpr int kEntry = 32;
 constexpr unsigned char kBootable = 0x88;
 constexpr unsigned char kSectionMore = 0x90;
@@ -50,7 +44,6 @@ void set_error(QString* error_out, const QString& why) {
     return file.read(length);
 }
 
-// The sector the firmware loads the UEFI boot image from.
 [[nodiscard]] std::optional<quint32> efi_image_sector(QFile& iso, QString* error_out) {
     const QByteArray record = read_at(iso, kBootRecordSector * kSector, kSector);
     if (record.size() != kSector || record[0] != 0 || record.mid(1, 5) != "CD001"
@@ -102,7 +95,7 @@ void set_error(QString* error_out, const QString& why) {
     return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray{};
 }
 
-}  // namespace
+}
 
 bool NoPromptMedia::make(const QString& source_iso, const QString& overlay_path,
                          QString* error_out) {
@@ -116,18 +109,12 @@ bool NoPromptMedia::make(const QString& source_iso, const QString& overlay_path,
         return false;
     }
 
-    // qemu-io takes the file to write as a word of its own command line,
-    // which it splits at spaces with no quoting; the temporary directory
-    // is the one path here that is ours to choose.
     QTemporaryDir scratch{QDir(QDir::tempPath()).filePath(QStringLiteral("lsw-boot-XXXXXX"))};
     if (!scratch.isValid() || scratch.path().contains(QRegularExpression(QStringLiteral("\\s")))) {
         set_error(error_out, QStringLiteral("no temporary directory without spaces in its path "
                                             "to stage the boot image in (set TMPDIR)"));
         return false;
     }
-    // By the names the medium itself gives them: the case is the
-    // medium's, and 7-Zip extracts nothing, successfully, for a name
-    // that is not there.
     const QStringList entries = seven_zip_entries(source_iso, error_out);
     const auto entry = [&entries](const char* wanted) {
         for (const QString& name : entries) {
@@ -161,9 +148,6 @@ bool NoPromptMedia::make(const QString& source_iso, const QString& overlay_path,
         return false;
     }
 
-    // Only ever over the image it replaces, and at its own size: the
-    // catalog's sector count stays what it was, so a no-prompt image
-    // larger than the prompt one would be loaded cut short.
     const qint64 offset = static_cast<qint64>(*sector) * kSector;
     const QByteArray booted = read_at(iso, offset, no_prompt.size());
     if (booted != prompt && booted != no_prompt) {
@@ -179,7 +163,6 @@ bool NoPromptMedia::make(const QString& source_iso, const QString& overlay_path,
         return false;
     }
 
-    // The old overlay belongs to the old machine, which is gone by now.
     QFile::remove(overlay_path);
     if (!platform::run_tool(QStringLiteral("qemu-img"),
                             {QStringLiteral("create"), QStringLiteral("-q"), QStringLiteral("-f"),
@@ -205,4 +188,4 @@ bool NoPromptMedia::make(const QString& source_iso, const QString& overlay_path,
     return true;
 }
 
-}  // namespace lsw::host::provision::install
+}

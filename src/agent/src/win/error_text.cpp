@@ -23,7 +23,6 @@ std::string ErrorText::win32(unsigned long code) {
     if (n == 0 || text == nullptr) {
         return out;
     }
-    // System messages end in "\r\n"; a log line must not.
     std::wstring message(text, n);
     ::LocalFree(text);
     while (!message.empty() && std::iswspace(message.back()) != 0) {
@@ -39,4 +38,4 @@ std::string ErrorText::last_error() {
     return win32(::GetLastError());
 }
 
-}  // namespace lsw::agent::win
+}

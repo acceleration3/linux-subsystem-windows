@@ -37,4 +37,4 @@ LaunchCommand::LaunchCommand(const std::wstring& path, const std::wstring& windo
         command_line += L"\"";
 }
 
-}  // namespace lsw::agent::apps
+}

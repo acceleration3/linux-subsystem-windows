@@ -19,19 +19,6 @@ namespace lsw::host::config { class Settings; }
 namespace lsw::host::provision::iso { class Downloader; }
 
 namespace lsw::host::tools {
-
-// Fetch a Windows installation image from microsoft.com.
-//
-// Another wizard page that should never have been one. A page can only
-// run on the way to somewhere, could not be reached again once passed,
-// and left a wizard that had committed to downloading with no way back.
-// As a tool it runs before the wizard, or during it, or from Settings
-// long afterwards, and cancelling it costs nothing because nothing
-// depended on it succeeding.
-//
-// Everything about talking to Microsoft lives here now: the edition
-// scrape, the session, the SKU list and the ban detection. The wizard's
-// ISO page is one path field again.
 class DownloadImageDialog : public QDialog {
     Q_OBJECT
 public:
@@ -57,8 +44,6 @@ private:
     bool ms_ready_ = false;
     bool resolving_ = false;
     QElapsedTimer clock_;
-    // What the first progress report said was there already: a resumed
-    // download's rate is of the bytes this run fetched.
     qint64 resumed_from_ = -1;
 
     QComboBox* edition_combo_ = nullptr;
@@ -77,4 +62,4 @@ private:
     QPushButton* close_button_ = nullptr;
 };
 
-}  // namespace lsw::host::tools
+}

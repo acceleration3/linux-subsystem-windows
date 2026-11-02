@@ -13,24 +13,11 @@
 namespace lsw::host::provision::debloat {
 
 namespace {
-
-// Where Windows stages the payload of a provisioned application before
-// any user has logged in.
-//
-// One entry, and measured rather than assumed: a Windows 11 25H2 image
-// has this directory and has no /Windows/InfusedApps at all, which is
-// where an earlier version of this list looked first. A root that is
-// not there is skipped rather than failing, so adding one back costs
-// nothing if a future build moves them again.
 const QString kAppxRoot = QStringLiteral("/Program Files/WindowsApps");
 
-// The two directories that hold most of a Windows image.
 const QString kDriverStore = QStringLiteral("/Windows/System32/DriverStore/FileRepository");
 const QString kWinSxS = QStringLiteral("/Windows/WinSxS");
 
-// The offline hives, by their path in the image. NTUSER.DAT is the
-// template every new profile is copied from, which is why a per-user
-// setting can be written before any user exists.
 const QStringList kHivePaths = {
     QStringLiteral("/Windows/System32/config/SOFTWARE"),
     QStringLiteral("/Windows/System32/config/SYSTEM"),
@@ -43,15 +30,8 @@ const QStringList kHivePaths = {
     return text != nullptr ? QString::fromUtf8(text) : QStringLiteral("wimlib error %1").arg(rc);
 }
 
-// The oldest Windows build the guest's display driver loads on.
-// avgpu.sys declares WDDM 3.2, and Windows 11 refuses a driver that
-// declares an older level than its own, so there is no build of it for
-// anything before 24H2 - and a guest installed from older media comes
-// up with no display driver at all.
 constexpr int kMinimumWindowsBuild = 26100;
 
-// Collects the immediate children of a directory. wimlib hands each
-// entry to this callback; the context is the list being filled.
 struct ChildCollector {
     QStringList* out;
     QString parent;
@@ -61,22 +41,19 @@ int collect_child(const struct wimlib_dir_entry* entry, void* context) {
     auto* collector = static_cast<ChildCollector*>(context);
     const QString name = QString::fromUtf8(entry->filename != nullptr ? entry->filename : "");
     if (name.isEmpty()) {
-        return 0;  // the directory itself, which iteration reports first
+        return 0;
     }
     collector->out->append(collector->parent + QLatin1Char('/') + name);
     return 0;
 }
 
-}  // namespace
+}
 
 WimDebloater::WimDebloater(QObject* parent) : QObject(parent) {}
 
 QStringList WimDebloater::children_of(void* wim, int image_index, const QString& root) {
     QStringList children;
     ChildCollector collector{&children, root};
-    // Children only: a payload directory is the unit of removal, and
-    // walking into it would produce thousands of paths that all
-    // disappear with their parent anyway.
     const int rc = wimlib_iterate_dir_tree(
         static_cast<WIMStruct*>(wim), image_index, root.toUtf8().constData(),
         WIMLIB_ITERATE_DIR_TREE_FLAG_CHILDREN, collect_child, &collector);
@@ -110,7 +87,7 @@ QStringList WimDebloater::children_not_keeping(void* wim, int image_index, const
                                                const QStringList& keep) {
     QStringList doomed;
     if (keep.isEmpty()) {
-        return doomed;  // an empty keep-list would mean "delete everything"
+        return doomed;
     }
     for (const QString& child : children_of(wim, image_index, root)) {
         const QString leaf = child.section(QLatin1Char('/'), -1);
@@ -138,9 +115,6 @@ bool WimDebloater::isolate_edition(const QString& src_path, const QStringList& e
         }
         return false;
     }
-    // The cheapest moment to refuse media the guest cannot use: the
-    // edition's metadata is open, and nothing has been written yet. A
-    // build wimlib cannot read is let through rather than guessed at.
     if (const wimlib_tchar* build =
             wimlib_get_image_property(src, image_index, "WINDOWS/VERSION/BUILD");
         build != nullptr) {
@@ -161,10 +135,6 @@ bool WimDebloater::isolate_edition(const QString& src_path, const QStringList& e
         LSW_WARN("debloat: edition {} of {} names no build; not checking it against {}",
                  image_index, src_path.toStdString(), kMinimumWindowsBuild);
     }
-    // A split image's metadata is all in part 1, so the open above
-    // succeeds and reports the edition perfectly well — and then the
-    // export below reads file data, most of which is in the parts that
-    // have not been mentioned yet. Hand them over before that happens.
     if (!extra_parts.isEmpty()) {
         std::vector<QByteArray> held;
         std::vector<const char*> refs;
@@ -188,9 +158,6 @@ bool WimDebloater::isolate_edition(const QString& src_path, const QStringList& e
         }
     }
     WIMStruct* dest = nullptr;
-    // LZX rather than the media's XPRESS: this file is written once on
-    // a machine with cores to spare and then read by Setup, so the
-    // slower, tighter codec is paid for in the right direction.
     if (const int rc = wimlib_create_new_wim(WIMLIB_COMPRESSION_TYPE_LZX, &dest); rc != 0) {
         wimlib_free(src);
         if (error_out != nullptr) {
@@ -233,9 +200,6 @@ bool WimDebloater::apply(const QString& wim_path, int image_index, const Debloat
         return false;
     }
 
-    // The hives come out first, while the image is still whole. They are
-    // edited on disk and go back in the same batch as the deletions, so
-    // several gigabytes are rewritten once rather than twice.
     QTemporaryDir scratch;
     if (!scratch.isValid()) {
         wimlib_free(wim);
@@ -277,7 +241,6 @@ bool WimDebloater::apply(const QString& wim_path, int image_index, const Debloat
     LSW_INFO("debloat: {} provisioned application payloads matched", targets.size());
     targets += plan.paths();
 
-    // The two that carry the gigabytes, and only at Maximum.
     if (!plan.driver_remove().isEmpty()) {
         const QStringList drivers =
             children_matching(wim, image_index, kDriverStore, plan.driver_remove());
@@ -291,12 +254,6 @@ bool WimDebloater::apply(const QString& wim_path, int image_index, const Debloat
         targets += components;
     }
 
-    // One update call for everything: wimlib applies the batch and
-    // rewrites the metadata once, rather than once per path.
-    //
-    // A deque and not a vector: the commands hold raw pointers into
-    // these buffers and more are appended as the batch is built, so the
-    // container must be one that never moves what it already holds.
     std::deque<QByteArray> owned;
     std::vector<wimlib_update_command> commands;
     for (const QString& path : targets) {
@@ -304,19 +261,13 @@ bool WimDebloater::apply(const QString& wim_path, int image_index, const Debloat
         wimlib_update_command cmd{};
         cmd.op = WIMLIB_UPDATE_OP_DELETE;
         cmd.delete_.wim_path = owned.back().data();
-        // FORCE so a path this edition does not ship is skipped rather
-        // than failing the batch; RECURSIVE because the directories are
-        // the point.
         cmd.delete_.delete_flags = WIMLIB_DELETE_FLAG_FORCE | WIMLIB_DELETE_FLAG_RECURSIVE;
         commands.push_back(cmd);
     }
-    // Each edited hive replaces the one in the image. An add over an
-    // existing path needs the delete to have happened first, which it
-    // has: wimlib applies the commands in order.
     for (const QString& path : kHivePaths) {
         const QString on_disk = QDir(scratch.path()).filePath(path.mid(1));
         if (!QFile::exists(on_disk)) {
-            continue;  // an edition without this hive
+            continue;
         }
         owned.push_back(path.toUtf8());
         wimlib_update_command del{};
@@ -345,10 +296,6 @@ bool WimDebloater::apply(const QString& wim_path, int image_index, const Debloat
         return false;
     }
 
-    // Writing back is the expensive half: wimlib rebuilds the file
-    // without the deleted resources. Solid compression is deliberately
-    // not requested — it would shrink the result further at a cost in
-    // time that dwarfs the install it is meant to speed up.
     Q_EMIT progress(QStringLiteral("Writing the trimmed image"), 55);
     if (const int rc = wimlib_overwrite(wim, WIMLIB_WRITE_FLAG_REBUILD, 0); rc != 0) {
         wimlib_free(wim);
@@ -366,4 +313,4 @@ bool WimDebloater::apply(const QString& wim_path, int image_index, const Debloat
     return true;
 }
 
-}  // namespace lsw::host::provision::debloat
+}

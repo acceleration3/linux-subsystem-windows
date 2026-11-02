@@ -15,10 +15,6 @@ public:
     explicit GuestFileTransfer(link::AgentRpcClient& rpc, QObject* parent = nullptr);
     ~GuestFileTransfer() override;
 
-    // ``guest_name`` is what the file is called in Windows, when it is not
-    // what it is called here. A ``document`` is a copy of a file opened from
-    // the host: it may be empty, any name Windows can create is allowed, and
-    // the agent leaves it read-only.
     void start(const QString& local_path, const QString& guest_name = {}, bool document = false);
     void cancel();
 
@@ -46,4 +42,4 @@ private:
     bool cancel_requested_ = false;
 };
 
-}  // namespace lsw::host::apps
+}

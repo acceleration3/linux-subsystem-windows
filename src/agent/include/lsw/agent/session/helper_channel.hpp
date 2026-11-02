@@ -21,37 +21,17 @@ class RunAs;
 }
 
 namespace lsw::agent::session {
-
-// What a helper reports that is not the answer to a request.
 class HelperSink {
 public:
     virtual ~HelperSink() = default;
 
-    // A manager-bound event (UI Automation), to forward unchanged.
     virtual void helper_event(rpc::Event event) = 0;
 
-    // The helper connected, reported its desktop, or went away.
     virtual void helper_changed() = 0;
 };
 
-// The service's end of one session helper: the process, started as the
-// session's user, and the named pipe it dials back into.
-//
-// The pipe is created here, before the helper exists, with a DACL that
-// admits SYSTEM and that session's user only, and as the first and only
-// instance of its name — so nothing can be waiting on the name first and
-// nothing else can open it after. The client that connects must be the
-// process launched for it (GetNamedPipeClientProcessId), or it is turned
-// away.
-//
-// A thread per channel connects and then reads, delivering replies to
-// whoever is blocked in ``call`` and everything else to the sink. When
-// the helper exits, or stops reading, every caller waiting on it is
-// failed at once rather than left to time out.
 class HelperChannel {
 public:
-    // Create the pipe and start the helper in ``info``'s session as
-    // ``as``. Nullptr, with ``error`` set, when either fails.
     [[nodiscard]] static std::shared_ptr<HelperChannel>
     launch(const SessionInfo& info, const win::RunAs& as, HelperSink& sink, std::string* error);
 
@@ -70,26 +50,20 @@ public:
         return started_;
     }
 
-    // Connected and serving.
     [[nodiscard]] bool connected() const noexcept { return state_.load() == State::Connected; }
 
-    // Gone for good: the helper exited, never connected, or was stopped.
     [[nodiscard]] bool finished() const noexcept { return state_.load() == State::Finished; }
 
-    // The helper's desktop gate has opened.
+    [[nodiscard]] int log_level_sent() const noexcept { return log_level_sent_.load(); }
+    void set_log_level_sent(int level) noexcept { log_level_sent_.store(level); }
+
     [[nodiscard]] bool desktop_ready() const noexcept { return desktop_ready_.load(); }
 
-    // Block up to ``wait`` for the helper to connect. True once it has.
     [[nodiscard]] bool wait_connected(std::chrono::milliseconds wait);
 
-    // Forward one request and return its ``result``. Throws
-    // std::runtime_error with the helper's own error, or with why there
-    // was no answer (not connected, gone, timed out).
     [[nodiscard]] nlohmann::json call(const std::string& cmd, const nlohmann::json& params,
                                       std::chrono::milliseconds timeout);
 
-    // Tell the helper to exit, close the pipe, and make sure the process
-    // is gone. Idempotent; not to be called from the sink callbacks.
     void stop();
 
 private:
@@ -115,6 +89,7 @@ private:
 
     std::atomic<State> state_{State::Starting};
     std::atomic<bool> desktop_ready_{false};
+    std::atomic<int> log_level_sent_{-1};
     std::atomic<bool> stopping_{false};
     std::mutex state_mu_;
     std::condition_variable state_cv_;
@@ -123,4 +98,4 @@ private:
     std::thread thread_;
 };
 
-}  // namespace lsw::agent::session
+}

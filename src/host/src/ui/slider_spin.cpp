@@ -48,4 +48,4 @@ void SliderSpin::set_maximum(int max) {
     slider_->setMaximum(max);
 }
 
-}  // namespace lsw::host::ui
+}

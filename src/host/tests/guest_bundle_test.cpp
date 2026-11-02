@@ -1,10 +1,3 @@
-// What the guest update ships (GuestBundle): the manifest's exact form, the
-// release it makes, what is required and what is optional, and where each
-// file lands. The files are made up in a temporary directory and found
-// through the locators' environment overrides; nothing here reaches the
-// network or enumerates a GPU (collect() is the part of build() after
-// those).
-
 #include "lsw/host/services/guest_bundle.hpp"
 #include "lsw/host/vm/domain_description.hpp"
 
@@ -39,7 +32,6 @@ std::string sha256(const std::string& text) {
         .toStdString();
 }
 
-// The files of a host tree, and the environment that points the locators at them.
 class Tree {
 public:
     Tree() {
@@ -100,7 +92,7 @@ bool has(const Contents& c, const std::string& guest_path) {
     return false;
 }
 
-}  // namespace
+}
 
 int main(int argc, char** argv) {
     QCoreApplication app{argc, argv};
@@ -109,7 +101,6 @@ int main(int argc, char** argv) {
     const Contents base = collect();
     check(base->error.isEmpty(), "a complete tree makes a bundle");
 
-    // The manifest's form.
     {
         static const QRegularExpression line{QStringLiteral("^[0-9a-f]{64}  [^\\n]+$")};
         const QString manifest = QString::fromStdString(base->manifest);
@@ -147,7 +138,6 @@ int main(int argc, char** argv) {
               "the release is the SHA-256 hex of the manifest text");
     }
 
-    // Where each file lands.
     check(has(base, "C:\\ProgramData\\LSW\\lsw-agent.exe") && has(base, "C:\\ProgramData\\LSW\\remotewin-guest.exe")
               && has(base, "C:\\ProgramData\\LSW\\lsw-guest-update.ps1") && has(base, "C:\\av\\provision.ps1")
               && has(base, "C:\\av\\package\\avgpu.sys") && has(base, "C:\\av\\package\\avgpu.inf")
@@ -161,7 +151,6 @@ int main(int argc, char** argv) {
     check(std::string{GuestBundle::kSharesGuestPath} == "C:\\ProgramData\\LSW\\update\\shares.txt",
           "the mount list's pseudo path is under the update directory");
 
-    // Determinism.
     {
         const Contents again = collect();
         check(again->release == base->release && again->manifest == base->manifest,
@@ -200,13 +189,11 @@ int main(int argc, char** argv) {
     }
     check(!has(collect(QString{}), "C:\\av\\adapters.txt"), "no adapter names, no adapters.txt");
 
-    // The version.
     check(!base->version.empty() && base->manifest.find(base->version) == std::string::npos
               && base->release == sha256(base->manifest),
           "the version is in the contents, and in neither the manifest nor the release");
     check(base->shares == "none", "the mount list is carried in the contents");
 
-    // Required files.
     {
         qputenv("LSW_AGENT_EXE", tree.path("nonexistent.exe"));
         const Contents c = collect();
@@ -228,7 +215,6 @@ int main(int argc, char** argv) {
         check(collect()->error.isEmpty() && collect()->release == base->release, "restoring the tree restores the bundle");
     }
 
-    // Optional files.
     {
         qputenv("LSW_REMOTEWIN_GUEST", tree.path("nonexistent.exe"));
         qputenv("LSW_VULKAN_LOADER", tree.path("nonexistent.dll"));
@@ -251,7 +237,6 @@ int main(int argc, char** argv) {
         tree.point_all();
     }
 
-    // Refused guest paths.
     {
         tree.write("drivers/package/100%.dll", "x");
         const Contents pct = collect();
@@ -264,7 +249,6 @@ int main(int argc, char** argv) {
         check(collect()->error.isEmpty(), "and a tree without them is fine");
     }
 
-    // staged_path.
     check(GuestBundle::staged_path("C:\\av\\a.sys") == "C\\av\\a.sys", "staged_path drops the drive colon");
     check(GuestBundle::staged_path("C:\\ProgramData\\LSW\\a:b.txt") == "C\\ProgramData\\LSW\\a:b.txt",
           "staged_path drops only the drive's colon");
@@ -272,7 +256,6 @@ int main(int argc, char** argv) {
               && GuestBundle::staged_path("C") == "C",
           "staged_path leaves a path with no drive alone");
 
-    // Mounts.
     {
         using Mount = GuestBundle::Mount;
         check(GuestBundle::shares_argument({}) == QStringLiteral("none"), "no mounts is 'none'");

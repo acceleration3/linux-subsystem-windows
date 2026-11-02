@@ -1,4 +1,3 @@
-# Ctrl+J duplicates the photo, the copy's blend mode Multiply (Layers panel), opacity 50% (key 5, Move Tool), the copy moved down-right; a second copy (Ctrl+J), its blend mode Lighter Color (the list scrolled with Multiply current).
 Ready
 Press "ctrl+j" 1000
 Click 2114 880 1200

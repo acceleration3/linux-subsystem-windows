@@ -24,10 +24,6 @@ QString places_xbel_path() {
     return QDir(share).filePath(QStringLiteral("user-places.xbel"));
 }
 
-// Already-present check uses URL-prefix-up-to-userinfo so the
-// caller can rotate passwords on reinstall without producing
-// duplicate entries. Returns the matching <bookmark> node if
-// found, else a null QDomElement.
 QDomElement find_existing_bookmark(const QDomElement& root, const QString& host_path) {
     const QDomNodeList bookmarks = root.elementsByTagName(QStringLiteral("bookmark"));
     for (int i = 0; i < bookmarks.size(); ++i) {
@@ -42,7 +38,7 @@ QDomElement find_existing_bookmark(const QDomElement& root, const QString& host_
     return {};
 }
 
-}  // namespace
+}
 
 bool DolphinPlaces::register_windows_bookmark(const QString& username, const QString& password,
                                               const QString& share) {
@@ -65,10 +61,6 @@ bool DolphinPlaces::register_windows_bookmark(const QString& username, const QSt
     }
 
     if (root.isNull()) {
-        // No file (or file existed but had no root). Synthesise the
-        // minimal XBEL skeleton Dolphin emits on first run. Dolphin
-        // will repopulate Home/Desktop/etc. on its next start; we
-        // only need the document to be well-formed.
         doc.appendChild(doc.createProcessingInstruction(
             QStringLiteral("xml"), QStringLiteral("version=\"1.0\" encoding=\"UTF-8\"")));
         QDomDocumentType dtype =
@@ -84,11 +76,6 @@ bool DolphinPlaces::register_windows_bookmark(const QString& username, const QSt
         doc.appendChild(root);
     }
 
-    // Idempotency: don't add a duplicate if the user (or an earlier
-    // install) already wrote one — just refresh it by overwriting its
-    // href. The host and port identify the entry as ours whatever the
-    // share or the credentials happen to be, so changing either
-    // refreshes the one entry rather than adding a second.
     const QString url = GuestSmbShare::url(username, password, share);
     QDomElement existing = find_existing_bookmark(root, GuestSmbShare::signature());
     if (!existing.isNull()) {
@@ -113,9 +100,6 @@ bool DolphinPlaces::register_windows_bookmark(const QString& username, const QSt
         QDomElement md_kde = doc.createElement(QStringLiteral("metadata"));
         md_kde.setAttribute(QStringLiteral("owner"), QStringLiteral("http://www.kde.org"));
         QDomElement id = doc.createElement(QStringLiteral("ID"));
-        // Dolphin's own ID format is ``<unix-seconds>/<seq>``. The
-        // value just needs to be unique within this file; current
-        // time + "/0" matches what Dolphin writes for new entries.
         id.appendChild(
             doc.createTextNode(QStringLiteral("%1/0").arg(QDateTime::currentSecsSinceEpoch())));
         md_kde.appendChild(id);
@@ -163,4 +147,4 @@ void DolphinPlaces::remove_windows_bookmark() {
     }
 }
 
-}  // namespace lsw::host::platform
+}

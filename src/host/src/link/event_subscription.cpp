@@ -26,4 +26,4 @@ void EventSubscription::reset() {
     }
 }
 
-}  // namespace lsw::host::link
+}

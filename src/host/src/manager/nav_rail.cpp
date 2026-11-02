@@ -24,9 +24,6 @@ struct ItemSpec {
     const char* label;
 };
 
-// The glyphs are plain text rather than an icon font: they have to
-// survive a host with no icon theme, and every one of them is in the
-// fonts a desktop already has.
 constexpr ItemSpec kItems[kPageCount] = {
     {NavRail::Page::Overview, "□", "Overview"},
     {NavRail::Page::Console, ">_", "Console"},
@@ -35,7 +32,7 @@ constexpr ItemSpec kItems[kPageCount] = {
     {NavRail::Page::Settings, "⚙", "Settings"},
 };
 
-}  // namespace
+}
 
 NavRail::NavRail(QWidget* parent) : QWidget(parent) {
     Theme::surface(this, Theme::Role::kNavRail);
@@ -45,7 +42,6 @@ NavRail::NavRail(QWidget* parent) : QWidget(parent) {
     root->setContentsMargins(0, 0, 0, 0);
     root->setSpacing(0);
 
-    // ---- identity -------------------------------------------------
     auto* identity = new QWidget;
     Theme::surface(identity, Theme::Role::kNavIdentity);
     auto* id_layout = new QVBoxLayout(identity);
@@ -59,16 +55,12 @@ NavRail::NavRail(QWidget* parent) : QWidget(parent) {
     name_label_->setFont(name_font);
 
     detail_label_ = Widgets::meta(QString{}, true);
-    // A shade smaller than the other captions: the machine's shape is
-    // three facts on one line, and wrapping "60 GiB" onto a third line
-    // makes the identity look like an error.
     detail_label_->setStyleSheet(QStringLiteral("font-size: 10px;"));
 
     id_layout->addWidget(name_label_);
     id_layout->addWidget(detail_label_);
     root->addWidget(identity);
 
-    // ---- items ----------------------------------------------------
     auto* items = new QWidget;
     auto* items_layout = new QVBoxLayout(items);
     items_layout->setContentsMargins(8, 8, 8, 8);
@@ -85,9 +77,6 @@ NavRail::NavRail(QWidget* parent) : QWidget(parent) {
         button->setCheckable(true);
         button->setCursor(Qt::PointingHandCursor);
 
-        // The row is laid out inside the button rather than written as
-        // its text, because the marker has to sit hard right whatever
-        // the label's length is.
         auto* row = new QHBoxLayout(button);
         row->setContentsMargins(9, 4, 9, 4);
         row->setSpacing(10);
@@ -122,7 +111,6 @@ NavRail::NavRail(QWidget* parent) : QWidget(parent) {
     root->addWidget(items);
     root->addStretch(1);
 
-    // ---- power ----------------------------------------------------
     auto* power_box = new QWidget;
     Theme::surface(power_box, Theme::Role::kNavPower);
     auto* power_layout = new QVBoxLayout(power_box);
@@ -207,9 +195,7 @@ void NavRail::set_pending_changes(int count) {
 }
 
 void NavRail::set_graphics_warning(const char* tone) {
-    // A dot rather than a number: how many things are wrong is not the
-    // interesting part, that something is, and how badly, is.
     set_marker(Page::Graphics, tone != nullptr ? QStringLiteral("●") : QString{}, tone);
 }
 
-}  // namespace lsw::host::manager
+}

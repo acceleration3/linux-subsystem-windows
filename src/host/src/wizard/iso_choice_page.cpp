@@ -23,8 +23,6 @@ namespace {
 
 using ui::Theme;
 
-// One of the two tool cards under the field: a name, a sentence, and
-// the button that opens it.
 QWidget* tool_card(const QString& title, const QString& blurb, QPushButton* button) {
     auto* frame = new QFrame;
     Theme::surface(frame, Theme::Role::kPanel);
@@ -47,7 +45,7 @@ QWidget* tool_card(const QString& title, const QString& blurb, QPushButton* butt
     return frame;
 }
 
-}  // namespace
+}
 
 IsoChoicePage::IsoChoicePage(Wizard& wizard, QWidget* parent)
     : WizardPage(parent), wizard_(wizard) {
@@ -134,8 +132,6 @@ void IsoChoicePage::open_download_tool() {
     tools::DownloadImageDialog dialog{wizard_.services().settings(), this};
     if (dialog.exec() == QDialog::Accepted && dialog.use_for_install()
         && !dialog.result_path().isEmpty()) {
-        // A fresh download has not been through the preparation pass,
-        // so the pipeline still has to run it.
         prepared_ = false;
         path_edit_->setText(dialog.result_path());
     }
@@ -145,8 +141,6 @@ void IsoChoicePage::open_trim_tool() {
     tools::TrimImageDialog dialog{wizard_.services().settings(), path_edit_->text(), this};
     if (dialog.exec() == QDialog::Accepted && !dialog.result_path().isEmpty()) {
         if (dialog.use_for_install()) {
-            // The tool rebuilt the image, which is also what writes the
-            // setup bypasses, so the pipeline can skip its own pass.
             prepared_ = true;
             path_edit_->setText(dialog.result_path());
         }
@@ -169,4 +163,4 @@ int IsoChoicePage::nextId() const {
     return Wizard::VmSize;
 }
 
-}  // namespace lsw::host::wizard
+}

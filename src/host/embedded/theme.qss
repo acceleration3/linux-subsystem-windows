@@ -1,36 +1,3 @@
-/* LSW, one stylesheet for both applications.
- *
- * The palette is the one the design kit settles on: a cool blue-black
- * host chrome and a single warm amber that means "guest side, or the
- * primary action", never decoration. Green, blue and red carry state
- * and nothing else, so a green button would be a bug.
- *
- *   ink        #0d0f14   window ground
- *   surface    #151922   panel, header, footer
- *   raised     #1c212c   control, table row
- *   raised.hi  #242a37   hover
- *   line       #272d3a   every 1px border
- *   fg         #e4e8f0 / #9aa3b4 dim / #646d7e faint
- *   amber      #ff9f45   guest, primary, focus
- *   ok         #4ec98a   online, done
- *   info       #5aa9f0   running
- *   bad        #f2555a   failed, stop
- *
- * Depth comes from fill, never from a shadow: Qt stylesheets cannot
- * draw one, and faking it costs a paint event. Every border here is
- * one pixel.
- */
-
-/* ---- ground ------------------------------------------------------ */
-
-/* Type and colour on every widget; a ground on none of them.
- *
- * A blanket background here is the mistake that makes a themed Qt app
- * look wrong: it paints an opaque rectangle behind every label, every
- * layout container and every child of a panel, so the panel's own
- * surface never shows and each caption sits in a box of its own. The
- * windows carry the ground, the named surfaces carry theirs, and
- * everything else is transparent. */
 QWidget {
     color: #e4e8f0;
     font-family: "Archivo", "Inter", "Noto Sans", "DejaVu Sans", sans-serif;
@@ -49,8 +16,6 @@ QLabel, QCheckBox, QRadioButton, QGroupBox {
     background: transparent;
 }
 
-/* The scroll areas the settings and graphics pages live in. Without
-   this the viewport paints Base (an input colour) behind the page. */
 QScrollArea, QAbstractScrollArea, QAbstractScrollArea > QWidget > QWidget {
     background: transparent;
 }
@@ -62,9 +27,6 @@ QToolTip {
     padding: 4px 7px;
 }
 
-/* Anything the machine produced reads in the mono face. Widgets opt in
-   by object name rather than by type, because a path and a label are
-   both QLabel. */
 QLabel#Mono, QLineEdit#Mono, QPlainTextEdit#Mono, QLabel#Meta {
     font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace;
 }
@@ -78,14 +40,11 @@ QLabel#Dim {
     color: #9aa3b4;
 }
 
-/* Prose under a setting's name. Sans, because it is a sentence; #Meta
-   is the mono one, for things the machine said. */
 QLabel#Body {
     color: #9aa3b4;
     font-size: 12px;
 }
 
-/* Uppercase mono captions replace group-box titles. */
 QLabel#Caption {
     font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace;
     font-size: 10px;
@@ -97,8 +56,6 @@ QLabel#Heading {
     font-size: 15px;
     font-weight: 600;
 }
-
-/* ---- buttons ----------------------------------------------------- */
 
 QPushButton {
     background-color: #1c212c;
@@ -114,9 +71,6 @@ QPushButton {
 QPushButton:hover   { background-color: #242a37; border-color: #39415a; }
 QPushButton:pressed { background-color: #2c3444; }
 
-/* A latching button has to look latched. The log's severity buttons are
-   the only ones, and three of them all looking identical is three
-   buttons that say nothing. */
 QPushButton:checked {
     background-color: #2c3444;
     border-color: #4a536b;
@@ -152,7 +106,6 @@ QPushButton#Quiet:hover { background-color: #1c212c; color: #e4e8f0; }
 QPushButton#Go:enabled   { color: #4ec98a; }
 QPushButton#Stop:enabled { color: #f2555a; }
 
-/* A 22px square for the little header actions. */
 QPushButton#IconButton {
     padding: 0px;
     min-width: 24px;
@@ -162,11 +115,6 @@ QPushButton#IconButton {
     color: #9aa3b4;
 }
 
-/* ---- text entry -------------------------------------------------- */
-
-/* Mono, because what goes in one of these is almost always a path, a
-   port, a size or a name the guest will see, and lining those up is
-   most of what makes a field of them readable. */
 QLineEdit, QPlainTextEdit, QTextEdit, QSpinBox, QDoubleSpinBox, QComboBox {
     font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace;
     font-size: 12px;
@@ -192,18 +140,11 @@ QLineEdit:disabled, QPlainTextEdit:disabled, QSpinBox:disabled {
     color: #4d5566;
 }
 
-/* No steppers. Every spin box in the application sits beside a slider
-   that is the real control, and the pair of arrow stubs Fusion draws
-   outside the rounded border is the only thing in the window that does
-   not line up with anything. The value is still typed and still
-   scrolled. */
 QSpinBox::up-button, QSpinBox::down-button {
     width: 0px;
     border: none;
     background: transparent;
 }
-
-/* ---- combo ------------------------------------------------------- */
 
 QComboBox {
     background-color: #0f131a;
@@ -220,9 +161,6 @@ QComboBox::drop-down {
     border: none;
     width: 18px;
 }
-/* A styled combo draws its own arrow or none at all, so the proxy style
-   never sees it: this is the borders-as-a-triangle recipe, sized large
-   enough to read as one. */
 QComboBox::down-arrow {
     image: url(:/lsw/caret.png);
     width: 12px;
@@ -241,19 +179,10 @@ QComboBox QAbstractItemView {
     padding: 3px;
 }
 
-/* ---- check and radio --------------------------------------------- */
-
 QCheckBox, QRadioButton {
     spacing: 8px;
     background: transparent;
 }
-
-/* No ::indicator rules on purpose. Styling one makes Qt draw it from
-   the stylesheet, which can fill a box but cannot put a tick or a dot
-   in it, so a checked box comes out as a solid square. Left unstyled,
-   both fall through to LswStyle, which paints them. */
-
-/* ---- slider ------------------------------------------------------ */
 
 QSlider::groove:horizontal {
     height: 4px;
@@ -274,8 +203,6 @@ QSlider::handle:horizontal {
 }
 QSlider::handle:horizontal:hover { background: #ffffff; }
 
-/* ---- progress ---------------------------------------------------- */
-
 QProgressBar {
     background-color: #20252f;
     border: none;
@@ -290,8 +217,6 @@ QProgressBar::chunk {
     border-radius: 3px;
 }
 
-/* ---- lists, trees, tables ---------------------------------------- */
-
 QListWidget, QListView, QTreeView, QTableWidget, QTableView {
     background-color: #151922;
     border: 1px solid #272d3a;
@@ -300,9 +225,6 @@ QListWidget, QListView, QTreeView, QTableWidget, QTableView {
     alternate-background-color: #171c25;
 }
 
-/* A table of rows the eye reads down: hairlines between them and a rule
-   under the headings, and nothing else. A box around it would be a
-   second frame inside whatever panel already holds it. */
 QTableWidget#Rows, QTableView#Rows {
     background: transparent;
     border: none;
@@ -313,20 +235,14 @@ QTableWidget#Rows::item, QTableView#Rows::item {
     border-bottom: 1px solid #1b202a;
     padding: 9px 12px;
 }
-/* A row list whose cells hold controls (a role combo, move buttons):
-   the item padding would be taken out of the controls' height too. */
 QTableWidget#Rows[controls="true"]::item {
     padding: 0px 12px;
 }
-/* The heading is a line of small caps over a rule, not a filled band:
-   a band reads as a second surface inside the panel. */
 QTableWidget#Rows QHeaderView, QTableView#Rows QHeaderView {
     background: transparent;
     border: none;
 }
-QTableWidget#Rows QHeaderView::section, QTableView#Rows /* The store app list runs edge to edge between the search and the button
-   band, on the ink, as the design's list does; its rows are drawn by the
-   dialog's delegate. */
+QTableWidget#Rows QHeaderView::section, QTableView#Rows
 QListWidget#StoreApps, QWidget#StoreAppsEmpty {
     background-color: #0d0f14;
     border: none;
@@ -381,8 +297,6 @@ QTableWidget, QTableView {
     gridline-color: #1b202a;
 }
 
-/* ---- scrollbars -------------------------------------------------- */
-
 QScrollBar:vertical {
     background: transparent;
     width: 10px;
@@ -409,19 +323,12 @@ QScrollBar::handle:horizontal:hover { background: #39415a; }
 QScrollBar::add-line, QScrollBar::sub-line { height: 0px; width: 0px; }
 QScrollBar::add-page, QScrollBar::sub-page { background: none; }
 
-/* ---- panels ------------------------------------------------------ */
-
-/* A panel is a bordered frame with its caption inside, not a group box
-   with a caption floating on its border. */
 QFrame#Panel {
     background-color: #151922;
     border: 1px solid #272d3a;
     border-radius: 5px;
 }
 
-/* An option card. The selected one carries an amber edge and a warmer
-   ground, so a choice reads from across the dialog rather than from a
-   dot. */
 QFrame#OptionCard {
     background-color: #151922;
     border: 1px solid #272d3a;
@@ -435,7 +342,6 @@ QFrame#OptionCard[selected="true"] {
     border: 1px solid #a8672a;
 }
 
-/* An icon that is not there yet still has a place. */
 QLabel#IconSlot {
     background-color: #0f131a;
     border: 1px dashed #272d3a;
@@ -443,8 +349,6 @@ QLabel#IconSlot {
     color: #646d7e;
 }
 
-/* A figure under a meter. The grid behind it shows through 1px gaps,
-   which is where the hairlines between tiles come from. */
 QWidget#Tile {
     background-color: #151922;
 }
@@ -455,21 +359,17 @@ QFrame#KpiGrid {
     border-radius: 3px;
 }
 
-/* The figure in a tile: mono, a size up from the body. */
 QLabel#KpiValue {
     font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace;
     font-size: 15px;
     color: #e4e8f0;
 }
 
-/* A card's name in its header, beside the mono caption. */
 QLabel#CardName {
     font-size: 13px;
     font-weight: 600;
 }
 
-/* The tail of a log a machine wrote, on black. Older lines faint; the
-   newest is in the foreground, set in the text itself. */
 QLabel#Term {
     background-color: #05070a;
     color: #646d7e;
@@ -478,15 +378,12 @@ QLabel#Term {
     padding: 9px 14px;
 }
 
-/* The guest's console on the install page. */
 QFrame#Screen {
     background-color: #05070a;
     border: 1px solid #272d3a;
     border-radius: 5px;
 }
 
-/* The number beside a slider. Quiet: the slider is the control and this
-   is what it currently says. */
 QSpinBox#SliderValue {
     background: transparent;
     border: none;
@@ -494,9 +391,6 @@ QSpinBox#SliderValue {
     color: #e4e8f0;
 }
 
-/* The label on the guest's console, so the black rectangle says what
-   it is before there is anything in it. It sits on the picture, so it
-   carries a ground of its own. */
 QLabel#ScreenTag {
     font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace;
     font-size: 9px;
@@ -508,8 +402,6 @@ QLabel#ScreenTag {
     background: rgba(11, 14, 19, 204);
 }
 
-/* Something the next click will do, rather than something being
-   explained. Warm, and edged on the side the eye starts from. */
 QLabel#Callout {
     background-color: #1d1712;
     border-left: 2px solid #ff9f45;
@@ -517,7 +409,6 @@ QLabel#Callout {
     color: #f0c393;
     padding: 10px 13px;
 }
-/* The same for something that failed, in the warning strip's red. */
 QLabel#CalloutCritical {
     background-color: #1f1315;
     border-left: 2px solid #f2555a;
@@ -526,9 +417,6 @@ QLabel#CalloutCritical {
     padding: 10px 13px;
 }
 
-/* A bar whose colour says how it is going: green while there is room,
-   amber as it fills, red when it is out. The id is named alongside the
-   property because an id selector outranks a bare attribute one. */
 QProgressBar#Meter::chunk { background-color: #4ec98a; border-radius: 3px; }
 QProgressBar#Meter[pressure="hot"]::chunk  { background-color: #ff9f45; }
 QProgressBar#Meter[pressure="crit"]::chunk { background-color: #f2555a; }
@@ -566,8 +454,6 @@ QGroupBox::title {
 
 QSplitter::handle { background: transparent; }
 
-/* ---- state badges and pills -------------------------------------- */
-
 QLabel#Badge {
     border: 1px solid #2b313d;
     border-radius: 5px;
@@ -595,8 +481,6 @@ QLabel#BadgeOffline {
     font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace;
     font-weight: 500;
 }
-
-/* ---- navigation rail --------------------------------------------- */
 
 QWidget#NavRail {
     background-color: #0f131a;
@@ -632,9 +516,6 @@ QPushButton#NavItem:checked {
     font-weight: 500;
 }
 
-/* A place in the guest browser's sidebar. Same shape as a nav item,
-   but its glyph and its label are separate labels inside it so the
-   current place can tint one amber and leave the other alone. */
 QPushButton#Place {
     background-color: transparent;
     border: none;
@@ -652,8 +533,6 @@ QLabel#PlaceLabel { color: #9aa3b4; font-size: 12px; }
 QLabel#PlaceLabel[on="true"] { color: #e4e8f0; font-weight: 500; }
 QLabel#PlaceGlyph { color: #646d7e; font-size: 11px; }
 QLabel#PlaceGlyph[on="true"] { color: #ff9f45; }
-
-/* ---- content bar and status bar ---------------------------------- */
 
 QWidget#ContentBar {
     background-color: #151922;
@@ -674,8 +553,6 @@ QStatusBar {
 }
 QStatusBar::item { border: none; }
 
-/* ---- warning strip ----------------------------------------------- */
-
 QWidget#WarnStrip {
     background-color: #1d1712;
     border-bottom: 1px solid #a8672a;
@@ -687,13 +564,10 @@ QWidget#WarnStripCritical {
 QLabel#WarnText { color: #f0c393; }
 QLabel#WarnTextCritical { color: #f0b0b2; }
 
-/* The staged-changes bar at the foot of Settings. */
 QWidget#ApplyBar {
     background-color: #1d1712;
     border-top: 1px solid #a8672a;
 }
-
-/* ---- menus and toolbars ------------------------------------------ */
 
 QMenu {
     background-color: #151922;
@@ -728,8 +602,6 @@ QToolButton:hover {
     border-color: #272d3a;
     color: #e4e8f0;
 }
-/* A tool button that opens a menu (the add button): the combo box's caret
-   beside its label, not the style's own arrow tucked under it. */
 QToolButton[popupMode="2"] {
     padding-right: 20px;
 }
@@ -742,13 +614,8 @@ QToolButton::menu-indicator {
     height: 5px;
 }
 
-/* ---- wizard ------------------------------------------------------ */
-
 QWizard, QWizardPage { background-color: #0d0f14; }
 
-/* QWizard paints its own header band and names it. Without this it
-   comes out in the style's idea of a title area, which on a dark page
-   is a light bar with a hairline under it. */
 QWidget#qt_wizard_header {
     background-color: #151922;
     border-bottom: 1px solid #272d3a;
@@ -762,7 +629,6 @@ QLabel#qt_wizard_subTitleLabel {
     color: #9aa3b4;
 }
 
-/* The title band at the top of every page. */
 QFrame#WizardHead {
     background-color: #151922;
     border-bottom: 1px solid #272d3a;
@@ -772,7 +638,6 @@ QLabel#WizardTitle {
     font-weight: 600;
 }
 
-/* The page's own footer: counter left, Back and Next right. */
 QFrame#WizardFoot {
     background-color: #151922;
     border-top: 1px solid #272d3a;
@@ -813,14 +678,11 @@ QLabel#RailHost, QLabel#RailFree {
     color: #646d7e;
 }
 
-/* A dialog's button row: on the surface, with a rule over it. */
 QFrame#DialogFoot {
     background-color: #151922;
     border-top: 1px solid #272d3a;
 }
 
-/* A status word with its dot, in a pill. Pending, running, done and
-   failed each keep the colour that means that everywhere else. */
 QLabel#Pill, QLabel#PillRun, QLabel#PillDone, QLabel#PillFail, QLabel#PillWarn {
     font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace;
     font-size: 11px;
@@ -834,13 +696,6 @@ QLabel#PillDone { color: #4ec98a; border: 1px solid #2c5c44; background-color: #
 QLabel#PillFail { color: #f2555a; border: 1px solid #6b2f32; background-color: #24181a; }
 QLabel#PillWarn { color: #ff9f45; border: 1px solid #a8672a; background-color: #1d1712; }
 
-/* ---- tones ------------------------------------------------------- */
-
-/* A colour for what a widget says rather than for what it is. Each rule
-   names the role it recolours as well as the tone, because an id
-   selector outranks a bare attribute one and the role's own colour
-   would otherwise win. Nothing else changes: the role keeps its face
-   and its size. */
 QLabel#Caption[tone="amber"], QLabel#Meta[tone="amber"] { color: #ff9f45; }
 QLabel#Meta[tone="bad"] { color: #f2555a; }
 QLabel#Body[tone="warm"] { color: #f0c393; }
@@ -849,14 +704,10 @@ QLabel[tone="amber"] { color: #ff9f45; }
 QLabel[tone="bad"] { color: #f2555a; }
 QLabel[tone="faint"] { color: #646d7e; }
 
-/* After the button rules above, so a tone outranks :disabled too. */
 QPushButton[tone="info"]  { color: #5aa9f0; }
 QPushButton[tone="amber"] { color: #ff9f45; }
 QPushButton[tone="bad"]   { color: #f2555a; }
 
-/* The now-or-restart tag beside a setting's name. Amber for restart
-   because it is the one that costs something; green for now because it
-   is already done. */
 QLabel#Meta[tone="restart"], QLabel#Meta[tone="now"] {
     border-radius: 2px;
     padding: 0px 4px;

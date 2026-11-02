@@ -32,4 +32,4 @@ void Params::fail_missing(std::string_view what) const {
     throw std::invalid_argument(std::string{cmd_} + ": missing " + std::string{what});
 }
 
-}  // namespace lsw::agent::rpc
+}

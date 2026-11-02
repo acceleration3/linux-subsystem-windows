@@ -1,10 +1,3 @@
-// What the guest's adapters are called. provision.ps1 names each GPU's
-// INF model from C:\av\adapters.txt, which the payload now writes on the
-// user's machine rather than shipping the one the driver package was
-// built with; this pins that file to the rules accel-virt's device and
-// its list_gpus.py use, against a fake sysfs and fake ID databases.
-// No GPU, no Vulkan.
-
 #include "lsw/host/services/adapter_names.hpp"
 
 #include <QCoreApplication>
@@ -38,7 +31,6 @@ void write(const QString& path, const QByteArray& text) {
     }
 }
 
-// A PCI function in the fake sysfs, as the kernel writes its attributes.
 void pci_function(const QDir& sysfs, const char* address, const char* vendor, const char* device,
                   const char* revision) {
     const QString dir = sysfs.filePath(QLatin1String(address));
@@ -57,7 +49,7 @@ HostGpu gpu(const char* name, const char* pci_address, bool integrated = false,
     return out;
 }
 
-}  // namespace
+}
 
 int main(int argc, char** argv) {
     QCoreApplication app{argc, argv};
@@ -71,11 +63,11 @@ int main(int argc, char** argv) {
                        dir.filePath(QStringLiteral("pci.ids"))};
 
     const QDir sysfs{sources.sysfs_pci};
-    pci_function(sysfs, "0000:03:00.0", "0x1002", "0x7550", "0xc0");  // discrete AMD
-    pci_function(sysfs, "0000:10:00.0", "0x1002", "0x13c0", "0xc1");  // integrated AMD
-    pci_function(sysfs, "0000:00:02.0", "0x8086", "0x7d67", "0x06");  // integrated Intel
-    pci_function(sysfs, "0000:00:02.1", "0x8086", "0x46a6", "0x0c");  // integrated Intel
-    pci_function(sysfs, "0000:01:00.0", "0x10de", "0x2684", "0xa1");  // discrete NVIDIA
+    pci_function(sysfs, "0000:03:00.0", "0x1002", "0x7550", "0xc0");
+    pci_function(sysfs, "0000:10:00.0", "0x1002", "0x13c0", "0xc1");
+    pci_function(sysfs, "0000:00:02.0", "0x8086", "0x7d67", "0x06");
+    pci_function(sysfs, "0000:00:02.1", "0x8086", "0x46a6", "0x0c");
+    pci_function(sysfs, "0000:01:00.0", "0x10de", "0x2684", "0xa1");
     write(sources.amdgpu_ids, "# List of AMDGPU IDs\n"
                               "#\n"
                               "1.0.0\n"

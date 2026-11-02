@@ -32,35 +32,23 @@
 namespace lsw::host::manager {
 
 namespace {
-// The design's paused look: the surface before any frame exists, how far
-// a paused frame is dimmed once desaturated, and the dim over a live one
-// while the pointer is on it.
 constexpr const char* kPlaceholder = "#2b2f36";
 const QColor kPausedDim{13, 15, 20, 115};
 const QColor kHoverDim{13, 15, 20, 70};
-// Where the tag sits on the picture.
 constexpr int kTagInset = 9;
-// A paused start's frame is taken this long after the first one arrives,
-// so the GPU path has drawn it.
 constexpr int kSettleMs = 300;
 constexpr int kStartTimeoutMs = 60000;
 
 const QString kPaused = QStringLiteral("WGC, paused");
 const QString kNoAgent = QStringLiteral("WGC, waiting for guest agent");
 
-// ``size`` letterboxed into ``area``, centred.
 QRect fit(QSize size, const QRect& area) {
     const QSize target = size.scaled(area.size(), Qt::KeepAspectRatio);
     return {area.x() + (area.width() - target.width()) / 2,
             area.y() + (area.height() - target.height()) / 2, target.width(), target.height()};
 }
-}  // namespace
+}
 
-// One capture of the guest's monitor: remotewin's link, on this process's
-// own loop, and the picture as the guest last made it whole. Frames come
-// as pixels - the guest's frame and the tiles that changed since - and are
-// drawn by the preview itself: it is a picture in a widget, with nothing
-// of a window system's own under it.
 class DesktopPreview::Session : public QObject {
 public:
     explicit Session(QObject* parent) : QObject(parent) {}
@@ -75,14 +63,12 @@ public:
     bool framed = false;
 };
 
-// Children draw over their parent, and the live view is a child: what is
-// drawn over it is drawn by a sibling above it.
 class DesktopPreview::Surface : public QWidget {
 public:
     explicit Surface(DesktopPreview& preview) : QWidget(&preview), preview_(preview) {}
 
 protected:
-    void paintEvent(QPaintEvent* /*event*/) override {
+    void paintEvent(QPaintEvent* ) override {
         QPainter p{this};
         preview_.paint_surface(p, rect());
     }
@@ -169,7 +155,6 @@ void DesktopPreview::set_paused(bool paused) {
         if (available_ && !failed_) note(kPaused);
     } else {
         failed_ = false;
-        // A paused start still taking its frame goes on, live.
         if (session_ == nullptr) note(QStringLiteral("WGC, connecting"));
         start();
     }
@@ -183,8 +168,6 @@ void DesktopPreview::showEvent(QShowEvent* event) {
 }
 
 void DesktopPreview::hideEvent(QHideEvent* event) {
-    // Adding the first QOpenGLWidget can recreate the top-level native
-    // window. Its temporary hide/show is not a request to restart capture.
     if (!starting_) stop();
     QWidget::hideEvent(event);
 }
@@ -229,8 +212,6 @@ void DesktopPreview::freeze() {
 
 void DesktopPreview::stop() {
     if (session_ == nullptr) return;
-    // A frame or disconnect signal may be on the stack. Retire the session
-    // after that dispatch, without closing any Windows application.
     session_->deadline.stop();
     session_->settle.stop();
     session_->deleteLater();
@@ -248,7 +229,6 @@ void DesktopPreview::fail(const QString& reason) {
 }
 
 void DesktopPreview::start() {
-    // Paused, a capture is only for the frame it starts on.
     const bool wanted = !paused_ || frozen_.isNull();
     if (!available_ || !isVisible() || !wanted || failed_ || starting_ || session_ != nullptr) {
         return;
@@ -269,8 +249,6 @@ void DesktopPreview::start() {
         stop();
         return;
     }
-    // Asked once the guest has said it speaks this wire: asked before, the
-    // request goes to nobody, and asked again, a capture is made again.
     link.connected.connect([this, session] {
         if (session_ != session) return;
         if (!session->link.features().has(rwin::Feature::kMonitor)) {
@@ -299,9 +277,6 @@ void DesktopPreview::start() {
         if (!paused_ && status_ != route) note(route);
         surface_->update();
     };
-    // Copied out of the message as it comes; the tiles that changed since
-    // are painted over it, and a tile of a picture of another size waits
-    // for that picture.
     link.frame_arrived.connect([session, framed](rwin::WindowId window, const rwin::host::PixelsView& pixels) {
         if (window != rwin::kMonitorWindow) return;
         const QImage frame(pixels.bgra, pixels.width, pixels.height, pixels.stride,
@@ -342,4 +317,4 @@ void DesktopPreview::start() {
 #endif
 }
 
-}  // namespace lsw::host::manager
+}

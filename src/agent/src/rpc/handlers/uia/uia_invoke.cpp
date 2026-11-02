@@ -9,12 +9,6 @@
 #include <string>
 
 namespace lsw::agent::rpc::handlers {
-
-// ``uia_invoke``: find an element under ``hwnd`` whose AutomationId
-// (preferred) or Name matches ``selector`` and fire its
-// InvokePattern — the UIA equivalent of clicking it. Returns
-// ``{"ok": bool}``. Used by automation scripts to drive dialogs by
-// element identity instead of pixel coordinates.
 struct UiaInvokeHandler : RpcHandler {
     nlohmann::json handle(const nlohmann::json& params, RpcContext& ctx) override {
         const Params p{params, linkproto::cmd::kUiaInvoke};
@@ -26,11 +20,9 @@ struct UiaInvokeHandler : RpcHandler {
         return {{"ok", ctx.services.uia().invoke_by_selector(hwnd, selector)}};
     }
 
-    // Window handles, UI Automation and HKCU belong to the user's
-    // session: served by the session helper there.
     [[nodiscard]] Placement placement() const override { return Placement::UserSession; }
 };
 
-}  // namespace lsw::agent::rpc::handlers
+}
 
 LSW_REGISTER_RPC(lsw::agent::rpc::handlers::UiaInvokeHandler, ::lsw::linkproto::cmd::kUiaInvoke)

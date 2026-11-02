@@ -26,11 +26,8 @@ namespace {
 
 using ui::Widgets;
 
-// Where each edition's EDITIONID rides in the combo, beside its index.
 constexpr int kEditionIdRole = Qt::UserRole + 1;
 
-// A sizing slider, starting at ``initial``, with room beside it for the
-// number and its unit.
 ui::SliderSpin* make_slider(const ui::MachineLimits::Range& range, int initial,
                             const QString& suffix) {
     auto* slider = new ui::SliderSpin(range.min, range.max, range.step, suffix);
@@ -39,7 +36,7 @@ ui::SliderSpin* make_slider(const ui::MachineLimits::Range& range, int initial,
     return slider;
 }
 
-}  // namespace
+}
 
 VmSizePage::VmSizePage(Wizard& wizard, QWidget* parent) : WizardPage(parent), wizard_(wizard) {
 
@@ -48,9 +45,6 @@ VmSizePage::VmSizePage(Wizard& wizard, QWidget* parent) : WizardPage(parent), wi
         QStringLiteral("Both are baked into the answer file, so they are set before the "
                        "installer boots."));
 
-    // The account, two by two. Stacked captions and full-width fields:
-    // a name and a password are the same shape, and the pair reads as
-    // one question rather than four rows of a form.
     auto* account = new QGridLayout;
     account->setHorizontalSpacing(16);
     account->setVerticalSpacing(12);
@@ -86,12 +80,8 @@ VmSizePage::VmSizePage(Wizard& wizard, QWidget* parent) : WizardPage(parent), wi
     account->setColumnStretch(1, 1);
     body->addLayout(account);
 
-    // A rule between the account and the machine: two questions, and
-    // the design draws the seam.
     body->addWidget(Widgets::separator());
 
-    // The machine. A narrow caption, then as much slider as the page
-    // will give, then what it currently says.
     auto* sizing = new QFormLayout;
     sizing->setHorizontalSpacing(16);
     sizing->setVerticalSpacing(12);
@@ -111,12 +101,9 @@ VmSizePage::VmSizePage(Wizard& wizard, QWidget* parent) : WizardPage(parent), wi
     sizing->addRow(Widgets::caption(QStringLiteral("Memory")), mem_slider_);
     sizing->addRow(Widgets::caption(QStringLiteral("Disk")), disk_slider_);
 
-    // What the sizing costs, next to the control that decides it.
     footnote_ = Widgets::meta(QString{}, true);
     body->addWidget(footnote_);
 
-    // A reinstall: this page's Next starts the install, and the install
-    // replaces the guest there is. Said on the page whose button does it.
     if (wizard_.services().vms().primary() != nullptr) {
         auto* replaces = new QLabel(QStringLiteral(
             "Next starts the install, which replaces the current guest. It is shut down, its "
@@ -159,13 +146,6 @@ void VmSizePage::initializePage() {
         computer_edit_->setText(s.computer_name);
     }
 
-    // Edition list only makes sense for a local ISO — when downloading
-    // from Microsoft the ISO doesn't exist yet, so we can't read its
-    // WIM. In that case hide the row and keep image_index at 1.
-    // The field stays, whatever the answer is. It is one of the four
-    // questions this page asks, and an empty place where it was reads
-    // as something gone wrong rather than as a question that cannot be
-    // answered yet.
     const QString iso = s.chosen_iso_path;
     if (iso.isEmpty()) {
         edition_combo_->clear();
@@ -184,7 +164,7 @@ void VmSizePage::initializePage() {
     }
 
     if (probed_iso_ == iso) {
-        return;  // already listed this ISO; keep the existing combo
+        return;
     }
     probed_iso_ = iso;
     editions_loaded_ = false;
@@ -205,9 +185,6 @@ void VmSizePage::initializePage() {
 }
 
 namespace {
-
-// A language as people know it, then as the answer file spells it:
-// "English (United Kingdom) · en-GB".
 QString language_label(const QString& tag) {
     const QLocale locale{tag};
     if (locale.language() == QLocale::C) {
@@ -220,7 +197,7 @@ QString language_label(const QString& tag) {
         .arg(QLocale::languageToString(locale.language()), territory, tag);
 }
 
-}  // namespace
+}
 
 void VmSizePage::on_languages_ready() {
     const QStringList languages = language_watcher_->result();
@@ -240,8 +217,6 @@ void VmSizePage::on_languages_ready() {
     Q_EMIT completeChanged();
 }
 
-// How much of the host the sizing leaves behind. A number next to the
-// slider that moves it is worth more than the same number in a manual.
 void VmSizePage::refresh_footnote() {
     const qint64 free_gib = wizard_.state().host_free_disk_bytes / (1024LL * 1024 * 1024);
     footnote_->setText(QStringLiteral("Leaves %1 GiB free on the host. The disk is sparse "
@@ -255,7 +230,7 @@ void VmSizePage::on_editions_ready() {
     if (editions.isEmpty()) {
         edition_status_->setText("Could not read the editions from this image. Setup will "
                                  "install image 1 (or prompt if that fails).");
-        editions_loaded_ = true;  // don't block the wizard; fall back to index 1
+        editions_loaded_ = true;
         Q_EMIT completeChanged();
         return;
     }
@@ -271,8 +246,6 @@ void VmSizePage::on_editions_ready() {
 }
 
 bool VmSizePage::isComplete() const {
-    // Block Next until the edition probe has settled so the pipeline
-    // doesn't start with an unknown image index.
     return editions_loaded_ && languages_loaded_;
 }
 
@@ -289,21 +262,12 @@ bool VmSizePage::validatePage() {
     if (s.user_password.isEmpty()) {
         s.user_password = "lsw";
     }
-    // Computer name — empty keeps the pipeline's VM-name fallback.
     s.computer_name = computer_edit_->text().trimmed();
-    // Edition → WIM image index. currentData() carries the 1-based
-    // index; default to 1 when the combo is empty/hidden (download
-    // path or unreadable ISO).
     const QVariant idx = edition_combo_->currentData();
     s.image_index = idx.isValid() ? idx.toInt() : 1;
     s.edition_id = edition_combo_->currentData(kEditionIdRole).toString();
-    // Empty when the languages were not read: the install takes the
-    // image's default.
     s.language = language_combo_->currentData().toString();
 
-    // This is the last page that gathers anything, so the pipeline
-    // starts here. It used to start on the trim page, which no longer
-    // exists: trimming is a tool, run before this point or not at all.
     wizard_.start_pipeline();
     return true;
 }
@@ -312,4 +276,4 @@ int VmSizePage::nextId() const {
     return Wizard::Payload;
 }
 
-}  // namespace lsw::host::wizard
+}

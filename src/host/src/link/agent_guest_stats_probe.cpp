@@ -27,4 +27,4 @@ vm::GuestStatsSample AgentGuestStatsProbe::sample() {
     return out;
 }
 
-}  // namespace lsw::host::link
+}

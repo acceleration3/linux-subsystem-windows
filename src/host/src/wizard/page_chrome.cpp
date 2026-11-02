@@ -18,15 +18,6 @@ namespace {
 
 using ui::Theme;
 
-// The step rail, built into the page rather than handed to
-// QWizard::setSideWidget.
-//
-// A side widget is placed in a column of QWizard's own layout, and that
-// layout insets everything it holds by the style's margin. There is no
-// way to reach that margin: it is read from the style with the page as
-// the widget, and the stylesheet's style answers first. With no side
-// widget the page fills the window exactly, so the rail lives here and
-// the page is the whole of what QWizard lays out.
 QWidget* build_rail(PageChrome& chrome) {
     auto* rail = new QWidget;
     Theme::surface(rail, Theme::Role::kWizardSide);
@@ -57,7 +48,6 @@ QWidget* build_rail(PageChrome& chrome) {
     auto* foot_layout = new QVBoxLayout(foot);
     foot_layout->setContentsMargins(18, 12, 18, 0);
     foot_layout->setSpacing(3);
-    // Named for the stylesheet, which sets them in mono.
     chrome.rail_host = new QLabel;
     chrome.rail_host->setObjectName(QStringLiteral("RailHost"));
     chrome.rail_free = new QLabel;
@@ -68,7 +58,7 @@ QWidget* build_rail(PageChrome& chrome) {
     return rail;
 }
 
-}  // namespace
+}
 
 PageChrome PageChrome::install(QWizardPage* page, const QString& title,
                                const QString& subtitle) {
@@ -84,7 +74,6 @@ PageChrome PageChrome::install(QWizardPage* page, const QString& title,
     root->setSpacing(0);
     columns->addWidget(right, 1);
 
-    // ---- title band -----------------------------------------------
     auto* head = new QFrame;
     Theme::surface(head, Theme::Role::kWizardHead);
     auto* head_layout = new QVBoxLayout(head);
@@ -106,7 +95,6 @@ PageChrome PageChrome::install(QWizardPage* page, const QString& title,
     chrome.title = heading;
     chrome.subtitle = sub;
 
-    // ---- body -----------------------------------------------------
     auto* body_widget = new QWidget;
     auto* body = new QVBoxLayout(body_widget);
     body->setContentsMargins(26, 22, 26, 22);
@@ -114,10 +102,6 @@ PageChrome PageChrome::install(QWizardPage* page, const QString& title,
     root->addWidget(body_widget, 1);
     chrome.body = body;
 
-    // ---- footer ---------------------------------------------------
-    // Beside the rail, not under it: the design's footer belongs to the
-    // page. QWizard's own button row spans the window and cannot be
-    // told otherwise, so it is emptied and this stands in.
     auto* foot = new QFrame;
     Theme::surface(foot, Theme::Role::kWizardFoot);
     auto* foot_layout = new QHBoxLayout(foot);
@@ -147,8 +131,6 @@ PageChrome PageChrome::install(QWizardPage* page, const QString& title,
     chrome.back = back;
     chrome.next = next;
 
-    // QWizardPage::wizard() is protected; the wizard is the page's
-    // top-level window, which is not.
     const auto wizard_of = [page]() { return qobject_cast<QWizard*>(page->window()); };
     QObject::connect(back, &QPushButton::clicked, page, [wizard_of] {
         if (auto* wizard = wizard_of()) {
@@ -169,12 +151,9 @@ PageChrome PageChrome::install(QWizardPage* page, const QString& title,
             wizard->reject();
         }
     });
-    // Not asked now: this runs at the top of the page's constructor,
-    // before the widgets isComplete() reads exist. The wizard asks when
-    // the page is shown.
     QObject::connect(page, &QWizardPage::completeChanged, next,
                      [page, next] { next->setEnabled(page->isComplete()); });
     return chrome;
 }
 
-}  // namespace lsw::host::wizard
+}

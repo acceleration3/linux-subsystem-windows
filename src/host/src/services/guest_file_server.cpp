@@ -1,5 +1,6 @@
 #include "lsw/host/services/guest_file_server.hpp"
 
+#include "lsw/base/log.hpp"
 #include <arpa/inet.h>
 #include <cerrno>
 #include <cstring>
@@ -25,14 +26,13 @@ void send_all(int connection, const char* bytes, std::size_t size) {
     }
 }
 
-}  // namespace
+}
 
 GuestFileServer::GuestFileServer(Files files) noexcept : files_(std::move(files)) {}
 
 GuestFileServer::~GuestFileServer() { stop(); }
 
 std::string_view GuestFileServer::requested_name(std::string_view request) {
-    // "GET /name HTTP/1.1"
     const auto method_end = request.find(' ');
     if (method_end == std::string_view::npos) {
         return {};
@@ -64,7 +64,7 @@ bool GuestFileServer::start() {
     sockaddr_in addr{};
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    addr.sin_port = 0;  // kernel picks
+    addr.sin_port = 0;
     if (::bind(listen_fd_, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0) {
         error_ = std::string{"bind: "} + std::strerror(errno);
         ::close(listen_fd_);
@@ -80,6 +80,7 @@ bool GuestFileServer::start() {
         return false;
     }
     port_ = ntohs(addr.sin_port);
+    LSW_DEBUG("file server: listening on port {}", port_);
     thread_ = std::thread([this] { serve_loop(); });
     return true;
 }
@@ -95,13 +96,11 @@ void GuestFileServer::serve_loop() {
             }
             continue;
         }
-        // Read the request head, bounded so a peer that never finishes
-        // cannot pin the loop.
         std::string request;
         request.reserve(512);
         char buf[4096];
         for (int i = 0; i < 8; ++i) {
-            timeval tv{0, 100 * 1000};  // 100 ms per attempt
+            timeval tv{0, 100 * 1000};
             fd_set rd;
             FD_ZERO(&rd);
             FD_SET(conn, &rd);
@@ -127,6 +126,7 @@ void GuestFileServer::answer(int connection, std::string_view request) {
     if (file == files_.end()) {
         constexpr std::string_view kNotFound =
             "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+        LSW_DEBUG("file server: {} not found", std::string{requested_name(request)});
         send_all(connection, kNotFound.data(), kNotFound.size());
         return;
     }
@@ -137,6 +137,7 @@ void GuestFileServer::answer(int connection, std::string_view request) {
                                + "Connection: close\r\n\r\n";
     send_all(connection, header.data(), header.size());
     send_all(connection, payload.constData(), static_cast<std::size_t>(payload.size()));
+    LSW_DEBUG("file server: served {} ({} bytes)", std::string{requested_name(request)}, payload.size());
     ++served_;
 }
 
@@ -145,8 +146,6 @@ void GuestFileServer::stop() {
         return;
     }
     stop_.store(true);
-    // Shut the listener down so the blocked accept returns rather than
-    // waiting for a connection that will never come.
     ::shutdown(listen_fd_, SHUT_RDWR);
     ::close(listen_fd_);
     listen_fd_ = -1;
@@ -155,4 +154,4 @@ void GuestFileServer::stop() {
     }
 }
 
-}  // namespace lsw::host::services
+}

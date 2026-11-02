@@ -10,7 +10,7 @@ class QPushButton;
 namespace lsw::host::apps {
 class GuestAppLauncher;
 class GuestFileTransfer;
-}  // namespace lsw::host::apps
+}
 
 namespace lsw::host::link {
 class AgentRpcClient;
@@ -48,4 +48,4 @@ private:
     bool closing_ = false;
 };
 
-}  // namespace lsw::host::manager
+}

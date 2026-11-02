@@ -4,8 +4,6 @@
 
 #include <QFile>
 
-// We don't link libburn — tell libisofs to expose its own copy of
-// ``struct burn_source`` rather than forward-declaring the libburn one.
 #define LIBISOFS_WITHOUT_LIBBURN 1
 #include <cerrno>
 #include <cstdint>
@@ -28,8 +26,6 @@ struct WriteOptsFree {
     void operator()(IsoWriteOpts* opts) const noexcept { iso_write_opts_free(opts); }
 };
 
-// A burn source is the caller's to dispose of in two steps: its own
-// data first, then the struct itself.
 struct BurnSourceFree {
     void operator()(burn_source* src) const noexcept {
         if (src->free_data != nullptr) {
@@ -48,8 +44,6 @@ using WriteOptsPtr = std::unique_ptr<IsoWriteOpts, WriteOptsFree>;
 using BurnSourcePtr = std::unique_ptr<burn_source, BurnSourceFree>;
 using FilePtr = std::unique_ptr<std::FILE, FileClose>;
 
-// libisofs requires a one-time process-wide init. Repeat calls are
-// documented as harmless, but guarding means not depending on that.
 [[nodiscard]] bool ensure_libisofs_init() {
     static std::once_flag once;
     static int rc = 0;
@@ -57,7 +51,6 @@ using FilePtr = std::unique_ptr<std::FILE, FileClose>;
     return rc >= 0;
 }
 
-// "<what> (<libisofs's reason>)", for the end of an error sentence.
 void fail(QString* error_out, const QString& what, int rc) {
     const QString reason = QString::fromLocal8Bit(iso_error_to_msg(rc));
     LSW_ERROR("libisofs: {} ({})", what.toStdString(), reason.toStdString());
@@ -79,8 +72,6 @@ void fail_errno(QString* error_out, const QString& what) {
         const ElToritoEntry& entry = boot.entries.at(i);
         const QByteArray path = entry.image_path.toUtf8();
         ElToritoBootImage* added = nullptr;
-        // The first call creates the catalog, and every further entry
-        // is added to the set it made.
         const int rc =
             i == 0 ? iso_image_set_boot_image(image, path.constData(), ELTORITO_NO_EMUL,
                                               boot.catalog_path.toUtf8().constData(), &added)
@@ -100,15 +91,11 @@ void fail_errno(QString* error_out, const QString& what) {
     return true;
 }
 
-// Drain ``src`` into ``out``. libisofs documents 2048-byte sectors as
-// the natural read granularity.
 [[nodiscard]] bool drain(burn_source* src, std::FILE* out, const QString& output_iso,
                          QString* error_out) {
     constexpr int kSector = 2048;
     unsigned char buf[kSector];
     for (;;) {
-        // burn_source has both read() and read_xt(); newer-version
-        // sources set read=NULL and use read_xt instead.
         const int got =
             (src->read != nullptr) ? src->read(src, buf, kSector) : src->read_xt(src, buf, kSector);
         if (got < 0) {
@@ -161,7 +148,7 @@ void fail_errno(QString* error_out, const QString& what) {
     }
 
     IsoWriteOpts* raw_opts = nullptr;
-    if (const int rc = iso_write_opts_new(&raw_opts, /*profile=*/2);
+    if (const int rc = iso_write_opts_new(&raw_opts, 2);
         rc < 0 || raw_opts == nullptr) {
         fail(error_out, QStringLiteral("could not create write options"), rc);
         return false;
@@ -187,8 +174,6 @@ void fail_errno(QString* error_out, const QString& what) {
     if (!drain(src.get(), out.get(), output_iso, error_out)) {
         return false;
     }
-    // Closed by hand because the close can fail: it is where buffered
-    // bytes meet a full disk.
     if (std::fclose(out.release()) != 0) {
         fail_errno(error_out, QStringLiteral("writing %1 failed").arg(output_iso));
         return false;
@@ -196,18 +181,16 @@ void fail_errno(QString* error_out, const QString& what) {
     return true;
 }
 
-}  // namespace
+}
 
 bool write_iso_from_tree(const QString& tree_dir, const QString& output_iso,
                          const IsoWriteOptions& options, const std::optional<ElToritoBoot>& boot,
                          QString* error_out) {
     if (!write(tree_dir, output_iso, options, boot, error_out)) {
-        // A truncated ISO is worse than none: it attaches, and fails
-        // somewhere inside Setup.
         QFile::remove(output_iso);
         return false;
     }
     return true;
 }
 
-}  // namespace lsw::host::provision::install
+}

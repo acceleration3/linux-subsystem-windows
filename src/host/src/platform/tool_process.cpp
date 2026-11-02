@@ -6,15 +6,8 @@
 namespace lsw::host::platform {
 
 namespace {
-
-// How long a tool gets to exec. Separate from the run timeout: a binary
-// that is missing or not executable fails here at once, and that is a
-// different sentence from one that ran too long.
 constexpr int kStartTimeoutMs = 5000;
 
-// The tail of what the tool printed, for the end of an error sentence.
-// The last line is where tools put the reason ("No space left", "Could
-// not open"), and it is worth more than the exit code it comes with.
 QString last_line(const QByteArray& output) {
     const QString text = QString::fromLocal8Bit(output).trimmed();
     if (text.isEmpty()) {
@@ -29,8 +22,6 @@ void set_error(QString* error_out, const QString& message) {
     }
 }
 
-// Seconds below two minutes, minutes above, so "did not finish within
-// 30 seconds" and "within 30 minutes" both read naturally.
 QString duration(int timeout_ms) {
     if (timeout_ms < 120000) {
         return QStringLiteral("%1 seconds").arg(timeout_ms / 1000);
@@ -38,7 +29,7 @@ QString duration(int timeout_ms) {
     return QStringLiteral("%1 minutes").arg(timeout_ms / 60000);
 }
 
-}  // namespace
+}
 
 bool run_tool(const QString& program, const QStringList& args, int timeout_ms,
               QByteArray* stdout_out, QString* error_out) {
@@ -78,4 +69,4 @@ bool run_tool(const QString& program, const QStringList& args, int timeout_ms,
     return true;
 }
 
-}  // namespace lsw::host::platform
+}

@@ -29,4 +29,4 @@ std::string TextEncoding::to_utf8(const std::wstring& wide) {
     return out;
 }
 
-}  // namespace lsw::agent::util
+}

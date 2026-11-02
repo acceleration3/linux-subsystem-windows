@@ -1,43 +1,6 @@
-# lsw-guest-update.ps1 - brings what LSW puts into Windows to one release.
-#
-# The manager (services::GuestUpdate) downloads every file of its release
-# into a staging directory and runs this from it as SYSTEM in a one-shot
-# scheduled task, not through the agent: the work stops the agent.
-#
-#   lsw-guest-update.ps1 -Stage <dir> -Release <hex> [-Version <x.y.z>] [-Force] [-NoRestart]
-#
-# The staging directory holds each file under its guest path with the
-# drive's colon removed (<dir>\C\ProgramData\LSW\lsw-agent.exe is
-# C:\ProgramData\LSW\lsw-agent.exe), manifest.txt (one line per file,
-# "<sha256>  <guest path>") and shares.txt (the value for
-# lsw-shares.ps1 -Shares). docs/guest-update.md has the steps and why.
-#
-# Every step is idempotent and is skipped when what it puts in place
-# already matches the manifest, unless -Force. The first step that fails
-# ends the work, except that the agent is always started again (step 8),
-# so the guest is never left without one.
-#
-# Written to C:\ProgramData\LSW:
-#   update.log          every step, appended
-#   update-result.json  { ok, finished, restart, steps, message }, every run
-#   (times are UTC "yyyy-MM-ddTHH:mm:ss.fffZ")
-#   release.json        { release, version, applied, manifest }, only when every step
-#                       succeeded
-# Two runs never overlap: the whole run holds the mutex Global\lsw-guest-update.
-# A restart a step marked is done last, with shutdown /r /t 5, except with
-# -NoRestart: Windows does not allow a restart from SetupComplete, where the
-# first install runs this from the payload ISO's copy of the bundle. The
-# restart is then only recorded in update-result.json ("restart": true), and
-# the first boot after setup is the restart. There the agent cannot listen
-# yet (it waits for the wizard user's desktop), so step 8 waits for the
-# service to run instead.
-
 param(
     [Parameter(Mandatory = $true)] [string] $Stage,
     [Parameter(Mandatory = $true)] [string] $Release,
-    # The LSW version that made the bundle, for the manager to name it by.
-    # Not part of the manifest: two versions with the same files are the
-    # same release.
     [string] $Version = '',
     [switch] $Force,
     [switch] $NoRestart
@@ -47,7 +10,8 @@ $ErrorActionPreference = 'Continue'
 $ProgressPreference = 'SilentlyContinue'
 
 $Root = 'C:\ProgramData\LSW'
-$Log = Join-Path $Root 'update.log'
+$LogDir = Join-Path $Root 'logs'
+$Log = Join-Path $LogDir 'update.log'
 $ResultFile = Join-Path $Root 'update-result.json'
 $ReleaseFile = Join-Path $Root 'release.json'
 $Previous = Join-Path $Root 'previous'
@@ -60,13 +24,27 @@ $DriverMarker = 'C:\av\installed.sha256'
 $Utf8 = New-Object System.Text.UTF8Encoding($false)
 
 New-Item -ItemType Directory -Force -Path $Root | Out-Null
+New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
+
+function Roll-Log([string] $LogFile) {
+    try {
+        if ((Test-Path -LiteralPath $LogFile) -and (Get-Item -LiteralPath $LogFile).Length -gt 2MB) {
+            $stem = $LogFile.Substring(0, $LogFile.Length - 4)
+            Remove-Item -LiteralPath ($stem + '.2.log') -Force -ErrorAction SilentlyContinue
+            if (Test-Path -LiteralPath ($stem + '.1.log')) {
+                Move-Item -LiteralPath ($stem + '.1.log') -Destination ($stem + '.2.log') -Force
+            }
+            Move-Item -LiteralPath $LogFile -Destination ($stem + '.1.log') -Force
+        }
+    } catch { }
+}
+
+Roll-Log $Log
 
 function L([string] $Message) {
     ('{0} {1}' -f (Get-Date -Format s), $Message) | Add-Content -LiteralPath $Log -Encoding Ascii
 }
 
-# The form the host parses (Qt::ISODateWithMs): milliseconds, because the
-# host compares the agent's start with it to a second.
 function Utc-Now {
     return (Get-Date).ToUniversalTime().ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff'Z'", [Globalization.CultureInfo]::InvariantCulture)
 }
@@ -86,15 +64,12 @@ function Write-Result([bool] $Succeeded, [string] $Text, $StepList) {
     }
 }
 
-# ---- one run at a time ----
-
 $script:Restart = $false
 $script:UpdateLock = New-Object System.Threading.Mutex($false, 'Global\lsw-guest-update')
 $locked = $false
 try {
     $locked = $script:UpdateLock.WaitOne(5000)
 } catch [System.Threading.AbandonedMutexException] {
-    # The run that held it died; the lock is ours.
     $locked = $true
 }
 if (-not $locked) {
@@ -102,8 +77,6 @@ if (-not $locked) {
     Write-Result $false 'another update is running in Windows' @()
     exit 1
 }
-
-# ---- the manifest ----
 
 $script:Manifest = @{}
 $script:ManifestText = ''
@@ -116,19 +89,15 @@ function Sha([string] $Path) {
     return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLower()
 }
 
-# Whether the file at $Path is the manifest's $GuestPath, byte for byte.
 function Is-Current([string] $Path, [string] $GuestPath) {
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $false }
     return (Sha $Path) -eq $script:Manifest[$GuestPath]
 }
 
-# The manifest's guest paths under a directory, or equal to a file.
 function Manifest-Under([string] $Prefix) {
     return @($script:Manifest.Keys | Where-Object { $_ -eq $Prefix -or $_.StartsWith($Prefix.TrimEnd('\') + '\') } | Sort-Object)
 }
 
-# Whether a directory holds exactly the manifest's files under it: none
-# missing, none changed, none extra.
 function Tree-Is-Current([string] $Dir) {
     $want = Manifest-Under $Dir
     foreach ($guest in $want) {
@@ -144,10 +113,6 @@ function Tree-Is-Current([string] $Dir) {
     return $true
 }
 
-# ---- doing things ----
-
-# Copies keep trying for ten seconds: a process that was just killed
-# still holds its image for a moment.
 function Copy-Retry([string] $From, [string] $To) {
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $To) | Out-Null
     for ($i = 0; ; $i++) {
@@ -161,7 +126,6 @@ function Copy-Retry([string] $From, [string] $To) {
     }
 }
 
-# Puts the staged file in place when it differs; says whether it did.
 function Place([string] $GuestPath) {
     if (-not $Force -and (Is-Current $GuestPath $GuestPath)) { return $false }
     Copy-Retry (Stage-Path $GuestPath) $GuestPath
@@ -169,13 +133,11 @@ function Place([string] $GuestPath) {
     return $true
 }
 
-# Makes $To exactly $From. robocopy's codes below 8 are all successes.
 function Mirror-Tree([string] $From, [string] $To) {
     robocopy $From $To /MIR /NFL /NDL /NJH /NJS /NP | Out-Null
     if ($LASTEXITCODE -ge 8) { throw ('robocopy ' + $From + ' -> ' + $To + ' exited ' + $LASTEXITCODE) }
 }
 
-# A native command's output goes to the log, its exit code back.
 function Run-Native([string] $Label, [string] $File, [string[]] $Arguments) {
     $out = & $File @Arguments 2>&1 | Out-String
     $rc = $LASTEXITCODE
@@ -183,7 +145,6 @@ function Run-Native([string] $Label, [string] $File, [string[]] $Arguments) {
     return $rc
 }
 
-# Up is listening, or only running under -NoRestart (see the header).
 function Agent-Up {
     if ($NoRestart) {
         $service = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
@@ -210,9 +171,6 @@ function Kill-Processes([string] $Name) {
     Get-Process -Name $Name -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 }
 
-# The service restarts itself when it is killed; mid-run that would start
-# the agent on files still being replaced. Step 7 puts the real actions
-# back, and step 8 if step 7 did not run.
 $script:RecoveryOff = $false
 $script:RecoveryOn = $false
 
@@ -239,12 +197,8 @@ function Stop-Agent {
         }
         L ('service ' + (Get-Service -Name $ServiceName).Status)
     }
-    # The session helpers are the same image and outlive a stopped
-    # service; a service that did not stop in time is killed here too.
     Kill-Processes 'lsw-agent'
 }
-
-# ---- the steps ----
 
 $script:Steps = @()
 $script:Failure = $null
@@ -252,7 +206,6 @@ $script:State = 'done'
 $script:Stopped = $false
 $script:Replaced = $false
 
-# -Always runs even after a failure: only step 8 is.
 function Run-Step([string] $Name, [scriptblock] $Body, [switch] $Always) {
     if ($script:Failure -and -not $Always) {
         $script:Steps += [pscustomobject]@{ name = $Name; status = 'not run'; message = '' }
@@ -292,7 +245,6 @@ function Step-Verify {
 }
 
 function Step-Stop {
-    # Set first: a stop that fails half way has still stopped something.
     $script:Stopped = $true
     Kill-Processes 'remotewin-guest'
     Stop-Agent
@@ -305,7 +257,6 @@ function Step-AgentAndMirror {
     $ours = @($agent, $mirror) | Where-Object { $script:Manifest.ContainsKey($_) }
     $differs = @($ours | Where-Object { $Force -or -not (Is-Current $_ $_) })
     if ($differs.Count -gt 0) {
-        # Kept for step 8 to put back. Only what is there to keep.
         New-Item -ItemType Directory -Force -Path $Previous | Out-Null
         foreach ($path in $ours) {
             if (Test-Path -LiteralPath $path) { Copy-Retry $path (Join-Path $Previous (Split-Path -Leaf $path)) }
@@ -313,12 +264,10 @@ function Step-AgentAndMirror {
         $script:Replaced = $true
         foreach ($path in $differs) { Place $path | Out-Null }
     }
-    # The script itself is next to them so the next run can start from it.
     if ($script:Manifest.ContainsKey($update)) { Place $update | Out-Null }
     if ($differs.Count -eq 0) { $script:State = 'skipped' }
 }
 
-# The manifest's lines of every file the driver step owns, sorted.
 function Driver-Lines {
     $guests = @($script:Manifest.Keys | Where-Object {
         $_ -eq 'C:\av\provision.ps1' -or $_ -eq 'C:\av\adapters.txt' -or $_.StartsWith('C:\av\package\')
@@ -330,9 +279,6 @@ function Driver-Lines {
 
 function Step-Driver {
     $set = @('C:\av\provision.ps1', 'C:\av\adapters.txt') | Where-Object { $script:Manifest.ContainsKey($_) }
-    # The files alone prove nothing: they are put in place before the
-    # install, which may fail. Only the marker, written after it succeeded,
-    # says this package is installed.
     $wanted = Driver-Lines
     $have = ''
     if (Test-Path -LiteralPath $DriverMarker -PathType Leaf) { $have = [System.IO.File]::ReadAllText($DriverMarker, $Utf8) }
@@ -344,13 +290,8 @@ function Step-Driver {
     foreach ($path in $set) { Place $path | Out-Null }
     Mirror-Tree (Stage-Path 'C:\av\package') 'C:\av\package'
 
-    # Signing rewrites the INF for the adapters present now and signs
-    # avgpu.sys, so it happens on a copy: the package as shipped stays
-    # what the manifest says it is.
     Mirror-Tree 'C:\av\package' 'C:\av\resign\package'
     $provision = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', 'C:\av\provision.ps1', '-Package', 'C:\av\resign\package')
-    # provision.ps1 exits 3010 when it wants Windows restarted, which is
-    # how -Stage install ends on success.
     $signed = Run-Native 'provision sign' 'powershell.exe' ($provision + @('-Stage', 'sign'))
     if ($signed -ne 0 -and $signed -ne 3010) { throw ('provision.ps1 -Stage sign exited ' + $signed) }
     $installed = Run-Native 'provision install' 'powershell.exe' ($provision + @('-Stage', 'install', '-NoVerifier'))
@@ -359,7 +300,6 @@ function Step-Driver {
     $script:Restart = $true
 }
 
-# For a loader that is in use: Windows replaces it at the next boot.
 function Schedule-Replace([string] $From, [string] $To) {
     if (-not ('LswUpdate.Native' -as [type])) {
         Add-Type -Namespace LswUpdate -Name Native -MemberDefinition @'
@@ -367,7 +307,6 @@ function Schedule-Replace([string] $From, [string] $To) {
 public static extern bool MoveFileEx(string existing, string target, int flags);
 '@
     }
-    # The staging directory is gone before the boot that moves it.
     New-Item -ItemType Directory -Force -Path $Pending | Out-Null
     $kept = Join-Path $Pending ((Split-Path -Leaf (Split-Path -Parent $From)) + '-' + (Split-Path -Leaf $From))
     Copy-Item -LiteralPath $From -Destination $kept -Force
@@ -409,7 +348,6 @@ function Step-Shares {
     $dir = $Root + '\virtiofs'
     $current = Tree-Is-Current $dir
     if (-not $current -or $Force) {
-        # Exactly the bundle's, so an old WinFsp installer cannot be picked.
         if (Test-Path -LiteralPath (Stage-Path $dir)) { Mirror-Tree (Stage-Path $dir) $dir }
         elseif (Test-Path -LiteralPath $dir) { Remove-Item -LiteralPath $dir -Recurse -Force }
     }
@@ -425,18 +363,13 @@ function Step-Shares {
         $text = ([System.IO.File]::ReadAllText($sharesPath, $Utf8)).Trim()
         if ($text) { $shares = $text }
     }
-    # Always run: it is idempotent and the mounts are what the manager
-    # wants now, which no staged file says has already been done.
     $rc = Run-Native 'lsw-shares' 'powershell.exe' @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $sharesScript, '-Install', '-Shares', $shares)
     if ($rc -eq 7) { $script:Restart = $true }
     elseif ($rc -ne 0) { throw ('lsw-shares.ps1 exited ' + $rc) }
 }
 
-# What setup creates (autounattend.xml, SetupComplete): the service, and
-# the two rules that let the host and the stream in.
 function Step-Service {
     $bin = 'C:\ProgramData\LSW\lsw-agent.exe --service'
-    # Always, even when all else is current: the stop step turned it off.
     if (Get-Service -Name $ServiceName -ErrorAction SilentlyContinue) { Set-Recovery $true }
     $key = 'HKLM:\SYSTEM\CurrentControlSet\Services\' + $ServiceName
     $props = Get-ItemProperty -LiteralPath $key -ErrorAction SilentlyContinue
@@ -460,8 +393,6 @@ function Step-Service {
     }
     foreach ($rule in $rules) {
         if (-not $Force -and $rulesMissing -notcontains $rule) { continue }
-        # Added after a delete so a rule that exists with other settings
-        # ends up as setup makes it.
         netsh advfirewall firewall delete rule "name=$($rule.Name)" | Out-Null
         $out = netsh advfirewall firewall add rule "name=$($rule.Name)" dir=in action=allow protocol=TCP "localport=$($rule.Port)" profile=any | Out-String
         L ('firewall ' + $rule.Name + ': ' + $out.Trim())
@@ -470,7 +401,6 @@ function Step-Service {
 
 function Step-Start {
     if ($script:RecoveryOff -and -not $script:RecoveryOn) { Set-Recovery $true }
-    # Nothing was stopped when the run ended before step 2.
     if (-not $script:Stopped) { $script:State = 'skipped'; return }
     sc.exe start $ServiceName 2>&1 | Out-String | ForEach-Object { L ('lsw-agent start: ' + $_.Trim()) }
     if (Wait-Listening 60) { return }
@@ -483,7 +413,6 @@ function Step-Start {
             $kept = Join-Path $Previous (Split-Path -Leaf $path)
             if (Test-Path -LiteralPath $kept) { Copy-Retry $kept $path }
         }
-        # Stop-Agent turned the recovery actions off again.
         Set-Recovery $true
         sc.exe start $ServiceName 2>&1 | Out-String | ForEach-Object { L ('lsw-agent start: ' + $_.Trim()) }
         $back = Wait-Listening 60
@@ -492,8 +421,6 @@ function Step-Start {
     }
     throw ('the agent did not listen on ' + $AgentPort + ' within 60 s')
 }
-
-# ---- the run ----
 
 L ('=== update to release ' + $Release + ($(if ($Force) { ' (forced)' } else { '' })) + ' from ' + $Stage)
 
@@ -509,12 +436,8 @@ Run-Step 'start' { Step-Start } -Always
 $ok = -not $script:Failure
 $message = if ($ok) { 'updated to release ' + $Release } else { $script:Failure.Step + ': ' + $script:Failure.Message }
 
-# 9. Record. release.json first, so a result that says ok always has it.
 if ($ok) {
     try {
-        # Not $release: PowerShell's names ignore case, so that is the
-        # [string] parameter $Release, and the table would be stored as its
-        # type name.
         $record = [ordered]@{
             release  = $Release
             version  = $Version

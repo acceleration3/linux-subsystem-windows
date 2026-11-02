@@ -5,10 +5,6 @@
 namespace lsw::agent::win {
 
 namespace {
-
-// The attribute list restricting inheritance to ``handles``. Owns its
-// buffer; the handles themselves are borrowed and must outlive the
-// CreateProcess call.
 class HandleList {
 public:
     explicit HandleList(std::vector<HANDLE> handles) : handles_(std::move(handles)) {
@@ -47,7 +43,7 @@ private:
     bool ok_ = false;
 };
 
-}  // namespace
+}
 
 std::optional<SpawnedProcess> Process::spawn(const SpawnOptions& options, DWORD* error_out) {
     STARTUPINFOEXW startup_ex{};
@@ -63,8 +59,6 @@ std::optional<SpawnedProcess> Process::spawn(const SpawnOptions& options, DWORD*
         startup.hStdOutput = options.std_output;
         startup.hStdError = options.std_error;
         for (HANDLE h : {options.std_input, options.std_output, options.std_error}) {
-            // The list may not name a handle twice (stdout and stderr are
-            // usually the same pipe) or name a null one.
             if (h != nullptr && h != INVALID_HANDLE_VALUE &&
                 std::find(std_handles.begin(), std_handles.end(), h) == std_handles.end()) {
                 std_handles.push_back(h);
@@ -76,7 +70,6 @@ std::optional<SpawnedProcess> Process::spawn(const SpawnOptions& options, DWORD*
         startup.wShowWindow = SW_HIDE;
     }
 
-    // lpDesktop is an LPWSTR; give it a buffer of its own.
     std::vector<wchar_t> desktop(options.desktop.begin(), options.desktop.end());
     desktop.push_back(L'\0');
     if (!options.desktop.empty()) {
@@ -100,14 +93,11 @@ std::optional<SpawnedProcess> Process::spawn(const SpawnOptions& options, DWORD*
         flags |= CREATE_UNICODE_ENVIRONMENT;
     }
 
-    // CreateProcess*W writes through the command-line buffer, so it must
-    // be a mutable copy.
     std::vector<wchar_t> command(options.command_line.begin(), options.command_line.end());
     command.push_back(L'\0');
 
     const wchar_t* application =
         options.application.empty() ? nullptr : options.application.c_str();
-    // Only read, whatever the parameter's constness says.
     void* environment =
         options.environment.empty() ? nullptr : const_cast<wchar_t*>(options.environment.data());
     const wchar_t* working_dir =
@@ -137,4 +127,4 @@ std::optional<SpawnedProcess> Process::spawn(const SpawnOptions& options, DWORD*
     return out;
 }
 
-}  // namespace lsw::agent::win
+}

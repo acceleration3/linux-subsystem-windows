@@ -16,7 +16,7 @@ void repolish(QWidget* widget) {
     widget->style()->polish(widget);
 }
 
-}  // namespace
+}
 
 QLabel* Widgets::caption(const QString& text) {
     auto* label = new QLabel(text.toUpper());
@@ -35,6 +35,13 @@ QLabel* Widgets::prose(const QString& text) {
     auto* label = new QLabel(text);
     label->setObjectName(QString::fromLatin1(Theme::Role::kBody));
     label->setWordWrap(true);
+    return label;
+}
+
+QLabel* Widgets::step_line(const QString& mark, const QString& text, const char* tone) {
+    auto* label = new QLabel(QStringLiteral("%1  %2").arg(mark, text));
+    label->setWordWrap(true);
+    set_flag(label, Theme::Tone::kProperty, tone != nullptr ? QVariant(tone) : QVariant());
     return label;
 }
 
@@ -69,4 +76,4 @@ void Widgets::bring_to_front(QWidget* window) {
     window->activateWindow();
 }
 
-}  // namespace lsw::host::ui
+}

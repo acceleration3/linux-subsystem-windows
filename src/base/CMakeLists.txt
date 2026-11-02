@@ -1,14 +1,10 @@
-# lsw_base — cross-cutting primitives every other module may depend on.
-#
-#   lsw/base/log.hpp      LSW_* logging macros (header-only)
-#   lsw/base/logger.hpp   Logger — process-wide sink/level configuration
-#
-# Membership rule: no LSW domain concepts, no Qt, no platform APIs beyond
-# the C++ standard library. Anything that knows what a "VM" or a "frame"
-# is belongs in a higher module.
-
 add_library(lsw_base STATIC
+    src/crash_handler.cpp
+    src/log_format.cpp
+    src/log_tail.cpp
     src/logger.cpp
+    src/repeat_collapser.cpp
+    src/rolling_file.cpp
 )
 add_library(LSW::Base ALIAS lsw_base)
 

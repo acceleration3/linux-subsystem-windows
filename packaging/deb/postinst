@@ -1,5 +1,4 @@
 #!/bin/sh
-# Says what a VM's first start needs; there is nothing to configure.
 set -e
 if [ "$1" = configure ] && [ -z "$2" ]; then
     cat <<'MSG'

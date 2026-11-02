@@ -52,7 +52,7 @@ private:
     QTimer timer_;
 };
 
-}  // namespace
+}
 
 std::unique_ptr<rwin::host::EventLoop::Watch> QtEventLoop::watch(int fd, short events, Ready ready) {
     return std::make_unique<QtWatch>(fd, events, std::move(ready));
@@ -62,5 +62,5 @@ std::unique_ptr<rwin::host::EventLoop::Timer> QtEventLoop::timer(std::function<v
     return std::make_unique<QtTimer>(std::move(fired));
 }
 
-}  // namespace lsw::host::manager
+}
 #endif

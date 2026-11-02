@@ -30,6 +30,3 @@ jobs:
             --xml third_party/Vulkan-Headers/registry/vk.xml \
             --out /tmp/lsw-gen-check \
             --verbose
-
-      # In Phase 1+ this step diffs /tmp/lsw-gen-check against the
-      # committed generated/ tree and fails on mismatch.

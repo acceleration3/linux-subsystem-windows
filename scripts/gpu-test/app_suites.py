@@ -1,26 +1,3 @@
-"""Real applications on one GPU, in the guest gpu_matrix.py booted on it.
-
-  wgc       remotewin-wgcbench in its four forms (a Direct3D 11 or a GDI
-            window, the monitor or the window captured), judged by its own
-            PASS line, and the desktop still composed after each
-  affinity  Affinity (Canva), installed from its MSIX: the adapters and the
-            OpenCL device its log says it found, and its window drawn by WPF
-  resolve   DaVinci Resolve: the OpenCL device gpudetect.bin says it chose
-  hl2       Half-Life 2 (Steam 220): sixty seconds of the train ride that
-            opens d1_trainstation_01, which plays itself, timed by PresentMon
-  dsr       Dark Souls Remastered (Steam 570940): its title screen and
-            menus, timed by PresentMon
-
-The applications are the user's own installs in the VM (Steam signed in,
-Canva signed in where its pages need it): a suite whose application is
-missing fails and says so. Every suite also fails on a GPU reset during it
-(a LiveKernelEvent or a display driver event 4101 in the guest's logs).
-
-Programs with windows run in the console session through a scheduled task
-whose launcher shows no window of its own, so nothing on the desktop takes
-the focus from the application; screenshots and input are guest/shot.ps1
-and guest/input.ps1.
-"""
 import csv
 import io
 import json
@@ -44,17 +21,10 @@ APP_SUITES = ("wgc", "affinity", "resolve", "hl2", "dsr")
 WGC_FORMS = (("d3d", "monitor"), ("gdi", "monitor"), ("d3d", "window"), ("gdi", "window"))
 WGC_SECONDS = 15
 DARK_TASKBAR = 20.0
-"""A taskbar darker than this on average is not being composed."""
 BLACK_WINDOW = 0.2
-"""A window with less than this share of lit pixels is not being drawn."""
 GAME_SECONDS = 60
 GROWTH_MIB = 512
-"""What a game may commit while it plays one scene: streaming, not a leak. Dark
-Souls Remastered leaking 1 MiB a frame grew some 3.7 GB in a minute."""
 SETTLE_SECONDS = 60
-"""How long a fresh boot is left alone before a timed suite: Windows' own
-start-up work (indexing, updates, the shell's first paint) shows in a capture
-benchmark as gaps of its own."""
 
 
 def say(line):
@@ -62,9 +32,6 @@ def say(line):
 
 
 class HiddenConsole(suite.ConsoleProgram):
-    """ConsoleProgram whose task starts its script through hidden.vbs, so no
-    console window appears over (and takes the focus from) the desktop."""
-
     task = "avapps"
     script = GUEST_APPS + "\\console.cmd"
 
@@ -82,9 +49,6 @@ class HiddenConsole(suite.ConsoleProgram):
 
 
 class Desktop:
-    """The logged-on user's desktop in one boot of the guest: programs run in
-    it, its picture read back, input sent to it."""
-
     def __init__(self, guest, out, guest_name):
         self.guest = guest
         self.out = out
@@ -99,10 +63,6 @@ class Desktop:
             self.guest.share.put(ASSETS / asset, f"{GUEST_APPS}\\{asset}")
 
     def run(self, command, timeout=120):
-        """`command` in the console session: its exit code and output.
-
-        A file of its own each run: a program the command started keeps the
-        redirection open, and the next run's redirection into it would fail."""
         self.runs += 1
         output = f"{GUEST_APPS}\\console-out-{self.runs}.txt"
         code = HiddenConsole(self.guest.agent, timeout).run(command, output, "desktop")
@@ -113,15 +73,12 @@ class Desktop:
         return code, text
 
     def start(self, command):
-        """`command` started in the console session without waiting for it."""
         return self.run(f'start "" {command}', 60)
 
     def powershell(self, script, timeout=300):
         return self.guest.powershell(script, timeout)
 
     def screenshot(self, name, process=None):
-        """The screen or `process`'s window into out/NAME.png, and what
-        shot.ps1 measured of it ({"lit": .., "taskbar": ..})."""
         guest_png = f"{GUEST_APPS}\\{name}.png"
         _, text = self.run(f"powershell -NoProfile -ExecutionPolicy Bypass -File {GUEST_APPS}\\shot.ps1 "
                            f"{guest_png}" + (f" {process}" if process else ""), 120)
@@ -146,10 +103,6 @@ class Desktop:
         return text.strip().splitlines()[-1] if text.strip() else ""
 
     def resets_since(self, since):
-        """GPU resets the guest had after `since`: the dumps Windows writes
-        for a TDR or another live kernel event, and display driver 4101s.
-        Not Windows Error Reporting's 1001s - it sends old reports again
-        after a reboot, dated when sent."""
         after = f"[DateTime]::Parse('{since}').ToUniversalTime()" if since else "(Get-Date).AddHours(-1).ToUniversalTime()"
         _, text = self.powershell(
             f"$after = {after}; "
@@ -160,7 +113,6 @@ class Desktop:
         return [line.strip() for line in text.splitlines() if line.strip()]
 
     def presentmon(self, process, seconds, name):
-        """PresentMon on `process` for `seconds`: frame times in ms."""
         exe = f"{GUEST_APPS}\\PresentMon.exe"
         if not self.guest.share.exists(exe):
             self.powershell(f"$ProgressPreference='SilentlyContinue'; Invoke-WebRequest {PRESENTMON_URL} -OutFile {exe}",
@@ -182,7 +134,6 @@ class Desktop:
 
 
 def frame_metrics(times):
-    """Average fps, 1% low fps and the 99th percentile frame time of a run."""
     if not times:
         return {}
     ordered = sorted(times)
@@ -193,9 +144,6 @@ def frame_metrics(times):
 
 
 def names_gpu(found, gpu, guest_name):
-    """Whether a name an application reported is this GPU: the guest's own
-    name for the adapter ("AMD Radeon(TM) Graphics" for a Radeon 610M), or
-    the host's."""
     found = found.lower()
     return any(name and (name in found or found in name)
                for name in (guest_name.lower(), gpu.name.split(" (")[0].lower()))
@@ -209,8 +157,6 @@ def verdict(failures, notes=(), metrics=None, log=None):
         result["log"] = str(log)
     return result
 
-
-# ------------------------------------------------------------------ the suites
 
 def run_wgc(desktop, gpu):
     desktop.guest.share.put(WGC_BENCH, f"{GUEST_APPS}\\wgcbench.exe")
@@ -240,7 +186,6 @@ def run_wgc(desktop, gpu):
 
 
 def affinity_session(text):
-    """The last session in Affinity's Log.txt: what it found, by section."""
     session = text[text.rfind("] Affinity 3"):] if "] Affinity 3" in text else text
     devices = re.findall(r"\[OpenCL\] Found \d+ devices for platform ([^\r\n:]+):\r?\n([^\r\n]+)", session)
     dxgi = re.search(r"\[DXGI\] Enumerating adapters\r?\n(.*?)(?:\r?\n\[|\Z)", session, re.S)
@@ -323,8 +268,6 @@ def steam_ready(desktop, app):
 
 
 def run_game(desktop, app, process, arguments, ready, name):
-    """Steam app `app` launched with `arguments`, `ready(desktop)` waited for,
-    then timed for GAME_SECONDS."""
     missing = steam_ready(desktop, app)
     if missing:
         return verdict([{"case": "install", "detail": missing}])
@@ -357,7 +300,6 @@ def run_game(desktop, app, process, arguments, ready, name):
 
 
 def private_bytes(desktop, process):
-    """What `process` has committed for itself, or None when it is not running."""
     _, text = desktop.powershell(f"(Get-Process {process} -ErrorAction SilentlyContinue"
                                  " | Select-Object -First 1).PrivateMemorySize64", 60)
     text = text.strip()
@@ -365,7 +307,6 @@ def private_bytes(desktop, process):
 
 
 def hl2_ready(desktop):
-    """The map is in: the train ride runs from here by itself."""
     log = f"{STEAM}\\steamapps\\common\\Half-Life 2\\hl2\\console.log"
     deadline = time.monotonic() + 240
     while time.monotonic() < deadline:
@@ -389,7 +330,6 @@ def run_hl2(desktop, gpu):
 
 
 def dsr_ready(desktop):
-    """The title screen, after the logos."""
     deadline = time.monotonic() + 180
     while time.monotonic() < deadline:
         time.sleep(10)
@@ -408,7 +348,6 @@ RUNNERS = {"wgc": run_wgc, "affinity": run_affinity, "resolve": run_resolve, "hl
 
 
 def run_app_suite(name, guest, out, gpu, guest_name):
-    """Suite `name` on `gpu`, whose adapter the guest calls `guest_name`."""
     say(f"suite {name}")
     desktop = Desktop(guest, out, guest_name)
     try:

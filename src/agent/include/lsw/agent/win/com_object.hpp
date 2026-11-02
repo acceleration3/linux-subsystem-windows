@@ -12,19 +12,6 @@
 #include <utility>
 
 namespace lsw::agent::win {
-
-// IUnknown for a COM object the agent implements itself: QueryInterface
-// over ``Interfaces``, and a thread-safe reference count that deletes the
-// object when it reaches zero.
-//
-// The UIA event handlers each carried their own copy of these three
-// methods, identical but for the interface name — boilerplate that is
-// easy to get subtly wrong (a QueryInterface that forgets IUnknown, a
-// non-atomic count on an object called from UIA's thread pool) and has
-// no reason to exist more than once.
-//
-// Objects start with one reference, owned by whoever created them; see
-// ``make_com_object``.
 template<class... Interfaces>
 class ComObject : public Interfaces... {
 public:
@@ -36,8 +23,6 @@ public:
             return E_POINTER;
         }
         if (iid == __uuidof(IUnknown)) {
-            // Through the first interface: with several, IUnknown is
-            // ambiguous, and COM requires one identity for it.
             *out = static_cast<IUnknown*>(static_cast<First*>(this));
         } else if (!(... || match<Interfaces>(iid, out))) {
             *out = nullptr;
@@ -76,8 +61,6 @@ private:
     std::atomic<ULONG> refs_{1};
 };
 
-// Construct a ComObject-derived ``T`` and take over its initial
-// reference, so nothing has to remember to Release it.
 template<class T, class... Args>
 [[nodiscard]] ComPtr<T> make_com_object(Args&&... args) {
     ComPtr<T> object;
@@ -85,4 +68,4 @@ template<class T, class... Args>
     return object;
 }
 
-}  // namespace lsw::agent::win
+}

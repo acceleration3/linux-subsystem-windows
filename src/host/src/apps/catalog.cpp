@@ -15,10 +15,6 @@
 namespace lsw::host::apps {
 
 namespace {
-
-// Nothing for a reply that is not a listing: an empty list would say the
-// guest has no applications, and the store drops what the agent stops
-// reporting.
 std::optional<QList<AppEntry>> parse_reply(const link::AgentReply& reply) {
     if (!reply.ok) {
         LSW_WARN("list_apps: {}", reply.error);
@@ -56,9 +52,6 @@ std::optional<QList<AppEntry>> parse_reply(const link::AgentReply& reply) {
     return out;
 }
 
-// The file types of each store application, by lowercase AUMID. Nothing for
-// a reply that is not a listing, so that a refused request does not clear
-// what is known.
 std::optional<QHash<QString, QStringList>> parse_store_reply(const link::AgentReply& reply) {
     if (!reply.ok || !reply.body.is_object() || !reply.body.contains("apps") ||
         !reply.body["apps"].is_array()) {
@@ -79,14 +72,10 @@ std::optional<QHash<QString, QStringList>> parse_store_reply(const link::AgentRe
     return out;
 }
 
-}  // namespace
+}
 
 AppCatalog::AppCatalog(link::AgentRpcClient& rpc, QObject* parent)
     : QObject(parent), rpc_(rpc) {
-    // An install or an uninstall in Windows changes its Start menu; the
-    // agent says so (after the installer is quiet), and the list is read
-    // again without anybody pressing Refresh. The handler runs on the
-    // reader thread.
     retry_.setSingleShot(true);
     connect(&retry_, &QTimer::timeout, this, [this] {
         if (online_ && rpc_.has_target()) {
@@ -98,11 +87,7 @@ AppCatalog::AppCatalog(link::AgentRpcClient& rpc, QObject* parent)
     });
 }
 
-// The user's Start menu and every icon in it, which a slow guest takes well
-// over the default call timeout to read.
 constexpr std::chrono::milliseconds kListTimeout{60000};
-// How long after a read that failed the next is tried while the agent answers:
-// nobody logged on yet, mostly.
 constexpr int kRetryMs = 15000;
 
 void AppCatalog::set_agent_online(bool online) {
@@ -113,17 +98,12 @@ void AppCatalog::set_agent_online(bool online) {
 }
 
 void AppCatalog::refresh() {
-    // One at a time: an installer's burst of changes, or a click, while one
-    // is in flight is a read after it, not beside it.
     if (refreshing_) {
         again_ = true;
         return;
     }
     refreshing_ = true;
     retry_.stop();
-    // The worker holds the channel, not ``this``: the catalog may be gone
-    // by the time the agent answers, and ``then(this, …)`` drops the
-    // continuation if so.
     QtConcurrent::run([&rpc = rpc_] {
         return parse_reply(rpc.request(linkproto::cmd::kListApps, nlohmann::json::object(), kListTimeout));
     }).then(this, [this](std::optional<QList<AppEntry>> entries) {
@@ -141,8 +121,6 @@ void AppCatalog::refresh() {
             refresh();
         }
     });
-    // The packaged applications' file types too, which only the user's
-    // session knows; the smallest icon, since only the types are wanted.
     QtConcurrent::run([&rpc = rpc_] {
         return parse_store_reply(rpc.request(linkproto::cmd::kListStoreApps, {{"icon_size", 16}}, kListTimeout));
     }).then(this, [this](std::optional<QHash<QString, QStringList>> extensions) {
@@ -152,4 +130,4 @@ void AppCatalog::refresh() {
     });
 }
 
-}  // namespace lsw::host::apps
+}

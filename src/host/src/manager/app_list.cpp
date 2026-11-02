@@ -28,31 +28,20 @@
 namespace lsw::host::manager {
 
 namespace {
-// What the manager has opened of an application, in a tile's
-// kLaunchRole: nothing, being opened, or mirrored here.
 enum class LaunchMark : int { None, Opening, Running };
 constexpr int kLaunchRole = Qt::UserRole + 1;
-// The mark sits on the icon's bottom-right corner, ringed in the grid's
-// own ground so it reads as cut out of the icon.
 constexpr qreal kMarkPx = 15.0;
 constexpr qreal kMarkRing = 2.0;
 constexpr qreal kMarkOverhang = 4.0;
-// A store application's icon kept for the launcher, which HiDPI menus
-// draw large; the list's own is the size of its rows.
 constexpr int kStoreIconPx = 256;
 
-// The tile's width is fixed so the columns stay aligned; its height is
-// what its name needs. A row of the grid is as tall as its tallest tile.
 constexpr int kTileWidth = 96;
 constexpr int kTilePad = 4;
 constexpr int kTileTop = 6;
 constexpr int kIconSide = 64;
 constexpr int kIconGap = 4;
-// A one line tile is this tall, which is what every tile used to be.
 constexpr int kTileMinHeight = 104;
 
-// The name laid out in the tile's text width, breaking at words and, for a
-// word wider than the tile, anywhere: nothing is elided.
 int lay_out_name(QTextLayout& layout, const QString& name, const QFont& font) {
     QTextOption option;
     option.setAlignment(Qt::AlignHCenter);
@@ -74,9 +63,6 @@ int lay_out_name(QTextLayout& layout, const QString& name, const QFont& font) {
     return static_cast<int>(std::ceil(height));
 }
 
-// A tile: the icon at the top, the whole name under it, and the launch
-// mark over the icon's corner. The icon and the mark keep their place
-// whatever the name; the tile grows downward.
 class AppTileDelegate : public QStyledItemDelegate {
 public:
     using QStyledItemDelegate::QStyledItemDelegate;
@@ -90,7 +76,6 @@ public:
 
     void paint(QPainter* p, const QStyleOptionViewItem& option,
                const QModelIndex& index) const override {
-        // The ground (hover, selection) is the style's, over the whole tile.
         QStyleOptionViewItem ground = option;
         initStyleOption(&ground, index);
         ground.text.clear();
@@ -138,7 +123,7 @@ public:
         p->restore();
     }
 };
-}  // namespace
+}
 
 AppListWidget::AppListWidget(apps::AppConfigStore& store, link::AgentRpcClient& rpc,
                              apps::GuestAppLauncher& launcher, QWidget* parent)
@@ -147,13 +132,8 @@ AppListWidget::AppListWidget(apps::AppConfigStore& store, link::AgentRpcClient& 
     root->setContentsMargins(0, 0, 0, 0);
 
     toolbar_ = new QToolBar;
-    // Text rather than the platform's icon theme: those icons arrive in
-    // whatever colours the user's theme picked, which on a dark panel is
-    // a pair of bright stickers.
     auto* refresh_act = toolbar_->addAction(QStringLiteral("\u21bb"));
     refresh_act->setToolTip(QStringLiteral("Refresh"));
-    // Two kinds of application, added two ways: a program by its path,
-    // and a store application by its ID from Windows' own list.
     auto* add_menu = new QMenu(this);
     auto* regular_act = add_menu->addAction(QStringLiteral("Add a regular app"));
     regular_act->setToolTip(QStringLiteral("A program or shortcut, by its path in Windows"));
@@ -173,10 +153,6 @@ AppListWidget::AppListWidget(apps::AppConfigStore& store, link::AgentRpcClient& 
     list_->setMovement(QListView::Static);
     list_->setResizeMode(QListView::Adjust);
     list_->setIconSize({64, 64});
-    // No grid and no uniform size: a tile is as wide as the columns need
-    // and as tall as its whole name (AppTileDelegate::sizeHint), and a row
-    // of the layout is as tall as its tallest tile. The delegate's sizes
-    // include the old 96 x 104 pitch, so there is no spacing to add.
     list_->setSpacing(0);
     list_->setWordWrap(true);
     list_->setContextMenuPolicy(Qt::CustomContextMenu);
@@ -188,9 +164,6 @@ AppListWidget::AppListWidget(apps::AppConfigStore& store, link::AgentRpcClient& 
     connect(&catalog_, &apps::AppCatalog::loaded, this, &AppListWidget::on_loaded);
     connect(&catalog_, &apps::AppCatalog::store_extensions_loaded, &store_,
             &apps::AppConfigStore::set_store_extensions);
-    // Use itemDoubleClicked rather than itemActivated — the latter is
-    // style-dependent (single-click on some platforms, double on
-    // others). Explicit double-click is what the user sees.
     connect(list_, &QListWidget::itemDoubleClicked, this, &AppListWidget::on_item_activated);
     for (const auto key : {Qt::Key_Return, Qt::Key_Enter}) {
         auto* open = new QShortcut(QKeySequence(key), list_);
@@ -202,8 +175,6 @@ AppListWidget::AppListWidget(apps::AppConfigStore& store, link::AgentRpcClient& 
     connect(refresh_act, &QAction::triggered, this, &AppListWidget::on_refresh_clicked);
     connect(regular_act, &QAction::triggered, this, &AppListWidget::on_new_clicked);
     connect(store_act, &QAction::triggered, this, &AppListWidget::add_store_app);
-    // The XDG menu follows the store too, but App owns that: it reapplies
-    // the integrations on every change, whether or not this grid exists.
     connect(&store_, &apps::AppConfigStore::changed, this, &AppListWidget::rebuild);
 
     rebuild();
@@ -211,9 +182,9 @@ AppListWidget::AppListWidget(apps::AppConfigStore& store, link::AgentRpcClient& 
 
 void AppListWidget::set_target(const QUuid& vm_uuid) {
     uuid_ = vm_uuid;
-    rebuild();  // show whatever's already in the store immediately
+    rebuild();
     if (rpc_.has_target()) {
-        catalog_.refresh();  // and kick a fresh enumeration
+        catalog_.refresh();
     }
 }
 
@@ -226,10 +197,6 @@ void AppListWidget::set_agent_online(bool online, int boot_id) {
     const bool came_back = online && !agent_online_;
     agent_online_ = online;
     catalog_.set_agent_online(online);
-    // The list is the user's Start menu, which exists once somebody is
-    // logged on: read it when the agent first answers in a boot, and not
-    // again when only the agent came back inside the same one (a swap of it
-    // changes nothing in the Start menu, and the read is not cheap).
     if (came_back && rpc_.has_target() && (boot_id < 0 || boot_id != refreshed_boot_)) {
         refreshed_boot_ = boot_id;
         catalog_.refresh();
@@ -279,7 +246,7 @@ void AppListWidget::refresh() {
 }
 
 void AppListWidget::on_new_clicked() {
-    apps::AppConfig blank;  // empty id -> dialog computes one on save
+    apps::AppConfig blank;
     open_config_dialog(blank);
 }
 
@@ -297,8 +264,6 @@ void AppListWidget::add_store_app() {
     }
     store_.upsert(chosen);
     select(chosen.id);
-    // The list's icon is the size of its rows; the launcher wants Windows'
-    // largest.
     const QString id = chosen.id;
     rpc_.request_async(linkproto::cmd::kListStoreApps,
                        {{"aumid", chosen.aumid.toStdString()}, {"icon_size", kStoreIconPx}}, this,
@@ -331,13 +296,6 @@ void AppListWidget::select(const QString& id) {
 
 void AppListWidget::on_loaded(const QList<apps::AppEntry>& entries) {
     store_.merge_from_agent(entries);
-    // ``rebuild`` runs via the store's ``changed`` if the merge actually
-    // mutated anything. The desktop-launcher sync, on the other hand,
-    // has to run on every refresh — the user may have hand-deleted a
-    // .desktop file, or the catalog may have produced identical icon
-    // bytes (no store change → no on_store_changed signal) but the
-    // on-disk PNGs still need to be rewritten because the agent now
-    // produces a different format (e.g. higher-resolution alpha).
     apps::DesktopLauncher::sync(store_.configs());
 }
 
@@ -356,8 +314,6 @@ void AppListWidget::on_item_activated(QListWidgetItem* item) {
         LSW_WARN("app_list: no config for id={}", id.toStdString());
         return;
     }
-    // Straight to an agent that would only drop the request, the launch
-    // fails at once; it waits for the guest instead.
     if (!agent_online_) {
         Q_EMIT launch_requested(id);
         return;
@@ -388,8 +344,6 @@ void AppListWidget::on_context_menu(const QPoint& pos) {
         return;
     }
     if (chosen == del_act) {
-        // Store::remove triggers ``changed``, on which App reapplies the
-        // integrations — the now-missing entry is pruned in that pass.
         store_.remove(id);
         return;
     }
@@ -412,11 +366,9 @@ void AppListWidget::open_config_dialog(const apps::AppConfig& initial) {
         }
         return;
     }
-    // Edited, it is the user's: the agent no longer reporting its program
-    // is not a reason to drop it.
     apps::AppConfig edited = dlg.result();
     edited.discovered_via_agent = false;
     store_.upsert(std::move(edited));
 }
 
-}  // namespace lsw::host::manager
+}

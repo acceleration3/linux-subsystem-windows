@@ -15,17 +15,11 @@
 namespace lsw::host::mirror {
 
 namespace {
-
-// remotewin's exit status for a guest half from another build: the two
-// halves say which features they speak first, and refuse a peer without
-// what a mirror needs rather than misread it (remotewin's Hello).
 constexpr int kExitWireMismatch = 3;
 
-// The launcher entry the desktop's window presents as: the manager's
-// own, since it is the manager's window onto the guest.
 constexpr const char* kManagerDesktopId = "lsw-manager";
 
-}  // namespace
+}
 
 WindowMirror* WindowMirror::of_application(link::AgentRpcClient& rpc, const Application& application,
                                            QObject* parent) {
@@ -68,13 +62,17 @@ WindowMirror::WindowMirror(link::AgentRpcClient& rpc, QString what, QStringList 
     : QObject(parent), rpc_(rpc), what_(std::move(what)),
       host_arguments_(std::move(host_arguments)), guest_pid_(guest_pid), desktop_(desktop),
       log_name_(std::move(log_name)), activation_token_(std::move(activation_token)),
-      host_end_(new QProcess(this)), deadline_(this) {
+      host_end_(new QProcess(this)),
+      log_(desktop ? QStringLiteral("desktop")
+                   : (log_name_.isEmpty() ? QStringLiteral("app-%1").arg(guest_pid_) : log_name_)),
+      deadline_(this) {
     deadline_.setSingleShot(true);
     connect(&deadline_, &QTimer::timeout, this, [this] {
         fail(QStringLiteral("No window appeared within 60 seconds. The application may still "
                             "be running in Windows; open the guest desktop or try again."));
     });
     connect(host_end_, &QProcess::readyReadStandardOutput, this, &WindowMirror::read_status);
+    connect(host_end_, &QProcess::readyReadStandardError, this, &WindowMirror::read_log);
     connect(host_end_, &QProcess::finished, this, &WindowMirror::on_host_end_finished);
     connect(host_end_, &QProcess::errorOccurred, this, [this](QProcess::ProcessError error) {
         if (error == QProcess::FailedToStart || error == QProcess::Crashed) {
@@ -96,11 +94,18 @@ WindowMirror::~WindowMirror() {
     }
 }
 
+void WindowMirror::read_log() {
+    log_.consume(host_end_->readAllStandardError());
+}
+
 void WindowMirror::on_host_end_finished(int code, QProcess::ExitStatus status) {
     read_status();
+    read_log();
+    log_.finish();
+    LSW_INFO("mirror: {} exited with code {}{} after {:.1f} s", what_.toStdString(), code,
+             status == QProcess::CrashExit ? " (crashed)" : "", static_cast<double>(running_.elapsed()) / 1000.0);
     deadline_.stop();
     if (status == QProcess::NormalExit && code == kExitWireMismatch) {
-        // remotewin has said what the guest half lacks on its own stderr, just above.
         LSW_WARN("mirror: {} refused the guest's remotewin-guest.exe: it is from another "
                  "build than this manager's remotewin. Redeploy it (scripts/redeploy-agent.sh, "
                  "or the redeploy_agent MCP tool)",
@@ -133,19 +138,11 @@ bool WindowMirror::start() {
     started_ = true;
     QStringList arguments{QStringLiteral("--managed"), QStringLiteral("--port"),
                           QStringLiteral("0")};
-    // The GPU device's export socket: with it, and on the GPU the guest's
-    // surfaces are on, the guest's frames reach the mirror as host GPU
-    // memory instead of pixels over the guest's network. A VM defined
-    // without one, or a QEMU that is not listening, is a mirror that takes
-    // pixels, which remotewin settles for itself.
     if (const QString socket = vm::ExportSocket::path(); !socket.isEmpty()) {
         arguments << QStringLiteral("--export-socket") << socket;
     }
     arguments << host_arguments_;
-    // The mirror's own diagnostics belong beside the manager's. The
-    // launcher's activation token is its first window's to use, and no
-    // other token reaches it.
-    host_end_->setProcessChannelMode(QProcess::ForwardedErrorChannel);
+    host_end_->setProcessChannelMode(QProcess::SeparateChannels);
     QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
     environment.remove(QStringLiteral("XDG_ACTIVATION_TOKEN"));
     if (!activation_token_.isEmpty()) {
@@ -153,6 +150,11 @@ bool WindowMirror::start() {
     }
     host_end_->setProcessEnvironment(environment);
     deadline_.start(60000);
+    log_.roll_for_start();
+    running_.start();
+    LSW_INFO("mirror: starting {} (log mirrors/{}.log)", what_.toStdString(),
+             log_.name().toStdString());
+    LSW_DEBUG("mirror: {} {}", exe.toStdString(), arguments.join(QLatin1Char(' ')).toStdString());
     host_end_->start(exe, arguments);
     return true;
 }
@@ -209,6 +211,7 @@ void WindowMirror::start_guest(quint16 port) {
                                fail(QStringLiteral("The guest window mirror could not start: %1")
                                         .arg(QString::fromStdString(reply.error)));
                            } else if (reply.ok && !failed_) {
+                               LSW_DEBUG("mirror: the guest half of {} started", what_.toStdString());
                                guest_confirmed_ = true;
                                announce_ready();
                            }
@@ -219,6 +222,8 @@ void WindowMirror::announce_ready() {
     if (failed_ || ready_ || !guest_confirmed_ || !first_frame_)
         return;
     ready_ = true;
+    LSW_INFO("mirror: {} is ready after {:.1f} s", what_.toStdString(),
+             static_cast<double>(running_.elapsed()) / 1000.0);
     deadline_.stop();
     Q_EMIT ready();
 }
@@ -233,8 +238,6 @@ void WindowMirror::fail(const QString& reason) {
     Q_EMIT failed(reason);
 }
 
-// A token lets remotewin activate the window itself (xdg_activation_v1),
-// which every compositor honours; without one, KWin's scripting is asked.
 void WindowMirror::raise(const QString& activation_token) const {
     if (host_end_->state() != QProcess::Running) {
         return;
@@ -250,4 +253,4 @@ void WindowMirror::raise(const QString& activation_token) const {
     }
 }
 
-}  // namespace lsw::host::mirror
+}

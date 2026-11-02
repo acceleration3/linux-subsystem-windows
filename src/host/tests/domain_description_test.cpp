@@ -1,10 +1,3 @@
-// What the manager shows as the running machine's graphics, cores and
-// disk is read back out of the domain definition (DomainDescription),
-// not out of the settings. This pins that reading: the virtio-gpu-av-pci
-// argument parser against DomainXmlBuilder's own output, against XML in
-// the shape libvirt hands back for a running domain, and the qcow2
-// header the disk size comes from. No libvirt, no VM.
-
 #include "lsw/host/vm/domain_description.hpp"
 #include "lsw/host/vm/domain_xml_builder.hpp"
 #include "lsw/host/vm/lifecycle.hpp"
@@ -31,9 +24,6 @@ void check(bool ok, const char* label) {
     }
 }
 
-// libvirt's live XML for a running domain, trimmed to what is read:
-// memory in KiB, the NVMe system disk after a cdrom, and the GPU lines
-// with their doubled commas, one render-only.
 const char* const kLiveXml = R"(<domain type='kvm' id='3' xmlns:qemu='http://libvirt.org/schemas/domain/qemu/1.0'>
   <name>lsw</name>
   <memory unit='KiB'>16777216</memory>
@@ -62,12 +52,11 @@ const char* const kLiveXml = R"(<domain type='kvm' id='3' xmlns:qemu='http://lib
   </qemu:commandline>
 </domain>)";
 
-}  // namespace
+}
 
 int main(int argc, char** argv) {
     QCoreApplication app{argc, argv};
 
-    // ---- the option splitter and sizes -------------------------------
     check(DomainDescription::split_options(QStringLiteral("a,id=x,modes=1x1,,2x2,last")) ==
               QStringList({QStringLiteral("a"), QStringLiteral("id=x"),
                            QStringLiteral("modes=1x1,2x2"), QStringLiteral("last")}),
@@ -81,7 +70,6 @@ int main(int argc, char** argv) {
           "a bare number is bytes");
     check(DomainDescription::size_mib(QStringLiteral("lots")) == 0, "nonsense is 0");
 
-    // ---- round trip through the builder ------------------------------
     VmRecord vm;
     vm.uuid = QUuid::createUuid();
     vm.name = QStringLiteral("lsw");
@@ -128,7 +116,6 @@ int main(int argc, char** argv) {
         check(during && during->installing, "the install-time one, with its VGA, is not");
     }
 
-    // No modes, auto: what the line leaves out reads as such.
     inputs.host_gpu_uuid.clear();
     inputs.render_only_gpu_uuids.clear();
     inputs.display_modes.clear();
@@ -138,7 +125,6 @@ int main(int argc, char** argv) {
               && !plain->gpus.first().modes.has_value() && !plain->gpus.first().refresh_millihz.has_value(),
           "auto, no modes, no refresh: read back as such");
 
-    // ---- libvirt's live shape -----------------------------------------
     const auto live = DomainDescription::parse(QString::fromUtf8(kLiveXml));
     check(live.has_value(), "libvirt's live XML parses");
     if (live) {
@@ -154,9 +140,6 @@ int main(int argc, char** argv) {
     }
     check(live && live->usb_devices.isEmpty(), "a definition with no hostdev has no USB devices");
 
-    // ---- passed-through USB devices -------------------------------------
-    // The host's bus and device are in <source>; the <address> after it
-    // is where the guest sees the device, and is not the host's.
     const auto with_usb = DomainDescription::parse(QStringLiteral(
         "<domain><devices>"
         "<hostdev mode='subsystem' type='usb' managed='no'><source>"
@@ -191,7 +174,6 @@ int main(int argc, char** argv) {
     check(!DomainDescription::parse(QStringLiteral("<domain><vcpu>")).has_value(),
           "truncated XML is refused");
 
-    // ---- the disk's size -----------------------------------------------
     QByteArray header(32, '\0');
     header.replace(0, 4, QByteArrayLiteral("QFI\xfb"));
     const quint64 sixty_gib = 60ULL << 30;

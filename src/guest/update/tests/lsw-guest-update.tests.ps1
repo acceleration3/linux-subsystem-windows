@@ -1,26 +1,3 @@
-# lsw-guest-update.tests.ps1 - scenario tests for lsw-guest-update.ps1,
-# run inside the Windows guest as SYSTEM (docs/guest-update.md, "In the
-# guest"). scripts/test-guest-update.sh puts it there and starts it.
-#
-#   lsw-guest-update.tests.ps1 [-ScriptUnderTest <path>] [-LogFile <path>] [-Only <letters>]
-#
-# Each scenario builds a staging directory from the files installed now
-# (so a current stage changes nothing), with a manifest computed from them
-# in the script's format, runs the script under test from it with
-# -NoRestart (the guest is never restarted from here), and checks the
-# outcome in update-result.json, release.json, update.log, the service, port
-# 5102 and the files. What a scenario changed is put back before the next.
-#
-# It is run the way production runs the script: a one-shot scheduled task
-# as SYSTEM, never a child of the agent, which the script stops and starts.
-# Output: one PASS/FAIL line per check in -LogFile, then
-#   SUMMARY: <n> passed, <n> failed
-# as the last line.
-#
-# The script under test is staged from -ScriptUnderTest (default: the
-# installed one), so the installed script is not replaced by the checkout's
-# before it has passed; the installed one is put back after each scenario.
-
 param(
     [string] $ScriptUnderTest = 'C:\ProgramData\LSW\lsw-guest-update.ps1',
     [string] $LogFile = 'C:\ProgramData\LSW\update-tests.log',
@@ -35,7 +12,7 @@ $WorkDir = Join-Path $Lsw 'update-tests-work'
 $BaseDir = Join-Path $WorkDir 'base'
 $ReleaseJson = Join-Path $Lsw 'release.json'
 $ResultJson = Join-Path $Lsw 'update-result.json'
-$UpdateLog = Join-Path $Lsw 'update.log'
+$UpdateLog = Join-Path $Lsw 'logs\update.log'
 $InstalledScript = Join-Path $Lsw 'lsw-guest-update.ps1'
 $PreviousDir = Join-Path $Lsw 'previous'
 $PendingDir = Join-Path $Lsw 'pending-loaders'
@@ -47,8 +24,6 @@ $StepNames = @('verify', 'stop', 'agent and mirror', 'driver', 'loaders', 'share
 
 $script:Passed = 0
 $script:Failed = 0
-
-# ---- reporting ----
 
 function Say([string] $Text) {
     $line = '{0} {1}' -f (Get-Date -Format 'HH:mm:ss'), $Text
@@ -65,8 +40,6 @@ function Check([string] $Label, [bool] $Condition, [string] $Detail = '') {
         Say ('FAIL ' + $Label + $(if ($Detail) { ' :: ' + $Detail } else { '' }))
     }
 }
-
-# ---- reading the guest ----
 
 function Sha([string] $Path) {
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return '' }
@@ -120,7 +93,6 @@ function Format-Steps($Result) {
     return ('ok=' + $Result.ok + ' restart=' + $Result.restart + ' [' + $text + '] ' + $Result.message)
 }
 
-# The recovery actions of the lsw-agent service as sc.exe reports them.
 function Get-Recovery {
     $text = sc.exe qfailure lsw-agent | Out-String
     $reset = ''
@@ -137,9 +109,7 @@ function Get-Pending {
     return $null
 }
 
-# ---- the stage ----
-
-$script:Orig = @{}          # guest path -> sha256 of what is installed at the start
+$script:Orig = @{}
 $script:SharesText = ''
 $script:SavedMarker = $null
 $script:SavedRelease = $null
@@ -160,7 +130,6 @@ function Driver-Lines([hashtable] $Map) {
     return ($lines -join "`n")
 }
 
-# The files that exist now, as the release would list them.
 function Enumerate-Installed {
     $paths = @(
         'C:\ProgramData\LSW\lsw-agent.exe', 'C:\ProgramData\LSW\remotewin-guest.exe',
@@ -180,12 +149,9 @@ function Build-Base {
         New-Item -ItemType Directory -Force -Path (Split-Path -Parent $to) | Out-Null
         Copy-Item -LiteralPath $guest -Destination $to -Force
     }
-    # The script under test is what is staged and run; the installed one is
-    # kept to be put back.
     Copy-Item -LiteralPath $ScriptUnderTest -Destination (Stage-File $BaseDir $InstalledScript) -Force
     Copy-Item -LiteralPath $InstalledScript -Destination (Join-Path $WorkDir 'installed-script.ps1') -Force
 
-    # The mounts the guest has now, so that the shares step changes none.
     $saved = 'C:\Program Files\LSW\virtiofs\shares.txt'
     $script:SharesText = 'none'
     if (Test-Path -LiteralPath $saved) {
@@ -194,8 +160,6 @@ function Build-Base {
     }
 }
 
-# A copy of the base with its manifest; $Tweak may change staged files
-# (and must say so with Stage-Rehash) before the manifest is computed.
 function New-Stage([string] $StageName, [scriptblock] $Tweak = $null) {
     $path = Join-Path $WorkDir $StageName
     if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Recurse -Force }
@@ -220,12 +184,9 @@ function New-Stage([string] $StageName, [scriptblock] $Tweak = $null) {
     return $stageObject
 }
 
-# After a tweak that changed a staged file and means the manifest to follow.
 function Stage-Rehash($StageObject, [string] $GuestPath) {
     $StageObject.Map[$GuestPath] = Sha (Stage-File $StageObject.Path $GuestPath)
 }
-
-# ---- running the script under test ----
 
 function Invoke-Update($StageObject, [string[]] $Extra = @(), [string] $CultureName = '') {
     $logFrom = 0
@@ -260,15 +221,11 @@ function Invoke-Update($StageObject, [string[]] $Extra = @(), [string] $CultureN
     }
 }
 
-# k: the recovery actions are the real ones after every run.
 function Check-Recovery([string] $Label) {
     $have = Get-Recovery
     Check ('k. recovery actions are the real ones after ' + $Label) ($have -eq $WantedRecovery) ('have ' + $have)
 }
 
-# ---- putting back ----
-
-# Everything a scenario may have changed; says what it had to put back.
 function Reset-Guest([string] $Label) {
     $repaired = @()
     Wait-Agent 120 | Out-Null
@@ -284,7 +241,6 @@ function Reset-Guest([string] $Label) {
         Copy-Item -LiteralPath $original -Destination $InstalledScript -Force
     }
 
-    # Pending renames this scenario registered, and the copies they point at.
     $pending = Get-Pending
     $same = ($null -eq $pending -and $null -eq $script:SavedPending) -or
         ($null -ne $pending -and $null -ne $script:SavedPending -and (($pending -join "`n") -eq ($script:SavedPending -join "`n")))
@@ -302,7 +258,6 @@ function Reset-Guest([string] $Label) {
         Get-ChildItem -LiteralPath $PreviousDir -Force | Remove-Item -Recurse -Force
     }
 
-    # Installed files back to what they were; files that were not there go.
     foreach ($guest in $script:Orig.Keys) {
         if ((Sha $guest) -ne $script:Orig[$guest] -and $guest -ne $InstalledScript) {
             if ($guest -like '*lsw-agent.exe' -or $guest -like '*remotewin-guest.exe') {
@@ -331,7 +286,6 @@ function Reset-Guest([string] $Label) {
     if ($repaired.Count -gt 0) { Say ('  put back after ' + $Label + ': ' + ($repaired -join '; ')) }
 }
 
-# True when no installed file differs from what it was at the start.
 function Test-Pristine {
     foreach ($guest in $script:Orig.Keys) {
         if ($guest -ne $InstalledScript -and (Sha $guest) -ne $script:Orig[$guest]) { return $false }
@@ -344,9 +298,6 @@ function Dir-Empty([string] $Path) {
     return @(Get-ChildItem -LiteralPath $Path -Force).Count -eq 0
 }
 
-# ---- scenarios ----
-
-# The checks every run that goes through all steps shares.
 function Check-Steps([string] $Tag, $Run, [hashtable] $Expected) {
     foreach ($stepName in $StepNames) {
         if (-not $Expected.ContainsKey($stepName)) { continue }
@@ -391,7 +342,6 @@ function Scenario-Rejected([string] $Tag, [scriptblock] $Spoil, [string] $Messag
 }
 
 function Scenario-B {
-    # One byte of one staged file differs; the manifest is the original's.
     Scenario-Rejected 'b' {
         param($st)
         $victim = Stage-File $st.Path 'C:\av\loaders\x86\OpenCL.dll'
@@ -409,7 +359,6 @@ function Scenario-C {
 }
 
 function Scenario-D {
-    # An agent that never serves: the script must put the previous one back.
     $bogus = {
         param($st)
         Copy-Item -LiteralPath 'C:\Windows\System32\timeout.exe' -Destination (Stage-File $st.Path 'C:\ProgramData\LSW\lsw-agent.exe') -Force
@@ -491,7 +440,6 @@ function Scenario-H {
         Stage-Rehash $st 'C:\av\loaders\x64\vulkan-1.dll'
     }
     $before = Sha $target
-    # Open for reading only: nobody may write or delete it while held.
     $held = [System.IO.File]::Open($target, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::Read)
     try {
         $run = Invoke-Update $st
@@ -508,7 +456,6 @@ function Scenario-H {
     Check 'h. loaders step done' ((Get-StepStatus $run.Result 'loaders') -eq 'done') (Format-Steps $run.Result)
     Check 'h. agent answering on 5102 afterwards' (Wait-Agent 90)
     Check-Recovery 'h'
-    # Reset-Guest removes the pending rename, its copy and C:\av's loader.
 }
 
 function Scenario-I {
@@ -559,8 +506,6 @@ function Scenario-J {
     }
 }
 
-# ---- the run ----
-
 function Run-Scenario([string] $Letter, [string] $Title, [scriptblock] $Body) {
     if ($Only -and $Only.IndexOf($Letter) -lt 0) { return }
     Say ('--- ' + $Letter + ': ' + $Title)
@@ -579,7 +524,6 @@ Set-Content -LiteralPath $LogFile -Value ('=== lsw-guest-update scenario tests, 
 Say ('PowerShell ' + $PSVersionTable.PSVersion + ' as ' + [System.Security.Principal.WindowsIdentity]::GetCurrent().Name)
 
 try {
-    # What is put back at the end (and between scenarios).
     $script:SavedRelease = @{ Bytes = [System.IO.File]::ReadAllBytes($ReleaseJson); Hash = (Sha $ReleaseJson) }
     $script:SavedResult = @{ Bytes = [System.IO.File]::ReadAllBytes($ResultJson) }
     $script:SavedLog = @{ Length = (Get-Item -LiteralPath $UpdateLog).Length }
@@ -609,7 +553,6 @@ catch {
     Say ('FAIL harness threw :: ' + $_.Exception.Message + ' at ' + $_.InvocationInfo.PositionMessage)
 }
 finally {
-    # The logs the scenarios appended to are put back as they were.
     try {
         if ($script:SavedResult) { [System.IO.File]::WriteAllBytes($ResultJson, $script:SavedResult.Bytes) }
         if ($script:SavedLog) {

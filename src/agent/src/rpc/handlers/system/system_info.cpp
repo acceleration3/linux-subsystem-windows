@@ -6,11 +6,13 @@
 namespace lsw::agent::rpc::handlers {
 
 struct SystemInfoHandler : RpcHandler {
-    nlohmann::json handle(const nlohmann::json& /*params*/, RpcContext& /*ctx*/) override {
+    nlohmann::json handle(const nlohmann::json& , RpcContext& ) override {
         return system::Info::collect();
     }
+
+    [[nodiscard]] log::Level request_level() const override { return log::Level::Trace; }
 };
 
-}  // namespace lsw::agent::rpc::handlers
+}
 
 LSW_REGISTER_RPC(lsw::agent::rpc::handlers::SystemInfoHandler, ::lsw::linkproto::cmd::kSystemInfo)

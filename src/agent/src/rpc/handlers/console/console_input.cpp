@@ -18,7 +18,7 @@ struct ConsoleInputHandler : RpcHandler {
     }
 };
 
-}  // namespace lsw::agent::rpc::handlers
+}
 
 LSW_REGISTER_RPC(lsw::agent::rpc::handlers::ConsoleInputHandler,
                  ::lsw::linkproto::cmd::kConsoleInput)

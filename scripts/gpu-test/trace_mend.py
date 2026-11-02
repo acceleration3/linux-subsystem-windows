@@ -1,24 +1,3 @@
-"""apitrace traces mended where apitrace 14.0 records a call its own
-retracer cannot replay - read and rewritten here, on the host, as data.
-
-IDXGIDevice2::ReclaimResources(NumResources, ppResources, pDiscarded):
-pDiscarded is an array of NumResources BOOLs, one per resource, which
-apitrace's specs/dxgi.py declares Out(Pointer(BOOL)). The tracer records one
-BOOL; d3dretrace sizes the room it passes by the recorded array
-(ScopedAllocator::allocArray), so the runtime writes NumResources BOOLs into
-room for one, and the replay dies of heap corruption (0xC0000374) a few
-calls later - on any driver, WARP's too. Direct2D offers and reclaims its
-own buffers and glyph textures (Affinity's canvas UI), so nearly every
-Affinity trace has such a call. Mending widens each recorded pDiscarded to
-NumResources elements, copies of the recorded one: the replay ignores what
-the runtime writes there, and only the room matters. Calls keep their
-numbers, so frames.txt stays right.
-
-The trace format (apitrace's docs/FORMAT.markdown, version 6): a header,
-then enter and leave events, each a call's details; values typed by a
-leading byte. The file is apitrace's snappy or zstd container; a mended
-trace is written as one zstd frame and padding (write_container).
-"""
 import io
 import pathlib
 import struct
@@ -26,17 +5,13 @@ import struct
 SNAPPY_MAGIC = b"at"
 ZSTD_MAGIC = b"\x28\xb5\x2f\xfd"
 WIDENED = ("::ReclaimResources",)
-"""Methods whose pDiscarded holds NumResources BOOLs."""
 
 
 class TraceError(Exception):
     pass
 
 
-# ------------------------------------------------------------- containers
-
 def snappy_decompress(data):
-    """One raw snappy block (the format apitrace's chunks are)."""
     pos, length, shift = 0, 0, 0
     while True:
         byte = data[pos]
@@ -83,7 +58,6 @@ def snappy_decompress(data):
 
 
 def read_container(path):
-    """A trace file's decompressed stream."""
     data = pathlib.Path(path).read_bytes()
     if data.startswith(SNAPPY_MAGIC):
         out, pos = io.BytesIO(), 2
@@ -99,19 +73,9 @@ def read_container(path):
 
 
 TAIL_PADDING = 4 << 20
-"""Bytes of a skippable zstd frame after a mended trace's data (see write_container)."""
 
 
 def write_container(path, stream):
-    """`stream` as one zstd frame, then a skippable frame of TAIL_PADDING.
-
-    apitrace's reader for a zstd trace without its seek table (meant for a
-    capture cut short) stops at the read that finds the file's end, even
-    with compressed data still in its input buffer (up to 2 MiB): the end of
-    such a trace is lost (the last 1000 to 2000 calls of the Affinity
-    traces, whichever way the data was split into frames). Padding the file
-    with more than that buffer holds, in a frame zstd skips, leaves only
-    padding unread when it stops."""
     from compression import zstd
     compressor = zstd.ZstdCompressor(level=6)
     with open(path, "wb") as out:
@@ -121,16 +85,12 @@ def write_container(path, stream):
         out.write(struct.pack("<II", 0x184D2A50, TAIL_PADDING) + bytes(TAIL_PADDING))
 
 
-# ------------------------------------------------------------------ stream
-
 class Stream:
-    """apitrace's event stream, walked value by value."""
-
     def __init__(self, data):
         self.data = data
         self.pos = 0
-        self.calls = {}     # call sig id -> (name, argument names)
-        self.structs = {}   # struct sig id -> member count
+        self.calls = {}
+        self.structs = {}
         self.enums = set()
         self.bitmasks = set()
         self.frames = set()
@@ -167,12 +127,11 @@ class Stream:
         version = self.uint()
         if version != 6:
             raise TraceError(f"trace format version {version}: only 6 (apitrace 10 and later) is read")
-        self.uint()  # semantic version
+        self.uint()
         while self.string():
             self.string()
 
     def value(self):
-        """Skips one value; an integer's or a bool's is returned."""
         kind = self.byte()
         if kind in (0, 1, 2):
             return (None, False, True)[kind]
@@ -228,7 +187,6 @@ class Stream:
         return None
 
     def function(self):
-        """(name, argument names) of the call whose signature is next."""
         sig = self.uint()
         if sig not in self.calls:
             name = bytes(self.string()).decode("utf-8", "replace")
@@ -255,19 +213,17 @@ class Stream:
 
 
 class Mender:
-    """One pass over a decompressed trace, keeping what it changes."""
-
     def __init__(self, data):
         self.data = data
         self.stream = Stream(data)
-        self.pieces = []    # the mended stream: spans of `data` and new bytes
-        self.copied = 0     # where the next span of `data` starts
-        self.mended = []    # (call number, method, NumResources)
-        self.pending = {}   # call number -> (method, arguments, NumResources) of a call to widen
+        self.pieces = []
+        self.copied = 0
+        self.mended = []
+        self.pending = {}
         self.calls = 0
-        self.open = {}      # call number -> (offset of its enter, method) until its leave
-        self.left = 0       # where the last leave event ended
-        self.dropped = []   # (call number, method) of the calls cut off at the end
+        self.open = {}
+        self.left = 0
+        self.dropped = []
 
     def run(self):
         stream = self.stream
@@ -278,14 +234,8 @@ class Mender:
             try:
                 self.event()
             except IndexError:
-                # The application exited before apitrace flushed its last
-                # calls (apitrace warns "unexpected end of file").
                 end = start
                 break
-        # Calls entered after the last leave and never left were cut off by
-        # the application's exit (apitrace dumps the last "// incomplete"):
-        # d3dretrace replays them anyway, and one cut-off Release crashed it
-        # (affinity/text, on WARP too). The trace ends before them.
         trailing = sorted((offset, number, name) for number, (offset, name) in self.open.items()
                           if offset >= self.left)
         if trailing:
@@ -303,7 +253,7 @@ class Mender:
         kind = stream.byte()
         start = stream.pos - 1
         if kind == 0:
-            stream.uint()  # thread
+            stream.uint()
             name, arguments = stream.function()
             number, count, widened = self.calls, 0, name.endswith(WIDENED)
             self.open[number] = (start, name)
@@ -342,10 +292,6 @@ class Mender:
                 raise TraceError(f"offset {stream.pos - 1}: unknown call detail {detail}")
 
     def widen(self, start, number, name, count):
-        """The array of one BOOL from `start` to the stream's position, as
-        `count` of that BOOL. apitrace records a BOOL as an enum (FALSE,
-        TRUE), whose signature the first one in the trace defines: the
-        copies after the first name it by its id alone."""
         data, end = self.data, self.stream.pos
         if data[start] != 11 or data[start + 1] != 1:
             return
@@ -369,7 +315,6 @@ class Mender:
 
 
 def sint_bytes(data, pos):
-    """How long the signed integer at `pos` is: its type byte and varint."""
     if data[pos] not in (3, 4):
         return -1
     length = 1
@@ -379,9 +324,6 @@ def sint_bytes(data, pos):
 
 
 def mend(data):
-    """(mended stream, Mender) for a decompressed trace: its `mended` calls
-    (call number, method, NumResources) and the `dropped` ones (call number,
-    method). The stream is `data` itself when nothing needed it."""
     mender = Mender(data)
     return mender.run(), mender
 
@@ -399,8 +341,6 @@ def encode_uint(value):
 
 
 def mend_file(path):
-    """Mends the trace at `path` in place: the Mender, whose `mended` and
-    `dropped` are empty when the file was left as it was."""
     data = read_container(path)
     mended_stream, mender = mend(memoryview(data))
     if mender.mended or mender.dropped:

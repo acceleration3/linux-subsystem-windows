@@ -1,5 +1,7 @@
 #include "lsw/host/vm/domain_handle.hpp"
 
+#include "lsw/base/log.hpp"
+
 #include <libvirt/libvirt.h>
 
 namespace lsw::host::vm {
@@ -25,10 +27,13 @@ DomainHandle DomainHandle::lookup(virConnectPtr conn, const QUuid& uuid) {
     if (conn == nullptr) {
         return {};
     }
-    // libvirt wants the 16 raw bytes, which is what RFC 4122 order is.
     const QByteArray bytes = uuid.toRfc4122();
-    return DomainHandle{
+    DomainHandle found{
         ::virDomainLookupByUUID(conn, reinterpret_cast<const unsigned char*>(bytes.constData()))};
+    if (!found.valid()) {
+        LSW_TRACE("domain {} not found", uuid.toString(QUuid::WithoutBraces).toStdString());
+    }
+    return found;
 }
 
-}  // namespace lsw::host::vm
+}

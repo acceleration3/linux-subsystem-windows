@@ -10,4 +10,4 @@ QString GuestVirtiofsPath::locate() {
                                  QStringLiteral("/../share/lsw/guest/virtiofs"));
 }
 
-}  // namespace lsw::host::platform
+}

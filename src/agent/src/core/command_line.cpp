@@ -39,4 +39,4 @@ CommandLine CommandLine::parse(const std::vector<std::wstring>& args) {
     return out;
 }
 
-}  // namespace lsw::agent::core
+}

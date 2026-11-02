@@ -1,23 +1,35 @@
 #pragma once
 
-namespace lsw::base {
+#include "lsw/base/rolling_file.hpp"
 
-// Owns the process-wide spdlog configuration. Exactly one concern:
-// deciding where log records go and at what level.
-//
-// Not instantiable — the sink set it configures is process-global by
-// construction (spdlog's default logger), so an instance would be a lie.
+#include <cstdint>
+#include <functional>
+#include <spdlog/common.h>
+#include <string>
+#include <string_view>
+
+namespace lsw::base {
 class Logger {
 public:
     Logger() = delete;
 
-    // One-shot setup. ``component`` is a short tag (``icd``, ``render``,
-    // ``manager``) that prefixes every line so combined logs stay
-    // readable. Reads ``$LSW_LOG`` for the level (``trace``, ``debug``,
-    // ``info``, ``warn``, ``error``); default is ``info``. Reads
-    // ``$LSW_LOG_FILE`` for an optional file sink (in addition to
-    // stderr). Safe to call repeatedly — only the first call has effect.
+    using Observer = std::function<void(int level, std::string_view source, std::string_view text,
+                                        std::int64_t ts_ms)>;
+
     static void init(const char* component) noexcept;
+
+    static void attach(const std::filesystem::path& file, RollingFile::Limits limits,
+                       Observer observer);
+    static void detach() noexcept;
+
+    static void set_level(spdlog::level::level_enum level) noexcept;
+    [[nodiscard]] static spdlog::level::level_enum level() noexcept;
+    [[nodiscard]] static bool level_overridden() noexcept;
+
+    static void write(spdlog::level::level_enum level, std::string_view source,
+                      std::string_view text);
+
+    static void flush_repeats();
 };
 
-}  // namespace lsw::base
+}

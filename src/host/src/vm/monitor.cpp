@@ -21,6 +21,7 @@ void Monitor::set_guest_probe(IGuestStatsProbe* probe) {
 }
 
 void Monitor::watch(const QUuid& uuid) {
+    LSW_DEBUG("monitor: watching {}", uuid.toString(QUuid::WithoutBraces).toStdString());
     if (!stats_.contains(uuid)) {
         stats_.insert(uuid, VmStats{});
     }
@@ -33,6 +34,7 @@ void Monitor::watch(const QUuid& uuid) {
 }
 
 void Monitor::unwatch(const QUuid& uuid) {
+    LSW_DEBUG("monitor: no longer watching {}", uuid.toString(QUuid::WithoutBraces).toStdString());
     stats_.remove(uuid);
     domain_ids_.remove(uuid);
     last_cpu_ns_.remove(uuid);
@@ -56,8 +58,6 @@ VmStats Monitor::latest(const QUuid& uuid) const {
 }
 
 void Monitor::on_tick() {
-    // Copy the key list before iterating — poll_one may emit signals
-    // that reach back into the monitor (unlikely, but safer).
     const auto keys = stats_.keys();
     for (const auto& k : keys) {
         poll_one(k);
@@ -71,6 +71,7 @@ void Monitor::poll_one(const QUuid& uuid) {
     }
     const DomainHandle dom = DomainHandle::lookup(conn_.raw(), uuid);
     if (!dom.valid()) {
+        LSW_TRACE("monitor: domain {} not found", uuid.toString(QUuid::WithoutBraces).toStdString());
         return;
     }
 
@@ -78,6 +79,7 @@ void Monitor::poll_one(const QUuid& uuid) {
 
     virDomainInfo info{};
     if (::virDomainGetInfo(dom.raw(), &info) != 0) {
+        LSW_TRACE("monitor: virDomainGetInfo failed");
         return;
     }
     s.running = info.state == VIR_DOMAIN_RUNNING;
@@ -87,30 +89,19 @@ void Monitor::poll_one(const QUuid& uuid) {
         return;
     }
 
-    // libvirt numbers every start of a domain. A new number on a running
-    // machine is a stop and a start that fell between two ticks, as a
-    // restart's do: it is reported as the stop it was, so everything that
-    // follows the machine's boots sees this one.
     const unsigned int domain_id = ::virDomainGetID(dom.raw());
     const auto seen_id = domain_ids_.constFind(uuid);
     if (seen_id != domain_ids_.constEnd() && *seen_id != domain_id) {
+        LSW_DEBUG("monitor: domain id changed from {} to {}; the VM restarted", *seen_id, domain_id);
         report_stopped(uuid);
         s = VmStats{};
         s.running = true;
     }
     domain_ids_[uuid] = domain_id;
 
-    // Agent reachability — derived from the recency of the last
-    // successful system_info reply. The actual poll is kicked off in
-    // ``kick_agent_poll`` (async); here we just decide whether the
-    // stored timestamp is fresh enough to call the agent "alive".
     const auto last_agent = last_agent_ms_.value(uuid, 0);
     s.agent_reachable = (last_agent != 0) && (now_ms - last_agent <= kAgentStaleMs);
 
-    // The host's view of the CPU, from libvirt's cpu_time delta. It is
-    // what the gauge shows until the agent answers, and again whenever
-    // it stops: the agent's figure (what is busy inside Windows) only
-    // counts while it is fresh.
     const quint64 now_ns = info.cpuTime;
     const auto last_ns = last_cpu_ns_.value(uuid, 0);
     const auto last_ms = last_sample_ms_.value(uuid, now_ms);
@@ -123,9 +114,6 @@ void Monitor::poll_one(const QUuid& uuid) {
             s.cpu_percent = static_cast<int>(std::min<quint64>(
                 100, (delta * 100ULL) / (elapsed_ns * static_cast<quint64>(vcpus))));
         }
-        // Without the agent there is no "used" to give. libvirt's
-        // ``info.memory`` is the memory available to the domain, which
-        // without ballooning equals maxMem: a total, not a use.
         s.memory_used_bytes = 0;
         s.memory_total_bytes = info.maxMem * 1024ULL;
         s.disk_used_bytes = 0;
@@ -139,9 +127,6 @@ void Monitor::poll_one(const QUuid& uuid) {
 }
 
 void Monitor::report_stopped(const QUuid& uuid) {
-    // A machine that is off has no guest figures and no agent: what the
-    // last one said would otherwise stay on screen as if it were still
-    // true, and "online" would outlive the VM by the staleness window.
     const VmStats s{};
     domain_ids_.remove(uuid);
     last_cpu_ns_.remove(uuid);
@@ -162,23 +147,20 @@ void Monitor::kick_agent_poll(const QUuid& uuid) {
     const auto& in_flight = it.value();
     bool expected = false;
     if (!in_flight->compare_exchange_strong(expected, true)) {
-        return;  // previous poll still pending — skip this tick
+        return;
     }
 
-    // ``sample`` blocks on the worker; the GUI thread keeps serving
-    // paints and clicks. The merge is dropped if the monitor is gone by
-    // the time the sample lands.
     (void)QtConcurrent::run([probe = probe_, in_flight] {
         const GuestStatsSample g = probe->sample();
         in_flight->store(false);
         return g;
     }).then(this, [this, uuid](const GuestStatsSample& g) {
         if (!g.valid || !stats_.contains(uuid)) {
-            return;  // no answer, or unwatched while in flight
+            return;
         }
         VmStats s = stats_.value(uuid);
         if (!s.running) {
-            return;  // an answer that left before the machine stopped
+            return;
         }
         if (g.cpu_percent >= 0) {
             s.cpu_percent = std::clamp(g.cpu_percent, 0, 100);
@@ -191,9 +173,6 @@ void Monitor::kick_agent_poll(const QUuid& uuid) {
             s.disk_total_bytes = g.disk_total;
             s.disk_used_bytes = g.disk_avail <= g.disk_total ? g.disk_total - g.disk_avail : 0;
         }
-        // A successful merge is the heartbeat — record it so poll_one
-        // can flip ``agent_reachable`` back off if we go silent for
-        // ``kAgentStaleMs``.
         last_agent_ms_[uuid] = QDateTime::currentMSecsSinceEpoch();
         s.agent_reachable = true;
         stats_[uuid] = s;
@@ -201,4 +180,4 @@ void Monitor::kick_agent_poll(const QUuid& uuid) {
     });
 }
 
-}  // namespace lsw::host::vm
+}

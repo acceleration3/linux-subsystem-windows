@@ -15,8 +15,6 @@
 namespace lsw::agent::install {
 
 namespace {
-
-// Closes the WinHTTP handle trio in the right order however we leave.
 class WinHttpHandles {
 public:
     ~WinHttpHandles() {
@@ -33,9 +31,9 @@ public:
     HINTERNET request = nullptr;
 };
 
-constexpr unsigned long long kProgressIntervalMs = 100;  // ~10 updates/sec
+constexpr unsigned long long kProgressIntervalMs = 100;
 
-}  // namespace
+}
 
 bool HttpDownloader::fetch(const std::wstring& url, const std::wstring& dest_path,
                            const ProgressCallback& on_progress, std::string& error_out) {
@@ -87,7 +85,6 @@ bool HttpDownloader::fetch(const std::wstring& url, const std::wstring& dest_pat
         return false;
     }
 
-    // Content-Length is optional; many CDNs use chunked encoding.
     std::uint64_t total = 0;
     {
         wchar_t len_buf[64] = {};
@@ -106,9 +103,6 @@ bool HttpDownloader::fetch(const std::wstring& url, const std::wstring& dest_pat
         return false;
     }
 
-    // Any failure past this point deletes the partial file, so a retry
-    // cannot pick up a truncated download. Closed first: the file was
-    // opened unshared, so it cannot be deleted while we hold it.
     auto abandon = [&](std::string why) {
         error_out = std::move(why);
         out.reset();
@@ -125,7 +119,7 @@ bool HttpDownloader::fetch(const std::wstring& url, const std::wstring& dest_pat
             return abandon("WinHttpReadData failed err=" + win::ErrorText::last_error());
         }
         if (got == 0) {
-            break;  // EOF
+            break;
         }
         DWORD wrote = 0;
         if (!::WriteFile(out.get(), buf.data(), got, &wrote, nullptr) || wrote != got) {
@@ -141,12 +135,10 @@ bool HttpDownloader::fetch(const std::wstring& url, const std::wstring& dest_pat
     }
     out.reset();
 
-    // Final 100% update so the UI lands on a stable end state before the
-    // next phase starts.
     if (on_progress) {
         on_progress(received, total > 0 ? total : received);
     }
     return true;
 }
 
-}  // namespace lsw::agent::install
+}

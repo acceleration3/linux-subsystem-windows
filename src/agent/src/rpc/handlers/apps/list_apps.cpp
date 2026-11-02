@@ -7,16 +7,10 @@
 #include <string>
 
 namespace lsw::agent::rpc::handlers {
-
-// ``list_apps``: the applications the session's user has - their Start
-// menu, which is theirs and their per-user installs', so it is read in
-// their session. With nobody logged on the command is refused, and the
-// manager treats a refusal as "unknown" rather than "none".
 struct ListAppsHandler : RpcHandler {
     [[nodiscard]] Placement placement() const override { return Placement::UserSession; }
 
-    nlohmann::json handle(const nlohmann::json& /*params*/, RpcContext& /*ctx*/) override {
-        // The shell's folders want an apartment of their own.
+    nlohmann::json handle(const nlohmann::json& , RpcContext& ) override {
         const win::Apartment apartment(win::Apartment::Model::SingleThreaded);
         return apps::Catalog::list();
     }
@@ -27,6 +21,6 @@ struct ListAppsHandler : RpcHandler {
     }
 };
 
-}  // namespace lsw::agent::rpc::handlers
+}
 
 LSW_REGISTER_RPC(lsw::agent::rpc::handlers::ListAppsHandler, ::lsw::linkproto::cmd::kListApps)

@@ -15,8 +15,6 @@
 namespace lsw::agent::win {
 
 namespace {
-
-// One string property of a session, empty when it cannot be read.
 std::string query_string(DWORD session, WTS_INFO_CLASS what) {
     LPWSTR buffer = nullptr;
     DWORD bytes = 0;
@@ -30,8 +28,6 @@ std::string query_string(DWORD session, WTS_INFO_CLASS what) {
     return out;
 }
 
-// The state a session is reported in, or nullopt for one that is not a
-// user's session to report at all.
 std::optional<session::SessionState> state_of(WTS_CONNECTSTATE_CLASS state) {
     switch (state) {
     case WTSActive:
@@ -42,12 +38,12 @@ std::optional<session::SessionState> state_of(WTS_CONNECTSTATE_CLASS state) {
         return session::SessionState::Connected;
     case WTSDisconnected:
         return session::SessionState::Disconnected;
-    default:  // WTSIdle, WTSListen, WTSReset, WTSDown, WTSInit
+    default:
         return std::nullopt;
     }
 }
 
-}  // namespace
+}
 
 std::vector<session::SessionInfo> WtsSessions::list() {
     std::vector<session::SessionInfo> out;
@@ -74,7 +70,7 @@ std::vector<session::SessionInfo> WtsSessions::list() {
         info.domain = query_string(s.SessionId, WTSDomainName);
         info.console = console && *console == s.SessionId;
         if (info.user.empty()) {
-            continue;  // a console at the logon screen: nobody to act for
+            continue;
         }
         out.push_back(std::move(info));
     }
@@ -105,4 +101,4 @@ std::uint32_t WtsSessions::current() {
     return of_process(::GetCurrentProcessId()).value_or(0);
 }
 
-}  // namespace lsw::agent::win
+}

@@ -22,4 +22,4 @@ nlohmann::json ListWindowsTool::call(const nlohmann::json&) {
     return ToolResult::from_reply(agent_.request(linkproto::cmd::kListWindows));
 }
 
-}  // namespace lsw::host::mcp
+}

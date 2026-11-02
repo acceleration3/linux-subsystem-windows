@@ -69,7 +69,6 @@ class Desk:
         raise LinkError(f"the helper did not answer in {timeout} s (is it started? desk.py start)")
 
     def guest(self):
-        """The agent's link (the held VM's bridge when gpu_matrix.py hold serves one), and its work directory."""
         import gpu_matrix
         work = pathlib.Path(tempfile.mkdtemp(prefix="lsw-desk-"))
         guest = gpu_matrix.Guest(work, self.share)

@@ -1,15 +1,3 @@
-// Tests for the contract shared by the manager and the guest agent.
-//
-// This is the code with the worst failure mode in the project: both ends
-// of a VM boundary must agree byte for byte, and when they stop agreeing
-// nothing fails loudly — frames come out garbled or a command silently
-// does not exist. It used to be untestable because each side had its own
-// copy inside a platform-specific TU. Now it is one header pair, so it
-// gets tested host-native regardless of which side ships it.
-//
-// Same hand-rolled style as the other tests in this repo: no external
-// test dependency.
-
 #include "lsw/linkproto/byte_order.hpp"
 #include "lsw/linkproto/commands.hpp"
 #include "lsw/linkproto/envelope.hpp"
@@ -34,8 +22,6 @@ void check(bool ok, const char* label) {
     }
 }
 
-// ---- byte order ---------------------------------------------------------
-
 void test_byte_order_roundtrip() {
     using namespace lsw::linkproto;
     std::uint8_t buf[8] = {};
@@ -55,8 +41,6 @@ void test_byte_order_roundtrip() {
     check(read_u32_be(buf) == 0xFFFFFFFFU, "max u32 round-trips");
 }
 
-// ---- envelope framing ---------------------------------------------------
-
 void test_envelope_header() {
     using namespace lsw::linkproto;
     check(kHeaderSize == 5, "header is type + u32 length");
@@ -68,7 +52,6 @@ void test_envelope_header() {
     check(static_cast<int>(FrameType::Control) == 1, "control is type 1");
 }
 
-// Append one framed message to ``out``.
 void append_envelope(std::vector<std::uint8_t>& out, lsw::linkproto::FrameType type,
                      const std::string& payload) {
     std::uint8_t header[lsw::linkproto::kHeaderSize] = {};
@@ -105,8 +88,6 @@ void test_frame_reader_whole_frames() {
 
 void test_frame_reader_byte_at_a_time() {
     using namespace lsw::linkproto;
-    // The real hazard: TCP hands over arbitrary fragments, so a frame can
-    // arrive split anywhere — including inside the 5-byte header.
     std::vector<std::uint8_t> wire;
     append_envelope(wire, FrameType::Control, R"({"cmd":"system_info"})");
 
@@ -131,7 +112,7 @@ void test_frame_reader_keeps_partial_tail() {
     std::vector<std::uint8_t> wire;
     append_envelope(wire, FrameType::Control, "AAAA");
     append_envelope(wire, FrameType::Control, "BBBB");
-    wire.resize(wire.size() - 2);  // truncate the second payload
+    wire.resize(wire.size() - 2);
 
     FrameReader reader;
     reader.append(wire.data(), wire.size());
@@ -164,7 +145,7 @@ void test_frame_reader_aborts_on_handler_false() {
     int delivered = 0;
     const bool ok = reader.drain([&](FrameType, const std::uint8_t*, std::size_t) {
         ++delivered;
-        return false;  // the connection is going away
+        return false;
     });
     check(!ok, "drain reports the abort");
     check(delivered == 1, "no further frames are handed over after an abort");
@@ -184,9 +165,6 @@ void test_command_names_unique() {
     namespace cmd = lsw::linkproto::cmd;
     namespace topic = lsw::linkproto::topic;
 
-    // Duplicate names would mean two handlers fighting for one command
-    // (the agent's registry aborts on that) or a topic silently shadowing
-    // another.
     const std::vector<const char*> commands = {
         cmd::kSystemInfo,     cmd::kListApps,       cmd::kLaunch,
         cmd::kGetIcon,        cmd::kListWindows,    cmd::kCloseWindow,
@@ -199,7 +177,8 @@ void test_command_names_unique() {
         cmd::kUiaSubscribeFocus,
         cmd::kUiaSubscribeProperties, cmd::kUiaUnsubscribe,
         cmd::kGpuStatus,      cmd::kSetDisplay,     cmd::kListDir,
-        cmd::kResolveShortcut, cmd::kListSessions,
+        cmd::kResolveShortcut, cmd::kListSessions, cmd::kSetLogLevel,
+        cmd::kReadFile,       cmd::kPackLogs,
     };
     std::set<std::string> seen;
     for (const char* name : commands) {
@@ -220,7 +199,7 @@ void test_command_names_unique() {
     }
 }
 
-}  // namespace
+}
 
 void test_file_names() {
     using lsw::linkproto::WindowsFileName;

@@ -3,12 +3,13 @@
 #include <nlohmann/json.hpp>
 
 namespace lsw::agent::system {
-
-// Reports OS version, RAM, CPU load, disk, hostname, primary IP and the
-// agent's build stamp, as the ``system_info`` reply object.
 class Info {
 public:
     [[nodiscard]] static nlohmann::json collect();
+
+    [[nodiscard]] static const char* build_stamp();
+
+    [[nodiscard]] static nlohmann::json release_record();
 };
 
-}  // namespace lsw::agent::system
+}

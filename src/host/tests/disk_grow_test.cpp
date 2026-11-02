@@ -1,11 +1,3 @@
-// The disk size setting, end to end on a real image.
-//
-// "Grows only" is a promise the Settings page makes and the restart
-// keeps: Lifecycle::grow_disk widens a qcow2 between the stop and the
-// start, does nothing for a size at or below what the image is, and
-// never shrinks one — a shrink under NTFS loses the end of the volume.
-// Needs qemu-img; skipped (and passing) without it.
-
 #include "lsw/host/vm/domain_description.hpp"
 #include "lsw/host/vm/lifecycle.hpp"
 
@@ -36,7 +28,7 @@ void check(bool ok, const char* label) {
     return size ? (*size >> 30) : 0;
 }
 
-}  // namespace
+}
 
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);

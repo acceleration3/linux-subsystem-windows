@@ -12,7 +12,7 @@ void DirectoryMaker::make_path(const std::wstring& path) {
             continue;
         }
         if (i == 0 || (i == 2 && path[1] == L':')) {
-            continue;  // skip the drive root
+            continue;
         }
         ::CreateDirectoryW(path.substr(0, i).c_str(), nullptr);
     }
@@ -23,4 +23,4 @@ void DirectoryMaker::remove_tree(const std::wstring& path) {
     (void)ProcessRunner::run(L"cmd.exe /c rd /s /q \"" + path + L"\"");
 }
 
-}  // namespace lsw::agent::install
+}

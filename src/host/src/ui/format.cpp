@@ -9,7 +9,7 @@ namespace {
 constexpr double kMib = 1024.0 * 1024.0;
 constexpr double kGib = 1024.0 * 1024.0 * 1024.0;
 
-}  // namespace
+}
 
 double Format::to_gib(qint64 bytes) {
     return static_cast<double>(bytes) / kGib;
@@ -46,4 +46,4 @@ QString Format::clock(qint64 seconds, int minute_digits) {
         .arg(seconds % 60, 2, 10, QLatin1Char('0'));
 }
 
-}  // namespace lsw::host::ui
+}

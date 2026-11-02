@@ -22,36 +22,17 @@ namespace {
 
 using nlohmann::json;
 
-// The download-connector API keys this to the browser session. Both
-// values were re-read from a real Firefox session against the live site
-// (see docs/microsoft-iso-flow.md) and still match.
 constexpr auto kProfile = "606624d44113";
 constexpr auto kUserAgent =
     "Mozilla/5.0 (X11; Linux x86_64; rv:155.0) Gecko/20100101 Firefox/155.0";
 
-// How long to wait before each connector call.
-//
-// A real session takes seven and a half seconds from the page load to
-// the first call and six more to the second — a person reading the page
-// and working a dropdown. Firing both the moment the page returns is
-// the one part of the timing a client cannot pass off as a browser, and
-// the cost here is a few seconds on a provisioning run that takes tens
-// of minutes.
-//
-// Jittered, because a constant interval is its own signature.
 constexpr int kApiDelayMinMs = 4000;
 constexpr int kApiDelayMaxMs = 9000;
 
-// The page the connector calls are made from. Locale-qualified: the
-// browser's Referer carries the same /en-us/ segment the page was
-// served under, and the bare form does not appear in a real session.
 [[nodiscard]] QString referer_for(const QString& locale) {
     return QStringLiteral("https://www.microsoft.com/%1/software-download/windows11").arg(locale);
 }
 
-// Replace UTF-8 NBSP, collapse runs of whitespace, trim. Mirrors the
-// ``normalize_whitespace`` helper from the reference impl — Microsoft
-// peppers product display names with NBSP that breaks UI alignment.
 QString normalize_whitespace(const QString& input) {
     QString tmp = input;
     tmp.replace(QChar(0x00A0), QChar(' '));
@@ -59,9 +40,6 @@ QString normalize_whitespace(const QString& input) {
     return tmp.replace(kRunOfSpace, " ").trimmed();
 }
 
-// Get a JSON value as ``std::string``, accepting either string or
-// number — Microsoft's responses sometimes ship integers as JSON
-// numbers and sometimes as numeric strings, depending on the field.
 std::string json_to_string(const json& v) {
     if (v.is_string()) {
         return v.get<std::string>();
@@ -80,14 +58,10 @@ bool looks_gzipped(const QByteArray& body) {
            static_cast<unsigned char>(body[1]) == 0x8B;
 }
 
-// Defensive zlib gunzip. Only invoked when the body still looks
-// gzipped after Qt's own decompression should have run — usually
-// because some intermediary handed us back compressed bytes.
 QByteArray gunzip(const QByteArray& body) {
     z_stream zs{};
     zs.next_in = reinterpret_cast<Bytef*>(const_cast<char*>(body.constData()));
     zs.avail_in = static_cast<uInt>(body.size());
-    // 16 + MAX_WBITS = decode gzip-wrapped stream.
     if (inflateInit2(&zs, 16 + MAX_WBITS) != Z_OK) {
         LSW_WARN("microsoft: zlib inflateInit2 failed");
         return {};
@@ -110,13 +84,10 @@ QByteArray gunzip(const QByteArray& body) {
     return out;
 }
 
-}  // namespace
+}
 
 MicrosoftClient::MicrosoftClient(QObject* parent) : QObject(parent) {
     nam_.setRedirectPolicy(QNetworkRequest::NoLessSafeRedirectPolicy);
-    // QNAM's default cookie jar persists Set-Cookie headers across
-    // requests — exactly what we need so the visit-page → whitelist
-    // sequence works.
     LSW_DEBUG("microsoft: client constructed");
 }
 
@@ -142,7 +113,6 @@ QString MicrosoftClient::rewrite_host(const QString& url) const {
     return out;
 }
 
-// A request for a page, as the browser makes it.
 QNetworkRequest MicrosoftClient::make_page_request(const QString& url) const {
     const QString final_url = rewrite_host(url);
     LSW_DEBUG("microsoft: GET {}", final_url.toStdString());
@@ -150,12 +120,6 @@ QNetworkRequest MicrosoftClient::make_page_request(const QString& url) const {
     req.setHeader(QNetworkRequest::UserAgentHeader, kUserAgent);
     req.setRawHeader("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
     req.setRawHeader("Accept-Language", "en-US,en;q=0.9");
-    // NOTE: do NOT set Accept-Encoding here. Qt's QNetworkAccessManager
-    // only auto-decompresses gzip/deflate when it owns that header — if
-    // we set it ourselves, autoDecompress flips off and we get raw
-    // gzip bytes back. That manifests as "response not valid JSON: ...
-    // first byte 0x1F" downstream. Letting Qt set its own header means
-    // it advertises only what it can decompress.
     req.setRawHeader("Connection", "keep-alive");
     req.setRawHeader("Sec-Fetch-Dest", "document");
     req.setRawHeader("Sec-Fetch-Mode", "navigate");
@@ -163,14 +127,6 @@ QNetworkRequest MicrosoftClient::make_page_request(const QString& url) const {
     return req;
 }
 
-// A request for the download connector, as the PAGE makes it.
-//
-// Not the same shape as a page load, and that is the point: these two
-// calls are XMLHttpRequests issued by the download page's own script,
-// so they carry a JSON Accept, the X-Requested-With marker jQuery sets,
-// and Sec-Fetch headers describing a same-origin CORS fetch rather than
-// a navigation. Sending them with a document's headers is a browser
-// User-Agent attached to a request no browser would produce that way.
 QNetworkRequest MicrosoftClient::make_api_request(const QString& url) const {
     const QString final_url = rewrite_host(url);
     LSW_DEBUG("microsoft: XHR {}", final_url.toStdString());
@@ -187,10 +143,7 @@ QNetworkRequest MicrosoftClient::make_api_request(const QString& url) const {
     return req;
 }
 
-// Run ``work`` after a jittered pause. See kApiDelayMinMs.
 void MicrosoftClient::after_human_pause(std::function<void()> work) {
-    // Only against the real site. Pointed at a mock there is nobody to
-    // look human to, and the wait would just be a slow test.
     if (microsoft_base_ != QLatin1String("https://www.microsoft.com")) {
         work();
         return;
@@ -201,9 +154,6 @@ void MicrosoftClient::after_human_pause(std::function<void()> work) {
 }
 
 QString MicrosoftClient::generate_session_id() {
-    // Random UUID v4. QUuid::createUuid uses a CSPRNG underneath and
-    // formats with lowercase hex when serialised WithoutBraces — which
-    // is what Microsoft expects.
     return QUuid::createUuid().toString(QUuid::WithoutBraces);
 }
 
@@ -261,10 +211,6 @@ void MicrosoftClient::initialize(const QString& locale) {
     initialized_ = false;
     LSW_INFO("microsoft: initialize locale={}", locale_.toStdString());
 
-    // Stage 1 — check_locale. We chain into visit_download_page from
-    // ``on_locale_check_finished``; on failure we emit
-    // ``initialization_failed``. Falling back to en-US is handled in
-    // the slot itself.
     const QString url = "https://www.microsoft.com/" + locale_ + "/software-download/";
     auto* reply = nam_.get(make_page_request(url));
     connect(reply, &QNetworkReply::finished, this, &MicrosoftClient::on_locale_check_finished);
@@ -291,9 +237,6 @@ void MicrosoftClient::on_locale_check_finished() {
     session_id_ = generate_session_id();
     LSW_INFO("microsoft: session_id={}", session_id_.toStdString());
 
-    // Stage 3 — visit the Win11 download page. This is what puts MC1,
-    // MUID and MSFPC in the jar, and those are the cookies the
-    // connector calls carry.
     auto* reply2 = nam_.get(make_page_request(referer_for(locale_)));
     connect(reply2, &QNetworkReply::finished, this, &MicrosoftClient::on_visit_page_finished);
 }
@@ -311,11 +254,6 @@ void MicrosoftClient::on_visit_page_finished() {
         return;
     }
 
-    // That is the whole of it. There used to be a fourth stage here,
-    // a GET to vlscppe.microsoft.com/tags said to whitelist the
-    // session — but a real browser session never contacts that host at
-    // all, so the call was not authorising anything. It was a request
-    // no browser makes, from a client trying to look like one.
     initialized_ = true;
     LSW_INFO("microsoft: session ready (locale={} session_id={})",
              locale_.toStdString(), session_id_.toStdString());
@@ -329,9 +267,6 @@ void MicrosoftClient::fetch_skus(int product_edition_id) {
         return;
     }
     LSW_INFO("microsoft: fetch_skus product_edition_id={}", product_edition_id);
-    // NB: Microsoft expects ``ProductEditionId`` (capital P) in the
-    // current API revision. Old Fido docs spell it ``productEditionId``;
-    // that variant 404s now.
     const QString url =
         QStringLiteral("https://www.microsoft.com/software-download-connector/api/"
                        "getskuinformationbyproductedition"
@@ -464,10 +399,6 @@ void MicrosoftClient::parse_microsoft_envelope(const QByteArray& body, bool* err
     try {
         *doc = json::parse(body.constData(), body.constData() + body.size());
     } catch (const json::exception& e) {
-        // Log a clipped preview of the body — most parse failures are
-        // either an HTML error page (block / WAF challenge) or bytes
-        // we couldn't decompress; both are easy to spot in the first
-        // ~256 chars.
         const auto preview = QString::fromUtf8(body.left(256)).toStdString();
         LSW_WARN("microsoft: response not valid JSON: {}; body[0..256]={}", e.what(), preview);
         *error_out = true;
@@ -493,4 +424,4 @@ void MicrosoftClient::parse_microsoft_envelope(const QByteArray& body, bool* err
     }
 }
 
-}  // namespace lsw::host::provision::iso
+}

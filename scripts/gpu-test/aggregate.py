@@ -17,7 +17,6 @@ import trace_judge
 
 
 def gpu_results(run):
-    """(host, results) for every GPU pass, and the hosts whose run never got that far."""
     passes, stopped = [], []
     for host_dir in sorted(path for path in run.iterdir() if path.is_dir()):
         found = sorted(host_dir.glob("*/results.json"))

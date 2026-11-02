@@ -32,4 +32,4 @@ nlohmann::json ConsoleReadTool::call(const nlohmann::json& args) {
     return ToolResult::text(QString::fromUtf8(buffer_.take(session_id)).toStdString());
 }
 
-}  // namespace lsw::host::mcp
+}

@@ -10,7 +10,6 @@ void ToolRegistry::add(std::unique_ptr<IMcpTool> tool) {
     }
     auto& slot = by_name_[tool->name()];
     if (slot != nullptr) {
-        // Replace in place, keeping the earlier entry's position.
         for (auto& existing : order_) {
             if (existing.get() == slot) {
                 slot = tool.get();
@@ -40,4 +39,4 @@ nlohmann::json ToolRegistry::describe_all() const {
     return tools;
 }
 
-}  // namespace lsw::host::mcp
+}

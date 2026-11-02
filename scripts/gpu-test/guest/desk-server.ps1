@@ -1,14 +1,3 @@
-# desk-server.ps1: an elevated helper in the console session that runs the
-# PowerShell snippets desk.py drops into -Dir, one at a time, and leaves each
-# one's output beside it. Started by desk.py from a scheduled task made with
-# /rl highest, so the input it sends reaches an elevated application (UIPI
-# drops input a lower-integrity sender sends to a higher one: Resolve traced
-# through apitrace's wrapper runs elevated), and what it starts is elevated.
-#
-# A snippet is <n>.ps1 (desk.py writes <n>.txt and renames it, so a snippet is
-# never read half-written); its output goes to <n>.out the same way. The
-# helpers below (Click, Drag, Press, Keys, Shot, Windows...) are defined once.
-# The server ends when <Dir>\stop appears.
 param([string]$Dir = 'C:\av\apps\desk')
 $ErrorActionPreference = 'Continue'
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
@@ -80,7 +69,6 @@ function DClick($x, $y) {
     Move-To $x $y; Start-Sleep -Milliseconds 120
     1..2 | ForEach-Object { [Desk]::mouse_event(2, 0, 0, 0, [IntPtr]::Zero); [Desk]::mouse_event(4, 0, 0, 0, [IntPtr]::Zero); Start-Sleep -Milliseconds 70 }
 }
-# A press at one point, the pointer moved in steps, a release at another.
 function Drag($x1, $y1, $x2, $y2, $steps = 20, $ms = 25) {
     Move-To $x1 $y1; Start-Sleep -Milliseconds 150
     [Desk]::mouse_event(2, 0, 0, 0, [IntPtr]::Zero); Start-Sleep -Milliseconds 150
@@ -89,7 +77,6 @@ function Drag($x1, $y1, $x2, $y2, $steps = 20, $ms = 25) {
     [Desk]::mouse_event(4, 0, 0, 0, [IntPtr]::Zero)
 }
 function Wheel($x, $y, $clicks) { Move-To $x $y; Start-Sleep -Milliseconds 100; [Desk]::mouse_event(0x800, 0, 0, 120 * $clicks, [IntPtr]::Zero) }
-# Press "ctrl+shift+s", "space", "f4"...: modifiers held around the last key.
 function Press($chord, $ms = 80, $count = 1) {
     $parts = @("$chord".Split('+') | ForEach-Object { Vk $_ })
     for ($n = 0; $n -lt $count; $n++) {
@@ -99,7 +86,6 @@ function Press($chord, $ms = 80, $count = 1) {
         Start-Sleep -Milliseconds 150
     }
 }
-# Text typed character by character (SendKeys, its specials escaped).
 function Type-Text($text) {
     foreach ($c in "$text".ToCharArray()) {
         [System.Windows.Forms.SendKeys]::SendWait($(if ("+^%~(){}[]".Contains($c)) { "{$c}" } else { "$c" })); Start-Sleep -Milliseconds 30
@@ -118,7 +104,6 @@ function Focus($name) {
     }
     "could not focus $name"
 }
-# The screen (or a rectangle of it) as a PNG, scaled by -Scale.
 function Shot($path, $x = 0, $y = 0, $w = 0, $h = 0, $scale = 1.0) {
     $screen = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
     if ($w -le 0) { $x = 0; $y = 0; $w = $screen.Width; $h = $screen.Height }
@@ -136,8 +121,6 @@ function Shot($path, $x = 0, $y = 0, $w = 0, $h = 0, $scale = 1.0) {
     "screen $($screen.Width)x$($screen.Height), shot ${x},${y} ${w}x${h} -> $path"
 }
 
-# Lua typed into DaVinci Resolve's console (F6; a window of Resolve's titled
-# "Resolve") and run; the console closed again unless -Keep.
 function Resolve-Lua($code, $keep = $false) {
     $resolve = Get-Process Resolve -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1
     if (-not $resolve) { return "Resolve has no window" }

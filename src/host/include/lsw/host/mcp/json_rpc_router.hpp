@@ -8,17 +8,11 @@ namespace lsw::host::mcp {
 
 class ToolRegistry;
 
-// Turns a JSON-RPC frame into the right MCP response.
-//
-// Knows the MCP method set (``initialize``, ``tools/list``,
-// ``tools/call``, and the harmless probes clients send) and nothing
-// about HTTP or about what any individual tool does.
 class JsonRpcRouter {
 public:
     JsonRpcRouter(ToolRegistry& tools, link::AgentRpcClient& agent) noexcept
         : tools_(tools), agent_(agent) {}
 
-    // Never throws: a tool that throws becomes an internal-error reply.
     [[nodiscard]] nlohmann::json dispatch(const nlohmann::json& request);
 
 private:
@@ -30,4 +24,4 @@ private:
     link::AgentRpcClient& agent_;
 };
 
-}  // namespace lsw::host::mcp
+}

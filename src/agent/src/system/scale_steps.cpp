@@ -28,4 +28,4 @@ int ScaleSteps::percent_at(int relative) const noexcept {
     return kPercents[static_cast<std::size_t>(std::clamp(recommended_ + relative, 0, highest_))];
 }
 
-}  // namespace lsw::agent::system
+}

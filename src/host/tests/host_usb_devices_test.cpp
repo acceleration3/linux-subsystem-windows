@@ -1,10 +1,3 @@
-// The USB devices the manager offers to hand to the guest are read from
-// sysfs, so this builds a small sysfs of its own and reads it: which
-// directories are devices at all, how a device is named and identified,
-// which are input devices, and which are in use because something on
-// them (or on a LUKS or LVM layer above them) is mounted or swapped on.
-// The real /sys is not touched.
-
 #include "lsw/host/platform/host_usb_devices.hpp"
 #include "lsw/host/services/usb_status.hpp"
 
@@ -37,7 +30,6 @@ void write(const QString& path, const QString& text) {
     }
 }
 
-// A device directory with the attributes sysfs gives it.
 void device(const QString& root, const QString& name, const QString& vendor, const QString& product,
             int bus, int number, const QString& klass = QStringLiteral("00")) {
     const QString dir = root + QLatin1Char('/') + name;
@@ -58,7 +50,7 @@ const HostUsbDevice* find(const QVector<HostUsbDevice>& all, const QString& iden
     return nullptr;
 }
 
-}  // namespace
+}
 
 int main(int argc, char** argv) {
     QCoreApplication app{argc, argv};
@@ -68,36 +60,26 @@ int main(int argc, char** argv) {
 
     device(devices, QStringLiteral("usb1"), QStringLiteral("1d6b"), QStringLiteral("0002"), 1, 1,
            QStringLiteral("09"));
-    // A tablet with a serial number and a HID interface.
     device(devices, QStringLiteral("1-2"), QStringLiteral("056a"), QStringLiteral("0374"), 1, 5);
     write(devices + QStringLiteral("/1-2/product"), QStringLiteral("Wacom Intuos S\n"));
     write(devices + QStringLiteral("/1-2/serial"), QStringLiteral("ABC123\n"));
     write(devices + QStringLiteral("/1-2/1-2:1.0/bInterfaceClass"), QStringLiteral("03\n"));
-    // A hub.
     device(devices, QStringLiteral("1-3"), QStringLiteral("2109"), QStringLiteral("0817"), 1, 6,
            QStringLiteral("09"));
-    // A stick whose partition sits under a LUKS mapping that is mounted.
     device(devices, QStringLiteral("1-4"), QStringLiteral("0781"), QStringLiteral("5581"), 1, 7);
     write(devices + QStringLiteral("/1-4/product"), QStringLiteral("Ultra\n"));
     write(devices + QStringLiteral("/1-4/1-4:1.0/bInterfaceClass"), QStringLiteral("08\n"));
     QDir().mkpath(devices + QStringLiteral("/1-4/1-4:1.0/host0/target0:0:0/0:0:0:0/block/sda/sda1"));
-    // Another stick with a disk nobody has mounted.
     device(devices, QStringLiteral("1-5"), QStringLiteral("0951"), QStringLiteral("1666"), 1, 8);
     QDir().mkpath(devices + QStringLiteral("/1-5/1-5:1.0/host1/target1:0:0/1:0:0:0/block/sdb"));
-    // Only a manufacturer string, and nothing at all.
     device(devices, QStringLiteral("2-1"), QStringLiteral("046d"), QStringLiteral("c52b"), 2, 3);
     write(devices + QStringLiteral("/2-1/manufacturer"), QStringLiteral("Logitech\n"));
     device(devices, QStringLiteral("2-2"), QStringLiteral("dead"), QStringLiteral("beef"), 2, 4);
-    // Not a device: an interface, and a directory with no ids.
     QDir().mkpath(devices + QStringLiteral("/1-2:1.0"));
     QDir().mkpath(devices + QStringLiteral("/stray"));
-    // One reached through a symlink, as /sys/bus/usb/devices has them.
     device(root + QStringLiteral("/real"), QStringLiteral("3-1"), QStringLiteral("0bda"), QStringLiteral("8153"), 3, 2);
     QFile::link(root + QStringLiteral("/real/3-1"), devices + QStringLiteral("/3-1"));
 
-    // A stick formatted btrfs: mounted with an anonymous 0:N, so only the
-    // source says which disk. And a second one that is a member of a
-    // multi-device btrfs whose other member is mounted.
     device(devices, QStringLiteral("2-3"), QStringLiteral("abcd"), QStringLiteral("0001"), 2, 5);
     QDir().mkpath(devices + QStringLiteral("/2-3/2-3:1.0/host2/target2:0:0/2:0:0:0/block/sde/sde1"));
     device(devices, QStringLiteral("2-4"), QStringLiteral("abcd"), QStringLiteral("0002"), 2, 6);
@@ -164,13 +146,11 @@ int main(int argc, char** argv) {
     check(find(all, QStringLiteral("0bda:8153")) != nullptr, "a device reached through a symlink is read");
     check(all.size() >= 2 && all.first().bus == 1 && all.last().bus == 3, "in bus order");
 
-    // A device node the user can open makes it accessible.
     write(root + QStringLiteral("/dev/001/005"), QString{});
     const auto again = HostUsbDevices::enumerate(roots);
     const auto* opened = find(again, QStringLiteral("056a:0374:ABC123"));
     check(opened != nullptr && opened->accessible, "a readable, writable node is accessible");
 
-    // A swap on the mapping counts as in use too.
     write(root + QStringLiteral("/mountinfo"), QStringLiteral("22 1 259:2 / / rw - ext4 /dev/nvme0n1p2 rw\n"));
     write(root + QStringLiteral("/swaps"),
           QStringLiteral("Filename\tType\tSize\tUsed\tPriority\n/dev/dm-0 partition 1024 0 -2\n"));
@@ -178,7 +158,6 @@ int main(int argc, char** argv) {
     const auto* swap_stick = find(swapped, QStringLiteral("0781:5581"));
     check(swap_stick != nullptr && swap_stick->mounted, "swap on the mapping is in use");
 
-    // ---- the snapshot: two of one kind, and what is left behind --------
     using lsw::host::services::UsbStatus;
     HostUsbDevice twin;
     twin.vendor = 0x046d;

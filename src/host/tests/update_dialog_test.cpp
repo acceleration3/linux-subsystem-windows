@@ -1,7 +1,3 @@
-// The dialog that shows a guest update (UpdateDialog): when it opens, what
-// it will not let the person do while the run goes, what it offers at the
-// end, and that it opens at the same size every run.
-
 #include "lsw/host/config/manager_settings.hpp"
 #include "lsw/host/config/settings.hpp"
 #include "lsw/host/link/agent_rpc_client.hpp"
@@ -66,7 +62,7 @@ GuestUpdateStatus status(State state, const QString& step = {}, const QString& m
     return s;
 }
 
-}  // namespace
+}
 
 int main(int argc, char** argv) {
     QTemporaryDir home;
@@ -89,11 +85,9 @@ int main(int argc, char** argv) {
     check(dialog.layout()->sizeConstraint() == QLayout::SetFixedSize,
           "the layout's size constraint is SetFixedSize, so each run opens at the same size");
 
-    // A check that finds Windows current publishes no Running.
     hub.set_update(status(State::Succeeded));
     check(!dialog.isVisible(), "a check that finds Windows current does not open it");
 
-    // A run starts.
     hub.set_update(status(State::Running, QStringLiteral("Preparing files")));
     check(dialog.isVisible(), "the dialog opens when the update snapshot becomes Running");
     check(!shown(dialog, QStringLiteral("Close")) && !shown(dialog, QStringLiteral("Try again")),
@@ -101,7 +95,6 @@ int main(int argc, char** argv) {
     app.processEvents();
     const QSize running_size = dialog.size();
 
-    // No way out while it runs.
     static_cast<QDialog&>(dialog).reject();
     check(dialog.isVisible(), "reject (Escape) is ignored while the run goes");
     dialog.close();
@@ -115,7 +108,6 @@ int main(int argc, char** argv) {
     hub.set_update(status(State::Running, QStringLiteral("Updating Windows")));
     check(dialog.isVisible(), "going from step to step does not close it");
 
-    // It ends in failure.
     GuestUpdateStatus failed = status(State::Failed, {}, QStringLiteral("disk full"));
     failed.last_steps = {{QStringLiteral("agent"), QStringLiteral("failed"), QStringLiteral("no space")}};
     hub.set_update(failed);
@@ -129,7 +121,6 @@ int main(int argc, char** argv) {
     button(dialog, QStringLiteral("Try again"))->click();
     check(retried, "Try again asks for the run again");
 
-    // Try again starts a run: same size as the first.
     hub.set_update(status(State::Running, QStringLiteral("Preparing files")));
     app.processEvents();
     check(dialog.isVisible() && !shown(dialog, QStringLiteral("Close")) && !shown(dialog, QStringLiteral("Try again")),
@@ -138,14 +129,12 @@ int main(int argc, char** argv) {
     static_cast<QDialog&>(dialog).reject();
     check(dialog.isVisible(), "it is still not to be rejected");
 
-    // Success.
     hub.set_update(status(State::Succeeded));
     check(shown(dialog, QStringLiteral("Close")) && !shown(dialog, QStringLiteral("Try again")),
           "a successful run offers Close and not Try again");
     static_cast<QDialog&>(dialog).reject();
     check(!dialog.isVisible(), "once it has ended it can be closed");
 
-    // A new run brings it back, also after Close.
     hub.set_update(status(State::Running, QStringLiteral("Preparing files")));
     check(dialog.isVisible(), "a new run opens it again after it was closed");
     hub.set_update(status(State::Succeeded));

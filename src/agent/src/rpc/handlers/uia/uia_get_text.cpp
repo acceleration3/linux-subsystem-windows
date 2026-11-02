@@ -8,11 +8,6 @@
 #include <cstdint>
 
 namespace lsw::agent::rpc::handlers {
-
-// ``uia_get_text``: return the text content of ``hwnd`` via UIA's
-// TextPattern. ``max_chars`` caps the response so reading a huge
-// Notepad doesn't pin the agent on a multi-MB BSTR; default 32k
-// is plenty for any UI surface we'd reasonably scrape.
 struct UiaGetTextHandler : RpcHandler {
     nlohmann::json handle(const nlohmann::json& params, RpcContext& ctx) override {
         const Params p{params, linkproto::cmd::kUiaGetText};
@@ -21,11 +16,9 @@ struct UiaGetTextHandler : RpcHandler {
         return {{"text", ctx.services.uia().get_text(hwnd, max_chars)}};
     }
 
-    // Window handles, UI Automation and HKCU belong to the user's
-    // session: served by the session helper there.
     [[nodiscard]] Placement placement() const override { return Placement::UserSession; }
 };
 
-}  // namespace lsw::agent::rpc::handlers
+}
 
 LSW_REGISTER_RPC(lsw::agent::rpc::handlers::UiaGetTextHandler, ::lsw::linkproto::cmd::kUiaGetText)

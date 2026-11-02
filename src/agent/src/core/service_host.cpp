@@ -14,15 +14,9 @@
 namespace lsw::agent::core {
 
 namespace {
-
-// How long the SCM is told a start or a stop may take. A stop ends the
-// connections (one tick each, or a forwarded request's 8 s at worst) and
-// the session helpers (2 s grace each, then terminated).
 constexpr DWORD kStartHintMs = 10000;
 constexpr DWORD kStopHintMs = 30000;
 
-// The service's status, shared by the service thread and the control
-// handler (which the SCM calls on the dispatcher thread).
 struct Status {
     std::mutex mu;
     SERVICE_STATUS_HANDLE handle = nullptr;
@@ -38,13 +32,10 @@ struct Status {
         status.dwWaitHint = wait_hint;
         status.dwWin32ExitCode = exit_code;
         status.dwServiceSpecificExitCode = specific;
-        // Controls are only accepted while running: a STOP during
-        // START_PENDING has nothing to stop yet.
         status.dwControlsAccepted =
             state == SERVICE_RUNNING
                 ? SERVICE_ACCEPT_STOP | SERVICE_ACCEPT_SHUTDOWN | SERVICE_ACCEPT_SESSIONCHANGE
                 : 0;
-        // Pending states count checkpoints up; settled ones reset them.
         status.dwCheckPoint =
             (state == SERVICE_RUNNING || state == SERVICE_STOPPED) ? 0 : status.dwCheckPoint + 1;
         if (::SetServiceStatus(handle, &status) == FALSE) {
@@ -60,12 +51,12 @@ struct Status {
 };
 
 Status& status() {
-    static auto* s = new Status;  // never destroyed: the SCM may call late
+    static auto* s = new Status;
     return *s;
 }
 
 DWORD WINAPI control_handler(DWORD control, DWORD event_type, LPVOID event_data,
-                             LPVOID /*context*/) {
+                             LPVOID ) {
     switch (control) {
     case SERVICE_CONTROL_INTERROGATE:
         return NO_ERROR;
@@ -79,7 +70,6 @@ DWORD WINAPI control_handler(DWORD control, DWORD event_type, LPVOID event_data,
         AgentService::instance().request_stop();
         return NO_ERROR;
     case SERVICE_CONTROL_SESSIONCHANGE: {
-        // Logon, logoff, console connect...: the session helpers follow.
         const auto* note = static_cast<const WTSSESSION_NOTIFICATION*>(event_data);
         if (note != nullptr) {
             AgentService::instance().on_session_change(note->dwSessionId, event_type);
@@ -91,7 +81,7 @@ DWORD WINAPI control_handler(DWORD control, DWORD event_type, LPVOID event_data,
     }
 }
 
-void WINAPI service_main(DWORD /*argc*/, LPWSTR* /*argv*/) {
+void WINAPI service_main(DWORD , LPWSTR* ) {
     Status& st = status();
     {
         const std::lock_guard lock(st.mu);
@@ -103,8 +93,6 @@ void WINAPI service_main(DWORD /*argc*/, LPWSTR* /*argv*/) {
         return;
     }
     st.report(SERVICE_START_PENDING, kStartHintMs);
-    // Everything slow — the desktop gate above all — happens inside run,
-    // after this: RUNNING is "the agent is up", not "the port is open".
     st.report(SERVICE_RUNNING);
     LSW_AGENT_INFO("service: running");
 
@@ -119,10 +107,9 @@ void WINAPI service_main(DWORD /*argc*/, LPWSTR* /*argv*/) {
     }
 }
 
-}  // namespace
+}
 
 int ServiceHost::run() {
-    // The name is ignored for an own-process service, but must be there.
     wchar_t name[] = L"lsw-agent";
     const SERVICE_TABLE_ENTRYW table[] = {
         {name, &service_main},
@@ -141,4 +128,4 @@ int ServiceHost::run() {
     return 0;
 }
 
-}  // namespace lsw::agent::core
+}

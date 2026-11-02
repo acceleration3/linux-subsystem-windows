@@ -6,10 +6,6 @@
 namespace lsw::agent::win {
 
 namespace {
-
-// Wait for an overlapped operation's event, racing up to two interrupt
-// handles (null ones are skipped). WAIT_OBJECT_0 means the operation
-// completed; anything else is a timeout or an interrupt.
 DWORD wait_for(HANDLE op_event, HANDLE interrupt, HANDLE other_interrupt, DWORD timeout_ms) {
     HANDLE handles[3] = {op_event, nullptr, nullptr};
     DWORD count = 1;
@@ -21,9 +17,6 @@ DWORD wait_for(HANDLE op_event, HANDLE interrupt, HANDLE other_interrupt, DWORD 
     return ::WaitForMultipleObjects(count, handles, FALSE, timeout_ms);
 }
 
-// Cancel ``ov`` and wait for the cancellation to land. The OVERLAPPED and
-// the buffer belong to the caller's stack frame; returning while the
-// kernel may still write to them is a use-after-free.
 void cancel_and_drain(HANDLE pipe, OVERLAPPED& ov) {
     ::CancelIoEx(pipe, &ov);
     DWORD ignored = 0;
@@ -36,7 +29,7 @@ DWORD clamp_ms(std::chrono::milliseconds d) {
         std::min<std::chrono::milliseconds::rep>(ms, std::numeric_limits<DWORD>::max() - 1));
 }
 
-}  // namespace
+}
 
 OverlappedPipe::OverlappedPipe(HANDLE pipe)
     : pipe_(pipe), read_event_(::CreateEventW(nullptr, TRUE, FALSE, nullptr)),
@@ -54,7 +47,7 @@ OverlappedPipe::Wait OverlappedPipe::connect(std::chrono::milliseconds timeout, 
         return Wait::Done;
     }
     switch (::GetLastError()) {
-    case ERROR_PIPE_CONNECTED:  // the client got in between create and connect
+    case ERROR_PIPE_CONNECTED:
         return Wait::Done;
     case ERROR_IO_PENDING:
         break;
@@ -85,7 +78,7 @@ OverlappedPipe::Read OverlappedPipe::read(void* buffer, std::size_t capacity, st
     DWORD n = 0;
     if (::ReadFile(pipe_.get(), buffer, want, nullptr, &ov) == FALSE &&
         ::GetLastError() != ERROR_IO_PENDING) {
-        return Read::Closed;  // ERROR_BROKEN_PIPE, or the pipe is unusable
+        return Read::Closed;
     }
     const DWORD w = wait_for(ov.hEvent, interrupt, nullptr, INFINITE);
     if (w != WAIT_OBJECT_0) {
@@ -136,4 +129,4 @@ bool OverlappedPipe::write_all(const void* data, std::size_t len,
     return true;
 }
 
-}  // namespace lsw::agent::win
+}

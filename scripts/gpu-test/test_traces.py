@@ -1,5 +1,3 @@
-"""The traces suite's judging, store and guest-side comparison, without a VM:
-python3 -m unittest test_traces (from scripts/gpu-test)."""
 import argparse
 import hashlib
 import json
@@ -44,7 +42,6 @@ def pnm(picture, comment):
 
 
 def png_with_filters(picture, filters):
-    """A PNG whose rows use `filters` in turn, encoded the way libpng would."""
     width, height, rgb = picture
     stride = width * 3
     raw, previous = bytearray(), bytes(stride)
@@ -111,8 +108,8 @@ class Images(unittest.TestCase):
 
     def test_bmp_bottom_up_is_read_top_row_first(self):
         width, height = 3, 2
-        rows = [bytes([0, 0, 255] * width) + b"\x00" * 3, bytes([255, 0, 0] * width) + b"\x00" * 3]  # BGR, padded
-        pixels = rows[1] + rows[0]  # bottom-up: the last row first
+        rows = [bytes([0, 0, 255] * width) + b"\x00" * 3, bytes([255, 0, 0] * width) + b"\x00" * 3]
+        pixels = rows[1] + rows[0]
         header = b"BM" + struct.pack("<IHHI", 54 + len(pixels), 0, 0, 54)
         info = struct.pack("<IiiHHIIiiII", 40, width, height, 1, 24, 0, len(pixels), 0, 0, 0, 0)
         with tempfile.TemporaryDirectory() as directory:
@@ -120,8 +117,8 @@ class Images(unittest.TestCase):
             path.write_bytes(header + info + pixels)
             picture = judge.read_bmp(path)
         self.assertEqual(picture[:2], (3, 2))
-        self.assertEqual(picture[2][:3], bytes([255, 0, 0]))   # top row red
-        self.assertEqual(picture[2][-3:], bytes([0, 0, 255]))  # bottom row blue
+        self.assertEqual(picture[2][:3], bytes([255, 0, 0]))
+        self.assertEqual(picture[2][-3:], bytes([0, 0, 255]))
 
 
 class Pictures(unittest.TestCase):
@@ -135,7 +132,7 @@ class Pictures(unittest.TestCase):
         reference = solid(20, 20, (100, 100, 100))
         got = with_pixels(reference, {(x, 0): (101, 99, 100) for x in range(20)})
         stats = judge.compare_images(reference, got)
-        self.assertEqual(stats["changed_pct"], 0.0)  # within the 2-step pixel tolerance
+        self.assertEqual(stats["changed_pct"], 0.0)
         self.assertEqual(judge.picture_verdict(stats, LIMITS), "matches")
 
     def test_a_wrong_region_differs(self):
@@ -177,8 +174,6 @@ class Process(unittest.TestCase):
         self.assertEqual(judge.memory_growth(samples), (0.0, 800.0))
 
     def test_a_leak_grows(self):
-        # Loading to 500 MiB, then a leak of 8 MiB a sample, as Dark Souls
-        # Remastered's 1 MiB a frame looked.
         samples = [[t, min(t, 10) * (50 << 20) + max(0, t - 10) * (8 << 20), 0] for t in range(100)]
         growth, peak = judge.memory_growth(samples)
         self.assertGreater(growth, 200)
@@ -285,8 +280,6 @@ class OpenCl(unittest.TestCase):
         self.assertEqual(kinds, {0: "float", 1: "bytes", 2: "bytes", 3: "half", 4: "float"})
 
     def test_a_numbered_dump_pairs_with_what_run_py_wrote(self):
-        # CLIntercept 3.0.6 dumps ..._Arg_4_Buffer_0000.bin and ..._Arg_7_Image_0006_1x1x1_32bpp.raw;
-        # its run.py writes ..._Arg_4_Buffer.bin and ..._Arg_7_Image.raw.
         with tempfile.TemporaryDirectory() as directory:
             directory = pathlib.Path(directory)
             (directory / "Post").mkdir()
@@ -581,8 +574,6 @@ class ClReplayScript(unittest.TestCase):
 
 
 class FakeShare:
-    """The guest's C: drive as a dict, as GuestShare reaches it."""
-
     def __init__(self):
         self.files = {}
 
@@ -614,9 +605,6 @@ class FakeShare:
 
 
 class FakeDesktop:
-    """The console session: the few commands the suite runs, and a retracer
-    that renders every frame grey, except frame 3, which it renders red."""
-
     def __init__(self, guest, out, guest_name):
         self.guest = guest
         self.commands = []
@@ -674,7 +662,7 @@ class FakeDesktop:
 
 class SuiteAgainstAFakeGuest(unittest.TestCase):
     def test_a_trace_is_sent_once_replayed_and_judged(self):
-        for tar_above in (16, 0):  # file by file, then as one tar
+        for tar_above in (16, 0):
             with self.subTest(tar_above=tar_above):
                 self.replay_against_a_fake_guest(tar_above)
 
@@ -709,13 +697,13 @@ class SuiteAgainstAFakeGuest(unittest.TestCase):
                 again = trace_suite.run_trace_suite(guest, root / "out2", None, "", "hl2", store=store)
             self.assertEqual(result["status"], "fail")
             self.assertEqual([f["case"] for f in result["failures"]], ["hl2/trainstation: frame 3"])
-            self.assertEqual(result["metrics"]["hl2/trainstation fps"], 150.0)  # 300 frames over the check pass's 2 s
+            self.assertEqual(result["metrics"]["hl2/trainstation fps"], 150.0)
             self.assertEqual(result["metrics"]["hl2/trainstation memory_growth_mib"], 0.0)
             self.assertEqual(again["failures"], result["failures"])
             stamps = [key for key in guest.share.files if key.endswith(".stamp")]
-            self.assertEqual(len(stamps), 2)  # the tool and the trace
+            self.assertEqual(len(stamps), 2)
             self.assertFalse(any("trace-replay" not in command and "rmdir" in command and "store" in command
-                                 for command in desktops[1].commands))  # sent once, kept
+                                 for command in desktops[1].commands))
             check = next(command for command in desktops[0].commands if "check.config" in command)
             self.assertIn("check.config.json", check)
             sent = json.loads(guest.share.get_bytes("C:\\av\\traces\\runs\\hl2\\trainstation\\check.config.json"))
@@ -725,8 +713,6 @@ class SuiteAgainstAFakeGuest(unittest.TestCase):
 
 
 class TraceWriter:
-    """A version 6 apitrace stream, written the way apitrace's own writer does."""
-
     def __init__(self):
         self.out = bytearray(b"\x06\x06") + self.string("process.name") + self.string("App.exe") + self.string("")
         self.sigs, self.calls = {}, 0
@@ -741,7 +727,6 @@ class TraceWriter:
         return self.uint(len(data)) + data
 
     def bool(self, value):
-        """A BOOL as apitrace records it: an enum whose signature its first use defines."""
         if self.enum_defined:
             return b"\x09\x00\x04" + self.uint(int(value))
         self.enum_defined = True
@@ -780,8 +765,6 @@ class TraceWriter:
 
 
 class Mending(unittest.TestCase):
-    """trace_mend: ReclaimResources' pDiscarded widened to NumResources BOOLs."""
-
     def trace(self):
         writer = TraceWriter()
         writer.reclaim(1, False)
@@ -797,11 +780,9 @@ class Mending(unittest.TestCase):
         mended, mender = trace_mend.mend(memoryview(bytes(writer.out)))
         self.assertEqual(mender.mended, [(six, "IDXGIDevice4::ReclaimResources", 6),
                                    (three, "IDXGIDevice4::ReclaimResources", 3)])
-        # The mended stream has nothing left to mend, and its calls are the same calls.
         mender = trace_mend.Mender(memoryview(mended))
         mender.run()
         self.assertEqual((mender.calls, mender.mended), (writer.calls, []))
-        # Every copy after the first names the BOOL's enum by its id alone.
         self.assertIn(b"\x0b\x06" + b"\x09\x00\x04\x01" * 6, mended)
         self.assertIn(b"\x0b\x03" + b"\x09\x00\x04\x00" * 3, mended)
 
@@ -826,13 +807,12 @@ class Mending(unittest.TestCase):
     def test_a_trace_cut_short_ends_before_its_unfinished_calls(self):
         writer, six, three = self.trace()
         whole = len(writer.out)
-        # The exit cut off a Release after its enter, then an enter in its signature.
         release = writer.enter("ID3D11Texture2D1::Release", ("this",), {0: b"\x0d\x20"})
         data = bytes(writer.out) + b"\x00\x00\x05"
         mended, mender = trace_mend.mend(memoryview(data))
         self.assertEqual(len(mender.mended), 2)
         self.assertEqual(mender.dropped, [(release, "ID3D11Texture2D1::Release")])
-        self.assertEqual(len(mended), whole + (6 - 1) * 4 + (3 - 1) * 4)  # each added BOOL: 09 00 04 xx
+        self.assertEqual(len(mended), whole + (6 - 1) * 4 + (3 - 1) * 4)
         again = trace_mend.Mender(memoryview(mended))
         again.run()
         self.assertEqual((again.calls, again.mended, again.dropped), (writer.calls - 1, [], []))
@@ -851,21 +831,18 @@ class Mending(unittest.TestCase):
         writer, six, three = self.trace()
         stream = bytes(writer.out)
         with tempfile.TemporaryDirectory() as directory:
-            # apitrace's snappy container: 'at', then length-prefixed raw snappy
-            # blocks - here one of literals and one with a back-reference.
             first, second = stream[:40], stream[40:]
             literal = trace_mend.encode_uint(len(first)) + bytes([(len(first) - 1) << 2]) + first
             copy = trace_mend.encode_uint(len(second) + 8) + bytes([(len(second) - 1) << 2 if len(second) <= 60
                                                                       else 61 << 2])
             if len(second) > 60:
                 copy += (len(second) - 1).to_bytes(2, "little")
-            copy += second + bytes([((8 - 4) << 2) | 1, 8])  # copy 8 bytes from 8 back
+            copy += second + bytes([((8 - 4) << 2) | 1, 8])
             path = pathlib.Path(directory) / "capture.trace"
             path.write_bytes(b"at" + struct.pack("<I", len(literal)) + literal + struct.pack("<I", len(copy)) + copy)
             self.assertEqual(trace_mend.read_container(path), stream + stream[-8:])
             path.write_bytes(b"at" + struct.pack("<I", len(literal)) + literal)
             self.assertEqual(trace_mend.read_container(path), first)
-            # A whole trace mended in place, written as zstd and read back.
             trace_mend.write_container(path, stream)
             self.assertEqual(trace_mend.mend_file(path).mended, [(six, "IDXGIDevice4::ReclaimResources", 6),
                                                                  (three, "IDXGIDevice4::ReclaimResources", 3)])
@@ -878,7 +855,6 @@ class Mending(unittest.TestCase):
 
 
 def io_zip(members):
-    """A zip archive's bytes holding `members` ({name: bytes})."""
     import io
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w") as written:
@@ -888,8 +864,6 @@ def io_zip(members):
 
 
 class Direct3D12(unittest.TestCase):
-    """D3D12 traces: recorded and replayed by GFXReconstruct's D3D12 build."""
-
     def test_d3d12_replays_with_the_d3d12_build_and_vulkan_with_the_sdk_s(self):
         d3d12 = trace_store.Manifest(manifest_data(api="d3d12", capture="capture.gfxr"), "/x")
         vulkan = trace_store.Manifest(manifest_data(api="vulkan", capture="capture.gfxr"), "/x")
@@ -943,7 +917,6 @@ class Direct3D12(unittest.TestCase):
                 got = trace_store.download(entry, root / "cache")
             self.assertEqual(calls, [["gh", "api", "repos/o/r/actions/artifacts/7/zip"]])
             self.assertEqual(got.name, "build-abc.zip")
-            # Already downloaded by hand: found by its pinned file name.
             sources = root / "downloads"
             sources.mkdir()
             (sources / "build-abc.zip").write_bytes(payload)
@@ -1016,8 +989,7 @@ class Direct3D12(unittest.TestCase):
         self.assertEqual(arguments[-1], "C:\\s\\capture.gfxr")
         self.assertEqual(sorted(findings["frames"]), [5, 9])
         self.assertEqual(findings["frames"][5][:2], (2, 2))
-        self.assertTrue(findings["notes"])  # frame 0 is not a GFXReconstruct frame
-        # Judged against promoted references: no WARP pass.
+        self.assertTrue(findings["notes"])
         self.assertEqual(len(runs), 1)
         self.assertEqual(findings["references"], {})
 

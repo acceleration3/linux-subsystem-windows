@@ -36,8 +36,6 @@ GuestUpkeep::GuestUpkeep(StatusHub& status, link::AgentRpcClient& rpc, GuestUpda
             finish_pass(false, probe.error);
             return;
         }
-        // While it runs nothing else here touches the guest: the pass goes
-        // on from its end.
         awaiting_update_ = true;
         update_.run_if_stale(probe.release, probe.version);
         if (update_.running()) {
@@ -45,8 +43,6 @@ GuestUpkeep::GuestUpkeep(StatusHub& status, link::AgentRpcClient& rpc, GuestUpda
         }
     });
     connect(&update_, &GuestUpdate::succeeded, this, [this] {
-        // A retry from the dialog or Settings is not a pass of ours, but one
-        // that ended Failed is completed by it.
         if (!awaiting_update_ && state_ != State::Failed) {
             return;
         }
@@ -54,9 +50,6 @@ GuestUpkeep::GuestUpkeep(StatusHub& status, link::AgentRpcClient& rpc, GuestUpda
         if (end_if_stopped()) {
             return;
         }
-        // The update mounts the shared folders; a pass that did not get that
-        // far has not, and a document in a shared folder is not to be opened
-        // as if it had.
         shares_reached_ = true;
         set_state(State::Checking);
         clock_watcher_.setFuture(QtConcurrent::run([this] { return set_clock(); }));
@@ -101,12 +94,8 @@ bool GuestUpkeep::busy() const {
     return probe_watcher_.isRunning() || clock_watcher_.isRunning() || awaiting_update_;
 }
 
-// A machine that stops ends the boot. The update takes the agent away and
-// brings it back while the pass runs, which is the same boot.
 void GuestUpkeep::on_status() {
     if (busy()) {
-        // A stop seen now is the end of the boot being passed, which the
-        // finished pass must not be taken for the next one's.
         if (!status_.vm().running()) {
             stopped_during_pass_ = true;
         }
@@ -127,7 +116,6 @@ bool GuestUpkeep::end_if_stopped() {
     if (!stopped_during_pass_) {
         return false;
     }
-    // The boot this was a pass for is gone, and so is what it found.
     stopped_during_pass_ = false;
     passed_ = false;
     shares_reached_ = false;
@@ -155,7 +143,6 @@ void GuestUpkeep::finish_pass(bool ok, const QString& error) {
     if (!set_state(ok ? State::Current : State::Failed)) {
         Q_EMIT changed();
     }
-    // A driver put in place reports anew.
     status_.refresh(StatusHub::Area::Graphics);
 }
 
@@ -176,8 +163,6 @@ GuestUpkeep::Probe GuestUpkeep::probe() {
                 QStringLiteral("Windows did not say which LSW release it has: %1")
                     .arg(QString::fromStdString(info.error))};
     }
-    // An agent from before releases reports none, which is a release that
-    // differs from every shipped one.
     const auto text = [&info](const char* key) {
         const auto value = info.body.value(key, nlohmann::json{});
         return value.is_string() ? QString::fromStdString(value.get<std::string>()) : QString{};
@@ -185,7 +170,6 @@ GuestUpkeep::Probe GuestUpkeep::probe() {
     return {true, text("release"), text("release_version"), {}};
 }
 
-// The time zone and the clock, as the host's.
 GuestUpkeep::Clock GuestUpkeep::set_clock() {
     const QByteArray zone = QTimeZone::ianaIdToWindowsId(QTimeZone::systemTimeZoneId());
     if (zone.isEmpty()) {
@@ -210,4 +194,4 @@ GuestUpkeep::Clock GuestUpkeep::set_clock() {
     return {};
 }
 
-}  // namespace lsw::host::services
+}

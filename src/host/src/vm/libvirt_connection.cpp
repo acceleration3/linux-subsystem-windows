@@ -8,13 +8,7 @@
 namespace lsw::host::vm {
 
 namespace {
-
-// Route libvirt's own error reports to LSW_DEBUG instead of letting
-// them dump to stderr. Routine "not found" lookups (e.g. checking
-// whether the ``lsw`` domain exists at startup) are expected and
-// shouldn't produce alarming output. Real failures are still logged
-// by the call sites via ``last_error()``.
-void lsw_libvirt_error_handler(void* /*userdata*/, virErrorPtr err) {
+void lsw_libvirt_error_handler(void* , virErrorPtr err) {
     if (err == nullptr || err->message == nullptr) {
         return;
     }
@@ -30,7 +24,7 @@ void install_quiet_error_handler_once() {
     }
 }
 
-}  // namespace
+}
 
 LibvirtConnection::LibvirtConnection(QObject* parent) : QObject(parent) {
     install_quiet_error_handler_once();
@@ -57,6 +51,7 @@ void LibvirtConnection::close() noexcept {
     if (conn_ != nullptr) {
         ::virConnectClose(conn_);
         conn_ = nullptr;
+        LSW_INFO("libvirt disconnected");
     }
 }
 
@@ -68,4 +63,4 @@ QString LibvirtConnection::last_error() const {
     return QString::fromUtf8(err->message);
 }
 
-}  // namespace lsw::host::vm
+}

@@ -1,8 +1,3 @@
-// What the payload ISO carries of a release (PayloadIsoBuilder::stage_files):
-// each bundle file as a real file in real directories under update/, the
-// way an update stages it, plus the manifest and the mount list, byte for
-// byte the bundle's.
-
 #include "lsw/host/provision/install/payload_inputs.hpp"
 #include "lsw/host/provision/install/payload_iso.hpp"
 
@@ -35,7 +30,7 @@ QByteArray read(const QString& path) {
     return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray{"<unreadable>"};
 }
 
-}  // namespace
+}
 
 int main(int argc, char** argv) {
     QCoreApplication app{argc, argv};
@@ -69,7 +64,6 @@ int main(int argc, char** argv) {
     check(QFileInfo(at("C/ProgramData/LSW/lsw-agent.exe")).isFile() && QFileInfo(at("C/av/package/avgpu.sys")).isFile()
               && QFileInfo(at("C/av/loaders/x64/vulkan-1.dll")).isFile() && QFileInfo(at("C/av/provision.ps1")).isFile(),
           "each file is at update/<drive>/<dirs>/<name>");
-    // The bug of a fresh install: one file name with backslashes in it.
     bool no_backslash_names = true;
     for (const QString& name : update.entryList(QDir::AllEntries | QDir::NoDotAndDotDot)) {
         no_backslash_names = no_backslash_names && !name.contains(QLatin1Char('\\'));
@@ -93,7 +87,6 @@ int main(int argc, char** argv) {
     }
     check(created_exist && created.size() == 1 + 4 + 2, "every file written is reported: the answer file, the bundle's, the two lists");
 
-    // Without a bundle, or with a failed one, no ISO.
     {
         QTemporaryDir other;
         PayloadInputs none;

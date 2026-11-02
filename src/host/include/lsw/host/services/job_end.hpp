@@ -11,9 +11,6 @@
 #include <vector>
 
 namespace lsw::host::services {
-
-// A run_script job's end (the agent's setup_done event), as the reader
-// thread hands it over to the thread that waits for it.
 class JobEnd {
 public:
     struct End {
@@ -22,8 +19,6 @@ public:
         std::string message;
     };
 
-    // Every setup_done is kept until the job's id is known: a script that
-    // ends fast reports its end before the reply that names it.
     void on_done(const nlohmann::json& frame) {
         const std::lock_guard lock{mutex_};
         ends_.emplace_back(frame.value("job_id", std::string{}),
@@ -54,4 +49,4 @@ private:
     std::vector<std::pair<std::string, End>> ends_;
 };
 
-}  // namespace lsw::host::services
+}

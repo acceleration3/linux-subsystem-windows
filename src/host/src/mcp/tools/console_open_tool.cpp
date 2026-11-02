@@ -48,4 +48,4 @@ nlohmann::json ConsoleOpenTool::call(const nlohmann::json& args) {
     return ToolResult::text(text);
 }
 
-}  // namespace lsw::host::mcp
+}

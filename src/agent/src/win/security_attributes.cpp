@@ -28,4 +28,4 @@ SecurityAttributes::~SecurityAttributes() {
     }
 }
 
-}  // namespace lsw::agent::win
+}

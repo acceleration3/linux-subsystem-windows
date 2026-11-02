@@ -1,14 +1,4 @@
 ---
-# cppcoreguidelines-owning-memory is off: this is a Qt application, and
-# `new Child(parent)` is how Qt expresses ownership. The check has no model
-# for parent-child ownership and flagged all 164 of them, which buried
-# everything else. The sibling pro-bounds-avoid-unchecked-container-access
-# goes with the pro-bounds-* checks already disabled below.
-#
-# portability-avoid-pragma-once is off: every header here opens with
-# #pragma once, all 216 of them. The check is advice for code that must
-# build on a compiler without it, and this project targets GCC, Clang and
-# mingw-w64, which all have it.
 Checks: >
   bugprone-*,
   -bugprone-easily-swappable-parameters,

@@ -16,21 +16,10 @@ namespace {
 
 using linkproto::FrameType;
 
-// The agent should never send a frame this large; a stream claiming
-// one is bailed on rather than allowed to chew host memory.
 constexpr std::size_t kMaxFrameLen = 4 * 1024 * 1024;
 constexpr int kRecvChunk = 64 * 1024;
 constexpr quint64 kProbeId = 1;
 
-// Single-shot reachability probe. Opens a TCP connection, sends one
-// ``system_info`` envelope, drains incoming frames until it sees the
-// matching reply (skipping any log/installer events the agent pushes
-// proactively), then returns true.
-//
-// QEMU's slirp hostfwd accepts host TCP handshakes immediately even
-// when the guest isn't listening — so a successful ``connect()``
-// doesn't prove the agent is up. The end-to-end JSON round trip
-// here is what actually proves liveness.
 [[nodiscard]] bool probe_reachable(quint32 cid, quint32 port) {
     platform::VsockClient client;
     if (client.connect(cid, port) != 0) {
@@ -66,22 +55,19 @@ constexpr quint64 kProbeId = 1;
                 answered = j.is_object() && j.value("id", std::uint64_t{0}) == kProbeId &&
                            j.contains("result");
             } catch (const nlohmann::json::exception&) {
-                // Malformed control payload — skip and keep draining.
             }
             return !answered;
         });
         if (answered) {
             return true;
         }
-        // Whatever is left is one incomplete frame. Past the cap, it is
-        // a frame we would refuse once it arrived, so stop reading now.
         if (reader.buffered() > linkproto::kHeaderSize + kMaxFrameLen) {
             return false;
         }
     }
 }
 
-}  // namespace
+}
 
 PostInstallWatcher::PostInstallWatcher(QUuid vm_uuid, quint32 cid, quint32 agent_port,
                                        QObject* parent)
@@ -102,7 +88,7 @@ void PostInstallWatcher::stop() {
 
 void PostInstallWatcher::on_tick() {
     if (probe_in_flight_) {
-        return;  // last probe still blocked on kernel connect — skip
+        return;
     }
     probe_in_flight_ = true;
     (void)QtConcurrent::run([cid = cid_, port = port_] {
@@ -119,4 +105,4 @@ void PostInstallWatcher::on_tick() {
     });
 }
 
-}  // namespace lsw::host::provision::install
+}

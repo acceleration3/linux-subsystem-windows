@@ -1,15 +1,4 @@
 # Maintainer: acceleration3 <acceleration23 at gmail dot com>
-#
-# lsw-bin from this checkout: the release tarball scripts/dist.sh arch
-# wrote to dist/, instead of the one attached to the GitHub release. For
-# installing a release before it is published, or one never published.
-#
-#   scripts/dist.sh --version <V> arch           (aur/README.md, step 1)
-#   cd packaging/arch && makepkg -si
-#
-# Everything but the version and where the tarball comes from is
-# aur/PKGBUILD's, sourced as it is, so the depends stay the AUR package's.
-# The version is the newest tarball's in dist/.
 
 _root="$(realpath "${startdir}/../..")"
 source "${_root}/aur/PKGBUILD"
@@ -21,9 +10,6 @@ if [[ ! -f "${_tarball}" ]]; then
 fi
 pkgver="$(basename "${_tarball}" | sed 's/^lsw-\(.*\)-x86_64\.tar\.zst$/\1/')"
 pkgrel=1
-# Unpacked straight from dist/ in package(): as a source, makepkg would
-# copy it next to this file and, on the next run of the same version,
-# reuse that copy rather than a rebuilt tarball.
 source=()
 sha256sums=()
 

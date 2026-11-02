@@ -10,13 +10,8 @@
 namespace lsw::host::provision::install {
 
 namespace {
-
-// Reading one small file from the medium; 7-Zip seeks to it.
 constexpr int kExtractTimeoutMs = 60'000;
 
-// A language tag in its usual case: "en-us" is "en-US", "sr-latn-rs"
-// "sr-Latn-RS". Microsoft's media write them in lower case; Setup does
-// not mind either way, people reading them do.
 QString cased(const QString& tag) {
     QStringList parts = tag.split(QLatin1Char('-'));
     for (qsizetype i = 0; i < parts.size(); ++i) {
@@ -32,7 +27,7 @@ QString cased(const QString& tag) {
     return parts.join(QLatin1Char('-'));
 }
 
-}  // namespace
+}
 
 QStringList MediaLanguage::parse(const QString& lang_ini) {
     static const QRegularExpression language(QStringLiteral("^([A-Za-z]{2,3}(-[A-Za-z0-9]+)*)\\s*="));
@@ -93,7 +88,6 @@ QStringList MediaLanguage::of(const QString& iso_path, const QString& scratch_di
         }
         return {};
     }
-    // lang.ini is UTF-16 on some media and ANSI on others.
     const QByteArray bytes = file.readAll();
     const QString text = bytes.startsWith("\xff\xfe")
                              ? QString::fromUtf16(reinterpret_cast<const char16_t*>(bytes.constData() + 2),
@@ -102,4 +96,4 @@ QStringList MediaLanguage::of(const QString& iso_path, const QString& scratch_di
     return parse(text);
 }
 
-}  // namespace lsw::host::provision::install
+}

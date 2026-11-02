@@ -20,11 +20,8 @@
 namespace lsw::agent::win {
 
 namespace {
-
-// The interactive desktop of the session the token belongs to.
 constexpr const wchar_t* kInteractiveDesktop = L"winsta0\\default";
 
-// The longest string ExpandEnvironmentStrings* will produce.
 constexpr DWORD kMaxExpanded = 32768;
 
 std::vector<unsigned char> token_info(HANDLE token, TOKEN_INFORMATION_CLASS what) {
@@ -70,8 +67,6 @@ bool is_elevated(HANDLE token) {
            elevation.TokenIsElevated != 0;
 }
 
-// The user's full token when UAC split their logon into a filtered and a
-// linked one; null when there is no split (UAC off, or not an admin).
 HANDLE linked_token(HANDLE token) {
     TOKEN_ELEVATION_TYPE type{};
     DWORD len = 0;
@@ -87,8 +82,6 @@ HANDLE linked_token(HANDLE token) {
     return linked.LinkedToken;
 }
 
-// A primary token of our own, so its privileges and session can be set
-// without touching the logon's.
 UniqueHandle primary_copy(HANDLE token) {
     UniqueHandle out;
     if (::DuplicateTokenEx(token, MAXIMUM_ALLOWED, nullptr, SecurityImpersonation, TokenPrimary,
@@ -104,7 +97,7 @@ void close_token(void* token) {
     }
 }
 
-}  // namespace
+}
 
 RunAs RunAs::self() {
     RunAs out;
@@ -145,9 +138,6 @@ RunAs RunAs::user(std::uint32_t session, bool elevated) {
     if (linked) {
         primary = primary_copy(linked.get());
         if (!primary) {
-            // Only a caller with SeTcbPrivilege gets a usable linked
-            // token; without one it is identification-level and cannot
-            // become a primary token. Better a filtered launch than none.
             LSW_AGENT_WARN("run_as: the linked token of {} cannot be used (err={}); "
                            "starting the process unelevated",
                            where, ErrorText::last_error());
@@ -161,9 +151,6 @@ RunAs RunAs::user(std::uint32_t session, bool elevated) {
                                  ") failed: " + ErrorText::last_error());
     }
 
-    // The linked token is the same logon, but nothing promises its session
-    // id says so; a process started with the wrong one lands on another
-    // session's desktop, or on none.
     DWORD session_id = session;
     if (::SetTokenInformation(primary.get(), TokenSessionId, &session_id, sizeof(session_id)) ==
         FALSE) {
@@ -194,7 +181,7 @@ std::wstring RunAs::expand(const std::wstring& s) const {
     std::vector<wchar_t> buffer(kMaxExpanded, L'\0');
     if (::ExpandEnvironmentStringsForUserW(static_cast<HANDLE>(token_.get()), s.c_str(),
                                            buffer.data(), kMaxExpanded) == FALSE) {
-        return s;  // unchanged, as Environment::expand does
+        return s;
     }
     return std::wstring{buffer.data()};
 }
@@ -235,4 +222,4 @@ std::string RunAs::describe() const {
     return out;
 }
 
-}  // namespace lsw::agent::win
+}

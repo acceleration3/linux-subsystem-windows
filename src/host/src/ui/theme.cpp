@@ -17,8 +17,6 @@
 
 #include "theme_qss.hpp"
 
-// Outside the namespace: Q_INIT_RESOURCE expands to a call on a symbol
-// Qt declares at global scope.
 void init_lsw_theme_resources() {
     Q_INIT_RESOURCE(resources);
 }
@@ -26,12 +24,6 @@ void init_lsw_theme_resources() {
 namespace lsw::host::ui {
 
 namespace {
-
-// The design pairs Archivo with JetBrains Mono. Neither is guaranteed
-// on a Linux host, and a missing family falls back silently to whatever
-// Qt picks, which is how a considered type scale turns into DejaVu at
-// the wrong weight. So the choice is made here, out loud, against what
-// is actually installed.
 [[nodiscard]] QString pick(const QStringList& candidates, const QString& fallback) {
     const auto families = QFontDatabase::families();
     for (const auto& name : candidates) {
@@ -42,14 +34,6 @@ namespace {
     return fallback;
 }
 
-// The row lists' cells inset their text by the stylesheet's item padding
-// (12 px either side). A control or a pill set into a cell is placed by
-// the delegate too, and the stock one hands it the *text* rectangle: the
-// item's padding taken off every side, vertical included, so a 24 px
-// button in a 38 px row with 9 px of padding above and below was cut to
-// 20. This one gives a cell widget the whole height of its row (less the
-// hairline under it) and the same 12 px either side the text has, so
-// controls line up with the column's text and are never clipped.
 class CellWidgetDelegate : public QStyledItemDelegate {
 public:
     using QStyledItemDelegate::QStyledItemDelegate;
@@ -57,22 +41,18 @@ public:
     static constexpr int kInset = 12;
 
     void updateEditorGeometry(QWidget* editor, const QStyleOptionViewItem& option,
-                              const QModelIndex& /*index*/) const override {
+                              const QModelIndex& ) const override {
         editor->setGeometry(option.rect.adjusted(kInset, 0, -kInset, -1));
     }
 };
 
-}  // namespace
+}
 
 void Theme::surface(QWidget* widget, const char* role) {
     widget->setObjectName(QString::fromLatin1(role));
     widget->setAttribute(Qt::WA_StyledBackground, true);
 }
 
-// One table, everywhere. The design draws a row list rather than a
-// grid: headings in letter-spaced mono over a hairline, rows separated
-// by a fainter one, and no box around any of it, because the panel
-// holding the table is already the box.
 void Theme::rows_table(QTableWidget* table, const QStringList& headers) {
     table->setColumnCount(static_cast<int>(headers.size()));
     table->setHorizontalHeaderLabels(headers);
@@ -93,8 +73,6 @@ void Theme::rows_table(QTableWidget* table, const QStringList& headers) {
     head->setDefaultAlignment(Qt::AlignLeft | Qt::AlignBottom);
     head->setHighlightSections(false);
     head->setFixedHeight(28);
-    // Letter spacing is the one thing the heading needs and a
-    // stylesheet cannot say.
     QFont font = head->font();
     font.setFamilies(mono_font(10).families());
     font.setPixelSize(10);
@@ -113,9 +91,6 @@ QTableWidgetItem* Theme::kind_cell(const QString& text) {
 void Theme::fit_rows(QTableWidget* table) {
     int height = table->horizontalHeader()->height();
     for (int row = 0; row < table->rowCount(); ++row) {
-        // Tall enough for every control in the row at its own height,
-        // with a little air: a row sized for text alone clips a combo
-        // or a button set into it.
         int needed = table->rowHeight(row);
         for (int column = 0; column < table->columnCount(); ++column) {
             if (QWidget* cell = table->cellWidget(row, column)) {
@@ -152,10 +127,6 @@ QString Theme::stylesheet() {
 }
 
 void Theme::apply() {
-    // The images live in a static library, whose resource initialiser
-    // is only pulled in when something references it. Nothing would, so
-    // this does. The symbol Qt generates is at global scope, which is
-    // why the call is qualified.
     ::init_lsw_theme_resources();
 
     auto* app = qobject_cast<QApplication*>(QCoreApplication::instance());
@@ -172,14 +143,6 @@ void Theme::apply() {
     base.setPixelSize(13);
     app->setFont(base);
 
-    // Fusion under a proxy that paints the three indicators a
-    // stylesheet cannot, and a palette to go with it.
-    //
-    // A stylesheet does not reach everything: QWizard paints its own
-    // title band, item views draw their own alternating rows, and the
-    // platform style may ignore a colour it thinks it knows better.
-    // Those all read the palette, so the palette has to say the same
-    // thing the stylesheet does or half the window is light.
     app->setStyle(new LswStyle);
 
     const QColor ink = color(Color::kInk);
@@ -214,4 +177,4 @@ void Theme::apply() {
     app->setStyleSheet(stylesheet());
 }
 
-}  // namespace lsw::host::ui
+}

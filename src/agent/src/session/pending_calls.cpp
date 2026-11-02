@@ -72,4 +72,4 @@ std::size_t PendingCalls::in_flight() const {
     return slots_.size();
 }
 
-}  // namespace lsw::agent::session
+}

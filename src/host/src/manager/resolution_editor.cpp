@@ -33,7 +33,6 @@ constexpr int kColSize = 1;
 constexpr int kColAspect = 2;
 constexpr int kColActions = 3;
 
-// The sizes most monitors and most people ask for.
 constexpr DisplayMode kCommon[] = {
     {1280, 720},  {1366, 768},  {1600, 900},  {1920, 1080}, {1920, 1200},
     {2560, 1080}, {2560, 1440}, {2560, 1600}, {3440, 1440}, {3840, 2160},
@@ -46,7 +45,7 @@ QPushButton* small(const QString& glyph, const QString& tip) {
     return button;
 }
 
-}  // namespace
+}
 
 ResolutionEditor::ResolutionEditor(config::ManagerSettings& settings, QWidget* parent)
     : QWidget(parent), settings_(settings) {
@@ -74,7 +73,6 @@ ResolutionEditor::ResolutionEditor(config::ManagerSettings& settings, QWidget* p
     table_->setColumnWidth(kColActions, 104);
     column->addWidget(table_);
 
-    // The add row: a preset, or any size typed in, checked as it is typed.
     auto* foot = new QWidget;
     Theme::surface(foot, Theme::Role::kListFoot);
     auto* foot_column = new QVBoxLayout(foot);
@@ -92,7 +90,6 @@ ResolutionEditor::ResolutionEditor(config::ManagerSettings& settings, QWidget* p
         spin->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
         spin->setObjectName(QString::fromLatin1(Theme::Role::kMono));
     }
-    // Filled in by rebuild with a size the list does not have yet.
     add_ = Widgets::button(QStringLiteral("Add a resolution"));
     add_row->addWidget(presets_);
     add_row->addWidget(width_);
@@ -125,12 +122,9 @@ ResolutionEditor::ResolutionEditor(config::ManagerSettings& settings, QWidget* p
             return;
         }
         list << mode.text();
-        // A fresh suggestion for the next one: the boxes are no longer
-        // the user's edit once it has been added.
         edited_ = false;
         write(list);
     });
-    // Another page can change the list too: the Graphics page's switch.
     connect(&settings_, &config::ManagerSettings::changed, this, [this](const QString& key) {
         if (key == K::kDisplayModes) {
             QMetaObject::invokeMethod(this, &ResolutionEditor::rebuild, Qt::QueuedConnection);
@@ -142,8 +136,6 @@ ResolutionEditor::ResolutionEditor(config::ManagerSettings& settings, QWidget* p
 void ResolutionEditor::fill_presets() {
     presets_->clear();
     presets_->addItem(QStringLiteral("Common sizes and monitors"), QString{});
-    // The monitors on this machine first: the size most often wanted is
-    // the one in front of you. Their own pixels, not the scaled desktop.
     for (const QScreen* screen : QGuiApplication::screens()) {
         const QSize size = screen->geometry().size() * screen->devicePixelRatio();
         const DisplayMode mode{size.width(), size.height()};
@@ -156,8 +148,6 @@ void ResolutionEditor::fill_presets() {
 }
 
 void ResolutionEditor::suggest(const QStringList& list) {
-    // The first common size the list lacks, so the boxes never open on a
-    // size Add would refuse; the user's own numbers are left alone.
     DisplayMode suggestion{1920, 1080};
     for (const auto& mode : kCommon) {
         if (DisplayModes::refusal_to_add(list, mode).isEmpty()) {
@@ -214,8 +204,6 @@ void ResolutionEditor::rebuild() {
     table_->setRowCount(static_cast<int>(list.size()));
     for (int row = 0; row < list.size(); ++row) {
         const auto mode = DisplayModes::parse(list.at(row));
-        // The first entry is the preferred one; marking another moves it
-        // to the top, which is what makes it preferred.
         auto* radio_holder = new QWidget;
         auto* radio_row = new QHBoxLayout(radio_holder);
         radio_row->setContentsMargins(12, 0, 0, 0);
@@ -243,10 +231,7 @@ void ResolutionEditor::rebuild() {
         auto* remove = small(QStringLiteral("×"), QStringLiteral("Remove"));
         up->setEnabled(row > 0);
         down->setEnabled(row + 1 < list.size());
-        // Removing the last size would be asking for the host's modes,
-        // which has a switch of its own that says so.
         remove->setEnabled(list.size() > 1);
-        // Queued: each one rebuilds the table it sits in.
         connect(up, &QPushButton::clicked, this, [this, row] {
             QMetaObject::invokeMethod(this, [this, row] { move(row, -1); }, Qt::QueuedConnection);
         });
@@ -281,4 +266,4 @@ void ResolutionEditor::rebuild() {
     }
 }
 
-}  // namespace lsw::host::manager
+}

@@ -26,7 +26,7 @@ const char* const kPhaseNames[] = {
     "Application running",
 };
 
-}  // namespace
+}
 
 LaunchSplash::LaunchSplash(QString application, QIcon icon, std::optional<qint64> last_boot_ms,
                            QWidget* parent)
@@ -41,7 +41,6 @@ LaunchSplash::LaunchSplash(QString application, QIcon icon, std::optional<qint64
     root->setContentsMargins(22, 20, 22, 16);
     root->setSpacing(16);
 
-    // ---- identity -------------------------------------------------
     auto* head = new QHBoxLayout;
     head->setSpacing(14);
     auto* badge = new QLabel;
@@ -59,8 +58,6 @@ LaunchSplash::LaunchSplash(QString application, QIcon icon, std::optional<qint64
     titles->setSpacing(3);
     heading_ = new QLabel(application_);
     heading_->setObjectName(QString::fromLatin1(Theme::Role::kHeading));
-    // Sentences, not values: the subtitle and the footnote are prose and
-    // read in the interface face.
     subtitle_ = Widgets::prose(QStringLiteral("Starting Windows so it has somewhere to run"));
     titles->addWidget(heading_);
     titles->addWidget(subtitle_);
@@ -68,11 +65,6 @@ LaunchSplash::LaunchSplash(QString application, QIcon icon, std::optional<qint64
     head->addLayout(titles, 1);
     root->addLayout(head);
 
-    // ---- progress -------------------------------------------------
-    // Against the last boot when there was one, as an expectation
-    // rather than a countdown, because it is one; busy otherwise.
-    // The progress and the phases go together, and give way together to
-    // the reason when the launch stalls or fails.
     progress_ = new QWidget;
     auto* progress = new QVBoxLayout(progress_);
     progress->setContentsMargins(0, 0, 0, 0);
@@ -83,7 +75,6 @@ LaunchSplash::LaunchSplash(QString application, QIcon icon, std::optional<qint64
     timing_ = Widgets::meta(QString{}, true);
     progress->addWidget(timing_);
 
-    // ---- phases ---------------------------------------------------
     auto* steps = new QVBoxLayout;
     steps->setSpacing(7);
     for (int i = 0; i < static_cast<int>(Phase::Count); ++i) {
@@ -95,8 +86,6 @@ LaunchSplash::LaunchSplash(QString application, QIcon icon, std::optional<qint64
     root->addWidget(progress_);
     show_phases();
 
-    // The reason, as the design's callout: amber for a guest gone quiet,
-    // red for a launch that failed.
     stall_text_ = new QLabel;
     stall_text_->setObjectName(QString::fromLatin1(Theme::Role::kCallout));
     stall_text_->setWordWrap(true);
@@ -104,9 +93,6 @@ LaunchSplash::LaunchSplash(QString application, QIcon icon, std::optional<qint64
     stall_text_->setVisible(false);
     root->addWidget(stall_text_);
 
-    // ---- footers --------------------------------------------------
-    // Two of them, swapped rather than rebuilt: the normal one, and the
-    // one that appears when the guest has gone quiet.
     footer_ = new QWidget;
     auto* footer_layout = new QHBoxLayout(footer_);
     footer_layout->setContentsMargins(0, 0, 0, 0);
@@ -156,8 +142,6 @@ LaunchSplash::LaunchSplash(QString application, QIcon icon, std::optional<qint64
         close();
     });
     connect(hide_button, &QPushButton::clicked, this, [this] {
-        // Hide, not cancel: the application still opens when it is
-        // ready, it just stops occupying the screen while it waits.
         hide();
     });
     connect(open_log, &QPushButton::clicked, this, &LaunchSplash::log_requested);
@@ -206,14 +190,12 @@ void LaunchSplash::reach(Phase phase) {
 }
 
 void LaunchSplash::show_phases() {
-    // Done up to the one reached, the next one current, the rest to come.
     for (int i = 0; i < static_cast<int>(Phase::Count); ++i) {
         const bool done = i <= reached_;
         const bool current = i == reached_ + 1;
         steps_[i]->setText(QStringLiteral("%1  %2").arg(
             done ? QStringLiteral("✓") : (current ? QStringLiteral("●") : QStringLiteral("○")),
             QString::fromLatin1(kPhaseNames[i])));
-        // The current phase is in the plain foreground, which is no tone.
         Widgets::set_flag(steps_[i], Theme::Tone::kProperty,
                           done      ? QVariant(Theme::Tone::kOk)
                           : current ? QVariant()
@@ -267,4 +249,4 @@ void LaunchSplash::stall(const QString& reason) {
                            .arg(ui::Format::clock(static_cast<int>(clock_.elapsed() / 1000))));
 }
 
-}  // namespace lsw::host::manager
+}

@@ -32,7 +32,6 @@ void NotificationQueue::requeue_front(std::vector<JobNotification> notes) {
         return;
     }
     const std::lock_guard<std::mutex> lock(mu_);
-    // Prepend, preserving order: [notes...] + [whatever arrived since].
     notes.reserve(notes.size() + pending_.size());
     for (auto& p : pending_) {
         notes.push_back(std::move(p));
@@ -50,4 +49,4 @@ void NotificationQueue::requeue_front(std::vector<JobNotification> notes) {
     }
 }
 
-}  // namespace lsw::agent::install
+}

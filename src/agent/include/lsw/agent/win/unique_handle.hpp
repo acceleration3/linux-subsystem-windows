@@ -4,15 +4,6 @@
 #include <windows.h>
 
 namespace lsw::agent::win {
-
-// Move-only owner of one Win32 resource, closed when the owner goes.
-//
-// The agent used to close every handle by hand, on every exit path, and
-// the paths multiply faster than anyone re-reads them: the console leaked
-// each session's process handle, and a new early return anywhere is one
-// more place to remember. ``Traits`` names the handle type, what "no
-// handle" looks like, and how to close one — the only things that differ
-// between a file, a find, a desktop and a registry key.
 template<class Traits>
 class UniqueResource {
 public:
@@ -38,10 +29,8 @@ public:
 
     [[nodiscard]] Handle get() const noexcept { return handle_; }
 
-    // Give up ownership without closing.
     [[nodiscard]] Handle release() noexcept { return std::exchange(handle_, Traits::empty()); }
 
-    // Close what is held, then hold ``handle``.
     void reset(Handle handle = Traits::empty()) noexcept {
         if (Traits::valid(handle_)) {
             Traits::close(handle_);
@@ -49,8 +38,6 @@ public:
         handle_ = handle;
     }
 
-    // For APIs that return the handle through an out-parameter. Closes
-    // whatever was held first, so the old value cannot leak.
     [[nodiscard]] Handle* put() noexcept {
         reset();
         return &handle_;
@@ -62,11 +49,6 @@ private:
     Handle handle_ = Traits::empty();
 };
 
-// Kernel objects: processes, threads, files, pipes, jobs, snapshots.
-// Both null and INVALID_HANDLE_VALUE count as empty, because which of
-// the two means "failed" depends on the function that returned it —
-// CreateFileW and CreateToolhelp32Snapshot use one, OpenProcess and
-// CreateJobObjectW the other.
 struct KernelHandleTraits {
     using Handle = HANDLE;
 
@@ -77,7 +59,6 @@ struct KernelHandleTraits {
     static void close(Handle h) noexcept { ::CloseHandle(h); }
 };
 
-// FindFirstFile*: a different close function for the same handle type.
 struct FindHandleTraits {
     using Handle = HANDLE;
 
@@ -98,8 +79,6 @@ struct DesktopHandleTraits {
     static void close(Handle h) noexcept { ::CloseDesktop(h); }
 };
 
-// An opened or created registry key — never one of the predefined
-// roots (HKEY_LOCAL_MACHINE and friends), which are not ours to close.
 struct RegistryKeyTraits {
     using Handle = HKEY;
 
@@ -115,4 +94,4 @@ using UniqueFindHandle = UniqueResource<FindHandleTraits>;
 using UniqueDesktop = UniqueResource<DesktopHandleTraits>;
 using UniqueRegKey = UniqueResource<RegistryKeyTraits>;
 
-}  // namespace lsw::agent::win
+}

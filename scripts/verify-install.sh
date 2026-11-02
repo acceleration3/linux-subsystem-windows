@@ -1,14 +1,4 @@
 #!/usr/bin/env bash
-# Check whether the LSW install succeeded by probing what's externally
-# observable from the host:
-#   * libvirt domain ``lsw`` exists and is running
-#   * the qcow2 disk has been written to (>= 4 GiB used = Windows
-#     unpacked, not just an empty-disk first boot)
-#   * vsock(cid=100, port=5102) accepts a connection (= guest agent
-#     is up and listening)
-#
-# Each check prints PASS / FAIL with a short note. Exit 0 if every
-# check passes, 1 otherwise.
 
 set -uo pipefail
 
@@ -38,7 +28,7 @@ echo "=== qcow2 disk ==="
 if [[ ! -f "${DISK}" ]]; then
     fail "disk image missing: ${DISK}"
 else
-    used_bytes=$(stat -c%s "${DISK}")  # apparent size; sparse so this is upper bound
+    used_bytes=$(stat -c%s "${DISK}")
     actual_blocks=$(stat -c%b "${DISK}")
     actual_bytes=$((actual_blocks * 512))
     actual_gib=$((actual_bytes / 1024 / 1024 / 1024))
@@ -80,7 +70,7 @@ if (( fails > 0 )); then
     these in cmd.exe (Win+R "cmd")) ===
 
   1. Did the post-OOBE promote script run?
-     type C:\ProgramData\LSW\promote.log
+     type C:\ProgramData\LSW\logs\promote.log
 
      It logs every step of SetupComplete: creating the wizard account,
      promoting it to Administrators, and registering the lsw-agent
@@ -115,7 +105,7 @@ if (( fails > 0 )); then
 
        RUNNING                      -> agent is up but the transport is
                                        not reaching the host
-       STOPPED                      -> see C:\ProgramData\LSW\agent.log
+       STOPPED                      -> see C:\ProgramData\LSW\logs\agent.log
        "does not exist"             -> LswPromote.ps1 did not get that
                                        far; see promote.log above
 

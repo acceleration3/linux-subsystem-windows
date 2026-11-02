@@ -6,7 +6,7 @@ namespace lsw::host::config {
 
 namespace {
 constexpr int kFirstAutoCid = 100;
-}  // namespace
+}
 
 VmState::VmState(QObject* parent) : QObject(parent) {}
 
@@ -51,4 +51,4 @@ quint32 VmState::allocate_cid() const {
     return c;
 }
 
-}  // namespace lsw::host::config
+}

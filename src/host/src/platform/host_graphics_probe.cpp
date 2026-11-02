@@ -12,10 +12,6 @@
 namespace lsw::host::platform {
 
 namespace {
-
-// The little of EGL the probe needs, declared here rather than taken
-// from <EGL/egl.h>: libEGL is opened at run time, so the manager neither
-// links it nor needs its headers to build.
 using EGLDisplay = void*;
 using EGLBoolean = unsigned int;
 using EGLint = std::int32_t;
@@ -33,7 +29,6 @@ using QueryString = const char* (*)(EGLDisplay, EGLint);
 using BindApi = EGLBoolean (*)(EGLenum);
 using GetDisplayDriverName = const char* (*)(EGLDisplay);
 
-// What the library a Khronos OpenCL ICD file names is usually called.
 QString icd_label(const QString& library) {
     const QString lower = library.toLower();
     if (lower.contains(QLatin1StringView("rusticl"))) return QStringLiteral("rusticl");
@@ -47,8 +42,6 @@ QString icd_label(const QString& library) {
     return base;
 }
 
-// The first file in ``dir`` matching ``pattern``; the one with the
-// longest name, so libdxvk_d3d11.so.0.20701 wins over its symlinks.
 QString find_library(const QString& dir, const QString& pattern) {
     if (dir.isEmpty()) {
         return {};
@@ -62,9 +55,6 @@ QString find_library(const QString& dir, const QString& pattern) {
     return found.first();
 }
 
-// The version a native DXVK build encodes in its soname,
-// "libdxvk_d3d11.so.0.20701" being 2.7.1. Empty when the name carries
-// none.
 QString soname_version(const QString& file) {
     static const QRegularExpression pattern(QStringLiteral("\\.so\\.\\d+\\.(\\d{5,})$"));
     const auto match = pattern.match(file);
@@ -78,7 +68,7 @@ QString soname_version(const QString& file) {
         .arg(encoded % 100);
 }
 
-}  // namespace
+}
 
 QString HostGraphicsProbe::driver_name(const HostGpu& gpu) {
     const QString driver = gpu.driver.toLower();
@@ -99,11 +89,7 @@ QString HostGraphicsProbe::driver_name(const HostGpu& gpu) {
 
 QString HostGraphicsProbe::driver_label(const HostGpu& gpu) {
     const QString name = driver_name(gpu);
-    // driverInfo is a version for most drivers ("Mesa 25.2.3", "580.82")
-    // and a sentence for some; only a short one is worth the room.
     QString info = gpu.driver_info.trimmed();
-    // A distribution's build suffix, "Mesa 26.2.4-arch3.1", is not the
-    // version anyone looks up.
     static const QRegularExpression suffix(QStringLiteral("^(Mesa \\d+\\.\\d+(\\.\\d+)?)[-+].*$"));
     info.replace(suffix, QStringLiteral("\\1"));
     if (info.size() > 24) {
@@ -158,10 +144,6 @@ HostApi HostGraphicsProbe::opengl() {
     auto* bind = reinterpret_cast<BindApi>(symbol("eglBindAPI"));
     if (get_proc != nullptr && initialize != nullptr && terminate != nullptr && query != nullptr
         && bind != nullptr) {
-        // The executor's own choice: a display with no window system,
-        // since it draws for the guest and never on a host window.
-        // Mesa's surfaceless platform where there is one, the default
-        // display otherwise.
         EGLDisplay display = nullptr;
         if (auto* platform =
                 reinterpret_cast<GetPlatformDisplay>(get_proc("eglGetPlatformDisplay"))) {
@@ -190,8 +172,6 @@ HostApi HostGraphicsProbe::opengl() {
             terminate(display);
         }
     }
-    // Left loaded: unloading a GL driver some other library may have
-    // pulled in is how a process crashes at exit.
     return api;
 }
 
@@ -199,8 +179,6 @@ HostApi HostGraphicsProbe::opencl() {
     HostApi api;
     api.kind = HostApi::Kind::OpenCl;
     api.name = QStringLiteral("OpenCL");
-    // The Khronos loader's own list: one file per ICD, holding the
-    // library's name. OCL_ICD_VENDORS moves it.
     QString vendors = qEnvironmentVariable("OCL_ICD_VENDORS");
     if (vendors.isEmpty() || !QFileInfo(vendors).isDir()) {
         vendors = QStringLiteral("/etc/OpenCL/vendors");
@@ -258,4 +236,4 @@ bool HostGraphicsProbe::missing_required(const QVector<HostApi>& apis) {
                        [](const HostApi& api) { return api.required && !api.served; });
 }
 
-}  // namespace lsw::host::platform
+}

@@ -5,12 +5,10 @@
 namespace lsw::host::platform {
 
 namespace {
-
-// Must match the hostfwd in embedded/domain.xml.
 constexpr auto kHost = "127.0.0.1";
 constexpr int kPort = 5445;
 
-}  // namespace
+}
 
 QString GuestSmbShare::url(const QString& username, const QString& password, const QString& share) {
     QUrl url;
@@ -31,4 +29,4 @@ QString GuestSmbShare::share_for_scope(const QString& scope) {
     return scope == QLatin1String("profile") ? QStringLiteral("Users") : QStringLiteral("C$");
 }
 
-}  // namespace lsw::host::platform
+}

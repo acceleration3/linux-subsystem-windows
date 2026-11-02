@@ -20,13 +20,10 @@ constexpr int kColTask = 0;
 constexpr int kColSource = 1;
 constexpr int kColStatus = 2;
 
-// The pipeline reports row 0; the driver package row follows the
-// payload ISO it is staged onto. There is no driver media row: the
-// domain's disk and NIC have in-box Windows drivers.
 constexpr int kRowPayloadIso = 0;
 constexpr int kRowAvgpu = 1;
 
-}  // namespace
+}
 
 PayloadPage::PayloadPage(Wizard& wizard, QWidget* parent)
     : PipelinePage(parent), wizard_(wizard) {
@@ -42,20 +39,12 @@ PayloadPage::PayloadPage(Wizard& wizard, QWidget* parent)
     table_->horizontalHeader()->setSectionResizeMode(kColTask, QHeaderView::Stretch);
     table_->horizontalHeader()->setSectionResizeMode(kColSource, QHeaderView::Fixed);
     table_->setColumnWidth(kColSource, 220);
-    // Fixed: the state is a cell widget, and a column sized to its
-    // items measures the empty item behind it and clips the pill.
     table_->horizontalHeader()->setSectionResizeMode(kColStatus, QHeaderView::Fixed);
     table_->setColumnWidth(kColStatus, 190);
-    // The artifacts, named as themselves. A row says what is being made
-    // or fetched; the verb is in the state column, where it changes.
     table_->setItem(kRowPayloadIso, kColTask, new QTableWidgetItem("lsw-payload.iso"));
-    // The guest's display driver, x64 and the x86 user-mode drivers
-    // 32-bit processes load. It is staged onto the payload ISO, so it is
-    // ready when that is, and Windows installs it before the first logon.
     table_->setItem(kRowAvgpu, kColTask,
                     new QTableWidgetItem("avgpu driver package, x64 and x86"));
 
-    // Where each one comes from.
     table_->setItem(kRowPayloadIso, kColSource, ui::Theme::kind_cell("local build"));
     table_->setItem(kRowAvgpu, kColSource, ui::Theme::kind_cell("accel-virt, local build"));
     ui::Theme::fit_rows(table_);
@@ -90,9 +79,6 @@ void PayloadPage::initializePage() {
             [this](int row, bool ok, const QString& detail) {
                 set_row_status(row, ok ? RowStatus::Done : RowStatus::Failed, detail);
             });
-    // The trim runs before the payload, while this page is on screen, so
-    // its progress and its failure are this page's to show: without them
-    // a trim that fails leaves every row at Pending and nothing moving.
     connect(p, &::lsw::host::provision::Pipeline::step_started, this,
             [this](Step s, const QString& desc) {
                 if (s == Step::BuildingPayloadIso || s == Step::TrimmingImage) {
@@ -131,11 +117,9 @@ int PayloadPage::nextId() const {
 
 void PayloadPage::set_row_status(int row, RowStatus s, const QString& detail) {
     ui::StatusPill::set_cell(table_, row, kColStatus, s, detail);
-    // The driver package travels on the payload ISO: its row says what
-    // the ISO's does.
     if (row == kRowPayloadIso) {
         ui::StatusPill::set_cell(table_, kRowAvgpu, kColStatus, s, detail);
     }
 }
 
-}  // namespace lsw::host::wizard
+}

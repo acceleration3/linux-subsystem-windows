@@ -13,12 +13,9 @@
 namespace lsw::host::provision::install {
 
 namespace {
+constexpr qint64 kFreeSpaceSlackBytes = 2LL * 1024 * 1024 * 1024;
 
-// Headroom over the on-ISO compressed size — the extracted WIM is
-// larger than its ISO entry, and we don't want to fill the disk.
-constexpr qint64 kFreeSpaceSlackBytes = 2LL * 1024 * 1024 * 1024;  // 2 GiB
-
-}  // namespace
+}
 
 QVector<WimEdition> WimEditionLister::list(const QString& iso_path, const QString& scratch_dir,
                                       QString* error) {
@@ -30,9 +27,6 @@ QVector<WimEdition> WimEditionLister::list(const QString& iso_path, const QStrin
         return {};
     };
 
-    // Scratch must be disk-backed with room for the whole image. Default
-    // to the ISO's own directory (guaranteed on disk, usually has room
-    // since the multi-GB ISO already lives there).
     QString base = scratch_dir;
     if (base.isEmpty()) {
         base = QFileInfo(iso_path).absolutePath();
@@ -41,8 +35,6 @@ QVector<WimEdition> WimEditionLister::list(const QString& iso_path, const QStrin
         return fail(QStringLiteral("scratch dir %1 is not writable").arg(base));
     }
 
-    // Bail early if there clearly isn't room — extracting most of an
-    // 8 GB WIM only to ENOSPC wastes minutes and leaves a huge stub.
     const qint64 iso_size = QFileInfo(iso_path).size();
     const QStorageInfo si{base};
     if (si.isValid() && si.bytesAvailable() < iso_size + kFreeSpaceSlackBytes) {
@@ -65,10 +57,6 @@ QVector<WimEdition> WimEditionLister::list(const QString& iso_path, const QStrin
         return fail(stage_error);
     }
 
-    // No reference to the other parts of a split image, deliberately.
-    // The edition table is metadata and all of it is in part 1; nothing
-    // below reads a single byte of file data, so the parts that carry
-    // it are not needed to answer this question.
     WIMStruct* w = nullptr;
     const int rc = ::wimlib_open_wim(image.path.toUtf8().constData(), 0, &w);
     if (rc != 0 || w == nullptr) {
@@ -108,7 +96,6 @@ int WimEditionLister::preferred(const QVector<WimEdition>& editions) {
             return i;
         }
     }
-    // No EDITIONID to go by: the name, as the edition table spells it.
     for (int i = 0; i < editions.size(); ++i) {
         if (editions[i].edition_id.isEmpty() &&
             editions[i].name.contains(QStringLiteral("Pro"), Qt::CaseInsensitive)) {
@@ -118,4 +105,4 @@ int WimEditionLister::preferred(const QVector<WimEdition>& editions) {
     return 0;
 }
 
-}  // namespace lsw::host::provision::install
+}

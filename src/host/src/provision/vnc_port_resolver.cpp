@@ -41,4 +41,4 @@ void VncPortResolver::on_tick() {
     Q_EMIT resolved(port);
 }
 
-}  // namespace lsw::host::provision
+}

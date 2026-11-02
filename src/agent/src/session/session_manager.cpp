@@ -22,22 +22,15 @@
 namespace lsw::agent::session {
 
 namespace {
-
-// How often sessions are reconciled with no notification to prompt it.
 constexpr auto kReconcileEvery = std::chrono::seconds(5);
 
-// How stale the cached session list may be for routing. list_windows is
-// polled at tens of hertz; enumerating Terminal Services sessions for
-// each poll would be most of its cost.
+constexpr auto kLogLevelCallTimeout = std::chrono::milliseconds(2000);
+
 constexpr auto kSnapshotMaxAge = std::chrono::seconds(2);
 
-// Relaunch backoff for a helper that keeps dying, and how long one must
-// have lived for the backoff to start over.
 constexpr auto kMaxBackoff = std::chrono::seconds(60);
 constexpr auto kHealthyAfter = std::chrono::seconds(60);
 
-// Helper-pushed events are held this many at most while no manager is
-// connected to drain them; the oldest go first.
 constexpr std::size_t kEventCapacity = 1000;
 
 std::string trim(std::string s) {
@@ -47,9 +40,6 @@ std::string trim(std::string s) {
     return s;
 }
 
-// The account the installer created and logs on automatically: the
-// AutoLogon user Winlogon keeps, else what UserOnce.ps1 recorded in
-// user.txt. Empty when neither is there (a guest not installed by LSW).
 std::string read_wizard_user() {
     if (const auto key = win::RegKey::open(
             HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon",
@@ -66,7 +56,7 @@ std::string read_wizard_user() {
     return {};
 }
 
-}  // namespace
+}
 
 SessionManager::SessionManager(bool as_service)
     : as_service_(as_service), own_session_(win::WtsSessions::current()) {}
@@ -99,8 +89,6 @@ void SessionManager::stop() {
         const std::lock_guard lock(mu_);
         slots.swap(slots_);
     }
-    // Outside the lock: a channel's thread calls back into this object
-    // while it winds down.
     for (auto& [id, slot] : slots) {
         if (slot.channel) {
             slot.channel->stop();
@@ -118,9 +106,6 @@ void SessionManager::notify_session_change(std::uint32_t session, std::uint32_t 
 }
 
 void SessionManager::helper_changed() {
-    // No lock: this runs on a channel's thread, which a caller of
-    // HelperChannel::stop may be joining. Every waiter re-checks on a
-    // short timeout, so a notification racing a wait costs that much.
     cv_.notify_all();
 }
 
@@ -143,9 +128,35 @@ std::vector<rpc::Event> SessionManager::collect_pending() {
     return out;
 }
 
+void SessionManager::sync_log_level() {
+    const int level = static_cast<int>(log::level());
+    std::vector<std::shared_ptr<HelperChannel>> stale;
+    {
+        const std::lock_guard lock(mu_);
+        for (const auto& [id, slot] : slots_) {
+            if (slot.channel && slot.channel->connected() &&
+                slot.channel->log_level_sent() != level) {
+                stale.push_back(slot.channel);
+            }
+        }
+    }
+    for (const auto& channel : stale) {
+        try {
+            (void)channel->call(helper_cmd::kSetLogLevel,
+                                {{"level", log::level_name(log::level())}}, kLogLevelCallTimeout);
+            channel->set_log_level_sent(level);
+        } catch (const std::exception& e) {
+            LSW_AGENT_WARN("sessions: the helper in session {} did not take the log level: {}",
+                           channel->session(),
+                           e.what());
+        }
+    }
+}
+
 void SessionManager::supervise() {
     for (;;) {
         reconcile();
+        sync_log_level();
         std::unique_lock lock(mu_);
         cv_.wait_for(lock, kReconcileEvery, [&] { return stopping_ || wake_; });
         if (stopping_) {
@@ -166,7 +177,7 @@ SessionSelector SessionManager::selector(bool refresh) {
     auto sessions = win::WtsSessions::list();
     const std::lock_guard lock(mu_);
     if (wizard_.empty()) {
-        wizard_ = read_wizard_user();  // UserOnce.ps1 may have written it since
+        wizard_ = read_wizard_user();
     }
     snapshot_ = sessions;
     snapshot_at_ = now;
@@ -174,9 +185,6 @@ SessionSelector SessionManager::selector(bool refresh) {
 }
 
 win::RunAs SessionManager::identity_for(std::uint32_t session, bool elevated) {
-    // In the foreground the agent cannot borrow anyone's token
-    // (WTSQueryUserToken is LocalSystem's); for its own session it does
-    // not need to.
     if (!as_service_ && session == own_session_) {
         return win::RunAs::self();
     }
@@ -194,7 +202,6 @@ void SessionManager::reconcile() {
         if (stopping_) {
             return;
         }
-        // Sessions that ended, or whose user changed, lose their helper.
         for (auto it = slots_.begin(); it != slots_.end();) {
             const auto info = sel.find(it->first);
             if (!info || (it->second.channel && it->second.channel->user() != info->user)) {
@@ -212,11 +219,9 @@ void SessionManager::reconcile() {
             }
             Slot& slot = slots_[info.id];
             if (slot.channel && !slot.channel->finished()) {
-                continue;  // starting or serving
+                continue;
             }
             if (slot.channel) {
-                // It died. Back off before the next attempt, unless it had
-                // been running long enough to count as healthy.
                 const bool healthy = now - slot.channel->started() >= kHealthyAfter;
                 slot.backoff = healthy
                                    ? std::chrono::seconds(1)
@@ -246,7 +251,7 @@ void SessionManager::reconcile() {
         const std::lock_guard lock(mu_);
         if (stopping_) {
             if (channel) {
-                retired.push_back(channel);  // stopped below, outside the lock
+                retired.push_back(channel);
             }
             continue;
         }
@@ -261,7 +266,6 @@ void SessionManager::reconcile() {
                            info.id, info.user, error, slot.backoff.count());
         }
     }
-    // Launched as the agent was stopping: not kept.
     for (auto& channel : retired) {
         if (channel) {
             channel->stop();
@@ -289,11 +293,9 @@ std::shared_ptr<HelperChannel> SessionManager::channel_for(std::uint32_t session
         }
         const auto left = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now);
         if (channel && !channel->finished()) {
-            (void)channel->wait_connected(left);  // being started: wait for it
+            (void)channel->wait_connected(left);
             continue;
         }
-        // None, or a dead one: have the supervisor look now rather than
-        // at its next tick, and check again shortly.
         std::unique_lock lock(mu_);
         wake_ = true;
         cv_.notify_all();
@@ -437,4 +439,4 @@ nlohmann::json SessionManager::describe() {
     };
 }
 
-}  // namespace lsw::agent::session
+}

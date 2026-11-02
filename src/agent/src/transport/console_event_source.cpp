@@ -18,8 +18,6 @@ std::vector<rpc::Event> ConsoleEventSource::collect_pending() {
         nlohmann::json payload;
         payload["session_id"] = n.session_id;
         if (is_output) {
-            // Base64 so the bytes survive JSON. Console output is a few
-            // KB/s at most — not worth a dedicated binary envelope type.
             payload["data_b64"] = util::Base64::encode(n.data);
         } else {
             payload["exit_code"] = n.exit_code;
@@ -31,4 +29,4 @@ std::vector<rpc::Event> ConsoleEventSource::collect_pending() {
     return events;
 }
 
-}  // namespace lsw::agent::transport
+}

@@ -34,17 +34,12 @@ using ui::Widgets;
 constexpr int kRoleName = Qt::UserRole;
 constexpr int kRoleIsDir = Qt::UserRole + 1;
 
-// Where applications actually are. The first entry is where the dialog
-// opens, because it is the same folder the application catalog already
-// enumerates: picking one is two clicks rather than a remembered path.
 struct Place {
     const char* label;
     const char* path;
     const char* glyph;
 };
 
-// The glyphs are the two a plain desktop font is certain to have. An
-// icon theme would be prettier and is not guaranteed to be installed.
 const Place kPlaces[] = {
     {"Start menu", R"(C:\ProgramData\Microsoft\Windows\Start Menu\Programs)", "▣"},
     {"Program Files", R"(C:\Program Files)", "▢"},
@@ -53,7 +48,7 @@ const Place kPlaces[] = {
     {"Downloads", R"(C:\Users\Public\Downloads)", "●"},
 };
 
-}  // namespace
+}
 
 RemoteFileDialog::RemoteFileDialog(link::AgentRpcClient& rpc, Mode mode, QWidget* parent)
     : QDialog(parent), rpc_(rpc), mode_(mode) {
@@ -65,8 +60,6 @@ RemoteFileDialog::RemoteFileDialog(link::AgentRpcClient& rpc, Mode mode, QWidget
     build();
 
     if (!rpc_.has_target()) {
-        // No target is no guest at all; a guest that is off is the
-        // failed read below, which says so in the agent's words.
         status_->setText(QStringLiteral("No guest is set up, so there is nothing to browse."));
         entries_->setEnabled(false);
         places_->setEnabled(false);
@@ -80,10 +73,6 @@ void RemoteFileDialog::build() {
     root->setContentsMargins(0, 0, 0, 0);
     root->setSpacing(0);
 
-    // ---- places ---------------------------------------------------
-    // A column of buttons rather than a list: the design gives the
-    // current place an amber edge and its glyph the same colour, and a
-    // list item is one piece of text that cannot be two colours.
     places_ = new QWidget;
     Theme::surface(places_, Theme::Role::kNavRail);
     places_->setFixedWidth(190);
@@ -98,7 +87,6 @@ void RemoteFileDialog::build() {
     places_layout_->addStretch(1);
     root->addWidget(places_);
 
-    // ---- pane -----------------------------------------------------
     auto* pane = new QWidget;
     auto* pane_layout = new QVBoxLayout(pane);
     pane_layout->setContentsMargins(0, 0, 0, 0);
@@ -166,7 +154,6 @@ void RemoteFileDialog::build() {
                 }
             });
 
-    // ---- name and filter ------------------------------------------
     auto* name_row = new QFrame;
     Theme::surface(name_row, Theme::Role::kContentBar);
     auto* name_layout = new QHBoxLayout(name_row);
@@ -190,7 +177,6 @@ void RemoteFileDialog::build() {
     connect(filter_, &QComboBox::currentIndexChanged, this,
             [this](int) { navigate_to(current_); });
 
-    // ---- footer ---------------------------------------------------
     auto* footer_layout = ui::DialogChrome::foot_band(pane_layout, QMargins(12, 10, 12, 10), 8);
     status_ = Widgets::meta(QString{}, true);
     auto* cancel = new QPushButton(QStringLiteral("Cancel"));
@@ -206,8 +192,6 @@ void RemoteFileDialog::build() {
     root->addWidget(pane, 1);
 }
 
-// The column ends in a stretch once it has been built, and anything
-// added later (the drives, when the guest answers) goes above it.
 void RemoteFileDialog::append_place_widget(QWidget* widget) {
     int at = places_layout_->count();
     if (at > 0 && places_layout_->itemAt(at - 1)->spacerItem() != nullptr) {
@@ -223,10 +207,6 @@ void RemoteFileDialog::add_place(const QString& label, const QString& path,
     button->setCheckable(true);
     button->setCursor(Qt::PointingHandCursor);
     button->setProperty("placePath", path);
-    // The row height is in the stylesheet, not here: QStyleSheetStyle
-    // rewrites a widget's minimum and maximum size from the sheet when
-    // it polishes it, so setFixedHeight on a styled button is undone
-    // and the button comes back the height of its (empty) text.
 
     auto* layout = new QHBoxLayout(button);
     layout->setContentsMargins(9, 6, 9, 6);
@@ -245,8 +225,6 @@ void RemoteFileDialog::add_place(const QString& label, const QString& path,
     connect(button, &QPushButton::clicked, this, [this, path] { navigate_to(path); });
 }
 
-// Which place the pane is inside. A folder deeper in a place still
-// belongs to it, so the longest matching prefix wins.
 void RemoteFileDialog::highlight_place(const QString& path) {
     QPushButton* best = nullptr;
     int longest = 0;
@@ -272,8 +250,6 @@ void RemoteFileDialog::highlight_place(const QString& path) {
     }
 }
 
-// A heading over a group of places. Small mono caps, and the design's
-// breathing room above it, because it separates two kinds of thing.
 void RemoteFileDialog::add_place_heading(const QString& text) {
     auto* label = Widgets::caption(text);
     label->setContentsMargins(9, places_layout_->count() == 0 ? 0 : 10, 9, 5);
@@ -281,9 +257,6 @@ void RemoteFileDialog::add_place_heading(const QString& text) {
 }
 
 void RemoteFileDialog::refresh_places() {
-    // The drives the guest reports, appended under the fixed shortcuts.
-    // A mapped host folder is a drive letter in there like any other,
-    // which is exactly how it should read.
     rpc_.request_async(linkproto::cmd::kListDir, {{"path", ""}}, this,
                        [this](const link::AgentReply& reply) {
         const auto drives = reply.ok ? reply.body.value("entries", nlohmann::json::array())
@@ -317,7 +290,6 @@ QString RemoteFileDialog::parent_of(const QString& path) const {
     }
     const int cut = trimmed.lastIndexOf(QLatin1Char('\\'));
     if (cut <= 2) {
-        // "C:" is as far up as this goes; above that is the drive list.
         return trimmed.left(2) + QLatin1Char('\\');
     }
     return trimmed.left(cut);
@@ -369,17 +341,12 @@ void RemoteFileDialog::navigate_to(const QString& path) {
 
 void RemoteFileDialog::render_entries(const link::AgentReply& reply) {
     if (!reply.ok) {
-        // A refusal carries the folder's own entries field; a transport
-        // failure carries nothing. They read differently.
         if (!reply.body.is_object()) {
             status_->setText(QStringLiteral("The guest did not answer (%1). It may be off or "
                                             "still booting.")
                                  .arg(QString::fromStdString(reply.error)));
             return;
         }
-        // The agent runs as the wizard user, so a folder belonging to
-        // somebody else is refused by Windows and not by us. Saying
-        // which is the difference between a bug and a permission.
         status_->setText(QStringLiteral("%1. The agent runs as the guest's own account.")
                              .arg(QString::fromStdString(reply.error)));
         return;
@@ -438,10 +405,6 @@ void RemoteFileDialog::accept_current() {
         return;
     }
 
-    // A shortcut is not the thing to store: an uninstaller deletes it
-    // and the entry stops working for a reason nobody can see. Ask the
-    // guest what it points at, and keep its arguments and working
-    // folder while we are there.
     status_->setText(QStringLiteral("Resolving the shortcut"));
     rpc_.request_async(linkproto::cmd::kResolveShortcut, {{"path", path.toStdString()}}, this,
                        [this, path](const link::AgentReply& reply) {
@@ -449,8 +412,6 @@ void RemoteFileDialog::accept_current() {
             return reply.ok ? QString::fromStdString(reply.body.value(key, std::string{}))
                             : QString{};
         };
-        // A shortcut that resolves to nothing is still better stored
-        // as itself than not stored at all.
         const QString target = field("target");
         selected_ = target.isEmpty() ? path : target;
         arguments_ = field("args");
@@ -459,4 +420,4 @@ void RemoteFileDialog::accept_current() {
     });
 }
 
-}  // namespace lsw::host::manager
+}

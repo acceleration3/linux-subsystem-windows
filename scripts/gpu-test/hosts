@@ -1,7 +1,3 @@
-# The machines gpu-test.sh deploys to and tests: a name, then where ssh
-# reaches it ("local" is this machine, the builder). Each needs an LSW VM
-# (gpu-test.sh provision NAME installs one) and key-based ssh
-# (gpu-test.sh setup-keys NAME).
 local   local
 test    test@192.168.1.199
 accel   accel@192.168.1.15

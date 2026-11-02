@@ -21,8 +21,6 @@ using services::GuestUpdateStatus;
 using ui::Theme;
 using ui::Widgets;
 
-// The host's steps, in order. These are the step texts GuestUpdate
-// publishes, so the current one is found by its text.
 constexpr const char* kPreparing = "Preparing files";
 constexpr const char* kSending = "Sending files to Windows";
 constexpr const char* kUpdating = "Updating Windows";
@@ -36,14 +34,6 @@ const QStringList& host_step_names() {
     return names;
 }
 
-QLabel* marked(const QString& mark, const QString& text, const char* tone) {
-    auto* label = new QLabel(QStringLiteral("%1  %2").arg(mark, text));
-    label->setWordWrap(true);
-    // The current step is in the plain foreground, which is no tone.
-    Widgets::set_flag(label, Theme::Tone::kProperty, tone != nullptr ? QVariant(tone) : QVariant());
-    return label;
-}
-
 void clear(QWidget* box) {
     auto* layout = box->layout();
     while (QLayoutItem* item = layout->takeAt(0)) {
@@ -52,7 +42,7 @@ void clear(QWidget* box) {
     }
 }
 
-}  // namespace
+}
 
 UpdateDialog::UpdateDialog(services::StatusHub& status, QWidget* parent)
     : QDialog(parent), status_(status) {
@@ -61,9 +51,6 @@ UpdateDialog::UpdateDialog(services::StatusHub& status, QWidget* parent)
     setMinimumWidth(460);
 
     auto* root = new QVBoxLayout(this);
-    // The dialog is always the size of what it shows: it grows when a run's
-    // outcome is added, and shrinks back when the next run starts, so every
-    // run opens at the same size.
     root->setSizeConstraint(QLayout::SetFixedSize);
     root->setContentsMargins(22, 20, 22, 16);
     root->setSpacing(14);
@@ -147,7 +134,6 @@ void UpdateDialog::refresh() {
         if (!was_running_) {
             reached_ = -1;
             restart_seen_ = false;
-            // A new run opens the dialog, also over one that was closed.
             open();
         }
         const int index = static_cast<int>(host_step_names().indexOf(update.step));
@@ -187,16 +173,15 @@ void UpdateDialog::rebuild_host_steps() {
         }
         QLabel* label = nullptr;
         if (state == State::Succeeded) {
-            label = marked(QStringLiteral("✓"), names[i], Theme::Tone::kOk);
+            label = Widgets::step_line(QStringLiteral("✓"), names[i], Theme::Tone::kOk);
         } else if (state == State::Failed) {
-            // The step it stopped on failed; before it done, after it to come.
-            label = i < reached_    ? marked(QStringLiteral("✓"), names[i], Theme::Tone::kOk)
-                    : i == reached_ ? marked(QStringLiteral("✗"), names[i], Theme::Tone::kBad)
-                                    : marked(QStringLiteral("○"), names[i], Theme::Tone::kFaint);
+            label = i < reached_    ? Widgets::step_line(QStringLiteral("✓"), names[i], Theme::Tone::kOk)
+                    : i == reached_ ? Widgets::step_line(QStringLiteral("✗"), names[i], Theme::Tone::kBad)
+                                    : Widgets::step_line(QStringLiteral("○"), names[i], Theme::Tone::kFaint);
         } else {
-            label = i < reached_    ? marked(QStringLiteral("✓"), names[i], Theme::Tone::kOk)
-                    : i == reached_ ? marked(QStringLiteral("●"), names[i], nullptr)
-                                    : marked(QStringLiteral("○"), names[i], Theme::Tone::kFaint);
+            label = i < reached_    ? Widgets::step_line(QStringLiteral("✓"), names[i], Theme::Tone::kOk)
+                    : i == reached_ ? Widgets::step_line(QStringLiteral("●"), names[i], nullptr)
+                                    : Widgets::step_line(QStringLiteral("○"), names[i], Theme::Tone::kFaint);
         }
         host_steps_->layout()->addWidget(label);
     }
@@ -213,22 +198,22 @@ void UpdateDialog::rebuild_guest_steps() {
         }
         QLabel* label = nullptr;
         if (step.status == QLatin1String("done")) {
-            label = marked(QStringLiteral("✓"), QStringLiteral("%1: updated").arg(name), Theme::Tone::kOk);
+            label = Widgets::step_line(QStringLiteral("✓"), QStringLiteral("%1: updated").arg(name), Theme::Tone::kOk);
         } else if (step.status == QLatin1String("skipped")) {
-            label = marked(QStringLiteral("✓"), QStringLiteral("%1: already current").arg(name),
+            label = Widgets::step_line(QStringLiteral("✓"), QStringLiteral("%1: already current").arg(name),
                            Theme::Tone::kFaint);
         } else if (step.status == QLatin1String("failed")) {
-            label = marked(QStringLiteral("✗"),
+            label = Widgets::step_line(QStringLiteral("✗"),
                            step.message.isEmpty()
                                ? QStringLiteral("%1: failed").arg(name)
                                : QStringLiteral("%1: failed, %2").arg(name, step.message),
                            Theme::Tone::kBad);
         } else {
-            label = marked(QStringLiteral("○"), QStringLiteral("%1: not run").arg(name),
+            label = Widgets::step_line(QStringLiteral("○"), QStringLiteral("%1: not run").arg(name),
                            Theme::Tone::kFaint);
         }
         guest_steps_->layout()->addWidget(label);
     }
 }
 
-}  // namespace lsw::host::manager
+}

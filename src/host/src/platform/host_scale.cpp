@@ -17,4 +17,4 @@ int HostScale::resolve(int setting, const QWidget* window) {
     return setting > 0 ? setting : percent(window);
 }
 
-}  // namespace lsw::host::platform
+}

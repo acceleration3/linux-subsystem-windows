@@ -17,18 +17,15 @@ namespace {
 
 using K = config::ManagerSettings::Key;
 
-// What a worker brings back.
 struct Outcome {
     bool ok = false;
     QString error;
 };
 
-// The first wait before a stale hostdev is detached again, doubling to a
-// minute.
 constexpr qint64 kBackoffFirstMs = 4000;
 constexpr qint64 kBackoffMaxMs = 60000;
 
-}  // namespace
+}
 
 UsbPassthrough::UsbPassthrough(vm::Lifecycle& lifecycle, StatusHub& status,
                                config::ManagerSettings& settings, QObject* parent)
@@ -49,8 +46,6 @@ UsbPassthrough::UsbPassthrough(vm::Lifecycle& lifecycle, StatusHub& status,
                 if (!ok && !asked.isEmpty()) {
                     fail(asked, error);
                 } else if (ok) {
-                    // The rule applies to every device of the type, so any that
-                    // failed for want of it may be tried again.
                     for (const auto& device : status_.usb().devices) {
                         if (device.type_id() == type) {
                             tried_.remove(device.key());
@@ -64,6 +59,7 @@ UsbPassthrough::UsbPassthrough(vm::Lifecycle& lifecycle, StatusHub& status,
 }
 
 void UsbPassthrough::fail(const QString& key, const QString& why) {
+    LSW_WARN("USB {}: {}", key.toStdString(), why.toStdString());
     errors_.insert(key, why);
     Q_EMIT changed();
 }
@@ -89,7 +85,6 @@ void UsbPassthrough::attach(const QString& identity, int bus, int device) {
     }
     const UsbStatus::Device row = *found;
     errors_.remove(row.key());
-    // A hand attach is a decision: nothing held back or given up on stays so.
     returned_.remove(row.key());
     tried_.remove(row.key());
     if (!status_.usb().guest_running) {
@@ -109,13 +104,12 @@ void UsbPassthrough::run_attach(const UsbStatus::Device& row) {
     }
     busy_.insert(key);
     Q_EMIT changed();
+    LSW_DEBUG("USB {}: passing to the guest", key.toStdString());
     const QUuid uuid = status_.vm().uuid;
     const auto usb = row.usb();
     const QString identity = row.identity;
     (void)QtConcurrent::run([this, uuid, usb, identity] {
         Outcome out;
-        // This one device again, now: a stick can have been automounted, or
-        // unplugged, in the two seconds since the last reading.
         const auto devices = platform::HostUsbDevices::enumerate();
         const auto it = std::find_if(devices.begin(), devices.end(), [&](const platform::HostUsbDevice& d) {
             return d.identity() == identity && d.bus == usb.bus && d.device == usb.device;
@@ -149,12 +143,10 @@ void UsbPassthrough::detach(const QString& identity, int bus, int device) {
         return;
     }
     errors_.remove(found->key());
-    // A hostdev whose device is gone is the retry's to do, at its own pace,
-    // and a click is the person asking for it now.
     if (!found->present) {
         stale_.remove(found->key());
     }
-    run_detach(*found, /*by_hand=*/true);
+    run_detach(*found, true);
 }
 
 void UsbPassthrough::run_detach(const UsbStatus::Device& row, bool by_hand) {
@@ -166,6 +158,7 @@ void UsbPassthrough::run_detach(const UsbStatus::Device& row, bool by_hand) {
     const QUuid uuid = status_.vm().uuid;
     const auto usb = row.usb();
     const bool always = row.always;
+    LSW_DEBUG("USB {}: returning to the host{}", key.toStdString(), by_hand ? "" : " (unplugged)");
     Q_EMIT changed();
     (void)QtConcurrent::run([this, uuid, usb] {
         Outcome out;
@@ -183,9 +176,8 @@ void UsbPassthrough::run_detach(const UsbStatus::Device& row, bool by_hand) {
                 retry_.start(static_cast<int>(delay));
             }
         } else {
+            LSW_INFO("USB {} returned to the host", key.toStdString());
             stale_.remove(key);
-            // Returned by hand while it is to be passed whenever it is plugged
-            // in: reconciling would otherwise attach it again at once.
             if (by_hand && always) {
                 returned_.insert(key);
             }
@@ -204,7 +196,6 @@ void UsbPassthrough::set_always(const QString& identity, bool on) {
         list << identity;
     } else {
         list.removeAll(identity);
-        // Whatever was held back or given up on for it is no longer anything.
         for (const auto& device : status_.usb().devices) {
             if (device.identity == identity) {
                 returned_.remove(device.key());
@@ -212,7 +203,7 @@ void UsbPassthrough::set_always(const QString& identity, bool on) {
             }
         }
     }
-    // Changing the list rebuilds the snapshot, which reconciles.
+    LSW_INFO("USB {}: always pass to the guest is {}", identity.toStdString(), on ? "on" : "off");
     settings_.set_value(K::kUsbAlways, list);
 }
 
@@ -221,8 +212,6 @@ void UsbPassthrough::grant_access(const QString& identity, int bus, int device) 
     if (found == nullptr || !found->present) {
         return;
     }
-    // One prompt at a time per kind of device: a second click while the first
-    // waits must not replace whose it is.
     if (granting_.contains(found->type_id())) {
         return;
     }
@@ -244,10 +233,8 @@ void UsbPassthrough::forget_attempts() {
 
 void UsbPassthrough::reconcile() {
     const UsbStatus& usb = status_.usb();
-    // A new boot, seen as the machine stopping and starting or, when that was
-    // quicker than the readings, as a different libvirt id: a new chance for
-    // everything given up on or held back.
     if (usb.guest_running != was_running_ || (usb.boot_id != boot_id_ && usb.guest_running)) {
+        LSW_DEBUG("USB: guest running {}, boot {}; attempts forgotten", usb.guest_running, usb.boot_id);
         was_running_ = usb.guest_running;
         boot_id_ = usb.boot_id;
         forget_attempts();
@@ -258,7 +245,6 @@ void UsbPassthrough::reconcile() {
     }
     const qint64 now = QDateTime::currentMSecsSinceEpoch();
 
-    // Keys of what is there now, so what is not forgets itself.
     QSet<QString> live;
     for (const auto& device : usb.devices) {
         live.insert(device.key());
@@ -276,7 +262,6 @@ void UsbPassthrough::reconcile() {
 
     for (const auto& device : usb.devices) {
         const QString key = device.key();
-        // A hostdev whose device has gone from the host but not from the guest.
         if (device.attached() && !device.present) {
             const auto wait = stale_.constFind(key);
             if (!busy_.contains(key) && (wait == stale_.constEnd() || wait->next_ms <= now)) {
@@ -284,7 +269,7 @@ void UsbPassthrough::reconcile() {
                     stale_.insert(key, Backoff{});
                 }
                 LSW_INFO("USB {} is gone from the host; detaching it from the guest", key.toStdString());
-                run_detach(device, /*by_hand=*/false);
+                run_detach(device, false);
             }
             continue;
         }
@@ -297,4 +282,4 @@ void UsbPassthrough::reconcile() {
     }
 }
 
-}  // namespace lsw::host::services
+}

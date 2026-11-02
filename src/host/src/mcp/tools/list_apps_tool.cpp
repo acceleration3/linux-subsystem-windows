@@ -24,7 +24,6 @@ nlohmann::json ListAppsTool::call(const nlohmann::json&) {
     if (!r.ok) {
         return ToolResult::error(r.error);
     }
-    // Drop the icons: megabytes of base64 that a model can do nothing with.
     nlohmann::json out = r.body;
     if (out.contains("apps") && out["apps"].is_array()) {
         for (auto& app : out["apps"]) {
@@ -36,4 +35,4 @@ nlohmann::json ListAppsTool::call(const nlohmann::json&) {
     return ToolResult::json_body(out);
 }
 
-}  // namespace lsw::host::mcp
+}

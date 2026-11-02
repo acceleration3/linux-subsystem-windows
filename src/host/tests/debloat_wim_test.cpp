@@ -1,19 +1,3 @@
-// Runs the debloater against a real Windows image.
-//
-// Opt-in: set ``LSW_TEST_WIM`` to a WRITABLE COPY of an install.wim
-// extracted from Windows media, and ``LSW_TEST_WIM_INDEX`` to the
-// edition index to operate on. Without it the test reports skipped and
-// passes, because CI has no Windows media and downloading eight
-// gigabytes to find out whether a prefix matches is not a unit test.
-//
-// The copy is modified in place. Point it at a scratch file.
-//
-// What this actually checks is the half that cannot be checked any
-// other way: that the appx payload directory is where the code looks,
-// that the prefixes match the names Microsoft ships, and — the one that
-// matters most — that nothing the rest of the image depends on is
-// caught by them.
-
 #include "lsw/host/provision/debloat/debloat_level.hpp"
 #include "lsw/host/provision/debloat/wim_debloater.hpp"
 
@@ -36,7 +20,7 @@ void check(bool ok, const char* what) {
     }
 }
 
-}  // namespace
+}
 
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
@@ -51,10 +35,6 @@ int main(int argc, char** argv) {
     const int index = qEnvironmentVariable("LSW_TEST_WIM_INDEX", QStringLiteral("1")).toInt();
 
     using namespace lsw::host::provision::debloat;
-    // Sane by default because it is the level the wizard recommends and
-    // the one whose assertions below are about. LSW_TEST_WIM_LEVEL=maximum
-    // measures the component-store and driver passes instead, which is
-    // the run worth doing when either of those lists changes.
     const DebloatLevel level =
         DebloatPlan::from_string(qEnvironmentVariable("LSW_TEST_WIM_LEVEL",
                                                       QStringLiteral("sane")));
@@ -63,13 +43,8 @@ int main(int argc, char** argv) {
                 static_cast<long long>(before / (1024 * 1024)), index,
                 qPrintable(DebloatPlan::to_string(level)));
 
-    // Isolate first, exactly as DebloatStager does: without it the
-    // deletions free almost nothing, because the other editions in the
-    // file still reference the same resources.
     const QString single = wim + QStringLiteral(".single");
     QString isolate_error;
-    // No extra parts: the test takes a single .wim by path. A split
-    // source is DebloatStager's business, not the debloater's.
     const bool isolated =
         WimDebloater::isolate_edition(wim, {}, index, single, &isolate_error);
     check(isolated, "isolate_edition() succeeded");
@@ -92,7 +67,6 @@ int main(int argc, char** argv) {
                      });
 
     QString error;
-    // Index 1: the isolated file has exactly one image.
     const bool ok = debloater.apply(single, 1, DebloatPlan{level}, &error);
     check(ok, "apply() succeeded");
     if (!ok) {
@@ -105,16 +79,10 @@ int main(int argc, char** argv) {
     std::printf("  removed %lld paths\n", static_cast<long long>(removed.size()));
     check(!removed.isEmpty(), "something was matched and removed");
 
-    // The appx payloads have to have been found. A run that removed only
-    // the OneDrive stub means the directory moved and the prefixes never
-    // matched anything — which would pass silently without this.
     const auto appx =
         removed.filter(QStringLiteral("/Program Files/WindowsApps/"));
     check(appx.size() > 5, "provisioned application payloads were matched");
 
-    // And the packages everything else links against must NOT be in it.
-    // This is the assertion worth having: a prefix that is too broad
-    // produces an image that installs and then cannot run an app.
     for (const char* keep : {"Microsoft.VCLibs", "Microsoft.UI.Xaml", "Microsoft.NET.Native",
                              "Microsoft.WindowsStore", "Microsoft.DesktopAppInstaller",
                              "Microsoft.WindowsAppRuntime", "Microsoft.WindowsNotepad",

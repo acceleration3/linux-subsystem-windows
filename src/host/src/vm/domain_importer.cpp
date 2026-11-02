@@ -19,7 +19,7 @@ bool DomainImporter::import_existing(LibvirtConnection& conn, const config::Sett
     }
     auto* d = ::virDomainLookupByName(conn.raw(), config::kVmName);
     if (d == nullptr) {
-        return false;  // no VM defined yet — the wizard will create one
+        return false;
     }
     DomainHandle handle{d};
 
@@ -30,7 +30,7 @@ bool DomainImporter::import_existing(LibvirtConnection& conn, const config::Sett
         rec.uuid = QUuid::fromRfc4122(
             QByteArray(reinterpret_cast<const char*>(uuid_bytes), VIR_UUID_BUFLEN));
     } else {
-        rec.uuid = QUuid::createUuid();  // fallback — non-fatal
+        rec.uuid = QUuid::createUuid();
     }
     rec.disk_path = settings.vm_disk_path();
     rec.nvram_path = settings.vm_nvram_path();
@@ -41,4 +41,4 @@ bool DomainImporter::import_existing(LibvirtConnection& conn, const config::Sett
     return true;
 }
 
-}  // namespace lsw::host::vm
+}

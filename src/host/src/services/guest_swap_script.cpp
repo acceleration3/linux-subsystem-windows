@@ -5,18 +5,6 @@
 namespace lsw::host::services {
 
 namespace {
-
-// Runs inside the guest, started by the agent's own run_script — as
-// SYSTEM in session 0, since the agent is the ``lsw-agent`` service.
-//
-// It stops that service, which ends the agent process. The script lives
-// on regardless: run_script's job object has no KILL_ON_JOB_CLOSE (see
-// install::ProcessRunner), and a service's children are not ended with
-// it. ``taskkill`` then clears whatever still maps the old binary — the
-// session helpers, which the service normally ends itself — because a
-// mapped image cannot be overwritten.
-//
-// Delays use ping: ``timeout`` wants a console input it does not have.
 constexpr std::string_view kHead = R"BAT(@echo off
 setlocal
 set DIR=C:\ProgramData\LSW
@@ -29,9 +17,6 @@ if errorlevel 1 ( echo [swap] download failed >> "%LOG%" & exit /b 1 )
 for %%I in ("%NEW%") do echo [swap] downloaded size=%%~zI >> "%LOG%"
 )BAT";
 
-// Before the agent is stopped, and whatever becomes of the download:
-// the mirror's guest half has nothing to do with the service, and a
-// failure here leaves the old one where it was.
 constexpr std::string_view kMirror = R"BAT(set RW=%DIR%\remotewin-guest.exe
 set RWNEW=%DIR%\remotewin-guest.new.exe
 curl.exe --fail -L -o "%RWNEW%" http://10.0.2.2:__PORT__/remotewin-guest.exe >> "%LOG%" 2>&1
@@ -67,7 +52,7 @@ echo [swap] done >> "%LOG%"
 exit /b 0
 )BAT";
 
-}  // namespace
+}
 
 std::string GuestSwapScript::text() const {
     std::string script{kHead};
@@ -84,4 +69,4 @@ std::string GuestSwapScript::text() const {
     return script;
 }
 
-}  // namespace lsw::host::services
+}

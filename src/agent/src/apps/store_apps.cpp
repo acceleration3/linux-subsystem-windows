@@ -30,14 +30,9 @@
 namespace lsw::agent::apps {
 
 namespace {
-
-// Not in mingw-w64's shobjidl.h, which declares the coclass but not its CLSID.
 constexpr CLSID kApplicationActivationManager = {
     0x45ba127d, 0x10a8, 0x46ea, {0x8a, 0xb7, 0x56, 0xea, 0x90, 0x78, 0x94, 0x3c}};
 
-// A packaged application's ID is its package family, '!', and the
-// application's name in the manifest. Everything else in AppsFolder (Win32
-// shortcuts, by path or by an ID their shortcut set) has no '!'.
 constexpr wchar_t kFamilySeparator = L'!';
 
 struct StoreApp {
@@ -46,14 +41,9 @@ struct StoreApp {
     std::string icon;
 };
 
-// How long a new process is given to hand an activation to the instance
-// already running and exit, as a single-instance application does.
 constexpr DWORD kHandOffMs = 3000;
-// PACKAGE_FAMILY_NAME_MAX_LENGTH, which mingw-w64's appmodel.h leaves out:
-// a 64-character name, '_', and a 13-character publisher ID.
 constexpr UINT32 kFamilyNameMax = 64 + 1 + 13;
 
-// The running processes of a package family, oldest first.
 std::vector<DWORD> family_processes(const std::wstring& family) {
     std::vector<std::pair<std::uint64_t, DWORD>> found;
     for (const auto& entry : win::ProcessInfo::snapshot()) {
@@ -73,8 +63,6 @@ std::vector<DWORD> family_processes(const std::wstring& family) {
     return pids;
 }
 
-// The instance a single-instance application handed its activation to:
-// the one of ``family`` showing a window, else the oldest. Zero for none.
 DWORD running_instance(const std::wstring& family, DWORD gone) {
     std::vector<DWORD> pids = family_processes(family);
     pids.erase(std::remove(pids.begin(), pids.end(), gone), pids.end());
@@ -85,14 +73,13 @@ DWORD running_instance(const std::wstring& family, DWORD gone) {
     return pids.front();
 }
 
-// Whether ``pid`` ended within ``ms``; a process that cannot be opened has.
 bool exits_within(DWORD pid, DWORD ms) {
     const win::UniqueHandle process(::OpenProcess(SYNCHRONIZE, FALSE, pid));
     return !process || ::WaitForSingleObject(process.get(), ms) == WAIT_OBJECT_0;
 }
 
 
-}  // namespace
+}
 
 nlohmann::json StoreApps::list(int icon_size, const std::wstring& only) {
     std::vector<StoreApp> found;
@@ -123,8 +110,6 @@ nlohmann::json StoreApps::list(int icon_size, const std::wstring& only) {
 }
 
 namespace {
-
-// The shell items for ``paths``, as ActivateForFile wants them.
 win::ComPtr<IShellItemArray> items_of(const std::vector<std::wstring>& paths) {
     std::vector<PIDLIST_ABSOLUTE> ids;
     HRESULT hr = S_OK;
@@ -149,7 +134,7 @@ win::ComPtr<IShellItemArray> items_of(const std::vector<std::wstring>& paths) {
     return array;
 }
 
-}  // namespace
+}
 
 unsigned long StoreApps::activate(const std::wstring& aumid, const std::wstring& args,
                                   const std::vector<std::wstring>& documents) {
@@ -177,9 +162,6 @@ unsigned long StoreApps::activate(const std::wstring& aumid, const std::wstring&
         throw std::runtime_error("Windows could not start " + util::TextEncoding::to_utf8(aumid) +
                                  ": " + win::ErrorText::hresult(hr));
     }
-    // Already running, a single-instance application starts a process that
-    // passes the activation to the running one and exits; the instance to
-    // follow is the one that was there.
     if (was_running && exits_within(pid, kHandOffMs)) {
         if (const DWORD running = running_instance(family, pid); running != 0) {
             LSW_AGENT_INFO("store app {} handed its activation (pid {}) to pid {}",
@@ -191,4 +173,4 @@ unsigned long StoreApps::activate(const std::wstring& aumid, const std::wstring&
     return pid;
 }
 
-}  // namespace lsw::agent::apps
+}

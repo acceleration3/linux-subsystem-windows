@@ -17,16 +17,9 @@
 namespace lsw::agent::rpc::handlers {
 
 namespace {
-
-// One page. Big enough that an ordinary folder arrives whole, small
-// enough that System32 does not have to fit in a reply slot to be
-// listed at all.
 constexpr int kDefaultLimit = 250;
 constexpr int kMaxLimit = 1000;
 
-// The drives, for an empty path. A fixed disk and whatever host folders
-// have been mapped in look the same from here, which is the point: the
-// picker's sidebar lists them together.
 nlohmann::json list_drives() {
     nlohmann::json entries = nlohmann::json::array();
     const DWORD mask = ::GetLogicalDrives();
@@ -51,17 +44,10 @@ nlohmann::json list_drives() {
     return entries;
 }
 
-}  // namespace
+}
 
-// Read one page of a directory in the guest.
-//
-// The manager's file picker asks a Windows path of the machine that
-// will run the program, over the connection it already has, rather than
-// going through the SMB share: the share exists for the user's file
-// manager and can be switched off, and it would see the guest as a
-// different account than the one the program runs as.
 struct ListDirHandler : RpcHandler {
-    nlohmann::json handle(const nlohmann::json& params, RpcContext& /*ctx*/) override {
+    nlohmann::json handle(const nlohmann::json& params, RpcContext& ) override {
         const auto path = params.value("path", std::string{});
         const int cursor = std::max(0, params.value("cursor", 0));
         const int limit = std::clamp(params.value("limit", kDefaultLimit), 1, kMaxLimit);
@@ -92,8 +78,6 @@ struct ListDirHandler : RpcHandler {
             };
         }
 
-        // Folders first, then files, each alphabetically: the order a
-        // file manager uses, decided here so every caller gets it.
         std::vector<nlohmann::json> dirs;
         std::vector<nlohmann::json> files;
         do {
@@ -151,6 +135,6 @@ struct ListDirHandler : RpcHandler {
     }
 };
 
-}  // namespace lsw::agent::rpc::handlers
+}
 
 LSW_REGISTER_RPC(lsw::agent::rpc::handlers::ListDirHandler, ::lsw::linkproto::cmd::kListDir)

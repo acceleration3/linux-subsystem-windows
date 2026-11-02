@@ -1,7 +1,3 @@
-# shot.ps1 OUT.png [PROCESS]: the screen, or PROCESS's largest visible window
-# brought to the front, as DWM composes it. Prints the rectangle, the share of
-# pixels that are not black ("lit"), and the taskbar's mean brightness - a
-# desktop DWM still composes has a lit taskbar whatever the wallpaper.
 Add-Type -AssemblyName System.Windows.Forms,System.Drawing
 Add-Type -ReferencedAssemblies System.Drawing @"
 using System; using System.Runtime.InteropServices;

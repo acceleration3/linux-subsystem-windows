@@ -11,14 +11,11 @@
 namespace lsw::agent::install {
 
 namespace {
-
-// 0 = success, 3010 = success-but-reboot-required. That pair is the
-// standard Windows installer convention; anything else is a failure.
 [[nodiscard]] bool is_installer_success(int exit_code) {
     return exit_code == 0 || exit_code == 3010;
 }
 
-}  // namespace
+}
 
 DownloadInstallJob::DownloadInstallJob(std::string id, std::string name, NotificationQueue& queue,
                                        std::string url, std::string args, win::RunAs as)
@@ -28,13 +25,12 @@ DownloadInstallJob::DownloadInstallJob(std::string id, std::string name, Notific
 void DownloadInstallJob::run() {
     const auto downloaded = download(url_);
     if (!downloaded) {
-        return;  // terminal notification already posted
+        return;
     }
     const std::wstring& dest = *downloaded;
 
     report_status("install", "launching installer");
 
-    // ``"<path>" <args>`` — quoting the path handles spaces.
     std::wstring command_line = win::Process::quote(dest);
     if (!args_.empty()) {
         command_line += L" " + util::TextEncoding::to_wide(args_);
@@ -54,4 +50,4 @@ void DownloadInstallJob::run() {
                 ok ? std::string{} : exit_message(outcome, "installer"));
 }
 
-}  // namespace lsw::agent::install
+}

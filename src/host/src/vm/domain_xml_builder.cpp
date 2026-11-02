@@ -2,6 +2,8 @@
 
 #include "domain_template.hpp"
 
+#include "lsw/base/log.hpp"
+
 #include <QHash>
 #include <QProcessEnvironment>
 #include <QRegularExpression>
@@ -11,48 +13,20 @@
 namespace lsw::host::vm {
 
 namespace {
-
-// The GPU device's PCI slots on the root bus. Explicit, because libvirt
-// does not know about anything passed through <qemu:commandline> and
-// would happily put one of its own devices where QEMU then puts this.
-// It allocates from the low slots up (video at 0x01, root ports from
-// 0x02), keeps 0x1b and 0x1f for sound and the chipset, and the e1000e
-// NIC already sits at 0x10, so the GPUs take the run after it.
 constexpr int kGpuSlot = 0x11;
-// Render-only adapters, one slot each, stopping short of 0x1b.
 constexpr int kMaxRenderOnlyGpus = 8;
 
-// The device id the display adapter is given, and so its QOM path
-// (/machine/peripheral/<id>): Lifecycle::set_display_modes addresses
-// it there, and an id that drifted would make every resolution change
-// a "device not found".
 constexpr QLatin1StringView kGpuId{"lsw-gpu"};
 
-// ``value`` as one option of a QEMU -device / -chardev string. QEMU
-// splits those at commas and reads ",," as a literal one, so a path
-// with a comma in it — or a mode list, which is nothing but commas —
-// has to be doubled, or the rest of it becomes options of its own.
 QString qemu_opt(const QString& value) {
     QString out = value;
     return out.replace(QLatin1Char(','), QStringLiteral(",,"));
 }
 
-// One <qemu:arg>, escaped for the attribute it lands in.
 QString qemu_arg(const QString& value) {
     return QStringLiteral("    <qemu:arg value='%1'/>").arg(DomainXmlBuilder::xml_escape(value));
 }
 
-// The options every virtio-gpu-av-pci here shares: which GPU, the
-// executor that runs commands on it, and the host window. vectors=11 is
-// the INF's MessageNumberLimit: three for the device's own interrupt
-// sources and eight the contexts' fence queues share.
-//
-// The executor runs inside QEMU, always: there is no ``renderer=``.
-// That option has the device start av-renderer, a process of its own,
-// to hold the host GPU stack, but libvirt runs QEMU under its seccomp
-// sandbox with spawn=deny, so QEMU cannot start a process at all and
-// the device fails to realize. Executing in-process needs no process,
-// works under the sandbox as it is, and the sandbox stays on.
 QString gpu_common(const DomainXmlInputs& inputs, const QString& host_gpu) {
     QString out = QStringLiteral(",host-gpu=%1").arg(qemu_opt(host_gpu));
     if (!inputs.executor.isEmpty()) {
@@ -65,7 +39,7 @@ QString gpu_tail(const DomainXmlInputs& inputs) {
     return QStringLiteral(",vectors=11,hostmem=%1M").arg(inputs.host_window_mib);
 }
 
-}  // namespace
+}
 
 QString DomainXmlBuilder::gpu_device_id() {
     return kGpuId;
@@ -73,9 +47,6 @@ QString DomainXmlBuilder::gpu_device_id() {
 
 QString DomainXmlBuilder::render_template(const QString& tmpl,
                                           const QHash<QString, QString>& vars) {
-    // One pass over the template, so a substituted value is never
-    // scanned again: a path that happens to contain "{{uuid}}" stays a
-    // path. A placeholder with no value is left as it is.
     static const QRegularExpression placeholder(QStringLiteral("\\{\\{(\\w+)\\}\\}"));
     QString out;
     out.reserve(tmpl.size());
@@ -120,19 +91,9 @@ QString DomainXmlBuilder::xml_escape(const QString& text) {
 }
 
 QString DomainXmlBuilder::build(const config::VmRecord& vm, const DomainXmlInputs& inputs) {
-    // Every string that did not come from this file is escaped on its
-    // way in. They are paths and names a user can choose — a shared
-    // folder called "Tom & Jerry", a home directory with an apostrophe
-    // — and the template quotes its attributes with ', so either one
-    // unescaped is a definition libvirt rejects, or worse, one it reads
-    // differently. The *_inner blocks are XML built here and go in as
-    // they are, with their own substitutions escaped.
     const auto esc = &DomainXmlBuilder::xml_escape;
 
     QHash<QString, QString> vars;
-    // Stable libvirt domain name — matches the on-disk artifact names
-    // (see config::kVmName). Re-running the wizard re-defines the same
-    // domain instead of leaving UUID-suffixed orphans.
     vars["domain_name"] = esc(vm.name);
     vars["uuid"] = vm.uuid.toString(QUuid::WithoutBraces);
     vars["ram_mib"] = QString::number(vm.sizing.memory_mib);
@@ -141,34 +102,11 @@ QString DomainXmlBuilder::build(const config::VmRecord& vm, const DomainXmlInput
     vars["disk_path"] = esc(vm.disk_path);
     vars["cid"] = QString::number(vm.vsock_cid);
 
-    // Install media: the Windows ISO, by the overlay that boots it
-    // without a prompt, and the LSW payload ISO (autounattend + agent).
-    // Nothing else: the disk and the NIC are devices Windows has in-box
-    // drivers for, so there is no driver media to attach.
     vars["install_media"] = esc(vm.install_media_path);
     vars["payload_iso"] = esc(vm.payload_iso_path);
 
-    // accel-virt's QEMU, which is the only one that has the GPU device.
     vars["emulator"] = esc(inputs.qemu_binary);
 
-    // The environment QEMU runs in. libvirt's session mode starts QEMU
-    // with a scrubbed environment, so anything it needs from ours has to
-    // be named here:
-    //   QEMU_MODULE_DIR  the patched QEMU's own modules; without it QEMU
-    //                    looks in the distribution's directory and finds
-    //                    a module table with no GPU device in it.
-    //   AV_D3D_PATH      DXVK and vkd3d-proton for the executor. Without
-    //                    them the host offers no Direct3D, and the
-    //                    guest's desktop, which is Direct3D 11,
-    //                    crash-loops.
-    //   XDG_RUNTIME_DIR  the PipeWire audio backend's socket lives under
-    //                    it. Absent on the host, the line is left out and
-    //                    QEMU fails closed at startup with a clear error.
-    //   *_CACHE_*        each host driver's own shader cache, kept across
-    //                    boots: libvirt points XDG_CACHE_HOME at a
-    //                    per-domain directory it deletes at shutdown, so
-    //                    Mesa, NVIDIA, DXVK and vkd3d-proton are pointed
-    //                    past it by their own variables.
     const std::pair<const char*, QString> env[] = {
         {"QEMU_MODULE_DIR", inputs.qemu_module_dir},
         {"AV_D3D_PATH", inputs.d3d_lib_dir},
@@ -177,6 +115,8 @@ QString DomainXmlBuilder::build(const config::VmRecord& vm, const DomainXmlInput
         {"__GL_SHADER_DISK_CACHE_PATH", inputs.shader_cache_dir},
         {"DXVK_STATE_CACHE_PATH", inputs.shader_cache_dir},
         {"VKD3D_SHADER_CACHE_PATH", inputs.shader_cache_dir},
+        {"DXVK_LOG_LEVEL", inputs.dxvk_log_level},
+        {"VKD3D_DEBUG", inputs.vkd3d_debug},
     };
     QStringList env_lines;
     for (const auto& [name, value] : env) {
@@ -187,18 +127,6 @@ QString DomainXmlBuilder::build(const config::VmRecord& vm, const DomainXmlInput
     }
     vars["qemu_env_inner"] = env_lines.join(QLatin1Char('\n'));
 
-    // The display adapter during Windows setup, and none after it.
-    //
-    // The GPU device presents its host GPU's PCI vendor and device IDs,
-    // so OVMF's virtio-gpu GOP driver does not bind it, and until
-    // avgpu.sys is installed nothing in the guest drives it either: with
-    // no other adapter, Setup and the VNC install console are black.
-    // So the first definition carries a plain VGA as the primary display
-    // as well. The GPU device is there too, because provision.ps1's sign
-    // stage names every virtio-gpu-av-pci present in the INF, and one
-    // that is absent then gets no driver. Once setup is done the domain
-    // is redefined without the VGA, which would otherwise keep the
-    // desktop.
     vars["video_inner"] =
         inputs.install_display
             ? QStringLiteral("    <video>\n"
@@ -213,16 +141,7 @@ QString DomainXmlBuilder::build(const config::VmRecord& vm, const DomainXmlInput
                          "    </graphics>")
         : QString{};
 
-    // The GPU itself, as QEMU arguments: libvirt has no element for a
-    // device it does not know. One display adapter on the chosen host
-    // GPU, one output, and the resolutions the user asked for (empty is
-    // the host monitors' own); then, optionally, a render-only adapter
-    // per other host GPU.
     QStringList gpu_lines;
-    // Where an installed QEMU finds its firmware and option ROMs. It was
-    // configured for /usr/local and only finds them unaided in its own
-    // build tree; -L puts this directory first on its search path, ahead
-    // of the compiled-in one, so no other QEMU's ROMs are picked up.
     if (!inputs.qemu_data_dir.isEmpty()) {
         gpu_lines << qemu_arg(QStringLiteral("-L")) << qemu_arg(inputs.qemu_data_dir);
     }
@@ -234,24 +153,11 @@ QString DomainXmlBuilder::build(const config::VmRecord& vm, const DomainXmlInput
     display += gpu_common(inputs, inputs.host_gpu_uuid.isEmpty() ? QStringLiteral("auto")
                                                                  : inputs.host_gpu_uuid);
     if (inputs.install_display) {
-        // No outputs while Setup runs. QEMU's VNC server shows the
-        // first graphical console there is, and the GPU's comes before
-        // the VGA's; it stays black until avgpu.sys is installed, so
-        // the install console would show nothing while the VGA draws
-        // Setup. display=off is not enough: it disables the output but
-        // the console is still made, one per max_outputs. With none the
-        // device is still on the bus with its IDs, which is all the
-        // sign stage needs, and avgpu starts on it with its default
-        // source.
         display += QStringLiteral(",max_outputs=0");
         display += gpu_tail(inputs);
     } else {
         display += QStringLiteral(",max_outputs=1");
         display += gpu_tail(inputs);
-        // The guest's shared surfaces, handed to a mirror as the host GPU
-        // memory they are in. QEMU binds it as it starts and replaces a
-        // socket a QEMU that was killed left behind; it does not make the
-        // directory, which is why the path is one that always exists.
         if (!inputs.export_socket.isEmpty()) {
             display += QStringLiteral(",export-socket=%1").arg(qemu_opt(inputs.export_socket));
         }
@@ -272,23 +178,12 @@ QString DomainXmlBuilder::build(const config::VmRecord& vm, const DomainXmlInput
                              .arg(kGpuSlot + 1 + static_cast<int>(i), 0, 16);
         device += gpu_common(inputs, inputs.render_only_gpu_uuids.at(i));
         device += QStringLiteral(",display=off");
-        // display=off still makes the output's console, and while Setup
-        // runs VNC shows the first console there is: a render-only GPU's
-        // came before the VGA's, and the install console said "Display
-        // output is not active" all through Setup on a host with a second
-        // GPU. With no outputs, as the display adapter has then, there is
-        // no console to show.
         if (inputs.install_display) {
             device += QStringLiteral(",max_outputs=0");
         }
         device += gpu_tail(inputs);
         gpu_lines << qemu_arg(QStringLiteral("-device")) << qemu_arg(device);
     }
-    // The driver's log. avgpu.sys writes "avgpu: ..." lines to I/O port
-    // 0x402, and the debug console turns them into a host file, which
-    // keeps them across guest reboots and up to the instant of a
-    // bugcheck, where nothing inside the guest survives. QEMU truncates
-    // it when it starts, so it holds one run of the VM.
     if (!inputs.avgpu_log.isEmpty()) {
         gpu_lines
             << qemu_arg(QStringLiteral("-chardev"))
@@ -297,9 +192,12 @@ QString DomainXmlBuilder::build(const config::VmRecord& vm, const DomainXmlInput
             << qemu_arg(QStringLiteral("isa-debugcon,iobase=0x402,chardev=avgpu-log"));
     }
     vars["gpu_args_inner"] = gpu_lines.join(QLatin1Char('\n'));
+    LSW_DEBUG("domain: {} MiB, {} cpus, {} render-only GPUs, {} shares, display {} refresh {} mHz, "
+              "host window {} MiB, install display {}",
+              vm.sizing.memory_mib, vm.sizing.cpu_cores, render_only, inputs.shares.size(),
+              inputs.display_modes.isEmpty() ? "host modes" : inputs.display_modes.toStdString(),
+              inputs.display_refresh_millihz, inputs.host_window_mib, inputs.install_display);
 
-    // Shared folders. virtiofs reads the guest's RAM directly, which is
-    // why the template always backs it with a shared memfd.
     QString shares_inner;
     if (!inputs.shares.isEmpty()) {
         QStringList blocks;
@@ -317,8 +215,7 @@ QString DomainXmlBuilder::build(const config::VmRecord& vm, const DomainXmlInput
     }
     vars["host_shares_inner"] = shares_inner;
 
-    // One template, for install and steady state alike.
     return render_template(QString::fromUtf8(embedded::kDomainTemplate), vars);
 }
 
-}  // namespace lsw::host::vm
+}

@@ -6,6 +6,26 @@ LSW is WSL in reverse. It installs Windows 11 into a virtual machine and keeps i
 
 > **Status:** early and moving fast. Expect rough edges, and expect things to break between releases.
 
+## AI disclosure
+
+LSW is designed and directed by its author. What it does, how it is built and which features it gets are decisions made by a person. AI tools are part of the workflow around that work, and this section says where.
+
+**Where AI is used**
+
+- **Commit messages.** Commit messages are written with an AI assistant.
+- **Release packaging.** Building the release tarball, the AUR package and the deb and rpm packages is automated with AI assistance.
+- **Debugging.** An AI agent can inspect a running system: read logs from the host and from Windows, open a console in the guest, list windows and drive applications, and collect a log bundle when something goes wrong.
+- **Benchmarking.** An AI agent can run the same graphics workloads across several test machines with different GPUs and compare the results.
+
+**What is in the repository for this**
+
+- **An MCP server in the manager.** The manager runs a Model Context Protocol server that only listens on `127.0.0.1`. It exposes the VM and the guest to a local AI agent: guest console, launching apps, listing windows, logs, the guest update and log collection. Nothing is reachable from other machines.
+- **Claude skills.** `.claude/skills/` holds instructions for an AI agent to control the VM (`lsw-control`), debug it (`lsw-debug`) and deploy a new guest agent (`lsw-deploy`).
+- **Test scripts.** `scripts/gpu-test/` runs workloads on several machines through that same interface.
+
+None of this is needed to use LSW. The MCP server is a development tool, and the application works the same without any AI involved.
+
+
 ## Features
 
 - **Per-application windows.** Each Windows application appears as its own native Wayland windows, including its menus and popups.
@@ -117,7 +137,7 @@ If you already have a Windows kit, `-DAV_WINDOWS_KIT_DIR=<dir>` avoids downloadi
 ctest --test-dir build --output-on-failure
 ```
 
-`scripts/verify-install.sh` checks that an installed VM is up, and [docs/gpu-testing.md](docs/gpu-testing.md) covers the GPU suites.
+`scripts/verify-install.sh` checks that an installed VM is up, and `scripts/gpu-test/gpu-test.sh` runs the GPU suites.
 
 ## How it works
 
@@ -157,7 +177,7 @@ external/
   remotewin/   the window mirror
   accel-virt/  the GPU stack
 scripts/       building, packaging, testing
-docs/          protocol and testing documents
+docs/          the UI design mockup
 aur/           the lsw-bin AUR package and the release procedure
 ```
 
@@ -170,9 +190,9 @@ Start with [CONTRIBUTING.md](CONTRIBUTING.md), which covers development setup, s
 - Format C++ with `clang-format`, using the repo's `.clang-format` and `.clang-tidy`.
 - Write commit subjects in the imperative mood, around 70 characters.
 - Make GPU changes in `accel-virt` and window changes in `remotewin`, then bump the submodule pointer here.
-- Anything the manager and the guest agent must agree on belongs in `src/linkproto/`, specified in [docs/link-protocol.md](docs/link-protocol.md).
+- Anything the manager and the guest agent must agree on belongs in `src/linkproto/`.
 
-When reporting a bug, include your distribution, GPU and LSW version. The manager's log and, for shared folders, `C:\ProgramData\LSW\shares.log` in the guest are the most useful things to attach.
+When reporting a bug, include your distribution, GPU and LSW version. The manager's log and, for shared folders, `C:\ProgramData\LSW\logs\shares.log` in the guest are the most useful things to attach.
 
 ## License
 

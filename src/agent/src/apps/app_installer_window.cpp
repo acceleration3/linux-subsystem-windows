@@ -58,8 +58,6 @@ AppInstallerWindow::select(const std::vector<win::DiscoveredWindow>& windows,
     }
     if (changed)
         return changed_ambiguous ? std::nullopt : changed;
-    // Shell activation can reuse an unchanged main window. Give it time to
-    // activate first, and never guess between unrelated existing instances.
     if (!allow_existing)
         return std::nullopt;
     if (existing_foreground)
@@ -67,4 +65,4 @@ AppInstallerWindow::select(const std::vector<win::DiscoveredWindow>& windows,
     return !existing_ambiguous ? existing : std::nullopt;
 }
 
-}  // namespace lsw::agent::apps
+}

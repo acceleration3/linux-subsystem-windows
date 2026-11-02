@@ -1,15 +1,4 @@
 #!/usr/bin/env bash
-# Manual integration test: wipe any prior VM, rebuild agent + manager +
-# accel-virt, launch the manager with LSW_AGENT_EXE pointing at the
-# freshly-built guest agent so it gets bundled into the payload ISO. The
-# GPU's pieces — build/av-drivers for the payload, and the patched QEMU
-# under build/accel-virt — the manager finds beside its own executable.
-#
-# Click through the wizard yourself; the install is unattended after
-# that and the wizard auto-advances to "Open manager" once the guest
-# agent connects back over vsock.
-#
-# Run: ./scripts/test.sh
 
 set -euo pipefail
 

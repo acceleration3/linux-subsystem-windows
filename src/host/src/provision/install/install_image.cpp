@@ -13,16 +13,8 @@
 namespace lsw::host::provision::install {
 
 namespace {
-
-// Long enough for most of an 8 GB image off a slow disk: the failure
-// this guards against is a machine that is merely slow, and cutting
-// that off part-way through wastes the whole extract.
 constexpr int kExtractTimeoutMs = 900000;
 
-// ``sources/install<n>.swm``, with the part number captured. Part 1 is
-// written without one, so an empty capture means 1 — that is the
-// convention DISM /Split-Image and wimlib both produce, and what Setup
-// expects to find.
 const QRegularExpression& swm_re() {
     static const QRegularExpression re{
         QStringLiteral(R"(^sources/install(\d*)\.swm$)"),
@@ -30,8 +22,6 @@ const QRegularExpression& swm_re() {
     return re;
 }
 
-// The single-file forms, in the order a medium that somehow had both
-// should be read: install.wim is the one Setup itself prefers.
 [[nodiscard]] QString find_single_file(const QStringList& entries) {
     for (const QString& wanted :
          {QStringLiteral("sources/install.wim"), QStringLiteral("sources/install.esd")}) {
@@ -44,10 +34,6 @@ const QRegularExpression& swm_re() {
     return {};
 }
 
-// The .swm parts, ordered by part number. Order is not what
-// wimlib_reference_resource_files() needs — it reads the part number
-// out of each header — but it is what makes ``path`` part 1, and a
-// stable order keeps the log readable.
 [[nodiscard]] QStringList find_swm_parts(const QStringList& entries) {
     QList<QPair<int, QString>> found;
     for (const QString& entry : entries) {
@@ -68,10 +54,6 @@ const QRegularExpression& swm_re() {
     return ordered;
 }
 
-// Pull ``entries`` out of the ISO in one 7-Zip run and return where
-// they landed, in the order asked for. ``e`` rather than ``x``: these
-// go in a flat scratch directory and their sources/ prefix means
-// nothing there.
 [[nodiscard]] bool extract(const QString& iso_path, const QStringList& entries,
                            const QString& dir, QStringList* out, QString* error_out) {
     QStringList args{QStringLiteral("e"), QStringLiteral("-y"), QStringLiteral("-bso0"),
@@ -86,10 +68,6 @@ const QRegularExpression& swm_re() {
     for (const QString& entry : entries) {
         const QString path = QDir(dir).filePath(QFileInfo(entry).fileName());
         if (!QFile::exists(path)) {
-            // 7-Zip exited cleanly and the file is not there: the entry
-            // named in the listing is not the entry it extracted, which
-            // is worth saying plainly rather than failing later on a
-            // WIM that cannot be opened.
             if (error_out != nullptr) {
                 *error_out = QStringLiteral("%1 did not come out of the image").arg(entry);
             }
@@ -100,7 +78,7 @@ const QRegularExpression& swm_re() {
     return true;
 }
 
-}  // namespace
+}
 
 bool stage_install_image(const QString& iso_path, const QString& dir, StagedInstallImage* out,
                          QString* error_out) {
@@ -145,4 +123,4 @@ bool stage_install_image(const QString& iso_path, const QString& dir, StagedInst
     return true;
 }
 
-}  // namespace lsw::host::provision::install
+}

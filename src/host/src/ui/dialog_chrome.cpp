@@ -37,4 +37,4 @@ QHBoxLayout* DialogChrome::foot_band(QBoxLayout* into, const QMargins& padding, 
     return row;
 }
 
-}  // namespace lsw::host::ui
+}

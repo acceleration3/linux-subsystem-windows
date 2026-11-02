@@ -11,8 +11,8 @@
 namespace lsw::agent::rpc::handlers {
 
 struct ListWindowsHandler : RpcHandler {
-    nlohmann::json handle(const nlohmann::json& /*params*/,
-                          RpcContext& /*ctx*/) override {
+    nlohmann::json handle(const nlohmann::json& ,
+                          RpcContext& ) override {
         const auto wins = win::Window::enumerate();
         nlohmann::json arr = nlohmann::json::array();
         for (const auto& w : wins) {
@@ -20,8 +20,6 @@ struct ListWindowsHandler : RpcHandler {
                 {"hwnd", static_cast<std::uint64_t>(w.hwnd)},
                 {"owner", static_cast<std::uint64_t>(w.owner)},
                 {"pid", static_cast<std::uint64_t>(w.pid)},
-                // Filled in by the service (complete_in_service): the
-                // launches are tracked there, not in this helper.
                 {"root_pid", std::uint64_t{0}},
                 {"title", w.title},
                 {"exe_path", w.exe_path},
@@ -37,11 +35,6 @@ struct ListWindowsHandler : RpcHandler {
         return {{"windows", std::move(arr)}};
     }
 
-    // Which launch each window's process came from, following through
-    // any stub that spawned it; 0 for a process the agent did not start.
-    // The host scopes a watcher to this rather than to ``pid``, or an
-    // application whose first process is a launcher loses every window
-    // it opens. Answered here because the service is what launched them.
     void complete_in_service(nlohmann::json& reply) const override {
         auto it = reply.find("windows");
         if (it == reply.end() || !it->is_array()) {
@@ -53,20 +46,16 @@ struct ListWindowsHandler : RpcHandler {
         }
     }
 
-    // Polled by every window watcher at ~45 Hz; a REQ/REP pair each
-    // would leave room for nothing else in the log ring.
-    [[nodiscard]] bool silent() const override { return true; }
+    [[nodiscard]] log::Level request_level() const override { return log::Level::Trace; }
 
     [[nodiscard]] std::string summarize(const nlohmann::json& reply) const override {
         return std::to_string(reply.value("windows", nlohmann::json::array()).size())
                + " windows";
     }
 
-    // Window handles, UI Automation and HKCU belong to the user's
-    // session: served by the session helper there.
     [[nodiscard]] Placement placement() const override { return Placement::UserSession; }
 };
 
-}  // namespace lsw::agent::rpc::handlers
+}
 
 LSW_REGISTER_RPC(lsw::agent::rpc::handlers::ListWindowsHandler, ::lsw::linkproto::cmd::kListWindows)

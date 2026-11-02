@@ -15,7 +15,6 @@
 #include "lsw/linkproto/frame_reader.hpp"
 
 // clang-format off
-// Header order matters: <winsock2.h> before <windows.h>.
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <windows.h>
@@ -30,9 +29,6 @@
 namespace lsw::agent::transport {
 
 namespace {
-
-// Capture poll tick. Caps latency on agent-initiated pushes and acts as
-// the frame-rate cap for the window mirror (~60 Hz).
 constexpr int kTickMs = 16;
 
 constexpr std::size_t kMaxLogPayload = 200;
@@ -45,7 +41,6 @@ constexpr std::size_t kMaxLogPayload = 200;
            " more bytes)";
 }
 
-// ``ip:port``, the form every connection log line names its peer in.
 [[nodiscard]] std::string describe(const sockaddr_in& peer) {
     char ip[64] = {};
     ::inet_ntop(AF_INET, &peer.sin_addr, ip, sizeof(ip));
@@ -61,15 +56,11 @@ constexpr std::size_t kMaxLogPayload = 200;
     return describe(peer);
 }
 
-// A message the dispatcher should answer: an object with an id and a
-// string command. Manager-pushed events — none are defined — and
-// anything malformed are dropped, whichever transport they came in on.
 [[nodiscard]] bool is_request(const nlohmann::json& message) {
     return message.is_object() && !message.contains("event") && message.contains("id") &&
            message.contains("cmd") && message["cmd"].is_string();
 }
 
-// What one connection has moved, for the line logged when it ends.
 struct ConnectionStats {
     std::uint64_t bytes_received = 0;
     std::uint64_t requests_handled = 0;
@@ -82,15 +73,8 @@ struct ConnectionStats {
     }
 };
 
-// Turns one request frame into one reply frame, logging both.
-//
-// Verbosity and reply summaries come from the handler itself
-// (``RpcHandler::silent`` / ``summarize``) — this used to be a pair of
-// functions here that switched on command names, which meant adding an
-// RPC could mean editing the transport.
 class RequestDispatcher {
 public:
-    // ``reply`` sends one JSON message back the way the request came.
     using ReplySink = std::function<bool(const nlohmann::json&)>;
 
     RequestDispatcher(rpc::RpcContext& ctx, ConnectionStats& stats) : ctx_(&ctx), stats_(&stats) {}
@@ -104,10 +88,11 @@ public:
                                 : nlohmann::json::object();
 
         auto* handler = rpc::RpcRegistry::instance().find(cmd);
-        const bool silent = (handler != nullptr) && handler->silent();
-        if (!silent) {
-            LSW_AGENT_INFO("host_endpoint: REQ id={} cmd={} line={}", id, cmd,
-                           truncate_for_log(request.dump()));
+        const log::Level level = handler != nullptr ? handler->request_level() : log::Level::Debug;
+        const bool logged = log::enabled(level);
+        if (logged) {
+            log::append(level, log::format("host_endpoint: REQ id={} cmd={} line={}", id, cmd,
+                                           truncate_for_log(request.dump())));
         }
 
         nlohmann::json reply;
@@ -118,7 +103,6 @@ public:
         } else {
             try {
                 if (handler->placement() == rpc::RpcHandler::Placement::UserSession) {
-                    // Runs in the user's session, in the helper there.
                     nlohmann::json result = ctx_->services.sessions().route(cmd, params);
                     handler->complete_in_service(result);
                     reply["result"] = std::move(result);
@@ -131,15 +115,15 @@ public:
             }
         }
 
-        if (!silent) {
+        if (logged) {
             const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                                         std::chrono::steady_clock::now() - started)
                                         .count();
             const std::string summary = reply.contains("error")
                                             ? "error: " + reply["error"].get<std::string>()
                                             : handler->summarize(reply["result"]);
-            LSW_AGENT_INFO("host_endpoint: REP id={} cmd={} ({}ms) {}", id, cmd, elapsed_ms,
-                           summary);
+            log::append(level, log::format("host_endpoint: REP id={} cmd={} ({}ms) {}", id, cmd,
+                                           elapsed_ms, summary));
         }
         ++stats_->requests_handled;
         return reply_sink(reply);
@@ -150,7 +134,7 @@ private:
     ConnectionStats* stats_;
 };
 
-}  // namespace
+}
 
 HostEndpoint::HostEndpoint(core::AgentServices& services) : services_(&services) {
     WSADATA wsa{};
@@ -165,7 +149,6 @@ HostEndpoint::~HostEndpoint() {
 void HostEndpoint::stop() {
     const std::intptr_t fd = listen_fd_.exchange(-1);
     if (fd >= 0) {
-        // Unblocks accept() in run().
         ::closesocket(static_cast<SOCKET>(fd));
     }
 }
@@ -206,7 +189,7 @@ bool HostEndpoint::run(std::atomic<bool>& stop_flag) {
     while (!stop_flag.load()) {
         const std::intptr_t fd = listen_fd_.load();
         if (fd < 0) {
-            break;  // stop() closed it
+            break;
         }
         sockaddr_in peer{};
         int peer_len = sizeof(peer);
@@ -217,14 +200,9 @@ bool HostEndpoint::run(std::atomic<bool>& stop_flag) {
                 break;
             }
             LSW_AGENT_WARN("host_endpoint: accept failed wsa_err={}", ::WSAGetLastError());
-            // Not a tight loop if the socket has gone bad for good.
             ::Sleep(100);
             continue;
         }
-        // Nagle off on this side too. Replies to input are not sent at
-        // all, so there is nothing to coalesce with — and the events
-        // travelling the other way are exactly the small writes Nagle
-        // was designed to hold back.
         {
             const int one = 1;
             if (::setsockopt(c, IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<const char*>(&one),
@@ -251,8 +229,6 @@ bool HostEndpoint::run(std::atomic<bool>& stop_flag) {
         }
     }
 
-    // Stopping: let every connection thread finish before the endpoint
-    // (and the services they reference) go away.
     std::vector<std::unique_ptr<Connection>> remaining;
     {
         const std::lock_guard lk{connections_mu_};
@@ -279,8 +255,6 @@ void HostEndpoint::reap_finished_connections() {
             }
         }
     }
-    // Joined outside the lock: a thread that is on its way out may still
-    // be logging, and logging takes locks of its own.
     for (auto& conn : done) {
         if (conn->thread.joinable()) {
             conn->thread.join();
@@ -301,9 +275,6 @@ void HostEndpoint::handle_connection(std::intptr_t accepted_fd) {
         return writer.send_control(message);
     };
 
-    // Everything that pushes to the manager, in one list. Ordering is the
-    // drain order: logs first so the reason for whatever follows is
-    // already on record.
     LogEventSource logs;
     ConsoleEventSource console{services_->console()};
     InstallerEventSource installer{services_->installer()};
@@ -331,7 +302,7 @@ void HostEndpoint::handle_connection(std::intptr_t accepted_fd) {
     const auto on_frame = [&](linkproto::FrameType type, const std::uint8_t* payload,
                               std::size_t len) {
         if (type != linkproto::FrameType::Control) {
-            return true;  // the agent expects no inbound binary frames
+            return true;
         }
         nlohmann::json frame;
         try {
@@ -392,4 +363,4 @@ void HostEndpoint::handle_connection(std::intptr_t accepted_fd) {
     }
 }
 
-}  // namespace lsw::agent::transport
+}

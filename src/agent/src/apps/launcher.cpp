@@ -33,11 +33,8 @@ void set_err(std::string* error_out, const std::string& s) {
     }
 }
 
-// Whether a running instance must share the launch's elevation to count.
 enum class Elevation { Same, Any };
 
-// How long a new process is given to pass its launch to the instance
-// already running and exit, as a single-instance application does.
 constexpr DWORD kHandOffMs = 3000;
 
 std::optional<unsigned long> existing_process(const std::wstring& path, const win::RunAs& as,
@@ -73,8 +70,6 @@ std::optional<unsigned long> existing_process(const std::wstring& path, const wi
                                    &bytes) ||
             (elevation.TokenIsElevated != 0) != as.elevated())
             continue;
-        // The oldest image is normally the browser/application, not one of its
-        // later same-image renderer/helper processes that has no windows.
         const auto created = win::ProcessInfo::creation_time(process.get());
         if (created && *created < oldest) {
             chosen = entry.pid;
@@ -100,7 +95,7 @@ bool has_application_window(unsigned long pid, const std::vector<unsigned long>&
                        [&](unsigned long candidate) { return family.contains(candidate); });
 }
 
-}  // namespace
+}
 
 bool Launcher::launch(const std::string& app_id, const std::string& extra_args,
                       const std::vector<EnvVar>& env, const win::RunAs& as, unsigned long* pid_out,
@@ -112,13 +107,10 @@ bool Launcher::launch(const std::string& app_id, const std::string& extra_args,
     }
     LSW_AGENT_INFO("launch: app_id={} as {}", app_id, as.describe());
 
-    // Resolve .lnk → real exe + args + working dir.
     std::wstring path = util::TextEncoding::to_wide(app_id);
     std::wstring args;
     std::wstring working_dir;
     if (util::WideString::iends_with(path, L".lnk")) {
-        // Raw: the path as stored, variables and all — they are
-        // expanded just below, with everything else.
         const auto link = win::ShellLink::resolve(path, win::ShellLink::PathMode::Raw);
         if (!link || link->path.empty()) {
             set_err(error_out,
@@ -131,21 +123,12 @@ bool Launcher::launch(const std::string& app_id, const std::string& extra_args,
         args = link->args;
         working_dir = link->working_dir;
     }
-    // A .lnk's raw path often contains unexpanded variables like
-    // ``%windir%\system32\charmap.exe``. CreateProcess does not expand
-    // these in the application name argument, so the launch fails with
-    // ERROR_PATH_NOT_FOUND (3). Manager-supplied raw paths get the same
-    // treatment in case they were typed with variables too. Expanded
-    // against the identity the process will run as: %APPDATA% is the
-    // user's, not the service's.
     path = as.expand(path);
     if (image_out != nullptr) {
         *image_out = path;
     }
     working_dir = as.expand(working_dir);
     args = as.expand(args);
-    // Never consume a document/profile argument or pretend environment overrides
-    // were applied to an existing process. Match the full image, not its basename.
     std::optional<unsigned long> existing;
     if (mode == Mode::Open && args.empty() && extra_args.empty() && documents.empty() && env.empty() &&
         util::WideString::iends_with(path, L".exe")) {
@@ -156,32 +139,12 @@ bool Launcher::launch(const std::string& app_id, const std::string& extra_args,
                 *pid_out = *existing;
             return true;
         }
-        // A tray-only process needs its normal launch/IPC handoff to reopen.
-        // Keep mirroring the original process, not the short-lived activation stub.
     }
-    // Any instance at all, whatever its elevation: the one a single-instance
-    // application hands this launch to. Steam restarted by its own updater
-    // runs with the user's filtered token, and the elevated launch's new
-    // Steam.exe passes the launch to it and exits.
     const std::optional<unsigned long> running =
         mode == Mode::Open && util::WideString::iends_with(path, L".exe")
             ? existing_process(path, as, Elevation::Any)
             : std::nullopt;
 
-    // Default the working directory to the executable's own folder.
-    //
-    // This is what Explorer does, and applications assume it: anything
-    // that opens a data file by a relative name — a config, an archive,
-    // a save — reads it relative to the working directory, not to the
-    // image. Launched with none, the child inherits the agent's, which
-    // for a service is C:\Windows\System32, and an application that
-    // finds none of its own files there fails in whatever way it fails
-    // when its data is missing. Touhou 6 gets far enough to try creating a Direct3D
-    // device and then reports that every mode failed, which names
-    // neither the missing config nor this.
-    //
-    // A .lnk that carries its own working directory keeps it: the
-    // shortcut's author chose it deliberately.
     if (working_dir.empty()) {
         if (auto dir = util::WideString::parent_dir(path); dir && !dir->empty()) {
             working_dir = std::move(*dir);
@@ -189,9 +152,6 @@ bool Launcher::launch(const std::string& app_id, const std::string& extra_args,
     }
     LSW_AGENT_DEBUG("launch: expanded path={} working_dir={}", path, working_dir);
 
-    // The configured arguments come last, after whatever a .lnk
-    // carried, so an app config can add to a shortcut rather than
-    // having to restate it.
     if (const std::wstring extra = as.expand(util::TextEncoding::to_wide(extra_args));
         !extra.empty()) {
         if (!args.empty()) {
@@ -199,8 +159,6 @@ bool Launcher::launch(const std::string& app_id, const std::string& extra_args,
         }
         args += extra;
     }
-    // The documents last, after the arguments, and as they are: not
-    // expanded, so a ``%`` in a file name survives.
     for (const std::string& document : documents) {
         if (!args.empty()) {
             args += L" ";
@@ -210,9 +168,6 @@ bool Launcher::launch(const std::string& app_id, const std::string& extra_args,
     const LaunchCommand command(path, as.expand(L"%windir%"), args);
     const auto& cmdline = command.command_line;
 
-    // The environment ``as`` gets, with the overrides applied. For the
-    // agent itself with nothing to override that is empty, and the child
-    // inherits ours.
     win::SpawnOptions options;
     options.application = command.application;
     options.command_line = cmdline;
@@ -233,31 +188,10 @@ bool Launcher::launch(const std::string& app_id, const std::string& extra_args,
         LSW_AGENT_INFO("launch: environment overrides: {}", names);
     }
 
-    // ``as.apply`` has pointed the spawn at the user's token and their
-    // session's interactive desktop (CreateProcessAsUserW), so the app
-    // lands on the user's real desktop.
-    //
-    // CREATE_NO_WINDOW so the child doesn't briefly flash a console
-    // window for non-GUI exes; CREATE_UNICODE_ENVIRONMENT because every
-    // environment block here is UTF-16.
-    //
-    // CREATE_SUSPENDED so the process can be put in its launch's job
-    // before it executes an instruction. A launcher stub can spawn the
-    // real application in the first milliseconds of its life, and a
-    // child that starts before the assignment is outside the job for
-    // good — which is exactly the process we most need to track.
     options.creation_flags = CREATE_UNICODE_ENVIRONMENT | CREATE_NO_WINDOW | CREATE_SUSPENDED;
     DWORD err = 0;
     const auto spawned = win::Process::spawn(options, &err);
     if (!spawned) {
-        // Not a plain PE (alias / packaged / document): let the shell
-        // open it.
-        //
-        // Environment overrides do not survive this: the shell starts
-        // the application from its own process, with its own
-        // environment. Nothing can be done about that from here — a
-        // packaged app is started by the shell by definition — so it is
-        // logged rather than silently ignored.
         if (!documents.empty()) {
             set_err(error_out, "launch: " + app_id + " cannot be started directly (CreateProcess err=" +
                                    win::ErrorText::win32(err) +
@@ -297,9 +231,6 @@ bool Launcher::launch(const std::string& app_id, const std::string& extra_args,
         }
         return true;
     }
-    // Job first, then let it run. Whether the adoption worked or not the
-    // thread has to be resumed — a process left suspended is a process
-    // that never starts.
     (void)LaunchGroup::adopt(spawned->process.get(), spawned->pid);
     ::ResumeThread(spawned->thread.get());
 
@@ -316,4 +247,4 @@ bool Launcher::launch(const std::string& app_id, const std::string& extra_args,
     return true;
 }
 
-}  // namespace lsw::agent::apps
+}

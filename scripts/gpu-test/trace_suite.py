@@ -1,21 +1,3 @@
-"""The traces suite: API traces recorded from real applications, replayed on
-one GPU in the guest gpu_matrix.py booted on it, and judged unattended.
-
-  traces   every functionality in the trace store (trace_store.py), or those
-           --traces names: apitrace traces (D3D8/9/10/11, OpenGL) through
-           d3dretrace/glretrace, GFXReconstruct captures (Vulkan, D3D12)
-           through gfxrecon-replay, CLIntercept kernel captures (OpenCL)
-           through their own run.py
-
-Each replay runs in the console session under guest/trace-replay.ps1, which
-samples the process's memory; the verdict (trace_judge.py) is the replay's
-exit, a lost device or a GPU reset, the frames the manifest names against
-its reference pictures, the OpenCL outputs against the application's own,
-memory growth and, as a measurement, the replay's frame rate.
-
-The guest keeps what it was sent under C:\\av\\traces, each directory stamped
-with what it holds, so a trace crosses the share once per host and VM.
-"""
 import json
 import math
 import pathlib
@@ -42,23 +24,14 @@ GUEST_HARNESS = GUEST_ROOT + "\\harness"
 HARNESS_FILES = ("trace-replay.ps1", "trace-capture.ps1", "clreplay.py")
 TAR = "C:\\Windows\\System32\\tar.exe"
 TAR_ABOVE = 16
-"""A directory of more files than this crosses the share as one tar."""
 NOT_SENT = {"reference", "capture.done"}
-"""What stays on the host: reference pictures are judged here."""
 RETRACERS = {"d3d8": "d3dretrace.exe", "d3d9": "d3dretrace.exe", "dxgi": "d3dretrace.exe", "gl": "glretrace.exe"}
 MODULES = r"^(av\w+|d3d10warp|d3d9|d3d11|d3d12|dxgi|opengl32|vulkan-1|opencl|nvwgf2um\w*|igd\w+|amdxx\w*|atidxx\w*)\.dll$"
-"""The DLLs a replay's process is watched for: whose driver it rendered with."""
 POWERSHELL = {"x64": "powershell", "x86": "C:\\Windows\\SysWOW64\\WindowsPowerShell\\v1.0\\powershell.exe"}
 WARNINGS_NOTED = 5
 SHORT_TRACE_FRAMES = 200
 KEEP_FREE_GIB = 4.0
-"""A trace's copy stays in the guest for the next run only while C: keeps
-this much free: VM disks are small, and a trace is sent again when needed."""
 KEEP_MAX_MIB = 256
-"""A trace larger than this is never kept in the guest: the VM's disk grows on
-the host's own (the accel host has ~15 GB to spare, and Resolve's OpenCL
-traces are 300-800 MiB each, 15 GB together), while sending one again is a
-local copy of seconds."""
 
 
 def guest_path(*parts):
@@ -66,9 +39,6 @@ def guest_path(*parts):
 
 
 class GuestFiles:
-    """Directories of the host mirrored into the guest over the share, each
-    stamped with a digest of what it holds."""
-
     def __init__(self, desktop, staging):
         self.desktop = desktop
         self.share = desktop.guest.share
@@ -87,7 +57,6 @@ class GuestFiles:
         return text
 
     def mirror(self, local, directory, digest, skip=NOT_SENT):
-        """`local`'s files in guest `directory`, unless it holds `digest` already."""
         if self.stamp(directory) == digest:
             return False
         files = [path for path in sorted(pathlib.Path(local).rglob("*"))
@@ -120,14 +89,11 @@ class GuestFiles:
         return True
 
     def listing(self, directory):
-        """The file names in a guest directory."""
         code, text = self.desktop.run(f'dir /b /a-d "{directory}"', 120)
         return [line.strip() for line in text.splitlines() if line.strip()] if code == 0 else []
 
 
 class Replayer:
-    """One trace's replay passes in the guest, their results pulled to `out`."""
-
     def __init__(self, files, manifest, out, tools, env=None):
         self.env = dict(env or {})
         self.files = files
@@ -149,11 +115,6 @@ class Replayer:
 
     def run(self, name, exe, arguments, env=None, timeout=None, binary_stdout=False, arch="x64", linger=None,
             share_console=False):
-        """One pass: trace-replay.ps1's result, with its stderr (and its stdout,
-        unless that is a binary stream, which is left in out/NAME.out).
-        share_console runs the program in trace-replay.ps1's own (hidden)
-        console rather than one of its own: gfxrecon-replay ends by waiting
-        for a key press in a console that is only its own."""
         timeout = timeout or self.manifest.replay["timeout_s"]
         config = {"exe": exe, "args": suite_command_line(arguments), "cwd": self.store_dir,
                   "env": {**self.manifest.replay["env"], **self.env, **(env or {})},
@@ -184,15 +145,11 @@ class Replayer:
 
 
 def suite_command_line(arguments):
-    """Arguments as the Microsoft C runtime splits them back."""
     import subprocess
     return subprocess.list2cmdline([str(argument) for argument in arguments])
 
 
-# ------------------------------------------------------------------ replaying
-
 def frames_of_stream(path, call_to_frame):
-    """{frame: image} from an apitrace PNM stream whose comments are call numbers."""
     try:
         data = path.read_bytes()
     except OSError:
@@ -205,10 +162,6 @@ def frames_of_stream(path, call_to_frame):
 
 
 def replay_apitrace(replayer):
-    """apitrace: a benchmark pass for the frame rate and memory, a pass that
-    reads back the frames the manifest names (and prints every failed call),
-    and, for a dxgi trace judged against WARP with no promoted reference yet,
-    the same frames rendered by WARP."""
     manifest, out = replayer.manifest, replayer.out
     bin_dir = guest_path(replayer.tool_dir("apitrace"), manifest.arch, "bin")
     retracer = guest_path(bin_dir, RETRACERS[manifest.api])
@@ -232,9 +185,6 @@ def replay_apitrace(replayer):
     if manifest.replay["benchmark"]:
         findings["passes"]["benchmark"] = replayer.run("benchmark", retracer, ["-b", *extra, trace], arch=manifest.arch)
     if 0 < len(calls) < SHORT_TRACE_FRAMES:
-        # A replay of a few frames is over before its DLLs can be looked at:
-        # one more pass that keeps its window (-w) until it is closed, which
-        # is also too short to be timed.
         findings["passes"]["driver"] = replayer.run("driver", retracer, ["-w", *extra, trace], arch=manifest.arch,
                                                     linger=4)
         findings["frame_count"] = None
@@ -264,8 +214,6 @@ def replay_apitrace(replayer):
 
 
 def replay_gfxreconstruct(replayer):
-    """gfxrecon-replay: one pass, the frames the manifest names as BMP
-    screenshots (GFXReconstruct numbers frames from 1), its own FPS line."""
     manifest, out = replayer.manifest, replayer.out
     replay = guest_path(replayer.tool_dir(manifest.replayer), "x64", "gfxrecon-replay.exe")
     capture = guest_path(replayer.store_dir, manifest.capture)
@@ -301,8 +249,6 @@ def replay_gfxreconstruct(replayer):
 
 
 def gfxr_warp_frames(replayer, replay, capture, wanted, findings):
-    """A D3D12 trace's frames rendered by WARP - the adapter warp_gpu names -
-    for a trace judged against WARP with no promoted reference yet."""
     out = replayer.out
     shots = guest_path(replayer.run_dir, "warp-shots")
     replayer.files.share.make_directories(shots)
@@ -330,8 +276,6 @@ def gfxr_warp_frames(replayer, replay, capture, wanted, findings):
 
 
 def replay_opencl(replayer):
-    """CLIntercept: guest/clreplay.py runs every captured kernel's run.py and
-    compares what it wrote with the application's own outputs."""
     manifest = replayer.manifest
     python = guest_path(replayer.tool_dir("python"), "x64", "python.exe")
     limits = manifest.judge
@@ -352,21 +296,16 @@ def replay_opencl(replayer):
 REPLAYS = {"apitrace": replay_apitrace, "gfxreconstruct": replay_gfxreconstruct, "clintercept": replay_opencl}
 
 
-# -------------------------------------------------------------------- judging
-
 def judge_findings(manifest, findings, resets, out):
-    """failures, notes and metrics of one trace's replay."""
     limits = manifest.judge
     failures, notes, metrics = [], list(findings["notes"]), {}
     passes = findings["passes"]
     measured = next((name for name in ("benchmark", "check", "opencl") if passes.get(name)), None)
     for name, result in passes.items():
-        # Memory is judged once, on the pass that ran the trace as it is;
-        # clreplay.py's own process is not what an OpenCL leak would grow.
         judged = name == measured and manifest.tool != "clintercept"
         pass_limits = dict(limits) if judged else dict(limits, memory_growth_mib_max=None)
         if name == "driver" and result and result.get("closed"):
-            result = dict(result, exit_code=0)  # closed by trace-replay.ps1 once seen, as asked
+            result = dict(result, exit_code=0)
         pass_failures, pass_metrics = judge.judge_process(name, result, pass_limits)
         failures += pass_failures
         if name == measured:
@@ -386,8 +325,6 @@ def judge_findings(manifest, findings, resets, out):
         metrics["fps"] = round(fps, 1)
     failures += judge.judge_fps(fps, limits)
     if manifest.tool != "clintercept":
-        # Which driver rendered: every pass but the trace listing and WARP's,
-        # together (a short pass may end before its DLLs could be seen).
         loaded = sorted({name for pass_name, result in passes.items() if pass_name not in ("frames", "warp")
                          for name in (result or {}).get("modules") or []})
         driver_failures, driver_notes, seen = judge.judge_driver("replay", {"modules": loaded}, manifest.api)
@@ -428,11 +365,7 @@ def judge_findings(manifest, findings, resets, out):
     return failures, notes, metrics
 
 
-# ---------------------------------------------------------------------- suite
-
 def run_trace_suite(guest, out, gpu, guest_name, selection="", store=None, env=None):
-    """Every selected trace replayed on `gpu`: the suite's verdict. `env` is
-    added to every replay's environment (AV_D3D11_TRACE, say)."""
     say("suite traces")
     store = store or Store()
     desktop = Desktop(guest, out, guest_name)

@@ -1,56 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <unattend xmlns="urn:schemas-microsoft-com:unattend" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
-	<!-- LSW autounattend.xml — schneegans.de/windows/unattend-generator
-	     base, declarative install onto the NVMe system disk from the
-	     FIRST boot (one domain.xml, no pre/post split, no controller
-	     swap). Key pieces:
-	       * no driver injection: the disk is NVMe (stornvme.sys) and the
-	         NIC an e1000e, both driven by in-box drivers in WinPE and in
-	         the installed image alike, so no driver path is handed to
-	         Setup and there is no driver CD. Windows 11 24H2+ does not carry
-	         a WinPE-loaded driver into the image, which is what made the
-	         old virtio disk an INACCESSIBLE_BOOT_DEVICE away from a
-	         missed injection.
-	       * windowsPE Microsoft-Windows-Setup declaratively partitions
-	         (GPT EFI/MSR/Windows) and installs the WIM image index
-	         {{image_index}}; {{win11_bypass_block}} re-adds the LabConfig
-	         TPM/SecureBoot/RAM bypass (setup.exe enforces the checks).
-	       * user/password/computer-name/locale/image-index are
-	         template-substituted ({{...}}).
-	       * specialize "LSW bootstrap": mkdir C:\ProgramData\LSW with its
-	         ACL, and nothing else of LSW's. Everything LSW puts into the
-	         guest comes from the payload ISO's \update, which SetupComplete
-	         (LswPromote.ps1) hands to lsw-guest-update.ps1, the script that
-	         updates a running guest, so a fresh guest and an updated one go
-	         through the same steps and end with the same release.json
-	         ({{release}}, {{version}}; docs/guest-update.md, "First
-	         install"). That covers the agent and the window mirror, the
-	         accel-virt driver package (signed and installed there), the
-	         Vulkan/OpenCL loaders, the shared folders' guest half, the
-	         'lsw-agent' Windows service (LocalSystem, session 0, auto
-	         start, restart on failure) and its firewall rules. The agent
-	         starts a helper in each user's session for what has to happen
-	         there, and keeps its port closed until the wizard user's
-	         desktop is usable.
-	       * accel-virt, the guest's GPU: a test-signed WDDM driver
-	         (avgpu.sys + native D3D11/12, Vulkan, OpenGL and OpenCL
-	         user-mode drivers) for the virtio-gpu-av-pci device. The
-	         update script signs and installs it at SetupComplete; its sign
-	         stage turns test signing on, which the kernel reads at boot,
-	         so the driver first starts on the first boot after setup (the
-	         manager restarts the guest into its steady definition then).
-	         Needs Windows 11 24H2 (build 26100) or later, and test
-	         signing, which needs UEFI WITHOUT enrolled Secure Boot keys:
-	         the domain asks libvirt for UEFI firmware with neither Secure
-	         Boot nor enrolled keys, and the LabConfig BypassSecureBootCheck
-	         in the win11-bypass block is what lets setup.exe accept that.
-	         Install-time the domain also has a plain VGA adapter (the av
-	         device has no firmware framebuffer before avgpu.sys loads);
-	         the manager redefines it without one once setup is done.
-	       * AutoLogon persistent (LogonCount=9999); UserOnce.ps1's
-	         last customization step writes C:\ProgramData\LSW\installed.txt
-	         (a marker that the per-user setup ran; the agent's gate is
-	         the usable desktop, not this file). -->
 
 	<settings pass="windowsPE">
 		<component name="Microsoft-Windows-International-Core-WinPE" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
@@ -63,15 +12,6 @@
 			<UserLocale>{{locale}}</UserLocale>
 		</component>
 		<component name="Microsoft-Windows-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
-			<!-- Declarative partitioning + image apply. Windows Setup does
-			     the well-tested work itself — no hand-built WinPE batch
-			     script. The disk is a dedicated qcow2 we created, so we
-			     wipe disk 0 and lay down a standard GPT EFI/MSR/Windows
-			     layout. The edition is selected by WIM image index via
-			     InstallFrom/MetaData. The win11-bypass fragment is
-			     spliced in below to re-add the LabConfig
-			     TPM/SecureBoot/RAM bypass because setup.exe (not
-			     DISM) enforces the Win11 checks. -->
 			<DiskConfiguration>
 				<Disk wcm:action="add">
 					<DiskID>0</DiskID>
@@ -116,12 +56,6 @@
 			</DiskConfiguration>
 			<ImageInstall>
 				<OSImage>
-					<!-- {{install_from_path}} is the trimmed install.wim on
-					     the payload CD, or empty when the image was left
-					     as shipped and Setup should use the one on its
-					     own media. Written as a <Path> because there is
-					     no way to say "the default" once a path is
-					     given, so the whole element goes or stays. -->
 					<InstallFrom>
 						<MetaData wcm:action="add">
 							<Key>/IMAGE/INDEX</Key>
@@ -174,11 +108,6 @@
 					<Path>reg.exe unload "HKU\DefaultUser"</Path>
 				</RunSynchronousCommand>
 
-				<!-- LSW bootstrap: only the folder, which the payload
-				     ISO's update (SetupComplete) and the SYSTEM agent need
-				     before anything else of LSW's exists. Files, the
-				     service and the firewall rules are the update
-				     script's. -->
 				<RunSynchronousCommand wcm:action="add">
 					<Order>20</Order>
 					<Description>LSW: create C:\ProgramData\LSW and grant Users:Modify (inheritable) so the SYSTEM agent and the wizard user's setup processes can share staged files</Description>
@@ -199,14 +128,6 @@
 		<component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
 			<UserAccounts>
 				<LocalAccounts>
-					<!-- Child-element ORDER is schema-significant here.
-					     Recent Win11 (live-proven on 26200.8037) DROPS the
-					     <Group> assignment if <Name> precedes it — the
-					     account is created but lands in no groups. The
-					     fix (corroborated: r/MDT 16ib5cw, and Microsoft's
-					     own LocalAccount XML example) is to follow the
-					     documented sequence Password → DisplayName →
-					     Group → Name, i.e. <Name> LAST. -->
 					<LocalAccount wcm:action="add">
 						<Password>
 							<Value>{{user_password}}</Value>
@@ -412,18 +333,6 @@ $scripts = @(
 		reg.exe add "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender Security Center\Systray" /v HideSystray /t REG_DWORD /d 1 /f;
 	};
 	{
-		# Keep UAC structurally ENABLED (EnableLUA=1, the default) so
-		# UWP/packaged apps, the Settings app, Edge and WiX Burn
-		# per-machine bundles keep working — EnableLUA=0 breaks all of
-		# those on Win11. Make ADMIN elevation silent
-		# (ConsentPromptBehaviorAdmin=0 = "elevate without prompting"),
-		# no secure-desktop switch. Do NOT touch ConsentPromptBehaviorUser:
-		# for STANDARD users the value 0 means "automatically DENY
-		# elevation" (the opposite of the admin key) and yields "This app
-		# has been blocked by your system administrator". Leaving it at
-		# the Windows default is correct — our wizard account is an admin,
-		# so only the admin key is relevant; if it is ever hit on the
-		# user path that itself signals the account is not admin yet.
 		reg.exe add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" /v EnableLUA /t REG_DWORD /d 1 /f;
 		reg.exe add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" /v ConsentPromptBehaviorAdmin /t REG_DWORD /d 0 /f;
 		reg.exe add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" /v PromptOnSecureDesktop /t REG_DWORD /d 0 /f
@@ -443,12 +352,6 @@ $scripts = @(
 		Register-ScheduledTask -TaskName 'MoveActiveHours' -Xml $( Get-Content -LiteralPath 'C:\Windows\Setup\Scripts\MoveActiveHours.xml' -Raw );
 	};
 	{
-		# The 'lsw-agent' service is registered by the update script at
-		# SetupComplete (post-OOBE, from LswPromote.ps1), NOT here in Specialize: registered
-		# here with automatic start it would first run during OOBE, and
-		# its install gate would have OOBE's own sessions to reason
-		# about. (No HKLM\Run or logon-task autostart either: the
-		# service starts the per-session helpers itself.)
 	};
 	{
 		reg.exe add "HKLM\SOFTWARE\Policies\Microsoft\Dsh" /v AllowNewsAndInterests /t REG_DWORD /d 0 /f;
@@ -482,59 +385,17 @@ $scripts = @(
 		reg.exe add "HKU\.DEFAULT\Control Panel\Accessibility\StickyKeys" /v Flags /t REG_SZ /d 10 /f;
 	};
 	{
-		# No driver searches on Windows Update, from here on.
-		#
-		# The accel-virt device presents its host GPU's PCI vendor and
-		# device IDs, so a guest with a network finds that vendor's real
-		# WHQL driver on Windows Update, ranks it above the test-signed
-		# avgpu and installs it over the device - which then bugchecks
-		# at the next boot. provision.ps1's install stage turns driver
-		# searches off too, but that is SetupComplete, and OOBE has had
-		# the network and the device since the first boot. These are the
-		# same policies it writes; it also stops the update services.
 		reg.exe add "HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate" /v ExcludeWUDriversInQualityUpdate /t REG_DWORD /d 1 /f;
 		reg.exe add "HKLM\SOFTWARE\Policies\Microsoft\Windows\DriverSearching" /v DontSearchWindowsUpdate /t REG_DWORD /d 1 /f;
 		reg.exe add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\DriverSearching" /v SearchOrderConfig /t REG_DWORD /d 0 /f;
 		reg.exe add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Device Metadata" /v PreventDeviceMetadataFromNetwork /t REG_DWORD /d 1 /f;
 	};
 	{
-		# How much video memory the display adapter admits to.
-		#
-		# A VM with no GPU enumerates the Microsoft Basic Display
-		# Adapter, whose HardwareInformation.MemorySize is 0 - and
-		# applications gate their GPU path on that number long before
-		# they ever open a driver. Photoshop's sniffer reads exactly
-		# this key, reported "video RAM(MB): 0", and disabled the GPU
-		# with a working OpenGL sitting underneath it. It is read from
-		# the registry, not asked of any driver.
-		#
-		# What this reaches is whatever the Basic Display driver has
-		# bound by specialize - the install-time VGA adapter. avgpu is
-		# installed later, at SetupComplete, under a class key this
-		# never sees.
-		#
-		# 1 GiB. Comfortably over the 256 MB minimum the applications
-		# that check this ask for, and under the 4 GiB where the DWORD
-		# form of it stops being representable. Takes effect with no
-		# reboot.
-		#
-		# Both spellings, because consumers are split between them: the
-		# QWORD is what a WDDM adapter reports today and the DWORD is
-		# what the older path reads.
-		#
-		# This lives here rather than in a RunSynchronousCommand
-		# because Path there is capped at 259 characters, and a longer
-		# one does not fail on its own - setup rejects the WHOLE answer
-		# file with 0x80220005 and the install dies at specialize.
 		$class = 'HKLM:\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}';
 		Get-ChildItem $class -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -match '^[0-9]{4}$' } | ForEach-Object {
 			New-ItemProperty -LiteralPath $_.PSPath -Name 'HardwareInformation.qwMemorySize' -Value 1073741824 -PropertyType QWord -Force;
 			New-ItemProperty -LiteralPath $_.PSPath -Name 'HardwareInformation.MemorySize' -Value 1073741824 -PropertyType DWord -Force;
 		};
-		# The same values on 0000 whether or not it exists yet. The
-		# adapter is enumerated by PnP, and on an image where that has
-		# not happened by this point the loop above matches nothing and
-		# writes nowhere; 0000 is the subkey the first adapter takes.
 		New-Item -Path "$class\0000" -Force -ErrorAction SilentlyContinue | Out-Null;
 		New-ItemProperty -LiteralPath "$class\0000" -Name 'HardwareInformation.qwMemorySize' -Value 1073741824 -PropertyType QWord -Force;
 		New-ItemProperty -LiteralPath "$class\0000" -Name 'HardwareInformation.MemorySize' -Value 1073741824 -PropertyType DWord -Force;
@@ -556,7 +417,7 @@ $scripts = @(
     $complete += $increment;
   }
 } *&gt;&amp;1 | Out-String -Width 1KB -Stream &gt;&gt; "C:\Windows\Setup\Scripts\Specialize.log";
-		</File>
+</File>
 		<File path="C:\Windows\Setup\Scripts\UserOnce.ps1">
 $scripts = @(
 	{
@@ -572,11 +433,6 @@ $scripts = @(
 		Set-ItemProperty -LiteralPath 'Registry::HKCU\Software\Microsoft\Windows\CurrentVersion\Search' -Name 'SearchboxTaskbarMode' -Type 'DWord' -Value 0;
 	};
 	{
-		# "Adjust for best performance" less one effect, as Custom (3): a
-		# window keeps its contents while it is dragged instead of leaving
-		# an outline behind, which a mirrored window cannot follow. Each
-		# value is the one the best-performance preset writes, set here
-		# because a preset would be applied whole again.
 		Set-ItemProperty -LiteralPath 'Registry::HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects' -Name 'VisualFXSetting' -Type 'DWord' -Value 3 -Force;
 		Set-ItemProperty -LiteralPath 'Registry::HKEY_CURRENT_USER\Control Panel\Desktop' -Name 'UserPreferencesMask' -Type 'Binary' -Value ([byte[]](0x90, 0x12, 0x03, 0x80, 0x10, 0x00, 0x00, 0x00)) -Force;
 		Set-ItemProperty -LiteralPath 'Registry::HKEY_CURRENT_USER\Control Panel\Desktop' -Name 'DragFullWindows' -Type 'String' -Value '1' -Force;
@@ -585,8 +441,6 @@ $scripts = @(
 			Set-ItemProperty -LiteralPath 'Registry::HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' -Name $name -Type 'DWord' -Value 0 -Force;
 		}
 		Set-ItemProperty -LiteralPath 'Registry::HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' -Name 'IconsOnly' -Type 'DWord' -Value 1 -Force;
-		# Not New-Item -Force on its own: on a key that exists, that
-		# empties it.
 		if( -not ( Test-Path -LiteralPath 'Registry::HKEY_CURRENT_USER\Software\Microsoft\Windows\DWM' ) ) {
 			New-Item -Path 'Registry::HKEY_CURRENT_USER\Software\Microsoft\Windows\DWM' | Out-Null;
 		}
@@ -601,10 +455,6 @@ $scripts = @(
 	};
 	{
 		New-Item -ItemType Directory -Force -Path 'C:\ProgramData\LSW' | Out-Null;
-		# Record the wizard-chosen account name. The agent service reads
-		# it (after Winlogon's AutoLogon DefaultUserName) to know whose
-		# session is the wizard user's. installed.txt marks that this
-		# per-user setup ran; nothing gates on it.
 		Set-Content -LiteralPath 'C:\ProgramData\LSW\user.txt' -Value '{{user_name}}' -Encoding Ascii -Force;
 		Set-Content -LiteralPath 'C:\ProgramData\LSW\installed.txt' -Value (Get-Date -Format s) -Encoding Ascii -Force;
 	}
@@ -625,7 +475,7 @@ $scripts = @(
     $complete += $increment;
   }
 } *&gt;&amp;1 | Out-String -Width 1KB -Stream &gt;&gt; "$env:TEMP\UserOnce.log";
-		</File>
+</File>
 		<File path="C:\Windows\Setup\Scripts\DefaultUser.ps1">
 $scripts = @(
 	{
@@ -690,10 +540,6 @@ $scripts = @(
 		reg.exe add "HKU\DefaultUser\Control Panel\Accessibility\StickyKeys" /v Flags /t REG_SZ /d 10 /f;
 	};
 	{
-		# Screen saver off, no password on resume, for every account
-		# created from here on. The tune-windows setup step writes the
-		# same values to HKCU, but setup steps run as the agent service
-		# (SYSTEM) now, whose HKCU is not the user's.
 		reg.exe add "HKU\DefaultUser\Control Panel\Desktop" /v ScreenSaveActive /t REG_SZ /d 0 /f;
 		reg.exe add "HKU\DefaultUser\Control Panel\Desktop" /v ScreenSaverIsSecure /t REG_SZ /d 0 /f;
 		reg.exe add "HKU\DefaultUser\Control Panel\Desktop" /v ScreenSaveTimeOut /t REG_SZ /d 0 /f;
@@ -718,7 +564,7 @@ $scripts = @(
     $complete += $increment;
   }
 } *&gt;&amp;1 | Out-String -Width 1KB -Stream &gt;&gt; "C:\Windows\Setup\Scripts\DefaultUser.log";
-		</File>
+</File>
 		<File path="C:\Windows\Setup\Scripts\FirstLogon.ps1">
 $scripts = @(
 	{
@@ -729,15 +575,6 @@ $scripts = @(
 		) -Force -ErrorAction 'SilentlyContinue' -Verbose;
 	};
 	{
-		# Marker that the finalize scripts ran to completion. Useful
-		# for diagnosing a half-finished install; nothing gates on it.
-		#
-		# It is NOT an OOBE-done sentinel and must not be used as one:
-		# FirstLogonCommands is part of OOBE and runs while the
-		# "Preparing Windows" screen is still displayed, so this file
-		# appears well before there is a desktop. The agent decides
-		# for itself when the session is usable by waiting on the
-		# shell (see win::DesktopSession).
 		New-Item -ItemType Directory -Force -Path 'C:\ProgramData\LSW' | Out-Null;
 		Set-Content -LiteralPath 'C:\ProgramData\LSW\lsw-ready.flag' -Value (Get-Date -Format s) -Encoding Ascii -Force;
 	};
@@ -758,30 +595,7 @@ $scripts = @(
     $complete += $increment;
   }
 } *&gt;&amp;1 | Out-String -Width 1KB -Stream &gt;&gt; "C:\Windows\Setup\Scripts\FirstLogon.log";
-		</File>
-		<!-- Windows auto-runs C:\Windows\Setup\Scripts\SetupComplete.cmd
-		     as SYSTEM at the end of Setup, BEFORE the first interactive
-		     AutoLogon. That is the only autounattend hook that is both
-		     (a) privileged enough to add to Administrators (SYSTEM, no
-		     admin-account chicken-and-egg — FirstLogonCommands runs as
-		     the non-admin user and per MS docs "may not run") and
-		     (b) early enough that the membership is in place before LSA
-		     builds the user's logon token, so NO re-logon is needed.
-		     The autounattend <LocalAccount><Group>Administrators</Group>
-		     is LIVE-PROVEN not to stick on Win11 26200, and
-		     `net localgroup /add` fails 1317 there, so promotion uses
-		     PowerShell Add-LocalGroupMember. Tiny .cmd launcher (ANSI,
-		     no XML-entity hazards) → LswPromote.ps1.
-
-		     LswPromote.ps1 first puts LSW into the guest: it copies the
-		     payload ISO's \update to C:\ProgramData\LSW\update\<release>
-		     and runs lsw-guest-update.ps1 from there, the script that
-		     updates a running guest (the agent and its service, the
-		     driver, the loaders, the shared folders, the firewall rules),
-		     as SYSTEM with -NoRestart: Windows does not allow a restart
-		     from SetupComplete. It then promotes the user. All of it logs
-		     to C:\ProgramData\LSW\promote.log (the update's own steps to
-		     update.log). -->
+</File>
 		<File path="C:\Windows\Setup\Scripts\SetupComplete.cmd">
 @echo off
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Windows\Setup\Scripts\LswPromote.ps1
@@ -789,26 +603,22 @@ exit /b 0
 		</File>
 		<File path="C:\Windows\Setup\Scripts\LswPromote.ps1">
 $ErrorActionPreference = 'Continue';
-New-Item -ItemType Directory -Force -Path 'C:\ProgramData\LSW' | Out-Null;
-$log = 'C:\ProgramData\LSW\promote.log';
+New-Item -ItemType Directory -Force -Path 'C:\ProgramData\LSW\logs' | Out-Null;
+$log = 'C:\ProgramData\LSW\logs\promote.log';
+function Roll-Log([string] $LogFile) {
+    try {
+        if ((Test-Path -LiteralPath $LogFile) -and (Get-Item -LiteralPath $LogFile).Length -gt 2MB) {
+            $stem = $LogFile.Substring(0, $LogFile.Length - 4)
+            Remove-Item -LiteralPath ($stem + '.2.log') -Force -ErrorAction SilentlyContinue
+            if (Test-Path -LiteralPath ($stem + '.1.log')) {
+                Move-Item -LiteralPath ($stem + '.1.log') -Destination ($stem + '.2.log') -Force
+            }
+            Move-Item -LiteralPath $LogFile -Destination ($stem + '.1.log') -Force
+        }
+    } catch { }
+}
+Roll-Log $log;
 function L($m) { ('{0} {1}' -f (Get-Date -Format s), $m) | Add-Content -LiteralPath $log -Encoding Ascii; }
-# LSW's files: the payload ISO carries what an update would ship (its
-# \update), and the same script puts it in place, so that this guest ends
-# with the same release.json as one that was updated. It goes first: it
-# needs nothing from the account below, and the promotion has exits this
-# must not sit behind.
-#
-# The script signs the driver package (which turns test signing on, effective
-# from the next boot) and installs it with pnputil; avgpu.sys first starts
-# on the first boot after setup, when the manager restarts the guest into
-# its steady definition. It starts the agent, which keeps its port closed
-# until the wizard user's desktop is usable. -NoRestart because Windows
-# does not allow a restart from SetupComplete: the boot after setup is the
-# restart (the result says restart:true in update-result.json).
-#
-# A failure leaves no release.json, so the first steady boot's GuestUpkeep
-# (which finds the guest at no release) runs the update again, from the
-# manager; nothing here retries.
 $releaseId = '{{release}}';
 $bundleVersion = '{{version}}';
 $payload = [System.IO.DriveInfo]::GetDrives() | Where-Object { $_.DriveType -eq 'CDRom' -and $_.IsReady -and $_.VolumeLabel -eq 'LSW_PAYLOAD' } | Select-Object -First 1;
@@ -817,8 +627,6 @@ if (-not $payload) {
 } else {
     $stageDir = 'C:\ProgramData\LSW\update\' + $releaseId.Substring(0, 16);
     Remove-Item -LiteralPath $stageDir -Recurse -Force -ErrorAction SilentlyContinue;
-    # xcopy without /K, on purpose: files on a CD carry the read-only
-    # attribute and the sign stage rewrites avgpu.inf in place.
     $out = &amp; xcopy.exe ($payload.RootDirectory.FullName + 'update') $stageDir /E /I /Y /Q 2&gt;&amp;1 | Out-String;
     L ('xcopy of ' + $payload.RootDirectory.FullName + 'update to ' + $stageDir + ' exited ' + $LASTEXITCODE + ': ' + $out.Trim());
     $updateScript = $stageDir + '\C\ProgramData\LSW\lsw-guest-update.ps1';
@@ -831,14 +639,9 @@ if (-not $payload) {
     }
 }
 $flag = 'C:\ProgramData\LSW\promoted.flag';
-# SetupComplete.cmd can run twice on Win11 (SYSTEM during setup, then
-# again post first-logon); the sentinel makes the second run a no-op.
 if (Test-Path -LiteralPath $flag) { L 'promoted.flag present - skipping'; exit 0; }
 $u = '{{user_name}}';
 L ('SetupComplete promote start; target=' + $u + '; ctx=' + [System.Security.Principal.WindowsIdentity]::GetCurrent().Name);
-# The account is created in the oobeSystem pass; SetupComplete normally
-# runs after that, but guard the race with a bounded wait so we never
-# deadlock OOBE (give up after ~5 min, exit 0).
 $lu = $null; $n = 0;
 while ($n -lt 60) {
     $lu = Get-LocalUser -Name $u -ErrorAction SilentlyContinue;
@@ -861,6 +664,6 @@ if ($members -contains $lu.SID.Value) {
 Set-Content -LiteralPath $flag -Value (Get-Date -Format s) -Encoding Ascii -Force;
 ( Get-LocalGroupMember -Group 'Administrators' | Format-Table Name, SID -AutoSize | Out-String ) | Add-Content -LiteralPath $log -Encoding Ascii;
 L 'SetupComplete promote done';
-		</File>
+</File>
 	</Extensions>
 </unattend>

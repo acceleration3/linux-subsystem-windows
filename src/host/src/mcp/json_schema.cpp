@@ -21,4 +21,4 @@ nlohmann::json JsonSchema::object(const nlohmann::json& properties,
     return s;
 }
 
-}  // namespace lsw::host::mcp
+}

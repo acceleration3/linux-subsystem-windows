@@ -1,5 +1,3 @@
-"""judge_summary: a suite whose host half failed or left a picture missing
-does not pass, unless the sample is an explained HOST_EXCEPTIONS entry."""
 import json
 import pathlib
 import sys
@@ -29,8 +27,6 @@ class JudgeSummary(unittest.TestCase):
         self.assertEqual((failures, notes, count), ([], [], 2))
 
     def test_host_that_never_ran_fails_every_sample(self):
-        # The measured case: the native run was killed, metrics.tsv never
-        # written, every picture missing - it used to pass with 32 notes.
         samples = [sample(n, host=None, picture="missing", tone="bad") for n in ("triangle", "texture")]
         failures, notes, _ = self.judge(samples)
         self.assertEqual([f["case"] for f in failures], ["triangle", "texture"])

@@ -1,9 +1,3 @@
--- resolve-export-grades.lua: each graded timeline's grade (resolve-setup.lua's
--- `graded` list), done by hand on the Color page, grabbed as a still and
--- exported as a DRX into C:\av\media\resolve\grades\export\<timeline>\ (which
--- must exist: Resolve's console Lua cannot make directories) as
--- <timeline>_1.1.1.drx; renamed <timeline>.drx it is what resolve-setup.lua
--- applies when it builds the project again.
 local OUT = [[C:\av\media\resolve\grades\export\]]
 local project = resolve:GetProjectManager():GetCurrentProject()
 local album = project:GetGallery():GetCurrentStillAlbum()

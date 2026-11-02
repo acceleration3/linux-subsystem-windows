@@ -1,9 +1,3 @@
-// The overlay a Windows ISO boots through without "press any key": the
-// UEFI boot image the catalog names is the no-prompt one in it, and
-// the ISO itself is not written. Over a small ISO laid out the way
-// Windows media is (a BIOS entry, then a UEFI section), with 7-Zip and
-// qemu-img doing what they do for the real thing.
-
 #include "lsw/host/platform/tool_process.hpp"
 #include "lsw/host/provision/install/no_prompt_media.hpp"
 
@@ -45,8 +39,6 @@ QByteArray read(const QString& path) {
     return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray{};
 }
 
-// Windows media's boot layout over ``tree``: etfsboot.com for BIOS in
-// the initial entry, ``uefi_image`` in a section of its own.
 bool write_iso(const QString& tree, const char* uefi_image, const QString& out_path) {
     IsoImage* image = nullptr;
     if (iso_init() < 0 || iso_image_new("TEST", &image) < 0) {
@@ -87,7 +79,7 @@ QByteArray sha(const QByteArray& data) {
     return QCryptographicHash::hash(data, QCryptographicHash::Sha256);
 }
 
-}  // namespace
+}
 
 int main() {
     QTemporaryDir dir;
@@ -125,14 +117,11 @@ int main() {
           "nothing else differs");
     check(sha(read(iso)) == sha(before), "the ISO itself is not written");
 
-    // Media that already boots the no-prompt image: made all the same,
-    // since the domain always boots the overlay, and nothing changes.
     const QString rebuilt = dir.filePath(QStringLiteral("rebuilt.iso"));
     check(write_iso(tree, "efi/microsoft/boot/efisys_noprompt.bin", rebuilt) &&
               NoPromptMedia::make(rebuilt, overlay, &why),
           "media already without the prompt still gets its overlay");
 
-    // Media without the no-prompt image is refused, with a reason.
     QFile::remove(tree + QStringLiteral("/efi/microsoft/boot/efisys_noprompt.bin"));
     const QString older = dir.filePath(QStringLiteral("older.iso"));
     why.clear();

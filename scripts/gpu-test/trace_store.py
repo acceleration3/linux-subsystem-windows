@@ -1,24 +1,3 @@
-"""The trace store: API traces recorded from real applications, the pinned
-tools that record and replay them, and what each trace is judged on.
-
-Traces are big and come from the user's own installs, so they live outside
-git, in a directory gpu-test.sh mirrors to every host:
-
-  ~/.local/share/lsw-gpu-test/traces/        (LSW_GPU_TEST_TRACE_STORE)
-    tools/<tool>-<version>/                   unpacked from trace_tools.json's pins
-      tool.json                               the pin it was unpacked from
-    <app>/<functionality>/
-      manifest.json                           see Manifest
-      <the capture>                           a .trace, a .gfxr, or CLIntercept's Replay/
-      frames.txt                              apitrace: the call that ends each frame
-      capture.json                            what trace-capture.ps1 recorded about the capture
-      reference/frame-<n>.png                 the pictures a replay is judged against
-      reference/reference.json                where those came from
-
-The builder's store is the master copy; hosts get it with rsync and never
-write to it. Nothing here runs anything downloaded: the tools are unpacked
-from archives whose hashes are pinned, and only ever run in the guest.
-"""
 import fnmatch
 import hashlib
 import json
@@ -40,34 +19,21 @@ DOWNLOADS = pathlib.Path(os.environ.get("XDG_CACHE_HOME", pathlib.Path.home() / 
 
 SCHEMA = 1
 NAME = re.compile(r"^[a-z0-9][a-z0-9_.-]*$")
-"""An app's or a functionality's name: a path component on both systems."""
 APITRACE_APIS = ("d3d8", "d3d9", "dxgi", "gl")
 GFXR_APIS = ("vulkan", "d3d12")
 TOOL_OF_API = {**{api: "apitrace" for api in APITRACE_APIS}, **{api: "gfxreconstruct" for api in GFXR_APIS},
                "opencl": "clintercept"}
 REPLAYER_OF_TOOL = {"apitrace": "apitrace", "gfxreconstruct": "gfxreconstruct", "clintercept": "python"}
-"""The pinned tool a trace's replay runs with: a CLIntercept capture replays
-through its own run.py, under the pinned Python with pyopencl."""
 REPLAYER_OF_API = {"d3d12": "gfxreconstruct_d3d12"}
-"""Where an API's replayer is not its tool's: D3D12 is recorded and replayed
-by a GFXReconstruct build with its D3D12 capture DLLs and its Agility SDK
-runtime (the Vulkan SDK's has neither), and a capture replays with the build
-that recorded it."""
 
 DEFAULT_JUDGE = {
-    # Pictures, against reference/ and across GPUs. A pixel differs when a
-    # channel is off by more than pixel_tolerance; the limits are those the
-    # sample suites call a match (tools/d3d11_report.py).
-    "reference": "promoted",      # "promoted" (a run's frames, traces.py promote) or "warp" (D3D10+, D3D12 only)
+    "reference": "promoted",
     "pixel_tolerance": 2,
     "psnr_min": 40.0,
     "changed_max_pct": 1.0,
     "psnr_warn": 30.0,
-    # The replay process.
     "memory_growth_mib_max": 256,
     "min_fps": None,
-    # OpenCL: an element is bad when |got - ref| > atol + rtol * |ref| (floats)
-    # or when an integer byte is off by more than itol.
     "rtol": 1e-3,
     "atol": 1e-5,
     "itol": 0,
@@ -75,40 +41,13 @@ DEFAULT_JUDGE = {
 }
 DEFAULT_REPLAY = {"timeout_s": 900, "benchmark": False, "env": {}, "extra_args": [], "cl_platform": "avgpu",
                   "warp_gpu": 1}
-"""benchmark adds a pass of its own (apitrace -b) for the frame rate; without
-it the rate is the checking pass's frames over its seconds, which also
-counts loading and the snapshots - one pass instead of two, as a replay of a
-game's minute takes minutes. extra_args go to the retracer or gfxrecon-replay before the trace; env is
-added to the replay's environment (AV_D3D11_TRACE, say); cl_platform is the
-OpenCL platform name part an OpenCL replay runs on; warp_gpu is the adapter
-gfxrecon-replay --gpu renders a D3D12 trace's WARP reference on (it lists the
-VM's two Microsoft Basic Render Driver adapters first)."""
 
 
 class StoreError(Exception):
-    """The store, a manifest or a pin is not what the harness needs."""
+    pass
 
-
-# ------------------------------------------------------------------ manifests
 
 class Manifest:
-    """One functionality's manifest.json:
-
-      schema         1
-      app, functionality, title
-      api            d3d8 d3d9 dxgi gl (apitrace), vulkan d3d12 (gfxreconstruct), opencl (clintercept)
-      tool           {"name", "version"}: what recorded it; the replayer is the pinned one
-      arch           x64 or x86: which apitrace build replays it
-      capture        the trace file, or for opencl the directory of Enqueue_* dirs
-      files          {relative path: {"size", "sha256"}} for every file the trace needs
-      check          {"frames": [n, ...]}: frame numbers whose pictures are judged
-                     (apitrace: 0-based; negative counts from the end; gfxreconstruct:
-                     1-based as it counts), [] for none
-      replay         {"timeout_s", "benchmark", "env", "extra_args", "cl_platform", "warp_gpu"}
-      judge          DEFAULT_JUDGE's keys, any of them overridden
-      captured       {"date", "host", "gpu", "app_version", "how", "command", ...}
-    """
-
     def __init__(self, data, directory):
         self.data = data
         self.directory = pathlib.Path(directory)
@@ -140,7 +79,6 @@ class Manifest:
 
     @property
     def replayer(self):
-        """The pinned tool this trace replays with."""
         return REPLAYER_OF_API.get(self.api, REPLAYER_OF_TOOL[self.tool])
 
     @property
@@ -199,7 +137,6 @@ class Manifest:
         return found
 
     def missing_files(self):
-        """Files the manifest lists that are not on disk, or not of their size."""
         missing = []
         for relative, entry in self.data["files"].items():
             path = self.directory / relative
@@ -208,14 +145,12 @@ class Manifest:
         return missing
 
     def frame_calls(self):
-        """apitrace: the call number that ends each frame, from frames.txt, or None."""
         path = self.directory / "frames.txt"
         if not path.exists():
             return None
         return parse_frames(path.read_text())
 
     def references(self):
-        """{frame: png path} of the pictures in reference/."""
         found = {}
         for path in sorted((self.directory / "reference").glob("frame-*.png")):
             number = re.match(r"frame-(-?\d+)\.png$", path.name)
@@ -224,21 +159,14 @@ class Manifest:
         return found
 
     def digest(self):
-        """What identifies this functionality's files: the guest keeps a copy
-        stamped with it, and is sent the files again when it changes."""
         return hashlib.sha256(json.dumps(self.data["files"], sort_keys=True).encode()).hexdigest()
 
 
 def parse_frames(text):
-    """frames.txt, or `apitrace dump --calls=frame` output: the leading call
-    number of every line that has one."""
     return [int(found.group(1)) for found in re.finditer(r"^\s*(\d+)\b", text, re.M)]
 
 
 def resolve_frames(wanted, count):
-    """Frame numbers as a manifest names them (negative from the end), as
-    indices into a trace of `count` frames: those out of range are dropped
-    and returned apart."""
     chosen, outside = [], []
     for frame in wanted:
         index = frame + count if frame < 0 else frame
@@ -251,8 +179,6 @@ def resolve_frames(wanted, count):
 
 
 def default_frames(count, picks=5):
-    """Frames to judge when a manifest is first written: `picks` spread over
-    the trace, past its first tenth (loading), the last one included."""
     if count <= 0:
         return []
     start = count // 10
@@ -271,7 +197,6 @@ def file_entry(path):
 
 
 def describe_files(directory, relative_paths):
-    """{relative: {size, sha256}} for files and every file under directories."""
     directory = pathlib.Path(directory)
     files = {}
     for relative in relative_paths:
@@ -283,8 +208,6 @@ def describe_files(directory, relative_paths):
             files[pathlib.PurePath(relative).as_posix()] = file_entry(path)
     return files
 
-
-# ---------------------------------------------------------------------- store
 
 class Store:
     def __init__(self, root=None):
@@ -301,7 +224,6 @@ class Store:
                       if path.parent.parent.name != "tools")
 
     def manifests(self):
-        """(manifests, problems): every functionality that loads, and why the others do not."""
         loaded, problems = [], []
         for directory in self.functionality_dirs():
             try:
@@ -311,9 +233,6 @@ class Store:
         return loaded, problems
 
     def select(self, selection):
-        """The manifests `selection` names: "" for all, else comma-separated
-        apps ("hl2"), functionalities ("hl2/trainstation") or shell patterns
-        of functionalities ("resolve/fx-*", "*/title")."""
         loaded, problems = self.manifests()
         wanted = [part.strip() for part in (selection or "").split(",") if part.strip()]
         if not wanted:
@@ -330,7 +249,6 @@ class Store:
         return chosen, problems
 
     def tool(self, name):
-        """(directory, pin) of the unpacked tool `name`, or StoreError."""
         found = sorted(self.tools_root.glob(f"{name}-*/tool.json"))
         if not found:
             raise StoreError(f"{name} is not in {self.tools_root}: run traces.py fetch-tools on the builder "
@@ -338,8 +256,6 @@ class Store:
         path = found[-1]
         return path.parent, json.loads(path.read_text())
 
-
-# ---------------------------------------------------------------- tool pins
 
 def load_pins(path=PINS):
     return json.loads(pathlib.Path(path).read_text())
@@ -350,15 +266,10 @@ def sha256_of(path):
 
 
 def archive_name(entry):
-    """The file a pinned download is kept as: its `file`, else the URL's last part."""
     return entry.get("file") or entry["url"].rsplit("/", 1)[-1]
 
 
 def download(entry, cache):
-    """`entry`'s archive into `cache`, verified against its sha256; a cached
-    copy that verifies is used as is. A GitHub Actions artifact
-    (`"gh_artifact": true`) can only be downloaded signed in, so it comes
-    through the gh CLI's own login."""
     url, sha256 = entry["url"], entry["sha256"]
     cache.mkdir(parents=True, exist_ok=True)
     target = cache / archive_name(entry)
@@ -386,7 +297,6 @@ def download(entry, cache):
 
 
 def safe_members(names):
-    """Archive member names that stay inside the directory they unpack into."""
     kept = []
     for name in names:
         posix = pathlib.PurePosixPath(name.replace("\\", "/"))
@@ -397,8 +307,6 @@ def safe_members(names):
 
 
 def unpack(archive, kind, scratch):
-    """The archive's files under `scratch`: zip and wheel with zipfile, 7z
-    (and the self-extracting SDK installer) with the system's 7z."""
     if kind in ("zip", "wheel"):
         with zipfile.ZipFile(archive) as opened:
             safe_members(opened.namelist())
@@ -412,7 +320,6 @@ def unpack(archive, kind, scratch):
 
 
 def install_download(entry, archive, target):
-    """The files `entry` keeps from `archive`, under target/entry["into"]."""
     with tempfile.TemporaryDirectory(dir=target.parent) as scratch:
         scratch = pathlib.Path(scratch)
         unpack(archive, entry["unpack"], scratch)
@@ -436,9 +343,6 @@ def install_download(entry, archive, target):
 
 
 def fetch_tool(name, pin, store, cache=DOWNLOADS, sources=()):
-    """Tool `name` unpacked into the store from its pinned downloads. A
-    download is looked for in `sources` (directories of already downloaded
-    archives) before the network."""
     target = store.tools_root / f"{name}-{pin['version']}"
     stamp = target / "tool.json"
     if stamp.exists() and json.loads(stamp.read_text()) == pin:
@@ -472,8 +376,6 @@ def fetch_tool(name, pin, store, cache=DOWNLOADS, sources=()):
 
 
 def tree_digest(directory):
-    """Names and sizes of every file under `directory`: a cheap stamp for a
-    tool (its tool.json pins the content)."""
     directory = pathlib.Path(directory)
     listing = [(path.relative_to(directory).as_posix(), path.stat().st_size)
                for path in sorted(directory.rglob("*")) if path.is_file()]

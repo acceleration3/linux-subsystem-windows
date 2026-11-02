@@ -6,8 +6,6 @@ namespace lsw::host::mcp {
 
 class ConsoleSessionBuffer;
 
-// Terminates a console session in the guest and drops its host-side
-// buffer, so a reused session id cannot return a dead session's output.
 class ConsoleCloseTool final : public AgentTool {
 public:
     ConsoleCloseTool(link::AgentRpcClient& agent, ConsoleSessionBuffer& buffer) noexcept
@@ -22,4 +20,4 @@ private:
     ConsoleSessionBuffer& buffer_;
 };
 
-}  // namespace lsw::host::mcp
+}

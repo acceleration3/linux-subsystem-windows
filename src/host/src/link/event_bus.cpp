@@ -34,7 +34,6 @@ void EventBus::unsubscribe(std::uint64_t id) {
         }
     }
     if (removed) {
-        // Waits for a call already in progress on the reader thread.
         std::lock_guard<std::recursive_mutex> lock(removed->call_mu);
         removed->live = false;
     }
@@ -48,8 +47,6 @@ void EventBus::dispatch(const nlohmann::json& frame) {
     if (topic == frame.end() || !topic->is_string()) {
         return;
     }
-    // Snapshot under the lock, call outside it: a handler that
-    // subscribes or unsubscribes would otherwise deadlock.
     std::vector<std::shared_ptr<Entry>> snapshot;
     {
         std::lock_guard<std::mutex> lock(mu_);
@@ -67,4 +64,4 @@ void EventBus::dispatch(const nlohmann::json& frame) {
     }
 }
 
-}  // namespace lsw::host::link
+}

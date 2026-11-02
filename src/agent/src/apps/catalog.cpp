@@ -31,17 +31,6 @@
 namespace lsw::agent::apps {
 
 namespace {
-
-// Add/Remove Programs is just two well-known registry hives — the
-// same view ``Get-Package -ProviderName Programs`` ends up reading.
-// Querying the registry directly avoids spawning powershell.exe (slow
-// + can deadlock under LocalSystem due to PackageManagement module
-// init), and runs in milliseconds.
-//
-// We read both 64-bit and 32-bit views so 32-bit apps installed on
-// 64-bit Windows show up too. Per-user installs (HKCU) are skipped
-// for now — running as LocalSystem, HKCU points at the system
-// profile, not the logged-in user.
 constexpr const wchar_t kUninstallKey[] =
     L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall";
 
@@ -53,9 +42,6 @@ struct RegEntry {
     std::wstring uninstall_string;
 };
 
-// DisplayIcon is often ``"C:\Path\foo.exe",N`` with optional quoting
-// and a trailing icon-resource index. Strip both so the result is the
-// raw file path.
 std::wstring strip_icon_suffix(std::wstring s) {
     if (!s.empty() && s.front() == L'"') {
         const auto end = s.find(L'"', 1);
@@ -84,8 +70,6 @@ std::wstring file_name_of(const std::wstring& path) {
     return slash == std::wstring::npos ? path : path.substr(slash + 1);
 }
 
-// Lowercase letters and digits only, so "Mozilla Firefox (x64 en-US)"
-// and "firefox.exe" can be compared.
 std::wstring name_key(std::wstring_view s) {
     std::wstring out;
     for (const wchar_t c : s) {
@@ -96,8 +80,6 @@ std::wstring name_key(std::wstring_view s) {
     return out;
 }
 
-// What a DisplayIcon names is as often the uninstaller as the program:
-// Steam registers uninstall.exe for both its icon and its uninstaller.
 bool is_uninstaller(const std::wstring& exe, const RegEntry& e) {
     if (util::WideString::istarts_with(file_name_of(exe), L"unins")) {
         return true;
@@ -107,10 +89,6 @@ bool is_uninstaller(const std::wstring& exe, const RegEntry& e) {
            util::WideString::lower(exe) == util::WideString::lower(uninstall_program);
 }
 
-// An .exe directly under ``dir`` (non-recursive) that is not the
-// uninstaller and is named like the entry - Steam's folder has steam.exe
-// beside gameoverlayui.exe. Nothing when none is: guessing "the first
-// exe" is how a Microsoft 365 entry came to start appvcleaner.exe.
 std::wstring find_program_in(const std::wstring& dir, const RegEntry& e) {
     if (dir.empty()) {
         return {};
@@ -145,10 +123,6 @@ std::wstring find_program_in(const std::wstring& dir, const RegEntry& e) {
     return {};
 }
 
-// The program of an Uninstall entry that has no Start menu shortcut: its
-// DisplayIcon when that names an existing .exe other than the
-// uninstaller, else an .exe in InstallLocation that is named like the
-// entry. Nothing otherwise.
 std::wstring resolve_program(const RegEntry& e, const std::wstring& icon_path) {
     if (util::WideString::iends_with(icon_path, L".exe") && !is_uninstaller(icon_path, e) &&
         win::FileSystem::exists(icon_path)) {
@@ -157,8 +131,6 @@ std::wstring resolve_program(const RegEntry& e, const std::wstring& icon_path) {
     return find_program_in(e.install_location, e);
 }
 
-// The programs Windows runs as services, lowercase. An entry whose
-// program is one - Mozilla's Maintenance Service - has nothing to open.
 std::unordered_set<std::wstring> service_programs() {
     std::unordered_set<std::wstring> out;
     const auto services = win::RegKey::open(
@@ -178,9 +150,6 @@ std::unordered_set<std::wstring> service_programs() {
     return out;
 }
 
-// Filter out registry entries that aren't real user-launchable apps:
-// system components, Windows updates (KB...), redistributables,
-// "Update for ..." patches, etc.
 bool looks_like_app(const RegEntry& e) {
     if (e.display_name.empty()) {
         return false;
@@ -224,7 +193,6 @@ void enumerate_uninstall_view(HKEY root, REGSAM view_flag, std::vector<RegEntry>
     }
 }
 
-// The extensions of a program as a JSON array of ".ext" strings.
 nlohmann::json extensions_json(const FileAssociations::Table& table, const std::wstring& program) {
     auto out = nlohmann::json::array();
     for (const std::wstring& extension : FileAssociations::of(table, program)) {
@@ -233,7 +201,7 @@ nlohmann::json extensions_json(const FileAssociations::Table& table, const std::
     return out;
 }
 
-}  // namespace
+}
 
 nlohmann::json Catalog::list() {
     LSW_AGENT_INFO("app_catalog: reading the Start menu and the Uninstall registry");
@@ -242,12 +210,10 @@ nlohmann::json Catalog::list() {
 
     nlohmann::json doc = nlohmann::json::object();
     auto& arr_out = doc["apps"] = nlohmann::json::array();
-    std::unordered_set<std::wstring> listed;         // lowercase programs
-    std::unordered_set<std::wstring> listed_folders;  // lowercase parents of those
+    std::unordered_set<std::wstring> listed;
+    std::unordered_set<std::wstring> listed_folders;
     size_t with_icon = 0;
 
-    // The Start menu is the primary source: it says exactly what each
-    // shortcut starts, which is what the person sees in All apps.
     std::vector<StartMenuEntry> shortcuts;
     std::vector<AppsFolderItem> items = AppsFolder::items();
     for (const AppsFolderItem& item : items) {
@@ -260,7 +226,6 @@ nlohmann::json Catalog::list() {
         shortcuts, windows_dir, [](const std::wstring& path) { return win::FileSystem::exists(path); });
     constexpr int kIconPx = 64;
     for (const StartMenuEntry& entry : chosen) {
-        // The item itself, for its icon: the one the dedupe kept.
         const AppsFolderItem* item = nullptr;
         for (const AppsFolderItem& candidate : items) {
             if (!candidate.packaged() && candidate.name == entry.name && candidate.target == entry.target &&
@@ -271,9 +236,6 @@ nlohmann::json Catalog::list() {
         }
         const auto exe_u8 = util::TextEncoding::to_utf8(entry.target);
         nlohmann::json o = nlohmann::json::object();
-        // Several applications can be one program with different arguments
-        // (Chrome's web apps): the id has them in it, so it is stable and
-        // none shares another's.
         o["id"] = entry.arguments.empty() ? exe_u8 : exe_u8 + " " + util::TextEncoding::to_utf8(entry.arguments);
         o["name"] = util::TextEncoding::to_utf8(entry.name);
         o["exe_path"] = exe_u8;
@@ -298,8 +260,6 @@ nlohmann::json Catalog::list() {
     }
     const size_t from_start_menu = arr_out.size();
 
-    // Things with no Start menu shortcut (a Steam game has only its
-    // Uninstall entry), from the Uninstall registry in both views.
     std::vector<RegEntry> entries;
     enumerate_uninstall_view(HKEY_LOCAL_MACHINE, KEY_WOW64_64KEY, entries);
     enumerate_uninstall_view(HKEY_LOCAL_MACHINE, KEY_WOW64_32KEY, entries);
@@ -316,9 +276,6 @@ nlohmann::json Catalog::list() {
             ++skipped_service;
             continue;
         }
-        // Already listed, or a program of the same folder is: the entry is
-        // the application the shortcut already names (OneDrive's uninstall
-        // entry points at its updater beside OneDrive.exe).
         const auto parent = util::WideString::parent_dir(lowered);
         if (listed.contains(lowered) || (parent && listed_folders.contains(*parent))) {
             continue;
@@ -339,9 +296,6 @@ nlohmann::json Catalog::list() {
     }
 
     if (arr_out.empty()) {
-        // A read that found no program at all is more likely a shell that
-        // was not ready than a guest with none; the manager drops what an
-        // answer leaves out, so this is an error, not an empty list.
         throw std::runtime_error("the Start menu listed no programs");
     }
     const auto took_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -354,4 +308,4 @@ nlohmann::json Catalog::list() {
     return doc;
 }
 
-}  // namespace lsw::agent::apps
+}

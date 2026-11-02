@@ -11,18 +11,12 @@
 namespace lsw::agent::rpc::handlers {
 
 namespace {
-
-// More than any comparison asks about at once: the agent, the mirror's
-// guest half, provision.ps1 and the loaders.
 constexpr std::size_t kMaxPaths = 64;
 
-}  // namespace
+}
 
-// {"paths": [string]} -> {"hashes": {path: sha256 | null}}: each file's
-// SHA-256 in lowercase hex, null for one that is not there or cannot be
-// read. Paths come back as they were asked.
 struct FileHashesHandler : RpcHandler {
-    nlohmann::json handle(const nlohmann::json& params, RpcContext& /*ctx*/) override {
+    nlohmann::json handle(const nlohmann::json& params, RpcContext& ) override {
         const auto paths = params.value("paths", nlohmann::json::array());
         if (!paths.is_array() || paths.size() > kMaxPaths) {
             throw std::invalid_argument("file_hashes takes a list of at most 64 paths");
@@ -41,6 +35,6 @@ struct FileHashesHandler : RpcHandler {
     }
 };
 
-}  // namespace lsw::agent::rpc::handlers
+}
 
 LSW_REGISTER_RPC(lsw::agent::rpc::handlers::FileHashesHandler, ::lsw::linkproto::cmd::kFileHashes)

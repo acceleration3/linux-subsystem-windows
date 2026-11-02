@@ -25,7 +25,7 @@ quint32 number(const nlohmann::json& object, const char* key) {
     return it != object.end() && it->is_number_unsigned() ? it->get<quint32>() : 0U;
 }
 
-}  // namespace
+}
 
 GuestGpuStatus GuestGpuStatus::from_json(const nlohmann::json& body) {
     GuestGpuStatus out;
@@ -81,4 +81,4 @@ QString GuestGpuStatus::explain(quint32 problem_code, bool test_signing) {
     return QStringLiteral("Device Manager has the details");
 }
 
-}  // namespace lsw::host::services
+}

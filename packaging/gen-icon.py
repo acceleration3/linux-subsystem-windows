@@ -1,12 +1,8 @@
 #!/usr/bin/env python3
-"""Writes packaging/lsw-manager.svg: Tux coming apart into pixels that become
-the Windows logo, on a green tile. The pixels are placed here, seeded, rather
-than by hand: python3 packaging/gen-icon.py packaging/lsw-manager.svg"""
 import random
 import sys
 random.seed(7)
-# Tux geometry
-BODY=(92,146,46,60)    # cx, cy, rx, ry
+BODY=(92,146,46,60)
 HEAD=(92,86,34)
 BELLY=(92,154,30,44)
 def in_ell(x,y,e): cx,cy,rx,ry=e; return ((x-cx)/rx)**2+((y-cy)/ry)**2<=1
@@ -19,13 +15,10 @@ BLUE=(46,156,240)
 def mix(a,b,t): return tuple(round(a[i]+(b[i]-a[i])*t) for i in range(3))
 def hexc(c): return '#%02x%02x%02x'%c
 CELL=8
-X0, X1 = 104, 152          # where Tux comes apart, and where the logo begins
-# Logo
+X0, X1 = 104, 152
 LX, LY, P, G = 156, 104, 38, 5
-# Tux's edge, row by row: a jagged line of whole cells
 rows=range(40, 216, CELL)
 edges={y: X0 + CELL*random.randint(1,3) for y in rows}
-# build staircase path explicitly
 d='M0 0 H%d '%edges[rows[0]]
 for y in rows:
     d+='H%d V%d '%(edges[y], y+CELL)
@@ -39,21 +32,18 @@ for y in rows:
         t = (x - X0)/(X1 - X0)
         outside = base is None
         if outside: base = (27,28,34)
-        # Past his outline the stream is thinner, but unbroken.
         keep = random.random() < (0.9 - 0.55*t) * (0.55 if outside else 1.0)
         if outside and not (52 <= y <= 196):
             keep = False
         if keep:
             size = CELL - 1 - round(2*t)
             col = mix(base, BLUE, min(1, t*1.4))
-            # Funnelled: a pixel's row eases from Tux's toward the logo's.
             span = (rows[-1] + CELL) - rows[0]
             target = LY + (y - rows[0]) / span * (2*P + G)
             ease = t ** 1.6
             py = y + (target - y) * ease + random.uniform(-1, 1) * 2 * t
             px = x + random.uniform(-1, 1) * 3 * t
             nx, ny = px + (CELL - size) / 2, py + (CELL - size) / 2
-            # A pixel never lands on another: converging, they thin out.
             if all(abs(nx - ox) > (size + os) / 2 + 2 or abs(ny - oy) > (size + os) / 2 + 2
                    for (ox, oy, os, _) in parts):
                 parts.append((nx, ny, size, hexc(col)))

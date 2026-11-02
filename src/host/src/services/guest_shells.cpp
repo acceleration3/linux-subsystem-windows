@@ -13,11 +13,8 @@
 namespace lsw::host::services {
 
 namespace {
-
-// Characters of transcript kept per shell. Past it the oldest lines go.
 constexpr qsizetype kMaxTranscript = 1 << 20;
 
-// cmd.exe writes CR-LF in the OEM code page. A view wants plain lines.
 QString decode(const QByteArray& raw) {
     QString s = QString::fromLocal8Bit(raw);
     s.replace(QStringLiteral("\r\n"), QStringLiteral("\n"));
@@ -25,7 +22,7 @@ QString decode(const QByteArray& raw) {
     return s;
 }
 
-}  // namespace
+}
 
 GuestShells::GuestShells(link::AgentRpcClient& rpc, StatusHub& status, QObject* parent)
     : QObject(parent), rpc_(rpc), hub_(status), agent_online_(status.vm().agent_online()) {
@@ -37,8 +34,6 @@ GuestShells::GuestShells(link::AgentRpcClient& rpc, StatusHub& status, QObject* 
         }
     });
 
-    // The agent fires the same topics for every console it holds, the
-    // MCP server's included; the slots keep to the ones opened here.
     output_sub_ = rpc_.subscribe(linkproto::topic::kConsoleOutput, [this](const nlohmann::json& f) {
         const auto id = QString::fromStdString(f.value("session_id", std::string{}));
         const auto bytes =
@@ -87,8 +82,6 @@ void GuestShells::open(int session) {
                             : QString{};
         const auto it = shells_.find(session);
         if (it == shells_.end() || it->attempt != attempt || it->state != State::Opening) {
-            // Given up on while the reply was on its way: the agent went
-            // away, or this was destroyed. The shell it opened is not wanted.
             if (!id.isEmpty()) {
                 rpc_.request_detached(linkproto::cmd::kConsoleClose,
                                       {{"session_id", id.toStdString()}});
@@ -119,8 +112,6 @@ void GuestShells::open(int session) {
 }
 
 void GuestShells::send(int session, const QString& line) {
-    // Echoed into the transcript: cmd does not echo what arrives on a
-    // redirected stdin, and the command belongs above its output.
     append(session, QStringLiteral("> ") + line + QChar('\n'));
     Shell& shell = shells_[session];
     if (shell.state == State::Open) {
@@ -155,8 +146,6 @@ void GuestShells::on_agent(bool online) {
     if (online) {
         return;
     }
-    // A shell is a cmd.exe the agent holds; with the agent gone, so is
-    // the shell, whatever the transcript still shows.
     for (auto it = shells_.begin(); it != shells_.end(); ++it) {
         if (it->state != State::Open && it->state != State::Opening) {
             continue;
@@ -210,4 +199,4 @@ void GuestShells::append(int session, const QString& text) {
     Q_EMIT output(session, text);
 }
 
-}  // namespace lsw::host::services
+}

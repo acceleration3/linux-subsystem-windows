@@ -24,7 +24,7 @@ bool under(const std::wstring& path, std::wstring dir) {
     return util::WideString::istarts_with(path, dir);
 }
 
-}  // namespace
+}
 
 bool StartMenuFilter::is_uninstaller(const std::wstring& exe) {
     const std::wstring name = file_name_of(exe);
@@ -36,7 +36,6 @@ std::vector<StartMenuEntry>
 StartMenuFilter::applications(const std::vector<StartMenuEntry>& entries,
                               const std::wstring& windows_dir,
                               const std::function<bool(const std::wstring&)>& exists) {
-    // Applicable shortcuts, grouped by program in the order each was first seen.
     std::vector<std::wstring> order;
     std::unordered_map<std::wstring, std::vector<StartMenuEntry>> by_program;
     for (const StartMenuEntry& entry : entries) {
@@ -55,10 +54,6 @@ StartMenuFilter::applications(const std::vector<StartMenuEntry>& entries,
     std::vector<StartMenuEntry> out;
     for (const std::wstring& key : order) {
         const auto& group = by_program[key];
-        // A shortcut with no arguments is the program, and the ones with
-        // arguments are ways of starting it (a proxy generator, a new
-        // window). With none of those, each is its own application: Chrome's
-        // web apps are chrome_proxy.exe with an --app-id apiece.
         const auto plain = std::find_if(group.begin(), group.end(),
                                         [](const StartMenuEntry& e) { return e.arguments.empty(); });
         if (plain != group.end()) {
@@ -76,4 +71,4 @@ StartMenuFilter::applications(const std::vector<StartMenuEntry>& entries,
     return out;
 }
 
-}  // namespace lsw::agent::apps
+}

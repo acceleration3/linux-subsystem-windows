@@ -16,41 +16,20 @@ class AgentRpcClient;
 }
 
 namespace lsw::host::manager {
-
-// Toolbar (Refresh + New) above an icon-grid of configured apps.
-// Items are loaded from the local ``AppConfigStore``; agent
-// discoveries are merged on each refresh so user overrides survive
-// re-enumeration. Right-click → Configure / Delete.
-//
-// Double-click launches the app in the guest through GuestAppLauncher,
-// which starts a ``mirror::WindowMirror`` for it: one mirror process per
-// launch, which owns that application's windows on this desktop. With
-// the agent not answering yet it asks for the launch instead
-// (``launch_requested``), and whoever owns the boot splash waits for
-// Windows first.
 class AppListWidget : public QWidget {
     Q_OBJECT
 public:
     AppListWidget(apps::AppConfigStore& store, link::AgentRpcClient& rpc,
                   apps::GuestAppLauncher& launcher, QWidget* parent = nullptr);
 
-    // The toolbar the grid builds for itself. The Overview page lifts
-    // it into the panel's caption row, so refresh and add sit on the
-    // same line as the panel's name rather than in a strip of their own.
     [[nodiscard]] QToolBar* toolbar() const noexcept { return toolbar_; }
 
     void set_target(const QUuid& vm_uuid);
-    // Ask the agent for the installed applications again.
     void refresh();
     void clear_target();
-    // Whether a launch can go to the agent now or has to wait for it.
-    // ``boot_id`` is libvirt's id of the boot the agent answers in
-    // (VmStatus::domain_id), -1 if not known.
     void set_agent_online(bool online, int boot_id = -1);
 
 Q_SIGNALS:
-    // An application opened while the agent is not answering: one for
-    // GuestAppLaunchController, which boots the guest first.
     void launch_requested(const QString& app_id);
 
 private Q_SLOTS:
@@ -64,7 +43,6 @@ private Q_SLOTS:
 private:
     void open_config_dialog(const apps::AppConfig& initial);
     void rebuild();
-    // Make the tile for ``id`` the current one, in view.
     void select(const QString& id);
 
     apps::AppConfigStore& store_;
@@ -80,4 +58,4 @@ private:
     bool agent_online_ = false;
 };
 
-}  // namespace lsw::host::manager
+}

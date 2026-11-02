@@ -32,4 +32,4 @@ nlohmann::json ToolArgs::missing(std::string_view key) const {
     return ToolResult::error(std::string{tool_} + ": missing " + std::string{key});
 }
 
-}  // namespace lsw::host::mcp
+}

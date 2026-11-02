@@ -17,14 +17,6 @@ namespace lsw::host::wizard {
 
 class Wizard;
 
-// Step 5: VM sizing + local Windows account credentials + Windows
-// edition. Sliders for CPU/memory/disk (bounded by host caps), the
-// local-account username/password baked into autounattend.xml, and an
-// edition combo box populated asynchronously by reading the chosen
-// ISO's WIM image table (provision::install::WimEditionLister::list, run off-thread
-// because it shells out to 7z), and a language combo box of the languages
-// the ISO carries (provision::install::MediaLanguage), read the same way.
-// The VM name is fixed (config::kVmName).
 class VmSizePage : public WizardPage {
     Q_OBJECT
 public:
@@ -56,8 +48,6 @@ private:
     QComboBox* language_combo_ = nullptr;
     QLabel* language_status_ = nullptr;
 
-    // Async WIM-edition probe. ``probed_iso_`` guards against
-    // re-probing the same ISO every time the page is revisited.
     QFutureWatcher<QVector<provision::install::WimEdition>>* edition_watcher_ = nullptr;
     QFutureWatcher<QStringList>* language_watcher_ = nullptr;
     QString probed_iso_;
@@ -65,4 +55,4 @@ private:
     bool languages_loaded_ = false;
 };
 
-}  // namespace lsw::host::wizard
+}

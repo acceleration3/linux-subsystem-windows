@@ -12,19 +12,10 @@
 #include <vector>
 
 namespace lsw::agent::rpc::handlers {
-
-// ``launch_store_app``: activate a packaged application by its ID.
-//
-//   params: aumid, args?, documents? (Windows paths to open), session?
-//   reply:  {ok, pid}
-//
-// The process is started by Windows' activation broker, not by the
-// agent, so it belongs to no job of the agent's: the mirror follows it by
-// its pid.
 struct LaunchStoreAppHandler : RpcHandler {
     [[nodiscard]] Placement placement() const override { return Placement::UserSession; }
 
-    nlohmann::json handle(const nlohmann::json& params, RpcContext& /*ctx*/) override {
+    nlohmann::json handle(const nlohmann::json& params, RpcContext& ) override {
         const auto aumid = Params{params, linkproto::cmd::kLaunchStoreApp}.require_string("aumid");
         const auto args = params.value("args", std::string{});
         std::vector<std::wstring> documents;
@@ -48,7 +39,7 @@ struct LaunchStoreAppHandler : RpcHandler {
     }
 };
 
-}  // namespace lsw::agent::rpc::handlers
+}
 
 LSW_REGISTER_RPC(lsw::agent::rpc::handlers::LaunchStoreAppHandler,
                  ::lsw::linkproto::cmd::kLaunchStoreApp)

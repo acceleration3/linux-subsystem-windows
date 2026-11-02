@@ -39,4 +39,4 @@ nlohmann::json LaunchTool::call(const nlohmann::json& args) {
     return ToolResult::from_reply(agent_.request(linkproto::cmd::kLaunch, params));
 }
 
-}  // namespace lsw::host::mcp
+}

@@ -17,8 +17,6 @@ ConsoleSessionBuffer::ConsoleSessionBuffer(link::AgentRpcClient& rpc) {
         const auto b64 = QByteArray::fromStdString(f.value("data_b64", std::string{}));
         on_output(sid, QByteArray::fromBase64(b64));
     });
-    // A closed session gets a synthetic tail line rather than silence, so
-    // a model polling console_read can tell "nothing yet" from "it ended".
     closed_sub_ = rpc.subscribe(linkproto::topic::kConsoleClosed, [this](const nlohmann::json& f) {
         const auto sid = QString::fromStdString(f.value("session_id", std::string{}));
         if (sid.isEmpty()) {
@@ -54,4 +52,4 @@ void ConsoleSessionBuffer::forget(const QString& session_id) {
     sessions_.remove(session_id);
 }
 
-}  // namespace lsw::host::mcp
+}

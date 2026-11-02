@@ -8,16 +8,8 @@
 #include <string>
 
 namespace lsw::agent::rpc::handlers {
-
-// What a .lnk points at.
-//
-// Configuring an application by picking its Start menu shortcut is the
-// obvious thing to do, and storing the shortcut itself is the wrong
-// answer: an installer's uninstaller deletes it and the entry stops
-// working for a reason nobody can see. So the target is resolved here,
-// once, and the entry keeps its arguments and working folder too.
 struct ResolveShortcutHandler : RpcHandler {
-    nlohmann::json handle(const nlohmann::json& params, RpcContext& /*ctx*/) override {
+    nlohmann::json handle(const nlohmann::json& params, RpcContext& ) override {
         const auto path = Params{params, linkproto::cmd::kResolveShortcut}.require_string("path");
 
         nlohmann::json reply = {{"target", ""}, {"args", ""}, {"workdir", ""}};
@@ -37,7 +29,7 @@ struct ResolveShortcutHandler : RpcHandler {
     }
 };
 
-}  // namespace lsw::agent::rpc::handlers
+}
 
 LSW_REGISTER_RPC(lsw::agent::rpc::handlers::ResolveShortcutHandler,
                  ::lsw::linkproto::cmd::kResolveShortcut)

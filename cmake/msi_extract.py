@@ -1,26 +1,4 @@
 #!/usr/bin/env python3
-"""Copy files out of a Windows Installer package, with nothing but Python.
-
-    msi_extract.py PACKAGE.msi OUT_DIR KEY=NAME [KEY=NAME ...]
-
-Writes the file the package's cabinet stores under KEY to OUT_DIR/NAME,
-for each pair, and fails if any KEY is not there. Used by
-cmake/LSWGuestShares.cmake to take the virtio-fs driver and virtiofs.exe
-out of virtio-win's guest-tools package, which carries them under keys
-such as FILE_viofs_w11_amd64.sys.
-
-A package is an OLE compound file; its files are in a cabinet stored as
-one of its streams. libarchive, and so CMake, reads neither the compound
-file nor this cabinet, and 7-Zip or msitools would be one more thing a
-build needs, so both are read here: the compound file far enough to find
-the stream that is a cabinet, and the cabinet's MSZIP folders, which are
-deflate blocks zlib inflates. Cabinets compressed any other way (LZX,
-Quantum) are refused, not guessed at.
-
-The package is checked against its pinned SHA-256 before this runs, and
-every file this writes against its own pinned hash after, so a reader
-that went wrong cannot ship a wrong driver.
-"""
 
 import os
 import struct
@@ -28,7 +6,7 @@ import sys
 import zlib
 
 CFB_MAGIC = bytes.fromhex("d0cf11e0a1b11ae1")
-END_OF_CHAIN = 0xFFFFFFFA  # this and above end a sector chain
+END_OF_CHAIN = 0xFFFFFFFA
 MSZIP = 1
 
 
@@ -37,8 +15,6 @@ def fail(message):
 
 
 class CompoundFile:
-    """The streams of an OLE compound file, read whole."""
-
     def __init__(self, data):
         if data[:8] != CFB_MAGIC:
             fail("not an OLE compound file")
@@ -69,11 +45,10 @@ class CompoundFile:
         return bytes(out[:size])
 
     def large_streams(self):
-        """The streams held in whole sectors: every one a cabinet could be."""
         directory = self.chain(self.directory_start, len(self.data))
         for at in range(0, len(directory) - 127, 128):
             entry = directory[at:at + 128]
-            if entry[66] != 2:  # not a stream
+            if entry[66] != 2:
                 continue
             start, size = struct.unpack_from("<IQ", entry, 116)
             if size >= self.cutoff:
@@ -81,7 +56,6 @@ class CompoundFile:
 
 
 def cabinet_files(cab):
-    """{name: bytes} for every file of an MSZIP cabinet."""
     (signature, _, _, _, files_at, _, _, _, folder_count, file_count, flags, _,
      _) = struct.unpack_from("<4sIIIIIBBHHHHH", cab, 0)
     if signature != b"MSCF":
@@ -91,7 +65,7 @@ def cabinet_files(cab):
     if flags & 0x4:
         header_reserve, folder_reserve, data_reserve = struct.unpack_from("<HBB", cab, at)
         at += 4 + header_reserve
-    for flag in (0x1, 0x2):  # a previous or next cabinet: two strings each
+    for flag in (0x1, 0x2):
         if flags & flag:
             for _ in range(2):
                 at = cab.index(b"\0", at) + 1
@@ -126,8 +100,6 @@ def cabinet_files(cab):
                 data_at += 8 + data_reserve + packed
                 if block[:2] != b"CK":
                     fail("an MSZIP block without its CK signature")
-                # Each block is a deflate stream of its own whose window
-                # is the 32 KiB inflated before it.
                 inflater = zlib.decompressobj(-15, zdict=bytes(out[-32768:]))
                 out += inflater.decompress(block[2:]) + inflater.flush()
             inflated[index] = bytes(out)

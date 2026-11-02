@@ -22,9 +22,6 @@ ProcessOutcome ProcessRunner::run(const std::wstring& command_line, const win::R
 
     win::SpawnOptions options;
     options.command_line = command_line;
-    // CREATE_SUSPENDED so the process joins the job BEFORE it can spawn
-    // descendants — otherwise an early grandchild escapes the job and
-    // survives a timeout kill.
     options.creation_flags = CREATE_NO_WINDOW | CREATE_SUSPENDED;
     options.hide_window = true;
     try {
@@ -46,11 +43,10 @@ ProcessOutcome ProcessRunner::run(const std::wstring& command_line, const win::R
     }
     ::ResumeThread(spawned->thread.get());
 
-    LSW_AGENT_INFO("process: spawned pid={} as {} timeout={} cmd={}", spawned->pid,
-                   as.describe(),
+    LSW_AGENT_INFO("process: spawned pid={} as {} timeout={}", spawned->pid, as.describe(),
                    timeout_ms == kNoTimeout ? std::string{"none"}
-                                            : std::to_string(timeout_ms / 1000) + "s",
-                   command_line);
+                                            : std::to_string(timeout_ms / 1000) + "s");
+    LSW_AGENT_DEBUG("process: pid={} cmd={}", spawned->pid, command_line);
 
     outcome.completed = true;
     if (::WaitForSingleObject(process, timeout_ms) == WAIT_TIMEOUT) {
@@ -76,4 +72,4 @@ ProcessOutcome ProcessRunner::run(const std::wstring& command_line, const win::R
     return outcome;
 }
 
-}  // namespace lsw::agent::install
+}

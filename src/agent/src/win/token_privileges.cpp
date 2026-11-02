@@ -12,18 +12,18 @@ namespace lsw::agent::win {
 namespace {
 
 constexpr const wchar_t* kInstallPrivileges[] = {
-    SE_TAKE_OWNERSHIP_NAME,  // ACL ownership changes (the 1307 fix)
-    SE_RESTORE_NAME,         // restoring files with original ownership
-    SE_BACKUP_NAME,          // reading files past their DACL
-    SE_SECURITY_NAME,        // SACL / audit access
-    SE_LOAD_DRIVER_NAME,     // driver install (DIFx, pnputil)
-    SE_DEBUG_NAME,           // some installers cross-poke service processes
+    SE_TAKE_OWNERSHIP_NAME,
+    SE_RESTORE_NAME,
+    SE_BACKUP_NAME,
+    SE_SECURITY_NAME,
+    SE_LOAD_DRIVER_NAME,
+    SE_DEBUG_NAME,
 };
 
 constexpr int kPrivilegeCount =
     static_cast<int>(sizeof(kInstallPrivileges) / sizeof(kInstallPrivileges[0]));
 
-}  // namespace
+}
 
 int TokenPrivileges::enable_install_privileges(void* given) {
     UniqueHandle own;
@@ -72,4 +72,4 @@ bool TokenPrivileges::enable(const wchar_t* name) {
            ::GetLastError() == ERROR_SUCCESS;
 }
 
-}  // namespace lsw::agent::win
+}

@@ -30,4 +30,4 @@ GuestSessions GuestSessions::from_json(const nlohmann::json& body) {
     return out;
 }
 
-}  // namespace lsw::host::services
+}

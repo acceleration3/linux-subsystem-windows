@@ -1,23 +1,4 @@
 #!/usr/bin/env bash
-# Build everything: the cross-compiled Windows guest agent, the
-# host-side Linux binaries, and accel-virt — the GPU's patched QEMU and
-# host libraries, and the guest driver package (build/av-drivers). The
-# host configure also fetches the shared folders' guest half, pinned
-# (build/guest-virtiofs, cmake/LSWGuestShares.cmake).
-#
-# Order matters — the manager bakes the agent's path into the payload
-# ISO, so the agent has to exist first.
-#
-# Run: ./scripts/build.sh              # agent + manager + GPU (the usual case)
-#      ./scripts/build.sh --no-gpu     # skip accel-virt (manager iteration)
-#      ./scripts/build.sh --host-only  # skip the mingw cross-build
-#
-# The first GPU build fetches what accel-virt pins and does not commit
-# (the Windows kit subset, the Khronos registries, QEMU's tarball) and
-# compiles QEMU, DXVK and vkd3d-proton, so it takes a while; later ones
-# are incremental.
-#
-# Exits non-zero on the first build failure.
 
 set -euo pipefail
 
@@ -28,21 +9,29 @@ cd "${ROOT}"
 BUILD_AGENT=1
 HOST_TARGETS=(lsw-manager remotewin accel_virt)
 
+usage() {
+    cat <<'EOF'
+usage: scripts/build.sh [--no-gpu] [--host-only]
+
+Builds the Windows guest agent, the host binaries and accel-virt.
+
+  --no-gpu     skip accel-virt
+  --host-only  skip the mingw cross-build of the guest agent
+EOF
+}
+
+
 for arg in "$@"; do
     case "$arg" in
         --no-gpu)    HOST_TARGETS=(lsw-manager remotewin) ;;
         --host-only) BUILD_AGENT=0 ;;
-        -h|--help)   sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help)   usage; exit 0 ;;
         *)           echo "build: unknown argument '$arg'" >&2; exit 2 ;;
     esac
 done
 
 say() { printf '\033[1;36m==>\033[0m %s\n' "$*"; }
 
-# Submodules: remotewin and accel-virt here, and accel-virt's own dxvk
-# and vkd3d-proton, which both of its halves compile against. Only the
-# ones that are missing — an unconditional ``submodule update`` would
-# move a submodule someone is working in back to the recorded commit.
 missing=()
 for sub in external/remotewin external/accel-virt; do
     [[ -f "${sub}/CMakeLists.txt" ]] || missing+=("${sub}")
@@ -66,15 +55,9 @@ say "Building host binaries (Linux, Qt 6)"
 if [[ ! -d "${BUILD}" ]]; then
     cmake -S "${ROOT}" -B "${BUILD}" -G Ninja -DCMAKE_BUILD_TYPE=Debug
 fi
-# A tree configured with -DLSW_BUILD_ACCEL_VIRT=OFF has no accel_virt
-# target; asking for it would fail the build over a choice made on
-# purpose.
 if grep -q '^LSW_BUILD_ACCEL_VIRT:BOOL=OFF' "${BUILD}/CMakeCache.txt" 2>/dev/null; then
     HOST_TARGETS=("${HOST_TARGETS[@]/accel_virt}")
 fi
-# The same for the window mirror's host half, -DLSW_BUILD_REMOTEWIN=OFF.
-# Nothing the manager links needs it, so building only lsw-manager left
-# every launch without a mirror.
 if grep -q '^LSW_BUILD_REMOTEWIN:BOOL=OFF' "${BUILD}/CMakeCache.txt" 2>/dev/null; then
     HOST_TARGETS=("${HOST_TARGETS[@]/remotewin}")
 fi

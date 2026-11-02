@@ -15,8 +15,6 @@ Uia::Uia() : subscriptions_(std::make_unique<SubscriptionRegistry>(root_.get(), 
 Uia::~Uia() = default;
 
 void Uia::shutdown() {
-    // Subscriptions first: detaching them needs the root, and the root
-    // must go before the apartment does.
     subscriptions_->clear();
     root_.shutdown();
 }
@@ -61,4 +59,4 @@ std::vector<rpc::Event> Uia::collect_pending() {
     return queue_.collect_pending();
 }
 
-}  // namespace lsw::agent::uia
+}

@@ -1,15 +1,3 @@
-"""The LSW VM from the host, without the manager: the guest agent's control
-link (docs/link-protocol.md) and the guest's C$ share.
-
-The link is one TCP connection to the agent's port, forwarded by the domain's
-hostfwd rule; every message is ``[type:u8][len:u32 BE][JSON]``. Requests are
-answered by id and events are dropped: the agent hands an event to whichever
-connection drains it first, and the manager may hold another one, so nothing
-here waits on an event. A job's end is read off a file the job writes.
-
-Files go through smbclient on the forwarded SMB port as the VM's own account
-(lsw/lsw unless the domain was installed with another).
-"""
 import json
 import os
 import pathlib
@@ -27,11 +15,11 @@ CALL_TIMEOUT = 60.0
 
 
 class LinkError(Exception):
-    """The agent or the share did not do what was asked."""
+    pass
 
 
 class GuestGone(LinkError):
-    """Nothing answers on the forwarded port: the VM is down."""
+    pass
 
 
 GONE = ("NT_STATUS_CONNECTION_REFUSED", "NT_STATUS_CONNECTION_RESET", "NT_STATUS_IO_TIMEOUT",
@@ -39,8 +27,6 @@ GONE = ("NT_STATUS_CONNECTION_REFUSED", "NT_STATUS_CONNECTION_RESET", "NT_STATUS
 
 
 class AgentLink:
-    """One connection to the guest agent: requests and their replies."""
-
     def __init__(self, host="127.0.0.1", port=AGENT_PORT, timeout=CALL_TIMEOUT):
         self.timeout = timeout
         self.socket = socket.create_connection((host, port), timeout=timeout)
@@ -77,7 +63,6 @@ class AgentLink:
             self.buffer += data
 
     def call(self, command, params=None, timeout=None):
-        """The command's result; an error reply, or a result saying ok=false, raises."""
         with self.lock:
             request_id = self.next_id
             self.next_id += 1
@@ -100,11 +85,6 @@ class AgentLink:
 
 
 def wait_for_agent(deadline, port=AGENT_PORT):
-    """A link to an agent that answers system_info, or LinkError at the deadline.
-
-    QEMU's hostfwd accepts a connection whether or not the guest listens, so
-    only an answer proves the agent is up - and it listens only once the
-    user's desktop is usable."""
     last = None
     while time.monotonic() < deadline:
         link = None
@@ -122,8 +102,6 @@ def wait_for_agent(deadline, port=AGENT_PORT):
 
 
 class GuestShare:
-    """The guest's C: drive over SMB: ``C:\\path`` in, local files out."""
-
     def __init__(self, user="lsw", password="lsw", port=SMB_PORT):
         self.user = user
         self.password = password
@@ -175,7 +153,6 @@ class GuestShare:
         return code == 0 and "NT_STATUS" not in out
 
     def make_directories(self, guest_directory):
-        """Every level of a C:\\ directory; levels that exist already are fine."""
         parts = [part for part in self.share_path(guest_directory).split("\\") if part]
         commands = ";".join(f'mkdir "\\{chr(92).join(parts[:depth])}"' for depth in range(1, len(parts) + 1))
         self.smbclient(commands, 60)

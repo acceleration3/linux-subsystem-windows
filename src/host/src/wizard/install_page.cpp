@@ -17,15 +17,11 @@ InstallPage::InstallPage(Wizard& wizard, QWidget* parent) : PipelinePage(parent)
     auto* lay =
         install_chrome(QStringLiteral("Installing Windows"),
                        QStringLiteral("Booting the VM and running the unattended installer."));
-    // In the title band with the title: the wait is what this page is,
-    // and how long it has been going is the first thing to read.
     auto* head = chrome().head;
     bar_ = new QProgressBar;
-    bar_->setRange(0, 0);  // indeterminate
+    bar_->setRange(0, 0);
     head->addWidget(bar_);
-    // The phase on a line of its own under the bar: phases are whole
-    // sentences, and beside the bar they were squeezed into a column.
-    elapsed_ = ui::Widgets::meta(QString{}, /*wrap=*/true);
+    elapsed_ = ui::Widgets::meta(QString{}, true);
     head->addWidget(elapsed_);
 
     status_ = new QLabel(QStringLiteral("Windows setup usually takes 10 to 30 minutes "
@@ -34,8 +30,6 @@ InstallPage::InstallPage(Wizard& wizard, QWidget* parent) : PipelinePage(parent)
     status_->setWordWrap(true);
     head->addWidget(status_);
 
-    // The screen is the content. A bordered frame around the guest's
-    // console, with the same corner and line as every other panel.
     auto* screen = new QFrame;
     ui::Theme::surface(screen, ui::Theme::Role::kScreen);
     auto* screen_layout = new QVBoxLayout(screen);
@@ -46,19 +40,16 @@ InstallPage::InstallPage(Wizard& wizard, QWidget* parent) : PipelinePage(parent)
     screen_layout->addWidget(tag, 0, Qt::AlignLeft | Qt::AlignTop);
     vnc_ = new ui::VncView;
     screen_layout->addWidget(vnc_, 1);
-    lay->addWidget(screen, /*stretch=*/1);
+    lay->addWidget(screen, 1);
 }
 
 void InstallPage::set_phase(const QString& text) {
-    // The head keeps its sentence about how long this takes; the phase
-    // is the line under the bar.
     phase_ = text;
     elapsed_->setText(text);
 }
 
 void InstallPage::initializePage() {
     reset_complete();
-    // A retry starts clean: no red reason left over from the last run.
     ui::Widgets::set_flag(status_, ui::Theme::Tone::kProperty, QVariant{});
     status_->setText(QStringLiteral("Windows setup usually takes 10 to 30 minutes and reboots "
                                     "itself several times."));
@@ -70,9 +61,6 @@ void InstallPage::initializePage() {
     }
     using Step = ::lsw::host::provision::Pipeline::Step;
 
-    // The pipeline phases this page is responsible for displaying.
-    // BuildingPayloadIso is now shown by PayloadPage; this page picks
-    // up from CreatingDisk onward.
     const auto is_install_phase = [](Step s) {
         return s == Step::CreatingDisk
             || s == Step::StartingVm || s == Step::WaitingForAgent;
@@ -87,9 +75,6 @@ void InstallPage::initializePage() {
             [this, is_install_phase](Step s, double frac, const QString& detail) {
                 if (!is_install_phase(s)) return;
                 if (!detail.isEmpty()) set_phase(detail);
-                // A real fraction (e.g. the Windows ISO download
-                // or the image trim) → determinate bar;
-                // anything indeterminate → busy spinner.
                 if (frac >= 0.0 && frac <= 1.0) {
                     bar_->setRange(0, 100);
                     bar_->setValue(static_cast<int>(frac * 100));
@@ -100,18 +85,12 @@ void InstallPage::initializePage() {
     connect(p, &::lsw::host::provision::Pipeline::failed, this,
             [this, is_install_phase](Step s, const QString& err) {
                 if (!is_install_phase(s)) return;
-                // The reason gets the sentence under the bar, which wraps;
-                // beside the bar is a one-word slot, and a whole libvirt
-                // error squeezed into it is unreadable.
                 bar_->setRange(0, 1);
                 bar_->setValue(0);
                 set_phase(QStringLiteral("Failed"));
                 status_->setText(QStringLiteral("The install could not continue: %1").arg(err));
                 ui::Widgets::set_flag(status_, ui::Theme::Tone::kProperty, ui::Theme::Tone::kBad);
             });
-    // The Pipeline emits step_finished(WaitingForAgent) right before
-    // it transitions into the Setup phase — that's our signal to
-    // advance the wizard to the Setup page.
     connect(p, &::lsw::host::provision::Pipeline::step_finished, this, [this](Step s) {
         if (s != Step::WaitingForAgent) return;
         bar_->setRange(0, 100);
@@ -123,8 +102,6 @@ void InstallPage::initializePage() {
         LSW_INFO("install_page: attaching ui::VncView to 127.0.0.1:{}", port);
         vnc_->connect_to("127.0.0.1", port);
     });
-    // The payload page advances on a zero-delay timer, by which time the
-    // disk step has already started: what was missed is read back.
     if (const auto step = p->current_step(); step && is_install_phase(*step)) {
         set_phase(p->current_description());
     }
@@ -137,4 +114,4 @@ int InstallPage::nextId() const {
     return Wizard::Setup;
 }
 
-}  // namespace lsw::host::wizard
+}

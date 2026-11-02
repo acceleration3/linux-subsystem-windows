@@ -41,4 +41,4 @@ const char* WindowStateQuery::visual_state_name(int state) {
     }
 }
 
-}  // namespace lsw::agent::uia
+}

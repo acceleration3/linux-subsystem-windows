@@ -25,8 +25,6 @@ nlohmann::json JsonRpcRouter::dispatch(const nlohmann::json& request) {
         if (method == "initialize") return JsonRpcFrame::result(id, on_initialize());
         if (method == "tools/list") return JsonRpcFrame::result(id, on_tools_list());
         if (method == "tools/call") return JsonRpcFrame::result(id, on_tools_call(params));
-        // Harmless probes clients send on connect — answer empty so they
-        // move on rather than treating us as broken.
         if (method == "notifications/initialized") return JsonRpcFrame::result(id, {});
         if (method == "resources/list") {
             return JsonRpcFrame::result(id, {{"resources", nlohmann::json::array()}});
@@ -70,4 +68,4 @@ nlohmann::json JsonRpcRouter::on_tools_call(const nlohmann::json& params) {
     return tool->call(args);
 }
 
-}  // namespace lsw::host::mcp
+}

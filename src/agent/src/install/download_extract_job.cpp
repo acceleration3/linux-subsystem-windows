@@ -19,27 +19,20 @@ DownloadExtractJob::DownloadExtractJob(std::string id, std::string name, Notific
       extract_to_(std::move(extract_to)), script_(std::move(script)) {}
 
 void DownloadExtractJob::run() {
-    // Empty target = a job-scoped directory we own and clean up. A
-    // caller-supplied path is taken at face value: created if missing,
-    // never deleted.
     const bool target_is_temp = extract_to_.empty();
     const std::wstring extract_dir = target_is_temp ? WorkDir::staged_path(id_, L"-out")
                                                     : util::TextEncoding::to_wide(extract_to_);
 
     const auto downloaded = download(url_);
     if (!downloaded) {
-        return;  // terminal notification already posted
+        return;
     }
     const std::wstring& archive = *downloaded;
 
     DirectoryMaker::make_path(extract_dir);
     report_status("extract", "extracting to " + util::TextEncoding::to_utf8(extract_dir));
 
-    // tar.exe is the built-in BSD libarchive (Win10 1803+): it groks
-    // .zip / .tar / .tar.gz / .tar.xz with nothing else installed.
     const std::wstring tar_cmd = L"tar.exe -xf \"" + archive + L"\" -C \"" + extract_dir + L"\"";
-    // tar runs in the service: the archive and the target are files, and
-    // the follow-up script below is what runs as the requested identity.
     const auto extract = ProcessRunner::run(tar_cmd);
     if (!extract.completed || extract.exit_code != 0) {
         LSW_AGENT_ERROR("installer: extract failed job={} err={} exit={}", id_, extract.error,
@@ -48,14 +41,13 @@ void DownloadExtractJob::run() {
         report_done("extract", false, extract.exit_code, exit_message(extract, "tar"));
         return;
     }
-    // The extracted contents are what matters now.
     ::DeleteFileW(archive.c_str());
 
     if (!script_.empty() && !run_follow_up_script(extract_dir, archive)) {
         if (target_is_temp) {
             DirectoryMaker::remove_tree(extract_dir);
         }
-        return;  // terminal notification already posted
+        return;
     }
 
     if (target_is_temp) {
@@ -69,8 +61,6 @@ bool DownloadExtractJob::run_follow_up_script(const std::wstring& extract_dir,
                                               const std::wstring& archive_path) {
     report_status("script", "running follow-up script");
 
-    // Prepend the two env vars so the script can move things into place
-    // without hard-coding the staged paths.
     std::string wrapper = "@echo off\r\n";
     wrapper += "set LSW_EXTRACT_DIR=" + util::TextEncoding::to_utf8(extract_dir) + "\r\n";
     wrapper += "set LSW_DOWNLOAD_PATH=" + util::TextEncoding::to_utf8(archive_path) + "\r\n";
@@ -93,4 +83,4 @@ bool DownloadExtractJob::run_follow_up_script(const std::wstring& extract_dir,
     return true;
 }
 
-}  // namespace lsw::agent::install
+}

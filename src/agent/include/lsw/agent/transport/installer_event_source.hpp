@@ -8,15 +8,6 @@ class Installer;
 }
 
 namespace lsw::agent::transport {
-
-// Publishes install-job progress as ``setup_progress`` / ``setup_done``.
-//
-// The one source that implements ``undeliverable``: the wizard blocks on
-// ``setup_done``, so a batch lost to a connection dying mid-drain — a
-// NIC reset under a driver install, say — must be redelivered rather
-// than dropped. The typed
-// notifications are kept alongside the events precisely so they can go
-// back on the installer's queue unchanged.
 class InstallerEventSource : public rpc::EventSource {
 public:
     explicit InstallerEventSource(install::Installer& installer)
@@ -30,4 +21,4 @@ private:
     std::vector<install::JobNotification> batch_;
 };
 
-}  // namespace lsw::agent::transport
+}

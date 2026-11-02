@@ -13,31 +13,19 @@ namespace {
 
 using K = ManagerSettings::Key;
 
-// The defaults, in one table. A key absent from here is not one of
-// ours, which is what ``default_value`` returns an invalid variant to
-// say.
 const QHash<QString, QVariant>& defaults() {
     static const QHash<QString, QVariant> table = {
         {K::kCpuCores, VmSizing::host_cores()},
         {K::kMemoryMib, 8192},
         {K::kDiskGib, 60},
 
-        // accel-virt's default: the host monitors' own modes.
         {K::kDisplayModes, QStringList{}},
         {K::kMatchHostOutput, false},
-        // The monitor's own rate: the same as the modes' sizes follow it.
         {K::kDisplayRefresh, QStringLiteral("monitor")},
         {K::kScalingPercent, 0},
 
-        // "auto" is the device's own default, so a fresh install binds
-        // the same GPU QEMU would have picked unasked.
         {K::kHostGpu, QStringLiteral("auto")},
-        // What runs real applications. At 256 MiB the per-context arenas
-        // run out and applications fail to create devices.
         {K::kHostWindowMib, 8192},
-        // None: a second adapter is a second device the guest's driver
-        // package has to be signed for, and most hosts have one GPU worth
-        // using.
         {K::kRenderGpus, QStringList{}},
 
         {K::kSmbEnabled, true},
@@ -50,8 +38,6 @@ const QHash<QString, QVariant>& defaults() {
 
         {K::kPublishEntries, true},
         {K::kMenuCategory, QStringLiteral("Windows")},
-        // On: Windows applications are the handlers of the file types nothing
-        // on the host handles, and no default is touched.
         {K::kFileAssociations, true},
 
         {K::kUsbAlways, QStringList{}},
@@ -60,14 +46,18 @@ const QHash<QString, QVariant>& defaults() {
 
         {K::kCloseToTray, true},
 
+        {K::kLogManager, QStringLiteral("info")},
+        {K::kLogMirrors, QStringLiteral("info")},
+        {K::kLogAgent, QStringLiteral("info")},
+        {K::kLogGuestMirrors, QStringLiteral("info")},
+        {K::kLogGpu, QStringLiteral("warn")},
+        {K::kLogDebugUntil, qlonglong{0}},
+
         {K::kLastBootMs, 0},
     };
     return table;
 }
 
-// Changing one of these rewrites the domain XML, which a running guest
-// does not re-read. The display keys are not here: the resolution is
-// pushed into the running device over QMP.
 const QStringList& restart_keys() {
     static const QStringList keys = {
         K::kCpuCores,      K::kMemoryMib,  K::kDiskGib,    K::kHostGpu,
@@ -79,7 +69,7 @@ const QStringList& restart_keys() {
 constexpr QChar kRecordSep = QLatin1Char('\x1f');
 constexpr QChar kFieldSep = QLatin1Char('\x1e');
 
-}  // namespace
+}
 
 ManagerSettings::ManagerSettings(QObject* parent)
     : QObject(parent), store_(QSettings::IniFormat, QSettings::UserScope, QStringLiteral("lsw"),
@@ -101,10 +91,6 @@ QVariant ManagerSettings::default_value(const QString& key) {
 QVariant ManagerSettings::value(const QString& key) const {
     const QVariant fallback = default_value(key);
     const QVariant stored = store_.value(key, fallback);
-    // A list comes back from the INI file as whatever it looks like: an
-    // empty one as an invalid variant, a one-element one as a string. Read
-    // as the type the default has, so a staged list compares equal to the
-    // same list stored.
     if (fallback.typeId() == QMetaType::QStringList) {
         return stored.toStringList();
     }
@@ -125,6 +111,17 @@ QString ManagerSettings::string_value(const QString& key) const {
 
 QStringList ManagerSettings::string_list_value(const QString& key) const {
     return value(key).toStringList();
+}
+
+QMap<QString, QVariant> ManagerSettings::snapshot() const {
+    QMap<QString, QVariant> out;
+    for (auto it = defaults().cbegin(); it != defaults().cend(); ++it) {
+        out.insert(it.key(), value(it.key()));
+    }
+    for (const QString& key : store_.allKeys()) {
+        out.insert(key, value(key));
+    }
+    return out;
 }
 
 void ManagerSettings::set_value(const QString& key, const QVariant& v) {
@@ -198,8 +195,6 @@ QStringList ManagerSettings::free_drive_letters(const QVector<HostShare>& shares
         taken << share.drive.toUpper();
     }
     QStringList out;
-    // Backwards from Z, which is where people put a mapped drive, and
-    // stopping before the letters Windows has already spoken for.
     for (char letter = 'Z'; letter >= 'E'; --letter) {
         const QString candidate = QString(QLatin1Char(letter)) + QLatin1Char(':');
         if (!taken.contains(candidate)) {
@@ -209,4 +204,4 @@ QStringList ManagerSettings::free_drive_letters(const QVector<HostShare>& shares
     return out;
 }
 
-}  // namespace lsw::host::config
+}

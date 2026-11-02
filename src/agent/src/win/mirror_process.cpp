@@ -6,7 +6,10 @@
 #include "lsw/agent/win/error_text.hpp"
 #include "lsw/agent/win/file_system.hpp"
 #include "lsw/agent/win/process.hpp"
+#include "lsw/agent/win/rolling_file.hpp"
 #include "lsw/agent/win/run_as.hpp"
+
+#include <filesystem>
 
 #include <utility>
 #include <vector>
@@ -14,9 +17,6 @@
 namespace lsw::agent::win {
 
 namespace {
-
-// QEMU's user networking puts the host at the gateway address, with no
-// forwarding rule needed for a connection the guest opens itself.
 constexpr const char* kHostAddress = "10.0.2.2";
 
 void set_error(std::string* into, std::string text) {
@@ -25,10 +25,11 @@ void set_error(std::string* into, std::string text) {
     }
 }
 
-}  // namespace
+}
 
 unsigned long MirrorProcess::start(const std::string& exe, std::uint16_t port,
-                                   const std::string& log_path, const RunAs& as,
+                                   const std::string& log_path,
+                                   const std::string& log_level, const RunAs& as,
                                    std::string* error_out) {
     if (exe.empty() || port == 0) {
         set_error(error_out, "start_window_mirror: an executable and a port are required");
@@ -46,13 +47,17 @@ unsigned long MirrorProcess::start(const std::string& exe, std::uint16_t port,
     options.command_line = Process::quote(path) + L" --host " +
                            util::TextEncoding::to_wide(kHostAddress) + L" --port " +
                            std::to_wstring(port);
-    // CREATE_NO_WINDOW: a console program with nobody to read it.
     options.creation_flags = CREATE_UNICODE_ENVIRONMENT | CREATE_NO_WINDOW;
-    // Where the mirror says what happened. Its output would otherwise go
-    // to a console it was given none of.
     std::vector<Environment::Override> overrides;
     if (!log_path.empty()) {
+        const std::wstring file = util::TextEncoding::to_wide(log_path);
+        std::error_code ignored;
+        std::filesystem::create_directories(std::filesystem::path{file}.parent_path(), ignored);
+        RollingFile{file}.roll_now();
         overrides.emplace_back("RWIN_LOG_FILE", log_path);
+    }
+    if (!log_level.empty()) {
+        overrides.emplace_back("RWIN_LOG", log_level);
     }
     try {
         options.environment = as.environment(overrides);
@@ -75,4 +80,4 @@ unsigned long MirrorProcess::start(const std::string& exe, std::uint16_t port,
     return spawned->pid;
 }
 
-}  // namespace lsw::agent::win
+}

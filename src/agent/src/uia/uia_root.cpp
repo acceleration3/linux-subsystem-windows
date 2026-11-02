@@ -38,4 +38,4 @@ void UiaRoot::shutdown() {
     }
 }
 
-}  // namespace lsw::agent::uia
+}

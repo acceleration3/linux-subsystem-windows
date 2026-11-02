@@ -10,25 +10,11 @@
 #include <QStringList>
 
 namespace lsw::host::apps {
-
-// Owns the app-config directory under ``~/.local/share/lsw/apps/`` —
-// one ``<id>.json`` per app. The store is the source of truth for
-// what the manager UI shows; agent-discovered apps are upserted on
-// each refresh, so the user can override fields (capture method,
-// name, cmdline) without losing them when the agent re-enumerates.
-//
-// Thread-affine to whichever thread constructs it (Qt + filesystem
-// I/O is fine on the GUI thread for small numbers of files; if the
-// directory grows pathologically we can move to a worker).
 class AppConfigStore : public QObject {
     Q_OBJECT
 public:
     explicit AppConfigStore(QString dir, QObject* parent = nullptr);
 
-    // Re-reads every ``*.json`` from the directory into memory.
-    // Called on construction; call again to re-sync if files are
-    // edited externally. Emits ``changed`` if anything actually
-    // differs.
     void reload();
 
     [[nodiscard]] const QList<AppConfig>& configs() const noexcept { return configs_; }
@@ -36,25 +22,12 @@ public:
     [[nodiscard]] AppConfig* find(const QString& id);
     [[nodiscard]] const AppConfig* find(const QString& id) const;
 
-    // Persist + take ownership. If ``id`` is empty, ``make_id`` is
-    // applied first. Emits ``changed``.
     void upsert(AppConfig cfg);
 
-    // Remove from disk + memory. Emits ``changed`` if matched.
     void remove(const QString& id);
 
-    // Merge agent-discovered entries: for each ``e`` in ``entries``,
-    // either create a new config or refresh the matched one's
-    // ``last_seen_unix`` (and ``icon_png_base64`` if not user-set).
-    // Discovered configs the agent no longer reports are removed;
-    // configs the user created or edited (``discovered_via_agent ==
-    // false``) are left alone. Emits ``changed`` if anything was
-    // added, modified or removed.
-    // The file types an entry handles are refreshed by its target for every
-    // config, the user's edits included: they are Windows's to say.
     void merge_from_agent(const QList<AppEntry>& entries);
 
-    // The same for packaged applications, by lowercase AUMID.
     void set_store_extensions(const QHash<QString, QStringList>& extensions);
 
 Q_SIGNALS:
@@ -68,4 +41,4 @@ private:
     QList<AppConfig> configs_;
 };
 
-}  // namespace lsw::host::apps
+}

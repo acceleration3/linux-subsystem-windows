@@ -31,8 +31,6 @@ std::vector<rpc::Event> LogEventSource::collect_pending() {
 }
 
 void LogEventSource::undeliverable(std::size_t first_undelivered) {
-    // Rewind to just before the first record that did not make it, so the
-    // next connection picks up exactly there.
     if (first_undelivered < batch_seqs_.size()) {
         last_seq_ = (first_undelivered == 0) ? (batch_seqs_.front() - 1)
                                              : batch_seqs_[first_undelivered - 1];
@@ -40,4 +38,4 @@ void LogEventSource::undeliverable(std::size_t first_undelivered) {
     batch_seqs_.clear();
 }
 
-}  // namespace lsw::agent::transport
+}

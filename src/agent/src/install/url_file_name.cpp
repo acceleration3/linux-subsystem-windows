@@ -10,4 +10,4 @@ std::wstring UrlFileName::of(const std::wstring& url) {
     return base.empty() ? std::wstring{L"download.bin"} : base;
 }
 
-}  // namespace lsw::agent::install
+}

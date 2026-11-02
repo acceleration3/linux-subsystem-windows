@@ -8,7 +8,7 @@ namespace {
 
 using Area = services::StatusHub::Area;
 
-}  // namespace
+}
 
 GraphicsAlerts::GraphicsAlerts(services::StatusHub& status, QObject* parent)
     : QObject(parent), status_(status) {
@@ -93,4 +93,4 @@ GraphicsAlerts::Severity GraphicsAlerts::worst() const {
     return out;
 }
 
-}  // namespace lsw::host::manager
+}

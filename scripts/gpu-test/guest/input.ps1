@@ -1,4 +1,3 @@
-# input.ps1 press VK|NAME [MS] [COUNT] | click X Y | dclick X Y | keys "SENDKEYS" | focus PROCESS | sendto PROCESS "SENDKEYS"
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type @"
 using System; using System.Runtime.InteropServices;

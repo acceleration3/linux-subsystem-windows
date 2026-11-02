@@ -17,8 +17,6 @@ void GracefulShutdown::start() {
     ticks_ = 0;
     forced_ = false;
     if (lifecycle_.is_running(uuid_) && lifecycle_.shutdown(uuid_) != 0) {
-        // The poll presses again and, at the deadline, pulls the plug;
-        // one refused request is not the end of it.
         LSW_WARN("shutdown: the first request was refused; retrying");
     }
     timer_.start();
@@ -39,11 +37,11 @@ void GracefulShutdown::poll() {
                  deadline_ms_ / 1000);
         forced_ = true;
         (void)lifecycle_.force_off(uuid_);
-        return;  // the next tick sees it stopped
+        return;
     }
     if (++ticks_ % kRepressTicks == 0) {
         (void)lifecycle_.shutdown(uuid_);
     }
 }
 
-}  // namespace lsw::host::vm
+}

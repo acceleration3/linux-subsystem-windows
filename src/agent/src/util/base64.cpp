@@ -71,4 +71,4 @@ std::string Base64::encode(const std::vector<std::uint8_t>& data) {
     return out;
 }
 
-}  // namespace lsw::agent::util
+}

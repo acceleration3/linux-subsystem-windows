@@ -46,14 +46,10 @@ void HttpServer::on_new_connection() {
 }
 
 void HttpServer::try_serve(QTcpSocket* socket) {
-    // Minimal HTTP/1.1 request parsing. POST with a Content-Length body
-    // is the only thing MCP needs; everything else gets a 405. Keep-alive
-    // is not offered, so there is never more than one request per socket
-    // and no state to carry between them.
     const auto peeked = socket->peek(64 * 1024);
     const qsizetype header_end = peeked.indexOf("\r\n\r\n");
     if (header_end < 0) {
-        return;  // headers incomplete; another readyRead will bring the rest
+        return;
     }
     const qsizetype body_start = header_end + 4;
 
@@ -72,8 +68,6 @@ void HttpServer::try_serve(QTcpSocket* socket) {
         }
     }
 
-    // Wait for the whole body before consuming any bytes — peeking until
-    // then keeps this method safely re-entrant across readyRead signals.
     if (socket->bytesAvailable() < body_start + content_length) {
         return;
     }
@@ -89,9 +83,6 @@ void HttpServer::try_serve(QTcpSocket* socket) {
         return;
     }
 
-    // The handler blocks on the guest agent, so it runs on a worker and
-    // the reply is marshalled back here to be written. This is the only
-    // place in the MCP stack that knows about threads.
     const QPointer<QTcpSocket> socket_ptr{socket};
     const QPointer<HttpServer> self{this};
     const std::string request_body = body.toStdString();
@@ -111,4 +102,4 @@ void HttpServer::try_serve(QTcpSocket* socket) {
     });
 }
 
-}  // namespace lsw::host::mcp
+}

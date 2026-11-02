@@ -15,21 +15,10 @@
 #include <string>
 
 namespace lsw::agent::rpc::handlers {
-
-// ``launch``: start an application.
-//
-//   params: app_id, args?, documents? (Windows paths to open), env?, session? (default: the console user's
-//           session; 0 = SYSTEM in session 0), elevated? (default true)
-//   reply:  {ok, pid, job?, session, elevated, error?}
 struct LaunchHandler : RpcHandler {
     nlohmann::json handle(const nlohmann::json& params, RpcContext& ctx) override {
         const auto app_id = params.value("app_id", std::string{});
 
-        // Extra arguments, and per-launch environment overrides as a
-        // ``{"NAME": "value"}`` object. Overrides exist because some
-        // applications are configured only through their environment
-        // and the alternatives reach too far: a machine-wide variable
-        // applies to every process and needs a logon to take effect.
         const auto args = params.value("args", std::string{});
         std::vector<apps::Launcher::EnvVar> env;
         if (const auto it = params.find("env"); it != params.end() && it->is_object()) {
@@ -81,16 +70,12 @@ struct LaunchHandler : RpcHandler {
                             {"pid", static_cast<std::uint64_t>(pid)},
                             {"session", as.session()},
                             {"elevated", as.elevated()}};
-        // What this launch is, for anything that has to recognise its
-        // windows later. The caller is spared the naming convention.
         if (ok && pid != 0) {
             r["pid_created"] = win::ProcessInfo::creation_time_of(pid);
             if (const auto root = apps::LaunchGroup::root_of(pid); root != 0) {
                 r["job"] = apps::LaunchGroup::job_name(root);
             }
         }
-        // The program, with a shortcut resolved, for the mirror to match the
-        // windows of a second process by.
         if (ok && util::WideString::iends_with(image, L".exe")) {
             r["image"] = util::TextEncoding::to_utf8(image);
         }
@@ -108,6 +93,6 @@ struct LaunchHandler : RpcHandler {
     }
 };
 
-}  // namespace lsw::agent::rpc::handlers
+}
 
 LSW_REGISTER_RPC(lsw::agent::rpc::handlers::LaunchHandler, ::lsw::linkproto::cmd::kLaunch)

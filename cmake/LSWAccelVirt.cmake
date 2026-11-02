@@ -1,58 +1,3 @@
-# accel-virt, the GPU: a WDDM paravirtual adapter for the Windows guest.
-#
-# Included from the root CMakeLists for the Linux host build only. It
-# defines four targets, all part of ``all``:
-#
-#   accel_virt_fetch    what accel-virt fetches rather than commits: the
-#                       Windows kit subset, the Khronos registries, the
-#                       QEMU tarball, the OpenCL loader's source, and its
-#                       dxvk / vkd3d-proton submodules
-#   accel_virt_drivers  the guest half: avgpu.sys and the user-mode
-#                       drivers for x64 and x86, installed as the
-#                       guest's C:\av, plus the OpenCL loaders
-#   accel_virt_host     the host half: the patched QEMU with the
-#                       virtio-gpu-av-pci device and libav_executor.so
-#   accel_virt_d3d      the host's Direct3D: DXVK and vkd3d-proton,
-#                       built natively, which the executor loads
-#
-# and ``accel_virt``, which is all of them.
-#
-# Why ExternalProject and not add_subdirectory: accel-virt refuses any
-# compiler but clang (its kernel driver is the same core compiled with
-# clang-cl /kernel, and the native tests hold the core to that subset),
-# and it brings its own clang-cl toolchains for the guest. Neither can
-# live inside this build's gcc configuration, so each half is configured
-# as a project of its own, with clang, and LSW consumes only what it
-# installs or leaves in its build tree.
-#
-# What comes out, and where the manager looks for it. The defaults are
-# relative to the manager executable (src/host/lsw-manager), so this
-# layout is load-bearing; each has an environment override:
-#
-#   ${CMAKE_BINARY_DIR}/av-drivers/                  LSW_AV_DRIVERS
-#       provision.ps1, adapters.txt, package/...     the install tree, which
-#       loaders/x64/OpenCL.dll                       the payload ISO carries
-#       loaders/x86/OpenCL.dll                       and the guest copies to C:\av
-#   ${CMAKE_BINARY_DIR}/accel-virt/qemu/             LSW_AV_QEMU_BUILD
-#       qemu/qemu-system-x86_64                      (QEMU_MODULE_DIR is qemu/)
-#       libav_executor.so                            the device's executor=
-#   ${CMAKE_BINARY_DIR}/accel-virt/d3d/lib/          LSW_AV_D3D_PATH
-#       libdxvk_*.so, libvkd3d-proton-*.so           AV_D3D_PATH for QEMU
-#
-# The guest's vulkan-1.dll loaders (x64 and x86) are not part of this:
-# they come from our own mingw cross builds (scripts/build-agent.sh) and
-# the payload stager adds them beside the tree.
-#
-# Installed (``cmake --install --component lsw``, at the end of this
-# file), the same pieces move under the prefix, and the manager finds
-# them there relative to its own binary in the same way:
-#
-#   lib/lsw/accel-virt/qemu/          qemu-system-x86_64, the modules it
-#                                     loads, libav_executor.so
-#   lib/lsw/accel-virt/qemu/share/    its firmware, ROMs and keymaps (-L)
-#   lib/lsw/accel-virt/d3d/           libdxvk_*.so, libvkd3d-proton-*.so
-#   share/lsw/guest/av-drivers/       the driver tree
-
 include(ExternalProject)
 
 find_program(LSW_CLANG   NAMES clang)
@@ -73,10 +18,6 @@ endif()
 find_package(Git REQUIRED)
 find_package(Python3 3.11 REQUIRED COMPONENTS Interpreter)
 
-# Empty means "the submodule's own third_party/windows-kit, fetched by
-# the build". The kit is a few dozen MB, but the WDK and SDK packages it
-# is cut from are gigabytes, so a machine that already has one fetched
-# (another accel-virt checkout, say) can point here instead.
 set(AV_WINDOWS_KIT_DIR "" CACHE PATH
     "An already-fetched accel-virt Windows kit; empty fetches one into the submodule")
 if(AV_WINDOWS_KIT_DIR)
@@ -86,11 +27,6 @@ else()
 endif()
 
 set(LSW_AV_BUILD_DIR   "${CMAKE_BINARY_DIR}/accel-virt")
-# A driver tree built by another tree of this project, installed as it
-# is and not built here: scripts/dist.sh builds the guest's drivers once,
-# on Arch, so that every distribution's package carries the same ones.
-# The manager of this tree does not find it (it looks in av-drivers/
-# beside the tree, or at $LSW_AV_DRIVERS); a package's install does.
 set(LSW_AV_PREBUILT_DRIVERS "" CACHE PATH
     "An accel-virt driver tree to install instead of building one")
 if(LSW_AV_PREBUILT_DRIVERS)
@@ -104,23 +40,6 @@ else()
 endif()
 set(_lsw_av_step       "${CMAKE_CURRENT_LIST_DIR}/LSWAccelVirtStep.cmake")
 
-# ---- prerequisites ----
-# Run on every build, and cheap when there is nothing to do: each fetch
-# script checks its own pinned marker first and returns at once when
-# the tree it would write is already there, so nothing is downloaded
-# twice. Asking the script rather than testing for a directory here is
-# deliberate — after the submodule is bumped to new pins, the directory
-# exists and is wrong, and only the script knows that.
-#
-# Before either half configures, because accel-virt's own configure
-# refuses to run without the kit, and the drivers configure decides
-# there whether OpenCL.dll is built at all (only with the loader source
-# present).
-#
-# The markers each fetch writes are declared as its byproducts, so the
-# driver build below can depend on them: a pin bump that rewrites a
-# tree rebuilds the drivers, and a fetch that finds nothing to do
-# leaves the markers' times alone and rebuilds nothing.
 set(_lsw_av_fetch_markers
     "${_lsw_av_kit}/VERSION"
     "${LSW_ACCEL_VIRT_DIR}/third_party/khronos/VERSION"
@@ -137,44 +56,17 @@ add_custom_target(accel_virt_fetch
     USES_TERMINAL
     COMMENT "accel-virt: fetching what it pins and does not commit")
 
-# Arguments both halves configure with. clang, because accel-virt will
-# take nothing else; Ninja, because its nested guest builds are Ninja
-# and a Makefile parent here would gain nothing. The C compiler is
-# unused today (it is a CXX project) and passed anyway, so a C source
-# added there later does not quietly pick up gcc.
 set(_lsw_av_cmake_args
     --no-warn-unused-cli
     -DCMAKE_C_COMPILER=${LSW_CLANG}
     -DCMAKE_CXX_COMPILER=${LSW_CLANGXX}
     -DAV_WINDOWS_KIT_DIR=${_lsw_av_kit}
-    # ASan + UBSan instrument accel-virt's own test suite, which LSW
-    # never builds; off, so nothing here pays for them.
     -DAV_SANITIZE=OFF
     -DAV_COVERAGE=OFF
     -DAV_FUZZ=OFF
-    # Invariant walks over whole tables on every mutation: for accel-virt's
-    # own gates and tests, and what a running guest should not pay for.
     -DAV_CHECKED=OFF
 )
 
-# ---- the guest half: the driver package ----
-# accel-virt's ``drivers`` target builds avgpu.sys and the user-mode
-# drivers for both architectures, and its ``drivers`` install component
-# lays them out as the guest's C:\av: provision.ps1, adapters.txt, and
-# package/ with its package.sha256. Installing is what makes it a
-# package — package.sha256 and adapters.txt are written by the install
-# script, not the build — so the install step is the point of this.
-#
-# Not BUILD_ALWAYS, unlike the host half below. The guest trees compile
-# against the Windows kit through a clang VFS overlay, and their depfiles
-# record the overlay's virtual paths (/windows-kit/km/crt/stddef.h ...),
-# which exist nowhere on disk — so Ninja finds every object in them out
-# of date, every time, and asking them to build recompiles all three
-# from scratch (half a minute and several CPU-minutes, on every build of
-# this tree). Instead the build step depends on what those trees read:
-# accel-virt's sources, its CMake, provision.ps1 and the fetch markers.
-# Editing any of them, or bumping the submodule, rebuilds the drivers;
-# nothing else does.
 if(NOT LSW_AV_PREBUILT_DRIVERS)
     file(GLOB_RECURSE _lsw_av_guest_inputs CONFIGURE_DEPENDS
         "${LSW_ACCEL_VIRT_DIR}/src/*"
@@ -202,12 +94,6 @@ if(NOT LSW_AV_PREBUILT_DRIVERS)
         USES_TERMINAL_INSTALL   ON
     )
     ExternalProject_Add_StepDependencies(accel_virt_drivers build ${_lsw_av_guest_inputs})
-    # The Khronos OpenCL loader, cross-built by the same guest trees once
-    # its source is fetched. Windows ships no OpenCL.dll, and an OpenCL
-    # application finds avcl.dll only through one, so it travels with the
-    # package: x64 for System32, x86 for SysWOW64. Packaged after the
-    # install, into the same tree, so the one directory is everything the
-    # guest needs from accel-virt.
     ExternalProject_Add_Step(accel_virt_drivers loaders
         COMMAND ${CMAKE_COMMAND}
             -DSTEP=loaders
@@ -221,22 +107,6 @@ if(NOT LSW_AV_PREBUILT_DRIVERS)
     )
 endif()
 
-# ---- the host half: QEMU and the executor ----
-# AV_QEMU switches accel-virt to its host configuration: the default
-# target then builds QEMU 11.1.1 with the device patched in (its
-# ``qemu`` target), and the executor library beside it. It builds
-# av-renderer too, the process the device's renderer= option runs the
-# executor in; LSW neither uses nor installs it, because libvirt's
-# seccomp sandbox (spawn=deny) does not let QEMU start it, and the
-# executor runs inside QEMU instead (DomainXmlBuilder).
-# Release, because this is what the guest runs on; unoptimized, every
-# command the guest sends pays for it. accel-virt installs none of it —
-# QEMU runs from its build tree with QEMU_MODULE_DIR pointing at it — so
-# what this project installs is picked out of that tree below.
-#
-# BUILD_ALWAYS here: these are host builds with honest depfiles, and the
-# inner Ninja (and QEMU's own, behind build_qemu.sh) answers "nothing to
-# do" in a second or two.
 ExternalProject_Add(accel_virt_host
     SOURCE_DIR       "${LSW_ACCEL_VIRT_DIR}"
     BINARY_DIR       "${LSW_AV_BUILD_DIR}/qemu"
@@ -245,15 +115,9 @@ ExternalProject_Add(accel_virt_host
     CMAKE_ARGS       ${_lsw_av_cmake_args}
                      -DCMAKE_BUILD_TYPE=Release
                      -DAV_QEMU=ON
-                     # Linked as the rest of this host build is: a
-                     # release's hardening (scripts/dist.sh)
-                     # reaches the executor too. Only
-                     # this half: the guest half links Windows images.
                      "-DCMAKE_EXE_LINKER_FLAGS=${CMAKE_EXE_LINKER_FLAGS}"
                      "-DCMAKE_SHARED_LINKER_FLAGS=${CMAKE_SHARED_LINKER_FLAGS}"
                      "-DCMAKE_MODULE_LINKER_FLAGS=${CMAKE_MODULE_LINKER_FLAGS}"
-    # What LSW ships, not the tree's smoke-test doubles (echo/null-ops
-    # executors), which accel-virt's own build and suites carry.
     BUILD_COMMAND    ${CMAKE_COMMAND} --build <BINARY_DIR>
                      --target qemu av_executor av-renderer avrecord
     BUILD_ALWAYS     ON
@@ -265,24 +129,6 @@ ExternalProject_Add(accel_virt_host
     USES_TERMINAL_BUILD     ON
 )
 
-# ---- the host's Direct3D ----
-# accel-virt's tools/build_d3d_runtime.sh applies its patch series to
-# the dxvk and vkd3d-proton submodules and builds both with meson. It
-# writes to <accel-virt>/build-d3d and has no switch to write anywhere
-# else. Rather than restate its meson calls and its patch-series logic
-# here — which would drift the first time accel-virt changes either —
-# it is run as it is, and its lib/ mirrored to where the manager looks.
-# build-d3d/ is covered by accel-virt's own .gitignore (build-*/), so
-# the submodule stays clean; the patch series does leave the dxvk and
-# vkd3d-proton checkouts modified, as it does for anyone building
-# accel-virt by hand.
-#
-# Without these the host serves no Direct3D and DWM crash-loops in the
-# guest, so they are as much a part of the GPU as QEMU is.
-#
-# Its meson builds take their link flags from LDFLAGS when they are first
-# set up; this build's shared-library flags are passed as that, for the
-# same reason as the host half's above.
 add_custom_target(accel_virt_d3d ALL
     COMMAND ${CMAKE_COMMAND} -E env "LDFLAGS=${CMAKE_SHARED_LINKER_FLAGS}"
             "${LSW_ACCEL_VIRT_DIR}/tools/build_d3d_runtime.sh"
@@ -301,10 +147,6 @@ if(NOT LSW_AV_PREBUILT_DRIVERS)
     add_dependencies(accel_virt accel_virt_drivers)
 endif()
 
-# ---- install ----
-# Only what runs, out of build trees that are mostly not: QEMU's holds
-# objects, its configure log and every module the build machine happened
-# to have the libraries for.
 set(_lsw_av_qemu_build "${LSW_AV_BUILD_DIR}/qemu")
 set(_lsw_av_qemu_dest  "${LSW_INSTALL_LIBDIR}/accel-virt/qemu")
 set(_lsw_av_exec_perms
@@ -313,17 +155,6 @@ set(_lsw_av_exec_perms
 install(PROGRAMS "${_lsw_av_qemu_build}/qemu/qemu-system-x86_64"
         DESTINATION ${_lsw_av_qemu_dest}
         COMPONENT ${LSW_INSTALL_COMPONENT})
-# QEMU's modules, beside the binary: QEMU_MODULE_DIR is the binary's
-# directory either way (AccelVirtPaths::qemu_module_dir). Only the ones
-# a domain here loads — the GPU device and what it is built on, and the
-# PipeWire audio the domain names, and usb-host, which hands a host USB
-# device to the guest (UsbPassthrough; it links libusb, a dependency of
-# the package). QEMU's configure builds a module for
-# every optional library it finds, and each one installed would be a
-# dependency of the install; a module that is absent is skipped quietly
-# when QEMU enumerates its devices, where one that is present without
-# its library is an error on every start. The module table itself is
-# compiled into the binary, so the .modinfo files stay behind.
 install(FILES
             "${_lsw_av_qemu_build}/libav_executor.so"
             "${_lsw_av_qemu_build}/qemu/hw-display-virtio-gpu.so"
@@ -335,13 +166,6 @@ install(FILES
         PERMISSIONS ${_lsw_av_exec_perms}
         DESTINATION ${_lsw_av_qemu_dest}
         COMPONENT ${LSW_INSTALL_COMPONENT})
-# QEMU's data: the x86 firmware and option ROMs, and the VNC keymaps.
-# QEMU was configured for /usr/local and finds these unaided only in its
-# own build tree (qemu-bundle/), so the install puts them in share/ and
-# the domain passes that directory as -L (AccelVirtPaths::qemu_data_dir).
-# The other architectures' firmware — tens of megabytes of edk2 images
-# for arm and riscv among it — stays behind. Globbed when installing,
-# because which ROMs QEMU ships is QEMU's business and changes with it.
 install(CODE "
     file(GLOB _lsw_qemu_roms LIST_DIRECTORIES false
         \"${_lsw_av_qemu_build}/source/pc-bios/bios*.bin\"
@@ -361,8 +185,6 @@ install(CODE "
          DESTINATION \"\${CMAKE_INSTALL_PREFIX}/${_lsw_av_qemu_dest}/share\")
     " COMPONENT ${LSW_INSTALL_COMPONENT})
 
-# DXVK and vkd3d-proton, with the .so -> .so.0 -> .so.0.x symlinks kept
-# as they are: the executor loads them by those names.
 install(DIRECTORY "${LSW_AV_BUILD_DIR}/d3d/lib/"
         DESTINATION ${LSW_INSTALL_LIBDIR}/accel-virt/d3d
         USE_SOURCE_PERMISSIONS
@@ -370,11 +192,6 @@ install(DIRECTORY "${LSW_AV_BUILD_DIR}/d3d/lib/"
         FILES_MATCHING PATTERN "*.so" PATTERN "*.so.*"
         PATTERN "pkgconfig" EXCLUDE)
 
-# The guest's driver tree, but for adapters.txt: accel-virt's install
-# writes the names of the GPUs on the machine that built it there, which
-# for an installed package is the wrong machine. The payload stager
-# writes the file from the user's own GPUs instead
-# (provision::install::AdapterNames), and ignores the tree's copy.
 install(DIRECTORY "${LSW_AV_DRIVERS_DIR}/"
         DESTINATION ${LSW_INSTALL_GUESTDIR}/av-drivers
         COMPONENT ${LSW_INSTALL_COMPONENT}

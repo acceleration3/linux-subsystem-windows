@@ -24,4 +24,4 @@ void FieldStack::add_note(const QString& text) {
     into_->addWidget(Widgets::meta(text, true));
 }
 
-}  // namespace lsw::host::ui
+}

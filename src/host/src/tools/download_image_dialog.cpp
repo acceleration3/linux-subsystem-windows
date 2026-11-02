@@ -29,8 +29,6 @@ using ui::Format;
 using ui::Theme;
 using ui::Widgets;
 
-// One of the three figures under the progress bar. A long wait earns
-// real numbers.
 QWidget* tile(const QString& name, QLabel*& value_out) {
     auto* box = new QFrame;
     Theme::surface(box, Theme::Role::kPanel);
@@ -45,7 +43,7 @@ QWidget* tile(const QString& name, QLabel*& value_out) {
     return box;
 }
 
-}  // namespace
+}
 
 DownloadImageDialog::DownloadImageDialog(config::Settings& settings, QWidget* parent)
     : QDialog(parent), settings_(settings) {
@@ -56,7 +54,6 @@ DownloadImageDialog::DownloadImageDialog(config::Settings& settings, QWidget* pa
     const auto chrome = ui::DialogChrome::install(this);
     auto* root = chrome.body;
 
-    // ---- what to fetch --------------------------------------------
     auto* pickers = new QHBoxLayout;
     pickers->setSpacing(12);
 
@@ -83,7 +80,6 @@ DownloadImageDialog::DownloadImageDialog(config::Settings& settings, QWidget* pa
         Widgets::meta(QStringLiteral("Asking microsoft.com for the current editions."), true);
     root->addWidget(source_status_);
 
-    // ---- where it goes --------------------------------------------
     root->addWidget(Widgets::caption(QStringLiteral("Save to")));
     auto* out_row = new QHBoxLayout;
     output_dir_ = new QLineEdit(settings_.isos_dir());
@@ -102,7 +98,6 @@ DownloadImageDialog::DownloadImageDialog(config::Settings& settings, QWidget* pa
     use_box_->setChecked(true);
     root->addWidget(use_box_);
 
-    // ---- progress -------------------------------------------------
     bar_ = new QProgressBar;
     bar_->setRange(0, 100);
     bar_->setVisible(false);
@@ -138,7 +133,6 @@ DownloadImageDialog::DownloadImageDialog(config::Settings& settings, QWidget* pa
         }
     });
 
-    // ---- Microsoft ------------------------------------------------
     connect(&fetcher_, &provision::iso::IsoSourceFetcher::ready, this,
             [this](const QList<provision::iso::WindowsEdition>& editions) {
                 editions_ = editions;
@@ -165,8 +159,6 @@ DownloadImageDialog::DownloadImageDialog(config::Settings& settings, QWidget* pa
 
     connect(&ms_, &provision::iso::MicrosoftClient::initialized, this, [this] {
         ms_ready_ = true;
-        // The edition may already have been chosen while the session
-        // was still opening.
         if (edition_combo_->currentIndex() >= 0) {
             Q_EMIT edition_combo_->currentIndexChanged(edition_combo_->currentIndex());
         }
@@ -214,9 +206,6 @@ DownloadImageDialog::DownloadImageDialog(config::Settings& settings, QWidget* pa
                                     QStringLiteral("%1 of %2").arg(Format::gib(received, 2),
                                                                    Format::gib(total, 2)));
                             }
-                            // A resumed download counts what was already
-                            // on disk in ``received``; the rate is of what
-                            // this run has fetched.
                             if (resumed_from_ < 0) {
                                 resumed_from_ = received;
                             }
@@ -330,4 +319,4 @@ void DownloadImageDialog::start() {
     ms_.fetch_download_url(skus_.at(index));
 }
 
-}  // namespace lsw::host::tools
+}

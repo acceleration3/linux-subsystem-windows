@@ -13,27 +13,6 @@
 #include <string>
 
 namespace lsw::agent::rpc::handlers {
-
-// Start the guest half of the window mirror for one application.
-//
-// The manager already has a mirror process listening; this is the end
-// that dials it. Nothing else about mirroring passes through the agent —
-// the windows, their pixels and their input travel on the connection
-// this starts, not on this channel.
-//
-// The mirror has to run in the application's session (window handles,
-// capture and input do not cross sessions), as that session's user,
-// elevated like the application by default.
-//
-// Or for the guest's whole desktop ("Open desktop"): the same guest half,
-// which learns from the host end, once connected, that it is to capture
-// the monitor rather than an application. ``desktop`` and ``name`` (the
-// application's) only name its log apart, so no two mirrors write over
-// each other's.
-//
-//   params: port, exe?, log_path?, desktop?, name?, session?, pid? (the
-//           mirrored application: its session is the default), elevated?
-//   reply:  {ok, pid, session, error?}
 struct StartWindowMirrorHandler : RpcHandler {
     nlohmann::json handle(const nlohmann::json& params, RpcContext& ctx) override {
         const auto port = params.value("port", std::uint32_t{0});
@@ -57,7 +36,8 @@ struct StartWindowMirrorHandler : RpcHandler {
 
         std::string error;
         const unsigned long pid =
-            win::MirrorProcess::start(exe, static_cast<std::uint16_t>(port), log_path, as, &error);
+            win::MirrorProcess::start(exe, static_cast<std::uint16_t>(port), log_path,
+                                      ctx.services.mirror_log_level(), as, &error);
         nlohmann::json r = {
             {"ok", pid != 0}, {"pid", static_cast<std::uint64_t>(pid)}, {"session", as.session()}};
         if (pid == 0) {
@@ -74,7 +54,7 @@ struct StartWindowMirrorHandler : RpcHandler {
     }
 };
 
-}  // namespace lsw::agent::rpc::handlers
+}
 
 LSW_REGISTER_RPC(lsw::agent::rpc::handlers::StartWindowMirrorHandler,
                  ::lsw::linkproto::cmd::kStartWindowMirror)

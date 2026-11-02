@@ -22,18 +22,10 @@
 namespace lsw::agent::session {
 
 namespace {
-
-// Big enough for any request; a helper's large replies (a UIA tree)
-// simply take more than one buffer's worth of writes.
 constexpr DWORD kPipeBuffer = 64 * 1024;
 
-// How long a stopping helper gets to leave on its own before it is
-// terminated.
 constexpr DWORD kExitGraceMs = 2000;
 
-// A pipe name nobody can predict or have created first. The session id
-// keeps it readable in a handle list; the rest makes each launch's name
-// unique, so a helper from a previous launch can never dial the new one.
 std::wstring pipe_name(std::uint32_t session) {
     static std::atomic<std::uint64_t> counter{0};
     LARGE_INTEGER now{};
@@ -44,7 +36,7 @@ std::wstring pipe_name(std::uint32_t session) {
            std::to_wstring(nonce);
 }
 
-}  // namespace
+}
 
 HelperChannel::HelperChannel(const SessionInfo& info, HelperSink& sink)
     : session_(info.id), user_(info.user), sink_(sink), started_(std::chrono::steady_clock::now()),
@@ -62,8 +54,6 @@ std::shared_ptr<HelperChannel> HelperChannel::launch(const SessionInfo& info, co
         return fail("no SID for " + as.describe());
     }
 
-    // SYSTEM (the service) and the session's user (the helper) — nobody
-    // else. GRGW is what CreateFile(GENERIC_READ | GENERIC_WRITE) asks.
     win::SecurityAttributes security{L"D:P(A;;GA;;;SY)(A;;GRGW;;;" + as.sid() + L")"};
     if (!security.ok()) {
         return fail("cannot build the pipe's security descriptor");
@@ -88,8 +78,6 @@ std::shared_ptr<HelperChannel> HelperChannel::launch(const SessionInfo& info, co
     options.application = self;
     options.command_line =
         win::Process::quote(self) + L" --session --pipe " + win::Process::quote(name);
-    // The helper is a GUI-subsystem program that never makes a window;
-    // CREATE_NO_WINDOW is belt and braces should that ever change.
     options.creation_flags = CREATE_NO_WINDOW;
     options.working_dir = core::Paths::root();
     try {
@@ -136,9 +124,6 @@ bool HelperChannel::wait_connected(std::chrono::milliseconds wait) {
 }
 
 void HelperChannel::run() {
-    // Connect, racing the helper's own exit and a stop: a helper that
-    // dies on startup must not hold its session's slot for the full
-    // timeout.
     const auto connected = pipe_->connect(kHelperConnectTimeout, stop_event_.get(), process_.get());
 
     if (connected != win::OverlappedPipe::Wait::Done) {
@@ -206,9 +191,9 @@ void HelperChannel::on_message(nlohmann::json message) {
     }
     const std::string topic = message["event"].get<std::string>();
     if (topic == helper_topic::kLog) {
-        log::append(log::level_from_name(message.value("level", std::string{"INFO"})),
-                    "session " + std::to_string(session_) + ": " +
-                        message.value("msg", std::string{}));
+        log::append_from(log::level_from_name(message.value("level", std::string{})),
+                         "agent session " + std::to_string(session_),
+                         message.value("msg", std::string{}), message.value("ts_ms", std::uint64_t{0}));
         return;
     }
     if (topic == helper_topic::kHello) {
@@ -225,8 +210,6 @@ void HelperChannel::on_message(nlohmann::json message) {
         sink_.helper_changed();
         return;
     }
-    // Anything else is the manager's: a UI Automation event, forwarded
-    // as it came.
     message.erase("event");
     sink_.helper_event(rpc::Event{topic, std::move(message)});
 }
@@ -236,8 +219,6 @@ bool HelperChannel::send(const nlohmann::json& message, std::chrono::millisecond
     if (pipe_->write_all(bytes.data(), bytes.size(), timeout)) {
         return true;
     }
-    // A helper that stops reading is as good as gone; end the reader too,
-    // so everyone waiting on it hears so now.
     ::SetEvent(stop_event_.get());
     return false;
 }
@@ -276,15 +257,11 @@ void HelperChannel::stop() {
     if (connected()) {
         (void)send({{"event", helper_topic::kShutdown}}, std::chrono::milliseconds(1000));
     }
-    // Ends the reader (or the wait for a connection) promptly.
     ::SetEvent(stop_event_.get());
     if (thread_.joinable()) {
         thread_.join();
     }
     pending_.close(label() + " was stopped");
-    // Break the helper's end too, in case it missed the shutdown message;
-    // a helper whose pipe breaks exits. The handle itself stays open until
-    // the last caller holding this channel has let go of it.
     if (pipe_) {
         ::DisconnectNamedPipe(pipe_->get());
     }
@@ -295,4 +272,4 @@ void HelperChannel::stop() {
     }
 }
 
-}  // namespace lsw::agent::session
+}

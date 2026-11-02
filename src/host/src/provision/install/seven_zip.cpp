@@ -9,20 +9,12 @@
 namespace lsw::host::provision::install {
 
 namespace {
-
-// In preference order. ``7zr`` is deliberately absent: it is the
-// reduced build that handles .7z only, so finding it would mean
-// choosing a binary that cannot read an ISO at all.
 const QStringList& candidate_names() {
     static const QStringList names = {QStringLiteral("7z"), QStringLiteral("7zz"),
                                       QStringLiteral("7za")};
     return names;
 }
 
-// The tail of what 7-Zip printed, for the end of an error sentence. A
-// failing extract says something useful on stderr ("Can not open the
-// file as archive", "No space left"), and that line is worth more than
-// the exit code it comes with.
 QString last_line(const QByteArray& output) {
     const QString text = QString::fromLocal8Bit(output).trimmed();
     if (text.isEmpty()) {
@@ -31,10 +23,6 @@ QString last_line(const QByteArray& output) {
     return text.section(QLatin1Char('\n'), -1).trimmed();
 }
 
-// The one QProcess in this file. ``merged`` is what the extract paths
-// want — a diagnostic is caught whichever stream it went to — and what
-// the listing path must not have, since it parses stdout and a warning
-// mixed into it would read as an entry.
 bool run(const QStringList& args, int timeout_ms, bool merged, QByteArray* stdout_out,
          QString* error_out) {
     const QString program = find_seven_zip();
@@ -72,9 +60,6 @@ bool run(const QStringList& args, int timeout_ms, bool merged, QByteArray* stdou
         *stdout_out = output;
     }
     if (proc.exitStatus() != QProcess::NormalExit || proc.exitCode() != 0) {
-        // Merged runs have it all on stdout; separated ones kept the
-        // diagnostic on the other stream, which is the half worth
-        // quoting.
         const QString detail = last_line(merged ? output : proc.readAllStandardError());
         LSW_WARN("7z: {} exited {} ({})", program.toStdString(), proc.exitCode(),
                  detail.toStdString());
@@ -93,7 +78,7 @@ bool run(const QStringList& args, int timeout_ms, bool merged, QByteArray* stdou
     return true;
 }
 
-}  // namespace
+}
 
 QString find_seven_zip() {
     const QString from_env = qEnvironmentVariable("LSW_SEVEN_ZIP").trimmed();
@@ -121,16 +106,13 @@ QString seven_zip_missing_message() {
 }
 
 bool run_seven_zip(const QStringList& args, int timeout_ms, QString* error_out) {
-    return run(args, timeout_ms, /*merged=*/true, /*stdout_out=*/nullptr, error_out);
+    return run(args, timeout_ms, true, nullptr, error_out);
 }
 
 QStringList seven_zip_entries(const QString& archive_path, QString* error_out) {
-    // ``-slt`` prints one ``Key = value`` block per entry rather than
-    // the columns, so a name with spaces in it survives; ``-ba`` drops
-    // the banner and the column header ahead of them.
     QByteArray output;
     if (!run({QStringLiteral("l"), QStringLiteral("-slt"), QStringLiteral("-ba"), archive_path},
-             /*timeout_ms=*/300000, /*merged=*/false, &output, error_out)) {
+             300000, false, &output, error_out)) {
         return {};
     }
 
@@ -142,8 +124,6 @@ QStringList seven_zip_entries(const QString& archive_path, QString* error_out) {
         if (trimmed.startsWith(QLatin1String("Path = "))) {
             pending = trimmed.mid(7);
         } else if (trimmed.startsWith(QLatin1String("Folder = "))) {
-            // Directories are listed the same way and are never what a
-            // caller is looking for here.
             if (!pending.isEmpty() && trimmed.mid(9) == QLatin1String("-")) {
                 paths.append(pending);
             }
@@ -153,4 +133,4 @@ QStringList seven_zip_entries(const QString& archive_path, QString* error_out) {
     return paths;
 }
 
-}  // namespace lsw::host::provision::install
+}

@@ -30,14 +30,9 @@ namespace lsw::host::apps {
 namespace {
 
 constexpr const char* kEntryPrefix = "lsw-app-";
-// The submenu's name is a setting; its id is not, because the id is in
-// the file names and renaming those would orphan every entry already
-// written. So the id stays and the name is what the menus show.
 QString g_category_name = QStringLiteral("Windows");
 bool g_publishing = true;
 bool g_file_associations = true;
-// Whether an entry was written or removed since update-desktop-database
-// last ran, and whether it is running now.
 bool g_entries_changed = false;
 QProcess* g_database_update = nullptr;
 bool g_database_update_again = false;
@@ -56,10 +51,6 @@ QString icons_dir()            { return QDir(xdg_data_home()).filePath("icons/ls
 QString directories_dir()      { return QDir(xdg_data_home()).filePath("desktop-directories"); }
 QString menus_merged_dir()     { return QDir(xdg_config_home()).filePath("menus/applications-merged"); }
 
-// Stable, filename-safe digest of the Windows-side path. The app's
-// own ``id`` field is already a sha1-prefix of the path, but it can
-// contain characters XDG dislikes; rehash for the launcher filename
-// so we're robust to whatever the source produced.
 QString entry_basename(const AppConfig& cfg) {
     return DesktopLauncher::entry_id(cfg.id);
 }
@@ -79,11 +70,6 @@ QString sanitise_name(const QString& s) {
     return out.trimmed();
 }
 
-// Resolves the absolute path of the currently running lsw-manager.
-// Used as the ``Exec=`` target so each .desktop points at exactly the
-// binary the user just installed from — important when there might
-// be both an /usr/bin/lsw-manager and a developer build under
-// ~/Coding/.../build/.
 QString lsw_manager_executable() {
     QString self = QCoreApplication::applicationFilePath();
     if (!self.isEmpty() && QFile::exists(self)) {
@@ -92,19 +78,12 @@ QString lsw_manager_executable() {
     return QStringLiteral("lsw-manager");
 }
 
-// kmenuedit hides categories by writing
-// ``~/.config/menus/applications-kmenuedit.menu`` with
-// ``<Menu><Name>Windows</Name><Deleted/></Menu>``. The .desktop
-// files stay on disk but KDE Plasma stops rendering the submenu.
-// Surgically strip just our category's deletion entry so a user
-// "delete" via kmenuedit doesn't permanently break the auto-sync
-// path; other customizations in the same overlay stay intact.
 void unhide_windows_category_in_kmenuedit() {
     const QString path = QDir(menus_merged_dir())
         .filePath(QStringLiteral("../applications-kmenuedit.menu"));
     const QString resolved = QDir::cleanPath(path);
     if (!QFile::exists(resolved)) {
-        return;  // user hasn't touched kmenuedit — nothing to undo
+        return;
     }
     QDomDocument doc;
     {
@@ -114,7 +93,6 @@ void unhide_windows_category_in_kmenuedit() {
     }
     bool mutated = false;
     QDomNodeList menus = doc.elementsByTagName(QStringLiteral("Menu"));
-    // Snapshot to a list — removeChild mutates the live NodeList.
     QList<QDomElement> targets;
     for (int i = 0; i < menus.size(); ++i) {
         QDomElement m = menus.at(i).toElement();
@@ -138,9 +116,6 @@ void unhide_windows_category_in_kmenuedit() {
     doc.save(s, 1);
 }
 
-// First-touch installation of the "Windows" category. Cheap to call
-// every time install() runs — file writes are skipped if the content
-// is already correct.
 void ensure_windows_category() {
     QDir().mkpath(directories_dir());
     QDir().mkpath(menus_merged_dir());
@@ -165,10 +140,6 @@ void ensure_windows_category() {
         dirf.close();
     }
 
-    // applications-merged/lsw-windows.menu. The DOCTYPE + Menu Spec
-    // reference are required for KDE Plasma's menu parser to accept
-    // the fragment; older docs sometimes omit them and silently
-    // ignore the file.
     const QString menu_path = QDir(menus_merged_dir())
         .filePath(QStringLiteral("%1.menu").arg(kCategoryId));
     const QByteArray menu_body =
@@ -198,11 +169,6 @@ void ensure_windows_category() {
     }
 }
 
-// ``update-desktop-database`` over the applications directory, so the MIME
-// handlers just written are in the cache the file managers' Open With reads
-// (mimeinfo.cache). Run behind the GUI thread's back, one at a time, and
-// skipped when the tool is not installed: the cache is then built by
-// whatever else the desktop runs.
 void update_desktop_database() {
     if (g_database_update != nullptr) {
         g_database_update_again = true;
@@ -234,8 +200,6 @@ void update_desktop_database() {
     g_database_update->start(tool, {applications_dir()});
 }
 
-// Written only when it differs, so an unchanged entry neither touches the
-// file nor asks for the database to be rebuilt.
 bool write_if_changed(const QString& path, const QByteArray& body) {
     QFile current(path);
     if (current.open(QIODevice::ReadOnly) && current.readAll() == body) {
@@ -251,7 +215,7 @@ bool write_if_changed(const QString& path, const QByteArray& body) {
     return true;
 }
 
-}  // namespace
+}
 
 QString DesktopLauncher::entry_id(const QString& app_config_id) {
     const QByteArray digest = QCryptographicHash::hash(
@@ -301,7 +265,6 @@ QStringList DesktopLauncher::mime_types_of(const AppConfig& cfg) {
 }
 
 QStringList DesktopLauncher::declared_mime_types(const AppConfig& cfg, const HostMimeHandlers& handlers) {
-    // What the person typed is an explicit request: always declared.
     QStringList out;
     for (QString type : cfg.mime_types.split(QLatin1Char('\n'), Qt::SkipEmptyParts)) {
         type = type.trimmed();
@@ -311,8 +274,6 @@ QStringList DesktopLauncher::declared_mime_types(const AppConfig& cfg, const Hos
     }
     const QString entry = entry_basename(cfg) + QStringLiteral(".desktop");
     for (const QString& type : mime_types_of_extensions(cfg.file_extensions)) {
-        // What Windows says it opens, where nothing on this machine does, or
-        // where the person's mimeapps.list already chose this entry for it.
         if ((!handlers.has_host_handler(type) || handlers.explicit_default(type, entry)) && !out.contains(type)) {
             out << type;
         }
@@ -322,7 +283,6 @@ QStringList DesktopLauncher::declared_mime_types(const AppConfig& cfg, const Hos
 
 QStringList DesktopLauncher::mime_types_of_extensions(const QStringList& extensions) {
     const QMimeDatabase database;
-    // What the host's database calls a file of each extension.
     QList<QStringList> candidates;
     for (const QString& extension : extensions) {
         const QString name = QStringLiteral("file") +
@@ -337,8 +297,6 @@ QStringList DesktopLauncher::mime_types_of_extensions(const QStringList& extensi
     }
     const auto top_level = [](const QString& type) { return type.section(QLatin1Char('/'), 0, 0); };
 
-    // The kind of thing this application opens: the top-level type most of
-    // its extensions have one candidate for.
     QHash<QString, int> votes;
     for (const QStringList& names : candidates) {
         if (names.size() == 1) {
@@ -354,33 +312,23 @@ QStringList DesktopLauncher::mime_types_of_extensions(const QStringList& extensi
         }
     }
 
-    // Text types the host's database hands out for odd extensions (.asd as
-    // Lisp for Word's autosave) are not what a document application opens;
-    // these few are.
     static const QSet<QString> kPlainTexts = {
         QStringLiteral("text/plain"), QStringLiteral("text/html"), QStringLiteral("text/csv"),
         QStringLiteral("text/xml"), QStringLiteral("text/markdown"), QStringLiteral("text/rtf"),
         QStringLiteral("text/richtext"), QStringLiteral("text/calendar"), QStringLiteral("text/vcard"),
         QStringLiteral("text/tab-separated-values")};
 
-    // Never declared, for any application: what the host's database calls an
-    // extension that Windows uses for a document, and that is not one.
     static const QSet<QString> kNeverDocuments = {QStringLiteral("text/x-ssh-public-key")};
 
     QStringList out;
     for (QStringList names : candidates) {
         names.removeIf([](const QString& n) { return kNeverDocuments.contains(n); });
         if (dominant != QLatin1String("text")) {
-            // An application of documents or media is not offered other kinds of text.
             names.removeIf([&](const QString& n) {
                 return top_level(n) == QLatin1String("text") && !kPlainTexts.contains(n);
             });
         }
         if (names.size() > 1) {
-            // .pub is Publisher and an SSH key, .ts is video and a Qt
-            // linguist file: the application's own kind of thing decides,
-            // else the one that is not text, else none - a wrong default is
-            // worse than no entry for the type.
             QStringList kept;
             for (const QString& n : std::as_const(names)) {
                 if (top_level(n) == dominant) {
@@ -417,14 +365,8 @@ bool DesktopLauncher::install(const AppConfig& cfg, const HostMimeHandlers& hand
     QDir().mkpath(icons_dir());
     ensure_windows_category();
 
-    // Write the icon PNG to disk if we have one. The XDG .desktop
-    // Icon= field is followed by absolute path or theme name; the
-    // absolute path is the no-config-needed path that works under any
-    // icon theme.
     QString icon_abs;
     if (!cfg.icon_png_base64.isEmpty()) {
-        // Marked as Windows', so its mirrored windows are told apart from
-        // the host's own on the task manager, which shows this icon.
         const QByteArray png =
             WindowsBadge::applied(QByteArray::fromBase64(cfg.icon_png_base64.toUtf8()));
         if (!png.isEmpty()) {
@@ -444,15 +386,9 @@ bool DesktopLauncher::install(const AppConfig& cfg, const HostMimeHandlers& hand
     QString body;
     QTextStream s(&body);
     const QString name = sanitise_name(cfg.name.isEmpty() ? cfg.target() : cfg.name);
-    // ``Exec`` quotes the app id in case it contains spaces (Windows
-    // paths often do — "C:\\Program Files\\..."). XDG escapes the
-    // contained backslashes via doubled escape; we use single quotes
-    // around the value so the shell treats them as literal.
     QString exec_id = cfg.id;
     exec_id.replace(QChar('\\'), QStringLiteral("\\\\"));
     exec_id.replace(QChar('\''), QStringLiteral("\\'"));
-    // %F: the files a file manager opens with it, which the second
-    // process hands to the running manager (see CliParser).
     s << "[Desktop Entry]\n"
       << "Type=Application\n"
       << "Version=1.0\n"
@@ -463,20 +399,8 @@ bool DesktopLauncher::install(const AppConfig& cfg, const HostMimeHandlers& hand
     }
     s << "Exec=" << lsw_manager_executable() << " --launch '" << exec_id << "' %F\n"
       << "Categories=" << g_category_name << ";\n"
-      // StartupWMClass is the X11 grouping hint; on Wayland the taskbar
-      // matches against the app id the mirror presents, which is this
-      // entry's own, so this is mostly for the launcher-side bounce /
-      // startup-id flow on X11.
       << "StartupNotify=true\n"
       << "Terminal=false\n";
-    // The Windows file types this application opens that nothing on this
-    // machine does, so the application is their handler and a double click
-    // on one starts it in Windows. The others are the host's: which of
-    // several applications the desktop picks for a type is not something an
-    // entry can influence (KDE's choice varies from one rebuild of its cache
-    // to the next, whatever preference an entry names), and putting this one
-    // among them would sometimes take a person's default. Those are the
-    // application's own "Make it the default", an explicit choice.
     if (g_file_associations) {
         if (const QStringList types = declared_mime_types(cfg, handlers); !types.isEmpty()) {
             s << "MimeType=" << types.join(QLatin1Char(';')) << ";\n";
@@ -502,7 +426,6 @@ std::optional<DesktopLauncher::DefaultHandler> DesktopLauncher::default_handler(
         return std::nullopt;
     }
     DefaultHandler handler{entry, QString{}};
-    // The entry's own Name, from the applications directories.
     const QString file = QStandardPaths::locate(QStandardPaths::ApplicationsLocation, entry);
     QFile f(file);
     if (!file.isEmpty() && f.open(QIODevice::ReadOnly)) {
@@ -539,28 +462,18 @@ bool DesktopLauncher::is_installed(const AppConfig& cfg) {
 }
 
 void DesktopLauncher::sync(const QList<AppConfig>& live) {
-    // The caches are read once for the whole pass.
     write_entries(live, HostMimeHandlers{HostMimeHandlers::Dirs::from_environment()});
 }
 
 void DesktopLauncher::write_entries(const QList<AppConfig>& live, const HostMimeHandlers& handlers) {
-    // First pass: install/refresh entries for every live config. Build
-    // the set of basenames we just produced so the prune pass can
-    // distinguish "ours, current" from "ours, orphan".
     QSet<QString> live_bases;
     for (const auto& cfg : live) {
         if (cfg.id.isEmpty() || cfg.target().isEmpty()) continue;
-        // An application the user un-published, or a manager with
-        // publishing off entirely, leaves no basename behind, so the
-        // prune pass below removes whatever it had.
         if (!g_publishing || !cfg.publish_entry) continue;
         (void)install(cfg, handlers);
         live_bases.insert(entry_basename(cfg));
     }
 
-    // Second pass: prune. Anything matching ``lsw-app-*.desktop``
-    // whose basename isn't in ``live_bases`` belongs to an app that
-    // was removed from the manager / no longer exists in the guest.
     QDir apps(applications_dir());
     if (apps.exists()) {
         const QStringList stale = apps.entryList(
@@ -614,7 +527,6 @@ void DesktopLauncher::sync_manager_entry() {
         LSW_WARN("DesktopLauncher: cannot write {}", own_icon.toStdString());
         return;
     }
-    // Copied out of the resources read-only; rewritten on the next run.
     QFile::setPermissions(own_icon, QFile::ReadOwner | QFile::WriteOwner | QFile::ReadGroup |
                                         QFile::ReadOther);
 
@@ -643,4 +555,4 @@ void DesktopLauncher::sync_manager_entry() {
     entry.write(body);
 }
 
-}  // namespace lsw::host::apps
+}

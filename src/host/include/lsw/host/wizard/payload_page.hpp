@@ -10,10 +10,6 @@ namespace lsw::host::wizard {
 
 class Wizard;
 
-// SetupPage-style view of the BuildingPayloadIso stage. Two fixed
-// rows, lsw-payload.iso and the avgpu driver package staged onto it,
-// driven by the pipeline's payload_step_* signals.
-// Auto-advances to Install when the stage finishes.
 class PayloadPage : public PipelinePage {
     Q_OBJECT
 public:
@@ -21,8 +17,6 @@ public:
 
     void initializePage() override;
 
-    // A plausible mid-run state for --screenshot, where there is no
-    // pipeline to drive the rows.
     void demo_fill();
     [[nodiscard]] int nextId() const override;
 
@@ -34,4 +28,4 @@ private:
     QLabel* status_label_ = nullptr;
 };
 
-}  // namespace lsw::host::wizard
+}

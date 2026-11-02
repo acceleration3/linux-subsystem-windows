@@ -1,6 +1,7 @@
 #include "lsw/host/manager/settings_page.hpp"
 
 #include "lsw/host/config/display_refresh.hpp"
+#include "lsw/host/config/log_verbosity.hpp"
 #include "lsw/host/manager/adapter_roles.hpp"
 #include "lsw/host/manager/resolution_editor.hpp"
 #include "lsw/host/manager/usb_devices_panel.hpp"
@@ -20,6 +21,7 @@
 #include <QAbstractItemView>
 #include <QCheckBox>
 #include <QComboBox>
+#include <QDateTime>
 #include <QFileDialog>
 #include <QFrame>
 #include <QHBoxLayout>
@@ -43,8 +45,6 @@ using K = config::ManagerSettings::Key;
 
 using Choices = QVector<QPair<QString, QVariant>>;
 
-// The now-or-restart tag. Amber for restart because it is the one that
-// costs something; green for now because it is already done.
 QLabel* tag(bool restart) {
     auto* label = Widgets::meta(restart ? QStringLiteral("RESTART") : QStringLiteral("NOW"));
     label->setProperty(Theme::Tone::kProperty,
@@ -80,23 +80,23 @@ QTableWidget* make_table(const QStringList& headers) {
     return table;
 }
 
-}  // namespace
+}
 
 SettingsPage::SettingsPage(config::ManagerSettings& settings, config::PendingChanges& pending,
                            apps::AppConfigStore& apps, services::StatusHub& status,
-                           services::UsbPassthrough& usb, QWidget* parent)
+                           services::UsbPassthrough& usb, config::LogVerbosity& verbosity,
+                           QWidget* parent)
     : QWidget(parent), settings_(settings), pending_(pending), apps_(apps), status_(status),
-      usb_(usb) {
+      usb_(usb), verbosity_(verbosity) {
     build();
+    debug_clock_.setInterval(15000);
+    connect(&debug_clock_, &QTimer::timeout, this, &SettingsPage::refresh_debug_row);
+    connect(&verbosity_, &config::LogVerbosity::changed, this, &SettingsPage::refresh_debug_row);
+    refresh_debug_row();
     connect(&pending_, &config::PendingChanges::changed, this,
             &SettingsPage::refresh_apply_bar);
-    // The shares table shows the staged list, so whatever changes what
-    // is staged (an add, a remove, Revert, Apply) redraws it. Queued,
-    // because a remove is clicked from inside the table it rebuilds.
     connect(&pending_, &config::PendingChanges::changed, this,
             &SettingsPage::rebuild_shares_table, Qt::QueuedConnection);
-    // Revert throws the staged values away; every control shows what is
-    // stored again rather than the edit that is no longer pending.
     connect(&pending_, &config::PendingChanges::changed, this, [this] {
         for (auto it = shows_.constBegin(); it != shows_.constEnd(); ++it) {
             it.value()();
@@ -109,11 +109,14 @@ SettingsPage::SettingsPage(config::ManagerSettings& settings, config::PendingCha
 void SettingsPage::showEvent(QShowEvent* event) {
     QWidget::showEvent(event);
     status_.set_detail(services::StatusHub::Area::Usb, true);
+    refresh_debug_row();
+    debug_clock_.start();
 }
 
 void SettingsPage::hideEvent(QHideEvent* event) {
     QWidget::hideEvent(event);
     status_.set_detail(services::StatusHub::Area::Usb, false);
+    debug_clock_.stop();
 }
 
 void SettingsPage::follow(const QString& key, std::function<void()> show) {
@@ -131,7 +134,6 @@ void SettingsPage::build() {
     root->setContentsMargins(0, 0, 0, 0);
     root->setSpacing(0);
 
-    // The list scrolls; the apply bar stays pinned under it.
     auto* scroll = new QScrollArea;
     scroll->setWidgetResizable(true);
     scroll->setFrameShape(QFrame::NoFrame);
@@ -142,13 +144,10 @@ void SettingsPage::build() {
     scroll->setWidget(holder);
     root->addWidget(scroll, 1);
 
-    // ---- machine --------------------------------------------------
     auto* machine = new_group(QStringLiteral("Machine"));
     add_row(machine, K::kCpuCores, QStringLiteral("Processor cores"),
             QStringLiteral("One socket, cores only, no SMT."),
             [this] {
-                // No more vCPUs than the host has threads: past that they
-                // only take turns on the same cores.
                 auto* cores = static_cast<ui::SliderSpin*>(
                     make_slider(K::kCpuCores, ui::MachineLimits::kCores, QString{}));
                 cores->set_maximum(config::VmSizing::host_cores());
@@ -163,9 +162,6 @@ void SettingsPage::build() {
             QStringLiteral("Grows only: the image is grown when the guest restarts, and Windows "
                            "extends C: into the new space as it starts."),
             disk);
-    // The floor is the image as it is now, not the template's minimum: a
-    // smaller number is a shrink, which the restart refuses, so the
-    // slider does not offer it.
     const auto follow_disk = [this, disk] {
         const auto bytes = status_.vm().disk_bytes;
         if (!bytes) {
@@ -184,7 +180,6 @@ void SettingsPage::build() {
             });
     follow_disk();
 
-    // ---- display --------------------------------------------------
     auto* display = new_group(QStringLiteral("Display"));
     auto* resolutions = new ResolutionEditor(settings_);
     add_wide_row(display, false, QStringLiteral("Resolutions"),
@@ -239,9 +234,6 @@ void SettingsPage::build() {
                                 {QStringLiteral("150 % (144 DPI)"), 150},
                                 {QStringLiteral("200 % (192 DPI)"), 200}}));
 
-    // ---- graphics -------------------------------------------------
-    // The accel-virt devices. Every row is a property of their lines on
-    // the QEMU command line, read once when the device is realized.
     auto* graphics = new_group(QStringLiteral("Graphics"));
     add_wide_row(graphics, true, QStringLiteral("Adapters"),
                  QStringLiteral("Each host GPU can be the guest's display adapter, a render-only "
@@ -259,7 +251,6 @@ void SettingsPage::build() {
                                 {QStringLiteral("8 GiB"), 8192},
                                 {QStringLiteral("16 GiB"), 16384}}));
 
-    // ---- files ----------------------------------------------------
     auto* files = new_group(QStringLiteral("Files"));
     add_row(files, K::kSmbEnabled,
             QStringLiteral("Browse the guest from your file manager"),
@@ -282,8 +273,6 @@ void SettingsPage::build() {
             QStringLiteral("The same entry, in gtk-3.0/bookmarks."),
             make_toggle(K::kBookmarkGtk));
 
-    // The shares are a list because there is no reason for there to be
-    // only one of them.
     auto* shares_row = new QWidget;
     auto* shares_layout = new QVBoxLayout(shares_row);
     shares_layout->setContentsMargins(12, 10, 12, 12);
@@ -295,8 +284,6 @@ void SettingsPage::build() {
     auto* add_share = small_button(QStringLiteral("Add a folder"));
     shares_head->addWidget(add_share);
     shares_layout->addLayout(shares_head);
-    // The second sentence is the notice WinFsp's FLOSS exception asks for
-    // in the interface (packaging/licenses/winfsp-LICENSE).
     shares_layout->addWidget(Widgets::meta(
         QStringLiteral("Each one becomes a virtiofs device and a drive letter in Windows, named "
                        "after the folder and mounted "
@@ -329,7 +316,6 @@ void SettingsPage::build() {
                    QStringLiteral("Launches your file manager at the guest's C: drive."),
                    QStringLiteral("Open Windows files"), &SettingsPage::open_share_requested);
 
-    // ---- desktop entries ------------------------------------------
     auto* entries = new_group(QStringLiteral("Desktop entries"));
     add_row(entries, K::kPublishEntries,
             QStringLiteral("Put guest applications in your menu"),
@@ -349,28 +335,26 @@ void SettingsPage::build() {
                    QStringLiteral("Regenerates every .desktop file and icon."),
                    QStringLiteral("Rewrite now"), &SettingsPage::rewrite_entries_requested);
 
-    // ---- usb ------------------------------------------------------
     auto* usb = new_group(QStringLiteral("USB devices"));
     add_wide_row(usb, false, QStringLiteral("Pass USB devices to the guest"),
                  QStringLiteral("A device passed to the guest disappears from this machine until "
                                 "you return it."),
                  new UsbDevicesPanel(status_, usb_));
 
-    // ---- guest ----------------------------------------------------
     auto* guest = new_group(QStringLiteral("Guest"));
     add_row(guest, K::kAutostart,
             QStringLiteral("Start the guest when the manager opens"),
             QStringLiteral("Otherwise it starts the first time you launch an application."),
             make_toggle(K::kAutostart));
 
-    // ---- host -----------------------------------------------------
     auto* host = new_group(QStringLiteral("Host"));
     add_row(host, K::kCloseToTray,
             QStringLiteral("Keep running in the tray when closed"),
             QStringLiteral("Closing the window leaves the guest running."),
             make_toggle(K::kCloseToTray));
 
-    // ---- images ---------------------------------------------------
+    build_logs_group();
+
     auto* images = new_group(QStringLiteral("Images"));
     add_action_row(images, QStringLiteral("Download a Windows image"),
                    QStringLiteral("Fetch an installation ISO from microsoft.com into any folder."),
@@ -405,7 +389,6 @@ void SettingsPage::build() {
 
     content_->addStretch(1);
 
-    // ---- apply bar ------------------------------------------------
     apply_bar_ = new QWidget;
     Theme::surface(apply_bar_, Theme::Role::kApplyBar);
     auto* bar = new QHBoxLayout(apply_bar_);
@@ -434,10 +417,73 @@ void SettingsPage::build() {
     });
 }
 
+void SettingsPage::build_logs_group() {
+    using Part = config::LogVerbosity::Part;
+    const Choices levels = {
+        {QStringLiteral("Trace"), QStringLiteral("trace")},
+        {QStringLiteral("Debug"), QStringLiteral("debug")},
+        {QStringLiteral("Info"), QStringLiteral("info")},
+        {QStringLiteral("Warn"), QStringLiteral("warn")},
+        {QStringLiteral("Error"), QStringLiteral("error")},
+    };
+    auto* logs = new_group(QStringLiteral("Logs"));
+    add_row(logs, K::kLogManager, QStringLiteral("Manager"),
+            QStringLiteral("How much the manager says."), make_choice(K::kLogManager, levels));
+    add_row(logs, QString{}, QStringLiteral("Window mirrors"),
+            QStringLiteral("Applies to mirrors started from now on."),
+            make_choice(K::kLogMirrors, levels));
+    add_row(logs, K::kLogAgent, QStringLiteral("Windows agent"),
+            QStringLiteral("How much the agent in Windows says."),
+            make_choice(K::kLogAgent, levels));
+    add_row(logs, QString{}, QStringLiteral("Window mirrors in Windows"),
+            QStringLiteral("Applies to mirrors started from now on."),
+            make_choice(K::kLogGuestMirrors, levels));
+    add_row(logs, QString{}, QStringLiteral("GPU"),
+            QStringLiteral("The GPU device, DXVK and vkd3d-proton. Applies the next time the "
+                           "guest starts."),
+            make_choice(K::kLogGpu, levels));
+
+    auto* debug = new QWidget;
+    auto* debug_layout = new QHBoxLayout(debug);
+    debug_layout->setContentsMargins(0, 0, 0, 0);
+    debug_layout->setSpacing(8);
+    debug_button_ = small_button(QString{});
+    debug_stop_ = small_button(QStringLiteral("Stop"));
+    debug_layout->addWidget(debug_button_, 1);
+    debug_layout->addWidget(debug_stop_);
+    connect(debug_button_, &QPushButton::clicked, this, [this] { verbosity_.start_debug(); });
+    connect(debug_stop_, &QPushButton::clicked, this, [this] { verbosity_.stop_debug(); });
+    add_row(logs, QString{}, QStringLiteral("Debug logging"),
+            QStringLiteral("Every part at debug for %1 minutes, then back to the levels above.")
+                .arg(config::LogVerbosity::kDebugMinutes),
+            debug);
+
+    add_action_row(logs, QStringLiteral("Log folder"), QStringLiteral("Where every log is kept."),
+                   QStringLiteral("Open log folder"), &SettingsPage::open_log_folder_requested);
+    add_action_row(logs, QStringLiteral("Collect logs for a bug report"),
+                   QStringLiteral("Packs the logs, Windows' logs and system details into one "
+                                  "archive. Window titles and file names appear in logs; read it "
+                                  "before you share it."),
+                   QStringLiteral("Collect logs"), &SettingsPage::collect_logs_requested);
+}
+
+void SettingsPage::refresh_debug_row() {
+    const qint64 left_ms = verbosity_.debug_until_ms() - QDateTime::currentMSecsSinceEpoch();
+    const bool active = left_ms > 0;
+    if (active) {
+        const qint64 minutes = (left_ms + 59999) / 60000;
+        debug_button_->setText(QStringLiteral("Debug on, %1 min left").arg(minutes));
+    } else {
+        debug_button_->setText(QStringLiteral("Debug logging for %1 minutes")
+                                   .arg(config::LogVerbosity::kDebugMinutes));
+    }
+    debug_button_->setEnabled(!active);
+    debug_stop_->setVisible(active);
+}
+
 void SettingsPage::refresh_update_row() {
     using State = services::GuestUpdateStatus::State;
     const auto& update = status_.update();
-    // The first 12 hex of a release, or "-" when it is not known.
     const auto brief = [](const QString& release) {
         return release.isEmpty() ? QStringLiteral("-") : release.left(12);
     };
@@ -464,8 +510,6 @@ void SettingsPage::refresh_update_row() {
 }
 
 QVBoxLayout* SettingsPage::new_group(const QString& title) {
-    // Rows run edge to edge and carry their own padding, so the body
-    // has none.
     const auto group = ui::Panel::make(title);
     group.body->setContentsMargins(0, 0, 0, 0);
     group.body->setSpacing(0);
@@ -493,20 +537,15 @@ QWidget* SettingsPage::add_row(QVBoxLayout* group, const QString& key, const QSt
     text->addLayout(head);
 
     auto* prose = Widgets::prose(description);
-    // Found again by a row whose explanation follows the data.
     prose->setObjectName(QStringLiteral("rowDescription"));
     text->addWidget(prose);
 
     layout->addLayout(text, 1);
-    // The control column is a fixed share of the row, so a slider has
-    // somewhere to travel and a combo does not float in the middle.
     control->setFixedWidth(300);
     layout->addWidget(control, 0, Qt::AlignRight);
 
     group->addWidget(row);
 
-    // A hairline between rows, and none after the last one; the frame's
-    // own border closes the group.
     group->addWidget(Widgets::separator());
     return row;
 }
@@ -545,7 +584,6 @@ QWidget* SettingsPage::make_slider(const QString& key, const ui::MachineLimits::
                                    const QString& suffix) {
     auto* slider = new ui::SliderSpin(range.min, range.max, range.step, suffix);
     slider->row()->setSpacing(12);
-    // The number is quiet and right aligned: the slider is the control.
     slider->spin()->setFixedWidth(96);
     slider->spin()->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     slider->spin()->setObjectName(QStringLiteral("SliderValue"));
@@ -560,8 +598,6 @@ QWidget* SettingsPage::make_slider(const QString& key, const ui::MachineLimits::
 }
 
 
-// "Applies at once; more GPU work", and, where the monitors do not all run
-// at the same rates, which of them support which.
 QString SettingsPage::refresh_description(const QVector<platform::RateChoice>& rates) {
     QString text = QStringLiteral(
         "Windows' refresh rate, changed while Windows runs: it switches to the new rate at once, "
@@ -597,9 +633,6 @@ void SettingsPage::add_refresh_row(QVBoxLayout* group) {
     auto* row = add_row(group, K::kDisplayRefresh, QStringLiteral("Refresh rate"), QString{}, combo);
     auto* description = row->findChild<QLabel*>(QStringLiteral("rowDescription"));
 
-    // The monitors' rates, high to low, behind "same as monitor"; the saved
-    // rate stays a choice when no monitor offers it any more, so the
-    // setting never changes by the list changing.
     const auto show = [this, combo, description] {
         const auto& graphics = status_.graphics();
         const std::optional<quint32> stored = DisplayRefresh::fixed(settings_.string_value(K::kDisplayRefresh));
@@ -659,10 +692,6 @@ QWidget* SettingsPage::make_choice(const QString& key, const Choices& options) {
     const QVariant current = pending_.staged_or_current(key);
     const int index = combo->findData(current);
     combo->setCurrentIndex(index >= 0 ? index : 0);
-    // The control column is a fixed width and some of these names are
-    // longer than it. The list that drops down is not bound by it, so
-    // the choice is made against the whole name even when the closed
-    // box shows the beginning of one.
     combo->view()->setMinimumWidth(combo->sizeHint().width());
     combo->setToolTip(combo->currentText());
     connect(combo, &QComboBox::currentIndexChanged, this, [this, combo, key](int i) {
@@ -679,8 +708,6 @@ QWidget* SettingsPage::make_choice(const QString& key, const Choices& options) {
 }
 
 QWidget* SettingsPage::make_toggle(const QString& key) {
-    // A switch rather than a check box: every boolean here is a thing
-    // that is on or off, not one of a list of things being ticked.
     auto* box = new ui::ToggleSwitch;
     box->setChecked(pending_.staged_or_current(key).toBool());
     connect(box, &ui::ToggleSwitch::toggled, this, [this, key](bool on) { put(key, on); });
@@ -689,9 +716,6 @@ QWidget* SettingsPage::make_toggle(const QString& key) {
         box->setChecked(pending_.staged_or_current(key).toBool());
     });
 
-    // The control column is right aligned, and a bare checkbox floating
-    // there reads as unfinished; the wrapper gives it the same right
-    // edge as every other control.
     auto* row = new QWidget;
     auto* layout = new QHBoxLayout(row);
     layout->setContentsMargins(0, 0, 0, 0);
@@ -726,8 +750,6 @@ QVector<HostShare> SettingsPage::staged_shares() const {
 }
 
 void SettingsPage::stage_shares(const QVector<HostShare>& shares) {
-    // A share is a device on the machine, so it stages rather than
-    // applying under a running guest.
     put(K::kHostShares, config::ManagerSettings::encode_host_shares(shares));
 }
 
@@ -761,4 +783,4 @@ void SettingsPage::refresh_apply_bar() {
     apply_diffs_->setText(pending_.summary().join(QStringLiteral("   ")));
 }
 
-}  // namespace lsw::host::manager
+}

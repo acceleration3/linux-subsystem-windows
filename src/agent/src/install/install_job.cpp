@@ -78,4 +78,4 @@ std::string InstallJob::exit_message(const ProcessOutcome& outcome, const char* 
     return std::string{what} + " exit code " + std::to_string(outcome.exit_code);
 }
 
-}  // namespace lsw::agent::install
+}

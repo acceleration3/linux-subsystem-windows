@@ -71,7 +71,7 @@ void UnattendedRunner::start() {
     in.iso_local_path = cli_.iso_path;
     in.user_name = cli_.user_name.isEmpty() ? QStringLiteral("lsw") : cli_.user_name;
     in.user_password = cli_.user_password.isEmpty() ? QStringLiteral("lsw") : cli_.user_password;
-    in.computer_name = cli_.computer_name;  // empty → pipeline falls back to the VM name
+    in.computer_name = cli_.computer_name;
     if (cli_.cpu_cores > 0)  in.sizing.cpu_cores  = cli_.cpu_cores;
     if (cli_.memory_mib > 0) in.sizing.memory_mib = cli_.memory_mib;
     if (cli_.disk_gib > 0)   in.sizing.disk_gib   = cli_.disk_gib;
@@ -183,7 +183,7 @@ void UnattendedRunner::resolve_microsoft_iso(provision::PipelineInputs in) {
                 resolver->deleteLater();
             });
     connect(resolver, &provision::MicrosoftResolver::failed, this,
-            [this, resolver](const QString& msg, bool /*banned*/) {
+            [this, resolver](const QString& msg, bool ) {
                 std::fputs(QStringLiteral("[resolve] FAILED: %1\n").arg(msg)
                                .toUtf8().constData(), stderr);
                 resolver->deleteLater();
@@ -192,4 +192,4 @@ void UnattendedRunner::resolve_microsoft_iso(provision::PipelineInputs in) {
     resolver->resolve(edition, cli_.language_label);
 }
 
-}  // namespace lsw::host::app
+}

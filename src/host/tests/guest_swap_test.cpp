@@ -1,8 +1,3 @@
-// The redeploy's guest half: what the file server answers for each name,
-// and what the swap script does with the window mirror's guest half - the
-// in-use file renamed aside before the new one moves in, never replaced
-// in place, and nothing of it at all when there is no mirror to send.
-
 #include "lsw/host/services/guest_file_server.hpp"
 #include "lsw/host/services/guest_swap_script.hpp"
 
@@ -29,7 +24,6 @@ void check(bool ok, const char* label) {
     }
 }
 
-// The whole response to one GET, as curl in the guest would read it.
 std::string fetch(unsigned short port, std::string_view path) {
     const int fd = ::socket(AF_INET, SOCK_STREAM, 0);
     sockaddr_in addr{};
@@ -107,7 +101,7 @@ void swaps_the_mirror_aside() {
           "and still swaps the agent");
 }
 
-}  // namespace
+}
 
 int main() {
     serves_by_name();

@@ -17,17 +17,11 @@
 namespace lsw::agent::apps {
 
 namespace {
-
-// How long after the last change the event is sent: an installer writes
-// many files, and one event per burst is enough.
 constexpr DWORD kQuietMs = 2000;
-// How often the set of folders is looked at again, for a profile that
-// came into being since.
 constexpr DWORD kRescanMs = 5000;
 
 constexpr const wchar_t kProgramsTail[] = L"\\Microsoft\\Windows\\Start Menu\\Programs";
 
-// The folders to watch now: the machine's Start menu, and each profile's.
 std::vector<std::wstring> folders() {
     std::vector<std::wstring> out;
     const std::wstring common = win::Environment::expand(L"%ProgramData%");
@@ -50,7 +44,7 @@ std::vector<std::wstring> folders() {
     return out;
 }
 
-}  // namespace
+}
 
 StartMenuWatcher::~StartMenuWatcher() {
     if (stop_event_ != nullptr) {
@@ -63,7 +57,6 @@ StartMenuWatcher::~StartMenuWatcher() {
 }
 
 void StartMenuWatcher::start() {
-    // Each connection's thread asks, and two can at once.
     std::call_once(started_, [this] {
         stop_event_ = ::CreateEventW(nullptr, TRUE, FALSE, nullptr);
         if (stop_event_ == nullptr) {
@@ -82,7 +75,7 @@ std::vector<rpc::Event> StartMenuWatcher::collect_pending() {
 }
 
 void StartMenuWatcher::run() {
-    std::map<std::wstring, HANDLE> watches;  // folder -> change notification
+    std::map<std::wstring, HANDLE> watches;
     ULONGLONG last_scan = 0;
     ULONGLONG last_change = 0;
     bool dirty = false;
@@ -94,7 +87,6 @@ void StartMenuWatcher::run() {
                 if (watches.contains(folder)) {
                     continue;
                 }
-                // Recursive; a shortcut appearing, going or being renamed.
                 const HANDLE handle = ::FindFirstChangeNotificationW(
                     folder.c_str(), TRUE, FILE_NOTIFY_CHANGE_FILE_NAME | FILE_NOTIFY_CHANGE_DIR_NAME);
                 if (handle != INVALID_HANDLE_VALUE) {
@@ -103,7 +95,7 @@ void StartMenuWatcher::run() {
             }
         }
         std::vector<HANDLE> handles{static_cast<HANDLE>(stop_event_)};
-        std::vector<std::wstring> named{std::wstring{}};  // the folder of each handle
+        std::vector<std::wstring> named{std::wstring{}};
         for (const auto& [folder, handle] : watches) {
             if (handles.size() < MAXIMUM_WAIT_OBJECTS) {
                 handles.push_back(handle);
@@ -119,9 +111,6 @@ void StartMenuWatcher::run() {
         if (which > WAIT_OBJECT_0 && which < WAIT_OBJECT_0 + handles.size()) {
             const std::size_t index = which - WAIT_OBJECT_0;
             if (!::FindNextChangeNotification(handles[index])) {
-                // The folder is gone (a profile deleted) or the watch broke: an
-                // armed handle that cannot be re-armed would be signalled for
-                // ever. Dropped; a rescan watches it again if it returns.
                 ::FindCloseChangeNotification(handles[index]);
                 watches.erase(named[index]);
             }
@@ -139,4 +128,4 @@ void StartMenuWatcher::run() {
     }
 }
 
-}  // namespace lsw::agent::apps
+}

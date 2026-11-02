@@ -21,14 +21,9 @@ namespace lsw::host::services {
 namespace {
 
 constexpr int kTimeoutMs = 8000;
-// A transfer's timeout restarts with every byte, so a proxy that trickles them
-// never trips it; setup and an update must not wait on it.
 constexpr int kDeadlineMs = 15000;
-// A file version holds four parts of sixteen bits.
 constexpr int kMostVersionPart = 65535;
 
-// The catalog lists a driver per row, with an id that ends in the row's
-// number.
 const QRegularExpression& row_pattern() {
     static const QRegularExpression pattern(
         QStringLiteral(R"(<tr[^>]*\bid="[0-9a-fA-F-]+_R\d+"[^>]*>(.*?)</tr>)"),
@@ -46,7 +41,7 @@ const QRegularExpression& version_pattern() {
     return pattern;
 }
 
-}  // namespace
+}
 
 DriverCatalog::DriverCatalog(Fetch fetch, QString cache_path, QObject* parent)
     : QObject(parent), fetch_(std::move(fetch)), cache_path_(std::move(cache_path)) {
@@ -81,7 +76,7 @@ std::optional<QString> DriverCatalog::newest(const QByteArray& page) {
         const QList<int> parts = number.segments();
         if (std::any_of(parts.begin(), parts.end(),
                         [](int part) { return part > kMostVersionPart; })) {
-            continue;  // no driver's: the highest would otherwise beat every real one
+            continue;
         }
         if (!best || number > best_number) {
             best = found.captured(1);
@@ -126,8 +121,6 @@ void DriverCatalog::lookup(const QString& adapter_names) {
             complete();
         }
     });
-    // Every search is registered before the first can answer, so a fetch
-    // that answers at once does not end the lookup early.
     QPointer<DriverCatalog> self(this);
     for (const QString& key : keys) {
         const QStringList ids = key.split(QLatin1Char(':'));
@@ -144,7 +137,7 @@ void DriverCatalog::lookup(const QString& adapter_names) {
 
 void DriverCatalog::answer(const QString& key, const QByteArray& page, const QString& error) {
     if (!pending_.remove(key)) {
-        return;  // answered already
+        return;
     }
     if (!error.isEmpty()) {
         LSW_WARN("provision: catalog lookup for {} failed ({}); the guest takes its built-in "
@@ -192,7 +185,6 @@ void DriverCatalog::save_cache() const {
     for (auto it = cached_.begin(); it != cached_.end(); ++it) {
         object.insert(it.key(), it.value());
     }
-    // Replaced whole, so an interrupted write leaves the old file.
     QSaveFile file{cache_path_};
     if (!file.open(QIODevice::WriteOnly)) {
         LSW_WARN("provision: cannot keep the catalog's driver versions in {}: {}",
@@ -215,7 +207,6 @@ void DriverCatalog::complete() {
         QStringList fields = line.split(QLatin1Char('\t'));
         if (fields.size() >= 3) {
             const QString key = fields[0] + QLatin1Char(':') + fields[1];
-            // A lookup that failed leaves the last version found.
             const QString version = versions_.value(key, cached_.value(key));
             if (!version.isEmpty()) {
                 fields = fields.mid(0, 3);
@@ -227,4 +218,4 @@ void DriverCatalog::complete() {
     Q_EMIT completed(out);
 }
 
-}  // namespace lsw::host::services
+}

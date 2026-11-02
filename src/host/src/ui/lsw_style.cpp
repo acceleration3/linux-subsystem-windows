@@ -12,9 +12,6 @@
 namespace lsw::host::ui {
 
 namespace {
-
-// A tick, drawn rather than typed: two strokes across the box, inset so
-// the joint has somewhere to sit.
 void draw_check(QPainter* painter, const QRect& box, const QColor& ink) {
     QPen pen{ink};
     pen.setWidthF(2.1);
@@ -32,18 +29,12 @@ void draw_check(QPainter* painter, const QRect& box, const QColor& ink) {
     painter->drawPath(path);
 }
 
-}  // namespace
+}
 
 LswStyle::LswStyle() : QProxyStyle(QStyleFactory::create(QStringLiteral("Fusion"))) {}
 
 int LswStyle::pixelMetric(PixelMetric metric, const QStyleOption* option,
                           const QWidget* widget) const {
-    // QWizard lays its page, its side widget and its button row out with
-    // the style's own margins, and there is no API to set them. It asks
-    // twice: once about itself for the outer margin, and once about the
-    // current page for the inner one that surrounds both the page and
-    // the rail. Both have to answer zero, or the design's rail and page
-    // float in a border of the window's ground.
     if (widget != nullptr
         && (qobject_cast<const QWizard*>(widget) != nullptr
             || qobject_cast<const QWizardPage*>(widget) != nullptr)) {
@@ -112,8 +103,6 @@ void LswStyle::drawPrimitive(PrimitiveElement element, const QStyleOption* optio
         return;
     }
     case PE_IndicatorArrowDown: {
-        // The combo box caret. A solid triangle, because the border
-        // trick a stylesheet has to use renders as a dash at this size.
         painter->save();
         painter->setRenderHint(QPainter::Antialiasing, true);
         const QPointF centre = QRectF(option->rect).center();
@@ -135,4 +124,4 @@ void LswStyle::drawPrimitive(PrimitiveElement element, const QStyleOption* optio
     QProxyStyle::drawPrimitive(element, option, painter, widget);
 }
 
-}  // namespace lsw::host::ui
+}

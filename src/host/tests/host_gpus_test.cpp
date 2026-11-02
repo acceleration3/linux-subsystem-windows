@@ -1,10 +1,3 @@
-// Which host GPU a setting names. The guest's adapter is bound by a
-// Vulkan device UUID or by "auto", and the manager has to agree with
-// QEMU's device about what "auto" means — the first device the loader
-// lists, whatever kind it is — or the settings page shows one GPU and
-// the guest runs on another. A pure function over a list, so no GPU is
-// needed; enumerate() itself is exercised by whatever this host has.
-
 #include "lsw/host/platform/host_gpus.hpp"
 
 #include <QCoreApplication>
@@ -34,13 +27,11 @@ HostGpu gpu(const char* name, const char* uuid, bool cpu = false) {
     return out;
 }
 
-}  // namespace
+}
 
 int main(int argc, char** argv) {
     QCoreApplication app{argc, argv};
 
-    // llvmpipe first on purpose: the device's auto takes index 0 even
-    // when it is a CPU device, and so must this.
     const QVector<HostGpu> gpus = {
         gpu("llvmpipe (LLVM 20.1.0, 256 bits)", "6d657361-3230-2e31-2e30-000000000000", true),
         gpu("AMD Radeon RX 9070 XT (RADV GFX1201)", "00000000-0300-0000-0000-000000000000"),
@@ -63,8 +54,6 @@ int main(int argc, char** argv) {
     check(!HostGpus::resolve(gpus, QStringLiteral("AUTO")).has_value(),
           "only the device's own spelling of auto is auto");
 
-    // Whatever this host has, each UUID is in the form the device's
-    // host-gpu= takes.
     static const QRegularExpression form(
         QStringLiteral("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"));
     const QVector<HostGpu> host = HostGpus::enumerate();

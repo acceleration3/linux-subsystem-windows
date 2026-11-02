@@ -1,10 +1,3 @@
-// Regression test: the rendered answer file must be non-empty, valid
-// XML, with every placeholder substituted.
-//
-// A silently-empty autounattend.xml is the worst failure mode this
-// project has: the ISO builds, the VM boots, and Windows just shows the
-// interactive installer — with nothing anywhere saying why.
-
 #include "lsw/host/provision/install/autounattend.hpp"
 #include "lsw/host/provision/install/payload_iso.hpp"
 #include "lsw/host/provision/install/product_keys.hpp"
@@ -31,7 +24,7 @@ void check(bool ok, const char* what) {
     }
 }
 
-}  // namespace
+}
 
 int main() {
     using namespace lsw::host::provision::install;
@@ -50,9 +43,6 @@ int main() {
     check(!xml.isEmpty(), "render() returns a non-empty document");
     check(xml.size() > 1000, "rendered document is a plausible size");
 
-    // Every substitutable placeholder must be gone. Checked by name
-    // rather than by scanning for "{{", because the template's own
-    // comments talk about the placeholder syntax.
     bool any_left = false;
     for (const char* key : {"locale", "timezone", "computer_name", "user_name", "user_password",
                             "product_key_block", "image_index", "win11_bypass_block", "release",
@@ -64,7 +54,6 @@ int main() {
     }
     check(!any_left, "no unsubstituted placeholders remain");
 
-    // The inputs must actually reach the output.
     check(xml.contains(QStringLiteral("LSW-TEST")), "computer_name substituted");
     {
         AutounattendInputs lisbon = in;
@@ -92,7 +81,6 @@ int main() {
               ProductKeys::for_edition(QString{}).isEmpty(),
           "an edition the table does not know gets no key");
     {
-        // Microsoft's Windows 11 media: Home is image 1, Pro image 6.
         const QVector<WimEdition> media{{1, QStringLiteral("Windows 11 Home"), QStringLiteral("Core")},
                                         {2, QStringLiteral("Windows 11 Home N"), QStringLiteral("CoreN")},
                                         {3, QStringLiteral("Windows 11 Pro N"), QStringLiteral("ProfessionalN")},
@@ -113,12 +101,6 @@ int main() {
     check(doc.documentElement().tagName() == QStringLiteral("unattend"),
           "root element is <unattend>");
 
-    // A RunSynchronousCommand's <Path> is capped at 259 characters
-    // (MAX_PATH). Going over does not fail that one command: setup
-    // rejects the ENTIRE answer file with 0x80220005 and the install
-    // dies at specialize behind "The computer restarted unexpectedly".
-    // Two 1-GiB-VRAM registry writes once did exactly that, which is
-    // why anything that long now lives in Specialize.ps1 instead.
     constexpr int kMaxPathLength = 259;
     bool paths_within_limit = true;
     const QDomNodeList commands = doc.elementsByTagName(QStringLiteral("RunSynchronousCommand"));
@@ -135,12 +117,9 @@ int main() {
     check(commands.count() > 0, "the answer file has RunSynchronousCommand entries");
     check(paths_within_limit, "every RunSynchronousCommand <Path> is within 259 characters");
 
-    // And it must survive the trip onto the ISO staging directory —
-    // this is what actually lands at the root of the payload ISO.
     QTemporaryDir staging;
     PayloadInputs payload;
     payload.autounattend_xml = xml;
-    // The release the ISO carries is required: a guest without it has no desktop.
     auto stub_bundle = std::make_shared<lsw::host::services::GuestBundle::Contents>();
     stub_bundle->files.push_back({"C:\\ProgramData\\LSW\\lsw-agent.exe", "agent", "hash"});
     payload.bundle = stub_bundle;
@@ -152,9 +131,6 @@ int main() {
     check(QFile::exists(staged_path), "autounattend.xml exists in the staging dir");
     check(QFileInfo(staged_path).size() > 1000, "staged autounattend.xml is not empty");
 
-    // No driver injection: the disk (NVMe) and the NIC (e1000e) have
-    // in-box drivers, so neither Setup nor the offline image is handed a
-    // driver path, and nothing points at a virtio-win CD.
     check(!xml.contains(QStringLiteral("PnpCustomizations")) &&
               !xml.contains(QStringLiteral("DriverPaths")) &&
               !xml.contains(QStringLiteral("offlineServicing")),
@@ -163,10 +139,6 @@ int main() {
               !xml.contains(QStringLiteral("NetKVM"), Qt::CaseInsensitive),
           "nothing of virtio-win is left");
 
-    // LSW's files. Setup copies nothing of them: SetupComplete finds the
-    // payload volume, stages its \update under the release and runs the
-    // update script from there, which signs and installs the driver, puts
-    // the loaders, the shares, the service and the firewall rules in place.
     check(!xml.contains(QStringLiteral("rvk")), "nothing of the render server's drivers is left");
     check(!xml.contains(QStringLiteral("LswAvSign")) && !xml.contains(QStringLiteral("pristine")) &&
               !xml.contains(QStringLiteral("xcopy /E /I /Y %i:")) &&
@@ -197,8 +169,6 @@ int main() {
     check(xml.contains(QStringLiteral("HKU\\DefaultUser\\Control Panel\\Desktop\" /v ScreenSaveActive")),
           "the screen saver is off for new accounts, since setup steps no longer run as the user");
 
-    // The bundle stages as \update, each file under its guest path without
-    // the drive's colon, beside the manifest and the mount list.
     using lsw::host::services::GuestBundle;
     auto bundle = std::make_shared<GuestBundle::Contents>();
     for (const char* guest_path : {"C:\\ProgramData\\LSW\\lsw-agent.exe", "C:\\av\\provision.ps1",
@@ -234,8 +204,6 @@ int main() {
               !QFile::exists(QDir(staging3.path()).filePath(QStringLiteral("lsw-agent.exe"))),
           "nothing of the bundle is on the ISO anywhere else");
 
-    // No bundle, or one that could not be made, is refused, not half-staged:
-    // the guest would have no display after a full install.
     {
         QTemporaryDir staging4;
         PayloadInputs none;
@@ -252,15 +220,10 @@ int main() {
               "and so is one that could not be made, with its reason");
     }
 
-    // End to end: build a real ISO and read the answer file back out of
-    // it. This is the step that actually failed in the field — the file
-    // was present at the ISO root but zero bytes, so Windows Setup
-    // silently fell through to the interactive installer.
     QTemporaryDir iso_dir;
     PayloadInputs iso_inputs;
     iso_inputs.autounattend_xml = xml;
     iso_inputs.output_iso_path = QDir(iso_dir.path()).filePath("payload.iso");
-    // The bundle too: its files are the nested tree on the ISO.
     iso_inputs.bundle = bundle;
     QString build_error;
     const bool built = PayloadIsoBuilder::build(iso_inputs, &build_error);
@@ -270,9 +233,6 @@ int main() {
     check(built, "PayloadIsoBuilder::build() succeeds");
     check(QFileInfo(iso_inputs.output_iso_path).size() > 0, "ISO was written");
 
-    // Look for the answer file's CONTENT in the image, not just its
-    // name: a zero-length entry still has a name. The substituted
-    // computer name only exists if the rendered bytes were written.
     QFile iso{iso_inputs.output_iso_path};
     bool found_non_empty = false;
     if (iso.open(QIODevice::ReadOnly)) {

@@ -1,5 +1,7 @@
 #include "lsw/host/services/update_batch.hpp"
 
+#include "lsw/base/log.hpp"
+
 namespace lsw::host::services {
 
 namespace {
@@ -8,23 +10,22 @@ constexpr const char* kGuestResult = "C:\\ProgramData\\LSW\\update-result.json";
 
 constexpr const char* kStageRoot = "C:\\ProgramData\\LSW\\update\\";
 
-}  // namespace
+}
 
 std::string UpdateBatch::send(unsigned short port, const std::string& release,
                                 const GuestBundle::Contents& contents, bool force) {
+    LSW_DEBUG("update batch: {} files, port {}{}", contents.files.size(), port, force ? ", forced" : "");
     const std::string stage = kStageRoot + release.substr(0, 16);
     const std::string url = "http://10.0.2.2:" + std::to_string(port) + "/";
     std::string text = "@echo off\r\nsetlocal\r\n";
     text += "set STAGE=" + stage + "\r\n";
     text += "set LOG=" + std::string{kGuestLog} + "\r\n";
-    // A stage a running task uses is not removed under it.
+    text += "if not exist \"%LOG%\\..\" md \"%LOG%\\..\"\r\n";
     text += "schtasks /Query /TN lsw-update /FO CSV /NH 2>nul | findstr /i /c:Running >nul && exit /b "
             + std::to_string(kStillRunning) + "\r\n";
     text += "if exist \"%STAGE%\" rd /s /q \"%STAGE%\"\r\n";
     text += "md \"%STAGE%\"\r\n";
     const auto fetch = [&](const std::string& name, const std::string& to) {
-        // The file's index, not its path, in the log: a path may hold
-        // what batch reads as syntax inside a block.
         text += "curl.exe --fail -s -S -L --create-dirs -o \"%STAGE%\\" + to + "\" " + url + name
                 + " >> \"%LOG%\" 2>&1\r\n";
         text += "if errorlevel 1 (echo [manager] download of " + name + " failed>> \"%LOG%\" & exit /b "
@@ -36,7 +37,6 @@ std::string UpdateBatch::send(unsigned short port, const std::string& release,
     fetch("manifest.txt", "manifest.txt");
     fetch("shares.txt", "shares.txt");
 
-    // The task runs run.cmd, which runs the script with the stage and release.
     const std::string run = "powershell -NoProfile -ExecutionPolicy Bypass -File \"%STAGE%\\C\\ProgramData\\LSW\\"
                             "lsw-guest-update.ps1\" -Stage \"%STAGE%\" -Release " + release
                             + " -Version " + contents.version + (force ? " -Force" : "");
@@ -54,8 +54,6 @@ std::string UpdateBatch::send(unsigned short port, const std::string& release,
     return text;
 }
 
-// The file's text is not read; that the finished stamp is not the one from
-// before the run, and whether it says ok, is.
 std::string UpdateBatch::read_result(const std::string& finished_before) {
     std::string text = "@echo off\r\n";
     text += std::string{"if not exist \""} + kGuestResult + "\" exit /b " + std::to_string(kNoResult) + "\r\n";
@@ -71,6 +69,9 @@ std::string UpdateBatch::read_result(const std::string& finished_before) {
 
 
 std::optional<QString> UpdateBatch::send_failure(bool ok, int exit_code, const std::string& message) {
+    if (exit_code != 0 || !ok) {
+        LSW_WARN("update: the send script ended ok={} exit={}: {}", ok, exit_code, message);
+    }
     if (exit_code == kDownloadFailed) {
         return with_log(QStringLiteral("LSW's files could not be copied into Windows."));
     }
@@ -102,4 +103,4 @@ QString UpdateBatch::with_log(const QString& why) {
     return QStringLiteral("%1 %2 in Windows says more.").arg(why, QLatin1StringView(kGuestLog));
 }
 
-}  // namespace lsw::host::services
+}

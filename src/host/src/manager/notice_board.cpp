@@ -25,7 +25,6 @@ void NoticeBoard::post(const QString& key, bool critical, const QString& headlin
     connect(strip, &WarningStrip::dismissed, this, [this, key] { withdraw(key); });
     strips_.insert(key, strip);
     column_->insertWidget(0, strip);
-    // A child added to a board already on screen stays hidden until shown.
     strip->show();
     show();
 }
@@ -33,10 +32,9 @@ void NoticeBoard::post(const QString& key, bool critical, const QString& headlin
 void NoticeBoard::withdraw(const QString& key) {
     WarningStrip* strip = strips_.take(key);
     if (strip == nullptr) return;
-    // A Dismiss click is on the stack: the strip goes after it returns.
     strip->hide();
     strip->deleteLater();
     setVisible(!strips_.isEmpty());
 }
 
-}  // namespace lsw::host::manager
+}

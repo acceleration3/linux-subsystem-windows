@@ -50,4 +50,4 @@ QString DisplayRefresh::label(std::optional<quint32> millihz) {
     return QStringLiteral("%1.%2 Hz").arg(*millihz / 1000).arg(decimals);
 }
 
-}  // namespace lsw::host::config
+}

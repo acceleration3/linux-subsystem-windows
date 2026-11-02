@@ -7,4 +7,4 @@ QVBoxLayout* WizardPage::install_chrome(const QString& title, const QString& sub
     return chrome_.body;
 }
 
-}  // namespace lsw::host::wizard
+}

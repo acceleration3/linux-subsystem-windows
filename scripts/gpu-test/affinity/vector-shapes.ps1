@@ -1,4 +1,3 @@
-# Rectangle Tool: a rectangle dragged (default fill); Pen Tool: a curve of four clicks and a drag, back to its first node; Esc.
 Ready
 Click 344 1032 800
 Drag @(760,620, 1000,860) 15 15 1000

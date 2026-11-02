@@ -90,4 +90,4 @@ QString DisplayModes::property(const QStringList& list) {
     return list.join(QLatin1Char(','));
 }
 
-}  // namespace lsw::host::config
+}

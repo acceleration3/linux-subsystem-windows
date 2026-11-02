@@ -11,7 +11,7 @@ QString sub(QString s, const QString& key, const QString& value) {
     return s.replace(QStringLiteral("{{%1}}").arg(key), value);
 }
 
-}  // namespace
+}
 
 QString Autounattend::render(const AutounattendInputs& in) {
     QString out{embedded::kAutounattendTemplate};
@@ -31,8 +31,6 @@ QString Autounattend::render(const AutounattendInputs& in) {
                                    "\t\t\t\t</ProductKey>")
                         .arg(in.product_key));
     out = sub(out, "image_index", QString::number(in.image_index));
-    // The whole element or none of it: Setup has no way to be told
-    // "the default path" once a <Path> is present.
     out = sub(out, "install_from_path",
               in.install_from_path.isEmpty()
                   ? QString{}
@@ -42,4 +40,4 @@ QString Autounattend::render(const AutounattendInputs& in) {
     return out;
 }
 
-}  // namespace lsw::host::provision::install
+}

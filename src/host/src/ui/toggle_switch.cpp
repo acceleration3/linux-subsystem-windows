@@ -8,13 +8,11 @@
 namespace lsw::host::ui {
 
 namespace {
-
-// The design's pill: 34 by 19, a 13px knob with 3px of air either side.
 constexpr int kWidth = 34;
 constexpr int kHeight = 19;
 constexpr int kKnob = 13;
 
-}  // namespace
+}
 
 ToggleSwitch::ToggleSwitch(QWidget* parent) : QAbstractButton(parent) {
     setCheckable(true);
@@ -26,7 +24,7 @@ QSize ToggleSwitch::sizeHint() const {
     return {kWidth, kHeight};
 }
 
-void ToggleSwitch::paintEvent(QPaintEvent* /*event*/) {
+void ToggleSwitch::paintEvent(QPaintEvent* ) {
     QPainter painter{this};
     painter.setRenderHint(QPainter::Antialiasing, true);
 
@@ -52,4 +50,4 @@ void ToggleSwitch::paintEvent(QPaintEvent* /*event*/) {
     }
 }
 
-}  // namespace lsw::host::ui
+}

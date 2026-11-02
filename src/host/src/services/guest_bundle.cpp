@@ -26,18 +26,13 @@
 namespace lsw::host::services {
 
 namespace {
-
-// Where the update script and the payload ISO's tree put things.
 constexpr const char* kGuestUpdateScript = "C:\\ProgramData\\LSW\\lsw-guest-update.ps1";
 constexpr const char* kGuestVirtiofsDir = "C:\\ProgramData\\LSW\\virtiofs\\";
 constexpr const char* kGuestAv = "C:\\av\\";
 
-// The bundle as it is gathered: guest path to bytes.
 class Gathering {
 public:
-    // False, with ``error`` set, when the file cannot be read.
     bool add_file(const std::string& guest_path, const QString& host_path, QString* error) {
-        // The path crosses into a batch file that downloads it (GuestUpdate).
         if (guest_path.find_first_of("%\"") != std::string::npos) {
             *error = QStringLiteral("%1 cannot be a path in Windows").arg(QString::fromStdString(guest_path));
             return false;
@@ -55,7 +50,6 @@ public:
         files_[guest_path] = std::move(bytes);
     }
 
-    // Every plain file of ``dir`` (not its subdirectories) under ``guest_dir``.
     bool add_dir(const std::string& guest_dir, const QString& dir, QString* error) {
         const QDir d{dir};
         for (const QString& name : d.entryList(QDir::Files, QDir::Name)) {
@@ -76,27 +70,23 @@ private:
     return QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex().toStdString();
 }
 
-}  // namespace
+}
 
 GuestBundle::GuestBundle(config::Settings& settings, QObject* parent)
     : QObject(parent), settings_(settings) {}
 
 namespace {
-
-// The mount of the share with ``tag`` on ``host_path``, if the tag is one
-// Windows can mount.
 void add_mount(QVector<GuestBundle::Mount>& mounts, const QString& tag, const QString& host_path) {
     if (tag.size() != 1 || !tag.front().isLetter()) {
         LSW_WARN("shares: tag '{}' ({}) is not a drive letter; Windows does not mount it",
                  tag.toStdString(), host_path.toStdString());
         return;
     }
-    // The root of the host has no name of its own to go by.
     const QString folder = QFileInfo(QDir::cleanPath(host_path)).fileName();
     mounts.push_back({tag, tag.toUpper() + QLatin1Char(':'), folder.isEmpty() ? QStringLiteral("Host") : folder});
 }
 
-}  // namespace
+}
 
 QVector<GuestBundle::Mount> GuestBundle::mounts_of(const vm::DomainDescription& definition) {
     QVector<Mount> mounts;
@@ -109,7 +99,6 @@ QVector<GuestBundle::Mount> GuestBundle::mounts_of(const vm::DomainDescription& 
 QVector<GuestBundle::Mount> GuestBundle::mounts_of(const config::ManagerSettings& settings) {
     QVector<Mount> mounts;
     for (const auto& share : settings.host_shares()) {
-        // The tag is the drive letter, lower-cased, as the definition has it.
         add_mount(mounts, share.drive.left(1).toLower(), share.host_path);
     }
     return mounts;
@@ -138,7 +127,6 @@ void GuestBundle::build(const QVector<Mount>& mounts) {
     }
     building_ = true;
     const std::string shares = shares_argument(mounts).toStdString();
-    // Enumerating the GPUs loads Vulkan, so it is not done on this thread.
     (void)QtConcurrent::run([] {
         return AdapterNames{}.render(platform::HostGpus::enumerate());
     }).then(this, [this, shares](const QString& names) {
@@ -155,9 +143,6 @@ void GuestBundle::build(const QVector<Mount>& mounts) {
             finish(names);
             return;
         }
-        // The catalog, which keeps the last version it found for a GPU, so
-        // that a search that fails does not change the file and with it the
-        // release.
         auto* const catalog = new DriverCatalog({}, settings_.driver_versions_path(), this);
         connect(catalog, &DriverCatalog::completed, this, [catalog, finish](const QString& versioned) {
             catalog->deleteLater();
@@ -178,7 +163,6 @@ std::shared_ptr<const GuestBundle::Contents> GuestBundle::collect(const QString&
         return std::shared_ptr<const Contents>{contents};
     };
 
-    // Required.
     const QString agent = platform::AgentExePath::locate();
     if (agent.isEmpty()) {
         return fail(QStringLiteral("cannot find lsw-guest-agent.exe; set $LSW_AGENT_EXE or run "
@@ -216,7 +200,6 @@ std::shared_ptr<const GuestBundle::Contents> GuestBundle::collect(const QString&
         }
     }
 
-    // Optional: a missing one costs the guest that part, and says so.
     const QString mirror = platform::MirrorExePaths::guest();
     if (mirror.isEmpty()) {
         LSW_WARN("update: no guest window mirror found; the guest's is left as it is. Set "
@@ -245,11 +228,7 @@ std::shared_ptr<const GuestBundle::Contents> GuestBundle::collect(const QString&
         LSW_WARN("update: the shared-folder guest files: {}", error.toStdString());
     }
 
-    // Made here.
     if (!adapter_names.isEmpty()) {
-        // Sorted so that the order the GPUs were enumerated in does not
-        // change the release; provision.ps1 looks lines up by vendor and
-        // device.
         QStringList lines = adapter_names.split(QLatin1Char('\n'), Qt::SkipEmptyParts);
         lines.sort();
         gathering.add_bytes(std::string{kGuestAv} + "adapters.txt",
@@ -267,4 +246,4 @@ std::shared_ptr<const GuestBundle::Contents> GuestBundle::collect(const QString&
     return contents;
 }
 
-}  // namespace lsw::host::services
+}

@@ -1,24 +1,3 @@
-// Standalone recorder. Drives MicrosoftClient against the *real*
-// microsoft.com endpoints with ``set_record_directory`` enabled, and
-// dumps the five canonical responses (locale, visit, whitelist, skus,
-// download_url) to a directory.
-//
-// Edition IDs rotate on Microsoft's side (2229 used to be Win11 multi-
-// edition; today it's a Server preview). To stay current, the recorder
-// first calls ``IsoSourceFetcher`` to scrape the live list, picks the
-// first Win11 edition, and uses its ``product_edition_ids[0]``. An
-// explicit ``edition_id`` argv override skips the scrape.
-//
-// Usage:
-//   lsw_manager_microsoft_client_record <out_dir> [edition_id] [locale]
-//     out_dir     — directory to dump NN_<step>.bin files into
-//     edition_id  — optional Microsoft ProductEditionId override (skips
-//                    the live IsoSourceFetcher scrape)
-//     locale      — locale string for stage 1 (defaults to en-US)
-//
-// The dumped directory is what ``LSW_MICROSOFT_FIXTURE_DIR`` expects,
-// so the unit test can replay it deterministically.
-
 #include "lsw/host/provision/iso/windows_edition.hpp"
 #include "lsw/base/log.hpp"
 #include "lsw/base/logger.hpp"
@@ -86,17 +65,12 @@ int main(int argc, char** argv) {
     QObject::connect(&client, &lsw::host::provision::iso::MicrosoftClient::banned_detected, &client,
                      [&] { fail("Microsoft banned this IP / region"); });
 
-    // Hard timeout — Microsoft's CDN can hang quite a while on a bad
-    // route, but 60s is more than generous for a session that will
-    // succeed.
     QTimer::singleShot(60'000, &app, [&] {
         if (!done) {
             fail("timeout (60s) before pipeline completed");
         }
     });
 
-    // If no edition override, scrape one off microsoft.com first.
-    // Otherwise jump straight into the recorded pipeline.
     auto kick_off_initialize = [&] { client.initialize(locale); };
     if (chosen_edition_id != 0) {
         std::fprintf(stderr, "edition_id override: %d\n", chosen_edition_id);

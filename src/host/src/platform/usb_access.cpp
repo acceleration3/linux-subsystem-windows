@@ -9,13 +9,10 @@
 namespace lsw::host::platform {
 
 namespace {
-
-// pkexec's own words for the two ways the prompt ends without a rule: the
-// user is not allowed (126), or dismissed it or got the password wrong (127).
 constexpr int kNotAuthorized = 126;
 constexpr int kDismissed = 127;
 
-}  // namespace
+}
 
 UsbAccess::UsbAccess(QObject* parent) : QObject(parent) {}
 
@@ -37,7 +34,9 @@ bool UsbAccess::granting(int vendor, int product) const {
 
 void UsbAccess::done(const QString& k, int vendor, int product, bool ok, const QString& error) {
     granting_.remove(k);
-    if (!ok) {
+    if (ok) {
+        LSW_INFO("USB access for {} granted", k.toStdString());
+    } else {
         LSW_WARN("USB access for {}: {}", k.toStdString(), error.toStdString());
     }
     Q_EMIT finished(vendor, product, ok, error);
@@ -51,7 +50,6 @@ bool UsbAccess::grant(int vendor, int product) {
     granting_.insert(k);
     const QString pkexec = QStandardPaths::findExecutable(QStringLiteral("pkexec"));
     if (pkexec.isEmpty()) {
-        // Reported from the event loop, like every other answer.
         QMetaObject::invokeMethod(this, [this, k, vendor, product] {
             done(k, vendor, product, false,
                  QStringLiteral("pkexec is not installed; install polkit to allow access to this device"));
@@ -65,8 +63,6 @@ bool UsbAccess::grant(int vendor, int product) {
         }, Qt::QueuedConnection);
         return true;
     }
-    // The helper checks its arguments again as root; these are hex digits
-    // from our own integers, which is also what it requires.
     const QStringList arguments = {helper, QStringLiteral("%1").arg(vendor, 4, 16, QLatin1Char('0')),
                                    QStringLiteral("%1").arg(product, 4, 16, QLatin1Char('0'))};
     LSW_INFO("asking for access to USB {} through pkexec", k.toStdString());
@@ -81,6 +77,7 @@ bool UsbAccess::grant(int vendor, int product) {
     connect(process, &QProcess::finished, this,
             [this, process, k, vendor, product](int code, QProcess::ExitStatus status) {
                 const QString output = QString::fromLocal8Bit(process->readAll()).trimmed();
+                LSW_DEBUG("USB {}: the helper exited with code {}", k.toStdString(), code);
                 process->deleteLater();
                 if (status == QProcess::NormalExit && code == 0) {
                     done(k, vendor, product, true, QString{});
@@ -94,8 +91,9 @@ bool UsbAccess::grant(int vendor, int product) {
                          output.isEmpty() ? QStringLiteral("the helper failed (exit %1)").arg(code) : output);
                 }
             });
+    LSW_DEBUG("pkexec {} {}", pkexec.toStdString(), helper.toStdString());
     process->start(pkexec, arguments);
     return true;
 }
 
-}  // namespace lsw::host::platform
+}

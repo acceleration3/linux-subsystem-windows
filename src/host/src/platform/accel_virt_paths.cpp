@@ -9,15 +9,7 @@
 #include <utility>
 
 namespace lsw::host::platform {
-
-// Relative to the manager binary. The root build puts it at
-// ${build}/src/host/lsw-manager, with accel-virt's outputs at ${build};
-// an install puts it at <prefix>/bin/lsw-manager, with accel-virt's
-// under <prefix>/lib/lsw/accel-virt and <prefix>/share/lsw/guest.
-
 AccelVirtPaths::QemuTree AccelVirtPaths::qemu_tree() {
-    // A build tree keeps the binary one level down, in QEMU's own build
-    // directory; an install flattens it beside the executor.
     const QString build_binary = QStringLiteral("qemu/qemu-system-x86_64");
     const QString exe_dir = QCoreApplication::applicationDirPath();
     const QString named = qEnvironmentVariable("LSW_AV_QEMU_BUILD");
@@ -58,13 +50,6 @@ QString AccelVirtPaths::qemu_module_dir() {
 }
 
 QString AccelVirtPaths::qemu_data_dir() {
-    // accel-virt configures QEMU with the default /usr/local prefix, so
-    // the data directory compiled into it is /usr/local/share/qemu. Run
-    // from its build tree it finds qemu-bundle/ beside itself instead;
-    // installed anywhere else it would find neither, and the first ROM
-    // it needs (the VGA BIOS during setup, efi-virtio.rom for the NIC)
-    // fails the start. The install puts that data in share/ beside the
-    // binary, and only an installed binary has one there.
     const QString binary = qemu_binary();
     if (binary.isEmpty()) {
         return {};
@@ -90,9 +75,6 @@ QString AccelVirtPaths::driver_tree() {
 }
 
 QString AccelVirtPaths::vulkan_loader(bool x86) {
-    // The x86 override keeps its _X86 suffix: it names one specific
-    // file, and a developer setting it is saying which build of that
-    // architecture to use.
     return x86 ? locate_build_artifact(
                      QStringLiteral("LSW_VULKAN_LOADER_X86"),
                      QStringLiteral(
@@ -105,4 +87,4 @@ QString AccelVirtPaths::vulkan_loader(bool x86) {
                      QStringLiteral("/../share/lsw/guest/loaders/x64/vulkan-1.dll"));
 }
 
-}  // namespace lsw::host::platform
+}

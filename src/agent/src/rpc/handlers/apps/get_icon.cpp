@@ -14,7 +14,7 @@
 namespace lsw::agent::rpc::handlers {
 
 struct GetIconHandler : RpcHandler {
-    nlohmann::json handle(const nlohmann::json& params, RpcContext& /*ctx*/) override {
+    nlohmann::json handle(const nlohmann::json& params, RpcContext& ) override {
         const auto path = Params{params, linkproto::cmd::kGetIcon}.require_string("path");
         return {{"icon_png_base64",
                  win::IconExtractor::from_executable(util::TextEncoding::to_wide(path))}};
@@ -26,6 +26,6 @@ struct GetIconHandler : RpcHandler {
     }
 };
 
-}  // namespace lsw::agent::rpc::handlers
+}
 
 LSW_REGISTER_RPC(lsw::agent::rpc::handlers::GetIconHandler, ::lsw::linkproto::cmd::kGetIcon)

@@ -8,12 +8,6 @@
 #include <cstdint>
 
 namespace lsw::agent::rpc::handlers {
-
-// ``uia_subscribe_lifecycle``: watch ``pid`` for window-opened /
-// window-closed events. Reply carries the subscription id the host
-// later passes to ``uia_unsubscribe``. Nothing cleans these up on
-// disconnect; the host is responsible for unsubscribing when it tears
-// down its mirrors.
 struct UiaSubscribeLifecycleHandler : RpcHandler {
     nlohmann::json handle(const nlohmann::json& params, RpcContext& ctx) override {
         const auto pid = Params{params, linkproto::cmd::kUiaSubscribeLifecycle}.require_pid();
@@ -21,12 +15,10 @@ struct UiaSubscribeLifecycleHandler : RpcHandler {
         return {{"ok", id != 0}, {"sub_id", id}};
     }
 
-    // Window handles, UI Automation and HKCU belong to the user's
-    // session: served by the session helper there.
     [[nodiscard]] Placement placement() const override { return Placement::UserSession; }
 };
 
-}  // namespace lsw::agent::rpc::handlers
+}
 
 LSW_REGISTER_RPC(lsw::agent::rpc::handlers::UiaSubscribeLifecycleHandler,
                  ::lsw::linkproto::cmd::kUiaSubscribeLifecycle)

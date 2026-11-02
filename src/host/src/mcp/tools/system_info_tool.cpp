@@ -22,4 +22,4 @@ nlohmann::json SystemInfoTool::call(const nlohmann::json&) {
     return ToolResult::from_reply(agent_.request(linkproto::cmd::kSystemInfo));
 }
 
-}  // namespace lsw::host::mcp
+}

@@ -207,7 +207,7 @@ void uploads(const std::filesystem::path& root) {
                         std::filesystem::directory_iterator{}) == 1,
           "service teardown cleans unfinished uploads");
 }
-}  // namespace
+}
 
 int main() {
     const auto root = std::filesystem::temp_directory_path() /
@@ -217,7 +217,6 @@ int main() {
     commands();
     installer_windows();
     uploads(root);
-    // Only the unique test-owned directory is removed.
     std::filesystem::remove_all(root);
     std::puts("upload and launch command tests passed");
 }

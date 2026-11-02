@@ -17,12 +17,8 @@
 namespace lsw::agent::rpc::handlers {
 
 namespace {
-
-// Off by less than this, the clock is left alone: the call itself takes
-// a moment, and Windows' own time service keeps it closer than this.
 constexpr std::int64_t kTolerance_ms = 2000;
 
-// Milliseconds between 1601 (FILETIME's epoch) and 1970.
 constexpr std::int64_t kEpochGap_ms = 11644473600000LL;
 
 std::int64_t now_ms() {
@@ -40,8 +36,6 @@ std::wstring current_zone() {
     return zone.TimeZoneKeyName;
 }
 
-// The zone Windows knows by ``name`` (its registry key: "GMT Standard
-// Time"), or nullopt.
 std::optional<DYNAMIC_TIME_ZONE_INFORMATION> find_zone(const std::wstring& name) {
     for (DWORD index = 0;; ++index) {
         DYNAMIC_TIME_ZONE_INFORMATION zone{};
@@ -82,20 +76,10 @@ void set_time(std::int64_t utc_ms) {
     }
 }
 
-}  // namespace
+}
 
-// {"time_zone": string, "utc_ms": int} -> {"time_zone_was": string,
-// "time_zone": string, "clock_off_ms": int, "clock_set": bool}
-//
-// Windows' time zone becomes ``time_zone``, the host's, and its clock the
-// host's ``utc_ms`` when it is more than two seconds off. The VM's RTC
-// runs on the host's local time and Windows reads it in its own zone, so
-// in another zone the clock is hours off from every boot until the time
-// service corrects it; in the host's it is right from the start. The
-// zone is set first, which leaves the UTC time as it was; the clock
-// after, against the host's.
 struct SetClockHandler : RpcHandler {
-    nlohmann::json handle(const nlohmann::json& params, RpcContext& /*ctx*/) override {
+    nlohmann::json handle(const nlohmann::json& params, RpcContext& ) override {
         const std::string zone = params.value("time_zone", std::string{});
         if (zone.empty() || !params.contains("utc_ms") || !params["utc_ms"].is_number_integer()) {
             throw std::invalid_argument("set_clock takes time_zone and utc_ms");
@@ -122,6 +106,6 @@ struct SetClockHandler : RpcHandler {
     }
 };
 
-}  // namespace lsw::agent::rpc::handlers
+}
 
 LSW_REGISTER_RPC(lsw::agent::rpc::handlers::SetClockHandler, ::lsw::linkproto::cmd::kSetClock)

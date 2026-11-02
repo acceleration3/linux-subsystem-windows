@@ -134,8 +134,7 @@ payload ISO, and running `provision.ps1` in the guest.
 
 Anything the Linux manager and the Windows guest agent must agree on —
 the envelope framing and the RPC command names and event topics —
-lives in `src/linkproto/`, which BOTH toolchains compile, and is
-specified in [docs/link-protocol.md](docs/link-protocol.md). Change it
+lives in `src/linkproto/`, which BOTH toolchains compile. Change it
 there, once; do not restate a constant on either side. The framing is
 covered by `lsw_linkproto_test`, so a divergence is a failed test
 rather than a garbled frame at runtime.
@@ -157,10 +156,5 @@ it with the connection's `EventPump` in `host_endpoint.cpp`.
 ## Where to find what
 
 - [README.md](README.md#layout) — the source tree, one line per module.
-- Each module's `CMakeLists.txt` header comment states what belongs in it
-  and what does not.
-- [docs/link-protocol.md](docs/link-protocol.md) — the normative
-  host↔guest spec.
-- [docs/gpu-testing.md](docs/gpu-testing.md) — running every graphics
-  suite and the app/game trace suites on every GPU of the test machines
-  (`scripts/gpu-test/`).
+- `scripts/gpu-test/gpu-test.sh` — runs every graphics suite and the
+  app/game trace suites on every GPU of the test machines.

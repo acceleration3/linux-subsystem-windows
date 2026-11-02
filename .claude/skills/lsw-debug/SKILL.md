@@ -24,7 +24,7 @@ The agent's structured log stream as the manager has accumulated it. Bounded rin
 - `host_endpoint: cmd=X threw: <msg>` — agent-side exception.
 - `host_endpoint: peer ... EOF` / `connection accepted from` — connection churn (reconnects).
 - Module-specific lines (`installer:`, `console:`, `app_catalog:`) for that subsystem's state.
-- `sessions:` — the session helpers (one `lsw-agent.exe --session` per logged-on user, started by the service): started/connected/went away/relaunching, and while the install gate holds `:5102` closed, `still waiting for a usable desktop`. Lines prefixed `session N:` are that helper's own log, forwarded (its pre-connection log is `C:\ProgramData\LSW\agent-session-N.log`).
+- `sessions:` — the session helpers (one `lsw-agent.exe --session` per logged-on user, started by the service): started/connected/went away/relaunching, and while the install gate holds `:5102` closed, `still waiting for a usable desktop`. Records with source `agent session N` are that helper's own log, forwarded (its pre-connection log is `C:\ProgramData\LSW\logs\agent-session-N.log`).
 - `service:` — SCM start/stop.
 
 ### `screenshot` (no args)

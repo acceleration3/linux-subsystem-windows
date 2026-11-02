@@ -47,7 +47,7 @@ void dump_node(IUIAutomationTreeWalker* walker, IUIAutomationElement* element, i
     out = std::move(node);
 }
 
-}  // namespace
+}
 
 nlohmann::json TreeDumper::dump(const UiaWindow& window, int max_depth) {
     nlohmann::json out = nlohmann::json::object();
@@ -63,4 +63,4 @@ nlohmann::json TreeDumper::dump(const UiaWindow& window, int max_depth) {
     return out;
 }
 
-}  // namespace lsw::agent::uia
+}

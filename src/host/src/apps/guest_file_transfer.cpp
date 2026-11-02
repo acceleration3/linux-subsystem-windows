@@ -46,8 +46,6 @@ bool GuestFileTransfer::stop_if_cancelled() {
 }
 
 void GuestFileTransfer::cancel() {
-    // The outstanding callback observes this before sending another chunk
-    // or publishing success. In particular, a late begin reply is aborted.
     cancel_requested_ = true;
 }
 
@@ -153,4 +151,4 @@ void GuestFileTransfer::next_chunk() {
         });
 }
 
-}  // namespace lsw::host::apps
+}

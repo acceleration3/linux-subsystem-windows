@@ -1,20 +1,3 @@
-# trace-replay.ps1 -Config PASS.json : one replay pass, run in the console session.
-# The config (written by trace_suite.py) names the program, its argument line,
-# its working directory, extra environment, where standard output and error go,
-# where the result goes, a timeout and how often to sample memory:
-#   {"exe", "args", "cwd", "env": {}, "stdout", "stderr", "result", "timeout_s", "sample_ms", "modules", "linger_s",
-#    "share_console"}
-# linger_s: the program is closed (its main window, then killed) after this
-# long, and "closed" says so - for a retracer told to keep its window (-w).
-# share_console: the program runs in this script's console (hidden, as the
-# desktop task starts it) instead of a new one of its own - gfxrecon-replay
-# ends with "Press any key to close this window" in a console only it holds,
-# and waited there until the pass timed out.
-# The result is JSON: exit_code, seconds, timed_out, error, samples as
-# [seconds, private bytes, working set] while the process ran, and the loaded
-# DLLs whose names match the "modules" pattern (which driver it really used).
-# A 32-bit replayer is watched from the 32-bit PowerShell: a 64-bit one does
-# not see a WOW64 process's DLLs.
 param([Parameter(Mandatory = $true)][string]$Config)
 $ErrorActionPreference = 'Stop'
 $c = Get-Content -Raw -LiteralPath $Config | ConvertFrom-Json
@@ -44,8 +27,6 @@ try {
     $copies = @($process.StandardOutput.BaseStream.CopyToAsync($out), $process.StandardError.BaseStream.CopyToAsync($err))
     $interval = if ($c.sample_ms) { [int]$c.sample_ms } else { 500 }
     $nextSample = 0.0
-    # The DLLs are looked at every 20 ms until a driver shows (a replay of a
-    # few frames is over in a fraction of a second), then every 5 s.
     $driverSeen = $false
     while (-not $process.WaitForExit($(if ($driverSeen) { $interval } else { 20 }))) {
         try {
@@ -66,7 +47,6 @@ try {
             }
         } catch { }
         if ($c.linger_s -and $watch.Elapsed.TotalSeconds -gt [double]$c.linger_s -and -not $result.closed) {
-            # A pass asked to stay open (a retracer's -w) is closed once looked at.
             $result.closed = $true
             [void]$process.CloseMainWindow()
             if (-not $process.WaitForExit(5000)) { try { $process.Kill() } catch { } }

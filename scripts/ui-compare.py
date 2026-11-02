@@ -22,8 +22,6 @@ import tempfile
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 DESIGN = ROOT / "docs" / "design" / "lsw-ui.html"
 
-# Each screen: the app's screenshot basename, the design view id, and the
-# size the design frame is specified at.
 SCREENS = [
     ("manager-01-overview", "m-main", 1000, 700),
     ("manager-02-console", "m-console", 1000, 660),
@@ -45,6 +43,7 @@ SCREENS = [
     ("dialog-5-starting", "m-splash", 440, 560),
     ("dialog-6-open-document", "m-opendoc", 560, 290),
     ("dialog-7-update", "m-update", 520, 470),
+    ("dialog-8-collect-logs", "m-collect", 560, 420),
 ]
 
 
@@ -53,7 +52,6 @@ def run(cmd, **kw):
 
 
 def capture_design(out_dir):
-    """One PNG per design view, rendered headless."""
     firefox = shutil.which("firefox")
     if firefox is None:
         sys.exit("firefox is needed to render the design")
@@ -93,8 +91,6 @@ def compose(design_dir, app_dir, out_dir, wanted):
         if not design.exists() or not app.exists():
             continue
         target = out_dir / f"{name}.png"
-        # Same height, a gap between, and a label over each half so the
-        # pair is readable on its own.
         run(["magick",
              "(", str(design), "-resize", "x760>", "-background", "#0b0c10",
              "-gravity", "north", "-splice", "0x28",

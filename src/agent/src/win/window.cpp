@@ -14,17 +14,6 @@
 namespace lsw::agent::win {
 
 namespace {
-
-// The window's frame rect: the DWM extended frame bounds (the visible
-// window, drop shadow excluded), falling back to GetWindowRect.
-//
-// This one rectangle is the whole coordinate system. The WGC capture
-// texture IS this rect — measured, not assumed: a restored Notepad
-// captures 667x389 against a 667x389 frame, a maximized one 1280x754
-// against 1280x754, a maximized Photoshop 1296x768 against 1296x768,
-// while GetWindowRect disagrees with all three. So enumeration, props,
-// input injection and capture all measure from here and need no
-// conversion between them.
 RECT frame_rect_of(HWND hwnd) {
     RECT fr{};
     if (FAILED(::DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &fr, sizeof(fr))) ||
@@ -39,26 +28,15 @@ BOOL CALLBACK enum_proc(HWND hwnd, LPARAM lparam) {
     if (!::IsWindowVisible(hwnd)) {
         return TRUE;
     }
-    // DWM-cloaked windows are "visible" per IsWindowVisible but not
-    // actually shown — UWP/packaged apps keep many such ghost
-    // top-levels. Capturing them spawns dead black mirrors.
     int cloaked = 0;
     if (::DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked)) == S_OK &&
         cloaked != 0) {
         return TRUE;
     }
-    // NOTE: we deliberately do NOT filter by title or WS_EX_TOOLWINDOW
-    // anymore. Menus (class "#32768"), combo-box drop-downs
-    // ("ComboLbox") and modern WinUI flyouts are title-less and often
-    // tool windows — the old filter dropped every one of them, which
-    // is exactly why menus weren't captured. The AppWindowWatcher
-    // scopes mirrors to the launched app's PID, so permissive
-    // top-level enumeration here only ever surfaces that app's own
-    // popups, not unrelated system chrome.
     wchar_t cls[64] = {};
     ::GetClassNameW(hwnd, cls, 64);
     if (::lstrcmpiW(cls, L"tooltips_class32") == 0) {
-        return TRUE;  // pure tooltips: pure flicker, no value mirroring
+        return TRUE;
     }
 
     int title_len = ::GetWindowTextLengthW(hwnd);
@@ -71,42 +49,24 @@ BOOL CALLBACK enum_proc(HWND hwnd, LPARAM lparam) {
     DWORD pid = 0;
     ::GetWindowThreadProcessId(hwnd, &pid);
     const std::wstring image = ProcessInfo::image_path(pid);
-    // Skip our own agent process so we don't capture ourselves
-    // (mostly relevant when running --console rather than as a
-    // service, but cheap to filter unconditionally).
     if (!image.empty() && image == ProcessInfo::self_path()) {
         return TRUE;
     }
 
-    // FULL-WINDOW model: the mirror shows the whole window (title bar,
-    // menu bar, borders) — not just the client area — so classic
-    // menu-bar / system menus, which open in the NON-client region,
-    // line up. Origin + size both come from the frame rect, so
-    // enumeration, capture, input and placement all agree.
     const RECT fr = frame_rect_of(hwnd);
     if (fr.right - fr.left <= 0 || fr.bottom - fr.top <= 0) {
-        return TRUE;  // zero-area placeholder/ghost top-level
+        return TRUE;
     }
     DiscoveredWindow w;
     w.hwnd = reinterpret_cast<std::uintptr_t>(hwnd);
-    // GA_ROOTOWNER walks BOTH the parent and owner chains to the
-    // top-level "owned root" — which is what we need to associate a
-    // popup with the right tracked window. GW_OWNER alone returns the
-    // direct owner, which for things like ComboLBox dropdowns is the
-    // combobox CHILD control (not a top-level we mirror) → the popup
-    // mirror would then have no tracked owner and fall through to
-    // the main-window path (decorated frame + compositor-chosen
-    // position). GA_ROOTOWNER returns the actual top-level instead.
-    // For a window with no owner it returns the window itself; treat
-    // that as "no owner".
     HWND root = ::GetAncestor(hwnd, GA_ROOTOWNER);
     w.owner = (root != nullptr && root != hwnd) ? reinterpret_cast<std::uintptr_t>(root) : 0;
     w.pid = static_cast<std::uint32_t>(pid);
     w.title = util::TextEncoding::to_utf8(title);
     w.exe_path = util::TextEncoding::to_utf8(image);
-    w.client_w = fr.right - fr.left;  // now the WINDOW size
+    w.client_w = fr.right - fr.left;
     w.client_h = fr.bottom - fr.top;
-    w.screen_x = fr.left;  // now the WINDOW origin
+    w.screen_x = fr.left;
     w.screen_y = fr.top;
     w.minimized = ::IsIconic(hwnd) != FALSE;
     w.maximized = ::IsZoomed(hwnd) != FALSE;
@@ -115,7 +75,7 @@ BOOL CALLBACK enum_proc(HWND hwnd, LPARAM lparam) {
     return TRUE;
 }
 
-}  // namespace
+}
 
 bool Window::system_command(std::uintptr_t hwnd_raw, const std::string& command) {
     auto* hwnd = reinterpret_cast<HWND>(hwnd_raw);
@@ -132,10 +92,6 @@ bool Window::system_command(std::uintptr_t hwnd_raw, const std::string& command)
     } else {
         return false;
     }
-    // Posted, not sent: SC_MINIMIZE and friends run an animation and a
-    // full layout pass inside the target's message loop, and the RPC
-    // thread has no reason to wait for that — nor to hang behind an
-    // application that is busy.
     const BOOL ok = ::PostMessageW(hwnd, WM_SYSCOMMAND, sc, 0);
     LSW_AGENT_INFO("window_command: {} hwnd={} {}", command, hwnd_raw,
                    ok != FALSE ? "ok" : "FAILED");
@@ -148,9 +104,6 @@ bool Window::close_window(std::uintptr_t hwnd_raw) {
         LSW_AGENT_WARN("window_capture: close_window invalid hwnd={}", hwnd_raw);
         return false;
     }
-    // PostMessage (not SendMessage) so we don't block on the target
-    // window's message loop — the app processes WM_CLOSE on its own
-    // schedule, possibly putting up a save-changes dialog.
     const bool ok = ::PostMessageW(hwnd, WM_CLOSE, 0, 0) != FALSE;
     LSW_AGENT_INFO("window_capture: close_window hwnd={} {}", hwnd_raw,
                    ok ? "posted" : "post FAILED");
@@ -158,14 +111,9 @@ bool Window::close_window(std::uintptr_t hwnd_raw) {
 }
 
 std::vector<DiscoveredWindow> Window::enumerate() {
-    // Only meaningful inside the user's session: from the service
-    // (session 0) EnumWindows sees session 0's windows, not the user's.
-    // list_windows is therefore a UserSession command — the service
-    // forwards it to the session helper, which calls this.
     std::vector<DiscoveredWindow> out;
     ::EnumWindows(&enum_proc, reinterpret_cast<LPARAM>(&out));
-    return out;  // no per-call log: enumerate runs at the watcher poll
-                 // rate (now ~50 Hz) — logging it floods the ring.
+    return out;
 }
 
-}  // namespace lsw::agent::win
+}

@@ -16,4 +16,4 @@ win::ComPtr<IUIAutomationElement> UiaWindow::find(const std::string& selector) c
                                        util::TextEncoding::to_wide(selector));
 }
 
-}  // namespace lsw::agent::uia
+}

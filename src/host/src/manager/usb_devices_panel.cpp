@@ -30,11 +30,8 @@ constexpr int kColWhere = 1;
 constexpr int kColAlways = 2;
 constexpr int kColAction = 3;
 
-// What a cell widget is, so focus can be put back on the same one after a
-// rebuild.
 constexpr const char* kFocusKey = "usbFocus";
 
-// Centred at its own height, as the adapter table does its combos.
 QWidget* held(QWidget* inner) {
     auto* holder = new QWidget;
     auto* line = new QHBoxLayout(holder);
@@ -51,7 +48,7 @@ QPushButton* action_button(const QString& text, bool enabled) {
     return button;
 }
 
-}  // namespace
+}
 
 UsbDevicesPanel::UsbDevicesPanel(services::StatusHub& status, services::UsbPassthrough& usb,
                                  QWidget* parent)
@@ -72,7 +69,6 @@ UsbDevicesPanel::UsbDevicesPanel(services::StatusHub& status, services::UsbPasst
     table_->setProperty("controls", true);
     auto* head = table_->horizontalHeader();
     head->setSectionResizeMode(kColDevice, QHeaderView::Stretch);
-    // Fixed: a column of cell widgets is not sized by what is in it.
     for (const int col : {kColWhere, kColAlways, kColAction}) {
         head->setSectionResizeMode(col, QHeaderView::Fixed);
     }
@@ -128,7 +124,6 @@ bool UsbDevicesPanel::confirm_input_device(const UsbStatus::Device& device) {
 }
 
 bool UsbDevicesPanel::confirm_access(const UsbStatus::Device& device) {
-    // The rule is per kind of device and the helper's prompt asks once for it.
     QString text = QStringLiteral("Letting LSW open %1 (%2) asks for your password, and applies to "
                                   "every device of this kind from now on.")
                        .arg(device.name, device.type_id());
@@ -143,7 +138,6 @@ bool UsbDevicesPanel::confirm_access(const UsbStatus::Device& device) {
 void UsbDevicesPanel::rebuild() {
     const UsbStatus& snapshot = status_.usb();
 
-    // The same control focused again afterwards, and the table where it was.
     QString focused_key;
     QString focused_part;
     if (QWidget* focus = QApplication::focusWidget(); focus != nullptr && table_->isAncestorOf(focus)) {
@@ -153,7 +147,6 @@ void UsbDevicesPanel::rebuild() {
     const int scrolled = table_->verticalScrollBar()->value();
 
     if (!snapshot.read) {
-        // Not read yet is not "nothing plugged in".
         table_->setRowCount(1);
         table_->setItem(0, kColDevice, new QTableWidgetItem(QStringLiteral("Reading the USB bus")));
         for (int col = kColWhere; col <= kColAction; ++col) {
@@ -197,7 +190,6 @@ void UsbDevicesPanel::rebuild() {
             problem->setProperty(Theme::Tone::kProperty, Theme::Tone::kBad);
             problem->setToolTip(error);
             problem->setMaximumWidth(150);
-            // Full text in the tooltip; the row keeps its height.
             problem->setText(problem->fontMetrics().elidedText(error, Qt::ElideRight, 150));
             place_column->addWidget(problem);
         }
@@ -208,13 +200,10 @@ void UsbDevicesPanel::rebuild() {
         always->setChecked(device.always);
         always->setProperty(kFocusKey, QStringLiteral("always"));
         always->setProperty("usbKey", device.key());
-        // "Pass it to the guest whenever it is plugged in and the guest is running."
         always->setToolTip(QStringLiteral("Pass it to the guest whenever it is plugged in and "
                                           "the guest is running"));
         connect(always, &QAbstractButton::clicked, this,
                 [this, identity, device](bool on) {
-                    // Queued: the setting's change rebuilds the table this
-                    // switch is in.
                     if (on && device.is_hid && !confirm_input_device(device)) {
                         QMetaObject::invokeMethod(this, &UsbDevicesPanel::rebuild, Qt::QueuedConnection);
                         return;
@@ -288,4 +277,4 @@ void UsbDevicesPanel::rebuild() {
                            : QStringLiteral("Start the guest to pass a device."));
 }
 
-}  // namespace lsw::host::manager
+}

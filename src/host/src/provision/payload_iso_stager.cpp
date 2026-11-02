@@ -29,9 +29,6 @@ void PayloadIsoStager::build(const config::VmRecord& record, const PipelineInput
     answers.user_name = inputs.user_name;
     answers.user_password = inputs.user_password;
     answers.image_index = inputs.image_index;
-    // The key has to be the installed edition's, or Setup stops on its
-    // product key page. An edition the table does not know gets none,
-    // and Setup asks: better than a key that cannot match.
     if (inputs.edition_id.isEmpty()) {
         answers.product_key = install::ProductKeys::fallback();
     } else {
@@ -43,10 +40,7 @@ void PayloadIsoStager::build(const config::VmRecord& record, const PipelineInput
     }
     LSW_INFO("provision: edition {}, product key {}",
              inputs.edition_id.isEmpty() ? std::string{"not read"} : inputs.edition_id.toStdString(),
-             answers.product_key.isEmpty() ? std::string{"none"} : answers.product_key.toStdString());
-    // Setup runs in a language the medium carries or not at all: named one
-    // it lacks, it stops on its language page. The one picked, else the
-    // medium's default, else Setup's own default.
+             answers.product_key.isEmpty() ? "none" : "set");
     answers.locale = inputs.language;
     if (answers.locale.isEmpty()) {
         QString why;
@@ -68,27 +62,17 @@ void PayloadIsoStager::build(const config::VmRecord& record, const PipelineInput
         answers.timezone = QStringLiteral("UTC");
     }
     LSW_INFO("provision: time zone {}", answers.timezone.toStdString());
-    // install_from_path stays empty, and deliberately: the trimmed
-    // image IS the install.wim on the media being booted, so Setup's
-    // own default is already the right answer. A <Path> here would name
-    // the same file by a route WinPE cannot resolve that early.
 
-    // Register a Dolphin bookmark for the guest's C$ share via KIO's
-    // userspace smb:// worker. No kernel cifs mount, so no junction
-    // auto-submount pollution in Dolphin's Remote sidebar — one click
-    // opens the guest's C:\ live.
     (void)platform::DolphinPlaces::register_windows_bookmark(inputs.user_name,
                                                              inputs.user_password);
 
-    // The release the guest is installed with: what an update would ship now,
-    // with the shares the machine will have. Built beside the GUI thread; the
-    // answer file waits for it because it names the release.
     const auto mounts = services::GuestBundle::mounts_of(manager_settings_);
     auto* const once = new QObject(this);
     connect(&bundle_, &services::GuestBundle::built, once,
             [this, once, answers](const std::shared_ptr<const services::GuestBundle::Contents>& contents) mutable {
                 once->deleteLater();
                 if (!contents->error.isEmpty()) {
+                    LSW_WARN("provision: the guest bundle failed: {}", contents->error.toStdString());
                     Q_EMIT failed(QStringLiteral("LSW's files for Windows could not be put together: %1. "
                                                  "The guest's only display adapter needs its driver, so "
                                                  "there is no installing without them.")
@@ -109,24 +93,25 @@ void PayloadIsoStager::build(const config::VmRecord& record, const PipelineInput
 }
 
 void PayloadIsoStager::build_iso(install::PayloadInputs payload) {
-    // libisofs writes hundreds of megabytes; off the GUI thread. The
-    // continuation is dropped if the stager is gone by the time it lands.
     struct Outcome {
         bool ok = false;
         QString error;
     };
 
+    LSW_DEBUG("provision: building the payload ISO at {}", payload.output_iso_path.toStdString());
     (void)QtConcurrent::run([payload] {
         Outcome outcome;
         outcome.ok = install::PayloadIsoBuilder::build(payload, &outcome.error);
         return outcome;
     }).then(this, [this, path = payload.output_iso_path](const Outcome& outcome) {
         if (!outcome.ok) {
+            LSW_WARN("provision: the payload ISO failed: {}", outcome.error.toStdString());
             Q_EMIT failed(QStringLiteral("payload ISO build failed: %1").arg(outcome.error));
             return;
         }
+        LSW_INFO("provision: payload ISO written to {}", path.toStdString());
         Q_EMIT finished(path);
     });
 }
 
-}  // namespace lsw::host::provision
+}

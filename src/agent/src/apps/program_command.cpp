@@ -21,14 +21,12 @@ ProgramCommand::DocumentCommand ProgramCommand::split_for_document(const std::ws
     if (out.program.empty()) {
         return out;
     }
-    // What follows the program: past its closing quote when it had one.
     std::size_t at = out.program.size();
     if (!command_line.empty() && command_line.front() == L'"') {
         at += 2;
     }
     const std::wstring rest = at <= command_line.size() ? command_line.substr(at) : std::wstring{};
 
-    // Words, a quoted one kept whole and with its quotes.
     std::vector<std::wstring> words;
     std::wstring word;
     bool quoted = false;
@@ -62,4 +60,4 @@ ProgramCommand::DocumentCommand ProgramCommand::split_for_document(const std::ws
     return out;
 }
 
-}  // namespace lsw::agent::apps
+}

@@ -50,8 +50,6 @@ std::optional<std::wstring> RegKey::read_string(const wchar_t* name) const {
     if (rc != ERROR_SUCCESS) {
         return std::nullopt;
     }
-    // Registry strings may or may not carry their terminator, and may
-    // carry several.
     while (!buf.empty() && buf.back() == L'\0') {
         buf.pop_back();
     }
@@ -68,7 +66,6 @@ std::vector<std::wstring> RegKey::read_strings(const wchar_t* name) const {
     if (rc != ERROR_SUCCESS || type != REG_MULTI_SZ || size == 0) {
         return {};
     }
-    // Room for the two terminators a value written without them lacks.
     std::wstring buf(size / sizeof(wchar_t) + 2, L'\0');
     rc = ::RegQueryValueExW(key_.get(), name, nullptr, nullptr, reinterpret_cast<BYTE*>(buf.data()),
                             &size);
@@ -107,7 +104,6 @@ long RegKey::delete_value(const wchar_t* name) const {
 
 std::vector<std::wstring> RegKey::subkey_names() const {
     std::vector<std::wstring> names;
-    // 255 characters is the registry's own limit on a key name.
     wchar_t name[256];
     for (DWORD index = 0;; ++index) {
         DWORD length = static_cast<DWORD>(std::size(name));
@@ -125,7 +121,6 @@ std::vector<std::wstring> RegKey::subkey_names() const {
 
 std::vector<std::wstring> RegKey::value_names() const {
     std::vector<std::wstring> names;
-    // 16383 characters is the registry's own limit on a value name.
     std::wstring name(16384, L'\0');
     for (DWORD index = 0;; ++index) {
         DWORD length = static_cast<DWORD>(name.size());
@@ -141,4 +136,4 @@ std::vector<std::wstring> RegKey::value_names() const {
     return names;
 }
 
-}  // namespace lsw::agent::win
+}

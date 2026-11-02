@@ -1,7 +1,3 @@
-// Add a store app: what the agent lists is shown with its icons, the
-// search narrows it by name or package family, and Add makes an entry
-// named by the application's ID. A fake agent answers list_store_apps.
-// ``--snapshot <dir>`` saves the dialog and the app grid as drawn.
 #include "lsw/host/apps/app_config_store.hpp"
 #include "lsw/host/apps/guest_app_launcher.hpp"
 #include "lsw/host/link/agent_rpc_client.hpp"
@@ -70,7 +66,7 @@ int shown(const QListWidget& list) {
     for (int row = 0; row < list.count(); ++row) rows += list.item(row)->isHidden() ? 0 : 1;
     return rows;
 }
-}  // namespace
+}
 
 int main(int argc, char** argv) {
     QApplication app(argc, argv);
@@ -187,8 +183,6 @@ int main(int argc, char** argv) {
         lsw::host::manager::AppListWidget grid(store, rpc, launcher);
         grid.resize(420, 240);
         grid.show();
-        // The fake agent refuses the activation; until it answers the tile
-        // is opening.
         launcher.launch(store.configs().front(), QString());
         QCoreApplication::processEvents();
         grid.grab().save(snapshots + QStringLiteral("/grid-opening.png"));

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The Resolve suite's captures (TRACES.md, "The Resolve suite"): each of
+"""The Resolve suite's captures: each of
 DaVinci Resolve's features below recorded in one Resolve session, its OpenCL
 through CLIntercept (system mode) as resolve/<feature>-cl and its OpenGL
 through apitrace's opengl32.dll wrapper as resolve/<feature>-gl, then both
@@ -31,10 +31,8 @@ from desk import Desk  # noqa: E402
 RESOLVE = "C:\\Program Files\\Blackmagic Design\\DaVinci Resolve\\Resolve.exe"
 KERNEL_CACHE = "%APPDATA%\\Blackmagic Design\\DaVinci Resolve\\Support\\DVIP\\Cache\\OpenCL.cache"
 PROJECT_TILE = (1046, 420)
-"""lsw-mimic in the project manager, the only project there."""
 RENDER_DIR = "C:\\av\\media\\resolve\\render"
 
-# Where things are, in desktop pixels.
 VIEWER = {"media": (1240, 380), "edit": (2180, 400), "color": (1440, 313), "fusion": (1290, 400),
           "fairlight": (1280, 300), "deliver": (1600, 400)}
 PRIMARIES_PALETTE = (295, 772)
@@ -49,21 +47,18 @@ EDIT_RULER_X = (1400, 2100)
 
 
 def play(page, seconds):
-    """Focus the page's viewer and play for `seconds`."""
     x, y = VIEWER[page]
     return [f"Click {x} {y}", "Start-Sleep -Milliseconds 500", "Press space",
             f"Start-Sleep -Milliseconds {int(seconds * 1000)}", "Press space"]
 
 
 def scrub():
-    """The Edit page's playhead dragged along the ruler and back."""
     left, right = EDIT_RULER_X
     return [f"Drag {left} {EDIT_RULER_Y} {right} {EDIT_RULER_Y} 60 40",
             f"Drag {right} {EDIT_RULER_Y} {left + 100} {EDIT_RULER_Y} 60 40"]
 
 
 def serial_nodes():
-    """Three serial nodes graded live: offset, contrast, gamma."""
     px, py = PRIMARIES_PALETTE
     ox, oy = OFFSET_WHEEL
     gx, gy = GAMMA_WHEEL
@@ -132,8 +127,6 @@ FEATURES = {
     "fx-sharpen": dict(timeline="fx-sharpen", page="color", steps=COLOR_PLAY,
                        title="the Color page: the Blur palette's Sharpen (radius lowered) on a node, played 3 s",
                        how="timeline fx-sharpen (resolve-grades/fx-sharpen.drx), viewer clicked, Space, 3 s, Space"),
-    # Not while playing: on avgpu, playback with the scopes showing made Resolve register a new GL texture for
-    # OpenCL every frame (its GLsyncs stop answering past 256 per context) and hit "Your GPU memory is full".
     "scopes": dict(timeline="grade", page="color", steps=scopes(),
                    title="the Color page's scopes over the graded clip's first frame: waveform, vectorscope, "
                          "histogram, CIE chromaticity, parade",

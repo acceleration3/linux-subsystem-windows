@@ -17,8 +17,6 @@
 namespace lsw::agent::rpc::handlers {
 
 namespace {
-
-// One of the shell's answers about a file type, empty when it has none.
 std::wstring associated(ASSOCSTR what, const std::wstring& extension) {
     DWORD length = 0;
     const ASSOCF flags = ASSOCF_NOTRUNCATE | ASSOCF_REMAPRUNDLL;
@@ -37,19 +35,12 @@ std::wstring associated(ASSOCSTR what, const std::wstring& extension) {
     return text;
 }
 
-}  // namespace
+}
 
-// ``file_handler``: the program Windows opens a file with.
-//
-//   params: path (a Windows path, or just an extension), session?
-//   reply:  {exe_path | aumid, name}; an error when nothing is registered
-//
-// Asked in the user's session because the answer is the user's: their
-// choice of default overrides the machine's.
 struct FileHandlerHandler : RpcHandler {
     [[nodiscard]] Placement placement() const override { return Placement::UserSession; }
 
-    nlohmann::json handle(const nlohmann::json& params, RpcContext& /*ctx*/) override {
+    nlohmann::json handle(const nlohmann::json& params, RpcContext& ) override {
         const std::wstring path = util::TextEncoding::to_wide(
             Params{params, linkproto::cmd::kFileHandler}.require_string("path"));
         const auto dot = path.find_last_of(L'.');
@@ -61,16 +52,11 @@ struct FileHandlerHandler : RpcHandler {
         const std::wstring extension = util::WideString::lower(path.substr(dot));
 
         const std::wstring name = associated(ASSOCSTR_FRIENDLYAPPNAME, extension);
-        // A packaged handler has an application ID of the form
-        // family!application; any other handler's is not one.
         if (const std::wstring aumid = associated(ASSOCSTR_APPID, extension);
             aumid.find(L'!') != std::wstring::npos) {
             return {{"aumid", util::TextEncoding::to_utf8(aumid)},
                     {"name", util::TextEncoding::to_utf8(name)}};
         }
-        // The verb's command line says what comes before the document: a
-        // .jar is opened by ``java.exe -jar "%1"``, and the program alone
-        // would start java with a document it takes for a class name.
         const auto command = apps::ProgramCommand::split_for_document(
             associated(ASSOCSTR_COMMAND, extension));
         std::wstring exe = command.program.empty() ? associated(ASSOCSTR_EXECUTABLE, extension) : command.program;
@@ -79,13 +65,9 @@ struct FileHandlerHandler : RpcHandler {
                                      util::TextEncoding::to_utf8(extension) + " files");
         }
         if (util::WideString::iends_with(exe, L"\\rundll32.exe") || util::WideString::lower(exe) == L"rundll32.exe") {
-            // Opened by a DLL's entry point, which no command line of ours
-            // can reach with a path.
             throw std::runtime_error(util::TextEncoding::to_utf8(extension) +
                                      " files are opened by rundll32, which cannot be asked to open a file from here");
         }
-        // What Windows falls back to for a type nothing handles: its picker,
-        // whose choice starts a process no mirror follows.
         if (util::WideString::iends_with(exe, L"\\openwith.exe") || util::WideString::lower(exe) == L"openwith.exe") {
             throw std::runtime_error("no program is registered for " +
                                      util::TextEncoding::to_utf8(extension) + " files");
@@ -103,6 +85,6 @@ struct FileHandlerHandler : RpcHandler {
     }
 };
 
-}  // namespace lsw::agent::rpc::handlers
+}
 
 LSW_REGISTER_RPC(lsw::agent::rpc::handlers::FileHandlerHandler, ::lsw::linkproto::cmd::kFileHandler)

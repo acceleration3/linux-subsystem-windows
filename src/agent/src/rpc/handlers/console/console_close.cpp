@@ -20,6 +20,6 @@ struct ConsoleCloseHandler : RpcHandler {
     }
 };
 
-}  // namespace lsw::agent::rpc::handlers
+}
 
 LSW_REGISTER_RPC(lsw::agent::rpc::handlers::ConsoleCloseHandler, ::lsw::linkproto::cmd::kConsoleClose)

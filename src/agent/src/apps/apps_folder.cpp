@@ -15,10 +15,6 @@
 namespace lsw::agent::apps {
 
 namespace {
-
-// System.Link.TargetParsingPath and System.Link.Arguments, spelled out
-// here because propkey.h only declares them and the agent's link line has
-// nothing that defines them.
 constexpr PROPERTYKEY kLinkTargetParsingPath = {
     {0xb9b4b3fc, 0x2b51, 0x4a42, {0xb5, 0xd8, 0x32, 0x41, 0x46, 0xaf, 0xcf, 0x25}}, 2};
 constexpr PROPERTYKEY kLinkArguments = {
@@ -43,7 +39,7 @@ std::wstring string_property(IShellItem& item, const PROPERTYKEY& key) {
 }
 
 
-}  // namespace
+}
 
 std::vector<AppsFolderItem> AppsFolder::items() {
     win::ComPtr<IShellItem> folder;
@@ -58,10 +54,7 @@ std::vector<AppsFolderItem> AppsFolder::items() {
     for (;;) {
         win::ComPtr<IShellItem> item;
         const HRESULT next = enumerator->Next(1, item.GetAddressOf(), nullptr);
-        if (next == S_FALSE) break;  // the end
-        // Anything else that is not an item is the shell failing part way
-        // through: a shorter list taken for the whole one would have the
-        // manager forget applications that are still installed.
+        if (next == S_FALSE) break;
         if (next != S_OK) {
             throw std::runtime_error("the Start menu's apps could not be read to the end: " +
                                      win::ErrorText::hresult(next));
@@ -91,4 +84,4 @@ std::string AppsFolder::icon(IShellItem& item, int size) {
     return png;
 }
 
-}  // namespace lsw::agent::apps
+}

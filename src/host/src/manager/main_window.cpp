@@ -2,6 +2,7 @@
 
 #include "lsw/host/config/display_refresh.hpp"
 #include "lsw/host/config/vm_state.hpp"
+#include "lsw/host/manager/collect_logs_dialog.hpp"
 #include "lsw/host/manager/console_panel.hpp"
 #include "lsw/host/manager/graphics_alerts.hpp"
 #include "lsw/host/manager/graphics_page.hpp"
@@ -60,13 +61,10 @@ struct PageInfo {
     const char* detail;
 };
 
-// The details that are not status are descriptions of the page; the
-// rest come from the status hub (see MainWindow::page_detail).
 const PageInfo kPages[] = {
     {"Overview", ""}, {"Console", ""}, {"Log", ""}, {"Graphics", ""}, {"Settings", ""},
 };
 
-// A path under the home directory as people write it: "~/.config/...".
 QString tilde(const QString& path) {
     const QString home = QDir::homePath();
     if (path.startsWith(home + QLatin1Char('/'))) {
@@ -75,7 +73,7 @@ QString tilde(const QString& path) {
     return path;
 }
 
-}  // namespace
+}
 
 MainWindow::MainWindow(services::HostServices& services, QWidget* parent)
     : QMainWindow(parent), services_(services) {
@@ -95,7 +93,6 @@ MainWindow::MainWindow(services::HostServices& services, QWidget* parent)
     right_layout->setContentsMargins(0, 0, 0, 0);
     right_layout->setSpacing(0);
 
-    // ---- content bar ----------------------------------------------
     auto* bar = new QWidget;
     Theme::surface(bar, Theme::Role::kContentBar);
     auto* bar_layout = new QHBoxLayout(bar);
@@ -110,9 +107,6 @@ MainWindow::MainWindow(services::HostServices& services, QWidget* parent)
     bar_layout->addWidget(content_title_);
     bar_layout->addWidget(content_detail_);
     bar_layout->addStretch(1);
-    // Console and Log are pages now, which is right for the common
-    // case and wrong for the one where you want to watch the log while
-    // doing something else. So they can still be a window.
     const auto bar_action = [&](const QString& text) {
         auto* button = Widgets::button(text, Theme::Role::kQuiet);
         button->setVisible(false);
@@ -153,9 +147,6 @@ MainWindow::MainWindow(services::HostServices& services, QWidget* parent)
     });
     right_layout->addWidget(bar);
 
-    // ---- warning strip --------------------------------------------
-    // The overview's copy of the two Graphics warnings that break the
-    // guest. Everything else the Graphics page says stays there.
     warn_strip_ = new WarningStrip;
     warn_strip_->setVisible(false);
     right_layout->addWidget(warn_strip_);
@@ -165,10 +156,6 @@ MainWindow::MainWindow(services::HostServices& services, QWidget* parent)
     stack_ = new QStackedWidget;
     right_layout->addWidget(stack_, 1);
 
-    // ---- status strip ---------------------------------------------
-    // Under the content rather than across the whole window: the rail
-    // has its own foot, and a bar that runs beneath it reads as
-    // belonging to neither.
     auto* strip = new QWidget;
     Theme::surface(strip, Theme::Role::kStatusStrip);
     auto* strip_layout = new QHBoxLayout(strip);
@@ -194,8 +181,6 @@ MainWindow::MainWindow(services::HostServices& services, QWidget* parent)
 
     connect(overview_, &VmDetailPanel::running_changed, this, [this](bool running) {
         rail_->set_running(running);
-        // The device takes the resolutions the moment QEMU is up; the
-        // definition may carry an older list than the settings now hold.
         if (running) {
             notices_->withdraw(QStringLiteral("start"));
             push_display_modes();
@@ -210,15 +195,12 @@ MainWindow::MainWindow(services::HostServices& services, QWidget* parent)
         rail_->set_agent_online(online);
         follow_agent_for_desktop(online);
         if (online) {
-            // A restart is over once Windows answers again.
             if (restart_ == nullptr) {
                 notice_.clear();
             }
             push_dpi();
         }
     });
-    // Every reading of the machine or its graphics: the status bar, the
-    // page's detail and the rail's identity are all drawn from it.
     connect(&services_.status(), &services::StatusHub::changed, this, [this] {
         refresh_status_bar();
         content_detail_->setText(page_detail(rail_->current()));
@@ -242,8 +224,6 @@ MainWindow::MainWindow(services::HostServices& services, QWidget* parent)
     rail_->set_pending_changes(services_.pending_changes().count());
     connect(alerts_, &GraphicsAlerts::changed, this, &MainWindow::on_graphics_changed);
     connect(graphics_page_, &GraphicsPage::summary_changed, this, &MainWindow::on_graphics_changed);
-    // The display settings are live: each change goes to the running
-    // device at once, and the DPI to the agent.
     connect(&services_.manager_settings(), &config::ManagerSettings::changed, this,
             [this](const QString& key) {
                 if (key == K::kDisplayModes || key == K::kMatchHostOutput) {
@@ -260,8 +240,6 @@ MainWindow::MainWindow(services::HostServices& services, QWidget* parent)
                 }
             });
 
-    // Single-VM model: pin the pages to whatever record App populated
-    // for the lone ``lsw`` domain on startup.
     const config::VmRecord* record = services_.vms().primary();
     if (record != nullptr) {
         overview_->set_target(record->uuid);
@@ -275,8 +253,6 @@ MainWindow::MainWindow(services::HostServices& services, QWidget* parent)
     on_graphics_changed();
     setup_tray();
 
-    // "Same as monitor" follows the screen the window is on: its rate, which
-    // the compositor may change, and which screen that is.
     const auto watch = [this](QScreen* screen) {
         connect(screen, &QScreen::refreshRateChanged, this, [this] { follow_monitor_refresh(); });
     };
@@ -298,18 +274,19 @@ MainWindow::MainWindow(services::HostServices& services, QWidget* parent)
 void MainWindow::build_pages() {
     overview_ = new VmDetailPanel(services_, this);
     console_ = new ConsolePanel(services_.shells(), services_.status(), this);
-    log_ = new LogPanel(services_.log_store(), this);
+    log_ = new LogPanel(services_.log_store(), services_.settings(), services_.log_collector(), this);
+    connect(log_, &LogPanel::collect_requested, this, &MainWindow::collect_logs);
     alerts_ = new GraphicsAlerts(services_.status(), this);
     graphics_page_ =
         new GraphicsPage(services_.status(), *alerts_, services_.manager_settings(), this);
     settings_page_ = new SettingsPage(services_.manager_settings(), services_.pending_changes(),
-                                      services_.app_configs(), services_.status(), services_.usb(), this);
+                                      services_.app_configs(), services_.status(), services_.usb(),
+                                      services_.log_verbosity(), this);
 
     overview_stack_ = new QStackedWidget;
     overview_stack_->addWidget(overview_);
     overview_stack_->addWidget(build_empty_state());
 
-    // Order must match NavRail::Page.
     stack_->addWidget(overview_stack_);
     stack_->addWidget(console_);
     stack_->addWidget(log_);
@@ -319,8 +296,6 @@ void MainWindow::build_pages() {
     connect(graphics_page_, &GraphicsPage::settings_requested, this,
             [this] { show_page(NavRail::Page::Settings); });
     connect(settings_page_, &SettingsPage::restart_requested, this, [this] { (void)restart_guest(); });
-    // The image tools are the same dialogs the wizard opens. Nothing
-    // about them needs a guest, so they work with the machine off.
     connect(settings_page_, &SettingsPage::download_tool_requested, this, [this] {
         tools::DownloadImageDialog dialog{services_.settings(), this};
         dialog.exec();
@@ -331,24 +306,22 @@ void MainWindow::build_pages() {
         tools::TrimImageDialog dialog{services_.settings(), source, this};
         dialog.exec();
     });
+    connect(settings_page_, &SettingsPage::collect_logs_requested, this, &MainWindow::collect_logs);
+    connect(settings_page_, &SettingsPage::open_log_folder_requested, this, [this] {
+        QDir{}.mkpath(services_.settings().logs_dir());
+        QDesktopServices::openUrl(QUrl::fromLocalFile(services_.settings().logs_dir()));
+    });
     connect(settings_page_, &SettingsPage::update_requested, this,
             [this] { services_.guest_update().run(true); });
-    // Opens itself when a run starts, from whoever asked for it.
     update_dialog_ = new UpdateDialog(services_.status(), this);
     connect(update_dialog_, &UpdateDialog::retry_requested, this,
             [this] { services_.guest_update().retry(); });
     connect(settings_page_, &SettingsPage::reinstall_requested, this,
             &MainWindow::reinstall_requested);
     connect(settings_page_, &SettingsPage::rewrite_entries_requested, this, [this] {
-        // Idempotent, and the point of the button is the case where the
-        // files on disk have drifted from what the store says.
         services_.apply_integrations();
     });
     connect(settings_page_, &SettingsPage::open_share_requested, this, [this] {
-        // The share is served in userspace by the file manager, so this
-        // is a URL rather than a mount. The whole disk, whatever the
-        // bookmarks' scope: the row says it opens C:. Signed in as the
-        // account the bookmarks use, so the file manager does not ask.
         const auto& settings = services_.manager_settings();
         QDesktopServices::openUrl(QUrl(platform::GuestSmbShare::url(
             settings.string_value(K::kGuestUser), settings.string_value(K::kGuestPassword),
@@ -356,18 +329,24 @@ void MainWindow::build_pages() {
     });
 }
 
+void MainWindow::collect_logs() {
+    auto* dialog = new CollectLogsDialog(services_.log_collector(), this);
+    services_.log_collector().start();
+    dialog->show();
+    Widgets::bring_to_front(dialog);
+}
+
 void MainWindow::pop_out(NavRail::Page page) {
-    // A second instance rather than reparenting the embedded one: the
-    // page keeps working where it is. Two consoles are two views: on the
-    // same Windows session they show the same shell, so the pop-out can
-    // sit on SYSTEM's while the page stays on the user's.
     QWidget* content = nullptr;
     QString title;
     if (page == NavRail::Page::Console) {
         content = new ConsolePanel(services_.shells(), services_.status());
         title = QStringLiteral("Console");
     } else if (page == NavRail::Page::Log) {
-        content = new LogPanel(services_.log_store());
+        auto* panel = new LogPanel(services_.log_store(), services_.settings(),
+                                   services_.log_collector());
+        connect(panel, &LogPanel::collect_requested, this, &MainWindow::collect_logs);
+        content = panel;
         title = QStringLiteral("Log");
     } else {
         return;
@@ -444,9 +423,6 @@ QWidget* MainWindow::build_empty_state() {
     body->setObjectName(QString::fromLatin1(Theme::Role::kDim));
     body->setWordWrap(true);
     body->setAlignment(Qt::AlignCenter);
-    // Fixed in both directions: a layout that centres a widget gives it
-    // its plain size hint, which for a wrapping label is one line, and the
-    // rest of the paragraph was cut off.
     body->setFixedWidth(420);
     body->ensurePolished();
     body->setFixedHeight(body->heightForWidth(420));
@@ -491,9 +467,6 @@ void MainWindow::refresh_identity() {
     }
     const auto& record = *primary;
     const auto& vm = services_.status().vm();
-    // The machine's shape as libvirt holds it — the running one, or what
-    // the next start boots — and the disk image's own size. The settings
-    // only stand in when there is no definition to read (no libvirt).
     auto& settings = services_.manager_settings();
     const vm::DomainDescription* definition = vm.definition();
     const int cores = definition != nullptr ? definition->vcpus : settings.int_value(K::kCpuCores);
@@ -507,8 +480,6 @@ void MainWindow::refresh_identity() {
                          .arg(cores)
                          .arg(memory_mib / 1024)
                          .arg(disk);
-    // The GPU Windows sees, because with accel-virt that is the adapter's
-    // own name; on every page, since the rail is.
     const auto& adapters = services_.status().graphics().adapters;
     if (!adapters.isEmpty()) {
         detail += QLatin1Char('\n') + platform::HostGpus::adapter_name(adapters.first().gpu);
@@ -532,8 +503,6 @@ QString MainWindow::page_detail(NavRail::Page page) const {
     case NavRail::Page::Graphics:
         return graphics_page_ != nullptr ? graphics_page_->summary() : QString{};
     case NavRail::Page::Log:
-        // The records arrive from the agent as it writes them, so the
-        // page is live exactly when the agent answers.
         return services_.status().vm().agent_online() ? QStringLiteral("live")
                                                       : QStringLiteral("agent not answering");
     case NavRail::Page::Settings:
@@ -557,10 +526,6 @@ void MainWindow::refresh_status_bar() {
     if (rail_->current() == NavRail::Page::Graphics && graphics_page_ != nullptr) {
         facts << graphics_page_->status_facts();
     } else {
-        // The facts, with a rule between each, which is what makes a row
-        // of them read as a row rather than as a sentence. Each is read:
-        // the channel's own target and the disk as its definition
-        // declares it.
         const auto& vm = services_.status().vm();
         const quint32 port = services_.rpc().port();
         facts << (port != 0 ? QStringLiteral("agent 127.0.0.1:%1").arg(port)
@@ -595,7 +560,6 @@ void MainWindow::refresh_warning() {
     rail_->set_graphics_warning(worst == Severity::Red     ? Theme::Tone::kBad
                                 : worst == Severity::Amber ? Theme::Tone::kAmber
                                                            : nullptr);
-    // Only the ones that break the guest, and only on the overview: the rest are the Graphics page's.
     std::optional<GraphicsAlerts::Warning> shown;
     for (const auto& warning : alerts_->warnings()) {
         if (warning.kind == GraphicsAlerts::Warning::Kind::NoDirect3d ||
@@ -637,12 +601,9 @@ void MainWindow::push_display_refresh() {
     }
     const auto rate = services::display_refresh_from_settings(services_.manager_settings(),
                                                               current_refresh_millihz());
-    // Nothing known to push: the device keeps the rate it has.
     if (!rate) {
         return;
     }
-    // A rate set again is a display event again, and Windows re-reads its
-    // monitor for it, so the one the device holds is not set twice.
     if (services_.status().graphics().live_refresh == rate) {
         notices_->withdraw(QStringLiteral("refresh"));
         return;
@@ -662,7 +623,6 @@ std::optional<config::DisplayMode> MainWindow::current_output() const {
     if (screen == nullptr) {
         return std::nullopt;
     }
-    // The monitor's own pixels, not the scaled desktop's.
     const QSize size = screen->geometry().size() * screen->devicePixelRatio();
     return config::DisplayMode{size.width(), size.height()};
 }
@@ -685,8 +645,6 @@ void MainWindow::push_display_modes() {
 }
 
 void MainWindow::push_dpi() {
-    // The scale is Windows' own, set by the agent in the user's session
-    // while it runs; the resolution is the device's and is not sent here.
     if (!services_.status().vm().agent_online()) {
         return;
     }
@@ -704,9 +662,6 @@ bool MainWindow::redefine_now(const config::VmRecord& primary) {
         services::domain_inputs_from_settings(services_.settings(), services_.manager_settings(),
                                               current_refresh_millihz());
     if (services_.lifecycle().redefine(record, inputs) != 0) {
-        // A definition libvirt refused is one the guest must not be
-        // started against, and the old one is still on disk, so the
-        // honest thing is to say nothing was applied.
         notices_->post(QStringLiteral("definition"), true,
                        QStringLiteral("libvirt refused the new machine definition."),
                        QStringLiteral("Nothing changed: the guest keeps the definition it had. "
@@ -714,20 +669,12 @@ bool MainWindow::redefine_now(const config::VmRecord& primary) {
                        {{QStringLiteral("Open the log"), [this] { show_page(NavRail::Page::Log); }}});
         return false;
     }
-    // The stored definition is new: what is pending, and what the next
-    // start boots, follow from it.
     services_.status().refresh(services::StatusHub::Area::Vm);
     notices_->withdraw(QStringLiteral("definition"));
     return true;
 }
 
 RestartResult MainWindow::restart_guest(QString* reason) {
-    // The values are current by the time this runs; what is left is to
-    // make the machine take them. Cores, memory, the shared folders and
-    // the GPU devices are the domain definition rather than properties
-    // of a running guest, so the definition is rewritten first - libvirt
-    // keeps it for the next start - and the guest is stopped and started
-    // on it.
     const config::VmRecord* primary = services_.vms().primary();
     if (primary == nullptr) {
         if (reason != nullptr) {
@@ -736,9 +683,6 @@ RestartResult MainWindow::restart_guest(QString* reason) {
         return RestartResult::Refused;
     }
     if (restart_ != nullptr) {
-        // Under way, with the definition it was started with: written again
-        // in its finished handler, just before the start, so this request's
-        // changes are in what boots.
         redefine_again_ = true;
         return RestartResult::Pending;
     }
@@ -751,11 +695,6 @@ RestartResult MainWindow::restart_guest(QString* reason) {
         return RestartResult::Refused;
     }
     const config::VmRecord record = *primary;
-    // The disk is the one part of the machine that is a file rather than
-    // the definition, and it can only grow while QEMU does not hold it —
-    // so it grows between the stop and the start, never on a running
-    // guest. A refusal is reported and the guest still starts: on its old
-    // size, which is a working machine, rather than not at all.
     const auto grow_disk = [this, record] {
         QString error;
         const auto sizing = services::vm_sizing_from_settings(services_.manager_settings());
@@ -782,9 +721,6 @@ RestartResult MainWindow::restart_guest(QString* reason) {
         }
         return RestartResult::Refused;
     }
-    // A start while the old QEMU still runs does nothing, so the start
-    // waits for the stop: asked politely, asked again, and at the
-    // deadline forced.
     notice_ = QStringLiteral("Restarting the guest: waiting for Windows to shut down");
     refresh_status_bar();
     restart_ = new vm::GracefulShutdown(services_.lifecycle(), record.uuid,
@@ -792,9 +728,6 @@ RestartResult MainWindow::restart_guest(QString* reason) {
     connect(restart_, &vm::GracefulShutdown::finished, this, [this, grow_disk, record](bool forced) {
         restart_->deleteLater();
         restart_ = nullptr;
-        // Something asked for a restart while this one waited: its changes
-        // (a shared folder) are in the settings by now, and not in the
-        // definition this restart wrote.
         if (std::exchange(redefine_again_, false)) {
             if (const config::VmRecord* now = services_.vms().primary(); now != nullptr) {
                 (void)redefine_now(*now);
@@ -822,8 +755,6 @@ void MainWindow::notice_start_refused(const QString& headline) {
 
 void MainWindow::follow_upkeep() {
     auto& upkeep = services_.upkeep();
-    // The update's state comes from StatusHub; the upkeep's own failures
-    // (the clock, the release probe) have no snapshot of theirs.
     const auto refresh = [this, &upkeep] {
         refresh_status_bar();
         const auto& update = services_.status().update();
@@ -903,15 +834,10 @@ void MainWindow::on_tray_activated(QSystemTrayIcon::ActivationReason reason) {
 }
 
 bool MainWindow::event(QEvent* e) {
-    // "Match this desktop" is this window's scale, which is not known
-    // until the compositor has mapped it (a Wayland screen says 2 for
-    // 1.2 until then) and changes when it moves to another monitor. So
-    // the guest is told again whenever it changes.
     if (e->type() == QEvent::DevicePixelRatioChange &&
         services_.manager_settings().int_value(K::kScalingPercent) == 0) {
         push_dpi();
     }
-    // The refresh rate of the screen it moved to, likewise.
     if (e->type() == QEvent::ScreenChangeInternal) {
         follow_monitor_refresh();
     }
@@ -935,4 +861,4 @@ void MainWindow::on_quit() {
     qApp->quit();
 }
 
-}  // namespace lsw::host::manager
+}

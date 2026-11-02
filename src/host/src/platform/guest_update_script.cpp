@@ -10,4 +10,4 @@ QString GuestUpdateScript::locate() {
                                  QStringLiteral("/../share/lsw/guest/lsw-guest-update.ps1"));
 }
 
-}  // namespace lsw::host::platform
+}

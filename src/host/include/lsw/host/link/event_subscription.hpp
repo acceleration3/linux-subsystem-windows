@@ -6,17 +6,6 @@ namespace lsw::host::link {
 
 class EventBus;
 
-// One handler's registration on an ``EventBus``, removed when this is
-// destroyed or reset.
-//
-// Removal waits for a call to the handler already in progress on the
-// reader thread, so once the subscription is gone nothing the handler
-// captured is touched again. That makes the usual member layout safe —
-// the subscription declared after whatever its handler uses, so it is
-// destroyed first — and is why a handler must never block on the thread
-// that owns its subscription.
-//
-// Must not outlive the bus it came from.
 class EventSubscription {
 public:
     EventSubscription() noexcept = default;
@@ -39,4 +28,4 @@ private:
     std::uint64_t id_ = 0;
 };
 
-}  // namespace lsw::host::link
+}

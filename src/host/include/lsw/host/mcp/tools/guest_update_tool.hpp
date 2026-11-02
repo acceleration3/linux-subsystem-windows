@@ -8,9 +8,6 @@ class StatusHub;
 }
 
 namespace lsw::host::mcp {
-
-// Exposes GuestUpdate as a tool: the manager's own update of Windows, run
-// and waited for. Thin on purpose; the run is GuestUpdate's.
 class GuestUpdateTool final : public IMcpTool {
 public:
     GuestUpdateTool(services::GuestUpdate& update, services::StatusHub& status) noexcept
@@ -26,4 +23,4 @@ private:
     services::StatusHub& status_;
 };
 
-}  // namespace lsw::host::mcp
+}

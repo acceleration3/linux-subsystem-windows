@@ -42,10 +42,6 @@ void InstallerEventSource::undeliverable(std::size_t first_undelivered) {
         batch_.clear();
         return;
     }
-    // Put the tail back at the FRONT of the installer's queue so the next
-    // connection sees these before anything newer — a ``setup_done`` that
-    // arrives after the progress ticks of the following step would be
-    // read as the wrong step finishing.
     std::vector<install::JobNotification> undelivered(
         std::make_move_iterator(batch_.begin()
                                 + static_cast<std::ptrdiff_t>(first_undelivered)),
@@ -54,4 +50,4 @@ void InstallerEventSource::undeliverable(std::size_t first_undelivered) {
     installer_->requeue_front(std::move(undelivered));
 }
 
-}  // namespace lsw::agent::transport
+}

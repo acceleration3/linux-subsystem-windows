@@ -17,4 +17,4 @@ bool ElementValueSetter::set_value(const UiaWindow& window, const std::string& s
     return SUCCEEDED(pattern->SetValue(text.get()));
 }
 
-}  // namespace lsw::agent::uia
+}

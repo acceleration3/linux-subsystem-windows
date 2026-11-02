@@ -17,9 +17,6 @@
 namespace lsw::host::provision {
 
 namespace {
-
-// The RPC for one step. The verb and its parameters are the only thing
-// that differs between step kinds.
 struct StepRequest {
     const char* cmd = nullptr;
     nlohmann::json params = nlohmann::json::object();
@@ -48,7 +45,7 @@ struct StepRequest {
     return request;
 }
 
-}  // namespace
+}
 
 SetupStageRunner::SetupStageRunner(link::AgentRpcClient& rpc, QObject* parent)
     : QObject(parent), rpc_(&rpc) {}
@@ -75,14 +72,10 @@ void SetupStageRunner::run() {
         return;
     }
     subscribe_to_agent_events();
-    // Defer one turn so a UI page connected to ``plan_ready`` has laid
-    // out its rows before the first ``step_started`` arrives.
     QTimer::singleShot(0, this, [this] { start_stage(0); });
 }
 
 void SetupStageRunner::subscribe_to_agent_events() {
-    // Handlers run on the channel's reader thread; everything they touch
-    // is marshalled back here first.
     progress_sub_ = rpc_->subscribe(linkproto::topic::kSetupProgress,
                                     [this](const nlohmann::json& frame) {
         const auto job = QString::fromStdString(frame.value("job_id", std::string{}));
@@ -96,7 +89,7 @@ void SetupStageRunner::subscribe_to_agent_events() {
             }
             QString status;
             if (!message.isEmpty()) {
-                LSW_INFO("provision: setup_progress job={} row={} '{}'",
+                LSW_DEBUG("provision: setup_progress job={} row={} '{}'",
                          job.toStdString(), it.value(), message.toStdString());
                 status = message;
             } else if (total > 0) {
@@ -149,14 +142,13 @@ bool SetupStageRunner::dispatch_step(const SetupStep& step, int row) {
              request.cmd, step.name.toStdString());
     Q_EMIT step_started(row);
 
-    // Blocking, but only until the agent acks with a job id — the work
-    // itself runs in the guest and streams back as events. On a healthy
-    // channel the ack is immediate, so the GUI thread is fine here.
     const auto reply = rpc_->request(request.cmd, request.params);
     const auto job_id = reply.body.is_object()
                             ? QString::fromStdString(reply.body.value("job_id", std::string{}))
                             : QString{};
     if (!reply.ok || job_id.isEmpty()) {
+        LSW_WARN("provision: setup step row={} was not accepted: {}", row,
+                 reply.ok ? "no job_id" : reply.error);
         any_failure_ = true;
         Q_EMIT step_finished(row, false,
                              reply.ok ? QStringLiteral("agent returned no job_id")
@@ -176,8 +168,6 @@ void SetupStageRunner::start_stage(int index) {
     current_stage_ = index;
     const auto& stage = stages_[index];
 
-    // Rows are laid out in stage order with no gaps, so a stage's first
-    // row is the running total of the steps before it.
     int row_offset = 0;
     for (int i = 0; i < index; ++i) {
         row_offset += static_cast<int>(stages_[i].steps.size());
@@ -187,8 +177,6 @@ void SetupStageRunner::start_stage(int index) {
     LSW_INFO("provision: starting setup stage {}/{} ({} step(s), row_offset={})",
              index + 1, stages_.size(), stage_pending_, row_offset);
 
-    // A step whose dispatch failed will never produce a setup_done, so
-    // it must not be counted as pending or the stage never completes.
     int failed_to_dispatch = 0;
     for (int i = 0; i < stage.steps.size(); ++i) {
         if (!dispatch_step(stage.steps[i], row_offset + i)) {
@@ -229,4 +217,4 @@ void SetupStageRunner::on_stage_step_finished() {
 
 void SetupStageRunner::finish() { Q_EMIT finished(!any_failure_); }
 
-}  // namespace lsw::host::provision
+}

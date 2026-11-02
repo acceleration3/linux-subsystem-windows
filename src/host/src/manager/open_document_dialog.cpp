@@ -16,7 +16,6 @@ namespace {
 using ui::Theme;
 using ui::Widgets;
 
-// How many names are listed before "and N more".
 constexpr int kListed = 6;
 
 QString listed(const QStringList& lines) {
@@ -27,7 +26,7 @@ QString listed(const QStringList& lines) {
     return shown.join(QLatin1Char('\n'));
 }
 
-}  // namespace
+}
 
 OpenDocumentDialog::OpenDocumentDialog(const QStringList& files, const QStringList& folders,
                                        const QString& application, bool guest_running,
@@ -41,7 +40,6 @@ OpenDocumentDialog::OpenDocumentDialog(const QStringList& files, const QStringLi
     const auto chrome = ui::DialogChrome::install(this);
     auto* root = chrome.body;
 
-    // What and where: the file, then its folder in mono.
     auto* names = new QVBoxLayout;
     names->setSpacing(4);
     QStringList file_names;
@@ -99,4 +97,4 @@ OpenDocumentDialog::OpenDocumentDialog(const QStringList& files, const QStringLi
     });
 }
 
-}  // namespace lsw::host::manager
+}

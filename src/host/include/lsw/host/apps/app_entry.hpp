@@ -5,15 +5,13 @@
 #include <QStringList>
 
 namespace lsw::host::apps {
-
-// One installed Windows app the guest agent told us about.
 struct AppEntry {
-    QString id;        // stable identifier (e.g. AUMID or full exe path)
-    QString name;      // display name
-    QString exe_path;  // absolute path inside the guest
-    QString args;      // arguments its Start menu shortcut starts it with, if it keeps any
-    QImage icon;       // PNG decoded from the agent reply
-    QStringList extensions;  // file types it handles, ".xlsx" and the like
+    QString id;
+    QString name;
+    QString exe_path;
+    QString args;
+    QImage icon;
+    QStringList extensions;
 };
 
-}  // namespace lsw::host::apps
+}

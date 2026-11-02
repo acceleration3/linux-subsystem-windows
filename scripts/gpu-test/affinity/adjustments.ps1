@@ -1,4 +1,3 @@
-# Layers panel adjustments: HSL (hue and saturation sliders dragged), then Curves (the master curve's middle dragged up); panels closed.
 Ready
 Click 1932 922 300
 Click 2076 1040 1500
