@@ -21,6 +21,7 @@ set(_lsw_agent_session_sources
     src/session/pipe_codec.cpp
     src/session/pending_calls.cpp
     src/session/helper_channel.cpp
+    src/session/input_relay_supervisor.cpp
     src/session/session_manager.cpp
     src/session/session_host.cpp
 )

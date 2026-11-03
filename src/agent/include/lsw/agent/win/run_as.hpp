@@ -15,6 +15,8 @@ public:
 
     [[nodiscard]] static RunAs user(std::uint32_t session, bool elevated);
 
+    [[nodiscard]] static RunAs system_in_session(std::uint32_t session);
+
     [[nodiscard]] bool is_self() const noexcept { return token_ == nullptr; }
 
     [[nodiscard]] std::uint32_t session() const noexcept { return session_; }

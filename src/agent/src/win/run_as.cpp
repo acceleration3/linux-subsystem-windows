@@ -174,6 +174,37 @@ RunAs RunAs::user(std::uint32_t session, bool elevated) {
     return out;
 }
 
+RunAs RunAs::system_in_session(std::uint32_t session) {
+    const std::string where = "session " + std::to_string(session);
+    UniqueHandle own;
+    if (::OpenProcessToken(::GetCurrentProcess(), TOKEN_DUPLICATE | TOKEN_QUERY, own.put()) ==
+        FALSE) {
+        throw std::runtime_error("OpenProcessToken(self) failed: " + ErrorText::last_error());
+    }
+    UniqueHandle primary = primary_copy(own.get());
+    if (!primary) {
+        throw std::runtime_error("DuplicateTokenEx(self) failed: " + ErrorText::last_error());
+    }
+    DWORD session_id = session;
+    if (::SetTokenInformation(primary.get(), TokenSessionId, &session_id, sizeof(session_id)) ==
+        FALSE) {
+        throw std::runtime_error("cannot move the SYSTEM token to " + where + ": " +
+                                 ErrorText::last_error() + " (needs SeTcbPrivilege)");
+    }
+
+    RunAs out;
+    out.session_ = session;
+    out.elevated_ = true;
+    const auto user = token_info(primary.get(), TokenUser);
+    if (!user.empty()) {
+        const auto* tu = reinterpret_cast<const TOKEN_USER*>(user.data());
+        out.sid_ = sid_string(tu->User.Sid);
+        out.account_ = account_of(tu->User.Sid);
+    }
+    out.token_ = std::shared_ptr<void>(primary.release(), &close_token);
+    return out;
+}
+
 std::wstring RunAs::expand(const std::wstring& s) const {
     if (token_ == nullptr || s.empty()) {
         return Environment::expand(s);

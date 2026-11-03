@@ -277,6 +277,7 @@ function Step-Stop {
     $script:Stopped = $true
     Kill-Processes 'remotewin-guest'
     Stop-Agent
+    Kill-Processes 'remotewin-guest'
 }
 
 function Step-AgentAndMirror {
@@ -507,6 +508,7 @@ function Step-Start {
         L ('the agent is not listening on ' + $AgentPort + ' after 60 s; putting the previous one back')
         Kill-Processes 'remotewin-guest'
         Stop-Agent
+        Kill-Processes 'remotewin-guest'
         foreach ($path in @($AgentExe, $MirrorExe)) {
             $kept = Join-Path $Previous (Split-Path -Leaf $path)
             if (Test-Path -LiteralPath $kept) { Copy-Retry $kept $path }

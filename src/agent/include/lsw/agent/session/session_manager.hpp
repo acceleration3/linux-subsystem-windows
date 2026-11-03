@@ -2,6 +2,7 @@
 
 #include "lsw/agent/rpc/event_source.hpp"
 #include "lsw/agent/session/helper_channel.hpp"
+#include "lsw/agent/session/input_relay_supervisor.hpp"
 #include "lsw/agent/session/session_info.hpp"
 #include "lsw/agent/session/session_selector.hpp"
 
@@ -89,6 +90,8 @@ private:
 
     std::mutex events_mu_;
     std::deque<rpc::Event> events_;
+
+    InputRelaySupervisor relays_;
 
     std::thread supervisor_;
 };

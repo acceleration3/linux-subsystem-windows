@@ -84,6 +84,7 @@ void SessionManager::stop() {
     if (supervisor_.joinable()) {
         supervisor_.join();
     }
+    relays_.stop_all();
     std::map<std::uint32_t, Slot> slots;
     {
         const std::lock_guard lock(mu_);
@@ -197,6 +198,7 @@ void SessionManager::reconcile() {
 
     std::vector<std::shared_ptr<HelperChannel>> retired;
     std::vector<SessionInfo> wanted;
+    std::vector<std::uint32_t> relay_sessions;
     {
         const std::lock_guard lock(mu_);
         if (stopping_) {
@@ -217,6 +219,7 @@ void SessionManager::reconcile() {
             if (!SessionSelector::wants_helper(info)) {
                 continue;
             }
+            relay_sessions.push_back(info.id);
             Slot& slot = slots_[info.id];
             if (slot.channel && !slot.channel->finished()) {
                 continue;
@@ -239,6 +242,7 @@ void SessionManager::reconcile() {
     for (auto& channel : retired) {
         channel->stop();
     }
+    relays_.reconcile(relay_sessions);
 
     for (const auto& info : wanted) {
         std::string error;
