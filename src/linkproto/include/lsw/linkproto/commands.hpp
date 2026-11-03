@@ -38,6 +38,9 @@ inline constexpr const char* kConsoleOpen  = "console_open";
 inline constexpr const char* kConsoleInput = "console_input";
 inline constexpr const char* kConsoleClose = "console_close";
 
+inline constexpr const char* kClipboardGet = "clipboard_get";
+inline constexpr const char* kClipboardSet = "clipboard_set";
+
 inline constexpr const char* kUiaState                 = "uia_state";
 inline constexpr const char* kUiaInvoke                = "uia_invoke";
 inline constexpr const char* kUiaSetValue              = "uia_set_value";
@@ -59,6 +62,8 @@ inline constexpr const char* kConsoleClosed = "console_closed";
 inline constexpr const char* kAppsChanged   = "apps_changed";
 inline constexpr const char* kAppError      = "app_error";
 inline constexpr const char* kLaunchEnded   = "launch_ended";
+
+inline constexpr const char* kClipboardChanged = "clipboard_changed";
 
 inline constexpr const char* kUiaWindowOpened  = "uia_window_opened";
 inline constexpr const char* kUiaWindowClosed  = "uia_window_closed";

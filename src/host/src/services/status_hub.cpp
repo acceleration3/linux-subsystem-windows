@@ -256,6 +256,14 @@ void StatusHub::set_update(const GuestUpdateStatus& status) {
     Q_EMIT changed(Area::Update);
 }
 
+void StatusHub::set_clipboard(const ClipboardStatus& status) {
+    if (status == clipboard_) {
+        return;
+    }
+    clipboard_ = status;
+    Q_EMIT changed(Area::Host);
+}
+
 void StatusHub::boot_started(const QUuid& uuid) {
     if (uuid == vm_.uuid && !uuid.isNull()) {
         boot_clock_.start();

@@ -11,14 +11,15 @@
 #include "lsw/host/link/agent_rpc_client.hpp"
 #include "lsw/host/services/agent_log_levels.hpp"
 #include "lsw/host/services/app_errors.hpp"
+#include "lsw/host/services/clipboard_sync.hpp"
 #include "lsw/host/services/guest_shells.hpp"
-#include "lsw/host/services/log_cleaner.hpp"
-#include "lsw/host/services/log_collector.hpp"
-#include "lsw/host/services/host_logging.hpp"
 #include "lsw/host/services/guest_update.hpp"
 #include "lsw/host/services/guest_upkeep.hpp"
-#include "lsw/host/services/status_hub.hpp"
+#include "lsw/host/services/host_logging.hpp"
 #include "lsw/host/services/host_shutdown_watch.hpp"
+#include "lsw/host/services/log_cleaner.hpp"
+#include "lsw/host/services/log_collector.hpp"
+#include "lsw/host/services/status_hub.hpp"
 #include "lsw/host/services/usb_passthrough.hpp"
 #include "lsw/host/vm/libvirt_connection.hpp"
 #include "lsw/host/vm/lifecycle.hpp"
@@ -50,6 +51,8 @@ public:
     [[nodiscard]] GuestShells& shells() noexcept { return shells_; }
 
     [[nodiscard]] AppErrors& app_errors() noexcept { return app_errors_; }
+
+    [[nodiscard]] ClipboardSync& clipboard() noexcept { return clipboard_; }
 
     [[nodiscard]] GuestUpdate& guest_update() noexcept { return guest_update_; }
     [[nodiscard]] GuestUpkeep& upkeep() noexcept { return upkeep_; }
@@ -92,6 +95,7 @@ private:
     StatusHub status_;
     GuestShells shells_;
     AppErrors app_errors_;
+    ClipboardSync clipboard_;
     GuestUpdate guest_update_;
     GuestUpkeep upkeep_;
     UsbPassthrough usb_;

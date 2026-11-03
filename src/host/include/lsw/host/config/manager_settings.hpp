@@ -43,6 +43,7 @@ public:
         static constexpr QLatin1StringView kPublishEntries{"desktop/publish"};
         static constexpr QLatin1StringView kMenuCategory{"desktop/category"};
         static constexpr QLatin1StringView kFileAssociations{"desktop/mime"};
+        static constexpr QLatin1StringView kShareClipboard{"desktop/share_clipboard"};
         static constexpr QLatin1StringView kUsbAlways{"usb/always"};
         static constexpr QLatin1StringView kAutostart{"guest/autostart"};
         static constexpr QLatin1StringView kCloseToTray{"host/close_to_tray"};

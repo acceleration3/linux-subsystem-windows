@@ -7,6 +7,7 @@
 #include "lsw/agent/session/helper_protocol.hpp"
 #include "lsw/agent/session/pipe_codec.hpp"
 #include "lsw/agent/uia/uia.hpp"
+#include "lsw/agent/win/clipboard_watcher.hpp"
 #include "lsw/agent/win/desktop_session.hpp"
 #include "lsw/agent/win/error_text.hpp"
 #include "lsw/agent/win/overlapped_pipe.hpp"
@@ -137,7 +138,8 @@ void run_gate(Shared& shared) {
                  {"waited_s", static_cast<std::int64_t>(waited.count())}});
 }
 
-void run_pump(Shared& shared, uia::Uia& uia) {
+void run_pump(Shared& shared, uia::Uia& uia, win::ClipboardWatcher* clipboard,
+              std::uint32_t session) {
     std::uint64_t log_cursor = 0;
     while (!shared.stopping()) {
         for (const auto& record : log::collect_since(log_cursor, log_cursor)) {
@@ -150,6 +152,14 @@ void run_pump(Shared& shared, uia::Uia& uia) {
             nlohmann::json message = std::move(ev.payload);
             message["event"] = ev.topic;
             shared.send(message);
+        }
+        if (clipboard != nullptr) {
+            for (auto& ev : clipboard->collect_pending()) {
+                nlohmann::json message = std::move(ev.payload);
+                message["event"] = ev.topic;
+                message["session"] = session;
+                shared.send(message);
+            }
         }
         ::WaitForSingleObject(shared.stop.get(), static_cast<DWORD>(kPumpTick.count()));
     }
@@ -205,7 +215,9 @@ int SessionHost::run(const std::wstring& pipe_name) {
 
     std::thread{[shared] { run_gate(*shared); }}.detach();
 
-    std::thread pump{[shared, services] { run_pump(*shared, services->uia()); }};
+    std::thread pump{[shared, services, session] {
+        run_pump(*shared, services->uia(), services->clipboard(), session);
+    }};
     std::vector<std::thread> workers;
     for (int i = 0; i < kWorkers; ++i) {
         workers.emplace_back([shared, ctx] { run_worker(*shared, *ctx); });

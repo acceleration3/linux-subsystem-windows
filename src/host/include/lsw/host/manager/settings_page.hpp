@@ -39,6 +39,7 @@ private:
     void build_desktop();
     void build_logging();
     void refresh_debug_row();
+    void refresh_clipboard_note();
 
     QVBoxLayout* new_group(const QString& title);
     QWidget* add_row(QVBoxLayout* group, const QString& key, const QString& label,
@@ -49,6 +50,7 @@ private:
     config::LogVerbosity& verbosity_;
     SettingControls* controls_ = nullptr;
 
+    QLabel* clipboard_note_ = nullptr;
     QPushButton* debug_button_ = nullptr;
     QPushButton* debug_stop_ = nullptr;
     QTimer debug_clock_;

@@ -1,8 +1,9 @@
 #pragma once
 
+#include "lsw/host/services/clipboard_status.hpp"
 #include "lsw/host/services/graphics_status.hpp"
-#include "lsw/host/services/guest_update_status.hpp"
 #include "lsw/host/services/guest_sessions.hpp"
+#include "lsw/host/services/guest_update_status.hpp"
 #include "lsw/host/services/usb_status.hpp"
 #include "lsw/host/services/vm_status.hpp"
 #include "lsw/host/vm/avgpu_log.hpp"
@@ -51,9 +52,13 @@ public:
     [[nodiscard]] const UsbStatus& usb() const noexcept { return usb_; }
     [[nodiscard]] const GuestUpdateStatus& update() const noexcept { return update_; }
 
+    [[nodiscard]] const ClipboardStatus& clipboard() const noexcept { return clipboard_; }
+
     void set_vm(const VmStatus& status);
 
     void set_update(const GuestUpdateStatus& status);
+
+    void set_clipboard(const ClipboardStatus& status);
 
     void refresh(Area area);
 
@@ -112,6 +117,7 @@ private:
     bool usb_live_again_ = false;
     UsbStatus usb_;
     GuestUpdateStatus update_;
+    ClipboardStatus clipboard_;
     QVector<platform::HostUsbDevice> usb_host_;
     QHash<QString, QString> usb_names_;
     QVector<vm::DomainDescription::UsbDevice> usb_live_;

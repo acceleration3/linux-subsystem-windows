@@ -39,6 +39,7 @@ const QHash<QString, QVariant>& defaults() {
         {K::kPublishEntries, true},
         {K::kMenuCategory, QStringLiteral("Windows")},
         {K::kFileAssociations, true},
+        {K::kShareClipboard, true},
 
         {K::kUsbAlways, QStringList{}},
 

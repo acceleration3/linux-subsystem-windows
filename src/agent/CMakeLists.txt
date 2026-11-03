@@ -66,6 +66,8 @@ set(_lsw_agent_rpc_sources
     src/rpc/handlers/console/console_open.cpp
     src/rpc/handlers/console/console_input.cpp
     src/rpc/handlers/console/console_close.cpp
+    src/rpc/handlers/system/clipboard_get.cpp
+    src/rpc/handlers/system/clipboard_set.cpp
     src/rpc/handlers/uia/uia_state.cpp
     src/rpc/handlers/uia/uia_invoke.cpp
     src/rpc/handlers/uia/uia_set_value.cpp
@@ -101,6 +103,8 @@ set(_lsw_agent_win_sources
     src/win/rolling_file.cpp
     src/win/pe_image.cpp
     src/win/event_log_reader.cpp
+    src/win/clipboard_watcher.cpp
+    src/win/image_codec.cpp
 )
 set(_lsw_agent_util_sources
     src/util/base64.cpp
@@ -224,6 +228,7 @@ target_link_libraries(lsw-guest-agent
         bcrypt
         ole32
         oleaut32
+        windowscodecs
         uuid
         wtsapi32
         userenv

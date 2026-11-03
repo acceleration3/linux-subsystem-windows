@@ -1,5 +1,25 @@
 set(CMAKE_AUTOMOC ON)
 
+enable_language(C)
+pkg_check_modules(WAYLAND_CLIENT REQUIRED IMPORTED_TARGET wayland-client)
+pkg_check_modules(WAYLAND_SCANNER_PC REQUIRED wayland-scanner)
+pkg_get_variable(WAYLAND_SCANNER wayland-scanner wayland_scanner)
+if(NOT WAYLAND_SCANNER)
+    message(FATAL_ERROR "wayland-scanner is needed for the clipboard protocol")
+endif()
+set(LSW_CLIPBOARD_PROTOCOL_DIR "${CMAKE_CURRENT_BINARY_DIR}/wayland")
+file(MAKE_DIRECTORY "${LSW_CLIPBOARD_PROTOCOL_DIR}")
+set(LSW_CLIPBOARD_PROTOCOL_XML "${CMAKE_CURRENT_SOURCE_DIR}/protocols/ext-data-control-v1.xml")
+add_custom_command(
+    OUTPUT "${LSW_CLIPBOARD_PROTOCOL_DIR}/ext-data-control-v1-client-protocol.h"
+           "${LSW_CLIPBOARD_PROTOCOL_DIR}/ext-data-control-v1-protocol.c"
+    COMMAND "${WAYLAND_SCANNER}" client-header "${LSW_CLIPBOARD_PROTOCOL_XML}"
+            "${LSW_CLIPBOARD_PROTOCOL_DIR}/ext-data-control-v1-client-protocol.h"
+    COMMAND "${WAYLAND_SCANNER}" private-code "${LSW_CLIPBOARD_PROTOCOL_XML}"
+            "${LSW_CLIPBOARD_PROTOCOL_DIR}/ext-data-control-v1-protocol.c"
+    DEPENDS "${LSW_CLIPBOARD_PROTOCOL_XML}"
+    VERBATIM)
+
 function(lsw_host_sources out)
     set(_all "")
     foreach(concern ${ARGN})
@@ -33,9 +53,12 @@ set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/src/services/guest_bundl
 set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/src/services/startup_header.cpp
     PROPERTIES COMPILE_DEFINITIONS "LSW_VERSION=\"${PROJECT_VERSION}\";LSW_BUILD_ID=\"${LSW_BUILD_ID}\"")
 add_library(lsw_host_core STATIC ${LSW_CORE_SOURCES}
+    ${LSW_CLIPBOARD_PROTOCOL_DIR}/ext-data-control-v1-client-protocol.h
+    ${LSW_CLIPBOARD_PROTOCOL_DIR}/ext-data-control-v1-protocol.c
     ${CMAKE_CURRENT_SOURCE_DIR}/embedded/resources.qrc)
 target_include_directories(lsw_host_core PUBLIC ${LSW_HOST_INCLUDE_DIR})
-target_include_directories(lsw_host_core PRIVATE $<BUILD_INTERFACE:${_core_embed}>)
+target_include_directories(lsw_host_core PRIVATE $<BUILD_INTERFACE:${_core_embed}>
+    $<BUILD_INTERFACE:${LSW_CLIPBOARD_PROTOCOL_DIR}>)
 target_link_libraries(lsw_host_core
     PUBLIC
         Qt6::Widgets Qt6::Network Qt6::DBus Qt6::Xml Qt6::Concurrent
@@ -47,6 +70,7 @@ target_link_libraries(lsw_host_core
         LSW::CompileOptions
         PkgConfig::LIBVNCCLIENT
         PkgConfig::LIBDRM
+        PkgConfig::WAYLAND_CLIENT
         Vulkan::Vulkan
         PkgConfig::LIBVIRT_QEMU
         ZLIB::ZLIB

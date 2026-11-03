@@ -93,7 +93,9 @@ public:
         const bool logged = log::enabled(level);
         if (logged) {
             log::append(level, log::format("host_endpoint: REQ id={} cmd={} line={}", id, cmd,
-                                           truncate_for_log(request.dump())));
+                                           handler != nullptr && !handler->log_request_body()
+                                               ? std::string{"<redacted>"}
+                                               : truncate_for_log(request.dump())));
         }
 
         nlohmann::json reply;

@@ -1,8 +1,10 @@
 #include "lsw/agent/core/services.hpp"
 
 #include "lsw/agent/core/paths.hpp"
+#include "lsw/agent/log.hpp"
 #include "lsw/agent/session/session_manager.hpp"
 #include "lsw/agent/uia/uia.hpp"
+#include "lsw/agent/win/clipboard_watcher.hpp"
 
 #include <stdexcept>
 #include <utility>
@@ -13,6 +15,11 @@ AgentServices::AgentServices(Role role)
     : role_(role), uploads_(std::filesystem::path(Paths::root()) / L"uploads") {
     if (role_ == Role::SessionHelper) {
         uia_ = std::make_unique<uia::Uia>();
+        try {
+            clipboard_ = std::make_unique<win::ClipboardWatcher>();
+        } catch (const std::exception& e) {
+            LSW_AGENT_WARN("clipboard: sharing unavailable in this session: {}", e.what());
+        }
     }
 }
 
@@ -53,6 +60,7 @@ void AgentServices::shutdown() {
     if (uia_) {
         uia_->shutdown();
     }
+    clipboard_.reset();
 }
 
 }

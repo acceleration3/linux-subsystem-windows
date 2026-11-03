@@ -33,27 +33,26 @@ HostServices::HostServices(QObject* parent)
       lifecycle_(libvirt_, this), rpc_(this), guest_probe_(rpc_),
       status_(libvirt_, lifecycle_, rpc_, guest_probe_, settings_, manager_settings_, this),
       shells_(rpc_, status_, this), app_errors_(rpc_, this),
-      guest_update_(settings_, status_, rpc_, this),
-      upkeep_(status_, rpc_, guest_update_, this),
-      usb_(lifecycle_, status_, manager_settings_, this),
-      host_shutdown_(lifecycle_, status_, this),
+      clipboard_(rpc_, status_, manager_settings_, this),
+      guest_update_(settings_, status_, rpc_, this), upkeep_(status_, rpc_, guest_update_, this),
+      usb_(lifecycle_, status_, manager_settings_, this), host_shutdown_(lifecycle_, status_, this),
       app_configs_(QDir(settings_.data_dir()).filePath("apps"), this), log_store_(this),
-      vm_logs_(settings_.vm_logs_dir()),
-      logging_(settings_, manager_settings_, log_store_, this),
+      vm_logs_(settings_.vm_logs_dir()), logging_(settings_, manager_settings_, log_store_, this),
       agent_log_levels_(status_, rpc_, manager_settings_, logging_.verbosity(), this),
-      log_collector_(settings_, manager_settings_, rpc_,
-                     [this] {
-                         SystemReport::Inputs inputs;
-                         inputs.shipped_release = status_.update().shipped_release;
-                         inputs.guest_release = status_.update().guest_release;
-                         inputs.agent_online = status_.vm().agent_online();
-                         inputs.domain_xml = lifecycle_.domain_xml(status_.vm().uuid);
-                         return inputs;
-                     },
-                     this),
-      log_cleaner_(settings_, rpc_, log_store_,
-                   [this] { return status_.vm().agent_online(); },
-                   [this] { return status_.vm().running(); }, this),
+      log_collector_(
+          settings_, manager_settings_, rpc_,
+          [this] {
+              SystemReport::Inputs inputs;
+              inputs.shipped_release = status_.update().shipped_release;
+              inputs.guest_release = status_.update().guest_release;
+              inputs.agent_online = status_.vm().agent_online();
+              inputs.domain_xml = lifecycle_.domain_xml(status_.vm().uuid);
+              return inputs;
+          },
+          this),
+      log_cleaner_(
+          settings_, rpc_, log_store_, [this] { return status_.vm().agent_online(); },
+          [this] { return status_.vm().running(); }, this),
       app_launcher_(rpc_, this) {
     log_store_.attach(rpc_);
 

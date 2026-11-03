@@ -162,6 +162,7 @@ int App::run() {
                                               services_.vms());
     services_.apply_integrations();
     services_.host_shutdown().start();
+    services_.clipboard().start();
 
     if (cli_.unattended()) {
         unattended_ = std::make_unique<UnattendedRunner>(services_, cli_, this);

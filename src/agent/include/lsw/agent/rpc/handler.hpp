@@ -21,6 +21,8 @@ public:
 
     [[nodiscard]] virtual log::Level request_level() const { return log::Level::Debug; }
 
+    [[nodiscard]] virtual bool log_request_body() const { return true; }
+
     [[nodiscard]] virtual std::string summarize(const nlohmann::json& reply) const {
         return std::to_string(reply.dump().size()) + "B json";
     }

@@ -192,12 +192,42 @@ void SettingsPage::build_desktop() {
                            "handles. For the rest, use Make it the default in an application's "
                            "settings."),
             right_aligned(controls_->toggle(K::kFileAssociations)));
+    auto* clipboard_row =
+        add_row(desktop, K::kShareClipboard, QStringLiteral("Share the clipboard"), QString{},
+                right_aligned(controls_->toggle(K::kShareClipboard)));
+    clipboard_note_ = clipboard_row->findChild<QLabel*>(QStringLiteral("rowDescription"));
+    connect(&status_, &services::StatusHub::changed, this, [this](services::StatusHub::Area area) {
+        if (area == services::StatusHub::Area::Host) {
+            refresh_clipboard_note();
+        }
+    });
+    refresh_clipboard_note();
     auto* rewrite = Widgets::button(QStringLiteral("Rewrite now"));
     connect(rewrite, &QPushButton::clicked, this, &SettingsPage::rewrite_entries_requested);
     add_row(desktop, QString{}, QStringLiteral("Rewrite the entries"),
             QStringLiteral("Regenerates every .desktop file and icon. Use it if a launcher is "
                            "showing a stale name or a missing icon."),
             right_aligned(rewrite));
+}
+
+void SettingsPage::refresh_clipboard_note() {
+    if (clipboard_note_ == nullptr) {
+        return;
+    }
+    const auto& state = status_.clipboard();
+    if (state.limited) {
+        clipboard_note_->setText(
+            QStringLiteral("This desktop does not let applications follow the clipboard in the "
+                           "background, so only copies made while the manager window is "
+                           "focused reach Windows."));
+    } else if (state.enabled && !state.working) {
+        clipboard_note_->setText(QStringLiteral(
+            "The clipboard connection to this desktop is down; it reconnects on its own."));
+    } else {
+        clipboard_note_->setText(
+            QStringLiteral("Text and images copied on this machine paste into Windows "
+                           "applications and the desktop view, and the other way round."));
+    }
 }
 
 void SettingsPage::build_logging() {
