@@ -771,12 +771,7 @@ void MainWindow::push_dpi() {
 }
 
 bool MainWindow::redefine_now(const config::VmRecord& primary) {
-    config::VmRecord record = primary;
-    record.sizing = services::vm_sizing_from_settings(services_.manager_settings());
-    const vm::DomainXmlInputs inputs =
-        services::domain_inputs_from_settings(services_.settings(), services_.manager_settings(),
-                                              current_refresh_millihz());
-    if (services_.lifecycle().redefine(record, inputs) != 0) {
+    if (!services_.redefine_vm(primary)) {
         notices_->post(QStringLiteral("definition"), true,
                        QStringLiteral("libvirt refused the new machine definition."),
                        QStringLiteral("Nothing changed: the guest keeps the definition it had. "
@@ -784,7 +779,6 @@ bool MainWindow::redefine_now(const config::VmRecord& primary) {
                        {{QStringLiteral("Open the log"), [this] { show_page(NavRail::Page::Log); }}});
         return false;
     }
-    services_.status().refresh(services::StatusHub::Area::Vm);
     notices_->withdraw(QStringLiteral("definition"));
     return true;
 }

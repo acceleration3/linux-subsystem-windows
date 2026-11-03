@@ -73,6 +73,8 @@ public:
 
     [[nodiscard]] int start_vm(const QUuid& uuid);
 
+    [[nodiscard]] bool redefine_vm(const config::VmRecord& record);
+
     void apply_integrations();
 
 private:

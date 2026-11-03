@@ -8,6 +8,8 @@
 
 #include <QString>
 #include <QUuid>
+
+#include <cstdlib>
 #include <libvirt/libvirt.h>
 
 namespace lsw::host::vm {
@@ -36,6 +38,10 @@ bool DomainImporter::import_existing(LibvirtConnection& conn, const config::Sett
     rec.nvram_path = settings.vm_nvram_path();
     rec.payload_iso_path = settings.vm_payload_iso_path();
     rec.install_media_path = settings.vm_install_media_path();
+    if (char* xml = ::virDomainGetXMLDesc(d, VIR_DOMAIN_XML_INACTIVE)) {
+        rec.first_boot_done = QString::fromUtf8(xml).contains(QStringLiteral("max_outputs=1"));
+        ::free(xml);
+    }
     vms.add(std::move(rec));
     LSW_INFO("found existing libvirt domain '{}', registered with manager", config::kVmName);
     return true;

@@ -5,6 +5,7 @@
 #include "lsw/host/platform/dolphin_places.hpp"
 #include "lsw/host/platform/gtk_bookmarks.hpp"
 #include "lsw/host/platform/guest_smb_share.hpp"
+#include "lsw/host/services/domain_inputs.hpp"
 #include "lsw/linkproto/envelope.hpp"
 
 #include <QDir>
@@ -107,9 +108,24 @@ bool HostServices::bind_agent(const QUuid& uuid) {
     return true;
 }
 
+bool HostServices::redefine_vm(const config::VmRecord& record) {
+    config::VmRecord sized = record;
+    sized.sizing = vm_sizing_from_settings(manager_settings_);
+    const vm::DomainXmlInputs inputs = domain_inputs_from_settings(
+        settings_, manager_settings_, status_.graphics().monitor_refresh_millihz);
+    if (lifecycle_.redefine(sized, inputs) != 0) {
+        return false;
+    }
+    status_.refresh(StatusHub::Area::Vm);
+    return true;
+}
+
 int HostServices::start_vm(const QUuid& uuid) {
     const auto* record = vms_.find(uuid);
     const bool cold = !lifecycle_.is_running(uuid);
+    if (cold && record != nullptr && record->first_boot_done && !redefine_vm(*record)) {
+        LSW_WARN("start: the definition could not be rewritten from the settings; starting the one libvirt has");
+    }
     const int rc = lifecycle_.start(uuid, record != nullptr && record->first_boot_done);
     if (rc == 0 && cold) {
         status_.boot_started(uuid);
