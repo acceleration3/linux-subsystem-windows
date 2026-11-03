@@ -9,7 +9,11 @@
 #include <iterator>
 #include <string>
 #include <thread>
+
+// clang-format off
 #include <windows.h>
+#include <dwmapi.h>
+// clang-format on
 
 namespace lsw::agent::win {
 
@@ -32,6 +36,14 @@ BOOL CALLBACK overlay_proc(HWND window, LPARAM param) {
     DWORD pid = 0;
     ::GetWindowThreadProcessId(window, &pid);
     if (pid == scan->shell_pid) {
+        return TRUE;
+    }
+    if ((::GetWindowLongW(window, GWL_EXSTYLE) & WS_EX_TOPMOST) == 0) {
+        return TRUE;
+    }
+    int cloaked = 0;
+    if (::DwmGetWindowAttribute(window, DWMWA_CLOAKED, &cloaked, sizeof(cloaked)) == S_OK &&
+        cloaked != 0) {
         return TRUE;
     }
     RECT rect{};
