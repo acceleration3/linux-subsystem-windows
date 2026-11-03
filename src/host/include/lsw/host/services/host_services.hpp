@@ -10,6 +10,7 @@
 #include "lsw/host/link/agent_guest_stats_probe.hpp"
 #include "lsw/host/link/agent_rpc_client.hpp"
 #include "lsw/host/services/agent_log_levels.hpp"
+#include "lsw/host/services/app_errors.hpp"
 #include "lsw/host/services/guest_shells.hpp"
 #include "lsw/host/services/log_cleaner.hpp"
 #include "lsw/host/services/log_collector.hpp"
@@ -47,6 +48,8 @@ public:
     [[nodiscard]] link::AgentRpcClient& rpc() noexcept { return rpc_; }
 
     [[nodiscard]] GuestShells& shells() noexcept { return shells_; }
+
+    [[nodiscard]] AppErrors& app_errors() noexcept { return app_errors_; }
 
     [[nodiscard]] GuestUpdate& guest_update() noexcept { return guest_update_; }
     [[nodiscard]] GuestUpkeep& upkeep() noexcept { return upkeep_; }
@@ -88,6 +91,7 @@ private:
     link::AgentGuestStatsProbe guest_probe_;
     StatusHub status_;
     GuestShells shells_;
+    AppErrors app_errors_;
     GuestUpdate guest_update_;
     GuestUpkeep upkeep_;
     UsbPassthrough usb_;

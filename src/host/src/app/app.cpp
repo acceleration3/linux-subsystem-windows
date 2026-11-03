@@ -7,6 +7,7 @@
 #include "lsw/host/manager/document_opener.hpp"
 #include "lsw/host/manager/guest_app_launch_controller.hpp"
 #include "lsw/host/manager/app_config_dialog.hpp"
+#include "lsw/host/manager/app_error_dialog.hpp"
 #include "lsw/host/manager/launch_splash.hpp"
 #include "lsw/host/manager/update_dialog.hpp"
 #include "lsw/host/services/guest_update_status.hpp"
@@ -326,6 +327,38 @@ int App::capture_screens(const QString& dir) {
         Q_EMIT services_.log_collector().finished(
             QDir(services_.settings().logs_dir()).filePath(QStringLiteral("lsw-logs-20261102-143518.tar.gz")));
         shoot(&collecting, QStringLiteral("dialog-8-collect-logs"));
+
+        using Problem = services::AppErrorReport::Problem;
+        services::AppErrorReport startup;
+        startup.kind = services::AppErrorReport::Kind::Startup;
+        startup.image = QStringLiteral("C:\\Games\\th06c\\th06c.exe");
+        startup.pid = 5604;
+        startup.exit_code = 0xC0000135;
+        startup.exit_code_hex = QStringLiteral("0xC0000135");
+        startup.code_name = QStringLiteral("DLL not found");
+        for (const QString& module : {QStringLiteral("MSVCP140.dll"), QStringLiteral("VCRUNTIME140.dll"),
+                                      QStringLiteral("VCRUNTIME140_1.dll")}) {
+            Problem problem;
+            problem.module = module;
+            problem.importer = QStringLiteral("th06c.exe");
+            startup.problems.append(problem);
+        }
+        manager::AppErrorDialog start_error{startup};
+        start_error.setAttribute(Qt::WA_DeleteOnClose, false);
+        shoot(&start_error, QStringLiteral("dialog-9-app-startup-error"));
+
+        services::AppErrorReport crash;
+        crash.kind = services::AppErrorReport::Kind::Crash;
+        crash.image = QStringLiteral("C:\\Tools\\crashme.exe");
+        crash.pid = 6536;
+        crash.exit_code = 0xC0000005;
+        crash.exit_code_hex = QStringLiteral("0xC0000005");
+        crash.code_name = QStringLiteral("access violation");
+        crash.module = QStringLiteral("crashme.exe");
+        crash.offset = QStringLiteral("0x1009");
+        manager::AppErrorDialog crash_error{crash};
+        crash_error.setAttribute(Qt::WA_DeleteOnClose, false);
+        shoot(&crash_error, QStringLiteral("dialog-10-app-crash-error"));
     }
 
     auto* wiz = new wizard::Wizard(services_);

@@ -35,6 +35,8 @@ public:
     [[nodiscard]] static std::optional<SpawnedProcess> spawn(const SpawnOptions& options,
                                                              DWORD* error_out = nullptr);
 
+    [[nodiscard]] static bool set_error_mode(HANDLE process, DWORD mode);
+
     [[nodiscard]] static std::wstring quote(const std::wstring& path) {
         return L"\"" + path + L"\"";
     }

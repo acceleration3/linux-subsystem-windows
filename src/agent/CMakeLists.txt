@@ -99,6 +99,8 @@ set(_lsw_agent_win_sources
     src/win/security_attributes.cpp
     src/win/overlapped_pipe.cpp
     src/win/rolling_file.cpp
+    src/win/pe_image.cpp
+    src/win/event_log_reader.cpp
 )
 set(_lsw_agent_util_sources
     src/util/base64.cpp
@@ -134,6 +136,10 @@ set(_lsw_agent_apps_sources
     src/apps/launch_group.cpp
     src/apps/launch_command.cpp
     src/apps/launcher.cpp
+    src/apps/exit_status.cpp
+    src/apps/exit_reporter.cpp
+    src/apps/import_resolver.cpp
+    src/apps/launch_watcher.cpp
     src/apps/upload_store.cpp
 )
 set(_lsw_agent_install_sources
@@ -210,6 +216,7 @@ target_link_libraries(lsw-guest-agent
         shlwapi
         shell32
         winhttp
+        wevtapi
         dwmapi
         runtimeobject
         setupapi

@@ -4,7 +4,9 @@
 #include "lsw/host/config/vm_record.hpp"
 #include "lsw/host/manager/guest_restart.hpp"
 #include "lsw/host/manager/nav_rail.hpp"
+#include "lsw/host/services/app_errors.hpp"
 
+#include <QHash>
 #include <QMainWindow>
 #include <QPointer>
 #include <QSystemTrayIcon>
@@ -31,6 +33,7 @@ class GraphicsPage;
 class LogPanel;
 class MaintenancePage;
 class RunOnVmDialog;
+class AppErrorDialog;
 class UsbPage;
 class SettingsPage;
 class UpdateDialog;
@@ -73,6 +76,7 @@ private:
     void start_guest();
     void follow_agent_for_desktop(bool online);
     void setup_tray();
+    void show_app_error(const services::AppErrorReport& report);
     void refresh_identity();
     void refresh_pending_counts();
     void refresh_detail();
@@ -99,6 +103,7 @@ private:
     QPushButton* desktop_button_ = nullptr;
     QPushButton* run_on_vm_button_ = nullptr;
     QPointer<RunOnVmDialog> run_on_vm_dialog_;
+    QHash<QString, QPointer<AppErrorDialog>> app_error_dialogs_;
     QPushButton* clear_button_ = nullptr;
     QPushButton* config_folder_button_ = nullptr;
     QPushButton* windows_files_button_ = nullptr;

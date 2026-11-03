@@ -5,6 +5,8 @@
 namespace lsw::agent::win {
 
 namespace {
+constexpr ULONG kProcessDefaultHardErrorMode = 12;
+
 class HandleList {
 public:
     explicit HandleList(std::vector<HANDLE> handles) : handles_(std::move(handles)) {
@@ -43,6 +45,19 @@ private:
     bool ok_ = false;
 };
 
+}
+
+bool Process::set_error_mode(HANDLE process, DWORD mode) {
+    using SetInformationProcess = LONG(NTAPI*)(HANDLE, ULONG, PVOID, ULONG);
+    const HMODULE ntdll = ::GetModuleHandleW(L"ntdll.dll");
+    const auto set = ntdll == nullptr ? nullptr
+                                      : reinterpret_cast<SetInformationProcess>(reinterpret_cast<void*>(
+                                            ::GetProcAddress(ntdll, "NtSetInformationProcess")));
+    if (set == nullptr) {
+        return false;
+    }
+    ULONG value = mode ^ SEM_FAILCRITICALERRORS;
+    return set(process, kProcessDefaultHardErrorMode, &value, sizeof(value)) >= 0;
 }
 
 std::optional<SpawnedProcess> Process::spawn(const SpawnOptions& options, DWORD* error_out) {

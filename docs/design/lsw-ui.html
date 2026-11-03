@@ -788,6 +788,8 @@ svg.ico{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stro
         <li><button data-view="m-cfg">Configure application</button></li>
         <li><button data-view="m-store">Add a store app</button></li>
         <li><button data-view="m-opendoc">Windows can't see this file</button></li>
+        <li><button data-view="m-apperror">Application could not start</button></li>
+        <li><button data-view="m-apperror-crash">Application stopped unexpectedly</button></li>
         <li><button data-view="m-picker">Browse the guest</button></li>
         <li><button data-view="m-empty">No guest yet</button></li>
       </ul>
@@ -2214,6 +2216,55 @@ svg.ico{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stro
         <button class="btn">Cancel</button>
         <button class="btn">Open a read-only copy</button>
         <button class="btn primary">Share the folder and restart Windows</button>
+      </div>
+    </div>
+  </section>
+
+  <section data-view="m-apperror" hidden>
+    <div class="stage-head">
+      <span class="eyebrow">Manager</span>
+      <h1>Application could not start</h1>
+    </div>
+
+    <div class="frame dlg" style="max-width:520px">
+      <div class="titlebar">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <span class="t">th06c.exe could not start</span>
+      </div>
+      <div class="dlg-body">
+        <span style="font-size:15px;font-weight:600">th06c.exe could not start</span>
+        <span style="font-size:12.5px;color:var(--fg-dim);line-height:1.55">These files are missing:</span>
+        <ul style="margin:0;padding-left:18px;font-size:12.5px;line-height:1.6;color:var(--fg-dim)">
+            <li>MSVCP140.dll</li>
+            <li>VCRUNTIME140.dll</li>
+            <li>VCRUNTIME140_1.dll</li>
+        </ul>
+        <span class="meta">Exit code 0xC0000135 (DLL not found), process 5604</span>
+      </div>
+      <div class="dlg-foot">
+        <button class="btn primary">Close</button>
+      </div>
+    </div>
+  </section>
+
+  <section data-view="m-apperror-crash" hidden>
+    <div class="stage-head">
+      <span class="eyebrow">Manager</span>
+      <h1>Application stopped unexpectedly</h1>
+    </div>
+
+    <div class="frame dlg" style="max-width:520px">
+      <div class="titlebar">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <span class="t">crashme.exe stopped unexpectedly</span>
+      </div>
+      <div class="dlg-body">
+        <span style="font-size:15px;font-weight:600">crashme.exe stopped unexpectedly</span>
+        <span style="font-size:12.5px;color:var(--fg-dim);line-height:1.55">It crashed with an access violation in <span class="mono">crashme.exe</span> at offset <span class="mono">0x1009</span>.</span>
+        <span class="meta">Exit code 0xC0000005 (access violation), process 6536</span>
+      </div>
+      <div class="dlg-foot">
+        <button class="btn primary">Close</button>
       </div>
     </div>
   </section>

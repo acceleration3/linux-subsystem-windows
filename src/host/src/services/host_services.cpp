@@ -32,7 +32,7 @@ HostServices::HostServices(QObject* parent)
       pending_changes_(manager_settings_, this), vms_(this), libvirt_(this),
       lifecycle_(libvirt_, this), rpc_(this), guest_probe_(rpc_),
       status_(libvirt_, lifecycle_, rpc_, guest_probe_, settings_, manager_settings_, this),
-      shells_(rpc_, status_, this),
+      shells_(rpc_, status_, this), app_errors_(rpc_, this),
       guest_update_(settings_, status_, rpc_, this),
       upkeep_(status_, rpc_, guest_update_, this),
       usb_(lifecycle_, status_, manager_settings_, this),

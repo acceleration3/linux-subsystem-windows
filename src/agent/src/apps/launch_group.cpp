@@ -1,5 +1,6 @@
 #include "lsw/agent/apps/launch_group.hpp"
 
+#include "lsw/agent/apps/launch_watcher.hpp"
 #include "lsw/agent/log.hpp"
 #include "lsw/agent/util/text_encoding.hpp"
 #include "lsw/agent/util/wide_string.hpp"
@@ -200,7 +201,7 @@ std::string LaunchGroup::job_name(unsigned long pid) {
     return "Global\\lsw-launch-" + std::to_string(pid);
 }
 
-bool LaunchGroup::adopt(void* process, unsigned long pid) {
+bool LaunchGroup::adopt(void* process, unsigned long pid, LaunchIdentity identity) {
     Group g;
     const auto handle = static_cast<HANDLE>(process);
     if (::DuplicateHandle(::GetCurrentProcess(), handle, ::GetCurrentProcess(),
@@ -222,10 +223,13 @@ bool LaunchGroup::adopt(void* process, unsigned long pid) {
         LSW_AGENT_WARN("launch_group: CreateJobObject failed (err={}); this launch is tracked "
                        "by parentage and image path only",
                        win::ErrorText::last_error());
-    } else if (::AssignProcessToJobObject(g.job.get(), static_cast<HANDLE>(process)) == 0) {
-        LSW_AGENT_WARN("launch_group: AssignProcessToJobObject failed (err={}) for pid {}",
-                       win::ErrorText::last_error(), pid);
-        g.job.reset();
+    } else {
+        (void)LaunchWatcher::shared().attach(g.job.get(), pid, std::move(identity));
+        if (::AssignProcessToJobObject(g.job.get(), static_cast<HANDLE>(process)) == 0) {
+            LSW_AGENT_WARN("launch_group: AssignProcessToJobObject failed (err={}) for pid {}",
+                           win::ErrorText::last_error(), pid);
+            g.job.reset();
+        }
     }
 
     State& s = state();

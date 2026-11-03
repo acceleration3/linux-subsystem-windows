@@ -3,6 +3,7 @@
 #include "lsw/host/config/display_refresh.hpp"
 #include "lsw/host/config/vm_state.hpp"
 #include "lsw/host/link/agent_reply.hpp"
+#include "lsw/host/manager/app_error_dialog.hpp"
 #include "lsw/host/manager/apply_bar.hpp"
 #include "lsw/host/manager/collect_logs_dialog.hpp"
 #include "lsw/host/manager/console_panel.hpp"
@@ -905,10 +906,28 @@ void MainWindow::follow_launches() {
                        QStringLiteral("Could not open %1.").arg(name), error,
                        {{QStringLiteral("Open desktop"), [this] { open_desktop(); }}});
     });
+    connect(&services_.app_errors(), &services::AppErrors::reported, this,
+            &MainWindow::show_app_error);
     connect(&launcher, &apps::GuestAppLauncher::launched, this,
             [this](const QString& target, quint32) {
         notices_->withdraw(QStringLiteral("launch:") + target);
     });
+}
+
+void MainWindow::show_app_error(const services::AppErrorReport& report) {
+    const QString key = report.identity();
+    if (const auto open = app_error_dialogs_.value(key); open) {
+        return;
+    }
+    const bool anchored = isVisible() && !isMinimized();
+    auto* dialog = new AppErrorDialog(report, anchored ? this : nullptr);
+    app_error_dialogs_.insert(key, dialog);
+    if (anchored) {
+        dialog->open();
+    } else {
+        dialog->setModal(true);
+        Widgets::bring_to_front(dialog);
+    }
 }
 
 void MainWindow::setup_tray() {

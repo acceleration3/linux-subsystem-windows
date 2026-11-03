@@ -36,6 +36,7 @@ void set_err(std::string* error_out, const std::string& s) {
 enum class Elevation { Same, Any };
 
 constexpr DWORD kHandOffMs = 3000;
+constexpr DWORD kLaunchErrorMode = SEM_FAILCRITICALERRORS;
 
 std::optional<unsigned long> existing_process(const std::wstring& path, const win::RunAs& as,
                                               Elevation elevation_rule = Elevation::Same) {
@@ -231,7 +232,19 @@ bool Launcher::launch(const std::string& app_id, const std::string& extra_args,
         }
         return true;
     }
-    (void)LaunchGroup::adopt(spawned->process.get(), spawned->pid);
+    if (!win::Process::set_error_mode(spawned->process.get(), kLaunchErrorMode)) {
+        LSW_AGENT_WARN("launch: cannot set the error mode of pid {}; a failure in it may show "
+                       "a Windows error box",
+                       spawned->pid);
+    }
+    std::wstring path_env = win::Environment::variable_in(options.environment, L"PATH");
+    if (path_env.empty()) {
+        path_env.resize(::GetEnvironmentVariableW(L"PATH", nullptr, 0));
+        path_env.resize(::GetEnvironmentVariableW(L"PATH", path_env.data(),
+                                                  static_cast<DWORD>(path_env.size() + 1)));
+    }
+    (void)LaunchGroup::adopt(spawned->process.get(), spawned->pid,
+                             {app_id, path, working_dir, std::move(path_env)});
     ::ResumeThread(spawned->thread.get());
 
     LSW_AGENT_INFO("launch: spawned pid={}", spawned->pid);

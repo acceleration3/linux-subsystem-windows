@@ -13,6 +13,9 @@ public:
 
     [[nodiscard]] static std::wstring expand(const std::wstring& s);
 
+    [[nodiscard]] static std::wstring variable_in(const std::vector<wchar_t>& block,
+                                                  const std::wstring& name);
+
     [[nodiscard]] static std::vector<wchar_t> block_with(const std::vector<Override>& overrides);
 
     [[nodiscard]] static std::vector<wchar_t> block_from(const wchar_t* base,

@@ -26,6 +26,20 @@ std::wstring Environment::expand(const std::wstring& s) {
     return out;
 }
 
+std::wstring Environment::variable_in(const std::vector<wchar_t>& block, const std::wstring& name) {
+    const std::wstring wanted = util::WideString::upper(name);
+    const wchar_t* end = block.data() + block.size();
+    for (const wchar_t* p = block.data(); p < end && *p != L'\0';) {
+        const std::wstring entry(p);
+        p += entry.size() + 1;
+        const auto eq = entry.find(L'=', 1);
+        if (eq != std::wstring::npos && util::WideString::upper(entry.substr(0, eq)) == wanted) {
+            return entry.substr(eq + 1);
+        }
+    }
+    return {};
+}
+
 std::vector<wchar_t> Environment::block_with(const std::vector<Override>& overrides) {
     if (overrides.empty()) {
         return {};

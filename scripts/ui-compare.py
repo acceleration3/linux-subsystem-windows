@@ -48,6 +48,8 @@ SCREENS = [
     ("dialog-6-open-document", "m-opendoc", 560, 290),
     ("dialog-7-update", "m-update", 520, 470),
     ("dialog-8-collect-logs", "m-collect", 560, 420),
+    ("dialog-9-app-startup-error", "m-apperror", 520, 300),
+    ("dialog-10-app-crash-error", "m-apperror-crash", 520, 240),
 ]
 
 

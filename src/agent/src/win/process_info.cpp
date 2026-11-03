@@ -14,6 +14,7 @@ namespace lsw::agent::win {
 
 namespace {
 constexpr std::size_t kMaxPathChars = 32767;
+constexpr ULONG kProcessBasicInformation = 0;
 
 template<class Query, class Insufficient>
 [[nodiscard]] std::wstring grow_until_fits(Query query, Insufficient insufficient) {
@@ -58,6 +59,28 @@ std::optional<std::uint64_t> ProcessInfo::creation_time(HANDLE process) {
         return std::nullopt;
     }
     return FileTime::to_u64(created);
+}
+
+std::optional<DWORD> ProcessInfo::parent_pid(HANDLE process) {
+    struct BasicInformation {
+        LONG exit_status;
+        PVOID peb_base;
+        ULONG_PTR affinity_mask;
+        LONG base_priority;
+        ULONG_PTR unique_process_id;
+        ULONG_PTR inherited_from_unique_process_id;
+    };
+    using QueryInformationProcess = LONG(NTAPI*)(HANDLE, ULONG, PVOID, ULONG, PULONG);
+    const HMODULE ntdll = ::GetModuleHandleW(L"ntdll.dll");
+    const auto query = ntdll == nullptr ? nullptr
+                                        : reinterpret_cast<QueryInformationProcess>(
+                                              ::GetProcAddress(ntdll, "NtQueryInformationProcess"));
+    BasicInformation info{};
+    if (query == nullptr ||
+        query(process, kProcessBasicInformation, &info, sizeof(info), nullptr) < 0) {
+        return std::nullopt;
+    }
+    return static_cast<DWORD>(info.inherited_from_unique_process_id);
 }
 
 std::uint64_t ProcessInfo::creation_time_of(DWORD pid) {

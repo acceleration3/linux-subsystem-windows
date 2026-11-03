@@ -22,6 +22,8 @@ public:
     [[nodiscard]] static std::wstring image_path(HANDLE process);
 
     [[nodiscard]] static std::optional<std::uint64_t> creation_time(HANDLE process);
+    [[nodiscard]] static std::optional<DWORD> parent_pid(HANDLE process);
+
     [[nodiscard]] static std::uint64_t creation_time_of(DWORD pid);
 
     [[nodiscard]] static const std::wstring& self_path();
