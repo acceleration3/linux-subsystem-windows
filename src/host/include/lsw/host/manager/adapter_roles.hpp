@@ -2,35 +2,39 @@
 
 #include "lsw/host/platform/host_gpus.hpp"
 
-#include <QWidget>
+#include <QObject>
 
 class QComboBox;
-class QTableWidget;
 
 namespace lsw::host::config { class PendingChanges; }
 namespace lsw::host::services { class StatusHub; }
 
 namespace lsw::host::manager {
-class AdapterRoles : public QWidget {
+class AdapterRoles : public QObject {
     Q_OBJECT
 public:
-    AdapterRoles(config::PendingChanges& pending, const services::StatusHub& status,
-                 QWidget* parent = nullptr);
+    enum class Role { Display = 0, RenderOnly = 1, NotUsed = 2 };
 
-    [[nodiscard]] static QVector<platform::HostGpu>
-    listed(const QVector<platform::HostGpu>& gpus, const QString& display_uuid,
-           const QStringList& render);
+    AdapterRoles(config::PendingChanges& pending, const services::StatusHub& status,
+                 QObject* parent = nullptr);
+
+    [[nodiscard]] QVector<platform::HostGpu> listed() const;
+
+    [[nodiscard]] Role staged(const QString& uuid) const;
+    [[nodiscard]] Role running(const QString& uuid) const;
+    [[nodiscard]] bool differs(const QString& uuid) const;
+    [[nodiscard]] int staged_render_count() const;
+
+    [[nodiscard]] QComboBox* combo(const platform::HostGpu& gpu);
+
+    [[nodiscard]] static QString label(Role role);
 
 private:
-    void rebuild();
-    void choose(const QString& uuid, int role);
-    void set_role_cell(int row, QComboBox* combo);
+    [[nodiscard]] QString staged_display_uuid() const;
+    void choose(const QString& uuid, Role role);
 
     config::PendingChanges& pending_;
     const services::StatusHub& status_;
-    QVector<platform::HostGpu> gpus_;
-    bool probed_ = false;
-    QTableWidget* table_ = nullptr;
 };
 
 }

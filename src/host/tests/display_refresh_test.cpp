@@ -1,6 +1,6 @@
 #include "lsw/host/config/display_refresh.hpp"
 #include "lsw/host/config/manager_settings.hpp"
-#include "lsw/host/platform/host_monitor_rates.hpp"
+#include "lsw/host/platform/host_monitors.hpp"
 #include "lsw/host/services/domain_inputs.hpp"
 
 #include <QCoreApplication>
@@ -13,8 +13,8 @@ namespace {
 
 using lsw::host::config::DisplayRefresh;
 using lsw::host::config::ManagerSettings;
-using lsw::host::platform::HostMonitorRates;
-using lsw::host::platform::MonitorRates;
+using lsw::host::platform::HostMonitors;
+using lsw::host::platform::HostMonitor;
 using lsw::host::platform::RateChoice;
 using K = ManagerSettings::Key;
 
@@ -65,22 +65,22 @@ int main(int argc, char** argv) {
           "a rate reads without decimals when whole, else to three with trailing zeros dropped");
     check(DisplayRefresh::label(std::nullopt) == QStringLiteral("-"), "an unknown rate is a hyphen");
 
-    check(HostMonitorRates::mode_millihz(148500, 2200, 1125) == 60000, "1080p60 is 60 Hz");
-    check(HostMonitorRates::mode_millihz(148352, 2200, 1125) == 59940, "1080p59.94 is 59.94 Hz");
-    check(HostMonitorRates::mode_millihz(1'000'000, 2000, 1389) == 359971,
+    check(HostMonitors::mode_millihz(148500, 2200, 1125) == 60000, "1080p60 is 60 Hz");
+    check(HostMonitors::mode_millihz(148352, 2200, 1125) == 59940, "1080p59.94 is 59.94 Hz");
+    check(HostMonitors::mode_millihz(1'000'000, 2000, 1389) == 359971,
           "a 360 Hz mode is its exact rate, not its name");
-    check(HostMonitorRates::mode_millihz(0, 2200, 1125) == 0 &&
-              HostMonitorRates::mode_millihz(148500, 0, 1125) == 0 &&
-              HostMonitorRates::mode_millihz(148500, 2200, 0) == 0,
+    check(HostMonitors::mode_millihz(0, 2200, 1125) == 0 &&
+              HostMonitors::mode_millihz(148500, 0, 1125) == 0 &&
+              HostMonitors::mode_millihz(148500, 2200, 0) == 0,
           "a mode with no frame or no clock has no rate");
-    check(HostMonitorRates::mode_millihz(0xFFFFFFFFu, 1, 1) > 0, "a huge clock overflows nothing");
+    check(HostMonitors::mode_millihz(0xFFFFFFFFu, 1, 1) > 0, "a huge clock overflows nothing");
 
-    const QVector<MonitorRates> monitors = {
+    const QVector<HostMonitor> monitors = {
         {QStringLiteral("DP-2"), {360000, 239760, 144000, 60000, 59940}},
         {QStringLiteral("HDMI-A-1"), {144000, 119880, 60000}},
     };
-    const QVector<MonitorRates> screens = {{QStringLiteral("DP-2"), {359979}}};
-    const QVector<RateChoice> merged = HostMonitorRates::merge(monitors, screens);
+    const QVector<HostMonitor> screens = {{QStringLiteral("DP-2"), {359979}}};
+    const QVector<RateChoice> merged = HostMonitors::merge(monitors, screens);
     check(merged.size() == 5, "five choices: 360, 239.76, 144, 119.88, 60");
     check(merged.size() == 5 && merged[0].millihz == 360000 && merged[1].millihz == 239760 &&
               merged[2].millihz == 144000 && merged[3].millihz == 119880 && merged[4].millihz == 60000,
@@ -91,24 +91,24 @@ int main(int argc, char** argv) {
               merged[2].monitors == (QStringList{QStringLiteral("DP-2"), QStringLiteral("HDMI-A-1")}) &&
               merged[4].monitors == (QStringList{QStringLiteral("DP-2"), QStringLiteral("HDMI-A-1")}),
           "a rate both support names both");
-    check(HostMonitorRates::merge({}, {}).isEmpty(), "nothing read and no screen is no choice");
+    check(HostMonitors::merge({}, {}).isEmpty(), "nothing read and no screen is no choice");
     {
-        const auto real = HostMonitorRates::merge(
+        const auto real = HostMonitors::merge(
             {{QStringLiteral("DP-2"), {75029, 75025, 75000, 74973, 74551, 72809, 60317, 60020, 60004, 60000, 59954, 59940}}},
             {});
         check(real.size() == 3 && real[0].millihz == 75000 && real[1].millihz == 72809 && real[2].millihz == 60000,
               "a choice is shown as its rate nearest a whole hertz");
     }
     {
-        const auto only_screens = HostMonitorRates::merge({}, screens);
+        const auto only_screens = HostMonitors::merge({}, screens);
         check(only_screens.size() == 1 && only_screens[0].millihz == 359979,
               "with no node readable the screens' own rates are the list");
     }
     {
-        const auto edge = HostMonitorRates::merge({{QStringLiteral("A"), {60000, 59501, 59500}}}, {});
+        const auto edge = HostMonitors::merge({{QStringLiteral("A"), {60000, 59501, 59500}}}, {});
         check(edge.size() == 2 && edge[0].millihz == 60000 && edge[1].millihz == 59500,
               "499 mHz apart is one choice, 500 are two");
-        const auto chain = HostMonitorRates::merge({{QStringLiteral("A"), {60000, 59700, 59400}}}, {});
+        const auto chain = HostMonitors::merge({{QStringLiteral("A"), {60000, 59700, 59400}}}, {});
         check(chain.size() == 2 && chain[1].millihz == 59400, "a choice reaches half a hertz from its highest only");
     }
 

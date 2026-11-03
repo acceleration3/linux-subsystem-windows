@@ -1,4 +1,4 @@
-#include "lsw/host/platform/host_monitor_rates.hpp"
+#include "lsw/host/platform/host_monitors.hpp"
 
 #include "lsw/base/log.hpp"
 
@@ -31,7 +31,7 @@ QVector<qint64> rates_of(const drmModeConnector& connector) {
         if ((mode.flags & (DRM_MODE_FLAG_INTERLACE | DRM_MODE_FLAG_DBLSCAN)) != 0) {
             continue;
         }
-        const qint64 rate = HostMonitorRates::mode_millihz(mode.clock, mode.htotal, mode.vtotal);
+        const qint64 rate = HostMonitors::mode_millihz(mode.clock, mode.htotal, mode.vtotal);
         if (rate > 0 && !rates.contains(rate)) {
             rates.push_back(rate);
         }
@@ -40,9 +40,28 @@ QVector<qint64> rates_of(const drmModeConnector& connector) {
     return rates;
 }
 
+QSize active_mode_of(int fd, const drmModeConnector& connector) {
+    if (connector.encoder_id == 0) {
+        return {};
+    }
+    QSize size;
+    if (drmModeEncoder* encoder = drmModeGetEncoder(fd, connector.encoder_id)) {
+        if (encoder->crtc_id != 0) {
+            if (drmModeCrtc* crtc = drmModeGetCrtc(fd, encoder->crtc_id)) {
+                if (crtc->mode_valid != 0) {
+                    size = QSize(crtc->mode.hdisplay, crtc->mode.vdisplay);
+                }
+                drmModeFreeCrtc(crtc);
+            }
+        }
+        drmModeFreeEncoder(encoder);
+    }
+    return size;
 }
 
-qint64 HostMonitorRates::mode_millihz(quint32 clock_khz, quint32 htotal, quint32 vtotal) {
+}
+
+qint64 HostMonitors::mode_millihz(quint32 clock_khz, quint32 htotal, quint32 vtotal) {
     const qint64 frame = qint64{htotal} * vtotal;
     if (frame <= 0) {
         return 0;
@@ -50,8 +69,8 @@ qint64 HostMonitorRates::mode_millihz(quint32 clock_khz, quint32 htotal, quint32
     return (qint64{clock_khz} * 1'000'000 + frame / 2) / frame;
 }
 
-QVector<MonitorRates> HostMonitorRates::read() {
-    QVector<MonitorRates> monitors;
+QVector<HostMonitor> HostMonitors::read() {
+    QVector<HostMonitor> monitors;
     const QStringList nodes =
         QDir(QStringLiteral("/dev/dri")).entryList({QStringLiteral("card*")}, QDir::System | QDir::Files,
                                                    QDir::Name);
@@ -73,12 +92,13 @@ QVector<MonitorRates> HostMonitorRates::read() {
                 continue;
             }
             if (connector->connection == DRM_MODE_CONNECTED) {
-                MonitorRates found;
+                HostMonitor found;
                 found.name = QStringLiteral("%1-%2")
                                  .arg(QString::fromUtf8(drmModeGetConnectorTypeName(connector->connector_type)))
                                  .arg(connector->connector_type_id);
                 found.millihz = rates_of(*connector);
-                if (!found.millihz.isEmpty()) {
+                found.mode = active_mode_of(fd.value, *connector);
+                if (!found.millihz.isEmpty() || found.mode.isValid()) {
                     monitors.push_back(std::move(found));
                 }
             }
@@ -89,15 +109,15 @@ QVector<MonitorRates> HostMonitorRates::read() {
     return monitors;
 }
 
-QVector<RateChoice> HostMonitorRates::merge(const QVector<MonitorRates>& monitors,
-                                            const QVector<MonitorRates>& screens) {
+QVector<RateChoice> HostMonitors::merge(const QVector<HostMonitor>& monitors,
+                                            const QVector<HostMonitor>& screens) {
     struct Entry {
         qint64 millihz;
         QString monitor;
     };
     QVector<Entry> all;
     for (const auto* source : {&monitors, &screens}) {
-        for (const MonitorRates& monitor : *source) {
+        for (const HostMonitor& monitor : *source) {
             for (const qint64 rate : monitor.millihz) {
                 all.push_back({rate, monitor.name});
             }

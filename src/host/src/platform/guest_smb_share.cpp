@@ -21,6 +21,10 @@ QString GuestSmbShare::url(const QString& username, const QString& password, con
     return QString::fromUtf8(url.toEncoded());
 }
 
+QString GuestSmbShare::endpoint() {
+    return QStringLiteral("%1:%2").arg(QLatin1String(kHost)).arg(kPort);
+}
+
 QString GuestSmbShare::signature() {
     return QStringLiteral("@%1:%2/").arg(QLatin1String(kHost)).arg(kPort);
 }

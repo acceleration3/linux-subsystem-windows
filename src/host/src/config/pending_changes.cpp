@@ -74,15 +74,18 @@ QVariant PendingChanges::staged_or_current(const QString& key) const {
     return settings_.value(key);
 }
 
-QStringList PendingChanges::summary() const {
-    QStringList out;
+QVector<PendingChanges::Diff> PendingChanges::diffs() const {
+    QVector<Diff> out;
     out.reserve(staged_.size());
     for (auto it = staged_.constBegin(); it != staged_.constEnd(); ++it) {
-        out << QStringLiteral("%1 %2 → %3")
-                   .arg(label_for(it.key()), render(it.key(), settings_.value(it.key())),
-                        render(it.key(), it.value()));
+        out.push_back({it.key(), label_for(it.key()), render(it.key(), settings_.value(it.key())),
+                       render(it.key(), it.value())});
     }
     return out;
+}
+
+QStringList PendingChanges::keys() const {
+    return QStringList{staged_.keyBegin(), staged_.keyEnd()};
 }
 
 std::optional<HostShare> PendingChanges::add_share(const QString& folder) {

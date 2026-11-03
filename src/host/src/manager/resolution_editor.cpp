@@ -2,6 +2,8 @@
 
 #include "lsw/host/config/display_modes.hpp"
 #include "lsw/host/config/manager_settings.hpp"
+#include "lsw/host/manager/screen_pixels.hpp"
+#include "lsw/host/services/status_hub.hpp"
 #include "lsw/host/ui/theme.hpp"
 #include "lsw/host/ui/widgets.hpp"
 
@@ -14,6 +16,7 @@
 #include <QPushButton>
 #include <QRadioButton>
 #include <QScreen>
+#include <QWindow>
 #include <QSpinBox>
 #include <QTableWidget>
 #include <QVBoxLayout>
@@ -47,8 +50,9 @@ QPushButton* small(const QString& glyph, const QString& tip) {
 
 }
 
-ResolutionEditor::ResolutionEditor(config::ManagerSettings& settings, QWidget* parent)
-    : QWidget(parent), settings_(settings) {
+ResolutionEditor::ResolutionEditor(config::ManagerSettings& settings, const services::StatusHub& status,
+                                   QWidget* parent)
+    : QWidget(parent), settings_(settings), status_(status) {
     auto* frame = new QFrame;
     Theme::surface(frame, Theme::Role::kPanel);
     auto* outer = new QVBoxLayout(this);
@@ -136,10 +140,16 @@ ResolutionEditor::ResolutionEditor(config::ManagerSettings& settings, QWidget* p
 void ResolutionEditor::fill_presets() {
     presets_->clear();
     presets_->addItem(QStringLiteral("Common sizes and monitors"), QString{});
+    const ScreenPixels pixels(status_);
     for (const QScreen* screen : QGuiApplication::screens()) {
-        const QSize size = screen->geometry().size() * screen->devicePixelRatio();
-        const DisplayMode mode{size.width(), size.height()};
-        presets_->addItem(QStringLiteral("%1 · %2").arg(mode.label(), screen->name()),
+        const auto size = pixels.of(screen, window() != nullptr ? window()->windowHandle() : nullptr);
+        if (!size) {
+            continue;
+        }
+        const DisplayMode mode{size->width(), size->height()};
+        presets_->addItem(screen->name().isEmpty()
+                              ? mode.label()
+                              : QStringLiteral("%1 · %2").arg(mode.label(), screen->name()),
                           mode.text());
     }
     for (const auto& mode : kCommon) {
@@ -149,7 +159,15 @@ void ResolutionEditor::fill_presets() {
 
 void ResolutionEditor::suggest(const QStringList& list) {
     DisplayMode suggestion{1920, 1080};
-    for (const auto& mode : kCommon) {
+    QVector<DisplayMode> candidates;
+    const ScreenPixels pixels(status_);
+    for (const QScreen* screen : QGuiApplication::screens()) {
+        if (const auto size = pixels.of(screen, window() != nullptr ? window()->windowHandle() : nullptr)) {
+            candidates.push_back({size->width(), size->height()});
+        }
+    }
+    candidates.append(QVector<DisplayMode>(std::begin(kCommon), std::end(kCommon)));
+    for (const auto& mode : candidates) {
         if (DisplayModes::refusal_to_add(list, mode).isEmpty()) {
             suggestion = mode;
             break;
@@ -157,15 +175,18 @@ void ResolutionEditor::suggest(const QStringList& list) {
     }
     const QSignalBlocker quiet_width(width_);
     const QSignalBlocker quiet_height(height_);
+    const QSignalBlocker quiet_presets(presets_);
     width_->setValue(suggestion.width);
     height_->setValue(suggestion.height);
+    const int preset = presets_->findData(suggestion.text());
+    presets_->setCurrentIndex(preset >= 0 ? preset : 0);
 }
 
 void ResolutionEditor::validate() {
     const DisplayMode mode{width_->value(), height_->value()};
     const QString why =
         DisplayModes::refusal_to_add(settings_.string_list_value(K::kDisplayModes), mode);
-    add_->setEnabled(why.isEmpty() && isEnabled());
+    add_->setEnabled(why.isEmpty());
     reason_->setText(why);
     reason_->setVisible(edited_ && !why.isEmpty());
     Widgets::set_flag(reason_, Theme::Tone::kProperty, QVariant(Theme::Tone::kBad));
@@ -200,7 +221,6 @@ void ResolutionEditor::use_host_modes(bool on) {
 
 void ResolutionEditor::rebuild() {
     const QStringList list = DisplayModes::normalized(settings_.string_list_value(K::kDisplayModes));
-    setEnabled(!list.isEmpty());
     table_->setRowCount(static_cast<int>(list.size()));
     for (int row = 0; row < list.size(); ++row) {
         const auto mode = DisplayModes::parse(list.at(row));
@@ -259,11 +279,6 @@ void ResolutionEditor::rebuild() {
         suggest(list);
     }
     validate();
-    if (list.isEmpty()) {
-        reason_->setText(QStringLiteral("The host monitors' own modes are offered."));
-        reason_->setVisible(true);
-        Widgets::set_flag(reason_, Theme::Tone::kProperty, QVariant());
-    }
 }
 
 }

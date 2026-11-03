@@ -115,6 +115,34 @@ QPushButton#IconButton {
     color: #9aa3b4;
 }
 
+QToolButton#IconTool {
+    background-color: #1c212c;
+    border: 1px solid #272d3a;
+    border-radius: 3px;
+    padding: 0px;
+    min-width: 26px;
+    max-width: 26px;
+    min-height: 26px;
+    max-height: 26px;
+}
+QToolButton#IconTool:hover {
+    background-color: #242a37;
+    border-color: #272d3a;
+}
+QToolButton#IconTool[popupMode="2"] {
+    min-width: 40px;
+    max-width: 40px;
+    padding: 0px 14px 0px 4px;
+}
+QToolButton#IconTool::menu-indicator {
+    image: url(:/lsw/caret.png);
+    subcontrol-origin: padding;
+    subcontrol-position: center right;
+    right: 6px;
+    width: 8px;
+    height: 5px;
+}
+
 QLineEdit, QPlainTextEdit, QTextEdit, QSpinBox, QDoubleSpinBox, QComboBox {
     font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace;
     font-size: 12px;
@@ -491,6 +519,11 @@ QWidget#NavIdentity {
     border-bottom: 1px solid #272d3a;
 }
 
+QFrame#NavRule {
+    background-color: #1b202a;
+    border: none;
+}
+
 QWidget#NavPower {
     border-top: 1px solid #272d3a;
 }
@@ -688,7 +721,7 @@ QLabel#Pill, QLabel#PillRun, QLabel#PillDone, QLabel#PillFail, QLabel#PillWarn {
     font-size: 11px;
     font-weight: 500;
     border-radius: 9px;
-    padding: 1px 8px;
+    padding: 2px 8px;
 }
 QLabel#Pill     { color: #646d7e; border: 1px solid #2b313d; background-color: #181c25; }
 QLabel#PillRun  { color: #5aa9f0; border: 1px solid #2b4a6b; background-color: #16202c; }
@@ -738,4 +771,87 @@ QListWidget#WizardSteps::item:selected {
     background-color: #161c26;
     border-left: 2px solid #ff9f45;
     color: #e4e8f0;
+}
+
+QFrame#Segmented {
+    background-color: #0f131a;
+    border: 1px solid #272d3a;
+    border-radius: 5px;
+}
+
+QWidget#ItemRow {
+    border-bottom: 1px solid #1b202a;
+}
+QWidget#ItemRow[last="true"] {
+    border-bottom: none;
+}
+QLabel#ItemName {
+    font-size: 13px;
+}
+QLabel#ItemName[tone="dim"] {
+    color: #9aa3b4;
+}
+QLabel#ItemNote {
+    font-size: 11px;
+    color: #9aa3b4;
+}
+QLabel#ItemNote[tone="warm"] {
+    color: #f0c393;
+}
+QLabel#ItemNote[tone="bad"] {
+    color: #f2555a;
+}
+
+QLabel#DriveBadge {
+    font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace;
+    font-size: 13px;
+    font-weight: 600;
+    background-color: #0f131a;
+    border: 1px solid #272d3a;
+    border-radius: 4px;
+    padding: 2px 8px;
+}
+
+QLabel#StepChip {
+    font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace;
+    font-size: 11px;
+    color: #9aa3b4;
+    background-color: #0f131a;
+    border: 1px solid #272d3a;
+    border-radius: 10px;
+    padding: 3px 9px;
+}
+QLabel#StepChip[tone="ok"] {
+    color: #4ec98a;
+    border-color: #2c5c44;
+    background-color: #16241d;
+}
+QLabel#StepChip[tone="faint"] {
+    color: #646d7e;
+}
+QLabel#StepChip[tone="bad"] {
+    color: #f2555a;
+    border-color: #6b2f32;
+    background-color: #24181a;
+}
+
+QFrame#Panel[danger="true"] {
+    border-color: #6b2f32;
+}
+QWidget#PanelHeader[danger="true"] {
+    background-color: #1f1315;
+    border-bottom: 1px solid #6b2f32;
+}
+QLabel#CardName[danger="true"] {
+    color: #f0b0b2;
+}
+
+QPushButton[compact="true"] {
+    padding: 2px 9px;
+    min-height: 18px;
+    font-size: 12px;
+}
+QComboBox[compact="true"] {
+    padding: 3px 8px;
+    font-size: 11px;
 }

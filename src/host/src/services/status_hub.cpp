@@ -7,7 +7,7 @@
 #include "lsw/host/link/agent_reply.hpp"
 #include "lsw/host/link/agent_rpc_client.hpp"
 #include "lsw/host/platform/accel_virt_paths.hpp"
-#include "lsw/host/platform/host_monitor_rates.hpp"
+#include "lsw/host/platform/host_monitors.hpp"
 #include "lsw/host/platform/host_usb_devices.hpp"
 #include "lsw/host/vm/domain_description.hpp"
 #include "lsw/host/vm/lifecycle.hpp"
@@ -31,11 +31,12 @@ constexpr int kGraphicsPollMs = 2000;
 constexpr int kSessionsPollMs = 5000;
 constexpr int kModesEveryTicks = 5;
 constexpr int kUsbPollMs = 2000;
+constexpr int kMonitorsSettleMs = 250;
 
 struct HostAnswer {
     QVector<platform::HostGpu> gpus;
     QVector<platform::HostApi> apis;
-    QVector<platform::MonitorRates> monitors;
+    QVector<platform::HostMonitor> monitors;
 };
 
 }
@@ -70,7 +71,54 @@ StatusHub::StatusHub(vm::LibvirtConnection& libvirt, vm::Lifecycle& lifecycle,
             rebuild_usb();
         }
     });
+    monitors_timer_.setSingleShot(true);
+    monitors_timer_.setInterval(kMonitorsSettleMs);
+    connect(&monitors_timer_, &QTimer::timeout, this, &StatusHub::read_monitors);
+    for (QScreen* screen : QGuiApplication::screens()) {
+        watch_screen(screen);
+    }
+    connect(qGuiApp, &QGuiApplication::screenAdded, this, [this](QScreen* screen) {
+        watch_screen(screen);
+        monitors_timer_.start();
+    });
+    connect(qGuiApp, &QGuiApplication::screenRemoved, this, [this] { monitors_timer_.start(); });
     probe_host();
+}
+
+void StatusHub::watch_screen(QScreen* screen) {
+    const auto again = [this] { monitors_timer_.start(); };
+    connect(screen, &QScreen::geometryChanged, this, again);
+    connect(screen, &QScreen::refreshRateChanged, this, again);
+    connect(screen, &QScreen::logicalDotsPerInchChanged, this, again);
+    connect(screen, &QScreen::physicalSizeChanged, this, again);
+}
+
+bool StatusHub::apply_monitors(const QVector<platform::HostMonitor>& monitors) {
+    const bool differs = monitors != graphics_.host_monitors;
+    drm_monitors_ = monitors;
+    graphics_.host_monitors = monitors;
+    rebuild_monitor_rates();
+    return differs;
+}
+
+void StatusHub::read_monitors() {
+    if (monitors_reading_) {
+        monitors_again_ = true;
+        return;
+    }
+    monitors_reading_ = true;
+    (void)QtConcurrent::run([] { return platform::HostMonitors::read(); })
+        .then(this, [this](const QVector<platform::HostMonitor>& monitors) {
+            monitors_reading_ = false;
+            const bool differs = apply_monitors(monitors);
+            if (monitors_again_) {
+                monitors_again_ = false;
+                monitors_timer_.start();
+            }
+            if (differs) {
+                Q_EMIT changed(Area::Graphics);
+            }
+        });
 }
 
 void StatusHub::set_target(const QUuid& uuid) {
@@ -87,6 +135,7 @@ void StatusHub::set_target(const QUuid& uuid) {
     graphics_.guest = GuestGpuStatus{};
     graphics_.live_modes.reset();
     graphics_.live_refresh.reset();
+    graphics_.scale_percent.reset();
     graphics_timer_.stop();
     usb_ = UsbStatus{};
     update_usb_timer();
@@ -146,6 +195,7 @@ void StatusHub::on_stats(const QUuid& uuid, const vm::VmStats& stats) {
             graphics_.guest = GuestGpuStatus{};
             graphics_.live_modes.reset();
             graphics_.live_refresh.reset();
+            graphics_.scale_percent.reset();
             if (log_.poll()) {
                 graphics_.log_lines = log_.lines();
                 graphics_.log_line_count = log_.line_count();
@@ -160,6 +210,7 @@ void StatusHub::on_stats(const QUuid& uuid, const vm::VmStats& stats) {
         ask_sessions();
     } else if (!stats.agent_reachable && was_online) {
         graphics_.guest = GuestGpuStatus{};
+        graphics_.scale_percent.reset();
         rematch();
         Q_EMIT changed(Area::Graphics);
         sessions_ = GuestSessions{};
@@ -291,7 +342,7 @@ void StatusHub::probe_host() {
         answer.gpus = platform::HostGpus::enumerate();
         answer.apis =
             platform::HostGraphicsProbe::probe(answer.gpus, platform::AccelVirtPaths::d3d_lib_dir());
-        answer.monitors = platform::HostMonitorRates::read();
+        answer.monitors = platform::HostMonitors::read();
         return answer;
     }).then(this, [this](const HostAnswer& answer) {
         probing_ = false;
@@ -315,8 +366,7 @@ void StatusHub::probe_host() {
         }
         graphics_.host_gpus = answer.gpus;
         graphics_.apis = answer.apis;
-        drm_monitors_ = answer.monitors;
-        rebuild_monitor_rates();
+        apply_monitors(answer.monitors);
         graphics_.probed = true;
         rematch();
         read_vram();
@@ -371,14 +421,22 @@ void StatusHub::set_monitor_refresh(std::optional<quint32> millihz) {
     Q_EMIT changed(Area::Graphics);
 }
 
+void StatusHub::set_scale_percent(std::optional<int> percent) {
+    if (percent == graphics_.scale_percent) {
+        return;
+    }
+    graphics_.scale_percent = percent;
+    Q_EMIT changed(Area::Graphics);
+}
+
 void StatusHub::rebuild_monitor_rates() {
-    QVector<platform::MonitorRates> screens;
+    QVector<platform::HostMonitor> screens;
     for (const QScreen* screen : QGuiApplication::screens()) {
         if (const auto rate = config::DisplayRefresh::from_hertz(screen->refreshRate())) {
             screens.push_back({screen->name(), {static_cast<qint64>(*rate)}});
         }
     }
-    graphics_.monitor_rates = platform::HostMonitorRates::merge(drm_monitors_, screens);
+    graphics_.monitor_rates = platform::HostMonitors::merge(drm_monitors_, screens);
 }
 
 void StatusHub::update_usb_timer() {

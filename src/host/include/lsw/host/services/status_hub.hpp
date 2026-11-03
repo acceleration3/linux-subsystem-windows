@@ -15,6 +15,8 @@
 #include <QUuid>
 #include <optional>
 
+class QScreen;
+
 namespace lsw::host::config {
 class ManagerSettings;
 class Settings;
@@ -38,6 +40,8 @@ public:
               QObject* parent = nullptr);
 
     void set_monitor_refresh(std::optional<quint32> millihz);
+
+    void set_scale_percent(std::optional<int> percent);
 
     void set_target(const QUuid& uuid);
 
@@ -66,6 +70,9 @@ private:
     void on_stats(const QUuid& uuid, const vm::VmStats& stats);
     void tick_graphics();
     void probe_host();
+    void watch_screen(QScreen* screen);
+    void read_monitors();
+    bool apply_monitors(const QVector<platform::HostMonitor>& monitors);
     void ask_guest();
     void ask_sessions();
     void read_modes();
@@ -87,7 +94,7 @@ private:
 
     VmStatus vm_;
     GraphicsStatus graphics_;
-    QVector<platform::MonitorRates> drm_monitors_;
+    QVector<platform::HostMonitor> drm_monitors_;
     GuestSessions sessions_;
     vm::AvgpuLog log_;
     QTimer graphics_timer_;
@@ -95,6 +102,9 @@ private:
     bool graphics_detail_ = false;
     QTimer sessions_timer_;
     bool probing_ = false;
+    QTimer monitors_timer_;
+    bool monitors_reading_ = false;
+    bool monitors_again_ = false;
     QTimer usb_timer_;
     bool usb_detail_ = false;
     bool usb_reading_ = false;

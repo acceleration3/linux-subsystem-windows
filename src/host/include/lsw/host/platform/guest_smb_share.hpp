@@ -10,6 +10,8 @@ public:
     [[nodiscard]] static QString url(const QString& username, const QString& password,
                                      const QString& share);
 
+    [[nodiscard]] static QString endpoint();
+
     [[nodiscard]] static QString signature();
 
     [[nodiscard]] static QString share_for_scope(const QString& scope);

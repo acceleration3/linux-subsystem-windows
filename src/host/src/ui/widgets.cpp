@@ -45,6 +45,13 @@ QLabel* Widgets::step_line(const QString& mark, const QString& text, const char*
     return label;
 }
 
+QLabel* Widgets::tag(bool restart) {
+    auto* label = meta(restart ? QStringLiteral("RESTART") : QStringLiteral("NOW"));
+    label->setProperty(Theme::Tone::kProperty, restart ? Theme::Tone::kRestart : Theme::Tone::kNow);
+    label->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
+    return label;
+}
+
 QFrame* Widgets::separator() {
     auto* line = new QFrame;
     line->setObjectName(QString::fromLatin1(Theme::Role::kSeparator));
@@ -63,6 +70,10 @@ QPushButton* Widgets::button(const QString& text, const char* role) {
 void Widgets::set_role(QWidget* widget, const char* role) {
     widget->setObjectName(QString::fromLatin1(role));
     repolish(widget);
+}
+
+void Widgets::compact(QWidget* widget) {
+    set_flag(widget, "compact", true);
 }
 
 void Widgets::set_flag(QWidget* widget, const char* property, const QVariant& value) {

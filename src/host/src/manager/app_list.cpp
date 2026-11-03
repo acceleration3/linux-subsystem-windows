@@ -6,6 +6,7 @@
 #include "lsw/host/link/agent_rpc_client.hpp"
 #include "lsw/host/manager/app_config_dialog.hpp"
 #include "lsw/host/manager/store_app_dialog.hpp"
+#include "lsw/host/ui/line_icon.hpp"
 #include "lsw/host/ui/theme.hpp"
 #include "lsw/linkproto/commands.hpp"
 
@@ -34,6 +35,7 @@ constexpr qreal kMarkPx = 15.0;
 constexpr qreal kMarkRing = 2.0;
 constexpr qreal kMarkOverhang = 4.0;
 constexpr int kStoreIconPx = 256;
+constexpr int kToolIconPx = 18;
 
 constexpr int kTileWidth = 96;
 constexpr int kTilePad = 4;
@@ -132,17 +134,25 @@ AppListWidget::AppListWidget(apps::AppConfigStore& store, link::AgentRpcClient& 
     root->setContentsMargins(0, 0, 0, 0);
 
     toolbar_ = new QToolBar;
-    auto* refresh_act = toolbar_->addAction(QStringLiteral("\u21bb"));
-    refresh_act->setToolTip(QStringLiteral("Refresh"));
+    const auto tool_button = [](ui::LineIcon::Shape shape, const QString& tip) {
+        auto* button = new QToolButton;
+        button->setObjectName(QString::fromLatin1(ui::Theme::Role::kIconTool));
+        button->setIcon(ui::LineIcon::icon(shape));
+        button->setIconSize({kToolIconPx, kToolIconPx});
+        button->setToolTip(tip);
+        button->setCursor(Qt::PointingHandCursor);
+        return button;
+    };
+    auto* refresh_button = tool_button(ui::LineIcon::Shape::Refresh, QStringLiteral("Refresh"));
+    toolbar_->addWidget(refresh_button);
     auto* add_menu = new QMenu(this);
     auto* regular_act = add_menu->addAction(QStringLiteral("Add a regular app"));
     regular_act->setToolTip(QStringLiteral("A program or shortcut, by its path in Windows"));
     auto* store_act = add_menu->addAction(QStringLiteral("Add a store app"));
     store_act->setToolTip(QStringLiteral("One installed from the Microsoft Store"));
     add_menu->setToolTipsVisible(true);
-    auto* add_button = new QToolButton;
-    add_button->setText(QStringLiteral("+"));
-    add_button->setToolTip(QStringLiteral("Add an application"));
+    auto* add_button =
+        tool_button(ui::LineIcon::Shape::Plus, QStringLiteral("Add an application"));
     add_button->setMenu(add_menu);
     add_button->setPopupMode(QToolButton::InstantPopup);
     toolbar_->addWidget(add_button);
@@ -172,7 +182,7 @@ AppListWidget::AppListWidget(apps::AppConfigStore& store, link::AgentRpcClient& 
                 [this] { on_item_activated(list_->currentItem()); });
     }
     connect(list_, &QListWidget::customContextMenuRequested, this, &AppListWidget::on_context_menu);
-    connect(refresh_act, &QAction::triggered, this, &AppListWidget::on_refresh_clicked);
+    connect(refresh_button, &QToolButton::clicked, this, &AppListWidget::on_refresh_clicked);
     connect(regular_act, &QAction::triggered, this, &AppListWidget::on_new_clicked);
     connect(store_act, &QAction::triggered, this, &AppListWidget::add_store_app);
     connect(&store_, &apps::AppConfigStore::changed, this, &AppListWidget::rebuild);

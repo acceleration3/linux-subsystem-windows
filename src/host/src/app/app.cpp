@@ -24,6 +24,7 @@
 #include "lsw/host/vm/domain_importer.hpp"
 #include "lsw/host/wizard/payload_page.hpp"
 #include "lsw/host/wizard/setup_page.hpp"
+#include "lsw/host/wizard/vm_size_page.hpp"
 #include "lsw/host/wizard/wizard.hpp"
 
 #include <QDir>
@@ -143,6 +144,7 @@ int App::run() {
     if (!cli_.screenshot_dir.isEmpty()) {
         log_artifacts();
         (void)services_.open();
+        services_.upkeep().disable();
         (void)vm::DomainImporter::import_existing(services_.libvirt(),
                                                   services_.settings(), services_.vms());
         return capture_screens(cli_.screenshot_dir);
@@ -228,6 +230,10 @@ int App::capture_screens(const QString& dir) {
         {manager::NavRail::Page::Graphics, "manager-04-graphics", 860},
         {manager::NavRail::Page::Settings, "manager-05-settings", 900},
         {manager::NavRail::Page::Settings, "manager-06-settings-full", 3600},
+        {manager::NavRail::Page::Display, "manager-07-display", 900},
+        {manager::NavRail::Page::Files, "manager-08-files", 700},
+        {manager::NavRail::Page::Usb, "manager-09-usb", 800},
+        {manager::NavRail::Page::Maintenance, "manager-10-maintenance", 700},
     };
     for (const auto& entry : kPages) {
         window->resize(1000, entry.height);
@@ -242,7 +248,6 @@ int App::capture_screens(const QString& dir) {
         shoot(&download, QStringLiteral("dialog-1-download"));
 
         tools::TrimImageDialog trim{services_.settings(), QString{}};
-        trim.resize(620, 790);
         shoot(&trim, QStringLiteral("dialog-2-trim"));
 
         apps::AppConfig sample;
@@ -276,9 +281,40 @@ int App::capture_screens(const QString& dir) {
         demo.guest_version = QStringLiteral("0.1.0");
         demo.shipped_version = QStringLiteral("0.2.0");
         const services::GuestUpdateStatus real_update = services_.status().update();
+        demo.live_steps = {
+            {QStringLiteral("verify"), QStringLiteral("done"), {}},
+            {QStringLiteral("stop"), QStringLiteral("done"), {}},
+            {QStringLiteral("agent and mirror"), QStringLiteral("done"), {}},
+            {QStringLiteral("driver"), QStringLiteral("running"), {}},
+            {QStringLiteral("loaders"), QStringLiteral("pending"), {}},
+            {QStringLiteral("shared folders"), QStringLiteral("pending"), {}},
+            {QStringLiteral("service and firewall"), QStringLiteral("pending"), {}},
+            {QStringLiteral("start"), QStringLiteral("pending"), {}},
+        };
         manager::UpdateDialog updating{services_.status()};
         services_.status().set_update(demo);
         shoot(&updating, QStringLiteral("dialog-7-update"));
+
+        services::GuestUpdateStatus finished = demo;
+        finished.state = services::GuestUpdateStatus::State::Succeeded;
+        finished.step.clear();
+        finished.guest_version = finished.shipped_version;
+        finished.restart = services::GuestUpdateStatus::Restart::NotNeeded;
+        for (auto& step : finished.live_steps) {
+            step.status = step.name == QLatin1String("loaders") ? QStringLiteral("skipped")
+                                                                  : QStringLiteral("done");
+        }
+        services_.status().set_update(finished);
+        shoot(&updating, QStringLiteral("dialog-7-update-finished"));
+
+        services::GuestUpdateStatus restarting = demo;
+        restarting.restart = services::GuestUpdateStatus::Restart::Running;
+        restarting.restart_reasons = {QStringLiteral("the GPU driver did not switch over live")};
+        for (auto& step : restarting.live_steps) {
+            step.status = QStringLiteral("done");
+        }
+        services_.status().set_update(restarting);
+        shoot(&updating, QStringLiteral("dialog-7-update-restarting"));
         services_.status().set_update(real_update);
         updating.close();
 
@@ -299,6 +335,9 @@ int App::capture_screens(const QString& dir) {
         wiz->restart();
         if (auto* payload = qobject_cast<wizard::PayloadPage*>(wiz->currentPage())) {
             payload->demo_fill();
+        }
+        if (auto* size = qobject_cast<wizard::VmSizePage*>(wiz->currentPage())) {
+            size->demo_fill();
         }
         if (auto* setup = qobject_cast<wizard::SetupPage*>(wiz->currentPage())) {
             setup->demo_fill();

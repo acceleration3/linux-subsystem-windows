@@ -356,6 +356,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
   padding:2px 8px;border-radius:999px;border:1px solid;
 }
 .pill::before{content:"";width:5px;height:5px;border-radius:50%;background:currentColor}
+.pill{white-space:nowrap}
 .pill.pend{color:var(--fg-faint);border-color:#2b313d;background:#181c25}
 .pill.run{color:var(--info);border-color:#2b4a6b;background:var(--info-wash)}
 .pill.done{color:var(--ok);border-color:#2c5c44;background:var(--ok-wash)}
@@ -382,7 +383,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 }
 .panel > header .tools{margin-left:auto;display:flex;gap:6px}
 .icon-btn{
-  width:24px;height:24px;border-radius:var(--r-sm);border:1px solid var(--line);
+  width:28px;height:28px;border-radius:var(--r-sm);border:1px solid var(--line);
   background:var(--raised);display:grid;place-items:center;color:var(--fg-dim);font-size:12px;
 }
 .icon-btn:hover{background:var(--raised-hi);color:var(--fg)}
@@ -423,6 +424,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 
 .icon-btn.menu-btn{width:auto;padding:0 6px;grid-auto-flow:column;gap:4px}
 .icon-btn.menu-btn .car{font-size:8px;color:var(--fg-faint)}
+.icon-btn svg{width:18px;height:18px}
 .menu{position:absolute;right:10px;top:36px;z-index:5;min-width:180px;background:#151922;
   border:1px solid var(--line);border-radius:var(--r-md);padding:4px;box-shadow:0 10px 28px #000a;
   display:flex;flex-direction:column;gap:1px;text-transform:none;letter-spacing:0}
@@ -465,7 +467,6 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
   padding:7px 10px;border-radius:var(--r-md);font-size:13px;color:var(--fg-dim);
   border-left:2px solid transparent;
 }
-.navitem .g{width:15px;text-align:center;color:var(--fg-faint);font-size:12px}
 .navitem:hover{background:var(--raised);color:var(--fg)}
 .navitem.on{background:#1a1f29;color:var(--fg);font-weight:500;border-left:2px solid var(--amber)}
 .navitem.on .g{color:var(--amber)}
@@ -557,6 +558,74 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 .radio.on{border-color:var(--amber);box-shadow:inset 0 0 0 3px #0f131a;background:var(--amber)}
 .tbl.tight td{padding:6px 12px}
 .tbl.tight th{padding:0 12px 6px}
+
+.navitem .g{width:18px;height:18px;display:grid;place-items:center;color:var(--fg-faint);flex:none}
+.navitem .g svg{width:18px;height:18px}
+.navitem:hover .g{color:var(--fg-dim)}
+.nav ul .rule{height:1px;margin:5px 8px;background:#1b202a}
+svg.ico{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+
+.seg{display:inline-flex;flex-wrap:wrap;border:1px solid var(--line);border-radius:var(--r-md);overflow:hidden;background:#0f131a;align-self:flex-start}
+.seg button{padding:5px 11px;font-size:12px;color:var(--fg-dim);border-right:1px solid var(--line);white-space:nowrap}
+.seg button:last-child{border-right:none}
+.seg button:hover{color:var(--fg);background:var(--raised)}
+.seg button.on{background:var(--amber-wash);color:var(--amber)}
+.seg button.on .o{color:#d08a46}
+.seg button .o{font-family:"JetBrains Mono",monospace;font-size:10.5px;color:var(--fg-faint);margin-left:5px}
+.seg button:disabled{color:#3a4150;background:#0f131a}
+.tline{display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--fg-dim)}
+.input.select.sm{display:inline-flex;padding:3px 8px;font-size:11.5px;gap:8px}
+
+.dispnow{display:grid;grid-template-columns:236px minmax(0,1fr);gap:20px;align-items:center}
+@media (max-width:760px){.dispnow{grid-template-columns:1fr}}
+.monbox{justify-self:center;display:flex;flex-direction:column;align-items:center}
+.monbox .scr{width:210px;border:1.5px solid #39415a;border-radius:6px;background:#121722;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px}
+.monbox .scr b{font-family:"JetBrains Mono",monospace;font-size:14px;font-weight:500;color:var(--fg)}
+.monbox .stand{width:2px;height:12px;background:#39415a}
+.monbox .base{width:64px;height:2px;border-radius:2px;background:#39415a}
+
+.rows{display:flex;flex-direction:column}
+.drow{display:grid;grid-template-columns:30px minmax(0,1fr) auto;gap:12px;align-items:center;
+  padding:10px 12px;border-bottom:1px solid #1b202a}
+.drow:last-child{border-bottom:none}
+.drow .ic{width:30px;height:30px;border-radius:6px;background:#1a1f29;border:1px solid var(--line);
+  display:grid;place-items:center;color:var(--fg-dim)}
+.drow .ic svg{width:17px;height:17px}
+.drow .who{display:flex;flex-direction:column;gap:2px;min-width:0}
+.drow .who .n{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.drow .who .f{font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--fg-faint);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.drow .who .note{font-size:11.5px;color:var(--fg-dim)}
+.drow .who .note.warm{color:#f0c393}
+.drow .side{display:flex;align-items:center;gap:12px}
+.drow.off .who .n{color:var(--fg-dim)}
+.drow .alw{display:flex;align-items:center;gap:7px;font-family:"JetBrains Mono",monospace;
+  font-size:9.5px;letter-spacing:0.12em;text-transform:uppercase;color:var(--fg-faint)}
+.drive{font-family:"JetBrains Mono",monospace;font-size:13px;font-weight:600;color:var(--fg);
+  border:1px solid var(--line);border-radius:4px;padding:2px 8px;background:#0f131a}
+.arrow{color:var(--fg-faint);font-size:13px}
+.area .foot{padding:9px 12px;border-top:1px solid var(--line);background:#131720}
+.area > .rows + .foot, .area > .in + .foot{margin:0}
+
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip2{display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:999px;
+  border:1px solid var(--line);font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--fg-dim);background:#0f131a}
+.chip2.ok{color:var(--ok);border-color:#2c5c44;background:var(--ok-wash)}
+.chip2.skip{color:var(--fg-faint)}
+
+.area.danger{border-color:#6b2f32}
+.area.danger > header{background:#1f1315;border-bottom-color:#6b2f32}
+.area.danger > header .nm{color:#f0b0b2}
+.broken{position:relative}
+.broken > *{opacity:.38;pointer-events:none}
+.broken::after{
+  content:"not working";position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) rotate(-8deg);
+  font-family:"JetBrains Mono",monospace;font-size:13px;font-weight:600;letter-spacing:.22em;text-transform:uppercase;
+  color:var(--bad);border:1.5px solid var(--bad);border-radius:4px;padding:5px 14px;background:#1f1315e6;white-space:nowrap;
+}
+.toolrow, .area .in.toolrow{display:flex;flex-direction:row;align-items:center;gap:16px}
+.toolrow p{margin:0;font-size:12.5px;color:var(--fg-dim);line-height:1.55;flex:1}
 
 .editlist{border:1px solid var(--line);border-radius:var(--r-sm);overflow:hidden}
 .editlist table{width:100%;border-collapse:collapse}
@@ -668,6 +737,23 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
   flex-wrap:wrap;gap:10px;align-items:center;border:1px solid #000}
 </style>
 
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-overview" viewBox="0 0 20 20"><rect x="3" y="3" width="6" height="6" rx="1.5"/><rect x="11" y="3" width="6" height="6" rx="1.5"/><rect x="3" y="11" width="6" height="6" rx="1.5"/><rect x="11" y="11" width="6" height="6" rx="1.5"/></symbol>
+    <symbol id="i-display" viewBox="0 0 20 20"><rect x="2.5" y="3.5" width="15" height="10.5" rx="2"/><path d="M10 14v2.5M6.5 16.5h7"/></symbol>
+    <symbol id="i-graphics" viewBox="0 0 20 20"><rect x="5.5" y="5.5" width="9" height="9" rx="1.5"/><rect x="8.5" y="8.5" width="3" height="3"/><path d="M8 2.5v3M12 2.5v3M8 14.5v3M12 14.5v3M2.5 8h3M2.5 12h3M14.5 8h3M14.5 12h3"/></symbol>
+    <symbol id="i-files" viewBox="0 0 20 20"><path d="M2.5 6.5v8a1.5 1.5 0 0 0 1.5 1.5h12a1.5 1.5 0 0 0 1.5-1.5V8a1.5 1.5 0 0 0-1.5-1.5H10L8.3 4.5H4A1.5 1.5 0 0 0 2.5 6Z"/></symbol>
+    <symbol id="i-usb" viewBox="0 0 20 20"><rect x="7.25" y="2.5" width="5.5" height="4" rx="0.8"/><rect x="5.5" y="6.5" width="9" height="7" rx="2"/><path d="M10 13.5v4"/></symbol>
+    <symbol id="i-console" viewBox="0 0 20 20"><rect x="2.5" y="3.5" width="15" height="13" rx="2"/><path d="M6 8l2.5 2.25L6 12.5M10.5 12.5H14"/></symbol>
+    <symbol id="i-log" viewBox="0 0 20 20"><path d="M7.5 5.5h9M7.5 10h9M7.5 14.5h9"/><circle cx="4" cy="5.5" r="1.15" fill="currentColor" stroke="none"/><circle cx="4" cy="10" r="1.15" fill="currentColor" stroke="none"/><circle cx="4" cy="14.5" r="1.15" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-maint" viewBox="0 0 20 20"><path d="M12.6 3.2a4 4 0 0 0-3.7 5.4l-5.6 5.6a1.6 1.6 0 0 0 2.3 2.3l5.6-5.6a4 4 0 0 0 5.4-3.7l-2.4 2.4-2.3-.6-.6-2.3Z"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 20 20"><path d="M2.5 5h2.6M8.9 5h8.6M2.5 10h8.6M14.9 10h2.6M2.5 15h4.6M10.9 15h6.6"/><circle cx="7" cy="5" r="1.9"/><circle cx="13" cy="10" r="1.9"/><circle cx="9" cy="15" r="1.9"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 20 20"><path d="M16 10a6 6 0 1 1-1.76-4.24"/><path d="M15.5 3v3.25h-3.25"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 20 20"><path d="M10 4.5v11M4.5 10h11"/></symbol>
+    <symbol id="i-hid" viewBox="0 0 20 20"><rect x="6" y="2.5" width="8" height="15" rx="4"/><path d="M10 2.5v5M6 7.5h8"/></symbol>
+    <symbol id="i-disk" viewBox="0 0 20 20"><rect x="2.5" y="5" width="15" height="10" rx="2"/><path d="M2.5 11h15"/><circle cx="14" cy="13" r="0.6" fill="currentColor"/></symbol>
+  </defs>
+</svg>
 <header class="topbar">
   <div class="mark">
     <img class="logo" src="../../packaging/lsw-manager.svg" alt="">
@@ -688,10 +774,14 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
       <h2>Manager surfaces</h2>
       <ul>
         <li><button data-view="m-main" aria-current="true">Overview</button></li>
+        <li><button data-view="m-display">Display</button></li>
         <li><button data-view="m-gpu">Graphics</button></li>
-        <li><button data-view="m-settings">Settings</button></li>
+        <li><button data-view="m-files">Files</button></li>
+        <li><button data-view="m-usb">USB</button></li>
         <li><button data-view="m-console">Console</button></li>
         <li><button data-view="m-log">Log</button></li>
+        <li><button data-view="m-maint">Maintenance</button></li>
+        <li><button data-view="m-settings">Settings</button></li>
         <li><button data-view="m-splash">Starting the guest</button></li>
         <li><button data-view="m-update">Updating LSW in Windows</button></li>
         <li><button data-view="m-collect">Collect logs</button></li>
@@ -753,13 +843,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
             <span class="n">lsw</span>
             <span class="m">Windows 11 Pro 26200<br>8 cores &middot; 8 GiB &middot; 60 GiB<br>AMD Radeon RX 9070 XT +1 render</span>
           </div>
-          <ul>
-            <li><button class="navitem on"><span class="g">&#9633;</span> Overview</button></li>
-            <li><button class="navitem"><span class="g">&gt;_</span> Console</button></li>
-            <li><button class="navitem"><span class="g">&#8801;</span> Log <span class="count">1 284</span></button></li>
-            <li><button class="navitem"><span class="g">&#9678;</span> Graphics</button></li>
-            <li><button class="navitem"><span class="g">&#9881;</span> Settings <span class="count" style="color:var(--amber)">3</span></button></li>
-          </ul>
+          <ul data-nav="overview"></ul>
           <div class="power">
             <span class="badge on">ONLINE</span>
             <button class="btn stop">Stop the guest</button>
@@ -798,8 +882,8 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
             <div class="panel">
               <header>Installed applications
                 <span class="tools">
-                  <button class="icon-btn" title="Refresh">&#8635;</button>
-                  <button class="icon-btn menu-btn" title="Add an application">+<span class="car">&#9662;</span></button>
+                  <button class="icon-btn" title="Refresh"><svg class="ico"><use href="#i-refresh"/></svg></button>
+                  <button class="icon-btn menu-btn" title="Add an application"><svg class="ico"><use href="#i-plus"/></svg><span class="car">&#9662;</span></button>
                 </span>
               </header>
               <div class="apps" id="appGrid">
@@ -935,13 +1019,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
             <span class="n">lsw</span>
             <span class="m">Windows 11 Pro 26200<br>8 cores &middot; 8 GiB &middot; 60 GiB<br>AMD Radeon RX 9070 XT +1 render</span>
           </div>
-          <ul>
-            <li><button class="navitem"><span class="g">&#9633;</span> Overview</button></li>
-            <li><button class="navitem"><span class="g">&gt;_</span> Console</button></li>
-            <li><button class="navitem"><span class="g">&#8801;</span> Log <span class="count">1 284</span></button></li>
-            <li><button class="navitem on"><span class="g">&#9678;</span> Graphics</button></li>
-            <li><button class="navitem"><span class="g">&#9881;</span> Settings <span class="count" style="color:var(--amber)">3</span></button></li>
-          </ul>
+          <ul data-nav="graphics"></ul>
           <div class="power">
             <span class="badge on">ONLINE</span>
             <button class="btn stop">Stop the guest</button>
@@ -951,18 +1029,16 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
         <div class="content">
           <div class="cbar">
             <h4>Graphics</h4>
-            <span class="sub">accel-virt &middot; 2 adapters &middot; avgpu.sys started on 1</span>
-            <span class="acts">
-              <button class="btn quiet">Change in Settings</button>
-            </span>
+            <span class="sub">accel-virt &middot; 1 adapter, 1 more after a restart</span>
+
           </div>
 
           <div class="areas" style="flex:1">
             <div class="area">
               <header>
                 <span class="nm">AMD Radeon RX 9070 XT</span>
-                <span class="cap">display adapter</span>
-                <span class="right"><span class="pill done">Started</span></span>
+                <span class="cap">1002:7550</span>
+                <span class="right"><span class="input select sm" style="width:128px">Display</span><span class="pill done">Started</span></span>
               </header>
               <div class="in">
                 <div class="kpis">
@@ -977,8 +1053,8 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
             <div class="area">
               <header>
                 <span class="nm">Intel UHD Graphics 770</span>
-                <span class="cap">render only, no outputs</span>
-                <span class="right"><span class="pill warn">No driver</span></span>
+                <span class="cap">8086:4680</span>
+                <span class="right"><span class="tagr">restart</span><span class="input select sm" style="width:128px">Render only</span><span class="pill pend">After restart</span></span>
               </header>
               <div class="in">
                 <div class="kpis">
@@ -1014,14 +1090,13 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
               <div class="area">
                 <header>
                   <span class="nm">Device</span>
-                  <span class="cap">virtio-gpu-av-pci &times; 2</span>
-                  <span class="input select" style="margin-left:auto;display:inline-block;padding:1px 22px 1px 7px;font-size:11px">Switch resolution</span>
+                  <span class="cap">virtio-gpu-av-pci</span>
                 </header>
                 <div class="in">
                   <dl class="kv">
-                    <dt>Host window</dt><dd>8 GiB <span class="meta">write-back, taken by the driver</span></dd>
-                    <dt>Display</dt><dd>2560 &times; 1440 at 360 Hz <span class="meta">3 modes offered</span></dd>
-                    <dt>Adapters</dt><dd>2 <span class="meta">1 display, 1 render only</span></dd>
+                    <dt>Host window</dt><dd style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="input select sm" style="width:92px">8 GiB</span><span class="tagr">restart</span><span class="meta" style="margin:0">write-back, used on demand</span></dd>
+                    <dt>Display</dt><dd>2560 &times; 1440 at 360 Hz <span class="meta">set on the Display page</span></dd>
+                    <dt>Adapters</dt><dd>1 <span class="meta">the display; a render-only one after a restart</span></dd>
                   </dl>
                 </div>
               </div>
@@ -1030,12 +1105,11 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
                 <header>
                   <span class="nm">Guest driver</span>
                   <span class="cap">avgpu.sys 0.9.0.41</span>
-                  <span class="right"><span class="pill warn">1 of 2</span></span>
+                  <span class="right"><span class="pill done">Running</span></span>
                 </header>
                 <div class="in">
                   <dl class="kv">
                     <dt>RX 9070 XT</dt><dd><span class="yes">Running</span> <span class="meta">no problem code</span></dd>
-                    <dt>UHD 770</dt><dd><span class="warn">No driver</span> <span class="meta">problem code 28</span></dd>
                     <dt>Test signing</dt><dd><span class="yes">On</span> <span class="meta">the driver needs it</span></dd>
                     <dt>Driver search</dt><dd><span class="yes">Off</span> <span class="meta">Update cannot replace it</span></dd>
                     <dt>Submission</dt><dd>User mode <span class="meta">native fences on</span></dd>
@@ -1060,10 +1134,22 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
             </div>
           </div>
 
+          <div class="applybar">
+            <span class="eyebrow" style="color:var(--amber)">4 changes need a restart</span>
+            <span class="diffs">
+              <span class="diff">cores <span class="f">8</span> <span class="t">12</span></span>
+              <span class="diff">memory <span class="f">8192</span> <span class="t">12288 MiB</span></span>
+              <span class="diff">UHD 770 <span class="f">not used</span> <span class="t">render only</span></span>
+              <span class="diff">folders <span class="f">2</span> <span class="t">3</span></span>
+            </span>
+            <span class="acts">
+              <button class="btn quiet">Revert</button>
+              <button class="btn primary">Apply and restart the guest</button>
+            </span>
+          </div>
+
           <div class="statusbar">
             <span><b>host-gpu</b> 5f2c91d0&hellip;e83a</span>
-            <span class="sep"></span>
-            <span><b>render</b> 8086a780&hellip;0c11</span>
             <span class="sep"></span>
             <span><b>hostmem</b> 8 GiB</span>
             <span class="sep"></span>
@@ -1099,6 +1185,418 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 
   </section>
 
+  <section data-view="m-display" hidden>
+    <div class="stage-head">
+      <span class="eyebrow">Manager</span>
+      <h1>Display</h1>
+    </div>
+    <div class="frame">
+      <div class="titlebar">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <span class="t"><img class="logo" src="../../packaging/lsw-manager.svg" alt="">LSW</span>
+        <span class="spacer mono">1000 &times; 620</span>
+      </div>
+      <div class="mgr2">
+        <aside class="nav">
+          <div class="id">
+            <span class="n">lsw</span>
+            <span class="m">Windows 11 Pro 26200<br>8 cores &middot; 8 GiB &middot; 60 GiB<br>AMD Radeon RX 9070 XT +1 render</span>
+          </div>
+          <ul data-nav="display"></ul>
+          <div class="power">
+            <span class="badge on">ONLINE</span>
+            <button class="btn stop">Stop the guest</button>
+          </div>
+        </aside>
+        <div class="content">
+          <div class="cbar">
+            <h4>Display</h4>
+            <span class="sub">2560 &times; 1440 &middot; 360 Hz &middot; 125 %</span>
+            <span class="acts"><button class="btn quiet">Open desktop</button></span>
+          </div>
+
+          <div class="areas" style="flex:1">
+            <div class="area">
+              <header>
+                <span class="nm">What Windows shows</span>
+                <span class="cap">read from the running device</span>
+                <span class="right"><span class="pill done">Live</span></span>
+              </header>
+              <div class="in">
+                <div class="dispnow">
+                  <div class="monbox">
+                    <div class="scr" style="aspect-ratio:16/9"><b>2560 &times; 1440</b><span class="meta">16:9 &middot; 360 Hz</span></div>
+                    <i class="stand"></i><i class="base"></i>
+                  </div>
+                  <dl class="kv">
+                    <dt>Resolution</dt><dd>2560 &times; 1440 <span class="meta">the preferred one of 3 offered</span></dd>
+                    <dt>Refresh</dt><dd>360 Hz <span class="meta">same as the monitor this window is on</span></dd>
+                    <dt>Scale</dt><dd>125 % <span class="meta">matching this desktop, 1.25</span></dd>
+                    <dt>This window</dt><dd>DP-2 <span class="meta">2560 &times; 1440 at 360 Hz, scale 1.25</span></dd>
+                  </dl>
+                </div>
+              </div>
+            </div>
+
+            <div class="area">
+              <header>
+                <span class="nm">Resolutions</span>
+                <span class="cap">what the guest's monitor offers Windows</span>
+                <span class="right"><span class="tagr live">now</span></span>
+              </header>
+              <div class="in">
+                <span class="seg"><button class="on">This list</button><button>The host monitors' own modes</button></span>
+                <span class="tline"><span class="toggle"><i></i></span> Put the size of the monitor this window is on first, and follow it to another monitor</span>
+                <div class="editlist">
+                  <table>
+                    <thead>
+                      <tr><th style="width:88px">Preferred</th><th>Resolution</th><th style="width:90px">Aspect</th><th class="tight"></th></tr>
+                    </thead>
+                    <tbody>
+                    <tr>
+                      <td><span class="radio on"></span></td>
+                      <td><span class="mono" style="color:var(--fg)">2560 &times; 1440</span></td>
+                      <td class="mono" style="color:var(--fg-faint);font-size:11.5px">16:9</td>
+                      <td class="tight"><button class="rm" style="display:inline-grid" title="Move up" disabled>&uarr;</button> <button class="rm" style="display:inline-grid" title="Move down">&darr;</button> <button class="rm" style="display:inline-grid" title="Remove">&times;</button></td>
+                    </tr>
+                    <tr>
+                      <td><span class="radio"></span></td>
+                      <td><span class="mono" style="color:var(--fg)">1920 &times; 1080</span></td>
+                      <td class="mono" style="color:var(--fg-faint);font-size:11.5px">16:9</td>
+                      <td class="tight"><button class="rm" style="display:inline-grid" title="Move up">&uarr;</button> <button class="rm" style="display:inline-grid" title="Move down">&darr;</button> <button class="rm" style="display:inline-grid" title="Remove">&times;</button></td>
+                    </tr>
+                    <tr>
+                      <td><span class="radio"></span></td>
+                      <td><span class="mono" style="color:var(--fg)">3440 &times; 1440</span></td>
+                      <td class="mono" style="color:var(--fg-faint);font-size:11.5px">43:18</td>
+                      <td class="tight"><button class="rm" style="display:inline-grid" title="Move up">&uarr;</button> <button class="rm" style="display:inline-grid" title="Move down" disabled>&darr;</button> <button class="rm" style="display:inline-grid" title="Remove">&times;</button></td>
+                    </tr>
+                    </tbody>
+                  </table>
+                  <div class="foot" style="flex-wrap:wrap">
+                    <span class="input select" style="width:200px;white-space:nowrap">3840 &times; 2160 &middot; DP-1</span>
+                    <span class="input mono" style="width:64px;text-align:right">3840</span>
+                    <span class="meta">&times;</span>
+                    <span class="input mono" style="width:64px;text-align:right">2160</span>
+                    <button class="btn" style="white-space:nowrap">Add a resolution</button>
+                  </div>
+                </div>
+                <span class="meta">Windows uses the preferred size, and it is the largest a maximised application window can be. Any size from 100 &times; 100 to 4095 on an edge; a change reaches Windows at once, as if a monitor were replugged.</span>
+              </div>
+            </div>
+
+            <div class="area">
+              <header>
+                <span class="nm">Refresh and scale</span>
+                <span class="cap">Windows switches at once, no restart</span>
+                <span class="right"><span class="tagr live">now</span></span>
+              </header>
+              <div class="in">
+                <dl class="kv" style="align-items:center;gap:12px 16px">
+                  <dt>Refresh</dt><dd><span class="seg"><button class="on">Same as monitor<span class="o">360 Hz</span></button><button>360 Hz</button><button>240 Hz</button><button>144 Hz</button><button>120 Hz</button><button>60 Hz</button></span></dd>
+                  <dt>Scale</dt><dd><span class="seg"><button class="on">Match this desktop<span class="o">125 %</span></button><button>100 %</button><button>125 %</button><button>150 %</button><button>175 %</button><button>200 %</button></span></dd>
+                </dl>
+                <span class="meta">Same as monitor and Match this desktop follow the screen this window is on. A higher rate is more GPU work on the host; 240 Hz is DP-2 only. The scale is the nearest step Windows has, and mirrored windows stay one guest pixel to one screen pixel.</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="statusbar">
+            <span><b>display</b> 2560 &times; 1440, 360 Hz</span>
+            <span class="sep"></span>
+            <span><b>scale</b> 125 %</span>
+            <span class="sep"></span>
+            <span><b>modes</b> 3 offered</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h3 style="margin:26px 0 12px;font-size:14px">With the host monitors' modes</h3>
+    <div class="frame">
+      <div class="titlebar">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <span class="t">LSW, Display, the list handed to the host</span>
+      </div>
+      <div class="areas" style="background:var(--ink)">
+        <div class="area">
+          <header>
+            <span class="nm">Resolutions</span>
+            <span class="cap">what the guest's monitor offers Windows</span>
+            <span class="right"><span class="tagr live">now</span></span>
+          </header>
+          <div class="in">
+            <span class="seg"><button>This list</button><button class="on">The host monitors' own modes</button></span>
+            <dl class="kv">
+              <dt>DP-2</dt><dd>2560 &times; 1440 <span class="meta">preferred, the largest monitor's best mode</span></dd>
+              <dt>HDMI-A-1</dt><dd>1920 &times; 1080</dd>
+            </dl>
+            <span class="meta">The list is kept for when you switch back.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </section>
+  <section data-view="m-files" hidden>
+    <div class="stage-head">
+      <span class="eyebrow">Manager</span>
+      <h1>Files</h1>
+    </div>
+    <div class="frame">
+      <div class="titlebar">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <span class="t"><img class="logo" src="../../packaging/lsw-manager.svg" alt="">LSW</span>
+        <span class="spacer mono">1000 &times; 620</span>
+      </div>
+      <div class="mgr2">
+        <aside class="nav">
+          <div class="id">
+            <span class="n">lsw</span>
+            <span class="m">Windows 11 Pro 26200<br>8 cores &middot; 8 GiB &middot; 60 GiB<br>AMD Radeon RX 9070 XT +1 render</span>
+          </div>
+          <ul data-nav="files"></ul>
+          <div class="power">
+            <span class="badge on">ONLINE</span>
+            <button class="btn stop">Stop the guest</button>
+          </div>
+        </aside>
+        <div class="content">
+          <div class="cbar">
+            <h4>Files</h4>
+            <span class="sub">3 folders in Windows &middot; Windows on smb://127.0.0.1:5445</span>
+            <span class="acts"><button class="btn quiet">Open Windows files</button></span>
+          </div>
+
+          <div class="areas" style="flex:1">
+            <div class="area">
+              <header>
+                <span class="nm">Folders Windows can see</span>
+                <span class="cap">a drive letter each</span>
+                <span class="right"><span class="tagr">restart</span><span class="meta">3 of 23 letters</span><button class="btn">Add a folder</button></span>
+              </header>
+              <div class="rows">
+                <div class="drow">
+                  <span class="ic"><svg class="ico"><use href="#i-files"/></svg></span>
+                  <span class="who"><span class="n">Documents</span><span class="f">/home/accel/Documents</span></span>
+                  <span class="side">
+                    <span class="arrow">&rarr;</span><span class="drive">Z:</span>
+                    <span class="input select sm" style="width:108px">Read write</span>
+                    <span style="width:116px;display:flex;justify-content:flex-end"><span class="pill done">In Windows</span></span>
+                    <button class="rm" style="display:inline-grid" title="Stop sharing">&times;</button>
+                  </span>
+                </div>
+                <div class="drow">
+                  <span class="ic"><svg class="ico"><use href="#i-files"/></svg></span>
+                  <span class="who"><span class="n">Pictures</span><span class="f">/home/accel/Pictures</span></span>
+                  <span class="side">
+                    <span class="arrow">&rarr;</span><span class="drive">Y:</span>
+                    <span class="input select sm" style="width:108px">Read only</span>
+                    <span style="width:116px;display:flex;justify-content:flex-end"><span class="pill done">In Windows</span></span>
+                    <button class="rm" style="display:inline-grid" title="Stop sharing">&times;</button>
+                  </span>
+                </div>
+                <div class="drow">
+                  <span class="ic"><svg class="ico"><use href="#i-files"/></svg></span>
+                  <span class="who"><span class="n">renders</span><span class="f">/mnt/scratch/renders</span></span>
+                  <span class="side">
+                    <span class="arrow">&rarr;</span><span class="drive">X:</span>
+                    <span class="input select sm" style="width:108px">Read write</span>
+                    <span style="width:116px;display:flex;justify-content:flex-end"><span class="pill pend">After restart</span></span>
+                    <button class="rm" style="display:inline-grid" title="Stop sharing">&times;</button>
+                  </span>
+                </div>
+              </div>
+              <div class="foot"><span class="meta">Each folder is a virtiofs device on the machine, mounted in Windows with WinFsp - Windows File System Proxy, Copyright (C) Bill Zissimopoulos (github.com/winfsp/winfsp). Changes to this list wait for the next restart.</span></div>
+            </div>
+
+            <div class="area">
+              <header>
+                <span class="nm">Windows in your file manager</span>
+                <span class="cap">SMB, served in userspace</span>
+                <span class="right"><span class="pill done">Serving</span><span class="toggle on"><i></i></span></span>
+              </header>
+              <div class="in">
+                <dl class="kv" style="align-items:center">
+                  <dt>Address</dt><dd style="display:flex;align-items:center;gap:10px"><span class="mono">smb://127.0.0.1:5445/C$</span><button class="btn quiet" style="padding:2px 9px;font-size:12px">Copy</button></dd>
+                  <dt>Opens</dt><dd><span class="seg"><button class="on">The whole disk, C:</button><button>Your Windows profile</button></span></dd>
+                  <dt>Bookmarks</dt><dd style="display:flex;gap:22px;flex-wrap:wrap">
+                    <span class="tline"><span class="toggle on"><i></i></span> Dolphin</span>
+                    <span class="tline"><span class="toggle on"><i></i></span> GNOME Files and Thunar</span>
+                  </dd>
+                </dl>
+                <span class="meta">A Places entry titled Windows. Nothing is mounted, so Windows junctions never turn into extra mounts.</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="applybar">
+            <span class="eyebrow" style="color:var(--amber)">4 changes need a restart</span>
+            <span class="diffs">
+              <span class="diff">cores <span class="f">8</span> <span class="t">12</span></span>
+              <span class="diff">memory <span class="f">8192</span> <span class="t">12288 MiB</span></span>
+              <span class="diff">UHD 770 <span class="f">not used</span> <span class="t">render only</span></span>
+              <span class="diff">folders <span class="f">2</span> <span class="t">3</span></span>
+            </span>
+            <span class="acts">
+              <button class="btn quiet">Revert</button>
+              <button class="btn primary">Apply and restart the guest</button>
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </section>
+  <section data-view="m-usb" hidden>
+    <div class="stage-head">
+      <span class="eyebrow">Manager</span>
+      <h1>USB</h1>
+    </div>
+    <div class="frame">
+      <div class="titlebar">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <span class="t"><img class="logo" src="../../packaging/lsw-manager.svg" alt="">LSW</span>
+        <span class="spacer mono">1000 &times; 620</span>
+      </div>
+      <div class="mgr2">
+        <aside class="nav">
+          <div class="id">
+            <span class="n">lsw</span>
+            <span class="m">Windows 11 Pro 26200<br>8 cores &middot; 8 GiB &middot; 60 GiB<br>AMD Radeon RX 9070 XT +1 render</span>
+          </div>
+          <ul data-nav="usb"></ul>
+          <div class="power">
+            <span class="badge on">ONLINE</span>
+            <button class="btn stop">Stop the guest</button>
+          </div>
+        </aside>
+        <div class="content">
+          <div class="cbar">
+            <h4>USB</h4>
+            <span class="sub">2 in Windows &middot; 4 on this machine &middot; 1 remembered</span>
+          </div>
+
+          <div class="areas" style="flex:1">
+            <div class="area">
+              <header>
+                <span class="nm">In Windows</span>
+                <span class="cap">gone from this machine until you return it</span>
+              </header>
+              <div class="rows">
+                <div class="drow">
+                  <span class="ic"><svg class="ico"><use href="#i-usb"/></svg></span>
+                  <span class="who"><span class="n">YubiKey OTP+FIDO+CCID</span><span class="f">1050:0407</span></span>
+                  <span class="side">
+                    <span class="alw">Always <span class="toggle on"><i></i></span></span>
+                    <span style="width:132px;display:flex;justify-content:flex-end"><button class="btn">Return</button></span>
+                  </span>
+                </div>
+                <div class="drow">
+                  <span class="ic"><svg class="ico"><use href="#i-usb"/></svg></span>
+                  <span class="who"><span class="n">Galaxy phone</span><span class="f">04e8:6860</span></span>
+                  <span class="side">
+                    <span class="alw">Always <span class="toggle"><i></i></span></span>
+                    <span style="width:132px;display:flex;justify-content:flex-end"><button class="btn" disabled>Returning...</button></span>
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div class="area">
+              <header>
+                <span class="nm">On this machine</span>
+                <span class="cap">plugged in now</span>
+              </header>
+              <div class="rows">
+                <div class="drow">
+                  <span class="ic"><svg class="ico"><use href="#i-usb"/></svg></span>
+                  <span class="who"><span class="n">Wacom Intuos S</span><span class="f">056a:0374</span></span>
+                  <span class="side">
+                    <span class="alw">Always <span class="toggle"><i></i></span></span>
+                    <span style="width:132px;display:flex;justify-content:flex-end"><button class="btn">Pass to Windows</button></span>
+                  </span>
+                </div>
+                <div class="drow">
+                  <span class="ic"><svg class="ico"><use href="#i-usb"/></svg></span>
+                  <span class="who"><span class="n">Elgato Stream Deck</span><span class="f">0fd9:0060</span><span class="note">Needs access: Allow asks for your password once for this kind of device.</span></span>
+                  <span class="side">
+                    <span class="alw">Always <span class="toggle"><i></i></span></span>
+                    <span style="width:132px;display:flex;justify-content:flex-end"><button class="btn">Allow</button></span>
+                  </span>
+                </div>
+                <div class="drow">
+                  <span class="ic"><svg class="ico"><use href="#i-disk"/></svg></span>
+                  <span class="who"><span class="n">SanDisk Ultra</span><span class="f">0781:5581</span><span class="note">Mounted here. Unmount it to pass it.</span></span>
+                  <span class="side">
+                    <span class="alw">Always <span class="toggle"><i></i></span></span>
+                    <span style="width:132px;display:flex;justify-content:flex-end"><button class="btn" disabled>Pass to Windows</button></span>
+                  </span>
+                </div>
+                <div class="drow">
+                  <span class="ic"><svg class="ico"><use href="#i-hid"/></svg></span>
+                  <span class="who"><span class="n">Logitech G502</span><span class="f">046d:c08b</span><span class="note warm">An input device. Passing it leaves this desktop without it until you return it.</span></span>
+                  <span class="side">
+                    <span class="alw">Always <span class="toggle"><i></i></span></span>
+                    <span style="width:132px;display:flex;justify-content:flex-end"><button class="btn">Pass to Windows</button></span>
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div class="area">
+              <header>
+                <span class="nm">Remembered</span>
+                <span class="cap">not plugged in</span>
+              </header>
+              <div class="rows">
+                <div class="drow off">
+                  <span class="ic"><svg class="ico"><use href="#i-usb"/></svg></span>
+                  <span class="who"><span class="n">Focusrite Scarlett 2i2</span><span class="f">1235:8210</span></span>
+                  <span class="side">
+                    <span class="alw">Always <span class="toggle on"><i></i></span></span>
+                    <span style="width:132px;display:flex;justify-content:flex-end"><button class="btn quiet">Forget it</button></span>
+                  </span>
+                </div>
+              </div>
+              <div class="foot"><span class="meta">Always passes a device to Windows whenever it is plugged in and the guest is running.</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h3 style="margin:26px 0 12px;font-size:14px">With the guest off</h3>
+    <div class="frame">
+      <div class="titlebar">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <span class="t">LSW, USB, guest off</span>
+      </div>
+      <div style="background:var(--ink)">
+        <div class="warnstrip">
+          <span class="wdot"></span>
+          <span class="msg"><b>The guest is off.</b> Start it to pass a device; Always devices go to it as it starts.</span>
+          <span class="acts"><button class="btn go">Start the guest</button></span>
+        </div>
+        <div class="areas">
+          <div class="area">
+            <header><span class="nm">On this machine</span><span class="cap">plugged in now</span></header>
+            <div class="rows">
+                <div class="drow">
+                  <span class="ic"><svg class="ico"><use href="#i-usb"/></svg></span>
+                  <span class="who"><span class="n">Wacom Intuos S</span><span class="f">056a:0374</span></span>
+                  <span class="side">
+                    <span class="alw">Always <span class="toggle"><i></i></span></span>
+                    <span style="width:132px;display:flex;justify-content:flex-end"><button class="btn" disabled>Pass to Windows</button></span>
+                  </span>
+                </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </section>
   <section data-view="m-settings" hidden>
     <div class="stage-head">
       <span class="eyebrow">Manager</span>
@@ -1117,13 +1615,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
             <span class="n">lsw</span>
             <span class="m">Windows 11 Pro 26200<br>8 cores &middot; 8 GiB &middot; 60 GiB<br>AMD Radeon RX 9070 XT +1 render</span>
           </div>
-          <ul>
-            <li><button class="navitem"><span class="g">&#9633;</span> Overview</button></li>
-            <li><button class="navitem"><span class="g">&gt;_</span> Console</button></li>
-            <li><button class="navitem"><span class="g">&#8801;</span> Log <span class="count">1 284</span></button></li>
-            <li><button class="navitem"><span class="g">&#9678;</span> Graphics</button></li>
-            <li><button class="navitem on"><span class="g">&#9881;</span> Settings <span class="count" style="color:var(--amber)">3</span></button></li>
-          </ul>
+          <ul data-nav="settings"></ul>
           <div class="power">
             <span class="badge on">ONLINE</span>
             <button class="btn stop">Stop the guest</button>
@@ -1174,195 +1666,25 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
             </div>
 
             <div class="sgroup">
-              <h5>Display</h5>
-              <div class="srow wide">
-                <span>
-                  <span class="k">Resolutions <span class="tagr live">now</span></span>
-                  <span class="d">The sizes the guest's monitor offers, as Windows lists them in Settings &rarr; Display. Windows uses the preferred one. Any size works, from 100 &times; 100 up to 4095 on an edge; a change reaches a running guest at once, as if a monitor were replugged. Application windows are mirrored individually, so the preferred size is the ceiling a maximised window can reach.</span>
-                </span>
-                <div class="editlist">
-                  <table>
-                    <thead>
-                      <tr><th style="width:88px">Preferred</th><th>Resolution</th><th style="width:90px">Aspect</th><th class="tight"></th></tr>
-                    </thead>
-                    <tbody>
-                      <tr>
-                        <td><span class="radio on"></span></td>
-                        <td><span class="mono" style="color:var(--fg)">2560 &times; 1440</span></td>
-                        <td class="mono" style="color:var(--fg-faint);font-size:11.5px">16:9</td>
-                        <td class="tight"><button class="rm" style="display:inline-grid" title="Move up" disabled>&uarr;</button> <button class="rm" style="display:inline-grid" title="Move down">&darr;</button> <button class="rm" style="display:inline-grid" title="Remove">&times;</button></td>
-                      </tr>
-                      <tr>
-                        <td><span class="radio"></span></td>
-                        <td><span class="mono" style="color:var(--fg)">1920 &times; 1080</span></td>
-                        <td class="mono" style="color:var(--fg-faint);font-size:11.5px">16:9</td>
-                        <td class="tight"><button class="rm" style="display:inline-grid" title="Move up">&uarr;</button> <button class="rm" style="display:inline-grid" title="Move down">&darr;</button> <button class="rm" style="display:inline-grid" title="Remove">&times;</button></td>
-                      </tr>
-                      <tr>
-                        <td><span class="radio"></span></td>
-                        <td><span class="mono" style="color:var(--fg)">3440 &times; 1440</span></td>
-                        <td class="mono" style="color:var(--fg-faint);font-size:11.5px">43:18</td>
-                        <td class="tight"><button class="rm" style="display:inline-grid" title="Move up">&uarr;</button> <button class="rm" style="display:inline-grid" title="Move down" disabled>&darr;</button> <button class="rm" style="display:inline-grid" title="Remove">&times;</button></td>
-                      </tr>
-                    </tbody>
-                  </table>
-                  <div class="foot" style="flex-wrap:wrap">
-                    <span class="input select" style="width:200px;white-space:nowrap">3840 &times; 2160 &middot; DP-1</span>
-                    <span class="input mono" style="width:64px;text-align:right">5120</span>
-                    <span class="meta">&times;</span>
-                    <span class="input mono" style="width:64px;text-align:right">2880</span>
-                    <button class="btn" disabled style="white-space:nowrap">Add a resolution</button>
-                    <span class="meta" style="color:var(--bad);flex-basis:100%">5120 &times; 2880 cannot be offered: 4095 is the most an edge can be.</span>
-                  </div>
-                </div>
-              </div>
+              <h5>Startup</h5>
               <div class="srow">
                 <span>
-                  <span class="k">Offer the host monitors' own modes instead <span class="tagr live">now</span></span>
-                  <span class="d">Leaves the list empty, which is accel-virt's default: the guest's monitor offers the modes of the monitors connected to this machine, the largest one's best mode preferred.</span>
-                </span>
-                <span class="ctl"><span class="toggle"><i></i></span></span>
-              </div>
-              <div class="srow">
-                <span>
-                  <span class="k">Match the monitor the manager is on <span class="tagr live">now</span></span>
-                  <span class="d">Puts the size of the monitor this window is on first, preferred, ahead of the list above, and follows when the window moves to another one.</span>
-                </span>
-                <span class="ctl"><span class="toggle"><i></i></span></span>
-              </div>
-              <div class="srow">
-                <span>
-                  <span class="k">Refresh rate <span class="tagr live">now</span></span>
-                  <span class="d">Windows' refresh rate, changed while Windows runs: it switches to the new rate at once, without a restart. Same as monitor follows the screen the manager is on. A higher rate means more GPU work on the host. Supported by: 360 Hz on DP-2; 144 Hz on DP-2, HDMI-A-1; 60 Hz on DP-2, HDMI-A-1.</span>
-                </span>
-                <span class="ctl"><span class="input select" style="width:220px">Same as monitor (360 Hz)</span></span>
-              </div>
-              <div class="srow">
-                <span>
-                  <span class="k">Scaling <span class="tagr live">now</span></span>
-                  <span class="d">Windows' display scale, changed while Windows runs. Matching this desktop takes the scale of the monitor the manager is on, as the nearest step Windows has (1.2 is 125 %); mirrored windows stay one guest pixel to one screen pixel.</span>
-                </span>
-                <span class="ctl"><span class="input select" style="width:220px">Match this desktop</span></span>
-              </div>
-            </div>
-
-            <div class="sgroup">
-              <h5>Graphics</h5>
-              <div class="srow wide">
-                <span>
-                  <span class="k">Adapters <span class="tagr">restart</span></span>
-                  <span class="d">Each host GPU can be the guest's display adapter, a render-only adapter with no outputs, or left out. Windows names every adapter after its GPU and reports its VRAM. Exactly one is the display; until you pick one, it is the first Vulkan device.</span>
-                </span>
-                <div class="editlist">
-                  <table>
-                    <thead>
-                      <tr><th>Host GPU</th><th style="width:84px">IDs</th><th style="width:70px">Memory</th><th style="width:150px">Host driver</th><th style="width:160px">Role</th></tr>
-                    </thead>
-                    <tbody>
-                      <tr>
-                        <td><span class="input" style="border-color:transparent;background:none;padding-left:0">AMD Radeon RX 9070 XT</span></td>
-                        <td class="mono" style="color:var(--fg-faint);font-size:11.5px">1002:7550</td>
-                        <td class="mono" style="color:var(--fg-faint);font-size:11.5px">16 GiB</td>
-                        <td class="mono" style="color:var(--fg-faint);font-size:11.5px">RADV, Mesa 25.2.3</td>
-                        <td><span class="input select">Display (auto)</span></td>
-                      </tr>
-                      <tr>
-                        <td><span class="input" style="border-color:transparent;background:none;padding-left:0">Intel UHD Graphics 770</span></td>
-                        <td class="mono" style="color:var(--fg-faint);font-size:11.5px">8086:4680</td>
-                        <td class="mono" style="color:var(--fg-faint);font-size:11.5px">shared</td>
-                        <td class="mono" style="color:var(--fg-faint);font-size:11.5px">ANV, Mesa 25.2.3</td>
-                        <td><span class="input select">Render only</span></td>
-                      </tr>
-                    </tbody>
-                  </table>
-                  <div class="foot">
-                    <span class="meta">A GPU added after Windows was installed has no driver in the guest yet; the Graphics page installs it.</span>
-                  </div>
-                </div>
-              </div>
-              <div class="srow">
-                <span>
-                  <span class="k">Host window <span class="tagr">restart</span></span>
-                  <span class="d">Host memory the guest maps write-back, for uploads, readbacks and host-visible Vulkan memory. Used on demand; 8 GiB runs real applications.</span>
-                </span>
-                <span class="ctl"><span class="input select" style="width:180px">8 GiB</span></span>
-              </div>
-            </div>
-
-            <div class="sgroup">
-              <h5>Files</h5>
-              <div class="srow">
-                <span>
-                  <span class="k">Browse the guest from your file manager <span class="tagr live">now</span></span>
-                  <span class="d">Serves the guest over SMB on <span class="mono">127.0.0.1:5445</span>, handled in userspace by the file manager. Nothing is mounted, so Windows junctions never appear as extra mounts.</span>
+                  <span class="k">Start the guest when the manager opens <span class="tagr live">now</span></span>
+                  <span class="d">Otherwise it starts the first time you launch an application.</span>
                 </span>
                 <span class="ctl"><span class="toggle on"><i></i></span></span>
               </div>
               <div class="srow">
                 <span>
-                  <span class="k">Shared folder</span>
-                  <span class="d">What the bookmark opens. The whole disk, or a single folder if you would rather not expose all of C:.</span>
+                  <span class="k">Keep running in the tray when closed <span class="tagr live">now</span></span>
+                  <span class="d">Closing the window leaves the guest running.</span>
                 </span>
-                <span class="ctl"><span class="input select" style="width:180px">Whole disk (C$)</span></span>
-              </div>
-              <div class="srow">
-                <span>
-                  <span class="k">Add a bookmark to <span class="tagr live">now</span></span>
-                  <span class="d">Writes a Places entry titled Windows. Dolphin reads <span class="mono">user-places.xbel</span>, GNOME Files and Thunar read <span class="mono">gtk-3.0/bookmarks</span>. Both can be on at once.</span>
-                </span>
-                <span class="ctl" style="flex-direction:column;align-items:flex-end;gap:7px">
-                  <span style="display:flex;align-items:center;gap:8px"><span style="font-size:12.5px;color:var(--fg-dim)">Dolphin</span><span class="toggle on"><i></i></span></span>
-                  <span style="display:flex;align-items:center;gap:8px"><span style="font-size:12.5px;color:var(--fg-dim)">GNOME Files, Thunar</span><span class="toggle on"><i></i></span></span>
-                </span>
-              </div>
-              <div class="srow wide">
-                <span>
-                  <span class="k">Host folders the guest can see <span class="tagr">restart</span></span>
-                  <span class="d">Each one becomes a virtiofs device on the machine and a drive letter in Windows, named after the folder and mounted with WinFsp - Windows File System Proxy, Copyright (C) Bill Zissimopoulos (github.com/winfsp/winfsp). Add as many as you want; a letter is only used once.</span>
-                </span>
-                <div class="editlist">
-                  <table>
-                    <thead>
-                      <tr><th>Folder on this machine</th><th style="width:88px">Drive</th><th style="width:96px">Access</th><th class="tight"></th></tr>
-                    </thead>
-                    <tbody>
-                      <tr>
-                        <td><span class="input">/home/accel/Documents</span></td>
-                        <td><span class="input select">Z:</span></td>
-                        <td><span class="input select">Read write</span></td>
-                        <td class="tight"><button class="rm" title="Remove">&times;</button></td>
-                      </tr>
-                      <tr>
-                        <td><span class="input">/home/accel/Pictures</span></td>
-                        <td><span class="input select">Y:</span></td>
-                        <td><span class="input select">Read only</span></td>
-                        <td class="tight"><button class="rm" title="Remove">&times;</button></td>
-                      </tr>
-                      <tr>
-                        <td><span class="input">/mnt/scratch/renders</span></td>
-                        <td><span class="input select">X:</span></td>
-                        <td><span class="input select">Read write</span></td>
-                        <td class="tight"><button class="rm" title="Remove">&times;</button></td>
-                      </tr>
-                    </tbody>
-                  </table>
-                  <div class="foot">
-                    <button class="btn">Add a folder</button>
-                    <span class="meta">3 of 23 letters used</span>
-                  </div>
-                </div>
-              </div>
-              <div class="srow">
-                <span>
-                  <span class="k">Open the share</span>
-                  <span class="d">Launches your file manager at the guest's C: drive.</span>
-                </span>
-                <span class="ctl"><button class="btn">Open Windows files</button></span>
+                <span class="ctl"><span class="toggle on"><i></i></span></span>
               </div>
             </div>
 
             <div class="sgroup">
-              <h5>Desktop entries</h5>
+              <h5>Desktop integration</h5>
               <div class="srow">
                 <span>
                   <span class="k">Put guest applications in your menu <span class="tagr live">now</span></span>
@@ -1401,86 +1723,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
             </div>
 
             <div class="sgroup">
-              <h5>USB devices</h5>
-              <div class="srow wide">
-                <span>
-                  <span class="k">Pass USB devices to the guest <span class="tagr live">now</span></span>
-                  <span class="d">A device passed to the guest disappears from this machine until you return it.</span>
-                </span>
-                <div class="editlist">
-                  <table>
-                    <thead>
-                      <tr><th>Device</th><th style="width:150px">Where</th><th class="tight">Always</th><th class="tight"></th></tr>
-                    </thead>
-                    <tbody>
-                      <tr>
-                        <td>Wacom Intuos S<br><span class="mono" style="color:var(--fg-faint);font-size:11.5px">056a:0374</span></td>
-                        <td>On this machine</td>
-                        <td class="tight"><span class="toggle"><i></i></span></td>
-                        <td class="tight"><button class="btn">Pass to guest</button></td>
-                      </tr>
-                      <tr>
-                        <td>YubiKey OTP+FIDO+CCID<br><span class="mono" style="color:var(--fg-faint);font-size:11.5px">1050:0407</span></td>
-                        <td>In the guest</td>
-                        <td class="tight"><span class="toggle"><i></i></span></td>
-                        <td class="tight"><button class="btn">Return</button></td>
-                      </tr>
-                      <tr>
-                        <td>Galaxy phone<br><span class="mono" style="color:var(--fg-faint);font-size:11.5px">04e8:6860</span></td>
-                        <td>In the guest</td>
-                        <td class="tight"><span class="toggle"><i></i></span></td>
-                        <td class="tight"><button class="btn" disabled>Returning...</button></td>
-                      </tr>
-                      <tr>
-                        <td>Elgato Stream Deck<br><span class="mono" style="color:var(--fg-faint);font-size:11.5px">0fd9:0060</span></td>
-                        <td>Needs access</td>
-                        <td class="tight"><span class="toggle"><i></i></span></td>
-                        <td class="tight"><button class="btn">Allow</button></td>
-                      </tr>
-                      <tr>
-                        <td>SanDisk Ultra<br><span class="mono" style="color:var(--fg-faint);font-size:11.5px">0781:5581</span></td>
-                        <td>Mounted here</td>
-                        <td class="tight"><span class="toggle"><i></i></span></td>
-                        <td class="tight"><button class="btn" disabled>Pass to guest</button></td>
-                      </tr>
-                      <tr>
-                        <td>Focusrite Scarlett 2i2<br><span class="mono" style="color:var(--fg-faint);font-size:11.5px">1235:8210</span></td>
-                        <td>Not plugged in</td>
-                        <td class="tight"><span class="toggle on"><i></i></span></td>
-                        <td class="tight"><button class="rm" title="Forget it">&times;</button></td>
-                      </tr>
-                    </tbody>
-                  </table>
-                  <div class="foot">
-                    <span class="meta">Always: pass it to the guest whenever it is plugged in and the guest is running. Allow asks for your password once per device type.</span>
-                  </div>
-                  <div class="foot">
-                    <span class="meta">With the guest off the buttons are disabled and this line reads: Start the guest to pass a device.</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div class="sgroup">
-              <h5>Guest</h5>
-              <div class="srow">
-                <span>
-                  <span class="k">Windows account</span>
-                  <span class="d">Set at install and baked into the answer file. Change it from inside Windows.</span>
-                </span>
-                <span class="ctl"><span class="input" style="width:180px;color:var(--fg-faint)">lsw</span></span>
-              </div>
-              <div class="srow">
-                <span>
-                  <span class="k">Start the guest when the manager opens <span class="tagr live">now</span></span>
-                  <span class="d">Otherwise it starts the first time you launch an application.</span>
-                </span>
-                <span class="ctl"><span class="toggle on"><i></i></span></span>
-              </div>
-            </div>
-
-            <div class="sgroup">
-              <h5>Host</h5>
+              <h5>Storage</h5>
               <div class="srow">
                 <span>
                   <span class="k">Data folder <span class="tagr live">now</span></span>
@@ -1491,17 +1734,10 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
                   <button class="btn">Change</button>
                 </span>
               </div>
-              <div class="srow">
-                <span>
-                  <span class="k">Keep running in the tray when closed <span class="tagr live">now</span></span>
-                  <span class="d">Closing the window leaves the guest running.</span>
-                </span>
-                <span class="ctl"><span class="toggle on"><i></i></span></span>
-              </div>
             </div>
 
             <div class="sgroup">
-              <h5>Logs</h5>
+              <h5>Logging</h5>
               <div class="srow">
                 <span>
                   <span class="k">Manager <span class="tagr live">now</span></span>
@@ -1544,68 +1780,16 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
                 </span>
                 <span class="ctl"><button class="btn" disabled>Debug on, 24 min left</button><button class="btn">Stop</button></span>
               </div>
-              <div class="srow">
-                <span>
-                  <span class="k">Log folder</span>
-                  <span class="d">Where every log is kept.</span>
-                </span>
-                <span class="ctl"><button class="btn">Open log folder</button></span>
-              </div>
-              <div class="srow">
-                <span>
-                  <span class="k">Collect logs for a bug report</span>
-                  <span class="d">Packs the logs, Windows' logs and system details into one archive. Window titles and file names appear in logs; read it before you share it.</span>
-                </span>
-                <span class="ctl"><button class="btn">Collect logs</button></span>
-              </div>
-              <div class="srow">
-                <span>
-                  <span class="k">Clear all logs</span>
-                  <span class="d">Deletes the logs of the manager, the window mirrors, the GPU driver and Windows. Collected archives stay.</span>
-                </span>
-                <span class="ctl"><button class="btn">Clear all logs</button></span>
-              </div>
-            </div>
-
-            <div class="sgroup">
-              <h5>Images</h5>
-              <div class="srow">
-                <span>
-                  <span class="k">Download a Windows image</span>
-                  <span class="d">Fetch an installation ISO from microsoft.com into any folder. Useful for a reinstall or a second edition.</span>
-                </span>
-                <span class="ctl"><button class="btn">Open the download tool</button></span>
-              </div>
-              <div class="srow">
-                <span>
-                  <span class="k">Trim a Windows image</span>
-                  <span class="d">Build a smaller install ISO from one you have, into any folder. Does not touch the running guest.</span>
-                </span>
-                <span class="ctl"><button class="btn">Open the image tool</button></span>
-              </div>
-              <div class="srow">
-                <span>
-                  <span class="k">Update LSW in Windows</span>
-                  <span class="d" title="Replaces every LSW file in Windows: the agent, the window mirror, the GPU driver, the graphics loaders and the shared folders' half. Restarts Windows when the driver changes.">Windows has this release (3f9c1ab07d52)</span>
-                </span>
-                <span class="ctl"><button class="btn">Update</button></span>
-              </div>
-              <div class="srow">
-                <span>
-                  <span class="k">Reinstall the guest</span>
-                  <span class="d">Runs the first-run wizard again. Its install replaces the current disk, and applications inside the guest are lost; closing the wizard before then changes nothing.</span>
-                </span>
-                <span class="ctl"><button class="btn stop">Reinstall</button></span>
-              </div>
             </div>
           </div>
 
           <div class="applybar">
-            <span class="eyebrow" style="color:var(--amber)">3 changes need a restart</span>
+            <span class="eyebrow" style="color:var(--amber)">4 changes need a restart</span>
             <span class="diffs">
               <span class="diff">cores <span class="f">8</span> <span class="t">12</span></span>
               <span class="diff">memory <span class="f">8192</span> <span class="t">12288 MiB</span></span>
-              <span class="diff">render GPUs <span class="f">0</span> <span class="t">1</span></span>
+              <span class="diff">UHD 770 <span class="f">not used</span> <span class="t">render only</span></span>
+              <span class="diff">folders <span class="f">2</span> <span class="t">3</span></span>
             </span>
             <span class="acts">
               <button class="btn quiet">Revert</button>
@@ -1634,13 +1818,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
             <span class="n">lsw</span>
             <span class="m">Windows 11 Pro 26200<br>8 cores &middot; 8 GiB &middot; 60 GiB<br>AMD Radeon RX 9070 XT +1 render</span>
           </div>
-          <ul>
-            <li><button class="navitem"><span class="g">&#9633;</span> Overview</button></li>
-            <li><button class="navitem on"><span class="g">&gt;_</span> Console</button></li>
-            <li><button class="navitem"><span class="g">&#8801;</span> Log <span class="count">1 284</span></button></li>
-            <li><button class="navitem"><span class="g">&#9678;</span> Graphics</button></li>
-            <li><button class="navitem"><span class="g">&#9881;</span> Settings <span class="count" style="color:var(--amber)">3</span></button></li>
-          </ul>
+          <ul data-nav="console"></ul>
           <div class="power">
             <span class="badge on">ONLINE</span>
             <button class="btn stop">Stop the guest</button>
@@ -1692,13 +1870,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
             <span class="n">lsw</span>
             <span class="m">Windows 11 Pro 26200<br>8 cores &middot; 8 GiB &middot; 60 GiB<br>AMD Radeon RX 9070 XT +1 render</span>
           </div>
-          <ul>
-            <li><button class="navitem"><span class="g">&#9633;</span> Overview</button></li>
-            <li><button class="navitem"><span class="g">&gt;_</span> Console</button></li>
-            <li><button class="navitem on"><span class="g">&#8801;</span> Log <span class="count">1 284</span></button></li>
-            <li><button class="navitem"><span class="g">&#9678;</span> Graphics</button></li>
-            <li><button class="navitem"><span class="g">&#9881;</span> Settings <span class="count" style="color:var(--amber)">3</span></button></li>
-          </ul>
+          <ul data-nav="log"></ul>
           <div class="power">
             <span class="badge on">ONLINE</span>
             <button class="btn stop">Stop the guest</button>
@@ -1743,6 +1915,83 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
     </div>
   </section>
 
+  <section data-view="m-maint" hidden>
+    <div class="stage-head">
+      <span class="eyebrow">Manager</span>
+      <h1>Maintenance</h1>
+    </div>
+    <div class="frame">
+      <div class="titlebar">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <span class="t"><img class="logo" src="../../packaging/lsw-manager.svg" alt="">LSW</span>
+        <span class="spacer mono">1000 &times; 620</span>
+      </div>
+      <div class="mgr2">
+        <aside class="nav">
+          <div class="id">
+            <span class="n">lsw</span>
+            <span class="m">Windows 11 Pro 26200<br>8 cores &middot; 8 GiB &middot; 60 GiB<br>AMD Radeon RX 9070 XT +1 render</span>
+          </div>
+          <ul data-nav="maint"></ul>
+          <div class="power">
+            <span class="badge on">ONLINE</span>
+            <button class="btn stop">Stop the guest</button>
+          </div>
+        </aside>
+        <div class="content">
+          <div class="cbar">
+            <h4>Maintenance</h4>
+            <span class="sub">LSW 0.2.2 &middot; Windows has the same release</span>
+          </div>
+
+          <div class="areas" style="flex:1">
+            <div class="area">
+              <header>
+                <span class="nm">LSW in Windows</span>
+                <span class="cap">agent, window mirror, GPU driver, loaders, shared folders</span>
+                <span class="right"><span class="pill done">Up to date</span><button class="btn">Update</button></span>
+              </header>
+              <div class="in">
+                <dl class="kv">
+                  <dt>Windows has</dt><dd>8bfc503c53ae <span class="meta">LSW 0.2.2</span></dd>
+                  <dt>This LSW ships</dt><dd>8bfc503c53ae</dd>
+                  <dt>Last update</dt><dd>3 Nov, 10:21 <span class="meta">finished, Windows restarted</span></dd>
+                </dl>
+                <div class="chips"><span class="chip2 ok">&#10003; verify</span><span class="chip2 ok">&#10003; stop</span><span class="chip2 ok">&#10003; agent and mirror</span><span class="chip2 ok">&#10003; driver</span><span class="chip2 ok">&#10003; loaders</span><span class="chip2 ok">&#10003; shared folders</span><span class="chip2 skip">&ndash; service and firewall</span><span class="chip2 ok">&#10003; start</span></div>
+                <span class="meta">Update replaces every LSW file in Windows and restarts Windows when the driver changes. It runs by itself when the two releases differ.</span>
+              </div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px">
+              <div class="area broken">
+                <header><span class="nm">Download a Windows image</span></header>
+                <div class="in toolrow">
+                  <p>Fetch an installation ISO from microsoft.com into any folder, for a reinstall or a second edition.</p>
+                  <button class="btn" disabled>Download</button>
+                </div>
+              </div>
+              <div class="area">
+                <header><span class="nm">Trim a Windows image</span></header>
+                <div class="in toolrow">
+                  <p>Build a smaller install ISO from one you have. Does not touch the running guest.</p>
+                  <button class="btn">Trim</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="area danger">
+              <header><span class="nm">Reinstall the guest</span></header>
+              <div class="in toolrow">
+                <p>Runs the first-run wizard again. Its install replaces the disk, and applications installed in Windows are lost; closing the wizard before the install starts changes nothing.</p>
+                <button class="btn stop">Reinstall</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </section>
   <section data-view="m-collect" hidden>
     <div class="stage-head">
       <span class="eyebrow">Manager</span>
@@ -2032,8 +2281,8 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
       <div class="panel" style="border:none;border-radius:0;position:relative;min-height:150px">
         <header>Installed applications
           <span class="tools">
-            <button class="icon-btn" title="Refresh">&#8635;</button>
-            <button class="icon-btn menu-btn" title="Add an application" style="border-color:var(--amber-dim)">+<span class="car">&#9662;</span></button>
+            <button class="icon-btn" title="Refresh"><svg class="ico"><use href="#i-refresh"/></svg></button>
+            <button class="icon-btn menu-btn" title="Add an application" style="border-color:var(--amber-dim)"><svg class="ico"><use href="#i-plus"/></svg><span class="car">&#9662;</span></button>
           </span>
         </header>
         <div class="menu">
@@ -2185,13 +2434,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
             <span class="n">lsw</span>
             <span class="m">not provisioned</span>
           </div>
-          <ul>
-            <li><button class="navitem on"><span class="g">&#9633;</span> Overview</button></li>
-            <li><button class="navitem" style="opacity:.45"><span class="g">&gt;_</span> Console</button></li>
-            <li><button class="navitem" style="opacity:.45"><span class="g">&#8801;</span> Log</button></li>
-            <li><button class="navitem" style="opacity:.45"><span class="g">&#9678;</span> Graphics</button></li>
-            <li><button class="navitem"><span class="g">&#9881;</span> Settings</button></li>
-          </ul>
+          <ul data-nav="overview"></ul>
           <div class="power">
             <span class="badge off">NO GUEST</span>
             <button class="btn" disabled>Start the guest</button>
@@ -2332,10 +2575,10 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 
             <span class="eyebrow" style="color:var(--fg-faint)">Image tools, optional</span>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-              <div style="border:1px solid var(--line);border-radius:5px;padding:13px;background:var(--surface);display:flex;flex-direction:column;gap:7px;align-items:flex-start">
+              <div class="broken" style="border:1px solid var(--line);border-radius:5px;padding:13px;background:var(--surface);display:flex;flex-direction:column;gap:7px;align-items:flex-start">
                 <span style="font-size:13.5px;font-weight:500">No image yet</span>
                 <span style="font-size:12.5px;color:var(--fg-dim);line-height:1.55">Fetch one from microsoft.com, into any folder you choose.</span>
-                <button class="btn" style="margin-top:auto">Download an image</button>
+                <button class="btn" style="margin-top:auto" disabled>Download an image</button>
               </div>
               <div style="border:1px solid var(--line);border-radius:5px;padding:13px;background:var(--surface);display:flex;flex-direction:column;gap:7px;align-items:flex-start">
                 <span style="font-size:13.5px;font-weight:500">Smaller guest</span>
@@ -2874,6 +3117,10 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
           <li><b>Two wizard pages become dialogs.</b> <span class="mono">DebloatPage</span> and <span class="mono">DownloadPage</span> lose their page ids (<span class="mono">Wizard::Debloat</span>, <span class="mono">Wizard::Download</span>) and their widgets move into <span class="mono">TrimImageDialog</span> and <span class="mono">DownloadImageDialog</span>. Each owns its worker, each returns the path it wrote.</li>
           <li><b>Output directory.</b> <span class="mono">DebloatStager::trim()</span> already takes an output directory, so the dialog passes the chosen folder plus a filename instead of <span class="mono">settings().isos_dir()</span>. The downloader gains the same pair.</li>
           <li><b>IsoChoicePage shrinks</b> to one path field and two buttons. <span class="mono">MicrosoftClient</span> and <span class="mono">IsoSourceFetcher</span> move with the download dialog, so the page no longer owns network state or a ban flag.</li>
+          <li><b>Manager tabs.</b> Display, Files, USB and Maintenance become pages of the stack beside Overview, Graphics, Console, Log and Settings, in four groups split by thin rules. <span class="mono">SettingsPage</span> keeps only settings: machine size, startup, desktop integration, storage and logging. The adapter roles and the host window move onto the Graphics page, the display controls onto Display, the shared folders and the SMB share onto Files, the device list onto USB, the image tools, the guest update and the reinstall onto Maintenance.</li>
+          <li><b>One apply bar.</b> It moves from <span class="mono">SettingsPage</span> to <span class="mono">MainWindow</span>, under the stack, and shows on every page while <span class="mono">PendingChanges</span> holds a change. Each rail item shows in amber how many of the waiting changes are its own.</li>
+          <li><b>Rail icons.</b> Line icons drawn by <span class="mono">NavIcon</span> with QPainter, one shape per page, coloured from the button: faint, dim on hover, amber when current. The mockup draws the same shapes as SVG symbols.</li>
+          <li><b>Data behind the new pages.</b> Display reads <span class="mono">GraphicsStatus</span>'s live modes and refresh and the monitor the window is on; the scale needs the one the agent last applied kept in <span class="mono">StatusHub</span>. Files compares the folder list with the running definition for In Windows and After restart. USB is <span class="mono">UsbStatus</span> split by place. Maintenance is <span class="mono">GuestUpdateStatus</span>, its steps included.</li>
           <li><b>Manager nav rail.</b> A QListWidget beside a QStackedWidget replaces the header button row. <span class="mono">MainWindow</span> keeps its tray; <span class="mono">VmDetailPanel</span> becomes the Overview page of the stack.</li>
           <li><b>Console and log move into the stack.</b> <span class="mono">ConsoleWindow</span> and <span class="mono">LogViewer</span> become plain QWidgets that the stack owns; the pop out button reparents one into a QDialog.</li>
           <li><b>Settings page.</b> New <span class="mono">SettingsPage</span> over a <span class="mono">PendingChanges</span> object: live keys write straight to <span class="mono">Settings</span>, restart keys stage until Apply, which calls <span class="mono">Lifecycle::shutdown</span>, rewrites the domain XML from the template, and starts it again.</li>
@@ -2898,7 +3145,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
           <li><b>No shadows, blur or transparency</b> inside the app windows. Qt stylesheets cannot draw them, and faking them costs a paint event.</li>
           <li><b>No animation</b> beyond what QProgressBar already does.</li>
           <li><b>No light theme for the app.</b> The manager is a machine console and commits to one world. Tokens are named so a light set can be added later without touching layout.</li>
-          <li><b>No icon font.</b> Symbols are either real app icons from the guest or plain text.</li>
+          <li><b>No icon font.</b> Symbols are real app icons from the guest, plain text, or the rail's drawn line icons.</li>
           <li><b>Trim is never mandatory.</b> The pipeline keeps its own trim path for the unattended CLI runner, but the wizard never blocks on it.</li>
         </ul>
       </div>
@@ -2906,6 +3153,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
         <h3>Files this touches</h3>
         <ul>
           <li><span class="mono">src/host/src/manager/main_window.cpp</span>, nav rail and the stacked pages</li>
+          <li>new <span class="mono">display_page.cpp</span>, <span class="mono">files_page.cpp</span>, <span class="mono">usb_page.cpp</span>, <span class="mono">maintenance_page.cpp</span> and <span class="mono">apply_bar.cpp</span> in <span class="mono">src/host/src/manager/</span>; <span class="mono">usb_devices_panel.cpp</span> and <span class="mono">resolution_editor.cpp</span> move into them</li>
           <li><span class="mono">src/host/src/manager/vm_detail_panel.cpp</span>, becomes the Overview page, header row deleted, stylesheet constant moves to a resource</li>
           <li>new <span class="mono">src/host/src/manager/settings_page.cpp</span> and <span class="mono">src/host/src/config/pending_changes.cpp</span></li>
           <li><span class="mono">src/host/src/platform/dolphin_places.cpp</span>, plus a new <span class="mono">gtk_bookmarks.cpp</span> beside it</li>
@@ -2949,6 +3197,29 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
     });
   });
 
+
+  var NAV = [
+    ["overview", "Overview"], null,
+    ["display", "Display"], ["graphics", "Graphics"], ["files", "Files"], ["usb", "USB"], null,
+    ["console", "Console"], ["log", "Log"], ["maint", "Maintenance"], null,
+    ["settings", "Settings"]
+  ];
+  var COUNTS = {
+    log: '<span class="count">1 284</span>',
+    usb: '<span class="count">2</span>',
+    graphics: '<span class="count" style="color:var(--amber)">1</span>',
+    files: '<span class="count" style="color:var(--amber)">1</span>',
+    settings: '<span class="count" style="color:var(--amber)">2</span>'
+  };
+  document.querySelectorAll("ul[data-nav]").forEach(function(ul){
+    var on = ul.getAttribute("data-nav");
+    ul.innerHTML = NAV.map(function(item){
+      if (!item) return '<li class="rule"></li>';
+      return '<li><button class="navitem' + (item[0] === on ? ' on' : '') + '">' +
+        '<span class="g"><svg class="ico"><use href="#i-' + item[0] + '"/></svg></span> ' +
+        item[1] + (COUNTS[item[0]] || '') + '</button></li>';
+    }).join("");
+  });
   var tabs = document.querySelectorAll(".segmented button");
   var rails = document.querySelectorAll("[data-rail]");
   var views = document.querySelectorAll(".stage > section");

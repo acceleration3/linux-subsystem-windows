@@ -15,6 +15,8 @@ public:
 
     [[nodiscard]] static QLabel* make(State state, const QString& text);
 
+    static void set(QLabel* pill, State state, const QString& text);
+
     static void set_cell(QTableWidget* table, int row, int column, State state,
                          const QString& detail = {});
 };

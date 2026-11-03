@@ -1,6 +1,7 @@
 #include "lsw/host/ui/status_pill.hpp"
 
 #include "lsw/host/ui/theme.hpp"
+#include "lsw/host/ui/widgets.hpp"
 
 #include <QHBoxLayout>
 #include <QLabel>
@@ -48,7 +49,13 @@ QString word_for(StatusPill::State state, const QString& detail) {
 QLabel* StatusPill::make(State state, const QString& text) {
     auto* pill = new QLabel(QStringLiteral("●  %1").arg(text));
     pill->setObjectName(QString::fromLatin1(role_for(state)));
+    pill->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
     return pill;
+}
+
+void StatusPill::set(QLabel* pill, State state, const QString& text) {
+    pill->setText(QStringLiteral("●  %1").arg(text));
+    Widgets::set_role(pill, role_for(state));
 }
 
 void StatusPill::set_cell(QTableWidget* table, int row, int column, State state,

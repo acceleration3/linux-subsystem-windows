@@ -1,5 +1,6 @@
 #include "lsw/host/ui/panel.hpp"
 
+#include "lsw/host/ui/elided_label.hpp"
 #include "lsw/host/ui/theme.hpp"
 #include "lsw/host/ui/widgets.hpp"
 
@@ -35,6 +36,37 @@ Panel Panel::make(const QString& caption) {
     outer->addWidget(header_widget);
     outer->addWidget(body_widget, 1);
     return panel;
+}
+
+Panel Panel::area(const QString& name, const QString& caption, bool danger) {
+    Panel panel = make();
+    panel.header->setContentsMargins(12, 8, 12, 8);
+    panel.header->setSpacing(10);
+    auto* title = new ElidedLabel(name);
+    title->setObjectName(QString::fromLatin1(Theme::Role::kCardName));
+    panel.header->addWidget(title);
+    if (!caption.isEmpty()) {
+        auto* cap = new ElidedLabel(caption);
+        cap->setObjectName(QString::fromLatin1(Theme::Role::kMeta));
+        panel.header->addWidget(cap, 1);
+    } else {
+        panel.header->addStretch(1);
+    }
+    if (danger) {
+        Widgets::set_flag(panel.frame, "danger", true);
+        Widgets::set_flag(panel.header->parentWidget(), "danger", true);
+        Widgets::set_flag(title, "danger", true);
+    }
+    return panel;
+}
+
+void Panel::add_foot(const QString& meta_text) const {
+    auto* foot = new QWidget;
+    Theme::surface(foot, Theme::Role::kListFoot);
+    auto* line = new QVBoxLayout(foot);
+    line->setContentsMargins(12, 9, 12, 9);
+    line->addWidget(Widgets::meta(meta_text, true));
+    static_cast<QVBoxLayout*>(frame->layout())->addWidget(foot);
 }
 
 }

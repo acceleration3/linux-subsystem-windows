@@ -1,13 +1,17 @@
 #include "lsw/host/manager/nav_rail.hpp"
 
+#include "lsw/host/manager/nav_icon.hpp"
 #include "lsw/host/ui/theme.hpp"
 #include "lsw/host/ui/widgets.hpp"
 
 #include <QButtonGroup>
+#include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
 #include <QVBoxLayout>
+
+#include <array>
 
 namespace lsw::host::manager {
 
@@ -18,19 +22,26 @@ using ui::Widgets;
 
 constexpr int kPageCount = static_cast<int>(NavRail::Page::Count);
 
+using Shape = ui::LineIcon::Shape;
+
 struct ItemSpec {
     NavRail::Page page;
-    const char* glyph;
+    Shape icon;
     const char* label;
+    bool rule_after;
 };
 
-constexpr ItemSpec kItems[kPageCount] = {
-    {NavRail::Page::Overview, "□", "Overview"},
-    {NavRail::Page::Console, ">_", "Console"},
-    {NavRail::Page::Log, "≡", "Log"},
-    {NavRail::Page::Graphics, "◎", "Graphics"},
-    {NavRail::Page::Settings, "⚙", "Settings"},
-};
+constexpr std::array<ItemSpec, kPageCount> kItems{{
+    {NavRail::Page::Overview, Shape::Overview, "Overview", true},
+    {NavRail::Page::Display, Shape::Display, "Display", false},
+    {NavRail::Page::Graphics, Shape::Graphics, "Graphics", false},
+    {NavRail::Page::Files, Shape::Files, "Files", false},
+    {NavRail::Page::Usb, Shape::Usb, "USB", true},
+    {NavRail::Page::Console, Shape::Console, "Console", false},
+    {NavRail::Page::Log, Shape::Log, "Log", false},
+    {NavRail::Page::Maintenance, Shape::Maintenance, "Maintenance", true},
+    {NavRail::Page::Settings, Shape::Settings, "Settings", false},
+}};
 
 }
 
@@ -81,10 +92,7 @@ NavRail::NavRail(QWidget* parent) : QWidget(parent) {
         row->setContentsMargins(9, 4, 9, 4);
         row->setSpacing(10);
 
-        auto* glyph = Widgets::meta(QString::fromUtf8(spec.glyph));
-        glyph->setFixedWidth(15);
-        glyph->setAlignment(Qt::AlignCenter);
-        glyph->setAttribute(Qt::WA_TransparentForMouseEvents);
+        auto* icon = new NavIcon(spec.icon);
 
         auto* label = new QLabel(QString::fromLatin1(spec.label));
         label->setAttribute(Qt::WA_TransparentForMouseEvents);
@@ -93,7 +101,7 @@ NavRail::NavRail(QWidget* parent) : QWidget(parent) {
         marker->setVisible(false);
         marker->setAttribute(Qt::WA_TransparentForMouseEvents);
 
-        row->addWidget(glyph);
+        row->addWidget(icon);
         row->addWidget(label);
         row->addStretch(1);
         row->addWidget(marker);
@@ -107,6 +115,17 @@ NavRail::NavRail(QWidget* parent) : QWidget(parent) {
             current_ = page;
             Q_EMIT page_selected(page);
         });
+
+        if (spec.rule_after) {
+            auto* gap = new QWidget;
+            auto* gap_layout = new QVBoxLayout(gap);
+            gap_layout->setContentsMargins(8, 5, 8, 5);
+            auto* rule = new QFrame;
+            rule->setObjectName(QString::fromLatin1(Theme::Role::kNavRule));
+            rule->setFixedHeight(1);
+            gap_layout->addWidget(rule);
+            items_layout->addWidget(gap);
+        }
     }
     root->addWidget(items);
     root->addStretch(1);
@@ -171,6 +190,17 @@ void NavRail::set_marker(Page page, const QString& text, const char* tone) {
     if (index < 0 || index >= kPageCount) {
         return;
     }
+    state_[static_cast<std::size_t>(index)].text = text;
+    state_[static_cast<std::size_t>(index)].tone = tone;
+    show_marker(page);
+}
+
+void NavRail::show_marker(Page page) {
+    const int index = static_cast<int>(page);
+    const Marker& state = state_[static_cast<std::size_t>(index)];
+    const bool pending = state.pending > 0;
+    const QString text = pending ? QString::number(state.pending) : state.text;
+    const char* tone = pending ? Theme::Tone::kAmber : state.tone;
     auto* marker = markers_[index];
     marker->setText(text);
     marker->setVisible(!text.isEmpty());
@@ -179,8 +209,10 @@ void NavRail::set_marker(Page page, const QString& text, const char* tone) {
 }
 
 void NavRail::set_guest_provisioned(bool provisioned) {
-    for (const auto page : {Page::Console, Page::Log, Page::Graphics}) {
-        items_[static_cast<int>(page)]->setEnabled(provisioned);
+    for (const auto& spec : kItems) {
+        if (spec.page == Page::Console || spec.page == Page::Graphics) {
+            items_[static_cast<int>(spec.page)]->setEnabled(provisioned);
+        }
     }
     power_->setEnabled(provisioned);
 }
@@ -189,9 +221,17 @@ void NavRail::set_log_count(int records) {
     set_marker(Page::Log, records > 0 ? QString::number(records) : QString{}, nullptr);
 }
 
-void NavRail::set_pending_changes(int count) {
-    set_marker(Page::Settings, count > 0 ? QString::number(count) : QString{},
-               Theme::Tone::kAmber);
+void NavRail::set_usb_count(int devices) {
+    set_marker(Page::Usb, devices > 0 ? QString::number(devices) : QString{}, nullptr);
+}
+
+void NavRail::set_pending(Page page, int changes) {
+    const int index = static_cast<int>(page);
+    if (index < 0 || index >= kPageCount) {
+        return;
+    }
+    state_[static_cast<std::size_t>(index)].pending = changes;
+    show_marker(page);
 }
 
 void NavRail::set_graphics_warning(const char* tone) {

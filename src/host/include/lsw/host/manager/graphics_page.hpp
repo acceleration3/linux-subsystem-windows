@@ -6,24 +6,30 @@
 class QLabel;
 class QVBoxLayout;
 
-namespace lsw::host::config { class ManagerSettings; }
+namespace lsw::host::config {
+class ManagerSettings;
+class PendingChanges;
+}
+namespace lsw::host::platform { struct HostGpu; }
 namespace lsw::host::services { class StatusHub; }
 
 namespace lsw::host::manager {
 
+class AdapterRoles;
 class GraphicsAlerts;
+class SettingControls;
 
 class GraphicsPage : public QWidget {
     Q_OBJECT
 public:
     GraphicsPage(services::StatusHub& status, GraphicsAlerts& alerts,
-                 config::ManagerSettings& settings, QWidget* parent = nullptr);
+                 config::ManagerSettings& settings, config::PendingChanges& pending,
+                 QWidget* parent = nullptr);
 
     [[nodiscard]] QString summary() const;
     [[nodiscard]] QStringList status_facts() const;
 
 Q_SIGNALS:
-    void settings_requested();
     void summary_changed();
 
 protected:
@@ -37,7 +43,7 @@ private:
     [[nodiscard]] QString signature() const;
 
     [[nodiscard]] QWidget* build_warnings();
-    [[nodiscard]] QWidget* build_adapter_card(int index) const;
+    [[nodiscard]] QWidget* build_adapter_card(const platform::HostGpu& gpu);
     [[nodiscard]] QWidget* build_apis() const;
     [[nodiscard]] QWidget* build_device();
     [[nodiscard]] QWidget* build_guest_driver() const;
@@ -47,6 +53,9 @@ private:
     services::StatusHub& status_;
     GraphicsAlerts& alerts_;
     config::ManagerSettings& settings_;
+    config::PendingChanges& pending_;
+    AdapterRoles* roles_ = nullptr;
+    SettingControls* controls_ = nullptr;
     QVBoxLayout* content_ = nullptr;
     QLabel* log_meta_ = nullptr;
     QLabel* log_text_ = nullptr;

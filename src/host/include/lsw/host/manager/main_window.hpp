@@ -22,11 +22,16 @@ namespace lsw::host::mirror { class WindowMirror; }
 
 namespace lsw::host::manager {
 
+class ApplyBar;
 class ConsolePanel;
+class DisplayPage;
+class FilesPage;
 class GraphicsAlerts;
 class GraphicsPage;
 class LogPanel;
+class MaintenancePage;
 class RunOnVmDialog;
+class UsbPage;
 class SettingsPage;
 class UpdateDialog;
 class VmDetailPanel;
@@ -64,9 +69,13 @@ private:
     void refresh_log_buttons();
     void show_cleared();
     void open_desktop();
+    void open_windows_files();
+    void start_guest();
     void follow_agent_for_desktop(bool online);
     void setup_tray();
     void refresh_identity();
+    void refresh_pending_counts();
+    void refresh_detail();
     [[nodiscard]] QString page_detail(NavRail::Page page) const;
     void refresh_status_bar();
     void refresh_warning();
@@ -82,6 +91,7 @@ private:
     services::HostServices& services_;
 
     NavRail* rail_ = nullptr;
+    ApplyBar* apply_bar_ = nullptr;
     QStackedWidget* stack_ = nullptr;
     QLabel* content_title_ = nullptr;
     QLabel* content_detail_ = nullptr;
@@ -91,7 +101,7 @@ private:
     QPointer<RunOnVmDialog> run_on_vm_dialog_;
     QPushButton* clear_button_ = nullptr;
     QPushButton* config_folder_button_ = nullptr;
-    QPushButton* change_settings_button_ = nullptr;
+    QPushButton* windows_files_button_ = nullptr;
     WarningStrip* warn_strip_ = nullptr;
     NoticeBoard* notices_ = nullptr;
     QLabel* status_left_ = nullptr;
@@ -106,6 +116,10 @@ private:
     ConsolePanel* console_ = nullptr;
     LogPanel* log_ = nullptr;
     GraphicsAlerts* alerts_ = nullptr;
+    DisplayPage* display_page_ = nullptr;
+    FilesPage* files_page_ = nullptr;
+    UsbPage* usb_page_ = nullptr;
+    MaintenancePage* maintenance_page_ = nullptr;
     GraphicsPage* graphics_page_ = nullptr;
     SettingsPage* settings_page_ = nullptr;
     UpdateDialog* update_dialog_ = nullptr;

@@ -3,17 +3,24 @@
 #include "lsw/host/config/display_modes.hpp"
 #include "lsw/host/config/display_refresh.hpp"
 #include "lsw/host/config/manager_settings.hpp"
+#include "lsw/host/config/pending_changes.hpp"
+#include "lsw/host/manager/adapter_roles.hpp"
+#include "lsw/host/manager/display_facts.hpp"
 #include "lsw/host/manager/graphics_alerts.hpp"
+#include "lsw/host/manager/setting_controls.hpp"
 #include "lsw/host/services/status_hub.hpp"
 #include "lsw/host/manager/warning_strip.hpp"
 #include "lsw/host/platform/accel_virt_paths.hpp"
+#include "lsw/host/ui/flow_layout.hpp"
 #include "lsw/host/ui/format.hpp"
+#include "lsw/host/ui/key_values.hpp"
 #include "lsw/host/ui/panel.hpp"
 #include "lsw/host/ui/status_pill.hpp"
 #include "lsw/host/ui/theme.hpp"
 #include "lsw/host/ui/widgets.hpp"
 
 #include <QComboBox>
+#include <algorithm>
 #include <QDesktopServices>
 #include <QDir>
 #include <QFileInfo>
@@ -44,6 +51,8 @@ using Warning = GraphicsAlerts::Warning;
 using Area = services::StatusHub::Area;
 
 constexpr int kLogLines = 6;
+constexpr int kKpiCell = 170;
+constexpr int kPairCell = 300;
 
 QString short_uuid(const QString& uuid) {
     if (uuid.size() < 16) {
@@ -92,14 +101,7 @@ QString short_name(const QString& name) {
 }
 
 ui::Panel card(const QString& name, const QString& caption, QWidget* right = nullptr) {
-    auto panel = ui::Panel::make();
-    panel.header->setContentsMargins(12, 8, 12, 8);
-    panel.header->setSpacing(10);
-    auto* title = new QLabel(name);
-    title->setObjectName(QString::fromLatin1(Theme::Role::kCardName));
-    panel.header->addWidget(title);
-    panel.header->addWidget(Widgets::meta(caption));
-    panel.header->addStretch(1);
+    auto panel = ui::Panel::area(name, caption);
     if (right != nullptr) {
         panel.header->addWidget(right);
     }
@@ -109,9 +111,9 @@ ui::Panel card(const QString& name, const QString& caption, QWidget* right = nul
 QWidget* kpi_grid(const QVector<QPair<QString, QString>>& figures) {
     auto* grid = new QFrame;
     Theme::surface(grid, Theme::Role::kKpiGrid);
-    auto* row = new QHBoxLayout(grid);
+    auto* row = new ui::FlowLayout(grid, ui::FlowLayout::Mode::Even, 1, 1);
+    row->set_cell_width(kKpiCell);
     row->setContentsMargins(1, 1, 1, 1);
-    row->setSpacing(1);
     for (const auto& [key, value] : figures) {
         auto* tile = new QWidget;
         Theme::surface(tile, Theme::Role::kTile);
@@ -125,52 +127,12 @@ QWidget* kpi_grid(const QVector<QPair<QString, QString>>& figures) {
         figure->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
         figure->setMinimumWidth(0);
         column->addWidget(figure);
-        row->addWidget(tile, 1);
+        row->addWidget(tile);
     }
     return grid;
 }
 
-class KeyValues {
-public:
-    explicit KeyValues(QVBoxLayout* body) : grid_(new QGridLayout) {
-        grid_->setHorizontalSpacing(16);
-        grid_->setVerticalSpacing(9);
-        grid_->setColumnStretch(1, 1);
-        body->addLayout(grid_);
-    }
-
-    QHBoxLayout* add(const QString& key, const QString& value, const char* tone = nullptr,
-                     const QString& note = {}) {
-        auto* caption = Widgets::caption(key);
-        auto* line = new QHBoxLayout;
-        line->setSpacing(6);
-        if (value == QLatin1String("-") && !note.isEmpty()) {
-            line->addWidget(Widgets::meta(note, true), 1);
-            grid_->addWidget(caption, row_, 0, Qt::AlignLeft | Qt::AlignVCenter);
-            grid_->addLayout(line, row_, 1);
-            ++row_;
-            return line;
-        }
-        auto* shown = new QLabel(value);
-        if (tone != nullptr) {
-            shown->setProperty(Theme::Tone::kProperty, QString::fromLatin1(tone));
-        }
-        line->addWidget(shown);
-        if (!note.isEmpty()) {
-            line->addWidget(Widgets::meta(note, true), 1);
-        } else {
-            line->addStretch(1);
-        }
-        grid_->addWidget(caption, row_, 0, Qt::AlignLeft | Qt::AlignVCenter);
-        grid_->addLayout(line, row_, 1);
-        ++row_;
-        return line;
-    }
-
-private:
-    QGridLayout* grid_;
-    int row_ = 0;
-};
+using ui::KeyValues;
 
 QLabel* adapter_pill(const services::StatusHub& status, const Adapter& adapter) {
     if (!status.vm().running()) {
@@ -208,8 +170,11 @@ QString tilde(const QString& path) {
 }
 
 GraphicsPage::GraphicsPage(services::StatusHub& status, GraphicsAlerts& alerts,
-                           config::ManagerSettings& settings, QWidget* parent)
-    : QWidget(parent), status_(status), alerts_(alerts), settings_(settings) {
+                           config::ManagerSettings& settings, config::PendingChanges& pending,
+                           QWidget* parent)
+    : QWidget(parent), status_(status), alerts_(alerts), settings_(settings), pending_(pending),
+      roles_(new AdapterRoles(pending, status, this)),
+      controls_(new SettingControls(settings, pending, this)) {
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(0, 0, 0, 0);
     root->setSpacing(0);
@@ -231,6 +196,7 @@ GraphicsPage::GraphicsPage(services::StatusHub& status, GraphicsAlerts& alerts,
         }
     });
     connect(&alerts_, &GraphicsAlerts::changed, this, &GraphicsPage::refresh);
+    connect(&pending_, &config::PendingChanges::changed, this, &GraphicsPage::refresh);
     rebuild();
 }
 
@@ -245,24 +211,20 @@ void GraphicsPage::hideEvent(QHideEvent* event) {
 }
 
 QString GraphicsPage::summary() const {
-    const auto adapters = status_.graphics().adapters;
-    QStringList parts{QStringLiteral("accel-virt")};
-    parts << (adapters.size() == 1 ? QStringLiteral("1 adapter")
-                                   : QStringLiteral("%1 adapters").arg(adapters.size()));
-    if (status_.vm().running() && status_.graphics().guest.valid) {
-        int started = 0;
-        for (const auto& adapter : adapters) {
-            started += adapter.guest && adapter.guest->running() ? 1 : 0;
-        }
-        if (started == adapters.size() && started > 0) {
-            parts << QStringLiteral("avgpu.sys started");
-        } else if (started == 0) {
-            parts << QStringLiteral("avgpu.sys not running");
-        } else {
-            parts << QStringLiteral("avgpu.sys started on %1").arg(started);
-        }
+    const int running = static_cast<int>(status_.graphics().adapters.size());
+    int staged = 0;
+    for (const auto& gpu : status_.graphics().host_gpus) {
+        staged += roles_->staged(gpu.uuid) != AdapterRoles::Role::NotUsed ? 1 : 0;
     }
-    return parts.join(QStringLiteral(" · "));
+    QString text = QStringLiteral("accel-virt · %1")
+                       .arg(running == 1 ? QStringLiteral("1 adapter")
+                                         : QStringLiteral("%1 adapters").arg(running));
+    if (status_.graphics().probed && status_.graphics().pending.adapters && staged != running) {
+        const int more = staged - running;
+        text += more > 0 ? QStringLiteral(", %1 more after a restart").arg(more)
+                         : QStringLiteral(", %1 fewer after a restart").arg(-more);
+    }
+    return text;
 }
 
 QStringList GraphicsPage::status_facts() const {
@@ -352,7 +314,14 @@ QString GraphicsPage::signature() const {
         }
     }
     parts << QString::number(g.pending.host_window_mib.value_or(0))
-          << QString::number(g.pending.adapters);
+          << QString::number(g.pending.adapters)
+          << pending_.staged_or_current(K::kHostGpu).toString()
+          << pending_.staged_or_current(K::kRenderGpus).toStringList().join(QLatin1Char(','))
+          << pending_.staged_or_current(K::kHostWindowMib).toString()
+          << QString::number(g.scale_percent.value_or(0)) << QString::number(g.live_refresh.value_or(0));
+    for (const auto& gpu : g.host_gpus) {
+        parts << gpu.uuid;
+    }
     return parts.join(QLatin1Char('\x1f'));
 }
 
@@ -371,8 +340,8 @@ void GraphicsPage::rebuild() {
     if (auto* warnings = build_warnings()) {
         content_->addWidget(warnings);
     }
-    const auto adapters = status_.graphics().adapters;
-    if (adapters.isEmpty()) {
+    const auto gpus = roles_->listed();
+    if (gpus.isEmpty()) {
         const vm::DomainDescription* definition = status_.vm().definition();
         const auto* device = definition != nullptr ? definition->display() : nullptr;
         auto panel = card(QStringLiteral("No host GPU found"),
@@ -384,17 +353,31 @@ void GraphicsPage::rebuild() {
             "device it finds.")));
         content_->addWidget(panel.frame);
     }
-    for (int i = 0; i < adapters.size(); ++i) {
-        content_->addWidget(build_adapter_card(i));
+    for (const auto& gpu : gpus) {
+        content_->addWidget(build_adapter_card(gpu));
+    }
+    for (const auto& adapter : status_.graphics().adapters) {
+        const bool known = std::any_of(status_.graphics().host_gpus.begin(),
+                                       status_.graphics().host_gpus.end(),
+                                       [&adapter](const platform::HostGpu& gpu) {
+                                           return gpu.uuid == adapter.gpu.uuid;
+                                       });
+        if (status_.graphics().probed && !known) {
+            auto panel = card(adapter.gpu.name, adapter.display ? QStringLiteral("display adapter")
+                                                                : QStringLiteral("render only"));
+            panel.header->addWidget(StatusPill::make(StatusPill::State::Warning,
+                                                     QStringLiteral("Not on this host")));
+            content_->addWidget(panel.frame);
+        }
     }
     content_->addWidget(build_apis());
 
     auto* pair = new QWidget;
-    auto* pair_row = new QHBoxLayout(pair);
+    auto* pair_row = new ui::FlowLayout(pair, ui::FlowLayout::Mode::Even, 12, 12);
+    pair_row->set_cell_width(kPairCell);
     pair_row->setContentsMargins(0, 0, 0, 0);
-    pair_row->setSpacing(12);
-    pair_row->addWidget(build_device(), 1);
-    pair_row->addWidget(build_guest_driver(), 1);
+    pair_row->addWidget(build_device());
+    pair_row->addWidget(build_guest_driver());
     content_->addWidget(pair);
 
     content_->addWidget(build_log());
@@ -436,18 +419,34 @@ QWidget* GraphicsPage::build_warnings() {
     return box;
 }
 
-QWidget* GraphicsPage::build_adapter_card(int index) const {
+QWidget* GraphicsPage::build_adapter_card(const platform::HostGpu& gpu) {
     const auto adapters = status_.graphics().adapters;
-    const Adapter& adapter = adapters.at(index);
-    auto panel = card(platform::HostGpus::adapter_name(adapter.gpu),
-                      adapter.display ? QStringLiteral("display adapter")
-                                      : QStringLiteral("render only, no outputs"),
-                      adapter_pill(status_, adapter));
+    const auto found = std::find_if(adapters.begin(), adapters.end(), [&gpu](const Adapter& a) {
+        return a.gpu.uuid == gpu.uuid;
+    });
+    const bool differs = roles_->differs(gpu.uuid);
+
+    auto* pill = [&]() -> QLabel* {
+        if (differs) {
+            return StatusPill::make(StatusPill::State::Pending, QStringLiteral("After restart"));
+        }
+        if (found == adapters.end()) {
+            return StatusPill::make(StatusPill::State::Pending, QStringLiteral("Not used"));
+        }
+        return adapter_pill(status_, *found);
+    }();
+
+    auto panel = card(platform::HostGpus::adapter_name(gpu), ids(gpu));
+    if (differs) {
+        panel.header->addWidget(Widgets::tag(true));
+    }
+    panel.header->addWidget(roles_->combo(gpu));
+    panel.header->addWidget(pill);
     panel.body->addWidget(kpi_grid({
-        {QStringLiteral("Dedicated memory"), memory(adapter.gpu)},
-        {QStringLiteral("Vendor : device"), ids(adapter.gpu)},
-        {QStringLiteral("Vulkan UUID"), short_uuid(adapter.gpu.uuid)},
-        {QStringLiteral("Host driver"), platform::HostGraphicsProbe::driver_label(adapter.gpu)},
+        {QStringLiteral("Dedicated memory"), memory(gpu)},
+        {QStringLiteral("Vendor : device"), ids(gpu)},
+        {QStringLiteral("Vulkan UUID"), short_uuid(gpu.uuid)},
+        {QStringLiteral("Host driver"), platform::HostGraphicsProbe::driver_label(gpu)},
     }));
     return panel.frame;
 }
@@ -515,82 +514,43 @@ QWidget* GraphicsPage::build_device() {
         definition != nullptr ? definition->display() : nullptr;
     const bool live = vm.running_device.has_value();
 
-    QStringList offered;
-    if (g.live_modes.has_value()) {
-        offered = config::DisplayModes::normalized(
-            g.live_modes->split(QLatin1Char(','), Qt::SkipEmptyParts));
-    } else {
-        offered = config::DisplayModes::normalized(settings_.string_list_value(K::kDisplayModes));
-    }
-
-    QComboBox* pick = nullptr;
-    if (offered.size() > 1) {
-        pick = new QComboBox;
-        pick->addItem(QStringLiteral("Switch resolution"));
-        for (const QString& entry : offered.mid(1)) {
-            if (const auto m = config::DisplayModes::parse(entry)) {
-                pick->addItem(m->label(), entry);
-            }
-        }
-        pick->setSizeAdjustPolicy(QComboBox::AdjustToContents);
-        connect(pick, &QComboBox::activated, this, [this, pick](int index) {
-            const QString chosen = pick->itemData(index).toString();
-            if (chosen.isEmpty()) {
-                return;
-            }
-            QStringList list = config::DisplayModes::normalized(
-                settings_.string_list_value(K::kDisplayModes));
-            list.removeAll(chosen);
-            list.prepend(chosen);
-            settings_.set_value(K::kDisplayModes, list);
-        });
-    }
     const int devices = definition != nullptr ? static_cast<int>(definition->gpus.size())
                                               : static_cast<int>(adapters.size());
     auto panel = card(QStringLiteral("Device"),
                       devices > 1 ? QStringLiteral("virtio-gpu-av-pci × %1").arg(devices)
-                                  : QStringLiteral("virtio-gpu-av-pci"),
-                      pick);
+                                  : QStringLiteral("virtio-gpu-av-pci"));
     KeyValues rows(panel.body);
 
     if (device == nullptr) {
         rows.add(QStringLiteral("Host window"), QStringLiteral("-"), Theme::Tone::kFaint,
                  QStringLiteral("no machine is defined"));
     } else {
-        QString window_note = live ? QStringLiteral("write-back")
-                                   : QStringLiteral("write-back, from the next start");
-        const char* window_tone = nullptr;
+        QString window_note = QStringLiteral("write-back, used on demand");
         if (live && facts.host_window_taken.has_value()) {
             window_note = *facts.host_window_taken
                               ? QStringLiteral("write-back, taken by the driver")
                               : QStringLiteral("refused by the driver; chunks fall back to guest RAM");
-            window_tone = *facts.host_window_taken ? nullptr : Theme::Tone::kAmber;
         }
-        if (g.pending.host_window_mib) {
-            window_note += QStringLiteral("; %1 after a restart")
-                               .arg(window_size(*g.pending.host_window_mib));
-            window_tone = Theme::Tone::kAmber;
-        }
-        rows.add(QStringLiteral("Host window"),
-                 device->hostmem_mib > 0 ? window_size(device->hostmem_mib) : QStringLiteral("-"),
-                 window_tone, window_note);
+        auto* holder = new QWidget;
+        auto* line = new QHBoxLayout(holder);
+        line->setContentsMargins(0, 0, 0, 0);
+        line->setSpacing(8);
+        auto* window = controls_->choice(K::kHostWindowMib,
+                                         {{QStringLiteral("2 GiB"), 2048},
+                                          {QStringLiteral("4 GiB"), 4096},
+                                          {QStringLiteral("8 GiB"), 8192},
+                                          {QStringLiteral("16 GiB"), 16384}});
+        line->addWidget(window);
+        line->addWidget(Widgets::tag(true));
+        line->addWidget(Widgets::meta(window_note, true), 1);
+        rows.add_widget(QStringLiteral("Host window"), holder);
     }
 
-    QString preferred = offered.value(0);
-    if (preferred.isEmpty()) {
-        preferred = facts.preferred_mode;
-    }
-    const int count = !offered.isEmpty() ? static_cast<int>(offered.size()) : facts.modes_taken;
-    const auto mode = config::DisplayModes::parse(preferred);
-    rows.add(
-        QStringLiteral("Display"),
-        mode ? QStringLiteral("%1 at %2").arg(mode->label(), config::DisplayRefresh::label(g.live_refresh))
-             : QStringLiteral("Host monitors' modes"),
-        nullptr,
-        count <= 0 ? QString{}
-        : g.live_modes.has_value() || facts.modes_taken > 0
-            ? QStringLiteral("%1 mode%2 offered").arg(count).arg(count == 1 ? "" : "s")
-            : QStringLiteral("%1 mode%2 at boot").arg(count).arg(count == 1 ? "" : "s"));
+    const DisplayFacts display = DisplayFacts::read(status_);
+    rows.add(QStringLiteral("Display"),
+             display.mode ? QStringLiteral("%1 at %2").arg(display.mode_label(), display.refresh_label())
+                          : display.mode_label(),
+             nullptr, QStringLiteral("set on the Display page"));
 
     int render = 0;
     for (const auto& adapter : adapters) {
@@ -599,7 +559,11 @@ QWidget* GraphicsPage::build_device() {
     QString adapters_note = render == 0 ? QStringLiteral("the display only")
                                         : QStringLiteral("1 display, %1 render only").arg(render);
     if (g.pending.adapters) {
-        adapters_note += QStringLiteral("; the settings pass a different set after a restart");
+        const int staged_render = roles_->staged_render_count();
+        adapters_note += staged_render == 0
+                             ? QStringLiteral("; the display only after a restart")
+                             : QStringLiteral("; 1 display, %1 render only after a restart")
+                                   .arg(staged_render);
     }
     rows.add(QStringLiteral("Adapters"), QString::number(adapters.size()),
              g.pending.adapters ? Theme::Tone::kAmber : nullptr, adapters_note);

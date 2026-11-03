@@ -36,6 +36,7 @@ public:
         static constexpr const char* kGo = "Go";
         static constexpr const char* kStop = "Stop";
         static constexpr const char* kIconButton = "IconButton";
+        static constexpr const char* kIconTool = "IconTool";
         static constexpr const char* kMono = "Mono";
         static constexpr const char* kMeta = "Meta";
         static constexpr const char* kDim = "Dim";
@@ -64,6 +65,7 @@ public:
         static constexpr const char* kNavItem = "NavItem";
         static constexpr const char* kNavIdentity = "NavIdentity";
         static constexpr const char* kNavPower = "NavPower";
+        static constexpr const char* kNavRule = "NavRule";
         static constexpr const char* kContentBar = "ContentBar";
         static constexpr const char* kWarnStrip = "WarnStrip";
         static constexpr const char* kWarnStripCritical = "WarnStripCritical";
@@ -82,6 +84,12 @@ public:
         static constexpr const char* kPillDone = "PillDone";
         static constexpr const char* kPillFail = "PillFail";
         static constexpr const char* kPillWarn = "PillWarn";
+        static constexpr const char* kSegmented = "Segmented";
+        static constexpr const char* kItemRow = "ItemRow";
+        static constexpr const char* kItemName = "ItemName";
+        static constexpr const char* kItemNote = "ItemNote";
+        static constexpr const char* kDriveBadge = "DriveBadge";
+        static constexpr const char* kStepChip = "StepChip";
     };
 
     struct Tone {
@@ -94,6 +102,7 @@ public:
         static constexpr const char* kFaint = "faint";
         static constexpr const char* kRestart = "restart";
         static constexpr const char* kNow = "now";
+        static constexpr const char* kDim = "dim";
     };
 
     struct Color {
@@ -109,6 +118,7 @@ public:
         static constexpr const char* kOk = "#4ec98a";
         static constexpr const char* kInfo = "#5aa9f0";
         static constexpr const char* kBad = "#f2555a";
+        static constexpr const char* kBadSurface = "#1f1315";
     };
 };
 

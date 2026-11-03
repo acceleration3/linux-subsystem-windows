@@ -22,11 +22,14 @@ public:
     [[nodiscard]] static QLabel* step_line(const QString& mark, const QString& text,
                                            const char* tone);
 
+    [[nodiscard]] static QLabel* tag(bool restart);
+
     [[nodiscard]] static QFrame* separator();
 
     [[nodiscard]] static QPushButton* button(const QString& text, const char* role = nullptr);
 
     static void set_role(QWidget* widget, const char* role);
+    static void compact(QWidget* widget);
     static void set_flag(QWidget* widget, const char* property, const QVariant& value);
 
     static void bring_to_front(QWidget* window);

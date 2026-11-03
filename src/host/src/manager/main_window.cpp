@@ -2,15 +2,22 @@
 
 #include "lsw/host/config/display_refresh.hpp"
 #include "lsw/host/config/vm_state.hpp"
+#include "lsw/host/link/agent_reply.hpp"
+#include "lsw/host/manager/apply_bar.hpp"
 #include "lsw/host/manager/collect_logs_dialog.hpp"
 #include "lsw/host/manager/console_panel.hpp"
+#include "lsw/host/manager/display_page.hpp"
+#include "lsw/host/manager/files_page.hpp"
 #include "lsw/host/manager/graphics_alerts.hpp"
 #include "lsw/host/manager/graphics_page.hpp"
 #include "lsw/host/manager/log_panel.hpp"
+#include "lsw/host/manager/maintenance_page.hpp"
 #include "lsw/host/manager/notice_board.hpp"
 #include "lsw/host/manager/run_on_vm_dialog.hpp"
+#include "lsw/host/manager/screen_pixels.hpp"
 #include "lsw/host/manager/settings_page.hpp"
 #include "lsw/host/manager/update_dialog.hpp"
+#include "lsw/host/manager/usb_page.hpp"
 #include "lsw/host/apps/app_config_store.hpp"
 #include "lsw/host/apps/guest_app_launcher.hpp"
 #include "lsw/host/manager/vm_detail_panel.hpp"
@@ -50,6 +57,9 @@
 #include <QWindow>
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
+#include <array>
+
 namespace lsw::host::manager {
 
 namespace {
@@ -65,9 +75,17 @@ struct PageInfo {
     const char* detail;
 };
 
-const PageInfo kPages[] = {
-    {"Overview", ""}, {"Console", ""}, {"Log", ""}, {"Graphics", ""}, {"Settings", ""},
-};
+constexpr std::array<PageInfo, static_cast<std::size_t>(NavRail::Page::Count)> kPages{{
+    {"Overview", ""},
+    {"Display", ""},
+    {"Graphics", ""},
+    {"Files", ""},
+    {"USB", ""},
+    {"Console", ""},
+    {"Log", ""},
+    {"Maintenance", ""},
+    {"Settings", ""},
+}};
 
 QString tilde(const QString& path) {
     const QString home = QDir::homePath();
@@ -120,7 +138,7 @@ MainWindow::MainWindow(services::HostServices& services, QWidget* parent)
     desktop_button_ = bar_action(QStringLiteral("Open desktop"));
     run_on_vm_button_ = bar_action(QStringLiteral("Run on VM…"));
     clear_button_ = bar_action(QStringLiteral("Clear"));
-    change_settings_button_ = bar_action(QStringLiteral("Change in Settings"));
+    windows_files_button_ = bar_action(QStringLiteral("Open Windows files"));
     config_folder_button_ = bar_action(QStringLiteral("Open config folder"));
     pop_out_button_ = bar_action(QStringLiteral("Pop out"));
 
@@ -144,8 +162,7 @@ MainWindow::MainWindow(services::HostServices& services, QWidget* parent)
         }
         clear_logs();
     });
-    connect(change_settings_button_, &QPushButton::clicked, this,
-            [this] { show_page(NavRail::Page::Settings); });
+    connect(windows_files_button_, &QPushButton::clicked, this, &MainWindow::open_windows_files);
     connect(config_folder_button_, &QPushButton::clicked, this, [this] {
         QDesktopServices::openUrl(QUrl::fromLocalFile(services_.settings().config_dir()));
     });
@@ -160,11 +177,15 @@ MainWindow::MainWindow(services::HostServices& services, QWidget* parent)
     stack_ = new QStackedWidget;
     right_layout->addWidget(stack_, 1);
 
+    apply_bar_ = new ApplyBar(services_.pending_changes());
+    right_layout->addWidget(apply_bar_);
+
     auto* strip = new QWidget;
     Theme::surface(strip, Theme::Role::kStatusStrip);
     auto* strip_layout = new QHBoxLayout(strip);
     strip_layout->setContentsMargins(14, 5, 14, 5);
     status_left_ = Widgets::meta(QString{});
+    status_left_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
     strip_layout->addWidget(status_left_, 1);
     right_layout->addWidget(strip);
 
@@ -176,11 +197,8 @@ MainWindow::MainWindow(services::HostServices& services, QWidget* parent)
     connect(rail_, &NavRail::page_selected, this, &MainWindow::show_page);
     follow_launches();
     follow_upkeep();
-    connect(rail_, &NavRail::start_requested, this, [this] {
-        if (!overview_->start_guest()) {
-            notice_start_refused(QStringLiteral("libvirt would not start the guest."));
-        }
-    });
+    connect(rail_, &NavRail::start_requested, this, &MainWindow::start_guest);
+    connect(usb_page_, &UsbPage::start_requested, this, &MainWindow::start_guest);
     connect(rail_, &NavRail::stop_requested, overview_, &VmDetailPanel::stop_guest);
 
     connect(overview_, &VmDetailPanel::running_changed, this, [this](bool running) {
@@ -207,9 +225,20 @@ MainWindow::MainWindow(services::HostServices& services, QWidget* parent)
     });
     connect(&services_.status(), &services::StatusHub::changed, this, [this] {
         refresh_status_bar();
-        content_detail_->setText(page_detail(rail_->current()));
+        refresh_detail();
         refresh_identity();
     });
+    connect(&services_.status(), &services::StatusHub::changed, this,
+            [this](services::StatusHub::Area area) {
+                if (area != services::StatusHub::Area::Usb) {
+                    return;
+                }
+                const auto& devices = services_.status().usb().devices;
+                rail_->set_usb_count(static_cast<int>(std::count_if(
+                    devices.begin(), devices.end(), [](const services::UsbStatus::Device& device) {
+                        return device.place == services::UsbStatus::Place::Guest;
+                    })));
+            });
     connect(console_, &ConsolePanel::open_failed, this, [this](const QString& reason) {
         notices_->post(QStringLiteral("console"), false, QStringLiteral("Could not open a console."),
                        reason);
@@ -223,9 +252,9 @@ MainWindow::MainWindow(services::HostServices& services, QWidget* parent)
     });
     connect(log_, &LogPanel::record_count_changed, rail_, &NavRail::set_log_count);
     rail_->set_log_count(log_->shown());
-    connect(&services_.pending_changes(), &config::PendingChanges::changed, this,
-            [this] { rail_->set_pending_changes(services_.pending_changes().count()); });
-    rail_->set_pending_changes(services_.pending_changes().count());
+    connect(apply_bar_, &ApplyBar::restart_requested, this, [this] { (void)restart_guest(); });
+    connect(apply_bar_, &ApplyBar::counts_changed, this, &MainWindow::refresh_pending_counts);
+    refresh_pending_counts();
     connect(alerts_, &GraphicsAlerts::changed, this, &MainWindow::on_graphics_changed);
     connect(graphics_page_, &GraphicsPage::summary_changed, this, &MainWindow::on_graphics_changed);
     connect(&services_.manager_settings(), &config::ManagerSettings::changed, this,
@@ -280,38 +309,47 @@ void MainWindow::build_pages() {
     console_ = new ConsolePanel(services_.shells(), services_.status(), this);
     log_ = new LogPanel(services_.log_store(), services_.settings(), services_.log_collector(), this);
     connect(log_, &LogPanel::collect_requested, this, &MainWindow::collect_logs);
+    display_page_ = new DisplayPage(services_.status(), services_.manager_settings(),
+                                    services_.pending_changes(), this);
+    connect(display_page_, &DisplayPage::summary_changed, this, &MainWindow::refresh_detail);
+    files_page_ = new FilesPage(services_.status(), services_.manager_settings(),
+                                services_.pending_changes(), this);
+    connect(files_page_, &FilesPage::summary_changed, this, &MainWindow::refresh_detail);
+    maintenance_page_ = new MaintenancePage(services_.status(), this);
+    connect(maintenance_page_, &MaintenancePage::summary_changed, this, &MainWindow::refresh_detail);
+    usb_page_ = new UsbPage(services_.status(), services_.usb(), this);
+    connect(usb_page_, &UsbPage::summary_changed, this, &MainWindow::refresh_detail);
     alerts_ = new GraphicsAlerts(services_.status(), this);
     graphics_page_ =
-        new GraphicsPage(services_.status(), *alerts_, services_.manager_settings(), this);
+        new GraphicsPage(services_.status(), *alerts_, services_.manager_settings(),
+                         services_.pending_changes(), this);
     settings_page_ = new SettingsPage(services_.manager_settings(), services_.pending_changes(),
-                                      services_.app_configs(), services_.status(), services_.usb(),
-                                      services_.log_verbosity(), this);
+                                      services_.status(), services_.log_verbosity(), this);
 
     overview_stack_ = new QStackedWidget;
     overview_stack_->addWidget(overview_);
     overview_stack_->addWidget(build_empty_state());
 
     stack_->addWidget(overview_stack_);
+    stack_->addWidget(display_page_);
+    stack_->addWidget(graphics_page_);
+    stack_->addWidget(files_page_);
+    stack_->addWidget(usb_page_);
     stack_->addWidget(console_);
     stack_->addWidget(log_);
-    stack_->addWidget(graphics_page_);
+    stack_->addWidget(maintenance_page_);
     stack_->addWidget(settings_page_);
 
-    connect(graphics_page_, &GraphicsPage::settings_requested, this,
-            [this] { show_page(NavRail::Page::Settings); });
-    connect(settings_page_, &SettingsPage::restart_requested, this, [this] { (void)restart_guest(); });
-    connect(settings_page_, &SettingsPage::download_tool_requested, this, [this] {
+    connect(maintenance_page_, &MaintenancePage::download_requested, this, [this] {
         tools::DownloadImageDialog dialog{services_.settings(), this};
         dialog.exec();
     });
-    connect(settings_page_, &SettingsPage::trim_tool_requested, this, [this] {
+    connect(maintenance_page_, &MaintenancePage::trim_requested, this, [this] {
         const config::VmRecord* record = services_.vms().primary();
         const QString source = record != nullptr ? record->iso_path : QString{};
         tools::TrimImageDialog dialog{services_.settings(), source, this};
         dialog.exec();
     });
-    connect(settings_page_, &SettingsPage::collect_logs_requested, this, &MainWindow::collect_logs);
-    connect(settings_page_, &SettingsPage::clear_logs_requested, this, &MainWindow::clear_logs);
     auto& collector = services_.log_collector();
     auto& cleaner = services_.log_cleaner();
     connect(&collector, &services::LogCollector::step_started, this, &MainWindow::refresh_log_buttons);
@@ -320,25 +358,15 @@ void MainWindow::build_pages() {
     connect(&cleaner, &services::LogCleaner::started, this, &MainWindow::refresh_log_buttons);
     connect(&cleaner, &services::LogCleaner::finished, this, &MainWindow::refresh_log_buttons);
     connect(&cleaner, &services::LogCleaner::finished, this, &MainWindow::show_cleared);
-    connect(settings_page_, &SettingsPage::open_log_folder_requested, this, [this] {
-        QDir{}.mkpath(services_.settings().logs_dir());
-        QDesktopServices::openUrl(QUrl::fromLocalFile(services_.settings().logs_dir()));
-    });
-    connect(settings_page_, &SettingsPage::update_requested, this,
+    connect(maintenance_page_, &MaintenancePage::update_requested, this,
             [this] { services_.guest_update().run(true); });
     update_dialog_ = new UpdateDialog(services_.status(), this);
     connect(update_dialog_, &UpdateDialog::retry_requested, this,
             [this] { services_.guest_update().retry(); });
-    connect(settings_page_, &SettingsPage::reinstall_requested, this,
+    connect(maintenance_page_, &MaintenancePage::reinstall_requested, this,
             &MainWindow::reinstall_requested);
     connect(settings_page_, &SettingsPage::rewrite_entries_requested, this, [this] {
         services_.apply_integrations();
-    });
-    connect(settings_page_, &SettingsPage::open_share_requested, this, [this] {
-        const auto& settings = services_.manager_settings();
-        QDesktopServices::openUrl(QUrl(platform::GuestSmbShare::url(
-            settings.string_value(K::kGuestUser), settings.string_value(K::kGuestPassword),
-            QStringLiteral("C$"))));
     });
 }
 
@@ -364,9 +392,6 @@ void MainWindow::clear_logs() {
 void MainWindow::refresh_log_buttons() {
     const bool busy = services_.log_cleaner().running() || services_.log_collector().running();
     clear_button_->setEnabled(!busy || rail_->current() != NavRail::Page::Log);
-    if (settings_page_ != nullptr) {
-        settings_page_->set_logs_busy(busy);
-    }
 }
 
 void MainWindow::show_cleared() {
@@ -425,6 +450,19 @@ void MainWindow::follow_agent_for_desktop(bool online) {
     desktop_button_->setToolTip(
         online ? QStringLiteral("The guest's whole screen in a window of its own")
                : QStringLiteral("Needs Windows running: the agent is offline"));
+}
+
+void MainWindow::start_guest() {
+    if (!overview_->start_guest()) {
+        notice_start_refused(QStringLiteral("libvirt would not start the guest."));
+    }
+}
+
+void MainWindow::open_windows_files() {
+    const auto& settings = services_.manager_settings();
+    QDesktopServices::openUrl(QUrl(platform::GuestSmbShare::url(
+        settings.string_value(K::kGuestUser), settings.string_value(K::kGuestPassword),
+        platform::GuestSmbShare::share_for_scope(settings.string_value(K::kShareScope)))));
 }
 
 void MainWindow::open_desktop() {
@@ -498,20 +536,31 @@ void MainWindow::show_page(NavRail::Page page) {
     }
     stack_->setCurrentIndex(index);
     rail_->set_current(page);
-    content_title_->setText(QString::fromLatin1(kPages[index].title));
+    content_title_->setText(QString::fromLatin1(kPages[static_cast<std::size_t>(index)].title));
     content_detail_->setText(page_detail(page));
     pop_out_button_->setVisible(page == NavRail::Page::Console || page == NavRail::Page::Log);
-    desktop_button_->setVisible(page == NavRail::Page::Overview);
+    desktop_button_->setVisible(page == NavRail::Page::Overview || page == NavRail::Page::Display);
     run_on_vm_button_->setVisible(page == NavRail::Page::Overview);
     clear_button_->setVisible(page == NavRail::Page::Log || page == NavRail::Page::Console);
     clear_button_->setText(page == NavRail::Page::Log ? QStringLiteral("Clear all logs")
                                                       : QStringLiteral("Clear"));
     refresh_log_buttons();
-    change_settings_button_->setVisible(page == NavRail::Page::Graphics);
+    windows_files_button_->setVisible(page == NavRail::Page::Files);
     config_folder_button_->setVisible(page == NavRail::Page::Settings);
 
     refresh_warning();
     refresh_status_bar();
+}
+
+void MainWindow::refresh_detail() {
+    content_detail_->setText(page_detail(rail_->current()));
+}
+
+void MainWindow::refresh_pending_counts() {
+    const auto counts = apply_bar_->counts();
+    for (int i = 0; i < static_cast<int>(NavRail::Page::Count); ++i) {
+        rail_->set_pending(static_cast<NavRail::Page>(i), counts[static_cast<std::size_t>(i)]);
+    }
 }
 
 void MainWindow::refresh_identity() {
@@ -564,10 +613,18 @@ QString MainWindow::page_detail(NavRail::Page page) const {
         return tilde(services_.manager_settings().file_path());
     case NavRail::Page::Console:
         return console_ != nullptr ? console_->summary() : QString{};
+    case NavRail::Page::Display:
+        return display_page_ != nullptr ? display_page_->summary() : QString{};
+    case NavRail::Page::Files:
+        return files_page_ != nullptr ? files_page_->summary() : QString{};
+    case NavRail::Page::Usb:
+        return usb_page_ != nullptr ? usb_page_->summary() : QString{};
+    case NavRail::Page::Maintenance:
+        return maintenance_page_ != nullptr ? maintenance_page_->summary() : QString{};
     case NavRail::Page::Count:
         break;
     }
-    return QString::fromLatin1(kPages[static_cast<int>(page)].detail);
+    return QString::fromLatin1(kPages[static_cast<std::size_t>(page)].detail);
 }
 
 void MainWindow::refresh_status_bar() {
@@ -674,12 +731,11 @@ void MainWindow::push_display_refresh() {
 }
 
 std::optional<config::DisplayMode> MainWindow::current_output() const {
-    const QScreen* screen = this->screen();
-    if (screen == nullptr) {
+    const auto size = ScreenPixels(services_.status()).of(this->screen(), windowHandle());
+    if (!size) {
         return std::nullopt;
     }
-    const QSize size = screen->geometry().size() * screen->devicePixelRatio();
-    return config::DisplayMode{size.width(), size.height()};
+    return config::DisplayMode{size->width(), size->height()};
 }
 
 void MainWindow::push_display_modes() {
@@ -703,11 +759,15 @@ void MainWindow::push_dpi() {
     if (!services_.status().vm().agent_online()) {
         return;
     }
-    services_.rpc().request_detached(
-        linkproto::cmd::kSetDisplay,
-        {{"scaling_percent",
-          platform::HostScale::resolve(services_.manager_settings().int_value(K::kScalingPercent),
-                                       this)}});
+    const int percent = platform::HostScale::resolve(
+        services_.manager_settings().int_value(K::kScalingPercent), this);
+    services_.rpc().request_async(
+        linkproto::cmd::kSetDisplay, {{"scaling_percent", percent}}, this,
+        [this](const link::AgentReply& reply) {
+            const int applied = reply.ok ? reply.body.value("scale_percent", 0) : 0;
+            services_.status().set_scale_percent(applied > 0 ? std::optional<int>{applied}
+                                                             : std::nullopt);
+        });
 }
 
 bool MainWindow::redefine_now(const config::VmRecord& primary) {
@@ -890,8 +950,14 @@ bool MainWindow::event(QEvent* e) {
         services_.manager_settings().int_value(K::kScalingPercent) == 0) {
         push_dpi();
     }
+    if (e->type() == QEvent::DevicePixelRatioChange && display_page_ != nullptr) {
+        display_page_->refresh();
+    }
     if (e->type() == QEvent::ScreenChangeInternal) {
         follow_monitor_refresh();
+        if (display_page_ != nullptr) {
+            display_page_->refresh();
+        }
     }
     return QMainWindow::event(e);
 }

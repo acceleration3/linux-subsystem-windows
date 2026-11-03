@@ -6,6 +6,7 @@
 #include <QObject>
 #include <QString>
 #include <QVariant>
+#include <QVector>
 #include <optional>
 
 namespace lsw::host::config {
@@ -22,7 +23,16 @@ public:
 
     [[nodiscard]] bool empty() const noexcept { return staged_.isEmpty(); }
 
-    [[nodiscard]] QStringList summary() const;
+    struct Diff {
+        QString key;
+        QString label;
+        QString from;
+        QString to;
+    };
+
+    [[nodiscard]] QVector<Diff> diffs() const;
+
+    [[nodiscard]] QStringList keys() const;
 
     std::optional<HostShare> add_share(const QString& folder);
 

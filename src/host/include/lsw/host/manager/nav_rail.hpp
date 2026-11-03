@@ -2,6 +2,8 @@
 
 #include <QWidget>
 
+#include <array>
+
 class QLabel;
 class QPushButton;
 class QButtonGroup;
@@ -10,7 +12,18 @@ namespace lsw::host::manager {
 class NavRail : public QWidget {
     Q_OBJECT
 public:
-    enum class Page { Overview, Console, Log, Graphics, Settings, Count };
+    enum class Page {
+        Overview,
+        Display,
+        Graphics,
+        Files,
+        Usb,
+        Console,
+        Log,
+        Maintenance,
+        Settings,
+        Count
+    };
 
     explicit NavRail(QWidget* parent = nullptr);
 
@@ -22,7 +35,8 @@ public:
     void set_running(bool running);
 
     void set_log_count(int records);
-    void set_pending_changes(int count);
+    void set_usb_count(int devices);
+    void set_pending(Page page, int changes);
     void set_graphics_warning(const char* tone);
 
     void set_guest_provisioned(bool provisioned);
@@ -33,7 +47,14 @@ Q_SIGNALS:
     void stop_requested();
 
 private:
+    struct Marker {
+        QString text;
+        const char* tone = nullptr;
+        int pending = 0;
+    };
+
     void set_marker(Page page, const QString& text, const char* tone);
+    void show_marker(Page page);
 
     QLabel* name_label_ = nullptr;
     QLabel* detail_label_ = nullptr;
@@ -42,6 +63,7 @@ private:
     QButtonGroup* group_ = nullptr;
     QPushButton* items_[static_cast<int>(Page::Count)]{};
     QLabel* markers_[static_cast<int>(Page::Count)]{};
+    std::array<Marker, static_cast<int>(Page::Count)> state_{};
     Page current_ = Page::Overview;
     bool running_ = false;
 };

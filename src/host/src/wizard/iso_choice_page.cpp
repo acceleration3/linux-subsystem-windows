@@ -3,6 +3,7 @@
 #include "lsw/host/services/host_services.hpp"
 #include "lsw/host/tools/download_image_dialog.hpp"
 #include "lsw/host/tools/trim_image_dialog.hpp"
+#include "lsw/host/ui/broken_mark.hpp"
 #include "lsw/host/ui/format.hpp"
 #include "lsw/host/ui/theme.hpp"
 #include "lsw/host/ui/widgets.hpp"
@@ -77,10 +78,12 @@ IsoChoicePage::IsoChoicePage(Wizard& wizard, QWidget* parent)
 
     auto* tools = new QHBoxLayout;
     tools->setSpacing(10);
-    tools->addWidget(tool_card(
+    auto* download_card = tool_card(
         QStringLiteral("No image yet"),
         QStringLiteral("Fetch one from microsoft.com, into any folder you choose."),
-        download_button));
+        download_button);
+    ui::BrokenMark::apply(download_card);
+    tools->addWidget(download_card);
     tools->addWidget(tool_card(
         QStringLiteral("Smaller guest"),
         QStringLiteral("Cut the bundled applications, or strip the image down to the "

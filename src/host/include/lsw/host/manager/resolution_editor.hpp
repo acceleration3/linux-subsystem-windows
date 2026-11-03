@@ -10,12 +10,14 @@ class QSpinBox;
 class QTableWidget;
 
 namespace lsw::host::config { class ManagerSettings; }
+namespace lsw::host::services { class StatusHub; }
 
 namespace lsw::host::manager {
 class ResolutionEditor : public QWidget {
     Q_OBJECT
 public:
-    explicit ResolutionEditor(config::ManagerSettings& settings, QWidget* parent = nullptr);
+    ResolutionEditor(config::ManagerSettings& settings, const services::StatusHub& status,
+                     QWidget* parent = nullptr);
 
     void use_host_modes(bool on);
 
@@ -28,6 +30,7 @@ private:
     void fill_presets();
 
     config::ManagerSettings& settings_;
+    const services::StatusHub& status_;
     QTableWidget* table_ = nullptr;
     QComboBox* presets_ = nullptr;
     QSpinBox* width_ = nullptr;
