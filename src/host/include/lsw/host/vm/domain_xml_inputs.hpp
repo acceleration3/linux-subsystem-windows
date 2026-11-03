@@ -25,6 +25,7 @@ struct DomainXmlInputs {
     quint32 display_refresh_millihz = 0;
     QString avgpu_log;
     QString export_socket;
+    QString input_socket;
 
     QString qemu_binary;
     QString qemu_module_dir;

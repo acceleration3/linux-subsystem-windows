@@ -192,6 +192,17 @@ QString DomainXmlBuilder::build(const config::VmRecord& vm, const DomainXmlInput
             << qemu_arg(QStringLiteral("isa-debugcon,iobase=0x402,chardev=avgpu-log"));
     }
     vars["gpu_args_inner"] = gpu_lines.join(QLatin1Char('\n'));
+
+    QStringList input_lines;
+    if (!inputs.input_socket.isEmpty()) {
+        input_lines
+            << qemu_arg(QStringLiteral("-chardev"))
+            << qemu_arg(QStringLiteral("socket,id=lsw-input,path=%1,server=on,wait=off")
+                            .arg(qemu_opt(inputs.input_socket)))
+            << qemu_arg(QStringLiteral("-mon"))
+            << qemu_arg(QStringLiteral("chardev=lsw-input,mode=control"));
+    }
+    vars["input_args_inner"] = input_lines.join(QLatin1Char('\n'));
     LSW_DEBUG("domain: {} MiB, {} cpus, {} render-only GPUs, {} shares, display {} refresh {} mHz, "
               "host window {} MiB, install display {}",
               vm.sizing.memory_mib, vm.sizing.cpu_cores, render_only, inputs.shares.size(),

@@ -6,7 +6,7 @@
 #include "lsw/host/platform/tool_process.hpp"
 #include "lsw/host/vm/domain_description.hpp"
 #include "lsw/host/vm/domain_handle.hpp"
-#include "lsw/host/vm/export_socket.hpp"
+#include "lsw/host/vm/runtime_socket_paths.hpp"
 
 #include <QDir>
 #include <QDomDocument>
@@ -435,7 +435,8 @@ bool Lifecycle::fill_accel_virt(DomainXmlInputs& inputs) {
     fill(inputs.qemu_binary, &platform::AccelVirtPaths::qemu_binary);
     fill(inputs.executor, &platform::AccelVirtPaths::executor);
     fill(inputs.d3d_lib_dir, &platform::AccelVirtPaths::d3d_lib_dir);
-    fill(inputs.export_socket, &ExportSocket::path);
+    fill(inputs.export_socket, &RuntimeSocketPaths::export_path);
+    fill(inputs.input_socket, &RuntimeSocketPaths::input_path);
     if (inputs.shader_cache_dir.isEmpty()) {
         const QString dir = QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation) +
                             QStringLiteral("/lsw/shader-cache");

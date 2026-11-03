@@ -5,9 +5,10 @@
 #include "lsw/host/link/agent_rpc_client.hpp"
 #include "lsw/host/platform/kwin_activation.hpp"
 #include "lsw/host/platform/mirror_exe_paths.hpp"
-#include "lsw/host/vm/export_socket.hpp"
+#include "lsw/host/vm/runtime_socket_paths.hpp"
 #include "lsw/linkproto/commands.hpp"
 
+#include <QFileInfo>
 #include <QProcessEnvironment>
 #include <nlohmann/json.hpp>
 #include <utility>
@@ -138,8 +139,13 @@ bool WindowMirror::start() {
     started_ = true;
     QStringList arguments{QStringLiteral("--managed"), QStringLiteral("--port"),
                           QStringLiteral("0")};
-    if (const QString socket = vm::ExportSocket::path(); !socket.isEmpty()) {
+    if (const QString socket = vm::RuntimeSocketPaths::export_path(); !socket.isEmpty()) {
         arguments << QStringLiteral("--export-socket") << socket;
+    }
+    if (desktop_) {
+        if (const QString input = vm::RuntimeSocketPaths::input_path(); !input.isEmpty() && QFileInfo::exists(input)) {
+            arguments << QStringLiteral("--qmp-input") << input;
+        }
     }
     arguments << host_arguments_;
     host_end_->setProcessChannelMode(QProcess::SeparateChannels);

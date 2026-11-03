@@ -64,6 +64,9 @@
     <emulator>{{emulator}}</emulator>
 
     <controller type='usb' index='0' model='qemu-xhci' ports='15'/>
+    <input type='tablet' bus='usb'/>
+    <input type='mouse' bus='ps2'/>
+    <input type='keyboard' bus='ps2'/>
 
     <controller type='nvme' index='0'/>
     <disk type='file' device='disk'>
@@ -108,6 +111,7 @@
   <qemu:commandline>
 {{qemu_env_inner}}
 {{gpu_args_inner}}
+{{input_args_inner}}
     <qemu:arg value='-netdev'/>
     <qemu:arg value='user,id=lsw-net,hostfwd=tcp:127.0.0.1:5102-:5102,hostfwd=tcp:127.0.0.1:5103-:5103,hostfwd=tcp:127.0.0.1:5445-:445'/>
     <qemu:arg value='-device'/>
