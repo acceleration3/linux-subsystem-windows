@@ -13,6 +13,8 @@ $Log = Join-Path $LogDir 'shares.log'
 $TaskName = 'lsw-shares'
 $FsClass = 'virtiofs'
 $DeviceMatch = 'PCI\VEN_1AF4&DEV_105A*'
+$ReadySeconds = 90
+$NoDeviceSeconds = 6
 $LauncherSddl = 'D:P(A;;RPWPLC;;;SY)(A;;RPWPLC;;;BA)'
 
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
@@ -48,11 +50,17 @@ function Parse-Shares([string] $Text) {
     foreach ($item in ($Text -split '[,\r\n]+')) {
         $item = $item.Trim()
         if (-not $item) { continue }
-        if ($item -notmatch '^([A-Za-z0-9_.-]+)=([A-Za-z]):?(?:=([A-Za-z0-9+/]*={0,2}))?$') {
-            Fail 1 ('not a share: "' + $item + '" (want tag=X:=name)')
+        if ($item -notmatch '^([A-Za-z]):([A-Za-z0-9+/]+={0,2}):([A-Za-z0-9+/]*={0,2})$') {
+            Fail 1 ('not a share: "' + $item + '" (want X:base64(tag):base64(name))')
             return $null
         }
-        $list += [pscustomobject]@{ Tag = $Matches[1]; Drive = $Matches[2].ToUpper() + ':'; Name = [string] $Matches[3] }
+        try {
+            $tag = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($Matches[2]))
+        } catch {
+            Fail 1 ('not a share: "' + $item + '" (the tag is not base64)')
+            return $null
+        }
+        $list += [pscustomobject]@{ Tag = $tag; Drive = $Matches[1].ToUpper() + ':'; Name = [string] $Matches[3] }
     }
     return ,$list
 }
@@ -60,12 +68,13 @@ function Parse-Shares([string] $Text) {
 function Set-DriveNames($Wanted, $Before) {
     $icons = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\DriveIcons'
     foreach ($share in @($Before)) {
+        if (-not $share -or -not $share.Drive) { continue }
         if (@($Wanted | Where-Object { $_.Drive -eq $share.Drive }).Count -eq 0) {
             Remove-Item -LiteralPath (Join-Path $icons $share.Drive.TrimEnd(':')) -Recurse -Force -ErrorAction SilentlyContinue
         }
     }
     foreach ($share in @($Wanted)) {
-        if (-not $share.Name) { continue }
+        if (-not $share -or -not $share.Drive -or -not $share.Name) { continue }
         $name = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($share.Name))
         $key = Join-Path (Join-Path $icons $share.Drive.TrimEnd(':')) 'DefaultLabel'
         New-Item -Path $key -Force | Out-Null
@@ -230,7 +239,8 @@ function Register-BootTask {
 }
 
 function Wait-Ready {
-    $deadline = (Get-Date).AddSeconds(90)
+    $started = Get-Date
+    $deadline = $started.AddSeconds($ReadySeconds)
     while ((Get-Date) -lt $deadline) {
         $devices = @(Get-PnpDevice -PresentOnly -ErrorAction SilentlyContinue |
                      Where-Object { $_.InstanceId -like $DeviceMatch })
@@ -242,6 +252,7 @@ function Wait-Ready {
         if ($devices.Count -gt 0 -and $ok -eq $devices.Count -and $launcher -and $launcher.Status -eq 'Running') {
             return $true
         }
+        if ($devices.Count -eq 0 -and ((Get-Date) - $started).TotalSeconds -ge $NoDeviceSeconds) { break }
         Start-Sleep -Seconds 2
     }
     foreach ($device in $devices) { L ('device ' + $device.InstanceId + ': ' + $device.Status + ', problem ' + $device.Problem) }
@@ -253,7 +264,7 @@ function Wait-Ready {
 function Mount-Shares($Wanted) {
     $launchctl = Launchctl
     $running = Running-Instances
-    $names = @($Wanted | ForEach-Object { 'lsw-' + $_.Tag })
+    $names = @($Wanted | ForEach-Object { 'lsw-' + $_.Drive.TrimEnd(':') })
     foreach ($name in @($running.Keys)) {
         if ($names -notcontains $name) { Stop-Instance $name; $running.Remove($name) }
     }
@@ -262,7 +273,7 @@ function Mount-Shares($Wanted) {
     if (-not (Wait-Ready)) { Fail 5 'the virtio-fs devices or the WinFsp launcher did not come up'; return }
 
     foreach ($share in $Wanted) {
-        $name = 'lsw-' + $share.Tag
+        $name = 'lsw-' + $share.Drive.TrimEnd(':')
         $root = $share.Drive + '\'
         $ours = $running.ContainsKey($name) -and
                 $running[$name] -match ('-t "?' + [regex]::Escape($share.Tag) + '"? -m "?' + [regex]::Escape($share.Drive) + '"?')
@@ -298,7 +309,8 @@ try {
 
     $before = @()
     if (Test-Path -LiteralPath $SavedList) {
-        $before = @(Parse-Shares ((Get-Content -LiteralPath $SavedList) -join ','))
+        $before = Parse-Shares ((Get-Content -LiteralPath $SavedList) -join ',')
+        if ($null -eq $before) { $before = @() }
     }
     if ($PSBoundParameters.ContainsKey('Shares')) {
         $wanted = Parse-Shares $Shares
@@ -325,10 +337,14 @@ try {
 
     if ($PSBoundParameters.ContainsKey('Shares') -and $script:Result -eq 0) {
         New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
-        Set-Content -LiteralPath $SavedList -Encoding Ascii -Value @($wanted | ForEach-Object { $_.Tag + '=' + $_.Drive + $(if ($_.Name) { '=' + $_.Name } else { '' }) })
+        Set-Content -LiteralPath $SavedList -Encoding Ascii -Value @($wanted | ForEach-Object { $_.Drive.TrimEnd(':') + ':' + [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($_.Tag)) + ':' + $_.Name })
     }
     if ($script:Result -eq 0) {
-        Set-DriveNames $wanted $before
+        try {
+            Set-DriveNames $wanted $before
+        } catch {
+            L ('naming drives failed: ' + $_.Exception.Message)
+        }
         Mount-Shares $wanted
     }
     L ('done, exit ' + $script:Result)

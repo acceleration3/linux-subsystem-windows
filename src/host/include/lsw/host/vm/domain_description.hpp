@@ -1,5 +1,7 @@
 #pragma once
 
+#include "lsw/host/vm/domain_xml_inputs.hpp"
+
 #include <QString>
 #include <QStringList>
 #include <QVector>
@@ -16,11 +18,7 @@ struct DomainDescription {
         std::optional<quint32> refresh_millihz;
     };
 
-    struct Share {
-        QString tag;
-        QString host_path;
-        bool read_only = false;
-    };
+    using Share = DomainShare;
 
     struct UsbDevice {
         int vendor = 0;

@@ -206,9 +206,11 @@ QString DomainXmlBuilder::build(const config::VmRecord& vm, const DomainXmlInput
                                      "      <driver type='virtiofs'/>\n"
                                      "      <source dir='%1'/>\n"
                                      "      <target dir='%2'/>\n"
-                                     "%3"
+                                     "      <alias name='%3'/>\n"
+                                     "%4"
                                      "    </filesystem>")
                           .arg(esc(share.host_path), esc(share.tag),
+                               esc(QString::fromLatin1(DomainShare::kAliasPrefix) + share.drive),
                                share.read_only ? QStringLiteral("      <readonly/>\n") : QString{});
         }
         shares_inner = blocks.join(QLatin1Char('\n'));

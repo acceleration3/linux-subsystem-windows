@@ -219,6 +219,11 @@ std::optional<DomainDescription> DomainDescription::parse(const QString& xml) {
             share.host_path = attrs.value(QLatin1StringView("dir")).toString();
         } else if (in_filesystem && name == QLatin1StringView("target")) {
             share.tag = attrs.value(QLatin1StringView("dir")).toString();
+        } else if (in_filesystem && name == QLatin1StringView("alias")) {
+            const QString alias = attrs.value(QLatin1StringView("name")).toString();
+            if (alias.startsWith(QLatin1String(DomainShare::kAliasPrefix))) {
+                share.drive = alias.mid(qstrlen(DomainShare::kAliasPrefix));
+            }
         } else if (in_filesystem && name == QLatin1StringView("readonly")) {
             share.read_only = true;
         } else if (in_devices && name == QLatin1StringView("video")) {

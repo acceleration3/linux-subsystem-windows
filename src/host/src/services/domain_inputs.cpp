@@ -4,6 +4,7 @@
 #include "lsw/host/config/display_refresh.hpp"
 #include "lsw/host/config/log_verbosity.hpp"
 #include "lsw/host/platform/host_gpus.hpp"
+#include "lsw/host/services/host_share_layout.hpp"
 
 namespace lsw::host::services {
 
@@ -38,13 +39,7 @@ vm::DomainXmlInputs domain_inputs_from_settings(const config::Settings& settings
                                                 const config::ManagerSettings& manager_settings,
                                                 std::optional<quint32> monitor_refresh_millihz) {
     vm::DomainXmlInputs inputs;
-    for (const auto& share : manager_settings.host_shares()) {
-        vm::DomainShare mapped;
-        mapped.tag = share.drive.left(1).toLower();
-        mapped.host_path = share.host_path;
-        mapped.read_only = share.read_only;
-        inputs.shares.push_back(mapped);
-    }
+    inputs.shares = HostShareLayout::assign(manager_settings.host_shares());
 
     inputs.host_window_mib = manager_settings.int_value(K::kHostWindowMib);
     inputs.display_modes = display_modes_from_settings(manager_settings);

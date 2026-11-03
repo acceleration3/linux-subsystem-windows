@@ -9,6 +9,9 @@ struct DomainShare {
     QString tag;
     QString host_path;
     bool read_only = false;
+    QString drive;
+
+    static constexpr const char* kAliasPrefix = "ua-share-";
 };
 
 struct DomainXmlInputs {

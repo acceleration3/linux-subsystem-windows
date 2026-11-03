@@ -38,7 +38,7 @@ std::optional<QString> GuestDocumentPath::map(const QString& host_path,
     const vm::DomainDescription::Share* best = nullptr;
     QString best_root;
     for (const auto& share : shares) {
-        if (share.tag.size() != 1 || !share.tag.at(0).isLetter() || share.host_path.isEmpty()) {
+        if (share.drive.size() != 1 || !share.drive.at(0).isLetter() || share.host_path.isEmpty()) {
             continue;
         }
         const QString root = root_of(share.host_path);
@@ -53,7 +53,7 @@ std::optional<QString> GuestDocumentPath::map(const QString& host_path,
     }
     const QString relative =
         best_root == QLatin1String("/") ? host_path.mid(1) : host_path.mid(best_root.size() + 1);
-    QString guest = best->tag.toUpper() + QStringLiteral(":\\");
+    QString guest = best->drive.toUpper() + QStringLiteral(":\\");
     const QStringList parts = relative.split(QLatin1Char('/'), Qt::SkipEmptyParts);
     for (qsizetype i = 0; i < parts.size(); ++i) {
         if (!legal_component(parts.at(i))) {

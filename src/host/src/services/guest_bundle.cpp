@@ -12,6 +12,7 @@
 #include "lsw/host/services/adapter_names.hpp"
 #include "lsw/host/services/driver_catalog.hpp"
 #include "lsw/host/services/guest_swap_script.hpp"
+#include "lsw/host/services/host_share_layout.hpp"
 #include "lsw/host/vm/domain_description.hpp"
 
 #include <QCryptographicHash>
@@ -76,31 +77,28 @@ GuestBundle::GuestBundle(config::Settings& settings, QObject* parent)
     : QObject(parent), settings_(settings) {}
 
 namespace {
-void add_mount(QVector<GuestBundle::Mount>& mounts, const QString& tag, const QString& host_path) {
-    if (tag.size() != 1 || !tag.front().isLetter()) {
-        LSW_WARN("shares: tag '{}' ({}) is not a drive letter; Windows does not mount it",
-                 tag.toStdString(), host_path.toStdString());
-        return;
+void add_mounts(QVector<GuestBundle::Mount>& mounts, const QVector<vm::DomainShare>& shares) {
+    for (const auto& share : shares) {
+        if (share.drive.size() != 1 || !share.drive.front().isLetter()) {
+            LSW_WARN("shares: '{}' ({}) has no drive letter; Windows does not mount it",
+                     share.tag.toStdString(), share.host_path.toStdString());
+            continue;
+        }
+        mounts.push_back({share.tag, share.drive.toUpper() + QLatin1Char(':'), share.tag});
     }
-    const QString folder = QFileInfo(QDir::cleanPath(host_path)).fileName();
-    mounts.push_back({tag, tag.toUpper() + QLatin1Char(':'), folder.isEmpty() ? QStringLiteral("Host") : folder});
 }
 
 }
 
 QVector<GuestBundle::Mount> GuestBundle::mounts_of(const vm::DomainDescription& definition) {
     QVector<Mount> mounts;
-    for (const auto& share : definition.shares) {
-        add_mount(mounts, share.tag, share.host_path);
-    }
+    add_mounts(mounts, definition.shares);
     return mounts;
 }
 
 QVector<GuestBundle::Mount> GuestBundle::mounts_of(const config::ManagerSettings& settings) {
     QVector<Mount> mounts;
-    for (const auto& share : settings.host_shares()) {
-        add_mount(mounts, share.drive.left(1).toLower(), share.host_path);
-    }
+    add_mounts(mounts, HostShareLayout::assign(settings.host_shares()));
     return mounts;
 }
 
@@ -115,8 +113,8 @@ std::string GuestBundle::staged_path(const std::string& guest_path) {
 QString GuestBundle::shares_argument(const QVector<Mount>& mounts) {
     QStringList items;
     for (const auto& mount : mounts) {
-        items << mount.tag + QLatin1Char('=') + mount.drive + QLatin1Char('=')
-                     + QString::fromLatin1(mount.name.toUtf8().toBase64());
+        items << mount.drive.left(1) + QLatin1Char(':') + QString::fromLatin1(mount.tag.toUtf8().toBase64())
+                     + QLatin1Char(':') + QString::fromLatin1(mount.name.toUtf8().toBase64());
     }
     return items.isEmpty() ? QStringLiteral("none") : items.join(QLatin1Char(','));
 }

@@ -9,6 +9,7 @@
 #include "lsw/host/manager/open_document_dialog.hpp"
 #include "lsw/host/services/guest_document_path.hpp"
 #include "lsw/host/services/host_services.hpp"
+#include "lsw/host/services/host_share_layout.hpp"
 #include "lsw/host/ui/widgets.hpp"
 
 #include <QDir>
@@ -24,12 +25,8 @@ namespace {
 using Share = vm::DomainDescription::Share;
 using services::GuestDocumentPath;
 
-QString tag_of(const QString& drive) {
-    return drive.left(1).toLower();
-}
-
 QVector<Share> everything() {
-    return {Share{QStringLiteral("z"), QStringLiteral("/"), false}};
+    return {Share{QStringLiteral("Host"), QStringLiteral("/"), false, QStringLiteral("z")}};
 }
 
 }
@@ -128,13 +125,10 @@ QStringList DocumentOpener::share_and_map(const QStringList& shareable, const Pl
     }
 
     QVector<Share> shares = plan.shares;
-    for (const auto& share : settings.host_shares()) {
-        Share s;
-        s.tag = tag_of(share.drive);
-        s.host_path = GuestDocumentPath::canonical(share.host_path);
-        s.read_only = share.read_only;
-        if (!s.host_path.isEmpty()) {
-            shares.push_back(std::move(s));
+    for (Share& share : services::HostShareLayout::assign(settings.host_shares())) {
+        share.host_path = GuestDocumentPath::canonical(share.host_path);
+        if (!share.host_path.isEmpty()) {
+            shares.push_back(std::move(share));
         }
     }
     QStringList documents;
