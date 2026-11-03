@@ -4,6 +4,7 @@
 #include "lsw/host/ui/theme.hpp"
 #include "lsw/host/ui/widgets.hpp"
 
+#include <QFontMetrics>
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -14,6 +15,9 @@
 namespace lsw::host::manager {
 
 namespace {
+constexpr int kValuePx = 11;
+constexpr int kValuePad = 8;
+
 QString dash() {
     return QStringLiteral("-");
 }
@@ -43,7 +47,8 @@ StatsWidget::Gauge StatsWidget::add_gauge(QFormLayout* form, const QString& name
 
     gauge.label = ui::Widgets::meta(initial);
     gauge.label->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    gauge.label->setMinimumWidth(92);
+    gauge.label->setMinimumWidth(
+        QFontMetrics(ui::Theme::mono_font(kValuePx)).horizontalAdvance(QStringLiteral("999.9 GiB / 999.9 GiB")) + kValuePad);
 
     auto* row = new QWidget;
     auto* layout = new QHBoxLayout(row);

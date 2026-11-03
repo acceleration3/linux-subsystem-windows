@@ -10,6 +10,7 @@
 #include "lsw/host/wizard/vm_size_page.hpp"
 #include "lsw/host/wizard/welcome_page.hpp"
 
+#include "lsw/host/ui/content_height.hpp"
 #include "lsw/host/ui/format.hpp"
 #include "lsw/host/ui/theme.hpp"
 
@@ -29,6 +30,7 @@ Wizard::Wizard(services::HostServices& services, QWidget* parent) : QWizard(pare
     setOption(QWizard::IndependentPages, false);
     setOption(QWizard::NoCancelButtonOnLastPage);
     resize(880, 620);
+    ui::ContentHeight::keep(this, [this] { return currentPage(); });
 
     detect_host_caps();
 

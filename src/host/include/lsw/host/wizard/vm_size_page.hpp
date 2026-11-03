@@ -27,6 +27,8 @@ public:
     bool validatePage() override;
     [[nodiscard]] int nextId() const override;
 
+    void demo_fill();
+
 private Q_SLOTS:
     void on_editions_ready();
     void on_languages_ready();
@@ -36,6 +38,7 @@ private:
     QLabel* footnote_ = nullptr;
 
     void refresh_footnote();
+    void show_reading();
     Wizard& wizard_;
     QLineEdit* user_edit_ = nullptr;
     QLineEdit* pass_edit_ = nullptr;

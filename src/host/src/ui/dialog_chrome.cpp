@@ -1,5 +1,6 @@
 #include "lsw/host/ui/dialog_chrome.hpp"
 
+#include "lsw/host/ui/content_height.hpp"
 #include "lsw/host/ui/theme.hpp"
 
 #include <QDialog>
@@ -22,6 +23,7 @@ DialogChrome DialogChrome::install(QDialog* dialog) {
     outer->addWidget(body_widget, 1);
 
     chrome.foot = foot_band(outer, QMargins(20, 12, 20, 12));
+    ContentHeight::keep(dialog);
     return chrome;
 }
 

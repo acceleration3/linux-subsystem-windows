@@ -169,12 +169,7 @@ void VmSizePage::initializePage() {
     probed_iso_ = iso;
     editions_loaded_ = false;
     languages_loaded_ = false;
-    edition_combo_->clear();
-    edition_combo_->setEnabled(false);
-    edition_status_->setText("Reading editions from the ISO (this can take ~10 s)...");
-    language_combo_->clear();
-    language_combo_->setEnabled(false);
-    language_status_->setText(QStringLiteral("Reading the languages from the ISO..."));
+    show_reading();
     Q_EMIT completeChanged();
     const QString scratch = wizard_.services().settings().cache_dir();
     edition_watcher_->setFuture(QtConcurrent::run(
@@ -270,6 +265,19 @@ bool VmSizePage::validatePage() {
 
     wizard_.start_pipeline();
     return true;
+}
+
+void VmSizePage::demo_fill() {
+    show_reading();
+}
+
+void VmSizePage::show_reading() {
+    edition_combo_->clear();
+    edition_combo_->setEnabled(false);
+    edition_status_->setText("Reading editions from the ISO (this can take ~10 s)...");
+    language_combo_->clear();
+    language_combo_->setEnabled(false);
+    language_status_->setText(QStringLiteral("Reading the languages from the ISO..."));
 }
 
 int VmSizePage::nextId() const {
