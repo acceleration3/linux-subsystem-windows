@@ -236,12 +236,18 @@ std::shared_ptr<const GuestBundle::Contents> GuestBundle::collect(const QString&
     }
     gathering.add_bytes(kSharesGuestPath, QByteArray::fromStdString(shares));
 
+    const std::string adapters_path = std::string{kGuestAv} + "adapters.txt";
+    std::string release_lines;
+    std::string config_lines;
     for (auto& [path, bytes] : gathering.files()) {
         std::string hash = sha256_hex(bytes);
-        contents->manifest += hash + "  " + path + "\n";
+        const std::string line = hash + "  " + path + "\n";
+        contents->manifest += line;
+        (path == kSharesGuestPath || path == adapters_path ? config_lines : release_lines) += line;
         contents->files.push_back({path, std::move(bytes), std::move(hash)});
     }
-    contents->release = sha256_hex(QByteArray::fromStdString(contents->manifest));
+    contents->release = sha256_hex(QByteArray::fromStdString(release_lines));
+    contents->config = sha256_hex(QByteArray::fromStdString(config_lines));
     contents->shares = shares;
     return contents;
 }

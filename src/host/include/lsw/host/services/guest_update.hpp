@@ -33,9 +33,20 @@ public:
 
     void run(bool force);
 
-    virtual void run_if_stale(const QString& guest_release, const QString& guest_version);
+    virtual void run_if_stale(const QString& guest_release, const QString& guest_config,
+                              const QString& guest_version);
 
     void retry();
+
+    void note_last(const QVector<GuestUpdateStatus::GuestStep>& steps, const QString& finished,
+                   bool ok);
+
+    [[nodiscard]] static bool ok_of(const nlohmann::json& last);
+
+    [[nodiscard]] static QVector<GuestUpdateStatus::GuestStep> steps_of(const nlohmann::json& last);
+    [[nodiscard]] static QString finished_of(const nlohmann::json& last);
+    [[nodiscard]] static bool restart_of(const nlohmann::json& last);
+    [[nodiscard]] static QStringList reasons_of(const nlohmann::json& last);
 
 Q_SIGNALS:
     void succeeded();
@@ -47,14 +58,22 @@ private:
         QString message;
         QVector<GuestUpdateStatus::GuestStep> steps;
         bool shipped = false;
+        QString finished;
+        bool last_ok = false;
+        bool restart = false;
+        QStringList reasons;
     };
 
-    void begin(bool force, bool announce, const QString& current, const QString& current_version);
+    void begin(bool force, bool announce, const QString& current, const QString& current_config,
+               const QString& current_version);
     void on_built(const std::shared_ptr<const GuestBundle::Contents>& contents, bool force,
-                  const QString& current);
+                  const QString& current, const QString& current_config);
+    void reset_live();
+    void on_progress(const QString& step, const QString& status);
+    void say_restart(const QStringList& reasons);
+    void settle_live(const Outcome& outcome);
     [[nodiscard]] Outcome carry_out(const std::shared_ptr<const GuestBundle::Contents>& contents,
                                     bool force);
-    [[nodiscard]] static QVector<GuestUpdateStatus::GuestStep> steps_of(const nlohmann::json& last);
     void say_step(const QString& text);
     void publish(GuestUpdateStatus::State state, const QString& step, const QString& message);
     void finish(const Outcome& outcome);

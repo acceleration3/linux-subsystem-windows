@@ -69,7 +69,7 @@ public:
     };
 
     bool running() const noexcept override { return running_now; }
-    void run_if_stale(const QString& release, const QString& version) override {
+    void run_if_stale(const QString& release, const QString&, const QString& version) override {
         calls.push_back({release, version});
         running_now = accepts;
         if (!accepts) {

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "lsw/host/services/guest_update_status.hpp"
 #include <QFutureWatcher>
 #include <QObject>
 #include <QString>
@@ -32,6 +33,8 @@ public:
 
     void retry();
 
+    void disable() noexcept { enabled_ = false; }
+
 Q_SIGNALS:
     void changed();
 
@@ -39,7 +42,11 @@ private:
     struct Probe {
         bool ok = false;
         QString release;
+        QString config;
         QString version;
+        QVector<GuestUpdateStatus::GuestStep> steps;
+        QString finished;
+        bool last_ok = false;
         QString error;
     };
     struct Clock {
@@ -64,6 +71,7 @@ private:
     QFutureWatcher<Clock> clock_watcher_;
     State state_ = State::Idle;
     QString error_;
+    bool enabled_ = true;
     bool passed_ = false;
     bool shares_reached_ = false;
     bool awaiting_update_ = false;

@@ -39,6 +39,8 @@ std::string UpdateBatch::send(unsigned short port, const std::string& release,
 
     const std::string run = "powershell -NoProfile -ExecutionPolicy Bypass -File \"%STAGE%\\C\\ProgramData\\LSW\\"
                             "lsw-guest-update.ps1\" -Stage \"%STAGE%\" -Release " + release
+                            + " -Config " + contents.config
+                            + " -ProgressUrl http://10.0.2.2:" + std::to_string(port)
                             + " -Version " + contents.version + (force ? " -Force" : "");
     text += ">  \"%STAGE%\\run.cmd\" echo @echo off\r\n";
     text += ">> \"%STAGE%\\run.cmd\" echo " + run + "\r\n";

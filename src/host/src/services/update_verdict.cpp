@@ -45,7 +45,7 @@ bool UpdateVerdict::started_after(const link::AgentReply& info, const std::strin
 }
 
 UpdateVerdict UpdateVerdict::judge(const link::AgentReply& info, const std::string& baseline,
-                                   const std::string& shipped) {
+                                   const std::string& shipped, const std::string& shipped_config) {
     UpdateVerdict verdict;
     if (!info.ok) {
         return verdict;
@@ -61,7 +61,8 @@ UpdateVerdict UpdateVerdict::judge(const link::AgentReply& info, const std::stri
         LSW_DEBUG("update verdict: failed: {}", verdict.message);
         return verdict;
     }
-    if (info.body.value("release", std::string{}) != shipped) {
+    if (info.body.value("release", std::string{}) != shipped
+        || info.body.value("release_config", std::string{}) != shipped_config) {
         return verdict;
     }
     verdict.kind = !last.value("restart", false) || started_after(info, last.value("finished", std::string{}))

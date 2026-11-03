@@ -5,6 +5,7 @@
 #include "lsw/host/link/agent_rpc_client.hpp"
 #include "lsw/host/link/event_subscription.hpp"
 #include "lsw/host/services/guest_file_server.hpp"
+#include "lsw/host/services/guest_update_steps.hpp"
 #include "lsw/host/services/job_end.hpp"
 #include "lsw/host/services/update_batch.hpp"
 #include "lsw/host/services/update_verdict.hpp"
@@ -53,17 +54,18 @@ GuestUpdate::~GuestUpdate() {
 }
 
 void GuestUpdate::run(bool force) {
-    begin(force, true, snapshot_.guest_release, snapshot_.guest_version);
+    begin(force, true, snapshot_.guest_release, snapshot_.guest_config, snapshot_.guest_version);
 }
 
-void GuestUpdate::run_if_stale(const QString& guest_release, const QString& guest_version) {
-    begin(false, guest_release.isEmpty(), guest_release, guest_version);
+void GuestUpdate::run_if_stale(const QString& guest_release, const QString& guest_config,
+                               const QString& guest_version) {
+    begin(false, guest_release.isEmpty(), guest_release, guest_config, guest_version);
 }
 
 void GuestUpdate::retry() { run(last_force_); }
 
 void GuestUpdate::begin(bool force, bool announce, const QString& current,
-                        const QString& current_version) {
+                        const QString& current_config, const QString& current_version) {
     if (running_) {
         return;
     }
@@ -73,8 +75,10 @@ void GuestUpdate::begin(bool force, bool announce, const QString& current,
     last_force_ = force;
     cancel_.store(false);
     snapshot_.guest_release = current;
+    snapshot_.guest_config = current_config;
     snapshot_.guest_version = current_version;
-    snapshot_.last_steps.clear();
+    snapshot_.quiet = false;
+    reset_live();
     if (announce) {
         publish(GuestUpdateStatus::State::Running, QStringLiteral("Preparing files"), {});
     }
@@ -85,23 +89,25 @@ void GuestUpdate::begin(bool force, bool announce, const QString& current,
     }
     auto* const once = new QObject(this);
     connect(&bundle_, &GuestBundle::built, once,
-            [this, once, force, current](const std::shared_ptr<const GuestBundle::Contents>& c) {
+            [this, once, force, current, current_config](const std::shared_ptr<const GuestBundle::Contents>& c) {
                 once->deleteLater();
-                on_built(c, force, current);
+                on_built(c, force, current, current_config);
             });
     bundle_.build(mounts);
 }
 
 void GuestUpdate::on_built(const std::shared_ptr<const GuestBundle::Contents>& contents,
-                           bool force, const QString& current) {
+                           bool force, const QString& current, const QString& current_config) {
     if (!contents->error.isEmpty()) {
         finish({false, QStringLiteral("LSW's files for Windows could not be put together: %1")
                            .arg(contents->error)});
         return;
     }
     snapshot_.shipped_release = QString::fromStdString(contents->release);
+    snapshot_.shipped_config = QString::fromStdString(contents->config);
     snapshot_.shipped_version = QString::fromStdString(contents->version);
-    if (!force && !current.isEmpty() && current == snapshot_.shipped_release) {
+    if (!force && !current.isEmpty() && current == snapshot_.shipped_release
+        && current_config == snapshot_.shipped_config) {
         LSW_INFO("update: the guest has the shipped release {}", contents->release.substr(0, 16));
         finish({true, {}, {}, false});
         return;
@@ -109,8 +115,30 @@ void GuestUpdate::on_built(const std::shared_ptr<const GuestBundle::Contents>& c
     LSW_INFO("update: shipping release {} ({} files) to a guest at {}{}", contents->release.substr(0, 16),
              contents->files.size(), current.isEmpty() ? "-" : current.left(16).toStdString(),
              force ? ", forced" : "");
+    snapshot_.quiet = !force && !current.isEmpty() && current == snapshot_.shipped_release;
+    reset_live();
     publish(GuestUpdateStatus::State::Running, QStringLiteral("Sending files to Windows"), {});
     watcher_.setFuture(QtConcurrent::run([this, contents, force] { return carry_out(contents, force); }));
+}
+
+void GuestUpdate::note_last(const QVector<GuestUpdateStatus::GuestStep>& steps,
+                            const QString& finished, bool ok) {
+    if (running_) {
+        return;
+    }
+    snapshot_.last_steps = steps;
+    snapshot_.finished = finished;
+    snapshot_.last_ok = ok;
+    status_.set_update(snapshot_);
+}
+
+bool GuestUpdate::ok_of(const nlohmann::json& last) {
+    return last.is_object() && last.value("ok", false);
+}
+
+QString GuestUpdate::finished_of(const nlohmann::json& last) {
+    const auto value = last.is_object() ? last.value("finished", nlohmann::json{}) : nlohmann::json{};
+    return value.is_string() ? QString::fromStdString(value.get<std::string>()) : QString{};
 }
 
 QVector<GuestUpdateStatus::GuestStep> GuestUpdate::steps_of(const nlohmann::json& last) {
@@ -125,10 +153,84 @@ QVector<GuestUpdateStatus::GuestStep> GuestUpdate::steps_of(const nlohmann::json
     };
     for (const auto& step : steps) {
         if (step.is_object()) {
-            out.push_back({text(step, "name"), text(step, "status"), text(step, "message")});
+            const auto restart = step.value("restart", nlohmann::json{});
+            out.push_back({text(step, "name"), text(step, "status"), text(step, "message"),
+                           restart.is_boolean() && restart.get<bool>()});
         }
     }
     return out;
+}
+
+bool GuestUpdate::restart_of(const nlohmann::json& last) {
+    return last.is_object() && last.value("restart", false);
+}
+
+QStringList GuestUpdate::reasons_of(const nlohmann::json& last) {
+    QStringList out;
+    const auto reasons = last.is_object() ? last.value("restart_reasons", nlohmann::json{}) : nlohmann::json{};
+    if (reasons.is_array()) {
+        for (const auto& reason : reasons) {
+            if (reason.is_string()) {
+                out << QString::fromStdString(reason.get<std::string>());
+            }
+        }
+    }
+    return out;
+}
+
+void GuestUpdate::reset_live() {
+    snapshot_.live_steps.clear();
+    for (const auto& entry : GuestUpdateSteps::all()) {
+        snapshot_.live_steps.push_back({QString::fromLatin1(entry.key), QStringLiteral("pending"), {}});
+    }
+    snapshot_.restart = GuestUpdateStatus::Restart::Pending;
+    snapshot_.restart_reasons.clear();
+}
+
+void GuestUpdate::on_progress(const QString& step, const QString& status) {
+    if (!running_) {
+        return;
+    }
+    if (step == QLatin1StringView(GuestUpdateSteps::kRestart)) {
+        snapshot_.restart = GuestUpdateStatus::Restart::Running;
+    } else {
+        for (auto& live : snapshot_.live_steps) {
+            if (live.name == step) {
+                live.status = status;
+            }
+        }
+    }
+    status_.set_update(snapshot_);
+}
+
+void GuestUpdate::say_restart(const QStringList& reasons) {
+    QPointer<GuestUpdate> self(this);
+    QMetaObject::invokeMethod(this, [self, reasons] {
+        if (self && self->running_) {
+            self->snapshot_.restart = GuestUpdateStatus::Restart::Running;
+            self->snapshot_.restart_reasons = reasons;
+            self->status_.set_update(self->snapshot_);
+        }
+    }, Qt::QueuedConnection);
+}
+
+void GuestUpdate::settle_live(const Outcome& outcome) {
+    if (outcome.finished.isEmpty()) {
+        return;
+    }
+    for (auto& live : snapshot_.live_steps) {
+        for (const auto& step : outcome.steps) {
+            if (step.name == live.name) {
+                live = step;
+            }
+        }
+    }
+    snapshot_.restart_reasons = outcome.reasons;
+    if (outcome.restart) {
+        snapshot_.restart = outcome.ok ? GuestUpdateStatus::Restart::Done : GuestUpdateStatus::Restart::Running;
+    } else if (outcome.ok) {
+        snapshot_.restart = GuestUpdateStatus::Restart::NotNeeded;
+    }
 }
 
 void GuestUpdate::say_step(const QString& text) {
@@ -149,6 +251,16 @@ GuestUpdate::Outcome GuestUpdate::carry_out(const std::shared_ptr<const GuestBun
     files.emplace("manifest.txt", QByteArray::fromStdString(contents->manifest));
     files.emplace("shares.txt", QByteArray::fromStdString(contents->shares));
     GuestFileServer server{std::move(files)};
+    QPointer<GuestUpdate> self(this);
+    server.on_progress([this, self](const GuestFileServer::Progress& progress) {
+        const QString step = QString::fromStdString(progress.step);
+        const QString status = QString::fromStdString(progress.status);
+        QMetaObject::invokeMethod(this, [self, step, status] {
+            if (self) {
+                self->on_progress(step, status);
+            }
+        }, Qt::QueuedConnection);
+    });
     if (!server.start()) {
         return {false, QStringLiteral("Could not serve LSW's files to Windows: %1")
                            .arg(QString::fromStdString(server.error()))};
@@ -219,24 +331,26 @@ GuestUpdate::Outcome GuestUpdate::carry_out(const std::shared_ptr<const GuestBun
     while (!cancel_.load() && std::chrono::steady_clock::now() - started < kRunWindow) {
         std::this_thread::sleep_for(kPollInterval);
         const auto info = rpc_.request(linkproto::cmd::kSystemInfo);
-        const auto verdict = UpdateVerdict::judge(info, finished_before, contents->release);
+        const auto verdict = UpdateVerdict::judge(info, finished_before, contents->release, contents->config);
         switch (verdict.kind) {
         case UpdateVerdict::Kind::Waiting:
             break;
         case UpdateVerdict::Kind::Failed:
             return {false, UpdateBatch::with_log(QStringLiteral("Windows could not be updated: %1.")
                                                      .arg(QString::fromStdString(verdict.message))),
-                    steps_of(verdict.last)};
+                    steps_of(verdict.last), false, finished_of(verdict.last), ok_of(verdict.last),
+                    restart_of(verdict.last), reasons_of(verdict.last)};
         case UpdateVerdict::Kind::RestartPending:
             if (!restart_noted) {
                 restart_noted = true;
                 LSW_INFO("update: Windows is restarting to finish the update");
             }
-            say_step(QStringLiteral("Restarting Windows"));
+            say_restart(reasons_of(verdict.last));
             break;
         case UpdateVerdict::Kind::Succeeded:
             LSW_DEBUG("update: the guest reports release {}", contents->release.substr(0, 16));
-            return {true, {}, steps_of(verdict.last), true};
+            return {true, {}, steps_of(verdict.last), true, finished_of(verdict.last), true,
+                    restart_of(verdict.last), reasons_of(verdict.last)};
         }
     }
     if (cancel_.load()) {
@@ -264,19 +378,29 @@ void GuestUpdate::publish(GuestUpdateStatus::State state, const QString& step, c
 
 void GuestUpdate::finish(const Outcome& outcome) {
     running_ = false;
+    settle_live(outcome);
     if (outcome.ok) {
         if (outcome.shipped) {
             LSW_INFO("update: Windows has release {}", snapshot_.shipped_release.left(16).toStdString());
         }
         snapshot_.guest_release = snapshot_.shipped_release;
+        snapshot_.guest_config = snapshot_.shipped_config;
         snapshot_.guest_version = snapshot_.shipped_version;
-        snapshot_.last_steps = outcome.steps;
+        if (outcome.shipped) {
+            snapshot_.last_steps = outcome.steps;
+            snapshot_.finished = outcome.finished;
+            snapshot_.last_ok = outcome.last_ok;
+        }
         publish(GuestUpdateStatus::State::Succeeded, {}, {});
         Q_EMIT succeeded();
         return;
     }
     LSW_WARN("update: {}", outcome.message.toStdString());
-    snapshot_.last_steps = outcome.steps;
+    if (!outcome.finished.isEmpty()) {
+        snapshot_.last_steps = outcome.steps;
+        snapshot_.finished = outcome.finished;
+        snapshot_.last_ok = outcome.last_ok;
+    }
     publish(GuestUpdateStatus::State::Failed, {}, outcome.message);
     Q_EMIT failed(outcome.message);
 }

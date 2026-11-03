@@ -52,67 +52,67 @@ std::uint64_t filetime_of(const std::string& finished, qint64 offset_ms) {
 
 int main() {
     check(UpdateVerdict::judge(reply({{"release", kShipped}, {"last_update", last(true, kBaseline)}}),
-                               kBaseline, kShipped).kind == Kind::Waiting,
+                               kBaseline, kShipped, "").kind == Kind::Waiting,
           "a forced run is not done on the result and release from before it");
-    check(UpdateVerdict::judge(reply({{"release", kShipped}}), kBaseline, kShipped).kind == Kind::Waiting,
+    check(UpdateVerdict::judge(reply({{"release", kShipped}}), kBaseline, kShipped, "").kind == Kind::Waiting,
           "no last_update at all keeps waiting");
     check(UpdateVerdict::judge(reply({{"release", kShipped}, {"last_update", last(true, kFinished)}}),
-                               kBaseline, kShipped).kind == Kind::Succeeded,
+                               kBaseline, kShipped, "").kind == Kind::Succeeded,
           "a forced run succeeds on an ok result of its own with the shipped release");
     check(UpdateVerdict::judge(reply({{"release", kShipped}, {"last_update", last(true, kFinished)}}),
-                               "", kShipped).kind == Kind::Succeeded,
+                               "", kShipped, "").kind == Kind::Succeeded,
           "a guest that had no result before takes the first as this run's");
 
     check(UpdateVerdict::judge(reply({{"release", "old"}, {"last_update", last(false, kBaseline, false, "earlier")}}),
-                               kBaseline, kShipped).kind == Kind::Waiting,
+                               kBaseline, kShipped, "").kind == Kind::Waiting,
           "a failed result of an earlier run (same finished as the baseline) is ignored");
     {
         const auto v = UpdateVerdict::judge(
             reply({{"release", "old"}, {"last_update", last(false, kFinished, false, "disk full")}}),
-            kBaseline, kShipped);
+            kBaseline, kShipped, "");
         check(v.kind == Kind::Failed && v.message == "disk full", "a failed result of this run is a failure with its message");
         check(v.last.value("finished", "") == kFinished, "the failure carries the result for its steps");
     }
     check(UpdateVerdict::judge(reply({{"release", "old"}, {"last_update", last(false, kFinished)}}), kBaseline,
-                               kShipped).message == "-",
+                               kShipped, "").message == "-",
           "a failure without a message says '-'");
     check(UpdateVerdict::judge(reply({{"release", kShipped}, {"last_update", last(false, kFinished, true, "x")}}),
-                               kBaseline, kShipped).kind == Kind::Failed,
+                               kBaseline, kShipped, "").kind == Kind::Failed,
           "a failure is checked before the release: the shipped release does not make it a success");
 
     check(UpdateVerdict::judge(reply({{"release", "other"}, {"last_update", last(true, kFinished)}}), kBaseline,
-                               kShipped).kind == Kind::Waiting,
+                               kShipped, "").kind == Kind::Waiting,
           "an ok result of this run with another release keeps waiting");
-    check(UpdateVerdict::judge(reply({{"last_update", last(true, kFinished)}}), kBaseline, kShipped).kind
+    check(UpdateVerdict::judge(reply({{"last_update", last(true, kFinished)}}), kBaseline, kShipped, "").kind
               == Kind::Waiting,
           "an ok result with no release reported keeps waiting");
 
     {
         const json l = last(true, kFinished, true);
         json before = {{"release", kShipped}, {"last_update", l}, {"agent_started", filetime_of(kFinished, -5000)}};
-        check(UpdateVerdict::judge(reply(before), kBaseline, kShipped).kind == Kind::RestartPending,
+        check(UpdateVerdict::judge(reply(before), kBaseline, kShipped, "").kind == Kind::RestartPending,
               "restart:true with an agent started before the result waits");
         before["agent_started"] = filetime_of(kFinished, 1000);
-        check(UpdateVerdict::judge(reply(before), kBaseline, kShipped).kind == Kind::RestartPending,
+        check(UpdateVerdict::judge(reply(before), kBaseline, kShipped, "").kind == Kind::RestartPending,
               "restart:true with an agent started exactly 1 s after the result still waits");
         before["agent_started"] = filetime_of(kFinished, 1000) + 1;
-        check(UpdateVerdict::judge(reply(before), kBaseline, kShipped).kind == Kind::Succeeded,
+        check(UpdateVerdict::judge(reply(before), kBaseline, kShipped, "").kind == Kind::Succeeded,
               "restart:true with an agent started more than 1 s after the result succeeds");
         before.erase("agent_started");
-        check(UpdateVerdict::judge(reply(before), kBaseline, kShipped).kind == Kind::RestartPending,
+        check(UpdateVerdict::judge(reply(before), kBaseline, kShipped, "").kind == Kind::RestartPending,
               "restart:true with no agent_started waits");
         json no_restart = {{"release", kShipped}, {"last_update", last(true, kFinished, false)},
                            {"agent_started", filetime_of(kFinished, -5000)}};
-        check(UpdateVerdict::judge(reply(no_restart), kBaseline, kShipped).kind == Kind::Succeeded,
+        check(UpdateVerdict::judge(reply(no_restart), kBaseline, kShipped, "").kind == Kind::Succeeded,
               "restart:false succeeds at once whatever the agent's start");
     }
 
     {
         AgentReply none = AgentReply::failure("timed out");
-        check(UpdateVerdict::judge(none, kBaseline, kShipped).kind == Kind::Waiting,
+        check(UpdateVerdict::judge(none, kBaseline, kShipped, "").kind == Kind::Waiting,
               "an unanswered system_info keeps waiting");
         none.body = {{"release", kShipped}, {"last_update", last(true, kFinished)}};
-        check(UpdateVerdict::judge(none, kBaseline, kShipped).kind == Kind::Waiting,
+        check(UpdateVerdict::judge(none, kBaseline, kShipped, "").kind == Kind::Waiting,
               "an unanswered system_info keeps waiting whatever its body holds");
         check(UpdateVerdict::moved_on(none, kBaseline), "the send phase gives way when the agent stops answering");
     }

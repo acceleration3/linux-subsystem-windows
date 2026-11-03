@@ -26,6 +26,7 @@ public:
         QVector<File> files;
         std::string manifest;
         std::string release;
+        std::string config;
         std::string shares;
         std::string version;
     };

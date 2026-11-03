@@ -2,6 +2,7 @@
 
 #include "lsw/base/log.hpp"
 #include <arpa/inet.h>
+#include <cctype>
 #include <cerrno>
 #include <cstring>
 #include <netinet/in.h>
@@ -50,6 +51,55 @@ std::string_view GuestFileServer::requested_name(std::string_view request) {
         return {};
     }
     return path.substr(1);
+}
+
+std::optional<GuestFileServer::Progress> GuestFileServer::progress_of(std::string_view request) {
+    if (requested_name(request) != "progress") {
+        return std::nullopt;
+    }
+    const auto method_end = request.find(' ');
+    const auto path_end = request.find_first_of(" \r\n", method_end + 1);
+    const std::string_view path = request.substr(method_end + 1, path_end - method_end - 1);
+    const auto query = path.find('?');
+    if (query == std::string_view::npos) {
+        return std::nullopt;
+    }
+    const auto decode = [](std::string_view in) {
+        std::string out;
+        for (std::size_t i = 0; i < in.size(); ++i) {
+            if (in[i] == '%' && i + 2 < in.size() && std::isxdigit(static_cast<unsigned char>(in[i + 1]))
+                && std::isxdigit(static_cast<unsigned char>(in[i + 2]))) {
+                out += static_cast<char>(std::stoi(std::string{in.substr(i + 1, 2)}, nullptr, 16));
+                i += 2;
+            } else if (in[i] == '+') {
+                out += ' ';
+            } else {
+                out += in[i];
+            }
+        }
+        return out;
+    };
+    Progress progress;
+    std::string_view rest = path.substr(query + 1);
+    while (!rest.empty()) {
+        const auto amp = rest.find('&');
+        const std::string_view pair = rest.substr(0, amp);
+        rest = amp == std::string_view::npos ? std::string_view{} : rest.substr(amp + 1);
+        const auto eq = pair.find('=');
+        if (eq == std::string_view::npos) {
+            continue;
+        }
+        const std::string_view key = pair.substr(0, eq);
+        if (key == "step") {
+            progress.step = decode(pair.substr(eq + 1));
+        } else if (key == "status") {
+            progress.status = decode(pair.substr(eq + 1));
+        }
+    }
+    if (progress.step.empty() || progress.status.empty()) {
+        return std::nullopt;
+    }
+    return progress;
 }
 
 bool GuestFileServer::start() {
@@ -122,6 +172,16 @@ void GuestFileServer::serve_loop() {
 }
 
 void GuestFileServer::answer(int connection, std::string_view request) {
+    if (const auto progress = progress_of(request)) {
+        constexpr std::string_view kNoContent =
+            "HTTP/1.1 204 No Content\r\nConnection: close\r\n\r\n";
+        send_all(connection, kNoContent.data(), kNoContent.size());
+        LSW_DEBUG("file server: progress {} {}", progress->step, progress->status);
+        if (sink_) {
+            sink_(*progress);
+        }
+        return;
+    }
     const auto file = files_.find(requested_name(request));
     if (file == files_.end()) {
         constexpr std::string_view kNotFound =

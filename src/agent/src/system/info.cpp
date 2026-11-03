@@ -152,6 +152,9 @@ nlohmann::json Info::collect() {
     j["release"] = release.is_object() && release.value("release", nlohmann::json{}).is_string()
                        ? release["release"].get<std::string>()
                        : std::string{};
+    j["release_config"] = release.is_object() && release.value("config", nlohmann::json{}).is_string()
+                              ? release["config"].get<std::string>()
+                              : std::string{};
     j["release_version"] = release.is_object() && release.value("version", nlohmann::json{}).is_string()
                                ? release["version"].get<std::string>()
                                : std::string{};

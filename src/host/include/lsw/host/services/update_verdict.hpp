@@ -29,7 +29,8 @@ public:
     [[nodiscard]] static bool started_after(const link::AgentReply& info, const std::string& finished);
 
     [[nodiscard]] static UpdateVerdict judge(const link::AgentReply& info, const std::string& baseline,
-                                             const std::string& shipped);
+                                             const std::string& shipped,
+                                             const std::string& shipped_config);
 };
 
 }

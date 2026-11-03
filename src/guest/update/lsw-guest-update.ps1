@@ -1,6 +1,8 @@
 param(
     [Parameter(Mandatory = $true)] [string] $Stage,
     [Parameter(Mandatory = $true)] [string] $Release,
+    [string] $Config = '',
+    [string] $ProgressUrl = '',
     [string] $Version = '',
     [switch] $Force,
     [switch] $NoRestart
@@ -49,13 +51,29 @@ function Utc-Now {
     return (Get-Date).ToUniversalTime().ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff'Z'", [Globalization.CultureInfo]::InvariantCulture)
 }
 
+function Report([string] $Step, [string] $Status) {
+    if (-not $ProgressUrl) { return }
+    try {
+        $url = $ProgressUrl.TrimEnd('/') + '/progress?step=' + [uri]::EscapeDataString($Step) + '&status=' + $Status
+        & curl.exe -s -m 2 $url 2>&1 | Out-Null
+    } catch { }
+}
+
+function Need-Restart([string] $Reason) {
+    $script:Restart = $true
+    $script:StepRestart = $true
+    if ($script:Reasons -notcontains $Reason) { $script:Reasons += $Reason }
+    L ('restart needed: ' + $Reason)
+}
+
 function Write-Result([bool] $Succeeded, [string] $Text, $StepList) {
     $outcome = [ordered]@{
-        ok       = $Succeeded
-        finished = Utc-Now
-        restart  = $script:Restart
-        steps    = @($StepList)
-        message  = $Text
+        ok               = $Succeeded
+        finished         = Utc-Now
+        restart          = $script:Restart
+        restart_reasons  = @($script:Reasons)
+        steps            = @($StepList)
+        message          = $Text
     }
     try {
         [System.IO.File]::WriteAllText($ResultFile, ($outcome | ConvertTo-Json -Depth 4 -Compress), $Utf8)
@@ -65,6 +83,8 @@ function Write-Result([bool] $Succeeded, [string] $Text, $StepList) {
 }
 
 $script:Restart = $false
+$script:StepRestart = $false
+$script:Reasons = @()
 $script:UpdateLock = New-Object System.Threading.Mutex($false, 'Global\lsw-guest-update')
 $locked = $false
 try {
@@ -208,11 +228,13 @@ $script:Replaced = $false
 
 function Run-Step([string] $Name, [scriptblock] $Body, [switch] $Always) {
     if ($script:Failure -and -not $Always) {
-        $script:Steps += [pscustomobject]@{ name = $Name; status = 'not run'; message = '' }
+        $script:Steps += [pscustomobject]@{ name = $Name; status = 'not run'; message = ''; restart = $false }
         return
     }
     L ('step ' + $Name)
+    Report $Name 'running'
     $script:State = 'done'
+    $script:StepRestart = $false
     $message = ''
     try {
         & $Body
@@ -223,7 +245,8 @@ function Run-Step([string] $Name, [scriptblock] $Body, [switch] $Always) {
         if (-not $script:Failure) { $script:Failure = @{ Step = $Name; Message = $message } }
     }
     L ('step ' + $Name + ': ' + $script:State)
-    $script:Steps += [pscustomobject]@{ name = $Name; status = $script:State; message = $message }
+    Report $Name $script:State
+    $script:Steps += [pscustomobject]@{ name = $Name; status = $script:State; message = $message; restart = $script:StepRestart }
 }
 
 function Step-Verify {
@@ -244,17 +267,21 @@ function Step-Verify {
     L ('verified ' + $script:Manifest.Count + ' file(s)')
 }
 
+function Agent-Files-Differ {
+    $ours = @($AgentExe, $MirrorExe) | Where-Object { $script:Manifest.ContainsKey($_) }
+    return @($ours | Where-Object { $Force -or -not (Is-Current $_ $_) }).Count -gt 0
+}
+
 function Step-Stop {
+    if (-not (Agent-Files-Differ)) { $script:State = 'skipped'; return }
     $script:Stopped = $true
     Kill-Processes 'remotewin-guest'
     Stop-Agent
 }
 
 function Step-AgentAndMirror {
-    $agent = $Root + '\lsw-agent.exe'
-    $mirror = $Root + '\remotewin-guest.exe'
     $update = $Root + '\lsw-guest-update.ps1'
-    $ours = @($agent, $mirror) | Where-Object { $script:Manifest.ContainsKey($_) }
+    $ours = @($AgentExe, $MirrorExe) | Where-Object { $script:Manifest.ContainsKey($_) }
     $differs = @($ours | Where-Object { $Force -or -not (Is-Current $_ $_) })
     if ($differs.Count -gt 0) {
         New-Item -ItemType Directory -Force -Path $Previous | Out-Null
@@ -294,34 +321,100 @@ function Step-Driver {
     $provision = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', 'C:\av\provision.ps1', '-Package', 'C:\av\resign\package')
     $signed = Run-Native 'provision sign' 'powershell.exe' ($provision + @('-Stage', 'sign'))
     if ($signed -ne 0 -and $signed -ne 3010) { throw ('provision.ps1 -Stage sign exited ' + $signed) }
+    if ($signed -eq 3010) { Need-Restart 'test signing was just turned on' }
     $installed = Run-Native 'provision install' 'powershell.exe' ($provision + @('-Stage', 'install', '-NoVerifier'))
     if ($installed -ne 0 -and $installed -ne 3010) { throw ('provision.ps1 -Stage install exited ' + $installed) }
     [System.IO.File]::WriteAllText($DriverMarker, $wanted, $Utf8)
-    $script:Restart = $true
+    if (-not (Driver-Is-Live 'C:\av\resign\package\avgpu.inf' 30)) {
+        Need-Restart 'the GPU driver did not switch over live'
+    }
 }
 
-function Schedule-Replace([string] $From, [string] $To) {
+function Package-Version([string] $Inf) {
+    foreach ($line in (Get-Content -LiteralPath $Inf)) {
+        if ($line -match '^DriverVer\s*=\s*[0-9/]+,([0-9.]+)\s*$') { return $Matches[1] }
+    }
+    throw ($Inf + ' has no DriverVer')
+}
+
+function Driver-Is-Live([string] $Inf, [int] $Seconds) {
+    $version = Package-Version $Inf
+    $pattern = '^PCI\\VEN_([0-9A-F]{4})&DEV_([0-9A-F]{4})&SUBSYS_52561AF4$'
+    $until = (Get-Date).AddSeconds($Seconds)
+    while ($true) {
+        $devices = @(Get-PnpDevice -PresentOnly -ErrorAction SilentlyContinue |
+            Where-Object { @($_.HardwareID | Where-Object { $_ -match $pattern }).Count })
+        $live = $devices.Count -gt 0
+        $report = @()
+        foreach ($device in $devices) {
+            $running = (Get-PnpDeviceProperty -InstanceId $device.InstanceId -KeyName DEVPKEY_Device_DriverVersion -ErrorAction SilentlyContinue).Data
+            $problem = (Get-PnpDeviceProperty -InstanceId $device.InstanceId -KeyName DEVPKEY_Device_ProblemCode -ErrorAction SilentlyContinue).Data
+            $report += ($device.InstanceId + ' driver ' + $running + ' problem ' + $problem)
+            if ($running -ne $version -or $problem -ne 0) { $live = $false }
+        }
+        if ($live -or (Get-Date) -ge $until) {
+            L ('avgpu adapters, package ' + $version + ': ' + $(if ($report.Count) { $report -join '; ' } else { 'none present' }))
+            return $live
+        }
+        Start-Sleep -Seconds 1
+    }
+}
+
+function Native-Type {
     if (-not ('LswUpdate.Native' -as [type])) {
         Add-Type -Namespace LswUpdate -Name Native -MemberDefinition @'
 [System.Runtime.InteropServices.DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode, SetLastError = true)]
 public static extern bool MoveFileEx(string existing, string target, int flags);
 '@
     }
+}
+
+$MoveReplaceExisting = 1
+$MoveDelayUntilReboot = 4
+
+function Schedule-Replace([string] $From, [string] $To) {
+    Native-Type
     New-Item -ItemType Directory -Force -Path $Pending | Out-Null
     $kept = Join-Path $Pending ((Split-Path -Leaf (Split-Path -Parent $From)) + '-' + (Split-Path -Leaf $From))
     Copy-Item -LiteralPath $From -Destination $kept -Force
-    $delayUntilReboot = 4
-    $replaceExisting = 1
-    if (-not [LswUpdate.Native]::MoveFileEx($kept, $To, $delayUntilReboot -bor $replaceExisting)) {
+    if (-not [LswUpdate.Native]::MoveFileEx($kept, $To, $MoveDelayUntilReboot -bor $MoveReplaceExisting)) {
         throw ('MoveFileEx for ' + $To + ' failed: ' + [System.Runtime.InteropServices.Marshal]::GetLastWin32Error())
     }
     L ($To + ' is in use; replaced at the next boot')
-    $script:Restart = $true
+    Need-Restart 'a graphics loader could not be swapped live'
+}
+
+function Swap-Live([string] $From, [string] $To) {
+    Native-Type
+    $old = $To + '.lsw-old-' + [guid]::NewGuid().ToString('N')
+    [System.IO.File]::Move($To, $old)
+    try {
+        [System.IO.File]::Copy($From, $To, $true)
+    } catch {
+        [System.IO.File]::Move($old, $To)
+        throw
+    }
+    if (-not [LswUpdate.Native]::MoveFileEx($old, [NullString]::Value, $MoveDelayUntilReboot)) {
+        L ('could not schedule ' + $old + ' for deletion: ' + [System.Runtime.InteropServices.Marshal]::GetLastWin32Error())
+    }
+    L ($To + ' is in use; the loaded copy was renamed to ' + (Split-Path -Leaf $old) + ' and the new one placed')
+}
+
+function Remove-Old-Loaders([hashtable] $Targets) {
+    foreach ($dir in $Targets.Values) {
+        foreach ($file in @(Get-ChildItem -LiteralPath $dir -Filter '*.lsw-old-*' -File -Force -ErrorAction SilentlyContinue)) {
+            try {
+                [System.IO.File]::Delete($file.FullName)
+                L ('removed ' + $file.FullName)
+            } catch { }
+        }
+    }
 }
 
 function Step-Loaders {
     $names = @('vulkan-1.dll', 'OpenCL.dll')
     $targets = @{ x64 = Join-Path $env:SystemRoot 'System32'; x86 = Join-Path $env:SystemRoot 'SysWOW64' }
+    Remove-Old-Loaders $targets
     $placed = $false
     foreach ($guest in (Manifest-Under 'C:\av\loaders')) {
         if (Place $guest) { $placed = $true }
@@ -337,7 +430,12 @@ function Step-Loaders {
                 [System.IO.File]::Copy($source, $target, $true)
                 L ('placed ' + $target)
             } catch [System.IO.IOException], [System.UnauthorizedAccessException] {
-                Schedule-Replace $source $target
+                try {
+                    Swap-Live $source $target
+                } catch {
+                    L ('live swap of ' + $target + ' failed: ' + $_.Exception.Message)
+                    Schedule-Replace $source $target
+                }
             }
         }
     }
@@ -364,7 +462,7 @@ function Step-Shares {
         if ($text) { $shares = $text }
     }
     $rc = Run-Native 'lsw-shares' 'powershell.exe' @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $sharesScript, '-Install', '-Shares', $shares)
-    if ($rc -eq 7) { $script:Restart = $true }
+    if ($rc -eq 7) { Need-Restart 'shared folders' }
     elseif ($rc -ne 0) { throw ('lsw-shares.ps1 exited ' + $rc) }
 }
 
@@ -440,6 +538,7 @@ if ($ok) {
     try {
         $record = [ordered]@{
             release  = $Release
+            config   = $Config
             version  = $Version
             applied  = Utc-Now
             manifest = $script:ManifestText
@@ -459,6 +558,7 @@ if ($script:Restart -and $NoRestart) {
     L 'a restart is due; -NoRestart, so it is left to the next boot'
 } elseif ($script:Restart) {
     L 'restarting Windows'
+    Report 'restart' 'running'
     shutdown.exe /r /t 5 /c 'LSW: restart to finish updating'
 }
 $script:UpdateLock.ReleaseMutex()

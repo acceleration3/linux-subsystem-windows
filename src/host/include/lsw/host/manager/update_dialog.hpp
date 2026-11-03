@@ -1,5 +1,7 @@
 #pragma once
 
+#include "lsw/host/services/guest_update_status.hpp"
+
 #include <QDialog>
 #include <QString>
 
@@ -27,16 +29,19 @@ private:
     void refresh();
     void rebuild_host_steps();
     void rebuild_guest_steps();
+    void rebuild_restart_line();
 
     services::StatusHub& status_;
     bool was_running_ = false;
     int reached_ = -1;
-    bool restart_seen_ = false;
+    bool opened_ = false;
+    services::GuestUpdateStatus::State last_state_ = services::GuestUpdateStatus::State::Idle;
 
     QLabel* line_ = nullptr;
     QWidget* host_steps_ = nullptr;
     QWidget* guest_box_ = nullptr;
     QWidget* guest_steps_ = nullptr;
+    QWidget* restart_line_ = nullptr;
     QLabel* failure_ = nullptr;
     QLabel* note_ = nullptr;
     QPushButton* retry_ = nullptr;

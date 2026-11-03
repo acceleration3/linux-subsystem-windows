@@ -37,7 +37,8 @@ GuestUpkeep::GuestUpkeep(StatusHub& status, link::AgentRpcClient& rpc, GuestUpda
             return;
         }
         awaiting_update_ = true;
-        update_.run_if_stale(probe.release, probe.version);
+        update_.note_last(probe.steps, probe.finished, probe.last_ok);
+        update_.run_if_stale(probe.release, probe.config, probe.version);
         if (update_.running()) {
             set_state(State::Updating);
         }
@@ -87,7 +88,7 @@ void GuestUpkeep::retry() {
 bool GuestUpkeep::ready() const {
     const auto& vm = status_.vm();
     const vm::DomainDescription* definition = vm.definition();
-    return vm.running() && vm.agent_online() && definition != nullptr && !definition->installing;
+    return enabled_ && vm.running() && vm.agent_online() && definition != nullptr && !definition->installing;
 }
 
 bool GuestUpkeep::busy() const {
@@ -159,7 +160,7 @@ GuestUpkeep::Probe GuestUpkeep::probe() {
     const auto info = rpc_.request(linkproto::cmd::kSystemInfo);
     if (!info.ok) {
         LSW_WARN("upkeep: system_info: {}", info.error);
-        return {false, {}, {},
+        return {false, {}, {}, {}, {}, {}, false,
                 QStringLiteral("Windows did not say which LSW release it has: %1")
                     .arg(QString::fromStdString(info.error))};
     }
@@ -167,7 +168,9 @@ GuestUpkeep::Probe GuestUpkeep::probe() {
         const auto value = info.body.value(key, nlohmann::json{});
         return value.is_string() ? QString::fromStdString(value.get<std::string>()) : QString{};
     };
-    return {true, text("release"), text("release_version"), {}};
+    const auto last = info.body.value("last_update", nlohmann::json{});
+    return {true, text("release"), text("release_config"), text("release_version"), GuestUpdate::steps_of(last),
+            GuestUpdate::finished_of(last), GuestUpdate::ok_of(last), {}};
 }
 
 GuestUpkeep::Clock GuestUpkeep::set_clock() {
