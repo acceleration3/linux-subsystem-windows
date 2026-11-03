@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.25)
 
 project(LSW
-    VERSION 0.2.2
+    VERSION 0.2.3
     DESCRIPTION "Linux Subsystem for Windows"
     HOMEPAGE_URL "https://github.com/anthropics/lsw"
     LANGUAGES CXX
