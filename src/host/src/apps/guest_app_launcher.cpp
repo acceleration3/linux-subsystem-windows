@@ -7,13 +7,59 @@
 #include "lsw/host/link/agent_rpc_client.hpp"
 #include "lsw/host/mirror/window_mirror.hpp"
 
+#include "lsw/linkproto/commands.hpp"
+
 #include <QFileInfo>
+#include <QMetaObject>
+
+#include <nlohmann/json.hpp>
 #include <iterator>
 
 namespace lsw::host::apps {
 
+namespace {
+constexpr qsizetype kMostEnded = 64;
+}
+
 GuestAppLauncher::GuestAppLauncher(link::AgentRpcClient& rpc, QObject* parent)
-    : QObject(parent), rpc_(rpc) {}
+    : QObject(parent), rpc_(rpc) {
+    ended_sub_ = rpc_.subscribe(linkproto::topic::kLaunchEnded, [this](const nlohmann::json& f) {
+        const auto pid = f.value("pid", quint32{0});
+        if (pid == 0) {
+            return;
+        }
+        QMetaObject::invokeMethod(this, [this, pid] { launch_ended(pid); }, Qt::QueuedConnection);
+    });
+}
+
+void GuestAppLauncher::launch_ended(quint32 pid) {
+    QString identity;
+    for (auto it = pids_.cbegin(); it != pids_.cend(); ++it) {
+        if (it.value() == pid) {
+            identity = it.key();
+            break;
+        }
+    }
+    if (identity.isEmpty()) {
+        ended_.append(pid);
+        if (ended_.size() > kMostEnded) {
+            ended_.removeFirst();
+        }
+        return;
+    }
+    if (!pending_.contains(identity)) {
+        return;
+    }
+    LSW_INFO("launch {}: every process ended before a window was shown", identity.toStdString());
+    const QPointer<mirror::WindowMirror> mirror = mirrors_.value(identity);
+    forget(identity);
+    pending_.remove(identity);
+    if (mirror) {
+        mirror->deleteLater();
+    }
+    Q_EMIT changed();
+    flush_queued(identity);
+}
 
 void GuestAppLauncher::launch(const apps::AppConfig& app, const QString& activation_token,
                               const QStringList& documents) {
@@ -65,6 +111,13 @@ void GuestAppLauncher::launch(const apps::AppConfig& app, const QString& activat
                 existing->raise(activation_token);
                 Q_EMIT changed();
                 Q_EMIT launched(path, pid);
+                flush_queued(identity);
+                return;
+            }
+            if (ended_.removeOne(pid)) {
+                LSW_INFO("launch {}: every process ended before a window was shown", path.toStdString());
+                pending_.remove(identity);
+                Q_EMIT changed();
                 flush_queued(identity);
                 return;
             }

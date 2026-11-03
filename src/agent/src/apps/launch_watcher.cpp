@@ -191,6 +191,9 @@ void LaunchWatcher::run() {
         case JOB_OBJECT_MSG_ABNORMAL_EXIT_PROCESS:
             on_exit_process(pid);
             break;
+        case JOB_OBJECT_MSG_ACTIVE_PROCESS_ZERO:
+            on_launch_ended(static_cast<unsigned long>(key));
+            break;
         default:
             break;
         }
@@ -266,6 +269,20 @@ void LaunchWatcher::on_exit_process(unsigned long pid) {
     exited.working_dir = std::move(identity.working_dir);
     exited.path_env = std::move(identity.path_env);
     report_async(std::move(exited));
+}
+
+void LaunchWatcher::on_launch_ended(unsigned long key) {
+    LSW_AGENT_DEBUG("launch_watcher: launch {} has no process left", key);
+    const std::lock_guard lock(mu_);
+    std::string app_id;
+    if (const auto id = identities_.find(key); id != identities_.end()) {
+        app_id = id->second.app_id;
+    }
+    if (pending_.size() >= kMaxPendingReports) {
+        pending_.erase(pending_.begin());
+    }
+    pending_.emplace_back(linkproto::topic::kLaunchEnded,
+                          nlohmann::json{{"pid", key}, {"app_id", app_id}});
 }
 
 void LaunchWatcher::report_async(ExitedProcess exited) {

@@ -58,6 +58,7 @@ inline constexpr const char* kConsoleOutput = "console_output";
 inline constexpr const char* kConsoleClosed = "console_closed";
 inline constexpr const char* kAppsChanged   = "apps_changed";
 inline constexpr const char* kAppError      = "app_error";
+inline constexpr const char* kLaunchEnded   = "launch_ended";
 
 inline constexpr const char* kUiaWindowOpened  = "uia_window_opened";
 inline constexpr const char* kUiaWindowClosed  = "uia_window_closed";
