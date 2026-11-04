@@ -2,7 +2,10 @@ name: release
 
 on:
   push:
+    branches: [master]
     tags: ['v*']
+    paths-ignore:
+      - packaging/aur/**
   schedule:
     - cron: '17 3 * * 1'
   workflow_dispatch:
@@ -15,7 +18,49 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
+  plan:
+    name: plan
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.plan.outputs.version }}
+      publish: ${{ steps.plan.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version and whether to publish it
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PUBLISH_INPUT: ${{ inputs.publish }}
+        run: |
+          version="$(sed -n 's/^ *VERSION \([0-9][0-9.]*\)$/\1/p' CMakeLists.txt | head -1)"
+          [ -n "${version}" ] || { echo "::error::no version in CMakeLists.txt"; exit 1; }
+          if [ "${GITHUB_REF_TYPE}" = tag ] && [ "${GITHUB_REF_NAME}" != "v${version}" ]; then
+              echo "::error::tag ${GITHUB_REF_NAME} does not match the project version ${version}"
+              exit 1
+          fi
+          wanted=false
+          case "${GITHUB_EVENT_NAME}" in
+              push) wanted=true ;;
+              workflow_dispatch) [ "${PUBLISH_INPUT}" = true ] && wanted=true ;;
+          esac
+          publish=false
+          if [ "${wanted}" = true ]; then
+              if gh release view "v${version}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+                  echo "::notice::LSW ${version} is already released, so this run only builds"
+              else
+                  publish=true
+                  echo "::notice::LSW ${version} is not released yet, so this run publishes it"
+              fi
+          fi
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "publish=${publish}" >> "${GITHUB_OUTPUT}"
+
   guest:
     name: guest
     runs-on: ubuntu-latest
@@ -135,29 +180,18 @@ jobs:
 
   release:
     name: release
-    needs: host
-    if: startsWith(github.ref, 'refs/tags/v') || inputs.publish
+    needs: [plan, host]
+    if: needs.plan.outputs.publish == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
     outputs:
       aur: ${{ steps.aur.outputs.enabled }}
-      version: ${{ steps.version.outputs.version }}
+      version: ${{ needs.plan.outputs.version }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Version and tag
-        id: version
-        run: |
-          version="$(sed -n 's/^ *VERSION \([0-9][0-9.]*\)$/\1/p' CMakeLists.txt | head -1)"
-          [ -n "${version}" ] || { echo "::error::no version in CMakeLists.txt"; exit 1; }
-          if [ "${GITHUB_REF_TYPE}" = tag ]; then
-              [ "${GITHUB_REF_NAME}" = "v${version}" ] \
-                  || { echo "::error::tag ${GITHUB_REF_NAME} does not match the project version ${version}"; exit 1; }
-          fi
-          echo "version=${version}" >> "${GITHUB_OUTPUT}"
 
       - uses: actions/download-artifact@v4
         with:
@@ -168,16 +202,25 @@ jobs:
       - name: Create the release
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ steps.version.outputs.version }}
+          VERSION: ${{ needs.plan.outputs.version }}
         run: |
           tag="v${VERSION}"
+          git fetch --force --tags origin
           if [ "${GITHUB_REF_TYPE}" = tag ]; then
-              git fetch --force --tags origin
               git tag -l --format='%(contents)' "${tag}" > notes.md
           fi
           if ! grep -q '[^[:space:]]' notes.md 2>/dev/null; then
-              git log -1 --format=%B "${GITHUB_SHA}" > notes.md
+              bump="$(git log -1 --format=%H --fixed-strings --grep="LSW ${VERSION}" "${GITHUB_SHA}")"
+              if [ -n "${bump}" ]; then
+                  git log -1 --format=%b "${bump}" > notes.md
+              fi
           fi
+          if ! grep -q '[^[:space:]]' notes.md 2>/dev/null; then
+              previous="$(git describe --tags --abbrev=0 --match 'v*' "${GITHUB_SHA}^" 2>/dev/null || true)"
+              git log --no-merges --format='- %s' ${previous:+"${previous}..${GITHUB_SHA}"} \
+                  | grep -vE '^- (LSW|lsw-bin) [0-9]' > notes.md || true
+          fi
+          cat notes.md
           ls -l dist
           gh release create "${tag}" --title "LSW ${VERSION}" --notes-file notes.md --target "${GITHUB_SHA}" \
               dist/lsw-"${VERSION}"-x86_64.tar.zst dist/lsw-"${VERSION}"-x86_64.tar.zst.sha256 \
