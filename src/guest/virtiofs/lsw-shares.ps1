@@ -44,19 +44,21 @@ function Fail([int] $Code, [string] $Message) {
     if ($script:Result -eq 0) { $script:Result = $Code }
 }
 
-function Parse-Shares([string] $Text) {
+function Parse-Shares([string] $Text, [switch] $Lenient) {
     $list = @()
     if ($Text -eq 'none' -or [string]::IsNullOrWhiteSpace($Text)) { return ,$list }
     foreach ($item in ($Text -split '[,\r\n]+')) {
         $item = $item.Trim()
         if (-not $item) { continue }
         if ($item -notmatch '^([A-Za-z]):([A-Za-z0-9+/]+={0,2}):([A-Za-z0-9+/]*={0,2})$') {
+            if ($Lenient) { L ('ignoring saved entry "' + $item + '"'); continue }
             Fail 1 ('not a share: "' + $item + '" (want X:base64(tag):base64(name))')
             return $null
         }
         try {
             $tag = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($Matches[2]))
         } catch {
+            if ($Lenient) { L ('ignoring saved entry "' + $item + '"'); continue }
             Fail 1 ('not a share: "' + $item + '" (the tag is not base64)')
             return $null
         }
@@ -309,8 +311,7 @@ try {
 
     $before = @()
     if (Test-Path -LiteralPath $SavedList) {
-        $before = Parse-Shares ((Get-Content -LiteralPath $SavedList) -join ',')
-        if ($null -eq $before) { $before = @() }
+        $before = Parse-Shares ((Get-Content -LiteralPath $SavedList) -join ',') -Lenient
     }
     if ($PSBoundParameters.ContainsKey('Shares')) {
         $wanted = Parse-Shares $Shares
