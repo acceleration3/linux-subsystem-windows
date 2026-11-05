@@ -1178,9 +1178,13 @@ svg.ico{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stro
           <span class="msg"><b>Windows is not running avgpu.sys.</b> The adapter reports problem code 52: test signing is off, so Windows refused the driver's signature.</span>
           <span class="acts"><button class="btn">Open the driver log</button></span>
         </div>
-        <div class="warnstrip" style="border-bottom:none">
+        <div class="warnstrip">
           <span class="wdot"></span>
           <span class="msg"><b>Windows has no driver for Intel UHD Graphics 770.</b> It was added as an adapter after the driver package was installed, so Windows has not matched it to avgpu.sys yet. LSW's next update of Windows, at the next boot, installs the driver for it.</span>
+        </div>
+        <div class="warnstrip" style="border-bottom:none">
+          <span class="wdot"></span>
+          <span class="msg"><b>Resizable BAR is off for Radeon RX 9070 XT.</b> The CPU can reach only 256 MiB of its VRAM, so once that fills, uploads through the host window go to system RAM. Turn on Above 4G Decoding and Resizable BAR in the firmware settings.</span>
         </div>
       </div>
     </div>
@@ -3116,6 +3120,10 @@ svg.ico{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stro
         <span class="wdot"></span>
         <span class="msg"><b>The host serves no Direct3D.</b> Windows' desktop will keep restarting.</span>
         <span class="acts"><button class="btn">Check again</button></span>
+      </div>
+      <div class="warnstrip" style="border-bottom:none">
+        <span class="wdot"></span>
+        <span class="msg"><b>Resizable BAR is off for Radeon RX 9070 XT.</b> The CPU can reach only 256 MiB of its VRAM.</span>
       </div>
     </div>
 

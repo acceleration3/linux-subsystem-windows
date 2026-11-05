@@ -79,6 +79,19 @@ QVector<GraphicsAlerts::Warning> GraphicsAlerts::warnings() const {
             }
         }
     }
+    for (const auto& adapter : g.adapters) {
+        if (platform::HostGpus::resizable_bar_off(adapter.gpu)) {
+            out.push_back({Warning::Kind::ResizableBarOff, false,
+                           QStringLiteral("Resizable BAR is off for %1.")
+                               .arg(platform::HostGpus::adapter_name(adapter.gpu)),
+                           QStringLiteral("The CPU can reach only %1 of its VRAM, so once that "
+                                          "fills, uploads through the host window go to system "
+                                          "RAM. Turn on Above 4G Decoding and Resizable BAR in "
+                                          "the firmware settings.")
+                               .arg(platform::HostGpus::format_mib(
+                                   adapter.gpu.resizable_bar->current_bytes >> 20))});
+        }
+    }
     return out;
 }
 

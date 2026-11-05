@@ -90,6 +90,9 @@ HostGpu describe(VkPhysicalDevice device) {
             gpu.vram_bytes += memory.memoryHeaps[heap].size;
         }
     }
+    if (!gpu.pci_address.isEmpty() && !gpu.cpu && !gpu.integrated) {
+        gpu.resizable_bar = ResizableBar::read(gpu.pci_address);
+    }
     return gpu;
 }
 
@@ -132,6 +135,15 @@ QString HostGpus::adapter_name(const HostGpu& gpu) {
     const qsizetype open = name.lastIndexOf(QLatin1Char('('));
     const QString kept = open > 0 ? name.left(open).trimmed() : QString{};
     return kept.isEmpty() ? name : kept;
+}
+
+QString HostGpus::format_mib(quint64 mib) {
+    return mib % 1024 == 0 ? QStringLiteral("%1 GiB").arg(mib / 1024)
+                           : QStringLiteral("%1 MiB").arg(mib);
+}
+
+bool HostGpus::resizable_bar_off(const HostGpu& gpu) {
+    return gpu.resizable_bar && ResizableBar::is_off(*gpu.resizable_bar, gpu.vram_bytes);
 }
 
 std::optional<HostGpu> HostGpus::resolve(const QVector<HostGpu>& gpus, const QString& setting) {

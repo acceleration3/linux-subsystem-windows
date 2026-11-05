@@ -1,5 +1,7 @@
 #pragma once
 
+#include "lsw/host/platform/resizable_bar.hpp"
+
 #include <QString>
 #include <QVector>
 #include <QtGlobal>
@@ -15,6 +17,7 @@ struct HostGpu {
     QString driver;
     QString driver_info;
     QString pci_address;
+    std::optional<ResizableBar::Sizes> resizable_bar;
     bool cpu = false;
     bool integrated = false;
 };
@@ -29,6 +32,10 @@ public:
                                                         const QString& setting);
 
     [[nodiscard]] static QString adapter_name(const HostGpu& gpu);
+
+    [[nodiscard]] static QString format_mib(quint64 mib);
+
+    [[nodiscard]] static bool resizable_bar_off(const HostGpu& gpu);
 };
 
 }

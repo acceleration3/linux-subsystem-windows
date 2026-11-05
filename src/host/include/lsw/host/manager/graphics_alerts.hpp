@@ -16,6 +16,7 @@ public:
             DisplayNotRunning,
             DisplayNoDriver,
             NoDriver,
+            ResizableBarOff,
         };
         Kind kind = Kind::NoDirect3d;
         bool critical = false;

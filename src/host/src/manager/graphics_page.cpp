@@ -154,11 +154,6 @@ QLabel* adapter_pill(const services::StatusHub& status, const Adapter& adapter) 
                             QStringLiteral("Problem code %1").arg(adapter.guest->problem_code));
 }
 
-QString window_size(int mib) {
-    return mib % 1024 == 0 ? QStringLiteral("%1 GiB").arg(mib / 1024)
-                           : QStringLiteral("%1 MiB").arg(mib);
-}
-
 QString tilde(const QString& path) {
     const QString home = QDir::homePath();
     if (path.startsWith(home + QLatin1Char('/'))) {
@@ -243,7 +238,8 @@ QStringList GraphicsPage::status_facts() const {
                      .arg(device != nullptr ? short_uuid(device->host_gpu) : QStringLiteral("auto"));
     }
     if (device != nullptr && device->hostmem_mib > 0) {
-        facts << QStringLiteral("hostmem %1").arg(window_size(device->hostmem_mib));
+        facts << QStringLiteral("hostmem %1")
+                     .arg(platform::HostGpus::format_mib(device->hostmem_mib));
     }
     const QString preferred = g.live_modes.value_or(QString{}).section(QLatin1Char(','), 0, 0);
     if (const auto mode = config::DisplayModes::parse(preferred)) {
@@ -255,7 +251,8 @@ QStringList GraphicsPage::status_facts() const {
     if (g.pending.any()) {
         QStringList what;
         if (g.pending.host_window_mib) {
-            what << QStringLiteral("hostmem %1").arg(window_size(*g.pending.host_window_mib));
+            what << QStringLiteral("hostmem %1")
+                        .arg(platform::HostGpus::format_mib(*g.pending.host_window_mib));
         }
         if (g.pending.adapters) {
             what << QStringLiteral("adapters");
@@ -412,6 +409,8 @@ QWidget* GraphicsPage::build_warnings() {
                     &QPushButton::clicked, this, &GraphicsPage::open_log);
             break;
         case Warning::Kind::NoDriver:
+            break;
+        case Warning::Kind::ResizableBarOff:
             break;
         }
         column->addWidget(strip);
