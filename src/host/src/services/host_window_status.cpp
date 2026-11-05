@@ -118,14 +118,29 @@ void HostWindowTracker::add(const platform::AvStateDump::Snapshot& snapshot, qin
         if (known && seconds > 0) {
             const quint64 splits = delta(channel.split_transfers, before.split_transfers);
             const quint64 pieces = delta(channel.split_pieces, before.split_pieces);
-            const quint64 waits = delta(channel.room_waits, before.room_waits);
-            const quint64 wait_us = delta(channel.room_wait_us, before.room_wait_us);
+            const auto optional_delta = [&](const std::optional<quint64>& now, const std::optional<quint64>& was) {
+                return now ? delta(*now, was.value_or(0)) : quint64{0};
+            };
+            const auto wait = [&](const std::optional<quint64>& count, const std::optional<quint64>& was_count,
+                                  const std::optional<quint64>& micros, const std::optional<quint64>& was_micros) {
+                HostWindowStatus::Wait result;
+                const quint64 waits = optional_delta(count, was_count);
+                result.per_s = static_cast<double>(waits) / seconds;
+                if (waits > 0) {
+                    result.avg_ms = static_cast<double>(optional_delta(micros, was_micros)) / static_cast<double>(waits) / 1000.0;
+                }
+                return result;
+            };
+            const quint64 blob_room_waits = optional_delta(channel.blob_room_waits, before.blob_room_waits);
+            const quint64 ring_waits = optional_delta(channel.ring_waits, before.ring_waits);
+            const quint64 fence_waits = optional_delta(channel.fence_waits, before.fence_waits);
+            const quint64 waits = blob_room_waits + ring_waits + fence_waits;
             transfer.splits_per_s = static_cast<double>(splits) / seconds;
             transfer.extra_pieces_per_s = static_cast<double>(pieces > splits ? pieces - splits : 0) / seconds;
-            transfer.waits_per_s = static_cast<double>(waits) / seconds;
-            if (waits > 0) {
-                transfer.avg_wait_ms = static_cast<double>(wait_us) / static_cast<double>(waits) / 1000.0;
-            }
+            transfer.blob_room_wait = wait(channel.blob_room_waits, before.blob_room_waits, channel.blob_room_wait_us,
+                                           before.blob_room_wait_us);
+            transfer.ring_wait = wait(channel.ring_waits, before.ring_waits, channel.ring_wait_us, before.ring_wait_us);
+            transfer.fence_wait = wait(channel.fence_waits, before.fence_waits, channel.fence_wait_us, before.fence_wait_us);
             if (channel.arena_grows && before.arena_grows) {
                 transfer.arena_grows_per_s = static_cast<double>(delta(*channel.arena_grows, *before.arena_grows)) / seconds;
             }
@@ -144,7 +159,7 @@ void HostWindowTracker::add(const platform::AvStateDump::Snapshot& snapshot, qin
                     || delta(channel.copied_mappings, before.copied_mappings) > 0
                     || delta(channel.slice_waits, before.slice_waits) > 0
                     || delta(channel.refused(), before.refused()) > 0;
-            if (waits > 0 && channel.arena_bytes && *channel.arena_bytes > 0 && channel.arena_peak_ring_bytes
+            if (blob_room_waits > 0 && channel.arena_bytes && *channel.arena_bytes > 0 && channel.arena_peak_ring_bytes
                 && *channel.arena_peak_ring_bytes * 10 >= *channel.arena_bytes * 9) {
                 memory.arena_full_at_ms = at_ms;
             }

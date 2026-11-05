@@ -285,8 +285,12 @@ void AvStateDump::parse(const QByteArray& dump, Snapshot& into) {
             channel.rejected += number_or_zero(values, QStringLiteral("rejected"));
             channel.split_transfers += number_or_zero(values, QStringLiteral("split_transfers"));
             channel.split_pieces += number_or_zero(values, QStringLiteral("split_pieces"));
-            channel.room_waits += number_or_zero(values, QStringLiteral("room_waits"));
-            channel.room_wait_us += number_or_zero(values, QStringLiteral("room_wait_us"));
+            add_known(channel.blob_room_waits, number(values, QStringLiteral("blob_room_waits")));
+            add_known(channel.blob_room_wait_us, number(values, QStringLiteral("blob_room_wait_us")));
+            add_known(channel.ring_waits, number(values, QStringLiteral("ring_waits")));
+            add_known(channel.ring_wait_us, number(values, QStringLiteral("ring_wait_us")));
+            add_known(channel.fence_waits, number(values, QStringLiteral("fence_waits")));
+            add_known(channel.fence_wait_us, number(values, QStringLiteral("fence_wait_us")));
             channel.inline_bulk += number_or_zero(values, QStringLiteral("inline_bulk"));
             channel.copied_mappings += number_or_zero(values, QStringLiteral("copied_mappings"));
             channel.slice_waits += number_or_zero(values, QStringLiteral("slice_waits"));

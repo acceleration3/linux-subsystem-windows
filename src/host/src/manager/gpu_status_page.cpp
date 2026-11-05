@@ -477,19 +477,24 @@ void GpuStatusPage::fill_transfers() {
             Widgets::meta(QStringLiteral("No transfers needed more than one trip")));
         return;
     }
-    auto* table = new QTableWidget(static_cast<int>(shown.size()), 10);
+    auto* table = new QTableWidget(static_cast<int>(shown.size()), 11);
     Theme::rows_table(table, {QStringLiteral("APP"), QStringLiteral("SPLITS"), QStringLiteral("EXTRA"),
-                              QStringLiteral("WAITS"), QStringLiteral("AVG WAIT"),
+                              QStringLiteral("ARENA ROOM"), QStringLiteral("RING"),
+                              QStringLiteral("FENCE"),
                               QStringLiteral("INLINE"), QStringLiteral("COPIED"),
                               QStringLiteral("SLICE"), QStringLiteral("REFUSED"), QStringLiteral("ARENA")});
     auto* head = table->horizontalHeader();
     head->setSectionResizeMode(0, QHeaderView::Stretch);
-    for (int column = 1; column < 10; ++column) {
+    for (int column = 1; column < 11; ++column) {
         head->setSectionResizeMode(column, QHeaderView::Fixed);
-        table->setColumnWidth(column, column == 4 ? 84 : column == 9 ? 220 : 70);
+        table->setColumnWidth(column, column >= 4 && column <= 6 ? 110 : column == 10 ? 220 : 70);
     }
     table->verticalHeader()->setDefaultSectionSize(30);
     const auto rate = [](double value) { return QString::number(value, 'f', 1); };
+    const auto wait = [&rate](const services::HostWindowStatus::Wait& value) {
+        return value.avg_ms ? QStringLiteral("%1/s, %2 ms").arg(rate(value.per_s)).arg(*value.avg_ms, 0, 'f', 1)
+                            : QStringLiteral("%1/s").arg(rate(value.per_s));
+    };
     for (int row = 0; row < shown.size(); ++row) {
         const auto& t = *shown.at(row);
         const auto peak = t.arena_peak_percent();
@@ -505,8 +510,9 @@ void GpuStatusPage::fill_transfers() {
             t.label(),
             rate(t.splits_per_s),
             rate(t.extra_pieces_per_s),
-            rate(t.waits_per_s),
-            t.avg_wait_ms ? QStringLiteral("%1 ms").arg(*t.avg_wait_ms, 0, 'f', 1) : QStringLiteral("-"),
+            wait(t.blob_room_wait),
+            wait(t.ring_wait),
+            wait(t.fence_wait),
             QString::number(t.inline_bulk),
             QString::number(t.copied_mappings),
             QString::number(t.slice_waits),

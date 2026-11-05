@@ -36,8 +36,12 @@ public:
         quint64 rejected = 0;
         quint64 split_transfers = 0;
         quint64 split_pieces = 0;
-        quint64 room_waits = 0;
-        quint64 room_wait_us = 0;
+        std::optional<quint64> blob_room_waits;
+        std::optional<quint64> blob_room_wait_us;
+        std::optional<quint64> ring_waits;
+        std::optional<quint64> ring_wait_us;
+        std::optional<quint64> fence_waits;
+        std::optional<quint64> fence_wait_us;
         quint64 inline_bulk = 0;
         quint64 copied_mappings = 0;
         quint64 slice_waits = 0;

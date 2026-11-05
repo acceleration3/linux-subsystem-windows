@@ -183,23 +183,31 @@ int main(int argc, char** argv) {
         auto first = executor({channel(1)});
         tracker.add(first, 0);
         const auto* t = transfer(tracker, 1);
-        check(t && near(t->splits_per_s, 0) && !t->avg_wait_ms && !t->active, "a new channel has no rates");
+        check(t && near(t->splits_per_s, 0) && !t->blob_room_wait.avg_ms && !t->active, "a new channel has no rates");
         auto second = executor({channel(1)});
         second.channels[0].split_transfers = 20;
         second.channels[0].split_pieces = 50;
-        second.channels[0].room_waits = 4;
-        second.channels[0].room_wait_us = 8000;
+        second.channels[0].blob_room_waits = 4;
+        second.channels[0].blob_room_wait_us = 8000;
+        second.channels[0].ring_waits = 2;
+        second.channels[0].ring_wait_us = 1000;
+        second.channels[0].fence_waits = 6;
+        second.channels[0].fence_wait_us = 3000;
         tracker.add(second, 2000);
         t = transfer(tracker, 1);
-        check(t && near(t->splits_per_s, 10) && near(t->extra_pieces_per_s, 15) && near(t->waits_per_s, 2),
+        check(t && near(t->splits_per_s, 10) && near(t->extra_pieces_per_s, 15) && near(t->blob_room_wait.per_s, 2),
               "rates are counter deltas per second");
-        check(t && t->avg_wait_ms && near(*t->avg_wait_ms, 2.0), "the average wait is wait time over waits");
+        check(t && t->blob_room_wait.avg_ms && near(*t->blob_room_wait.avg_ms, 2.0), "the average wait is wait time over waits");
+        check(t && near(t->ring_wait.per_s, 1) && t->ring_wait.avg_ms && near(*t->ring_wait.avg_ms, 0.5),
+              "ring waits have their own rate and average");
+        check(t && near(t->fence_wait.per_s, 3) && t->fence_wait.avg_ms && near(*t->fence_wait.avg_ms, 0.5),
+              "fence waits have their own rate and average");
         check(t && t->active, "movement makes a channel active");
         auto third = second;
         third.channels[0].split_transfers = 20;
         tracker.add(third, 3000);
         t = transfer(tracker, 1);
-        check(t && near(t->splits_per_s, 0) && !t->avg_wait_ms, "an idle interval has zero rates and no wait average");
+        check(t && near(t->splits_per_s, 0) && !t->blob_room_wait.avg_ms && !t->ring_wait.avg_ms, "an idle interval has zero rates and no wait average");
         auto fourth = third;
         fourth.channels[0].split_transfers = 5;
         fourth.channels[0].split_pieces = 1;
@@ -282,25 +290,36 @@ int main(int argc, char** argv) {
         snap.channels[0].arena_peak_ring_bytes = 900;
         tracker.add(snap, 0);
         check(!transfer(tracker, 1)->arena_full_at_ms, "the first sample never raises the arena alert");
-        snap.channels[0].room_waits = 1;
+        snap.channels[0].blob_room_waits = 1;
         tracker.add(snap, 1000);
         check(transfer(tracker, 1)->arena_full_at_ms == 1000, "a peak at 90 percent with a new room wait stamps");
         check(transfer(tracker, 1)->arena_peak_percent() == 90, "the peak percent is reported");
         tracker.add(snap, 2000);
         check(transfer(tracker, 1)->arena_full_at_ms == 1000, "no new waits keep the old stamp");
-        snap.channels[0].room_waits = 2;
+        snap.channels[0].blob_room_waits = 2;
         snap.channels[0].arena_peak_ring_bytes = 899;
         tracker.add(snap, 3000);
         check(transfer(tracker, 1)->arena_full_at_ms == 1000, "a peak under 90 percent does not stamp");
-        snap.channels[0].room_waits = 3;
+        snap.channels[0].blob_room_waits = 3;
         snap.channels[0].arena_peak_ring_bytes = 1000;
         tracker.add(snap, 4000);
         check(transfer(tracker, 1)->arena_full_at_ms == 4000, "a full peak with waits stamps again");
-        snap.channels[0].room_waits = 4;
+        snap.channels[0].blob_room_waits = 4;
         snap.channels[0].arena_bytes.reset();
         tracker.add(snap, 5000);
         check(transfer(tracker, 1)->arena_full_at_ms == 4000 && !transfer(tracker, 1)->arena_peak_percent(),
               "an unknown arena does not stamp");
+    }
+    {
+        HostWindowTracker tracker;
+        auto snap = executor({channel(1)});
+        snap.channels[0].arena_bytes = 1000;
+        snap.channels[0].arena_peak_ring_bytes = 1000;
+        tracker.add(snap, 0);
+        snap.channels[0].ring_waits = 5;
+        snap.channels[0].fence_waits = 5;
+        tracker.add(snap, 1000);
+        check(!transfer(tracker, 1)->arena_full_at_ms, "ring and fence waits do not stamp the arena alert");
     }
     {
         HostWindowTracker tracker;
@@ -343,7 +362,7 @@ int main(int argc, char** argv) {
     {
         HostWindowTracker tracker;
         auto snap = executor({channel(1)});
-        snap.channels[0].room_waits = 0;
+        snap.channels[0].blob_room_waits = 0;
         tracker.add(snap, 0);
         snap.channels[0].inline_bulk = 1;
         tracker.add(snap, 1000);

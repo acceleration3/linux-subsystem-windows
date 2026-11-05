@@ -207,23 +207,26 @@ int main(int argc, char** argv) {
     }
     {
         QByteArray dump;
-        dump += channel(5, "reports=10 rejected=1 split_transfers=2 split_pieces=6 room_waits=3 room_wait_us=900 "
+        dump += channel(5, "reports=10 rejected=1 split_transfers=2 split_pieces=6 blob_room_waits=3 blob_room_wait_us=900 ring_waits=7 ring_wait_us=70 fence_waits=8 fence_wait_us=80 "
                            "inline_bulk=4 copied_mappings=5 slice_waits=6 refused_no_space=1 refused_no_memory=2 "
                            "refused_other=3 arena_grows=2 arena_bytes=1000 arena_peak_ring_bytes=400 arena_set_aside_bytes=50 "
                            "arena_segments=3 parked_blobs=4");
         dump += "executor/1/session/2/channel/5 reports=1 refused_other=1 arena_bytes=500 arena_peak_ring_bytes=100 "
                 "arena_set_aside_bytes=25 arena_grows=1 arena_segments=2 parked_blobs=1\n";
         dump += channel(6, "reports=1");
-        dump += channel(7, "arena_bytes=junk arena_peak_ring_bytes=-1 arena_grows=x arena_segments=-2 parked_blobs=y");
+        dump += channel(7, "ring_waits=q fence_wait_us=-3 arena_bytes=junk arena_peak_ring_bytes=-1 arena_grows=x arena_segments=-2 parked_blobs=y");
         const auto snap = parsed(dump);
         check(snap.executor && !snap.device, "channel lines mark the executor");
         check(snap.channels.size() == 3, "channels are keyed by context");
         const auto& c = snap.channels.at(0);
         check(c.context == 5 && c.reports == 11 && c.rejected == 1 && c.split_transfers == 2 && c.split_pieces == 6,
               "channel counters sum across sessions");
-        check(c.room_waits == 3 && c.room_wait_us == 900 && c.inline_bulk == 4 && c.copied_mappings == 5
+        check(c.blob_room_waits == 3 && c.blob_room_wait_us == 900 && c.ring_waits == 7 && c.ring_wait_us == 70
+                  && c.fence_waits == 8 && c.fence_wait_us == 80 && c.inline_bulk == 4 && c.copied_mappings == 5
                   && c.slice_waits == 6,
               "channel wait and mapping counters read");
+        check(!snap.channels.at(2).ring_waits && !snap.channels.at(2).fence_wait_us && !snap.channels.at(1).blob_room_waits,
+              "malformed or missing wait counters stay unknown");
         check(c.refused_no_space == 1 && c.refused_no_memory == 2 && c.refused_other == 4 && c.refused() == 7,
               "refusals sum by reason");
         check(c.arena_bytes == 1500 && c.arena_peak_ring_bytes == 500 && c.arena_set_aside_bytes == 75,

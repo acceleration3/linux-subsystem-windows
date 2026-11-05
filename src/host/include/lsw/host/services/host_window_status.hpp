@@ -25,13 +25,19 @@ struct HostWindowStatus {
         [[nodiscard]] QString label() const;
     };
 
+    struct Wait {
+        double per_s = 0;
+        std::optional<double> avg_ms;
+    };
+
     struct Transfer {
         quint32 context = 0;
         QString name;
         double splits_per_s = 0;
         double extra_pieces_per_s = 0;
-        double waits_per_s = 0;
-        std::optional<double> avg_wait_ms;
+        Wait blob_room_wait;
+        Wait ring_wait;
+        Wait fence_wait;
         quint64 inline_bulk = 0;
         quint64 copied_mappings = 0;
         quint64 slice_waits = 0;
