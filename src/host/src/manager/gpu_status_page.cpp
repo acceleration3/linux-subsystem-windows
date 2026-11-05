@@ -2,6 +2,7 @@
 
 #include "lsw/host/manager/gpu_status_alerts.hpp"
 #include "lsw/host/manager/warning_strip.hpp"
+#include "lsw/host/services/host_window_alerts.hpp"
 #include "lsw/host/services/status_hub.hpp"
 #include "lsw/host/ui/key_values.hpp"
 #include "lsw/host/ui/panel.hpp"
@@ -470,13 +471,7 @@ void GpuStatusPage::fill_transfers() {
         transfers_box_->addWidget(Widgets::meta(QStringLiteral("-")));
         return;
     }
-    QVector<const services::HostWindowStatus::Transfer*> shown;
-    for (const auto& transfer : w.transfers) {
-        const auto peak = transfer.arena_peak_percent();
-        if (transfer.active || (peak && *peak >= 75)) {
-            shown.push_back(&transfer);
-        }
-    }
+    const auto shown = services::HostWindowAlerts::shown_transfers(w);
     if (shown.isEmpty()) {
         transfers_box_->addWidget(
             Widgets::meta(QStringLiteral("No transfers needed more than one trip")));

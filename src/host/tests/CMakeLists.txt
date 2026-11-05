@@ -321,3 +321,12 @@ target_link_libraries(lsw_host_qemu_process_test
 )
 target_compile_definitions(lsw_host_qemu_process_test PRIVATE QT_NO_KEYWORDS)
 add_test(NAME lsw_host_qemu_process_test COMMAND lsw_host_qemu_process_test)
+
+add_executable(lsw_host_host_window_alerts_test host_window_alerts_test.cpp)
+target_link_libraries(lsw_host_host_window_alerts_test
+    PRIVATE
+        lsw_host_core
+        LSW::CompileOptions
+)
+target_compile_definitions(lsw_host_host_window_alerts_test PRIVATE QT_NO_KEYWORDS)
+add_test(NAME lsw_host_host_window_alerts_test COMMAND lsw_host_host_window_alerts_test)
