@@ -293,9 +293,12 @@ void AvStateDump::parse(const QByteArray& dump, Snapshot& into) {
             channel.refused_no_space += number_or_zero(values, QStringLiteral("refused_no_space"));
             channel.refused_no_memory += number_or_zero(values, QStringLiteral("refused_no_memory"));
             channel.refused_other += number_or_zero(values, QStringLiteral("refused_other"));
+            add_known(channel.arena_grows, number(values, QStringLiteral("arena_grows")));
             add_known(channel.arena_bytes, number(values, QStringLiteral("arena_bytes")));
             add_known(channel.arena_peak_ring_bytes, number(values, QStringLiteral("arena_peak_ring_bytes")));
             add_known(channel.arena_set_aside_bytes, number(values, QStringLiteral("arena_set_aside_bytes")));
+            add_known(channel.arena_segments, number(values, QStringLiteral("arena_segments")));
+            add_known(channel.parked_blobs, number(values, QStringLiteral("parked_blobs")));
             into.executor = true;
         } else if (n >= 1 && parts.at(0) == QLatin1String("executor")) {
             into.executor = true;

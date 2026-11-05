@@ -303,6 +303,28 @@ int main(int argc, char** argv) {
               "an unknown arena does not stamp");
     }
     {
+        HostWindowTracker tracker;
+        auto snap = executor({channel(1)});
+        snap.channels[0].arena_grows = 2;
+        snap.channels[0].arena_segments = 3;
+        snap.channels[0].parked_blobs = 1;
+        tracker.add(snap, 0);
+        check(!transfer(tracker, 1)->arena_grows_per_s, "the first sample has no grow rate");
+        check(transfer(tracker, 1)->arena_segments == 3 && transfer(tracker, 1)->parked_blobs == 1
+                  && transfer(tracker, 1)->arena_grows == 2,
+              "segments, parked blobs and grows are carried");
+        snap.channels[0].arena_grows = 6;
+        tracker.add(snap, 2000);
+        check(transfer(tracker, 1)->arena_grows_per_s == 2.0, "grows are a per second rate from deltas");
+        tracker.add(snap, 3000);
+        check(transfer(tracker, 1)->arena_grows_per_s == 0.0, "no new grows is a zero rate");
+        snap.channels[0].arena_grows.reset();
+        snap.channels[0].arena_segments.reset();
+        tracker.add(snap, 4000);
+        check(!transfer(tracker, 1)->arena_grows_per_s && !transfer(tracker, 1)->arena_segments,
+              "missing grows and segments stay unknown");
+    }
+    {
         HostWindowStatus::Transfer t;
         check(!t.arena_peak_percent(), "no arena, no percent");
         t.arena_bytes = 0;

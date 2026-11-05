@@ -209,11 +209,12 @@ int main(int argc, char** argv) {
         QByteArray dump;
         dump += channel(5, "reports=10 rejected=1 split_transfers=2 split_pieces=6 room_waits=3 room_wait_us=900 "
                            "inline_bulk=4 copied_mappings=5 slice_waits=6 refused_no_space=1 refused_no_memory=2 "
-                           "refused_other=3 arena_bytes=1000 arena_peak_ring_bytes=400 arena_set_aside_bytes=50");
+                           "refused_other=3 arena_grows=2 arena_bytes=1000 arena_peak_ring_bytes=400 arena_set_aside_bytes=50 "
+                           "arena_segments=3 parked_blobs=4");
         dump += "executor/1/session/2/channel/5 reports=1 refused_other=1 arena_bytes=500 arena_peak_ring_bytes=100 "
-                "arena_set_aside_bytes=25\n";
+                "arena_set_aside_bytes=25 arena_grows=1 arena_segments=2 parked_blobs=1\n";
         dump += channel(6, "reports=1");
-        dump += channel(7, "arena_bytes=junk arena_peak_ring_bytes=-1");
+        dump += channel(7, "arena_bytes=junk arena_peak_ring_bytes=-1 arena_grows=x arena_segments=-2 parked_blobs=y");
         const auto snap = parsed(dump);
         check(snap.executor && !snap.device, "channel lines mark the executor");
         check(snap.channels.size() == 3, "channels are keyed by context");
@@ -227,6 +228,13 @@ int main(int argc, char** argv) {
               "refusals sum by reason");
         check(c.arena_bytes == 1500 && c.arena_peak_ring_bytes == 500 && c.arena_set_aside_bytes == 75,
               "arena counters sum across sessions");
+        check(c.arena_grows == 3 && c.arena_segments == 5 && c.parked_blobs == 5, "grows, segments and parked blobs sum");
+        check(!snap.channels.at(1).arena_grows && !snap.channels.at(1).arena_segments
+                  && !snap.channels.at(1).parked_blobs,
+              "grows, segments and parked blobs stay unknown when absent");
+        check(!snap.channels.at(2).arena_grows && !snap.channels.at(2).arena_segments
+                  && !snap.channels.at(2).parked_blobs,
+              "grows, segments and parked blobs stay unknown when malformed");
         check(!snap.channels.at(1).arena_bytes && !snap.channels.at(1).arena_peak_ring_bytes
                   && !snap.channels.at(1).arena_set_aside_bytes,
               "arena counters stay unknown when absent");

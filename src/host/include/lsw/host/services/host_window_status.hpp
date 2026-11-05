@@ -38,6 +38,10 @@ struct HostWindowStatus {
         quint64 refusals = 0;
         std::optional<quint64> arena_bytes;
         std::optional<quint64> arena_peak_ring_bytes;
+        std::optional<quint64> arena_segments;
+        std::optional<quint64> parked_blobs;
+        std::optional<quint64> arena_grows;
+        std::optional<double> arena_grows_per_s;
         std::optional<qint64> arena_full_at_ms;
         bool active = false;
         qint64 hot_split_ms = 0;

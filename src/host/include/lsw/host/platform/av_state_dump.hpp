@@ -44,9 +44,12 @@ public:
         quint64 refused_no_space = 0;
         quint64 refused_no_memory = 0;
         quint64 refused_other = 0;
+        std::optional<quint64> arena_grows;
         std::optional<quint64> arena_bytes;
         std::optional<quint64> arena_peak_ring_bytes;
         std::optional<quint64> arena_set_aside_bytes;
+        std::optional<quint64> arena_segments;
+        std::optional<quint64> parked_blobs;
 
         [[nodiscard]] quint64 refused() const noexcept {
             return refused_no_space + refused_no_memory + refused_other;

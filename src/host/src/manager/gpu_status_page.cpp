@@ -486,17 +486,21 @@ void GpuStatusPage::fill_transfers() {
     head->setSectionResizeMode(0, QHeaderView::Stretch);
     for (int column = 1; column < 10; ++column) {
         head->setSectionResizeMode(column, QHeaderView::Fixed);
-        table->setColumnWidth(column, column == 4 ? 84 : column == 9 ? 130 : 70);
+        table->setColumnWidth(column, column == 4 ? 84 : column == 9 ? 220 : 70);
     }
     table->verticalHeader()->setDefaultSectionSize(30);
     const auto rate = [](double value) { return QString::number(value, 'f', 1); };
     for (int row = 0; row < shown.size(); ++row) {
         const auto& t = *shown.at(row);
         const auto peak = t.arena_peak_percent();
-        const QString arena = t.arena_bytes && *t.arena_bytes > 0
-                                  ? (peak ? QStringLiteral("%1, peak %2%").arg(ui::Format::bytes(*t.arena_bytes)).arg(*peak)
-                                          : ui::Format::bytes(*t.arena_bytes))
-                                  : QStringLiteral("-");
+        QString arena = QStringLiteral("-");
+        if (t.arena_bytes && *t.arena_bytes > 0) {
+            const QString size = ui::Format::bytes(*t.arena_bytes);
+            const QString in_segments = t.arena_segments
+                                            ? QStringLiteral("%1 in %2 segments").arg(size).arg(*t.arena_segments)
+                                            : size;
+            arena = peak ? QStringLiteral("%1, peak %2%").arg(in_segments).arg(*peak) : in_segments;
+        }
         const QStringList cells = {
             t.label(),
             rate(t.splits_per_s),

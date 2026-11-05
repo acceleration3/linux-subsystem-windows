@@ -126,6 +126,9 @@ void HostWindowTracker::add(const platform::AvStateDump::Snapshot& snapshot, qin
             if (waits > 0) {
                 transfer.avg_wait_ms = static_cast<double>(wait_us) / static_cast<double>(waits) / 1000.0;
             }
+            if (channel.arena_grows && before.arena_grows) {
+                transfer.arena_grows_per_s = static_cast<double>(delta(*channel.arena_grows, *before.arena_grows)) / seconds;
+            }
             if (transfer.splits_per_s > kHotSplitsPerSecond) {
                 memory.hot_since_ms = memory.hot_since_ms.value_or(*previous_at_ms_);
             } else {
@@ -156,6 +159,9 @@ void HostWindowTracker::add(const platform::AvStateDump::Snapshot& snapshot, qin
         transfer.refusals = channel.refused();
         transfer.arena_bytes = channel.arena_bytes;
         transfer.arena_peak_ring_bytes = channel.arena_peak_ring_bytes;
+        transfer.arena_segments = channel.arena_segments;
+        transfer.parked_blobs = channel.parked_blobs;
+        transfer.arena_grows = channel.arena_grows;
         transfer.arena_full_at_ms = memory.arena_full_at_ms;
         transfer.hot_split_ms = memory.hot_since_ms ? at_ms - *memory.hot_since_ms : 0;
         transfer.refused_at_ms = memory.refused_at_ms;
