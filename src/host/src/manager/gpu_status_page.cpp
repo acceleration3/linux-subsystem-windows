@@ -6,7 +6,9 @@
 #include "lsw/host/ui/key_values.hpp"
 #include "lsw/host/ui/panel.hpp"
 #include "lsw/host/ui/status_pill.hpp"
+#include "lsw/host/ui/format.hpp"
 #include "lsw/host/ui/theme.hpp"
+#include "lsw/host/ui/usage_graph.hpp"
 #include "lsw/host/ui/widgets.hpp"
 
 #include <QDesktopServices>
@@ -109,6 +111,8 @@ GpuStatusPage::GpuStatusPage(services::StatusHub& status, GpuStatusAlerts& alert
     connect(&status_, &services::StatusHub::changed, this, [this](Area area) {
         if (area == Area::Graphics) {
             refresh();
+        } else if (area == Area::HostWindow) {
+            update_window();
         }
     });
     connect(&alerts_, &GpuStatusAlerts::changed, this, &GpuStatusPage::refresh);
@@ -187,15 +191,23 @@ void GpuStatusPage::rebuild() {
     }
     log_meta_ = nullptr;
     log_text_ = nullptr;
+    graph_ = nullptr;
+    window_use_ = nullptr;
+    window_peak_ = nullptr;
+    holders_box_ = nullptr;
+    transfers_box_ = nullptr;
 
     if (auto* warnings = build_warnings()) {
         content_->addWidget(warnings);
     }
     content_->addWidget(build_adapters());
     content_->addWidget(build_guest_driver());
+    content_->addWidget(build_host_window());
+    content_->addWidget(build_transfers());
     content_->addWidget(build_log());
     content_->addStretch(1);
     update_log();
+    update_window();
 }
 
 QWidget* GpuStatusPage::build_warnings() {
@@ -218,6 +230,10 @@ QWidget* GpuStatusPage::build_warnings() {
                     &QPushButton::clicked, this, &GpuStatusPage::open_log);
             break;
         case Warning::Kind::NoDriver:
+        case Warning::Kind::WindowFull:
+        case Warning::Kind::Refusals:
+        case Warning::Kind::SplitTransfers:
+        case Warning::Kind::CopiedMappings:
             break;
         }
         column->addWidget(strip);
@@ -351,6 +367,150 @@ QWidget* GpuStatusPage::build_guest_driver() const {
     }
     panel.body->addStretch(1);
     return panel.frame;
+}
+
+QWidget* GpuStatusPage::build_host_window() {
+    auto panel = card(QStringLiteral("Host window"), QStringLiteral("last 10 minutes"));
+    graph_ = new ui::UsageGraph;
+    panel.body->addWidget(graph_);
+    auto* legend = Widgets::meta(
+        QStringLiteral("<span style=\"color:%1\">&#9632;</span> write-back &nbsp; "
+                       "<span style=\"color:%2\">&#9632;</span> write-combined &nbsp; "
+                       "<span style=\"color:%3\">- -</span> window size")
+            .arg(QString::fromLatin1(Theme::Color::kInfo), QString::fromLatin1(Theme::Color::kAmber),
+                 QString::fromLatin1(Theme::Color::kFgDim)));
+    legend->setTextFormat(Qt::RichText);
+    panel.body->addWidget(legend);
+    KeyValues rows(panel.body);
+    window_use_ = qobject_cast<QLabel*>(
+        rows.add(QStringLiteral("In use"), QStringLiteral("-"))->itemAt(0)->widget());
+    window_peak_ = qobject_cast<QLabel*>(
+        rows.add(QStringLiteral("Peak"), QStringLiteral("-"))->itemAt(0)->widget());
+    panel.body->addWidget(Widgets::caption(QStringLiteral("Held most by")));
+    auto* holders = new QWidget;
+    holders_box_ = new QVBoxLayout(holders);
+    holders_box_->setContentsMargins(0, 0, 0, 0);
+    panel.body->addWidget(holders);
+    return panel.frame;
+}
+
+QWidget* GpuStatusPage::build_transfers() {
+    auto panel = card(QStringLiteral("Transfers"),
+                      QStringLiteral("rates per second, counts since the app started"));
+    auto* holder = new QWidget;
+    transfers_box_ = new QVBoxLayout(holder);
+    transfers_box_->setContentsMargins(0, 0, 0, 0);
+    panel.body->addWidget(holder);
+    return panel.frame;
+}
+
+void GpuStatusPage::update_window() {
+    if (graph_ == nullptr) {
+        return;
+    }
+    const auto& w = status_.host_window();
+    QVector<ui::UsageGraph::Point> points;
+    for (const auto& sample : w.history) {
+        points.push_back({sample.at_ms, sample.write_back, sample.write_back + sample.write_combined});
+    }
+    graph_->set_series(points, w.window_bytes, w.at_ms, services::HostWindowStatus::kHistoryMs);
+    const QString window = w.window_bytes ? ui::Format::bytes(*w.window_bytes) : QStringLiteral("-");
+    window_use_->setText(w.read ? QStringLiteral("%1 of %2").arg(ui::Format::bytes(w.used_bytes), window)
+                                : QStringLiteral("-"));
+    window_peak_->setText(w.peak_bytes ? ui::Format::bytes(*w.peak_bytes) : QStringLiteral("-"));
+    fill_holders();
+    fill_transfers();
+}
+
+void GpuStatusPage::fill_holders() {
+    constexpr int kRows = 6;
+    while (auto* item = holders_box_->takeAt(0)) {
+        if (auto* widget = item->widget()) {
+            widget->hide();
+            widget->deleteLater();
+        }
+        delete item;
+    }
+    const auto& w = status_.host_window();
+    if (!w.read || w.holders.isEmpty()) {
+        holders_box_->addWidget(Widgets::meta(w.read ? QStringLiteral("Nothing is held") : QStringLiteral("-")));
+        return;
+    }
+    const int rows = static_cast<int>(qMin<qsizetype>(w.holders.size(), kRows));
+    auto* table = new QTableWidget(rows, 3);
+    Theme::rows_table(table, {QStringLiteral("APP"), QStringLiteral("HELD"), QStringLiteral("BLOBS")});
+    auto* head = table->horizontalHeader();
+    head->setSectionResizeMode(0, QHeaderView::Stretch);
+    head->setSectionResizeMode(1, QHeaderView::Fixed);
+    head->setSectionResizeMode(2, QHeaderView::Fixed);
+    table->setColumnWidth(1, 112);
+    table->setColumnWidth(2, 80);
+    table->verticalHeader()->setDefaultSectionSize(30);
+    for (int row = 0; row < rows; ++row) {
+        const auto& holder = w.holders.at(row);
+        table->setItem(row, 0, new QTableWidgetItem(holder.label()));
+        table->setItem(row, 1, new QTableWidgetItem(ui::Format::bytes(holder.bytes)));
+        table->setItem(row, 2, new QTableWidgetItem(QString::number(holder.blobs)));
+    }
+    Theme::fit_rows(table);
+    holders_box_->addWidget(table);
+}
+
+void GpuStatusPage::fill_transfers() {
+    while (auto* item = transfers_box_->takeAt(0)) {
+        if (auto* widget = item->widget()) {
+            widget->hide();
+            widget->deleteLater();
+        }
+        delete item;
+    }
+    const auto& w = status_.host_window();
+    if (!w.read || !w.channels_known) {
+        transfers_box_->addWidget(Widgets::meta(QStringLiteral("-")));
+        return;
+    }
+    QVector<const services::HostWindowStatus::Transfer*> shown;
+    for (const auto& transfer : w.transfers) {
+        if (transfer.active) {
+            shown.push_back(&transfer);
+        }
+    }
+    if (shown.isEmpty()) {
+        transfers_box_->addWidget(
+            Widgets::meta(QStringLiteral("No transfers needed more than one trip")));
+        return;
+    }
+    auto* table = new QTableWidget(static_cast<int>(shown.size()), 9);
+    Theme::rows_table(table, {QStringLiteral("APP"), QStringLiteral("SPLITS"), QStringLiteral("EXTRA"),
+                              QStringLiteral("WAITS"), QStringLiteral("AVG WAIT"),
+                              QStringLiteral("INLINE"), QStringLiteral("COPIED"),
+                              QStringLiteral("SLICE"), QStringLiteral("REFUSED")});
+    auto* head = table->horizontalHeader();
+    head->setSectionResizeMode(0, QHeaderView::Stretch);
+    for (int column = 1; column < 9; ++column) {
+        head->setSectionResizeMode(column, QHeaderView::Fixed);
+        table->setColumnWidth(column, column == 4 ? 84 : 70);
+    }
+    table->verticalHeader()->setDefaultSectionSize(30);
+    const auto rate = [](double value) { return QString::number(value, 'f', 1); };
+    for (int row = 0; row < shown.size(); ++row) {
+        const auto& t = *shown.at(row);
+        const QStringList cells = {
+            t.label(),
+            rate(t.splits_per_s),
+            rate(t.extra_pieces_per_s),
+            rate(t.waits_per_s),
+            t.avg_wait_ms ? QStringLiteral("%1 ms").arg(*t.avg_wait_ms, 0, 'f', 1) : QStringLiteral("-"),
+            QString::number(t.inline_bulk),
+            QString::number(t.copied_mappings),
+            QString::number(t.slice_waits),
+            QString::number(t.refusals)};
+        for (int column = 0; column < cells.size(); ++column) {
+            table->setItem(row, column, new QTableWidgetItem(cells.at(column)));
+        }
+    }
+    Theme::fit_rows(table);
+    transfers_box_->addWidget(table);
 }
 
 QWidget* GpuStatusPage::build_log() {

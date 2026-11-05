@@ -2,11 +2,21 @@
 
 #include "lsw/host/services/status_hub.hpp"
 
+#include <QStringList>
+
 namespace lsw::host::manager {
 
 namespace {
 
 using Area = services::StatusHub::Area;
+
+constexpr qint64 kFullHoldMs = 5000;
+constexpr qint64 kHotHoldMs = 10'000;
+constexpr qint64 kRiseShownMs = 60'000;
+
+bool recent(const std::optional<qint64>& at, qint64 now) {
+    return at.has_value() && now - *at <= kRiseShownMs;
+}
 
 }
 
@@ -23,8 +33,26 @@ GpuStatusAlerts::GpuStatusAlerts(services::StatusHub& status, QObject* parent)
         }
         if (area == Area::Graphics) {
             Q_EMIT changed();
+        } else if (area == Area::HostWindow) {
+            const QString signature = window_signature();
+            if (signature != window_signature_) {
+                window_signature_ = signature;
+                Q_EMIT changed();
+            }
         }
     });
+}
+
+QString GpuStatusAlerts::window_signature() const {
+    QStringList parts;
+    for (const auto& warning : warnings()) {
+        if (warning.kind == Warning::Kind::WindowFull || warning.kind == Warning::Kind::Refusals
+            || warning.kind == Warning::Kind::SplitTransfers
+            || warning.kind == Warning::Kind::CopiedMappings) {
+            parts << warning.headline << warning.detail << QString::number(warning.critical);
+        }
+    }
+    return parts.join(QLatin1Char('\x1f'));
 }
 
 QVector<GpuStatusAlerts::Warning> GpuStatusAlerts::warnings() const {
@@ -69,6 +97,59 @@ QVector<GpuStatusAlerts::Warning> GpuStatusAlerts::warnings() const {
                                               "Windows, at the next boot, installs the driver "
                                               "for it.")});
                 break;
+            }
+        }
+    }
+    const auto& w = status_.host_window();
+    if (running && w.read) {
+        const qint64 now = w.at_ms;
+        if (w.full_since_ms && now - *w.full_since_ms >= kFullHoldMs) {
+            const auto top = w.holders.isEmpty() ? nullptr : &w.holders.first();
+            out.push_back({Warning::Kind::WindowFull, false,
+                           top != nullptr
+                               ? QStringLiteral("The host window is over 90% full, mostly with %1.")
+                                     .arg(top->label())
+                               : QStringLiteral("The host window is over 90% full."),
+                           QStringLiteral("It has stayed that full for several seconds. When it "
+                                          "runs out, allocations are refused and the apps see "
+                                          "out-of-memory errors.")});
+        }
+        bool named = false;
+        for (const auto& transfer : w.transfers) {
+            if (recent(transfer.refused_at_ms, now)) {
+                named = true;
+                out.push_back({Warning::Kind::Refusals, true,
+                               QStringLiteral("%1 is being refused host window memory.")
+                                   .arg(transfer.label()),
+                               QStringLiteral("The app sees out-of-memory errors. The host window "
+                                              "has no room for what it asks for.")});
+            }
+        }
+        if (!named && recent(w.window_refused_at_ms, now)) {
+            out.push_back({Warning::Kind::Refusals, true,
+                           QStringLiteral("The host window is refusing allocations."),
+                           QStringLiteral("An app sees out-of-memory errors. The host window has "
+                                          "no room for what it asks for.")});
+        }
+        for (const auto& transfer : w.transfers) {
+            if (transfer.hot_split_ms >= kHotHoldMs) {
+                out.push_back({Warning::Kind::SplitTransfers, false,
+                               QStringLiteral("%1's transfers need several trips through the "
+                                              "host window.")
+                                   .arg(transfer.label()),
+                               QStringLiteral("More than 5 transfers a second have been sent in "
+                                              "pieces for 10 seconds, because the window had no "
+                                              "room for each one whole.")});
+            }
+        }
+        for (const auto& transfer : w.transfers) {
+            if (recent(transfer.copied_at_ms, now)) {
+                out.push_back({Warning::Kind::CopiedMappings, false,
+                               QStringLiteral("%1's dynamic buffers are copied instead of drawn "
+                                              "in place.")
+                                   .arg(transfer.label()),
+                               QStringLiteral("The app keeps rewriting buffers the host cannot "
+                                              "share directly, so every change is copied.")});
             }
         }
     }

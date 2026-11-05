@@ -7,8 +7,10 @@
 #include "lsw/host/link/agent_reply.hpp"
 #include "lsw/host/link/agent_rpc_client.hpp"
 #include "lsw/host/platform/accel_virt_paths.hpp"
+#include "lsw/host/platform/av_state_dump.hpp"
 #include "lsw/host/platform/host_monitors.hpp"
 #include "lsw/host/platform/host_usb_devices.hpp"
+#include "lsw/host/platform/qemu_process.hpp"
 #include "lsw/host/vm/domain_description.hpp"
 #include "lsw/host/vm/lifecycle.hpp"
 #include "lsw/linkproto/commands.hpp"
@@ -29,6 +31,8 @@ using K = config::ManagerSettings::Key;
 
 constexpr int kGraphicsPollMs = 2000;
 constexpr int kSessionsPollMs = 5000;
+constexpr int kWindowFastMs = 1000;
+constexpr int kWindowSlowMs = 5000;
 constexpr int kModesEveryTicks = 5;
 constexpr int kUsbPollMs = 2000;
 constexpr int kMonitorsSettleMs = 250;
@@ -59,6 +63,9 @@ StatusHub::StatusHub(vm::LibvirtConnection& libvirt, vm::Lifecycle& lifecycle,
     connect(&graphics_timer_, &QTimer::timeout, this, &StatusHub::tick_graphics);
     sessions_timer_.setInterval(kSessionsPollMs);
     connect(&sessions_timer_, &QTimer::timeout, this, &StatusHub::ask_sessions);
+    clock_.start();
+    window_timer_.setInterval(kWindowSlowMs);
+    connect(&window_timer_, &QTimer::timeout, this, &StatusHub::sample_window);
     usb_timer_.setInterval(kUsbPollMs);
     connect(&usb_timer_, &QTimer::timeout, this, &StatusHub::read_usb);
 
@@ -137,6 +144,8 @@ void StatusHub::set_target(const QUuid& uuid) {
     graphics_.live_refresh.reset();
     graphics_.scale_percent.reset();
     graphics_timer_.stop();
+    window_timer_.stop();
+    window_.clear();
     usb_ = UsbStatus{};
     update_usb_timer();
     if (!uuid.isNull()) {
@@ -188,10 +197,15 @@ void StatusHub::on_stats(const QUuid& uuid, const vm::VmStats& stats) {
         if (stats.running) {
             graphics_ticks_ = 0;
             graphics_timer_.start();
+            window_timer_.start();
+            sample_window();
             probe_host();
             tick_graphics();
         } else {
             graphics_timer_.stop();
+            window_timer_.stop();
+            window_.clear();
+            Q_EMIT changed(Area::HostWindow);
             graphics_.guest = GuestGpuStatus{};
             graphics_.live_modes.reset();
             graphics_.live_refresh.reset();
@@ -239,6 +253,9 @@ void StatusHub::refresh(Area area) {
         read_usb();
         break;
     case Area::Update:
+        break;
+    case Area::HostWindow:
+        sample_window();
         break;
     }
 }
@@ -314,10 +331,34 @@ void StatusHub::set_detail(Area area, bool on) {
         return;
     }
     graphics_detail_ += on ? 1 : -1;
+    update_window_timer();
     if (on && vm_.running()) {
         tick_graphics();
         ask_guest();
+        sample_window();
     }
+}
+
+void StatusHub::update_window_timer() {
+    window_timer_.setInterval(graphics_detail_ > 0 ? kWindowFastMs : kWindowSlowMs);
+}
+
+void StatusHub::sample_window() {
+    if (!vm_.running() || window_reading_) {
+        return;
+    }
+    window_reading_ = true;
+    const QUuid uuid = vm_.uuid;
+    (void)QtConcurrent::run([this, uuid] {
+        return platform::AvStateDump::read(platform::QemuProcess::pid_of(uuid));
+    }).then(this, [this, uuid](const platform::AvStateDump::Snapshot& snapshot) {
+        window_reading_ = false;
+        if (!vm_.running() || vm_.uuid != uuid) {
+            return;
+        }
+        window_.add(snapshot, clock_.elapsed());
+        Q_EMIT changed(Area::HostWindow);
+    });
 }
 
 void StatusHub::tick_graphics() {

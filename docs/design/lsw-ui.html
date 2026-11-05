@@ -1214,6 +1214,54 @@ svg.ico{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stro
               </div>
             </div>
 
+            <div class="area">
+              <header>
+                <span class="nm">Host window</span>
+                <span class="cap">last 10 minutes</span>
+              </header>
+              <div class="in">
+                <svg viewBox="0 0 640 120" preserveAspectRatio="none" style="width:100%;height:120px;display:block;background:#0f131a;border:1px solid var(--line);border-radius:4px">
+                  <polygon points="10.0,94.6 61.7,94.6 113.3,93.5 165.0,93.5 216.7,92.5 268.3,91.4 320.0,90.3 371.7,91.4 423.3,92.5 475.0,92.5 526.7,92.5 578.3,92.5 630.0,92.5 630.0,100.0 10.0,100.0" fill="var(--info)" fill-opacity="0.6"/>
+                  <polygon points="10.0,90.3 61.7,89.2 113.3,86.0 165.0,87.1 216.7,80.7 268.3,72.0 320.0,63.5 371.7,74.2 423.3,78.5 475.0,77.4 526.7,77.4 578.3,78.5 630.0,77.4 630.0,92.5 578.3,92.5 526.7,92.5 475.0,92.5 423.3,92.5 371.7,91.4 320.0,90.3 268.3,91.4 216.7,92.5 165.0,93.5 113.3,93.5 61.7,94.6 10.0,94.6" fill="var(--amber)" fill-opacity="0.6"/>
+                  <line x1="10" y1="14" x2="630" y2="14" stroke="var(--fg-dim)" stroke-dasharray="4 3"/>
+                  <text x="10" y="10" fill="var(--fg-faint)" font-size="9" font-family="JetBrains Mono,monospace">8 GiB</text>
+                  <text x="10" y="116" fill="var(--fg-faint)" font-size="9" font-family="JetBrains Mono,monospace">10 min</text>
+                </svg>
+                <div class="meta" style="margin-top:8px"><span style="color:var(--info)">&#9632;</span> write-back &nbsp; <span style="color:var(--amber)">&#9632;</span> write-combined &nbsp; <span style="color:var(--fg-dim)">- -</span> window size</div>
+                <dl class="kv" style="margin-top:10px">
+                  <dt>In use</dt><dd>2.1 GiB of 8.0 GiB</dd>
+                  <dt>Peak</dt><dd>3.4 GiB</dd>
+                </dl>
+                <div class="meta" style="margin:12px 0 4px;text-transform:uppercase;letter-spacing:0.12em">Held most by</div>
+                <table class="tbl tight">
+                  <thead><tr><th>App</th><th style="width:112px">Held</th><th style="width:80px">Blobs</th></tr></thead>
+                  <tbody>
+                    <tr><td>3412 Photoshop.exe</td><td>896.0 MiB</td><td>14</td></tr>
+                    <tr><td>5120 explorer.exe</td><td>512.0 MiB</td><td>6</td></tr>
+                    <tr><td>7788 chrome.exe</td><td>384.0 MiB</td><td>9</td></tr>
+                    <tr><td>context 450</td><td>168.0 MiB</td><td>2</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="area">
+              <header>
+                <span class="nm">Transfers</span>
+                <span class="cap">rates per second, counts since the app started</span>
+              </header>
+              <div class="in">
+                <table class="tbl tight">
+                  <thead><tr><th>App</th><th style="width:70px">Splits</th><th style="width:70px">Extra</th><th style="width:70px">Waits</th><th style="width:84px">Avg wait</th><th style="width:70px">Inline</th><th style="width:70px">Copied</th><th style="width:70px">Slice</th><th style="width:70px">Refused</th></tr></thead>
+                  <tbody>
+                    <tr><td>3412 Photoshop.exe</td><td>7.2</td><td>14.4</td><td>1.0</td><td>2.5 ms</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
+                    <tr><td>7788 chrome.exe</td><td>0.0</td><td>0.0</td><td>0.0</td><td>-</td><td>0</td><td>212</td><td>0</td><td>0</td></tr>
+                  </tbody>
+                </table>
+                <div class="meta" style="margin-top:10px">With nothing to show: No transfers needed more than one trip</div>
+              </div>
+            </div>
+
             <div class="panel">
               <header>Driver log
                 <span class="meta" style="letter-spacing:0;text-transform:none">avgpu.log &middot; 1 906 lines &middot; live</span>
@@ -1252,6 +1300,22 @@ svg.ico{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stro
           <span class="wdot"></span>
           <span class="msg"><b>Windows is not running avgpu.sys.</b> The adapter reports problem code 52: test signing is off, so Windows refused the driver's signature.</span>
           <span class="acts"><button class="btn">Open the driver log</button></span>
+        </div>
+        <div class="warnstrip crit">
+          <span class="wdot"></span>
+          <span class="msg"><b>Photoshop.exe is being refused host window memory.</b> The app sees out-of-memory errors. The host window has no room for what it asks for.</span>
+        </div>
+        <div class="warnstrip">
+          <span class="wdot"></span>
+          <span class="msg"><b>The host window is over 90% full, mostly with Photoshop.exe.</b> It has stayed that full for several seconds. When it runs out, allocations are refused and the apps see out-of-memory errors.</span>
+        </div>
+        <div class="warnstrip">
+          <span class="wdot"></span>
+          <span class="msg"><b>Photoshop.exe's transfers need several trips through the host window.</b> More than 5 transfers a second have been sent in pieces for 10 seconds, because the window had no room for each one whole.</span>
+        </div>
+        <div class="warnstrip">
+          <span class="wdot"></span>
+          <span class="msg"><b>chrome.exe's dynamic buffers are copied instead of drawn in place.</b> The app keeps rewriting buffers the host cannot share directly, so every change is copied.</span>
         </div>
         <div class="warnstrip" style="border-bottom:none">
           <span class="wdot"></span>

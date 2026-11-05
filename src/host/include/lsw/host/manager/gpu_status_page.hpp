@@ -3,9 +3,11 @@
 #include <QWidget>
 
 class QLabel;
+class QTableWidget;
 class QVBoxLayout;
 
 namespace lsw::host::services { class StatusHub; }
+namespace lsw::host::ui { class UsageGraph; }
 
 namespace lsw::host::manager {
 
@@ -29,11 +31,16 @@ private:
     void refresh();
     void rebuild();
     void update_log();
+    void update_window();
+    void fill_holders();
+    void fill_transfers();
     [[nodiscard]] QString signature() const;
 
     [[nodiscard]] QWidget* build_warnings();
     [[nodiscard]] QWidget* build_adapters() const;
     [[nodiscard]] QWidget* build_guest_driver() const;
+    [[nodiscard]] QWidget* build_host_window();
+    [[nodiscard]] QWidget* build_transfers();
     [[nodiscard]] QWidget* build_log();
     void open_log() const;
 
@@ -42,6 +49,11 @@ private:
     QVBoxLayout* content_ = nullptr;
     QLabel* log_meta_ = nullptr;
     QLabel* log_text_ = nullptr;
+    ui::UsageGraph* graph_ = nullptr;
+    QLabel* window_use_ = nullptr;
+    QLabel* window_peak_ = nullptr;
+    QVBoxLayout* holders_box_ = nullptr;
+    QVBoxLayout* transfers_box_ = nullptr;
     QString built_for_;
 };
 

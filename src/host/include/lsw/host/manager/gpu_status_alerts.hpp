@@ -15,6 +15,10 @@ public:
             DisplayNotRunning,
             DisplayNoDriver,
             NoDriver,
+            WindowFull,
+            Refusals,
+            SplitTransfers,
+            CopiedMappings,
         };
         Kind kind = Kind::DisplayNotRunning;
         bool critical = false;
@@ -33,7 +37,10 @@ Q_SIGNALS:
     void changed();
 
 private:
+    [[nodiscard]] QString window_signature() const;
+
     services::StatusHub& status_;
+    QString window_signature_;
     bool running_ = false;
     bool agent_online_ = false;
 };
