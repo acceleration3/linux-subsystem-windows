@@ -629,6 +629,7 @@ booted_checkpoint() {
 capset_accepted() {
     local mark="$1" lines
     [[ -f "$AVGPU_LOG" ]] || return 1
+    [[ "$(stat -c%s "$AVGPU_LOG")" -ge "$mark" ]] || mark=0
     lines="$(tail -c +$((mark + 1)) "$AVGPU_LOG" | grep 'device capset status' | tail -n1 || true)"
     [[ "$lines" == *'status 0x00000000' ]]
 }
