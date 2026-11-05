@@ -16,6 +16,7 @@ public:
         Overview,
         Display,
         Graphics,
+        GpuStatus,
         Files,
         Usb,
         Console,
@@ -38,6 +39,7 @@ public:
     void set_usb_count(int devices);
     void set_pending(Page page, int changes);
     void set_graphics_warning(const char* tone);
+    void set_gpu_status_warning(const char* tone);
 
     void set_guest_provisioned(bool provisioned);
 

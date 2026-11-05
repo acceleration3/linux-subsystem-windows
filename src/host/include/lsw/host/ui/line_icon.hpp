@@ -17,6 +17,7 @@ public:
         Overview,
         Display,
         Graphics,
+        GpuStatus,
         Files,
         Usb,
         Console,

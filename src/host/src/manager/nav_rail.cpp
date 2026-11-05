@@ -35,6 +35,7 @@ constexpr std::array<ItemSpec, kPageCount> kItems{{
     {NavRail::Page::Overview, Shape::Overview, "Overview", true},
     {NavRail::Page::Display, Shape::Display, "Display", false},
     {NavRail::Page::Graphics, Shape::Graphics, "Graphics", false},
+    {NavRail::Page::GpuStatus, Shape::GpuStatus, "GPU status", false},
     {NavRail::Page::Files, Shape::Files, "Files", false},
     {NavRail::Page::Usb, Shape::Usb, "USB", true},
     {NavRail::Page::Console, Shape::Console, "Console", false},
@@ -210,7 +211,8 @@ void NavRail::show_marker(Page page) {
 
 void NavRail::set_guest_provisioned(bool provisioned) {
     for (const auto& spec : kItems) {
-        if (spec.page == Page::Console || spec.page == Page::Graphics) {
+        if (spec.page == Page::Console || spec.page == Page::Graphics ||
+            spec.page == Page::GpuStatus) {
             items_[static_cast<int>(spec.page)]->setEnabled(provisioned);
         }
     }
@@ -236,6 +238,10 @@ void NavRail::set_pending(Page page, int changes) {
 
 void NavRail::set_graphics_warning(const char* tone) {
     set_marker(Page::Graphics, tone != nullptr ? QStringLiteral("●") : QString{}, tone);
+}
+
+void NavRail::set_gpu_status_warning(const char* tone) {
+    set_marker(Page::GpuStatus, tone != nullptr ? QStringLiteral("●") : QString{}, tone);
 }
 
 }

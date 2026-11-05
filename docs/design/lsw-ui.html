@@ -742,6 +742,7 @@ svg.ico{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stro
     <symbol id="i-overview" viewBox="0 0 20 20"><rect x="3" y="3" width="6" height="6" rx="1.5"/><rect x="11" y="3" width="6" height="6" rx="1.5"/><rect x="3" y="11" width="6" height="6" rx="1.5"/><rect x="11" y="11" width="6" height="6" rx="1.5"/></symbol>
     <symbol id="i-display" viewBox="0 0 20 20"><rect x="2.5" y="3.5" width="15" height="10.5" rx="2"/><path d="M10 14v2.5M6.5 16.5h7"/></symbol>
     <symbol id="i-graphics" viewBox="0 0 20 20"><rect x="5.5" y="5.5" width="9" height="9" rx="1.5"/><rect x="8.5" y="8.5" width="3" height="3"/><path d="M8 2.5v3M12 2.5v3M8 14.5v3M12 14.5v3M2.5 8h3M2.5 12h3M14.5 8h3M14.5 12h3"/></symbol>
+    <symbol id="i-gpustatus" viewBox="0 0 20 20"><rect x="2.5" y="4.5" width="15" height="11" rx="2"/><path d="M5.5 10h2.5l1.5-3 2 6 1.5-3h2"/></symbol>
     <symbol id="i-files" viewBox="0 0 20 20"><path d="M2.5 6.5v8a1.5 1.5 0 0 0 1.5 1.5h12a1.5 1.5 0 0 0 1.5-1.5V8a1.5 1.5 0 0 0-1.5-1.5H10L8.3 4.5H4A1.5 1.5 0 0 0 2.5 6Z"/></symbol>
     <symbol id="i-usb" viewBox="0 0 20 20"><rect x="7.25" y="2.5" width="5.5" height="4" rx="0.8"/><rect x="5.5" y="6.5" width="9" height="7" rx="2"/><path d="M10 13.5v4"/></symbol>
     <symbol id="i-console" viewBox="0 0 20 20"><rect x="2.5" y="3.5" width="15" height="13" rx="2"/><path d="M6 8l2.5 2.25L6 12.5M10.5 12.5H14"/></symbol>
@@ -776,6 +777,7 @@ svg.ico{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stro
         <li><button data-view="m-main" aria-current="true">Overview</button></li>
         <li><button data-view="m-display">Display</button></li>
         <li><button data-view="m-gpu">Graphics</button></li>
+        <li><button data-view="m-gpustatus">GPU status</button></li>
         <li><button data-view="m-files">Files</button></li>
         <li><button data-view="m-usb">USB</button></li>
         <li><button data-view="m-console">Console</button></li>
@@ -1013,9 +1015,9 @@ svg.ico{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stro
       <div class="titlebar">
         <span class="dot"></span><span class="dot"></span><span class="dot"></span>
         <span class="t"><img class="logo" src="../../packaging/lsw-manager.svg" alt="">LSW</span>
-        <span class="spacer mono">1000 &times; 1076, scrolls</span>
+        <span class="spacer mono">1000 &times; 860</span>
       </div>
-      <div class="mgr2" style="min-height:1060px">
+      <div class="mgr2" style="min-height:844px">
         <aside class="nav">
           <div class="id">
             <span class="n">lsw</span>
@@ -1040,7 +1042,7 @@ svg.ico{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stro
               <header>
                 <span class="nm">AMD Radeon RX 9070 XT</span>
                 <span class="cap">1002:7550</span>
-                <span class="right"><span class="input select sm" style="width:128px">Display</span><span class="pill done">Started</span></span>
+                <span class="right"><span class="input select sm" style="width:128px">Display</span></span>
               </header>
               <div class="in">
                 <div class="kpis">
@@ -1088,50 +1090,17 @@ svg.ico{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stro
               </div>
             </div>
 
-            <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px">
-              <div class="area">
-                <header>
-                  <span class="nm">Device</span>
-                  <span class="cap">virtio-gpu-av-pci</span>
-                </header>
-                <div class="in">
-                  <dl class="kv">
-                    <dt>Host window</dt><dd style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="input select sm" style="width:92px">8 GiB</span><span class="tagr">restart</span><span class="meta" style="margin:0">write-back, used on demand</span></dd>
-                    <dt>Display</dt><dd>2560 &times; 1440 at 360 Hz <span class="meta">set on the Display page</span></dd>
-                    <dt>Adapters</dt><dd>1 <span class="meta">the display; a render-only one after a restart</span></dd>
-                  </dl>
-                </div>
-              </div>
-
-              <div class="area">
-                <header>
-                  <span class="nm">Guest driver</span>
-                  <span class="cap">avgpu.sys 0.9.0.41</span>
-                  <span class="right"><span class="pill done">Running</span></span>
-                </header>
-                <div class="in">
-                  <dl class="kv">
-                    <dt>RX 9070 XT</dt><dd><span class="yes">Running</span> <span class="meta">no problem code</span></dd>
-                    <dt>Test signing</dt><dd><span class="yes">On</span> <span class="meta">the driver needs it</span></dd>
-                    <dt>Driver search</dt><dd><span class="yes">Off</span> <span class="meta">Update cannot replace it</span></dd>
-                    <dt>Submission</dt><dd>User mode <span class="meta">native fences on</span></dd>
-                  </dl>
-                </div>
-              </div>
-            </div>
-
-            <div class="panel">
-              <header>Driver log
-                <span class="meta" style="letter-spacing:0;text-transform:none">avgpu.log &middot; 1 906 lines &middot; live</span>
-                <span class="tools"><button class="btn quiet" style="padding:2px 9px;font-size:12px;letter-spacing:0;text-transform:none;font-family:Archivo,sans-serif">Open the full log</button></span>
+            <div class="area">
+              <header>
+                <span class="nm">Device</span>
+                <span class="cap">virtio-gpu-av-pci</span>
               </header>
-              <div class="term" style="padding:9px 14px;font-size:11.5px;line-height:1.7">
-                <div><span class="d">avgpu: device capset status 0x00000000</span></div>
-                <div><span class="d">avgpu: presents are moved by the device's present engine</span></div>
-                <div><span class="d">avgpu: the host offers 4 modes, 4 taken, preferred 2560x1440</span></div>
-                <div><span class="d">avgpu: StartDevice</span></div>
-                <div><span class="d">avgpu: av context on doorbell 4 message 3 status 0x00000000</span></div>
-                <div>avgpu: av context on doorbell 5 message 4 status 0x00000000</div>
+              <div class="in">
+                <dl class="kv">
+                  <dt>Host window</dt><dd style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="input select sm" style="width:92px">8 GiB</span><span class="tagr">restart</span><span class="meta" style="margin:0">write-back, used on demand</span></dd>
+                  <dt>Display</dt><dd>2560 &times; 1440 at 360 Hz <span class="meta">set on the Display page</span></dd>
+                  <dt>Adapters</dt><dd>1 <span class="meta">the display; a render-only one after a restart</span></dd>
+                </dl>
               </div>
             </div>
           </div>
@@ -1173,18 +1142,120 @@ svg.ico{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stro
           <span class="msg"><b>The host serves no Direct3D.</b> DXVK and vkd3d-proton were not found, and Windows draws its desktop with Direct3D 11, so it will keep restarting until they are.</span>
           <span class="acts"><button class="btn">Check again</button></span>
         </div>
+        <div class="warnstrip" style="border-bottom:none">
+          <span class="wdot"></span>
+          <span class="msg"><b>Resizable BAR is off for Radeon RX 9070 XT.</b> The CPU can reach only 256 MiB of its VRAM, so once that fills, uploads through the host window go to system RAM. Turn on Above 4G Decoding and Resizable BAR in the firmware settings.</span>
+        </div>
+      </div>
+    </div>
+
+  </section>
+
+  <section data-view="m-gpustatus" hidden>
+    <div class="stage-head">
+      <span class="eyebrow">Manager</span>
+      <h1>GPU status</h1>
+    </div>
+
+    <div class="frame">
+      <div class="titlebar">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <span class="t"><img class="logo" src="../../packaging/lsw-manager.svg" alt="">LSW</span>
+        <span class="spacer mono">1000 &times; 860</span>
+      </div>
+      <div class="mgr2" style="min-height:844px">
+        <aside class="nav">
+          <div class="id">
+            <span class="n">lsw</span>
+            <span class="m">Windows 11 Pro 26200<br>8 cores &middot; 8 GiB &middot; 60 GiB<br>AMD Radeon RX 9070 XT +1 render</span>
+          </div>
+          <ul data-nav="gpustatus"></ul>
+          <div class="power">
+            <span class="badge on">ONLINE</span>
+            <button class="btn stop">Stop the guest</button>
+          </div>
+        </aside>
+
+        <div class="content">
+          <div class="cbar">
+            <h4>GPU status</h4>
+            <span class="sub">avgpu.sys &middot; 1 of 1 adapters started</span>
+          </div>
+
+          <div class="areas" style="flex:1">
+            <div class="area">
+              <header>
+                <span class="nm">Adapters</span>
+                <span class="cap">what Windows lists</span>
+              </header>
+              <div class="in">
+                <table class="tbl tight">
+                  <thead><tr><th>Adapter</th><th style="width:112px">Role</th><th style="width:148px">In Windows</th></tr></thead>
+                  <tbody>
+                    <tr><td>AMD Radeon RX 9070 XT</td><td>Display</td><td><span class="pill done">Started</span></td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="area">
+              <header>
+                <span class="nm">Guest driver</span>
+                <span class="cap">avgpu.sys 0.9.0.41</span>
+                <span class="right"><span class="pill done">Running</span></span>
+              </header>
+              <div class="in">
+                <dl class="kv">
+                  <dt>RX 9070 XT</dt><dd><span class="yes">Running</span> <span class="meta">no problem code</span></dd>
+                  <dt>Test signing</dt><dd><span class="yes">On</span> <span class="meta">the driver needs it</span></dd>
+                  <dt>Driver search</dt><dd><span class="yes">Off</span> <span class="meta">Update cannot replace it</span></dd>
+                  <dt>Submission</dt><dd>User mode <span class="meta">native fences on</span></dd>
+                </dl>
+              </div>
+            </div>
+
+            <div class="panel">
+              <header>Driver log
+                <span class="meta" style="letter-spacing:0;text-transform:none">avgpu.log &middot; 1 906 lines &middot; live</span>
+                <span class="tools"><button class="btn quiet" style="padding:2px 9px;font-size:12px;letter-spacing:0;text-transform:none;font-family:Archivo,sans-serif">Open the full log</button></span>
+              </header>
+              <div class="term" style="padding:9px 14px;font-size:11.5px;line-height:1.7">
+                <div><span class="d">avgpu: device capset status 0x00000000</span></div>
+                <div><span class="d">avgpu: presents are moved by the device's present engine</span></div>
+                <div><span class="d">avgpu: the host offers 4 modes, 4 taken, preferred 2560x1440</span></div>
+                <div><span class="d">avgpu: StartDevice</span></div>
+                <div><span class="d">avgpu: av context on doorbell 4 message 3 status 0x00000000</span></div>
+                <div>avgpu: av context on doorbell 5 message 4 status 0x00000000</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="statusbar">
+            <span><b>agent</b> 127.0.0.1:5102</span>
+            <span class="sep"></span>
+            <span><b>disk</b> NVMe, 60 GiB</span>
+            <span class="sep"></span>
+            <span><b>guest</b> agent answering</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h3 style="margin:26px 0 12px;font-size:14px">What it warns about</h3>
+    <div class="frame">
+      <div class="titlebar">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <span class="t">LSW, GPU status, warning strips</span>
+      </div>
+      <div style="background:var(--ink)">
         <div class="warnstrip crit">
           <span class="wdot"></span>
           <span class="msg"><b>Windows is not running avgpu.sys.</b> The adapter reports problem code 52: test signing is off, so Windows refused the driver's signature.</span>
           <span class="acts"><button class="btn">Open the driver log</button></span>
         </div>
-        <div class="warnstrip">
-          <span class="wdot"></span>
-          <span class="msg"><b>Windows has no driver for Intel UHD Graphics 770.</b> It was added as an adapter after the driver package was installed, so Windows has not matched it to avgpu.sys yet. LSW's next update of Windows, at the next boot, installs the driver for it.</span>
-        </div>
         <div class="warnstrip" style="border-bottom:none">
           <span class="wdot"></span>
-          <span class="msg"><b>Resizable BAR is off for Radeon RX 9070 XT.</b> The CPU can reach only 256 MiB of its VRAM, so once that fills, uploads through the host window go to system RAM. Turn on Above 4G Decoding and Resizable BAR in the firmware settings.</span>
+          <span class="msg"><b>Windows has no driver for Intel UHD Graphics 770.</b> It was added as an adapter after the driver package was installed, so Windows has not matched it to avgpu.sys yet. LSW's next update of Windows, at the next boot, installs the driver for it.</span>
         </div>
       </div>
     </div>
@@ -3266,7 +3337,7 @@ svg.ico{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stro
 
   var NAV = [
     ["overview", "Overview"], null,
-    ["display", "Display"], ["graphics", "Graphics"], ["files", "Files"], ["usb", "USB"], null,
+    ["display", "Display"], ["graphics", "Graphics"], ["gpustatus", "GPU status"], ["files", "Files"], ["usb", "USB"], null,
     ["console", "Console"], ["log", "Log"], ["maint", "Maintenance"], null,
     ["settings", "Settings"]
   ];

@@ -104,7 +104,7 @@ private:
     vm::AvgpuLog log_;
     QTimer graphics_timer_;
     int graphics_ticks_ = 0;
-    bool graphics_detail_ = false;
+    int graphics_detail_ = 0;
     QTimer sessions_timer_;
     bool probing_ = false;
     QTimer monitors_timer_;

@@ -313,7 +313,7 @@ void StatusHub::set_detail(Area area, bool on) {
     if (area != Area::Graphics) {
         return;
     }
-    graphics_detail_ = on;
+    graphics_detail_ += on ? 1 : -1;
     if (on && vm_.running()) {
         tick_graphics();
         ask_guest();
@@ -332,7 +332,7 @@ void StatusHub::tick_graphics() {
         graphics_.log_facts = log_.facts();
         changed_now = true;
     }
-    if (graphics_detail_ || graphics_ticks_ % kModesEveryTicks == 1) {
+    if (graphics_detail_ > 0 || graphics_ticks_ % kModesEveryTicks == 1) {
         read_modes();
     }
     if (changed_now) {

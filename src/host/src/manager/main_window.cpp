@@ -9,6 +9,8 @@
 #include "lsw/host/manager/console_panel.hpp"
 #include "lsw/host/manager/display_page.hpp"
 #include "lsw/host/manager/files_page.hpp"
+#include "lsw/host/manager/gpu_status_alerts.hpp"
+#include "lsw/host/manager/gpu_status_page.hpp"
 #include "lsw/host/manager/graphics_alerts.hpp"
 #include "lsw/host/manager/graphics_page.hpp"
 #include "lsw/host/manager/log_panel.hpp"
@@ -80,6 +82,7 @@ constexpr std::array<PageInfo, static_cast<std::size_t>(NavRail::Page::Count)> k
     {"Overview", ""},
     {"Display", ""},
     {"Graphics", ""},
+    {"GPU status", ""},
     {"Files", ""},
     {"USB", ""},
     {"Console", ""},
@@ -258,6 +261,9 @@ MainWindow::MainWindow(services::HostServices& services, QWidget* parent)
     refresh_pending_counts();
     connect(alerts_, &GraphicsAlerts::changed, this, &MainWindow::on_graphics_changed);
     connect(graphics_page_, &GraphicsPage::summary_changed, this, &MainWindow::on_graphics_changed);
+    connect(gpu_status_alerts_, &GpuStatusAlerts::changed, this, &MainWindow::on_graphics_changed);
+    connect(gpu_status_page_, &GpuStatusPage::summary_changed, this,
+            &MainWindow::on_graphics_changed);
     connect(&services_.manager_settings(), &config::ManagerSettings::changed, this,
             [this](const QString& key) {
                 if (key == K::kDisplayModes || key == K::kMatchHostOutput) {
@@ -324,6 +330,8 @@ void MainWindow::build_pages() {
     graphics_page_ =
         new GraphicsPage(services_.status(), *alerts_, services_.manager_settings(),
                          services_.pending_changes(), this);
+    gpu_status_alerts_ = new GpuStatusAlerts(services_.status(), this);
+    gpu_status_page_ = new GpuStatusPage(services_.status(), *gpu_status_alerts_, this);
     settings_page_ = new SettingsPage(services_.manager_settings(), services_.pending_changes(),
                                       services_.status(), services_.log_verbosity(), this);
 
@@ -334,6 +342,7 @@ void MainWindow::build_pages() {
     stack_->addWidget(overview_stack_);
     stack_->addWidget(display_page_);
     stack_->addWidget(graphics_page_);
+    stack_->addWidget(gpu_status_page_);
     stack_->addWidget(files_page_);
     stack_->addWidget(usb_page_);
     stack_->addWidget(console_);
@@ -607,6 +616,8 @@ QString MainWindow::page_detail(NavRail::Page page) const {
     }
     case NavRail::Page::Graphics:
         return graphics_page_ != nullptr ? graphics_page_->summary() : QString{};
+    case NavRail::Page::GpuStatus:
+        return gpu_status_page_ != nullptr ? gpu_status_page_->summary() : QString{};
     case NavRail::Page::Log:
         return services_.status().vm().agent_online() ? QStringLiteral("live")
                                                       : QStringLiteral("agent not answering");
@@ -669,17 +680,38 @@ void MainWindow::on_graphics_changed() {
 
 void MainWindow::refresh_warning() {
     using Severity = GraphicsAlerts::Severity;
+    const auto tone = [](bool red, bool amber) -> const char* {
+        return red ? Theme::Tone::kBad : amber ? Theme::Tone::kAmber : nullptr;
+    };
     const Severity worst = alerts_->worst();
-    rail_->set_graphics_warning(worst == Severity::Red     ? Theme::Tone::kBad
-                                : worst == Severity::Amber ? Theme::Tone::kAmber
-                                                           : nullptr);
-    std::optional<GraphicsAlerts::Warning> shown;
+    rail_->set_graphics_warning(tone(worst == Severity::Red, worst == Severity::Amber));
+    const GpuStatusAlerts::Severity gpu_worst = gpu_status_alerts_->worst();
+    rail_->set_gpu_status_warning(tone(gpu_worst == GpuStatusAlerts::Severity::Red,
+                                       gpu_worst == GpuStatusAlerts::Severity::Amber));
+
+    struct Shown {
+        bool critical;
+        QString headline;
+        QString detail;
+        NavRail::Page page;
+        QString open;
+    };
+    std::optional<Shown> shown;
     for (const auto& warning : alerts_->warnings()) {
-        if (warning.kind == GraphicsAlerts::Warning::Kind::NoDirect3d ||
-            warning.kind == GraphicsAlerts::Warning::Kind::DisplayNotRunning ||
-            warning.kind == GraphicsAlerts::Warning::Kind::DisplayNoDriver) {
-            shown = warning;
+        if (warning.kind == GraphicsAlerts::Warning::Kind::NoDirect3d) {
+            shown = Shown{warning.critical, warning.headline, warning.detail,
+                          NavRail::Page::Graphics, QStringLiteral("Open Graphics")};
             break;
+        }
+    }
+    if (!shown) {
+        for (const auto& warning : gpu_status_alerts_->warnings()) {
+            if (warning.kind == GpuStatusAlerts::Warning::Kind::DisplayNotRunning ||
+                warning.kind == GpuStatusAlerts::Warning::Kind::DisplayNoDriver) {
+                shown = Shown{warning.critical, warning.headline, warning.detail,
+                              NavRail::Page::GpuStatus, QStringLiteral("Open GPU status")};
+                break;
+            }
         }
     }
     if (!shown || rail_->current() != NavRail::Page::Overview) {
@@ -687,10 +719,9 @@ void MainWindow::refresh_warning() {
         return;
     }
     warn_strip_->set_message(shown->critical, shown->headline, shown->detail);
-    if (warn_strip_->findChild<QPushButton*>() == nullptr) {
-        connect(warn_strip_->add_button(QStringLiteral("Open Graphics")), &QPushButton::clicked,
-                this, [this] { show_page(NavRail::Page::Graphics); });
-    }
+    warn_strip_->clear_buttons();
+    connect(warn_strip_->add_button(shown->open), &QPushButton::clicked, this,
+            [this, page = shown->page] { show_page(page); });
     warn_strip_->setVisible(true);
 }
 

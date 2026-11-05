@@ -13,9 +13,6 @@ public:
     struct Warning {
         enum class Kind {
             NoDirect3d,
-            DisplayNotRunning,
-            DisplayNoDriver,
-            NoDriver,
             ResizableBarOff,
         };
         Kind kind = Kind::NoDirect3d;
@@ -36,8 +33,6 @@ Q_SIGNALS:
 
 private:
     services::StatusHub& status_;
-    bool running_ = false;
-    bool agent_online_ = false;
 };
 
 }

@@ -32,6 +32,7 @@ SCREENS = [
     ("manager-08-files", "m-files", 1000, 700),
     ("manager-09-usb", "m-usb", 1000, 800),
     ("manager-10-maintenance", "m-maint", 1000, 700),
+    ("manager-11-gpu-status", "m-gpustatus", 1000, 860),
     ("wizard-01-page", "w-1", 880, 660),
     ("wizard-02-page", "w-2", 880, 620),
     ("wizard-03-page", "w-3", 880, 660),
