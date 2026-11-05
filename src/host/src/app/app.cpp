@@ -33,6 +33,7 @@
 #include <QMetaObject>
 #include <QProcess>
 
+#include <cstdint>
 #include <string>
 #include <utility>
 
@@ -405,7 +406,8 @@ void App::start_mcp_server() {
         return;
     }
     mcp_server_ = std::make_unique<mcp::McpServer>(services_.rpc(), services_.log_store(), services_.guest_update(), services_.status(), services_.log_collector(), services_.log_cleaner(), this);
-    (void)mcp_server_->listen();
+    const int port = qEnvironmentVariableIntValue("LSW_MCP_PORT");
+    (void)mcp_server_->listen(port > 0 ? static_cast<std::uint16_t>(port) : std::uint16_t{5105});
 }
 
 void App::on_wizard_complete() {
