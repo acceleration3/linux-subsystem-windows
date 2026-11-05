@@ -8,8 +8,9 @@ namespace lsw::host::platform {
 
 namespace {
 constexpr qint64 kMaxCmdline = 256 * 1024;
+}
 
-bool runs_domain(const QByteArray& cmdline, const QByteArray& uuid) {
+bool QemuProcess::runs_domain(const QByteArray& cmdline, const QByteArray& uuid) {
     const QList<QByteArray> args = cmdline.split('\0');
     for (qsizetype i = 0; i + 1 < args.size(); ++i) {
         if (args.at(i) == "-uuid" && args.at(i + 1).compare(uuid, Qt::CaseInsensitive) == 0) {
@@ -17,8 +18,6 @@ bool runs_domain(const QByteArray& cmdline, const QByteArray& uuid) {
         }
     }
     return false;
-}
-
 }
 
 qint64 QemuProcess::pid_of(const QUuid& uuid) {

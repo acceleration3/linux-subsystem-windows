@@ -294,3 +294,30 @@ target_link_libraries(lsw_host_log_cleaner_test PRIVATE lsw_host_core LSW::Compi
 target_compile_definitions(lsw_host_log_cleaner_test PRIVATE QT_NO_KEYWORDS)
 add_test(NAME lsw_host_log_cleaner_test COMMAND lsw_host_log_cleaner_test)
 set_tests_properties(lsw_host_log_cleaner_test PROPERTIES TIMEOUT 120)
+
+add_executable(lsw_host_av_state_dump_test av_state_dump_test.cpp)
+target_link_libraries(lsw_host_av_state_dump_test
+    PRIVATE
+        lsw_host_core
+        LSW::CompileOptions
+)
+target_compile_definitions(lsw_host_av_state_dump_test PRIVATE QT_NO_KEYWORDS)
+add_test(NAME lsw_host_av_state_dump_test COMMAND lsw_host_av_state_dump_test)
+
+add_executable(lsw_host_host_window_status_test host_window_status_test.cpp)
+target_link_libraries(lsw_host_host_window_status_test
+    PRIVATE
+        lsw_host_core
+        LSW::CompileOptions
+)
+target_compile_definitions(lsw_host_host_window_status_test PRIVATE QT_NO_KEYWORDS)
+add_test(NAME lsw_host_host_window_status_test COMMAND lsw_host_host_window_status_test)
+
+add_executable(lsw_host_qemu_process_test qemu_process_test.cpp)
+target_link_libraries(lsw_host_qemu_process_test
+    PRIVATE
+        lsw_host_core
+        LSW::CompileOptions
+)
+target_compile_definitions(lsw_host_qemu_process_test PRIVATE QT_NO_KEYWORDS)
+add_test(NAME lsw_host_qemu_process_test COMMAND lsw_host_qemu_process_test)
