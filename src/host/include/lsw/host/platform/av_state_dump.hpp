@@ -27,7 +27,7 @@ public:
         quint64 peak_pages_in_use = 0;
         quint64 refusals = 0;
         quint64 refused_bytes = 0;
-        quint64 largest_free_run = 0;
+        quint64 largest_free_run_at_refusal = 0;
     };
 
     struct Channel {

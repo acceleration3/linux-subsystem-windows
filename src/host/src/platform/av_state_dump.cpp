@@ -264,8 +264,8 @@ void AvStateDump::parse(const QByteArray& dump, Snapshot& into) {
                 stats.peak_pages_in_use += number_or_zero(values, QStringLiteral("peak_pages_in_use"));
                 stats.refusals += number_or_zero(values, QStringLiteral("refusals"));
                 stats.refused_bytes += number_or_zero(values, QStringLiteral("refused_bytes"));
-                stats.largest_free_run =
-                    std::max(stats.largest_free_run, number_or_zero(values, QStringLiteral("largest_free_run")));
+                stats.largest_free_run_at_refusal =
+                    std::max(stats.largest_free_run_at_refusal, number_or_zero(values, QStringLiteral("largest_free_run_at_refusal")));
                 into.window_stats = stats;
             }
         } else if (n == 6 && parts.at(0) == QLatin1String("executor") && parts.at(2) == QLatin1String("session")
