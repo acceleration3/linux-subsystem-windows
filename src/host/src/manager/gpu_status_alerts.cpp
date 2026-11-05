@@ -48,7 +48,7 @@ QString GpuStatusAlerts::window_signature() const {
     for (const auto& warning : warnings()) {
         if (warning.kind == Warning::Kind::WindowFull || warning.kind == Warning::Kind::Refusals
             || warning.kind == Warning::Kind::SplitTransfers
-            || warning.kind == Warning::Kind::CopiedMappings) {
+            || warning.kind == Warning::Kind::CopiedMappings || warning.kind == Warning::Kind::ArenaFull) {
             parts << warning.headline << warning.detail << QString::number(warning.critical);
         }
     }
@@ -150,6 +150,16 @@ QVector<GpuStatusAlerts::Warning> GpuStatusAlerts::warnings() const {
                                    .arg(transfer.label()),
                                QStringLiteral("The app keeps rewriting buffers the host cannot "
                                               "share directly, so every change is copied.")});
+            }
+        }
+        for (const auto& transfer : w.transfers) {
+            if (recent(transfer.arena_full_at_ms, now)) {
+                out.push_back({Warning::Kind::ArenaFull, false,
+                               QStringLiteral("%1's transfer arena is nearly full, so its uploads "
+                                              "wait for room")
+                                   .arg(transfer.label()),
+                               QStringLiteral("Its transfer ring has reached 90% of the arena, and "
+                                              "uploads have been waiting for room.")});
             }
         }
     }

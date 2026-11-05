@@ -83,6 +83,12 @@ std::optional<quint64> number(const QHash<QString, QString>& values, const QStri
     return ok ? std::optional<quint64>{value} : std::nullopt;
 }
 
+void add_known(std::optional<quint64>& total, const std::optional<quint64>& value) {
+    if (value) {
+        total = total.value_or(0) + *value;
+    }
+}
+
 quint64 number_or_zero(const QHash<QString, QString>& values, const QString& key) {
     return number(values, key).value_or(0);
 }
@@ -287,6 +293,9 @@ void AvStateDump::parse(const QByteArray& dump, Snapshot& into) {
             channel.refused_no_space += number_or_zero(values, QStringLiteral("refused_no_space"));
             channel.refused_no_memory += number_or_zero(values, QStringLiteral("refused_no_memory"));
             channel.refused_other += number_or_zero(values, QStringLiteral("refused_other"));
+            add_known(channel.arena_bytes, number(values, QStringLiteral("arena_bytes")));
+            add_known(channel.arena_peak_ring_bytes, number(values, QStringLiteral("arena_peak_ring_bytes")));
+            add_known(channel.arena_set_aside_bytes, number(values, QStringLiteral("arena_set_aside_bytes")));
             into.executor = true;
         } else if (n >= 1 && parts.at(0) == QLatin1String("executor")) {
             into.executor = true;

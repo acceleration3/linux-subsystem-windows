@@ -234,6 +234,7 @@ QWidget* GpuStatusPage::build_warnings() {
         case Warning::Kind::Refusals:
         case Warning::Kind::SplitTransfers:
         case Warning::Kind::CopiedMappings:
+        case Warning::Kind::ArenaFull:
             break;
         }
         column->addWidget(strip);
@@ -471,7 +472,8 @@ void GpuStatusPage::fill_transfers() {
     }
     QVector<const services::HostWindowStatus::Transfer*> shown;
     for (const auto& transfer : w.transfers) {
-        if (transfer.active) {
+        const auto peak = transfer.arena_peak_percent();
+        if (transfer.active || (peak && *peak >= 75)) {
             shown.push_back(&transfer);
         }
     }
@@ -480,21 +482,26 @@ void GpuStatusPage::fill_transfers() {
             Widgets::meta(QStringLiteral("No transfers needed more than one trip")));
         return;
     }
-    auto* table = new QTableWidget(static_cast<int>(shown.size()), 9);
+    auto* table = new QTableWidget(static_cast<int>(shown.size()), 10);
     Theme::rows_table(table, {QStringLiteral("APP"), QStringLiteral("SPLITS"), QStringLiteral("EXTRA"),
                               QStringLiteral("WAITS"), QStringLiteral("AVG WAIT"),
                               QStringLiteral("INLINE"), QStringLiteral("COPIED"),
-                              QStringLiteral("SLICE"), QStringLiteral("REFUSED")});
+                              QStringLiteral("SLICE"), QStringLiteral("REFUSED"), QStringLiteral("ARENA")});
     auto* head = table->horizontalHeader();
     head->setSectionResizeMode(0, QHeaderView::Stretch);
-    for (int column = 1; column < 9; ++column) {
+    for (int column = 1; column < 10; ++column) {
         head->setSectionResizeMode(column, QHeaderView::Fixed);
-        table->setColumnWidth(column, column == 4 ? 84 : 70);
+        table->setColumnWidth(column, column == 4 ? 84 : column == 9 ? 130 : 70);
     }
     table->verticalHeader()->setDefaultSectionSize(30);
     const auto rate = [](double value) { return QString::number(value, 'f', 1); };
     for (int row = 0; row < shown.size(); ++row) {
         const auto& t = *shown.at(row);
+        const auto peak = t.arena_peak_percent();
+        const QString arena = t.arena_bytes && *t.arena_bytes > 0
+                                  ? (peak ? QStringLiteral("%1, peak %2%").arg(ui::Format::bytes(*t.arena_bytes)).arg(*peak)
+                                          : ui::Format::bytes(*t.arena_bytes))
+                                  : QStringLiteral("-");
         const QStringList cells = {
             t.label(),
             rate(t.splits_per_s),
@@ -504,7 +511,8 @@ void GpuStatusPage::fill_transfers() {
             QString::number(t.inline_bulk),
             QString::number(t.copied_mappings),
             QString::number(t.slice_waits),
-            QString::number(t.refusals)};
+            QString::number(t.refusals),
+            arena};
         for (int column = 0; column < cells.size(); ++column) {
             table->setItem(row, column, new QTableWidgetItem(cells.at(column)));
         }

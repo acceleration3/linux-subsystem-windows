@@ -23,6 +23,13 @@ QString HostWindowStatus::Transfer::label() const {
     return context_label(context, name);
 }
 
+std::optional<int> HostWindowStatus::Transfer::arena_peak_percent() const {
+    if (!arena_bytes || *arena_bytes == 0 || !arena_peak_ring_bytes) {
+        return std::nullopt;
+    }
+    return static_cast<int>(qMin<quint64>(100, *arena_peak_ring_bytes * 100 / *arena_bytes));
+}
+
 void HostWindowTracker::clear() {
     status_ = HostWindowStatus{};
     memory_.clear();
@@ -134,6 +141,10 @@ void HostWindowTracker::add(const platform::AvStateDump::Snapshot& snapshot, qin
                     || delta(channel.copied_mappings, before.copied_mappings) > 0
                     || delta(channel.slice_waits, before.slice_waits) > 0
                     || delta(channel.refused(), before.refused()) > 0;
+            if (waits > 0 && channel.arena_bytes && *channel.arena_bytes > 0 && channel.arena_peak_ring_bytes
+                && *channel.arena_peak_ring_bytes * 10 >= *channel.arena_bytes * 9) {
+                memory.arena_full_at_ms = at_ms;
+            }
             if (moved) {
                 memory.active_at_ms = at_ms;
             }
@@ -143,6 +154,9 @@ void HostWindowTracker::add(const platform::AvStateDump::Snapshot& snapshot, qin
         transfer.copied_mappings = channel.copied_mappings;
         transfer.slice_waits = channel.slice_waits;
         transfer.refusals = channel.refused();
+        transfer.arena_bytes = channel.arena_bytes;
+        transfer.arena_peak_ring_bytes = channel.arena_peak_ring_bytes;
+        transfer.arena_full_at_ms = memory.arena_full_at_ms;
         transfer.hot_split_ms = memory.hot_since_ms ? at_ms - *memory.hot_since_ms : 0;
         transfer.refused_at_ms = memory.refused_at_ms;
         transfer.copied_at_ms = memory.copied_at_ms;

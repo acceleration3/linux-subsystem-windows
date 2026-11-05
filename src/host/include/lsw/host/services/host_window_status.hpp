@@ -36,12 +36,16 @@ struct HostWindowStatus {
         quint64 copied_mappings = 0;
         quint64 slice_waits = 0;
         quint64 refusals = 0;
+        std::optional<quint64> arena_bytes;
+        std::optional<quint64> arena_peak_ring_bytes;
+        std::optional<qint64> arena_full_at_ms;
         bool active = false;
         qint64 hot_split_ms = 0;
         std::optional<qint64> refused_at_ms;
         std::optional<qint64> copied_at_ms;
 
         [[nodiscard]] QString label() const;
+        [[nodiscard]] std::optional<int> arena_peak_percent() const;
     };
 
     static constexpr qint64 kHistoryMs = 10 * 60 * 1000;
@@ -75,6 +79,7 @@ private:
         std::optional<qint64> hot_since_ms;
         std::optional<qint64> refused_at_ms;
         std::optional<qint64> copied_at_ms;
+        std::optional<qint64> arena_full_at_ms;
         std::optional<qint64> active_at_ms;
     };
 

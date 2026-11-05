@@ -19,6 +19,7 @@ public:
             Refusals,
             SplitTransfers,
             CopiedMappings,
+            ArenaFull,
         };
         Kind kind = Kind::DisplayNotRunning;
         bool critical = false;
