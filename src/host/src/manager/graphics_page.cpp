@@ -239,7 +239,7 @@ QStringList GraphicsPage::status_facts() const {
     }
     if (device != nullptr && device->hostmem_mib > 0) {
         facts << QStringLiteral("hostmem %1")
-                     .arg(platform::HostGpus::format_mib(device->hostmem_mib));
+                     .arg(platform::HostGpus::format_mib(static_cast<quint64>(device->hostmem_mib)));
     }
     const QString preferred = g.live_modes.value_or(QString{}).section(QLatin1Char(','), 0, 0);
     if (const auto mode = config::DisplayModes::parse(preferred)) {
@@ -252,7 +252,7 @@ QStringList GraphicsPage::status_facts() const {
         QStringList what;
         if (g.pending.host_window_mib) {
             what << QStringLiteral("hostmem %1")
-                        .arg(platform::HostGpus::format_mib(*g.pending.host_window_mib));
+                        .arg(platform::HostGpus::format_mib(static_cast<quint64>(*g.pending.host_window_mib)));
         }
         if (g.pending.adapters) {
             what << QStringLiteral("adapters");
