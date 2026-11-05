@@ -156,7 +156,7 @@ QVector<GpuStatusAlerts::Warning> GpuStatusAlerts::warnings() const {
             if (recent(transfer.arena_full_at_ms, now)) {
                 out.push_back({Warning::Kind::ArenaFull, false,
                                QStringLiteral("%1's transfer arena is nearly full, so its uploads "
-                                              "wait for room")
+                                              "wait for room.")
                                    .arg(transfer.label()),
                                QStringLiteral("Its transfer ring has reached 90% of the arena, and "
                                               "uploads have been waiting for room.")});
