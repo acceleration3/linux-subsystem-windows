@@ -412,6 +412,51 @@ function Remove-Old-Loaders([hashtable] $Targets) {
     }
 }
 
+function Get-DwmDisplayCore {
+    $result = $null
+    foreach ($proc in @(Get-Process -Name dwm -ErrorAction SilentlyContinue)) {
+        try {
+            $loaded = @($proc.Modules | Where-Object { $_.ModuleName -ieq 'ddisplay.dll' }).Count -gt 0
+            if ($loaded) { return $true }
+            $result = $false
+        } catch {
+            L ('dwm.exe modules unreadable: ' + $_.Exception.Message)
+        }
+    }
+    return $result
+}
+
+function Step-DisplayPath {
+    $key = 'HKLM:\SOFTWARE\Microsoft\Windows\Dwm'
+    $current = (Get-ItemProperty -LiteralPath $key -Name DisableDDisplay -ErrorAction SilentlyContinue).DisableDDisplay
+    $loaded = Get-DwmDisplayCore
+    if ($current -eq 1 -and $loaded -eq $false) {
+        L 'display path: DisplayCore already off'
+        $script:State = 'skipped'
+        return
+    }
+    if ($current -ne 1) {
+        if (-not (Test-Path -LiteralPath $key)) { New-Item -Path $key -Force | Out-Null }
+        New-ItemProperty -LiteralPath $key -Name DisableDDisplay -PropertyType DWord -Value 1 -Force | Out-Null
+        L 'display path: DisableDDisplay set to 1'
+    }
+    if ($loaded -ne $true) {
+        Need-Restart 'DWM still uses DisplayCore'
+        return
+    }
+    L 'display path: restarting DWM to leave DisplayCore'
+    Stop-Process -Name dwm -Force -ErrorAction SilentlyContinue
+    $deadline = (Get-Date).AddSeconds(20)
+    while ((Get-Date) -lt $deadline) {
+        Start-Sleep -Milliseconds 500
+        if ((Get-DwmDisplayCore) -eq $false) {
+            L 'display path: DWM restarted without DisplayCore'
+            return
+        }
+    }
+    Need-Restart 'DWM still uses DisplayCore'
+}
+
 function Step-Loaders {
     $names = @('vulkan-1.dll', 'OpenCL.dll')
     $targets = @{ x64 = Join-Path $env:SystemRoot 'System32'; x86 = Join-Path $env:SystemRoot 'SysWOW64' }
@@ -528,6 +573,7 @@ Run-Step 'verify' { Step-Verify }
 Run-Step 'stop' { Step-Stop }
 Run-Step 'agent and mirror' { Step-AgentAndMirror }
 Run-Step 'driver' { Step-Driver }
+Run-Step 'display path' { Step-DisplayPath }
 Run-Step 'loaders' { Step-Loaders }
 Run-Step 'shared folders' { Step-Shares }
 Run-Step 'service and firewall' { Step-Service }

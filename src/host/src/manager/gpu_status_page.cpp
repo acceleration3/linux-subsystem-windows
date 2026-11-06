@@ -171,6 +171,9 @@ QString GpuStatusPage::signature() const {
     const auto& facts = g.log_facts;
     parts << QString::number(status_.vm().running()) << QString::number(guest.valid)
           << QString::number(guest.test_signing) << QString::number(guest.driver_search_off)
+          << QString::number(guest.display_core_disabled)
+          << QString::number(guest.display_core_loaded.value_or(false))
+          << QString::number(guest.display_core_loaded.has_value())
           << QString::number(facts.user_mode_submission.value_or(false))
           << QString::number(facts.user_mode_submission.has_value())
           << QString::number(facts.native_fences.value_or(false))
@@ -338,6 +341,8 @@ QWidget* GpuStatusPage::build_guest_driver() const {
                  QStringLiteral("the driver needs it"));
         rows.add(QStringLiteral("Driver search"), QStringLiteral("-"), Theme::Tone::kFaint,
                  QStringLiteral("must be off"));
+        rows.add(QStringLiteral("Display path"), QStringLiteral("-"), Theme::Tone::kFaint,
+                 QStringLiteral("DisplayCore must be off"));
     } else {
         rows.add(QStringLiteral("Test signing"),
                  guest.test_signing ? QStringLiteral("On") : QStringLiteral("Off"),
@@ -348,6 +353,20 @@ QWidget* GpuStatusPage::build_guest_driver() const {
                  guest.driver_search_off ? Theme::Tone::kOk : Theme::Tone::kBad,
                  guest.driver_search_off ? QStringLiteral("Update cannot replace it")
                                          : QStringLiteral("Update may replace it"));
+        if (!guest.display_core_disabled) {
+            rows.add(QStringLiteral("Display path"), QStringLiteral("DisplayCore"),
+                     Theme::Tone::kBad,
+                     QStringLiteral("the display output switches off; update turns it off"));
+        } else if (guest.display_core_loaded.value_or(false)) {
+            rows.add(QStringLiteral("Display path"), QStringLiteral("DisplayCore"),
+                     Theme::Tone::kAmber, QStringLiteral("off after DWM restarts"));
+        } else if (guest.display_core_loaded.has_value()) {
+            rows.add(QStringLiteral("Display path"), QStringLiteral("Classic"), Theme::Tone::kOk,
+                     QStringLiteral("DisplayCore off"));
+        } else {
+            rows.add(QStringLiteral("Display path"), QStringLiteral("-"), Theme::Tone::kFaint,
+                     QStringLiteral("DisplayCore must be off"));
+        }
     }
     const auto& facts = status_.graphics().log_facts;
     const std::optional<bool> ums =

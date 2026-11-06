@@ -1,13 +1,16 @@
 #include "lsw/agent/rpc/auto_register.hpp"
 #include "lsw/agent/rpc/handler.hpp"
 #include "lsw/agent/util/text_encoding.hpp"
+#include "lsw/agent/win/process_info.hpp"
 #include "lsw/agent/win/reg_key.hpp"
+#include "lsw/agent/win/wts_sessions.hpp"
 #include "lsw/linkproto/commands.hpp"
 
 // clang-format off
 #include <windows.h>
 #include <setupapi.h>
 #include <cfgmgr32.h>
+#include <tlhelp32.h>
 // clang-format on
 
 #include <algorithm>
@@ -23,7 +26,9 @@ namespace lsw::agent::rpc::handlers {
 namespace {
 
 using util::TextEncoding;
+using win::ProcessInfo;
 using win::RegKey;
+using win::WtsSessions;
 
 constexpr REGSAM kRead = KEY_READ | KEY_WOW64_64KEY;
 
@@ -179,6 +184,56 @@ bool driver_search_off() {
     return excluded.value_or(0) == 1 && dont_search.value_or(0) == 1 && order.value_or(1) == 0;
 }
 
+bool display_core_disabled() {
+    return read_dword(L"SOFTWARE\\Microsoft\\Windows\\Dwm", L"DisableDDisplay").value_or(0) == 1;
+}
+
+std::optional<bool> has_module(DWORD pid, const wchar_t* module) {
+    for (int attempt = 0; attempt < 5; ++attempt) {
+        const HANDLE snap =
+            ::CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid);
+        if (snap == INVALID_HANDLE_VALUE) {
+            if (::GetLastError() == ERROR_BAD_LENGTH) {
+                continue;
+            }
+            return std::nullopt;
+        }
+        MODULEENTRY32W entry{};
+        entry.dwSize = sizeof(entry);
+        bool found = false;
+        if (::Module32FirstW(snap, &entry) != FALSE) {
+            do {
+                if (::_wcsicmp(entry.szModule, module) == 0) {
+                    found = true;
+                    break;
+                }
+            } while (::Module32NextW(snap, &entry) != FALSE);
+        }
+        ::CloseHandle(snap);
+        return found;
+    }
+    return std::nullopt;
+}
+
+nlohmann::json display_core_loaded() {
+    const auto console = WtsSessions::active_console();
+    if (!console) {
+        return nullptr;
+    }
+    for (const auto& process : ProcessInfo::snapshot()) {
+        if (::_wcsicmp(process.exe_name.c_str(), L"dwm.exe") != 0
+            || WtsSessions::of_process(process.pid) != console) {
+            continue;
+        }
+        const auto loaded = has_module(process.pid, L"ddisplay.dll");
+        if (!loaded) {
+            return nullptr;
+        }
+        return *loaded;
+    }
+    return nullptr;
+}
+
 nlohmann::json feature_enabled(int id) {
     const std::wstring path =
         L"SYSTEM\\CurrentControlSet\\Control\\GraphicsDrivers\\Features\\" + std::to_wstring(id);
@@ -198,6 +253,8 @@ struct GpuStatusHandler : RpcHandler {
             {"adapters", std::move(adapters)},
             {"test_signing", test_signing()},
             {"driver_search_off", driver_search_off()},
+            {"display_core_disabled", display_core_disabled()},
+            {"display_core_loaded", display_core_loaded()},
             {"user_mode_submission", feature_enabled(4)},
             {"native_fences", feature_enabled(37)},
         };

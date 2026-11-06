@@ -151,6 +151,12 @@ target_link_libraries(lsw_host_guest_sessions_test
 target_compile_definitions(lsw_host_guest_sessions_test PRIVATE QT_NO_KEYWORDS)
 add_test(NAME lsw_host_guest_sessions_test COMMAND lsw_host_guest_sessions_test)
 
+add_executable(lsw_host_guest_gpu_status_test guest_gpu_status_test.cpp)
+target_link_libraries(lsw_host_guest_gpu_status_test
+    PRIVATE lsw_host_core LSW::CompileOptions nlohmann_json::nlohmann_json)
+target_compile_definitions(lsw_host_guest_gpu_status_test PRIVATE QT_NO_KEYWORDS)
+add_test(NAME lsw_host_guest_gpu_status_test COMMAND lsw_host_guest_gpu_status_test)
+
 add_executable(lsw_host_guest_swap_test guest_swap_test.cpp)
 target_link_libraries(lsw_host_guest_swap_test
     PRIVATE lsw_host_manager LSW::CompileOptions)
