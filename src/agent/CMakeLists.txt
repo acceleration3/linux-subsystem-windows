@@ -137,6 +137,7 @@ set(_lsw_agent_apps_sources
     src/apps/start_menu_watcher.cpp
     src/apps/start_menu_filter.cpp
     src/apps/file_associations.cpp
+    src/apps/launch_continuation.cpp
     src/apps/launch_group.cpp
     src/apps/launch_command.cpp
     src/apps/launcher.cpp

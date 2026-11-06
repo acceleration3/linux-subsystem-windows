@@ -13,6 +13,7 @@ add_executable(lsw_agent_logic_test
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/system/scale_steps.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/apps/start_menu_filter.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/apps/program_command.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/apps/launch_continuation.cpp
 )
 
 target_include_directories(lsw_agent_logic_test

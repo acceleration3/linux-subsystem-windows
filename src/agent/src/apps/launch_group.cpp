@@ -1,5 +1,6 @@
 #include "lsw/agent/apps/launch_group.hpp"
 
+#include "lsw/agent/apps/launch_continuation.hpp"
 #include "lsw/agent/apps/launch_watcher.hpp"
 #include "lsw/agent/log.hpp"
 #include "lsw/agent/util/text_encoding.hpp"
@@ -12,6 +13,7 @@
 #include <chrono>
 #include <iterator>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -22,6 +24,9 @@ namespace lsw::agent::apps {
 
 namespace {
 constexpr auto kSnapshotMaxAge = std::chrono::milliseconds(200);
+
+constexpr DWORD kRelaunchPollMs = 100;
+constexpr DWORD kRelaunchWaitMs = 3000;
 
 constexpr std::uint64_t kRelaunchTicks = 5ULL * 10'000'000ULL;
 
@@ -35,7 +40,9 @@ struct Group {
     win::UniqueHandle process;
     win::UniqueHandle job;
     std::wstring dir_lc;
+    std::wstring image_lc;
     std::uint64_t started = 0;
+    unsigned long session = 0;
 };
 
 struct Proc {
@@ -212,6 +219,11 @@ bool LaunchGroup::adopt(void* process, unsigned long pid, LaunchIdentity identit
     }
     g.started = win::ProcessInfo::creation_time(handle).value_or(0);
     const std::wstring image = util::WideString::lower(win::ProcessInfo::image_path(handle));
+    g.image_lc = image;
+    DWORD session = 0;
+    if (::ProcessIdToSessionId(pid, &session) != 0) {
+        g.session = session;
+    }
     if (const auto dir = util::WideString::parent_dir(image)) {
         g.dir_lc = image.substr(0, dir->size() + 1);
     }
@@ -253,6 +265,69 @@ unsigned long LaunchGroup::root_of(unsigned long pid) {
     refresh_locked(s);
     const auto it = s.owner_of.find(pid);
     return it == s.owner_of.end() ? 0 : it->second;
+}
+
+bool LaunchGroup::follow_relaunch(unsigned long pid) {
+    HANDLE job = nullptr;
+    std::optional<LaunchContinuation> rule;
+    {
+        State& s = state();
+        const std::lock_guard lock(s.mu);
+        const auto it = s.groups.find(pid);
+        if (it == s.groups.end() || !it->second.job) {
+            return false;
+        }
+        const Group& g = it->second;
+        if (::DuplicateHandle(::GetCurrentProcess(), g.job.get(), ::GetCurrentProcess(), &job, 0,
+                              FALSE, DUPLICATE_SAME_ACCESS) == 0) {
+            return false;
+        }
+        rule.emplace(pid, g.session, g.image_lc, g.started);
+    }
+    const win::UniqueHandle job_ref{job};
+
+    for (DWORD waited = 0; waited <= kRelaunchWaitMs; waited += kRelaunchPollMs) {
+        const std::vector<Proc> procs = scan_processes();
+        std::vector<LaunchContinuation::Candidate> candidates;
+        {
+            State& s = state();
+            const std::lock_guard lock(s.mu);
+            rebuild_locked(s);
+            for (const Proc& p : procs) {
+                LaunchContinuation::Candidate c;
+                c.pid = p.pid;
+                c.image_lc = p.image_lc;
+                c.created = p.started;
+                DWORD session = 0;
+                if (::ProcessIdToSessionId(p.pid, &session) != 0) {
+                    c.session = session;
+                }
+                const auto owner = s.owner_of.find(p.pid);
+                c.owned_by_other_launch = owner != s.owner_of.end() && owner->second != pid;
+                candidates.push_back(std::move(c));
+            }
+        }
+        if (const auto found = rule->pick(candidates)) {
+            const win::UniqueHandle process{
+                ::OpenProcess(PROCESS_SET_QUOTA | PROCESS_TERMINATE | PROCESS_QUERY_LIMITED_INFORMATION,
+                              FALSE, *found)};
+            if (process && ::AssignProcessToJobObject(job_ref.get(), process.get()) != 0) {
+                LSW_AGENT_INFO("launch: pid {} relaunched itself as pid {} outside its job; "
+                               "following it",
+                               pid, *found);
+                State& s = state();
+                const std::lock_guard lock(s.mu);
+                s.owner_of[*found] = pid;
+                s.built = {};
+                return true;
+            }
+            LSW_AGENT_WARN("launch_group: cannot follow pid {} into its relaunch pid {} (err={})",
+                           pid, *found, win::ErrorText::last_error());
+            return false;
+        }
+        ::Sleep(kRelaunchPollMs);
+    }
+    return false;
 }
 
 }

@@ -1,3 +1,4 @@
+#include "lsw/agent/apps/launch_continuation.hpp"
 #include "lsw/agent/apps/program_command.hpp"
 #include "lsw/agent/apps/start_menu_filter.hpp"
 #include "lsw/agent/core/command_line.hpp"
@@ -475,7 +476,32 @@ void test_start_menu_filter() {
 
 }
 
+static void test_launch_continuation() {
+    using lsw::agent::apps::LaunchContinuation;
+    using C = LaunchContinuation::Candidate;
+    constexpr std::uint64_t s = 1'000'000'000ULL;
+    const std::wstring ff = L"c:\\program files\\mozilla firefox\\firefox.exe";
+    const LaunchContinuation launch(8772, 1, ff, 100 * s);
+    check(launch.pick({}) == std::nullopt, "no processes, no continuation");
+    check(launch.pick({C{10228, 1, ff, 100 * s + 5'000'000, false}}) == 10228UL,
+          "a same-image process started after the launch continues it");
+    check(launch.pick({C{10228, 1, ff, 100 * s - 1, false}}) == std::nullopt,
+          "one that started before the launch does not");
+    check(launch.pick({C{10228, 1, ff, 100 * s + 200'000'000ULL, false}}) == std::nullopt,
+          "one that started long after the launch does not");
+    check(launch.pick({C{10228, 2, ff, 100 * s + 5'000'000, false}}) == std::nullopt,
+          "one in another session does not");
+    check(launch.pick({C{10228, 1, L"c:\\other.exe", 100 * s + 5'000'000, false}}) == std::nullopt,
+          "another image does not");
+    check(launch.pick({C{10228, 1, ff, 100 * s + 5'000'000, true}}) == std::nullopt,
+          "one that belongs to another launch does not");
+    check(launch.pick({C{8772, 1, ff, 100 * s + 1, false}}) == std::nullopt, "the root itself does not");
+    check(launch.pick({C{30, 1, ff, 100 * s + 9'000'000, false}, C{20, 1, ff, 100 * s + 3'000'000, false}}) == 20UL,
+          "the earliest candidate wins");
+}
+
 int main() {
+    test_launch_continuation();
     test_base64_vectors();
     test_base64_binary();
     test_url_file_name();

@@ -3,6 +3,7 @@
 #include "lsw/agent/apps/error_report.hpp"
 #include "lsw/agent/apps/exit_reporter.hpp"
 #include "lsw/agent/apps/exit_status.hpp"
+#include "lsw/agent/apps/launch_group.hpp"
 #include "lsw/agent/log.hpp"
 #include "lsw/agent/util/text_encoding.hpp"
 #include "lsw/agent/win/error_text.hpp"
@@ -273,6 +274,14 @@ void LaunchWatcher::on_exit_process(unsigned long pid) {
 
 void LaunchWatcher::on_launch_ended(unsigned long key) {
     LSW_AGENT_DEBUG("launch_watcher: launch {} has no process left", key);
+    std::thread([this, key] {
+        if (!LaunchGroup::follow_relaunch(key)) {
+            report_launch_ended(key);
+        }
+    }).detach();
+}
+
+void LaunchWatcher::report_launch_ended(unsigned long key) {
     const std::lock_guard lock(mu_);
     std::string app_id;
     if (const auto id = identities_.find(key); id != identities_.end()) {
