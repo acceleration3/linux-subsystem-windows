@@ -1,5 +1,7 @@
 #include "lsw/host/services/host_window_alerts.hpp"
 
+#include <algorithm>
+
 namespace lsw::host::services {
 
 namespace {
@@ -15,8 +17,20 @@ QVector<HostWindowAlerts::Warning> HostWindowAlerts::warnings(const HostWindowSt
     if (!w.read) {
         return out;
     }
+    QVector<const HostWindowStatus::App*> apps;
+    for (const auto& app : w.apps) {
+        apps.push_back(&app);
+    }
+    std::sort(apps.begin(), apps.end(), [](const HostWindowStatus::App* a, const HostWindowStatus::App* b) {
+        return a->device != b->device ? a->device < b->device : a->context < b->context;
+    });
     if (w.full_since_ms && now - *w.full_since_ms >= kFullHoldMs) {
-        const auto top = w.holders.isEmpty() ? nullptr : &w.holders.first();
+        const HostWindowStatus::App* top = nullptr;
+        for (const auto* app : apps) {
+            if (app->held_bytes > 0 && (top == nullptr || app->held_bytes > top->held_bytes)) {
+                top = app;
+            }
+        }
         out.push_back({Warning::Kind::WindowFull, false,
                        top != nullptr
                            ? QStringLiteral("The host window is over 90% full, mostly with %1.")
@@ -27,12 +41,13 @@ QVector<HostWindowAlerts::Warning> HostWindowAlerts::warnings(const HostWindowSt
                                       "out-of-memory errors.")});
     }
     bool named = false;
-    for (const auto& transfer : w.transfers) {
-        if (recent(transfer.refused_at_ms, now)) {
+    for (const auto* app_ptr : apps) {
+        const auto& app = *app_ptr;
+        if (recent(app.refused_at_ms, now)) {
             named = true;
             out.push_back({Warning::Kind::Refusals, true,
                            QStringLiteral("%1 is being refused host window memory.")
-                               .arg(transfer.label()),
+                               .arg(app.label()),
                            QStringLiteral("The app sees out-of-memory errors. The host window "
                                           "has no room for what it asks for.")});
         }
@@ -43,49 +58,41 @@ QVector<HostWindowAlerts::Warning> HostWindowAlerts::warnings(const HostWindowSt
                        QStringLiteral("An app sees out-of-memory errors. The host window has "
                                       "no room for what it asks for.")});
     }
-    for (const auto& transfer : w.transfers) {
-        if (transfer.hot_split_ms >= kHotHoldMs) {
+    for (const auto* app_ptr : apps) {
+        const auto& app = *app_ptr;
+        if (app.hot_split_ms >= kHotHoldMs) {
             out.push_back({Warning::Kind::SplitTransfers, false,
                            QStringLiteral("%1's transfers need several trips through the "
                                           "host window.")
-                               .arg(transfer.label()),
+                               .arg(app.label()),
                            QStringLiteral("More than 5 transfers a second have been sent in "
                                           "pieces for 10 seconds, because the window had no "
                                           "room for each one whole.")});
         }
     }
-    for (const auto& transfer : w.transfers) {
-        if (recent(transfer.copied_at_ms, now)) {
+    for (const auto* app_ptr : apps) {
+        const auto& app = *app_ptr;
+        if (recent(app.copied_at_ms, now)) {
             out.push_back({Warning::Kind::CopiedMappings, false,
                            QStringLiteral("%1's dynamic buffers are copied instead of drawn "
                                           "in place.")
-                               .arg(transfer.label()),
+                               .arg(app.label()),
                            QStringLiteral("The app keeps rewriting buffers the host cannot "
                                           "share directly, so every change is copied.")});
         }
     }
-    for (const auto& transfer : w.transfers) {
-        if (recent(transfer.arena_full_at_ms, now)) {
+    for (const auto* app_ptr : apps) {
+        const auto& app = *app_ptr;
+        if (recent(app.arena_full_at_ms, now)) {
             out.push_back({Warning::Kind::ArenaFull, false,
                            QStringLiteral("%1's transfer arena is nearly full, so its uploads "
                                           "wait for room.")
-                               .arg(transfer.label()),
+                               .arg(app.label()),
                            QStringLiteral("Its transfer ring has reached 90% of the arena, and "
                                           "uploads have been waiting for room.")});
         }
     }
     return out;
-}
-
-QVector<const HostWindowStatus::Transfer*> HostWindowAlerts::shown_transfers(const HostWindowStatus& status) {
-    QVector<const HostWindowStatus::Transfer*> shown;
-    for (const auto& transfer : status.transfers) {
-        const auto peak = transfer.arena_peak_percent();
-        if (transfer.active || (peak && *peak >= kArenaShownPercent)) {
-            shown.push_back(&transfer);
-        }
-    }
-    return shown;
 }
 
 }

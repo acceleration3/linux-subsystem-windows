@@ -20,13 +20,10 @@ public:
     static constexpr qint64 kFullHoldMs = 5000;
     static constexpr qint64 kHotHoldMs = 10'000;
     static constexpr qint64 kRiseShownMs = 60'000;
-    static constexpr int kArenaShownPercent = 75;
 
     HostWindowAlerts() = delete;
 
     [[nodiscard]] static QVector<Warning> warnings(const HostWindowStatus& status, qint64 now_ms);
-
-    [[nodiscard]] static QVector<const HostWindowStatus::Transfer*> shown_transfers(const HostWindowStatus& status);
 };
 
 }

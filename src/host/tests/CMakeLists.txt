@@ -330,3 +330,10 @@ target_link_libraries(lsw_host_host_window_alerts_test
 )
 target_compile_definitions(lsw_host_host_window_alerts_test PRIVATE QT_NO_KEYWORDS)
 add_test(NAME lsw_host_host_window_alerts_test COMMAND lsw_host_host_window_alerts_test)
+
+add_executable(lsw_host_resizable_columns_test resizable_columns_test.cpp)
+target_link_libraries(lsw_host_resizable_columns_test PRIVATE lsw_host_core LSW::CompileOptions)
+target_compile_definitions(lsw_host_resizable_columns_test PRIVATE QT_NO_KEYWORDS)
+add_test(NAME lsw_host_resizable_columns_test COMMAND lsw_host_resizable_columns_test)
+set_tests_properties(lsw_host_resizable_columns_test PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 60)

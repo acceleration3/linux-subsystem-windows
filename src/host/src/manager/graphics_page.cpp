@@ -376,13 +376,8 @@ QWidget* GraphicsPage::build_apis() const {
     }
     auto* table = new QTableWidget(static_cast<int>(apis.size()), 3);
     Theme::rows_table(table, {QStringLiteral("API"), QStringLiteral("THE HOST RUNS IT ON"),
-                              QStringLiteral("STATE")});
-    auto* head = table->horizontalHeader();
-    head->setSectionResizeMode(0, QHeaderView::Fixed);
-    head->setSectionResizeMode(1, QHeaderView::Stretch);
-    head->setSectionResizeMode(2, QHeaderView::Fixed);
-    table->setColumnWidth(0, 112);
-    table->setColumnWidth(2, 124);
+                              QStringLiteral("STATE")},
+                      QStringLiteral("graphics-apis"), {112, 300, 124}, 1);
     table->verticalHeader()->setDefaultSectionSize(34);
     for (int row = 0; row < apis.size(); ++row) {
         const auto& api = apis.at(row);

@@ -4,6 +4,7 @@
 #include <QFont>
 #include <QString>
 #include <QStringList>
+#include <QVector>
 
 class QTableWidget;
 class QTableWidgetItem;
@@ -18,7 +19,8 @@ public:
 
     static void surface(QWidget* widget, const char* role);
 
-    static void rows_table(QTableWidget* table, const QStringList& headers);
+    static void rows_table(QTableWidget* table, const QStringList& headers, const QString& key,
+                           const QVector<int>& widths, int stretch = -1);
 
     [[nodiscard]] static QTableWidgetItem* kind_cell(const QString& text);
 

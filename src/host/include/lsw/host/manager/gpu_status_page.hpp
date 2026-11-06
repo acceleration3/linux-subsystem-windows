@@ -32,15 +32,14 @@ private:
     void rebuild();
     void update_log();
     void update_window();
-    void fill_holders();
-    void fill_transfers();
+    void fill_apps();
     [[nodiscard]] QString signature() const;
 
     [[nodiscard]] QWidget* build_warnings();
     [[nodiscard]] QWidget* build_adapters() const;
     [[nodiscard]] QWidget* build_guest_driver() const;
     [[nodiscard]] QWidget* build_host_window();
-    [[nodiscard]] QWidget* build_transfers();
+    [[nodiscard]] QWidget* build_apps();
     [[nodiscard]] QWidget* build_log();
     void open_log() const;
 
@@ -52,8 +51,8 @@ private:
     ui::UsageGraph* graph_ = nullptr;
     QLabel* window_use_ = nullptr;
     QLabel* window_peak_ = nullptr;
-    QVBoxLayout* holders_box_ = nullptr;
-    QVBoxLayout* transfers_box_ = nullptr;
+    QTableWidget* apps_table_ = nullptr;
+    QLabel* apps_note_ = nullptr;
     QString built_for_;
 };
 

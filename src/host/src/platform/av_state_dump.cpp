@@ -116,14 +116,20 @@ std::optional<quint32> segment_id(const QString& text) {
     return ok ? std::optional<quint32>{value} : std::nullopt;
 }
 
-AvStateDump::Context& context_for(AvStateDump::Snapshot& into, QHash<quint32, int>& index,
-                                  quint32 id) {
-    const auto it = index.constFind(id);
+quint64 context_key(quint32 device, quint32 id) {
+    return (static_cast<quint64>(device) << 32) | id;
+}
+
+AvStateDump::Context& context_for(AvStateDump::Snapshot& into, QHash<quint64, int>& index,
+                                  quint32 device, quint32 id) {
+    const quint64 key = context_key(device, id);
+    const auto it = index.constFind(key);
     if (it != index.constEnd()) {
         return into.contexts[*it];
     }
-    index.insert(id, static_cast<int>(into.contexts.size()));
+    index.insert(key, static_cast<int>(into.contexts.size()));
     AvStateDump::Context context;
+    context.device = device;
     context.id = id;
     into.contexts.push_back(context);
     return into.contexts.last();
@@ -171,6 +177,23 @@ quint64 AvStateDump::Snapshot::used_bytes() const {
     return total;
 }
 
+const AvStateDump::Context* AvStateDump::Snapshot::find_context(quint32 device, quint32 id) const {
+    for (const auto& context : contexts) {
+        if (context.device == device && context.id == id) {
+            return &context;
+        }
+    }
+    return nullptr;
+}
+
+int AvStateDump::Snapshot::contexts_with_id(quint32 id) const {
+    int count = 0;
+    for (const auto& context : contexts) {
+        count += context.id == id ? 1 : 0;
+    }
+    return count;
+}
+
 const AvStateDump::Context* AvStateDump::Snapshot::find_context(quint32 id) const {
     for (const auto& context : contexts) {
         if (context.id == id) {
@@ -208,10 +231,10 @@ QHash<QString, QString> AvStateDump::fields(const QByteArray& line, QString* pat
 }
 
 void AvStateDump::parse(const QByteArray& dump, Snapshot& into) {
-    QHash<quint32, int> context_index;
+    QHash<quint64, int> context_index;
     QHash<quint32, int> channel_index;
     for (const Context& context : std::as_const(into.contexts)) {
-        context_index.insert(context.id, static_cast<int>(context_index.size()));
+        context_index.insert(context_key(context.device, context.id), static_cast<int>(context_index.size()));
     }
     for (const Channel& channel : std::as_const(into.channels)) {
         channel_index.insert(channel.context, static_cast<int>(channel_index.size()));
@@ -239,14 +262,15 @@ void AvStateDump::parse(const QByteArray& dump, Snapshot& into) {
                 }
             } else if (n == 8 && parts.at(4) == QLatin1String("host_blobs")
                        && parts.at(6) == QLatin1String("host_blob")) {
+                const quint32 device = segment_id(parts.at(3)).value_or(0);
                 const auto id = number(values, QStringLiteral("context"));
                 const auto size = number(values, QStringLiteral("size"));
                 const auto caching = number(values, QStringLiteral("caching"));
                 if (!id || *id > 0xffffffffULL || !size || flag(values, QStringLiteral("mapped")) != true
-                    || (!context_index.contains(static_cast<quint32>(*id)) && context_index.size() >= kMaxContexts)) {
+                    || (!context_index.contains(context_key(device, static_cast<quint32>(*id))) && context_index.size() >= kMaxContexts)) {
                     continue;
                 }
-                Context& context = context_for(into, context_index, static_cast<quint32>(*id));
+                Context& context = context_for(into, context_index, device, static_cast<quint32>(*id));
                 if (caching == kCachingWriteCombined) {
                     context.write_combined_bytes += *size;
                 } else {
@@ -254,13 +278,16 @@ void AvStateDump::parse(const QByteArray& dump, Snapshot& into) {
                 }
                 ++context.blobs;
             } else if (n == 8 && parts.at(4) == QLatin1String("contexts") && parts.at(6) == QLatin1String("context")) {
+                const quint32 device = segment_id(parts.at(3)).value_or(0);
                 const auto id = segment_id(parts.at(7));
                 const auto name = values.constFind(QStringLiteral("name"));
                 if (!id || name == values.constEnd()
-                    || (!context_index.contains(*id) && context_index.size() >= kMaxContexts)) {
+                    || (!context_index.contains(context_key(device, *id)) && context_index.size() >= kMaxContexts)) {
                     continue;
                 }
-                context_for(into, context_index, *id).name = *name;
+                Context& context = context_for(into, context_index, device, *id);
+                context.name = *name;
+                context.batches = number(values, QStringLiteral("batches"));
             } else if (n == 6 && parts.at(4) == QLatin1String("window_stats")) {
                 WindowStats stats = into.window_stats.value_or(WindowStats{});
                 stats.attached = stats.attached || flag(values, QStringLiteral("attached")).value_or(false);

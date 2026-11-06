@@ -10,11 +10,13 @@ namespace lsw::host::platform {
 class AvStateDump {
 public:
     struct Context {
+        quint32 device = 0;
         quint32 id = 0;
         QString name;
         quint64 write_back_bytes = 0;
         quint64 write_combined_bytes = 0;
         int blobs = 0;
+        std::optional<quint64> batches;
 
         [[nodiscard]] quint64 bytes() const noexcept { return write_back_bytes + write_combined_bytes; }
     };
@@ -70,6 +72,8 @@ public:
 
         [[nodiscard]] quint64 used_bytes() const;
         [[nodiscard]] const Context* find_context(quint32 id) const;
+        [[nodiscard]] const Context* find_context(quint32 device, quint32 id) const;
+        [[nodiscard]] int contexts_with_id(quint32 id) const;
     };
 
     AvStateDump() = delete;

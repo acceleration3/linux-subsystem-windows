@@ -1,6 +1,7 @@
 #include "lsw/host/ui/theme.hpp"
 
 #include "lsw/host/ui/lsw_style.hpp"
+#include "lsw/host/ui/resizable_columns.hpp"
 
 #include <QApplication>
 #include <QFont>
@@ -11,6 +12,7 @@
 
 #include <QColor>
 #include <QHeaderView>
+#include <QScrollBar>
 #include <QStyledItemDelegate>
 #include <QTableWidget>
 #include <QWidget>
@@ -53,7 +55,8 @@ void Theme::surface(QWidget* widget, const char* role) {
     widget->setAttribute(Qt::WA_StyledBackground, true);
 }
 
-void Theme::rows_table(QTableWidget* table, const QStringList& headers) {
+void Theme::rows_table(QTableWidget* table, const QStringList& headers, const QString& key,
+                       const QVector<int>& widths, int stretch) {
     table->setColumnCount(static_cast<int>(headers.size()));
     table->setHorizontalHeaderLabels(headers);
     table->setObjectName(QStringLiteral("Rows"));
@@ -79,6 +82,7 @@ void Theme::rows_table(QTableWidget* table, const QStringList& headers) {
     font.setWeight(QFont::Medium);
     font.setLetterSpacing(QFont::PercentageSpacing, 113);
     head->setFont(font);
+    ResizableColumns::attach(head, key, widths, stretch);
 }
 
 QTableWidgetItem* Theme::kind_cell(const QString& text) {
@@ -102,6 +106,10 @@ void Theme::fit_rows(QTableWidget* table) {
             table->setRowHeight(row, needed);
         }
         height += needed;
+    }
+    const int room = table->viewport()->width();
+    if (room > 0 && table->horizontalHeader()->length() > room) {
+        height += table->horizontalScrollBar()->sizeHint().height();
     }
     table->setFixedHeight(height + 2);
 }

@@ -2,7 +2,6 @@
 
 #include "lsw/host/manager/gpu_status_alerts.hpp"
 #include "lsw/host/manager/warning_strip.hpp"
-#include "lsw/host/services/host_window_alerts.hpp"
 #include "lsw/host/services/status_hub.hpp"
 #include "lsw/host/ui/key_values.hpp"
 #include "lsw/host/ui/panel.hpp"
@@ -195,8 +194,8 @@ void GpuStatusPage::rebuild() {
     graph_ = nullptr;
     window_use_ = nullptr;
     window_peak_ = nullptr;
-    holders_box_ = nullptr;
-    transfers_box_ = nullptr;
+    apps_table_ = nullptr;
+    apps_note_ = nullptr;
 
     if (auto* warnings = build_warnings()) {
         content_->addWidget(warnings);
@@ -204,7 +203,7 @@ void GpuStatusPage::rebuild() {
     content_->addWidget(build_adapters());
     content_->addWidget(build_guest_driver());
     content_->addWidget(build_host_window());
-    content_->addWidget(build_transfers());
+    content_->addWidget(build_apps());
     content_->addWidget(build_log());
     content_->addStretch(1);
     update_log();
@@ -252,13 +251,8 @@ QWidget* GpuStatusPage::build_adapters() const {
     }
     auto* table = new QTableWidget(static_cast<int>(adapters.size()), 3);
     Theme::rows_table(table, {QStringLiteral("ADAPTER"), QStringLiteral("ROLE"),
-                              QStringLiteral("IN WINDOWS")});
-    auto* head = table->horizontalHeader();
-    head->setSectionResizeMode(0, QHeaderView::Stretch);
-    head->setSectionResizeMode(1, QHeaderView::Fixed);
-    head->setSectionResizeMode(2, QHeaderView::Fixed);
-    table->setColumnWidth(1, 112);
-    table->setColumnWidth(2, 148);
+                              QStringLiteral("IN WINDOWS")},
+                      QStringLiteral("gpu-adapters"), {320, 112, 200}, 0);
     table->verticalHeader()->setDefaultSectionSize(34);
     for (int row = 0; row < adapters.size(); ++row) {
         const auto& adapter = adapters.at(row);
@@ -388,21 +382,25 @@ QWidget* GpuStatusPage::build_host_window() {
         rows.add(QStringLiteral("In use"), QStringLiteral("-"))->itemAt(0)->widget());
     window_peak_ = qobject_cast<QLabel*>(
         rows.add(QStringLiteral("Peak"), QStringLiteral("-"))->itemAt(0)->widget());
-    panel.body->addWidget(Widgets::caption(QStringLiteral("Held most by")));
-    auto* holders = new QWidget;
-    holders_box_ = new QVBoxLayout(holders);
-    holders_box_->setContentsMargins(0, 0, 0, 0);
-    panel.body->addWidget(holders);
     return panel.frame;
 }
 
-QWidget* GpuStatusPage::build_transfers() {
-    auto panel = card(QStringLiteral("Transfers"),
-                      QStringLiteral("rates per second, counts since the app started"));
-    auto* holder = new QWidget;
-    transfers_box_ = new QVBoxLayout(holder);
-    transfers_box_->setContentsMargins(0, 0, 0, 0);
-    panel.body->addWidget(holder);
+QWidget* GpuStatusPage::build_apps() {
+    auto panel = card(QStringLiteral("Apps"),
+                      QStringLiteral("every app with a GPU context, rates per second, drag a header edge to resize"));
+    apps_note_ = Widgets::meta(QStringLiteral("-"));
+    panel.body->addWidget(apps_note_);
+    apps_table_ = new QTableWidget(0, 13);
+    Theme::rows_table(apps_table_,
+                      {QStringLiteral("APP"), QStringLiteral("SUBMITS"), QStringLiteral("HELD"),
+                       QStringLiteral("ARENA"), QStringLiteral("SPLITS"), QStringLiteral("EXTRA"),
+                       QStringLiteral("ARENA ROOM"), QStringLiteral("RING"), QStringLiteral("FENCE"),
+                       QStringLiteral("INLINE"), QStringLiteral("COPIED"), QStringLiteral("SLICE"),
+                       QStringLiteral("REFUSED")},
+                      QStringLiteral("gpu-apps"), {210, 84, 96, 250, 70, 70, 110, 110, 110, 70, 70, 70, 80}, 0);
+    apps_table_->verticalHeader()->setDefaultSectionSize(30);
+    apps_table_->setVisible(false);
+    panel.body->addWidget(apps_table_);
     return panel.frame;
 }
 
@@ -420,110 +418,74 @@ void GpuStatusPage::update_window() {
     window_use_->setText(w.read ? QStringLiteral("%1 of %2").arg(ui::Format::bytes(w.used_bytes), window)
                                 : QStringLiteral("-"));
     window_peak_->setText(w.peak_bytes ? ui::Format::bytes(*w.peak_bytes) : QStringLiteral("-"));
-    fill_holders();
-    fill_transfers();
+    fill_apps();
 }
 
-void GpuStatusPage::fill_holders() {
-    constexpr int kRows = 6;
-    while (auto* item = holders_box_->takeAt(0)) {
-        if (auto* widget = item->widget()) {
-            widget->hide();
-            widget->deleteLater();
-        }
-        delete item;
-    }
+void GpuStatusPage::fill_apps() {
     const auto& w = status_.host_window();
-    if (!w.read || w.holders.isEmpty()) {
-        holders_box_->addWidget(Widgets::meta(w.read ? QStringLiteral("Nothing is held") : QStringLiteral("-")));
+    const auto note = [this](const QString& text) {
+        apps_note_->setText(text);
+        apps_note_->setVisible(true);
+        apps_table_->setVisible(false);
+    };
+    if (!w.read) {
+        note(QStringLiteral("-"));
         return;
     }
-    const int rows = static_cast<int>(qMin<qsizetype>(w.holders.size(), kRows));
-    auto* table = new QTableWidget(rows, 3);
-    Theme::rows_table(table, {QStringLiteral("APP"), QStringLiteral("HELD"), QStringLiteral("BLOBS")});
-    auto* head = table->horizontalHeader();
-    head->setSectionResizeMode(0, QHeaderView::Stretch);
-    head->setSectionResizeMode(1, QHeaderView::Fixed);
-    head->setSectionResizeMode(2, QHeaderView::Fixed);
-    table->setColumnWidth(1, 112);
-    table->setColumnWidth(2, 80);
-    table->verticalHeader()->setDefaultSectionSize(30);
-    for (int row = 0; row < rows; ++row) {
-        const auto& holder = w.holders.at(row);
-        table->setItem(row, 0, new QTableWidgetItem(holder.label()));
-        table->setItem(row, 1, new QTableWidgetItem(ui::Format::bytes(holder.bytes)));
-        table->setItem(row, 2, new QTableWidgetItem(QString::number(holder.blobs)));
-    }
-    Theme::fit_rows(table);
-    holders_box_->addWidget(table);
-}
-
-void GpuStatusPage::fill_transfers() {
-    while (auto* item = transfers_box_->takeAt(0)) {
-        if (auto* widget = item->widget()) {
-            widget->hide();
-            widget->deleteLater();
-        }
-        delete item;
-    }
-    const auto& w = status_.host_window();
-    if (!w.read || !w.channels_known) {
-        transfers_box_->addWidget(Widgets::meta(QStringLiteral("-")));
+    if (w.apps.isEmpty()) {
+        note(QStringLiteral("No app has a GPU context"));
         return;
     }
-    const auto shown = services::HostWindowAlerts::shown_transfers(w);
-    if (shown.isEmpty()) {
-        transfers_box_->addWidget(
-            Widgets::meta(QStringLiteral("No transfers needed more than one trip")));
-        return;
+    apps_note_->setVisible(false);
+    apps_table_->setVisible(true);
+    const int rows = static_cast<int>(w.apps.size());
+    if (apps_table_->rowCount() != rows) {
+        apps_table_->setRowCount(rows);
     }
-    auto* table = new QTableWidget(static_cast<int>(shown.size()), 11);
-    Theme::rows_table(table, {QStringLiteral("APP"), QStringLiteral("SPLITS"), QStringLiteral("EXTRA"),
-                              QStringLiteral("ARENA ROOM"), QStringLiteral("RING"),
-                              QStringLiteral("FENCE"),
-                              QStringLiteral("INLINE"), QStringLiteral("COPIED"),
-                              QStringLiteral("SLICE"), QStringLiteral("REFUSED"), QStringLiteral("ARENA")});
-    auto* head = table->horizontalHeader();
-    head->setSectionResizeMode(0, QHeaderView::Stretch);
-    for (int column = 1; column < 11; ++column) {
-        head->setSectionResizeMode(column, QHeaderView::Fixed);
-        table->setColumnWidth(column, column >= 4 && column <= 6 ? 110 : column == 10 ? 220 : 70);
-    }
-    table->verticalHeader()->setDefaultSectionSize(30);
     const auto rate = [](double value) { return QString::number(value, 'f', 1); };
     const auto wait = [&rate](const services::HostWindowStatus::Wait& value) {
         return value.avg_ms ? QStringLiteral("%1/s, %2 ms").arg(rate(value.per_s)).arg(*value.avg_ms, 0, 'f', 1)
                             : QStringLiteral("%1/s").arg(rate(value.per_s));
     };
-    for (int row = 0; row < shown.size(); ++row) {
-        const auto& t = *shown.at(row);
-        const auto peak = t.arena_peak_percent();
-        QString arena = QStringLiteral("-");
-        if (t.arena_bytes && *t.arena_bytes > 0) {
-            const QString size = ui::Format::bytes(*t.arena_bytes);
-            const QString in_segments = t.arena_segments
-                                            ? QStringLiteral("%1 in %2 segments").arg(size).arg(*t.arena_segments)
+    const QString none = QStringLiteral("-");
+    for (int row = 0; row < rows; ++row) {
+        const auto& app = w.apps.at(row);
+        QString arena = none;
+        if (app.arena_bytes && *app.arena_bytes > 0) {
+            const auto peak = app.arena_peak_percent();
+            const QString size = ui::Format::bytes(*app.arena_bytes);
+            const QString in_segments = app.arena_segments
+                                            ? (*app.arena_segments == 1 ? QStringLiteral("%1 in %2 segment") : QStringLiteral("%1 in %2 segments"))
+                                                  .arg(size)
+                                                  .arg(*app.arena_segments)
                                             : size;
             arena = peak ? QStringLiteral("%1, peak %2%").arg(in_segments).arg(*peak) : in_segments;
         }
+        const bool channel = app.has_channel;
         const QStringList cells = {
-            t.label(),
-            rate(t.splits_per_s),
-            rate(t.extra_pieces_per_s),
-            wait(t.blob_room_wait),
-            wait(t.ring_wait),
-            wait(t.fence_wait),
-            QString::number(t.inline_bulk),
-            QString::number(t.copied_mappings),
-            QString::number(t.slice_waits),
-            QString::number(t.refusals),
-            arena};
+            app.label(),
+            app.submits_per_s ? QStringLiteral("%1/s").arg(rate(*app.submits_per_s)) : none,
+            ui::Format::bytes(app.held_bytes),
+            arena,
+            channel ? rate(app.splits_per_s) : none,
+            channel ? rate(app.extra_pieces_per_s) : none,
+            channel ? wait(app.blob_room_wait) : none,
+            channel ? wait(app.ring_wait) : none,
+            channel ? wait(app.fence_wait) : none,
+            channel ? QString::number(app.inline_bulk) : none,
+            channel ? QString::number(app.copied_mappings) : none,
+            channel ? QString::number(app.slice_waits) : none,
+            channel ? QString::number(app.refusals) : none};
         for (int column = 0; column < cells.size(); ++column) {
-            table->setItem(row, column, new QTableWidgetItem(cells.at(column)));
+            auto* item = apps_table_->item(row, column);
+            if (item == nullptr) {
+                apps_table_->setItem(row, column, new QTableWidgetItem(cells.at(column)));
+            } else if (item->text() != cells.at(column)) {
+                item->setText(cells.at(column));
+            }
         }
     }
-    Theme::fit_rows(table);
-    transfers_box_->addWidget(table);
+    Theme::fit_rows(apps_table_);
 }
 
 QWidget* GpuStatusPage::build_log() {

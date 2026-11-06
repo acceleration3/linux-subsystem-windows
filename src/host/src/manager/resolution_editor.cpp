@@ -64,17 +64,10 @@ ResolutionEditor::ResolutionEditor(config::ManagerSettings& settings, const serv
 
     table_ = new QTableWidget(0, 4);
     Theme::rows_table(table_, {QStringLiteral("PREFERRED"), QStringLiteral("RESOLUTION"),
-                               QStringLiteral("ASPECT"), QString{}});
+                               QStringLiteral("ASPECT"), QString{}},
+                      QStringLiteral("display-resolutions"), {96, 240, 90, 104}, kColSize);
     table_->verticalHeader()->setDefaultSectionSize(38);
     table_->setProperty("controls", true);
-    auto* head = table_->horizontalHeader();
-    head->setSectionResizeMode(kColPreferred, QHeaderView::Fixed);
-    head->setSectionResizeMode(kColSize, QHeaderView::Stretch);
-    head->setSectionResizeMode(kColAspect, QHeaderView::Fixed);
-    head->setSectionResizeMode(kColActions, QHeaderView::Fixed);
-    table_->setColumnWidth(kColPreferred, 96);
-    table_->setColumnWidth(kColAspect, 90);
-    table_->setColumnWidth(kColActions, 104);
     column->addWidget(table_);
 
     auto* foot = new QWidget;

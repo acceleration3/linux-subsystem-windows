@@ -5,6 +5,7 @@
 
 #include "lsw/host/ui/dialog_chrome.hpp"
 #include "lsw/host/ui/format.hpp"
+#include "lsw/host/ui/resizable_columns.hpp"
 #include "lsw/host/ui/theme.hpp"
 #include "lsw/host/ui/widgets.hpp"
 
@@ -131,11 +132,7 @@ void RemoteFileDialog::build() {
     entries_->setRootIsDecorated(false);
     entries_->setUniformRowHeights(true);
     entries_->setAlternatingRowColors(false);
-    entries_->header()->setSectionResizeMode(0, QHeaderView::Stretch);
-    entries_->header()->setSectionResizeMode(1, QHeaderView::Fixed);
-    entries_->header()->setSectionResizeMode(2, QHeaderView::Fixed);
-    entries_->setColumnWidth(1, 96);
-    entries_->setColumnWidth(2, 140);
+    ui::ResizableColumns::attach(entries_->header(), QStringLiteral("remote-files"), {320, 96, 140}, 0);
     pane_layout->addWidget(entries_, 1);
 
     connect(entries_, &QTreeWidget::itemActivated, this,

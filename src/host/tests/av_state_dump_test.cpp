@@ -156,6 +156,32 @@ int main(int argc, char** argv) {
         check(snap.find_context(9) && snap.find_context(9)->name.isEmpty(), "an empty name is kept");
         check(!snap.find_context(8), "a context line without a name is ignored");
         check(snap.contexts.size() == 2, "bad context ids are ignored");
+        check(!snap.find_context(7)->batches, "a context with no batches key has none");
+    }
+    {
+        QByteArray dump;
+        dump += "module/device/device/1/contexts/1/context/1 name=A batches=5\n";
+        dump += "module/device/device/2/contexts/1/context/1 name=B batches=9\n";
+        dump += "module/device/device/1/host_blobs/1/host_blob/1 context=1 size=100 caching=0 mapped=true\n";
+        dump += "module/device/device/2/host_blobs/1/host_blob/1 context=1 size=40 caching=0 mapped=true\n";
+        const auto snap = parsed(dump);
+        check(snap.contexts.size() == 2, "the same context id on two devices is two contexts");
+        const auto* a = snap.find_context(1, 1);
+        const auto* b = snap.find_context(2, 1);
+        check(a && b && a->name == QStringLiteral("A") && b->name == QStringLiteral("B"), "each device keeps its own name");
+        check(a && b && a->bytes() == 100 && b->bytes() == 40 && a->batches == 5 && b->batches == 9,
+              "bytes and batches do not mix across devices");
+        check(snap.contexts_with_id(1) == 2 && snap.contexts_with_id(3) == 0, "contexts are counted by id");
+    }
+    {
+        QByteArray dump;
+        dump += "module/device/device/1/contexts/1/context/7 name=hl2.exe batches=412\n";
+        dump += "module/device/device/1/contexts/1/context/8 name=a batches=x\n";
+        dump += "module/device/device/1/contexts/1/context/9 name=b batches=0\n";
+        const auto snap = parsed(dump);
+        check(snap.find_context(7)->batches == 412, "a context's batches are parsed");
+        check(!snap.find_context(8)->batches, "a batch count that is not a number is unknown");
+        check(snap.find_context(9)->batches == 0, "zero batches are known");
     }
     {
         QByteArray dump;

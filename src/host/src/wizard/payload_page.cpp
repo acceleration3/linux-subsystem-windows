@@ -35,12 +35,8 @@ PayloadPage::PayloadPage(Wizard& wizard, QWidget* parent)
     table_ = new QTableWidget(2, 3);
     ui::Theme::rows_table(table_, QStringList{QStringLiteral("ARTIFACT"),
                                               QStringLiteral("SOURCE"),
-                                              QStringLiteral("STATE")});
-    table_->horizontalHeader()->setSectionResizeMode(kColTask, QHeaderView::Stretch);
-    table_->horizontalHeader()->setSectionResizeMode(kColSource, QHeaderView::Fixed);
-    table_->setColumnWidth(kColSource, 220);
-    table_->horizontalHeader()->setSectionResizeMode(kColStatus, QHeaderView::Fixed);
-    table_->setColumnWidth(kColStatus, 190);
+                                              QStringLiteral("STATE")},
+                         QStringLiteral("wizard-payload"), {260, 220, 190}, kColTask);
     table_->setItem(kRowPayloadIso, kColTask, new QTableWidgetItem("lsw-payload.iso"));
     table_->setItem(kRowAvgpu, kColTask,
                     new QTableWidgetItem("avgpu driver package, x64 and x86"));

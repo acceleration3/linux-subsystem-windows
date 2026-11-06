@@ -61,12 +61,8 @@ SetupPage::SetupPage(Wizard& wizard, QWidget* parent) : PipelinePage(parent), wi
     table_ = new QTableWidget(0, 3);
     ui::Theme::rows_table(table_, QStringList{QStringLiteral("STEP"),
                                               QStringLiteral("TYPE"),
-                                              QStringLiteral("STATUS")});
-    table_->horizontalHeader()->setSectionResizeMode(kColName, QHeaderView::Stretch);
-    table_->horizontalHeader()->setSectionResizeMode(kColKind, QHeaderView::Fixed);
-    table_->setColumnWidth(kColKind, 170);
-    table_->horizontalHeader()->setSectionResizeMode(kColStatus, QHeaderView::Fixed);
-    table_->setColumnWidth(kColStatus, 210);
+                                              QStringLiteral("STATUS")},
+                         QStringLiteral("wizard-setup"), {260, 170, 210}, kColName);
     ui::Theme::fit_rows(table_);
     lay->addWidget(table_);
     lay->addStretch(1);
