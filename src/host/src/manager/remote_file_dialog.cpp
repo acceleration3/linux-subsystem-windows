@@ -5,7 +5,7 @@
 
 #include "lsw/host/ui/dialog_chrome.hpp"
 #include "lsw/host/ui/format.hpp"
-#include "lsw/host/ui/resizable_columns.hpp"
+#include "lsw/host/ui/table_header.hpp"
 #include "lsw/host/ui/theme.hpp"
 #include "lsw/host/ui/widgets.hpp"
 
@@ -21,6 +21,8 @@
 #include <QTreeWidget>
 #include <QVBoxLayout>
 
+#include <optional>
+
 #include <nlohmann/json.hpp>
 
 #include "lsw/linkproto/commands.hpp"
@@ -34,6 +36,52 @@ using ui::Widgets;
 
 constexpr int kRoleName = Qt::UserRole;
 constexpr int kRoleIsDir = Qt::UserRole + 1;
+
+class EntryItem : public QTreeWidgetItem {
+public:
+    EntryItem(QTreeWidget* parent, bool directory, std::optional<double> size, std::optional<double> modified)
+        : QTreeWidgetItem(parent), directory_(directory), size_(size), modified_(modified),
+          natural_(parent->topLevelItemCount()) {
+    }
+
+    bool operator<(const QTreeWidgetItem& other) const override {
+        const auto* rhs = dynamic_cast<const EntryItem*>(&other);
+        const QHeaderView* head = treeWidget() != nullptr ? treeWidget()->header() : nullptr;
+        if (rhs == nullptr || head == nullptr) {
+            return QTreeWidgetItem::operator<(other);
+        }
+        if (ui::TableHeader::natural(head)) {
+            return natural_ < rhs->natural_;
+        }
+        const bool descending = ui::TableHeader::order(head) == Qt::DescendingOrder;
+        if (directory_ != rhs->directory_) {
+            return descending ? !directory_ : directory_;
+        }
+        const int column = treeWidget()->sortColumn();
+        if (column > 0) {
+            const auto& mine = column == 1 ? size_ : modified_;
+            const auto& theirs = column == 1 ? rhs->size_ : rhs->modified_;
+            if (mine.has_value() != theirs.has_value()) {
+                return descending ? !mine.has_value() : mine.has_value();
+            }
+            if (mine && theirs && *mine != *theirs) {
+                return *mine < *theirs;
+            }
+        } else {
+            const int compared = text(0).compare(rhs->text(0), Qt::CaseInsensitive);
+            if (compared != 0) {
+                return compared < 0;
+            }
+        }
+        return descending ? natural_ > rhs->natural_ : natural_ < rhs->natural_;
+    }
+
+private:
+    bool directory_;
+    std::optional<double> size_;
+    std::optional<double> modified_;
+    int natural_;
+};
 
 struct Place {
     const char* label;
@@ -132,7 +180,7 @@ void RemoteFileDialog::build() {
     entries_->setRootIsDecorated(false);
     entries_->setUniformRowHeights(true);
     entries_->setAlternatingRowColors(false);
-    ui::ResizableColumns::attach(entries_->header(), QStringLiteral("remote-files"), {320, 96, 140}, 0);
+    ui::TableHeader::attach(entries_->header(), QStringLiteral("remote-files"), {420, 96, 140});
     pane_layout->addWidget(entries_, 1);
 
     connect(entries_, &QTreeWidget::itemActivated, this,
@@ -356,7 +404,9 @@ void RemoteFileDialog::render_entries(const link::AgentReply& reply) {
         const auto size = entry.value("size", std::int64_t{0});
         const auto mtime = entry.value("mtime", std::int64_t{0});
 
-        auto* item = new QTreeWidgetItem(entries_);
+        auto* item = new EntryItem(entries_, is_dir,
+                                   is_dir || size <= 0 ? std::nullopt : std::optional<double>{static_cast<double>(size)},
+                                   mtime > 0 ? std::optional<double>{static_cast<double>(mtime)} : std::nullopt);
         item->setText(0, name);
         item->setText(1, is_dir || size <= 0 ? QString{}
                                              : ui::Format::bytes(static_cast<quint64>(size)));
@@ -371,6 +421,8 @@ void RemoteFileDialog::render_entries(const link::AgentReply& reply) {
         }
         item->setData(0, kRoleName, child + name);
     }
+
+    ui::TableHeader::refresh(entries_->header());
 
     const int total = reply.body.value("total", 0);
     const bool more = reply.body.contains("next_cursor");

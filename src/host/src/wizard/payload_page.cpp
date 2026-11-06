@@ -36,7 +36,7 @@ PayloadPage::PayloadPage(Wizard& wizard, QWidget* parent)
     ui::Theme::rows_table(table_, QStringList{QStringLiteral("ARTIFACT"),
                                               QStringLiteral("SOURCE"),
                                               QStringLiteral("STATE")},
-                         QStringLiteral("wizard-payload"), {260, 220, 190}, kColTask);
+                         QStringLiteral("wizard-payload"), {300, 220, 190}, {0, 1, 2});
     table_->setItem(kRowPayloadIso, kColTask, new QTableWidgetItem("lsw-payload.iso"));
     table_->setItem(kRowAvgpu, kColTask,
                     new QTableWidgetItem("avgpu driver package, x64 and x86"));

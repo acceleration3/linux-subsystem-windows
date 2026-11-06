@@ -62,7 +62,7 @@ SetupPage::SetupPage(Wizard& wizard, QWidget* parent) : PipelinePage(parent), wi
     ui::Theme::rows_table(table_, QStringList{QStringLiteral("STEP"),
                                               QStringLiteral("TYPE"),
                                               QStringLiteral("STATUS")},
-                         QStringLiteral("wizard-setup"), {260, 170, 210}, kColName);
+                         QStringLiteral("wizard-setup"), {300, 170, 210}, {0, 1, 2});
     ui::Theme::fit_rows(table_);
     lay->addWidget(table_);
     lay->addStretch(1);

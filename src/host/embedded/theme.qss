@@ -280,6 +280,20 @@ QTableWidget#Rows QHeaderView::section, QTableView#Rows QHeaderView::section {
 QTableWidget#Rows QHeaderView::section:hover, QTableView#Rows QHeaderView::section:hover {
     border-right: 1px solid #394152;
 }
+QHeaderView::up-arrow {
+    image: url(:/lsw/sort-up.png);
+    width: 9px;
+    height: 9px;
+    subcontrol-origin: padding;
+    subcontrol-position: center right;
+}
+QHeaderView::down-arrow {
+    image: url(:/lsw/sort-down.png);
+    width: 9px;
+    height: 9px;
+    subcontrol-origin: padding;
+    subcontrol-position: center right;
+}
 QListWidget#StoreApps, QWidget#StoreAppsEmpty {
     background-color: #0d0f14;
     border: none;
@@ -870,4 +884,18 @@ QHeaderView::section {
 }
 QHeaderView::section:hover {
     border-right: 1px solid #394152;
+}
+QHeaderView::up-arrow {
+    image: url(:/lsw/sort-up.png);
+    width: 9px;
+    height: 9px;
+    subcontrol-origin: padding;
+    subcontrol-position: center right;
+}
+QHeaderView::down-arrow {
+    image: url(:/lsw/sort-down.png);
+    width: 9px;
+    height: 9px;
+    subcontrol-origin: padding;
+    subcontrol-position: center right;
 }

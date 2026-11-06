@@ -130,6 +130,7 @@ void HostWindowTracker::add(const platform::AvStateDump::Snapshot& snapshot, qin
         if (found == nullptr) {
             memory.has_counters = false;
             memory.counters = {};
+            memory.recent.clear();
             memory.hot_since_ms.reset();
             memory.refused_at_ms.reset();
             memory.copied_at_ms.reset();
@@ -141,33 +142,18 @@ void HostWindowTracker::add(const platform::AvStateDump::Snapshot& snapshot, qin
         const auto& channel = *found;
         app.has_channel = true;
         const auto delta = [&](quint64 now, quint64 was) { return now >= was ? now - was : quint64{0}; };
+        double interval_splits_per_s = 0;
         if (known && seconds > 0) {
             const quint64 splits = delta(channel.split_transfers, before.split_transfers);
-            const quint64 pieces = delta(channel.split_pieces, before.split_pieces);
             const auto optional_delta = [&](const std::optional<quint64>& now, const std::optional<quint64>& was) {
                 return now ? delta(*now, was.value_or(0)) : quint64{0};
             };
-            const auto wait = [&](const std::optional<quint64>& count, const std::optional<quint64>& was_count,
-                                  const std::optional<quint64>& micros, const std::optional<quint64>& was_micros) {
-                HostWindowStatus::Wait result;
-                const quint64 waits = optional_delta(count, was_count);
-                result.per_s = static_cast<double>(waits) / seconds;
-                if (waits > 0) {
-                    result.avg_ms = static_cast<double>(optional_delta(micros, was_micros)) / static_cast<double>(waits) / 1000.0;
-                }
-                return result;
-            };
             const quint64 blob_room_waits = optional_delta(channel.blob_room_waits, before.blob_room_waits);
-            app.splits_per_s = static_cast<double>(splits) / seconds;
-            app.extra_pieces_per_s = static_cast<double>(pieces > splits ? pieces - splits : 0) / seconds;
-            app.blob_room_wait = wait(channel.blob_room_waits, before.blob_room_waits, channel.blob_room_wait_us,
-                                           before.blob_room_wait_us);
-            app.ring_wait = wait(channel.ring_waits, before.ring_waits, channel.ring_wait_us, before.ring_wait_us);
-            app.fence_wait = wait(channel.fence_waits, before.fence_waits, channel.fence_wait_us, before.fence_wait_us);
+            interval_splits_per_s = static_cast<double>(splits) / seconds;
             if (channel.arena_grows && before.arena_grows) {
                 app.arena_grows_per_s = static_cast<double>(delta(*channel.arena_grows, *before.arena_grows)) / seconds;
             }
-            if (app.splits_per_s > kHotSplitsPerSecond) {
+            if (interval_splits_per_s > kHotSplitsPerSecond) {
                 memory.hot_since_ms = memory.hot_since_ms.value_or(*previous_at_ms_);
             } else {
                 memory.hot_since_ms.reset();
@@ -183,6 +169,41 @@ void HostWindowTracker::add(const platform::AvStateDump::Snapshot& snapshot, qin
                 memory.arena_full_at_ms = at_ms;
             }
         }
+        if (!memory.recent.isEmpty()) {
+            const auto& last = memory.recent.last().counters;
+            const auto below = [](const std::optional<quint64>& now, const std::optional<quint64>& was) {
+                return now && was && *now < *was;
+            };
+            if (channel.split_transfers < last.split_transfers || channel.split_pieces < last.split_pieces
+                || below(channel.blob_room_waits, last.blob_room_waits) || below(channel.ring_waits, last.ring_waits)
+                || below(channel.fence_waits, last.fence_waits)) {
+                memory.recent.clear();
+            }
+        }
+        memory.recent.push_back({at_ms, channel});
+        while (memory.recent.size() > 2 && memory.recent.first().at_ms < at_ms - kRecentMs) {
+            memory.recent.removeFirst();
+        }
+        const auto& base = memory.recent.first();
+        const double span = static_cast<double>(at_ms - base.at_ms) / 1000.0;
+        const auto per_s = [&](const std::optional<quint64>& now, const std::optional<quint64>& was) {
+            return span > 0 && now ? static_cast<double>(delta(*now, was.value_or(0))) / span : 0.0;
+        };
+        app.splits = {channel.split_transfers, per_s(channel.split_transfers, base.counters.split_transfers)};
+        app.extra = {channel.split_pieces, per_s(channel.split_pieces, base.counters.split_pieces)};
+        const auto wait = [&](const std::optional<quint64>& count, const std::optional<quint64>& micros,
+                              const std::optional<quint64>& was_count) {
+            HostWindowStatus::Wait result;
+            result.count = count;
+            result.per_s = per_s(count, was_count);
+            if (count && *count > 0 && micros) {
+                result.avg_ms = static_cast<double>(*micros) / static_cast<double>(*count) / 1000.0;
+            }
+            return result;
+        };
+        app.blob_room_wait = wait(channel.blob_room_waits, channel.blob_room_wait_us, base.counters.blob_room_waits);
+        app.ring_wait = wait(channel.ring_waits, channel.ring_wait_us, base.counters.ring_waits);
+        app.fence_wait = wait(channel.fence_waits, channel.fence_wait_us, base.counters.fence_waits);
         memory.counters = channel;
         memory.has_counters = true;
         app.inline_bulk = channel.inline_bulk;

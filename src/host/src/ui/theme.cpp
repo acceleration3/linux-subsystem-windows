@@ -1,7 +1,8 @@
 #include "lsw/host/ui/theme.hpp"
 
 #include "lsw/host/ui/lsw_style.hpp"
-#include "lsw/host/ui/resizable_columns.hpp"
+#include "lsw/host/ui/sort_item.hpp"
+#include "lsw/host/ui/table_header.hpp"
 
 #include <QApplication>
 #include <QFont>
@@ -56,7 +57,7 @@ void Theme::surface(QWidget* widget, const char* role) {
 }
 
 void Theme::rows_table(QTableWidget* table, const QStringList& headers, const QString& key,
-                       const QVector<int>& widths, int stretch) {
+                       const QVector<int>& widths, const QVector<int>& unsortable) {
     table->setColumnCount(static_cast<int>(headers.size()));
     table->setHorizontalHeaderLabels(headers);
     table->setObjectName(QStringLiteral("Rows"));
@@ -82,11 +83,11 @@ void Theme::rows_table(QTableWidget* table, const QStringList& headers, const QS
     font.setWeight(QFont::Medium);
     font.setLetterSpacing(QFont::PercentageSpacing, 113);
     head->setFont(font);
-    ResizableColumns::attach(head, key, widths, stretch);
+    TableHeader::attach(head, key, widths, unsortable);
 }
 
-QTableWidgetItem* Theme::kind_cell(const QString& text) {
-    auto* item = new QTableWidgetItem(text);
+QTableWidgetItem* Theme::kind_cell(const QString& text, int natural) {
+    auto* item = new SortItem(text, std::nullopt, natural);
     item->setFont(mono_font(12));
     item->setForeground(color(Color::kFgFaint));
     return item;

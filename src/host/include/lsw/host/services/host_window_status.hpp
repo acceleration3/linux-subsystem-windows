@@ -16,7 +16,13 @@ struct HostWindowStatus {
         quint64 write_combined = 0;
     };
 
+    struct Counter {
+        quint64 total = 0;
+        double per_s = 0;
+    };
+
     struct Wait {
+        std::optional<quint64> count;
         double per_s = 0;
         std::optional<double> avg_ms;
     };
@@ -29,8 +35,8 @@ struct HostWindowStatus {
         int blobs = 0;
         std::optional<double> submits_per_s;
         bool has_channel = false;
-        double splits_per_s = 0;
-        double extra_pieces_per_s = 0;
+        Counter splits;
+        Counter extra;
         Wait blob_room_wait;
         Wait ring_wait;
         Wait fence_wait;
@@ -83,7 +89,13 @@ public:
     [[nodiscard]] const HostWindowStatus& status() const noexcept { return status_; }
 
 private:
+    struct Recent {
+        qint64 at_ms = 0;
+        platform::AvStateDump::Channel counters;
+    };
+
     struct Memory {
+        QVector<Recent> recent;
         platform::AvStateDump::Channel counters;
         bool has_counters = false;
         std::optional<quint64> batches;
@@ -93,6 +105,7 @@ private:
         std::optional<qint64> arena_full_at_ms;
     };
 
+    static constexpr qint64 kRecentMs = 10'000;
     static constexpr double kJumpRatio = 1.2;
     static constexpr double kJumpPerSecond = 1.0;
 

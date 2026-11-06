@@ -187,7 +187,8 @@ int main(int argc, char** argv) {
         auto first = executor({channel(1)});
         tracker.add(first, 0);
         const auto* t = transfer(tracker, 1);
-        check(t && near(t->splits_per_s, 0) && !t->blob_room_wait.avg_ms, "a new channel has no rates");
+        check(t && t->splits.total == 0 && near(t->splits.per_s, 0) && !t->blob_room_wait.avg_ms && !t->blob_room_wait.count,
+              "a new channel has no rates");
         auto second = executor({channel(1)});
         second.channels[0].split_transfers = 20;
         second.channels[0].split_pieces = 50;
@@ -199,25 +200,46 @@ int main(int argc, char** argv) {
         second.channels[0].fence_wait_us = 3000;
         tracker.add(second, 2000);
         t = transfer(tracker, 1);
-        check(t && near(t->splits_per_s, 10) && near(t->extra_pieces_per_s, 15) && near(t->blob_room_wait.per_s, 2),
-              "rates are counter deltas per second");
+        check(t && t->splits.total == 20 && near(t->splits.per_s, 10), "splits are a total and a recent rate");
+        check(t && t->extra.total == 50 && near(t->extra.per_s, 25), "the extra trips are the split pieces, not pieces minus splits");
+        check(t && t->blob_room_wait.count == 4 && near(t->blob_room_wait.per_s, 2), "waits are a count and a recent rate");
         check(t && t->blob_room_wait.avg_ms && near(*t->blob_room_wait.avg_ms, 2.0), "the average wait is wait time over waits");
-        check(t && near(t->ring_wait.per_s, 1) && t->ring_wait.avg_ms && near(*t->ring_wait.avg_ms, 0.5),
-              "ring waits have their own rate and average");
-        check(t && near(t->fence_wait.per_s, 3) && t->fence_wait.avg_ms && near(*t->fence_wait.avg_ms, 0.5),
-              "fence waits have their own rate and average");
+        check(t && t->ring_wait.count == 2 && near(t->ring_wait.per_s, 1) && t->ring_wait.avg_ms && near(*t->ring_wait.avg_ms, 0.5),
+              "ring waits have their own count, rate and average");
+        check(t && t->fence_wait.count == 6 && near(t->fence_wait.per_s, 3) && t->fence_wait.avg_ms && near(*t->fence_wait.avg_ms, 0.5),
+              "fence waits have their own count, rate and average");
         auto third = second;
-        third.channels[0].split_transfers = 20;
         tracker.add(third, 3000);
         t = transfer(tracker, 1);
-        check(t && near(t->splits_per_s, 0) && !t->blob_room_wait.avg_ms && !t->ring_wait.avg_ms, "an idle interval has zero rates and no wait average");
+        check(t && t->splits.total == 20 && near(t->splits.per_s, 20.0 / 3), "the rate covers the recent window, not one interval");
+        tracker.add(third, 20000);
+        t = transfer(tracker, 1);
+        check(t && t->splits.total == 20 && near(t->splits.per_s, 0) && t->blob_room_wait.avg_ms && near(*t->blob_room_wait.avg_ms, 2.0),
+              "a burst leaves the rate after ten seconds but stays in the totals and the average");
         auto fourth = third;
         fourth.channels[0].split_transfers = 5;
         fourth.channels[0].split_pieces = 1;
-        tracker.add(fourth, 4000);
+        tracker.add(fourth, 21000);
         t = transfer(tracker, 1);
-        check(t && near(t->splits_per_s, 0) && near(t->extra_pieces_per_s, 0),
+        check(t && t->splits.total == 5 && near(t->splits.per_s, 0) && t->extra.total == 1 && near(t->extra.per_s, 0),
               "a counter that went backwards counts as no change");
+    }
+    {
+        HostWindowTracker tracker;
+        auto snap = executor({channel(1)});
+        tracker.add(snap, 0);
+        tracker.add(snap, 1000);
+        snap.channels[0].split_transfers = 5;
+        snap.channels[0].split_pieces = 7;
+        tracker.add(snap, 2000);
+        tracker.add(snap, 5000);
+        check(near(transfer(tracker, 1)->splits.per_s, 1) && near(transfer(tracker, 1)->extra.per_s, 7.0 / 5),
+              "a burst stays visible as a rate for a few seconds");
+        tracker.add(snap, 11000);
+        check(near(transfer(tracker, 1)->splits.per_s, 5.0 / 10), "it is still there while its starting sample is inside the window");
+        tracker.add(snap, 12500);
+        check(near(transfer(tracker, 1)->splits.per_s, 0) && transfer(tracker, 1)->splits.total == 5,
+              "and gone once the window has passed it");
     }
     {
         HostWindowTracker tracker;
@@ -257,11 +279,11 @@ int main(int argc, char** argv) {
         snap.channels.push_back(channel(1));
         snap.channels[0].split_transfers = 99;
         tracker.add(snap, 1000);
-        check(transfer(tracker, 1)->has_channel && near(transfer(tracker, 1)->splits_per_s, 0),
+        check(transfer(tracker, 1)->has_channel && near(transfer(tracker, 1)->splits.per_s, 0),
               "a channel that appears after its context starts from a baseline");
         snap.channels[0].split_transfers = 109;
         tracker.add(snap, 2000);
-        check(near(transfer(tracker, 1)->splits_per_s, 10), "and then has rates");
+        check(near(transfer(tracker, 1)->splits.per_s, 10), "and then has rates");
     }
     {
         HostWindowTracker tracker;
@@ -269,7 +291,7 @@ int main(int argc, char** argv) {
         auto snap = executor({channel(1)});
         snap.channels[0].split_transfers = 1;
         tracker.add(snap, 1000);
-        check(near(transfer(tracker, 1)->splits_per_s, 0), "two snapshots at the same time give no rates");
+        check(near(transfer(tracker, 1)->splits.per_s, 0), "two snapshots at the same time give no rates");
     }
     {
         HostWindowTracker tracker;
@@ -427,7 +449,7 @@ int main(int argc, char** argv) {
         snap.channels.push_back(channel(2));
         snap.channels[1].split_transfers = 50;
         tracker.add(snap, 2000);
-        check(near(transfer(tracker, 2)->splits_per_s, 0), "a returning channel starts from a baseline");
+        check(near(transfer(tracker, 2)->splits.per_s, 0), "a returning channel starts from a baseline");
     }
     {
         HostWindowTracker tracker;
@@ -436,7 +458,7 @@ int main(int argc, char** argv) {
         auto snap = executor({channel(1)});
         snap.channels[0].split_transfers = 99;
         tracker.add(snap, 2000);
-        check(near(transfer(tracker, 1)->splits_per_s, 0), "an empty snapshot resets the baselines");
+        check(near(transfer(tracker, 1)->splits.per_s, 0), "an empty snapshot resets the baselines");
     }
     {
         HostWindowTracker tracker;
@@ -520,6 +542,37 @@ int main(int argc, char** argv) {
         snap.contexts.removeLast();
         tracker.add(snap, 3000);
         check(apps.size() == 1 && apps.at(0).has_channel, "a unique id is merged with its context");
+    }
+
+    {
+        HostWindowTracker tracker;
+        auto snap = executor({channel(1)});
+        for (int i = 0; i <= 3; ++i) {
+            snap.channels[0].split_transfers = static_cast<quint64>(i) * 10;
+            tracker.add(snap, i * 1000);
+        }
+        check(near(transfer(tracker, 1)->splits.per_s, 10), "a steady 10 per second reads 10");
+        snap.channels[0].split_transfers = 0;
+        tracker.add(snap, 4000);
+        snap.channels[0].split_transfers = 10;
+        tracker.add(snap, 5000);
+        check(near(transfer(tracker, 1)->splits.per_s, 10), "after a counter drop the rate reads right at the next sample");
+        snap.channels[0].split_transfers = 20;
+        tracker.add(snap, 6000);
+        check(near(transfer(tracker, 1)->splits.per_s, 10), "and keeps reading it");
+    }
+    {
+        HostWindowTracker tracker;
+        auto snap = executor({channel(1)});
+        snap.channels[0].ring_waits = 8;
+        tracker.add(snap, 0);
+        snap.channels[0].ring_waits = 18;
+        tracker.add(snap, 1000);
+        snap.channels[0].ring_waits = 0;
+        tracker.add(snap, 2000);
+        snap.channels[0].ring_waits = 10;
+        tracker.add(snap, 3000);
+        check(near(transfer(tracker, 1)->ring_wait.per_s, 10), "a wait counter that dropped restarts the rate window too");
     }
 
     return g_failures == 0 ? 0 : 1;

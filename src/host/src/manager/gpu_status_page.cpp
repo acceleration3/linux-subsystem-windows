@@ -7,6 +7,8 @@
 #include "lsw/host/ui/panel.hpp"
 #include "lsw/host/ui/status_pill.hpp"
 #include "lsw/host/ui/format.hpp"
+#include "lsw/host/ui/sort_item.hpp"
+#include "lsw/host/ui/table_header.hpp"
 #include "lsw/host/ui/theme.hpp"
 #include "lsw/host/ui/usage_graph.hpp"
 #include "lsw/host/ui/widgets.hpp"
@@ -252,14 +254,15 @@ QWidget* GpuStatusPage::build_adapters() const {
     auto* table = new QTableWidget(static_cast<int>(adapters.size()), 3);
     Theme::rows_table(table, {QStringLiteral("ADAPTER"), QStringLiteral("ROLE"),
                               QStringLiteral("IN WINDOWS")},
-                      QStringLiteral("gpu-adapters"), {320, 112, 200}, 0);
+                      QStringLiteral("gpu-adapters"), {420, 112, 200});
     table->verticalHeader()->setDefaultSectionSize(34);
     for (int row = 0; row < adapters.size(); ++row) {
         const auto& adapter = adapters.at(row);
-        table->setItem(row, 0, new QTableWidgetItem(platform::HostGpus::adapter_name(adapter.gpu)));
+        table->setItem(row, 0, new ui::SortItem(platform::HostGpus::adapter_name(adapter.gpu), std::nullopt, row));
         table->setItem(row, 1,
-                       new QTableWidgetItem(adapter.display ? QStringLiteral("Display")
-                                                            : QStringLiteral("Render only")));
+                       new ui::SortItem(adapter.display ? QStringLiteral("Display")
+                                                        : QStringLiteral("Render only"),
+                                        std::nullopt, row));
         auto* holder = new QWidget;
         auto* line = new QHBoxLayout(holder);
         line->setContentsMargins(8, 0, 8, 0);
@@ -268,9 +271,11 @@ QWidget* GpuStatusPage::build_adapters() const {
         pill->setMinimumWidth(pill->sizeHint().width());
         line->addWidget(pill, 0, Qt::AlignLeft | Qt::AlignVCenter);
         line->addStretch(1);
+        table->setItem(row, 2, new ui::SortItem(QString{}, std::nullopt, row, pill->text()));
         table->setCellWidget(row, 2, holder);
     }
     Theme::fit_rows(table);
+    ui::TableHeader::refresh(table->horizontalHeader());
     panel.body->addWidget(table);
     return panel.frame;
 }
@@ -387,7 +392,7 @@ QWidget* GpuStatusPage::build_host_window() {
 
 QWidget* GpuStatusPage::build_apps() {
     auto panel = card(QStringLiteral("Apps"),
-                      QStringLiteral("every app with a GPU context, rates per second, drag a header edge to resize"));
+                      QStringLiteral("totals and recent rate, click a header to sort"));
     apps_note_ = Widgets::meta(QStringLiteral("-"));
     panel.body->addWidget(apps_note_);
     apps_table_ = new QTableWidget(0, 13);
@@ -397,7 +402,7 @@ QWidget* GpuStatusPage::build_apps() {
                        QStringLiteral("ARENA ROOM"), QStringLiteral("RING"), QStringLiteral("FENCE"),
                        QStringLiteral("INLINE"), QStringLiteral("COPIED"), QStringLiteral("SLICE"),
                        QStringLiteral("REFUSED")},
-                      QStringLiteral("gpu-apps"), {210, 84, 96, 250, 70, 70, 110, 110, 110, 70, 70, 70, 80}, 0);
+                      QStringLiteral("gpu-apps"), {210, 84, 96, 250, 110, 110, 170, 170, 170, 70, 70, 70, 80});
     apps_table_->verticalHeader()->setDefaultSectionSize(30);
     apps_table_->setVisible(false);
     panel.body->addWidget(apps_table_);
@@ -443,49 +448,84 @@ void GpuStatusPage::fill_apps() {
         apps_table_->setRowCount(rows);
     }
     const auto rate = [](double value) { return QString::number(value, 'f', 1); };
-    const auto wait = [&rate](const services::HostWindowStatus::Wait& value) {
-        return value.avg_ms ? QStringLiteral("%1/s, %2 ms").arg(rate(value.per_s)).arg(*value.avg_ms, 0, 'f', 1)
-                            : QStringLiteral("%1/s").arg(rate(value.per_s));
-    };
     const QString none = QStringLiteral("-");
+    using Value = std::optional<double>;
+    struct Cell {
+        QString text;
+        Value value;
+        QString key;
+    };
     for (int row = 0; row < rows; ++row) {
         const auto& app = w.apps.at(row);
         QString arena = none;
+        Value arena_value;
         if (app.arena_bytes && *app.arena_bytes > 0) {
             const auto peak = app.arena_peak_percent();
             const QString size = ui::Format::bytes(*app.arena_bytes);
             const QString in_segments = app.arena_segments
-                                            ? (*app.arena_segments == 1 ? QStringLiteral("%1 in %2 segment") : QStringLiteral("%1 in %2 segments"))
+                                            ? QStringLiteral("%1 in %2 %3")
                                                   .arg(size)
                                                   .arg(*app.arena_segments)
+                                                  .arg(*app.arena_segments == 1 ? QStringLiteral("segment")
+                                                                                : QStringLiteral("segments"))
                                             : size;
             arena = peak ? QStringLiteral("%1, peak %2%").arg(in_segments).arg(*peak) : in_segments;
+            arena_value = static_cast<double>(*app.arena_bytes);
         }
         const bool channel = app.has_channel;
-        const QStringList cells = {
-            app.label(),
-            app.submits_per_s ? QStringLiteral("%1/s").arg(rate(*app.submits_per_s)) : none,
-            ui::Format::bytes(app.held_bytes),
-            arena,
-            channel ? rate(app.splits_per_s) : none,
-            channel ? rate(app.extra_pieces_per_s) : none,
-            channel ? wait(app.blob_room_wait) : none,
-            channel ? wait(app.ring_wait) : none,
-            channel ? wait(app.fence_wait) : none,
-            channel ? QString::number(app.inline_bulk) : none,
-            channel ? QString::number(app.copied_mappings) : none,
-            channel ? QString::number(app.slice_waits) : none,
-            channel ? QString::number(app.refusals) : none};
-        for (int column = 0; column < cells.size(); ++column) {
-            auto* item = apps_table_->item(row, column);
-            if (item == nullptr) {
-                apps_table_->setItem(row, column, new QTableWidgetItem(cells.at(column)));
-            } else if (item->text() != cells.at(column)) {
-                item->setText(cells.at(column));
+        const auto count = [&](quint64 value) {
+            return channel ? Cell{QString::number(value), static_cast<double>(value), {}} : Cell{none, {}, {}};
+        };
+        const auto rated = [&](const services::HostWindowStatus::Counter& value) {
+            if (!channel) {
+                return Cell{none, {}, {}};
             }
+            QString text = QString::number(value.total);
+            if (value.per_s > 0) {
+                text += QStringLiteral(" · %1/s").arg(rate(value.per_s));
+            }
+            return Cell{text, static_cast<double>(value.total), {}};
+        };
+        const auto waited = [&](const services::HostWindowStatus::Wait& value) {
+            if (!channel || !value.count) {
+                return Cell{none, {}, {}};
+            }
+            QString text = QString::number(*value.count);
+            if (value.avg_ms) {
+                text += QStringLiteral(" · %1 ms avg").arg(*value.avg_ms, 0, 'f', 1);
+            }
+            if (value.per_s > 0) {
+                text += QStringLiteral(" · %1/s").arg(rate(value.per_s));
+            }
+            return Cell{text, static_cast<double>(*value.count), {}};
+        };
+        QString name = app.label();
+        const qsizetype space = name.indexOf(QLatin1Char(' '));
+        if (space > 0 && name.left(space).toULongLong() > 0) {
+            name = name.mid(space + 1);
+        }
+        const QVector<Cell> cells = {
+            {app.label(), {}, name},
+            app.submits_per_s ? Cell{QStringLiteral("%1/s").arg(rate(*app.submits_per_s)), *app.submits_per_s, {}}
+                              : Cell{none, {}, {}},
+            {ui::Format::bytes(app.held_bytes), static_cast<double>(app.held_bytes), {}},
+            {arena, arena_value, {}},
+            rated(app.splits),
+            rated(app.extra),
+            waited(app.blob_room_wait),
+            waited(app.ring_wait),
+            waited(app.fence_wait),
+            count(app.inline_bulk),
+            count(app.copied_mappings),
+            count(app.slice_waits),
+            count(app.refusals)};
+        for (int column = 0; column < cells.size(); ++column) {
+            ui::SortItem::put(apps_table_, row, column, cells.at(column).text, cells.at(column).value,
+                              cells.at(column).key);
         }
     }
     Theme::fit_rows(apps_table_);
+    ui::TableHeader::refresh(apps_table_->horizontalHeader());
 }
 
 QWidget* GpuStatusPage::build_log() {

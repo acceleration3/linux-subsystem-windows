@@ -16,6 +16,8 @@
 #include "lsw/host/ui/key_values.hpp"
 #include "lsw/host/ui/panel.hpp"
 #include "lsw/host/ui/status_pill.hpp"
+#include "lsw/host/ui/sort_item.hpp"
+#include "lsw/host/ui/table_header.hpp"
 #include "lsw/host/ui/theme.hpp"
 #include "lsw/host/ui/widgets.hpp"
 
@@ -377,12 +379,12 @@ QWidget* GraphicsPage::build_apis() const {
     auto* table = new QTableWidget(static_cast<int>(apis.size()), 3);
     Theme::rows_table(table, {QStringLiteral("API"), QStringLiteral("THE HOST RUNS IT ON"),
                               QStringLiteral("STATE")},
-                      QStringLiteral("graphics-apis"), {112, 300, 124}, 1);
+                      QStringLiteral("graphics-apis"), {112, 420, 124});
     table->verticalHeader()->setDefaultSectionSize(34);
     for (int row = 0; row < apis.size(); ++row) {
         const auto& api = apis.at(row);
-        table->setItem(row, 0, new QTableWidgetItem(api.name));
-        table->setItem(row, 1, Theme::kind_cell(api.runs_on));
+        table->setItem(row, 0, new ui::SortItem(api.name, std::nullopt, row));
+        table->setItem(row, 1, Theme::kind_cell(api.runs_on, row));
         auto* holder = new QWidget;
         auto* line = new QHBoxLayout(holder);
         line->setContentsMargins(8, 0, 8, 0);
@@ -396,9 +398,11 @@ QWidget* GraphicsPage::build_apis() const {
         pill->setMinimumWidth(pill->sizeHint().width());
         line->addWidget(pill, 0, Qt::AlignLeft | Qt::AlignVCenter);
         line->addStretch(1);
+        table->setItem(row, 2, new ui::SortItem(QString{}, std::nullopt, row, pill->text()));
         table->setCellWidget(row, 2, holder);
     }
     Theme::fit_rows(table);
+    ui::TableHeader::refresh(table->horizontalHeader());
     panel.body->addWidget(table);
     const QString d3d = platform::AccelVirtPaths::d3d_lib_dir();
     auto* note = Widgets::meta(

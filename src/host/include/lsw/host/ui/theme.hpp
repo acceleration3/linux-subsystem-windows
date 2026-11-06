@@ -20,9 +20,9 @@ public:
     static void surface(QWidget* widget, const char* role);
 
     static void rows_table(QTableWidget* table, const QStringList& headers, const QString& key,
-                           const QVector<int>& widths, int stretch = -1);
+                           const QVector<int>& widths, const QVector<int>& unsortable = {});
 
-    [[nodiscard]] static QTableWidgetItem* kind_cell(const QString& text);
+    [[nodiscard]] static QTableWidgetItem* kind_cell(const QString& text, int natural = 0);
 
     static void fit_rows(QTableWidget* table);
 
