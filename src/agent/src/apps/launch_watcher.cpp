@@ -284,14 +284,16 @@ void LaunchWatcher::on_launch_ended(unsigned long key) {
 void LaunchWatcher::report_launch_ended(unsigned long key) {
     const std::lock_guard lock(mu_);
     std::string app_id;
+    std::uint64_t created = 0;
     if (const auto id = identities_.find(key); id != identities_.end()) {
         app_id = id->second.app_id;
+        created = id->second.created;
     }
     if (pending_.size() >= kMaxPendingReports) {
         pending_.erase(pending_.begin());
     }
     pending_.emplace_back(linkproto::topic::kLaunchEnded,
-                          nlohmann::json{{"pid", key}, {"app_id", app_id}});
+                          nlohmann::json{{"pid", key}, {"created", created}, {"app_id", app_id}});
 }
 
 void LaunchWatcher::report_async(ExitedProcess exited) {

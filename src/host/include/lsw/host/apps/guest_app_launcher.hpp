@@ -5,6 +5,7 @@
 
 #include <QHash>
 #include <QObject>
+#include <QPair>
 #include <QPointer>
 #include <QSet>
 #include <QString>
@@ -44,7 +45,7 @@ private:
     [[nodiscard]] QString key(const apps::AppConfig& app) const;
     void identified(const QString& identity, const QString& aumid, const QString& path);
     void forget(const QString& identity);
-    void launch_ended(quint32 pid);
+    void launch_ended(quint32 pid, quint64 created);
     link::AgentRpcClient& rpc_;
     std::function<QString()> output_source_;
     QSet<QString> pending_;
@@ -57,8 +58,9 @@ private:
     QHash<QString, Queued> queued_;
     QHash<QString, QPointer<mirror::WindowMirror>> mirrors_;
     QHash<QString, quint32> pids_;
+    QHash<QString, quint64> created_;
     QHash<QString, QString> shown_by_;
-    QList<quint32> ended_;
+    QList<QPair<quint32, quint64>> ended_;
     link::EventSubscription ended_sub_;
 };
 

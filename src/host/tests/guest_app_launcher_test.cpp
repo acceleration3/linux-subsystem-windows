@@ -8,6 +8,8 @@
 #include <QCoreApplication>
 #include <QEventLoop>
 #include <QFile>
+#include <QList>
+#include <QPointer>
 #include <QSocketNotifier>
 #include <QTcpServer>
 #include <QTcpSocket>
@@ -262,8 +264,10 @@ int main(int argc, char** argv) {
     bool desktop_mirror = false;
     bool reject_mirror = false;
     bool reject_launch = false;
+    QList<QPointer<QTcpSocket>> agent_sockets;
     QObject::connect(&server, &QTcpServer::newConnection, &app, [&] {
         auto* socket = server.nextPendingConnection();
+        agent_sockets.append(socket);
         auto buffer = std::make_shared<QByteArray>();
         QObject::connect(socket, &QTcpSocket::disconnected, socket, &QObject::deleteLater);
         QObject::connect(socket, &QTcpSocket::readyRead, socket, [&, socket, buffer] {
@@ -282,7 +286,7 @@ int main(int argc, char** argv) {
                           "UI asks to reuse an existing guest app");
                     body = reject_launch
                                ? nlohmann::json{{"ok", false}, {"error", "activation refused"}}
-                               : nlohmann::json{{"ok", true}, {"pid", 123}, {"job", "test-job"}};
+                               : nlohmann::json{{"ok", true}, {"pid", 123}, {"pid_created", 777}, {"job", "test-job"}};
                 } else if (message["cmd"] == "open_package") {
                     ++packages;
                     check(message["params"]["path"] == "C:\\test.MSIX",
@@ -410,6 +414,37 @@ int main(int argc, char** argv) {
               "MSIX arguments rejected instead of ignored");
     }
     QFile::remove(frame);
+    {
+        const auto push_ended = [&](quint32 pid, quint64 created) {
+            const auto event =
+                nlohmann::json{{"event", "launch_ended"}, {"pid", pid}, {"created", created}}.dump();
+            std::uint8_t header[5];
+            lsw::linkproto::write_header(header, lsw::linkproto::FrameType::Control,
+                                         static_cast<std::uint32_t>(event.size()));
+            for (const auto& socket : agent_sockets) {
+                if (socket && socket->state() == QAbstractSocket::ConnectedState) {
+                    socket->write(reinterpret_cast<const char*>(header), 5);
+                    socket->write(event.data(), static_cast<qint64>(event.size()));
+                    socket->flush();
+                }
+            }
+        };
+        lsw::host::apps::GuestAppLauncher launcher(rpc);
+        lsw::host::apps::AppConfig config;
+        config.id = QStringLiteral("ended-app");
+        config.path = QStringLiteral("C:\\ended.exe");
+        const int before = mirrors;
+        launcher.launch(config, QString());
+        check(wait_for([&] { return mirrors == before + 1; }), "launch under test starts a mirror");
+        push_ended(123, 555);
+        push_ended(124, 777);
+        wait_for([] { return false; }, 300);
+        check(launcher.opening(config),
+              "an ended report of a reused pid or another creation time does not end the launch");
+        push_ended(123, 777);
+        check(wait_for([&] { return !launcher.opening(config); }),
+              "an ended report matching pid and creation time ends the launch");
+    }
     const QString bad_executable = directory.filePath("not-executable");
     QFile bad_file(bad_executable);
     check(bad_file.open(QIODevice::WriteOnly), "non-executable fixture available");

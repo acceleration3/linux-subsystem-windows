@@ -481,23 +481,79 @@ static void test_launch_continuation() {
     using C = LaunchContinuation::Candidate;
     constexpr std::uint64_t s = 1'000'000'000ULL;
     const std::wstring ff = L"c:\\program files\\mozilla firefox\\firefox.exe";
-    const LaunchContinuation launch(8772, 1, ff, 100 * s);
+    const auto root = [&](bool own = true, std::vector<std::uint64_t> newer = {}) {
+        LaunchContinuation::Root r;
+        r.pid = 8772;
+        r.session = 1;
+        r.image_lc = ff;
+        r.started = 100 * s;
+        r.runs_own_executable = own;
+        r.newer_launch_starts = std::move(newer);
+        return r;
+    };
+    const auto relaunch = [&](unsigned long pid, std::uint64_t at) {
+        C c;
+        c.pid = pid;
+        c.parent = 1656;
+        c.session = 1;
+        c.image_lc = ff;
+        c.created = at;
+        c.parent_is_explorer = true;
+        return c;
+    };
+    const std::uint64_t soon = 100 * s + 5'000'000;
+    const LaunchContinuation launch(root());
     check(launch.pick({}) == std::nullopt, "no processes, no continuation");
-    check(launch.pick({C{10228, 1, ff, 100 * s + 5'000'000, false}}) == 10228UL,
-          "a same-image process started after the launch continues it");
-    check(launch.pick({C{10228, 1, ff, 100 * s - 1, false}}) == std::nullopt,
-          "one that started before the launch does not");
-    check(launch.pick({C{10228, 1, ff, 100 * s + 200'000'000ULL, false}}) == std::nullopt,
-          "one that started long after the launch does not");
-    check(launch.pick({C{10228, 2, ff, 100 * s + 5'000'000, false}}) == std::nullopt,
-          "one in another session does not");
-    check(launch.pick({C{10228, 1, L"c:\\other.exe", 100 * s + 5'000'000, false}}) == std::nullopt,
-          "another image does not");
-    check(launch.pick({C{10228, 1, ff, 100 * s + 5'000'000, true}}) == std::nullopt,
-          "one that belongs to another launch does not");
-    check(launch.pick({C{8772, 1, ff, 100 * s + 1, false}}) == std::nullopt, "the root itself does not");
-    check(launch.pick({C{30, 1, ff, 100 * s + 9'000'000, false}, C{20, 1, ff, 100 * s + 3'000'000, false}}) == 20UL,
-          "the earliest candidate wins");
+    check(launch.pick({relaunch(10228, soon)}) == 10228UL,
+          "a same-image process started by Explorer after the launch continues it");
+    check(launch.pick({relaunch(10228, 100 * s - 1)}) == std::nullopt, "started before the launch: no");
+    check(launch.pick({relaunch(10228, 100 * s + 200'000'000ULL)}) == std::nullopt,
+          "started long after the launch: no");
+    C other_session = relaunch(10228, soon);
+    other_session.session = 2;
+    check(launch.pick({other_session}) == std::nullopt, "another session: no");
+    C other_image = relaunch(10228, soon);
+    other_image.image_lc = L"c:\\other.exe";
+    check(launch.pick({other_image}) == std::nullopt, "another image: no");
+    C owned = relaunch(10228, soon);
+    owned.owned_by_other_launch = true;
+    check(launch.pick({owned}) == std::nullopt, "owned by another launch: no");
+    check(launch.pick({relaunch(8772, soon)}) == std::nullopt, "the root itself: no");
+    check(launch.pick({relaunch(30, soon + 4'000'000), relaunch(20, soon)}) == 20UL, "the earliest wins");
+    C jobbed = relaunch(10228, soon);
+    jobbed.in_job = true;
+    check(launch.pick({jobbed}) == std::nullopt, "a process in a job: no");
+    C stranger = relaunch(10228, soon);
+    stranger.parent_is_explorer = false;
+    stranger.parent = 777;
+    check(launch.pick({stranger}) == std::nullopt, "a process of an unrelated parent: no");
+    stranger.parent_in_launch = true;
+    check(launch.pick({stranger}) == 10228UL, "a child of a process of the launch: yes");
+    stranger.parent_in_launch = false;
+    stranger.parent = 8772;
+    check(launch.pick({stranger}) == 10228UL, "a child of the root: yes");
+    LaunchContinuation chained(root());
+    stranger.parent = 10408;
+    check(chained.pick({stranger}) == std::nullopt, "the child of a stranger: no");
+    chained.followed(10408);
+    check(chained.pick({stranger}) == 10228UL, "the child of a followed process: yes");
+    const LaunchContinuation older(root(true, {100 * s + 1'000'000}));
+    check(older.pick({relaunch(10228, soon)}) == std::nullopt,
+          "created after a newer launch of the same image started: its");
+    check(older.pick({relaunch(10228, 100 * s + 500'000)}) == 10228UL,
+          "created before the newer launch started: ours");
+    LaunchContinuation retry(root());
+    retry.reject(10228);
+    check(retry.pick({relaunch(10228, soon)}) == std::nullopt, "a rejected pid is not picked again");
+    check(retry.pick({relaunch(10228, soon), relaunch(10300, soon + 1'000'000)}) == 10300UL,
+          "polling goes on to the next candidate after a failed assign");
+    check(LaunchContinuation::keep_polling(0) && LaunchContinuation::keep_polling(3000) &&
+              !LaunchContinuation::keep_polling(3001),
+          "polling stops at the deadline");
+    check(launch.worth_following(100 * s + 100'000'000ULL), "a young launch is worth following");
+    check(!launch.worth_following(100 * s + 200'000'000ULL), "an old launch is not");
+    check(!LaunchContinuation(root(false)).worth_following(100 * s + 1),
+          "a launch that did not run the app's own executable is not");
 }
 
 int main() {

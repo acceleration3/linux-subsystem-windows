@@ -25,23 +25,25 @@ GuestAppLauncher::GuestAppLauncher(link::AgentRpcClient& rpc, QObject* parent)
     : QObject(parent), rpc_(rpc) {
     ended_sub_ = rpc_.subscribe(linkproto::topic::kLaunchEnded, [this](const nlohmann::json& f) {
         const auto pid = f.value("pid", quint32{0});
+        const auto created = f.value("created", quint64{0});
         if (pid == 0) {
             return;
         }
-        QMetaObject::invokeMethod(this, [this, pid] { launch_ended(pid); }, Qt::QueuedConnection);
+        QMetaObject::invokeMethod(
+            this, [this, pid, created] { launch_ended(pid, created); }, Qt::QueuedConnection);
     });
 }
 
-void GuestAppLauncher::launch_ended(quint32 pid) {
+void GuestAppLauncher::launch_ended(quint32 pid, quint64 created) {
     QString identity;
     for (auto it = pids_.cbegin(); it != pids_.cend(); ++it) {
-        if (it.value() == pid) {
+        if (it.value() == pid && created_.value(it.key()) == created) {
             identity = it.key();
             break;
         }
     }
     if (identity.isEmpty()) {
-        ended_.append(pid);
+        ended_.append({pid, created});
         if (ended_.size() > kMostEnded) {
             ended_.removeFirst();
         }
@@ -114,7 +116,7 @@ void GuestAppLauncher::launch(const apps::AppConfig& app, const QString& activat
                 flush_queued(identity);
                 return;
             }
-            if (ended_.removeOne(pid)) {
+            if (ended_.removeOne({pid, pid_created})) {
                 LSW_INFO("launch {}: every process ended before a window was shown", path.toStdString());
                 pending_.remove(identity);
                 Q_EMIT changed();
@@ -129,6 +131,7 @@ void GuestAppLauncher::launch(const apps::AppConfig& app, const QString& activat
             auto* mirror = mirror::WindowMirror::of_application(rpc_, application, this);
             mirrors_.insert(identity, mirror);
             pids_.insert(identity, pid);
+            created_.insert(identity, pid_created);
             connect(mirror, &mirror::WindowMirror::app_identified, this,
                     [this, identity, path](const QString& aumid) { identified(identity, aumid, path); });
             connect(mirror, &mirror::WindowMirror::ready, this, [this, identity, path, pid] {
@@ -215,6 +218,7 @@ void GuestAppLauncher::identified(const QString& identity, const QString& aumid,
 void GuestAppLauncher::forget(const QString& identity) {
     mirrors_.remove(identity);
     pids_.remove(identity);
+    created_.remove(identity);
     for (auto it = shown_by_.begin(); it != shown_by_.end();) {
         it = it.value() == identity ? shown_by_.erase(it) : std::next(it);
     }
