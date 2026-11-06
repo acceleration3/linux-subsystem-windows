@@ -1,0 +1,203 @@
+#include "core/runner.hpp"
+
+#include "core/check_filter.hpp"
+#include "core/exe_identity.hpp"
+#include "core/json_report.hpp"
+#include "core/run_guard.hpp"
+#include "core/worker.hpp"
+
+#include <algorithm>
+#include <atomic>
+#include <chrono>
+#include <cstdio>
+#include <ctime>
+#include <random>
+#include <thread>
+
+namespace lsw::suites {
+
+namespace {
+
+constexpr int kDefaultTimeoutSeconds = 60;
+constexpr int kMaxDefaultJobs = 16;
+
+std::string utc_now() {
+    const std::time_t now = std::time(nullptr);
+    char buffer[32];
+    std::strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%SZ", std::gmtime(&now));
+    return buffer;
+}
+
+std::string join(const std::vector<std::string>& parts) {
+    std::string out;
+    for (const std::string& part : parts) {
+        out += out.empty() ? "" : ",";
+        out += part;
+    }
+    return out;
+}
+
+}  // namespace
+
+Runner::Runner(const Registry& registry, const Options& options)
+    : registry_(registry), options_(options), printer_(ExeIdentity::name()) {}
+
+int Runner::list() const {
+    for (const Suite& suite : registry_.suites()) {
+        for (const Check& check : suite.checks()) {
+            std::printf("%s suite=%s policy=%s tags=%s%s\n", check.id.c_str(),
+                        suite.name().c_str(),
+                        suite.policy() == Policy::Parallel ? "parallel" : "serial",
+                        join(check.tags).c_str(), check.exclusive ? " exclusive" : "");
+        }
+    }
+    return 0;
+}
+
+bool Runner::select(std::vector<Planned>& plan, std::size_t& parallel_free,
+                    std::size_t& parallel_exclusive, bool& any_serial, std::string& error) const {
+    const CheckFilter filter(options_.filter, options_.tag);
+    std::vector<Planned> free_checks;
+    std::vector<Planned> exclusive_checks;
+    std::vector<Planned> serial_checks;
+    for (const std::string& name : options_.suites) {
+        const Suite* suite = registry_.find_suite(name);
+        if (suite == nullptr) {
+            error = "unknown suite: " + name;
+            return false;
+        }
+        for (const Check& check : suite->checks()) {
+            if (!filter.accepts(check.id, check.tags)) {
+                continue;
+            }
+            std::vector<Planned>& target =
+                suite->policy() == Policy::Serial ? serial_checks
+                : check.exclusive                 ? exclusive_checks
+                                                  : free_checks;
+            for (int round = 0; round < options_.repeat; ++round) {
+                target.push_back({suite, &check});
+            }
+        }
+    }
+    if (options_.shuffle) {
+        std::mt19937 random(*options_.shuffle);
+        std::shuffle(free_checks.begin(), free_checks.end(), random);
+    }
+    any_serial = !serial_checks.empty() ||
+                 std::any_of(options_.suites.begin(), options_.suites.end(),
+                             [&](const std::string& name) {
+                                 return registry_.find_suite(name)->policy() == Policy::Serial;
+                             });
+    plan = free_checks;
+    parallel_free = plan.size();
+    plan.insert(plan.end(), exclusive_checks.begin(), exclusive_checks.end());
+    parallel_exclusive = plan.size();
+    plan.insert(plan.end(), serial_checks.begin(), serial_checks.end());
+    if (plan.empty()) {
+        error = "no check matches";
+        return false;
+    }
+    return true;
+}
+
+void Runner::flush_ready() {
+    while (printed_ < results_.size() && done_[printed_]) {
+        printer_.print(results_[printed_]);
+        ++printed_;
+    }
+}
+
+void Runner::execute(const std::vector<Planned>& plan, std::size_t begin, std::size_t end,
+                     int jobs) {
+    const Worker worker(options_.artifacts);
+    std::atomic<std::size_t> next{begin};
+    const auto loop = [&] {
+        for (;;) {
+            const std::size_t index = next.fetch_add(1);
+            if (index >= end) {
+                return;
+            }
+            const Planned& planned = plan[index];
+            const int timeout = options_.timeout_seconds > 0 ? options_.timeout_seconds
+                                : planned.check->timeout_seconds > 0
+                                    ? planned.check->timeout_seconds
+                                    : kDefaultTimeoutSeconds;
+            const std::string started = utc_now();
+            CheckResult result = worker.run(planned.check->id, timeout);
+            result.suite = planned.suite->name();
+            result.tags = planned.check->tags;
+            result.started = started;
+            const std::lock_guard<std::mutex> lock(mutex_);
+            results_[index] = std::move(result);
+            done_[index] = true;
+            flush_ready();
+        }
+    };
+    const std::size_t count = end - begin;
+    const std::size_t threads = std::min(static_cast<std::size_t>(std::max(jobs, 1)), count);
+    std::vector<std::thread> pool;
+    for (std::size_t i = 1; i < threads; ++i) {
+        pool.emplace_back(loop);
+    }
+    loop();
+    for (std::thread& thread : pool) {
+        thread.join();
+    }
+}
+
+int Runner::run() {
+    std::vector<Planned> plan;
+    std::size_t free_end = 0;
+    std::size_t exclusive_end = 0;
+    bool any_serial = false;
+    std::string error;
+    if (!select(plan, free_end, exclusive_end, any_serial, error)) {
+        std::fprintf(stderr, "%s: %s\n", ExeIdentity::name().c_str(), error.c_str());
+        return 2;
+    }
+    RunGuard guard;
+    if (!guard.acquire(any_serial, error)) {
+        std::fprintf(stderr, "%s: refusing to start: %s\n", ExeIdentity::name().c_str(),
+                     error.c_str());
+        return 2;
+    }
+    int jobs = options_.jobs;
+    if (jobs <= 0) {
+        jobs = static_cast<int>(
+            std::min<unsigned>(std::max(1u, std::thread::hardware_concurrency()), kMaxDefaultJobs));
+    }
+    std::error_code ignored;
+    std::filesystem::create_directories(options_.artifacts, ignored);
+    results_.assign(plan.size(), {});
+    done_.assign(plan.size(), false);
+    printed_ = 0;
+    const std::string started = utc_now();
+    execute(plan, 0, free_end, jobs);
+    execute(plan, free_end, exclusive_end, 1);
+    execute(plan, exclusive_end, plan.size(), 1);
+
+    int passed = 0;
+    int failed = 0;
+    int skipped = 0;
+    for (const CheckResult& result : results_) {
+        if (result.status == Status::Ok) {
+            ++passed;
+        } else if (result.status == Status::Skip) {
+            ++skipped;
+        } else {
+            ++failed;
+        }
+    }
+    printer_.summary(passed, failed, skipped);
+    if (!options_.json.empty()) {
+        const JsonReport report(ExeIdentity::name(), started);
+        if (!report.write(options_.json, results_)) {
+            std::fprintf(stderr, "%s: cannot write %s\n", ExeIdentity::name().c_str(),
+                         options_.json.string().c_str());
+            return 2;
+        }
+    }
+    return failed > 0 ? 1 : 0;
+}
+
+}  // namespace lsw::suites

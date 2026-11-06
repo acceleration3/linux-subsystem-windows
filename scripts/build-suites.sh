@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+BUILD="${LSW_SUITES_BUILD:-${ROOT}/build-suites}"
+BUILD32="${LSW_SUITES32_BUILD:-${ROOT}/build-suites32}"
+
+launcher=()
+if command -v ccache >/dev/null 2>&1; then
+    launcher=(-DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_C_COMPILER_LAUNCHER=ccache)
+fi
+
+build_one() {
+    local label=$1 dir=$2 toolchain=$3
+    echo ">>> Configuring lsw-suites ${label} -> ${dir}"
+    cmake -S "${ROOT}/suites" -B "${dir}" -G Ninja \
+        -DCMAKE_TOOLCHAIN_FILE="${ROOT}/cmake/${toolchain}" \
+        -DCMAKE_BUILD_TYPE=Release \
+        "${launcher[@]}"
+    echo ">>> Building lsw-suites ${label}"
+    cmake --build "${dir}" ${CMAKE_BUILD_PARALLEL_LEVEL:+-j "${CMAKE_BUILD_PARALLEL_LEVEL}"}
+}
+
+build_one 64-bit "${BUILD}" toolchain-mingw-w64.cmake
+build_one 32-bit "${BUILD32}" toolchain-mingw-w64-i686.cmake
+
+for exe in "${BUILD}/lsw-suites64.exe" "${BUILD32}/lsw-suites32.exe"; do
+    if [[ ! -f "${exe}" ]]; then
+        echo "!!! Build did not produce ${exe}" >&2
+        exit 1
+    fi
+    echo ">>> Built ${exe} ($(stat -c%s "${exe}") bytes)"
+done

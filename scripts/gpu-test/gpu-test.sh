@@ -64,6 +64,8 @@ cmd_build() {
     say "Building LSW: agent, manager, mirror, accel-virt"
     "${ROOT}/scripts/build.sh"
     cmake --build "${ROOT}/build-agent" --target remotewin-wgcbench
+    say "Building lsw-suites"
+    "${ROOT}/scripts/build-suites.sh"
     say "Building accel-virt's test programs"
     if [[ ! -f ${AV}/build/CMakeCache.txt ]]; then
         cmake -S "${AV}" -B "${AV}/build" -G Ninja
@@ -96,6 +98,8 @@ bundle_paths() (
     echo build-agent/src/agent/lsw-guest-agent.exe
     ls build-agent/remotewin/source/guest/remotewin-guest.exe 2>/dev/null || true
     echo build-agent/remotewin/source/guest/remotewin-wgcbench.exe
+    echo build-suites/lsw-suites64.exe
+    echo build-suites32/lsw-suites32.exe
     echo build-agent/_deps/vulkanloader-build/loader/vulkan-1.dll
     echo build-agent32/_deps/vulkanloader-build/loader/vulkan-1.dll
     echo external/accel-virt/tools
