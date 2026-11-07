@@ -19,6 +19,7 @@ struct SwapOptions {
     int x = 60;
     int y = 60;
     bool visible = true;
+    UINT device_flags = 0;
 };
 
 class SwapRig {

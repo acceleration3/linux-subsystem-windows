@@ -1,5 +1,8 @@
 add_library(suite_sanity OBJECT
     sanity.cpp
+    dxgi/enum_checks.cpp
+    dxgi/swap_checks.cpp
+    dxgi/mem_checks.cpp
     d3d11/fl_checks.cpp
     d3d11/res_checks.cpp
     d3d11/map_checks.cpp

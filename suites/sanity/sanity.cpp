@@ -28,6 +28,9 @@
 #include "sanity/d3d11/share_checks.hpp"
 #include "sanity/d3d11/tiled_checks.hpp"
 #include "sanity/d3d11/err_checks.hpp"
+#include "sanity/dxgi/enum_checks.hpp"
+#include "sanity/dxgi/swap_checks.hpp"
+#include "sanity/dxgi/mem_checks.hpp"
 #include "sanity/env/display_checks.hpp"
 #include "sanity/env/icd_checks.hpp"
 #include "sanity/env/install_checks.hpp"
@@ -248,6 +251,32 @@ void add(Registry& registry) {
     guarded(suite, {"sanity.d3d11.err.bad_parameters", {"d3d11"}, false, 60, d3d11::ErrChecks::bad_parameters});
     guarded(suite, {"sanity.d3d11.err.device_removed", {"d3d11", "exclusive"}, true, 120, d3d11::ErrChecks::device_removed});
     guarded(suite, {"sanity.d3d11.err.stress_destroy", {"d3d11", "mem", "leak", "slow"}, false, 300, d3d11::ErrChecks::stress_destroy});
+    guarded(suite, {"sanity.dxgi.enum.adapters_consistent", {"dxgi"}, false, 60, dxgi::EnumChecks::adapters_consistent});
+    guarded(suite, {"sanity.dxgi.enum.factory_lifecycle", {"dxgi"}, false, 60, dxgi::EnumChecks::factory_lifecycle});
+    guarded(suite, {"sanity.dxgi.enum.adapter_desc_matches_apis", {"dxgi", "d3d9", "d3d11", "d3d12", "vulkan"}, false, 90, dxgi::EnumChecks::adapter_desc_matches_apis});
+    guarded(suite, {"sanity.dxgi.enum.output_modes", {"dxgi", "d3d11"}, false, 60, dxgi::EnumChecks::output_modes});
+    guarded(suite, {"sanity.dxgi.enum.output_desc_vs_win32", {"dxgi"}, false, 60, dxgi::EnumChecks::output_desc_vs_win32});
+    guarded(suite, {"sanity.dxgi.swap.model_matrix", {"dxgi", "d3d11", "present"}, false, 180, dxgi::SwapChecks::model_matrix});
+    guarded(suite, {"sanity.dxgi.swap.buffer_contents", {"dxgi", "d3d11", "present"}, false, 90, dxgi::SwapChecks::buffer_contents});
+    guarded(suite, {"sanity.dxgi.swap.present1", {"dxgi", "d3d11", "present"}, false, 90, dxgi::SwapChecks::present1});
+    guarded(suite, {"sanity.dxgi.swap.allow_tearing", {"dxgi", "d3d11", "present"}, false, 60, dxgi::SwapChecks::allow_tearing});
+    guarded(suite, {"sanity.dxgi.swap.do_not_wait", {"dxgi", "d3d11", "present"}, false, 90, dxgi::SwapChecks::do_not_wait});
+    guarded(suite, {"sanity.dxgi.swap.waitable_latency", {"dxgi", "d3d11", "present"}, false, 90, dxgi::SwapChecks::waitable_latency});
+    guarded(suite, {"sanity.dxgi.swap.frame_statistics", {"dxgi", "d3d11", "present"}, false, 90, dxgi::SwapChecks::frame_statistics});
+    guarded(suite, {"sanity.dxgi.swap.resize_buffers", {"dxgi", "d3d11", "present"}, false, 90, dxgi::SwapChecks::resize_buffers});
+    guarded(suite, {"sanity.dxgi.swap.fullscreen_transition", {"dxgi", "d3d11", "present", "exclusive"}, true, 120, dxgi::SwapChecks::fullscreen_transition});
+    guarded(suite, {"sanity.dxgi.swap.hdr_colorspace", {"dxgi", "d3d11", "present"}, false, 90, dxgi::SwapChecks::hdr_colorspace});
+    guarded(suite, {"sanity.dxgi.swap.getdc", {"dxgi", "d3d11", "present"}, false, 90, dxgi::SwapChecks::getdc});
+    guarded(suite, {"sanity.dxgi.swap.background_alpha_composition", {"dxgi", "d3d11", "present"}, false, 90, dxgi::SwapChecks::background_alpha_composition});
+    guarded(suite, {"sanity.dxgi.swap.multiple_and_orphan", {"dxgi", "d3d11", "present"}, false, 90, dxgi::SwapChecks::multiple_and_orphan});
+    guarded(suite, {"sanity.dxgi.mem.video_memory_info", {"dxgi", "d3d11", "mem"}, false, 90, dxgi::MemChecks::video_memory_info});
+    guarded(suite, {"sanity.dxgi.mem.offer_reclaim", {"dxgi", "d3d11", "mem"}, false, 60, dxgi::MemChecks::offer_reclaim});
+    guarded(suite, {"sanity.dxgi.mem.trim_and_priority", {"dxgi", "d3d11"}, false, 60, dxgi::MemChecks::trim_and_priority});
+    guarded(suite, {"sanity.dxgi.overlay.caps_consistent", {"dxgi", "d3d11", "present"}, false, 60, dxgi::MemChecks::overlay_caps_consistent});
+    guarded(suite, {"sanity.dxgi.overlay.mpo_present", {"dxgi", "d3d11", "present"}, false, 90, dxgi::MemChecks::overlay_mpo_present});
+    guarded(suite, {"sanity.dxgi.debug.no_messages", {"dxgi", "d3d11", "present"}, false, 60, dxgi::MemChecks::debug_no_messages});
+    guarded(suite, {"sanity.dxgi.device.removal_events", {"dxgi", "d3d11", "d3d12", "slow"}, false, 60, dxgi::MemChecks::removal_events});
+    guarded(suite, {"sanity.dxgi.present.duplication_visible", {"dxgi", "d3d11", "present"}, false, 60, dxgi::MemChecks::duplication_visible});
 }
 
 }  // namespace lsw::suites::sanity

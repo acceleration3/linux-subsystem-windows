@@ -12,7 +12,7 @@ bool SwapRig::open(const SwapOptions& wanted, std::string& error) {
     if (!TargetAdapter::pick(adapter, error)) {
         return false;
     }
-    if (!device.create_ex(adapter.luid, nullptr, 0, D3D11_CREATE_DEVICE_BGRA_SUPPORT, error)) {
+    if (!device.create_ex(adapter.luid, nullptr, 0, D3D11_CREATE_DEVICE_BGRA_SUPPORT | wanted.device_flags, error)) {
         return false;
     }
     TestWindowConfig config;
