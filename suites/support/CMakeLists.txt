@@ -4,6 +4,10 @@ add_library(suite_support OBJECT
     d3d11_backend.cpp
     d3d11_device.cpp
     d3d11_textures.cpp
+    d3d11_tools.cpp
+    format_codec.cpp
+    oracle_rig.cpp
+    swap_rig.cpp
     d3d12_backend.cpp
     d3d12_device.cpp
     d3d9_backend.cpp

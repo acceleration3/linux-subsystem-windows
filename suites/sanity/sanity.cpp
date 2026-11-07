@@ -17,6 +17,10 @@
 #include "sanity/memory/evict_map_checks.hpp"
 #include "sanity/memory/leak_checks.hpp"
 #include "sanity/memory/limit_checks.hpp"
+#include "sanity/d3d11/fl_checks.hpp"
+#include "sanity/d3d11/res_checks.hpp"
+#include "sanity/d3d11/map_checks.hpp"
+#include "sanity/d3d11/transfer_checks.hpp"
 #include "sanity/env/display_checks.hpp"
 #include "sanity/env/icd_checks.hpp"
 #include "sanity/env/install_checks.hpp"
@@ -172,6 +176,34 @@ void add(Registry& registry) {
     guarded(suite, {"sanity.mem.map.unmap_flushes", {"mem", "d3d11", "d3d12", "vulkan", "opencl", "gl"}, false, 120, memory::EvictMapChecks::unmap_flushes});
     guarded(suite, {"sanity.mem.map.exit_with_live_mappings", {"mem", "d3d12", "vulkan", "opencl", "d3d11"}, false, 300, memory::EvictMapChecks::exit_with_live_mappings});
     guarded(suite, {"sanity.mem.map.large_map_many", {"mem", "d3d11", "d3d12", "vulkan", "opencl", "slow", "exclusive"}, true, 300, memory::EvictMapChecks::large_map_many});
+    guarded(suite, {"sanity.d3d11.fl.requested_levels", {"d3d11"}, false, 60, d3d11::FlChecks::requested_levels});
+    guarded(suite, {"sanity.d3d11.fl.checkfeaturesupport_options", {"d3d11"}, false, 60, d3d11::FlChecks::checkfeaturesupport_options});
+    guarded(suite, {"sanity.d3d11.fl.format_support_vs_creation", {"d3d11", "formats"}, false, 120, d3d11::FlChecks::format_support_vs_creation});
+    guarded(suite, {"sanity.d3d11.fl.msaa_quality_vs_use", {"d3d11", "msaa"}, false, 120, d3d11::FlChecks::msaa_quality_vs_use});
+    guarded(suite, {"sanity.d3d11.fl.limits_at_level", {"d3d11"}, false, 120, d3d11::FlChecks::limits_at_level});
+    guarded(suite, {"sanity.d3d11.res.usage_bind_cpu_matrix", {"d3d11"}, false, 120, d3d11::ResChecks::usage_bind_cpu_matrix});
+    guarded(suite, {"sanity.d3d11.res.immutable_initial", {"d3d11"}, false, 60, d3d11::ResChecks::immutable_initial});
+    guarded(suite, {"sanity.d3d11.res.views_matrix", {"d3d11"}, false, 120, d3d11::ResChecks::views_matrix});
+    guarded(suite, {"sanity.d3d11.res.sizes_extremes", {"d3d11"}, false, 120, d3d11::ResChecks::sizes_extremes});
+    guarded(suite, {"sanity.d3d11.res.exhaustion_and_reclaim", {"d3d11", "mem", "slow", "exclusive"}, true, 300, d3d11::ResChecks::exhaustion_and_reclaim});
+    guarded(suite, {"sanity.d3d11.res.exit_reclaim", {"d3d11", "mem", "slow"}, false, 300, d3d11::ResChecks::exit_reclaim});
+    guarded(suite, {"sanity.d3d11.map.read_last_write", {"d3d11"}, false, 60, d3d11::MapChecks::read_last_write});
+    guarded(suite, {"sanity.d3d11.map.discard_old_draws", {"d3d11"}, false, 60, d3d11::MapChecks::discard_old_draws});
+    guarded(suite, {"sanity.d3d11.map.nooverwrite_inflight", {"d3d11"}, false, 60, d3d11::MapChecks::nooverwrite_inflight});
+    guarded(suite, {"sanity.d3d11.map.do_not_wait", {"d3d11"}, false, 120, d3d11::MapChecks::do_not_wait});
+    guarded(suite, {"sanity.d3d11.map.pitches", {"d3d11"}, false, 60, d3d11::MapChecks::pitches});
+    guarded(suite, {"sanity.d3d11.map.errors", {"d3d11"}, false, 60, d3d11::MapChecks::errors});
+    guarded(suite, {"sanity.d3d11.map.persistent_across_frames", {"d3d11", "dxgi", "present"}, false, 60, d3d11::MapChecks::persistent_across_frames});
+    guarded(suite, {"sanity.d3d11.update.boxes_pitches", {"d3d11"}, false, 60, d3d11::TransferChecks::update_boxes_pitches});
+    guarded(suite, {"sanity.d3d11.update.bc_and_formats", {"d3d11", "formats"}, false, 60, d3d11::TransferChecks::update_bc_and_formats});
+    guarded(suite, {"sanity.d3d11.update.copy_flags", {"d3d11"}, false, 60, d3d11::TransferChecks::update_copy_flags});
+    guarded(suite, {"sanity.d3d11.update.deferred_ctx", {"d3d11", "deferred"}, false, 60, d3d11::TransferChecks::update_deferred_ctx});
+    guarded(suite, {"sanity.d3d11.copy.variants", {"d3d11"}, false, 60, d3d11::TransferChecks::copy_variants});
+    guarded(suite, {"sanity.d3d11.copy.typeless_cross_format", {"d3d11", "formats"}, false, 60, d3d11::TransferChecks::copy_typeless_cross_format});
+    guarded(suite, {"sanity.d3d11.copy.structure_copy", {"d3d11", "compute"}, false, 60, d3d11::TransferChecks::copy_structure_copy});
+    guarded(suite, {"sanity.d3d11.copy.resolve", {"d3d11", "msaa"}, false, 60, d3d11::TransferChecks::copy_resolve});
+    guarded(suite, {"sanity.d3d11.copy.generatemips", {"d3d11"}, false, 60, d3d11::TransferChecks::copy_generatemips});
+    guarded(suite, {"sanity.d3d11.copy.clearview_discard", {"d3d11"}, false, 60, d3d11::TransferChecks::copy_clearview_discard});
 }
 
 }  // namespace lsw::suites::sanity

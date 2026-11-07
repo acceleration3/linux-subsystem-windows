@@ -9,28 +9,43 @@
 namespace lsw::suites {
 
 D3d11Device::~D3d11Device() {
+    destroy();
+}
+
+void D3d11Device::destroy() {
     if (context != nullptr) {
         context->ClearState();
         context->Flush();
         context->Release();
+        context = nullptr;
     }
     if (device != nullptr) {
         device->Release();
+        device = nullptr;
     }
 }
 
-bool D3d11Device::create(const LUID& luid, std::string& error) {
+namespace {
+
+PFN_D3D11_CREATE_DEVICE loader() {
     static DynLibrary library;
     static std::mutex load_mutex;
-    PFN_D3D11_CREATE_DEVICE create_device = nullptr;
-    {
-        std::lock_guard lock(load_mutex);
-        if (!library.loaded() && !library.load("d3d11.dll")) {
-            error = "d3d11.dll cannot be loaded";
-            return false;
-        }
-        create_device = library.symbol<PFN_D3D11_CREATE_DEVICE>("D3D11CreateDevice");
+    std::lock_guard lock(load_mutex);
+    if (!library.loaded() && !library.load("d3d11.dll")) {
+        return nullptr;
     }
+    return library.symbol<PFN_D3D11_CREATE_DEVICE>("D3D11CreateDevice");
+}
+
+}  // namespace
+
+bool D3d11Device::create(const LUID& luid, std::string& error) {
+    return create_ex(luid, nullptr, 0, 0, error);
+}
+
+bool D3d11Device::create_ex(const LUID& luid, const D3D_FEATURE_LEVEL* levels, UINT count, UINT flags,
+                            std::string& error) {
+    PFN_D3D11_CREATE_DEVICE create_device = loader();
     if (create_device == nullptr) {
         error = "d3d11.dll has no D3D11CreateDevice";
         return false;
@@ -40,11 +55,28 @@ bool D3d11Device::create(const LUID& luid, std::string& error) {
         error = "the adapter cannot be opened by LUID for D3D11";
         return false;
     }
-    const HRESULT result = create_device(static_cast<IDXGIAdapter*>(adapter), D3D_DRIVER_TYPE_UNKNOWN, nullptr, 0,
-                                         nullptr, 0, D3D11_SDK_VERSION, &device, nullptr, &context);
+    result = create_device(static_cast<IDXGIAdapter*>(adapter), D3D_DRIVER_TYPE_UNKNOWN, nullptr, flags, levels, count,
+                           D3D11_SDK_VERSION, &device, &level, &context);
     adapter->Release();
     if (FAILED(result)) {
         error = "D3D11CreateDevice failed: 0x" + Text::hex(static_cast<std::uint32_t>(result), 8);
+        device = nullptr;
+        context = nullptr;
+        return false;
+    }
+    return true;
+}
+
+bool D3d11Device::create_warp(const D3D_FEATURE_LEVEL* levels, UINT count, UINT flags, std::string& error) {
+    PFN_D3D11_CREATE_DEVICE create_device = loader();
+    if (create_device == nullptr) {
+        error = "d3d11.dll has no D3D11CreateDevice";
+        return false;
+    }
+    result = create_device(nullptr, D3D_DRIVER_TYPE_WARP, nullptr, flags, levels, count, D3D11_SDK_VERSION, &device,
+                           &level, &context);
+    if (FAILED(result)) {
+        error = "D3D11CreateDevice(WARP) failed: 0x" + Text::hex(static_cast<std::uint32_t>(result), 8);
         device = nullptr;
         context = nullptr;
         return false;
