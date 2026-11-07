@@ -27,6 +27,11 @@ add_library(suite_sanity OBJECT
     d3d11/err_checks.cpp
     d3d9/caps_checks.cpp
     d3d9/res_checks.cpp
+    d3d9/lock_checks.cpp
+    d3d9/blt_checks.cpp
+    d3d9/fixed_scenes.cpp
+    d3d9/render_checks.cpp
+    d3d9/query_checks.cpp
     data/align_checks.cpp
     data/load_checks.cpp
     data/sequence_checks.cpp

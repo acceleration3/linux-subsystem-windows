@@ -39,6 +39,7 @@ struct TwinScene {
     UINT width = 64;
     UINT height = 64;
     UINT targets = 1;
+    UINT samples = 1;
     float clear[4] = {0, 0, 0, 1};
 };
 

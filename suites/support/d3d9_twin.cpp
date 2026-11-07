@@ -49,13 +49,23 @@ bool D3d9Twin::render(const TwinScene& scene, std::vector<SceneImage>& out, std:
     std::vector<Com<ID3D11Texture2D>> targets;
     std::vector<Com<ID3D11RenderTargetView>> views;
     ID3D11RenderTargetView* raw_views[2] = {};
+    Com<ID3D11Texture2D> multisampled;
     for (UINT i = 0; i < scene.targets; ++i) {
         targets.push_back(D3d11Tools::target(warp, scene.width, scene.height, DXGI_FORMAT_B8G8R8A8_UNORM, 0));
         if (!targets.back()) {
             error = "the render target cannot be created";
             return false;
         }
-        views.push_back(D3d11Tools::rtv(warp, targets.back().get()));
+        if (scene.samples > 1 && i == 0) {
+            multisampled = D3d11Tools::texture(warp, D3d11Tools::desc2d(scene.width, scene.height, DXGI_FORMAT_B8G8R8A8_UNORM, D3D11_BIND_RENDER_TARGET, D3D11_USAGE_DEFAULT, 0, 1, 1, scene.samples));
+            if (!multisampled) {
+                error = "the multisampled WARP target cannot be created";
+                return false;
+            }
+            views.push_back(D3d11Tools::rtv(warp, multisampled.get()));
+        } else {
+            views.push_back(D3d11Tools::rtv(warp, targets.back().get()));
+        }
         raw_views[i] = views.back().get();
         D3d11Tools::clear(warp, views.back().get(), scene.clear[0], scene.clear[1], scene.clear[2], scene.clear[3]);
     }
@@ -79,6 +89,7 @@ bool D3d9Twin::render(const TwinScene& scene, std::vector<SceneImage>& out, std:
     raster.FillMode = D3D11_FILL_SOLID;
     raster.CullMode = D3D11_CULL_NONE;
     raster.DepthClipEnable = FALSE;
+    raster.MultisampleEnable = scene.samples > 1 ? TRUE : FALSE;
     Com<ID3D11RasterizerState> raster_state;
     device->CreateRasterizerState(&raster, raster_state.put());
     D3D11_DEPTH_STENCIL_DESC depth{};
@@ -109,6 +120,9 @@ bool D3d9Twin::render(const TwinScene& scene, std::vector<SceneImage>& out, std:
         context->DrawIndexed(static_cast<UINT>(scene.indices.size()), 0, 0);
     } else {
         context->Draw(scene.vertex_count, 0);
+    }
+    if (multisampled) {
+        context->ResolveSubresource(targets[0].get(), 0, multisampled.get(), 0, DXGI_FORMAT_B8G8R8A8_UNORM);
     }
     if (!warp.wait_idle(error)) {
         return false;

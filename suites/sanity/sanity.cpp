@@ -21,6 +21,10 @@
 #include "sanity/memory/limit_checks.hpp"
 #include "sanity/d3d9/caps_checks.hpp"
 #include "sanity/d3d9/res_checks.hpp"
+#include "sanity/d3d9/lock_checks.hpp"
+#include "sanity/d3d9/blt_checks.hpp"
+#include "sanity/d3d9/render_checks.hpp"
+#include "sanity/d3d9/query_checks.hpp"
 #include "sanity/d3d11/fl_checks.hpp"
 #include "sanity/d3d11/res_checks.hpp"
 #include "sanity/d3d11/map_checks.hpp"
@@ -206,6 +210,22 @@ void add(Registry& registry) {
     guarded(suite, {"sanity.d3d9.res.priority_and_lod", {"d3d9"}, false, 60, d3d9::ResChecks::priority_and_lod});
     guarded(suite, {"sanity.d3d9.res.autogenmipmap", {"d3d9"}, false, 60, d3d9::ResChecks::autogenmipmap});
     guarded(suite, {"sanity.d3d9.res.exhaustion", {"d3d9", "mem", "slow", "exclusive", "host-hazard"}, true, 300, d3d9::ResChecks::exhaustion});
+    guarded(suite, {"sanity.d3d9.lock.discard_fresh", {"d3d9"}, false, 60, d3d9::LockChecks::discard_fresh});
+    guarded(suite, {"sanity.d3d9.lock.nooverwrite_inflight", {"d3d9"}, false, 60, d3d9::LockChecks::nooverwrite_inflight});
+    guarded(suite, {"sanity.d3d9.lock.readonly_and_partial", {"d3d9"}, false, 60, d3d9::LockChecks::readonly_and_partial});
+    guarded(suite, {"sanity.d3d9.lock.dirty_regions", {"d3d9"}, false, 60, d3d9::LockChecks::dirty_regions});
+    guarded(suite, {"sanity.d3d9.lock.errors", {"d3d9"}, false, 60, d3d9::LockChecks::errors});
+    guarded(suite, {"sanity.d3d9.blt.stretchrect", {"d3d9"}, false, 120, d3d9::BltChecks::stretchrect});
+    guarded(suite, {"sanity.d3d9.blt.updatesurface_texture", {"d3d9"}, false, 60, d3d9::BltChecks::updatesurface_texture});
+    guarded(suite, {"sanity.d3d9.blt.colorfill_and_readback", {"d3d9"}, false, 60, d3d9::BltChecks::colorfill_and_readback});
+    guarded(suite, {"sanity.d3d9.blt.frontbuffer", {"d3d9", "dwm"}, false, 60, d3d9::BltChecks::frontbuffer});
+    guarded(suite, {"sanity.d3d9.render.fixed_function", {"d3d9"}, false, 120, d3d9::RenderChecks::fixed_function});
+    guarded(suite, {"sanity.d3d9.render.shaders", {"d3d9"}, false, 120, d3d9::RenderChecks::shaders});
+    guarded(suite, {"sanity.d3d9.render.states_and_blend", {"d3d9"}, false, 120, d3d9::RenderChecks::states_and_blend});
+    guarded(suite, {"sanity.d3d9.render.multisample", {"d3d9", "msaa"}, false, 120, d3d9::RenderChecks::multisample});
+    guarded(suite, {"sanity.d3d9.render.draw_variants", {"d3d9"}, false, 60, d3d9::RenderChecks::draw_variants});
+    guarded(suite, {"sanity.d3d9.query.occlusion", {"d3d9"}, false, 60, d3d9::QueryChecks::occlusion});
+    guarded(suite, {"sanity.d3d9.query.event_timestamp", {"d3d9"}, false, 60, d3d9::QueryChecks::event_timestamp});
     guarded(suite, {"sanity.d3d11.fl.requested_levels", {"d3d11"}, false, 60, d3d11::FlChecks::requested_levels});
     guarded(suite, {"sanity.d3d11.fl.checkfeaturesupport_options", {"d3d11"}, false, 60, d3d11::FlChecks::checkfeaturesupport_options});
     guarded(suite, {"sanity.d3d11.fl.format_support_vs_creation", {"d3d11", "formats"}, false, 120, d3d11::FlChecks::format_support_vs_creation});
