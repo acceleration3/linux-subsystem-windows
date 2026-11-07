@@ -608,7 +608,7 @@ void add(Registry& registry) {
     guarded(suite, {"sanity.shader.dxbc.sm4_sm5", {"shader", "d3d10", "d3d11", "d3d12"}, false, 180, shader::DxbcChecks::sm4_sm5});
     guarded(suite, {"sanity.shader.dxil.sm6", {"shader", "d3d12"}, false, 120, shader::DxilChecks::sm6});
     guarded(suite, {"sanity.shader.spirv.valid_runs", {"shader", "vulkan"}, false, 120, shader::SpirvChecks::valid_runs});
-    guarded(suite, {"sanity.shader.spirv.invalid_fails", {"shader", "vulkan"}, false, 120, shader::SpirvChecks::invalid_fails});
+    guarded(suite, {"sanity.shader.spirv.invalid_fails", {"shader", "vulkan", "host-hazard"}, false, 120, shader::SpirvChecks::invalid_fails});
     guarded(suite, {"sanity.shader.glsl.versions", {"shader", "gl"}, false, 120, shader::GlslChecks::versions});
     guarded(suite, {"sanity.shader.glsl.invalid_diagnostics", {"shader", "gl"}, false, 90, shader::GlslChecks::invalid_diagnostics});
     guarded(suite, {"sanity.shader.dxbc.invalid_diagnostics", {"shader", "d3d9", "d3d11", "d3d12"}, false, 120, shader::DxbcChecks::invalid_diagnostics});

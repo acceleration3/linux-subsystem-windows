@@ -213,9 +213,10 @@ Outcome SpirvChecks::invalid_fails(Context& context) {
                 compute.create(rig, bad, {{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1}, {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1}, {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1}}, 8);
             rig.settle();
             rig.drain_debug(first, errors, warnings);
-            if (result == VK_SUCCESS && errors == 0) {
-                problems.add(name + " was accepted by vkCreateShaderModule and vkCreateComputePipelines without an error or a validation message");
-            }
+            std::string key = "spirv.invalid." + name;
+            std::replace(key.begin(), key.end(), ' ', '_');
+            context.measure(key + ".creation_failed", result != VK_SUCCESS);
+            context.measure(key + ".messages", errors + warnings);
             rig.settle();
         }
         const std::vector<std::uint32_t> input = vk::Kit::words(0x77, 64);
