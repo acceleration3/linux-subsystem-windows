@@ -3,17 +3,13 @@
 #include "core/child_mode.hpp"
 #include "core/text.hpp"
 #include "support/child_runs.hpp"
-#include "support/d3d11_tools.hpp"
-#include "support/target_adapter.hpp"
+#include "support/render_probe.hpp"
 
 #include <algorithm>
-#include <cstdlib>
 
 namespace lsw::suites {
 
 namespace {
-
-constexpr UINT kSide = 256;
 
 HANDLE open_named(const wchar_t* variable) {
     const std::string name = ChildMode::variable(variable);
@@ -79,7 +75,7 @@ void GateWindow::stop() {
     }
 }
 
-void GateWindow::close(Context& context, Problems& problems, const std::string& label) {
+void GateWindow::close(Context& context, Problems& problems, const std::string& label, long long limit_us) {
     stop();
     if (!started_) {
         return;
@@ -96,22 +92,16 @@ void GateWindow::close(Context& context, Problems& problems, const std::string& 
     if (cycles < 3) {
         problems.add("the peer process completed only " + std::to_string(cycles) + " render and readback cycles during " + label);
     }
-    if (worst > kProbeLimitUs) {
-        problems.add("a render and readback in another process took " + std::to_string(worst / 1000) + " ms during " + label + ", longer than " + std::to_string(kProbeLimitUs / 1000) + " ms");
+    if (worst > limit_us) {
+        problems.add("a render and readback in another process took " + std::to_string(worst / 1000) + " ms during " + label + ", longer than " + std::to_string(limit_us / 1000) + " ms");
     }
 }
 
 Outcome GateWindow::peer(Context& context) {
-    AvAdapter adapter;
+    RenderProbe probe;
     std::string error;
-    D3d11Device device;
-    if (!TargetAdapter::pick(adapter, error) || !device.create(adapter.luid, error)) {
+    if (!probe.open(error)) {
         return Outcome::fail(error);
-    }
-    Com<ID3D11Texture2D> target = D3d11Tools::target(device, kSide, kSide);
-    Com<ID3D11RenderTargetView> view = D3d11Tools::rtv(device, target.get());
-    if (!target || !view) {
-        return Outcome::fail("creating the peer render target failed");
     }
     HANDLE ready = open_named(L"LSW_SUITES_READY_EVENT");
     HANDLE stop = open_named(L"LSW_SUITES_STOP_EVENT");
@@ -120,27 +110,14 @@ Outcome GateWindow::peer(Context& context) {
     Outcome outcome = Outcome::ok();
     const auto limit = std::chrono::steady_clock::now() + std::chrono::seconds(100);
     while (std::chrono::steady_clock::now() < limit && (stop == nullptr || ::WaitForSingleObject(stop, 0) != WAIT_OBJECT_0)) {
-        const unsigned step = static_cast<unsigned>(cycles % 251);
-        const float r = static_cast<float>(step) / 255.0f;
-        const float g = static_cast<float>(255 - step) / 255.0f;
         const auto begin = std::chrono::steady_clock::now();
-        D3d11Tools::clear(device, view.get(), r, g, 0.5f, 1.0f);
-        std::vector<std::uint8_t> pixels;
-        if (!D3d11Tools::read_pixels(device, target.get(), pixels, error)) {
-            outcome = Outcome::fail("peer readback failed: " + error);
+        if (!probe.cycle(static_cast<unsigned>(cycles), error)) {
+            outcome = Outcome::fail("peer " + error);
             break;
         }
         const long long took = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - begin).count();
         if (cycles > 0) {
             worst = std::max(worst, took);
-        }
-        const std::size_t middle = (static_cast<std::size_t>(kSide / 2) * kSide + kSide / 2) * 4;
-        const int expected_r = static_cast<int>(r * 255.0f + 0.5f);
-        const int expected_g = static_cast<int>(g * 255.0f + 0.5f);
-        if (pixels.size() < middle + 4 || std::abs(pixels[middle] - expected_r) > 1 || std::abs(pixels[middle + 1] - expected_g) > 1 ||
-            std::abs(pixels[middle + 2] - 128) > 1) {
-            outcome = Outcome::fail("peer readback returned wrong colour in cycle " + std::to_string(cycles));
-            break;
         }
         if (++cycles == 1 && ready != nullptr) {
             ::SetEvent(ready);

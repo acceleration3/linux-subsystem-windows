@@ -24,6 +24,11 @@ public:
 
     void set_timeout_millis(int milliseconds) { timeout_ms_ = milliseconds; }
 
+    void set_kill_trigger(void* event, int milliseconds) {
+        trigger_ = event;
+        trigger_ms_ = milliseconds;
+    }
+
     void add_env(const std::wstring& name, const std::wstring& value) { env_.emplace_back(name, value); }
 
 private:
@@ -32,6 +37,8 @@ private:
     bool child_mode_ = false;
     bool restricted_ = false;
     int timeout_ms_ = 0;
+    void* trigger_ = nullptr;
+    int trigger_ms_ = 0;
     std::vector<std::pair<std::wstring, std::wstring>> env_;
     std::filesystem::path artifacts_;
 };

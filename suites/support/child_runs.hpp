@@ -13,6 +13,8 @@ struct ChildRunOptions {
     bool restricted = false;
     int timeout_seconds = 60;
     int timeout_ms = 0;
+    void* kill_trigger = nullptr;
+    int kill_after_trigger_ms = 0;
     std::vector<std::pair<std::string, std::string>> env;
 };
 

@@ -33,7 +33,7 @@ public:
 
     void sleep_until_release() const { sleep_until(kHoldMs); }
 
-    void close(Context& context, Problems& problems, const std::string& label);
+    void close(Context& context, Problems& problems, const std::string& label, long long limit_us = kProbeLimitUs);
 
     [[nodiscard]] static Outcome peer(Context& context);
 

@@ -24,7 +24,9 @@ enum class VulkanShader {
     VertexInput,
     SpecKernel,
     SpecFrag,
-    DetKernel
+    DetKernel,
+    Spin,
+    SpinForever
 };
 
 class VulkanShaders {

@@ -49,6 +49,9 @@ add_library(suite_support OBJECT
     process_sampler.cpp
     stress_load.cpp
     gate_window.cpp
+    render_probe.cpp
+    fresh_process.cpp
+    robust_child.cpp
     target_adapter.cpp
     vulkan_backend.cpp
     vulkan_device.cpp

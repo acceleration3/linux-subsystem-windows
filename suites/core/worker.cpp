@@ -211,13 +211,18 @@ CheckResult Worker::run(const std::string& id, int timeout_seconds) const {
     }
     ::ResumeThread(thread.get());
 
-    const auto deadline = timeout_ms_ > 0 ? begin + std::chrono::milliseconds(timeout_ms_) : begin + std::chrono::seconds(timeout_seconds);
+    auto deadline = timeout_ms_ > 0 ? begin + std::chrono::milliseconds(timeout_ms_) : begin + std::chrono::seconds(timeout_seconds);
     std::string output;
     bool timed_out = false;
+    bool triggered = false;
     for (;;) {
         drain(read_end.get(), output);
         if (::WaitForSingleObject(process.get(), 20) == WAIT_OBJECT_0) {
             break;
+        }
+        if (trigger_ != nullptr && !triggered && ::WaitForSingleObject(trigger_, 0) == WAIT_OBJECT_0) {
+            triggered = true;
+            deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(trigger_ms_);
         }
         if (std::chrono::steady_clock::now() > deadline) {
             timed_out = true;
@@ -233,6 +238,9 @@ CheckResult Worker::run(const std::string& id, int timeout_seconds) const {
     ::GetExitCodeProcess(process.get(), &code);
     const bool have_status = ChildProtocol::decode(output, result);
     if (timed_out) {
+        if (triggered) {
+            return finish(Status::Timeout, "terminated " + std::to_string(trigger_ms_) + " ms after the child reported ready");
+        }
         return finish(Status::Timeout, timeout_ms_ > 0 ? "no result after " + std::to_string(timeout_ms_) + " ms" : "no result after " + std::to_string(timeout_seconds) + " s");
     }
     if (!have_status) {

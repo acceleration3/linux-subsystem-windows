@@ -37,6 +37,9 @@ CheckResult ChildRuns::run_self(const std::string& id, const ChildRunOptions& op
     if (options.restricted) {
         worker.set_restricted_token();
     }
+    if (options.kill_trigger != nullptr) {
+        worker.set_kill_trigger(options.kill_trigger, options.kill_after_trigger_ms);
+    }
     if (options.timeout_ms > 0) {
         worker.set_timeout_millis(options.timeout_ms);
     }
