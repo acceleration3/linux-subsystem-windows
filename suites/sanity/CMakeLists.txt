@@ -195,5 +195,7 @@ add_library(suite_sanity OBJECT
     err/unsupported_checks.cpp
     err/recovery_checks.cpp
     err/limit_checks.cpp
+    life/kit.cpp
+    life/life_checks.cpp
 )
 target_link_libraries(suite_sanity PUBLIC suite_core suite_support)

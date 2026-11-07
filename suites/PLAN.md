@@ -1250,8 +1250,8 @@ Each row below drives a path an application can reach and asserts that the host 
 | `sanity.life.sleep.resume_contents` | After sleep and resume, resources created before the sleep are intact or the device is reported lost with a documented reason, and new devices work. [E] |
 | `sanity.life.agent.restart_apps_unaffected` | Restarting the guest management agent does not affect running GPU applications. [E] |
 | `sanity.life.agent.restart_new_apps_work` | Applications started after the agent restart see the same adapters and run correctly. [E] |
-| `sanity.life.update.live_driver_update` | A driver update performed while apps are running leaves them either running correctly or removed with a documented loss; new apps run on the new version. [E] |
-| `sanity.life.session.logoff_logon` | After user logoff and logon, the adapters and displays enumerate identically and apps run. [E] |
+| `sanity.life.update.live_driver_update` | A driver update performed while apps are running leaves them either running correctly or removed with a documented loss; new apps run on the new version; the update is driven as a pnputil device restart of the adapter. [E] |
+| `sanity.life.session.logoff_logon` | After the user session is disconnected and reconnected (tsdiscon and a SYSTEM tscon task), the adapters and displays enumerate identically and apps run. [E] |
 | `sanity.life.display.output_off_on` | Turning the output off and on through the display configuration API restores a composed desktop and does not repeat itself by itself. [E] |
 
 ### 4.23 Bitness (12)

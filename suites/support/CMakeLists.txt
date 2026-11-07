@@ -125,4 +125,4 @@ set(LSW_SUITES_KHRONOS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../external/accel-vir
     CACHE PATH "Khronos headers root (contains include/CL and include/vulkan)")
 target_include_directories(suite_support PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
 target_include_directories(suite_support SYSTEM PUBLIC ${LSW_SUITES_KHRONOS_DIR}/include)
-target_link_libraries(suite_support PUBLIC suite_core version shcore dwmapi psapi d3d9 d3d11 d3d12)
+target_link_libraries(suite_support PUBLIC suite_core version shcore dwmapi powrprof psapi d3d9 d3d11 d3d12)

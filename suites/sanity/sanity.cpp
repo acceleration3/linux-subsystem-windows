@@ -159,6 +159,7 @@
 #include "sanity/err/unsupported_checks.hpp"
 #include "sanity/err/recovery_checks.hpp"
 #include "sanity/err/limit_checks.hpp"
+#include "sanity/life/life_checks.hpp"
 
 namespace lsw::suites::sanity {
 
@@ -821,6 +822,16 @@ void add(Registry& registry) {
     guarded(suite, {"sanity.err.limit.max_texture_dims", {"err", "d3d11", "d3d12", "vulkan", "opencl"}, false, 300, err::LimitChecks::max_texture_dims});
     guarded(suite, {"sanity.err.limit.max_threads_workgroup", {"err", "compute", "d3d11", "d3d12", "vulkan", "opencl"}, false, 120, err::LimitChecks::max_threads_workgroup});
     guarded(suite, {"sanity.err.limit.many_contexts_per_process", {"err", "slow", "d3d11", "d3d12", "vulkan", "opencl"}, false, 600, err::LimitChecks::many_contexts_per_process});
+    guarded(suite, {"sanity.life.dwm.restart_apps_survive", {"life", "dwm", "d3d11", "vulkan", "present", "exclusive", "pacing"}, true, 420, life::LifeChecks::dwm_restart_apps_survive});
+    guarded(suite, {"sanity.life.dwm.restart_desktop_recovers", {"life", "dwm", "present", "exclusive", "pacing"}, true, 240, life::LifeChecks::dwm_restart_desktop_recovers});
+    guarded(suite, {"sanity.life.mode.change_apps_survive", {"life", "life", "d3d11", "dxgi", "present", "exclusive", "pacing"}, true, 240, life::LifeChecks::mode_change_apps_survive});
+    guarded(suite, {"sanity.life.mode.refresh_rate_change", {"life", "life", "d3d11", "dxgi", "present", "exclusive", "pacing"}, true, 240, life::LifeChecks::mode_refresh_rate_change});
+    guarded(suite, {"sanity.life.sleep.resume_contents", {"life", "life", "d3d11", "robust", "exclusive"}, true, 600, life::LifeChecks::sleep_resume_contents});
+    guarded(suite, {"sanity.life.agent.restart_apps_unaffected", {"life", "life", "d3d11", "vulkan", "present", "exclusive", "pacing"}, true, 420, life::LifeChecks::agent_restart_apps_unaffected});
+    guarded(suite, {"sanity.life.agent.restart_new_apps_work", {"life", "life", "d3d11", "exclusive"}, true, 300, life::LifeChecks::agent_restart_new_apps_work});
+    guarded(suite, {"sanity.life.update.live_driver_update", {"life", "life", "d3d11", "vulkan", "present", "robust", "exclusive", "pacing"}, true, 600, life::LifeChecks::live_driver_update});
+    guarded(suite, {"sanity.life.session.logoff_logon", {"life", "life", "d3d11", "exclusive"}, true, 300, life::LifeChecks::session_logoff_logon});
+    guarded(suite, {"sanity.life.display.output_off_on", {"life", "life", "present", "exclusive", "pacing"}, true, 300, life::LifeChecks::display_output_off_on});
 }
 
 }  // namespace lsw::suites::sanity
