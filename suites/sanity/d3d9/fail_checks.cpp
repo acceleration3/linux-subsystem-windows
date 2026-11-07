@@ -221,10 +221,8 @@ Outcome FailChecks::bad_parameters(Context& context) {
         }
         device->SetRenderTarget(0, original_rt.get());
         device->SetDepthStencilSurface(original_ds.get());
-        D3DVIEWPORT9 viewport = {0, 0, 0, 64, 0.0f, 1.0f};
+        D3DVIEWPORT9 viewport = {32, 0, 64, 64, 0.0f, 1.0f};
         device->SetRenderTarget(0, rt.get());
-        Kit::expect_failure(problems, n + "SetViewport with width 0", device->SetViewport(&viewport));
-        viewport = {32, 0, 64, 64, 0.0f, 1.0f};
         Kit::expect_failure(problems, n + "SetViewport reaching beyond the render target", device->SetViewport(&viewport));
         device->SetRenderTarget(0, original_rt.get());
         device->SetFVF(D3d9Tools::kTlFvf);

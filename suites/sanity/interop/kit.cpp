@@ -8,6 +8,18 @@
 
 namespace lsw::suites::sanity::interop {
 
+namespace {
+
+int own_width(const std::vector<std::uint32_t>& expected, int width, int height) {
+    if (expected.size() == static_cast<std::size_t>(width) * static_cast<std::size_t>(height) || height <= 0 ||
+        expected.size() % static_cast<std::size_t>(height) != 0) {
+        return width;
+    }
+    return static_cast<int>(expected.size() / static_cast<std::size_t>(height));
+}
+
+}  // namespace
+
 std::string Kit::missing(std::initializer_list<const char*> apis) {
     std::string out;
     for (const char* api : apis) {
@@ -25,6 +37,9 @@ void Kit::keep_image(Context& context, const std::string& name, const Bitmap& im
 }
 
 void Kit::keep_pixels(Context& context, const std::string& name, const std::vector<std::uint32_t>& pixels, int width, int height) {
+    if (width <= 0 || height <= 0 || pixels.size() < static_cast<std::size_t>(width) * static_cast<std::size_t>(height)) {
+        return;
+    }
     ArtifactWriter writer(context);
     writer.image(sanitize(name), pixels.data(), static_cast<std::uint32_t>(width), static_cast<std::uint32_t>(height), static_cast<std::uint32_t>(width) * 4u);
 }
@@ -45,11 +60,11 @@ bool Kit::judge(Context& context, Problems& problems, const std::string& label, 
         return true;
     }
     problems.add(label + ": " + where);
-    keep_pixels(context, label + ".expected", expected, width, height);
+    keep_pixels(context, label + ".expected", expected, own_width(expected, width, height), height);
     Bitmap region;
     region.width = width;
     region.height = height;
-    region.pixels.resize(expected.size());
+    region.pixels.resize(static_cast<std::size_t>(std::max(width, 0)) * static_cast<std::size_t>(std::max(height, 0)));
     for (int y = 0; y < height; ++y) {
         for (int x = 0; x < width; ++x) {
             region.pixels[static_cast<std::size_t>(y) * static_cast<std::size_t>(width) + static_cast<std::size_t>(x)] =
@@ -77,7 +92,7 @@ bool Kit::settle_screen(Context& context, const std::string& label, const RECT& 
         }
         ::Sleep(15);
     } while (std::chrono::steady_clock::now() < deadline);
-    keep_pixels(context, label + ".expected", expected, width, height);
+    keep_pixels(context, label + ".expected", expected, own_width(expected, width, height), height);
     keep_image(context, label + ".actual", last);
     return false;
 }

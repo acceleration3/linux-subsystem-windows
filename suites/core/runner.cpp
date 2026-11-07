@@ -108,7 +108,7 @@ void Runner::flush_ready() {
 }
 
 void Runner::execute(const std::vector<Planned>& plan, std::size_t begin, std::size_t end,
-                     int jobs) {
+                     int jobs, bool machine_wide) {
     const Worker worker(options_.artifacts);
     std::atomic<std::size_t> next{begin};
     const auto loop = [&] {
@@ -122,8 +122,16 @@ void Runner::execute(const std::vector<Planned>& plan, std::size_t begin, std::s
                                 : planned.check->timeout_seconds > 0
                                     ? planned.check->timeout_seconds
                                     : kDefaultTimeoutSeconds;
-            const std::string started = utc_now();
-            CheckResult result = worker.run(planned.check->id, timeout);
+            std::string started;
+            CheckResult result;
+            if (machine_wide) {
+                const std::lock_guard<MachineLock> held(machine_lock_);
+                started = utc_now();
+                result = worker.run(planned.check->id, timeout);
+            } else {
+                started = utc_now();
+                result = worker.run(planned.check->id, timeout);
+            }
             result.suite = planned.suite->name();
             result.tags = planned.check->tags;
             result.started = started;
@@ -181,7 +189,7 @@ int Runner::run() {
         }
     }
     execute(plan, 0, free_end, jobs);
-    execute(plan, free_end, exclusive_end, 1);
+    execute(plan, free_end, exclusive_end, 1, true);
     execute(plan, exclusive_end, plan.size(), 1);
 
     int passed = 0;

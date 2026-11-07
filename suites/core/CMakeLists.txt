@@ -6,6 +6,7 @@ add_library(suite_core OBJECT
     glob.cpp
     json.cpp
     json_report.cpp
+    machine_lock.cpp
     options.cpp
     registry.cpp
     report_printer.cpp

@@ -633,7 +633,7 @@ Outcome D3dClChecks::acquire_order_caps(Context& context) {
     };
     int judged = 0;
     if (!ApiPolicy::is_skipped("d3d11")) {
-        const Family family{"d3d11", "cl_khr_d3d11_sharing", CL_D3D11_RESOURCE_ALREADY_ACQUIRED_KHR, CL_D3D11_RESOURCE_NOT_ACQUIRED_KHR, CL_INVALID_D3D11_RESOURCE_KHR};
+        const Family family{"d3d11", "cl_khr_d3d11_sharing", CL_D3D11_RESOURCE_ALREADY_ACQUIRED_KHR, CL_D3D11_RESOURCE_NOT_ACQUIRED_KHR, CL_INVALID_MEM_OBJECT};
         D3d11Device d3d;
         Side side;
         std::string error;
@@ -746,7 +746,7 @@ Outcome D3dClChecks::acquire_order_caps(Context& context) {
                     clkit::Kit::expect(problems, "d3d10: a second clEnqueueAcquireD3D10ObjectsKHR", api.AcquireD3D10Objects(queue, 1, &handle, 0, nullptr, nullptr), {CL_D3D10_RESOURCE_ALREADY_ACQUIRED_KHR});
                     clkit::Kit::expect(problems, "d3d10: clEnqueueReleaseD3D10ObjectsKHR of the acquired buffer", api.ReleaseD3D10Objects(queue, 1, &handle, 0, nullptr, nullptr), {CL_SUCCESS});
                     clkit::Kit::expect(problems, "d3d10: a second clEnqueueReleaseD3D10ObjectsKHR", api.ReleaseD3D10Objects(queue, 1, &handle, 0, nullptr, nullptr), {CL_D3D10_RESOURCE_NOT_ACQUIRED_KHR});
-                    clkit::Kit::expect(problems, "d3d10: clEnqueueAcquireD3D10ObjectsKHR of a plain buffer", api.AcquireD3D10Objects(queue, 1, &plain_handle, 0, nullptr, nullptr), {CL_INVALID_D3D10_RESOURCE_KHR});
+                    clkit::Kit::expect(problems, "d3d10: clEnqueueAcquireD3D10ObjectsKHR of a plain buffer", api.AcquireD3D10Objects(queue, 1, &plain_handle, 0, nullptr, nullptr), {CL_INVALID_MEM_OBJECT});
                     side.cl.api.Finish(queue);
                 }
             }

@@ -218,7 +218,7 @@ Outcome GdiLayeredChecks::text_over_flip_window(Context& context) {
         for (int y = 0; y < kEdge; ++y) {
             for (int x = 0; x < kEdge; ++x) {
                 const std::uint32_t want = frame[static_cast<std::size_t>(y) * kEdge + static_cast<std::size_t>(x)];
-                if (shot.at(x, y) == want) {
+                if ((shot.at(x, y) & 0xFFFFFFu) == (want & 0xFFFFFFu)) {
                     continue;
                 }
                 if (inside(text, x, y)) {

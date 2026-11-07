@@ -1,6 +1,7 @@
 #include "support/api_snapshot.hpp"
 
 #include "core/text.hpp"
+#include "support/api_policy.hpp"
 #include "support/kmt_api.hpp"
 
 namespace lsw::suites {
@@ -81,19 +82,25 @@ bool ApiSnapshot::take(ApiSnapshot& out, std::string& error) {
                    " sources=" + std::to_string(kmt_adapters[i].sources) + "\n";
     }
 
-    VulkanApi vulkan;
-    std::vector<VulkanDevice> devices;
-    if (!vulkan.load(error) || !vulkan.enumerate_fresh(devices, error)) {
-        return false;
+    out.vulkan.clear();
+    if (!ApiPolicy::is_skipped("vulkan")) {
+        VulkanApi vulkan;
+        std::vector<VulkanDevice> devices;
+        if (!vulkan.load(error) || !vulkan.enumerate_fresh(devices, error)) {
+            return false;
+        }
+        out.vulkan = describe_vulkan(devices);
     }
-    out.vulkan = describe_vulkan(devices);
 
-    OpenClApi opencl;
-    std::vector<OpenClPlatform> platforms;
-    if (!opencl.load(error) || !opencl.platforms(platforms, error)) {
-        return false;
+    out.opencl.clear();
+    if (!ApiPolicy::is_skipped("opencl")) {
+        OpenClApi opencl;
+        std::vector<OpenClPlatform> platforms;
+        if (!opencl.load(error) || !opencl.platforms(platforms, error)) {
+            return false;
+        }
+        out.opencl = describe_opencl(platforms);
     }
-    out.opencl = describe_opencl(platforms);
     return true;
 }
 

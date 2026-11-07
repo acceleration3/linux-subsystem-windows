@@ -682,9 +682,11 @@ Outcome GlClChecks::acquire_release_errors(Context& context) {
         problems.add("the shared or the plain buffer cannot be created: " + ClTools::error_name(code) + " / " + ClTools::error_name(plain_code));
     } else {
         cl_mem plain_handle = plain.get();
-        expect("clEnqueueAcquireGLObjects with zero objects", bench.interop.AcquireGLObjects(cl.queue, 0, nullptr, 0, nullptr, nullptr), {CL_INVALID_VALUE});
+        expect("clEnqueueAcquireGLObjects with zero objects and a null list", bench.interop.AcquireGLObjects(cl.queue, 0, nullptr, 0, nullptr, nullptr), {CL_SUCCESS});
+        expect("clEnqueueAcquireGLObjects with zero objects and a list", bench.interop.AcquireGLObjects(cl.queue, 0, &plain_handle, 0, nullptr, nullptr), {CL_INVALID_VALUE});
         expect("clEnqueueAcquireGLObjects with a null list", bench.interop.AcquireGLObjects(cl.queue, 1, nullptr, 0, nullptr, nullptr), {CL_INVALID_VALUE});
-        expect("clEnqueueReleaseGLObjects with zero objects", bench.interop.ReleaseGLObjects(cl.queue, 0, nullptr, 0, nullptr, nullptr), {CL_INVALID_VALUE});
+        expect("clEnqueueReleaseGLObjects with zero objects and a null list", bench.interop.ReleaseGLObjects(cl.queue, 0, nullptr, 0, nullptr, nullptr), {CL_SUCCESS});
+        expect("clEnqueueReleaseGLObjects with zero objects and a list", bench.interop.ReleaseGLObjects(cl.queue, 0, &plain_handle, 0, nullptr, nullptr), {CL_INVALID_VALUE});
         expect("clEnqueueAcquireGLObjects of a buffer not created from GL", bench.interop.AcquireGLObjects(cl.queue, 1, &plain_handle, 0, nullptr, nullptr), {CL_INVALID_GL_OBJECT});
         expect("clEnqueueReleaseGLObjects of a buffer not created from GL", bench.interop.ReleaseGLObjects(cl.queue, 1, &plain_handle, 0, nullptr, nullptr), {CL_INVALID_GL_OBJECT});
         cl_gl_object_type type = 0;

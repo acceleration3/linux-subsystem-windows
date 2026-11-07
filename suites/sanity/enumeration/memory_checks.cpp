@@ -1,5 +1,6 @@
 #include "sanity/enumeration/memory_checks.hpp"
 
+#include "support/api_policy.hpp"
 #include "support/av_adapters.hpp"
 #include "support/kmt_api.hpp"
 #include "support/opencl_api.hpp"
@@ -37,10 +38,11 @@ Outcome MemoryChecks::dedicated_vs_shared_consistent(Context& context) {
     std::vector<AvAdapter> adapters;
     std::string error;
     KmtApi kmt;
+    const bool use_vulkan = !ApiPolicy::is_skipped("vulkan");
     VulkanApi vulkan;
     std::vector<VulkanDevice> devices;
-    if (!AvAdapters::all(adapters, error) || !kmt.load(error) || !vulkan.load(error) ||
-        !vulkan.create_instance(error) || !vulkan.devices(devices, error)) {
+    if (!AvAdapters::all(adapters, error) || !kmt.load(error) ||
+        (use_vulkan && (!vulkan.load(error) || !vulkan.create_instance(error) || !vulkan.devices(devices, error)))) {
         return Outcome::fail(error);
     }
     Problems problems;
@@ -74,6 +76,9 @@ Outcome MemoryChecks::dedicated_vs_shared_consistent(Context& context) {
                              std::to_string(kKmtTolerancePercent) + "%");
             }
         }
+        if (!use_vulkan) {
+            continue;
+        }
         const VulkanDevice* device = vulkan_for(devices, adapter);
         if (device == nullptr) {
             problems.add(label + ": no Vulkan device carries this LUID");
@@ -106,12 +111,18 @@ Outcome MemoryChecks::dedicated_vs_shared_consistent(Context& context) {
 Outcome MemoryChecks::opencl_global_size(Context& context) {
     std::vector<AvAdapter> adapters;
     std::string error;
+    if (ApiPolicy::is_skipped("opencl")) {
+        return Outcome::skip("opencl is excluded by LSW_SUITES_SKIP_APIS");
+    }
+    const bool use_vulkan = !ApiPolicy::is_skipped("vulkan");
+    KmtApi kmt;
     VulkanApi vulkan;
     std::vector<VulkanDevice> vk_devices;
     OpenClApi opencl;
     std::vector<OpenClPlatform> platforms;
-    if (!AvAdapters::accel(adapters, error) || !vulkan.load(error) || !vulkan.create_instance(error) ||
-        !vulkan.devices(vk_devices, error) || !opencl.load(error) || !opencl.platforms(platforms, error)) {
+    if (!AvAdapters::accel(adapters, error) || !kmt.load(error) ||
+        (use_vulkan && (!vulkan.load(error) || !vulkan.create_instance(error) || !vulkan.devices(vk_devices, error))) ||
+        !opencl.load(error) || !opencl.platforms(platforms, error)) {
         return Outcome::fail(error);
     }
     Problems problems;
@@ -130,8 +141,12 @@ Outcome MemoryChecks::opencl_global_size(Context& context) {
             ++checked;
             const VulkanDevice* vk = vulkan_for(vk_devices, *adapter);
             const std::uint64_t vulkan_total = vk != nullptr ? vk->total_heaps() : 0;
-            const std::uint64_t dxgi_total =
-                adapter->dedicated_video + adapter->dedicated_system + adapter->shared_system;
+            KmtSegmentSizes segments;
+            if (!kmt.segment_sizes(adapter->luid, segments)) {
+                problems.add(device.name + ": D3DKMT segment sizes unavailable");
+                continue;
+            }
+            const std::uint64_t dxgi_total = segments.dedicated_video + segments.dedicated_system + segments.shared_system;
             const std::uint64_t limit = std::max(vulkan_total, dxgi_total);
             context.measure(device.name + ".global", device.global_memory);
             context.measure(device.name + ".max_alloc", device.max_allocation);
@@ -141,7 +156,7 @@ Outcome MemoryChecks::opencl_global_size(Context& context) {
             }
             if (device.global_memory > limit) {
                 problems.add(device.name + ": CL_DEVICE_GLOBAL_MEM_SIZE " + std::to_string(device.global_memory) +
-                             " exceeds the Vulkan/DXGI heap total " + std::to_string(limit));
+                             " exceeds the Vulkan/D3DKMT heap total " + std::to_string(limit));
             }
             if (device.max_allocation > device.global_memory) {
                 problems.add(device.name + ": CL_DEVICE_MAX_MEM_ALLOC_SIZE exceeds the global size");

@@ -62,7 +62,10 @@ suites/
     `%ProgramData%\lsw-suites.lock`: parallel-only runs with shared read, runs with a serial suite exclusively;
     the kernel drops the lock when a process dies. A refused run prints `refusing to start` and exits 2.
 - A check can declare `exclusive`. Exclusive checks of a parallel suite run after the parallel phase, one at a
-  time, with no other worker alive. Exclusive is for anything that changes or needs quiet global state:
+  time, with no other worker alive of the same run; the 32-bit and 64-bit runs on one machine take the named
+  mutex `Global\lsw-suites-exclusive-check` around each exclusive check, so their exclusive checks never overlap.
+  Windows of non-exclusive checks are parked beyond the virtual desktop and never topmost, so they cannot disturb
+  another run's exclusive screen checks. Exclusive is for anything that changes or needs quiet global state:
   device-loss injection, TDR, memory exhaustion, display mode changes, DWM restarts, frame pacing and timing
   measurements, power transitions, driver log scans.
 - Every check runs in its own worker process: the executable starts itself with `--run-one ID`, suspended, in a
@@ -986,7 +989,7 @@ Each loop creates and destroys 5000 objects of the kind with its largest practic
 | `sanity.fmt.roundtrip_uncompressed` | Upload and readback of every uncompressed colour format (8/16/32 bits, UNORM/SNORM/UINT/SINT/FLOAT) returns the exact bytes for copies and values correct at the format's precision for render and sample. |
 | `sanity.fmt.packed_formats` | Packed formats (R10G10B10A2, R11G11B10_FLOAT, R9G9B9E5, B5G6R5, B5G5R5A1, B4G4R4A4) decode and encode to the analytic values when sampled and rendered, with correct handling of denormals/infinity for floats. |
 | `sanity.fmt.bc_blocks` | BC1-BC5 textures uploaded with valid generated blocks sample to values equal to a CPU decoder within the spec's tolerance (endpoints exact), BC6H and BC7 blocks round-trip bit-exactly, and CopyResource of blocks and partial block-aligned updates are bit-exact in D3D11, D3D12, Vulkan and OpenGL. |
-| `sanity.fmt.bc_dimensions` | BC textures with sizes not a multiple of 4 and small mips (1x1, 2x2) have the documented footprint sizes and sample correctly; creation with invalid sizes fails per spec. |
+| `sanity.fmt.bc_dimensions` | BC textures with 4-aligned top levels and mip chains down to 1x1 have the documented footprint sizes and sample correctly; on D3D10/11 a top level that is not a multiple of 4 in width or height fails with E_INVALIDARG as on WARP, on D3D12 only when UnalignedBlockTexturesSupported is FALSE; creation with other invalid sizes fails per spec. |
 | `sanity.fmt.srgb_conversion` | Writing linear values to SRGB targets and sampling them back follow the sRGB EOTF within one 8-bit step for all 256 codes, equal across D3D9 (SRGBWRITE), D3D11 and D3D12; blending happens in linear space. |
 | `sanity.fmt.typeless_casts` | A typeless resource viewed as UNORM, SNORM, UINT, SINT, FLOAT and SRGB (where allowed) reinterprets the same bits as per the spec in D3D11 and D3D12, and casts outside the format family fail in D3D11 view creation. |
 | `sanity.fmt.depth_stencil` | Depth and stencil formats clear, test and sample to the analytic values (D16 quantisation, D24 and D32 precision, stencil bits) in D3D11, Vulkan and OpenGL, and reading depth via typeless SRV equals the written depth within the format's resolution. |
@@ -995,14 +998,14 @@ Each loop creates and destroys 5000 objects of the kind with its largest practic
 | `sanity.fmt.float_special_values` | FLOAT formats preserve NaN, Inf, denormal and negative zero through copy and sample paths per IEEE rules (rendering may flush denormals per spec), and comparisons against the CPU values are bit-exact for copies. |
 | `sanity.fmt.snorm_and_clamp` | SNORM formats clamp -1 for the minimum code and write/readback symmetrical values; UNORM render clamps out-of-range shader outputs to [0,1]; UINT/SINT clamp per format on write. |
 | `sanity.fmt.mip_and_array_footprints` | For each format the subresource sizes, pitches and total size from API queries (GetCopyableFootprints / Map RowPitch / GetLevelDesc) are consistent with the format's bits per element and block size at every mip. |
-| `sanity.fmt.display_formats` | Formats the output reports for display (GetDisplayModeList, swap-chain support bit) can be created as a swap chain and present a known colour, matching the reported scan-out support. [E] |
+| `sanity.fmt.display_formats` | Formats the output reports for display (GetDisplayModeList, swap-chain support bit) can be created as a swap chain and present a known colour, matching the reported scan-out support; R10G10B10_XR_BIAS_A2_UNORM, which is not a valid flip-model buffer format, is tried as a blt-model chain and reported as a measure. [E] |
 
 ### 4.17 Shaders and compilation (12)
 
 | check | contract |
 |---|---|
 | `sanity.shader.dxbc.sm2_sm3` | SM2.0/2.x/3.0 vertex and pixel shaders from D3DCompile run on D3D9 and equal WARP/D3D9Ex-reference pixels. |
-| `sanity.shader.dxbc.sm4_sm5` | SM4.0/4.1/5.0/5.1 vertex, geometry, hull/domain, pixel and compute shaders run on D3D10/11 and equal WARP within tolerance (graphics) or the analytic result (compute, tessellation, UAV atomics, resource arrays); SM5.1 dynamic resource arrays run on D3D12. |
+| `sanity.shader.dxbc.sm4_sm5` | SM4.0/4.1/5.0/5.1 vertex, geometry, hull/domain, pixel and compute shaders run on D3D10/11 and equal WARP within tolerance (graphics) or the analytic result (compute, tessellation, UAV atomics on SM5 only since cs_4_x has none, resource arrays); SM5.1 dynamic resource arrays run on D3D12. |
 | `sanity.shader.dxil.sm6` | DXIL SM6.0 to 6.x (per reported max shader model) compute and graphics shaders, wave intrinsics per caps, run on D3D12 and equal a CPU reference; unsupported models are refused by CheckFeatureSupport; the run skips with a reason when dxcompiler.dll or dxil.dll cannot be loaded. |
 | `sanity.shader.spirv.valid_runs` | Valid SPIR-V compute and graphics modules (with specialization constants) create and run in Vulkan and match the CPU reference. |
 | `sanity.shader.spirv.invalid_fails` | Invalid SPIR-V is invalid usage with undefined behaviour and reaches the host compiler; whether creation failed and whether a message appeared are measures only, and the device still computes correctly afterwards. |
@@ -1050,7 +1053,7 @@ Each loop creates and destroys 5000 objects of the kind with its largest practic
 | `sanity.interop.glcl.texture_targets_mips_layers` | clCreateFromGLTexture for 2D, 3D, array, cube faces, rectangle and mip levels > 0 returns images whose pixels match the GL texture, and CL writes visible in GL. |
 | `sanity.interop.glcl.renderbuffer_sharing` | A GL renderbuffer rendered by GL is read by CL; CL writes to it are visible in glReadPixels after release. |
 | `sanity.interop.glcl.gl_event_sync` | With cl_khr_gl_event, a CL event from a GL fence (clCreateEventFromGLsyncKHR) orders CL work after GL rendering without glFinish; the reverse via cl_khr_gl_event/ GL sync object works. |
-| `sanity.interop.glcl.acquire_release_errors` | The documented error codes of cl_khr_gl_sharing hold: clCreateFromGLBuffer, clCreateFromGLTexture and clCreateFromGLRenderbuffer reject unknown GL names (CL_INVALID_GL_OBJECT), invalid flags, targets and contexts; clEnqueueAcquire/ReleaseGLObjects reject empty lists (CL_INVALID_VALUE) and objects not created from GL (CL_INVALID_GL_OBJECT); clGetGLObjectInfo agrees with the shared object. Using an object outside acquire and release is invalid usage and is never exercised. |
+| `sanity.interop.glcl.acquire_release_errors` | The documented error codes of cl_khr_gl_sharing hold: clCreateFromGLBuffer, clCreateFromGLTexture and clCreateFromGLRenderbuffer reject unknown GL names (CL_INVALID_GL_OBJECT), invalid flags, targets and contexts; clEnqueueAcquire/ReleaseGLObjects accept zero objects with a null list (CL_SUCCESS), reject a zero count with a list or a count with a null list (CL_INVALID_VALUE) and objects not created from GL (CL_INVALID_GL_OBJECT); clGetGLObjectInfo agrees with the shared object. Using an object outside acquire and release is invalid usage and is never exercised. |
 | `sanity.interop.glcl.caps_unsupported` | If cl_khr_gl_sharing is not advertised, clCreateFromGLBuffer fails with the documented code and the extension string and entry points agree. |
 
 #### D3D and OpenCL
@@ -1060,7 +1063,7 @@ Each loop creates and destroys 5000 objects of the kind with its largest practic
 | `sanity.interop.d3dcl.d3d11_sharing` | With cl_khr_d3d11_sharing, buffers and 2D/3D textures from D3D11 are read and written by CL across AcquireD3D11Objects/Release with matching data; the device from clGetDeviceIDsFromD3D11KHR matches the D3D device's adapter. |
 | `sanity.interop.d3dcl.d3d10_sharing` | Same contract for cl_khr_d3d10_sharing. |
 | `sanity.interop.d3dcl.dx9_media_sharing` | With cl_khr_dx9_media_sharing, D3D9Ex surfaces (including planes of NV12 where reported) are readable and writable by CL across acquire/release. |
-| `sanity.interop.d3dcl.acquire_order_caps` | For each of cl_khr_d3d10_sharing, cl_khr_d3d11_sharing and cl_khr_dx9_media_sharing that is advertised, the extension's own error codes hold: a second acquire gives the ALREADY_ACQUIRED code, a second release the NOT_ACQUIRED code, and acquiring an object not created from D3D the INVALID_RESOURCE code; for one that is not advertised, contexts with its device property and its creation functions fail. Using an object outside acquire and release is invalid usage and is never exercised. |
+| `sanity.interop.d3dcl.acquire_order_caps` | For each of cl_khr_d3d10_sharing, cl_khr_d3d11_sharing and cl_khr_dx9_media_sharing that is advertised, the extension's own error codes hold: a second acquire gives the ALREADY_ACQUIRED code, a second release the NOT_ACQUIRED code, and acquiring an object not created from D3D10 or D3D11 CL_INVALID_MEM_OBJECT; for one that is not advertised, contexts with its device property and its creation functions fail. Using an object outside acquire and release is invalid usage and is never exercised. |
 
 #### OpenGL and D3D
 

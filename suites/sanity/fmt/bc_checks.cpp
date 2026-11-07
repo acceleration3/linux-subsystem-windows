@@ -399,6 +399,24 @@ struct Size {
 
 const Size kSizes[] = {{5, 7}, {1, 1}, {2, 2}, {3, 9}, {13, 6}, {4, 4}, {17, 5}, {64, 3}};
 
+bool block_aligned(const Size& size) { return size.width % 4 == 0 && size.height % 4 == 0; }
+
+const std::vector<Size>& aligned_sizes() {
+    static const std::vector<Size> sizes = [] {
+        std::vector<Size> out;
+        for (const Size& size : kSizes) {
+            if (block_aligned(size)) {
+                out.push_back(size);
+            }
+        }
+        for (const Size& size : {Size{8, 8}, Size{12, 4}, Size{16, 8}, Size{64, 28}}) {
+            out.push_back(size);
+        }
+        return out;
+    }();
+    return sizes;
+}
+
 unsigned mip_count(const Size& size) {
     unsigned largest = std::max(size.width, size.height);
     unsigned levels = 1;
@@ -419,6 +437,9 @@ std::string size_text(const Size& size) { return std::to_string(size.width) + "x
 
 void d3d11_dimensions(D3d11Device& device, Limited& out, int& tested) {
     D3d11FormatRunner runner(device);
+    D3d11Device warp;
+    std::string warp_error;
+    const bool warp_ready = warp.create_warp(nullptr, 0, 0, warp_error);
     const int families[] = {1, 3, 4, 7};
     for (int family : families) {
         const DXGI_FORMAT format = BcCodec::unorm_format(family);
@@ -428,6 +449,30 @@ void d3d11_dimensions(D3d11Device& device, Limited& out, int& tested) {
         }
         const unsigned bb = static_cast<unsigned>(BcCodec::block_bytes(family));
         for (const Size& size : kSizes) {
+            if (block_aligned(size)) {
+                continue;
+            }
+            ++tested;
+            const std::string name = "D3D11 " + std::string(FormatTable::name(format)) + " " + size_text(size);
+            const unsigned mips = mip_count(size);
+            const D3D11_TEXTURE2D_DESC wanted =
+                D3d11Tools::desc2d(size.width, size.height, format, D3D11_BIND_SHADER_RESOURCE, D3D11_USAGE_DEFAULT, 0, mips);
+            HRESULT warp_result = E_INVALIDARG;
+            if (warp_ready) {
+                Com<ID3D11Texture2D> reference;
+                warp_result = warp.device->CreateTexture2D(&wanted, nullptr, reference.put());
+            }
+            Com<ID3D11Texture2D> texture;
+            const HRESULT result = device.device->CreateTexture2D(&wanted, nullptr, texture.put());
+            if (FAILED(warp_result) && SUCCEEDED(result)) {
+                out.add(name + " with a width or height that is not a multiple of 4 was accepted, WARP refuses it");
+            } else if (FAILED(warp_result) && result != E_INVALIDARG) {
+                out.add(name + " with a width or height that is not a multiple of 4 failed with " + D3d11Tools::hr(result) + ", expected E_INVALIDARG");
+            } else if (SUCCEEDED(warp_result) && FAILED(result)) {
+                out.add(name + " failed with " + D3d11Tools::hr(result) + " but WARP accepts it");
+            }
+        }
+        for (const Size& size : aligned_sizes()) {
             ++tested;
             const std::string name = "D3D11 " + std::string(FormatTable::name(format)) + " " + size_text(size);
             const unsigned mips = mip_count(size);
@@ -504,6 +549,17 @@ void d3d11_dimensions(D3d11Device& device, Limited& out, int& tested) {
 void d3d12_dimensions(D3d12Rig& rig, Limited& out, int& tested) {
     const int families[] = {1, 3, 4, 7};
     D3d12FormatRunner runner(rig);
+    D3D12_FEATURE_DATA_D3D12_OPTIONS8 options8{};
+    const bool unaligned_ok = SUCCEEDED(rig.device()->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS8, &options8, sizeof(options8))) &&
+                              options8.UnalignedBlockTexturesSupported != FALSE;
+    std::vector<Size> sizes12 = aligned_sizes();
+    if (unaligned_ok) {
+        for (const Size& size : kSizes) {
+            if (!block_aligned(size)) {
+                sizes12.push_back(size);
+            }
+        }
+    }
     for (int family : families) {
         const DXGI_FORMAT format = BcCodec::unorm_format(family);
         UINT bits = 0;
@@ -511,7 +567,27 @@ void d3d12_dimensions(D3d12Rig& rig, Limited& out, int& tested) {
             continue;
         }
         const unsigned bb = static_cast<unsigned>(BcCodec::block_bytes(family));
-        for (const Size& size : kSizes) {
+        if (!unaligned_ok) {
+            for (const Size& size : kSizes) {
+                if (block_aligned(size)) {
+                    continue;
+                }
+                ++tested;
+                const std::string name = "D3D12 " + std::string(FormatTable::name(format)) + " " + size_text(size);
+                ID3D12Resource* unaligned = nullptr;
+                const D3D12_RESOURCE_DESC wanted = D3d12Tools::texture_desc(size.width, size.height, format, D3D12_RESOURCE_FLAG_NONE, mip_count(size));
+                const D3D12_HEAP_PROPERTIES heap = D3d12Tools::heap_props(D3D12_HEAP_TYPE_DEFAULT);
+                const HRESULT result = rig.device()->CreateCommittedResource(&heap, D3D12_HEAP_FLAG_NONE, &wanted, D3D12_RESOURCE_STATE_COMMON, nullptr,
+                                                                            IID_PPV_ARGS(&unaligned));
+                if (SUCCEEDED(result)) {
+                    out.add(name + " was accepted though UnalignedBlockTexturesSupported is FALSE");
+                    rig.hold(Com<ID3D12Resource>(unaligned));
+                } else if (result != E_INVALIDARG) {
+                    out.add(name + " failed with " + D3d12Tools::hr(result) + ", expected E_INVALIDARG");
+                }
+            }
+        }
+        for (const Size& size : sizes12) {
             ++tested;
             const std::string name = "D3D12 " + std::string(FormatTable::name(format)) + " " + size_text(size);
             const unsigned mips = mip_count(size);

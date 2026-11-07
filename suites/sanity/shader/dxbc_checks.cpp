@@ -298,12 +298,6 @@ std::uint32_t hash_word(std::uint32_t id, bool sm5) {
             reversed |= ((id >> i) & 1u) << (31 - i);
         }
         v ^= reversed;
-    } else {
-        std::uint32_t top = 0;
-        for (std::uint32_t x = v | 1u; x > 1; x >>= 1) {
-            ++top;
-        }
-        v ^= top * 16777619u;
     }
     return v;
 }
@@ -315,11 +309,11 @@ const char* kHashCs =
     "  uint v = id.x * 2654435761u; v ^= v >> 13; v *= 1597334677u;\n"
     "#ifdef SM5\n"
     "  v ^= countbits(v) * 16777619u; v ^= reversebits(id.x);\n"
-    "#else\n"
-    "  v ^= firstbithigh(v | 1u) * 16777619u;\n"
     "#endif\n"
     "  o.Store(id.x * 4, v);\n"
+    "#ifdef SM5\n"
     "  uint previous; o.InterlockedAdd(1024 + (id.x & 15u) * 4, 1u, previous);\n"
+    "#endif\n"
     "}\n";
 
 void compute_level(D3d11Device& device, bool sm5, Problems& problems, const std::string& level) {
@@ -350,7 +344,7 @@ void compute_level(D3d11Device& device, bool sm5, Problems& problems, const std:
             break;
         }
     }
-    for (std::uint32_t bucket = 0; bucket < 16; ++bucket) {
+    for (std::uint32_t bucket = 0; sm5 && bucket < 16; ++bucket) {
         if (words[256 + bucket] != 16) {
             problems.add(level + " compute scene: atomic bucket " + std::to_string(bucket) + " holds " + std::to_string(words[256 + bucket]) + ", expected 16");
             break;

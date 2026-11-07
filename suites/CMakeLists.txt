@@ -7,6 +7,10 @@ if(NOT WIN32)
     message(FATAL_ERROR "lsw-suites is a guest program: configure with a mingw-w64 toolchain")
 endif()
 
+if(CMAKE_SIZEOF_VOID_P EQUAL 4)
+    add_compile_options(-msse2 -mfpmath=sse)
+endif()
+
 add_subdirectory(core)
 add_subdirectory(support)
 add_subdirectory(selftest)

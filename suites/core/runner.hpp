@@ -4,6 +4,7 @@
 #include "core/options.hpp"
 #include "core/registry.hpp"
 #include "core/report_printer.hpp"
+#include "core/machine_lock.hpp"
 #include "core/result_log.hpp"
 
 #include <mutex>
@@ -28,7 +29,8 @@ private:
                               std::size_t& parallel_exclusive, bool& any_serial,
                               std::string& error) const;
 
-    void execute(const std::vector<Planned>& plan, std::size_t begin, std::size_t end, int jobs);
+    void execute(const std::vector<Planned>& plan, std::size_t begin, std::size_t end, int jobs,
+                 bool machine_wide = false);
 
     void flush_ready();
 
@@ -36,6 +38,7 @@ private:
     const Options& options_;
     ReportPrinter printer_;
     ResultLog log_;
+    MachineLock machine_lock_;
     std::mutex mutex_;
     std::vector<CheckResult> results_;
     std::vector<bool> done_;

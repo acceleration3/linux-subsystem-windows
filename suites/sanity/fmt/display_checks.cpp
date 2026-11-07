@@ -36,6 +36,8 @@ bool srgb_format(DXGI_FORMAT format) {
     return format == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB || format == DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
 }
 
+bool xr_bias_format(DXGI_FORMAT format) { return format == DXGI_FORMAT_R10G10B10_XR_BIAS_A2_UNORM; }
+
 void dxgi_part(Context& context, Problems& problems) {
     SwapRig rig;
     SwapOptions options;
@@ -76,11 +78,16 @@ void dxgi_part(Context& context, Problems& problems) {
         chain_options.effect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
         Com<IDXGISwapChain1> chain;
         HRESULT result = rig.try_create(chain_options, rig.window.hwnd(), chain);
-        if (FAILED(result) && srgb_format(candidate.format)) {
+        if (FAILED(result) && (srgb_format(candidate.format) || xr_bias_format(candidate.format))) {
             chain_options.buffers = 1;
             chain_options.effect = DXGI_SWAP_EFFECT_DISCARD;
             chain.reset();
             result = rig.try_create(chain_options, rig.window.hwnd(), chain);
+        }
+        if (xr_bias_format(candidate.format)) {
+            context.measure(name + ".display_bit", display_bit ? 1 : 0);
+            context.measure(name + ".chain_created", SUCCEEDED(result) ? 1 : 0);
+            continue;
         }
         if (display_bit && FAILED(result)) {
             problems.add(name + " reports DISPLAY support but a swap chain cannot be created: " + D3d11Tools::hr(result));

@@ -45,9 +45,10 @@ Outcome CapsChecks::feature_level_vs_api_support(Context& context) {
     if (!ApiPolicy::is_skipped("d3d12") && d3d12.load("d3d12.dll")) {
         create12 = d3d12.symbol<PFN_D3D12_CREATE_DEVICE>("D3D12CreateDevice");
     }
+    const bool use_vulkan = !ApiPolicy::is_skipped("vulkan");
     VulkanApi vulkan;
     std::vector<VulkanDevice> vk_devices;
-    if (!vulkan.load(error) || !vulkan.create_instance(error) || !vulkan.devices(vk_devices, error)) {
+    if (use_vulkan && (!vulkan.load(error) || !vulkan.create_instance(error) || !vulkan.devices(vk_devices, error))) {
         return Outcome::fail(error);
     }
     Problems problems;
@@ -102,7 +103,7 @@ Outcome CapsChecks::feature_level_vs_api_support(Context& context) {
             problems.add(label + ": D3D12 supports " + level_name(max12) + " but D3D11 only " +
                          level_name(max11));
         }
-        if (max11 >= D3D_FEATURE_LEVEL_11_0) {
+        if (use_vulkan && max11 >= D3D_FEATURE_LEVEL_11_0) {
             bool found = false;
             for (const VulkanDevice& device : vk_devices) {
                 found = found || (device.luid_valid && AvAdapters::key(device.luid) == adapter.luid_key());

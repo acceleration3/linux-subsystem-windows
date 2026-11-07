@@ -40,11 +40,15 @@ SingleCheck::SingleCheck(const Registry& registry, std::filesystem::path artifac
 int SingleCheck::run(const std::string& id) const {
     ::SetErrorMode(SEM_NOGPFAULTERRORBOX | SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX);
     Context context(id, artifacts_);
-    const Check* check = registry_.find_check(id);
+    const Suite* owner = nullptr;
+    const Check* check = registry_.find_check(id, &owner);
     if (check == nullptr) {
         const std::string text = ChildProtocol::encode(context, Outcome::fail("no such check"));
         std::fputs(text.c_str(), stdout);
         return 2;
+    }
+    if (!check->exclusive && owner != nullptr && owner->policy() == Policy::Parallel) {
+        ::SetEnvironmentVariableW(L"LSW_SUITES_QUIET_DESKTOP", L"1");
     }
     Outcome outcome = Outcome::fail("the check returned nothing");
     try {
