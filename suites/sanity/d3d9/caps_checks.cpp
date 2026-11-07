@@ -128,11 +128,11 @@ Outcome CapsChecks::caps_vs_behaviour(Context& context) {
         Com<IDirect3DTexture9> t = D3d9Tools::texture(device, caps.MaxTextureWidth, wide_h, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &result);
         Kit::expect_success(problems, "a texture of MaxTextureWidth " + std::to_string(caps.MaxTextureWidth), result);
         t = D3d9Tools::texture(device, caps.MaxTextureWidth + 1, 1, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &result);
-        Kit::expect_failure(problems, "a texture of MaxTextureWidth + 1", result);
+        Kit::expect_refused(problems, "a texture of MaxTextureWidth + 1", result);
         t = D3d9Tools::texture(device, tall_w, caps.MaxTextureHeight, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &result);
         Kit::expect_success(problems, "a texture of MaxTextureHeight " + std::to_string(caps.MaxTextureHeight), result);
         t = D3d9Tools::texture(device, 1, caps.MaxTextureHeight + 1, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &result);
-        Kit::expect_failure(problems, "a texture of MaxTextureHeight + 1", result);
+        Kit::expect_refused(problems, "a texture of MaxTextureHeight + 1", result);
         context.measure("max_texture", std::to_string(caps.MaxTextureWidth) + "x" + std::to_string(caps.MaxTextureHeight));
     }
     {

@@ -32,6 +32,10 @@ add_library(suite_sanity OBJECT
     d3d9/fixed_scenes.cpp
     d3d9/render_checks.cpp
     d3d9/query_checks.cpp
+    d3d9/present_checks.cpp
+    d3d9/lost_checks.cpp
+    d3d9/share_checks.cpp
+    d3d9/fail_checks.cpp
     data/align_checks.cpp
     data/load_checks.cpp
     data/sequence_checks.cpp

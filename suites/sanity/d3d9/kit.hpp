@@ -37,6 +37,14 @@ public:
         }
     }
 
+    static void expect_refused(Problems& problems, const std::string& what, HRESULT actual) {
+        if (SUCCEEDED(actual)) {
+            problems.add(what + " succeeded, expected D3DERR_INVALIDCALL or D3DERR_NOTAVAILABLE");
+        } else if (actual != D3DERR_INVALIDCALL && actual != D3DERR_NOTAVAILABLE) {
+            problems.add(what + " returned " + hr(actual) + ", expected D3DERR_INVALIDCALL or D3DERR_NOTAVAILABLE");
+        }
+    }
+
     static void expect_success(Problems& problems, const std::string& what, HRESULT actual) {
         if (FAILED(actual)) {
             problems.add(what + " failed with " + hr(actual));

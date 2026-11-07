@@ -25,6 +25,10 @@
 #include "sanity/d3d9/blt_checks.hpp"
 #include "sanity/d3d9/render_checks.hpp"
 #include "sanity/d3d9/query_checks.hpp"
+#include "sanity/d3d9/present_checks.hpp"
+#include "sanity/d3d9/lost_checks.hpp"
+#include "sanity/d3d9/share_checks.hpp"
+#include "sanity/d3d9/fail_checks.hpp"
 #include "sanity/d3d11/fl_checks.hpp"
 #include "sanity/d3d11/res_checks.hpp"
 #include "sanity/d3d11/map_checks.hpp"
@@ -226,6 +230,18 @@ void add(Registry& registry) {
     guarded(suite, {"sanity.d3d9.render.draw_variants", {"d3d9"}, false, 60, d3d9::RenderChecks::draw_variants});
     guarded(suite, {"sanity.d3d9.query.occlusion", {"d3d9"}, false, 60, d3d9::QueryChecks::occlusion});
     guarded(suite, {"sanity.d3d9.query.event_timestamp", {"d3d9"}, false, 60, d3d9::QueryChecks::event_timestamp});
+    guarded(suite, {"sanity.d3d9.present.swap_effects", {"d3d9", "present", "dwm"}, false, 120, d3d9::PresentChecks::swap_effects});
+    guarded(suite, {"sanity.d3d9.present.intervals", {"d3d9", "present", "exclusive"}, true, 60, d3d9::PresentChecks::intervals});
+    guarded(suite, {"sanity.d3d9.present.presentex_flags", {"d3d9", "present"}, false, 60, d3d9::PresentChecks::presentex_flags});
+    guarded(suite, {"sanity.d3d9.present.src_dst_rects", {"d3d9", "present", "dwm"}, false, 60, d3d9::PresentChecks::src_dst_rects});
+    guarded(suite, {"sanity.d3d9.lost.reset_semantics", {"d3d9"}, false, 60, d3d9::LostChecks::reset_semantics});
+    guarded(suite, {"sanity.d3d9.lost.ex_never_lost", {"d3d9", "present", "exclusive"}, true, 120, d3d9::LostChecks::ex_never_lost});
+    guarded(suite, {"sanity.d3d9.share.cross_device", {"d3d9", "interop"}, false, 60, d3d9::ShareChecks::cross_device});
+    guarded(suite, {"sanity.d3d9.share.cross_process", {"d3d9", "interop"}, false, 180, d3d9::ShareChecks::cross_process});
+    guarded(suite, {"sanity.d3d9.share.d3dimage_pattern", {"d3d9", "d3d11", "interop"}, false, 120, d3d9::ShareChecks::d3dimage_pattern});
+    guarded(suite, {"sanity.d3d9.fail.unsupported_features", {"d3d9"}, false, 60, d3d9::FailChecks::unsupported_features});
+    guarded(suite, {"sanity.d3d9.fail.bad_parameters", {"d3d9"}, false, 60, d3d9::FailChecks::bad_parameters});
+    guarded(suite, {"sanity.d3d9.fail.lifetime", {"d3d9", "mem", "slow"}, false, 300, d3d9::FailChecks::lifetime});
     guarded(suite, {"sanity.d3d11.fl.requested_levels", {"d3d11"}, false, 60, d3d11::FlChecks::requested_levels});
     guarded(suite, {"sanity.d3d11.fl.checkfeaturesupport_options", {"d3d11"}, false, 60, d3d11::FlChecks::checkfeaturesupport_options});
     guarded(suite, {"sanity.d3d11.fl.format_support_vs_creation", {"d3d11", "formats"}, false, 120, d3d11::FlChecks::format_support_vs_creation});
