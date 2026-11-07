@@ -366,6 +366,8 @@ function Native-Type {
         Add-Type -Namespace LswUpdate -Name Native -MemberDefinition @'
 [System.Runtime.InteropServices.DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode, SetLastError = true)]
 public static extern bool MoveFileEx(string existing, string target, int flags);
+[System.Runtime.InteropServices.DllImport("kernel32.dll")]
+public static extern uint WTSGetActiveConsoleSessionId();
 '@
     }
 }
@@ -413,8 +415,10 @@ function Remove-Old-Loaders([hashtable] $Targets) {
 }
 
 function Get-DwmDisplayCore {
+    Native-Type
+    $console = [int][LswUpdate.Native]::WTSGetActiveConsoleSessionId()
     $result = $null
-    foreach ($proc in @(Get-Process -Name dwm -ErrorAction SilentlyContinue)) {
+    foreach ($proc in @(Get-Process -Name dwm -ErrorAction SilentlyContinue | Where-Object { $_.SessionId -eq $console })) {
         try {
             $loaded = @($proc.Modules | Where-Object { $_.ModuleName -ieq 'ddisplay.dll' }).Count -gt 0
             if ($loaded) { return $true }
@@ -435,13 +439,23 @@ function Step-DisplayPath {
         $script:State = 'skipped'
         return
     }
-    if ($current -ne 1) {
+    if ($current -eq 1 -and $null -eq $loaded) {
+        L 'display path: DisableDDisplay is 1 and the console DWM modules are unreadable'
+        $script:State = 'skipped'
+        return
+    }
+    $changed = $current -ne 1
+    if ($changed) {
         if (-not (Test-Path -LiteralPath $key)) { New-Item -Path $key -Force | Out-Null }
         New-ItemProperty -LiteralPath $key -Name DisableDDisplay -PropertyType DWord -Value 1 -Force | Out-Null
         L 'display path: DisableDDisplay set to 1'
     }
-    if ($loaded -ne $true) {
-        Need-Restart 'DWM still uses DisplayCore'
+    if ($loaded -eq $false) {
+        L 'display path: the console DWM does not use DisplayCore'
+        return
+    }
+    if ($null -eq $loaded) {
+        Need-Restart 'DisableDDisplay takes effect when DWM starts'
         return
     }
     L 'display path: restarting DWM to leave DisplayCore'
@@ -453,6 +467,10 @@ function Step-DisplayPath {
             L 'display path: DWM restarted without DisplayCore'
             return
         }
+    }
+    if (-not $changed) {
+        L 'display path: DWM keeps ddisplay.dll with DisableDDisplay already 1; a restart would not change it'
+        return
     }
     Need-Restart 'DWM still uses DisplayCore'
 }
