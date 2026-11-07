@@ -41,6 +41,12 @@ add_library(suite_support OBJECT
     backend_harness.cpp
     av_adapters.cpp
     child_runs.cpp
+    cl_api.cpp
+    cl_program.cpp
+    cl_rig.cpp
+    cl_spirv.cpp
+    cl_tools.cpp
+    cl_ulp.cpp
     compare.cpp
     display_devices.cpp
     driver_registry.cpp

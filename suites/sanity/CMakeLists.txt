@@ -1,5 +1,9 @@
 add_library(suite_sanity OBJECT
     sanity.cpp
+    cl/kit.cpp
+    cl/platform_checks.cpp
+    cl/device_checks.cpp
+    cl/mem_checks.cpp
     gl/format_checks.cpp
     gl/context_checks.cpp
     gl/thread_checks.cpp

@@ -47,6 +47,9 @@
 #include "sanity/dxgi/enum_checks.hpp"
 #include "sanity/dxgi/swap_checks.hpp"
 #include "sanity/dxgi/mem_checks.hpp"
+#include "sanity/cl/platform_checks.hpp"
+#include "sanity/cl/device_checks.hpp"
+#include "sanity/cl/mem_checks.hpp"
 #include "sanity/gl/context_checks.hpp"
 #include "sanity/gl/format_checks.hpp"
 #include "sanity/gl/thread_checks.hpp"
@@ -407,6 +410,18 @@ void add(Registry& registry) {
     guarded(suite, {"sanity.gl.buffer.map_errors", {"gl"}, false, 60, gl::BufferChecks::map_errors});
     guarded(suite, {"sanity.gl.buffer.copy_and_clear", {"gl", "mem", "slow"}, false, 180, gl::BufferChecks::copy_and_clear});
     guarded(suite, {"sanity.gl.buffer.pbo_pack_unpack", {"gl", "formats"}, false, 120, gl::BufferChecks::pbo_pack_unpack});
+    guarded(suite, {"sanity.cl.platform.query_consistent", {"opencl"}, false, 60, cl::PlatformChecks::query_consistent});
+    guarded(suite, {"sanity.cl.device.query_all_params", {"opencl"}, false, 60, cl::DeviceChecks::query_all_params});
+    guarded(suite, {"sanity.cl.device.extensions_match_entry_points", {"opencl"}, false, 90, cl::DeviceChecks::extensions_match_entry_points});
+    guarded(suite, {"sanity.cl.device.limits_honoured", {"opencl"}, false, 120, cl::DeviceChecks::limits_honoured});
+    guarded(suite, {"sanity.cl.device.both_adapters", {"opencl"}, false, 120, cl::DeviceChecks::both_adapters});
+    guarded(suite, {"sanity.cl.device.create_sub_devices_error", {"opencl"}, false, 60, cl::DeviceChecks::create_sub_devices_error});
+    guarded(suite, {"sanity.cl.mem.use_host_ptr_coherence", {"opencl"}, false, 60, cl::MemChecks::use_host_ptr_coherence});
+    guarded(suite, {"sanity.cl.mem.use_host_ptr_blocking_ops", {"opencl"}, false, 60, cl::MemChecks::use_host_ptr_blocking_ops});
+    guarded(suite, {"sanity.cl.mem.alloc_host_ptr", {"opencl"}, false, 60, cl::MemChecks::alloc_host_ptr});
+    guarded(suite, {"sanity.cl.mem.copy_host_ptr", {"opencl"}, false, 60, cl::MemChecks::copy_host_ptr});
+    guarded(suite, {"sanity.cl.mem.access_flags_honoured", {"opencl"}, false, 60, cl::MemChecks::access_flags_honoured});
+    guarded(suite, {"sanity.cl.mem.sub_buffer_alignment", {"opencl"}, false, 60, cl::MemChecks::sub_buffer_alignment});
 }
 
 }  // namespace lsw::suites::sanity

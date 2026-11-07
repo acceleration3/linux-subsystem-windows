@@ -17,6 +17,8 @@ public:
 
     [[nodiscard]] bool empty() const { return count_ == 0; }
 
+    [[nodiscard]] const std::string& text() const { return text_; }
+
     [[nodiscard]] Outcome outcome() const { return empty() ? Outcome::ok() : Outcome::fail(text_); }
 
 private:
