@@ -211,7 +211,7 @@ CheckResult Worker::run(const std::string& id, int timeout_seconds) const {
     }
     ::ResumeThread(thread.get());
 
-    const auto deadline = begin + std::chrono::seconds(timeout_seconds);
+    const auto deadline = timeout_ms_ > 0 ? begin + std::chrono::milliseconds(timeout_ms_) : begin + std::chrono::seconds(timeout_seconds);
     std::string output;
     bool timed_out = false;
     for (;;) {
@@ -233,7 +233,7 @@ CheckResult Worker::run(const std::string& id, int timeout_seconds) const {
     ::GetExitCodeProcess(process.get(), &code);
     const bool have_status = ChildProtocol::decode(output, result);
     if (timed_out) {
-        return finish(Status::Timeout, "no result after " + std::to_string(timeout_seconds) + " s");
+        return finish(Status::Timeout, timeout_ms_ > 0 ? "no result after " + std::to_string(timeout_ms_) + " ms" : "no result after " + std::to_string(timeout_seconds) + " s");
     }
     if (!have_status) {
         return finish(Status::Crash, describe_exit(code));

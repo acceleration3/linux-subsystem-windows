@@ -48,6 +48,7 @@ add_library(suite_support OBJECT
     opencl_backend.cpp
     process_sampler.cpp
     stress_load.cpp
+    gate_window.cpp
     target_adapter.cpp
     vulkan_backend.cpp
     vulkan_device.cpp

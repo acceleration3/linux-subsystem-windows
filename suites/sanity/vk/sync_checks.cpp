@@ -1,6 +1,8 @@
 #include "sanity/vk/sync_checks.hpp"
 
+#include "core/child_mode.hpp"
 #include "sanity/vk/kit.hpp"
+#include "support/gate_window.hpp"
 #include "support/vulkan_image_io.hpp"
 
 #include <algorithm>
@@ -34,9 +36,17 @@ void copy_to_host(VulkanRig& rig, VkCommandBuffer commands, VkBuffer source, VkB
     Kit::transfer_barrier(rig, commands, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_HOST_BIT, VK_ACCESS_HOST_READ_BIT);
 }
 
+bool untouched(const VulkanBuffer& buffer, VkDeviceSize size, std::uint8_t value) {
+    const std::uint8_t* bytes = buffer.bytes();
+    return std::all_of(bytes, bytes + size, [value](std::uint8_t byte) { return byte == value; });
+}
+
 }  // namespace
 
 Outcome SyncChecks::fences(Context& context) {
+    if (ChildMode::active()) {
+        return GateWindow::peer(context);
+    }
     return Kit::each_device(context, [&](VulkanRig& rig, Problems& problems) -> std::string {
         VulkanOwned<VkFence> fence;
         if (!Kit::succeeds(problems, "fence", rig.make_fence(fence))) {
@@ -74,12 +84,24 @@ Outcome SyncChecks::fences(Context& context) {
         if (!Kit::succeeds(problems, "recording of the gated copy", code)) {
             return {};
         }
+        GateWindow window(context.id());
+        window.open(problems);
         Kit::succeeds(problems, "gated submission", submit_one(rig, queue, commands, fence.get()));
+        window.begin();
         Kit::succeeds(problems, "empty submission behind it", submit_one(rig, queue, nullptr, empty.get()));
         Kit::expect(problems, "status of a fence whose work waits for an unset event", rig.fn.vkGetFenceStatus(rig.device, fence.get()), {VK_NOT_READY});
         Kit::expect(problems, "wait on a fence whose work waits for an unset event", rig.wait_fence(fence.get(), 1000000), {VK_TIMEOUT});
         Kit::expect(problems, "status of the empty-submission fence behind unfinished work", rig.fn.vkGetFenceStatus(rig.device, empty.get()), {VK_NOT_READY});
+        window.sleep_until(2600);
+        Kit::expect(problems, "bounded wait on the gated fence past the kernel ring timeout", rig.wait_fence(fence.get(), 100000000), {VK_TIMEOUT});
+        Kit::expect(problems, "status of the gated fence past the kernel ring timeout", rig.fn.vkGetFenceStatus(rig.device, fence.get()), {VK_NOT_READY});
+        window.sleep_until_release();
+        sink.acquire();
+        if (!untouched(sink, kSize, 0xCD)) {
+            problems.add("the gated copy wrote its destination before the event was set");
+        }
         Kit::succeeds(problems, "vkSetEvent", rig.fn.vkSetEvent(rig.device, gate.get()));
+        window.close(context, problems, "fences.gate");
         if (Kit::succeeds(problems, "wait for the gated work", rig.wait_fence(fence.get(), 20 * kSecond)) &&
             Kit::succeeds(problems, "wait for the empty submission", rig.wait_fence(empty.get(), 20 * kSecond))) {
             sink.acquire();
@@ -667,6 +689,9 @@ Outcome SyncChecks::memory_model(Context& context) {
 }
 
 Outcome SyncChecks::submit2_and_wait_idle(Context& context) {
+    if (ChildMode::active()) {
+        return GateWindow::peer(context);
+    }
     return Kit::each_device(context, [&](VulkanRig& rig, Problems& problems) -> std::string {
         VulkanBuffer source;
         VulkanBuffer middle;
@@ -743,11 +768,23 @@ Outcome SyncChecks::submit2_and_wait_idle(Context& context) {
                         info.signalSemaphoreInfoCount = 1;
                         info.pSignalSemaphoreInfos = &signal;
                         rig.mark_pending();
+                        GateWindow timeline_window(context.id());
+                        timeline_window.open(problems);
                         if (Kit::succeeds(problems, "vkQueueSubmit2 with timeline values", rig.fn.vkQueueSubmit2(queue.handle, 1, &info, VK_NULL_HANDLE))) {
-                            VkSemaphoreSignalInfo host{VK_STRUCTURE_TYPE_SEMAPHORE_SIGNAL_INFO, nullptr, timeline.get(), 7};
-                            Kit::succeeds(problems, "host signal releasing the timeline wait", rig.fn.vkSignalSemaphore(rig.device, &host));
+                            timeline_window.begin();
                             VkSemaphore handle = timeline.get();
                             std::uint64_t target = 8;
+                            timeline_window.sleep_until(2600);
+                            VkSemaphoreWaitInfo probe_info{VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO, nullptr, 0, 1, &handle, &target};
+                            Kit::expect(problems, "bounded host wait on a timeline value nobody signalled", rig.fn.vkWaitSemaphores(rig.device, &probe_info, 100000000), {VK_TIMEOUT});
+                            timeline_window.sleep_until_release();
+                            sink.acquire();
+                            if (!untouched(sink, kSize, 0xCD)) {
+                                problems.add("the copy waiting for a timeline value ran before the host signalled it");
+                            }
+                            VkSemaphoreSignalInfo host{VK_STRUCTURE_TYPE_SEMAPHORE_SIGNAL_INFO, nullptr, timeline.get(), 7};
+                            Kit::succeeds(problems, "host signal releasing the timeline wait", rig.fn.vkSignalSemaphore(rig.device, &host));
+                            timeline_window.close(context, problems, "submit2.timeline_gate");
                             VkSemaphoreWaitInfo wait_info{VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO, nullptr, 0, 1, &handle, &target};
                             if (Kit::succeeds(problems, "host wait for the stage-specific timeline signal", rig.fn.vkWaitSemaphores(rig.device, &wait_info, 20 * kSecond))) {
                                 sink.acquire();
@@ -777,25 +814,31 @@ Outcome SyncChecks::submit2_and_wait_idle(Context& context) {
                 wait_for_host_event(rig, cb, gate.get());
                 copy_to_host(rig, cb, source.buffer, sink.buffer, kSize);
             }, 0, &code);
+            GateWindow window(context.id());
+            window.open(problems);
             if (commands == nullptr || !Kit::succeeds(problems, name + " gated submission", submit_one(rig, queue, commands, VK_NULL_HANDLE))) {
                 continue;
             }
-            std::atomic<bool> started{false};
+            window.begin();
             std::atomic<bool> released{false};
             std::atomic<bool> early{false};
             std::atomic<int> code_seen{VK_SUCCESS};
             std::thread waiter([&] {
-                started = true;
                 code_seen = whole_device ? rig.fn.vkDeviceWaitIdle(rig.device) : rig.fn.vkQueueWaitIdle(queue.handle);
                 early = !released.load();
             });
-            while (!started.load()) {
-                std::this_thread::yield();
-            }
+            window.sleep_until_release();
+            const bool returned_while_gated = early.load();
+            sink.acquire();
+            const bool copied_early = !untouched(sink, kSize, 0xCD);
             released = true;
             (void)rig.fn.vkSetEvent(rig.device, gate.get());
+            window.close(context, problems, whole_device ? "device_wait_idle.gate" : "queue_wait_idle.gate");
             waiter.join();
-            if (early.load()) {
+            if (copied_early) {
+                problems.add(name + ": the gated copy wrote its destination before the event was set");
+            }
+            if (returned_while_gated || early.load()) {
                 problems.add(name + " returned while submitted work was still waiting for an event");
             }
             if (code_seen.load() != VK_SUCCESS) {

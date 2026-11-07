@@ -12,6 +12,7 @@ struct ChildRunOptions {
     std::filesystem::path cwd;
     bool restricted = false;
     int timeout_seconds = 60;
+    int timeout_ms = 0;
     std::vector<std::pair<std::string, std::string>> env;
 };
 

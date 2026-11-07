@@ -1,6 +1,8 @@
 #include "sanity/vk/query_checks.hpp"
 
+#include "core/child_mode.hpp"
 #include "sanity/vk/kit.hpp"
+#include "support/gate_window.hpp"
 
 #include <atomic>
 #include <chrono>
@@ -20,6 +22,9 @@ std::uint64_t mask_for(std::uint32_t bits) {
 }  // namespace
 
 Outcome QueryChecks::timestamps(Context& context) {
+    if (ChildMode::active()) {
+        return GateWindow::peer(context);
+    }
     return Kit::each_device(context, [&](VulkanRig& rig, Problems& problems) -> std::string {
         const double period = static_cast<double>(rig.props.limits.timestampPeriod);
         for (VulkanQueue* family_queue : rig.queues_supporting(VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT)) {
@@ -95,26 +100,32 @@ Outcome QueryChecks::timestamps(Context& context) {
                 info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
                 info.commandBufferCount = 1;
                 info.pCommandBuffers = &commands;
+                GateWindow window(context.id());
+                window.open(problems);
                 if (Kit::succeeds(problems, "gated timestamp submission", rig.submit(queue, 1, &info, fence.get()))) {
+                    window.begin();
                     std::uint64_t probe = 0;
                     const VkResult unfinished = rig.fn.vkGetQueryPoolResults(rig.device, pool.get(), 0, 1, 8, &probe, 8, VK_QUERY_RESULT_64_BIT);
-                    std::atomic<bool> started{false};
                     std::atomic<bool> released{false};
                     std::atomic<bool> early{false};
                     std::atomic<int> seen{VK_SUCCESS};
                     std::thread waiter([&] {
-                        started = true;
                         std::uint64_t value = 0;
                         seen = rig.fn.vkGetQueryPoolResults(rig.device, pool.get(), 0, 1, 8, &value, 8, VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT);
                         early = !released.load();
                     });
-                    while (!started.load()) {
-                        std::this_thread::yield();
-                    }
+                    window.sleep_until(2600);
+                    Kit::expect(problems, "bounded fence wait past the kernel ring timeout", rig.wait_fence(fence.get(), 100000000), {VK_TIMEOUT});
+                    std::uint64_t pending[2] = {0xFF, 0xFF};
+                    Kit::expect(problems, "availability of the unwritten query past the kernel ring timeout", rig.fn.vkGetQueryPoolResults(rig.device, pool.get(), 0, 1, sizeof(pending), pending, 16,
+                                                                                                                                         VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT), {VK_NOT_READY});
+                    window.sleep_until_release();
+                    const bool returned_while_gated = early.load();
                     released = true;
                     (void)rig.fn.vkSetEvent(rig.device, gate.get());
+                    window.close(context, problems, "timestamps.gate");
                     waiter.join();
-                    if (early.load()) {
+                    if (returned_while_gated || early.load()) {
                         problems.add("vkGetQueryPoolResults with WAIT_BIT returned before the query was written");
                     }
                     if (unfinished != VK_NOT_READY) {

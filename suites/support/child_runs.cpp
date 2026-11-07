@@ -37,6 +37,9 @@ CheckResult ChildRuns::run_self(const std::string& id, const ChildRunOptions& op
     if (options.restricted) {
         worker.set_restricted_token();
     }
+    if (options.timeout_ms > 0) {
+        worker.set_timeout_millis(options.timeout_ms);
+    }
     for (const auto& [name, value] : options.env) {
         worker.add_env(Text::wide(name), Text::wide(value));
     }

@@ -3,6 +3,7 @@
 #include "core/child_mode.hpp"
 #include "sanity/d3d12/kit.hpp"
 #include "support/child_runs.hpp"
+#include "support/gate_window.hpp"
 
 #include <atomic>
 #include <cstring>
@@ -189,6 +190,9 @@ Outcome FenceChecks::cross_queue(Context& context) {
 }
 
 Outcome FenceChecks::cpu_semantics(Context& context) {
+    if (ChildMode::active()) {
+        return GateWindow::peer(context);
+    }
     return Kit::one_device(context, D3D_FEATURE_LEVEL_11_0, [&](D3d12Rig& rig, Problems& problems) -> std::string {
         ID3D12Device* d = rig.device();
         Com<ID3D12Fence> owned;
@@ -253,12 +257,30 @@ Outcome FenceChecks::cpu_semantics(Context& context) {
         Com<ID3D12Fence> gate_owner;
         if (Kit::succeeds(problems, "CreateFence(gate)", d->CreateFence(0, D3D12_FENCE_FLAG_NONE, __uuidof(ID3D12Fence), gate_owner.put_void()))) {
             ID3D12Fence* gate = rig.hold(std::move(gate_owner));
+            GateWindow window(context.id());
+            window.open(problems);
             queue.gpu_wait_fence(gate, 100);
             const std::uint64_t behind = queue.signal();
+            window.begin();
             if (queue.reached(behind)) {
                 problems.add("a queue signal queued behind a wait on an unsignalled fence completed anyway");
             }
+            window.sleep_until(2600);
+            HANDLE probe = make_event();
+            Kit::succeeds(problems, "SetEventOnCompletion on the queue fence behind the gated wait", queue.fence()->SetEventOnCompletion(behind, probe));
+            if (::WaitForSingleObject(probe, 100) != WAIT_TIMEOUT) {
+                problems.add("a bounded wait for a queue signal behind an unsignalled fence did not time out");
+            }
+            ::CloseHandle(probe);
+            if (gate->GetCompletedValue() != 0) {
+                problems.add("the gate fence reports a completed value although nobody signalled it");
+            }
+            window.sleep_until_release();
+            if (queue.reached(behind)) {
+                problems.add("a queue signal queued behind a wait on an unsignalled fence completed before the CPU signalled it");
+            }
             gate->Signal(100);
+            window.close(context, problems, "fence_cpu_gate");
             std::string error;
             if (!queue.wait(behind, error)) {
                 problems.add("the queue did not continue after the CPU signalled the fence it waits on: " + error);
