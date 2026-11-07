@@ -99,12 +99,14 @@
 #include "sanity/fmt/bc_checks.hpp"
 #include "sanity/fmt/color_checks.hpp"
 #include "sanity/fmt/depth_checks.hpp"
+#include "sanity/fmt/display_checks.hpp"
 #include "sanity/fmt/footprint_checks.hpp"
 #include "sanity/fmt/roundtrip_checks.hpp"
 #include "sanity/fmt/support_checks.hpp"
 #include "sanity/fmt/value_checks.hpp"
 #include "sanity/fmt/yuv_checks.hpp"
 #include "sanity/interop/d3d_checks.hpp"
+#include "sanity/interop/d3d_process_checks.hpp"
 #include "sanity/interop/d3dcl_checks.hpp"
 #include "sanity/interop/gdi_capture_checks.hpp"
 #include "sanity/interop/gdi_d2d_checks.hpp"
@@ -118,7 +120,11 @@
 #include "sanity/interop/vk_checks.hpp"
 #include "sanity/present/alpha_checks.hpp"
 #include "sanity/present/content_checks.hpp"
+#include "sanity/present/display_checks.hpp"
 #include "sanity/present/path_checks.hpp"
+#include "sanity/present/process_checks.hpp"
+#include "sanity/present/timing_checks.hpp"
+#include "sanity/present/window_checks.hpp"
 #include "sanity/shader/cache_checks.hpp"
 #include "sanity/shader/cl_checks.hpp"
 #include "sanity/shader/determinism_checks.hpp"
@@ -126,6 +132,7 @@
 #include "sanity/shader/dxil_checks.hpp"
 #include "sanity/shader/glsl_checks.hpp"
 #include "sanity/shader/spirv_checks.hpp"
+#include "sanity/env/display_checks.hpp"
 #include "sanity/env/icd_checks.hpp"
 #include "sanity/env/install_checks.hpp"
 
@@ -697,6 +704,25 @@ void add(Registry& registry) {
     guarded(suite, {"sanity.present.content.sizes_and_formats", {"present", "dwm", "dxgi", "d3d11", "formats", "exclusive"}, true, 240, present::ContentChecks::sizes_and_formats});
     guarded(suite, {"sanity.present.content.scaling_modes", {"present", "dwm", "dxgi", "d3d11", "exclusive"}, true, 120, present::ContentChecks::scaling_modes});
     guarded(suite, {"sanity.present.content.alpha_modes", {"present", "dwm", "dxgi", "d3d11", "exclusive"}, true, 120, present::AlphaChecks::alpha_modes});
+    guarded(suite, {"sanity.present.timing.vsync_interval_equals_refresh", {"present", "dwm", "d3d9", "d3d11", "d3d12", "gl", "vulkan", "exclusive"}, true, 300, present::TimingChecks::vsync_interval_equals_refresh});
+    guarded(suite, {"sanity.present.timing.interval_two", {"present", "dwm", "d3d9", "d3d11", "d3d12", "gl", "exclusive"}, true, 300, present::TimingChecks::interval_two});
+    guarded(suite, {"sanity.present.timing.immediate_faster_than_refresh", {"present", "dwm", "d3d9", "d3d11", "d3d12", "gl", "vulkan", "exclusive"}, true, 300, present::TimingChecks::immediate_ordering});
+    guarded(suite, {"sanity.present.timing.frame_latency_limits", {"present", "dwm", "dxgi", "d3d11", "exclusive"}, true, 120, present::TimingChecks::frame_latency_limits});
+    guarded(suite, {"sanity.present.timing.present_stats_vs_capture", {"present", "dwm", "dxgi", "d3d9", "d3d11", "d3d12", "exclusive"}, true, 180, present::TimingChecks::present_stats_vs_capture});
+    guarded(suite, {"sanity.present.timing.high_refresh_rates", {"present", "dwm", "dxgi", "d3d11", "host-hazard", "exclusive"}, true, 300, present::TimingChecks::high_refresh_rates});
+    guarded(suite, {"sanity.present.window.resize_during_presentation", {"present", "dwm", "d3d9", "d3d11", "d3d12", "gl", "vulkan", "exclusive"}, true, 300, present::WindowChecks::resize_during_presentation});
+    guarded(suite, {"sanity.present.window.occlusion", {"present", "dwm", "d3d9", "d3d11", "d3d12", "exclusive"}, true, 180, present::WindowChecks::occlusion});
+    guarded(suite, {"sanity.present.window.minimize_restore", {"present", "dwm", "d3d9", "d3d11", "d3d12", "gl", "vulkan", "exclusive"}, true, 300, present::WindowChecks::minimize_restore});
+    guarded(suite, {"sanity.present.window.fullscreen_exclusive", {"present", "dwm", "dxgi", "d3d11", "host-hazard", "exclusive"}, true, 120, present::WindowChecks::fullscreen_exclusive});
+    guarded(suite, {"sanity.present.window.borderless_fullscreen_flip", {"present", "dwm", "dxgi", "d3d11", "exclusive"}, true, 120, present::WindowChecks::borderless_fullscreen_flip});
+    guarded(suite, {"sanity.present.window.many_windows", {"present", "dwm", "dxgi", "d3d11", "exclusive"}, true, 180, present::WindowChecks::many_windows});
+    guarded(suite, {"sanity.present.window.many_processes", {"present", "dwm", "d3d9", "d3d11", "d3d12", "gl", "vulkan", "exclusive"}, true, 240, present::ProcessChecks::many_processes});
+    guarded(suite, {"sanity.present.window.multi_monitor", {"present", "dwm", "dxgi", "d3d11", "exclusive"}, true, 120, present::WindowChecks::multi_monitor});
+    guarded(suite, {"sanity.present.window.destroy_while_presenting", {"present", "dwm", "dxgi", "d3d11", "exclusive"}, true, 120, present::WindowChecks::destroy_while_presenting});
+    guarded(suite, {"sanity.present.mirror.host_receives_sequence", {"present", "dwm", "dxgi", "d3d11", "host", "exclusive"}, true, 120, present::DisplayChecks::host_receives_sequence});
+    guarded(suite, {"sanity.present.display.output_stays_active", {"present", "dwm", "dxgi", "d3d11", "exclusive"}, true, 120, present::DisplayChecks::output_stays_active});
+    guarded(suite, {"sanity.present.display.idle_then_present", {"present", "dwm", "d3d11", "d3d12", "gl", "exclusive"}, true, 180, present::DisplayChecks::idle_then_present});
+    guarded(suite, {"sanity.present.latency.input_to_photon_monotonic", {"present", "dwm", "dxgi", "d3d11", "exclusive"}, true, 120, present::DisplayChecks::input_to_photon_monotonic});
 }
 
 }  // namespace lsw::suites::sanity

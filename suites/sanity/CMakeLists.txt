@@ -145,6 +145,10 @@ add_library(suite_sanity OBJECT
     interop/d3d_process_checks.cpp
     interop/vk_checks.cpp
     present/kit.cpp
+    present/timing_checks.cpp
+    present/window_checks.cpp
+    present/display_checks.cpp
+    present/process_checks.cpp
     present/chain_probe.cpp
     present/path_checks.cpp
     present/content_checks.cpp
