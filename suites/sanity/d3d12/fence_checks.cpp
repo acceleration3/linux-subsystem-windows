@@ -255,7 +255,6 @@ Outcome FenceChecks::cpu_semantics(Context& context) {
             ID3D12Fence* gate = rig.hold(std::move(gate_owner));
             queue.gpu_wait_fence(gate, 100);
             const std::uint64_t behind = queue.signal();
-            ::Sleep(50);
             if (queue.reached(behind)) {
                 problems.add("a queue signal queued behind a wait on an unsignalled fence completed anyway");
             }

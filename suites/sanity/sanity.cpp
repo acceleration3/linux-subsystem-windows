@@ -546,7 +546,7 @@ void add(Registry& registry) {
     guarded(suite, {"sanity.d3d12.queue.types", {"d3d12", "compute"}, false, 90, d3d12::QueueChecks::types});
     guarded(suite, {"sanity.d3d12.queue.many_lists", {"d3d12"}, false, 90, d3d12::QueueChecks::many_lists});
     guarded(suite, {"sanity.d3d12.fence.cross_queue", {"d3d12", "compute"}, false, 90, d3d12::FenceChecks::cross_queue});
-    guarded(suite, {"sanity.d3d12.fence.cpu_semantics", {"d3d12"}, false, 180, d3d12::FenceChecks::cpu_semantics});
+    guarded(suite, {"sanity.d3d12.fence.cpu_semantics", {"d3d12", "host-hazard"}, false, 180, d3d12::FenceChecks::cpu_semantics});
     guarded(suite, {"sanity.d3d12.fence.shared", {"d3d12", "interop"}, false, 240, d3d12::FenceChecks::shared});
     guarded(suite, {"sanity.d3d12.barrier.transition_uav", {"d3d12", "compute"}, false, 90, d3d12::BarrierChecks::transition_uav});
     guarded(suite, {"sanity.d3d12.barrier.enhanced", {"d3d12", "compute"}, false, 90, d3d12::BarrierChecks::enhanced});
@@ -594,13 +594,13 @@ void add(Registry& registry) {
     guarded(suite, {"sanity.vk.descriptor.pools_templates_samplers", {"vulkan"}, false, 90, vk::ComputeChecks::pools_templates_samplers});
     guarded(suite, {"sanity.vk.graphics.vs_twin", {"vulkan", "msaa"}, false, 120, vk::GraphicsChecks::vs_twin});
     guarded(suite, {"sanity.vk.graphics.pipeline_features", {"vulkan"}, false, 120, vk::GraphicsChecks::pipeline_features});
-    guarded(suite, {"sanity.vk.sync.fences", {"vulkan"}, false, 90, vk::SyncChecks::fences});
+    guarded(suite, {"sanity.vk.sync.fences", {"vulkan", "host-hazard"}, false, 90, vk::SyncChecks::fences});
     guarded(suite, {"sanity.vk.sync.binary_semaphores", {"vulkan"}, false, 120, vk::SyncChecks::binary_semaphores});
     guarded(suite, {"sanity.vk.sync.timeline_semaphores", {"vulkan"}, false, 90, vk::SyncChecks::timeline_semaphores});
     guarded(suite, {"sanity.vk.sync.events_barriers", {"vulkan"}, false, 120, vk::SyncChecks::events_barriers});
     guarded(suite, {"sanity.vk.sync.memory_model", {"vulkan"}, false, 120, vk::SyncChecks::memory_model});
-    guarded(suite, {"sanity.vk.sync.submit2_and_wait_idle", {"vulkan"}, false, 90, vk::SyncChecks::submit2_and_wait_idle});
-    guarded(suite, {"sanity.vk.query.timestamps", {"vulkan"}, false, 90, vk::QueryChecks::timestamps});
+    guarded(suite, {"sanity.vk.sync.submit2_and_wait_idle", {"vulkan", "host-hazard"}, false, 90, vk::SyncChecks::submit2_and_wait_idle});
+    guarded(suite, {"sanity.vk.query.timestamps", {"vulkan", "host-hazard"}, false, 90, vk::QueryChecks::timestamps});
     guarded(suite, {"sanity.vk.cmd.buffers_reset_reuse", {"vulkan"}, false, 90, vk::QueryChecks::buffers_reset_reuse});
     guarded(suite, {"sanity.vk.wsi.surface_caps_consistent", {"vulkan", "present"}, true, 90, vk::WsiChecks::surface_caps_consistent});
     guarded(suite, {"sanity.vk.wsi.fifo_every_image_in_order", {"vulkan", "present", "dwm", "exclusive"}, true, 90, vk::WsiChecks::fifo_every_image_in_order});

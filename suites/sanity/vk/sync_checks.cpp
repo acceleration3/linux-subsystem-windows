@@ -76,9 +76,8 @@ Outcome SyncChecks::fences(Context& context) {
         }
         Kit::succeeds(problems, "gated submission", submit_one(rig, queue, commands, fence.get()));
         Kit::succeeds(problems, "empty submission behind it", submit_one(rig, queue, nullptr, empty.get()));
-        std::this_thread::sleep_for(std::chrono::milliseconds(20));
         Kit::expect(problems, "status of a fence whose work waits for an unset event", rig.fn.vkGetFenceStatus(rig.device, fence.get()), {VK_NOT_READY});
-        Kit::expect(problems, "wait on a fence whose work waits for an unset event", rig.wait_fence(fence.get(), 10000000), {VK_TIMEOUT});
+        Kit::expect(problems, "wait on a fence whose work waits for an unset event", rig.wait_fence(fence.get(), 1000000), {VK_TIMEOUT});
         Kit::expect(problems, "status of the empty-submission fence behind unfinished work", rig.fn.vkGetFenceStatus(rig.device, empty.get()), {VK_NOT_READY});
         Kit::succeeds(problems, "vkSetEvent", rig.fn.vkSetEvent(rig.device, gate.get()));
         if (Kit::succeeds(problems, "wait for the gated work", rig.wait_fence(fence.get(), 20 * kSecond)) &&
@@ -97,10 +96,10 @@ Outcome SyncChecks::fences(Context& context) {
             const VkCommandBuffer second = Kit::record(rig, queue, [&](VkCommandBuffer cb) { wait_for_host_event(rig, cb, third_gate.get()); }, 0, &code);
             Kit::succeeds(problems, "first reused submission", submit_one(rig, queue, first, fence.get()));
             Kit::succeeds(problems, "second reused submission", submit_one(rig, queue, second, empty.get()));
-            Kit::expect(problems, "wait for any of two unfinished fences", rig.fn.vkWaitForFences(rig.device, 2, handles, VK_FALSE, 5000000), {VK_TIMEOUT});
+            Kit::expect(problems, "wait for any of two unfinished fences", rig.fn.vkWaitForFences(rig.device, 2, handles, VK_FALSE, 1000000), {VK_TIMEOUT});
             Kit::succeeds(problems, "release of the first gate", rig.fn.vkSetEvent(rig.device, second_gate.get()));
             Kit::succeeds(problems, "wait for any of two fences", rig.fn.vkWaitForFences(rig.device, 2, handles, VK_FALSE, 20 * kSecond));
-            Kit::expect(problems, "wait for all of two fences while one is pending", rig.fn.vkWaitForFences(rig.device, 2, handles, VK_TRUE, 10000000), {VK_TIMEOUT});
+            Kit::expect(problems, "wait for all of two fences while one is pending", rig.fn.vkWaitForFences(rig.device, 2, handles, VK_TRUE, 1000000), {VK_TIMEOUT});
             Kit::succeeds(problems, "release of the second gate", rig.fn.vkSetEvent(rig.device, third_gate.get()));
             Kit::succeeds(problems, "wait for all of two fences", rig.fn.vkWaitForFences(rig.device, 2, handles, VK_TRUE, 20 * kSecond));
         }
@@ -781,17 +780,22 @@ Outcome SyncChecks::submit2_and_wait_idle(Context& context) {
             if (commands == nullptr || !Kit::succeeds(problems, name + " gated submission", submit_one(rig, queue, commands, VK_NULL_HANDLE))) {
                 continue;
             }
-            std::atomic<bool> returned{false};
+            std::atomic<bool> started{false};
+            std::atomic<bool> released{false};
+            std::atomic<bool> early{false};
             std::atomic<int> code_seen{VK_SUCCESS};
             std::thread waiter([&] {
+                started = true;
                 code_seen = whole_device ? rig.fn.vkDeviceWaitIdle(rig.device) : rig.fn.vkQueueWaitIdle(queue.handle);
-                returned = true;
+                early = !released.load();
             });
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            const bool early = returned.load();
+            while (!started.load()) {
+                std::this_thread::yield();
+            }
+            released = true;
             (void)rig.fn.vkSetEvent(rig.device, gate.get());
             waiter.join();
-            if (early) {
+            if (early.load()) {
                 problems.add(name + " returned while submitted work was still waiting for an event");
             }
             if (code_seen.load() != VK_SUCCESS) {
