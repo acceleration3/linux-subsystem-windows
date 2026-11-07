@@ -224,6 +224,8 @@ builds. Area counts are in the headings.
 
 ### 4.3 Kernel-mode contracts (36)
 
+Implementation note: query, display and escape rows call the documented D3DKMT entry points. The allocation and synchronisation rows exercise the same kernel objects through D3D11 and D3D12 (Map and Unmap for Lock and Unlock, D3D12 fences for monitored fences, CreateSharedHandle for shared allocations), because the D3DKMT creation entry points need a WDDM device the user-mode runtimes already own. The recovery rows reuse the err and life rows of the same contract, with the Basic Render adapter as the other adapter.
+
 #### QueryAdapterInfo
 
 | check | contract |
@@ -262,7 +264,7 @@ builds. Area counts are in the headings.
 | `sanity.kmd.display.cursor_shapes` | Monochrome, colour and alpha-blended cursor shapes of 32, 48 and 64 pixels created by CreateCursor and set by SetCursor are accepted, and GetCursorInfo reflects the cursor shown. |
 | `sanity.kmd.display.cursor_position_roundtrip` | SetCursorPos followed by GetCursorPos returns the position set, including negative and off-screen coordinates clamped to the desktop. |
 | `sanity.kmd.display.gamma_ramp_roundtrip` | A gamma ramp that the output reports as settable reads back within one quantisation step; a non-monotonic ramp is rejected the documented way. [E] |
-| `sanity.kmd.display.output_duplication_frame` | IDXGIOutputDuplication delivers a frame whose pixels equal a known pattern drawn in a topmost window, within tolerance, when the window is on the duplicated output. |
+| `sanity.kmd.display.output_duplication_frame` | IDXGIOutputDuplication delivers a frame whose pixels equal a known pattern drawn in a topmost window, within tolerance, when the window is on the duplicated output. [E] |
 
 #### Escapes and validation
 

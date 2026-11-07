@@ -197,5 +197,8 @@ add_library(suite_sanity OBJECT
     err/limit_checks.cpp
     life/kit.cpp
     life/life_checks.cpp
+    kmd/query_checks.cpp
+    kmd/display_checks.cpp
+    kmd/surrogate_checks.cpp
 )
 target_link_libraries(suite_sanity PUBLIC suite_core suite_support)

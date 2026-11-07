@@ -74,6 +74,7 @@ add_library(suite_support OBJECT
     event_log_scan.cpp
     file_version.cpp
     kmt_api.cpp
+    kmt_extra.cpp
     memory_tools.cpp
     leak_loop.cpp
     mismatch.cpp

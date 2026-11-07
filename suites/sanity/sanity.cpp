@@ -160,6 +160,9 @@
 #include "sanity/err/recovery_checks.hpp"
 #include "sanity/err/limit_checks.hpp"
 #include "sanity/life/life_checks.hpp"
+#include "sanity/kmd/query_checks.hpp"
+#include "sanity/kmd/display_checks.hpp"
+#include "sanity/kmd/surrogate_checks.hpp"
 
 namespace lsw::suites::sanity {
 
@@ -832,6 +835,42 @@ void add(Registry& registry) {
     guarded(suite, {"sanity.life.update.live_driver_update", {"life", "life", "d3d11", "vulkan", "present", "robust", "exclusive", "pacing"}, true, 600, life::LifeChecks::live_driver_update});
     guarded(suite, {"sanity.life.session.logoff_logon", {"life", "life", "d3d11", "exclusive"}, true, 300, life::LifeChecks::session_logoff_logon});
     guarded(suite, {"sanity.life.display.output_off_on", {"life", "life", "present", "exclusive", "pacing"}, true, 300, life::LifeChecks::display_output_off_on});
+    guarded(suite, {"sanity.kmd.query.adapter_info_stable", {"kmd", "kmt"}, false, 120, kmd::QueryChecks::adapter_info_stable});
+    guarded(suite, {"sanity.kmd.query.size_semantics", {"kmd", "kmt"}, false, 60, kmd::QueryChecks::size_semantics});
+    guarded(suite, {"sanity.kmd.query.unsupported_type_status", {"kmd", "kmt"}, false, 60, kmd::QueryChecks::unsupported_type_status});
+    guarded(suite, {"sanity.kmd.query.segment_info_consistent", {"kmd", "kmt", "dxgi"}, false, 60, kmd::QueryChecks::segment_info_consistent});
+    guarded(suite, {"sanity.kmd.query.driver_caps_self_consistent", {"kmd", "kmt", "dxgi", "d3d11"}, false, 60, kmd::QueryChecks::driver_caps_self_consistent});
+    guarded(suite, {"sanity.kmd.query.open_adapter_from_hdc_and_name", {"kmd", "kmt", "gdi"}, false, 60, kmd::QueryChecks::open_adapter_from_hdc_and_name});
+    guarded(suite, {"sanity.kmd.query.close_adapter_twice", {"kmd", "kmt"}, false, 60, kmd::QueryChecks::close_adapter_twice});
+    guarded(suite, {"sanity.kmd.escape.malformed_rejected", {"kmd", "kmt", "robust"}, false, 60, kmd::QueryChecks::escape_malformed_rejected});
+    guarded(suite, {"sanity.kmd.escape.unknown_command_status", {"kmd", "kmt", "robust", "d3d11"}, false, 60, kmd::QueryChecks::escape_unknown_command_status});
+    guarded(suite, {"sanity.kmd.display.vblank_wait_cadence", {"kmd", "kmt", "gdi", "exclusive", "pacing"}, true, 120, kmd::DisplayChecks::vblank_wait_cadence});
+    guarded(suite, {"sanity.kmd.display.scanline_monotonic", {"kmd", "kmt", "gdi", "exclusive", "pacing"}, true, 120, kmd::DisplayChecks::scanline_monotonic});
+    guarded(suite, {"sanity.kmd.display.vblank_vs_dwm_timing", {"kmd", "kmt", "dwm", "exclusive", "pacing"}, true, 120, kmd::DisplayChecks::vblank_vs_dwm_timing});
+    guarded(suite, {"sanity.kmd.display.source_visible_while_composed", {"kmd", "kmt", "gdi", "dwm"}, false, 120, kmd::DisplayChecks::source_visible_while_composed});
+    guarded(suite, {"sanity.kmd.display.mode_set_restore", {"kmd", "gdi", "exclusive"}, true, 300, kmd::DisplayChecks::mode_set_restore});
+    guarded(suite, {"sanity.kmd.display.mode_list_all_settable", {"kmd", "gdi", "exclusive"}, true, 180, kmd::DisplayChecks::mode_list_all_settable});
+    guarded(suite, {"sanity.kmd.display.cursor_shapes", {"kmd", "gdi"}, false, 120, kmd::DisplayChecks::cursor_shapes});
+    guarded(suite, {"sanity.kmd.display.cursor_position_roundtrip", {"kmd", "gdi"}, false, 60, kmd::DisplayChecks::cursor_position_roundtrip});
+    guarded(suite, {"sanity.kmd.display.gamma_ramp_roundtrip", {"kmd", "gdi", "exclusive"}, true, 60, kmd::DisplayChecks::gamma_ramp_roundtrip});
+    guarded(suite, {"sanity.kmd.display.output_duplication_frame", {"kmd", "dxgi", "d3d11", "present", "dwm", "exclusive", "pacing"}, true, 180, kmd::DisplayChecks::output_duplication_frame});
+    guarded(suite, {"sanity.kmd.alloc.lock_returns_written_data", {"kmd", "d3d12", "vulkan", "opencl", "d3d11"}, false, 180, kmd::SurrogateChecks::lock_returns_written_data});
+    guarded(suite, {"sanity.kmd.alloc.lock_twice_status", {"kmd", "d3d11", "d3d12"}, false, 60, kmd::SurrogateChecks::lock_twice_status});
+    guarded(suite, {"sanity.kmd.alloc.lock_pointer_stable_while_locked", {"kmd", "d3d12"}, false, 120, kmd::SurrogateChecks::lock_pointer_stable_while_locked});
+    guarded(suite, {"sanity.kmd.alloc.discard_and_nooverwrite", {"kmd", "d3d11"}, false, 60, kmd::SurrogateChecks::discard_and_nooverwrite});
+    guarded(suite, {"sanity.kmd.alloc.destroy_while_locked", {"kmd", "d3d11", "d3d12", "robust"}, false, 120, kmd::SurrogateChecks::destroy_while_locked});
+    guarded(suite, {"sanity.kmd.alloc.nt_handle_share", {"kmd", "d3d12", "interop"}, false, 240, kmd::SurrogateChecks::nt_handle_share});
+    guarded(suite, {"sanity.kmd.alloc.nt_handle_wrong_adapter", {"kmd", "d3d12", "interop"}, false, 120, kmd::SurrogateChecks::nt_handle_wrong_adapter});
+    guarded(suite, {"sanity.kmd.alloc.share_requires_handle", {"kmd", "d3d12", "robust"}, false, 420, kmd::SurrogateChecks::share_requires_handle});
+    guarded(suite, {"sanity.kmd.sync.monitored_fence_monotonic", {"kmd", "d3d12"}, false, 120, kmd::SurrogateChecks::monitored_fence_monotonic});
+    guarded(suite, {"sanity.kmd.sync.wait_releases_on_signal", {"kmd", "d3d12"}, false, 60, kmd::SurrogateChecks::wait_releases_on_signal});
+    guarded(suite, {"sanity.kmd.sync.wait_timeout", {"kmd", "d3d12"}, false, 60, kmd::SurrogateChecks::wait_timeout});
+    guarded(suite, {"sanity.kmd.sync.shared_fence_across_processes", {"kmd", "d3d12"}, false, 420, kmd::SurrogateChecks::shared_fence_across_processes});
+    guarded(suite, {"sanity.kmd.sync.cpu_signal_visible_to_gpu", {"kmd", "d3d12"}, false, 60, kmd::SurrogateChecks::cpu_signal_visible_to_gpu});
+    guarded(suite, {"sanity.kmd.recovery.tdr_restores_service", {"kmd", "robust", "d3d11", "d3d12", "vulkan", "exclusive"}, true, 420, kmd::SurrogateChecks::tdr_restores_service});
+    guarded(suite, {"sanity.kmd.recovery.tdr_other_adapter_unaffected", {"kmd", "robust", "d3d12", "exclusive"}, true, 240, kmd::SurrogateChecks::tdr_other_adapter_unaffected});
+    guarded(suite, {"sanity.kmd.recovery.power_transition_contents", {"kmd", "robust", "d3d11", "exclusive"}, true, 600, kmd::SurrogateChecks::power_transition_contents});
+    guarded(suite, {"sanity.kmd.recovery.query_status_after_reset", {"kmd", "kmt", "robust", "d3d11", "exclusive"}, true, 240, kmd::SurrogateChecks::query_status_after_reset});
 }
 
 }  // namespace lsw::suites::sanity
