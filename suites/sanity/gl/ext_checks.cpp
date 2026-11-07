@@ -2,6 +2,7 @@
 
 #include "sanity/gl/gl_name_tables.hpp"
 #include "sanity/gl/kit.hpp"
+#include "support/vulkan_export.hpp"
 #include "support/d3d11_device.hpp"
 #include "support/d3d11_tools.hpp"
 #include "support/gl_fetch.hpp"
@@ -463,6 +464,47 @@ Outcome ExtChecks::external_memory_caps(Context& context) {
             context.note("GL_DEVICE_LUID_EXT is not queryable");
         }
     }
+    {
+        VulkanExport producer;
+        std::string vk_error;
+        std::string detail;
+        if (!producer.create(rig.adapter.luid, vk_error)) {
+            context.measure("opaque_win32_import", "no Vulkan producer: " + vk_error);
+        } else if (!producer.exportable(detail)) {
+            context.measure("opaque_win32_import", "not exportable by Vulkan: " + detail);
+        } else {
+            HANDLE exported = nullptr;
+            if (!producer.export_memory(64ull * 64ull * 4ull, exported, vk_error)) {
+                problems.add("Vulkan reports OPAQUE_WIN32 memory as exportable but exporting it failed: " + vk_error);
+            } else {
+                (void)api.drain_errors();
+                unsigned object = 0;
+                api.glCreateMemoryObjectsEXT(1, &object);
+                const int dedicated = 0;
+                api.glMemoryObjectParameterivEXT(object, glc::DEDICATED_MEMORY_OBJECT_EXT, &dedicated);
+                api.glImportMemoryWin32HandleEXT(object, 64ull * 64ull * 4ull, glc::HANDLE_TYPE_OPAQUE_WIN32_EXT, exported);
+                const unsigned import_error = api.drain_errors();
+                if (import_error != 0) {
+                    problems.add("glImportMemoryWin32HandleEXT with GL_HANDLE_TYPE_OPAQUE_WIN32_EXT for memory exported by Vulkan gave " + GlApi::error_name(import_error) +
+                                 " although both APIs advertise the handle type");
+                }
+                if (api.glGetUnsignedBytevEXT != nullptr) {
+                    unsigned char uuid[16] = {};
+                    (void)api.drain_errors();
+                    api.glGetUnsignedBytevEXT(glc::DEVICE_UUID_EXT, uuid);
+                    if (api.drain_errors() == 0 && std::memcmp(uuid, producer.device_uuid(), 16) != 0) {
+                        problems.add("GL_DEVICE_UUID_EXT differs from the deviceUUID of the Vulkan device that exported the memory");
+                    }
+                }
+                api.glDeleteMemoryObjectsEXT(1, &object);
+                api.glFinish();
+                context.measure("opaque_win32_import", import_error == 0 ? "imported" : "refused");
+            }
+            if (exported != nullptr) {
+                ::CloseHandle(exported);
+            }
+        }
+    }
     D3d11Device device;
     if (!device.create(rig.adapter.luid, error)) {
         return Outcome::fail("the Direct3D 11 producer device cannot be created: " + error);
@@ -480,10 +522,11 @@ Outcome ExtChecks::external_memory_caps(Context& context) {
     }
     Com<ID3D11RenderTargetView> view = D3d11Tools::rtv(device, texture.get());
     D3d11Tools::clear(device, view.get(), 0.25f, 0.5f, 0.75f, 1.0f);
+    Problems imported;
     std::string wait_error;
     device.context->Flush();
     if (!device.wait_idle(wait_error)) {
-        problems.add("the Direct3D 11 producer did not finish: " + wait_error);
+        imported.add("the Direct3D 11 producer did not finish: " + wait_error);
     }
     (void)api.drain_errors();
     unsigned object = 0;
@@ -493,7 +536,7 @@ Outcome ExtChecks::external_memory_caps(Context& context) {
     api.glImportMemoryWin32HandleEXT(object, 64ull * 64ull * 4ull, glc::HANDLE_TYPE_D3D11_IMAGE_EXT, handle);
     const unsigned import_error = api.drain_errors();
     if (import_error != 0) {
-        problems.add("glImportMemoryWin32HandleEXT with GL_HANDLE_TYPE_D3D11_IMAGE_EXT (0x958B) for a 64x64 RGBA8 shared texture gave " + GlApi::error_name(import_error) +
+        imported.add("glImportMemoryWin32HandleEXT with GL_HANDLE_TYPE_D3D11_IMAGE_EXT (0x958B) for a 64x64 RGBA8 shared texture gave " + GlApi::error_name(import_error) +
                      " although GL_EXT_memory_object_win32 is advertised");
     } else {
         unsigned gl_texture = 0;
@@ -503,7 +546,7 @@ Outcome ExtChecks::external_memory_caps(Context& context) {
         api.glTexParameteri(glc::TEXTURE_2D, glc::TEXTURE_MIN_FILTER, static_cast<int>(glc::NEAREST));
         const unsigned storage_error = api.drain_errors();
         if (storage_error != 0) {
-            problems.add("glTexStorageMem2DEXT over the imported memory gave " + GlApi::error_name(storage_error));
+            imported.add("glTexStorageMem2DEXT over the imported memory gave " + GlApi::error_name(storage_error));
         } else {
             GlFetchRequest request;
             request.sampler = "sampler2D";
@@ -514,14 +557,14 @@ Outcome ExtChecks::external_memory_caps(Context& context) {
             request.height = 64;
             std::vector<float> values;
             if (!GlFetch::run(api, request, values, error)) {
-                problems.add("sampling the imported texture: " + error);
+                imported.add("sampling the imported texture: " + error);
             } else {
                 const float want[3] = {0.25f, 0.5f, 0.75f};
                 for (int y = 0; y < 64 && !values.empty(); y += 9) {
                     for (int x = 0; x < 64; x += 7) {
                         const float* px = &values[static_cast<std::size_t>(y * 64 + x) * 4];
                         if (std::fabs(px[0] - want[0]) > 0.01f || std::fabs(px[1] - want[1]) > 0.01f || std::fabs(px[2] - want[2]) > 0.01f) {
-                            problems.add("the imported texture samples (" + std::to_string(px[0]) + "," + std::to_string(px[1]) + "," + std::to_string(px[2]) + ") at (" + std::to_string(x) +
+                            imported.add("the imported texture samples (" + std::to_string(px[0]) + "," + std::to_string(px[1]) + "," + std::to_string(px[2]) + ") at (" + std::to_string(x) +
                                          "," + std::to_string(y) + "), the Direct3D 11 producer cleared (0.25,0.5,0.75)");
                             y = 64;
                             break;
@@ -535,6 +578,7 @@ Outcome ExtChecks::external_memory_caps(Context& context) {
     }
     api.glDeleteMemoryObjectsEXT(1, &object);
     api.glFinish();
+    context.measure("d3d11_image_import", imported.empty() ? std::string("imported and sampled") : imported.text());
     ::CloseHandle(handle);
     if (semaphore && semaphore_win32) {
         context.note("the semaphore hand-off ordering is not exercised: no Direct3D 11 timeline fence import path is defined for GL_EXT_semaphore_win32 in this suite");

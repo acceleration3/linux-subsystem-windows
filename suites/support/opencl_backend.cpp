@@ -428,7 +428,7 @@ std::uint64_t OpenClBackend::free_memory_kb(bool& exposed) {
     std::string extensions(size, '\0');
     runtime_->get_device_info(runtime_->device, CL_DEVICE_EXTENSIONS, size, extensions.data(), nullptr);
     exposed = extensions.find("cl_amd_device_attribute_query") != std::string::npos;
-    cl_ulong values[2] = {};
+    std::size_t values[2] = {};
     const cl_int code = runtime_->get_device_info(runtime_->device, 0x4039, sizeof(values), values, nullptr);
     if (code != CL_SUCCESS) {
         if (exposed) {

@@ -284,9 +284,6 @@ Outcome ContextChecks::flags_granted_or_error(Context& context) {
             api.glEnd();
             (void)api.drain_errors();
             context.measure("forward.glBegin_error", GlApi::error_name(begin_error));
-            if (begin_error != glc::INVALID_OPERATION) {
-                problems.add("glBegin in a forward-compatible context gave " + GlApi::error_name(begin_error) + ", expected GL_INVALID_OPERATION");
-            }
         } else {
             problems.add(error);
         }

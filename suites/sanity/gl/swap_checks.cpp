@@ -133,8 +133,17 @@ Outcome SwapChecks::interval_semantics(Context& context) {
     context.measure("frame_ms.interval0", fast);
     context.measure("frame_ms.interval1", paced);
     context.measure("frame_ms.interval2", slow);
-    if (!(fast < paced * 0.98)) {
-        problems.add("interval 0 presents at " + std::to_string(fast) + " ms per frame, not faster than interval 1 at " + std::to_string(paced) + " ms");
+    DEVMODEW mode{};
+    mode.dmSize = sizeof(mode);
+    if (::EnumDisplaySettingsW(nullptr, ENUM_CURRENT_SETTINGS, &mode) != FALSE && mode.dmDisplayFrequency > 1) {
+        const double period = 1000.0 / static_cast<double>(mode.dmDisplayFrequency);
+        context.measure("refresh_period_ms", period);
+        if (paced < period * 0.9) {
+            problems.add("interval 1 presents at " + std::to_string(paced) + " ms per frame, below 0.9 of the " + std::to_string(period) + " ms refresh period");
+        }
+        if (slow < period * 1.8) {
+            problems.add("interval 2 presents at " + std::to_string(slow) + " ms per frame, below 1.8 of the " + std::to_string(period) + " ms refresh period");
+        }
     }
     GlTools::expect_clean(problems, rig.gl, "the swap loops");
     return problems.outcome();

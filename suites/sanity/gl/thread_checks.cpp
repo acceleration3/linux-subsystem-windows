@@ -89,8 +89,11 @@ Outcome ThreadChecks::share_across_threads(Context& context) {
             void* sync = nullptr;
             {
                 std::unique_lock lock(mutex);
-                if (!changed.wait_for(lock, std::chrono::seconds(20), [&] { return round == expected_round || done; }) || done) {
+                if (!changed.wait_for(lock, std::chrono::seconds(20), [&] { return round == expected_round || done; })) {
                     problems.add("the consumer thread timed out waiting for round " + std::to_string(expected_round));
+                    return;
+                }
+                if (done && round != expected_round) {
                     return;
                 }
                 tex = texture;

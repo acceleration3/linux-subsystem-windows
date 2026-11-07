@@ -345,7 +345,16 @@ Outcome FormatChecks::arb_attribs_agree_with_describe(Context& context) {
     const int names[] = {NUMBER_PIXEL_FORMATS, DRAW_TO_WINDOW, SUPPORT_OPENGL, DOUBLE_BUFFER, PIXEL_TYPE, COLOR_BITS, RED_BITS, GREEN_BITS,
                          BLUE_BITS, ALPHA_BITS, DEPTH_BITS, STENCIL_BITS, SWAP_METHOD};
     Problems problems;
+    int icd_formats = 0;
     for (const Format& format : formats) {
+        if ((format.pfd.dwFlags & PFD_GENERIC_FORMAT) == 0) {
+            ++icd_formats;
+        }
+    }
+    for (const Format& format : formats) {
+        if ((format.pfd.dwFlags & PFD_GENERIC_FORMAT) != 0) {
+            continue;
+        }
         int values[13] = {};
         if (rig.wgl.get_pixel_format_attribs(rig.dc(), format.index, 0, 13, names, values) == FALSE) {
             problems.add(label(format) + ": wglGetPixelFormatAttribivARB failed (error " + std::to_string(::GetLastError()) + ")");
@@ -357,8 +366,8 @@ Outcome FormatChecks::arb_attribs_agree_with_describe(Context& context) {
                 problems.add(label(format) + ": " + what + " is " + std::to_string(arb) + " through the ARB query and " + std::to_string(describe) + " through DescribePixelFormat");
             }
         };
-        if (format.index == 1 && values[0] < static_cast<int>(formats.size())) {
-            problems.add(label(format) + ": NUMBER_PIXEL_FORMATS " + std::to_string(values[0]) + " is below DescribePixelFormat's count " + std::to_string(formats.size()));
+        if (values[0] < icd_formats) {
+            problems.add(label(format) + ": NUMBER_PIXEL_FORMATS " + std::to_string(values[0]) + " is below the count of non-generic formats " + std::to_string(icd_formats));
         }
         differ("DRAW_TO_WINDOW", values[1] != 0, (pfd.dwFlags & PFD_DRAW_TO_WINDOW) != 0);
         differ("SUPPORT_OPENGL", values[2] != 0, (pfd.dwFlags & PFD_SUPPORT_OPENGL) != 0);

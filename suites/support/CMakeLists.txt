@@ -37,6 +37,7 @@ add_library(suite_support OBJECT
     target_adapter.cpp
     vulkan_backend.cpp
     vulkan_device.cpp
+    vulkan_export.cpp
     artifact_writer.cpp
     backend_harness.cpp
     av_adapters.cpp

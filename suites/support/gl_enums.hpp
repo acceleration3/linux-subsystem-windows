@@ -282,6 +282,8 @@ constexpr unsigned DEBUG_SEVERITY_NOTIFICATION = 0x826B;
 constexpr unsigned DONT_CARE = 0x1100;
 
 constexpr unsigned DEVICE_LUID_EXT = 0x9599;
+constexpr unsigned DEVICE_UUID_EXT = 0x9597;
+constexpr unsigned HANDLE_TYPE_OPAQUE_WIN32_EXT = 0x9587;
 constexpr unsigned HANDLE_TYPE_D3D11_IMAGE_EXT = 0x958B;
 constexpr unsigned HANDLE_TYPE_D3D12_FENCE_EXT = 0x9594;
 constexpr unsigned DEDICATED_MEMORY_OBJECT_EXT = 0x9581;

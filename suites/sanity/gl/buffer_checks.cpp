@@ -6,6 +6,8 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
+#include <cstdlib>
 #include <cstring>
 
 namespace lsw::suites::sanity::gl {
@@ -615,8 +617,10 @@ Outcome BufferChecks::map_errors(Context& context) {
         void* empty = api.glMapBufferRange(glc::ARRAY_BUFFER, 0, 0, glc::MAP_READ_BIT);
         const unsigned zero_error = api.drain_errors();
         context.measure("zero_length_map_error", GlApi::error_name(zero_error));
-        if ((zero_error != glc::INVALID_VALUE && zero_error != glc::INVALID_OPERATION) || empty != nullptr) {
-            problems.add("glMapBufferRange with zero length gave " + GlApi::error_name(zero_error) + ", expected GL_INVALID_OPERATION (4.5) or GL_INVALID_VALUE");
+        const bool at_least_45 = api.major() > 4 || (api.major() == 4 && api.minor() >= 5);
+        const bool good = at_least_45 ? zero_error == glc::INVALID_OPERATION : (zero_error == glc::INVALID_VALUE || zero_error == glc::INVALID_OPERATION);
+        if (!good || empty != nullptr) {
+            problems.add("glMapBufferRange with zero length gave " + GlApi::error_name(zero_error) + ", expected " + (at_least_45 ? "GL_INVALID_OPERATION (OpenGL 4.5 section 6.3)" : "GL_INVALID_VALUE or GL_INVALID_OPERATION"));
         }
     }
     void* first = api.glMapBufferRange(glc::ARRAY_BUFFER, 0, 64, glc::MAP_READ_BIT);
@@ -873,20 +877,75 @@ Outcome BufferChecks::pbo_pack_unpack(Context& context) {
             api.glPixelStorei(glc::PACK_ROW_LENGTH, 0);
             api.glPixelStorei(glc::PACK_SKIP_PIXELS, 0);
             api.glPixelStorei(glc::PACK_SKIP_ROWS, 0);
-            if (pbo_error != 0 || !equivalent(pair.type, from_pbo, client)) {
+            std::vector<bool> inside(total, false);
+            const std::size_t base = static_cast<std::size_t>(store.skip_rows * stride + store.skip_pixels * pair.bytes);
+            for (int y = 0; y < kH; ++y) {
+                for (int b = 0; b < kW * pair.bytes; ++b) {
+                    inside[base + static_cast<std::size_t>(y * stride + b)] = true;
+                }
+            }
+            std::vector<std::uint8_t> group_pbo;
+            std::vector<std::uint8_t> group_client;
+            for (std::size_t i = 0; i < total; ++i) {
+                if (inside[i]) {
+                    group_pbo.push_back(from_pbo[i]);
+                    group_client.push_back(client[i]);
+                } else if (from_pbo[i] != 0xCD || client[i] != 0xCD) {
+                    problems.add(text + ": byte " + std::to_string(i) + " lies outside every pixel group yet the read changed it (PBO 0x" + Text::hex(from_pbo[i], 2) + ", client 0x" + Text::hex(client[i], 2) + ")");
+                    break;
+                }
+            }
+            if (pbo_error != 0 || !equivalent(pair.type, group_pbo, group_client)) {
                 std::size_t at = 0;
-                while (at < total && from_pbo[at] == client[at]) {
+                while (at < group_pbo.size() && group_pbo[at] == group_client[at]) {
                     ++at;
                 }
                 problems.add(text + ": glReadPixels into a PBO gave " + GlApi::error_name(pbo_error) +
-                             (equivalent(pair.type, from_pbo, client) ? std::string() : " and different bytes than the client-memory read, first at byte " + std::to_string(at) + " (PBO 0x" +
-                                                                       Text::hex(from_pbo[at], 2) + ", client 0x" + Text::hex(client[at], 2) + ")"));
+                             (equivalent(pair.type, group_pbo, group_client) ? std::string() : " and different pixel bytes than the client-memory read, first at group byte " + std::to_string(at) + " (PBO 0x" +
+                                                                       Text::hex(group_pbo[at], 2) + ", client 0x" + Text::hex(group_client[at], 2) + ")"));
             }
-            if (pair.format == glc::RGBA && pair.type == glc::UNSIGNED_BYTE && store.alignment == 1 && store.row_length == 0) {
-                for (int y = 0; y < kH && problems.empty(); ++y) {
-                    if (std::memcmp(client.data() + y * stride, source_pixels.data() + ((3 + y) * kSide + 2) * 4, kW * 4) != 0) {
-                        problems.add(text + ": row " + std::to_string(y) + " of the read-back region differs from the uploaded image");
+            {
+                std::string oracle_error;
+                for (int y = 0; y < kH && oracle_error.empty(); ++y) {
+                    for (int x = 0; x < kW && oracle_error.empty(); ++x) {
+                        const std::uint8_t* src = source_pixels.data() + ((3 + y) * kSide + 2 + x) * 4;
+                        const std::uint8_t* got = client.data() + base + static_cast<std::size_t>(y * stride + x * pair.bytes);
+                        const std::string where = "pixel (" + std::to_string(x) + "," + std::to_string(y) + ")";
+                        if (pair.type == glc::UNSIGNED_BYTE || pair.type == glc::UNSIGNED_INT_8_8_8_8_REV) {
+                            std::uint8_t want[4] = {src[0], src[1], src[2], src[3]};
+                            if (pair.format == glc::BGRA) {
+                                want[0] = src[2];
+                                want[2] = src[0];
+                            }
+                            for (int c = 0; c < pair.bytes; ++c) {
+                                if (got[c] != want[c]) {
+                                    oracle_error = where + " byte " + std::to_string(c) + " is 0x" + Text::hex(got[c], 2) + ", expected 0x" + Text::hex(want[c], 2);
+                                    break;
+                                }
+                            }
+                        } else if (pair.type == glc::UNSIGNED_SHORT) {
+                            for (int c = 0; c < 4; ++c) {
+                                std::uint16_t value;
+                                std::memcpy(&value, got + c * 2, 2);
+                                if (std::abs(static_cast<int>(value) - src[c] * 257) > 1) {
+                                    oracle_error = where + " channel " + std::to_string(c) + " is " + std::to_string(value) + ", expected " + std::to_string(src[c] * 257);
+                                    break;
+                                }
+                            }
+                        } else if (pair.type == glc::FLOAT) {
+                            for (int c = 0; c < 4; ++c) {
+                                float value;
+                                std::memcpy(&value, got + c * 4, 4);
+                                if (std::fabs(value - static_cast<float>(src[c]) / 255.0f) > 1e-6f) {
+                                    oracle_error = where + " channel " + std::to_string(c) + " is " + std::to_string(value) + ", expected " + std::to_string(static_cast<float>(src[c]) / 255.0f);
+                                    break;
+                                }
+                            }
+                        }
                     }
+                }
+                if (!oracle_error.empty()) {
+                    problems.add(text + ": glReadPixels differs from the uploaded image: " + oracle_error);
                 }
             }
             std::vector<std::uint8_t> uploaded[2];

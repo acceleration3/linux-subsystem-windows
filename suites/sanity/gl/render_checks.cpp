@@ -292,17 +292,18 @@ Outcome RenderChecks::completeness_matrix(Context& context) {
         attach_texture(glc::COLOR_ATTACHMENT0, glc::RGBA8, glc::RGBA, glc::UNSIGNED_BYTE, t[0]);
         attach_renderbuffer(glc::DEPTH_ATTACHMENT, glc::RGBA8, r[0]);
     });
+    const bool es2_rules = api.supports(4, 1, "GL_ARB_ES2_compatibility");
     expect_status("a texture with no level 0 image", glc::FRAMEBUFFER_INCOMPLETE_ATTACHMENT, [&](unsigned* t, unsigned*) {
         api.glGenTextures(1, &t[0]);
         api.glBindTexture(glc::TEXTURE_2D, t[0]);
         api.glFramebufferTexture2D(glc::FRAMEBUFFER, glc::COLOR_ATTACHMENT0, glc::TEXTURE_2D, t[0], 0);
     });
-    expect_status("DrawBuffers naming an empty attachment", glc::FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER, [&](unsigned* t, unsigned*) {
+    expect_status("DrawBuffers naming an empty attachment", es2_rules ? glc::FRAMEBUFFER_COMPLETE : glc::FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER, [&](unsigned* t, unsigned*) {
         attach_texture(glc::COLOR_ATTACHMENT0, glc::RGBA8, glc::RGBA, glc::UNSIGNED_BYTE, t[0]);
         const unsigned buffers[1] = {glc::COLOR_ATTACHMENT0 + 1};
         api.glDrawBuffers(1, buffers);
     });
-    expect_status("ReadBuffer naming an empty attachment", glc::FRAMEBUFFER_INCOMPLETE_READ_BUFFER, [&](unsigned* t, unsigned*) {
+    expect_status("ReadBuffer naming an empty attachment", es2_rules ? glc::FRAMEBUFFER_COMPLETE : glc::FRAMEBUFFER_INCOMPLETE_READ_BUFFER, [&](unsigned* t, unsigned*) {
         attach_texture(glc::COLOR_ATTACHMENT0, glc::RGBA8, glc::RGBA, glc::UNSIGNED_BYTE, t[0]);
         api.glReadBuffer(glc::COLOR_ATTACHMENT0 + 1);
     });
