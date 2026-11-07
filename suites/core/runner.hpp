@@ -26,8 +26,8 @@ private:
     };
 
     [[nodiscard]] bool select(std::vector<Planned>& plan, std::size_t& parallel_free,
-                              std::size_t& parallel_exclusive, bool& any_serial,
-                              std::string& error) const;
+                              std::size_t& parallel_exclusive, std::size_t& serial_end,
+                              bool& any_serial, std::string& error) const;
 
     void execute(const std::vector<Planned>& plan, std::size_t begin, std::size_t end, int jobs,
                  bool machine_wide = false);

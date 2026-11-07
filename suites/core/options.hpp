@@ -12,6 +12,7 @@ struct Options {
     std::vector<std::string> suites{"sanity"};
     std::string filter;
     std::string tag;
+    std::string phase = "all";
     int jobs = 0;
     int timeout_seconds = 0;
     int repeat = 1;

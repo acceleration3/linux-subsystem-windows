@@ -55,11 +55,13 @@ int Runner::list() const {
 }
 
 bool Runner::select(std::vector<Planned>& plan, std::size_t& parallel_free,
-                    std::size_t& parallel_exclusive, bool& any_serial, std::string& error) const {
+                    std::size_t& parallel_exclusive, std::size_t& serial_end, bool& any_serial,
+                    std::string& error) const {
     const CheckFilter filter(options_.filter, options_.tag);
     std::vector<Planned> free_checks;
     std::vector<Planned> exclusive_checks;
     std::vector<Planned> serial_checks;
+    std::vector<Planned> pacing_checks;
     for (const std::string& name : options_.suites) {
         const Suite* suite = registry_.find_suite(name);
         if (suite == nullptr) {
@@ -70,8 +72,14 @@ bool Runner::select(std::vector<Planned>& plan, std::size_t& parallel_free,
             if (!filter.accepts(check.id, check.tags)) {
                 continue;
             }
+            const bool pacing =
+                std::find(check.tags.begin(), check.tags.end(), "pacing") != check.tags.end();
+            if (pacing ? options_.phase == "main" : options_.phase == "pacing") {
+                continue;
+            }
             std::vector<Planned>& target =
-                suite->policy() == Policy::Serial ? serial_checks
+                pacing                            ? pacing_checks
+                : suite->policy() == Policy::Serial ? serial_checks
                 : check.exclusive                 ? exclusive_checks
                                                   : free_checks;
             for (int round = 0; round < options_.repeat; ++round) {
@@ -82,6 +90,8 @@ bool Runner::select(std::vector<Planned>& plan, std::size_t& parallel_free,
     if (options_.shuffle) {
         std::mt19937 random(*options_.shuffle);
         std::shuffle(free_checks.begin(), free_checks.end(), random);
+        std::shuffle(exclusive_checks.begin(), exclusive_checks.end(), random);
+        std::shuffle(pacing_checks.begin(), pacing_checks.end(), random);
     }
     any_serial = !serial_checks.empty() ||
                  std::any_of(options_.suites.begin(), options_.suites.end(),
@@ -93,6 +103,8 @@ bool Runner::select(std::vector<Planned>& plan, std::size_t& parallel_free,
     plan.insert(plan.end(), exclusive_checks.begin(), exclusive_checks.end());
     parallel_exclusive = plan.size();
     plan.insert(plan.end(), serial_checks.begin(), serial_checks.end());
+    serial_end = plan.size();
+    plan.insert(plan.end(), pacing_checks.begin(), pacing_checks.end());
     if (plan.empty()) {
         error = "no check matches";
         return false;
@@ -158,9 +170,10 @@ int Runner::run() {
     std::vector<Planned> plan;
     std::size_t free_end = 0;
     std::size_t exclusive_end = 0;
+    std::size_t serial_end = 0;
     bool any_serial = false;
     std::string error;
-    if (!select(plan, free_end, exclusive_end, any_serial, error)) {
+    if (!select(plan, free_end, exclusive_end, serial_end, any_serial, error)) {
         std::fprintf(stderr, "%s: %s\n", ExeIdentity::name().c_str(), error.c_str());
         return 2;
     }
@@ -183,14 +196,15 @@ int Runner::run() {
     const std::string started = utc_now();
     if (!options_.json.empty()) {
         std::filesystem::path log_path = options_.json;
-        log_path.replace_filename("results.jsonl");
+        log_path.replace_extension(".jsonl");
         if (!log_.open(log_path)) {
             std::fprintf(stderr, "%s: cannot write %s\n", ExeIdentity::name().c_str(), log_path.string().c_str());
         }
     }
     execute(plan, 0, free_end, jobs);
     execute(plan, free_end, exclusive_end, 1, true);
-    execute(plan, exclusive_end, plan.size(), 1);
+    execute(plan, exclusive_end, serial_end, 1);
+    execute(plan, serial_end, plan.size(), 1, true);
 
     int passed = 0;
     int failed = 0;

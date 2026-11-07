@@ -45,11 +45,12 @@ suites/
 | `--suite NAME[,NAME]` | run these suites (default: `sanity`) |
 | `--filter GLOB[,GLOB]` | only checks whose id matches; `-GLOB` excludes |
 | `--tag TAG` | only checks with a tag (`d3d11`, `interop`, `exclusive`, `x86-only`, `slow`...) |
+| `--phase all\|main\|pacing` | `main` runs every check without the `pacing` tag, `pacing` only those; default `all` |
 | `--jobs N` | worker processes for parallel suites (default: logical CPUs, capped at 16) |
 | `--timeout S` | per-check timeout (default per check, 60 s if none) |
 | `--repeat N` | run every selected check N times (flake hunting) |
-| `--shuffle SEED` | randomise order within the parallel phase |
-| `--json FILE` | write the result file (schema in 2.4) |
+| `--shuffle SEED` | randomise order within each phase (parallel, exclusive, pacing) |
+| `--json FILE` | write the result file (schema in 2.4); the per-check log goes next to it with the extension `.jsonl` (`r64.json` gives `r64.jsonl`) |
 | `--artifacts DIR` | where failing checks drop images, buffers and logs (default `.\lsw-suites-artifacts`) |
 | `--run-one ID` | internal: run one check in this process (used by workers) |
 
@@ -68,6 +69,11 @@ suites/
   another run's exclusive screen checks. Exclusive is for anything that changes or needs quiet global state:
   device-loss injection, TDR, memory exhaustion, display mode changes, DWM restarts, frame pacing and timing
   measurements, power transitions, driver log scans.
+- A check tagged `pacing` is one whose verdict depends on presentation, capture, frame order or frame timing.
+  The run is ordered: parallel checks, exclusive checks, serial-suite checks, then all pacing checks last. Pacing
+  checks always run one at a time, exclusive or not, each under the same machine-wide mutex; `--phase main`
+  and `--phase pacing` run the two halves separately (`gpu_matrix.py` runs `main` for both bitnesses, then
+  `pacing` for x64 and x32 one after the other).
 - Every check runs in its own worker process: the executable starts itself with `--run-one ID`, suspended, in a
   job object with kill-on-close. A crash, a hang, a device loss or a leaked handle then fails one check, not the
   run; the parent enforces the timeout and kills the whole tree. The child reports through `@@lsw status|reason|

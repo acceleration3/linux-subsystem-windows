@@ -22,7 +22,7 @@ bool positive(const std::string& text, int& out) {
 
 std::string Options::usage() {
     return "usage: lsw-suites [--list] [--suite NAME[,NAME]] [--filter GLOB[,-GLOB]] [--tag TAG]\n"
-           "                  [--jobs N] [--timeout S] [--repeat N] [--shuffle SEED]\n"
+           "                  [--phase all|main|pacing] [--jobs N] [--timeout S] [--repeat N] [--shuffle SEED]\n"
            "                  [--json FILE] [--artifacts DIR] [--skip-apis API[,API]]\n";
 }
 
@@ -50,6 +50,12 @@ std::optional<Options> Options::parse(int argc, char** argv, std::string& error)
             options.filter = value;
         } else if (arg == "--tag") {
             options.tag = value;
+        } else if (arg == "--phase") {
+            if (value != "all" && value != "main" && value != "pacing") {
+                error = "--phase needs all, main or pacing, got " + value;
+                return std::nullopt;
+            }
+            options.phase = value;
         } else if (arg == "--json") {
             options.json = value;
         } else if (arg == "--artifacts") {

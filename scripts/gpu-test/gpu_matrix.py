@@ -17,7 +17,8 @@ OpenGL, Vulkan and OpenCL in the guest all reach it by default; then:
   clgl     the OpenCL-OpenGL sharing samples (tools/clgl_samples.py), each
            judging the values it moved itself
   suites   lsw-suites64.exe and lsw-suites32.exe (suites/), in the console
-           session; a check fails the GPU if it failed in either bitness;
+           session: --phase main for both, then --phase pacing for x64 and x32,
+           one after the other; a check fails the GPU if it failed in either bitness;
            --suite-args passes options to both
   traces   (opt-in) API traces recorded from real applications, replayed and
            judged on their pictures, buffers, memory and speed (trace_suite.py); --traces picks some
@@ -93,6 +94,7 @@ GUEST_DIR = "C:\\av\\gputest"
 GPU_DEVICE = "virtio-gpu-av-pci"
 FIRST_RENDER_SLOT = 0x12
 SUITES = ("probes", "d3d11", "d3d12", "vulkan", "opengl", "opencl", "clgl", "suites")
+SUITES_RUNS = (("64", "main"), ("32", "main"), ("64", "pacing"), ("32", "pacing"))
 SUITES_EXECUTABLES = {"64": TREE / "build-suites" / "lsw-suites64.exe",
                       "32": TREE / "build-suites32" / "lsw-suites32.exe"}
 SUITES_TIMEOUT = 2 * 60 * 60
@@ -636,48 +638,50 @@ def run_suites(guest, out, suite_args):
     guest.powershell(f"New-Item -ItemType Directory -Force {GUEST_DIR} | Out-Null")
     extra = subprocess.list2cmdline(shlex.split(suite_args))
     failures, notes, total = [], [], 0
-    for bits, executable in SUITES_EXECUTABLES.items():
+    for bits, phase in SUITES_RUNS:
+        executable = SUITES_EXECUTABLES[bits]
         program = f"lsw-suites{bits}"
+        label = f"{program}-{phase}"
         if not executable.exists():
-            failures.append({"case": program, "detail": f"{executable} is not built: run scripts/build-suites.sh"})
+            failures.append({"case": label, "detail": f"{executable} is not built: run scripts/build-suites.sh"})
             continue
         guest_exe = f"{GUEST_DIR}\\{program}.exe"
-        guest_json = f"{GUEST_DIR}\\{program}.json"
-        guest_text = f"{GUEST_DIR}\\{program}.txt"
-        guest_artifacts = f"{GUEST_DIR}\\{program}-artifacts"
-        local_text = out / f"{program}.txt"
-        local_json = out / f"{program}.json"
+        guest_json = f"{GUEST_DIR}\\{label}.json"
+        guest_text = f"{GUEST_DIR}\\{label}.txt"
+        guest_artifacts = f"{GUEST_DIR}\\{label}-artifacts"
+        local_text = out / f"{label}.txt"
+        local_json = out / f"{label}.json"
         try:
             guest.agent.push(executable.read_bytes(), guest_exe)
             guest.powershell(f"Remove-Item -Recurse -Force {guest_json},{guest_artifacts} -ErrorAction SilentlyContinue")
-            code = console.run(f'cd /d {GUEST_DIR} && {guest_exe} --json {guest_json} --artifacts {guest_artifacts} {extra}'.rstrip(),
-                               guest_text, program)
+            code = console.run(f'cd /d {GUEST_DIR} && {guest_exe} --phase {phase} --json {guest_json} --artifacts {guest_artifacts} {extra}'.rstrip(),
+                               guest_text, label)
             guest.agent.pull(guest_text, local_text)
         except (AgentError, suite.StepFailed, OSError) as error:
-            failures.append({"case": program, "detail": str(error)})
+            failures.append({"case": label, "detail": str(error)})
             continue
         try:
             guest.agent.pull(guest_json, local_json)
         except (AgentError, OSError):
             local_json.unlink(missing_ok=True)
-        archive = f"{GUEST_DIR}\\{program}-artifacts.zip"
+        archive = f"{GUEST_DIR}\\{label}-artifacts.zip"
         try:
             guest.powershell(f"Remove-Item {archive} -ErrorAction SilentlyContinue; "
                              f"if (Test-Path {guest_artifacts}) {{ Compress-Archive -Path {guest_artifacts} -DestinationPath {archive} }}")
-            guest.agent.pull(archive, out / f"{program}-artifacts.zip")
+            guest.agent.pull(archive, out / f"{label}-artifacts.zip")
         except (AgentError, OSError):
-            (out / f"{program}-artifacts.zip").unlink(missing_ok=True)
+            (out / f"{label}-artifacts.zip").unlink(missing_ok=True)
         if not local_json.exists():
-            failures.append({"case": program, "detail": f"no result file (exit {code}); see {local_text}"})
+            failures.append({"case": label, "detail": f"no result file (exit {code}); see {local_text}"})
             continue
         found, skipped, count = judge_suites_json(local_json, bits)
         failures += found
         notes += skipped
         total += count
         if code not in (0, 1):
-            failures.append({"case": program, "detail": f"the runner failed (exit {code}); see {local_text}"})
+            failures.append({"case": label, "detail": f"the runner failed (exit {code}); see {local_text}"})
         if count == 0:
-            failures.append({"case": program, "detail": "no check ran"})
+            failures.append({"case": label, "detail": "no check ran"})
     return {"status": "fail" if failures else "pass", "failures": failures, "notes": notes, "checks": total}
 
 
