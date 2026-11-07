@@ -1165,7 +1165,7 @@ Each frame encodes its number in pixels so captures can read ordering, drops and
 | `sanity.present.display.idle_then_present` | After seconds of no changes, a single new present still reaches the capture/mirror within a bound. |
 | `sanity.present.latency.input_to_photon_monotonic` | Each frame presented after a SendInput shows in a capture no earlier than the input and the captured sequence has no gaps larger than a bound while typing/moving. |
 
-### 4.21 Errors and robustness (21)
+### 4.21 Errors and robustness (27)
 
 #### Invalid arguments
 
@@ -1198,6 +1198,19 @@ Each frame encodes its number in pixels so captures can read ordering, drops and
 | `sanity.err.fault.process_crash_cleanup` | A process terminated by TerminateProcess in the middle of submission leaves no resources in use: the system returns to baseline and new processes allocate the full budget. |
 | `sanity.err.fault.oom_clean` | Creating resources until failure in every API ends with the documented out-of-memory error, and freeing allows work to resume. |
 | `sanity.err.fault.kill_during_map` | Killing a process while it holds large mappings does not leave memory that later allocators cannot get. |
+
+#### Host survival
+
+Each row below drives a path an application can reach and asserts that the host survives. The misbehaving guest device may end up lost, but another process rendering and reading back during the misbehaviour completes every cycle, a guest process started afterwards creates a device, renders and reads back correctly, and the check records what the guest itself saw, which must be the API's documented error or device-lost result. Misbehaviour runs in child processes that are never cleaned up, so the host sees the process end with the work in flight.
+
+| check | contract |
+|---|---|
+| `sanity.err.vk_wrong_queue_family` | [E]: transfer, graphics and compute commands recorded into command buffers of every queue family that lacks the matching capability (for example a transfer-only or video family), then submitted, give only documented results or device loss; skips only when every family supports all three. |
+| `sanity.err.gpu_wait_never_signalled` | [E]: a Vulkan vkCmdWaitEvents on an event nobody sets, a D3D12 queue Wait on a fence value nobody signals and a GL glWaitSync on a sync object created in a shared context that never flushes (so its fence is never reached), each followed by the process ending without setting or signalling anything; the guest sees the work pending or a documented loss. |
+| `sanity.err.long_running_shader` | [E]: a D3D11, D3D12 and Vulkan compute shader running a bounded loop sized by calibration to about 10 s completes with the analytic result or the device is lost; the time to completion or loss is recorded. |
+| `sanity.err.infinite_shader` | [E]: a D3D11, D3D12, Vulkan and OpenCL compute dispatch whose loop waits for a value in a buffer the CPU never changes (read with atomics so it cannot be removed) is terminated after 3 s of running; the time the guest device takes to report removal or loss is recorded when it does. |
+| `sanity.err.kill_mid_submit` | [E]: child processes of every API submit heavy copy work in a loop and are ended by TerminateProcess at random points, 20 times; the seed is recorded. |
+| `sanity.err.oom_every_api` | [E]: allocating device buffers until failure in each API ends with the API's out-of-memory error at every request size down to 1 MiB, freeing everything succeeds, and a fresh allocation, upload and readback of normal size works. |
 
 #### Limits
 

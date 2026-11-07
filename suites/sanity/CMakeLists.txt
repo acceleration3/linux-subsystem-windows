@@ -33,6 +33,17 @@ add_library(suite_sanity OBJECT
     vk/compute_checks.cpp
     vk/graphics_checks.cpp
     vk/sync_checks.cpp
+    err/family_checks.cpp
+    err/kill_checks.cpp
+    err/oom_checks.cpp
+    err/shader_checks.cpp
+    err/wait_checks.cpp
+    err/spin_device.cpp
+    err/spin_workload.cpp
+    err/spin_d3d11.cpp
+    err/spin_d3d12.cpp
+    err/spin_vulkan.cpp
+    err/spin_opencl.cpp
     vk/query_checks.cpp
     vk/wsi_checks.cpp
     vk/robust_checks.cpp

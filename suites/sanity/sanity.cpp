@@ -92,6 +92,11 @@
 #include "sanity/vk/compute_checks.hpp"
 #include "sanity/vk/graphics_checks.hpp"
 #include "sanity/vk/sync_checks.hpp"
+#include "sanity/err/family_checks.hpp"
+#include "sanity/err/kill_checks.hpp"
+#include "sanity/err/oom_checks.hpp"
+#include "sanity/err/shader_checks.hpp"
+#include "sanity/err/wait_checks.hpp"
 #include "sanity/vk/query_checks.hpp"
 #include "sanity/vk/wsi_checks.hpp"
 #include "sanity/vk/robust_checks.hpp"
@@ -730,6 +735,12 @@ void add(Registry& registry) {
     guarded(suite, {"sanity.capture.wgc.resize_and_close", {"capture", "wgc", "d3d11", "present", "dwm", "exclusive"}, true, 120, capture::WgcChecks::resize_and_close});
     guarded(suite, {"sanity.capture.dwm.thumbnail_each_api", {"capture", "dwm", "d3d9", "d3d11", "d3d12", "gl", "vulkan", "present", "exclusive"}, true, 300, capture::ThumbnailChecks::each_api});
     guarded(suite, {"sanity.capture.dwm.thumbnail_updates", {"capture", "dwm", "d3d11", "present", "exclusive"}, true, 120, capture::ThumbnailChecks::updates});
+    guarded(suite, {"sanity.err.vk_wrong_queue_family", {"err", "robust", "vulkan", "exclusive"}, true, 240, err::FamilyChecks::vk_wrong_queue_family});
+    guarded(suite, {"sanity.err.gpu_wait_never_signalled", {"err", "robust", "vulkan", "d3d12", "gl", "exclusive"}, true, 420, err::WaitChecks::never_signalled});
+    guarded(suite, {"sanity.err.long_running_shader", {"err", "robust", "slow", "compute", "d3d11", "d3d12", "vulkan", "exclusive"}, true, 900, err::ShaderChecks::long_running});
+    guarded(suite, {"sanity.err.infinite_shader", {"err", "robust", "compute", "d3d11", "d3d12", "vulkan", "opencl", "exclusive"}, true, 600, err::ShaderChecks::infinite});
+    guarded(suite, {"sanity.err.kill_mid_submit", {"err", "robust", "slow", "d3d9", "d3d11", "d3d12", "vulkan", "opencl", "gl", "exclusive"}, true, 900, err::KillChecks::mid_submit});
+    guarded(suite, {"sanity.err.oom_every_api", {"err", "robust", "mem", "slow", "d3d9", "d3d11", "d3d12", "vulkan", "opencl", "gl", "exclusive"}, true, 900, err::OomChecks::every_api});
 }
 
 }  // namespace lsw::suites::sanity
