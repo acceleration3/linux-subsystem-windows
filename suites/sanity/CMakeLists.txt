@@ -29,6 +29,8 @@ add_library(suite_sanity OBJECT
     vk/instance_checks.cpp
     vk/memory_checks.cpp
     vk/resource_checks.cpp
+    vk/transfer_checks.cpp
+    vk/compute_checks.cpp
     dxgi/enum_checks.cpp
     dxgi/swap_checks.cpp
     dxgi/mem_checks.cpp

@@ -20,6 +20,7 @@ VkResult VulkanCompute::create(VulkanRig& rig, const std::vector<std::uint32_t>&
         entry.descriptorType = bindings[i].type;
         entry.descriptorCount = bindings[i].count;
         entry.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+        entry.pImmutableSamplers = bindings[i].immutable;
         layout_bindings.push_back(entry);
         counts[bindings[i].type] += bindings[i].count;
     }
@@ -122,7 +123,8 @@ void VulkanCompute::write_image(std::uint32_t binding, VkImageView view, VkSampl
 void VulkanCompute::bind(VkCommandBuffer commands) const {
     rig_->fn.vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline.get());
     if (set != VK_NULL_HANDLE) {
-        rig_->fn.vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_COMPUTE, layout.get(), 0, 1, &set, 0, nullptr);
+        rig_->fn.vkCmdBindDescriptorSets(commands, VK_PIPELINE_BIND_POINT_COMPUTE, layout.get(), 0, 1, &set,
+                                         static_cast<std::uint32_t>(dynamic_offsets.size()), dynamic_offsets.data());
     }
 }
 

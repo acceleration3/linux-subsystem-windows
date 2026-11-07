@@ -73,6 +73,8 @@
 #include "sanity/vk/instance_checks.hpp"
 #include "sanity/vk/memory_checks.hpp"
 #include "sanity/vk/resource_checks.hpp"
+#include "sanity/vk/transfer_checks.hpp"
+#include "sanity/vk/compute_checks.hpp"
 #include "sanity/env/display_checks.hpp"
 #include "sanity/env/icd_checks.hpp"
 #include "sanity/env/install_checks.hpp"
@@ -480,6 +482,11 @@ void add(Registry& registry) {
     guarded(suite, {"sanity.vk.image.formats_features_usage", {"vulkan", "formats"}, false, 180, vk::ResourceChecks::formats_features_usage});
     guarded(suite, {"sanity.vk.image.types_layers_mips", {"vulkan"}, false, 120, vk::ResourceChecks::types_layers_mips});
     guarded(suite, {"sanity.vk.image.sparse_caps", {"vulkan"}, false, 90, vk::ResourceChecks::sparse_caps});
+    guarded(suite, {"sanity.vk.transfer.copy_all_forms", {"vulkan", "formats"}, false, 120, vk::TransferChecks::copy_all_forms});
+    guarded(suite, {"sanity.vk.transfer.blit_resolve", {"vulkan"}, false, 90, vk::TransferChecks::blit_resolve});
+    guarded(suite, {"sanity.vk.transfer.clear_fill_update", {"vulkan", "formats"}, false, 120, vk::TransferChecks::clear_fill_update});
+    guarded(suite, {"sanity.vk.compute.vs_cpu", {"vulkan"}, false, 120, vk::ComputeChecks::vs_cpu});
+    guarded(suite, {"sanity.vk.descriptor.pools_templates_samplers", {"vulkan"}, false, 90, vk::ComputeChecks::pools_templates_samplers});
 }
 
 }  // namespace lsw::suites::sanity

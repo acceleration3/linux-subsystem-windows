@@ -10,6 +10,9 @@ namespace {
 
 VkBufferImageCopy copy_region(const ImageRegion& region) {
     VkBufferImageCopy copy{};
+    copy.bufferOffset = region.buffer_offset;
+    copy.bufferRowLength = region.row_length;
+    copy.bufferImageHeight = region.image_height;
     copy.imageSubresource = {region.aspect, region.mip, region.layer, region.layers};
     copy.imageOffset = region.offset;
     copy.imageExtent = region.extent;
@@ -52,7 +55,7 @@ VkResult VulkanImageIo::write(VulkanRig& rig, const VulkanImage& image, const Im
 
 VkResult VulkanImageIo::read(VulkanRig& rig, const VulkanImage& image, const ImageRegion& region, std::vector<std::uint8_t>& data,
                              std::uint32_t texel) {
-    const std::size_t bytes = region_bytes(region, texel);
+    const std::size_t bytes = span_bytes(region, texel);
     VulkanBuffer staging;
     VkResult result = staging.create(rig, bytes, VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
                                      VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);

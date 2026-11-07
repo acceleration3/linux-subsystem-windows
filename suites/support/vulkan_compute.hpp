@@ -6,6 +6,7 @@ namespace lsw::suites {
 struct VulkanBinding {
     VkDescriptorType type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     std::uint32_t count = 1;
+    const VkSampler* immutable = nullptr;
 };
 
 class VulkanCompute {
@@ -36,6 +37,7 @@ public:
     VulkanOwned<VkPipeline> pipeline;
     VulkanOwned<VkDescriptorPool> pool;
     VkDescriptorSet set = VK_NULL_HANDLE;
+    std::vector<std::uint32_t> dynamic_offsets;
 
 private:
     VulkanRig* rig_ = nullptr;
