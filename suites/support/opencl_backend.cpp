@@ -5,6 +5,8 @@
 #define CL_TARGET_OPENCL_VERSION 300
 #include <CL/cl.h>
 #include <CL/cl_ext.h>
+#include <d3d11.h>
+#include <CL/cl_d3d11.h>
 
 #include <cstring>
 
@@ -39,6 +41,8 @@ struct OpenClRuntime {
     cl_int(__stdcall* nd_range)(cl_command_queue, cl_kernel, cl_uint, const size_t*, const size_t*, const size_t*, cl_uint, const cl_event*, cl_event*) = nullptr;
     cl_int(__stdcall* release_kernel)(cl_kernel) = nullptr;
     cl_int(__stdcall* release_program)(cl_program) = nullptr;
+    void*(__stdcall* ext_address)(cl_platform_id, const char*) = nullptr;
+    cl_int(__stdcall* read_image)(cl_command_queue, cl_mem, cl_bool, const size_t*, const size_t*, size_t, size_t, void*, cl_uint, const cl_event*, cl_event*) = nullptr;
 
     ~OpenClRuntime() {
         if (context != nullptr && release_context != nullptr) {
@@ -106,6 +110,8 @@ bool OpenClBackend::init(const LUID& luid, std::string& error) {
     LSW_CL(nd_range, "clEnqueueNDRangeKernel");
     LSW_CL(release_kernel, "clReleaseKernel");
     LSW_CL(release_program, "clReleaseProgram");
+    LSW_CL(ext_address, "clGetExtensionFunctionAddressForPlatform");
+    LSW_CL(read_image, "clEnqueueReadImage");
     if (rt.get_platform_ids == nullptr || rt.finish == nullptr || rt.unmap == nullptr || rt.create_queue == nullptr) {
         error = "OpenCL.dll lacks entry points";
         return false;
@@ -281,6 +287,73 @@ std::uint64_t OpenClBackend::available_memory() {
 
 std::uint64_t OpenClBackend::oversize_request() {
     return available_memory() * 2 + (1ull << 30);
+}
+
+bool OpenClBackend::d3d11_sharing_advertised() {
+    std::size_t size = 0;
+    runtime_->get_device_info(runtime_->device, CL_DEVICE_EXTENSIONS, 0, nullptr, &size);
+    std::string extensions(size, '\0');
+    runtime_->get_device_info(runtime_->device, CL_DEVICE_EXTENSIONS, size, extensions.data(), nullptr);
+    return (" " + extensions + " ").find(" cl_khr_d3d11_sharing ") != std::string::npos;
+}
+
+bool OpenClBackend::read_d3d11_texture(void* d3d11_device, void* d3d11_texture, std::uint32_t width, std::uint32_t height,
+                                       std::vector<std::uint8_t>& tight, std::string& error) {
+    OpenClRuntime& rt = *runtime_;
+    if (rt.ext_address == nullptr || rt.read_image == nullptr) {
+        error = "the OpenCL loader has no extension lookup";
+        return false;
+    }
+    using GetIds = cl_int(__stdcall*)(cl_platform_id, cl_d3d11_device_source_khr, void*, cl_d3d11_device_set_khr, cl_uint, cl_device_id*, cl_uint*);
+    using CreateTexture = cl_mem(__stdcall*)(cl_context, cl_mem_flags, void*, UINT, cl_int*);
+    using Acquire = cl_int(__stdcall*)(cl_command_queue, cl_uint, const cl_mem*, cl_uint, const cl_event*, cl_event*);
+    auto get_ids = reinterpret_cast<GetIds>(rt.ext_address(rt.platform, "clGetDeviceIDsFromD3D11KHR"));
+    auto create_texture = reinterpret_cast<CreateTexture>(rt.ext_address(rt.platform, "clCreateFromD3D11Texture2DKHR"));
+    auto acquire = reinterpret_cast<Acquire>(rt.ext_address(rt.platform, "clEnqueueAcquireD3D11ObjectsKHR"));
+    auto release = reinterpret_cast<Acquire>(rt.ext_address(rt.platform, "clEnqueueReleaseD3D11ObjectsKHR"));
+    if (get_ids == nullptr || create_texture == nullptr || acquire == nullptr || release == nullptr) {
+        error = "the platform does not resolve the cl_khr_d3d11_sharing entry points";
+        return false;
+    }
+    cl_device_id device = nullptr;
+    cl_uint count = 0;
+    cl_int code = get_ids(rt.platform, CL_D3D11_DEVICE_KHR, d3d11_device, CL_PREFERRED_DEVICES_FOR_D3D11_KHR, 1, &device, &count);
+    if (code != CL_SUCCESS || count == 0) {
+        error = "clGetDeviceIDsFromD3D11KHR returned " + std::to_string(code) + " with " + std::to_string(count) + " device(s)";
+        return false;
+    }
+    cl_context_properties properties[] = {CL_CONTEXT_PLATFORM, reinterpret_cast<cl_context_properties>(rt.platform),
+                                          CL_CONTEXT_D3D11_DEVICE_KHR, reinterpret_cast<cl_context_properties>(d3d11_device), 0};
+    cl_context context = rt.create_context(properties, 1, &device, nullptr, nullptr, &code);
+    if (context == nullptr) {
+        error = "clCreateContext with the D3D11 device failed: " + std::to_string(code);
+        return false;
+    }
+    cl_command_queue queue = rt.create_queue(context, device, 0, &code);
+    cl_mem image = queue != nullptr ? create_texture(context, CL_MEM_READ_ONLY, d3d11_texture, 0, &code) : nullptr;
+    bool ok = image != nullptr;
+    if (!ok) {
+        error = "clCreateFromD3D11Texture2DKHR failed: " + std::to_string(code);
+    } else {
+        tight.assign(static_cast<std::size_t>(width) * height * 4, 0);
+        const size_t origin[3] = {0, 0, 0};
+        const size_t region[3] = {width, height, 1};
+        ok = acquire(queue, 1, &image, 0, nullptr, nullptr) == CL_SUCCESS &&
+             rt.read_image(queue, image, CL_TRUE, origin, region, 0, 0, tight.data(), 0, nullptr, nullptr) == CL_SUCCESS;
+        release(queue, 1, &image, 0, nullptr, nullptr);
+        rt.finish(queue);
+        if (!ok) {
+            error = "acquiring or reading the shared D3D11 texture failed";
+        }
+    }
+    if (image != nullptr) {
+        rt.release_mem(image);
+    }
+    if (queue != nullptr) {
+        rt.release_queue(queue);
+    }
+    rt.release_context(context);
+    return ok;
 }
 
 bool OpenClBackend::churn_program(std::string& error) {

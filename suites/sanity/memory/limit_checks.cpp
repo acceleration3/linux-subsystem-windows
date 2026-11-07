@@ -1,6 +1,7 @@
 #include "sanity/memory/limit_checks.hpp"
 
 #include "support/api_loop.hpp"
+#include "support/api_policy.hpp"
 #include "support/d3d11_textures.hpp"
 #include "support/memory_tools.hpp"
 #include "support/pattern.hpp"
@@ -16,10 +17,6 @@ constexpr std::uint64_t kChunk = 128ull << 20;
 
 std::string status_text(AllocStatus status) {
     return GpuBackends::describe(status);
-}
-
-bool is_documented_refusal(AllocStatus status) {
-    return status == AllocStatus::OutOfMemory || status == AllocStatus::TooLarge;
 }
 
 }  // namespace
@@ -70,21 +67,40 @@ Outcome LimitChecks::allocate_up_to_reported(Context& context) {
 Outcome LimitChecks::fail_beyond_reported(Context& context) {
     Problems problems;
     ApiLoop::run(problems, GpuBackends::names(), [&](GpuBackend& backend, const std::string& api, const AvAdapter&) {
+        AllocStatus status = AllocStatus::Ok;
+        std::string detail;
+        if (api == "opencl") {
+            const std::uint64_t over = backend.max_allocation() + 1;
+            std::unique_ptr<GpuBuffer> buffer = backend.create(over, BufferKind::Device, status, detail);
+            context.measure(api + ".request_bytes", over);
+            context.measure(api + ".status", status_text(status) + " " + detail);
+            if (buffer != nullptr) {
+                problems.add(api + ": a buffer of CL_DEVICE_MAX_MEM_ALLOC_SIZE + 1 = " + std::to_string(over) + " bytes was created");
+            } else if (status != AllocStatus::TooLarge) {
+                problems.add(api + ": the request above the maximum failed with '" + detail + "' instead of CL_INVALID_BUFFER_SIZE");
+            }
+            return;
+        }
         const std::uint64_t request = backend.oversize_request();
         if (request == 0) {
             context.note(api + ": no request is defined that exceeds the memory it reports");
             return;
         }
-        AllocStatus status = AllocStatus::Ok;
-        std::string detail;
         std::unique_ptr<GpuBuffer> buffer = backend.create(request, BufferKind::Device, status, detail);
         context.measure(api + ".request_mib", request >> 20);
         context.measure(api + ".status", status_text(status) + " " + detail);
-        if (buffer != nullptr) {
-            problems.add(api + ": a " + std::to_string(request >> 20) + " MiB request beyond the reported memory succeeded");
-        } else if (!is_documented_refusal(status)) {
-            problems.add(api + ": the refusal is not the documented out-of-memory code: " + detail);
+        if (buffer == nullptr) {
+            if (status != AllocStatus::OutOfMemory) {
+                problems.add(api + ": the " + std::to_string(request >> 20) + " MiB request failed with '" + detail +
+                             "' instead of an out-of-memory code");
+            }
+            return;
         }
+        std::string error;
+        if (!MemoryTools::touch(backend, *buffer, 43, error) || !MemoryTools::verify_ends(backend, *buffer, 43, context, error)) {
+            problems.add(api + ": the " + std::to_string(request >> 20) + " MiB request succeeded but its first and last pages do not work: " + error);
+        }
+        static_cast<void>(backend.finish(error));
     });
     return problems.outcome();
 }
@@ -112,13 +128,27 @@ Outcome LimitChecks::single_allocation_max(Context& context) {
             }
         }
         std::unique_ptr<GpuBuffer> over = backend.create(maximum + 1, BufferKind::Device, status, detail);
-        if (over != nullptr) {
-            problems.add(api + ": an allocation one byte above the maximum succeeded");
+        context.measure(api + ".over_max_status", status_text(status) + " " + detail);
+        if (api == "opencl") {
+            if (over != nullptr) {
+                problems.add(api + ": an allocation one byte above CL_DEVICE_MAX_MEM_ALLOC_SIZE succeeded");
+            } else if (status != AllocStatus::TooLarge) {
+                problems.add(api + ": the allocation one byte above the maximum failed with '" + detail + "' instead of CL_INVALID_BUFFER_SIZE");
+            }
+        } else if (over == nullptr) {
+            if (status != AllocStatus::OutOfMemory) {
+                problems.add(api + ": the allocation one byte above the maximum failed with '" + detail + "' instead of an out-of-memory code");
+            }
         } else {
-            context.measure(api + ".over_max_status", status_text(status) + " " + detail);
+            std::string error;
+            if (!MemoryTools::touch(backend, *over, 42, error) || !MemoryTools::verify_ends(backend, *over, 42, context, error)) {
+                problems.add(api + ": the allocation above the maximum succeeded but does not work: " + error);
+            }
         }
+        std::string error;
+        static_cast<void>(backend.finish(error));
     });
-    context.note("D3D12 reports no maximum single allocation size, so the row is checked for Vulkan and OpenCL");
+    context.note("D3D12 reports no maximum single allocation, so the row is checked for Vulkan and OpenCL");
     return problems.outcome();
 }
 
@@ -144,29 +174,36 @@ Outcome LimitChecks::zero_size(Context& context) {
 
 Outcome LimitChecks::after_failure_usable(Context& context) {
     Problems problems;
-    ApiLoop::run(problems, GpuBackends::names(), [&](GpuBackend& backend, const std::string& api, const AvAdapter&) {
-        const std::uint64_t request = backend.oversize_request();
-        if (request == 0) {
-            context.note(api + ": no request is defined that exceeds the memory it reports");
-            return;
-        }
+    ApiLoop::run(problems, {"d3d11", "d3d12", "vulkan", "opencl", "gl", "d3d9"}, [&](GpuBackend& backend, const std::string& api, const AvAdapter&) {
         AllocStatus status = AllocStatus::Ok;
         std::string detail;
-        std::unique_ptr<GpuBuffer> big = backend.create(request, BufferKind::Device, status, detail);
-        if (big != nullptr) {
-            problems.add(api + ": the oversize request succeeded, no failure to recover from");
-            return;
+        std::string provoked = "nothing";
+        if (api == "opencl") {
+            std::unique_ptr<GpuBuffer> big = backend.create(backend.max_allocation() + 1, BufferKind::Device, status, detail);
+            provoked = big == nullptr ? "request above the maximum allocation: " + detail : "request above the maximum allocation succeeded";
+        } else if (api == "vulkan") {
+            std::unique_ptr<GpuBuffer> big = backend.create(backend.oversize_request(), BufferKind::Device, status, detail);
+            provoked = big == nullptr ? "oversize request: " + detail : "oversize request succeeded";
+        } else {
+            std::unique_ptr<GpuBuffer> empty = backend.create(0, BufferKind::Device, status, detail);
+            provoked = empty == nullptr ? "zero-sized creation: " + detail : "zero-sized creation returned an empty object";
+            if (api == "d3d12") {
+                const std::uint64_t request = backend.oversize_request();
+                std::unique_ptr<GpuBuffer> big = request != 0 ? backend.create(request, BufferKind::Device, status, detail) : nullptr;
+                provoked += big == nullptr ? "; oversize request: " + detail : "; oversize request succeeded";
+            }
         }
+        context.measure(api + ".provoked", provoked);
         std::string error;
         AllocStatus later = AllocStatus::Ok;
         if (!BackendHarness::roundtrip(backend, 1 << 20, 61, later, context, error) || later != AllocStatus::Ok) {
-            problems.add(api + ": a 1 MiB roundtrip fails after the out-of-memory failure: " + error);
+            problems.add(api + ": a 1 MiB roundtrip fails after the failure (" + provoked + "): " + error);
             return;
         }
         std::unique_ptr<GpuBuffer> source = backend.create(65536, BufferKind::Device, later, error);
         std::unique_ptr<GpuBuffer> destination = backend.create(65536, BufferKind::Device, later, error);
         if (source == nullptr || destination == nullptr) {
-            problems.add(api + ": allocation fails after the out-of-memory failure: " + error);
+            problems.add(api + ": allocation fails after the failure: " + error);
             return;
         }
         std::vector<std::uint8_t> expected(65536);
@@ -182,7 +219,7 @@ Outcome LimitChecks::after_failure_usable(Context& context) {
     AvAdapter adapter;
     std::string error;
     D3d11Device device;
-    if (TargetAdapter::pick(adapter, error) && device.create(adapter.luid, error)) {
+    if (!ApiPolicy::is_skipped("d3d11") && TargetAdapter::pick(adapter, error) && device.create(adapter.luid, error)) {
         HRESULT result = S_OK;
         ID3D11Texture2D* target = D3d11Textures::make2d(device, 64, 64, DXGI_FORMAT_R8G8B8A8_UNORM, D3D11_USAGE_DEFAULT,
                                                         D3D11_BIND_RENDER_TARGET, 0, result);
@@ -271,9 +308,12 @@ Outcome LimitChecks::fragmented_pattern(Context& context) {
             small.push_back(std::move(a));
             large.push_back(std::move(b));
         }
-        small.clear();
         std::string error;
-        static_cast<void>(backend.finish(error));
+        if (!backend.finish(error)) {
+            problems.add(api + ": " + error);
+            return;
+        }
+        small.clear();
         AllocStatus status = AllocStatus::Ok;
         if (!BackendHarness::roundtrip(backend, freed, 99, status, context, error) || status != AllocStatus::Ok) {
             problems.add(api + ": a " + std::to_string(freed >> 20) + " MiB block does not fit after freeing every other buffer: " + error);

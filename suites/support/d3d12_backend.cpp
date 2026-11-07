@@ -13,6 +13,9 @@ namespace {
 class Buffer12 : public GpuBuffer {
 public:
     ~Buffer12() override {
+        if (owner != nullptr) {
+            owner->drain();
+        }
         if (mapped) {
             resource->Unmap(0, nullptr);
         }
@@ -21,6 +24,7 @@ public:
         }
     }
 
+    D3d12Backend* owner = nullptr;
     ID3D12Resource* resource = nullptr;
     D3D12_RESOURCE_STATES state = D3D12_RESOURCE_STATE_COPY_DEST;
     bool mapped = false;
@@ -279,6 +283,7 @@ std::unique_ptr<GpuBuffer> D3d12Backend::create(std::uint64_t size, BufferKind k
         detail = "CreateCommittedResource failed: " + hr_text(result);
         return nullptr;
     }
+    buffer->owner = this;
     buffer->size = size;
     buffer->kind = kind;
     status = AllocStatus::Ok;
@@ -404,6 +409,11 @@ bool D3d12Backend::copy(GpuBuffer& source, std::uint64_t source_offset, GpuBuffe
     return true;
 }
 
+void D3d12Backend::drain() {
+    std::string error;
+    static_cast<void>(submit(error));
+}
+
 bool D3d12Backend::finish(std::string& error) {
     return submit(error);
 }
@@ -416,10 +426,69 @@ std::unique_ptr<GpuBuffer> D3d12Backend::open_shared(HANDLE handle, std::uint64_
         error = "OpenSharedHandle failed: " + hr_text(result);
         return nullptr;
     }
+    buffer->owner = this;
     buffer->size = size;
     buffer->kind = BufferKind::Device;
     buffer->state = D3D12_RESOURCE_STATE_COMMON;
     return buffer;
+}
+
+ID3D12Resource* D3d12Backend::open_shared_raw(HANDLE handle, std::string& error) {
+    ID3D12Resource* resource = nullptr;
+    const HRESULT result = device_->device->OpenSharedHandle(handle, __uuidof(ID3D12Resource), reinterpret_cast<void**>(&resource));
+    if (FAILED(result)) {
+        error = "OpenSharedHandle failed: " + hr_text(result);
+        return nullptr;
+    }
+    return resource;
+}
+
+bool D3d12Backend::read_texture(ID3D12Resource* texture, UINT width, UINT height, UINT bytes_per_pixel,
+                                std::vector<std::uint8_t>& tight, std::string& error) {
+    const UINT pitch = (width * bytes_per_pixel + 255) & ~255u;
+    const std::uint64_t total = static_cast<std::uint64_t>(pitch) * height;
+    if (!ensure_readback(total, error) || !begin(error)) {
+        return false;
+    }
+    D3D12_RESOURCE_BARRIER barrier{};
+    barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    barrier.Transition.pResource = texture;
+    barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
+    barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_SOURCE;
+    barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+    list_->ResourceBarrier(1, &barrier);
+    D3D12_TEXTURE_COPY_LOCATION destination{};
+    destination.pResource = readback_;
+    destination.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+    destination.PlacedFootprint.Footprint.Format = texture->GetDesc().Format;
+    destination.PlacedFootprint.Footprint.Width = width;
+    destination.PlacedFootprint.Footprint.Height = height;
+    destination.PlacedFootprint.Footprint.Depth = 1;
+    destination.PlacedFootprint.Footprint.RowPitch = pitch;
+    D3D12_TEXTURE_COPY_LOCATION source{};
+    source.pResource = texture;
+    source.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+    source.SubresourceIndex = 0;
+    list_->CopyTextureRegion(&destination, 0, 0, 0, &source, nullptr);
+    std::swap(barrier.Transition.StateBefore, barrier.Transition.StateAfter);
+    list_->ResourceBarrier(1, &barrier);
+    if (!submit(error)) {
+        return false;
+    }
+    D3D12_RANGE range{0, static_cast<SIZE_T>(total)};
+    void* pointer = nullptr;
+    if (FAILED(readback_->Map(0, &range, &pointer))) {
+        error = "Map (readback) failed";
+        return false;
+    }
+    tight.assign(static_cast<std::size_t>(width) * height * bytes_per_pixel, 0);
+    for (UINT y = 0; y < height; ++y) {
+        std::memcpy(tight.data() + static_cast<std::size_t>(y) * width * bytes_per_pixel,
+                    static_cast<const char*>(pointer) + static_cast<std::size_t>(y) * pitch, static_cast<std::size_t>(width) * bytes_per_pixel);
+    }
+    D3D12_RANGE none{0, 0};
+    readback_->Unmap(0, &none);
+    return true;
 }
 
 bool D3d12Backend::evict(GpuBuffer& buffer, std::string& error) {

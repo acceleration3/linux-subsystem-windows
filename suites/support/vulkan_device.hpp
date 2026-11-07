@@ -36,6 +36,7 @@ public:
     VkDeviceSize max_allocation_size = 0;
     VkDeviceSize min_map_alignment = 0;
     bool budget_extension = false;
+    bool external_win32 = false;
     std::mutex mutex;
 
     PFN_vkGetInstanceProcAddr get_instance_proc = nullptr;
@@ -64,5 +65,12 @@ public:
     PFN_vkFlushMappedMemoryRanges flush_ranges = nullptr;
     PFN_vkInvalidateMappedMemoryRanges invalidate_ranges = nullptr;
     PFN_vkDeviceWaitIdle device_wait = nullptr;
+    PFN_vkGetPhysicalDeviceImageFormatProperties2 image_format_properties2 = nullptr;
+    PFN_vkCreateImage create_image = nullptr;
+    PFN_vkDestroyImage destroy_image = nullptr;
+    PFN_vkGetImageMemoryRequirements image_requirements = nullptr;
+    PFN_vkBindImageMemory bind_image = nullptr;
+    PFN_vkCmdCopyImageToBuffer cmd_copy_image = nullptr;
+    PFN_vkCmdPipelineBarrier cmd_barrier = nullptr;
 };
 }  // namespace lsw::suites

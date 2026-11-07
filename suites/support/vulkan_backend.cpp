@@ -11,6 +11,9 @@ namespace {
 class BufferVk : public GpuBuffer {
 public:
     ~BufferVk() override {
+        if (owner != nullptr) {
+            owner->drain();
+        }
         if (state != nullptr) {
             if (mapped != nullptr) {
                 state->unmap_memory(state->device, memory);
@@ -20,6 +23,7 @@ public:
         }
     }
 
+    VulkanBackend* owner = nullptr;
     VulkanDeviceState* state = nullptr;
     VkBuffer buffer = VK_NULL_HANDLE;
     VkDeviceMemory memory = VK_NULL_HANDLE;
@@ -278,6 +282,7 @@ std::unique_ptr<GpuBuffer> VulkanBackend::create(std::uint64_t size, BufferKind 
         return nullptr;
     }
     auto buffer = std::make_unique<BufferVk>();
+    buffer->owner = this;
     buffer->state = state_.get();
     buffer->buffer = raw.buffer;
     buffer->memory = raw.memory;
@@ -384,6 +389,134 @@ bool VulkanBackend::copy(GpuBuffer& source, std::uint64_t source_offset, GpuBuff
     copy_with_barrier(*state_, commands_, static_cast<BufferVk&>(source).buffer,
                       static_cast<BufferVk&>(destination).buffer, VkBufferCopy{source_offset, destination_offset, size});
     return true;
+}
+
+namespace {
+
+struct ImportWin32 {
+    VkStructureType sType;
+    const void* pNext;
+    VkExternalMemoryHandleTypeFlagBits handleType;
+    HANDLE handle;
+    LPCWSTR name;
+};
+
+constexpr VkStructureType kImportWin32Type = static_cast<VkStructureType>(1000073000);
+
+}  // namespace
+
+bool VulkanBackend::texture_import_supported(std::uint32_t handle_type, std::string& detail) {
+    if (!state_->external_win32) {
+        detail = "VK_KHR_external_memory_win32 is not exposed by the device";
+        return false;
+    }
+    VkPhysicalDeviceExternalImageFormatInfo external{};
+    external.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO;
+    external.handleType = static_cast<VkExternalMemoryHandleTypeFlagBits>(handle_type);
+    VkPhysicalDeviceImageFormatInfo2 info{};
+    info.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2;
+    info.pNext = &external;
+    info.format = VK_FORMAT_R8G8B8A8_UNORM;
+    info.type = VK_IMAGE_TYPE_2D;
+    info.tiling = VK_IMAGE_TILING_OPTIMAL;
+    info.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    VkExternalImageFormatProperties external_properties{};
+    external_properties.sType = VK_STRUCTURE_TYPE_EXTERNAL_IMAGE_FORMAT_PROPERTIES;
+    VkImageFormatProperties2 properties{};
+    properties.sType = VK_STRUCTURE_TYPE_IMAGE_FORMAT_PROPERTIES_2;
+    properties.pNext = &external_properties;
+    const VkResult result = state_->image_format_properties2(state_->physical, &info, &properties);
+    if (result != VK_SUCCESS) {
+        detail = "vkGetPhysicalDeviceImageFormatProperties2 returned " + std::to_string(result);
+        return false;
+    }
+    if ((external_properties.externalMemoryProperties.externalMemoryFeatures & VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT) == 0) {
+        detail = "the handle type is not importable";
+        return false;
+    }
+    return true;
+}
+
+bool VulkanBackend::read_imported_texture(HANDLE handle, std::uint32_t handle_type, std::uint32_t width, std::uint32_t height,
+                                          std::vector<std::uint8_t>& tight, std::string& error) {
+    VkExternalMemoryImageCreateInfo external{};
+    external.sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO;
+    external.handleTypes = handle_type;
+    VkImageCreateInfo info{};
+    info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    info.pNext = &external;
+    info.imageType = VK_IMAGE_TYPE_2D;
+    info.format = VK_FORMAT_R8G8B8A8_UNORM;
+    info.extent = {width, height, 1};
+    info.mipLevels = 1;
+    info.arrayLayers = 1;
+    info.samples = VK_SAMPLE_COUNT_1_BIT;
+    info.tiling = VK_IMAGE_TILING_OPTIMAL;
+    info.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    VkImage image = VK_NULL_HANDLE;
+    VkResult result = state_->create_image(state_->device, &info, nullptr, &image);
+    if (result != VK_SUCCESS) {
+        error = "vkCreateImage failed: " + std::to_string(result);
+        return false;
+    }
+    VkMemoryRequirements requirements{};
+    state_->image_requirements(state_->device, image, &requirements);
+    const int type = state_->find_memory_type(requirements.memoryTypeBits, 0, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    VkDeviceMemory memory = VK_NULL_HANDLE;
+    if (type >= 0) {
+        VkMemoryDedicatedAllocateInfo dedicated{};
+        dedicated.sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO;
+        dedicated.image = image;
+        ImportWin32 import_info{kImportWin32Type, &dedicated, static_cast<VkExternalMemoryHandleTypeFlagBits>(handle_type), handle, nullptr};
+        VkMemoryAllocateInfo allocate{};
+        allocate.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+        allocate.pNext = &import_info;
+        allocate.allocationSize = requirements.size;
+        allocate.memoryTypeIndex = static_cast<std::uint32_t>(type);
+        result = state_->allocate_memory(state_->device, &allocate, nullptr, &memory);
+    } else {
+        result = VK_ERROR_FEATURE_NOT_PRESENT;
+    }
+    bool ok = result == VK_SUCCESS && state_->bind_image(state_->device, image, memory, 0) == VK_SUCCESS;
+    if (!ok) {
+        error = "importing the texture memory failed: " + std::to_string(result);
+    }
+    if (ok && ensure_readback(static_cast<std::uint64_t>(width) * height * 4, error) && begin(error)) {
+        VkImageMemoryBarrier barrier{};
+        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        barrier.srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT;
+        barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+        barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image = image;
+        barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+        state_->cmd_barrier(commands_, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+        VkBufferImageCopy region{};
+        region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+        region.imageExtent = {width, height, 1};
+        state_->cmd_copy_image(commands_, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, readback_, 1, &region);
+        if (submit(error)) {
+            tight.assign(readback_map_, readback_map_ + static_cast<std::size_t>(width) * height * 4);
+        } else {
+            ok = false;
+        }
+    } else {
+        ok = false;
+    }
+    if (memory != VK_NULL_HANDLE) {
+        state_->free_memory(state_->device, memory, nullptr);
+    }
+    state_->destroy_image(state_->device, image, nullptr);
+    return ok;
+}
+
+void VulkanBackend::drain() {
+    std::string error;
+    static_cast<void>(submit(error));
 }
 
 bool VulkanBackend::finish(std::string& error) {

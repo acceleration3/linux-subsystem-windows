@@ -291,7 +291,7 @@ All checks fill with a position-dependent pattern computed on the CPU and verify
 |---|---|
 | `sanity.data.size.buffer_roundtrip_small` | Buffers from 1 byte to 1 MiB (every size up to 600, then selected sizes) written by the CPU through a staging path arrive intact on the GPU and return intact, in D3D11, D3D12, Vulkan and OpenCL. |
 | `sanity.data.size.buffer_roundtrip_boundaries` | Buffers of the boundary sizes around 4, 16, 32, 64 and 256 MiB, each exactly at, one byte below and one byte above, roundtrip intact. |
-| `sanity.data.size.buffer_roundtrip_hundreds_mib` | Buffers of 300 to 700 MiB (as far as the API reports available) roundtrip intact, or the allocation fails cleanly. |
+| `sanity.data.size.buffer_roundtrip_hundreds_mib` | Buffers of 300 to 700 MiB (as far as the API reports available) roundtrip intact, or the allocation fails cleanly. [E] |
 | `sanity.data.size.texture_upload_sizes` | Textures from 1x1 to 16384 wide or tall (as far as caps allow) in 1-, 4-, 8- and 16-byte formats upload and read back intact for odd widths and heights. |
 | `sanity.data.size.texture_full_screen_upload` | A full-screen 2560x1440 RGBA texture uploaded through UpdateSubresource, Map-write, and staging copy reads back intact. |
 | `sanity.data.size.readback_every_size` | Readbacks (GPU to CPU) of every size in the same set complete in full: the destination has no stale or unwritten bytes. |
@@ -316,7 +316,7 @@ All checks fill with a position-dependent pattern computed on the CPU and verify
 | `sanity.data.seq.read_after_write_same_context` | Within a single context, a readback submitted after a write always sees the write, for every API and size combination above. |
 | `sanity.data.seq.many_contexts` | Sixty-four contexts or queues on one device each write and verify their own region concurrently with no cross-contamination. |
 | `sanity.data.seq.many_devices_one_process` | Sixteen devices created in one process each roundtrip a distinct pattern, and the data of one never appears in another. |
-| `sanity.data.seq.mixed_api_chain` | A buffer written through D3D11, copied by D3D12 via a shared resource, read by Vulkan via external memory, and read by OpenCL via sharing (where each reports support) arrives with the original bytes. |
+| `sanity.data.seq.mixed_api_chain` | A shared Texture2D written through D3D11 (NT handle with keyed mutex, NT handle, then legacy shared flags) is read back with the original bytes through every link the runtimes report as supported: D3D12 OpenSharedHandle, Vulkan import (VK_KHR_external_memory_win32) and OpenCL cl_khr_d3d11_sharing. Each unsupported link is reported unsupported consistently. |
 
 #### Load and pressure
 
@@ -334,11 +334,11 @@ All checks fill with a position-dependent pattern computed on the CPU and verify
 
 | check | contract |
 |---|---|
-| `sanity.mem.limit.allocate_up_to_reported` | Buffers allocated in chunks until the API's reported available budget is reached succeed, and each chunk can be filled and verified. |
-| `sanity.mem.limit.fail_beyond_reported` | Requests that exceed what the API reports as available fail with the documented code (E_OUTOFMEMORY, VK_ERROR_OUT_OF_DEVICE_MEMORY, CL_MEM_OBJECT_ALLOCATION_FAILURE, GL_OUT_OF_MEMORY) and never crash. |
-| `sanity.mem.limit.single_allocation_max` | An allocation of exactly the API-reported maximum single allocation size succeeds, one more byte fails cleanly, in Vulkan, OpenCL and D3D12. |
+| `sanity.mem.limit.allocate_up_to_reported` | Buffers allocated in chunks until the API's reported available budget is reached succeed, and each chunk can be filled and verified. [E] |
+| `sanity.mem.limit.fail_beyond_reported` | A single OpenCL buffer above CL_DEVICE_MAX_MEM_ALLOC_SIZE fails with CL_INVALID_BUFFER_SIZE; a D3D12 or Vulkan request beyond the memory the API reports either fails with E_OUTOFMEMORY or VK_ERROR_OUT_OF_*_MEMORY or succeeds and its first and last pages work; nothing crashes and the device stays usable. [E] |
+| `sanity.mem.limit.single_allocation_max` | An allocation of exactly the reported maximum succeeds and works in Vulkan and OpenCL; one byte more fails with CL_INVALID_BUFFER_SIZE in OpenCL, and in Vulkan either fails with an out-of-memory code or succeeds and works. D3D12 reports no maximum, so it is not part of this row. |
 | `sanity.mem.limit.zero_size` | Zero-sized allocations return the documented error or a valid empty object in each API and never a corrupt handle. |
-| `sanity.mem.limit.after_failure_usable` | After an out-of-memory failure the device remains usable: a small allocation and a render still produce correct output. |
+| `sanity.mem.limit.after_failure_usable` | After a failure the API contract defines (OpenCL above the maximum allocation, an invalid-argument creation on each API, an out-of-memory refusal where one occurs) the device stays usable: a small allocation, a copy and a render still produce correct output. |
 
 #### Reuse and budgets
 
@@ -370,12 +370,12 @@ Each loop creates and destroys 5000 objects of the kind with its largest practic
 
 | check | contract |
 |---|---|
-| `sanity.mem.evict.contents_survive_pressure` | Resources filled with patterns keep their content after other allocations push total use above the budget, forcing eviction and residency changes. |
-| `sanity.mem.evict.make_resident_semantics` | In D3D12 MakeResident and Evict on resources keep their data after being made resident again, and failure to make resident fails cleanly. |
+| `sanity.mem.evict.contents_survive_pressure` | Resources filled with patterns keep their content after other allocations push total use above the budget, forcing eviction and residency changes. [E] |
+| `sanity.mem.evict.make_resident_semantics` | In D3D12 MakeResident and Evict on resources keep their data after being made resident again, and failure to make resident fails cleanly. [E] |
 | `sanity.mem.map.pointer_valid_until_unmap` | A persistent mapping (Vulkan, D3D12 upload heap, GL persistent buffer) stays valid and coherent across GPU work until unmapped, regardless of pressure from other allocations. |
 | `sanity.mem.map.unmap_flushes` | Data written through a non-coherent mapping becomes visible to the GPU after flush and unmap, as the API defines, and reads after invalidate see GPU writes. |
 | `sanity.mem.map.exit_with_live_mappings` | A process that exits with live mappings, locks and in-flight work causes no error in other processes or in the system, and its resources are released. |
-| `sanity.mem.map.large_map_many` | Mapping 64 buffers of 64 MiB at once either succeeds with working pointers or fails cleanly. |
+| `sanity.mem.map.large_map_many` | Mapping 64 buffers of 64 MiB at once either succeeds with working pointers or fails cleanly. [E] |
 
 ### 4.6 Isolation (15)
 

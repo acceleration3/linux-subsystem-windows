@@ -1,3 +1,4 @@
+#include "support/api_policy.hpp"
 #include "support/d3d11_backend.hpp"
 #include "support/d3d12_backend.hpp"
 #include "support/d3d9_backend.hpp"
@@ -9,10 +10,13 @@
 namespace lsw::suites {
 
 std::vector<std::string> GpuBackends::names() {
-    return {"d3d11", "d3d12", "vulkan", "opencl"};
+    return ApiPolicy::filter({"d3d11", "d3d12", "vulkan", "opencl"});
 }
 
 std::unique_ptr<GpuBackend> GpuBackends::make(const std::string& name) {
+    if (ApiPolicy::is_skipped(name)) {
+        return nullptr;
+    }
     if (name == "d3d11") {
         return std::make_unique<D3d11Backend>();
     }

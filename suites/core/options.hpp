@@ -19,6 +19,7 @@ struct Options {
     std::filesystem::path json;
     std::filesystem::path artifacts = "lsw-suites-artifacts";
     std::string run_one;
+    std::string skip_apis;
 
     [[nodiscard]] static std::optional<Options> parse(int argc, char** argv, std::string& error);
 

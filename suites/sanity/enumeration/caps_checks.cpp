@@ -1,6 +1,7 @@
 #include "sanity/enumeration/caps_checks.hpp"
 
 #include "core/text.hpp"
+#include "support/api_policy.hpp"
 #include "support/av_adapters.hpp"
 #include "support/dyn_library.hpp"
 #include "support/problems.hpp"
@@ -41,7 +42,7 @@ Outcome CapsChecks::feature_level_vs_api_support(Context& context) {
     }
     DynLibrary d3d12;
     PFN_D3D12_CREATE_DEVICE create12 = nullptr;
-    if (d3d12.load("d3d12.dll")) {
+    if (!ApiPolicy::is_skipped("d3d12") && d3d12.load("d3d12.dll")) {
         create12 = d3d12.symbol<PFN_D3D12_CREATE_DEVICE>("D3D12CreateDevice");
     }
     VulkanApi vulkan;

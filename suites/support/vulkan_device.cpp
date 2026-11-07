@@ -109,19 +109,31 @@ bool VulkanDeviceState::create(const LUID& luid, std::string& error) {
     for (const VkExtensionProperties& extension : extension_list) {
         budget_extension = budget_extension || std::strcmp(extension.extensionName, VK_EXT_MEMORY_BUDGET_EXTENSION_NAME) == 0;
     }
+    bool win32_memory = false;
+    for (const VkExtensionProperties& extension : extension_list) {
+        win32_memory = win32_memory || std::strcmp(extension.extensionName, "VK_KHR_external_memory_win32") == 0;
+    }
+    external_win32 = win32_memory;
+    LSW_VK_INSTANCE(image_format_properties2, PFN_vkGetPhysicalDeviceImageFormatProperties2, "vkGetPhysicalDeviceImageFormatProperties2");
     const float priority = 1.0f;
     VkDeviceQueueCreateInfo queue_info{};
     queue_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
     queue_info.queueFamilyIndex = family;
     queue_info.queueCount = 1;
     queue_info.pQueuePriorities = &priority;
-    const char* enabled[] = {VK_EXT_MEMORY_BUDGET_EXTENSION_NAME};
+    std::vector<const char*> enabled;
+    if (budget_extension) {
+        enabled.push_back(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME);
+    }
+    if (external_win32) {
+        enabled.push_back("VK_KHR_external_memory_win32");
+    }
     VkDeviceCreateInfo device_info{};
     device_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     device_info.queueCreateInfoCount = 1;
     device_info.pQueueCreateInfos = &queue_info;
-    device_info.enabledExtensionCount = budget_extension ? 1 : 0;
-    device_info.ppEnabledExtensionNames = enabled;
+    device_info.enabledExtensionCount = static_cast<std::uint32_t>(enabled.size());
+    device_info.ppEnabledExtensionNames = enabled.data();
     const VkResult result = create_device(physical, &device_info, nullptr, &device);
     if (result != VK_SUCCESS) {
         error = "vkCreateDevice failed: " + std::to_string(result);
@@ -151,6 +163,12 @@ bool VulkanDeviceState::create(const LUID& luid, std::string& error) {
     LSW_VK_DEVICE(flush_ranges, PFN_vkFlushMappedMemoryRanges, "vkFlushMappedMemoryRanges");
     LSW_VK_DEVICE(invalidate_ranges, PFN_vkInvalidateMappedMemoryRanges, "vkInvalidateMappedMemoryRanges");
     LSW_VK_DEVICE(device_wait, PFN_vkDeviceWaitIdle, "vkDeviceWaitIdle");
+    LSW_VK_DEVICE(create_image, PFN_vkCreateImage, "vkCreateImage");
+    LSW_VK_DEVICE(destroy_image, PFN_vkDestroyImage, "vkDestroyImage");
+    LSW_VK_DEVICE(image_requirements, PFN_vkGetImageMemoryRequirements, "vkGetImageMemoryRequirements");
+    LSW_VK_DEVICE(bind_image, PFN_vkBindImageMemory, "vkBindImageMemory");
+    LSW_VK_DEVICE(cmd_copy_image, PFN_vkCmdCopyImageToBuffer, "vkCmdCopyImageToBuffer");
+    LSW_VK_DEVICE(cmd_barrier, PFN_vkCmdPipelineBarrier, "vkCmdPipelineBarrier");
     get_queue(device, family, 0, &queue);
     return true;
 }

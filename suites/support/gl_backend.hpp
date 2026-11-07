@@ -50,6 +50,7 @@ private:
     void(__stdcall* buffer_storage_)(unsigned, std::ptrdiff_t, const void*, unsigned) = nullptr;
     void*(__stdcall* map_buffer_range_)(unsigned, std::ptrdiff_t, std::ptrdiff_t, unsigned) = nullptr;
     unsigned char(__stdcall* unmap_buffer_)(unsigned) = nullptr;
+    void(__stdcall* get_buffer_parameter_)(unsigned, unsigned, int*) = nullptr;
     unsigned(__stdcall* get_error_)() = nullptr;
     void(__stdcall* finish_)() = nullptr;
 

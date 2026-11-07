@@ -4,6 +4,7 @@
 #include "support/vulkan_device.hpp"
 
 #include <memory>
+#include <vector>
 
 namespace lsw::suites {
 class VulkanBackend : public GpuBackend {
@@ -43,6 +44,14 @@ public:
     [[nodiscard]] std::uint64_t map_alignment() override { return state_->min_map_alignment; }
 
     [[nodiscard]] std::unique_ptr<GpuBackend> new_context() override;
+
+    void drain();
+
+    [[nodiscard]] bool texture_import_supported(std::uint32_t handle_type, std::string& detail);
+
+    [[nodiscard]] bool read_imported_texture(HANDLE handle, std::uint32_t handle_type, std::uint32_t width,
+                                             std::uint32_t height, std::vector<std::uint8_t>& tight,
+                                             std::string& error);
 
     [[nodiscard]] VulkanDeviceState& shared() { return *state_; }
 

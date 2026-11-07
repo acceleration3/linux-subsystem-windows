@@ -4,6 +4,7 @@
 #include "support/gpu_backend.hpp"
 
 #include <memory>
+#include <vector>
 
 namespace lsw::suites {
 struct OpenClRuntime;
@@ -48,6 +49,11 @@ public:
     [[nodiscard]] std::unique_ptr<GpuBackend> new_context() override;
 
     [[nodiscard]] std::uint64_t free_memory_kb(bool& exposed);
+
+    [[nodiscard]] bool d3d11_sharing_advertised();
+
+    [[nodiscard]] bool read_d3d11_texture(void* d3d11_device, void* d3d11_texture, std::uint32_t width,
+                                          std::uint32_t height, std::vector<std::uint8_t>& tight, std::string& error);
 
     [[nodiscard]] bool churn_program(std::string& error);
 

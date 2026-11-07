@@ -1,4 +1,5 @@
 add_library(suite_support OBJECT
+    api_policy.cpp
     api_snapshot.cpp
     d3d11_backend.cpp
     d3d11_device.cpp

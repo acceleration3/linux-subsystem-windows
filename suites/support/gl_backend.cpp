@@ -1,6 +1,7 @@
 #include "support/gl_backend.hpp"
 
 #include "support/av_adapters.hpp"
+#include "core/text.hpp"
 #include "support/dxgi_budget.hpp"
 
 namespace lsw::suites {
@@ -52,6 +53,7 @@ bool GlBackend::init(const LUID& luid, std::string& error) {
     LSW_GL(buffer_storage_, "glBufferStorage");
     LSW_GL(map_buffer_range_, "glMapBufferRange");
     LSW_GL(unmap_buffer_, "glUnmapBuffer");
+    LSW_GL(get_buffer_parameter_, "glGetBufferParameteriv");
     get_error_ = reinterpret_cast<decltype(get_error_)>(gl_.export_symbol("glGetError"));
     finish_ = reinterpret_cast<decltype(finish_)>(gl_.export_symbol("glFinish"));
     if (gen_buffers_ == nullptr || buffer_data_ == nullptr || copy_buffer_sub_data_ == nullptr || get_buffer_sub_data_ == nullptr ||
@@ -98,12 +100,26 @@ bool GlBackend::map(GpuBuffer& buffer, void** pointer, std::string& error) {
         error = "persistent mapping is not available for this buffer";
         return false;
     }
+    while (get_error_() != 0) {
+    }
     bind_buffer_(kCopyWrite, b.id);
+    const unsigned bind_error = get_error_();
     if (b.mapped == nullptr) {
         b.mapped = map_buffer_range_(kCopyWrite, 0, static_cast<std::ptrdiff_t>(b.size), 0x1 | 0x2 | 0x40 | 0x80);
     }
     if (b.mapped == nullptr) {
-        error = "glMapBufferRange failed";
+        const unsigned map_error = get_error_();
+        int flags = -1;
+        int size = -1;
+        if (get_buffer_parameter_ != nullptr) {
+            get_buffer_parameter_(kCopyWrite, 0x8220, &flags);
+            get_buffer_parameter_(kCopyWrite, 0x8764, &size);
+        }
+        error = "glMapBufferRange(buffer " + std::to_string(b.id) + ", 0, " + std::to_string(b.size) +
+                ", MAP_READ|MAP_WRITE|MAP_PERSISTENT|MAP_COHERENT) returned null; glGetError after bind 0x" + std::to_string(bind_error) +
+                ", after map 0x" + Text::hex(map_error, 4) + "; GL_BUFFER_STORAGE_FLAGS 0x" + Text::hex(static_cast<unsigned>(flags), 4) +
+                ", GL_BUFFER_SIZE " + std::to_string(size) + ", context " + (gl_.export_symbol("wglGetCurrentContext") != nullptr && reinterpret_cast<HGLRC(__stdcall*)()>(gl_.export_symbol("wglGetCurrentContext"))() != nullptr ? "current" : "not current") +
+                ", " + gl_.version();
         return false;
     }
     *pointer = b.mapped;

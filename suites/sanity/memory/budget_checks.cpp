@@ -48,8 +48,9 @@ Outcome BudgetChecks::dxgi_moves_with_alloc(Context& context) {
         context.measure(api + ".usage_during", during.usage);
         const std::uint64_t slack = 8ull << 20;
         if (during.usage + slack < before.usage + kSize) {
-            problems.add(api + ": CurrentUsage rose by " + std::to_string((during.usage - std::min(during.usage, before.usage)) >> 20) +
-                         " MiB for a touched " + std::to_string(kSize >> 20) + " MiB allocation");
+            problems.add(api + ": CurrentUsage rose by " + std::to_string((during.usage > before.usage ? during.usage - before.usage : 0) >> 20) +
+                         " MiB (" + std::to_string(before.usage) + " to " + std::to_string(during.usage) + " bytes) for a touched " +
+                         std::to_string(kSize >> 20) + " MiB allocation");
         }
         bool fell = false;
         for (int poll = 0; poll < 30 && !fell; ++poll) {
@@ -112,7 +113,9 @@ Outcome BudgetChecks::vulkan_budget_moves(Context& context) {
     context.measure("usage.before", before);
     context.measure("usage.during", during);
     if (during + (8ull << 20) < before + kSize) {
-        problems.add("device-local heap usage rose by less than the allocated size");
+        problems.add("device-local heap usage went from " + std::to_string(before) + " to " + std::to_string(during) +
+                     " bytes (rose " + std::to_string(during > before ? (during - before) >> 20 : 0) + " MiB) for a touched " +
+                     std::to_string(kSize >> 20) + " MiB allocation");
     }
     std::uint64_t after = 0;
     bool fell = false;
@@ -125,7 +128,8 @@ Outcome BudgetChecks::vulkan_budget_moves(Context& context) {
     }
     context.measure("usage.after", after);
     if (!fell) {
-        problems.add("device-local heap usage did not fall after the free");
+        problems.add("device-local heap usage was " + std::to_string(after) + " bytes after the free, " + std::to_string(before) +
+                     " before the allocation");
     }
     return problems.outcome();
 }
@@ -147,12 +151,15 @@ Outcome BudgetChecks::reservation_honoured(Context& context) {
     Problems problems;
     const std::uint64_t amount = memory.available_for_reservation;
     const long accepted = DxgiBudget::set_reservation(adapter.luid, true, amount);
+    context.measure("reservation.requested", amount);
+    context.measure("reservation.hresult", Text::hex(static_cast<std::uint32_t>(accepted), 8));
+    context.measure("reservation.segment_group", "local");
     VideoMemory reserved;
     if (accepted < 0) {
         problems.add("SetVideoMemoryReservation rejected the available amount, HRESULT 0x" + Text::hex(static_cast<std::uint32_t>(accepted), 8));
     } else if (!DxgiBudget::query(adapter.luid, true, reserved, error) || reserved.reservation != amount) {
-        problems.add("CurrentReservation " + std::to_string(reserved.reservation) + " does not reflect the " + std::to_string(amount) +
-                     " byte reservation");
+        problems.add("SetVideoMemoryReservation(local, " + std::to_string(amount) + " = AvailableForReservation) returned 0x" +
+                     Text::hex(static_cast<std::uint32_t>(accepted), 8) + " but CurrentReservation reads " + std::to_string(reserved.reservation));
     }
     static_cast<void>(DxgiBudget::set_reservation(adapter.luid, true, 0));
     const long rejected = DxgiBudget::set_reservation(adapter.luid, true, memory.available_for_reservation * 2 + (1ull << 30));
@@ -174,8 +181,7 @@ Outcome BudgetChecks::opencl_free_memory(Context& context) {
     bool exposed = false;
     const std::uint64_t before_kb = backend.free_memory_kb(exposed);
     if (!exposed) {
-        context.note("the free-memory query is not exposed and is consistently refused");
-        return Outcome::ok();
+        return Context::skip("cl_amd_device_attribute_query (free memory) is not advertised by the device");
     }
     std::uint64_t during_kb = 0;
     {

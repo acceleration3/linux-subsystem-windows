@@ -3,6 +3,7 @@
 #include "core/child_mode.hpp"
 #include "core/text.hpp"
 #include "support/api_loop.hpp"
+#include "support/api_policy.hpp"
 #include "support/child_runs.hpp"
 #include "support/d3d11_textures.hpp"
 #include "support/d3d12_backend.hpp"
@@ -64,7 +65,7 @@ Outcome LeakChecks::textures_all_apis(Context& context) {
     if (!pick(adapter, error)) {
         return Outcome::fail(error);
     }
-    {
+    if (!ApiPolicy::is_skipped("d3d11")) {
         D3d11Device device;
         if (!device.create(adapter.luid, error)) {
             problems.add(error);
@@ -85,7 +86,7 @@ Outcome LeakChecks::textures_all_apis(Context& context) {
             });
         }
     }
-    {
+    if (!ApiPolicy::is_skipped("d3d12")) {
         D3d12Backend backend;
         if (!backend.init(adapter.luid, error)) {
             problems.add(error);
@@ -115,7 +116,7 @@ Outcome LeakChecks::textures_all_apis(Context& context) {
             });
         }
     }
-    {
+    if (!ApiPolicy::is_skipped("d3d9")) {
         D3d9Backend backend;
         if (!backend.init(adapter.luid, error)) {
             problems.add(error);
@@ -131,7 +132,7 @@ Outcome LeakChecks::textures_all_apis(Context& context) {
             });
         }
     }
-    {
+    if (!ApiPolicy::is_skipped("gl")) {
         TestWindow window;
         OpenGlContext gl;
         if (!window.create({}, error) || !gl.create(window.dc(), error)) {
@@ -171,7 +172,7 @@ Outcome LeakChecks::views_and_samplers(Context& context) {
     if (!pick(adapter, error)) {
         return Outcome::fail(error);
     }
-    {
+    if (!ApiPolicy::is_skipped("d3d11")) {
         D3d11Device device;
         HRESULT result = S_OK;
         if (!device.create(adapter.luid, error)) {
@@ -202,7 +203,7 @@ Outcome LeakChecks::views_and_samplers(Context& context) {
             problems.add("creating the view texture failed");
         }
     }
-    {
+    if (!ApiPolicy::is_skipped("d3d12")) {
         D3d12Backend backend;
         if (!backend.init(adapter.luid, error)) {
             problems.add(error);
@@ -227,7 +228,7 @@ Outcome LeakChecks::views_and_samplers(Context& context) {
             });
         }
     }
-    {
+    if (!ApiPolicy::is_skipped("gl")) {
         TestWindow window;
         OpenGlContext gl;
         if (window.create({}, error) && gl.create(window.dc(), error)) {
@@ -261,7 +262,7 @@ Outcome LeakChecks::shaders_pipelines(Context& context) {
     if (!pick(adapter, error)) {
         return Outcome::fail(error);
     }
-    {
+    if (!ApiPolicy::is_skipped("d3d11")) {
         D3d11Device device;
         DynLibrary compiler;
         using Compile = HRESULT(WINAPI*)(const void*, SIZE_T, const char*, const D3D_SHADER_MACRO*, ID3DInclude*, const char*, const char*,
@@ -307,7 +308,7 @@ Outcome LeakChecks::shaders_pipelines(Context& context) {
             problems.add(error);
         }
     }
-    {
+    if (!ApiPolicy::is_skipped("gl")) {
         TestWindow window;
         OpenGlContext gl;
         if (window.create({}, error) && gl.create(window.dc(), error)) {
@@ -366,7 +367,7 @@ Outcome LeakChecks::contexts_devices(Context& context) {
             problems.add(api + ": a new device cannot be created after the loop: " + error);
         }
     }
-    {
+    if (!ApiPolicy::is_skipped("d3d11")) {
         D3d11Device device;
         TestWindow window;
         if (device.create(adapter.luid, error) && window.create({}, error)) {
@@ -411,7 +412,7 @@ Outcome LeakChecks::sync_objects(Context& context) {
     if (!pick(adapter, error)) {
         return Outcome::fail(error);
     }
-    {
+    if (!ApiPolicy::is_skipped("d3d11")) {
         D3d11Device device;
         if (device.create(adapter.luid, error)) {
             LeakLoop::run(context, problems, "d3d11.queries", adapter.luid, kCount, [&](int, std::string& detail) {
@@ -430,7 +431,7 @@ Outcome LeakChecks::sync_objects(Context& context) {
             problems.add(error);
         }
     }
-    {
+    if (!ApiPolicy::is_skipped("d3d12")) {
         D3d12Backend backend;
         if (backend.init(adapter.luid, error)) {
             LeakLoop::run(context, problems, "d3d12.fences", adapter.luid, kCount, [&](int i, std::string& detail) {
@@ -452,7 +453,7 @@ Outcome LeakChecks::sync_objects(Context& context) {
             problems.add(error);
         }
     }
-    {
+    if (!ApiPolicy::is_skipped("gl")) {
         TestWindow window;
         OpenGlContext gl;
         if (window.create({}, error) && gl.create(window.dc(), error)) {

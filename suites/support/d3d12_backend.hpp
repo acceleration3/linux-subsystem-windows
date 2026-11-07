@@ -4,6 +4,7 @@
 #include "support/gpu_backend.hpp"
 
 #include <memory>
+#include <vector>
 
 namespace lsw::suites {
 class D3d12Backend : public GpuBackend {
@@ -49,6 +50,13 @@ public:
     [[nodiscard]] bool make_resident(GpuBuffer& buffer, std::string& error);
 
     [[nodiscard]] std::unique_ptr<GpuBuffer> open_shared(HANDLE handle, std::uint64_t size, std::string& error);
+
+    [[nodiscard]] ID3D12Resource* open_shared_raw(HANDLE handle, std::string& error);
+
+    [[nodiscard]] bool read_texture(ID3D12Resource* texture, UINT width, UINT height, UINT bytes_per_pixel,
+                                    std::vector<std::uint8_t>& tight, std::string& error);
+
+    void drain();
 
     [[nodiscard]] D3d12Device& shared() { return *device_; }
 
