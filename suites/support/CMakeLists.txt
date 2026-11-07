@@ -19,6 +19,17 @@ add_library(suite_support OBJECT
     d3d9_backend.cpp
     dxgi_budget.cpp
     gl_backend.cpp
+    gl_api.cpp
+    gl_context.cpp
+    gl_fetch.cpp
+    gl_library.cpp
+    gl_program.cpp
+    gl_rig.cpp
+    gl_satellite.cpp
+    gl_scene.cpp
+    gl_target.cpp
+    gl_tools.cpp
+    wgl_api.cpp
     gpu_backends.cpp
     opencl_backend.cpp
     process_sampler.cpp

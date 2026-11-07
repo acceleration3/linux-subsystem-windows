@@ -1,5 +1,10 @@
 add_library(suite_sanity OBJECT
     sanity.cpp
+    gl/format_checks.cpp
+    gl/context_checks.cpp
+    gl/thread_checks.cpp
+    gl/buffer_checks.cpp
+    gl/texture_checks.cpp
     dxgi/enum_checks.cpp
     dxgi/swap_checks.cpp
     dxgi/mem_checks.cpp

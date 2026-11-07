@@ -47,6 +47,11 @@
 #include "sanity/dxgi/enum_checks.hpp"
 #include "sanity/dxgi/swap_checks.hpp"
 #include "sanity/dxgi/mem_checks.hpp"
+#include "sanity/gl/context_checks.hpp"
+#include "sanity/gl/format_checks.hpp"
+#include "sanity/gl/thread_checks.hpp"
+#include "sanity/gl/buffer_checks.hpp"
+#include "sanity/gl/texture_checks.hpp"
 #include "sanity/env/display_checks.hpp"
 #include "sanity/env/icd_checks.hpp"
 #include "sanity/env/install_checks.hpp"
@@ -347,6 +352,38 @@ void add(Registry& registry) {
     guarded(suite, {"sanity.dxgi.debug.no_messages", {"dxgi", "d3d11", "present"}, false, 60, dxgi::MemChecks::debug_no_messages});
     guarded(suite, {"sanity.dxgi.device.removal_events", {"dxgi", "d3d11", "d3d12", "slow"}, false, 60, dxgi::MemChecks::removal_events});
     guarded(suite, {"sanity.dxgi.present.duplication_visible", {"dxgi", "d3d11", "present"}, false, 60, dxgi::MemChecks::duplication_visible});
+    guarded(suite, {"sanity.gl.pixelformat.enumerate_choosable", {"gl"}, false, 120, gl::FormatChecks::enumerate_choosable});
+    guarded(suite, {"sanity.gl.pixelformat.every_format_renders", {"gl"}, false, 180, gl::FormatChecks::every_format_renders});
+    guarded(suite, {"sanity.gl.pixelformat.choose_matches_request", {"gl"}, false, 60, gl::FormatChecks::choose_matches_request});
+    guarded(suite, {"sanity.gl.pixelformat.arb_attribs_agree_with_describe", {"gl"}, false, 60, gl::FormatChecks::arb_attribs_agree_with_describe});
+    guarded(suite, {"sanity.gl.pixelformat.set_twice_fails", {"gl"}, false, 60, gl::FormatChecks::set_twice_fails});
+    guarded(suite, {"sanity.gl.pixelformat.srgb_and_float", {"gl", "formats"}, false, 90, gl::FormatChecks::srgb_and_float});
+    guarded(suite, {"sanity.gl.context.legacy_create", {"gl"}, false, 60, gl::ContextChecks::legacy_create});
+    guarded(suite, {"sanity.gl.context.arb_version_profile", {"gl"}, false, 120, gl::ContextChecks::arb_version_profile});
+    guarded(suite, {"sanity.gl.context.flags_granted_or_error", {"gl"}, false, 60, gl::ContextChecks::flags_granted_or_error});
+    guarded(suite, {"sanity.gl.context.robustness_reset", {"gl"}, false, 60, gl::ContextChecks::robustness_reset});
+    guarded(suite, {"sanity.gl.context.no_error", {"gl"}, false, 60, gl::ContextChecks::no_error});
+    guarded(suite, {"sanity.gl.context.share_lists", {"gl"}, false, 60, gl::ContextChecks::share_lists});
+    guarded(suite, {"sanity.gl.context.non_shared_isolation", {"gl"}, false, 60, gl::ContextChecks::non_shared_isolation});
+    guarded(suite, {"sanity.gl.context.share_across_threads", {"gl"}, false, 90, gl::ThreadChecks::share_across_threads});
+    guarded(suite, {"sanity.gl.context.make_current_rules", {"gl"}, false, 60, gl::ThreadChecks::make_current_rules});
+    guarded(suite, {"sanity.gl.context.many_contexts", {"gl", "slow"}, false, 240, gl::ContextChecks::many_contexts});
+    guarded(suite, {"sanity.gl.thread.concurrent_contexts", {"gl"}, false, 90, gl::ThreadChecks::concurrent_contexts});
+    guarded(suite, {"sanity.gl.thread.producer_consumer", {"gl"}, false, 120, gl::ThreadChecks::producer_consumer});
+    guarded(suite, {"sanity.gl.texture.all_targets_roundtrip", {"gl", "formats"}, false, 90, gl::TextureChecks::all_targets_roundtrip});
+    guarded(suite, {"sanity.gl.texture.compressed_formats", {"gl", "formats"}, false, 120, gl::TextureChecks::compressed_formats});
+    guarded(suite, {"sanity.gl.texture.generate_mipmap", {"gl"}, false, 90, gl::TextureChecks::generate_mipmap});
+    guarded(suite, {"sanity.gl.texture.views", {"gl"}, false, 60, gl::TextureChecks::views});
+    guarded(suite, {"sanity.gl.texture.immutable_storage", {"gl"}, false, 60, gl::TextureChecks::immutable_storage});
+    guarded(suite, {"sanity.gl.texture.max_size_limits", {"gl"}, false, 60, gl::TextureChecks::max_size_limits});
+    guarded(suite, {"sanity.gl.buffer.storage_flag_matrix", {"gl"}, false, 90, gl::BufferChecks::storage_flag_matrix});
+    guarded(suite, {"sanity.gl.buffer.persistent_coherent_gpu_write", {"gl"}, false, 90, gl::BufferChecks::persistent_coherent_gpu_write});
+    guarded(suite, {"sanity.gl.buffer.persistent_noncoherent_flush", {"gl"}, false, 90, gl::BufferChecks::persistent_noncoherent_flush});
+    guarded(suite, {"sanity.gl.buffer.dynamic_storage_subdata", {"gl"}, false, 60, gl::BufferChecks::dynamic_storage_subdata});
+    guarded(suite, {"sanity.gl.buffer.map_range_flags", {"gl"}, false, 60, gl::BufferChecks::map_range_flags});
+    guarded(suite, {"sanity.gl.buffer.map_errors", {"gl"}, false, 60, gl::BufferChecks::map_errors});
+    guarded(suite, {"sanity.gl.buffer.copy_and_clear", {"gl", "mem", "slow"}, false, 180, gl::BufferChecks::copy_and_clear});
+    guarded(suite, {"sanity.gl.buffer.pbo_pack_unpack", {"gl", "formats"}, false, 120, gl::BufferChecks::pbo_pack_unpack});
 }
 
 }  // namespace lsw::suites::sanity
