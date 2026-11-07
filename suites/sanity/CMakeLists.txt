@@ -27,6 +27,8 @@ add_library(suite_sanity OBJECT
     gl/ext_checks.cpp
     vk/kit.cpp
     vk/instance_checks.cpp
+    vk/memory_checks.cpp
+    vk/resource_checks.cpp
     dxgi/enum_checks.cpp
     dxgi/swap_checks.cpp
     dxgi/mem_checks.cpp

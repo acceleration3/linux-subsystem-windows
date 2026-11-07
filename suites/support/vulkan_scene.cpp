@@ -226,7 +226,9 @@ VkResult VulkanScene::build_pipeline() {
         return VK_SUCCESS;
     };
     const bool point = options_.kind == SceneKind::Point;
-    result = add_stage(VK_SHADER_STAGE_VERTEX_BIT, point ? VulkanShader::PointVert : VulkanShader::RectVert);
+    result = add_stage(VK_SHADER_STAGE_VERTEX_BIT, point ? VulkanShader::PointVert
+                       : options_.kind == SceneKind::Vertex ? VulkanShader::VertexInput
+                                                            : VulkanShader::RectVert);
     if (result == VK_SUCCESS && options_.kind == SceneKind::Tessellation) {
         result = add_stage(VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT, VulkanShader::TessControl);
         if (result == VK_SUCCESS) {
@@ -242,12 +244,21 @@ VkResult VulkanScene::build_pipeline() {
     if (result != VK_SUCCESS) {
         return result;
     }
+    const VkVertexInputBindingDescription binding{0, 8, VK_VERTEX_INPUT_RATE_VERTEX};
+    const VkVertexInputAttributeDescription attribute{0, 0, VK_FORMAT_R32G32_SFLOAT, 0};
     VkPipelineVertexInputStateCreateInfo vertex_input{};
     vertex_input.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+    if (options_.kind == SceneKind::Vertex) {
+        vertex_input.vertexBindingDescriptionCount = 1;
+        vertex_input.pVertexBindingDescriptions = &binding;
+        vertex_input.vertexAttributeDescriptionCount = 1;
+        vertex_input.pVertexAttributeDescriptions = &attribute;
+    }
     VkPipelineInputAssemblyStateCreateInfo assembly{};
     assembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
     switch (options_.kind) {
         case SceneKind::Rect:
+        case SceneKind::Vertex:
             assembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
             break;
         case SceneKind::Geometry:
@@ -354,7 +365,24 @@ void VulkanScene::draw_all(VkCommandBuffer commands, const std::vector<SceneRect
         std::memcpy(push.color, rect.color, sizeof(push.color));
         push.depth = rect.depth;
         rig_->fn.vkCmdPushConstants(commands, layout_.get(), push_stages_, 0, kPushSize, &push);
-        rig_->fn.vkCmdDraw(commands, vertices, 1, 0, 0);
+        if (options_.kind != SceneKind::Vertex) {
+            rig_->fn.vkCmdDraw(commands, vertices, 1, 0, 0);
+            continue;
+        }
+        const VkDeviceSize zero = 0;
+        rig_->fn.vkCmdBindVertexBuffers(commands, 0, 1, &options_.vertex_buffer, &zero);
+        if (options_.draw == SceneDraw::Direct) {
+            rig_->fn.vkCmdDraw(commands, 4, 1, 0, 0);
+        } else if (options_.draw == SceneDraw::Indirect) {
+            rig_->fn.vkCmdDrawIndirect(commands, options_.indirect_buffer, 0, 1, sizeof(VkDrawIndirectCommand));
+        } else {
+            rig_->fn.vkCmdBindIndexBuffer(commands, options_.index_buffer, 0, VK_INDEX_TYPE_UINT16);
+            if (options_.draw == SceneDraw::Indexed) {
+                rig_->fn.vkCmdDrawIndexed(commands, 4, 1, 0, 0, 0);
+            } else {
+                rig_->fn.vkCmdDrawIndexedIndirect(commands, options_.indirect_buffer, 0, 1, sizeof(VkDrawIndexedIndirectCommand));
+            }
+        }
     }
 }
 

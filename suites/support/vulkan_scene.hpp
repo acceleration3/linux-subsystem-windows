@@ -8,7 +8,9 @@
 #include <vector>
 
 namespace lsw::suites {
-enum class SceneKind { Rect, Geometry, Tessellation, Line, Point };
+enum class SceneKind { Rect, Geometry, Tessellation, Line, Point, Vertex };
+
+enum class SceneDraw { Direct, Indexed, Indirect, IndexedIndirect };
 
 struct SceneRect {
     float x0 = 0;
@@ -36,6 +38,10 @@ struct SceneOptions {
     VkCompareOp depth_op = VK_COMPARE_OP_LESS;
     float line_width = 1.0f;
     VkPipelineCache cache = VK_NULL_HANDLE;
+    SceneDraw draw = SceneDraw::Direct;
+    VkBuffer vertex_buffer = VK_NULL_HANDLE;
+    VkBuffer index_buffer = VK_NULL_HANDLE;
+    VkBuffer indirect_buffer = VK_NULL_HANDLE;
 };
 
 struct SceneResult {

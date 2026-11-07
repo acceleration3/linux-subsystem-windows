@@ -71,6 +71,8 @@
 #include "sanity/gl/swap_checks.hpp"
 #include "sanity/gl/ext_checks.hpp"
 #include "sanity/vk/instance_checks.hpp"
+#include "sanity/vk/memory_checks.hpp"
+#include "sanity/vk/resource_checks.hpp"
 #include "sanity/env/display_checks.hpp"
 #include "sanity/env/icd_checks.hpp"
 #include "sanity/env/install_checks.hpp"
@@ -467,6 +469,17 @@ void add(Registry& registry) {
     guarded(suite, {"sanity.vk.device.limits_minimums_honoured", {"vulkan"}, false, 120, vk::InstanceChecks::limits_minimums_honoured});
     guarded(suite, {"sanity.vk.device.queue_families", {"vulkan"}, false, 90, vk::InstanceChecks::queue_families});
     guarded(suite, {"sanity.vk.device.extensions_match_functions", {"vulkan"}, false, 90, vk::InstanceChecks::extensions_match_functions});
+    guarded(suite, {"sanity.vk.memory.every_type_allocates", {"vulkan", "mem"}, false, 120, vk::MemoryChecks::every_type_allocates});
+    guarded(suite, {"sanity.vk.memory.host_visible_map", {"vulkan", "mem"}, false, 90, vk::MemoryChecks::host_visible_map});
+    guarded(suite, {"sanity.vk.memory.host_coherent_no_flush", {"vulkan", "mem"}, false, 90, vk::MemoryChecks::host_coherent_no_flush});
+    guarded(suite, {"sanity.vk.memory.noncoherent_flush_invalidate", {"vulkan", "mem"}, false, 90, vk::MemoryChecks::noncoherent_flush_invalidate});
+    guarded(suite, {"sanity.vk.memory.device_local_and_budget", {"vulkan", "mem"}, true, 90, vk::MemoryChecks::device_local_and_budget});
+    guarded(suite, {"sanity.vk.memory.allocation_limits", {"vulkan", "mem", "slow", "exclusive", "host-hazard"}, true, 300, vk::MemoryChecks::allocation_limits});
+    guarded(suite, {"sanity.vk.memory.dedicated_and_aliasing", {"vulkan", "mem"}, false, 90, vk::MemoryChecks::dedicated_and_aliasing});
+    guarded(suite, {"sanity.vk.buffer.all_usages", {"vulkan"}, false, 90, vk::ResourceChecks::all_usages});
+    guarded(suite, {"sanity.vk.image.formats_features_usage", {"vulkan", "formats"}, false, 180, vk::ResourceChecks::formats_features_usage});
+    guarded(suite, {"sanity.vk.image.types_layers_mips", {"vulkan"}, false, 120, vk::ResourceChecks::types_layers_mips});
+    guarded(suite, {"sanity.vk.image.sparse_caps", {"vulkan"}, false, 90, vk::ResourceChecks::sparse_caps});
 }
 
 }  // namespace lsw::suites::sanity

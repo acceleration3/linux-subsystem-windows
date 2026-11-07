@@ -96,6 +96,29 @@ void VulkanCompute::write_buffer(std::uint32_t binding, VkBuffer buffer, VkDevic
     rig_->fn.vkUpdateDescriptorSets(rig_->device, 1, &write, 0, nullptr);
 }
 
+void VulkanCompute::write_texel(std::uint32_t binding, VkBufferView view) {
+    VkWriteDescriptorSet write{};
+    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    write.dstSet = set;
+    write.dstBinding = binding;
+    write.descriptorCount = 1;
+    write.descriptorType = bindings_[binding].type;
+    write.pTexelBufferView = &view;
+    rig_->fn.vkUpdateDescriptorSets(rig_->device, 1, &write, 0, nullptr);
+}
+
+void VulkanCompute::write_image(std::uint32_t binding, VkImageView view, VkSampler sampler, VkImageLayout image_layout) {
+    const VkDescriptorImageInfo info{sampler, view, image_layout};
+    VkWriteDescriptorSet write{};
+    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    write.dstSet = set;
+    write.dstBinding = binding;
+    write.descriptorCount = 1;
+    write.descriptorType = bindings_[binding].type;
+    write.pImageInfo = &info;
+    rig_->fn.vkUpdateDescriptorSets(rig_->device, 1, &write, 0, nullptr);
+}
+
 void VulkanCompute::bind(VkCommandBuffer commands) const {
     rig_->fn.vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline.get());
     if (set != VK_NULL_HANDLE) {

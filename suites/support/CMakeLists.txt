@@ -68,6 +68,7 @@ add_library(suite_support OBJECT
     vulkan_buffer.cpp
     vulkan_compute.cpp
     vulkan_extension_table.cpp
+    vulkan_formats.cpp
     vulkan_image.cpp
     vulkan_image_io.cpp
     vulkan_rig.cpp

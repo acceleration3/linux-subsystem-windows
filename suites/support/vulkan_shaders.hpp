@@ -16,7 +16,12 @@ enum class VulkanShader {
     Rect2Frag,
     RectGeom,
     TessControl,
-    TessEval
+    TessEval,
+    Texel,
+    Sample,
+    StoreUint,
+    StoreRgba,
+    VertexInput
 };
 
 class VulkanShaders {

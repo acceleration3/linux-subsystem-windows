@@ -17,6 +17,10 @@ public:
     void write_buffer(std::uint32_t binding, VkBuffer buffer, VkDeviceSize offset = 0, VkDeviceSize range = VK_WHOLE_SIZE,
                       std::uint32_t element = 0);
 
+    void write_texel(std::uint32_t binding, VkBufferView view);
+
+    void write_image(std::uint32_t binding, VkImageView view, VkSampler sampler, VkImageLayout image_layout);
+
     void bind(VkCommandBuffer commands) const;
 
     void push(VkCommandBuffer commands, const void* data, std::uint32_t size) const;

@@ -70,6 +70,11 @@ public:
 
     [[nodiscard]] static std::uint64_t device_local_budget(VulkanRig& rig);
 
+    [[nodiscard]] static std::uint32_t buffer_type_bits(VulkanRig& rig, VkDeviceSize size, VkBufferUsageFlags usage);
+
+    [[nodiscard]] static std::uint32_t image_type_bits(VulkanRig& rig, VkFormat format, std::uint32_t width, std::uint32_t height,
+                                                      VkImageUsageFlags usage);
+
     [[nodiscard]] static Outcome finish(const std::vector<std::string>& skips, const Problems& problems);
 };
 }  // namespace lsw::suites::sanity::vk

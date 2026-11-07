@@ -162,4 +162,42 @@ std::uint64_t Kit::device_local_budget(VulkanRig& rig) {
     return best;
 }
 
+std::uint32_t Kit::buffer_type_bits(VulkanRig& rig, VkDeviceSize size, VkBufferUsageFlags usage) {
+    VkBufferCreateInfo info{};
+    info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    info.size = size;
+    info.usage = usage;
+    info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    VulkanOwned<VkBuffer> buffer;
+    if (rig.make(buffer, rig.fn.vkCreateBuffer, rig.fn.vkDestroyBuffer, info) != VK_SUCCESS) {
+        return 0;
+    }
+    VkMemoryRequirements requirements{};
+    rig.fn.vkGetBufferMemoryRequirements(rig.device, buffer.get(), &requirements);
+    return requirements.memoryTypeBits;
+}
+
+std::uint32_t Kit::image_type_bits(VulkanRig& rig, VkFormat format, std::uint32_t width, std::uint32_t height,
+                                   VkImageUsageFlags usage) {
+    VulkanOwned<VkImage> image;
+    VkImageCreateInfo info{};
+    info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    info.imageType = VK_IMAGE_TYPE_2D;
+    info.format = format;
+    info.extent = {width, height, 1};
+    info.mipLevels = 1;
+    info.arrayLayers = 1;
+    info.samples = VK_SAMPLE_COUNT_1_BIT;
+    info.tiling = VK_IMAGE_TILING_OPTIMAL;
+    info.usage = usage;
+    info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    if (rig.make(image, rig.fn.vkCreateImage, rig.fn.vkDestroyImage, info) != VK_SUCCESS) {
+        return 0;
+    }
+    VkMemoryRequirements requirements{};
+    rig.fn.vkGetImageMemoryRequirements(rig.device, image.get(), &requirements);
+    return requirements.memoryTypeBits;
+}
+
 }  // namespace lsw::suites::sanity::vk
