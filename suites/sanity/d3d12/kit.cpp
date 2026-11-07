@@ -170,10 +170,6 @@ std::uint64_t Kit::host_budget(D3d12Rig& rig) {
     return DxgiBudget::query(rig.luid, false, memory, error) ? memory.budget : 0;
 }
 
-bool Kit::hazard_allowed() {
-    return std::getenv("LSW_SUITES_ALLOW_HOST_HAZARD") != nullptr;
-}
-
 D3D12_RESOURCE_BINDING_TIER Kit::binding_tier(D3d12Rig& rig) {
     D3D12_FEATURE_DATA_D3D12_OPTIONS options{};
     static_cast<void>(D3d12Tools::feature(rig.device(), D3D12_FEATURE_D3D12_OPTIONS, options));

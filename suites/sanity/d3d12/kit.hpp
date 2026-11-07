@@ -60,7 +60,6 @@ public:
 
     [[nodiscard]] static std::uint64_t host_budget(D3d12Rig& rig);
 
-    [[nodiscard]] static bool hazard_allowed();
 
     [[nodiscard]] static D3D12_RESOURCE_BINDING_TIER binding_tier(D3d12Rig& rig);
 

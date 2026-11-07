@@ -106,10 +106,6 @@ Outcome ResidChecks::make_evict(Context& context) {
         } else {
             context.note("ID3D12Device1 is not exposed; SetResidencyPriority is not exercised");
         }
-        if (!Kit::hazard_allowed()) {
-            context.note("host-unsafe part skipped: MakeResident beyond the budget; set LSW_SUITES_ALLOW_HOST_HAZARD=1");
-            return {};
-        }
         const UINT64 budget = Kit::device_local_budget(rig);
         if (budget < 1024 * kMiB) {
             context.note("the budget is unknown or below 1 GiB; MakeResident beyond the budget is not exercised");

@@ -152,12 +152,8 @@ void guarded(Suite& suite, Check check) {
             }
         }
     }
-    const bool hazard = std::find(check.tags.begin(), check.tags.end(), "host-hazard") != check.tags.end();
     std::function<Outcome(Context&)> inner = check.run;
-    check.run = [apis, inner, hazard](Context& context) {
-        if (hazard && std::getenv("LSW_SUITES_ALLOW_HOST_HAZARD") == nullptr) {
-            return Context::skip("host-unsafe; set LSW_SUITES_ALLOW_HOST_HAZARD=1");
-        }
+    check.run = [apis, inner](Context& context) {
         std::vector<std::string> excluded;
         for (const std::string& api : apis) {
             if (ApiPolicy::is_skipped(api)) {
@@ -270,7 +266,7 @@ void add(Registry& registry) {
     guarded(suite, {"sanity.data.load.memory_pressure_guest", {"data", "exclusive", "slow"}, true, 180, data::LoadChecks::memory_pressure_guest});
     guarded(suite, {"sanity.data.load.sustained_30s", {"data", "exclusive", "slow"}, true, 180, data::LoadChecks::sustained_30s});
     guarded(suite, {"sanity.mem.limit.allocate_up_to_reported", {"mem", "d3d11", "d3d12", "vulkan", "opencl", "slow", "exclusive"}, true, 300, memory::LimitChecks::allocate_up_to_reported});
-    guarded(suite, {"sanity.mem.limit.fail_beyond_reported", {"mem", "d3d12", "vulkan", "opencl", "exclusive", "host-hazard"}, true, 120, memory::LimitChecks::fail_beyond_reported});
+    guarded(suite, {"sanity.mem.limit.fail_beyond_reported", {"mem", "d3d12", "vulkan", "opencl", "exclusive"}, true, 120, memory::LimitChecks::fail_beyond_reported});
     guarded(suite, {"sanity.mem.limit.single_allocation_max", {"mem", "vulkan", "opencl"}, false, 180, memory::LimitChecks::single_allocation_max});
     guarded(suite, {"sanity.mem.limit.zero_size", {"mem", "d3d9", "d3d11", "d3d12", "gl", "vulkan", "opencl"}, false, 120, memory::LimitChecks::zero_size});
     guarded(suite, {"sanity.mem.limit.after_failure_usable", {"mem", "d3d11", "d3d12", "vulkan", "opencl"}, false, 120, memory::LimitChecks::after_failure_usable});
@@ -288,7 +284,7 @@ void add(Registry& registry) {
     guarded(suite, {"sanity.mem.leak.sync_objects", {"mem", "leak", "d3d11", "d3d12", "gl", "slow"}, false, 300, memory::LeakChecks::sync_objects});
     guarded(suite, {"sanity.mem.leak.shared_resources", {"mem", "leak", "d3d11", "interop", "slow"}, false, 300, memory::LeakChecks::shared_resources});
     guarded(suite, {"sanity.mem.leak.process_exit_releases", {"mem", "leak", "d3d11", "d3d12", "vulkan", "opencl", "slow"}, false, 300, memory::LeakChecks::process_exit_releases});
-    guarded(suite, {"sanity.mem.evict.contents_survive_pressure", {"mem", "d3d11", "d3d12", "vulkan", "opencl", "slow", "exclusive", "host-hazard"}, true, 300, memory::EvictMapChecks::contents_survive_pressure});
+    guarded(suite, {"sanity.mem.evict.contents_survive_pressure", {"mem", "d3d11", "d3d12", "vulkan", "opencl", "slow", "exclusive"}, true, 300, memory::EvictMapChecks::contents_survive_pressure});
     guarded(suite, {"sanity.mem.evict.make_resident_semantics", {"mem", "d3d12", "exclusive"}, true, 180, memory::EvictMapChecks::make_resident_semantics});
     guarded(suite, {"sanity.mem.map.pointer_valid_until_unmap", {"mem", "vulkan", "d3d12", "gl"}, false, 180, memory::EvictMapChecks::pointer_valid_until_unmap});
     guarded(suite, {"sanity.mem.map.unmap_flushes", {"mem", "d3d11", "d3d12", "vulkan", "opencl", "gl"}, false, 120, memory::EvictMapChecks::unmap_flushes});
@@ -315,7 +311,7 @@ void add(Registry& registry) {
     guarded(suite, {"sanity.d3d9.res.managed_roundtrip", {"d3d9", "mem"}, false, 120, d3d9::ResChecks::managed_roundtrip});
     guarded(suite, {"sanity.d3d9.res.priority_and_lod", {"d3d9"}, false, 60, d3d9::ResChecks::priority_and_lod});
     guarded(suite, {"sanity.d3d9.res.autogenmipmap", {"d3d9"}, false, 60, d3d9::ResChecks::autogenmipmap});
-    guarded(suite, {"sanity.d3d9.res.exhaustion", {"d3d9", "mem", "slow", "exclusive", "host-hazard"}, true, 300, d3d9::ResChecks::exhaustion});
+    guarded(suite, {"sanity.d3d9.res.exhaustion", {"d3d9", "mem", "slow", "exclusive"}, true, 300, d3d9::ResChecks::exhaustion});
     guarded(suite, {"sanity.d3d9.lock.discard_fresh", {"d3d9"}, false, 60, d3d9::LockChecks::discard_fresh});
     guarded(suite, {"sanity.d3d9.lock.nooverwrite_inflight", {"d3d9"}, false, 60, d3d9::LockChecks::nooverwrite_inflight});
     guarded(suite, {"sanity.d3d9.lock.readonly_and_partial", {"d3d9"}, false, 60, d3d9::LockChecks::readonly_and_partial});
@@ -353,7 +349,7 @@ void add(Registry& registry) {
     guarded(suite, {"sanity.d3d11.res.immutable_initial", {"d3d11"}, false, 60, d3d11::ResChecks::immutable_initial});
     guarded(suite, {"sanity.d3d11.res.views_matrix", {"d3d11"}, false, 120, d3d11::ResChecks::views_matrix});
     guarded(suite, {"sanity.d3d11.res.sizes_extremes", {"d3d11"}, false, 120, d3d11::ResChecks::sizes_extremes});
-    guarded(suite, {"sanity.d3d11.res.exhaustion_and_reclaim", {"d3d11", "mem", "slow", "exclusive", "host-hazard"}, true, 300, d3d11::ResChecks::exhaustion_and_reclaim});
+    guarded(suite, {"sanity.d3d11.res.exhaustion_and_reclaim", {"d3d11", "mem", "slow", "exclusive"}, true, 300, d3d11::ResChecks::exhaustion_and_reclaim});
     guarded(suite, {"sanity.d3d11.res.exit_reclaim", {"d3d11", "mem", "slow"}, false, 300, d3d11::ResChecks::exit_reclaim});
     guarded(suite, {"sanity.d3d11.map.read_last_write", {"d3d11"}, false, 60, d3d11::MapChecks::read_last_write});
     guarded(suite, {"sanity.d3d11.map.discard_old_draws", {"d3d11"}, false, 60, d3d11::MapChecks::discard_old_draws});
@@ -407,7 +403,7 @@ void add(Registry& registry) {
     guarded(suite, {"sanity.d3d11.ifaces.d3d11_2_3_4", {"d3d11"}, false, 90, d3d11::TiledChecks::d3d11_2_3_4});
     guarded(suite, {"sanity.d3d11.ifaces.on12", {"d3d11", "d3d12", "interop"}, false, 90, d3d11::TiledChecks::on12});
     guarded(suite, {"sanity.d3d11.err.bad_parameters", {"d3d11"}, false, 60, d3d11::ErrChecks::bad_parameters});
-    guarded(suite, {"sanity.d3d11.err.device_removed", {"d3d11", "exclusive", "host-hazard"}, true, 120, d3d11::ErrChecks::device_removed});
+    guarded(suite, {"sanity.d3d11.err.device_removed", {"d3d11", "exclusive"}, true, 120, d3d11::ErrChecks::device_removed});
     guarded(suite, {"sanity.d3d11.err.stress_destroy", {"d3d11", "mem", "leak", "slow"}, false, 300, d3d11::ErrChecks::stress_destroy});
     guarded(suite, {"sanity.dxgi.enum.adapters_consistent", {"dxgi"}, false, 60, dxgi::EnumChecks::adapters_consistent});
     guarded(suite, {"sanity.dxgi.enum.factory_lifecycle", {"dxgi"}, false, 60, dxgi::EnumChecks::factory_lifecycle});
@@ -537,7 +533,7 @@ void add(Registry& registry) {
     guarded(suite, {"sanity.d3d12.heap.reserved_tiles", {"d3d12", "tiled"}, false, 90, d3d12::HeapChecks::reserved_tiles});
     guarded(suite, {"sanity.d3d12.heap.committed_flags", {"d3d12"}, false, 90, d3d12::HeapChecks::committed_flags});
     guarded(suite, {"sanity.d3d12.heap.zeroed_new", {"d3d12", "mem"}, false, 180, d3d12::HeapChecks::zeroed_new});
-    guarded(suite, {"sanity.d3d12.heap.exhaustion", {"d3d12", "mem", "slow", "exclusive", "host-hazard"}, true, 300, d3d12::HeapChecks::exhaustion});
+    guarded(suite, {"sanity.d3d12.heap.exhaustion", {"d3d12", "mem", "slow", "exclusive"}, true, 300, d3d12::HeapChecks::exhaustion});
     guarded(suite, {"sanity.d3d12.map.persistent", {"d3d12", "mem"}, false, 90, d3d12::MapChecks::persistent});
     guarded(suite, {"sanity.d3d12.map.upload_visible", {"d3d12"}, false, 90, d3d12::MapChecks::upload_visible});
     guarded(suite, {"sanity.d3d12.map.readback_after_fence", {"d3d12"}, false, 90, d3d12::MapChecks::readback_after_fence});
@@ -546,7 +542,7 @@ void add(Registry& registry) {
     guarded(suite, {"sanity.d3d12.queue.types", {"d3d12", "compute"}, false, 90, d3d12::QueueChecks::types});
     guarded(suite, {"sanity.d3d12.queue.many_lists", {"d3d12"}, false, 90, d3d12::QueueChecks::many_lists});
     guarded(suite, {"sanity.d3d12.fence.cross_queue", {"d3d12", "compute"}, false, 90, d3d12::FenceChecks::cross_queue});
-    guarded(suite, {"sanity.d3d12.fence.cpu_semantics", {"d3d12", "host-hazard"}, false, 180, d3d12::FenceChecks::cpu_semantics});
+    guarded(suite, {"sanity.d3d12.fence.cpu_semantics", {"d3d12"}, false, 180, d3d12::FenceChecks::cpu_semantics});
     guarded(suite, {"sanity.d3d12.fence.shared", {"d3d12", "interop"}, false, 240, d3d12::FenceChecks::shared});
     guarded(suite, {"sanity.d3d12.barrier.transition_uav", {"d3d12", "compute"}, false, 90, d3d12::BarrierChecks::transition_uav});
     guarded(suite, {"sanity.d3d12.barrier.enhanced", {"d3d12", "compute"}, false, 90, d3d12::BarrierChecks::enhanced});
@@ -563,7 +559,7 @@ void add(Registry& registry) {
     guarded(suite, {"sanity.d3d12.share.heap_resource_nt", {"d3d12", "interop"}, false, 240, d3d12::ShareChecks::heap_resource_nt});
     guarded(suite, {"sanity.d3d12.share.keyed_cross_api", {"d3d12", "interop"}, false, 120, d3d12::ShareChecks::keyed_cross_api});
     guarded(suite, {"sanity.d3d12.resid.make_evict", {"d3d12", "mem", "exclusive"}, true, 240, d3d12::ResidChecks::make_evict});
-    guarded(suite, {"sanity.d3d12.resid.budget_pressure", {"d3d12", "mem", "slow", "exclusive", "host-hazard"}, true, 300, d3d12::ResidChecks::budget_pressure});
+    guarded(suite, {"sanity.d3d12.resid.budget_pressure", {"d3d12", "mem", "slow", "exclusive"}, true, 300, d3d12::ResidChecks::budget_pressure});
     guarded(suite, {"sanity.d3d12.opt.raytracing", {"d3d12"}, false, 90, d3d12::OptChecks::raytracing});
     guarded(suite, {"sanity.d3d12.opt.mesh_shaders", {"d3d12"}, false, 60, d3d12::OptChecks::mesh_shaders});
     guarded(suite, {"sanity.d3d12.opt.vrs_sampler_feedback", {"d3d12"}, false, 90, d3d12::OptChecks::vrs_sampler_feedback});
@@ -581,7 +577,7 @@ void add(Registry& registry) {
     guarded(suite, {"sanity.vk.memory.host_coherent_no_flush", {"vulkan", "mem"}, false, 90, vk::MemoryChecks::host_coherent_no_flush});
     guarded(suite, {"sanity.vk.memory.noncoherent_flush_invalidate", {"vulkan", "mem"}, false, 90, vk::MemoryChecks::noncoherent_flush_invalidate});
     guarded(suite, {"sanity.vk.memory.device_local_and_budget", {"vulkan", "mem"}, true, 90, vk::MemoryChecks::device_local_and_budget});
-    guarded(suite, {"sanity.vk.memory.allocation_limits", {"vulkan", "mem", "slow", "exclusive", "host-hazard"}, true, 300, vk::MemoryChecks::allocation_limits});
+    guarded(suite, {"sanity.vk.memory.allocation_limits", {"vulkan", "mem", "slow", "exclusive"}, true, 300, vk::MemoryChecks::allocation_limits});
     guarded(suite, {"sanity.vk.memory.dedicated_and_aliasing", {"vulkan", "mem"}, false, 90, vk::MemoryChecks::dedicated_and_aliasing});
     guarded(suite, {"sanity.vk.buffer.all_usages", {"vulkan"}, false, 90, vk::ResourceChecks::all_usages});
     guarded(suite, {"sanity.vk.image.formats_features_usage", {"vulkan", "formats"}, false, 180, vk::ResourceChecks::formats_features_usage});
@@ -594,13 +590,13 @@ void add(Registry& registry) {
     guarded(suite, {"sanity.vk.descriptor.pools_templates_samplers", {"vulkan"}, false, 90, vk::ComputeChecks::pools_templates_samplers});
     guarded(suite, {"sanity.vk.graphics.vs_twin", {"vulkan", "msaa"}, false, 120, vk::GraphicsChecks::vs_twin});
     guarded(suite, {"sanity.vk.graphics.pipeline_features", {"vulkan"}, false, 120, vk::GraphicsChecks::pipeline_features});
-    guarded(suite, {"sanity.vk.sync.fences", {"vulkan", "host-hazard"}, false, 90, vk::SyncChecks::fences});
+    guarded(suite, {"sanity.vk.sync.fences", {"vulkan"}, false, 90, vk::SyncChecks::fences});
     guarded(suite, {"sanity.vk.sync.binary_semaphores", {"vulkan"}, false, 120, vk::SyncChecks::binary_semaphores});
     guarded(suite, {"sanity.vk.sync.timeline_semaphores", {"vulkan"}, false, 90, vk::SyncChecks::timeline_semaphores});
     guarded(suite, {"sanity.vk.sync.events_barriers", {"vulkan"}, false, 120, vk::SyncChecks::events_barriers});
     guarded(suite, {"sanity.vk.sync.memory_model", {"vulkan"}, false, 120, vk::SyncChecks::memory_model});
-    guarded(suite, {"sanity.vk.sync.submit2_and_wait_idle", {"vulkan", "host-hazard"}, false, 90, vk::SyncChecks::submit2_and_wait_idle});
-    guarded(suite, {"sanity.vk.query.timestamps", {"vulkan", "host-hazard"}, false, 90, vk::QueryChecks::timestamps});
+    guarded(suite, {"sanity.vk.sync.submit2_and_wait_idle", {"vulkan"}, false, 90, vk::SyncChecks::submit2_and_wait_idle});
+    guarded(suite, {"sanity.vk.query.timestamps", {"vulkan"}, false, 90, vk::QueryChecks::timestamps});
     guarded(suite, {"sanity.vk.cmd.buffers_reset_reuse", {"vulkan"}, false, 90, vk::QueryChecks::buffers_reset_reuse});
     guarded(suite, {"sanity.vk.wsi.surface_caps_consistent", {"vulkan", "present"}, true, 90, vk::WsiChecks::surface_caps_consistent});
     guarded(suite, {"sanity.vk.wsi.fifo_every_image_in_order", {"vulkan", "present", "dwm", "exclusive"}, true, 90, vk::WsiChecks::fifo_every_image_in_order});
@@ -631,7 +627,7 @@ void add(Registry& registry) {
     guarded(suite, {"sanity.shader.dxbc.sm4_sm5", {"shader", "d3d10", "d3d11", "d3d12"}, false, 180, shader::DxbcChecks::sm4_sm5});
     guarded(suite, {"sanity.shader.dxil.sm6", {"shader", "d3d12"}, false, 120, shader::DxilChecks::sm6});
     guarded(suite, {"sanity.shader.spirv.valid_runs", {"shader", "vulkan"}, false, 120, shader::SpirvChecks::valid_runs});
-    guarded(suite, {"sanity.shader.spirv.invalid_fails", {"shader", "vulkan", "host-hazard"}, false, 120, shader::SpirvChecks::invalid_fails});
+    guarded(suite, {"sanity.shader.spirv.invalid_fails", {"shader", "vulkan"}, false, 120, shader::SpirvChecks::invalid_fails});
     guarded(suite, {"sanity.shader.glsl.versions", {"shader", "gl"}, false, 120, shader::GlslChecks::versions});
     guarded(suite, {"sanity.shader.glsl.invalid_diagnostics", {"shader", "gl"}, false, 90, shader::GlslChecks::invalid_diagnostics});
     guarded(suite, {"sanity.shader.dxbc.invalid_diagnostics", {"shader", "d3d9", "d3d11", "d3d12"}, false, 120, shader::DxbcChecks::invalid_diagnostics});
@@ -712,11 +708,11 @@ void add(Registry& registry) {
     guarded(suite, {"sanity.present.timing.immediate_faster_than_refresh", {"present", "dwm", "d3d9", "d3d11", "d3d12", "gl", "vulkan", "exclusive"}, true, 300, present::TimingChecks::immediate_ordering});
     guarded(suite, {"sanity.present.timing.frame_latency_limits", {"present", "dwm", "dxgi", "d3d11", "exclusive"}, true, 120, present::TimingChecks::frame_latency_limits});
     guarded(suite, {"sanity.present.timing.present_stats_vs_capture", {"present", "dwm", "dxgi", "d3d9", "d3d11", "d3d12", "exclusive"}, true, 180, present::TimingChecks::present_stats_vs_capture});
-    guarded(suite, {"sanity.present.timing.high_refresh_rates", {"present", "dwm", "dxgi", "d3d11", "host-hazard", "exclusive"}, true, 300, present::TimingChecks::high_refresh_rates});
+    guarded(suite, {"sanity.present.timing.high_refresh_rates", {"present", "dwm", "dxgi", "d3d11", "exclusive"}, true, 300, present::TimingChecks::high_refresh_rates});
     guarded(suite, {"sanity.present.window.resize_during_presentation", {"present", "dwm", "d3d9", "d3d11", "d3d12", "gl", "vulkan", "exclusive"}, true, 300, present::WindowChecks::resize_during_presentation});
     guarded(suite, {"sanity.present.window.occlusion", {"present", "dwm", "d3d9", "d3d11", "d3d12", "exclusive"}, true, 180, present::WindowChecks::occlusion});
     guarded(suite, {"sanity.present.window.minimize_restore", {"present", "dwm", "d3d9", "d3d11", "d3d12", "gl", "vulkan", "exclusive"}, true, 300, present::WindowChecks::minimize_restore});
-    guarded(suite, {"sanity.present.window.fullscreen_exclusive", {"present", "dwm", "dxgi", "d3d11", "host-hazard", "exclusive"}, true, 120, present::WindowChecks::fullscreen_exclusive});
+    guarded(suite, {"sanity.present.window.fullscreen_exclusive", {"present", "dwm", "dxgi", "d3d11", "exclusive"}, true, 120, present::WindowChecks::fullscreen_exclusive});
     guarded(suite, {"sanity.present.window.borderless_fullscreen_flip", {"present", "dwm", "dxgi", "d3d11", "exclusive"}, true, 120, present::WindowChecks::borderless_fullscreen_flip});
     guarded(suite, {"sanity.present.window.many_windows", {"present", "dwm", "dxgi", "d3d11", "exclusive"}, true, 180, present::WindowChecks::many_windows});
     guarded(suite, {"sanity.present.window.many_processes", {"present", "dwm", "d3d9", "d3d11", "d3d12", "gl", "vulkan", "exclusive"}, true, 240, present::ProcessChecks::many_processes});
