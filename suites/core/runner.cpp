@@ -128,6 +128,7 @@ void Runner::execute(const std::vector<Planned>& plan, std::size_t begin, std::s
             result.tags = planned.check->tags;
             result.started = started;
             const std::lock_guard<std::mutex> lock(mutex_);
+            log_.append(result);
             results_[index] = std::move(result);
             done_[index] = true;
             flush_ready();
@@ -172,6 +173,13 @@ int Runner::run() {
     done_.assign(plan.size(), false);
     printed_ = 0;
     const std::string started = utc_now();
+    if (!options_.json.empty()) {
+        std::filesystem::path log_path = options_.json;
+        log_path.replace_filename("results.jsonl");
+        if (!log_.open(log_path)) {
+            std::fprintf(stderr, "%s: cannot write %s\n", ExeIdentity::name().c_str(), log_path.string().c_str());
+        }
+    }
     execute(plan, 0, free_end, jobs);
     execute(plan, free_end, exclusive_end, 1);
     execute(plan, exclusive_end, plan.size(), 1);

@@ -1,8 +1,27 @@
 #include "core/report_printer.hpp"
 
+#include <windows.h>
+#include <io.h>
+
 #include <sstream>
 
 namespace lsw::suites {
+
+namespace {
+
+void flush_stdout() {
+    std::fflush(stdout);
+    const intptr_t raw = _get_osfhandle(_fileno(stdout));
+    if (raw == -1) {
+        return;
+    }
+    const HANDLE handle = reinterpret_cast<HANDLE>(raw);
+    if (::GetFileType(handle) == FILE_TYPE_DISK) {
+        ::FlushFileBuffers(handle);
+    }
+}
+
+}  // namespace
 
 void ReportPrinter::print(const CheckResult& result) const {
     std::ostringstream out;
@@ -32,12 +51,12 @@ void ReportPrinter::print(const CheckResult& result) const {
         }
     }
     std::fputs(out.str().c_str(), stdout);
-    std::fflush(stdout);
+    flush_stdout();
 }
 
 void ReportPrinter::summary(int passed, int failed, int skipped) const {
     std::printf("%s: %d passed, %d failed, %d skipped\n", exe_.c_str(), passed, failed, skipped);
-    std::fflush(stdout);
+    flush_stdout();
 }
 
 }  // namespace lsw::suites

@@ -9,6 +9,7 @@ add_library(suite_core OBJECT
     options.cpp
     registry.cpp
     report_printer.cpp
+    result_log.cpp
     run_guard.cpp
     runner.cpp
     single_check.cpp

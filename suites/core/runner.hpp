@@ -4,6 +4,7 @@
 #include "core/options.hpp"
 #include "core/registry.hpp"
 #include "core/report_printer.hpp"
+#include "core/result_log.hpp"
 
 #include <mutex>
 #include <vector>
@@ -34,6 +35,7 @@ private:
     const Registry& registry_;
     const Options& options_;
     ReportPrinter printer_;
+    ResultLog log_;
     std::mutex mutex_;
     std::vector<CheckResult> results_;
     std::vector<bool> done_;
