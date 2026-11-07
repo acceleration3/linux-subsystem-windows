@@ -40,7 +40,7 @@ public:
                                                       HRESULT* result = nullptr);
 
     [[nodiscard]] static Com<ID3D10Texture2D> target(D3d10Device& device, UINT width, UINT height,
-                                                     DXGI_FORMAT format = DXGI_FORMAT_B8G8R8A8_UNORM);
+                                                     DXGI_FORMAT format = DXGI_FORMAT_R8G8B8A8_UNORM);
 
     [[nodiscard]] static Com<ID3D10RenderTargetView> rtv(D3d10Device& device, ID3D10Resource* resource);
 

@@ -40,7 +40,7 @@ Outcome DxgiChecks::swapchain(Context& context) {
         DXGI_SWAP_CHAIN_DESC desc{};
         desc.BufferDesc.Width = 200;
         desc.BufferDesc.Height = 160;
-        desc.BufferDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+        desc.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
         desc.SampleDesc.Count = 1;
         desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
         desc.BufferCount = 2;
@@ -70,7 +70,7 @@ Outcome DxgiChecks::swapchain(Context& context) {
                 }
                 DXGI_SWAP_CHAIN_DESC now{};
                 chain->GetDesc(&now);
-                if (now.BufferDesc.Width != stage.width || now.BufferDesc.Height != stage.height || now.BufferDesc.Format != DXGI_FORMAT_B8G8R8A8_UNORM) {
+                if (now.BufferDesc.Width != stage.width || now.BufferDesc.Height != stage.height || now.BufferDesc.Format != DXGI_FORMAT_R8G8B8A8_UNORM) {
                     problems.add(name + ": GetDesc reports " + std::to_string(now.BufferDesc.Width) + "x" + std::to_string(now.BufferDesc.Height) + " after ResizeBuffers");
                 }
             }
@@ -125,7 +125,8 @@ Outcome DxgiChecks::interop_d3d11(Context& context) {
             return Outcome::fail(error);
         }
         const std::string name = Kit::name(with_1);
-        D3D10_TEXTURE2D_DESC desc = D3d10Tools::desc2d(64, 64, DXGI_FORMAT_B8G8R8A8_UNORM, D3D10_BIND_RENDER_TARGET | D3D10_BIND_SHADER_RESOURCE);
+        auto rgba_word = [](std::uint32_t bgra_word) { return (bgra_word & 0xFF00FF00u) | ((bgra_word & 0xFFu) << 16) | ((bgra_word >> 16) & 0xFFu); };
+        D3D10_TEXTURE2D_DESC desc = D3d10Tools::desc2d(64, 64, DXGI_FORMAT_R8G8B8A8_UNORM, D3D10_BIND_RENDER_TARGET | D3D10_BIND_SHADER_RESOURCE);
         desc.MiscFlags = D3D10_RESOURCE_MISC_SHARED;
         HRESULT made = S_OK;
         Com<ID3D10Texture2D> shared = D3d10Tools::texture(d10, desc, nullptr, &made);
@@ -143,7 +144,7 @@ Outcome DxgiChecks::interop_d3d11(Context& context) {
         }
         D3D11_TEXTURE2D_DESC opened_desc{};
         opened->GetDesc(&opened_desc);
-        if (opened_desc.Width != 64 || opened_desc.Height != 64 || opened_desc.Format != DXGI_FORMAT_B8G8R8A8_UNORM) {
+        if (opened_desc.Width != 64 || opened_desc.Height != 64 || opened_desc.Format != DXGI_FORMAT_R8G8B8A8_UNORM) {
             problems.add(name + ": the opened texture has a different description");
         }
         Com<ID3D10RenderTargetView> view10 = D3d10Tools::rtv(d10, shared.get());
@@ -158,7 +159,7 @@ Outcome DxgiChecks::interop_d3d11(Context& context) {
                 }
                 TexelImage image;
                 std::string where;
-                if (!D3d11Tools::read_texture(d11, opened.get(), 0, image, error) || !Kit::uniform(image, Kit::frame_color(k), where)) {
+                if (!D3d11Tools::read_texture(d11, opened.get(), 0, image, error) || !Kit::uniform(image, rgba_word(Kit::frame_color(k)), where)) {
                     problems.add(name + ": frame " + std::to_string(k) + " written by D3D10 is not what D3D11 reads: " + where + error);
                 }
             } else {

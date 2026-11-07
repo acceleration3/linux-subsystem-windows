@@ -111,6 +111,10 @@ Com<ID3D10RenderTargetView> D3d10Tools::rtv(D3d10Device& device, ID3D10Resource*
 }
 
 bool D3d10Tools::read_texture(D3d10Device& device, ID3D10Texture2D* texture, TexelImage& out, std::string& error) {
+    if (texture == nullptr) {
+        error = "there is no texture to read back";
+        return false;
+    }
     D3D10_TEXTURE2D_DESC desc{};
     texture->GetDesc(&desc);
     D3D10_TEXTURE2D_DESC staging_desc = desc;
@@ -145,6 +149,11 @@ bool D3d10Tools::read_texture(D3d10Device& device, ID3D10Texture2D* texture, Tex
                     static_cast<const std::uint8_t*>(mapped.pData) + static_cast<std::size_t>(row) * mapped.RowPitch, out.row_bytes);
     }
     staging->Unmap(0);
+    if (desc.Format == DXGI_FORMAT_R8G8B8A8_UNORM) {
+        for (std::size_t i = 0; i + 3 < out.data.size(); i += 4) {
+            std::swap(out.data[i], out.data[i + 2]);
+        }
+    }
     return true;
 }
 

@@ -453,7 +453,7 @@ Outcome RenderChecks::map_contracts(Context& context) {
         Com<ID3D10Texture2D> heavy = D3d10Tools::target(d, 2048, 2048);
         Com<ID3D10RenderTargetView> view = D3d10Tools::rtv(d, heavy.get());
         Com<ID3D10Buffer> vb = D3d10Tools::buffer(d, sizeof(PositionColor) * 4, D3D10_USAGE_DEFAULT, D3D10_BIND_VERTEX_BUFFER, 0, 0, nullptr);
-        Com<ID3D10Texture2D> staging = D3d10Tools::texture(d, D3d10Tools::desc2d(2048, 2048, DXGI_FORMAT_B8G8R8A8_UNORM, 0, D3D10_USAGE_STAGING, D3D10_CPU_ACCESS_READ));
+        Com<ID3D10Texture2D> staging = D3d10Tools::texture(d, D3d10Tools::desc2d(2048, 2048, DXGI_FORMAT_R8G8B8A8_UNORM, 0, D3D10_USAGE_STAGING, D3D10_CPU_ACCESS_READ));
         if (!view || !vb || !staging) {
             return Outcome::fail("the DO_NOT_WAIT resources cannot be created");
         }
@@ -484,6 +484,7 @@ Outcome RenderChecks::map_contracts(Context& context) {
         } else {
             std::uint32_t first = 0;
             std::memcpy(&first, mapped.pData, 4);
+            first = (first & 0xFF00FF00u) | ((first & 0xFFu) << 16) | ((first >> 16) & 0xFFu);
             if (first != Kit::frame_color(119)) {
                 problems.add("Map(READ, DO_NOT_WAIT) succeeded with 0x" + Text::hex(first, 8) + " instead of the last frame 0x" + Text::hex(Kit::frame_color(119), 8));
             }

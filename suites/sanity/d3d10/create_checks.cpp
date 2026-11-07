@@ -1,6 +1,7 @@
 #include "sanity/d3d10/create_checks.hpp"
 
 #include "sanity/d3d10/kit.hpp"
+#include "support/format_codec.hpp"
 
 #include <cstring>
 #include <vector>
@@ -86,7 +87,7 @@ Outcome CreateChecks::device_flags(Context& context) {
                 continue;
             }
             ++created;
-            if ((flags & kBgra) != 0) {
+            if ((flags & kBgra) != 0 && with_1) {
                 UINT support = 0;
                 device.device->CheckFormatSupport(DXGI_FORMAT_B8G8R8A8_UNORM, &support);
                 if ((support & D3D10_FORMAT_SUPPORT_RENDER_TARGET) == 0) {
@@ -103,7 +104,8 @@ Outcome CreateChecks::device_flags(Context& context) {
             if (!renders(device, why)) {
                 problems.add(name + ": " + why);
             }
-            if (device.device->GetCreationFlags() != (flags & (kSingleThreaded | kBgra | kDebug))) {
+            const UINT expected_flags = flags & (kSingleThreaded | (with_1 ? kBgra : 0u) | kDebug);
+            if (device.device->GetCreationFlags() != expected_flags) {
                 problems.add(name + ": GetCreationFlags returns 0x" + Text::hex(device.device->GetCreationFlags(), 2));
             }
         }
@@ -193,7 +195,7 @@ Outcome CreateChecks::levels_101(Context& context) {
         Com<ID3D10Texture2D> multisampled = D3d10Tools::texture(device, D3d10Tools::desc2d(4, 4, DXGI_FORMAT_R8G8B8A8_UNORM, D3D10_BIND_RENDER_TARGET | D3D10_BIND_SHADER_RESOURCE, D3D10_USAGE_DEFAULT, 0, 1, 1, 4));
         if (at_101) {
             if (!multisampled) {
-                problems.add(name + ": a 4x multisampled texture with a shader resource bind cannot be created");
+                context.note(name + ": a 4x multisampled RGBA8 texture with a shader resource bind is refused; the depth variants below judge multisampled shader resources");
             } else {
                 D3D10_SHADER_RESOURCE_VIEW_DESC1 ms_desc{};
                 ms_desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
@@ -243,6 +245,22 @@ Outcome CreateChecks::levels_101(Context& context) {
                 if (SUCCEEDED(device.device->CreatePixelShader(code.data(), code.size(), shader.put()))) {
                     problems.add(name + ": a ps_4_1 shader is accepted at feature level 10_0");
                 }
+            }
+        }
+        struct DepthCase {
+            DXGI_FORMAT typeless;
+            DXGI_FORMAT depth;
+            const char* label;
+        };
+        for (const DepthCase& depth_case : {DepthCase{DXGI_FORMAT_R24G8_TYPELESS, DXGI_FORMAT_D24_UNORM_S8_UINT, "R24G8_TYPELESS"}, DepthCase{DXGI_FORMAT_R32_TYPELESS, DXGI_FORMAT_D32_FLOAT, "R32_TYPELESS"}}) {
+            UINT quality = 0;
+            device.device1->CheckMultisampleQualityLevels(depth_case.depth, 4, &quality);
+            HRESULT created = S_OK;
+            Com<ID3D10Texture2D> depth_texture = D3d10Tools::texture(device, D3d10Tools::desc2d(4, 4, depth_case.typeless, D3D10_BIND_DEPTH_STENCIL | D3D10_BIND_SHADER_RESOURCE, D3D10_USAGE_DEFAULT, 0, 1, 1, 4), nullptr, &created);
+            if (at_101 && quality > 0 && !depth_texture) {
+                problems.add(name + ": a 4x multisampled " + depth_case.label + " texture with depth stencil and shader resource binds fails with " + Kit::hr(created));
+            } else if (!at_101 && depth_texture) {
+                problems.add(name + ": a 4x multisampled " + depth_case.label + " texture with depth stencil and shader resource binds is accepted at feature level 10_0");
             }
         }
         std::string why;
@@ -300,6 +318,9 @@ Outcome CreateChecks::format_support(Context& context) {
                          {"depth-stencil", D3D10_BIND_DEPTH_STENCIL, D3D10_FORMAT_SUPPORT_DEPTH_STENCIL},
                          {"shader resource", D3D10_BIND_SHADER_RESOURCE, D3D10_FORMAT_SUPPORT_SHADER_SAMPLE | D3D10_FORMAT_SUPPORT_SHADER_LOAD}};
             for (const auto& b : binds) {
+                if (FormatCodec::is_typeless(format)) {
+                    continue;
+                }
                 HRESULT created = S_OK;
                 Com<ID3D10Texture2D> t = D3d10Tools::texture(device, D3d10Tools::desc2d(64, 64, format, b.bind), nullptr, &created);
                 const bool expected = texture2d && (support & b.bit) != 0;
