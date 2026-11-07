@@ -130,6 +130,7 @@
 #include "sanity/present/alpha_checks.hpp"
 #include "sanity/present/content_checks.hpp"
 #include "sanity/present/display_checks.hpp"
+#include "sanity/present/pacing_checks.hpp"
 #include "sanity/present/path_checks.hpp"
 #include "sanity/present/process_checks.hpp"
 #include "sanity/present/timing_checks.hpp"
@@ -715,6 +716,11 @@ void add(Registry& registry) {
     guarded(suite, {"sanity.present.timing.frame_latency_limits", {"present", "dwm", "dxgi", "d3d11", "exclusive"}, true, 120, present::TimingChecks::frame_latency_limits});
     guarded(suite, {"sanity.present.timing.present_stats_vs_capture", {"present", "dwm", "dxgi", "d3d9", "d3d11", "d3d12", "exclusive"}, true, 180, present::TimingChecks::present_stats_vs_capture});
     guarded(suite, {"sanity.present.timing.high_refresh_rates", {"present", "dwm", "dxgi", "d3d11", "exclusive"}, true, 300, present::TimingChecks::high_refresh_rates});
+    guarded(suite, {"sanity.present.timing.stutter_per_path", {"present", "dwm", "d3d9", "d3d11", "d3d12", "gl", "vulkan", "exclusive"}, true, 180, present::PacingChecks::stutter_per_path});
+    guarded(suite, {"sanity.present.timing.pacing_under_gpu_load", {"present", "dwm", "d3d11", "vulkan", "exclusive"}, true, 180, present::PacingChecks::pacing_under_gpu_load});
+    guarded(suite, {"sanity.present.timing.pacing_with_parallel_presenters", {"present", "dwm", "d3d9", "d3d11", "d3d12", "gl", "vulkan", "exclusive"}, true, 180, present::PacingChecks::pacing_with_parallel_presenters});
+    guarded(suite, {"sanity.present.latency.present_to_display", {"present", "dwm", "d3d9", "d3d11", "d3d12", "gl", "vulkan", "exclusive"}, true, 180, present::PacingChecks::present_to_display});
+    guarded(suite, {"sanity.present.mirror.host_cadence", {"present", "dwm", "dxgi", "d3d11", "host", "exclusive"}, true, 120, present::PacingChecks::mirror_host_cadence});
     guarded(suite, {"sanity.present.window.resize_during_presentation", {"present", "dwm", "d3d9", "d3d11", "d3d12", "gl", "vulkan", "exclusive"}, true, 300, present::WindowChecks::resize_during_presentation});
     guarded(suite, {"sanity.present.window.occlusion", {"present", "dwm", "d3d9", "d3d11", "d3d12", "exclusive"}, true, 180, present::WindowChecks::occlusion});
     guarded(suite, {"sanity.present.window.minimize_restore", {"present", "dwm", "d3d9", "d3d11", "d3d12", "gl", "vulkan", "exclusive"}, true, 300, present::WindowChecks::minimize_restore});

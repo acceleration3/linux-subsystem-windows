@@ -185,7 +185,7 @@ class Judging(unittest.TestCase):
         found = host_phase.judge(snapshot(), snapshot(device_start=1), {"logs": {"kernel": ""}, "stalls": []})
         failures, notes = host_phase.to_matrix(found)
         self.assertEqual([f["case"] for f in failures], [ROWS[0]])
-        self.assertEqual(len(notes), 5)
+        self.assertEqual(len(notes), 6)
 
 
 class Probing(unittest.TestCase):
@@ -237,6 +237,85 @@ class Probing(unittest.TestCase):
                 handle.write("new line\n")
             self.assertEqual(window.delta(), "new line\n")
             self.assertEqual(host_phase.LogWindow(None).delta(), "")
+
+
+PERIOD = 1000.0 / 60.0
+
+
+def guest_mirror(count=180, period=PERIOD):
+    return {"frames": [[i, 1000 + i, 1.7e12 + i * period] for i in range(count)], "period_ms": period}
+
+
+def arrivals(count=180, period=PERIOD, start_us=5_000_000, window=77, skip=(), event="received", stall_at=(), stall_ms=0.0):
+    events, now = [], float(start_us)
+    for i in range(count):
+        now += period * 1000.0
+        if i in stall_at:
+            now += stall_ms * 1000.0
+        if i not in skip:
+            events.append({"event": event, "us": int(now), "frame": i, "window": window})
+    return events
+
+
+class MirrorCadence(unittest.TestCase):
+    def judge(self, guest, events):
+        return host_phase.judge_mirror_cadence(guest, events, Config())
+
+    def test_clean_arrivals_pass(self):
+        found = self.judge(guest_mirror(), arrivals())
+        self.assertEqual(found["status"], "ok", found)
+
+    def test_decoy_bursts_are_ignored(self):
+        events = arrivals(count=5, start_us=1_000_000, window=3) + arrivals()
+        self.assertEqual(self.judge(guest_mirror(), events)["status"], "ok")
+
+    def test_dropped_frames_fail(self):
+        found = self.judge(guest_mirror(), arrivals(skip=range(40, 120, 8)))
+        self.assertEqual(found["status"], "fail")
+        self.assertIn("never arrived", found["detail"])
+
+    def test_one_drop_in_a_hundred_is_allowed(self):
+        self.assertEqual(self.judge(guest_mirror(), arrivals(skip=(100,)))["status"], "ok")
+
+    def test_slow_arrivals_fail_the_median(self):
+        found = self.judge(guest_mirror(), arrivals(period=PERIOD * 1.3))
+        self.assertEqual(found["status"], "fail")
+        self.assertIn("median", found["detail"])
+
+    def test_one_long_stall_fails_the_tail(self):
+        found = self.judge(guest_mirror(), arrivals(stall_at=(60, 90, 120), stall_ms=PERIOD * 4))
+        self.assertEqual(found["status"], "fail")
+        self.assertIn("p99", found["detail"])
+
+    def test_no_burst_resembling_the_run_fails(self):
+        found = self.judge(guest_mirror(), arrivals(count=20))
+        self.assertEqual(found["status"], "fail")
+        self.assertIn("resembles", found["detail"])
+
+    def test_missing_inputs_are_skipped(self):
+        self.assertEqual(self.judge(None, arrivals())["status"], "skip")
+        self.assertEqual(self.judge(guest_mirror(), None)["status"], "skip")
+        self.assertEqual(self.judge(guest_mirror(), arrivals(event="ready"))["status"], "skip")
+
+    def test_feed_events_read_the_timing_csv_and_filter_old_files(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = pathlib.Path(directory, "feed-123.csv")
+            path.write_text("event,local_us,frame,source_100ns,detail\nreceived,1000,1,0,77\nready,2000,1,0,77\noverflow,0,0,0,0\n")
+            pathlib.Path(directory, "capture-9.csv").write_text("event,local_us,frame,source_100ns,detail\ncapture,1,1,1,0\n")
+            events = host_phase.feed_events(directory)
+            self.assertEqual([(e["event"], e["us"], e["window"]) for e in events], [("received", 1000, 77), ("ready", 2000, 77), ("overflow", 0, 0)])
+            self.assertEqual(host_phase.feed_events(directory, since=path.stat().st_mtime + 100), [])
+            self.assertIsNone(host_phase.feed_events(None))
+
+    def test_guest_metrics_carry_the_mirror_frame_list(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = pathlib.Path(directory, "r.json")
+            path.write_text(json.dumps({"checks": [{"id": host_phase.MIRROR_ROW, "measures": {"frames": [[0, 1, 2.5]], "period_ms": 16.6}}]}))
+            self.assertEqual(host_phase.guest_metrics([path])["mirror"], {"frames": [[0, 1, 2.5]], "period_ms": 16.6})
+
+    def test_full_judge_lists_the_mirror_row(self):
+        found = verdicts(snapshot(), snapshot(), logs={"kernel": ""}, stalls=[], guest={"mirror": guest_mirror()}, mirror_events=arrivals())
+        self.assertEqual(found[host_phase.MIRROR_ROW]["status"], "ok")
 
 
 if __name__ == "__main__":

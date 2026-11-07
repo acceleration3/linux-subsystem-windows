@@ -1120,7 +1120,7 @@ Each loop creates and destroys 5000 objects of the kind with its largest practic
 | `sanity.capture.latency_present_to_capture` | Per API, over 3 s at interval 1, the time from the QPC taken after Present to the capture reporting that frame (WGC SystemRelativeTime and duplication LastPresentTime, both against QPC); p50 and p99 are measures and the p99 is under 4 refresh periods plus 20 ms. [E] (about 20 s) |
 | `sanity.capture.steady_no_drift` | 10 s of WGC capture of a D3D11 flip window at interval 1: the captured frame number trails the number of Presents started by 0 to 6 frames at every sample, and the linear-fit slope of that lag over time is within 0.1 frames per second. [E] (about 12 s) |
 
-### 4.20 Presentation and frame pacing (33)
+### 4.20 Presentation and frame pacing (38)
 
 Each frame encodes its number in pixels so captures can read ordering, drops and duplicates.
 
@@ -1153,6 +1153,10 @@ Each frame encodes its number in pixels so captures can read ordering, drops and
 | `sanity.present.timing.frame_latency_limits` | SetMaximumFrameLatency(n) bounds queued frames: the waitable object never allows more than n frames ahead of the display, and n=1 gives lower latency than larger n. [E] |
 | `sanity.present.timing.present_stats_vs_capture` | GetFrameStatistics / DwmGetCompositionTimingInfo present counts and refresh counts agree with the number of frames and intervals observed in a capture. [E] |
 | `sanity.present.timing.high_refresh_rates` | At each refresh rate offered by the display modes (up to the maximum), vsync-paced presenting achieves that rate within bound and no frames are lost. [E] |
+| `sanity.present.timing.stutter_per_path` | For each of the 11 present paths, 3 s at interval 1 (interval 0 for Vulkan IMMEDIATE, which has no interval 1), the displayed intervals (DXGI/D3D9Ex frame statistics: PresentRefreshCount deltas times the DWM refresh period when at least 60 percent of the frames yield a new PresentCount, otherwise WGC capture timestamps): at most 0.5 percent of the intervals span 2 refresh periods or more (an interval of 1.5 periods or more counts), the longest is under 3 periods and the p99 frame time under 1.5 periods. The full histogram (0.25-period bins) and the per-frame timing are written as CSV. [E] (about 40 s) |
+| `sanity.present.timing.pacing_under_gpu_load` | The stutter_per_path bounds hold for D3D11 flip and Vulkan FIFO while two other processes run bounded heavy GPU work (1080p clears and copies; multi-API 4 and 16 MiB round trips) for the whole measurement. [E] (about 20 s) |
+| `sanity.present.timing.pacing_with_parallel_presenters` | Up to four processes on different APIs (D3D11 flip, D3D12 flip, Vulkan FIFO, GL; D3D9Ex when fewer are enabled) each present at interval 1 for 3 s and each meets the stutter_per_path bounds; DwmGetCompositionTimingInfo cFramesMissed rises by at most 0.5 percent of the cRefresh rise over the run. [E] (about 15 s) |
+| `sanity.present.latency.present_to_display` | Per paced path, over 3 s at interval 1, the time from the Present call to the frame being displayed (frame statistics: SyncQPCTime of the frame's PresentCount, moved by PresentRefreshCount minus SyncRefreshCount periods; otherwise the SystemRelativeTime of the first WGC capture showing the frame); p50 and p99 are measures and the p99 is at most (frame latency 3 + 1) periods plus 1 period. [E] (about 35 s) |
 
 #### Window state and concurrency
 
@@ -1168,6 +1172,7 @@ Each frame encodes its number in pixels so captures can read ordering, drops and
 | `sanity.present.window.multi_monitor` | With more than one output, a window moved across outputs keeps presenting correct frames in order. [E] |
 | `sanity.present.window.destroy_while_presenting` | Destroying the window or device during Present from another thread does not hang and releases cleanly; a new window then presents correctly. |
 | `sanity.present.mirror.host_receives_sequence` | The mirror on the host receives the same frame number sequence as presented in the guest (in order, none from the future), the latest frame is eventually delivered, and the host-phase capture equals the guest content. |
+| `sanity.present.mirror.host_cadence` | The guest presents a numbered sequence (D3D11 flip, interval 1, 3 s) and records for each frame number its QPC and wall-clock UTC in ms (measure `frames` and mirror_frames.json); the guest row asserts only that the sequence was presented and its last frame shown. The matrix host phase (scripts/gpu-test/host_phase.py, same id) matches the frame list to the remotewin host's per-frame arrival events (RWIN_TIMING_DIR feed-*.csv, event received) and asserts a p50 within 10 percent of the period, a p99 under 2.5 periods and at most 1 percent of the frames lost. [E] (about 6 s) |
 | `sanity.present.display.output_stays_active` | While frames are composed continuously, the display output reports active (EnumDisplayDevices ATTACHED, DWM composition on, no monitor off events) for the whole run. [E] |
 | `sanity.present.display.idle_then_present` | After seconds of no changes, a single new present still reaches the capture/mirror within a bound. |
 | `sanity.present.latency.input_to_photon_monotonic` | Each frame presented after a SendInput shows in a capture no earlier than the input and the captured sequence has no gaps larger than a bound while typing/moving. |

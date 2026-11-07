@@ -6,6 +6,7 @@ QEMU process, the host GPU memory), marks the avgpu, QEMU and kernel logs, and s
 run it waits for the guest to settle and judges each 4.24 row as a contract. Everything that judges takes plain data,
 so the tests feed canned dumps.
 """
+import csv
 import dataclasses
 import os
 import pathlib
@@ -28,7 +29,9 @@ ROWS = (
     "sanity.host.accounting.processes_agree",
     "sanity.host.accounting.memory_peak_covers",
     "sanity.host.shutdown.clean_exit",
+    "sanity.present.mirror.host_cadence",
 )
+MIRROR_ROW = ROWS[-1]
 
 STATE_FIELD = re.compile(r"(\w+)=(\S*)")
 MODULES = ("device", "executor")
@@ -59,6 +62,13 @@ class Config:
     bytes_multiple: float = 8.0
     submission_tolerance: float = 0.5
     benign: tuple = ()
+    mirror_event: str = "received"
+    mirror_burst_gap_ms: float = 500.0
+    mirror_warmup_frames: int = 8
+    mirror_p50_tolerance: float = 0.10
+    mirror_p99_periods: float = 2.5
+    mirror_drop_rate: float = 0.01
+    mirror_count_match: float = 0.5
 
 
 def parse_state(text):
@@ -494,6 +504,91 @@ def judge_shutdown(stop):
     return verdict(row, "fail" if problems else "ok", "; ".join(problems))
 
 
+def feed_events(directory, since=None):
+    if not directory:
+        return None
+    events = []
+    for path in sorted(pathlib.Path(directory).glob("feed-*.csv")):
+        try:
+            if since is not None and path.stat().st_mtime < since:
+                continue
+            with open(path, newline="") as source:
+                for row in csv.DictReader(source):
+                    events.append({"event": row["event"], "us": int(row["local_us"]), "frame": int(row["frame"]),
+                                   "window": int(row["detail"])})
+        except (OSError, KeyError, ValueError):
+            continue
+    return events
+
+
+def bursts_of(times_ms, gap_ms):
+    bursts, current = [], []
+    for when in sorted(times_ms):
+        if current and when - current[-1] > gap_ms:
+            bursts.append(current)
+            current = []
+        current.append(when)
+    if current:
+        bursts.append(current)
+    return bursts
+
+
+def percentile(values, fraction):
+    ordered = sorted(values)
+    position = fraction * (len(ordered) - 1)
+    low = int(position)
+    high = min(len(ordered) - 1, low + 1)
+    return ordered[low] + (ordered[high] - ordered[low]) * (position - low)
+
+
+def matching_burst(events, count, config):
+    by_window = {}
+    for event in events:
+        if event["event"] == config.mirror_event:
+            by_window.setdefault(event["window"], []).append(event["us"] / 1000.0)
+    best = None
+    for window, times in by_window.items():
+        for burst in bursts_of(times, config.mirror_burst_gap_ms):
+            miss = abs(len(burst) - count) / count
+            if best is None or miss < best[0]:
+                best = (miss, window, burst)
+    if best is None or best[0] > config.mirror_count_match:
+        return None
+    return best[1], best[2]
+
+
+def judge_mirror_cadence(guest, events, config):
+    row = MIRROR_ROW
+    frames = (guest or {}).get("frames") or []
+    period = (guest or {}).get("period_ms") or 0.0
+    if len(frames) <= config.mirror_warmup_frames + 2 or period <= 0:
+        return verdict(row, "skip", "the guest run recorded no mirror frame list")
+    if events is None:
+        return verdict(row, "skip", "no remotewin frame timing directory (RWIN_TIMING_DIR) was set for the host")
+    if not [e for e in events if e["event"] == config.mirror_event]:
+        return verdict(row, "skip", f"the host wrote no '{config.mirror_event}' events (the mirror process may still be running)")
+    presented = len(frames) - config.mirror_warmup_frames
+    found = matching_burst(events, len(frames), config)
+    if found is None:
+        return verdict(row, "fail", f"no host arrival burst resembles the {len(frames)} frames the guest presented")
+    window, burst = found
+    arrivals = burst[config.mirror_warmup_frames:]
+    problems = []
+    gaps = [b - a for a, b in zip(arrivals, arrivals[1:])]
+    if len(gaps) < 10:
+        return verdict(row, "fail", f"only {len(arrivals)} frames arrived in the matching burst of window {window}")
+    p50, p99 = percentile(gaps, 0.5), percentile(gaps, 0.99)
+    if abs(p50 - period) > period * config.mirror_p50_tolerance:
+        problems.append(f"median arrival interval {p50:.2f} ms is not within {config.mirror_p50_tolerance:.0%} of the {period:.2f} ms period")
+    if p99 >= period * config.mirror_p99_periods:
+        problems.append(f"p99 arrival interval {p99:.2f} ms is not under {config.mirror_p99_periods} periods ({period * config.mirror_p99_periods:.2f} ms)")
+    dropped = max(0, presented - len(arrivals))
+    if dropped > presented * config.mirror_drop_rate:
+        problems.append(f"{dropped} of {presented} presented frames never arrived on the host, above {config.mirror_drop_rate:.0%}")
+    detail = "; ".join(problems) if problems else f"window {window}: {len(arrivals)}/{presented} arrived, p50 {p50:.2f} ms, p99 {p99:.2f} ms"
+    return verdict(row, "fail" if problems else "ok", detail)
+
+
 def judge(before, after, run, config=None):
     config = config or Config()
     guest = run.get("guest", {})
@@ -501,7 +596,8 @@ def judge(before, after, run, config=None):
             judge_objects(before, after, config), judge_threads_fds(before, after, config),
             judge_errors(before, after, run.get("logs", {}), config), judge_stalls(run.get("stalls"), config),
             judge_bytes(before, after, guest, config), judge_submissions(before, after, guest, config),
-            judge_processes(after, guest), judge_peak(after, guest), judge_shutdown(run.get("stop"))]
+            judge_processes(after, guest), judge_peak(after, guest), judge_shutdown(run.get("stop")),
+            judge_mirror_cadence(guest.get("mirror"), run.get("mirror_events"), config)]
 
 
 def settled(probe, work, config, sleep=time.sleep, clock=time.monotonic):
@@ -518,8 +614,10 @@ def settled(probe, work, config, sleep=time.sleep, clock=time.monotonic):
 
 
 class HostPhase:
-    def __init__(self, work, avgpu_log, qemu_log, out, config=None, probe=None):
+    def __init__(self, work, avgpu_log, qemu_log, out, config=None, probe=None, timing_dir=None):
         self.work = work
+        self.timing_dir = timing_dir or os.environ.get("RWIN_TIMING_DIR")
+        self.started = time.time()
         self.out = pathlib.Path(out)
         self.config = config or Config()
         self.probe = probe or StackProbe()
@@ -536,7 +634,8 @@ class HostPhase:
         stalls = self.stalls.finish() if self.stalls is not None else None
         after = settled(self.probe, self.work, self.config)
         logs = {"avgpu": self.avgpu.delta(), "qemu": self.qemu.delta(), "kernel": self.kernel.delta()}
-        verdicts = judge(self.before, after, {"logs": logs, "stalls": stalls, "guest": guest or {}}, self.config)
+        run = {"logs": logs, "stalls": stalls, "guest": guest or {}, "mirror_events": feed_events(self.timing_dir, self.started)}
+        verdicts = judge(self.before, after, run, self.config)
         self.out.mkdir(parents=True, exist_ok=True)
         for name, text in logs.items():
             if text:
@@ -546,7 +645,7 @@ class HostPhase:
 
 def guest_metrics(paths):
     import json
-    metrics = {"pids": set(), "bytes_verified": 0, "submissions": 0, "held_peak_bytes": 0}
+    metrics = {"pids": set(), "bytes_verified": 0, "submissions": 0, "held_peak_bytes": 0, "mirror": None}
     for path in paths:
         try:
             report = json.loads(pathlib.Path(path).read_text())
@@ -559,6 +658,8 @@ def guest_metrics(paths):
             for key in ("bytes_verified", "submissions"):
                 if isinstance(measures.get(key), int):
                     metrics[key] += measures[key]
+            if check.get("id") == MIRROR_ROW and isinstance(measures.get("frames"), list):
+                metrics["mirror"] = {"frames": measures["frames"], "period_ms": measures.get("period_ms", 0.0)}
             if isinstance(measures.get("held_peak_bytes"), int):
                 metrics["held_peak_bytes"] = max(metrics["held_peak_bytes"], measures["held_peak_bytes"])
     return metrics
