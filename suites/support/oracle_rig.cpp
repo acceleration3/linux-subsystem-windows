@@ -45,6 +45,8 @@ bool OracleRig::judge(Context& context, const std::string& label, const SceneIma
     std::size_t bad = 0;
     std::size_t first = 0;
     std::size_t total = 0;
+    int largest = 0;
+    std::size_t largest_at = 0;
     std::vector<std::uint8_t> diff(actual.data.size(), 0);
     if (tolerance.floats) {
         total = actual.data.size() / 4;
@@ -67,6 +69,10 @@ bool OracleRig::judge(Context& context, const std::string& label, const SceneIma
         for (std::size_t i = 0; i < total; ++i) {
             const int delta = std::abs(static_cast<int>(expected.data[i]) - static_cast<int>(actual.data[i]));
             if (delta > tolerance.byte) {
+                if (delta > largest) {
+                    largest = delta;
+                    largest_at = i;
+                }
                 if (bad++ == 0) {
                     first = i;
                 }
@@ -82,6 +88,8 @@ bool OracleRig::judge(Context& context, const std::string& label, const SceneIma
              std::to_string(first);
     if (!tolerance.floats && first < actual.data.size()) {
         detail += " expected " + std::to_string(expected.data[first]) + " actual " + std::to_string(actual.data[first]);
+        detail += "; largest difference " + std::to_string(largest) + " at " + std::to_string(largest_at) + " expected " + std::to_string(expected.data[largest_at]) +
+                  " actual " + std::to_string(actual.data[largest_at]);
     }
     const bool image = actual.width * actual.height * 4 == actual.data.size() && actual.width > 0;
     if (image) {

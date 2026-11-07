@@ -125,6 +125,9 @@ Outcome LostChecks::reset_semantics(Context& context) {
             problems.add("a default-pool resource created after Reset does not render: " + where + error);
         }
     }
+    fresh.reset();
+    back.reset();
+    depth.reset();
     DWORD levels = 0;
     if (SUCCEEDED(rig.d3d->CheckDeviceMultiSampleType(rig.ordinal, D3DDEVTYPE_HAL, D3DFMT_X8R8G8B8, TRUE, D3DMULTISAMPLE_4_SAMPLES, &levels)) &&
         SUCCEEDED(rig.d3d->CheckDeviceMultiSampleType(rig.ordinal, D3DDEVTYPE_HAL, D3DFMT_D24S8, TRUE, D3DMULTISAMPLE_4_SAMPLES, &levels))) {

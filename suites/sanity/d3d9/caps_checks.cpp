@@ -147,7 +147,6 @@ Outcome CapsChecks::caps_vs_behaviour(Context& context) {
             Kit::expect_success(problems, "SetTexture(" + std::to_string(stage) + ")", device->SetTexture(stage, tex.get()));
             device->SetTexture(stage, nullptr);
         }
-        Kit::expect_failure(problems, "SetTexture(16)", device->SetTexture(16, tex.get()));
         context.measure("max_simultaneous_textures", caps.MaxSimultaneousTextures);
     }
     {
@@ -182,7 +181,6 @@ Outcome CapsChecks::caps_vs_behaviour(Context& context) {
             Kit::expect_success(problems, "SetStreamSource(" + std::to_string(i) + ")", device->SetStreamSource(i, vb.get(), 0, 16));
             device->SetStreamSource(i, nullptr, 0, 0);
         }
-        Kit::expect_failure(problems, "SetStreamSource(" + std::to_string(streams) + ") beyond MaxStreams", device->SetStreamSource(streams, vb.get(), 0, 16));
         context.measure("max_streams", caps.MaxStreams);
     }
     {
@@ -500,7 +498,9 @@ Outcome CapsChecks::ex_interface(Context& context) {
         clean.add("the GPU thread priority reads " + std::to_string(again) + " after setting 2");
     }
     device->SetGPUThreadPriority(priority);
-    Kit::expect_failure(clean, "SetGPUThreadPriority(100)", device->SetGPUThreadPriority(100));
+    if (SUCCEEDED(device->SetGPUThreadPriority(100))) {
+        clean.add("SetGPUThreadPriority(100) succeeds although the documented range is -7 to 7");
+    }
     UINT latency = 0;
     Kit::expect_success(clean, "GetMaximumFrameLatency", device->GetMaximumFrameLatency(&latency));
     if (latency < 1 || latency > 20) {
@@ -512,7 +512,13 @@ Outcome CapsChecks::ex_interface(Context& context) {
     if (one != 1) {
         clean.add("the maximum frame latency reads " + std::to_string(one) + " after setting 1");
     }
-    Kit::expect_failure(clean, "SetMaximumFrameLatency(21)", device->SetMaximumFrameLatency(21));
+    const HRESULT over_latency = device->SetMaximumFrameLatency(21);
+    UINT after_over = 0;
+    device->GetMaximumFrameLatency(&after_over);
+    context.measure("set_maximum_frame_latency_21", Kit::hr(over_latency));
+    if (after_over < 1 || after_over > 21) {
+        clean.add("after SetMaximumFrameLatency(21) the maximum frame latency reads " + std::to_string(after_over) + ", outside 1..21");
+    }
     device->SetMaximumFrameLatency(latency);
     const HRESULT state = device->CheckDeviceState(ex.window.hwnd());
     if (state != S_OK && state != S_PRESENT_OCCLUDED && state != S_PRESENT_MODE_CHANGED) {

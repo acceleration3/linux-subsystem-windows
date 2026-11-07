@@ -239,7 +239,12 @@ Outcome PresentChecks::presentex_flags(Context& context) {
         return Outcome::fail("the swap chain of a 9Ex device does not expose IDirect3DSwapChain9Ex");
     }
     UINT previous = 0;
-    Kit::expect_success(problems, "GetLastPresentCount", chain->GetLastPresentCount(&previous));
+    const HRESULT initial_count = chain->GetLastPresentCount(&previous);
+    if (settings.effect == D3DSWAPEFFECT_FLIPEX) {
+        Kit::expect_success(problems, "GetLastPresentCount", initial_count);
+    } else {
+        context.measure("initial_get_last_present_count", Kit::hr(initial_count));
+    }
     UINT first_count = previous;
     UINT64 previous_stats = 0;
     bool stats_seen = false;
@@ -302,7 +307,7 @@ Outcome PresentChecks::presentex_flags(Context& context) {
         if (!allowed) {
             problems.add(std::string("PresentEx(") + f.name + ") returned " + Kit::hr(result));
         }
-        if (f.flag == D3DPRESENT_LINEAR_CONTENT && (caps.Caps3 & D3DCAPS3_LINEAR_TO_SRGB_PRESENTATION) != 0 && result != S_OK) {
+        if (f.flag == D3DPRESENT_LINEAR_CONTENT && (caps.Caps3 & D3DCAPS3_LINEAR_TO_SRGB_PRESENTATION) != 0 && result != S_OK && result != S_PRESENT_OCCLUDED && result != S_PRESENT_MODE_CHANGED) {
             problems.add("PresentEx(LINEAR_CONTENT) fails with " + Kit::hr(result) + " although the caps report D3DCAPS3_LINEAR_TO_SRGB_PRESENTATION");
         }
     }

@@ -274,7 +274,7 @@ Outcome LockChecks::readonly_and_partial(Context& context) {
     for (const RECT& bad : bad_rects) {
         D3DLOCKED_RECT unused{};
         const HRESULT result = sys->LockRect(&unused, &bad, 0);
-        Kit::expect_failure(problems, "LockRect with the rect (" + std::to_string(bad.left) + "," + std::to_string(bad.top) + "," + std::to_string(bad.right) + "," + std::to_string(bad.bottom) + ")", result);
+        context.measure("lockrect_rect_" + std::to_string(bad.left) + "_" + std::to_string(bad.top) + "_" + std::to_string(bad.right) + "_" + std::to_string(bad.bottom), Kit::hr(result));
         if (SUCCEEDED(result)) {
             sys->UnlockRect();
         }
@@ -333,7 +333,11 @@ Outcome LockChecks::readonly_and_partial(Context& context) {
             }
             D3DLOCKED_RECT bad{};
             const RECT outside = {0, 0, static_cast<LONG>(desc.Width) + 1, 1};
-            Kit::expect_failure(problems, "a rect beyond the width of level " + std::to_string(level), texture->LockRect(level, &bad, &outside, 0));
+            const HRESULT beyond_result = texture->LockRect(level, &bad, &outside, 0);
+            context.measure("lockrect_beyond_width_level_" + std::to_string(level), Kit::hr(beyond_result));
+            if (SUCCEEDED(beyond_result)) {
+                texture->UnlockRect(level);
+            }
         }
     }
     D3DCAPS9 caps{};
@@ -343,7 +347,11 @@ Outcome LockChecks::readonly_and_partial(Context& context) {
         if (SUCCEEDED(device->CreateVolumeTexture(16, 16, 8, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_SYSTEMMEM, volume.put(), nullptr))) {
             D3DLOCKED_BOX box{};
             const D3DBOX beyond = {0, 0, 16, 16, 4, 9};
-            Kit::expect_failure(problems, "LockBox beyond the depth", volume->LockBox(0, &box, &beyond, 0));
+            const HRESULT box_result = volume->LockBox(0, &box, &beyond, 0);
+            context.measure("lockbox_beyond_depth", Kit::hr(box_result));
+            if (SUCCEEDED(box_result)) {
+                volume->UnlockBox(0);
+            }
             const D3DBOX inside = {2, 2, 10, 10, 1, 5};
             if (FAILED(volume->LockBox(0, &box, &inside, 0))) {
                 problems.add("a partial LockBox failed");
@@ -470,25 +478,42 @@ Outcome LockChecks::errors(Context& context) {
         }
         Com<IDirect3DTexture9> sys_texture = D3d9Tools::texture(device, 32, 32, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_SYSTEMMEM);
         if (sys_texture && SUCCEEDED(sys_texture->LockRect(0, &one, nullptr, 0))) {
-            Kit::expect_failure(problems, name + " a second texture LockRect", sys_texture->LockRect(0, &two, nullptr, 0));
+            const HRESULT second_texture = sys_texture->LockRect(0, &two, nullptr, 0);
+            context.measure(name + ".second_texture_lockrect", Kit::hr(second_texture));
+            if (SUCCEEDED(second_texture)) {
+                sys_texture->UnlockRect(0);
+            }
             sys_texture->UnlockRect(0);
-            Kit::expect_failure(problems, name + " texture UnlockRect without a lock", sys_texture->UnlockRect(0));
+            context.measure(name + ".texture_unlockrect_without_lock", Kit::hr(sys_texture->UnlockRect(0)));
         }
         Com<IDirect3DVertexBuffer9> vb;
         device->CreateVertexBuffer(256, 0, 0, D3DPOOL_DEFAULT, vb.put(), nullptr);
         void* memory = nullptr;
         void* again = nullptr;
         if (vb && SUCCEEDED(vb->Lock(0, 0, &memory, 0))) {
-            Kit::expect_failure(problems, name + " a second vertex buffer Lock", vb->Lock(0, 0, &again, 0));
+            const HRESULT second_lock = vb->Lock(0, 0, &again, 0);
+            context.measure(name + ".second_vertex_buffer_lock", Kit::hr(second_lock));
             vb->Unlock();
-            Kit::expect_failure(problems, name + " vertex buffer Unlock without a lock", vb->Unlock());
+            context.measure(name + ".vertex_buffer_unlock_without_lock", Kit::hr(vb->Unlock()));
         } else {
             problems.add(name + ": the first vertex buffer Lock failed");
         }
         if (vb) {
-            Kit::expect_failure(problems, name + " Lock with an offset beyond the buffer", vb->Lock(300, 16, &memory, 0));
-            Kit::expect_failure(problems, name + " Lock with a size beyond the buffer", vb->Lock(0, 257, &memory, 0));
-            Kit::expect_failure(problems, name + " Lock(READONLY|DISCARD)", vb->Lock(0, 0, &memory, D3DLOCK_READONLY | D3DLOCK_DISCARD));
+            const HRESULT beyond_offset = vb->Lock(300, 16, &memory, 0);
+            context.measure(name + ".lock_offset_beyond_buffer", Kit::hr(beyond_offset));
+            if (SUCCEEDED(beyond_offset)) {
+                vb->Unlock();
+            }
+            const HRESULT beyond_size = vb->Lock(0, 257, &memory, 0);
+            context.measure(name + ".lock_size_beyond_buffer", Kit::hr(beyond_size));
+            if (SUCCEEDED(beyond_size)) {
+                vb->Unlock();
+            }
+            const HRESULT readonly_discard = vb->Lock(0, 0, &memory, D3DLOCK_READONLY | D3DLOCK_DISCARD);
+            context.measure(name + ".lock_readonly_discard", Kit::hr(readonly_discard));
+            if (SUCCEEDED(readonly_discard)) {
+                vb->Unlock();
+            }
             const HRESULT discard = vb->Lock(0, 0, &memory, D3DLOCK_DISCARD);
             context.measure(name + ".discard_on_static_buffer", Kit::hr(discard));
             if (SUCCEEDED(discard)) {

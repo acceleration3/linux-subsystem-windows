@@ -62,7 +62,7 @@ Outcome ShareChecks::cross_device(Context& context) {
     HRESULT result = S_OK;
     Com<IDirect3DTexture9> produced = D3d9Tools::texture(a.dev(), kSize, kSize, 1, D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &result, &handle);
     if (!produced || handle == nullptr) {
-        return Outcome::fail("a shared render target texture cannot be created on device A: " + Kit::hr(result));
+        return Outcome::fail("a shared render target texture cannot be created on device A: " + (SUCCEEDED(result) ? std::string("creation succeeded without a handle") : Kit::hr(result)));
     }
     Com<IDirect3DTexture9> opened = D3d9Tools::texture(b.dev(), kSize, kSize, 1, D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &result, &handle);
     if (!opened) {
@@ -160,7 +160,7 @@ Outcome ShareChecks::cross_process(Context& context) {
     HRESULT result = S_OK;
     Com<IDirect3DTexture9> produced = D3d9Tools::texture(rig.dev(), kSize, kSize, 1, D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &result, &handle);
     if (!produced || handle == nullptr) {
-        return Outcome::fail("a shared render target texture cannot be created: " + Kit::hr(result));
+        return Outcome::fail("a shared render target texture cannot be created: " + (SUCCEEDED(result) ? std::string("creation succeeded without a handle") : Kit::hr(result)));
     }
     Com<IDirect3DSurface9> surface = D3d9Tools::level(produced.get(), 0);
     const std::string run_id = std::to_string(::GetCurrentProcessId());
@@ -232,7 +232,7 @@ Outcome ShareChecks::d3dimage_pattern(Context& context) {
     for (int i = 0; i < 2; ++i) {
         const HRESULT created = device->CreateRenderTarget(kSize, kSize, D3DFMT_A8R8G8B8, D3DMULTISAMPLE_NONE, 0, FALSE, surfaces[i].put(), &handles[i]);
         if (FAILED(created) || handles[i] == nullptr) {
-            return Outcome::fail("a shared render target cannot be created with a shared handle: " + Kit::hr(created));
+            return Outcome::fail("a shared render target cannot be created with a shared handle: " + (SUCCEEDED(created) ? std::string("creation succeeded without a handle") : Kit::hr(created)));
         }
         device->ColorFill(surfaces[i].get(), nullptr, 0xFF000000u);
         const HRESULT opened = consumer.device->OpenSharedResource(handles[i], __uuidof(ID3D11Texture2D), views[i].put_void());

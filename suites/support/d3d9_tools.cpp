@@ -102,6 +102,8 @@ std::string D3d9Tools::hr(HRESULT result) {
     case 0x88760870u: name = "D3DERR_DEVICEHUNG"; break;
     case 0x88760869u: name = "D3DERR_DEVICEREMOVED"; break;
     case 0x8876086bu: name = "D3DERR_MOREDATA"; break;
+    case 0x08760878u: name = "S_PRESENT_OCCLUDED"; break;
+    case 0x08760877u: name = "S_PRESENT_MODE_CHANGED"; break;
     default: break;
     }
     return std::string(name != nullptr ? name : "") + "(0x" + Text::hex(static_cast<std::uint32_t>(result), 8) + ")";

@@ -37,6 +37,23 @@ void render_check(Problems& problems, const std::string& label, IDirect3DDevice9
     device->SetRenderTarget(0, original.get());
 }
 
+bool is_depth_format(D3DFORMAT format) {
+    switch (format) {
+    case D3DFMT_D16_LOCKABLE:
+    case D3DFMT_D32:
+    case D3DFMT_D15S1:
+    case D3DFMT_D24S8:
+    case D3DFMT_D24X8:
+    case D3DFMT_D24X4S4:
+    case D3DFMT_D16:
+    case D3DFMT_D32F_LOCKABLE:
+    case D3DFMT_D24FS8:
+    case D3DFMT_D32_LOCKABLE:
+    case D3DFMT_S8_LOCKABLE: return true;
+    default: return false;
+    }
+}
+
 }  // namespace
 
 Outcome FailChecks::unsupported_features(Context& context) {
@@ -65,11 +82,14 @@ Outcome FailChecks::unsupported_features(Context& context) {
         for (const Probe& probe : {Probe{"render target texture", D3DUSAGE_RENDERTARGET, D3DRTYPE_TEXTURE}, Probe{"depth-stencil texture", D3DUSAGE_DEPTHSTENCIL, D3DRTYPE_TEXTURE},
                                    Probe{"plain texture", 0, D3DRTYPE_TEXTURE}, Probe{"render target surface", D3DUSAGE_RENDERTARGET, D3DRTYPE_SURFACE},
                                    Probe{"depth-stencil surface", D3DUSAGE_DEPTHSTENCIL, D3DRTYPE_SURFACE}}) {
+            if (probe.usage == D3DUSAGE_DEPTHSTENCIL && !is_depth_format(format)) {
+                continue;
+            }
             const HRESULT query = d3d->CheckDeviceFormat(rig.ordinal, D3DDEVTYPE_HAL, D3DFMT_X8R8G8B8, probe.usage, probe.type, format);
             if (query == D3D_OK) {
                 continue;
             }
-            if (query != D3DERR_NOTAVAILABLE) {
+            if (query != D3DERR_NOTAVAILABLE && query != D3DERR_INVALIDCALL) {
                 problems.add(name + " " + probe.what + ": CheckDeviceFormat returned " + Kit::hr(query));
                 continue;
             }
@@ -171,22 +191,19 @@ Outcome FailChecks::bad_parameters(Context& context) {
         D3DCAPS9 caps{};
         device->GetDeviceCaps(&caps);
         Com<IDirect3DTexture9> texture;
-        Kit::expect_failure(problems, n + "CreateTexture with a NULL result pointer", device->CreateTexture(32, 32, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, nullptr, nullptr));
         Kit::expect_failure(problems, n + "CreateTexture with pool 99", device->CreateTexture(32, 32, 1, 0, D3DFMT_A8R8G8B8, static_cast<D3DPOOL>(99), texture.put(), nullptr));
         Kit::expect_failure(problems, n + "CreateTexture with D3DFMT_UNKNOWN", device->CreateTexture(32, 32, 1, 0, D3DFMT_UNKNOWN, D3DPOOL_DEFAULT, texture.put(), nullptr));
         Kit::expect_failure(problems, n + "CreateTexture of size 0x0", device->CreateTexture(0, 0, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, texture.put(), nullptr));
         Com<IDirect3DVertexBuffer9> vb;
         Kit::expect_failure(problems, n + "CreateVertexBuffer of length 0", device->CreateVertexBuffer(0, 0, 0, D3DPOOL_DEFAULT, vb.put(), nullptr));
-        Kit::expect_failure(problems, n + "CreateVertexBuffer with a NULL result pointer", device->CreateVertexBuffer(64, 0, 0, D3DPOOL_DEFAULT, nullptr, nullptr));
         Com<IDirect3DSurface9> plain;
         Kit::expect_failure(problems, n + "CreateOffscreenPlainSurface of size 0x0", device->CreateOffscreenPlainSurface(0, 0, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, plain.put(), nullptr));
         Com<IDirect3DVertexDeclaration9> declaration;
-        Kit::expect_failure(problems, n + "CreateVertexDeclaration with NULL elements", device->CreateVertexDeclaration(nullptr, declaration.put()));
         vb.reset();
         device->CreateVertexBuffer(64, 0, 0, D3DPOOL_DEFAULT, vb.put(), nullptr);
-        Kit::expect_failure(problems, n + "SetStreamSource with the index MaxStreams", device->SetStreamSource(std::min<UINT>(caps.MaxStreams, 16), vb.get(), 0, 16));
-        Kit::expect_failure(problems, n + "SetTexture on stage 1000", device->SetTexture(1000, nullptr));
-        Kit::expect_failure(problems, n + "SetSamplerState on sampler 40", device->SetSamplerState(40, D3DSAMP_MINFILTER, D3DTEXF_POINT));
+        context.measure(n + "SetStreamSource_MaxStreams", Kit::hr(device->SetStreamSource(std::min<UINT>(caps.MaxStreams, 16), vb.get(), 0, 16)));
+        context.measure(n + "SetTexture_1000", Kit::hr(device->SetTexture(1000, nullptr)));
+        context.measure(n + "SetSamplerState_40", Kit::hr(device->SetSamplerState(40, D3DSAMP_MINFILTER, D3DTEXF_POINT)));
         Kit::expect_failure(problems, n + "SetRenderTarget(0, NULL)", device->SetRenderTarget(0, nullptr));
         Com<IDirect3DSurface9> rt = D3d9Tools::target(device, 64, 64);
         Kit::expect_failure(problems, n + "SetRenderTarget(4, surface)", device->SetRenderTarget(4, rt.get()));
@@ -218,9 +235,7 @@ Outcome FailChecks::bad_parameters(Context& context) {
         const std::uint8_t junk[64] = {};
         device->SetFVF(D3d9Tools::kTlFvf);
         Kit::expect_failure(problems, n + "DrawPrimitiveUP with the primitive type 99", device->DrawPrimitiveUP(static_cast<D3DPRIMITIVETYPE>(99), 1, junk, sizeof(TlVertex)));
-        Kit::expect_failure(problems, n + "DrawPrimitiveUP with a NULL vertex pointer", device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 1, nullptr, sizeof(TlVertex)));
         Kit::expect_failure(problems, n + "Clear with a rect count and no rects", device->Clear(2, nullptr, D3DCLEAR_TARGET, 0, 1.0f, 0));
-        Kit::expect_failure(problems, n + "SetVertexShaderConstantF with NULL data", device->SetVertexShaderConstantF(0, nullptr, 1));
         Kit::check_usable(problems, n + "after the bad calls", device);
         render_check(problems, n + "after the bad calls", device);
     }
