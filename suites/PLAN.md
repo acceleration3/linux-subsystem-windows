@@ -411,10 +411,10 @@ Each loop creates and destroys 5000 objects of the kind with its largest practic
 | check | contract |
 |---|---|
 | `sanity.sync.order.readback_after_signal` | A CPU read after a fence wait always sees the GPU writes preceding the signal, over 10000 iterations in D3D11, D3D12, Vulkan and OpenCL. |
-| `sanity.sync.order.flush_makes_visible` | Flush/finish (glFinish, clFinish, ID3D11DeviceContext::Flush plus query) guarantee completion of preceding work as the API defines. |
+| `sanity.sync.order.flush_makes_visible` | Flush/finish (clFinish, ID3D11DeviceContext::Flush plus query, a D3D12 queue drained to idle, vkDeviceWaitIdle) guarantee completion of preceding work as the API defines. |
 | `sanity.sync.order.queue_order_in_order` | Commands in one in-order queue execute and complete in submission order: a chain of dependent increments yields the exact count. |
 | `sanity.sync.order.out_of_order_events` | OpenCL out-of-order queue plus event dependencies yield the dependency-correct result. |
-| `sanity.sync.wait.timeout_honoured` | WaitForFences, clWaitForEvents with timeouts, GetData polls and D3D12 event waits return within the requested timeout plus a stated slack when the work never completes. |
+| `sanity.sync.wait.timeout_honoured` | vkWaitForFences, clGetEventInfo polls (clWaitForEvents has no timeout), GetData polls and D3D12 event waits return within the requested timeout plus a stated slack when the work never completes. [E] |
 | `sanity.sync.wait.zero_timeout_poll` | A zero timeout returns immediately with the not-ready result while work is outstanding and ready after it ends. |
 | `sanity.sync.wait.signal_before_wait` | A fence already signalled when waited on returns immediately, for every API with fences. |
 | `sanity.sync.thread.many_threads_one_device` | Thirty-two threads each submitting and waiting on independent work on one device all complete with correct results and no deadlock. |
@@ -427,7 +427,7 @@ Each loop creates and destroys 5000 objects of the kind with its largest practic
 | `sanity.sync.cross.vulkan_d3d12_semaphore` | If external semaphore interop is reported, a Vulkan-to-D3D12 semaphore chain orders work correctly; otherwise the capability is reported absent and use fails the documented way. |
 | `sanity.sync.cross.gl_d3d11_interop` | WGL_NV_DX_interop2, when exposed, shows D3D11 writes in GL after unlock and the reverse. |
 | `sanity.sync.deadlock.contention_no_deadlock` | Threads taking resources in opposite orders across queues, with timeouts, complete with no deadlock for thirty seconds of wall time. |
-| `sanity.sync.fairness.low_rate_not_starved` | A context submitting one tiny job every 10 ms next to a saturating context sees each job complete within a bounded multiple of its idle latency. |
+| `sanity.sync.fairness.low_rate_not_starved` | A context submitting one tiny job every 10 ms next to a saturating context sees each job complete within a bounded multiple of its idle latency. [E] |
 | `sanity.sync.fairness.equal_load_share` | Two contexts with equal saturating loads each achieve at least a third of the combined throughput. [E] |
 
 ### 4.8 Direct3D 9 and 9Ex (40)

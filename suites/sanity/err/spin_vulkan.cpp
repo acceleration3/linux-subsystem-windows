@@ -116,6 +116,18 @@ public:
         }
     }
 
+    SpinState wait_native(int timeout_ms, std::string& detail) override {
+        const VkResult result = rig_.wait_fence(fence_.get(), static_cast<std::uint64_t>(timeout_ms) * 1000000ull);
+        if (result == VK_SUCCESS) {
+            return SpinState::Done;
+        }
+        if (result == VK_TIMEOUT) {
+            return SpinState::Pending;
+        }
+        detail = "vkWaitForFences returned " + VulkanTools::result_name(result);
+        return result == VK_ERROR_DEVICE_LOST ? SpinState::Lost : SpinState::Error;
+    }
+
     bool read(std::vector<std::uint32_t>& out, std::string&) override {
         buffer_.acquire();
         out.resize(kThreads);

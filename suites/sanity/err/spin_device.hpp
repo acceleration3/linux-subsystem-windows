@@ -21,9 +21,13 @@ public:
 
     [[nodiscard]] virtual SpinState poll(int timeout_ms, std::string& detail) = 0;
 
+    [[nodiscard]] virtual SpinState wait_native(int timeout_ms, std::string& detail) { return poll(timeout_ms, detail); }
+
     [[nodiscard]] virtual bool read(std::vector<std::uint32_t>& out, std::string& error) = 0;
 
     [[nodiscard]] static std::unique_ptr<SpinDevice> make(const std::string& api);
+
+    [[nodiscard]] static bool calibrate(SpinDevice& device, double target_ms, std::uint32_t& outer, double& took_ms, std::string& error);
 
     [[nodiscard]] static std::uint32_t expected(std::uint32_t thread, std::uint64_t iterations);
 };

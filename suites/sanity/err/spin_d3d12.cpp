@@ -98,6 +98,25 @@ public:
         }
     }
 
+    SpinState wait_native(int timeout_ms, std::string& detail) override {
+        D3d12Queue& queue = rig_.direct();
+        if (!queue.reached(value_)) {
+            HANDLE event = ::CreateEventW(nullptr, FALSE, FALSE, nullptr);
+            if (event == nullptr || FAILED(queue.fence()->SetEventOnCompletion(value_, event))) {
+                detail = "SetEventOnCompletion failed";
+                return SpinState::Error;
+            }
+            ::WaitForSingleObject(event, static_cast<DWORD>(timeout_ms));
+            ::CloseHandle(event);
+        }
+        const HRESULT removed = rig_.removed_reason();
+        if (removed != S_OK) {
+            detail = "device removed: " + D3d12Tools::hr(removed);
+            return SpinState::Lost;
+        }
+        return queue.reached(value_) ? SpinState::Done : SpinState::Pending;
+    }
+
     bool read(std::vector<std::uint32_t>& out, std::string& error) override {
         return D3d12Tools::read_words(rig_, buffer_, D3D12_RESOURCE_STATE_COMMON, kThreads, out, error);
     }

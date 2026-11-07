@@ -1,5 +1,8 @@
 #include "sanity/err/spin_device.hpp"
 
+#include <algorithm>
+#include <chrono>
+
 namespace lsw::suites::sanity::err {
 
 std::unique_ptr<SpinDevice> SpinDevice::make(const std::string& api) {
@@ -16,6 +19,32 @@ std::unique_ptr<SpinDevice> SpinDevice::make(const std::string& api) {
         return make_spin_opencl();
     }
     return nullptr;
+}
+
+bool SpinDevice::calibrate(SpinDevice& device, double target_ms, std::uint32_t& outer, double& took_ms, std::string& error) {
+    outer = 1;
+    double measured = 0;
+    for (;;) {
+        std::string detail;
+        if (!device.submit(outer, error)) {
+            return false;
+        }
+        const auto begin = std::chrono::steady_clock::now();
+        const SpinState state = device.poll(30000, detail);
+        measured = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - begin).count();
+        if (state != SpinState::Done) {
+            error = "the calibration run with outer count " + std::to_string(outer) + " did not complete: " + detail;
+            return false;
+        }
+        if (measured >= 100.0 || outer >= (1u << 24)) {
+            break;
+        }
+        outer *= 4;
+    }
+    const double scaled = static_cast<double>(outer) * target_ms / std::max(measured, 1.0);
+    outer = std::max<std::uint32_t>(static_cast<std::uint32_t>(std::min(scaled, 4.0e9)), 1);
+    took_ms = measured;
+    return true;
 }
 
 std::uint32_t SpinDevice::expected(std::uint32_t thread, std::uint64_t iterations) {

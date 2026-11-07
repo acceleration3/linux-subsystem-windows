@@ -145,6 +145,12 @@
 #include "sanity/env/display_checks.hpp"
 #include "sanity/env/icd_checks.hpp"
 #include "sanity/env/install_checks.hpp"
+#include "sanity/sync/order_checks.hpp"
+#include "sanity/sync/wait_checks.hpp"
+#include "sanity/sync/thread_checks.hpp"
+#include "sanity/sync/process_checks.hpp"
+#include "sanity/sync/cross_checks.hpp"
+#include "sanity/sync/fair_checks.hpp"
 
 namespace lsw::suites::sanity {
 
@@ -752,6 +758,25 @@ void add(Registry& registry) {
     guarded(suite, {"sanity.err.infinite_shader", {"err", "robust", "compute", "d3d11", "d3d12", "vulkan", "opencl", "exclusive"}, true, 600, err::ShaderChecks::infinite});
     guarded(suite, {"sanity.err.kill_mid_submit", {"err", "robust", "slow", "d3d9", "d3d11", "d3d12", "vulkan", "opencl", "gl", "exclusive"}, true, 900, err::KillChecks::mid_submit});
     guarded(suite, {"sanity.err.oom_every_api", {"err", "robust", "mem", "slow", "d3d9", "d3d11", "d3d12", "vulkan", "opencl", "gl", "exclusive"}, true, 900, err::OomChecks::every_api});
+    guarded(suite, {"sanity.sync.order.readback_after_signal", {"sync", "d3d11", "d3d12", "vulkan", "opencl", "slow"}, false, 900, sync::OrderChecks::readback_after_signal});
+    guarded(suite, {"sanity.sync.order.flush_makes_visible", {"sync", "d3d11", "d3d12", "vulkan", "opencl"}, false, 300, sync::OrderChecks::flush_makes_visible});
+    guarded(suite, {"sanity.sync.order.queue_order_in_order", {"sync", "d3d11", "d3d12", "vulkan", "opencl"}, false, 300, sync::OrderChecks::queue_order_in_order});
+    guarded(suite, {"sanity.sync.order.out_of_order_events", {"sync", "opencl"}, false, 120, sync::OrderChecks::out_of_order_events});
+    guarded(suite, {"sanity.sync.wait.timeout_honoured", {"sync", "robust", "d3d11", "d3d12", "vulkan", "opencl", "exclusive"}, true, 180, sync::WaitChecks::timeout_honoured});
+    guarded(suite, {"sanity.sync.wait.zero_timeout_poll", {"sync", "d3d11", "d3d12", "vulkan", "opencl"}, false, 300, sync::WaitChecks::zero_timeout_poll});
+    guarded(suite, {"sanity.sync.wait.signal_before_wait", {"sync", "d3d11", "d3d12", "vulkan", "opencl"}, false, 180, sync::WaitChecks::signal_before_wait});
+    guarded(suite, {"sanity.sync.thread.many_threads_one_device", {"sync", "d3d11", "d3d12", "vulkan", "opencl", "slow"}, false, 300, sync::ThreadChecks::many_threads_one_device});
+    guarded(suite, {"sanity.sync.thread.multi_queue_vulkan", {"sync", "vulkan"}, false, 120, sync::ThreadChecks::multi_queue_vulkan});
+    guarded(suite, {"sanity.sync.thread.d3d12_multi_queue", {"sync", "d3d12"}, false, 120, sync::ThreadChecks::d3d12_multi_queue});
+    guarded(suite, {"sanity.sync.thread.immediate_context_serialised", {"sync", "d3d11"}, false, 120, sync::ThreadChecks::immediate_context_serialised});
+    guarded(suite, {"sanity.sync.process.many_processes", {"sync", "slow", "d3d11", "d3d12", "vulkan", "opencl"}, false, 420, sync::ProcessChecks::many_processes});
+    guarded(suite, {"sanity.sync.process.shared_fence_ping_pong", {"sync", "d3d12"}, false, 420, sync::ProcessChecks::shared_fence_ping_pong});
+    guarded(suite, {"sanity.sync.cross.d3d11_d3d12_fence", {"sync", "interop", "d3d11", "d3d12"}, false, 180, sync::CrossChecks::d3d11_d3d12_fence});
+    guarded(suite, {"sanity.sync.cross.vulkan_d3d12_semaphore", {"sync", "interop", "vulkan", "d3d12"}, false, 180, sync::CrossChecks::vulkan_d3d12_semaphore});
+    guarded(suite, {"sanity.sync.cross.gl_d3d11_interop", {"sync", "interop", "gl", "d3d11"}, false, 240, sync::CrossChecks::gl_d3d11_interop});
+    guarded(suite, {"sanity.sync.deadlock.contention_no_deadlock", {"sync", "slow", "d3d11", "d3d12", "vulkan", "opencl"}, false, 300, sync::FairChecks::contention_no_deadlock});
+    guarded(suite, {"sanity.sync.fairness.low_rate_not_starved", {"sync", "slow", "d3d11", "d3d12", "vulkan", "opencl", "exclusive"}, true, 300, sync::FairChecks::low_rate_not_starved});
+    guarded(suite, {"sanity.sync.fairness.equal_load_share", {"sync", "slow", "d3d11", "d3d12", "vulkan", "opencl", "exclusive"}, true, 300, sync::FairChecks::equal_load_share});
 }
 
 }  // namespace lsw::suites::sanity

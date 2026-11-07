@@ -1,5 +1,6 @@
 add_library(suite_support OBJECT
     api_policy.cpp
+    shared_fence.cpp
     api_snapshot.cpp
     d3d11_backend.cpp
     d3d10_device.cpp

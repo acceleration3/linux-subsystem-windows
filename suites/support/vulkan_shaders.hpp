@@ -26,7 +26,8 @@ enum class VulkanShader {
     SpecFrag,
     DetKernel,
     Spin,
-    SpinForever
+    SpinForever,
+    Step
 };
 
 class VulkanShaders {

@@ -170,5 +170,17 @@ add_library(suite_sanity OBJECT
     present/path_checks.cpp
     present/content_checks.cpp
     present/alpha_checks.cpp
+    sync/sync_device.cpp
+    sync/sync_d3d11.cpp
+    sync/sync_d3d12.cpp
+    sync/sync_vulkan.cpp
+    sync/sync_opencl.cpp
+    sync/api_children.cpp
+    sync/order_checks.cpp
+    sync/wait_checks.cpp
+    sync/thread_checks.cpp
+    sync/process_checks.cpp
+    sync/cross_checks.cpp
+    sync/fair_checks.cpp
 )
 target_link_libraries(suite_sanity PUBLIC suite_core suite_support)
