@@ -37,7 +37,7 @@ std::vector<GlScene::Vertex> GlScene::vertices() const {
     return result;
 }
 
-bool GlScene::draw(const GlApi& api, std::string& error) {
+bool GlScene::draw(const GlApi& api, std::string& error, bool per_rect) {
     if (api_ == nullptr) {
         api_ = &api;
         if (api.glGenVertexArrays == nullptr || !program_.build(api, vertex_source(), fragment_source(), error)) {
@@ -66,7 +66,13 @@ bool GlScene::draw(const GlApi& api, std::string& error) {
                      static_cast<float>((clear_ >> 16) & 0xFF) / 255.0f, static_cast<float>(clear_ >> 24) / 255.0f);
     api.glClear(glc::COLOR_BUFFER_BIT);
     program_.use();
-    api.glDrawArrays(glc::TRIANGLES, 0, static_cast<int>(data.size()));
+    if (per_rect) {
+        for (std::size_t i = 0; i < rects_.size(); ++i) {
+            api.glDrawArrays(glc::TRIANGLES, static_cast<int>(i * 6), 6);
+        }
+    } else {
+        api.glDrawArrays(glc::TRIANGLES, 0, static_cast<int>(data.size()));
+    }
     api.glBindVertexArray(0);
     api.glUseProgram(0);
     const unsigned failure = api.drain_errors();

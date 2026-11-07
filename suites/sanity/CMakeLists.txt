@@ -5,6 +5,10 @@ add_library(suite_sanity OBJECT
     gl/thread_checks.cpp
     gl/buffer_checks.cpp
     gl/texture_checks.cpp
+    gl/render_checks.cpp
+    gl/sync_checks.cpp
+    gl/swap_checks.cpp
+    gl/ext_checks.cpp
     dxgi/enum_checks.cpp
     dxgi/swap_checks.cpp
     dxgi/mem_checks.cpp

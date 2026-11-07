@@ -439,36 +439,41 @@ Outcome FormatChecks::srgb_and_float(Context& context) {
     if (rig.wgl.get_pixel_format_attribs == nullptr) {
         return Kit::not_advertised("WGL_ARB_pixel_format");
     }
-    std::vector<Format> formats;
-    if (!describe_all(rig.dc(), formats, error)) {
-        return Outcome::fail(error);
+    bool counted = false;
+    const int total = attribute(rig, 1, NUMBER_PIXEL_FORMATS, counted);
+    if (!counted || total <= 0) {
+        return Outcome::fail("WGL_NUMBER_PIXEL_FORMATS_ARB cannot be queried");
     }
     Problems problems;
     int srgb_format = 0;
     int float_format = 0;
     bool any_float = false;
-    for (const Format& format : formats) {
+    for (int index = 1; index <= total; ++index) {
         bool known = false;
-        const int srgb = attribute(rig, format.index, FRAMEBUFFER_SRGB_CAPABLE, known);
+        const int srgb = attribute(rig, index, FRAMEBUFFER_SRGB_CAPABLE, known);
         const bool srgb_known = known;
-        const int type = attribute(rig, format.index, PIXEL_TYPE, known);
+        const int type = attribute(rig, index, PIXEL_TYPE, known);
         const bool is_srgb = srgb_known && srgb != 0;
         const bool is_float = known && type == TYPE_RGBA_FLOAT;
         bool window_ok = false;
-        const int draw = attribute(rig, format.index, DRAW_TO_WINDOW, window_ok);
+        const int draw = attribute(rig, index, DRAW_TO_WINDOW, window_ok);
+        bool accel_ok = false;
+        const int acceleration = attribute(rig, index, ACCELERATION, accel_ok);
+        const bool hardware = !accel_ok || acceleration == FULL_ACCELERATION;
+        const std::string name = "format " + std::to_string(index);
         if (is_srgb && !srgb_advertised) {
-            problems.add(label(format) + " reports an sRGB-capable framebuffer but neither WGL_ARB_framebuffer_sRGB nor WGL_EXT_framebuffer_sRGB is advertised");
+            problems.add(name + " reports an sRGB-capable framebuffer but neither WGL_ARB_framebuffer_sRGB nor WGL_EXT_framebuffer_sRGB is advertised");
         }
         if (is_float && !float_advertised) {
-            problems.add(label(format) + " reports a floating-point pixel type but WGL_ARB_pixel_format_float is not advertised");
+            problems.add(name + " reports a floating-point pixel type but WGL_ARB_pixel_format_float is not advertised");
         }
-        if (is_srgb && draw != 0 && srgb_format == 0 && format.rgba() && !format.generic()) {
-            srgb_format = format.index;
+        if (is_srgb && draw != 0 && srgb_format == 0 && hardware) {
+            srgb_format = index;
         }
         if (is_float) {
             any_float = true;
-            if (draw != 0 && float_format == 0 && !format.generic()) {
-                float_format = format.index;
+            if (draw != 0 && float_format == 0 && hardware) {
+                float_format = index;
             }
         }
     }

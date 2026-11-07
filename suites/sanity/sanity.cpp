@@ -52,6 +52,10 @@
 #include "sanity/gl/thread_checks.hpp"
 #include "sanity/gl/buffer_checks.hpp"
 #include "sanity/gl/texture_checks.hpp"
+#include "sanity/gl/render_checks.hpp"
+#include "sanity/gl/sync_checks.hpp"
+#include "sanity/gl/swap_checks.hpp"
+#include "sanity/gl/ext_checks.hpp"
 #include "sanity/env/display_checks.hpp"
 #include "sanity/env/icd_checks.hpp"
 #include "sanity/env/install_checks.hpp"
@@ -370,6 +374,25 @@ void add(Registry& registry) {
     guarded(suite, {"sanity.gl.context.many_contexts", {"gl", "slow"}, false, 240, gl::ContextChecks::many_contexts});
     guarded(suite, {"sanity.gl.thread.concurrent_contexts", {"gl"}, false, 90, gl::ThreadChecks::concurrent_contexts});
     guarded(suite, {"sanity.gl.thread.producer_consumer", {"gl"}, false, 120, gl::ThreadChecks::producer_consumer});
+    guarded(suite, {"sanity.gl.memobj.external_memory_caps", {"gl", "d3d11", "interop"}, false, 90, gl::ExtChecks::external_memory_caps});
+    guarded(suite, {"sanity.gl.ext.string_matches_entry_points", {"gl"}, false, 60, gl::ExtChecks::string_matches_entry_points});
+    guarded(suite, {"sanity.gl.ext.unadvertised_not_supported", {"gl"}, false, 90, gl::ExtChecks::unadvertised_not_supported});
+    guarded(suite, {"sanity.gl.ext.version_implies_core_functions", {"gl"}, false, 60, gl::ExtChecks::version_implies_core_functions});
+    guarded(suite, {"sanity.gl.error.getError_contracts", {"gl"}, false, 60, gl::ExtChecks::getError_contracts});
+    guarded(suite, {"sanity.gl.error.debug_output", {"gl"}, false, 60, gl::ExtChecks::debug_output});
+    guarded(suite, {"sanity.gl.swap.interval_semantics", {"gl", "present"}, false, 60, gl::SwapChecks::interval_semantics});
+    guarded(suite, {"sanity.gl.swap.swapbuffers_content", {"gl", "present", "dwm"}, false, 90, gl::SwapChecks::swapbuffers_content});
+    guarded(suite, {"sanity.gl.swap.resize_and_dc_lifetime", {"gl", "present"}, false, 60, gl::SwapChecks::resize_and_dc_lifetime});
+    guarded(suite, {"sanity.gl.sync.fence_ordering", {"gl"}, false, 90, gl::SyncChecks::fence_ordering});
+    guarded(suite, {"sanity.gl.sync.timeout_semantics", {"gl"}, false, 90, gl::SyncChecks::timeout_semantics});
+    guarded(suite, {"sanity.gl.sync.finish_flush", {"gl"}, false, 90, gl::SyncChecks::finish_flush});
+    guarded(suite, {"sanity.gl.query.timer_samples_primitives", {"gl"}, false, 90, gl::SyncChecks::timer_samples_primitives});
+    guarded(suite, {"sanity.gl.query.availability_rules", {"gl"}, false, 60, gl::SyncChecks::availability_rules});
+    guarded(suite, {"sanity.gl.fbo.completeness_matrix", {"gl", "formats"}, false, 90, gl::RenderChecks::completeness_matrix});
+    guarded(suite, {"sanity.gl.fbo.blit", {"gl", "msaa"}, false, 90, gl::RenderChecks::blit});
+    guarded(suite, {"sanity.gl.draw.core_vs_compat_equal", {"gl"}, false, 60, gl::RenderChecks::core_vs_compat_equal});
+    guarded(suite, {"sanity.gl.draw.instanced_indirect", {"gl"}, false, 90, gl::RenderChecks::instanced_indirect});
+    guarded(suite, {"sanity.gl.draw.large_batches", {"gl", "slow"}, false, 180, gl::RenderChecks::large_batches});
     guarded(suite, {"sanity.gl.texture.all_targets_roundtrip", {"gl", "formats"}, false, 90, gl::TextureChecks::all_targets_roundtrip});
     guarded(suite, {"sanity.gl.texture.compressed_formats", {"gl", "formats"}, false, 120, gl::TextureChecks::compressed_formats});
     guarded(suite, {"sanity.gl.texture.generate_mipmap", {"gl"}, false, 90, gl::TextureChecks::generate_mipmap});

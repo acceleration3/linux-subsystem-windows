@@ -29,7 +29,7 @@ public:
 
     void clear_rects() { rects_.clear(); }
 
-    [[nodiscard]] bool draw(const GlApi& api, std::string& error);
+    [[nodiscard]] bool draw(const GlApi& api, std::string& error, bool per_rect = false);
 
     void release();
 
