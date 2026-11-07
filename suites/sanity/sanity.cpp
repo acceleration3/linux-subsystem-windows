@@ -23,6 +23,11 @@
 #include "sanity/d3d11/transfer_checks.hpp"
 #include "sanity/d3d11/render_checks.hpp"
 #include "sanity/d3d11/compute_checks.hpp"
+#include "sanity/d3d11/query_checks.hpp"
+#include "sanity/d3d11/deferred_checks.hpp"
+#include "sanity/d3d11/share_checks.hpp"
+#include "sanity/d3d11/tiled_checks.hpp"
+#include "sanity/d3d11/err_checks.hpp"
 #include "sanity/env/display_checks.hpp"
 #include "sanity/env/icd_checks.hpp"
 #include "sanity/env/install_checks.hpp"
@@ -221,6 +226,28 @@ void add(Registry& registry) {
     guarded(suite, {"sanity.d3d11.compute.typed_uav_load", {"d3d11", "compute", "formats"}, false, 90, d3d11::ComputeChecks::typed_uav_load});
     guarded(suite, {"sanity.d3d11.compute.barriers_sharing", {"d3d11", "compute"}, false, 90, d3d11::ComputeChecks::barriers_sharing});
     guarded(suite, {"sanity.d3d11.compute.cs_on_downlevel", {"d3d11", "compute"}, false, 60, d3d11::ComputeChecks::cs_on_downlevel});
+    guarded(suite, {"sanity.d3d11.query.occlusion_counts", {"d3d11"}, false, 60, d3d11::QueryChecks::occlusion_counts});
+    guarded(suite, {"sanity.d3d11.query.timestamp_disjoint", {"d3d11", "compute"}, false, 90, d3d11::QueryChecks::timestamp_disjoint});
+    guarded(suite, {"sanity.d3d11.query.pipeline_stats", {"d3d11"}, false, 60, d3d11::QueryChecks::pipeline_stats});
+    guarded(suite, {"sanity.d3d11.query.event_and_predication", {"d3d11"}, false, 90, d3d11::QueryChecks::event_and_predication});
+    guarded(suite, {"sanity.d3d11.deferred.equivalence", {"d3d11", "deferred"}, false, 60, d3d11::DeferredChecks::equivalence});
+    guarded(suite, {"sanity.d3d11.deferred.maps", {"d3d11", "deferred"}, false, 60, d3d11::DeferredChecks::maps});
+    guarded(suite, {"sanity.d3d11.deferred.list_reuse", {"d3d11", "deferred"}, false, 60, d3d11::DeferredChecks::list_reuse});
+    guarded(suite, {"sanity.d3d11.deferred.clearstate", {"d3d11", "deferred"}, false, 60, d3d11::DeferredChecks::clearstate});
+    guarded(suite, {"sanity.d3d11.mt.free_threaded", {"d3d11"}, false, 90, d3d11::DeferredChecks::free_threaded});
+    guarded(suite, {"sanity.d3d11.mt.multithread_protect", {"d3d11"}, false, 90, d3d11::DeferredChecks::multithread_protect});
+    guarded(suite, {"sanity.d3d11.mt.two_devices", {"d3d11"}, false, 90, d3d11::DeferredChecks::two_devices});
+    guarded(suite, {"sanity.d3d11.share.legacy_handle", {"d3d11", "interop"}, false, 60, d3d11::ShareChecks::legacy_handle});
+    guarded(suite, {"sanity.d3d11.share.nt_handle", {"d3d11", "interop"}, false, 120, d3d11::ShareChecks::nt_handle});
+    guarded(suite, {"sanity.d3d11.share.keyed_mutex", {"d3d11", "interop"}, false, 180, d3d11::ShareChecks::keyed_mutex});
+    guarded(suite, {"sanity.d3d11.share.fence", {"d3d11", "interop"}, false, 90, d3d11::ShareChecks::fence});
+    guarded(suite, {"sanity.d3d11.tiled.caps_driven", {"d3d11"}, false, 90, d3d11::TiledChecks::caps_driven});
+    guarded(suite, {"sanity.d3d11.ifaces.d3d11_1", {"d3d11"}, false, 90, d3d11::TiledChecks::d3d11_1});
+    guarded(suite, {"sanity.d3d11.ifaces.d3d11_2_3_4", {"d3d11"}, false, 90, d3d11::TiledChecks::d3d11_2_3_4});
+    guarded(suite, {"sanity.d3d11.ifaces.on12", {"d3d11", "d3d12", "interop"}, false, 90, d3d11::TiledChecks::on12});
+    guarded(suite, {"sanity.d3d11.err.bad_parameters", {"d3d11"}, false, 60, d3d11::ErrChecks::bad_parameters});
+    guarded(suite, {"sanity.d3d11.err.device_removed", {"d3d11", "exclusive"}, true, 120, d3d11::ErrChecks::device_removed});
+    guarded(suite, {"sanity.d3d11.err.stress_destroy", {"d3d11", "mem", "leak", "slow"}, false, 300, d3d11::ErrChecks::stress_destroy});
 }
 
 }  // namespace lsw::suites::sanity
