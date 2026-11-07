@@ -4,6 +4,7 @@
 #include "lsw/host/config/display_refresh.hpp"
 #include "lsw/host/config/manager_settings.hpp"
 #include "lsw/host/config/pending_changes.hpp"
+#include "lsw/host/config/vram_reserve.hpp"
 #include "lsw/host/manager/adapter_roles.hpp"
 #include "lsw/host/manager/display_facts.hpp"
 #include "lsw/host/manager/graphics_alerts.hpp"
@@ -207,6 +208,9 @@ QStringList GraphicsPage::status_facts() const {
             what << QStringLiteral("hostmem %1")
                         .arg(platform::HostGpus::format_mib(static_cast<quint64>(*g.pending.host_window_mib)));
         }
+        if (g.pending.vram_reserve_mib) {
+            what << QStringLiteral("vram reserve %1").arg(config::VramReserve::label(*g.pending.vram_reserve_mib));
+        }
         if (g.pending.adapters) {
             what << QStringLiteral("adapters");
         }
@@ -250,6 +254,8 @@ QString GraphicsPage::signature() const {
                   << QString::number(device.hostmem_mib);
         }
     }
+    parts << QString::number(g.pending.vram_reserve_mib.value_or(-1))
+          << pending_.staged_or_current(K::kVramReserveMib).toString();
     parts << QString::number(g.pending.host_window_mib.value_or(0))
           << QString::number(g.pending.adapters)
           << pending_.staged_or_current(K::kHostGpu).toString()
@@ -457,6 +463,45 @@ QWidget* GraphicsPage::build_device() {
         line->addWidget(Widgets::tag(true));
         line->addWidget(Widgets::meta(window_note, true), 1);
         rows.add_widget(QStringLiteral("Host window"), holder);
+    }
+
+    {
+        const int staged = pending_.staged_or_current(K::kVramReserveMib).toInt();
+        QStringList caps;
+        for (const auto& adapter : adapters) {
+            const quint64 total_mib = adapter.gpu.vram_bytes / (1024 * 1024);
+            if (total_mib == 0) {
+                continue;
+            }
+            const auto split = config::VramReserve::resolve(staged, total_mib);
+            const QString cap = QStringLiteral("%1 of %2")
+                                    .arg(platform::HostGpus::format_mib(split.guest_cap_mib),
+                                         platform::HostGpus::format_mib(total_mib));
+            caps << (adapters.size() > 1
+                         ? QStringLiteral("%1: %2").arg(adapter.display ? QStringLiteral("display")
+                                                                         : QStringLiteral("render"),
+                                                        cap)
+                         : cap);
+        }
+        auto* holder = new QWidget;
+        auto* line = new QHBoxLayout(holder);
+        line->setContentsMargins(0, 0, 0, 0);
+        line->setSpacing(8);
+        auto* reserve = controls_->choice(K::kVramReserveMib,
+                                          {{QStringLiteral("Auto"), 0},
+                                           {QStringLiteral("512 MiB"), 512},
+                                           {QStringLiteral("1 GiB"), 1024},
+                                           {QStringLiteral("2 GiB"), 2048},
+                                           {QStringLiteral("4 GiB"), 4096},
+                                           {QStringLiteral("8 GiB"), 8192}});
+        line->addWidget(reserve);
+        line->addWidget(Widgets::tag(true));
+        line->addWidget(Widgets::meta(QStringLiteral("applies at the next VM start"), true), 1);
+        rows.add_widget(QStringLiteral("VRAM kept for the host"), holder);
+        rows.add(QStringLiteral("Guest VRAM cap"), caps.isEmpty() ? QStringLiteral("-") : caps.join(QStringLiteral(", ")),
+                 caps.isEmpty() ? Theme::Tone::kFaint : nullptr,
+                 caps.isEmpty() ? QStringLiteral("the host GPU is not known yet")
+                                : QStringLiteral("what is left for the guest"));
     }
 
     const DisplayFacts display = DisplayFacts::read(status_);

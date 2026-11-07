@@ -77,6 +77,7 @@ struct HostWindowStatus {
     std::optional<qint64> window_refused_at_ms;
     std::optional<qint64> full_since_ms;
     QVector<Sample> history;
+    QVector<platform::AvStateDump::GpuVram> vram;
     QVector<App> apps;
 };
 

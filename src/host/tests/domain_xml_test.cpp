@@ -183,6 +183,7 @@ int main(int argc, char** argv) {
     inputs.host_gpu_uuid = QStringLiteral("01234567-89ab-cdef-0123-456789abcdef");
     inputs.render_only_gpu_uuids = {QStringLiteral("fedcba98-7654-3210-fedc-ba9876543210")};
     inputs.host_window_mib = 4096;
+    inputs.vram_reserve_mib = 2048;
     inputs.display_modes = QStringLiteral("2560x1440,1920x1080");
     inputs.avgpu_log = QStringLiteral("/home/o'brien/.local/share/lsw/logs/lsw-avgpu.log");
     inputs.export_socket = QStringLiteral("/run/user/1000/o'b,c-export.sock");
@@ -249,6 +250,8 @@ int main(int argc, char** argv) {
     check(display.contains(QStringLiteral(",max_outputs=1,")), "one output");
     check(display.contains(QStringLiteral(",vectors=11,hostmem=4096M,")),
           "MSI-X vectors and the host window");
+    check(display.contains(QStringLiteral(",hostmem=4096M,vram-reserve=2048")),
+          "the display adapter keeps 2048 MiB of VRAM for the host");
     check(!xml.contains(QStringLiteral("renderer")), "no device is given a renderer");
     check(display.endsWith(QStringLiteral(",modes=2560x1440,,1920x1080")),
           "the mode list's commas are doubled for QEMU");
@@ -265,6 +268,14 @@ int main(int argc, char** argv) {
               render_only.contains(QStringLiteral(",hostmem=4096M")) &&
               !render_only.contains(QStringLiteral("modes=")),
           "the render-only adapter is display=off on its own GPU");
+    check(render_only.contains(QStringLiteral(",vram-reserve=2048")),
+          "the render-only adapter gets the same reserve");
+    {
+        DomainXmlInputs automatic = inputs;
+        automatic.vram_reserve_mib = 0;
+        check(!DomainXmlBuilder::build(vm, automatic).contains(QStringLiteral("vram-reserve")),
+              "Auto leaves the property out");
+    }
 
     check(args_after(args, QStringLiteral("-chardev"), QStringLiteral("file,id=avgpu-log,path="))
                   .value(0) == QStringLiteral("file,id=avgpu-log,path=") + inputs.avgpu_log + QStringLiteral(",append=on"),

@@ -208,6 +208,7 @@ void GpuStatusPage::rebuild() {
     content_->addWidget(build_adapters());
     content_->addWidget(build_guest_driver());
     content_->addWidget(build_host_window());
+    content_->addWidget(build_guest_vram());
     content_->addWidget(build_apps());
     content_->addWidget(build_log());
     content_->addStretch(1);
@@ -409,6 +410,28 @@ QWidget* GpuStatusPage::build_host_window() {
     return panel.frame;
 }
 
+QWidget* GpuStatusPage::build_guest_vram() {
+    auto panel = card(QStringLiteral("Guest VRAM"), QStringLiteral("from the executor"));
+    KeyValues rows(panel.body);
+    vram_cap_.clear();
+    vram_reserve_.clear();
+    const auto& adapters = status_.graphics().adapters;
+    const qsizetype devices = std::max<qsizetype>(adapters.size(), 1);
+    for (qsizetype i = 0; i < devices; ++i) {
+        const QString prefix = devices > 1
+                                   ? short_name(platform::HostGpus::adapter_name(adapters.at(i).gpu)) + QStringLiteral(" ")
+                                   : QString{};
+        vram_cap_.push_back(qobject_cast<QLabel*>(
+            rows.add(prefix + QStringLiteral("Guest VRAM cap"), QStringLiteral("-"), Theme::Tone::kFaint,
+                     QStringLiteral("the most GPU memory the guest may use"))->itemAt(0)->widget()));
+        vram_reserve_.push_back(qobject_cast<QLabel*>(
+            rows.add(prefix + QStringLiteral("Kept for the host"), QStringLiteral("-"), Theme::Tone::kFaint,
+                     QStringLiteral("the reserve in effect"))->itemAt(0)->widget()));
+    }
+    panel.body->addStretch(1);
+    return panel.frame;
+}
+
 QWidget* GpuStatusPage::build_apps() {
     auto panel = card(QStringLiteral("Apps"),
                       QStringLiteral("totals and recent rate, click a header to sort"));
@@ -442,6 +465,16 @@ void GpuStatusPage::update_window() {
     window_use_->setText(w.read ? QStringLiteral("%1 of %2").arg(ui::Format::bytes(w.used_bytes), window)
                                 : QStringLiteral("-"));
     window_peak_->setText(w.peak_bytes ? ui::Format::bytes(*w.peak_bytes) : QStringLiteral("-"));
+    for (qsizetype i = 0; i < vram_cap_.size(); ++i) {
+        const auto found = std::find_if(w.vram.begin(), w.vram.end(), [i](const auto& entry) {
+            return entry.device == static_cast<quint32>(i);
+        });
+        const auto show = [&](QLabel* label, const std::optional<quint64>& bytes) {
+            label->setText(bytes ? ui::Format::bytes(*bytes) : QStringLiteral("-"));
+        };
+        show(vram_cap_.at(i), found != w.vram.end() ? found->guest_cap_bytes : std::nullopt);
+        show(vram_reserve_.at(i), found != w.vram.end() ? found->reserve_bytes : std::nullopt);
+    }
     fill_apps();
 }
 

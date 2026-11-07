@@ -70,7 +70,8 @@ StatusHub::StatusHub(vm::LibvirtConnection& libvirt, vm::Lifecycle& lifecycle,
     connect(&usb_timer_, &QTimer::timeout, this, &StatusHub::read_usb);
 
     connect(&manager_settings_, &config::ManagerSettings::changed, this, [this](const QString& key) {
-        if (key == K::kHostGpu || key == K::kRenderGpus || key == K::kHostWindowMib) {
+        if (key == K::kHostGpu || key == K::kRenderGpus || key == K::kHostWindowMib
+            || key == K::kVramReserveMib) {
             rematch();
             read_vram();
             Q_EMIT changed(Area::Graphics);
@@ -673,6 +674,15 @@ void StatusHub::compare_settings() {
         const int window = manager_settings_.int_value(K::kHostWindowMib);
         if (display->hostmem_mib != 0 && window != display->hostmem_mib) {
             pending.host_window_mib = window;
+        }
+    }
+    if (definition != nullptr) {
+        const int reserve = manager_settings_.int_value(K::kVramReserveMib);
+        const bool differs =
+            std::any_of(definition->gpus.begin(), definition->gpus.end(),
+                        [reserve](const auto& device) { return device.vram_reserve_mib != reserve; });
+        if (differs) {
+            pending.vram_reserve_mib = reserve;
         }
     }
     if (definition != nullptr && !definition->gpus.isEmpty() && graphics_.probed) {

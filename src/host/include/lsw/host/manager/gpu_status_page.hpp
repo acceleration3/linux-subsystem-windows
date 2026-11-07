@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QVector>
 #include <QWidget>
 
 class QLabel;
@@ -39,6 +40,7 @@ private:
     [[nodiscard]] QWidget* build_adapters() const;
     [[nodiscard]] QWidget* build_guest_driver() const;
     [[nodiscard]] QWidget* build_host_window();
+    [[nodiscard]] QWidget* build_guest_vram();
     [[nodiscard]] QWidget* build_apps();
     [[nodiscard]] QWidget* build_log();
     void open_log() const;
@@ -51,6 +53,8 @@ private:
     ui::UsageGraph* graph_ = nullptr;
     QLabel* window_use_ = nullptr;
     QLabel* window_peak_ = nullptr;
+    QVector<QLabel*> vram_cap_;
+    QVector<QLabel*> vram_reserve_;
     QTableWidget* apps_table_ = nullptr;
     QLabel* apps_note_ = nullptr;
     QString built_for_;

@@ -1114,6 +1114,8 @@ svg.ico{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stro
               <div class="in">
                 <dl class="kv">
                   <dt>Host window</dt><dd style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="input select sm" style="width:92px">8 GiB</span><span class="tagr">restart</span><span class="meta" style="margin:0">write-back, used on demand</span></dd>
+                  <dt>VRAM kept for the host</dt><dd style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="input select sm" style="width:92px">Auto</span><span class="tagr">restart</span><span class="meta" style="margin:0">Auto or a size; applies at the next VM start</span></dd>
+                  <dt>Guest VRAM cap</dt><dd>14.0 GiB of 16.0 GiB <span class="meta">what is left for the guest</span></dd>
                   <dt>Display</dt><dd>2560 &times; 1440 at 360 Hz <span class="meta">set on the Display page</span></dd>
                   <dt>Adapters</dt><dd>1 <span class="meta">the display; a render-only one after a restart</span></dd>
                 </dl>
@@ -1248,6 +1250,19 @@ svg.ico{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stro
                 <dl class="kv" style="margin-top:10px">
                   <dt>In use</dt><dd>2.1 GiB of 8.0 GiB</dd>
                   <dt>Peak</dt><dd>3.4 GiB</dd>
+                </dl>
+              </div>
+            </div>
+
+            <div class="area">
+              <header>
+                <span class="nm">Guest VRAM</span>
+                <span class="cap">from the executor</span>
+              </header>
+              <div class="in">
+                <dl class="kv">
+                  <dt>Guest VRAM cap</dt><dd>14.0 GiB <span class="meta">the most GPU memory the guest may use</span></dd>
+                  <dt>Kept for the host</dt><dd>2.0 GiB <span class="meta">the reserve in effect; - when the executor has not reported</span></dd>
                 </dl>
               </div>
             </div>

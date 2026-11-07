@@ -1,5 +1,7 @@
 #include "lsw/host/config/pending_changes.hpp"
 
+#include "lsw/host/config/vram_reserve.hpp"
+
 #include <QDir>
 #include <QHash>
 #include <algorithm>
@@ -18,6 +20,7 @@ QString label_for(const QString& key) {
         {K::kDiskGib, QStringLiteral("disk")},
         {K::kHostGpu, QStringLiteral("display GPU")},
         {K::kHostWindowMib, QStringLiteral("host window")},
+        {K::kVramReserveMib, QStringLiteral("VRAM kept for the host")},
         {K::kRenderGpus, QStringLiteral("render GPUs")},
         {K::kHostShares, QStringLiteral("shared folders")},
     };
@@ -38,6 +41,9 @@ QString render(const QString& key, const QVariant& value) {
     }
     if (key == K::kHostWindowMib && value.toInt() % 1024 == 0) {
         return QStringLiteral("%1 GiB").arg(value.toInt() / 1024);
+    }
+    if (key == K::kVramReserveMib) {
+        return VramReserve::label(value.toInt());
     }
     if (value.typeId() == QMetaType::Bool) {
         return value.toBool() ? QStringLiteral("on") : QStringLiteral("off");

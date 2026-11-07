@@ -343,3 +343,12 @@ target_compile_definitions(lsw_host_table_header_test PRIVATE QT_NO_KEYWORDS)
 add_test(NAME lsw_host_table_header_test COMMAND lsw_host_table_header_test)
 set_tests_properties(lsw_host_table_header_test PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 60)
+
+add_executable(lsw_host_vram_reserve_test vram_reserve_test.cpp)
+target_link_libraries(lsw_host_vram_reserve_test
+    PRIVATE
+        lsw_host_core
+        LSW::CompileOptions
+)
+target_compile_definitions(lsw_host_vram_reserve_test PRIVATE QT_NO_KEYWORDS)
+add_test(NAME lsw_host_vram_reserve_test COMMAND lsw_host_vram_reserve_test)

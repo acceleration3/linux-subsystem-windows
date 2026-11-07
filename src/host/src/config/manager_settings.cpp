@@ -26,6 +26,7 @@ const QHash<QString, QVariant>& defaults() {
 
         {K::kHostGpu, QStringLiteral("auto")},
         {K::kHostWindowMib, 8192},
+        {K::kVramReserveMib, 0},
         {K::kRenderGpus, QStringList{}},
 
         {K::kSmbEnabled, true},
@@ -62,7 +63,7 @@ const QHash<QString, QVariant>& defaults() {
 const QStringList& restart_keys() {
     static const QStringList keys = {
         K::kCpuCores,      K::kMemoryMib,  K::kDiskGib,    K::kHostGpu,
-        K::kHostWindowMib, K::kRenderGpus, K::kHostShares,
+        K::kHostWindowMib, K::kVramReserveMib, K::kRenderGpus, K::kHostShares,
     };
     return keys;
 }

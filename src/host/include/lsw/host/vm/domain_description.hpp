@@ -14,6 +14,7 @@ struct DomainDescription {
         QString host_gpu;
         bool display = true;
         int hostmem_mib = 0;
+        int vram_reserve_mib = 0;
         std::optional<QString> modes;
         std::optional<quint32> refresh_millihz;
     };

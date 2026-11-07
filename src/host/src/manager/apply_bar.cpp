@@ -47,7 +47,7 @@ ApplyBar::ApplyBar(config::PendingChanges& pending, QWidget* parent)
 }
 
 NavRail::Page ApplyBar::page_of(const QString& key) {
-    if (key == K::kHostGpu || key == K::kRenderGpus || key == K::kHostWindowMib) {
+    if (key == K::kHostGpu || key == K::kRenderGpus || key == K::kHostWindowMib || key == K::kVramReserveMib) {
         return NavRail::Page::Graphics;
     }
     if (key == K::kHostShares) {

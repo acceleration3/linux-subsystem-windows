@@ -62,6 +62,12 @@ public:
         }
     };
 
+    struct GpuVram {
+        quint32 device = 0;
+        std::optional<quint64> guest_cap_bytes;
+        std::optional<quint64> reserve_bytes;
+    };
+
     struct Snapshot {
         bool device = false;
         bool executor = false;
@@ -69,6 +75,7 @@ public:
         std::optional<WindowStats> window_stats;
         QVector<Context> contexts;
         QVector<Channel> channels;
+        QVector<GpuVram> vram;
 
         [[nodiscard]] quint64 used_bytes() const;
         [[nodiscard]] const Context* find_context(quint32 id) const;

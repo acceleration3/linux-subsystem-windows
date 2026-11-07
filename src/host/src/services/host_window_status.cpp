@@ -41,6 +41,7 @@ void HostWindowTracker::add(const platform::AvStateDump::Snapshot& snapshot, qin
     status_.read = snapshot.device;
     status_.channels_known = snapshot.executor && !snapshot.channels.isEmpty();
     status_.at_ms = at_ms;
+    status_.vram = snapshot.vram;
 
     const auto& stats = snapshot.window_stats;
     status_.window_bytes = snapshot.window_bytes;

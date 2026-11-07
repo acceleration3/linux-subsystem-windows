@@ -21,9 +21,12 @@ struct GraphicsAdapter {
 
 struct PendingGraphics {
     std::optional<int> host_window_mib;
+    std::optional<int> vram_reserve_mib;
     bool adapters = false;
 
-    [[nodiscard]] bool any() const noexcept { return host_window_mib.has_value() || adapters; }
+    [[nodiscard]] bool any() const noexcept {
+        return host_window_mib.has_value() || vram_reserve_mib.has_value() || adapters;
+    }
 };
 
 struct GraphicsStatus {

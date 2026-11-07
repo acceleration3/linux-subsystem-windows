@@ -313,6 +313,21 @@ int main(int argc, char** argv) {
         check(snap.contexts.size() == 1 && snap.find_context(3)->bytes() == 15 && snap.find_context(3)->blobs == 2,
               "parsing into an existing snapshot adds to it");
     }
+    {
+        const auto snap = parsed(
+            "executor/1/gpu_shares/0/memory_source/0 live=2 vram_total_bytes=17179869184 "
+            "vram_cap_bytes=15032385536 vram_reserve_bytes=2147483648\n"
+            "executor/1/gpu_shares/1/memory_source/0 vram_cap_bytes=x vram_reserve_bytes=1073741824\n"
+            "executor/1/gpu_shares/2/memory_source/0 live=1\n"
+            "executor/1/gpu_shares/y/memory_source/0 vram_cap_bytes=5\n");
+        check(snap.vram.size() == 2 && snap.executor, "only gpu_shares memory sources with a numeric index and a VRAM field count");
+        check(snap.vram.at(0).device == 0 && snap.vram.at(0).guest_cap_bytes == 15032385536ULL
+                  && snap.vram.at(0).reserve_bytes == 2147483648ULL,
+              "the guest cap and the reserve are read per GPU");
+        check(snap.vram.at(1).device == 1 && !snap.vram.at(1).guest_cap_bytes
+                  && snap.vram.at(1).reserve_bytes == 1073741824ULL,
+              "an unreadable field stays unknown");
+    }
 
     return g_failures == 0 ? 0 : 1;
 }

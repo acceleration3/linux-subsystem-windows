@@ -42,6 +42,7 @@ vm::DomainXmlInputs domain_inputs_from_settings(const config::Settings& settings
     inputs.shares = HostShareLayout::assign(manager_settings.host_shares());
 
     inputs.host_window_mib = manager_settings.int_value(K::kHostWindowMib);
+    inputs.vram_reserve_mib = manager_settings.int_value(K::kVramReserveMib);
     inputs.display_modes = display_modes_from_settings(manager_settings);
     inputs.display_refresh_millihz =
         display_refresh_from_settings(manager_settings, monitor_refresh_millihz).value_or(0);

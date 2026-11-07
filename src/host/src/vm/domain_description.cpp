@@ -56,6 +56,8 @@ DomainDescription::GpuDevice gpu_from(const QStringList& options) {
                             || value == QLatin1StringView("no"));
         } else if (key == QLatin1StringView("hostmem")) {
             gpu.hostmem_mib = DomainDescription::size_mib(value);
+        } else if (key == QLatin1StringView("vram-reserve")) {
+            gpu.vram_reserve_mib = qMax(0, value.toInt());
         } else if (key == QLatin1StringView("modes")) {
             gpu.modes = value;
         } else if (key == QLatin1StringView("refresh")) {

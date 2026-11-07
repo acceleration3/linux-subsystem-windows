@@ -331,6 +331,19 @@ void AvStateDump::parse(const QByteArray& dump, Snapshot& into) {
             add_known(channel.arena_segments, number(values, QStringLiteral("arena_segments")));
             add_known(channel.parked_blobs, number(values, QStringLiteral("parked_blobs")));
             into.executor = true;
+        } else if (n == 6 && parts.at(0) == QLatin1String("executor") && parts.at(2) == QLatin1String("gpu_shares")
+                   && parts.at(4) == QLatin1String("memory_source")) {
+            const auto device = segment_id(parts.at(3));
+            const auto cap = number(values, QStringLiteral("vram_cap_bytes"));
+            const auto reserve = number(values, QStringLiteral("vram_reserve_bytes"));
+            if (device && (cap || reserve)) {
+                GpuVram entry;
+                entry.device = *device;
+                entry.guest_cap_bytes = cap;
+                entry.reserve_bytes = reserve;
+                into.vram.push_back(entry);
+            }
+            into.executor = true;
         } else if (n >= 1 && parts.at(0) == QLatin1String("executor")) {
             into.executor = true;
         }
