@@ -21,6 +21,8 @@
 #include "sanity/d3d11/res_checks.hpp"
 #include "sanity/d3d11/map_checks.hpp"
 #include "sanity/d3d11/transfer_checks.hpp"
+#include "sanity/d3d11/render_checks.hpp"
+#include "sanity/d3d11/compute_checks.hpp"
 #include "sanity/env/display_checks.hpp"
 #include "sanity/env/icd_checks.hpp"
 #include "sanity/env/install_checks.hpp"
@@ -204,6 +206,21 @@ void add(Registry& registry) {
     guarded(suite, {"sanity.d3d11.copy.resolve", {"d3d11", "msaa"}, false, 60, d3d11::TransferChecks::copy_resolve});
     guarded(suite, {"sanity.d3d11.copy.generatemips", {"d3d11"}, false, 60, d3d11::TransferChecks::copy_generatemips});
     guarded(suite, {"sanity.d3d11.copy.clearview_discard", {"d3d11"}, false, 60, d3d11::TransferChecks::copy_clearview_discard});
+    guarded(suite, {"sanity.d3d11.render.basic_stages", {"d3d11", "streamout"}, false, 60, d3d11::RenderChecks::basic_stages});
+    guarded(suite, {"sanity.d3d11.render.states", {"d3d11"}, false, 60, d3d11::RenderChecks::states});
+    guarded(suite, {"sanity.d3d11.render.msaa", {"d3d11", "msaa"}, false, 60, d3d11::RenderChecks::msaa});
+    guarded(suite, {"sanity.d3d11.render.tessellation", {"d3d11", "tessellation"}, false, 60, d3d11::RenderChecks::tessellation});
+    guarded(suite, {"sanity.d3d11.render.geometry_streamout", {"d3d11", "streamout"}, false, 60, d3d11::RenderChecks::geometry_streamout});
+    guarded(suite, {"sanity.d3d11.render.format_sweep", {"d3d11", "formats"}, false, 90, d3d11::RenderChecks::format_sweep});
+    guarded(suite, {"sanity.d3d11.render.depth_stencil_formats", {"d3d11", "formats"}, false, 60, d3d11::RenderChecks::depth_stencil_formats});
+    guarded(suite, {"sanity.d3d11.render.multi_rt_viewports", {"d3d11"}, false, 60, d3d11::RenderChecks::multi_rt_viewports});
+    guarded(suite, {"sanity.d3d11.render.resource_hazards", {"d3d11"}, false, 60, d3d11::RenderChecks::resource_hazards});
+    guarded(suite, {"sanity.d3d11.compute.uav_basic", {"d3d11", "compute"}, false, 90, d3d11::ComputeChecks::uav_basic});
+    guarded(suite, {"sanity.d3d11.compute.atomics", {"d3d11", "compute"}, false, 90, d3d11::ComputeChecks::atomics});
+    guarded(suite, {"sanity.d3d11.compute.append_consume", {"d3d11", "compute"}, false, 90, d3d11::ComputeChecks::append_consume});
+    guarded(suite, {"sanity.d3d11.compute.typed_uav_load", {"d3d11", "compute", "formats"}, false, 90, d3d11::ComputeChecks::typed_uav_load});
+    guarded(suite, {"sanity.d3d11.compute.barriers_sharing", {"d3d11", "compute"}, false, 90, d3d11::ComputeChecks::barriers_sharing});
+    guarded(suite, {"sanity.d3d11.compute.cs_on_downlevel", {"d3d11", "compute"}, false, 60, d3d11::ComputeChecks::cs_on_downlevel});
 }
 
 }  // namespace lsw::suites::sanity

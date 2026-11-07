@@ -4,10 +4,14 @@ add_library(suite_sanity OBJECT
     d3d11/res_checks.cpp
     d3d11/map_checks.cpp
     d3d11/transfer_checks.cpp
+    d3d11/render_checks.cpp
+    d3d11/compute_checks.cpp
     d3d11/fl_checks.cpp
     d3d11/res_checks.cpp
     d3d11/map_checks.cpp
     d3d11/transfer_checks.cpp
+    d3d11/render_checks.cpp
+    d3d11/compute_checks.cpp
     data/align_checks.cpp
     data/load_checks.cpp
     data/sequence_checks.cpp
