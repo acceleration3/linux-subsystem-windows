@@ -106,9 +106,14 @@ Outcome KernelChecks::atomics_vs_cpu(Context& context) {
             problems.add("buffers: " + ClTools::error_name(code));
             return problems.outcome();
         }
+        const std::size_t global_limit = Kit::group_limit(global, problems, "global atomics kernel");
+        const std::size_t local_limit = Kit::group_limit(local, problems, "local atomics kernel");
+        if (global_limit == 0 || local_limit == 0) {
+            return problems.outcome();
+        }
         code = global.set(in, shared, seen, tries);
         if (code == CL_SUCCESS) {
-            code = global.run(count, std::min(group, global.work_group_size()));
+            code = global.run(count, std::min(group, global_limit));
         }
         if (code != CL_SUCCESS) {
             problems.add("the global atomics kernel returned " + ClTools::error_name(code));
@@ -156,7 +161,7 @@ Outcome KernelChecks::atomics_vs_cpu(Context& context) {
             }
         }
         {
-            const std::size_t local_group = std::min(group, local.work_group_size());
+            const std::size_t local_group = std::min(group, local_limit);
             const std::size_t groups = count / local_group;
             const std::size_t used = groups * local_group;
             ClOwned<cl_mem> out = Kit::buffer(rig, CL_MEM_WRITE_ONLY, groups * 6 * 4, problems, "local atomics output");

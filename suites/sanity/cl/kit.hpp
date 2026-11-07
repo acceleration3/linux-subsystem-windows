@@ -65,6 +65,8 @@ public:
         std::vector<std::uint32_t> actual;
     };
 
+    [[nodiscard]] static std::size_t group_limit(const ClKernel& kernel, Problems& problems, const std::string& what);
+
     [[nodiscard]] static bool vector_add(ClRig& rig, std::size_t count, std::uint64_t seed, Pair& out, Problems& problems,
                                          const std::string& what);
 

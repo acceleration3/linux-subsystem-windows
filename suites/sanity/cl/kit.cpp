@@ -240,6 +240,16 @@ bool Kit::vector_add(ClRig& rig, std::size_t count, std::uint64_t seed, Pair& ou
     return read_words(rig, mc.get(), count, out.actual, problems, what);
 }
 
+std::size_t Kit::group_limit(const ClKernel& kernel, Problems& problems, const std::string& what) {
+    std::size_t value = 0;
+    const cl_int code = kernel.work_group_info(value);
+    if (code != CL_SUCCESS || value == 0) {
+        problems.add(what + ": CL_KERNEL_WORK_GROUP_SIZE reports " + std::to_string(value) + " with " + ClTools::error_name(code) + ", the specification requires at least 1");
+        return 0;
+    }
+    return value;
+}
+
 bool Kit::reduction(ClRig& rig, std::size_t count, std::size_t group, std::uint64_t seed, Pair& out, Problems& problems,
                     const std::string& what) {
     ClProgram program;
@@ -250,7 +260,11 @@ bool Kit::reduction(ClRig& rig, std::size_t count, std::size_t group, std::uint6
     if (!reduce) {
         return false;
     }
-    group = std::min(group, reduce.work_group_size());
+    const std::size_t limit = group_limit(reduce, problems, what);
+    if (limit == 0) {
+        return false;
+    }
+    group = std::min(group, limit);
     const std::size_t groups = (count + group - 1) / group;
     const std::size_t padded = groups * group;
     std::vector<std::uint32_t> input = words(seed, count);

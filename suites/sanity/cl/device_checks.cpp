@@ -596,13 +596,16 @@ Outcome DeviceChecks::limits_honoured(Context& context) {
                 problems.add("creating the " + ClTools::bytes_text(bytes) + " constant buffers failed: " + ClTools::error_name(code));
             } else {
                 code = constant.set(in, out, n);
+                std::size_t group = 0;
                 if (code == CL_SUCCESS) {
-                    const std::size_t group = std::min<std::size_t>(constant.work_group_size(), 64);
-                    code = constant.run(((n + group - 1) / group) * group, group);
+                    group = std::min<std::size_t>(Kit::group_limit(constant, problems, "constant buffer kernel"), 64);
+                    if (group != 0) {
+                        code = constant.run(((n + group - 1) / group) * group, group);
+                    }
                 }
                 if (code != CL_SUCCESS) {
                     problems.add("a kernel reading a " + ClTools::bytes_text(bytes) + " __constant buffer returned " + ClTools::error_name(code));
-                } else {
+                } else if (group != 0) {
                     std::vector<std::uint32_t> expected(n);
                     for (std::uint32_t i = 0; i < n; ++i) {
                         expected[i] = data[i] ^ 0x5a5a5a5au;
