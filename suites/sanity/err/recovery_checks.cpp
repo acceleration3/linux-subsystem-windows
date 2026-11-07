@@ -273,7 +273,7 @@ Outcome mapper_role(Context& context, const std::string& api) {
         return Context::skip("no large mapping could be created");
     }
     RobustChild::ready();
-    ::Sleep(60000);
+    ::Sleep(static_cast<DWORD>(iso::Loads::seconds() * 1000));
     return Outcome::ok();
 }
 
@@ -346,6 +346,10 @@ Outcome kill_then_measure(Context& context, const std::string& hold_role, const 
 }
 
 }  // namespace
+
+Outcome RecoveryChecks::child_role(Context& context, const std::string& name) {
+    return role(context, name);
+}
 
 Outcome RecoveryChecks::device_removed_reason(Context& context) {
     return Delegate::all(context, {d3d11::ErrChecks::device_removed, removed_d3d12});

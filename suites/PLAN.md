@@ -1263,14 +1263,14 @@ Each row below drives a path an application can reach and asserts that the host 
 | `sanity.bits.parity.operations_same_result` | A set of deterministic compute and render operations produces byte-identical output in 32-bit and 64-bit processes, for each API. |
 | `sanity.bits.parity.integer_widths` | Struct sizes and ABI-visible values (pointer-sized fields, size_t in OpenCL, handle widths) are those the APIs define for each bitness. |
 | `sanity.bits.parity.data_roundtrip` | The data roundtrip boundary sizes up to what 32-bit address space allows roundtrip intact. |
-| `sanity.bits.share.cross_bitness_nt_handle` | A resource shared by NT handle from a 64-bit process opens in a 32-bit process and the reverse, with identical contents. |
+| `sanity.bits.share.cross_bitness_nt_handle` | A resource shared by NT handle from a 64-bit process opens in a 32-bit process and the reverse, with identical contents; each executable is the owner in its own run and the other bitness is the opener. |
 | `sanity.bits.share.cross_bitness_fence` | A shared fence signalled in one bitness releases a waiter in the other. |
 | `sanity.bits.share.cross_bitness_dxgi_keyed_mutex` | Keyed mutex hand-offs between a 32-bit and a 64-bit process serialise access and keep contents. |
-| `sanity.bits.addr.allocation_fails_cleanly` | In a 32-bit process, allocating and mapping more than the address space allows fails with the documented error and never crashes or wraps. (x86) |
-| `sanity.bits.addr.large_address_aware_on` | A LARGEADDRESSAWARE 32-bit process can map up to the larger space and all data roundtrips intact. (x86) |
-| `sanity.bits.addr.large_address_aware_off` | Without the flag, mappings that do not fit in 2 GiB fail cleanly, and no pointer is above the limit. (x86) |
+| `sanity.bits.addr.allocation_fails_cleanly` | In a 32-bit process, allocating and mapping more than the address space allows fails with the documented error and never crashes or wraps. (x86) [E] |
+| `sanity.bits.addr.large_address_aware_on` | A LARGEADDRESSAWARE 32-bit process can map up to the larger space and all data roundtrips intact; the flag is set in a patched copy of lsw-suites32.exe. (x86) [E] |
+| `sanity.bits.addr.large_address_aware_off` | Without the flag, mappings that do not fit in 2 GiB fail cleanly, and no pointer is above the limit; the flag is cleared in a patched copy of lsw-suites32.exe. (x86) [E] |
 | `sanity.bits.wow64.icd_loading` | All four ICD kinds (D3D UMD, OpenGL, OpenCL, Vulkan) load in a 32-bit process on the 64-bit OS and report the same adapter. (x86) |
-| `sanity.bits.wow64.exit_cleanup` | A 32-bit process exiting with live mappings leaves the system at baseline. (x86) |
+| `sanity.bits.wow64.exit_cleanup` | A 32-bit process exiting with live mappings leaves the system at baseline (device and host-visible memory a new process can allocate stays within 90%). (x86) [E] |
 | `sanity.bits.parity.error_codes` | The error-path checks of invalid arguments return the same codes in both bitnesses. |
 
 ### 4.24 Host invariants (12)

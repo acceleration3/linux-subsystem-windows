@@ -163,6 +163,9 @@
 #include "sanity/kmd/query_checks.hpp"
 #include "sanity/kmd/display_checks.hpp"
 #include "sanity/kmd/surrogate_checks.hpp"
+#include "sanity/bits/parity_checks.hpp"
+#include "sanity/bits/share_checks.hpp"
+#include "sanity/bits/addr_checks.hpp"
 
 namespace lsw::suites::sanity {
 
@@ -871,6 +874,18 @@ void add(Registry& registry) {
     guarded(suite, {"sanity.kmd.recovery.tdr_other_adapter_unaffected", {"kmd", "robust", "d3d12", "exclusive"}, true, 240, kmd::SurrogateChecks::tdr_other_adapter_unaffected});
     guarded(suite, {"sanity.kmd.recovery.power_transition_contents", {"kmd", "robust", "d3d11", "exclusive"}, true, 600, kmd::SurrogateChecks::power_transition_contents});
     guarded(suite, {"sanity.kmd.recovery.query_status_after_reset", {"kmd", "kmt", "robust", "d3d11", "exclusive"}, true, 240, kmd::SurrogateChecks::query_status_after_reset});
+    guarded(suite, {"sanity.bits.parity.operations_same_result", {"bits", "cross-bitness", "d3d11", "d3d12", "vulkan", "opencl"}, false, 300, bits::ParityChecks::operations_same_result});
+    guarded(suite, {"sanity.bits.parity.integer_widths", {"bits", "cross-bitness", "opencl", "vulkan", "d3d12"}, false, 180, bits::ParityChecks::integer_widths});
+    guarded(suite, {"sanity.bits.parity.data_roundtrip", {"bits", "d3d11", "d3d12", "vulkan", "opencl", "slow"}, false, 600, bits::ParityChecks::data_roundtrip});
+    guarded(suite, {"sanity.bits.share.cross_bitness_nt_handle", {"bits", "cross-bitness", "d3d12", "interop"}, false, 240, bits::ShareChecks::cross_bitness_nt_handle});
+    guarded(suite, {"sanity.bits.share.cross_bitness_fence", {"bits", "cross-bitness", "d3d12", "interop"}, false, 300, bits::ShareChecks::cross_bitness_fence});
+    guarded(suite, {"sanity.bits.share.cross_bitness_dxgi_keyed_mutex", {"bits", "cross-bitness", "d3d11", "interop"}, false, 300, bits::ShareChecks::cross_bitness_dxgi_keyed_mutex});
+    guarded(suite, {"sanity.bits.addr.allocation_fails_cleanly", {"bits", "x86-only", "mem", "slow", "robust", "d3d11", "d3d12", "vulkan", "opencl", "exclusive"}, true, 900, bits::AddrChecks::allocation_fails_cleanly});
+    guarded(suite, {"sanity.bits.addr.large_address_aware_on", {"bits", "x86-only", "cross-bitness", "mem", "slow", "robust", "d3d11", "d3d12", "vulkan", "opencl", "exclusive"}, true, 900, bits::AddrChecks::large_address_aware_on});
+    guarded(suite, {"sanity.bits.addr.large_address_aware_off", {"bits", "x86-only", "cross-bitness", "mem", "slow", "robust", "d3d11", "d3d12", "vulkan", "opencl", "exclusive"}, true, 900, bits::AddrChecks::large_address_aware_off});
+    guarded(suite, {"sanity.bits.wow64.icd_loading", {"bits", "x86-only", "dxgi", "vulkan", "opencl", "gl"}, false, 240, bits::AddrChecks::icd_loading});
+    guarded(suite, {"sanity.bits.wow64.exit_cleanup", {"bits", "x86-only", "mem", "robust", "d3d11", "d3d12", "vulkan", "opencl", "exclusive"}, true, 900, bits::AddrChecks::exit_cleanup});
+    guarded(suite, {"sanity.bits.parity.error_codes", {"bits", "cross-bitness", "d3d11", "d3d12", "vulkan", "opencl"}, false, 300, bits::ParityChecks::error_codes});
 }
 
 }  // namespace lsw::suites::sanity

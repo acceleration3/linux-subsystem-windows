@@ -10,6 +10,7 @@
 namespace lsw::suites {
 struct ChildRunOptions {
     std::filesystem::path cwd;
+    std::filesystem::path exe;
     bool restricted = false;
     int timeout_seconds = 60;
     int timeout_ms = 0;

@@ -200,5 +200,8 @@ add_library(suite_sanity OBJECT
     kmd/query_checks.cpp
     kmd/display_checks.cpp
     kmd/surrogate_checks.cpp
+    bits/parity_checks.cpp
+    bits/share_checks.cpp
+    bits/addr_checks.cpp
 )
 target_link_libraries(suite_sanity PUBLIC suite_core suite_support)

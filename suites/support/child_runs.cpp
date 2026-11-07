@@ -31,6 +31,9 @@ std::filesystem::path ChildRuns::sibling_exe() {
 CheckResult ChildRuns::run_self(const std::string& id, const ChildRunOptions& options) {
     Worker worker(scratch_root());
     worker.set_child_mode();
+    if (!options.exe.empty()) {
+        worker.set_exe(options.exe);
+    }
     if (!options.cwd.empty()) {
         worker.set_cwd(options.cwd);
     }
@@ -51,7 +54,7 @@ CheckResult ChildRuns::run_self(const std::string& id, const ChildRunOptions& op
 
 bool ChildRuns::run_sibling(const std::string& id, const ChildRunOptions& options,
                             CheckResult& result, std::string& error) {
-    const std::filesystem::path exe = sibling_exe();
+    const std::filesystem::path exe = options.exe.empty() ? sibling_exe() : options.exe;
     std::error_code code;
     if (!std::filesystem::exists(exe, code)) {
         error = exe.string() + " is not next to this executable";
