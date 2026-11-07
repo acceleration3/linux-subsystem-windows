@@ -118,6 +118,9 @@
 #include "sanity/interop/gld3d_checks.hpp"
 #include "sanity/interop/glcl_checks.hpp"
 #include "sanity/interop/vk_checks.hpp"
+#include "sanity/capture/dup_checks.hpp"
+#include "sanity/capture/thumbnail_checks.hpp"
+#include "sanity/capture/wgc_checks.hpp"
 #include "sanity/present/alpha_checks.hpp"
 #include "sanity/present/content_checks.hpp"
 #include "sanity/present/display_checks.hpp"
@@ -723,6 +726,14 @@ void add(Registry& registry) {
     guarded(suite, {"sanity.present.display.output_stays_active", {"present", "dwm", "dxgi", "d3d11", "exclusive"}, true, 120, present::DisplayChecks::output_stays_active});
     guarded(suite, {"sanity.present.display.idle_then_present", {"present", "dwm", "d3d11", "d3d12", "gl", "exclusive"}, true, 180, present::DisplayChecks::idle_then_present});
     guarded(suite, {"sanity.present.latency.input_to_photon_monotonic", {"present", "dwm", "dxgi", "d3d11", "exclusive"}, true, 120, present::DisplayChecks::input_to_photon_monotonic});
+    guarded(suite, {"sanity.capture.dxgi.desktop_duplication_content", {"capture", "dxgi", "d3d11", "present", "dwm", "exclusive"}, true, 120, capture::DupChecks::desktop_duplication_content});
+    guarded(suite, {"sanity.capture.dxgi.dirty_rects_cover_changes", {"capture", "dxgi", "d3d11", "present", "dwm", "exclusive"}, true, 120, capture::DupChecks::dirty_rects_cover_changes});
+    guarded(suite, {"sanity.capture.dxgi.pointer_info", {"capture", "dxgi", "d3d11", "present", "dwm", "exclusive"}, true, 120, capture::DupChecks::pointer_info});
+    guarded(suite, {"sanity.capture.wgc.each_api_equals_presented", {"capture", "wgc", "d3d9", "d3d11", "d3d12", "gl", "vulkan", "present", "dwm", "exclusive"}, true, 300, capture::WgcChecks::each_api_equals_presented});
+    guarded(suite, {"sanity.capture.wgc.frames_in_order", {"capture", "wgc", "d3d11", "present", "dwm", "exclusive"}, true, 120, capture::WgcChecks::frames_in_order});
+    guarded(suite, {"sanity.capture.wgc.resize_and_close", {"capture", "wgc", "d3d11", "present", "dwm", "exclusive"}, true, 120, capture::WgcChecks::resize_and_close});
+    guarded(suite, {"sanity.capture.dwm.thumbnail_each_api", {"capture", "dwm", "d3d9", "d3d11", "d3d12", "gl", "vulkan", "present", "exclusive"}, true, 300, capture::ThumbnailChecks::each_api});
+    guarded(suite, {"sanity.capture.dwm.thumbnail_updates", {"capture", "dwm", "d3d11", "present", "exclusive"}, true, 120, capture::ThumbnailChecks::updates});
 }
 
 }  // namespace lsw::suites::sanity

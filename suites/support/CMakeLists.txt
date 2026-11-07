@@ -102,6 +102,8 @@ add_library(suite_support OBJECT
     frame_probe.cpp
     frame_watcher.cpp
     sequence_judge.cpp
+    wgc_session.cpp
+    duplication_session.cpp
     present_path.cpp
     present_path_native.cpp
     cl_interop.cpp

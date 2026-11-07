@@ -149,6 +149,10 @@ add_library(suite_sanity OBJECT
     present/window_checks.cpp
     present/display_checks.cpp
     present/process_checks.cpp
+    capture/kit.cpp
+    capture/dup_checks.cpp
+    capture/wgc_checks.cpp
+    capture/thumbnail_checks.cpp
     present/chain_probe.cpp
     present/path_checks.cpp
     present/content_checks.cpp
