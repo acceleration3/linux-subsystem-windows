@@ -24,8 +24,16 @@ struct DisplayDevice {
     [[nodiscard]] std::wstring class_key() const;
 };
 
+struct DisplayInterface {
+    std::wstring path;
+    std::wstring instance_id;
+    std::wstring hardware_ids;
+};
+
 class DisplayDevices {
 public:
     [[nodiscard]] static std::vector<DisplayDevice> enumerate(bool present_only);
+
+    [[nodiscard]] static std::vector<DisplayInterface> interfaces();
 };
 }  // namespace lsw::suites

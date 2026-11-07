@@ -25,6 +25,12 @@ struct OpenFromLuid {
     std::uint32_t handle;
 };
 
+struct OpenFromDeviceName {
+    const wchar_t* name;
+    std::uint32_t handle;
+    LUID luid;
+};
+
 struct CloseAdapter {
     std::uint32_t handle;
 };
@@ -77,7 +83,8 @@ bool KmtApi::load(std::string& error) {
     close_ = gdi_.symbol<std::int32_t(__stdcall*)(void*)>("D3DKMTCloseAdapter");
     open_luid_ = gdi_.symbol<std::int32_t(__stdcall*)(void*)>("D3DKMTOpenAdapterFromLuid");
     query_ = gdi_.symbol<std::int32_t(__stdcall*)(void*)>("D3DKMTQueryAdapterInfo");
-    if (enum_ == nullptr || close_ == nullptr || open_luid_ == nullptr || query_ == nullptr) {
+    open_name_ = gdi_.symbol<std::int32_t(__stdcall*)(void*)>("D3DKMTOpenAdapterFromDeviceName");
+    if (open_name_ == nullptr || enum_ == nullptr || close_ == nullptr || open_luid_ == nullptr || query_ == nullptr) {
         error = "gdi32 lacks the D3DKMT adapter entry points";
         return false;
     }
@@ -118,6 +125,17 @@ std::int32_t KmtApi::open_from_luid(const LUID& luid, std::uint32_t& handle) con
     OpenFromLuid args{luid, 0};
     const std::int32_t status = open_luid_(&args);
     handle = args.handle;
+    return status;
+}
+
+std::int32_t KmtApi::open_from_device_name(const std::wstring& name, KmtAdapter& out) const {
+    OpenFromDeviceName args{name.c_str(), 0, {}};
+    const std::int32_t status = open_name_(&args);
+    if (status == 0) {
+        out.handle = args.handle;
+        out.luid = args.luid;
+        static_cast<void>(close(args.handle));
+    }
     return status;
 }
 

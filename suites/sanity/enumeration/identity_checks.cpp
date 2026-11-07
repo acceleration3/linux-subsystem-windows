@@ -78,29 +78,32 @@ Outcome IdentityChecks::dxgi_vs_kmt_luid(Context& context) {
         return Outcome::fail(error);
     }
     std::set<std::uint64_t> dxgi;
-    std::set<std::uint64_t> from_kmt;
     for (const AvAdapter& adapter : adapters) {
-        if (!adapter.software) {
+        if (adapter.accel()) {
             dxgi.insert(adapter.luid_key());
+        } else {
+            context.measure("other.dxgi." + adapter.luid_text(), adapter.name);
+        }
+    }
+    context.measure("dxgi.accel", dxgi.size());
+    context.measure("kmt.total", kmt_adapters.size());
+    Problems problems;
+    if (dxgi.empty()) {
+        problems.add("DXGI lists no accel-virt adapter");
+    }
+    for (std::uint64_t key : dxgi) {
+        std::size_t count = 0;
+        for (const KmtAdapter& adapter : kmt_adapters) {
+            count += luid_key(adapter.luid) == key ? std::size_t{1} : std::size_t{0};
+        }
+        if (count != 1) {
+            problems.add("accel-virt LUID " + key_text(key) + " appears " + std::to_string(count) +
+                         " times in D3DKMT");
         }
     }
     for (const KmtAdapter& adapter : kmt_adapters) {
-        from_kmt.insert(luid_key(adapter.luid));
-    }
-    context.measure("dxgi.count", dxgi.size());
-    context.measure("kmt.count", from_kmt.size());
-    Problems problems;
-    if (dxgi.empty()) {
-        problems.add("DXGI lists no hardware adapter");
-    }
-    for (std::uint64_t key : dxgi) {
-        if (from_kmt.count(key) == 0) {
-            problems.add("LUID " + key_text(key) + " is in DXGI but not in D3DKMT");
-        }
-    }
-    for (std::uint64_t key : from_kmt) {
-        if (dxgi.count(key) == 0) {
-            problems.add("LUID " + key_text(key) + " is in D3DKMT but not in DXGI");
+        if (dxgi.count(luid_key(adapter.luid)) == 0) {
+            context.measure("other.kmt." + key_text(luid_key(adapter.luid)), "not accel-virt");
         }
     }
     return problems.outcome();
@@ -231,31 +234,25 @@ Outcome IdentityChecks::setupapi_matches(Context& context) {
     if (!kmt.load(error)) {
         return Outcome::fail(error);
     }
-    const std::vector<DisplayDevice> devices = DisplayDevices::enumerate(true);
+    const std::vector<DisplayInterface> interfaces = DisplayDevices::interfaces();
     Problems problems;
     std::size_t checked = 0;
     for (const AvAdapter& adapter : adapters) {
-        if (adapter.software) {
+        if (!adapter.accel()) {
             continue;
         }
         ++checked;
-        KmtAddress address;
-        if (!kmt.address(adapter.luid, address)) {
-            problems.add(adapter.name + ": D3DKMT cannot report the adapter's bus address");
-            continue;
-        }
-        const DisplayDevice* found = nullptr;
-        for (const DisplayDevice& device : devices) {
-            if (device.bus == address.bus && (device.address >> 16) == address.device &&
-                (device.address & 0xffff) == address.function) {
-                found = &device;
+        const DisplayInterface* found = nullptr;
+        for (const DisplayInterface& entry : interfaces) {
+            KmtAdapter opened;
+            if (kmt.open_from_device_name(entry.path, opened) == 0 && luid_key(opened.luid) == adapter.luid_key()) {
+                found = &entry;
                 break;
             }
         }
         if (found == nullptr) {
-            problems.add(adapter.name + ": no SetupAPI display device at bus " + std::to_string(address.bus) +
-                         " device " + std::to_string(address.device) + " function " +
-                         std::to_string(address.function));
+            problems.add(adapter.name + " " + adapter.luid_text() +
+                         ": no display device interface opens to this LUID");
             continue;
         }
         const std::wstring ven = L"VEN_" + Text::wide(Text::upper(Text::hex(adapter.vendor, 4)));
@@ -268,7 +265,7 @@ Outcome IdentityChecks::setupapi_matches(Context& context) {
         context.measure(adapter.luid_text() + ".instance", Text::utf8(found->instance_id));
     }
     if (checked == 0) {
-        problems.add("DXGI lists no hardware adapter");
+        problems.add("DXGI lists no accel-virt adapter");
     }
     return problems.outcome();
 }

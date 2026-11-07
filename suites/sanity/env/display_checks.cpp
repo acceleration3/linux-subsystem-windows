@@ -17,7 +17,14 @@ namespace lsw::suites::sanity::env {
 namespace {
 
 void enable_dpi_awareness() {
-    ::SetProcessDpiAwareness(PROCESS_PER_MONITOR_DPI_AWARE);
+    using SetContext = BOOL(WINAPI*)(HANDLE);
+    const HMODULE user32 = ::GetModuleHandleW(L"user32.dll");
+    void* address = user32 != nullptr ? reinterpret_cast<void*>(::GetProcAddress(user32, "SetProcessDpiAwarenessContext"))
+                                      : nullptr;
+    auto set_context = reinterpret_cast<SetContext>(address);
+    if (set_context == nullptr || set_context(reinterpret_cast<HANDLE>(-4)) == FALSE) {
+        ::SetProcessDpiAwareness(PROCESS_PER_MONITOR_DPI_AWARE);
+    }
 }
 
 std::set<std::string> gdi_outputs() {
@@ -186,6 +193,17 @@ Outcome DisplayChecks::desktop_rect_consistent(Context& context) {
 }
 
 Outcome DisplayChecks::dpi_scaling_consistent(Context& context) {
+    for (const MonitorInfoEx& entry : monitors()) {
+        UINT x = 0;
+        UINT y = 0;
+        DEVICE_SCALE_FACTOR scale = DEVICE_SCALE_FACTOR_INVALID;
+        if (SUCCEEDED(::GetDpiForMonitor(entry.monitor, MDT_EFFECTIVE_DPI, &x, &y))) {
+            context.measure("unaware." + Text::utf8(entry.info.szDevice) + ".dpi", x);
+        }
+        if (SUCCEEDED(::GetScaleFactorForMonitor(entry.monitor, &scale))) {
+            context.measure("unaware." + Text::utf8(entry.info.szDevice) + ".scale_percent", static_cast<int>(scale));
+        }
+    }
     enable_dpi_awareness();
     const std::vector<MonitorInfoEx> list = monitors();
     if (list.empty()) {

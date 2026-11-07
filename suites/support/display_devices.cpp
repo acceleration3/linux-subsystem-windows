@@ -112,4 +112,40 @@ std::vector<DisplayDevice> DisplayDevices::enumerate(bool present_only) {
     return out;
 }
 
+std::vector<DisplayInterface> DisplayDevices::interfaces() {
+    static const GUID kArrival = {0x1ca05180, 0xa699, 0x450a, {0x9a, 0x0c, 0xde, 0x4f, 0xbe, 0x3d, 0xdd, 0x89}};
+    std::vector<DisplayInterface> out;
+    HDEVINFO set = ::SetupDiGetClassDevsW(&kArrival, nullptr, nullptr, DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
+    if (set == INVALID_HANDLE_VALUE) {
+        return out;
+    }
+    SP_DEVICE_INTERFACE_DATA item{};
+    item.cbSize = sizeof(item);
+    for (DWORD index = 0; ::SetupDiEnumDeviceInterfaces(set, nullptr, &kArrival, index, &item) != FALSE; ++index) {
+        DWORD size = 0;
+        ::SetupDiGetDeviceInterfaceDetailW(set, &item, nullptr, 0, &size, nullptr);
+        if (size == 0) {
+            continue;
+        }
+        std::vector<char> storage(size);
+        auto* detail = reinterpret_cast<SP_DEVICE_INTERFACE_DETAIL_DATA_W*>(storage.data());
+        detail->cbSize = sizeof(SP_DEVICE_INTERFACE_DETAIL_DATA_W);
+        SP_DEVINFO_DATA device{};
+        device.cbSize = sizeof(device);
+        if (::SetupDiGetDeviceInterfaceDetailW(set, &item, detail, size, nullptr, &device) == FALSE) {
+            continue;
+        }
+        DisplayInterface entry;
+        entry.path = detail->DevicePath;
+        entry.hardware_ids = property_text(set, device, SPDRP_HARDWAREID, true);
+        wchar_t instance[MAX_DEVICE_ID_LEN] = {};
+        if (::CM_Get_Device_IDW(device.DevInst, instance, MAX_DEVICE_ID_LEN, 0) == CR_SUCCESS) {
+            entry.instance_id = instance;
+        }
+        out.push_back(std::move(entry));
+    }
+    ::SetupDiDestroyDeviceInfoList(set);
+    return out;
+}
+
 }  // namespace lsw::suites

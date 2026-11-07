@@ -35,6 +35,8 @@ public:
 
     [[nodiscard]] std::int32_t open_from_luid(const LUID& luid, std::uint32_t& handle) const;
 
+    [[nodiscard]] std::int32_t open_from_device_name(const std::wstring& name, KmtAdapter& out) const;
+
     [[nodiscard]] std::int32_t close(std::uint32_t handle) const;
 
     [[nodiscard]] std::int32_t query(std::uint32_t handle, std::uint32_t type, void* data,
@@ -54,5 +56,6 @@ private:
     std::int32_t(__stdcall* close_)(void*) = nullptr;
     std::int32_t(__stdcall* open_luid_)(void*) = nullptr;
     std::int32_t(__stdcall* query_)(void*) = nullptr;
+    std::int32_t(__stdcall* open_name_)(void*) = nullptr;
 };
 }  // namespace lsw::suites

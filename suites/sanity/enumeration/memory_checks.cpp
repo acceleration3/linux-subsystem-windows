@@ -45,32 +45,35 @@ Outcome MemoryChecks::dedicated_vs_shared_consistent(Context& context) {
     }
     Problems problems;
     std::size_t checked = 0;
+    const bool clamped_desc = sizeof(void*) == 4;
     for (const AvAdapter& adapter : adapters) {
-        if (adapter.software) {
+        if (!adapter.accel()) {
             continue;
         }
         ++checked;
         const std::string label = adapter.name + " " + adapter.luid_text();
-        if (adapter.dedicated_video == 0 || adapter.shared_system == 0) {
-            problems.add(label + ": DXGI reports zero dedicated video or shared system memory");
-        }
+        context.measure(adapter.luid_text() + ".dxgi_desc.dedicated_video", adapter.dedicated_video);
+        context.measure(adapter.luid_text() + ".dxgi_desc.shared_system", adapter.shared_system);
         KmtSegmentSizes segments;
         if (!kmt.segment_sizes(adapter.luid, segments)) {
             problems.add(label + ": D3DKMT segment sizes unavailable");
-        } else {
-            if (segments.dedicated_video == 0 || segments.shared_system == 0) {
-                problems.add(label + ": D3DKMT reports zero dedicated video or shared system memory");
+            continue;
+        }
+        context.measure(adapter.luid_text() + ".kmt.dedicated_video", segments.dedicated_video);
+        context.measure(adapter.luid_text() + ".kmt.shared_system", segments.shared_system);
+        if (segments.dedicated_video == 0 || segments.shared_system == 0) {
+            problems.add(label + ": D3DKMT reports zero dedicated video or shared system memory");
+        }
+        if (!clamped_desc) {
+            if (adapter.dedicated_video == 0 || adapter.shared_system == 0) {
+                problems.add(label + ": DXGI reports zero dedicated video or shared system memory");
             }
             if (!within(segments.dedicated_video, adapter.dedicated_video, kKmtTolerancePercent) ||
                 !within(segments.shared_system, adapter.shared_system, kKmtTolerancePercent)) {
                 problems.add(label + ": D3DKMT and DXGI sizes differ by more than " +
                              std::to_string(kKmtTolerancePercent) + "%");
             }
-            context.measure(adapter.luid_text() + ".kmt.dedicated_video", segments.dedicated_video);
-            context.measure(adapter.luid_text() + ".kmt.shared_system", segments.shared_system);
         }
-        context.measure(adapter.luid_text() + ".dxgi.dedicated_video", adapter.dedicated_video);
-        context.measure(adapter.luid_text() + ".dxgi.shared_system", adapter.shared_system);
         const VulkanDevice* device = vulkan_for(devices, adapter);
         if (device == nullptr) {
             problems.add(label + ": no Vulkan device carries this LUID");
@@ -83,19 +86,19 @@ Outcome MemoryChecks::dedicated_vs_shared_consistent(Context& context) {
         if (local == 0 || host == 0) {
             problems.add(label + ": Vulkan reports a zero device-local or host heap");
         }
-        if (!within(local, adapter.dedicated_video, kDedicatedTolerancePercent)) {
-            problems.add(label + ": Vulkan device-local heap " + std::to_string(local) + " vs DXGI dedicated " +
-                         std::to_string(adapter.dedicated_video) + " differ by more than " +
+        if (!within(local, segments.dedicated_video, kDedicatedTolerancePercent)) {
+            problems.add(label + ": Vulkan device-local heap " + std::to_string(local) + " vs D3DKMT dedicated " +
+                         std::to_string(segments.dedicated_video) + " differ by more than " +
                          std::to_string(kDedicatedTolerancePercent) + "%");
         }
-        if (!within(host, adapter.shared_system, kSharedTolerancePercent)) {
-            problems.add(label + ": Vulkan host heaps " + std::to_string(host) + " vs DXGI shared " +
-                         std::to_string(adapter.shared_system) + " differ by more than " +
+        if (!within(host, segments.shared_system, kSharedTolerancePercent)) {
+            problems.add(label + ": Vulkan host heaps " + std::to_string(host) + " vs D3DKMT shared " +
+                         std::to_string(segments.shared_system) + " differ by more than " +
                          std::to_string(kSharedTolerancePercent) + "%");
         }
     }
     if (checked == 0) {
-        problems.add("DXGI lists no hardware adapter");
+        problems.add("DXGI lists no accel-virt adapter");
     }
     return problems.outcome();
 }

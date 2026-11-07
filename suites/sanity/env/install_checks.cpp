@@ -9,6 +9,7 @@
 #include "support/kmt_api.hpp"
 #include "support/problems.hpp"
 #include "support/registry_reader.hpp"
+#include "support/vulkan_api.hpp"
 
 // clang-format off
 #include <windows.h>
@@ -151,54 +152,69 @@ Outcome InstallChecks::driver_version_consistent(Context& context) {
     }
     std::vector<AvAdapter> adapters;
     std::string error;
-    if (!AvAdapters::accel(adapters, error)) {
+    KmtApi kmt;
+    if (!AvAdapters::accel(adapters, error) || !kmt.load(error)) {
         return Outcome::fail(error);
     }
     Problems problems;
-    std::set<std::uint64_t> versions;
     for (const DisplayDevice& device : devices) {
-        const std::optional<std::uint64_t> parsed = FileVersion::parse(device.driver_version);
-        if (!parsed) {
-            problems.add("SetupAPI driver version of " + device.name + " is not a.b.c.d: '" +
-                         device.driver_version + "'");
-            continue;
-        }
-        context.measure("setupapi.version", device.driver_version);
-        versions.insert(*parsed);
+        context.measure("setupapi.driver_ver", device.driver_version);
     }
-    const std::size_t setupapi_count = versions.size();
+    std::set<std::uint64_t> release;
+    const auto add_file = [&](const std::wstring& path) {
+        if (path.empty()) {
+            return;
+        }
+        const std::optional<std::uint64_t> version = FileVersion::read(path);
+        if (!version) {
+            problems.add(narrow(path) + " has no version resource");
+            return;
+        }
+        context.measure("file." + narrow(path), FileVersion::text(*version));
+        release.insert(*version);
+    };
     for (const AvAdapter& adapter : adapters) {
         if (!adapter.umd_version_known) {
             problems.add("DXGI CheckInterfaceSupport fails for " + adapter.name);
             continue;
         }
-        context.measure("dxgi.version", FileVersion::text(adapter.umd_version));
-        versions.insert(adapter.umd_version);
+        context.measure("dxgi.version." + adapter.luid_text(), FileVersion::text(adapter.umd_version));
+        std::wstring loaded = kmt.umd_name(adapter.luid, 2);
+        if (loaded.empty()) {
+            problems.add(adapter.name + ": D3DKMT cannot name the loaded D3D11 user-mode driver");
+            continue;
+        }
+        loaded = DriverRegistry::resolve(loaded, true);
+        const std::optional<std::uint64_t> version = FileVersion::read(loaded);
+        if (!version) {
+            problems.add(narrow(loaded) + " has no version resource");
+        } else if (*version != adapter.umd_version) {
+            problems.add("DXGI reports " + FileVersion::text(adapter.umd_version) + " for " + adapter.name + " but " +
+                         narrow(loaded) + " is " + FileVersion::text(*version));
+        }
     }
     for (const DisplayDevice& device : devices) {
         const DriverFiles files = DriverRegistry::read(device);
         if (files.umd_own.empty()) {
             problems.add("no user-mode driver DLL registered for " + device.name);
         }
-        for (const std::wstring& path : files.umd_own) {
-            const std::optional<std::uint64_t> version = FileVersion::read(path);
-            if (!version) {
-                problems.add(narrow(path) + " has no version resource");
-                continue;
+        for (const auto* list : {&files.umd_own, &files.umd_other, &files.opencl_own, &files.opencl_other}) {
+            for (const std::wstring& path : *list) {
+                add_file(path);
             }
-            context.measure("file.version", FileVersion::text(*version));
-            versions.insert(*version);
+        }
+        for (const auto* list : {&files.vulkan_own, &files.vulkan_other}) {
+            for (const std::wstring& manifest : *list) {
+                add_file(DriverRegistry::vulkan_library(manifest));
+            }
         }
     }
-    if (setupapi_count > 1) {
-        problems.add("SetupAPI reports " + std::to_string(setupapi_count) + " different driver versions");
-    }
-    if (versions.size() > 1) {
+    if (release.size() > 1) {
         std::string list;
-        for (std::uint64_t version : versions) {
+        for (std::uint64_t version : release) {
             list += FileVersion::text(version) + " ";
         }
-        problems.add("SetupAPI, DXGI and the driver file disagree: " + list);
+        problems.add("the accel-virt driver files carry different release versions: " + list);
     }
     return problems.outcome();
 }
@@ -285,42 +301,62 @@ Outcome InstallChecks::no_duplicate_adapters(Context& context) {
     }
     KmtApi kmt;
     std::vector<KmtAdapter> kmt_adapters;
-    if (!kmt.load(error) || !kmt.enum_adapters(kmt_adapters, error)) {
+    VulkanApi vulkan;
+    std::vector<VulkanDevice> vk_devices;
+    if (!kmt.load(error) || !kmt.enum_adapters(kmt_adapters, error) || !vulkan.load(error) ||
+        !vulkan.create_instance(error) || !vulkan.devices(vk_devices, error)) {
         return Outcome::fail(error);
     }
-    const std::vector<DisplayDevice> devices = DisplayDevices::enumerate(true);
-    std::set<std::uint64_t> dxgi_luids;
-    std::size_t dxgi_hardware = 0;
+    std::size_t devices = 0;
+    for (const DisplayDevice& device : DisplayDevices::enumerate(true)) {
+        devices += device.accel ? std::size_t{1} : std::size_t{0};
+    }
     Problems problems;
+    std::set<std::uint64_t> accel_luids;
+    std::size_t accel_count = 0;
     for (const AvAdapter& adapter : adapters) {
-        if (adapter.software) {
+        if (!adapter.accel()) {
+            context.measure("other.dxgi." + adapter.luid_text(), adapter.name);
             continue;
         }
-        ++dxgi_hardware;
-        if (!dxgi_luids.insert(adapter.luid_key()).second) {
-            problems.add("DXGI lists LUID " + adapter.luid_text() + " twice");
+        ++accel_count;
+        if (!accel_luids.insert(adapter.luid_key()).second) {
+            problems.add("DXGI lists accel-virt LUID " + adapter.luid_text() + " twice");
         }
     }
-    std::set<std::uint64_t> kmt_luids;
+    if (accel_count == 0) {
+        problems.add("DXGI lists no accel-virt adapter");
+    }
+    if (accel_count != devices) {
+        problems.add(std::to_string(accel_count) + " accel-virt DXGI adapter(s) but " + std::to_string(devices) +
+                     " present accel-virt display device(s) in the device tree");
+    }
+    for (std::uint64_t key : accel_luids) {
+        std::size_t in_kmt = 0;
+        for (const KmtAdapter& adapter : kmt_adapters) {
+            in_kmt += AvAdapters::key(adapter.luid) == key ? std::size_t{1} : std::size_t{0};
+        }
+        std::size_t in_vulkan = 0;
+        for (const VulkanDevice& device : vk_devices) {
+            in_vulkan += device.luid_valid && AvAdapters::key(device.luid) == key ? std::size_t{1} : std::size_t{0};
+        }
+        const std::string luid = Text::hex(key >> 32, 8) + ":" + Text::hex(key & 0xffffffffu, 8);
+        if (in_kmt != 1) {
+            problems.add("accel-virt LUID " + luid + " appears " + std::to_string(in_kmt) + " times in D3DKMT");
+        }
+        if (in_vulkan != 1) {
+            problems.add("accel-virt LUID " + luid + " appears " + std::to_string(in_vulkan) + " times in Vulkan");
+        }
+    }
     for (const KmtAdapter& adapter : kmt_adapters) {
-        if (!kmt_luids.insert(AvAdapters::key(adapter.luid)).second) {
-            problems.add("D3DKMT lists a LUID twice");
+        if (accel_luids.count(AvAdapters::key(adapter.luid)) == 0) {
+            context.measure("other.kmt." + Text::hex(static_cast<std::uint32_t>(adapter.luid.HighPart), 8) + ":" +
+                                Text::hex(adapter.luid.LowPart, 8),
+                            "not accel-virt");
         }
-        if (dxgi_luids.count(AvAdapters::key(adapter.luid)) == 0) {
-            problems.add("D3DKMT lists an adapter that DXGI does not (ghost entry)");
-        }
     }
-    context.measure("dxgi.hardware", dxgi_hardware);
-    context.measure("kmt.adapters", kmt_adapters.size());
-    context.measure("setupapi.display", devices.size());
-    if (dxgi_hardware != devices.size()) {
-        problems.add(std::to_string(dxgi_hardware) + " DXGI adapter(s) but " +
-                     std::to_string(devices.size()) + " present display device(s) in the device tree");
-    }
-    if (kmt_adapters.size() != devices.size()) {
-        problems.add(std::to_string(kmt_adapters.size()) + " D3DKMT adapter(s) but " +
-                     std::to_string(devices.size()) + " present display device(s) in the device tree");
-    }
+    context.measure("accel.dxgi", accel_count);
+    context.measure("accel.setupapi", devices);
     return problems.outcome();
 }
 

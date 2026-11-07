@@ -4,7 +4,12 @@
 
 #include <windows.h>
 
+#include "core/text.hpp"
+
 #include <algorithm>
+#include <filesystem>
+#include <fstream>
+#include <sstream>
 
 namespace lsw::suites {
 
@@ -39,6 +44,35 @@ std::wstring DriverRegistry::resolve(const std::wstring& name, bool own_bitness)
         return name;
     }
     return base + (sizeof(void*) == 8 ? L"\\SysWOW64\\" : L"\\Sysnative\\") + name;
+}
+
+std::wstring DriverRegistry::vulkan_library(const std::wstring& manifest) {
+    std::ifstream file(std::filesystem::path(manifest), std::ios::binary);
+    std::stringstream text;
+    text << file.rdbuf();
+    const std::string body = text.str();
+    const std::size_t key = body.find("\"library_path\"");
+    if (key == std::string::npos) {
+        return {};
+    }
+    const std::size_t open = body.find('"', body.find(':', key) + 1);
+    if (open == std::string::npos) {
+        return {};
+    }
+    std::string value;
+    for (std::size_t i = open + 1; i < body.size() && body[i] != '"'; ++i) {
+        if (body[i] == '\\' && i + 1 < body.size()) {
+            ++i;
+        }
+        value += body[i];
+    }
+    const std::wstring name = Text::wide(value);
+    if (name.find(L':') != std::wstring::npos) {
+        return name;
+    }
+    const std::size_t slash = manifest.find_last_of(L"\\/");
+    const std::wstring dir = slash == std::wstring::npos ? L"" : manifest.substr(0, slash + 1);
+    return exists(dir + name) ? dir + name : name;
 }
 
 bool DriverRegistry::exists(const std::wstring& path) {

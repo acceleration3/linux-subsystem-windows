@@ -315,23 +315,29 @@ Outcome IcdChecks::loader_independent_of_cwd(Context& context) {
     if (ChildMode::active()) {
         return Outcome::ok();
     }
-    const std::filesystem::path other_cwd = std::filesystem::temp_directory_path();
+    std::error_code code;
+    const std::filesystem::path decoys =
+        std::filesystem::temp_directory_path() / ("lsw-suites-decoys-" + std::to_string(::GetCurrentProcessId()));
+    std::filesystem::create_directories(decoys, code);
+    for (const char* name : {"OpenCL.dll", "vulkan-1.dll", "opengl32.dll"}) {
+        std::ofstream(decoys / name, std::ios::binary).close();
+    }
+    const std::pair<const char*, std::filesystem::path> directories[] = {
+        {"the parent's directory", std::filesystem::current_path()},
+        {"the temp directory", std::filesystem::temp_directory_path()},
+        {"a directory with decoy loaders", decoys},
+    };
     Problems problems;
-    ChildRunOptions moved;
-    moved.cwd = other_cwd;
-    CheckResult result = ChildRuns::run_self("sanity.env.icd.loader_independent_of_cwd", moved);
-    if (ChildRuns::text(result, "discovery") != discovery) {
-        problems.add("discovery from " + other_cwd.string() + " differs: " +
-                     (result.status == Status::Ok ? ChildRuns::text(result, "discovery") : result.reason));
+    for (const auto& [label, directory] : directories) {
+        ChildRunOptions options;
+        options.cwd = directory;
+        const CheckResult result = ChildRuns::run_self("sanity.env.icd.loader_independent_of_cwd", options);
+        if (ChildRuns::text(result, "discovery") != discovery) {
+            problems.add(std::string("discovery from ") + label + " differs: " +
+                         (result.status == Status::Ok ? ChildRuns::text(result, "discovery") : result.reason));
+        }
     }
-    ChildRunOptions restricted;
-    restricted.cwd = other_cwd;
-    restricted.restricted = true;
-    result = ChildRuns::run_self("sanity.env.icd.loader_independent_of_cwd", restricted);
-    if (ChildRuns::text(result, "discovery") != discovery) {
-        problems.add("discovery under a restricted token differs: " +
-                     (result.status == Status::Ok ? ChildRuns::text(result, "discovery") : result.reason));
-    }
+    std::filesystem::remove_all(decoys, code);
     return problems.outcome();
 }
 

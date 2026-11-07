@@ -22,6 +22,8 @@ public:
 
     [[nodiscard]] static std::wstring resolve(const std::wstring& name, bool own_bitness);
 
+    [[nodiscard]] static std::wstring vulkan_library(const std::wstring& manifest);
+
     [[nodiscard]] static bool exists(const std::wstring& path);
 };
 }  // namespace lsw::suites
