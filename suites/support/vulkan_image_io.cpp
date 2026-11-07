@@ -55,7 +55,11 @@ VkResult VulkanImageIo::write(VulkanRig& rig, const VulkanImage& image, const Im
 
 VkResult VulkanImageIo::read(VulkanRig& rig, const VulkanImage& image, const ImageRegion& region, std::vector<std::uint8_t>& data,
                              std::uint32_t texel) {
-    const std::size_t bytes = span_bytes(region, texel);
+    return read_raw(rig, image, region, span_bytes(region, texel), data);
+}
+
+VkResult VulkanImageIo::read_raw(VulkanRig& rig, const VulkanImage& image, const ImageRegion& region, std::size_t bytes,
+                                 std::vector<std::uint8_t>& data) {
     VulkanBuffer staging;
     VkResult result = staging.create(rig, bytes, VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
                                      VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);

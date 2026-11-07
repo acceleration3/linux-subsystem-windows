@@ -27,6 +27,9 @@ public:
     [[nodiscard]] static VkResult read(VulkanRig& rig, const VulkanImage& image, const ImageRegion& region,
                                        std::vector<std::uint8_t>& data, std::uint32_t texel);
 
+    [[nodiscard]] static VkResult read_raw(VulkanRig& rig, const VulkanImage& image, const ImageRegion& region, std::size_t bytes,
+                                           std::vector<std::uint8_t>& data);
+
     [[nodiscard]] static std::size_t span_bytes(const ImageRegion& region, std::uint32_t texel) {
         const std::size_t row = region.row_length != 0 ? region.row_length : region.extent.width;
         const std::size_t high = region.image_height != 0 ? region.image_height : region.extent.height;

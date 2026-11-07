@@ -178,4 +178,18 @@
     X(void, glDeleteSemaphoresEXT, int, const unsigned*) \
     X(void, glImportSemaphoreWin32HandleEXT, unsigned, unsigned, void*) \
     X(void, glWaitSemaphoreEXT, unsigned, unsigned, const unsigned*, unsigned, const unsigned*, const unsigned*) \
-    X(void, glSignalSemaphoreEXT, unsigned, unsigned, const unsigned*, unsigned, const unsigned*, const unsigned*)
+    X(void, glSignalSemaphoreEXT, unsigned, unsigned, const unsigned*, unsigned, const unsigned*, const unsigned*) \
+    X(void, glGetInternalformativ, unsigned, unsigned, unsigned, int, int*) \
+    X(void, glGetProgramBinary, unsigned, int, int*, unsigned*, void*) \
+    X(void, glProgramBinary, unsigned, unsigned, const void*, int) \
+    X(void, glProgramParameteri, unsigned, unsigned, int) \
+    X(void, glUniform4f, int, float, float, float, float) \
+    X(void, glUniform1ui, int, unsigned) \
+    X(void, glValidateProgram, unsigned) \
+    X(int, glGetAttribLocation, unsigned, const char*) \
+    X(void, glBindAttribLocation, unsigned, unsigned, const char*) \
+    X(void, glBindFragDataLocation, unsigned, unsigned, const char*) \
+    X(void, glClearBufferfi, unsigned, int, float, int) \
+    X(void, glGetShaderSource, unsigned, int, int*, char*) \
+    X(void, glDetachShader, unsigned, unsigned) \
+    X(void, glCompressedTexSubImage2D, unsigned, int, int, int, int, int, unsigned, int, const void*)

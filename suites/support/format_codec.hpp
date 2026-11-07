@@ -29,6 +29,8 @@ public:
 
     static void decode(const FormatSpec& spec, const std::uint8_t* texel, double out[4]);
 
+    static void encode(const FormatSpec& spec, const double values[4], std::uint8_t* texel);
+
     [[nodiscard]] static double tolerance(const FormatSpec& spec, int field_index, double value);
 
     [[nodiscard]] static bool matches(const FormatSpec& spec, const std::uint8_t* texel, const double expected[4],

@@ -110,5 +110,17 @@ add_library(suite_sanity OBJECT
     env/display_checks.cpp
     env/icd_checks.cpp
     env/install_checks.cpp
+    fmt/format_data.cpp
+    fmt/support_checks.cpp
+    fmt/display_checks.cpp
+    fmt/vulkan_format_io.cpp
+    fmt/gl_format_io.cpp
+    fmt/roundtrip_checks.cpp
+    fmt/value_checks.cpp
+    fmt/bc_checks.cpp
+    fmt/color_checks.cpp
+    fmt/depth_checks.cpp
+    fmt/yuv_checks.cpp
+    fmt/footprint_checks.cpp
 )
 target_link_libraries(suite_sanity PUBLIC suite_core suite_support)

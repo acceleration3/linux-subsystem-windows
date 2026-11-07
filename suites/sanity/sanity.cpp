@@ -96,6 +96,15 @@
 #include "sanity/vk/wsi_checks.hpp"
 #include "sanity/vk/robust_checks.hpp"
 #include "sanity/vk/external_checks.hpp"
+#include "sanity/fmt/bc_checks.hpp"
+#include "sanity/fmt/color_checks.hpp"
+#include "sanity/fmt/depth_checks.hpp"
+#include "sanity/fmt/display_checks.hpp"
+#include "sanity/fmt/footprint_checks.hpp"
+#include "sanity/fmt/roundtrip_checks.hpp"
+#include "sanity/fmt/support_checks.hpp"
+#include "sanity/fmt/value_checks.hpp"
+#include "sanity/fmt/yuv_checks.hpp"
 #include "sanity/env/display_checks.hpp"
 #include "sanity/env/icd_checks.hpp"
 #include "sanity/env/install_checks.hpp"
@@ -573,6 +582,21 @@ void add(Registry& registry) {
     guarded(suite, {"sanity.vk.validation.reference_workload", {"vulkan", "present"}, true, 120, vk::RobustChecks::reference_workload});
     guarded(suite, {"sanity.vk.external.memory_caps_consistent", {"vulkan", "interop"}, false, 90, vk::ExternalChecks::memory_caps_consistent});
     guarded(suite, {"sanity.vk.external.semaphore_fence_caps", {"vulkan", "interop"}, false, 90, vk::ExternalChecks::semaphore_fence_caps});
+    guarded(suite, {"sanity.fmt.support_bits_match_use", {"formats", "d3d9", "d3d11", "d3d12"}, false, 240, fmt::SupportChecks::support_bits_match_use});
+    guarded(suite, {"sanity.fmt.cross_api_equal", {"formats", "d3d11", "d3d12"}, false, 240, fmt::SupportChecks::cross_api_equal});
+    guarded(suite, {"sanity.fmt.roundtrip_uncompressed", {"formats", "d3d11", "d3d12", "vulkan", "gl", "opencl"}, false, 300, fmt::RoundtripChecks::roundtrip_uncompressed});
+    guarded(suite, {"sanity.fmt.packed_formats", {"formats", "d3d11", "d3d12", "vulkan", "gl"}, false, 240, fmt::RoundtripChecks::packed_formats});
+    guarded(suite, {"sanity.fmt.bc_blocks", {"formats", "d3d11", "d3d12", "vulkan", "gl"}, false, 240, fmt::BcChecks::bc_blocks});
+    guarded(suite, {"sanity.fmt.bc_dimensions", {"formats", "d3d11", "d3d12", "vulkan", "gl"}, false, 240, fmt::BcChecks::bc_dimensions});
+    guarded(suite, {"sanity.fmt.srgb_conversion", {"formats", "d3d9", "d3d11", "d3d12"}, false, 180, fmt::ColorChecks::srgb_conversion});
+    guarded(suite, {"sanity.fmt.typeless_casts", {"formats", "d3d11", "d3d12"}, false, 180, fmt::ColorChecks::typeless_casts});
+    guarded(suite, {"sanity.fmt.depth_stencil", {"formats", "d3d11", "vulkan", "gl"}, false, 180, fmt::DepthChecks::depth_stencil});
+    guarded(suite, {"sanity.fmt.yuv_nv12_p010", {"formats", "d3d11", "d3d12"}, false, 180, fmt::YuvChecks::yuv_nv12_p010});
+    guarded(suite, {"sanity.fmt.yuv_video_processing", {"formats", "d3d11"}, false, 120, fmt::YuvChecks::yuv_video_processing});
+    guarded(suite, {"sanity.fmt.float_special_values", {"formats", "d3d11", "d3d12", "vulkan", "gl", "opencl"}, false, 240, fmt::ValueChecks::float_special_values});
+    guarded(suite, {"sanity.fmt.snorm_and_clamp", {"formats", "d3d11", "d3d12", "vulkan", "gl"}, false, 180, fmt::ValueChecks::snorm_and_clamp});
+    guarded(suite, {"sanity.fmt.mip_and_array_footprints", {"formats", "d3d9", "d3d11", "d3d12", "vulkan", "gl", "opencl"}, false, 300, fmt::FootprintChecks::mip_and_array_footprints});
+    guarded(suite, {"sanity.fmt.display_formats", {"formats", "d3d9", "d3d11", "dxgi", "present", "dwm", "exclusive"}, true, 180, fmt::DisplayChecks::display_formats});
 }
 
 }  // namespace lsw::suites::sanity

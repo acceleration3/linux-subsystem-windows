@@ -340,7 +340,7 @@ bool D3d11Tools::read_texture(D3d11Device& device, ID3D11Texture2D* texture, UIN
     out.height = height;
     out.depth = 1;
     out.rows = block ? (height + 3) / 4 : height;
-    out.row_bytes = block ? ((width + 3) / 4) * element : width * element;
+    out.row_bytes = block ? ((width + 3) / 4) * static_cast<UINT>(element) : width * static_cast<UINT>(element);
     desc.Usage = D3D11_USAGE_STAGING;
     desc.BindFlags = 0;
     desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
@@ -377,7 +377,7 @@ bool D3d11Tools::read_volume(D3d11Device& device, ID3D11Texture3D* texture, UINT
     out.height = height;
     out.depth = depth;
     out.rows = block ? (height + 3) / 4 : height;
-    out.row_bytes = block ? ((width + 3) / 4) * element : width * element;
+    out.row_bytes = block ? ((width + 3) / 4) * static_cast<UINT>(element) : width * static_cast<UINT>(element);
     desc.Usage = D3D11_USAGE_STAGING;
     desc.BindFlags = 0;
     desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;

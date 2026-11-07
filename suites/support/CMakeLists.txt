@@ -12,6 +12,13 @@ add_library(suite_support OBJECT
     d3d11_textures.cpp
     d3d11_tools.cpp
     format_codec.cpp
+    half_float.cpp
+    packed_codec.cpp
+    bc_codec.cpp
+    format_table.cpp
+    format_runner.cpp
+    d3d11_format_runner.cpp
+    d3d12_format_runner.cpp
     oracle_rig.cpp
     swap_rig.cpp
     d3d12_backend.cpp

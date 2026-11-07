@@ -1,5 +1,8 @@
 #include "support/format_codec.hpp"
 
+#include "support/half_float.hpp"
+#include "support/packed_codec.hpp"
+
 #include <cmath>
 #include <cstring>
 
@@ -191,6 +194,63 @@ void FormatCodec::decode(const FormatSpec& spec, const std::uint8_t* texel, doub
             break;
         }
         out[field.channel] = value;
+    }
+}
+
+void FormatCodec::encode(const FormatSpec& spec, const double values[4], std::uint8_t* texel) {
+    for (int i = 0; i < spec.bytes; ++i) {
+        texel[i] = 0;
+    }
+    for (int i = 0; i < spec.count; ++i) {
+        const FormatField& field = spec.field[i];
+        const double value = values[field.channel];
+        std::uint64_t raw = 0;
+        const std::uint64_t mask = field.bits == 64 ? ~0ull : ((1ull << field.bits) - 1);
+        switch (spec.kind) {
+        case FormatKind::Unorm:
+        case FormatKind::Srgb: {
+            double encoded = value;
+            if (spec.kind == FormatKind::Srgb && field.channel != 3) {
+                encoded = linear_to_srgb(std::fmin(std::fmax(value, 0.0), 1.0));
+            }
+            encoded = std::fmin(std::fmax(encoded, 0.0), 1.0);
+            raw = static_cast<std::uint64_t>(std::nearbyint(encoded * static_cast<double>(mask)));
+            break;
+        }
+        case FormatKind::Snorm: {
+            const double top = static_cast<double>((1ll << (field.bits - 1)) - 1);
+            const double clamped = std::fmin(std::fmax(value, -1.0), 1.0);
+            raw = static_cast<std::uint64_t>(static_cast<std::int64_t>(std::nearbyint(clamped * top))) & mask;
+            break;
+        }
+        case FormatKind::Uint:
+            raw = static_cast<std::uint64_t>(std::fmin(std::fmax(value, 0.0), static_cast<double>(mask)));
+            break;
+        case FormatKind::Sint: {
+            const double low = -static_cast<double>(1ll << (field.bits - 1));
+            const double high = static_cast<double>((1ll << (field.bits - 1)) - 1);
+            raw = static_cast<std::uint64_t>(static_cast<std::int64_t>(std::fmin(std::fmax(value, low), high))) & mask;
+            break;
+        }
+        case FormatKind::Float:
+            if (field.bits == 32) {
+                const float single = static_cast<float>(value);
+                std::uint32_t word = 0;
+                std::memcpy(&word, &single, 4);
+                raw = word;
+            } else if (field.bits == 16) {
+                raw = HalfFloat::from_float(static_cast<float>(value));
+            } else {
+                raw = PackedCodec::pack_small(value, field.bits - 5);
+            }
+            break;
+        }
+        for (int bit = 0; bit < field.bits; ++bit) {
+            const int position = field.shift + bit;
+            if (((raw >> bit) & 1) != 0) {
+                texel[position / 8] = static_cast<std::uint8_t>(texel[position / 8] | (1u << (position % 8)));
+            }
+        }
     }
 }
 
