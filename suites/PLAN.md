@@ -1103,7 +1103,7 @@ Each loop creates and destroys 5000 objects of the kind with its largest practic
 | `sanity.interop.vk.kmt_handles_caps` | KMT handle types work when reported (OPAQUE_WIN32_KMT buffer memory and a legacy shared D3D11 texture as D3D11_TEXTURE_KMT, both read in a second process) and when not reported the queries agree (zero features, VK_ERROR_FORMAT_NOT_SUPPORTED); creating objects with an unreported handle type is invalid usage and is not exercised. |
 | `sanity.interop.vk.cross_process_present_chain` | A Vulkan process renders frames into a shared D3D11 texture, a D3D11 process composes them into its swap chain, and the capture shows each frame exactly and in order, with events ordering the two processes after the GPU work of each side completed. [E] |
 
-### 4.19 Capture (8)
+### 4.19 Capture (12)
 
 | check | contract |
 |---|---|
@@ -1115,6 +1115,10 @@ Each loop creates and destroys 5000 objects of the kind with its largest practic
 | `sanity.capture.dwm.thumbnail_each_api` | DWM thumbnails of a window for each API show its content (read back via capture of the destination) equal to the source window downscaled analytically. |
 | `sanity.capture.dwm.thumbnail_updates` | A thumbnail of a continuously updating window shows frames in order and stops updating when the source is minimised or destroyed as documented. |
 | `sanity.capture.wgc.resize_and_close` | A WGC session survives source window resize (FrameArrived with new ContentSize, pool recreate) and ends cleanly with Closed on window destruction. |
+| `sanity.capture.wgc.cadence_matches_present` | A window presents at interval 1 for 3 s on each of D3D11 flip, D3D12 flip, GL, Vulkan FIFO and D3D9Ex FLIPEX; the WGC FrameArrived SystemRelativeTime intervals have a p50 within 10 percent of the refresh period (DwmGetCompositionTimingInfo) and a p99 under 2.5 periods, and at most 1 percent of the presented frames (after 8 warm-up frames) are never captured; duplicates (one frame number captured twice) are a measure. Raw samples are written as CSV. [E] (about 20 s) |
+| `sanity.capture.dxgi.duplication_cadence` | The same through Desktop Duplication on each of the five APIs: LastPresentTime deltas, divided by AccumulatedFrames, have a p50 within 10 percent of the refresh period and a p99 under 2.5 periods; the AccumulatedFrames after the first decoded frame sum to the number of presents between the first and last decoded frame within max(2, 2 percent); the LastPresentTime span equals the present QPC span within 3 percent plus 2 periods; no frame has a LastPresentTime more than one period before its Present call. [E] (about 20 s) |
+| `sanity.capture.latency_present_to_capture` | Per API, over 3 s at interval 1, the time from the QPC taken after Present to the capture reporting that frame (WGC SystemRelativeTime and duplication LastPresentTime, both against QPC); p50 and p99 are measures and the p99 is under 4 refresh periods plus 20 ms. [E] (about 20 s) |
+| `sanity.capture.steady_no_drift` | 10 s of WGC capture of a D3D11 flip window at interval 1: the captured frame number trails the number of Presents started by 0 to 6 frames at every sample, and the linear-fit slope of that lag over time is within 0.1 frames per second. [E] (about 12 s) |
 
 ### 4.20 Presentation and frame pacing (33)
 

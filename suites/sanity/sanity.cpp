@@ -123,6 +123,7 @@
 #include "sanity/interop/gld3d_checks.hpp"
 #include "sanity/interop/glcl_checks.hpp"
 #include "sanity/interop/vk_checks.hpp"
+#include "sanity/capture/cadence_checks.hpp"
 #include "sanity/capture/dup_checks.hpp"
 #include "sanity/capture/thumbnail_checks.hpp"
 #include "sanity/capture/wgc_checks.hpp"
@@ -733,6 +734,10 @@ void add(Registry& registry) {
     guarded(suite, {"sanity.capture.wgc.each_api_equals_presented", {"capture", "wgc", "d3d9", "d3d11", "d3d12", "gl", "vulkan", "present", "dwm", "exclusive"}, true, 300, capture::WgcChecks::each_api_equals_presented});
     guarded(suite, {"sanity.capture.wgc.frames_in_order", {"capture", "wgc", "d3d11", "present", "dwm", "exclusive"}, true, 120, capture::WgcChecks::frames_in_order});
     guarded(suite, {"sanity.capture.wgc.resize_and_close", {"capture", "wgc", "d3d11", "present", "dwm", "exclusive"}, true, 120, capture::WgcChecks::resize_and_close});
+    guarded(suite, {"sanity.capture.wgc.cadence_matches_present", {"capture", "wgc", "d3d9", "d3d11", "d3d12", "gl", "vulkan", "present", "dwm", "exclusive"}, true, 180, capture::CadenceChecks::wgc_cadence_matches_present});
+    guarded(suite, {"sanity.capture.dxgi.duplication_cadence", {"capture", "dxgi", "d3d9", "d3d11", "d3d12", "gl", "vulkan", "present", "dwm", "exclusive"}, true, 180, capture::CadenceChecks::duplication_cadence});
+    guarded(suite, {"sanity.capture.latency_present_to_capture", {"capture", "wgc", "dxgi", "d3d9", "d3d11", "d3d12", "gl", "vulkan", "present", "dwm", "exclusive"}, true, 180, capture::CadenceChecks::latency_present_to_capture});
+    guarded(suite, {"sanity.capture.steady_no_drift", {"capture", "wgc", "d3d11", "present", "dwm", "exclusive"}, true, 120, capture::CadenceChecks::steady_no_drift});
     guarded(suite, {"sanity.capture.dwm.thumbnail_each_api", {"capture", "dwm", "d3d9", "d3d11", "d3d12", "gl", "vulkan", "present", "exclusive"}, true, 300, capture::ThumbnailChecks::each_api});
     guarded(suite, {"sanity.capture.dwm.thumbnail_updates", {"capture", "dwm", "d3d11", "present", "exclusive"}, true, 120, capture::ThumbnailChecks::updates});
     guarded(suite, {"sanity.err.vk_wrong_queue_family", {"err", "robust", "vulkan", "exclusive"}, true, 240, err::FamilyChecks::vk_wrong_queue_family});

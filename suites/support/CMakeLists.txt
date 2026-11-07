@@ -108,6 +108,12 @@ add_library(suite_support OBJECT
     sequence_judge.cpp
     wgc_session.cpp
     duplication_session.cpp
+    duplication_collector.cpp
+    wgc_collector.cpp
+    paced_run.cpp
+    frame_intervals.cpp
+    frame_sequence.cpp
+    timing_artifact.cpp
     present_path.cpp
     present_path_native.cpp
     cl_interop.cpp

@@ -19,6 +19,11 @@ public:
 
     [[nodiscard]] HRESULT acquire(UINT timeout_ms, DuplicationFrame& out, std::string& error);
 
+    void crop_to(const RECT& output_relative) {
+        crop_ = output_relative;
+        cropped_ = true;
+    }
+
     [[nodiscard]] const RECT& output_rect() const { return output_; }
 
     [[nodiscard]] bool used_duplicate_output1() const { return output1_used_; }
@@ -30,6 +35,8 @@ private:
     Com<IDXGIOutputDuplication> duplication_;
     Com<ID3D11Texture2D> staging_;
     RECT output_{};
+    RECT crop_{};
+    bool cropped_ = false;
     bool output1_used_ = false;
 };
 }  // namespace lsw::suites

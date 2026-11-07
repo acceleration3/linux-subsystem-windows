@@ -91,10 +91,17 @@ HRESULT DuplicationSession::acquire(UINT timeout_ms, DuplicationFrame& out, std:
         D3D11_TEXTURE2D_DESC desc{};
         frame->GetDesc(&desc);
         if (!staging_) {
-            staging_ = D3d11Tools::texture(device_, D3d11Tools::desc2d(desc.Width, desc.Height, desc.Format, 0, D3D11_USAGE_STAGING, D3D11_CPU_ACCESS_READ));
+            const UINT staging_width = cropped_ ? static_cast<UINT>(crop_.right - crop_.left) : desc.Width;
+            const UINT staging_height = cropped_ ? static_cast<UINT>(crop_.bottom - crop_.top) : desc.Height;
+            staging_ = D3d11Tools::texture(device_, D3d11Tools::desc2d(staging_width, staging_height, desc.Format, 0, D3D11_USAGE_STAGING, D3D11_CPU_ACCESS_READ));
         }
         if (staging_) {
-            device_.context->CopyResource(staging_.get(), frame.get());
+            if (cropped_) {
+                const D3D11_BOX box{static_cast<UINT>(crop_.left), static_cast<UINT>(crop_.top), 0, static_cast<UINT>(crop_.right), static_cast<UINT>(crop_.bottom), 1};
+                device_.context->CopySubresourceRegion(staging_.get(), 0, 0, 0, 0, frame.get(), 0, &box);
+            } else {
+                device_.context->CopyResource(staging_.get(), frame.get());
+            }
             TexelImage image;
             if (D3d11Tools::read_texture(device_, staging_.get(), 0, image, error)) {
                 out.image.width = static_cast<int>(image.width);
