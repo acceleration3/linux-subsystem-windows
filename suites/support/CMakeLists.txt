@@ -91,6 +91,13 @@ add_library(suite_support OBJECT
     vulkan_shaders.cpp
     vulkan_table.cpp
     vulkan_tools.cpp
+    frame_image.cpp
+    gdi_dib.cpp
+    screen_capture.cpp
+    layered_overlay.cpp
+    d3d11_frame_draw.cpp
+    gl_frame_draw.cpp
+    window_presenters.cpp
 )
 set(LSW_SUITES_KHRONOS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../external/accel-virt/third_party/khronos"
     CACHE PATH "Khronos headers root (contains include/CL and include/vulkan)")

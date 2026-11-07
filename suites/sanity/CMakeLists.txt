@@ -130,5 +130,13 @@ add_library(suite_sanity OBJECT
     shader/cl_checks.cpp
     shader/dxbc_checks.cpp
     shader/dxil_checks.cpp
+    interop/kit.cpp
+    interop/gdi_dxgi_checks.cpp
+    interop/gdi_d3d9_checks.cpp
+    interop/gdi_gl_checks.cpp
+    interop/gdi_capture_checks.cpp
+    interop/gdi_layered_checks.cpp
+    interop/gdi_dib_checks.cpp
+    interop/gdi_d2d_checks.cpp
 )
 target_link_libraries(suite_sanity PUBLIC suite_core suite_support)

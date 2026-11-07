@@ -127,6 +127,7 @@ D3DPRESENT_PARAMETERS D3d9Rig::parameters(const D3d9Settings& wanted) const {
     pp.EnableAutoDepthStencil = wanted.depth ? TRUE : FALSE;
     pp.AutoDepthStencilFormat = wanted.depth_format;
     pp.PresentationInterval = wanted.interval;
+    pp.Flags = wanted.present_flags;
     return pp;
 }
 

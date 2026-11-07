@@ -14,6 +14,9 @@ struct TestWindowConfig {
     int width = 320;
     int height = 240;
     bool visible = true;
+    bool popup = false;
+    bool layered = false;
+    bool topmost = false;
     std::wstring title = L"lsw-suites";
 };
 
@@ -35,6 +38,7 @@ public:
     void move(int x, int y);
 
     void destroy();
+    void paint_with(COLORREF color);
 
     [[nodiscard]] HWND hwnd() const { return hwnd_; }
 

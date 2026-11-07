@@ -19,6 +19,7 @@ struct D3d9Settings {
     bool depth = true;
     D3DFORMAT depth_format = D3DFMT_D24S8;
     UINT interval = D3DPRESENT_INTERVAL_DEFAULT;
+    DWORD present_flags = 0;
     DWORD behavior = 0;
     DWORD extra_behavior = 0;
     int x = 60;

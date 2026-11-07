@@ -1020,26 +1020,26 @@ Each loop creates and destroys 5000 objects of the kind with its largest practic
 
 | check | contract |
 |---|---|
-| `sanity.interop.gdi.dxgi_getdc_roundtrip` | IDXGISurface1::GetDC on a GDI-compatible back buffer lets GDI draw (lines, text, FillRect, alpha-less), and after ReleaseDC and Present the frame shows the GDI content and the D3D content around it intact. |
+| `sanity.interop.gdi.dxgi_getdc_roundtrip` | IDXGISurface1::GetDC on a GDI-compatible back buffer lets GDI draw (lines, text, FillRect, alpha-less), and after ReleaseDC and Present the frame shows the GDI content and the D3D content around it intact. [E] |
 | `sanity.interop.gdi.dxgi_getdc_discard_flag` | GetDC with Discard=TRUE does not require preserving prior contents, FALSE preserves them; both return pixels matching the WARP result. |
 | `sanity.interop.gdi.dxgi_getdc_lifetime` | GetDC twice without release fails, ReleaseDC without GetDC fails with documented error, and the device and surface stay usable. |
 | `sanity.interop.gdi.d3d9_surface_getdc` | IDirect3DSurface9::GetDC on a lockable/GDI-compatible surface lets GDI draw, and D3D9 sees GDI pixels after ReleaseDC while untouched pixels are unchanged. |
-| `sanity.interop.gdi.d3d9ex_flip_gdi` | GDI drawn via GetDC onto a D3D9Ex flip-model back buffer shows in the presented frame in order with D3D rendering. |
-| `sanity.interop.gdi.gl_window_owndc` | In a CS_OWNDC window with a GL format, GDI calls on the same DC and SwapBuffers produce the documented behaviour: SwapBuffers shows GL content in double-buffered windows, GDI drawing in a single-buffered window is visible, and the GL content is unchanged by unrelated GDI calls. |
-| `sanity.interop.gdi.gl_mixed_swap` | Alternating GDI TextOut and GL render+SwapBuffers 100 times: the final frame equals the last GL frame (double buffered) and no GDI call crashes or hangs. |
-| `sanity.interop.gdi.bitblt_each_api` | BitBlt of a window DC (via GetWindowDC/CAPTURE) showing D3D9, D3D11, D3D12, GL and Vulkan content returns the presented frame's pixels. |
-| `sanity.interop.gdi.printwindow_full_content` | PrintWindow(PW_RENDERFULLCONTENT) of windows showing each API's content returns pixels equal to what is presented for the same frame number. |
-| `sanity.interop.gdi.layered_per_pixel_alpha` | UpdateLayeredWindow with a per-pixel-alpha DIB over a 3D window composes to the analytic source-over result in a capture. |
-| `sanity.interop.gdi.layered_over_3d_update` | A layered window over a continuously updating 3D window: every capture shows a consistent (frame, overlay) pair with correct blend and no tearing between them. |
-| `sanity.interop.gdi.dib_section_upload` | A DIB section (pattern) uploaded as a texture to D3D9, D3D11, D3D12, GL and Vulkan and rendered 1:1 reads back identical pixels (BGRA to RGBA conversions correct). |
-| `sanity.interop.gdi.dib_after_gpu_writes` | GPU rendering followed by GdiFlush-synchronised reads of a DIB shared via GetDC/BitBlt shows the GPU's results. |
+| `sanity.interop.gdi.d3d9ex_flip_gdi` | GDI drawn via GetDC onto a D3D9Ex flip-model back buffer shows in the presented frame in order with D3D rendering. [E] |
+| `sanity.interop.gdi.gl_window_owndc` | In a CS_OWNDC window with a GL format, GDI calls on the same DC and SwapBuffers produce the documented behaviour: SwapBuffers shows GL content in double-buffered windows, GDI drawing in a single-buffered window is visible, and the GL content is unchanged by unrelated GDI calls. [E] |
+| `sanity.interop.gdi.gl_mixed_swap` | Alternating GDI TextOut and GL render+SwapBuffers 100 times: the final frame equals the last GL frame (double buffered) and no GDI call crashes or hangs. [E] |
+| `sanity.interop.gdi.bitblt_each_api` | BitBlt from the desktop device context over a window showing D3D9, D3D11, D3D12, GL and Vulkan content returns exactly the presented frame's pixels; BitBlt from the window's own device context does too for bitblt-model windows (D3D9, D3D11 sequential, GL double buffered) and is a measure for flip-model windows (D3D12, Vulkan), whose window DC content is not specified. [E] |
+| `sanity.interop.gdi.printwindow_full_content` | PrintWindow(PW_RENDERFULLCONTENT) of windows showing each API's content (D3D11 also in flip model) returns client pixels equal to the frame presented last. [E] |
+| `sanity.interop.gdi.layered_per_pixel_alpha` | UpdateLayeredWindow with a per-pixel-alpha DIB over a 3D window composes to the analytic source-over result in a capture. [E] |
+| `sanity.interop.gdi.layered_over_3d_update` | A layered window over a continuously updating 3D window: every capture is a consistent (frame i, overlay j) pair with exact blend, uniform across the whole image (no tearing inside either surface), and i and j never go back in time; the newest pair is reached after each update. [E] |
+| `sanity.interop.gdi.dib_section_upload` | A DIB section (pattern) uploaded as a texture to D3D9, D3D11, D3D12, GL and Vulkan and rendered 1:1 (shader load/fetch; Vulkan by format-converting blit) reads back the same R, G, B, A values through the format codecs (BGRA to RGBA conversions correct). |
+| `sanity.interop.gdi.dib_after_gpu_writes` | GPU results on a GDI-compatible D3D11 texture and a lockable D3D9 render target are copied by GetDC and BitBlt into a DIB section and equal the frame after GdiFlush; the reverse (BitBlt of a DIB pattern into the surface DC) is read back identically by D3D11. Patterns change every frame. |
 | `sanity.interop.gdi.d2d_gdi_interop_target` | Direct2D on a DXGI surface mixed with GDI through ID2D1GdiInteropRenderTarget::GetDC/ReleaseDC yields pixels equal to the WARP render of the same sequence within 1 LSB. |
 | `sanity.interop.gdi.dwrite_text_on_surface` | DirectWrite text drawn on a DXGI surface render target with GDI-compatible rendering mode matches the WARP rendering and the GDI text metrics. |
-| `sanity.interop.gdi.text_over_flip_window` | GDI text drawn over a flip-model swapchain window (via layered child or the redirection surface) shows in captures according to documented flip-model behaviour and does not corrupt the 3D frame. |
-| `sanity.interop.gdi.redirection_mixed_windows` | With several overlapping windows (GDI-only, 3D, layered), DWM composition equals the analytic z-ordered composite in a capture, including after moving one. |
-| `sanity.interop.gdi.cursor_in_captures` | Captures with the cursor requested include the cursor at GetCursorPos location (with its hotspot) and captures without exclude it, for both GDI and 3D windows. |
-| `sanity.interop.gdi.gdi_after_device_lost` | After a D3D device is destroyed or reset, GDI on the same window still works and the window is repainted fully on the next WM_PAINT. |
-| `sanity.interop.gdi.multi_thread_gdi_3d` | One thread drawing GDI on a window while another presents a 3D swapchain to a different window both remain correct and responsive for seconds. |
+| `sanity.interop.gdi.text_over_flip_window` | GDI text on the window DC of a flip-model swapchain window never changes pixels outside the text and the next present is exact; a layered window carrying GDI text over the window composes to the analytic frame plus text. [E] |
+| `sanity.interop.gdi.redirection_mixed_windows` | With several overlapping windows (GDI-only, 3D, layered), DWM composition equals the analytic z-ordered composite in a capture, including after moving one. [E] |
+| `sanity.interop.gdi.cursor_in_captures` | Desktop captures without the cursor leave the window content exact under the cursor; captures with the cursor (GetCursorInfo plus DrawIconEx at the position minus the hotspot) equal the content with the cursor drawn at GetCursorPos with its hotspot, for a GDI window and a 3D window. [E] |
+| `sanity.interop.gdi.gdi_after_device_lost` | After a D3D device is destroyed or reset, GDI on the same window still works and the window is repainted fully on the next WM_PAINT. [E] |
+| `sanity.interop.gdi.multi_thread_gdi_3d` | One thread drawing GDI on a window while another presents a 3D swapchain to a different window both remain correct and responsive for seconds. [E] |
 
 #### OpenGL and OpenCL
 

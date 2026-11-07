@@ -18,6 +18,7 @@ public:
     [[nodiscard]] VkResult acquire(std::uint64_t timeout, std::uint32_t& index);
 
     [[nodiscard]] VkResult paint_and_present(std::uint32_t index, const float rgba[4]);
+    [[nodiscard]] VkResult pixels_and_present(std::uint32_t index, const std::vector<std::uint32_t>& xrgb);
 
     void destroy_swapchain();
 

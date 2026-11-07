@@ -1,6 +1,9 @@
 #include "support/vulkan_swapchain.hpp"
 
+#include "support/vulkan_buffer.hpp"
 #include "support/vulkan_image.hpp"
+
+#include <cstring>
 
 namespace lsw::suites {
 
@@ -106,6 +109,50 @@ VkResult VulkanSwapchain::acquire(std::uint64_t timeout, std::uint32_t& index) {
         return rig_->wait_fence(handle, 20ull * 1000000000ull) == VK_SUCCESS ? result : VK_TIMEOUT;
     }
     return result;
+}
+
+VkResult VulkanSwapchain::pixels_and_present(std::uint32_t index, const std::vector<std::uint32_t>& xrgb) {
+    if (queue_ == nullptr || index >= images.size() || xrgb.size() < static_cast<std::size_t>(extent.width) * extent.height) {
+        return VK_ERROR_UNKNOWN;
+    }
+    const VkImage image = images[index];
+    const std::size_t count = static_cast<std::size_t>(extent.width) * extent.height;
+    VulkanBuffer staging;
+    VkResult result = staging.create(*rig_, count * 4, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    if (result != VK_SUCCESS) {
+        return result;
+    }
+    const bool bgra = format == VK_FORMAT_B8G8R8A8_UNORM;
+    std::uint32_t* words = staging.words();
+    for (std::size_t i = 0; i < count; ++i) {
+        const std::uint32_t value = 0xFF000000u | xrgb[i];
+        words[i] = bgra ? value : (value & 0xFF00FF00u) | ((value & 0xFFu) << 16) | ((value >> 16) & 0xFFu);
+    }
+    staging.publish();
+    result = rig_->run(
+        [&](VkCommandBuffer commands) {
+            VkImageMemoryBarrier to_copy = VulkanImage::barrier(image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0, VK_ACCESS_TRANSFER_WRITE_BIT,
+                                                                VK_IMAGE_ASPECT_COLOR_BIT);
+            rig_->fn.vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &to_copy);
+            VkBufferImageCopy region{};
+            region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+            region.imageExtent = {extent.width, extent.height, 1};
+            rig_->fn.vkCmdCopyBufferToImage(commands, staging.buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+            VkImageMemoryBarrier to_present = VulkanImage::barrier(image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_ACCESS_TRANSFER_WRITE_BIT, 0,
+                                                                   VK_IMAGE_ASPECT_COLOR_BIT);
+            rig_->fn.vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, nullptr, 0, nullptr, 1, &to_present);
+        },
+        queue_);
+    if (result != VK_SUCCESS) {
+        return result;
+    }
+    VkPresentInfoKHR present{};
+    present.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+    present.swapchainCount = 1;
+    present.pSwapchains = &swapchain;
+    present.pImageIndices = &index;
+    rig_->mark_pending();
+    return rig_->fn.vkQueuePresentKHR(queue_->handle, &present);
 }
 
 VkResult VulkanSwapchain::paint_and_present(std::uint32_t index, const float rgba[4]) {

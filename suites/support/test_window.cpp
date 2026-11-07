@@ -14,6 +14,20 @@ LRESULT CALLBACK window_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lpar
     if (message == WM_ERASEBKGND) {
         return 1;
     }
+    if (message == WM_PAINT) {
+        const LONG_PTR paint = ::GetWindowLongPtrW(hwnd, GWLP_USERDATA);
+        if (paint != 0) {
+            PAINTSTRUCT ps;
+            HDC dc = ::BeginPaint(hwnd, &ps);
+            RECT client{};
+            ::GetClientRect(hwnd, &client);
+            HBRUSH brush = ::CreateSolidBrush(static_cast<COLORREF>(paint - 1));
+            ::FillRect(dc, &client, brush);
+            ::DeleteObject(brush);
+            ::EndPaint(hwnd, &ps);
+            return 0;
+        }
+    }
     if (message == WM_DESTROY) {
         ::PostQuitMessage(0);
         return 0;
@@ -76,8 +90,15 @@ bool TestWindow::create(const TestWindowConfig& config, std::string& error) {
 
 void TestWindow::pump(TestWindowConfig config) {
     register_class();
-    HWND hwnd = ::CreateWindowExW(0, kClassName, config.title.c_str(),
-                                  WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN | WS_CLIPSIBLINGS,
+    DWORD ex_style = 0;
+    if (config.layered) {
+        ex_style |= WS_EX_LAYERED;
+    }
+    if (config.topmost) {
+        ex_style |= WS_EX_TOPMOST | WS_EX_NOACTIVATE;
+    }
+    HWND hwnd = ::CreateWindowExW(ex_style, kClassName, config.title.c_str(),
+                                  (config.popup ? WS_POPUP : WS_OVERLAPPEDWINDOW) | WS_CLIPCHILDREN | WS_CLIPSIBLINGS,
                                   config.x, config.y, config.width, config.height, nullptr, nullptr,
                                   ::GetModuleHandleW(nullptr), nullptr);
     {
@@ -103,6 +124,10 @@ void TestWindow::pump(TestWindowConfig config) {
         ::TranslateMessage(&message);
         ::DispatchMessageW(&message);
     }
+}
+
+void TestWindow::paint_with(COLORREF color) {
+    ::SetWindowLongPtrW(hwnd_, GWLP_USERDATA, static_cast<LONG_PTR>(color) + 1);
 }
 
 void TestWindow::show() {

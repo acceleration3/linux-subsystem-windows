@@ -105,6 +105,13 @@
 #include "sanity/fmt/support_checks.hpp"
 #include "sanity/fmt/value_checks.hpp"
 #include "sanity/fmt/yuv_checks.hpp"
+#include "sanity/interop/gdi_capture_checks.hpp"
+#include "sanity/interop/gdi_d2d_checks.hpp"
+#include "sanity/interop/gdi_d3d9_checks.hpp"
+#include "sanity/interop/gdi_dib_checks.hpp"
+#include "sanity/interop/gdi_dxgi_checks.hpp"
+#include "sanity/interop/gdi_gl_checks.hpp"
+#include "sanity/interop/gdi_layered_checks.hpp"
 #include "sanity/shader/cache_checks.hpp"
 #include "sanity/shader/cl_checks.hpp"
 #include "sanity/shader/determinism_checks.hpp"
@@ -616,6 +623,26 @@ void add(Registry& registry) {
     guarded(suite, {"sanity.shader.determinism.created_twice", {"shader", "d3d11", "d3d12", "vulkan", "gl", "opencl"}, false, 180, shader::DeterminismChecks::created_twice});
     guarded(suite, {"sanity.shader.determinism.two_processes", {"shader", "d3d11", "d3d12", "vulkan", "gl", "opencl", "slow"}, false, 300, shader::DeterminismChecks::two_processes});
     guarded(suite, {"sanity.shader.cache.reuse_correct", {"shader", "vulkan", "gl", "d3d12"}, false, 180, shader::CacheChecks::reuse_correct});
+    guarded(suite, {"sanity.interop.gdi.dxgi_getdc_roundtrip", {"interop", "gdi", "dxgi", "d3d11", "present", "dwm", "exclusive"}, true, 120, interop::GdiDxgiChecks::getdc_roundtrip});
+    guarded(suite, {"sanity.interop.gdi.dxgi_getdc_discard_flag", {"interop", "gdi", "dxgi", "d3d11"}, false, 90, interop::GdiDxgiChecks::getdc_discard_flag});
+    guarded(suite, {"sanity.interop.gdi.dxgi_getdc_lifetime", {"interop", "gdi", "dxgi", "d3d11"}, false, 90, interop::GdiDxgiChecks::getdc_lifetime});
+    guarded(suite, {"sanity.interop.gdi.d3d9_surface_getdc", {"interop", "gdi", "d3d9"}, false, 90, interop::GdiD3d9Checks::surface_getdc});
+    guarded(suite, {"sanity.interop.gdi.d3d9ex_flip_gdi", {"interop", "gdi", "d3d9", "present", "dwm", "exclusive"}, true, 120, interop::GdiD3d9Checks::flip_getdc});
+    guarded(suite, {"sanity.interop.gdi.gl_window_owndc", {"interop", "gdi", "gl", "present", "dwm", "exclusive"}, true, 120, interop::GdiGlChecks::window_owndc});
+    guarded(suite, {"sanity.interop.gdi.gl_mixed_swap", {"interop", "gdi", "gl", "present", "dwm", "exclusive"}, true, 120, interop::GdiGlChecks::mixed_swap});
+    guarded(suite, {"sanity.interop.gdi.bitblt_each_api", {"interop", "gdi", "d3d9", "d3d11", "d3d12", "gl", "vulkan", "present", "dwm", "exclusive"}, true, 240, interop::GdiCaptureChecks::bitblt_each_api});
+    guarded(suite, {"sanity.interop.gdi.printwindow_full_content", {"interop", "gdi", "d3d9", "d3d11", "d3d12", "gl", "vulkan", "present", "dwm", "exclusive"}, true, 240, interop::GdiCaptureChecks::printwindow_full_content});
+    guarded(suite, {"sanity.interop.gdi.layered_per_pixel_alpha", {"interop", "gdi", "d3d11", "present", "dwm", "exclusive"}, true, 120, interop::GdiLayeredChecks::per_pixel_alpha});
+    guarded(suite, {"sanity.interop.gdi.layered_over_3d_update", {"interop", "gdi", "d3d11", "present", "dwm", "exclusive"}, true, 180, interop::GdiLayeredChecks::over_3d_update});
+    guarded(suite, {"sanity.interop.gdi.dib_section_upload", {"interop", "gdi", "d3d9", "d3d11", "d3d12", "gl", "vulkan"}, false, 180, interop::GdiDibChecks::section_upload});
+    guarded(suite, {"sanity.interop.gdi.dib_after_gpu_writes", {"interop", "gdi", "d3d9", "d3d11"}, false, 120, interop::GdiDibChecks::after_gpu_writes});
+    guarded(suite, {"sanity.interop.gdi.d2d_gdi_interop_target", {"interop", "gdi", "d3d11"}, false, 120, interop::GdiD2dChecks::gdi_interop_target});
+    guarded(suite, {"sanity.interop.gdi.dwrite_text_on_surface", {"interop", "gdi", "d3d11"}, false, 120, interop::GdiD2dChecks::dwrite_text_on_surface});
+    guarded(suite, {"sanity.interop.gdi.text_over_flip_window", {"interop", "gdi", "d3d11", "present", "dwm", "exclusive"}, true, 120, interop::GdiLayeredChecks::text_over_flip_window});
+    guarded(suite, {"sanity.interop.gdi.redirection_mixed_windows", {"interop", "gdi", "d3d11", "present", "dwm", "exclusive"}, true, 180, interop::GdiLayeredChecks::mixed_windows});
+    guarded(suite, {"sanity.interop.gdi.cursor_in_captures", {"interop", "gdi", "d3d11", "present", "dwm", "exclusive"}, true, 120, interop::GdiCaptureChecks::cursor_in_captures});
+    guarded(suite, {"sanity.interop.gdi.gdi_after_device_lost", {"interop", "gdi", "d3d9", "d3d11", "present", "dwm", "exclusive"}, true, 120, interop::GdiD3d9Checks::after_device_lost});
+    guarded(suite, {"sanity.interop.gdi.multi_thread_gdi_3d", {"interop", "gdi", "d3d11", "present", "dwm", "exclusive"}, true, 120, interop::GdiDibChecks::multi_thread});
 }
 
 }  // namespace lsw::suites::sanity
