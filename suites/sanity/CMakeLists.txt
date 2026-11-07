@@ -122,5 +122,13 @@ add_library(suite_sanity OBJECT
     fmt/depth_checks.cpp
     fmt/yuv_checks.cpp
     fmt/footprint_checks.cpp
+    shader/workload.cpp
+    shader/determinism_checks.cpp
+    shader/cache_checks.cpp
+    shader/spirv_checks.cpp
+    shader/glsl_checks.cpp
+    shader/cl_checks.cpp
+    shader/dxbc_checks.cpp
+    shader/dxil_checks.cpp
 )
 target_link_libraries(suite_sanity PUBLIC suite_core suite_support)

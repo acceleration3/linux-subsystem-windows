@@ -13,7 +13,8 @@ class VulkanCompute {
 public:
     [[nodiscard]] VkResult create(VulkanRig& rig, const std::vector<std::uint32_t>& spirv,
                                   const std::vector<VulkanBinding>& bindings, std::uint32_t push_bytes,
-                                  const VkSpecializationInfo* specialization = nullptr, bool push_descriptors = false);
+                                  const VkSpecializationInfo* specialization = nullptr, bool push_descriptors = false,
+                                  VkPipelineCache cache = VK_NULL_HANDLE);
 
     void write_buffer(std::uint32_t binding, VkBuffer buffer, VkDeviceSize offset = 0, VkDeviceSize range = VK_WHOLE_SIZE,
                       std::uint32_t element = 0);

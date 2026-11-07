@@ -13,6 +13,7 @@ add_library(suite_support OBJECT
     d3d11_tools.cpp
     format_codec.cpp
     half_float.cpp
+    dxc_compiler.cpp
     packed_codec.cpp
     bc_codec.cpp
     format_table.cpp

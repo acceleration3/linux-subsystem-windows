@@ -5,7 +5,7 @@
 namespace lsw::suites {
 
 VkResult VulkanCompute::create(VulkanRig& rig, const std::vector<std::uint32_t>& spirv, const std::vector<VulkanBinding>& bindings,
-                               std::uint32_t push_bytes, const VkSpecializationInfo* specialization, bool push_descriptors) {
+                               std::uint32_t push_bytes, const VkSpecializationInfo* specialization, bool push_descriptors, VkPipelineCache cache) {
     rig_ = &rig;
     bindings_ = bindings;
     VkResult result = rig.make_shader(module, spirv);
@@ -54,7 +54,7 @@ VkResult VulkanCompute::create(VulkanRig& rig, const std::vector<std::uint32_t>&
     pipeline_info.stage.pSpecializationInfo = specialization;
     pipeline_info.layout = layout.get();
     VkPipeline created = VK_NULL_HANDLE;
-    result = rig.fn.vkCreateComputePipelines(rig.device, VK_NULL_HANDLE, 1, &pipeline_info, nullptr, &created);
+    result = rig.fn.vkCreateComputePipelines(rig.device, cache, 1, &pipeline_info, nullptr, &created);
     if (result != VK_SUCCESS) {
         return result;
     }

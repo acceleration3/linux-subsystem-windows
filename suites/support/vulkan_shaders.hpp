@@ -21,7 +21,10 @@ enum class VulkanShader {
     Sample,
     StoreUint,
     StoreRgba,
-    VertexInput
+    VertexInput,
+    SpecKernel,
+    SpecFrag,
+    DetKernel
 };
 
 class VulkanShaders {

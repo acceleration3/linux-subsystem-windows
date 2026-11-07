@@ -96,8 +96,8 @@ bool D3d11Device::wait_idle(std::string& error) {
     context->Flush();
     BOOL done = FALSE;
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(60);
-    HRESULT result = S_FALSE;
-    while ((result = context->GetData(query, &done, sizeof(done), 0)) == S_FALSE) {
+    HRESULT polled = S_FALSE;
+    while ((polled = context->GetData(query, &done, sizeof(done), 0)) == S_FALSE) {
         if (std::chrono::steady_clock::now() > deadline) {
             query->Release();
             error = "the D3D11 event query did not complete in 60 s";
@@ -106,7 +106,7 @@ bool D3d11Device::wait_idle(std::string& error) {
         ::SwitchToThread();
     }
     query->Release();
-    if (FAILED(result)) {
+    if (FAILED(polled)) {
         error = "GetData failed";
         return false;
     }

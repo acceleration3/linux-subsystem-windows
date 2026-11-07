@@ -38,6 +38,8 @@ struct SceneOptions {
     VkCompareOp depth_op = VK_COMPARE_OP_LESS;
     float line_width = 1.0f;
     VkPipelineCache cache = VK_NULL_HANDLE;
+    std::vector<std::uint32_t> fragment_words;
+    const VkSpecializationInfo* fragment_specialization = nullptr;
     SceneDraw draw = SceneDraw::Direct;
     VkBuffer vertex_buffer = VK_NULL_HANDLE;
     VkBuffer index_buffer = VK_NULL_HANDLE;

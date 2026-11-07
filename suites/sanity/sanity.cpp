@@ -105,6 +105,13 @@
 #include "sanity/fmt/support_checks.hpp"
 #include "sanity/fmt/value_checks.hpp"
 #include "sanity/fmt/yuv_checks.hpp"
+#include "sanity/shader/cache_checks.hpp"
+#include "sanity/shader/cl_checks.hpp"
+#include "sanity/shader/determinism_checks.hpp"
+#include "sanity/shader/dxbc_checks.hpp"
+#include "sanity/shader/dxil_checks.hpp"
+#include "sanity/shader/glsl_checks.hpp"
+#include "sanity/shader/spirv_checks.hpp"
 #include "sanity/env/display_checks.hpp"
 #include "sanity/env/icd_checks.hpp"
 #include "sanity/env/install_checks.hpp"
@@ -597,6 +604,18 @@ void add(Registry& registry) {
     guarded(suite, {"sanity.fmt.snorm_and_clamp", {"formats", "d3d11", "d3d12", "vulkan", "gl"}, false, 180, fmt::ValueChecks::snorm_and_clamp});
     guarded(suite, {"sanity.fmt.mip_and_array_footprints", {"formats", "d3d9", "d3d11", "d3d12", "vulkan", "gl", "opencl"}, false, 300, fmt::FootprintChecks::mip_and_array_footprints});
     guarded(suite, {"sanity.fmt.display_formats", {"formats", "d3d9", "d3d11", "dxgi", "present", "dwm", "exclusive"}, true, 180, fmt::DisplayChecks::display_formats});
+    guarded(suite, {"sanity.shader.dxbc.sm2_sm3", {"shader", "d3d9", "d3d11"}, false, 120, shader::DxbcChecks::sm2_sm3});
+    guarded(suite, {"sanity.shader.dxbc.sm4_sm5", {"shader", "d3d10", "d3d11", "d3d12"}, false, 180, shader::DxbcChecks::sm4_sm5});
+    guarded(suite, {"sanity.shader.dxil.sm6", {"shader", "d3d12"}, false, 120, shader::DxilChecks::sm6});
+    guarded(suite, {"sanity.shader.spirv.valid_runs", {"shader", "vulkan"}, false, 120, shader::SpirvChecks::valid_runs});
+    guarded(suite, {"sanity.shader.spirv.invalid_fails", {"shader", "vulkan"}, false, 120, shader::SpirvChecks::invalid_fails});
+    guarded(suite, {"sanity.shader.glsl.versions", {"shader", "gl"}, false, 120, shader::GlslChecks::versions});
+    guarded(suite, {"sanity.shader.glsl.invalid_diagnostics", {"shader", "gl"}, false, 90, shader::GlslChecks::invalid_diagnostics});
+    guarded(suite, {"sanity.shader.dxbc.invalid_diagnostics", {"shader", "d3d9", "d3d11", "d3d12"}, false, 120, shader::DxbcChecks::invalid_diagnostics});
+    guarded(suite, {"sanity.shader.cl.c_and_il", {"shader", "opencl"}, false, 120, shader::ClChecks::c_and_il});
+    guarded(suite, {"sanity.shader.determinism.created_twice", {"shader", "d3d11", "d3d12", "vulkan", "gl", "opencl"}, false, 180, shader::DeterminismChecks::created_twice});
+    guarded(suite, {"sanity.shader.determinism.two_processes", {"shader", "d3d11", "d3d12", "vulkan", "gl", "opencl", "slow"}, false, 300, shader::DeterminismChecks::two_processes});
+    guarded(suite, {"sanity.shader.cache.reuse_correct", {"shader", "vulkan", "gl", "d3d12"}, false, 180, shader::CacheChecks::reuse_correct});
 }
 
 }  // namespace lsw::suites::sanity

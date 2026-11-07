@@ -13,7 +13,7 @@ out=../vulkan_shaders.cpp
     for pair in ops.comp:kOps subgroup.comp:kSubgroup limits.comp:kLimits bindings.comp:kBindings memmodel.comp:kMemoryModel \
                 rect.vert:kRectVert point.vert:kPointVert rect.frag:kRectFrag rect2.frag:kRect2Frag rect.geom:kRectGeom \
                 rect.tesc:kTessControl rect.tese:kTessEval texel.comp:kTexel sample.comp:kSample imgstore_r32ui.comp:kStoreUint \
-                imgstore_rgba8.comp:kStoreRgba vertex.vert:kVertexInput; do
+                imgstore_rgba8.comp:kStoreRgba vertex.vert:kVertexInput spec_kernel.comp:kSpecKernel spec.frag:kSpecFrag det_kernel.comp:kDetKernel; do
         src=${pair%%:*}
         name=${pair##*:}
         tmp=$(mktemp)
@@ -32,7 +32,7 @@ out=../vulkan_shaders.cpp
     echo '    switch (shader) {'
     for pair in Ops:kOps Subgroup:kSubgroup Limits:kLimits Bindings:kBindings MemoryModel:kMemoryModel RectVert:kRectVert \
                 PointVert:kPointVert RectFrag:kRectFrag Rect2Frag:kRect2Frag RectGeom:kRectGeom TessControl:kTessControl \
-                TessEval:kTessEval Texel:kTexel Sample:kSample StoreUint:kStoreUint StoreRgba:kStoreRgba VertexInput:kVertexInput; do
+                TessEval:kTessEval Texel:kTexel Sample:kSample StoreUint:kStoreUint StoreRgba:kStoreRgba VertexInput:kVertexInput SpecKernel:kSpecKernel SpecFrag:kSpecFrag DetKernel:kDetKernel; do
         echo "        case VulkanShader::${pair%%:*}:"
         echo "            return std::vector<std::uint32_t>(std::begin(${pair##*:}), std::end(${pair##*:}));"
     done

@@ -1002,8 +1002,8 @@ Each loop creates and destroys 5000 objects of the kind with its largest practic
 | check | contract |
 |---|---|
 | `sanity.shader.dxbc.sm2_sm3` | SM2.0/2.x/3.0 vertex and pixel shaders from D3DCompile run on D3D9 and equal WARP/D3D9Ex-reference pixels. |
-| `sanity.shader.dxbc.sm4_sm5` | SM4.0/4.1/5.0/5.1 vertex, geometry, hull/domain, pixel and compute shaders run on D3D10/11 and equal WARP within tolerance, including resource arrays and UAVs. |
-| `sanity.shader.dxil.sm6` | DXIL SM6.0 to 6.x (per reported max shader model) compute and graphics shaders, wave intrinsics per caps, run on D3D12 and equal a CPU reference; unsupported models are refused by CheckFeatureSupport. |
+| `sanity.shader.dxbc.sm4_sm5` | SM4.0/4.1/5.0/5.1 vertex, geometry, hull/domain, pixel and compute shaders run on D3D10/11 and equal WARP within tolerance (graphics) or the analytic result (compute, tessellation, UAV atomics, resource arrays); SM5.1 dynamic resource arrays run on D3D12. |
+| `sanity.shader.dxil.sm6` | DXIL SM6.0 to 6.x (per reported max shader model) compute and graphics shaders, wave intrinsics per caps, run on D3D12 and equal a CPU reference; unsupported models are refused by CheckFeatureSupport; the run skips with a reason when dxcompiler.dll or dxil.dll cannot be loaded. |
 | `sanity.shader.spirv.valid_runs` | Valid SPIR-V compute and graphics modules (with specialization constants) create and run in Vulkan and match the CPU reference. |
 | `sanity.shader.spirv.invalid_fails` | Malformed SPIR-V is rejected at vkCreateShaderModule/pipeline creation with a documented error (or validation message) and the device remains usable. |
 | `sanity.shader.glsl.versions` | GLSL #version 110 through 460 shaders (those within the context's reported SHADING_LANGUAGE_VERSION) compile and give the analytic output. |

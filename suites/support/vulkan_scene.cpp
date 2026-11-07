@@ -211,8 +211,9 @@ VkResult VulkanScene::build_pipeline() {
     }
     std::vector<VkPipelineShaderStageCreateInfo> stages;
     std::size_t module_index = 0;
-    const auto add_stage = [&](VkShaderStageFlagBits stage, VulkanShader shader) -> VkResult {
-        const VkResult made = rig.make_shader(modules_[module_index], VulkanShaders::words(shader));
+    const auto add_stage = [&](VkShaderStageFlagBits stage, VulkanShader shader, const std::vector<std::uint32_t>* words = nullptr,
+                               const VkSpecializationInfo* specialization = nullptr) -> VkResult {
+        const VkResult made = rig.make_shader(modules_[module_index], words != nullptr ? *words : VulkanShaders::words(shader));
         if (made != VK_SUCCESS) {
             return made;
         }
@@ -221,6 +222,7 @@ VkResult VulkanScene::build_pipeline() {
         entry.stage = stage;
         entry.module = modules_[module_index].get();
         entry.pName = "main";
+        entry.pSpecializationInfo = specialization;
         stages.push_back(entry);
         ++module_index;
         return VK_SUCCESS;
@@ -239,7 +241,11 @@ VkResult VulkanScene::build_pipeline() {
         result = add_stage(VK_SHADER_STAGE_GEOMETRY_BIT, VulkanShader::RectGeom);
     }
     if (result == VK_SUCCESS) {
-        result = add_stage(VK_SHADER_STAGE_FRAGMENT_BIT, options_.second ? VulkanShader::Rect2Frag : VulkanShader::RectFrag);
+        if (!options_.fragment_words.empty()) {
+            result = add_stage(VK_SHADER_STAGE_FRAGMENT_BIT, VulkanShader::RectFrag, &options_.fragment_words, options_.fragment_specialization);
+        } else {
+            result = add_stage(VK_SHADER_STAGE_FRAGMENT_BIT, options_.second ? VulkanShader::Rect2Frag : VulkanShader::RectFrag);
+        }
     }
     if (result != VK_SUCCESS) {
         return result;
