@@ -317,6 +317,8 @@ Outcome MemChecks::overlay_mpo_present(Context& context) {
     options.height = 128;
     options.buffers = 2;
     options.effect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+    options.flags = DXGI_SWAP_CHAIN_FLAG_YUV_VIDEO;
+    options.usage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
     SwapRig probe;
     SwapOptions plain;
     plain.width = 128;
@@ -379,13 +381,6 @@ Outcome MemChecks::overlay_mpo_present(Context& context) {
             std::memset(static_cast<std::uint8_t*>(mapped.pData) + (128 + row) * mapped.RowPitch, 128, 128);
         }
         probe.device.context->Unmap(staging.get(), 0);
-        UINT index = 0;
-        Com<IDXGISwapChain3> chain3 = chain.as<IDXGISwapChain3>();
-        if (chain3) {
-            index = chain3->GetCurrentBackBufferIndex();
-            buffer.reset();
-            chain->GetBuffer(index, __uuidof(ID3D11Texture2D), buffer.put_void());
-        }
         probe.device.context->CopyResource(buffer.get(), staging.get());
         if (FAILED(chain->Present(1, 0))) {
             problems.add("frame " + std::to_string(frame) + " cannot be presented");
@@ -560,7 +555,11 @@ Outcome MemChecks::duplication_visible(Context& context) {
         return Outcome::fail("the adapter has no IDXGIOutput1");
     }
     Com<IDXGIOutputDuplication> duplication;
-    const HRESULT created = output1->DuplicateOutput(device.device, duplication.put());
+    Com<IDXGIOutput5> output5 = output.as<IDXGIOutput5>();
+    const DXGI_FORMAT duplication_formats[] = {DXGI_FORMAT_B8G8R8A8_UNORM};
+    const HRESULT created = output5 ? output5->DuplicateOutput1(device.device, 0, 1, duplication_formats, duplication.put())
+                                    : output1->DuplicateOutput(device.device, duplication.put());
+    context.measure("duplicate_output1", static_cast<bool>(output5));
     if (FAILED(created)) {
         if (created == DXGI_ERROR_UNSUPPORTED || created == DXGI_ERROR_NOT_CURRENTLY_AVAILABLE || created == E_NOTIMPL) {
             return Context::skip("output duplication is reported as not available (" + D3d11Tools::hr(created) + ")");
@@ -574,8 +573,7 @@ Outcome MemChecks::duplication_visible(Context& context) {
     TestWindowConfig config;
     config.x = od.DesktopCoordinates.left + 100;
     config.y = od.DesktopCoordinates.top + 100;
-    config.width = 200;
-    config.height = 200;
+    TestWindow::outer_size(config.x, config.y, 184, 161, config.width, config.height);
     if (!window.create(config, error)) {
         return Outcome::fail(error);
     }
@@ -588,6 +586,8 @@ Outcome MemChecks::duplication_visible(Context& context) {
     bool matched = false;
     std::uint32_t last = 0;
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    int acquired_frames = 0;
+    long long last_present_time = 0;
     while (!matched && std::chrono::steady_clock::now() < deadline) {
         HDC dc = ::GetDC(window.hwnd());
         HBRUSH brush = ::CreateSolidBrush(RGB(200, 30, 90));
@@ -599,6 +599,10 @@ Outcome MemChecks::duplication_visible(Context& context) {
         const HRESULT acquired = duplication->AcquireNextFrame(200, &info, resource.put());
         if (acquired == DXGI_ERROR_WAIT_TIMEOUT) {
             continue;
+        }
+        if (SUCCEEDED(acquired)) {
+            ++acquired_frames;
+            last_present_time = info.LastPresentTime.QuadPart;
         }
         if (FAILED(acquired)) {
             problems.add("AcquireNextFrame returned " + D3d11Tools::hr(acquired));
@@ -616,7 +620,7 @@ Outcome MemChecks::duplication_visible(Context& context) {
             TexelImage image;
             if (D3d11Tools::read_texture(device, staging.get(), 0, image, error)) {
                 last = image.pixel(static_cast<UINT>(origin.x - od.DesktopCoordinates.left), static_cast<UINT>(origin.y - od.DesktopCoordinates.top));
-                matched = (last & 0xFFFFFFu) == 0x5A1EC8u;
+                matched = (last & 0xFFFFFFu) == 0xC81E5Au;
             }
         }
         frame.reset();
@@ -627,6 +631,8 @@ Outcome MemChecks::duplication_visible(Context& context) {
             break;
         }
     }
+    context.measure("acquired_frames", acquired_frames);
+    context.measure("last_present_time", last_present_time);
     if (!matched && problems.empty()) {
         problems.add("no duplicated frame shows the topmost window colour; the pixel reads 0x" + Text::hex(last, 8));
     }
@@ -646,7 +652,6 @@ Outcome MemChecks::duplication_visible(Context& context) {
             duplication->ReleaseFrame();
         }
     }
-    static_cast<void>(context);
     return problems.outcome();
 }
 

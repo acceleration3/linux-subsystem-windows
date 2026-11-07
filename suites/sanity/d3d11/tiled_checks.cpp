@@ -1,6 +1,7 @@
 #include "sanity/d3d11/tiled_checks.hpp"
 
 #include "sanity/d3d11/kit.hpp"
+#include "support/api_policy.hpp"
 #include "support/d3d12_device.hpp"
 #include "support/dyn_library.hpp"
 #include "support/pattern.hpp"
@@ -341,6 +342,9 @@ Outcome TiledChecks::d3d11_2_3_4(Context& context) {
 }
 
 Outcome TiledChecks::on12(Context& context) {
+    if (ApiPolicy::is_skipped("d3d12")) {
+        return Context::skip("Direct3D 12 is excluded by LSW_SUITES_SKIP_APIS");
+    }
     AvAdapter adapter;
     std::string error;
     if (!TargetAdapter::pick(adapter, error)) {

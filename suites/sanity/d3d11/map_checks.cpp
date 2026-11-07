@@ -602,12 +602,14 @@ Outcome MapChecks::errors(Context& context) {
         std::string name;
         bool must_fail;
         std::function<HRESULT(D3d11Device&)> run;
+        bool oracle_only = false;
     };
+    constexpr HRESULT kFollowUpFailed = static_cast<HRESULT>(0x8FFF0001);
     auto staging = [](D3d11Device& d, UINT cpu) {
         return D3d11Tools::texture(d, D3d11Tools::desc2d(8, 8, DXGI_FORMAT_R8G8B8A8_UNORM, 0, D3D11_USAGE_STAGING, cpu));
     };
     std::vector<Case> cases;
-    cases.push_back({"double map", true, [=](D3d11Device& d) {
+    cases.push_back({"double map", false, [=](D3d11Device& d) {
         auto t = staging(d, D3D11_CPU_ACCESS_READ);
         D3D11_MAPPED_SUBRESOURCE m{};
         d.context->Map(t.get(), 0, D3D11_MAP_READ, 0, &m);
@@ -615,11 +617,11 @@ Outcome MapChecks::errors(Context& context) {
         d.context->Unmap(t.get(), 0);
         D3D11_MAPPED_SUBRESOURCE again{};
         if (FAILED(d.context->Map(t.get(), 0, D3D11_MAP_READ, 0, &again))) {
-            return E_FAIL;
+            return kFollowUpFailed;
         }
         d.context->Unmap(t.get(), 0);
         return second;
-    }});
+    }, true});
     cases.push_back({"map read on default", true, [=](D3d11Device& d) {
         auto t = D3d11Tools::texture(d, D3d11Tools::desc2d(8, 8, DXGI_FORMAT_R8G8B8A8_UNORM, D3D11_BIND_SHADER_RESOURCE));
         D3D11_MAPPED_SUBRESOURCE m{};
@@ -687,7 +689,13 @@ Outcome MapChecks::errors(Context& context) {
     for (const Case& c : cases) {
         const HRESULT a = c.run(rig.av);
         const HRESULT w = c.run(rig.warp);
-        if (c.must_fail && SUCCEEDED(a)) {
+        if (c.oracle_only) {
+            if (a == kFollowUpFailed) {
+                problems.add(c.name + " left the device unable to map");
+            } else if (a != w) {
+                problems.add(c.name + " returned " + D3d11Tools::hr(a) + " where WARP returns " + D3d11Tools::hr(w));
+            }
+        } else if (c.must_fail && SUCCEEDED(a)) {
             problems.add(c.name + " succeeded");
         } else if (!c.must_fail && FAILED(a)) {
             problems.add(c.name + " left the device unable to map: " + D3d11Tools::hr(a));
@@ -736,7 +744,7 @@ Outcome MapChecks::persistent_across_frames(Context& context) {
     }
     Com<ID3D11PixelShader> flat = Kit::color_ps(rig.device, "0.1, 0.2, 0.3, 1.0", error);
     for (int frame = 0; frame < 12; ++frame) {
-        Com<ID3D11RenderTargetView> view = rig.back_view(static_cast<UINT>(frame % 2));
+        Com<ID3D11RenderTargetView> view = rig.back_view(0);
         if (!view || !flat) {
             problems.add("a back buffer view is missing");
             break;

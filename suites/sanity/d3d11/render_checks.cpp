@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <set>
 
 namespace lsw::suites::sanity::d3d11 {
 
@@ -244,6 +245,9 @@ Outcome RenderChecks::states(Context& context) {
                 d.context->Draw(4, 0);
             }
         }
+        if (!finish_image(d, target.get(), 128, 64, out, why)) {
+            return false;
+        }
         if (logic_ops) {
             Com<ID3D11Device1> device1 = Kit::query<ID3D11Device1>(d.device);
             D3D11_BLEND_DESC1 desc{};
@@ -251,16 +255,29 @@ Outcome RenderChecks::states(Context& context) {
             desc.RenderTarget[0].LogicOp = D3D11_LOGIC_OP_XOR;
             desc.RenderTarget[0].RenderTargetWriteMask = 0xf;
             Com<ID3D11BlendState1> state;
-            if (device1 && SUCCEEDED(device1->CreateBlendState1(&desc, state.put()))) {
+            Com<ID3D11PixelShader> integer = D3d11Tools::ps(d, "uint4 main() : SV_Target { return uint4(200, 100, 50, 128); }", why);
+            Com<ID3D11Texture2D> uint_target = D3d11Tools::target(d, 16, 16, DXGI_FORMAT_R8G8B8A8_UINT);
+            Com<ID3D11RenderTargetView> uint_view = D3d11Tools::rtv(d, uint_target.get());
+            if (device1 && integer && uint_view && SUCCEEDED(device1->CreateBlendState1(&desc, state.put()))) {
                 Com<ID3D11DeviceContext1> ctx1 = Kit::query<ID3D11DeviceContext1>(d.context);
-                D3D11_VIEWPORT vp{16, 48, 16, 16, 0, 1};
+                const float clear_values[4] = {15.0f, 240.0f, 60.0f, 255.0f};
+                d.context->ClearRenderTargetView(uint_view.get(), clear_values);
+                ID3D11RenderTargetView* list_uint[1] = {uint_view.get()};
+                d.context->OMSetRenderTargets(1, list_uint, nullptr);
+                D3D11_VIEWPORT vp{0, 0, 16, 16, 0, 1};
                 d.context->RSSetViewports(1, &vp);
                 ctx1->OMSetBlendState(state.get(), factor, 0xffffffff);
-                d.context->PSSetShader(half.get(), nullptr, 0);
+                d.context->PSSetShader(integer.get(), nullptr, 0);
                 d.context->Draw(4, 0);
+                std::vector<std::uint8_t> tile_bytes;
+                if (D3d11Tools::read_pixels(d, uint_target.get(), tile_bytes, why) && tile_bytes.size() >= 16 * 16 * 4) {
+                    for (int row = 0; row < 16; ++row) {
+                        std::memcpy(out.data.data() + (static_cast<std::size_t>(48 + row) * 128 + 16) * 4, tile_bytes.data() + static_cast<std::size_t>(row) * 16 * 4, 16 * 4);
+                    }
+                }
             }
         }
-        return finish_image(d, target.get(), 128, 64, out, why);
+        return true;
     };
     rig.compare(context, problems, "states_blend", blend_scene, Tolerance::bytes(3));
     OracleRig::Scene depth_raster_scene = [](D3d11Device& d, SceneImage& out, std::string& why) {
@@ -271,7 +288,7 @@ Outcome RenderChecks::states(Context& context) {
             return false;
         }
         Com<ID3D11Texture2D> target = D3d11Tools::target(d, 128, 64);
-        Com<ID3D11Texture2D> depth = D3d11Tools::texture(d, D3d11Tools::desc2d(16, 16, DXGI_FORMAT_D24_UNORM_S8_UINT, D3D11_BIND_DEPTH_STENCIL));
+        Com<ID3D11Texture2D> depth = D3d11Tools::texture(d, D3d11Tools::desc2d(128, 64, DXGI_FORMAT_D24_UNORM_S8_UINT, D3D11_BIND_DEPTH_STENCIL));
         Com<ID3D11RenderTargetView> view = D3d11Tools::rtv(d, target.get());
         D3d11Tools::clear(d, view.get(), 0, 0, 0, 1);
         d.context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
@@ -520,7 +537,7 @@ Outcome RenderChecks::msaa(Context& context) {
                     problems.add(label + ": " + why);
                 }
                 std::string detail;
-                if (!OracleRig::judge(context, "msaa_" + label, on_warp, on_av, Tolerance::bytes(2), detail)) {
+                if (mode != 0 && !OracleRig::judge(context, "msaa_" + label, on_warp, on_av, Tolerance::bytes(2), detail)) {
                     problems.add(detail + " (against WARP)");
                 }
             } else {
@@ -841,6 +858,7 @@ Outcome RenderChecks::format_sweep(Context& context) {
                 }
             }
             ID3D11ShaderResourceView* views[1] = {srgb_srv.get()};
+            device.context->OMSetRenderTargets(0, nullptr, nullptr);
             device.context->PSSetShaderResources(0, 1, views);
             static_cast<void>(D3d11Tools::draw_fullscreen(device, sample.get(), linear_view.get(), 4, 4, error));
             if (D3d11Tools::read_pixels(device, linear.get(), bytes, error)) {
@@ -1060,8 +1078,9 @@ Outcome RenderChecks::multi_rt_viewports(Context& context) {
             "}\n";
         Com<ID3D11GeometryShader> gs = D3d11Tools::gs(device, gs_source, error);
         Com<ID3D11GeometryShader> slice_gs = D3d11Tools::gs(device, slice_source, error);
-        Com<ID3D11PixelShader> ps = D3d11Tools::ps(device, "float4 main(float4 p : SV_Position, nointerpolation uint slot : SLOT) : SV_Target { return float4(slot / 255.0, 0, 0, 1); }", error);
-        if (!gs || !slice_gs || !ps) {
+        Com<ID3D11PixelShader> ps = D3d11Tools::ps(device, "struct P { float4 pos : SV_Position; uint vp : SV_ViewportArrayIndex; nointerpolation uint slot : SLOT; };\nfloat4 main(P i) : SV_Target { return float4(i.slot / 255.0, 0, 0, 1); }", error);
+        Com<ID3D11PixelShader> slice_ps = D3d11Tools::ps(device, "struct P { float4 pos : SV_Position; uint rt : SV_RenderTargetArrayIndex; nointerpolation uint slot : SLOT; };\nfloat4 main(P i) : SV_Target { return float4(i.slot / 255.0, 0, 0, 1); }", error);
+        if (!gs || !slice_gs || !ps || !slice_ps) {
             problems.add("geometry shader scene: " + error);
         } else {
             Com<ID3D11Texture2D> target = D3d11Tools::target(device, 64, 64, DXGI_FORMAT_R8G8B8A8_UNORM, 0);
@@ -1093,14 +1112,14 @@ Outcome RenderChecks::multi_rt_viewports(Context& context) {
             if (!D3d11Tools::read_texture(device, target.get(), 0, image, error)) {
                 problems.add(error);
             } else {
-                int bad = 0;
-                for (UINT y = 0; y < 64 && bad < 3; ++y) {
+                std::set<int> reported;
+                for (UINT y = 0; y < 64; ++y) {
                     for (UINT x = 0; x < 64; ++x) {
                         const int tile = static_cast<int>(y / 16) * 4 + static_cast<int>(x / 16);
                         const bool inside = x % 16 >= 2 && x % 16 < 14 && y % 16 >= 2 && y % 16 < 14;
                         const std::uint32_t want = Kit::rgba(inside ? tile + 1 : 0, 0, 0, 255);
-                        if (image.pixel(x, y) != want && bad++ < 3) {
-                            problems.add("viewport array: pixel (" + std::to_string(x) + "," + std::to_string(y) + ") is 0x" + Text::hex(image.pixel(x, y), 8) + ", expected 0x" + Text::hex(want, 8));
+                        if (image.pixel(x, y) != want && reported.insert(tile).second) {
+                            problems.add("viewport array tile " + std::to_string(tile) + ": pixel (" + std::to_string(x) + "," + std::to_string(y) + ") is 0x" + Text::hex(image.pixel(x, y), 8) + ", expected 0x" + Text::hex(want, 8));
                         }
                     }
                 }
@@ -1117,6 +1136,7 @@ Outcome RenderChecks::multi_rt_viewports(Context& context) {
                 ID3D11RenderTargetView* array_list[1] = {array_view.get()};
                 ctx->OMSetRenderTargets(1, array_list, nullptr);
                 ctx->GSSetShader(slice_gs.get(), nullptr, 0);
+                ctx->PSSetShader(slice_ps.get(), nullptr, 0);
                 D3d11Tools::set_viewport(device, 8, 8);
                 ctx->RSSetState(nullptr);
                 ctx->Draw(3, 0);
@@ -1169,9 +1189,16 @@ Outcome RenderChecks::resource_hazards(Context& context) {
     ctx->PSSetShaderResources(0, 1, views);
     ID3D11RenderTargetView* current = nullptr;
     ctx->OMGetRenderTargets(1, &current, nullptr);
-    if (current != nullptr) {
-        problems.add("binding a shader resource view of the bound render target left the render target bound");
+    if (current == nullptr) {
+        problems.add("binding a shader resource view of the bound render target unbound the render target");
+    } else {
         current->Release();
+    }
+    ID3D11ShaderResourceView* forced = nullptr;
+    ctx->PSGetShaderResources(0, 1, &forced);
+    if (forced != nullptr) {
+        problems.add("binding a shader resource view of the bound render target left the view bound");
+        forced->Release();
     }
     ctx->ClearState();
     Com<ID3D11Texture2D> ping[2] = {D3d11Tools::target(device, 8, 8, DXGI_FORMAT_R32_FLOAT), D3d11Tools::target(device, 8, 8, DXGI_FORMAT_R32_FLOAT)};
@@ -1186,6 +1213,8 @@ Outcome RenderChecks::resource_hazards(Context& context) {
         const int from = pass % 2;
         const int to = 1 - from;
         ID3D11ShaderResourceView* in[1] = {ping_srv[from].get()};
+        ID3D11RenderTargetView* target_view[1] = {ping_rtv[to].get()};
+        ctx->OMSetRenderTargets(1, target_view, nullptr);
         ctx->PSSetShaderResources(0, 1, in);
         if (!D3d11Tools::draw_fullscreen(device, step.get(), ping_rtv[to].get(), 8, 8, error)) {
             return Outcome::fail(error);

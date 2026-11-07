@@ -16,6 +16,7 @@ struct SwapOptions {
     UINT buffers = 2;
     DXGI_SWAP_EFFECT effect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
     UINT flags = 0;
+    UINT usage = DXGI_USAGE_RENDER_TARGET_OUTPUT | DXGI_USAGE_SHADER_INPUT;
     int x = 60;
     int y = 60;
     bool visible = true;

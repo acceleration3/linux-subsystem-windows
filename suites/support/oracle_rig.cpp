@@ -115,11 +115,14 @@ void OracleRig::compare(Context& context, Problems& problems, const std::string&
     SceneImage on_warp;
     SceneImage on_av;
     std::string error;
+    warp.context->ClearState();
+    av.context->ClearState();
     if (!scene(warp, on_warp, error)) {
         problems.add(label + ": the WARP oracle failed: " + error);
         return;
     }
     error.clear();
+    av.context->ClearState();
     if (!scene(av, on_av, error)) {
         problems.add(label + ": " + error);
         return;

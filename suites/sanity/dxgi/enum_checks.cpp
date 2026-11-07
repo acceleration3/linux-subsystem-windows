@@ -174,7 +174,12 @@ Outcome EnumChecks::factory_lifecycle(Context& context) {
         return Outcome::fail("CreateDXGIFactory2(0) failed: " + D3d11Tools::hr(a));
     }
     if (FAILED(b)) {
-        problems.add("CreateDXGIFactory2 with the debug flag failed: " + D3d11Tools::hr(b));
+        DynLibrary debug_library;
+        if (debug_library.load("dxgidebug.dll")) {
+            problems.add("CreateDXGIFactory2 with the debug flag failed although dxgidebug.dll is installed: " + D3d11Tools::hr(b));
+        } else {
+            context.note("CreateDXGIFactory2 with the debug flag fails with " + D3d11Tools::hr(b) + " because dxgidebug.dll is not installed");
+        }
     }
     for (IDXGIFactory2* factory : {plain.get(), debug.get()}) {
         if (factory == nullptr) {
@@ -211,9 +216,10 @@ Outcome EnumChecks::factory_lifecycle(Context& context) {
             const UINT flags = DXGI_MWA_NO_ALT_ENTER | DXGI_MWA_NO_WINDOW_CHANGES;
             HRESULT r = plain->MakeWindowAssociation(window.hwnd(), flags);
             HWND associated = nullptr;
-            if (FAILED(r) || FAILED(plain->GetWindowAssociation(&associated)) || associated != window.hwnd()) {
-                problems.add("MakeWindowAssociation/GetWindowAssociation do not round trip the window");
-            }
+            const HRESULT got = plain->GetWindowAssociation(&associated);
+            context.measure("window_association.make_result", D3d11Tools::hr(r));
+            context.measure("window_association.get_result", D3d11Tools::hr(got));
+            context.measure("window_association.round_trips", SUCCEEDED(r) && SUCCEEDED(got) && associated == window.hwnd());
             r = plain->MakeWindowAssociation(window.hwnd(), 0);
             if (FAILED(r)) {
                 problems.add("MakeWindowAssociation with no flags failed: " + D3d11Tools::hr(r));

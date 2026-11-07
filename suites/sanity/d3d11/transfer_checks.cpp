@@ -285,6 +285,9 @@ Outcome TransferChecks::update_copy_flags(Context& context) {
         const UINT flags[3] = {D3D11_COPY_DISCARD, D3D11_COPY_DISCARD, D3D11_COPY_NO_OVERWRITE};
         for (int i = 0; i < 3; ++i) {
             if (i == 2) {
+                if (!D3d11Tools::wait_event(d, d.context, why)) {
+                    return false;
+                }
                 const D3D11_BOX box{0, 0, 0, 16, 1, 1};
                 ctx->UpdateSubresource1(cb.get(), 0, &box, colors[i], 0, 0, flags[i]);
             } else {

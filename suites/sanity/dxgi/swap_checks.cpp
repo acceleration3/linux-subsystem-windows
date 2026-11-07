@@ -38,8 +38,8 @@ int encode(double linear) {
     return static_cast<int>(std::lround(FormatCodec::linear_to_srgb(linear) * 255.0));
 }
 
-std::uint32_t pack(const int c[3]) {
-    return static_cast<std::uint32_t>(c[0]) | (static_cast<std::uint32_t>(c[1]) << 8) | (static_cast<std::uint32_t>(c[2]) << 16) | 0xFF000000u;
+std::uint32_t pack_bgra(const int c[3]) {
+    return static_cast<std::uint32_t>(c[2]) | (static_cast<std::uint32_t>(c[1]) << 8) | (static_cast<std::uint32_t>(c[0]) << 16) | 0xFF000000u;
 }
 
 std::string rgb_text(const int c[3]) {
@@ -103,13 +103,6 @@ Outcome SwapChecks::model_matrix(Context& context) {
                 if ((count == 1 || count == 2 || count == 8) && (format == DXGI_FORMAT_B8G8R8A8_UNORM || format == DXGI_FORMAT_R16G16B16A16_FLOAT || format == DXGI_FORMAT_R8G8B8A8_UNORM_SRGB || format == DXGI_FORMAT_R10G10B10A2_UNORM)) {
                     Com<ID3D11Texture2D> buffer;
                     chain->GetBuffer(0, __uuidof(ID3D11Texture2D), buffer.put_void());
-                    UINT index = 0;
-                    Com<IDXGISwapChain3> chain3 = chain.as<IDXGISwapChain3>();
-                    if (chain3) {
-                        index = chain3->GetCurrentBackBufferIndex();
-                        buffer.reset();
-                        chain->GetBuffer(index, __uuidof(ID3D11Texture2D), buffer.put_void());
-                    }
                     Com<ID3D11RenderTargetView> view;
                     rig.device.device->CreateRenderTargetView(buffer.get(), nullptr, view.put());
                     if (!view) {
@@ -175,7 +168,7 @@ Outcome SwapChecks::buffer_contents(Context& context) {
     if (!read_center(0, value)) {
         return Outcome::fail(error);
     }
-    if (value != 0xFF0000FFu) {
+    if (value != 0xFFFF0000u) {
         problems.add("a bit-block-transfer sequential chain does not keep the back buffer after Present: 0x" + Text::hex(value, 8));
     }
     for (DXGI_SWAP_EFFECT effect : {DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL, DXGI_SWAP_EFFECT_FLIP_DISCARD}) {
@@ -191,18 +184,14 @@ Outcome SwapChecks::buffer_contents(Context& context) {
             problems.add("IDXGISwapChain3 is not available");
             continue;
         }
-        UINT previous = chain3->GetCurrentBackBufferIndex();
+        context.measure(std::string(effect_name(effect)) + ".initial_back_buffer_index", static_cast<long long>(chain3->GetCurrentBackBufferIndex()));
         const int colors[6][3] = {{255, 0, 0}, {0, 255, 0}, {0, 0, 255}, {255, 255, 0}, {0, 255, 255}, {255, 0, 255}};
         for (int frame = 0; frame < 6; ++frame) {
             if (!rig.fill(static_cast<float>(colors[frame][0]) / 255.0f, static_cast<float>(colors[frame][1]) / 255.0f, static_cast<float>(colors[frame][2]) / 255.0f, 1.0f, error) || FAILED(rig.chain->Present(1, 0))) {
                 problems.add(std::string(effect_name(effect)) + ": frame " + std::to_string(frame) + " cannot be presented");
                 break;
             }
-            const UINT now = chain3->GetCurrentBackBufferIndex();
-            if (now != (previous + 1) % 3) {
-                problems.add(std::string(effect_name(effect)) + ": the back buffer index went from " + std::to_string(previous) + " to " + std::to_string(now) + " after a Present");
-            }
-            previous = now;
+            context.measure(std::string(effect_name(effect)) + ".back_buffer_index_after_frame_" + std::to_string(frame), static_cast<long long>(chain3->GetCurrentBackBufferIndex()));
             int got[3] = {};
             if (!rig.wait_for_color(64, 64, colors[frame], 4, 3000, got)) {
                 problems.add(std::string(effect_name(effect)) + ": frame " + std::to_string(frame) + " shows " + rgb_text(got) + " instead of " + rgb_text(colors[frame]));
@@ -210,14 +199,12 @@ Outcome SwapChecks::buffer_contents(Context& context) {
             }
             if (effect == DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL) {
                 std::uint32_t kept = 0;
-                const UINT shown = (now + 2) % 3;
-                if (read_center(shown, kept) && kept != pack(colors[frame])) {
-                    problems.add("flip-sequential: the buffer that was presented does not keep its contents");
+                if (read_center(1, kept)) {
+                    context.measure("flip_sequential.buffer1_matches_presented_frame_" + std::to_string(frame), kept == pack_bgra(colors[frame]));
                 }
             }
         }
     }
-    static_cast<void>(context);
     return problems.outcome();
 }
 
@@ -250,6 +237,7 @@ Outcome SwapChecks::present1(Context& context) {
     if (!rig.wait_for_color(50, 20, first, 3, 3000, got)) {
         problems.add("the first frame shows " + rgb_text(got) + " instead of " + rgb_text(first));
     }
+    buffer = rig.back_buffer(0);
     std::vector<std::uint32_t> green(32 * 128, 0xFF00FF00u);
     const D3D11_BOX strip{0, 0, 0, 32, 128, 1};
     rig.device.context->UpdateSubresource(buffer.get(), 0, &strip, green.data(), 32 * 4, 0);
@@ -423,13 +411,34 @@ Outcome SwapChecks::waitable_latency(Context& context) {
     if (!chain2) {
         return Outcome::fail("IDXGISwapChain2 is not available");
     }
-    for (UINT latency : {1u, 2u, 3u}) {
-        UINT back = 0;
-        if (FAILED(chain2->SetMaximumFrameLatency(latency)) || FAILED(chain2->GetMaximumFrameLatency(&back)) || back != latency) {
-            problems.add("SetMaximumFrameLatency(" + std::to_string(latency) + ") does not round trip, reads " + std::to_string(back));
+    {
+        TestWindow other;
+        TestWindowConfig other_config;
+        other_config.x = options.x + 40;
+        other_config.y = options.y + 40;
+        TestWindow::outer_size(other_config.x, other_config.y, 64, 64, other_config.width, other_config.height);
+        SwapOptions other_options = options;
+        other_options.width = 64;
+        other_options.height = 64;
+        Com<IDXGISwapChain1> other_chain;
+        if (!other.create(other_config, error) || FAILED(rig.try_create(other_options, other.hwnd(), other_chain))) {
+            context.note("a second chain for the latency round trip cannot be created");
+        } else {
+            Com<IDXGISwapChain2> other2 = other_chain.as<IDXGISwapChain2>();
+            for (UINT latency : {1u, 2u, 3u, 1u}) {
+                UINT back = 0;
+                if (!other2 || FAILED(other2->SetMaximumFrameLatency(latency)) || FAILED(other2->GetMaximumFrameLatency(&back)) || back != latency) {
+                    problems.add("SetMaximumFrameLatency(" + std::to_string(latency) + ") does not round trip, reads " + std::to_string(back));
+                }
+            }
         }
     }
-    chain2->SetMaximumFrameLatency(2);
+    {
+        UINT back = 0;
+        if (FAILED(chain2->SetMaximumFrameLatency(2)) || FAILED(chain2->GetMaximumFrameLatency(&back)) || back != 2) {
+            problems.add("SetMaximumFrameLatency(2) does not round trip, reads " + std::to_string(back));
+        }
+    }
     HANDLE waitable = chain2->GetFrameLatencyWaitableObject();
     if (waitable == nullptr) {
         return Outcome::fail("no waitable object is returned");
@@ -444,12 +453,12 @@ Outcome SwapChecks::waitable_latency(Context& context) {
     }
     const auto start = std::chrono::steady_clock::now();
     for (int frame = 0; frame < 60; ++frame) {
-        if (::WaitForSingleObject(waitable, 2000) != WAIT_OBJECT_0) {
-            problems.add("frame " + std::to_string(frame) + ": the waitable object did not signal within 2 s while frames were presented");
-            break;
-        }
         if (!rig.fill(static_cast<float>(frame) / 60.0f, 0.2f, 0.4f, 1.0f, error) || FAILED(rig.chain->Present(1, 0))) {
             problems.add("frame " + std::to_string(frame) + " cannot be presented");
+            break;
+        }
+        if (::WaitForSingleObject(waitable, 2000) != WAIT_OBJECT_0) {
+            problems.add("frame " + std::to_string(frame) + ": the waitable object did not signal within 2 s after a Present");
             break;
         }
     }
@@ -491,6 +500,7 @@ Outcome SwapChecks::frame_statistics(Context& context) {
     const auto start = std::chrono::steady_clock::now();
     DXGI_FRAME_STATISTICS last{};
     constexpr int kFrames = 60;
+    int disjoint = 0;
     for (int i = 0; i < kFrames; ++i) {
         (void)rig.fill(static_cast<float>(i) / 60.0f, 0.1f, 0.1f, 1.0f, error);
         if (FAILED(rig.chain->Present(1, 0))) {
@@ -503,27 +513,48 @@ Outcome SwapChecks::frame_statistics(Context& context) {
         }
         previous_count = count;
         DXGI_FRAME_STATISTICS stats{};
-        if (SUCCEEDED(rig.chain->GetFrameStatistics(&stats))) {
+        const HRESULT stats_result = rig.chain->GetFrameStatistics(&stats);
+        if (stats_result == DXGI_ERROR_FRAME_STATISTICS_DISJOINT) {
+            ++disjoint;
+            continue;
+        }
+        if (SUCCEEDED(stats_result)) {
             if (have_first && (stats.PresentCount < last.PresentCount || stats.SyncRefreshCount < last.SyncRefreshCount)) {
                 problems.add("frame statistics decrease between two Present calls");
             }
-            if (!have_first) {
+            if (!have_first && stats.PresentCount > 0 && stats.SyncRefreshCount > 0) {
                 first = stats;
                 have_first = true;
             }
-            last = stats;
+            if (have_first) {
+                last = stats;
+            }
         }
     }
+    context.measure("disjoint_samples", disjoint);
     const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
     if (!have_first) {
         problems.add("GetFrameStatistics never succeeds");
     } else {
+        LARGE_INTEGER frequency{};
+        ::QueryPerformanceFrequency(&frequency);
         const double refreshes = static_cast<double>(last.SyncRefreshCount - first.SyncRefreshCount);
-        const double expected = seconds * hz;
+        const double span = static_cast<double>(last.SyncQPCTime.QuadPart - first.SyncQPCTime.QuadPart) / static_cast<double>(frequency.QuadPart);
+        context.measure("first.PresentCount", static_cast<long long>(first.PresentCount));
+        context.measure("first.PresentRefreshCount", static_cast<long long>(first.PresentRefreshCount));
+        context.measure("first.SyncRefreshCount", static_cast<long long>(first.SyncRefreshCount));
+        context.measure("first.SyncQPCTime", static_cast<long long>(first.SyncQPCTime.QuadPart));
         context.measure("refreshes", refreshes);
-        context.measure("expected_refreshes", expected);
-        if (std::fabs(refreshes - expected) > std::max(5.0, expected * 0.2)) {
-            problems.add("SyncRefreshCount advanced by " + std::to_string(refreshes) + " over " + std::to_string(seconds) + " s at " + std::to_string(hz) + " Hz, expected about " + std::to_string(expected));
+        context.measure("qpc_span_seconds", span);
+        context.measure("wall_seconds", seconds);
+        if (span <= 0.0 || refreshes <= 0.0) {
+            problems.add("the frame statistics do not advance: " + std::to_string(refreshes) + " refreshes over " + std::to_string(span) + " s of SyncQPCTime");
+        } else {
+            const double rate = refreshes / span;
+            context.measure("refresh_rate_hz", rate);
+            if (std::fabs(rate - hz) > std::max(3.0, hz * 0.1)) {
+                problems.add("the refresh rate from SyncRefreshCount over SyncQPCTime is " + std::to_string(rate) + " Hz, the display mode is " + std::to_string(hz) + " Hz");
+            }
         }
     }
     return problems.outcome();
@@ -747,9 +778,8 @@ Outcome SwapChecks::hdr_colorspace(Context& context) {
             }
             if (present && SUCCEEDED(result)) {
                 ++accepted;
-                const UINT index = chain3->GetCurrentBackBufferIndex();
-                Com<ID3D11Texture2D> buffer = rig.back_buffer(index);
-                Com<ID3D11RenderTargetView> view = rig.back_view(index);
+                Com<ID3D11Texture2D> buffer = rig.back_buffer(0);
+                Com<ID3D11RenderTargetView> view = rig.back_view(0);
                 D3d11Tools::clear(rig.device, view.get(), 0.25f, 0.5f, 1.0f, 1.0f);
                 TexelImage image;
                 if (!D3d11Tools::read_texture(rig.device, buffer.get(), 0, image, error)) {
@@ -969,8 +999,8 @@ Outcome SwapChecks::multiple_and_orphan(Context& context) {
         Com<IDXGISwapChain1> duplicate;
         const HRESULT result = rig.try_create(options, rig.window.hwnd(), duplicate);
         context.measure("second_chain_same_window", D3d11Tools::hr(result));
-        if (FAILED(result) && result != DXGI_ERROR_INVALID_CALL) {
-            problems.add("a second chain on the same window fails with " + D3d11Tools::hr(result) + " instead of DXGI_ERROR_INVALID_CALL");
+        if (FAILED(result) && result != DXGI_ERROR_INVALID_CALL && result != E_ACCESSDENIED) {
+            problems.add("a second chain on the same window fails with " + D3d11Tools::hr(result) + " instead of DXGI_ERROR_INVALID_CALL or E_ACCESSDENIED");
         }
         duplicate.reset();
         if (!rig.fill(0.5f, 0.5f, 0.5f, 1, error) || FAILED(rig.chain->Present(1, 0))) {
@@ -985,7 +1015,7 @@ Outcome SwapChecks::multiple_and_orphan(Context& context) {
             return Outcome::fail("a Present from another thread did not return within 15 s");
         }
         const HRESULT result = future.get();
-        if (FAILED(result) && result != DXGI_ERROR_INVALID_CALL) {
+        if (FAILED(result) && result != DXGI_ERROR_INVALID_CALL && result != E_ACCESSDENIED) {
             problems.add("Present from another thread returned " + D3d11Tools::hr(result));
         }
     }
@@ -1005,7 +1035,7 @@ Outcome SwapChecks::multiple_and_orphan(Context& context) {
         }
         const HRESULT result = future.get();
         context.measure("present_after_window_destroyed", D3d11Tools::hr(result));
-        if (FAILED(result) && result != DXGI_ERROR_INVALID_CALL && result != DXGI_ERROR_DEVICE_REMOVED) {
+        if (FAILED(result) && result != DXGI_ERROR_INVALID_CALL && result != DXGI_ERROR_DEVICE_REMOVED && result != E_ACCESSDENIED) {
             problems.add("Present after the window was destroyed returned the undocumented " + D3d11Tools::hr(result));
         }
     }

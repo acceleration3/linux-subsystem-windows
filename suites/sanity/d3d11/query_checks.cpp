@@ -351,7 +351,6 @@ Outcome QueryChecks::event_and_predication(Context& context) {
     const char* names[] = {"Draw", "Dispatch", "CopyResource", "CopySubresourceRegion", "UpdateSubresource", "ClearRenderTargetView", "ClearDepthStencilView", "ResolveSubresource", "ClearUnorderedAccessView"};
     const bool level11 = rig.av.level >= D3D_FEATURE_LEVEL_11_0;
     auto executed = [&](D3d11Device& d, int op, bool predicate_true, BOOL predicate_value, bool& usable, std::string& why) -> bool {
-        usable = true;
         ID3D11DeviceContext* ctx = d.context;
         Com<ID3D11Texture2D> subject = D3d11Tools::texture(d, D3d11Tools::desc2d(4, 4, DXGI_FORMAT_R32_UINT, D3D11_BIND_RENDER_TARGET | (level11 ? D3D11_BIND_UNORDERED_ACCESS : 0)));
         Com<ID3D11Texture2D> source = D3d11Tools::texture(d, D3d11Tools::desc2d(4, 4, DXGI_FORMAT_R32_UINT, 0));

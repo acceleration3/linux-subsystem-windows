@@ -41,7 +41,7 @@ HRESULT SwapRig::try_create(const SwapOptions& wanted, HWND hwnd, Com<IDXGISwapC
     desc.Height = wanted.height;
     desc.Format = wanted.format;
     desc.SampleDesc.Count = 1;
-    desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT | DXGI_USAGE_SHADER_INPUT;
+    desc.BufferUsage = wanted.usage;
     desc.BufferCount = wanted.buffers;
     desc.SwapEffect = wanted.effect;
     desc.Flags = wanted.flags;
@@ -79,12 +79,7 @@ Com<ID3D11RenderTargetView> SwapRig::back_view(UINT index) {
 }
 
 bool SwapRig::fill(float r, float g, float b, float a, std::string& error) {
-    UINT index = 0;
-    Com<IDXGISwapChain3> chain3 = chain.as<IDXGISwapChain3>();
-    if (chain3) {
-        index = chain3->GetCurrentBackBufferIndex();
-    }
-    Com<ID3D11RenderTargetView> view = back_view(index);
+    Com<ID3D11RenderTargetView> view = back_view(0);
     if (!view) {
         error = "no render target view over the back buffer";
         return false;

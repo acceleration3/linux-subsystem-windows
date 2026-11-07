@@ -334,6 +334,15 @@ Outcome FlChecks::format_support_vs_creation(Context& context) {
             problems.add("format " + std::to_string(format) + ": " + text);
         }
     };
+    D3d11Device warp;
+    std::string warp_error;
+    const bool have_warp = warp.create_warp(nullptr, 0, 0, warp_error);
+    auto disagrees = [&](bool created, bool bit, auto&& on_warp) {
+        if (created == bit) {
+            return false;
+        }
+        return !(created && !bit && have_warp && on_warp());
+    };
     std::vector<int> formats;
     for (int format = 0; format <= 132; ++format) {
         if (format <= 115 || format >= 130 || format == 116 || format == 120) {
@@ -349,20 +358,34 @@ Outcome FlChecks::format_support_vs_creation(Context& context) {
         const bool video = FormatCodec::is_video(format);
         const bool block = FormatCodec::is_block(format);
         const UINT size = 16;
-        auto texture = [&](UINT bind, UINT misc = 0, UINT mips = 1, UINT array_size = 1, UINT samples = 1) {
+        auto texture_on = [&](ID3D11Device* target, UINT bind, UINT misc, UINT mips, UINT array_size, UINT samples) {
             D3D11_TEXTURE2D_DESC desc = D3d11Tools::desc2d(size, size, format, bind, D3D11_USAGE_DEFAULT, 0, mips, array_size, samples);
             desc.MiscFlags = misc;
             Com<ID3D11Texture2D> out;
-            return SUCCEEDED(d->CreateTexture2D(&desc, nullptr, out.put()));
+            return SUCCEEDED(target->CreateTexture2D(&desc, nullptr, out.put()));
         };
-        if (number == 0 || number == 116 || number == 120) {
+        auto texture = [&](UINT bind, UINT misc = 0, UINT mips = 1, UINT array_size = 1, UINT samples = 1) {
+            return texture_on(d, bind, misc, mips, array_size, samples);
+        };
+        auto warp_texture = [&](UINT bind, UINT misc = 0, UINT mips = 1, UINT array_size = 1, UINT samples = 1) {
+            return texture_on(warp.device, bind, misc, mips, array_size, samples);
+        };
+        if (number == 0) {
+            const UINT image_bits = D3D11_FORMAT_SUPPORT_TEXTURE1D | D3D11_FORMAT_SUPPORT_TEXTURE2D | D3D11_FORMAT_SUPPORT_TEXTURE3D |
+                                    D3D11_FORMAT_SUPPORT_TEXTURECUBE | D3D11_FORMAT_SUPPORT_RENDER_TARGET | D3D11_FORMAT_SUPPORT_DEPTH_STENCIL;
+            if ((s1 & image_bits) != 0 || texture(D3D11_BIND_SHADER_RESOURCE) || texture(0)) {
+                mismatch(number, "DXGI_FORMAT_UNKNOWN reports texture, render target or depth stencil support or creates a texture");
+            }
+            continue;
+        }
+        if (number == 116 || number == 120) {
             if (s1 != 0 || texture(D3D11_BIND_SHADER_RESOURCE)) {
                 mismatch(number, "an invalid format reports support or creates a texture");
             }
             continue;
         }
         const bool has2d = (s1 & D3D11_FORMAT_SUPPORT_TEXTURE2D) != 0;
-        if (texture(0) != has2d) {
+        if (disagrees(texture(0), has2d, [&] { return warp_texture(0); })) {
             mismatch(number, std::string("Texture2D support bit ") + (has2d ? "set" : "clear") + " but creation " +
                                  (has2d ? "failed" : "succeeded"));
         }
@@ -379,7 +402,8 @@ Outcome FlChecks::format_support_vs_creation(Context& context) {
             Com<ID3D11Texture1D> out;
             const bool created = SUCCEEDED(d->CreateTexture1D(&desc, nullptr, out.put()));
             const bool bit = (s1 & D3D11_FORMAT_SUPPORT_TEXTURE1D) != 0;
-            if (created != bit) {
+            Com<ID3D11Texture1D> warp_out;
+            if (disagrees(created, bit, [&] { return SUCCEEDED(warp.device->CreateTexture1D(&desc, nullptr, warp_out.put())); })) {
                 mismatch(number, std::string("Texture1D support bit ") + (bit ? "set" : "clear") + " but creation " +
                                      (created ? "succeeded" : "failed"));
             }
@@ -395,7 +419,8 @@ Outcome FlChecks::format_support_vs_creation(Context& context) {
             Com<ID3D11Texture3D> out;
             const bool created = SUCCEEDED(d->CreateTexture3D(&desc, nullptr, out.put()));
             const bool bit = (s1 & D3D11_FORMAT_SUPPORT_TEXTURE3D) != 0;
-            if (created != bit) {
+            Com<ID3D11Texture3D> warp_out;
+            if (disagrees(created, bit, [&] { return SUCCEEDED(warp.device->CreateTexture3D(&desc, nullptr, warp_out.put())); })) {
                 mismatch(number, std::string("Texture3D support bit ") + (bit ? "set" : "clear") + " but creation " +
                                      (created ? "succeeded" : "failed"));
             }
@@ -403,7 +428,7 @@ Outcome FlChecks::format_support_vs_creation(Context& context) {
         {
             const bool created = texture(0, D3D11_RESOURCE_MISC_TEXTURECUBE, 1, 6);
             const bool bit = (s1 & D3D11_FORMAT_SUPPORT_TEXTURECUBE) != 0;
-            if (created != bit) {
+            if (disagrees(created, bit, [&] { return warp_texture(0, D3D11_RESOURCE_MISC_TEXTURECUBE, 1, 6); })) {
                 mismatch(number, std::string("TextureCube support bit ") + (bit ? "set" : "clear") + " but creation " +
                                      (created ? "succeeded" : "failed"));
             }
@@ -412,7 +437,7 @@ Outcome FlChecks::format_support_vs_creation(Context& context) {
             continue;
         }
         const bool rt_bit = (s1 & D3D11_FORMAT_SUPPORT_RENDER_TARGET) != 0;
-        if (texture(D3D11_BIND_RENDER_TARGET) != rt_bit) {
+        if (disagrees(texture(D3D11_BIND_RENDER_TARGET), rt_bit, [&] { return warp_texture(D3D11_BIND_RENDER_TARGET); })) {
             mismatch(number, std::string("render target bit ") + (rt_bit ? "set" : "clear") + " disagrees with creation");
         } else if (rt_bit) {
             D3D11_TEXTURE2D_DESC desc = D3d11Tools::desc2d(size, size, format, D3D11_BIND_RENDER_TARGET);
@@ -424,20 +449,20 @@ Outcome FlChecks::format_support_vs_creation(Context& context) {
             }
         }
         const bool ds_bit = (s1 & D3D11_FORMAT_SUPPORT_DEPTH_STENCIL) != 0;
-        if (texture(D3D11_BIND_DEPTH_STENCIL) != ds_bit) {
+        if (disagrees(texture(D3D11_BIND_DEPTH_STENCIL), ds_bit, [&] { return warp_texture(D3D11_BIND_DEPTH_STENCIL); })) {
             mismatch(number, std::string("depth stencil bit ") + (ds_bit ? "set" : "clear") + " disagrees with creation");
         }
         const UINT sample_bits = D3D11_FORMAT_SUPPORT_SHADER_LOAD | D3D11_FORMAT_SUPPORT_SHADER_SAMPLE |
                                  D3D11_FORMAT_SUPPORT_SHADER_GATHER | D3D11_FORMAT_SUPPORT_SHADER_SAMPLE_COMPARISON |
                                  D3D11_FORMAT_SUPPORT_SHADER_GATHER_COMPARISON;
         const bool srv_bit = (s1 & sample_bits) != 0;
-        if (texture(D3D11_BIND_SHADER_RESOURCE) != srv_bit) {
+        if (disagrees(texture(D3D11_BIND_SHADER_RESOURCE), srv_bit, [&] { return warp_texture(D3D11_BIND_SHADER_RESOURCE); })) {
             mismatch(number, std::string("shader resource bits ") + (srv_bit ? "set" : "clear") + " disagree with creation");
         }
         if (fl11) {
             const bool uav_bit = (s1 & D3D11_FORMAT_SUPPORT_TYPED_UNORDERED_ACCESS_VIEW) != 0;
             const bool created = texture(D3D11_BIND_UNORDERED_ACCESS);
-            if (created != uav_bit) {
+            if (disagrees(created, uav_bit, [&] { return warp_texture(D3D11_BIND_UNORDERED_ACCESS); })) {
                 mismatch(number, std::string("typed UAV bit ") + (uav_bit ? "set" : "clear") + " disagrees with creation");
             } else if (created) {
                 D3D11_TEXTURE2D_DESC desc = D3d11Tools::desc2d(size, size, format, D3D11_BIND_UNORDERED_ACCESS);
@@ -635,44 +660,64 @@ Outcome FlChecks::limits_at_level(Context& context) {
         ++tested;
         ID3D11Device* d = device.device;
         const std::string name = std::string("level ") + level_name(level) + ": ";
+        D3d11Device warp;
+        std::string warp_error;
+        const bool have_warp = warp.create_warp(&level, 1, 0, warp_error);
+        const UINT format_bits = support1(device, DXGI_FORMAT_R8G8B8A8_UNORM);
+        auto refusal_ok = [&](HRESULT hardware, HRESULT reference) {
+            if (!FAILED(hardware)) {
+                return false;
+            }
+            return have_warp ? hardware == reference : hardware == E_INVALIDARG;
+        };
         auto accepted = [](HRESULT result) { return SUCCEEDED(result) || result == E_OUTOFMEMORY; };
         {
-            D3D11_TEXTURE2D_DESC desc = D3d11Tools::desc2d(limits.dimension, 1, DXGI_FORMAT_R8_UNORM, D3D11_BIND_SHADER_RESOURCE);
+            D3D11_TEXTURE2D_DESC desc = D3d11Tools::desc2d(limits.dimension, 1, DXGI_FORMAT_R8G8B8A8_UNORM, D3D11_BIND_SHADER_RESOURCE);
             Com<ID3D11Texture2D> tex;
             HRESULT result = d->CreateTexture2D(&desc, nullptr, tex.put());
-            if (!accepted(result)) {
+            if (!accepted(result) && (format_bits & D3D11_FORMAT_SUPPORT_TEXTURE2D) != 0) {
                 problems.add(name + "a " + std::to_string(limits.dimension) + "-wide 2D texture failed: " + D3d11Tools::hr(result));
             }
-            desc = D3d11Tools::desc2d(1, limits.dimension, DXGI_FORMAT_R8_UNORM, D3D11_BIND_SHADER_RESOURCE);
+            desc = D3d11Tools::desc2d(1, limits.dimension, DXGI_FORMAT_R8G8B8A8_UNORM, D3D11_BIND_SHADER_RESOURCE);
             result = d->CreateTexture2D(&desc, nullptr, tex.put());
-            if (!accepted(result)) {
+            if (!accepted(result) && (format_bits & D3D11_FORMAT_SUPPORT_TEXTURE2D) != 0) {
                 problems.add(name + "a " + std::to_string(limits.dimension) + "-high 2D texture failed: " + D3d11Tools::hr(result));
             }
-            desc = D3d11Tools::desc2d(limits.dimension + 1, 1, DXGI_FORMAT_R8_UNORM, D3D11_BIND_SHADER_RESOURCE);
+            desc = D3d11Tools::desc2d(limits.dimension + 1, 1, DXGI_FORMAT_R8G8B8A8_UNORM, D3D11_BIND_SHADER_RESOURCE);
             result = d->CreateTexture2D(&desc, nullptr, tex.put());
-            if (result != E_INVALIDARG) {
+            HRESULT reference = E_INVALIDARG;
+            if (have_warp) {
+                Com<ID3D11Texture2D> ignored;
+                reference = warp.device->CreateTexture2D(&desc, nullptr, ignored.put());
+            }
+            if (!refusal_ok(result, reference)) {
                 problems.add(name + "a 2D texture beyond the limit returned " + D3d11Tools::hr(result));
             }
             D3D11_TEXTURE1D_DESC d1{};
             d1.Width = limits.dimension;
             d1.MipLevels = 1;
             d1.ArraySize = 1;
-            d1.Format = DXGI_FORMAT_R8_UNORM;
+            d1.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
             d1.Usage = D3D11_USAGE_DEFAULT;
             d1.BindFlags = D3D11_BIND_SHADER_RESOURCE;
             Com<ID3D11Texture1D> tex1;
             result = d->CreateTexture1D(&d1, nullptr, tex1.put());
-            if (!accepted(result)) {
+            if (!accepted(result) && (format_bits & D3D11_FORMAT_SUPPORT_TEXTURE1D) != 0) {
                 problems.add(name + "a maximum 1D texture failed: " + D3d11Tools::hr(result));
             }
             d1.Width = limits.dimension + 1;
             result = d->CreateTexture1D(&d1, nullptr, tex1.put());
-            if (result != E_INVALIDARG) {
+            reference = E_INVALIDARG;
+            if (have_warp) {
+                Com<ID3D11Texture1D> ignored;
+                reference = warp.device->CreateTexture1D(&d1, nullptr, ignored.put());
+            }
+            if (!refusal_ok(result, reference)) {
                 problems.add(name + "a 1D texture beyond the limit returned " + D3d11Tools::hr(result));
             }
         }
         if (limits.array_size > 1) {
-            D3D11_TEXTURE2D_DESC desc = D3d11Tools::desc2d(1, 1, DXGI_FORMAT_R8_UNORM, D3D11_BIND_SHADER_RESOURCE, D3D11_USAGE_DEFAULT, 0, 1, limits.array_size);
+            D3D11_TEXTURE2D_DESC desc = D3d11Tools::desc2d(1, 1, DXGI_FORMAT_R8G8B8A8_UNORM, D3D11_BIND_SHADER_RESOURCE, D3D11_USAGE_DEFAULT, 0, 1, limits.array_size);
             Com<ID3D11Texture2D> tex;
             HRESULT result = d->CreateTexture2D(&desc, nullptr, tex.put());
             if (!accepted(result)) {
@@ -680,7 +725,12 @@ Outcome FlChecks::limits_at_level(Context& context) {
             }
             desc.ArraySize = limits.array_size + 1;
             result = d->CreateTexture2D(&desc, nullptr, tex.put());
-            if (result != E_INVALIDARG) {
+            HRESULT reference = E_INVALIDARG;
+            if (have_warp) {
+                Com<ID3D11Texture2D> ignored;
+                reference = warp.device->CreateTexture2D(&desc, nullptr, ignored.put());
+            }
+            if (!refusal_ok(result, reference)) {
                 problems.add(name + "a texture array beyond the limit returned " + D3d11Tools::hr(result));
             }
         }
@@ -690,32 +740,42 @@ Outcome FlChecks::limits_at_level(Context& context) {
             desc.Height = 1;
             desc.Depth = 1;
             desc.MipLevels = 1;
-            desc.Format = DXGI_FORMAT_R8_UNORM;
+            desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
             desc.Usage = D3D11_USAGE_DEFAULT;
             desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
             Com<ID3D11Texture3D> tex;
             HRESULT result = d->CreateTexture3D(&desc, nullptr, tex.put());
-            if (!accepted(result)) {
+            if (!accepted(result) && (format_bits & D3D11_FORMAT_SUPPORT_TEXTURE3D) != 0) {
                 problems.add(name + "a maximum 3D texture failed: " + D3d11Tools::hr(result));
             }
             desc.Width = limits.volume + 1;
             result = d->CreateTexture3D(&desc, nullptr, tex.put());
-            if (result != E_INVALIDARG) {
+            HRESULT reference = E_INVALIDARG;
+            if (have_warp) {
+                Com<ID3D11Texture3D> ignored;
+                reference = warp.device->CreateTexture3D(&desc, nullptr, ignored.put());
+            }
+            if (!refusal_ok(result, reference)) {
                 problems.add(name + "a 3D texture beyond the limit returned " + D3d11Tools::hr(result));
             }
         }
         {
             const UINT cube = std::min<UINT>(limits.cube, 2048);
-            D3D11_TEXTURE2D_DESC desc = D3d11Tools::desc2d(cube, cube, DXGI_FORMAT_R8_UNORM, D3D11_BIND_SHADER_RESOURCE, D3D11_USAGE_DEFAULT, 0, 1, 6);
+            D3D11_TEXTURE2D_DESC desc = D3d11Tools::desc2d(cube, cube, DXGI_FORMAT_R8G8B8A8_UNORM, D3D11_BIND_SHADER_RESOURCE, D3D11_USAGE_DEFAULT, 0, 1, 6);
             desc.MiscFlags = D3D11_RESOURCE_MISC_TEXTURECUBE;
             Com<ID3D11Texture2D> tex;
             HRESULT result = d->CreateTexture2D(&desc, nullptr, tex.put());
-            if (!accepted(result)) {
+            if (!accepted(result) && (format_bits & D3D11_FORMAT_SUPPORT_TEXTURECUBE) != 0) {
                 problems.add(name + "a large cube texture failed: " + D3d11Tools::hr(result));
             }
             desc.Width = desc.Height = limits.cube + 1;
             result = d->CreateTexture2D(&desc, nullptr, tex.put());
-            if (result != E_INVALIDARG) {
+            HRESULT reference = E_INVALIDARG;
+            if (have_warp) {
+                Com<ID3D11Texture2D> ignored;
+                reference = warp.device->CreateTexture2D(&desc, nullptr, ignored.put());
+            }
+            if (!refusal_ok(result, reference)) {
                 problems.add(name + "a cube texture beyond the limit returned " + D3d11Tools::hr(result));
             }
         }
