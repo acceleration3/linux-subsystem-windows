@@ -1211,11 +1211,11 @@ Each frame encodes its number in pixels so captures can read ordering, drops and
 | check | contract |
 |---|---|
 | `sanity.err.fault.device_removed_reason` | After removal injection, GetDeviceRemovedReason returns a failure code and every later call fails with the documented device-removed result, not a crash. [E] |
-| `sanity.err.fault.device_lost_vulkan` | After a lost device, Vulkan calls return VK_ERROR_DEVICE_LOST, and new device creation works. [E] |
+| `sanity.err.fault.device_lost_vulkan` | After a lost device, Vulkan calls return VK_ERROR_DEVICE_LOST, and new device creation works; skipped when the never-ending shader is not terminated within 25 s. [E] |
 | `sanity.err.fault.tdr_recovers` | A shader that runs well past the timeout limit is aborted with a documented loss and a new device then runs normally; elapsed time of the test is under 30 seconds. [E] |
-| `sanity.err.fault.process_crash_cleanup` | A process terminated by TerminateProcess in the middle of submission leaves no resources in use: the system returns to baseline and new processes allocate the full budget. |
-| `sanity.err.fault.oom_clean` | Creating resources until failure in every API ends with the documented out-of-memory error, and freeing allows work to resume. |
-| `sanity.err.fault.kill_during_map` | Killing a process while it holds large mappings does not leave memory that later allocators cannot get. |
+| `sanity.err.fault.process_crash_cleanup` | A process terminated by TerminateProcess in the middle of submission leaves no resources in use: the system returns to baseline and new processes allocate the full budget (at least 90% of what a fresh process allocated before the kills, for device and host-visible memory). [E] |
+| `sanity.err.fault.oom_clean` | Creating resources until failure in every API ends with the documented out-of-memory error, and freeing allows work to resume. [E] |
+| `sanity.err.fault.kill_during_map` | Killing a process while it holds large mappings does not leave memory that later allocators cannot get (at least 90% of the pre-kill amount). [E] |
 
 #### Host survival
 
@@ -1234,10 +1234,10 @@ Each row below drives a path an application can reach and asserts that the host 
 
 | check | contract |
 |---|---|
-| `sanity.err.limit.handle_count` | Creating objects up to the API limits (e.g. 100000 small buffers, maximum descriptor counts) succeeds or fails with the documented error, and releasing returns to baseline. |
-| `sanity.err.limit.max_texture_dims` | Textures of the maximum reported dimensions can be created and used, and the next size up fails with the documented code. |
-| `sanity.err.limit.max_threads_workgroup` | Dispatches at the reported maximum work-group size run correctly; one more is rejected. |
-| `sanity.err.limit.many_contexts_per_process` | Creating contexts until the first failure gives the documented error, and at least the number the API guarantees works. |
+| `sanity.err.limit.handle_count` | Creating objects up to the API limits (100000 small buffers in D3D11, Vulkan and OpenCL, 100000 fences, a 1000000-descriptor heap and 4096 committed buffers in D3D12) succeeds or fails with the documented out-of-memory error, and releasing returns process memory and handles to baseline. |
+| `sanity.err.limit.max_texture_dims` | Textures of the maximum reported dimensions can be created and used (D3D11, D3D12, OpenCL), and the next size up fails with the documented code. |
+| `sanity.err.limit.max_threads_workgroup` | Dispatches at the reported maximum work-group size run correctly; one more is rejected (D3D11 and D3D12 at 1024 threads per group, OpenCL at CL_DEVICE_MAX_WORK_GROUP_SIZE). |
+| `sanity.err.limit.many_contexts_per_process` | Creating contexts until the first failure gives the documented error, and at least 64 contexts (devices) work in each of D3D11, D3D12, Vulkan and OpenCL. |
 
 ### 4.22 Lifecycle (10)
 

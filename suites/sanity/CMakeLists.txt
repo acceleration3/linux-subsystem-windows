@@ -190,5 +190,10 @@ add_library(suite_sanity OBJECT
     iso/handle_checks.cpp
     iso/fault_checks.cpp
     iso/stall_checks.cpp
+    err/delegate.cpp
+    err/arg_checks.cpp
+    err/unsupported_checks.cpp
+    err/recovery_checks.cpp
+    err/limit_checks.cpp
 )
 target_link_libraries(suite_sanity PUBLIC suite_core suite_support)

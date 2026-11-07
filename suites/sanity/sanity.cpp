@@ -155,6 +155,10 @@
 #include "sanity/iso/handle_checks.hpp"
 #include "sanity/iso/fault_checks.hpp"
 #include "sanity/iso/stall_checks.hpp"
+#include "sanity/err/arg_checks.hpp"
+#include "sanity/err/unsupported_checks.hpp"
+#include "sanity/err/recovery_checks.hpp"
+#include "sanity/err/limit_checks.hpp"
 
 namespace lsw::suites::sanity {
 
@@ -796,6 +800,27 @@ void add(Registry& registry) {
     guarded(suite, {"sanity.iso.write.out_of_bounds_contained", {"iso", "robust", "d3d11", "d3d12", "vulkan", "opencl"}, false, 600, iso::FaultChecks::out_of_bounds_contained});
     guarded(suite, {"sanity.iso.share.read_only_enforced", {"iso", "d3d11"}, false, 120, iso::HandleChecks::read_only_enforced});
     guarded(suite, {"sanity.iso.session.service_session_separate", {"iso", "d3d12", "exclusive"}, true, 300, iso::HandleChecks::service_session_separate});
+    guarded(suite, {"sanity.err.arg.d3d11_invalid_params", {"err", "d3d11"}, false, 60, err::ArgChecks::d3d11_invalid_params});
+    guarded(suite, {"sanity.err.arg.d3d12_invalid_params", {"err", "d3d12"}, false, 60, err::ArgChecks::d3d12_invalid_params});
+    guarded(suite, {"sanity.err.arg.d3d9_invalid_params", {"err", "d3d9"}, false, 60, err::ArgChecks::d3d9_invalid_params});
+    guarded(suite, {"sanity.err.arg.vulkan_invalid_handles_null", {"err", "vulkan"}, false, 60, err::ArgChecks::vulkan_invalid_handles_null});
+    guarded(suite, {"sanity.err.arg.opencl_error_codes", {"err", "opencl"}, false, 60, err::ArgChecks::opencl_error_codes});
+    guarded(suite, {"sanity.err.arg.gl_error_flags", {"err", "gl"}, false, 60, err::ArgChecks::gl_error_flags});
+    guarded(suite, {"sanity.err.arg.dxgi_invalid_swapchain", {"err", "dxgi", "d3d11"}, false, 60, err::ArgChecks::dxgi_invalid_swapchain});
+    guarded(suite, {"sanity.err.unsupported.caps_match_use", {"err", "d3d11", "d3d12", "vulkan"}, false, 300, err::UnsupportedChecks::caps_match_use});
+    guarded(suite, {"sanity.err.unsupported.formats", {"err", "formats", "d3d11", "d3d12"}, false, 300, err::UnsupportedChecks::formats});
+    guarded(suite, {"sanity.err.unsupported.extensions_list_vs_entry", {"err", "vulkan", "gl", "opencl"}, false, 300, err::UnsupportedChecks::extensions_list_vs_entry});
+    guarded(suite, {"sanity.err.unsupported.opencl_version_coherent", {"err", "opencl"}, false, 120, err::UnsupportedChecks::opencl_version_coherent});
+    guarded(suite, {"sanity.err.fault.device_removed_reason", {"err", "robust", "d3d11", "d3d12", "exclusive"}, true, 240, err::RecoveryChecks::device_removed_reason});
+    guarded(suite, {"sanity.err.fault.device_lost_vulkan", {"err", "robust", "vulkan", "exclusive"}, true, 240, err::RecoveryChecks::device_lost_vulkan});
+    guarded(suite, {"sanity.err.fault.tdr_recovers", {"err", "robust", "d3d11", "d3d12", "vulkan", "exclusive"}, true, 420, err::RecoveryChecks::tdr_recovers});
+    guarded(suite, {"sanity.err.fault.process_crash_cleanup", {"err", "robust", "mem", "slow", "d3d11", "d3d12", "vulkan", "opencl", "exclusive"}, true, 1200, err::RecoveryChecks::process_crash_cleanup});
+    guarded(suite, {"sanity.err.fault.oom_clean", {"err", "robust", "mem", "slow", "d3d9", "d3d11", "d3d12", "vulkan", "opencl", "gl", "exclusive"}, true, 900, err::RecoveryChecks::oom_clean});
+    guarded(suite, {"sanity.err.fault.kill_during_map", {"err", "robust", "mem", "slow", "d3d11", "d3d12", "vulkan", "opencl", "exclusive"}, true, 1200, err::RecoveryChecks::kill_during_map});
+    guarded(suite, {"sanity.err.limit.handle_count", {"err", "mem", "slow", "d3d11", "d3d12", "vulkan", "opencl"}, false, 900, err::LimitChecks::handle_count});
+    guarded(suite, {"sanity.err.limit.max_texture_dims", {"err", "d3d11", "d3d12", "vulkan", "opencl"}, false, 300, err::LimitChecks::max_texture_dims});
+    guarded(suite, {"sanity.err.limit.max_threads_workgroup", {"err", "compute", "d3d11", "d3d12", "vulkan", "opencl"}, false, 120, err::LimitChecks::max_threads_workgroup});
+    guarded(suite, {"sanity.err.limit.many_contexts_per_process", {"err", "slow", "d3d11", "d3d12", "vulkan", "opencl"}, false, 600, err::LimitChecks::many_contexts_per_process});
 }
 
 }  // namespace lsw::suites::sanity
