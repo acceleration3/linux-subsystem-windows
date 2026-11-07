@@ -428,7 +428,7 @@ Each loop creates and destroys 5000 objects of the kind with its largest practic
 | check | contract |
 |---|---|
 | `sanity.d3d9.caps.create_matrix` | CreateDevice succeeds for HAL with HARDWARE, MIXED and SOFTWARE vertex processing (where GetDeviceCaps reports the matching support), with and without MULTITHREADED and FPU_PRESERVE, and the device renders a clear afterwards. |
-| `sanity.d3d9.caps.caps_vs_behaviour` | Every boolean cap the check can exercise (texture caps POW2/NONPOW2CONDITIONAL, CUBEMAP, VOLUMEMAP, MAXTEXTURESIZE, MaxSimultaneousTextures, NumSimultaneousRTs, MaxStreams, MaxVertexIndex, MaxPrimitiveCount, VS/PS versions) agrees with behaviour: a resource or draw within the cap works, one beyond it fails with D3DERR_INVALIDCALL. |
+| `sanity.d3d9.caps.caps_vs_behaviour` | Every boolean cap the check can exercise (texture caps POW2/NONPOW2CONDITIONAL, CUBEMAP, VOLUMEMAP, MAXTEXTURESIZE, MaxSimultaneousTextures, NumSimultaneousRTs, MaxStreams, MaxVertexIndex, MaxPrimitiveCount, VS/PS versions) agrees with behaviour: a resource or draw within the cap works, one beyond it fails with D3DERR_INVALIDCALL or D3DERR_NOTAVAILABLE (MaxPrimitiveCount is exercised only within the cap). |
 | `sanity.d3d9.caps.check_device_format_consistent` | CheckDeviceFormat, CheckDeviceMultiSampleType, CheckDepthStencilMatch and CheckDeviceFormatConversion answers agree with whether CreateTexture/CreateRenderTarget/CreateDepthStencilSurface of that format, usage and multisample type succeed, for a table of formats and usages. |
 | `sanity.d3d9.caps.ex_interface` | Direct3DCreate9Ex and CreateDeviceEx succeed or the whole Ex entry set is absent consistently; a 9Ex device exposes the same caps as a 9 device on the same adapter apart from the documented Ex bits. |
 | `sanity.d3d9.caps.adapter_identity` | GetAdapterIdentifier, GetAdapterCount, GetAdapterDisplayMode and GetAdapterLUID are mutually consistent, and the LUID equals the one DXGI reports for the same adapter. |
@@ -437,13 +437,13 @@ Each loop creates and destroys 5000 objects of the kind with its largest practic
 
 | check | contract |
 |---|---|
-| `sanity.d3d9.res.pool_usage_matrix` | For every type (VB, IB, 2D texture, cube, volume, surface, RT, DS) the combinations of pool (DEFAULT, MANAGED, SYSTEMMEM, SCRATCH) and usage (DYNAMIC, RENDERTARGET, DEPTHSTENCIL, WRITEONLY, AUTOGENMIPMAP) accepted or rejected equal the documented rules and WARP's answers; accepted ones report matching GetDesc. |
+| `sanity.d3d9.res.pool_usage_matrix` | For every type (VB, IB, 2D texture, cube, volume, surface, RT, DS) the combinations of pool (DEFAULT, MANAGED, SYSTEMMEM, SCRATCH) and usage (DYNAMIC, RENDERTARGET, DEPTHSTENCIL, WRITEONLY, AUTOGENMIPMAP) accepted or rejected equal the documented rules (D3D9 has no WARP; 9Ex rejects MANAGED); accepted ones report matching GetDesc. |
 | `sanity.d3d9.res.mip_levels_and_sizes` | Texture creation with Levels 0 yields the full chain down to 1x1, non-power-of-two sizes follow floor(size/2) per level, and GetLevelDesc and LockRect pitch are consistent for every level. |
 | `sanity.d3d9.res.volume_and_cube` | Volume and cube textures keep faces and slices independent: writing a distinct pattern per face/slice and reading back returns each pattern with no bleed, honouring RowPitch and SlicePitch. |
 | `sanity.d3d9.res.managed_roundtrip` | Data written to a MANAGED texture is preserved across a draw, an eviction pressure loop that allocates many DEFAULT resources, and a device Reset; reading back through a render still gives the original data. |
 | `sanity.d3d9.res.priority_and_lod` | SetPriority/GetPriority and SetLOD/GetLOD on managed resources return the values set (LOD clamped to the level count) and LOD selects the expected top mip when sampled. |
 | `sanity.d3d9.res.autogenmipmap` | A texture with D3DUSAGE_AUTOGENMIPMAP regenerates lower levels from level 0 after a write or render; GenerateMipSubLevels matches a box-filter CPU reference within one unit. |
-| `sanity.d3d9.res.exhaustion` | Creating DEFAULT-pool resources until failure returns D3DERR_OUTOFVIDEOMEMORY or E_OUTOFMEMORY (never crashes or hangs), the device stays usable, and freeing them allows creation again. |
+| `sanity.d3d9.res.exhaustion` | `host-hazard`, [E]: creating DEFAULT-pool resources until failure returns D3DERR_OUTOFVIDEOMEMORY or E_OUTOFMEMORY (never crashes or hangs), the device stays usable, and freeing them allows creation again. |
 
 #### Locking
 
@@ -453,7 +453,7 @@ Each loop creates and destroys 5000 objects of the kind with its largest practic
 | `sanity.d3d9.lock.nooverwrite_inflight` | Appending with NOOVERWRITE to a dynamic VB while earlier draws from the same buffer are queued never changes the data those draws consume: all frames of a ring-style pattern match the WARP output. |
 | `sanity.d3d9.lock.readonly_and_partial` | READONLY locks return the contents last written (including GPU renders to the surface), partial rect/box locks address exactly the requested region with the returned pitch, and out-of-range rects fail with INVALIDCALL. |
 | `sanity.d3d9.lock.dirty_regions` | AddDirtyRect on a managed texture makes only the declared region be re-uploaded; a write outside the dirty rect with NO_DIRTY_UPDATE locks is not required to appear, a write inside it must appear in the next draw. |
-| `sanity.d3d9.lock.errors` | Double Lock without Unlock, Unlock without Lock, locking a non-lockable (default-pool RT without LOCKABLE, depth-stencil) surface, and DISCARD on a non-dynamic resource return the documented failure codes and leave the device usable. |
+| `sanity.d3d9.lock.errors` | Double Lock without Unlock, Unlock without Lock, locking a non-lockable (default-pool RT without LOCKABLE, depth-stencil) surface, and DISCARD on a non-dynamic buffer (success or INVALIDCALL) return the documented codes and leave the device usable. |
 
 #### Blt operations
 
@@ -502,7 +502,7 @@ Each loop creates and destroys 5000 objects of the kind with its largest practic
 | check | contract |
 |---|---|
 | `sanity.d3d9.share.cross_device` | A shared DEFAULT-pool texture created with pSharedHandle on device A is opened on device B (same process) and B sees what A rendered after A's EVENT query completes. |
-| `sanity.d3d9.share.cross_process` | The same shared texture opened in a second process (handle passed by duplication) observes every frame the producer writes with no tearing for a sequence of 200 known frames, using query ordering. |
+| `sanity.d3d9.share.cross_process` | The same shared texture opened in a second process (the legacy shared handle value passed through the environment) observes every frame the producer writes with no tearing for a sequence of 200 known frames, using query ordering. |
 | `sanity.d3d9.share.d3dimage_pattern` | The WPF/D3DImage pattern (9Ex device, shared RT with LOCKABLE flag off, render, Flush, then consumer reads through D3D11 OpenSharedResource) yields correct pixels each frame with the producer rendering the next frame while the consumer reads the previous. |
 
 #### Failure behaviour
@@ -522,7 +522,7 @@ Each loop creates and destroys 5000 objects of the kind with its largest practic
 | `sanity.d3d10.create.device_flags` | D3D10CreateDevice and D3D10CreateDevice1 succeed on the hardware adapter with DEBUG, SINGLETHREADED and BGRA_SUPPORT flags where valid, and fail with the documented HRESULT for a bad driver type or adapter. |
 | `sanity.d3d10.fl.levels_101` | D3D10CreateDevice1 requested at each of 10_0, 10_1 returns the requested level or fails; the level obtained matches features usable (cube array and shader sample-from-MSAA at 10_1 only) and the 10.0 level rejects them. |
 | `sanity.d3d10.res.format_support` | CheckFormatSupport for a table of formats is consistent with creation of textures with the corresponding bind flags, and CheckMultisampleQualityLevels agrees with creating a multisampled RT. |
-| `sanity.d3d10.render.pipeline_warp` | A scene with VS, GS, PS, depth/stencil, blend, and instancing renders within tolerance of WARP (D3D10 and D3D10.1 devices). |
+| `sanity.d3d10.render.pipeline_warp` | A scene with VS, GS, PS, depth/stencil, blend, and instancing renders within tolerance of D3D10 WARP (D3D10 and D3D10.1 devices; the row fails when the WARP oracle is unavailable). |
 | `sanity.d3d10.render.streamout` | Stream-output of a known vertex set returns exact positions, and the SO_STATISTICS query counts primitives written and needed correctly including an overflowing buffer. |
 | `sanity.d3d10.map.contracts` | Map READ after a GPU write returns the written data, WRITE_DISCARD returns fresh memory, WRITE_NO_OVERWRITE leaves queued draws intact, and DO_NOT_WAIT either succeeds or returns DXGI_ERROR_WAS_STILL_DRAWING and later succeeds. |
 | `sanity.d3d10.dxgi.swapchain` | A D3D10 device creates a swap chain, presents, resizes buffers and reads back the back buffer through a staging copy with the expected colour. |
