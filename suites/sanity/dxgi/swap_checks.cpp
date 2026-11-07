@@ -57,6 +57,8 @@ Outcome SwapChecks::model_matrix(Context& context) {
     if (!rig.open(base, error)) {
         return Outcome::fail(error);
     }
+    rig.chain.reset();
+    rig.window.destroy();
     Problems problems;
     const DXGI_SWAP_EFFECT effects[] = {DXGI_SWAP_EFFECT_DISCARD, DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL, DXGI_SWAP_EFFECT_FLIP_DISCARD};
     const DXGI_FORMAT formats[] = {DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, DXGI_FORMAT_R10G10B10A2_UNORM, DXGI_FORMAT_R16G16B16A16_FLOAT};
@@ -74,8 +76,7 @@ Outcome SwapChecks::model_matrix(Context& context) {
                 TestWindowConfig config;
                 config.x = base.x;
                 config.y = base.y;
-                config.width = 176;
-                config.height = 199;
+                TestWindow::outer_size(config.x, config.y, 160, 160, config.width, config.height);
                 if (!window.create(config, error)) {
                     return Outcome::fail(error);
                 }

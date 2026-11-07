@@ -13,6 +13,13 @@
 
 int main(int argc, char** argv) {
     using namespace lsw::suites;
+    using SetContext = BOOL(WINAPI*)(HANDLE);
+    if (HMODULE user32 = GetModuleHandleW(L"user32.dll")) {
+        auto set_context = reinterpret_cast<SetContext>(reinterpret_cast<void*>(GetProcAddress(user32, "SetProcessDpiAwarenessContext")));
+        if (set_context != nullptr) {
+            set_context(reinterpret_cast<HANDLE>(-4));
+        }
+    }
     std::string error;
     const auto options = Options::parse(argc, argv, error);
     if (!options) {

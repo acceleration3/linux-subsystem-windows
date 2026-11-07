@@ -342,8 +342,7 @@ Outcome MemChecks::overlay_mpo_present(Context& context) {
     }
     TestWindow window;
     TestWindowConfig config;
-    config.width = 144;
-    config.height = 167;
+    TestWindow::outer_size(config.x, config.y, 128, 128, config.width, config.height);
     Com<IDXGISwapChain1> chain;
     if (!window.create(config, error)) {
         return Outcome::fail(error);

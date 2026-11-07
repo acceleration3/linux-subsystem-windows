@@ -242,10 +242,10 @@ Outcome DisplayChecks::dpi_scaling_consistent(Context& context) {
         UINT y = 0;
         DEVICE_SCALE_FACTOR scale = DEVICE_SCALE_FACTOR_INVALID;
         if (SUCCEEDED(::GetDpiForMonitor(entry.monitor, MDT_EFFECTIVE_DPI, &x, &y))) {
-            context.measure("unaware." + Text::utf8(entry.info.szDevice) + ".dpi", x);
+            context.measure("initial." + Text::utf8(entry.info.szDevice) + ".dpi", x);
         }
         if (SUCCEEDED(::GetScaleFactorForMonitor(entry.monitor, &scale))) {
-            context.measure("unaware." + Text::utf8(entry.info.szDevice) + ".scale_percent", static_cast<int>(scale));
+            context.measure("initial." + Text::utf8(entry.info.szDevice) + ".scale_percent", static_cast<int>(scale));
         }
     }
     enable_dpi_awareness();

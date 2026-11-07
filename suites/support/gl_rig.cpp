@@ -33,10 +33,6 @@ bool names_adapter(const std::string& renderer, const std::string& adapter) {
 
 TestWindowConfig GlRig::window_config(int client_width, int client_height, bool visible) const {
     TestWindowConfig config;
-    RECT rect{0, 0, client_width, client_height};
-    ::AdjustWindowRectEx(&rect, WS_OVERLAPPEDWINDOW, FALSE, 0);
-    config.width = rect.right - rect.left;
-    config.height = rect.bottom - rect.top;
     config.visible = visible;
     for (const AvOutput& output : adapter.outputs) {
         if (output.attached) {
@@ -45,6 +41,7 @@ TestWindowConfig GlRig::window_config(int client_width, int client_height, bool 
             break;
         }
     }
+    TestWindow::outer_size(config.x, config.y, client_width, client_height, config.width, config.height);
     return config;
 }
 

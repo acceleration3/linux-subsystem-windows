@@ -44,6 +44,8 @@ public:
 
     [[nodiscard]] int height() const;
 
+    static void outer_size(int x, int y, int client_width, int client_height, int& width, int& height);
+
 private:
     void pump(TestWindowConfig config);
 

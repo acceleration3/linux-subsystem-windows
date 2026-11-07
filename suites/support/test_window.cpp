@@ -1,5 +1,9 @@
 #include "support/test_window.hpp"
 
+// clang-format off
+#include <shellscalingapi.h>
+// clang-format on
+
 namespace lsw::suites {
 
 namespace {
@@ -32,6 +36,27 @@ void register_class() {
 }
 
 }  // namespace
+
+void TestWindow::outer_size(int x, int y, int client_width, int client_height, int& width, int& height) {
+    RECT rect{0, 0, client_width, client_height};
+    const DWORD style = WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN | WS_CLIPSIBLINGS;
+    using AdjustForDpi = BOOL(WINAPI*)(LPRECT, DWORD, BOOL, DWORD, UINT);
+    const HMODULE user32 = ::GetModuleHandleW(L"user32.dll");
+    auto adjust = user32 != nullptr ? reinterpret_cast<AdjustForDpi>(reinterpret_cast<void*>(::GetProcAddress(user32, "AdjustWindowRectExForDpi"))) : nullptr;
+    UINT dpi_x = 96;
+    UINT dpi_y = 96;
+    const POINT point{x, y};
+    const HMONITOR monitor = ::MonitorFromPoint(point, MONITOR_DEFAULTTONEAREST);
+    if (monitor == nullptr || FAILED(::GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &dpi_x, &dpi_y))) {
+        dpi_x = 96;
+    }
+    if (adjust == nullptr || adjust(&rect, style, FALSE, 0, dpi_x) == FALSE) {
+        rect = {0, 0, client_width, client_height};
+        ::AdjustWindowRectEx(&rect, style, FALSE, 0);
+    }
+    width = rect.right - rect.left;
+    height = rect.bottom - rect.top;
+}
 
 bool TestWindow::create(const TestWindowConfig& config, std::string& error) {
     destroy();
