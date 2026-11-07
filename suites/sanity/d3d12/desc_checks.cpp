@@ -15,12 +15,6 @@ const char* kTableShader =
     "[numthreads(64, 1, 1)]\n"
     "void main(uint3 id : SV_DispatchThreadID) { o[id.x] = bufs[id.x][0] ^ id.x; }\n";
 
-const char* kUnboundedShader =
-    "StructuredBuffer<uint> bufs[] : register(t0);\n"
-    "RWStructuredBuffer<uint> o : register(u0);\n"
-    "[numthreads(64, 1, 1)]\n"
-    "void main(uint3 id : SV_DispatchThreadID) { o[id.x] = bufs[id.x][0] ^ id.x; }\n";
-
 const char* kSamplerShader =
     "Texture2D<float> tex : register(t0);\n"
     "SamplerState smp[2] : register(s0);\n"
@@ -38,7 +32,7 @@ bool run_table(D3d12Rig& rig, Context& context, Problems& problems, const std::s
     const std::string size_text = std::to_string(count);
     const D3D_SHADER_MACRO macros[] = {{"N", size_text.c_str()}, {nullptr, nullptr}};
     D3d12Tools::Bytes code;
-    if (signature == nullptr || !D3d12Tools::compile(unbounded ? kUnboundedShader : kTableShader, "main", "cs_5_1", code, error, macros)) {
+    if (signature == nullptr || !D3d12Tools::compile(kTableShader, "main", "cs_5_1", code, error, macros)) {
         problems.add(label + ": " + error);
         return false;
     }

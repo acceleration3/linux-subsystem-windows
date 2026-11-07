@@ -489,7 +489,7 @@ void add(Registry& registry) {
     guarded(suite, {"sanity.cl.error.codes_documented", {"opencl"}, false, 60, cl::ErrorChecks::codes_documented});
     guarded(suite, {"sanity.d3d12.dev.create_levels", {"d3d12", "dxgi"}, false, 90, d3d12::DevChecks::create_levels});
     guarded(suite, {"sanity.d3d12.dev.options_consistent", {"d3d12"}, false, 90, d3d12::DevChecks::options_consistent});
-    guarded(suite, {"sanity.d3d12.dev.format_support", {"d3d12", "d3d11", "formats"}, false, 180, d3d12::DevChecks::format_support});
+    guarded(suite, {"sanity.d3d12.dev.format_support", {"d3d12", "formats"}, false, 180, d3d12::DevChecks::format_support});
     guarded(suite, {"sanity.d3d12.dev.node_and_uma", {"d3d12"}, false, 60, d3d12::DevChecks::node_and_uma});
     guarded(suite, {"sanity.d3d12.heap.default_upload_readback", {"d3d12", "mem", "slow"}, false, 180, d3d12::HeapChecks::default_upload_readback});
     guarded(suite, {"sanity.d3d12.heap.custom_properties", {"d3d12"}, false, 90, d3d12::HeapChecks::custom_properties});
@@ -521,8 +521,8 @@ void add(Registry& registry) {
     guarded(suite, {"sanity.d3d12.query.occlusion_pipeline", {"d3d12"}, false, 90, d3d12::QueryChecks::occlusion_pipeline});
     guarded(suite, {"sanity.d3d12.query.timestamp_calibration", {"d3d12", "compute"}, true, 90, d3d12::QueryChecks::timestamp_calibration});
     guarded(suite, {"sanity.d3d12.present.dxgi_queue", {"d3d12", "dxgi", "present", "dwm", "exclusive"}, true, 180, d3d12::QueryChecks::present_queue});
-    guarded(suite, {"sanity.d3d12.share.heap_resource_nt", {"d3d12", "d3d11", "interop"}, false, 240, d3d12::ShareChecks::heap_resource_nt});
-    guarded(suite, {"sanity.d3d12.share.keyed_cross_api", {"d3d12", "d3d11", "interop"}, false, 120, d3d12::ShareChecks::keyed_cross_api});
+    guarded(suite, {"sanity.d3d12.share.heap_resource_nt", {"d3d12", "interop"}, false, 240, d3d12::ShareChecks::heap_resource_nt});
+    guarded(suite, {"sanity.d3d12.share.keyed_cross_api", {"d3d12", "interop"}, false, 120, d3d12::ShareChecks::keyed_cross_api});
     guarded(suite, {"sanity.d3d12.resid.make_evict", {"d3d12", "mem", "exclusive"}, true, 240, d3d12::ResidChecks::make_evict});
     guarded(suite, {"sanity.d3d12.resid.budget_pressure", {"d3d12", "mem", "slow", "exclusive", "host-hazard"}, true, 300, d3d12::ResidChecks::budget_pressure});
     guarded(suite, {"sanity.d3d12.opt.raytracing", {"d3d12"}, false, 90, d3d12::OptChecks::raytracing});

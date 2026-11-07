@@ -26,7 +26,7 @@ const char* kRovVs =
 
 const char* kRovPs =
     "struct VO { float4 pos : SV_Position; nointerpolation uint iid : IID; };\n"
-    "RasterizerOrderedTexture2D<uint> rov : register(u0);\n"
+    "RasterizerOrderedTexture2D<uint> rov : register(u1);\n"
     "float4 main(VO i) : SV_Target { uint2 c = uint2(i.pos.xy); rov[c] = rov[c] * 3u + i.iid + 1u; return float4(0, 0, 0, 0); }\n";
 
 const char* kTinyVs =
@@ -465,7 +465,7 @@ Outcome OptChecks::work_graphs_dxr11(Context& context) {
         }
         {
             D3d12Root root;
-            root.table(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0);
+            root.table(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 1);
             ID3D12RootSignature* signature = root.build(rig, error);
             D3d12Tools::Bytes vs;
             D3d12Tools::Bytes ps;

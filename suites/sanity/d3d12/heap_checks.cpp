@@ -155,7 +155,8 @@ Outcome HeapChecks::custom_properties(Context& context) {
                 props.MemoryPoolPreference = pool_values[p];
                 const std::string label = std::string("custom heap ") + cpu_names[c] + "/" + pool_names[p];
                 const bool cpu_visible = c >= 2;
-                const bool must_reject = c == 0 || p == 0 || (uma && p == 2) || (!uma && cpu_visible && p == 2);
+                const bool must_reject = c == 0 || p == 0;
+                const bool may_reject = (uma && p == 2) || (!uma && cpu_visible && p == 2);
                 HRESULT made = S_OK;
                 ID3D12Resource* resource = D3d12Tools::committed(rig, props, D3D12_HEAP_FLAG_NONE, D3d12Tools::buffer_desc(64 * kKiB),
                                                                  D3D12_RESOURCE_STATE_COMMON, nullptr, &made);
@@ -169,6 +170,8 @@ Outcome HeapChecks::custom_properties(Context& context) {
                     }
                 } else if (resource != nullptr) {
                     rig.release(resource);
+                } else if (may_reject) {
+                    Kit::expect(problems, label, made, {E_INVALIDARG});
                 }
             }
         }

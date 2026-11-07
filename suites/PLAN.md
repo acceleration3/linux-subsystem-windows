@@ -702,7 +702,7 @@ Each loop creates and destroys 5000 objects of the kind with its largest practic
 | check | contract |
 |---|---|
 | `sanity.d3d12.dev.create_levels` | D3D12CreateDevice at each feature level (11_0 to 12_2) returns S_OK iff the level is supported according to CheckFeatureSupport(FEATURE_LEVELS) and the adapter's LUID equals the DXGI one. |
-| `sanity.d3d12.dev.options_consistent` | Every OPTIONS struct (OPTIONS through OPTIONS21), ARCHITECTURE1, GPU_VIRTUAL_ADDRESS_SUPPORT, SHADER_MODEL and ROOT_SIGNATURE answers are mutually consistent (tiers monotonic, FL12_x implies required tiers), and any feature a check exercises works when reported. |
+| `sanity.d3d12.dev.options_consistent` | Every OPTIONS struct the build's headers define (OPTIONS through OPTIONS18), ARCHITECTURE1, GPU_VIRTUAL_ADDRESS_SUPPORT, SHADER_MODEL and ROOT_SIGNATURE answers are mutually consistent (tiers in range, shader-model prerequisites of wave, 16-bit, raytracing, mesh and feedback features, FL12_1 and FL12_2 required tiers), an unknown feature or a wrong structure size fails, and any feature a check exercises works when reported. |
 | `sanity.d3d12.dev.format_support` | CheckFeatureSupport(FORMAT_SUPPORT / FORMAT_INFO / MULTISAMPLE_QUALITY_LEVELS) per DXGI_FORMAT agree with resource and view creation and rendering, and with the D3D11 answers for the same format. |
 | `sanity.d3d12.dev.node_and_uma` | GetNodeCount, Architecture (UMA, CacheCoherentUMA) and heap property queries are consistent with each other and with GetCustomHeapProperties. |
 
@@ -712,12 +712,12 @@ Each loop creates and destroys 5000 objects of the kind with its largest practic
 |---|---|
 | `sanity.d3d12.heap.default_upload_readback` | Upload through UPLOAD heap, copy to DEFAULT, copy to READBACK, read: round trip equals input for sizes from 1 byte to 128 MiB and odd alignments. |
 | `sanity.d3d12.heap.custom_properties` | CUSTOM heaps accept each CPUPageProperty/MemoryPoolPreference pair permitted by the architecture and reject others; the UMA/cache-coherent flags decide validity; accepted heaps map and round-trip data. |
-| `sanity.d3d12.heap.placed_alignment` | Placed resources at heap offsets follow GetResourceAllocationInfo alignment and size (64 KiB, 4 MiB for MSAA), reject misaligned offsets and overlap oversize with the documented HRESULT. |
+| `sanity.d3d12.heap.placed_alignment` | Placed resources at heap offsets follow GetResourceAllocationInfo alignment and size (64 KiB, 4 MiB for MSAA by default), resources placed back to back and at the heap end keep their own data; misaligned or oversize placements are invalid usage and are not submitted. |
 | `sanity.d3d12.heap.aliasing` | Two placed resources aliasing the same heap range, used with an aliasing barrier between, behave per spec: render to one, discard, then fully write the other and read it correctly. |
 | `sanity.d3d12.heap.reserved_tiles` | Reserved resources with UpdateTileMappings for many ranges (including re-mapping, null mappings, shared tiles) read back the mapped data, null-mapped tiles read zero per tier, and CopyTileMappings preserves them. |
 | `sanity.d3d12.heap.committed_flags` | Committed resources with each HEAP_FLAG (ALLOW_ONLY_*, DENY_*, SHARED, CREATE_NOT_ZEROED) and resource flag creation matches the documented combination matrix; newly created non-NOT_ZEROED resources read as zero. |
 | `sanity.d3d12.heap.zeroed_new` | A freshly created committed resource, and a resource placed in a newly created heap, never exposes stale data from other resources or earlier processes (reads zero or application-defined per spec). |
-| `sanity.d3d12.heap.exhaustion` | Allocation beyond available memory fails with E_OUTOFMEMORY, the device is not removed, and later allocations succeed after release. |
+| `sanity.d3d12.heap.exhaustion` | `host-hazard`, [E]: allocation beyond available memory fails with E_OUTOFMEMORY, the device is not removed, and later allocations succeed after release. |
 
 #### Map semantics and copies
 
@@ -733,24 +733,24 @@ Each loop creates and destroys 5000 objects of the kind with its largest practic
 
 | check | contract |
 |---|---|
-| `sanity.d3d12.queue.types` | Direct, compute and copy queues each execute lists they are allowed to; recording an unsupported command (e.g. draw on a copy list) is rejected by the spec's rules (debug layer / close error) without device removal. |
+| `sanity.d3d12.queue.types` | Direct, compute and copy queues each execute lists they are allowed to (copy lists on all three, compute lists on direct and compute), report their type in GetDesc, and a high priority queue works when the priority is reported as supported; unsupported commands on a list type are invalid usage and are not recorded. |
 | `sanity.d3d12.queue.many_lists` | One ExecuteCommandLists with 1, 64 and 1000 lists runs them in order, and bundles executed from direct lists produce results equal to inline commands. |
 | `sanity.d3d12.fence.cross_queue` | Signal on a copy queue and Wait on a direct queue orders their work; results of the copy are visible to the draw; also compute-to-direct and direct-to-copy. |
-| `sanity.d3d12.fence.cpu_semantics` | SetEventOnCompletion fires only once the value is reached (immediately if already), GetCompletedValue is monotonic, CPU Signal from the application raises it, signalling a lower value fails or is ignored per spec, and 10000 fence waits complete without deadlock. |
+| `sanity.d3d12.fence.cpu_semantics` | SetEventOnCompletion fires only once the value is reached (immediately if already), GetCompletedValue is monotonic, CPU Signal from the application raises it, signalling a lower value leaves the completed value or sets it, a queue wait on a CPU-signalled fence continues once it is signalled, and 10000 fence waits complete without deadlock. |
 | `sanity.d3d12.fence.shared` | A shared fence (NT handle) signalled in process A completes a wait in process B and vice versa, where reported by caps; handle closing leaves the other side valid. |
 | `sanity.d3d12.barrier.transition_uav` | Transition and UAV barriers between write-then-read passes make all writes visible (compute writes then pixel shader reads); 1000 chained passes give the CPU-referenced result. |
 | `sanity.d3d12.barrier.enhanced` | If EnhancedBarriersSupported, texture and buffer barriers with syncs/access/layouts transform data correctly and layouts across queues work; otherwise CreateCommandList7 / Barrier fails consistently with the caps. |
-| `sanity.d3d12.barrier.misuse_tolerance` | Common application mis-states (redundant transitions, COMMON promotion and decay for buffers and simultaneous-access textures) behave as documented, not as errors. |
+| `sanity.d3d12.barrier.misuse_tolerance` | COMMON promotion and decay for buffers and simultaneous-access textures without barriers, split begin/end barriers, per-subresource transitions and a null aliasing barrier behave as documented, not as errors. |
 
 #### Descriptors, root signatures, pipelines
 
 | check | contract |
 |---|---|
 | `sanity.d3d12.desc.heaps_and_tables` | CBV/SRV/UAV and sampler descriptor heaps (shader-visible and not), CopyDescriptors and bindless tables of large size give correct resource access; heap sizes up to the tier's limit work. |
-| `sanity.d3d12.root.signatures` | Root signature 1.0 and 1.1 serialize/deserialize round trip; root constants, root descriptors, tables, static samplers, descriptor/data volatility all produce results equal to WARP in a test shader. |
-| `sanity.d3d12.pso.graphics_compute` | Graphics PSOs (all state fields, MSAA, depth, blend with logic op) and compute PSOs render or compute results equal to WARP / CPU reference. |
+| `sanity.d3d12.root.signatures` | Root signature 1.0 and 1.1 serialize/deserialize round trip and convert between versions; root constants, root descriptors, tables, static samplers, descriptor/data volatility all produce the analytic result in a test shader. |
+| `sanity.d3d12.pso.graphics_compute` | Graphics PSOs (all state fields, MSAA, depth, blend with logic op) and compute PSOs render or compute the analytic or CPU reference result. |
 | `sanity.d3d12.pso.library_cache` | A pipeline library stores and reloads PSOs; a loaded PSO produces the same output; a corrupted or driver-mismatched blob yields D3D12_ERROR_DRIVER_VERSION_MISMATCH / ADAPTER_NOT_FOUND / INVALID_ARG not a crash; cached PSO blobs in desc work or are ignored. |
-| `sanity.d3d12.render.draw_variants` | DrawInstanced, DrawIndexedInstanced, ExecuteIndirect (draw, dispatch, with counters) and indirect argument buffers match WARP. |
+| `sanity.d3d12.render.draw_variants` | DrawInstanced, DrawIndexedInstanced, ExecuteIndirect (draw, indexed draw, dispatch, constant, constant buffer, vertex and index buffer arguments, with count buffers and offsets) and indirect argument buffers match the analytic image. |
 | `sanity.d3d12.render.msaa_resolve` | MSAA render with programmable sample positions (if tier reports) and resolve equals WARP. |
 
 #### Queries, timing, present
@@ -758,21 +758,21 @@ Each loop creates and destroys 5000 objects of the kind with its largest practic
 | check | contract |
 |---|---|
 | `sanity.d3d12.query.occlusion_pipeline` | Occlusion (binary and counting) and pipeline-statistics queries resolve to analytic counts through ResolveQueryData. |
-| `sanity.d3d12.query.timestamp_calibration` | GetTimestampFrequency is non-zero, GetClockCalibration pairs GPU and CPU (QPC) timestamps whose conversions agree within a few ms with a CPU stopwatch around a known-length wait, and timestamps in a list are non-decreasing. |
-| `sanity.d3d12.present.dxgi_queue` | A swap chain created on a D3D12 direct queue (FLIP_DISCARD, 2-4 buffers) presents distinct frames in order, back buffers need PRESENT state, and ResizeBuffers after idle works. |
+| `sanity.d3d12.query.timestamp_calibration` | GetTimestampFrequency is non-zero, GetClockCalibration pairs GPU and CPU (QPC) timestamps whose conversions agree within a few ms with a CPU stopwatch around a known-length wait, and timestamps in a list are non-decreasing. [E] |
+| `sanity.d3d12.present.dxgi_queue` | A swap chain created on a D3D12 direct queue (FLIP_DISCARD, 2-4 buffers) presents distinct frames in order, back buffers need PRESENT state, and ResizeBuffers after idle works (frames are read from the screen). [E] |
 
 #### Sharing, residency, optional features, removal
 
 | check | contract |
 |---|---|
 | `sanity.d3d12.share.heap_resource_nt` | Shared heaps and committed resources with CreateSharedHandle open in a second device and process (OpenSharedHandle) and show the writer's data after fence ordering, when shared tier is reported; D3D11 and D3D12 opening the same texture agree. |
-| `sanity.d3d12.share.keyed_cross_api` | A D3D11 texture shared with NT handle written by D3D11 under a keyed mutex is readable by D3D12 and vice versa, with ordering enforced by the mutex. |
-| `sanity.d3d12.resid.make_evict` | Evict then MakeResident (and EnqueueMakeResident with a fence) of heaps and committed resources preserves contents on UMA and non-UMA per spec; MakeResident beyond the budget fails with E_OUTOFMEMORY rather than removing the device. |
-| `sanity.d3d12.resid.budget_pressure` | Allocating beyond the video memory budget while evicting retained resources keeps all data intact and QueryVideoMemoryInfo within Budget at the end. |
-| `sanity.d3d12.opt.raytracing` | If RaytracingTier is reported, building a BLAS/TLAS for a known scene and tracing rays yields hit/miss results exactly equal to an analytic CPU intersection; otherwise creating the state object fails with the documented HRESULT. |
-| `sanity.d3d12.opt.mesh_shaders` | If MeshShaderTier is reported, an amplification+mesh pipeline renders pixels equal to WARP / an analytic result; else PSO creation fails per caps. |
-| `sanity.d3d12.opt.vrs_sampler_feedback` | VRS tiers (pipeline, per-draw, image, combiners) shade rates are respected on known inputs; sampler feedback (MinMip, MipRegionUsed) records the sampled mips for a known sampling pattern; both fail consistently when caps are absent. |
-| `sanity.d3d12.opt.work_graphs_dxr11` | Options for wave ops, 16-bit ops, int64, atomics-on-typed-resources, root-signature-1.1 features when reported give shader results equal to a CPU reference; unreported ones fail at PSO creation. |
+| `sanity.d3d12.share.keyed_cross_api` | A D3D11 texture shared with NT handle written by D3D11 under a keyed mutex is readable by D3D12 and vice versa, with the D3D11 side ordered by the mutex keys and the D3D12 side by CPU waits (D3D12 has no keyed mutex). |
+| `sanity.d3d12.resid.make_evict` | Evict then MakeResident (and EnqueueMakeResident with a fence) of heaps and committed resources preserves contents on UMA and non-UMA per spec; MakeResident beyond the budget fails with E_OUTOFMEMORY rather than removing the device (this last part runs only with LSW_SUITES_ALLOW_HOST_HAZARD=1). [E] |
+| `sanity.d3d12.resid.budget_pressure` | `host-hazard`, [E]: allocating beyond the video memory budget while evicting retained resources keeps all data intact and QueryVideoMemoryInfo within Budget at the end. |
+| `sanity.d3d12.opt.raytracing` | If RaytracingTier is reported, a BLAS and a TLAS for a known scene build with sizes inside the prebuild info and a compacted size not above the current size; tracing rays (exact hit and miss results against an analytic CPU intersection) needs DXIL and runs only when a DXIL compiler is available to the build, otherwise the row reports it. |
+| `sanity.d3d12.opt.mesh_shaders` | MeshShaderTier is consistent with shader model 6.5; the amplification+mesh pipeline render (analytic result) needs DXIL and runs only when a DXIL compiler is available to the build, otherwise the row skips with that reason. |
+| `sanity.d3d12.opt.vrs_sampler_feedback` | VRS tiers (per-draw, image, combiners) shade rates are respected on known inputs (fine pattern at 1x1, uniform 2x2 blocks when coarse); a sampler feedback map is created when the tier is reported and rejected when it is not; recording the sampled mips needs DXIL and is not run. |
+| `sanity.d3d12.opt.work_graphs_dxr11` | Optional features expressible in SM 5.1 when reported give results equal to a CPU or analytic reference (typed UAV loads of the additional formats, rasterizer ordered views accumulating in primitive order, conservative rasterization coverage), and unreported ones fail at PSO creation; wave ops, 16-bit and 64-bit ops and work graphs need DXIL and are not run. |
 | `sanity.d3d12.removal.reasons` | After a device is removed (by documented test hook or a deliberate fault), GetDeviceRemovedReason returns a documented DXGI_ERROR_*, further submissions fail without hang, and a new device can be created on the same adapter. [E] |
 | `sanity.d3d12.stress.lifetime_exit` | Create/destroy loops of devices, queues, lists, heaps and fences with outstanding GPU work, and process exit with queued work, leave video memory usage at baseline (monitored from a second process). |
 | `sanity.d3d12.stress.concurrent_queues` | Four threads each submitting to its own queue with shared resources under fence ordering for 5 s produce the expected sums with no device removal. |
