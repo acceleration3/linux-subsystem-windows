@@ -144,5 +144,10 @@ add_library(suite_sanity OBJECT
     interop/d3d_checks.cpp
     interop/d3d_process_checks.cpp
     interop/vk_checks.cpp
+    present/kit.cpp
+    present/chain_probe.cpp
+    present/path_checks.cpp
+    present/content_checks.cpp
+    present/alpha_checks.cpp
 )
 target_link_libraries(suite_sanity PUBLIC suite_core suite_support)

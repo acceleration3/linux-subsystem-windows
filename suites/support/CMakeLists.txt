@@ -98,6 +98,12 @@ add_library(suite_support OBJECT
     d3d11_frame_draw.cpp
     gl_frame_draw.cpp
     window_presenters.cpp
+    refresh_rate.cpp
+    frame_probe.cpp
+    frame_watcher.cpp
+    sequence_judge.cpp
+    present_path.cpp
+    present_path_native.cpp
     cl_interop.cpp
     wgl_interop.cpp
     vulkan_interop.cpp

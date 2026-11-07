@@ -18,6 +18,8 @@ public:
 
     [[nodiscard]] static std::vector<std::uint32_t> render(int frame, int width, int height);
 
+    [[nodiscard]] static std::vector<std::uint32_t> gradient_checker(int width, int height, int phase);
+
     [[nodiscard]] static std::uint32_t swap_red_blue(std::uint32_t value) {
         return (value & 0xFF00FF00u) | ((value & 0xFFu) << 16) | ((value >> 16) & 0xFFu);
     }

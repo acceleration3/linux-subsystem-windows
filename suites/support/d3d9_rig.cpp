@@ -99,13 +99,10 @@ POINT D3d9Rig::client_origin() const {
 
 bool D3d9Rig::make_window(const D3d9Settings& wanted, std::string& error) {
     const RECT monitor = monitor_rect();
-    RECT frame{0, 0, static_cast<LONG>(wanted.width), static_cast<LONG>(wanted.height)};
-    ::AdjustWindowRect(&frame, WS_OVERLAPPEDWINDOW, FALSE);
     TestWindowConfig config;
     config.x = static_cast<int>(monitor.left) + wanted.x;
     config.y = static_cast<int>(monitor.top) + wanted.y;
-    config.width = static_cast<int>(frame.right - frame.left);
-    config.height = static_cast<int>(frame.bottom - frame.top);
+    TestWindow::outer_size(config.x, config.y, static_cast<int>(wanted.width), static_cast<int>(wanted.height), config.width, config.height);
     config.visible = wanted.visible;
     if (!window.create(config, error)) {
         return false;

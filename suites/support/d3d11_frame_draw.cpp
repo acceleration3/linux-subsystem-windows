@@ -28,8 +28,12 @@ void D3d11FrameDraw::release() {
 void D3d11FrameDraw::fill(ID3D11RenderTargetView* view, const RECT& rect, std::uint32_t xrgb, float alpha) {
     const float color[4] = {static_cast<float>((xrgb >> 16) & 255u) / 255.0f, static_cast<float>((xrgb >> 8) & 255u) / 255.0f,
                             static_cast<float>(xrgb & 255u) / 255.0f, alpha};
+    fill_rgba(view, rect, color);
+}
+
+void D3d11FrameDraw::fill_rgba(ID3D11RenderTargetView* view, const RECT& rect, const float rgba[4]) {
     ID3D11DeviceContext* context = device_->context;
-    context->UpdateSubresource(constants_.get(), 0, nullptr, color, 0, 0);
+    context->UpdateSubresource(constants_.get(), 0, nullptr, rgba, 0, 0);
     ID3D11RenderTargetView* views[1] = {view};
     context->OMSetRenderTargets(1, views, nullptr);
     const D3D11_VIEWPORT viewport{static_cast<float>(rect.left), static_cast<float>(rect.top), static_cast<float>(rect.right - rect.left),

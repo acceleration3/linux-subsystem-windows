@@ -13,6 +13,8 @@ public:
 
     void fill(ID3D11RenderTargetView* view, const RECT& rect, std::uint32_t xrgb, float alpha = 1.0f);
 
+    void fill_rgba(ID3D11RenderTargetView* view, const RECT& rect, const float rgba[4]);
+
     void frame(ID3D11RenderTargetView* view, int width, int height, int index);
 
     void release();

@@ -99,14 +99,12 @@
 #include "sanity/fmt/bc_checks.hpp"
 #include "sanity/fmt/color_checks.hpp"
 #include "sanity/fmt/depth_checks.hpp"
-#include "sanity/fmt/display_checks.hpp"
 #include "sanity/fmt/footprint_checks.hpp"
 #include "sanity/fmt/roundtrip_checks.hpp"
 #include "sanity/fmt/support_checks.hpp"
 #include "sanity/fmt/value_checks.hpp"
 #include "sanity/fmt/yuv_checks.hpp"
 #include "sanity/interop/d3d_checks.hpp"
-#include "sanity/interop/d3d_process_checks.hpp"
 #include "sanity/interop/d3dcl_checks.hpp"
 #include "sanity/interop/gdi_capture_checks.hpp"
 #include "sanity/interop/gdi_d2d_checks.hpp"
@@ -118,6 +116,9 @@
 #include "sanity/interop/gld3d_checks.hpp"
 #include "sanity/interop/glcl_checks.hpp"
 #include "sanity/interop/vk_checks.hpp"
+#include "sanity/present/alpha_checks.hpp"
+#include "sanity/present/content_checks.hpp"
+#include "sanity/present/path_checks.hpp"
 #include "sanity/shader/cache_checks.hpp"
 #include "sanity/shader/cl_checks.hpp"
 #include "sanity/shader/determinism_checks.hpp"
@@ -125,7 +126,6 @@
 #include "sanity/shader/dxil_checks.hpp"
 #include "sanity/shader/glsl_checks.hpp"
 #include "sanity/shader/spirv_checks.hpp"
-#include "sanity/env/display_checks.hpp"
 #include "sanity/env/icd_checks.hpp"
 #include "sanity/env/install_checks.hpp"
 
@@ -683,6 +683,20 @@ void add(Registry& registry) {
     guarded(suite, {"sanity.interop.vk.opencl_external_memory_caps", {"interop", "vulkan", "opencl"}, false, 120, interop::VkChecks::opencl_external_memory_caps});
     guarded(suite, {"sanity.interop.vk.kmt_handles_caps", {"interop", "vulkan", "d3d11"}, false, 240, interop::VkChecks::kmt_handles_caps});
     guarded(suite, {"sanity.interop.vk.cross_process_present_chain", {"interop", "vulkan", "d3d11", "present", "dwm", "exclusive"}, true, 180, interop::VkChecks::cross_process_present_chain});
+    guarded(suite, {"sanity.present.path.d3d9_blt", {"present", "dwm", "d3d9", "exclusive"}, true, 120, present::PathChecks::d3d9_blt});
+    guarded(suite, {"sanity.present.path.d3d9ex_flip", {"present", "dwm", "d3d9", "exclusive"}, true, 120, present::PathChecks::d3d9ex_flip});
+    guarded(suite, {"sanity.present.path.dxgi_blt_sequential", {"present", "dwm", "dxgi", "d3d11", "exclusive"}, true, 120, present::PathChecks::dxgi_blt_sequential});
+    guarded(suite, {"sanity.present.path.dxgi_blt_discard", {"present", "dwm", "dxgi", "d3d11", "exclusive"}, true, 120, present::PathChecks::dxgi_blt_discard});
+    guarded(suite, {"sanity.present.path.dxgi_flip_sequential", {"present", "dwm", "dxgi", "d3d11", "exclusive"}, true, 120, present::PathChecks::dxgi_flip_sequential});
+    guarded(suite, {"sanity.present.path.dxgi_flip_discard", {"present", "dwm", "dxgi", "d3d11", "exclusive"}, true, 120, present::PathChecks::dxgi_flip_discard});
+    guarded(suite, {"sanity.present.path.d3d12_flip", {"present", "dwm", "dxgi", "d3d12", "exclusive"}, true, 120, present::PathChecks::d3d12_flip});
+    guarded(suite, {"sanity.present.path.gl_swapbuffers", {"present", "dwm", "gl", "exclusive"}, true, 120, present::PathChecks::gl_swapbuffers});
+    guarded(suite, {"sanity.present.path.vk_fifo", {"present", "dwm", "vulkan", "exclusive"}, true, 120, present::PathChecks::vk_fifo});
+    guarded(suite, {"sanity.present.path.vk_immediate_mailbox", {"present", "dwm", "vulkan", "exclusive"}, true, 120, present::PathChecks::vk_immediate_mailbox});
+    guarded(suite, {"sanity.present.content.exact_pixels", {"present", "dwm", "d3d9", "d3d11", "d3d12", "gl", "vulkan", "exclusive"}, true, 300, present::ContentChecks::exact_pixels});
+    guarded(suite, {"sanity.present.content.sizes_and_formats", {"present", "dwm", "dxgi", "d3d11", "formats", "exclusive"}, true, 240, present::ContentChecks::sizes_and_formats});
+    guarded(suite, {"sanity.present.content.scaling_modes", {"present", "dwm", "dxgi", "d3d11", "exclusive"}, true, 120, present::ContentChecks::scaling_modes});
+    guarded(suite, {"sanity.present.content.alpha_modes", {"present", "dwm", "dxgi", "d3d11", "exclusive"}, true, 120, present::AlphaChecks::alpha_modes});
 }
 
 }  // namespace lsw::suites::sanity

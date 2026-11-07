@@ -22,6 +22,9 @@ struct SwapOptions {
     bool visible = true;
     UINT device_flags = 0;
     bool warp = false;
+    int scaling = -1;
+    DXGI_ALPHA_MODE alpha = DXGI_ALPHA_MODE_UNSPECIFIED;
+    bool popup = false;
 };
 
 class SwapRig {

@@ -1121,20 +1121,20 @@ Each frame encodes its number in pixels so captures can read ordering, drops and
 
 | check | contract |
 |---|---|
-| `sanity.present.path.d3d9_blt` | D3D9 windowed Present shows every frame in order with exact content when presenting once per vsync-throttled step. |
-| `sanity.present.path.d3d9ex_flip` | D3D9Ex flip-style present with present statistics shows frames in order with exact content and non-decreasing present counts. |
-| `sanity.present.path.dxgi_blt_sequential` | DXGI bitblt-model SEQUENTIAL swapchain shows every presented frame once and in order (interval 1). |
-| `sanity.present.path.dxgi_blt_discard` | DXGI bitblt DISCARD never shows a lower frame number after a higher one. |
-| `sanity.present.path.dxgi_flip_sequential` | Flip-model SEQUENTIAL with interval 1 shows every frame, in order, exactly once. |
-| `sanity.present.path.dxgi_flip_discard` | Flip-model DISCARD never shows an older frame after a newer one, and the last presented frame is eventually shown. |
-| `sanity.present.path.d3d12_flip` | D3D12 flip swapchain with multiple buffers shows every frame in order at interval 1. |
-| `sanity.present.path.gl_swapbuffers` | GL SwapBuffers with interval 1 shows every frame once in order. |
-| `sanity.present.path.vk_fifo` | Vulkan FIFO presents every image exactly once in order. |
-| `sanity.present.path.vk_immediate_mailbox` | Vulkan IMMEDIATE and MAILBOX (when reported) never show an older frame after a newer one and the last frame is shown. |
-| `sanity.present.content.exact_pixels` | In every path above, the displayed frame's pixels equal what the application rendered (full surface compared for a gradient plus checker pattern), including odd window sizes. |
-| `sanity.present.content.sizes_and_formats` | Presenting RGBA8, BGRA8, sRGB, R10G10B10A2 and FP16 swapchains at 1x1, odd sizes and 4K show correct pixels. |
-| `sanity.present.content.scaling_modes` | DXGI_SCALING stretch/none/aspect-ratio when the window size differs from the buffer shows the documented geometry. |
-| `sanity.present.content.alpha_modes` | Premultiplied, ignore and straight alpha swapchain modes composite as documented against a known background (composition swapchain and layered cases). |
+| `sanity.present.path.d3d9_blt` | D3D9 windowed Present shows every frame in order with exact content when presenting once per vsync-throttled step: stepwise (each frame visible after its Present and not before), then a 40-frame burst at interval 1 in which no frame is missing where the capture sampled faster than 0.75 refresh periods. [E] |
+| `sanity.present.path.d3d9ex_flip` | D3D9Ex FLIPEX present with present statistics shows frames in order with exact content (stepwise and 40-frame burst) and nondecreasing PresentCount, PresentRefreshCount and SyncRefreshCount; GetLastPresentCount is at least the presents issued and not below the displayed count. [E] |
+| `sanity.present.path.dxgi_blt_sequential` | DXGI bitblt-model SEQUENTIAL swapchain (one buffer) shows every presented frame once and in order (interval 1; stepwise and 40-frame burst). [E] |
+| `sanity.present.path.dxgi_blt_discard` | DXGI bitblt DISCARD never shows a lower frame number after a higher one in a 48-frame burst at interval 0 and a 16-frame run at interval 1, never shows torn or unrecognised images, and the last frame is shown. [E] |
+| `sanity.present.path.dxgi_flip_sequential` | Flip-model SEQUENTIAL with interval 1 shows every frame, in order, exactly once (stepwise and 40-frame burst; frame statistics nondecreasing). [E] |
+| `sanity.present.path.dxgi_flip_discard` | Flip-model DISCARD never shows an older frame after a newer one in a 48-frame burst at interval 0 and a 16-frame run at interval 1, and the last presented frame is eventually shown. [E] |
+| `sanity.present.path.d3d12_flip` | D3D12 flip swapchain with three buffers (fence-protected reuse, no GPU wait between presents) shows every frame in order at interval 1. [E] |
+| `sanity.present.path.gl_swapbuffers` | GL SwapBuffers with interval 1 (WGL_EXT_swap_control when advertised) shows every frame once in order. [E] |
+| `sanity.present.path.vk_fifo` | Vulkan FIFO presents every image exactly once in order. [E] |
+| `sanity.present.path.vk_immediate_mailbox` | Vulkan IMMEDIATE and MAILBOX (each only when the surface reports it; skip when neither) never show an older frame after a newer one in a 48-frame burst and the last frame is shown. [E] |
+| `sanity.present.content.exact_pixels` | In every path above (11 path ids, three window sizes including odd ones), the displayed frame's pixels equal what the application rendered over the full surface (quadrant frames), and equal an uploaded gradient plus checker pattern on every path that has a pixel upload. [E] |
+| `sanity.present.content.sizes_and_formats` | Presenting RGBA8, BGRA8, sRGB (blt chain and sRGB view over a BGRA flip chain), R10G10B10A2 and FP16 swapchains at odd 131x77 (exact within 0, 1, 1, 1, 3 per channel respectively), 1x1 and 3840x2160 (stretched, quadrant centres) shows correct pixels; CheckFormatSupport DISPLAY and RENDER_TARGET agree with swap chain creation. [E] |
+| `sanity.present.content.scaling_modes` | DXGI_SCALING stretch/none/aspect-ratio when the window size differs from the buffer (64x64 buffer in a 128x96 client) shows the documented geometry: stretch covers the client, none shows the buffer 1:1 at the top-left, aspect-ratio keeps the square centred; none on a bitblt chain and aspect-ratio may be rejected with a documented invalid-argument code. [E] |
+| `sanity.present.content.alpha_modes` | Window swapchains with IGNORE alpha show the colour channels unchanged (premultiplied and straight are measured: creation result and colour); composition swapchains (DirectComposition, over a known opaque background visual) composite premultiplied and ignore as source-over within 2 per channel, straight when the runtime creates it. The layered-window cases are covered by sanity.interop.gdi.layered_per_pixel_alpha. [E] |
 
 #### Timing
 

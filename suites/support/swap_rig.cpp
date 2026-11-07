@@ -23,7 +23,13 @@ bool SwapRig::open(const SwapOptions& wanted, std::string& error) {
     TestWindowConfig config;
     config.x = wanted.x;
     config.y = wanted.y;
-    TestWindow::outer_size(config.x, config.y, static_cast<int>(wanted.width), static_cast<int>(wanted.height), config.width, config.height);
+    if (wanted.popup) {
+        config.popup = true;
+        config.width = static_cast<int>(wanted.width);
+        config.height = static_cast<int>(wanted.height);
+    } else {
+        TestWindow::outer_size(config.x, config.y, static_cast<int>(wanted.width), static_cast<int>(wanted.height), config.width, config.height);
+    }
     config.visible = wanted.visible;
     if (!window.create(config, error)) {
         return false;
@@ -50,9 +56,13 @@ HRESULT SwapRig::try_create(const SwapOptions& wanted, HWND hwnd, Com<IDXGISwapC
     desc.BufferCount = wanted.buffers;
     desc.SwapEffect = wanted.effect;
     desc.Flags = wanted.flags;
+    desc.AlphaMode = wanted.alpha;
     desc.Scaling = DXGI_SCALING_STRETCH;
     if (wanted.effect == DXGI_SWAP_EFFECT_FLIP_DISCARD || wanted.effect == DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL) {
         desc.Scaling = DXGI_SCALING_NONE;
+    }
+    if (wanted.scaling >= 0) {
+        desc.Scaling = static_cast<DXGI_SCALING>(wanted.scaling);
     }
     return factory->CreateSwapChainForHwnd(device.device, hwnd, &desc, nullptr, nullptr, out.put());
 }

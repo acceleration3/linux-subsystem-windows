@@ -29,4 +29,17 @@ std::vector<std::uint32_t> FrameImage::render(int frame, int width, int height) 
     return out;
 }
 
+std::vector<std::uint32_t> FrameImage::gradient_checker(int width, int height, int phase) {
+    std::vector<std::uint32_t> out(static_cast<std::size_t>(width) * static_cast<std::size_t>(height));
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            const std::uint32_t r = width > 1 ? static_cast<std::uint32_t>(x * 255 / (width - 1)) : 128u;
+            const std::uint32_t g = height > 1 ? static_cast<std::uint32_t>(y * 255 / (height - 1)) : 128u;
+            const std::uint32_t b = (((x / 4) + (y / 4) + phase) & 1) != 0 ? 0xC4u : 0x3Bu;
+            out[static_cast<std::size_t>(y) * static_cast<std::size_t>(width) + static_cast<std::size_t>(x)] = 0xFF000000u | (r << 16) | (g << 8) | b;
+        }
+    }
+    return out;
+}
+
 }  // namespace lsw::suites
