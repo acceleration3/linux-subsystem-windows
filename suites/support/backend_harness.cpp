@@ -1,5 +1,6 @@
 #include "support/backend_harness.hpp"
 
+#include "support/api_policy.hpp"
 #include "support/artifact_writer.hpp"
 #include "support/compare.hpp"
 #include "support/pattern.hpp"
@@ -11,6 +12,10 @@ namespace lsw::suites {
 
 std::unique_ptr<GpuBackend> BackendHarness::open(const std::string& api, AvAdapter& adapter, std::string& error) {
     if (!TargetAdapter::pick(adapter, error)) {
+        return nullptr;
+    }
+    if (ApiPolicy::is_skipped(api)) {
+        error = "api " + api + " excluded by LSW_SUITES_SKIP_APIS";
         return nullptr;
     }
     std::unique_ptr<GpuBackend> backend = GpuBackends::make(api);
@@ -71,13 +76,27 @@ bool BackendHarness::roundtrip(GpuBackend& backend, std::uint64_t size, std::uin
 
 bool BackendHarness::fill_and_verify(GpuBackend& backend, GpuBuffer& buffer, std::uint64_t seed, std::uint64_t size,
                                      Context& context, std::string& error) {
-    std::vector<std::uint8_t> expected(static_cast<std::size_t>(size));
-    Pattern::fill(seed, 0, expected.data(), expected.size());
-    std::vector<std::uint8_t> actual(expected.size(), 0xCD);
-    if (!backend.upload(buffer, 0, expected.data(), size, error) || !backend.download(buffer, 0, actual.data(), size, error)) {
-        return false;
+    const std::uint64_t window = std::min<std::uint64_t>(size, kWindow);
+    std::vector<std::uint8_t> expected(static_cast<std::size_t>(window));
+    for (std::uint64_t offset = 0; offset < size; offset += window) {
+        const std::uint64_t length = std::min<std::uint64_t>(window, size - offset);
+        Pattern::fill(seed, offset, expected.data(), static_cast<std::size_t>(length));
+        if (!backend.upload(buffer, offset, expected.data(), length, error)) {
+            return false;
+        }
     }
-    return verify(context, backend.name() + " size " + std::to_string(size), expected.data(), actual.data(), size, error);
+    std::vector<std::uint8_t> actual(expected.size(), 0xCD);
+    for (std::uint64_t offset = 0; offset < size; offset += window) {
+        const std::uint64_t length = std::min<std::uint64_t>(window, size - offset);
+        Pattern::fill(seed, offset, expected.data(), static_cast<std::size_t>(length));
+        std::fill(actual.begin(), actual.end(), static_cast<std::uint8_t>(0xCD));
+        if (!backend.download(buffer, offset, actual.data(), length, error) ||
+            !verify(context, backend.name() + " size " + std::to_string(size) + " offset " + std::to_string(offset),
+                    expected.data(), actual.data(), length, error)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 }  // namespace lsw::suites

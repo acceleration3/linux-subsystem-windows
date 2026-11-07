@@ -272,17 +272,9 @@ Outcome SizeChecks::readback_every_size(Context& context) {
                 }
                 continue;
             }
-            std::vector<std::uint8_t> expected(static_cast<std::size_t>(size));
-            Pattern::fill(++seed, 0, expected.data(), expected.size());
             std::string error;
-            if (!backend.upload(*buffer, 0, expected.data(), size, error)) {
+            if (!BackendHarness::fill_and_verify(backend, *buffer, ++seed, size, context, error)) {
                 problems.add(api + ": " + error);
-                return;
-            }
-            std::vector<std::uint8_t> poison(expected.size(), 0xA5);
-            if (!backend.download(*buffer, 0, poison.data(), size, error) ||
-                !BackendHarness::verify(context, api + " readback " + size_text(size), expected.data(), poison.data(), size, error)) {
-                problems.add(error);
                 return;
             }
         }

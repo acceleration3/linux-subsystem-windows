@@ -2,6 +2,7 @@
 
 #include "core/child_mode.hpp"
 #include "support/api_loop.hpp"
+#include "support/api_policy.hpp"
 #include "support/child_runs.hpp"
 #include "support/d3d12_backend.hpp"
 #include "support/dxgi_budget.hpp"
@@ -261,7 +262,7 @@ Outcome EvictMapChecks::exit_with_live_mappings(Context& context) {
     AvAdapter adapter;
     std::string error;
     if (ChildMode::active()) {
-        for (const std::string api : {"vulkan", "d3d12", "opencl", "d3d11"}) {
+        for (const std::string& api : ApiPolicy::filter({"vulkan", "d3d12", "opencl", "d3d11"})) {
             std::unique_ptr<GpuBackend> backend = BackendHarness::open(api, adapter, error);
             if (backend == nullptr) {
                 return Outcome::fail(error);
@@ -287,7 +288,11 @@ Outcome EvictMapChecks::exit_with_live_mappings(Context& context) {
     if (!TargetAdapter::pick(adapter, error)) {
         return Outcome::fail(error);
     }
-    std::unique_ptr<GpuBackend> mine = BackendHarness::open("d3d12", adapter, error);
+    const std::string own_api = ApiPolicy::first_enabled({"d3d12", "d3d11", "vulkan", "opencl"});
+    if (own_api.empty()) {
+        return Context::skip("every API of this row is excluded by LSW_SUITES_SKIP_APIS");
+    }
+    std::unique_ptr<GpuBackend> mine = BackendHarness::open(own_api, adapter, error);
     if (mine == nullptr) {
         return Outcome::fail(error);
     }

@@ -38,6 +38,15 @@ bool ApiPolicy::is_skipped(const std::string& api) {
     return std::find(list.begin(), list.end(), api) != list.end();
 }
 
+std::string ApiPolicy::first_enabled(const std::vector<std::string>& preferred) {
+    for (const std::string& api : preferred) {
+        if (!is_skipped(api)) {
+            return api;
+        }
+    }
+    return {};
+}
+
 std::vector<std::string> ApiPolicy::filter(const std::vector<std::string>& apis) {
     std::vector<std::string> out;
     for (const std::string& api : apis) {

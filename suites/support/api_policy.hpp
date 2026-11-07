@@ -15,5 +15,7 @@ public:
     [[nodiscard]] static std::vector<std::string> filter(const std::vector<std::string>& apis);
 
     [[nodiscard]] static std::vector<std::string> known();
+
+    [[nodiscard]] static std::string first_enabled(const std::vector<std::string>& preferred);
 };
 }  // namespace lsw::suites

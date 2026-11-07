@@ -12,6 +12,8 @@
 namespace lsw::suites {
 class BackendHarness {
 public:
+    static constexpr std::uint64_t kWindow = 16ull << 20;
+
     [[nodiscard]] static std::unique_ptr<GpuBackend> open(const std::string& api, AvAdapter& adapter,
                                                           std::string& error);
 

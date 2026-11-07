@@ -356,7 +356,7 @@ Outcome LeakChecks::contexts_devices(Context& context) {
     if (!pick(adapter, error)) {
         return Outcome::fail(error);
     }
-    for (const std::string api : {"d3d11", "d3d12", "vulkan", "opencl", "gl", "d3d9"}) {
+    for (const std::string& api : ApiPolicy::filter({"d3d11", "d3d12", "vulkan", "opencl", "gl", "d3d9"})) {
         LeakLoop::run(context, problems, api + ".devices", adapter.luid, kDeviceCount, [&](int, std::string& detail) {
             std::unique_ptr<GpuBackend> backend = GpuBackends::make(api);
             return backend != nullptr && backend->init(adapter.luid, detail);
@@ -614,7 +614,11 @@ Outcome LeakChecks::process_exit_releases(Context& context) {
     if (!pick(adapter, error)) {
         return Outcome::fail(error);
     }
-    std::unique_ptr<GpuBackend> d3d12 = BackendHarness::open("d3d12", adapter, error);
+    const std::string own_api = ApiPolicy::first_enabled({"d3d12", "d3d11", "vulkan", "opencl"});
+    if (own_api.empty()) {
+        return Context::skip("every API of this row is excluded by LSW_SUITES_SKIP_APIS");
+    }
+    std::unique_ptr<GpuBackend> d3d12 = BackendHarness::open(own_api, adapter, error);
     if (d3d12 == nullptr) {
         return Outcome::fail(error);
     }
