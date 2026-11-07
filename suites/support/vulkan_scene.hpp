@@ -42,6 +42,10 @@ struct SceneOptions {
     VkBuffer vertex_buffer = VK_NULL_HANDLE;
     VkBuffer index_buffer = VK_NULL_HANDLE;
     VkBuffer indirect_buffer = VK_NULL_HANDLE;
+    VkQueryPool occlusion_pool = VK_NULL_HANDLE;
+    VkQueryControlFlags occlusion_flags = 0;
+    VkQueryPool statistics_pool = VK_NULL_HANDLE;
+    std::uint32_t query_count = 0;
 };
 
 struct SceneResult {

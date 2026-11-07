@@ -107,7 +107,7 @@ Outcome ComputeChecks::vs_cpu(Context& context) {
                 const std::vector<std::uint32_t> input = Kit::words(0x9200, words);
                 std::memcpy(ops.input.mapped, input.data(), words * 4);
                 ops.input.publish();
-                std::memset(ops.output.mapped, 0, ops.output.size);
+                std::memset(ops.output.mapped, 0, static_cast<std::size_t>(ops.output.size));
                 ops.output.publish();
                 set_params(ops, 1, 0, static_cast<std::uint32_t>(words));
                 const std::uint32_t push[2] = {2, 0};
@@ -416,7 +416,7 @@ Outcome ComputeChecks::pools_templates_samplers(Context& context) {
                 const std::vector<std::uint32_t> values = Kit::words(0x9600, words);
                 std::memcpy(input.mapped, values.data(), words * 4);
                 input.publish();
-                std::memset(params.mapped, 0, params.size);
+                std::memset(params.mapped, 0, static_cast<std::size_t>(params.size));
                 params.words()[0] = 2;
                 params.words()[1] = 0;
                 params.words()[2] = static_cast<std::uint32_t>(words);

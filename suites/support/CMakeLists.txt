@@ -73,6 +73,7 @@ add_library(suite_support OBJECT
     vulkan_image_io.cpp
     vulkan_rig.cpp
     vulkan_scene.cpp
+    vulkan_swapchain.cpp
     vulkan_shaders.cpp
     vulkan_table.cpp
     vulkan_tools.cpp

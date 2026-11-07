@@ -741,7 +741,7 @@ Outcome ResourceChecks::sparse_caps(Context& context) {
                 void* mapped = nullptr;
                 if (Kit::succeeds(problems, "host buffer", Kit::host_buffer(rig, host, piece * pieces)) &&
                     Kit::succeeds(problems, "map of the sparse memory", rig.fn.vkMapMemory(rig.device, memory, 0, VK_WHOLE_SIZE, 0, &mapped))) {
-                    std::vector<std::uint8_t> pattern(piece * pieces);
+                    std::vector<std::uint8_t> pattern(static_cast<std::size_t>(piece * pieces));
                     Pattern::fill(0x5BA5, 0, pattern.data(), pattern.size());
                     std::memcpy(host.mapped, pattern.data(), pattern.size());
                     host.publish();

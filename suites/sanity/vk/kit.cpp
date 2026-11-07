@@ -128,6 +128,40 @@ bool Kit::same_words(Context& context, Problems& problems, const std::string& wh
     return true;
 }
 
+VkCommandBuffer Kit::record(VulkanRig& rig, VulkanQueue& queue, const std::function<void(VkCommandBuffer)>& body, VkCommandBufferUsageFlags flags,
+                            VkResult* code) {
+    VkCommandBufferAllocateInfo allocate{};
+    allocate.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    allocate.commandPool = queue.pool;
+    allocate.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    allocate.commandBufferCount = 1;
+    VkCommandBuffer commands = nullptr;
+    VkResult result = rig.fn.vkAllocateCommandBuffers(rig.device, &allocate, &commands);
+    if (result == VK_SUCCESS) {
+        VkCommandBufferBeginInfo begin{};
+        begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        begin.flags = flags;
+        result = rig.fn.vkBeginCommandBuffer(commands, &begin);
+        if (result == VK_SUCCESS) {
+            body(commands);
+            result = rig.fn.vkEndCommandBuffer(commands);
+        }
+    }
+    if (code != nullptr) {
+        *code = result;
+    }
+    return result == VK_SUCCESS ? commands : nullptr;
+}
+
+void Kit::transfer_barrier(VulkanRig& rig, VkCommandBuffer commands, VkPipelineStageFlags source, VkAccessFlags source_access,
+                           VkPipelineStageFlags destination, VkAccessFlags destination_access) {
+    VkMemoryBarrier barrier{};
+    barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+    barrier.srcAccessMask = source_access;
+    barrier.dstAccessMask = destination_access;
+    rig.fn.vkCmdPipelineBarrier(commands, source, destination, 0, 1, &barrier, 0, nullptr, 0, nullptr);
+}
+
 std::string Kit::sanitize(std::string text) {
     for (char& c : text) {
         if (!(std::isalnum(static_cast<unsigned char>(c)) != 0 || c == '_' || c == '-')) {

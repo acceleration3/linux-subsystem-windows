@@ -60,6 +60,12 @@ public:
     static bool same_words(Context& context, Problems& problems, const std::string& what,
                            const std::vector<std::uint32_t>& expected, const std::vector<std::uint32_t>& actual);
 
+    [[nodiscard]] static VkCommandBuffer record(VulkanRig& rig, VulkanQueue& queue, const std::function<void(VkCommandBuffer)>& body,
+                                                VkCommandBufferUsageFlags flags = 0, VkResult* code = nullptr);
+
+    static void transfer_barrier(VulkanRig& rig, VkCommandBuffer commands, VkPipelineStageFlags source, VkAccessFlags source_access,
+                                 VkPipelineStageFlags destination, VkAccessFlags destination_access);
+
     [[nodiscard]] static std::string sanitize(std::string text);
 
     [[nodiscard]] static VkFormatProperties format_properties(VulkanRig& rig, VkFormat format);

@@ -351,7 +351,14 @@ void VulkanScene::draw_all(VkCommandBuffer commands, const std::vector<SceneRect
     } else if (options_.kind == SceneKind::Line) {
         vertices = 2;
     }
+    if (options_.statistics_pool != VK_NULL_HANDLE) {
+        rig_->fn.vkCmdBeginQuery(commands, options_.statistics_pool, 0, 0);
+    }
+    std::uint32_t query = 0;
     for (const SceneRect& rect : rects) {
+        if (options_.occlusion_pool != VK_NULL_HANDLE) {
+            rig_->fn.vkCmdBeginQuery(commands, options_.occlusion_pool, query, options_.occlusion_flags);
+        }
         Push push{};
         const float vw = static_cast<float>(viewport_width());
         const float vh = static_cast<float>(viewport_height());
@@ -367,6 +374,9 @@ void VulkanScene::draw_all(VkCommandBuffer commands, const std::vector<SceneRect
         rig_->fn.vkCmdPushConstants(commands, layout_.get(), push_stages_, 0, kPushSize, &push);
         if (options_.kind != SceneKind::Vertex) {
             rig_->fn.vkCmdDraw(commands, vertices, 1, 0, 0);
+            if (options_.occlusion_pool != VK_NULL_HANDLE) {
+                rig_->fn.vkCmdEndQuery(commands, options_.occlusion_pool, query++);
+            }
             continue;
         }
         const VkDeviceSize zero = 0;
@@ -384,6 +394,9 @@ void VulkanScene::draw_all(VkCommandBuffer commands, const std::vector<SceneRect
             }
         }
     }
+    if (options_.statistics_pool != VK_NULL_HANDLE) {
+        rig_->fn.vkCmdEndQuery(commands, options_.statistics_pool, 0);
+    }
 }
 
 void VulkanScene::record(VkCommandBuffer commands, const std::vector<SceneRect>& rects, const float clear_color[4],
@@ -399,6 +412,12 @@ void VulkanScene::record(VkCommandBuffer commands, const std::vector<SceneRect>&
         ++clear_count;
     };
     const VkRect2D area{{0, 0}, {options_.width, options_.height}};
+    if (options_.occlusion_pool != VK_NULL_HANDLE) {
+        rig.fn.vkCmdResetQueryPool(commands, options_.occlusion_pool, 0, options_.query_count);
+    }
+    if (options_.statistics_pool != VK_NULL_HANDLE) {
+        rig.fn.vkCmdResetQueryPool(commands, options_.statistics_pool, 0, 1);
+    }
     if (!options_.dynamic) {
         push_color();
         if (options_.second) {

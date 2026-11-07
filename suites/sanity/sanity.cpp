@@ -75,6 +75,12 @@
 #include "sanity/vk/resource_checks.hpp"
 #include "sanity/vk/transfer_checks.hpp"
 #include "sanity/vk/compute_checks.hpp"
+#include "sanity/vk/graphics_checks.hpp"
+#include "sanity/vk/sync_checks.hpp"
+#include "sanity/vk/query_checks.hpp"
+#include "sanity/vk/wsi_checks.hpp"
+#include "sanity/vk/robust_checks.hpp"
+#include "sanity/vk/external_checks.hpp"
 #include "sanity/env/display_checks.hpp"
 #include "sanity/env/icd_checks.hpp"
 #include "sanity/env/install_checks.hpp"
@@ -487,6 +493,26 @@ void add(Registry& registry) {
     guarded(suite, {"sanity.vk.transfer.clear_fill_update", {"vulkan", "formats"}, false, 120, vk::TransferChecks::clear_fill_update});
     guarded(suite, {"sanity.vk.compute.vs_cpu", {"vulkan"}, false, 120, vk::ComputeChecks::vs_cpu});
     guarded(suite, {"sanity.vk.descriptor.pools_templates_samplers", {"vulkan"}, false, 90, vk::ComputeChecks::pools_templates_samplers});
+    guarded(suite, {"sanity.vk.graphics.vs_twin", {"vulkan", "msaa"}, false, 120, vk::GraphicsChecks::vs_twin});
+    guarded(suite, {"sanity.vk.graphics.pipeline_features", {"vulkan"}, false, 120, vk::GraphicsChecks::pipeline_features});
+    guarded(suite, {"sanity.vk.sync.fences", {"vulkan"}, false, 90, vk::SyncChecks::fences});
+    guarded(suite, {"sanity.vk.sync.binary_semaphores", {"vulkan"}, false, 120, vk::SyncChecks::binary_semaphores});
+    guarded(suite, {"sanity.vk.sync.timeline_semaphores", {"vulkan"}, false, 90, vk::SyncChecks::timeline_semaphores});
+    guarded(suite, {"sanity.vk.sync.events_barriers", {"vulkan"}, false, 120, vk::SyncChecks::events_barriers});
+    guarded(suite, {"sanity.vk.sync.memory_model", {"vulkan"}, false, 120, vk::SyncChecks::memory_model});
+    guarded(suite, {"sanity.vk.sync.submit2_and_wait_idle", {"vulkan"}, false, 90, vk::SyncChecks::submit2_and_wait_idle});
+    guarded(suite, {"sanity.vk.query.timestamps", {"vulkan"}, false, 90, vk::QueryChecks::timestamps});
+    guarded(suite, {"sanity.vk.cmd.buffers_reset_reuse", {"vulkan"}, false, 90, vk::QueryChecks::buffers_reset_reuse});
+    guarded(suite, {"sanity.vk.wsi.surface_caps_consistent", {"vulkan", "present"}, true, 90, vk::WsiChecks::surface_caps_consistent});
+    guarded(suite, {"sanity.vk.wsi.fifo_every_image_in_order", {"vulkan", "present", "dwm", "exclusive"}, true, 90, vk::WsiChecks::fifo_every_image_in_order});
+    guarded(suite, {"sanity.vk.wsi.mailbox_immediate_caps", {"vulkan", "present", "dwm", "exclusive"}, true, 120, vk::WsiChecks::mailbox_immediate_caps});
+    guarded(suite, {"sanity.vk.wsi.out_of_date_suboptimal", {"vulkan", "present", "dwm", "exclusive"}, true, 90, vk::WsiChecks::out_of_date_suboptimal});
+    guarded(suite, {"sanity.vk.wsi.acquire_timeouts", {"vulkan", "present"}, false, 90, vk::WsiChecks::acquire_timeouts});
+    guarded(suite, {"sanity.vk.wsi.minimized_and_destroyed", {"vulkan", "present", "dwm", "exclusive"}, true, 120, vk::WsiChecks::minimized_and_destroyed});
+    guarded(suite, {"sanity.vk.device.independent_devices", {"vulkan"}, false, 90, vk::RobustChecks::independent_devices});
+    guarded(suite, {"sanity.vk.validation.reference_workload", {"vulkan", "present"}, true, 120, vk::RobustChecks::reference_workload});
+    guarded(suite, {"sanity.vk.external.memory_caps_consistent", {"vulkan", "interop"}, false, 90, vk::ExternalChecks::memory_caps_consistent});
+    guarded(suite, {"sanity.vk.external.semaphore_fence_caps", {"vulkan", "interop"}, false, 90, vk::ExternalChecks::semaphore_fence_caps});
 }
 
 }  // namespace lsw::suites::sanity

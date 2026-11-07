@@ -128,7 +128,7 @@ GPUs and runs, and so the benchmark suite later shares the schema.
 
 ## 4. The sanity catalogue
 
-662 checks in 26 areas, plus white-box diagnostics recorded as measures. Ids are `sanity.<area>.<group>.<name>`;
+664 checks in 26 areas, plus white-box diagnostics recorded as measures. Ids are `sanity.<area>.<group>.<name>`;
 `[E]` marks exclusive checks; `(x86)` and `(x64)` mark bitness-specific ones; every other check runs in both
 builds. Area counts are in the headings.
 
@@ -907,23 +907,23 @@ Each loop creates and destroys 5000 objects of the kind with its largest practic
 | `sanity.cl.queue.finish_flush_release` | clFinish returns only after all work completes; releasing queues/events/memory with commands still in flight neither crashes nor corrupts other work. |
 | `sanity.cl.error.codes_documented` | Representative invalid calls (null context, bad handle, size 0 buffer, too-large allocation, bad flags) return the spec's error codes and the context remains usable. |
 
-### 4.15 Vulkan (39)
+### 4.15 Vulkan (41)
 
 #### Instance, device and memory
 
 | check | contract |
 |---|---|
 | `sanity.vk.instance.version_layers_extensions` | vkEnumerateInstanceVersion >= 1.1, instance creation at the reported apiVersion succeeds, requesting an unsupported extension/layer returns VK_ERROR_EXTENSION/LAYER_NOT_PRESENT, and each advertised instance function resolves. |
-| `sanity.vk.device.props_features_consistent` | Properties2/Features2 chains agree with the basic structures, device apiVersion <= instance, and each feature reported true can be enabled at vkCreateDevice and each false feature enabled fails with VK_ERROR_FEATURE_NOT_PRESENT. |
+| `sanity.vk.device.props_features_consistent` | Properties2/Features2 chains agree with the basic structures (limits, UUIDs, LUID, Vulkan11/12 structs), the device apiVersion has major version 1, and each feature reported true can be enabled at vkCreateDevice while each false feature enabled fails with VK_ERROR_FEATURE_NOT_PRESENT; an unsupported device extension fails with VK_ERROR_EXTENSION_NOT_PRESENT. |
 | `sanity.vk.device.limits_minimums_honoured` | All reported limits meet the spec minimums, and work at the stated limit (max push constants, descriptors, workgroup size, image dimension, viewport) executes correctly. |
 | `sanity.vk.device.queue_families` | Queue family flags, counts and timestampValidBits are consistent; a queue of each family accepts only commands matching its flags with the right synchronisation and submits work to completion. |
 | `sanity.vk.device.extensions_match_functions` | Every advertised device extension's functions resolve through vkGetDeviceProcAddr and its feature structs chain without error. |
-| `sanity.vk.memory.every_type_allocates` | Each memory type allocates (small and a large chunk up to 1/4 of the heap size), binds to a buffer and image of compatible memoryTypeBits, and frees. |
-| `sanity.vk.memory.host_visible_map` | HOST_VISIBLE types map, written data is readable back through a copy to a device buffer and readback, and mapping the same memory twice returns VK_ERROR_MEMORY_MAP_FAILED. |
+| `sanity.vk.memory.every_type_allocates` | Each memory type allocates (1 MiB and a large chunk of up to 128 MiB, 1/4 of the heap and the budget at most), binds to a buffer and image of compatible memoryTypeBits, and frees; requirement size and alignment are valid. |
+| `sanity.vk.memory.host_visible_map` | HOST_VISIBLE types map aligned to minMemoryMapAlignment, written data is readable back through a copy to a device buffer and readback, contents survive unmap and map, and a partial map writes the right bytes. |
 | `sanity.vk.memory.host_coherent_no_flush` | In HOST_COHERENT memory, host writes are seen by a submitted GPU copy and GPU writes by the host after fence wait, with no flush/invalidate calls. |
 | `sanity.vk.memory.noncoherent_flush_invalidate` | In non-coherent HOST_VISIBLE memory, flushing mapped ranges (aligned to nonCoherentAtomSize) publishes host writes to the device and invalidating makes device writes visible. |
-| `sanity.vk.memory.device_local_and_budget` | DEVICE_LOCAL allocations work; with VK_EXT_memory_budget the reported heapUsage rises on allocation and falls after free, never exceeds heapBudget with successful allocations tracked. |
-| `sanity.vk.memory.allocation_limits` | Allocating until maxMemoryAllocationCount fails further with VK_ERROR_TOO_MANY_OBJECTS (or OUT_OF_*_MEMORY) and the device continues working after freeing; allocating beyond heap size fails with VK_ERROR_OUT_OF_DEVICE_MEMORY without loss. |
+| `sanity.vk.memory.device_local_and_budget` | DEVICE_LOCAL allocations work; with VK_EXT_memory_budget the reported heapUsage rises on allocation and falls after free, never exceeds heapBudget with successful allocations tracked. [E] |
+| `sanity.vk.memory.allocation_limits` | `host-hazard`, [E]: allocating maxMemoryAllocationCount (capped at 4096) small blocks succeeds and frees; repeated allocation of up to heap size chunks either succeeds or fails only with VK_ERROR_OUT_OF_DEVICE_MEMORY, VK_ERROR_OUT_OF_HOST_MEMORY or VK_ERROR_TOO_MANY_OBJECTS; the device works after freeing. |
 | `sanity.vk.memory.dedicated_and_aliasing` | Dedicated allocation requirements are consistent, and aliased buffers on one allocation with proper barriers see each other's data. |
 
 #### Buffers, images, transfers
@@ -943,28 +943,30 @@ Each loop creates and destroys 5000 objects of the kind with its largest practic
 | check | contract |
 |---|---|
 | `sanity.vk.compute.vs_cpu` | Compute shaders (SSBO/UBO/push constant/shared memory/atomic/subgroup per caps) produce results equal to the CPU for several dispatch sizes including indirect and zero-size. |
-| `sanity.vk.graphics.vs_twin` | A render pass (and dynamic rendering) scene with depth, blending, MSAA and multiple attachments equals the analytic result and the GL or WARP D3D twin within tolerance. |
+| `sanity.vk.graphics.vs_twin` | A render pass (and dynamic rendering) scene with depth, blending, MSAA, BGRA targets and two colour attachments equals the analytic CPU result, with pixel-centred rectangles of exact coverage. |
 | `sanity.vk.graphics.pipeline_features` | Tessellation, geometry shaders, line/point sizes, wide lines, depth clamp, secondary command buffers and pipeline cache reuse render correctly when the feature is reported. |
+| `sanity.vk.descriptor.pools_templates_samplers` | Descriptor pools with and without FREE_DESCRIPTOR_SET allocate up to maxSets and fail further allocation with VK_ERROR_OUT_OF_POOL_MEMORY or FRAGMENTED_POOL, reset and free make sets available again, update templates, dynamic uniform offsets and immutable samplers produce the CPU result. |
+| `sanity.vk.cmd.buffers_reset_reuse` | Command buffers from pools with and without per-buffer reset re-record and re-submit correctly (ONE_TIME_SUBMIT, SIMULTANEOUS_USE, vkResetCommandBuffer, vkResetCommandPool) and secondary buffers execute from primaries. |
 | `sanity.vk.sync.fences` | A fence signals only after the submitted work completes (readback after wait is final), WaitForFences with timeout 0 and short timeout return VK_TIMEOUT correctly and ResetFences works. |
 | `sanity.vk.sync.binary_semaphores` | Cross-queue and cross-submit binary semaphore dependencies order work correctly, and each signal is waited exactly once. |
 | `sanity.vk.sync.timeline_semaphores` | Timeline semaphore values advance monotonically, host waits/signals and device waits on future values interleave correctly, and values stay within maxTimelineSemaphoreValueDifference. |
 | `sanity.vk.sync.events_barriers` | Events and pipeline barriers (execution plus memory dependencies, layout transitions) order writes before reads across all stage pairs; the same program without the barrier is not asserted. |
 | `sanity.vk.sync.memory_model` | With vulkanMemoryModel features reported, release/acquire shared-memory message passing across workgroups on atomic variables never observes stale data across many iterations. |
 | `sanity.vk.sync.submit2_and_wait_idle` | vkQueueSubmit2 with stage-specific semaphores and vkDeviceWaitIdle/vkQueueWaitIdle return only after all work completes. |
-| `sanity.vk.query.timestamps` | Timestamp queries are monotonic along a queue with timestampPeriod conversion; with VK_EXT_calibrated_timestamps the device/host pair relates sanely to QPC. Occlusion and pipeline statistic queries match analytic counts. |
-| `sanity.vk.device.lost_reported` | After forcing a GPU fault via an infinite or invalid-access workload (caps permitting), pending waits return VK_ERROR_DEVICE_LOST and a new device after destroying the first works. [E] |
+| `sanity.vk.query.timestamps` | Timestamp queries are monotonic along each queue (timestampValidBits masked) with timestampPeriod conversion, availability and VK_QUERY_RESULT_WAIT_BIT semantics hold, with VK_EXT_calibrated_timestamps the device/QPC pair relates sanely, and occlusion and (when the feature is on) pipeline statistic queries match analytic counts. |
+| `sanity.vk.device.independent_devices` | Two devices on one adapter work side by side, the second keeps working after the first is destroyed, and a third device created afterwards works (device loss is not provoked: forcing it needs invalid usage or unbounded shaders). |
 | `sanity.vk.validation.reference_workload` | A reference workload (buffers, images, compute, graphics, swapchain) run under the Khronos validation layer produces zero errors and zero warnings. |
 
 #### WSI
 
 | check | contract |
 |---|---|
-| `sanity.vk.wsi.surface_caps_consistent` | Surface capabilities, formats and present modes are consistent with swapchain creation: every reported (format, mode, image count within min/max, extent in range) creates, and out-of-range values fail. |
-| `sanity.vk.wsi.fifo_every_image_in_order` | In FIFO mode N sequential frames with their numbers encoded in pixels are all presented, once each, in order (verified by capture). |
-| `sanity.vk.wsi.mailbox_immediate_caps` | MAILBOX and IMMEDIATE are used only if reported; mailbox never shows an older frame after a newer one, and immediate exceeds the refresh rate when unthrottled. |
-| `sanity.vk.wsi.out_of_date_suboptimal` | After resizing the window, acquire or present returns VK_ERROR_OUT_OF_DATE_KHR or SUBOPTIMAL_KHR per spec, and a recreated swapchain at the new extent presents correctly. |
+| `sanity.vk.wsi.surface_caps_consistent` | Surface capabilities, formats and present modes are consistent (FIFO present, extent in range and equal to the client area, two-call VK_INCOMPLETE) and every reported (format, mode, image count) creates a swapchain granting at least the requested images. [E] |
+| `sanity.vk.wsi.fifo_every_image_in_order` | In FIFO mode N sequential frames with their numbers encoded in pixels are all presented, in order (verified by screen reads). [E] |
+| `sanity.vk.wsi.mailbox_immediate_caps` | MAILBOX and IMMEDIATE are used only if reported; mailbox never shows an older frame after a newer one, and immediate is not slower than FIFO (rates recorded). [E] |
+| `sanity.vk.wsi.out_of_date_suboptimal` | [E] After resizing the window, acquire or present returns VK_ERROR_OUT_OF_DATE_KHR or SUBOPTIMAL_KHR per spec, and a recreated swapchain at the new extent presents correctly. |
 | `sanity.vk.wsi.acquire_timeouts` | AcquireNextImage with timeout 0 and finite timeouts return NOT_READY/TIMEOUT when no image is free, and with the images presented they become available. |
-| `sanity.vk.wsi.minimized_and_destroyed` | Presenting to a minimised window and destroying the swapchain/surface/window in various orders never hangs or loses the device. |
+| `sanity.vk.wsi.minimized_and_destroyed` | [E] Presenting to a minimised window and destroying the swapchain/surface/window in various orders never hangs or loses the device. |
 
 #### External
 

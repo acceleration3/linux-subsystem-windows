@@ -31,6 +31,12 @@ add_library(suite_sanity OBJECT
     vk/resource_checks.cpp
     vk/transfer_checks.cpp
     vk/compute_checks.cpp
+    vk/graphics_checks.cpp
+    vk/sync_checks.cpp
+    vk/query_checks.cpp
+    vk/wsi_checks.cpp
+    vk/robust_checks.cpp
+    vk/external_checks.cpp
     dxgi/enum_checks.cpp
     dxgi/swap_checks.cpp
     dxgi/mem_checks.cpp
