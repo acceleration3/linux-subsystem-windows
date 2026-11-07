@@ -119,6 +119,28 @@ void Runner::flush_ready() {
     }
 }
 
+void Runner::write_progress(bool complete, bool force) {
+    if (options_.json.empty()) {
+        return;
+    }
+    const auto now = std::chrono::steady_clock::now();
+    if (!force && now - last_progress_ < std::chrono::seconds(3)) {
+        return;
+    }
+    last_progress_ = now;
+    std::vector<CheckResult> finished;
+    for (std::size_t i = 0; i < results_.size(); ++i) {
+        if (done_[i]) {
+            finished.push_back(results_[i]);
+        }
+    }
+    const JsonReport report(ExeIdentity::name(), started_);
+    if (!report.write(options_.json, finished, complete) && complete) {
+        std::fprintf(stderr, "%s: cannot write %s\n", ExeIdentity::name().c_str(),
+                     options_.json.string().c_str());
+    }
+}
+
 void Runner::execute(const std::vector<Planned>& plan, std::size_t begin, std::size_t end,
                      int jobs, bool machine_wide) {
     const Worker worker(options_.artifacts);
@@ -152,6 +174,7 @@ void Runner::execute(const std::vector<Planned>& plan, std::size_t begin, std::s
             results_[index] = std::move(result);
             done_[index] = true;
             flush_ready();
+            write_progress(false, false);
         }
     };
     const std::size_t count = end - begin;
@@ -193,7 +216,8 @@ int Runner::run() {
     results_.assign(plan.size(), {});
     done_.assign(plan.size(), false);
     printed_ = 0;
-    const std::string started = utc_now();
+    started_ = utc_now();
+    last_progress_ = std::chrono::steady_clock::now();
     if (!options_.json.empty()) {
         std::filesystem::path log_path = options_.json;
         log_path.replace_extension(".jsonl");
@@ -220,8 +244,8 @@ int Runner::run() {
     }
     printer_.summary(passed, failed, skipped);
     if (!options_.json.empty()) {
-        const JsonReport report(ExeIdentity::name(), started);
-        if (!report.write(options_.json, results_)) {
+        const JsonReport report(ExeIdentity::name(), started_);
+        if (!report.write(options_.json, results_, true)) {
             std::fprintf(stderr, "%s: cannot write %s\n", ExeIdentity::name().c_str(),
                          options_.json.string().c_str());
             return 2;

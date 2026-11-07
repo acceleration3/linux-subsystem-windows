@@ -11,19 +11,33 @@ namespace lsw::suites {
 namespace {
 
 template <typename Function>
-std::string text_info(Function function, void* object, unsigned name) {
+std::string text_info(Function function, void* object, unsigned name, int& code) {
     std::size_t size = 0;
-    if (function(object, name, 0, nullptr, &size) != CL_SUCCESS || size == 0) {
+    code = function(object, name, 0, nullptr, &size);
+    if (code != CL_SUCCESS || size == 0) {
         return {};
     }
     std::string value(size, '\0');
-    if (function(object, name, size, value.data(), nullptr) != CL_SUCCESS) {
+    code = function(object, name, size, value.data(), nullptr);
+    if (code != CL_SUCCESS) {
         return {};
     }
     while (!value.empty() && value.back() == '\0') {
         value.pop_back();
     }
     return value;
+}
+
+template <typename Function>
+std::string text_info(Function function, void* object, unsigned name) {
+    int code = 0;
+    return text_info(function, object, name, code);
+}
+
+void record(std::string& failures, const char* what, int code) {
+    if (code != CL_SUCCESS) {
+        failures += std::string(failures.empty() ? "" : ", ") + what + " returned " + std::to_string(code);
+    }
 }
 
 }  // namespace
@@ -84,19 +98,28 @@ bool OpenClApi::platforms(std::vector<OpenClPlatform>& out, std::string& error) 
         }
         for (void* device_id : device_ids) {
             OpenClDevice device;
-            device.name = text_info(get_device_info_, device_id, CL_DEVICE_NAME);
-            device.vendor = text_info(get_device_info_, device_id, CL_DEVICE_VENDOR);
-            device.version = text_info(get_device_info_, device_id, CL_DEVICE_VERSION);
-            device.driver_version = text_info(get_device_info_, device_id, CL_DRIVER_VERSION);
-            device.extensions = text_info(get_device_info_, device_id, CL_DEVICE_EXTENSIONS);
+            int code = 0;
+            device.name = text_info(get_device_info_, device_id, CL_DEVICE_NAME, code);
+            record(device.query_failures, "CL_DEVICE_NAME", code);
+            device.vendor = text_info(get_device_info_, device_id, CL_DEVICE_VENDOR, code);
+            record(device.query_failures, "CL_DEVICE_VENDOR", code);
+            device.version = text_info(get_device_info_, device_id, CL_DEVICE_VERSION, code);
+            record(device.query_failures, "CL_DEVICE_VERSION", code);
+            device.driver_version = text_info(get_device_info_, device_id, CL_DRIVER_VERSION, code);
+            record(device.query_failures, "CL_DRIVER_VERSION", code);
+            device.extensions = text_info(get_device_info_, device_id, CL_DEVICE_EXTENSIONS, code);
+            record(device.query_failures, "CL_DEVICE_EXTENSIONS", code);
             cl_uint vendor_id = 0;
-            get_device_info_(device_id, CL_DEVICE_VENDOR_ID, sizeof(vendor_id), &vendor_id, nullptr);
+            code = get_device_info_(device_id, CL_DEVICE_VENDOR_ID, sizeof(vendor_id), &vendor_id, nullptr);
+            record(device.query_failures, "CL_DEVICE_VENDOR_ID", code);
             device.vendor_id = vendor_id;
             cl_ulong value = 0;
-            get_device_info_(device_id, CL_DEVICE_GLOBAL_MEM_SIZE, sizeof(value), &value, nullptr);
+            code = get_device_info_(device_id, CL_DEVICE_GLOBAL_MEM_SIZE, sizeof(value), &value, nullptr);
+            record(device.query_failures, "CL_DEVICE_GLOBAL_MEM_SIZE", code);
             device.global_memory = value;
             value = 0;
-            get_device_info_(device_id, CL_DEVICE_MAX_MEM_ALLOC_SIZE, sizeof(value), &value, nullptr);
+            code = get_device_info_(device_id, CL_DEVICE_MAX_MEM_ALLOC_SIZE, sizeof(value), &value, nullptr);
+            record(device.query_failures, "CL_DEVICE_MAX_MEM_ALLOC_SIZE", code);
             device.max_allocation = value;
             device.luid_extension =
                 (" " + device.extensions + " ").find(" cl_khr_device_uuid ") != std::string::npos;

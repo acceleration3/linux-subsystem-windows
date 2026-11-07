@@ -44,6 +44,7 @@ suites/
 | `--list` | print every check id, its suite, its tags and its policy, then exit |
 | `--suite NAME[,NAME]` | run these suites (default: `sanity`) |
 | `--filter GLOB[,GLOB]` | only checks whose id matches; `-GLOB` excludes |
+| `--exclude-file PATH` | read one check id or glob per line (blank lines ignored) and exclude those checks, in addition to `--filter`; for long held-row lists that do not fit a cmd.exe line |
 | `--tag TAG` | only checks with a tag (`d3d11`, `interop`, `exclusive`, `x86-only`, `slow`...) |
 | `--phase all\|main\|pacing` | `main` runs every check without the `pacing` tag, `pacing` only those; default `all` |
 | `--jobs N` | worker processes for parallel suites (default: logical CPUs, capped at 16) |
@@ -101,9 +102,14 @@ lsw-suites64: 652 passed, 2 failed, 8 skipped
 
 ```
 { "exe": "lsw-suites64", "bitness": 64, "adapter": {...}, "driver": {...}, "started": "...",
+  "complete": true, "summary": { "passed": 652, "failed": 2, "skipped": 8 },
   "checks": [ { "id": "...", "suite": "sanity", "tags": [...], "status": "ok|fail|skip|timeout|crash",
                 "reason": "...", "ms": 12, "pid": 1234, "artifacts": ["..."], "measures": {...} } ] }
 ```
+
+The file is rewritten while the run progresses (at most every few seconds and once at the end) with `complete`
+false until the run finishes, so a crashed run still leaves its finished checks and counts; the per-check
+`.jsonl` log stays the exact record.
 
 `measures` carries numbers a check observed (frame intervals, transfer sizes, counters) so the matrix can compare
 GPUs and runs, and so the benchmark suite later shares the schema.
@@ -521,7 +527,7 @@ Each loop creates and destroys 5000 objects of the kind with its largest practic
 | check | contract |
 |---|---|
 | `sanity.d3d9.fail.unsupported_features` | Features the caps report absent (formats, texture sizes, shader models, multi-element textures) fail at creation or draw with the documented D3DERR_* and the device renders correctly afterwards. |
-| `sanity.d3d9.fail.bad_parameters` | mismatched RT/DS sizes, invalid sizes and invalid enums return INVALIDCALL (or the documented code) without crash, and the debug runtime reports no unexpected corruption. |
+| `sanity.d3d9.fail.bad_parameters` | invalid sizes and invalid enums return INVALIDCALL (or the documented code) without crash, and the debug runtime reports no unexpected corruption; RT/DS size mismatch and viewports beyond the render target are measured only. |
 | `sanity.d3d9.fail.lifetime` | Releasing a device with resources still referenced by the app, destroying a resource that is the current RT or bound texture, and releasing in any order leaves no leak and no crash; process exit with a live device reclaims everything (second run allocates the same amount). |
 
 ### 4.9 Direct3D 10 and 10.1 (10)
@@ -561,7 +567,7 @@ Each loop creates and destroys 5000 objects of the kind with its largest practic
 | `sanity.d3d11.res.immutable_initial` | IMMUTABLE resources require initial data and thereafter return exactly that data when read via a view in shader and via a copy; creation with missing or short initial data fails. |
 | `sanity.d3d11.res.views_matrix` | SRV, RTV, DSV and UAV creation over typed, typeless, array, MSAA, mip-sliced and buffer resources (raw, structured, append, counter) matches WARP's accept/reject, and views of sub-ranges read/write exactly that sub-range. |
 | `sanity.d3d11.res.sizes_extremes` | Resources at the maximum documented dimensions, 1x1, odd sizes, and zero-sized requests behave per spec (success, E_INVALIDARG, or E_OUTOFMEMORY), leaving the device usable. |
-| `sanity.d3d11.res.exhaustion_and_reclaim` | Allocating default-usage resources until failure ends with E_OUTOFMEMORY (no crash or hang), the device still renders, and after releasing and Flush the same allocations succeed again. |
+| `sanity.d3d11.res.exhaustion_and_reclaim` | Allocating default-usage resources until failure (a failure before the cap is E_OUTOFMEMORY; no crash or hang), the device still renders, and after releasing and Flush the same allocations succeed again. |
 | `sanity.d3d11.res.exit_reclaim` | A child process that allocates a large amount of GPU memory and exits (cleanly or killed) releases it all: QueryVideoMemoryInfo current usage returns to its baseline within a timeout. |
 
 #### Map contracts

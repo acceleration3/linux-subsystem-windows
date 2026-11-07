@@ -21,6 +21,7 @@ struct OpenClDevice {
     LUID luid{};
     int luid_query_error = 0;
     int luid_valid_query_error = 0;
+    std::string query_failures;
 };
 
 struct OpenClPlatform {

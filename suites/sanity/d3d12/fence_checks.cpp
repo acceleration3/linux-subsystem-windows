@@ -5,6 +5,7 @@
 #include "support/child_runs.hpp"
 #include "support/gate_window.hpp"
 
+#include <algorithm>
 #include <atomic>
 #include <cstring>
 #include <thread>
@@ -67,13 +68,20 @@ HANDLE make_event() {
     return ::CreateEventW(nullptr, FALSE, FALSE, nullptr);
 }
 
-bool reaches(ID3D12Fence* fence, std::uint64_t value, DWORD timeout) {
+bool reaches(ID3D12Fence* fence, std::uint64_t value, DWORD timeout, const std::atomic<bool>* finished = nullptr) {
     HANDLE event = make_event();
     if (FAILED(fence->SetEventOnCompletion(value, event))) {
         ::CloseHandle(event);
         return false;
     }
-    const DWORD waited = ::WaitForSingleObject(event, timeout);
+    DWORD waited = WAIT_TIMEOUT;
+    for (DWORD spent = 0; waited == WAIT_TIMEOUT && spent < timeout; spent += 100) {
+        const bool over = finished != nullptr && finished->load();
+        waited = ::WaitForSingleObject(event, over ? 0 : std::min<DWORD>(100, timeout - spent));
+        if (over) {
+            break;
+        }
+    }
     ::CloseHandle(event);
     return waited == WAIT_OBJECT_0;
 }
@@ -401,14 +409,18 @@ Outcome FenceChecks::shared(Context& context) {
         options.timeout_seconds = 150;
         options.env = {{"LSW_SUITES_FENCE_NAME", name + "-p"}};
         CheckResult child;
-        std::thread runner([&] { child = ChildRuns::run_self("sanity.d3d12.fence.shared", options); });
-        if (!reaches(process_fence, 2, 90000)) {
+        std::atomic<bool> child_done{false};
+        std::thread runner([&] {
+            child = ChildRuns::run_self("sanity.d3d12.fence.shared", options);
+            child_done = true;
+        });
+        if (!reaches(process_fence, 2, 90000, &child_done)) {
             problems.add("the child process never completed the wait for 1 and signalled 2");
         }
         D3d12Queue& queue = rig.direct();
         queue.queue()->Signal(process_fence, 3);
         queue.touch();
-        if (!reaches(process_fence, 4, 90000)) {
+        if (!reaches(process_fence, 4, 90000, &child_done)) {
             problems.add("the child process did not see the queue signal of 3 and answer with 4");
         }
         runner.join();

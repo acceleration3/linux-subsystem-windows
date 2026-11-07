@@ -3,6 +3,7 @@
 #include "core/check_filter.hpp"
 
 #include <cstdlib>
+#include <fstream>
 
 namespace lsw::suites {
 
@@ -21,8 +22,8 @@ bool positive(const std::string& text, int& out) {
 }  // namespace
 
 std::string Options::usage() {
-    return "usage: lsw-suites [--list] [--suite NAME[,NAME]] [--filter GLOB[,-GLOB]] [--tag TAG]\n"
-           "                  [--phase all|main|pacing] [--jobs N] [--timeout S] [--repeat N] [--shuffle SEED]\n"
+    return "usage: lsw-suites [--list] [--suite NAME[,NAME]] [--filter GLOB[,-GLOB]] [--exclude-file PATH]\n"
+           "                  [--tag TAG] [--phase all|main|pacing] [--jobs N] [--timeout S] [--repeat N] [--shuffle SEED]\n"
            "                  [--json FILE] [--artifacts DIR] [--skip-apis API[,API]]\n";
 }
 
@@ -48,6 +49,8 @@ std::optional<Options> Options::parse(int argc, char** argv, std::string& error)
             options.suites = CheckFilter::split(value);
         } else if (arg == "--filter") {
             options.filter = value;
+        } else if (arg == "--exclude-file") {
+            options.exclude_file = value;
         } else if (arg == "--tag") {
             options.tag = value;
         } else if (arg == "--phase") {
@@ -76,6 +79,22 @@ std::optional<Options> Options::parse(int argc, char** argv, std::string& error)
         } else {
             error = "unknown option: " + arg;
             return std::nullopt;
+        }
+    }
+    if (!options.exclude_file.empty()) {
+        std::ifstream file(options.exclude_file);
+        if (!file) {
+            error = "--exclude-file cannot be read: " + options.exclude_file.string();
+            return std::nullopt;
+        }
+        std::string line;
+        while (std::getline(file, line)) {
+            const std::size_t first = line.find_first_not_of(" \t\r\n");
+            if (first == std::string::npos) {
+                continue;
+            }
+            const std::size_t last = line.find_last_not_of(" \t\r\n");
+            options.filter += std::string(options.filter.empty() ? "" : ",") + "-" + line.substr(first, last - first + 1);
         }
     }
     if (options.suites.empty()) {

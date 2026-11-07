@@ -59,7 +59,8 @@ void many_d3d11(Context& context, Problems& problems, int objects) {
             problems.add("d3d11: creating buffer " + std::to_string(made) + " failed with " + D3d12Tools::hr(last) + " instead of E_OUTOFMEMORY");
         }
         if (!buffers.empty()) {
-            device.context->UpdateSubresource(buffers.back().get(), 0, nullptr, "x", 0, 0);
+            const std::uint8_t zeros[256] = {};
+            device.context->UpdateSubresource(buffers.back().get(), 0, nullptr, zeros, 0, 0);
         }
     }
     static_cast<void>(device.wait_idle(error));

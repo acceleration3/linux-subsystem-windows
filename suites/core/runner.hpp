@@ -7,6 +7,7 @@
 #include "core/machine_lock.hpp"
 #include "core/result_log.hpp"
 
+#include <chrono>
 #include <mutex>
 #include <vector>
 
@@ -34,6 +35,8 @@ private:
 
     void flush_ready();
 
+    void write_progress(bool complete, bool force);
+
     const Registry& registry_;
     const Options& options_;
     ReportPrinter printer_;
@@ -43,5 +46,7 @@ private:
     std::vector<CheckResult> results_;
     std::vector<bool> done_;
     std::size_t printed_ = 0;
+    std::string started_;
+    std::chrono::steady_clock::time_point last_progress_;
 };
 }  // namespace lsw::suites

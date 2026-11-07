@@ -15,7 +15,7 @@ public:
     [[nodiscard]] static Json check_json(const CheckResult& result);
 
     [[nodiscard]] bool write(const std::filesystem::path& path,
-                             const std::vector<CheckResult>& results) const;
+                             const std::vector<CheckResult>& results, bool complete) const;
 
 private:
     std::string exe_;

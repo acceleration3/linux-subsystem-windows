@@ -120,7 +120,8 @@ Outcome ErrChecks::device_removed(Context& context) {
     if (!hang || !uav) {
         return Outcome::fail("the hang scene cannot be built: " + error);
     }
-    device.context->UpdateSubresource(buffer.get(), 0, nullptr, limit, 0, 0);
+    const D3D11_BOX first{0, 0, 0, 4, 1, 1};
+    device.context->UpdateSubresource(buffer.get(), 0, &first, limit, 0, 0);
     ID3D11UnorderedAccessView* list[1] = {uav.get()};
     device.context->CSSetShader(hang.get(), nullptr, 0);
     device.context->CSSetUnorderedAccessViews(0, 1, list, nullptr);

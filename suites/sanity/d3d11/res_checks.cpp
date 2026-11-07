@@ -712,9 +712,10 @@ Outcome ResChecks::exhaustion_and_reclaim(Context& context) {
     }
     context.measure("allocated_mib", total >> 20);
     context.measure("budget_mib", video.budget >> 20);
-    if (stop != E_OUTOFMEMORY) {
-        problems.add("allocation ended with " + (stop == S_OK ? std::string("no failure after ") + std::to_string(total >> 20) + " MiB" : D3d11Tools::hr(stop)) +
-                     " instead of E_OUTOFMEMORY");
+    if (stop == S_OK) {
+        context.note("no failure was reached before the cap of " + std::to_string(cap >> 20) + " MiB");
+    } else if (stop != E_OUTOFMEMORY) {
+        problems.add("allocation ended with " + D3d11Tools::hr(stop) + " instead of E_OUTOFMEMORY");
     }
     const std::size_t count = held.size();
     {

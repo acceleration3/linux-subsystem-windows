@@ -11,6 +11,7 @@ bool GlFetch::run(const GlApi& api, const GlFetchRequest& request, std::vector<f
                                  "void main() { ivec2 p = ivec2(gl_FragCoord.xy); color = vec4(" + request.expression + "); }\n";
     std::string blame;
     const auto step = [&](const char* name) {
+        api.glFinish();
         for (int i = 0; i < 16; ++i) {
             const unsigned failure = api.glGetError();
             if (failure == 0) {

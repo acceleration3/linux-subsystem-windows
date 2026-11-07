@@ -11,6 +11,7 @@ struct Options {
     bool help = false;
     std::vector<std::string> suites{"sanity"};
     std::string filter;
+    std::filesystem::path exclude_file;
     std::string tag;
     std::string phase = "all";
     int jobs = 0;

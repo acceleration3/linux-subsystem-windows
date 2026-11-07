@@ -2,6 +2,8 @@
 
 #include "core/exe_identity.hpp"
 
+#include <windows.h>
+
 #include <fstream>
 
 namespace lsw::suites {
@@ -39,25 +41,48 @@ Json JsonReport::check_json(const CheckResult& result) {
 }
 
 bool JsonReport::write(const std::filesystem::path& path,
-                       const std::vector<CheckResult>& results) const {
+                       const std::vector<CheckResult>& results, bool complete) const {
     Json checks = Json::array();
+    int passed = 0;
+    int failed = 0;
+    int skipped = 0;
     for (const CheckResult& result : results) {
         checks.push(check_json(result));
+        if (result.status == Status::Ok) {
+            ++passed;
+        } else if (result.status == Status::Skip) {
+            ++skipped;
+        } else {
+            ++failed;
+        }
     }
+    Json summary = Json::object();
+    summary.set("passed", passed);
+    summary.set("failed", failed);
+    summary.set("skipped", skipped);
     Json root = Json::object();
     root.set("exe", exe_);
     root.set("bitness", ExeIdentity::kBitness);
     root.set("adapter", Json::object());
     root.set("driver", Json::object());
     root.set("started", started_);
+    root.set("complete", complete);
+    root.set("summary", std::move(summary));
     root.set("checks", std::move(checks));
     std::error_code error;
     if (path.has_parent_path()) {
         std::filesystem::create_directories(path.parent_path(), error);
     }
-    std::ofstream file(path, std::ios::binary);
-    file << root.dump(2) << '\n';
-    return file.good();
+    std::filesystem::path temporary = path;
+    temporary += ".tmp";
+    {
+        std::ofstream file(temporary, std::ios::binary);
+        file << root.dump(2) << '\n';
+        if (!file.good()) {
+            return false;
+        }
+    }
+    return ::MoveFileExW(temporary.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING) != 0;
 }
 
 }  // namespace lsw::suites

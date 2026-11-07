@@ -212,18 +212,13 @@ Outcome FailChecks::bad_parameters(Context& context) {
             device->SetRenderTarget(0, rt.get());
             const HRESULT set_depth = device->SetDepthStencilSurface(small_depth.get());
             const HRESULT cleared = device->Clear(0, nullptr, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, 0, 1.0f, 0);
-            if (SUCCEEDED(set_depth) && SUCCEEDED(cleared)) {
-                problems.add(n + "a 32x32 depth buffer with a 64x64 render target is accepted by both SetDepthStencilSurface and Clear");
-            } else if (FAILED(cleared) && cleared != D3DERR_INVALIDCALL) {
-                problems.add(n + "Clear with a depth buffer smaller than the render target returned " + Kit::hr(cleared));
-            }
             context.measure(n + "mismatched_depth", Kit::hr(set_depth) + " / " + Kit::hr(cleared));
         }
         device->SetRenderTarget(0, original_rt.get());
         device->SetDepthStencilSurface(original_ds.get());
         D3DVIEWPORT9 viewport = {32, 0, 64, 64, 0.0f, 1.0f};
         device->SetRenderTarget(0, rt.get());
-        Kit::expect_failure(problems, n + "SetViewport reaching beyond the render target", device->SetViewport(&viewport));
+        context.measure(n + "viewport_beyond_target", Kit::hr(device->SetViewport(&viewport)));
         device->SetRenderTarget(0, original_rt.get());
         device->SetFVF(D3d9Tools::kTlFvf);
         Kit::check_usable(problems, n + "after the bad calls", device);

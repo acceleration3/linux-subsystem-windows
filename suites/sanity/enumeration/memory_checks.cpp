@@ -152,7 +152,7 @@ Outcome MemoryChecks::opencl_global_size(Context& context) {
             context.measure(device.name + ".max_alloc", device.max_allocation);
             context.measure(device.name + ".limit", limit);
             if (device.global_memory == 0 || device.max_allocation == 0) {
-                problems.add(device.name + ": zero global size or maximum allocation");
+                problems.add(device.name + ": zero global size or maximum allocation" + (device.query_failures.empty() ? std::string() : " (" + device.query_failures + ")"));
             }
             if (device.global_memory > limit) {
                 problems.add(device.name + ": CL_DEVICE_GLOBAL_MEM_SIZE " + std::to_string(device.global_memory) +

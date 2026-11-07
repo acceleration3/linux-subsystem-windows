@@ -46,6 +46,39 @@ const char* kAdd =
 }  // namespace
 
 Outcome LifeChecks::removal_reasons(Context& context) {
+    const std::string parent_text = ChildMode::variable(L"LSW_SUITES_REMOVAL_PARENT");
+    if (ChildMode::active() && !parent_text.empty()) {
+        return Kit::one_device(context, D3D_FEATURE_LEVEL_11_0, [&](D3d12Rig& rig, Problems& problems) -> std::string {
+            HANDLE ready = ::OpenEventW(EVENT_MODIFY_STATE, FALSE, Text::wide("Local\\lsw-suites-removal-ready-" + parent_text).c_str());
+            HANDLE removed = ::OpenEventW(SYNCHRONIZE, FALSE, Text::wide("Local\\lsw-suites-removal-done-" + parent_text).c_str());
+            if (ready == nullptr || removed == nullptr) {
+                problems.add("the witness cannot open the parent's events");
+            } else {
+                std::string error;
+                if (!round_trip(rig, 1501, error)) {
+                    problems.add("the witness fails before the removal: " + error);
+                }
+                ::SetEvent(ready);
+                if (::WaitForSingleObject(removed, 60000) != WAIT_OBJECT_0) {
+                    problems.add("the parent never reported the removal");
+                } else {
+                    if (rig.removed_reason() != S_OK) {
+                        problems.add("removing a device in another process removed this one: " + Kit::hr(rig.removed_reason()));
+                    }
+                    if (!round_trip(rig, 1502, error)) {
+                        problems.add("the witness does not work after the removal in another process: " + error);
+                    }
+                }
+            }
+            if (ready != nullptr) {
+                ::CloseHandle(ready);
+            }
+            if (removed != nullptr) {
+                ::CloseHandle(removed);
+            }
+            return {};
+        });
+    }
     return Kit::one_device(context, D3D_FEATURE_LEVEL_11_0, [&](D3d12Rig& rig, Problems& problems) -> std::string {
         std::string error;
         if (rig.removed_reason() != S_OK) {
@@ -56,16 +89,41 @@ Outcome LifeChecks::removal_reasons(Context& context) {
         if (!device5) {
             return "ID3D12Device5 (RemoveDevice) is not exposed by this runtime";
         }
-        D3d12Rig witness;
-        if (!witness.open_luid(rig.luid, D3D_FEATURE_LEVEL_11_0, error)) {
-            problems.add("the witness device cannot be created: " + error);
+        const LUID luid = rig.luid;
+        const std::string pid = std::to_string(::GetCurrentProcessId());
+        HANDLE ready = ::CreateEventW(nullptr, TRUE, FALSE, Text::wide("Local\\lsw-suites-removal-ready-" + pid).c_str());
+        HANDLE removed = ::CreateEventW(nullptr, TRUE, FALSE, Text::wide("Local\\lsw-suites-removal-done-" + pid).c_str());
+        if (ready == nullptr || removed == nullptr) {
+            problems.add("the witness events cannot be created");
             return {};
         }
-        if (!round_trip(rig, 1500, error) || !round_trip(witness, 1501, error)) {
-            problems.add("the devices fail before the removal: " + error);
+        if (!round_trip(rig, 1500, error)) {
+            problems.add("the device fails before the removal: " + error);
+            ::CloseHandle(ready);
+            ::CloseHandle(removed);
             return {};
+        }
+        ChildRunOptions options;
+        options.timeout_seconds = 120;
+        options.env = {{"LSW_SUITES_REMOVAL_PARENT", pid}};
+        CheckResult child;
+        std::atomic<bool> child_done{false};
+        std::thread runner([&] {
+            child = ChildRuns::run_self("sanity.d3d12.removal.reasons", options);
+            child_done = true;
+        });
+        bool witness_ready = false;
+        while (!child_done) {
+            if (::WaitForSingleObject(ready, 100) == WAIT_OBJECT_0) {
+                witness_ready = true;
+                break;
+            }
+        }
+        if (!witness_ready) {
+            problems.add("the witness process never became ready");
         }
         device5->RemoveDevice();
+        ::SetEvent(removed);
         const HRESULT reason = rig.removed_reason();
         context.measure("d3d12.removed_reason", Kit::hr(reason));
         if (!D3d12Tools::in(reason, {D3d12Tools::kDeviceRemoved, D3d12Tools::kDeviceHung, D3d12Tools::kDeviceReset, D3d12Tools::kDriverInternalError, D3d12Tools::kInvalidCall})) {
@@ -94,14 +152,16 @@ Outcome LifeChecks::removal_reasons(Context& context) {
         if (std::chrono::steady_clock::now() - started > std::chrono::seconds(10)) {
             problems.add("submitting to a removed device took more than 10 seconds");
         }
-        if (witness.removed_reason() != S_OK) {
-            problems.add("removing one device removed another device on the same adapter: " + Kit::hr(witness.removed_reason()));
+        runner.join();
+        if (child.status != Status::Ok) {
+            problems.add("the witness process failed: " + child.reason);
         }
-        if (!round_trip(witness, 1502, error)) {
-            problems.add("the other device does not work after the removal: " + error);
-        }
+        ::CloseHandle(ready);
+        ::CloseHandle(removed);
+        device5.reset();
+        rig.shutdown();
         D3d12Rig fresh;
-        if (!fresh.open_luid(rig.luid, D3D_FEATURE_LEVEL_11_0, error)) {
+        if (!fresh.open_luid(luid, D3D_FEATURE_LEVEL_11_0, error)) {
             problems.add("a new device cannot be created on the adapter after a removal: " + error);
         } else if (!round_trip(fresh, 1503, error)) {
             problems.add("the new device does not work: " + error);
