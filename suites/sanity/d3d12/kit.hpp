@@ -75,6 +75,17 @@ public:
 
     [[nodiscard]] static std::string vs_source();
 
+    static constexpr const char* kConstantVs =
+        "cbuffer C : register(b0) { float z; float r; float g; float b; }\n"
+        "float4 main(uint id : SV_VertexID) : SV_Position {\n"
+        "  float2 p = float2((id << 1) & 2, id & 2);\n"
+        "  return float4(p * float2(2, -2) + float2(-1, 1), z, 1);\n"
+        "}\n";
+
+    static constexpr const char* kConstantPs =
+        "cbuffer C : register(b0) { float z; float r; float g; float b; }\n"
+        "float4 main() : SV_Target { return float4(r, g, b, 1); }\n";
+
     static constexpr const char* kSolidPs = "float4 main() : SV_Target { return float4(0.2, 0.6, 1.0, 1.0); }";
 
     [[nodiscard]] static std::uint32_t solid_color() { return rgba(51, 153, 255, 255); }

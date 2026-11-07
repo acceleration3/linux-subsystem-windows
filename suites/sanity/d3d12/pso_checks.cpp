@@ -10,17 +10,6 @@ namespace lsw::suites::sanity::d3d12 {
 
 namespace {
 
-const char* kConstantVs =
-    "cbuffer C : register(b0) { float z; float r; float g; float b; }\n"
-    "float4 main(uint id : SV_VertexID) : SV_Position {\n"
-    "  float2 p = float2((id << 1) & 2, id & 2);\n"
-    "  return float4(p * float2(2, -2) + float2(-1, 1), z, 1);\n"
-    "}\n";
-
-const char* kConstantPs =
-    "cbuffer C : register(b0) { float z; float r; float g; float b; }\n"
-    "float4 main() : SV_Target { return float4(r, g, b, 1); }\n";
-
 const char* kHalfAlphaPs = "float4 main() : SV_Target { return float4(1.0, 0.0, 0.0, 0.5); }\n";
 
 const char* kLogicPs = "float4 main() : SV_Target { return float4(15.0 / 255.0, 15.0 / 255.0, 15.0 / 255.0, 15.0 / 255.0); }\n";
@@ -90,7 +79,7 @@ Outcome PsoChecks::graphics_compute(Context& context) {
         }
         D3d12Tools::Bytes vs;
         D3d12Tools::Bytes ps;
-        if (!D3d12Tools::compile(kConstantVs, "main", "vs_5_1", vs, error) || !D3d12Tools::compile(kConstantPs, "main", "ps_5_1", ps, error)) {
+        if (!D3d12Tools::compile(Kit::kConstantVs, "main", "vs_5_1", vs, error) || !D3d12Tools::compile(Kit::kConstantPs, "main", "ps_5_1", ps, error)) {
             problems.add(error);
             return {};
         }

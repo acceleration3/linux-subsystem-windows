@@ -47,6 +47,12 @@ add_library(suite_sanity OBJECT
     d3d12/barrier_checks.cpp
     d3d12/desc_checks.cpp
     d3d12/pso_checks.cpp
+    d3d12/draw_checks.cpp
+    d3d12/query_checks.cpp
+    d3d12/share_checks.cpp
+    d3d12/resid_checks.cpp
+    d3d12/opt_checks.cpp
+    d3d12/life_checks.cpp
     dxgi/enum_checks.cpp
     dxgi/swap_checks.cpp
     dxgi/mem_checks.cpp

@@ -53,6 +53,12 @@
 #include "sanity/d3d12/barrier_checks.hpp"
 #include "sanity/d3d12/desc_checks.hpp"
 #include "sanity/d3d12/pso_checks.hpp"
+#include "sanity/d3d12/draw_checks.hpp"
+#include "sanity/d3d12/query_checks.hpp"
+#include "sanity/d3d12/share_checks.hpp"
+#include "sanity/d3d12/resid_checks.hpp"
+#include "sanity/d3d12/opt_checks.hpp"
+#include "sanity/d3d12/life_checks.hpp"
 #include "sanity/dxgi/enum_checks.hpp"
 #include "sanity/dxgi/swap_checks.hpp"
 #include "sanity/dxgi/mem_checks.hpp"
@@ -510,6 +516,22 @@ void add(Registry& registry) {
     guarded(suite, {"sanity.d3d12.root.signatures", {"d3d12", "compute"}, false, 90, d3d12::DescChecks::root_signatures});
     guarded(suite, {"sanity.d3d12.pso.graphics_compute", {"d3d12", "compute"}, false, 120, d3d12::PsoChecks::graphics_compute});
     guarded(suite, {"sanity.d3d12.pso.library_cache", {"d3d12"}, false, 90, d3d12::PsoChecks::library_cache});
+    guarded(suite, {"sanity.d3d12.render.draw_variants", {"d3d12", "compute"}, false, 120, d3d12::DrawChecks::draw_variants});
+    guarded(suite, {"sanity.d3d12.render.msaa_resolve", {"d3d12", "msaa"}, false, 120, d3d12::DrawChecks::msaa_resolve});
+    guarded(suite, {"sanity.d3d12.query.occlusion_pipeline", {"d3d12"}, false, 90, d3d12::QueryChecks::occlusion_pipeline});
+    guarded(suite, {"sanity.d3d12.query.timestamp_calibration", {"d3d12", "compute"}, true, 90, d3d12::QueryChecks::timestamp_calibration});
+    guarded(suite, {"sanity.d3d12.present.dxgi_queue", {"d3d12", "dxgi", "present", "dwm", "exclusive"}, true, 180, d3d12::QueryChecks::present_queue});
+    guarded(suite, {"sanity.d3d12.share.heap_resource_nt", {"d3d12", "d3d11", "interop"}, false, 240, d3d12::ShareChecks::heap_resource_nt});
+    guarded(suite, {"sanity.d3d12.share.keyed_cross_api", {"d3d12", "d3d11", "interop"}, false, 120, d3d12::ShareChecks::keyed_cross_api});
+    guarded(suite, {"sanity.d3d12.resid.make_evict", {"d3d12", "mem", "exclusive"}, true, 240, d3d12::ResidChecks::make_evict});
+    guarded(suite, {"sanity.d3d12.resid.budget_pressure", {"d3d12", "mem", "slow", "exclusive", "host-hazard"}, true, 300, d3d12::ResidChecks::budget_pressure});
+    guarded(suite, {"sanity.d3d12.opt.raytracing", {"d3d12"}, false, 90, d3d12::OptChecks::raytracing});
+    guarded(suite, {"sanity.d3d12.opt.mesh_shaders", {"d3d12"}, false, 60, d3d12::OptChecks::mesh_shaders});
+    guarded(suite, {"sanity.d3d12.opt.vrs_sampler_feedback", {"d3d12"}, false, 90, d3d12::OptChecks::vrs_sampler_feedback});
+    guarded(suite, {"sanity.d3d12.opt.work_graphs_dxr11", {"d3d12", "compute"}, false, 90, d3d12::OptChecks::work_graphs_dxr11});
+    guarded(suite, {"sanity.d3d12.removal.reasons", {"d3d12", "exclusive"}, true, 120, d3d12::LifeChecks::removal_reasons});
+    guarded(suite, {"sanity.d3d12.stress.lifetime_exit", {"d3d12", "mem", "leak", "slow"}, false, 300, d3d12::LifeChecks::lifetime_exit});
+    guarded(suite, {"sanity.d3d12.stress.concurrent_queues", {"d3d12", "slow"}, false, 120, d3d12::LifeChecks::concurrent_queues});
     guarded(suite, {"sanity.vk.instance.version_layers_extensions", {"vulkan"}, false, 60, vk::InstanceChecks::version_layers_extensions});
     guarded(suite, {"sanity.vk.device.props_features_consistent", {"vulkan"}, false, 120, vk::InstanceChecks::props_features_consistent});
     guarded(suite, {"sanity.vk.device.limits_minimums_honoured", {"vulkan"}, false, 120, vk::InstanceChecks::limits_minimums_honoured});
