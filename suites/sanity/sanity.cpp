@@ -44,6 +44,15 @@
 #include "sanity/d3d11/share_checks.hpp"
 #include "sanity/d3d11/tiled_checks.hpp"
 #include "sanity/d3d11/err_checks.hpp"
+#include "sanity/d3d12/dev_checks.hpp"
+#include "sanity/d3d12/heap_checks.hpp"
+#include "sanity/d3d12/map_checks.hpp"
+#include "sanity/d3d12/copy_checks.hpp"
+#include "sanity/d3d12/queue_checks.hpp"
+#include "sanity/d3d12/fence_checks.hpp"
+#include "sanity/d3d12/barrier_checks.hpp"
+#include "sanity/d3d12/desc_checks.hpp"
+#include "sanity/d3d12/pso_checks.hpp"
 #include "sanity/dxgi/enum_checks.hpp"
 #include "sanity/dxgi/swap_checks.hpp"
 #include "sanity/dxgi/mem_checks.hpp"
@@ -472,6 +481,35 @@ void add(Registry& registry) {
     guarded(suite, {"sanity.cl.queue.multiple_queues_concurrent", {"opencl"}, false, 90, cl::QueueChecks::multiple_queues_concurrent});
     guarded(suite, {"sanity.cl.queue.finish_flush_release", {"opencl"}, false, 60, cl::QueueChecks::finish_flush_release});
     guarded(suite, {"sanity.cl.error.codes_documented", {"opencl"}, false, 60, cl::ErrorChecks::codes_documented});
+    guarded(suite, {"sanity.d3d12.dev.create_levels", {"d3d12", "dxgi"}, false, 90, d3d12::DevChecks::create_levels});
+    guarded(suite, {"sanity.d3d12.dev.options_consistent", {"d3d12"}, false, 90, d3d12::DevChecks::options_consistent});
+    guarded(suite, {"sanity.d3d12.dev.format_support", {"d3d12", "d3d11", "formats"}, false, 180, d3d12::DevChecks::format_support});
+    guarded(suite, {"sanity.d3d12.dev.node_and_uma", {"d3d12"}, false, 60, d3d12::DevChecks::node_and_uma});
+    guarded(suite, {"sanity.d3d12.heap.default_upload_readback", {"d3d12", "mem", "slow"}, false, 180, d3d12::HeapChecks::default_upload_readback});
+    guarded(suite, {"sanity.d3d12.heap.custom_properties", {"d3d12"}, false, 90, d3d12::HeapChecks::custom_properties});
+    guarded(suite, {"sanity.d3d12.heap.placed_alignment", {"d3d12"}, false, 90, d3d12::HeapChecks::placed_alignment});
+    guarded(suite, {"sanity.d3d12.heap.aliasing", {"d3d12"}, false, 90, d3d12::HeapChecks::aliasing});
+    guarded(suite, {"sanity.d3d12.heap.reserved_tiles", {"d3d12", "tiled"}, false, 90, d3d12::HeapChecks::reserved_tiles});
+    guarded(suite, {"sanity.d3d12.heap.committed_flags", {"d3d12"}, false, 90, d3d12::HeapChecks::committed_flags});
+    guarded(suite, {"sanity.d3d12.heap.zeroed_new", {"d3d12", "mem"}, false, 180, d3d12::HeapChecks::zeroed_new});
+    guarded(suite, {"sanity.d3d12.heap.exhaustion", {"d3d12", "mem", "slow", "exclusive", "host-hazard"}, true, 300, d3d12::HeapChecks::exhaustion});
+    guarded(suite, {"sanity.d3d12.map.persistent", {"d3d12", "mem"}, false, 90, d3d12::MapChecks::persistent});
+    guarded(suite, {"sanity.d3d12.map.upload_visible", {"d3d12"}, false, 90, d3d12::MapChecks::upload_visible});
+    guarded(suite, {"sanity.d3d12.map.readback_after_fence", {"d3d12"}, false, 90, d3d12::MapChecks::readback_after_fence});
+    guarded(suite, {"sanity.d3d12.copy.footprints", {"d3d12", "formats"}, false, 120, d3d12::CopyChecks::footprints});
+    guarded(suite, {"sanity.d3d12.copy.region_variants", {"d3d12", "msaa"}, false, 90, d3d12::CopyChecks::region_variants});
+    guarded(suite, {"sanity.d3d12.queue.types", {"d3d12", "compute"}, false, 90, d3d12::QueueChecks::types});
+    guarded(suite, {"sanity.d3d12.queue.many_lists", {"d3d12"}, false, 90, d3d12::QueueChecks::many_lists});
+    guarded(suite, {"sanity.d3d12.fence.cross_queue", {"d3d12", "compute"}, false, 90, d3d12::FenceChecks::cross_queue});
+    guarded(suite, {"sanity.d3d12.fence.cpu_semantics", {"d3d12"}, false, 180, d3d12::FenceChecks::cpu_semantics});
+    guarded(suite, {"sanity.d3d12.fence.shared", {"d3d12", "interop"}, false, 240, d3d12::FenceChecks::shared});
+    guarded(suite, {"sanity.d3d12.barrier.transition_uav", {"d3d12", "compute"}, false, 90, d3d12::BarrierChecks::transition_uav});
+    guarded(suite, {"sanity.d3d12.barrier.enhanced", {"d3d12", "compute"}, false, 90, d3d12::BarrierChecks::enhanced});
+    guarded(suite, {"sanity.d3d12.barrier.misuse_tolerance", {"d3d12"}, false, 90, d3d12::BarrierChecks::misuse_tolerance});
+    guarded(suite, {"sanity.d3d12.desc.heaps_and_tables", {"d3d12", "compute"}, false, 120, d3d12::DescChecks::heaps_and_tables});
+    guarded(suite, {"sanity.d3d12.root.signatures", {"d3d12", "compute"}, false, 90, d3d12::DescChecks::root_signatures});
+    guarded(suite, {"sanity.d3d12.pso.graphics_compute", {"d3d12", "compute"}, false, 120, d3d12::PsoChecks::graphics_compute});
+    guarded(suite, {"sanity.d3d12.pso.library_cache", {"d3d12"}, false, 90, d3d12::PsoChecks::library_cache});
     guarded(suite, {"sanity.vk.instance.version_layers_extensions", {"vulkan"}, false, 60, vk::InstanceChecks::version_layers_extensions});
     guarded(suite, {"sanity.vk.device.props_features_consistent", {"vulkan"}, false, 120, vk::InstanceChecks::props_features_consistent});
     guarded(suite, {"sanity.vk.device.limits_minimums_honoured", {"vulkan"}, false, 120, vk::InstanceChecks::limits_minimums_honoured});

@@ -16,6 +16,12 @@ add_library(suite_support OBJECT
     swap_rig.cpp
     d3d12_backend.cpp
     d3d12_device.cpp
+    d3d12_frame.cpp
+    d3d12_oracle.cpp
+    d3d12_queue.cpp
+    d3d12_rig.cpp
+    d3d12_root.cpp
+    d3d12_tools.cpp
     d3d9_backend.cpp
     dxgi_budget.cpp
     gl_backend.cpp

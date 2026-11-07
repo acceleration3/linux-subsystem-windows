@@ -37,6 +37,16 @@ add_library(suite_sanity OBJECT
     vk/wsi_checks.cpp
     vk/robust_checks.cpp
     vk/external_checks.cpp
+    d3d12/kit.cpp
+    d3d12/dev_checks.cpp
+    d3d12/heap_checks.cpp
+    d3d12/map_checks.cpp
+    d3d12/copy_checks.cpp
+    d3d12/queue_checks.cpp
+    d3d12/fence_checks.cpp
+    d3d12/barrier_checks.cpp
+    d3d12/desc_checks.cpp
+    d3d12/pso_checks.cpp
     dxgi/enum_checks.cpp
     dxgi/swap_checks.cpp
     dxgi/mem_checks.cpp
