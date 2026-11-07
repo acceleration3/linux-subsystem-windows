@@ -39,9 +39,14 @@ public:
         return enqueue(queue, 1, nullptr, &global, local != 0 ? &local : nullptr, waits, wait_list, event);
     }
 
+    [[nodiscard]] cl_int work_group_info(std::size_t& value) const {
+        value = 0;
+        return rig_->api.GetKernelWorkGroupInfo(kernel_.get(), rig_->device, CL_KERNEL_WORK_GROUP_SIZE, sizeof(value), &value, nullptr);
+    }
+
     [[nodiscard]] std::size_t work_group_size() const {
         std::size_t value = 0;
-        rig_->api.GetKernelWorkGroupInfo(kernel_.get(), rig_->device, CL_KERNEL_WORK_GROUP_SIZE, sizeof(value), &value, nullptr);
+        static_cast<void>(work_group_info(value));
         return value;
     }
 

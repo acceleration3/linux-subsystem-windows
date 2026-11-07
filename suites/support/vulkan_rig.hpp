@@ -65,6 +65,8 @@ struct VulkanQueue {
     VkQueue handle = nullptr;
     VkCommandPool pool = VK_NULL_HANDLE;
     VkQueueFamilyProperties properties{};
+
+    [[nodiscard]] bool supports(VkQueueFlags any_of) const { return (properties.queueFlags & any_of) != 0; }
 };
 
 struct VulkanRigOptions {
@@ -97,6 +99,8 @@ public:
     [[nodiscard]] bool at_least(std::uint32_t version) const { return api >= version; }
 
     [[nodiscard]] VulkanQueue& main() { return queues[main_index]; }
+
+    [[nodiscard]] std::vector<VulkanQueue*> queues_supporting(VkQueueFlags any_of);
 
     [[nodiscard]] int find_type(std::uint32_t bits, VkMemoryPropertyFlags required, VkMemoryPropertyFlags preferred = 0) const;
 

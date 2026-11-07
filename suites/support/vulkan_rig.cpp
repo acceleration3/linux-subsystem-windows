@@ -377,6 +377,16 @@ bool VulkanRig::open(const AvAdapter& target, const VulkanRigOptions& options, s
     return true;
 }
 
+std::vector<VulkanQueue*> VulkanRig::queues_supporting(VkQueueFlags any_of) {
+    std::vector<VulkanQueue*> out;
+    for (VulkanQueue& queue : queues) {
+        if (queue.supports(any_of)) {
+            out.push_back(&queue);
+        }
+    }
+    return out;
+}
+
 int VulkanRig::find_type(std::uint32_t bits, VkMemoryPropertyFlags required, VkMemoryPropertyFlags preferred) const {
     int fallback = -1;
     for (std::uint32_t i = 0; i < memory.memoryTypeCount; ++i) {

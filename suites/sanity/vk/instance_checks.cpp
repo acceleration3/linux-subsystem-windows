@@ -701,12 +701,10 @@ Outcome InstanceChecks::queue_families(Context& context) {
                                                                    {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1}},
                                                                   8));
         }
-        for (VulkanQueue& queue : rig.queues) {
+        for (VulkanQueue* family_queue : rig.queues_supporting(VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT)) {
+            VulkanQueue& queue = *family_queue;
             const std::string label = "queue " + std::to_string(queue.index) + " of family " + std::to_string(queue.family);
             const VkQueueFlags flags = queue.properties.queueFlags;
-            if ((flags & (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT)) == 0) {
-                continue;
-            }
             VulkanBuffer a;
             VulkanBuffer b;
             if (!Kit::succeeds(problems, label + " source buffer", Kit::host_buffer(rig, a, 256)) ||

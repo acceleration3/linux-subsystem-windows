@@ -22,7 +22,8 @@ std::uint64_t mask_for(std::uint32_t bits) {
 Outcome QueryChecks::timestamps(Context& context) {
     return Kit::each_device(context, [&](VulkanRig& rig, Problems& problems) -> std::string {
         const double period = static_cast<double>(rig.props.limits.timestampPeriod);
-        for (VulkanQueue& queue : rig.queues) {
+        for (VulkanQueue* family_queue : rig.queues_supporting(VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT)) {
+            VulkanQueue& queue = *family_queue;
             const std::uint32_t bits = queue.properties.timestampValidBits;
             if (bits == 0) {
                 continue;
@@ -95,23 +96,28 @@ Outcome QueryChecks::timestamps(Context& context) {
                 info.commandBufferCount = 1;
                 info.pCommandBuffers = &commands;
                 if (Kit::succeeds(problems, "gated timestamp submission", rig.submit(queue, 1, &info, fence.get()))) {
-                    std::atomic<bool> returned{false};
-                    std::atomic<int> seen{VK_SUCCESS};
-                    std::thread waiter([&] {
-                        std::uint64_t value = 0;
-                        seen = rig.fn.vkGetQueryPoolResults(rig.device, pool.get(), 0, 1, 8, &value, 8, VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT);
-                        returned = true;
-                    });
-                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
-                    const bool early = returned.load();
                     std::uint64_t probe = 0;
                     const VkResult unfinished = rig.fn.vkGetQueryPoolResults(rig.device, pool.get(), 0, 1, 8, &probe, 8, VK_QUERY_RESULT_64_BIT);
+                    std::atomic<bool> started{false};
+                    std::atomic<bool> released{false};
+                    std::atomic<bool> early{false};
+                    std::atomic<int> seen{VK_SUCCESS};
+                    std::thread waiter([&] {
+                        started = true;
+                        std::uint64_t value = 0;
+                        seen = rig.fn.vkGetQueryPoolResults(rig.device, pool.get(), 0, 1, 8, &value, 8, VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT);
+                        early = !released.load();
+                    });
+                    while (!started.load()) {
+                        std::this_thread::yield();
+                    }
+                    released = true;
                     (void)rig.fn.vkSetEvent(rig.device, gate.get());
                     waiter.join();
-                    if (early) {
+                    if (early.load()) {
                         problems.add("vkGetQueryPoolResults with WAIT_BIT returned before the query was written");
                     }
-                    if (!early && unfinished != VK_NOT_READY) {
+                    if (unfinished != VK_NOT_READY) {
                         problems.add("vkGetQueryPoolResults without WAIT_BIT on an unwritten query returned " + Kit::name(unfinished) + ", expected VK_NOT_READY");
                     }
                     if (seen.load() != VK_SUCCESS) {
