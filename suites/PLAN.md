@@ -1294,6 +1294,8 @@ Judged by the matrix around runs. All rows are host-phase.
 
 ### 4.25 LSW stack (12)
 
+Implementation note: a guest process cannot drive the host mirror, so these rows assert the guest side of each contract with the same mechanisms the stack uses: windows of a launched process found by title, Win32 maximize, snap and restore, and SendInput keyboard, mouse and focus. Whether the host mirrors the result is judged by the host phase. `sanity.lsw.status.numbers_match_activity` skips because the status numbers exist only on the host. `sanity.lsw.mirror.frames_equal_guest` reuses the guest frame-order check of the capture area.
+
 | check | contract |
 |---|---|
 | `sanity.lsw.mirror.launched_app_appears` | An application launched through the stack shows a mirrored window within a stated time, with the right title and size. |
@@ -1311,6 +1313,8 @@ Judged by the matrix around runs. All rows are host-phase.
 
 ### 4.26 Regression contracts (10)
 
+Implementation note: `sanity.reg.stats.transfer_counts_plausible` runs the known sequence and records its totals, then skips because the counters are host-side. `sanity.reg.lsw.maximized_not_at_drop_point` drags a maximized guest window by mouse injection. `sanity.reg.lsw.first_launch_mirrored` skips (host-observed). `sanity.reg.gl.core_context_works` creates the core profile contexts of every advertised version.
+
 | check | contract |
 |---|---|
 | `sanity.reg.cl.buffer_alive_while_in_use` | An OpenCL buffer released by the application while a kernel using it is enqueued remains valid until the kernel finishes: the result is correct (reference counting contract). |
@@ -1325,6 +1329,8 @@ Judged by the matrix around runs. All rows are host-phase.
 | `sanity.reg.gl.legacy_context_version_string` | A legacy context's GL_VERSION string starts with a version number that matches the highest version the extension string enables. |
 
 ### 4.27 White-box diagnostics (recorded as measures, never pass or fail)
+
+Implementation note: each measure scans the driver logs in C:\ProgramData\av for the keywords of its observation before and after a roundtrip workload and records counts, deltas and the first matching lines; `latency.roundtrip_percentiles` and `registry.object_table` measure directly.
 
 | measure | observation |
 |---|---|

@@ -33,7 +33,7 @@ void judge_baseline(Problems& problems, const std::string& api, const ProcessSam
     }
 }
 
-void many_d3d11(Context& context, Problems& problems) {
+void many_d3d11(Context& context, Problems& problems, int objects) {
     AvAdapter adapter;
     std::string error;
     D3d11Device device;
@@ -45,9 +45,9 @@ void many_d3d11(Context& context, Problems& problems) {
     int made = 0;
     {
         std::vector<Com<ID3D11Buffer>> buffers;
-        buffers.reserve(kObjects);
+        buffers.reserve(static_cast<std::size_t>(objects));
         HRESULT last = S_OK;
-        for (; made < kObjects; ++made) {
+        for (; made < objects; ++made) {
             Com<ID3D11Buffer> buffer = D3d11Tools::buffer(device, 256, D3D11_USAGE_DEFAULT, D3D11_BIND_CONSTANT_BUFFER, 0, 0, 0, nullptr, &last);
             if (!buffer) {
                 break;
@@ -55,7 +55,7 @@ void many_d3d11(Context& context, Problems& problems) {
             buffers.push_back(std::move(buffer));
         }
         context.measure("d3d11.buffers", made);
-        if (made < kObjects && !D3d12Tools::in(last, {E_OUTOFMEMORY, DXGI_ERROR_DEVICE_REMOVED, E_FAIL})) {
+        if (made < objects && !D3d12Tools::in(last, {E_OUTOFMEMORY, DXGI_ERROR_DEVICE_REMOVED, E_FAIL})) {
             problems.add("d3d11: creating buffer " + std::to_string(made) + " failed with " + D3d12Tools::hr(last) + " instead of E_OUTOFMEMORY");
         }
         if (!buffers.empty()) {
@@ -66,7 +66,7 @@ void many_d3d11(Context& context, Problems& problems) {
     judge_baseline(problems, "d3d11", before, ProcessSampler::take());
 }
 
-void many_d3d12(Context& context, Problems& problems) {
+void many_d3d12(Context& context, Problems& problems, int objects) {
     AvAdapter adapter;
     std::string error;
     D3d12Rig rig;
@@ -77,9 +77,9 @@ void many_d3d12(Context& context, Problems& problems) {
     const ProcessSample before = ProcessSampler::take();
     {
         std::vector<Com<ID3D12Fence>> fences;
-        fences.reserve(kObjects);
+        fences.reserve(static_cast<std::size_t>(objects));
         HRESULT last = S_OK;
-        for (int i = 0; i < kObjects; ++i) {
+        for (int i = 0; i < objects; ++i) {
             Com<ID3D12Fence> fence;
             last = rig.device()->CreateFence(0, D3D12_FENCE_FLAG_NONE, __uuidof(ID3D12Fence), fence.put_void());
             if (FAILED(last)) {
@@ -122,7 +122,7 @@ void many_d3d12(Context& context, Problems& problems) {
     judge_baseline(problems, "d3d12", before, ProcessSampler::take());
 }
 
-void many_vulkan(Context& context, Problems& problems) {
+void many_vulkan(Context& context, Problems& problems, int objects) {
     std::string error;
     const std::vector<AvAdapter> adapters = VulkanRig::target_adapters(error);
     if (adapters.empty()) {
@@ -135,13 +135,13 @@ void many_vulkan(Context& context, Problems& problems) {
     }
     const ProcessSample before = ProcessSampler::take();
     std::vector<VkBuffer> buffers;
-    buffers.reserve(kObjects);
+    buffers.reserve(static_cast<std::size_t>(objects));
     VkResult last = VK_SUCCESS;
     VkBufferCreateInfo info{};
     info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     info.size = 256;
     info.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-    for (int i = 0; i < kObjects; ++i) {
+    for (int i = 0; i < objects; ++i) {
         VkBuffer buffer = VK_NULL_HANDLE;
         last = rig.fn.vkCreateBuffer(rig.device, &info, nullptr, &buffer);
         if (last != VK_SUCCESS) {
@@ -159,7 +159,7 @@ void many_vulkan(Context& context, Problems& problems) {
     judge_baseline(problems, "vulkan", before, ProcessSampler::take());
 }
 
-void many_opencl(Context& context, Problems& problems) {
+void many_opencl(Context& context, Problems& problems, int objects) {
     ClRig rig;
     std::string error;
     if (!rig.open(ClRigOptions{}, error)) {
@@ -167,9 +167,9 @@ void many_opencl(Context& context, Problems& problems) {
     }
     const ProcessSample before = ProcessSampler::take();
     std::vector<cl_mem> buffers;
-    buffers.reserve(kObjects);
+    buffers.reserve(static_cast<std::size_t>(objects));
     cl_int last = CL_SUCCESS;
-    for (int i = 0; i < kObjects; ++i) {
+    for (int i = 0; i < objects; ++i) {
         cl_mem buffer = rig.api.CreateBuffer(rig.context, CL_MEM_READ_WRITE, 256, nullptr, &last);
         if (last != CL_SUCCESS || buffer == nullptr) {
             break;
@@ -190,18 +190,22 @@ void many_opencl(Context& context, Problems& problems) {
 }  // namespace
 
 Outcome LimitChecks::handle_count(Context& context) {
+    return many_objects(context, kObjects);
+}
+
+Outcome LimitChecks::many_objects(Context& context, int objects) {
     Problems problems;
     if (!ApiPolicy::is_skipped("d3d11")) {
-        many_d3d11(context, problems);
+        many_d3d11(context, problems, objects);
     }
     if (!ApiPolicy::is_skipped("d3d12")) {
-        many_d3d12(context, problems);
+        many_d3d12(context, problems, objects);
     }
     if (!ApiPolicy::is_skipped("vulkan")) {
-        many_vulkan(context, problems);
+        many_vulkan(context, problems, objects);
     }
     if (!ApiPolicy::is_skipped("opencl")) {
-        many_opencl(context, problems);
+        many_opencl(context, problems, objects);
     }
     return problems.outcome();
 }

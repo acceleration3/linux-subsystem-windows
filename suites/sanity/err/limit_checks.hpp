@@ -8,6 +8,8 @@ class LimitChecks {
 public:
     [[nodiscard]] static Outcome handle_count(Context& context);
 
+    [[nodiscard]] static Outcome many_objects(Context& context, int objects);
+
     [[nodiscard]] static Outcome max_texture_dims(Context& context);
 
     [[nodiscard]] static Outcome max_threads_workgroup(Context& context);

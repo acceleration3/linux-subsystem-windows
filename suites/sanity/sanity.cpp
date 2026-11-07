@@ -166,6 +166,9 @@
 #include "sanity/bits/parity_checks.hpp"
 #include "sanity/bits/share_checks.hpp"
 #include "sanity/bits/addr_checks.hpp"
+#include "sanity/reg/reg_checks.hpp"
+#include "sanity/lsw/lsw_checks.hpp"
+#include "sanity/diag/diag_checks.hpp"
 
 namespace lsw::suites::sanity {
 
@@ -886,6 +889,38 @@ void add(Registry& registry) {
     guarded(suite, {"sanity.bits.wow64.icd_loading", {"bits", "x86-only", "dxgi", "vulkan", "opencl", "gl"}, false, 240, bits::AddrChecks::icd_loading});
     guarded(suite, {"sanity.bits.wow64.exit_cleanup", {"bits", "x86-only", "mem", "robust", "d3d11", "d3d12", "vulkan", "opencl", "exclusive"}, true, 900, bits::AddrChecks::exit_cleanup});
     guarded(suite, {"sanity.bits.parity.error_codes", {"bits", "cross-bitness", "d3d11", "d3d12", "vulkan", "opencl"}, false, 300, bits::ParityChecks::error_codes});
+    guarded(suite, {"sanity.reg.cl.buffer_alive_while_in_use", {"reg", "opencl"}, false, 120, reg::RegChecks::cl_buffer_alive_while_in_use});
+    guarded(suite, {"sanity.reg.d3d12.caps_enum_defined", {"reg", "d3d12"}, false, 60, reg::RegChecks::d3d12_caps_enum_defined});
+    guarded(suite, {"sanity.reg.stats.transfer_counts_plausible", {"reg", "d3d11"}, false, 120, reg::RegChecks::stats_transfer_counts_plausible});
+    guarded(suite, {"sanity.reg.upload.large_not_slower_than_small", {"reg", "d3d11", "exclusive"}, true, 120, reg::RegChecks::upload_large_not_slower_than_small});
+    guarded(suite, {"sanity.reg.dwm.output_not_toggled", {"reg", "dwm", "gdi", "exclusive", "pacing"}, true, 120, reg::RegChecks::dwm_output_not_toggled});
+    guarded(suite, {"sanity.reg.gl.core_context_works", {"reg", "gl"}, false, 120, reg::RegChecks::gl_core_context_works});
+    guarded(suite, {"sanity.reg.objects.many_objects_work", {"reg", "mem", "slow", "d3d11", "d3d12", "vulkan", "opencl"}, false, 1200, reg::RegChecks::objects_many_objects_work});
+    guarded(suite, {"sanity.reg.gl.legacy_context_version_string", {"reg", "gl"}, false, 60, reg::RegChecks::gl_legacy_context_version_string});
+    guarded(suite, {"sanity.lsw.mirror.launched_app_appears", {"lsw", "gdi"}, false, 120, lsw::LswChecks::launched_app_appears});
+    guarded(suite, {"sanity.lsw.mirror.relaunching_app", {"lsw", "gdi", "exclusive"}, true, 120, lsw::LswChecks::relaunching_app});
+    guarded(suite, {"sanity.lsw.mirror.frames_equal_guest", {"lsw", "capture", "wgc", "d3d11", "present", "dwm", "exclusive", "pacing"}, true, 240, lsw::LswChecks::frames_equal_guest});
+    guarded(suite, {"sanity.lsw.window.maximize_work_area", {"lsw", "gdi", "dwm", "exclusive"}, true, 120, lsw::LswChecks::maximize_work_area});
+    guarded(suite, {"sanity.lsw.window.snap_restore", {"lsw", "gdi", "dwm", "exclusive"}, true, 120, lsw::LswChecks::snap_restore});
+    guarded(suite, {"sanity.lsw.window.move_resize_guest_follows", {"lsw", "gdi", "dwm", "exclusive"}, true, 120, lsw::LswChecks::move_resize_guest_follows});
+    guarded(suite, {"sanity.lsw.input.keyboard_to_right_window", {"lsw", "gdi", "exclusive"}, true, 120, lsw::LswChecks::keyboard_to_right_window});
+    guarded(suite, {"sanity.lsw.input.mouse_position_mapping", {"lsw", "gdi", "exclusive"}, true, 120, lsw::LswChecks::mouse_position_mapping});
+    guarded(suite, {"sanity.lsw.input.focus_follows", {"lsw", "gdi", "exclusive"}, true, 120, lsw::LswChecks::focus_follows});
+    guarded(suite, {"sanity.lsw.status.numbers_match_activity", {"lsw", "d3d11"}, false, 60, lsw::LswChecks::status_numbers_match_activity});
+    guarded(suite, {"sanity.lsw.update.preserves_requirements", {"lsw", "env", "gdi", "exclusive"}, true, 180, lsw::LswChecks::update_preserves_requirements});
+    guarded(suite, {"sanity.lsw.close.window_close_ends_app", {"lsw", "gdi"}, false, 120, lsw::LswChecks::window_close_ends_app});
+    guarded(suite, {"sanity.reg.lsw.maximized_not_at_drop_point", {"lsw", "gdi", "dwm", "exclusive"}, true, 120, lsw::LswChecks::maximized_not_at_drop_point});
+    guarded(suite, {"sanity.reg.lsw.first_launch_mirrored", {"lsw", "gdi"}, false, 60, lsw::LswChecks::first_launch_mirrored});
+    guarded(suite, {"sanity.diag.transfer.splits", {"diag", "measure", "d3d11", "d3d12", "vulkan", "opencl"}, false, 300, diag::DiagChecks::transfer_splits});
+    guarded(suite, {"sanity.diag.transfer.arena_size", {"diag", "measure", "d3d11", "d3d12", "vulkan", "opencl"}, false, 300, diag::DiagChecks::transfer_arena_size});
+    guarded(suite, {"sanity.diag.transfer.refusals", {"diag", "measure", "d3d11", "d3d12", "vulkan", "opencl"}, false, 300, diag::DiagChecks::transfer_refusals});
+    guarded(suite, {"sanity.diag.transfer.slice_waits", {"diag", "measure", "d3d11", "d3d12", "vulkan", "opencl"}, false, 300, diag::DiagChecks::transfer_slice_waits});
+    guarded(suite, {"sanity.diag.memory.lent_pages", {"diag", "measure", "d3d11", "d3d12", "vulkan", "opencl"}, false, 300, diag::DiagChecks::memory_lent_pages});
+    guarded(suite, {"sanity.diag.memory.host_window_use", {"diag", "measure", "d3d11", "d3d12", "vulkan", "opencl"}, false, 300, diag::DiagChecks::memory_host_window_use});
+    guarded(suite, {"sanity.diag.stats.channel_counters", {"diag", "measure", "d3d11", "d3d12", "vulkan", "opencl"}, false, 300, diag::DiagChecks::stats_channel_counters});
+    guarded(suite, {"sanity.diag.registry.object_table", {"diag", "measure", "d3d11", "d3d12", "vulkan", "opencl"}, false, 300, diag::DiagChecks::registry_object_table});
+    guarded(suite, {"sanity.diag.sched.queue_depth", {"diag", "measure", "d3d11", "d3d12", "vulkan", "opencl"}, false, 300, diag::DiagChecks::sched_queue_depth});
+    guarded(suite, {"sanity.diag.latency.roundtrip_percentiles", {"diag", "measure", "d3d11", "d3d12", "vulkan", "opencl"}, false, 300, diag::DiagChecks::latency_roundtrip_percentiles});
 }
 
 }  // namespace lsw::suites::sanity

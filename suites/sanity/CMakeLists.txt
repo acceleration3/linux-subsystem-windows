@@ -203,5 +203,9 @@ add_library(suite_sanity OBJECT
     bits/parity_checks.cpp
     bits/share_checks.cpp
     bits/addr_checks.cpp
+    reg/reg_checks.cpp
+    lsw/input_window.cpp
+    lsw/lsw_checks.cpp
+    diag/diag_checks.cpp
 )
 target_link_libraries(suite_sanity PUBLIC suite_core suite_support)
