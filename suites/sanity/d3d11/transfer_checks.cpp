@@ -348,8 +348,8 @@ Outcome TransferChecks::update_copy_flags(Context& context) {
         UINT offset = 0;
         d.context->IASetVertexBuffers(0, 1, &raw, &stride, &offset);
         for (UINT i = 0; i < kCount; ++i) {
-            Vertex v{((i % 100) + 0.5f) / 100.0f * 2.0f - 1.0f, 0.5f - static_cast<float>(i / 100), Kit::rgba(static_cast<int>(i), 255 - static_cast<int>(i), 9, 255)};
-            const D3D11_BOX box{i * sizeof(Vertex), 0, 0, (i + 1) * static_cast<UINT>(sizeof(Vertex)), 1, 1};
+            Vertex v{(static_cast<float>(i % 100) + 0.5f) / 100.0f * 2.0f - 1.0f, 0.5f - static_cast<float>(i / 100), Kit::rgba(static_cast<int>(i), 255 - static_cast<int>(i), 9, 255)};
+            const D3D11_BOX box{i * static_cast<UINT>(sizeof(Vertex)), 0, 0, (i + 1) * static_cast<UINT>(sizeof(Vertex)), 1, 1};
             ctx->UpdateSubresource1(vb.get(), 0, &box, &v, 0, 0, D3D11_COPY_NO_OVERWRITE);
             d.context->Draw(1, i);
         }
@@ -690,7 +690,7 @@ Outcome TransferChecks::copy_structure_copy(Context& context) {
     auto counter = [&]() -> long long {
         ctx->CopyStructureCount(count.get(), 0, list_uav.get());
         const std::vector<std::uint32_t> words = D3d11Tools::read_words(device, count.get(), error);
-        return words.empty() ? -1 : words[0];
+        return words.empty() ? -1LL : static_cast<long long>(words[0]);
     };
     ID3D11UnorderedAccessView* views[2] = {list_uav.get(), sink_uav.get()};
     const UINT start = 5;

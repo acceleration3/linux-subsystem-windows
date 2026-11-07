@@ -46,23 +46,6 @@ std::string rgb_text(const int c[3]) {
     return std::to_string(c[0]) + "," + std::to_string(c[1]) + "," + std::to_string(c[2]);
 }
 
-bool present_and_expect(SwapRig& rig, float r, float g, float b, const int want[3], int tolerance, std::string& detail) {
-    if (!rig.fill(r, g, b, 1.0f, detail)) {
-        return false;
-    }
-    const HRESULT presented = rig.chain->Present(1, 0);
-    if (FAILED(presented)) {
-        detail = "Present failed: " + D3d11Tools::hr(presented);
-        return false;
-    }
-    int got[3] = {0, 0, 0};
-    if (!rig.wait_for_color(64, 64, want, tolerance, 3000, got)) {
-        detail = "the screen shows " + rgb_text(got) + ", expected " + rgb_text(want);
-        return false;
-    }
-    return true;
-}
-
 }  // namespace
 
 Outcome SwapChecks::model_matrix(Context& context) {
@@ -210,7 +193,7 @@ Outcome SwapChecks::buffer_contents(Context& context) {
         UINT previous = chain3->GetCurrentBackBufferIndex();
         const int colors[6][3] = {{255, 0, 0}, {0, 255, 0}, {0, 0, 255}, {255, 255, 0}, {0, 255, 255}, {255, 0, 255}};
         for (int frame = 0; frame < 6; ++frame) {
-            if (!rig.fill(colors[frame][0] / 255.0f, colors[frame][1] / 255.0f, colors[frame][2] / 255.0f, 1.0f, error) || FAILED(rig.chain->Present(1, 0))) {
+            if (!rig.fill(static_cast<float>(colors[frame][0]) / 255.0f, static_cast<float>(colors[frame][1]) / 255.0f, static_cast<float>(colors[frame][2]) / 255.0f, 1.0f, error) || FAILED(rig.chain->Present(1, 0))) {
                 problems.add(std::string(effect_name(effect)) + ": frame " + std::to_string(frame) + " cannot be presented");
                 break;
             }
@@ -400,7 +383,7 @@ Outcome SwapChecks::do_not_wait(Context& context) {
     ::Sleep(600);
     HRESULT after = DXGI_ERROR_WAS_STILL_DRAWING;
     for (int i = 0; i < 10 && after == DXGI_ERROR_WAS_STILL_DRAWING; ++i) {
-        rig.fill(0.0f, 0.5f, 0.5f, 1.0f, error);
+        (void)rig.fill(0.0f, 0.5f, 0.5f, 1.0f, error);
         after = rig.chain->Present(1, DXGI_PRESENT_DO_NOT_WAIT);
         ::Sleep(100);
     }
@@ -464,7 +447,7 @@ Outcome SwapChecks::waitable_latency(Context& context) {
             problems.add("frame " + std::to_string(frame) + ": the waitable object did not signal within 2 s while frames were presented");
             break;
         }
-        if (!rig.fill(frame / 60.0f, 0.2f, 0.4f, 1.0f, error) || FAILED(rig.chain->Present(1, 0))) {
+        if (!rig.fill(static_cast<float>(frame) / 60.0f, 0.2f, 0.4f, 1.0f, error) || FAILED(rig.chain->Present(1, 0))) {
             problems.add("frame " + std::to_string(frame) + " cannot be presented");
             break;
         }
@@ -499,7 +482,7 @@ Outcome SwapChecks::frame_statistics(Context& context) {
         hz = mode.dmDisplayFrequency;
     }
     UINT previous_count = 0;
-    rig.fill(0.1f, 0.1f, 0.1f, 1.0f, error);
+    (void)rig.fill(0.1f, 0.1f, 0.1f, 1.0f, error);
     rig.chain->Present(1, 0);
     rig.chain->GetLastPresentCount(&previous_count);
     DXGI_FRAME_STATISTICS first{};
@@ -508,7 +491,7 @@ Outcome SwapChecks::frame_statistics(Context& context) {
     DXGI_FRAME_STATISTICS last{};
     constexpr int kFrames = 60;
     for (int i = 0; i < kFrames; ++i) {
-        rig.fill(i / 60.0f, 0.1f, 0.1f, 1.0f, error);
+        (void)rig.fill(static_cast<float>(i) / 60.0f, 0.1f, 0.1f, 1.0f, error);
         if (FAILED(rig.chain->Present(1, 0))) {
             return Outcome::fail("Present failed");
         }
@@ -808,7 +791,7 @@ Outcome SwapChecks::getdc(Context& context) {
             problems.add(std::string(effect_name(effect)) + ": " + error);
             continue;
         }
-        rig.fill(0, 0, 0, 1, error);
+        (void)rig.fill(0, 0, 0, 1, error);
         Com<IDXGISurface1> surface;
         rig.chain->GetBuffer(0, __uuidof(IDXGISurface1), surface.put_void());
         HDC dc = nullptr;

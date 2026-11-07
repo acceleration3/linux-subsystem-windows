@@ -355,8 +355,8 @@ Outcome MapChecks::nooverwrite_inflight(Context& context) {
             return Outcome::fail("Map failed in cycle " + std::to_string(i));
         }
         Vertex vertex{};
-        vertex.x = ((i % kWidth) + 0.5f) / kWidth * 2.0f - 1.0f;
-        vertex.y = 1.0f - ((i / kWidth) + 0.5f) / kHeight * 2.0f;
+        vertex.x = (static_cast<float>(i % kWidth) + 0.5f) / static_cast<float>(kWidth) * 2.0f - 1.0f;
+        vertex.y = 1.0f - (static_cast<float>(i / kWidth) + 0.5f) / static_cast<float>(kHeight) * 2.0f;
         vertex.color = Kit::rgba(static_cast<int>(i & 255), static_cast<int>((i >> 8) & 255), 77, 255);
         std::memcpy(static_cast<std::uint8_t*>(mapped.pData) + used * sizeof(Vertex), &vertex, sizeof(Vertex));
         ctx->Unmap(vb.get(), 0);
@@ -736,7 +736,7 @@ Outcome MapChecks::persistent_across_frames(Context& context) {
     }
     Com<ID3D11PixelShader> flat = Kit::color_ps(rig.device, "0.1, 0.2, 0.3, 1.0", error);
     for (int frame = 0; frame < 12; ++frame) {
-        Com<ID3D11RenderTargetView> view = rig.back_view(frame % 2);
+        Com<ID3D11RenderTargetView> view = rig.back_view(static_cast<UINT>(frame % 2));
         if (!view || !flat) {
             problems.add("a back buffer view is missing");
             break;

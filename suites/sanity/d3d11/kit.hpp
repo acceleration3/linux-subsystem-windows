@@ -12,6 +12,13 @@
 namespace lsw::suites::sanity::d3d11 {
 class Kit {
 public:
+    template <typename E>
+    [[nodiscard]] static E raw_enum(unsigned value) {
+        E result;
+        std::memcpy(&result, &value, sizeof(result));
+        return result;
+    }
+
     template <typename U>
     [[nodiscard]] static Com<U> query(IUnknown* object) {
         U* other = nullptr;

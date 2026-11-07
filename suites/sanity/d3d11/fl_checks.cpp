@@ -1,6 +1,7 @@
 #include "sanity/d3d11/fl_checks.hpp"
 
 #include "core/text.hpp"
+#include "sanity/d3d11/kit.hpp"
 #include "support/d3d11_tools.hpp"
 #include "support/format_codec.hpp"
 #include "support/problems.hpp"
@@ -285,7 +286,7 @@ Outcome FlChecks::checkfeaturesupport_options(Context& context) {
             problems.add("CheckFeatureSupport with a wrong size returned " + D3d11Tools::hr(wrong));
         }
         UINT dummy = 0;
-        const HRESULT unknown = device.device->CheckFeatureSupport(static_cast<D3D11_FEATURE>(0x77), &dummy, 4);
+        const HRESULT unknown = device.device->CheckFeatureSupport(Kit::raw_enum<D3D11_FEATURE>(0x77), &dummy, 4);
         if (unknown != E_INVALIDARG) {
             problems.add("CheckFeatureSupport with an undefined feature returned " + D3d11Tools::hr(unknown));
         }
@@ -584,7 +585,7 @@ Outcome FlChecks::msaa_quality_vs_use(Context& context) {
                 }
                 std::string why;
                 for (UINT p = 0; p < 256; p += 37) {
-                    if (!FormatCodec::matches(spec, bytes.data() + static_cast<std::size_t>(p) * spec.bytes, color, why)) {
+                    if (!FormatCodec::matches(spec, bytes.data() + static_cast<std::size_t>(p) * static_cast<std::size_t>(spec.bytes), color, why)) {
                         problems.add(label + ": resolved pixel " + std::to_string(p) + " " + why);
                         break;
                     }

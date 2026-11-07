@@ -96,12 +96,12 @@ Outcome MemChecks::video_memory_info(Context& context) {
         if (result < 0 || !DxgiBudget::query(target.luid, true, reserved, error) || reserved.reservation != request) {
             problems.add("SetVideoMemoryReservation(" + std::to_string(request >> 20) + " MiB) is not accepted or not reported back");
         }
-        DxgiBudget::set_reservation(target.luid, true, 0);
+        (void)DxgiBudget::set_reservation(target.luid, true, 0);
         if (before.available_for_reservation < UINT64_MAX / 2) {
             const long too_much = DxgiBudget::set_reservation(target.luid, true, before.available_for_reservation + (64ull << 30));
             if (too_much >= 0) {
                 problems.add("a reservation far above AvailableForReservation is accepted");
-                DxgiBudget::set_reservation(target.luid, true, 0);
+                (void)DxgiBudget::set_reservation(target.luid, true, 0);
             }
         }
     }
@@ -424,7 +424,7 @@ Outcome MemChecks::debug_no_messages(Context& context) {
     }
     Com<IDXGIInfoQueue> queue;
     using GetDebug1 = HRESULT(WINAPI*)(UINT, REFIID, void**);
-    if (FAILED(reinterpret_cast<GetDebug1>(get)(0, __uuidof(IDXGIInfoQueue), queue.put_void()))) {
+    if (FAILED(reinterpret_cast<GetDebug1>(reinterpret_cast<void*>(get))(0, __uuidof(IDXGIInfoQueue), queue.put_void()))) {
         return Context::skip("the DXGI info queue cannot be obtained, so the debug layer is unavailable");
     }
     SwapRig rig;
@@ -439,7 +439,7 @@ Outcome MemChecks::debug_no_messages(Context& context) {
     Problems problems;
     queue->ClearStoredMessages(kDebugAll);
     for (int i = 0; i < 20; ++i) {
-        if (!rig.fill(i / 20.0f, 0.5f, 0.5f, 1.0f, error) || FAILED(rig.chain->Present(1, 0))) {
+        if (!rig.fill(static_cast<float>(i) / 20.0f, 0.5f, 0.5f, 1.0f, error) || FAILED(rig.chain->Present(1, 0))) {
             problems.add("a valid frame cannot be presented");
             break;
         }

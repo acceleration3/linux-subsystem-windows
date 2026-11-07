@@ -619,7 +619,7 @@ Outcome RenderChecks::tessellation(Context& context) {
             d.context->DSSetShader(ds.get(), nullptr, 0);
             D3D11_VIEWPORT vp{static_cast<float>(tile % 6) * 32.0f, static_cast<float>(tile / 6) * 32.0f, 32.0f, 32.0f, 0, 1};
             d.context->RSSetViewports(1, &vp);
-            d.context->Draw(m.points, 0);
+            d.context->Draw(static_cast<UINT>(m.points), 0);
             ++tile;
         }
         return finish_image(d, target.get(), 192, 64, out, why);

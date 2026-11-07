@@ -226,7 +226,7 @@ Outcome DeferredChecks::maps(Context& context) {
             struct Vertex {
                 float x, y;
                 std::uint32_t color;
-            } v{(i + 0.5f) / 16.0f * 2.0f - 1.0f, 0.0f, Kit::rgba(static_cast<int>(i * 10), static_cast<int>(i), 200, 255)};
+            } v{(static_cast<float>(i) + 0.5f) / 16.0f * 2.0f - 1.0f, 0.0f, Kit::rgba(static_cast<int>(i * 10), static_cast<int>(i), 200, 255)};
             std::memcpy(static_cast<std::uint8_t*>(mapped.pData) + i * 12, &v, 12);
             c->Unmap(vb.get(), 0);
             c->Draw(1, i);

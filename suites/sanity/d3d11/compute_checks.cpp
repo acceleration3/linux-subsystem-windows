@@ -261,7 +261,7 @@ Outcome ComputeChecks::append_consume(Context& context) {
     auto counter = [&]() -> long long {
         ctx->CopyStructureCount(count.get(), 0, list_uav.get());
         const std::vector<std::uint32_t> words = D3d11Tools::read_words(device, count.get(), error);
-        return words.empty() ? -1 : words[0];
+        return words.empty() ? -1LL : static_cast<long long>(words[0]);
     };
     auto histogram_all_ones = [&](UINT from, UINT to) {
         const std::vector<std::uint32_t> words = D3d11Tools::read_words(device, seen.get(), error);
@@ -349,7 +349,6 @@ Outcome ComputeChecks::typed_uav_load(Context& context) {
     if (device.level < D3D_FEATURE_LEVEL_11_0) {
         return Context::skip("typed UAV access needs feature level 11_0");
     }
-    ID3D11DeviceContext* ctx = device.context;
     Problems problems;
     const DXGI_FORMAT candidates[] = {DXGI_FORMAT_R32_FLOAT, DXGI_FORMAT_R32_UINT, DXGI_FORMAT_R32_SINT, DXGI_FORMAT_R32G32B32A32_FLOAT,
                                       DXGI_FORMAT_R32G32B32A32_UINT, DXGI_FORMAT_R16G16B16A16_FLOAT, DXGI_FORMAT_R16G16B16A16_UNORM,
@@ -403,7 +402,7 @@ Outcome ComputeChecks::typed_uav_load(Context& context) {
         }
         const std::size_t texel = 9;
         double decoded[4];
-        FormatCodec::decode(spec, image.data.data() + texel * spec.bytes, decoded);
+        FormatCodec::decode(spec, image.data.data() + texel * static_cast<std::size_t>(spec.bytes), decoded);
         for (int i = 0; i < spec.count; ++i) {
             const int channel = spec.field[i].channel;
             std::uint32_t bits = words[texel * 4 + static_cast<std::size_t>(channel)];
