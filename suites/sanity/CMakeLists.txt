@@ -36,6 +36,10 @@ add_library(suite_sanity OBJECT
     d3d9/lost_checks.cpp
     d3d9/share_checks.cpp
     d3d9/fail_checks.cpp
+    d3d10/create_checks.cpp
+    d3d10/render_checks.cpp
+    d3d10/dxgi_checks.cpp
+    d3d10/query_checks.cpp
     data/align_checks.cpp
     data/load_checks.cpp
     data/sequence_checks.cpp

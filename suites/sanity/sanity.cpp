@@ -19,6 +19,10 @@
 #include "sanity/memory/evict_map_checks.hpp"
 #include "sanity/memory/leak_checks.hpp"
 #include "sanity/memory/limit_checks.hpp"
+#include "sanity/d3d10/create_checks.hpp"
+#include "sanity/d3d10/render_checks.hpp"
+#include "sanity/d3d10/dxgi_checks.hpp"
+#include "sanity/d3d10/query_checks.hpp"
 #include "sanity/d3d9/caps_checks.hpp"
 #include "sanity/d3d9/res_checks.hpp"
 #include "sanity/d3d9/lock_checks.hpp"
@@ -202,6 +206,16 @@ void add(Registry& registry) {
     guarded(suite, {"sanity.mem.map.unmap_flushes", {"mem", "d3d11", "d3d12", "vulkan", "opencl", "gl"}, false, 120, memory::EvictMapChecks::unmap_flushes});
     guarded(suite, {"sanity.mem.map.exit_with_live_mappings", {"mem", "d3d12", "vulkan", "opencl", "d3d11"}, false, 300, memory::EvictMapChecks::exit_with_live_mappings});
     guarded(suite, {"sanity.mem.map.large_map_many", {"mem", "d3d11", "d3d12", "vulkan", "opencl", "slow", "exclusive"}, true, 300, memory::EvictMapChecks::large_map_many});
+    guarded(suite, {"sanity.d3d10.create.device_flags", {"d3d10"}, false, 60, d3d10::CreateChecks::device_flags});
+    guarded(suite, {"sanity.d3d10.fl.levels_101", {"d3d10"}, false, 60, d3d10::CreateChecks::levels_101});
+    guarded(suite, {"sanity.d3d10.res.format_support", {"d3d10", "formats"}, false, 120, d3d10::CreateChecks::format_support});
+    guarded(suite, {"sanity.d3d10.render.pipeline_warp", {"d3d10"}, false, 120, d3d10::RenderChecks::pipeline_warp});
+    guarded(suite, {"sanity.d3d10.render.streamout", {"d3d10"}, false, 60, d3d10::RenderChecks::streamout});
+    guarded(suite, {"sanity.d3d10.map.contracts", {"d3d10"}, false, 120, d3d10::RenderChecks::map_contracts});
+    guarded(suite, {"sanity.d3d10.dxgi.swapchain", {"d3d10", "dxgi", "present", "dwm"}, false, 120, d3d10::DxgiChecks::swapchain});
+    guarded(suite, {"sanity.d3d10.dxgi.interop_d3d11", {"d3d10", "d3d11", "dxgi", "interop"}, false, 120, d3d10::DxgiChecks::interop_d3d11});
+    guarded(suite, {"sanity.d3d10.query.predicate", {"d3d10"}, false, 120, d3d10::QueryChecks::predicate});
+    guarded(suite, {"sanity.d3d10.state.clearstate_and_stale", {"d3d10"}, false, 60, d3d10::QueryChecks::clearstate_and_stale});
     guarded(suite, {"sanity.d3d9.caps.create_matrix", {"d3d9"}, false, 120, d3d9::CapsChecks::create_matrix});
     guarded(suite, {"sanity.d3d9.caps.caps_vs_behaviour", {"d3d9"}, false, 120, d3d9::CapsChecks::caps_vs_behaviour});
     guarded(suite, {"sanity.d3d9.caps.check_device_format_consistent", {"d3d9", "formats"}, false, 120, d3d9::CapsChecks::check_device_format_consistent});
