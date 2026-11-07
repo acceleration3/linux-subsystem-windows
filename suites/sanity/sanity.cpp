@@ -364,7 +364,7 @@ void add(Registry& registry) {
     guarded(suite, {"sanity.d3d11.map.do_not_wait", {"d3d11"}, false, 120, d3d11::MapChecks::do_not_wait});
     guarded(suite, {"sanity.d3d11.map.pitches", {"d3d11"}, false, 60, d3d11::MapChecks::pitches});
     guarded(suite, {"sanity.d3d11.map.errors", {"d3d11"}, false, 60, d3d11::MapChecks::errors});
-    guarded(suite, {"sanity.d3d11.map.persistent_across_frames", {"d3d11", "dxgi", "present", "exclusive"}, true, 60, d3d11::MapChecks::persistent_across_frames});
+    guarded(suite, {"sanity.d3d11.map.persistent_across_frames", {"d3d11", "dxgi", "present", "exclusive", "pacing"}, true, 60, d3d11::MapChecks::persistent_across_frames});
     guarded(suite, {"sanity.d3d11.update.boxes_pitches", {"d3d11"}, false, 60, d3d11::TransferChecks::update_boxes_pitches});
     guarded(suite, {"sanity.d3d11.update.bc_and_formats", {"d3d11", "formats"}, false, 60, d3d11::TransferChecks::update_bc_and_formats});
     guarded(suite, {"sanity.d3d11.update.copy_flags", {"d3d11"}, false, 60, d3d11::TransferChecks::update_copy_flags});
@@ -464,7 +464,7 @@ void add(Registry& registry) {
     guarded(suite, {"sanity.gl.error.debug_output", {"gl"}, false, 60, gl::ExtChecks::debug_output});
     guarded(suite, {"sanity.gl.swap.interval_semantics", {"gl", "present", "pacing"}, false, 60, gl::SwapChecks::interval_semantics});
     guarded(suite, {"sanity.gl.swap.swapbuffers_content", {"gl", "present", "dwm", "exclusive", "pacing"}, true, 90, gl::SwapChecks::swapbuffers_content});
-    guarded(suite, {"sanity.gl.swap.resize_and_dc_lifetime", {"gl", "present"}, false, 60, gl::SwapChecks::resize_and_dc_lifetime});
+    guarded(suite, {"sanity.gl.swap.resize_and_dc_lifetime", {"gl", "present", "pacing"}, false, 60, gl::SwapChecks::resize_and_dc_lifetime});
     guarded(suite, {"sanity.gl.sync.fence_ordering", {"gl"}, false, 90, gl::SyncChecks::fence_ordering});
     guarded(suite, {"sanity.gl.sync.timeout_semantics", {"gl"}, false, 90, gl::SyncChecks::timeout_semantics});
     guarded(suite, {"sanity.gl.sync.finish_flush", {"gl"}, false, 90, gl::SyncChecks::finish_flush});
