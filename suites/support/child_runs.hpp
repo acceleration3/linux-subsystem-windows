@@ -4,12 +4,15 @@
 
 #include <filesystem>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace lsw::suites {
 struct ChildRunOptions {
     std::filesystem::path cwd;
     bool restricted = false;
     int timeout_seconds = 60;
+    std::vector<std::pair<std::string, std::string>> env;
 };
 
 class ChildRuns {

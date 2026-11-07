@@ -1,5 +1,13 @@
 add_library(suite_sanity OBJECT
     sanity.cpp
+    data/align_checks.cpp
+    data/load_checks.cpp
+    data/sequence_checks.cpp
+    data/size_checks.cpp
+    memory/budget_checks.cpp
+    memory/evict_map_checks.cpp
+    memory/leak_checks.cpp
+    memory/limit_checks.cpp
     enumeration/caps_checks.cpp
     enumeration/identity_checks.cpp
     enumeration/memory_checks.cpp

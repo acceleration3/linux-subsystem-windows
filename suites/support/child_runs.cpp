@@ -2,6 +2,7 @@
 
 #include "core/child_mode.hpp"
 #include "core/exe_identity.hpp"
+#include "core/text.hpp"
 #include "core/worker.hpp"
 
 #include <windows.h>
@@ -35,6 +36,9 @@ CheckResult ChildRuns::run_self(const std::string& id, const ChildRunOptions& op
     }
     if (options.restricted) {
         worker.set_restricted_token();
+    }
+    for (const auto& [name, value] : options.env) {
+        worker.add_env(Text::wide(name), Text::wide(value));
     }
     return worker.run(id, options.timeout_seconds);
 }

@@ -27,6 +27,10 @@ public:
 
     [[nodiscard]] std::string wgl_extensions() const;
 
+    [[nodiscard]] void* proc(const char* name) const;
+
+    [[nodiscard]] void* export_symbol(const char* name) const;
+
 private:
     DynLibrary gl_;
     HGLRC context_ = nullptr;

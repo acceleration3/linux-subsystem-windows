@@ -1,5 +1,7 @@
 #include "support/pattern.hpp"
 
+#include <algorithm>
+
 namespace lsw::suites {
 
 std::uint64_t Pattern::mix(std::uint64_t value) {
@@ -16,8 +18,16 @@ std::uint8_t Pattern::byte(std::uint64_t seed, std::uint64_t offset) {
 
 void Pattern::fill(std::uint64_t seed, std::uint64_t offset, void* destination, std::size_t size) {
     auto* out = static_cast<std::uint8_t*>(destination);
-    for (std::size_t i = 0; i < size; ++i) {
-        out[i] = byte(seed, offset + i);
+    std::size_t done = 0;
+    while (done < size) {
+        const std::uint64_t at = offset + done;
+        const std::uint64_t word = mix(seed * 0x2545f4914f6cdd1dull + (at >> 3));
+        const std::size_t skip = static_cast<std::size_t>(at & 7);
+        const std::size_t take = std::min<std::size_t>(8 - skip, size - done);
+        for (std::size_t i = 0; i < take; ++i) {
+            out[done + i] = static_cast<std::uint8_t>(word >> ((skip + i) * 8));
+        }
+        done += take;
     }
 }
 

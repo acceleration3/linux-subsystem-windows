@@ -66,6 +66,14 @@ std::string OpenGlContext::get_string(unsigned name) const {
     return text == nullptr ? std::string() : std::string(reinterpret_cast<const char*>(text));
 }
 
+void* OpenGlContext::proc(const char* name) const {
+    return context_ == nullptr ? nullptr : reinterpret_cast<void*>(get_proc_(name));
+}
+
+void* OpenGlContext::export_symbol(const char* name) const {
+    return gl_.symbol<void*>(name);
+}
+
 std::string OpenGlContext::wgl_extensions() const {
     if (context_ == nullptr) {
         return {};

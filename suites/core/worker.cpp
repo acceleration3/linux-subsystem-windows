@@ -37,7 +37,7 @@ private:
     HANDLE handle_ = nullptr;
 };
 
-std::wstring child_environment() {
+std::wstring child_environment(const std::vector<std::pair<std::wstring, std::wstring>>& extra) {
     std::wstring block;
     wchar_t* strings = ::GetEnvironmentStringsW();
     if (strings != nullptr) {
@@ -51,6 +51,10 @@ std::wstring child_environment() {
     }
     block += std::wstring(ChildMode::kVariable) + L"=1";
     block.push_back(L'\0');
+    for (const auto& [name, value] : extra) {
+        block += name + L"=" + value;
+        block.push_back(L'\0');
+    }
     block.push_back(L'\0');
     return block;
 }
@@ -168,7 +172,7 @@ CheckResult Worker::run(const std::string& id, int timeout_seconds) const {
 
     std::wstring environment;
     if (child_mode_) {
-        environment = child_environment();
+        environment = child_environment(env_);
     }
     Handle token;
     if (restricted_) {

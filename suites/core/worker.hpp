@@ -4,6 +4,8 @@
 
 #include <filesystem>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace lsw::suites {
 class Worker {
@@ -20,11 +22,14 @@ public:
 
     void set_restricted_token() { restricted_ = true; }
 
+    void add_env(const std::wstring& name, const std::wstring& value) { env_.emplace_back(name, value); }
+
 private:
     std::wstring exe_;
     std::wstring cwd_;
     bool child_mode_ = false;
     bool restricted_ = false;
+    std::vector<std::pair<std::wstring, std::wstring>> env_;
     std::filesystem::path artifacts_;
 };
 }  // namespace lsw::suites
