@@ -8,10 +8,11 @@ if(NOT WIN32)
 endif()
 
 add_subdirectory(core)
+add_subdirectory(support)
 add_subdirectory(selftest)
 add_subdirectory(sanity)
 
 add_executable(lsw-suites main.cpp)
-target_link_libraries(lsw-suites PRIVATE suite_core suite_selftest suite_sanity LSW::CompileOptions)
+target_link_libraries(lsw-suites PRIVATE suite_core suite_support suite_selftest suite_sanity LSW::CompileOptions)
 math(EXPR LSW_SUITES_BITS "${CMAKE_SIZEOF_VOID_P} * 8")
 set_target_properties(lsw-suites PROPERTIES OUTPUT_NAME "lsw-suites${LSW_SUITES_BITS}")

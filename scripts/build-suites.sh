@@ -17,6 +17,7 @@ build_one() {
     cmake -S "${ROOT}/suites" -B "${dir}" -G Ninja \
         -DCMAKE_TOOLCHAIN_FILE="${ROOT}/cmake/${toolchain}" \
         -DCMAKE_BUILD_TYPE=Release \
+        ${LSW_SUITES_KHRONOS_DIR:+-DLSW_SUITES_KHRONOS_DIR="${LSW_SUITES_KHRONOS_DIR}"} \
         "${launcher[@]}"
     echo ">>> Building lsw-suites ${label}"
     cmake --build "${dir}" ${CMAKE_BUILD_PARALLEL_LEVEL:+-j "${CMAKE_BUILD_PARALLEL_LEVEL}"}

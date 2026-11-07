@@ -1,6 +1,13 @@
 add_library(suite_sanity OBJECT
     sanity.cpp
+    enumeration/caps_checks.cpp
+    enumeration/identity_checks.cpp
+    enumeration/memory_checks.cpp
+    enumeration/stability_checks.cpp
     env/av_display_devices.cpp
     env/adapters_present.cpp
+    env/display_checks.cpp
+    env/icd_checks.cpp
+    env/install_checks.cpp
 )
-target_link_libraries(suite_sanity PUBLIC suite_core)
+target_link_libraries(suite_sanity PUBLIC suite_core suite_support)

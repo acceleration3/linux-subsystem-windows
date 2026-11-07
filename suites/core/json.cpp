@@ -78,6 +78,15 @@ Json& Json::set(const std::string& key, Json value) {
     return *this;
 }
 
+const Json* Json::find(const std::string& key) const {
+    for (std::size_t i = 0; i < keys_.size(); ++i) {
+        if (keys_[i] == key) {
+            return &values_[i];
+        }
+    }
+    return nullptr;
+}
+
 double Json::as_real() const {
     return kind_ == Kind::Real ? real_ : static_cast<double>(int_);
 }

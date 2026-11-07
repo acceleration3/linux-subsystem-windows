@@ -1,11 +1,13 @@
 #include "core/worker.hpp"
 
+#include "core/child_mode.hpp"
 #include "core/child_protocol.hpp"
 #include "core/text.hpp"
 
 #include <windows.h>
 
 #include <chrono>
+#include <cwchar>
 #include <vector>
 
 namespace lsw::suites {
@@ -34,6 +36,39 @@ public:
 private:
     HANDLE handle_ = nullptr;
 };
+
+std::wstring child_environment() {
+    std::wstring block;
+    wchar_t* strings = ::GetEnvironmentStringsW();
+    if (strings != nullptr) {
+        const wchar_t* at = strings;
+        while (*at != L'\0') {
+            const std::size_t length = std::wcslen(at) + 1;
+            block.append(at, length);
+            at += length;
+        }
+        ::FreeEnvironmentStringsW(strings);
+    }
+    block += std::wstring(ChildMode::kVariable) + L"=1";
+    block.push_back(L'\0');
+    block.push_back(L'\0');
+    return block;
+}
+
+HANDLE restricted_primary_token() {
+    HANDLE own = nullptr;
+    if (::OpenProcessToken(::GetCurrentProcess(), TOKEN_DUPLICATE | TOKEN_QUERY | TOKEN_ASSIGN_PRIMARY,
+                           &own) == FALSE) {
+        return nullptr;
+    }
+    HANDLE restricted = nullptr;
+    if (::CreateRestrictedToken(own, LUA_TOKEN, 0, nullptr, 0, nullptr, 0, nullptr,
+                                &restricted) == FALSE) {
+        restricted = nullptr;
+    }
+    ::CloseHandle(own);
+    return restricted;
+}
 
 std::wstring quote(const std::wstring& text) {
     return L"\"" + text + L"\"";
@@ -119,7 +154,7 @@ CheckResult Worker::run(const std::string& id, int timeout_seconds) const {
     startup.lpAttributeList = attributes;
 
     std::wstring command = quote(exe_) + L" --run-one " + Text::wide(id) + L" --artifacts " +
-                           quote(artifacts_.wstring());
+                           quote(std::filesystem::absolute(artifacts_).wstring());
 
     Handle job(::CreateJobObjectW(nullptr, nullptr));
     JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits{};
@@ -131,11 +166,31 @@ CheckResult Worker::run(const std::string& id, int timeout_seconds) const {
         return finish(Status::Crash, "cannot create the job object");
     }
 
+    std::wstring environment;
+    if (child_mode_) {
+        environment = child_environment();
+    }
+    Handle token;
+    if (restricted_) {
+        token.reset(restricted_primary_token());
+        if (token.get() == nullptr) {
+            ::DeleteProcThreadAttributeList(attributes);
+            return finish(Status::Crash, "cannot create the restricted token");
+        }
+    }
+    DWORD flags = CREATE_SUSPENDED | CREATE_NO_WINDOW | EXTENDED_STARTUPINFO_PRESENT;
+    if (child_mode_) {
+        flags |= CREATE_UNICODE_ENVIRONMENT;
+    }
     PROCESS_INFORMATION info{};
-    const BOOL created = ::CreateProcessW(
-        exe_.c_str(), command.data(), nullptr, nullptr, TRUE,
-        CREATE_SUSPENDED | CREATE_NO_WINDOW | EXTENDED_STARTUPINFO_PRESENT, nullptr, nullptr,
-        &startup.StartupInfo, &info);
+    void* environment_block = child_mode_ ? static_cast<void*>(environment.data()) : nullptr;
+    const wchar_t* directory = cwd_.empty() ? nullptr : cwd_.c_str();
+    const BOOL created =
+        restricted_ ? ::CreateProcessAsUserW(token.get(), exe_.c_str(), command.data(), nullptr,
+                                             nullptr, TRUE, flags, environment_block, directory,
+                                             &startup.StartupInfo, &info)
+                    : ::CreateProcessW(exe_.c_str(), command.data(), nullptr, nullptr, TRUE, flags,
+                                       environment_block, directory, &startup.StartupInfo, &info);
     ::DeleteProcThreadAttributeList(attributes);
     if (created == FALSE) {
         return finish(Status::Crash, "cannot start the worker (error " +

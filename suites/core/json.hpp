@@ -29,6 +29,8 @@ public:
 
     Json& set(const std::string& key, Json value);
 
+    [[nodiscard]] const Json* find(const std::string& key) const;
+
     [[nodiscard]] Kind kind() const { return kind_; }
 
     [[nodiscard]] bool as_bool() const { return int_ != 0; }

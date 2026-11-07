@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/json.hpp"
+#include "core/outcome.hpp"
 
 #include <filesystem>
 #include <string>
@@ -22,6 +23,8 @@ public:
     void note(const std::string& line);
 
     void measure(const std::string& key, Json value);
+
+    [[nodiscard]] static Outcome skip(std::string reason) { return Outcome::skip(std::move(reason)); }
 
     void artifact(const std::filesystem::path& path);
 
