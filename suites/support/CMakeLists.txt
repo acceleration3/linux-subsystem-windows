@@ -42,6 +42,7 @@ add_library(suite_support OBJECT
     av_adapters.cpp
     child_runs.cpp
     cl_api.cpp
+    cl_image_formats.cpp
     cl_program.cpp
     cl_rig.cpp
     cl_spirv.cpp

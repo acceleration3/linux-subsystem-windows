@@ -4,6 +4,18 @@ add_library(suite_sanity OBJECT
     cl/platform_checks.cpp
     cl/device_checks.cpp
     cl/mem_checks.cpp
+    cl/transfer_checks.cpp
+    cl/image_kit.cpp
+    cl/image_checks.cpp
+    cl/image_transfer_checks.cpp
+    cl/image_kernel_checks.cpp
+    cl/svm_checks.cpp
+    cl/program_checks.cpp
+    cl/kernel_checks.cpp
+    cl/math_checks.cpp
+    cl/event_checks.cpp
+    cl/queue_checks.cpp
+    cl/error_checks.cpp
     gl/format_checks.cpp
     gl/context_checks.cpp
     gl/thread_checks.cpp

@@ -50,6 +50,17 @@
 #include "sanity/cl/platform_checks.hpp"
 #include "sanity/cl/device_checks.hpp"
 #include "sanity/cl/mem_checks.hpp"
+#include "sanity/cl/transfer_checks.hpp"
+#include "sanity/cl/image_checks.hpp"
+#include "sanity/cl/image_transfer_checks.hpp"
+#include "sanity/cl/image_kernel_checks.hpp"
+#include "sanity/cl/svm_checks.hpp"
+#include "sanity/cl/program_checks.hpp"
+#include "sanity/cl/kernel_checks.hpp"
+#include "sanity/cl/math_checks.hpp"
+#include "sanity/cl/event_checks.hpp"
+#include "sanity/cl/queue_checks.hpp"
+#include "sanity/cl/error_checks.hpp"
 #include "sanity/gl/context_checks.hpp"
 #include "sanity/gl/format_checks.hpp"
 #include "sanity/gl/thread_checks.hpp"
@@ -422,6 +433,34 @@ void add(Registry& registry) {
     guarded(suite, {"sanity.cl.mem.copy_host_ptr", {"opencl"}, false, 60, cl::MemChecks::copy_host_ptr});
     guarded(suite, {"sanity.cl.mem.access_flags_honoured", {"opencl"}, false, 60, cl::MemChecks::access_flags_honoured});
     guarded(suite, {"sanity.cl.mem.sub_buffer_alignment", {"opencl"}, false, 60, cl::MemChecks::sub_buffer_alignment});
+    guarded(suite, {"sanity.cl.transfer.read_write_blocking_nonblocking", {"opencl", "slow"}, false, 180, cl::TransferChecks::read_write_blocking_nonblocking});
+    guarded(suite, {"sanity.cl.transfer.rect_and_fill_copy", {"opencl"}, false, 60, cl::TransferChecks::rect_and_fill_copy});
+    guarded(suite, {"sanity.cl.transfer.map_unmap_ranges", {"opencl"}, false, 60, cl::TransferChecks::map_unmap_ranges});
+    guarded(suite, {"sanity.cl.transfer.migrate_mem_objects", {"opencl"}, false, 60, cl::TransferChecks::migrate_mem_objects});
+    guarded(suite, {"sanity.cl.image.formats_supported", {"opencl", "formats"}, false, 180, cl::ImageChecks::formats_supported});
+    guarded(suite, {"sanity.cl.image.transfers_rect_fill", {"opencl"}, false, 90, cl::ImageTransferChecks::transfers_rect_fill});
+    guarded(suite, {"sanity.cl.image.from_buffer", {"opencl"}, false, 60, cl::ImageTransferChecks::from_buffer});
+    guarded(suite, {"sanity.cl.kernel.images_in_kernels", {"opencl"}, false, 90, cl::ImageKernelChecks::images_in_kernels});
+    guarded(suite, {"sanity.cl.svm.coarse_grain", {"opencl"}, false, 60, cl::SvmChecks::coarse_grain});
+    guarded(suite, {"sanity.cl.svm.fine_grain_caps", {"opencl"}, false, 60, cl::SvmChecks::fine_grain_caps});
+    guarded(suite, {"sanity.cl.program.build_source_options", {"opencl"}, false, 90, cl::ProgramChecks::build_source_options});
+    guarded(suite, {"sanity.cl.program.build_errors_logs", {"opencl"}, false, 60, cl::ProgramChecks::build_errors_logs});
+    guarded(suite, {"sanity.cl.program.binary_roundtrip", {"opencl"}, false, 60, cl::ProgramChecks::binary_roundtrip});
+    guarded(suite, {"sanity.cl.program.il_spirv_caps", {"opencl"}, false, 60, cl::ProgramChecks::il_spirv_caps});
+    guarded(suite, {"sanity.cl.program.compile_link", {"opencl"}, false, 60, cl::ProgramChecks::compile_link});
+    guarded(suite, {"sanity.cl.kernel.atomics_vs_cpu", {"opencl"}, false, 90, cl::KernelChecks::atomics_vs_cpu});
+    guarded(suite, {"sanity.cl.kernel.local_memory_barrier", {"opencl"}, false, 90, cl::KernelChecks::local_memory_barrier});
+    guarded(suite, {"sanity.cl.kernel.arithmetic_vs_reference", {"opencl"}, false, 120, cl::MathChecks::arithmetic_vs_reference});
+    guarded(suite, {"sanity.cl.kernel.doubles_caps", {"opencl"}, false, 60, cl::MathChecks::doubles_caps});
+    guarded(suite, {"sanity.cl.kernel.args_and_ndrange", {"opencl"}, false, 60, cl::KernelChecks::args_and_ndrange});
+    guarded(suite, {"sanity.cl.kernel.large_workloads", {"opencl", "slow"}, false, 180, cl::KernelChecks::large_workloads});
+    guarded(suite, {"sanity.cl.event.in_order_ordering", {"opencl"}, false, 60, cl::EventChecks::in_order_ordering});
+    guarded(suite, {"sanity.cl.event.out_of_order_deps", {"opencl"}, false, 60, cl::EventChecks::out_of_order_deps});
+    guarded(suite, {"sanity.cl.event.user_events_callbacks", {"opencl"}, false, 60, cl::EventChecks::user_events_callbacks});
+    guarded(suite, {"sanity.cl.event.profiling_monotonic", {"opencl"}, false, 60, cl::EventChecks::profiling_monotonic});
+    guarded(suite, {"sanity.cl.queue.multiple_queues_concurrent", {"opencl"}, false, 90, cl::QueueChecks::multiple_queues_concurrent});
+    guarded(suite, {"sanity.cl.queue.finish_flush_release", {"opencl"}, false, 60, cl::QueueChecks::finish_flush_release});
+    guarded(suite, {"sanity.cl.error.codes_documented", {"opencl"}, false, 60, cl::ErrorChecks::codes_documented});
 }
 
 }  // namespace lsw::suites::sanity
