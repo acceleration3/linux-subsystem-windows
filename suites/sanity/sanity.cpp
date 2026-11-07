@@ -19,6 +19,8 @@
 #include "sanity/memory/evict_map_checks.hpp"
 #include "sanity/memory/leak_checks.hpp"
 #include "sanity/memory/limit_checks.hpp"
+#include "sanity/d3d9/caps_checks.hpp"
+#include "sanity/d3d9/res_checks.hpp"
 #include "sanity/d3d11/fl_checks.hpp"
 #include "sanity/d3d11/res_checks.hpp"
 #include "sanity/d3d11/map_checks.hpp"
@@ -192,6 +194,18 @@ void add(Registry& registry) {
     guarded(suite, {"sanity.mem.map.unmap_flushes", {"mem", "d3d11", "d3d12", "vulkan", "opencl", "gl"}, false, 120, memory::EvictMapChecks::unmap_flushes});
     guarded(suite, {"sanity.mem.map.exit_with_live_mappings", {"mem", "d3d12", "vulkan", "opencl", "d3d11"}, false, 300, memory::EvictMapChecks::exit_with_live_mappings});
     guarded(suite, {"sanity.mem.map.large_map_many", {"mem", "d3d11", "d3d12", "vulkan", "opencl", "slow", "exclusive"}, true, 300, memory::EvictMapChecks::large_map_many});
+    guarded(suite, {"sanity.d3d9.caps.create_matrix", {"d3d9"}, false, 120, d3d9::CapsChecks::create_matrix});
+    guarded(suite, {"sanity.d3d9.caps.caps_vs_behaviour", {"d3d9"}, false, 120, d3d9::CapsChecks::caps_vs_behaviour});
+    guarded(suite, {"sanity.d3d9.caps.check_device_format_consistent", {"d3d9", "formats"}, false, 120, d3d9::CapsChecks::check_device_format_consistent});
+    guarded(suite, {"sanity.d3d9.caps.ex_interface", {"d3d9"}, false, 60, d3d9::CapsChecks::ex_interface});
+    guarded(suite, {"sanity.d3d9.caps.adapter_identity", {"d3d9", "dxgi"}, false, 60, d3d9::CapsChecks::adapter_identity});
+    guarded(suite, {"sanity.d3d9.res.pool_usage_matrix", {"d3d9"}, false, 120, d3d9::ResChecks::pool_usage_matrix});
+    guarded(suite, {"sanity.d3d9.res.mip_levels_and_sizes", {"d3d9"}, false, 60, d3d9::ResChecks::mip_levels_and_sizes});
+    guarded(suite, {"sanity.d3d9.res.volume_and_cube", {"d3d9"}, false, 60, d3d9::ResChecks::volume_and_cube});
+    guarded(suite, {"sanity.d3d9.res.managed_roundtrip", {"d3d9", "mem"}, false, 120, d3d9::ResChecks::managed_roundtrip});
+    guarded(suite, {"sanity.d3d9.res.priority_and_lod", {"d3d9"}, false, 60, d3d9::ResChecks::priority_and_lod});
+    guarded(suite, {"sanity.d3d9.res.autogenmipmap", {"d3d9"}, false, 60, d3d9::ResChecks::autogenmipmap});
+    guarded(suite, {"sanity.d3d9.res.exhaustion", {"d3d9", "mem", "slow", "exclusive", "host-hazard"}, true, 300, d3d9::ResChecks::exhaustion});
     guarded(suite, {"sanity.d3d11.fl.requested_levels", {"d3d11"}, false, 60, d3d11::FlChecks::requested_levels});
     guarded(suite, {"sanity.d3d11.fl.checkfeaturesupport_options", {"d3d11"}, false, 60, d3d11::FlChecks::checkfeaturesupport_options});
     guarded(suite, {"sanity.d3d11.fl.format_support_vs_creation", {"d3d11", "formats"}, false, 120, d3d11::FlChecks::format_support_vs_creation});

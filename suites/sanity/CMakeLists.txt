@@ -25,6 +25,8 @@ add_library(suite_sanity OBJECT
     d3d11/share_checks.cpp
     d3d11/tiled_checks.cpp
     d3d11/err_checks.cpp
+    d3d9/caps_checks.cpp
+    d3d9/res_checks.cpp
     data/align_checks.cpp
     data/load_checks.cpp
     data/sequence_checks.cpp
