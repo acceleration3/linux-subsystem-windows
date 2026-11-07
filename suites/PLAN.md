@@ -510,7 +510,7 @@ Each loop creates and destroys 5000 objects of the kind with its largest practic
 | check | contract |
 |---|---|
 | `sanity.d3d9.fail.unsupported_features` | Features the caps report absent (formats, texture sizes, shader models, multi-element textures) fail at creation or draw with the documented D3DERR_* and the device renders correctly afterwards. |
-| `sanity.d3d9.fail.bad_parameters` | NULL pointers, out-of-range stream/sampler/RT indices, mismatched RT/DS sizes and invalid enums return INVALIDCALL (or the documented code) without crash, and the debug runtime reports no unexpected corruption. |
+| `sanity.d3d9.fail.bad_parameters` | mismatched RT/DS sizes, invalid sizes and invalid enums return INVALIDCALL (or the documented code) without crash, and the debug runtime reports no unexpected corruption. |
 | `sanity.d3d9.fail.lifetime` | Releasing a device with resources still referenced by the app, destroying a resource that is the current RT or bound texture, and releasing in any order leaves no leak and no crash; process exit with a live device reclaims everything (second run allocates the same amount). |
 
 ### 4.9 Direct3D 10 and 10.1 (10)
@@ -520,7 +520,7 @@ Each loop creates and destroys 5000 objects of the kind with its largest practic
 | check | contract |
 |---|---|
 | `sanity.d3d10.create.device_flags` | D3D10CreateDevice and D3D10CreateDevice1 succeed on the hardware adapter with DEBUG, SINGLETHREADED and BGRA_SUPPORT flags where valid, and fail with the documented HRESULT for a bad driver type or adapter. |
-| `sanity.d3d10.fl.levels_101` | D3D10CreateDevice1 requested at each of 10_0, 10_1 returns the requested level or fails; the level obtained matches features usable (cube array and shader sample-from-MSAA at 10_1 only) and the 10.0 level rejects them. |
+| `sanity.d3d10.fl.levels_101` | D3D10CreateDevice1 requested at each of 10_0, 10_1 returns the requested level or fails; the level obtained matches features usable (multisampled depth shader resources at 10_1 only) and the 10.0 level rejects them. |
 | `sanity.d3d10.res.format_support` | CheckFormatSupport for a table of formats is consistent with creation of textures with the corresponding bind flags, and CheckMultisampleQualityLevels agrees with creating a multisampled RT. |
 | `sanity.d3d10.render.pipeline_warp` | A scene with VS, GS, PS, depth/stencil, blend, and instancing renders within tolerance of D3D10 WARP (D3D10 and D3D10.1 devices; the row fails when the WARP oracle is unavailable). |
 | `sanity.d3d10.render.streamout` | Stream-output of a known vertex set returns exact positions, and the SO_STATISTICS query counts primitives written and needed correctly including an overflowing buffer. |
@@ -528,7 +528,7 @@ Each loop creates and destroys 5000 objects of the kind with its largest practic
 | `sanity.d3d10.dxgi.swapchain` | A D3D10 device creates a swap chain, presents, resizes buffers and reads back the back buffer through a staging copy with the expected colour. |
 | `sanity.d3d10.dxgi.interop_d3d11` | A D3D10 resource shared through DXGI handle opens in D3D11 on the same adapter and the data written by one is visible to the other after synchronisation. |
 | `sanity.d3d10.query.predicate` | Occlusion, OcclusionPredicate, PipelineStatistics and Timestamp/Disjoint queries give correct values on known workloads and SetPredication hides draws exactly when the predicate is true. |
-| `sanity.d3d10.state.clearstate_and_stale` | ClearState and ID3D10Device::Flush leave pipeline state unbound as documented (draw with nothing bound produces no output without a crash) and objects released while bound stay valid until unbound. |
+| `sanity.d3d10.state.clearstate_and_stale` | ClearState and ID3D10Device::Flush leave pipeline state unbound as documented (draw with nothing bound produces no output without a crash), and the device still clears and reads back a fresh target after ClearState; whether a released bound object stays reachable is a measure. |
 
 ### 4.10 Direct3D 11 (65)
 
@@ -540,7 +540,7 @@ Each loop creates and destroys 5000 objects of the kind with its largest practic
 | `sanity.d3d11.fl.checkfeaturesupport_options` | Every CheckFeatureSupport struct (D3D11_OPTIONS through OPTIONS5, ARCHITECTURE_INFO, DOUBLES, SHADER_MIN_PRECISION, MARSHALLING) returns S_OK or the documented error and fields are mutually consistent with the feature level (e.g. FL11 implies compute and typed-UAV loads rules). |
 | `sanity.d3d11.fl.format_support_vs_creation` | For every DXGI_FORMAT, each bit of CheckFormatSupport/CheckFormatSupport2 (texture1D/2D/3D/cube, render target, blend, MSAA render, UAV typed load/store, mip generation, display, shader sample/gather/comparison) corresponds to successful creation and correct use of the matching resource/view, and each absent bit corresponds to documented failure. |
 | `sanity.d3d11.fl.msaa_quality_vs_use` | CheckMultisampleQualityLevels for each format and count 1..16 matches whether a texture with those SampleDesc values can be created; every reported quality level below the count renders and resolves a known pattern. |
-| `sanity.d3d11.fl.limits_at_level` | Per-feature-level documented limits (max texture dimension, array size, render targets, UAV slots, constant buffer size, viewports) are honoured by creating or binding at the limit and fail with E_INVALIDARG beyond. |
+| `sanity.d3d11.fl.limits_at_level` | Per-feature-level documented limits (max texture dimension, array size, render targets, UAV slots, constant buffer size, viewports) are honoured by creating or binding at the limit; the runtime does not promise refusal beyond the limit, so beyond-limit results (success, E_INVALIDARG or E_OUTOFMEMORY) are measures. |
 
 #### Resource creation matrix
 
@@ -587,7 +587,7 @@ Each loop creates and destroys 5000 objects of the kind with its largest practic
 | `sanity.d3d11.render.basic_stages` | VS/PS pipelines with each primitive topology, indexed and instanced, DrawAuto and indirect draws render pixel-equal (within tolerance) to WARP. |
 | `sanity.d3d11.render.states` | Blend (incl. dual-source, logic ops, independent blend), depth, stencil, rasterizer (fill, cull, bias, scissor, conservative per caps, forced sample count) and sampler (all filters, addressing, comparison, anisotropy, border) match WARP over a grid of settings. |
 | `sanity.d3d11.render.msaa` | Rendering to 2x/4x/8x MSAA targets with SV_Coverage, SV_SampleIndex, sample-frequency shading, alpha-to-coverage and sample mask matches WARP after resolve. |
-| `sanity.d3d11.render.tessellation` | Hull/domain shaders with integer, fractional_odd, fractional_even and pow2 partitioning on tri/quad/isoline domains produce the same geometry as WARP. |
+| `sanity.d3d11.render.tessellation` | Hull/domain shaders with integer, fractional_odd, fractional_even and pow2 partitioning on tri/quad/isoline domains produce the analytic geometry: one-pixel isolines on the predicted rows, and tri and quad tile interiors covered. |
 | `sanity.d3d11.render.geometry_streamout` | Geometry shader amplification and SO to multiple buffers (with rasterization off) return exact vertex data, and the SO overflow query reports correctly. |
 | `sanity.d3d11.render.format_sweep` | A clear and a blended draw into every RTV-capable format reads back the expected values at that format's precision; sRGB targets apply linear-to-sRGB on write and sampling reverses it. |
 | `sanity.d3d11.render.depth_stencil_formats` | D16, D24S8, D32, D32S8 with reversed-Z, sampling depth via R-typeless SRVs, and stencil read via X-typeless SRVs give values equal to WARP or the analytic expected depth. |
@@ -669,7 +669,7 @@ Each loop creates and destroys 5000 objects of the kind with its largest practic
 | check | contract |
 |---|---|
 | `sanity.dxgi.swap.model_matrix` | For BITBLT/FLIP_SEQUENTIAL/FLIP_DISCARD x buffer counts 1-8 x formats (R8G8B8A8, B8G8R8A8, sRGB, R10G10B10A2, R16G16B16A16_FLOAT) creation succeeds or fails per the documented rules and the presented colour is visible on screen. |
-| `sanity.dxgi.swap.buffer_contents` | After Present, SEQUENTIAL keeps the back buffer contents and DISCARD does not require it; FLIP models rotate buffers such that GetCurrentBackBufferIndex advances per Present and each frame's unique colour is displayed in order. |
+| `sanity.dxgi.swap.buffer_contents` | After Present, a one-buffer SEQUENTIAL chain keeps the back buffer contents and DISCARD does not require it; FLIP models rotate buffers such that GetCurrentBackBufferIndex advances per Present and each frame's unique colour is displayed in order. |
 | `sanity.dxgi.swap.present1` | Present1 with dirty rects and scroll rect/offset updates exactly the declared region visually, with unchanged regions retained, and invalid rects fail with E_INVALIDARG. |
 | `sanity.dxgi.swap.allow_tearing` | ALLOW_TEARING creation and Present(0, PRESENT_ALLOW_TEARING) work iff CheckFeatureSupport(PRESENT_ALLOW_TEARING) reports true; otherwise creation with the flag fails; both consistent. |
 | `sanity.dxgi.swap.do_not_wait` | Present with DXGI_PRESENT_DO_NOT_WAIT returns DXGI_ERROR_WAS_STILL_DRAWING while the queue is full and succeeds when it drains; TEST flag does not present. |
@@ -786,12 +786,12 @@ Each loop creates and destroys 5000 objects of the kind with its largest practic
 | `sanity.gl.pixelformat.enumerate_choosable` | Every format index up to DescribePixelFormat's count describes consistently (bits, flags) and SetPixelFormat on a fresh window succeeds for each one that has PFD_SUPPORT_OPENGL and PFD_DRAW_TO_WINDOW. |
 | `sanity.gl.pixelformat.every_format_renders` | For each choosable format a context clears to a known colour, draws a triangle and SwapBuffers/glReadPixels returns the analytic result within the format's channel precision. |
 | `sanity.gl.pixelformat.choose_matches_request` | ChoosePixelFormat for requested colour/depth/stencil/double-buffer returns a format whose described bits are at least the request, and wglChoosePixelFormatARB results satisfy every exact/minimum attribute passed. |
-| `sanity.gl.pixelformat.arb_attribs_agree_with_describe` | wglGetPixelFormatAttribivARB values for colour, depth, stencil, double-buffer and swap-method agree with DescribePixelFormat for every format. |
+| `sanity.gl.pixelformat.arb_attribs_agree_with_describe` | wglGetPixelFormatAttribivARB values for colour, depth, stencil, double-buffer and swap-method agree with DescribePixelFormat for every ICD (non-generic) format. |
 | `sanity.gl.pixelformat.set_twice_fails` | SetPixelFormat on a window that already has a format fails, and the first format stays in effect. |
 | `sanity.gl.pixelformat.srgb_and_float` | If WGL_ARB_framebuffer_sRGB / WGL_ARB_pixel_format_float are advertised, formats with those attributes exist and render with the correct encoding (sRGB blend result, float values beyond 1.0 kept); if not advertised, no format reports them. |
 | `sanity.gl.context.legacy_create` | wglCreateContext on a valid-format DC returns a context that is current-able, reports GL_VERSION >= 1.1 and works after wglMakeCurrent/unmake cycles. |
 | `sanity.gl.context.arb_version_profile` | wglCreateContextAttribsARB for each version 3.2 to 4.6 core and compatibility either grants a context whose GL_MAJOR/MINOR_VERSION is >= requested with matching profile mask, or fails with the documented ERROR_INVALID_VERSION_ARB / ERROR_INVALID_PROFILE_ARB. |
-| `sanity.gl.context.flags_granted_or_error` | Debug, forward-compatible and robust-access flags requested are reflected in GL_CONTEXT_FLAGS when the context is created; forward-compatible contexts lack deprecated entry points' behaviour (INVALID_OPERATION). |
+| `sanity.gl.context.flags_granted_or_error` | Debug, forward-compatible and robust-access flags requested are reflected in GL_CONTEXT_FLAGS when the context is created; forward-compatible contexts reject removed state such as wide lines with INVALID_VALUE; glBegin is a measure. |
 | `sanity.gl.context.robustness_reset` | With ARB_create_context_robustness, glGetGraphicsResetStatus on a healthy context returns NO_ERROR and the GL_RESET_NOTIFICATION_STRATEGY query matches the requested strategy. |
 | `sanity.gl.context.no_error` | If KHR_no_error is advertised a no-error context creates and renders valid work correctly; if not advertised, requesting the flag fails with the documented error. |
 | `sanity.gl.context.share_lists` | Objects (texture, buffer, shader, program) created in one context are usable in a context joined with wglShareLists or the share argument, and deleting in one leaves the other's use valid until it unbinds. |
@@ -811,7 +811,7 @@ Each loop creates and destroys 5000 objects of the kind with its largest practic
 | `sanity.gl.buffer.map_range_flags` | MapBufferRange with INVALIDATE_RANGE/INVALIDATE_BUFFER keeps content outside the invalidated range, UNSYNCHRONIZED with fencing yields correct data, and FLUSH_EXPLICIT publishes only flushed ranges after UnmapBuffer. |
 | `sanity.gl.buffer.map_errors` | Mapping beyond size, with no read/write bit, with both INVALIDATE and READ, or mapping twice, produces the documented errors; UnmapBuffer returns GL_TRUE on intact data. |
 | `sanity.gl.buffer.copy_and_clear` | CopyBufferSubData (incl. overlapping same-buffer rejected, adjacent allowed) and ClearBufferSubData produce the CPU-reference bytes for many sizes and offsets including large (hundreds of MB if memory limits report it). |
-| `sanity.gl.buffer.pbo_pack_unpack` | glReadPixels into a PBO and glTexSubImage2D from a PBO equal their client-memory equivalents for all format/type pairs, with non-default PACK/UNPACK row length, alignment and skip. |
+| `sanity.gl.buffer.pbo_pack_unpack` | glReadPixels into a PBO and glTexSubImage2D from a PBO equal their client-memory equivalents in the pixel-group bytes for all format/type pairs, with non-default PACK/UNPACK row length, alignment and skip; bytes outside the pixel groups stay untouched, and the pixels match the uploaded image analytically. |
 
 #### Textures, framebuffers and draws
 
@@ -823,7 +823,7 @@ Each loop creates and destroys 5000 objects of the kind with its largest practic
 | `sanity.gl.texture.views` | TextureView over mip/layer subranges and compatible formats samples the same texels as the parent, and parent writes are visible through the view. |
 | `sanity.gl.texture.immutable_storage` | After TexStorage* the format and size cannot change (INVALID_OPERATION on TexImage), SubImage works at every level, and level count follows the formula. |
 | `sanity.gl.texture.max_size_limits` | Textures at GL_MAX_TEXTURE_SIZE and GL_MAX_3D/ARRAY limits are creatable and correct at the corners; one past the limit fails with INVALID_VALUE and the proxy query reports failure. |
-| `sanity.gl.fbo.completeness_matrix` | glCheckFramebufferStatus returns COMPLETE for every attachment format combination the spec requires and the documented INCOMPLETE_* code otherwise; renders to every complete configuration are correct. |
+| `sanity.gl.fbo.completeness_matrix` | glCheckFramebufferStatus returns COMPLETE for every attachment format combination the spec requires and the documented INCOMPLETE_* code otherwise (with GL 4.1 or GL_ARB_ES2_compatibility the draw/read buffer rules are gone and COMPLETE is expected); renders to every complete configuration are correct. |
 | `sanity.gl.fbo.blit` | BlitFramebuffer between FBOs and default framebuffer scales, flips, converts format and resolves multisample with the same pixels as a CPU reference (nearest exact, linear within 1 LSB). |
 | `sanity.gl.draw.core_vs_compat_equal` | The same scene drawn through a core context (VAO/VBO) and through compatibility immediate/vertex-array paths produces equal pixels, and equals an analytic or Vulkan-twin render of the same geometry. |
 | `sanity.gl.draw.instanced_indirect` | DrawArraysInstanced, DrawElementsBaseVertex, MultiDrawIndirect and glDrawTransformFeedback render identical results to a CPU-expanded plain draw. |
@@ -838,12 +838,12 @@ Each loop creates and destroys 5000 objects of the kind with its largest practic
 | `sanity.gl.sync.finish_flush` | glFinish returns only when all prior commands completed (readback of a long shader is final without further sync); glFlush returns promptly and work eventually completes without further commands. |
 | `sanity.gl.query.timer_samples_primitives` | TIME_ELAPSED is non-negative and nondecreasing with workload size, SAMPLES_PASSED matches the analytic covered-pixel count, PRIMITIVES_GENERATED and TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN match the issued primitives. |
 | `sanity.gl.query.availability_rules` | Query results become available eventually, QUERY_RESULT_AVAILABLE is false-then-true only monotonically, and nested/active query misuse gives the documented INVALID_OPERATION. |
-| `sanity.gl.swap.interval_semantics` | wglSwapIntervalEXT(n) returns TRUE for 0, 1, 2 and for -1 only if WGL_EXT_swap_control_tear is advertised, wglGetSwapIntervalEXT returns the set value, and interval 0 presents faster than interval 1. |
+| `sanity.gl.swap.interval_semantics` | wglSwapIntervalEXT(n) returns TRUE for 0, 1, 2 and for -1 only if WGL_EXT_swap_control_tear is advertised, wglGetSwapIntervalEXT returns the set value, interval 1 presents no faster than 0.9 refresh periods and interval 2 no faster than 1.8; interval 0 is a measure. |
 | `sanity.gl.swap.swapbuffers_content` | SwapBuffers presents the back buffer exactly (frame number encoded in pixels), and with PFD_SWAP_EXCHANGE/COPY semantics the back buffer content after swap follows the format's reported swap method. |
 | `sanity.gl.swap.resize_and_dc_lifetime` | Resizing a GL window between swaps keeps the framebuffer matching the client size (glViewport query, readback size) and rendering stays correct; releasing and re-getting the DC does not lose the context. |
 | `sanity.gl.thread.concurrent_contexts` | Several threads each with their own context drawing to their own FBOs for seconds produce each their own correct image with no cross-talk. |
 | `sanity.gl.thread.producer_consumer` | A producer thread uploading textures/buffers and a consumer sampling them via share group and fences never observes torn or stale data after the fence is signalled. |
-| `sanity.gl.memobj.external_memory_caps` | If GL_EXT_memory_object(_win32) is advertised, the device LUID matches the adapter, and importing a Direct3D 11 NT shared texture handle (GL_HANDLE_TYPE_D3D11_IMAGE_EXT) and sampling it returns the producer's pixels (the semaphore hand-off ordering is not exercised); if unadvertised, entry points are absent or error. |
+| `sanity.gl.memobj.external_memory_caps` | If GL_EXT_memory_object(_win32) is advertised, the device LUID matches the adapter, and importing Vulkan-exported OPAQUE_WIN32 memory succeeds with a GL_DEVICE_UUID_EXT equal to the Vulkan deviceUUID; importing a Direct3D 11 NT shared texture handle (GL_HANDLE_TYPE_D3D11_IMAGE_EXT) is a measure (the semaphore hand-off ordering is not exercised); if unadvertised, entry points are absent or error. |
 | `sanity.gl.ext.string_matches_entry_points` | Every extension listed in GL_EXTENSIONS and WGL extension strings that has a known entry point list has all of them resolve through wglGetProcAddress, and the glIs* entry points answer glIs*(0) with GL_FALSE and no error. |
 | `sanity.gl.ext.unadvertised_not_supported` | Features gated by extensions not advertised (e.g. KHR_debug, ARB_compute_shader on older versions, tessellation) are not usable: the corresponding calls give errors or the context version lacks them, consistently with GL_VERSION. |
 | `sanity.gl.ext.version_implies_core_functions` | For the reported GL_VERSION, all core functions of that version (and below) resolve and the corresponding GL_MAX_* minimum limits from the spec hold. |

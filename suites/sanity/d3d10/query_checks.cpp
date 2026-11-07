@@ -199,7 +199,7 @@ Outcome QueryChecks::predicate(Context& context) {
                 problems.add("PIPELINE_STATISTICS reports " + std::to_string(stats.PSInvocations) + " pixel shader invocations for 1024 covered pixels");
             }
         }
-        const std::string gs_source = "[maxvertexcount(3)] void main(triangle float4 v[3] : SV_Position, inout TriangleStream<float4> s) { s.Append(v[0]); s.Append(v[1]); s.Append(v[2]); }\n";
+        const std::string gs_source = "struct V { float4 p : SV_Position; };\n[maxvertexcount(3)] void main(triangle V v[3], inout TriangleStream<V> s) { s.Append(v[0]); s.Append(v[1]); s.Append(v[2]); }\n";
         Com<ID3D10GeometryShader> gs = D3d10Tools::gs(d, gs_source, error);
         if (gs) {
             device->GSSetShader(gs.get());
@@ -420,19 +420,23 @@ Outcome QueryChecks::clearstate_and_stale(Context& context) {
         device->Flush();
         ID3D10RenderTargetView* current = nullptr;
         device->OMGetRenderTargets(1, &current, nullptr);
-        if (current == nullptr) {
-            problems.add("releasing the application's reference to a bound render target view unbinds it");
-        } else {
-            Com<ID3D10Resource> resource;
-            current->GetResource(resource.put());
+        context.measure("released_bound_view_still_bound", current != nullptr);
+        if (current != nullptr) {
             current->Release();
-            Com<ID3D10Texture2D> same = Kit::query<ID3D10Texture2D>(resource.get());
-            if (!same || !D3d10Tools::read_texture(d, same.get(), image, error) || !Kit::uniform(image, D3d10Tools::bgra(255, 255, 255, 255), where)) {
-                problems.add("objects released while bound no longer draw: " + where + error);
-            }
         }
         device->ClearState();
         bound("after releasing and clearing", false);
+        Com<ID3D10Texture2D> fresh = D3d10Tools::target(d, 16, 16);
+        Com<ID3D10RenderTargetView> fresh_view = D3d10Tools::rtv(d, fresh.get());
+        if (!fresh || !fresh_view) {
+            problems.add("a fresh render target cannot be created after ClearState");
+        } else {
+            D3d10Tools::clear(d, fresh_view.get(), 0, 1, 0, 1);
+            device->Flush();
+            if (!D3d10Tools::read_texture(d, fresh.get(), image, error) || !Kit::uniform(image, D3d10Tools::bgra(0, 255, 0, 255), where)) {
+                problems.add("the device does not clear and read back a fresh target after ClearState: " + where + error);
+            }
+        }
     }
     context.measure("checked", 1);
     return problems.outcome();

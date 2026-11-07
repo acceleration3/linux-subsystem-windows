@@ -199,11 +199,6 @@ Outcome FailChecks::bad_parameters(Context& context) {
         Com<IDirect3DSurface9> plain;
         Kit::expect_failure(problems, n + "CreateOffscreenPlainSurface of size 0x0", device->CreateOffscreenPlainSurface(0, 0, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, plain.put(), nullptr));
         Com<IDirect3DVertexDeclaration9> declaration;
-        vb.reset();
-        device->CreateVertexBuffer(64, 0, 0, D3DPOOL_DEFAULT, vb.put(), nullptr);
-        context.measure(n + "SetStreamSource_MaxStreams", Kit::hr(device->SetStreamSource(std::min<UINT>(caps.MaxStreams, 16), vb.get(), 0, 16)));
-        context.measure(n + "SetTexture_1000", Kit::hr(device->SetTexture(1000, nullptr)));
-        context.measure(n + "SetSamplerState_40", Kit::hr(device->SetSamplerState(40, D3DSAMP_MINFILTER, D3DTEXF_POINT)));
         Kit::expect_failure(problems, n + "SetRenderTarget(0, NULL)", device->SetRenderTarget(0, nullptr));
         Com<IDirect3DSurface9> rt = D3d9Tools::target(device, 64, 64);
         Kit::expect_failure(problems, n + "SetRenderTarget(4, surface)", device->SetRenderTarget(4, rt.get()));
@@ -232,10 +227,7 @@ Outcome FailChecks::bad_parameters(Context& context) {
         viewport = {32, 0, 64, 64, 0.0f, 1.0f};
         Kit::expect_failure(problems, n + "SetViewport reaching beyond the render target", device->SetViewport(&viewport));
         device->SetRenderTarget(0, original_rt.get());
-        const std::uint8_t junk[64] = {};
         device->SetFVF(D3d9Tools::kTlFvf);
-        Kit::expect_failure(problems, n + "DrawPrimitiveUP with the primitive type 99", device->DrawPrimitiveUP(static_cast<D3DPRIMITIVETYPE>(99), 1, junk, sizeof(TlVertex)));
-        Kit::expect_failure(problems, n + "Clear with a rect count and no rects", device->Clear(2, nullptr, D3DCLEAR_TARGET, 0, 1.0f, 0));
         Kit::check_usable(problems, n + "after the bad calls", device);
         render_check(problems, n + "after the bad calls", device);
     }

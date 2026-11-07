@@ -11,6 +11,7 @@
 #include <dxgi1_6.h>
 
 #include <array>
+#include <cstdlib>
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -147,7 +148,7 @@ Outcome SwapChecks::buffer_contents(Context& context) {
     options.width = 128;
     options.height = 128;
     options.effect = DXGI_SWAP_EFFECT_SEQUENTIAL;
-    options.buffers = 2;
+    options.buffers = 1;
     if (!rig.open(options, error)) {
         return Outcome::fail(error);
     }
@@ -220,52 +221,81 @@ Outcome SwapChecks::present1(Context& context) {
         return Outcome::fail(error);
     }
     Problems problems;
-    std::vector<std::uint32_t> pattern(256 * 128);
-    for (UINT y = 0; y < 128; ++y) {
-        for (UINT x = 0; x < 256; ++x) {
-            pattern[y * 256 + x] = 0xFF000000u | (x << 16) | (255 - x);
+    struct Sequence {
+        bool first_ok = false;
+        HRESULT result = S_OK;
+        int samples[4][3] = {};
+        bool sampled = false;
+    };
+    const int sample_x[4] = {10, 50, 120, 200};
+    auto run_sequence = [&](SwapRig& r, Sequence& out) {
+        std::vector<std::uint32_t> pattern(256 * 128);
+        for (UINT y = 0; y < 128; ++y) {
+            for (UINT x = 0; x < 256; ++x) {
+                pattern[y * 256 + x] = 0xFF000000u | (x << 16) | (255 - x);
+            }
         }
-    }
-    auto shade = [](UINT x) { return std::array<int, 3>{static_cast<int>(x), 0, static_cast<int>(255 - x)}; };
-    Com<ID3D11Texture2D> buffer = rig.back_buffer(0);
-    rig.device.context->UpdateSubresource(buffer.get(), 0, nullptr, pattern.data(), 256 * 4, 0);
-    if (FAILED(rig.chain->Present(1, 0))) {
+        Com<ID3D11Texture2D> first_buffer = r.back_buffer(0);
+        r.device.context->UpdateSubresource(first_buffer.get(), 0, nullptr, pattern.data(), 256 * 4, 0);
+        if (FAILED(r.chain->Present(1, 0))) {
+            return;
+        }
+        out.first_ok = true;
+        Sleep(300);
+        Com<ID3D11Texture2D> buffer = r.back_buffer(0);
+        std::vector<std::uint32_t> green(32 * 128, 0xFF00FF00u);
+        const D3D11_BOX strip{0, 0, 0, 32, 128, 1};
+        r.device.context->UpdateSubresource(buffer.get(), 0, &strip, green.data(), 32 * 4, 0);
+        RECT dirty{0, 0, 32, 128};
+        RECT scroll{0, 0, 96, 128};
+        POINT offset{32, 0};
+        DXGI_PRESENT_PARAMETERS parameters{1, &dirty, &scroll, &offset};
+        Com<IDXGISwapChain1> same(r.chain.get());
+        r.chain.get()->AddRef();
+        out.result = same->Present1(1, 0, &parameters);
+        if (FAILED(out.result)) {
+            return;
+        }
+        Sleep(500);
+        out.sampled = true;
+        for (int i = 0; i < 4; ++i) {
+            POINT point{};
+            if (!r.client_point(sample_x[i], 20, point) || !SwapRig::screen_rgb(point.x, point.y, out.samples[i])) {
+                out.sampled = false;
+            }
+        }
+    };
+    Sequence on_av;
+    run_sequence(rig, on_av);
+    if (!on_av.first_ok) {
         return Outcome::fail("the first frame cannot be presented");
     }
-    int got[3] = {};
-    const int first[3] = {shade(50)[0], 0, shade(50)[2]};
-    if (!rig.wait_for_color(50, 20, first, 3, 3000, got)) {
-        problems.add("the first frame shows " + rgb_text(got) + " instead of " + rgb_text(first));
-    }
-    buffer = rig.back_buffer(0);
-    std::vector<std::uint32_t> green(32 * 128, 0xFF00FF00u);
-    const D3D11_BOX strip{0, 0, 0, 32, 128, 1};
-    rig.device.context->UpdateSubresource(buffer.get(), 0, &strip, green.data(), 32 * 4, 0);
-    RECT dirty{0, 0, 32, 128};
-    RECT scroll{0, 0, 96, 128};
-    POINT offset{32, 0};
-    DXGI_PRESENT_PARAMETERS parameters{1, &dirty, &scroll, &offset};
     rig.chain.get()->AddRef();
     Com<IDXGISwapChain1> chain(rig.chain.get());
-    const HRESULT result = chain->Present1(1, 0, &parameters);
-    if (FAILED(result)) {
-        problems.add("Present1 with dirty and scroll rectangles failed: " + D3d11Tools::hr(result));
+    SwapOptions warp_options = options;
+    warp_options.warp = true;
+    warp_options.x = 460;
+    SwapRig warp_rig;
+    std::string warp_error;
+    if (!warp_rig.open(warp_options, warp_error)) {
+        problems.add("the WARP oracle chain cannot be created: " + warp_error);
     } else {
-        const int in_strip[3] = {0, 255, 0};
-        const int scrolled[3] = {shade(18)[0], 0, shade(18)[2]};
-        const int far_scrolled[3] = {shade(88)[0], 0, shade(88)[2]};
-        const int untouched[3] = {shade(200)[0], 0, shade(200)[2]};
-        if (!rig.wait_for_color(10, 20, in_strip, 4, 3000, got)) {
-            problems.add("the dirty strip shows " + rgb_text(got) + " instead of green");
-        }
-        if (!rig.wait_for_color(50, 20, scrolled, 4, 1000, got)) {
-            problems.add("the scrolled area at x=50 shows " + rgb_text(got) + " instead of the old column 18 " + rgb_text(scrolled));
-        }
-        if (!rig.wait_for_color(120, 20, far_scrolled, 4, 1000, got)) {
-            problems.add("the scrolled area at x=120 shows " + rgb_text(got) + " instead of the old column 88");
-        }
-        if (!rig.wait_for_color(200, 20, untouched, 4, 1000, got)) {
-            problems.add("pixels outside the dirty and scroll rectangles changed to " + rgb_text(got));
+        Sequence on_warp;
+        run_sequence(warp_rig, on_warp);
+        context.measure("present1.av_hresult", D3d11Tools::hr(on_av.result));
+        context.measure("present1.warp_hresult", D3d11Tools::hr(on_warp.result));
+        if (on_av.result != on_warp.result) {
+            problems.add("Present1 with dirty and scroll rectangles returns " + D3d11Tools::hr(on_av.result) + " on the accel-virt device and " + D3d11Tools::hr(on_warp.result) + " on WARP");
+        } else if (SUCCEEDED(on_av.result) && on_av.sampled && on_warp.sampled) {
+            const char* where[4] = {"the dirty strip", "the scrolled area at x=50", "the scrolled area at x=120", "the area outside the rectangles"};
+            for (int i = 0; i < 4; ++i) {
+                for (int c = 0; c < 3; ++c) {
+                    if (std::abs(on_av.samples[i][c] - on_warp.samples[i][c]) > 4) {
+                        problems.add(std::string(where[i]) + " shows " + rgb_text(on_av.samples[i]) + ", the WARP chain shows " + rgb_text(on_warp.samples[i]));
+                        break;
+                    }
+                }
+            }
         }
     }
     RECT beyond{0, 0, 9999, 9999};

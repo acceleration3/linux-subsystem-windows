@@ -631,6 +631,12 @@ Outcome MemChecks::duplication_visible(Context& context) {
             break;
         }
     }
+    {
+        int rgb[3] = {};
+        if (SwapRig::screen_rgb(origin.x, origin.y, rgb)) {
+            context.measure("screen_rgb_at_origin", std::to_string(rgb[0]) + "," + std::to_string(rgb[1]) + "," + std::to_string(rgb[2]));
+        }
+    }
     context.measure("acquired_frames", acquired_frames);
     context.measure("last_present_time", last_present_time);
     if (!matched && problems.empty()) {

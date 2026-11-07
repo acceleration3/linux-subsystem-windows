@@ -591,6 +591,16 @@ Outcome RenderChecks::tessellation(Context& context) {
         if (!vs || code.empty() || !ps || FAILED(d.device->CreateInputLayout(&element, 1, code.data(), code.size(), layout.put()))) {
             return false;
         }
+        D3D11_RASTERIZER_DESC raster{};
+        raster.FillMode = D3D11_FILL_SOLID;
+        raster.CullMode = D3D11_CULL_NONE;
+        raster.DepthClipEnable = TRUE;
+        Com<ID3D11RasterizerState> no_cull;
+        if (FAILED(d.device->CreateRasterizerState(&raster, no_cull.put()))) {
+            why = "a rasterizer state without culling cannot be created";
+            return false;
+        }
+        d.context->RSSetState(no_cull.get());
         d.context->IASetInputLayout(layout.get());
         d.context->VSSetShader(vs.get(), nullptr, 0);
         d.context->PSSetShader(ps.get(), nullptr, 0);
@@ -641,7 +651,99 @@ Outcome RenderChecks::tessellation(Context& context) {
         }
         return finish_image(d, target.get(), 192, 64, out, why);
     };
-    rig.compare(context, problems, "tessellation", scene, Tolerance::bytes(8, 0.03));
+    SceneImage image;
+    std::string why;
+    if (!scene(rig.av, image, why)) {
+        return Outcome::fail("tessellation scene: " + why);
+    }
+    auto lit = [&](int x, int y) { return image.data[(static_cast<std::size_t>(y) * 192 + static_cast<std::size_t>(x)) * 4] > 128; };
+    for (std::size_t tile = 0; tile < modes.size(); ++tile) {
+        const int ox = static_cast<int>(tile % 6) * 32;
+        const int oy = static_cast<int>(tile / 6) * 32;
+        const std::string name = std::string(modes[tile].domain) + "/" + modes[tile].partitioning;
+        int missing = 0;
+        int stray = 0;
+        int first_x = -1;
+        int first_y = -1;
+        auto note = [&](int x, int y) {
+            if (first_x < 0) {
+                first_x = x;
+                first_y = y;
+            }
+        };
+        const std::string domain = modes[tile].domain;
+        if (domain == "isoline") {
+            const int rows[3] = {28, 20, 11};
+            for (int y = 0; y < 32; ++y) {
+                for (int x = 0; x < 32; ++x) {
+                    bool near_row = false;
+                    bool on_row = false;
+                    for (const int r : rows) {
+                        near_row = near_row || std::abs(y - r) <= 1;
+                        on_row = on_row || y == r;
+                    }
+                    const bool pixel = lit(ox + x, oy + y);
+                    if (on_row && x >= 5 && x <= 26 && !pixel) {
+                        ++missing;
+                        note(x, y);
+                    }
+                    if (pixel && (!near_row || x < 2 || x > 30)) {
+                        ++stray;
+                        note(x, y);
+                    }
+                }
+            }
+        } else if (domain == "quad") {
+            for (int y = 0; y < 32; ++y) {
+                for (int x = 0; x < 32; ++x) {
+                    const double cx = x + 0.5;
+                    const double cy = y + 0.5;
+                    const bool pixel = lit(ox + x, oy + y);
+                    if (cx >= 4.2 && cx <= 27.8 && cy >= 4.2 && cy <= 27.8 && !pixel) {
+                        ++missing;
+                        note(x, y);
+                    }
+                    if ((cx < 2.2 || cx > 29.8 || cy < 2.2 || cy > 29.8) && pixel) {
+                        ++stray;
+                        note(x, y);
+                    }
+                }
+            }
+        } else {
+            const double vx[3] = {3.2, 28.8, 16.0};
+            const double vy[3] = {28.8, 28.8, 3.2};
+            const double area = (vx[1] - vx[0]) * (vy[2] - vy[0]) - (vx[2] - vx[0]) * (vy[1] - vy[0]);
+            for (int y = 0; y < 32; ++y) {
+                for (int x = 0; x < 32; ++x) {
+                    const double cx = x + 0.5;
+                    const double cy = y + 0.5;
+                    double inside = 1e9;
+                    for (int e = 0; e < 3; ++e) {
+                        const double ax = vx[e];
+                        const double ay = vy[e];
+                        const double bx = vx[(e + 1) % 3];
+                        const double by = vy[(e + 1) % 3];
+                        const double cross = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
+                        const double distance = (area > 0 ? cross : -cross) / std::hypot(bx - ax, by - ay);
+                        inside = std::min(inside, distance);
+                    }
+                    const bool pixel = lit(ox + x, oy + y);
+                    if (inside >= 1.0 && !pixel) {
+                        ++missing;
+                        note(x, y);
+                    }
+                    if (inside <= -1.0 && pixel) {
+                        ++stray;
+                        note(x, y);
+                    }
+                }
+            }
+        }
+        if (missing != 0 || stray != 0) {
+            problems.add(name + ": " + std::to_string(missing) + " pixels that must be covered are not and " + std::to_string(stray) + " pixels that must stay clear are lit, first at tile pixel (" +
+                         std::to_string(first_x) + "," + std::to_string(first_y) + ")");
+        }
+    }
     return problems.outcome();
 }
 

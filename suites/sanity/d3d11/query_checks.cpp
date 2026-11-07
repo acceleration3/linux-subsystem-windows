@@ -285,7 +285,7 @@ Outcome QueryChecks::pipeline_stats(Context& context) {
         problems.add("PSInvocations is " + std::to_string(data.PSInvocations) + " for a fullscreen triangle of 4096 pixels");
     }
     if (device.level >= D3D_FEATURE_LEVEL_11_0) {
-        Com<ID3D11ComputeShader> cs = D3d11Tools::cs(device, "RWByteAddressBuffer o : register(u0);\n[numthreads(8,4,1)] void main(uint3 id : SV_DispatchThreadID) { o.Store(0, id.x); }", error);
+        Com<ID3D11ComputeShader> cs = D3d11Tools::cs(device, "RWByteAddressBuffer o : register(u0);\n[numthreads(8,4,1)] void main(uint3 id : SV_DispatchThreadID) { uint o0; o.InterlockedAdd(0, 1, o0); }", error);
         Com<ID3D11Buffer> buffer = D3d11Tools::buffer(device, 64, D3D11_USAGE_DEFAULT, D3D11_BIND_UNORDERED_ACCESS, 0, D3D11_RESOURCE_MISC_BUFFER_ALLOW_RAW_VIEWS, 0, nullptr);
         Com<ID3D11UnorderedAccessView> uav = buffer ? D3d11Tools::raw_uav(device, buffer.get()) : Com<ID3D11UnorderedAccessView>();
         if (cs && uav) {

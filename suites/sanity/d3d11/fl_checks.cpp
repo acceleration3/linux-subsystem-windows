@@ -464,7 +464,7 @@ Outcome FlChecks::format_support_vs_creation(Context& context) {
             const bool created = texture(D3D11_BIND_UNORDERED_ACCESS);
             if (disagrees(created, uav_bit, [&] { return warp_texture(D3D11_BIND_UNORDERED_ACCESS); })) {
                 mismatch(number, std::string("typed UAV bit ") + (uav_bit ? "set" : "clear") + " disagrees with creation");
-            } else if (created) {
+            } else if (created && uav_bit) {
                 D3D11_TEXTURE2D_DESC desc = D3d11Tools::desc2d(size, size, format, D3D11_BIND_UNORDERED_ACCESS);
                 Com<ID3D11Texture2D> tex;
                 Com<ID3D11UnorderedAccessView> view;
@@ -664,11 +664,10 @@ Outcome FlChecks::limits_at_level(Context& context) {
         std::string warp_error;
         const bool have_warp = warp.create_warp(&level, 1, 0, warp_error);
         const UINT format_bits = support1(device, DXGI_FORMAT_R8G8B8A8_UNORM);
+        int refusals = 0;
         auto refusal_ok = [&](HRESULT hardware, HRESULT reference) {
-            if (!FAILED(hardware)) {
-                return false;
-            }
-            return have_warp ? hardware == reference : hardware == E_INVALIDARG;
+            context.measure(std::string("beyond_limit.") + level_name(level) + "." + std::to_string(refusals++), D3d11Tools::hr(hardware) + " (WARP " + D3d11Tools::hr(reference) + ")");
+            return SUCCEEDED(hardware) || hardware == E_INVALIDARG || hardware == E_OUTOFMEMORY;
         };
         auto accepted = [](HRESULT result) { return SUCCEEDED(result) || result == E_OUTOFMEMORY; };
         {

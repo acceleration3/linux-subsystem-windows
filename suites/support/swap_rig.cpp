@@ -12,7 +12,12 @@ bool SwapRig::open(const SwapOptions& wanted, std::string& error) {
     if (!TargetAdapter::pick(adapter, error)) {
         return false;
     }
-    if (!device.create_ex(adapter.luid, nullptr, 0, D3D11_CREATE_DEVICE_BGRA_SUPPORT | wanted.device_flags, error)) {
+    if (wanted.warp) {
+        const D3D_FEATURE_LEVEL level = D3D_FEATURE_LEVEL_11_0;
+        if (!device.create_warp(&level, 1, D3D11_CREATE_DEVICE_BGRA_SUPPORT | wanted.device_flags, error)) {
+            return false;
+        }
+    } else if (!device.create_ex(adapter.luid, nullptr, 0, D3D11_CREATE_DEVICE_BGRA_SUPPORT | wanted.device_flags, error)) {
         return false;
     }
     TestWindowConfig config;

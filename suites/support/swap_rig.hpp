@@ -21,6 +21,7 @@ struct SwapOptions {
     int y = 60;
     bool visible = true;
     UINT device_flags = 0;
+    bool warp = false;
 };
 
 class SwapRig {

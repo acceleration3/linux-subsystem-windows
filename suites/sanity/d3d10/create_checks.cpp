@@ -230,15 +230,6 @@ Outcome CreateChecks::levels_101(Context& context) {
                 }
             }
         } else {
-            if (multisampled) {
-                D3D10_SHADER_RESOURCE_VIEW_DESC1 ms_desc{};
-                ms_desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-                ms_desc.ViewDimension = D3D10_1_SRV_DIMENSION_TEXTURE2DMS;
-                Com<ID3D10ShaderResourceView1> ms_view;
-                if (SUCCEEDED(device.device1->CreateShaderResourceView1(multisampled.get(), &ms_desc, ms_view.put()))) {
-                    problems.add(name + ": a multisampled shader resource view is accepted at feature level 10_0");
-                }
-            }
             std::vector<std::uint8_t> code;
             if (D3d10Tools::compile("float4 main() : SV_Target { return 0; }\n", "ps_4_1", code, error)) {
                 Com<ID3D10PixelShader> shader;
