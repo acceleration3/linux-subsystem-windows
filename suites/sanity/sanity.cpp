@@ -70,6 +70,7 @@
 #include "sanity/gl/sync_checks.hpp"
 #include "sanity/gl/swap_checks.hpp"
 #include "sanity/gl/ext_checks.hpp"
+#include "sanity/vk/instance_checks.hpp"
 #include "sanity/env/display_checks.hpp"
 #include "sanity/env/icd_checks.hpp"
 #include "sanity/env/install_checks.hpp"
@@ -461,6 +462,11 @@ void add(Registry& registry) {
     guarded(suite, {"sanity.cl.queue.multiple_queues_concurrent", {"opencl"}, false, 90, cl::QueueChecks::multiple_queues_concurrent});
     guarded(suite, {"sanity.cl.queue.finish_flush_release", {"opencl"}, false, 60, cl::QueueChecks::finish_flush_release});
     guarded(suite, {"sanity.cl.error.codes_documented", {"opencl"}, false, 60, cl::ErrorChecks::codes_documented});
+    guarded(suite, {"sanity.vk.instance.version_layers_extensions", {"vulkan"}, false, 60, vk::InstanceChecks::version_layers_extensions});
+    guarded(suite, {"sanity.vk.device.props_features_consistent", {"vulkan"}, false, 120, vk::InstanceChecks::props_features_consistent});
+    guarded(suite, {"sanity.vk.device.limits_minimums_honoured", {"vulkan"}, false, 120, vk::InstanceChecks::limits_minimums_honoured});
+    guarded(suite, {"sanity.vk.device.queue_families", {"vulkan"}, false, 90, vk::InstanceChecks::queue_families});
+    guarded(suite, {"sanity.vk.device.extensions_match_functions", {"vulkan"}, false, 90, vk::InstanceChecks::extensions_match_functions});
 }
 
 }  // namespace lsw::suites::sanity

@@ -25,6 +25,8 @@ add_library(suite_sanity OBJECT
     gl/sync_checks.cpp
     gl/swap_checks.cpp
     gl/ext_checks.cpp
+    vk/kit.cpp
+    vk/instance_checks.cpp
     dxgi/enum_checks.cpp
     dxgi/swap_checks.cpp
     dxgi/mem_checks.cpp

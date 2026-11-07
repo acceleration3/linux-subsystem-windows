@@ -65,6 +65,16 @@ add_library(suite_support OBJECT
     registry_reader.cpp
     test_window.cpp
     vulkan_api.cpp
+    vulkan_buffer.cpp
+    vulkan_compute.cpp
+    vulkan_extension_table.cpp
+    vulkan_image.cpp
+    vulkan_image_io.cpp
+    vulkan_rig.cpp
+    vulkan_scene.cpp
+    vulkan_shaders.cpp
+    vulkan_table.cpp
+    vulkan_tools.cpp
 )
 set(LSW_SUITES_KHRONOS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../external/accel-virt/third_party/khronos"
     CACHE PATH "Khronos headers root (contains include/CL and include/vulkan)")

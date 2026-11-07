@@ -1,0 +1,31 @@
+#version 450
+layout(local_size_x = 64) in;
+layout(std430, binding = 0) readonly buffer A { uint a[]; };
+layout(std430, binding = 1) buffer B { uint b[]; };
+layout(std140, binding = 2) uniform P { uint mul; uint add; uint count; uint pad; } p;
+layout(push_constant) uniform PC { uint op; uint k; } pc;
+shared uint tile[64];
+void main() {
+    uint i = gl_GlobalInvocationID.x;
+    if (pc.op == 0u) {
+        if (i < p.count) {
+            b[i] = a[i] * p.mul + p.add + pc.k;
+        }
+    } else if (pc.op == 1u) {
+        tile[gl_LocalInvocationID.x] = a[i];
+        barrier();
+        b[i] = tile[63u - gl_LocalInvocationID.x];
+    } else if (pc.op == 2u) {
+        if (i < p.count) {
+            atomicAdd(b[a[i] & 15u], 1u);
+        }
+    } else if (pc.op == 3u) {
+        if (i < p.count) {
+            atomicMax(b[0], a[i]);
+            atomicMin(b[1], a[i]);
+            atomicXor(b[2], a[i]);
+            atomicOr(b[3], a[i]);
+            atomicAnd(b[4], a[i]);
+        }
+    }
+}
