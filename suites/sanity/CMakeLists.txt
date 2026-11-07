@@ -138,5 +138,8 @@ add_library(suite_sanity OBJECT
     interop/gdi_layered_checks.cpp
     interop/gdi_dib_checks.cpp
     interop/gdi_d2d_checks.cpp
+    interop/glcl_checks.cpp
+    interop/d3dcl_checks.cpp
+    interop/gld3d_checks.cpp
 )
 target_link_libraries(suite_sanity PUBLIC suite_core suite_support)

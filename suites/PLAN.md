@@ -1050,7 +1050,7 @@ Each loop creates and destroys 5000 objects of the kind with its largest practic
 | `sanity.interop.glcl.texture_targets_mips_layers` | clCreateFromGLTexture for 2D, 3D, array, cube faces, rectangle and mip levels > 0 returns images whose pixels match the GL texture, and CL writes visible in GL. |
 | `sanity.interop.glcl.renderbuffer_sharing` | A GL renderbuffer rendered by GL is read by CL; CL writes to it are visible in glReadPixels after release. |
 | `sanity.interop.glcl.gl_event_sync` | With cl_khr_gl_event, a CL event from a GL fence (clCreateEventFromGLsyncKHR) orders CL work after GL rendering without glFinish; the reverse via cl_khr_gl_event/ GL sync object works. |
-| `sanity.interop.glcl.acquire_release_errors` | Using a shared object without acquire gives CL_INVALID_GL_OBJECT / is rejected, double acquire fails, and objects deleted in GL while acquired yield the documented behaviour. |
+| `sanity.interop.glcl.acquire_release_errors` | The documented error codes of cl_khr_gl_sharing hold: clCreateFromGLBuffer, clCreateFromGLTexture and clCreateFromGLRenderbuffer reject unknown GL names (CL_INVALID_GL_OBJECT), invalid flags, targets and contexts; clEnqueueAcquire/ReleaseGLObjects reject empty lists (CL_INVALID_VALUE) and objects not created from GL (CL_INVALID_GL_OBJECT); clGetGLObjectInfo agrees with the shared object. Using an object outside acquire and release is invalid usage and is never exercised. |
 | `sanity.interop.glcl.caps_unsupported` | If cl_khr_gl_sharing is not advertised, clCreateFromGLBuffer fails with the documented code and the extension string and entry points agree. |
 
 #### D3D and OpenCL
@@ -1060,7 +1060,7 @@ Each loop creates and destroys 5000 objects of the kind with its largest practic
 | `sanity.interop.d3dcl.d3d11_sharing` | With cl_khr_d3d11_sharing, buffers and 2D/3D textures from D3D11 are read and written by CL across AcquireD3D11Objects/Release with matching data; the device from clGetDeviceIDsFromD3D11KHR matches the D3D device's adapter. |
 | `sanity.interop.d3dcl.d3d10_sharing` | Same contract for cl_khr_d3d10_sharing. |
 | `sanity.interop.d3dcl.dx9_media_sharing` | With cl_khr_dx9_media_sharing, D3D9Ex surfaces (including planes of NV12 where reported) are readable and writable by CL across acquire/release. |
-| `sanity.interop.d3dcl.acquire_order_caps` | For each reported D3D sharing extension, using objects outside acquire/release gives the documented error, and if the extension is not advertised, the creation functions are absent or fail. |
+| `sanity.interop.d3dcl.acquire_order_caps` | For each of cl_khr_d3d10_sharing, cl_khr_d3d11_sharing and cl_khr_dx9_media_sharing that is advertised, the extension's own error codes hold: a second acquire gives the ALREADY_ACQUIRED code, a second release the NOT_ACQUIRED code, and acquiring an object not created from D3D the INVALID_RESOURCE code; for one that is not advertised, contexts with its device property and its creation functions fail. Using an object outside acquire and release is invalid usage and is never exercised. |
 
 #### OpenGL and D3D
 
@@ -1068,7 +1068,7 @@ Each loop creates and destroys 5000 objects of the kind with its largest practic
 |---|---|
 | `sanity.interop.gld3d.nv_dx_interop_d3d11` | WGL_NV_DX_interop2: wglDXOpenDeviceNV, RegisterObject of a D3D11 texture as GL texture/renderbuffer, Lock, GL render, Unlock, then D3D sampling gives the GL result; D3D writes visible in GL after Lock. |
 | `sanity.interop.gld3d.nv_dx_interop_d3d9ex` | The same with D3D9Ex surfaces and textures. |
-| `sanity.interop.gld3d.lock_ordering` | Using a registered object without Lock is invalid in GL; Lock/Unlock pairs across many frames preserve ordering (no stale frame), and UnregisterObject/CloseDevice with locked objects behave as documented. |
+| `sanity.interop.gld3d.lock_ordering` | Lock/Unlock pairs across 60 frames preserve ordering (GL reads exactly the frame D3D wrote before the lock, D3D reads exactly the frame GL rendered before the unlock, never a stale frame); locking or unlocking a handle that was never registered fails and an invalid object type is refused. Use outside Lock and unregistering locked objects are invalid usage and are never exercised. |
 | `sanity.interop.gld3d.formats_and_targets` | Each format/target combination reported usable by interop (RGBA8, sRGB, float, depth, MSAA) renders identically to its pure-GL twin. |
 | `sanity.interop.gld3d.present_via_d3d` | GL content rendered into a D3D11 swapchain back buffer via interop and presented by D3D shows the exact frame in capture. |
 | `sanity.interop.gld3d.caps_unsupported` | If the extension isn't advertised, wglDXOpenDeviceNV is absent or fails and all queries are consistent. |

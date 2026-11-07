@@ -192,4 +192,7 @@
     X(void, glClearBufferfi, unsigned, int, float, int) \
     X(void, glGetShaderSource, unsigned, int, int*, char*) \
     X(void, glDetachShader, unsigned, unsigned) \
-    X(void, glCompressedTexSubImage2D, unsigned, int, int, int, int, int, unsigned, int, const void*)
+    X(void, glCompressedTexSubImage2D, unsigned, int, int, int, int, int, unsigned, int, const void*) \
+    X(void*, glCreateSyncFromCLeventARB, void*, void*, unsigned) \
+    X(void, glBufferStorageMemEXT, unsigned, std::ptrdiff_t, unsigned, unsigned long long) \
+    X(void, glGetBufferParameteri64v, unsigned, unsigned, long long*)

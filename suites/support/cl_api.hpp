@@ -45,6 +45,8 @@ public:
     LSW_CL_FUNCTIONS(LSW_CL_MEMBER)
 #undef LSW_CL_MEMBER
 
+    [[nodiscard]] void* export_symbol(const char* name) const { return library_.symbol<void*>(name); }
+
     [[nodiscard]] void* extension(cl_platform_id platform, const char* name) const {
         return GetExtensionFunctionAddressForPlatform != nullptr ? GetExtensionFunctionAddressForPlatform(platform, name)
                                                                  : nullptr;

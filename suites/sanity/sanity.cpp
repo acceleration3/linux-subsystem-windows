@@ -105,6 +105,7 @@
 #include "sanity/fmt/support_checks.hpp"
 #include "sanity/fmt/value_checks.hpp"
 #include "sanity/fmt/yuv_checks.hpp"
+#include "sanity/interop/d3dcl_checks.hpp"
 #include "sanity/interop/gdi_capture_checks.hpp"
 #include "sanity/interop/gdi_d2d_checks.hpp"
 #include "sanity/interop/gdi_d3d9_checks.hpp"
@@ -112,6 +113,8 @@
 #include "sanity/interop/gdi_dxgi_checks.hpp"
 #include "sanity/interop/gdi_gl_checks.hpp"
 #include "sanity/interop/gdi_layered_checks.hpp"
+#include "sanity/interop/gld3d_checks.hpp"
+#include "sanity/interop/glcl_checks.hpp"
 #include "sanity/shader/cache_checks.hpp"
 #include "sanity/shader/cl_checks.hpp"
 #include "sanity/shader/determinism_checks.hpp"
@@ -643,6 +646,23 @@ void add(Registry& registry) {
     guarded(suite, {"sanity.interop.gdi.cursor_in_captures", {"interop", "gdi", "d3d11", "present", "dwm", "exclusive"}, true, 120, interop::GdiCaptureChecks::cursor_in_captures});
     guarded(suite, {"sanity.interop.gdi.gdi_after_device_lost", {"interop", "gdi", "d3d9", "d3d11", "present", "dwm", "exclusive"}, true, 120, interop::GdiD3d9Checks::after_device_lost});
     guarded(suite, {"sanity.interop.gdi.multi_thread_gdi_3d", {"interop", "gdi", "d3d11", "present", "dwm", "exclusive"}, true, 120, interop::GdiDibChecks::multi_thread});
+    guarded(suite, {"sanity.interop.glcl.context_device_match", {"interop", "gl", "opencl"}, false, 90, interop::GlClChecks::context_device_match});
+    guarded(suite, {"sanity.interop.glcl.buffer_sharing", {"interop", "gl", "opencl"}, false, 90, interop::GlClChecks::buffer_sharing});
+    guarded(suite, {"sanity.interop.glcl.texture_targets_mips_layers", {"interop", "gl", "opencl"}, false, 120, interop::GlClChecks::texture_targets_mips_layers});
+    guarded(suite, {"sanity.interop.glcl.renderbuffer_sharing", {"interop", "gl", "opencl"}, false, 90, interop::GlClChecks::renderbuffer_sharing});
+    guarded(suite, {"sanity.interop.glcl.gl_event_sync", {"interop", "gl", "opencl"}, false, 90, interop::GlClChecks::gl_event_sync});
+    guarded(suite, {"sanity.interop.glcl.acquire_release_errors", {"interop", "gl", "opencl"}, false, 90, interop::GlClChecks::acquire_release_errors});
+    guarded(suite, {"sanity.interop.glcl.caps_unsupported", {"interop", "gl", "opencl"}, false, 90, interop::GlClChecks::caps_unsupported});
+    guarded(suite, {"sanity.interop.d3dcl.d3d11_sharing", {"interop", "d3d11", "opencl"}, false, 120, interop::D3dClChecks::d3d11_sharing});
+    guarded(suite, {"sanity.interop.d3dcl.d3d10_sharing", {"interop", "d3d10", "opencl"}, false, 120, interop::D3dClChecks::d3d10_sharing});
+    guarded(suite, {"sanity.interop.d3dcl.dx9_media_sharing", {"interop", "d3d9", "opencl"}, false, 120, interop::D3dClChecks::dx9_media_sharing});
+    guarded(suite, {"sanity.interop.d3dcl.acquire_order_caps", {"interop", "d3d9", "d3d10", "d3d11", "opencl"}, false, 120, interop::D3dClChecks::acquire_order_caps});
+    guarded(suite, {"sanity.interop.gld3d.nv_dx_interop_d3d11", {"interop", "gl", "d3d11"}, false, 120, interop::GlD3dChecks::d3d11_objects});
+    guarded(suite, {"sanity.interop.gld3d.nv_dx_interop_d3d9ex", {"interop", "gl", "d3d9"}, false, 120, interop::GlD3dChecks::d3d9ex_objects});
+    guarded(suite, {"sanity.interop.gld3d.lock_ordering", {"interop", "gl", "d3d11"}, false, 120, interop::GlD3dChecks::lock_ordering});
+    guarded(suite, {"sanity.interop.gld3d.formats_and_targets", {"interop", "gl", "d3d11", "formats"}, false, 180, interop::GlD3dChecks::formats_and_targets});
+    guarded(suite, {"sanity.interop.gld3d.present_via_d3d", {"interop", "gl", "d3d11", "dxgi", "present", "dwm", "exclusive"}, true, 120, interop::GlD3dChecks::present_via_d3d});
+    guarded(suite, {"sanity.interop.gld3d.caps_unsupported", {"interop", "gl", "d3d11"}, false, 90, interop::GlD3dChecks::caps_unsupported});
 }
 
 }  // namespace lsw::suites::sanity
