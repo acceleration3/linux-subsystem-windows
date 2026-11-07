@@ -182,5 +182,13 @@ add_library(suite_sanity OBJECT
     sync/process_checks.cpp
     sync/cross_checks.cpp
     sync/fair_checks.cpp
+    iso/fleet.cpp
+    iso/loads.cpp
+    iso/magic.cpp
+    iso/scene.cpp
+    iso/fresh_checks.cpp
+    iso/handle_checks.cpp
+    iso/fault_checks.cpp
+    iso/stall_checks.cpp
 )
 target_link_libraries(suite_sanity PUBLIC suite_core suite_support)

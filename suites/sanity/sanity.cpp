@@ -151,6 +151,10 @@
 #include "sanity/sync/process_checks.hpp"
 #include "sanity/sync/cross_checks.hpp"
 #include "sanity/sync/fair_checks.hpp"
+#include "sanity/iso/fresh_checks.hpp"
+#include "sanity/iso/handle_checks.hpp"
+#include "sanity/iso/fault_checks.hpp"
+#include "sanity/iso/stall_checks.hpp"
 
 namespace lsw::suites::sanity {
 
@@ -777,6 +781,21 @@ void add(Registry& registry) {
     guarded(suite, {"sanity.sync.deadlock.contention_no_deadlock", {"sync", "slow", "d3d11", "d3d12", "vulkan", "opencl"}, false, 300, sync::FairChecks::contention_no_deadlock});
     guarded(suite, {"sanity.sync.fairness.low_rate_not_starved", {"sync", "slow", "d3d11", "d3d12", "vulkan", "opencl", "exclusive"}, true, 300, sync::FairChecks::low_rate_not_starved});
     guarded(suite, {"sanity.sync.fairness.equal_load_share", {"sync", "slow", "d3d11", "d3d12", "vulkan", "opencl", "exclusive"}, true, 300, sync::FairChecks::equal_load_share});
+    guarded(suite, {"sanity.iso.mem.fresh_alloc_zero_or_unspecified", {"iso", "mem", "slow", "d3d11", "d3d12", "vulkan", "opencl"}, false, 900, iso::FreshChecks::fresh_alloc_zero_or_unspecified});
+    guarded(suite, {"sanity.iso.mem.fresh_vram_pattern", {"iso", "mem", "slow", "d3d11", "d3d12", "vulkan", "opencl", "exclusive"}, true, 1800, iso::FreshChecks::fresh_vram_pattern});
+    guarded(suite, {"sanity.iso.mem.fresh_host_visible", {"iso", "mem", "d3d11", "d3d12", "vulkan", "opencl"}, false, 600, iso::FreshChecks::fresh_host_visible});
+    guarded(suite, {"sanity.iso.handle.no_access_without_handle", {"iso", "robust", "d3d12"}, false, 420, iso::HandleChecks::no_access_without_handle});
+    guarded(suite, {"sanity.iso.handle.closed_handle_dead", {"iso", "d3d12"}, false, 420, iso::HandleChecks::closed_handle_dead});
+    guarded(suite, {"sanity.iso.fault.crash_leaves_others", {"iso", "robust", "slow", "d3d11", "d3d12", "vulkan", "opencl"}, false, 420, iso::FaultChecks::crash_leaves_others});
+    guarded(suite, {"sanity.iso.fault.device_loss_leaves_others", {"iso", "robust", "slow", "d3d11", "d3d12", "vulkan", "opencl", "exclusive"}, true, 900, iso::FaultChecks::device_loss_leaves_others});
+    guarded(suite, {"sanity.iso.fault.oom_leaves_others", {"iso", "robust", "mem", "slow", "d3d11", "d3d12", "vulkan", "opencl", "exclusive"}, true, 900, iso::FaultChecks::oom_leaves_others});
+    guarded(suite, {"sanity.iso.fault.hang_leaves_others", {"iso", "robust", "slow", "d3d11", "d3d12", "vulkan", "opencl", "exclusive"}, true, 900, iso::FaultChecks::hang_leaves_others});
+    guarded(suite, {"sanity.iso.fault.invalid_commands_contained", {"iso", "robust", "d3d11", "d3d12", "vulkan", "opencl"}, false, 600, iso::FaultChecks::invalid_commands_contained});
+    guarded(suite, {"sanity.iso.stall.heavy_load_other_finishes", {"iso", "slow", "d3d11", "d3d12", "vulkan", "opencl", "exclusive"}, true, 600, iso::StallChecks::heavy_load_other_finishes});
+    guarded(suite, {"sanity.iso.stall.huge_upload_other_progress", {"iso", "slow", "d3d11", "d3d12", "vulkan", "opencl", "exclusive"}, true, 600, iso::StallChecks::huge_upload_other_progress});
+    guarded(suite, {"sanity.iso.write.out_of_bounds_contained", {"iso", "robust", "d3d11", "d3d12", "vulkan", "opencl"}, false, 600, iso::FaultChecks::out_of_bounds_contained});
+    guarded(suite, {"sanity.iso.share.read_only_enforced", {"iso", "d3d11"}, false, 120, iso::HandleChecks::read_only_enforced});
+    guarded(suite, {"sanity.iso.session.service_session_separate", {"iso", "d3d12", "exclusive"}, true, 300, iso::HandleChecks::service_session_separate});
 }
 
 }  // namespace lsw::suites::sanity

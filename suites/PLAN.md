@@ -390,21 +390,21 @@ Each loop creates and destroys 5000 objects of the kind with its largest practic
 
 | check | contract |
 |---|---|
-| `sanity.iso.mem.fresh_alloc_zero_or_unspecified` | Memory from a fresh allocation does not contain a pattern another process wrote and freed before, for buffers and textures of sizes from 4 KiB to 256 MiB in every API. |
-| `sanity.iso.mem.fresh_vram_pattern` | A process fills as much device memory as the API reports with a pattern and exits; a second process allocating everything it can finds no byte of the pattern. |
+| `sanity.iso.mem.fresh_alloc_zero_or_unspecified` | Memory from a fresh allocation does not contain a pattern another process wrote and freed before, for buffers of sizes from 4 KiB to 256 MiB in D3D11, D3D12, Vulkan and OpenCL and for a 64 MiB D3D11 texture. |
+| `sanity.iso.mem.fresh_vram_pattern` | A process fills as much device memory as the API reports with a pattern and exits; a second process allocating everything it can finds no byte of the pattern; the amount is capped at 4 GiB. [E] |
 | `sanity.iso.mem.fresh_host_visible` | Host-visible and upload-heap allocations of a second process contain none of the first process's freed data. |
 | `sanity.iso.handle.no_access_without_handle` | A process cannot reach another's shared resource without a handle or name granted to it; attempted opens by name guesses fail. |
 | `sanity.iso.handle.closed_handle_dead` | After the owner closes and the last handle is gone, opening the shared object fails; no later object reuses its contents. |
 | `sanity.iso.fault.crash_leaves_others` | A process killed while it has GPU work in flight does not alter the results of eight other processes running verified workloads. |
 | `sanity.iso.fault.device_loss_leaves_others` | Removal or reset of one process's device leaves the other processes' devices working correctly. [E] |
-| `sanity.iso.fault.oom_leaves_others` | A process exhausting all device memory does not cause failures in a second process holding a small allocation, and that process's data is intact. |
+| `sanity.iso.fault.oom_leaves_others` | A process exhausting all device memory does not cause failures in a second process holding a small allocation, and that process's data is intact. [E] |
 | `sanity.iso.fault.hang_leaves_others` | A long-running shader in one process delays another's simple work by no more than the documented timeout bound and does not corrupt it. [E] |
-| `sanity.iso.fault.invalid_commands_contained` | A process submitting invalid commands (bad descriptors, out-of-range indices, null resources) is the only one affected. |
-| `sanity.iso.stall.heavy_load_other_finishes` | A process with a saturating compute loop does not prevent another process from finishing a 1 MiB roundtrip within a stated multiple of its idle time. |
-| `sanity.iso.stall.huge_upload_other_progress` | While one process uploads 512 MiB repeatedly, another's 64 KiB roundtrips each complete within a bounded time. |
-| `sanity.iso.write.out_of_bounds_contained` | Out-of-bounds writes (robust access on) in one process do not alter any other process's buffers, checked by sentinel buffers. |
+| `sanity.iso.fault.invalid_commands_contained` | A process submitting invalid commands (out-of-range indices and offsets far beyond the buffer, issued through compute dispatches) is the only one affected. |
+| `sanity.iso.stall.heavy_load_other_finishes` | A process with a saturating compute loop does not prevent another process from finishing a 1 MiB roundtrip within a stated multiple of its idle time. [E] |
+| `sanity.iso.stall.huge_upload_other_progress` | While one process uploads 512 MiB repeatedly, another's 64 KiB roundtrips each complete within a bounded time. [E] |
+| `sanity.iso.write.out_of_bounds_contained` | Out-of-bounds writes in one process do not alter any other process's buffers, checked by sentinel buffers. |
 | `sanity.iso.share.read_only_enforced` | A resource opened read-only through a shared handle cannot be written by the opener. |
-| `sanity.iso.session.service_session_separate` | A process in session 0 and one in the user session see the same adapters but not each other's unshared resources. |
+| `sanity.iso.session.service_session_separate` | A process in session 0 and one in the user session see the same adapters but not each other's unshared resources; the session 0 process is started through a SYSTEM scheduled task. [E] |
 
 ### 4.7 Synchronisation and concurrency (19)
 
