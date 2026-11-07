@@ -55,8 +55,9 @@ import xml.etree.ElementTree as ET
 HERE = pathlib.Path(__file__).resolve().parent
 TREE = HERE.parents[1]
 AV = TREE / "external" / "accel-virt"
-sys.path[:0] = [str(HERE), str(AV / "tools"), str(AV / "tools" / "guest"), str(AV / "tools" / "host")]
+sys.path[:0] = [str(HERE), str(AV / "tools"), str(AV / "tools" / "mcp"), str(AV / "tools" / "guest"), str(AV / "tools" / "host")]
 
+import host_phase  # noqa: E402
 import list_gpus  # noqa: E402
 import run_guest_suite as suite  # noqa: E402
 from guest_agent import AgentError, wait_for_agent as wait_for_bridge  # noqa: E402
@@ -617,6 +618,17 @@ def judge_suites_json(path, bits):
     return failures, notes, count
 
 
+def add_host_phase(verdict, phase, out):
+    verdicts = phase.finish(host_phase.guest_metrics(sorted(out.glob("lsw-suites*.json"))))
+    failures, notes = host_phase.to_matrix(verdicts)
+    (out / "host-verdicts.json").write_text(json.dumps(verdicts, indent=1))
+    verdict["failures"] += failures
+    verdict["notes"] += notes
+    verdict["checks"] += len(verdicts) - len(notes)
+    if failures:
+        verdict["status"] = "fail"
+
+
 def run_suites(guest, out, suite_args):
     out.mkdir(parents=True, exist_ok=True)
     say("suites lsw-suites64 and lsw-suites32")
@@ -859,7 +871,11 @@ def gpu_pass(domain, original, share, gpu, args, out):
             elif name == "clgl":
                 result["suites"]["clgl"] = run_clgl(work, out / "clgl", user)
             elif name == "suites":
+                phase = host_phase.HostPhase(work, avgpu_log_path(original),
+                                             pathlib.Path.home() / ".cache" / "libvirt" / "qemu" / "log" / f"{DOMAIN}.log",
+                                             out / "suites" / "host")
                 result["suites"]["suites"] = run_suites(guest, out / "suites", args.suite_args)
+                add_host_phase(result["suites"]["suites"], phase, out / "suites")
             elif name in APP_SUITES:
                 result["suites"][name] = run_app_suite(name, guest, out / name, gpu, adapter.get("name", ""))
             elif name in TRACE_SUITES:
