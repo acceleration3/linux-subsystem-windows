@@ -223,6 +223,9 @@ std::vector<std::uint8_t> sample_rgba(D3d11Device& d3d, ID3D11Texture2D* texture
 }  // namespace
 
 Outcome GlD3dChecks::d3d11_objects(Context& context) {
+    if (const std::string why = Kit::missing({"gl", "d3d11"}); !why.empty()) {
+        return Context::skip(why);
+    }
     Bench bench;
     const Open state = bench.open(context, 64);
     if (state != Open::Ready) {
@@ -320,6 +323,9 @@ Outcome GlD3dChecks::d3d11_objects(Context& context) {
 }
 
 Outcome GlD3dChecks::d3d9ex_objects(Context& context) {
+    if (const std::string why = Kit::missing({"gl", "d3d9"}); !why.empty()) {
+        return Context::skip(why);
+    }
     Bench bench;
     const Open state = bench.open(context, 64, false);
     if (state != Open::Ready) {
@@ -349,7 +355,8 @@ Outcome GlD3dChecks::d3d9ex_objects(Context& context) {
     HRESULT made = S_OK;
     Com<IDirect3DTexture9> texture = D3d9Tools::texture(device9, kEdge, kEdge, 1, D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &made, &texture_share);
     Com<IDirect3DSurface9> level = texture ? D3d9Tools::level(texture.get(), 0) : Com<IDirect3DSurface9>();
-    Com<IDirect3DSurface9> surface = D3d9Tools::target(device9, kEdge, kEdge, D3DFMT_A8R8G8B8, D3DMULTISAMPLE_NONE, false, nullptr);
+    Com<IDirect3DSurface9> surface;
+    device9->CreateRenderTarget(kEdge, kEdge, D3DFMT_A8R8G8B8, D3DMULTISAMPLE_NONE, 0, FALSE, surface.put(), &surface_share);
     if (!texture || !level) {
         problems.add("a shared render target texture cannot be created on the Direct3D 9Ex device: " + D3d9Tools::hr(made));
     }
@@ -439,6 +446,9 @@ Outcome GlD3dChecks::d3d9ex_objects(Context& context) {
 }
 
 Outcome GlD3dChecks::lock_ordering(Context& context) {
+    if (const std::string why = Kit::missing({"gl", "d3d11"}); !why.empty()) {
+        return Context::skip(why);
+    }
     Bench bench;
     const Open state = bench.open(context, 64);
     if (state != Open::Ready) {
@@ -503,6 +513,9 @@ Outcome GlD3dChecks::lock_ordering(Context& context) {
 }
 
 Outcome GlD3dChecks::formats_and_targets(Context& context) {
+    if (const std::string why = Kit::missing({"gl", "d3d11"}); !why.empty()) {
+        return Context::skip(why);
+    }
     Bench bench;
     const Open state = bench.open(context, 32);
     if (state != Open::Ready) {
@@ -703,6 +716,9 @@ Outcome GlD3dChecks::formats_and_targets(Context& context) {
 }
 
 Outcome GlD3dChecks::present_via_d3d(Context& context) {
+    if (const std::string why = Kit::missing({"gl", "d3d11"}); !why.empty()) {
+        return Context::skip(why);
+    }
     Bench bench;
     const Open state = bench.open(context, 64, false);
     if (state != Open::Ready) {
@@ -779,6 +795,9 @@ Outcome GlD3dChecks::present_via_d3d(Context& context) {
 }
 
 Outcome GlD3dChecks::caps_unsupported(Context& context) {
+    if (const std::string why = Kit::missing({"gl", "d3d11"}); !why.empty()) {
+        return Context::skip(why);
+    }
     Bench bench;
     Open state = bench.open(context, 64, false);
     if (state == Open::Failed && bench.detail.find("do not resolve") == std::string::npos) {

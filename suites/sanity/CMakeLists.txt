@@ -141,5 +141,8 @@ add_library(suite_sanity OBJECT
     interop/glcl_checks.cpp
     interop/d3dcl_checks.cpp
     interop/gld3d_checks.cpp
+    interop/d3d_checks.cpp
+    interop/d3d_process_checks.cpp
+    interop/vk_checks.cpp
 )
 target_link_libraries(suite_sanity PUBLIC suite_core suite_support)

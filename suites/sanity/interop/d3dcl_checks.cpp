@@ -162,8 +162,11 @@ std::string entry_points(const std::initializer_list<std::pair<const char*, bool
 }  // namespace
 
 Outcome D3dClChecks::d3d11_sharing(Context& context) {
-    Side side;
+    if (const std::string why = Kit::missing({"d3d11", "opencl"}); !why.empty()) {
+        return Context::skip(why);
+    }
     D3d11Device d3d;
+    Side side;
     std::string error;
     if (!TargetAdapter::pick(side.adapter, error) || !d3d.create(side.adapter.luid, error)) {
         return Outcome::fail(error);
@@ -300,8 +303,11 @@ Outcome D3dClChecks::d3d11_sharing(Context& context) {
 }
 
 Outcome D3dClChecks::d3d10_sharing(Context& context) {
-    Side side;
+    if (const std::string why = Kit::missing({"opencl"}); !why.empty()) {
+        return Context::skip(why);
+    }
     D3d10Device d3d;
+    Side side;
     std::string error;
     if (!TargetAdapter::pick(side.adapter, error) || !d3d.create(side.adapter.luid, 0, error)) {
         return Outcome::fail(error);
@@ -452,8 +458,11 @@ Outcome D3dClChecks::d3d10_sharing(Context& context) {
 }
 
 Outcome D3dClChecks::dx9_media_sharing(Context& context) {
-    Side side;
+    if (const std::string why = Kit::missing({"d3d9", "opencl"}); !why.empty()) {
+        return Context::skip(why);
+    }
     D3d9Rig rig;
+    Side side;
     std::string error;
     D3d9Settings settings;
     settings.depth = false;
@@ -611,6 +620,9 @@ Outcome D3dClChecks::dx9_media_sharing(Context& context) {
 }
 
 Outcome D3dClChecks::acquire_order_caps(Context& context) {
+    if (const std::string why = Kit::missing({"opencl"}); !why.empty()) {
+        return Context::skip(why);
+    }
     Problems problems;
     struct Family {
         const char* name;
@@ -620,10 +632,10 @@ Outcome D3dClChecks::acquire_order_caps(Context& context) {
         cl_int not_shared;
     };
     int judged = 0;
-    {
+    if (!ApiPolicy::is_skipped("d3d11")) {
         const Family family{"d3d11", "cl_khr_d3d11_sharing", CL_D3D11_RESOURCE_ALREADY_ACQUIRED_KHR, CL_D3D11_RESOURCE_NOT_ACQUIRED_KHR, CL_INVALID_D3D11_RESOURCE_KHR};
-        Side side;
         D3d11Device d3d;
+        Side side;
         std::string error;
         if (!TargetAdapter::pick(side.adapter, error) || !d3d.create(side.adapter.luid, error)) {
             return Outcome::fail(error);
@@ -634,7 +646,7 @@ Outcome D3dClChecks::acquire_order_caps(Context& context) {
         }
         context.measure(std::string(family.name) + ".advertised", state == Open::Ready);
         ClInterop& api = side.interop;
-        if (state == Open::Ready && !ApiPolicy::is_skipped("d3d11")) {
+        if (state == Open::Ready) {
             cl_device_id device = nullptr;
             cl_uint count = 0;
             const cl_int found = api.GetDeviceIDsFromD3D11 != nullptr ? api.GetDeviceIDsFromD3D11(side.cl.platform, CL_D3D11_DEVICE_KHR, d3d.device, CL_PREFERRED_DEVICES_FOR_D3D11_KHR, 1, &device, &count) : CL_INVALID_VALUE;
@@ -695,8 +707,8 @@ Outcome D3dClChecks::acquire_order_caps(Context& context) {
         side.cl.drain();
     }
     {
-        Side side;
         D3d10Device d3d;
+        Side side;
         std::string error;
         if (!TargetAdapter::pick(side.adapter, error) || !d3d.create(side.adapter.luid, 0, error)) {
             return Outcome::fail(error);
@@ -766,8 +778,8 @@ Outcome D3dClChecks::acquire_order_caps(Context& context) {
         side.cl.drain();
     }
     if (!ApiPolicy::is_skipped("d3d9")) {
-        Side side;
         D3d9Rig rig;
+        Side side;
         std::string error;
         D3d9Settings settings;
         settings.depth = false;

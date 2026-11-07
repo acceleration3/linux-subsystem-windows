@@ -26,6 +26,7 @@ public:
     vkw::CreateWin32Surface vkCreateWin32SurfaceKHR = nullptr;
     vkw::GetPresentationSupport vkGetPhysicalDeviceWin32PresentationSupportKHR = nullptr;
     vkw::GetMemoryHandle vkGetMemoryWin32HandleKHR = nullptr;
+    vkw::GetMemoryHandleProperties vkGetMemoryWin32HandlePropertiesKHR = nullptr;
     vkw::GetSemaphoreHandle vkGetSemaphoreWin32HandleKHR = nullptr;
     vkw::ImportSemaphoreHandle vkImportSemaphoreWin32HandleKHR = nullptr;
     vkw::GetFenceHandle vkGetFenceWin32HandleKHR = nullptr;

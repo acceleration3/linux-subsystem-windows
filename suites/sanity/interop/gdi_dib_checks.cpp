@@ -434,7 +434,7 @@ Outcome GdiDibChecks::after_gpu_writes(Context& context) {
 }
 
 Outcome GdiDibChecks::multi_thread(Context& context) {
-    constexpr int kCanvas = 96;
+    constexpr int kCanvas = 128;
     std::string error;
     TestWindow gdi_window;
     TestWindowConfig config;

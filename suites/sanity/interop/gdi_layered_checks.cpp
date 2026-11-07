@@ -96,7 +96,7 @@ Outcome GdiLayeredChecks::per_pixel_alpha(Context& context) {
 }
 
 Outcome GdiLayeredChecks::over_3d_update(Context& context) {
-    constexpr int kEdge = 96;
+    constexpr int kEdge = 128;
     constexpr int kIterations = 40;
     constexpr int kAlpha = 96;
     std::unique_ptr<WindowPresenter> presenter = WindowPresenter::make("d3d11");

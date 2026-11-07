@@ -127,6 +127,9 @@ int level_size(int value, int level) {
 }  // namespace
 
 Outcome GlClChecks::context_device_match(Context& context) {
+    if (const std::string why = Kit::missing({"gl", "opencl"}); !why.empty()) {
+        return Context::skip(why);
+    }
     Bench bench;
     const Open state = bench.open(context, 64);
     if (state != Open::Ready) {
@@ -185,6 +188,9 @@ Outcome GlClChecks::context_device_match(Context& context) {
 }
 
 Outcome GlClChecks::buffer_sharing(Context& context) {
+    if (const std::string why = Kit::missing({"gl", "opencl"}); !why.empty()) {
+        return Context::skip(why);
+    }
     Bench bench;
     const Open state = bench.open(context, 64);
     if (state != Open::Ready) {
@@ -258,6 +264,9 @@ Outcome GlClChecks::buffer_sharing(Context& context) {
 }
 
 Outcome GlClChecks::texture_targets_mips_layers(Context& context) {
+    if (const std::string why = Kit::missing({"gl", "opencl"}); !why.empty()) {
+        return Context::skip(why);
+    }
     Bench bench;
     const Open state = bench.open(context, 64);
     if (state != Open::Ready) {
@@ -389,6 +398,9 @@ Outcome GlClChecks::texture_targets_mips_layers(Context& context) {
 }
 
 Outcome GlClChecks::renderbuffer_sharing(Context& context) {
+    if (const std::string why = Kit::missing({"gl", "opencl"}); !why.empty()) {
+        return Context::skip(why);
+    }
     Bench bench;
     const Open state = bench.open(context, 64);
     if (state != Open::Ready) {
@@ -471,6 +483,9 @@ Outcome GlClChecks::renderbuffer_sharing(Context& context) {
 }
 
 Outcome GlClChecks::gl_event_sync(Context& context) {
+    if (const std::string why = Kit::missing({"gl", "opencl"}); !why.empty()) {
+        return Context::skip(why);
+    }
     Bench bench;
     const Open state = bench.open(context, 64);
     if (state != Open::Ready) {
@@ -558,7 +573,12 @@ Outcome GlClChecks::gl_event_sync(Context& context) {
         }
         const std::vector<std::uint8_t> from_cl = clkit::Kit::bytes(Kit::seed(10, frame), seen.size());
         cl_event released = nullptr;
-        if (code == CL_SUCCESS && cl.api.EnqueueWriteImage(cl.queue, image.get(), CL_FALSE, origin, region, 0, 0, from_cl.data(), 0, nullptr, nullptr) == CL_SUCCESS) {
+        const bool held = acquired != nullptr;
+        const bool wrote = code == CL_SUCCESS && cl.api.EnqueueWriteImage(cl.queue, image.get(), CL_FALSE, origin, region, 0, 0, from_cl.data(), 0, nullptr, nullptr) == CL_SUCCESS;
+        if (held && !wrote) {
+            static_cast<void>(bench.interop.ReleaseGLObjects(cl.queue, 1, &handle, 0, nullptr, nullptr));
+        }
+        if (wrote) {
             code = bench.interop.ReleaseGLObjects(cl.queue, 1, &handle, 0, nullptr, &released);
             if (code == CL_SUCCESS && reverse) {
                 void* sync = gl.glCreateSyncFromCLeventARB(cl.context, released, 0);
@@ -599,6 +619,9 @@ Outcome GlClChecks::gl_event_sync(Context& context) {
 }
 
 Outcome GlClChecks::acquire_release_errors(Context& context) {
+    if (const std::string why = Kit::missing({"gl", "opencl"}); !why.empty()) {
+        return Context::skip(why);
+    }
     Bench bench;
     const Open state = bench.open(context, 64);
     if (state != Open::Ready) {
@@ -689,6 +712,9 @@ Outcome GlClChecks::acquire_release_errors(Context& context) {
 }
 
 Outcome GlClChecks::caps_unsupported(Context& context) {
+    if (const std::string why = Kit::missing({"gl", "opencl"}); !why.empty()) {
+        return Context::skip(why);
+    }
     Bench bench;
     const Open state = bench.open(context, 64, false);
     if (state != Open::Ready) {

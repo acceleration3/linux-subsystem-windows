@@ -1070,7 +1070,7 @@ Each loop creates and destroys 5000 objects of the kind with its largest practic
 | `sanity.interop.gld3d.nv_dx_interop_d3d9ex` | The same with D3D9Ex surfaces and textures. |
 | `sanity.interop.gld3d.lock_ordering` | Lock/Unlock pairs across 60 frames preserve ordering (GL reads exactly the frame D3D wrote before the lock, D3D reads exactly the frame GL rendered before the unlock, never a stale frame); locking or unlocking a handle that was never registered fails and an invalid object type is refused. Use outside Lock and unregistering locked objects are invalid usage and are never exercised. |
 | `sanity.interop.gld3d.formats_and_targets` | Each format/target combination reported usable by interop (RGBA8, sRGB, float, depth, MSAA) renders identically to its pure-GL twin. |
-| `sanity.interop.gld3d.present_via_d3d` | GL content rendered into a D3D11 swapchain back buffer via interop and presented by D3D shows the exact frame in capture. |
+| `sanity.interop.gld3d.present_via_d3d` | GL content rendered into a D3D11 swapchain back buffer via interop and presented by D3D shows the exact frame in capture. [E] |
 | `sanity.interop.gld3d.caps_unsupported` | If the extension isn't advertised, wglDXOpenDeviceNV is absent or fails and all queries are consistent. |
 
 #### D3D and D3D
@@ -1079,12 +1079,12 @@ Each loop creates and destroys 5000 objects of the kind with its largest practic
 |---|---|
 | `sanity.interop.d3d.d3d9ex_shared_to_d3d11` | A D3D9Ex shared render target (shared handle) rendered in D3D9Ex is opened in D3D11 (OpenSharedResource) with the same pixels after Flush/event query. |
 | `sanity.interop.d3d.d3d11_nt_handle_d3d12` | D3D11 texture created with SHARED_NTHANDLE is opened by D3D12 (OpenSharedHandle) and sampled correctly; D3D12 writes visible in D3D11 with a shared fence ordering. |
-| `sanity.interop.d3d.shared_fence_ordering` | ID3D11Fence/ID3D12Fence shared between devices orders a 1000-step ping-pong: each side sees the other's previous data and never an older value. |
+| `sanity.interop.d3d.shared_fence_ordering` | A fence shared between two D3D11 devices (ID3D11Fence) and between D3D11 and D3D12 (ID3D12Fence opened in D3D11) orders a 1000-step ping-pong over a shared texture: each side reads exactly the other's data of that step, never an older value, and the opened fence's completed value has reached each awaited value. |
 | `sanity.interop.d3d.keyed_mutex` | IDXGIKeyedMutex acquire/release between two devices (and processes) orders producer and consumer exactly; wrong key times out with WAIT_TIMEOUT. |
-| `sanity.interop.d3d.d3d11on12` | D3D11On12 wrapped D3D12 resources render in D3D11 and appear in the D3D12 swapchain present with correct pixels, with ReleaseWrappedResources/ flush ordering. |
-| `sanity.interop.d3d.cross_adapter_render_only` | Rendering on one adapter and copying through a cross-adapter shared resource (D3D12 CROSS_ADAPTER) to the display adapter presents the exact frame; works when both adapters exist. |
+| `sanity.interop.d3d.d3d11on12` | D3D11On12 wrapped D3D12 resources render in D3D11 and appear in the D3D12 swapchain present with correct pixels, with ReleaseWrappedResources/ flush ordering. [E] |
+| `sanity.interop.d3d.cross_adapter_render_only` | Data written on the render adapter into a D3D12 cross-adapter shared buffer (shared cross-adapter fence) is copied by the display adapter into its swap chain back buffer and presents exactly; skipped when fewer than two adapters or no cross-adapter heap exists. [E] |
 | `sanity.interop.d3d.cross_process_sharing` | A resource created in one process opens in another via named/duplicated NT handle, and data and fence ordering across processes are correct; the producer exit leaves the consumer valid. |
-| `sanity.interop.d3d.cross_bitness_sharing` | An x86 process and an x64 process exchange a shared texture and fence both ways with intact pixels. (x86) |
+| `sanity.interop.d3d.cross_bitness_sharing` | An x86 process and an x64 process ping-pong a shared texture and a shared fence both ways with intact pixels (duplicated handles and names), and a texture created by the x64 process is valid in the x86 process after the x64 process exited. (x86) |
 | `sanity.interop.d3d.handle_lifetime` | Closing the creator's handle/device while the other holds the resource keeps the data valid until the last reference; closing all returns memory (re-creating the same count succeeds repeatedly). |
 | `sanity.interop.d3d.invalid_open_errors` | Opening an invalid, closed or wrong-type handle fails with the documented HRESULT and the device remains usable. |
 
@@ -1092,13 +1092,13 @@ Each loop creates and destroys 5000 objects of the kind with its largest practic
 
 | check | contract |
 |---|---|
-| `sanity.interop.vk.import_d3d11_texture` | Vulkan imports a D3D11 shared NT texture (D3D11_TEXTURE handle type), samples it, and the pixels equal what D3D11 rendered, ordered by a shared fence. |
-| `sanity.interop.vk.import_d3d12_resource` | Vulkan imports a D3D12 heap/resource and a D3D12 fence as a timeline semaphore; the two ping-pong with correct data. |
-| `sanity.interop.vk.export_to_d3d12` | Vulkan-allocated exportable memory opens in D3D12 as a resource with the Vulkan-written pixels. |
-| `sanity.interop.vk.export_to_gl` | Vulkan exported memory and semaphores imported into GL (EXT_memory_object_win32/EXT_semaphore_win32) show the Vulkan frame in GL and GL writes back. |
+| `sanity.interop.vk.import_d3d11_texture` | Vulkan imports a D3D11 shared NT texture (D3D11_TEXTURE handle type, preserved initial layout), reads it by image copy, and the pixels equal what D3D11 wrote every frame, ordered by a shared fence imported as a timeline semaphore when the semaphore import is reported, otherwise by an event query. |
+| `sanity.interop.vk.import_d3d12_resource` | Vulkan imports a D3D12 shared buffer (D3D12_RESOURCE) and a D3D12 fence as a timeline semaphore; the two ping-pong 8 rounds with exact data in both directions. |
+| `sanity.interop.vk.export_to_d3d12` | Vulkan-allocated exportable buffer memory (D3D12_RESOURCE, else D3D12_HEAP) opens in D3D12 with the Vulkan-written bytes, and D3D12 writes are read back by Vulkan. |
+| `sanity.interop.vk.export_to_gl` | Vulkan exported OPAQUE_WIN32 buffer memory and binary semaphores imported into GL (EXT_memory_object_win32, EXT_semaphore_win32) show the Vulkan bytes in GL after the semaphore wait, and GL writes (copied into the imported storage, then signalled) are read back by Vulkan. |
 | `sanity.interop.vk.opencl_external_memory_caps` | If cl_khr_external_memory is advertised for a handle type, Vulkan memory imports into CL and kernel results are visible to Vulkan; otherwise not claimed. |
-| `sanity.interop.vk.kmt_handles_caps` | KMT handle types work when reported (cross-process share of a texture) and fail consistently when not reported. |
-| `sanity.interop.vk.cross_process_present_chain` | Vulkan process renders, D3D11 process composes via shared handle, and a capture shows the composed result in order. |
+| `sanity.interop.vk.kmt_handles_caps` | KMT handle types work when reported (OPAQUE_WIN32_KMT buffer memory and a legacy shared D3D11 texture as D3D11_TEXTURE_KMT, both read in a second process) and when not reported the queries agree (zero features, VK_ERROR_FORMAT_NOT_SUPPORTED); creating objects with an unreported handle type is invalid usage and is not exercised. |
+| `sanity.interop.vk.cross_process_present_chain` | A Vulkan process renders frames into a shared D3D11 texture, a D3D11 process composes them into its swap chain, and the capture shows each frame exactly and in order, with events ordering the two processes after the GPU work of each side completed. [E] |
 
 ### 4.19 Capture (8)
 

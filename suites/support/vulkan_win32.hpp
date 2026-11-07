@@ -64,6 +64,12 @@ struct ImportSemaphoreInfo {
     LPCWSTR name;
 };
 
+struct MemoryHandleProperties {
+    VkStructureType sType;
+    void* pNext;
+    std::uint32_t memoryTypeBits;
+};
+
 struct FenceGetHandleInfo {
     VkStructureType sType;
     const void* pNext;
@@ -84,6 +90,7 @@ struct ImportFenceInfo {
 using CreateWin32Surface = VkResult(VKAPI_PTR*)(VkInstance, const SurfaceCreateInfo*, const VkAllocationCallbacks*, VkSurfaceKHR*);
 using GetPresentationSupport = VkBool32(VKAPI_PTR*)(VkPhysicalDevice, std::uint32_t);
 using GetMemoryHandle = VkResult(VKAPI_PTR*)(VkDevice, const MemoryGetHandleInfo*, HANDLE*);
+using GetMemoryHandleProperties = VkResult(VKAPI_PTR*)(VkDevice, VkExternalMemoryHandleTypeFlagBits, HANDLE, MemoryHandleProperties*);
 using GetSemaphoreHandle = VkResult(VKAPI_PTR*)(VkDevice, const SemaphoreGetHandleInfo*, HANDLE*);
 using ImportSemaphoreHandle = VkResult(VKAPI_PTR*)(VkDevice, const ImportSemaphoreInfo*);
 using GetFenceHandle = VkResult(VKAPI_PTR*)(VkDevice, const FenceGetHandleInfo*, HANDLE*);

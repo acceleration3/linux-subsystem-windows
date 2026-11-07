@@ -15,6 +15,7 @@
 
 #include <chrono>
 #include <functional>
+#include <initializer_list>
 #include <memory>
 #include <cstdint>
 #include <string>
@@ -31,6 +32,8 @@ public:
         }
         return Com<U>(other);
     }
+
+    [[nodiscard]] static std::string missing(std::initializer_list<const char*> apis);
 
     [[nodiscard]] static std::size_t at(int x, int y, int width) {
         return static_cast<std::size_t>(y) * static_cast<std::size_t>(width) + static_cast<std::size_t>(x);
@@ -70,6 +73,12 @@ public:
     [[nodiscard]] static std::string sanitize(std::string text);
 
     [[nodiscard]] static std::uint64_t seed(int a, int b = 0) { return 0x1A7E0000ull + static_cast<std::uint64_t>(a) * 977u + static_cast<std::uint64_t>(b); }
+
+    [[nodiscard]] static std::string handle_text(HANDLE handle) {
+        return std::to_string(static_cast<unsigned long long>(reinterpret_cast<std::uintptr_t>(handle)));
+    }
+
+    [[nodiscard]] static HANDLE adopt_handle(const std::string& process_id, const std::string& value);
 
     [[nodiscard]] static std::vector<std::uint8_t> frame_bytes(std::uint64_t base, int frame, int width, int height);
 };

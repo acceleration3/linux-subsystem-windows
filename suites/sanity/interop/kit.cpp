@@ -1,10 +1,22 @@
 #include "sanity/interop/kit.hpp"
 
+#include "support/api_policy.hpp"
+
 #include <algorithm>
 #include <cctype>
 #include <thread>
 
 namespace lsw::suites::sanity::interop {
+
+std::string Kit::missing(std::initializer_list<const char*> apis) {
+    std::string out;
+    for (const char* api : apis) {
+        if (ApiPolicy::is_skipped(api)) {
+            out += (out.empty() ? "" : ", ") + std::string(api);
+        }
+    }
+    return out.empty() ? out : "this row needs " + std::string(apis.size() > 1 ? "all of its APIs" : "its API") + " and " + out + " is excluded by LSW_SUITES_SKIP_APIS";
+}
 
 void Kit::keep_image(Context& context, const std::string& name, const Bitmap& image) {
     ArtifactWriter writer(context);
@@ -96,6 +108,23 @@ std::vector<std::uint32_t> Kit::blend(const std::vector<std::uint32_t>& below, c
         out[i] = value;
     }
     return out;
+}
+
+HANDLE Kit::adopt_handle(const std::string& process_id, const std::string& value) {
+    if (process_id.empty() || value.empty()) {
+        return nullptr;
+    }
+    HANDLE parent = ::OpenProcess(PROCESS_DUP_HANDLE, FALSE, static_cast<DWORD>(std::stoul(process_id)));
+    if (parent == nullptr) {
+        return nullptr;
+    }
+    HANDLE local = nullptr;
+    const HANDLE remote = reinterpret_cast<HANDLE>(static_cast<std::uintptr_t>(std::stoull(value)));
+    if (::DuplicateHandle(parent, remote, ::GetCurrentProcess(), &local, 0, FALSE, DUPLICATE_SAME_ACCESS) == FALSE) {
+        local = nullptr;
+    }
+    ::CloseHandle(parent);
+    return local;
 }
 
 std::vector<std::uint8_t> Kit::frame_bytes(std::uint64_t base, int frame, int width, int height) {

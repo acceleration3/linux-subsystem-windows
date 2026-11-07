@@ -50,6 +50,7 @@ void VulkanTable::load_device(VkDevice device) {
 #undef LSW_VK_LOAD_ALIAS
     vkGetMemoryWin32HandleKHR =
         reinterpret_cast<vkw::GetMemoryHandle>(vkGetDeviceProcAddr(device, "vkGetMemoryWin32HandleKHR"));
+    vkGetMemoryWin32HandlePropertiesKHR = reinterpret_cast<vkw::GetMemoryHandleProperties>(vkGetDeviceProcAddr(device, "vkGetMemoryWin32HandlePropertiesKHR"));
     vkGetSemaphoreWin32HandleKHR =
         reinterpret_cast<vkw::GetSemaphoreHandle>(vkGetDeviceProcAddr(device, "vkGetSemaphoreWin32HandleKHR"));
     vkImportSemaphoreWin32HandleKHR =

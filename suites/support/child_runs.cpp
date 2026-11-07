@@ -54,6 +54,9 @@ bool ChildRuns::run_sibling(const std::string& id, const ChildRunOptions& option
     Worker worker(scratch_root());
     worker.set_exe(exe);
     worker.set_child_mode();
+    for (const auto& [name, value] : options.env) {
+        worker.add_env(Text::wide(name), Text::wide(value));
+    }
     result = worker.run(id, options.timeout_seconds);
     if (result.measures.size() == 0) {
         error = std::string(exe.filename().string()) + " reported no measures for " + id + ": " +

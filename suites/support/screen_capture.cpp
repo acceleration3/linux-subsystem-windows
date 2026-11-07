@@ -128,11 +128,19 @@ bool ScreenCapture::print_window(HWND window, UINT flags, Bitmap& out, std::stri
 }
 
 bool ScreenCapture::matches(const Bitmap& got, const std::vector<std::uint32_t>& expected, int tolerance, std::string& where) {
+    if (static_cast<std::size_t>(got.width) * static_cast<std::size_t>(got.height) != expected.size()) {
+        where = "the capture is " + std::to_string(got.width) + "x" + std::to_string(got.height) + " but the expected image has " + std::to_string(expected.size()) + " pixels";
+        return false;
+    }
     return matches_region(got, 0, 0, got.width, got.height, expected, tolerance, where);
 }
 
 bool ScreenCapture::matches_region(const Bitmap& got, int origin_x, int origin_y, int width, int height,
                                    const std::vector<std::uint32_t>& expected, int tolerance, std::string& where) {
+    if (static_cast<std::size_t>(width) * static_cast<std::size_t>(height) > expected.size()) {
+        where = "the expected image has " + std::to_string(expected.size()) + " pixels, fewer than the " + std::to_string(width) + "x" + std::to_string(height) + " compared";
+        return false;
+    }
     std::size_t bad = 0;
     std::string first;
     for (int y = 0; y < height; ++y) {

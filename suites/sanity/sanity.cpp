@@ -105,6 +105,8 @@
 #include "sanity/fmt/support_checks.hpp"
 #include "sanity/fmt/value_checks.hpp"
 #include "sanity/fmt/yuv_checks.hpp"
+#include "sanity/interop/d3d_checks.hpp"
+#include "sanity/interop/d3d_process_checks.hpp"
 #include "sanity/interop/d3dcl_checks.hpp"
 #include "sanity/interop/gdi_capture_checks.hpp"
 #include "sanity/interop/gdi_d2d_checks.hpp"
@@ -115,6 +117,7 @@
 #include "sanity/interop/gdi_layered_checks.hpp"
 #include "sanity/interop/gld3d_checks.hpp"
 #include "sanity/interop/glcl_checks.hpp"
+#include "sanity/interop/vk_checks.hpp"
 #include "sanity/shader/cache_checks.hpp"
 #include "sanity/shader/cl_checks.hpp"
 #include "sanity/shader/determinism_checks.hpp"
@@ -663,6 +666,23 @@ void add(Registry& registry) {
     guarded(suite, {"sanity.interop.gld3d.formats_and_targets", {"interop", "gl", "d3d11", "formats"}, false, 180, interop::GlD3dChecks::formats_and_targets});
     guarded(suite, {"sanity.interop.gld3d.present_via_d3d", {"interop", "gl", "d3d11", "dxgi", "present", "dwm", "exclusive"}, true, 120, interop::GlD3dChecks::present_via_d3d});
     guarded(suite, {"sanity.interop.gld3d.caps_unsupported", {"interop", "gl", "d3d11"}, false, 90, interop::GlD3dChecks::caps_unsupported});
+    guarded(suite, {"sanity.interop.d3d.d3d9ex_shared_to_d3d11", {"interop", "d3d9", "d3d11"}, false, 120, interop::D3dChecks::d3d9ex_shared_to_d3d11});
+    guarded(suite, {"sanity.interop.d3d.d3d11_nt_handle_d3d12", {"interop", "d3d11", "d3d12"}, false, 120, interop::D3dChecks::d3d11_nt_handle_d3d12});
+    guarded(suite, {"sanity.interop.d3d.shared_fence_ordering", {"interop", "d3d11", "d3d12", "slow"}, false, 300, interop::D3dChecks::shared_fence_ordering});
+    guarded(suite, {"sanity.interop.d3d.keyed_mutex", {"interop", "d3d11"}, false, 240, interop::D3dChecks::keyed_mutex});
+    guarded(suite, {"sanity.interop.d3d.d3d11on12", {"interop", "d3d11", "d3d12", "present", "dwm", "exclusive"}, true, 120, interop::D3dChecks::d3d11on12});
+    guarded(suite, {"sanity.interop.d3d.cross_adapter_render_only", {"interop", "d3d12", "present", "dwm", "exclusive"}, true, 120, interop::D3dProcessChecks::cross_adapter_render_only});
+    guarded(suite, {"sanity.interop.d3d.cross_process_sharing", {"interop", "d3d11"}, false, 240, interop::D3dProcessChecks::cross_process_sharing});
+    guarded(suite, {"sanity.interop.d3d.cross_bitness_sharing", {"interop", "d3d11", "x86-only", "cross-bitness"}, false, 240, interop::D3dProcessChecks::cross_bitness_sharing});
+    guarded(suite, {"sanity.interop.d3d.handle_lifetime", {"interop", "d3d11", "mem"}, false, 180, interop::D3dProcessChecks::handle_lifetime});
+    guarded(suite, {"sanity.interop.d3d.invalid_open_errors", {"interop", "d3d11", "d3d12"}, false, 120, interop::D3dProcessChecks::invalid_open_errors});
+    guarded(suite, {"sanity.interop.vk.import_d3d11_texture", {"interop", "vulkan", "d3d11"}, false, 120, interop::VkChecks::import_d3d11_texture});
+    guarded(suite, {"sanity.interop.vk.import_d3d12_resource", {"interop", "vulkan", "d3d12"}, false, 120, interop::VkChecks::import_d3d12_resource});
+    guarded(suite, {"sanity.interop.vk.export_to_d3d12", {"interop", "vulkan", "d3d12"}, false, 120, interop::VkChecks::export_to_d3d12});
+    guarded(suite, {"sanity.interop.vk.export_to_gl", {"interop", "vulkan", "gl"}, false, 120, interop::VkChecks::export_to_gl});
+    guarded(suite, {"sanity.interop.vk.opencl_external_memory_caps", {"interop", "vulkan", "opencl"}, false, 120, interop::VkChecks::opencl_external_memory_caps});
+    guarded(suite, {"sanity.interop.vk.kmt_handles_caps", {"interop", "vulkan", "d3d11"}, false, 240, interop::VkChecks::kmt_handles_caps});
+    guarded(suite, {"sanity.interop.vk.cross_process_present_chain", {"interop", "vulkan", "d3d11", "present", "dwm", "exclusive"}, true, 180, interop::VkChecks::cross_process_present_chain});
 }
 
 }  // namespace lsw::suites::sanity

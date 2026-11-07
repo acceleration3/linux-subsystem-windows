@@ -117,7 +117,9 @@ struct Scene {
 
     void close() {
         std::string error;
-        static_cast<void>(D3d11Tools::wait_event(rig.device, rig.device.context, error));
+        if (rig.device.context != nullptr) {
+            static_cast<void>(D3d11Tools::wait_event(rig.device, rig.device.context, error));
+        }
         draw.release();
         rig.chain.reset();
         rig.device.destroy();
