@@ -87,6 +87,7 @@ bool OpenClApi::platforms(std::vector<OpenClPlatform>& out, std::string& error) 
             device.name = text_info(get_device_info_, device_id, CL_DEVICE_NAME);
             device.vendor = text_info(get_device_info_, device_id, CL_DEVICE_VENDOR);
             device.version = text_info(get_device_info_, device_id, CL_DEVICE_VERSION);
+            device.driver_version = text_info(get_device_info_, device_id, CL_DRIVER_VERSION);
             device.extensions = text_info(get_device_info_, device_id, CL_DEVICE_EXTENSIONS);
             cl_uint vendor_id = 0;
             get_device_info_(device_id, CL_DEVICE_VENDOR_ID, sizeof(vendor_id), &vendor_id, nullptr);

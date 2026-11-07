@@ -3,6 +3,7 @@
 #include "core/text.hpp"
 #include "support/av_adapters.hpp"
 #include "support/problems.hpp"
+#include "support/test_window.hpp"
 
 // clang-format off
 #include <windows.h>
@@ -10,6 +11,7 @@
 // clang-format on
 
 #include <algorithm>
+#include <map>
 #include <set>
 
 namespace lsw::suites::sanity::env {
@@ -85,6 +87,48 @@ BOOL CALLBACK collect_monitor(HMONITOR monitor, HDC, LPRECT, LPARAM param) {
 std::vector<MonitorInfoEx> monitors() {
     std::vector<MonitorInfoEx> out;
     ::EnumDisplayMonitors(nullptr, nullptr, collect_monitor, reinterpret_cast<LPARAM>(&out));
+    return out;
+}
+
+std::map<std::wstring, int> configured_scales() {
+    constexpr int kPercents[] = {100, 125, 150, 175, 200, 225, 250, 300, 350, 400, 450, 500};
+    struct GetScale {
+        DISPLAYCONFIG_DEVICE_INFO_HEADER header;
+        std::int32_t min_relative;
+        std::int32_t current_relative;
+        std::int32_t max_relative;
+    };
+    std::map<std::wstring, int> out;
+    UINT32 path_count = 0;
+    UINT32 mode_count = 0;
+    if (::GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &path_count, &mode_count) != ERROR_SUCCESS) {
+        return out;
+    }
+    std::vector<DISPLAYCONFIG_PATH_INFO> paths(path_count);
+    std::vector<DISPLAYCONFIG_MODE_INFO> modes(mode_count);
+    if (::QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, &path_count, paths.data(), &mode_count, modes.data(),
+                             nullptr) != ERROR_SUCCESS) {
+        return out;
+    }
+    paths.resize(path_count);
+    for (const DISPLAYCONFIG_PATH_INFO& path : paths) {
+        GetScale scale{};
+        scale.header.type = static_cast<DISPLAYCONFIG_DEVICE_INFO_TYPE>(0xFFFFFFFDu);
+        scale.header.size = sizeof(scale);
+        scale.header.adapterId = path.sourceInfo.adapterId;
+        scale.header.id = path.sourceInfo.id;
+        DISPLAYCONFIG_SOURCE_DEVICE_NAME source{};
+        source.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME;
+        source.header.size = sizeof(source);
+        source.header.adapterId = path.sourceInfo.adapterId;
+        source.header.id = path.sourceInfo.id;
+        if (::DisplayConfigGetDeviceInfo(&scale.header) != ERROR_SUCCESS ||
+            ::DisplayConfigGetDeviceInfo(&source.header) != ERROR_SUCCESS) {
+            continue;
+        }
+        const int index = std::clamp(-scale.min_relative + scale.current_relative, 0, 11);
+        out[Text::upper(std::wstring(source.viewGdiDeviceName))] = kPercents[index];
+    }
     return out;
 }
 
@@ -209,42 +253,67 @@ Outcome DisplayChecks::dpi_scaling_consistent(Context& context) {
     if (list.empty()) {
         return Outcome::fail("EnumDisplayMonitors reports no monitor");
     }
+    const HMODULE user32 = ::GetModuleHandleW(L"user32.dll");
+    using ForWindow = UINT(WINAPI*)(HWND);
+    using MetricsForDpi = int(WINAPI*)(int, UINT);
+    auto dpi_for_window = reinterpret_cast<ForWindow>(
+        reinterpret_cast<void*>(::GetProcAddress(user32, "GetDpiForWindow")));
+    auto metrics_for_dpi = reinterpret_cast<MetricsForDpi>(
+        reinterpret_cast<void*>(::GetProcAddress(user32, "GetSystemMetricsForDpi")));
+    if (dpi_for_window == nullptr || metrics_for_dpi == nullptr) {
+        return Outcome::fail("user32 lacks GetDpiForWindow or GetSystemMetricsForDpi");
+    }
+    const std::map<std::wstring, int> configured = configured_scales();
     Problems problems;
     for (const MonitorInfoEx& entry : list) {
         const std::string name = Text::utf8(entry.info.szDevice);
-        UINT first_x = 0;
-        UINT first_y = 0;
-        if (FAILED(::GetDpiForMonitor(entry.monitor, MDT_EFFECTIVE_DPI, &first_x, &first_y))) {
+        UINT dpi_x = 0;
+        UINT dpi_y = 0;
+        if (FAILED(::GetDpiForMonitor(entry.monitor, MDT_EFFECTIVE_DPI, &dpi_x, &dpi_y))) {
             problems.add(name + ": GetDpiForMonitor fails");
             continue;
         }
-        DEVICE_SCALE_FACTOR scale = DEVICE_SCALE_FACTOR_INVALID;
-        if (FAILED(::GetScaleFactorForMonitor(entry.monitor, &scale)) ||
-            scale == DEVICE_SCALE_FACTOR_INVALID) {
-            problems.add(name + ": GetScaleFactorForMonitor fails");
-            continue;
+        DEVICE_SCALE_FACTOR shell = DEVICE_SCALE_FACTOR_INVALID;
+        if (SUCCEEDED(::GetScaleFactorForMonitor(entry.monitor, &shell))) {
+            context.measure(name + ".shell_scale_percent", static_cast<int>(shell));
         }
-        context.measure(name + ".dpi", first_x);
-        context.measure(name + ".scale_percent", static_cast<int>(scale));
-        const int dpi_percent = static_cast<int>((first_x * 100u + 48u) / 96u);
-        if (first_x != first_y) {
+        context.measure(name + ".dpi", dpi_x);
+        if (dpi_x != dpi_y) {
             problems.add(name + ": effective DPI differs between axes");
         }
-        if (std::abs(dpi_percent - static_cast<int>(scale)) > 1) {
-            problems.add(name + ": effective DPI " + std::to_string(first_x) + " is " +
-                         std::to_string(dpi_percent) + "% but the scale factor is " +
-                         std::to_string(static_cast<int>(scale)) + "%");
-        }
-        for (int repeat = 0; repeat < 10; ++repeat) {
-            UINT x = 0;
-            UINT y = 0;
-            DEVICE_SCALE_FACTOR again = DEVICE_SCALE_FACTOR_INVALID;
-            if (FAILED(::GetDpiForMonitor(entry.monitor, MDT_EFFECTIVE_DPI, &x, &y)) ||
-                FAILED(::GetScaleFactorForMonitor(entry.monitor, &again)) || x != first_x ||
-                y != first_y || again != scale) {
-                problems.add(name + ": DPI or scale factor changes between calls");
-                break;
+        TestWindowConfig config;
+        config.x = entry.info.rcMonitor.left + 40;
+        config.y = entry.info.rcMonitor.top + 40;
+        TestWindow window;
+        std::string error;
+        if (!window.create(config, error)) {
+            problems.add(name + ": " + error);
+        } else {
+            const UINT window_dpi = dpi_for_window(window.hwnd());
+            context.measure(name + ".window_dpi", window_dpi);
+            if (window_dpi != dpi_x) {
+                problems.add(name + ": GetDpiForWindow " + std::to_string(window_dpi) + " differs from the monitor's effective DPI " +
+                             std::to_string(dpi_x));
             }
+        }
+        const int scrollbar_96 = metrics_for_dpi(SM_CXVSCROLL, 96);
+        const int scrollbar = metrics_for_dpi(SM_CXVSCROLL, dpi_x);
+        const int expected = ::MulDiv(scrollbar_96, static_cast<int>(dpi_x), 96);
+        context.measure(name + ".scrollbar_width", scrollbar);
+        if (std::abs(scrollbar - expected) > 1) {
+            problems.add(name + ": GetSystemMetricsForDpi(SM_CXVSCROLL) is " + std::to_string(scrollbar) +
+                         " at " + std::to_string(dpi_x) + " DPI, expected " + std::to_string(expected));
+        }
+        const auto found = configured.find(Text::upper(std::wstring(entry.info.szDevice)));
+        if (found == configured.end()) {
+            problems.add(name + ": the configured display scale cannot be read");
+            continue;
+        }
+        context.measure(name + ".configured_percent", found->second);
+        const int effective_percent = static_cast<int>((dpi_x * 100u + 48u) / 96u);
+        if (effective_percent != found->second) {
+            problems.add(name + ": effective scale " + std::to_string(effective_percent) + "% differs from the configured " +
+                         std::to_string(found->second) + "%");
         }
     }
     return problems.outcome();

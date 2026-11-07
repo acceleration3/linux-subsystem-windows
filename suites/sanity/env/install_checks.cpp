@@ -10,6 +10,9 @@
 #include "support/problems.hpp"
 #include "support/registry_reader.hpp"
 #include "support/vulkan_api.hpp"
+#include "support/opencl_api.hpp"
+#include "support/opengl_context.hpp"
+#include "support/test_window.hpp"
 
 // clang-format off
 #include <windows.h>
@@ -159,20 +162,22 @@ Outcome InstallChecks::driver_version_consistent(Context& context) {
     Problems problems;
     for (const DisplayDevice& device : devices) {
         context.measure("setupapi.driver_ver", device.driver_version);
+        const DriverFiles files = DriverRegistry::read(device);
+        const auto note_files = [&](const std::vector<std::wstring>& paths) {
+            for (const std::wstring& path : paths) {
+                const std::optional<std::uint64_t> version = FileVersion::read(path);
+                context.measure("file." + narrow(path), version ? FileVersion::text(*version) : "none");
+            }
+        };
+        note_files(files.umd_own);
+        note_files(files.umd_other);
+        note_files(files.opencl_own);
+        note_files(files.opencl_other);
+        for (const std::wstring& manifest : files.vulkan_own) {
+            note_files({DriverRegistry::vulkan_library(manifest)});
+        }
     }
     std::set<std::uint64_t> release;
-    const auto add_file = [&](const std::wstring& path) {
-        if (path.empty()) {
-            return;
-        }
-        const std::optional<std::uint64_t> version = FileVersion::read(path);
-        if (!version) {
-            problems.add(narrow(path) + " has no version resource");
-            return;
-        }
-        context.measure("file." + narrow(path), FileVersion::text(*version));
-        release.insert(*version);
-    };
     for (const AvAdapter& adapter : adapters) {
         if (!adapter.umd_version_known) {
             problems.add("DXGI CheckInterfaceSupport fails for " + adapter.name);
@@ -191,30 +196,56 @@ Outcome InstallChecks::driver_version_consistent(Context& context) {
         } else if (*version != adapter.umd_version) {
             problems.add("DXGI reports " + FileVersion::text(adapter.umd_version) + " for " + adapter.name + " but " +
                          narrow(loaded) + " is " + FileVersion::text(*version));
+        } else {
+            release.insert(*version);
         }
     }
-    for (const DisplayDevice& device : devices) {
-        const DriverFiles files = DriverRegistry::read(device);
-        if (files.umd_own.empty()) {
-            problems.add("no user-mode driver DLL registered for " + device.name);
-        }
-        for (const auto* list : {&files.umd_own, &files.umd_other, &files.opencl_own, &files.opencl_other}) {
-            for (const std::wstring& path : *list) {
-                add_file(path);
-            }
-        }
-        for (const auto* list : {&files.vulkan_own, &files.vulkan_other}) {
-            for (const std::wstring& manifest : *list) {
-                add_file(DriverRegistry::vulkan_library(manifest));
+    std::vector<std::pair<std::string, std::string>> reported;
+    OpenClApi opencl;
+    std::vector<OpenClPlatform> platforms;
+    if (opencl.load(error) && opencl.platforms(platforms, error)) {
+        for (const OpenClPlatform& platform : platforms) {
+            for (const OpenClDevice& device : platform.devices) {
+                reported.emplace_back("CL_DRIVER_VERSION", device.driver_version);
             }
         }
     }
-    if (release.size() > 1) {
-        std::string list;
-        for (std::uint64_t version : release) {
-            list += FileVersion::text(version) + " ";
+    VulkanApi vulkan;
+    std::vector<VulkanDevice> vk_devices;
+    if (vulkan.load(error) && vulkan.create_instance(error) && vulkan.devices(vk_devices, error)) {
+        for (const VulkanDevice& device : vk_devices) {
+            context.measure("vulkan.driverVersion." + device.name, std::to_string(device.driver_version >> 22) + "." +
+                                                                       std::to_string((device.driver_version >> 12) & 0x3ff) +
+                                                                       "." + std::to_string(device.driver_version & 0xfff));
         }
-        problems.add("the accel-virt driver files carry different release versions: " + list);
+    }
+    {
+        TestWindow window;
+        OpenGlContext gl;
+        if (window.create({}, error) && gl.create(window.dc(), error)) {
+            reported.emplace_back("GL_VERSION", gl.version());
+        }
+    }
+    for (const auto& [api, text] : reported) {
+        context.measure("reported." + api, text);
+        for (std::size_t at = 0; at < text.size(); ++at) {
+            if (text[at] < '0' || text[at] > '9' || (at > 0 && (text[at - 1] == '.' || (text[at - 1] >= '0' && text[at - 1] <= '9')))) {
+                continue;
+            }
+            std::size_t end = at;
+            int dots = 0;
+            while (end < text.size() && ((text[end] >= '0' && text[end] <= '9') || (text[end] == '.' && dots < 3))) {
+                dots += text[end] == '.' ? 1 : 0;
+                ++end;
+            }
+            const std::string token = text.substr(at, end - at);
+            const std::optional<std::uint64_t> version = dots == 3 ? FileVersion::parse(token) : std::nullopt;
+            if (version && !release.empty() && release.count(*version) == 0) {
+                problems.add(api + " '" + text + "' carries driver version " + token + " which is not the release " +
+                             FileVersion::text(*release.begin()));
+            }
+            at = end;
+        }
     }
     return problems.outcome();
 }

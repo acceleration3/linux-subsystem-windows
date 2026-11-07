@@ -12,6 +12,7 @@ struct OpenClDevice {
     std::string vendor;
     std::string version;
     std::string extensions;
+    std::string driver_version;
     std::uint32_t vendor_id = 0;
     std::uint64_t global_memory = 0;
     std::uint64_t max_allocation = 0;
