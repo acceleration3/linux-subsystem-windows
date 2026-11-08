@@ -404,8 +404,22 @@ Outcome WsiChecks::acquire_timeouts(Context& context) {
             held.push_back(index);
         }
         std::uint32_t extra = 0;
-        Kit::expect(problems, "acquire with timeout 0 when no image is free", stage.chain.acquire(0, extra), {VK_NOT_READY});
-        Kit::expect(problems, "acquire with a 20 ms timeout when no image is free", stage.chain.acquire(20000000, extra), {VK_TIMEOUT});
+        for (std::uint32_t i = acquirable; i < granted; ++i) {
+            const VkResult result = stage.chain.acquire(20000000, extra);
+            if (!Kit::expect(problems, "acquire " + std::to_string(i + 1) + " of " + std::to_string(granted) + " images, beyond the guaranteed ones", result,
+                             {VK_SUCCESS, VK_SUBOPTIMAL_KHR, VK_NOT_READY, VK_TIMEOUT})) {
+                break;
+            }
+            if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
+                break;
+            }
+            held.push_back(extra);
+        }
+        context.measure("vk.acquirable_images_held", static_cast<std::uint64_t>(held.size()));
+        if (held.size() == granted) {
+            Kit::expect(problems, "acquire with timeout 0 when no image is free", stage.chain.acquire(0, extra), {VK_NOT_READY});
+            Kit::expect(problems, "acquire with a 20 ms timeout when no image is free", stage.chain.acquire(20000000, extra), {VK_TIMEOUT});
+        }
         const float color[4] = {shade(4), shade(4), shade(4), 1.0f};
         for (const std::uint32_t index : held) {
             Kit::expect(problems, "present of a held image", stage.chain.paint_and_present(index, color), {VK_SUCCESS, VK_SUBOPTIMAL_KHR});

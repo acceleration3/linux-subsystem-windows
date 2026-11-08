@@ -86,6 +86,7 @@ add_library(suite_support OBJECT
     test_window.cpp
     vulkan_api.cpp
     vulkan_buffer.cpp
+    vulkan_host_gate.cpp
     vulkan_compute.cpp
     vulkan_extension_table.cpp
     vulkan_formats.cpp

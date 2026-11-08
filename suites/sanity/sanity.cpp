@@ -772,6 +772,7 @@ void add(Registry& registry) {
     guarded(suite, {"sanity.capture.dwm.thumbnail_updates", {"capture", "dwm", "d3d11", "present", "exclusive", "pacing"}, true, 120, capture::ThumbnailChecks::updates});
     guarded(suite, {"sanity.err.vk_wrong_queue_family", {"err", "robust", "vulkan", "exclusive"}, true, 240, err::FamilyChecks::vk_wrong_queue_family});
     guarded(suite, {"sanity.err.gpu_wait_never_signalled", {"err", "robust", "vulkan", "d3d12", "gl", "exclusive"}, true, 420, err::WaitChecks::never_signalled});
+    guarded(suite, {"sanity.err.vk_host_event_gate", {"err", "robust", "vulkan", "exclusive"}, true, 240, err::WaitChecks::vk_host_event_gate});
     guarded(suite, {"sanity.err.long_running_shader", {"err", "robust", "slow", "compute", "d3d11", "d3d12", "vulkan", "exclusive"}, true, 900, err::ShaderChecks::long_running});
     guarded(suite, {"sanity.err.infinite_shader", {"err", "robust", "compute", "d3d11", "d3d12", "vulkan", "opencl", "exclusive"}, true, 600, err::ShaderChecks::infinite});
     guarded(suite, {"sanity.err.kill_mid_submit", {"err", "robust", "slow", "d3d9", "d3d11", "d3d12", "vulkan", "opencl", "gl", "exclusive"}, true, 900, err::KillChecks::mid_submit});
@@ -853,7 +854,7 @@ void add(Registry& registry) {
     guarded(suite, {"sanity.kmd.display.vblank_wait_cadence", {"kmd", "kmt", "gdi", "exclusive", "pacing"}, true, 120, kmd::DisplayChecks::vblank_wait_cadence});
     guarded(suite, {"sanity.kmd.display.scanline_monotonic", {"kmd", "kmt", "gdi", "exclusive", "pacing"}, true, 120, kmd::DisplayChecks::scanline_monotonic});
     guarded(suite, {"sanity.kmd.display.vblank_vs_dwm_timing", {"kmd", "kmt", "dwm", "exclusive", "pacing"}, true, 120, kmd::DisplayChecks::vblank_vs_dwm_timing});
-    guarded(suite, {"sanity.kmd.display.source_visible_while_composed", {"kmd", "kmt", "gdi", "dwm"}, false, 120, kmd::DisplayChecks::source_visible_while_composed});
+    guarded(suite, {"sanity.kmd.display.source_visible_while_composed", {"kmd", "kmt", "gdi", "dwm", "exclusive"}, true, 120, kmd::DisplayChecks::source_visible_while_composed});
     guarded(suite, {"sanity.kmd.display.mode_set_restore", {"kmd", "gdi", "exclusive"}, true, 300, kmd::DisplayChecks::mode_set_restore});
     guarded(suite, {"sanity.kmd.display.mode_list_all_settable", {"kmd", "gdi", "exclusive"}, true, 180, kmd::DisplayChecks::mode_list_all_settable});
     guarded(suite, {"sanity.kmd.display.cursor_shapes", {"kmd", "gdi"}, false, 120, kmd::DisplayChecks::cursor_shapes});

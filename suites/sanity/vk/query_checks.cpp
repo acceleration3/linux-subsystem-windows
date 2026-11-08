@@ -3,6 +3,7 @@
 #include "core/child_mode.hpp"
 #include "sanity/vk/kit.hpp"
 #include "support/gate_window.hpp"
+#include "support/vulkan_host_gate.hpp"
 
 #include <atomic>
 #include <chrono>
@@ -78,9 +79,9 @@ Outcome QueryChecks::timestamps(Context& context) {
         }
         VulkanQueue& queue = rig.main();
         VulkanOwned<VkQueryPool> pool;
-        VulkanOwned<VkEvent> gate;
-        if (queue.properties.timestampValidBits != 0 && Kit::succeeds(problems, "availability pool", rig.make_query_pool(pool, VK_QUERY_TYPE_TIMESTAMP, 1)) &&
-            Kit::succeeds(problems, "gate", rig.make_event(gate))) {
+        VulkanHostGate gate;
+        if (rig.timeline && queue.properties.timestampValidBits != 0 && Kit::succeeds(problems, "availability pool", rig.make_query_pool(pool, VK_QUERY_TYPE_TIMESTAMP, 1)) &&
+            Kit::succeeds(problems, "gate", gate.open(rig))) {
             Kit::succeeds(problems, "pool reset", rig.run([&](VkCommandBuffer cb) { rig.fn.vkCmdResetQueryPool(cb, pool.get(), 0, 1); }));
             std::uint64_t result[2] = {0xFF, 0xFF};
             Kit::expect(problems, "results of a reset query", rig.fn.vkGetQueryPoolResults(rig.device, pool.get(), 0, 1, sizeof(result), result, 16,
@@ -90,19 +91,13 @@ Outcome QueryChecks::timestamps(Context& context) {
             }
             VkResult code = VK_SUCCESS;
             const VkCommandBuffer commands = Kit::record(rig, queue, [&](VkCommandBuffer cb) {
-                VkEvent event = gate.get();
-                rig.fn.vkCmdWaitEvents(cb, 1, &event, VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0, nullptr, 0, nullptr, 0, nullptr);
                 rig.fn.vkCmdWriteTimestamp(cb, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, pool.get(), 0);
             }, 0, &code);
             VulkanOwned<VkFence> fence;
             if (commands != nullptr && Kit::succeeds(problems, "fence", rig.make_fence(fence))) {
-                VkSubmitInfo info{};
-                info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-                info.commandBufferCount = 1;
-                info.pCommandBuffers = &commands;
                 GateWindow window(context.id());
                 window.open(problems);
-                if (Kit::succeeds(problems, "gated timestamp submission", rig.submit(queue, 1, &info, fence.get()))) {
+                if (Kit::succeeds(problems, "gated timestamp submission", gate.submit(rig, queue, commands, fence.get(), VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT))) {
                     window.begin();
                     std::uint64_t probe = 0;
                     const VkResult unfinished = rig.fn.vkGetQueryPoolResults(rig.device, pool.get(), 0, 1, 8, &probe, 8, VK_QUERY_RESULT_64_BIT);
@@ -122,7 +117,7 @@ Outcome QueryChecks::timestamps(Context& context) {
                     window.sleep_until_release();
                     const bool returned_while_gated = early.load();
                     released = true;
-                    (void)rig.fn.vkSetEvent(rig.device, gate.get());
+                    (void)gate.release(rig);
                     window.close(context, problems, "timestamps.gate");
                     waiter.join();
                     if (returned_while_gated || early.load()) {

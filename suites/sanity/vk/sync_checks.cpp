@@ -3,6 +3,7 @@
 #include "core/child_mode.hpp"
 #include "sanity/vk/kit.hpp"
 #include "support/gate_window.hpp"
+#include "support/vulkan_host_gate.hpp"
 #include "support/vulkan_image_io.hpp"
 
 #include <algorithm>
@@ -17,10 +18,6 @@ namespace {
 
 constexpr std::uint64_t kSecond = 1000000000ull;
 constexpr VkDeviceSize kSize = 64 * 1024;
-
-void wait_for_host_event(VulkanRig& rig, VkCommandBuffer commands, VkEvent event) {
-    rig.fn.vkCmdWaitEvents(commands, 1, &event, VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, nullptr, 0, nullptr, 0, nullptr);
-}
 
 VkResult submit_one(VulkanRig& rig, VulkanQueue& queue, VkCommandBuffer commands, VkFence fence) {
     VkSubmitInfo info{};
@@ -65,10 +62,14 @@ Outcome SyncChecks::fences(Context& context) {
         }
         VulkanBuffer source;
         VulkanBuffer sink;
-        VulkanOwned<VkEvent> gate;
+        VulkanHostGate gate;
         VulkanOwned<VkFence> empty;
+        if (!rig.timeline) {
+            context.note("timeline semaphores are not reported; the gated fence checks are skipped");
+            return {};
+        }
         if (!Kit::succeeds(problems, "source", Kit::host_buffer(rig, source, kSize)) || !Kit::succeeds(problems, "sink", Kit::host_buffer(rig, sink, kSize)) ||
-            !Kit::succeeds(problems, "gate event", rig.make_event(gate)) || !Kit::succeeds(problems, "second fence", rig.make_fence(empty))) {
+            !Kit::succeeds(problems, "gate semaphore", gate.open(rig)) || !Kit::succeeds(problems, "second fence", rig.make_fence(empty))) {
             return {};
         }
         source.fill_pattern(0xFE00);
@@ -77,20 +78,17 @@ Outcome SyncChecks::fences(Context& context) {
         sink.publish();
         VulkanQueue& queue = rig.main();
         VkResult code = VK_SUCCESS;
-        const VkCommandBuffer commands = Kit::record(rig, queue, [&](VkCommandBuffer cb) {
-            wait_for_host_event(rig, cb, gate.get());
-            copy_to_host(rig, cb, source.buffer, sink.buffer, kSize);
-        }, 0, &code);
+        const VkCommandBuffer commands = Kit::record(rig, queue, [&](VkCommandBuffer cb) { copy_to_host(rig, cb, source.buffer, sink.buffer, kSize); }, 0, &code);
         if (!Kit::succeeds(problems, "recording of the gated copy", code)) {
             return {};
         }
         GateWindow window(context.id());
         window.open(problems);
-        Kit::succeeds(problems, "gated submission", submit_one(rig, queue, commands, fence.get()));
+        Kit::succeeds(problems, "gated submission", gate.submit(rig, queue, commands, fence.get()));
         window.begin();
         Kit::succeeds(problems, "empty submission behind it", submit_one(rig, queue, nullptr, empty.get()));
-        Kit::expect(problems, "status of a fence whose work waits for an unset event", rig.fn.vkGetFenceStatus(rig.device, fence.get()), {VK_NOT_READY});
-        Kit::expect(problems, "wait on a fence whose work waits for an unset event", rig.wait_fence(fence.get(), 1000000), {VK_TIMEOUT});
+        Kit::expect(problems, "status of a fence whose work waits for an unsignalled timeline value", rig.fn.vkGetFenceStatus(rig.device, fence.get()), {VK_NOT_READY});
+        Kit::expect(problems, "wait on a fence whose work waits for an unsignalled timeline value", rig.wait_fence(fence.get(), 1000000), {VK_TIMEOUT});
         Kit::expect(problems, "status of the empty-submission fence behind unfinished work", rig.fn.vkGetFenceStatus(rig.device, empty.get()), {VK_NOT_READY});
         window.sleep_until(2600);
         Kit::expect(problems, "bounded wait on the gated fence past the kernel ring timeout", rig.wait_fence(fence.get(), 100000000), {VK_TIMEOUT});
@@ -98,9 +96,9 @@ Outcome SyncChecks::fences(Context& context) {
         window.sleep_until_release();
         sink.acquire();
         if (!untouched(sink, kSize, 0xCD)) {
-            problems.add("the gated copy wrote its destination before the event was set");
+            problems.add("the gated copy wrote its destination before the timeline value was signalled");
         }
-        Kit::succeeds(problems, "vkSetEvent", rig.fn.vkSetEvent(rig.device, gate.get()));
+        Kit::succeeds(problems, "vkSignalSemaphore", gate.release(rig));
         window.close(context, problems, "fences.gate");
         if (Kit::succeeds(problems, "wait for the gated work", rig.wait_fence(fence.get(), 20 * kSecond)) &&
             Kit::succeeds(problems, "wait for the empty submission", rig.wait_fence(empty.get(), 20 * kSecond))) {
@@ -110,19 +108,16 @@ Outcome SyncChecks::fences(Context& context) {
         }
         VkFence handles[2] = {fence.get(), empty.get()};
         Kit::succeeds(problems, "reset of both fences", rig.fn.vkResetFences(rig.device, 2, handles));
-        VulkanOwned<VkEvent> second_gate;
-        if (Kit::succeeds(problems, "second gate", rig.make_event(second_gate))) {
-            VulkanOwned<VkEvent> third_gate;
-            Kit::succeeds(problems, "third gate", rig.make_event(third_gate));
-            const VkCommandBuffer first = Kit::record(rig, queue, [&](VkCommandBuffer cb) { wait_for_host_event(rig, cb, second_gate.get()); }, 0, &code);
-            const VkCommandBuffer second = Kit::record(rig, queue, [&](VkCommandBuffer cb) { wait_for_host_event(rig, cb, third_gate.get()); }, 0, &code);
-            Kit::succeeds(problems, "first reused submission", submit_one(rig, queue, first, fence.get()));
-            Kit::succeeds(problems, "second reused submission", submit_one(rig, queue, second, empty.get()));
+        VulkanHostGate second_gate;
+        VulkanHostGate third_gate;
+        if (Kit::succeeds(problems, "second gate", second_gate.open(rig)) && Kit::succeeds(problems, "third gate", third_gate.open(rig))) {
+            Kit::succeeds(problems, "first reused submission", second_gate.submit(rig, queue, nullptr, fence.get()));
+            Kit::succeeds(problems, "second reused submission", third_gate.submit(rig, queue, nullptr, empty.get()));
             Kit::expect(problems, "wait for any of two unfinished fences", rig.fn.vkWaitForFences(rig.device, 2, handles, VK_FALSE, 1000000), {VK_TIMEOUT});
-            Kit::succeeds(problems, "release of the first gate", rig.fn.vkSetEvent(rig.device, second_gate.get()));
+            Kit::succeeds(problems, "release of the first gate", second_gate.release(rig));
             Kit::succeeds(problems, "wait for any of two fences", rig.fn.vkWaitForFences(rig.device, 2, handles, VK_FALSE, 20 * kSecond));
             Kit::expect(problems, "wait for all of two fences while one is pending", rig.fn.vkWaitForFences(rig.device, 2, handles, VK_TRUE, 1000000), {VK_TIMEOUT});
-            Kit::succeeds(problems, "release of the second gate", rig.fn.vkSetEvent(rig.device, third_gate.get()));
+            Kit::succeeds(problems, "release of the second gate", third_gate.release(rig));
             Kit::succeeds(problems, "wait for all of two fences", rig.fn.vkWaitForFences(rig.device, 2, handles, VK_TRUE, 20 * kSecond));
         }
         rig.wait_idle();
@@ -383,8 +378,8 @@ Outcome SyncChecks::timeline_semaphores(Context& context) {
             info.pSignalSemaphores = &handle;
             return rig.submit(queue, 1, &info, VK_NULL_HANDLE);
         };
-        Kit::succeeds(problems, "submission of the download waiting for 20", submit(download, 20, 21));
         Kit::succeeds(problems, "submission of the upload waiting for 10", submit(upload, 10, 11));
+        Kit::succeeds(problems, "submission of the download waiting for 20", submit(download, 20, 21));
         std::this_thread::sleep_for(std::chrono::milliseconds(20));
         rig.fn.vkGetSemaphoreCounterValue(rig.device, timeline.get(), &value);
         if (value != 5) {
@@ -801,8 +796,12 @@ Outcome SyncChecks::submit2_and_wait_idle(Context& context) {
         for (const bool whole_device : {false, true}) {
             const std::string name = whole_device ? "vkDeviceWaitIdle" : "vkQueueWaitIdle";
             Kit::succeeds(problems, name + " on an idle device", whole_device ? rig.fn.vkDeviceWaitIdle(rig.device) : rig.fn.vkQueueWaitIdle(queue.handle));
-            VulkanOwned<VkEvent> gate;
-            if (!Kit::succeeds(problems, name + " gate", rig.make_event(gate))) {
+            VulkanHostGate gate;
+            if (!rig.timeline) {
+                context.note("timeline semaphores are not reported; " + name + " with gated work is skipped");
+                continue;
+            }
+            if (!Kit::succeeds(problems, name + " gate", gate.open(rig))) {
                 continue;
             }
             source.fill_pattern(whole_device ? 0x5B4 : 0x5B3);
@@ -810,13 +809,10 @@ Outcome SyncChecks::submit2_and_wait_idle(Context& context) {
             sink.fill_value(0xCD);
             sink.publish();
             VkResult code = VK_SUCCESS;
-            const VkCommandBuffer commands = Kit::record(rig, queue, [&](VkCommandBuffer cb) {
-                wait_for_host_event(rig, cb, gate.get());
-                copy_to_host(rig, cb, source.buffer, sink.buffer, kSize);
-            }, 0, &code);
+            const VkCommandBuffer commands = Kit::record(rig, queue, [&](VkCommandBuffer cb) { copy_to_host(rig, cb, source.buffer, sink.buffer, kSize); }, 0, &code);
             GateWindow window(context.id());
             window.open(problems);
-            if (commands == nullptr || !Kit::succeeds(problems, name + " gated submission", submit_one(rig, queue, commands, VK_NULL_HANDLE))) {
+            if (commands == nullptr || !Kit::succeeds(problems, name + " gated submission", gate.submit(rig, queue, commands, VK_NULL_HANDLE))) {
                 continue;
             }
             window.begin();
@@ -832,14 +828,14 @@ Outcome SyncChecks::submit2_and_wait_idle(Context& context) {
             sink.acquire();
             const bool copied_early = !untouched(sink, kSize, 0xCD);
             released = true;
-            (void)rig.fn.vkSetEvent(rig.device, gate.get());
+            (void)gate.release(rig);
             window.close(context, problems, whole_device ? "device_wait_idle.gate" : "queue_wait_idle.gate");
             waiter.join();
             if (copied_early) {
-                problems.add(name + ": the gated copy wrote its destination before the event was set");
+                problems.add(name + ": the gated copy wrote its destination before the timeline value was signalled");
             }
             if (returned_while_gated || early.load()) {
-                problems.add(name + " returned while submitted work was still waiting for an event");
+                problems.add(name + " returned while submitted work was still waiting for a timeline value");
             }
             if (code_seen.load() != VK_SUCCESS) {
                 problems.add(name + " returned " + Kit::name(static_cast<VkResult>(code_seen.load())));

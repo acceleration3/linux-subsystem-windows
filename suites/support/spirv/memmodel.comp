@@ -10,11 +10,11 @@ void main() {
     uint pair = g >> 1;
     if ((g & 1u) == 0u) {
         data[pair] = 1234u + pair;
-        atomicStore(flag[pair], 1u, gl_ScopeDevice, gl_StorageSemanticsBuffer, gl_SemanticsRelease);
+        atomicStore(flag[pair], 1u, gl_ScopeDevice, gl_StorageSemanticsBuffer, gl_SemanticsRelease | gl_SemanticsMakeAvailable);
     } else {
         uint seen = 0u;
         for (uint n = 0u; n < 2000u; ++n) {
-            seen = atomicLoad(flag[pair], gl_ScopeDevice, gl_StorageSemanticsBuffer, gl_SemanticsAcquire);
+            seen = atomicLoad(flag[pair], gl_ScopeDevice, gl_StorageSemanticsBuffer, gl_SemanticsAcquire | gl_SemanticsMakeVisible);
             if (seen != 0u) {
                 break;
             }
