@@ -49,6 +49,7 @@ public:
         if (flip_) {
             settings.effect = D3DSWAPEFFECT_FLIPEX;
             settings.buffers = 2;
+            settings.extra_behavior = D3DCREATE_ENABLE_PRESENTSTATS;
         }
         if (!rig_.open(flip_, error) || !rig_.create(settings, error)) {
             return false;
