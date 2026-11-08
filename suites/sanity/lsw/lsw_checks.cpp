@@ -176,8 +176,12 @@ Outcome LswChecks::launched_app_appears(Context& context) {
     RECT client{};
     ::GetClientRect(app.found.window, &client);
     Problems problems;
-    if (client.right != 400 || client.bottom != 300) {
-        problems.add("the window's client size is " + std::to_string(client.right) + "x" + std::to_string(client.bottom) + ", expected 400x300");
+    int frame_width = 0;
+    int frame_height = 0;
+    TestWindow::outer_size(120, 120, 0, 0, frame_width, frame_height);
+    if (client.right != 400 - frame_width || client.bottom != 300 - frame_height) {
+        problems.add("the window's client size is " + std::to_string(client.right) + "x" + std::to_string(client.bottom) + ", expected " + std::to_string(400 - frame_width) + "x" +
+                     std::to_string(300 - frame_height) + " for an outer size of 400x300");
     }
     wchar_t title[256] = {};
     ::GetWindowTextW(app.found.window, title, 255);
@@ -271,11 +275,11 @@ Outcome LswChecks::snap_restore(Context& context) {
     if (!close_to(snapped, half, 2)) {
         problems.add("after Win+Left the window is at " + text(snapped) + ", the left half is " + text(half));
     }
-    combo(VK_LWIN, VK_DOWN);
+    combo(VK_LWIN, VK_RIGHT);
     ::Sleep(1200);
     const RECT restored = bounds(app.found.window);
     if (!close_to(restored, original, 2)) {
-        problems.add("after Win+Down the window is at " + text(restored) + ", it was at " + text(original));
+        problems.add("after Win+Right the window is at " + text(restored) + ", it was at " + text(original));
     }
     return problems.outcome();
 }
@@ -320,7 +324,7 @@ Outcome LswChecks::move_resize_guest_follows(Context& context) {
     return problems.outcome();
 }
 
-Outcome LswChecks::keyboard_to_right_window(Context&) {
+Outcome LswChecks::keyboard_to_right_window(Context& context) {
     InputWindow first;
     InputWindow second;
     std::string error;
@@ -328,8 +332,17 @@ Outcome LswChecks::keyboard_to_right_window(Context&) {
         return Outcome::fail(error);
     }
     Problems problems;
+    int round = 0;
     for (InputWindow* target : {&first, &second, &first}) {
         focus(target->hwnd());
+        const auto waited_from = Clock::now();
+        while (Clock::now() - waited_from < std::chrono::seconds(2) && (::GetForegroundWindow() != target->hwnd() || target->focus_gains() == 0)) {
+            ::Sleep(10);
+        }
+        const std::string label = "lsw.keyboard.round" + std::to_string(round++);
+        context.measure(label + ".foreground_is_target", ::GetForegroundWindow() == target->hwnd());
+        context.measure(label + ".focus_gains_seen", target->focus_gains());
+        context.measure(label + ".focus_wait_ms", std::chrono::duration<double, std::milli>(Clock::now() - waited_from).count());
         first.reset();
         second.reset();
         for (WORD vk : {static_cast<WORD>('A'), static_cast<WORD>('B'), static_cast<WORD>('C')}) {

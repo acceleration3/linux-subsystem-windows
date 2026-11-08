@@ -24,6 +24,24 @@ IGraphicsCaptureSession : public IInspectable {
     virtual HRESULT STDMETHODCALLTYPE StartCapture() = 0;
 };
 
+MIDL_INTERFACE("2c39ae40-7d2e-5044-804e-8b6799d4cf9e")
+IGraphicsCaptureSession2 : public IInspectable {
+    virtual HRESULT STDMETHODCALLTYPE get_IsCursorCaptureEnabled(unsigned char* value) = 0;
+    virtual HRESULT STDMETHODCALLTYPE put_IsCursorCaptureEnabled(unsigned char value) = 0;
+};
+
+MIDL_INTERFACE("f2cdd966-22ae-5ea1-9596-3a289344c3be")
+IGraphicsCaptureSession3 : public IInspectable {
+    virtual HRESULT STDMETHODCALLTYPE get_IsBorderRequired(unsigned char* value) = 0;
+    virtual HRESULT STDMETHODCALLTYPE put_IsBorderRequired(unsigned char value) = 0;
+};
+
+MIDL_INTERFACE("67c0ea62-1f85-5061-925a-239be0ac09cb")
+IGraphicsCaptureSession5 : public IInspectable {
+    virtual HRESULT STDMETHODCALLTYPE get_MinUpdateInterval(TimeSpan* value) = 0;
+    virtual HRESULT STDMETHODCALLTYPE put_MinUpdateInterval(TimeSpan value) = 0;
+};
+
 MIDL_INTERFACE("2224a540-5974-49aa-b232-0882536f4cb5")
 IGraphicsCaptureSessionStatics : public IInspectable {
     virtual HRESULT STDMETHODCALLTYPE IsSupported(unsigned char* result) = 0;
@@ -97,6 +115,9 @@ IDirect3D11CaptureFramePoolStatics2 : public IInspectable {
 }  // namespace lsw::suites::wgc_abi
 
 __CRT_UUID_DECL(lsw::suites::wgc_abi::IGraphicsCaptureSession, 0x814e42a9, 0xf70f, 0x4ad7, 0x93, 0x9b, 0xfd, 0xdc, 0xc6, 0xeb, 0x88, 0x0d)
+__CRT_UUID_DECL(lsw::suites::wgc_abi::IGraphicsCaptureSession2, 0x2c39ae40, 0x7d2e, 0x5044, 0x80, 0x4e, 0x8b, 0x67, 0x99, 0xd4, 0xcf, 0x9e)
+__CRT_UUID_DECL(lsw::suites::wgc_abi::IGraphicsCaptureSession3, 0xf2cdd966, 0x22ae, 0x5ea1, 0x95, 0x96, 0x3a, 0x28, 0x93, 0x44, 0xc3, 0xbe)
+__CRT_UUID_DECL(lsw::suites::wgc_abi::IGraphicsCaptureSession5, 0x67c0ea62, 0x1f85, 0x5061, 0x92, 0x5a, 0x23, 0x9b, 0xe0, 0xac, 0x09, 0xcb)
 __CRT_UUID_DECL(lsw::suites::wgc_abi::IGraphicsCaptureSessionStatics, 0x2224a540, 0x5974, 0x49aa, 0xb2, 0x32, 0x08, 0x82, 0x53, 0x6f, 0x4c, 0xb5)
 __CRT_UUID_DECL(lsw::suites::wgc_abi::IClosable, 0x30d5a829, 0x7fa4, 0x4026, 0x83, 0xbb, 0xd7, 0x5b, 0xae, 0x4e, 0xa9, 0x9e)
 __CRT_UUID_DECL(lsw::suites::wgc_abi::IDirect3DSurface, 0x0bf4a146, 0x13c1, 0x4694, 0xbe, 0xe3, 0x7a, 0xbf, 0x15, 0xea, 0xf5, 0x86)

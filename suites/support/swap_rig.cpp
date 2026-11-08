@@ -28,7 +28,7 @@ bool SwapRig::open(const SwapOptions& wanted, std::string& error) {
         config.width = static_cast<int>(wanted.width);
         config.height = static_cast<int>(wanted.height);
     } else {
-        TestWindow::outer_size(config.x, config.y, static_cast<int>(wanted.width), static_cast<int>(wanted.height), config.width, config.height);
+        TestWindow::fit_config(config, static_cast<int>(wanted.width), static_cast<int>(wanted.height));
     }
     config.visible = wanted.visible;
     if (!window.create(config, error)) {

@@ -51,12 +51,7 @@ constexpr SizeCase kSizeCases[] = {
 };
 
 bool resize_window(TestWindow& window, int width, int height, std::string& error) {
-    RECT rect{};
-    ::GetWindowRect(window.hwnd(), &rect);
-    int outer_width = 0;
-    int outer_height = 0;
-    TestWindow::outer_size(rect.left, rect.top, width, height, outer_width, outer_height);
-    window.resize(outer_width, outer_height);
+    window.resize_client(width, height);
     if (window.width() != width || window.height() != height) {
         error = "the window client is " + std::to_string(window.width()) + "x" + std::to_string(window.height()) + " after asking for " + std::to_string(width) + "x" + std::to_string(height);
         return false;
@@ -164,6 +159,7 @@ Outcome ContentChecks::sizes_and_formats(Context& context) {
     SwapOptions options;
     options.width = 160;
     options.height = 120;
+    options.popup = true;
     options.usage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
     std::string error;
     if (!rig.open(options, error)) {

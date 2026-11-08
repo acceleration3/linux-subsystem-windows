@@ -108,7 +108,7 @@ Outcome QueryChecks::adapter_info_stable(Context& context) {
     return problems.outcome();
 }
 
-Outcome QueryChecks::size_semantics(Context&) {
+Outcome QueryChecks::size_semantics(Context& context) {
     Session session;
     const Outcome opened = with_session(session);
     if (opened.status() != Status::Ok) {
@@ -128,10 +128,12 @@ Outcome QueryChecks::size_semantics(Context&) {
     }
     std::fill(bytes.begin(), bytes.end(), 0xCD);
     const std::int32_t large = session.api.query(session.handle, 3, bytes.data(), 64);
-    if (large != 0) {
-        problems.add("the segment size query with a 64-byte buffer returned 0x" + Text::hex(static_cast<std::uint32_t>(large), 8));
+    constexpr std::int32_t kInvalidParameter = static_cast<std::int32_t>(0xC000000D);
+    context.measure("segment_size_query_64_bytes", "0x" + Text::hex(static_cast<std::uint32_t>(large), 8));
+    if (large != 0 && large != kInvalidParameter) {
+        problems.add("the segment size query with a 64-byte buffer returned 0x" + Text::hex(static_cast<std::uint32_t>(large), 8) + ", expected success or STATUS_INVALID_PARAMETER");
     }
-    for (std::size_t i = 24; i < bytes.size(); ++i) {
+    for (std::size_t i = 24; large == 0 && i < bytes.size(); ++i) {
         if (bytes[i] != 0xCD) {
             problems.add("the oversized query changed the extra byte " + std::to_string(i));
             break;

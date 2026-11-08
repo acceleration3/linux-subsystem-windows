@@ -35,6 +35,8 @@ public:
 
     void resize(int width, int height);
 
+    void resize_client(int width, int height);
+
     void move(int x, int y);
 
     void destroy();
@@ -50,11 +52,14 @@ public:
 
     static void outer_size(int x, int y, int client_width, int client_height, int& width, int& height);
 
+    static void fit_config(TestWindowConfig& config, int client_width, int client_height);
+
 private:
     void pump(TestWindowConfig config);
 
     std::thread thread_;
     std::mutex mutex_;
+    bool popup_ = false;
     std::condition_variable ready_cv_;
     bool ready_ = false;
     std::string error_;

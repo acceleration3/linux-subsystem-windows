@@ -237,7 +237,7 @@ Implementation note: query, display and escape rows call the documented D3DKMT e
 | check | contract |
 |---|---|
 | `sanity.kmd.query.adapter_info_stable` | Every documented D3DKMTQueryAdapterInfo type that succeeds returns the same bytes on repeated calls and from separate processes, apart from fields documented as dynamic. |
-| `sanity.kmd.query.size_semantics` | Querying with a buffer smaller than required fails with a documented status and writes nothing past the size given; a larger buffer succeeds and the extra bytes are untouched. |
+| `sanity.kmd.query.size_semantics` | Querying with a buffer smaller than required fails with a documented status and writes nothing past the size given; a larger buffer succeeds and the extra bytes are untouched; dxgkrnl answers a buffer larger than the structure with STATUS_INVALID_PARAMETER, which is accepted and recorded. |
 | `sanity.kmd.query.unsupported_type_status` | Querying an out-of-range or unsupported info type returns a failure status and never crashes or changes later answers. |
 | `sanity.kmd.query.segment_info_consistent` | Segment descriptors are self-consistent: sizes nonzero, commit limits not above segment size, aperture flags matching the memory heaps DXGI reports for the same adapter. |
 | `sanity.kmd.query.driver_caps_self_consistent` | WDDM caps report a version at or above 2.0 and the supported scheduling, preemption and flip-model capabilities agree with the DXGI-reported capabilities (e.g. flip model present support). |
@@ -264,7 +264,7 @@ Implementation note: query, display and escape rows call the documented D3DKMT e
 | `sanity.kmd.display.vblank_wait_cadence` | D3DKMTWaitForVerticalBlankEvent returns at a mean period within a stated tolerance of the current mode's refresh period over one second, with no wait longer than five periods. [E] |
 | `sanity.kmd.display.scanline_monotonic` | Successive D3DKMTGetScanLine samples inside one frame are non-decreasing until the vblank flag is seen, and are within the active height plus blanking. [E] |
 | `sanity.kmd.display.vblank_vs_dwm_timing` | The refresh rate seen through DwmGetCompositionTimingInfo matches the vblank wait cadence within tolerance. [E] |
-| `sanity.kmd.display.source_visible_while_composed` | While the desktop is composed, D3DKMTCheckVidPnExclusiveOwnership and the display source state report the source visible, and a screenshot of the desktop is not uniformly black. |
+| `sanity.kmd.display.source_visible_while_composed` | [E]: while the desktop is composed, D3DKMTCheckVidPnExclusiveOwnership and the display source state report the source visible, and a screenshot of the desktop is not uniformly black. |
 | `sanity.kmd.display.mode_set_restore` | Changing the display mode via ChangeDisplaySettingsEx to every enumerated mode, and back, succeeds, reports the new size through GetSystemMetrics, and restores the original mode and desktop layout exactly. [E] |
 | `sanity.kmd.display.mode_list_all_settable` | Every mode enumerated for an output, up to a bounded sample, is accepted by CDS_TEST, and a mode not in the list is rejected with DISP_CHANGE_BADMODE. [E] |
 | `sanity.kmd.display.cursor_shapes` | Monochrome, colour and alpha-blended cursor shapes of 32, 48 and 64 pixels created by CreateCursor and set by SetCursor are accepted, and GetCursorInfo reflects the cursor shown. |
@@ -750,7 +750,7 @@ Each loop creates and destroys 5000 objects of the kind with its largest practic
 
 | check | contract |
 |---|---|
-| `sanity.d3d12.queue.types` | Direct, compute and copy queues each execute lists they are allowed to (copy lists on all three, compute lists on direct and compute), report their type in GetDesc, and a high priority queue works when the priority is reported as supported; unsupported commands on a list type are invalid usage and are not recorded. |
+| `sanity.d3d12.queue.types` | Direct, compute and copy queues each execute lists of their own type (copy commands recorded in direct, compute and copy lists, dispatches in compute and direct lists), report their type in GetDesc, and a high priority queue works when the priority is reported as supported; unsupported commands on a list type are invalid usage and are not recorded. |
 | `sanity.d3d12.queue.many_lists` | One ExecuteCommandLists with 1, 64 and 1000 lists runs them in order, and bundles executed from direct lists produce results equal to inline commands. |
 | `sanity.d3d12.fence.cross_queue` | Signal on a copy queue and Wait on a direct queue orders their work; results of the copy are visible to the draw; also compute-to-direct and direct-to-copy. |
 | `sanity.d3d12.fence.cpu_semantics` | The queue waits on a fence the CPU signals 3 s after the submit, longer than the kernel's 2 s ring lockup timeout: the work queued behind the wait does not complete before the signal and completes after it, a bounded wait times out meanwhile, and a second process rendering and reading back meanwhile completes every cycle in a normal time. SetEventOnCompletion fires only once the value is reached (immediately if already), GetCompletedValue is monotonic, CPU Signal from the application raises it, signalling a lower value leaves the completed value or sets it, a queue wait on a CPU-signalled fence continues once it is signalled, and 10000 fence waits complete without deadlock. |
@@ -767,7 +767,7 @@ Each loop creates and destroys 5000 objects of the kind with its largest practic
 | `sanity.d3d12.root.signatures` | Root signature 1.0 and 1.1 serialize/deserialize round trip and convert between versions; root constants, root descriptors, tables, static samplers, descriptor/data volatility all produce the analytic result in a test shader. |
 | `sanity.d3d12.pso.graphics_compute` | Graphics PSOs (all state fields, MSAA, depth, blend with logic op) and compute PSOs render or compute the analytic or CPU reference result. |
 | `sanity.d3d12.pso.library_cache` | A pipeline library stores and reloads PSOs; a loaded PSO produces the same output; a corrupted or driver-mismatched blob yields D3D12_ERROR_DRIVER_VERSION_MISMATCH / ADAPTER_NOT_FOUND / INVALID_ARG not a crash; cached PSO blobs in desc work or are ignored. |
-| `sanity.d3d12.render.draw_variants` | DrawInstanced, DrawIndexedInstanced, ExecuteIndirect (draw, indexed draw, dispatch, constant, constant buffer, vertex and index buffer arguments, with count buffers and offsets) and indirect argument buffers match the analytic image. |
+| `sanity.d3d12.render.draw_variants` | DrawInstanced, DrawIndexedInstanced, ExecuteIndirect (draw, indexed draw, dispatch, constant, constant buffer, vertex and index buffer arguments, with count buffers and offsets) and indirect argument buffers match the analytic image; the base vertex of indexed draws offsets the vertex-buffer fetch, not SV_VertexID. |
 | `sanity.d3d12.render.msaa_resolve` | MSAA render with programmable sample positions (if tier reports) and resolve equals WARP. |
 
 #### Queries, timing, present
@@ -782,7 +782,7 @@ Each loop creates and destroys 5000 objects of the kind with its largest practic
 
 | check | contract |
 |---|---|
-| `sanity.d3d12.share.heap_resource_nt` | Shared heaps and committed resources with CreateSharedHandle open in a second device and process (OpenSharedHandle) and show the writer's data after fence ordering, when shared tier is reported; D3D11 and D3D12 opening the same texture agree. |
+| `sanity.d3d12.share.heap_resource_nt` | Shared heaps and committed resources with CreateSharedHandle open in a second device and process (OpenSharedHandle) and show the writer's data after fence ordering, a failure to create the shared object is a failure; D3D11 and D3D12 opening the same texture agree. |
 | `sanity.d3d12.share.keyed_cross_api` | A D3D11 texture shared with NT handle written by D3D11 under a keyed mutex is readable by D3D12 and vice versa, with the D3D11 side ordered by the mutex keys and the D3D12 side by CPU waits (D3D12 has no keyed mutex). |
 | `sanity.d3d12.resid.make_evict` | Evict then MakeResident (and EnqueueMakeResident with a fence) of heaps and committed resources preserves contents on UMA and non-UMA per spec; MakeResident beyond the budget fails with E_OUTOFMEMORY rather than removing the device. [E] |
 | `sanity.d3d12.resid.budget_pressure` | [E]: allocating beyond the video memory budget while evicting retained resources keeps all data intact and QueryVideoMemoryInfo within Budget at the end. |
@@ -964,13 +964,13 @@ Each loop creates and destroys 5000 objects of the kind with its largest practic
 | `sanity.vk.graphics.pipeline_features` | Tessellation, geometry shaders, line/point sizes, wide lines, depth clamp, secondary command buffers and pipeline cache reuse render correctly when the feature is reported. |
 | `sanity.vk.descriptor.pools_templates_samplers` | Descriptor pools with and without FREE_DESCRIPTOR_SET allocate up to maxSets and fail further allocation with VK_ERROR_OUT_OF_POOL_MEMORY or FRAGMENTED_POOL, reset and free make sets available again, update templates, dynamic uniform offsets and immutable samplers produce the CPU result. |
 | `sanity.vk.cmd.buffers_reset_reuse` | Command buffers from pools with and without per-buffer reset re-record and re-submit correctly (ONE_TIME_SUBMIT, SIMULTANEOUS_USE, vkResetCommandBuffer, vkResetCommandPool) and secondary buffers execute from primaries. |
-| `sanity.vk.sync.fences` | The GPU waits on an event the host sets 3 s after the submit, longer than the kernel's 2 s ring lockup timeout: the gated work does not run before the set and runs after it, and a second process rendering and reading back meanwhile completes every cycle in a normal time. A fence signals only after the submitted work completes (readback after wait is final), WaitForFences with timeout 0 and short timeout return VK_TIMEOUT correctly and ResetFences works. |
+| `sanity.vk.sync.fences` | The GPU waits on a timeline semaphore value the host signals 3 s after the submit (a wait submitted before its signal), longer than the kernel's 2 s ring lockup timeout: the gated work does not run before the set and runs after it, and a second process rendering and reading back meanwhile completes every cycle in a normal time. A fence signals only after the submitted work completes (readback after wait is final), WaitForFences with timeout 0 and short timeout return VK_TIMEOUT correctly and ResetFences works. |
 | `sanity.vk.sync.binary_semaphores` | Cross-queue and cross-submit binary semaphore dependencies order work correctly, and each signal is waited exactly once. |
-| `sanity.vk.sync.timeline_semaphores` | Timeline semaphore values advance monotonically, host waits/signals and device waits on future values interleave correctly, and values stay within maxTimelineSemaphoreValueDifference. |
+| `sanity.vk.sync.timeline_semaphores` | Timeline semaphore values advance monotonically, host waits/signals and device waits on future values interleave correctly (submitted in signal order), and values stay within maxTimelineSemaphoreValueDifference. |
 | `sanity.vk.sync.events_barriers` | Events and pipeline barriers (execution plus memory dependencies, layout transitions) order writes before reads across all stage pairs; the same program without the barrier is not asserted. |
-| `sanity.vk.sync.memory_model` | With vulkanMemoryModel features reported, release/acquire shared-memory message passing across workgroups on atomic variables never observes stale data across many iterations. |
-| `sanity.vk.sync.submit2_and_wait_idle` | The GPU waits on an event the host sets 3 s after the submit, longer than the kernel's 2 s ring lockup timeout: the gated work does not run before the set and runs after it, and a second process rendering and reading back meanwhile completes every cycle in a normal time. vkQueueSubmit2 with stage-specific semaphores and vkDeviceWaitIdle/vkQueueWaitIdle return only after all work completes. |
-| `sanity.vk.query.timestamps` | The GPU waits on an event the host sets 3 s after the submit, longer than the kernel's 2 s ring lockup timeout: the gated work does not run before the set and runs after it, and a second process rendering and reading back meanwhile completes every cycle in a normal time. Timestamp queries are monotonic along each queue (timestampValidBits masked) with timestampPeriod conversion, availability and VK_QUERY_RESULT_WAIT_BIT semantics hold, with VK_EXT_calibrated_timestamps the device/QPC pair relates sanely, and occlusion and (when the feature is on) pipeline statistic queries match analytic counts. |
+| `sanity.vk.sync.memory_model` | With vulkanMemoryModel features reported, release/acquire shared-memory message passing (MakeAvailable on the store, MakeVisible on the load) across workgroups on atomic variables never observes stale data across many iterations. |
+| `sanity.vk.sync.submit2_and_wait_idle` | The GPU waits on a timeline semaphore value the host signals 3 s after the submit (a wait submitted before its signal), longer than the kernel's 2 s ring lockup timeout: the gated work does not run before the set and runs after it, and a second process rendering and reading back meanwhile completes every cycle in a normal time. vkQueueSubmit2 with stage-specific semaphores and vkDeviceWaitIdle/vkQueueWaitIdle return only after all work completes. |
+| `sanity.vk.query.timestamps` | The GPU waits on a timeline semaphore value the host signals 3 s after the submit (a wait submitted before its signal), longer than the kernel's 2 s ring lockup timeout: the gated work does not run before the set and runs after it, and a second process rendering and reading back meanwhile completes every cycle in a normal time. Timestamp queries are monotonic along each queue (timestampValidBits masked) with timestampPeriod conversion, availability and VK_QUERY_RESULT_WAIT_BIT semantics hold, with VK_EXT_calibrated_timestamps the device/QPC pair relates sanely, and occlusion and (when the feature is on) pipeline statistic queries match analytic counts. |
 | `sanity.vk.device.independent_devices` | Two devices on one adapter work side by side, the second keeps working after the first is destroyed, and a third device created afterwards works (device loss is not provoked: forcing it needs invalid usage or unbounded shaders). |
 | `sanity.vk.validation.reference_workload` | A reference workload (buffers, images, compute, graphics, swapchain) run under the Khronos validation layer produces zero errors and zero warnings. |
 
@@ -982,7 +982,7 @@ Each loop creates and destroys 5000 objects of the kind with its largest practic
 | `sanity.vk.wsi.fifo_every_image_in_order` | In FIFO mode N sequential frames with their numbers encoded in pixels are all presented, in order (verified by screen reads). [E] |
 | `sanity.vk.wsi.mailbox_immediate_caps` | MAILBOX and IMMEDIATE are used only if reported; mailbox never shows an older frame after a newer one, and immediate is not slower than FIFO (rates recorded). [E] |
 | `sanity.vk.wsi.out_of_date_suboptimal` | [E] After resizing the window, acquire or present returns VK_ERROR_OUT_OF_DATE_KHR or SUBOPTIMAL_KHR per spec, and a recreated swapchain at the new extent presents correctly. |
-| `sanity.vk.wsi.acquire_timeouts` | AcquireNextImage with timeout 0 and finite timeouts return NOT_READY/TIMEOUT when no image is free, and with the images presented they become available. |
+| `sanity.vk.wsi.acquire_timeouts` | AcquireNextImage with timeout 0 and finite timeouts return NOT_READY/TIMEOUT once every image the swapchain granted is held (beyond minImageCount-relative guaranteed ones SUCCESS is also accepted), and with the images presented they become available. |
 | `sanity.vk.wsi.minimized_and_destroyed` | [E] Presenting to a minimised window and destroying the swapchain/surface/window in various orders never hangs or loses the device. |
 
 #### External
@@ -999,7 +999,7 @@ Each loop creates and destroys 5000 objects of the kind with its largest practic
 | check | contract |
 |---|---|
 | `sanity.fmt.support_bits_match_use` | For each format in D3D9, D3D11 and D3D12 tables, support for sample, render target, blend, UAV, MSAA and display reported by the API equals what actually works and what fails when a bit is absent. |
-| `sanity.fmt.cross_api_equal` | For the formats supported by both D3D11 and D3D12, the support bits and the resulting pixel values from the same upload-render-readback test are identical between the two APIs. |
+| `sanity.fmt.cross_api_equal` | For the formats supported by both D3D11 and D3D12, the resulting pixel values from the same upload-render-readback test are identical between the two APIs; the support bits are recorded as measures, not compared. |
 | `sanity.fmt.roundtrip_uncompressed` | Upload and readback of every uncompressed colour format (8/16/32 bits, UNORM/SNORM/UINT/SINT/FLOAT) returns the exact bytes for copies and values correct at the format's precision for render and sample. |
 | `sanity.fmt.packed_formats` | Packed formats (R10G10B10A2, R11G11B10_FLOAT, R9G9B9E5, B5G6R5, B5G5R5A1, B4G4R4A4) decode and encode to the analytic values when sampled and rendered, with correct handling of denormals/infinity for floats. |
 | `sanity.fmt.bc_blocks` | BC1-BC5 textures uploaded with valid generated blocks sample to values equal to a CPU decoder within the spec's tolerance (endpoints exact), BC6H and BC7 blocks round-trip bit-exactly, and CopyResource of blocks and partial block-aligned updates are bit-exact in D3D11, D3D12, Vulkan and OpenGL. |
@@ -1025,7 +1025,7 @@ Each loop creates and destroys 5000 objects of the kind with its largest practic
 | `sanity.shader.spirv.invalid_fails` | Invalid SPIR-V is invalid usage with undefined behaviour and reaches the host compiler; whether creation failed and whether a message appeared are measures only, and the device still computes correctly afterwards. |
 | `sanity.shader.glsl.versions` | GLSL #version 110 through 460 shaders (those within the context's reported SHADING_LANGUAGE_VERSION) compile and give the analytic output. |
 | `sanity.shader.glsl.invalid_diagnostics` | Invalid GLSL fails with COMPILE_STATUS false and a non-empty info log; programs that fail to link report LINK_STATUS false and glUseProgram gives INVALID_OPERATION. |
-| `sanity.shader.dxbc.invalid_diagnostics` | Invalid HLSL produces diagnostics from D3DCompile, and garbage bytecode passed to CreateVertexShader/PixelShader fails with E_INVALIDARG and does not lose the device. |
+| `sanity.shader.dxbc.invalid_diagnostics` | Invalid HLSL produces diagnostics from D3DCompile, and garbage bytecode passed to CreateVertexShader/PixelShader fails with E_INVALIDARG, garbage or truncated bytecode in a D3D12 pipeline description fails with any failure code, and none of them lose the device. |
 | `sanity.shader.cl.c_and_il` | CL C kernels at each supported -cl-std and IL kernels (when reported) compile and run correctly; build errors give a log. |
 | `sanity.shader.determinism.created_twice` | The same shader/pipeline created twice in one process gives bit-identical output for the same input, in each API. |
 | `sanity.shader.determinism.two_processes` | Two processes concurrently compiling and running the same shaders (D3D, GL, VK, CL) both get identical outputs, and each is unaffected by the other's invalid shaders. |
@@ -1191,14 +1191,14 @@ Each frame encodes its number in pixels so captures can read ordering, drops and
 | `sanity.present.display.idle_then_present` | After seconds of no changes, a single new present still reaches the capture/mirror within a bound. |
 | `sanity.present.latency.input_to_photon_monotonic` | Each frame presented after a SendInput shows in a capture no earlier than the input and the captured sequence has no gaps larger than a bound while typing/moving. |
 
-### 4.21 Errors and robustness (27)
+### 4.21 Errors and robustness (28)
 
 #### Invalid arguments
 
 | check | contract |
 |---|---|
 | `sanity.err.arg.d3d11_invalid_params` | D3D11 calls with null pointers, out-of-range values and invalid descriptors return E_INVALIDARG (or the documented code) and leave the device usable. |
-| `sanity.err.arg.d3d12_invalid_params` | D3D12 creation calls with invalid descriptors return E_INVALIDARG or DXGI_ERROR_UNSUPPORTED and do not crash; the debug layer is not needed. |
+| `sanity.err.arg.d3d12_invalid_params` | D3D12 creation calls with invalid descriptors (zero sizes, unknown formats, invalid dimensions, heap types, queue types, garbage blobs, empty pipeline descriptions, undefined fence flags) return E_INVALIDARG or DXGI_ERROR_UNSUPPORTED and do not crash; a descriptor heap with no descriptors or an invalid heap type has no documented code and is recorded as a measure; a device removed after the invalid usage is allowed and recorded; the debug layer is not needed. |
 | `sanity.err.arg.d3d9_invalid_params` | D3D9 calls with invalid parameters return D3DERR_INVALIDCALL and the device stays usable. |
 | `sanity.err.arg.vulkan_invalid_handles_null` | Vulkan calls that are valid with null handles succeed as documented (vkDestroy* of null, vkFreeMemory null) and valid-usage-compliant error returns are the documented codes. |
 | `sanity.err.arg.opencl_error_codes` | OpenCL calls with invalid values return the code the specification lists (CL_INVALID_VALUE, CL_INVALID_BUFFER_SIZE, CL_INVALID_KERNEL_ARGS, CL_INVALID_WORK_GROUP_SIZE) and the context stays usable. |
@@ -1233,6 +1233,7 @@ Each row below drives a path an application can reach and asserts that the host 
 |---|---|
 | `sanity.err.vk_wrong_queue_family` | [E]: transfer, graphics and compute commands recorded into command buffers of every queue family that lacks the matching capability (for example a transfer-only or video family), then submitted, give only documented results or device loss; skips only when every family supports all three. |
 | `sanity.err.gpu_wait_never_signalled` | [E]: a Vulkan vkCmdWaitEvents on an event nobody sets, a D3D12 queue Wait on a fence value nobody signals and a GL glWaitSync on a sync object created in a shared context that never flushes (so its fence is never reached), each followed by the process ending without setting or signalling anything; the guest sees the work pending or a documented loss. |
+| `sanity.err.vk_host_event_gate` | [E]: a Vulkan vkCmdWaitEvents on an event that the host sets (vkSetEvent) after the work has been pending for 2.6 s, past the kernel ring timeout, in a child process; the fence stays pending or the device is lost, the later vkSetEvent and fence wait return success or a documented loss, and the host and a fresh process stay usable. |
 | `sanity.err.long_running_shader` | [E]: a D3D11, D3D12 and Vulkan compute shader running a bounded loop sized by calibration to about 10 s completes with the analytic result or the device is lost; the time to completion or loss is recorded. |
 | `sanity.err.infinite_shader` | [E]: a D3D11, D3D12, Vulkan and OpenCL compute dispatch whose loop waits for a value in a buffer the CPU never changes (read with atomics so it cannot be removed) is terminated after 3 s of running; the time the guest device takes to report removal or loss is recorded when it does. |
 | `sanity.err.kill_mid_submit` | [E]: child processes of every API submit heavy copy work in a loop and are ended by TerminateProcess at random points, 20 times; the seed is recorded. |
@@ -1267,7 +1268,7 @@ Each row below drives a path an application can reach and asserts that the host 
 | check | contract |
 |---|---|
 | `sanity.bits.parity.operations_same_result` | A set of deterministic compute and render operations produces byte-identical output in 32-bit and 64-bit processes, for each API. |
-| `sanity.bits.parity.integer_widths` | Struct sizes and ABI-visible values (pointer-sized fields, size_t in OpenCL, handle widths) are those the APIs define for each bitness. |
+| `sanity.bits.parity.integer_widths` | Struct sizes and ABI-visible values (pointer-sized fields, size_t in OpenCL, handle widths) are those the APIs define for each bitness; CL_DEVICE_ADDRESS_BITS describes the device, not the process, and is recorded as a measure. |
 | `sanity.bits.parity.data_roundtrip` | The data roundtrip boundary sizes up to what 32-bit address space allows roundtrip intact. |
 | `sanity.bits.share.cross_bitness_nt_handle` | A resource shared by NT handle from a 64-bit process opens in a 32-bit process and the reverse, with identical contents; each executable is the owner in its own run and the other bitness is the opener. |
 | `sanity.bits.share.cross_bitness_fence` | A shared fence signalled in one bitness releases a waiter in the other. |
@@ -1277,7 +1278,7 @@ Each row below drives a path an application can reach and asserts that the host 
 | `sanity.bits.addr.large_address_aware_off` | Without the flag, mappings that do not fit in 2 GiB fail cleanly, and no pointer is above the limit; the flag is cleared in a patched copy of lsw-suites32.exe. (x86) [E] |
 | `sanity.bits.wow64.icd_loading` | All four ICD kinds (D3D UMD, OpenGL, OpenCL, Vulkan) load in a 32-bit process on the 64-bit OS and report the same adapter. (x86) |
 | `sanity.bits.wow64.exit_cleanup` | A 32-bit process exiting with live mappings leaves the system at baseline (device and host-visible memory a new process can allocate stays within 90%). (x86) [E] |
-| `sanity.bits.parity.error_codes` | The error-path checks of invalid arguments return the same codes in both bitnesses. |
+| `sanity.bits.parity.error_codes` | The error-path checks of invalid arguments return the same codes in both bitnesses, and a buffer of CL_DEVICE_MAX_MEM_ALLOC_SIZE + 1 bytes fails with CL_INVALID_BUFFER_SIZE; a sibling that cannot open an API is reported as such. |
 
 ### 4.24 Host invariants (12)
 
@@ -1304,11 +1305,11 @@ Implementation note: a guest process cannot drive the host mirror, so these rows
 
 | check | contract |
 |---|---|
-| `sanity.lsw.mirror.launched_app_appears` | An application launched through the stack shows a mirrored window within a stated time, with the right title and size. |
+| `sanity.lsw.mirror.launched_app_appears` | An application launched through the stack shows a mirrored window within a stated time, with the right title and the client size that its 400x300 outer size leaves. |
 | `sanity.lsw.mirror.relaunching_app` | An app that relaunches itself de-elevated through Explorer is mirrored from its first window, and the mirrored window stays attached to the final process. |
 | `sanity.lsw.mirror.frames_equal_guest` | Frames in the mirror equal the guest's frames bit for bit (after known scaling) and arrive in order with none repeated or skipped for a drawn counter sequence. |
 | `sanity.lsw.window.maximize_work_area` | Maximizing a mirrored window leaves the guest window at the work-area rectangle of its monitor. |
-| `sanity.lsw.window.snap_restore` | Snapping to a half and restoring puts the guest window at the expected half rectangle and then at the original rectangle. |
+| `sanity.lsw.window.snap_restore` | Snapping to a half with Win+Left and restoring with Win+Right puts the guest window at the expected half rectangle and then at the original rectangle. |
 | `sanity.lsw.window.move_resize_guest_follows` | Moving and resizing a mirrored window moves and resizes the guest window to the same rectangle within one pixel. |
 | `sanity.lsw.input.keyboard_to_right_window` | Keyboard input to one of two mirrored windows reaches only that guest window. |
 | `sanity.lsw.input.mouse_position_mapping` | A mouse click at a position in the mirrored window arrives at the matching guest coordinates within one pixel, including at non-100% scaling. |

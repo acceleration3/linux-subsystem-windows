@@ -109,8 +109,20 @@ void TestWindow::outer_size(int x, int y, int client_width, int client_height, i
     height = rect.bottom - rect.top;
 }
 
+void TestWindow::fit_config(TestWindowConfig& config, int client_width, int client_height) {
+    outer_size(config.x, config.y, client_width, client_height, config.width, config.height);
+    if (config.width < ::GetSystemMetrics(SM_CXMINTRACK) || config.height < ::GetSystemMetrics(SM_CYMINTRACK)) {
+        config.popup = true;
+    }
+    if (config.popup) {
+        config.width = client_width;
+        config.height = client_height;
+    }
+}
+
 bool TestWindow::create(const TestWindowConfig& config, std::string& error) {
     destroy();
+    popup_ = config.popup;
     ready_ = false;
     error_.clear();
     thread_ = std::thread([this, config] { pump(config); });
@@ -203,6 +215,17 @@ void TestWindow::hide() {
 void TestWindow::resize(int width, int height) {
     ::SetWindowPos(hwnd_, nullptr, 0, 0, width, height,
                    SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+}
+
+void TestWindow::resize_client(int width, int height) {
+    RECT rect{};
+    ::GetWindowRect(hwnd_, &rect);
+    int outer_width = width;
+    int outer_height = height;
+    if (!popup_) {
+        outer_size(rect.left, rect.top, width, height, outer_width, outer_height);
+    }
+    resize(outer_width, outer_height);
 }
 
 void TestWindow::move(int x, int y) {

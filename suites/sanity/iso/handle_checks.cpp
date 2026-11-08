@@ -55,7 +55,7 @@ Outcome guess_role(Context& context, const std::string& role) {
     std::string error;
     D3d12Rig rig;
     if (!TargetAdapter::pick(adapter, error) || !rig.open_luid(adapter.luid, D3D_FEATURE_LEVEL_11_0, error)) {
-        return Context::skip("D3D12 is unavailable: " + error);
+        return Outcome::fail("D3D12 is unavailable: " + error);
     }
     const std::string parent = ChildMode::variable(L"LSW_SUITES_PARENT_PID");
     int opened = 0;
@@ -92,7 +92,7 @@ Outcome closed_role(Context& context, const std::string& role) {
     std::string error;
     D3d12Rig rig;
     if (!TargetAdapter::pick(adapter, error) || !rig.open_luid(adapter.luid, D3D_FEATURE_LEVEL_11_0, error)) {
-        return Context::skip("D3D12 is unavailable: " + error);
+        return Outcome::fail("D3D12 is unavailable: " + error);
     }
     HANDLE handle = nullptr;
     const HRESULT result = rig.device()->OpenSharedHandleByName(Text::wide(ChildMode::variable(L"LSW_SUITES_SHARE_NAME")).c_str(), GENERIC_ALL, &handle);
@@ -189,7 +189,7 @@ Outcome HandleChecks::no_access_without_handle(Context& context) {
     }
     ID3D12Resource* buffer = shared_buffer(rig, error);
     if (buffer == nullptr) {
-        return Context::skip("resource sharing is unsupported: " + error);
+        return Outcome::fail("a shared D3D12 buffer cannot be created: " + error);
     }
     HANDLE handle = nullptr;
     if (FAILED(rig.device()->CreateSharedHandle(buffer, nullptr, GENERIC_ALL, nullptr, &handle)) || !fill_shared(rig, buffer, error)) {
@@ -232,7 +232,7 @@ Outcome HandleChecks::closed_handle_dead(Context& context) {
         }
         ID3D12Resource* buffer = shared_buffer(rig, error);
         if (buffer == nullptr) {
-            return Context::skip("resource sharing is unsupported: " + error);
+            return Outcome::fail("a shared D3D12 buffer cannot be created: " + error);
         }
         HANDLE handle = nullptr;
         if (FAILED(rig.device()->CreateSharedHandle(buffer, nullptr, GENERIC_ALL, Text::wide(name).c_str(), &handle)) || !fill_shared(rig, buffer, error)) {
@@ -274,7 +274,7 @@ Outcome HandleChecks::read_only_enforced(Context& context) {
     const std::string name = "Local\\lsw-suites-iso-readonly-" + std::to_string(::GetCurrentProcessId());
     HANDLE handle = nullptr;
     if (!view || !resource || FAILED(resource->CreateSharedHandle(nullptr, DXGI_SHARED_RESOURCE_READ, Text::wide(name).c_str(), &handle))) {
-        return Context::skip("a read-only NT-handle shared D3D11 texture cannot be created");
+        return Outcome::fail("a read-only NT-handle shared D3D11 texture cannot be created");
     }
     const float original[4] = {0.2f, 0.4f, 0.6f, 1.0f};
     owner.context->ClearRenderTargetView(view.get(), original);
@@ -285,7 +285,7 @@ Outcome HandleChecks::read_only_enforced(Context& context) {
     opener.device->QueryInterface(__uuidof(ID3D11Device1), opener1.put_void());
     if (!opener1) {
         ::CloseHandle(handle);
-        return Context::skip("ID3D11Device1 is not exposed, so shared handles cannot be opened by name");
+        return Outcome::fail("ID3D11Device1 is not exposed, so shared handles cannot be opened by name");
     }
     Problems problems;
     Com<ID3D11Texture2D> writable;
@@ -356,7 +356,7 @@ Outcome HandleChecks::service_session_separate(Context& context) {
     HANDLE handle = nullptr;
     const std::string name = "Local\\lsw-suites-iso-session-" + std::to_string(::GetCurrentProcessId());
     if (buffer == nullptr || FAILED(rig.device()->CreateSharedHandle(buffer, nullptr, GENERIC_ALL, Text::wide(name).c_str(), &handle))) {
-        return Context::skip("resource sharing is unsupported: " + error);
+        return Outcome::fail("a shared D3D12 buffer cannot be created: " + error);
     }
     std::vector<AvAdapter> own;
     std::string own_keys;

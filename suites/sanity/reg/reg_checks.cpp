@@ -237,7 +237,7 @@ Outcome RegChecks::stats_transfer_counts_plausible(Context& context) {
     std::string error;
     std::unique_ptr<GpuBackend> backend = BackendHarness::open("d3d11", adapter, error);
     if (backend == nullptr) {
-        return Context::skip(error);
+        return Outcome::fail("D3D11 backend: " + error);
     }
     long long uploaded = 0;
     long long read_back = 0;

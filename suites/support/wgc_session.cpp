@@ -259,6 +259,15 @@ WgcOpen WgcSession::open(HWND window, D3d11Device& device, std::string& error) {
         error = "CreateCaptureSession returned " + code(result);
         return unavailable_code(result) ? WgcOpen::Unavailable : WgcOpen::Failed;
     }
+    if (Com<IGraphicsCaptureSession2> cursor; SUCCEEDED(impl_->session->QueryInterface(__uuidof(IGraphicsCaptureSession2), cursor.put_void()))) {
+        (void)cursor->put_IsCursorCaptureEnabled(0);
+    }
+    if (Com<IGraphicsCaptureSession3> border; SUCCEEDED(impl_->session->QueryInterface(__uuidof(IGraphicsCaptureSession3), border.put_void()))) {
+        (void)border->put_IsBorderRequired(0);
+    }
+    if (Com<IGraphicsCaptureSession5> interval; SUCCEEDED(impl_->session->QueryInterface(__uuidof(IGraphicsCaptureSession5), interval.put_void()))) {
+        (void)interval->put_MinUpdateInterval(TimeSpan{10000});
+    }
     result = impl_->session->StartCapture();
     if (FAILED(result)) {
         error = "StartCapture returned " + code(result);

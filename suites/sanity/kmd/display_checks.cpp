@@ -323,7 +323,7 @@ Outcome DisplayChecks::mode_list_all_settable(Context& context) {
     return problems.outcome();
 }
 
-Outcome DisplayChecks::cursor_shapes(Context&) {
+Outcome DisplayChecks::cursor_shapes(Context& context) {
     TestWindow window;
     TestWindowConfig config;
     config.x = 100;
@@ -357,6 +357,17 @@ Outcome DisplayChecks::cursor_shapes(Context&) {
                 ::SetCursor(shape.cursor);
                 ::Sleep(25);
                 matched = ::GetCursorInfo(&info) != FALSE && info.hCursor == shape.cursor && (info.flags & CURSOR_SHOWING) != 0;
+            }
+            if (!matched) {
+                const POINT centre{(area.left + area.right) / 2, (area.top + area.bottom) / 2};
+                bool pumped = false;
+                for (int i = 0; i < 20 && !pumped; ++i) {
+                    ::SetCursorPos(centre.x, centre.y);
+                    ::SendMessageW(window.hwnd(), WM_SETCURSOR, reinterpret_cast<WPARAM>(window.hwnd()), MAKELPARAM(HTCLIENT, WM_MOUSEMOVE));
+                    ::Sleep(25);
+                    pumped = ::GetCursorInfo(&info) != FALSE && info.hCursor == shape.cursor && (info.flags & CURSOR_SHOWING) != 0;
+                }
+                context.measure(std::string("kmd.cursor_shape.") + std::to_string(size) + "." + shape.name + ".shown_after_wm_setcursor", pumped);
             }
             if (!matched) {
                 problems.add(std::string("GetCursorInfo does not reflect the ") + std::to_string(size) + " pixel " + shape.name + " cursor");
