@@ -309,7 +309,11 @@ Outcome GdiLayeredChecks::mixed_windows(Context& context) {
     ::SetWindowPos(gdi.hwnd(), HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     ::RedrawWindow(gdi.hwnd(), nullptr, nullptr, RDW_INVALIDATE | RDW_UPDATENOW);
     std::unique_ptr<WindowPresenter> three_d = WindowPresenter::make("d3d11");
-    if (!three_d->open(200, 120, kClient, kClient, error) || !three_d->present(9, error)) {
+    const bool opened = three_d->open(200, 120, kClient, kClient, error);
+    if (opened) {
+        ::SetWindowPos(three_d->hwnd(), HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    }
+    if (!opened || !three_d->present(9, error)) {
         three_d->close();
         return Outcome::fail("the Direct3D 11 window: " + error);
     }
@@ -406,6 +410,14 @@ Outcome GdiLayeredChecks::mixed_windows(Context& context) {
             ::Sleep(20);
         } while (std::chrono::steady_clock::now() < deadline);
         if (!first.empty()) {
+            int gdi_depth = -1;
+            int d3d_depth = -1;
+            int depth = 0;
+            for (HWND window = ::GetTopWindow(nullptr); window != nullptr; window = ::GetWindow(window, GW_HWNDNEXT), ++depth) {
+                gdi_depth = window == gdi.hwnd() ? depth : gdi_depth;
+                d3d_depth = window == three_d->hwnd() ? depth : d3d_depth;
+            }
+            first += "; the window manager's z-order has the GDI window at depth " + std::to_string(gdi_depth) + " and the Direct3D 11 window at " + std::to_string(d3d_depth);
             problems.add(stage + ": " + first);
             Kit::keep_image(context, Kit::sanitize(stage) + ".screen", shot);
         } else if (checked < 200) {
