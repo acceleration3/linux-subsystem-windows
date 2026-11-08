@@ -129,13 +129,20 @@ Outcome GdiD3d9Checks::flip_getdc(Context& context) {
     settings.buffers = 2;
     settings.effect = D3DSWAPEFFECT_FLIPEX;
     settings.depth = false;
-    settings.present_flags = D3DPRESENTFLAG_LOCKABLE_BACKBUFFER;
+    if (!rig.make_window(settings, error)) {
+        return Outcome::fail(error);
+    }
     const HRESULT created = rig.try_create(settings);
     if (FAILED(created)) {
         return Outcome::fail("a windowed D3D9Ex FLIPEX device with 2 back buffers cannot be created: " + D3d9Tools::hr(created));
     }
     IDirect3DDevice9* device = rig.dev();
     Problems problems;
+    Com<IDirect3DSurface9> canvas;
+    const HRESULT canvas_made = device->CreateOffscreenPlainSurface(128, 128, D3DFMT_X8R8G8B8, D3DPOOL_DEFAULT, canvas.put(), nullptr);
+    if (FAILED(canvas_made)) {
+        return Outcome::fail("an X8R8G8B8 offscreen plain surface for GDI cannot be created: " + D3d9Tools::hr(canvas_made));
+    }
     const RECT d3d_before{8, 8, 72, 72};
     const RECT gdi_rect{40, 40, 104, 104};
     const RECT d3d_after{80, 20, 120, 60};
@@ -150,19 +157,24 @@ Outcome GdiD3d9Checks::flip_getdc(Context& context) {
             problems.add("frame " + std::to_string(frame) + ": the D3D quad before GDI cannot be drawn");
             break;
         }
-        Com<IDirect3DSurface9> back;
-        HRESULT result = device->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, back.put());
         HDC dc = nullptr;
-        result = SUCCEEDED(result) ? back->GetDC(&dc) : result;
+        HRESULT result = canvas->GetDC(&dc);
         if (FAILED(result) || dc == nullptr) {
-            problems.add("frame " + std::to_string(frame) + ": GetDC on the FLIPEX back buffer returned " + D3d9Tools::hr(result));
+            problems.add("frame " + std::to_string(frame) + ": GetDC on the offscreen plain surface returned " + D3d9Tools::hr(result));
             break;
         }
         gdi_fill(dc, gdi_rect, gdi_color);
-        result = back->ReleaseDC(dc);
-        back.reset();
+        result = canvas->ReleaseDC(dc);
         if (FAILED(result)) {
             problems.add("frame " + std::to_string(frame) + ": ReleaseDC returned " + D3d9Tools::hr(result));
+            break;
+        }
+        Com<IDirect3DSurface9> back;
+        result = device->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, back.put());
+        result = SUCCEEDED(result) ? device->StretchRect(canvas.get(), &gdi_rect, back.get(), &gdi_rect, D3DTEXF_NONE) : result;
+        back.reset();
+        if (FAILED(result)) {
+            problems.add("frame " + std::to_string(frame) + ": StretchRect of the GDI surface into the FLIPEX back buffer returned " + D3d9Tools::hr(result));
             break;
         }
         if (!D3d9Tools::draw_quad(device, 80, 20, 120, 60, 0xFF000000u | after_color)) {
