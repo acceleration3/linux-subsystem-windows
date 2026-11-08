@@ -83,10 +83,7 @@ public:
         if (interval == 0) {
             return (caps.PresentationIntervals & D3DPRESENT_INTERVAL_IMMEDIATE) != 0;
         }
-        if (interval == 1) {
-            return true;
-        }
-        return flip_ && interval == 2 && (caps.PresentationIntervals & D3DPRESENT_INTERVAL_TWO) != 0;
+        return interval == 1;
     }
 
     [[nodiscard]] bool supports_image() const override { return true; }

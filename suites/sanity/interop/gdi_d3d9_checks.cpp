@@ -129,6 +129,7 @@ Outcome GdiD3d9Checks::flip_getdc(Context& context) {
     settings.buffers = 2;
     settings.effect = D3DSWAPEFFECT_FLIPEX;
     settings.depth = false;
+    settings.present_flags = D3DPRESENTFLAG_LOCKABLE_BACKBUFFER;
     const HRESULT created = rig.try_create(settings);
     if (FAILED(created)) {
         return Outcome::fail("a windowed D3D9Ex FLIPEX device with 2 back buffers cannot be created: " + D3d9Tools::hr(created));
