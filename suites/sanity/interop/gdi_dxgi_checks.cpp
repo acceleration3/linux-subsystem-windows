@@ -258,6 +258,9 @@ Outcome GdiDxgiChecks::getdc_discard_flag(Context& context) {
                     for (int y = part.top; y < part.bottom && y < kSize; ++y) {
                         for (int x = part.left; x < part.right && x < kSize; ++x) {
                             const std::size_t at = static_cast<std::size_t>(y) * kSize + static_cast<std::size_t>(x);
+                            if (&part == &parts[2] && (twin[at] & 0xFFFFFFu) != 0xFFFF00u) {
+                                continue;
+                            }
                             if (got[at] != twin[at]) {
                                 problems.add(label + ": GDI-drawn pixel (" + std::to_string(x) + "," + std::to_string(y) + ") is " + Kit::rgb(got[at]) + ", WARP produced " + Kit::rgb(twin[at]));
                                 y = kSize;

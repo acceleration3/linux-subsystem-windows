@@ -158,6 +158,8 @@ Outcome GdiCaptureChecks::cursor_in_captures(Context& context) {
         if (!Kit::settle_screen(context, label + ".content", area, want, 0, 3000, detail)) {
             problems.add(label + ": the window never showed its content: " + detail);
         } else {
+            POINT original{};
+            const bool restore = ::GetCursorPos(&original) != FALSE;
             ::SetCursorPos(static_cast<int>(area.left) + 40, static_cast<int>(area.top) + 50);
             ::Sleep(150);
             POINT position{};
@@ -191,6 +193,9 @@ Outcome GdiCaptureChecks::cursor_in_captures(Context& context) {
                         Kit::judge(context, problems, label + ".with_cursor", with_cursor, 0, 0, kSize, kSize, expected_pixels, 0);
                     }
                 }
+            }
+            if (restore) {
+                ::SetCursorPos(original.x, original.y);
             }
         }
         if (presenter) {
