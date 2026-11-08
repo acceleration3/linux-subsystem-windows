@@ -97,7 +97,7 @@ Outcome ProcessChecks::many_processes(Context& context) {
         options.timeout_seconds = 120;
         options.env = {{"LSW_SUITES_PRESENT_PATH", chosen[i]},
                        {"LSW_SUITES_PRESENT_X", std::to_string(20 + static_cast<int>(i) * 200)},
-                       {"LSW_SUITES_PRESENT_BASE", std::to_string(static_cast<int>(i) * 16)},
+                       {"LSW_SUITES_PRESENT_BASE", std::to_string(static_cast<int>(i) * kSteps)},
                        {"LSW_SUITES_PRESENT_READY", stem + "-ready"},
                        {"LSW_SUITES_PRESENT_GO", stem + "-go"}};
         runners.emplace_back([&results, i, options] { results[i] = ChildRuns::run_self(kCheckId, options); });
