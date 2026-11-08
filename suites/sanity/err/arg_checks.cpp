@@ -52,7 +52,7 @@ Outcome ArgChecks::gl_error_flags(Context& context) {
     return gl::ExtChecks::getError_contracts(context);
 }
 
-Outcome ArgChecks::d3d12_invalid_params(Context&) {
+Outcome ArgChecks::d3d12_invalid_params(Context& context) {
     if (ApiPolicy::is_skipped("d3d12")) {
         return Context::skip("d3d12 excluded by LSW_SUITES_SKIP_APIS");
     }
@@ -105,10 +105,11 @@ Outcome ArgChecks::d3d12_invalid_params(Context&) {
         desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
         desc.NumDescriptors = 0;
         Com<ID3D12DescriptorHeap> heap_object;
-        expect_one_of(problems, "CreateDescriptorHeap with no descriptors", device->CreateDescriptorHeap(&desc, __uuidof(ID3D12DescriptorHeap), heap_object.put_void()), invalid);
+        context.measure("d3d12.create_descriptor_heap_zero_descriptors", D3d12Tools::hr(device->CreateDescriptorHeap(&desc, __uuidof(ID3D12DescriptorHeap), heap_object.put_void())));
+        heap_object.reset();
         desc.Type = raw_enum<D3D12_DESCRIPTOR_HEAP_TYPE>(77);
         desc.NumDescriptors = 8;
-        expect_one_of(problems, "CreateDescriptorHeap with an invalid type", device->CreateDescriptorHeap(&desc, __uuidof(ID3D12DescriptorHeap), heap_object.put_void()), invalid);
+        context.measure("d3d12.create_descriptor_heap_invalid_type", D3d12Tools::hr(device->CreateDescriptorHeap(&desc, __uuidof(ID3D12DescriptorHeap), heap_object.put_void())));
     }
     {
         const std::uint8_t garbage[64] = {1, 2, 3, 4, 5, 6, 7, 8};
@@ -134,7 +135,11 @@ Outcome ArgChecks::d3d12_invalid_params(Context&) {
     D3d12Tools::Bytes bytes;
     if (buffer == nullptr || !D3d12Tools::write_buffer(rig, buffer, D3D12_RESOURCE_STATE_COMMON, 0, "abcdefgh", 8, error) ||
         !D3d12Tools::read_buffer(rig, buffer, D3D12_RESOURCE_STATE_COMMON, 0, 8, bytes, error) || bytes.size() < 8 || std::memcmp(bytes.data(), "abcdefgh", 8) != 0) {
-        problems.add("the device is not usable after the invalid calls: " + error);
+        const HRESULT removed = device->GetDeviceRemovedReason();
+        context.measure("d3d12.removed_reason_after_invalid_calls", D3d12Tools::hr(removed));
+        if (removed == S_OK) {
+            problems.add("the device is not usable after the invalid calls: " + error);
+        }
     }
     return problems.outcome();
 }

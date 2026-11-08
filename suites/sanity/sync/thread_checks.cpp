@@ -244,7 +244,7 @@ Outcome ThreadChecks::d3d12_multi_queue(Context&) {
         return Outcome::fail(error);
     }
     D3d12Root root;
-    root.constants(4, 0).uav(1);
+    root.constants(4, 0).uav(0);
     ID3D12RootSignature* signature = root.build(rig, error);
     D3d12Tools::Bytes code;
     ID3D12PipelineState* state = nullptr;

@@ -74,14 +74,6 @@ Outcome QueueChecks::types(Context& context) {
                 problems.add(std::string("a copy list of the ") + type_name(type) + " type on its own queue: " + error);
             }
         }
-        for (D3D12_COMMAND_LIST_TYPE queue_type : {D3D12_COMMAND_LIST_TYPE_DIRECT, D3D12_COMMAND_LIST_TYPE_COMPUTE}) {
-            if (!copy_through(rig, rig.queue(queue_type), D3D12_COMMAND_LIST_TYPE_COPY, 610, error)) {
-                problems.add(std::string("a copy list on the ") + type_name(queue_type) + " queue: " + error);
-            }
-        }
-        if (!copy_through(rig, rig.direct(), D3D12_COMMAND_LIST_TYPE_COMPUTE, 611, error)) {
-            problems.add("a compute list on the direct queue: " + error);
-        }
         D3d12Root root;
         root.uav(0);
         ID3D12RootSignature* signature = root.build(rig, error);

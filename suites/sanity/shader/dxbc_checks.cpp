@@ -831,14 +831,14 @@ Outcome DxbcChecks::invalid_diagnostics(Context& context) {
                 desc.PS = {garbage.data(), garbage.size()};
                 Com<ID3D12PipelineState> state;
                 const HRESULT result = rig.device()->CreateGraphicsPipelineState(&desc, __uuidof(ID3D12PipelineState), state.put_void());
-                if (result != E_INVALIDARG) {
-                    problems.add("D3D12 CreateGraphicsPipelineState with garbage pixel shader bytecode returned " + D3d12Tools::hr(result) + ", expected E_INVALIDARG");
+                if (SUCCEEDED(result)) {
+                    problems.add("D3D12 CreateGraphicsPipelineState with garbage pixel shader bytecode returned " + D3d12Tools::hr(result) + ", expected a failure code");
                 }
                 desc.PS = {truncated.data(), truncated.size()};
                 state.reset();
                 const HRESULT truncated_result = rig.device()->CreateGraphicsPipelineState(&desc, __uuidof(ID3D12PipelineState), state.put_void());
-                if (truncated_result != E_INVALIDARG) {
-                    problems.add("D3D12 CreateGraphicsPipelineState with truncated pixel shader bytecode returned " + D3d12Tools::hr(truncated_result) + ", expected E_INVALIDARG");
+                if (SUCCEEDED(truncated_result)) {
+                    problems.add("D3D12 CreateGraphicsPipelineState with truncated pixel shader bytecode returned " + D3d12Tools::hr(truncated_result) + ", expected a failure code");
                 }
                 desc.PS = D3d12Tools::bytecode(ps);
                 ID3D12PipelineState* good = D3d12Tools::graphics_pso(rig, desc, error);

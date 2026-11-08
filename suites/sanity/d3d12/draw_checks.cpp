@@ -279,6 +279,13 @@ Outcome DrawChecks::draw_variants(Context& context) {
             }
             Kit::compare_words(context, problems, label, quad_image(drawn), Kit::image_words(image));
         };
+        const D3D12_VERTEX_BUFFER_VIEW vertex_view{vertex_buffer->GetGPUVirtualAddress(), static_cast<UINT>(vertex_bytes), 12};
+        const auto buffer_state = [&](ID3D12GraphicsCommandList* list) {
+            list->SetGraphicsRootSignature(input_signature);
+            list->SetPipelineState(from_buffers);
+            list->IASetVertexBuffers(0, 1, &vertex_view);
+            list->IASetIndexBuffer(&index_view);
+        };
         const std::vector<bool> all = first_quads(0, 16);
         const auto plain_state = [&](ID3D12GraphicsCommandList* list, ID3D12PipelineState* state, UINT base) {
             const UINT values[4] = {base, 0, 0, 0};
@@ -296,8 +303,7 @@ Outcome DrawChecks::draw_variants(Context& context) {
             list->DrawIndexedInstanced(6, 16, 0, 0, 0);
         });
         scene("sixteen DrawIndexedInstanced calls with base vertices", all, [&](ID3D12GraphicsCommandList* list) {
-            plain_state(list, indexed, 0);
-            list->IASetIndexBuffer(&index_view);
+            buffer_state(list);
             for (UINT q = 0; q < 16; ++q) {
                 list->DrawIndexedInstanced(6, 1, 0, static_cast<INT>(4 * q), 0);
             }
@@ -323,23 +329,19 @@ Outcome DrawChecks::draw_variants(Context& context) {
         }
         if (indexed_signature != nullptr) {
             scene("ExecuteIndirect DRAW_INDEXED with 16 commands", all, [&](ID3D12GraphicsCommandList* list) {
-                plain_state(list, indexed, 0);
-                list->IASetIndexBuffer(&index_view);
+                buffer_state(list);
                 list->ExecuteIndirect(indexed_signature, 16, indexed_buffer, 0, nullptr, 0);
             });
             scene("ExecuteIndirect DRAW_INDEXED with a count buffer of 10", first_quads(0, 10), [&](ID3D12GraphicsCommandList* list) {
-                plain_state(list, indexed, 0);
-                list->IASetIndexBuffer(&index_view);
+                buffer_state(list);
                 list->ExecuteIndirect(indexed_signature, 16, indexed_buffer, 0, count_buffer, 0);
             });
             scene("ExecuteIndirect DRAW_INDEXED with a count buffer offset (4 commands)", first_quads(0, 4), [&](ID3D12GraphicsCommandList* list) {
-                plain_state(list, indexed, 0);
-                list->IASetIndexBuffer(&index_view);
+                buffer_state(list);
                 list->ExecuteIndirect(indexed_signature, 8, indexed_buffer, 0, count_buffer, 4);
             });
             scene("ExecuteIndirect DRAW_INDEXED from an argument buffer offset", first_quads(5, 3), [&](ID3D12GraphicsCommandList* list) {
-                plain_state(list, indexed, 0);
-                list->IASetIndexBuffer(&index_view);
+                buffer_state(list);
                 list->ExecuteIndirect(indexed_signature, 3, indexed_buffer, 5 * sizeof(D3D12_DRAW_INDEXED_ARGUMENTS), nullptr, 0);
             });
         }

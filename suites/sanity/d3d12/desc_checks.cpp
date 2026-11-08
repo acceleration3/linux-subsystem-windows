@@ -13,7 +13,7 @@ const char* kTableShader =
     "StructuredBuffer<uint> bufs[N] : register(t0);\n"
     "RWStructuredBuffer<uint> o : register(u0);\n"
     "[numthreads(64, 1, 1)]\n"
-    "void main(uint3 id : SV_DispatchThreadID) { o[id.x] = bufs[id.x][0] ^ id.x; }\n";
+    "void main(uint3 id : SV_DispatchThreadID) { o[id.x] = bufs[NonUniformResourceIndex(id.x)][0] ^ id.x; }\n";
 
 const char* kSamplerShader =
     "Texture2D<float> tex : register(t0);\n"

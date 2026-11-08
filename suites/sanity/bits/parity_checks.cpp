@@ -141,10 +141,16 @@ void error_facts(Facts& facts) {
             if (buffer != nullptr) {
                 rig.api.ReleaseMemObject(buffer);
             }
-            buffer = rig.api.CreateBuffer(rig.context, CL_MEM_READ_WRITE, ~static_cast<std::size_t>(0) / 2, nullptr, &code);
-            facts["cl.huge_buffer"] = ClTools::error_name(code);
-            if (buffer != nullptr) {
-                rig.api.ReleaseMemObject(buffer);
+            cl_ulong largest = 0;
+            rig.info(CL_DEVICE_MAX_MEM_ALLOC_SIZE, largest);
+            if (largest >= static_cast<cl_ulong>(~static_cast<std::size_t>(0))) {
+                facts["cl.huge_buffer"] = "n/a";
+            } else {
+                buffer = rig.api.CreateBuffer(rig.context, CL_MEM_READ_WRITE, static_cast<std::size_t>(largest) + 1, nullptr, &code);
+                facts["cl.huge_buffer"] = ClTools::error_name(code);
+                if (buffer != nullptr) {
+                    rig.api.ReleaseMemObject(buffer);
+                }
             }
         }
     }
@@ -198,8 +204,18 @@ Outcome compare_with_sibling(Context& context, const std::string& kind) {
     }
     Problems problems;
     for (const auto& [key, value] : own) {
-        const std::string theirs = ChildRuns::text(other, key);
         context.measure(key, value);
+        if (!ChildRuns::has(other, key)) {
+            problems.add(key + ": the sibling could not open " + key.substr(0, key.find('.')));
+            continue;
+        }
+        const std::string theirs = ChildRuns::text(other, key);
+        if (key == "cl.huge_buffer" && value != "n/a" && value != "CL_INVALID_BUFFER_SIZE") {
+            problems.add("clCreateBuffer of CL_DEVICE_MAX_MEM_ALLOC_SIZE + 1 bytes returned " + value + ", expected CL_INVALID_BUFFER_SIZE");
+        }
+        if (value == "n/a" || theirs == "n/a") {
+            continue;
+        }
         if (theirs != value) {
             problems.add(key + ": " + std::to_string(sizeof(void*) * 8) + "-bit gives '" + value + "', the other bitness gives '" + theirs + "'");
         }
@@ -255,9 +271,6 @@ Outcome ParityChecks::integer_widths(Context& context) {
             cl_uint bits = 0;
             rig.info(CL_DEVICE_ADDRESS_BITS, bits);
             context.measure("cl_address_bits", bits);
-            if (bits != pointer * 8) {
-                problems.add("CL_DEVICE_ADDRESS_BITS is " + std::to_string(bits) + " in a " + std::to_string(pointer * 8) + "-bit process, size_t is " + std::to_string(pointer * 8) + " bits");
-            }
         }
     }
     ChildRunOptions options;

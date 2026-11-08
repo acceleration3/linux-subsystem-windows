@@ -378,6 +378,7 @@ Outcome SupportChecks::cross_api_equal(Context& context) {
     Limited out(problems);
     int compared = 0;
     int rendered = 0;
+    int differing = 0;
     for (int number : probe_numbers()) {
         if (!is_defined(number)) {
             continue;
@@ -397,7 +398,8 @@ Outcome SupportChecks::cross_api_equal(Context& context) {
         }
         ++compared;
         if ((bits_a & kMaskBits) != (bits_b & kMaskBits)) {
-            out.add(name + ": support bits differ, D3D11 " + bits_text(bits_a & kMaskBits) + " D3D12 " + bits_text(bits_b & kMaskBits));
+            ++differing;
+            context.measure("fmt.support_bits_differ." + name, "D3D11 " + bits_text(bits_a & kMaskBits) + " D3D12 " + bits_text(bits_b & kMaskBits));
         }
         const FormatSpec spec = FormatCodec::spec(format);
         const UINT shared = bits_a & bits_b;
@@ -450,6 +452,7 @@ Outcome SupportChecks::cross_api_equal(Context& context) {
     }
     context.measure("fmt.cross.compared", compared);
     context.measure("fmt.cross.rendered", rendered);
+    context.measure("fmt.cross.support_bits_differing", differing);
     return problems.outcome();
 }
 

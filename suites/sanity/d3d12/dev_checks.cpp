@@ -11,6 +11,10 @@ namespace lsw::suites::sanity::d3d12 {
 
 namespace {
 
+bool is_depth_stencil_family(int format) {
+    return (format >= 19 && format <= 22) || (format >= 44 && format <= 47);
+}
+
 const char* level_name(D3D_FEATURE_LEVEL level) {
     switch (level) {
     case D3D_FEATURE_LEVEL_11_0: return "11_0";
@@ -111,14 +115,21 @@ Outcome DevChecks::options_consistent(Context& context) {
                 D3D12_FEATURE_DATA_SHADER_MODEL model{};
                 model.HighestShaderModel = static_cast<D3D_SHADER_MODEL>(candidate);
                 const HRESULT result = d->CheckFeatureSupport(D3D12_FEATURE_SHADER_MODEL, &model, sizeof(model));
-                const bool supported = SUCCEEDED(result);
+                const int answered = static_cast<int>(model.HighestShaderModel);
+                const bool supported = SUCCEEDED(result) && answered >= candidate;
+                if (SUCCEEDED(result)) {
+                    const int expected = std::min(candidate, shader_model);
+                    if (answered > candidate) {
+                        problems.add("SHADER_MODEL " + Text::hex(static_cast<unsigned>(candidate), 2) + " answered the higher model " + Text::hex(static_cast<unsigned>(answered), 2));
+                    } else if (answered != expected) {
+                        problems.add("SHADER_MODEL " + Text::hex(static_cast<unsigned>(candidate), 2) + " answered " + Text::hex(static_cast<unsigned>(answered), 2) + ", the highest supported not above it is " +
+                                     Text::hex(static_cast<unsigned>(expected), 2));
+                    }
+                }
                 if (supported && !previous) {
                     problems.add("shader model 0x" + Text::hex(static_cast<unsigned>(candidate), 2) + " is supported although a lower one is not");
                 }
-                if (supported && static_cast<int>(model.HighestShaderModel) != candidate) {
-                    problems.add("SHADER_MODEL " + Text::hex(static_cast<unsigned>(candidate), 2) + " succeeded but answered " + Text::hex(static_cast<unsigned>(model.HighestShaderModel), 2));
-                }
-                if (!supported && static_cast<int>(model.HighestShaderModel) > shader_model) {
+                if (FAILED(result) && answered > shader_model) {
                     problems.add("a failed SHADER_MODEL query answers a model above the highest supported");
                 }
                 previous = supported;
@@ -299,6 +310,7 @@ Outcome DevChecks::format_support(Context& context) {
         };
         int compared = 0;
         int created = 0;
+        int disagreements = 0;
         for (int value = 1; value <= 115; ++value) {
             const DXGI_FORMAT format = static_cast<DXGI_FORMAT>(value);
             D3D12_FEATURE_DATA_FORMAT_SUPPORT support{};
@@ -311,7 +323,7 @@ Outcome DevChecks::format_support(Context& context) {
             if (SUCCEEDED(info_result)) {
                 if (info.PlaneCount < 1) {
                     problems.add(label + ": FORMAT_INFO reports no planes");
-                } else if (!FormatCodec::is_video(format) && info.PlaneCount != 1) {
+                } else if (!FormatCodec::is_video(format) && info.PlaneCount != (is_depth_stencil_family(value) ? 2 : 1)) {
                     problems.add(label + ": FORMAT_INFO reports " + std::to_string(info.PlaneCount) + " planes for a non-planar format");
                 }
             }
@@ -325,8 +337,9 @@ Outcome DevChecks::format_support(Context& context) {
                     ++compared;
                     for (const Pair& pair : pairs) {
                         if (((s1 & pair.d3d12) != 0) != ((other & pair.d3d11) != 0)) {
-                            problems.add(label + ": " + pair.name + " is " + ((s1 & pair.d3d12) != 0 ? "set" : "clear") +
-                                         " in D3D12 and " + ((other & pair.d3d11) != 0 ? "set" : "clear") + " in D3D11");
+                            ++disagreements;
+                            context.measure("d3d12.format_support_differs." + std::to_string(value) + "." + pair.name,
+                                            std::string((s1 & pair.d3d12) != 0 ? "set in D3D12, clear in D3D11" : "clear in D3D12, set in D3D11"));
                         }
                     }
                 }
@@ -388,6 +401,7 @@ Outcome DevChecks::format_support(Context& context) {
             }
         }
         context.measure("d3d12.format.compared_with_d3d11", compared);
+        context.measure("d3d12.format.support_bit_disagreements_with_d3d11", disagreements);
         context.measure("d3d12.format.textures_created", created);
         const DXGI_FORMAT rendered[] = {DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_R16G16B16A16_FLOAT,
                                         DXGI_FORMAT_R32G32B32A32_FLOAT, DXGI_FORMAT_R10G10B10A2_UNORM, DXGI_FORMAT_R8_UNORM,

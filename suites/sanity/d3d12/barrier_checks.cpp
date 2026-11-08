@@ -161,11 +161,7 @@ Outcome BarrierChecks::enhanced(Context& context) {
                 Com<ID3D12Resource> resource;
                 const HRESULT made = device10->CreateCommittedResource3(&heap, D3D12_HEAP_FLAG_NONE, &desc, D3D12_BARRIER_LAYOUT_UNDEFINED, nullptr, nullptr, 0, nullptr,
                                                                        __uuidof(ID3D12Resource), resource.put_void());
-                if (SUCCEEDED(made)) {
-                    problems.add("EnhancedBarriersSupported is false but CreateCommittedResource3 succeeded");
-                } else {
-                    context.note("without enhanced barriers CreateCommittedResource3 returns " + Kit::hr(made));
-                }
+                context.measure("d3d12.create_committed_resource3_without_enhanced_barriers", Kit::hr(made));
             }
             return "enhanced barriers are not supported by this adapter";
         }

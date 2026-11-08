@@ -645,11 +645,27 @@ Outcome HeapChecks::committed_flags(Context& context) {
             cases.push_back({"texture, ALLOW_ALL_BUFFERS_AND_TEXTURES", D3D12_HEAP_FLAG_ALLOW_ALL_BUFFERS_AND_TEXTURES, plain, true, true, true});
         }
         int accepted_invalid = 0;
+        int differing_from_warp = 0;
+        D3d12Rig warp;
+        std::string warp_error;
+        const bool have_warp = warp.open_warp(D3D_FEATURE_LEVEL_11_0, warp_error);
         for (const Case& item : cases) {
             HRESULT made = S_OK;
             const bool is_buffer = item.desc.Dimension == D3D12_RESOURCE_DIMENSION_BUFFER;
             ID3D12Resource* resource = D3d12Tools::committed(rig, D3d12Tools::heap_props(D3D12_HEAP_TYPE_DEFAULT), item.flags, item.desc,
                                                              D3D12_RESOURCE_STATE_COMMON, nullptr, &made);
+            if (have_warp) {
+                HRESULT reference = S_OK;
+                ID3D12Resource* twin = D3d12Tools::committed(warp, D3d12Tools::heap_props(D3D12_HEAP_TYPE_DEFAULT), item.flags, item.desc, D3D12_RESOURCE_STATE_COMMON, nullptr, &reference);
+                if ((twin != nullptr) != (resource != nullptr)) {
+                    ++differing_from_warp;
+                    context.measure(std::string("d3d12.committed_flags_vs_warp.") + item.name, std::string("accelerated ") + (resource != nullptr ? "accepts" : "rejects with " + Kit::hr(made)) + ", WARP " +
+                                                                                                  (twin != nullptr ? "accepts" : "rejects with " + Kit::hr(reference)));
+                }
+                if (twin != nullptr) {
+                    warp.release(twin);
+                }
+            }
             if (item.valid) {
                 if (resource == nullptr) {
                     problems.add(std::string(item.name) + " failed with " + Kit::hr(made));
@@ -683,6 +699,7 @@ Outcome HeapChecks::committed_flags(Context& context) {
             }
         }
         context.measure("d3d12.accepted_contradictory_combinations", accepted_invalid);
+        context.measure("d3d12.committed_flags_differing_from_warp", have_warp ? std::to_string(differing_from_warp) : "WARP12 unavailable: " + warp_error);
         return {};
     });
 }

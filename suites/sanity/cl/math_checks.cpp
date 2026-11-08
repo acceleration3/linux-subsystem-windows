@@ -330,7 +330,8 @@ void check_integers(ClRig& rig, Context& context, Problems& problems) {
 }
 
 float round_toward(std::int64_t value, int mode) {
-    const float nearest = static_cast<float>(value);
+    volatile float stored = static_cast<float>(value);
+    const float nearest = stored;
     const std::int64_t back = static_cast<std::int64_t>(nearest);
     const bool down = mode == 3 || (mode == 1 && value >= 0);
     const bool up = mode == 2 || (mode == 1 && value < 0);

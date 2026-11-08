@@ -16,10 +16,6 @@ namespace {
 
 constexpr UINT64 kBytes = 256 * 1024;
 
-bool shareable(HRESULT result) {
-    return result != E_NOTIMPL && result != D3d12Tools::kUnsupported;
-}
-
 }  // namespace
 
 Outcome ShareChecks::heap_resource_nt(Context& context) {
@@ -67,9 +63,6 @@ Outcome ShareChecks::heap_resource_nt(Context& context) {
         HANDLE handle = nullptr;
         made = d->CreateSharedHandle(buffer, nullptr, GENERIC_ALL, Text::wide(name).c_str(), &handle);
         if (FAILED(made)) {
-            if (!shareable(made)) {
-                return "resource sharing is unsupported: CreateSharedHandle returned " + Kit::hr(made);
-            }
             problems.add("CreateSharedHandle of a shared buffer returned " + Kit::hr(made));
             return {};
         }
