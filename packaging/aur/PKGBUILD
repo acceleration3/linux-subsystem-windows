@@ -13,7 +13,7 @@ conflicts=('lsw')
 depends=(
     'qt6-base>=6.12' 'libvirt' 'libisofs' 'libvncserver' 'wimlib' 'hivex'
     'spdlog' 'fmt' 'zlib' 'wayland' 'libxkbcommon' 'libdrm'
-    'vulkan-icd-loader' 'ocl-icd' 'libglvnd' 'libpipewire'
+    'vulkan-icd-loader' 'ocl-icd' 'libglvnd' 'libpipewire' 'spirv-tools'
     'glib2' 'pixman' 'gnutls' 'libpng' 'libjpeg-turbo' 'libsasl' 'snappy' 'lzo'
     'zstd' 'numactl' 'keyutils' 'libslirp' 'libbpf'
     'libelf' 'libcbor' 'systemd-libs' 'libseccomp' 'dtc' 'pam' 'fuse3'
