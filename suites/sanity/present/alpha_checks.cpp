@@ -130,6 +130,7 @@ Outcome AlphaChecks::alpha_modes(Context& context) {
     }
     rig.chain.reset();
     static_cast<void>(D3d11Tools::wait_event(rig.device, rig.device.context, error));
+    rig.window.destroy();
     DynLibrary library;
     CreateDevice create_device = library.load("dcomp.dll") ? library.symbol<CreateDevice>("DCompositionCreateDevice") : nullptr;
     if (create_device == nullptr) {
