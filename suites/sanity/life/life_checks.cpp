@@ -87,9 +87,15 @@ struct Marker {
         if (!window.create(config, error)) {
             return false;
         }
-        window.paint_with(color);
+        paint(color);
         ::GetWindowRect(window.hwnd(), &area);
         return true;
+    }
+
+    void paint(COLORREF color) {
+        window.paint_with(color);
+        ::InvalidateRect(window.hwnd(), nullptr, TRUE);
+        ::UpdateWindow(window.hwnd());
     }
 };
 
@@ -107,7 +113,7 @@ Outcome with_marker_after(Context& context, const std::function<bool(std::string
     if (!disturb(error)) {
         return Outcome::fail(error);
     }
-    marker.window.paint_with(color);
+    marker.paint(color);
     double recovered = 0;
     const bool back = Kit::desktop_shows(marker.area, color, static_cast<int>(limit_ms), recovered);
     context.measure("desktop_recovered_ms", recovered);
@@ -490,7 +496,7 @@ Outcome LifeChecks::display_output_off_on(Context& context) {
     if (on != ERROR_SUCCESS) {
         problems.add("restoring the saved display configuration returned " + std::to_string(on));
     }
-    marker.window.paint_with(color);
+    marker.paint(color);
     double ms = 0;
     if (!Kit::desktop_shows(marker.area, color, 15000, ms)) {
         problems.add("the desktop does not show the marker window within 15 s after the output was switched off and on");
