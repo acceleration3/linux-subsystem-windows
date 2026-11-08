@@ -372,6 +372,11 @@ bool WgcSession::recreate(int width, int height, std::string& error) {
 bool WgcSession::wait_closed(int timeout_ms) {
     const long long deadline = static_cast<long long>(::GetTickCount64()) + timeout_ms;
     while (!impl_->closed.load() && static_cast<long long>(::GetTickCount64()) < deadline) {
+        MSG message;
+        while (::PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
+            ::TranslateMessage(&message);
+            ::DispatchMessageW(&message);
+        }
         ::Sleep(10);
     }
     return impl_->closed.load();
