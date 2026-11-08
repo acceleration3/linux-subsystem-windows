@@ -287,7 +287,15 @@ Outcome DupChecks::dirty_rects_cover_changes(Context& context) {
             }
         }
         if (!seen) {
-            problems.add(what + ": the change never reached the duplicated desktop");
+            Bitmap shot;
+            std::string shot_error;
+            std::string on_screen = "the screen could not be read";
+            const int px = client.left + (expect_changed.left + expect_changed.right) / 2;
+            const int py = client.top + (expect_changed.top + expect_changed.bottom) / 2;
+            if (ScreenCapture::screen({px, py, px + 1, py + 1}, false, shot, shot_error) && shot.width > 0) {
+                on_screen = "a GDI read of the screen shows " + std::to_string(shot.at(0, 0) >> 16 & 255) + "," + std::to_string(shot.at(0, 0) >> 8 & 255) + "," + std::to_string(shot.at(0, 0) & 255) + " where " + std::to_string(expect_colour >> 16 & 255) + "," + std::to_string(expect_colour >> 8 & 255) + "," + std::to_string(expect_colour & 255) + " was painted";
+            }
+            problems.add(what + ": the change never reached the duplicated desktop; " + on_screen + "; the last frame had " + std::to_string(frame.dirty.size()) + " dirty and " + std::to_string(frame.moves.size()) + " move rectangles");
         }
     };
     for (int i = 0; i < 12 && problems.empty(); ++i) {
