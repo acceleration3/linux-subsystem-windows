@@ -10,18 +10,21 @@ namespace lsw::suites::render::d3d10 {
 
 OpenStatus Kit::open(bool use_warp, const rr::CaseSpec& spec, std::string& error) {
     warp = use_warp;
-    const bool level_1 = spec.variant() != 0;
+    const unsigned variant = spec.variant();
+    const bool level_1 = variant != 0;
+    const D3D10_FEATURE_LEVEL1 level = variant == 2 ? D3D10_FEATURE_LEVEL_10_0 : D3D10_FEATURE_LEVEL_10_1;
+    level_10_1 = variant == 1;
     bool created = false;
     if (warp) {
         name = "WARP";
-        created = level_1 ? dev.create_warp1(0, D3D10_FEATURE_LEVEL_10_1, error) : dev.create_warp(0, error);
+        created = level_1 ? dev.create_warp1(0, level, error) : dev.create_warp(0, error);
     } else {
         AvAdapter adapter;
         if (!TargetAdapter::pick(adapter, error)) {
             return OpenStatus::Failed;
         }
         name = adapter.name;
-        created = level_1 ? dev.create1(adapter.luid, 0, D3D10_FEATURE_LEVEL_10_1, error) : dev.create(adapter.luid, 0, error);
+        created = level_1 ? dev.create1(adapter.luid, 0, level, error) : dev.create(adapter.luid, 0, error);
     }
     if (created) {
         if (!spec.multiframe()) {
