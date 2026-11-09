@@ -17,6 +17,8 @@ public:
 
     [[nodiscard]] bool flip_model() const { return flip_; }
 
+    [[nodiscard]] IDXGISwapChain1* chain() const { return chain_.get(); }
+
 private:
     TestWindow window_;
     Com<IDXGISwapChain1> chain_;
