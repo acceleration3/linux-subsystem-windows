@@ -261,12 +261,16 @@ def retarget(xml, gpus, qemu_env=()):
             commandline.remove(arguments[index + 1] if value == "-L" else arguments[index - 1])
     if template is None:
         raise RunFailed(f"the domain has no {GPU_DEVICE}")
+    hybrid_graphics = os.environ.get("LSW_HYBRID_GRAPHICS", "1") != "0"
     template.drop("display")
     template.set("executor", str(EXECUTOR))
     added = []
     for position, gpu in enumerate(gpus):
         device = DeviceProperties(template.text())
         device.set("host-gpu", gpu.uuid)
+        device.drop("hybrid")
+        if hybrid_graphics and len(gpus) > 1:
+            device.set("hybrid", "integrated" if position == 0 else "discrete")
         if position > 0:
             device.set("id", f"{template.get('id') or 'lsw-gpu'}-{position}")
             device.set("addr", f"0x{FIRST_RENDER_SLOT + position - 1:x}")
