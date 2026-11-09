@@ -543,4 +543,5 @@
     X(void, glMapGrid2f, GLint, GLfloat, GLfloat, GLint, GLfloat, GLfloat) \
     X(void, glEvalMesh2, GLenum, GLint, GLint, GLint, GLint) \
     X(void, glEvalCoord2f, GLfloat, GLfloat) \
-    X(void, glDrawMeshTasksNV, GLuint, GLuint)
+    X(void, glDrawMeshTasksNV, GLuint, GLuint) \
+    X(void, glBlendBarrierKHR)

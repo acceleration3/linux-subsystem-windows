@@ -66,3 +66,4 @@ glGenProgramsARB glBindProgramARB glDeleteProgramsARB glProgramStringARB glProgr
 glMapGrid1f glEvalMesh1 glMap1f glEvalCoord1f glMap2f glMapGrid2f glEvalMesh2 glEvalCoord2f
 glFramebufferTextureLayer
 glDrawMeshTasksNV glGetProgramResourceiv
+glBlendBarrierKHR
