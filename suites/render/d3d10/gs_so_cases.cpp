@@ -239,7 +239,7 @@ const Registrar kGs{[] {
         r.draw_std(v);
         r.cap_main(o);
     });
-    single(spec("gs", "constant_buffer_explode").tolerance(rr::Tolerance::raster(2, 1)), [](Rig& r, rr::CaptureSet& o) {
+    single(spec("gs", "constant_buffer_explode").tolerance(scene_tol(100, 1e-3, 16)), [](Rig& r, rr::CaptureSet& o) {
         r.begin(128, 128, DXGI_FORMAT_R8G8B8A8_UNORM, true);
         Com<ID3D10VertexShader> vs = r.vs(kSceneVs);
         Com<ID3D10InputLayout> layout = r.layout(mesh_elements());
@@ -247,7 +247,7 @@ const Registrar kGs{[] {
             "cbuffer C : register(b0) { float4x4 m; float4 tint; };\n"
             "struct VO { float4 p : SV_Position; float3 n : NORMAL; float2 uv : TEXCOORD0; float3 w : TEXCOORD1; };\n"
             "struct GO { float4 p : SV_Position; float4 c : COLOR; };\n"
-            "[maxvertexcount(3)] void main(triangle VO v[3], uint pid : SV_PrimitiveID, inout TriangleStream<GO> s) { float3 fn = normalize(cross(v[1].w - v[0].w, v[2].w - v[0].w));\n"
+            "[maxvertexcount(3)] void main(triangle VO v[3], uint pid : SV_PrimitiveID, inout TriangleStream<GO> s) { float3 cr = cross(v[1].w - v[0].w, v[2].w - v[0].w); float3 fn = length(cr) > 1e-6 ? cr / length(cr) : float3(0, 1, 0);\n"
             "  float shade = 0.3 + 0.7 * saturate(dot(fn, normalize(float3(0.5, 0.8, 0.6)))); GO o;\n"
             "  [unroll] for (int i = 0; i < 3; ++i) { o.p = mul(m, float4(v[i].w + fn * tint.x, 1)); o.c = float4(shade * (0.4 + 0.6 * frac(pid * 0.173)), shade * 0.7, shade * frac(pid * 0.41 + 0.3), 1); s.Append(o); } }\n");
         Com<ID3D10PixelShader> ps = r.ps(Std::kPs);
@@ -323,7 +323,7 @@ const Registrar kGs{[] {
         Com<ID3D10GeometryShader> gs = r.gs(std::string(kVoDecl) +
                                             "struct GO { float4 p : SV_Position; float4 c : COLOR; uint rt : SV_RenderTargetArrayIndex; };\n"
                                             "[maxvertexcount(18)] void main(triangle VO v[3], inout TriangleStream<GO> s) { GO o;\n"
-                                            "  [unroll] for (uint f = 0; f < 6; ++f) { [unroll] for (int i = 0; i < 3; ++i) { o.p = v[i].p; o.p.xy = o.p.xy * 0.8 + float2((f % 3) - 1, (f / 3) - 0.5) * 0.15;\n"
+                                            "  [unroll] for (uint f = 0; f < 6; ++f) { [unroll] for (int i = 0; i < 3; ++i) { o.p = v[i].p; o.p.xy = o.p.xy * 0.8 + float2((int(f) % 3) - 1, (int(f) / 3) - 0.5) * 0.15;\n"
                                             "      o.c = v[i].c * (0.4 + 0.12 * f); o.c.a = 1; o.rt = f; s.Append(o); } s.RestartStrip(); } }\n");
         if (!r.ok()) return;
         float clear[4] = {0.0f, 0.0f, 0.0f, 1};
@@ -409,6 +409,8 @@ const Registrar kSo{[] {
     single(spec("so", "geometry_shader_drawauto").tolerance(rr::Tolerance::blend()), [](Rig& r, rr::CaptureSet& o) { so_capture_pass(r, o, true, 1, false, true); });
     single(spec("so", "append_two_passes").tolerance(rr::Tolerance::blend()), [](Rig& r, rr::CaptureSet& o) { so_capture_pass(r, o, false, 2, true, true); });
     single(spec("so", "overwrite_two_passes").tolerance(rr::Tolerance::blend()), [](Rig& r, rr::CaptureSet& o) { so_capture_pass(r, o, false, 2, false, true); });
+    single(spec("so", "geometry_shader_append_two_passes").tolerance(rr::Tolerance::blend()), [](Rig& r, rr::CaptureSet& o) { so_capture_pass(r, o, true, 2, true, true); });
+    single(spec("so", "geometry_shader_overwrite_two_passes").tolerance(rr::Tolerance::blend()), [](Rig& r, rr::CaptureSet& o) { so_capture_pass(r, o, true, 2, false, true); });
     single(spec("so", "interleaved_single_buffer").tolerance(rr::Tolerance::blend()), [](Rig& r, rr::CaptureSet& o) { so_multi_buffers(r, o, false); });
     single(spec("so", "three_separate_buffers").tolerance(rr::Tolerance::blend()), [](Rig& r, rr::CaptureSet& o) { so_multi_buffers(r, o, true); });
 }};

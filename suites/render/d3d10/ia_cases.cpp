@@ -223,17 +223,17 @@ void run_format(Rig& r, rr::CaptureSet& out, const FormatCase& fc) {
 }
 
 const Registrar kTopologies{[] {
-    single(spec("ia", "topology_point_list").tolerance(rr::Tolerance::raster(6, 1)),
+    single(spec("ia", "topology_point_list").tolerance(lines_tol()),
            [](Rig& r, rr::CaptureSet& o) { run_topology(r, o, D3D10_PRIMITIVE_TOPOLOGY_POINTLIST, ring_points(60, 0.85f)); });
-    single(spec("ia", "topology_line_list").tolerance(rr::Tolerance::raster(6, 1)),
+    single(spec("ia", "topology_line_list").tolerance(lines_tol()),
            [](Rig& r, rr::CaptureSet& o) { run_topology(r, o, D3D10_PRIMITIVE_TOPOLOGY_LINELIST, spokes(16)); });
-    single(spec("ia", "topology_line_strip").tolerance(rr::Tolerance::raster(6, 1)),
+    single(spec("ia", "topology_line_strip").tolerance(lines_tol()),
            [](Rig& r, rr::CaptureSet& o) { run_topology(r, o, D3D10_PRIMITIVE_TOPOLOGY_LINESTRIP, wave(40)); });
     single(spec("ia", "topology_triangle_list").tolerance(rr::Tolerance::blend()),
            [](Rig& r, rr::CaptureSet& o) { run_topology(r, o, D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST, triangles()); });
     single(spec("ia", "topology_triangle_strip").tolerance(rr::Tolerance::blend()),
            [](Rig& r, rr::CaptureSet& o) { run_topology(r, o, D3D10_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP, ribbon(12)); });
-    single(spec("ia", "strip_restart_line").tolerance(rr::Tolerance::raster(6, 1)), [](Rig& r, rr::CaptureSet& o) {
+    single(spec("ia", "strip_restart_line").tolerance(lines_tol()), [](Rig& r, rr::CaptureSet& o) {
         std::vector<std::uint16_t> idx;
         for (unsigned i = 0; i < 20; ++i) idx.push_back(static_cast<std::uint16_t>(i));
         idx.push_back(0xffff);

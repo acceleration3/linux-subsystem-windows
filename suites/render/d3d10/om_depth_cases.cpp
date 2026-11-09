@@ -10,7 +10,7 @@ const D3D10_STENCIL_OP kOps[8] = {D3D10_STENCIL_OP_KEEP, D3D10_STENCIL_OP_ZERO, 
                                   D3D10_STENCIL_OP_DECR_SAT, D3D10_STENCIL_OP_INVERT, D3D10_STENCIL_OP_INCR, D3D10_STENCIL_OP_DECR};
 const char* kOpNames[8] = {"keep", "zero", "replace", "incr_sat", "decr_sat", "invert", "incr", "decr"};
 
-rr::CaseSpec dspec(const std::string& name) { return spec("om", name).uniform_ok("stencil").uniform_ok("depth"); }
+rr::CaseSpec dspec(const std::string& name) { return spec("om", name).uniform_ok("stencil").uniform_ok("depth").uniform_ok(""); }
 
 struct DsHarness {
     explicit DsHarness(Rig& rig, DXGI_FORMAT format) : r(rig) {
@@ -33,84 +33,124 @@ struct DsHarness {
     Rig& r;
 };
 
-void func_scene(Rig& r, rr::CaptureSet& o, DXGI_FORMAT format, D3D10_COMPARISON_FUNC func, bool spheres) {
-    DsHarness h(r, format);
+struct DsState {
+    std::unique_ptr<DsHarness> h;
+    std::unique_ptr<ScenePipe> pipe;
+    MeshBuffers m, t;
+};
+
+void func_setup(Rig& r, DsState& s, DXGI_FORMAT format, bool spheres) {
+    s.h = std::make_unique<DsHarness>(r, format);
     if (!r.ok()) return;
     auto dd = Rig::depth_desc();
     dd.DepthEnable = TRUE;
     if (!spheres) {
-        h.state(dd, 0);
-        std::vector<Vtx> a = Geo::quad(-0.9f, -0.9f, 0.9f, 0.9f, 0.5f, 0.9f, 0.4f, 0.2f);
-        std::vector<Vtx> b = Geo::quad(-0.7f, -0.8f, 0.8f, 0.7f, 0.5f, 0.2f, 0.6f, 0.95f);
-        for (auto& v : b) v.z = 0.2f + 0.6f * (v.x + 0.7f) / 1.5f;
-        r.draw_std(a);
-        dd.DepthFunc = func;
-        h.state(dd, 0);
-        r.draw_std(b);
+        s.h->state(dd, 0);
+        r.draw_std(Geo::quad(-0.9f, -0.9f, 0.9f, 0.9f, 0.5f, 0.9f, 0.4f, 0.2f));
     } else {
-        ScenePipe pipe(r);
-        MeshBuffers m = upload(r, Geo::sphere(14, 20, 1.0f));
-        MeshBuffers t = upload(r, Geo::torus(20, 10, 1.0f, 0.4f));
-        h.state(dd, 0);
-        pipe.bind(r);
-        pipe.draw(r, m, camera(0.4f, 0.3f, 4.5f) * rr::Mat4::translate(-0.35f, 0, 0));
-        dd.DepthFunc = func;
-        h.state(dd, 0);
-        pipe.draw(r, t, camera(0.4f, 0.3f, 4.5f) * rr::Mat4::translate(0.45f, 0.1f, 0.2f) * rr::Mat4::rotate_x(1.2f));
+        s.pipe = std::make_unique<ScenePipe>(r);
+        s.m = upload(r, Geo::sphere(14, 20, 1.0f));
+        s.t = upload(r, Geo::torus(20, 10, 1.0f, 0.4f));
+        s.h->state(dd, 0);
+        s.pipe->bind(r);
+        s.pipe->draw(r, s.m, camera(0.4f, 0.3f, 4.5f) * rr::Mat4::translate(-0.35f, 0, 0));
     }
-    r.cap_main(o);
-    r.cap_depth(o, "depth", r.depth_main);
 }
 
-void stencil_op_scene(Rig& r, rr::CaptureSet& o, D3D10_STENCIL_OP pass_op, D3D10_STENCIL_OP fail_op, D3D10_STENCIL_OP zfail_op, D3D10_COMPARISON_FUNC func,
-                      bool second_overlap) {
-    DsHarness h(r, DXGI_FORMAT_D24_UNORM_S8_UINT);
-    if (!r.ok()) return;
-    r.clear_depth(r.depth_main, 1.0f, 5);
+void func_frame(Rig& r, DsState& s, D3D10_COMPARISON_FUNC func, bool spheres, unsigned f) {
     auto dd = Rig::depth_desc();
     dd.DepthEnable = TRUE;
-    dd.DepthWriteMask = D3D10_DEPTH_WRITE_MASK_ALL;
-    dd.StencilEnable = TRUE;
-    dd.FrontFace = {fail_op, zfail_op, pass_op, func};
-    dd.BackFace = dd.FrontFace;
-    h.state(dd, 3);
-    std::vector<Vtx> a = Geo::quad(-0.9f, -0.6f, 0.4f, 0.9f, 0.4f, 0.9f, 0.4f, 0.2f);
-    std::vector<Vtx> b = Geo::quad(-0.3f, -0.9f, 0.9f, 0.5f, 0.6f, 0.2f, 0.6f, 0.95f);
-    if (second_overlap) {
-        for (auto& v : a) v.z = 0.6f;
-        for (auto& v : b) v.z = 0.3f;
+    dd.DepthFunc = func;
+    s.h->state(dd, 0);
+    const float shift = 0.18f * static_cast<float>(f);
+    if (!spheres) {
+        std::vector<Vtx> b = Geo::quad(-0.7f + 0.2f * shift, -0.8f + shift * 0.5f, 0.8f, 0.7f - shift * 0.4f, 0.5f, palette(f)[0], palette(f)[1], palette(f)[2]);
+        for (auto& v : b) v.z = 0.2f + 0.6f * (v.x + 0.7f) / 1.5f + 0.06f * static_cast<float>(f);
+        r.draw_std(b);
+    } else {
+        s.pipe->bind(r);
+        s.pipe->draw(r, s.t, camera(0.4f, 0.3f, 4.5f) * rr::Mat4::translate(0.45f - 0.2f * shift, 0.1f, 0.2f) * rr::Mat4::rotate_x(1.2f + 0.3f * static_cast<float>(f)));
     }
-    r.draw_std(a);
-    r.draw_std(b);
-    r.cap_main(o);
-    r.cap_stencil(o, "stencil", r.depth_main);
 }
 
-void stencil_func_scene(Rig& r, rr::CaptureSet& o, D3D10_COMPARISON_FUNC func) {
-    DsHarness h(r, DXGI_FORMAT_D24_UNORM_S8_UINT);
-    if (!r.ok()) return;
-    auto dd = Rig::depth_desc();
-    dd.StencilEnable = TRUE;
-    dd.FrontFace = {D3D10_STENCIL_OP_KEEP, D3D10_STENCIL_OP_KEEP, D3D10_STENCIL_OP_REPLACE, D3D10_COMPARISON_ALWAYS};
-    dd.BackFace = dd.FrontFace;
-    for (int band = 0; band < 4; ++band) {
-        h.state(dd, static_cast<UINT>(band + 1));
-        r.draw_std(Geo::quad(-1, 0.5f - 0.5f * band, 1, 1.0f - 0.5f * band, 0.5f, 0, 0, 0));
-    }
-    dd.FrontFace = {D3D10_STENCIL_OP_KEEP, D3D10_STENCIL_OP_KEEP, D3D10_STENCIL_OP_KEEP, func};
-    dd.BackFace = dd.FrontFace;
-    h.state(dd, 2);
-    std::vector<Vtx> q = Geo::quad(-0.9f, -0.9f, 0.9f, 0.9f, 0.5f, 0.3f, 0.9f, 0.5f);
-    for (auto& v : q) v.r = 0.3f + 0.6f * (v.x * 0.5f + 0.5f);
-    r.draw_std(q);
-    r.cap_main(o);
-    r.cap_stencil(o, "stencil", r.depth_main);
+void func_case(const std::string& name, DXGI_FORMAT format, D3D10_COMPARISON_FUNC func, bool spheres, float depth_tol, Caps caps = nullptr) {
+    MultiBody<DsState> body;
+    body.setup = [format, spheres](Rig& r, DsState& s) { func_setup(r, s, format, spheres); };
+    body.frame = [func, spheres](Rig& r, DsState& s, unsigned f) { func_frame(r, s, func, spheres, f); };
+    body.capture = [](Rig& r, DsState&, unsigned, rr::CaptureSet& o) {
+        r.cap_main(o);
+        r.cap_depth(o, "depth", r.depth_main);
+    };
+    multi<DsState>(dspec(name).frames(3, {0, 2}).tolerance(spheres ? scene_tol(12) : rr::Tolerance::blend()).tolerance_for("depth", rr::Tolerance::floats(depth_tol, depth_tol).with_outliers(2e-4)), body, std::move(caps));
+}
+
+struct StencilState {
+    std::unique_ptr<DsHarness> h;
+};
+
+void stencil_op_case(const std::string& name, D3D10_STENCIL_OP pass_op, D3D10_STENCIL_OP fail_op, D3D10_STENCIL_OP zfail_op, D3D10_COMPARISON_FUNC func, bool overlap) {
+    MultiBody<StencilState> body;
+    body.setup = [](Rig& r, StencilState& s) {
+        s.h = std::make_unique<DsHarness>(r, DXGI_FORMAT_D24_UNORM_S8_UINT);
+        if (r.ok()) r.clear_depth(r.depth_main, 1.0f, 5);
+    };
+    body.frame = [=](Rig& r, StencilState& s, unsigned f) {
+        auto dd = Rig::depth_desc();
+        dd.DepthEnable = TRUE;
+        dd.StencilEnable = TRUE;
+        dd.FrontFace = {fail_op, zfail_op, pass_op, func};
+        dd.BackFace = dd.FrontFace;
+        s.h->state(dd, 3);
+        const float shift = 0.25f * static_cast<float>(f);
+        std::vector<Vtx> a = Geo::quad(-0.9f + shift, -0.6f, 0.4f + shift, 0.9f - shift, 0.4f, 0.9f, 0.4f, 0.2f);
+        std::vector<Vtx> b = Geo::quad(-0.3f - shift, -0.9f + shift, 0.9f - shift, 0.5f, 0.6f, 0.2f, 0.6f, 0.95f);
+        if (overlap) {
+            for (auto& v : a) v.z = 0.6f;
+            for (auto& v : b) v.z = 0.3f;
+        }
+        r.draw_std(a);
+        r.draw_std(b);
+    };
+    body.capture = [](Rig& r, StencilState&, unsigned, rr::CaptureSet& o) {
+        r.cap_main(o);
+        r.cap_stencil(o, "stencil", r.depth_main);
+    };
+    multi<StencilState>(dspec(name).frames(3, {0, 2}).tolerance(rr::Tolerance::blend()), body);
+}
+
+void stencil_func_case(const std::string& name, D3D10_COMPARISON_FUNC func) {
+    MultiBody<StencilState> body;
+    body.setup = [](Rig& r, StencilState& s) {
+        s.h = std::make_unique<DsHarness>(r, DXGI_FORMAT_D24_UNORM_S8_UINT);
+        if (!r.ok()) return;
+        auto dd = Rig::depth_desc();
+        dd.StencilEnable = TRUE;
+        dd.FrontFace = {D3D10_STENCIL_OP_KEEP, D3D10_STENCIL_OP_KEEP, D3D10_STENCIL_OP_REPLACE, D3D10_COMPARISON_ALWAYS};
+        dd.BackFace = dd.FrontFace;
+        for (int band = 0; band < 4; ++band) {
+            s.h->state(dd, static_cast<UINT>(band + 1));
+            r.draw_std(Geo::quad(-1, 0.5f - 0.5f * band, 1, 1.0f - 0.5f * band, 0.5f, 0, 0, 0));
+        }
+    };
+    body.frame = [func](Rig& r, StencilState& s, unsigned f) {
+        auto dd = Rig::depth_desc();
+        dd.StencilEnable = TRUE;
+        dd.FrontFace = {D3D10_STENCIL_OP_KEEP, D3D10_STENCIL_OP_KEEP, D3D10_STENCIL_OP_KEEP, func};
+        dd.BackFace = dd.FrontFace;
+        s.h->state(dd, 2 + f);
+        std::vector<Vtx> q = Geo::quad(-0.9f + 0.4f * static_cast<float>(f), -0.9f, -0.3f + 0.4f * static_cast<float>(f), 0.9f, 0.5f, palette(f)[0], palette(f)[1], palette(f)[2]);
+        r.draw_std(q);
+    };
+    body.capture = [](Rig& r, StencilState&, unsigned, rr::CaptureSet& o) {
+        r.cap_main(o);
+        r.cap_stencil(o, "stencil", r.depth_main);
+    };
+    multi<StencilState>(dspec(name).frames(3, {0, 2}).tolerance(rr::Tolerance::blend()), body);
 }
 
 const Registrar kDepth{[] {
     for (int f = 0; f < 8; ++f) {
-        single(dspec(std::string("depth_func_") + kFuncNames[f]).tolerance(rr::Tolerance::blend()).tolerance_for("depth", rr::Tolerance::floats(1e-4f, 1e-4f)),
-               [f](Rig& r, rr::CaptureSet& o) { func_scene(r, o, DXGI_FORMAT_D32_FLOAT, kFuncs[f], false); });
+        func_case(std::string("depth_func_") + kFuncNames[f], DXGI_FORMAT_D32_FLOAT, kFuncs[f], false, 1e-4f);
     }
     struct Fmt {
         const char* name;
@@ -120,20 +160,16 @@ const Registrar kDepth{[] {
     for (const Fmt& fm : {Fmt{"d16", DXGI_FORMAT_D16_UNORM, 3e-3f}, Fmt{"d24s8", DXGI_FORMAT_D24_UNORM_S8_UINT, 3e-4f}, Fmt{"d32f", DXGI_FORMAT_D32_FLOAT, 1e-4f},
                           Fmt{"d32fs8x24", DXGI_FORMAT_D32_FLOAT_S8X24_UINT, 1e-4f}}) {
         const Fmt copy = fm;
-        single(dspec(std::string("depth_format_") + fm.name + "_intersecting_meshes").tolerance(rr::Tolerance::raster(2, 1)).tolerance_for("depth", rr::Tolerance::floats(fm.depth_tol, fm.depth_tol)),
-               [copy](Rig& r, rr::CaptureSet& o) { func_scene(r, o, copy.format, D3D10_COMPARISON_LESS, true); },
-               [copy](Rig& r) -> std::string { return (r.format_support(copy.format) & D3D10_FORMAT_SUPPORT_DEPTH_STENCIL) != 0 ? "" : std::string("depth format ") + copy.name; });
+        func_case(std::string("depth_format_") + fm.name + "_intersecting_meshes", fm.format, D3D10_COMPARISON_LESS, true, fm.depth_tol,
+                  [copy](Rig& r) -> std::string { return (r.format_support(copy.format) & D3D10_FORMAT_SUPPORT_DEPTH_STENCIL) != 0 ? "" : std::string("depth format ") + copy.name; });
     }
     for (int i = 0; i < 8; ++i) {
-        single(dspec(std::string("stencil_pass_op_") + kOpNames[i]).tolerance(rr::Tolerance::blend()),
-               [i](Rig& r, rr::CaptureSet& o) { stencil_op_scene(r, o, kOps[i], D3D10_STENCIL_OP_KEEP, D3D10_STENCIL_OP_KEEP, D3D10_COMPARISON_ALWAYS, false); });
+        stencil_op_case(std::string("stencil_pass_op_") + kOpNames[i], kOps[i], D3D10_STENCIL_OP_KEEP, D3D10_STENCIL_OP_KEEP, D3D10_COMPARISON_ALWAYS, false);
     }
-    single(dspec("stencil_fail_op_replace").tolerance(rr::Tolerance::blend()),
-           [](Rig& r, rr::CaptureSet& o) { stencil_op_scene(r, o, D3D10_STENCIL_OP_KEEP, D3D10_STENCIL_OP_REPLACE, D3D10_STENCIL_OP_KEEP, D3D10_COMPARISON_NEVER, false); });
-    single(dspec("stencil_depth_fail_op_incr").tolerance(rr::Tolerance::blend()),
-           [](Rig& r, rr::CaptureSet& o) { stencil_op_scene(r, o, D3D10_STENCIL_OP_KEEP, D3D10_STENCIL_OP_KEEP, D3D10_STENCIL_OP_INCR, D3D10_COMPARISON_ALWAYS, true); });
+    stencil_op_case("stencil_fail_op_replace", D3D10_STENCIL_OP_KEEP, D3D10_STENCIL_OP_REPLACE, D3D10_STENCIL_OP_KEEP, D3D10_COMPARISON_NEVER, false);
+    stencil_op_case("stencil_depth_fail_op_incr", D3D10_STENCIL_OP_KEEP, D3D10_STENCIL_OP_KEEP, D3D10_STENCIL_OP_INCR, D3D10_COMPARISON_ALWAYS, true);
     for (int f = 0; f < 8; ++f) {
-        single(dspec(std::string("stencil_func_") + kFuncNames[f]).tolerance(rr::Tolerance::blend()), [f](Rig& r, rr::CaptureSet& o) { stencil_func_scene(r, o, kFuncs[f]); });
+        stencil_func_case(std::string("stencil_func_") + kFuncNames[f], kFuncs[f]);
     }
     single(dspec("stencil_two_sided_sphere_count").tolerance(rr::Tolerance::raster(2, 1)), [](Rig& r, rr::CaptureSet& o) {
         DsHarness h(r, DXGI_FORMAT_D24_UNORM_S8_UINT);

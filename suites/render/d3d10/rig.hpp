@@ -6,6 +6,8 @@
 #include "render/d3d/convert.hpp"
 #include "render/d3d10/d3d10.hpp"
 
+#include <d3d10effect.h>
+
 #include <cstring>
 #include <functional>
 #include <memory>
@@ -131,6 +133,8 @@ public:
     void begin(UINT width = 128, UINT height = 128, DXGI_FORMAT format = DXGI_FORMAT_R8G8B8A8_UNORM, bool with_depth = false,
                const float* clear = nullptr);
 
+    [[nodiscard]] Com<ID3D10Effect> effect(const std::string& source, const char* profile = "fx_4_0", ID3D10EffectPool* pool = nullptr);
+    [[nodiscard]] Com<ID3D10EffectPool> effect_pool(const std::string& source, const char* profile = "fx_4_0");
     void no_cull();
     void bind_rt(Target& target, Depth* depth = nullptr);
     void clear(Target& target, float r, float g, float b, float a);

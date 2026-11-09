@@ -371,6 +371,74 @@ void Rig::begin(UINT width, UINT height, DXGI_FORMAT format, bool with_depth, co
     viewport(width, height);
 }
 
+namespace {
+bool compile_effect(const std::string& source, const char* profile, UINT effect_flags, std::vector<std::uint8_t>& code, std::string& error) {
+    using Compile = HRESULT(WINAPI*)(const void*, SIZE_T, const char*, const D3D_SHADER_MACRO*, ID3DInclude*, const char*, const char*, UINT, UINT, ID3DBlob**, ID3DBlob**);
+    static HMODULE module = ::LoadLibraryA("d3dcompiler_47.dll");
+    const Compile compile = module != nullptr ? reinterpret_cast<Compile>(reinterpret_cast<void*>(::GetProcAddress(module, "D3DCompile"))) : nullptr;
+    if (compile == nullptr) {
+        error = "d3dcompiler_47.dll has no D3DCompile";
+        return false;
+    }
+    ID3DBlob* blob = nullptr;
+    ID3DBlob* errors = nullptr;
+    const HRESULT result = compile(source.data(), source.size(), "effect", nullptr, nullptr, "", profile, 0, effect_flags, &blob, &errors);
+    if (FAILED(result)) {
+        error = std::string("compiling ") + profile + " failed: " + D3d10Tools::hr(result);
+        if (errors != nullptr) {
+            error += " " + std::string(static_cast<const char*>(errors->GetBufferPointer()), errors->GetBufferSize());
+            errors->Release();
+        }
+        return false;
+    }
+    if (errors != nullptr) errors->Release();
+    code.assign(static_cast<const std::uint8_t*>(blob->GetBufferPointer()), static_cast<const std::uint8_t*>(blob->GetBufferPointer()) + blob->GetBufferSize());
+    blob->Release();
+    return true;
+}
+
+HMODULE effects_library() {
+    static HMODULE module = ::LoadLibraryA("d3d10.dll");
+    return module;
+}
+}  // namespace
+
+Com<ID3D10Effect> Rig::effect(const std::string& source, const char* profile, ID3D10EffectPool* pool) {
+    using Create = HRESULT(WINAPI*)(void*, SIZE_T, UINT, ID3D10Device*, ID3D10EffectPool*, ID3D10Effect**);
+    Com<ID3D10Effect> out;
+    const Create create = reinterpret_cast<Create>(reinterpret_cast<void*>(::GetProcAddress(effects_library(), "D3D10CreateEffectFromMemory")));
+    if (create == nullptr) {
+        fail("d3d10.dll has no D3D10CreateEffectFromMemory");
+        return out;
+    }
+    std::vector<std::uint8_t> code;
+    std::string e;
+    if (!compile_effect(source, profile, pool != nullptr ? 1u : 0u, code, e)) {
+        fail(e);
+        return out;
+    }
+    check(create(code.data(), code.size(), pool != nullptr ? 1u : 0u, d, pool, out.put()), "D3D10CreateEffectFromMemory");
+    return hold(std::move(out));
+}
+
+Com<ID3D10EffectPool> Rig::effect_pool(const std::string& source, const char* profile) {
+    using Create = HRESULT(WINAPI*)(void*, SIZE_T, UINT, ID3D10Device*, ID3D10EffectPool**);
+    Com<ID3D10EffectPool> out;
+    const Create create = reinterpret_cast<Create>(reinterpret_cast<void*>(::GetProcAddress(effects_library(), "D3D10CreateEffectPoolFromMemory")));
+    if (create == nullptr) {
+        fail("d3d10.dll has no D3D10CreateEffectPoolFromMemory");
+        return out;
+    }
+    std::vector<std::uint8_t> code;
+    std::string e;
+    if (!compile_effect(source, profile, 0, code, e)) {
+        fail(e);
+        return out;
+    }
+    check(create(code.data(), code.size(), 0, d, out.put()), "D3D10CreateEffectPoolFromMemory");
+    return hold(std::move(out));
+}
+
 void Rig::no_cull() {
     default_raster = raster(raster_desc());
     d->RSSetState(default_raster.get());

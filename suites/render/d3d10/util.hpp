@@ -148,4 +148,113 @@ public:
 inline rr::Mat4 camera(float yaw, float pitch, float distance, float aspect = 1.0f, float fov = 1.0f) {
     return rr::Mat4::perspective_d3d(fov, aspect, 0.5f, 60.0f) * rr::Mat4::translate(0, 0, -distance) * rr::Mat4::rotate_x(pitch) * rr::Mat4::rotate_y(yaw);
 }
+
+#define PS_HEAD "float4 main(float4 p : SV_Position, float4 c : COLOR, float2 uv : TEXCOORD0) : SV_Target {\n"
+
+inline std::vector<Vtx> full_uv(float s = 1.0f, float ox = 0.0f, float oy = 0.0f) { return Geo::quad_uv(-1, -1, 1, 1, 0.5f, ox, oy, ox + s, oy + s); }
+
+inline void paint(Rig& r, rr::CaptureSet& o, const std::string& ps_source, const std::vector<ID3D10ShaderResourceView*>& views,
+                  const std::vector<ID3D10SamplerState*>& samplers, const std::vector<Vtx>& quad) {
+    Com<ID3D10PixelShader> ps = r.ps(ps_source);
+    if (!r.ok()) return;
+    r.d->PSSetShader(ps.get());
+    for (std::size_t i = 0; i < views.size(); ++i) r.ps_srv(static_cast<UINT>(i), views[i]);
+    for (std::size_t i = 0; i < samplers.size(); ++i) r.ps_smp(static_cast<UINT>(i), samplers[i]);
+    r.draw_std(quad);
+    r.cap_main(o);
+}
+
+inline rr::Pattern::Bytes tile_pattern(unsigned w, unsigned h, unsigned seed) {
+    rr::Pattern::Bytes bytes = rr::Pattern::checker(w, h, std::max(1u, w / 8), rr::Pattern::pack(240, 230, 60 + seed * 20), rr::Pattern::pack(30 + seed * 25, 90, 200));
+    const rr::Pattern::Bytes grad = rr::Pattern::gradient(w, h);
+    for (std::size_t i = 0; i < bytes.size(); i += 4) {
+        bytes[i] = static_cast<std::uint8_t>((bytes[i] * 3 + grad[i]) / 4);
+        bytes[i + 1] = static_cast<std::uint8_t>((bytes[i + 1] * 3 + grad[i + 1]) / 4);
+    }
+    return bytes;
+}
+
+struct V3 {
+    float x, y, z;
+};
+inline V3 sub(V3 a, V3 b) { return {a.x - b.x, a.y - b.y, a.z - b.z}; }
+inline V3 cross3(V3 a, V3 b) { return {a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x}; }
+inline float dot3(V3 a, V3 b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
+inline V3 norm3(V3 a) {
+    const float l = std::sqrt(dot3(a, a));
+    return {a.x / l, a.y / l, a.z / l};
+}
+
+inline rr::Mat4 look_at(V3 eye, V3 target, V3 up) {
+    const V3 f = norm3(sub(target, eye));
+    const V3 s = norm3(cross3(f, up));
+    const V3 u = cross3(s, f);
+    rr::Mat4 m;
+    m.m[0] = s.x; m.m[4] = s.y; m.m[8] = s.z;
+    m.m[1] = u.x; m.m[5] = u.y; m.m[9] = u.z;
+    m.m[2] = -f.x; m.m[6] = -f.y; m.m[10] = -f.z;
+    m.m[12] = -dot3(s, eye);
+    m.m[13] = -dot3(u, eye);
+    m.m[14] = dot3(f, eye);
+    return m;
+}
+
+inline rr::Mat4 ortho(float width, float height, float near_plane, float far_plane) {
+    rr::Mat4 m;
+    m.m[0] = 2.0f / width;
+    m.m[5] = 2.0f / height;
+    m.m[10] = -1.0f / (far_plane - near_plane);
+    m.m[14] = -near_plane / (far_plane - near_plane);
+    return m;
+}
+
+struct WorldObject {
+    const MeshBuffers* mesh;
+    rr::Mat4 model;
+    float color[4];
+};
+
+struct World {
+    explicit World(Rig& r)
+        : floor(upload(r, Geo::box(5.0f, 0.1f, 5.0f))), sphere(upload(r, Geo::sphere(16, 24, 0.9f))), torus(upload(r, Geo::torus(24, 12, 0.8f, 0.3f))),
+          box(upload(r, Geo::box(0.6f, 0.9f, 0.6f))) {}
+
+    [[nodiscard]] std::vector<WorldObject> objects(float t) const {
+        return {{&floor, rr::Mat4::translate(0, -1.0f, 0), {0.65f, 0.65f, 0.7f, 1}},
+                {&sphere, rr::Mat4::translate(-1.4f + 0.3f * std::sin(t), -0.1f, 0.3f), {0.9f, 0.35f, 0.25f, 1}},
+                {&torus, rr::Mat4::translate(1.2f, 0.1f + 0.2f * std::sin(t * 1.3f), -0.4f) * rr::Mat4::rotate_x(1.1f + 0.2f * t) * rr::Mat4::rotate_y(t), {0.3f, 0.7f, 0.4f, 1}},
+                {&box, rr::Mat4::translate(0.1f, -0.1f, 1.4f) * rr::Mat4::rotate_y(0.5f + 0.5f * t), {0.3f, 0.4f, 0.9f, 1}}};
+    }
+
+    MeshBuffers floor, sphere, torus, box;
+};
+
+struct ObjectConstants {
+    float vp[16];
+    float model[16];
+    float color[4];
+    float extra[4];
+};
+
+struct LightConstants {
+    float lvp[16];
+    float dir[4];
+    float pos[4];
+};
+
+inline rr::Tolerance lines_tol() {
+    rr::Tolerance t = rr::Tolerance::raster(48, 2);
+    t.outlier_fraction = 1e-3;
+    t.max_outliers = 8;
+    t.name = "lines(48,2)";
+    return t;
+}
+
+inline rr::Tolerance scene_tol(int delta, double fraction = 3e-4, std::uint64_t count = 24) {
+    rr::Tolerance t = rr::Tolerance::raster(delta, 1);
+    t.outlier_fraction = fraction;
+    t.max_outliers = count;
+    t.name = "scene(" + std::to_string(delta) + ")";
+    return t;
+}
 }  // namespace lsw::suites::render::d3d10

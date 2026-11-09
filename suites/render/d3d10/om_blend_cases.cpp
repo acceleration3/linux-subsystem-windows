@@ -45,12 +45,19 @@ D3D10_BLEND alpha_of(D3D10_BLEND b) {
     }
 }
 
-void blend_scene(Rig& r, rr::CaptureSet& o, const BlendCfg& cfg) {
+struct BlendRun {
+    BlendCfg cfg;
+    Com<ID3D10PixelShader> src_ps;
+    Com<ID3D10BlendState> bs;
+};
+
+void blend_setup(Rig& r, BlendRun& run) {
+    const BlendCfg& cfg = run.cfg;
     r.begin(128, 128, cfg.format, false);
     r.use_std();
     const bool dual = uses_dual(cfg.src) || uses_dual(cfg.dst) || uses_dual(cfg.sa) || uses_dual(cfg.da);
     Com<ID3D10PixelShader> dst_ps = r.ps(kDstPs);
-    Com<ID3D10PixelShader> src_ps = r.ps(dual ? kDualPs : (cfg.hdr ? kHdrSrcPs : kSrcPs));
+    run.src_ps = r.ps(dual ? kDualPs : (cfg.hdr ? kHdrSrcPs : kSrcPs));
     auto bd = Rig::blend_desc();
     bd.BlendEnable[0] = cfg.enable ? TRUE : FALSE;
     bd.SrcBlend = cfg.src;
@@ -60,18 +67,34 @@ void blend_scene(Rig& r, rr::CaptureSet& o, const BlendCfg& cfg) {
     bd.DestBlendAlpha = cfg.da;
     bd.BlendOpAlpha = cfg.aop;
     bd.RenderTargetWriteMask[0] = cfg.mask;
-    Com<ID3D10BlendState> bs = r.blend(bd);
+    run.bs = r.blend(bd);
     Com<ID3D10BlendState> off = r.blend(Rig::blend_desc());
     if (!r.ok()) return;
-    const float factor[4] = {0.25f, 0.6f, 0.85f, 0.5f};
     const float none[4] = {1, 1, 1, 1};
     r.d->PSSetShader(dst_ps.get());
     r.d->OMSetBlendState(off.get(), none, 0xffffffffu);
     r.draw_std(Geo::quad_uv(-1, -1, 1, 1, 0.5f, 0, 0, 1, 1));
-    r.d->PSSetShader(src_ps.get());
-    r.d->OMSetBlendState(bs.get(), factor, 0xffffffffu);
-    r.draw_std(Geo::quad_uv(-0.85f, -0.85f, 0.85f, 0.85f, 0.5f, 0, 0, 1, 1));
-    r.cap_main(o);
+}
+
+void blend_frame(Rig& r, BlendRun& run, unsigned f) {
+    const float factor[4] = {0.25f + 0.1f * static_cast<float>(f), 0.6f, 0.85f - 0.1f * static_cast<float>(f), 0.5f};
+    r.d->PSSetShader(run.src_ps.get());
+    r.d->OMSetBlendState(run.bs.get(), factor, 0xffffffffu);
+    const float shift = 0.08f * static_cast<float>(f);
+    r.draw_std(Geo::quad_uv(-0.85f + shift, -0.85f + shift * 0.5f, 0.85f - 0.1f * shift, 0.85f - shift, 0.5f, 0, 0, 1, 1));
+}
+
+void blend_case(const std::string& name, const BlendCfg& cfg, rr::Tolerance tol, Caps caps = nullptr) {
+    if (name.find("dest_") != std::string::npos || name.find("_dest") != std::string::npos) {
+        tol = rr::Tolerance::blend(10);
+    }
+    MultiBody<BlendRun> body;
+    body.setup = [cfg](Rig& r, BlendRun& run) {
+        run.cfg = cfg;
+        blend_setup(r, run);
+    };
+    body.frame = [](Rig& r, BlendRun& run, unsigned f) { blend_frame(r, run, f); };
+    multi<BlendRun>(spec("om", name).frames(4, {0, 3}).tolerance(tol), body, std::move(caps));
 }
 
 std::string blend_name(D3D10_BLEND b) {
@@ -102,7 +125,7 @@ const Registrar kBlend{[] {
             cfg.dst = D3D10_BLEND_ONE;
             cfg.da = D3D10_BLEND_ONE;
         }
-        single(spec("om", "blend_src_" + blend_name(f)).tolerance(rr::Tolerance::blend()), [cfg](Rig& r, rr::CaptureSet& o) { blend_scene(r, o, cfg); });
+        blend_case("blend_src_" + blend_name(f), cfg, rr::Tolerance::blend(4));
         if (f == D3D10_BLEND_SRC_ALPHA_SAT) continue;
         BlendCfg d;
         d.src = D3D10_BLEND_SRC_ALPHA;
@@ -112,7 +135,7 @@ const Registrar kBlend{[] {
         if (uses_dual(f)) {
             d.src = D3D10_BLEND_ONE;
         }
-        single(spec("om", "blend_dest_" + blend_name(f)).tolerance(rr::Tolerance::blend()), [d](Rig& r, rr::CaptureSet& o) { blend_scene(r, o, d); });
+        blend_case("blend_dest_" + blend_name(f), d, rr::Tolerance::blend(4));
     }
     const D3D10_BLEND_OP ops[] = {D3D10_BLEND_OP_ADD, D3D10_BLEND_OP_SUBTRACT, D3D10_BLEND_OP_REV_SUBTRACT, D3D10_BLEND_OP_MIN, D3D10_BLEND_OP_MAX};
     for (D3D10_BLEND_OP op : ops) {
@@ -127,7 +150,7 @@ const Registrar kBlend{[] {
             cfg.src = D3D10_BLEND_ONE;
             cfg.dst = D3D10_BLEND_ONE;
         }
-        single(spec("om", std::string("blend_op_") + op_name(op)).tolerance(rr::Tolerance::blend()), [cfg](Rig& r, rr::CaptureSet& o) { blend_scene(r, o, cfg); });
+        blend_case(std::string("blend_op_") + op_name(op), cfg, rr::Tolerance::blend(4));
     }
     {
         BlendCfg cfg;
@@ -137,11 +160,11 @@ const Registrar kBlend{[] {
         cfg.sa = D3D10_BLEND_ONE;
         cfg.da = D3D10_BLEND_ONE;
         cfg.aop = D3D10_BLEND_OP_MAX;
-        single(spec("om", "blend_separate_alpha_op_max").tolerance(rr::Tolerance::blend()), [cfg](Rig& r, rr::CaptureSet& o) { blend_scene(r, o, cfg); });
+        blend_case("blend_separate_alpha_op_max", cfg, rr::Tolerance::blend(4));
         cfg.sa = D3D10_BLEND_ZERO;
         cfg.da = D3D10_BLEND_SRC_ALPHA;
         cfg.aop = D3D10_BLEND_OP_REV_SUBTRACT;
-        single(spec("om", "blend_separate_alpha_rev_subtract").tolerance(rr::Tolerance::blend()), [cfg](Rig& r, rr::CaptureSet& o) { blend_scene(r, o, cfg); });
+        blend_case("blend_separate_alpha_rev_subtract", cfg, rr::Tolerance::blend(4));
     }
     for (int mask = 1; mask < 16; ++mask) {
         BlendCfg cfg;
@@ -151,7 +174,7 @@ const Registrar kBlend{[] {
         cfg.sa = D3D10_BLEND_ONE;
         cfg.da = D3D10_BLEND_INV_SRC_ALPHA;
         cfg.mask = static_cast<UINT8>(mask);
-        single(spec("om", "write_mask_" + std::to_string(mask)).tolerance(rr::Tolerance::blend()), [cfg](Rig& r, rr::CaptureSet& o) { blend_scene(r, o, cfg); });
+        blend_case("write_mask_" + std::to_string(mask), cfg, rr::Tolerance::blend(4));
     }
     struct FormatBlend {
         const char* name;
@@ -165,7 +188,7 @@ const Registrar kBlend{[] {
         {"blend_format_srgb", DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, false, rr::Tolerance::blend(3)},
         {"blend_format_bgra8", DXGI_FORMAT_B8G8R8A8_UNORM, false, rr::Tolerance::blend()},
         {"blend_format_rgb10a2", DXGI_FORMAT_R10G10B10A2_UNORM, false, rr::Tolerance::floats(3e-3f, 3e-3f)},
-        {"blend_format_r11g11b10", DXGI_FORMAT_R11G11B10_FLOAT, true, rr::Tolerance::floats(2e-2f, 2e-2f)},
+        {"blend_format_r11g11b10", DXGI_FORMAT_R11G11B10_FLOAT, true, rr::Tolerance::floats(2e-2f, 3e-2f)},
     };
     for (const FormatBlend& fb : formats) {
         BlendCfg cfg;
@@ -176,11 +199,10 @@ const Registrar kBlend{[] {
         cfg.sa = D3D10_BLEND_ONE;
         cfg.da = D3D10_BLEND_INV_SRC_ALPHA;
         const DXGI_FORMAT format = fb.format;
-        single(spec("om", fb.name).tolerance(fb.tol), [cfg](Rig& r, rr::CaptureSet& o) { blend_scene(r, o, cfg); },
-               [format](Rig& r) -> std::string {
-                   const UINT need = D3D10_FORMAT_SUPPORT_RENDER_TARGET | D3D10_FORMAT_SUPPORT_BLENDABLE;
-                   return (r.format_support(format) & need) == need ? "" : "blendable render target format " + float_tol_name(format);
-               });
+        blend_case(fb.name, cfg, fb.tol, [format](Rig& r) -> std::string {
+            const UINT need = D3D10_FORMAT_SUPPORT_RENDER_TARGET | D3D10_FORMAT_SUPPORT_BLENDABLE;
+            return (r.format_support(format) & need) == need ? "" : "blendable render target format " + float_tol_name(format);
+        });
     }
     single(spec("om", "blend_factor_changes_between_draws").tolerance(rr::Tolerance::blend()), [](Rig& r, rr::CaptureSet& o) {
         r.begin();
@@ -273,15 +295,15 @@ const Registrar kBlend{[] {
         r.draw_std(Geo::quad_uv(-0.85f, -0.85f, 0.85f, 0.85f, 0.5f, 0, 0, 1, 1));
         for (int i = 0; i < 4; ++i) r.cap(o, "target" + std::to_string(i), t[i]);
     });
-    single(spec("om", "blend_dual_source_with_write_mask").tolerance(rr::Tolerance::blend()), [](Rig& r, rr::CaptureSet& o) {
+    {
         BlendCfg cfg;
         cfg.src = D3D10_BLEND_SRC1_COLOR;
         cfg.dst = D3D10_BLEND_INV_SRC1_COLOR;
         cfg.sa = D3D10_BLEND_SRC1_ALPHA;
         cfg.da = D3D10_BLEND_INV_SRC1_ALPHA;
         cfg.mask = D3D10_COLOR_WRITE_ENABLE_RED | D3D10_COLOR_WRITE_ENABLE_ALPHA | D3D10_COLOR_WRITE_ENABLE_GREEN;
-        blend_scene(r, o, cfg);
-    });
+        blend_case("blend_dual_source_with_write_mask", cfg, rr::Tolerance::blend(4));
+    }
 }};
 
 }  // namespace

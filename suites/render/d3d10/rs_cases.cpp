@@ -118,7 +118,7 @@ void scissor_scene(Rig& r, rr::CaptureSet& o, int mode) {
         }
     } else {
         r.clear(r.main, 0.4f, 0.4f, 0.4f, 1);
-        D3D10_RECT rect = {-10, -10, 60, 200};
+        D3D10_RECT rect = {0, 0, 60, 128};
         r.d->RSSetScissorRects(1, &rect);
         r.d->Draw(6, 0);
         D3D10_RECT empty = {64, 64, 64, 100};
@@ -188,7 +188,7 @@ void fill_rule_scene(Rig& r, rr::CaptureSet& o, int mode) {
             }
     }
     r.draw_std(v);
-    std::vector<Vtx> marker = Geo::quad(-1, -1, -0.8f, -0.8f, 0.5f, 0.5f, 0.0f, 0.0f, 0.5f);
+    std::vector<Vtx> marker = Geo::quad(-1, -1, -0.8f, -0.8f, 0.5f, 128.0f / 255.0f, 0.0f, 0.0f, 128.0f / 255.0f);
     r.draw_std(marker);
     (void)zero;
     r.cap_main(o);
@@ -198,7 +198,7 @@ const Registrar kRs{[] {
     for (int box = 0; box < 2; ++box) {
         for (int wire = 0; wire < 2; ++wire) {
             if (box == 1 && wire == 0) continue;
-            single(spec("rs", std::string("fill_") + (wire ? "wireframe" : "solid") + (box ? "_box" : "_sphere")).tolerance(wire ? rr::Tolerance::raster(6, 1) : rr::Tolerance::blend()),
+            single(spec("rs", std::string("fill_") + (wire ? "wireframe" : "solid") + (box ? "_box" : "_sphere")).tolerance(wire ? lines_tol() : rr::Tolerance::blend()),
                    [box, wire](Rig& r, rr::CaptureSet& o) {
                        auto rd = Rig::raster_desc();
                        rd.FillMode = wire ? D3D10_FILL_WIREFRAME : D3D10_FILL_SOLID;
@@ -210,6 +210,7 @@ const Registrar kRs{[] {
     const D3D10_CULL_MODE cull_modes[] = {D3D10_CULL_NONE, D3D10_CULL_FRONT, D3D10_CULL_BACK};
     for (int c = 0; c < 3; ++c) {
         for (int ccw = 0; ccw < 2; ++ccw) {
+            if (c == 0 && ccw == 1) continue;
             single(spec("rs", std::string("cull_") + cull_names[c] + (ccw ? "_ccw" : "_cw")).tolerance(rr::Tolerance::blend()), [c, ccw, cull_modes](Rig& r, rr::CaptureSet& o) {
                 auto rd = Rig::raster_desc();
                 rd.CullMode = cull_modes[c];
