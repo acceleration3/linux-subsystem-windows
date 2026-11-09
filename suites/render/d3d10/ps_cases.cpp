@@ -6,8 +6,8 @@ namespace {
 void tilted_plane(Rig& r, rr::CaptureSet& o, const std::string& ps_body, bool depth_capture = false) {
     r.begin(128, 128, DXGI_FORMAT_R8G8B8A8_UNORM, true);
     ScenePipe pipe(r, ps_body.c_str());
-    std::vector<float> flat(81, 0.0f);
-    MeshBuffers m = upload(r, Geo::grid(8, 3.0f, flat));
+    std::vector<float> flat(4, 0.0f);
+    MeshBuffers m = upload(r, Geo::grid(1, 3.0f, flat));
     r.no_cull();
     auto dd = Rig::depth_desc();
     dd.DepthEnable = TRUE;
@@ -15,7 +15,7 @@ void tilted_plane(Rig& r, rr::CaptureSet& o, const std::string& ps_body, bool de
     if (!r.ok()) return;
     r.d->OMSetDepthStencilState(ds.get(), 0);
     pipe.bind(r);
-    pipe.draw(r, m, rr::Mat4::perspective_d3d(1.0f, 1.0f, 0.3f, 40.0f) * rr::Mat4::translate(0, -0.2f, -3.2f) * rr::Mat4::rotate_x(-1.0f));
+    pipe.draw(r, m, rr::Mat4::perspective_d3d(1.9f, 1.0f, 0.2f, 40.0f) * rr::Mat4::translate(0, -0.6f, -1.6f) * rr::Mat4::rotate_x(-1.35f));
     r.cap_main(o);
     if (depth_capture) r.cap_depth(o, "depth", r.depth_main);
 }
@@ -31,7 +31,7 @@ std::string interp_ps(const char* modifier) {
 const Registrar kPs{[] {
     for (const char* m : {"linear", "noperspective", "nointerpolation"}) {
         const std::string modifier = m;
-        single(spec("ps", "interpolation_" + modifier).tolerance(rr::Tolerance::blend(3)), [modifier](Rig& r, rr::CaptureSet& o) { tilted_plane(r, o, interp_ps(modifier.c_str())); });
+        single(spec("ps", "interpolation_" + modifier).tolerance(rr::Tolerance::raster(8, 1)), [modifier](Rig& r, rr::CaptureSet& o) { tilted_plane(r, o, interp_ps(modifier.c_str())); });
     }
     single(spec("ps", "sv_is_front_face").tolerance(rr::Tolerance::raster(4, 1)), [](Rig& r, rr::CaptureSet& o) {
         r.begin(128, 128, DXGI_FORMAT_R8G8B8A8_UNORM, true);

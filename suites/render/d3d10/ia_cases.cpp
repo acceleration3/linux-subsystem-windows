@@ -172,7 +172,7 @@ const FormatCase kFormats[] = {
     {"r16g16b16a16_sint", DXGI_FORMAT_R16G16B16A16_SINT, 'i', 4, 'i', 8},     {"r10g10b10a2_unorm", DXGI_FORMAT_R10G10B10A2_UNORM, 'f', 3, 'R', 4},
 };
 
-void run_format(Rig& r, rr::CaptureSet& out, const FormatCase& fc) {
+void run_format(Rig& r, rr::CaptureSet& out, const FormatCase& fc, unsigned index) {
     r.begin();
     const char* type = fc.kind == 'f' ? "float4" : fc.kind == 'u' ? "uint4" : "int4";
     const std::string fix = fc.kind == 'i' ? " + 128.0" : "";
@@ -190,10 +190,10 @@ void run_format(Rig& r, rr::CaptureSet& out, const FormatCase& fc) {
     std::vector<std::uint8_t> data;
     for (unsigned t = 0; t < 12; ++t) {
         for (unsigned k = 0; k < 3; ++k) {
-            const float a = 6.2831853f * (static_cast<float>(t) + (k == 0 ? 0.0f : k == 1 ? 0.9f : 0.45f)) / 12.0f;
+            const float a = 6.2831853f * (static_cast<float>(t) + (k == 0 ? 0.0f : k == 1 ? 0.9f : 0.45f) + 0.037f * static_cast<float>(index)) / 12.0f;
             const float rad = k == 2 ? 0.35f : 0.9f;
             const float pos[3] = {rad * std::cos(a), rad * std::sin(a), 0.5f};
-            const float* col = palette(t + k * 3);
+            const float* col = palette(t + k * 3 + index);
             std::uint8_t record[48] = {};
             std::memcpy(record, pos, 12);
             FormatCase f = fc;
@@ -280,10 +280,12 @@ const Registrar kTopologies{[] {
 }};
 
 const Registrar kFormatCases{[] {
+    unsigned format_index = 0;
     for (const FormatCase& fc : kFormats) {
         const FormatCase copy = fc;
+        const unsigned index = format_index++;
         single(spec("ia", std::string("format_") + fc.name, fc.name[0] == 'b' ? 1 : 0).tolerance(rr::Tolerance::blend(3)),
-               [copy](Rig& r, rr::CaptureSet& o) { run_format(r, o, copy); },
+               [copy, index](Rig& r, rr::CaptureSet& o) { run_format(r, o, copy, index); },
                [copy](Rig& r) -> std::string {
                    return (r.format_support(copy.format) & D3D10_FORMAT_SUPPORT_IA_VERTEX_BUFFER) != 0 ? "" : std::string("IA vertex format ") + copy.name;
                });
@@ -406,14 +408,14 @@ const Registrar kInstancing{[] {
     single(spec("ia", "draw_instanced_start_instance").tolerance(rr::Tolerance::blend()), [](Rig& r, rr::CaptureSet& o) { run_instanced(r, o, 1, 2); });
 }};
 
-void indexed_fan(Rig& r, rr::CaptureSet& out, bool wide, UINT base_vertex, UINT start_index, UINT ib_offset_bytes, UINT vb_offset_vertices) {
+void indexed_fan(Rig& r, rr::CaptureSet& out, bool wide, UINT base_vertex, UINT start_index, UINT ib_offset_bytes, UINT vb_offset_vertices, unsigned tag) {
     r.begin();
     r.use_std();
     std::vector<Vtx> ring;
-    ring.push_back(vtx(0, 0, 0.5f, palette(7)));
+    ring.push_back(vtx(0, 0, 0.5f, palette(7 + tag)));
     for (unsigned i = 0; i < 12; ++i) {
-        const float a = 6.2831853f * static_cast<float>(i) / 12.0f;
-        ring.push_back(vtx(0.9f * std::cos(a), 0.9f * std::sin(a), 0.5f, palette(i)));
+        const float a = 6.2831853f * static_cast<float>(i) / 12.0f + 0.11f * static_cast<float>(tag);
+        ring.push_back(vtx((0.9f - 0.04f * static_cast<float>(tag)) * std::cos(a), (0.9f - 0.04f * static_cast<float>(tag)) * std::sin(a), 0.5f, palette(i + tag)));
     }
     std::vector<Vtx> padded(vb_offset_vertices + base_vertex);
     for (auto& p : padded) p = vtx(5, 5, 0.5f, palette(0));
@@ -440,12 +442,12 @@ void indexed_fan(Rig& r, rr::CaptureSet& out, bool wide, UINT base_vertex, UINT 
 }
 
 const Registrar kIndexing{[] {
-    single(spec("ia", "index_16bit").tolerance(rr::Tolerance::blend()), [](Rig& r, rr::CaptureSet& o) { indexed_fan(r, o, false, 0, 0, 0, 0); });
-    single(spec("ia", "index_32bit").tolerance(rr::Tolerance::blend()), [](Rig& r, rr::CaptureSet& o) { indexed_fan(r, o, true, 0, 0, 0, 0); });
-    single(spec("ia", "index_base_vertex").tolerance(rr::Tolerance::blend()), [](Rig& r, rr::CaptureSet& o) { indexed_fan(r, o, false, 7, 0, 0, 0); });
-    single(spec("ia", "index_start_location").tolerance(rr::Tolerance::blend()), [](Rig& r, rr::CaptureSet& o) { indexed_fan(r, o, true, 0, 9, 0, 0); });
-    single(spec("ia", "index_buffer_offset").tolerance(rr::Tolerance::blend()), [](Rig& r, rr::CaptureSet& o) { indexed_fan(r, o, false, 0, 0, 24, 0); });
-    single(spec("ia", "vertex_buffer_offset").tolerance(rr::Tolerance::blend()), [](Rig& r, rr::CaptureSet& o) { indexed_fan(r, o, true, 0, 0, 0, 5); });
+    single(spec("ia", "index_16bit").tolerance(rr::Tolerance::blend()), [](Rig& r, rr::CaptureSet& o) { indexed_fan(r, o, false, 0, 0, 0, 0, 0); });
+    single(spec("ia", "index_32bit").tolerance(rr::Tolerance::blend()), [](Rig& r, rr::CaptureSet& o) { indexed_fan(r, o, true, 0, 0, 0, 0, 1); });
+    single(spec("ia", "index_base_vertex").tolerance(rr::Tolerance::blend()), [](Rig& r, rr::CaptureSet& o) { indexed_fan(r, o, false, 7, 0, 0, 0, 2); });
+    single(spec("ia", "index_start_location").tolerance(rr::Tolerance::blend()), [](Rig& r, rr::CaptureSet& o) { indexed_fan(r, o, true, 0, 9, 0, 0, 3); });
+    single(spec("ia", "index_buffer_offset").tolerance(rr::Tolerance::blend()), [](Rig& r, rr::CaptureSet& o) { indexed_fan(r, o, false, 0, 0, 24, 0, 4); });
+    single(spec("ia", "vertex_buffer_offset").tolerance(rr::Tolerance::blend()), [](Rig& r, rr::CaptureSet& o) { indexed_fan(r, o, true, 0, 0, 0, 5, 5); });
     single(spec("ia", "draw_start_vertex").tolerance(rr::Tolerance::blend()), [](Rig& r, rr::CaptureSet& o) {
         r.begin();
         r.use_std();

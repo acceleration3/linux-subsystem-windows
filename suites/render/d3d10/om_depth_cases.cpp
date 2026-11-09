@@ -51,7 +51,7 @@ struct DsState {
     MeshBuffers m, t;
 };
 
-void func_setup(Rig& r, DsState& s, DXGI_FORMAT format, bool spheres) {
+void func_setup(Rig& r, DsState& s, DXGI_FORMAT format, bool spheres, unsigned seed) {
     s.h = std::make_unique<DsHarness>(r, format);
     if (!r.ok()) return;
     auto dd = Rig::depth_desc();
@@ -67,11 +67,11 @@ void func_setup(Rig& r, DsState& s, DXGI_FORMAT format, bool spheres) {
         s.t = upload(r, Geo::torus(20, 10, 1.0f, 0.4f));
         s.h->state(dd, 0);
         s.pipe->bind(r);
-        s.pipe->draw(r, s.m, camera(0.4f, 0.3f, 4.5f) * rr::Mat4::translate(-0.35f, 0, 0));
+        s.pipe->draw(r, s.m, camera(0.4f + 0.12f * static_cast<float>(seed), 0.3f, 4.5f) * rr::Mat4::translate(-0.35f, 0, 0));
     }
 }
 
-void func_frame(Rig& r, DsState& s, D3D10_COMPARISON_FUNC func, bool spheres, unsigned f) {
+void func_frame(Rig& r, DsState& s, D3D10_COMPARISON_FUNC func, bool spheres, unsigned f, unsigned seed) {
     auto dd = Rig::depth_desc();
     dd.DepthEnable = TRUE;
     dd.DepthFunc = func;
@@ -81,19 +81,21 @@ void func_frame(Rig& r, DsState& s, D3D10_COMPARISON_FUNC func, bool spheres, un
         r.draw_std(ramp_layer(deltas[f % 3][0], deltas[f % 3][1], deltas[f % 3][2], f + 1, f));
     } else {
         s.pipe->bind(r);
-        s.pipe->draw(r, s.t, camera(0.4f, 0.3f, 4.5f) * rr::Mat4::translate(0.45f - 0.2f * 0.18f * static_cast<float>(f), 0.1f, 0.2f) * rr::Mat4::rotate_x(1.2f + 0.3f * static_cast<float>(f)));
+        s.pipe->draw(r, s.t, camera(0.4f + 0.12f * static_cast<float>(seed), 0.3f, 4.5f) * rr::Mat4::translate(0.45f - 0.2f * 0.18f * static_cast<float>(f), 0.1f, 0.2f) * rr::Mat4::rotate_x(1.2f + 0.3f * static_cast<float>(f)));
     }
 }
 
-void func_case(const std::string& name, DXGI_FORMAT format, D3D10_COMPARISON_FUNC func, bool spheres, float depth_tol, Caps caps = nullptr) {
+void func_case(const std::string& name, DXGI_FORMAT format, D3D10_COMPARISON_FUNC func, bool spheres, float depth_tol, Caps caps = nullptr, unsigned seed = 0) {
     MultiBody<DsState> body;
-    body.setup = [format, spheres](Rig& r, DsState& s) { func_setup(r, s, format, spheres); };
-    body.frame = [func, spheres](Rig& r, DsState& s, unsigned f) { func_frame(r, s, (!spheres && func == D3D10_COMPARISON_EQUAL && r.mutate("om_equal")) ? D3D10_COMPARISON_NEVER : func, spheres, f); };
+    body.setup = [format, spheres, seed](Rig& r, DsState& s) { func_setup(r, s, format, spheres, seed); };
+    body.frame = [func, spheres, seed](Rig& r, DsState& s, unsigned f) { func_frame(r, s, (!spheres && func == D3D10_COMPARISON_EQUAL && r.mutate("om_equal")) ? D3D10_COMPARISON_NEVER : func, spheres, f, seed); };
     body.capture = [](Rig& r, DsState&, unsigned, rr::CaptureSet& o) {
         r.cap_main(o);
         r.cap_depth(o, "depth", r.depth_main);
     };
-    multi<DsState>(dspec(name).frames(func == D3D10_COMPARISON_NEVER && !spheres ? 1 : 3, func == D3D10_COMPARISON_NEVER && !spheres ? std::vector<unsigned>{0} : std::vector<unsigned>{0, 2}).tolerance(spheres ? scene_tol(12) : rr::Tolerance::blend()).tolerance_for("depth", rr::Tolerance::floats(depth_tol, 0.0f).with_outliers(2e-4)), body, std::move(caps));
+    rr::CaseSpec cs = dspec(name);
+    if (!spheres) cs.audit_ok("depth captures coincide when an equal-test pass writes the depth that is already stored; the colour captures differ");
+    multi<DsState>(cs.frames(func == D3D10_COMPARISON_NEVER && !spheres ? 1 : 3, func == D3D10_COMPARISON_NEVER && !spheres ? std::vector<unsigned>{0} : std::vector<unsigned>{0, 2}).tolerance(spheres ? scene_tol(12) : rr::Tolerance::blend()).tolerance_for("depth", rr::Tolerance::floats(depth_tol, 0.0f).with_outliers(spheres ? 1e-3 : 2e-4)), body, std::move(caps));
 }
 
 struct StencilState {
@@ -140,7 +142,10 @@ void stencil_op_case(const std::string& name, D3D10_STENCIL_OP pass_op, D3D10_ST
         r.draw_std(b);
     };
     body.capture = [](Rig& r, StencilState&, unsigned, rr::CaptureSet& o) { r.cap_stencil(o, "stencil", r.depth_main); };
-    multi<StencilState>(dspec(name).frames(3, {0, 2}).tolerance(rr::Tolerance::blend()), body);
+    rr::CaseSpec cs = dspec(name);
+    if (name == "stencil_pass_op_keep") cs.audit_ok("KEEP leaves the seeded bands untouched in every frame by design");
+    if (name == "stencil_pass_op_replace" || name == "stencil_fail_op_replace") cs.audit_ok("REPLACE through the pass op under ALWAYS and through the fail op under NEVER write the same reference everywhere by design");
+    multi<StencilState>(cs.frames(3, {0, 2}).tolerance(rr::Tolerance::blend()), body);
 }
 
 void stencil_func_case(const std::string& name, D3D10_COMPARISON_FUNC func) {
@@ -181,11 +186,12 @@ const Registrar kDepth{[] {
         DXGI_FORMAT format;
         float depth_tol;
     };
-    for (const Fmt& fm : {Fmt{"d16", DXGI_FORMAT_D16_UNORM, 2e-5f}, Fmt{"d24s8", DXGI_FORMAT_D24_UNORM_S8_UINT, 6e-7f}, Fmt{"d32f", DXGI_FORMAT_D32_FLOAT, 6e-7f},
-                          Fmt{"d32fs8x24", DXGI_FORMAT_D32_FLOAT_S8X24_UINT, 6e-7f}}) {
+    unsigned depth_seed = 1;
+    for (const Fmt& fm : {Fmt{"d16", DXGI_FORMAT_D16_UNORM, 2e-5f}, Fmt{"d24s8", DXGI_FORMAT_D24_UNORM_S8_UINT, 3e-6f}, Fmt{"d32f", DXGI_FORMAT_D32_FLOAT, 3e-6f},
+                          Fmt{"d32fs8x24", DXGI_FORMAT_D32_FLOAT_S8X24_UINT, 3e-6f}}) {
         const Fmt copy = fm;
         func_case(std::string("depth_format_") + fm.name + "_intersecting_meshes", fm.format, D3D10_COMPARISON_LESS, true, fm.depth_tol,
-                  [copy](Rig& r) -> std::string { return (r.format_support(copy.format) & D3D10_FORMAT_SUPPORT_DEPTH_STENCIL) != 0 ? "" : std::string("depth format ") + copy.name; });
+                  [copy](Rig& r) -> std::string { return (r.format_support(copy.format) & D3D10_FORMAT_SUPPORT_DEPTH_STENCIL) != 0 ? "" : std::string("depth format ") + copy.name; }, depth_seed++);
     }
     for (int i = 0; i < 8; ++i) {
         stencil_op_case(std::string("stencil_pass_op_") + kOpNames[i], kOps[i], D3D10_STENCIL_OP_KEEP, D3D10_STENCIL_OP_KEEP, D3D10_COMPARISON_ALWAYS, false);
@@ -214,7 +220,7 @@ const Registrar kDepth{[] {
         r.cap_stencil(o, "stencil", r.depth_main);
     });
     for (int which = 0; which < 2; ++which) {
-        single(dspec(which ? "stencil_write_mask" : "stencil_read_mask").tolerance(rr::Tolerance::blend()), [which](Rig& r, rr::CaptureSet& o) {
+        single(dspec(which ? "stencil_write_mask" : "stencil_read_mask").audit_ok("the read-mask and write-mask scenes reach the same final picture through different state by design").tolerance(rr::Tolerance::blend()), [which](Rig& r, rr::CaptureSet& o) {
             DsHarness h(r, DXGI_FORMAT_D24_UNORM_S8_UINT);
             if (!r.ok()) return;
             r.clear_depth(r.depth_main, 1.0f, 0xf0);

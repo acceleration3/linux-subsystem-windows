@@ -166,9 +166,11 @@ const Registrar kViews{[] {
     const DepthView views[] = {{"d32_float_as_r32_float", DXGI_FORMAT_R32_TYPELESS, DXGI_FORMAT_D32_FLOAT, DXGI_FORMAT_R32_FLOAT, 6e-7f},
                                {"d24_unorm_as_r24_x8", DXGI_FORMAT_R24G8_TYPELESS, DXGI_FORMAT_D24_UNORM_S8_UINT, DXGI_FORMAT_R24_UNORM_X8_TYPELESS, 6e-7f},
                                {"d16_unorm_as_r16_unorm", DXGI_FORMAT_R16_TYPELESS, DXGI_FORMAT_D16_UNORM, DXGI_FORMAT_R16_UNORM, 5e-5f}};
+    unsigned view_index = 0;
     for (const DepthView& v : views) {
         const DepthView copy = v;
-        single(spec("tex", std::string("sample_depth_") + v.name).tolerance(rr::Tolerance::floats(v.tol, 0.0f).with_outliers(2e-4)), [copy](Rig& r, rr::CaptureSet& o) {
+        const float yaw = 0.4f + 0.25f * static_cast<float>(view_index++);
+        single(spec("tex", std::string("sample_depth_") + v.name).tolerance(rr::Tolerance::floats(v.tol, 0.0f).with_outliers(2e-4)), [copy, yaw](Rig& r, rr::CaptureSet& o) {
             r.begin(128, 128, DXGI_FORMAT_R32G32B32A32_FLOAT);
             Com<ID3D10Texture2D> tex = r.tex2d(128, 128, copy.typeless, D3D10_BIND_DEPTH_STENCIL | D3D10_BIND_SHADER_RESOURCE);
             D3D10_DEPTH_STENCIL_VIEW_DESC dd{};
@@ -195,8 +197,8 @@ const Registrar kViews{[] {
             r.d->OMSetDepthStencilState(ds.get(), 0);
             pipe.bind(r);
             r.d->PSSetShader(nullptr);
-            pipe.draw(r, sphere, camera(0.4f, 0.3f, 4.0f) * rr::Mat4::translate(-0.3f, 0, 0));
-            pipe.draw(r, ring, camera(0.4f, 0.3f, 4.0f) * rr::Mat4::translate(0.3f, 0.1f, 0.2f) * rr::Mat4::rotate_x(1.1f));
+            pipe.draw(r, sphere, camera(yaw, 0.3f, 4.0f) * rr::Mat4::translate(-0.3f, 0, 0));
+            pipe.draw(r, ring, camera(yaw, 0.3f, 4.0f) * rr::Mat4::translate(0.3f, 0.1f, 0.2f) * rr::Mat4::rotate_x(1.1f));
             r.bind_rt(r.main);
             r.d->OMSetDepthStencilState(nullptr, 0);
             r.ps_srv(0, srv.get());

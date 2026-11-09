@@ -459,17 +459,17 @@ const Registrar kGs{[] {
 }};
 
 const Registrar kSo{[] {
-    single(spec("so", "vertex_shader_only_drawauto").tolerance(rr::Tolerance::blend()), [](Rig& r, rr::CaptureSet& o) { so_capture_pass(r, o, false, 1, false, true); });
-    single(spec("so", "vertex_shader_only_buffer_contents").tolerance(rr::Tolerance::blend()).tolerance_for("streamed", rr::Tolerance::floats(1e-5f, 1e-5f)),
+    single(spec("so", "vertex_shader_only_drawauto").audit_ok("the stream-out through VS bytecode is shared by the sibling rows; the same vertices are streamed through different bindings").tolerance(rr::Tolerance::blend()), [](Rig& r, rr::CaptureSet& o) { so_capture_pass(r, o, false, 1, false, true); });
+    single(spec("so", "vertex_shader_only_buffer_contents").audit_ok("the stream-out through VS bytecode is shared by the sibling rows; the same vertices are streamed through different bindings").tolerance(rr::Tolerance::blend()).tolerance_for("streamed", rr::Tolerance::floats(1e-5f, 1e-5f)),
            [](Rig& r, rr::CaptureSet& o) { so_capture_pass(r, o, false, 1, false, false); });
     single(spec("so", "geometry_shader_drawauto").tolerance(rr::Tolerance::blend()), [](Rig& r, rr::CaptureSet& o) { so_capture_pass(r, o, true, 1, false, true); });
-    single(spec("so", "append_two_passes").tolerance(rr::Tolerance::blend()), [](Rig& r, rr::CaptureSet& o) { so_capture_pass(r, o, false, 2, true, true); });
-    single(spec("so", "overwrite_two_passes").tolerance(rr::Tolerance::blend()), [](Rig& r, rr::CaptureSet& o) { so_capture_pass(r, o, false, 2, false, true); });
+    single(spec("so", "append_two_passes").audit_ok("the stream-out through VS bytecode is shared by the sibling rows; the same vertices are streamed through different bindings").tolerance(rr::Tolerance::blend()), [](Rig& r, rr::CaptureSet& o) { so_capture_pass(r, o, false, 2, true, true); });
+    single(spec("so", "overwrite_two_passes").audit_ok("the stream-out through VS bytecode is shared by the sibling rows; the same vertices are streamed through different bindings").tolerance(rr::Tolerance::blend()), [](Rig& r, rr::CaptureSet& o) { so_capture_pass(r, o, false, 2, false, true); });
     single(spec("so", "geometry_shader_append_two_passes").tolerance(rr::Tolerance::blend()), [](Rig& r, rr::CaptureSet& o) { so_capture_pass(r, o, true, 2, true, true); });
     single(spec("so", "geometry_shader_overwrite_two_passes").tolerance(rr::Tolerance::blend()), [](Rig& r, rr::CaptureSet& o) { so_capture_pass(r, o, true, 2, false, true); });
     single(spec("so", "geometry_shader_four_separate_buffers").tolerance(rr::Tolerance::blend()).tolerance_for("slot3", rr::Tolerance::floats(1e-5f, 1e-5f)), [](Rig& r, rr::CaptureSet& o) { so_four_buffers_gs(r, o); });
-    single(spec("so", "interleaved_single_buffer").tolerance(rr::Tolerance::blend()), [](Rig& r, rr::CaptureSet& o) { so_multi_buffers(r, o, false); });
-    single(spec("so", "three_separate_buffers").tolerance(rr::Tolerance::blend()), [](Rig& r, rr::CaptureSet& o) { so_multi_buffers(r, o, true); });
+    single(spec("so", "interleaved_single_buffer").audit_ok("the stream-out through VS bytecode is shared by the sibling rows; the same vertices are streamed through different bindings").tolerance(rr::Tolerance::blend()), [](Rig& r, rr::CaptureSet& o) { so_multi_buffers(r, o, false); });
+    single(spec("so", "three_separate_buffers").audit_ok("the stream-out through VS bytecode is shared by the sibling rows; the same vertices are streamed through different bindings").tolerance(rr::Tolerance::blend()), [](Rig& r, rr::CaptureSet& o) { so_multi_buffers(r, o, true); });
 }};
 
 }  // namespace

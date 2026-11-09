@@ -331,7 +331,7 @@ const Registrar kRs{[] {
         {"bias_clamped", DXGI_FORMAT_D24_UNORM_S8_UINT, -400000, 0, -0.0005f, false, D3D10_COMPARISON_LESS, 2e-6f},
     };
     for (const BiasCase& b : biases) {
-        single(spec("rs", b.name).tolerance(rr::Tolerance::raster(2, 1)).tolerance_for("depth", rr::Tolerance::floats(b.depth_tol, 0.0f).with_outliers(2e-4)),
+        single(spec("rs", b.name).audit_ok("the colour capture only shows whether the biased quad is visible; the bias magnitude is judged on the depth capture").tolerance(rr::Tolerance::raster(2, 1)).tolerance_for("depth", rr::Tolerance::floats(b.depth_tol, 0.0f).with_outliers(2e-4)),
                [b](Rig& r, rr::CaptureSet& o) { bias_scene(r, o, b.format, b.bias, b.slope, b.clamp, b.tilt, b.func); });
     }
     for (int clip = 0; clip < 2; ++clip) {
@@ -382,9 +382,9 @@ const Registrar kRs{[] {
         r.draw_std(v);
         r.cap_main(o);
     });
-    single(spec("rs", "antialiased_lines_off").tolerance(lines_tol()), [](Rig& r, rr::CaptureSet& o) { line_scene(r, o, 0); });
+    single(spec("rs", "antialiased_lines_off").audit_ok("the aliased reference render is also the ms_off capture of the multisample row").tolerance(lines_tol()), [](Rig& r, rr::CaptureSet& o) { line_scene(r, o, 0); });
     single(spec("rs", "antialiased_lines_on_widen_and_fade").tolerance(rr::Tolerance::psnr(12.0)).tolerance_for("aliased", lines_tol()), [](Rig& r, rr::CaptureSet& o) { line_scene(r, o, 1); });
-    single(spec("rs", "multisample_enable_lines_on_msaa_target").tolerance(rr::Tolerance::psnr(14.0)).tolerance_for("ms_off", rr::Tolerance::psnr(18.0)), [](Rig& r, rr::CaptureSet& o) { line_scene(r, o, 2); });
+    single(spec("rs", "multisample_enable_lines_on_msaa_target").audit_ok("the ms_off capture is the aliased reference render that antialiased_lines_off also draws").tolerance(rr::Tolerance::psnr(14.0)).tolerance_for("ms_off", rr::Tolerance::psnr(18.0)), [](Rig& r, rr::CaptureSet& o) { line_scene(r, o, 2); });
     single(spec("rs", "fill_rule_shared_quads_additive").tolerance(rr::Tolerance::exact()), [](Rig& r, rr::CaptureSet& o) { fill_rule_scene(r, o, 0); });
     single(spec("rs", "fill_rule_shared_diagonal_additive").tolerance(rr::Tolerance::exact()), [](Rig& r, rr::CaptureSet& o) { fill_rule_scene(r, o, 1); });
     single(spec("rs", "fill_rule_pixel_center_edges_additive").tolerance(rr::Tolerance::exact()), [](Rig& r, rr::CaptureSet& o) { fill_rule_scene(r, o, 2); });
