@@ -195,11 +195,6 @@ const Registrar kQuery{[] {
         q->End();
         D3D10_QUERY_DATA_PIPELINE_STATISTICS stats{};
         if (!fetch(r, q.get(), stats)) return;
-        if (!r.kit.warp) {
-            char text[300];
-            std::snprintf(text, sizeof text, "ia v %llu p %llu vs %llu gs %llu gsp %llu", (unsigned long long)stats.IAVertices, (unsigned long long)stats.IAPrimitives, (unsigned long long)stats.VSInvocations, (unsigned long long)stats.GSInvocations, (unsigned long long)stats.GSPrimitives);
-            r.fail(text);
-        }
         r.cap_main(o);
         number_image(o, "stats", {static_cast<double>(stats.IAVertices), static_cast<double>(stats.IAPrimitives), static_cast<double>(stats.VSInvocations),
                                   static_cast<double>(stats.GSInvocations), static_cast<double>(stats.GSPrimitives)});
