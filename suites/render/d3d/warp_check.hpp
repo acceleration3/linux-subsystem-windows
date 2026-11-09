@@ -45,6 +45,9 @@ public:
             case OpenStatus::Failed:
                 return Outcome::fail("the oracle is unavailable: " + error);
         }
+        if constexpr (requires { accel.under_test = true; }) {
+            accel.under_test = true;
+        }
         context.measure("device", self ? accel.name + " (device under test)" : accel.name);
         if (self) {
             context.measure("dut", "warp");
