@@ -97,7 +97,7 @@ public:
     Com<ID3D11ShaderResourceView> srv_buffer(ID3D11Buffer* buffer, DXGI_FORMAT format, UINT first, UINT count);
 
     bool color(Target& out, UINT w = 128, UINT h = 128, DXGI_FORMAT format = DXGI_FORMAT_R8G8B8A8_UNORM, UINT samples = 1);
-    bool depth(Depth& out, UINT w = 128, UINT h = 128, DXGI_FORMAT format = DXGI_FORMAT_D32_FLOAT, UINT samples = 1);
+    bool depth(Depth& out, UINT w = 128, UINT h = 128, DXGI_FORMAT format = DXGI_FORMAT_D32_FLOAT, UINT samples = 1, UINT quality = 0);
 
     void bind(Target& target, Depth* depth = nullptr, const float* clear = nullptr, bool clear_depth = true);
     void viewport(float x, float y, float w, float h, float min_depth = 0.0f, float max_depth = 1.0f);
@@ -144,6 +144,7 @@ public:
 template <class State>
 class StateScene : public D3d11Scene {
 public:
+    explicit StateScene(State state) : state_(std::move(state)) {}
     [[nodiscard]] std::string unsupported(Kit& kit) override {
         Rig rig(kit);
         return state_.needs(rig);
@@ -180,9 +181,9 @@ private:
 template <class State>
 class AddState {
 public:
-    explicit AddState(rr::CaseSpec spec) {
+    explicit AddState(rr::CaseSpec spec, std::function<State()> make = [] { return State(); }) {
         spec.source_hash(LSW_RENDER_SOURCE_HASH);
-        rr::CaseTable<Kit>::instance().add(std::move(spec), [] { return std::unique_ptr<rr::Scene<Kit>>(new StateScene<State>()); });
+        rr::CaseTable<Kit>::instance().add(std::move(spec), [make = std::move(make)] { return std::unique_ptr<rr::Scene<Kit>>(new StateScene<State>(make())); });
     }
 };
 

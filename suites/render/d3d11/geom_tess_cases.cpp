@@ -127,8 +127,9 @@ bool isoline(Rig& r, Cap& out, const char* partition) {
     return r.shot(out, target);
 }
 
-const Add kIsoInteger(spec("geom", "tess_isoline_integer").tolerance(rr::Tolerance::raster(2, 2)), [](Rig& r, Cap& out) { return isoline(r, out, "integer"); });
-const Add kIsoOdd(spec("geom", "tess_isoline_fractional_odd").tolerance(rr::Tolerance::raster(2, 2)), [](Rig& r, Cap& out) { return isoline(r, out, "fractional_odd"); });
+const Needs kIsoNeeds = [](Rig& r) -> std::string { return r.kit.warp ? std::string("correct isoline tessellation output (the WARP oracle draws nothing or scribbles for isoline domains)") : std::string(); };
+const Add kIsoInteger(spec("geom", "tess_isoline_integer").tolerance(rr::Tolerance::raster(2, 2)), [](Rig& r, Cap& out) { return isoline(r, out, "integer"); }, kIsoNeeds);
+const Add kIsoOdd(spec("geom", "tess_isoline_fractional_odd").tolerance(rr::Tolerance::raster(2, 2)), [](Rig& r, Cap& out) { return isoline(r, out, "fractional_odd"); }, kIsoNeeds);
 
 const Add kTessPoints(spec("geom", "tess_point_output_topology").tolerance(rr::Tolerance::raster(2, 1)), [](Rig& r, Cap& out) {
     Target target;
@@ -324,6 +325,6 @@ const Add kIsoCoords(spec("geom", "tess_isoline_domain_coordinates").tolerance(r
     r.ctx->DSSetShader(d.get(), nullptr, 0);
     r.ctx->Draw(2, 0);
     return r.shot(out, target);
-});
+}, [](Rig& r) -> std::string { return r.kit.warp ? std::string("correct isoline tessellation output (the WARP oracle draws nothing or scribbles for isoline domains)") : std::string(); });
 }
 }

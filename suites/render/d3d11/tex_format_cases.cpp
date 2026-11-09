@@ -128,51 +128,65 @@ std::string sample_ps(const Plan& p, bool load, const char* type_override = null
     return src;
 }
 
-bool run_format(Rig& r, Cap& out, DXGI_FORMAT format) {
-    FormatSpec spec = FormatCodec::spec(format);
-    if (format == DXGI_FORMAT_R9G9B9E5_SHAREDEXP) {
-        spec.bytes = 4;
-    }
-    Bytes data(16 * 16 * static_cast<std::size_t>(spec.bytes));
-    for (int y = 0; y < 16; ++y) {
-        for (int x = 0; x < 16; ++x) {
-            std::uint8_t* texel = data.data() + (static_cast<std::size_t>(y) * 16 + x) * static_cast<std::size_t>(spec.bytes);
-            if (format == DXGI_FORMAT_R9G9B9E5_SHAREDEXP) {
-                const std::uint32_t packed = pack_e5(x / 15.0f * 3.0f, y / 15.0f * 2.0f, ((x ^ y) & 15) / 15.0f);
-                std::memcpy(texel, &packed, 4);
-                continue;
-            }
-            double v[4];
-            texel_values(spec, x, y, v);
-            FormatCodec::encode(spec, v, texel);
-        }
-    }
-    FormatKind kind = format == DXGI_FORMAT_R9G9B9E5_SHAREDEXP ? FormatKind::Float : spec.kind;
-    const Plan plan = plan_for(kind, format == DXGI_FORMAT_R9G9B9E5_SHAREDEXP ? 16 : spec.field[0].bits);
+struct TexFormatMf {
+    DXGI_FORMAT format;
+    FormatSpec spec;
     Target target;
-    Com<ID3D11Texture2D> texture = r.tex_data(16, 16, format, data);
-    Com<ID3D11PixelShader> ps = r.ps(sample_ps(plan, false));
-    Com<ID3D11SamplerState> sampler = r.smp(sdesc());
-    if (!r.color(target) || !texture || !ps || !sampler) return false;
-    Com<ID3D11ShaderResourceView> view = r.srv(texture.get());
-    if (!view) return false;
-    r.bind(target);
-    ID3D11ShaderResourceView* v = view.get();
-    ID3D11SamplerState* s = sampler.get();
-    r.ctx->PSSetShaderResources(0, 1, &v);
-    r.ctx->PSSetSamplers(0, 1, &s);
-    r.draw_fs(ps.get());
-    return r.shot(out, target);
-}
+    Com<ID3D11Texture2D> texture;
+    Com<ID3D11PixelShader> ps;
+    Com<ID3D11SamplerState> sampler;
+    Com<ID3D11ShaderResourceView> view;
+
+    explicit TexFormatMf(DXGI_FORMAT f) : format(f), spec(FormatCodec::spec(f)) {
+        if (f == DXGI_FORMAT_R9G9B9E5_SHAREDEXP) spec.bytes = 4;
+    }
+    std::string needs(Rig& r) { return need_format(r, format, D3D11_FORMAT_SUPPORT_TEXTURE2D | D3D11_FORMAT_SUPPORT_SHADER_LOAD, "sampling"); }
+    bool init(Rig& r) {
+        const bool e5 = format == DXGI_FORMAT_R9G9B9E5_SHAREDEXP;
+        const Plan plan = plan_for(e5 ? FormatKind::Float : spec.kind, e5 ? 16 : spec.field[0].bits);
+        texture = r.tex(16, 16, format, D3D11_BIND_SHADER_RESOURCE);
+        ps = r.ps(sample_ps(plan, false));
+        sampler = r.smp(sdesc());
+        if (!texture || !ps || !sampler || !r.color(target)) return false;
+        view = r.srv(texture.get());
+        return static_cast<bool>(view);
+    }
+    bool step(Rig& r, unsigned frame) {
+        Bytes data(16 * 16 * static_cast<std::size_t>(spec.bytes));
+        for (int y = 0; y < 16; ++y) {
+            for (int x = 0; x < 16; ++x) {
+                const int sx = (x + 3 * static_cast<int>(frame)) & 15;
+                const int sy = (y + static_cast<int>(frame)) & 15;
+                std::uint8_t* texel = data.data() + (static_cast<std::size_t>(y) * 16 + x) * static_cast<std::size_t>(spec.bytes);
+                if (format == DXGI_FORMAT_R9G9B9E5_SHAREDEXP) {
+                    const std::uint32_t packed = pack_e5(sx / 15.0f * 3.0f, sy / 15.0f * 2.0f, ((sx ^ sy) & 15) / 15.0f);
+                    std::memcpy(texel, &packed, 4);
+                    continue;
+                }
+                double v[4];
+                texel_values(spec, sx, sy, v);
+                FormatCodec::encode(spec, v, texel);
+            }
+        }
+        r.ctx->UpdateSubresource(texture.get(), 0, nullptr, data.data(), static_cast<UINT>(16 * spec.bytes), 0);
+        r.bind(target);
+        ID3D11ShaderResourceView* v = view.get();
+        ID3D11SamplerState* s = sampler.get();
+        r.ctx->PSSetShaderResources(0, 1, &v);
+        r.ctx->PSSetSamplers(0, 1, &s);
+        r.draw_fs(ps.get());
+        return true;
+    }
+    bool shot(Rig& r, unsigned, Cap& out) { return r.shot(out, target); }
+};
 
 struct Registrar {
     Registrar() {
         for (const FormatRow& row : kFormats) {
-            const rr::Tolerance tolerance = rr::Tolerance::blend(3).with_outliers(0.002);
-            auto cs = spec("tex", (std::string("sample_") + row.name).c_str()).tolerance(tolerance);
-            if (row.format == DXGI_FORMAT_B4G4R4A4_UNORM) cs.variant(1);
-            Add(std::move(cs), [&row](Rig& r, Cap& out) { return run_format(r, out, row.format); },
-                [&row](Rig& r) { return need_format(r, row.format, D3D11_FORMAT_SUPPORT_TEXTURE2D | D3D11_FORMAT_SUPPORT_SHADER_LOAD, "sampling"); });
+            const DXGI_FORMAT f = row.format;
+            auto cs = spec("tex", (std::string("sample_") + row.name).c_str()).frames(3, {0, 2}).tolerance(rr::Tolerance::blend(3).with_outliers(0.002));
+            if (f == DXGI_FORMAT_B4G4R4A4_UNORM) cs.variant(1);
+            AddState<TexFormatMf>(std::move(cs), [f] { return TexFormatMf(f); });
         }
     }
 };

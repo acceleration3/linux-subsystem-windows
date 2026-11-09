@@ -16,33 +16,6 @@ const char* const kDualPs =
     "PO main(VO i) { PO o; o.a = float4(i.uv.x, i.uv.y, 1.0 - i.uv.x * 0.5, 0.2 + 0.7 * i.uv.y);\n"
     "  o.b = float4(1.0 - i.uv.y, i.uv.x, 0.5, 0.25 + 0.5 * i.uv.x); return o; }\n";
 
-struct Factor {
-    const char* name;
-    D3D11_BLEND color;
-    D3D11_BLEND alpha;
-    bool dual;
-};
-
-const Factor kFactors[] = {
-    {"zero", D3D11_BLEND_ZERO, D3D11_BLEND_ZERO, false},
-    {"one", D3D11_BLEND_ONE, D3D11_BLEND_ONE, false},
-    {"src_color", D3D11_BLEND_SRC_COLOR, D3D11_BLEND_SRC_ALPHA, false},
-    {"inv_src_color", D3D11_BLEND_INV_SRC_COLOR, D3D11_BLEND_INV_SRC_ALPHA, false},
-    {"src_alpha", D3D11_BLEND_SRC_ALPHA, D3D11_BLEND_SRC_ALPHA, false},
-    {"inv_src_alpha", D3D11_BLEND_INV_SRC_ALPHA, D3D11_BLEND_INV_SRC_ALPHA, false},
-    {"dest_alpha", D3D11_BLEND_DEST_ALPHA, D3D11_BLEND_DEST_ALPHA, false},
-    {"inv_dest_alpha", D3D11_BLEND_INV_DEST_ALPHA, D3D11_BLEND_INV_DEST_ALPHA, false},
-    {"dest_color", D3D11_BLEND_DEST_COLOR, D3D11_BLEND_DEST_ALPHA, false},
-    {"inv_dest_color", D3D11_BLEND_INV_DEST_COLOR, D3D11_BLEND_INV_DEST_ALPHA, false},
-    {"src_alpha_sat", D3D11_BLEND_SRC_ALPHA_SAT, D3D11_BLEND_SRC_ALPHA_SAT, false},
-    {"blend_factor", D3D11_BLEND_BLEND_FACTOR, D3D11_BLEND_BLEND_FACTOR, false},
-    {"inv_blend_factor", D3D11_BLEND_INV_BLEND_FACTOR, D3D11_BLEND_INV_BLEND_FACTOR, false},
-    {"src1_color", D3D11_BLEND_SRC1_COLOR, D3D11_BLEND_SRC1_ALPHA, true},
-    {"inv_src1_color", D3D11_BLEND_INV_SRC1_COLOR, D3D11_BLEND_INV_SRC1_ALPHA, true},
-    {"src1_alpha", D3D11_BLEND_SRC1_ALPHA, D3D11_BLEND_SRC1_ALPHA, true},
-    {"inv_src1_alpha", D3D11_BLEND_INV_SRC1_ALPHA, D3D11_BLEND_INV_SRC1_ALPHA, true},
-};
-
 struct HalfState {
     D3D11_BLEND src, dst, src_a, dst_a;
     D3D11_BLEND_OP op, op_a;
@@ -91,35 +64,6 @@ bool run_blend(Rig& r, Cap& out, const HalfState& left, const HalfState& right, 
 
 struct BlendRegistrar {
     BlendRegistrar() {
-        for (const Factor& f : kFactors) {
-            Add(spec("om", (std::string("blend_factor_") + f.name).c_str()).tolerance(rr::Tolerance::blend(2)),
-                [&f](Rig& r, Cap& out) {
-                    HalfState l{f.color, D3D11_BLEND_ONE, f.alpha, D3D11_BLEND_ONE, D3D11_BLEND_OP_ADD, D3D11_BLEND_OP_ADD};
-                    const bool sat = f.color == D3D11_BLEND_SRC_ALPHA_SAT;
-                    HalfState rt{D3D11_BLEND_ONE, sat ? D3D11_BLEND_ZERO : f.color, D3D11_BLEND_ONE, sat ? D3D11_BLEND_ZERO : f.alpha,
-                                 D3D11_BLEND_OP_ADD, D3D11_BLEND_OP_ADD};
-                    return run_blend(r, out, l, rt, f.dual);
-                });
-        }
-        struct OpRow {
-            const char* name;
-            D3D11_BLEND_OP op;
-        };
-        static const OpRow ops[] = {{"add", D3D11_BLEND_OP_ADD},
-                                    {"subtract", D3D11_BLEND_OP_SUBTRACT},
-                                    {"rev_subtract", D3D11_BLEND_OP_REV_SUBTRACT},
-                                    {"min", D3D11_BLEND_OP_MIN},
-                                    {"max", D3D11_BLEND_OP_MAX}};
-        for (const OpRow& op : ops) {
-            Add(spec("om", (std::string("blend_op_") + op.name).c_str()).tolerance(rr::Tolerance::blend(2)), [&op](Rig& r, Cap& out) {
-                const bool minmax = op.op == D3D11_BLEND_OP_MIN || op.op == D3D11_BLEND_OP_MAX;
-                const D3D11_BLEND s = minmax ? D3D11_BLEND_ONE : D3D11_BLEND_SRC_ALPHA;
-                const D3D11_BLEND d = minmax ? D3D11_BLEND_ONE : D3D11_BLEND_ONE;
-                HalfState l{s, d, D3D11_BLEND_ONE, D3D11_BLEND_ONE, op.op, op.op};
-                HalfState rt{D3D11_BLEND_ONE, D3D11_BLEND_INV_SRC_ALPHA, D3D11_BLEND_ONE, D3D11_BLEND_ONE, op.op, D3D11_BLEND_OP_ADD};
-                return run_blend(r, out, l, rt, false);
-            });
-        }
         Add(spec("om", "blend_separate_alpha").tolerance(rr::Tolerance::blend(2)), [](Rig& r, Cap& out) {
             HalfState l{D3D11_BLEND_SRC_ALPHA, D3D11_BLEND_INV_SRC_ALPHA, D3D11_BLEND_ONE, D3D11_BLEND_ZERO, D3D11_BLEND_OP_ADD, D3D11_BLEND_OP_ADD};
             HalfState rt{D3D11_BLEND_ONE, D3D11_BLEND_ONE, D3D11_BLEND_DEST_ALPHA, D3D11_BLEND_ONE, D3D11_BLEND_OP_ADD, D3D11_BLEND_OP_REV_SUBTRACT};
@@ -140,14 +84,6 @@ struct BlendRegistrar {
             HalfState rt{D3D11_BLEND_ONE, D3D11_BLEND_SRC1_COLOR, D3D11_BLEND_ONE, D3D11_BLEND_SRC1_ALPHA, D3D11_BLEND_OP_ADD, D3D11_BLEND_OP_ADD};
             return run_blend(r, out, l, rt, true);
         });
-        for (UINT mask = 1; mask < 16; ++mask) {
-            Add(spec("om", ("write_mask_" + std::to_string(mask)).c_str()).tolerance(rr::Tolerance::blend(2)), [mask](Rig& r, Cap& out) {
-                HalfState l{D3D11_BLEND_SRC_ALPHA, D3D11_BLEND_INV_SRC_ALPHA, D3D11_BLEND_ONE, D3D11_BLEND_ONE, D3D11_BLEND_OP_ADD, D3D11_BLEND_OP_ADD,
-                            static_cast<UINT8>(mask)};
-                HalfState rt{D3D11_BLEND_ONE, D3D11_BLEND_ZERO, D3D11_BLEND_ONE, D3D11_BLEND_ZERO, D3D11_BLEND_OP_ADD, D3D11_BLEND_OP_ADD, static_cast<UINT8>(mask)};
-                return run_blend(r, out, l, rt, false);
-            });
-        }
     }
 };
 const BlendRegistrar kBlendRegistrar;
@@ -200,72 +136,6 @@ const Add kIndependent(spec("om", "blend_independent_eight_targets").tolerance(r
         }
         return true;
     });
-
-struct LogicRow {
-    const char* name;
-    D3D11_LOGIC_OP op;
-};
-
-const LogicRow kLogic[] = {{"clear", D3D11_LOGIC_OP_CLEAR},           {"set", D3D11_LOGIC_OP_SET},
-                           {"copy", D3D11_LOGIC_OP_COPY},             {"copy_inverted", D3D11_LOGIC_OP_COPY_INVERTED},
-                           {"noop", D3D11_LOGIC_OP_NOOP},             {"invert", D3D11_LOGIC_OP_INVERT},
-                           {"and", D3D11_LOGIC_OP_AND},               {"nand", D3D11_LOGIC_OP_NAND},
-                           {"or", D3D11_LOGIC_OP_OR},                 {"nor", D3D11_LOGIC_OP_NOR},
-                           {"xor", D3D11_LOGIC_OP_XOR},               {"equiv", D3D11_LOGIC_OP_EQUIV},
-                           {"and_reverse", D3D11_LOGIC_OP_AND_REVERSE}, {"and_inverted", D3D11_LOGIC_OP_AND_INVERTED},
-                           {"or_reverse", D3D11_LOGIC_OP_OR_REVERSE}, {"or_inverted", D3D11_LOGIC_OP_OR_INVERTED}};
-
-bool run_logic(Rig& r, Cap& out, D3D11_LOGIC_OP op) {
-    Target target;
-    if (!r.color(target, 128, 128, DXGI_FORMAT_R8G8B8A8_UINT)) return false;
-    const char* back_source =
-        "struct VO { float4 p : SV_Position; float2 uv : TEXCOORD0; };\n"
-        "uint4 main(VO i) : SV_Target { uint x = (uint)i.p.x; uint y = (uint)i.p.y; return uint4((x * 2) & 255, (y * 2) & 255, (x ^ y) & 255, 255 - ((x + y) & 127)); }\n";
-    const char* front_source =
-        "struct VO { float4 p : SV_Position; float2 uv : TEXCOORD0; };\n"
-        "uint4 main(VO i) : SV_Target { uint x = (uint)i.p.x; uint y = (uint)i.p.y; return uint4((x * 5 + y) & 255, (x + y * 3) & 255, 0xA5 ^ (x & 255), (x * y) & 255); }\n";
-    Com<ID3D11PixelShader> back = r.ps(back_source);
-    Com<ID3D11PixelShader> front = r.ps(front_source);
-    ID3D11Device1* raw_dev1 = nullptr;
-    r.dev->QueryInterface(__uuidof(ID3D11Device1), reinterpret_cast<void**>(&raw_dev1));
-    Com<ID3D11Device1> dev1(raw_dev1);
-    if (!back || !front || !dev1) return r.fail("ID3D11Device1 is unavailable");
-    D3D11_BLEND_DESC1 bd{};
-    bd.RenderTarget[0].SrcBlend = bd.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;
-    bd.RenderTarget[0].DestBlend = bd.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ZERO;
-    bd.RenderTarget[0].BlendOp = bd.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
-    bd.RenderTarget[0].LogicOpEnable = TRUE;
-    bd.RenderTarget[0].LogicOp = op;
-    bd.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
-    Com<ID3D11BlendState1> state;
-    if (!r.ok(dev1->CreateBlendState1(&bd, state.put()), "CreateBlendState1")) return false;
-    r.bind(target);
-    r.draw_fs(back.get());
-    const float factor[4] = {};
-    r.ctx->OMSetBlendState(state.get(), factor, 0xffffffffu);
-    r.draw_fs(front.get());
-    rr::Image image;
-    if (!r.read_image(target.texture.get(), DXGI_FORMAT_R8G8B8A8_UINT, 0, image)) return false;
-    out.add("", std::move(image));
-    return true;
-}
-
-struct LogicRegistrar {
-    LogicRegistrar() {
-        for (const LogicRow& row : kLogic) {
-            Add(spec("om", (std::string("logic_op_") + row.name).c_str()).variant(1).uniform_ok(),
-                [&row](Rig& r, Cap& out) { return run_logic(r, out, row.op); },
-                [](Rig& r) -> std::string {
-                    D3D11_FEATURE_DATA_D3D11_OPTIONS options{};
-                    if (FAILED(r.dev->CheckFeatureSupport(D3D11_FEATURE_D3D11_OPTIONS, &options, sizeof options)) || !options.OutputMergerLogicOp) {
-                        return "logic operations in the output merger";
-                    }
-                    return need_format(r, DXGI_FORMAT_R8G8B8A8_UINT, D3D11_FORMAT_SUPPORT_RENDER_TARGET, "R8G8B8A8_UINT render targets");
-                });
-        }
-    }
-};
-const LogicRegistrar kLogicRegistrar;
 
 bool run_msaa_blend(Rig& r, Cap& out, bool coverage, UINT sample_mask) {
     Target target;

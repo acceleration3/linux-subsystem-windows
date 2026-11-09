@@ -110,6 +110,7 @@ bool predicate_scene(Rig& r, Cap& out, bool predicate_value, bool occluded) {
 }
 const Add kPredVisible(spec("query", "predicated_draw_visible_object_value_false").tolerance(rr::Tolerance::blend(2)), [](Rig& r, Cap& out) { return predicate_scene(r, out, FALSE, false); });
 const Add kPredHidden(spec("query", "predicated_draw_hidden_object_value_false").tolerance(rr::Tolerance::blend(2)), [](Rig& r, Cap& out) { return predicate_scene(r, out, FALSE, true); });
+const Add kPredVisibleTrue(spec("query", "predicated_draw_visible_object_value_true").tolerance(rr::Tolerance::blend(2)), [](Rig& r, Cap& out) { return predicate_scene(r, out, TRUE, false); });
 const Add kPredHiddenTrue(spec("query", "predicated_draw_hidden_object_value_true").tolerance(rr::Tolerance::blend(2)), [](Rig& r, Cap& out) { return predicate_scene(r, out, TRUE, true); });
 
 const Add kSoQueries(spec("query", "stream_output_statistics_and_overflow_predicate").tolerance(rr::Tolerance::blend(2)), [](Rig& r, Cap& out) {

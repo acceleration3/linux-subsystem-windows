@@ -49,20 +49,6 @@ bool depth_scene(Rig& r, Cap& out, DXGI_FORMAT format, D3D11_COMPARISON_FUNC fun
 
 struct DepthRegistrar {
     DepthRegistrar() {
-        struct F {
-            const char* name;
-            D3D11_COMPARISON_FUNC func;
-        };
-        static const F funcs[] = {{"never", D3D11_COMPARISON_NEVER},         {"less", D3D11_COMPARISON_LESS},
-                                  {"equal", D3D11_COMPARISON_EQUAL},         {"less_equal", D3D11_COMPARISON_LESS_EQUAL},
-                                  {"greater", D3D11_COMPARISON_GREATER},     {"not_equal", D3D11_COMPARISON_NOT_EQUAL},
-                                  {"greater_equal", D3D11_COMPARISON_GREATER_EQUAL}, {"always", D3D11_COMPARISON_ALWAYS}};
-        for (const F& f : funcs) {
-            Add(spec("om", (std::string("depth_func_") + f.name).c_str()).tolerance(rr::Tolerance::blend(2).with_edge(2)),
-                [&f](Rig& r, Cap& out) { return depth_scene(r, out, DXGI_FORMAT_D32_FLOAT, f.func, true); });
-        }
-        Add(spec("om", "depth_write_disabled").tolerance(rr::Tolerance::blend(2).with_edge(2)),
-            [](Rig& r, Cap& out) { return depth_scene(r, out, DXGI_FORMAT_D32_FLOAT, D3D11_COMPARISON_GREATER, false); });
         struct Fmt {
             const char* name;
             DXGI_FORMAT format;
@@ -146,80 +132,6 @@ const Add kPrepass(spec("om", "depth_prepass_then_equal").tolerance(rr::Toleranc
     cubes.draw(r, b);
     return r.shot(out, target);
 });
-
-struct StencilOpRow {
-    const char* name;
-    D3D11_STENCIL_OP op;
-};
-
-const StencilOpRow kStencilOps[] = {{"keep", D3D11_STENCIL_OP_KEEP},       {"zero", D3D11_STENCIL_OP_ZERO},
-                                    {"replace", D3D11_STENCIL_OP_REPLACE}, {"incr_sat", D3D11_STENCIL_OP_INCR_SAT},
-                                    {"decr_sat", D3D11_STENCIL_OP_DECR_SAT}, {"invert", D3D11_STENCIL_OP_INVERT},
-                                    {"incr", D3D11_STENCIL_OP_INCR},       {"decr", D3D11_STENCIL_OP_DECR}};
-
-bool stencil_op_scene(Rig& r, Cap& out, D3D11_STENCIL_OP op) {
-    Depth depth;
-    if (!r.depth(depth, 128, 128, DXGI_FORMAT_D24_UNORM_S8_UINT)) return false;
-    Com<ID3D11VertexShader> vs = r.vs(Hlsl3d::kFsVsZ);
-    Com<ID3D11Buffer> zb = r.buf(16, D3D11_BIND_CONSTANT_BUFFER);
-    D3D11_RASTERIZER_DESC rd = rdesc();
-    rd.ScissorEnable = TRUE;
-    Com<ID3D11RasterizerState> rs = r.rast(rd);
-    if (!vs || !zb || !rs) return false;
-    auto state = [&](bool depth_on, D3D11_COMPARISON_FUNC depth_func, bool depth_write, D3D11_COMPARISON_FUNC sfunc, D3D11_STENCIL_OP fail,
-                     D3D11_STENCIL_OP zfail, D3D11_STENCIL_OP pass) {
-        D3D11_DEPTH_STENCIL_DESC d = ddesc(depth_on, depth_func, depth_write);
-        d.StencilEnable = TRUE;
-        d.FrontFace = {fail, zfail, pass, sfunc};
-        d.BackFace = d.FrontFace;
-        return r.dss(d);
-    };
-    using S = D3D11_STENCIL_OP;
-    Com<ID3D11DepthStencilState> init = state(false, D3D11_COMPARISON_ALWAYS, false, D3D11_COMPARISON_ALWAYS, S::D3D11_STENCIL_OP_REPLACE, S::D3D11_STENCIL_OP_REPLACE, S::D3D11_STENCIL_OP_REPLACE);
-    Com<ID3D11DepthStencilState> prefill = state(true, D3D11_COMPARISON_ALWAYS, true, D3D11_COMPARISON_ALWAYS, S::D3D11_STENCIL_OP_KEEP, S::D3D11_STENCIL_OP_KEEP, S::D3D11_STENCIL_OP_KEEP);
-    Com<ID3D11DepthStencilState> on_pass = state(false, D3D11_COMPARISON_ALWAYS, false, D3D11_COMPARISON_ALWAYS, S::D3D11_STENCIL_OP_KEEP, S::D3D11_STENCIL_OP_KEEP, op);
-    Com<ID3D11DepthStencilState> on_fail = state(false, D3D11_COMPARISON_ALWAYS, false, D3D11_COMPARISON_NEVER, op, S::D3D11_STENCIL_OP_KEEP, S::D3D11_STENCIL_OP_KEEP);
-    Com<ID3D11DepthStencilState> on_zfail = state(true, D3D11_COMPARISON_LESS, false, D3D11_COMPARISON_ALWAYS, S::D3D11_STENCIL_OP_KEEP, op, S::D3D11_STENCIL_OP_KEEP);
-    if (!init || !prefill || !on_pass || !on_fail || !on_zfail) return false;
-    ID3D11DeviceContext* c = r.ctx;
-    c->OMSetRenderTargets(0, nullptr, depth.view.get());
-    c->ClearDepthStencilView(depth.view.get(), D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 250);
-    r.viewport(0, 0, 128, 128);
-    c->RSSetState(rs.get());
-    c->IASetInputLayout(nullptr);
-    c->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-    c->VSSetShader(vs.get(), nullptr, 0);
-    c->PSSetShader(nullptr, nullptr, 0);
-    ID3D11Buffer* cb = zb.get();
-    c->VSSetConstantBuffers(0, 1, &cb);
-    auto fullscreen = [&](float z, const D3D11_RECT& rect, ID3D11DepthStencilState* s, UINT ref, int times) {
-        const float zc[4] = {z, 0, 0, 0};
-        c->UpdateSubresource(zb.get(), 0, nullptr, zc, 0, 0);
-        c->RSSetScissorRects(1, &rect);
-        c->OMSetDepthStencilState(s, ref);
-        for (int i = 0; i < times; ++i) c->Draw(3, 0);
-    };
-    fullscreen(0.5f, {0, 0, 64, 128}, init.get(), 2, 1);
-    const D3D11_RECT bands[3] = {{0, 0, 128, 42}, {0, 42, 128, 85}, {0, 85, 128, 128}};
-    fullscreen(0.2f, bands[2], prefill.get(), 0, 1);
-    fullscreen(0.5f, bands[0], on_pass.get(), 77, 9);
-    fullscreen(0.5f, bands[1], on_fail.get(), 77, 9);
-    fullscreen(0.8f, bands[2], on_zfail.get(), 77, 9);
-    rr::Image stencil;
-    if (!r.kit.read_stencil(depth, stencil, r.error)) return false;
-    out.add("stencil", std::move(stencil));
-    return true;
-}
-
-struct StencilRegistrar {
-    StencilRegistrar() {
-        for (const StencilOpRow& row : kStencilOps) {
-            Add(spec("om", (std::string("stencil_op_") + row.name).c_str()).uniform_ok("stencil"),
-                [&row](Rig& r, Cap& out) { return stencil_op_scene(r, out, row.op); });
-        }
-    }
-};
-const StencilRegistrar kStencilRegistrar;
 
 }  // namespace
 

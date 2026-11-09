@@ -319,7 +319,7 @@ bool Rig::color(Target& out, UINT w, UINT h, DXGI_FORMAT format, UINT samples) {
     return kit.make_target(out, w, h, format, samples, error);
 }
 
-bool Rig::depth(Depth& out, UINT w, UINT h, DXGI_FORMAT format, UINT samples) {
+bool Rig::depth(Depth& out, UINT w, UINT h, DXGI_FORMAT format, UINT samples, UINT quality) {
     HRESULT result = S_OK;
     DXGI_FORMAT texture_format = format;
     if (format == DXGI_FORMAT_D32_FLOAT) {
@@ -331,8 +331,10 @@ bool Rig::depth(Depth& out, UINT w, UINT h, DXGI_FORMAT format, UINT samples) {
     } else if (format == DXGI_FORMAT_D32_FLOAT_S8X24_UINT) {
         texture_format = DXGI_FORMAT_R32G8X24_TYPELESS;
     }
-    out.texture = D3d11Tools::texture(kit.dev, D3d11Tools::desc2d(w, h, texture_format, D3D11_BIND_DEPTH_STENCIL | D3D11_BIND_SHADER_RESOURCE,
-                                                                  D3D11_USAGE_DEFAULT, 0, 1, 1, samples), nullptr, &result);
+    D3D11_TEXTURE2D_DESC depth_desc = D3d11Tools::desc2d(w, h, texture_format, D3D11_BIND_DEPTH_STENCIL | D3D11_BIND_SHADER_RESOURCE,
+                                                         D3D11_USAGE_DEFAULT, 0, 1, 1, samples);
+    depth_desc.SampleDesc.Quality = quality;
+    out.texture = D3d11Tools::texture(kit.dev, depth_desc, nullptr, &result);
     if (!out.texture) {
         return ok(result, "depth texture");
     }

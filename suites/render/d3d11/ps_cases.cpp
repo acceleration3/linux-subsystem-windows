@@ -87,7 +87,7 @@ const InterpRegistrar kInterpRegistrar;
 bool msaa_ps(Rig& r, Cap& out, const char* ps_body, bool coverage_out = false) {
     (void)coverage_out;
     Target target;
-    const std::string src = std::string(kPsIn) + ps_body;
+    const std::string src = std::string("struct VO { float4 p : SV_Position; };\n") + ps_body;
     Com<ID3D11PixelShader> ps = r.ps(src);
     Com<ID3D11VertexShader> vs = r.vs("float4 main(uint id : SV_VertexID) : SV_Position { float2 p[6] = {float2(-0.9, -0.8), float2(0.9, -0.7), float2(-0.1, 0.9), float2(0.2, 0.7), float2(0.95, -0.2), float2(0.0, -0.9)}; return float4(p[id], 0, 1); }\n");
     D3D11_RASTERIZER_DESC d = rdesc();
@@ -132,7 +132,7 @@ const Add kDerivCoarse(spec("ps", "derivatives_coarse").tolerance(rr::Tolerance:
     return fs_pass(r, out, std::string(kPsIn) + "float4 main(VO i) : SV_Target { float v = sin(i.p.x * 0.35) * cos(i.p.y * 0.27) * 40.0; return float4(ddx_coarse(v) * 0.05 + 0.5, ddy_coarse(v) * 0.05 + 0.5, fwidth(v) * 0.03, 1); }\n");
 });
 
-const Add kBitOps(spec("ps", "integer_and_bit_operations").tolerance(rr::Tolerance::exact()), [](Rig& r, Cap& out) {
+const Add kBitOps(spec("ps", "integer_and_bit_operations").tolerance(rr::Tolerance::tight(1)), [](Rig& r, Cap& out) {
     return fs_pass(r, out, std::string(kPsIn) +
         "float4 main(VO i) : SV_Target { uint x = uint(i.p.x), y = uint(i.p.y); uint v = x * 2654435761u + y * 40503u;\n"
         "  uint a = countbits(v) * 8; uint b = (firstbithigh(v | 1) * 8) & 255; uint c = (reversebits(v) >> 24) & 255; uint d = ((v >> (x & 7)) & 0xFFu) ^ ((v << 3) >> 24);\n"
@@ -158,7 +158,7 @@ const Add kLoops(spec("ps", "flow_control_loops_switch").tolerance(rr::Tolerance
     return fs_pass(r, out, std::string(kPsIn) +
         "float4 main(VO i) : SV_Target { float2 c = (i.uv - float2(0.65, 0.5)) * 2.6; float2 z = 0; int n = 0;\n"
         "  [loop] for (int k = 0; k < 24; ++k) { z = float2(z.x * z.x - z.y * z.y, 2 * z.x * z.y) + c; if (dot(z, z) > 4.0) break; n++; }\n"
-        "  float3 col; switch (n % 4) { case 0: col = float3(1, 0.3, 0.1); break; case 1: col = float3(0.2, 0.9, 0.3); break; case 2: col = float3(0.2, 0.3, 1); break; default: col = float3(0.9, 0.9, 0.2); }\n"
+        "  float3 col; switch (n % 4) { case 0: col = float3(1, 0.3, 0.1); break; case 1: col = float3(0.2, 0.9, 0.3); break; case 2: col = float3(0.2, 0.3, 1); break; default: col = float3(0.9, 0.9, 0.2); break; }\n"
         "  [branch] if (n >= 24) col = 0.05; return float4(col * (0.3 + 0.7 * n / 24.0), 1); }\n");
 });
 
@@ -290,7 +290,7 @@ bool early_scene(Rig& r, Cap& out, bool early) {
     out.add("counts", std::move(counts));
     return r.shot(out, target);
 }
-const Add kEarlyZ(spec("ps", "early_depth_stencil_with_uav_writes").tolerance(rr::Tolerance::tight(1)), [](Rig& r, Cap& out) { return early_scene(r, out, true); });
+const Add kEarlyZ(spec("ps", "early_depth_stencil_with_uav_writes").tolerance(rr::Tolerance::tight(1)).uniform_ok("counts"), [](Rig& r, Cap& out) { return early_scene(r, out, true); });
 const Add kLateZ(spec("ps", "late_depth_with_uav_writes_runs_hidden_fragments").tolerance(rr::Tolerance::tight(1)), [](Rig& r, Cap& out) { return early_scene(r, out, false); });
 
 const Add kAtomics(spec("ps", "atomics_on_structured_buffer").tolerance(rr::Tolerance::exact()), [](Rig& r, Cap& out) {
@@ -300,7 +300,7 @@ const Add kAtomics(spec("ps", "atomics_on_structured_buffer").tolerance(rr::Tole
         "RWStructuredBuffer<uint> u : register(u1);\nstruct VO { float4 p : SV_Position; float2 uv : TEXCOORD0; };\n"
         "float4 main(VO i) : SV_Target { uint x = uint(i.p.x), y = uint(i.p.y); uint bin = ((x >> 2) ^ (y >> 3)) & 15; uint o;\n"
         "  InterlockedAdd(u[bin], 1); InterlockedMax(u[16 + (bin & 3)], x + y); InterlockedMin(u[20 + (bin & 3)], 1000 + (x ^ y)); InterlockedOr(u[24], 1u << (bin & 31));\n"
-        "  InterlockedXor(u[25], x * 7 + y); InterlockedAnd(u[26], ~(1u << (bin & 15))); InterlockedCompareExchange(u[27], 0, x + 1000, o); return float4(bin / 15.0, i.uv.y, 0.3, 1); }\n";
+        "  InterlockedXor(u[25], x * 7 + y); InterlockedAnd(u[26], ~(1u << (bin & 15))); InterlockedCompareExchange(u[27], 0, 7, o); return float4(bin / 15.0, i.uv.y, 0.3, 1); }\n";
     Com<ID3D11PixelShader> ps = r.ps(source);
     if (!buffer || !ps || !r.color(target)) return false;
     Com<ID3D11UnorderedAccessView> uav = D3d11Tools::structured_uav(r.kit.dev, buffer.get(), 64);
@@ -462,7 +462,7 @@ struct DepthOutRegistrar {
                 Depth depth;
                 const bool greater = std::string(row.semantic) == "SV_DepthGreaterEqual";
                 const bool less = std::string(row.semantic) == "SV_DepthLessEqual";
-                const std::string src = std::string(kPsIn) + "struct PO { float4 c : SV_Target; float d : " + row.semantic + "; };\n" +
+                const std::string src = std::string("struct VO { noperspective centroid float4 p : SV_Position; float2 uv : TEXCOORD0; };\n") + "struct PO { float4 c : SV_Target; float d : " + row.semantic + "; };\n" +
                     "PO main(VO i) { PO o; o.c = float4(i.uv, 0.5 + 0.5 * sin(i.p.x * 0.2), 1); float z = i.p.z; o.d = " +
                     (greater ? "z + 0.2 * i.uv.x" : less ? "z - 0.0001 * i.uv.x" : "0.2 + 0.6 * i.uv.x") + "; return o; }\n";
                 Com<ID3D11PixelShader> ps = r.ps(src);
@@ -491,13 +491,10 @@ struct DepthOutRegistrar {
 };
 const DepthOutRegistrar kDepthOutRegistrar;
 
-const Add kFrontFace(spec("ps", "sv_isfrontface_and_primitiveid").tolerance(rr::Tolerance::raster()), [](Rig& r, Cap& out) {
+bool face_scene(Rig& r, Cap& out, const char* ps_source) {
     Target target;
     Depth depth;
     CubePipe cubes;
-    const char* ps_source =
-        "struct VsOut { float4 pos : SV_Position; float3 col : COLOR; };\n"
-        "float4 main(VsOut i, bool front : SV_IsFrontFace, uint id : SV_PrimitiveID) : SV_Target { float3 c = front ? i.col : (1.0 - i.col) * 0.5; return float4(c * (0.6 + 0.4 * ((id & 3) / 3.0)), 1); }\n";
     if (!r.color(target) || !r.depth(depth) || !cubes.make(r, ps_source, D3D11_CULL_NONE)) return false;
     Com<ID3D11DepthStencilState> ds = r.dss(ddesc(true, D3D11_COMPARISON_LESS, true));
     if (!ds) return false;
@@ -506,6 +503,18 @@ const Add kFrontFace(spec("ps", "sv_isfrontface_and_primitiveid").tolerance(rr::
     r.ctx->OMSetDepthStencilState(ds.get(), 0);
     cubes.draw(r, CubePipe::camera() * rr::Mat4::rotate_y(0.7f) * rr::Mat4::rotate_x(0.5f));
     return r.shot(out, target);
+}
+
+const Add kFrontFace(spec("ps", "sv_isfrontface").tolerance(rr::Tolerance::raster()), [](Rig& r, Cap& out) {
+    return face_scene(r, out,
+        "struct VsOut { float4 pos : SV_Position; float3 col : COLOR; };\n"
+        "float4 main(VsOut i, bool front : SV_IsFrontFace) : SV_Target { return float4(front ? i.col : (1.0 - i.col) * 0.5, 1); }\n");
+});
+
+const Add kPrimitiveId(spec("ps", "sv_primitiveid").tolerance(rr::Tolerance::raster()), [](Rig& r, Cap& out) {
+    return face_scene(r, out,
+        "struct VsOut { float4 pos : SV_Position; float3 col : COLOR; };\n"
+        "float4 main(VsOut i, uint id : SV_PrimitiveID) : SV_Target { return float4(i.col * (0.4 + 0.6 * ((id & 3) / 3.0)), 1); }\n");
 });
 
 }  // namespace

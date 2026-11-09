@@ -251,11 +251,11 @@ void read_bytes_as_image(Rig& r, ID3D11Buffer* buffer, Cap& out, const char* lab
 }
 
 bool draw_from(Rig& r, Basic& basic, ID3D11Buffer* buffer, UINT stride, D3D11_PRIMITIVE_TOPOLOGY topology) {
+    r.ctx->SOSetTargets(0, nullptr, nullptr);
     basic.bind(r, topology);
     UINT offset = 0;
     r.ctx->IASetVertexBuffers(0, 1, &buffer, &stride, &offset);
     r.ctx->GSSetShader(nullptr, nullptr, 0);
-    r.ctx->SOSetTargets(0, nullptr, nullptr);
     r.ctx->DrawAuto();
     return true;
 }

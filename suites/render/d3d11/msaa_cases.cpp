@@ -27,7 +27,7 @@ bool msaa_scene(Rig& r, Cap& out, UINT samples, DXGI_FORMAT format, bool standar
     } else if (!r.color(target, 128, 128, format, samples)) {
         return false;
     }
-    if (!r.depth(depth, 128, 128, DXGI_FORMAT_D32_FLOAT, samples) || !cubes.make(r)) return false;
+    if (!r.depth(depth, 128, 128, DXGI_FORMAT_D32_FLOAT, samples, standard_pattern ? D3D11_STANDARD_MULTISAMPLE_PATTERN : 0) || !cubes.make(r)) return false;
     D3D11_RASTERIZER_DESC rd = rdesc(D3D11_FILL_SOLID, D3D11_CULL_BACK);
     rd.FrontCounterClockwise = TRUE;
     rd.MultisampleEnable = TRUE;

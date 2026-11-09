@@ -61,12 +61,12 @@ const Add kBlur(spec("cs", "groupshared_gaussian_blur_barriers").tolerance(rr::T
     Com<ID3D11Texture2D> mid = r.tex(64, 64, DXGI_FORMAT_R8G8B8A8_UNORM, D3D11_BIND_UNORDERED_ACCESS | D3D11_BIND_SHADER_RESOURCE);
     Com<ID3D11Texture2D> dst = r.tex(64, 64, DXGI_FORMAT_R8G8B8A8_UNORM, D3D11_BIND_UNORDERED_ACCESS | D3D11_BIND_SHADER_RESOURCE);
     auto source = [](bool horizontal) {
-        const std::string pc = horizontal ? "int2(i, line)" : "int2(line, i)";
-        const std::string lo = horizontal ? "int2(0, line)" : "int2(line, 0)";
-        const std::string hi = horizontal ? "int2(63, line)" : "int2(line, 63)";
+        const std::string pc = horizontal ? "int2(i, row)" : "int2(row, i)";
+        const std::string lo = horizontal ? "int2(0, row)" : "int2(row, 0)";
+        const std::string hi = horizontal ? "int2(63, row)" : "int2(row, 63)";
         return std::string("Texture2D<float4> t : register(t0);\nRWTexture2D<float4> u : register(u0);\ngroupshared float4 tile[72];\n"
                            "static const float w[9] = {0.027, 0.065, 0.121, 0.176, 0.2, 0.176, 0.121, 0.065, 0.027};\n"
-                           "[numthreads(64, 1, 1)] void main(uint3 g : SV_GroupID, uint3 th : SV_GroupThreadID) { int line = g.x; int i = th.x;\n"
+                           "[numthreads(64, 1, 1)] void main(uint3 g : SV_GroupID, uint3 th : SV_GroupThreadID) { int row = g.x; int i = th.x;\n"
                            "  tile[i + 4] = t.Load(int3(" + pc + ", 0)); if (i < 4) { tile[i] = t.Load(int3(" + lo + ", 0)); tile[68 + i] = t.Load(int3(" + hi + ", 0)); }\n"
                            "  GroupMemoryBarrierWithGroupSync(); float4 acc = 0; [unroll] for (int k = 0; k < 9; ++k) acc += tile[i + k] * w[k]; u[" + pc + "] = acc; }\n");
     };
@@ -152,7 +152,7 @@ const Add kHistogram(spec("cs", "histogram_interlockedadd_visualised").tolerance
 const Add kAppendConsume(spec("cs", "append_consume_buffers").tolerance(rr::Tolerance::exact()), [](Rig& r, Cap& out) {
     Com<ID3D11Buffer> list = r.buf(256 * 8, D3D11_BIND_UNORDERED_ACCESS | D3D11_BIND_SHADER_RESOURCE, nullptr, D3D11_USAGE_DEFAULT, 0, D3D11_RESOURCE_MISC_BUFFER_STRUCTURED, 8);
     Com<ID3D11Buffer> sums = r.buf(16, D3D11_BIND_UNORDERED_ACCESS, nullptr, D3D11_USAGE_DEFAULT, 0, D3D11_RESOURCE_MISC_BUFFER_ALLOW_RAW_VIEWS);
-    Com<ID3D11Buffer> count = r.buf(16, 0, nullptr, D3D11_USAGE_DEFAULT, 0, D3D11_RESOURCE_MISC_BUFFER_ALLOW_RAW_VIEWS);
+    Com<ID3D11Buffer> count = r.buf(16, D3D11_BIND_UNORDERED_ACCESS, nullptr, D3D11_USAGE_DEFAULT, 0, D3D11_RESOURCE_MISC_BUFFER_ALLOW_RAW_VIEWS);
     Com<ID3D11ComputeShader> produce = r.cs(
         "AppendStructuredBuffer<uint2> a : register(u0);\n[numthreads(16, 1, 1)] void main(uint3 id : SV_DispatchThreadID) { if ((id.x % 3) != 1) a.Append(uint2(id.x, id.x * id.x)); }\n");
     Com<ID3D11ComputeShader> consume = r.cs(
@@ -197,9 +197,9 @@ const Add kAppendConsume(spec("cs", "append_consume_buffers").tolerance(rr::Tole
     return true;
 }, [](Rig& r) { return need_fl(r, D3D_FEATURE_LEVEL_11_0); });
 
-const Add kCounter(spec("cs", "uav_counter_increment_and_copy_structure_count").tolerance(rr::Tolerance::exact()), [](Rig& r, Cap& out) {
+const Add kCounter(spec("cs", "uav_counter_increment_and_copy_structure_count").tolerance(rr::Tolerance::exact()).uniform_ok("counter"), [](Rig& r, Cap& out) {
     Com<ID3D11Buffer> buffer = r.buf(1024 * 4, D3D11_BIND_UNORDERED_ACCESS, nullptr, D3D11_USAGE_DEFAULT, 0, D3D11_RESOURCE_MISC_BUFFER_STRUCTURED, 4);
-    Com<ID3D11Buffer> count = r.buf(16, 0, nullptr, D3D11_USAGE_DEFAULT, 0, D3D11_RESOURCE_MISC_BUFFER_ALLOW_RAW_VIEWS);
+    Com<ID3D11Buffer> count = r.buf(16, D3D11_BIND_UNORDERED_ACCESS, nullptr, D3D11_USAGE_DEFAULT, 0, D3D11_RESOURCE_MISC_BUFFER_ALLOW_RAW_VIEWS);
     Com<ID3D11ComputeShader> cs = r.cs(
         "RWStructuredBuffer<uint> u : register(u0);\n[numthreads(64, 1, 1)] void main(uint3 id : SV_DispatchThreadID) { if ((id.x * 7) % 5 < 2) { uint k = u.IncrementCounter(); u[k] = 1; } }\n");
     if (!buffer || !count || !cs) return false;
@@ -262,10 +262,11 @@ const Add kIndirect(spec("cs", "dispatch_indirect_args_from_compute").tolerance(
 
 bool typed_load(Rig& r, Cap& out, DXGI_FORMAT format, const char* type) {
     Com<ID3D11Texture2D> tex = r.tex(64, 64, format, D3D11_BIND_UNORDERED_ACCESS | D3D11_BIND_SHADER_RESOURCE);
-    const std::string src = std::string("RWTexture2D<") + type + "> u : register(u0);\n[numthreads(8, 8, 1)] void main(uint3 id : SV_DispatchThreadID) {\n"
-        "  u[id.xy] = " + type + "(id.x / 64.0, id.y / 64.0, (id.x ^ id.y) / 64.0, 1.0); }\n";
-    const std::string inc = std::string("RWTexture2D<") + type + "> u : register(u0);\n[numthreads(8, 8, 1)] void main(uint3 id : SV_DispatchThreadID) {\n"
-        "  " + type + " v = u[id.xy]; u[id.xy] = " + type + "(v.y, v.z * 0.5, v.x, 1.0); }\n";
+    const std::string decl = std::string(type) == "float4" && format == DXGI_FORMAT_R8G8B8A8_UNORM ? "unorm float4" : type;
+    const std::string src = std::string("RWTexture2D<") + decl + "> u : register(u0);\n[numthreads(8, 8, 1)] void main(uint3 id : SV_DispatchThreadID) {\n"
+        "  u[id.xy] = float4(id.x / 64.0, id.y / 64.0, (id.x ^ id.y) / 64.0, 1.0); }\n";
+    const std::string inc = std::string("RWTexture2D<") + decl + "> u : register(u0);\n[numthreads(8, 8, 1)] void main(uint3 id : SV_DispatchThreadID) {\n"
+        "  float4 v = u[id.xy]; u[id.xy] = float4(v.y, v.z * 0.5, v.x, 1.0); }\n";
     if (std::string(type) == "float") {
     }
     Com<ID3D11ComputeShader> first = r.cs(src);
@@ -396,8 +397,8 @@ const Add kGeneratedVertices(spec("cs", "compute_generated_vertex_buffer_then_dr
 const Add kRawBuffer(spec("cs", "raw_buffer_uav_store_load").tolerance(rr::Tolerance::exact()), [](Rig& r, Cap& out) {
     Com<ID3D11Buffer> buffer = r.buf(1024, D3D11_BIND_UNORDERED_ACCESS, nullptr, D3D11_USAGE_DEFAULT, 0, D3D11_RESOURCE_MISC_BUFFER_ALLOW_RAW_VIEWS);
     Com<ID3D11ComputeShader> cs = r.cs(
-        "RWByteAddressBuffer b : register(u0);\n[numthreads(16, 1, 1)] void main(uint3 id : SV_DispatchThreadID) { uint i = id.x; b.Store4(i * 16, uint4(i, i * i, i ^ 0xA5A5, ~i)); GroupMemoryBarrierWithGroupSync();\n"
-        "  uint4 v = b.Load4(((i + 1) % 16) * 16); b.Store(i * 16 + 8, v.x + v.y * 3); b.Store2(i * 16, uint2(v.w, v.z)); }\n");
+        "RWByteAddressBuffer b : register(u0);\n[numthreads(16, 1, 1)] void main(uint3 id : SV_DispatchThreadID) { uint i = id.x; b.Store4(i * 16, uint4(i, i * i, i ^ 0xA5A5, ~i)); AllMemoryBarrierWithGroupSync();\n"
+        "  uint4 v = b.Load4(((i + 1) % 16) * 16); AllMemoryBarrierWithGroupSync(); b.Store(i * 16 + 8, v.x + v.y * 3); b.Store2(i * 16, uint2(v.w, v.z)); }\n");
     if (!buffer || !cs) return false;
     D3D11_UNORDERED_ACCESS_VIEW_DESC ud{};
     ud.Format = DXGI_FORMAT_R32_TYPELESS;
@@ -411,6 +412,18 @@ const Add kRawBuffer(spec("cs", "raw_buffer_uav_store_load").tolerance(rr::Toler
     r.ctx->CSSetUnorderedAccessViews(0, 1, &u, nullptr);
     r.ctx->Dispatch(1, 1, 1);
     unbind_cs(r);
+    Bytes bytes;
+    if (!r.read_bytes(buffer.get(), bytes)) return false;
+    for (unsigned i = 0; i < 16; ++i) {
+        const unsigned n = (i + 1) % 16;
+        const std::uint32_t v[4] = {n, n * n, n ^ 0xA5A5u, ~n};
+        const std::uint32_t expected[4] = {v[3], v[2], v[0] + v[1] * 3, ~i};
+        std::uint32_t got[4];
+        std::memcpy(got, bytes.data() + i * 16, 16);
+        for (int k = 0; k < 4; ++k) {
+            if (got[k] != expected[k]) return r.fail("raw buffer word " + std::to_string(i * 4 + k) + " is " + std::to_string(got[k]) + " but the barriered model gives " + std::to_string(expected[k]));
+        }
+    }
     return words_image(r, buffer.get(), 64, out, "raw");
 });
 
@@ -435,7 +448,7 @@ const Add kStructured(spec("cs", "structured_buffer_uav_struct_stride").toleranc
     return true;
 });
 
-const Add kClearUint(spec("cs", "clear_unordered_access_view_uint").tolerance(rr::Tolerance::exact()), [](Rig& r, Cap& out) {
+const Add kClearUint(spec("cs", "clear_unordered_access_view_uint").tolerance(rr::Tolerance::exact()).uniform_ok("buffer"), [](Rig& r, Cap& out) {
     Com<ID3D11Texture2D> tex = r.tex(32, 32, DXGI_FORMAT_R32G32B32A32_UINT, D3D11_BIND_UNORDERED_ACCESS);
     Com<ID3D11Buffer> buf = r.buf(256, D3D11_BIND_UNORDERED_ACCESS, nullptr, D3D11_USAGE_DEFAULT, 0, D3D11_RESOURCE_MISC_BUFFER_ALLOW_RAW_VIEWS);
     Com<ID3D11ComputeShader> cs = r.cs("RWTexture2D<uint4> u : register(u0);\n[numthreads(8, 8, 1)] void main(uint3 id : SV_DispatchThreadID) { if ((id.x ^ id.y) & 4) u[id.xy] = u[id.xy] + uint4(id.x, id.y, 7, 0); }\n");
@@ -527,10 +540,10 @@ const Add kReduction(spec("cs", "groupshared_reduction_sum_min_max").tolerance(r
 });
 
 const Add kThreadIds(spec("cs", "thread_group_ids_numthreads_4x4x2").tolerance(rr::Tolerance::tight(1)), [](Rig& r, Cap& out) {
-    Com<ID3D11Texture2D> tex = r.tex(32, 32, DXGI_FORMAT_R8G8B8A8_UNORM, D3D11_BIND_UNORDERED_ACCESS | D3D11_BIND_SHADER_RESOURCE);
+    Com<ID3D11Texture2D> tex = r.tex(32, 64, DXGI_FORMAT_R8G8B8A8_UNORM, D3D11_BIND_UNORDERED_ACCESS | D3D11_BIND_SHADER_RESOURCE);
     Com<ID3D11ComputeShader> cs = r.cs(
         "RWTexture2D<float4> u : register(u0);\n[numthreads(4, 4, 2)] void main(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID, uint3 dtid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {\n"
-        "  if (tid.z == 1) { u[dtid.xy + uint2(0, 0)] = float4(gid.x / 8.0, gid.y / 8.0, gi / 32.0, 1); }\n"
+        "  if (tid.z == 1) { u[uint2(dtid.x, dtid.y + 32)] = float4(gid.x / 8.0, gid.y / 8.0, gi / 32.0, 1); }\n"
         "  else { u[dtid.xy] = float4(tid.x / 4.0, tid.y / 4.0, 0.3, 1); } }\n");
     if (!tex || !cs) return false;
     Com<ID3D11UnorderedAccessView> uav = r.uav(tex.get());

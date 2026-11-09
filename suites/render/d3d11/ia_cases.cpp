@@ -58,71 +58,88 @@ const FormatRow kFormats[] = {
     {"r8_sint", DXGI_FORMAT_R8_SINT, 1, 'i', 100},
 };
 
-bool run_format(Rig& r, Cap& out, const FormatRow& row) {
-    const std::vector<Vtx> shape = ring_fan(6, 0.8f, 0.0f, 0.0f, 0.2f);
-    const FormatSpec spec = FormatCodec::spec(row.format);
-    Bytes data(shape.size() * static_cast<std::size_t>(spec.bytes));
-    std::string ys = "static const float ys[" + std::to_string(shape.size()) + "] = {";
-    for (std::size_t i = 0; i < shape.size(); ++i) {
-        const double z = 0.6 * std::sin(static_cast<double>(i));
-        const double w = 0.5 * std::cos(static_cast<double>(i));
-        const double logical[4] = {shape[i].x, shape[i].y, z, w};
-        double native[4];
-        for (int k = 0; k < 4; ++k) {
-            switch (row.kind) {
-                case 'n': native[k] = (logical[k] + 1.0) * 0.5; break;
-                case 'u': native[k] = std::nearbyint((logical[k] + 1.0) * 0.5 * row.scale); break;
-                case 'i': native[k] = std::nearbyint(logical[k] * row.scale); break;
-                default: native[k] = logical[k]; break;
-            }
-        }
-        FormatCodec::encode(spec, native, data.data() + i * static_cast<std::size_t>(spec.bytes));
-        ys += std::to_string(shape[i].y) + (i + 1 < shape.size() ? "," : "};\n");
-    }
-    const char* type = row.kind == 'u' ? "uint4" : row.kind == 'i' ? "int4" : "float4";
-    std::string decode;
-    switch (row.kind) {
-        case 'n': decode = "a * 2.0 - 1.0"; break;
-        case 'u': decode = "float4(a) * (2.0 / " + std::to_string(row.scale) + ") - 1.0"; break;
-        case 'i': decode = "float4(a) / " + std::to_string(row.scale); break;
-        default: decode = "float4(a)"; break;
-    }
-    std::string src = ys + "struct VO { float4 p : SV_Position; float3 c : COLOR; };\n" +
-                      "VO main(" + type + " a : ATTR, uint id : SV_VertexID) { VO o; float4 d = " + decode + ";\n";
-    src += row.used == 1 ? "  float2 q = float2(d.x, ys[id]);\n" : "  float2 q = d.xy;\n";
-    src += "  float z = " + std::string(row.used >= 3 ? "d.z" : "0.0") + "; float w = " + (row.used >= 4 ? "d.w" : "0.0") + ";\n";
-    src += "  o.p = float4(q, 0, 1); o.c = float3(0.5 + 0.5 * sin(id * 1.7), 0.5 + 0.5 * cos(id * 0.9), 0.4) * (0.6 + 0.4 * abs(z)) + 0.2 * abs(w); return o; }\n";
+struct FormatMf {
+    const FormatRow* row;
+    FormatSpec spec;
+    std::vector<Vtx> shape;
     Target target;
-    Bytes code;
-    Com<ID3D11VertexShader> vs = r.vs(src, &code);
-    Com<ID3D11PixelShader> ps = r.ps(Hlsl2d::kPs);
-    if (!r.color(target) || !vs || !ps) {
-        return false;
+    Com<ID3D11VertexShader> vs;
+    Com<ID3D11PixelShader> ps;
+    Com<ID3D11InputLayout> il;
+    Com<ID3D11Buffer> vb;
+
+    explicit FormatMf(const FormatRow* r) : row(r), spec(FormatCodec::spec(r->format)), shape(ring_fan(6, 0.8f, 0.0f, 0.0f, 0.2f)) {}
+    std::string needs(Rig& r) { return need_format(r, row->format, D3D11_FORMAT_SUPPORT_IA_VERTEX_BUFFER, "vertex buffers"); }
+    bool init(Rig& r) {
+        std::string ys = "static const float ys[" + std::to_string(shape.size()) + "] = {";
+        for (std::size_t i = 0; i < shape.size(); ++i) ys += std::to_string(shape[i].y) + (i + 1 < shape.size() ? "," : "};\n");
+        const char* type = row->kind == 'u' ? "uint4" : row->kind == 'i' ? "int4" : "float4";
+        std::string decode;
+        switch (row->kind) {
+            case 'n': decode = "a * 2.0 - 1.0"; break;
+            case 'u': decode = "float4(a) * (2.0 / " + std::to_string(row->scale) + ") - 1.0"; break;
+            case 'i': decode = "float4(a) / " + std::to_string(row->scale); break;
+            default: decode = "float4(a)"; break;
+        }
+        std::string src = ys + "struct VO { float4 p : SV_Position; float3 c : COLOR; };\n" + "VO main(" + type + " a : ATTR, uint id : SV_VertexID) { VO o; float4 d = " + decode + ";\n";
+        src += row->used == 1 ? "  float2 q = float2(d.x, ys[id]);\n" : "  float2 q = d.xy;\n";
+        src += "  float z = " + std::string(row->used >= 3 ? "d.z" : "0.0") + "; float w = " + (row->used >= 4 ? "d.w" : "0.0") + ";\n";
+        src += "  o.p = float4(q, 0, 1); o.c = float3(0.5 + 0.5 * sin(id * 1.7), 0.5 + 0.5 * cos(id * 0.9), 0.4) * (0.6 + 0.4 * abs(z)) + 0.2 * abs(w); return o; }\n";
+        Bytes code;
+        vs = r.vs(src, &code);
+        ps = r.ps(Hlsl2d::kPs);
+        if (!vs || !ps || !r.color(target)) return false;
+        il = r.layout({elem("ATTR", row->format, 0)}, code);
+        vb = r.buf(static_cast<UINT>(shape.size() * static_cast<std::size_t>(spec.bytes)), D3D11_BIND_VERTEX_BUFFER);
+        return il && vb;
     }
-    Com<ID3D11InputLayout> il = r.layout({elem("ATTR", row.format, 0)}, code);
-    Com<ID3D11Buffer> vb = r.buf(static_cast<UINT>(data.size()), D3D11_BIND_VERTEX_BUFFER, data.data());
-    if (!il || !vb) {
-        return false;
+    bool step(Rig& r, unsigned frame) {
+        Bytes data(shape.size() * static_cast<std::size_t>(spec.bytes));
+        const double angle = 0.45 * frame;
+        for (std::size_t i = 0; i < shape.size(); ++i) {
+            double x = shape[i].x, y = shape[i].y;
+            if (row->used >= 2) {
+                const double rx = x * std::cos(angle) - y * std::sin(angle);
+                y = x * std::sin(angle) + y * std::cos(angle);
+                x = rx;
+            } else {
+                x *= 1.0 - 0.14 * frame;
+            }
+            const double z = 0.6 * std::sin(static_cast<double>(i) + frame);
+            const double w = 0.5 * std::cos(static_cast<double>(i) - frame);
+            const double logical[4] = {x, y, z, w};
+            double native[4];
+            for (int k = 0; k < 4; ++k) {
+                switch (row->kind) {
+                    case 'n': native[k] = (logical[k] + 1.0) * 0.5; break;
+                    case 'u': native[k] = std::nearbyint((logical[k] + 1.0) * 0.5 * row->scale); break;
+                    case 'i': native[k] = std::nearbyint(logical[k] * row->scale); break;
+                    default: native[k] = logical[k]; break;
+                }
+            }
+            FormatCodec::encode(spec, native, data.data() + i * static_cast<std::size_t>(spec.bytes));
+        }
+        r.ctx->UpdateSubresource(vb.get(), 0, nullptr, data.data(), 0, 0);
+        r.bind(target);
+        const UINT stride = static_cast<UINT>(spec.bytes);
+        const UINT offset = 0;
+        ID3D11Buffer* buffer = vb.get();
+        r.ctx->IASetInputLayout(il.get());
+        r.ctx->IASetVertexBuffers(0, 1, &buffer, &stride, &offset);
+        r.ctx->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+        r.ctx->VSSetShader(vs.get(), nullptr, 0);
+        r.ctx->PSSetShader(ps.get(), nullptr, 0);
+        r.ctx->Draw(static_cast<UINT>(shape.size()), 0);
+        return true;
     }
-    r.bind(target);
-    const UINT stride = static_cast<UINT>(spec.bytes);
-    const UINT offset = 0;
-    ID3D11Buffer* buffer = vb.get();
-    r.ctx->IASetInputLayout(il.get());
-    r.ctx->IASetVertexBuffers(0, 1, &buffer, &stride, &offset);
-    r.ctx->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-    r.ctx->VSSetShader(vs.get(), nullptr, 0);
-    r.ctx->PSSetShader(ps.get(), nullptr, 0);
-    r.ctx->Draw(static_cast<UINT>(shape.size()), 0);
-    return r.shot(out, target);
-}
+    bool shot(Rig& r, unsigned, Cap& out) { return r.shot(out, target); }
+};
 
 struct FormatRegistrar {
     FormatRegistrar() {
         for (const FormatRow& row : kFormats) {
-            Add(spec("ia", (std::string("format_") + row.name).c_str()).tolerance(rr::Tolerance::raster(3, 1)),
-                [&row](Rig& r, Cap& out) { return run_format(r, out, row); },
-                [&row](Rig& r) { return need_format(r, row.format, D3D11_FORMAT_SUPPORT_IA_VERTEX_BUFFER, "vertex buffers"); });
+            const FormatRow* p = &row;
+            AddState<FormatMf>(spec("ia", (std::string("format_") + row.name).c_str()).frames(4, {0, 3}).tolerance(rr::Tolerance::raster(3, 1)), [p] { return FormatMf(p); });
         }
     }
 };

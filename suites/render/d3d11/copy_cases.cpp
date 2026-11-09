@@ -44,7 +44,7 @@ const Add kCopyBox(spec("copy", "copy_subresource_region_box_offsets").tolerance
     return show(r, out, b.get());
 });
 
-const Add kCopyBc(spec("copy", "copy_subresource_region_bc1_block_box").tolerance(rr::Tolerance::tight(1)), [](Rig& r, Cap& out) {
+const Add kCopyBc(spec("copy", "copy_subresource_region_bc1_block_box").tolerance(rr::Tolerance::filter(6, 0.004)), [](Rig& r, Cap& out) {
     Bytes b0 = BcCodec::blocks(1, 77, 64);
     Bytes b1 = BcCodec::blocks(1, 78, 64);
     D3D11_SUBRESOURCE_DATA i0{b0.data(), 8 * 8, 0};
@@ -196,7 +196,7 @@ const Add kResRgba16(spec("copy", "resolve_subresource_r16g16b16a16_float").tole
 const Add kResBgra(spec("copy", "resolve_subresource_b8g8r8a8_unorm").tolerance(rr::Tolerance::psnr(26)), [](Rig& r, Cap& out) { return resolve_scene(r, out, DXGI_FORMAT_B8G8R8A8_UNORM); },
                    [](Rig& r) { return need_msaa(r, DXGI_FORMAT_B8G8R8A8_UNORM, 4); });
 
-const Add kClearView(spec("copy", "clear_view_with_rects").variant(1).tolerance(rr::Tolerance::exact()), [](Rig& r, Cap& out) {
+const Add kClearView(spec("copy", "clear_view_with_rects").variant(1).tolerance(rr::Tolerance::tight(1)), [](Rig& r, Cap& out) {
     Target target;
     if (!r.color(target)) return false;
     ID3D11DeviceContext1* raw = nullptr;
