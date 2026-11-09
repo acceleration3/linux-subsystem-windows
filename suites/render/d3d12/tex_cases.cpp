@@ -286,6 +286,58 @@ void register_formats() {
     }
 }
 
+void add_format_stream(const std::string& name, DXGI_FORMAT format, DXGI_FORMAT view) {
+    Cases::frames(
+        rr::CaseSpec("tex", "format_" + name + "_streamed_updates").frames(4, {0, 3}).tolerance(sampler_tolerance()).tag("format"),
+        [format, view](Cases::Steps& steps) {
+            auto rig = std::make_shared<SampleRig>();
+            auto texture = std::make_shared<ID3D12Resource*>(nullptr);
+            steps.on_setup = [=](Kit& kit, std::string& error) {
+                TextureSpec spec;
+                spec.format = format;
+                spec.width = 64;
+                spec.height = 64;
+                *texture = TextureFactory::create(kit, spec, false, error);
+                const D3D12_SAMPLER_DESC sampler = linear_wrap();
+                return *texture != nullptr &&
+                       rig->open(kit, *texture, srv_2d(view, 1), sampler, ps_of("Texture2D<float4> tex : register(t0); SamplerState smp : register(s0);\n", "return float4(tex.Sample(smp, i.uv * p1.xy).rgb, 1);"), error);
+            };
+            steps.on_frame = [=](Kit& kit, unsigned frame, std::string& error) {
+                Texels::Bytes bytes;
+                if (Texels::is_block(format)) {
+                    bytes = Texels::block_compressed(format, 64, 64, 500u + frame * 31u);
+                } else {
+                    bytes = Texels::encode(format, Texels::content(frame, 64, 64), 64, 64);
+                }
+                if (!D3d12Tools::write_texture(kit.rig, *texture, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, 0, bytes.data(), error)) {
+                    return false;
+                }
+                const float tint[4] = {1, 1, 1, 1};
+                const float scale[4] = {1, 1, 0, 0};
+                return rig->frame(kit, tint, scale, -0.4f - 0.1f * static_cast<float>(frame), true, error);
+            };
+            steps.on_capture = [rig](Kit& kit, unsigned, rr::CaptureSet& out, std::string& error) { return rig->capture(kit, out, error); };
+        },
+        [view](Kit& kit) { return needs_format(kit, view, D3D12_FORMAT_SUPPORT1_SHADER_SAMPLE, "sampling this format"); });
+}
+
+void register_format_streams() {
+    const FormatCase formats[] = {
+        {"r8g8b8a8_unorm", DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_R8G8B8A8_UNORM, 4},       {"r8g8b8a8_srgb", DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, 5},
+        {"b8g8r8a8_unorm", DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_B8G8R8A8_UNORM, 4},       {"r10g10b10a2_unorm", DXGI_FORMAT_R10G10B10A2_UNORM, DXGI_FORMAT_R10G10B10A2_UNORM, 4},
+        {"r16g16b16a16_float", DXGI_FORMAT_R16G16B16A16_FLOAT, DXGI_FORMAT_R16G16B16A16_FLOAT, 4}, {"r32g32b32a32_float", DXGI_FORMAT_R32G32B32A32_FLOAT, DXGI_FORMAT_R32G32B32A32_FLOAT, 4},
+        {"r16g16b16a16_unorm", DXGI_FORMAT_R16G16B16A16_UNORM, DXGI_FORMAT_R16G16B16A16_UNORM, 4}, {"r16_unorm", DXGI_FORMAT_R16_UNORM, DXGI_FORMAT_R16_UNORM, 4},
+        {"r8_unorm", DXGI_FORMAT_R8_UNORM, DXGI_FORMAT_R8_UNORM, 4},                         {"r8g8_unorm", DXGI_FORMAT_R8G8_UNORM, DXGI_FORMAT_R8G8_UNORM, 4},
+        {"r16g16_float", DXGI_FORMAT_R16G16_FLOAT, DXGI_FORMAT_R16G16_FLOAT, 4},             {"r32_float", DXGI_FORMAT_R32_FLOAT, DXGI_FORMAT_R32_FLOAT, 4},
+        {"bc1_unorm", DXGI_FORMAT_BC1_UNORM, DXGI_FORMAT_BC1_UNORM, 4},                      {"bc1_srgb", DXGI_FORMAT_BC1_UNORM_SRGB, DXGI_FORMAT_BC1_UNORM_SRGB, 4},
+        {"bc2_unorm", DXGI_FORMAT_BC2_UNORM, DXGI_FORMAT_BC2_UNORM, 4},                      {"bc3_unorm", DXGI_FORMAT_BC3_UNORM, DXGI_FORMAT_BC3_UNORM, 4},
+        {"bc4_unorm", DXGI_FORMAT_BC4_UNORM, DXGI_FORMAT_BC4_UNORM, 4},                      {"bc5_unorm", DXGI_FORMAT_BC5_UNORM, DXGI_FORMAT_BC5_UNORM, 4},
+        {"bc7_unorm", DXGI_FORMAT_BC7_UNORM, DXGI_FORMAT_BC7_UNORM, 4},                      {"bc7_srgb", DXGI_FORMAT_BC7_UNORM_SRGB, DXGI_FORMAT_BC7_UNORM_SRGB, 4}};
+    for (const FormatCase& item : formats) {
+        add_format_stream(item.name, item.format, item.view);
+    }
+}
+
 bool depth_sample(Kit& kit, DXGI_FORMAT depth_format, rr::CaptureSet& out, std::string& error) {
     Stage stage;
     if (!stage.open(kit, error, DXGI_FORMAT_R8G8B8A8_UNORM, depth_format)) {
@@ -367,6 +419,7 @@ const struct Registrar {
         register_dimensions();
         register_formats();
         register_depth_formats();
+        register_format_streams();
     }
 } kRegistrar;
 

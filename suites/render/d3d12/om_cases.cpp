@@ -723,7 +723,89 @@ void add_stencil_frames(const std::string& name, D3D12_STENCIL_OP pass_op, D3D12
     });
 }
 
+struct LogicFrames {
+    Canvas canvas;
+    Geometry sphere;
+    Geometry torus;
+    ID3D12PipelineState* backdrop = nullptr;
+    ID3D12PipelineState* shapes = nullptr;
+};
+
+void register_logic_frames() {
+    struct Logic {
+        const char* name;
+        D3D12_LOGIC_OP value;
+    };
+    const Logic logics[] = {{"clear", D3D12_LOGIC_OP_CLEAR}, {"and", D3D12_LOGIC_OP_AND}, {"xor", D3D12_LOGIC_OP_XOR},       {"or", D3D12_LOGIC_OP_OR},
+                            {"invert", D3D12_LOGIC_OP_INVERT}, {"equiv", D3D12_LOGIC_OP_EQUIV}, {"copy_inverted", D3D12_LOGIC_OP_COPY_INVERTED}, {"nand", D3D12_LOGIC_OP_NAND}};
+    for (const Logic& logic : logics) {
+        Cases::frames(
+            rr::CaseSpec("om", std::string("logic_op_") + logic.name + "_accumulate").size(64, 64).frames(4, {1, 3}).tolerance(rr::Tolerance::exact()).uniform_ok().tag("blend"),
+            [logic](Cases::Steps& steps) {
+                auto s = std::make_shared<LogicFrames>();
+                steps.on_setup = [s, logic](Kit& kit, std::string& error) {
+                    if (!s->canvas.open(kit, 64, 64, DXGI_FORMAT_R8G8B8A8_UINT, error) || !s->sphere.create(kit, Shapes::sphere(16, 24, 0.8f), true, error) ||
+                        !s->torus.create(kit, Shapes::torus(24, 12, 0.9f, 0.3f), true, error)) {
+                        return false;
+                    }
+                    const char* uint_ps =
+                        "struct VsOut { float4 pos : SV_Position; float3 nrm : NORMAL; float2 uv : TEXCOORD0; };\n"
+                        "uint4 main(VsOut i) : SV_Target { float l = saturate(dot(normalize(i.nrm), float3(0.5, 0.8, 0.6))) * 0.8 + 0.2; return uint4(saturate(p0.rgb * l) * 255.0, 255); }\n";
+                    const char* uint_backdrop =
+                        "uint4 main(float4 pos : SV_Position, float2 uv : TEXCOORD0) : SV_Target { uint ch = ((uint)(pos.x / 8) + (uint)(pos.y / 8)) & 1; return uint4(lerp(50, 200, uv.x) * (0.6 + 0.4 * ch), lerp(90, 180, uv.y), 120, 255); }\n";
+                    Pso backdrop(kit, s->canvas.binder.signature);
+                    backdrop.vs(Hlsl12::kFullVs).ps(uint_backdrop).layout({}).targets({DXGI_FORMAT_R8G8B8A8_UINT});
+                    Pso shapes(kit, s->canvas.binder.signature);
+                    shapes.vs(Hlsl12::with_root(Hlsl12::kLitVs)).ps(Hlsl12::with_root(uint_ps)).targets({DXGI_FORMAT_R8G8B8A8_UINT});
+                    shapes.desc.BlendState.RenderTarget[0].BlendEnable = FALSE;
+                    shapes.desc.BlendState.RenderTarget[0].LogicOpEnable = TRUE;
+                    shapes.desc.BlendState.RenderTarget[0].LogicOp = logic.value;
+                    s->backdrop = backdrop.build(error);
+                    s->shapes = shapes.build(error);
+                    return s->backdrop != nullptr && s->shapes != nullptr;
+                };
+                steps.on_frame = [s](Kit& kit, unsigned frame, std::string& error) {
+                    return kit.submit([&](ID3D12GraphicsCommandList* list) {
+                        const float clear[4] = {10, 20, 30, 255};
+                        if (frame == 0) {
+                            s->canvas.begin(list, clear);
+                            list->SetPipelineState(s->backdrop);
+                            list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+                            list->DrawInstanced(3, 1, 0, 0);
+                        } else {
+                            s->canvas.begin_keep(list);
+                        }
+                        list->SetPipelineState(s->shapes);
+                        const rr::Mat4 base = rr::Mat4::perspective_d3d(1.0f, 1.0f, 0.5f, 40.0f) * rr::Mat4::translate(0, 0, -3.0f);
+                        const float a[4] = {0.9f, 0.35f, 0.2f, 1.0f};
+                        set_cbv_root(list, base * rr::Mat4::translate(-0.3f + 0.2f * static_cast<float>(frame), 0, 0), a);
+                        s->sphere.bind(list);
+                        s->sphere.draw(list);
+                        const float b[4] = {0.2f, 0.8f, 0.45f, 1.0f};
+                        set_cbv_root(list, base * rr::Mat4::rotate_x(0.7f + 0.3f * static_cast<float>(frame)), b);
+                        s->torus.bind(list);
+                        s->torus.draw(list);
+                    }, error);
+                };
+                steps.on_capture = [s](Kit& kit, unsigned, rr::CaptureSet& out, std::string& error) {
+                    rr::Image image;
+                    if (!s->canvas.read(kit, image, error)) {
+                        return false;
+                    }
+                    out.add("", std::move(image));
+                    return true;
+                };
+            },
+            [](Kit& kit) {
+                D3D12_FEATURE_DATA_D3D12_OPTIONS options{};
+                const HRESULT result = D3d12Tools::feature(kit.device(), D3D12_FEATURE_D3D12_OPTIONS, options);
+                return SUCCEEDED(result) && options.OutputMergerLogicOp ? std::string() : std::string("logic ops (OutputMergerLogicOp)");
+            });
+    }
+}
+
 void register_om_frames() {
+    register_logic_frames();
     for (const StencilOp& op : kStencilOps) {
         add_stencil_frames(std::string("stencil_pass_op_") + op.name, op.value, D3D12_STENCIL_OP_KEEP, D3D12_STENCIL_OP_KEEP, D3D12_COMPARISON_FUNC_ALWAYS);
     }

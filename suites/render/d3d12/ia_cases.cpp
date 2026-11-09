@@ -130,6 +130,61 @@ void register_formats() {
     }
 }
 
+void register_format_streams() {
+    for (const VertexFormat& format : vertex_formats()) {
+        Cases::frames(rr::CaseSpec("ia", std::string("vertex_format_") + format.name + "_streamed_ring").frames(4, {0, 3}).tolerance(rr::Tolerance::blend(2)).tag("vertex"), [format](Cases::Steps& steps) {
+            struct State {
+                Stage stage;
+                ID3D12Resource* positions = nullptr;
+                ID3D12Resource* ring = nullptr;
+                std::uint8_t* mapped = nullptr;
+                ID3D12PipelineState* state = nullptr;
+                Bars bars;
+            };
+            auto s = std::make_shared<State>();
+            steps.on_setup = [s, format](Kit& kit, std::string& error) {
+                if (!s->stage.open(kit, error)) {
+                    return false;
+                }
+                s->positions = kit.make_upload(s->bars.positions.data(), s->bars.positions.size() * 4, error);
+                s->ring = kit.make_upload(nullptr, 3ull * s->bars.count * format.size, error);
+                if (s->positions == nullptr || s->ring == nullptr) {
+                    return false;
+                }
+                const D3D12_RANGE none{0, 0};
+                if (FAILED(s->ring->Map(0, &none, reinterpret_cast<void**>(&s->mapped)))) {
+                    return fail_with(error, "Map of the vertex ring failed");
+                }
+                const std::vector<D3D12_INPUT_ELEMENT_DESC> layout = {
+                    {"POSITION", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
+                    {"COLOR", 0, format.format, 1, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0}};
+                Pso builder(kit, s->stage.canvas.binder.signature);
+                builder.vs(Hlsl12::with_root(format.integer ? kAttrUintVs : kAttrVs)).ps(kAttrPs).layout(layout).targets({DXGI_FORMAT_R8G8B8A8_UNORM});
+                s->state = builder.build(error);
+                return s->state != nullptr;
+            };
+            steps.on_frame = [s, format](Kit& kit, unsigned frame, std::string& error) {
+                const std::size_t slot = static_cast<std::size_t>(frame % 3) * s->bars.count * format.size;
+                for (UINT v = 0; v < s->bars.count; ++v) {
+                    const UINT quad = (v / 6 + frame) % 6;
+                    format.encode(&s->bars.colors[(quad * 6 + v % 6) * 4], s->mapped + slot + static_cast<std::size_t>(v) * format.size);
+                }
+                const D3D12_VERTEX_BUFFER_VIEW views[2] = {{s->positions->GetGPUVirtualAddress(), static_cast<UINT>(s->bars.positions.size() * 4), 8},
+                                                           {s->ring->GetGPUVirtualAddress() + slot, s->bars.count * format.size, format.size}};
+                return kit.submit([&](ID3D12GraphicsCommandList* list) {
+                    const float clear[4] = {0.05f, 0.05f, 0.1f, 1};
+                    s->stage.canvas.begin(list, clear);
+                    list->SetPipelineState(s->state);
+                    list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+                    list->IASetVertexBuffers(0, 2, views);
+                    list->DrawInstanced(s->bars.count, 1, 0, 0);
+                }, error);
+            };
+            steps.on_capture = [s](Kit&, unsigned, rr::CaptureSet& out, std::string& error) { return s->stage.finish(out, error); };
+        });
+    }
+}
+
 const char* kInstVs =
     "struct VsIn { float3 pos : POSITION; float3 nrm : NORMAL; float2 uv : TEXCOORD0; float4 inst : INSTANCE; float4 tint : TINT; uint id : SV_InstanceID; };\n"
     "struct VsOut { float4 pos : SV_Position; float3 nrm : NORMAL; float4 tint : TINT; };\n"
@@ -734,6 +789,7 @@ void register_stream_output() {
 const struct Registrar {
     Registrar() {
         register_formats();
+        register_format_streams();
         register_instancing();
         register_indices();
         register_topologies();
