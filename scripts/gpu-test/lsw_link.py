@@ -12,6 +12,7 @@ AGENT_PORT = 5102
 SMB_PORT = 5445
 CONTROL = 1
 CALL_TIMEOUT = 60.0
+RUN_BASE = "C:\\av\\render-run"
 
 
 class LinkError(Exception):

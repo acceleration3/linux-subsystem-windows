@@ -14,6 +14,7 @@ CPU_QUOTA="${LSW_RENDER_CPU_QUOTA:-400%}"
 started_vm=0
 GPUTEST="${ROOT}/scripts/gpu-test/gpu-test.sh"
 STAMP="$(date +%Y%m%d-%H%M%S)"
+RUN_TOKEN="$$"
 
 hosts=local
 gpus=all
@@ -115,6 +116,12 @@ case "${adapters}" in all|first|list) ;; *) die "--adapters needs all, first or 
 [[ -n ${out} ]] || out="${ROOT}/build-render-report/${STAMP}"
 bit_list=(64 32)
 [[ ${bits} != both ]] && bit_list=("${bits}")
+
+run_id_of() {
+    local gpu_part=${adapters}
+    [[ ${gpus} != all ]] && gpu_part="$(tr -c 'A-Za-z0-9\n' - <<< "${gpus}" | cut -c1-16)"
+    printf '%s-%s-%s-%s-x%s' "${STAMP}" "${RUN_TOKEN}" "$1" "${gpu_part}" "${bits}"
+}
 
 target_of() { awk -v name="$1" '!/^[[:space:]]*#/ && $1 == name { print $2 }' "${HOSTS_FILE}"; }
 
@@ -245,7 +252,12 @@ collect_hosts() {
                 fi
             done <<< "${TABLE[${h}]}"
             TABLE[${h}]="${filtered%$'\n'}"
-            [[ ${adapters} == first && ${gpus} == all ]] && TABLE[${h}]="$(head -n 1 <<< "${TABLE[${h}]}")"
+            if [[ ${adapters} == first && ${gpus} == all ]]; then
+                local first_bound
+                first_bound="$(head -n 1 <<< "${bound}")"
+                TABLE[${h}]="$(grep -F -- "|${first_bound}|" <<< "${TABLE[${h}]}" | head -n 1)"
+                [[ -n ${TABLE[${h}]} ]] || TABLE[${h}]="$(head -n 1 <<< "${filtered%$'\n'}")"
+            fi
         fi
         local s u
         for s in "${selectors[@]}"; do
@@ -312,7 +324,8 @@ guest_step() {
 
 run_local() {
     local h=$1 uuids=(${SEL_UUIDS[$1]}) refs="${out}/refs" uuid
-    local all_selected=0
+    local all_selected=0 run_id
+    run_id="$(run_id_of "${h}")"
     [[ ${#uuids[@]} -eq $(domain_gpus | wc -l) && ${adapters} != first ]] && all_selected=1
     export RR_LOG="${out}/render-ref.log"
     local ref_filter=()
@@ -332,7 +345,10 @@ run_local() {
         [[ ${b} == 32 ]] && dir="build-suites32"
         exes+=(--exe "${b}=${ROOT}/${dir}/lsw-suites${b}.exe")
     done
-    guest_step "push executables, dxc and references to C:\\av\\render-run" 1500 python3 "${HERE}/render-run-guest.py" push "${exes[@]}" --dxc "${AV}/third_party/dxc" --refs "${refs}" || return 1
+    if [[ ${dry} -eq 0 && ${#uuids[@]} -eq 1 && -d ${refs}/${uuids[0]//-/} ]]; then
+        cp -a "${refs}/${uuids[0]//-/}/." "${refs}/"
+    fi
+    guest_step "push executables, dxc and references to C:\\av\\render-run\\${run_id}" 1500 python3 "${HERE}/render-run-guest.py" push --run-id "${run_id}" "${exes[@]}" --dxc "${AV}/third_party/dxc" --refs "${refs}" || return 1
     local gpu_name base b adapter_arg run_args
     for uuid in "${uuids[@]}"; do
         gpu_name="$(gpu_name_of "${h}" "${uuid}")"
@@ -340,7 +356,7 @@ run_local() {
             base="${out}/${h}/$(slug "${gpu_name}")/x${b}"
             adapter_arg="uuid:${uuid//-/}"
             [[ ${adapters} == first ]] && adapter_arg="first"
-            run_args=(--bits "${b}" --adapter "${adapter_arg}" --jobs "${jobs}" --tag "$(slug "${gpu_name}")-x${b}" --out "${base}")
+            run_args=(--run-id "${run_id}" --bits "${b}" --adapter "${adapter_arg}" --jobs "${jobs}" --tag "$(slug "${gpu_name}")-x${b}" --out "${base}")
             [[ -n ${filter} ]] && run_args+=(--filter "${filter}")
             [[ ${dump} -eq 1 ]] && run_args+=(--dump)
             guest_step "render suite x${b} on ${gpu_name} (${adapter_arg})" 1500 python3 "${HERE}/render-run-guest.py" run "${run_args[@]}"
@@ -444,8 +460,8 @@ adapter_dir() {
 }
 
 guest_runs() {
-    local h=$1 jobs_here=$2 agent_port=$3 smb_port=$4 vm=$5 refs=$6
-    shift 6
+    local h=$1 jobs_here=$2 agent_port=$3 smb_port=$4 vm=$5 refs=$6 run_id=$7
+    shift 7
     local uuids=("$@") uuid b gpu_name base status=0
     local phases=all
     [[ ${suite} == sanity ]] && phases="main:parallel,isolated:serial"
@@ -455,7 +471,7 @@ guest_runs() {
             gpu_name="$(gpu_name_of "${h}" "${uuid}")"
             runs+=(--run "$(slug "${gpu_name}")-x${b}|uuid:${uuid//-/}|$(adapter_dir "${h}" "${gpu_name}" "${b}")")
         done
-        local args=(--bits "${b}" --suite "${suite}" --jobs "${jobs_here}" --timeout "${guest_timeout}"
+        local args=(--run-id "${run_id}" --bits "${b}" --suite "${suite}" --jobs "${jobs_here}" --timeout "${guest_timeout}"
                     --agent-port "${agent_port}" --smb-port "${smb_port}" --vm "${vm}" --host "${h}" --root "${out}"
                     --evidence "${out}/evidence/${h}-${suite}-x${b}-$(date +%H%M%S)" --max-recoveries "${max_recoveries}" --phases "${phases}")
         local effective
@@ -495,7 +511,8 @@ watch_memory() {
 
 run_host_parallel() {
     local h=$1 index=$2 uuids=(${SEL_UUIDS[$1]}) refs="${out}/refs-$1" jobs_here
-    local agent_port=5102 smb_port=5445 ref_filter="" vm=local status=0
+    local agent_port=5102 smb_port=5445 ref_filter="" vm=local status=0 run_id
+    run_id="$(run_id_of "${h}")"
     jobs_here="$(jobs_of "${h}")"
     [[ -n ${filter} ]] && ref_filter="--filter ${filter}"
     local exes=() b
@@ -532,10 +549,10 @@ run_host_parallel() {
         local watcher=$!
     fi
     say "${h}: push executables, dxc and references"
-    python3 "${HERE}/render-run-guest.py" push "${exes[@]}" --dxc "${AV}/third_party/dxc" "${push_refs[@]}" \
+    python3 "${HERE}/render-run-guest.py" push --run-id "${run_id}" "${exes[@]}" --dxc "${AV}/third_party/dxc" "${push_refs[@]}" \
         --agent-port "${agent_port}" --smb-port "${smb_port}" || status=1
     if [[ ${status} -eq 0 ]]; then
-        guest_runs "${h}" "${jobs_here}" "${agent_port}" "${smb_port}" "${vm}" "${refs}" "${uuids[@]}" || status=1
+        guest_runs "${h}" "${jobs_here}" "${agent_port}" "${smb_port}" "${vm}" "${refs}" "${run_id}" "${uuids[@]}" || status=1
     fi
     [[ -n ${watcher:-} ]] && kill "${watcher}" 2>/dev/null
     [[ -n ${lockfd:-} ]] && { "${VM}" done; eval "exec ${lockfd}>&-"; }

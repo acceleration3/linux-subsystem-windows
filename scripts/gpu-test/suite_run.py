@@ -9,10 +9,11 @@ import zipfile
 
 import lsw_link
 
-GUEST_DIR = "C:\\av\\render-run"
 QEMU_LOG = "~/.cache/libvirt/qemu/log/lsw.log"
 CORES = "~/.local/share/lsw-gpu-test/cores"
 RECOVERY_BUDGET = 5
+KEEP_RUNS = 3
+PRUNE_AGE_SECONDS = 4 * 3600
 
 
 def say(line):
@@ -105,6 +106,7 @@ class Spec:
 class Context:
     def __init__(self, args):
         self.args = args
+        self.guest_dir = lsw_link.RUN_BASE + "\\" + args.run_id
         self.share = lsw_link.GuestShare(port=args.smb_port)
         self.machine = Machine(args.vm, args.host)
         self.lock = threading.Condition()
@@ -121,7 +123,7 @@ class Context:
         return lsw_link.AgentLink(port=self.args.agent_port, timeout=timeout)
 
     def present(self, name):
-        code, out = self.share.smbclient(f'allinfo "{self.share.share_path(GUEST_DIR + chr(92) + name)}"', 60)
+        code, out = self.share.smbclient(f'allinfo "{self.share.share_path(self.guest_dir + chr(92) + name)}"', 60)
         return code == 0 and "attributes:" in out
 
     def begin(self):
@@ -236,7 +238,7 @@ class Context:
 
 def read_text(ctx, name):
     try:
-        return ctx.share.get_bytes(f"{GUEST_DIR}\\{name}").decode(errors="replace")
+        return ctx.share.get_bytes(f"{ctx.guest_dir}\\{name}").decode(errors="replace")
     except lsw_link.LinkError:
         return None
 
@@ -263,7 +265,7 @@ def segment_lines(ctx, spec, number, filter_text, phase, exclude, jobs):
              f"--phase {phase}" if phase else "", f"--exclude-file ex-{tag}.txt" if exclude else "",
              f"--jobs {jobs}", "--dump-captures" if args.dump else "",
              f'--adapter "{spec.adapter}"' if spec.adapter else "",
-             f"--json r-{tag}-s{number}.json", f"--artifacts art-{tag}", f"--refs {GUEST_DIR}\\render-refs"]
+             f"--json r-{tag}-s{number}.json", f"--artifacts art-{tag}", f"--refs {ctx.guest_dir}\\render-refs"]
     cleanup = [f"if exist r-{tag}-s{number}.json del r-{tag}-s{number}.json",
                f"if exist r-{tag}-s{number}.jsonl del r-{tag}-s{number}.jsonl",
                f"if exist done-{tag}-s{number}.txt del done-{tag}-s{number}.txt"]
@@ -276,7 +278,7 @@ def segment_lines(ctx, spec, number, filter_text, phase, exclude, jobs):
 
 
 def launch(ctx, name, lines, done):
-    script = "@echo off\r\ncd /d " + GUEST_DIR + "\r\n" + "\r\n".join(lines) + f"\r\necho done > {done}\r\n"
+    script = "@echo off\r\ncd /d " + ctx.guest_dir + "\r\n" + "\r\n".join(lines) + f"\r\necho done > {done}\r\n"
     link = ctx.link()
     try:
         link.call("run_script", {"name": f"suite-run {name}", "script": script, "session": 1})
@@ -300,7 +302,7 @@ def run_segment(ctx, spec, filter_text, phase, exclude, jobs, deadline):
     tag = spec.name
     if exclude:
         listed = sorted(set(spec.stage_exclude) | set(spec.finished) | set(spec.retry))
-        ctx.share.put_bytes(("\r\n".join(listed) + "\r\n").encode(), f"{GUEST_DIR}\\ex-{tag}.txt")
+        ctx.share.put_bytes(("\r\n".join(listed) + "\r\n").encode(), f"{ctx.guest_dir}\\ex-{tag}.txt")
     lines, shown = segment_lines(ctx, spec, number, filter_text, phase, exclude, jobs)
     say(f"{ctx.args.host}: {tag} segment {number}: lsw-suites{ctx.args.bits}.exe {shown}")
     generation = ctx.begin()
@@ -440,31 +442,106 @@ def finish(ctx, spec):
     tag = spec.name
     last = spec.segments
     try:
-        ctx.share.get(f"{GUEST_DIR}\\rc-{tag}-s{last}.txt", out / "rc.txt")
+        ctx.share.get(f"{ctx.guest_dir}\\rc-{tag}-s{last}.txt", out / "rc.txt")
     except lsw_link.LinkError:
         pass
+    if not pull_archive(ctx, spec):
+        pull_tree(ctx, spec)
+
+
+def unpack(out, archive):
+    with zipfile.ZipFile(archive) as opened:
+        for member in opened.infolist():
+            target = out / member.filename.replace("\\", "/")
+            if member.is_dir() or member.filename.endswith(("/", "\\")):
+                target.mkdir(parents=True, exist_ok=True)
+                continue
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(opened.read(member))
+    archive.unlink()
+
+
+def pull_archive(ctx, spec):
+    out = spec.out
+    tag = spec.name
     try:
-        ctx.share.remove(f"{GUEST_DIR}\\done-{tag}-zip.txt")
-        launch(ctx, f"{tag} zip", [f'powershell -NoProfile -Command "if (Test-Path art-{tag}) {{ Compress-Archive -Path art-{tag} -DestinationPath art-{tag}.zip -Force }}"'], f"done-{tag}-zip.txt")
+        if not ctx.present(f"art-{tag}"):
+            return True
+        ctx.share.remove(f"{ctx.guest_dir}\\done-{tag}-zip.txt")
+        launch(ctx, f"{tag} zip", [f"if exist art-{tag}.zip del art-{tag}.zip",
+                                   f"tar.exe -a -c -f art-{tag}.zip -C art-{tag} . > zip-{tag}.txt 2>&1"],
+               f"done-{tag}-zip.txt")
         deadline = time.monotonic() + 600
         while time.monotonic() < deadline and not ctx.present(f"done-{tag}-zip.txt"):
             time.sleep(5)
         archive = out / "artifacts.zip"
-        ctx.share.get(f"{GUEST_DIR}\\art-{tag}.zip", archive)
-        with zipfile.ZipFile(archive) as opened:
-            for member in opened.infolist():
-                target = out / member.filename.replace("\\", "/")
-                if member.is_dir() or member.filename.endswith(("/", "\\")):
-                    target.mkdir(parents=True, exist_ok=True)
-                    continue
-                target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_bytes(opened.read(member))
-        archive.unlink()
-        if (out / f"art-{tag}").is_dir():
-            shutil.rmtree(out / "artifacts", ignore_errors=True)
-            (out / f"art-{tag}").rename(out / "artifacts")
+        ctx.share.get(f"{ctx.guest_dir}\\art-{tag}.zip", archive)
+        target = out / "artifacts"
+        shutil.rmtree(target, ignore_errors=True)
+        target.mkdir(parents=True, exist_ok=True)
+        unpack(target, archive)
+        return True
     except (lsw_link.LinkError, OSError, zipfile.BadZipFile) as error:
-        say(f"{ctx.args.host}: {tag}: no artifacts archive ({error})")
+        detail = (read_text(ctx, f"zip-{tag}.txt") or "").strip()[-200:]
+        say(f"{ctx.args.host}: {tag}: no artifacts archive ({error}{'; ' + detail if detail else ''}), fetching the files one by one")
+        (out / "artifacts.zip").unlink(missing_ok=True)
+        return False
+
+
+def pull_tree(ctx, spec):
+    target = spec.out / "artifacts"
+    shutil.rmtree(target, ignore_errors=True)
+    target.mkdir(parents=True, exist_ok=True)
+    remote = ctx.share.share_path(f"{ctx.guest_dir}\\art-{spec.name}")
+    try:
+        code, text = ctx.share.smbclient(f'cd "{remote}"; lcd "{target}"; recurse ON; prompt OFF; mget *', 3600)
+    except (lsw_link.LinkError, OSError, subprocess.SubprocessError) as error:
+        say(f"{ctx.args.host}: {spec.name}: the artifacts could not be fetched ({error})")
+        return
+    if code != 0 and "NT_STATUS" in text:
+        say(f"{ctx.args.host}: {spec.name}: the artifacts could not be fetched ({text.strip()[-200:]})")
+
+
+def run_stamp(name):
+    parts = name.split("-")
+    try:
+        return time.mktime(time.strptime(parts[0] + parts[1], "%Y%m%d%H%M%S"))
+    except (ValueError, IndexError):
+        return None
+
+
+def prune(ctx):
+    try:
+        code, text = ctx.share.smbclient(f'ls "{ctx.share.share_path(lsw_link.RUN_BASE)}\\*"', 120)
+    except (lsw_link.LinkError, OSError, subprocess.SubprocessError):
+        return
+    names = []
+    for line in text.splitlines():
+        parts = line.split()
+        if len(parts) >= 2 and parts[1] == "D" and parts[0] not in (".", "..") and run_stamp(parts[0]) is not None:
+            names.append(parts[0])
+    names.sort(reverse=True)
+    own = ctx.args.run_id
+    old = [n for n in names[KEEP_RUNS:] if n != own and time.time() - run_stamp(n) > PRUNE_AGE_SECONDS]
+    if not old:
+        return
+    marker = f"done-prune-{own}.txt"
+    lines = [f'rmdir /s /q "{lsw_link.RUN_BASE}\\{n}"' for n in old]
+    script = "@echo off\r\ncd /d " + lsw_link.RUN_BASE + "\r\n" + "\r\n".join(lines) + f"\r\necho done > {marker}\r\n"
+    try:
+        ctx.share.remove(f"{lsw_link.RUN_BASE}\\{marker}")
+        link = ctx.link()
+        try:
+            link.call("run_script", {"name": "suite-run prune", "script": script, "session": 1})
+        finally:
+            link.close()
+        deadline = time.monotonic() + 300
+        while time.monotonic() < deadline and not ctx.share.exists(f"{lsw_link.RUN_BASE}\\{marker}"):
+            time.sleep(3)
+        ctx.share.remove(f"{lsw_link.RUN_BASE}\\{marker}")
+    except (lsw_link.LinkError, OSError):
+        return
+    say(f"{ctx.args.host}: removed {len(old)} old guest run folders, kept the newest {KEEP_RUNS}")
 
 
 def discover(ctx):
@@ -516,6 +593,7 @@ def execute(args, specs):
         ctx.stop.set()
     for spec in specs:
         finish(ctx, spec)
+    prune(ctx)
     if ctx.limit_hit:
         say(f"{args.host}: stopped: the recovery limit ({args.max_recoveries}) was reached or the guest did not come back")
         return 1

@@ -1454,7 +1454,7 @@ suites/render-ref/        lsw-render-ref, the Linux tool that renders the Vulkan
   above 100 MB. `--import-matrix DIR --into ROOT` takes the render results of a `gpu-test.sh` run.
 - `scripts/render-run.sh`: one command for a local or multi-host run. It builds, renders the references for the selected
   GPUs, starts the VM inside the heavy lock (`vm.sh up`, `done`), pushes the executables, dxc and references to
-  `C:\av\render-run`, runs `--suite render --dump-captures` per GPU (`--adapter uuid:`) and bitness, pulls results and
+  `C:\av\render-run\<run-id>` (timestamp, pid, host, GPU selection, bits; the newest 3 folders per host are kept), runs `--suite render --dump-captures` per GPU (`--adapter uuid:`) and bitness, pulls results and
   captures, runs `render-audit.py`, and writes `build-render-report/<timestamp>/report.html`.
   `--hosts local,test,accel` and `--gpus all|HOST:uuid:HEX|HOST:name:SUBSTR|HOST:N` select what runs, `--list-gpus`
   prints every host's GPUs, `--bits`, `--filter`, `--jobs`, `--baseline DIR`, `--images`, `--no-build` and `--dry-run`
