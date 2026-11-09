@@ -23,6 +23,7 @@ add_library(suite_support OBJECT
     d3d12_format_runner.cpp
     oracle_rig.cpp
     swap_rig.cpp
+    yuv_video_chain.cpp
     d3d12_backend.cpp
     d3d12_device.cpp
     d3d12_frame.cpp

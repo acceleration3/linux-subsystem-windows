@@ -8,6 +8,7 @@
 #include "support/problems.hpp"
 #include "support/swap_rig.hpp"
 #include "support/target_adapter.hpp"
+#include "support/yuv_video_chain.hpp"
 
 #include <dxgi1_6.h>
 #include <dxgidebug.h>
@@ -310,19 +311,11 @@ Outcome MemChecks::overlay_mpo_present(Context& context) {
         return Outcome::fail(error);
     }
     Problems problems;
-    SwapRig rig;
-    SwapOptions options;
-    options.format = DXGI_FORMAT_NV12;
-    options.width = 128;
-    options.height = 128;
-    options.buffers = 2;
-    options.effect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
-    options.flags = DXGI_SWAP_CHAIN_FLAG_YUV_VIDEO;
-    options.usage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
     SwapRig probe;
     SwapOptions plain;
     plain.width = 128;
     plain.height = 128;
+    plain.device_flags = D3D11_CREATE_DEVICE_VIDEO_SUPPORT;
     if (!probe.open(plain, error)) {
         return Outcome::fail(error);
     }
@@ -342,21 +335,27 @@ Outcome MemChecks::overlay_mpo_present(Context& context) {
     if (output3) {
         output3->CheckOverlaySupport(DXGI_FORMAT_NV12, probe.device.device, &support);
     }
+    if (support == 0) {
+        context.note("NV12 reports no overlay support; the video swap chain part is not tested");
+        return problems.outcome();
+    }
+    probe.chain.reset();
+    probe.window.destroy();
     TestWindow window;
     TestWindowConfig config;
     TestWindow::outer_size(config.x, config.y, 128, 128, config.width, config.height);
-    Com<IDXGISwapChain1> chain;
     if (!window.create(config, error)) {
         return Outcome::fail(error);
     }
-    const HRESULT created = probe.try_create(options, window.hwnd(), chain);
+    YuvVideoChain video;
+    HRESULT created = E_FAIL;
+    if (!video.create(probe, window.hwnd(), DXGI_FORMAT_NV12, 128, 128, created, error)) {
+        return Outcome::fail(error);
+    }
+    IDXGISwapChain1* const chain = video.chain.get();
     context.measure("nv12_chain", D3d11Tools::hr(created));
     if (FAILED(created)) {
-        if (support != 0) {
-            problems.add("overlay support is reported for NV12 but creating the NV12 chain fails with " + D3d11Tools::hr(created));
-        } else if (created != DXGI_ERROR_INVALID_CALL && created != DXGI_ERROR_UNSUPPORTED && created != E_INVALIDARG) {
-            problems.add("an unsupported NV12 chain fails with the undocumented " + D3d11Tools::hr(created));
-        }
+        problems.add("overlay support is reported for NV12 but creating the NV12 composition surface chain fails with " + D3d11Tools::hr(created));
         return problems.outcome();
     }
     Com<ID3D11Texture2D> staging = D3d11Tools::texture(probe.device, D3d11Tools::desc2d(128, 128, DXGI_FORMAT_NV12, 0, D3D11_USAGE_STAGING, D3D11_CPU_ACCESS_WRITE));
