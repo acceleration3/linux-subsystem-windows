@@ -95,9 +95,9 @@ const struct Batch16 {
             Api& gl = kit.gl;
             const GLuint t = TexRig::texture(kit, glc::TEXTURE_CUBE_MAP, glc::LINEAR);
             gl.glTexStorage2D(glc::TEXTURE_CUBE_MAP, 1, glc::RGBA8, 16, 16);
+            const auto data = TexRig::cells(16, 16, 6, 4);
             for (unsigned face = 0; face < 6; ++face) {
-                const auto data = TexRig::cells(16, 16, 1 + face % 3, 4 + face % 2);
-                gl.glTexSubImage2D(glc::TEXTURE_CUBE_MAP_POSITIVE_X + face, 0, 0, 0, 16, 16, glc::RGBA, glc::UNSIGNED_BYTE, data.data() + 16 * 16 * 4 * (face % 3) * 0);
+                gl.glTexSubImage2D(glc::TEXTURE_CUBE_MAP_POSITIVE_X + face, 0, 0, 0, 16, 16, glc::RGBA, glc::UNSIGNED_BYTE, data.data() + 16 * 16 * 4 * face);
             }
             return show(kit, rig, cube_show, error, glc::TEXTURE_CUBE_MAP, t, "uniform samplerCube u_tex;");
         });
@@ -131,39 +131,38 @@ const struct Batch16 {
 
         tex_case("target_buffer_texture_range", [](Kit& kit, TexRig& rig, std::string& error) {
             Api& gl = kit.gl;
-            const auto data = TexRig::cells(64, 4);
+            const auto data = TexRig::cells(64, 8);
             const GLuint buffer = kit.buffer(glc::TEXTURE_BUFFER, data.data(), data.size(), glc::STATIC_DRAW);
-            GLuint t = 0;
-            gl.glGenTextures(1, &t);
-            gl.glBindTexture(glc::TEXTURE_BUFFER, t);
-            kit.defer([&kit, t] { kit.gl.glDeleteTextures(1, &t); });
             const GLint align = kit.integer(glc::TEXTURE_BUFFER_OFFSET_ALIGNMENT);
-            if (align > 1024) {
-                error = "texture buffer alignment is too large";
+            if (align <= 0 || align > 1024) {
+                error = "texture buffer alignment is unusable";
                 return false;
             }
-            gl.glTexBufferRange(glc::TEXTURE_BUFFER, glc::RGBA8, buffer, 0, 64 * 4 * 4);
+            const GLint offset = ((300 + align - 1) / align) * align;
+            GLuint whole = 0;
             GLuint ranged = 0;
+            gl.glGenTextures(1, &whole);
             gl.glGenTextures(1, &ranged);
-            gl.glBindTexture(glc::TEXTURE_BUFFER, ranged);
-            kit.defer([&kit, ranged] { kit.gl.glDeleteTextures(1, &ranged); });
+            kit.defer([&kit, whole, ranged] {
+                kit.gl.glDeleteTextures(1, &whole);
+                kit.gl.glDeleteTextures(1, &ranged);
+            });
+            gl.glBindTexture(glc::TEXTURE_BUFFER, whole);
             gl.glTexBuffer(glc::TEXTURE_BUFFER, glc::RGBA8, buffer);
-            static_cast<void>(ranged);
             gl.glActiveTexture(glc::TEXTURE1);
-            gl.glBindTexture(glc::TEXTURE_BUFFER, t);
+            gl.glBindTexture(glc::TEXTURE_BUFFER, ranged);
+            gl.glTexBufferRange(glc::TEXTURE_BUFFER, glc::RGBA8, buffer, offset, 128 * 4);
             gl.glActiveTexture(glc::TEXTURE0);
             const GLuint program = rig.program(kit,
-                                               "void main() { vec2 c = gl_FragCoord.xy / 128.0; int i = int(c.x * 64.0) + 64 * int(c.y * 4.0); out_color = c.y < 0.5 ? texelFetch(u_a, i) : texelFetch(u_b, i % 128); }", error,
+                                               "void main() { vec2 c = gl_FragCoord.xy / 128.0; int i = int(c.x * 64.0) + 64 * int(fract(c.y * 2.0) * 2.0); out_color = c.y < 0.5 ? texelFetch(u_a, i) : texelFetch(u_b, i); }", error,
                                                "uniform samplerBuffer u_a;\nuniform samplerBuffer u_b;");
             if (program == 0) {
                 return false;
             }
             kit.u1i(program, "u_a", 0);
             kit.u1i(program, "u_b", 1);
-            gl.glActiveTexture(glc::TEXTURE0);
-            gl.glBindTexture(glc::TEXTURE_BUFFER, ranged);
             rig.draw(kit, program);
-            return true;
+            return kit.check("texture buffer range", error);
         });
 
         for (const bool array : {false, true}) {

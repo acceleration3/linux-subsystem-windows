@@ -44,6 +44,22 @@ GLuint checker_texture(Kit& kit, unsigned size, unsigned block, GLenum filter, u
     return t;
 }
 
+GLuint distinct_mip_texture(Kit& kit, unsigned size, unsigned levels) {
+    Api& gl = kit.gl;
+    const GLuint t = TexRig::texture(kit, glc::TEXTURE_2D, glc::NEAREST);
+    gl.glTexStorage2D(glc::TEXTURE_2D, static_cast<GLsizei>(levels), glc::RGBA8, static_cast<GLsizei>(size), static_cast<GLsizei>(size));
+    for (unsigned level = 0; level < levels; ++level) {
+        const unsigned extent = size >> level;
+        auto data = TexRig::cells(extent, extent, 1, 2);
+        for (std::size_t i = 0; i < data.size(); i += 4) {
+            data[i + level % 3] = static_cast<std::uint8_t>(255 - data[i + level % 3]);
+            data[i + (level + 1) % 3] = static_cast<std::uint8_t>(data[i + (level + 1) % 3] / (1 + level % 2));
+        }
+        gl.glTexSubImage2D(glc::TEXTURE_2D, static_cast<GLint>(level), 0, 0, static_cast<GLsizei>(extent), static_cast<GLsizei>(extent), glc::RGBA, glc::UNSIGNED_BYTE, data.data());
+    }
+    return t;
+}
+
 const char* kMinify =
     "void main() {\n"
     "    vec2 c = gl_FragCoord.xy / 128.0;\n"
@@ -63,7 +79,7 @@ const struct Batch19 {
                                 Filter{"min_nearest_mip_linear", glc::NEAREST_MIPMAP_LINEAR, glc::NEAREST}, Filter{"min_linear_mip_linear", glc::LINEAR_MIPMAP_LINEAR, glc::LINEAR}}) {
             tex_case(std::string("sampler_filter_") + f.name, [f](Kit& kit, TexRig& rig, std::string& error) {
                 Api& gl = kit.gl;
-                const GLuint t = checker_texture(kit, 64, 2, glc::NEAREST, 7);
+                const GLuint t = distinct_mip_texture(kit, 64, 7);
                 GLuint sampler = 0;
                 gl.glGenSamplers(1, &sampler);
                 kit.defer([&kit, sampler] { kit.gl.glDeleteSamplers(1, &sampler); });
@@ -416,6 +432,10 @@ const struct Batch19 {
             const GLuint source = checker_texture(kit, 32, 4, glc::NEAREST, 1);
             const GLuint array = TexRig::texture(kit, glc::TEXTURE_2D_ARRAY, glc::NEAREST);
             gl.glTexStorage3D(glc::TEXTURE_2D_ARRAY, 1, glc::RGBA8, 32, 32, 4);
+            const GLubyte fill[4] = {30, 90, 150, 255};
+            gl.glClearTexImage(array, 0, glc::RGBA, glc::UNSIGNED_BYTE, fill);
+            const auto first_layer = TexRig::cells(32, 32, 1, 8);
+            gl.glTexSubImage3D(glc::TEXTURE_2D_ARRAY, 0, 0, 0, 0, 32, 32, 1, glc::RGBA, glc::UNSIGNED_BYTE, first_layer.data());
             gl.glCopyImageSubData(source, glc::TEXTURE_2D, 0, 0, 0, 0, array, glc::TEXTURE_2D_ARRAY, 0, 0, 0, 1, 32, 32, 1);
             gl.glCopyImageSubData(source, glc::TEXTURE_2D, 0, 8, 8, 0, array, glc::TEXTURE_2D_ARRAY, 0, 4, 12, 2, 16, 16, 1);
             gl.glCopyImageSubData(array, glc::TEXTURE_2D_ARRAY, 0, 0, 0, 1, array, glc::TEXTURE_2D_ARRAY, 0, 0, 0, 3, 32, 16, 1);

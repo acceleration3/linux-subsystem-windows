@@ -143,15 +143,14 @@ const struct Batch13 {
             float units;
             bool clamp;
         };
-        for (const OffsetDef& def : {OffsetDef{"polygon_offset_fill_negative", glc::POLYGON_OFFSET_FILL, glc::FILL, -1.0f, -1.0f, false},
+        for (const OffsetDef& def : {OffsetDef{"polygon_offset_fill_negative", glc::POLYGON_OFFSET_FILL, glc::FILL, -1.0f, -2.0f, false},
                                      OffsetDef{"polygon_offset_fill_positive", glc::POLYGON_OFFSET_FILL, glc::FILL, 2.0f, 2.0f, false},
                                      OffsetDef{"polygon_offset_line", glc::POLYGON_OFFSET_LINE, glc::LINE, -1.0f, -4.0f, false},
-                                     OffsetDef{"polygon_offset_point", glc::POLYGON_OFFSET_POINT, glc::POINT, -1.0f, -4.0f, false},
-                                     OffsetDef{"polygon_offset_clamp", glc::POLYGON_OFFSET_FILL, glc::FILL, -4.0f, -4.0f, true}}) {
+                                     OffsetDef{"polygon_offset_point", glc::POLYGON_OFFSET_POINT, glc::POINT, -1.0f, -4.0f, false}}) {
             scene_case(def.name, [def](Kit& kit, Scene3& s, std::string&) {
                 Api& gl = kit.gl;
                 s.view = Gx::camera(1.0f, 3.0f, 0.2f, 0.35f);
-                gl.glDepthFunc(glc::LEQUAL);
+                gl.glDepthFunc(def.factor < 0.0f && def.mode == glc::FILL ? glc::LESS : glc::LEQUAL);
                 s.draw(kit, s.cube, Mat4::identity(), 0.8f, 0.4f, 0.3f);
                 gl.glEnable(def.enable);
                 if (def.clamp) {
@@ -165,6 +164,24 @@ const struct Batch13 {
                 s.draw(kit, s.cube, Mat4::identity(), 0.2f, 0.9f, 0.5f);
                 return true;
             }, def.mode == glc::FILL ? Tolerance::tight(1) : Tolerance::raster(2, 1));
+        }
+
+        for (const bool clamp : {true, false}) {
+            scene_case(clamp ? "polygon_offset_clamp" : "polygon_offset_unclamped", [clamp](Kit& kit, Scene3& s, std::string&) {
+                Api& gl = kit.gl;
+                s.view = Gx::ortho(-1.0f, 1.0f, -1.0f, 1.0f, 0.0f, 1.0f);
+                gl.glDepthFunc(glc::LESS);
+                s.draw(kit, s.quad, Mat4::translate(0.0f, 0.0f, -0.5f), 0.8f, 0.4f, 0.3f);
+                gl.glEnable(glc::POLYGON_OFFSET_FILL);
+                if (clamp) {
+                    gl.glPolygonOffsetClamp(-1000.0f, -1000.0f, -0.00001f);
+                } else {
+                    gl.glPolygonOffset(-1000.0f, -1000.0f);
+                }
+                s.draw(kit, s.quad, Mat4::translate(-0.55f, 0.0f, -0.50003f) * Mat4::scale(0.45f, 0.8f, 1.0f), 0.2f, 0.9f, 0.5f);
+                s.draw(kit, s.quad, Mat4::translate(0.55f, 0.0f, -0.500003f) * Mat4::scale(0.45f, 0.8f, 1.0f), 0.3f, 0.5f, 0.95f);
+                return true;
+            }, Tolerance::tight(1), {}, 1, glc::DEPTH_COMPONENT24, true);
         }
 
         for (const bool clamp : {false, true}) {
@@ -292,7 +309,7 @@ const struct Batch13 {
                 s.draw(kit, s.torus, Mat4::rotate_x(0.5f));
                 s.draw(kit, s.cube, Mat4::translate(0.9f, -0.9f, 0.0f) * Mat4::scale(0.35f, 0.35f, 0.35f));
                 return true;
-            }, Tolerance::raster(2, 1).with_outliers(0.01), {}, 4);
+            }, Tolerance::tight(1), {}, 4);
         }
 
         scene_case("sample_mask_and_coverage", [](Kit& kit, Scene3& s, std::string&) {
@@ -307,31 +324,41 @@ const struct Batch13 {
             gl.glSampleCoverage(0.5f, glc::FALSE_);
             s.draw(kit, s.sphere, Mat4::translate(0.0f, -0.9f, 0.0f) * Mat4::scale(0.4f, 0.4f, 0.4f), 0.4f, 0.9f, 0.4f);
             return true;
-        }, Tolerance::raster(2, 1).with_outliers(0.02), {}, 4);
+        }, Tolerance::tight(1), {}, 4);
 
-        scene_case("sample_shading_per_sample", [](Kit& kit, Scene3& s, std::string& error) {
-            Api& gl = kit.gl;
-            static const char* fs =
-                "#version 460 core\n"
-                "in vec3 v_nrm;\n"
-                "in vec2 v_uv;\n"
-                "layout(location = 0) out vec4 out_color;\n"
-                "void main() {\n"
-                "    float k = float(gl_SampleID) / 4.0;\n"
-                "    out_color = vec4(abs(v_nrm) * 0.7 + 0.2, 1.0) * vec4(vec3(0.7 + 0.3 * k), 1.0);\n"
-                "}\n";
-            const GLuint program = kit.program(kCullVertex, fs, error);
-            if (program == 0) {
-                return false;
-            }
-            gl.glEnable(glc::SAMPLE_SHADING);
-            gl.glMinSampleShading(1.0f);
-            gl.glDisable(glc::CULL_FACE);
-            gl.glUseProgram(program);
-            kit.umat4(program, "u_mvp", (s.view * Mat4::rotate_x(0.3f)).m);
-            s.sphere.draw(kit);
-            return true;
-        }, Tolerance::raster(2, 1).with_outliers(0.02), {}, 4);
+        struct ShadingDef {
+            const char* name;
+            bool enable;
+            float fraction;
+        };
+        for (const ShadingDef& def : {ShadingDef{"sample_shading_per_sample", true, 1.0f}, ShadingDef{"sample_shading_disabled", false, 1.0f}, ShadingDef{"sample_shading_half", true, 0.5f}}) {
+            scene_case(def.name, [def](Kit& kit, Scene3& s, std::string& error) {
+                Api& gl = kit.gl;
+                static const char* fs =
+                    "#version 460 core\n"
+                    "in vec3 v_nrm;\n"
+                    "in vec2 v_uv;\n"
+                    "layout(location = 0) out vec4 out_color;\n"
+                    "void main() {\n"
+                    "    float stripe = step(0.5, fract(v_uv.x * 47.0 + v_uv.y * 31.0));\n"
+                    "    out_color = vec4(vec3(0.15, 0.3, 0.9) * (0.35 + 0.65 * stripe) + 0.1 * abs(v_nrm), 1.0);\n"
+                    "}\n";
+                const GLuint program = kit.program(Sources::kLitVertex, fs, error);
+                if (program == 0) {
+                    return false;
+                }
+                if (def.enable) {
+                    gl.glEnable(glc::SAMPLE_SHADING);
+                    gl.glMinSampleShading(def.fraction);
+                }
+                gl.glUseProgram(program);
+                const Mat4 model = Mat4::rotate_x(0.3f);
+                kit.umat4(program, "u_mvp", (s.view * model).m);
+                kit.umat4(program, "u_model", model.m);
+                s.sphere.draw(kit);
+                return true;
+            }, Tolerance::tight(1), {}, 4);
+        }
 
         scene_case("line_width_aliased", [](Kit& kit, Scene3& s, std::string& error) {
             Api& gl = kit.gl;

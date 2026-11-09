@@ -257,12 +257,8 @@ const struct Batch20 {
             return Gx::shot(kit, dest, out, error) && Gx::shot_depth(kit, dest, out, error) && Gx::shot_stencil(kit, dest, out, error);
         });
 
-        for (const int samples : {2, 4, 8}) {
-            Cases::single(fbo("msaa_renderbuffer_resolve_" + std::to_string(samples) + "x").tolerance(Tolerance::raster(2, 1).with_outliers(0.02)), [samples](Kit& kit, CaptureSet& out, std::string& error) {
-                if (kit.integer(glc::MAX_SAMPLES) < samples) {
-                    error = "sample count is unavailable";
-                    return false;
-                }
+        for (const int samples : {2, 4, 8, 16}) {
+            Cases::single(fbo("msaa_renderbuffer_resolve_" + std::to_string(samples) + "x").tolerance(Tolerance::tight(1)), [samples](Kit& kit, CaptureSet& out, std::string& error) {
                 Target target;
                 TargetDesc desc;
                 desc.samples = samples;
@@ -278,10 +274,18 @@ const struct Batch20 {
                 }
                 flat.shape(kit, 9, 0.2f, 0.9f);
                 flat.shape(kit, 5, 0.5f, 0.5f, 0.3f);
-                GLint actual = 0;
-                kit.gl.glGetIntegerv(glc::SAMPLES, &actual);
+                std::vector<V2> spokes;
+                for (unsigned k = 0; k < 14; ++k) {
+                    const float a = 0.2f + 0.43f * static_cast<float>(k);
+                    const float b = a + 0.035f + 0.004f * static_cast<float>(k);
+                    spokes.push_back({0.02f * static_cast<float>(k) - 0.13f, 0.0f, 0.9f, 0.9f, 0.9f});
+                    spokes.push_back({0.95f * std::cos(a), 0.95f * std::sin(a), 0.9f, 0.3f + 0.05f * static_cast<float>(k), 0.2f});
+                    spokes.push_back({0.95f * std::cos(b), 0.95f * std::sin(b), 0.2f, 0.9f, 0.3f + 0.05f * static_cast<float>(k)});
+                }
+                kit.gl.glBindVertexArray(Flat2d::upload(kit, spokes));
+                kit.gl.glDrawArrays(glc::TRIANGLES, 0, static_cast<GLsizei>(spokes.size()));
                 return Gx::shot(kit, target, out, error);
-            });
+            }, [samples](Kit& kit) -> std::string { return kit.integer(glc::MAX_SAMPLES) < samples ? std::string("the sample count is not supported") : std::string(); });
         }
 
         Cases::single(fbo("clear_buffer_float_int_uint_depth_stencil"), [](Kit& kit, CaptureSet& out, std::string& error) {
@@ -486,7 +490,9 @@ const struct Batch20 {
             gl.glNamedFramebufferDrawBuffers(f[1], 1, &draw);
             const GLfloat a[4] = {0.9f, 0.5f, 0.1f, 1};
             const GLfloat b[4] = {0.1f, 0.2f, 0.6f, 1};
-            gl.glClearNamedFramebufferfv(f[0], glc::COLOR, 0, a);
+            static_cast<void>(a);
+            const auto pattern = TexRig::cells(32, 32, 1, 2);
+            gl.glTextureSubImage2D(t[0], 0, 0, 0, 32, 32, glc::RGBA, glc::UNSIGNED_BYTE, pattern.data());
             gl.glClearNamedFramebufferfv(f[1], glc::COLOR, 0, b);
             if (gl.glCheckNamedFramebufferStatus(f[0], glc::FRAMEBUFFER) != glc::FRAMEBUFFER_COMPLETE) {
                 error = "named framebuffer incomplete";

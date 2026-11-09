@@ -12,8 +12,12 @@ using Body = std::function<bool(Kit&, Scene3&, std::string&)>;
 enum class Extra { None, Depth, Stencil, Both };
 
 void scene_case(const std::string& name, Body body, Extra extra = Extra::None, Tolerance tolerance = Tolerance::tight(1), int samples = 1, GLenum depth = glc::DEPTH24_STENCIL8,
-                NeedFn need = {}) {
-    Cases::single(frag(name).tolerance(std::move(tolerance)), [body, extra, samples, depth](Kit& kit, CaptureSet& out, std::string& error) {
+                NeedFn need = {}, bool exact_depth = false) {
+    CaseSpec spec = frag(name).tolerance(std::move(tolerance));
+    if (exact_depth) {
+        spec.tolerance_for("depth", Tolerance::floats(1e-6f, 0.0f));
+    }
+    Cases::single(std::move(spec), [body, extra, samples, depth](Kit& kit, CaptureSet& out, std::string& error) {
         Scene3 scene;
         if (!scene.open(kit, error, samples, depth)) {
             return false;
@@ -34,16 +38,20 @@ void scene_case(const std::string& name, Body body, Extra extra = Extra::None, T
     }, std::move(need));
 }
 
+Mat4 backdrop_model(int i) {
+    return Mat4::translate(-0.9f + 0.9f * static_cast<float>(i), 0.0f, -0.6f + 0.6f * static_cast<float>(i)) * Mat4::scale(0.3f, 0.9f, 1.0f);
+}
+
 void depth_pass(Kit& kit, Scene3& s, GLenum func) {
     Api& gl = kit.gl;
     s.view = Gx::camera(1.0f, 3.2f, 0.4f, 0.25f);
     gl.glDepthFunc(glc::LESS);
     for (int i = 0; i < 3; ++i) {
-        s.draw(kit, s.quad, Mat4::translate(-0.9f + 0.9f * static_cast<float>(i), 0.0f, -0.6f + 0.6f * static_cast<float>(i)) * Mat4::scale(0.3f, 0.9f, 1.0f), 0.85f, 0.45f, 0.3f);
+        s.draw(kit, s.quad, backdrop_model(i), 0.85f, 0.45f, 0.3f);
     }
     gl.glDepthFunc(func);
     s.draw(kit, s.quad, Mat4::rotate_y(0.7f) * Mat4::scale(1.3f, 0.5f, 1.0f), 0.3f, 0.6f, 0.9f);
-    s.draw(kit, s.quad, Mat4::translate(0.0f, 0.0f, 0.0f) * Mat4::scale(0.3f, 0.9f, 1.0f) * Mat4::translate(0.0f, 0.0f, 0.0f) * Mat4::scale(1.0f, 0.5f, 1.0f), 0.3f, 0.9f, 0.4f);
+    s.draw(kit, s.quad, backdrop_model(1), 0.3f, 0.9f, 0.4f);
 }
 
 const char* kDepthWriteFragment =
@@ -74,18 +82,23 @@ const struct Batch15 {
         struct Format {
             const char* name;
             GLenum value;
+            int bits;
         };
-        for (const Format& f : {Format{"d16", glc::DEPTH_COMPONENT16}, Format{"d24", glc::DEPTH_COMPONENT24}}) {
-            scene_case(std::string("depth_format_") + f.name, [](Kit& kit, Scene3& s, std::string&) {
+        for (const Format& f : {Format{"d16", glc::DEPTH_COMPONENT16, 16}, Format{"d24", glc::DEPTH_COMPONENT24, 24}, Format{"d32f", glc::DEPTH_COMPONENT32F, 23},
+                                Format{"d24s8", glc::DEPTH24_STENCIL8, 24}, Format{"d32f_s8", glc::DEPTH32F_STENCIL8, 23}}) {
+            const int bits = f.bits;
+            scene_case(std::string("depth_format_") + f.name, [bits](Kit& kit, Scene3& s, std::string&) {
                 kit.gl.glDepthFunc(glc::LESS);
                 s.view = Mat4::perspective(1.0f, 1.0f, 0.1f, 100.0f, false);
+                const double slope = 100.0 * 0.1 / (99.9 * 50.0 * 50.0);
+                const double step = std::ldexp(1.0, -bits) / slope;
                 s.draw(kit, s.quad, Mat4::translate(0.0f, 0.0f, -50.0f) * Mat4::scale(40.0f, 40.0f, 1.0f), 0.3f, 0.5f, 0.9f);
                 for (int i = 0; i < 8; ++i) {
-                    const float dz = 0.0005f * (1.0f + static_cast<float>(i * i));
+                    const float dz = static_cast<float>(step * static_cast<double>(2 + i));
                     s.draw(kit, s.quad, Mat4::translate((static_cast<float>(i) - 3.5f) * 6.8f, 0.0f, -50.0f + dz) * Mat4::scale(3.3f, 20.0f, 1.0f), 0.9f - 0.08f * static_cast<float>(i), 0.4f, 0.3f);
                 }
                 return true;
-            }, f.value == glc::DEPTH_COMPONENT16 ? Extra::None : Extra::Depth, Tolerance::tight(1), 1, f.value);
+            }, Extra::Depth, Tolerance::tight(1), 1, f.value, {}, true);
         }
 
         scene_case("depth_range_window", [](Kit& kit, Scene3& s, std::string&) {
@@ -134,7 +147,8 @@ const struct Batch15 {
                 const GLuint vao = Flat2d::upload(kit, quad);
                 gl.glBindVertexArray(vao);
                 gl.glStencilMask(0xFF);
-                gl.glStencilFunc(glc::ALWAYS, 5, 0xFF);
+                const GLint start = (ops[i] == glc::INCR || ops[i] == glc::INCR_WRAP) ? 255 : ((ops[i] == glc::DECR || ops[i] == glc::DECR_WRAP) ? 0 : 5);
+                gl.glStencilFunc(glc::ALWAYS, start, 0xFF);
                 gl.glStencilOp(glc::REPLACE, glc::REPLACE, glc::REPLACE);
                 gl.glDrawArrays(glc::TRIANGLES, 0, 6);
                 gl.glStencilFunc(glc::ALWAYS, 9, 0xFF);
@@ -397,10 +411,11 @@ const struct Batch15 {
                 "#version 460 core\nin vec3 v_nrm;\nin vec2 v_uv;\nlayout(location = 0) out vec4 out_color;\n"
                 "void main() {\n"
                 "    vec2 p = v_uv * 24.0;\n"
-                "    vec2 c = abs(vec2(dFdxCoarse(p.x), dFdyCoarse(p.y)));\n"
-                "    vec2 f = abs(vec2(dFdxFine(p.x), dFdyFine(p.y)));\n"
-                "    float w = fwidth(p.x) + fwidth(p.y);\n"
-                "    out_color = vec4(c * 0.8, f.x * 0.8 + w * 0.1 + f.y * 0.0, 1.0);\n"
+                "    vec2 g = vec2(sin(p.x * 0.8 + p.y * 0.3), sin(p.y * 0.9 - p.x * 0.2));\n"
+                "    float c = abs(dFdxCoarse(g.x)) + 0.5 * fwidth(g.y);\n"
+                "    float f = abs(dFdxFine(g.x));\n"
+                "    float d = abs(dFdyFine(g.y) - dFdyCoarse(g.y)) + abs(dFdxFine(g.x) - dFdxCoarse(g.x));\n"
+                "    out_color = vec4(clamp(c * 3.0, 0.0, 1.0), clamp(f * 3.0, 0.0, 1.0), clamp(d * 12.0, 0.0, 1.0), 1.0);\n"
                 "}\n";
             const GLuint program = kit.program(Sources::kLitVertex, fs, error);
             if (program == 0) {
@@ -432,11 +447,14 @@ const struct Batch15 {
             return true;
         });
 
-        for (const bool sample_mode : {false, true}) {
-            scene_case(sample_mode ? "interpolation_sample_qualifier_msaa" : "interpolation_centroid_qualifier_msaa", [sample_mode](Kit& kit, Scene3& s, std::string& error) {
-                const std::string fs = std::string("#version 460 core\n") + (sample_mode ? "sample" : "centroid") +
-                                       " in vec2 v_uv;\nin vec3 v_nrm;\nlayout(location = 0) out vec4 out_color;\n"
-                                       "void main() { out_color = vec4(fract(v_uv.x * 6.0), fract(v_uv.y * 6.0), 0.5 + 0.5 * v_nrm.y, 1.0); }\n";
+        for (const int mode : {0, 1, 2}) {
+            const bool sample_mode = mode == 2;
+            const char* qualifier = mode == 0 ? "centroid " : (mode == 1 ? "" : "sample ");
+            const char* name = mode == 0 ? "interpolation_centroid_qualifier_msaa" : (mode == 1 ? "interpolation_default_qualifier_msaa" : "interpolation_sample_qualifier_msaa");
+            scene_case(name, [sample_mode, qualifier](Kit& kit, Scene3& s, std::string& error) {
+                const std::string fs = std::string("#version 460 core\n") + qualifier +
+                                       "in vec2 v_uv;\nin vec3 v_nrm;\nlayout(location = 0) out vec4 out_color;\n"
+                                       "void main() { out_color = vec4(fract(v_uv.x * 40.0), fract(v_uv.y * 40.0), 0.5 + 0.5 * v_nrm.y, 1.0); }\n";
                 std::string vs = Sources::kLitVertex;
                 if (sample_mode) {
                     vs.replace(vs.find("out vec2 v_uv;"), 14, "sample out vec2 v_uv;");
@@ -450,7 +468,7 @@ const struct Batch15 {
                 s.draw(kit, s.sphere, Mat4::rotate_x(0.3f) * Mat4::scale(1.2f, 1.2f, 1.2f));
                 s.program = previous;
                 return true;
-            }, Extra::None, Tolerance::raster(2, 1).with_outliers(0.02), 4);
+            }, Extra::None, Tolerance::tight(1), 4);
         }
 
         scene_case("interpolate_at_centroid_offset_sample", [](Kit& kit, Scene3& s, std::string& error) {
@@ -471,7 +489,7 @@ const struct Batch15 {
             s.draw(kit, s.sphere, Mat4::rotate_x(0.3f) * Mat4::scale(1.2f, 1.2f, 1.2f));
             s.program = previous;
             return true;
-        }, Extra::None, Tolerance::raster(2, 1).with_outliers(0.02), 4);
+        }, Extra::None, Tolerance::tight(1), 4);
 
         scene_case("sample_mask_in_out_shader", [](Kit& kit, Scene3& s, std::string& error) {
             static const char* fs =
@@ -490,7 +508,7 @@ const struct Batch15 {
             s.draw(kit, s.sphere, Mat4::rotate_x(0.3f) * Mat4::scale(1.2f, 1.2f, 1.2f));
             s.program = previous;
             return true;
-        }, Extra::None, Tolerance::raster(2, 1).with_outliers(0.02), 4);
+        }, Extra::None, Tolerance::tight(1), 4);
 
         scene_case("front_facing_and_primitive_id", [](Kit& kit, Scene3& s, std::string& error) {
             static const char* fs =

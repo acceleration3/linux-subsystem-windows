@@ -56,13 +56,13 @@ const struct Batch18 {
         for (const int alignment : {1, 2, 4, 8}) {
             tex_case("store_unpack_alignment_" + std::to_string(alignment), [alignment](Kit& kit, TexRig& rig, std::string& error) {
                 Api& gl = kit.gl;
-                const unsigned width = 10 + static_cast<unsigned>(alignment);
+                const unsigned width = 11;
                 const unsigned height = 9;
                 const unsigned stride = ((width * 3 + static_cast<unsigned>(alignment) - 1) / static_cast<unsigned>(alignment)) * static_cast<unsigned>(alignment);
                 std::vector<std::uint8_t> data(static_cast<std::size_t>(stride) * height, 0xEE);
                 for (unsigned y = 0; y < height; ++y) {
                     for (unsigned x = 0; x < width; ++x) {
-                        data[y * stride + x * 3] = static_cast<std::uint8_t>(20 + x * 17);
+                        data[y * stride + x * 3] = static_cast<std::uint8_t>(20 + x * 17 + static_cast<unsigned>(alignment) * 11);
                         data[y * stride + x * 3 + 1] = static_cast<std::uint8_t>(30 + y * 25);
                         data[y * stride + x * 3 + 2] = static_cast<std::uint8_t>((x + y) % 2 ? 220 : 60);
                     }
@@ -135,7 +135,7 @@ const struct Batch18 {
             kit.u1f(flat, "u_size", 1.0f);
             gl.glBindVertexArray(Flat2d::upload(kit, Flat2d::ring(9, 0.3f, 0.85f)));
             gl.glDrawArrays(glc::TRIANGLES, 0, 9);
-            const unsigned row_pixels = 40;
+            const unsigned row_pixels = 41;
             std::vector<std::uint8_t> data(static_cast<std::size_t>(row_pixels) * 3 * 20 * 2, 0x55);
             gl.glPixelStorei(glc::PACK_ALIGNMENT, 4);
             gl.glPixelStorei(glc::PACK_ROW_LENGTH, static_cast<GLint>(row_pixels));
@@ -146,6 +146,23 @@ const struct Batch18 {
             gl.glPixelStorei(glc::PACK_ROW_LENGTH, 0);
             gl.glPixelStorei(glc::PACK_SKIP_PIXELS, 0);
             gl.glPixelStorei(glc::PACK_SKIP_ROWS, 0);
+            std::vector<std::uint8_t> tight(32 * 16 * 3, 0);
+            gl.glPixelStorei(glc::PACK_ALIGNMENT, 1);
+            gl.glReadPixels(40, 40, 32, 16, glc::RGB, glc::UNSIGNED_BYTE, tight.data());
+            if (!kit.check("pack readback", error)) {
+                return false;
+            }
+            const unsigned packed_stride = ((row_pixels * 3 + 3) / 4) * 4;
+            for (unsigned r = 0; r < 16; ++r) {
+                for (unsigned c = 0; c < 32; ++c) {
+                    const std::uint8_t* have = &data[(2 + r) * packed_stride + (3 + c) * 3];
+                    const std::uint8_t* want = &tight[(r * 32 + c) * 3];
+                    if (have[0] != want[0] || have[1] != want[1] || have[2] != want[2]) {
+                        error = "packed readback differs from the tight readback at " + std::to_string(c) + "," + std::to_string(r);
+                        return false;
+                    }
+                }
+            }
             const GLuint t = TexRig::texture(kit, glc::TEXTURE_2D);
             gl.glTexStorage2D(glc::TEXTURE_2D, 1, glc::RGB8, 32, 16);
             gl.glPixelStorei(glc::UNPACK_ALIGNMENT, 4);

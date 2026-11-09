@@ -151,14 +151,14 @@ const struct Batch4 {
             float ref;
         };
         for (const AlphaDef& def : {AlphaDef{"alpha_test_greater", glc::GREATER, 0.5f}, AlphaDef{"alpha_test_less", glc::LESS, 0.3f},
-                                    AlphaDef{"alpha_test_gequal", glc::GEQUAL, 0.8f}, AlphaDef{"alpha_test_notequal", glc::NOTEQUAL, 1.0f}}) {
+                                    AlphaDef{"alpha_test_gequal", glc::GEQUAL, 0.8f}, AlphaDef{"alpha_test_notequal", glc::NOTEQUAL, 0.5f}}) {
             Cases::single(compat(def.name), [def](Kit& kit, CaptureSet& out, std::string& error) {
                 Target target;
                 if (!Legacy::open(kit, target, error)) {
                     return false;
                 }
                 Api& gl = kit.gl;
-                gl.glBindTexture(glc::TEXTURE_2D, Legacy::alpha_texture(kit));
+                gl.glBindTexture(glc::TEXTURE_2D, def.func == glc::NOTEQUAL ? Legacy::alpha_steps_texture(kit) : Legacy::alpha_texture(kit));
                 gl.glEnable(glc::TEXTURE_2D);
                 gl.glTexEnvi(glc::TEXTURE_ENV, glc::TEXTURE_ENV_MODE, static_cast<GLint>(glc::REPLACE));
                 gl.glEnable(glc::ALPHA_TEST);
@@ -251,7 +251,7 @@ const struct Batch4 {
             return Gx::shot(kit, target, out, error);
         });
 
-        Cases::single(compat("smooth_lines_blend").tolerance(Tolerance::raster(6, 1).with_outliers(0.01)), [](Kit& kit, CaptureSet& out, std::string& error) {
+        Cases::single(compat("smooth_lines_blend").tolerance(Tolerance::tight(1)), [](Kit& kit, CaptureSet& out, std::string& error) {
             Target target;
             if (!Legacy::open(kit, target, error)) {
                 return false;

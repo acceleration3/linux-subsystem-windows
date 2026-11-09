@@ -110,6 +110,35 @@ const char* kEvalBezier =
     "    te_col = c;\n"
     "}\n";
 
+const char* kEvalBezier32 =
+    "#version 460 core\n"
+    "layout(quads, equal_spacing, ccw) in;\n"
+    "in vec3 tc_col[];\n"
+    "out vec3 te_col;\n"
+    "vec4 basis(float t) {\n"
+    "    float u = 1.0 - t;\n"
+    "    return vec4(u * u * u, 3.0 * t * u * u, 3.0 * t * t * u, t * t * t);\n"
+    "}\n"
+    "void main() {\n"
+    "    vec4 bu = basis(gl_TessCoord.x);\n"
+    "    vec4 bv = basis(gl_TessCoord.y);\n"
+    "    vec4 pa = vec4(0.0);\n"
+    "    vec4 pb = vec4(0.0);\n"
+    "    vec3 ca = vec3(0.0);\n"
+    "    vec3 cb = vec3(0.0);\n"
+    "    for (int j = 0; j < 4; ++j) {\n"
+    "        for (int i = 0; i < 4; ++i) {\n"
+    "            float w = bu[i] * bv[j];\n"
+    "            pa += w * gl_in[j * 4 + i].gl_Position;\n"
+    "            ca += w * tc_col[j * 4 + i];\n"
+    "            pb += w * gl_in[16 + j * 4 + i].gl_Position;\n"
+    "            cb += w * tc_col[16 + j * 4 + i];\n"
+    "        }\n"
+    "    }\n"
+    "    gl_Position = mix(pa, pb, 0.5);\n"
+    "    te_col = mix(ca, cb, 0.5);\n"
+    "}\n";
+
 const char* kEvalIsolines =
     "#version 460 core\n"
     "layout(isolines, equal_spacing, ccw) in;\n"
@@ -215,7 +244,7 @@ const struct Batch5 {
         };
         const PatchDef patches[] = {{"patch_1_isolines", 1, kEvalIsolines, false, false}, {"patch_3_triangles", 3, kEvalTriangles, false, false},
                                     {"patch_3_points", 3, kEvalPoints, false, true},     {"patch_4_quads", 4, kEvalQuads, true, false},
-                                    {"patch_16_bezier", 16, kEvalBezier, false, false},   {"patch_32_bezier_colors", 32, kEvalBezier, true, false}};
+                                    {"patch_16_bezier", 16, kEvalBezier, false, false},   {"patch_32_bezier_colors", 32, kEvalBezier32, true, false}};
         for (const PatchDef& def : patches) {
             Cases::single(prim(def.name).tolerance(Tolerance::raster(2, 1)), [def](Kit& kit, CaptureSet& out, std::string& error) {
                 Target target;
@@ -247,12 +276,11 @@ const struct Batch5 {
                         }
                     }
                     for (unsigned k = 16; k < def.vertices; ++k) {
-                        verts.push_back({0, 0, static_cast<float>(k % 4) / 3.0f, static_cast<float>(k % 5) / 4.0f, 1.0f - static_cast<float>(k % 3) / 2.0f});
-                    }
-                    if (def.vertices == 32) {
-                        for (unsigned k = 0; k < 16; ++k) {
-                            verts[k].r = static_cast<float>(k % 4) / 3.0f;
-                        }
+                        const unsigned i = (k - 16) % 4;
+                        const unsigned j = (k - 16) / 4;
+                        const float x = -0.8f + 1.6f * static_cast<float>(j) / 3.0f;
+                        const float y = -0.8f + 1.6f * static_cast<float>(i) / 3.0f;
+                        verts.push_back({x * 0.8f, y * 0.9f + (j == 1 ? 0.3f : (j == 2 ? -0.3f : 0.0f)), 0.9f - 0.25f * static_cast<float>(i), 0.2f + 0.25f * static_cast<float>(j), 0.3f + 0.2f * static_cast<float>(i)});
                     }
                 }
                 kit.gl.glUseProgram(program);

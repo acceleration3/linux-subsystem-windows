@@ -23,7 +23,7 @@ public:
         return true;
     }
 
-    GLuint program(Kit& kit, const std::string& body, std::string& error, const char* uniforms = "") {
+    GLuint program(Kit& kit, const std::string& body, std::string& error, const char* uniforms = "", const char* out_type = "vec4") {
         std::string decls = uniforms;
         std::string preamble;
         while (decls.rfind("#extension", 0) == 0) {
@@ -31,7 +31,7 @@ public:
             preamble += decls.substr(0, end + 1);
             decls.erase(0, end + 1);
         }
-        const std::string source = std::string("#version 460 core\n") + preamble + "layout(location = 0) out vec4 out_color;\n" + decls + "\n" + body + "\n";
+        const std::string source = std::string("#version 460 core\n") + preamble + "layout(location = 0) out " + out_type + " out_color;\n" + decls + "\n" + body + "\n";
         return kit.program(Sources::kScreenVertex, source.c_str(), error);
     }
 

@@ -76,10 +76,12 @@ const struct Batch6 {
             }
         });
         draw_case("draw_elements_ushort_offset", [](Kit& kit, DrawRig& r) {
+            const GLushort shorts[12] = {0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7};
             kit.gl.glBindVertexArray(r.vao_indexed);
+            kit.buffer(glc::ELEMENT_ARRAY_BUFFER, shorts, sizeof shorts, glc::STATIC_DRAW);
             for (int cell = 0; cell < 6; ++cell) {
                 kit.u1i(r.program, "u_cell", cell);
-                kit.gl.glDrawElements(glc::TRIANGLES, 6, glc::UNSIGNED_SHORT, nullptr);
+                kit.gl.glDrawElements(glc::TRIANGLES, 6, glc::UNSIGNED_SHORT, reinterpret_cast<const void*>(static_cast<std::uintptr_t>((cell % 2) * 12)));
             }
         });
         draw_case("draw_elements_ubyte", [](Kit& kit, DrawRig& r) {

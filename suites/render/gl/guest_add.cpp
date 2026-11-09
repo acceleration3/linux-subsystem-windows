@@ -24,6 +24,10 @@ void add(Suite& suite) {
             }
             context.measure("gl.renderer", kit.renderer);
             context.measure("gl.uuid", kit.uuid);
+            context.measure("gl.pixel_format", host->describe());
+            context.measure("gl.profile_mask", std::to_string(kit.integer(rr::gl::glc::CONTEXT_PROFILE_MASK)));
+            context.measure("gl.context_flags", std::to_string(kit.integer(rr::gl::glc::CONTEXT_FLAGS)));
+            context.measure("gl.version", kit.version);
             GuestIdentity guest{"gl", std::string(), kit.uuid, kit.renderer};
             return RefCheck::run<Kit>(context, *entry, kit, opened == rr::OpenResult::Unsupported ? error : std::string(), guest);
         });

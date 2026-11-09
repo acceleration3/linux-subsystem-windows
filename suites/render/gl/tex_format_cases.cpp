@@ -19,9 +19,20 @@ void put(Bytes& out, T value) {
     out.insert(out.end(), p, p + sizeof(T));
 }
 
-float channel_value(unsigned x, unsigned y, unsigned c, unsigned variant) {
-    const float base = static_cast<float>((x * (5 + variant % 4) + y * (3 + variant % 3) + c * 7 + variant) % 16) / 15.0f;
-    return c == 3 ? 0.3f + 0.7f * static_cast<float>(y) / 15.0f : base;
+std::uint32_t texel_hash(unsigned x, unsigned y, unsigned c, unsigned variant) {
+    std::uint32_t h = x * 0x9E3779B1u ^ (y + 0x7F4A7C15u) * 0x85EBCA6Bu ^ (c + 1) * 0xC2B2AE35u ^ (variant + 3) * 0x27D4EB2Fu;
+    h ^= h >> 15;
+    h *= 0x2C1B3C6Du;
+    h ^= h >> 12;
+    h *= 0x297A2D39u;
+    h ^= h >> 15;
+    return h;
+}
+
+float unit_value(std::uint32_t h) { return static_cast<float>(h >> 8) / 16777216.0f; }
+
+float spread_value(std::uint32_t h) {
+    return std::ldexp(1.0f + static_cast<float>(h & 0x7FFFFF) / 8388608.0f, static_cast<int>((h >> 23) % 12) - 9);
 }
 
 std::uint32_t small_float(float v, unsigned mantissa_bits) {
@@ -77,6 +88,7 @@ struct Fmt {
     float scale;
     float bias;
     unsigned variant = 0;
+    bool unit = false;
 };
 
 unsigned format_channels(GLenum format) {
@@ -88,45 +100,38 @@ unsigned format_channels(GLenum format) {
     }
 }
 
-Bytes encode_texel(const Fmt& f, const float* v) {
+Bytes encode_texel(const Fmt& f, unsigned x, unsigned y) {
     Bytes out;
-    float c[4] = {v[0], v[1], v[2], v[3]};
+    std::uint32_t h[4];
+    for (unsigned i = 0; i < 4; ++i) {
+        h[i] = texel_hash(x, y, i, f.variant);
+    }
     if (f.bgra) {
-        std::swap(c[0], c[2]);
+        std::swap(h[0], h[2]);
     }
     const unsigned n = f.channels;
+    const auto value = [&](unsigned i) { return f.unit ? unit_value(h[i]) : spread_value(h[i]); };
     switch (f.type) {
-        case glc::UNSIGNED_BYTE: for (unsigned i = 0; i < n; ++i) put<std::uint8_t>(out, static_cast<std::uint8_t>(std::lround(c[i] * (f.cls == Cls::Float ? 255.0f : 255.0f)))); break;
-        case glc::BYTE: for (unsigned i = 0; i < n; ++i) put<std::int8_t>(out, static_cast<std::int8_t>(std::lround((f.cls == Cls::Float ? c[i] * 2.0f - 1.0f : c[i]) * 127.0f))); break;
-        case glc::UNSIGNED_SHORT: for (unsigned i = 0; i < n; ++i) put<std::uint16_t>(out, static_cast<std::uint16_t>(std::lround(c[i] * (f.cls == Cls::Float ? 65535.0f : 255.0f)))); break;
-        case glc::SHORT: for (unsigned i = 0; i < n; ++i) put<std::int16_t>(out, static_cast<std::int16_t>(std::lround((f.cls == Cls::Float ? c[i] * 2.0f - 1.0f : c[i]) * (f.cls == Cls::Float ? 32767.0f : 127.0f)))); break;
-        case glc::UNSIGNED_INT: for (unsigned i = 0; i < n; ++i) put<std::uint32_t>(out, static_cast<std::uint32_t>(std::lround(c[i] * 255.0f))); break;
-        case glc::INT: for (unsigned i = 0; i < n; ++i) put<std::int32_t>(out, static_cast<std::int32_t>(std::lround(c[i] * 127.0f))); break;
-        case glc::HALF_FLOAT: for (unsigned i = 0; i < n; ++i) put<std::uint16_t>(out, PixelInfo::float_to_half(c[i])); break;
-        case glc::FLOAT: for (unsigned i = 0; i < n; ++i) put<float>(out, c[i]); break;
-        case glc::UNSIGNED_SHORT_5_6_5: { const unsigned b[3] = {5, 6, 5}; put<std::uint16_t>(out, static_cast<std::uint16_t>(pack_fields(c, b, 3, false))); break; }
-        case glc::UNSIGNED_SHORT_5_6_5_REV: { const unsigned b[3] = {5, 6, 5}; put<std::uint16_t>(out, static_cast<std::uint16_t>(pack_fields(c, b, 3, true))); break; }
-        case glc::UNSIGNED_SHORT_4_4_4_4: { const unsigned b[4] = {4, 4, 4, 4}; put<std::uint16_t>(out, static_cast<std::uint16_t>(pack_fields(c, b, 4, false))); break; }
-        case glc::UNSIGNED_SHORT_4_4_4_4_REV: { const unsigned b[4] = {4, 4, 4, 4}; put<std::uint16_t>(out, static_cast<std::uint16_t>(pack_fields(c, b, 4, true))); break; }
-        case glc::UNSIGNED_SHORT_5_5_5_1: { const unsigned b[4] = {5, 5, 5, 1}; put<std::uint16_t>(out, static_cast<std::uint16_t>(pack_fields(c, b, 4, false))); break; }
-        case glc::UNSIGNED_SHORT_1_5_5_5_REV: { const unsigned b[4] = {5, 5, 5, 1}; put<std::uint16_t>(out, static_cast<std::uint16_t>(pack_fields(c, b, 4, true))); break; }
-        case glc::UNSIGNED_INT_8_8_8_8: { const unsigned b[4] = {8, 8, 8, 8}; put<std::uint32_t>(out, pack_fields(c, b, 4, false)); break; }
-        case glc::UNSIGNED_INT_8_8_8_8_REV: { const unsigned b[4] = {8, 8, 8, 8}; put<std::uint32_t>(out, pack_fields(c, b, 4, true)); break; }
-        case glc::UNSIGNED_INT_10_10_10_2: { const unsigned b[4] = {10, 10, 10, 2}; put<std::uint32_t>(out, pack_fields(c, b, 4, false)); break; }
-        case glc::UNSIGNED_INT_2_10_10_10_REV: {
-            const unsigned b[4] = {10, 10, 10, 2};
-            float cc[4] = {c[0], c[1], c[2], c[3]};
-            if (f.cls == Cls::Uint) {
-                std::uint32_t r = static_cast<std::uint32_t>(std::lround(c[0] * 1023.0f)), g = static_cast<std::uint32_t>(std::lround(c[1] * 1023.0f)),
-                              bb = static_cast<std::uint32_t>(std::lround(c[2] * 1023.0f)), a = static_cast<std::uint32_t>(std::lround(c[3] * 3.0f));
-                put<std::uint32_t>(out, r | (g << 10) | (bb << 20) | (a << 30));
-            } else {
-                put<std::uint32_t>(out, pack_fields(cc, b, 4, true));
-            }
-            break;
-        }
-        case glc::UNSIGNED_INT_10F_11F_11F_REV: put<std::uint32_t>(out, small_float(c[0], 6) | (small_float(c[1], 6) << 11) | (small_float(c[2], 5) << 22)); break;
-        case glc::UNSIGNED_INT_5_9_9_9_REV: put<std::uint32_t>(out, shared_exponent(c)); break;
+        case glc::UNSIGNED_BYTE: for (unsigned i = 0; i < n; ++i) put<std::uint8_t>(out, static_cast<std::uint8_t>(h[i] >> 24)); break;
+        case glc::BYTE: for (unsigned i = 0; i < n; ++i) put<std::int8_t>(out, static_cast<std::int8_t>(static_cast<int>((h[i] >> 24) % 255) - 127)); break;
+        case glc::UNSIGNED_SHORT: for (unsigned i = 0; i < n; ++i) put<std::uint16_t>(out, static_cast<std::uint16_t>(f.unit ? h[i] >> 24 : h[i] >> 16)); break;
+        case glc::SHORT: for (unsigned i = 0; i < n; ++i) put<std::int16_t>(out, static_cast<std::int16_t>(static_cast<int>((h[i] >> 16) % 65535) - 32767)); break;
+        case glc::UNSIGNED_INT: for (unsigned i = 0; i < n; ++i) put<std::uint32_t>(out, f.unit ? h[i] >> 24 : h[i]); break;
+        case glc::INT: for (unsigned i = 0; i < n; ++i) put<std::int32_t>(out, h[i] == 0x80000000u ? -2147483647 : static_cast<std::int32_t>(h[i])); break;
+        case glc::HALF_FLOAT: for (unsigned i = 0; i < n; ++i) put<std::uint16_t>(out, PixelInfo::float_to_half(f.unit ? static_cast<float>(h[i] >> 21) / 2048.0f : value(i))); break;
+        case glc::FLOAT: for (unsigned i = 0; i < n; ++i) put<float>(out, value(i)); break;
+        case glc::UNSIGNED_SHORT_5_6_5: { const unsigned b[3] = {5, 6, 5}; float c[4] = {unit_value(h[0]), unit_value(h[1]), unit_value(h[2]), 0}; put<std::uint16_t>(out, static_cast<std::uint16_t>(pack_fields(c, b, 3, false))); break; }
+        case glc::UNSIGNED_SHORT_5_6_5_REV: { const unsigned b[3] = {5, 6, 5}; float c[4] = {unit_value(h[0]), unit_value(h[1]), unit_value(h[2]), 0}; put<std::uint16_t>(out, static_cast<std::uint16_t>(pack_fields(c, b, 3, true))); break; }
+        case glc::UNSIGNED_SHORT_4_4_4_4: { const unsigned b[4] = {4, 4, 4, 4}; float c[4] = {unit_value(h[0]), unit_value(h[1]), unit_value(h[2]), unit_value(h[3])}; put<std::uint16_t>(out, static_cast<std::uint16_t>(pack_fields(c, b, 4, false))); break; }
+        case glc::UNSIGNED_SHORT_4_4_4_4_REV: { const unsigned b[4] = {4, 4, 4, 4}; float c[4] = {unit_value(h[0]), unit_value(h[1]), unit_value(h[2]), unit_value(h[3])}; put<std::uint16_t>(out, static_cast<std::uint16_t>(pack_fields(c, b, 4, true))); break; }
+        case glc::UNSIGNED_SHORT_5_5_5_1: { const unsigned b[4] = {5, 5, 5, 1}; float c[4] = {unit_value(h[0]), unit_value(h[1]), unit_value(h[2]), unit_value(h[3])}; put<std::uint16_t>(out, static_cast<std::uint16_t>(pack_fields(c, b, 4, false))); break; }
+        case glc::UNSIGNED_SHORT_1_5_5_5_REV: { const unsigned b[4] = {5, 5, 5, 1}; float c[4] = {unit_value(h[0]), unit_value(h[1]), unit_value(h[2]), unit_value(h[3])}; put<std::uint16_t>(out, static_cast<std::uint16_t>(pack_fields(c, b, 4, true))); break; }
+        case glc::UNSIGNED_INT_8_8_8_8: put<std::uint32_t>(out, h[0]); break;
+        case glc::UNSIGNED_INT_8_8_8_8_REV: put<std::uint32_t>(out, h[0]); break;
+        case glc::UNSIGNED_INT_10_10_10_2: put<std::uint32_t>(out, h[0]); break;
+        case glc::UNSIGNED_INT_2_10_10_10_REV: put<std::uint32_t>(out, h[0]); break;
+        case glc::UNSIGNED_INT_10F_11F_11F_REV: put<std::uint32_t>(out, small_float(spread_value(h[0]), 6) | (small_float(spread_value(h[1]), 6) << 11) | (small_float(spread_value(h[2]), 5) << 22)); break;
+        case glc::UNSIGNED_INT_5_9_9_9_REV: { const float c[3] = {spread_value(h[0]), spread_value(h[1]), spread_value(h[2])}; put<std::uint32_t>(out, shared_exponent(c)); break; }
         default: break;
     }
     return out;
@@ -136,15 +141,20 @@ Bytes build_image(const Fmt& f, unsigned size = 16) {
     Bytes out;
     for (unsigned y = 0; y < size; ++y) {
         for (unsigned x = 0; x < size; ++x) {
-            const float v[4] = {channel_value(x, y, 0, f.variant), channel_value(x, y, 1, f.variant), channel_value(x, y, 2, f.variant), channel_value(x, y, 3, f.variant)};
-            const Bytes texel = encode_texel(f, v);
+            const Bytes texel = encode_texel(f, x, y);
             out.insert(out.end(), texel.begin(), texel.end());
         }
     }
     return out;
 }
 
-std::string display_source(Cls cls, bool alpha_row) {
+std::string display_source(Cls cls) {
+    const char* sampler = cls == Cls::Float ? "sampler2D" : (cls == Cls::Int ? "isampler2D" : "usampler2D");
+    return std::string("uniform ") + sampler + " u_tex;\n"
+           "void main() { out_color = " + (cls == Cls::Float ? "vec4" : "uvec4") + "(texelFetch(u_tex, ivec2(gl_FragCoord.xy / 8.0), 0)); }\n";
+}
+
+std::string scaled_display_source(Cls cls, bool alpha_row) {
     const char* sampler = cls == Cls::Float ? "sampler2D" : (cls == Cls::Int ? "isampler2D" : "usampler2D");
     return std::string("uniform ") + sampler + " u_tex;\nuniform float u_scale;\nuniform float u_bias;\n"
            "void main() {\n"
@@ -153,6 +163,10 @@ std::string display_source(Cls cls, bool alpha_row) {
            "    out_color = vec4(" + (alpha_row ? "c.y < 0.5 ? t.rgb : vec3(t.a)" : "t.rgb") + " * u_scale + u_bias, 1.0);\n"
            "}\n";
 }
+
+GLenum display_target(Cls cls) { return cls == Cls::Float ? glc::RGBA32F : glc::RGBA32UI; }
+
+Tolerance display_tolerance(Cls cls) { return cls == Cls::Float ? Tolerance::floats(1e-6f, 1e-6f) : Tolerance::exact(); }
 
 std::string supported(Kit& kit, GLenum internal) {
     GLint ok = 0;
@@ -177,15 +191,13 @@ bool upload_and_show(Kit& kit, TexRig& rig, const Fmt& f, const Bytes& data, std
     if (!kit.check("texture upload", error)) {
         return false;
     }
-    const GLuint program = rig.program(kit, display_source(f.cls, f.channels == 4 || f.channels == 0), error);
+    const GLuint program = rig.program(kit, display_source(f.cls), error, "", f.cls == Cls::Float ? "vec4" : "uvec4");
     if (program == 0) {
         return false;
     }
     gl.glActiveTexture(glc::TEXTURE0);
     gl.glBindTexture(glc::TEXTURE_2D, t);
     kit.u1i(program, "u_tex", 0);
-    kit.u1f(program, "u_scale", f.scale);
-    kit.u1f(program, "u_bias", f.bias);
     rig.draw(kit, program);
     return true;
 }
@@ -244,9 +256,9 @@ const struct Batch17 {
         for (Fmt f : formats) {
             f.variant = ++variant_counter;
             const GLenum internal = f.internal;
-            Cases::single(tex(std::string("format_") + f.name).tolerance(Tolerance::tight(1)), [f](Kit& kit, CaptureSet& out, std::string& error) {
+            Cases::single(tex(std::string("format_") + f.name).tolerance(display_tolerance(f.cls)), [f](Kit& kit, CaptureSet& out, std::string& error) {
                 TexRig rig;
-                if (!rig.open(kit, error)) {
+                if (!rig.open(kit, error, 128, display_target(f.cls))) {
                     return false;
                 }
                 if (!upload_and_show(kit, rig, f, build_image(f), error)) {
@@ -266,7 +278,7 @@ const struct Batch17 {
                 }
                 f.variant = 40 + (++variant_counter);
                 const GLenum internal = f.internal;
-                Cases::multi(tex(std::string("stream_rows_") + f.name).frames(8, {0, 3, 7}).tolerance(Tolerance::tight(1)), [f] {
+                Cases::multi(tex(std::string("stream_rows_") + f.name).frames(8, {0, 3, 7}).tolerance(display_tolerance(f.cls)), [f] {
                     struct State {
                         TexRig rig;
                         GLuint texture = 0;
@@ -277,7 +289,7 @@ const struct Batch17 {
                     auto s = std::make_shared<State>();
                     Fns fns;
                     fns.setup = [s, f](Kit& kit, std::string& error) {
-                        if (!s->rig.open(kit, error)) {
+                        if (!s->rig.open(kit, error, 128, display_target(f.cls))) {
                             return false;
                         }
                         s->image = build_image(f);
@@ -285,7 +297,7 @@ const struct Batch17 {
                         s->texture = TexRig::texture(kit, glc::TEXTURE_2D, glc::NEAREST);
                         kit.gl.glTexStorage2D(glc::TEXTURE_2D, 1, f.internal, 16, 16);
                         kit.gl.glClearTexImage(s->texture, 0, f.format, f.type, nullptr);
-                        s->program = s->rig.program(kit, display_source(f.cls, f.channels == 4), error);
+                        s->program = s->rig.program(kit, display_source(f.cls), error, "", f.cls == Cls::Float ? "vec4" : "uvec4");
                         return s->program != 0 && kit.check("stream setup", error);
                     };
                     fns.frame = [s, f](Kit& kit, unsigned frame, std::string& error) {
@@ -295,8 +307,6 @@ const struct Batch17 {
                         gl.glTexSubImage2D(glc::TEXTURE_2D, 0, 0, static_cast<GLint>(first), 16, 2, f.format, f.type, s->image.data() + static_cast<std::size_t>(first) * s->row_bytes);
                         s->rig.target.bind(kit);
                         kit.u1i(s->program, "u_tex", 0);
-                        kit.u1f(s->program, "u_scale", f.scale);
-                        kit.u1f(s->program, "u_bias", f.bias);
                         s->rig.draw(kit, s->program);
                         return kit.check("stream rows", error);
                     };
@@ -315,18 +325,18 @@ const struct Batch17 {
             {"uint_8888_rev", glc::RGBA8, glc::RGBA, glc::UNSIGNED_INT_8_8_8_8_REV, Cls::Float, 4, false, 1, 0},
             {"uint_8888", glc::RGBA8, glc::RGBA, glc::UNSIGNED_INT_8_8_8_8, Cls::Float, 4, false, 1, 0},
             {"uint_1010102", glc::RGB10_A2, glc::RGBA, glc::UNSIGNED_INT_10_10_10_2, Cls::Float, 4, false, 1, 0},
-            {"float_into_rgba8", glc::RGBA8, glc::RGBA, glc::FLOAT, Cls::Float, 4, false, 1, 0},
-            {"half_into_rgba16", glc::RGBA16, glc::RGBA, glc::HALF_FLOAT, Cls::Float, 4, false, 1, 0},
-            {"ushort_into_rgba8ui", glc::RGBA8UI, glc::RGBA_INTEGER, glc::UNSIGNED_SHORT, Cls::Uint, 4, false, k8, 0},
-            {"int_into_rg32ui_clamped", glc::RG32UI, glc::RG_INTEGER, glc::UNSIGNED_INT, Cls::Uint, 2, false, k8, 0},
+            {"float_into_rgba8", glc::RGBA8, glc::RGBA, glc::FLOAT, Cls::Float, 4, false, 1, 0, 0, true},
+            {"half_into_rgba16", glc::RGBA16, glc::RGBA, glc::HALF_FLOAT, Cls::Float, 4, false, 1, 0, 0, true},
+            {"ushort_into_rgba8ui", glc::RGBA8UI, glc::RGBA_INTEGER, glc::UNSIGNED_SHORT, Cls::Uint, 4, false, k8, 0, 0, true},
+            {"uint_into_rg32ui", glc::RG32UI, glc::RG_INTEGER, glc::UNSIGNED_INT, Cls::Uint, 2, false, k8, 0},
             {"rgb_ubyte_into_rgba16f", glc::RGBA16F, glc::RGB, glc::UNSIGNED_BYTE, Cls::Float, 3, false, 1, 0},
         };
         for (Fmt f : transfers) {
             f.variant = ++variant_counter;
             const GLenum internal = f.internal;
-            Cases::single(tex(std::string("transfer_") + f.name).tolerance(Tolerance::tight(1)), [f](Kit& kit, CaptureSet& out, std::string& error) {
+            Cases::single(tex(std::string("transfer_") + f.name).tolerance(display_tolerance(f.cls)), [f](Kit& kit, CaptureSet& out, std::string& error) {
                 TexRig rig;
-                if (!rig.open(kit, error)) {
+                if (!rig.open(kit, error, 128, display_target(f.cls))) {
                     return false;
                 }
                 if (!upload_and_show(kit, rig, f, build_image(f), error, false)) {
@@ -375,7 +385,7 @@ const struct Batch17 {
                 if (!kit.check("compressed upload", error)) {
                     return false;
                 }
-                const GLuint program = rig.program(kit, display_source(Cls::Float, true), error);
+                const GLuint program = rig.program(kit, scaled_display_source(Cls::Float, true), error);
                 if (program == 0) {
                     return false;
                 }

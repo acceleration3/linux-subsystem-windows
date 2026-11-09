@@ -88,6 +88,30 @@ public:
         kit.gl.glTexParameteri(glc::TEXTURE_2D, glc::TEXTURE_MAG_FILTER, static_cast<GLint>(glc::LINEAR));
         return id;
     }
+
+    static GLuint alpha_steps_texture(Kit& kit, unsigned size = 64) {
+        const Pattern::Bytes colors = Pattern::checker(size, size, size / 8, Pattern::pack(250, 200, 60), Pattern::pack(40, 120, 230));
+        const float steps[4] = {0.25f, 0.5f, 0.75f, 0.5f};
+        std::vector<std::uint16_t> texels(static_cast<std::size_t>(size) * size * 4);
+        for (unsigned y = 0; y < size; ++y) {
+            for (unsigned x = 0; x < size; ++x) {
+                for (unsigned c = 0; c < 3; ++c) {
+                    texels[(y * size + x) * 4 + c] = PixelInfo::float_to_half(static_cast<float>(colors[(y * size + x) * 4 + c]) / 255.0f);
+                }
+                texels[(y * size + x) * 4 + 3] = PixelInfo::float_to_half(steps[(x / 8) % 4]);
+            }
+        }
+        GLuint id = 0;
+        kit.gl.glGenTextures(1, &id);
+        kit.gl.glBindTexture(glc::TEXTURE_2D, id);
+        kit.defer([&kit, id] { kit.gl.glDeleteTextures(1, &id); });
+        kit.gl.glTexImage2D(glc::TEXTURE_2D, 0, static_cast<GLint>(glc::RGBA16F), static_cast<GLsizei>(size), static_cast<GLsizei>(size), 0, glc::RGBA, glc::HALF_FLOAT, texels.data());
+        kit.gl.glTexParameteri(glc::TEXTURE_2D, glc::TEXTURE_MIN_FILTER, static_cast<GLint>(glc::NEAREST));
+        kit.gl.glTexParameteri(glc::TEXTURE_2D, glc::TEXTURE_MAG_FILTER, static_cast<GLint>(glc::NEAREST));
+        kit.gl.glTexParameteri(glc::TEXTURE_2D, glc::TEXTURE_WRAP_S, static_cast<GLint>(glc::CLAMP_TO_EDGE));
+        kit.gl.glTexParameteri(glc::TEXTURE_2D, glc::TEXTURE_WRAP_T, static_cast<GLint>(glc::CLAMP_TO_EDGE));
+        return id;
+    }
 };
 
 }  // namespace lsw::render::gl

@@ -29,7 +29,7 @@ const char* kControlIso =
     "void main() {\n"
     "    gl_out[gl_InvocationID].gl_Position = gl_in[gl_InvocationID].gl_Position;\n"
     "    if (gl_InvocationID == 0) {\n"
-    "        gl_TessLevelOuter[0] = 3.2; gl_TessLevelOuter[1] = 7.4;\n"
+    "        gl_TessLevelOuter[0] = 3.2; gl_TessLevelOuter[1] = 3.4;\n"
     "    }\n"
     "}\n";
 
@@ -49,7 +49,7 @@ std::string evaluation(const std::string& domain, const std::string& spacing, co
                "    float v = gl_TessCoord.y;\n"
                "    vec4 a = mix(gl_in[0].gl_Position, gl_in[1].gl_Position, u);\n"
                "    vec4 b = mix(gl_in[3].gl_Position, gl_in[2].gl_Position, u);\n"
-               "    gl_Position = mix(a, b, v) + vec4(0.0, 0.15 * sin(u * 6.2831853), 0.0, 0.0);\n"
+               "    gl_Position = mix(a, b, v) + vec4(0.0, 0.35 * sin(u * 6.2831853), 0.0, 0.0);\n"
                "    uv = vec2(u, v);\n";
     }
     return "#version 460 core\n" + layout + "out vec2 uv;\nvoid main() {\n" + body + "    gl_PointSize = 6.0;\n}\n";

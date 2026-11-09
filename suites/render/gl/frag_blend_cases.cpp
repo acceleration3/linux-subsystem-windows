@@ -298,7 +298,7 @@ const struct Batch14 {
         });
 
         for (const bool one : {false, true}) {
-            Cases::single(frag(one ? "alpha_to_one_msaa" : "alpha_to_coverage_msaa").tolerance(Tolerance::blend(2).with_outliers(0.02)), [one](Kit& kit, CaptureSet& out, std::string& error) {
+            Cases::single(frag(one ? "alpha_to_one_msaa" : "alpha_to_coverage_msaa").tolerance(Tolerance::blend(2)), [one](Kit& kit, CaptureSet& out, std::string& error) {
                 BlendRig rig;
                 if (!rig.open(kit, error, 4)) {
                     return false;

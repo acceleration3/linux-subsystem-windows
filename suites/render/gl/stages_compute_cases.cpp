@@ -225,8 +225,17 @@ const struct Batch11 {
                 "#version 460 core\nlayout(binding = 0, offset = 0) uniform atomic_uint u_counter;\nlayout(location = 0) out vec4 out_color;\n"
                 "void main() { atomicCounterIncrement(u_counter); out_color = vec4(0.9, 0.7, 0.2, 1.0); }\n";
             static const char* bar_fs =
-                "#version 460 core\nuniform float u_fraction;\nlayout(location = 0) out vec4 out_color;\n"
-                "void main() { vec2 c = gl_FragCoord.xy / 128.0; out_color = (c.y < 0.12 && c.x < u_fraction) ? vec4(0.2, 0.9, 0.4, 1.0) : vec4(0.0, 0.0, 0.0, 0.0); }\n";
+                "#version 460 core\nuniform int u_count;\nlayout(location = 0) out vec4 out_color;\n"
+                "void main() {\n"
+                "    ivec2 p = ivec2(gl_FragCoord.xy);\n"
+                "    int k = p.x / 8;\n"
+                "    if (p.y < 16 && k < 16) {\n"
+                "        bool set = ((u_count >> k) & 1) != 0;\n"
+                "        out_color = set ? vec4(0.9, 0.9, 0.2, 1.0) : vec4(0.1, 0.1, 0.1, 1.0);\n"
+                "    } else {\n"
+                "        out_color = vec4(0.0);\n"
+                "    }\n"
+                "}\n";
             const GLuint program = kit.program(vs, fs, error);
             const GLuint bar = program != 0 ? screen_program(kit, bar_fs, error) : 0;
             if (bar == 0) {
@@ -245,7 +254,7 @@ const struct Batch11 {
             gl.glBindVertexArray(s.vao);
             gl.glEnable(glc::BLEND);
             gl.glBlendFunc(glc::SRC_ALPHA, glc::ONE_MINUS_SRC_ALPHA);
-            kit.u1f(bar, "u_fraction", static_cast<float>(count) / 8192.0f);
+            kit.u1i(bar, "u_count", static_cast<GLint>(count));
             gl.glDrawArrays(glc::TRIANGLES, 0, 3);
             return Gx::shot(kit, s.target, out, error);
         });
@@ -284,10 +293,16 @@ const struct Batch11 {
             gl.glClearTexImage(texture, 0, glc::RED_INTEGER, glc::UNSIGNED_INT, &zero);
             gl.glBindImageTexture(0, texture, 0, glc::FALSE_, 0, glc::READ_WRITE, glc::R32UI);
             const GLuint vao = Flat2d::upload(kit, Flat2d::ring(15, 0.25f, 0.85f, 0.3f));
+            const GLuint vao2 = Flat2d::upload(kit, Flat2d::ring(9, 0.1f, 0.9f, 0.7f));
+            const GLuint vao3 = Flat2d::upload(kit, std::vector<V2>{{-0.5f, -0.5f, 1, 1, 1}, {0.5f, -0.5f, 1, 1, 1}, {0.5f, 0.5f, 1, 1, 1}, {-0.5f, -0.5f, 1, 1, 1}, {0.5f, 0.5f, 1, 1, 1}, {-0.5f, 0.5f, 1, 1, 1}});
             gl.glUseProgram(program);
-            gl.glBindVertexArray(vao);
             gl.glColorMask(0, 0, 0, 0);
+            gl.glBindVertexArray(vao);
             gl.glDrawArrays(glc::TRIANGLES, 0, 15);
+            gl.glBindVertexArray(vao2);
+            gl.glDrawArrays(glc::TRIANGLES, 0, 9);
+            gl.glBindVertexArray(vao3);
+            gl.glDrawArrays(glc::TRIANGLES, 0, 6);
             gl.glColorMask(1, 1, 1, 1);
             gl.glMemoryBarrier(glc::SHADER_IMAGE_ACCESS_BARRIER_BIT | glc::TEXTURE_FETCH_BARRIER_BIT);
             gl.glBindVertexArray(s.vao);

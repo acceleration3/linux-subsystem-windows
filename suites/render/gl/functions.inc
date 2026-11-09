@@ -109,6 +109,8 @@
     X(void, glGetTexParameterfv, GLenum, GLenum, GLfloat *) \
     X(void, glGetTexLevelParameteriv, GLenum, GLint, GLenum, GLint *) \
     X(void, glGetTexImage, GLenum, GLint, GLenum, GLenum, void *) \
+    X(void, glGetTextureSubImage, GLuint, GLint, GLint, GLint, GLint, GLsizei, GLsizei, GLsizei, GLenum, GLenum, GLsizei, void *) \
+    X(void, glGetTextureImage, GLuint, GLint, GLenum, GLenum, GLsizei, void *) \
     X(void, glGetCompressedTexImage, GLenum, GLint, void *) \
     X(void, glCopyTexImage2D, GLenum, GLint, GLenum, GLint, GLint, GLsizei, GLsizei, GLint) \
     X(void, glCopyTexSubImage2D, GLenum, GLint, GLint, GLint, GLint, GLint, GLsizei, GLsizei) \
@@ -459,6 +461,7 @@
     X(void, glRotatef, GLfloat, GLfloat, GLfloat, GLfloat) \
     X(void, glScalef, GLfloat, GLfloat, GLfloat) \
     X(void, glLoadTransposeMatrixf, const GLfloat *) \
+    X(void, glMultTransposeMatrixf, const GLfloat *) \
     X(void, glLightfv, GLenum, GLenum, const GLfloat *) \
     X(void, glLightf, GLenum, GLenum, GLfloat) \
     X(void, glLightModelfv, GLenum, const GLfloat *) \

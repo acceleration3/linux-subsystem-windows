@@ -15,6 +15,7 @@ struct MfState {
     GLuint buffer = 0;
     void* mapped = nullptr;
     GLsync fences[4] = {};
+    unsigned fence_slot = 4;
     std::size_t slot_bytes = 6 * sizeof(V2);
 };
 
@@ -70,6 +71,10 @@ void mf_case(const char* name, unsigned frames, std::vector<unsigned> captured, 
                 return false;
             }
             kit.gl.glDrawArrays(glc::TRIANGLES, first, 6);
+            if (state->fence_slot < 4) {
+                state->fences[state->fence_slot] = kit.gl.glFenceSync(glc::SYNC_GPU_COMMANDS_COMPLETE, 0);
+                state->fence_slot = 4;
+            }
             return kit.check("frame", error);
         };
         fns.capture = [state](Kit& kit, unsigned, CaptureSet& out, std::string& error) { return Gx::shot(kit, state->target, out, error); };
@@ -271,6 +276,7 @@ const struct Batch9 {
                             gl.glMemoryBarrier(glc::CLIENT_MAPPED_BUFFER_BARRIER_BIT);
                         }
                         first = static_cast<GLint>(slot * 6);
+                        s.fence_slot = slot;
                         return true;
                     });
         };
