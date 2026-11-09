@@ -17,7 +17,11 @@ public:
 
     void append(const CheckResult& result);
 
+    void append_start(const std::string& id, const std::string& started);
+
 private:
+    void write_line(const std::string& line);
+
     std::mutex mutex_;
     void* handle_ = nullptr;
 };

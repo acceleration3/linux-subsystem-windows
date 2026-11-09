@@ -161,9 +161,11 @@ void Runner::execute(const std::vector<Planned>& plan, std::size_t begin, std::s
             if (machine_wide) {
                 const std::lock_guard<MachineLock> held(machine_lock_);
                 started = utc_now();
+                log_.append_start(planned.check->id, started);
                 result = worker.run(planned.check->id, timeout);
             } else {
                 started = utc_now();
+                log_.append_start(planned.check->id, started);
                 result = worker.run(planned.check->id, timeout);
             }
             result.suite = planned.suite->name();
