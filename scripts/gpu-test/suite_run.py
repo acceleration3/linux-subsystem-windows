@@ -269,7 +269,8 @@ def segment_lines(ctx, spec, number, filter_text, phase, exclude, jobs):
                f"if exist done-{tag}-s{number}.txt del done-{tag}-s{number}.txt"]
     if number == 1:
         cleanup += [f"if exist art-{tag} rmdir /s /q art-{tag}", f"if exist art-{tag}.zip del art-{tag}.zip"]
-    lines = cleanup + [f"{program} {' '.join(f for f in flags if f)} > out-{tag}-s{number}.txt 2>&1",
+    guest_env = [f"set {item}" for item in os.environ.get("LSW_RENDER_GUEST_SET", "").split(";") if item]
+    lines = cleanup + guest_env + [f"{program} {' '.join(f for f in flags if f)} > out-{tag}-s{number}.txt 2>&1",
                        f"echo %ERRORLEVEL% > rc-{tag}-s{number}.txt"]
     return lines, " ".join(f for f in flags if f)
 
