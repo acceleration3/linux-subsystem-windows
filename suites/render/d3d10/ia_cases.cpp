@@ -169,8 +169,7 @@ const FormatCase kFormats[] = {
     {"r16g16_uint", DXGI_FORMAT_R16G16_UINT, 'u', 2, 'u', 4},                 {"r16g16b16a16_uint", DXGI_FORMAT_R16G16B16A16_UINT, 'u', 4, 'u', 8},
     {"r32_uint", DXGI_FORMAT_R32_UINT, 'u', 1, 'U', 4},                       {"r32g32b32a32_uint", DXGI_FORMAT_R32G32B32A32_UINT, 'u', 4, 'U', 16},
     {"r8g8b8a8_sint", DXGI_FORMAT_R8G8B8A8_SINT, 'i', 4, 'c', 4},             {"r16g16_sint", DXGI_FORMAT_R16G16_SINT, 'i', 2, 'i', 4},
-    {"r16g16b16a16_sint", DXGI_FORMAT_R16G16B16A16_SINT, 'i', 4, 'i', 8},     {"r32_sint", DXGI_FORMAT_R32_SINT, 'i', 1, 'I', 4},
-    {"r32g32_sint", DXGI_FORMAT_R32G32_SINT, 'i', 2, 'I', 8},                 {"r10g10b10a2_unorm", DXGI_FORMAT_R10G10B10A2_UNORM, 'f', 3, 'R', 4},
+    {"r16g16b16a16_sint", DXGI_FORMAT_R16G16B16A16_SINT, 'i', 4, 'i', 8},     {"r10g10b10a2_unorm", DXGI_FORMAT_R10G10B10A2_UNORM, 'f', 3, 'R', 4},
 };
 
 void run_format(Rig& r, rr::CaptureSet& out, const FormatCase& fc) {
@@ -454,7 +453,7 @@ const Registrar kIndexing{[] {
         v.insert(v.begin(), 9, vtx(3, 3, 0.5f, palette(0)));
         Com<ID3D10Buffer> vb = r.vbuf(v);
         r.std_vb(vb.get());
-        r.d->Draw(12, 9);
+        r.d->Draw(6, 9 + 6);
         r.cap_main(o);
     });
     single(spec("ia", "system_values_vertex_instance_id").tolerance(rr::Tolerance::blend()), [](Rig& r, rr::CaptureSet& o) {

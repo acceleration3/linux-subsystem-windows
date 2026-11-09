@@ -257,7 +257,7 @@ const Registrar kFeedback{[] {
         r.d->PSSetShaderResources(0, 1, &none);
         s.flip = !s.flip;
     };
-    multi<S>(spec("scene", "render_to_texture_feedback_trails").size(256, 256).frames(8, {0, 3, 7}).tolerance(rr::Tolerance::filter(10, 0.01)), body);
+    multi<S>(spec("scene", "render_to_texture_feedback_trails").size(256, 256).frames(8, {3, 5, 7}).tolerance(rr::Tolerance::filter(10, 0.01)), body);
 }};
 
 struct AtlasText {

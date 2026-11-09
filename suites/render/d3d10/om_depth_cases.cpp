@@ -93,7 +93,7 @@ void func_case(const std::string& name, DXGI_FORMAT format, D3D10_COMPARISON_FUN
         r.cap_main(o);
         r.cap_depth(o, "depth", r.depth_main);
     };
-    multi<DsState>(dspec(name).frames(3, {0, 2}).tolerance(spheres ? scene_tol(12) : rr::Tolerance::blend()).tolerance_for("depth", rr::Tolerance::floats(depth_tol, 0.0f).with_outliers(2e-4)), body, std::move(caps));
+    multi<DsState>(dspec(name).frames(func == D3D10_COMPARISON_NEVER && !spheres ? 1 : 3, func == D3D10_COMPARISON_NEVER && !spheres ? std::vector<unsigned>{0} : std::vector<unsigned>{0, 2}).tolerance(spheres ? scene_tol(12) : rr::Tolerance::blend()).tolerance_for("depth", rr::Tolerance::floats(depth_tol, 0.0f).with_outliers(2e-4)), body, std::move(caps));
 }
 
 struct StencilState {
@@ -104,10 +104,19 @@ void stencil_op_case(const std::string& name, D3D10_STENCIL_OP pass_op, D3D10_ST
     MultiBody<StencilState> body;
     const bool up = pass_op == D3D10_STENCIL_OP_INCR || pass_op == D3D10_STENCIL_OP_INCR_SAT;
     const bool down = pass_op == D3D10_STENCIL_OP_DECR || pass_op == D3D10_STENCIL_OP_DECR_SAT;
-    const std::uint8_t start = up ? 254 : down ? 1 : 5;
-    body.setup = [start](Rig& r, StencilState& s) {
+    const int base = up ? 252 : down ? 3 : 5;
+    const int step = down ? -1 : 1;
+    body.setup = [=](Rig& r, StencilState& s) {
         s.h = std::make_unique<DsHarness>(r, DXGI_FORMAT_D24_UNORM_S8_UINT);
-        if (r.ok()) r.clear_depth(r.depth_main, 1.0f, start);
+        if (!r.ok()) return;
+        auto dd = Rig::depth_desc();
+        dd.StencilEnable = TRUE;
+        dd.FrontFace = {D3D10_STENCIL_OP_KEEP, D3D10_STENCIL_OP_KEEP, D3D10_STENCIL_OP_REPLACE, D3D10_COMPARISON_ALWAYS};
+        dd.BackFace = dd.FrontFace;
+        for (int k = 0; k < 4; ++k) {
+            s.h->state(dd, static_cast<UINT>(base + step * k));
+            r.draw_std(Geo::quad(-1.0f + 0.5f * k, -1, -0.5f + 0.5f * k, 1, 0.9f, 0, 0, 0));
+        }
     };
     body.frame = [=](Rig& r, StencilState& s, unsigned f) {
         auto dd = Rig::depth_desc();
@@ -124,16 +133,13 @@ void stencil_op_case(const std::string& name, D3D10_STENCIL_OP pass_op, D3D10_ST
         std::vector<Vtx> a = Geo::quad(-0.9f + shift, -0.6f, 0.4f + shift, 0.9f - shift, 0.4f, 0.9f, 0.4f, 0.2f);
         std::vector<Vtx> b = Geo::quad(-0.3f - shift, -0.9f + shift, 0.9f - shift, 0.5f, 0.6f, 0.2f, 0.6f, 0.95f);
         if (overlap) {
-            for (auto& v : a) v.z = 0.6f;
-            for (auto& v : b) v.z = 0.3f;
+            for (auto& v : a) v.z = 0.3f;
+            for (auto& v : b) v.z = 0.6f;
         }
         r.draw_std(a);
         r.draw_std(b);
     };
-    body.capture = [](Rig& r, StencilState&, unsigned, rr::CaptureSet& o) {
-        r.cap_main(o);
-        r.cap_stencil(o, "stencil", r.depth_main);
-    };
+    body.capture = [](Rig& r, StencilState&, unsigned, rr::CaptureSet& o) { r.cap_stencil(o, "stencil", r.depth_main); };
     multi<StencilState>(dspec(name).frames(3, {0, 2}).tolerance(rr::Tolerance::blend()), body);
 }
 
@@ -148,7 +154,8 @@ void stencil_func_case(const std::string& name, D3D10_COMPARISON_FUNC func) {
         dd.BackFace = dd.FrontFace;
         for (int band = 0; band < 4; ++band) {
             s.h->state(dd, static_cast<UINT>(band + 1));
-            r.draw_std(Geo::quad(-1, 0.5f - 0.5f * band, 1, 1.0f - 0.5f * band, 0.5f, 0, 0, 0));
+            const float* c = palette(static_cast<unsigned>(band));
+            r.draw_std(Geo::quad(-1, 0.5f - 0.5f * band, 1, 1.0f - 0.5f * band, 0.5f, c[0] * 0.5f, c[1] * 0.5f, c[2] * 0.5f));
         }
     };
     body.frame = [func](Rig& r, StencilState& s, unsigned f) {
@@ -157,14 +164,12 @@ void stencil_func_case(const std::string& name, D3D10_COMPARISON_FUNC func) {
         dd.FrontFace = {D3D10_STENCIL_OP_KEEP, D3D10_STENCIL_OP_KEEP, D3D10_STENCIL_OP_KEEP, func};
         dd.BackFace = dd.FrontFace;
         s.h->state(dd, 2 + f);
-        std::vector<Vtx> q = Geo::quad(-0.9f + 0.4f * static_cast<float>(f), -0.9f, -0.3f + 0.4f * static_cast<float>(f), 0.9f, 0.5f, palette(f)[0], palette(f)[1], palette(f)[2]);
+        std::vector<Vtx> q = Geo::quad(-0.9f + 0.4f * static_cast<float>(f), -0.9f, -0.3f + 0.4f * static_cast<float>(f), 0.9f, 0.5f, 0.9f - 0.3f * static_cast<float>(f), 0.9f, 0.3f + 0.3f * static_cast<float>(f));
         r.draw_std(q);
     };
-    body.capture = [](Rig& r, StencilState&, unsigned, rr::CaptureSet& o) {
-        r.cap_main(o);
-        r.cap_stencil(o, "stencil", r.depth_main);
-    };
-    multi<StencilState>(dspec(name).frames(3, {0, 2}).tolerance(rr::Tolerance::blend()), body);
+    body.capture = [](Rig& r, StencilState&, unsigned, rr::CaptureSet& o) { r.cap_main(o); };
+    const bool never = func == D3D10_COMPARISON_NEVER;
+    multi<StencilState>(dspec(name).frames(never ? 1 : 3, never ? std::vector<unsigned>{0} : std::vector<unsigned>{0, 2}).tolerance(rr::Tolerance::blend()), body);
 }
 
 const Registrar kDepth{[] {

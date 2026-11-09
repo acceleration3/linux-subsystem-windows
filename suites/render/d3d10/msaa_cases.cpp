@@ -55,6 +55,18 @@ void draw_aa_scene(Rig& r) {
     r.draw_std(fan);
 }
 
+void draw_sliver_scene(Rig& r) {
+    std::vector<Vtx> v;
+    for (int i = 0; i < 14; ++i) {
+        const float a = 0.15f + 0.43f * static_cast<float>(i);
+        const float w = 0.006f + 0.002f * static_cast<float>(i % 5);
+        v.push_back(vtx(0.0f, 0.0f, 0.5f, palette(static_cast<unsigned>(i))));
+        v.push_back(vtx(0.95f * std::cos(a - w), 0.95f * std::sin(a - w), 0.5f, palette(static_cast<unsigned>(i))));
+        v.push_back(vtx(0.95f * std::cos(a + w), 0.95f * std::sin(a + w), 0.5f, palette(static_cast<unsigned>(i))));
+    }
+    r.draw_std(v);
+}
+
 const Registrar kMsaa{[] {
     for (UINT n : {2u, 4u, 8u}) {
         single(spec("msaa", "color_resolve_" + std::to_string(n) + "x").tolerance(rr::Tolerance::raster(8, 1)),
@@ -95,7 +107,7 @@ const Registrar kMsaa{[] {
         single(spec("msaa", "standard_pattern_" + std::to_string(n) + "x", 1).tolerance(rr::Tolerance::blend(3)), [n](Rig& r, rr::CaptureSet& o) {
             msaa_target(r, n, DXGI_FORMAT_R8G8B8A8_UNORM, false, true);
             if (!r.ok()) return;
-            draw_aa_scene(r);
+            draw_sliver_scene(r);
             r.cap_main(o);
         });
     }

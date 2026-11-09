@@ -6,7 +6,7 @@ namespace {
 void mesh_with_raster(Rig& r, rr::CaptureSet& o, const D3D10_RASTERIZER_DESC& rd, bool box, bool depth_test = true, bool face_colors = false) {
     r.begin(128, 128, DXGI_FORMAT_R8G8B8A8_UNORM, true);
     ScenePipe pipe(r, face_colors ? "float4 main(float4 p : SV_Position, float3 n : NORMAL, float2 uv : TEXCOORD0, float3 w : TEXCOORD1, bool ff : SV_IsFrontFace) : SV_Target { float l = saturate(dot(normalize(n), float3(0.4, 0.8, 0.5))) * 0.6 + 0.3; return ff ? float4(l, 0.3 * l, 0.1, 1) : float4(0.1, 0.4 * l, l, 1); }\n" : nullptr);
-    MeshBuffers m = upload(r, box ? Geo::box(1.0f, 0.8f, 0.9f) : Geo::sphere(10, 16, 1.2f));
+    MeshBuffers m = upload(r, box ? Geo::box(1.0f, 0.8f, 0.9f) : (depth_test ? Geo::torus(18, 10, 1.0f, 0.45f) : Geo::sphere(10, 16, 1.2f)));
     Com<ID3D10RasterizerState> rs = r.raster(rd);
     auto dd = Rig::depth_desc();
     dd.DepthEnable = depth_test ? TRUE : FALSE;
@@ -285,7 +285,7 @@ const Registrar kRs{[] {
     for (int box = 0; box < 2; ++box) {
         for (int wire = 0; wire < 2; ++wire) {
             if (box == 1 && wire == 0) continue;
-            single(spec("rs", std::string("fill_") + (wire ? "wireframe" : "solid") + (box ? "_box" : "_sphere")).tolerance(wire ? lines_tol() : rr::Tolerance::blend()),
+            single(spec("rs", std::string("fill_") + (wire ? "wireframe" : "solid") + (box ? "_box" : "_torus")).tolerance(wire ? lines_tol() : rr::Tolerance::blend()),
                    [box, wire](Rig& r, rr::CaptureSet& o) {
                        auto rd = Rig::raster_desc();
                        rd.FillMode = wire ? D3D10_FILL_WIREFRAME : D3D10_FILL_SOLID;

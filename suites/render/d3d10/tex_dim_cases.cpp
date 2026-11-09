@@ -362,7 +362,7 @@ const Registrar kFilters{[] {
     single(spec("tex", "lod_bias_positive").tolerance(rr::Tolerance::filter(8, 0.01).with_edge(1)), [](Rig& r, rr::CaptureSet& o) { lod_scene(r, o, 6.0f, 1.5f, 0, D3D10_FLOAT32_MAX); });
     single(spec("tex", "lod_bias_negative").tolerance(rr::Tolerance::filter(8, 0.01).with_edge(1)), [](Rig& r, rr::CaptureSet& o) { lod_scene(r, o, 12.0f, -1.5f, 0, D3D10_FLOAT32_MAX); });
     single(spec("tex", "lod_min_clamp").tolerance(rr::Tolerance::filter(8, 0.01)), [](Rig& r, rr::CaptureSet& o) { lod_scene(r, o, 2.0f, 0, 2.5f, D3D10_FLOAT32_MAX); });
-    single(spec("tex", "lod_max_clamp").tolerance(rr::Tolerance::filter(8, 0.01)), [](Rig& r, rr::CaptureSet& o) { lod_scene(r, o, 12.0f, 0, 0, 1.0f); });
+    single(spec("tex", "lod_max_clamp").tolerance(rr::Tolerance::filter(8, 0.01)), [](Rig& r, rr::CaptureSet& o) { lod_scene(r, o, 12.0f, 0, 0, 2.0f); });
     single(spec("tex", "sample_level_explicit").tolerance(rr::Tolerance::filter(8, 0.01)), [](Rig& r, rr::CaptureSet& o) {
         sample_fn_scene(r, o, "  return t.SampleLevel(s, uv * 2, floor(uv.x * 4) + frac(uv.y * 3)); ", 0);
     });
