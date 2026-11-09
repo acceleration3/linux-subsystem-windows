@@ -82,9 +82,20 @@ void register_compare() {
     };
     for (const DepthFormat& depth_format : formats) {
     for (const CompareEntry& entry : compare_ops()) {
+        if (entry.op == VK_COMPARE_OP_NEVER && depth_format.format != VK_FORMAT_D32_SFLOAT) {
+            continue;
+        }
         CaseSpec spec("om", std::string("depth_compare_") + entry.name + "_" + depth_format.suffix);
         spec.tolerance(Tolerance::exact());
-        if (entry.op != VK_COMPARE_OP_NEVER) {
+        if (entry.op == VK_COMPARE_OP_ALWAYS) {
+            std::vector<std::string> others;
+            for (const DepthFormat& other : formats) {
+                if (other.format != depth_format.format) {
+                    others.push_back(std::string("om.depth_compare_always_") + other.suffix);
+                }
+            }
+            spec.same_as(others, "always passes every fragment, so the colour and stencil planes do not depend on the depth format; the depth plane holds each format's quantization of the seven depths");
+        } else if (entry.op != VK_COMPARE_OP_NEVER) {
             spec.same_as({std::string("om.depth_compare_") + entry.name + "_" + depth_format.twin}, depth_format.twin_reason);
         }
         Cases::add(std::move(spec), [entry, depth_format](Rig& rig, CaptureSet& out) {
@@ -125,7 +136,8 @@ void register_compare() {
                 }
             }, quads.layout);
             const bool observable = entry.op != VK_COMPARE_OP_NEVER;
-            capture_depth_and_color(rig, target, out, std::move(color), observable, observable && depth_format.stencil);
+            const bool depth_differs = entry.op == VK_COMPARE_OP_LESS || entry.op == VK_COMPARE_OP_GREATER || entry.op == VK_COMPARE_OP_ALWAYS;
+            capture_depth_and_color(rig, target, out, std::move(color), depth_differs, observable && depth_format.stencil);
         }, [depth_format](Kit& kit) { return Cases::need_format(kit, depth_format.format, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT, "depth format"); });
     }
     }
