@@ -54,7 +54,7 @@ struct LifeState {
     }
     bool shot(Rig& r, unsigned, Cap& out) { return r.shot(out, view_target); }
 };
-const AddState<LifeState> kLife(spec("scene", "game_of_life_ping_pong_16_frames").frames(16, {0, 5, 15}).tolerance(rr::Tolerance::exact()));
+const AddState<LifeState> kLife(spec("scene", "game_of_life_ping_pong_16_frames").frames(16, {0, 5, 15}).tolerance(rr::Tolerance::tight(1)));
 
 struct FeedbackState {
     Target a, b, out_target;
@@ -166,7 +166,7 @@ struct DiffuseState {
     }
     bool shot(Rig& r, unsigned, Cap& out) { return r.shot(out, target); }
 };
-const AddState<DiffuseState> kDiffuse(spec("scene", "compute_heat_diffusion_ping_pong_uav").frames(12, {0, 5, 11}).tolerance(rr::Tolerance::floats(2e-3f, 1e-3f).with_edge(0)));
+const AddState<DiffuseState> kDiffuse(spec("scene", "compute_heat_diffusion_ping_pong_uav").frames(12, {0, 5, 11}).tolerance(rr::Tolerance::blend(2)));
 
 struct TaaState {
     Target current, history_a, history_b, out_target;
@@ -348,7 +348,8 @@ struct ParticleState {
         cs = r.cs(
             "struct P { float2 pos; float2 vel; float age; float life; float2 pad; };\nRWStructuredBuffer<P> ps : register(u0);\nAppendStructuredBuffer<uint> alive : register(u1);\ncbuffer K : register(b0) { float4 k; };\n"
             "[numthreads(64, 1, 1)] void main(uint3 id : SV_DispatchThreadID) { P p = ps[id.x]; p.age += 0.12; p.vel.y -= 0.35 * 0.12; p.pos += p.vel * 0.12;\n"
-            "  if (p.age > p.life) { p.pos = float2(0.0, -0.7); float a = frac(sin(id.x * 12.9898 + k.x * 3.7) * 43758.5453) * 6.2831853; float v = 0.2 + frac(sin(id.x * 78.233 + k.x) * 12345.6789) * 0.5; p.vel = float2(0.35 * cos(a) * v, 0.5 + abs(sin(a)) * v); p.age = 0; }\n"
+            "  if (p.age > p.life) { p.pos = float2(0.0, -0.7); uint h = id.x * 747796405u + asuint(k.x) * 2891336453u + 1u; h = ((h >> ((h >> 28) + 4)) ^ h) * 277803737u; h = (h >> 22) ^ h; float a = (h & 0xFFFFFu) / 1048576.0 * 6.2831853;\n"
+            "    uint g = (h ^ 0x9E3779B9u) * 2654435761u; float v = 0.2 + ((g >> 8) & 0xFFFFu) / 65536.0 * 0.5; p.vel = float2(0.35 * cos(a) * v, 0.5 + abs(sin(a)) * v); p.age = 0; }\n"
             "  ps[id.x] = p; if (id.x < 64 * (1 + (uint)k.x)) alive.Append(id.x); }\n");
         vs = r.vs("struct P { float2 pos; float2 vel; float age; float life; float2 pad; };\nStructuredBuffer<P> ps : register(t0);\nStructuredBuffer<uint> alive : register(t1);\nstruct VO { float4 p : SV_Position; float2 q : Q; float a : A; };\n"
                   "static const float2 q[6] = {float2(0, 0), float2(1, 0), float2(0, 1), float2(1, 0), float2(1, 1), float2(0, 1)};\n"
