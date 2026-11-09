@@ -424,16 +424,16 @@ def boot(domain, work, share):
     return guest
 
 
-def driver_files():
+def driver_files(drivers=DRIVERS, own_loaders=True):
     files = [(path, f"C:\\av\\incoming\\package\\{path.name}")
-             for path in sorted((DRIVERS / "package").iterdir()) if path.is_file()]
-    files.append((DRIVERS / "provision.ps1", "C:\\av\\provision.ps1"))
+             for path in sorted((drivers / "package").iterdir()) if path.is_file()]
+    files.append((drivers / "provision.ps1", "C:\\av\\provision.ps1"))
     for arch in ("x64", "x86"):
-        loaders = DRIVERS / "loaders" / arch
+        loaders = drivers / "loaders" / arch
         for path in sorted(loaders.iterdir()) if loaders.is_dir() else []:
-            if path.name.lower() != "vulkan-1.dll" or not VULKAN_LOADERS[arch].exists():
+            if not own_loaders or path.name.lower() != "vulkan-1.dll" or not VULKAN_LOADERS[arch].exists():
                 files.append((path, f"C:\\av\\loaders\\{arch}\\{path.name}"))
-        if VULKAN_LOADERS[arch].exists():
+        if own_loaders and VULKAN_LOADERS[arch].exists():
             files.append((VULKAN_LOADERS[arch], f"C:\\av\\loaders\\{arch}\\vulkan-1.dll"))
     return files
 
@@ -488,8 +488,8 @@ def run_install(guest, staged, log):
     return code
 
 
-def update_driver(guest, gpus, out, force):
-    ours = (DRIVERS / "package" / "package.sha256").read_bytes()
+def update_driver(guest, gpus, out, force, drivers=DRIVERS, own_loaders=True):
+    ours = (drivers / "package" / "package.sha256").read_bytes()
     try:
         theirs = guest.share.get_bytes("C:\\av\\package\\package.sha256")
     except LinkError:
@@ -503,7 +503,7 @@ def update_driver(guest, gpus, out, force):
     stage = "C:\\av\\gputest-stage"
     staged = []
     guest.share.make_directories(stage)
-    for index, (local, target) in enumerate(driver_files()):
+    for index, (local, target) in enumerate(driver_files(drivers, own_loaders)):
         source = f"{stage}\\{index:02d}-{local.name}"
         guest.share.put(local, source)
         staged.append((source, target))

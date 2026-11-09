@@ -196,7 +196,7 @@ ship_missing_libraries() {
     for round in 1 2 3 4 5; do
         missing="$(on "${host}" <<EOF
 LD_LIBRARY_PATH=${BASE}/tree/libs ldd ${BASE}/tree/build/accel-virt/qemu/qemu/qemu-system-x86_64 \
-    ${BASE}/tree/build/accel-virt/qemu/libav_executor.so | awk '/=> not found/ { print \$1 }' | sort -u
+    ${BASE}/tree/build/accel-virt/qemu/libav_executor.so \$(ls ${BASE}/tree/build-render-ref/lsw-render-ref 2>/dev/null) | awk '/=> not found/ { print \$1 }' | sort -u
 EOF
 )"
         [[ -z ${missing} ]] && break
@@ -211,6 +211,78 @@ EOF
         sync_to -a "${staged}/" "$(destination "${host}" "${BASE}/tree/libs/")"
     done
     rm -rf "${staged}"
+}
+
+render_bundle_paths() (
+    local qemu=build/accel-virt/qemu
+    cd "${ROOT}"
+    echo scripts/gpu-test
+    echo ${qemu}/qemu/qemu-system-x86_64
+    find ${qemu}/qemu -maxdepth 1 -name '*.so'
+    echo ${qemu}/qemu/qemu-bundle/usr/local/share/qemu
+    echo build-agent/src/agent/lsw-guest-agent.exe
+    echo build-agent/_deps/vulkanloader-build/loader/vulkan-1.dll
+    echo build-agent32/_deps/vulkanloader-build/loader/vulkan-1.dll
+    echo build-suites/lsw-suites64.exe
+    ls build-suites32/lsw-suites32.exe 2>/dev/null || true
+    echo build-render-ref/lsw-render-ref
+    echo external/accel-virt/tools
+    echo external/accel-virt/third_party/dxc
+)
+
+cmd_deploy_render() {
+    [[ -n ${LSW_RENDER_STACK:-} && -x ${LSW_RENDER_STACK}/libav_executor.so && -d ${LSW_RENDER_STACK}/d3dlib \
+        && -d ${LSW_RENDER_STACK}/av-drivers/package ]] ||
+        die "LSW_RENDER_STACK must name a directory with libav_executor.so, d3dlib/ and av-drivers/"
+    split_arguments "$@"
+    local list host
+    list="$(mktemp)"
+    trap 'rm -f "${list}"' RETURN
+    render_bundle_paths > "${list}" 2>/dev/null || die "the build outputs are incomplete"
+    while read -r path; do
+        [[ -e ${ROOT}/${path} ]] || die "${path} is missing"
+    done < "${list}"
+    for host in "${HOSTS[@]}"; do
+        say "Deploying the render stack to ${host}"
+        on "${host}" <<< "mkdir -p ${BASE}/tree/build/accel-virt/qemu ${BASE}/tree/build/accel-virt/d3d ${BASE}/runs"
+        sync_to -a -r -L --exclude __pycache__ --files-from="${list}" "${ROOT}/" \
+            "$(destination "${host}" "${BASE}/tree/")"
+        sync_to -a -L "${LSW_RENDER_STACK}/libav_executor.so" \
+            "$(destination "${host}" "${BASE}/tree/build/accel-virt/qemu/libav_executor.so")"
+        sync_to -a -L --delete "${LSW_RENDER_STACK}/d3dlib/" "$(destination "${host}" "${BASE}/tree/build/accel-virt/d3d/lib/")"
+        sync_to -a -L --delete "${LSW_RENDER_STACK}/av-drivers/" "$(destination "${host}" "${BASE}/tree/build/av-drivers/")"
+        portable_executables "${host}"
+        ship_missing_libraries "${host}"
+    done
+}
+
+cmd_stack() {
+    local action=$1
+    shift
+    split_arguments "$@"
+    local host
+    for host in "${HOSTS[@]}"; do
+        say "Render stack ${action} on ${host}"
+        on "${host}" <<RUN
+cd ${BASE}/tree/scripts/gpu-test
+if systemd-run --user --quiet --collect true 2>/dev/null; then
+    unit=lsw-render-stack-${action}
+    systemctl --user reset-failed "\${unit}.service" 2>/dev/null || true
+    systemd-run --user --quiet --collect --wait --pipe --unit="\${unit}" --working-directory="\${HOME}/${BASE}/tree/scripts/gpu-test" \
+        python3 -B render_stack.py ${action}
+else
+    python3 -B render_stack.py ${action}
+fi
+RUN
+    done
+}
+
+cmd_tunnel() {
+    [[ $# -eq 3 ]] || die "tunnel needs a host and two local ports: the agent's and the share's"
+    local target
+    target="$(target_of "$1")"
+    [[ -n ${target} && ${target} != local ]] || die "tunnel needs a remote host"
+    ssh -O forward "${SSH_OPTS[@]}" -L "$2:127.0.0.1:5102" -L "$3:127.0.0.1:5445" "${target}"
 }
 
 cmd_preflight() {
@@ -433,6 +505,11 @@ runs every graphics API's tests on every GPU of each machine, in its LSW VM.
 
   build                     LSW and the test programs
   deploy   [HOST...]        rsync the tree, then preflight
+  deploy-render [HOST...]   the render suite's stack only (LSW_RENDER_STACK names the executor, d3dlib and av-drivers)
+  stack-install [HOST...]   put that stack under the VM: saves the VM's definition, driver package and agent first
+  stack-restore [HOST...]   put the saved ones back
+  stack-status [HOST...]
+  tunnel HOST AGENTPORT SMBPORT   forward the remote guest's agent and share to local ports (needs the ssh master)
   preflight [HOST...]       what each host lacks
   run      [HOST...] [-- OPTIONS]
   status   [RUN]
@@ -460,6 +537,11 @@ shift
 case "${command}" in
     build)      cmd_build "$@" ;;
     deploy)     cmd_deploy "$@" ;;
+    deploy-render) cmd_deploy_render "$@" ;;
+    stack-install) cmd_stack install "$@" ;;
+    stack-restore) cmd_stack restore "$@" ;;
+    stack-status) cmd_stack status "$@" ;;
+    tunnel)     cmd_tunnel "$@" ;;
     preflight)  cmd_preflight "$@" ;;
     run)        cmd_run "$@" ;;
     status)     cmd_status "$@" || true ;;
