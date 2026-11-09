@@ -202,11 +202,22 @@ const struct Batch13 {
         };
         for (const ClipDef& def : {ClipDef{"clip_control_lower_left_neg", glc::LOWER_LEFT, glc::NEGATIVE_ONE_TO_ONE}, ClipDef{"clip_control_upper_left_neg", glc::UPPER_LEFT, glc::NEGATIVE_ONE_TO_ONE},
                                    ClipDef{"clip_control_lower_left_zero", glc::LOWER_LEFT, glc::ZERO_TO_ONE}, ClipDef{"clip_control_upper_left_zero", glc::UPPER_LEFT, glc::ZERO_TO_ONE}}) {
-            scene_case(def.name, [def](Kit& kit, Scene3& s, std::string&) {
+            scene_case(def.name, [def](Kit& kit, Scene3& s, std::string& error) {
                 kit.gl.glClipControl(def.origin, def.depth);
                 kit.gl.glClearDepth(def.depth == glc::ZERO_TO_ONE ? 1.0 : 1.0);
                 s.draw(kit, s.torus, Mat4::rotate_x(0.6f));
+                static const char* fs =
+                    "#version 460 core\nin vec3 v_nrm;\nin vec2 v_uv;\nin vec3 v_world;\nlayout(location = 0) out vec4 out_color;\n"
+                    "void main() { out_color = vec4(fract(gl_FragCoord.z * 12.0), gl_FragCoord.z, 0.5, 1.0); }\n";
+                const GLuint depth_program = kit.program(Sources::kLitVertex, fs, error);
+                if (depth_program == 0) {
+                    return false;
+                }
+                const GLuint previous = s.program;
+                s.program = depth_program;
                 s.draw(kit, s.cube, Mat4::translate(0.9f, -0.7f, 0.5f) * Mat4::scale(0.35f, 0.35f, 0.35f));
+                s.draw(kit, s.quad, Mat4::translate(-0.2f, 0.9f, -0.3f) * Mat4::rotate_x(-0.9f) * Mat4::scale(1.2f, 0.4f, 1.0f));
+                s.program = previous;
                 return true;
             }, Tolerance::tight(1), {}, 1, glc::DEPTH24_STENCIL8, true);
         }

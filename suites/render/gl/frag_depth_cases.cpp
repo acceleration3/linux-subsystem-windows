@@ -42,7 +42,7 @@ Mat4 backdrop_model(int i) {
     return Mat4::translate(-0.9f + 0.9f * static_cast<float>(i), 0.0f, -0.6f + 0.6f * static_cast<float>(i)) * Mat4::scale(0.3f, 0.9f, 1.0f);
 }
 
-void depth_pass(Kit& kit, Scene3& s, GLenum func) {
+void depth_pass(Kit& kit, Scene3& s, GLenum func, GLuint color_program = 0) {
     Api& gl = kit.gl;
     s.view = Gx::camera(1.0f, 3.2f, 0.4f, 0.25f);
     gl.glDepthFunc(glc::LESS);
@@ -50,9 +50,18 @@ void depth_pass(Kit& kit, Scene3& s, GLenum func) {
         s.draw(kit, s.quad, backdrop_model(i), 0.85f, 0.45f, 0.3f);
     }
     gl.glDepthFunc(func);
+    const GLuint previous = s.program;
+    if (color_program != 0) {
+        s.program = color_program;
+    }
     s.draw(kit, s.quad, Mat4::rotate_y(0.7f) * Mat4::scale(1.3f, 0.5f, 1.0f), 0.3f, 0.6f, 0.9f);
     s.draw(kit, s.quad, backdrop_model(1), 0.3f, 0.9f, 0.4f);
+    s.program = previous;
 }
+
+const char* kDepthColorFragment =
+    "#version 460 core\nin vec3 v_nrm;\nin vec2 v_uv;\nin vec3 v_world;\nlayout(location = 0) out vec4 out_color;\n"
+    "void main() { out_color = vec4(fract(gl_FragCoord.z * 64.0), fract(gl_FragCoord.z * 8.0), 0.4, 1.0); }\n";
 
 const char* kDepthWriteFragment =
     "#version 460 core\n"
@@ -76,7 +85,7 @@ const struct Batch15 {
             scene_case(std::string("depth_func_") + f.name, [value](Kit& kit, Scene3& s, std::string&) {
                 depth_pass(kit, s, value);
                 return true;
-            }, Extra::Depth);
+            });
         }
 
         struct Format {
@@ -106,20 +115,31 @@ const struct Batch15 {
                     }
                     s.draw(kit, s.quad, Mat4::translate((static_cast<float>(i) - 3.5f) * 6.8f, 0.0f, -50.0f + dz) * Mat4::scale(3.3f, 20.0f, 1.0f), 0.9f - 0.08f * static_cast<float>(i), 0.4f, 0.3f);
                 }
+                if (stencil) {
+                    kit.gl.glDisable(glc::DEPTH_TEST);
+                    kit.gl.glStencilFunc(glc::EQUAL, 0x44, 0xFF);
+                    kit.gl.glStencilOp(glc::KEEP, glc::KEEP, glc::KEEP);
+                    s.view = Mat4::identity();
+                    s.draw(kit, s.quad, Mat4::scale(1.0f, 0.5f, 1.0f), 0.95f, 0.95f, 0.2f);
+                }
                 return true;
-            }, stencil ? Extra::Both : Extra::Depth, Tolerance::tight(1), 1, f.value, {}, true);
+            }, stencil ? Extra::Stencil : Extra::Depth, Tolerance::tight(1), 1, f.value, {}, true);
         }
 
         scene_case("depth_range_window", [](Kit& kit, Scene3& s, std::string&) {
+            std::string error;
+            const GLuint colored = kit.program(Sources::kLitVertex, kDepthColorFragment, error);
             kit.gl.glDepthRange(0.25, 0.75);
-            depth_pass(kit, s, glc::LESS);
+            depth_pass(kit, s, glc::LESS, colored);
             kit.gl.glDepthRange(0.0, 1.0);
             return true;
         }, Extra::Depth);
 
         scene_case("depth_range_indexed_and_f", [](Kit& kit, Scene3& s, std::string&) {
+            std::string error;
+            const GLuint colored = kit.program(Sources::kLitVertex, kDepthColorFragment, error);
             kit.gl.glDepthRangeIndexed(0, 0.1, 0.6);
-            depth_pass(kit, s, glc::LESS);
+            depth_pass(kit, s, glc::LESS, colored);
             kit.gl.glDepthRangef(0.0f, 1.0f);
             return true;
         }, Extra::Depth);

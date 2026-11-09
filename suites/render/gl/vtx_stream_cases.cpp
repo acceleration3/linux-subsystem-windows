@@ -19,15 +19,24 @@ struct MfState {
     std::size_t slot_bytes = 6 * sizeof(V2);
 };
 
-std::vector<V2> frame_quad(unsigned frame) {
-    const float a = 0.7f * static_cast<float>(frame);
+std::vector<V2> frame_quad(unsigned frame, unsigned salt) {
+    const float a = 0.7f * static_cast<float>(frame) + 0.13f * static_cast<float>(salt);
     const float k = 1.0f - 0.06f * static_cast<float>(frame);
     const float cx = 0.6f * std::cos(a);
     const float cy = 0.6f * std::sin(a);
     const float h = 0.2f;
     const float r = 0.2f + 0.07f * static_cast<float>(frame % 5);
-    return {{cx - h, cy - h, r * k, 0.3f * k, 0.2f * k}, {cx + h, cy - h, 0.3f * k, 1.0f * k, r * k}, {cx + h, cy + h, 0.2f * k, 0.4f * k, 1.0f * k},
+    auto quad = std::vector<V2>{{cx - h, cy - h, r * k, 0.3f * k, 0.2f * k}, {cx + h, cy - h, 0.3f * k, 1.0f * k, r * k}, {cx + h, cy + h, 0.2f * k, 0.4f * k, 1.0f * k},
             {cx - h, cy - h, r * k, 0.3f * k, 0.2f * k}, {cx + h, cy + h, 0.2f * k, 0.4f * k, 1.0f * k}, {cx - h, cy + h, 1.0f * k, 1.0f * k, r * k}};
+    for (V2& v : quad) {
+        for (unsigned i = 0; i < salt % 3; ++i) {
+            const float t = v.r;
+            v.r = v.g;
+            v.g = v.b;
+            v.b = t;
+        }
+    }
+    return quad;
 }
 
 using SetupFn = std::function<bool(Kit&, MfState&, std::string&)>;
@@ -45,7 +54,9 @@ void attach_layout(Kit& kit, GLuint buffer) {
 }
 
 void mf_case(const char* name, unsigned frames, std::vector<unsigned> captured, SetupFn setup, UploadFn upload) {
-    Cases::multi(vtx(name).frames(frames, std::move(captured)), [setup, upload] {
+    static unsigned next_salt = 0;
+    const unsigned salt = next_salt++;
+    Cases::multi(vtx(name).frames(frames, std::move(captured)), [setup, upload, salt] {
         auto state = std::make_shared<MfState>();
         Fns fns;
         fns.setup = [state, setup](Kit& kit, std::string& error) {
@@ -62,12 +73,12 @@ void mf_case(const char* name, unsigned frames, std::vector<unsigned> captured, 
             state->vao = kit.vertex_array();
             return setup(kit, *state, error);
         };
-        fns.frame = [state, upload](Kit& kit, unsigned frame, std::string& error) {
+        fns.frame = [state, upload, salt](Kit& kit, unsigned frame, std::string& error) {
             state->target.bind(kit);
             kit.gl.glUseProgram(state->program);
             kit.gl.glBindVertexArray(state->vao);
             GLint first = 0;
-            if (!upload(kit, *state, frame, frame_quad(frame), first, error)) {
+            if (!upload(kit, *state, frame, frame_quad(frame, salt), first, error)) {
                 return false;
             }
             kit.gl.glDrawArrays(glc::TRIANGLES, first, 6);
