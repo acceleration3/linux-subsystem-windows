@@ -292,6 +292,36 @@ bool sample_scene(Kit& kit, ID3D12Resource* texture, const D3D12_SHADER_RESOURCE
     return ok && stage.finish(out, error);
 }
 
+bool SampleRig::open(Kit& kit, ID3D12Resource* texture, const D3D12_SHADER_RESOURCE_VIEW_DESC& srv, const D3D12_SAMPLER_DESC& sampler, const std::string& pixel_source, std::string& error) {
+    if (!stage.open(kit, error)) {
+        return false;
+    }
+    stage.canvas.binder.srv(0, texture, &srv);
+    stage.canvas.binder.sampler(0, sampler);
+    Pso builder = stage.pso();
+    builder.ps(Hlsl12::with_root(pixel_source.c_str()));
+    state = builder.build(error);
+    return state != nullptr;
+}
+
+bool SampleRig::frame(Kit& kit, const float p0[4], const float p1[4], float tilt, bool clear, std::string& error) {
+    return kit.submit(
+        [&](ID3D12GraphicsCommandList* list) {
+            const float background[4] = {0.1f, 0.12f, 0.2f, 1.0f};
+            if (clear) {
+                stage.canvas.begin(list, background);
+            } else {
+                stage.canvas.begin_keep(list);
+            }
+            list->SetPipelineState(state);
+            const rr::Mat4 matrix = rr::Mat4::perspective_d3d(1.0f, 1.0f, 0.5f, 40.0f) * rr::Mat4::translate(0, 0, -2.4f) * rr::Mat4::rotate_x(tilt);
+            set_cbv_root(list, matrix, p0, p1);
+            stage.plane.bind(list);
+            stage.plane.draw(list);
+        },
+        error);
+}
+
 const char* const kSamplePrefix = "struct VsOut { float4 pos : SV_Position; float3 nrm : NORMAL; float2 uv : TEXCOORD0; };\n";
 
 std::string needs_format(Kit& kit, DXGI_FORMAT format, D3D12_FORMAT_SUPPORT1 support, const char* what) {

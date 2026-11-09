@@ -39,6 +39,16 @@ public:
 [[nodiscard]] bool sample_scene(Kit& kit, ID3D12Resource* texture, const D3D12_SHADER_RESOURCE_VIEW_DESC& srv, const D3D12_SAMPLER_DESC* sampler,
                                 const std::string& pixel_source, const float p0[4], const float p1[4], float tilt, rr::CaptureSet& out, std::string& error,
                                 const D3D12_SAMPLER_DESC* second_sampler = nullptr, bool on_sphere = false);
+class SampleRig {
+public:
+    [[nodiscard]] bool open(Kit& kit, ID3D12Resource* texture, const D3D12_SHADER_RESOURCE_VIEW_DESC& srv, const D3D12_SAMPLER_DESC& sampler, const std::string& pixel_source, std::string& error);
+    [[nodiscard]] bool frame(Kit& kit, const float p0[4], const float p1[4], float tilt, bool clear, std::string& error);
+    [[nodiscard]] bool capture(Kit& kit, rr::CaptureSet& out, std::string& error) { return stage.finish(out, error); }
+
+    Stage stage;
+    ID3D12PipelineState* state = nullptr;
+};
+
 [[nodiscard]] D3D12_SHADER_RESOURCE_VIEW_DESC srv_2d(DXGI_FORMAT format, UINT mips, UINT most_detailed = 0);
 [[nodiscard]] std::string needs_format(Kit& kit, DXGI_FORMAT format, D3D12_FORMAT_SUPPORT1 support, const char* what);
 extern const char* const kSamplePrefix;

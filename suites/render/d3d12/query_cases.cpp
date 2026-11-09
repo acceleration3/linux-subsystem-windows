@@ -55,7 +55,7 @@ struct OcclusionScene {
         return true;
     }
 
-    static float wall_x(unsigned frame) { return -1.3f + 0.34f * static_cast<float>(frame); }
+    static float wall_x(unsigned frame) { return -0.75f + 0.5f * static_cast<float>(frame % 4); }
 
     rr::Mat4 object_matrix(UINT index) const {
         return rr::Mat4::translate(-0.75f + 0.5f * static_cast<float>(index), 0.0f, 0.0f) * rr::Mat4::scale(0.25f, 0.25f, 0.25f);

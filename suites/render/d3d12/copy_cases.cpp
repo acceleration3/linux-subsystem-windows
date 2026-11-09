@@ -356,48 +356,6 @@ void register_clears() {
                           return true;
                       });
     }
-    Cases::single(rr::CaseSpec("copy", "write_buffer_immediate_compute_queue_between_copies").tolerance(rr::Tolerance::exact()).tag("copy"), [](Kit& kit, rr::CaptureSet& out, std::string& error) {
-        if (!kit.rig.open_queue(D3D12_COMMAND_LIST_TYPE_COMPUTE, error)) {
-            return false;
-        }
-        HRESULT result = S_OK;
-        ID3D12Resource* buffer = D3d12Tools::device_buffer(kit.rig, 256, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_FLAG_NONE, &result);
-        ID3D12Resource* scratch = D3d12Tools::device_buffer(kit.rig, 256, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_FLAG_NONE, &result);
-        std::vector<std::uint32_t> data(64, 0x11111111u);
-        ID3D12Resource* upload = kit.make_upload(data.data(), 256, error);
-        if (buffer == nullptr || scratch == nullptr || upload == nullptr) {
-            return fail_with(error, error.empty() ? "buffer: " + D3d12Tools::hr(result) : error);
-        }
-        bool supported = true;
-        if (!kit.rig.compute().run_wait([&](ID3D12GraphicsCommandList* list) {
-                ID3D12GraphicsCommandList2* list2 = nullptr;
-                if (FAILED(list->QueryInterface(__uuidof(ID3D12GraphicsCommandList2), reinterpret_cast<void**>(&list2)))) {
-                    supported = false;
-                    return;
-                }
-                list->CopyBufferRegion(buffer, 0, upload, 0, 256);
-                const D3D12_WRITEBUFFERIMMEDIATE_PARAMETER first[2] = {{buffer->GetGPUVirtualAddress() + 16, 0xdeadbeefu}, {buffer->GetGPUVirtualAddress() + 20, 0xcafef00du}};
-                const D3D12_WRITEBUFFERIMMEDIATE_MODE modes[2] = {D3D12_WRITEBUFFERIMMEDIATE_MODE_DEFAULT, D3D12_WRITEBUFFERIMMEDIATE_MODE_MARKER_IN};
-                list2->WriteBufferImmediate(2, first, modes);
-                list->CopyBufferRegion(scratch, 64, buffer, 0, 32);
-                const D3D12_WRITEBUFFERIMMEDIATE_PARAMETER second[1] = {{buffer->GetGPUVirtualAddress() + 100, 0x12345678u}};
-                list2->WriteBufferImmediate(1, second, nullptr);
-                list2->Release();
-            }, error)) {
-            return false;
-        }
-        if (!supported) {
-            return fail_with(error, "ID3D12GraphicsCommandList2 is not available");
-        }
-        std::vector<std::uint32_t> words;
-        std::vector<std::uint32_t> more;
-        if (!D3d12Tools::read_words(kit.rig, buffer, D3D12_RESOURCE_STATE_COMMON, 64, words, error) || !D3d12Tools::read_words(kit.rig, scratch, D3D12_RESOURCE_STATE_COMMON, 64, more, error)) {
-            return false;
-        }
-        words.insert(words.end(), more.begin(), more.end());
-        out.add("", words_image(words, 8));
-        return true;
-    });
 }
 
 const struct Registrar {

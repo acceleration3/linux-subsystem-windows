@@ -618,12 +618,198 @@ void register_two_sided() {
                   });
 }
 
+struct AccumState {
+    Stage stage;
+    ID3D12PipelineState* state = nullptr;
+};
+
+void add_blend_frames(const std::string& name, const BlendSetup& setup, bool color_factor) {
+    Cases::frames(rr::CaseSpec("om", name + "_accumulate").frames(4, {1, 3}).tolerance(color_factor ? rr::Tolerance::blend(24).with_outliers(0.001) : rr::Tolerance::blend(4)).tag("blend"), [setup](Cases::Steps& steps) {
+        auto s = std::make_shared<AccumState>();
+        steps.on_setup = [s, setup](Kit& kit, std::string& error) {
+            if (!s->stage.open(kit, error)) {
+                return false;
+            }
+            Pso builder = s->stage.pso();
+            D3D12_RENDER_TARGET_BLEND_DESC& blend = builder.desc.BlendState.RenderTarget[0];
+            blend.BlendEnable = TRUE;
+            blend.SrcBlend = setup.src;
+            blend.DestBlend = setup.dst;
+            blend.BlendOp = setup.op;
+            blend.SrcBlendAlpha = setup.src_alpha;
+            blend.DestBlendAlpha = setup.dst_alpha;
+            blend.BlendOpAlpha = setup.op_alpha;
+            blend.RenderTargetWriteMask = setup.mask;
+            s->state = builder.build(error);
+            return s->state != nullptr;
+        };
+        steps.on_frame = [s](Kit& kit, unsigned frame, std::string& error) {
+            return kit.submit([&](ID3D12GraphicsCommandList* list) {
+                const float clear[4] = {0.1f, 0.2f, 0.3f, 0.5f};
+                if (frame == 0) {
+                    s->stage.canvas.begin(list, clear);
+                    s->stage.backdrop(list);
+                } else {
+                    s->stage.canvas.begin_keep(list);
+                }
+                list->SetPipelineState(s->state);
+                const float factor[4] = {0.75f, 0.4f, 0.2f, 0.6f};
+                list->OMSetBlendFactor(factor);
+                const float shift = -0.45f + 0.3f * static_cast<float>(frame);
+                s->stage.mesh(list, s->stage.sphere, rr::Mat4::translate(shift, 0.15f - 0.1f * static_cast<float>(frame), 0.0f) * rr::Mat4::scale(0.7f, 0.7f, 0.7f), 0.9f, 0.35f + 0.1f * static_cast<float>(frame), 0.2f, 0.6f);
+                s->stage.mesh(list, s->stage.torus, rr::Mat4::rotate_x(0.5f + 0.3f * static_cast<float>(frame)) * rr::Mat4::scale(0.7f, 0.7f, 0.7f), 0.2f, 0.8f, 0.45f, 0.5f);
+            }, error);
+        };
+        steps.on_capture = [s](Kit&, unsigned, rr::CaptureSet& out, std::string& error) { return s->stage.finish(out, error); };
+    });
+}
+
+struct StencilFrames {
+    Stage stage;
+    ID3D12PipelineState* writer = nullptr;
+    ID3D12PipelineState* tester = nullptr;
+};
+
+void add_stencil_frames(const std::string& name, D3D12_STENCIL_OP pass_op, D3D12_STENCIL_OP fail_op, D3D12_STENCIL_OP depth_fail_op, D3D12_COMPARISON_FUNC func) {
+    Cases::frames(rr::CaseSpec("om", name + "_accumulate").frames(4, {1, 3}).tolerance(rr::Tolerance::blend(3).with_edge(1)).tag("stencil"), [=](Cases::Steps& steps) {
+        auto s = std::make_shared<StencilFrames>();
+        steps.on_setup = [=](Kit& kit, std::string& error) {
+            if (!s->stage.open(kit, error, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_D24_UNORM_S8_UINT)) {
+                return false;
+            }
+            Pso writer = s->stage.pso();
+            writer.desc.DepthStencilState.StencilEnable = TRUE;
+            writer.desc.DepthStencilState.FrontFace = {fail_op, depth_fail_op, pass_op, func};
+            writer.desc.DepthStencilState.BackFace = writer.desc.DepthStencilState.FrontFace;
+            writer.desc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
+            writer.desc.BlendState.RenderTarget[0].RenderTargetWriteMask = 0;
+            Pso tester = s->stage.pso();
+            tester.desc.DepthStencilState.DepthEnable = FALSE;
+            tester.desc.DepthStencilState.StencilEnable = TRUE;
+            tester.desc.DepthStencilState.StencilWriteMask = 0;
+            tester.desc.DepthStencilState.FrontFace = {D3D12_STENCIL_OP_KEEP, D3D12_STENCIL_OP_KEEP, D3D12_STENCIL_OP_KEEP, D3D12_COMPARISON_FUNC_EQUAL};
+            tester.desc.DepthStencilState.BackFace = tester.desc.DepthStencilState.FrontFace;
+            s->writer = writer.build(error);
+            s->tester = tester.build(error);
+            return s->writer != nullptr && s->tester != nullptr;
+        };
+        steps.on_frame = [=](Kit& kit, unsigned frame, std::string& error) {
+            return kit.submit([&](ID3D12GraphicsCommandList* list) {
+                const float clear[4] = {0.05f, 0.05f, 0.1f, 1};
+                if (frame == 0) {
+                    s->stage.canvas.begin(list, clear);
+                    list->ClearDepthStencilView(s->stage.canvas.depth.view, D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0x55, 0, nullptr);
+                } else {
+                    s->stage.canvas.begin_keep(list);
+                }
+                list->SetPipelineState(s->writer);
+                list->OMSetStencilRef(0x56);
+                const float shift = -0.3f + 0.2f * static_cast<float>(frame);
+                s->stage.mesh(list, s->stage.sphere, rr::Mat4::translate(shift, 0.0f, 0.1f * static_cast<float>(frame % 2)), 1, 1, 1);
+                s->stage.mesh(list, s->stage.torus, rr::Mat4::rotate_x(0.8f + 0.2f * static_cast<float>(frame)), 1, 1, 1);
+                list->SetPipelineState(s->tester);
+                const float colors[6][4] = {{0.9f, 0.2f, 0.2f, 1}, {0.9f, 0.7f, 0.2f, 1}, {0.4f, 0.9f, 0.2f, 1}, {0.2f, 0.8f, 0.8f, 1}, {0.3f, 0.3f, 0.95f, 1}, {0.8f, 0.3f, 0.9f, 1}};
+                for (UINT k = 0; k < 6; ++k) {
+                    list->OMSetStencilRef(0x53 + k);
+                    const D3D12_RECT bar{0, static_cast<LONG>(k * 21), 128, static_cast<LONG>(k * 21 + 21)};
+                    list->RSSetScissorRects(1, &bar);
+                    set_cbv_root(list, rr::Mat4::identity(), colors[k]);
+                    s->stage.plane.bind(list);
+                    s->stage.plane.draw(list);
+                }
+            }, error);
+        };
+        steps.on_capture = [s](Kit&, unsigned, rr::CaptureSet& out, std::string& error) { return s->stage.finish(out, error); };
+    });
+}
+
+void register_om_frames() {
+    for (const StencilOp& op : kStencilOps) {
+        add_stencil_frames(std::string("stencil_pass_op_") + op.name, op.value, D3D12_STENCIL_OP_KEEP, D3D12_STENCIL_OP_KEEP, D3D12_COMPARISON_FUNC_ALWAYS);
+    }
+    for (const StencilOp& op : {kStencilOps[1], kStencilOps[2], kStencilOps[5], kStencilOps[6]}) {
+        add_stencil_frames(std::string("stencil_fail_op_") + op.name, D3D12_STENCIL_OP_KEEP, op.value, D3D12_STENCIL_OP_KEEP, D3D12_COMPARISON_FUNC_NOT_EQUAL);
+        add_stencil_frames(std::string("stencil_depth_fail_op_") + op.name, D3D12_STENCIL_OP_KEEP, D3D12_STENCIL_OP_KEEP, op.value, D3D12_COMPARISON_FUNC_ALWAYS);
+    }
+    const UINT8 masks[] = {1, 2, 4, 8, 3, 14, 5};
+    const char* mask_names[] = {"r", "g", "b", "a", "rg", "gba", "rb"};
+    for (int k = 0; k < 7; ++k) {
+        BlendSetup setup;
+        setup.mask = masks[k];
+        add_blend_frames(std::string("write_mask_") + mask_names[k], setup, false);
+    }
+    const D3D12_BLEND_OP alpha_ops[] = {D3D12_BLEND_OP_ADD, D3D12_BLEND_OP_SUBTRACT, D3D12_BLEND_OP_REV_SUBTRACT, D3D12_BLEND_OP_MIN, D3D12_BLEND_OP_MAX};
+    const char* alpha_names[] = {"add", "subtract", "rev_subtract", "min", "max"};
+    for (int k = 0; k < 5; ++k) {
+        BlendSetup setup;
+        setup.src_alpha = D3D12_BLEND_ONE;
+        setup.dst_alpha = D3D12_BLEND_ONE;
+        setup.op_alpha = alpha_ops[k];
+        add_blend_frames(std::string("blend_alpha_op_") + alpha_names[k], setup, false);
+    }
+    for (const Factor& f : kSourceFactors) {
+        BlendSetup setup;
+        setup.src = f.value;
+        setup.dst = D3D12_BLEND_ONE;
+        add_blend_frames(std::string("blend_src_") + f.name, setup, std::string(f.name).find("color") != std::string::npos);
+    }
+    for (const Factor& f : kDestFactors) {
+        BlendSetup setup;
+        setup.dst = f.value;
+        add_blend_frames(std::string("blend_dst_") + f.name, setup, std::string(f.name).find("color") != std::string::npos);
+    }
+    const D3D12_BLEND_OP ops[] = {D3D12_BLEND_OP_ADD, D3D12_BLEND_OP_SUBTRACT, D3D12_BLEND_OP_REV_SUBTRACT, D3D12_BLEND_OP_MIN, D3D12_BLEND_OP_MAX};
+    const char* op_names[] = {"add", "subtract", "rev_subtract", "min", "max"};
+    for (int k = 0; k < 5; ++k) {
+        BlendSetup setup;
+        setup.src = D3D12_BLEND_ONE;
+        setup.dst = D3D12_BLEND_ONE;
+        setup.op = ops[k];
+        setup.op_alpha = ops[k];
+        add_blend_frames(std::string("blend_op_") + op_names[k], setup, false);
+    }
+    for (const CompareFunc& f : kFuncs) {
+        const std::string func_name = f.name;
+        if (func_name == "never" || func_name == "equal" || func_name == "greater" || func_name == "greater_equal") {
+            continue;
+        }
+        Cases::frames(rr::CaseSpec("om", std::string("depth_func_") + f.name + "_persistent_depth").frames(4, {1, 3}).tolerance(rr::Tolerance::blend(3).with_edge(1)).tag("depth"), [f](Cases::Steps& steps) {
+            auto s = std::make_shared<AccumState>();
+            steps.on_setup = [s, f](Kit& kit, std::string& error) {
+                if (!s->stage.open(kit, error, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_D32_FLOAT)) {
+                    return false;
+                }
+                Pso builder = s->stage.pso();
+                builder.desc.DepthStencilState.DepthFunc = f.value;
+                s->state = builder.build(error);
+                return s->state != nullptr;
+            };
+            steps.on_frame = [s](Kit& kit, unsigned frame, std::string& error) {
+                return kit.submit([&](ID3D12GraphicsCommandList* list) {
+                    const float clear[4] = {0.05f, 0.05f, 0.1f, 1};
+                    if (frame == 0) {
+                        s->stage.canvas.begin(list, clear);
+                    } else {
+                        s->stage.canvas.begin_keep(list);
+                    }
+                    list->SetPipelineState(s->state);
+                    const float z = 0.5f - 0.35f * static_cast<float>(frame);
+                    s->stage.mesh(list, s->stage.sphere, rr::Mat4::translate(-0.4f + 0.27f * static_cast<float>(frame), 0.0f, z) * rr::Mat4::scale(0.8f, 0.8f, 0.8f), 0.9f - 0.2f * static_cast<float>(frame),
+                                  0.3f + 0.2f * static_cast<float>(frame), 0.3f);
+                }, error);
+            };
+            steps.on_capture = [s](Kit&, unsigned, rr::CaptureSet& out, std::string& error) { return s->stage.finish(out, error); };
+        });
+    }
+}
+
 const struct Registrar {
     Registrar() {
         register_blend();
         register_depth();
         register_stencil();
         register_two_sided();
+        register_om_frames();
     }
 } kRegistrar;
 
