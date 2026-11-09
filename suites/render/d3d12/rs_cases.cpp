@@ -232,7 +232,14 @@ void register_lines_points() {
     };
     const Mode modes[] = {{"aliased_list", false, false}, {"aliased_strip", false, true}, {"antialiased_list", true, false}};
     for (const Mode& mode : modes) {
-        Cases::single(rr::CaseSpec("rs", std::string("lines_") + mode.name).tolerance(mode.aa ? rr::Tolerance::psnr(8) : rr::Tolerance::raster(4, 1)).tag("raster"),
+        rr::CaseSpec line_spec("rs", std::string("lines_") + mode.name);
+        line_spec.tolerance(mode.aa ? rr::Tolerance::psnr(8) : rr::Tolerance::raster(4, 1)).tag("raster");
+        if (std::string(mode.name) == "aliased_list") {
+            line_spec.same_as({"rs.lines_desc2_aliased"}, "the legacy rasterizer desc and the rasterizer desc 2 stream draw the same star of line segments in the aliased mode, so both must give one image");
+        } else if (std::string(mode.name) == "antialiased_list") {
+            line_spec.same_as({"rs.lines_desc2_alpha_antialiased"}, "AntialiasedLineEnable and the rasterizer desc 2 alpha antialiased mode draw the same star of line segments, so both must give one image");
+        }
+        Cases::single(line_spec,
                       [mode](Kit& kit, rr::CaptureSet& out, std::string& error) {
                           Stage stage;
                           if (!stage.open(kit, error)) {
@@ -251,7 +258,12 @@ void register_lines_points() {
                           Pso builder(kit, stage.canvas.binder.signature);
                           builder.vs(Hlsl12::with_root(Hlsl12::kFlatVs)).ps(Hlsl12::with_root(kFlatPs)).targets({DXGI_FORMAT_R8G8B8A8_UNORM});
                           builder.desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_LINE;
-                          builder.desc.RasterizerState.AntialiasedLineEnable = mode.aa;
+                          builder.desc.RasterizerState.AntialiasedLineEnable = mode.aa && !kit.broken("line_mode");
+                          if (mode.aa) {
+                              builder.desc.BlendState.RenderTarget[0].BlendEnable = TRUE;
+                              builder.desc.BlendState.RenderTarget[0].SrcBlend = D3D12_BLEND_SRC_ALPHA;
+                              builder.desc.BlendState.RenderTarget[0].DestBlend = D3D12_BLEND_INV_SRC_ALPHA;
+                          }
                           ID3D12PipelineState* state = builder.build(error);
                           if (state == nullptr) {
                               return false;
@@ -271,24 +283,9 @@ void register_lines_points() {
                               return false;
                           }
                           if (mode.aa) {
-                              UINT fractional = 0;
-                              UINT lit = 0;
-                              const rr::Image& image = out.items().back().second;
-                              for (UINT y = 0; y < image.height(); ++y) {
-                                  for (UINT x = 0; x < image.width(); ++x) {
-                                      const std::uint32_t px = image.rgba8(x, y);
-                                      const unsigned red = px & 255;
-                                      if (red > 20) {
-                                          ++lit;
-                                      }
-                                      if (red > 30 && red < 200) {
-                                          ++fractional;
-                                      }
-                                  }
-                              }
-                              (void)fractional;
-                              if (lit < 600) {
-                                  return fail_with(error, "anti-aliased lines cover only " + std::to_string(lit) + " pixels, no more than aliased lines (about 400)");
+                              const std::string judgement = LineJudge::antialiased(out.items().back().second, points);
+                              if (!judgement.empty()) {
+                                  return fail_with(error, judgement);
                               }
                           }
                           return true;

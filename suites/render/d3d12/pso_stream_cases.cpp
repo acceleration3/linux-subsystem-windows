@@ -91,7 +91,7 @@ bool draw_stream(Kit& kit, bool depth_bounds, rr::CaptureSet& out, std::string& 
 }
 
 void register_all() {
-    Cases::single(rr::CaseSpec("pso", "stream_device2_basic").tolerance(rr::Tolerance::blend(2)).tag("pso").audit_ok("the scene is the PSO-creation path under test: a pipeline made through CreatePipelineState with a subobject stream renders the same lit scene as the cached-blob and pipeline-library rows"),
+    Cases::single(rr::CaseSpec("pso", "stream_device2_basic").tolerance(rr::Tolerance::blend(2)).tag("pso").same_as({"pso.cached_blob_reuse_renders_same", "pso.pipeline_library_store_serialize_load"}, "a pipeline made through the subobject stream is the creation path under test and renders the same lit scene as the cached-blob and pipeline-library rows"),
                   [](Kit& kit, rr::CaptureSet& out, std::string& error) { return draw_stream(kit, false, out, error); });
     Cases::single(
         rr::CaseSpec("pso", "stream_depth_bounds_test").tolerance(rr::Tolerance::blend(2)).tag("pso"),
@@ -101,7 +101,7 @@ void register_all() {
             const HRESULT result = D3d12Tools::feature(kit.device(), D3D12_FEATURE_D3D12_OPTIONS2, options);
             return SUCCEEDED(result) && options.DepthBoundsTestSupported ? std::string() : std::string("depth bounds test");
         });
-    Cases::single(rr::CaseSpec("pso", "cached_blob_reuse_renders_same").tolerance(rr::Tolerance::blend(2)).tag("pso").audit_ok("the row exists to prove that a PSO rebuilt from its cached blob renders the same image as the original, so it shares its scene with the stream and library rows"), [](Kit& kit, rr::CaptureSet& out, std::string& error) {
+    Cases::single(rr::CaseSpec("pso", "cached_blob_reuse_renders_same").tolerance(rr::Tolerance::blend(2)).tag("pso").same_as({"pso.stream_device2_basic", "pso.pipeline_library_store_serialize_load"}, "a PSO rebuilt from its cached blob must render the image of the original pipeline, which is the lit scene of the stream and library rows"), [](Kit& kit, rr::CaptureSet& out, std::string& error) {
         Stage stage;
         if (!stage.open(kit, error, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_D32_FLOAT)) {
             return false;
@@ -134,7 +134,7 @@ void register_all() {
             error);
         return ok && stage.finish(out, error);
     });
-    Cases::single(rr::CaseSpec("pso", "pipeline_library_store_serialize_load").tolerance(rr::Tolerance::blend(2)).tag("pso").audit_ok("the row exists to prove that a PSO loaded from a serialized pipeline library renders the same image as the original, so it shares its scene with the stream and blob rows"), [](Kit& kit, rr::CaptureSet& out, std::string& error) {
+    Cases::single(rr::CaseSpec("pso", "pipeline_library_store_serialize_load").tolerance(rr::Tolerance::blend(2)).tag("pso").same_as({"pso.stream_device2_basic", "pso.cached_blob_reuse_renders_same"}, "a PSO loaded from a serialized pipeline library must render the image of the original pipeline, which is the lit scene of the stream and blob rows"), [](Kit& kit, rr::CaptureSet& out, std::string& error) {
         Stage stage;
         if (!stage.open(kit, error, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_D32_FLOAT)) {
             return false;

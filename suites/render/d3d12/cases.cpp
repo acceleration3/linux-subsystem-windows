@@ -118,9 +118,9 @@ public:
     }
 };
 
-const D3d12Register<IndexedCubeDepth> kIndexedCubeDepth{rr::CaseSpec("geometry", "indexed_cube_depth").tolerance(rr::Tolerance::blend(2)).audit_ok("same scene as indexed_cube_depth_sm6; only the shader model differs")};
+const D3d12Register<IndexedCubeDepth> kIndexedCubeDepth{rr::CaseSpec("geometry", "indexed_cube_depth").tolerance(rr::Tolerance::blend(2)).same_as({"shader.indexed_cube_depth_sm6"}, "the same scene compiled as SM5.1 and SM6; the shader model is the subject of the pair")};
 const D3d12Register<IndexedCubeDepth> kIndexedCubeDepthDxc{
-    rr::CaseSpec("shader", "indexed_cube_depth_sm6").variant(1).tolerance(rr::Tolerance::blend(2)).audit_ok("same scene as indexed_cube_depth; only the shader model differs")};
+    rr::CaseSpec("shader", "indexed_cube_depth_sm6").variant(1).tolerance(rr::Tolerance::blend(2)).same_as({"geometry.indexed_cube_depth"}, "the same scene compiled as SM6 and SM5.1; the shader model is the subject of the pair")};
 
 class MrtDepthCapture : public D3d12SingleScene {
 public:

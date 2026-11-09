@@ -189,6 +189,11 @@ public:
     UINT sample_count = 1;
 };
 
+class LineJudge {
+public:
+    [[nodiscard]] static std::string antialiased(const rr::Image& image, const std::vector<Vertex>& line_list);
+};
+
 struct Hlsl12 {
     static constexpr const char* kRoot =
         "cbuffer Root : register(b0) { column_major float4x4 mvp; float4 p0; float4 p1; float4 p2; float4 p3; };\n"

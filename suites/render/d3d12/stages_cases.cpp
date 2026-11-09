@@ -138,15 +138,13 @@ bool draw_tess(Kit& kit, const DomainCase& domain, const char* partition, const 
     return ok && stage.finish(out, error);
 }
 
-const char* const kDxbcTessFinding = "device finding: a graphics PSO with DXBC hull and domain shaders drops the whole command list on the accel device, so its captures are uniform and equal to every sibling";
-
 void register_tessellation() {
     const char* partitions[] = {"integer", "fractional_even", "fractional_odd", "pow2"};
     for (const DomainCase& domain : kDomains) {
         for (const char* partition : partitions) {
             const bool line = std::string(domain.output) == "line";
             const std::string name = std::string("tess_") + domain.domain + "_" + partition;
-            Cases::single(rr::CaseSpec("stages", name).tolerance(line ? rr::Tolerance::raster(6, 1).with_outliers(0.02) : rr::Tolerance::blend(3)).tag("tessellation").audit_ok(kDxbcTessFinding),
+            Cases::single(rr::CaseSpec("stages", name).tolerance(line ? rr::Tolerance::raster(6, 1).with_outliers(0.02) : rr::Tolerance::blend(3)).tag("tessellation"),
                           [domain, partition](Kit& kit, rr::CaptureSet& out, std::string& error) {
                               const float color[4] = {0.9f, 0.55f, 0.2f, 1.0f};
                               const bool is_line = std::string(domain.output) == "line";
@@ -176,7 +174,7 @@ void register_tess_variants() {
                                 {"tess_tri_factor_one", "tri", {1.0f, 1.0f, 1.0f, 1.0f}, "integer"},
                                 {"tess_tri_high_factor", "tri", {16.0f, 16.0f, 16.0f, 12.0f}, "fractional_even"}};
     for (const Variant& variant : variants) {
-        Cases::single(rr::CaseSpec("stages", variant.name).tolerance(rr::Tolerance::blend(3)).tag("tessellation").audit_ok(kDxbcTessFinding),
+        Cases::single(rr::CaseSpec("stages", variant.name).tolerance(rr::Tolerance::blend(3)).tag("tessellation"),
                       [variant](Kit& kit, rr::CaptureSet& out, std::string& error) {
                           const DomainCase& domain = std::string(variant.domain) == "tri" ? kDomains[0] : kDomains[1];
                           const float color[4] = {0.9f, 0.55f, 0.2f, 1.0f};

@@ -673,11 +673,113 @@ void register_inline_rows() {
     }, [](Kit& kit) { return needs_dxr(kit, D3D12_RAYTRACING_TIER_1_1); });
 }
 
+void register_compaction() {
+    Cases::single(rr::CaseSpec("dxr", "blas_compaction_copy_renders_same_image").variant(4).tolerance(rr::Tolerance::blend(3).with_edge(1)).tag("raytracing").tag("x64-only"),
+                  [](Kit& kit, rr::CaptureSet& out, std::string& error) {
+        DxrRig rig;
+        Config config;
+        if (!rig.open(kit, error) || !rig.make_pipeline(kit, std::string(kHeader) + kClosest, config, error)) {
+            return false;
+        }
+        const Mesh3 mesh = mesh_of(Shapes::sphere(14, 20, 1.0f));
+        ID3D12Resource* vertices = kit.make_upload(mesh.positions.data(), mesh.positions.size() * 4, error);
+        ID3D12Resource* indices = kit.make_upload(mesh.indices.data(), mesh.indices.size() * 2, error);
+        if (vertices == nullptr || indices == nullptr) {
+            return false;
+        }
+        D3D12_RAYTRACING_GEOMETRY_DESC geometry = triangles_of(vertices, indices, static_cast<UINT>(mesh.positions.size() / 3), static_cast<UINT>(mesh.indices.size()), D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE);
+        D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS blas_inputs{};
+        blas_inputs.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL;
+        blas_inputs.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_COMPACTION | D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE;
+        blas_inputs.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
+        blas_inputs.NumDescs = 1;
+        blas_inputs.pGeometryDescs = &geometry;
+        Accel blas;
+        if (!rig.make_accel(kit, blas_inputs, blas, error)) {
+            return false;
+        }
+        HRESULT result = S_OK;
+        ID3D12Resource* size_buffer = D3d12Tools::device_buffer(kit.rig, 256, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, &result);
+        if (size_buffer == nullptr) {
+            return fail_with(error, "compacted size buffer: " + D3d12Tools::hr(result));
+        }
+        bool have_list4 = true;
+        if (!kit.run([&](ID3D12GraphicsCommandList* list) {
+                ID3D12GraphicsCommandList4* list4 = nullptr;
+                if (FAILED(list->QueryInterface(__uuidof(ID3D12GraphicsCommandList4), reinterpret_cast<void**>(&list4)))) {
+                    have_list4 = false;
+                    return;
+                }
+                D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC desc{};
+                desc.DestAccelerationStructureData = blas.result->GetGPUVirtualAddress();
+                desc.Inputs = blas_inputs;
+                desc.ScratchAccelerationStructureData = blas.scratch->GetGPUVirtualAddress();
+                const D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_DESC post{size_buffer->GetGPUVirtualAddress(), D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_COMPACTED_SIZE};
+                list4->BuildRaytracingAccelerationStructure(&desc, 1, &post);
+                const D3D12_RESOURCE_BARRIER barriers[2] = {D3d12Tools::uav_barrier(blas.result), D3d12Tools::uav_barrier(size_buffer)};
+                list->ResourceBarrier(2, barriers);
+                list4->Release();
+            }, error)) {
+            return false;
+        }
+        if (!have_list4) {
+            return fail_with(error, "ID3D12GraphicsCommandList4 is not available");
+        }
+        std::vector<std::uint32_t> words;
+        if (!D3d12Tools::read_words(kit.rig, size_buffer, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, 2, words, error)) {
+            return false;
+        }
+        const UINT64 compact_size = static_cast<UINT64>(words[0]) | (static_cast<UINT64>(words[1]) << 32);
+        if (compact_size == 0 || compact_size > blas.result_size) {
+            return fail_with(error, "the compacted size " + std::to_string(compact_size) + " is not within the build size " + std::to_string(blas.result_size));
+        }
+        ID3D12Resource* compact = D3d12Tools::device_buffer(kit.rig, D3d12Tools::align(compact_size, 256), D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, &result);
+        if (compact == nullptr) {
+            return fail_with(error, "compacted acceleration structure buffer: " + D3d12Tools::hr(result));
+        }
+        const bool copy = !kit.broken("blas_compaction");
+        if (!kit.run([&](ID3D12GraphicsCommandList* list) {
+                ID3D12GraphicsCommandList4* list4 = nullptr;
+                if (FAILED(list->QueryInterface(__uuidof(ID3D12GraphicsCommandList4), reinterpret_cast<void**>(&list4)))) {
+                    return;
+                }
+                if (copy) {
+                    list4->CopyRaytracingAccelerationStructure(compact->GetGPUVirtualAddress(), blas.result->GetGPUVirtualAddress(), D3D12_RAYTRACING_ACCELERATION_STRUCTURE_COPY_MODE_COMPACT);
+                }
+                const D3D12_RESOURCE_BARRIER barrier = D3d12Tools::uav_barrier(compact);
+                list->ResourceBarrier(1, &barrier);
+                list4->Release();
+            }, error)) {
+            return false;
+        }
+        std::vector<D3D12_RAYTRACING_INSTANCE_DESC> instances = four_instances(false);
+        for (auto& d : instances) {
+            d.AccelerationStructure = compact->GetGPUVirtualAddress();
+        }
+        ID3D12Resource* instance_buffer = kit.make_upload(instances.data(), instances.size() * sizeof(D3D12_RAYTRACING_INSTANCE_DESC), error);
+        if (instance_buffer == nullptr) {
+            return false;
+        }
+        D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS tlas_inputs{};
+        tlas_inputs.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL;
+        tlas_inputs.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
+        tlas_inputs.NumDescs = static_cast<UINT>(instances.size());
+        tlas_inputs.InstanceDescs = instance_buffer->GetGPUVirtualAddress();
+        Accel tlas;
+        if (!rig.make_accel(kit, tlas_inputs, tlas, error) || !kit.run([&](ID3D12GraphicsCommandList* list) { DxrRig::record_build(list, tlas_inputs, tlas); }, error)) {
+            return false;
+        }
+        const float params[8] = {0, 0, 0, 0, 255, 0, 0, 0};
+        return render_once(kit, rig, tlas.result, params, out, error);
+    }, [](Kit& kit) { return needs_dxr(kit, D3D12_RAYTRACING_TIER_1_0); });
+}
+
 const struct Registrar {
     Registrar() {
         register_trace_rows();
         register_procedural_and_updates();
         register_inline_rows();
+        register_compaction();
     }
 } kRegistrar;
 

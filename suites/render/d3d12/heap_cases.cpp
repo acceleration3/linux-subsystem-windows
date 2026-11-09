@@ -407,7 +407,7 @@ bool fill_and_sample(Kit& kit, ID3D12Resource* texture, rr::CaptureSet& out, std
 }
 
 void register_tiled() {
-    Cases::single(rr::CaseSpec("heap", "reserved_texture_all_tiles_mapped").tolerance(rr::Tolerance::blend(2)).tag("heap").audit_ok("the tile mapping path under test (UpdateTileMappings versus CopyTileMappings) must give the same sampled image by design"), [](Kit& kit, rr::CaptureSet& out, std::string& error) {
+    Cases::single(rr::CaseSpec("heap", "reserved_texture_all_tiles_mapped").tolerance(rr::Tolerance::blend(2)).tag("heap").same_as({"heap.reserved_texture_copy_tile_mappings"}, "mapping the tiles with UpdateTileMappings and copying the mapping with CopyTileMappings must give the same sampled image"), [](Kit& kit, rr::CaptureSet& out, std::string& error) {
         Tiled tiled;
         return make_tiled(kit, tiled, error) && map_tiles(kit, tiled.texture, tiled.heap, 0, 2, 2, 0, error) && fill_and_sample(kit, tiled.texture, out, error, false);
     }, [](Kit& kit) { return needs_tiled(kit, D3D12_TILED_RESOURCES_TIER_1); });
@@ -415,7 +415,7 @@ void register_tiled() {
         Tiled tiled;
         return make_tiled(kit, tiled, error) && map_tiles(kit, tiled.texture, tiled.heap, 0, 1, 2, 0, error) && fill_and_sample(kit, tiled.texture, out, error, true);
     }, [](Kit& kit) { return needs_tiled(kit, D3D12_TILED_RESOURCES_TIER_2); });
-    Cases::single(rr::CaseSpec("heap", "reserved_texture_copy_tile_mappings").tolerance(rr::Tolerance::blend(2)).tag("heap").audit_ok("the tile mapping path under test (UpdateTileMappings versus CopyTileMappings) must give the same sampled image by design"), [](Kit& kit, rr::CaptureSet& out, std::string& error) {
+    Cases::single(rr::CaseSpec("heap", "reserved_texture_copy_tile_mappings").tolerance(rr::Tolerance::blend(2)).tag("heap").same_as({"heap.reserved_texture_all_tiles_mapped"}, "copying the mapping with CopyTileMappings must give the same sampled image as mapping the tiles directly with UpdateTileMappings"), [](Kit& kit, rr::CaptureSet& out, std::string& error) {
         Tiled source;
         Tiled destination;
         if (!make_tiled(kit, source, error) || !make_tiled(kit, destination, error) || !map_tiles(kit, source.texture, source.heap, 0, 2, 2, 0, error)) {

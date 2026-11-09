@@ -780,9 +780,11 @@ void register_indirect() {
 
 void register_stream_output() {
     for (int mode = 0; mode < 2; ++mode) {
-        Cases::single(rr::CaseSpec("ia", mode == 0 ? "stream_output_vertex_shader_then_draw" : "stream_output_geometry_shader_then_draw")
-                          .tolerance(rr::Tolerance::blend(2))
-                          .tag("streamout"),
+        rr::CaseSpec so_spec("ia", mode == 0 ? "stream_output_vertex_shader_then_draw" : "stream_output_geometry_shader_then_draw");
+        so_spec.tolerance(rr::Tolerance::blend(2)).tag("streamout");
+        so_spec.same_as({mode == 0 ? "ia.stream_output_geometry_shader_then_draw" : "ia.stream_output_vertex_shader_then_draw"},
+                        "the vertex shader pass and the passthrough geometry shader pass stream out the same torus, so the filled size capture is the same count by design; the redrawn colour image differs");
+        Cases::single(so_spec,
                       [mode](Kit& kit, rr::CaptureSet& out, std::string& error) {
                           Stage stage;
                           if (!stage.open(kit, error, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_D32_FLOAT)) {

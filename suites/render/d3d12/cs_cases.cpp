@@ -431,7 +431,7 @@ void register_shader_model_features() {
             const char* source =
                 "StructuredBuffer<uint> src : register(t0); RWStructuredBuffer<uint> dst : register(u0);\n"
                 "[numthreads(64, 1, 1)] void main(uint3 id : SV_DispatchThreadID) {\n"
-                "  uint v = src[id.x]; float16_t a = (float16_t)(v & 255) * (float16_t)0.5; float16_t b = a * a + (float16_t)3.0; uint16_t k = (uint16_t)(v >> 3) * (uint16_t)3;\n"
+                "  uint v = src[id.x]; float16_t a = (float16_t)(v & 255) * (float16_t)0.5; precise float16_t sq = a * a; precise float16_t b = sq + (float16_t)3.0; uint16_t k = (uint16_t)(v >> 3) * (uint16_t)3;\n"
                 "  dst[id.x] = (uint)b + ((uint)k << 16); }\n";
             return run_words(kit, source, 4, 256, 9, 4000, 256, 8, out, error, {L"-enable-16bit-types"});
         },

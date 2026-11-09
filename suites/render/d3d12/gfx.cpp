@@ -829,6 +829,35 @@ private:
 
 }  // namespace
 
+std::string LineJudge::antialiased(const rr::Image& image, const std::vector<Vertex>& line_list) {
+    UINT lit = 0;
+    UINT partial = 0;
+    for (UINT y = 0; y < image.height(); ++y) {
+        for (UINT x = 0; x < image.width(); ++x) {
+            const float t = (static_cast<float>(image.rgba8(x, y) & 255) - 13.0f) / 217.0f;
+            if (t > 0.06f) {
+                ++lit;
+            }
+            if (t > 0.12f && t < 0.88f) {
+                ++partial;
+            }
+        }
+    }
+    float length = 0.0f;
+    for (std::size_t k = 0; k + 1 < line_list.size(); k += 2) {
+        const float dx = (line_list[k + 1].pos[0] - line_list[k].pos[0]) * static_cast<float>(image.width()) * 0.5f;
+        const float dy = (line_list[k + 1].pos[1] - line_list[k].pos[1]) * static_cast<float>(image.height()) * 0.5f;
+        length += std::sqrt(dx * dx + dy * dy);
+    }
+    const float footprint = length > 0.0f ? static_cast<float>(lit) / length : 0.0f;
+    const float fractional = lit != 0 ? static_cast<float>(partial) / static_cast<float>(lit) : 0.0f;
+    if (fractional >= 0.3f && footprint >= 2.0f) {
+        return {};
+    }
+    return "anti-aliased lines show " + std::to_string(partial) + " fractionally covered pixels of " + std::to_string(lit) + " lit (fraction " + std::to_string(fractional) +
+           ") with a footprint of " + std::to_string(footprint) + " px per px of line: the edge alpha must be fractional and the footprint at least 2 px";
+}
+
 void Cases::single(rr::CaseSpec spec, DrawFn draw, NeedFn need) {
     spec.tag("single");
     rr::CaseTable<Kit>::instance().add(std::move(spec), [draw = std::move(draw), need = std::move(need)] {
