@@ -1,4 +1,5 @@
 #include "render/common/pattern.hpp"
+#include "render/vk/formatdata.hpp"
 #include "render/vk/rig.hpp"
 
 #include <algorithm>
@@ -8,17 +9,6 @@
 namespace lsw::render::vk {
 
 namespace {
-
-enum class Kind { Unorm, Snorm, Uscaled, Sscaled, Uint, Sint, Float };
-
-struct FormatEntry {
-    const char* name;
-    VkFormat format;
-    char cls;
-    unsigned bytes;
-    Kind kind;
-    unsigned bits[4];
-};
 
 std::vector<FormatEntry> format_table() {
     using K = Kind;
@@ -78,64 +68,6 @@ std::vector<FormatEntry> format_table() {
     };
 }
 
-void make_scale(const FormatEntry& entry, float scale[4], float bias[4]) {
-    for (int c = 0; c < 4; ++c) {
-        const double bits = entry.bits[c] != 0 ? entry.bits[c] : 8;
-        const double umax = std::pow(2.0, bits) - 1.0;
-        const double smax = std::pow(2.0, bits - 1.0);
-        switch (entry.kind) {
-            case Kind::Unorm:
-            case Kind::Float:
-                scale[c] = 1.0f;
-                bias[c] = 0.0f;
-                break;
-            case Kind::Snorm:
-                scale[c] = 0.5f;
-                bias[c] = 0.5f;
-                break;
-            case Kind::Uscaled:
-            case Kind::Uint:
-                scale[c] = static_cast<float>(1.0 / umax);
-                bias[c] = 0.0f;
-                break;
-            case Kind::Sscaled:
-            case Kind::Sint:
-                scale[c] = static_cast<float>(0.5 / smax);
-                bias[c] = 0.5f;
-                break;
-        }
-    }
-}
-
-std::vector<std::uint8_t> make_attribute_bytes(const FormatEntry& entry, unsigned count) {
-    std::vector<std::uint8_t> bytes(static_cast<std::size_t>(count) * entry.bytes);
-    std::uint32_t state = 0x1234567u + entry.bytes * 977u;
-    if (entry.kind == Kind::Float) {
-        unsigned comps = 0;
-        while (comps < 4 && entry.bits[comps] != 0) {
-            ++comps;
-        }
-        for (unsigned v = 0; v < count; ++v) {
-            for (unsigned c = 0; c < comps; ++c) {
-                const float value = 0.1f + 0.8f * Pattern::unit_random(state);
-                std::uint8_t* at = bytes.data() + static_cast<std::size_t>(v) * entry.bytes;
-                if (entry.bits[c] == 16) {
-                    const std::uint16_t half = PixelInfo::float_to_half(value);
-                    std::memcpy(at + c * 2, &half, 2);
-                } else {
-                    std::memcpy(at + c * 4, &value, 4);
-                }
-            }
-        }
-        return bytes;
-    }
-    for (std::size_t i = 0; i < bytes.size(); ++i) {
-        state = state * 1664525u + 1013904223u;
-        bytes[i] = static_cast<std::uint8_t>(state >> 24);
-    }
-    return bytes;
-}
-
 void register_vertex_formats() {
     for (const FormatEntry& entry : format_table()) {
         CaseSpec spec("pipe", std::string("vin_") + entry.name);
@@ -154,7 +86,7 @@ void register_vertex_formats() {
                     }
                 }
                 const auto count = static_cast<std::uint32_t>(grid.size());
-                const std::vector<std::uint8_t> attrs = make_attribute_bytes(entry, count);
+                const std::vector<std::uint8_t> attrs = make_format_bytes(entry, count);
                 const Buffer positions = rig.buffer(grid, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
                 const Buffer values = rig.buffer(attrs.data(), attrs.size(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
                 struct Constants {
