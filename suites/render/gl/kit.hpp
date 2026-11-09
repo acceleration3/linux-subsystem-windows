@@ -6,6 +6,7 @@
 #include "render/platform/gl_platform.hpp"
 
 #include <functional>
+#include <initializer_list>
 #include <string>
 #include <vector>
 
@@ -17,6 +18,7 @@ struct KitOptions {
     unsigned width = 128;
     unsigned height = 128;
     bool window = false;
+    std::vector<std::string> extensions;
 
     [[nodiscard]] static KitOptions from(const CaseSpec& spec) {
         KitOptions options;
@@ -26,8 +28,14 @@ struct KitOptions {
         options.width = spec.width();
         options.height = spec.height();
         options.window = spec.uses_swapchain();
+        options.extensions = spec.extensions();
         return options;
     }
+};
+
+struct ShaderSource {
+    GLenum stage;
+    const char* text;
 };
 
 struct FormatInfo {
@@ -53,6 +61,16 @@ public:
     [[nodiscard]] bool at_least(int wanted_major, int wanted_minor) const;
 
     [[nodiscard]] GLuint program(const char* vertex_source, const char* fragment_source, std::string& error);
+    [[nodiscard]] GLuint program(std::initializer_list<ShaderSource> stages, std::string& error, bool separable = false);
+    [[nodiscard]] GLuint link(const std::vector<GLuint>& shaders, std::string& error, bool separable);
+    [[nodiscard]] GLuint shader(GLenum stage, const char* source, std::string& error);
+
+    void u1i(GLuint program, const char* name, GLint v);
+    void u1f(GLuint program, const char* name, GLfloat v);
+    void u2f(GLuint program, const char* name, GLfloat a, GLfloat b);
+    void u3f(GLuint program, const char* name, GLfloat a, GLfloat b, GLfloat c);
+    void u4f(GLuint program, const char* name, GLfloat a, GLfloat b, GLfloat c, GLfloat d);
+    void umat4(GLuint program, const char* name, const GLfloat* m);
     GLuint buffer(GLenum target, const void* data, std::size_t size, GLenum usage);
     GLuint vertex_array();
     [[nodiscard]] GLuint texture2d(unsigned width, unsigned height, GLenum internal, GLenum format, GLenum type,
@@ -65,6 +83,8 @@ public:
                                   std::string& error);
     [[nodiscard]] bool read_depth(GLuint fbo, unsigned width, unsigned height, Image& out, std::string& error);
     [[nodiscard]] bool read_stencil(GLuint fbo, unsigned width, unsigned height, Image& out, std::string& error);
+
+    [[nodiscard]] bool debug_errors() const { return debug_errors_; }
 
     void defer(std::function<void()> destroyer) { cleanups_.push_back(std::move(destroyer)); }
 
@@ -81,6 +101,8 @@ public:
 
 private:
     std::vector<std::function<void()>> cleanups_;
+    std::string pending_;
+    bool debug_errors_ = false;
 };
 
 struct TargetDesc {

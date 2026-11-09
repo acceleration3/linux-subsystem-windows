@@ -1,9 +1,19 @@
 #include "render/gl/kit.hpp"
 
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 namespace lsw::render::gl {
+
+namespace {
+void LSW_GLAPI debug_message(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar* message, const void*) {
+    if (severity == 0x826B) {
+        return;
+    }
+    std::fprintf(stderr, "GLDEBUG source=0x%x type=0x%x id=%u severity=0x%x: %.*s\n", source, type, id, severity, length, message);
+}
+}  // namespace
 
 Kit::~Kit() { close(); }
 
@@ -46,6 +56,17 @@ OpenResult Kit::open(platform::GlPlatform& host, const KitOptions& options, std:
                 std::to_string(options.minor);
         return OpenResult::Unsupported;
     }
+    for (const std::string& extension : options.extensions) {
+        if (!has_extension(extension.c_str())) {
+            error = "extension " + extension + " is not exposed";
+            return OpenResult::Unsupported;
+        }
+    }
+    if (std::getenv("LSW_GL_DEBUG") != nullptr && gl.glDebugMessageCallback != nullptr) {
+        gl.glEnable(glc::DEBUG_OUTPUT);
+        gl.glEnable(glc::DEBUG_OUTPUT_SYNCHRONOUS);
+        gl.glDebugMessageCallback(&debug_message, nullptr);
+    }
     gl.glPixelStorei(glc::PACK_ALIGNMENT, 1);
     gl.glPixelStorei(glc::UNPACK_ALIGNMENT, 1);
     while (gl.glGetError() != glc::NO_ERROR_) {
@@ -58,6 +79,13 @@ bool Kit::at_least(int wanted_major, int wanted_minor) const {
 }
 
 bool Kit::check(const char* where, std::string& error) {
+    if (!pending_.empty()) {
+        error = std::string(where) + ": " + pending_;
+        pending_.clear();
+        while (gl.glGetError() != glc::NO_ERROR_) {
+        }
+        return false;
+    }
     const GLenum code = gl.glGetError();
     if (code == glc::NO_ERROR_) {
         return true;
@@ -86,41 +114,40 @@ bool Kit::has_extension(const char* name) const {
     return false;
 }
 
-GLuint Kit::program(const char* vertex_source, const char* fragment_source, std::string& error) {
-    const auto compile = [&](GLenum stage, const char* source) -> GLuint {
-        const GLuint shader = gl.glCreateShader(stage);
-        gl.glShaderSource(shader, 1, &source, nullptr);
-        gl.glCompileShader(shader);
-        GLint ok = 0;
-        gl.glGetShaderiv(shader, glc::COMPILE_STATUS, &ok);
-        if (ok == 0) {
-            char log[1024] = {};
-            gl.glGetShaderInfoLog(shader, sizeof log - 1, nullptr, log);
-            error = std::string(stage == glc::VERTEX_SHADER ? "vertex" : "fragment") + " shader failed to compile: " + log;
-            gl.glDeleteShader(shader);
-            return 0;
-        }
-        return shader;
-    };
-    const GLuint vs = compile(glc::VERTEX_SHADER, vertex_source);
-    if (vs == 0) {
+GLuint Kit::shader(GLenum stage, const char* source, std::string& error) {
+    const GLuint id = gl.glCreateShader(stage);
+    gl.glShaderSource(id, 1, &source, nullptr);
+    gl.glCompileShader(id);
+    GLint ok = 0;
+    gl.glGetShaderiv(id, glc::COMPILE_STATUS, &ok);
+    if (ok == 0) {
+        char log[2048] = {};
+        gl.glGetShaderInfoLog(id, sizeof log - 1, nullptr, log);
+        char name[32];
+        std::snprintf(name, sizeof name, "stage 0x%x", stage);
+        error = std::string(name) + " shader failed to compile: " + log;
+        gl.glDeleteShader(id);
         return 0;
     }
-    const GLuint fs = compile(glc::FRAGMENT_SHADER, fragment_source);
-    if (fs == 0) {
-        gl.glDeleteShader(vs);
-        return 0;
-    }
+    return id;
+}
+
+GLuint Kit::link(const std::vector<GLuint>& shaders, std::string& error, bool separable) {
     const GLuint program = gl.glCreateProgram();
-    gl.glAttachShader(program, vs);
-    gl.glAttachShader(program, fs);
+    if (separable) {
+        gl.glProgramParameteri(program, glc::PROGRAM_SEPARABLE, 1);
+    }
+    for (GLuint id : shaders) {
+        gl.glAttachShader(program, id);
+    }
     gl.glLinkProgram(program);
-    gl.glDeleteShader(vs);
-    gl.glDeleteShader(fs);
+    for (GLuint id : shaders) {
+        gl.glDeleteShader(id);
+    }
     GLint ok = 0;
     gl.glGetProgramiv(program, glc::LINK_STATUS, &ok);
     if (ok == 0) {
-        char log[1024] = {};
+        char log[2048] = {};
         gl.glGetProgramInfoLog(program, sizeof log - 1, nullptr, log);
         error = std::string("program failed to link: ") + log;
         gl.glDeleteProgram(program);
@@ -128,6 +155,61 @@ GLuint Kit::program(const char* vertex_source, const char* fragment_source, std:
     }
     defer([this, program] { gl.glDeleteProgram(program); });
     return program;
+}
+
+GLuint Kit::program(std::initializer_list<ShaderSource> stages, std::string& error, bool separable) {
+    std::vector<GLuint> shaders;
+    for (const ShaderSource& stage : stages) {
+        const GLuint id = shader(stage.stage, stage.text, error);
+        if (id == 0) {
+            for (GLuint other : shaders) {
+                gl.glDeleteShader(other);
+            }
+            return 0;
+        }
+        shaders.push_back(id);
+    }
+    return link(shaders, error, separable);
+}
+
+GLuint Kit::program(const char* vertex_source, const char* fragment_source, std::string& error) {
+    return program({{glc::VERTEX_SHADER, vertex_source}, {glc::FRAGMENT_SHADER, fragment_source}}, error);
+}
+
+void Kit::u1i(GLuint program, const char* name, GLint v) {
+    const GLint location = uniform(program, name, pending_);
+    gl.glUseProgram(program);
+    if (location >= 0) gl.glUniform1i(location, v);
+}
+
+void Kit::u1f(GLuint program, const char* name, GLfloat v) {
+    const GLint location = uniform(program, name, pending_);
+    gl.glUseProgram(program);
+    if (location >= 0) gl.glUniform1f(location, v);
+}
+
+void Kit::u2f(GLuint program, const char* name, GLfloat a, GLfloat b) {
+    const GLint location = uniform(program, name, pending_);
+    gl.glUseProgram(program);
+    if (location >= 0) gl.glUniform2f(location, a, b);
+}
+
+void Kit::u3f(GLuint program, const char* name, GLfloat a, GLfloat b, GLfloat c) {
+    const GLint location = uniform(program, name, pending_);
+    gl.glUseProgram(program);
+    if (location >= 0) gl.glUniform3f(location, a, b, c);
+}
+
+void Kit::u4f(GLuint program, const char* name, GLfloat a, GLfloat b, GLfloat c, GLfloat d) {
+    const GLint location = uniform(program, name, pending_);
+    gl.glUseProgram(program);
+    if (location >= 0) gl.glUniform4f(location, a, b, c, d);
+}
+
+void Kit::umat4(GLuint program, const char* name, const GLfloat* m) {
+    const GLint location = uniform(program, name, pending_);
+    gl.glUseProgram(program);
+    if (location >= 0) gl.glUniformMatrix4fv(location, 1, glc::FALSE_, m);
 }
 
 GLuint Kit::buffer(GLenum target, const void* data, std::size_t size, GLenum usage) {
