@@ -53,6 +53,7 @@ public:
 [[nodiscard]] D3D12_SHADER_RESOURCE_VIEW_DESC srv_2d(DXGI_FORMAT format, UINT mips, UINT most_detailed = 0);
 [[nodiscard]] std::string needs_format(Kit& kit, DXGI_FORMAT format, D3D12_FORMAT_SUPPORT1 support, const char* what);
 extern const char* const kSamplePrefix;
+constexpr float kFlatTilt = 1000.0f;
 [[nodiscard]] rr::Tolerance sampler_tolerance();
 [[nodiscard]] rr::Tolerance anisotropic_tolerance();
 [[nodiscard]] rr::Tolerance loose_sampler_tolerance();

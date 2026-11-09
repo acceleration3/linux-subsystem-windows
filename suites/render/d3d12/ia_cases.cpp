@@ -15,7 +15,34 @@ struct VertexFormat {
     UINT size;
     bool integer;
     std::function<void(const float*, std::uint8_t*)> encode;
+    std::function<float(std::uint32_t)> sample;
 };
+
+std::uint32_t mix32(std::uint32_t x) {
+    x ^= x >> 16;
+    x *= 0x7feb352du;
+    x ^= x >> 15;
+    x *= 0x846ca68bu;
+    x ^= x >> 16;
+    return x;
+}
+
+float bits_to_float(std::uint32_t bits) {
+    float value;
+    std::memcpy(&value, &bits, 4);
+    return value;
+}
+
+float sample_f32(std::uint32_t n) { return bits_to_float(0x3f000000u | (mix32(n) & 0x7fffffu)); }
+float sample_f16(std::uint32_t n) { return rr::PixelInfo::half_to_float(static_cast<std::uint16_t>(0x3800u | (mix32(n) & 0x3ffu))); }
+float sample_unorm8(std::uint32_t n) { return static_cast<float>(8u + mix32(n) % 240u) / 255.0f; }
+float sample_unorm16(std::uint32_t n) { return static_cast<float>(300u + mix32(n) % 65000u) / 65535.0f; }
+float sample_unorm10(std::uint32_t n) { return static_cast<float>(20u + mix32(n) % 980u) / 1023.0f; }
+float sample_snorm8(std::uint32_t n) { return static_cast<float>(static_cast<int>(mix32(n) % 253u) - 126) / 127.0f; }
+float sample_snorm16(std::uint32_t n) { return static_cast<float>(static_cast<int>(mix32(n) % 65000u) - 32500) / 32767.0f; }
+float sample_uint8(std::uint32_t n) { return static_cast<float>(8u + mix32(n) % 240u); }
+float sample_uint16(std::uint32_t n) { return static_cast<float>(256u + mix32(n) % 65000u); }
+float sample_uint32(std::uint32_t n) { return static_cast<float>(65536u + mix32(n) % 16000000u); }
 
 template <class T>
 void put(std::uint8_t* out, std::size_t index, T value) {
@@ -25,37 +52,63 @@ void put(std::uint8_t* out, std::size_t index, T value) {
 std::vector<VertexFormat> vertex_formats() {
     using rr::PixelInfo;
     std::vector<VertexFormat> list;
-    list.push_back({"r32g32b32a32_float", DXGI_FORMAT_R32G32B32A32_FLOAT, 16, false, [](const float* c, std::uint8_t* o) { for (int i = 0; i < 4; ++i) put<float>(o, i, c[i]); }});
-    list.push_back({"r32g32b32_float", DXGI_FORMAT_R32G32B32_FLOAT, 12, false, [](const float* c, std::uint8_t* o) { for (int i = 0; i < 3; ++i) put<float>(o, i, c[i]); }});
-    list.push_back({"r32g32_float", DXGI_FORMAT_R32G32_FLOAT, 8, false, [](const float* c, std::uint8_t* o) { for (int i = 0; i < 2; ++i) put<float>(o, i, c[i]); }});
-    list.push_back({"r16g16b16a16_float", DXGI_FORMAT_R16G16B16A16_FLOAT, 8, false, [](const float* c, std::uint8_t* o) { for (int i = 0; i < 4; ++i) put<std::uint16_t>(o, i, PixelInfo::float_to_half(c[i])); }});
-    list.push_back({"r16g16_float", DXGI_FORMAT_R16G16_FLOAT, 4, false, [](const float* c, std::uint8_t* o) { for (int i = 0; i < 2; ++i) put<std::uint16_t>(o, i, PixelInfo::float_to_half(c[i])); }});
-    list.push_back({"r16g16b16a16_unorm", DXGI_FORMAT_R16G16B16A16_UNORM, 8, false, [](const float* c, std::uint8_t* o) { for (int i = 0; i < 4; ++i) put<std::uint16_t>(o, i, static_cast<std::uint16_t>(clampf(c[i], 0, 1) * 65535.0f + 0.5f)); }});
-    list.push_back({"r16g16_unorm", DXGI_FORMAT_R16G16_UNORM, 4, false, [](const float* c, std::uint8_t* o) { for (int i = 0; i < 2; ++i) put<std::uint16_t>(o, i, static_cast<std::uint16_t>(clampf(c[i], 0, 1) * 65535.0f + 0.5f)); }});
-    list.push_back({"r16g16b16a16_snorm", DXGI_FORMAT_R16G16B16A16_SNORM, 8, false, [](const float* c, std::uint8_t* o) { for (int i = 0; i < 4; ++i) put<std::int16_t>(o, i, static_cast<std::int16_t>(clampf(c[i], -1, 1) * 32767.0f + 0.5f)); }});
-    list.push_back({"r8g8b8a8_unorm", DXGI_FORMAT_R8G8B8A8_UNORM, 4, false, [](const float* c, std::uint8_t* o) { for (int i = 0; i < 4; ++i) put<std::uint8_t>(o, i, static_cast<std::uint8_t>(clampf(c[i], 0, 1) * 255.0f + 0.5f)); }});
-    list.push_back({"b8g8r8a8_unorm", DXGI_FORMAT_B8G8R8A8_UNORM, 4, false, [](const float* c, std::uint8_t* o) { const int order[4] = {2, 1, 0, 3}; for (int i = 0; i < 4; ++i) put<std::uint8_t>(o, i, static_cast<std::uint8_t>(clampf(c[order[i]], 0, 1) * 255.0f + 0.5f)); }});
-    list.push_back({"r8g8b8a8_snorm", DXGI_FORMAT_R8G8B8A8_SNORM, 4, false, [](const float* c, std::uint8_t* o) { for (int i = 0; i < 4; ++i) put<std::int8_t>(o, i, static_cast<std::int8_t>(clampf(c[i], -1, 1) * 127.0f + 0.5f)); }});
-    list.push_back({"r8g8_unorm", DXGI_FORMAT_R8G8_UNORM, 2, false, [](const float* c, std::uint8_t* o) { for (int i = 0; i < 2; ++i) put<std::uint8_t>(o, i, static_cast<std::uint8_t>(clampf(c[i], 0, 1) * 255.0f + 0.5f)); }});
+    auto f32 = [](int comps) { return [comps](const float* c, std::uint8_t* o) { for (int i = 0; i < comps; ++i) put<float>(o, i, c[i]); }; };
+    auto f16 = [](int comps) { return [comps](const float* c, std::uint8_t* o) { for (int i = 0; i < comps; ++i) put<std::uint16_t>(o, i, PixelInfo::float_to_half(c[i])); }; };
+    auto u16 = [](int comps) { return [comps](const float* c, std::uint8_t* o) { for (int i = 0; i < comps; ++i) put<std::uint16_t>(o, i, static_cast<std::uint16_t>(std::lround(clampf(c[i], 0, 1) * 65535.0f))); }; };
+    auto s16 = [](int comps) { return [comps](const float* c, std::uint8_t* o) { for (int i = 0; i < comps; ++i) put<std::int16_t>(o, i, static_cast<std::int16_t>(std::lround(clampf(c[i], -1, 1) * 32767.0f))); }; };
+    auto u8 = [](int comps, bool swap) { return [comps, swap](const float* c, std::uint8_t* o) { const int order[4] = {2, 1, 0, 3}; for (int i = 0; i < comps; ++i) put<std::uint8_t>(o, i, static_cast<std::uint8_t>(std::lround(clampf(c[swap ? order[i] : i], 0, 1) * 255.0f))); }; };
+    auto s8 = [](int comps) { return [comps](const float* c, std::uint8_t* o) { for (int i = 0; i < comps; ++i) put<std::int8_t>(o, i, static_cast<std::int8_t>(std::lround(clampf(c[i], -1, 1) * 127.0f))); }; };
+    list.push_back({"r32g32b32a32_float", DXGI_FORMAT_R32G32B32A32_FLOAT, 16, false, f32(4), sample_f32});
+    list.push_back({"r32g32b32_float", DXGI_FORMAT_R32G32B32_FLOAT, 12, false, f32(3), sample_f32});
+    list.push_back({"r32g32_float", DXGI_FORMAT_R32G32_FLOAT, 8, false, f32(2), sample_f32});
+    list.push_back({"r16g16b16a16_float", DXGI_FORMAT_R16G16B16A16_FLOAT, 8, false, f16(4), sample_f16});
+    list.push_back({"r16g16_float", DXGI_FORMAT_R16G16_FLOAT, 4, false, f16(2), sample_f16});
+    list.push_back({"r16g16b16a16_unorm", DXGI_FORMAT_R16G16B16A16_UNORM, 8, false, u16(4), sample_unorm16});
+    list.push_back({"r16g16_unorm", DXGI_FORMAT_R16G16_UNORM, 4, false, u16(2), sample_unorm16});
+    list.push_back({"r16g16b16a16_snorm", DXGI_FORMAT_R16G16B16A16_SNORM, 8, false, s16(4), sample_snorm16});
+    list.push_back({"r8g8b8a8_unorm", DXGI_FORMAT_R8G8B8A8_UNORM, 4, false, u8(4, false), sample_unorm8});
+    list.push_back({"b8g8r8a8_unorm", DXGI_FORMAT_B8G8R8A8_UNORM, 4, false, u8(4, true), sample_unorm8});
+    list.push_back({"r8g8b8a8_snorm", DXGI_FORMAT_R8G8B8A8_SNORM, 4, false, s8(4), sample_snorm8});
+    list.push_back({"r8g8_unorm", DXGI_FORMAT_R8G8_UNORM, 2, false, u8(2, false), sample_unorm8});
     list.push_back({"r10g10b10a2_unorm", DXGI_FORMAT_R10G10B10A2_UNORM, 4, false, [](const float* c, std::uint8_t* o) {
-                        const std::uint32_t r = static_cast<std::uint32_t>(clampf(c[0], 0, 1) * 1023.0f + 0.5f);
-                        const std::uint32_t g = static_cast<std::uint32_t>(clampf(c[1], 0, 1) * 1023.0f + 0.5f);
-                        const std::uint32_t b = static_cast<std::uint32_t>(clampf(c[2], 0, 1) * 1023.0f + 0.5f);
-                        const std::uint32_t a = static_cast<std::uint32_t>(clampf(c[3], 0, 1) * 3.0f + 0.5f);
+                        const std::uint32_t r = static_cast<std::uint32_t>(std::lround(clampf(c[0], 0, 1) * 1023.0f));
+                        const std::uint32_t g = static_cast<std::uint32_t>(std::lround(clampf(c[1], 0, 1) * 1023.0f));
+                        const std::uint32_t b = static_cast<std::uint32_t>(std::lround(clampf(c[2], 0, 1) * 1023.0f));
+                        const std::uint32_t a = static_cast<std::uint32_t>(std::lround(clampf(c[3], 0, 1) * 3.0f));
                         put<std::uint32_t>(o, 0, r | (g << 10) | (b << 20) | (a << 30));
-                    }});
-    list.push_back({"r8g8b8a8_uint", DXGI_FORMAT_R8G8B8A8_UINT, 4, true, [](const float* c, std::uint8_t* o) { for (int i = 0; i < 4; ++i) put<std::uint8_t>(o, i, static_cast<std::uint8_t>(clampf(c[i], 0, 1) * 255.0f + 0.5f)); }});
-    list.push_back({"r16g16b16a16_uint", DXGI_FORMAT_R16G16B16A16_UINT, 8, true, [](const float* c, std::uint8_t* o) { for (int i = 0; i < 4; ++i) put<std::uint16_t>(o, i, static_cast<std::uint16_t>(clampf(c[i], 0, 1) * 255.0f + 0.5f)); }});
-    list.push_back({"r32g32b32a32_uint", DXGI_FORMAT_R32G32B32A32_UINT, 16, true, [](const float* c, std::uint8_t* o) { for (int i = 0; i < 4; ++i) put<std::uint32_t>(o, i, static_cast<std::uint32_t>(clampf(c[i], 0, 1) * 255.0f + 0.5f)); }});
+                    }, sample_unorm10});
+    list.push_back({"r8g8b8a8_uint", DXGI_FORMAT_R8G8B8A8_UINT, 4, true, [](const float* c, std::uint8_t* o) { for (int i = 0; i < 4; ++i) put<std::uint8_t>(o, i, static_cast<std::uint8_t>(c[i])); }, sample_uint8});
+    list.push_back({"r16g16b16a16_uint", DXGI_FORMAT_R16G16B16A16_UINT, 8, true, [](const float* c, std::uint8_t* o) { for (int i = 0; i < 4; ++i) put<std::uint16_t>(o, i, static_cast<std::uint16_t>(c[i])); }, sample_uint16});
+    list.push_back({"r32g32b32a32_uint", DXGI_FORMAT_R32G32B32A32_UINT, 16, true, [](const float* c, std::uint8_t* o) { for (int i = 0; i < 4; ++i) put<std::uint32_t>(o, i, static_cast<std::uint32_t>(c[i])); }, sample_uint32});
     return list;
+}
+
+DXGI_FORMAT sibling_format(DXGI_FORMAT format) {
+    switch (format) {
+        case DXGI_FORMAT_R32G32B32A32_FLOAT: return DXGI_FORMAT_R32G32B32A32_UINT;
+        case DXGI_FORMAT_R32G32B32_FLOAT: return DXGI_FORMAT_R32G32B32_UINT;
+        case DXGI_FORMAT_R32G32_FLOAT: return DXGI_FORMAT_R32G32_UINT;
+        case DXGI_FORMAT_R16G16B16A16_FLOAT: return DXGI_FORMAT_R16G16B16A16_UNORM;
+        case DXGI_FORMAT_R16G16_FLOAT: return DXGI_FORMAT_R16G16_UNORM;
+        case DXGI_FORMAT_R16G16B16A16_UNORM: return DXGI_FORMAT_R16G16B16A16_FLOAT;
+        case DXGI_FORMAT_R16G16_UNORM: return DXGI_FORMAT_R16G16_FLOAT;
+        case DXGI_FORMAT_R16G16B16A16_SNORM: return DXGI_FORMAT_R16G16B16A16_UNORM;
+        case DXGI_FORMAT_R8G8B8A8_UNORM: return DXGI_FORMAT_R8G8B8A8_SNORM;
+        case DXGI_FORMAT_B8G8R8A8_UNORM: return DXGI_FORMAT_R8G8B8A8_UNORM;
+        case DXGI_FORMAT_R8G8B8A8_SNORM: return DXGI_FORMAT_R8G8B8A8_UNORM;
+        case DXGI_FORMAT_R8G8_UNORM: return DXGI_FORMAT_R8G8_SNORM;
+        case DXGI_FORMAT_R10G10B10A2_UNORM: return DXGI_FORMAT_R8G8B8A8_UNORM;
+        case DXGI_FORMAT_R8G8B8A8_UINT: return DXGI_FORMAT_R8G8B8A8_SINT;
+        case DXGI_FORMAT_R16G16B16A16_UINT: return DXGI_FORMAT_R16G16B16A16_SINT;
+        case DXGI_FORMAT_R32G32B32A32_UINT: return DXGI_FORMAT_R32G32B32A32_SINT;
+        default: return format;
+    }
 }
 
 struct Bars {
     std::vector<float> positions;
-    std::vector<float> colors;
     UINT count = 0;
     Bars() {
-        static const float palette[6][4] = {{1, 0.2f, 0.1f, 1}, {0.1f, 0.9f, 0.2f, 1}, {0.2f, 0.3f, 1, 1}, {0.9f, 0.8f, 0.1f, 1}, {0.8f, 0.2f, 0.9f, 1}, {0.1f, 0.8f, 0.8f, 1}};
         for (int q = 0; q < 6; ++q) {
             const float x0 = -0.95f + 0.32f * static_cast<float>(q);
             const float x1 = x0 + 0.28f;
@@ -65,26 +118,35 @@ struct Bars {
             for (const auto& p : quad) {
                 positions.push_back(p[0]);
                 positions.push_back(p[1]);
-                for (int k = 0; k < 4; ++k) {
-                    colors.push_back(palette[q][k]);
-                }
             }
         }
         count = 36;
+    }
+
+    [[nodiscard]] static std::vector<float> colors_for(const VertexFormat& format, unsigned shift) {
+        std::vector<float> colors;
+        const std::uint32_t salt = static_cast<std::uint32_t>(format.format) * 7919u;
+        for (unsigned v = 0; v < 36; ++v) {
+            const unsigned quad = (v / 6 + shift) % 6;
+            for (unsigned k = 0; k < 4; ++k) {
+                colors.push_back(format.sample(salt + quad * 4 + k));
+            }
+        }
+        return colors;
     }
 };
 
 const char* kAttrVs =
     "struct VsIn { float2 pos : POSITION; float4 col : COLOR; };\n"
     "struct VsOut { float4 pos : SV_Position; float4 col : COLOR; };\n"
-    "VsOut main(VsIn i) { VsOut o; o.pos = float4(i.pos, 0, 1); o.col = i.col; return o; }\n";
+    "VsOut main(VsIn i) { VsOut o; o.pos = float4(i.pos, 0, 1); o.col = frac(i.col * 64.0); return o; }\n";
 const char* kAttrUintVs =
     "struct VsIn { float2 pos : POSITION; uint4 col : COLOR; };\n"
     "struct VsOut { float4 pos : SV_Position; float4 col : COLOR; };\n"
-    "VsOut main(VsIn i) { VsOut o; o.pos = float4(i.pos, 0, 1); o.col = float4(i.col) / 255.0; return o; }\n";
+    "VsOut main(VsIn i) { VsOut o; o.pos = float4(i.pos, 0, 1); uint4 h = (i.col * 977u + (i.col >> 8)) & 255u; o.col = float4(h) / 255.0; return o; }\n";
 const char* kAttrPs =
     "struct VsOut { float4 pos : SV_Position; float4 col : COLOR; };\n"
-    "float4 main(VsOut i) : SV_Target { return float4(i.col.rgb, 1.0); }\n";
+    "float4 main(VsOut i) : SV_Target { return i.col; }\n";
 
 void register_formats() {
     for (const VertexFormat& format : vertex_formats()) {
@@ -95,9 +157,10 @@ void register_formats() {
                               return false;
                           }
                           const Bars bars;
+                          const std::vector<float> colors = Bars::colors_for(format, 0);
                           std::vector<std::uint8_t> encoded(static_cast<std::size_t>(bars.count) * format.size);
                           for (UINT v = 0; v < bars.count; ++v) {
-                              format.encode(&bars.colors[v * 4], &encoded[static_cast<std::size_t>(v) * format.size]);
+                              format.encode(&colors[v * 4], &encoded[static_cast<std::size_t>(v) * format.size]);
                           }
                           ID3D12Resource* positions = kit.make_upload(bars.positions.data(), bars.positions.size() * 4, error);
                           ID3D12Resource* attributes = kit.make_upload(encoded.data(), encoded.size(), error);
@@ -106,7 +169,7 @@ void register_formats() {
                           }
                           const std::vector<D3D12_INPUT_ELEMENT_DESC> layout = {
                               {"POSITION", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
-                              {"COLOR", 0, format.format, 1, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0}};
+                              {"COLOR", 0, kit.broken("vertex_format") ? sibling_format(format.format) : format.format, 1, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0}};
                           Pso builder(kit, stage.canvas.binder.signature);
                           builder.vs(Hlsl12::with_root(format.integer ? kAttrUintVs : kAttrVs)).ps(kAttrPs).layout(layout).targets({DXGI_FORMAT_R8G8B8A8_UNORM});
                           ID3D12PipelineState* state = builder.build(error);
@@ -161,7 +224,7 @@ void register_format_streams() {
                 }
                 const std::vector<D3D12_INPUT_ELEMENT_DESC> layout = {
                     {"POSITION", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
-                    {"COLOR", 0, format.format, 1, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0}};
+                    {"COLOR", 0, kit.broken("vertex_format") ? sibling_format(format.format) : format.format, 1, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0}};
                 Pso builder(kit, s->stage.canvas.binder.signature);
                 builder.vs(Hlsl12::with_root(format.integer ? kAttrUintVs : kAttrVs)).ps(kAttrPs).layout(layout).targets({DXGI_FORMAT_R8G8B8A8_UNORM});
                 s->state = builder.build(error);
@@ -169,9 +232,9 @@ void register_format_streams() {
             };
             steps.on_frame = [s, format](Kit& kit, unsigned frame, std::string& error) {
                 const std::size_t slot = static_cast<std::size_t>(frame % 3) * s->bars.count * format.size;
+                const std::vector<float> colors = Bars::colors_for(format, frame + 2);
                 for (UINT v = 0; v < s->bars.count; ++v) {
-                    const UINT quad = (v / 6 + frame) % 6;
-                    format.encode(&s->bars.colors[(quad * 6 + v % 6) * 4], s->mapped + slot + static_cast<std::size_t>(v) * format.size);
+                    format.encode(&colors[v * 4], s->mapped + slot + static_cast<std::size_t>(v) * format.size);
                 }
                 const D3D12_VERTEX_BUFFER_VIEW views[2] = {{s->positions->GetGPUVirtualAddress(), static_cast<UINT>(s->bars.positions.size() * 4), 8},
                                                            {s->ring->GetGPUVirtualAddress() + slot, s->bars.count * format.size, format.size}};
@@ -368,14 +431,27 @@ void register_indices() {
         INT base_vertex;
     };
     const Variant variants[] = {{"index16", false, 0, 0}, {"index32", true, 0, 0}, {"first_index_offset", false, 300, 0}, {"base_vertex_offset", true, 0, 40}};
+    static const float palette[4][4] = {{0.9f, 0.6f, 0.2f, 1}, {0.3f, 0.8f, 0.9f, 1}, {0.8f, 0.3f, 0.6f, 1}, {0.5f, 0.9f, 0.3f, 1}};
+    int variant_index = -1;
     for (const Variant& variant : variants) {
+        ++variant_index;
         Cases::single(rr::CaseSpec("ia", std::string("draw_indexed_") + variant.name).tolerance(rr::Tolerance::blend(2)).tag("index"),
-                      [variant](Kit& kit, rr::CaptureSet& out, std::string& error) {
+                      [variant, variant_index](Kit& kit, rr::CaptureSet& out, std::string& error) {
                           Stage stage;
                           if (!stage.open(kit, error, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_D32_FLOAT)) {
                               return false;
                           }
-                          MeshData mesh = Shapes::torus(24, 12, 0.85f, 0.3f);
+                          MeshData mesh = Shapes::torus(24 - 2 * variant_index, 12, 0.85f - 0.05f * static_cast<float>(variant_index), 0.3f - 0.03f * static_cast<float>(variant_index));
+                          if (variant.wide && variant.base_vertex == 0) {
+                              const std::uint32_t pad = 70000;
+                              MeshData big;
+                              big.vertices.assign(pad, Vertex{{5, 5, 5}, {0, 0, 1}, {0, 0}});
+                              big.vertices.insert(big.vertices.end(), mesh.vertices.begin(), mesh.vertices.end());
+                              for (std::uint32_t index : mesh.indices) {
+                                  big.indices.push_back(index + pad);
+                              }
+                              mesh = big;
+                          }
                           MeshData padded;
                           if (variant.base_vertex != 0) {
                               for (int k = 0; k < variant.base_vertex; ++k) {
@@ -400,8 +476,7 @@ void register_indices() {
                                   stage.canvas.begin(list, clear);
                                   list->SetPipelineState(state);
                                   geometry.bind(list);
-                                  const float color[4] = {0.9f, 0.6f, 0.2f, 1.0f};
-                                  set_cbv_root(list, stage.view_projection() * rr::Mat4::rotate_x(0.9f), color);
+                                  set_cbv_root(list, stage.view_projection() * rr::Mat4::rotate_x(0.9f + 0.3f * static_cast<float>(variant_index)), palette[variant_index]);
                                   const UINT count = variant.first_index != 0 ? (geometry.index_count - variant.first_index) / 3 * 3 : geometry.index_count;
                                   list->DrawIndexedInstanced(count, 1, variant.first_index, variant.base_vertex, 0);
                               },
@@ -418,10 +493,12 @@ void register_indices() {
                           }
                           std::vector<Vertex> vertices;
                           std::vector<std::uint32_t> indices;
-                          for (int strip = 0; strip < 4; ++strip) {
-                              for (int k = 0; k < 6; ++k) {
-                                  const float x = -0.9f + 0.45f * static_cast<float>(strip) + 0.2f * static_cast<float>(k % 2);
-                                  const float y = -0.8f + 0.3f * static_cast<float>(k / 2) * (1.0f + 0.1f * static_cast<float>(strip));
+                          const int strips = wide != 0 ? 3 : 4;
+                          const int per_strip = wide != 0 ? 8 : 6;
+                          for (int strip = 0; strip < strips; ++strip) {
+                              for (int k = 0; k < per_strip; ++k) {
+                                  const float x = -0.9f + (wide != 0 ? 0.6f : 0.45f) * static_cast<float>(strip) + (wide != 0 ? 0.3f : 0.2f) * static_cast<float>(k % 2);
+                                  const float y = -0.8f + (wide != 0 ? 0.22f : 0.3f) * static_cast<float>(k / 2) * (1.0f + 0.1f * static_cast<float>(strip));
                                   indices.push_back(static_cast<std::uint32_t>(vertices.size()));
                                   vertices.push_back({{x, y, 0}, {0, 0, 1}, {0, 0}});
                               }
@@ -681,7 +758,7 @@ void register_indirect() {
                           "VsOut main(uint vid : SV_VertexID, uint iid : SV_InstanceID) {\n"
                           "  VsOut o; uint corner = vid % 6; float2 c = float2((corner == 1 || corner == 4 || corner == 5) ? 1 : 0, (corner == 2 || corner == 3 || corner == 5) ? 1 : 0);\n"
                           "  uint cell = vid / 6 + iid * 4; float2 org = float2(-0.9 + 0.45 * (cell % 4), -0.9 + 0.45 * ((cell / 4) % 4));\n"
-                          "  o.pos = float4(org + c * 0.4, 0, 1); o.col = float3((cell % 5) / 4.0, (cell % 3) / 2.0, iid / 3.0 + 0.2); return o; }\n";
+                          "  o.pos = float4(org + c * 0.4, 0, 1); o.col = float3(iid / 3.0 + 0.2, (cell % 3) / 2.0, (cell % 5) / 4.0); return o; }\n";
                       Pso builder(kit, stage.canvas.binder.signature);
                       builder.vs(Hlsl12::with_root(vs)).ps("struct VsOut { float4 pos : SV_Position; float3 col : COLOR; };\nfloat4 main(VsOut i) : SV_Target { return float4(i.col, 1); }\n").layout({}).targets({DXGI_FORMAT_R8G8B8A8_UNORM});
                       ID3D12PipelineState* state = builder.build(error);

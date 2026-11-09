@@ -36,7 +36,7 @@ void register_dimensions() {
         srv.Texture1D.MipLevels = 7;
         const D3D12_SAMPLER_DESC sampler = linear_wrap();
         return sample_scene(kit, texture, srv, &sampler, ps_of("Texture1D<float4> tex : register(t0); SamplerState smp : register(s0);\n", "return tex.Sample(smp, i.uv.x * 3.0) * float4(1, 1, 1, 1);"),
-                            kTint, kScaleOne, -0.6f, out, error);
+                            kTint, kScaleOne, kFlatTilt, out, error);
     });
     Cases::single(rr::CaseSpec("tex", "dim_texture1d_array").tolerance(sampler_tolerance()).tag("dimension"), [](Kit& kit, rr::CaptureSet& out, std::string& error) {
         TextureSpec spec;
@@ -58,7 +58,7 @@ void register_dimensions() {
         const D3D12_SAMPLER_DESC sampler = linear_wrap();
         return sample_scene(kit, texture, srv, &sampler,
                             ps_of("Texture1DArray<float4> tex : register(t0); SamplerState smp : register(s0);\n", "return tex.Sample(smp, float2(i.uv.x * 2.0, floor(i.uv.y * 3.999)));"),
-                            kTint, kScaleOne, -0.5f, out, error);
+                            kTint, kScaleOne, kFlatTilt, out, error);
     });
     Cases::single(rr::CaseSpec("tex", "dim_texture2d_mips_trilinear").tolerance(sampler_tolerance()).tag("dimension"), [](Kit& kit, rr::CaptureSet& out, std::string& error) {
         TextureSpec spec;
@@ -72,7 +72,7 @@ void register_dimensions() {
         }
         const D3D12_SAMPLER_DESC sampler = linear_wrap();
         return sample_scene(kit, texture, srv_2d(DXGI_FORMAT_R8G8B8A8_UNORM, 8), &sampler,
-                            ps_of("Texture2D<float4> tex : register(t0); SamplerState smp : register(s0);\n", "return tex.Sample(smp, i.uv * p1.xy);"), kTint, kScale, -1.1f, out, error);
+                            ps_of("Texture2D<float4> tex : register(t0); SamplerState smp : register(s0);\n", "return tex.Sample(smp, i.uv * p1.xy);"), kTint, kScale, kFlatTilt, out, error);
     });
     Cases::single(rr::CaseSpec("tex", "dim_texture2d_array").tolerance(loose_sampler_tolerance()).tag("dimension"), [](Kit& kit, rr::CaptureSet& out, std::string& error) {
         TextureSpec spec;
@@ -95,7 +95,7 @@ void register_dimensions() {
         return sample_scene(kit, texture, srv, &sampler,
                             ps_of("Texture2DArray<float4> tex : register(t0); SamplerState smp : register(s0);\n",
                                   "uint slice = (uint)(i.uv.x * 1.999) + 2 * (uint)(i.uv.y * 1.999); return tex.Sample(smp, float3(i.uv * 4.0, slice));"),
-                            kTint, kScaleOne, -0.5f, out, error);
+                            kTint, kScaleOne, kFlatTilt, out, error);
     });
     Cases::single(rr::CaseSpec("tex", "dim_texture3d").tolerance(sampler_tolerance()).tag("dimension"), [](Kit& kit, rr::CaptureSet& out, std::string& error) {
         TextureSpec spec;
@@ -116,7 +116,7 @@ void register_dimensions() {
         srv.Texture3D.MipLevels = 3;
         const D3D12_SAMPLER_DESC sampler = linear_wrap();
         return sample_scene(kit, texture, srv, &sampler,
-                            ps_of("Texture3D<float4> tex : register(t0); SamplerState smp : register(s0);\n", "return tex.Sample(smp, float3(i.uv, 0.15 + 0.7 * i.uv.x));"), kTint, kScaleOne, -0.5f, out, error);
+                            ps_of("Texture3D<float4> tex : register(t0); SamplerState smp : register(s0);\n", "return tex.Sample(smp, float3(i.uv, 0.15 + 0.7 * i.uv.x));"), kTint, kScaleOne, kFlatTilt, out, error);
     });
     for (int array = 0; array < 2; ++array) {
         Cases::single(rr::CaseSpec("tex", array != 0 ? "dim_texturecube_array" : "dim_texturecube").tolerance(sampler_tolerance()).tag("dimension"),
@@ -184,13 +184,13 @@ void register_dimensions() {
                 }
             } else if (item.raw) {
                 for (UINT k = 0; k < elements; ++k) {
-                    const std::uint32_t px[4] = {(k % 16) * 17, (k / 16) * 17, (k * 13) & 255, 255};
+                    const std::uint32_t px[4] = {255 - (k % 16) * 11, (k / 16) * 17, (k * 29 + 7) & 255, 255};
                     const std::uint8_t* raw = reinterpret_cast<const std::uint8_t*>(px);
                     bytes.insert(bytes.end(), raw, raw + 16);
                 }
             } else {
                 for (UINT k = 0; k < elements; ++k) {
-                    const float px[4] = {static_cast<float>(k % 16) / 15.0f, static_cast<float>(k / 16) / 15.0f, static_cast<float>((k * 13) & 255) / 255.0f, 1.0f};
+                    const float px[4] = {static_cast<float>(k % 16) / 15.0f, static_cast<float>(k / 16) / 15.0f, static_cast<float>(k % 7) / 6.0f, 1.0f};
                     const std::uint8_t* raw = reinterpret_cast<const std::uint8_t*>(px);
                     bytes.insert(bytes.end(), raw, raw + 16);
                 }
@@ -222,40 +222,119 @@ struct FormatCase {
     float tolerance;
 };
 
+std::uint32_t texel_hash(std::uint32_t x) {
+    x ^= x >> 16;
+    x *= 0x7feb352du;
+    x ^= x >> 15;
+    x *= 0x846ca68bu;
+    x ^= x >> 16;
+    return x;
+}
+
+Texels::Bytes format_bytes(DXGI_FORMAT format, std::uint32_t salt, unsigned width, unsigned height) {
+    Texels::Bytes bytes;
+    auto push16 = [&](std::uint16_t v) { bytes.push_back(static_cast<std::uint8_t>(v)); bytes.push_back(static_cast<std::uint8_t>(v >> 8)); };
+    auto push32 = [&](std::uint32_t v) { for (int k = 0; k < 4; ++k) { bytes.push_back(static_cast<std::uint8_t>(v >> (8 * k))); } };
+    for (unsigned t = 0; t < width * height; ++t) {
+        auto h = [&](unsigned c) { return texel_hash(salt * 977u + t * 4u + c); };
+        switch (format) {
+            case DXGI_FORMAT_R8G8B8A8_UNORM:
+            case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB:
+            case DXGI_FORMAT_R8G8B8A8_TYPELESS:
+            case DXGI_FORMAT_B8G8R8A8_UNORM:
+                for (unsigned c = 0; c < 4; ++c) { bytes.push_back(static_cast<std::uint8_t>(8 + h(c) % 240)); }
+                break;
+            case DXGI_FORMAT_R8G8B8A8_SNORM:
+                for (unsigned c = 0; c < 4; ++c) { bytes.push_back(static_cast<std::uint8_t>(static_cast<std::int8_t>(static_cast<int>(h(c) % 253) - 126))); }
+                break;
+            case DXGI_FORMAT_R8_UNORM:
+                bytes.push_back(static_cast<std::uint8_t>(8 + h(0) % 240));
+                break;
+            case DXGI_FORMAT_R8G8_UNORM:
+                for (unsigned c = 0; c < 2; ++c) { bytes.push_back(static_cast<std::uint8_t>(8 + h(c) % 240)); }
+                break;
+            case DXGI_FORMAT_R10G10B10A2_UNORM:
+                push32((h(0) & 0x3fffffffu) | ((h(1) % 4u) << 30));
+                break;
+            case DXGI_FORMAT_R11G11B10_FLOAT:
+                push32((0x2c0u + (h(0) % 0x100u)) | ((0x2c0u + (h(1) % 0x100u)) << 11) | ((0x160u + (h(2) % 0x80u)) << 22));
+                break;
+            case DXGI_FORMAT_R16G16B16A16_FLOAT:
+                for (unsigned c = 0; c < 4; ++c) { push16(static_cast<std::uint16_t>(((12u + h(c) % 4u) << 10) | ((h(c) >> 8) & 0x3ffu))); }
+                break;
+            case DXGI_FORMAT_R16G16_FLOAT:
+                for (unsigned c = 0; c < 2; ++c) { push16(static_cast<std::uint16_t>(((12u + h(c) % 4u) << 10) | ((h(c) >> 8) & 0x3ffu))); }
+                break;
+            case DXGI_FORMAT_R32G32B32A32_FLOAT:
+                for (unsigned c = 0; c < 4; ++c) { push32(0x3f000000u | (h(c) & 0x7fffffu)); }
+                break;
+            case DXGI_FORMAT_R32_FLOAT:
+                push32(0x3f000000u | (h(0) & 0x7fffffu));
+                break;
+            case DXGI_FORMAT_R16G16B16A16_UNORM:
+                for (unsigned c = 0; c < 4; ++c) { push16(static_cast<std::uint16_t>(300 + h(c) % 65000)); }
+                break;
+            case DXGI_FORMAT_R16_UNORM:
+                push16(static_cast<std::uint16_t>(300 + h(0) % 65000));
+                break;
+            case DXGI_FORMAT_R16G16B16A16_SNORM:
+                for (unsigned c = 0; c < 4; ++c) { push16(static_cast<std::uint16_t>(static_cast<std::int16_t>(static_cast<int>(h(c) % 65000) - 32500))); }
+                break;
+            default:
+                break;
+        }
+    }
+    return bytes;
+}
+
 void register_formats() {
-    const FormatCase formats[] = {
-        {"r8g8b8a8_unorm", DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_R8G8B8A8_UNORM, 4},
-        {"r8g8b8a8_srgb", DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, 5},
-        {"b8g8r8a8_unorm", DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_B8G8R8A8_UNORM, 4},
-        {"r10g10b10a2_unorm", DXGI_FORMAT_R10G10B10A2_UNORM, DXGI_FORMAT_R10G10B10A2_UNORM, 4},
-        {"r16g16b16a16_float", DXGI_FORMAT_R16G16B16A16_FLOAT, DXGI_FORMAT_R16G16B16A16_FLOAT, 4},
-        {"r32g32b32a32_float", DXGI_FORMAT_R32G32B32A32_FLOAT, DXGI_FORMAT_R32G32B32A32_FLOAT, 4},
-        {"r16g16b16a16_unorm", DXGI_FORMAT_R16G16B16A16_UNORM, DXGI_FORMAT_R16G16B16A16_UNORM, 4},
-        {"r16_unorm", DXGI_FORMAT_R16_UNORM, DXGI_FORMAT_R16_UNORM, 4},
-        {"r8_unorm", DXGI_FORMAT_R8_UNORM, DXGI_FORMAT_R8_UNORM, 4},
-        {"r8g8_unorm", DXGI_FORMAT_R8G8_UNORM, DXGI_FORMAT_R8G8_UNORM, 4},
-        {"r16g16_float", DXGI_FORMAT_R16G16_FLOAT, DXGI_FORMAT_R16G16_FLOAT, 4},
-        {"r32_float", DXGI_FORMAT_R32_FLOAT, DXGI_FORMAT_R32_FLOAT, 4},
-        {"typeless_viewed_srgb", DXGI_FORMAT_R8G8B8A8_TYPELESS, DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, 5},
-        {"typeless_viewed_unorm", DXGI_FORMAT_R8G8B8A8_TYPELESS, DXGI_FORMAT_R8G8B8A8_UNORM, 4},
+    struct RawFormat {
+        const char* name;
+        DXGI_FORMAT format;
+        DXGI_FORMAT view;
+        bool amplify;
     };
-    for (const FormatCase& item : formats) {
+    const RawFormat raw_formats[] = {
+        {"r8g8b8a8_unorm", DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_R8G8B8A8_UNORM, true},
+        {"r8g8b8a8_srgb", DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, false},
+        {"b8g8r8a8_unorm", DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_B8G8R8A8_UNORM, true},
+        {"r8g8b8a8_snorm", DXGI_FORMAT_R8G8B8A8_SNORM, DXGI_FORMAT_R8G8B8A8_SNORM, true},
+        {"r10g10b10a2_unorm", DXGI_FORMAT_R10G10B10A2_UNORM, DXGI_FORMAT_R10G10B10A2_UNORM, true},
+        {"r11g11b10_float", DXGI_FORMAT_R11G11B10_FLOAT, DXGI_FORMAT_R11G11B10_FLOAT, true},
+        {"r16g16b16a16_float", DXGI_FORMAT_R16G16B16A16_FLOAT, DXGI_FORMAT_R16G16B16A16_FLOAT, true},
+        {"r32g32b32a32_float", DXGI_FORMAT_R32G32B32A32_FLOAT, DXGI_FORMAT_R32G32B32A32_FLOAT, true},
+        {"r16g16b16a16_unorm", DXGI_FORMAT_R16G16B16A16_UNORM, DXGI_FORMAT_R16G16B16A16_UNORM, true},
+        {"r16g16b16a16_snorm", DXGI_FORMAT_R16G16B16A16_SNORM, DXGI_FORMAT_R16G16B16A16_SNORM, true},
+        {"r16_unorm", DXGI_FORMAT_R16_UNORM, DXGI_FORMAT_R16_UNORM, true},
+        {"r8_unorm", DXGI_FORMAT_R8_UNORM, DXGI_FORMAT_R8_UNORM, true},
+        {"r8g8_unorm", DXGI_FORMAT_R8G8_UNORM, DXGI_FORMAT_R8G8_UNORM, true},
+        {"r16g16_float", DXGI_FORMAT_R16G16_FLOAT, DXGI_FORMAT_R16G16_FLOAT, true},
+        {"r32_float", DXGI_FORMAT_R32_FLOAT, DXGI_FORMAT_R32_FLOAT, true},
+        {"typeless_viewed_srgb", DXGI_FORMAT_R8G8B8A8_TYPELESS, DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, false},
+        {"typeless_viewed_unorm", DXGI_FORMAT_R8G8B8A8_TYPELESS, DXGI_FORMAT_R8G8B8A8_UNORM, true},
+    };
+    int salt_index = 0;
+    for (const RawFormat& item : raw_formats) {
+        const std::uint32_t salt = 101u + static_cast<std::uint32_t>(salt_index++);
         Cases::single(
             rr::CaseSpec("tex", std::string("format_") + item.name).tolerance(format_tolerance()).tag("format"),
-            [item](Kit& kit, rr::CaptureSet& out, std::string& error) {
+            [item, salt](Kit& kit, rr::CaptureSet& out, std::string& error) {
                 TextureSpec spec;
                 spec.format = item.format;
                 spec.width = 64;
                 spec.height = 64;
-                spec.mips = 7;
-                spec.content = 1;
-                ID3D12Resource* texture = TextureFactory::create(kit, spec, true, error);
+                ID3D12Resource* texture = TextureFactory::create(kit, spec, false, error);
                 if (texture == nullptr) {
                     return false;
                 }
-                const D3D12_SAMPLER_DESC sampler = linear_wrap();
-                return sample_scene(kit, texture, srv_2d(item.view, 7), &sampler,
-                                    ps_of("Texture2D<float4> tex : register(t0); SamplerState smp : register(s0);\n", "return tex.Sample(smp, i.uv * p1.xy);"), kTint, kScale, -0.9f, out, error);
+                const Texels::Bytes bytes = format_bytes(item.format, salt, 64, 64);
+                if (!D3d12Tools::write_texture(kit.rig, texture, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, 0, bytes.data(), error)) {
+                    return false;
+                }
+                const D3D12_SAMPLER_DESC sampler = Binder::sampler_desc(D3D12_FILTER_MIN_MAG_MIP_POINT, D3D12_TEXTURE_ADDRESS_MODE_WRAP);
+                const char* body = item.amplify ? "return frac(tex.SampleLevel(smp, i.uv, 0) * 64.0);" : "return tex.SampleLevel(smp, i.uv, 0);";
+                return sample_scene(kit, texture, srv_2d(item.view, 1), &sampler,
+                                    ps_of("Texture2D<float4> tex : register(t0); SamplerState smp : register(s0);\n", body), kTint, kScaleOne, 0.0f, out, error);
             },
             [item](Kit& kit) { return needs_format(kit, item.view, D3D12_FORMAT_SUPPORT1_SHADER_SAMPLE, "sampling this format"); });
     }
@@ -268,20 +347,20 @@ void register_formats() {
         {"bc6h_uf16", DXGI_FORMAT_BC6H_UF16, DXGI_FORMAT_BC6H_UF16, 4}};
     for (const FormatCase& item : compressed) {
         Cases::single(
-            rr::CaseSpec("tex", std::string("format_") + item.name).tolerance(sampler_tolerance()).tag("format"),
+            rr::CaseSpec("tex", std::string("format_") + item.name).tolerance(format_tolerance()).tag("format"),
             [item](Kit& kit, rr::CaptureSet& out, std::string& error) {
                 TextureSpec spec;
                 spec.format = item.format;
                 spec.width = 64;
                 spec.height = 64;
-                spec.mips = 5;
+                spec.mips = 1;
                 ID3D12Resource* texture = TextureFactory::create(kit, spec, true, error);
                 if (texture == nullptr) {
                     return false;
                 }
-                const D3D12_SAMPLER_DESC sampler = linear_wrap();
-                return sample_scene(kit, texture, srv_2d(item.view, 5), &sampler,
-                                    ps_of("Texture2D<float4> tex : register(t0); SamplerState smp : register(s0);\n", "return saturate(tex.Sample(smp, i.uv * p1.xy));"), kTint, kScaleOne, -0.5f, out, error);
+                const D3D12_SAMPLER_DESC sampler = Binder::sampler_desc(D3D12_FILTER_MIN_MAG_MIP_POINT, D3D12_TEXTURE_ADDRESS_MODE_WRAP);
+                return sample_scene(kit, texture, srv_2d(item.view, 1), &sampler,
+                                    ps_of("Texture2D<float4> tex : register(t0); SamplerState smp : register(s0);\n", "return saturate(tex.SampleLevel(smp, i.uv, 0));"), kTint, kScaleOne, 0.0f, out, error);
             },
             [item](Kit& kit) { return needs_format(kit, item.view, D3D12_FORMAT_SUPPORT1_SHADER_SAMPLE, "sampling this block format"); });
     }
@@ -342,7 +421,7 @@ void register_format_streams() {
     }
 }
 
-bool depth_sample(Kit& kit, DXGI_FORMAT depth_format, rr::CaptureSet& out, std::string& error) {
+bool depth_sample(Kit& kit, DXGI_FORMAT depth_format, float angle, rr::CaptureSet& out, std::string& error) {
     Stage stage;
     if (!stage.open(kit, error, DXGI_FORMAT_R8G8B8A8_UNORM, depth_format)) {
         return false;
@@ -383,7 +462,7 @@ bool depth_sample(Kit& kit, DXGI_FORMAT depth_format, rr::CaptureSet& out, std::
             stage.canvas.begin(list, clear);
             list->SetPipelineState(write_state);
             list->OMSetStencilRef(0x80);
-            stage.mesh(list, stage.torus, rr::Mat4::rotate_x(1.0f), 1, 1, 1);
+            stage.mesh(list, stage.torus, rr::Mat4::rotate_x(angle), 1, 1, 1);
             list->OMSetStencilRef(0x40);
             stage.mesh(list, stage.sphere, rr::Mat4::translate(0.1f, 0.0f, -0.4f), 1, 1, 1);
             stage.canvas.depth.to(list, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
@@ -414,7 +493,7 @@ void register_depth_formats() {
                           {"d32_float_s8x24_uint", DXGI_FORMAT_D32_FLOAT_S8X24_UINT}};
     for (const Item& item : items) {
         Cases::single(rr::CaseSpec("tex", std::string("depth_stencil_sample_") + item.name).tolerance(rr::Tolerance::blend(3)).tag("format"),
-                      [item](Kit& kit, rr::CaptureSet& out, std::string& error) { return depth_sample(kit, item.format, out, error); });
+                      [item, angle = 0.8f + 0.25f * static_cast<float>(&item - items)](Kit& kit, rr::CaptureSet& out, std::string& error) { return depth_sample(kit, item.format, angle, out, error); });
     }
 }
 

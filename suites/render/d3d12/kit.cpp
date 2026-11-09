@@ -50,6 +50,11 @@ OpenStatus Kit::open(bool use_warp, const rr::CaseSpec& spec, std::string& error
     return OpenStatus::Ok;
 }
 
+bool Kit::broken(const char* name) const {
+    const char* list = std::getenv("LSW_D3D12_BREAK");
+    return list != nullptr && under_test && (std::string(",") + list + ",").find(std::string(",") + name + ",") != std::string::npos;
+}
+
 bool Kit::end_frame(std::string& error) {
     if (!swap.present(error)) {
         return false;

@@ -45,6 +45,8 @@ public:
     D3D12_INDEX_BUFFER_VIEW ibv{};
     UINT index_count = 0;
     UINT vertex_count = 0;
+    bool break_index = false;
+    bool break_topology = false;
 };
 
 struct DepthFormats {
@@ -121,6 +123,7 @@ public:
     Pso& topology(D3D12_PRIMITIVE_TOPOLOGY_TYPE type);
     Pso& stage(const std::string& source, const char* entry, const char* stage_name);
     [[nodiscard]] ID3D12PipelineState* build(std::string& error);
+    void break_state();
 
     D3D12_GRAPHICS_PIPELINE_STATE_DESC desc;
     Kit& kit;

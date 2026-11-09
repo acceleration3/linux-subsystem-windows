@@ -65,7 +65,10 @@ public:
     [[nodiscard]] static D3D12_GRAPHICS_PIPELINE_STATE_DESC pipeline_desc(ID3D12RootSignature* signature, const Bytes& vs, const Bytes& ps,
                                                                           const std::vector<DXGI_FORMAT>& targets, DXGI_FORMAT depth);
 
+    [[nodiscard]] bool broken(const char* name) const;
+
     bool warp = false;
+    bool under_test = false;
     bool dxc = false;
     std::string name;
     D3d12Rig rig;

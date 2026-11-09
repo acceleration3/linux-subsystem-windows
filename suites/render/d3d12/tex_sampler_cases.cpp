@@ -14,6 +14,7 @@ std::string ps_of(const std::string& decls, const std::string& body) {
 const char* kTexDecl = "Texture2D<float4> tex : register(t0); SamplerState smp : register(s0);\n";
 const float kTint[4] = {1, 1, 1, 1};
 const float kScale4[4] = {4.0f, 4.0f, 0, 0};
+const float kScale3[4] = {3.0f, 3.0f, 0, 0};
 
 ID3D12Resource* checker_texture(Kit& kit, std::string& error, UINT size = 128, UINT mips = 8, DXGI_FORMAT format = DXGI_FORMAT_R8G8B8A8_UNORM, unsigned content = 3) {
     TextureSpec spec;
@@ -58,7 +59,7 @@ void register_filters() {
                           D3D12_SAMPLER_DESC sampler = Binder::sampler_desc(item.filter, D3D12_TEXTURE_ADDRESS_MODE_WRAP);
                           sampler.MaxAnisotropy = item.aniso;
                           const float magnify[4] = {0.25f, 0.25f, 0, 0};
-                          return run_sampler(kit, sampler, "return tex.Sample(smp, i.uv * p1.xy);", magnified ? magnify : kScale4, aniso ? -1.52f : -1.2f, out, error);
+                          return run_sampler(kit, sampler, "return tex.Sample(smp, i.uv * p1.xy);", magnified ? magnify : (aniso ? kScale4 : kScale3), aniso ? -1.52f : kFlatTilt, out, error);
                       });
     }
     struct Lod {
@@ -74,7 +75,7 @@ void register_filters() {
             sampler.MipLODBias = lod.bias;
             sampler.MinLOD = lod.min_lod;
             sampler.MaxLOD = lod.max_lod;
-            return run_sampler(kit, sampler, "return tex.Sample(smp, i.uv * p1.xy);", kScale4, -1.0f, out, error);
+            return run_sampler(kit, sampler, "return tex.Sample(smp, i.uv * p1.xy);", kScale4, kFlatTilt, out, error);
         });
     }
 }
@@ -99,7 +100,7 @@ void register_addressing() {
                 sampler.BorderColor[k] = item.border[k];
             }
             const float scale[4] = {2.5f, 2.5f, 0, 0};
-            return run_sampler(kit, sampler, "return tex.Sample(smp, i.uv * p1.xy - float2(0.75, 0.75));", scale, -0.5f, out, error);
+            return run_sampler(kit, sampler, "return tex.SampleLevel(smp, i.uv * p1.xy - float2(0.75, 0.75), 0);", scale, kFlatTilt, out, error);
         });
     }
     for (int point = 0; point < 2; ++point) {
@@ -110,8 +111,8 @@ void register_addressing() {
                               return false;
                           }
                           const std::string decl = std::string("Texture2D<float4> tex : register(t0); SamplerState smp : register(") + (point != 0 ? "s1" : "s2") + ", space1);\n";
-                          const float scale[4] = {2.5f, 2.5f, 0, 0};
-                          return sample_scene(kit, texture, srv_2d(DXGI_FORMAT_R8G8B8A8_UNORM, 8), nullptr, ps_of(decl, "return tex.Sample(smp, i.uv * p1.xy - float2(0.75, 0.75));"), kTint, scale, -0.5f, out, error);
+                          const float scale[4] = {3.0f, 3.0f, 0, 0};
+                          return sample_scene(kit, texture, srv_2d(DXGI_FORMAT_R8G8B8A8_UNORM, 8), nullptr, ps_of(decl, point != 0 ? "return tex.Sample(smp, i.uv * p1.xy - float2(0.75, 0.25));" : "return tex.Sample(smp, i.uv * p1.xy - float2(1.0, 0.5));"), kTint, scale, kFlatTilt, out, error);
                       });
     }
     Cases::single(rr::CaseSpec("tex", "sampler_two_heap_samplers").tolerance(texel_edge_tolerance()).tag("sampler"), [](Kit& kit, rr::CaptureSet& out, std::string& error) {
@@ -123,7 +124,7 @@ void register_addressing() {
         const D3D12_SAMPLER_DESC smooth = Binder::sampler_desc(D3D12_FILTER_MIN_MAG_MIP_LINEAR, D3D12_TEXTURE_ADDRESS_MODE_CLAMP);
         const std::string decl = "Texture2D<float4> tex : register(t0); SamplerState a : register(s0); SamplerState b : register(s1);\n";
         const float scale[4] = {1, 1, 0, 0};
-        return sample_scene(kit, texture, srv_2d(DXGI_FORMAT_R8G8B8A8_UNORM, 5), &point, ps_of(decl, "return i.uv.x < 0.5 ? tex.Sample(a, i.uv) : tex.Sample(b, i.uv);"), kTint, scale, -0.3f, out, error, &smooth);
+        return sample_scene(kit, texture, srv_2d(DXGI_FORMAT_R8G8B8A8_UNORM, 5), &point, ps_of(decl, "return i.uv.x < 0.5 ? tex.Sample(a, i.uv) : tex.Sample(b, i.uv);"), kTint, scale, kFlatTilt, out, error, &smooth);
     });
 }
 
@@ -142,7 +143,7 @@ void register_comparison() {
         {"sample_cmp_gather_red_depth_values", D3D12_FILTER_COMPARISON_MIN_MAG_MIP_POINT, "return tex.GatherCmpRed(smp, i.uv * 0.5 + 0.25, 0.45);"},
     };
     for (const CompareItem& item : items) {
-        Cases::single(rr::CaseSpec("tex", std::string("sampler_") + item.name).tolerance(sampler_tolerance()).tag("sampler"), [item](Kit& kit, rr::CaptureSet& out, std::string& error) {
+        Cases::single(rr::CaseSpec("tex", std::string("sampler_") + item.name).tolerance(rr::Tolerance::psnr(34)).tag("sampler"), [item](Kit& kit, rr::CaptureSet& out, std::string& error) {
             TextureSpec spec;
             spec.format = DXGI_FORMAT_R32_FLOAT;
             spec.width = 32;
@@ -179,7 +180,7 @@ void register_operations() {
         {"gather_green", "return tex.GatherGreen(smp, i.uv * float2(8, 8));"},
         {"gather_blue", "return tex.GatherBlue(smp, i.uv * float2(8, 8));"},
         {"gather_alpha", "return float4(tex.GatherAlpha(smp, i.uv * float2(8, 8)).xyz, 1);"},
-        {"gather_programmable_offsets", "return tex.GatherRed(smp, i.uv * float2(8, 8), int2(0, 0), int2(3, 0), int2(0, 3), int2(3, 3));"},
+        {"gather_programmable_offsets", "return tex.GatherRed(smp, i.uv * float2(8, 8), int2(1, 0), int2(5, 2), int2(-2, 3), int2(7, -3));"},
         {"load_mip", "uint w, h, l; tex.GetDimensions(2, w, h, l); return tex.Load(int3(i.uv * float2(w, h), 2));"},
         {"load_offset", "return tex.Load(int3(i.uv * 127.0, 0), int2(5, 3));"},
         {"calculate_lod", "float l = tex.CalculateLevelOfDetail(smp, i.uv * p1.xy); return float4(l / 8.0, l / 16.0, 0.2, 1);"},
@@ -189,7 +190,8 @@ void register_operations() {
     for (const Op& op : ops) {
         Cases::single(rr::CaseSpec("tex", std::string("op_") + op.name).tolerance(std::string(op.name).rfind("sample_", 0) == 0 || std::string(op.name).find("lod") != std::string::npos ? sampler_tolerance() : exact_op_tolerance()).tag("sampler"), [op](Kit& kit, rr::CaptureSet& out, std::string& error) {
             const D3D12_SAMPLER_DESC sampler = Binder::sampler_desc(D3D12_FILTER_MIN_MAG_MIP_LINEAR, D3D12_TEXTURE_ADDRESS_MODE_WRAP);
-            return run_sampler(kit, sampler, op.body, kScale4, -0.9f, out, error);
+            const bool lod_value = std::string(op.name).find("calculate_lod") != std::string::npos;
+            return run_sampler(kit, sampler, op.body, kScale4, lod_value ? -0.9f : kFlatTilt, out, error);
         });
     }
 }
@@ -202,7 +204,7 @@ void register_views() {
     const Item items[] = {
         {"srv_min_lod_clamp", [](D3D12_SHADER_RESOURCE_VIEW_DESC& d) { d.Texture2D.ResourceMinLODClamp = 3.0f; }},
         {"srv_mip_subrange", [](D3D12_SHADER_RESOURCE_VIEW_DESC& d) { d.Texture2D.MostDetailedMip = 2; d.Texture2D.MipLevels = 3; }},
-        {"srv_single_mip", [](D3D12_SHADER_RESOURCE_VIEW_DESC& d) { d.Texture2D.MostDetailedMip = 3; d.Texture2D.MipLevels = 1; }},
+        {"srv_single_mip", [](D3D12_SHADER_RESOURCE_VIEW_DESC& d) { d.Texture2D.MostDetailedMip = 4; d.Texture2D.MipLevels = 1; }},
         {"srv_swizzle_bgra", [](D3D12_SHADER_RESOURCE_VIEW_DESC& d) { d.Shader4ComponentMapping = D3D12_ENCODE_SHADER_4_COMPONENT_MAPPING(2, 1, 0, 3); }},
         {"srv_swizzle_force_values", [](D3D12_SHADER_RESOURCE_VIEW_DESC& d) {
              d.Shader4ComponentMapping = D3D12_ENCODE_SHADER_4_COMPONENT_MAPPING(D3D12_SHADER_COMPONENT_MAPPING_FORCE_VALUE_1, 1, D3D12_SHADER_COMPONENT_MAPPING_FORCE_VALUE_0, 0);
@@ -218,7 +220,7 @@ void register_views() {
             D3D12_SHADER_RESOURCE_VIEW_DESC srv = srv_2d(DXGI_FORMAT_R8G8B8A8_UNORM, 8);
             item.tweak(srv);
             const D3D12_SAMPLER_DESC sampler = Binder::sampler_desc(D3D12_FILTER_MIN_MAG_MIP_LINEAR, D3D12_TEXTURE_ADDRESS_MODE_WRAP);
-            return sample_scene(kit, texture, srv, &sampler, ps_of(kTexDecl, "return tex.Sample(smp, i.uv * p1.xy);"), kTint, kScale4, -0.9f, out, error);
+            return sample_scene(kit, texture, srv, &sampler, ps_of(kTexDecl, "return tex.Sample(smp, i.uv * p1.xy);"), kTint, kScale4, kFlatTilt, out, error);
         });
     }
     Cases::single(rr::CaseSpec("tex", "srv_array_slice_subrange").tolerance(sampler_tolerance()).tag("sampler"), [](Kit& kit, rr::CaptureSet& out, std::string& error) {

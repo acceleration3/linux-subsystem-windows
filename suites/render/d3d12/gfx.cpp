@@ -161,6 +161,8 @@ bool Geometry::create(Kit& kit, const MeshData& mesh, bool wide_indices, std::st
         return false;
     }
     vertex_count = static_cast<UINT>(mesh.vertices.size());
+    break_index = kit.broken("index_format");
+    break_topology = kit.broken("topology");
     vbv = {vertex->GetGPUVirtualAddress(), static_cast<UINT>(mesh.vertices.size() * sizeof(Vertex)), sizeof(Vertex)};
     index_count = static_cast<UINT>(mesh.indices.size());
     if (wide_indices) {
@@ -191,10 +193,17 @@ bool Geometry::create_vertices(Kit& kit, const void* data, UINT count, UINT stri
 }
 
 void Geometry::bind(ID3D12GraphicsCommandList* list, D3D_PRIMITIVE_TOPOLOGY topology) const {
+    if (break_topology) {
+        topology = topology == D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST ? D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP : D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+    }
     list->IASetPrimitiveTopology(topology);
     list->IASetVertexBuffers(0, 1, &vbv);
     if (index != nullptr) {
-        list->IASetIndexBuffer(&ibv);
+        D3D12_INDEX_BUFFER_VIEW view = ibv;
+        if (break_index) {
+            view.Format = view.Format == DXGI_FORMAT_R16_UINT ? DXGI_FORMAT_R32_UINT : DXGI_FORMAT_R16_UINT;
+        }
+        list->IASetIndexBuffer(&view);
     }
 }
 
@@ -378,6 +387,25 @@ D3D12_SAMPLER_DESC Binder::sampler_desc(D3D12_FILTER filter, D3D12_TEXTURE_ADDRE
 }
 
 void Binder::srv(UINT slot, ID3D12Resource* resource, const D3D12_SHADER_RESOURCE_VIEW_DESC* desc) {
+    if (desc != nullptr && owner->under_test) {
+        D3D12_SHADER_RESOURCE_VIEW_DESC changed = *desc;
+        if (owner->broken("srv_srgb")) {
+            if (changed.Format == DXGI_FORMAT_R8G8B8A8_UNORM) {
+                changed.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+            } else if (changed.Format == DXGI_FORMAT_R8G8B8A8_UNORM_SRGB) {
+                changed.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+            }
+        }
+        if (owner->broken("srv_mips") && changed.ViewDimension == D3D12_SRV_DIMENSION_TEXTURE2D) {
+            changed.Texture2D.MostDetailedMip = 0;
+            changed.Texture2D.ResourceMinLODClamp = 0.0f;
+        }
+        if (owner->broken("srv_swizzle")) {
+            changed.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+        }
+        owner->device()->CreateShaderResourceView(resource, &changed, D3d12Tools::cpu_at(heap, slot, increment));
+        return;
+    }
     owner->device()->CreateShaderResourceView(resource, desc, D3d12Tools::cpu_at(heap, slot, increment));
 }
 
@@ -426,7 +454,28 @@ void Binder::uav_buffer(UINT slot, ID3D12Resource* resource, DXGI_FORMAT format,
 }
 
 void Binder::sampler(UINT slot, const D3D12_SAMPLER_DESC& desc) {
-    owner->device()->CreateSampler(&desc, D3d12Tools::cpu_at(sampler_heap, slot, sampler_increment));
+    D3D12_SAMPLER_DESC changed = desc;
+    if (owner->under_test) {
+        if (owner->broken("sampler_filter")) {
+            const bool point = (changed.Filter & 0x15) == 0;
+            changed.Filter = point ? D3D12_FILTER_MIN_MAG_MIP_LINEAR : D3D12_FILTER_MIN_MAG_MIP_POINT;
+            changed.MaxAnisotropy = 1;
+        }
+        if (owner->broken("sampler_address")) {
+            for (D3D12_TEXTURE_ADDRESS_MODE* mode : {&changed.AddressU, &changed.AddressV, &changed.AddressW}) {
+                *mode = *mode == D3D12_TEXTURE_ADDRESS_MODE_WRAP ? D3D12_TEXTURE_ADDRESS_MODE_CLAMP : D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+            }
+        }
+        if (owner->broken("sampler_lod")) {
+            changed.MipLODBias = 0.0f;
+            changed.MinLOD = 0.0f;
+            changed.MaxLOD = FLT_MAX;
+        }
+        if (owner->broken("sampler_border")) {
+            changed.BorderColor[0] = changed.BorderColor[1] = changed.BorderColor[2] = changed.BorderColor[3] = 0.5f;
+        }
+    }
+    owner->device()->CreateSampler(&changed, D3d12Tools::cpu_at(sampler_heap, slot, sampler_increment));
 }
 
 void Binder::bind_graphics(ID3D12GraphicsCommandList* list) const {
@@ -538,7 +587,114 @@ ID3D12PipelineState* Pso::build(std::string& error) {
         desc.GS = D3d12Tools::bytecode(gs_code);
     }
     desc.InputLayout = {elements.empty() ? nullptr : elements.data(), static_cast<UINT>(elements.size())};
+    break_state();
     return D3d12Tools::graphics_pso(kit.rig, desc, error);
+}
+
+namespace {
+D3D12_BLEND opposite_factor(D3D12_BLEND b) {
+    switch (b) {
+        case D3D12_BLEND_ONE: return D3D12_BLEND_ZERO;
+        case D3D12_BLEND_ZERO: return D3D12_BLEND_ONE;
+        case D3D12_BLEND_SRC_ALPHA: return D3D12_BLEND_INV_SRC_ALPHA;
+        case D3D12_BLEND_INV_SRC_ALPHA: return D3D12_BLEND_SRC_ALPHA;
+        case D3D12_BLEND_SRC_COLOR: return D3D12_BLEND_INV_SRC_COLOR;
+        case D3D12_BLEND_INV_SRC_COLOR: return D3D12_BLEND_SRC_COLOR;
+        case D3D12_BLEND_DEST_ALPHA: return D3D12_BLEND_INV_DEST_ALPHA;
+        case D3D12_BLEND_INV_DEST_ALPHA: return D3D12_BLEND_DEST_ALPHA;
+        case D3D12_BLEND_DEST_COLOR: return D3D12_BLEND_INV_DEST_COLOR;
+        case D3D12_BLEND_INV_DEST_COLOR: return D3D12_BLEND_DEST_COLOR;
+        default: return D3D12_BLEND_ONE;
+    }
+}
+
+D3D12_BLEND_OP opposite_op(D3D12_BLEND_OP op) {
+    switch (op) {
+        case D3D12_BLEND_OP_ADD: return D3D12_BLEND_OP_SUBTRACT;
+        case D3D12_BLEND_OP_SUBTRACT: return D3D12_BLEND_OP_ADD;
+        case D3D12_BLEND_OP_REV_SUBTRACT: return D3D12_BLEND_OP_ADD;
+        case D3D12_BLEND_OP_MIN: return D3D12_BLEND_OP_MAX;
+        default: return D3D12_BLEND_OP_MIN;
+    }
+}
+
+D3D12_COMPARISON_FUNC opposite_func(D3D12_COMPARISON_FUNC f) {
+    switch (f) {
+        case D3D12_COMPARISON_FUNC_LESS: return D3D12_COMPARISON_FUNC_GREATER;
+        case D3D12_COMPARISON_FUNC_LESS_EQUAL: return D3D12_COMPARISON_FUNC_GREATER_EQUAL;
+        case D3D12_COMPARISON_FUNC_GREATER: return D3D12_COMPARISON_FUNC_LESS;
+        case D3D12_COMPARISON_FUNC_GREATER_EQUAL: return D3D12_COMPARISON_FUNC_LESS_EQUAL;
+        case D3D12_COMPARISON_FUNC_EQUAL: return D3D12_COMPARISON_FUNC_NOT_EQUAL;
+        case D3D12_COMPARISON_FUNC_NOT_EQUAL: return D3D12_COMPARISON_FUNC_EQUAL;
+        case D3D12_COMPARISON_FUNC_NEVER: return D3D12_COMPARISON_FUNC_ALWAYS;
+        default: return D3D12_COMPARISON_FUNC_NEVER;
+    }
+}
+}  // namespace
+
+void Pso::break_state() {
+    if (!kit.under_test) {
+        return;
+    }
+    for (UINT i = 0; i < 8; ++i) {
+        D3D12_RENDER_TARGET_BLEND_DESC& rt = desc.BlendState.RenderTarget[i];
+        if (rt.BlendEnable && kit.broken("blend_factor")) {
+            std::swap(rt.SrcBlend, rt.DestBlend);
+            rt.SrcBlendAlpha = opposite_factor(rt.SrcBlendAlpha);
+        }
+        if (rt.BlendEnable && kit.broken("blend_op")) {
+            rt.BlendOp = opposite_op(rt.BlendOp);
+            rt.BlendOpAlpha = opposite_op(rt.BlendOpAlpha);
+        }
+        if (kit.broken("write_mask")) {
+            rt.RenderTargetWriteMask = rt.RenderTargetWriteMask == 0xF ? 0x7 : 0xF;
+        }
+        if (rt.LogicOpEnable && kit.broken("logic_op")) {
+            rt.LogicOp = D3D12_LOGIC_OP_COPY;
+        }
+    }
+    if (kit.broken("alpha_to_coverage")) {
+        desc.BlendState.AlphaToCoverageEnable = FALSE;
+    }
+    D3D12_DEPTH_STENCIL_DESC& ds = desc.DepthStencilState;
+    if (ds.DepthEnable && kit.broken("depth_func")) {
+        ds.DepthFunc = opposite_func(ds.DepthFunc);
+    }
+    if (ds.DepthEnable && kit.broken("depth_write")) {
+        ds.DepthWriteMask = ds.DepthWriteMask == D3D12_DEPTH_WRITE_MASK_ALL ? D3D12_DEPTH_WRITE_MASK_ZERO : D3D12_DEPTH_WRITE_MASK_ALL;
+    }
+    if (ds.StencilEnable && kit.broken("stencil_op")) {
+        for (D3D12_DEPTH_STENCILOP_DESC* face : {&ds.FrontFace, &ds.BackFace}) {
+            face->StencilFailOp = face->StencilDepthFailOp = face->StencilPassOp = D3D12_STENCIL_OP_KEEP;
+        }
+    }
+    if (ds.StencilEnable && kit.broken("stencil_func")) {
+        for (D3D12_DEPTH_STENCILOP_DESC* face : {&ds.FrontFace, &ds.BackFace}) {
+            face->StencilFunc = opposite_func(face->StencilFunc);
+        }
+    }
+    if (ds.StencilEnable && kit.broken("stencil_masks")) {
+        ds.StencilReadMask = 0xff;
+        ds.StencilWriteMask = 0xff;
+    }
+    D3D12_RASTERIZER_DESC& rs = desc.RasterizerState;
+    if (kit.broken("cull_mode")) {
+        rs.CullMode = rs.CullMode == D3D12_CULL_MODE_NONE ? D3D12_CULL_MODE_BACK : D3D12_CULL_MODE_NONE;
+    }
+    if (kit.broken("winding")) {
+        rs.FrontCounterClockwise = !rs.FrontCounterClockwise;
+    }
+    if (kit.broken("fill_mode")) {
+        rs.FillMode = rs.FillMode == D3D12_FILL_MODE_SOLID ? D3D12_FILL_MODE_WIREFRAME : D3D12_FILL_MODE_SOLID;
+    }
+    if (kit.broken("depth_bias")) {
+        rs.DepthBias = 0;
+        rs.SlopeScaledDepthBias = 0.0f;
+        rs.DepthBiasClamp = 0.0f;
+    }
+    if (kit.broken("depth_clip")) {
+        rs.DepthClipEnable = !rs.DepthClipEnable;
+    }
 }
 
 bool Canvas::open(Kit& kit, UINT w, UINT h, DXGI_FORMAT format, std::string& error, DXGI_FORMAT depth_format, UINT samples) {
@@ -596,6 +752,16 @@ bool Canvas::read_depth(Kit& kit, rr::Image& out, std::string& error) {
 
 bool Stage::open(Kit& k, std::string& error, DXGI_FORMAT fmt, DXGI_FORMAT depth, UINT size, UINT samples) {
     kit = &k;
+    if (k.broken("sample_count") && samples > 1) {
+        samples = samples > 2 ? samples / 2 : 1;
+    }
+    if (k.broken("depth_format")) {
+        if (depth == DXGI_FORMAT_D16_UNORM || depth == DXGI_FORMAT_D24_UNORM_S8_UINT) {
+            depth = depth == DXGI_FORMAT_D16_UNORM ? DXGI_FORMAT_D32_FLOAT : DXGI_FORMAT_D32_FLOAT_S8X24_UINT;
+        } else if (depth == DXGI_FORMAT_D32_FLOAT) {
+            depth = DXGI_FORMAT_D16_UNORM;
+        }
+    }
     format = fmt;
     depth_format = depth;
     sample_count = samples;

@@ -295,7 +295,7 @@ bool sample_scene(Kit& kit, ID3D12Resource* texture, const D3D12_SHADER_RESOURCE
             const float clear[4] = {0.1f, 0.12f, 0.2f, 1.0f};
             stage.canvas.begin(list, clear);
             list->SetPipelineState(state);
-            const rr::Mat4 matrix = rr::Mat4::perspective_d3d(1.0f, 1.0f, 0.5f, 40.0f) * rr::Mat4::translate(0, 0, -2.4f) * rr::Mat4::rotate_x(tilt);
+            const rr::Mat4 matrix = tilt > 500.0f ? rr::Mat4::scale(1.0f / 1.2f, 1.0f / 1.2f, 1.0f) : rr::Mat4::perspective_d3d(1.0f, 1.0f, 0.5f, 40.0f) * rr::Mat4::translate(0, 0, -2.4f) * rr::Mat4::rotate_x(tilt);
             set_cbv_root(list, matrix, p0, p1);
             if (on_sphere) {
                 set_cbv_root(list, rr::Mat4::perspective_d3d(1.0f, 1.0f, 0.5f, 40.0f) * rr::Mat4::translate(0, 0, -2.4f) * rr::Mat4::rotate_x(0.3f) * rr::Mat4::scale(1.2f, 1.2f, 1.2f), p0, p1);
@@ -332,7 +332,7 @@ bool SampleRig::frame(Kit& kit, const float p0[4], const float p1[4], float tilt
                 stage.canvas.begin_keep(list);
             }
             list->SetPipelineState(state);
-            const rr::Mat4 matrix = rr::Mat4::perspective_d3d(1.0f, 1.0f, 0.5f, 40.0f) * rr::Mat4::translate(0, 0, -2.4f) * rr::Mat4::rotate_x(tilt);
+            const rr::Mat4 matrix = tilt > 500.0f ? rr::Mat4::scale(1.0f / 1.2f, 1.0f / 1.2f, 1.0f) : rr::Mat4::perspective_d3d(1.0f, 1.0f, 0.5f, 40.0f) * rr::Mat4::translate(0, 0, -2.4f) * rr::Mat4::rotate_x(tilt);
             set_cbv_root(list, matrix, p0, p1);
             stage.plane.bind(list);
             stage.plane.draw(list);
@@ -356,22 +356,38 @@ std::string needs_format(Kit& kit, DXGI_FORMAT format, D3D12_FORMAT_SUPPORT1 sup
 namespace lsw::suites::render::d3d12 {
 
 rr::Tolerance sampler_tolerance() {
-    rr::Tolerance t = rr::Tolerance::filter(40, 0.2).with_edge(1);
-    t.min_psnr = 30.0;
-    t.outlier_max_delta = 255.0;
-    t.max_outliers = 4500;
-    t.name = "mip-lod(40,edge1,4500,psnr30)";
+    rr::Tolerance t = rr::Tolerance::filter(6, 0.004).with_edge(1);
+    t.min_psnr = 40.0;
+    t.outlier_max_delta = 40.0;
+    t.max_outliers = 80;
+    t.name = "sampler(6,edge1,80,psnr40)";
     return t;
 }
 
-rr::Tolerance loose_sampler_tolerance() { return sampler_tolerance(); }
+rr::Tolerance loose_sampler_tolerance() {
+    rr::Tolerance t = rr::Tolerance::filter(16, 0.05).with_edge(1);
+    t.min_psnr = 33.0;
+    t.outlier_max_delta = 255.0;
+    t.max_outliers = 400;
+    t.name = "noise-minified(16,edge1,400,psnr33)";
+    return t;
+}
 
-rr::Tolerance format_tolerance() { return sampler_tolerance(); }
+rr::Tolerance format_tolerance() {
+    rr::Tolerance t = rr::Tolerance::filter(4, 0.01).with_edge(1);
+    t.min_psnr = 40.0;
+    t.outlier_max_delta = 255.0;
+    t.max_outliers = 16;
+    t.name = "texel-point(4,edge1,16,psnr40)";
+    return t;
+}
 
 rr::Tolerance texel_edge_tolerance() {
-    rr::Tolerance t = sampler_tolerance();
-    t.min_psnr = 20.0;
-    t.name = "texel-edge(40,edge1,4500,psnr20)";
+    rr::Tolerance t = rr::Tolerance::filter(4, 0.02).with_edge(1);
+    t.min_psnr = 26.0;
+    t.outlier_max_delta = 255.0;
+    t.max_outliers = 200;
+    t.name = "texel-edge(4,edge1,200,psnr26)";
     return t;
 }
 

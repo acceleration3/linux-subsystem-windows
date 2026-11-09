@@ -193,7 +193,7 @@ void register_root_descriptors() {
         });
     });
     for (int order = 0; order < 2; ++order) {
-        Cases::single(rr::CaseSpec("pso", order == 0 ? "root_parameter_order_constants_last" : "root_parameter_order_table_first").tolerance(rr::Tolerance::blend(2)).tag("root"),
+        Cases::single(rr::CaseSpec("pso", order == 0 ? "root_parameter_order_constants_last" : "root_parameter_order_table_first").tolerance(rr::Tolerance::blend(2)).tag("root").audit_ok("the pair differs only in the root parameter order of one root signature; the rendered scene is the same by design"),
                       [order](Kit& kit, rr::CaptureSet& out, std::string& error) {
                           D3d12Root root;
                           if (order == 0) {

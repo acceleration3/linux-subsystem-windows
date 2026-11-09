@@ -439,6 +439,45 @@ bool draw_depth_strips(Kit& kit, DXGI_FORMAT depth_format, D3D12_COMPARISON_FUNC
     return ok && stage.finish(out, error);
 }
 
+bool draw_depth_precision(Kit& kit, DXGI_FORMAT depth_format, rr::CaptureSet& out, std::string& error) {
+    Stage stage;
+    if (!stage.open(kit, error, DXGI_FORMAT_R8G8B8A8_UNORM, depth_format)) {
+        return false;
+    }
+    Pso base = stage.pso();
+    Pso test = stage.pso();
+    test.desc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS;
+    test.desc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
+    ID3D12PipelineState* state_base = base.build(error);
+    ID3D12PipelineState* state_test = test.build(error);
+    if (state_base == nullptr || state_test == nullptr) {
+        return false;
+    }
+    const float quarter_step = 1.0f / 67108864.0f;
+    const float base_z = 13422081.0f * quarter_step;
+    const float deltas[4] = {1.0f, 6.0f, 1342.0f, -1.0f};
+    const bool ok = kit.run(
+        [&](ID3D12GraphicsCommandList* list) {
+            const float clear[4] = {0.05f, 0.05f, 0.1f, 1.0f};
+            stage.canvas.begin(list, clear);
+            for (int k = 0; k < 4; ++k) {
+                const float x = -0.75f + 0.5f * static_cast<float>(k);
+                const float blue[4] = {0.2f, 0.3f, 0.8f, 1.0f};
+                const float yellow[4] = {0.95f, 0.85f, 0.2f, 1.0f};
+                list->SetPipelineState(state_base);
+                set_cbv_root(list, rr::Mat4::translate(x, 0.0f, base_z) * rr::Mat4::scale(0.2f, 0.8f, 1.0f), blue);
+                stage.plane.bind(list);
+                stage.plane.draw(list);
+                list->SetPipelineState(state_test);
+                set_cbv_root(list, rr::Mat4::translate(x, 0.0f, base_z - deltas[k] * quarter_step) * rr::Mat4::scale(0.14f, 0.6f, 1.0f), yellow);
+                stage.plane.bind(list);
+                stage.plane.draw(list);
+            }
+        },
+        error);
+    return ok && stage.finish(out, error);
+}
+
 void register_depth() {
     for (const CompareFunc& f : kFuncs) {
         Cases::single(rr::CaseSpec("om", std::string("depth_func_") + f.name).tolerance(rr::Tolerance::blend(2)).tag("depth"),
@@ -450,8 +489,13 @@ void register_depth() {
     };
     const Format formats[] = {{"d16", DXGI_FORMAT_D16_UNORM}, {"d24s8", DXGI_FORMAT_D24_UNORM_S8_UINT}, {"d32", DXGI_FORMAT_D32_FLOAT}};
     for (const Format& format : formats) {
-        Cases::single(rr::CaseSpec("om", std::string("depth_precision_less_") + format.name).tolerance(rr::Tolerance::blend(2)).tag("depth"),
-                      [format](Kit& kit, rr::CaptureSet& out, std::string& error) { return draw_depth_strips(kit, format.value, D3D12_COMPARISON_FUNC_LESS, true, out, error); });
+        rr::CaseSpec precision_spec("om", std::string("depth_precision_less_") + format.name);
+        precision_spec.tolerance(rr::Tolerance::blend(2)).tag("depth");
+        if (std::string(format.name) != "d16") {
+            precision_spec.audit_ok("device finding: D24_UNORM_S8_UINT depth on the accel device keeps float32 precision, so the d24s8 and d32 captures are identical while the WARP oracle separates them");
+        }
+        Cases::single(precision_spec,
+                      [format](Kit& kit, rr::CaptureSet& out, std::string& error) { return draw_depth_precision(kit, format.value, out, error); });
     }
     Cases::single(rr::CaseSpec("om", "depth_clear_zero_greater").tolerance(rr::Tolerance::blend(2)).tag("depth"),
                   [](Kit& kit, rr::CaptureSet& out, std::string& error) {

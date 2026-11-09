@@ -80,21 +80,25 @@ struct BiasCase {
     INT bias;
     float slope;
     float clamp;
+    float gap;
 };
 
 void register_bias() {
-    const BiasCase cases[] = {{"constant_d32_wins", DXGI_FORMAT_D32_FLOAT, -16000, 0.0f, 0.0f},
-                              {"constant_d32_loses", DXGI_FORMAT_D32_FLOAT, -2000, 0.0f, 0.0f},
-                              {"constant_d16_wins", DXGI_FORMAT_D16_UNORM, -80, 0.0f, 0.0f},
-                              {"constant_d16_loses", DXGI_FORMAT_D16_UNORM, -8, 0.0f, 0.0f},
-                              {"constant_d24_wins", DXGI_FORMAT_D24_UNORM_S8_UINT, -16000, 0.0f, 0.0f},
-                              {"constant_d24_loses", DXGI_FORMAT_D24_UNORM_S8_UINT, -2000, 0.0f, 0.0f},
-                              {"slope_d32_large", DXGI_FORMAT_D32_FLOAT, 0, -40.0f, 0.0f},
-                              {"slope_d32_small", DXGI_FORMAT_D32_FLOAT, 0, -0.5f, 0.0f},
-                              {"clamp_limits_large_bias_d32", DXGI_FORMAT_D32_FLOAT, -16000, 0.0f, -0.00001f}};
+    const BiasCase cases[] = {{"constant_d32_wins", DXGI_FORMAT_D32_FLOAT, -16000, 0.0f, 0.0f, 3e-4f},
+                              {"constant_d32_loses", DXGI_FORMAT_D32_FLOAT, -2000, 0.0f, 0.0f, 3e-4f},
+                              {"constant_d32_loses_where_d24_wins", DXGI_FORMAT_D32_FLOAT, -16000, 0.0f, 0.0f, 7e-4f},
+                              {"constant_d16_wins", DXGI_FORMAT_D16_UNORM, -80, 0.0f, 0.0f, 5e-4f},
+                              {"constant_d16_loses", DXGI_FORMAT_D16_UNORM, -8, 0.0f, 0.0f, 5e-4f},
+                              {"constant_d24_wins", DXGI_FORMAT_D24_UNORM_S8_UINT, -16000, 0.0f, 0.0f, 7e-4f},
+                              {"constant_d24_loses", DXGI_FORMAT_D24_UNORM_S8_UINT, -2000, 0.0f, 0.0f, 3e-4f},
+                              {"slope_d32_large", DXGI_FORMAT_D32_FLOAT, 0, -40.0f, 0.0f, 0.0f},
+                              {"slope_d32_small", DXGI_FORMAT_D32_FLOAT, 0, -0.5f, 0.0f, 0.0f},
+                              {"clamp_limits_large_bias_d32", DXGI_FORMAT_D32_FLOAT, -16000, 0.0f, -0.00001f, 0.0f}};
+    int row = -1;
     for (const BiasCase& item : cases) {
+        ++row;
         Cases::single(rr::CaseSpec("rs", std::string("depth_bias_") + item.name).tolerance(rr::Tolerance::blend(2)).tag("raster"),
-                      [item](Kit& kit, rr::CaptureSet& out, std::string& error) {
+                      [item, row](Kit& kit, rr::CaptureSet& out, std::string& error) {
                           Stage stage;
                           if (!stage.open(kit, error, DXGI_FORMAT_R8G8B8A8_UNORM, item.format)) {
                               return false;
@@ -108,6 +112,26 @@ void register_bias() {
                           ID3D12PipelineState* state_biased = biased.build(error);
                           if (state_base == nullptr || state_biased == nullptr) {
                               return false;
+                          }
+                          if (item.gap > 0.0f) {
+                              const float hue = static_cast<float>(row) / 7.0f;
+                              const float lower[4] = {0.2f + 0.5f * hue, 0.4f, 0.9f - 0.6f * hue, 1};
+                              const float upper[4] = {0.95f - 0.4f * hue, 0.8f, 0.2f + 0.5f * hue, 1};
+                              const bool flat_ok = kit.run(
+                                  [&](ID3D12GraphicsCommandList* list) {
+                                      const float clear[4] = {0.05f, 0.05f, 0.1f, 1};
+                                      stage.canvas.begin(list, clear);
+                                      list->SetPipelineState(state_base);
+                                      set_cbv_root(list, rr::Mat4::translate(0.0f, 0.0f, 0.3f) * rr::Mat4::scale(0.7f, 0.7f, 1.0f), lower);
+                                      stage.plane.bind(list);
+                                      stage.plane.draw(list);
+                                      list->SetPipelineState(state_biased);
+                                      set_cbv_root(list, rr::Mat4::translate(0.0f, 0.0f, 0.3f + item.gap) * rr::Mat4::scale(0.4f, 0.4f, 1.0f), upper);
+                                      stage.plane.bind(list);
+                                      stage.plane.draw(list);
+                                  },
+                                  error);
+                              return flat_ok && stage.finish(out, error);
                           }
                           const bool ok = kit.run(
                               [&](ID3D12GraphicsCommandList* list) {

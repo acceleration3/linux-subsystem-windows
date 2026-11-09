@@ -157,7 +157,7 @@ void register_promotion() {
         if (!stage.open(kit, error, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_D32_FLOAT)) {
             return false;
         }
-        const MeshData mesh = Shapes::torus(24, 12, 0.85f, 0.3f);
+        const MeshData mesh = Shapes::torus(26, 8, 0.82f, 0.32f);
         std::vector<std::uint16_t> indices(mesh.indices.begin(), mesh.indices.end());
         const UINT64 vertex_bytes = mesh.vertices.size() * sizeof(Vertex);
         const UINT64 index_bytes = indices.size() * 2;
@@ -187,7 +187,7 @@ void register_promotion() {
                 list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
                 list->IASetVertexBuffers(0, 1, &vbv);
                 list->IASetIndexBuffer(&ibv);
-                const float color[4] = {0.9f, 0.6f, 0.2f, 1};
+                const float color[4] = {0.4f, 0.9f, 0.5f, 1};
                 set_cbv_root(list, stage.view_projection() * rr::Mat4::rotate_x(0.9f), color);
                 list->DrawIndexedInstanced(static_cast<UINT>(indices.size()), 1, 0, 0, 0);
             },

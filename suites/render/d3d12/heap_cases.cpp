@@ -116,7 +116,7 @@ void register_placed() {
         if (heap == nullptr) {
             return false;
         }
-        const MeshData mesh = Shapes::torus(24, 12, 0.85f, 0.3f);
+        const MeshData mesh = Shapes::torus(20, 14, 0.8f, 0.34f);
         std::vector<std::uint16_t> indices(mesh.indices.begin(), mesh.indices.end());
         const UINT64 vertex_bytes = mesh.vertices.size() * sizeof(Vertex);
         const UINT64 index_bytes = indices.size() * 2;
@@ -275,7 +275,7 @@ void register_placed() {
             if (!stage.open(kit, error, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_D32_FLOAT)) {
                 return false;
             }
-            const MeshData mesh = Shapes::torus(24, 12, 0.85f, 0.3f);
+            const MeshData mesh = Shapes::torus(28, 10, 0.88f, 0.26f);
             const UINT64 vertex_bytes = mesh.vertices.size() * sizeof(Vertex);
             D3D12_HEAP_PROPERTIES custom{};
             custom.Type = D3D12_HEAP_TYPE_CUSTOM;
@@ -407,7 +407,7 @@ bool fill_and_sample(Kit& kit, ID3D12Resource* texture, rr::CaptureSet& out, std
 }
 
 void register_tiled() {
-    Cases::single(rr::CaseSpec("heap", "reserved_texture_all_tiles_mapped").tolerance(rr::Tolerance::blend(2)).tag("heap"), [](Kit& kit, rr::CaptureSet& out, std::string& error) {
+    Cases::single(rr::CaseSpec("heap", "reserved_texture_all_tiles_mapped").tolerance(rr::Tolerance::blend(2)).tag("heap").audit_ok("the tile mapping path under test (UpdateTileMappings versus CopyTileMappings) must give the same sampled image by design"), [](Kit& kit, rr::CaptureSet& out, std::string& error) {
         Tiled tiled;
         return make_tiled(kit, tiled, error) && map_tiles(kit, tiled.texture, tiled.heap, 0, 2, 2, 0, error) && fill_and_sample(kit, tiled.texture, out, error, false);
     }, [](Kit& kit) { return needs_tiled(kit, D3D12_TILED_RESOURCES_TIER_1); });
@@ -415,7 +415,7 @@ void register_tiled() {
         Tiled tiled;
         return make_tiled(kit, tiled, error) && map_tiles(kit, tiled.texture, tiled.heap, 0, 1, 2, 0, error) && fill_and_sample(kit, tiled.texture, out, error, true);
     }, [](Kit& kit) { return needs_tiled(kit, D3D12_TILED_RESOURCES_TIER_2); });
-    Cases::single(rr::CaseSpec("heap", "reserved_texture_copy_tile_mappings").tolerance(rr::Tolerance::blend(2)).tag("heap"), [](Kit& kit, rr::CaptureSet& out, std::string& error) {
+    Cases::single(rr::CaseSpec("heap", "reserved_texture_copy_tile_mappings").tolerance(rr::Tolerance::blend(2)).tag("heap").audit_ok("the tile mapping path under test (UpdateTileMappings versus CopyTileMappings) must give the same sampled image by design"), [](Kit& kit, rr::CaptureSet& out, std::string& error) {
         Tiled source;
         Tiled destination;
         if (!make_tiled(kit, source, error) || !make_tiled(kit, destination, error) || !map_tiles(kit, source.texture, source.heap, 0, 2, 2, 0, error)) {
