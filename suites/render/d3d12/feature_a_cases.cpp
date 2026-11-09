@@ -1086,7 +1086,7 @@ void register_line_modes() {
                           {"quadrilateral_wide", 2, false, 3, "rasterizer desc 2 (line rasterization modes)"}, {"quadrilateral_narrow", 3, false, 4, "narrow quadrilateral lines"}};
     for (const Mode& mode : modes) {
         rr::CaseSpec spec("rs", std::string("lines_desc2_") + mode.name);
-        spec.tolerance(mode.value == 1 ? rr::Tolerance::psnr(8) : (mode.value == 2 ? rr::Tolerance::blend(4).with_outliers(0.003) : (mode.value == 3 ? rr::Tolerance::blend(4).with_edge(1).with_outliers(0.004) : rr::Tolerance::raster(4, 1)))).tag("raster");
+        spec.tolerance(mode.value == 1 ? rr::Tolerance::psnr(8) : (mode.value == 2 ? rr::Tolerance::blend(4).with_outliers(0.003) : (mode.value == 3 ? rr::Tolerance::blend(4).with_outliers(0.004) : rr::Tolerance::raster(4, 1)))).tag("raster");
         if (mode.value == 0) {
             spec.same_as({"rs.lines_aliased_list"}, "the same star of line segments through the rasterizer desc 2 stream instead of the legacy rasterizer desc; the aliased mode must give the legacy image");
         } else if (mode.value == 1) {
@@ -1134,7 +1134,7 @@ void register_line_modes() {
                 raster.fill = D3D12_FILL_MODE_SOLID;
                 raster.cull = D3D12_CULL_MODE_NONE;
                 raster.depth_clip = TRUE;
-                raster.line_mode = kit.broken("line_mode") ? (mode.value == 0 ? 2 : 0) : mode.value;
+                raster.line_mode = kit.broken("line_mode") ? (mode.value == 0 || mode.value == 3 ? 2 : 0) : mode.value;
                 stream.rasterizer = raster;
                 D3D12_RT_FORMAT_ARRAY formats{};
                 formats.NumRenderTargets = 1;

@@ -407,7 +407,9 @@ struct LineSegment {
     int x0, y0, x1, y1;
 };
 
-const LineSegment kLastPixelLines[] = {{10, 20, 100, 20}, {20, 30, 20, 118}, {30, 40, 90, 100}, {110, 10, 40, 80}};
+const LineSegment kLastPixelLines[] = {{10, 20, 100, 20}, {20, 30, 20, 118}, {30, 40, 90, 100}, {110, 10, 40, 80}, {10, 50, 70, 50}, {30, 60, 120, 60}, {10, 70, 110, 70},
+                                       {20, 80, 105, 80}, {10, 90, 80, 90}, {30, 100, 100, 100}, {40, 25, 40, 110}, {55, 25, 55, 105}, {70, 30, 70, 115}, {85, 20, 85, 100},
+                                       {100, 30, 100, 110}, {15, 115, 60, 70}, {70, 120, 120, 70}, {25, 15, 75, 65}, {80, 15, 120, 55}};
 
 void lastpixel_scene(Ctx& c, bool last_pixel) {
     c.clear(Dx::kColor(0, 0, 0, 255));
@@ -450,7 +452,14 @@ bool lastpixel_reference(bool last_pixel, rr::CaptureSet& out) {
 
 void wrap_and_lastpixel_cases() {
     for (const WrapScene& scene : kWrapScenes) {
-        Cases::single(rr::CaseSpec("rs", scene.name).tolerance(rr::Tolerance::blend(3).with_outliers(0.01)), [&scene](Ctx& c) { wrap_scene(c, scene); }, {}, nullptr,
+        rr::CaseSpec spec("rs", scene.name);
+        spec.tolerance(rr::Tolerance::blend(3).with_outliers(0.01));
+        if (scene.second_set) {
+            spec.same_as({"rs.wrap_coord_u"}, "the same quad and texture through texture coordinate set 1 with WRAP1 and TEXCOORDINDEX 1, so the wrapped image equals the set 0 row by design; a driver that ignores WRAP1 or the coordinate index changes it");
+        } else if (scene.along_u) {
+            spec.same_as({"rs.wrap_coord_set1_u"}, "the same quad and texture through texture coordinate set 0 with WRAP0, so the wrapped image equals the set 1 row by design; a driver that ignores WRAP0 changes it");
+        }
+        Cases::single(spec, [&scene](Ctx& c) { wrap_scene(c, scene); }, {}, nullptr,
                       [&scene](Kit&, unsigned, rr::CaptureSet& out, std::string&) { return wrap_reference(scene, out); });
     }
     for (int on = 0; on < 2; ++on) {
