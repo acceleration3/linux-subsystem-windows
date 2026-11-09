@@ -298,8 +298,8 @@ bool early_scene(Rig& r, Cap& out, bool early) {
     out.add("counts", std::move(counts));
     return r.shot(out, target);
 }
-const Add kEarlyZ(spec("ps", "early_depth_stencil_with_uav_writes").tolerance(rr::Tolerance::tight(1)).uniform_ok("counts"), [](Rig& r, Cap& out) { return early_scene(r, out, true); });
-const Add kLateZ(spec("ps", "late_depth_with_uav_writes_runs_hidden_fragments").tolerance(rr::Tolerance::tight(1)), [](Rig& r, Cap& out) { return early_scene(r, out, false); });
+const Add kEarlyZ(spec("ps", "early_depth_stencil_with_uav_writes").same_as({"ps.late_depth_with_uav_writes_runs_hidden_fragments"}, "the colour image of the scene is the same as late_depth_with_uav_writes_runs_hidden_fragments with and without early depth stencil by design; the UAV counts capture differs").tolerance(rr::Tolerance::tight(1)).uniform_ok("counts"), [](Rig& r, Cap& out) { return early_scene(r, out, true); });
+const Add kLateZ(spec("ps", "late_depth_with_uav_writes_runs_hidden_fragments").same_as({"ps.early_depth_stencil_with_uav_writes"}, "the colour image of the scene is the same as early_depth_stencil_with_uav_writes with and without early depth stencil by design; the UAV counts capture differs").tolerance(rr::Tolerance::tight(1)), [](Rig& r, Cap& out) { return early_scene(r, out, false); });
 
 const Add kAtomics(spec("ps", "atomics_on_structured_buffer").tolerance(rr::Tolerance::exact()), [](Rig& r, Cap& out) {
     Target target;
@@ -463,7 +463,14 @@ const DepthOutRow kDepthOut[] = {{"sv_depth", "SV_Depth", D3D11_COMPARISON_LESS}
 struct DepthOutRegistrar {
     DepthOutRegistrar() {
         for (const DepthOutRow& row : kDepthOut) {
-            Add(spec("ps", (std::string("depth_output_") + row.name).c_str()).tolerance(rr::Tolerance::blend(3).with_edge(1)), [&row](Rig& r, Cap& out) {
+            rr::CaseSpec out_spec = spec("ps", (std::string("depth_output_") + row.name).c_str()).tolerance(rr::Tolerance::blend(3).with_edge(1));
+            const auto siblings = [](const char* name) -> std::vector<std::string> {
+                if (std::string(name) == "sv_depth") return {"om.depth_func_equal", "om.depth_func_never", "om.depth_write_disabled", "ps.depth_output_sv_depth_greater_equal", "ps.depth_output_sv_depth_less_equal"};
+                if (std::string(name) == "sv_depth_greater_equal") return {"ps.depth_output_sv_depth", "ps.depth_output_sv_depth_less_equal"};
+                return {"ps.depth_output_sv_depth", "ps.depth_output_sv_depth_greater_equal"};
+            };
+            out_spec.same_as(siblings(row.name), std::string("the colour image of the ") + row.semantic + " scene is the same as the other depth output semantics and depth functions listed by design; the depth capture shows the semantic");
+            Add(std::move(out_spec), [&row](Rig& r, Cap& out) {
                 Target target;
                 Depth depth;
                 const bool greater = std::string(row.semantic) == "SV_DepthGreaterEqual";

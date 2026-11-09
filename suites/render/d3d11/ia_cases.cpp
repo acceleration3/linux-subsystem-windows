@@ -10,52 +10,53 @@ struct FormatRow {
     int used;
     char kind;
     double scale;
+    std::vector<std::string> same = {};
 };
 
 const FormatRow kFormats[] = {
-    {"r32g32b32a32_float", DXGI_FORMAT_R32G32B32A32_FLOAT, 4, 'd', 1},
-    {"r32g32b32a32_uint", DXGI_FORMAT_R32G32B32A32_UINT, 4, 'u', 100000},
-    {"r32g32b32a32_sint", DXGI_FORMAT_R32G32B32A32_SINT, 4, 'i', 1000000},
-    {"r32g32b32_float", DXGI_FORMAT_R32G32B32_FLOAT, 3, 'd', 1},
-    {"r32g32b32_uint", DXGI_FORMAT_R32G32B32_UINT, 3, 'u', 100000},
-    {"r32g32b32_sint", DXGI_FORMAT_R32G32B32_SINT, 3, 'i', 1000000},
-    {"r32g32_float", DXGI_FORMAT_R32G32_FLOAT, 2, 'd', 1},
-    {"r32g32_uint", DXGI_FORMAT_R32G32_UINT, 2, 'u', 100000},
-    {"r32g32_sint", DXGI_FORMAT_R32G32_SINT, 2, 'i', 1000000},
-    {"r16g16b16a16_float", DXGI_FORMAT_R16G16B16A16_FLOAT, 4, 'd', 1},
-    {"r16g16b16a16_unorm", DXGI_FORMAT_R16G16B16A16_UNORM, 4, 'n', 1},
-    {"r16g16b16a16_snorm", DXGI_FORMAT_R16G16B16A16_SNORM, 4, 'd', 1},
-    {"r16g16b16a16_uint", DXGI_FORMAT_R16G16B16A16_UINT, 4, 'u', 4000},
-    {"r16g16b16a16_sint", DXGI_FORMAT_R16G16B16A16_SINT, 4, 'i', 10000},
-    {"r16g16_float", DXGI_FORMAT_R16G16_FLOAT, 2, 'd', 1},
-    {"r16g16_unorm", DXGI_FORMAT_R16G16_UNORM, 2, 'n', 1},
-    {"r16g16_snorm", DXGI_FORMAT_R16G16_SNORM, 2, 'd', 1},
-    {"r16g16_uint", DXGI_FORMAT_R16G16_UINT, 2, 'u', 4000},
-    {"r16g16_sint", DXGI_FORMAT_R16G16_SINT, 2, 'i', 10000},
-    {"r10g10b10a2_unorm", DXGI_FORMAT_R10G10B10A2_UNORM, 3, 'n', 1},
-    {"r10g10b10a2_uint", DXGI_FORMAT_R10G10B10A2_UINT, 3, 'u', 1000},
+    {"r32g32b32a32_float", DXGI_FORMAT_R32G32B32A32_FLOAT, 4, 'd', 1, {"ia.format_r32g32b32a32_sint"}},
+    {"r32g32b32a32_uint", DXGI_FORMAT_R32G32B32A32_UINT, 4, 'u', 100000, {"ia.format_r32g32b32a32_float", "ia.format_r32g32b32a32_sint"}},
+    {"r32g32b32a32_sint", DXGI_FORMAT_R32G32B32A32_SINT, 4, 'i', 1000000, {"ia.format_r32g32b32a32_float", "ia.format_r32g32b32a32_uint"}},
+    {"r32g32b32_float", DXGI_FORMAT_R32G32B32_FLOAT, 3, 'd', 1, {"ia.format_r32g32b32_sint", "ia.format_r32g32b32_uint"}},
+    {"r32g32b32_uint", DXGI_FORMAT_R32G32B32_UINT, 3, 'u', 100000, {"ia.format_r32g32b32_float", "ia.format_r32g32b32_sint"}},
+    {"r32g32b32_sint", DXGI_FORMAT_R32G32B32_SINT, 3, 'i', 1000000, {"ia.format_r32g32b32_float", "ia.format_r32g32b32_uint"}},
+    {"r32g32_float", DXGI_FORMAT_R32G32_FLOAT, 2, 'd', 1, {"ia.format_r16_snorm", "ia.format_r16_uint", "ia.format_r16_unorm", "ia.format_r16g16_snorm", "ia.format_r16g16_uint", "ia.format_r16g16_unorm", "ia.format_r32_float", "ia.format_r32_sint", "ia.format_r32_uint", "ia.format_r32g32_sint", "ia.format_r32g32_uint"}},
+    {"r32g32_uint", DXGI_FORMAT_R32G32_UINT, 2, 'u', 100000, {"ia.format_r16_snorm", "ia.format_r16_uint", "ia.format_r16_unorm", "ia.format_r16g16_snorm", "ia.format_r16g16_uint", "ia.format_r16g16_unorm", "ia.format_r32_float", "ia.format_r32_sint", "ia.format_r32_uint", "ia.format_r32g32_float", "ia.format_r32g32_sint"}},
+    {"r32g32_sint", DXGI_FORMAT_R32G32_SINT, 2, 'i', 1000000, {"ia.format_r16_snorm", "ia.format_r16_uint", "ia.format_r16_unorm", "ia.format_r16g16_snorm", "ia.format_r16g16_uint", "ia.format_r16g16_unorm", "ia.format_r32_float", "ia.format_r32_sint", "ia.format_r32_uint", "ia.format_r32g32_float", "ia.format_r32g32_uint"}},
+    {"r16g16b16a16_float", DXGI_FORMAT_R16G16B16A16_FLOAT, 4, 'd', 1, {"ia.format_r16g16b16a16_sint", "ia.format_r16g16b16a16_snorm", "ia.format_r16g16b16a16_uint", "ia.format_r16g16b16a16_unorm"}},
+    {"r16g16b16a16_unorm", DXGI_FORMAT_R16G16B16A16_UNORM, 4, 'n', 1, {"ia.format_r16g16b16a16_float", "ia.format_r16g16b16a16_sint", "ia.format_r16g16b16a16_snorm", "ia.format_r16g16b16a16_uint"}},
+    {"r16g16b16a16_snorm", DXGI_FORMAT_R16G16B16A16_SNORM, 4, 'd', 1, {"ia.format_r16g16b16a16_float", "ia.format_r16g16b16a16_sint", "ia.format_r16g16b16a16_uint", "ia.format_r16g16b16a16_unorm"}},
+    {"r16g16b16a16_uint", DXGI_FORMAT_R16G16B16A16_UINT, 4, 'u', 65000, {"ia.format_r16g16b16a16_float", "ia.format_r16g16b16a16_sint", "ia.format_r16g16b16a16_snorm", "ia.format_r16g16b16a16_unorm"}},
+    {"r16g16b16a16_sint", DXGI_FORMAT_R16G16B16A16_SINT, 4, 'i', 10000, {"ia.format_r16g16b16a16_float", "ia.format_r16g16b16a16_snorm", "ia.format_r16g16b16a16_uint", "ia.format_r16g16b16a16_unorm"}},
+    {"r16g16_float", DXGI_FORMAT_R16G16_FLOAT, 2, 'd', 1, {"ia.format_r16g16_sint", "ia.format_r16g16_snorm", "ia.format_r16g16_uint", "ia.format_r16g16_unorm"}},
+    {"r16g16_unorm", DXGI_FORMAT_R16G16_UNORM, 2, 'n', 1, {"ia.format_r16_snorm", "ia.format_r16_uint", "ia.format_r16_unorm", "ia.format_r16g16_float", "ia.format_r16g16_sint", "ia.format_r16g16_snorm", "ia.format_r16g16_uint", "ia.format_r32_float", "ia.format_r32_sint", "ia.format_r32_uint", "ia.format_r32g32_float", "ia.format_r32g32_sint", "ia.format_r32g32_uint"}},
+    {"r16g16_snorm", DXGI_FORMAT_R16G16_SNORM, 2, 'd', 1, {"ia.format_r16_snorm", "ia.format_r16_uint", "ia.format_r16_unorm", "ia.format_r16g16_float", "ia.format_r16g16_sint", "ia.format_r16g16_uint", "ia.format_r16g16_unorm", "ia.format_r32_float", "ia.format_r32_sint", "ia.format_r32_uint", "ia.format_r32g32_float", "ia.format_r32g32_sint", "ia.format_r32g32_uint"}},
+    {"r16g16_uint", DXGI_FORMAT_R16G16_UINT, 2, 'u', 65000, {"ia.format_r16_snorm", "ia.format_r16_uint", "ia.format_r16_unorm", "ia.format_r16g16_float", "ia.format_r16g16_sint", "ia.format_r16g16_snorm", "ia.format_r16g16_unorm", "ia.format_r32_float", "ia.format_r32_sint", "ia.format_r32_uint", "ia.format_r32g32_float", "ia.format_r32g32_sint", "ia.format_r32g32_uint"}},
+    {"r16g16_sint", DXGI_FORMAT_R16G16_SINT, 2, 'i', 10000, {"ia.format_r16g16_float", "ia.format_r16g16_snorm", "ia.format_r16g16_uint", "ia.format_r16g16_unorm"}},
+    {"r10g10b10a2_unorm", DXGI_FORMAT_R10G10B10A2_UNORM, 3, 'n', 1, {"ia.format_r10g10b10a2_uint"}},
+    {"r10g10b10a2_uint", DXGI_FORMAT_R10G10B10A2_UINT, 3, 'u', 1000, {"ia.format_r10g10b10a2_unorm"}},
     {"r11g11b10_float", DXGI_FORMAT_R11G11B10_FLOAT, 3, 'n', 1},
-    {"r8g8b8a8_unorm", DXGI_FORMAT_R8G8B8A8_UNORM, 4, 'n', 1},
-    {"r8g8b8a8_snorm", DXGI_FORMAT_R8G8B8A8_SNORM, 4, 'd', 1},
-    {"r8g8b8a8_uint", DXGI_FORMAT_R8G8B8A8_UINT, 4, 'u', 250},
-    {"r8g8b8a8_sint", DXGI_FORMAT_R8G8B8A8_SINT, 4, 'i', 100},
-    {"b8g8r8a8_unorm", DXGI_FORMAT_B8G8R8A8_UNORM, 4, 'n', 1},
-    {"r8g8_unorm", DXGI_FORMAT_R8G8_UNORM, 2, 'n', 1},
-    {"r8g8_snorm", DXGI_FORMAT_R8G8_SNORM, 2, 'd', 1},
-    {"r8g8_uint", DXGI_FORMAT_R8G8_UINT, 2, 'u', 250},
-    {"r8g8_sint", DXGI_FORMAT_R8G8_SINT, 2, 'i', 100},
-    {"r32_float", DXGI_FORMAT_R32_FLOAT, 1, 'd', 1},
-    {"r32_uint", DXGI_FORMAT_R32_UINT, 1, 'u', 100000},
-    {"r32_sint", DXGI_FORMAT_R32_SINT, 1, 'i', 1000000},
-    {"r16_float", DXGI_FORMAT_R16_FLOAT, 1, 'd', 1},
-    {"r16_unorm", DXGI_FORMAT_R16_UNORM, 1, 'n', 1},
-    {"r16_snorm", DXGI_FORMAT_R16_SNORM, 1, 'd', 1},
-    {"r16_uint", DXGI_FORMAT_R16_UINT, 1, 'u', 4000},
-    {"r16_sint", DXGI_FORMAT_R16_SINT, 1, 'i', 10000},
-    {"r8_unorm", DXGI_FORMAT_R8_UNORM, 1, 'n', 1},
-    {"r8_snorm", DXGI_FORMAT_R8_SNORM, 1, 'd', 1},
-    {"r8_uint", DXGI_FORMAT_R8_UINT, 1, 'u', 250},
-    {"r8_sint", DXGI_FORMAT_R8_SINT, 1, 'i', 100},
+    {"r8g8b8a8_unorm", DXGI_FORMAT_R8G8B8A8_UNORM, 4, 'n', 1, {"ia.format_b8g8r8a8_unorm"}},
+    {"r8g8b8a8_snorm", DXGI_FORMAT_R8G8B8A8_SNORM, 4, 'd', 1, {"ia.format_r8g8b8a8_sint", "ia.format_r8g8b8a8_uint", "ia.format_r8g8b8a8_unorm"}},
+    {"r8g8b8a8_uint", DXGI_FORMAT_R8G8B8A8_UINT, 4, 'u', 250, {"ia.format_r8g8b8a8_sint", "ia.format_r8g8b8a8_snorm", "ia.format_r8g8b8a8_unorm"}},
+    {"r8g8b8a8_sint", DXGI_FORMAT_R8G8B8A8_SINT, 4, 'i', 100, {"ia.format_r8g8b8a8_snorm", "ia.format_r8g8b8a8_uint"}},
+    {"b8g8r8a8_unorm", DXGI_FORMAT_B8G8R8A8_UNORM, 4, 'n', 1, {"ia.format_r8g8b8a8_unorm"}},
+    {"r8g8_unorm", DXGI_FORMAT_R8G8_UNORM, 2, 'n', 1, {"ia.format_r8g8_sint", "ia.format_r8g8_snorm", "ia.format_r8g8_uint"}},
+    {"r8g8_snorm", DXGI_FORMAT_R8G8_SNORM, 2, 'd', 1, {"ia.format_r8g8_sint", "ia.format_r8g8_uint", "ia.format_r8g8_unorm"}},
+    {"r8g8_uint", DXGI_FORMAT_R8G8_UINT, 2, 'u', 250, {"ia.format_r8g8_sint", "ia.format_r8g8_snorm", "ia.format_r8g8_unorm"}},
+    {"r8g8_sint", DXGI_FORMAT_R8G8_SINT, 2, 'i', 100, {"ia.format_r8g8_snorm", "ia.format_r8g8_uint", "ia.format_r8g8_unorm"}},
+    {"r32_float", DXGI_FORMAT_R32_FLOAT, 1, 'd', 1, {"ia.format_r16_snorm", "ia.format_r16_uint", "ia.format_r16_unorm", "ia.format_r16g16_snorm", "ia.format_r16g16_uint", "ia.format_r16g16_unorm", "ia.format_r32_sint", "ia.format_r32_uint", "ia.format_r32g32_float", "ia.format_r32g32_sint", "ia.format_r32g32_uint"}},
+    {"r32_uint", DXGI_FORMAT_R32_UINT, 1, 'u', 100000, {"ia.format_r16_snorm", "ia.format_r16_uint", "ia.format_r16_unorm", "ia.format_r16g16_snorm", "ia.format_r16g16_uint", "ia.format_r16g16_unorm", "ia.format_r32_float", "ia.format_r32_sint", "ia.format_r32g32_float", "ia.format_r32g32_sint", "ia.format_r32g32_uint"}},
+    {"r32_sint", DXGI_FORMAT_R32_SINT, 1, 'i', 1000000, {"ia.format_r16_snorm", "ia.format_r16_uint", "ia.format_r16_unorm", "ia.format_r16g16_snorm", "ia.format_r16g16_uint", "ia.format_r16g16_unorm", "ia.format_r32_float", "ia.format_r32_uint", "ia.format_r32g32_float", "ia.format_r32g32_sint", "ia.format_r32g32_uint"}},
+    {"r16_float", DXGI_FORMAT_R16_FLOAT, 1, 'd', 1, {"ia.format_r16_sint", "ia.format_r16_snorm", "ia.format_r16_uint", "ia.format_r16_unorm"}},
+    {"r16_unorm", DXGI_FORMAT_R16_UNORM, 1, 'n', 1, {"ia.format_r16_float", "ia.format_r16_sint", "ia.format_r16_snorm", "ia.format_r16_uint", "ia.format_r16g16_snorm", "ia.format_r16g16_uint", "ia.format_r16g16_unorm", "ia.format_r32_float", "ia.format_r32_sint", "ia.format_r32_uint", "ia.format_r32g32_float", "ia.format_r32g32_sint", "ia.format_r32g32_uint"}},
+    {"r16_snorm", DXGI_FORMAT_R16_SNORM, 1, 'd', 1, {"ia.format_r16_float", "ia.format_r16_sint", "ia.format_r16_uint", "ia.format_r16_unorm", "ia.format_r16g16_snorm", "ia.format_r16g16_uint", "ia.format_r16g16_unorm", "ia.format_r32_float", "ia.format_r32_sint", "ia.format_r32_uint", "ia.format_r32g32_float", "ia.format_r32g32_sint", "ia.format_r32g32_uint"}},
+    {"r16_uint", DXGI_FORMAT_R16_UINT, 1, 'u', 65000, {"ia.format_r16_float", "ia.format_r16_sint", "ia.format_r16_snorm", "ia.format_r16_unorm", "ia.format_r16g16_snorm", "ia.format_r16g16_uint", "ia.format_r16g16_unorm", "ia.format_r32_float", "ia.format_r32_sint", "ia.format_r32_uint", "ia.format_r32g32_float", "ia.format_r32g32_sint", "ia.format_r32g32_uint"}},
+    {"r16_sint", DXGI_FORMAT_R16_SINT, 1, 'i', 10000, {"ia.format_r16_float", "ia.format_r16_snorm", "ia.format_r16_uint", "ia.format_r16_unorm"}},
+    {"r8_unorm", DXGI_FORMAT_R8_UNORM, 1, 'n', 1, {"ia.format_r8_sint", "ia.format_r8_snorm", "ia.format_r8_uint"}},
+    {"r8_snorm", DXGI_FORMAT_R8_SNORM, 1, 'd', 1, {"ia.format_r8_sint", "ia.format_r8_uint", "ia.format_r8_unorm"}},
+    {"r8_uint", DXGI_FORMAT_R8_UINT, 1, 'u', 250, {"ia.format_r8_sint", "ia.format_r8_snorm", "ia.format_r8_unorm"}},
+    {"r8_sint", DXGI_FORMAT_R8_SINT, 1, 'i', 100, {"ia.format_r8_snorm", "ia.format_r8_uint", "ia.format_r8_unorm"}},
 };
 
 struct FormatMf {
@@ -77,7 +78,12 @@ struct FormatMf {
         std::string decode;
         switch (row->kind) {
             case 'n': decode = "a * 2.0 - 1.0"; break;
-            case 'u': decode = "float4(a) * (2.0 / " + std::to_string(row->scale) + ") - 1.0"; break;
+            case 'u':
+                decode = "float4(a) * (2.0 / " + std::to_string(row->scale) + ") - 1.0";
+                if (row->scale == 65000 && r.broken("uint16_sign")) {
+                    decode = "float4(int4(a) - int4(a & 32768) * 2) * (2.0 / 65000.0) - 1.0";
+                }
+                break;
             case 'i': decode = "float4(a) / " + std::to_string(row->scale); break;
             default: decode = "float4(a)"; break;
         }
@@ -140,8 +146,14 @@ struct FormatRegistrar {
         for (const FormatRow& row : kFormats) {
             const FormatRow* p = &row;
             const bool animated = row.format == DXGI_FORMAT_R32G32B32A32_FLOAT || row.format == DXGI_FORMAT_R8G8B8A8_UNORM;
-            AddState<FormatMf>(spec("ia", (std::string("format_") + row.name).c_str()).frames(animated ? 4 : 1, animated ? std::vector<unsigned>{0, 3} : std::vector<unsigned>{0}).tolerance(rr::Tolerance::raster(3, 1)),
-                               [p] { return FormatMf(p); });
+            rr::CaseSpec format_spec = spec("ia", (std::string("format_") + row.name).c_str()).frames(animated ? 4 : 1, animated ? std::vector<unsigned>{0, 3} : std::vector<unsigned>{0}).tolerance(rr::Tolerance::raster(3, 1));
+            if (!row.same.empty()) {
+                std::vector<std::string> short_names;
+                for (const std::string& n : row.same) short_names.push_back(n.substr(3));
+                format_spec.same_as(row.same, std::string("fetches the same logical vertex data as ") + join_names(short_names) + " through the " + row.name +
+                                                  " format, so the images are identical by design; a swizzle, normalisation, sign or width error in this format shows against the oracle");
+            }
+            AddState<FormatMf>(std::move(format_spec), [p] { return FormatMf(p); });
         }
     }
 };
@@ -206,14 +218,14 @@ struct DrawScene {
 
 const rr::Tolerance kTri = rr::Tolerance::raster();
 
-const Add kDraw(spec("ia", "draw").tolerance(kTri), [](Rig& r, Cap& out) {
+const Add kDraw(spec("ia", "draw").same_as({"ia.draw_indexed"}, "draws the same grid mesh as draw_indexed through a different draw call, so the images are identical by design; a wrong index or vertex count shows against the oracle").tolerance(kTri), [](Rig& r, Cap& out) {
     DrawScene s;
     if (!s.make(r)) return false;
     s.prepare(r, false);
     r.ctx->Draw(s.flat_count, 0);
     return r.shot(out, s.target);
 });
-const Add kDrawIndexed(spec("ia", "draw_indexed").tolerance(kTri), [](Rig& r, Cap& out) {
+const Add kDrawIndexed(spec("ia", "draw_indexed").same_as({"ia.draw"}, "draws the same grid mesh as draw through a different draw call, so the images are identical by design; a wrong index or vertex count shows against the oracle").tolerance(kTri), [](Rig& r, Cap& out) {
     DrawScene s;
     if (!s.make(r)) return false;
     s.prepare(r, true);
@@ -234,7 +246,7 @@ const Add kDrawIndexedInstanced(spec("ia", "draw_indexed_instanced").tolerance(k
     r.ctx->DrawIndexedInstanced(s.index_count, 8, 0, 0, 0);
     return r.shot(out, s.target);
 });
-const Add kDrawInstancedIndirect(spec("ia", "draw_instanced_indirect").tolerance(kTri), [](Rig& r, Cap& out) {
+const Add kDrawInstancedIndirect(spec("ia", "draw_instanced_indirect").same_as({"ia.base_vertex_negative", "ia.base_vertex_positive"}, "the same instanced geometry as base_vertex_negative, base_vertex_positive reaches the pipeline through indirect arguments instead of a base vertex, so the images are identical by design; an ignored argument draws nothing or the wrong instances").tolerance(kTri), [](Rig& r, Cap& out) {
     DrawScene s;
     if (!s.make(r)) return false;
     const UINT args[10] = {9999, 9999, 9999, 9999, 9999, s.flat_count, 6, 0, 0, 0};
@@ -284,8 +296,8 @@ bool base_vertex(Rig& r, Cap& out, bool negative) {
     r.ctx->DrawIndexedInstanced(s.index_count, 6, 0, negative ? -30 : static_cast<INT>(pad), 0);
     return r.shot(out, s.target);
 }
-const Add kBaseNeg(spec("ia", "base_vertex_negative").tolerance(kTri), [](Rig& r, Cap& out) { return base_vertex(r, out, true); });
-const Add kBasePos(spec("ia", "base_vertex_positive").tolerance(kTri), [](Rig& r, Cap& out) { return base_vertex(r, out, false); });
+const Add kBaseNeg(spec("ia", "base_vertex_negative").same_as({"ia.base_vertex_positive", "ia.draw_instanced_indirect"}, "the same instanced geometry as base_vertex_positive, draw_instanced_indirect reaches the pipeline through a different base vertex or indirect argument, with offscreen decoys where an ignored base would read, so the images are identical by design").tolerance(kTri), [](Rig& r, Cap& out) { return base_vertex(r, out, true); });
+const Add kBasePos(spec("ia", "base_vertex_positive").same_as({"ia.base_vertex_negative", "ia.draw_instanced_indirect"}, "the same instanced geometry as base_vertex_negative, draw_instanced_indirect reaches the pipeline through a different base vertex or indirect argument, with offscreen decoys where an ignored base would read, so the images are identical by design").tolerance(kTri), [](Rig& r, Cap& out) { return base_vertex(r, out, false); });
 
 const Add kStartIndex(spec("ia", "start_index_location").tolerance(kTri), [](Rig& r, Cap& out) {
     DrawScene s;
@@ -301,11 +313,11 @@ const Add kStartIndex(spec("ia", "start_index_location").tolerance(kTri), [](Rig
 });
 
 template <class Index>
-bool restart(Rig& r, Cap& out, DXGI_FORMAT format, Index marker) {
+bool restart(Rig& r, Cap& out, DXGI_FORMAT format, Index marker, std::uint32_t first = 0) {
     Target target;
     Basic basic;
     if (!r.color(target) || !basic.make(r)) return false;
-    std::vector<Vtx> verts;
+    std::vector<Vtx> verts(first, vtx(3.0f, 3.0f, 0.0f));
     std::vector<Index> indices;
     for (int strip = 0; strip < 4; ++strip) {
         const float y = -0.75f + 0.5f * static_cast<float>(strip);
@@ -317,6 +329,11 @@ bool restart(Rig& r, Cap& out, DXGI_FORMAT format, Index marker) {
         }
         if (strip < 3) indices.push_back(marker);
     }
+    if (first != 0 && r.broken("index32_truncated")) {
+        for (Index& i : indices) {
+            if (i != marker) i = static_cast<Index>(i & 0xFFFFu);
+        }
+    }
     Com<ID3D11Buffer> vb = r.vbuf(verts);
     Com<ID3D11Buffer> ib = r.ibuf(indices);
     if (!vb || !ib) return false;
@@ -327,10 +344,10 @@ bool restart(Rig& r, Cap& out, DXGI_FORMAT format, Index marker) {
     r.ctx->DrawIndexed(static_cast<UINT>(indices.size()), 0, 0);
     return r.shot(out, target);
 }
-const Add kRestart16(spec("ia", "primitive_restart_16").tolerance(kTri),
+const Add kRestart16(spec("ia", "primitive_restart_16").same_as({"ia.primitive_restart_32"}, "the same strips as primitive_restart_32 restarted with the 16 bit marker 0xFFFF; a wrong restart value breaks the strips").tolerance(kTri),
                      [](Rig& r, Cap& out) { return restart<std::uint16_t>(r, out, DXGI_FORMAT_R16_UINT, 0xFFFF); });
-const Add kRestart32(spec("ia", "primitive_restart_32").tolerance(kTri),
-                     [](Rig& r, Cap& out) { return restart<std::uint32_t>(r, out, DXGI_FORMAT_R32_UINT, 0xFFFFFFFFu); });
+const Add kRestart32(spec("ia", "primitive_restart_32").same_as({"ia.primitive_restart_16"}, "the same strips as primitive_restart_16 restarted with the 32 bit marker, with the real vertices above 65535 and the vertex 0xFFFF in the strip; a truncated index or a restart on 0xFFFF breaks them").tolerance(kTri),
+                     [](Rig& r, Cap& out) { return restart<std::uint32_t>(r, out, DXGI_FORMAT_R32_UINT, 0xFFFFFFFFu, 65532); });
 
 const Add kRestartLines(spec("ia", "primitive_restart_line_strip").tolerance(rr::Tolerance::raster(2, 1)), [](Rig& r, Cap& out) {
     Target target;
@@ -405,8 +422,8 @@ bool streams(Rig& r, Cap& out, unsigned step_rate, unsigned instances, bool offs
 }
 const Add kStreams4(spec("ia", "streams_four_slots").tolerance(kTri), [](Rig& r, Cap& out) { return streams(r, out, 1, 6, false); });
 const Add kStepRate3(spec("ia", "instance_step_rate_3").tolerance(kTri), [](Rig& r, Cap& out) { return streams(r, out, 3, 9, false); });
-const Add kStepRate2(spec("ia", "instance_step_rate_2").tolerance(kTri), [](Rig& r, Cap& out) { return streams(r, out, 2, 8, false); });
-const Add kStreamOffsets(spec("ia", "stream_offsets_and_element_offsets").tolerance(kTri), [](Rig& r, Cap& out) { return streams(r, out, 1, 4, true); });
+const Add kStepRate2(spec("ia", "instance_step_rate_2").same_as({"ia.stream_offsets_and_element_offsets"}, "fetches the same instance positions as stream_offsets_and_element_offsets with a step rate of two instead of buffer offsets; an ignored rate reads out of bounds and draws a different fan").tolerance(kTri), [](Rig& r, Cap& out) { return streams(r, out, 2, 8, false); });
+const Add kStreamOffsets(spec("ia", "stream_offsets_and_element_offsets").same_as({"ia.instance_step_rate_2"}, "fetches the same instance positions as instance_step_rate_2 through buffer and element offsets instead of a step rate; an ignored offset reads the wrong data and draws a different fan").tolerance(kTri), [](Rig& r, Cap& out) { return streams(r, out, 1, 4, true); });
 
 const Add kStride0(spec("ia", "stream_stride_zero").tolerance(kTri), [](Rig& r, Cap& out) {
     Target target;

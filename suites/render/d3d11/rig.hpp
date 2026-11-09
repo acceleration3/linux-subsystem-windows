@@ -17,7 +17,11 @@ namespace lsw::suites::render::d3d11 {
 using Cap = rr::CaptureSet;
 using Bytes = std::vector<std::uint8_t>;
 
-void explain_sameness(rr::CaseSpec& spec);
+inline std::string join_names(const std::vector<std::string>& names) {
+    std::string out;
+    for (const std::string& n : names) out += (out.empty() ? "" : ", ") + n;
+    return out;
+}
 
 struct V2 {
     float x, y, u, v;
@@ -198,7 +202,6 @@ class AddState {
 public:
     explicit AddState(rr::CaseSpec spec, std::function<State()> make = [] { return State(); }) {
         spec.source_hash(LSW_RENDER_SOURCE_HASH);
-        explain_sameness(spec);
         rr::CaseTable<Kit>::instance().add(std::move(spec), [make = std::move(make)] { return std::unique_ptr<rr::Scene<Kit>>(new StateScene<State>(make())); });
     }
 };

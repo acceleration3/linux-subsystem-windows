@@ -56,43 +56,6 @@ D3D11_INPUT_ELEMENT_DESC elem(const char* name, DXGI_FORMAT format, UINT offset,
 
 rr::CaseSpec spec(const char* group, const char* name) { return rr::CaseSpec(group, name); }
 
-void explain_sameness(rr::CaseSpec& spec) {
-    struct Rule {
-        const char* group;
-        const char* prefix;
-        const char* reason;
-    };
-    static const Rule rules[] = {
-        {"ia", "format_", "the same logical vertex data is fetched through a different format, so identical images across formats are the correct result"},
-        {"ia", "base_vertex", "the same geometry reaches the pipeline through a different base vertex mechanism, so the images match by design"},
-        {"ia", "draw", "the same geometry is submitted through a different draw call, so the images match by design"},
-        {"ia", "stream", "the same instance layout fetched with different buffer offsets renders the same positions by design"},
-        {"ia", "instance_step", "different step rates over the same instance data can give the same set of positions"},
-        {"ia", "primitive_restart", "the same strips are restarted with a different index width"},
-        {"tex", "sample_", "the same logical texels are sampled through a different format or view, so identical images are the correct result"},
-        {"tex", "filter_anisotropic", "the anisotropic footprint is implementation-defined and the levels differ less than the device spread"},
-        {"cs", "typed_uav_load", "the same in-place computation on a different typed UAV format"},
-        {"cs", "uav_counter", "the counter result is a count and equals the number of appended elements by construction"},
-        {"om", "depth_format", "the same scene through a different depth format"},
-        {"om", "depth_write", "with writes disabled the probe pass leaves the same pixels as comparison functions that never pass on this plane pair"},
-        {"om", "depth_func", "comparison functions with the same outcome on this plane pair and frame render the same pixels"},
-        {"om", "stencil_op", "an operation that leaves a frame or a band unchanged renders it identically to its siblings"},
-        {"om", "logic_op", "the operation result after each application is uniform or periodic by definition"},
-        {"ps", "depth_output", "the same scene with a different depth output semantic; the colour image is identical by design"},
-        {"ps", "early_depth", "the same scene with and without early depth stencil, colour identical by design"},
-        {"ps", "late_depth", "the same scene with and without early depth stencil, colour identical by design"},
-        {"query", "predicated_draw", "device finding: SetPredication is ignored so all predicated variants render identically on the device"},
-        {"geom", "stream_output", "device finding: stream output writes nothing, so the device images are uniform or identical"},
-        {"geom", "tess_isoline", "device finding: the isoline segments are not produced through stream output"},
-    };
-    for (const Rule& rule : rules) {
-        if (spec.group() == rule.group && spec.name().rfind(rule.prefix, 0) == 0) {
-            spec.audit_ok(rule.reason);
-            return;
-        }
-    }
-}
-
 bool Rig::broken(const char* name) const {
     const char* list = std::getenv("LSW_D3D11_BREAK");
     return list != nullptr && kit.under_test && (std::string(",") + list + ",").find(std::string(",") + name + ",") != std::string::npos;
@@ -591,7 +554,6 @@ bool FnScene::draw(Kit& kit, rr::CaptureSet& out, std::string& error) {
 
 Add::Add(rr::CaseSpec spec, Body body, Needs needs) {
     spec.source_hash(LSW_RENDER_SOURCE_HASH);
-    explain_sameness(spec);
     rr::CaseTable<Kit>::instance().add(std::move(spec), [body = std::move(body), needs = std::move(needs)] {
         return std::unique_ptr<rr::Scene<Kit>>(new FnScene(body, needs));
     });

@@ -7,32 +7,33 @@ namespace {
 struct FormatRow {
     const char* name;
     DXGI_FORMAT format;
+    std::vector<std::string> same = {};
 };
 
 const FormatRow kFormats[] = {
     {"r32g32b32a32_float", DXGI_FORMAT_R32G32B32A32_FLOAT}, {"r32g32b32a32_uint", DXGI_FORMAT_R32G32B32A32_UINT},
-    {"r32g32b32a32_sint", DXGI_FORMAT_R32G32B32A32_SINT},   {"r32g32b32_float", DXGI_FORMAT_R32G32B32_FLOAT},
+    {"r32g32b32a32_sint", DXGI_FORMAT_R32G32B32A32_SINT, {"tex.sample_r16g16b16a16_sint"}},   {"r32g32b32_float", DXGI_FORMAT_R32G32B32_FLOAT},
     {"r16g16b16a16_float", DXGI_FORMAT_R16G16B16A16_FLOAT}, {"r16g16b16a16_unorm", DXGI_FORMAT_R16G16B16A16_UNORM},
-    {"r16g16b16a16_uint", DXGI_FORMAT_R16G16B16A16_UINT},   {"r16g16b16a16_snorm", DXGI_FORMAT_R16G16B16A16_SNORM},
-    {"r16g16b16a16_sint", DXGI_FORMAT_R16G16B16A16_SINT},   {"r32g32_float", DXGI_FORMAT_R32G32_FLOAT},
-    {"r32g32_uint", DXGI_FORMAT_R32G32_UINT},               {"r32g32_sint", DXGI_FORMAT_R32G32_SINT},
+    {"r16g16b16a16_uint", DXGI_FORMAT_R16G16B16A16_UINT, {"tex.sample_r8g8b8a8_uint"}},   {"r16g16b16a16_snorm", DXGI_FORMAT_R16G16B16A16_SNORM},
+    {"r16g16b16a16_sint", DXGI_FORMAT_R16G16B16A16_SINT, {"tex.sample_r32g32b32a32_sint"}},   {"r32g32_float", DXGI_FORMAT_R32G32_FLOAT},
+    {"r32g32_uint", DXGI_FORMAT_R32G32_UINT, {"tex.sample_r16g16_uint"}},               {"r32g32_sint", DXGI_FORMAT_R32G32_SINT, {"tex.sample_r16g16_sint"}},
     {"r10g10b10a2_unorm", DXGI_FORMAT_R10G10B10A2_UNORM},   {"r10g10b10a2_uint", DXGI_FORMAT_R10G10B10A2_UINT},
-    {"r11g11b10_float", DXGI_FORMAT_R11G11B10_FLOAT},       {"r8g8b8a8_unorm", DXGI_FORMAT_R8G8B8A8_UNORM},
-    {"r8g8b8a8_unorm_srgb", DXGI_FORMAT_R8G8B8A8_UNORM_SRGB}, {"r8g8b8a8_uint", DXGI_FORMAT_R8G8B8A8_UINT},
+    {"r11g11b10_float", DXGI_FORMAT_R11G11B10_FLOAT},       {"r8g8b8a8_unorm", DXGI_FORMAT_R8G8B8A8_UNORM, {"tex.sample_b8g8r8a8_unorm"}},
+    {"r8g8b8a8_unorm_srgb", DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, {"tex.sample_b8g8r8a8_unorm_srgb"}}, {"r8g8b8a8_uint", DXGI_FORMAT_R8G8B8A8_UINT, {"tex.sample_r16g16b16a16_uint"}},
     {"r8g8b8a8_snorm", DXGI_FORMAT_R8G8B8A8_SNORM},         {"r8g8b8a8_sint", DXGI_FORMAT_R8G8B8A8_SINT},
     {"r16g16_float", DXGI_FORMAT_R16G16_FLOAT},             {"r16g16_unorm", DXGI_FORMAT_R16G16_UNORM},
-    {"r16g16_uint", DXGI_FORMAT_R16G16_UINT},               {"r16g16_snorm", DXGI_FORMAT_R16G16_SNORM},
-    {"r16g16_sint", DXGI_FORMAT_R16G16_SINT},               {"r32_float", DXGI_FORMAT_R32_FLOAT},
-    {"r32_uint", DXGI_FORMAT_R32_UINT},                     {"r32_sint", DXGI_FORMAT_R32_SINT},
+    {"r16g16_uint", DXGI_FORMAT_R16G16_UINT, {"tex.sample_r32g32_uint"}},               {"r16g16_snorm", DXGI_FORMAT_R16G16_SNORM},
+    {"r16g16_sint", DXGI_FORMAT_R16G16_SINT, {"tex.sample_r32g32_sint"}},               {"r32_float", DXGI_FORMAT_R32_FLOAT},
+    {"r32_uint", DXGI_FORMAT_R32_UINT, {"tex.sample_r16_uint"}},                     {"r32_sint", DXGI_FORMAT_R32_SINT, {"tex.sample_r16_sint"}},
     {"r8g8_unorm", DXGI_FORMAT_R8G8_UNORM},                 {"r8g8_uint", DXGI_FORMAT_R8G8_UINT},
     {"r8g8_snorm", DXGI_FORMAT_R8G8_SNORM},                 {"r8g8_sint", DXGI_FORMAT_R8G8_SINT},
     {"r16_float", DXGI_FORMAT_R16_FLOAT},                   {"r16_unorm", DXGI_FORMAT_R16_UNORM},
-    {"r16_uint", DXGI_FORMAT_R16_UINT},                     {"r16_snorm", DXGI_FORMAT_R16_SNORM},
-    {"r16_sint", DXGI_FORMAT_R16_SINT},                     {"r8_unorm", DXGI_FORMAT_R8_UNORM},
+    {"r16_uint", DXGI_FORMAT_R16_UINT, {"tex.sample_r32_uint"}},                     {"r16_snorm", DXGI_FORMAT_R16_SNORM},
+    {"r16_sint", DXGI_FORMAT_R16_SINT, {"tex.sample_r32_sint"}},                     {"r8_unorm", DXGI_FORMAT_R8_UNORM},
     {"r8_uint", DXGI_FORMAT_R8_UINT},                       {"r8_snorm", DXGI_FORMAT_R8_SNORM},
     {"r8_sint", DXGI_FORMAT_R8_SINT},                       {"a8_unorm", DXGI_FORMAT_A8_UNORM},
     {"b5g6r5_unorm", DXGI_FORMAT_B5G6R5_UNORM},             {"b5g5r5a1_unorm", DXGI_FORMAT_B5G5R5A1_UNORM},
-    {"b8g8r8a8_unorm", DXGI_FORMAT_B8G8R8A8_UNORM},         {"b8g8r8a8_unorm_srgb", DXGI_FORMAT_B8G8R8A8_UNORM_SRGB},
+    {"b8g8r8a8_unorm", DXGI_FORMAT_B8G8R8A8_UNORM, {"tex.sample_r8g8b8a8_unorm"}},         {"b8g8r8a8_unorm_srgb", DXGI_FORMAT_B8G8R8A8_UNORM_SRGB, {"tex.sample_r8g8b8a8_unorm_srgb"}},
     {"b8g8r8x8_unorm", DXGI_FORMAT_B8G8R8X8_UNORM},         {"b4g4r4a4_unorm", DXGI_FORMAT_B4G4R4A4_UNORM},
     {"r9g9b9e5_sharedexp", DXGI_FORMAT_R9G9B9E5_SHAREDEXP},
 };
@@ -77,6 +78,72 @@ void texel_values(const FormatSpec& s, int x, int y, double v[4]) {
             v[0] = std::floor((fx * 2 - 1) * top); v[1] = std::floor((fy * 2 - 1) * top); v[2] = std::floor((x3 * 2 - 1) * top); v[3] = std::floor(top / 3);
             break;
         }
+    }
+}
+
+bool precise_format(DXGI_FORMAT f) {
+    switch (f) {
+        case DXGI_FORMAT_R16_UNORM:
+        case DXGI_FORMAT_R16G16_UNORM:
+        case DXGI_FORMAT_R16G16B16A16_UNORM:
+        case DXGI_FORMAT_R16_SNORM:
+        case DXGI_FORMAT_R16G16_SNORM:
+        case DXGI_FORMAT_R16G16B16A16_SNORM:
+        case DXGI_FORMAT_R10G10B10A2_UNORM:
+        case DXGI_FORMAT_R32_FLOAT:
+        case DXGI_FORMAT_R32G32_FLOAT:
+        case DXGI_FORMAT_R32G32B32_FLOAT:
+        case DXGI_FORMAT_R32G32B32A32_FLOAT:
+            return true;
+        default:
+            return false;
+    }
+}
+
+rr::Tolerance precise_tolerance(DXGI_FORMAT f) {
+    switch (f) {
+        case DXGI_FORMAT_R16_UNORM:
+        case DXGI_FORMAT_R16G16_UNORM:
+        case DXGI_FORMAT_R16G16B16A16_UNORM:
+            return rr::Tolerance::floats(7.6e-6f);
+        case DXGI_FORMAT_R16_SNORM:
+        case DXGI_FORMAT_R16G16_SNORM:
+        case DXGI_FORMAT_R16G16B16A16_SNORM:
+            return rr::Tolerance::floats(1.5e-5f);
+        case DXGI_FORMAT_R10G10B10A2_UNORM:
+            return rr::Tolerance::floats(4.9e-4f);
+        default:
+            return rr::Tolerance::floats(4.8e-7f);
+    }
+}
+
+void precise_values(const FormatSpec& s, int x, int y, bool degrade, double v[4]) {
+    for (int ch = 0; ch < 4; ++ch) {
+        const unsigned code = static_cast<unsigned>(x * 4099 + y * 257 + ch * 9973 + 77) & 0xFFFFu;
+        const int bits = s.field[0].bits;
+        double value = 0;
+        switch (s.kind) {
+            case FormatKind::Unorm:
+                if (bits == 10) {
+                    const unsigned c10 = static_cast<unsigned>(x * 37 + y * 91 + ch * 173 + 1) % 1024u;
+                    value = ch == 3 ? ((x + y) & 3) / 3.0 : (degrade ? (c10 >> 2) / 255.0 : c10 / 1023.0);
+                } else {
+                    value = degrade ? (code >> 8) / 255.0 : code / 65535.0;
+                }
+                break;
+            case FormatKind::Snorm: {
+                int sv = static_cast<std::int16_t>(code);
+                if (sv < -32767) sv = -32767;
+                value = degrade ? std::nearbyint(sv / 32767.0 * 127.0) / 127.0 : sv / 32767.0;
+                break;
+            }
+            default: {
+                const double raw = 1.0 + static_cast<double>(code & 0x3FFF) * (1.0 / 1048576.0);
+                value = degrade ? std::nearbyint(raw * 1024.0) / 1024.0 : raw;
+                break;
+            }
+        }
+        v[ch] = value;
     }
 }
 
@@ -136,8 +203,10 @@ struct TexFormatMf {
     Com<ID3D11PixelShader> ps;
     Com<ID3D11SamplerState> sampler;
     Com<ID3D11ShaderResourceView> view;
+    bool precise = false;
 
     explicit TexFormatMf(DXGI_FORMAT f) : format(f), spec(FormatCodec::spec(f)) {
+        precise = precise_format(f);
         if (f == DXGI_FORMAT_R9G9B9E5_SHAREDEXP) spec.bytes = 4;
     }
     std::string needs(Rig& r) { return need_format(r, format, D3D11_FORMAT_SUPPORT_TEXTURE2D | D3D11_FORMAT_SUPPORT_SHADER_LOAD, "sampling"); }
@@ -145,9 +214,9 @@ struct TexFormatMf {
         const bool e5 = format == DXGI_FORMAT_R9G9B9E5_SHAREDEXP;
         const Plan plan = plan_for(e5 ? FormatKind::Float : spec.kind, e5 ? 16 : spec.field[0].bits);
         texture = r.tex(16, 16, format, D3D11_BIND_SHADER_RESOURCE);
-        ps = r.ps(sample_ps(plan, false));
+        ps = r.ps(precise ? "Texture2D<float4> t : register(t0);\nstruct VO { float4 p : SV_Position; float2 uv : TEXCOORD0; };\nfloat4 main(VO i) : SV_Target { return t.Load(int3(i.uv * 16.0, 0)); }\n" : sample_ps(plan, false));
         sampler = r.smp(sdesc());
-        if (!texture || !ps || !sampler || !r.color(target)) return false;
+        if (!texture || !ps || !sampler || !(precise ? r.color(target, 128, 128, DXGI_FORMAT_R32G32B32A32_FLOAT) : r.color(target))) return false;
         view = r.srv(texture.get());
         return static_cast<bool>(view);
     }
@@ -164,7 +233,11 @@ struct TexFormatMf {
                     continue;
                 }
                 double v[4];
-                texel_values(spec, sx, sy, v);
+                if (precise) {
+                    precise_values(spec, sx, sy, r.broken("tex_low_precision"), v);
+                } else {
+                    texel_values(spec, sx, sy, v);
+                }
                 FormatCodec::encode(spec, v, texel);
             }
         }
@@ -185,8 +258,14 @@ struct Registrar {
         for (const FormatRow& row : kFormats) {
             const DXGI_FORMAT f = row.format;
             const bool animated = f == DXGI_FORMAT_R32G32B32A32_FLOAT || f == DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
-            auto cs = spec("tex", (std::string("sample_") + row.name).c_str()).frames(animated ? 3 : 1, animated ? std::vector<unsigned>{0, 2} : std::vector<unsigned>{0}).tolerance(rr::Tolerance::blend(3).with_outliers(0.002));
+            auto cs = spec("tex", (std::string("sample_") + row.name).c_str()).frames(animated ? 3 : 1, animated ? std::vector<unsigned>{0, 2} : std::vector<unsigned>{0}).tolerance(precise_format(f) ? precise_tolerance(f) : rr::Tolerance::blend(3).with_outliers(0.002));
             if (f == DXGI_FORMAT_B4G4R4A4_UNORM) cs.variant(1);
+            if (!row.same.empty()) {
+                std::vector<std::string> short_names;
+                for (const std::string& n : row.same) short_names.push_back(n.substr(11));
+                cs.same_as(row.same, std::string("samples the same logical texels as ") + join_names(short_names) + " through the " + row.name +
+                                         " format, so the images are identical by design; a wrong swizzle, sign or width in this format shows against the oracle");
+            }
             AddState<TexFormatMf>(std::move(cs), [f] { return TexFormatMf(f); });
         }
     }
@@ -250,15 +329,16 @@ struct DepthRow {
     DXGI_FORMAT depth;
     DXGI_FORMAT view;
     bool stencil;
+    std::vector<std::string> same = {};
 };
 
 const DepthRow kDepthViews[] = {
-    {"d32_float_as_r32_float", DXGI_FORMAT_D32_FLOAT, DXGI_FORMAT_R32_FLOAT, false},
+    {"d32_float_as_r32_float", DXGI_FORMAT_D32_FLOAT, DXGI_FORMAT_R32_FLOAT, false, {"tex.sample_depth_d24s8_depth_as_r24_unorm_x8", "tex.sample_depth_d32s8_depth_as_r32_float_x8x24"}},
     {"d16_unorm_as_r16_unorm", DXGI_FORMAT_D16_UNORM, DXGI_FORMAT_R16_UNORM, false},
-    {"d24s8_depth_as_r24_unorm_x8", DXGI_FORMAT_D24_UNORM_S8_UINT, DXGI_FORMAT_R24_UNORM_X8_TYPELESS, false},
-    {"d24s8_stencil_as_x24_g8_uint", DXGI_FORMAT_D24_UNORM_S8_UINT, DXGI_FORMAT_X24_TYPELESS_G8_UINT, true},
-    {"d32s8_depth_as_r32_float_x8x24", DXGI_FORMAT_D32_FLOAT_S8X24_UINT, DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS, false},
-    {"d32s8_stencil_as_x32_g8x24_uint", DXGI_FORMAT_D32_FLOAT_S8X24_UINT, DXGI_FORMAT_X32_TYPELESS_G8X24_UINT, true},
+    {"d24s8_depth_as_r24_unorm_x8", DXGI_FORMAT_D24_UNORM_S8_UINT, DXGI_FORMAT_R24_UNORM_X8_TYPELESS, false, {"tex.sample_depth_d32_float_as_r32_float", "tex.sample_depth_d32s8_depth_as_r32_float_x8x24"}},
+    {"d24s8_stencil_as_x24_g8_uint", DXGI_FORMAT_D24_UNORM_S8_UINT, DXGI_FORMAT_X24_TYPELESS_G8_UINT, true, {"tex.sample_depth_d32s8_stencil_as_x32_g8x24_uint"}},
+    {"d32s8_depth_as_r32_float_x8x24", DXGI_FORMAT_D32_FLOAT_S8X24_UINT, DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS, false, {"tex.sample_depth_d24s8_depth_as_r24_unorm_x8", "tex.sample_depth_d32_float_as_r32_float"}},
+    {"d32s8_stencil_as_x32_g8x24_uint", DXGI_FORMAT_D32_FLOAT_S8X24_UINT, DXGI_FORMAT_X32_TYPELESS_G8X24_UINT, true, {"tex.sample_depth_d24s8_stencil_as_x24_g8_uint"}},
 };
 
 bool run_depth_view(Rig& r, Cap& out, const DepthRow& row) {
@@ -271,7 +351,12 @@ bool run_depth_view(Rig& r, Cap& out, const DepthRow& row) {
         "struct VO { float4 p : SV_Position; float2 uv : TEXCOORD0; };\n"
         "struct PO { float d : SV_Depth; };\n"
         "PO main(VO i) { PO o; o.d = zc.x + 0.5 * i.uv.x * zc.y + 0.2 * i.uv.y; return o; }\n";
-    Com<ID3D11PixelShader> fill = r.ps(ramp);
+    const char* quantized =
+        "cbuffer Z : register(b0) { float4 zc; };\n"
+        "struct VO { float4 p : SV_Position; float2 uv : TEXCOORD0; };\n"
+        "struct PO { float d : SV_Depth; };\n"
+        "PO main(VO i) { PO o; o.d = round((zc.x + 0.5 * i.uv.x * zc.y + 0.2 * i.uv.y) * 65535.0) / 65535.0; return o; }\n";
+    Com<ID3D11PixelShader> fill = r.ps(r.broken("depth_16bit") && row.depth != DXGI_FORMAT_D16_UNORM ? quantized : ramp);
     D3D11_DEPTH_STENCIL_DESC dd = ddesc(true, D3D11_COMPARISON_ALWAYS, true);
     dd.StencilEnable = TRUE;
     dd.FrontFace = {D3D11_STENCIL_OP_REPLACE, D3D11_STENCIL_OP_REPLACE, D3D11_STENCIL_OP_REPLACE, D3D11_COMPARISON_ALWAYS};
@@ -283,9 +368,11 @@ bool run_depth_view(Rig& r, Cap& out, const DepthRow& row) {
     Plan plan;
     plan.srv_type = row.stencil ? "uint4" : "float4";
     plan.display = row.stencil ? "float4(v) / 255.0" : "v";
-    Com<ID3D11PixelShader> show = r.ps(sample_ps(plan, true, row.stencil ? "uint4" : "float4", 64));
+    Com<ID3D11PixelShader> show = r.ps(row.stencil ? sample_ps(plan, true, "uint4", 64)
+                                                   : "Texture2D<float4> t : register(t0);\nstruct VO { float4 p : SV_Position; float2 uv : TEXCOORD0; };\n"
+                                                     "float4 main(VO i) : SV_Target { float d = t.Load(int3(i.uv * 64.0, 0)).x; return float4(d, d, d, d); }\n");
     Target target;
-    if (!vs || !zb || !fill || !state || !rs || !show || !r.color(target, 64, 64)) return false;
+    if (!vs || !zb || !fill || !state || !rs || !show || !(row.stencil ? r.color(target, 64, 64) : r.color(target, 64, 64, DXGI_FORMAT_R32_FLOAT))) return false;
     D3D11_SHADER_RESOURCE_VIEW_DESC sd{};
     sd.Format = row.view;
     sd.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
@@ -333,7 +420,15 @@ bool run_depth_view(Rig& r, Cap& out, const DepthRow& row) {
 struct DepthRegistrar {
     DepthRegistrar() {
         for (const DepthRow& row : kDepthViews) {
-            Add(spec("tex", (std::string("sample_depth_") + row.name).c_str()).size(64, 64).tolerance(rr::Tolerance::blend(3)),
+            const rr::Tolerance tol = row.stencil ? rr::Tolerance::blend(3) : row.depth == DXGI_FORMAT_D16_UNORM ? rr::Tolerance::floats(1.6e-5f) : rr::Tolerance::floats(1e-7f);
+            rr::CaseSpec view_spec = spec("tex", (std::string("sample_depth_") + row.name).c_str()).size(64, 64).tolerance(tol);
+            if (!row.same.empty()) {
+                std::vector<std::string> short_names;
+                for (const std::string& n : row.same) short_names.push_back(n.substr(17));
+                view_spec.same_as(row.same, std::string("reads the same ramp as ") + join_names(short_names) + " through the " + row.name +
+                                                " view; D24 and D32 float resolve this ramp identically at the tolerance while a D16 backing shows, and the stencil views read the same 37 and 201 bands");
+            }
+            Add(std::move(view_spec),
                 [&row](Rig& r, Cap& out) { return run_depth_view(r, out, row); },
                 [&row](Rig& r) { return need_format(r, row.depth, D3D11_FORMAT_SUPPORT_DEPTH_STENCIL, "depth stencil use"); });
         }

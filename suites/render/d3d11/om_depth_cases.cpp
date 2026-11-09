@@ -14,13 +14,27 @@ const char* const kPlanePs =
     "  else { o.c = float4(0.9, 0.5 * i.uv.x, 0.2 + 0.3 * i.uv.y, 1); }\n"
     "  return o; }\n";
 
-bool depth_scene(Rig& r, Cap& out, DXGI_FORMAT format, D3D11_COMPARISON_FUNC func, bool write) {
+bool depth_scene(Rig& r, Cap& out, DXGI_FORMAT format, D3D11_COMPARISON_FUNC func, bool write, bool stencil = false) {
     Target target;
     Depth depth;
-    if (!r.color(target) || !r.depth(depth, 128, 128, format)) return false;
+    const bool shrink = r.broken("depth_16bit") && format != DXGI_FORMAT_D16_UNORM;
+    if (!r.color(target) || !r.depth(depth, 128, 128, shrink ? DXGI_FORMAT_D16_UNORM : format)) return false;
     Com<ID3D11PixelShader> ps = r.ps(kPlanePs);
-    Com<ID3D11DepthStencilState> first = r.dss(ddesc(true, D3D11_COMPARISON_LESS, true));
-    Com<ID3D11DepthStencilState> second = r.dss(ddesc(true, func, write));
+    D3D11_DEPTH_STENCIL_DESC d1 = ddesc(true, D3D11_COMPARISON_LESS, true);
+    D3D11_DEPTH_STENCIL_DESC d2 = ddesc(true, func, write);
+    if (stencil) {
+        const D3D11_DEPTH_STENCILOP_DESC op = {D3D11_STENCIL_OP_KEEP, D3D11_STENCIL_OP_KEEP, r.broken("stencil_lost") ? D3D11_STENCIL_OP_KEEP : D3D11_STENCIL_OP_REPLACE,
+                                              D3D11_COMPARISON_ALWAYS};
+        for (D3D11_DEPTH_STENCIL_DESC* d : {&d1, &d2}) {
+            d->StencilEnable = TRUE;
+            d->StencilReadMask = 0xFF;
+            d->StencilWriteMask = 0xFF;
+            d->FrontFace = op;
+            d->BackFace = op;
+        }
+    }
+    Com<ID3D11DepthStencilState> first = r.dss(d1);
+    Com<ID3D11DepthStencilState> second = r.dss(d2);
     Com<ID3D11DepthStencilState> third = r.dss(ddesc(true, D3D11_COMPARISON_LESS, false));
     const float background[4] = {0.9f, 0.9f, 0.9f, 1};
     Com<ID3D11Buffer> k = r.buf(16, D3D11_BIND_CONSTANT_BUFFER);
@@ -31,10 +45,10 @@ bool depth_scene(Rig& r, Cap& out, DXGI_FORMAT format, D3D11_COMPARISON_FUNC fun
     const float one[4] = {1, 0, 0, 0};
     const float zero[4] = {0, 0, 0, 0};
     r.ctx->UpdateSubresource(k.get(), 0, nullptr, zero, 0, 0);
-    r.ctx->OMSetDepthStencilState(first.get(), 0);
+    r.ctx->OMSetDepthStencilState(first.get(), 37);
     r.draw_fs(ps.get());
     r.ctx->UpdateSubresource(k.get(), 0, nullptr, one, 0, 0);
-    r.ctx->OMSetDepthStencilState(second.get(), 0);
+    r.ctx->OMSetDepthStencilState(second.get(), 201);
     r.draw_fs(ps.get());
     if (!write) {
         r.ctx->UpdateSubresource(k.get(), 0, nullptr, zero, 0, 0);
@@ -44,6 +58,11 @@ bool depth_scene(Rig& r, Cap& out, DXGI_FORMAT format, D3D11_COMPARISON_FUNC fun
     rr::Image depth_image;
     if (!r.shot(out, target) || !r.depth_image(depth, depth_image)) return false;
     out.add("depth", std::move(depth_image));
+    if (stencil) {
+        rr::Image stencil_image;
+        if (!r.kit.read_stencil(depth, stencil_image, r.error)) return false;
+        out.add("stencil", std::move(stencil_image));
+    }
     return true;
 }
 
@@ -52,14 +71,21 @@ struct DepthRegistrar {
         struct Fmt {
             const char* name;
             DXGI_FORMAT format;
+            bool stencil;
+            float depth_tolerance;
+            std::vector<std::string> same;
         };
-        static const Fmt formats[] = {{"d16_unorm", DXGI_FORMAT_D16_UNORM},
-                                      {"d24_unorm_s8_uint", DXGI_FORMAT_D24_UNORM_S8_UINT},
-                                      {"d32_float", DXGI_FORMAT_D32_FLOAT},
-                                      {"d32_float_s8x24_uint", DXGI_FORMAT_D32_FLOAT_S8X24_UINT}};
+        static const Fmt formats[] = {{"d16_unorm", DXGI_FORMAT_D16_UNORM, false, 7.6e-6f, {"om.depth_format_d24_unorm_s8_uint", "om.depth_format_d32_float", "om.depth_format_d32_float_s8x24_uint", "om.depth_func_less_equal"}},
+                                      {"d24_unorm_s8_uint", DXGI_FORMAT_D24_UNORM_S8_UINT, true, 2e-7f, {"om.depth_format_d16_unorm", "om.depth_format_d32_float", "om.depth_format_d32_float_s8x24_uint", "om.depth_func_less_equal"}},
+                                      {"d32_float", DXGI_FORMAT_D32_FLOAT, false, 2e-7f, {"om.depth_format_d16_unorm", "om.depth_format_d24_unorm_s8_uint", "om.depth_format_d32_float_s8x24_uint", "om.depth_func_less", "om.depth_func_less_equal"}},
+                                      {"d32_float_s8x24_uint", DXGI_FORMAT_D32_FLOAT_S8X24_UINT, true, 2e-7f, {"om.depth_format_d16_unorm", "om.depth_format_d24_unorm_s8_uint", "om.depth_format_d32_float", "om.depth_func_less", "om.depth_func_less_equal"}}};
         for (const Fmt& f : formats) {
-            Add(spec("om", (std::string("depth_format_") + f.name).c_str()).tolerance(rr::Tolerance::blend(2).with_edge(2)),
-                [&f](Rig& r, Cap& out) { return depth_scene(r, out, f.format, D3D11_COMPARISON_LESS_EQUAL, true); },
+            rr::CaseSpec format_spec = spec("om", (std::string("depth_format_") + f.name).c_str()).tolerance(rr::Tolerance::blend(2).with_edge(2)).tolerance_for("depth", rr::Tolerance::floats(f.depth_tolerance)).tolerance_for("stencil", rr::Tolerance::exact().with_outliers(0.001));
+            if (!f.same.empty()) {
+                format_spec.same_as(f.same, std::string("draws the same plane pair as ") + join_names(f.same) + " in a different depth format, so the colour image is identical by design while the depth and stencil captures carry the format; a depth format backed by fewer bits shows in those captures");
+            }
+            Add(std::move(format_spec),
+                [&f](Rig& r, Cap& out) { return depth_scene(r, out, f.format, D3D11_COMPARISON_LESS_EQUAL, true, f.stencil); },
                 [&f](Rig& r) { return need_format(r, f.format, D3D11_FORMAT_SUPPORT_DEPTH_STENCIL, "depth stencil use"); });
         }
     }

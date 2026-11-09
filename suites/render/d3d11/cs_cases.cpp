@@ -284,8 +284,35 @@ bool typed_load(Rig& r, Cap& out, DXGI_FORMAT format, const char* type) {
     return show_texture(r, out, tex.get(), D3D11_FILTER_MIN_MAG_MIP_POINT);
 }
 
-const Add kTypedLoadRgba32(spec("cs", "typed_uav_load_r32g32b32a32_float_in_place").tolerance(rr::Tolerance::blend(2)),
-                           [](Rig& r, Cap& out) { return typed_load(r, out, DXGI_FORMAT_R32G32B32A32_FLOAT, "float4"); },
+bool typed_load_float(Rig& r, Cap& out) {
+    Com<ID3D11Texture2D> tex = r.tex(64, 64, DXGI_FORMAT_R32G32B32A32_FLOAT, D3D11_BIND_UNORDERED_ACCESS);
+    const std::string clamp = r.broken("uav_unorm8") ? "saturate(round(x * 255.0) / 255.0)" : "x";
+    const std::string first_src =
+        "float4 q(float4 x) { return " + clamp + "; }\nRWTexture2D<float4> u : register(u0);\n[numthreads(8, 8, 1)] void main(uint3 id : SV_DispatchThreadID) {\n"
+        "  float k = id.x * 4099 + id.y * 257; u[id.xy] = q(float4(1.5 + k * 9.5367431640625e-7, -3.25 - (id.x ^ id.y) * 0.0625 - k * 4.76837158203125e-7, 7.0 + id.y * 0.125, 1.0 + id.x * 1.1920928955078125e-7 * 64.0)); }\n";
+    const std::string second_src =
+        "float4 q(float4 x) { return " + clamp + "; }\nRWTexture2D<float4> u : register(u0);\n[numthreads(8, 8, 1)] void main(uint3 id : SV_DispatchThreadID) {\n"
+        "  float4 v = u[id.xy]; u[id.xy] = q(float4(v.y * 1.5, v.z - 9.0, v.x * v.x, v.w + 0.0009765625)); }\n";
+    Com<ID3D11ComputeShader> first = r.cs(first_src);
+    Com<ID3D11ComputeShader> second = r.cs(second_src);
+    if (!tex || !first || !second) return false;
+    Com<ID3D11UnorderedAccessView> uav = r.uav(tex.get());
+    if (!uav) return false;
+    ID3D11UnorderedAccessView* u = uav.get();
+    r.ctx->CSSetUnorderedAccessViews(0, 1, &u, nullptr);
+    r.ctx->CSSetShader(first.get(), nullptr, 0);
+    r.ctx->Dispatch(8, 8, 1);
+    r.ctx->CSSetShader(second.get(), nullptr, 0);
+    r.ctx->Dispatch(8, 8, 1);
+    unbind_cs(r);
+    rr::Image image;
+    if (!r.read_image(tex.get(), DXGI_FORMAT_R32G32B32A32_FLOAT, 0, image)) return false;
+    out.add("rgba32", std::move(image));
+    return true;
+}
+
+const Add kTypedLoadRgba32(spec("cs", "typed_uav_load_r32g32b32a32_float_in_place").tolerance(rr::Tolerance::floats(1e-6f, 1e-6f)),
+                           [](Rig& r, Cap& out) { return typed_load_float(r, out); },
                            [](Rig& r) -> std::string {
                                D3D11_FEATURE_DATA_D3D11_OPTIONS2 o2{};
                                D3D11_FEATURE_DATA_D3D11_OPTIONS1 o1{};

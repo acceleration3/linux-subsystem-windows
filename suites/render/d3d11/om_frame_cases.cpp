@@ -174,8 +174,8 @@ struct LogicMf {
         return need_format(r, DXGI_FORMAT_R8G8B8A8_UINT, D3D11_FORMAT_SUPPORT_RENDER_TARGET, "R8G8B8A8_UINT render targets");
     }
     bool init(Rig& r) {
-        back = r.ps("struct VO { float4 p : SV_Position; float2 uv : TEXCOORD0; };\n"
-                    "uint4 main(VO i) : SV_Target { uint x = (uint)i.p.x; uint y = (uint)i.p.y; return uint4((x * 2) & 255, (y * 2) & 255, (x ^ y) & 255, 255 - ((x + y) & 127)); }\n");
+        back = r.ps("cbuffer K : register(b0) { uint4 k; };\nstruct VO { float4 p : SV_Position; float2 uv : TEXCOORD0; };\n"
+                    "uint4 main(VO i) : SV_Target { uint x = (uint)i.p.x + k.x * 16; uint y = (uint)i.p.y; return uint4((x * 2) & 255, (y * 2) & 255, (x ^ y) & 255, 255 - ((x + y) & 127)); }\n");
         front = r.ps("cbuffer K : register(b0) { uint4 k; };\nstruct VO { float4 p : SV_Position; float2 uv : TEXCOORD0; };\n"
                      "uint4 main(VO i) : SV_Target { uint x = (uint)i.p.x + k.x * 37; uint y = (uint)i.p.y; return uint4((x * 5 + y) & 255, (x + y * 3) & 255, 0xA5 ^ (x & 255), (x * y + k.x * 11) & 255); }\n");
         cb = r.buf(16, D3D11_BIND_CONSTANT_BUFFER);
@@ -194,18 +194,13 @@ struct LogicMf {
         return back && front && cb && r.ok(dev1->CreateBlendState1(&bd, state.put()), "CreateBlendState1") && r.color(target, 128, 128, DXGI_FORMAT_R8G8B8A8_UINT);
     }
     bool step(Rig& r, unsigned frame) {
-        if (frame == 0) {
-            r.bind(target);
-            r.draw_fs(back.get());
-        } else {
-            ID3D11RenderTargetView* v = target.view.get();
-            r.ctx->OMSetRenderTargets(1, &v, nullptr);
-            r.viewport(0, 0, 128, 128);
-        }
         const UINT k[4] = {frame, 0, 0, 0};
         r.ctx->UpdateSubresource(cb.get(), 0, nullptr, k, 0, 0);
         ID3D11Buffer* b = cb.get();
         r.ctx->PSSetConstantBuffers(0, 1, &b);
+        r.bind(target);
+        r.draw_fs(back.get());
+        r.viewport(0, 0, 48.0f + 24.0f * static_cast<float>(frame), 128);
         const float factor[4] = {};
         r.ctx->OMSetBlendState(state.get(), factor, 0xffffffffu);
         r.draw_fs(front.get());
@@ -224,7 +219,7 @@ struct LogicRegistrar {
     LogicRegistrar() {
         for (const LogicRow& row : kLogic) {
             const D3D11_LOGIC_OP op = row.op;
-            AddState<LogicMf>(spec("om", (std::string("logic_op_") + row.name).c_str()).variant(1).frames(3, {0, 2}).uniform_ok(), [op] { return LogicMf(op); });
+            AddState<LogicMf>(spec("om", (std::string("logic_op_") + row.name).c_str()).variant(1).frames(3, {0, 2}), [op] { return LogicMf(op); });
         }
     }
 };
@@ -295,16 +290,21 @@ struct DepthRegistrar {
         struct F {
             const char* name;
             D3D11_COMPARISON_FUNC func;
+            std::vector<std::string> same = {};
         };
-        static const F funcs[] = {{"never", D3D11_COMPARISON_NEVER},         {"less", D3D11_COMPARISON_LESS},
-                                  {"equal", D3D11_COMPARISON_EQUAL},         {"less_equal", D3D11_COMPARISON_LESS_EQUAL},
-                                  {"greater", D3D11_COMPARISON_GREATER},     {"not_equal", D3D11_COMPARISON_NOT_EQUAL},
-                                  {"greater_equal", D3D11_COMPARISON_GREATER_EQUAL}, {"always", D3D11_COMPARISON_ALWAYS}};
+        static const F funcs[] = {{"never", D3D11_COMPARISON_NEVER, {"om.depth_func_equal", "om.depth_write_disabled", "ps.depth_output_sv_depth"}},         {"less", D3D11_COMPARISON_LESS, {"om.depth_format_d32_float", "om.depth_format_d32_float_s8x24_uint", "om.depth_func_less_equal"}},
+                                  {"equal", D3D11_COMPARISON_EQUAL, {"om.depth_func_never", "om.depth_write_disabled", "ps.depth_output_sv_depth"}},         {"less_equal", D3D11_COMPARISON_LESS_EQUAL, {"om.depth_format_d16_unorm", "om.depth_format_d24_unorm_s8_uint", "om.depth_format_d32_float", "om.depth_format_d32_float_s8x24_uint", "om.depth_func_less"}},
+                                  {"greater", D3D11_COMPARISON_GREATER, {"om.depth_func_greater_equal", "om.depth_write_disabled"}},     {"not_equal", D3D11_COMPARISON_NOT_EQUAL, {"om.depth_func_always"}},
+                                  {"greater_equal", D3D11_COMPARISON_GREATER_EQUAL, {"om.depth_func_greater"}}, {"always", D3D11_COMPARISON_ALWAYS, {"om.depth_func_not_equal"}}};
         for (const F& f : funcs) {
             const D3D11_COMPARISON_FUNC func = f.func;
-            AddState<DepthMf>(spec("om", (std::string("depth_func_") + f.name).c_str()).frames(4, {1, 3}).tolerance(tie_tolerance()), [func] { return DepthMf(func, true); });
+            rr::CaseSpec func_spec = spec("om", (std::string("depth_func_") + f.name).c_str()).frames(4, {1, 3}).tolerance(tie_tolerance());
+            if (!f.same.empty()) {
+                func_spec.same_as(f.same, std::string("on this plane pair the ") + f.name + " comparison passes the same pixels as " + join_names(f.same) + " in at least one captured frame or label, and differs from each of them in another; a driver that applies a different comparison fails there");
+            }
+            AddState<DepthMf>(std::move(func_spec), [func] { return DepthMf(func, true); });
         }
-        AddState<DepthMf>(spec("om", "depth_write_disabled").frames(4, {1, 3}).tolerance(tie_tolerance()), [] { return DepthMf(D3D11_COMPARISON_GREATER, false); });
+        AddState<DepthMf>(spec("om", "depth_write_disabled").same_as({"om.depth_func_equal", "om.depth_func_greater", "om.depth_func_never", "ps.depth_output_sv_depth"}, "with depth writes disabled the probe pass leaves the same pixels as depth_func_equal, depth_func_greater, depth_func_never, depth_output_sv_depth on this plane pair in the captured frames; a driver that writes depth anyway changes the depth capture").frames(4, {1, 3}).tolerance(tie_tolerance()), [] { return DepthMf(D3D11_COMPARISON_GREATER, false); });
     }
 };
 const DepthRegistrar kDepthRegistrar;
@@ -369,16 +369,17 @@ struct StencilMf {
         c->PSSetShader(nullptr, nullptr, 0);
         ID3D11Buffer* cb = zb.get();
         c->VSSetConstantBuffers(0, 1, &cb);
-        const D3D11_RECT bands[3] = {{0, 0, 128, 42}, {0, 42, 128, 85}, {0, 85, 128, 128}};
+        const LONG shift = static_cast<LONG>(4 * frame);
+        const D3D11_RECT bands[3] = {{0, 0, 128, 36 + shift}, {0, 44 + shift, 128, 85}, {0, 85, 128, 128}};
         if (frame == 0) {
             c->ClearDepthStencilView(depth.view.get(), D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 250);
             fullscreen(r, 0.5f, {0, 0, 64, 128}, init_state.get(), 2, 1);
             fullscreen(r, 0.2f, bands[2], prefill.get(), 0, 1);
             return true;
         }
-        fullscreen(r, 0.5f, bands[0], on_pass.get(), 77, 3);
-        fullscreen(r, 0.5f, bands[1], on_fail.get(), 77, 3);
-        fullscreen(r, 0.8f, bands[2], on_zfail.get(), 77, 3);
+        fullscreen(r, 0.5f, bands[0], on_pass.get(), 77 + frame, 3);
+        fullscreen(r, 0.5f, bands[1], on_fail.get(), 77 + frame, 3);
+        fullscreen(r, 0.8f, bands[2], on_zfail.get(), 77 + frame, 3);
         return true;
     }
     bool shot(Rig& r, unsigned, Cap& out) {
@@ -393,7 +394,13 @@ struct StencilRegistrar {
     StencilRegistrar() {
         for (const StencilOpRow& row : kStencilOps) {
             const D3D11_STENCIL_OP op = row.op;
-            AddState<StencilMf>(spec("om", (std::string("stencil_op_") + row.name).c_str()).frames(4, {0, 1, 3}).uniform_ok("stencil"), [op] { return StencilMf(op); });
+            rr::CaseSpec stencil_spec = spec("om", (std::string("stencil_op_") + row.name).c_str()).frames(4, op == D3D11_STENCIL_OP_KEEP ? std::vector<unsigned>{3} : std::vector<unsigned>{1, 3}).uniform_ok("stencil");
+            if (op == D3D11_STENCIL_OP_INCR) {
+                stencil_spec.same_as({"om.stencil_op_incr_sat"}, "INCR and INCR_SAT start at 250 and differ only after the value wraps past 255, so the first captured frame is identical by design; a wrong increment shows in both frames");
+            } else if (op == D3D11_STENCIL_OP_INCR_SAT) {
+                stencil_spec.same_as({"om.stencil_op_incr"}, "INCR_SAT and INCR start at 250 and differ only after the value wraps past 255, so the first captured frame is identical by design; a wrong increment shows in both frames");
+            }
+            AddState<StencilMf>(std::move(stencil_spec), [op] { return StencilMf(op); });
         }
     }
 };

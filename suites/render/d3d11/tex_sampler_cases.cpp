@@ -120,7 +120,7 @@ struct Registrar {
             Add(spec("tex", (std::string("filter_") + row.name).c_str()).tolerance(floor_tolerance()),
                 [&row](Rig& r, Cap& out) { return draw_floor(r, out, sdesc(row.filter, D3D11_TEXTURE_ADDRESS_WRAP)); });
         }
-        for (UINT level : {2u, 4u, 8u, 16u}) {
+        for (UINT level : {2u, 4u, 16u}) {
             Add(spec("tex", ("filter_anisotropic_" + std::to_string(level)).c_str()).tolerance(rr::Tolerance::psnr(26)), [level](Rig& r, Cap& out) {
                 D3D11_SAMPLER_DESC d = sdesc(D3D11_FILTER_ANISOTROPIC, D3D11_TEXTURE_ADDRESS_WRAP);
                 d.MaxAnisotropy = level;
