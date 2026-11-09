@@ -1,6 +1,6 @@
 #include "support/gl_rig.hpp"
 
-#include "core/text.hpp"
+#include "support/gl_identity.hpp"
 #include "support/target_adapter.hpp"
 
 #include <algorithm>
@@ -19,14 +19,6 @@ std::string trimmed(std::string text) {
         ++start;
     }
     return text.substr(start);
-}
-
-bool names_adapter(const std::string& renderer, const std::string& adapter) {
-    const std::string upper_renderer = Text::upper(renderer);
-    const std::string upper_adapter = Text::upper(trimmed(adapter));
-    return !upper_renderer.empty() && !upper_adapter.empty() &&
-           (upper_renderer.find(upper_adapter) != std::string::npos ||
-            upper_adapter.find(upper_renderer) != std::string::npos);
 }
 
 }  // namespace
@@ -101,11 +93,14 @@ bool GlRig::make_current(std::string& error) {
         identity_note = "identity not enforced (LSW_SUITES_DEV_ANY)";
         return true;
     }
-    if (!names_adapter(renderer, adapter.name)) {
-        error = "the OpenGL ICD that loaded for the window on " + adapter.name + " is not the adapter's: GL_VENDOR '" +
+    std::string how;
+    const std::string uuid = GlIdentity::device_uuid([](const char* name) { return GlLibrary::instance().resolve(name); }, [this] { return gl.drain_errors(); });
+    if (!GlIdentity::matches(adapter, uuid, renderer, how)) {
+        error = "the OpenGL ICD that loaded for the window on " + adapter.name + " is not the adapter's (" + how + "): GL_VENDOR '" +
                 vendor + "', GL_RENDERER '" + renderer + "', GL_VERSION '" + version + "'";
         return false;
     }
+    identity_note = how;
     return true;
 }
 

@@ -1,5 +1,6 @@
 #include "support/cl_rig.hpp"
 
+#include "support/gl_identity.hpp"
 #include "support/target_adapter.hpp"
 
 #include <algorithm>
@@ -31,14 +32,6 @@ struct Candidate {
     LUID luid{};
     bool claimed = false;
 };
-
-bool lower_contains(const std::string& haystack, const std::string& needle) {
-    auto lower = [](std::string text) {
-        std::transform(text.begin(), text.end(), text.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        return text;
-    };
-    return !needle.empty() && lower(haystack).find(lower(needle)) != std::string::npos;
-}
 
 }  // namespace
 
@@ -131,7 +124,7 @@ bool ClRig::list_devices(ClApi& api, ClDeviceList& out, std::string& error) {
         for (const AvAdapter& adapter : adapters) {
             for (Candidate& candidate : candidates) {
                 if (!candidate.claimed && candidate.vendor_id == adapter.vendor &&
-                    (lower_contains(candidate.name, adapter.name) || lower_contains(adapter.name, candidate.name))) {
+                    GlIdentity::names_match(candidate.name, adapter.name)) {
                     candidate.claimed = true;
                     out.refs.push_back({candidate.platform, candidate.device, candidate.name, adapter, false});
                     break;

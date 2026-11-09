@@ -1,6 +1,7 @@
 #include "sanity/enumeration/identity_checks.hpp"
 
 #include "core/text.hpp"
+#include "support/gl_identity.hpp"
 #include "support/av_adapters.hpp"
 #include "support/display_devices.hpp"
 #include "support/kmt_api.hpp"
@@ -209,12 +210,16 @@ Outcome IdentityChecks::gl_renderer_matches(Context& context) {
             ++tested;
             const std::string renderer = gl.renderer();
             context.measure(output.device_name + ".renderer", renderer);
-            const std::string upper_renderer = Text::upper(renderer);
-            const std::string upper_name = Text::upper(trim(adapter.name));
-            if (renderer.empty() || (upper_renderer.find(upper_name) == std::string::npos &&
-                                     upper_name.find(upper_renderer) == std::string::npos)) {
-                problems.add(output.device_name + ": GL_RENDERER '" + renderer + "' does not name DXGI adapter '" +
-                             adapter.name + "'");
+            const std::string uuid = GlIdentity::device_uuid([&](const char* name) { return gl.proc(name); },
+                                                             [&] {
+                                                                 using GetError = unsigned(__stdcall*)();
+                                                                 auto* const get_error = reinterpret_cast<GetError>(gl.export_symbol("glGetError"));
+                                                                 return get_error != nullptr ? get_error() : 0u;
+                                                             });
+            std::string how;
+            context.measure(output.device_name + ".gl_uuid", uuid);
+            if (renderer.empty() || !GlIdentity::matches(adapter, uuid, renderer, how)) {
+                problems.add(output.device_name + ": GL_RENDERER '" + renderer + "' is not DXGI adapter '" + adapter.name + "' (" + how + ")");
             }
         }
     }

@@ -38,6 +38,7 @@ add_library(suite_support OBJECT
     gl_api.cpp
     gl_context.cpp
     gl_fetch.cpp
+    gl_identity.cpp
     gl_library.cpp
     gl_program.cpp
     gl_rig.cpp
