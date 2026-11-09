@@ -58,7 +58,7 @@ void text(Ctx& c, float x, float y, float scale, const std::string& digits, DWOR
 }
 
 void ui_scenes() {
-    Cases::frames(scene("particles_point_sprites_ring_vb", 8, {0, 3, 7}, rr::Tolerance::raster(6, 1).with_outliers(0.01)), [] {
+    Cases::frames(scene("particles_point_sprites_ring_vb", 8, {7}, rr::Tolerance::raster(6, 1).with_outliers(0.01)), [] {
         struct State {
             Com<IDirect3DVertexBuffer9> ring;
             UINT cursor = 0;

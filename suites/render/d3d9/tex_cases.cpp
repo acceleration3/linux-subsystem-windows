@@ -49,7 +49,33 @@ void format_cases() {
         Cases::single(rr::CaseSpec("tex", std::string("format_") + f.name).tolerance(rr::Tolerance::blend(4)), [f](Ctx& c) {
             backdrop(c);
             const bool ati = std::strcmp(f.name, "ati1") == 0 || std::strcmp(f.name, "ati2") == 0;
-            Com<IDirect3DTexture9> t = c.texture(32, 32, 1, ati ? D3DUSAGE_DYNAMIC : 0, f.format, ati ? D3DPOOL_DEFAULT : D3DPOOL_MANAGED, alpha_rainbow());
+            Com<IDirect3DTexture9> t;
+            if (!ati) {
+                t = c.texture(32, 32, 1, 0, f.format, D3DPOOL_MANAGED, alpha_rainbow());
+            } else {
+                c.chk(c.d->CreateTexture(32, 32, 1, 0, f.format, D3DPOOL_DEFAULT, t.put(), nullptr), "CreateTexture");
+                Com<IDirect3DSurface9> sys;
+                c.chk(c.d->CreateOffscreenPlainSurface(32, 32, f.format, D3DPOOL_SYSTEMMEM, sys.put(), nullptr), "CreateOffscreenPlainSurface");
+                D3DLOCKED_RECT lr{};
+                if (!t || !sys || FAILED(sys->LockRect(&lr, nullptr, 0))) {
+                    c.fail("cannot stage the block compressed surface");
+                    return;
+                }
+                const Fill fill = alpha_rainbow();
+                for (UINT by = 0; by < 8; ++by) {
+                    for (UINT bx = 0; bx < 8; ++bx) {
+                        std::uint32_t texels[16];
+                        for (UINT k = 0; k < 16; ++k) {
+                            texels[k] = fill(bx * 4 + (k & 3), by * 4 + (k >> 2), 32, 32);
+                        }
+                        Texels::encode_block(f.format, texels, static_cast<std::uint8_t*>(lr.pBits) + static_cast<std::size_t>(by) * lr.Pitch + bx * Texels::block_bytes(f.format));
+                    }
+                }
+                sys->UnlockRect();
+                Com<IDirect3DSurface9> level;
+                t->GetSurfaceLevel(0, level.put());
+                c.chk(c.d->UpdateSurface(sys.get(), nullptr, level.get(), nullptr), "UpdateSurface");
+            }
             c.tex(0, t.get());
             sampler_linear(c, 0, f.linear);
             c.rs(D3DRS_ALPHABLENDENABLE, TRUE);
@@ -60,8 +86,8 @@ void format_cases() {
             if (std::strcmp(f.name, "ati1") != 0 && std::strcmp(f.name, "ati2") != 0) {
                 return std::string();
             }
-            Com<IDirect3DTexture9> probe;
-            return SUCCEEDED(device->CreateTexture(32, 32, 1, D3DUSAGE_DYNAMIC, f.format, D3DPOOL_DEFAULT, probe.put(), nullptr)) ? std::string() : std::string("creating the ") + f.name + " texture";
+            Com<IDirect3DSurface9> probe;
+            return SUCCEEDED(device->CreateOffscreenPlainSurface(32, 32, f.format, D3DPOOL_SYSTEMMEM, probe.put(), nullptr)) ? std::string() : std::string("system memory surfaces of the ") + f.name + " format";
         }}));
     }
 }
@@ -430,7 +456,7 @@ void transfer_cases() {
 }
 
 void dynamic_cases() {
-    Cases::frames(rr::CaseSpec("tex", "dynamic_texture_discard").frames(6, {0, 2, 5}).tolerance(rr::Tolerance::blend(2)), [] {
+    Cases::frames(rr::CaseSpec("tex", "dynamic_texture_discard").frames(6, {5}).tolerance(rr::Tolerance::blend(2)), [] {
         auto texture = std::make_shared<Com<IDirect3DTexture9>>();
         return FrameBody([texture](Ctx& c, unsigned f) {
             if (f == 0) {

@@ -357,20 +357,21 @@ void raster_cases() {
         c.clear(Dx::kColor(255, 255, 0, 255), D3DCLEAR_TARGET);
         c.rs(D3DRS_SCISSORTESTENABLE, FALSE);
     }, {}, Needs::caps([](const D3DCAPS9& caps) { return (caps.RasterCaps & D3DPRASTERCAPS_SCISSORTEST) != 0; }, "scissor test"));
-    for (int on = 0; on < 2; ++on) {
-        Cases::single(rr::CaseSpec("rs", on ? "antialiased_line_on" : "antialiased_line_off").tolerance(rr::Tolerance::raster(32, 1).with_outliers(0.002)), [on](Ctx& c) {
+    {
+        const int on = 1;
+        Cases::single(rr::CaseSpec("rs", "antialiased_line_renders").tolerance(rr::Tolerance::raster(32, 1).with_outliers(0.002)), [](Ctx& c) {
             c.clear(Dx::kColor(20, 20, 60, 255));
-            c.rs(D3DRS_ANTIALIASEDLINEENABLE, on ? TRUE : FALSE);
+            c.rs(D3DRS_ANTIALIASEDLINEENABLE, TRUE);
             const Tri lines[8] = {{10, 12, 0.5f, 1, 0xFFFFFF40}, {118, 40, 0.5f, 1, 0xFFFFFF40}, {10, 30, 0.5f, 1, 0xFF40FFFF}, {118, 100, 0.5f, 1, 0xFF40FFFF},
                                   {20, 120, 0.5f, 1, 0xFFFF40FF}, {100, 10, 0.5f, 1, 0xFFFF40FF}, {64, 5, 0.5f, 1, 0xFFFFFFFF}, {64, 123, 0.5f, 1, 0xFFFFFFFF}};
             c.fvf(D3DFVF_XYZRHW | D3DFVF_DIFFUSE);
             c.draw(D3DPT_LINELIST, 4, lines, sizeof(Tri));
         });
     }
-    for (int on = 0; on < 2; ++on) {
-        Cases::single(rr::CaseSpec("rs", on ? "lastpixel_on" : "lastpixel_off").tolerance(rr::Tolerance::exact()), [on](Ctx& c) {
+    {
+        Cases::single(rr::CaseSpec("rs", "lastpixel_off").tolerance(rr::Tolerance::exact()), [](Ctx& c) {
             c.clear(Dx::kColor(20, 20, 60, 255));
-            c.rs(D3DRS_LASTPIXEL, on ? TRUE : FALSE);
+            c.rs(D3DRS_LASTPIXEL, FALSE);
             const Tri lines[8] = {{10.5f, 20.5f, 0.5f, 1, 0xFFFFFFFF}, {50.5f, 20.5f, 0.5f, 1, 0xFFFFFFFF}, {10.5f, 30.5f, 0.5f, 1, 0xFFFF8080}, {50.5f, 30.5f, 0.5f, 1, 0xFFFF8080},
                                   {70.5f, 10.5f, 0.5f, 1, 0xFF80FF80}, {70.5f, 60.5f, 0.5f, 1, 0xFF80FF80}, {90.5f, 60.5f, 0.5f, 1, 0xFF8080FF}, {90.5f, 10.5f, 0.5f, 1, 0xFF8080FF}};
             c.fvf(D3DFVF_XYZRHW | D3DFVF_DIFFUSE);

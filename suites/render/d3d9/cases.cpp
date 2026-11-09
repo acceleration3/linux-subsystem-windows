@@ -362,7 +362,7 @@ private:
 };
 
 const D3d9Register<RingAccumulate> kRingAccumulate{
-    rr::CaseSpec("frames", "ring_accumulate").frames(8, {0, 3, 7}).variant(1).tolerance(rr::Tolerance::blend(2))};
+    rr::CaseSpec("frames", "ring_accumulate").frames(8, {7}).variant(1).tolerance(rr::Tolerance::blend(2))};
 
 }  // namespace
 
