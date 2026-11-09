@@ -23,6 +23,7 @@ struct Options {
     std::string run_one;
     std::string skip_apis;
     std::filesystem::path refs;
+    bool dump_captures = false;
 
     [[nodiscard]] static std::optional<Options> parse(int argc, char** argv, std::string& error);
 

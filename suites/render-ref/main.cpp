@@ -1,3 +1,4 @@
+#include "render/common/capture_dump.hpp"
 #include "render/common/case.hpp"
 #include "render/common/judge_selftest.hpp"
 #include "render/common/png.hpp"
@@ -268,8 +269,17 @@ int run_one(const Options& options, const CaseRef& ref) {
         std::fprintf(stderr, "%s\n", result.reason.c_str());
         return kExitFail;
     }
+    std::vector<CaptureRecord> records;
     for (const auto& [frame, set] : result.frames) {
         for (const auto& [label, image] : set.items()) {
+            if (options.png) {
+                CaptureRecord record;
+                record.frame = frame;
+                record.label = label;
+                record.actual = &image;
+                record.tolerance = ref.spec->resolve(label, image.kind());
+                records.push_back(record);
+            }
             if (!store.write_frame(ref.id, frame, label, image, error)) {
                 std::fprintf(stderr, "%s\n", error.c_str());
                 return kExitFail;
@@ -279,6 +289,9 @@ int run_one(const Options& options, const CaseRef& ref) {
                 static_cast<void>(Png::write(options.out + "/" + ref.id + "/" + name.substr(0, name.size() - 5) + ".png", image));
             }
         }
+    }
+    if (options.png) {
+        static_cast<void>(CaptureDump::write(std::filesystem::path(options.out) / ref.id, ref.id, *ref.spec, records, "host", "ref", false));
     }
     if (!store.write_recipe(ref.id, ref.spec->recipe(), error)) {
         std::fprintf(stderr, "%s\n", error.c_str());

@@ -24,7 +24,8 @@ bool positive(const std::string& text, int& out) {
 std::string Options::usage() {
     return "usage: lsw-suites [--list] [--suite NAME[,NAME]] [--filter GLOB[,-GLOB]] [--exclude-file PATH]\n"
            "                  [--tag TAG] [--phase all|main|pacing] [--jobs N] [--timeout S] [--repeat N] [--shuffle SEED]\n"
-           "                  [--json FILE] [--artifacts DIR] [--skip-apis API[,API]] [--refs DIR]\n";
+           "                  [--json FILE] [--artifacts DIR] [--skip-apis API[,API]] [--refs DIR]\n"
+           "                  [--dump-captures]\n";
 }
 
 std::optional<Options> Options::parse(int argc, char** argv, std::string& error) {
@@ -37,6 +38,10 @@ std::optional<Options> Options::parse(int argc, char** argv, std::string& error)
         }
         if (arg == "--help" || arg == "-h") {
             options.help = true;
+            continue;
+        }
+        if (arg == "--dump-captures") {
+            options.dump_captures = true;
             continue;
         }
         if (i + 1 >= argc) {

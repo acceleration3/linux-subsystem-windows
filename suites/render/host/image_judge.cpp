@@ -14,13 +14,17 @@ std::string ImageJudge::label(unsigned frame, const std::string& capture) {
 }
 
 void ImageJudge::compare(Context& context, Problems& problems, const std::string& name, const rr::Image& expected,
-                         const rr::Image& actual, const rr::Tolerance& tolerance, bool uniform_ok) {
+                         const rr::Image& actual, const rr::Tolerance& tolerance, bool uniform_ok,
+                         std::vector<rr::CaptureRecord>* records) {
     bool uniform = !expected.empty() && !uniform_ok;
     const std::size_t pixel = rr::PixelInfo::bytes(expected.kind());
     for (std::size_t i = pixel; uniform && i < expected.bytes().size(); ++i) {
         uniform = expected.bytes()[i] == expected.bytes()[i % pixel];
     }
     if (uniform) {
+        if (records != nullptr) {
+            records->back().tolerance = tolerance;
+        }
         problems.add(name + ": the reference image is a single value, so the scene drew nothing");
         return;
     }
@@ -30,6 +34,11 @@ void ImageJudge::compare(Context& context, Problems& problems, const std::string
     context.measure("bad_pixels." + name, static_cast<double>(result.bad));
     context.measure("max_delta." + name, result.max_delta);
     context.measure("forgiven." + name, static_cast<double>(result.forgiven));
+    if (records != nullptr) {
+        records->back().tolerance = tolerance;
+        records->back().judged = true;
+        records->back().result = result;
+    }
     if (result.pass) {
         return;
     }
@@ -51,7 +60,9 @@ void ImageJudge::compare(Context& context, Problems& problems, const std::string
 }
 
 void ImageJudge::compare_frames(Context& context, Problems& problems, const rr::CaseSpec& spec, const rr::FrameCaptures& expected,
-                                const rr::FrameCaptures& actual) {
+                                const rr::FrameCaptures& actual, bool oracle) {
+    const bool dump = rr::CaptureDump::enabled();
+    std::vector<rr::CaptureRecord> records;
     std::set<unsigned> frames;
     for (const auto& entry : expected) {
         frames.insert(entry.first);
@@ -91,7 +102,22 @@ void ImageJudge::compare_frames(Context& context, Problems& problems, const rr::
                 problems.add(name + ": captured by the " + (reference == nullptr ? "scene only" : "reference only"));
                 continue;
             }
-            compare(context, problems, name, *reference, *image, spec.resolve(capture, reference->kind()), spec.uniform_allowed(capture));
+            if (dump) {
+                rr::CaptureRecord record;
+                record.frame = frame;
+                record.label = capture;
+                record.actual = image;
+                record.oracle = oracle ? reference : nullptr;
+                records.push_back(record);
+            }
+            compare(context, problems, name, *reference, *image, spec.resolve(capture, reference->kind()), spec.uniform_allowed(capture),
+                    dump ? &records : nullptr);
+        }
+    }
+    if (dump) {
+        for (const std::filesystem::path& path :
+             rr::CaptureDump::write(context.artifacts_dir(), context.id(), spec, records, "guest", problems.empty() ? "pass" : "fail", true)) {
+            context.artifact(path);
         }
     }
 }

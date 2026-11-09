@@ -1408,5 +1408,10 @@ suites/render-ref/        lsw-render-ref, the Linux tool that renders the Vulkan
 - Run: `lsw-suites64.exe --suite render --jobs 2 --refs C:\av\gputest\render-refs --json r.json --artifacts art`. A
   failing frame writes `<frame>.expected.png`, `.actual.png` and `.diff.png`; `psnr`, `bad_pixels` and `max_delta`
   are recorded for every frame.
+- Audit: `--dump-captures` (worker env `LSW_RENDER_DUMP=1`) makes every render check write `<frame>_<label>.actual.png`,
+  `.oracle.png` (WARP and D3D9On12 checks) and `captures.json` (hashes, pixel statistics, tolerance, judge measures);
+  `lsw-render-ref --png` writes the same `captures.json` for the host references. `scripts/render-audit.py --guest
+  ARTIFACTS [--host REFS] [--json r.json] [--out report.md]` flags uniform captures, indistinguishable checks, static
+  multi-frame checks, trivial clear-colour matches and loose tolerances.
 - Caps: a case that needs an optional feature reports it through `unsupported`. A host reference skipped for a missing
   feature leaves `skip.txt`; the guest skips only if it lacks the feature too, and fails if the two disagree.

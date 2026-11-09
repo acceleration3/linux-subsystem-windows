@@ -55,7 +55,7 @@ public:
             return Outcome::fail(actual.reason);
         }
         Problems problems;
-        ImageJudge::compare_frames(context, problems, entry.spec, expected.frames, actual.frames);
+        ImageJudge::compare_frames(context, problems, entry.spec, expected.frames, actual.frames, true);
         return problems.outcome();
     }
 };
