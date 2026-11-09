@@ -25,7 +25,7 @@ std::string Options::usage() {
     return "usage: lsw-suites [--list] [--suite NAME[,NAME]] [--filter GLOB[,-GLOB]] [--exclude-file PATH]\n"
            "                  [--tag TAG] [--phase all|main|pacing] [--jobs N] [--timeout S] [--repeat N] [--shuffle SEED]\n"
            "                  [--json FILE] [--artifacts DIR] [--skip-apis API[,API]] [--refs DIR]\n"
-           "                  [--dump-captures]\n";
+           "                  [--dump-captures] [--device-under-test av|warp]\n";
 }
 
 std::optional<Options> Options::parse(int argc, char** argv, std::string& error) {
@@ -72,6 +72,12 @@ std::optional<Options> Options::parse(int argc, char** argv, std::string& error)
             options.skip_apis = value;
         } else if (arg == "--refs") {
             options.refs = value;
+        } else if (arg == "--device-under-test") {
+            if (value != "av" && value != "warp") {
+                error = "--device-under-test needs av or warp, got " + value;
+                return std::nullopt;
+            }
+            options.device_under_test = value;
         } else if (arg == "--run-one") {
             options.run_one = value;
         } else if (arg == "--jobs" || arg == "--timeout" || arg == "--repeat") {

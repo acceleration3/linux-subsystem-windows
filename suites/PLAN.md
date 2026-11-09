@@ -1413,5 +1413,6 @@ suites/render-ref/        lsw-render-ref, the Linux tool that renders the Vulkan
   `lsw-render-ref --png` writes the same `captures.json` for the host references. `scripts/render-audit.py --guest
   ARTIFACTS [--host REFS] [--json r.json] [--out report.md]` flags uniform captures, indistinguishable checks, static
   multi-frame checks, trivial clear-colour matches and loose tolerances.
+- Self-validation: `--device-under-test warp` (worker env `LSW_RENDER_DUT=warp`) runs every D3D render check with a second, independent WARP device (D3D9On12 over WARP12 for d3d9) as the device under test, records `dut=warp` and marks the JSON adapter; vk and gl checks are unaffected.
 - Caps: a case that needs an optional feature reports it through `unsupported`. A host reference skipped for a missing
   feature leaves `skip.txt`; the guest skips only if it lacks the feature too, and fails if the two disagree.

@@ -4,6 +4,7 @@
 
 #include <windows.h>
 
+#include <cstdlib>
 #include <fstream>
 
 namespace lsw::suites {
@@ -63,7 +64,12 @@ bool JsonReport::write(const std::filesystem::path& path,
     Json root = Json::object();
     root.set("exe", exe_);
     root.set("bitness", ExeIdentity::kBitness);
-    root.set("adapter", Json::object());
+    Json adapter = Json::object();
+    const char* under_test = std::getenv("LSW_RENDER_DUT");
+    if (under_test != nullptr && std::string(under_test) == "warp") {
+        adapter.set("device_under_test", "WARP");
+    }
+    root.set("adapter", std::move(adapter));
     root.set("driver", Json::object());
     root.set("started", started_);
     root.set("complete", complete);

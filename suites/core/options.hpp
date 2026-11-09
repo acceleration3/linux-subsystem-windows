@@ -24,6 +24,7 @@ struct Options {
     std::string skip_apis;
     std::filesystem::path refs;
     bool dump_captures = false;
+    std::string device_under_test = "av";
 
     [[nodiscard]] static std::optional<Options> parse(int argc, char** argv, std::string& error);
 

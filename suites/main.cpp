@@ -41,6 +41,10 @@ int main(int argc, char** argv) {
         _putenv_s("LSW_SUITES_REFS", refs.c_str());
         SetEnvironmentVariableA("LSW_SUITES_REFS", refs.c_str());
     }
+    if (options->device_under_test != "av") {
+        _putenv_s("LSW_RENDER_DUT", options->device_under_test.c_str());
+        SetEnvironmentVariableA("LSW_RENDER_DUT", options->device_under_test.c_str());
+    }
     if (options->dump_captures) {
         _putenv_s("LSW_RENDER_DUMP", "1");
         SetEnvironmentVariableA("LSW_RENDER_DUMP", "1");
