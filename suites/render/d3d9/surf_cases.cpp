@@ -99,10 +99,74 @@ struct DepthFormat {
     D3DFORMAT format;
 };
 
+bool has_stencil(D3DFORMAT format) { return format == D3DFMT_D24S8 || format == D3DFMT_D24FS8; }
+
+void depth_separation(Ctx& c, D3DFORMAT format) {
+    c.rs(D3DRS_ZENABLE, D3DZB_TRUE);
+    c.rs(D3DRS_ZFUNC, D3DCMP_LESS);
+    const bool d16_only = c.broken("depth_16bit") && format != D3DFMT_D16 && format != D3DFMT_D16_LOCKABLE;
+    for (unsigned i = 0; i < 6; ++i) {
+        const float k = 1000.0f + 9000.0f * static_cast<float>(i);
+        const float x0 = 4.0f + 20.0f * static_cast<float>(i);
+        const float far_z = d16_only ? k / 65535.0f : (k + 0.4f) / 65535.0f;
+        const float near_z = d16_only ? k / 65535.0f : (k + 0.1f) / 65535.0f;
+        c.quad(x0, 114, x0 + 18, 126, far_z, 0xFFE04030);
+        c.quad(x0, 114, x0 + 18, 126, near_z, 0xFF30E070);
+    }
+    if (has_stencil(format)) {
+        c.rs(D3DRS_ZENABLE, D3DZB_FALSE);
+        c.rs(D3DRS_STENCILENABLE, TRUE);
+        c.rs(D3DRS_STENCILFUNC, D3DCMP_ALWAYS);
+        c.rs(D3DRS_STENCILREF, 0x5A);
+        c.rs(D3DRS_STENCILPASS, c.broken("stencil_lost") ? D3DSTENCILOP_KEEP : D3DSTENCILOP_REPLACE);
+        c.rs(D3DRS_STENCILWRITEMASK, 0xFF);
+        c.rs(D3DRS_COLORWRITEENABLE, 0);
+        c.quad(10, 100, 118, 106, 0.5f, 0xFFFFFFFF);
+        c.rs(D3DRS_COLORWRITEENABLE, 15);
+        c.rs(D3DRS_STENCILFUNC, D3DCMP_EQUAL);
+        c.rs(D3DRS_STENCILPASS, D3DSTENCILOP_KEEP);
+        c.quad(0, 98, 128, 110, 0.5f, 0xFFF0C030);
+        c.rs(D3DRS_STENCILENABLE, FALSE);
+    }
+}
+
+bool snap_locked_depth(Ctx& c, const std::string& label) {
+    const bool was = c.in_scene;
+    c.end();
+    D3DLOCKED_RECT locked{};
+    if (!c.depth.surface || FAILED(c.depth.surface->LockRect(&locked, nullptr, D3DLOCK_READONLY))) {
+        c.fail("the depth surface cannot be locked");
+        return false;
+    }
+    rr::Image image(c.size, c.size, rr::PixelKind::R32Float);
+    for (UINT y = 0; y < c.size; ++y) {
+        const auto* row = reinterpret_cast<const std::uint16_t*>(static_cast<const std::uint8_t*>(locked.pBits) + static_cast<std::size_t>(y) * locked.Pitch);
+        float* out = reinterpret_cast<float*>(image.row(y));
+        for (UINT x = 0; x < c.size; ++x) {
+            out[x] = static_cast<float>(c.broken("depth_lock") ? row[x] & ~0xFFu : row[x]) / 65535.0f;
+        }
+    }
+    c.depth.surface->UnlockRect();
+    c.pending.add(label, std::move(image));
+    if (was) {
+        c.begin();
+    }
+    return true;
+}
+
 void depth_cases() {
     const DepthFormat formats[] = {{"d16", D3DFMT_D16}, {"d24x8", D3DFMT_D24X8}, {"d24s8", D3DFMT_D24S8}, {"d32", D3DFMT_D32}, {"d24fs8", D3DFMT_D24FS8}, {"d16_lockable", D3DFMT_D16_LOCKABLE}};
     for (const DepthFormat& f : formats) {
-        Cases::single(rr::CaseSpec("surf", std::string("depth_format_") + f.name), [f](Ctx& c) {
+        rr::CaseSpec spec("surf", std::string("depth_format_") + f.name);
+        if (f.format == D3DFMT_D16) {
+            spec.same_as({"surf.depth_format_d16_lockable"}, "the lockable D16 row draws the same spheres, depth strips and 16 bit depth as this row and only adds the locked depth capture, so the colour image is identical by design; a driver that drops the depth write fails in that capture");
+        } else if (f.format == D3DFMT_D16_LOCKABLE) {
+            spec.same_as({"surf.depth_format_d16"}, "the plain D16 row draws the same spheres, depth strips and 16 bit depth as this row, so the colour image is identical by design; this row adds the locked depth capture that proves the stored values");
+        }
+        if (f.format == D3DFMT_D16_LOCKABLE) {
+            spec.tolerance_for("depth", rr::Tolerance::floats(2.0f / 65535.0f));
+        }
+        Cases::single(spec, [f](Ctx& c) {
             c.clear(Dx::kColor(10, 10, 40, 255));
             c.rs(D3DRS_ZENABLE, D3DZB_TRUE);
             c.rs(D3DRS_ZFUNC, D3DCMP_LESS);
@@ -118,6 +182,14 @@ void depth_cases() {
             c.draw_mesh(a);
             c.xf(D3DTS_WORLD, Xf::translate(0.5f, 0, -0.3f));
             c.draw_mesh(b);
+            c.xf(D3DTS_WORLD, Xf());
+            c.xf(D3DTS_VIEW, Xf());
+            c.xf(D3DTS_PROJECTION, Xf());
+            depth_separation(c, f.format);
+            if (f.format == D3DFMT_D16_LOCKABLE) {
+                c.snap("");
+                (void)snap_locked_depth(c, "depth");
+            }
         }, {D3DFMT_A8R8G8B8, f.format, 128}, Needs::format(D3DUSAGE_DEPTHSTENCIL, D3DRTYPE_SURFACE, f.format, std::string("depth format ") + f.name));
     }
 }
@@ -132,8 +204,20 @@ void format_cases() {
     const RtFormat formats[] = {{"x8r8g8b8", D3DFMT_X8R8G8B8, rr::Tolerance::blend(2)}, {"a16b16g16r16f", D3DFMT_A16B16G16R16F, rr::Tolerance::floats(5e-3f, 5e-3f)},
                                 {"a32b32g32r32f", D3DFMT_A32B32G32R32F, rr::Tolerance::floats(4e-3f, 4e-3f)}, {"r32f", D3DFMT_R32F, rr::Tolerance::floats(4e-3f, 4e-3f)}};
     for (const RtFormat& f : formats) {
-        Cases::single(rr::CaseSpec("surf", std::string("rendertarget_format_") + f.name).tolerance(f.tolerance), [f](Ctx& c) {
-            c.clear(Dx::kColor(10, 10, 40, 255));
+        rr::CaseSpec rt_spec = rr::CaseSpec("surf", std::string("rendertarget_format_") + f.name).tolerance(f.tolerance);
+        if (f.format == D3DFMT_X8R8G8B8) {
+            rt_spec.same_as({"ex.gpu_thread_priority_and_frame_latency_do_not_alter_image"}, "an X8R8G8B8 target whose destination alpha reads one leaves the INVDESTALPHA and DESTALPHA quad invisible, so the picture is the plain lit sphere of the default target row by design; a destination alpha stored in the X channel makes the quad visible");
+        }
+        Cases::single(rt_spec, [f](Ctx& c) {
+            const bool x8 = f.format == D3DFMT_X8R8G8B8;
+            c.clear(Dx::kColor(10, 10, 40, x8 ? 0 : 255));
+            if (x8) {
+                c.rs(D3DRS_ALPHABLENDENABLE, TRUE);
+                c.rs(D3DRS_SRCBLEND, c.broken("x8_alpha") ? D3DBLEND_ONE : D3DBLEND_INVDESTALPHA);
+                c.rs(D3DRS_DESTBLEND, c.broken("x8_alpha") ? D3DBLEND_ZERO : D3DBLEND_DESTALPHA);
+                c.quad(0, 0, 128, 128, 0.5f, 0xFF30E0F0);
+                c.rs(D3DRS_ALPHABLENDENABLE, FALSE);
+            }
             c.camera(4.0f);
             c.rs(D3DRS_ZENABLE, D3DZB_TRUE);
             c.rs(D3DRS_CULLMODE, D3DCULL_CCW);

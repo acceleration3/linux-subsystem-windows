@@ -47,12 +47,20 @@ void primitive_cases() {
                     c.rsf(D3DRS_POINTSIZE, 5.0f);
                     break;
                 case D3DPT_LINELIST:
-                    v = ring(64, 64, 52, 12, false);
-                    count = 6;
+                    for (unsigned k = 0; k < 8; ++k) {
+                        const float a = 6.2831853f * static_cast<float>(k) / 16.0f;
+                        v.push_back({64 + 54 * std::cos(a), 64 + 54 * std::sin(a), 0.5f, 1, hue(k, 8)});
+                        v.push_back({64 - 54 * std::cos(a), 64 - 54 * std::sin(a), 0.5f, 1, hue(k + 4, 8)});
+                    }
+                    count = 8;
                     break;
                 case D3DPT_LINESTRIP:
-                    v = ring(64, 64, 52, 12, false);
-                    count = 11;
+                    for (unsigned k = 0; k < 14; ++k) {
+                        const float a = 6.2831853f * static_cast<float>(k) / 14.0f;
+                        const float r = k % 2 == 0 ? 54.0f : 16.0f;
+                        v.push_back({64 + r * std::cos(a), 64 + r * std::sin(a), 0.5f, 1, hue(k, 14)});
+                    }
+                    count = 13;
                     break;
                 case D3DPT_TRIANGLELIST:
                     v = ring(64, 64, 52, 12, false);
@@ -101,10 +109,43 @@ void primitive_cases() {
         c.chk(c.d->SetIndices(ib.get()), "SetIndices");
         c.chk(c.d->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, static_cast<INT>(base) - static_cast<INT>(min_index), min_index, 11, 0, 10), "DrawIndexedPrimitive");
     };
-    Cases::single(rr::CaseSpec("prim", "draw_indexed_16bit"), [indexed_mesh](Ctx& c) { indexed_mesh(c, false, 0, 0); });
-    Cases::single(rr::CaseSpec("prim", "draw_indexed_16bit_base_vertex"), [indexed_mesh](Ctx& c) { indexed_mesh(c, false, 7, 0); });
-    Cases::single(rr::CaseSpec("prim", "draw_indexed_16bit_min_index"), [indexed_mesh](Ctx& c) { indexed_mesh(c, false, 5, 3); });
-    Cases::single(rr::CaseSpec("prim", "draw_indexed_32bit"), [indexed_mesh](Ctx& c) { indexed_mesh(c, true, 3, 0); }, {},
+    const char* const kSameMesh = "the same ring mesh reaches the pipeline through another index width or base mechanism, with offscreen or black decoy vertices where an ignored base, minimum index or truncated index would read, so the images are identical by design";
+    Cases::single(rr::CaseSpec("prim", "draw_indexed_16bit").same_as({"prim.draw_indexed_16bit_base_vertex", "prim.draw_indexed_16bit_min_index", "prim.draw_indexed_32bit"}, kSameMesh), [indexed_mesh](Ctx& c) { indexed_mesh(c, false, 0, 0); });
+    Cases::single(rr::CaseSpec("prim", "draw_indexed_16bit_base_vertex").same_as({"prim.draw_indexed_16bit", "prim.draw_indexed_16bit_min_index", "prim.draw_indexed_32bit"}, kSameMesh), [indexed_mesh](Ctx& c) { indexed_mesh(c, false, 7, 0); });
+    Cases::single(rr::CaseSpec("prim", "draw_indexed_16bit_min_index").same_as({"prim.draw_indexed_16bit", "prim.draw_indexed_16bit_base_vertex", "prim.draw_indexed_32bit"}, kSameMesh), [indexed_mesh](Ctx& c) { indexed_mesh(c, false, 5, 3); });
+    Cases::single(rr::CaseSpec("prim", "draw_indexed_32bit").same_as({"prim.draw_indexed_16bit", "prim.draw_indexed_16bit_base_vertex", "prim.draw_indexed_16bit_min_index"}, kSameMesh), [](Ctx& c) {
+        c.clear(Dx::kColor(15, 15, 40));
+        constexpr std::uint32_t kFirst = 70000;
+        std::vector<P> v(kFirst, P{0, 0, 0.5f, 1, 0xFFFF2020});
+        for (std::uint32_t i = 0; i < kFirst; ++i) {
+            const float a = 2.399f * static_cast<float>(i);
+            v[i].x = 64 + 60 * std::cos(a);
+            v[i].y = 64 + 60 * std::sin(a);
+        }
+        const std::vector<P> r = ring(64, 64, 54, 10, true);
+        v.insert(v.end(), r.begin(), r.end());
+        std::vector<std::uint32_t> idx;
+        for (unsigned i = 0; i < 10; ++i) {
+            idx.push_back(kFirst);
+            idx.push_back(kFirst + 1 + i);
+            idx.push_back(kFirst + 1 + (i + 1) % 10);
+        }
+        const bool truncate = c.broken("index_16bit");
+        if (truncate) {
+            for (std::uint32_t& i : idx) {
+                i &= 0xFFFFu;
+            }
+        }
+        Com<IDirect3DVertexBuffer9> vb = c.vbuffer(v.data(), static_cast<UINT>(v.size() * sizeof(P)));
+        Com<IDirect3DIndexBuffer9> ib = c.ibuffer(idx.data(), static_cast<UINT>(idx.size() * 4), D3DFMT_INDEX32);
+        if (!vb || !ib) {
+            return;
+        }
+        c.fvf(kPFvf);
+        c.chk(c.d->SetStreamSource(0, vb.get(), 0, sizeof(P)), "SetStreamSource");
+        c.chk(c.d->SetIndices(ib.get()), "SetIndices");
+        c.chk(c.d->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, truncate ? kFirst & 0xFFFFu : kFirst, 11, 0, 10), "DrawIndexedPrimitive");
+    }, {},
                   Needs::caps([](const D3DCAPS9& caps) { return caps.MaxVertexIndex > 0xFFFF; }, "32-bit indices"));
 
     Cases::single(rr::CaseSpec("prim", "draw_primitive_up_fan"), [](Ctx& c) {
@@ -114,18 +155,6 @@ void primitive_cases() {
         c.fvf(kPFvf);
         c.draw(D3DPT_TRIANGLEFAN, 14, v.data(), sizeof(P));
     });
-    Cases::single(rr::CaseSpec("prim", "draw_indexed_up_32bit"), [](Ctx& c) {
-        c.clear(Dx::kColor(15, 15, 40));
-        const std::vector<P> v = ring(64, 64, 54, 9, true);
-        std::vector<std::uint32_t> idx;
-        for (unsigned i = 0; i < 9; ++i) {
-            idx.push_back(0);
-            idx.push_back(1 + i);
-            idx.push_back(1 + (i + 1) % 9);
-        }
-        c.fvf(kPFvf);
-        c.draw_idx(D3DPT_TRIANGLELIST, static_cast<UINT>(v.size()), 9, idx.data(), D3DFMT_INDEX32, v.data(), sizeof(P));
-    }, {}, Needs::caps([](const D3DCAPS9& caps) { return caps.MaxVertexIndex > 0xFFFF; }, "32-bit indices"));
     Cases::single(rr::CaseSpec("prim", "draw_indexed_up_strip_16bit"), [](Ctx& c) {
         c.clear(Dx::kColor(15, 15, 40));
         const std::vector<P> v = ring(64, 64, 54, 12, false);
@@ -225,12 +254,22 @@ void dynamic_cases() {
                     st->cursor = 0;
                 }
                 void* data = nullptr;
-                c.chk(st->vb->Lock(st->cursor * sizeof(P), bytes, &data, flags), "Lock");
-                if (data == nullptr) {
-                    return;
+                if (mode == 0 && c.broken("noverwrite_discards")) {
+                    c.chk(st->vb->Lock(0, kCapacity * sizeof(P), &data, D3DLOCK_DISCARD), "Lock");
+                    if (data == nullptr) {
+                        return;
+                    }
+                    std::memset(data, 0, kCapacity * sizeof(P));
+                    std::memcpy(static_cast<std::uint8_t*>(data) + st->cursor * sizeof(P), v.data(), bytes);
+                    st->vb->Unlock();
+                } else {
+                    c.chk(st->vb->Lock(st->cursor * sizeof(P), bytes, &data, flags), "Lock");
+                    if (data == nullptr) {
+                        return;
+                    }
+                    std::memcpy(data, v.data(), bytes);
+                    st->vb->Unlock();
                 }
-                std::memcpy(data, v.data(), bytes);
-                st->vb->Unlock();
                 c.clear(Dx::kColor(15, 15, 40), D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER);
                 c.fvf(kPFvf);
                 c.chk(c.d->SetStreamSource(0, st->vb.get(), 0, sizeof(P)), "SetStreamSource");
@@ -239,7 +278,9 @@ void dynamic_cases() {
                     c.rsf(D3DRS_POINTSIZE, 6.0f);
                     c.chk(c.d->DrawPrimitive(D3DPT_POINTLIST, st->cursor, static_cast<UINT>(v.size())), "DrawPrimitive");
                 } else {
-                    c.chk(c.d->DrawPrimitive(D3DPT_TRIANGLELIST, st->cursor, static_cast<UINT>(v.size() / 3)), "DrawPrimitive");
+                    const UINT first = mode == 0 ? 0 : st->cursor;
+                    const UINT count = mode == 0 ? st->cursor + static_cast<UINT>(v.size()) : static_cast<UINT>(v.size());
+                    c.chk(c.d->DrawPrimitive(D3DPT_TRIANGLELIST, first, count / 3), "DrawPrimitive");
                 }
                 st->cursor += static_cast<UINT>(v.size());
             });

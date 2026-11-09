@@ -219,7 +219,7 @@ void pixel_cases() {
         const char* ps;
     } profiles[] = {{"ps20_procedural", "vs_2_0", "ps_2_0"}, {"ps30_procedural", "vs_3_0", "ps_3_0"}};
     for (const auto& p : profiles) {
-        Cases::single(rr::CaseSpec("shader", p.name).tolerance(rr::Tolerance::blend(4)), [p](Ctx& c) {
+        Cases::single(rr::CaseSpec("shader", p.name).tolerance(rr::Tolerance::blend(4)).same_as({std::string(p.name) == "ps20_procedural" ? "shader.ps30_procedural" : "shader.ps20_procedural"}, "the same procedural shader compiled for the other shader model produces the same picture by design; ignoring the detail texture or the ring term shows in both"), [p](Ctx& c) {
             c.clear(Dx::kColor(15, 15, 40));
             Com<IDirect3DTexture9> t = detail_texture(c);
             c.tex(0, t.get());
@@ -344,7 +344,7 @@ void pixel_cases() {
         pass_quad(c, "float4 main(float4 col : COLOR0, float2 uv : TEXCOORD0) : COLOR { clip(sin(uv.x * 30.0) * cos(uv.y * 20.0)); return float4(col.rgb, 1); }\n", "ps_2_0", "vs_2_0");
     }, {}, Needs::all({vs_need(2, 0), ps_need(2, 0)}));
     for (int ver = 2; ver <= 3; ++ver) {
-        Cases::single(rr::CaseSpec("shader", ver == 2 ? "ps20_depth_output" : "ps30_depth_output").tolerance(tol), [ver](Ctx& c) {
+        Cases::single(rr::CaseSpec("shader", ver == 2 ? "ps20_depth_output" : "ps30_depth_output").tolerance(tol).same_as({ver == 2 ? "shader.ps30_depth_output" : "shader.ps20_depth_output"}, "the same depth writing shader through the other shader model draws the same picture by design; ignoring oDepth changes the intersection of the quads"), [ver](Ctx& c) {
             c.clear(Dx::kColor(15, 15, 40));
             c.rs(D3DRS_ZENABLE, D3DZB_TRUE);
             c.rs(D3DRS_ZFUNC, D3DCMP_LESS);
@@ -449,13 +449,21 @@ struct DeclType {
     D3DDECLTYPE type;
     DWORD cap;
     UINT bytes;
+    std::vector<std::string> same = {};
 };
 
-void write_attr(D3DDECLTYPE type, int corner, std::uint8_t* dst, float& scale) {
-    const float a = 0.15f + 0.25f * static_cast<float>(corner);
-    const float b = 0.9f - 0.2f * static_cast<float>(corner);
-    const float c = 0.3f + 0.15f * static_cast<float>(corner);
-    const float d = 1.0f - 0.1f * static_cast<float>(corner);
+bool signed_decl(D3DDECLTYPE type) {
+    return type == D3DDECLTYPE_SHORT2 || type == D3DDECLTYPE_SHORT4 || type == D3DDECLTYPE_SHORT2N || type == D3DDECLTYPE_SHORT4N || type == D3DDECLTYPE_DEC3N;
+}
+
+void write_attr(D3DDECLTYPE type, int corner, std::uint8_t* dst, float& scale, bool unsigned_decode) {
+    const float widen = signed_decl(type) ? 2.0f : 1.0f;
+    const float shift = signed_decl(type) ? -1.0f : 0.0f;
+    const auto clamp = [unsigned_decode](float v) { return unsigned_decode && v < 0.0f ? 0.0f : v; };
+    const float a = clamp((0.15f + 0.25f * static_cast<float>(corner)) * widen + shift);
+    const float b = clamp((0.9f - 0.2f * static_cast<float>(corner)) * widen + shift);
+    const float c = clamp((0.3f + 0.15f * static_cast<float>(corner)) * widen + shift);
+    const float d = clamp((1.0f - 0.1f * static_cast<float>(corner)) * widen + shift);
     const auto f4 = [&](int n) {
         const float v[4] = {a, b, c, d};
         std::memcpy(dst, v, static_cast<std::size_t>(n) * 4);
@@ -528,18 +536,24 @@ void write_attr(D3DDECLTYPE type, int corner, std::uint8_t* dst, float& scale) {
 
 void decl_cases() {
     const DeclType types[] = {
-        {"float1", D3DDECLTYPE_FLOAT1, 0, 4}, {"float2", D3DDECLTYPE_FLOAT2, 0, 8}, {"float3", D3DDECLTYPE_FLOAT3, 0, 12}, {"float4", D3DDECLTYPE_FLOAT4, 0, 16},
-        {"d3dcolor", D3DDECLTYPE_D3DCOLOR, 0, 4}, {"ubyte4", D3DDECLTYPE_UBYTE4, D3DDTCAPS_UBYTE4, 4}, {"short2", D3DDECLTYPE_SHORT2, 0, 4}, {"short4", D3DDECLTYPE_SHORT4, 0, 8},
-        {"ubyte4n", D3DDECLTYPE_UBYTE4N, D3DDTCAPS_UBYTE4N, 4}, {"short2n", D3DDECLTYPE_SHORT2N, D3DDTCAPS_SHORT2N, 4}, {"short4n", D3DDECLTYPE_SHORT4N, D3DDTCAPS_SHORT4N, 8},
-        {"ushort2n", D3DDECLTYPE_USHORT2N, D3DDTCAPS_USHORT2N, 4}, {"ushort4n", D3DDECLTYPE_USHORT4N, D3DDTCAPS_USHORT4N, 8}, {"udec3", D3DDECLTYPE_UDEC3, D3DDTCAPS_UDEC3, 4},
-        {"dec3n", D3DDECLTYPE_DEC3N, D3DDTCAPS_DEC3N, 4}, {"float16_2", D3DDECLTYPE_FLOAT16_2, D3DDTCAPS_FLOAT16_2, 4}, {"float16_4", D3DDECLTYPE_FLOAT16_4, D3DDTCAPS_FLOAT16_4, 8},
+        {"float1", D3DDECLTYPE_FLOAT1, 0, 4}, {"float2", D3DDECLTYPE_FLOAT2, 0, 8, {"shader.decl_type_ushort2n"}}, {"float3", D3DDECLTYPE_FLOAT3, 0, 12, {"shader.decl_type_dec3n", "shader.decl_type_udec3"}}, {"float4", D3DDECLTYPE_FLOAT4, 0, 16, {"shader.decl_type_d3dcolor", "shader.decl_type_short4", "shader.decl_type_short4n", "shader.decl_type_ubyte4", "shader.decl_type_ubyte4n", "shader.decl_type_ushort4n"}},
+        {"d3dcolor", D3DDECLTYPE_D3DCOLOR, 0, 4, {"shader.decl_type_float4", "shader.decl_type_short4", "shader.decl_type_short4n", "shader.decl_type_ubyte4", "shader.decl_type_ubyte4n", "shader.decl_type_ushort4n"}}, {"ubyte4", D3DDECLTYPE_UBYTE4, D3DDTCAPS_UBYTE4, 4, {"shader.decl_type_d3dcolor", "shader.decl_type_float4", "shader.decl_type_short4", "shader.decl_type_short4n", "shader.decl_type_ubyte4n", "shader.decl_type_ushort4n"}}, {"short2", D3DDECLTYPE_SHORT2, 0, 4, {"shader.decl_type_short2n"}}, {"short4", D3DDECLTYPE_SHORT4, 0, 8, {"shader.decl_type_d3dcolor", "shader.decl_type_float4", "shader.decl_type_short4n", "shader.decl_type_ubyte4", "shader.decl_type_ubyte4n", "shader.decl_type_ushort4n"}},
+        {"ubyte4n", D3DDECLTYPE_UBYTE4N, D3DDTCAPS_UBYTE4N, 4, {"shader.decl_type_d3dcolor", "shader.decl_type_float4", "shader.decl_type_short4", "shader.decl_type_short4n", "shader.decl_type_ubyte4", "shader.decl_type_ushort4n"}}, {"short2n", D3DDECLTYPE_SHORT2N, D3DDTCAPS_SHORT2N, 4, {"shader.decl_type_short2"}}, {"short4n", D3DDECLTYPE_SHORT4N, D3DDTCAPS_SHORT4N, 8, {"shader.decl_type_d3dcolor", "shader.decl_type_float4", "shader.decl_type_short4", "shader.decl_type_ubyte4", "shader.decl_type_ubyte4n", "shader.decl_type_ushort4n"}},
+        {"ushort2n", D3DDECLTYPE_USHORT2N, D3DDTCAPS_USHORT2N, 4, {"shader.decl_type_float2"}}, {"ushort4n", D3DDECLTYPE_USHORT4N, D3DDTCAPS_USHORT4N, 8, {"shader.decl_type_d3dcolor", "shader.decl_type_float4", "shader.decl_type_short4", "shader.decl_type_short4n", "shader.decl_type_ubyte4", "shader.decl_type_ubyte4n"}}, {"udec3", D3DDECLTYPE_UDEC3, D3DDTCAPS_UDEC3, 4, {"shader.decl_type_float3", "shader.decl_type_dec3n"}},
+        {"dec3n", D3DDECLTYPE_DEC3N, D3DDTCAPS_DEC3N, 4, {"shader.decl_type_float3", "shader.decl_type_udec3"}}, {"float16_2", D3DDECLTYPE_FLOAT16_2, D3DDTCAPS_FLOAT16_2, 4}, {"float16_4", D3DDECLTYPE_FLOAT16_4, D3DDTCAPS_FLOAT16_4, 8},
     };
     for (const DeclType& t : types) {
-        Cases::single(rr::CaseSpec("shader", std::string("decl_type_") + t.name).tolerance(rr::Tolerance::blend(3)), [t](Ctx& c) {
+        rr::CaseSpec decl_spec = rr::CaseSpec("shader", std::string("decl_type_") + t.name).tolerance(rr::Tolerance::blend(3));
+        if (!t.same.empty()) {
+            std::string names;
+            for (const std::string& n : t.same) names += (names.empty() ? "" : ", ") + n.substr(17);
+            decl_spec.same_as(t.same, std::string("the ") + t.name + " vertex type carries the same logical values as " + names + ", with negative components for the signed types, so the images are identical by design; a swizzle, normalisation or sign decoding error in this type shows against the oracle");
+        }
+        Cases::single(decl_spec, [t](Ctx& c) {
             c.clear(Dx::kColor(15, 15, 40));
             Com<IDirect3DVertexShader9> vs = c.vs(
                 "float4 k : register(c0);\nstruct I { float2 p : POSITION; float4 a : TEXCOORD0; };\nstruct O { float4 p : POSITION; float4 c : COLOR0; };\n"
-                "O main(I i) { O o; o.p = float4(i.p, 0.5, 1.0); float3 v = k.y > 0.5 ? i.a.xyw : i.a.xyz; o.c = float4(saturate(v * k.x), 1.0); return o; }\n", "vs_2_0");
+                "O main(I i) { O o; o.p = float4(i.p, 0.5, 1.0); float3 v = k.y > 0.5 ? i.a.xyw : i.a.xyz; o.c = float4(saturate(k.z > 0.5 ? v * k.x * 0.5 + 0.5 : v * k.x), 1.0); return o; }\n", "vs_2_0");
             Com<IDirect3DPixelShader9> ps = c.ps("float4 main(float4 c : COLOR0) : COLOR { return c; }\n", "ps_2_0");
             if (!vs || !ps) {
                 return;
@@ -550,11 +564,11 @@ void decl_cases() {
             float scale = 1.0f;
             for (int k = 0; k < 4; ++k) {
                 std::memcpy(&data[static_cast<std::size_t>(k) * stride], pos[k], 8);
-                write_attr(t.type, k, &data[static_cast<std::size_t>(k) * stride + 8], scale);
+                write_attr(t.type, k, &data[static_cast<std::size_t>(k) * stride + 8], scale, c.broken("decl_unsigned"));
             }
             const bool four = t.type == D3DDECLTYPE_FLOAT4 || t.type == D3DDECLTYPE_D3DCOLOR || t.type == D3DDECLTYPE_UBYTE4 || t.type == D3DDECLTYPE_UBYTE4N || t.type == D3DDECLTYPE_SHORT4 ||
                               t.type == D3DDECLTYPE_SHORT4N || t.type == D3DDECLTYPE_USHORT4N || t.type == D3DDECLTYPE_FLOAT16_4;
-            const float kconst[4] = {scale, four ? 1.0f : 0.0f, 0, 0};
+            const float kconst[4] = {scale, four ? 1.0f : 0.0f, signed_decl(t.type) ? 1.0f : 0.0f, 0};
             c.chk(c.d->SetVertexShaderConstantF(0, kconst, 1), "const");
             const D3DVERTEXELEMENT9 el[] = {{0, 0, D3DDECLTYPE_FLOAT2, 0, D3DDECLUSAGE_POSITION, 0}, {0, 8, static_cast<BYTE>(t.type), 0, D3DDECLUSAGE_TEXCOORD, 0}, D3DDECL_END()};
             Com<IDirect3DVertexDeclaration9> d = c.decl(el);

@@ -32,26 +32,48 @@ struct FormatInfo {
     const char* name;
     D3DFORMAT format;
     bool linear;
+    std::vector<std::string> same = {};
+    const char* reason = "";
 };
+
+Fill r565_fill(unsigned shift, bool five_bit_green = false) {
+    return [shift, five_bit_green](UINT x, UINT y, UINT w, UINT h) {
+        const std::uint32_t base = alpha_rainbow()(x, y, w, h);
+        const unsigned g = 4u * (2u * ((x + shift + 2u * y) % 16u) + 1u);
+        return (base & 0xFFFF00FFu) | ((five_bit_green ? g & ~7u : g) << 8);
+    };
+}
 
 void format_cases() {
     const FormatInfo formats[] = {
-        {"a8r8g8b8", D3DFMT_A8R8G8B8, true}, {"x8r8g8b8", D3DFMT_X8R8G8B8, true}, {"r5g6b5", D3DFMT_R5G6B5, true}, {"x1r5g5b5", D3DFMT_X1R5G5B5, true},
+        {"a8r8g8b8", D3DFMT_A8R8G8B8, true, {"tex.format_a8b8g8r8"}, "stores the same logical texels as A8B8G8R8 with red and blue swapped in memory, so the sampled image is identical; a driver that misorders the channels of either row fails against the oracle"}, {"x8r8g8b8", D3DFMT_X8R8G8B8, true, {"tex.format_x8b8g8r8"}, "stores the same logical texels as X8B8G8R8 with red and blue swapped in memory and the X byte zero, so the sampled image is identical; a driver that reads X as alpha makes the quad vanish"}, {"r5g6b5", D3DFMT_R5G6B5, true}, {"x1r5g5b5", D3DFMT_X1R5G5B5, true},
         {"a1r5g5b5", D3DFMT_A1R5G5B5, true}, {"a4r4g4b4", D3DFMT_A4R4G4B4, true}, {"a8", D3DFMT_A8, true}, {"l8", D3DFMT_L8, true},
-        {"a8l8", D3DFMT_A8L8, true}, {"l16", D3DFMT_L16, true}, {"a2r10g10b10", D3DFMT_A2R10G10B10, true}, {"a2b10g10r10", D3DFMT_A2B10G10R10, true},
+        {"a8l8", D3DFMT_A8L8, true}, {"l16", D3DFMT_L16, true}, {"a2r10g10b10", D3DFMT_A2R10G10B10, true, {"tex.format_a2b10g10r10"}, "stores the same 10 bit codes as A2B10G10R10 with red and blue swapped in memory, so the float image is identical; a driver that misorders the channels of either row fails against the oracle"}, {"a2b10g10r10", D3DFMT_A2B10G10R10, true, {"tex.format_a2r10g10b10"}, "stores the same 10 bit codes as A2R10G10B10 with red and blue swapped in memory, so the float image is identical; a driver that misorders the channels of either row fails against the oracle"},
         {"a16b16g16r16", D3DFMT_A16B16G16R16, true}, {"g16r16", D3DFMT_G16R16, true}, {"r16f", D3DFMT_R16F, true}, {"g16r16f", D3DFMT_G16R16F, true},
         {"a16b16g16r16f", D3DFMT_A16B16G16R16F, true}, {"r32f", D3DFMT_R32F, false}, {"g32r32f", D3DFMT_G32R32F, false}, {"a32b32g32r32f", D3DFMT_A32B32G32R32F, false},
-        {"v8u8", D3DFMT_V8U8, true}, {"q8w8v8u8", D3DFMT_Q8W8V8U8, true}, {"dxt1", D3DFMT_DXT1, true}, {"dxt3", D3DFMT_DXT3, true}, {"dxt5", D3DFMT_DXT5, true},
-        {"a8b8g8r8", D3DFMT_A8B8G8R8, true}, {"x8b8g8r8", D3DFMT_X8B8G8R8, true}, {"dxt2", D3DFMT_DXT2, true}, {"dxt4", D3DFMT_DXT4, true},
+        {"v8u8", D3DFMT_V8U8, true}, {"q8w8v8u8", D3DFMT_Q8W8V8U8, true}, {"dxt1", D3DFMT_DXT1, true}, {"dxt3", D3DFMT_DXT3, true, {"tex.format_dxt2"}, "DXT3 decodes to the same texels as DXT2, which differs only by the premultiplied alpha flag, so the sampled image is identical by definition of the formats"}, {"dxt5", D3DFMT_DXT5, true, {"tex.format_dxt4"}, "DXT5 decodes to the same texels as DXT4, which differs only by the premultiplied alpha flag, so the sampled image is identical by definition of the formats"},
+        {"a8b8g8r8", D3DFMT_A8B8G8R8, true, {"tex.format_a8r8g8b8"}, "stores the same logical texels as A8R8G8B8 with red and blue swapped in memory, so the sampled image is identical; a driver that misorders the channels of either row fails against the oracle"}, {"x8b8g8r8", D3DFMT_X8B8G8R8, true, {"tex.format_x8r8g8b8"}, "stores the same logical texels as X8R8G8B8 with red and blue swapped in memory and the X byte zero, so the sampled image is identical; a driver that reads X as alpha makes the quad vanish"}, {"dxt2", D3DFMT_DXT2, true, {"tex.format_dxt3"}, "DXT2 is DXT3 with premultiplied alpha and decodes to the same texels, so the sampled image is identical by definition of the formats"}, {"dxt4", D3DFMT_DXT4, true, {"tex.format_dxt5"}, "DXT4 is DXT5 with premultiplied alpha and decodes to the same texels, so the sampled image is identical by definition of the formats"},
         {"ati1", static_cast<D3DFORMAT>(MAKEFOURCC('A', 'T', 'I', '1')), true}, {"ati2", static_cast<D3DFORMAT>(MAKEFOURCC('A', 'T', 'I', '2')), true},
     };
     for (const FormatInfo& f : formats) {
-        Cases::single(rr::CaseSpec("tex", std::string("format_") + f.name).tolerance(rr::Tolerance::blend(4)), [f](Ctx& c) {
+        const bool hi = HiRows::applies(f.format);
+        const bool r565 = f.format == D3DFMT_R5G6B5;
+        rr::CaseSpec spec("tex", std::string("format_") + f.name);
+        spec.tolerance(hi ? HiRows::tolerance(f.format) : r565 ? rr::Tolerance::tight(1) : rr::Tolerance::blend(4));
+        if (!f.same.empty()) {
+            spec.same_as(f.same, f.reason);
+        }
+        Cases::single(spec, [f, hi, r565](Ctx& c) {
+            if (hi) {
+                Com<IDirect3DTexture9> t = c.texture(32, 32, 1, 0, f.format, D3DPOOL_MANAGED, nullptr, Texels::hi_precision(f.format, 0, c.broken("hi_precision")));
+                HiRows::present(c, t.get());
+                return;
+            }
             backdrop(c);
             const bool ati = std::strcmp(f.name, "ati1") == 0 || std::strcmp(f.name, "ati2") == 0;
             Com<IDirect3DTexture9> t;
             if (!ati) {
-                t = c.texture(32, 32, 1, 0, f.format, D3DPOOL_MANAGED, alpha_rainbow());
+                t = c.texture(32, 32, 1, 0, f.format, D3DPOOL_MANAGED, r565 ? r565_fill(0, c.broken("g565_five_bit")) : alpha_rainbow());
             } else {
                 c.chk(c.d->CreateTexture(32, 32, 1, 0, f.format, D3DPOOL_DEFAULT, t.put(), nullptr), "CreateTexture");
                 Com<IDirect3DSurface9> sys;
@@ -77,12 +99,13 @@ void format_cases() {
                 c.chk(c.d->UpdateSurface(sys.get(), nullptr, level.get(), nullptr), "UpdateSurface");
             }
             c.tex(0, t.get());
-            sampler_linear(c, 0, f.linear);
+            sampler_linear(c, 0, f.linear && !r565);
             c.rs(D3DRS_ALPHABLENDENABLE, TRUE);
-            c.rs(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
-            c.rs(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+            const bool x_as_alpha = c.broken("x_as_alpha") && (f.format == D3DFMT_X8R8G8B8 || f.format == D3DFMT_X8B8G8R8 || f.format == D3DFMT_X1R5G5B5);
+            c.rs(D3DRS_SRCBLEND, x_as_alpha ? D3DBLEND_ZERO : D3DBLEND_SRCALPHA);
+            c.rs(D3DRS_DESTBLEND, x_as_alpha ? D3DBLEND_ONE : D3DBLEND_INVSRCALPHA);
             tex_quad(c, 12, 12, 116, 116);
-        }, {}, Needs::all({Needs::format(0, D3DRTYPE_TEXTURE, f.format, std::string("texture format ") + f.name), [f](IDirect3DDevice9* device) {
+        }, hi ? HiRows::layout() : Layout{}, hi ? HiRows::need(f.format, f.name) : Needs::all({Needs::format(0, D3DRTYPE_TEXTURE, f.format, std::string("texture format ") + f.name), [f](IDirect3DDevice9* device) {
             if (std::strcmp(f.name, "ati1") != 0 && std::strcmp(f.name, "ati2") != 0) {
                 return std::string();
             }
@@ -133,7 +156,11 @@ void mip_cases() {
                             {"linear_linear", D3DTEXF_LINEAR, D3DTEXF_LINEAR, D3DTEXF_LINEAR}, {"point_linear", D3DTEXF_POINT, D3DTEXF_POINT, D3DTEXF_LINEAR}};
     const rr::Tolerance mip_tol = rr::Tolerance::raster(10, 1).with_outliers(0.02);
     for (const Combo& co : combos) {
-        Cases::single(rr::CaseSpec("tex", std::string("filter_") + co.name).tolerance(mip_tol), [co](Ctx& c) {
+        rr::CaseSpec filter_spec = rr::CaseSpec("tex", std::string("filter_") + co.name).tolerance(mip_tol);
+        if (std::string(co.name) == "linear_linear") {
+            filter_spec.same_as({"tex.pool_default_updatetexture"}, "the same per-level coloured mip chain on the same ground plane, uploaded through UpdateTexture into a default pool texture; a missed level shows in the level colours");
+        }
+        Cases::single(filter_spec, [co](Ctx& c) {
             c.clear(Dx::kColor(90, 120, 200, 255));
             Com<IDirect3DTexture9> t = level_texture(c, 64);
             c.tex(0, t.get());
@@ -392,7 +419,7 @@ void transfer_cases() {
         tex_quad(c, 10, 10, 118, 118);
         c.tex(0, nullptr);
     });
-    Cases::single(rr::CaseSpec("tex", "pool_default_updatetexture").tolerance(rr::Tolerance::raster(10, 1).with_outliers(0.02)), [](Ctx& c) {
+    Cases::single(rr::CaseSpec("tex", "pool_default_updatetexture").tolerance(rr::Tolerance::raster(10, 1).with_outliers(0.02)).same_as({"tex.filter_linear_linear"}, "uploads the per-level coloured mip chain of filter_linear_linear through UpdateTexture, so the picture is the same by design and a missed level shows in the level colours"), [](Ctx& c) {
         c.clear(Dx::kColor(90, 120, 200, 255));
         Com<IDirect3DTexture9> t = level_texture(c, 64, D3DPOOL_DEFAULT);
         c.tex(0, t.get());

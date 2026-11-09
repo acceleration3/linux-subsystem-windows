@@ -99,7 +99,7 @@ void op_cases() {
             if (info.op == D3DTOP_BLENDTEXTUREALPHAPM) {
                 stage(c, 1, info.op, D3DTA_CURRENT, D3DTA_TEXTURE);
             } else {
-                stage(c, 1, info.op, D3DTA_TEXTURE, D3DTA_CURRENT);
+                stage(c, 1, info.op, D3DTA_TEXTURE, info.op == D3DTOP_SELECTARG2 && !c.broken("ignore_arg2") ? D3DTA_TFACTOR : D3DTA_CURRENT);
             }
             c.tss(1, D3DTSS_COLORARG0, D3DTA_TFACTOR);
             if (info.op == D3DTOP_PREMODULATE) {

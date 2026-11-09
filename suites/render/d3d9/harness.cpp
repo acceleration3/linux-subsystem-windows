@@ -1,5 +1,7 @@
 #include "render/d3d9/harness.hpp"
 
+#include <cstdlib>
+
 #include <algorithm>
 
 namespace lsw::suites::render::d3d9 {
@@ -261,6 +263,91 @@ std::uint16_t Texels::half(float value) {
     return static_cast<std::uint16_t>(sign | (static_cast<std::uint32_t>(exponent) << 10) | (mantissa >> 13));
 }
 
+RawFill Texels::hi_precision(D3DFORMAT f, unsigned shift, bool degrade) {
+    const auto code16 = [shift, degrade](UINT x, UINT y, unsigned ch) {
+        const unsigned v = (((x + shift) * 2053u + y * 4099u + ch * 9973u + 12345u) * 40503u) & 0xFFFFu;
+        return degrade ? (v >> 8) * 257u : v;
+    };
+    const auto code10 = [shift, degrade](UINT x, UINT y, unsigned ch) {
+        const unsigned v = ((x + shift) * 37u + y * 91u + ch * 173u + 1u) % 1024u;
+        return degrade ? (v >> 2) * 1023u / 255u : v;
+    };
+    const auto code2 = [shift](UINT x, UINT y) { return (x + shift + y) & 3u; };
+    const auto base = [shift](UINT x, UINT y, unsigned ch) {
+        return -1.5f + 5.5f * static_cast<float>(((x + shift) * 13u + y * 29u + ch * 53u) % 97u) / 96.0f;
+    };
+    const auto value16 = [shift, degrade, base](UINT x, UINT y, unsigned ch) {
+        float v = base(x, y, ch) + static_cast<float>(((x + shift) * 7u + y * 3u + ch) % 8u) * (1.0f / 2048.0f);
+        if (degrade) {
+            v = std::round(std::min(std::max(v, 0.0f), 1.0f) * 255.0f) / 255.0f;
+        }
+        return v;
+    };
+    const auto value32 = [shift, degrade, base](UINT x, UINT y, unsigned ch) {
+        float v = base(x, y, ch) + static_cast<float>(((x + shift) * 131u + y * 17u + ch * 7u) % 1021u) * (1.0f / 262144.0f);
+        if (degrade) {
+            const std::uint16_t h = Texels::half(v);
+            const int e = (h >> 10) & 31;
+            const float m = static_cast<float>(h & 1023u);
+            v = e == 0 ? 0.0f : std::ldexp(1.0f + m / 1024.0f, e - 15);
+            v = (h & 0x8000u) ? -v : v;
+        }
+        return v;
+    };
+    switch (f) {
+        case D3DFMT_A16B16G16R16:
+            return [=](UINT x, UINT y, std::uint8_t* dst) {
+                const std::uint16_t v[4] = {static_cast<std::uint16_t>(code16(x, y, 0)), static_cast<std::uint16_t>(code16(x, y, 1)),
+                                            static_cast<std::uint16_t>(code16(x, y, 2)), static_cast<std::uint16_t>(code16(x, y, 3))};
+                std::memcpy(dst, v, 8);
+            };
+        case D3DFMT_G16R16:
+            return [=](UINT x, UINT y, std::uint8_t* dst) {
+                const std::uint16_t v[2] = {static_cast<std::uint16_t>(code16(x, y, 0)), static_cast<std::uint16_t>(code16(x, y, 1))};
+                std::memcpy(dst, v, 4);
+            };
+        case D3DFMT_L16:
+            return [=](UINT x, UINT y, std::uint8_t* dst) {
+                const std::uint16_t v = static_cast<std::uint16_t>(code16(x, y, 0));
+                std::memcpy(dst, &v, 2);
+            };
+        case D3DFMT_A2R10G10B10:
+            return [=](UINT x, UINT y, std::uint8_t* dst) {
+                const std::uint32_t v = (code2(x, y) << 30) | (code10(x, y, 0) << 20) | (code10(x, y, 1) << 10) | code10(x, y, 2);
+                std::memcpy(dst, &v, 4);
+            };
+        case D3DFMT_A2B10G10R10:
+            return [=](UINT x, UINT y, std::uint8_t* dst) {
+                const std::uint32_t v = (code2(x, y) << 30) | (code10(x, y, 2) << 20) | (code10(x, y, 1) << 10) | code10(x, y, 0);
+                std::memcpy(dst, &v, 4);
+            };
+        case D3DFMT_R16F:
+        case D3DFMT_G16R16F:
+        case D3DFMT_A16B16G16R16F: {
+            const int n = f == D3DFMT_R16F ? 1 : f == D3DFMT_G16R16F ? 2 : 4;
+            return [=](UINT x, UINT y, std::uint8_t* dst) {
+                for (int i = 0; i < n; ++i) {
+                    const std::uint16_t h = Texels::half(value16(x, y, static_cast<unsigned>(i)));
+                    std::memcpy(dst + i * 2, &h, 2);
+                }
+            };
+        }
+        case D3DFMT_R32F:
+        case D3DFMT_G32R32F:
+        case D3DFMT_A32B32G32R32F: {
+            const int n = f == D3DFMT_R32F ? 1 : f == D3DFMT_G32R32F ? 2 : 4;
+            return [=](UINT x, UINT y, std::uint8_t* dst) {
+                for (int i = 0; i < n; ++i) {
+                    const float v = value32(x, y, static_cast<unsigned>(i));
+                    std::memcpy(dst + i * 4, &v, 4);
+                }
+            };
+        }
+        default:
+            return nullptr;
+    }
+}
+
 UINT Texels::bytes_per_texel(D3DFORMAT f) {
     switch (f) {
         case D3DFMT_A8:
@@ -360,19 +447,19 @@ bool Texels::pack(D3DFORMAT f, std::uint32_t c, std::uint8_t* dst) {
             put32(c);
             return true;
         case D3DFMT_X8R8G8B8:
-            put32(c | 0xFF000000u);
+            put32(c & 0x00FFFFFFu);
             return true;
         case D3DFMT_A8B8G8R8:
             put32((a << 24) | (b << 16) | (g << 8) | r);
             return true;
         case D3DFMT_X8B8G8R8:
-            put32(0xFF000000u | (b << 16) | (g << 8) | r);
+            put32((b << 16) | (g << 8) | r);
             return true;
         case D3DFMT_R5G6B5:
             put16(((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3));
             return true;
         case D3DFMT_X1R5G5B5:
-            put16(0x8000u | ((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3));
+            put16(((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3));
             return true;
         case D3DFMT_A1R5G5B5:
             put16(((a >> 7) << 15) | ((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3));
@@ -613,6 +700,11 @@ bool Ctx::open(UINT extent, D3DFORMAT format, D3DFORMAT depth_format, bool use_b
     return good;
 }
 
+bool Ctx::broken(const char* name) const {
+    const char* list = std::getenv("LSW_D3D9_BREAK");
+    return list != nullptr && kit.under_test && (std::string(",") + list + ",").find(std::string(",") + name + ",") != std::string::npos;
+}
+
 void Ctx::fail(const std::string& message) {
     if (good) {
         error = message;
@@ -650,7 +742,7 @@ void Ctx::clear(D3DCOLOR color, DWORD flags, float z, DWORD stencil) {
     } else {
         D3DSURFACE_DESC desc{};
         bound->GetDesc(&desc);
-        if (desc.Format != D3DFMT_D24S8 && desc.Format != D3DFMT_D24X4S4 && desc.Format != D3DFMT_D15S1) {
+        if (desc.Format != D3DFMT_D24S8 && desc.Format != D3DFMT_D24FS8 && desc.Format != D3DFMT_D24X4S4 && desc.Format != D3DFMT_D15S1) {
             flags &= ~D3DCLEAR_STENCIL;
         }
     }
@@ -727,7 +819,7 @@ void Ctx::light(DWORD index, const D3DLIGHT9& value, bool enable) {
     chk(d->LightEnable(index, enable ? TRUE : FALSE), "LightEnable");
 }
 
-bool Ctx::fill_level(IDirect3DTexture9* texture, UINT level, D3DFORMAT format, const Fill& fill) {
+bool Ctx::fill_level(IDirect3DTexture9* texture, UINT level, D3DFORMAT format, const Fill& fill, const RawFill& raw) {
     D3DSURFACE_DESC desc{};
     texture->GetLevelDesc(level, &desc);
     D3DLOCKED_RECT locked{};
@@ -754,7 +846,9 @@ bool Ctx::fill_level(IDirect3DTexture9* texture, UINT level, D3DFORMAT format, c
         for (UINT y = 0; y < desc.Height; ++y) {
             std::uint8_t* row = static_cast<std::uint8_t*>(locked.pBits) + static_cast<std::size_t>(y) * locked.Pitch;
             for (UINT x = 0; x < desc.Width; ++x) {
-                if (!Texels::pack(format, fill(x, y, desc.Width, desc.Height), row + x * bpt)) {
+                if (raw) {
+                    raw(x, y, row + x * bpt);
+                } else if (!Texels::pack(format, fill(x, y, desc.Width, desc.Height), row + x * bpt)) {
                     texture->UnlockRect(level);
                     fail("no texel packer for the format");
                     return false;
@@ -766,7 +860,7 @@ bool Ctx::fill_level(IDirect3DTexture9* texture, UINT level, D3DFORMAT format, c
     return true;
 }
 
-Com<IDirect3DTexture9> Ctx::texture(UINT width, UINT height, UINT levels, DWORD usage, D3DFORMAT format, D3DPOOL pool, const Fill& fill) {
+Com<IDirect3DTexture9> Ctx::texture(UINT width, UINT height, UINT levels, DWORD usage, D3DFORMAT format, D3DPOOL pool, const Fill& fill, const RawFill& raw) {
     const bool staged = pool == D3DPOOL_DEFAULT && (usage & (D3DUSAGE_DYNAMIC | D3DUSAGE_RENDERTARGET | D3DUSAGE_DEPTHSTENCIL)) == 0;
     Com<IDirect3DTexture9> out;
     HRESULT result = d->CreateTexture(width, height, levels, usage, format, staged ? D3DPOOL_SYSTEMMEM : pool, out.put(), nullptr);
@@ -774,12 +868,12 @@ Com<IDirect3DTexture9> Ctx::texture(UINT width, UINT height, UINT levels, DWORD 
         fail("CreateTexture: " + D3d9Tools::hr(result));
         return {};
     }
-    if (!fill) {
+    if (!fill && !raw) {
         return out;
     }
     const UINT count = (usage & D3DUSAGE_AUTOGENMIPMAP) ? 1 : out->GetLevelCount();
     for (UINT level = 0; level < count; ++level) {
-        if (!fill_level(out.get(), level, format, fill)) {
+        if (!fill_level(out.get(), level, format, fill, raw)) {
             return {};
         }
     }
@@ -943,46 +1037,76 @@ private:
 
 }  // namespace
 
-namespace {
-
-void explain(rr::CaseSpec& spec) {
-    const std::string& g = spec.group();
-    const std::string& n = spec.name();
-    const auto has = [&](const char* text) { return n.find(text) != std::string::npos; };
-    const auto starts = [&](const char* text) { return n.rfind(text, 0) == 0; };
-    if (g == "tex" && (starts("format_") || starts("restream_format_"))) {
-        spec.audit_ok("texture formats that are lossless at 8 bits, or that share one source image with a channel swizzle, sample to identical 8-bit output by design");
-    } else if (g == "tex" && (starts("depth_") || has("pool_default") || starts("filter_linear_linear"))) {
-        spec.audit_ok("the same content reached through another colour target or upload path is identical by design");
-    } else if (g == "shader" && (starts("decl_type_") || has("ps20_") || has("ps30_procedural") || has("ps30_depth_output") || has("ps2a_"))) {
-        spec.audit_ok("vertex types carrying the same normalized values, or one shader through another shader model, produce identical output by design");
-    } else if (g == "surf" && (starts("depth_format_") || starts("rendertarget_format_x8") || starts("reset_restores") || starts("lockable_back"))) {
-        spec.audit_ok("depth or colour formats with sufficient precision, and the same scene on a second device, give identical output by design");
-    } else if (g == "ex" || starts("present_ex") || has("gpu_thread_priority")) {
-        spec.audit_ok("the extended device rows draw the same scene on different devices or paths and must produce identical images by design");
-    } else if (g == "prim" && (starts("draw_indexed_") || starts("dynamic_vb_") || starts("draw_vb_line"))) {
-        spec.audit_ok("one mesh through different index or buffer paths is identical by design; one pixel lines cover under two percent of the frame");
-    } else if (g == "ff" && (starts("fog_table_linear") || starts("fog_vertex_linear") || starts("fvf_tex1_size"))) {
-        spec.audit_ok("linear fog is affine so vertex and table fog coincide; projected texture coordinates of size 3 and 4 sample identically");
-    } else if (g == "rs" && (has("bothsrcalpha") || has("blend_src_srcalpha") || has("persistent_stencil_") || has("persistent_depth_equal") || starts("wrap_coord_") || starts("fill_point") || starts("alphatest_never") || starts("lastpixel") || has("persistent_depth_less") || starts("depthfunc_never") ||
-                             has("persistent_depth_greater") || has("persistent_stencil_keep") || has("persistent_stencil_zero") || has("stencil_op_zero") || has("stencil_op_keep"))) {
-        spec.audit_ok("BOTHSRCALPHA is defined as SRCALPHA with INVSRCALPHA; the remaining rows are a degenerate case of their family by design");
-    } else if (g == "tss" && (has("arg_temp_resultarg") || has("op_selectarg2"))) {
-        spec.audit_ok("a value routed through the temporary register equals SELECTARG2 by design");
+bool HiRows::applies(D3DFORMAT f) {
+    switch (f) {
+        case D3DFMT_A16B16G16R16:
+        case D3DFMT_G16R16:
+        case D3DFMT_L16:
+        case D3DFMT_A2R10G10B10:
+        case D3DFMT_A2B10G10R10:
+        case D3DFMT_R16F:
+        case D3DFMT_G16R16F:
+        case D3DFMT_A16B16G16R16F:
+        case D3DFMT_R32F:
+        case D3DFMT_G32R32F:
+        case D3DFMT_A32B32G32R32F:
+            return true;
+        default:
+            return false;
     }
 }
 
-}  // namespace
+rr::Tolerance HiRows::tolerance(D3DFORMAT f) {
+    switch (f) {
+        case D3DFMT_A16B16G16R16:
+        case D3DFMT_G16R16:
+        case D3DFMT_L16:
+            return rr::Tolerance::floats(7.6e-6f);
+        case D3DFMT_A2R10G10B10:
+        case D3DFMT_A2B10G10R10:
+        case D3DFMT_R16F:
+        case D3DFMT_G16R16F:
+        case D3DFMT_A16B16G16R16F:
+            return rr::Tolerance::floats(4.9e-4f);
+        default:
+            return rr::Tolerance::floats(1.9e-6f);
+    }
+}
+
+Layout HiRows::layout() { return {D3DFMT_A32B32G32R32F, D3DFMT_D24S8, 128}; }
+
+Need HiRows::need(D3DFORMAT f, const std::string& name) {
+    return Needs::all({Needs::format(0, D3DRTYPE_TEXTURE, f, "texture format " + name),
+                       Needs::format(D3DUSAGE_RENDERTARGET, D3DRTYPE_SURFACE, D3DFMT_A32B32G32R32F, "128-bit float render target"), Needs::shader(0, 2)});
+}
+
+void HiRows::present(Ctx& c, IDirect3DTexture9* texture) {
+    c.clear(Dx::kColor(0, 0, 0, 255));
+    Com<IDirect3DPixelShader9> ps = c.ps("sampler2D s : register(s0);\nfloat4 main(float2 t : TEXCOORD0) : COLOR { return tex2D(s, t); }\n", "ps_2_0");
+    if (!ps || texture == nullptr) {
+        return;
+    }
+    c.tex(0, texture);
+    c.ss(0, D3DSAMP_MINFILTER, D3DTEXF_POINT);
+    c.ss(0, D3DSAMP_MAGFILTER, D3DTEXF_POINT);
+    c.ss(0, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+    c.ss(0, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+    c.rs(D3DRS_ALPHABLENDENABLE, FALSE);
+    c.chk(c.d->SetPixelShader(ps.get()), "SetPixelShader");
+    const float inset = 1.0f / 1024.0f;
+    const std::vector<TlVtx> q = Geo::tl_quad(0, 0, 128, 128, 0xFFFFFFFF, inset, inset, 1.0f + inset, 1.0f + inset);
+    c.fvf(kTlFvf);
+    c.draw(D3DPT_TRIANGLELIST, 2, q.data(), sizeof(TlVtx));
+    c.chk(c.d->SetPixelShader(nullptr), "SetPixelShader");
+}
 
 void Cases::single(rr::CaseSpec spec, Body body, Layout layout, Need need) {
-    explain(spec);
     rr::CaseTable<Kit>::instance().add(std::move(spec), [body = std::move(body), layout, need] {
         return std::unique_ptr<rr::Scene<Kit>>(new FnScene([body](Ctx& ctx, unsigned) { body(ctx); }, layout, need));
     });
 }
 
 void Cases::frames(rr::CaseSpec spec, FrameMaker maker, Layout layout, Need need) {
-    explain(spec);
     rr::CaseTable<Kit>::instance().add(std::move(spec), [maker = std::move(maker), layout, need] {
         return std::unique_ptr<rr::Scene<Kit>>(new FnScene(maker(), layout, need));
     });

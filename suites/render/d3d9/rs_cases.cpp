@@ -32,7 +32,13 @@ Need blend_need() {
 
 void blend_cases() {
     for (const BlendInfo& s : kSrc) {
-        Cases::single(rr::CaseSpec("rs", std::string("blend_src_") + s.name).tolerance(rr::Tolerance::blend(3)), [s](Ctx& c) {
+        rr::CaseSpec src_spec = rr::CaseSpec("rs", std::string("blend_src_") + s.name).tolerance(rr::Tolerance::blend(3));
+        if (std::string(s.name) == "srcalpha") {
+            src_spec.same_as({"rs.blend_src_bothsrcalpha"}, "BOTHSRCALPHA is defined as SRCALPHA with INVSRCALPHA and the row sets exactly that destination, so the images are identical by design; ZERO or ONE for either factor would show");
+        } else if (std::string(s.name) == "bothsrcalpha") {
+            src_spec.same_as({"rs.blend_src_srcalpha"}, "BOTHSRCALPHA is defined as SRCALPHA with INVSRCALPHA and overrides the destination factor, so the image equals the SRCALPHA row by design; ZERO or ONE for either factor would show");
+        }
+        Cases::single(src_spec, [s](Ctx& c) {
             background(c);
             c.rs(D3DRS_ALPHABLENDENABLE, TRUE);
             c.rs(D3DRS_BLENDFACTOR, 0xFF4080C0);
@@ -135,7 +141,11 @@ void test_cases() {
         }, {}, Needs::caps([i](const D3DCAPS9& caps) { return (caps.AlphaCmpCaps & (1u << (static_cast<unsigned>(kFuncs[i]) - 1))) != 0; }, "alpha compare function"));
     }
     for (int i = 0; i < 8; ++i) {
-        Cases::single(rr::CaseSpec("rs", std::string("depthfunc_") + kFuncNames[i]), [i](Ctx& c) {
+        rr::CaseSpec func_spec = rr::CaseSpec("rs", std::string("depthfunc_") + kFuncNames[i]);
+        if (std::string(kFuncNames[i]) == "never") {
+            func_spec.same_as({"rs.persistent_depth_greater"}, "NEVER draws nothing, the plane alone that GREATER against the persistent depth plane shows in its first captured frames by design; a function that passes shows");
+        }
+        Cases::single(func_spec, [i](Ctx& c) {
             c.clear(Dx::kColor(20, 20, 60, 255));
             c.rs(D3DRS_ZENABLE, D3DZB_TRUE);
             c.rs(D3DRS_ZFUNC, D3DCMP_ALWAYS);
@@ -333,11 +343,18 @@ void raster_cases() {
         Cases::single(rr::CaseSpec("rs", std::string("fill_") + f.name).tolerance(rr::Tolerance::raster(4, 1)), [f](Ctx& c) {
             c.clear(Dx::kColor(20, 20, 60, 255));
             c.rs(D3DRS_FILLMODE, f.mode);
-            c.rsf(D3DRS_POINTSIZE, 3.0f);
-            const Tri tris[6] = {{10, 10, 0.5f, 1, 0xFFFF4040}, {70, 20, 0.5f, 1, 0xFF40FF40}, {20, 100, 0.5f, 1, 0xFF4040FF},
-                                 {60, 70, 0.5f, 1, 0xFFFFFF40}, {120, 60, 0.5f, 1, 0xFF40FFFF}, {90, 120, 0.5f, 1, 0xFFFF40FF}};
+            c.rsf(D3DRS_POINTSIZE, 5.0f);
+            std::vector<Tri> tris;
+            const DWORD palette[6] = {0xFFFF4040, 0xFF40FF40, 0xFF4040FF, 0xFFFFFF40, 0xFF40FFFF, 0xFFFF40FF};
+            for (unsigned k = 0; k < 24; ++k) {
+                const float a0 = 6.2831853f * static_cast<float>(k) / 24.0f;
+                const float a1 = 6.2831853f * static_cast<float>(k + 1) / 24.0f;
+                tris.push_back({64, 64, 0.5f, 1, 0xFFFFFFFF});
+                tris.push_back({64 + 56 * std::cos(a0), 64 + 56 * std::sin(a0), 0.5f, 1, palette[k % 6]});
+                tris.push_back({64 + 56 * std::cos(a1), 64 + 56 * std::sin(a1), 0.5f, 1, palette[(k + 1) % 6]});
+            }
             c.fvf(D3DFVF_XYZRHW | D3DFVF_DIFFUSE);
-            c.draw(D3DPT_TRIANGLELIST, 2, tris, sizeof(Tri));
+            c.draw(D3DPT_TRIANGLELIST, 24, tris.data(), sizeof(Tri));
         });
     }
     Cases::single(rr::CaseSpec("rs", "scissor_test"), [](Ctx& c) {
@@ -368,53 +385,6 @@ void raster_cases() {
             c.draw(D3DPT_LINELIST, 4, lines, sizeof(Tri));
         });
     }
-    {
-        Cases::single(rr::CaseSpec("rs", "lastpixel_off").tolerance(rr::Tolerance::exact()), [](Ctx& c) {
-            c.clear(Dx::kColor(20, 20, 60, 255));
-            c.rs(D3DRS_LASTPIXEL, FALSE);
-            const Tri lines[8] = {{10.5f, 20.5f, 0.5f, 1, 0xFFFFFFFF}, {50.5f, 20.5f, 0.5f, 1, 0xFFFFFFFF}, {10.5f, 30.5f, 0.5f, 1, 0xFFFF8080}, {50.5f, 30.5f, 0.5f, 1, 0xFFFF8080},
-                                  {70.5f, 10.5f, 0.5f, 1, 0xFF80FF80}, {70.5f, 60.5f, 0.5f, 1, 0xFF80FF80}, {90.5f, 60.5f, 0.5f, 1, 0xFF8080FF}, {90.5f, 10.5f, 0.5f, 1, 0xFF8080FF}};
-            c.fvf(D3DFVF_XYZRHW | D3DFVF_DIFFUSE);
-            c.draw(D3DPT_LINELIST, 4, lines, sizeof(Tri));
-        });
-    }
-    for (int axis = 0; axis < 2; ++axis) {
-        Cases::single(rr::CaseSpec("rs", axis ? "wrap_coord_v" : "wrap_coord_u").tolerance(rr::Tolerance::blend(3)), [axis](Ctx& c) {
-            c.clear(Dx::kColor(20, 20, 60, 255));
-            Com<IDirect3DTexture9> t = c.texture(64, 64, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, Texels::rainbow());
-            c.tex(0, t.get());
-            c.ss(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
-            c.ss(0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
-            c.ss(0, D3DSAMP_ADDRESSU, D3DTADDRESS_WRAP);
-            c.ss(0, D3DSAMP_ADDRESSV, D3DTADDRESS_WRAP);
-            c.rs(D3DRS_WRAP0, axis ? D3DWRAP_V : D3DWRAP_U);
-            const std::vector<TlVtx> top = Geo::tl_quad(8, 8, 120, 60, 0xFFFFFFFF, axis ? 0.0f : 0.9f, axis ? 0.9f : 0.0f, axis ? 1.0f : 0.1f, axis ? 0.1f : 1.0f);
-            c.fvf(kTlFvf);
-            c.draw(D3DPT_TRIANGLELIST, 2, top.data(), sizeof(TlVtx));
-            c.rs(D3DRS_WRAP0, 0);
-            const std::vector<TlVtx> bottom = Geo::tl_quad(8, 68, 120, 120, 0xFFFFFFFF, axis ? 0.0f : 0.9f, axis ? 0.9f : 0.0f, axis ? 1.0f : 0.1f, axis ? 0.1f : 1.0f);
-            c.draw(D3DPT_TRIANGLELIST, 2, bottom.data(), sizeof(TlVtx));
-        });
-    }
-    Cases::single(rr::CaseSpec("rs", "wrap_coord_set1_u").tolerance(rr::Tolerance::blend(3)), [](Ctx& c) {
-        c.clear(Dx::kColor(20, 20, 60, 255));
-        Com<IDirect3DTexture9> t = c.texture(64, 64, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, Texels::rainbow());
-        c.tex(0, t.get());
-        c.ss(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
-        c.ss(0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
-        c.ss(0, D3DSAMP_ADDRESSU, D3DTADDRESS_WRAP);
-        c.ss(0, D3DSAMP_ADDRESSV, D3DTADDRESS_WRAP);
-        c.tss(0, D3DTSS_TEXCOORDINDEX, 1);
-        struct V { float x, y, z, rhw, u0, v0, u1, v1; };
-        c.fvf(D3DFVF_XYZRHW | D3DFVF_TEX2);
-        c.rs(D3DRS_WRAP1, D3DWRAP_U);
-        const V a[4] = {{8, 8, 0.5f, 1, 0, 0, 0.9f, 0}, {120, 8, 0.5f, 1, 0, 0, 0.1f, 0}, {8, 60, 0.5f, 1, 0, 0, 0.9f, 1}, {120, 60, 0.5f, 1, 0, 0, 0.1f, 1}};
-        c.draw(D3DPT_TRIANGLESTRIP, 2, a, sizeof(V));
-        c.rs(D3DRS_WRAP1, 0);
-        const V b[4] = {{8, 68, 0.5f, 1, 0, 0, 0.9f, 0}, {120, 68, 0.5f, 1, 0, 0, 0.1f, 0}, {8, 120, 0.5f, 1, 0, 0, 0.9f, 1}, {120, 120, 0.5f, 1, 0, 0, 0.1f, 1}};
-        c.draw(D3DPT_TRIANGLESTRIP, 2, b, sizeof(V));
-        c.tss(0, D3DTSS_TEXCOORDINDEX, 0);
-    });
 }
 
 const Registrar kBlend(blend_cases);

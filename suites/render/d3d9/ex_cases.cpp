@@ -179,7 +179,7 @@ void surface_cases() {
         c.quad(40, 40, 120, 120, 0.7f, 0xFFE04060);
         c.quad(40, 40, 90, 90, 0.2f, 0xFF4060E0);
     }, {}, ex_need());
-    Cases::single(ex("gpu_thread_priority_and_frame_latency_do_not_alter_image"), [](Ctx& c) {
+    Cases::single(ex("gpu_thread_priority_and_frame_latency_do_not_alter_image").same_as({"surf.rendertarget_format_x8r8g8b8"}, "draws the plain lit sphere scene on the default target, the same image as the X8R8G8B8 render target row whose invisible destination alpha quad leaves the sphere unchanged; the subject is that thread priority and frame latency leave the image alone"), [](Ctx& c) {
         Com<IDirect3DDevice9Ex> holder;
         IDirect3DDevice9Ex* e = as_ex(c, holder);
         if (e == nullptr) {
@@ -209,7 +209,7 @@ void surface_cases() {
 }
 
 void second_device_cases() {
-    Cases::frames(ex("present_ex_flipex_loop", 6, {0, 2, 5}), [] {
+    Cases::frames(ex("present_ex_flipex_loop", 6, {0, 2, 5}).same_as({"ex.present_ex_discard_check_device_state", "surf.lockable_back_buffer_direct_read", "surf.reset_restores_rendering_plain_device"}, "the same scene_for(f) scene is captured before PresentEx on every path, so the images are identical by design; the subject of each row is the path that reaches them (a lost reset or device state shows as a failure, a missing draw as a mismatch with the oracle)"), [] {
         auto dev = std::make_shared<Dev2>();
         return FrameBody([dev](Ctx& c, unsigned f) {
             std::string error;
@@ -231,7 +231,7 @@ void second_device_cases() {
         });
     }, {}, ex_need());
 
-    Cases::frames(ex("present_ex_discard_check_device_state", 6, {0, 3, 5}), [] {
+    Cases::frames(ex("present_ex_discard_check_device_state", 6, {0, 3, 5}).same_as({"ex.present_ex_flipex_loop", "ex.reset_ex_changes_back_buffer_size", "surf.reset_restores_rendering_plain_device"}, "the same scene_for(f) scene is captured before PresentEx on every path, so the images are identical by design; the subject of each row is the path that reaches them (a lost reset or device state shows as a failure, a missing draw as a mismatch with the oracle)"), [] {
         auto dev = std::make_shared<Dev2>();
         return FrameBody([dev](Ctx& c, unsigned f) {
             std::string error;
@@ -264,7 +264,7 @@ void second_device_cases() {
         });
     }, {}, ex_need());
 
-    Cases::frames(ex("reset_ex_changes_back_buffer_size", 4, {0, 1, 2, 3}), [] {
+    Cases::frames(ex("reset_ex_changes_back_buffer_size", 4, {0, 1, 2, 3}).same_as({"ex.present_ex_discard_check_device_state"}, "the same scene_for(f) scene is captured before PresentEx on every path, so the images are identical by design; the subject of each row is the path that reaches them (a lost reset or device state shows as a failure, a missing draw as a mismatch with the oracle)"), [] {
         auto dev = std::make_shared<Dev2>();
         return FrameBody([dev](Ctx& c, unsigned f) {
             std::string error;
@@ -291,7 +291,7 @@ void second_device_cases() {
         });
     }, {}, ex_need());
 
-    Cases::frames(rr::CaseSpec("surf", "reset_restores_rendering_plain_device").frames(5, {0, 2, 4}), [] {
+    Cases::frames(rr::CaseSpec("surf", "reset_restores_rendering_plain_device").frames(5, {0, 2, 4}).same_as({"ex.present_ex_discard_check_device_state", "ex.present_ex_flipex_loop", "surf.lockable_back_buffer_direct_read"}, "the same scene_for(f) scene is captured before PresentEx on every path, so the images are identical by design; the subject of each row is the path that reaches them (a lost reset or device state shows as a failure, a missing draw as a mismatch with the oracle)"), [] {
         auto dev = std::make_shared<Dev2>();
         return FrameBody([dev](Ctx& c, unsigned f) {
             std::string error;
@@ -315,7 +315,7 @@ void second_device_cases() {
         });
     });
 
-    Cases::single(rr::CaseSpec("surf", "lockable_back_buffer_direct_read"), [](Ctx& c) {
+    Cases::single(rr::CaseSpec("surf", "lockable_back_buffer_direct_read").same_as({"ex.present_ex_flipex_loop", "surf.reset_restores_rendering_plain_device"}, "the same scene_for(f) scene is captured before PresentEx on every path, so the images are identical by design; the subject of each row is the path that reaches them (a lost reset or device state shows as a failure, a missing draw as a mismatch with the oracle)"), [](Ctx& c) {
         Dev2 dev;
         dev.flags = D3DPRESENTFLAG_LOCKABLE_BACKBUFFER;
         std::string error;

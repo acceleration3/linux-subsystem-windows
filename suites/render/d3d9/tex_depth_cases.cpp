@@ -26,7 +26,14 @@ void depth_texture_rows() {
     for (const Row& r : rows) {
         Need need = Needs::all({Needs::format(D3DUSAGE_DEPTHSTENCIL, D3DRTYPE_TEXTURE, r.format, std::string("depth texture format ") + r.name),
                                 r.null_target ? Needs::format(D3DUSAGE_RENDERTARGET, D3DRTYPE_SURFACE, fourcc('N', 'U', 'L', 'L'), "NULL render target format") : Need(), Needs::shader(0, 2)});
-        Cases::single(rr::CaseSpec("tex", r.name).tolerance(rr::Tolerance::blend(4)), [r](Ctx& c) {
+        rr::CaseSpec depth_spec = rr::CaseSpec("tex", r.name).tolerance(rr::Tolerance::blend(4));
+        const std::string fmt = std::string(r.name).substr(std::string(r.name).rfind('_') + 1);
+        if (std::string(r.name).rfind("depth_texture_", 0) == 0 && fmt != "rawz") {
+            depth_spec.same_as({"tex.depth_only_null_target_" + fmt}, "the same depth quads sampled back as a texture; this row renders them with a colour target and the null target row without one, so the sampled depth is identical by design and a missing depth write shows");
+        } else if (std::string(r.name).rfind("depth_only_null_target_", 0) == 0) {
+            depth_spec.same_as({"tex.depth_texture_" + fmt}, "the same depth quads rendered with a NULL colour target; the sampled depth equals the colour target row by design and a missing depth write shows");
+        }
+        Cases::single(depth_spec, [r](Ctx& c) {
             Com<IDirect3DTexture9> depth;
             c.chk(c.d->CreateTexture(128, 128, 1, D3DUSAGE_DEPTHSTENCIL, r.format, D3DPOOL_DEFAULT, depth.put(), nullptr), "CreateTexture depth");
             Com<IDirect3DSurface9> color;

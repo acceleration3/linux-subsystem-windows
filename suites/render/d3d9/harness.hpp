@@ -64,6 +64,7 @@ public:
 };
 
 using Fill = std::function<std::uint32_t(UINT x, UINT y, UINT w, UINT h)>;
+using RawFill = std::function<void(UINT x, UINT y, std::uint8_t* dst)>;
 
 class Texels {
 public:
@@ -73,6 +74,7 @@ public:
     [[nodiscard]] static Fill alpha_rings();
     [[nodiscard]] static Fill solid(std::uint32_t value);
     [[nodiscard]] static std::uint16_t half(float value);
+    [[nodiscard]] static RawFill hi_precision(D3DFORMAT format, unsigned shift, bool degrade = false);
     [[nodiscard]] static UINT bytes_per_texel(D3DFORMAT format);
     [[nodiscard]] static bool is_block(D3DFORMAT format);
     [[nodiscard]] static bool pack(D3DFORMAT format, std::uint32_t argb, std::uint8_t* dst);
@@ -95,6 +97,7 @@ public:
     rr::CaptureSet pending;
 
     [[nodiscard]] bool open(UINT extent, D3DFORMAT format, D3DFORMAT depth_format, bool use_back = false);
+    [[nodiscard]] bool broken(const char* name) const;
     void fail(const std::string& message);
     void chk(HRESULT result, const char* what);
     void rs(D3DRENDERSTATETYPE type, DWORD value) { chk(d->SetRenderState(type, value), "SetRenderState"); }
@@ -121,8 +124,8 @@ public:
     void light(DWORD index, const D3DLIGHT9& value, bool enable = true);
     void material(const D3DMATERIAL9& value);
     [[nodiscard]] Com<IDirect3DTexture9> texture(UINT width, UINT height, UINT levels, DWORD usage, D3DFORMAT format, D3DPOOL pool,
-                                                 const Fill& fill);
-    [[nodiscard]] bool fill_level(IDirect3DTexture9* texture, UINT level, D3DFORMAT format, const Fill& fill);
+                                                 const Fill& fill, const RawFill& raw = nullptr);
+    [[nodiscard]] bool fill_level(IDirect3DTexture9* texture, UINT level, D3DFORMAT format, const Fill& fill, const RawFill& raw = nullptr);
     [[nodiscard]] Com<IDirect3DVertexShader9> vs(const std::string& source, const char* profile = "vs_3_0");
     [[nodiscard]] Com<IDirect3DPixelShader9> ps(const std::string& source, const char* profile = "ps_3_0");
     [[nodiscard]] Com<IDirect3DVertexBuffer9> vbuffer(const void* data, UINT bytes, DWORD usage = D3DUSAGE_WRITEONLY, D3DPOOL pool = D3DPOOL_DEFAULT);
@@ -171,6 +174,15 @@ public:
     [[nodiscard]] static Need format(DWORD usage, D3DRESOURCETYPE type, D3DFORMAT format, std::string what);
     [[nodiscard]] static Need all(std::vector<Need> parts);
     [[nodiscard]] static Need shader(unsigned vertex_major, unsigned pixel_major);
+};
+
+class HiRows {
+public:
+    [[nodiscard]] static bool applies(D3DFORMAT format);
+    [[nodiscard]] static rr::Tolerance tolerance(D3DFORMAT format);
+    [[nodiscard]] static Layout layout();
+    [[nodiscard]] static Need need(D3DFORMAT format, const std::string& name);
+    static void present(Ctx& c, IDirect3DTexture9* texture);
 };
 
 struct Registrar {

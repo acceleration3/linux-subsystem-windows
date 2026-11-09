@@ -228,7 +228,13 @@ void fvf_cases() {
     struct SizeCase { const char* name; DWORD fvf; int floats; };
     const SizeCase sizes[] = {{"fvf_tex1_size1", D3DFVF_TEXCOORDSIZE1(0), 1}, {"fvf_tex1_size3", D3DFVF_TEXCOORDSIZE3(0), 3}, {"fvf_tex1_size4", D3DFVF_TEXCOORDSIZE4(0), 4}};
     for (const SizeCase& sc : sizes) {
-        Cases::single(rr::CaseSpec("ff", sc.name), [sc](Ctx& c) {
+        rr::CaseSpec size_spec("ff", sc.name);
+        if (sc.floats == 3) {
+            size_spec.same_as({"ff.fvf_tex1_size4"}, "COUNT3 and COUNT4 projected coordinates divide by the same last component and give the same (u, v), so the images are identical by design; dividing by the wrong component shows in both");
+        } else if (sc.floats == 4) {
+            size_spec.same_as({"ff.fvf_tex1_size3"}, "COUNT4 and COUNT3 projected coordinates divide by the same last component and give the same (u, v), so the images are identical by design; dividing by the wrong component shows in both");
+        }
+        Cases::single(size_spec, [sc](Ctx& c) {
             clear_blue(c);
             Com<IDirect3DTexture9> t = rainbow(c);
             c.tex(0, t.get());
@@ -501,7 +507,7 @@ void light_cases() {
     }
 }
 
-void fog_scene(Ctx& c, const std::function<void(Ctx&)>& fog, bool textured = true) {
+void fog_scene(Ctx& c, const std::function<void(Ctx&)>& fog, bool textured = true, bool wide = false) {
     c.clear(Dx::kColor(150, 160, 170));
     c.rs(D3DRS_ZENABLE, D3DZB_TRUE);
     c.rs(D3DRS_FOGENABLE, TRUE);
@@ -519,8 +525,14 @@ void fog_scene(Ctx& c, const std::function<void(Ctx&)>& fog, bool textured = tru
         c.ss(0, D3DSAMP_ADDRESSV, D3DTADDRESS_WRAP);
     }
     fog(c);
-    static const Mesh terrain = Geo::grid(4, 8.0f, 0.5f, kWhite);
     c.fvf(kVtxFvf);
+    if (wide) {
+        const Vtx ground[4] = {{-14, 0, 24, 0, 1, 0, 0xFFFFFFFF, 0, 0, 0}, {14, 0, 24, 0, 1, 0, 0xFFFFFFFF, 0, 7, 0},
+                               {-14, 0, -5, 0, 1, 0, 0xFFFFFFFF, 0, 0, 7}, {14, 0, -5, 0, 1, 0, 0xFFFFFFFF, 0, 7, 7}};
+        c.draw(D3DPT_TRIANGLESTRIP, 2, ground, sizeof(Vtx));
+        return;
+    }
+    static const Mesh terrain = Geo::grid(4, 8.0f, 0.5f, kWhite);
     c.draw_mesh(terrain);
 }
 
@@ -528,23 +540,31 @@ void fog_cases() {
     struct Mode { const char* name; DWORD mode; float density; };
     const Mode modes[] = {{"linear", D3DFOG_LINEAR, 0}, {"exp", D3DFOG_EXP, 0.08f}, {"exp2", D3DFOG_EXP2, 0.1f}};
     for (const Mode& m : modes) {
-        Cases::single(rr::CaseSpec("ff", std::string("fog_vertex_") + m.name).tolerance(rr::Tolerance::blend(4)), [m](Ctx& c) {
+        rr::CaseSpec vertex_spec = rr::CaseSpec("ff", std::string("fog_vertex_") + m.name).tolerance(rr::Tolerance::blend(4));
+        rr::CaseSpec table_spec = rr::CaseSpec("ff", std::string("fog_table_") + m.name).tolerance(rr::Tolerance::blend(4));
+        if (m.mode == D3DFOG_LINEAR) {
+            vertex_spec.same_as({"ff.fog_table_linear"}, "linear vertex fog over one large ground quad; both the D3D9On12 oracle and the accel path evaluate vertex fog per pixel from eye depth, so no scene separates it from the table fog row; the fog start and end still show in both");
+            table_spec.same_as({"ff.fog_vertex_linear"}, "linear table fog over one large ground quad; both the D3D9On12 oracle and the accel path evaluate vertex fog per pixel from eye depth, so no scene separates it from the vertex fog row; the fog start and end still show in both");
+        }
+        Cases::single(vertex_spec, [m](Ctx& c) {
             fog_scene(c, [m](Ctx& k) {
-                k.rs(D3DRS_FOGVERTEXMODE, m.mode);
-                k.rs(D3DRS_FOGTABLEMODE, D3DFOG_NONE);
+                const bool per_pixel = k.broken("fog_mode_swap");
+                k.rs(D3DRS_FOGVERTEXMODE, per_pixel ? D3DFOG_NONE : m.mode);
+                k.rs(D3DRS_FOGTABLEMODE, per_pixel ? m.mode : D3DFOG_NONE);
                 k.rsf(D3DRS_FOGSTART, 4.0f);
                 k.rsf(D3DRS_FOGEND, 16.0f);
                 k.rsf(D3DRS_FOGDENSITY, m.density);
-            });
+            }, true, m.mode == D3DFOG_LINEAR);
         });
-        Cases::single(rr::CaseSpec("ff", std::string("fog_table_") + m.name).tolerance(rr::Tolerance::blend(4)), [m](Ctx& c) {
+        Cases::single(table_spec, [m](Ctx& c) {
             fog_scene(c, [m](Ctx& k) {
-                k.rs(D3DRS_FOGTABLEMODE, m.mode);
-                k.rs(D3DRS_FOGVERTEXMODE, D3DFOG_NONE);
+                const bool per_vertex = k.broken("fog_mode_swap");
+                k.rs(D3DRS_FOGTABLEMODE, per_vertex ? D3DFOG_NONE : m.mode);
+                k.rs(D3DRS_FOGVERTEXMODE, per_vertex ? m.mode : D3DFOG_NONE);
                 k.rsf(D3DRS_FOGSTART, 4.0f);
                 k.rsf(D3DRS_FOGEND, 16.0f);
                 k.rsf(D3DRS_FOGDENSITY, m.density);
-            });
+            }, true, m.mode == D3DFOG_LINEAR);
         }, {}, Needs::caps([](const D3DCAPS9& caps) { return (caps.RasterCaps & D3DPRASTERCAPS_FOGTABLE) != 0; }, "table fog"));
     }
     Cases::single(rr::CaseSpec("ff", "fog_vertex_range").tolerance(rr::Tolerance::blend(4)), [](Ctx& c) {

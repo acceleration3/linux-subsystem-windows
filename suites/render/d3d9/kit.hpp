@@ -37,6 +37,7 @@ public:
     [[nodiscard]] bool end(std::string& error);
 
     bool warp = false;
+    bool under_test = false;
     std::string name;
     D3D_FEATURE_LEVEL warp_level = D3D_FEATURE_LEVEL_11_0;
 
