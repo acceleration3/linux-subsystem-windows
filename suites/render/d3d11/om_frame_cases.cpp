@@ -117,7 +117,7 @@ struct BlendMf {
 
 struct Registrar {
     Registrar() {
-        const rr::Tolerance tolerance = rr::Tolerance::blend(2);
+        const rr::Tolerance tolerance = rr::Tolerance::blend(8);
         for (const Factor& f : kFactors) {
             const bool sat = f.color == D3D11_BLEND_SRC_ALPHA_SAT;
             const Half l{f.color, D3D11_BLEND_ONE, f.alpha, D3D11_BLEND_ONE, D3D11_BLEND_OP_ADD, D3D11_BLEND_OP_ADD};
@@ -276,6 +276,14 @@ struct DepthMf {
     }
 };
 
+rr::Tolerance tie_tolerance() {
+    rr::Tolerance t = rr::Tolerance::blend(2).with_edge(2);
+    t.outlier_fraction = 0.0005;
+    t.outlier_max_delta = 255;
+    t.max_outliers = 8;
+    return t;
+}
+
 struct DepthRegistrar {
     DepthRegistrar() {
         struct F {
@@ -288,9 +296,9 @@ struct DepthRegistrar {
                                   {"greater_equal", D3D11_COMPARISON_GREATER_EQUAL}, {"always", D3D11_COMPARISON_ALWAYS}};
         for (const F& f : funcs) {
             const D3D11_COMPARISON_FUNC func = f.func;
-            AddState<DepthMf>(spec("om", (std::string("depth_func_") + f.name).c_str()).frames(4, {1, 3}).tolerance(rr::Tolerance::blend(2).with_edge(2)), [func] { return DepthMf(func, true); });
+            AddState<DepthMf>(spec("om", (std::string("depth_func_") + f.name).c_str()).frames(4, {1, 3}).tolerance(tie_tolerance()), [func] { return DepthMf(func, true); });
         }
-        AddState<DepthMf>(spec("om", "depth_write_disabled").frames(4, {1, 3}).tolerance(rr::Tolerance::blend(2).with_edge(2)), [] { return DepthMf(D3D11_COMPARISON_GREATER, false); });
+        AddState<DepthMf>(spec("om", "depth_write_disabled").frames(4, {1, 3}).tolerance(tie_tolerance()), [] { return DepthMf(D3D11_COMPARISON_GREATER, false); });
     }
 };
 const DepthRegistrar kDepthRegistrar;

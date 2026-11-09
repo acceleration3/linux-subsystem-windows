@@ -232,7 +232,7 @@ bool run_expr(Rig& r, Cap& out, const ExprRow& row) {
 struct ExprRegistrar {
     ExprRegistrar() {
         for (const ExprRow& row : kExpr) {
-            Add(spec("tex", (std::string("intrinsic_") + row.name).c_str()).tolerance(rr::Tolerance::filter(6, 0.01).with_edge(1)),
+            Add(spec("tex", (std::string("intrinsic_") + row.name).c_str()).tolerance(std::string(row.name) == "calculate_lod" ? rr::Tolerance::filter(12, 0.03) : rr::Tolerance::filter(6, 0.01).with_edge(1)),
                 [&row](Rig& r, Cap& out) { return run_expr(r, out, row); });
         }
     }

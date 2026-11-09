@@ -394,37 +394,42 @@ const Add kGeneratedVertices(spec("cs", "compute_generated_vertex_buffer_then_dr
     return r.shot(out, target);
 });
 
-const Add kRawBuffer(spec("cs", "raw_buffer_uav_store_load").tolerance(rr::Tolerance::exact()), [](Rig& r, Cap& out) {
-    Com<ID3D11Buffer> buffer = r.buf(1024, D3D11_BIND_UNORDERED_ACCESS, nullptr, D3D11_USAGE_DEFAULT, 0, D3D11_RESOURCE_MISC_BUFFER_ALLOW_RAW_VIEWS);
-    Com<ID3D11ComputeShader> cs = r.cs(
-        "RWByteAddressBuffer b : register(u0);\n[numthreads(16, 1, 1)] void main(uint3 id : SV_DispatchThreadID) { uint i = id.x; b.Store4(i * 16, uint4(i, i * i, i ^ 0xA5A5, ~i)); AllMemoryBarrierWithGroupSync();\n"
-        "  uint4 v = b.Load4(((i + 1) % 16) * 16); AllMemoryBarrierWithGroupSync(); b.Store(i * 16 + 8, v.x + v.y * 3); b.Store2(i * 16, uint2(v.w, v.z)); }\n");
-    if (!buffer || !cs) return false;
+const Add kRawBuffer(spec("cs", "raw_buffer_uav_store_load_across_dispatches").tolerance(rr::Tolerance::exact()), [](Rig& r, Cap& out) {
+    Com<ID3D11Buffer> source = r.buf(256, D3D11_BIND_UNORDERED_ACCESS, nullptr, D3D11_USAGE_DEFAULT, 0, D3D11_RESOURCE_MISC_BUFFER_ALLOW_RAW_VIEWS);
+    Com<ID3D11Buffer> result = r.buf(256, D3D11_BIND_UNORDERED_ACCESS, nullptr, D3D11_USAGE_DEFAULT, 0, D3D11_RESOURCE_MISC_BUFFER_ALLOW_RAW_VIEWS);
+    Com<ID3D11ComputeShader> first = r.cs("RWByteAddressBuffer b : register(u0);\n[numthreads(16, 1, 1)] void main(uint3 id : SV_DispatchThreadID) { uint i = id.x; b.Store4(i * 16, uint4(i, i * i, i ^ 0xA5A5, ~i)); }\n");
+    Com<ID3D11ComputeShader> second = r.cs(
+        "RWByteAddressBuffer a : register(u0);\nRWByteAddressBuffer o : register(u1);\n[numthreads(16, 1, 1)] void main(uint3 id : SV_DispatchThreadID) { uint i = id.x; uint4 v = a.Load4(((i + 1) % 16) * 16);\n"
+        "  o.Store(i * 16 + 8, v.x + v.y * 3); o.Store2(i * 16, uint2(v.w, v.z)); o.Store(i * 16 + 12, ~i); }\n");
+    if (!source || !result || !first || !second) return false;
     D3D11_UNORDERED_ACCESS_VIEW_DESC ud{};
     ud.Format = DXGI_FORMAT_R32_TYPELESS;
     ud.ViewDimension = D3D11_UAV_DIMENSION_BUFFER;
-    ud.Buffer.NumElements = 256;
+    ud.Buffer.NumElements = 64;
     ud.Buffer.Flags = D3D11_BUFFER_UAV_FLAG_RAW;
-    Com<ID3D11UnorderedAccessView> uav = r.uav(buffer.get(), &ud);
-    if (!uav) return false;
-    ID3D11UnorderedAccessView* u = uav.get();
-    r.ctx->CSSetShader(cs.get(), nullptr, 0);
-    r.ctx->CSSetUnorderedAccessViews(0, 1, &u, nullptr);
+    Com<ID3D11UnorderedAccessView> su = r.uav(source.get(), &ud);
+    Com<ID3D11UnorderedAccessView> ru = r.uav(result.get(), &ud);
+    if (!su || !ru) return false;
+    ID3D11UnorderedAccessView* both[2] = {su.get(), ru.get()};
+    r.ctx->CSSetShader(first.get(), nullptr, 0);
+    r.ctx->CSSetUnorderedAccessViews(0, 1, both, nullptr);
+    r.ctx->Dispatch(1, 1, 1);
+    r.ctx->CSSetShader(second.get(), nullptr, 0);
+    r.ctx->CSSetUnorderedAccessViews(0, 2, both, nullptr);
     r.ctx->Dispatch(1, 1, 1);
     unbind_cs(r);
     Bytes bytes;
-    if (!r.read_bytes(buffer.get(), bytes)) return false;
+    if (!r.read_bytes(result.get(), bytes)) return false;
     for (unsigned i = 0; i < 16; ++i) {
         const unsigned n = (i + 1) % 16;
         const std::uint32_t v[4] = {n, n * n, n ^ 0xA5A5u, ~n};
         const std::uint32_t expected[4] = {v[3], v[2], v[0] + v[1] * 3, ~i};
         std::uint32_t got[4];
         std::memcpy(got, bytes.data() + i * 16, 16);
-        for (int k = 0; k < 4; ++k) {
-            if (got[k] != expected[k]) return r.fail("raw buffer word " + std::to_string(i * 4 + k) + " is " + std::to_string(got[k]) + " but the barriered model gives " + std::to_string(expected[k]));
-        }
+        for (int k = 0; k < 4; ++k)
+            if (got[k] != expected[k]) return r.fail("raw buffer word " + std::to_string(i * 4 + k) + " is " + std::to_string(got[k]) + " but the model gives " + std::to_string(expected[k]));
     }
-    return words_image(r, buffer.get(), 64, out, "raw");
+    return words_image(r, result.get(), 64, out, "raw");
 });
 
 const Add kStructured(spec("cs", "structured_buffer_uav_struct_stride").tolerance(rr::Tolerance::floats(1e-5f)), [](Rig& r, Cap& out) {
