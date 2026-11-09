@@ -481,6 +481,9 @@ int main(int argc, char** argv) {
     const std::vector<CaseRef> cases = all_cases();
     if (options.list) {
         for (const CaseRef& ref : cases) {
+            if (!selected(options, ref.id)) {
+                continue;
+            }
             std::printf("%s\n", ref.id.c_str());
         }
         return 0;
