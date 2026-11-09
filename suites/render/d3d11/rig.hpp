@@ -45,6 +45,7 @@ public:
     explicit Rig(Kit& k) : kit(k), dev(k.device()), ctx(k.context()) {}
 
     bool fail(const std::string& text);
+    [[nodiscard]] bool broken(const char* name) const;
     bool ok(HRESULT result, const char* what);
     [[nodiscard]] bool fl11() const { return kit.dev.level >= D3D_FEATURE_LEVEL_11_0; }
     [[nodiscard]] bool fl11_1() const { return kit.dev.level >= D3D_FEATURE_LEVEL_11_1; }
@@ -163,7 +164,7 @@ public:
             error = rig.error;
             return false;
         }
-        return true;
+        return debug_ok(rig, error);
     }
     bool capture(Kit& kit, unsigned index, rr::CaptureSet& out, std::string& error) override {
         Rig rig(kit);
@@ -171,10 +172,22 @@ public:
             error = rig.error;
             return false;
         }
-        return true;
+        return debug_ok(rig, error);
     }
 
 private:
+    static bool debug_ok(Rig& rig, std::string& error) {
+        if (!rig.kit.debug) {
+            return true;
+        }
+        const std::string messages = rig.debug_messages();
+        if (messages.empty()) {
+            return true;
+        }
+        error = "debug layer: " + messages;
+        return false;
+    }
+
     State state_;
 };
 

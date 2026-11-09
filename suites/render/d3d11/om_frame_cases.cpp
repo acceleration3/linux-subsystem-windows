@@ -189,13 +189,19 @@ struct LogicMf {
         t.DestBlend = t.DestBlendAlpha = D3D11_BLEND_ZERO;
         t.BlendOp = t.BlendOpAlpha = D3D11_BLEND_OP_ADD;
         t.LogicOpEnable = TRUE;
-        t.LogicOp = op;
+        t.LogicOp = r.broken("logic_copy") ? D3D11_LOGIC_OP_COPY : op;
         t.RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
         return back && front && cb && r.ok(dev1->CreateBlendState1(&bd, state.put()), "CreateBlendState1") && r.color(target, 128, 128, DXGI_FORMAT_R8G8B8A8_UINT);
     }
     bool step(Rig& r, unsigned frame) {
-        r.bind(target);
-        if (frame == 0) r.draw_fs(back.get());
+        if (frame == 0) {
+            r.bind(target);
+            r.draw_fs(back.get());
+        } else {
+            ID3D11RenderTargetView* v = target.view.get();
+            r.ctx->OMSetRenderTargets(1, &v, nullptr);
+            r.viewport(0, 0, 128, 128);
+        }
         const UINT k[4] = {frame, 0, 0, 0};
         r.ctx->UpdateSubresource(cb.get(), 0, nullptr, k, 0, 0);
         ID3D11Buffer* b = cb.get();
@@ -218,7 +224,7 @@ struct LogicRegistrar {
     LogicRegistrar() {
         for (const LogicRow& row : kLogic) {
             const D3D11_LOGIC_OP op = row.op;
-            AddState<LogicMf>(spec("om", (std::string("logic_op_") + row.name).c_str()).variant(1).frames(4, {1, 3}).uniform_ok(), [op] { return LogicMf(op); });
+            AddState<LogicMf>(spec("om", (std::string("logic_op_") + row.name).c_str()).variant(1).frames(3, {0, 2}).uniform_ok(), [op] { return LogicMf(op); });
         }
     }
 };

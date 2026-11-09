@@ -2,6 +2,8 @@
 
 #include "render/d3d/convert.hpp"
 
+#include <cstdlib>
+
 namespace lsw::suites::render::d3d11 {
 
 D3D11_RASTERIZER_DESC rdesc(D3D11_FILL_MODE fill, D3D11_CULL_MODE cull) {
@@ -53,6 +55,11 @@ D3D11_INPUT_ELEMENT_DESC elem(const char* name, DXGI_FORMAT format, UINT offset,
 }
 
 rr::CaseSpec spec(const char* group, const char* name) { return rr::CaseSpec(group, name); }
+
+bool Rig::broken(const char* name) const {
+    const char* list = std::getenv("LSW_D3D11_BREAK");
+    return list != nullptr && kit.under_test && (std::string(",") + list + ",").find(std::string(",") + name + ",") != std::string::npos;
+}
 
 bool Rig::fail(const std::string& text) {
     error = text;
@@ -316,7 +323,28 @@ Com<ID3D11DepthStencilState> Rig::dss(const D3D11_DEPTH_STENCIL_DESC& desc) {
 }
 
 bool Rig::color(Target& out, UINT w, UINT h, DXGI_FORMAT format, UINT samples) {
-    return kit.make_target(out, w, h, format, samples, error);
+    if (broken("single_sample")) {
+        samples = 1;
+    }
+    if (samples <= 1) {
+        return kit.make_target(out, w, h, format, samples, error);
+    }
+    D3D11_TEXTURE2D_DESC d = D3d11Tools::desc2d(w, h, format, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE, D3D11_USAGE_DEFAULT, 0, 1, 1, samples);
+    d.SampleDesc.Quality = D3D11_STANDARD_MULTISAMPLE_PATTERN;
+    if (!ok(dev->CreateTexture2D(&d, nullptr, out.texture.put()), "multisample texture with the standard pattern")) {
+        return false;
+    }
+    out.view = rtv(out.texture.get());
+    d.SampleDesc.Count = 1;
+    d.SampleDesc.Quality = 0;
+    if (!out.view || !ok(dev->CreateTexture2D(&d, nullptr, out.resolved.put()), "resolve target")) {
+        return false;
+    }
+    out.format = format;
+    out.width = w;
+    out.height = h;
+    out.samples = samples;
+    return true;
 }
 
 bool Rig::depth(Depth& out, UINT w, UINT h, DXGI_FORMAT format, UINT samples, UINT quality) {
@@ -331,9 +359,12 @@ bool Rig::depth(Depth& out, UINT w, UINT h, DXGI_FORMAT format, UINT samples, UI
     } else if (format == DXGI_FORMAT_D32_FLOAT_S8X24_UINT) {
         texture_format = DXGI_FORMAT_R32G8X24_TYPELESS;
     }
+    if (broken("single_sample")) {
+        samples = 1;
+    }
     D3D11_TEXTURE2D_DESC depth_desc = D3d11Tools::desc2d(w, h, texture_format, D3D11_BIND_DEPTH_STENCIL | D3D11_BIND_SHADER_RESOURCE,
                                                          D3D11_USAGE_DEFAULT, 0, 1, 1, samples);
-    depth_desc.SampleDesc.Quality = quality;
+    depth_desc.SampleDesc.Quality = samples > 1 && quality == 0 ? D3D11_STANDARD_MULTISAMPLE_PATTERN : quality;
     out.texture = D3d11Tools::texture(kit.dev, depth_desc, nullptr, &result);
     if (!out.texture) {
         return ok(result, "depth texture");

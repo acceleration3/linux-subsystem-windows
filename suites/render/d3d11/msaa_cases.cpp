@@ -46,22 +46,17 @@ bool msaa_scene(Rig& r, Cap& out, UINT samples, DXGI_FORMAT format, bool standar
 struct Registrar {
     Registrar() {
         for (UINT samples : {2u, 4u, 8u, 16u}) {
-            Add(spec("msaa", ("color_depth_resolve_" + std::to_string(samples) + "x").c_str()).tolerance(rr::Tolerance::psnr(samples == 2 ? 28 : 24)),
+            Add(spec("msaa", ("color_depth_resolve_" + std::to_string(samples) + "x").c_str()).tolerance(rr::Tolerance::tight(8)),
                 [samples](Rig& r, Cap& out) { return msaa_scene(r, out, samples, DXGI_FORMAT_R8G8B8A8_UNORM, false); },
                 [samples](Rig& r) { return need_msaa(r, DXGI_FORMAT_R8G8B8A8_UNORM, samples); });
         }
-        for (UINT samples : {4u, 8u}) {
-            Add(spec("msaa", ("standard_sample_pattern_" + std::to_string(samples) + "x").c_str()).tolerance(rr::Tolerance::psnr(30)),
-                [samples](Rig& r, Cap& out) { return msaa_scene(r, out, samples, DXGI_FORMAT_R8G8B8A8_UNORM, true); },
-                [samples](Rig& r) { return need_msaa(r, DXGI_FORMAT_R8G8B8A8_UNORM, samples); });
-        }
-        Add(spec("msaa", "float16_color_resolve_4x").tolerance(rr::Tolerance::psnr(24)),
+        Add(spec("msaa", "float16_color_resolve_4x").tolerance(rr::Tolerance::tight(8)),
             [](Rig& r, Cap& out) { return msaa_scene(r, out, 4, DXGI_FORMAT_R16G16B16A16_FLOAT, false); }, [](Rig& r) { return need_msaa(r, DXGI_FORMAT_R16G16B16A16_FLOAT, 4); });
     }
 };
 const Registrar kRegistrar;
 
-const Add kDepthShader(spec("msaa", "depth_texture2dms_shader_resolve_4x").tolerance(rr::Tolerance::psnr(26)), [](Rig& r, Cap& out) {
+const Add kDepthShader(spec("msaa", "depth_texture2dms_shader_resolve_4x").tolerance(rr::Tolerance::tight(8)), [](Rig& r, Cap& out) {
     Target target;
     Depth depth;
     CubePipe cubes;
@@ -95,7 +90,7 @@ const Add kDepthShader(spec("msaa", "depth_texture2dms_shader_resolve_4x").toler
     return r.shot(out, display);
 }, [](Rig& r) { return need_msaa(r, DXGI_FORMAT_R32_FLOAT, 4); });
 
-const Add kMrt(spec("msaa", "two_render_targets_resolved_4x").tolerance(rr::Tolerance::psnr(26)), [](Rig& r, Cap& out) {
+const Add kMrt(spec("msaa", "two_render_targets_resolved_4x").tolerance(rr::Tolerance::tight(8)), [](Rig& r, Cap& out) {
     Target a, b;
     Basic basic;
     const char* ps_source =

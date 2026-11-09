@@ -201,7 +201,7 @@ struct TaaState {
         cubes.bind(r);
         r.ctx->OMSetDepthStencilState(ds.get(), 0);
         cubes.draw(r, jitter * CubePipe::camera() * rr::Mat4::translate(-0.5f, 0, 0) * rr::Mat4::rotate_y(0.7f) * rr::Mat4::rotate_x(0.5f));
-        cubes.draw(r, jitter * CubePipe::camera() * rr::Mat4::translate(0.9f, 0.3f, 0.5f) * rr::Mat4::rotate_y(-0.6f) * rr::Mat4::rotate_z(0.4f) * rr::Mat4::scale(0.7f, 0.7f, 0.7f));
+        cubes.draw(r, jitter * CubePipe::camera() * rr::Mat4::translate(1.4f - 0.28f * static_cast<float>(frame), 0.3f, 0.5f) * rr::Mat4::rotate_y(-0.6f) * rr::Mat4::rotate_z(0.4f) * rr::Mat4::scale(0.7f, 0.7f, 0.7f));
         Target& to = frame % 2 == 0 ? history_b : history_a;
         ID3D11ShaderResourceView* views[2] = {sc.get(), (frame % 2 == 0 ? sa : sb).get()};
         r.bind(to);
@@ -219,7 +219,7 @@ struct TaaState {
     }
     bool shot(Rig& r, unsigned frame, Cap& out) { return r.shot(out, frame % 2 == 0 ? history_b : history_a); }
 };
-const AddState<TaaState> kTaa(spec("scene", "temporal_accumulation_jittered_history").frames(8, {0, 3, 7}).tolerance(rr::Tolerance::psnr(26)));
+const AddState<TaaState> kTaa(spec("scene", "temporal_accumulation_jittered_history").frames(8, {0, 3, 7}).tolerance(rr::Tolerance::psnr(32)));
 
 struct MotionState {
     Target color, velocity, result;

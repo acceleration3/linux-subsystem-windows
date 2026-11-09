@@ -51,6 +51,7 @@ public:
 
     bool warp = false;
     bool debug = false;
+    bool under_test = false;
     std::string name;
     D3d11Device dev;
     FrameSwap swap;

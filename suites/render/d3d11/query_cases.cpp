@@ -80,7 +80,7 @@ struct OcclusionState {
         const float tint = last > 0 ? 1.0f : 0.0f;
         wall.draw(r, -0.2f, -0.35f, 0.2f, 0.35f, 0.6f, tint, 1.0f - tint, 0.2f);
         r.ctx->End(query.get());
-        wall.draw(r, -0.9f, -0.95f, 0.9f, -0.8f, 0.4f, 0.2f, 0.3f + 0.1f * static_cast<float>(frame), 0.9f);
+        wall.draw(r, -0.9f, -0.95f, 0.9f, -0.8f, 0.4f, 1.0f - tint, tint, 0.9f);
         UINT64 samples = 0;
         if (!fetch(r, query.get(), samples)) return false;
         last = samples;

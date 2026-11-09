@@ -139,7 +139,9 @@ struct FormatRegistrar {
     FormatRegistrar() {
         for (const FormatRow& row : kFormats) {
             const FormatRow* p = &row;
-            AddState<FormatMf>(spec("ia", (std::string("format_") + row.name).c_str()).frames(4, {0, 3}).tolerance(rr::Tolerance::raster(3, 1)), [p] { return FormatMf(p); });
+            const bool animated = row.format == DXGI_FORMAT_R32G32B32A32_FLOAT || row.format == DXGI_FORMAT_R8G8B8A8_UNORM;
+            AddState<FormatMf>(spec("ia", (std::string("format_") + row.name).c_str()).frames(animated ? 4 : 1, animated ? std::vector<unsigned>{0, 3} : std::vector<unsigned>{0}).tolerance(rr::Tolerance::raster(3, 1)),
+                               [p] { return FormatMf(p); });
         }
     }
 };
@@ -403,7 +405,7 @@ bool streams(Rig& r, Cap& out, unsigned step_rate, unsigned instances, bool offs
 }
 const Add kStreams4(spec("ia", "streams_four_slots").tolerance(kTri), [](Rig& r, Cap& out) { return streams(r, out, 1, 6, false); });
 const Add kStepRate3(spec("ia", "instance_step_rate_3").tolerance(kTri), [](Rig& r, Cap& out) { return streams(r, out, 3, 9, false); });
-const Add kStepRate2(spec("ia", "instance_step_rate_2").tolerance(kTri), [](Rig& r, Cap& out) { return streams(r, out, 2, 6, false); });
+const Add kStepRate2(spec("ia", "instance_step_rate_2").tolerance(kTri), [](Rig& r, Cap& out) { return streams(r, out, 2, 8, false); });
 const Add kStreamOffsets(spec("ia", "stream_offsets_and_element_offsets").tolerance(kTri), [](Rig& r, Cap& out) { return streams(r, out, 1, 4, true); });
 
 const Add kStride0(spec("ia", "stream_stride_zero").tolerance(kTri), [](Rig& r, Cap& out) {

@@ -31,7 +31,7 @@ bool interpolation(Rig& r, Cap& out, const char* pick, UINT samples) {
     Bytes code;
     Com<ID3D11VertexShader> vs = r.vs(kPerspVs, &code);
     const std::string ps_source = std::string("struct VO { float4 p : SV_Position; float4 a : A; centroid float4 b : B; nointerpolation float4 c : C; noperspective float4 d : D; sample float4 e : E; };\n") +
-                                  "float4 main(VO i) : SV_Target { return " + pick + "; }\n";
+                                  "float4 main(VO i) : SV_Target { return float4(frac((" + pick + ").rgb * 24.0), 1); }\n";
     Com<ID3D11PixelShader> ps = r.ps(ps_source);
     if (!vs || !ps || !r.color(target, 128, 128, DXGI_FORMAT_R8G8B8A8_UNORM, samples)) return false;
     struct V {
@@ -66,6 +66,14 @@ bool interpolation(Rig& r, Cap& out, const char* pick, UINT samples) {
     return r.shot(out, target);
 }
 
+rr::Tolerance interp_tolerance(UINT samples) {
+    rr::Tolerance t = samples > 1 ? rr::Tolerance::raster(8, 1) : rr::Tolerance::tight(4);
+    t.outlier_fraction = samples > 1 ? 0.02 : 0.0008;
+    t.outlier_max_delta = 255;
+    t.max_outliers = samples > 1 ? 400 : 13;
+    return t;
+}
+
 struct InterpRegistrar {
     InterpRegistrar() {
         struct Row {
@@ -76,7 +84,7 @@ struct InterpRegistrar {
         static const Row rows[] = {{"linear", "i.a", 1}, {"noperspective", "i.d", 1}, {"nointerpolation", "i.c", 1}, {"centroid_4x", "i.b", 4},
                                    {"linear_4x", "i.a", 4}, {"sample_4x", "i.e", 4}};
         for (const Row& row : rows) {
-            auto cs = spec("ps", (std::string("interpolation_") + row.name).c_str()).tolerance(row.samples > 1 ? rr::Tolerance::psnr(26) : rr::Tolerance::blend(3).with_edge(1));
+            auto cs = spec("ps", (std::string("interpolation_") + row.name).c_str()).tolerance(interp_tolerance(row.samples));
             Add(std::move(cs), [&row](Rig& r, Cap& out) { return interpolation(r, out, row.pick, row.samples); },
                 [&row](Rig& r) { return row.samples > 1 ? need_msaa(r, DXGI_FORMAT_R8G8B8A8_UNORM, row.samples) : std::string(); });
         }
@@ -104,15 +112,15 @@ bool msaa_ps(Rig& r, Cap& out, const char* ps_body, bool coverage_out = false) {
     return r.shot(out, target);
 }
 
-const Add kSampleIndex(spec("ps", "sv_sampleindex_per_sample_shading").tolerance(rr::Tolerance::psnr(26)), [](Rig& r, Cap& out) {
+const Add kSampleIndex(spec("ps", "sv_sampleindex_per_sample_shading").tolerance(rr::Tolerance::tight(8)), [](Rig& r, Cap& out) {
     return msaa_ps(r, out, "float4 main(VO i, uint s : SV_SampleIndex) : SV_Target { return float4(s == 0, s == 1, s == 2, 1) * 0.8 + 0.1; }\n");
 }, [](Rig& r) { return need_msaa(r, DXGI_FORMAT_R8G8B8A8_UNORM, 4); });
 
-const Add kCoverageIn(spec("ps", "sv_coverage_input").tolerance(rr::Tolerance::psnr(26)), [](Rig& r, Cap& out) {
+const Add kCoverageIn(spec("ps", "sv_coverage_input").tolerance(rr::Tolerance::tight(8)), [](Rig& r, Cap& out) {
     return msaa_ps(r, out, "float4 main(VO i, uint cov : SV_Coverage) : SV_Target { return float4(countbits(cov) / 4.0, ((cov >> 1) & 1) * 0.6, 0.3, 1); }\n");
 }, [](Rig& r) { return need_msaa(r, DXGI_FORMAT_R8G8B8A8_UNORM, 4); });
 
-const Add kCoverageOut(spec("ps", "sv_coverage_output").tolerance(rr::Tolerance::psnr(26)), [](Rig& r, Cap& out) {
+const Add kCoverageOut(spec("ps", "sv_coverage_output").tolerance(rr::Tolerance::tight(8)), [](Rig& r, Cap& out) {
     return msaa_ps(r, out,
                    "struct PO { float4 c : SV_Target; uint cov : SV_Coverage; };\n"
                    "PO main(VO i) { PO o; o.c = float4(0.9, 0.5, 0.2, 1); o.cov = ((uint(i.p.x) + uint(i.p.y)) & 1) ? 0x5 : 0xA; return o; }\n");
@@ -354,11 +362,9 @@ const Add kRov(spec("ps", "rasterizer_ordered_view_blending").variant(1).toleran
     Com<ID3D11Buffer> vb = r.vbuf(verts);
     if (!vb) return false;
     basic.vertices(r, vb.get());
-    for (int layer = 0; layer < 6; ++layer) {
-        const float value[4] = {0.15f + 0.1f * layer, 0, 0, 0};
-        r.ctx->UpdateSubresource(cb.get(), 0, nullptr, value, 0, 0);
-        r.ctx->Draw(9, static_cast<UINT>(layer * 9));
-    }
+    const float value[4] = {0.35f, 0, 0, 0};
+    r.ctx->UpdateSubresource(cb.get(), 0, nullptr, value, 0, 0);
+    r.ctx->Draw(static_cast<UINT>(verts.size()), 0);
     rr::Image image;
     if (!r.read_image(tex.get(), DXGI_FORMAT_R32_FLOAT, 0, image)) return false;
     out.add("rov", std::move(image));
@@ -464,7 +470,7 @@ struct DepthOutRegistrar {
                 const bool less = std::string(row.semantic) == "SV_DepthLessEqual";
                 const std::string src = std::string("struct VO { noperspective centroid float4 p : SV_Position; float2 uv : TEXCOORD0; };\n") + "struct PO { float4 c : SV_Target; float d : " + row.semantic + "; };\n" +
                     "PO main(VO i) { PO o; o.c = float4(i.uv, 0.5 + 0.5 * sin(i.p.x * 0.2), 1); float z = i.p.z; o.d = " +
-                    (greater ? "z + 0.2 * i.uv.x" : less ? "z - 0.0001 * i.uv.x" : "0.2 + 0.6 * i.uv.x") + "; return o; }\n";
+                    (greater ? "z + 0.2 * i.uv.x" : less ? "z - 0.2 * i.uv.x" : "0.2 + 0.6 * i.uv.x") + "; return o; }\n";
                 Com<ID3D11PixelShader> ps = r.ps(src);
                 Com<ID3D11VertexShader> vs = r.vs(Hlsl3d::kFsVsZ);
                 Com<ID3D11Buffer> zb = r.buf(16, D3D11_BIND_CONSTANT_BUFFER);
@@ -491,12 +497,12 @@ struct DepthOutRegistrar {
 };
 const DepthOutRegistrar kDepthOutRegistrar;
 
-bool face_scene(Rig& r, Cap& out, const char* ps_source) {
+bool face_scene(Rig& r, Cap& out, const char* ps_source, bool depth_test = true) {
     Target target;
     Depth depth;
     CubePipe cubes;
     if (!r.color(target) || !r.depth(depth) || !cubes.make(r, ps_source, D3D11_CULL_NONE)) return false;
-    Com<ID3D11DepthStencilState> ds = r.dss(ddesc(true, D3D11_COMPARISON_LESS, true));
+    Com<ID3D11DepthStencilState> ds = r.dss(ddesc(depth_test, D3D11_COMPARISON_LESS, depth_test));
     if (!ds) return false;
     r.bind(target, &depth);
     cubes.bind(r);
@@ -506,9 +512,10 @@ bool face_scene(Rig& r, Cap& out, const char* ps_source) {
 }
 
 const Add kFrontFace(spec("ps", "sv_isfrontface").tolerance(rr::Tolerance::raster()), [](Rig& r, Cap& out) {
+    const std::string pick = r.broken("front_true") ? "true" : "front";
     return face_scene(r, out,
-        "struct VsOut { float4 pos : SV_Position; float3 col : COLOR; };\n"
-        "float4 main(VsOut i, bool front : SV_IsFrontFace) : SV_Target { return float4(front ? i.col : (1.0 - i.col) * 0.5, 1); }\n");
+        ("struct VsOut { float4 pos : SV_Position; float3 col : COLOR; };\n"
+         "float4 main(VsOut i, bool front : SV_IsFrontFace) : SV_Target { return float4(" + pick + " ? i.col : (1.0 - i.col) * 0.5, 1); }\n").c_str(), false);
 });
 
 const Add kPrimitiveId(spec("ps", "sv_primitiveid").tolerance(rr::Tolerance::raster()), [](Rig& r, Cap& out) {

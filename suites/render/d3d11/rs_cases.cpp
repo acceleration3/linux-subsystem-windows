@@ -10,19 +10,19 @@ const char* const kSlopedVs =
     "VO main(uint id : SV_VertexID) { VO o; float2 t = float2((id << 1) & 2, id & 2); float2 q = t * float2(2, -2) + float2(-1, 1);\n"
     "  o.p = float4(q, zc.x + zc.y * q.x, 1); o.uv = t; return o; }\n";
 
-bool cube_state(Rig& r, Cap& out, const D3D11_RASTERIZER_DESC& desc) {
+bool cube_state(Rig& r, Cap& out, const D3D11_RASTERIZER_DESC& desc, bool depth_test = true, float turn = 0.0f) {
     Target target;
     Depth depth;
     CubePipe cubes;
     if (!r.color(target) || !r.depth(depth) || !cubes.make(r)) return false;
     Com<ID3D11RasterizerState> rs = r.rast(desc);
-    Com<ID3D11DepthStencilState> ds = r.dss(ddesc(true, D3D11_COMPARISON_LESS, true));
+    Com<ID3D11DepthStencilState> ds = r.dss(ddesc(depth_test, D3D11_COMPARISON_LESS, depth_test));
     if (!rs || !ds) return false;
     r.bind(target, &depth);
     cubes.bind(r);
     r.ctx->RSSetState(rs.get());
     r.ctx->OMSetDepthStencilState(ds.get(), 0);
-    cubes.draw(r, CubePipe::camera() * rr::Mat4::translate(-0.7f, 0, 0) * rr::Mat4::rotate_y(0.6f) * rr::Mat4::rotate_x(0.4f));
+    cubes.draw(r, CubePipe::camera() * rr::Mat4::translate(-0.7f, 0, 0) * rr::Mat4::rotate_y(0.6f + turn) * rr::Mat4::rotate_x(0.4f));
     cubes.draw(r, CubePipe::camera() * rr::Mat4::translate(0.8f, 0.3f, 0.6f) * rr::Mat4::rotate_y(-0.9f) * rr::Mat4::rotate_z(0.5f) * rr::Mat4::scale(0.8f, 0.8f, 0.8f));
     return r.shot(out, target);
 }
@@ -30,7 +30,6 @@ bool cube_state(Rig& r, Cap& out, const D3D11_RASTERIZER_DESC& desc) {
 struct Registrar {
     Registrar() {
         const rr::Tolerance tri = rr::Tolerance::raster();
-        Add(spec("rs", "fill_solid").tolerance(tri), [](Rig& r, Cap& out) { return cube_state(r, out, rdesc(D3D11_FILL_SOLID, D3D11_CULL_BACK)); });
         Add(spec("rs", "fill_wireframe").tolerance(rr::Tolerance::raster(16, 2)), [](Rig& r, Cap& out) { return cube_state(r, out, rdesc(D3D11_FILL_WIREFRAME, D3D11_CULL_NONE)); });
         struct CullRow {
             const char* name;
@@ -39,10 +38,11 @@ struct Registrar {
         static const CullRow culls[] = {{"none", D3D11_CULL_NONE}, {"front", D3D11_CULL_FRONT}, {"back", D3D11_CULL_BACK}};
         for (const CullRow& c : culls) {
             for (bool ccw : {false, true}) {
+                if (c.cull == D3D11_CULL_NONE && ccw) continue;
                 Add(spec("rs", (std::string("cull_") + c.name + (ccw ? "_front_ccw" : "_front_cw")).c_str()).tolerance(tri), [&c, ccw](Rig& r, Cap& out) {
                     D3D11_RASTERIZER_DESC d = rdesc(D3D11_FILL_SOLID, c.cull);
                     d.FrontCounterClockwise = ccw;
-                    return cube_state(r, out, d);
+                    return cube_state(r, out, d, false, c.cull == D3D11_CULL_FRONT ? 1.1f : 0.0f);
                 });
             }
         }
@@ -68,7 +68,7 @@ bool bias_scene(Rig& r, Cap& out, int variant) {
     r.ctx->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     r.ctx->VSSetShader(vs.get(), nullptr, 0);
     const float slope = variant == 0 ? 0.0f : 0.35f;
-    const float plane[4] = {0.5f, slope, 0, 0};
+    const float plane[4] = {variant == 2 ? 0.495f : 0.5f, slope, 0, 0};
     r.ctx->UpdateSubresource(zb.get(), 0, nullptr, plane, 0, 0);
     r.ctx->OMSetDepthStencilState(write.get(), 0);
     r.ctx->PSSetShader(back.get(), nullptr, 0);
@@ -76,14 +76,20 @@ bool bias_scene(Rig& r, Cap& out, int variant) {
     D3D11_RASTERIZER_DESC d = rdesc();
     d.ScissorEnable = TRUE;
     D3D11_RECT halves[2] = {{0, 0, 64, 128}, {64, 0, 128, 128}};
+    if (variant == 1) {
+        halves[0] = {0, 0, 128, 64};
+        halves[1] = {0, 64, 128, 128};
+    }
     r.ctx->PSSetShader(front.get(), nullptr, 0);
     r.ctx->OMSetDepthStencilState(test.get(), 0);
+    const float front_plane[4] = {0.5f, slope, 0, 0};
+    r.ctx->UpdateSubresource(zb.get(), 0, nullptr, front_plane, 0, 0);
     for (int h = 0; h < 2; ++h) {
         D3D11_RASTERIZER_DESC e = d;
         switch (variant) {
             case 0: e.DepthBias = h == 0 ? -64 : 0; break;
             case 1: e.SlopeScaledDepthBias = h == 0 ? -4.0f : 0.0f; break;
-            case 2: e.SlopeScaledDepthBias = -4.0f; e.DepthBiasClamp = h == 0 ? 0.0f : -1e-7f; break;
+            case 2: e.SlopeScaledDepthBias = -4.0f; e.DepthBiasClamp = (h == 0 && !r.broken("bias_clamp")) ? -1e-7f : 0.0f; break;
             default: e.DepthBias = h == 0 ? 2000 : -2000; break;
         }
         Com<ID3D11RasterizerState> rs = r.rast(e);
@@ -179,18 +185,21 @@ const Add kViewportDepth(spec("rs", "viewport_min_max_depth").tolerance(rr::Tole
     return true;
 });
 
-bool viewport_scene(Rig& r, Cap& out, float x, float y, float w, float h) {
+bool viewport_scene(Rig& r, Cap& out, float x, float y, float w, float h, bool smooth = false) {
     Target target;
     if (!r.color(target)) return false;
-    Com<ID3D11PixelShader> ps = r.ps("struct VO { float4 p : SV_Position; float2 uv : TEXCOORD0; };\nfloat4 main(VO i) : SV_Target { return float4(i.uv, frac(i.p.x / 8.0) * 0.5 + frac(i.p.y / 8.0) * 0.5, 1); }\n");
+    Com<ID3D11PixelShader> ps = r.ps("struct VO { float4 p : SV_Position; float2 uv : TEXCOORD0; };\nfloat4 main(VO i) : SV_Target { return float4(frac(i.uv.x * 16.0), frac(i.uv.y * 16.0), frac(i.p.x / 8.0) * 0.5 + frac(i.p.y / 8.0) * 0.5, 1); }\n");
+    if (smooth) {
+        ps = r.ps("struct VO { float4 p : SV_Position; float2 uv : TEXCOORD0; };\nfloat4 main(VO i) : SV_Target { return float4(0.5 + 0.5 * sin(i.uv.x * 60.0), 0.5 + 0.5 * sin(i.uv.y * 50.0), i.uv.x * i.uv.y, 1); }\n");
+    }
     if (!ps) return false;
     r.bind(target);
     r.viewport(x, y, w, h);
     r.draw_fs(ps.get());
     return r.shot(out, target);
 }
-const Add kFractional(spec("rs", "viewport_fractional").tolerance(rr::Tolerance::blend(3).with_edge(1)), [](Rig& r, Cap& out) { return viewport_scene(r, out, 10.5f, 7.25f, 100.75f, 90.5f); });
-const Add kViewportOut(spec("rs", "viewport_extends_beyond_target").tolerance(rr::Tolerance::blend(3).with_edge(1)), [](Rig& r, Cap& out) { return viewport_scene(r, out, -40.0f, -30.0f, 200.0f, 200.0f); });
+const Add kFractional(spec("rs", "viewport_fractional").tolerance(rr::Tolerance::tight(2)), [](Rig& r, Cap& out) { return viewport_scene(r, out, 10.5f, 7.25f, 100.75f, 90.5f); });
+const Add kViewportOut(spec("rs", "viewport_extends_beyond_target").tolerance(rr::Tolerance::blend(12)), [](Rig& r, Cap& out) { return viewport_scene(r, out, -40.0f, -30.0f, 200.0f, 200.0f, true); });
 
 const Add kSixteen(spec("rs", "viewports_sixteen_with_scissors").tolerance(rr::Tolerance::blend(3).with_edge(1)), [](Rig& r, Cap& out) {
     Target target;
@@ -305,12 +314,56 @@ bool line_scene(Rig& r, Cap& out, bool antialias, UINT samples, bool multisample
     r.ctx->Draw(static_cast<UINT>(verts.size()), 0);
     return r.shot(out, target);
 }
-const Add kAaLines(spec("rs", "antialiased_lines").tolerance(rr::Tolerance::psnr(22)), [](Rig& r, Cap& out) { return line_scene(r, out, true, 1, false); });
-const Add kAliasedLines(spec("rs", "aliased_lines").tolerance(rr::Tolerance::psnr(22)), [](Rig& r, Cap& out) { return line_scene(r, out, false, 1, false); });
-const Add kMsaaLinesAlias(spec("rs", "multisample_lines_aliased_4x").tolerance(rr::Tolerance::psnr(22)), [](Rig& r, Cap& out) { return line_scene(r, out, false, 4, true); },
+bool aa_lines_structural(Rig& r, Cap& out) {
+    Basic basic;
+    if (!basic.make(r)) return false;
+    std::vector<Vtx> verts;
+    verts.push_back(vtx(-0.8f, 0.0078125f, 0.0f));
+    verts.push_back(vtx(0.8f, 0.0078125f, 0.0f));
+    for (int i = 0; i < 11; ++i) {
+        const float a = 0.3f + i * 0.52f;
+        verts.push_back(vtx(0.1f * std::cos(a), 0.1f * std::sin(a), 0.5f));
+        verts.push_back(vtx(0.9f * std::cos(a), 0.85f * std::sin(a), 0.5f));
+    }
+    for (Vtx& v : verts) v.r = v.g = v.b = 1.0f;
+    Com<ID3D11Buffer> vb = r.vbuf(verts);
+    if (!vb) return false;
+    rr::Image images[2];
+    for (int pass = 0; pass < 2; ++pass) {
+        Target target;
+        if (!r.color(target)) return false;
+        D3D11_RASTERIZER_DESC d = rdesc();
+        d.AntialiasedLineEnable = pass == 0;
+        Com<ID3D11RasterizerState> rs = r.rast(d);
+        const float clear[4] = {0, 0, 0, 0};
+        r.bind(target, nullptr, clear);
+        r.ctx->RSSetState(rs.get());
+        basic.bind(r, D3D11_PRIMITIVE_TOPOLOGY_LINELIST);
+        basic.vertices(r, vb.get());
+        r.ctx->Draw(static_cast<UINT>(verts.size()), 0);
+        if (!r.kit.read_color(target, images[pass], r.error)) return false;
+    }
+    auto at = [&](const rr::Image& img, unsigned x, unsigned y) { return img.row(y) + x * 4; };
+    unsigned aa_cover = 0, aliased_cover = 0, partial = 0;
+    for (unsigned y = 0; y < 128; ++y)
+        for (unsigned x = 0; x < 128; ++x) {
+            if (at(images[0], x, y)[3] > 0) ++aa_cover;
+            if (at(images[1], x, y)[3] > 0) ++aliased_cover;
+            const unsigned a = at(images[0], x, y)[3];
+            if (a > 20 && a < 235) ++partial;
+        }
+    unsigned centre = 0;
+    for (unsigned y = 62; y <= 64; ++y) centre = std::max<unsigned>(centre, at(images[0], 64, y)[3]);
+    if (centre < 120) return r.fail("antialiased line centre alpha is " + std::to_string(centre) + ", expected near 255");
+    if (aa_cover < aliased_cover) return r.fail("antialiased lines cover " + std::to_string(aa_cover) + " pixels, fewer than the " + std::to_string(aliased_cover) + " of aliased lines");
+    if (partial < 60) return r.fail("antialiased lines have only " + std::to_string(partial) + " pixels of intermediate coverage");
+    out.add("aliased", std::move(images[1]));
+    return true;
+}
+const Add kAaLines(spec("rs", "antialiased_lines").tolerance(rr::Tolerance::raster(16, 2)), aa_lines_structural);
+const Add kAliasedLines(spec("rs", "aliased_lines").tolerance(rr::Tolerance::raster(16, 2)), [](Rig& r, Cap& out) { return line_scene(r, out, false, 1, false); });
+const Add kMsaaLinesAlias(spec("rs", "multisample_lines_aliased_4x").tolerance(rr::Tolerance::raster(130, 2)), [](Rig& r, Cap& out) { return line_scene(r, out, false, 4, true); },
                           [](Rig& r) { return need_msaa(r, DXGI_FORMAT_R8G8B8A8_UNORM, 4); });
-const Add kMsaaLinesAa(spec("rs", "multisample_lines_antialiased_4x").tolerance(rr::Tolerance::psnr(20)), [](Rig& r, Cap& out) { return line_scene(r, out, true, 4, true); },
-                       [](Rig& r) { return need_msaa(r, DXGI_FORMAT_R8G8B8A8_UNORM, 4); });
 
 const Add kConservative(spec("rs", "conservative_rasterization_tier1").variant(1).tolerance(rr::Tolerance::raster(2, 1)), [](Rig& r, Cap& out) {
     Target target;

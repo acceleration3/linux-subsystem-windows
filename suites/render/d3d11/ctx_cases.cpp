@@ -40,10 +40,12 @@ struct Scene3d {
     }
 };
 
+thread_local float g_tweak = 0.0f;
+
 rr::Mat4 placement(int k) {
     const float x = -0.75f + 1.5f * static_cast<float>(k % 2);
     const float y = 0.55f - 1.1f * static_cast<float>(k / 2);
-    return CubePipe::camera() * rr::Mat4::translate(x, y, 0.2f * static_cast<float>(k)) * rr::Mat4::rotate_y(0.4f + 0.5f * static_cast<float>(k)) * rr::Mat4::rotate_x(0.3f) * rr::Mat4::scale(0.6f, 0.6f, 0.6f);
+    return CubePipe::camera() * rr::Mat4::translate(x, y, 0.2f * static_cast<float>(k)) * rr::Mat4::rotate_y(0.4f + 0.5f * static_cast<float>(k) + g_tweak) * rr::Mat4::rotate_x(0.3f + 0.2f * g_tweak) * rr::Mat4::scale(0.6f + 0.1f * g_tweak, 0.6f, 0.6f - 0.08f * g_tweak);
 }
 
 bool deferred_state(Rig& r, Cap& out, bool restore) {
@@ -53,6 +55,11 @@ bool deferred_state(Rig& r, Cap& out, bool restore) {
     if (!r.ok(r.dev->CreateDeferredContext(0, deferred.put()), "CreateDeferredContext")) return false;
     s.clear(r);
     s.state(r.ctx);
+    D3D11_BLEND_DESC red_only = bdesc();
+    red_only.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_RED;
+    Com<ID3D11BlendState> red = r.blend(red_only);
+    if (!red) return false;
+    r.ctx->OMSetBlendState(red.get(), nullptr, 0xffffffffu);
     r.ctx->UpdateSubresource(s.cubes.cb_.get(), 0, nullptr, placement(0).m, 0, 0);
     r.ctx->DrawIndexed(s.cubes.count_, 0, 0);
     Com<ID3D11CommandList> list;
@@ -62,6 +69,9 @@ bool deferred_state(Rig& r, Cap& out, bool restore) {
     deferred->DrawIndexed(s.cubes.count_, 0, 0);
     if (!r.ok(deferred->FinishCommandList(restore, list.put()), "FinishCommandList")) return false;
     r.ctx->ExecuteCommandList(list.get(), restore);
+    if (!restore) {
+        s.state(r.ctx);
+    }
     r.ctx->UpdateSubresource(s.cubes.cb_.get(), 0, nullptr, placement(2).m, 0, 0);
     r.ctx->DrawIndexed(s.cubes.count_, 0, 0);
     return r.shot(out, s.target);
@@ -70,6 +80,7 @@ const Add kDeferredRestore(spec("ctx", "deferred_command_list_restore_state_true
 const Add kDeferredNoRestore(spec("ctx", "deferred_command_list_restore_state_false").tolerance(rr::Tolerance::raster()), [](Rig& r, Cap& out) { return deferred_state(r, out, false); });
 
 const Add kTwice(spec("ctx", "deferred_command_list_executed_twice_with_new_constants").tolerance(rr::Tolerance::raster()), [](Rig& r, Cap& out) {
+    g_tweak = 0.35f;
     Scene3d s;
     if (!s.make(r)) return false;
     Com<ID3D11DeviceContext> deferred;
@@ -87,6 +98,7 @@ const Add kTwice(spec("ctx", "deferred_command_list_executed_twice_with_new_cons
 });
 
 const Add kThreads(spec("ctx", "four_deferred_contexts_recorded_on_threads").tolerance(rr::Tolerance::raster()), [](Rig& r, Cap& out) {
+    g_tweak = 0.7f;
     Scene3d s;
     if (!s.make(r)) return false;
     Com<ID3D11Buffer> constants[4];
@@ -117,6 +129,7 @@ const Add kThreads(spec("ctx", "four_deferred_contexts_recorded_on_threads").tol
 });
 
 const Add kDeferredMap(spec("ctx", "deferred_context_map_discard_dynamic_buffers").tolerance(rr::Tolerance::raster()), [](Rig& r, Cap& out) {
+    g_tweak = 1.05f;
     Scene3d s;
     Com<ID3D11Buffer> dynamic = r.buf(64, D3D11_BIND_CONSTANT_BUFFER, nullptr, D3D11_USAGE_DYNAMIC, D3D11_CPU_ACCESS_WRITE);
     if (!s.make(r) || !dynamic) return false;
@@ -141,6 +154,7 @@ const Add kDeferredMap(spec("ctx", "deferred_context_map_discard_dynamic_buffers
 });
 
 const Add kOffsets(spec("ctx", "vs_set_constant_buffers1_offsets").variant(1).tolerance(rr::Tolerance::raster()), [](Rig& r, Cap& out) {
+    g_tweak = 1.4f;
     Scene3d s;
     if (!s.make(r)) return false;
     ID3D11DeviceContext1* raw = nullptr;
@@ -210,6 +224,7 @@ const Add kTexture2D1(spec("ctx", "device3_texture2d1_and_rtv1_plane_slice").var
 });
 
 const Add kFence(spec("ctx", "fence_signal_wait_between_passes").variant(1).tolerance(rr::Tolerance::raster()), [](Rig& r, Cap& out) {
+    g_tweak = 1.75f;
     ID3D11Device5* raw5 = nullptr;
     r.dev->QueryInterface(__uuidof(ID3D11Device5), reinterpret_cast<void**>(&raw5));
     Com<ID3D11Device5> dev5(raw5);

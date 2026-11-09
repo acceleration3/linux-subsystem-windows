@@ -189,11 +189,11 @@ bool resolve_scene(Rig& r, Cap& out, DXGI_FORMAT format) {
     out.add("", std::move(image));
     return true;
 }
-const Add kResRgba8(spec("copy", "resolve_subresource_r8g8b8a8_unorm").tolerance(rr::Tolerance::psnr(26)), [](Rig& r, Cap& out) { return resolve_scene(r, out, DXGI_FORMAT_R8G8B8A8_UNORM); },
+const Add kResRgba8(spec("copy", "resolve_subresource_r8g8b8a8_unorm").tolerance(rr::Tolerance::tight(8)), [](Rig& r, Cap& out) { return resolve_scene(r, out, DXGI_FORMAT_R8G8B8A8_UNORM); },
                     [](Rig& r) { return need_msaa(r, DXGI_FORMAT_R8G8B8A8_UNORM, 4); });
-const Add kResRgba16(spec("copy", "resolve_subresource_r16g16b16a16_float").tolerance(rr::Tolerance::psnr(26)), [](Rig& r, Cap& out) { return resolve_scene(r, out, DXGI_FORMAT_R16G16B16A16_FLOAT); },
+const Add kResRgba16(spec("copy", "resolve_subresource_r16g16b16a16_float").tolerance(rr::Tolerance::tight(8)), [](Rig& r, Cap& out) { return resolve_scene(r, out, DXGI_FORMAT_R16G16B16A16_FLOAT); },
                      [](Rig& r) { return need_msaa(r, DXGI_FORMAT_R16G16B16A16_FLOAT, 4); });
-const Add kResBgra(spec("copy", "resolve_subresource_b8g8r8a8_unorm").tolerance(rr::Tolerance::psnr(26)), [](Rig& r, Cap& out) { return resolve_scene(r, out, DXGI_FORMAT_B8G8R8A8_UNORM); },
+const Add kResBgra(spec("copy", "resolve_subresource_b8g8r8a8_unorm").tolerance(rr::Tolerance::tight(8)), [](Rig& r, Cap& out) { return resolve_scene(r, out, DXGI_FORMAT_B8G8R8A8_UNORM); },
                    [](Rig& r) { return need_msaa(r, DXGI_FORMAT_B8G8R8A8_UNORM, 4); });
 
 const Add kClearView(spec("copy", "clear_view_with_rects").variant(1).tolerance(rr::Tolerance::tight(1)), [](Rig& r, Cap& out) {

@@ -160,7 +160,7 @@ bool array_routing(Rig& r, Cap& out, UINT slices, bool cube, bool viewports) {
         "struct VO { float4 p : SV_Position; float3 c : COLOR; };\n"
         "struct GO { float4 p : SV_Position; float3 c : COLOR; uint rt : SV_RenderTargetArrayIndex; uint vp : SV_ViewportArrayIndex; };\n"
         "[instance(" + std::to_string(slices) + ")][maxvertexcount(3)] void main(triangle VO v[3], uint inst : SV_GSInstanceID, inout TriangleStream<GO> s) { GO o;\n"
-        "  [unroll] for (int j = 0; j < 3; ++j) { float a = inst * 0.6; float2 q = v[j].p.xy; o.p = float4(q.x * cos(a) - q.y * sin(a), q.x * sin(a) + q.y * cos(a), 0, 1);\n"
+        "  [unroll] for (int j = 0; j < 3; ++j) { float a = " + std::string(viewports ? "inst * 0.3 + 0.25" : "inst * 0.6") + "; float2 q = v[j].p.xy; o.p = float4(q.x * cos(a) - q.y * sin(a), q.x * sin(a) + q.y * cos(a), 0, 1);\n"
         "    o.c = float3(v[j].c.bgr * 0.5 + float3(inst & 1, (inst >> 1) & 1, (inst >> 2) & 1) * 0.5); o.rt = " + (viewports ? "0" : "inst") + "; o.vp = " + (viewports ? "inst" : "0") + "; s.Append(o); } }\n";
     const char* ps_source = "struct GO { float4 p : SV_Position; float3 c : COLOR; };\nfloat4 main(GO i) : SV_Target { return float4(i.c, 1); }\n";
     Bytes code;

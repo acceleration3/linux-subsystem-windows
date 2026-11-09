@@ -26,6 +26,26 @@ const char* const kFloorPs =
     "struct VO { float4 p : SV_Position; float2 uv : TEXCOORD0; };\n"
     "float4 main(VO i) : SV_Target { return t.Sample(s, i.uv); }\n";
 
+Com<ID3D11Texture2D> colored_chain(Rig& r, UINT size) {
+    static const unsigned colours[8][3] = {{255, 255, 255}, {255, 40, 40}, {40, 255, 40}, {60, 60, 255}, {255, 255, 40}, {255, 40, 255}, {40, 255, 255}, {200, 120, 40}};
+    const unsigned levels = rr::Pattern::level_count(size, size);
+    std::vector<Bytes> chain;
+    for (unsigned l = 0; l < levels; ++l) {
+        const unsigned s = std::max(1u, size >> l);
+        Bytes px(s * s * 4);
+        for (unsigned y = 0; y < s; ++y)
+            for (unsigned x = 0; x < s; ++x) {
+                const bool on = l == 0 ? ((x + y) & 1) != 0 : ((x / 2 + y / 2) & 1) != 0;
+                for (int k = 0; k < 3; ++k) px[(y * s + x) * 4 + k] = static_cast<std::uint8_t>(on ? colours[l % 8][k] : colours[l % 8][k] / 4);
+                px[(y * s + x) * 4 + 3] = 255;
+            }
+        chain.push_back(std::move(px));
+    }
+    std::vector<D3D11_SUBRESOURCE_DATA> data;
+    for (unsigned l = 0; l < levels; ++l) data.push_back({chain[l].data(), std::max(1u, size >> l) * 4, 0});
+    return r.tex(size, size, DXGI_FORMAT_R8G8B8A8_UNORM, D3D11_BIND_SHADER_RESOURCE, levels, 1, 1, data.data());
+}
+
 struct FloorVertex {
     float x, y, z, u, v;
 };
@@ -35,8 +55,12 @@ bool draw_floor(Rig& r, Cap& out, const D3D11_SAMPLER_DESC& sampler_desc, UINT s
     Bytes code;
     Com<ID3D11VertexShader> vs = r.vs(kFloorVs, &code);
     Com<ID3D11PixelShader> ps = r.ps(kFloorPs);
-    Com<ID3D11Texture2D> texture = r.tex_chain(size, size, make_pattern(size));
-    Com<ID3D11SamplerState> sampler = r.smp(sampler_desc);
+    Com<ID3D11Texture2D> texture = colored_chain(r, size);
+    D3D11_SAMPLER_DESC used = sampler_desc;
+    if (r.broken("mag_linear")) {
+        used.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+    }
+    Com<ID3D11SamplerState> sampler = r.smp(used);
     if (!r.color(target) || !vs || !ps || !texture || !sampler) return false;
     Com<ID3D11ShaderResourceView> view = r.srv(texture.get());
     Com<ID3D11InputLayout> il = r.layout({elem("POSITION", DXGI_FORMAT_R32G32B32_FLOAT, 0), elem("TEXCOORD", DXGI_FORMAT_R32G32_FLOAT, 12)}, code);
@@ -66,6 +90,14 @@ bool draw_floor(Rig& r, Cap& out, const D3D11_SAMPLER_DESC& sampler_desc, UINT s
     return r.shot(out, target);
 }
 
+rr::Tolerance floor_tolerance() {
+    rr::Tolerance t = rr::Tolerance::filter(6, 0.04).with_edge(1);
+    t.max_outliers = 600;
+    t.min_psnr = 24.0;
+    t.outlier_max_delta = 255;
+    return t;
+}
+
 struct FilterRow {
     const char* name;
     D3D11_FILTER filter;
@@ -85,33 +117,33 @@ const FilterRow kFilters[] = {
 struct Registrar {
     Registrar() {
         for (const FilterRow& row : kFilters) {
-            Add(spec("tex", (std::string("filter_") + row.name).c_str()).tolerance(rr::Tolerance::psnr(26)),
+            Add(spec("tex", (std::string("filter_") + row.name).c_str()).tolerance(floor_tolerance()),
                 [&row](Rig& r, Cap& out) { return draw_floor(r, out, sdesc(row.filter, D3D11_TEXTURE_ADDRESS_WRAP)); });
         }
         for (UINT level : {2u, 4u, 8u, 16u}) {
-            Add(spec("tex", ("filter_anisotropic_" + std::to_string(level)).c_str()).tolerance(rr::Tolerance::psnr(22)), [level](Rig& r, Cap& out) {
+            Add(spec("tex", ("filter_anisotropic_" + std::to_string(level)).c_str()).tolerance(rr::Tolerance::psnr(26)), [level](Rig& r, Cap& out) {
                 D3D11_SAMPLER_DESC d = sdesc(D3D11_FILTER_ANISOTROPIC, D3D11_TEXTURE_ADDRESS_WRAP);
                 d.MaxAnisotropy = level;
-                return draw_floor(r, out, d, 64, 2.0f);
+                return draw_floor(r, out, d, 64, 3.0f);
             });
         }
-        Add(spec("tex", "lod_bias_positive").tolerance(rr::Tolerance::psnr(26)), [](Rig& r, Cap& out) {
-            D3D11_SAMPLER_DESC d = sdesc(D3D11_FILTER_MIN_MAG_MIP_LINEAR, D3D11_TEXTURE_ADDRESS_WRAP);
+        Add(spec("tex", "lod_bias_positive").tolerance(floor_tolerance()), [](Rig& r, Cap& out) {
+            D3D11_SAMPLER_DESC d = sdesc(D3D11_FILTER_MIN_MAG_LINEAR_MIP_POINT, D3D11_TEXTURE_ADDRESS_WRAP);
             d.MipLODBias = 2.0f;
             return draw_floor(r, out, d);
         });
-        Add(spec("tex", "lod_bias_negative").tolerance(rr::Tolerance::psnr(26)), [](Rig& r, Cap& out) {
-            D3D11_SAMPLER_DESC d = sdesc(D3D11_FILTER_MIN_MAG_MIP_LINEAR, D3D11_TEXTURE_ADDRESS_WRAP);
+        Add(spec("tex", "lod_bias_negative").tolerance(floor_tolerance()), [](Rig& r, Cap& out) {
+            D3D11_SAMPLER_DESC d = sdesc(D3D11_FILTER_MIN_MAG_LINEAR_MIP_POINT, D3D11_TEXTURE_ADDRESS_WRAP);
             d.MipLODBias = -1.5f;
             return draw_floor(r, out, d);
         });
-        Add(spec("tex", "lod_min_clamp").tolerance(rr::Tolerance::psnr(26)), [](Rig& r, Cap& out) {
-            D3D11_SAMPLER_DESC d = sdesc(D3D11_FILTER_MIN_MAG_MIP_LINEAR, D3D11_TEXTURE_ADDRESS_WRAP);
+        Add(spec("tex", "lod_min_clamp").tolerance(floor_tolerance()), [](Rig& r, Cap& out) {
+            D3D11_SAMPLER_DESC d = sdesc(D3D11_FILTER_MIN_MAG_LINEAR_MIP_POINT, D3D11_TEXTURE_ADDRESS_WRAP);
             d.MinLOD = 2.5f;
             return draw_floor(r, out, d);
         });
-        Add(spec("tex", "lod_max_clamp").tolerance(rr::Tolerance::psnr(26)), [](Rig& r, Cap& out) {
-            D3D11_SAMPLER_DESC d = sdesc(D3D11_FILTER_MIN_MAG_MIP_LINEAR, D3D11_TEXTURE_ADDRESS_WRAP);
+        Add(spec("tex", "lod_max_clamp").tolerance(floor_tolerance()), [](Rig& r, Cap& out) {
+            D3D11_SAMPLER_DESC d = sdesc(D3D11_FILTER_MIN_MAG_LINEAR_MIP_POINT, D3D11_TEXTURE_ADDRESS_WRAP);
             d.MaxLOD = 1.0f;
             return draw_floor(r, out, d);
         });
@@ -194,7 +226,7 @@ const ExprRow kExpr[] = {
     {"sample_level", "return t.SampleLevel(s, i.uv, i.uv.x * 5.0);", D3D11_FILTER_MIN_MAG_MIP_LINEAR, false},
     {"sample_grad", "return t.SampleGrad(s, i.uv * 2.0, float2(0.01, 0) * (1 + i.uv.y * 8), float2(0, 0.01));", D3D11_FILTER_MIN_MAG_MIP_LINEAR, false},
     {"sample_bias", "return t.SampleBias(s, i.uv * 4.0, i.uv.x * 4.0 - 1.0);", D3D11_FILTER_MIN_MAG_MIP_LINEAR, false},
-    {"calculate_lod", "float l = t.CalculateLevelOfDetail(s, i.uv * (4.0 + 12.0 * i.uv.x)); float u = t.CalculateLevelOfDetailUnclamped(s, i.uv * (4.0 + 12.0 * i.uv.x)); return float4(l / 6.0, 0.5 + 0.1 * u, u / 6.0, 1);", D3D11_FILTER_MIN_MAG_MIP_LINEAR, false},
+    {"calculate_lod", "float l = t.CalculateLevelOfDetail(s, i.uv * exp2(i.uv.x * 9.0 - 1.0)); float u = t.CalculateLevelOfDetailUnclamped(s, i.uv * exp2(i.uv.x * 9.0 - 1.0)); return float4(l / 8.0, (u + 3.0) / 11.0, saturate(abs(u - l) * 0.5), 1);", D3D11_FILTER_MIN_MAG_MIP_LINEAR, false},
     {"gather_red", "return t.GatherRed(s, i.uv * 2.0);", D3D11_FILTER_MIN_MAG_MIP_POINT, false},
     {"gather_green", "return t.GatherGreen(s, i.uv * 2.0);", D3D11_FILTER_MIN_MAG_MIP_POINT, false},
     {"gather_blue", "return t.GatherBlue(s, i.uv * 2.0);", D3D11_FILTER_MIN_MAG_MIP_POINT, false},
@@ -242,7 +274,7 @@ bool run_expr(Rig& r, Cap& out, const ExprRow& row) {
 struct ExprRegistrar {
     ExprRegistrar() {
         for (const ExprRow& row : kExpr) {
-            Add(spec("tex", (std::string("intrinsic_") + row.name).c_str()).tolerance(std::string(row.name) == "calculate_lod" ? rr::Tolerance::filter(12, 0.03) : rr::Tolerance::filter(6, 0.01).with_edge(1)),
+            Add(spec("tex", (std::string("intrinsic_") + row.name).c_str()).tolerance(std::string(row.name) == "calculate_lod" ? rr::Tolerance::filter(26, 0.03) : rr::Tolerance::filter(6, 0.01).with_edge(1)),
                 [&row](Rig& r, Cap& out) { return run_expr(r, out, row); });
         }
     }

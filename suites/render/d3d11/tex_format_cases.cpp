@@ -184,7 +184,8 @@ struct Registrar {
     Registrar() {
         for (const FormatRow& row : kFormats) {
             const DXGI_FORMAT f = row.format;
-            auto cs = spec("tex", (std::string("sample_") + row.name).c_str()).frames(3, {0, 2}).tolerance(rr::Tolerance::blend(3).with_outliers(0.002));
+            const bool animated = f == DXGI_FORMAT_R32G32B32A32_FLOAT || f == DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+            auto cs = spec("tex", (std::string("sample_") + row.name).c_str()).frames(animated ? 3 : 1, animated ? std::vector<unsigned>{0, 2} : std::vector<unsigned>{0}).tolerance(rr::Tolerance::blend(3).with_outliers(0.002));
             if (f == DXGI_FORMAT_B4G4R4A4_UNORM) cs.variant(1);
             AddState<TexFormatMf>(std::move(cs), [f] { return TexFormatMf(f); });
         }

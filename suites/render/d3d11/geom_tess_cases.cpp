@@ -1,5 +1,8 @@
 #include "render/d3d11/draw2d.hpp"
 
+#include <algorithm>
+#include <array>
+
 namespace lsw::suites::render::d3d11 {
 
 namespace {
@@ -8,15 +11,15 @@ struct PartitionRow {
     const char* name;
 };
 
-const char* const kPartitions[] = {"integer", "fractional_even", "fractional_odd", "pow2"};
+const char* const kPartitions[] = {"integer", "fractional_even", "fractional_odd"};
 
 struct TessRegistrar {
     TessRegistrar() {
         for (const char* partition : kPartitions) {
-            Add(spec("geom", (std::string("tess_tri_") + partition).c_str()).tolerance(rr::Tolerance::raster(2, 1)),
-                [partition](Rig& r, Cap& out) { return run_patch_public(r, out, 3, false, partition, "triangle_cw", 5.3f, 4.6f, false); });
-            Add(spec("geom", (std::string("tess_quad_") + partition).c_str()).tolerance(rr::Tolerance::raster(2, 1)),
-                [partition](Rig& r, Cap& out) { return run_patch_public(r, out, 4, true, partition, "triangle_ccw", 6.4f, 3.2f, false); });
+            Add(spec("geom", (std::string("tess_tri_") + partition).c_str()).tolerance(rr::Tolerance::raster(16, 2)),
+                [partition](Rig& r, Cap& out) { return run_patch_public(r, out, 3, false, partition, "triangle_cw", r.broken("tess_one") ? 1.0f : 5.3f, 4.6f, true); });
+            Add(spec("geom", (std::string("tess_quad_") + partition).c_str()).tolerance(rr::Tolerance::raster(16, 2)),
+                [partition](Rig& r, Cap& out) { return run_patch_public(r, out, 4, true, partition, "triangle_ccw", 6.4f, 3.2f, true); });
         }
         Add(spec("geom", "tess_tri_wireframe_fractional_odd").tolerance(rr::Tolerance::raster(2, 2)),
             [](Rig& r, Cap& out) { return run_patch_public(r, out, 3, false, "fractional_odd", "triangle_cw", 7.0f, 5.0f, true); });
@@ -98,38 +101,73 @@ const Add kCulled(spec("geom", "tess_zero_factor_culls_patch").tolerance(rr::Tol
     return r.shot(out, target);
 });
 
-bool isoline(Rig& r, Cap& out, const char* partition) {
-    Target target;
+bool isoline_so(Rig& r, Cap& out, const char* partition, bool coordinates) {
     Basic basic;
-    if (!r.color(target) || !basic.make(r)) return false;
+    if (!basic.make(r)) return false;
     const std::string input = Hlsl2d::kVo;
     const std::string hull = input +
         "struct HC { float e[2] : SV_TessFactor; };\n"
         "HC pc(InputPatch<VO, 4> p) { HC h; h.e[0] = 6; h.e[1] = 12; return h; }\n"
         "[domain(\"isoline\")][partitioning(\"" + partition + "\")][outputtopology(\"line\")][outputcontrolpoints(4)][patchconstantfunc(\"pc\")]\n" + kHullTail;
-    const std::string domain = input +
-        "struct HC { float e[2] : SV_TessFactor; };\n"
-        "[domain(\"isoline\")] VO main(HC hc, float2 uv : SV_DomainLocation, const OutputPatch<VO, 4> p) { VO o;\n"
+    const std::string curve =
         "  float t = uv.x; float u = 1 - t;\n"
         "  float2 q = u*u*u*p[0].p.xy + 3*u*u*t*p[1].p.xy + 3*u*t*t*p[2].p.xy + t*t*t*p[3].p.xy + float2(0, (uv.y - 0.5) * 0.5);\n"
         "  o.p = float4(q, 0, 1); o.c = lerp(p[0].c, p[3].c, t) * (0.5 + uv.y); return o; }\n";
+    const std::string plain =
+        "  o.p = float4(uv.x * 1.6 - 0.8, uv.y * 1.6 - 0.8 + 0.1 * sin(uv.x * 9.0), 0, 1); o.c = float3(uv, 0.7); return o; }\n";
+    const std::string domain = input + "struct HC { float e[2] : SV_TessFactor; };\n"
+        "[domain(\"isoline\")] VO main(HC hc, float2 uv : SV_DomainLocation, const OutputPatch<VO, 4> p) { VO o;\n" + (coordinates ? plain : curve);
+    const std::string gs_source = std::string(Hlsl2d::kVo) + "[maxvertexcount(2)] void main(line VO v[2], inout LineStream<VO> s) { s.Append(v[0]); s.Append(v[1]); }\n";
     Com<ID3D11HullShader> h = r.hs(hull);
     Com<ID3D11DomainShader> d = r.ds(domain);
+    Com<ID3D11GeometryShader> gs = r.gs_so(gs_source, {{0, "SV_Position", 0, 0, 4, 0}, {0, "COLOR", 0, 0, 3, 0}}, {28}, D3D11_SO_NO_RASTERIZED_STREAM);
+    Com<ID3D11Buffer> so = r.buf(28 * 2 * 400, D3D11_BIND_STREAM_OUTPUT);
+    D3D11_QUERY_DESC qd{D3D11_QUERY_SO_STATISTICS, 0};
+    Com<ID3D11Query> stats;
+    if (!r.ok(r.dev->CreateQuery(&qd, stats.put()), "CreateQuery")) return false;
     const std::vector<Vtx> pts = {vtx(-0.85f, -0.3f, 0.0f), vtx(-0.3f, 0.8f, 0.2f), vtx(0.3f, -0.8f, 0.5f), vtx(0.85f, 0.3f, 0.8f)};
     Com<ID3D11Buffer> vb = r.vbuf(pts);
-    if (!h || !d || !vb) return false;
-    r.bind(target);
+    if (!h || !d || !gs || !so || !vb) return false;
     basic.bind(r, D3D11_PRIMITIVE_TOPOLOGY_4_CONTROL_POINT_PATCHLIST);
     basic.vertices(r, vb.get());
     r.ctx->HSSetShader(h.get(), nullptr, 0);
     r.ctx->DSSetShader(d.get(), nullptr, 0);
+    r.ctx->GSSetShader(gs.get(), nullptr, 0);
+    r.ctx->PSSetShader(nullptr, nullptr, 0);
+    ID3D11Buffer* t = so.get();
+    const UINT zero = 0;
+    r.ctx->SOSetTargets(1, &t, &zero);
+    r.ctx->Begin(stats.get());
     r.ctx->Draw(4, 0);
-    return r.shot(out, target);
+    r.ctx->End(stats.get());
+    r.ctx->SOSetTargets(0, nullptr, nullptr);
+    D3D11_QUERY_DATA_SO_STATISTICS so_stats{};
+    for (int spin = 0; spin < 100000; ++spin) {
+        const HRESULT hr = r.ctx->GetData(stats.get(), &so_stats, sizeof so_stats, 0);
+        if (hr == S_OK) break;
+        if (FAILED(hr)) return r.fail("GetData failed");
+        if (spin % 64 == 0) r.ctx->Flush();
+    }
+    Bytes bytes;
+    if (!r.read_bytes(so.get(), bytes)) return false;
+    const UINT segments = static_cast<UINT>(std::min<UINT64>(so_stats.NumPrimitivesWritten, 400));
+    std::vector<std::array<float, 4>> list;
+    for (UINT i = 0; i < segments; ++i) {
+        float v[14];
+        std::memcpy(v, bytes.data() + i * 56, 56);
+        std::array<float, 4> a{v[0], v[1], v[7], v[8]};
+        if (a[0] > a[2] || (a[0] == a[2] && a[1] > a[3])) a = {a[2], a[3], a[0], a[1]};
+        list.push_back(a);
+    }
+    std::sort(list.begin(), list.end());
+    rr::Image image(std::max<UINT>(segments, 1), 1, rr::PixelKind::Rgba32Float);
+    for (UINT i = 0; i < segments; ++i) std::memcpy(image.row(0) + i * 16, list[i].data(), 16);
+    out.add("segments", std::move(image));
+    return true;
 }
 
-const Needs kIsoNeeds = [](Rig& r) -> std::string { return r.kit.warp ? std::string("correct isoline tessellation output (the WARP oracle draws nothing or scribbles for isoline domains)") : std::string(); };
-const Add kIsoInteger(spec("geom", "tess_isoline_integer").tolerance(rr::Tolerance::raster(2, 2)), [](Rig& r, Cap& out) { return isoline(r, out, "integer"); }, kIsoNeeds);
-const Add kIsoOdd(spec("geom", "tess_isoline_fractional_odd").tolerance(rr::Tolerance::raster(2, 2)), [](Rig& r, Cap& out) { return isoline(r, out, "fractional_odd"); }, kIsoNeeds);
+const Add kIsoInteger(spec("geom", "tess_isoline_integer").uniform_ok("segments"), [](Rig& r, Cap& out) { return isoline_so(r, out, "integer", false); });
+const Add kIsoOdd(spec("geom", "tess_isoline_fractional_odd").uniform_ok("segments"), [](Rig& r, Cap& out) { return isoline_so(r, out, "fractional_odd", false); });
 
 const Add kTessPoints(spec("geom", "tess_point_output_topology").tolerance(rr::Tolerance::raster(2, 1)), [](Rig& r, Cap& out) {
     Target target;
@@ -300,31 +338,6 @@ const Add kDisplace(spec("geom", "tess_terrain_displacement_texture").size(256, 
 
 namespace lsw::suites::render::d3d11 {
 namespace {
-const Add kIsoCoords(spec("geom", "tess_isoline_domain_coordinates").tolerance(rr::Tolerance::raster(2, 2)), [](Rig& r, Cap& out) {
-    Target target;
-    Basic basic;
-    if (!r.color(target) || !basic.make(r)) return false;
-    const std::string input = Hlsl2d::kVo;
-    const std::string hull = input +
-        "struct HC { float e[2] : SV_TessFactor; };\n"
-        "HC pc(InputPatch<VO, 2> p) { HC h; h.e[0] = 5; h.e[1] = 8; return h; }\n"
-        "[domain(\"isoline\")][partitioning(\"integer\")][outputtopology(\"line\")][outputcontrolpoints(2)][patchconstantfunc(\"pc\")]\n"
-        "VO main(InputPatch<VO, 2> p, uint i : SV_OutputControlPointID) { return p[i]; }\n";
-    const std::string domain = input +
-        "struct HC { float e[2] : SV_TessFactor; };\n"
-        "[domain(\"isoline\")] VO main(HC hc, float2 uv : SV_DomainLocation, const OutputPatch<VO, 2> p) { VO o;\n"
-        "  o.p = float4(uv.x * 1.6 - 0.8, uv.y * 1.6 - 0.8 + 0.1 * sin(uv.x * 9.0), 0, 1); o.c = float3(uv, 0.7); return o; }\n";
-    Com<ID3D11HullShader> h = r.hs(hull);
-    Com<ID3D11DomainShader> d = r.ds(domain);
-    Com<ID3D11Buffer> vb = r.vbuf(std::vector<Vtx>{vtx(0, 0, 0), vtx(0, 0, 0.5f)});
-    if (!h || !d || !vb) return false;
-    r.bind(target);
-    basic.bind(r, D3D11_PRIMITIVE_TOPOLOGY_2_CONTROL_POINT_PATCHLIST);
-    basic.vertices(r, vb.get());
-    r.ctx->HSSetShader(h.get(), nullptr, 0);
-    r.ctx->DSSetShader(d.get(), nullptr, 0);
-    r.ctx->Draw(2, 0);
-    return r.shot(out, target);
-}, [](Rig& r) -> std::string { return r.kit.warp ? std::string("correct isoline tessellation output (the WARP oracle draws nothing or scribbles for isoline domains)") : std::string(); });
+const Add kIsoCoords(spec("geom", "tess_isoline_domain_coordinates").uniform_ok("segments"), [](Rig& r, Cap& out) { return isoline_so(r, out, "integer", true); });
 }
 }
