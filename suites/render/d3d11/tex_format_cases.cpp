@@ -129,7 +129,10 @@ std::string sample_ps(const Plan& p, bool load, const char* type_override = null
 }
 
 bool run_format(Rig& r, Cap& out, DXGI_FORMAT format) {
-    const FormatSpec spec = FormatCodec::spec(format);
+    FormatSpec spec = FormatCodec::spec(format);
+    if (format == DXGI_FORMAT_R9G9B9E5_SHAREDEXP) {
+        spec.bytes = 4;
+    }
     Bytes data(16 * 16 * static_cast<std::size_t>(spec.bytes));
     for (int y = 0; y < 16; ++y) {
         for (int x = 0; x < 16; ++x) {

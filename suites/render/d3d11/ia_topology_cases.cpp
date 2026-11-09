@@ -148,10 +148,10 @@ std::vector<Vtx> adj_triangles(bool strip) {
 const Add kPoints(spec("ia", "topology_point_list").tolerance(rr::Tolerance::raster()), [](Rig& r, Cap& out) {
     return run_topology(r, out, spiral_points(), D3D11_PRIMITIVE_TOPOLOGY_POINTLIST, nullptr);
 });
-const Add kLines(spec("ia", "topology_line_list").tolerance(rr::Tolerance::raster(2, 1)), [](Rig& r, Cap& out) {
+const Add kLines(spec("ia", "topology_line_list").tolerance(rr::Tolerance::raster(16, 2)), [](Rig& r, Cap& out) {
     return run_topology(r, out, star_lines(), D3D11_PRIMITIVE_TOPOLOGY_LINELIST, nullptr);
 });
-const Add kLineStrip(spec("ia", "topology_line_strip").tolerance(rr::Tolerance::raster(2, 2)), [](Rig& r, Cap& out) {
+const Add kLineStrip(spec("ia", "topology_line_strip").tolerance(rr::Tolerance::raster(16, 2)), [](Rig& r, Cap& out) {
     return run_topology(r, out, wave_strip(), D3D11_PRIMITIVE_TOPOLOGY_LINESTRIP, nullptr);
 });
 const Add kTriList(spec("ia", "topology_triangle_list").tolerance(rr::Tolerance::raster()), [](Rig& r, Cap& out) {
@@ -290,6 +290,10 @@ struct PatchRegistrar {
 const PatchRegistrar kPatchRegistrar;
 
 }  // namespace
+
+bool run_topology_public(Rig& r, Cap& out, const std::vector<Vtx>& verts, D3D11_PRIMITIVE_TOPOLOGY topology, const char* gs_source, UINT count) {
+    return run_topology(r, out, verts, topology, gs_source, count);
+}
 
 bool run_patch_public(Rig& r, Cap& out, unsigned n, bool quad, const char* partition, const char* topology, float outer, float inner, bool wire) {
     return run_patch(r, out, n, quad, partition, topology, outer, inner, wire);

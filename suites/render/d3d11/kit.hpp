@@ -50,6 +50,7 @@ public:
     [[nodiscard]] bool end_frame(std::string& error);
 
     bool warp = false;
+    bool debug = false;
     std::string name;
     D3d11Device dev;
     FrameSwap swap;

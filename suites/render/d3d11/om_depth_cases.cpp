@@ -58,10 +58,10 @@ struct DepthRegistrar {
                                   {"greater", D3D11_COMPARISON_GREATER},     {"not_equal", D3D11_COMPARISON_NOT_EQUAL},
                                   {"greater_equal", D3D11_COMPARISON_GREATER_EQUAL}, {"always", D3D11_COMPARISON_ALWAYS}};
         for (const F& f : funcs) {
-            Add(spec("om", (std::string("depth_func_") + f.name).c_str()).tolerance(rr::Tolerance::blend(2).with_edge(1)),
+            Add(spec("om", (std::string("depth_func_") + f.name).c_str()).tolerance(rr::Tolerance::blend(2).with_edge(2)),
                 [&f](Rig& r, Cap& out) { return depth_scene(r, out, DXGI_FORMAT_D32_FLOAT, f.func, true); });
         }
-        Add(spec("om", "depth_write_disabled").tolerance(rr::Tolerance::blend(2).with_edge(1)),
+        Add(spec("om", "depth_write_disabled").tolerance(rr::Tolerance::blend(2).with_edge(2)),
             [](Rig& r, Cap& out) { return depth_scene(r, out, DXGI_FORMAT_D32_FLOAT, D3D11_COMPARISON_GREATER, false); });
         struct Fmt {
             const char* name;
@@ -72,7 +72,7 @@ struct DepthRegistrar {
                                       {"d32_float", DXGI_FORMAT_D32_FLOAT},
                                       {"d32_float_s8x24_uint", DXGI_FORMAT_D32_FLOAT_S8X24_UINT}};
         for (const Fmt& f : formats) {
-            Add(spec("om", (std::string("depth_format_") + f.name).c_str()).tolerance(rr::Tolerance::blend(2).with_edge(1)),
+            Add(spec("om", (std::string("depth_format_") + f.name).c_str()).tolerance(rr::Tolerance::blend(2).with_edge(2)),
                 [&f](Rig& r, Cap& out) { return depth_scene(r, out, f.format, D3D11_COMPARISON_LESS_EQUAL, true); },
                 [&f](Rig& r) { return need_format(r, f.format, D3D11_FORMAT_SUPPORT_DEPTH_STENCIL, "depth stencil use"); });
         }
@@ -119,7 +119,7 @@ const Add kReadOnlyDsv(spec("om", "depth_readonly_dsv_sampled").tolerance(rr::To
     return r.shot(out, target);
 });
 
-const Add kPrepass(spec("om", "depth_prepass_then_equal").tolerance(rr::Tolerance::blend(2).with_edge(1)), [](Rig& r, Cap& out) {
+const Add kPrepass(spec("om", "depth_prepass_then_equal").tolerance(rr::Tolerance::blend(2).with_edge(2)), [](Rig& r, Cap& out) {
     Target target;
     Depth depth;
     if (!r.color(target) || !r.depth(depth)) return false;

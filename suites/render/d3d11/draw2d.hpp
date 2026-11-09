@@ -106,6 +106,7 @@ inline std::vector<Vtx> grid_mesh(unsigned n, float extent, std::vector<std::uin
 }  // namespace lsw::suites::render::d3d11
 
 namespace lsw::suites::render::d3d11 {
+bool run_topology_public(Rig& r, Cap& out, const std::vector<Vtx>& verts, D3D11_PRIMITIVE_TOPOLOGY topology, const char* gs_source, UINT count = 0);
 bool run_patch_public(Rig& r, Cap& out, unsigned n, bool quad, const char* partition, const char* topology, float outer, float inner, bool wire);
 }
 

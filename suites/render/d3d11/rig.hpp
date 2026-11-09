@@ -107,6 +107,7 @@ public:
 
     bool shot(Cap& out, Target& target, const char* label = "");
     bool read_image(ID3D11Texture2D* texture, DXGI_FORMAT format, unsigned subresource, rr::Image& out);
+    std::string debug_messages();
     bool depth_image(Depth& depth, rr::Image& out);
     bool read_bytes(ID3D11Buffer* buffer, Bytes& out);
     bool read_texels(ID3D11Texture2D* texture, unsigned subresource, TexelImage& out);

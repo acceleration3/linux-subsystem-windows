@@ -466,6 +466,33 @@ bool Rig::depth_image(Depth& depth, rr::Image& out) {
     return true;
 }
 
+std::string Rig::debug_messages() {
+    ID3D11InfoQueue* raw = nullptr;
+    dev->QueryInterface(__uuidof(ID3D11InfoQueue), reinterpret_cast<void**>(&raw));
+    Com<ID3D11InfoQueue> queue(raw);
+    std::string text;
+    if (!queue) {
+        return text;
+    }
+    const UINT64 count = queue->GetNumStoredMessages();
+    int shown = 0;
+    for (UINT64 i = 0; i < count && shown < 4; ++i) {
+        SIZE_T size = 0;
+        queue->GetMessage(i, nullptr, &size);
+        std::vector<char> storage(size);
+        D3D11_MESSAGE* message = reinterpret_cast<D3D11_MESSAGE*>(storage.data());
+        if (FAILED(queue->GetMessage(i, message, &size))) {
+            continue;
+        }
+        if (message->Severity <= D3D11_MESSAGE_SEVERITY_WARNING) {
+            text += std::string(message->pDescription, message->DescriptionByteLength > 0 ? message->DescriptionByteLength - 1 : 0) + " | ";
+            ++shown;
+        }
+    }
+    queue->ClearStoredMessages();
+    return text;
+}
+
 bool Rig::read_bytes(ID3D11Buffer* buffer, Bytes& out) { return D3d11Tools::read_buffer(kit.dev, buffer, out, error); }
 
 std::string FnScene::unsupported(Kit& kit) {
@@ -481,6 +508,13 @@ bool FnScene::draw(Kit& kit, rr::CaptureSet& out, std::string& error) {
     if (!body_(rig, out)) {
         error = rig.error.empty() ? "the scene failed" : rig.error;
         return false;
+    }
+    if (kit.debug) {
+        const std::string messages = rig.debug_messages();
+        if (!messages.empty()) {
+            error = "debug layer: " + messages;
+            return false;
+        }
     }
     return true;
 }

@@ -11,6 +11,7 @@ rr::Pattern::Bytes make_pattern(unsigned size) {
         for (int k = 0; k < 3; ++k) {
             base[i + k] = static_cast<std::uint8_t>((base[i + k] * 3 + grad[i + k]) / 4);
         }
+        base[i + 3] = static_cast<std::uint8_t>(90 + ((i / 4) % size) * 2 + ((i / 4) / size) % 40);
     }
     return base;
 }
@@ -183,7 +184,7 @@ const ExprRow kExpr[] = {
     {"sample_level", "return t.SampleLevel(s, i.uv, i.uv.x * 5.0);", D3D11_FILTER_MIN_MAG_MIP_LINEAR, false},
     {"sample_grad", "return t.SampleGrad(s, i.uv * 2.0, float2(0.01, 0) * (1 + i.uv.y * 8), float2(0, 0.01));", D3D11_FILTER_MIN_MAG_MIP_LINEAR, false},
     {"sample_bias", "return t.SampleBias(s, i.uv * 4.0, i.uv.x * 4.0 - 1.0);", D3D11_FILTER_MIN_MAG_MIP_LINEAR, false},
-    {"calculate_lod", "float l = t.CalculateLevelOfDetail(s, i.uv * 8.0); float u = t.CalculateLevelOfDetailUnclamped(s, i.uv * 8.0); return float4(l / 6.0, frac(u), u / 6.0, 1);", D3D11_FILTER_MIN_MAG_MIP_LINEAR, false},
+    {"calculate_lod", "float l = t.CalculateLevelOfDetail(s, i.uv * (4.0 + 12.0 * i.uv.x)); float u = t.CalculateLevelOfDetailUnclamped(s, i.uv * (4.0 + 12.0 * i.uv.x)); return float4(l / 6.0, 0.5 + 0.1 * u, u / 6.0, 1);", D3D11_FILTER_MIN_MAG_MIP_LINEAR, false},
     {"gather_red", "return t.GatherRed(s, i.uv * 2.0);", D3D11_FILTER_MIN_MAG_MIP_POINT, false},
     {"gather_green", "return t.GatherGreen(s, i.uv * 2.0);", D3D11_FILTER_MIN_MAG_MIP_POINT, false},
     {"gather_blue", "return t.GatherBlue(s, i.uv * 2.0);", D3D11_FILTER_MIN_MAG_MIP_POINT, false},

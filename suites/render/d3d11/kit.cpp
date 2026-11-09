@@ -4,17 +4,20 @@
 #include "support/target_adapter.hpp"
 
 #include <algorithm>
+#include <cstdlib>
 
 namespace lsw::suites::render::d3d11 {
 
 OpenStatus Kit::open(bool use_warp, const rr::CaseSpec& spec, std::string& error) {
     warp = use_warp;
+    const UINT flags = std::getenv("LSW_D3D11_DEBUG") != nullptr ? D3D11_CREATE_DEVICE_DEBUG : 0;
+    debug = flags != 0;
     static constexpr D3D_FEATURE_LEVEL kLevels[] = {D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_10_0,
                                                     D3D_FEATURE_LEVEL_10_1, D3D_FEATURE_LEVEL_12_0,  D3D_FEATURE_LEVEL_12_1};
     const D3D_FEATURE_LEVEL level = kLevels[std::min<unsigned>(spec.variant(), 5)];
     if (warp) {
         name = "WARP";
-        if (!dev.create_warp(&level, 1, 0, error)) {
+        if (!dev.create_warp(&level, 1, flags, error)) {
             return dev.result == E_INVALIDARG || dev.result == DXGI_ERROR_UNSUPPORTED ? OpenStatus::Unsupported : OpenStatus::Failed;
         }
         return open_swap(spec, error);
@@ -24,7 +27,7 @@ OpenStatus Kit::open(bool use_warp, const rr::CaseSpec& spec, std::string& error
         return OpenStatus::Failed;
     }
     name = adapter.name;
-    if (!dev.create_ex(adapter.luid, &level, 1, 0, error)) {
+    if (!dev.create_ex(adapter.luid, &level, 1, flags, error)) {
         return dev.result == E_INVALIDARG || dev.result == DXGI_ERROR_UNSUPPORTED ? OpenStatus::Unsupported : OpenStatus::Failed;
     }
     return open_swap(spec, error);
