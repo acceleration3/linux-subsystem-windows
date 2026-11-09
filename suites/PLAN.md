@@ -1410,14 +1410,21 @@ suites/render-ref/        lsw-render-ref, the Linux tool that renders the Vulkan
   are recorded for every frame.
 - Audit: `--dump-captures` (worker env `LSW_RENDER_DUMP=1`) makes every render check write `<frame>_<label>.actual.png`,
   `.oracle.png` (WARP and D3D9On12 checks), the raw images as `.actual.rref` and `.oracle.rref`, and `captures.json`
-  (hashes, pixel statistics, every tolerance field, `uniform_ok`, `audit_ok`, judge measures); `lsw-render-ref --png`
+  (hashes, pixel statistics, every tolerance field, `uniform_ok`, `same_as`, judge measures); `lsw-render-ref --png`
   writes the same `captures.json` for the host references. `scripts/render-audit.py --guest ARTIFACTS [--host REFS]
   [--json r.json] [--out report.md] [--strict] [--no-swap] [--verify-judge]` flags uniform captures, indistinguishable
   checks, identical captures inside a family and across families of one API, static multi-frame checks, trivial
   clear-colour matches, loose tolerances, and the swap test (a sibling's oracle image passes the check's own tolerance,
   judged by a python port of `common/diff`). `--strict` exits 1 when a gating flag (uniform, indistinguishable, family or
-  cross-family identical, frames identical, trivial match, swap pass) has no explanation; a case explains its flags with
-  `CaseSpec::audit_ok("reason")`. `--verify-judge` re-judges every recorded capture in python and fails on any
+  cross-family identical, frames identical, trivial match, swap pass) has no explanation. Only two explanations exist:
+  `CaseSpec::same_as({"<group>.<name>", ...}, "reason")` explains the sameness flags (indistinguishable, family
+  identical, cross-family identical, swap pass) and only with respect to the named siblings (full ids or `group.name`
+  of the same API): the script rejects the explanation unless every partner listed in the flag is named; and
+  `uniform_ok(label)` explains a uniform capture (and the trivial match it causes when every flat capture is a
+  `uniform_ok` label). Frames-identical and any other trivial match are fixed in the row, not explained. `same_as`
+  entries naming a check that is unknown or involved in no flag of the run are listed in the report. `audit_ok(reason)`
+  remains only as a deprecated alias that explains nothing, so unconverted rows fail `--strict`. `--self-test` runs the
+  explanation rules over synthetic dumps. `--verify-judge` re-judges every recorded capture in python and fails on any
   disagreement with the C++ verdict.
 - Tolerances: a tolerance set on a `CaseSpec` (or per label) is honoured exactly for every capture kind; only an unset
   tolerance gets the kind default (integer exact, depth `floats(2e-4, 1e-4)`, other float `floats(4e-3, 4e-3)`). On float

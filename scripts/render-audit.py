@@ -15,6 +15,8 @@ FRAME_STATIC = 0.005
 TRIVIAL = 0.98
 LOOSE = ("psnr", "filter", "raster")
 FLOAT_KINDS = ("rgba16f", "rgba32f", "r32f", "depth32f", "r16f", "rg16f", "rg32f")
+SAMENESS = ("indistinguishable_device", "indistinguishable_oracle", "family_identical_device", "family_identical_oracle",
+            "cross_family_device", "cross_family_oracle", "swap_pass")
 GATING = ("uniform", "indistinguishable_device", "indistinguishable_oracle", "family_identical_device", "family_identical_oracle",
           "cross_family_device", "cross_family_oracle", "frames_identical", "trivial_match", "swap_pass")
 
@@ -291,8 +293,12 @@ class Audit:
         self.cache = collections.OrderedDict()
         self.ids = sorted(set(guest) | set(host) | set(results))
 
-    def flag(self, check_id, name, detail, label=None):
+    def flag(self, check_id, name, detail, label=None, partners=None, labels=None):
         entry = {"flag": name, "detail": detail}
+        if labels is not None:
+            entry["labels"] = sorted(labels)
+        if partners is not None:
+            entry["partners"] = sorted(partners)
         if label is not None:
             entry["label"] = label
         self.flags[check_id].append(entry)
@@ -300,23 +306,66 @@ class Audit:
     def spec_of(self, check_id):
         return self.guest.get(check_id) or self.host.get(check_id) or {}
 
-    def explanation(self, check_id, entry):
+    def named_siblings(self, check_id):
         spec = self.spec_of(check_id)
-        reasons = spec.get("audit_ok", [])
-        if reasons:
-            return "; ".join(reasons)
-        if entry["flag"] == "uniform":
-            labels = spec.get("uniform_ok", [])
+        prefix = "render.%s." % api_of(check_id)
+        named = {}
+        for entry in spec.get("same_as", []):
+            for sibling in entry.get("siblings", []):
+                named[sibling if sibling.startswith("render.") else prefix + sibling] = entry.get("reason", "")
+        return named
+
+    def explanation(self, check_id, entry):
+        name = entry["flag"]
+        if name == "uniform":
+            labels = self.spec_of(check_id).get("uniform_ok", [])
             if "*" in labels or entry.get("label") in labels:
                 return "uniform_ok"
+            return None
+        if name == "trivial_match":
+            allowed = self.spec_of(check_id).get("uniform_ok", [])
+            if "*" in allowed or (entry.get("labels") and all(l in allowed for l in entry["labels"])):
+                return "uniform_ok"
+            return None
+        if name in SAMENESS:
+            partners = entry.get("partners")
+            named = self.named_siblings(check_id)
+            if partners and all(p in named for p in partners):
+                return "; ".join(sorted({named[p] for p in partners if named[p]}))
         return None
+
+    def stale_same_as(self):
+        out = []
+        for check_id in sorted(set(self.guest) | set(self.host)):
+            named = self.named_siblings(check_id)
+            if not named:
+                continue
+            used = set()
+            for entry in self.flags.get(check_id, []):
+                if entry["flag"] in SAMENESS:
+                    used.update(entry.get("partners", ()))
+            known = set(self.ids)
+            for sibling in sorted(named):
+                if sibling not in known:
+                    out.append((check_id, "names %s, which is not a known check" % sibling))
+                elif sibling not in used:
+                    out.append((check_id, "names %s, which no sameness flag of this check involves" % sibling))
+        return out
 
     def unexplained(self):
         out = []
         for check_id in sorted(self.flags):
+            failing = self.status_of(check_id) in ("fail", "timeout", "crash")
             for entry in self.flags[check_id]:
+                device_side = entry["flag"].endswith("_device") or (entry["flag"] == "uniform" and entry["detail"].startswith("device "))
+                if device_side and (failing or any(self.status_of(p) in ("fail", "timeout", "crash") for p in entry.get("partners", ()))):
+                    continue
                 if entry["flag"] in GATING and self.explanation(check_id, entry) is None:
-                    out.append((check_id, entry["flag"], entry["detail"]))
+                    detail = entry["detail"]
+                    if entry["flag"] in SAMENESS and self.named_siblings(check_id):
+                        missing = [p for p in entry.get("partners", ()) if p not in self.named_siblings(check_id)]
+                        detail += " (same_as does not name: %s)" % ", ".join(missing)
+                    out.append((check_id, entry["flag"], detail))
         return out
 
     def uniform(self):
@@ -346,7 +395,7 @@ class Audit:
                 self.groups.append({"kind": "identical_set", "side": side, "ids": ids})
                 for check_id in ids:
                     self.flag(check_id, "indistinguishable_" + side, "all captures on the %s side are identical to %s" %
-                              (side, ", ".join(i for i in ids if i != check_id)))
+                              (side, ", ".join(i for i in ids if i != check_id)), partners=[i for i in ids if i != check_id])
         families = collections.defaultdict(list)
         for check_id in device:
             family = family_of(check_id)
@@ -374,7 +423,7 @@ class Audit:
                 for check_id, entries in pairs.items():
                     for key, others in entries:
                         self.flag(check_id, "family_identical_" + side, "f%d %s equals %s in family %s" %
-                                  (key[0], key[1] or "(unnamed)", ", ".join(others), family))
+                                  (key[0], key[1] or "(unnamed)", ", ".join(others), family), partners=others)
 
     def cross_family(self):
         uniform_digests = set()
@@ -409,7 +458,7 @@ class Audit:
                     others = sorted({o for o, _ in members if families[o] != families[check_id]})
                     if others:
                         self.flag(check_id, "cross_family_" + side, "f%d %s equals other families: %s" %
-                                  (key[0], key[1] or "(unnamed)", ", ".join(others[:6]) + (" ..." if len(others) > 6 else "")))
+                                  (key[0], key[1] or "(unnamed)", ", ".join(others[:6]) + (" ..." if len(others) > 6 else "")), partners=others)
                         self.related[check_id].update(others)
 
     def multiframe(self):
@@ -442,6 +491,7 @@ class Audit:
             if check_id in self.host:
                 reference = {key_of(c): c.get("actual_stats") for c in self.host[check_id]["captures"]}
             details = []
+            flat_labels = []
             total = 0
             for capture in dump.get("captures", []):
                 total += 1
@@ -450,10 +500,11 @@ class Audit:
                 if device is None or other is None:
                     continue
                 if device["dominant_fraction"] > TRIVIAL and other["dominant_fraction"] > TRIVIAL and device["dominant"] == other["dominant"]:
+                    flat_labels.append(capture["label"])
                     details.append("f%d %s (%s over %.1f%%)" % (capture["frame"], capture["label"] or "(unnamed)", device["dominant"],
                                                                 min(device["dominant_fraction"], other["dominant_fraction"]) * 100.0))
             if total and len(details) == total:
-                self.flag(check_id, "trivial_match", "every capture of device and reference is the clear colour: " + ", ".join(details))
+                self.flag(check_id, "trivial_match", "every capture of device and reference is the clear colour: " + ", ".join(details), labels=flat_labels)
 
     def looseness(self):
         for check_id, dump in self.guest.items():
@@ -574,7 +625,7 @@ class Audit:
             self.swap_log.append({"id": check_id, "siblings": len(siblings), "passing": passing})
             if passing:
                 names = ", ".join(passing[:6]) + (" ..." if len(passing) > 6 else "")
-                self.flag(check_id, "swap_pass", "sibling %s passes this check with its own image, so replacing the feature by the sibling's state would not be caught" % names)
+                self.flag(check_id, "swap_pass", "sibling %s passes this check with its own image, so replacing the feature by the sibling's state would not be caught" % names, partners=passing)
 
     def verify(self):
         checked = 0
@@ -664,22 +715,83 @@ def render(audit):
         lines.append("none")
     for check_id, name, detail in open_items:
         lines.append("- %s [%s]: %s" % (check_id, name, detail))
+    stale = audit.stale_same_as()
+    lines += ["", "## same_as entries that match nothing in this run (%d)" % len(stale), ""]
+    if not stale:
+        lines.append("none")
+    for check_id, problem in stale:
+        lines.append("- %s: %s" % (check_id, problem))
     audited = set(audit.guest) | set(audit.host)
     lines += ["", "## Summary", "", "%d checks with captures audited, %d with at least one flag." % (len(audited), len(audit.flags)), ""]
     return "\n".join(lines)
 
 
+def synthetic_dump(check_id, digest, distinct=500, dominant_fraction=0.3, same_as=(), uniform_ok=(), audit_ok=()):
+    stats = {"distinct": distinct, "dominant": "10203040", "dominant_fraction": dominant_fraction, "stddev": 40.0}
+    capture = {"frame": 0, "label": "", "width": 8, "height": 8, "kind": "bgra8", "actual_hash": digest, "actual_stats": stats,
+               "oracle_hash": digest, "oracle_stats": dict(stats), "tolerance": {"name": "tight(1)"}, "pass": True}
+    return {"id": check_id, "side": "guest", "outcome": "pass", "frames": 1, "uniform_ok": list(uniform_ok), "audit_ok": list(audit_ok),
+            "same_as": [{"siblings": list(names), "reason": reason} for names, reason in same_as], "captured": [0], "captures": [capture]}
+
+
+def self_test():
+    p = "render.t.g."
+    rows = {
+        "a_one": synthetic_dump(p + "a_one", "aa"),
+        "a_two": synthetic_dump(p + "a_two", "aa"),
+        "b_one": synthetic_dump(p + "b_one", "bb", same_as=[(["g.b_two"], "named one of two")]),
+        "b_two": synthetic_dump(p + "b_two", "bb", same_as=[([p + "b_one", "g.b_three"], "full ids and short ids mix")]),
+        "b_three": synthetic_dump(p + "b_three", "bb", same_as=[(["g.b_one", "g.b_two"], "both partners")]),
+        "c_one": synthetic_dump(p + "c_one", "cc", same_as=[(["g.c_two"], "ok")]),
+        "c_two": synthetic_dump(p + "c_two", "cc", same_as=[(["g.c_one"], "ok")]),
+        "d_flat": synthetic_dump(p + "d_flat", "dd", distinct=1, dominant_fraction=1.0, same_as=[(["g.d_other"], "wrong flag kind")]),
+        "e_flat": synthetic_dump(p + "e_flat", "ee", distinct=1, dominant_fraction=1.0, uniform_ok=["*"]),
+        "f_one": synthetic_dump(p + "f_one", "ff", audit_ok=["deprecated alias"]),
+        "f_two": synthetic_dump(p + "f_two", "ff", audit_ok=["deprecated alias"]),
+        "g_one": synthetic_dump(p + "g_one", "gg", same_as=[(["g.g_ghost"], "names a check that does not exist")]),
+    }
+    guest = {p + name: dump for name, dump in rows.items()}
+    audit = Audit(guest, {}, {})
+    audit.run(swap=False)
+    open_ids = collections.defaultdict(set)
+    for check_id, flag, _ in audit.unexplained():
+        open_ids[check_id[len(p):]].add(flag)
+    stale = {i[len(p):] for i, _ in audit.stale_same_as()}
+    expect_open = {
+        "a_one": True, "a_two": True, "b_one": True, "b_two": False, "b_three": False, "c_one": False, "c_two": False,
+        "d_flat": True, "e_flat": False, "f_one": True, "f_two": True, "g_one": False,
+    }
+    bad = []
+    for name, want in expect_open.items():
+        got = name in open_ids and any(f != "near_uniform" for f in open_ids[name])
+        if got != want:
+            bad.append("%s: unexplained=%s expected %s (%s)" % (name, got, want, sorted(open_ids.get(name, ()))))
+    if "d_flat" in open_ids and not {"uniform", "trivial_match"} & open_ids["d_flat"]:
+        bad.append("d_flat: uniform not left open")
+    if "g_one" not in stale:
+        bad.append("g_one: unknown sibling not reported")
+    for line in bad:
+        print("self-test FAIL: " + line)
+    print("render-audit self-test: %s" % ("failed" if bad else "ok"))
+    return 1 if bad else 0
+
+
 def main():
     parser = argparse.ArgumentParser(description="Audit render suite captures")
-    parser.add_argument("--guest", required=True, help="guest artifacts tree produced with lsw-suites --dump-captures")
+    parser.add_argument("--self-test", action="store_true", help="run the explanation rules against synthetic dumps")
+    parser.add_argument("--guest", required=False, help="guest artifacts tree produced with lsw-suites --dump-captures")
     parser.add_argument("--host", help="reference directory produced by lsw-render-ref --png")
     parser.add_argument("--json", help="lsw-suites result JSON")
     parser.add_argument("--out", help="markdown report path (default stdout)")
     parser.add_argument("--flags", help="machine-readable JSON path (default <out>.json, or render-audit.json)")
-    parser.add_argument("--strict", action="store_true", help="exit 1 when a gating flag has no audit_ok explanation")
+    parser.add_argument("--strict", action="store_true", help="exit 1 when a gating flag has no explanation")
     parser.add_argument("--no-swap", action="store_true", help="skip the swap test")
     parser.add_argument("--verify-judge", action="store_true", help="check the python judge against the verdicts recorded in captures.json")
     args = parser.parse_args()
+    if args.self_test:
+        return self_test()
+    if not args.guest:
+        parser.error("--guest is required")
     audit = Audit(load_dumps(args.guest), load_dumps(args.host), load_results(args.json))
     if args.verify_judge:
         checked, mismatches = audit.verify()
@@ -700,6 +812,7 @@ def main():
         "checks": {i: {"status": audit.status_of(i), "flags": audit.flags.get(i, [])} for i in audit.ids},
         "groups": audit.groups,
         "swap": audit.swap_log,
+        "stale_same_as": [{"id": i, "problem": p} for i, p in audit.stale_same_as()],
         "unexplained": [{"id": i, "flag": f, "detail": d} for i, f, d in audit.unexplained()],
         "skips": {reason: ids for reason, ids in skips.items()},
         "failures": [{"id": i, "status": s, "reason": r} for i, s, r in fails],

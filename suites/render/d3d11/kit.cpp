@@ -28,7 +28,7 @@ OpenStatus Kit::open(bool use_warp, const rr::CaseSpec& spec, std::string& error
     }
     name = adapter.name;
     if (!dev.create_ex(adapter.luid, &level, 1, flags, error)) {
-        return dev.result == E_INVALIDARG || dev.result == DXGI_ERROR_UNSUPPORTED ? OpenStatus::Unsupported : OpenStatus::Failed;
+        return OpenStatus::Failed;
     }
     return open_swap(spec, error);
 }

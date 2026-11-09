@@ -18,6 +18,11 @@
 namespace lsw::render {
 class CaseSpec {
 public:
+    struct SameAs {
+        std::vector<std::string> siblings;
+        std::string reason;
+    };
+
     CaseSpec(std::string group, std::string name) : group_(std::move(group)), name_(std::move(name)) {}
 
     CaseSpec& size(unsigned width, unsigned height) {
@@ -63,6 +68,10 @@ public:
         audit_ok_.push_back(std::move(reason));
         return *this;
     }
+    CaseSpec& same_as(std::vector<std::string> siblings, std::string reason) {
+        same_as_.push_back(SameAs{std::move(siblings), std::move(reason)});
+        return *this;
+    }
     CaseSpec& min_version(unsigned major, unsigned minor) {
         major_ = major;
         minor_ = minor;
@@ -94,6 +103,7 @@ public:
     [[nodiscard]] bool tolerance_set() const { return tolerance_set_; }
     [[nodiscard]] const std::set<std::string>& uniform_labels() const { return uniform_ok_; }
     [[nodiscard]] const std::vector<std::string>& audit_reasons() const { return audit_ok_; }
+    [[nodiscard]] const std::vector<SameAs>& same_as_entries() const { return same_as_; }
     [[nodiscard]] int timeout_seconds() const { return timeout_seconds_; }
     [[nodiscard]] bool uses_swapchain() const { return swapchain_; }
     [[nodiscard]] unsigned variant() const { return variant_; }
@@ -203,6 +213,7 @@ private:
     std::map<std::string, Tolerance> overrides_;
     std::set<std::string> uniform_ok_;
     std::vector<std::string> audit_ok_;
+    std::vector<SameAs> same_as_;
     unsigned major_ = 0;
     unsigned minor_ = 0;
     std::vector<std::string> extensions_;

@@ -206,6 +206,15 @@ std::vector<std::filesystem::path> CaptureDump::write(const std::filesystem::pat
     for (std::size_t i = 0; i < spec.audit_reasons().size(); ++i) {
         json += (i ? ",\"" : "\"") + escape(spec.audit_reasons()[i]) + "\"";
     }
+    json += "],\"same_as\":[";
+    for (std::size_t i = 0; i < spec.same_as_entries().size(); ++i) {
+        const CaseSpec::SameAs& entry = spec.same_as_entries()[i];
+        json += std::string(i ? ",{" : "{") + "\"siblings\":[";
+        for (std::size_t j = 0; j < entry.siblings.size(); ++j) {
+            json += (j ? ",\"" : "\"") + escape(entry.siblings[j]) + "\"";
+        }
+        json += "],\"reason\":\"" + escape(entry.reason) + "\"}";
+    }
     json += "],\"captured\":[";
     for (std::size_t i = 0; i < frames.size(); ++i) {
         json += (i ? "," : "") + std::to_string(frames[i]);

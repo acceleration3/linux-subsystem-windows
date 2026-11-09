@@ -59,14 +59,16 @@ bool Convert::image_of(const TexelImage& texels, DXGI_FORMAT format, rr::Image& 
 }
 
 bool Convert::stencil_of(const TexelImage& texels, rr::Image& out, std::string& error) {
-    if (texels.row_bytes != texels.width * 4) {
-        error = "stencil readback expects a 32-bit depth-stencil format";
+    const std::size_t step = texels.width != 0 ? texels.row_bytes / texels.width : 0;
+    if (step != 4 && step != 8) {
+        error = "stencil readback expects a 32-bit or 64-bit depth-stencil format";
         return false;
     }
+    const std::size_t offset = step == 4 ? 3 : 4;
     rr::Image image(texels.width, texels.height, rr::PixelKind::R8Uint);
     for (UINT y = 0; y < texels.height; ++y) {
         for (UINT x = 0; x < texels.width; ++x) {
-            image.row(y)[x] = texels.data[(static_cast<std::size_t>(y) * texels.width + x) * 4 + 3];
+            image.row(y)[x] = texels.data[(static_cast<std::size_t>(y) * texels.width + x) * step + offset];
         }
     }
     out = std::move(image);

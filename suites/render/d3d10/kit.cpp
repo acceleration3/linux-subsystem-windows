@@ -33,7 +33,7 @@ OpenStatus Kit::open(bool use_warp, const rr::CaseSpec& spec, std::string& error
         IUnknown* base = dev.device;
         return swap.open(base, 128, 128, 2, DXGI_FORMAT_R8G8B8A8_UNORM, true, error) ? OpenStatus::Ok : OpenStatus::Failed;
     }
-    return dev.result == E_INVALIDARG || dev.result == DXGI_ERROR_UNSUPPORTED ? OpenStatus::Unsupported : OpenStatus::Failed;
+    return warp && (dev.result == E_INVALIDARG || dev.result == DXGI_ERROR_UNSUPPORTED) ? OpenStatus::Unsupported : OpenStatus::Failed;
 }
 
 Com<ID3D10VertexShader> Kit::vertex_shader(const std::string& source, std::vector<std::uint8_t>& code, std::string& error) {
