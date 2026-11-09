@@ -239,8 +239,9 @@ class Cases {
 public:
     using DrawFn = std::function<bool(Kit&, rr::CaptureSet&, std::string&)>;
     using NeedFn = std::function<std::string(Kit&)>;
+    using RefFn = std::function<bool(unsigned, rr::CaptureSet&, std::string&)>;
 
-    static void single(rr::CaseSpec spec, DrawFn draw, NeedFn need = {});
+    static void single(rr::CaseSpec spec, DrawFn draw, NeedFn need = {}, RefFn reference = {});
 
     class Steps : public D3d12Scene {
     public:
@@ -248,7 +249,10 @@ public:
         std::function<bool(Kit&, unsigned, std::string&)> on_frame;
         std::function<bool(Kit&, unsigned, rr::CaptureSet&, std::string&)> on_capture;
         NeedFn need;
+        RefFn on_reference;
         [[nodiscard]] std::string unsupported(Kit& kit) override { return need ? need(kit) : std::string(); }
+        [[nodiscard]] bool has_reference() const override { return static_cast<bool>(on_reference); }
+        [[nodiscard]] bool reference(unsigned index, rr::CaptureSet& out, std::string& error) override { return on_reference(index, out, error); }
         [[nodiscard]] bool setup(Kit& kit, std::string& error) override { return on_setup ? on_setup(kit, error) : true; }
         [[nodiscard]] bool frame(Kit& kit, unsigned index, std::string& error) override { return on_frame ? on_frame(kit, index, error) : true; }
         [[nodiscard]] bool capture(Kit& kit, unsigned index, rr::CaptureSet& out, std::string& error) override { return on_capture(kit, index, out, error); }

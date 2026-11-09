@@ -36,14 +36,18 @@ public:
             case OpenStatus::Failed:
                 return Outcome::fail((self ? "device creation on the WARP device under test failed: " : "device creation on the accel-virt adapter failed: ") + error);
         }
-        context.phase("open oracle side");
-        switch (oracle.open(true, entry.spec, error)) {
-            case OpenStatus::Ok:
-                break;
-            case OpenStatus::Unsupported:
-                return Outcome::skip("WARP: " + error);
-            case OpenStatus::Failed:
-                return Outcome::fail("the oracle is unavailable: " + error);
+        std::unique_ptr<rr::Scene<Kit>> oracle_scene = entry.make();
+        const bool analytic = oracle_scene->has_reference();
+        if (!analytic) {
+            context.phase("open oracle side");
+            switch (oracle.open(true, entry.spec, error)) {
+                case OpenStatus::Ok:
+                    break;
+                case OpenStatus::Unsupported:
+                    return Outcome::skip("WARP: " + error);
+                case OpenStatus::Failed:
+                    return Outcome::fail("the oracle is unavailable: " + error);
+            }
         }
         if constexpr (requires { accel.under_test = true; }) {
             accel.under_test = true;
@@ -53,20 +57,34 @@ public:
             context.measure("dut", "warp");
         }
         std::unique_ptr<rr::Scene<Kit>> accel_scene = entry.make();
-        std::unique_ptr<rr::Scene<Kit>> oracle_scene = entry.make();
         context.phase("device side setup");
         const std::string accel_lacks = accel_scene->unsupported(accel);
         if (!accel_lacks.empty()) {
             return Outcome::skip((self ? "the WARP device under test lacks " : "accel-virt adapter lacks ") + accel_lacks);
         }
-        const std::string oracle_lacks = oracle_scene->unsupported(oracle);
-        if (!oracle_lacks.empty()) {
-            return Outcome::skip("WARP lacks " + oracle_lacks);
-        }
-        context.phase("oracle side running");
-        rr::RunResult expected = rr::run_scene(oracle, entry.spec, *oracle_scene);
-        if (expected.status != rr::RunStatus::Ok) {
-            return Outcome::fail("the WARP oracle failed: " + expected.reason);
+        rr::RunResult expected;
+        if (analytic) {
+            context.phase("analytic reference");
+            for (unsigned f = 0; f < entry.spec.frame_count(); ++f) {
+                if (!entry.spec.captures(f)) {
+                    continue;
+                }
+                rr::CaptureSet set;
+                if (!oracle_scene->reference(f, set, error)) {
+                    return Outcome::fail("the analytic reference failed: " + error);
+                }
+                expected.frames[f] = std::move(set);
+            }
+        } else {
+            const std::string oracle_lacks = oracle_scene->unsupported(oracle);
+            if (!oracle_lacks.empty()) {
+                return Outcome::skip("WARP lacks " + oracle_lacks);
+            }
+            context.phase("oracle side running");
+            expected = rr::run_scene(oracle, entry.spec, *oracle_scene);
+            if (expected.status != rr::RunStatus::Ok) {
+                return Outcome::fail("the WARP oracle failed: " + expected.reason);
+            }
         }
         context.phase("device side running");
         rr::RunResult actual = rr::run_scene(accel, entry.spec, *accel_scene);

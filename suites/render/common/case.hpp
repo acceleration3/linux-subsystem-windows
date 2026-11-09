@@ -238,6 +238,8 @@ class Scene {
 public:
     virtual ~Scene() = default;
     [[nodiscard]] virtual std::string unsupported(Kit&) { return {}; }
+    [[nodiscard]] virtual bool has_reference() const { return false; }
+    [[nodiscard]] virtual bool reference(unsigned, CaptureSet&, std::string&) { return false; }
     [[nodiscard]] virtual bool setup(Kit&, std::string&) { return true; }
     [[nodiscard]] virtual bool frame(Kit&, unsigned, std::string&) { return true; }
     [[nodiscard]] virtual bool capture(Kit&, unsigned, CaptureSet&, std::string&) = 0;

@@ -818,13 +818,16 @@ namespace {
 
 class FnScene : public D3d12SingleScene {
 public:
-    FnScene(Cases::DrawFn draw_fn, Cases::NeedFn need_fn) : fn(std::move(draw_fn)), need(std::move(need_fn)) {}
+    FnScene(Cases::DrawFn draw_fn, Cases::NeedFn need_fn, Cases::RefFn ref_fn) : fn(std::move(draw_fn)), need(std::move(need_fn)), ref(std::move(ref_fn)) {}
     [[nodiscard]] std::string unsupported(Kit& kit) override { return need ? need(kit) : std::string(); }
+    [[nodiscard]] bool has_reference() const override { return static_cast<bool>(ref); }
+    [[nodiscard]] bool reference(unsigned index, rr::CaptureSet& out, std::string& error) override { return ref(index, out, error); }
     bool draw(Kit& kit, rr::CaptureSet& out, std::string& error) override { return fn(kit, out, error); }
 
 private:
     Cases::DrawFn fn;
     Cases::NeedFn need;
+    Cases::RefFn ref;
 };
 
 }  // namespace
@@ -858,10 +861,10 @@ std::string LineJudge::antialiased(const rr::Image& image, const std::vector<Ver
            ") with a footprint of " + std::to_string(footprint) + " px per px of line: the edge alpha must be fractional and the footprint at least 2 px";
 }
 
-void Cases::single(rr::CaseSpec spec, DrawFn draw, NeedFn need) {
+void Cases::single(rr::CaseSpec spec, DrawFn draw, NeedFn need, RefFn reference) {
     spec.tag("single");
-    rr::CaseTable<Kit>::instance().add(std::move(spec), [draw = std::move(draw), need = std::move(need)] {
-        return std::unique_ptr<rr::Scene<Kit>>(new FnScene(draw, need));
+    rr::CaseTable<Kit>::instance().add(std::move(spec), [draw = std::move(draw), need = std::move(need), reference = std::move(reference)] {
+        return std::unique_ptr<rr::Scene<Kit>>(new FnScene(draw, need, reference));
     });
 }
 
