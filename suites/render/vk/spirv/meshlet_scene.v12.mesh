@@ -1,0 +1,40 @@
+#version 450
+#extension GL_EXT_mesh_shader : require
+layout(local_size_x = 32) in;
+layout(triangles, max_vertices = 32, max_primitives = 32) out;
+struct Meshlet {
+    uvec4 info;
+    vec4 sphere;
+    vec4 cone;
+};
+struct Vertex {
+    vec4 pos;
+    vec4 nrm;
+};
+layout(set = 0, binding = 0) readonly buffer Vertices { Vertex vertices[]; };
+layout(set = 0, binding = 1) readonly buffer Meshlets { Meshlet meshlets[]; };
+layout(set = 0, binding = 2) readonly buffer MeshletVertices { uint meshlet_vertices[]; };
+layout(set = 0, binding = 3) readonly buffer Triangles { uint triangles[]; };
+layout(push_constant) uniform P { mat4 vp; vec4 eye; vec4 cut; } pc;
+struct Payload { uint ids[32]; };
+taskPayloadSharedEXT Payload payload;
+layout(location = 0) out vec3 v_color[];
+layout(location = 1) out vec3 v_normal[];
+void main() {
+    uint mid = payload.ids[gl_WorkGroupID.x];
+    Meshlet m = meshlets[mid];
+    SetMeshOutputsEXT(m.info.y, m.info.w);
+    uint t = gl_LocalInvocationIndex;
+    float h = float(mid) * 2.399963;
+    vec3 color = vec3(0.55 + 0.4 * sin(h), 0.55 + 0.4 * sin(h + 2.1), 0.55 + 0.4 * sin(h + 4.2));
+    if (t < m.info.y) {
+        Vertex v = vertices[meshlet_vertices[m.info.x + t]];
+        gl_MeshVerticesEXT[t].gl_Position = pc.vp * vec4(v.pos.xyz, 1.0);
+        v_color[t] = color;
+        v_normal[t] = v.nrm.xyz;
+    }
+    if (t < m.info.w) {
+        uint p = triangles[m.info.z + t];
+        gl_PrimitiveTriangleIndicesEXT[t] = uvec3(p & 255u, (p >> 8) & 255u, (p >> 16) & 255u);
+    }
+}

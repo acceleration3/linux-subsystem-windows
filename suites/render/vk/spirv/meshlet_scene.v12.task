@@ -1,0 +1,32 @@
+#version 450
+#extension GL_EXT_mesh_shader : require
+layout(local_size_x = 32) in;
+struct Meshlet {
+    uvec4 info;
+    vec4 sphere;
+    vec4 cone;
+};
+layout(set = 0, binding = 1) readonly buffer Meshlets { Meshlet meshlets[]; };
+layout(push_constant) uniform P { mat4 vp; vec4 eye; vec4 cut; } pc;
+struct Payload { uint ids[32]; };
+taskPayloadSharedEXT Payload payload;
+shared uint visible_count;
+void main() {
+    uint gid = gl_GlobalInvocationID.x;
+    if (gl_LocalInvocationIndex == 0u) {
+        visible_count = 0u;
+    }
+    barrier();
+    if (gid < uint(pc.eye.w)) {
+        Meshlet m = meshlets[gid];
+        vec3 to = m.sphere.xyz - pc.eye.xyz;
+        bool facing = dot(to, m.cone.xyz) < m.cone.w * length(to) + m.sphere.w;
+        bool inside = dot(pc.cut.xyz, m.sphere.xyz) + pc.cut.w - m.sphere.w <= 0.0;
+        if (facing && inside) {
+            uint slot = atomicAdd(visible_count, 1u);
+            payload.ids[slot] = gid;
+        }
+    }
+    barrier();
+    EmitMeshTasksEXT(visible_count, 1, 1);
+}

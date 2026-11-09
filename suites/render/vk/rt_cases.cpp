@@ -1,5 +1,6 @@
 #include "render/common/mat4.hpp"
 #include "render/vk/quadkit.hpp"
+#include "render/vk/scene_kit.hpp"
 
 #include <cmath>
 #include <cstring>
@@ -61,19 +62,19 @@ void create_accel(Rig& rig, Accel& accel, VkAccelerationStructureTypeKHR type, V
     accel.address = kit.api.vkGetAccelerationStructureDeviceAddressKHR(kit.device, &address);
 }
 
-void build_accel(Rig& rig, Accel& accel, VkAccelerationStructureTypeKHR type, const VkAccelerationStructureGeometryKHR& geometry, std::uint32_t primitives,
-                 VkBuildAccelerationStructureFlagsKHR flags, bool update, VkQueryPool compact_pool = VK_NULL_HANDLE) {
+void build_accel_geoms(Rig& rig, Accel& accel, VkAccelerationStructureTypeKHR type, const std::vector<VkAccelerationStructureGeometryKHR>& geometries,
+                       const std::vector<std::uint32_t>& counts, VkBuildAccelerationStructureFlagsKHR flags, bool update, VkQueryPool compact_pool = VK_NULL_HANDLE) {
     Kit& kit = rig.kit;
     VkAccelerationStructureBuildGeometryInfoKHR info{};
     info.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
     info.type = type;
     info.flags = flags;
     info.mode = update ? VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR : VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
-    info.geometryCount = 1;
-    info.pGeometries = &geometry;
+    info.geometryCount = static_cast<std::uint32_t>(geometries.size());
+    info.pGeometries = geometries.data();
     VkAccelerationStructureBuildSizesInfoKHR sizes{};
     sizes.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
-    kit.api.vkGetAccelerationStructureBuildSizesKHR(kit.device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &info, &primitives, &sizes);
+    kit.api.vkGetAccelerationStructureBuildSizesKHR(kit.device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &info, counts.data(), &sizes);
     if (accel.handle == VK_NULL_HANDLE) {
         create_accel(rig, accel, type, sizes.accelerationStructureSize);
     }
@@ -84,9 +85,11 @@ void build_accel(Rig& rig, Accel& accel, VkAccelerationStructureTypeKHR type, co
     info.dstAccelerationStructure = accel.handle;
     info.srcAccelerationStructure = update ? accel.handle : VK_NULL_HANDLE;
     info.scratchData.deviceAddress = (scratch.address + align - 1) / align * align;
-    VkAccelerationStructureBuildRangeInfoKHR range{};
-    range.primitiveCount = primitives;
-    const VkAccelerationStructureBuildRangeInfoKHR* ranges = &range;
+    std::vector<VkAccelerationStructureBuildRangeInfoKHR> range_infos(geometries.size());
+    for (std::size_t i = 0; i < geometries.size(); ++i) {
+        range_infos[i].primitiveCount = counts[i];
+    }
+    const VkAccelerationStructureBuildRangeInfoKHR* ranges = range_infos.data();
     rig.run([&](VkCommandBuffer cb) {
         if (compact_pool != VK_NULL_HANDLE) {
             kit.api.vkCmdResetQueryPool(cb, compact_pool, 0, 1);
@@ -101,6 +104,11 @@ void build_accel(Rig& rig, Accel& accel, VkAccelerationStructureTypeKHR type, co
             kit.api.vkCmdWriteAccelerationStructuresPropertiesKHR(cb, 1, &accel.handle, VK_QUERY_TYPE_ACCELERATION_STRUCTURE_COMPACTED_SIZE_KHR, compact_pool, 0);
         }
     });
+}
+
+void build_accel(Rig& rig, Accel& accel, VkAccelerationStructureTypeKHR type, const VkAccelerationStructureGeometryKHR& geometry, std::uint32_t primitives,
+                 VkBuildAccelerationStructureFlagsKHR flags, bool update, VkQueryPool compact_pool = VK_NULL_HANDLE) {
+    build_accel_geoms(rig, accel, type, {geometry}, {primitives}, flags, update, compact_pool);
 }
 
 VkAccelerationStructureGeometryKHR triangle_geometry(const Buffer& vertices, std::uint32_t vertex_count, const Buffer& indices) {
@@ -469,7 +477,281 @@ void register_rt() {
     }, [](Kit& kit) { return rt_caps(kit, true); });
 }
 
-const int registered = (register_rt(), 0);
+struct RtStage {
+    const char* name;
+    VkShaderStageFlagBits bits;
+};
+
+struct RtGroup {
+    VkRayTracingShaderGroupTypeKHR type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
+    int general = -1;
+    int closest = -1;
+    int any = -1;
+    int intersection = -1;
+};
+
+struct RtRecord {
+    int group = 0;
+    std::vector<float> data;
+};
+
+struct RtTables {
+    VkPipeline pipeline = VK_NULL_HANDLE;
+    Buffer buffer;
+    VkStridedDeviceAddressRegionKHR raygen{};
+    VkStridedDeviceAddressRegionKHR miss{};
+    VkStridedDeviceAddressRegionKHR hit{};
+    VkStridedDeviceAddressRegionKHR callable{};
+};
+
+RtTables build_rt(Rig& rig, VkPipelineLayout layout, const std::vector<RtStage>& stage_list, const std::vector<RtGroup>& group_list, int raygen_group,
+                  const std::vector<RtRecord>& misses, const std::vector<RtRecord>& hits, std::uint32_t data_bytes) {
+    Kit& kit = rig.kit;
+    std::vector<VkPipelineShaderStageCreateInfo> stages(stage_list.size());
+    for (std::size_t i = 0; i < stage_list.size(); ++i) {
+        stages[i].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        stages[i].stage = stage_list[i].bits;
+        stages[i].module = rig.sh(stage_list[i].name);
+        stages[i].pName = "main";
+    }
+    std::vector<VkRayTracingShaderGroupCreateInfoKHR> groups(group_list.size());
+    const auto unused = [](int v) { return v < 0 ? VK_SHADER_UNUSED_KHR : static_cast<std::uint32_t>(v); };
+    for (std::size_t i = 0; i < group_list.size(); ++i) {
+        groups[i].sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
+        groups[i].type = group_list[i].type;
+        groups[i].generalShader = unused(group_list[i].general);
+        groups[i].closestHitShader = unused(group_list[i].closest);
+        groups[i].anyHitShader = unused(group_list[i].any);
+        groups[i].intersectionShader = unused(group_list[i].intersection);
+    }
+    VkRayTracingPipelineCreateInfoKHR info{};
+    info.sType = VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR;
+    info.stageCount = static_cast<std::uint32_t>(stages.size());
+    info.pStages = stages.data();
+    info.groupCount = static_cast<std::uint32_t>(groups.size());
+    info.pGroups = groups.data();
+    info.maxPipelineRayRecursionDepth = 1;
+    info.layout = layout;
+    RtTables out;
+    rig.vk_ok(kit.api.vkCreateRayTracingPipelinesKHR(kit.device, VK_NULL_HANDLE, VK_NULL_HANDLE, 1, &info, nullptr, &out.pipeline), "vkCreateRayTracingPipelinesKHR");
+    const VkPipeline pipeline = out.pipeline;
+    kit.defer([&kit, pipeline] { kit.api.vkDestroyPipeline(kit.device, pipeline, nullptr); });
+    const auto rtp = kit.query_properties<VkPhysicalDeviceRayTracingPipelinePropertiesKHR>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR);
+    const VkDeviceSize handle = rtp.shaderGroupHandleSize;
+    std::vector<std::uint8_t> handles(static_cast<std::size_t>(handle) * groups.size());
+    rig.vk_ok(kit.api.vkGetRayTracingShaderGroupHandlesKHR(kit.device, pipeline, 0, static_cast<std::uint32_t>(groups.size()), handles.size(), handles.data()),
+              "vkGetRayTracingShaderGroupHandlesKHR");
+    const auto up = [](VkDeviceSize v, VkDeviceSize a) { return (v + a - 1) / a * a; };
+    const VkDeviceSize base = rtp.shaderGroupBaseAlignment;
+    const VkDeviceSize stride = up(handle + data_bytes, rtp.shaderGroupHandleAlignment);
+    const VkDeviceSize raygen_stride = up(handle, base);
+    const VkDeviceSize raygen_off = 0;
+    const VkDeviceSize miss_off = up(raygen_off + raygen_stride, base);
+    const VkDeviceSize hit_off = up(miss_off + stride * misses.size(), base);
+    const VkDeviceSize total = hit_off + stride * hits.size();
+    std::vector<std::uint8_t> sbt(static_cast<std::size_t>(total), 0);
+    const auto put = [&](VkDeviceSize offset, const RtRecord& record) {
+        std::memcpy(sbt.data() + offset, handles.data() + static_cast<std::size_t>(handle) * static_cast<std::size_t>(record.group), static_cast<std::size_t>(handle));
+        std::memcpy(sbt.data() + offset + handle, record.data.data(), record.data.size() * sizeof(float));
+    };
+    put(raygen_off, RtRecord{raygen_group, {}});
+    for (std::size_t i = 0; i < misses.size(); ++i) {
+        put(miss_off + stride * i, misses[i]);
+    }
+    for (std::size_t i = 0; i < hits.size(); ++i) {
+        put(hit_off + stride * i, hits[i]);
+    }
+    out.buffer = rig.blank(total + base, VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR, true, true);
+    const VkDeviceSize start = up(out.buffer.address, base) - out.buffer.address;
+    std::memcpy(static_cast<std::uint8_t*>(out.buffer.mapped) + start, sbt.data(), sbt.size());
+    const VkDeviceAddress a = out.buffer.address + start;
+    out.raygen = {a + raygen_off, raygen_stride, raygen_stride};
+    out.miss = {a + miss_off, stride, stride * misses.size()};
+    out.hit = {a + hit_off, stride, stride * hits.size()};
+    return out;
+}
+
+void trace(Rig& rig, const RtTables& tables, VkPipelineLayout layout, const TraceTarget& t, const void* push, std::uint32_t push_size) {
+    Kit& kit = rig.kit;
+    rig.run([&](VkCommandBuffer cb) {
+        kit.api.vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, tables.pipeline);
+        kit.api.vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, layout, 0, 1, &t.set, 0, nullptr);
+        if (push_size != 0) {
+            rig.push(cb, layout, VK_SHADER_STAGE_RAYGEN_BIT_KHR, push, push_size);
+        }
+        kit.api.vkCmdTraceRaysKHR(cb, &tables.raygen, &tables.miss, &tables.hit, &tables.callable, 64, 64, 1);
+    });
+}
+
+QuadMesh make_scaled_quad(Rig& rig, float scale) {
+    const float v[12] = {-0.5f * scale, -0.5f * scale, 0.0f, 0.5f * scale, -0.5f * scale, 0.0f, 0.5f * scale, 0.5f * scale, 0.0f, -0.5f * scale, 0.5f * scale, 0.0f};
+    const std::uint32_t idx[6] = {0, 1, 2, 0, 2, 3};
+    QuadMesh m;
+    m.vertices = address_buffer(rig, v, sizeof v, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+    m.indices = address_buffer(rig, idx, sizeof idx, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+    return m;
+}
+
+void register_rt_records() {
+    Cases::add(rt_spec("pipeline_any_hit_alpha_test", true), [](Rig& rig, CaptureSet& out) {
+        TraceTarget t = make_trace_target(rig, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
+        const QuadMesh mesh = make_scaled_quad(rig, 3.6f);
+        VkAccelerationStructureGeometryKHR front_geometry = triangle_geometry(mesh.vertices, 4, mesh.indices);
+        front_geometry.flags = 0;
+        Accel front;
+        build_accel(rig, front, VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR, front_geometry, 2, 0, false);
+        Accel back;
+        build_accel(rig, back, VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR, triangle_geometry(mesh.vertices, 4, mesh.indices), 2, 0, false);
+        const Accel tlas = build_tlas(rig, {{0.0f, 0.0f, 0.3f, 0.0f, 0, 0xFF, 0, front.address}, {0.0f, 0.0f, -0.5f, 0.0f, 1, 0xFF, 0, back.address}});
+        write_trace(rig, t, tlas);
+        const VkPipelineLayout layout = rig.playout({t.set_layout}, 4, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
+        RtGroup rgen;
+        rgen.general = 0;
+        RtGroup rmiss;
+        rmiss.general = 1;
+        RtGroup hit;
+        hit.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR;
+        hit.closest = 2;
+        hit.any = 3;
+        const RtTables tables = build_rt(rig, layout, {{"rt_ah.v12.rgen", VK_SHADER_STAGE_RAYGEN_BIT_KHR}, {"rt.v12.rmiss", VK_SHADER_STAGE_MISS_BIT_KHR},
+                                                       {"rt_ah.v12.rchit", VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR}, {"rt_ah.v12.rahit", VK_SHADER_STAGE_ANY_HIT_BIT_KHR}},
+                                         {rgen, rmiss, hit}, 0, {RtRecord{1, {}}}, {RtRecord{2, {}}}, 0);
+        const float alpha_test = 0.0f;
+        trace(rig, tables, layout, t, &alpha_test, 4);
+        out.add("alpha_test", rig.read(t.image, VK_IMAGE_LAYOUT_GENERAL));
+        const float opaque = 1.0f;
+        trace(rig, tables, layout, t, &opaque, 4);
+        out.add("opaque_ray_flag", rig.read(t.image, VK_IMAGE_LAYOUT_GENERAL));
+    }, [](Kit& kit) { return rt_caps(kit, true); });
+    Cases::add(rt_spec("pipeline_sbt_record_data_per_geometry", true), [](Rig& rig, CaptureSet& out) {
+        TraceTarget t = make_trace_target(rig, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
+        const float v[24] = {-0.45f, -0.4f, 0, -0.05f, -0.4f, 0, -0.05f, 0.4f, 0, -0.45f, 0.4f, 0, 0.05f, -0.4f, 0, 0.45f, -0.4f, 0, 0.45f, 0.4f, 0, 0.05f, 0.4f, 0};
+        const std::uint32_t idx[12] = {0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7};
+        const Buffer vertices = address_buffer(rig, v, sizeof v, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+        const Buffer indices = address_buffer(rig, idx, sizeof idx, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+        VkAccelerationStructureGeometryKHR first = triangle_geometry(vertices, 8, indices);
+        VkAccelerationStructureGeometryKHR second = first;
+        second.geometry.triangles.indexData.deviceAddress = indices.address + 24;
+        Accel blas;
+        build_accel_geoms(rig, blas, VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR, {first, second}, {2, 2}, 0, false);
+        const Accel tlas = build_tlas(rig, {{-1.0f, 0.7f, 0.0f, 0.2f, 0, 0xFF, 0, blas.address},
+                                            {0.2f, -0.2f, 0.3f, -0.3f, 1, 0xFF, 2, blas.address},
+                                            {-0.4f, -0.95f, -0.2f, 0.1f, 2, 0xFF, 4, blas.address}});
+        write_trace(rig, t, tlas);
+        const VkPipelineLayout layout = rig.playout({t.set_layout});
+        RtGroup rgen;
+        rgen.general = 0;
+        RtGroup rmiss;
+        rmiss.general = 1;
+        RtGroup hit;
+        hit.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR;
+        hit.closest = 2;
+        std::vector<RtRecord> records;
+        for (int i = 0; i < 6; ++i) {
+            const float* c = palette(static_cast<unsigned>(i));
+            records.push_back({2, {c[0], c[1], c[2], 1.0f, 0.45f + 0.08f * static_cast<float>(i), 0.3f - 0.04f * static_cast<float>(i), 0.15f + 0.05f * static_cast<float>(i), 0.0f}});
+        }
+        const RtTables tables = build_rt(rig, layout, {{"rt_sbt.v12.rgen", VK_SHADER_STAGE_RAYGEN_BIT_KHR}, {"rt_sbt.v12.rmiss", VK_SHADER_STAGE_MISS_BIT_KHR},
+                                                       {"rt_sbt.v12.rchit", VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR}},
+                                         {rgen, rmiss, hit}, 0, {RtRecord{1, {0.15f, 0.25f, 0.45f, 1.0f}}}, records, 32);
+        trace(rig, tables, layout, t, nullptr, 0);
+        out.add("", rig.read(t.image, VK_IMAGE_LAYOUT_GENERAL));
+    }, [](Kit& kit) { return rt_caps(kit, true); });
+}
+
+void register_rt_scene() {
+    CaseSpec spec = sk::scene_spec("rt_shadow_hybrid_ray_query", 160);
+    spec.min_version(1, 2).extension("VK_KHR_acceleration_structure").extension("VK_KHR_deferred_host_operations").extension("VK_KHR_ray_query");
+    Cases::add(
+        std::move(spec),
+        [](Rig& rig, CaptureSet& out) {
+            using namespace sk;
+            Kit& kit = rig.kit;
+            TargetDesc td;
+            td.width = td.height = 160;
+            td.depth = VK_FORMAT_D32_SFLOAT;
+            Target& target = rig.make_target(td);
+            target.clear_color[0] = 0.05f;
+            target.clear_color[1] = 0.06f;
+            target.clear_color[2] = 0.1f;
+            Geometry g;
+            g.floor(0.0f, 6.0f, {0.6f, 0.62f, 0.58f});
+            g.box({-1.6f, 0.9f, -0.8f}, {0.9f, 0.9f, 0.9f}, {0.9f, 0.45f, 0.3f}, 0.5f);
+            g.box({1.4f, 0.6f, 0.9f}, {0.6f, 0.6f, 0.6f}, {0.3f, 0.55f, 0.9f}, -0.4f);
+            g.box({0.2f, 0.25f, -2.6f}, {1.6f, 0.25f, 0.6f}, {0.9f, 0.85f, 0.3f}, 0.1f);
+            g.sphere({0.3f, 0.7f, 2.0f}, 0.7f, {0.85f, 0.35f, 0.75f});
+            g.quad({-6, 0, -3.5}, {-6, 4, -3.5}, {6, 4, -3.5}, {6, 0, -3.5}, {0, 0, 1}, {0.75f, 0.7f, 0.65f});
+            const Gpu gpu = upload(rig, g);
+            const Buffer vb = address_buffer(rig, g.v.data(), g.v.size() * sizeof(SVertex), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+            const Buffer ib = address_buffer(rig, g.i.data(), g.i.size() * sizeof(std::uint16_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+            VkAccelerationStructureGeometryKHR geometry{};
+            geometry.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
+            geometry.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR;
+            geometry.flags = VK_GEOMETRY_OPAQUE_BIT_KHR;
+            geometry.geometry.triangles.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
+            geometry.geometry.triangles.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;
+            geometry.geometry.triangles.vertexData.deviceAddress = vb.address;
+            geometry.geometry.triangles.vertexStride = sizeof(SVertex);
+            geometry.geometry.triangles.maxVertex = static_cast<std::uint32_t>(g.v.size() - 1);
+            geometry.geometry.triangles.indexType = VK_INDEX_TYPE_UINT16;
+            geometry.geometry.triangles.indexData.deviceAddress = ib.address;
+            Accel blas;
+            build_accel(rig, blas, VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR, geometry, static_cast<std::uint32_t>(g.i.size() / 3), 0, false);
+            const Accel tlas = build_tlas(rig, {{0.0f, 0.0f, 0.0f, 0.0f, 0, 0xFF, 0, blas.address}});
+            const VkDescriptorSetLayout set_layout = rig.dlayout({binding(0, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, VK_SHADER_STAGE_FRAGMENT_BIT)});
+            const VkDescriptorPoolSize pool_size{VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1};
+            VkDescriptorPoolCreateInfo pool_info{};
+            pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+            pool_info.maxSets = 1;
+            pool_info.poolSizeCount = 1;
+            pool_info.pPoolSizes = &pool_size;
+            VkDescriptorPool pool = VK_NULL_HANDLE;
+            rig.vk_ok(kit.api.vkCreateDescriptorPool(kit.device, &pool_info, nullptr, &pool), "vkCreateDescriptorPool");
+            kit.defer([&kit, pool] { kit.api.vkDestroyDescriptorPool(kit.device, pool, nullptr); });
+            VkDescriptorSetAllocateInfo alloc{};
+            alloc.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+            alloc.descriptorPool = pool;
+            alloc.descriptorSetCount = 1;
+            alloc.pSetLayouts = &set_layout;
+            VkDescriptorSet set = VK_NULL_HANDLE;
+            rig.vk_ok(kit.api.vkAllocateDescriptorSets(kit.device, &alloc, &set), "vkAllocateDescriptorSets");
+            VkWriteDescriptorSetAccelerationStructureKHR as{};
+            as.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR;
+            as.accelerationStructureCount = 1;
+            as.pAccelerationStructures = &tlas.handle;
+            VkWriteDescriptorSet write{};
+            write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            write.pNext = &as;
+            write.dstSet = set;
+            write.descriptorCount = 1;
+            write.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+            kit.api.vkUpdateDescriptorSets(kit.device, 1, &write, 0, nullptr);
+            const VkPipelineLayout layout = rig.playout({set_layout}, 96, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+            PipelineDesc pipe;
+            pipe.vertex = rig.sh("rtshadow.vert");
+            pipe.fragment = rig.sh("rtshadow.v12.frag");
+            svertex_input(pipe);
+            pipe.layout = layout;
+            pipe.pass = target.clear_pass;
+            pipe.depth_test = true;
+            const VkPipeline pipeline = rig.pipe(pipe);
+            const Mat4 vp = Mat4::perspective(1.1f, 1.0f, 0.3f, 40.0f, true) * look_at({4.2f, 3.4f, 6.0f}, {0.0f, 0.5f, -0.3f});
+            float push[24];
+            std::memcpy(push, vp.m, 64);
+            push[16] = push[17] = push[18] = push[19] = 0.0f;
+            push[20] = -3.4f;
+            push[21] = 3.6f;
+            push[22] = 2.2f;
+            push[23] = 1.0f;
+            out.add("", rig.draw(target, pipeline, nullptr, [&](VkCommandBuffer cb) {
+                rig.push(cb, layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, push, 96);
+                draw(rig, cb, gpu);
+            }, layout, {set}));
+        },
+        [](Kit& kit) { return rt_caps(kit, false); });
+}
+
+const int registered = (register_rt(), register_rt_records(), register_rt_scene(), 0);
 
 }  // namespace
 

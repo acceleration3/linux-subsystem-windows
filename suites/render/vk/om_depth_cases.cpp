@@ -68,11 +68,25 @@ void register_compare() {
     struct DepthFormat {
         const char* suffix;
         VkFormat format;
+        bool stencil;
+        const char* twin;
+        const char* twin_reason;
     };
-    for (const DepthFormat& depth_format : {DepthFormat{"", VK_FORMAT_D32_SFLOAT}}) {
+    const std::vector<DepthFormat> formats = {
+        {"d16", VK_FORMAT_D16_UNORM, false, "d16_s8", "colour and depth planes equal the d16 s8 row, whose stencil plane marks the passing columns"},
+        {"d16_s8", VK_FORMAT_D16_UNORM_S8_UINT, true, "d16", "colour and depth planes equal the d16 row; the stencil plane here marks the passing columns"},
+        {"x8_d24", VK_FORMAT_X8_D24_UNORM_PACK32, false, "d24_s8", "colour and depth planes equal the d24 s8 row, whose stencil plane marks the passing columns"},
+        {"d24_s8", VK_FORMAT_D24_UNORM_S8_UINT, true, "x8_d24", "colour and depth planes equal the x8 d24 row; the stencil plane here marks the passing columns"},
+        {"d32", VK_FORMAT_D32_SFLOAT, false, "d32_s8", "colour and depth planes equal the d32 s8 row, whose stencil plane marks the passing columns"},
+        {"d32_s8", VK_FORMAT_D32_SFLOAT_S8_UINT, true, "d32", "colour and depth planes equal the d32 row; the stencil plane here marks the passing columns"},
+    };
+    for (const DepthFormat& depth_format : formats) {
     for (const CompareEntry& entry : compare_ops()) {
-        CaseSpec spec("om", std::string("depth_compare_") + entry.name + depth_format.suffix);
+        CaseSpec spec("om", std::string("depth_compare_") + entry.name + "_" + depth_format.suffix);
         spec.tolerance(Tolerance::exact());
+        if (entry.op != VK_COMPARE_OP_NEVER) {
+            spec.same_as({std::string("om.depth_compare_") + entry.name + "_" + depth_format.twin}, depth_format.twin_reason);
+        }
         Cases::add(std::move(spec), [entry, depth_format](Rig& rig, CaptureSet& out) {
             TargetDesc td;
             td.depth = depth_format.format;
@@ -85,22 +99,33 @@ void register_compare() {
             PipelineDesc test = quads.desc(target);
             test.depth_test = true;
             test.depth_op = entry.op;
+            if (depth_format.stencil) {
+                test.stencil_test = true;
+                test.stencil.compareOp = VK_COMPARE_OP_ALWAYS;
+                test.stencil.passOp = VK_STENCIL_OP_REPLACE;
+                test.stencil.failOp = VK_STENCIL_OP_KEEP;
+                test.stencil.depthFailOp = VK_STENCIL_OP_KEEP;
+                test.stencil.compareMask = 0xff;
+                test.stencil.writeMask = 0xff;
+                test.stencil.reference = 0x81;
+            }
             const VkPipeline p_base = rig.pipe(base);
             const VkPipeline p_test = rig.pipe(test);
-            const float zs[3] = {0.3f, 0.5f, 0.500004f};
+            const float z0 = 0.2f;
+            const float d16 = 1.0f / 65535.0f;
+            const float zs[7] = {z0 - 1.5f * d16, z0 - 0.2f * d16, std::nextafter(z0, 0.0f), z0, std::nextafter(z0, 1.0f), z0 + 0.2f * d16, z0 + 1.5f * d16};
             Image color = rig.draw(target, p_base, nullptr, [&](VkCommandBuffer cb) {
-                const float grey[4] = {0.45f, 0.45f, 0.5f, 1.0f};
-                for (unsigned i = 0; i < 3; ++i) {
-                    quads.quad(cb, -1.0f + 0.67f * static_cast<float>(i), -1, 0.64f, 2, grey, 0.5f);
+                for (unsigned i = 0; i < 7; ++i) {
+                    const float grey[4] = {0.3f + 0.05f * static_cast<float>(i), 0.3f, 0.5f - 0.04f * static_cast<float>(i), 1.0f};
+                    quads.quad(cb, -1.0f + 2.0f / 7.0f * static_cast<float>(i), -1, 2.0f / 7.0f, 2, grey, z0);
                 }
                 rig.bind_graphics(cb, p_test);
-                for (unsigned i = 0; i < 3; ++i) {
-                    quads.quad(cb, -0.95f + 0.67f * static_cast<float>(i), -0.8f, 0.54f, 0.7f, palette(i), zs[i]);
-                    quads.quad(cb, -0.95f + 0.67f * static_cast<float>(i), 0.1f, 0.54f, 0.7f, palette(i + 3), zs[2 - i]);
+                for (unsigned i = 0; i < 7; ++i) {
+                    quads.quad(cb, -0.96f + 2.0f / 7.0f * static_cast<float>(i), -0.7f, 0.22f, 1.4f, palette(i), zs[i]);
                 }
             }, quads.layout);
-            const bool keeps_depth = entry.op == VK_COMPARE_OP_LESS || entry.op == VK_COMPARE_OP_GREATER;
-            capture_depth_and_color(rig, target, out, std::move(color), keeps_depth, false);
+            const bool observable = entry.op != VK_COMPARE_OP_NEVER;
+            capture_depth_and_color(rig, target, out, std::move(color), observable, observable && depth_format.stencil);
         }, [depth_format](Kit& kit) { return Cases::need_format(kit, depth_format.format, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT, "depth format"); });
     }
     }
