@@ -296,13 +296,29 @@ def kill(ctx):
         pass
 
 
+def stage_exclusions(ctx, spec, attempts=6, pause=10):
+    listed = sorted(set(spec.stage_exclude) | set(spec.finished) | set(spec.retry))
+    data = ("\r\n".join(listed) + "\r\n").encode()
+    for attempt in range(attempts):
+        try:
+            ctx.share.put_bytes(data, f"{ctx.guest_dir}\\ex-{spec.name}.txt")
+            return True
+        except (lsw_link.LinkError, subprocess.SubprocessError, OSError) as error:
+            say(f"{ctx.args.host}: {spec.name}: staging the exclusion list failed ({attempt + 1} of {attempts}): {str(error)[-120:]}")
+            time.sleep(pause)
+    return False
+
+
 def run_segment(ctx, spec, filter_text, phase, exclude, jobs, deadline):
     spec.segments += 1
     number = spec.segments
     tag = spec.name
-    if exclude:
-        listed = sorted(set(spec.stage_exclude) | set(spec.finished) | set(spec.retry))
-        ctx.share.put_bytes(("\r\n".join(listed) + "\r\n").encode(), f"{ctx.guest_dir}\\ex-{tag}.txt")
+    if exclude and not stage_exclusions(ctx, spec):
+        generation = ctx.generation
+        ctx.recover("the share does not accept the exclusion list", generation)
+        if not ctx.wait_recovered(generation):
+            spec.aborted = True
+        return number, "dead", generation
     lines, shown = segment_lines(ctx, spec, number, filter_text, phase, exclude, jobs)
     say(f"{ctx.args.host}: {tag} segment {number}: lsw-suites{ctx.args.bits}.exe {shown}")
     generation = ctx.begin()

@@ -116,6 +116,10 @@ case "${adapters}" in all|first|list) ;; *) die "--adapters needs all, first or 
 [[ -n ${out} ]] || out="${ROOT}/build-render-report/${STAMP}"
 bit_list=(64 32)
 [[ ${bits} != both ]] && bit_list=("${bits}")
+push_list=("${bit_list[@]}")
+[[ ${suite} == sanity ]] && push_list=(64 32)
+build_bits=${bits}
+[[ ${suite} == sanity ]] && build_bits=both
 
 run_id_of() {
     local gpu_part=${adapters}
@@ -340,7 +344,7 @@ run_local() {
         done
     fi
     local exes=()
-    for b in "${bit_list[@]}"; do
+    for b in "${push_list[@]}"; do
         local dir="build-suites"
         [[ ${b} == 32 ]] && dir="build-suites32"
         exes+=(--exe "${b}=${ROOT}/${dir}/lsw-suites${b}.exe")
@@ -516,7 +520,7 @@ run_host_parallel() {
     jobs_here="$(jobs_of "${h}")"
     [[ -n ${filter} ]] && ref_filter="--filter ${filter}"
     local exes=() b
-    for b in "${bit_list[@]}"; do
+    for b in "${push_list[@]}"; do
         local dir="build-suites"
         [[ ${b} == 32 ]] && dir="build-suites32"
         exes+=(--exe "${b}=${ROOT}/${dir}/lsw-suites${b}.exe")
@@ -597,8 +601,8 @@ fi
 if [[ ${build} -eq 1 ]]; then
     export CMAKE_BUILD_PARALLEL_LEVEL="${CMAKE_BUILD_PARALLEL_LEVEL:-4}"
     export LSW_SUITES_KHRONOS_DIR="${LSW_SUITES_KHRONOS_DIR:-${AV}/third_party/khronos}"
-    export LSW_SUITES_BITS="${bits}"
-    capped_step "build lsw-suites (${bits})" 1200 "${ROOT}/scripts/build-suites.sh" || die "suites build failed"
+    export LSW_SUITES_BITS="${build_bits}"
+    capped_step "build lsw-suites (${build_bits})" 1200 "${ROOT}/scripts/build-suites.sh" || die "suites build failed"
     capped_step "build lsw-render-ref" 1200 "${ROOT}/scripts/build-render-ref.sh" || die "lsw-render-ref build failed"
 fi
 
