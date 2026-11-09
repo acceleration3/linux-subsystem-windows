@@ -25,6 +25,16 @@ bool Texels::is_block(DXGI_FORMAT format) {
 }
 
 Texels::Bytes Texels::content(unsigned kind, unsigned width, unsigned height) {
+    Bytes bytes = base_content(kind, width, height);
+    for (unsigned y = 0; y < height; ++y) {
+        for (unsigned x = 0; x < width; ++x) {
+            bytes[(static_cast<std::size_t>(y) * width + x) * 4 + 3] = static_cast<std::uint8_t>(160 + ((x / 2 + y / 3) % 96));
+        }
+    }
+    return bytes;
+}
+
+Texels::Bytes Texels::base_content(unsigned kind, unsigned width, unsigned height) {
     switch (kind) {
         case 1:
             return rr::Pattern::gradient(width, height);
@@ -225,6 +235,14 @@ ID3D12Resource* TextureFactory::create(Kit& kit, const TextureSpec& spec, bool f
                 Texels::Bytes rgba;
                 for (UINT z = 0; z < md; ++z) {
                     Texels::Bytes plane = Texels::content(spec.content + slice, mw, mh);
+                    if (mip > 0) {
+                        static const unsigned tint[8][3] = {{255, 255, 255}, {255, 60, 60}, {60, 255, 60}, {60, 60, 255}, {255, 255, 60}, {255, 60, 255}, {60, 255, 255}, {160, 160, 160}};
+                        for (std::size_t i = 0; i < plane.size(); i += 4) {
+                            for (int c = 0; c < 3; ++c) {
+                                plane[i + static_cast<std::size_t>(c)] = static_cast<std::uint8_t>(plane[i + static_cast<std::size_t>(c)] * tint[mip % 8][c] / 255);
+                            }
+                        }
+                    }
                     if (md > 1) {
                         for (std::size_t i = 0; i < plane.size(); i += 4) {
                             plane[i + 2] = static_cast<std::uint8_t>(z * 255 / (md - 1));
@@ -338,17 +356,43 @@ std::string needs_format(Kit& kit, DXGI_FORMAT format, D3D12_FORMAT_SUPPORT1 sup
 namespace lsw::suites::render::d3d12 {
 
 rr::Tolerance sampler_tolerance() {
+    rr::Tolerance t = rr::Tolerance::filter(8, 0.004).with_edge(1);
+    t.min_psnr = 40.0;
+    t.outlier_max_delta = 255.0;
+    t.max_outliers = 64;
+    t.name = "sampler(8,edge1,64)";
+    return t;
+}
+
+rr::Tolerance loose_sampler_tolerance() {
     rr::Tolerance t = rr::Tolerance::filter(16, 0.05).with_edge(1);
     t.min_psnr = 33.0;
     t.outlier_max_delta = 255.0;
-    t.max_outliers = 400;
-    t.name = "sampler(16,edge1)";
+    t.max_outliers = 1200;
+    t.name = "sampler-minified(16,edge1)";
+    return t;
+}
+
+rr::Tolerance format_tolerance() {
+    rr::Tolerance t = rr::Tolerance::filter(4, 0.001);
+    t.min_psnr = 40.0;
+    t.outlier_max_delta = 255.0;
+    t.max_outliers = 16;
+    t.name = "format(4,16)";
+    return t;
+}
+
+rr::Tolerance exact_op_tolerance() {
+    rr::Tolerance t = rr::Tolerance::filter(2, 0.0005).with_edge(1);
+    t.outlier_max_delta = 255.0;
+    t.max_outliers = 8;
+    t.name = "op(2,edge1,8)";
     return t;
 }
 
 rr::Tolerance anisotropic_tolerance() {
-    rr::Tolerance t = rr::Tolerance::psnr(22).with_edge(1);
-    t.name = "aniso(psnr22,edge1)";
+    rr::Tolerance t = rr::Tolerance::psnr(34);
+    t.name = "aniso(psnr34)";
     return t;
 }
 

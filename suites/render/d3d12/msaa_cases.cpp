@@ -57,15 +57,15 @@ struct MsaaScene {
 };
 
 rr::Tolerance msaa_tolerance() {
-    rr::Tolerance t = rr::Tolerance::blend(6).with_edge(1);
-    t.name = "msaa(6,edge1)";
+    rr::Tolerance t = rr::Tolerance::blend(2);
+    t.name = "msaa(2)";
     return t;
 }
 
 void register_resolve() {
-    for (UINT samples : {2u, 4u, 8u}) {
+    for (UINT samples : {2u, 4u, 8u, 16u}) {
         Cases::single(
-            rr::CaseSpec("msaa", "resolve_color_depth_" + std::to_string(samples) + "x").tolerance(msaa_tolerance()).tag("msaa"),
+            rr::CaseSpec("msaa", "resolve_color_" + std::to_string(samples) + "x").tolerance(msaa_tolerance()).tag("msaa"),
             [samples](Kit& kit, rr::CaptureSet& out, std::string& error) {
                 MsaaScene scene;
                 if (!scene.open(kit, samples, error)) {
@@ -132,7 +132,7 @@ void register_resolve() {
             [](Kit& kit) { return needs_samples(kit, 4); });
     }
     Cases::single(
-        rr::CaseSpec("msaa", "alpha_to_coverage_4x").tolerance(rr::Tolerance::psnr(30).with_edge(1)).tag("msaa"),
+        rr::CaseSpec("msaa", "alpha_to_coverage_4x").tolerance(rr::Tolerance::psnr(33).with_edge(1)).tag("msaa"),
         [](Kit& kit, rr::CaptureSet& out, std::string& error) {
             MsaaScene scene;
             if (!scene.open(kit, 4, error, false)) {
@@ -223,7 +223,7 @@ void register_shader_access() {
         },
         [](Kit& kit) { return needs_samples(kit, 4); });
     Cases::single(
-        rr::CaseSpec("msaa", "texture2dms_depth_load_average_4x").tolerance(rr::Tolerance::blend(6).with_edge(1)).tag("msaa"),
+        rr::CaseSpec("msaa", "texture2dms_depth_load_average_4x").tolerance(rr::Tolerance::blend(2)).tag("msaa"),
         [](Kit& kit, rr::CaptureSet& out, std::string& error) {
             MsaaScene scene;
             if (!scene.open(kit, 4, error)) {

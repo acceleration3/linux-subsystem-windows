@@ -77,7 +77,7 @@ struct OcclusionScene {
 };
 
 void register_all() {
-    Cases::frames(rr::CaseSpec("query", "occlusion_culling_predication_ring").frames(8, {0, 3, 5, 7}).tolerance(rr::Tolerance::blend(3).with_edge(1)).tag("query"), [](Cases::Steps& steps) {
+    Cases::frames(rr::CaseSpec("query", "occlusion_culling_predication_ring").frames(8, {0, 1, 2, 3, 4, 5, 6, 7}).tolerance(rr::Tolerance::blend(3).with_edge(1)).tag("query"), [](Cases::Steps& steps) {
         auto scene = std::make_shared<OcclusionScene>();
         steps.on_setup = [scene](Kit& kit, std::string& error) { return scene->open(kit, error, true); };
         steps.on_frame = [scene](Kit& kit, unsigned frame, std::string& error) {
@@ -143,9 +143,9 @@ void register_all() {
         };
         steps.on_capture = [scene](Kit& kit, unsigned, rr::CaptureSet& out, std::string& error) { return scene->stage.finish(out, error); };
     });
-    Cases::single(rr::CaseSpec("query", "predication_skips_draw_copy_and_dispatch").tolerance(rr::Tolerance::exact()).tag("query"), [](Kit& kit, rr::CaptureSet& out, std::string& error) {
+    Cases::single(rr::CaseSpec("query", "predication_skips_dispatch_and_copy").tolerance(rr::Tolerance::exact()).tag("query"), [](Kit& kit, rr::CaptureSet& out, std::string& error) {
         Cs cs;
-        if (!cs.open(kit, "RWStructuredBuffer<uint> dst : register(u0);\n[numthreads(16, 1, 1)] void main(uint3 id : SV_DispatchThreadID) { dst[id.x] = id.x * 7 + 1; }\n", error)) {
+        if (!cs.open(kit, "RWStructuredBuffer<uint> dst : register(u0);\n[numthreads(16, 1, 1)] void main(uint3 id : SV_DispatchThreadID) { dst[id.x + (uint)p0.y * 16] = id.x * 7 + 1 + (uint)p0.x * 1000; }\n", error)) {
             return false;
         }
         HRESULT result = S_OK;
@@ -165,10 +165,14 @@ void register_all() {
         if (!kit.run([&](ID3D12GraphicsCommandList* list) {
                 D3d12Tools::move(list, predicate, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_PREDICATION);
                 cs.bind(list);
+                const float skipped_values[4] = {1, 0, 0, 0};
+                const float executed_values[4] = {2, 2, 0, 0};
                 list->SetPredication(predicate, 0, D3D12_PREDICATION_OP_EQUAL_ZERO);
+                list->SetComputeRoot32BitConstants(0, 4, skipped_values, 16);
                 list->Dispatch(1, 1, 1);
                 list->SetPredication(predicate, 8, D3D12_PREDICATION_OP_EQUAL_ZERO);
-                list->Dispatch(2, 1, 1);
+                list->SetComputeRoot32BitConstants(0, 4, executed_values, 16);
+                list->Dispatch(1, 1, 1);
                 D3d12Tools::move(list, target, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_DEST);
                 list->SetPredication(predicate, 0, D3D12_PREDICATION_OP_NOT_EQUAL_ZERO);
                 list->CopyBufferRegion(target, 512, source, 0, 128);
@@ -188,7 +192,7 @@ void register_all() {
         out.add("", std::move(image));
         return true;
     });
-    Cases::single(rr::CaseSpec("query", "pipeline_statistics_query_does_not_change_image").tolerance(rr::Tolerance::blend(2)).tag("query"), [](Kit& kit, rr::CaptureSet& out, std::string& error) {
+    Cases::single(rr::CaseSpec("query", "pipeline_statistics_ia_counters").tolerance(rr::Tolerance::blend(2)).tag("query"), [](Kit& kit, rr::CaptureSet& out, std::string& error) {
         Stage stage;
         if (!stage.open(kit, error, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_D32_FLOAT)) {
             return false;
@@ -219,7 +223,20 @@ void register_all() {
                 list->ResolveQueryData(heap, D3D12_QUERY_TYPE_PIPELINE_STATISTICS, 0, 1, readback, 0);
             },
             error);
-        return ok && stage.finish(out, error);
+        if (!ok || !stage.finish(out, error)) {
+            return false;
+        }
+        Kit::Bytes bytes;
+        if (!D3d12Tools::map_bytes(readback, 0, sizeof(D3D12_QUERY_DATA_PIPELINE_STATISTICS), bytes, error)) {
+            return false;
+        }
+        D3D12_QUERY_DATA_PIPELINE_STATISTICS stats{};
+        std::memcpy(&stats, bytes.data(), sizeof stats);
+        rr::Image counters(2, 1, rr::PixelKind::Rgba32Uint);
+        const std::uint32_t values[8] = {static_cast<std::uint32_t>(stats.IAVertices), static_cast<std::uint32_t>(stats.IAPrimitives), 0, 0, static_cast<std::uint32_t>(stats.IAPrimitives), static_cast<std::uint32_t>(stats.IAVertices), 1, 7};
+        std::memcpy(counters.bytes().data(), values, sizeof values);
+        out.add("counters", std::move(counters));
+        return true;
     });
 }
 

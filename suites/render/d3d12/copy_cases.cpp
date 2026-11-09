@@ -338,11 +338,15 @@ void register_clears() {
                                       const UINT whole[4] = {1, 2, 3, 4};
                                       const UINT part[4] = {900, 800, 700, 600};
                                       list->ClearUnorderedAccessViewUint(visible->GetGPUDescriptorHandleForHeapStart(), staging->GetCPUDescriptorHandleForHeapStart(), texture, whole, 0, nullptr);
+                                      const D3D12_RESOURCE_BARRIER between = D3d12Tools::uav_barrier(texture);
+                                      list->ResourceBarrier(1, &between);
                                       list->ClearUnorderedAccessViewUint(visible->GetGPUDescriptorHandleForHeapStart(), staging->GetCPUDescriptorHandleForHeapStart(), texture, part, 2, rects);
                                   } else {
                                       const float whole[4] = {0.1f, 0.2f, 0.3f, 0.4f};
                                       const float part[4] = {0.9f, 0.8f, 0.7f, 0.6f};
                                       list->ClearUnorderedAccessViewFloat(visible->GetGPUDescriptorHandleForHeapStart(), staging->GetCPUDescriptorHandleForHeapStart(), texture, whole, 0, nullptr);
+                                      const D3D12_RESOURCE_BARRIER between = D3d12Tools::uav_barrier(texture);
+                                      list->ResourceBarrier(1, &between);
                                       list->ClearUnorderedAccessViewFloat(visible->GetGPUDescriptorHandleForHeapStart(), staging->GetCPUDescriptorHandleForHeapStart(), texture, part, 2, rects);
                                   }
                               }, error)) {

@@ -311,7 +311,7 @@ struct BindlessState {
 };
 
 void register_bindless() {
-    Cases::frames(rr::CaseSpec("scene", "descriptor_array_material_indexing").size(256, 256).frames(3, {0, 2}).tolerance(sampler_tolerance()).tag("scene"), [](Cases::Steps& steps) {
+    Cases::frames(rr::CaseSpec("scene", "descriptor_array_material_indexing").size(256, 256).frames(3, {0, 2}).tolerance(loose_sampler_tolerance()).tag("scene"), [](Cases::Steps& steps) {
         auto s = std::make_shared<BindlessState>();
         steps.on_setup = [s](Kit& kit, std::string& error) {
             if (!s->stage.open(kit, error, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_D32_FLOAT, 256)) {

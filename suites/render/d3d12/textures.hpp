@@ -17,6 +17,7 @@ public:
     [[nodiscard]] static Bytes block_compressed(DXGI_FORMAT format, unsigned width, unsigned height, std::uint32_t seed);
     [[nodiscard]] static bool is_block(DXGI_FORMAT format);
     [[nodiscard]] static Bytes content(unsigned kind, unsigned width, unsigned height);
+    [[nodiscard]] static Bytes base_content(unsigned kind, unsigned width, unsigned height);
 };
 
 struct TextureSpec {
@@ -54,4 +55,7 @@ public:
 extern const char* const kSamplePrefix;
 [[nodiscard]] rr::Tolerance sampler_tolerance();
 [[nodiscard]] rr::Tolerance anisotropic_tolerance();
+[[nodiscard]] rr::Tolerance loose_sampler_tolerance();
+[[nodiscard]] rr::Tolerance format_tolerance();
+[[nodiscard]] rr::Tolerance exact_op_tolerance();
 }  // namespace lsw::suites::render::d3d12

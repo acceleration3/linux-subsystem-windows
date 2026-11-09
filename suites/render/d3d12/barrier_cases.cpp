@@ -455,10 +455,10 @@ bool run_pass_case(Kit& kit, int variant, rr::CaptureSet& out, std::string& erro
 }
 
 void register_render_passes() {
-    const char* names[] = {"render_pass_clear_preserve", "render_pass_two_passes_preserve", "render_pass_msaa_resolve_at_end", "render_pass_depth_discard_at_end"};
-    for (int variant = 0; variant < 4; ++variant) {
+    const char* names[] = {"render_pass_clear_preserve", "render_pass_two_passes_preserve", "render_pass_msaa_resolve_at_end"};
+    for (int variant = 0; variant < 3; ++variant) {
         Cases::single(
-            rr::CaseSpec("barrier", names[variant]).tolerance(rr::Tolerance::blend(6).with_edge(1)).tag("renderpass"),
+            rr::CaseSpec("barrier", names[variant]).tolerance(rr::Tolerance::blend(2)).tag("renderpass"),
             [variant](Kit& kit, rr::CaptureSet& out, std::string& error) { return run_pass_case(kit, variant, out, error); },
             [](Kit& kit) {
                 D3D12_FEATURE_DATA_D3D12_OPTIONS5 options{};

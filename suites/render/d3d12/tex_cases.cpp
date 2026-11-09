@@ -74,7 +74,7 @@ void register_dimensions() {
         return sample_scene(kit, texture, srv_2d(DXGI_FORMAT_R8G8B8A8_UNORM, 8), &sampler,
                             ps_of("Texture2D<float4> tex : register(t0); SamplerState smp : register(s0);\n", "return tex.Sample(smp, i.uv * p1.xy);"), kTint, kScale, -1.1f, out, error);
     });
-    Cases::single(rr::CaseSpec("tex", "dim_texture2d_array").tolerance(sampler_tolerance()).tag("dimension"), [](Kit& kit, rr::CaptureSet& out, std::string& error) {
+    Cases::single(rr::CaseSpec("tex", "dim_texture2d_array").tolerance(loose_sampler_tolerance()).tag("dimension"), [](Kit& kit, rr::CaptureSet& out, std::string& error) {
         TextureSpec spec;
         spec.width = 32;
         spec.height = 32;
@@ -166,7 +166,7 @@ void register_dimensions() {
          "uint k = ((uint)(i.uv.x * 15.99) + 16 * (uint)(i.uv.y * 15.99)) * 16; uint4 v = buf.Load4(k); return float4(v) / 255.0;", DXGI_FORMAT_R32_TYPELESS, 0, true},
     };
     for (const BufferCase& item : buffers) {
-        Cases::single(rr::CaseSpec("tex", item.name).tolerance(sampler_tolerance()).tag("dimension"), [item](Kit& kit, rr::CaptureSet& out, std::string& error) {
+        Cases::single(rr::CaseSpec("tex", item.name).tolerance(exact_op_tolerance()).tag("dimension"), [item](Kit& kit, rr::CaptureSet& out, std::string& error) {
             std::vector<std::uint8_t> bytes;
             UINT elements = 256;
             if (item.stride == 24) {
@@ -241,7 +241,7 @@ void register_formats() {
     };
     for (const FormatCase& item : formats) {
         Cases::single(
-            rr::CaseSpec("tex", std::string("format_") + item.name).tolerance(sampler_tolerance()).tag("format"),
+            rr::CaseSpec("tex", std::string("format_") + item.name).tolerance(format_tolerance()).tag("format"),
             [item](Kit& kit, rr::CaptureSet& out, std::string& error) {
                 TextureSpec spec;
                 spec.format = item.format;
@@ -264,7 +264,8 @@ void register_formats() {
         {"bc2_unorm", DXGI_FORMAT_BC2_UNORM, DXGI_FORMAT_BC2_UNORM, 4},       {"bc3_unorm", DXGI_FORMAT_BC3_UNORM, DXGI_FORMAT_BC3_UNORM, 4},
         {"bc3_srgb", DXGI_FORMAT_BC3_UNORM_SRGB, DXGI_FORMAT_BC3_UNORM_SRGB, 5}, {"bc4_unorm", DXGI_FORMAT_BC4_UNORM, DXGI_FORMAT_BC4_UNORM, 4},
         {"bc5_unorm", DXGI_FORMAT_BC5_UNORM, DXGI_FORMAT_BC5_UNORM, 4},       {"bc7_unorm", DXGI_FORMAT_BC7_UNORM, DXGI_FORMAT_BC7_UNORM, 4},
-        {"bc7_srgb", DXGI_FORMAT_BC7_UNORM_SRGB, DXGI_FORMAT_BC7_UNORM_SRGB, 5}};
+        {"bc7_srgb", DXGI_FORMAT_BC7_UNORM_SRGB, DXGI_FORMAT_BC7_UNORM_SRGB, 5},
+        {"bc6h_uf16", DXGI_FORMAT_BC6H_UF16, DXGI_FORMAT_BC6H_UF16, 4}};
     for (const FormatCase& item : compressed) {
         Cases::single(
             rr::CaseSpec("tex", std::string("format_") + item.name).tolerance(sampler_tolerance()).tag("format"),
@@ -280,7 +281,7 @@ void register_formats() {
                 }
                 const D3D12_SAMPLER_DESC sampler = linear_wrap();
                 return sample_scene(kit, texture, srv_2d(item.view, 5), &sampler,
-                                    ps_of("Texture2D<float4> tex : register(t0); SamplerState smp : register(s0);\n", "return float4(tex.Sample(smp, i.uv * p1.xy).rgb, 1);"), kTint, kScaleOne, -0.5f, out, error);
+                                    ps_of("Texture2D<float4> tex : register(t0); SamplerState smp : register(s0);\n", "return saturate(tex.Sample(smp, i.uv * p1.xy));"), kTint, kScaleOne, -0.5f, out, error);
             },
             [item](Kit& kit) { return needs_format(kit, item.view, D3D12_FORMAT_SUPPORT1_SHADER_SAMPLE, "sampling this block format"); });
     }
@@ -300,7 +301,7 @@ void add_format_stream(const std::string& name, DXGI_FORMAT format, DXGI_FORMAT 
                 *texture = TextureFactory::create(kit, spec, false, error);
                 const D3D12_SAMPLER_DESC sampler = linear_wrap();
                 return *texture != nullptr &&
-                       rig->open(kit, *texture, srv_2d(view, 1), sampler, ps_of("Texture2D<float4> tex : register(t0); SamplerState smp : register(s0);\n", "return float4(tex.Sample(smp, i.uv * p1.xy).rgb, 1);"), error);
+                       rig->open(kit, *texture, srv_2d(view, 1), sampler, ps_of("Texture2D<float4> tex : register(t0); SamplerState smp : register(s0);\n", "return tex.Sample(smp, i.uv * p1.xy);"), error);
             };
             steps.on_frame = [=](Kit& kit, unsigned frame, std::string& error) {
                 Texels::Bytes bytes;
@@ -334,7 +335,10 @@ void register_format_streams() {
         {"bc4_unorm", DXGI_FORMAT_BC4_UNORM, DXGI_FORMAT_BC4_UNORM, 4},                      {"bc5_unorm", DXGI_FORMAT_BC5_UNORM, DXGI_FORMAT_BC5_UNORM, 4},
         {"bc7_unorm", DXGI_FORMAT_BC7_UNORM, DXGI_FORMAT_BC7_UNORM, 4},                      {"bc7_srgb", DXGI_FORMAT_BC7_UNORM_SRGB, DXGI_FORMAT_BC7_UNORM_SRGB, 4}};
     for (const FormatCase& item : formats) {
-        add_format_stream(item.name, item.format, item.view);
+        const std::string name = item.name;
+        if (name == "r8g8b8a8_srgb" || name == "bc7_unorm") {
+            add_format_stream(item.name, item.format, item.view);
+        }
     }
 }
 

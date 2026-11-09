@@ -121,10 +121,7 @@ bool Kit::kind_for(DXGI_FORMAT format, rr::PixelKind& kind) {
         case DXGI_FORMAT_R32_TYPELESS:
             kind = rr::PixelKind::R32Float;
             return true;
-        case DXGI_FORMAT_R10G10B10A2_UNORM:
-        case DXGI_FORMAT_R11G11B10_FLOAT:
         case DXGI_FORMAT_R8G8B8A8_TYPELESS:
-        case DXGI_FORMAT_R8G8B8A8_SNORM:
             kind = rr::PixelKind::Rgba8Unorm;
             return true;
         default:

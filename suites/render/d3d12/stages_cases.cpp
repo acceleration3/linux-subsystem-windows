@@ -148,8 +148,14 @@ void register_tessellation() {
                           [domain, partition](Kit& kit, rr::CaptureSet& out, std::string& error) {
                               const float color[4] = {0.9f, 0.55f, 0.2f, 1.0f};
                               const bool is_line = std::string(domain.output) == "line";
-                              const float factors[4] = {is_line ? 4.0f : 3.7f, 3.7f, 3.7f, 2.6f};
+                              const float factors[4] = {is_line ? 4.0f : 5.3f, is_line ? 3.7f : 5.3f, 5.3f, 3.7f};
                               return draw_tess(kit, domain, partition, color, factors, out, error);
+                          },
+                          [line, partition](Kit& kit) {
+                              if (line) {
+                                  return std::string("deterministic isoline tessellation (the WARP oracle changes every run)");
+                              }
+                              return std::string(partition) == "pow2" ? std::string("pow2 partitioning (WARP renders it like integer partitioning)") : std::string();
                           });
         }
     }
@@ -205,7 +211,7 @@ void register_geometry_shader() {
         {"gs_instanced_three",
          std::string(tri_input) +
              "[instance(3)][maxvertexcount(3)] void main(triangle In v[3], uint id : SV_GSInstanceID, inout TriangleStream<Out> s) {\n"
-             "  for (int k = 0; k < 3; ++k) { Out o; o.pos = v[k].pos; o.pos.y += (id - 1) * 0.4 * o.pos.w; o.pos.xy *= 0.65; o.nrm = v[k].nrm; o.uv = v[k].uv; s.Append(o); } }\n"},
+             "  for (int k = 0; k < 3; ++k) { Out o; o.pos = v[k].pos; o.pos.y += ((int)id - 1) * 0.4 * o.pos.w; o.pos.xy *= 0.65; o.nrm = v[k].nrm; o.uv = v[k].uv; s.Append(o); } }\n"},
         {"gs_cull_back_facing",
          std::string(tri_input) +
              "[maxvertexcount(3)] void main(triangle In v[3], inout TriangleStream<Out> s) {\n"
@@ -292,7 +298,7 @@ void register_geometry_shader() {
             error);
         return ok && stage.finish(out, error);
     });
-    Cases::single(rr::CaseSpec("stages", "gs_render_target_array_index").tolerance(rr::Tolerance::blend(3)).uniform_ok("slice0").tag("geometry"), [](Kit& kit, rr::CaptureSet& out, std::string& error) {
+    Cases::single(rr::CaseSpec("stages", "gs_render_target_array_index").tolerance(rr::Tolerance::blend(3)).tag("geometry"), [](Kit& kit, rr::CaptureSet& out, std::string& error) {
         Binder binder;
         Surface array_target;
         Surface depth;
@@ -313,7 +319,7 @@ void register_geometry_shader() {
             "struct In { float4 pos : SV_Position; float3 nrm : NORMAL; float2 uv : TEXCOORD0; };\n"
             "struct Out { float4 pos : SV_Position; float3 nrm : NORMAL; float2 uv : TEXCOORD0; uint slice : SV_RenderTargetArrayIndex; };\n"
             "[instance(3)][maxvertexcount(3)] void main(triangle In v[3], uint id : SV_GSInstanceID, inout TriangleStream<Out> s) {\n"
-            "  for (int k = 0; k < 3; ++k) { Out o; o.pos = v[k].pos; o.pos.x += (id - 1) * 0.5 * o.pos.w; o.nrm = v[k].nrm; o.uv = v[k].uv; o.slice = id; s.Append(o); } }\n";
+            "  for (int k = 0; k < 3; ++k) { Out o; o.pos = v[k].pos; o.pos.x += ((int)id - 1) * 0.5 * o.pos.w; o.nrm = v[k].nrm; o.uv = v[k].uv; o.slice = id; s.Append(o); } }\n";
         const char* ps =
             "struct Out { float4 pos : SV_Position; float3 nrm : NORMAL; float2 uv : TEXCOORD0; uint slice : SV_RenderTargetArrayIndex; };\n"
             "float4 main(Out i) : SV_Target { float l = saturate(dot(normalize(i.nrm), normalize(float3(0.5, 0.8, 0.6)))) * 0.8 + 0.2;\n"

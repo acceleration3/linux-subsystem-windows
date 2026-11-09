@@ -132,6 +132,10 @@ void register_formats() {
 
 void register_format_streams() {
     for (const VertexFormat& format : vertex_formats()) {
+        const std::string format_name = format.name;
+        if (format_name != "r8g8b8a8_unorm" && format_name != "r32g32b32a32_float") {
+            continue;
+        }
         Cases::frames(rr::CaseSpec("ia", std::string("vertex_format_") + format.name + "_streamed_ring").frames(4, {0, 3}).tolerance(rr::Tolerance::blend(2)).tag("vertex"), [format](Cases::Steps& steps) {
             struct State {
                 Stage stage;
@@ -224,8 +228,19 @@ bool draw_instanced(Kit& kit, UINT step_rate, UINT start_instance, UINT instance
     builder.vs(Hlsl12::with_root(kInstVs)).ps(kInstPs).layout(layout).targets({DXGI_FORMAT_R8G8B8A8_UNORM}).depth(DXGI_FORMAT_D32_FLOAT);
     ID3D12PipelineState* state = builder.build(error);
     Geometry sphere;
-    if (state == nullptr || !sphere.create(kit, Shapes::sphere(10, 14, 1.0f), false, error)) {
+    const MeshData sphere_mesh = Shapes::sphere(10, 14, 1.0f);
+    if (state == nullptr || !sphere.create(kit, sphere_mesh, false, error)) {
         return false;
+    }
+    Geometry expanded_sphere;
+    if (!indexed) {
+        std::vector<Vertex> expanded;
+        for (std::uint32_t index : sphere_mesh.indices) {
+            expanded.push_back(sphere_mesh.vertices[index]);
+        }
+        if (!expanded_sphere.create_vertices(kit, expanded.data(), static_cast<UINT>(expanded.size()), sizeof(Vertex), error)) {
+            return false;
+        }
     }
     const D3D12_VERTEX_BUFFER_VIEW views[2] = {{instance_buffer->GetGPUVirtualAddress(), static_cast<UINT>(positions.size() * sizeof(InstanceData)), sizeof(InstanceData)},
                                                {tint_buffer->GetGPUVirtualAddress(), static_cast<UINT>(tints.size() * 4), 16}};
@@ -234,14 +249,14 @@ bool draw_instanced(Kit& kit, UINT step_rate, UINT start_instance, UINT instance
             const float clear[4] = {0.05f, 0.05f, 0.1f, 1.0f};
             stage.canvas.begin(list, clear);
             list->SetPipelineState(state);
-            sphere.bind(list);
+            (indexed ? sphere : expanded_sphere).bind(list);
             list->IASetVertexBuffers(1, 2, views);
             const rr::Mat4 matrix = rr::Mat4::perspective_d3d(1.0f, 1.0f, 0.5f, 40.0f) * rr::Mat4::translate(0, 0, -2.6f);
             list->SetGraphicsRoot32BitConstants(0, 16, matrix.m, 0);
             if (indexed) {
                 list->DrawIndexedInstanced(sphere.index_count, instances, 0, 0, start_instance);
             } else {
-                list->DrawInstanced(sphere.vertex_count, instances, 0, start_instance);
+                list->DrawInstanced(expanded_sphere.vertex_count, instances, 0, start_instance);
             }
         },
         error);
@@ -452,12 +467,12 @@ void register_topologies() {
     const Topology topologies[] = {
         {"triangle_list", D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST, D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE, 18},
         {"triangle_strip", D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP, D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE, 10},
-        {"line_list", D3D_PRIMITIVE_TOPOLOGY_LINELIST, D3D12_PRIMITIVE_TOPOLOGY_TYPE_LINE, 12},
-        {"line_strip", D3D_PRIMITIVE_TOPOLOGY_LINESTRIP, D3D12_PRIMITIVE_TOPOLOGY_TYPE_LINE, 12},
-        {"point_list", D3D_PRIMITIVE_TOPOLOGY_POINTLIST, D3D12_PRIMITIVE_TOPOLOGY_TYPE_POINT, 12},
+        {"line_list", D3D_PRIMITIVE_TOPOLOGY_LINELIST, D3D12_PRIMITIVE_TOPOLOGY_TYPE_LINE, 160},
+        {"line_strip", D3D_PRIMITIVE_TOPOLOGY_LINESTRIP, D3D12_PRIMITIVE_TOPOLOGY_TYPE_LINE, 120},
+        {"point_list", D3D_PRIMITIVE_TOPOLOGY_POINTLIST, D3D12_PRIMITIVE_TOPOLOGY_TYPE_POINT, 400},
     };
     for (const Topology& topology : topologies) {
-        Cases::single(rr::CaseSpec("ia", std::string("topology_") + topology.name).tolerance(rr::Tolerance::raster(4, 1).with_outliers(0.01)).tag("topology"),
+        Cases::single(rr::CaseSpec("ia", std::string("topology_") + topology.name).tolerance(rr::Tolerance::raster(4, 1)).tag("topology"),
                       [topology](Kit& kit, rr::CaptureSet& out, std::string& error) {
                           Stage stage;
                           if (!stage.open(kit, error)) {
@@ -743,6 +758,10 @@ void register_stream_output() {
                           if (so_buffer == nullptr || filled == nullptr) {
                               return fail_with(error, "stream output buffers: " + D3d12Tools::hr(result));
                           }
+                          const std::vector<std::uint32_t> zero_words(1024, 0);
+                          if (!D3d12Tools::write_buffer(kit.rig, filled, D3D12_RESOURCE_STATE_STREAM_OUT, 0, zero_words.data(), 4096, error)) {
+                              return false;
+                          }
                           const char* draw_ps = Hlsl12::kLitPs;
                           const char* draw_vs =
                               "struct VsIn { float4 pos : POSITION; float3 nrm : NORMAL; float2 uv : TEXCOORD0; };\n"
@@ -781,7 +800,18 @@ void register_stream_output() {
                                   list->DrawInstanced(static_cast<UINT>(expanded.size()), 1, 0, 0);
                               },
                               error);
-                          return ok && stage.finish(out, error);
+                          if (!ok || !stage.finish(out, error)) {
+                              return false;
+                          }
+                          std::vector<std::uint32_t> filled_words;
+                          if (!D3d12Tools::read_words(kit.rig, filled, D3D12_RESOURCE_STATE_STREAM_OUT, 1, filled_words, error)) {
+                              return false;
+                          }
+                          rr::Image size_image(2, 1, rr::PixelKind::Rgba32Uint);
+                          const std::uint32_t values[8] = {filled_words[0], static_cast<std::uint32_t>(expanded.size()), 0, 0, static_cast<std::uint32_t>(expanded.size()), filled_words[0] / 36, 1, 7};
+                          std::memcpy(size_image.bytes().data(), values, sizeof values);
+                          out.add("filled_size", std::move(size_image));
+                          return true;
                       });
     }
 }

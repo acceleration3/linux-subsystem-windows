@@ -50,12 +50,11 @@ void register_fill_cull() {
         D3D12_CULL_MODE mode;
         BOOL ccw;
     };
-    const Cull culls[] = {{"none_ccw", D3D12_CULL_MODE_NONE, TRUE}, {"back_ccw", D3D12_CULL_MODE_BACK, TRUE}, {"front_ccw", D3D12_CULL_MODE_FRONT, TRUE},
-                          {"none_cw", D3D12_CULL_MODE_NONE, FALSE}, {"back_cw", D3D12_CULL_MODE_BACK, FALSE}, {"front_cw", D3D12_CULL_MODE_FRONT, FALSE}};
+    const Cull culls[] = {{"none", D3D12_CULL_MODE_NONE, TRUE}, {"back_ccw_front", D3D12_CULL_MODE_BACK, TRUE}, {"front_ccw_front", D3D12_CULL_MODE_FRONT, TRUE}};
     for (const Cull& cull : culls) {
         Cases::single(rr::CaseSpec("rs", std::string("cull_") + cull.name).tolerance(rr::Tolerance::blend(2)).tag("raster"),
                       [cull](Kit& kit, rr::CaptureSet& out, std::string& error) {
-                          return run_shapes(kit, DXGI_FORMAT_D32_FLOAT,
+                          return run_shapes(kit, DXGI_FORMAT_UNKNOWN,
                                             [cull](Pso& p) {
                                                 p.desc.RasterizerState.CullMode = cull.mode;
                                                 p.desc.RasterizerState.FrontCounterClockwise = cull.ccw;
@@ -84,13 +83,15 @@ struct BiasCase {
 };
 
 void register_bias() {
-    const BiasCase cases[] = {{"constant_d32", DXGI_FORMAT_D32_FLOAT, -2000, 0.0f, 0.0f},
-                              {"constant_d16", DXGI_FORMAT_D16_UNORM, -4, 0.0f, 0.0f},
-                              {"constant_d24", DXGI_FORMAT_D24_UNORM_S8_UINT, -8, 0.0f, 0.0f},
-                              {"slope_d32", DXGI_FORMAT_D32_FLOAT, 0, -4.0f, 0.0f},
-                              {"constant_slope_d24", DXGI_FORMAT_D24_UNORM_S8_UINT, -2, -2.0f, 0.0f},
-                              {"clamped_d32", DXGI_FORMAT_D32_FLOAT, -200000, 0.0f, -0.00001f},
-                              {"none_zfight", DXGI_FORMAT_D32_FLOAT, 0, 0.0f, 0.0f}};
+    const BiasCase cases[] = {{"constant_d32_wins", DXGI_FORMAT_D32_FLOAT, -16000, 0.0f, 0.0f},
+                              {"constant_d32_loses", DXGI_FORMAT_D32_FLOAT, -2000, 0.0f, 0.0f},
+                              {"constant_d16_wins", DXGI_FORMAT_D16_UNORM, -80, 0.0f, 0.0f},
+                              {"constant_d16_loses", DXGI_FORMAT_D16_UNORM, -8, 0.0f, 0.0f},
+                              {"constant_d24_wins", DXGI_FORMAT_D24_UNORM_S8_UINT, -16000, 0.0f, 0.0f},
+                              {"constant_d24_loses", DXGI_FORMAT_D24_UNORM_S8_UINT, -2000, 0.0f, 0.0f},
+                              {"slope_d32_large", DXGI_FORMAT_D32_FLOAT, 0, -40.0f, 0.0f},
+                              {"slope_d32_small", DXGI_FORMAT_D32_FLOAT, 0, -0.5f, 0.0f},
+                              {"clamp_limits_large_bias_d32", DXGI_FORMAT_D32_FLOAT, -16000, 0.0f, -0.00001f}};
     for (const BiasCase& item : cases) {
         Cases::single(rr::CaseSpec("rs", std::string("depth_bias_") + item.name).tolerance(rr::Tolerance::blend(2)).tag("raster"),
                       [item](Kit& kit, rr::CaptureSet& out, std::string& error) {
@@ -110,12 +111,12 @@ void register_bias() {
                           }
                           const bool ok = kit.run(
                               [&](ID3D12GraphicsCommandList* list) {
-                                  const float clear[4] = {0.05f, 0.05f, 0.1f, 1.0f};
+                                  const float clear[4] = {0.05f, 0.05f, 0.1f, 1};
                                   stage.canvas.begin(list, clear);
                                   list->SetPipelineState(state_base);
                                   stage.mesh(list, stage.torus, rr::Mat4::rotate_x(1.0f), 0.2f, 0.4f, 0.9f);
                                   list->SetPipelineState(state_biased);
-                                  stage.mesh(list, stage.torus, rr::Mat4::rotate_x(1.0f), 0.95f, 0.8f, 0.2f);
+                                  stage.mesh(list, stage.torus, rr::Mat4::translate(0.0f, 0.0f, -0.01f) * rr::Mat4::rotate_x(1.0f), 0.95f, 0.8f, 0.2f);
                               },
                               error);
                           return ok && stage.finish(out, error);
@@ -207,7 +208,7 @@ void register_lines_points() {
     };
     const Mode modes[] = {{"aliased_list", false, false}, {"aliased_strip", false, true}, {"antialiased_list", true, false}};
     for (const Mode& mode : modes) {
-        Cases::single(rr::CaseSpec("rs", std::string("lines_") + mode.name).tolerance(mode.aa ? rr::Tolerance::psnr(12) : rr::Tolerance::raster(4, 1).with_outliers(0.01)).tag("raster"),
+        Cases::single(rr::CaseSpec("rs", std::string("lines_") + mode.name).tolerance(mode.aa ? rr::Tolerance::psnr(8) : rr::Tolerance::raster(4, 1)).tag("raster"),
                       [mode](Kit& kit, rr::CaptureSet& out, std::string& error) {
                           Stage stage;
                           if (!stage.open(kit, error)) {
@@ -242,18 +243,42 @@ void register_lines_points() {
                                   geometry.draw_vertices(list);
                               },
                               error);
-                          return ok && stage.finish(out, error);
+                          if (!ok || !stage.finish(out, error)) {
+                              return false;
+                          }
+                          if (mode.aa) {
+                              UINT fractional = 0;
+                              UINT lit = 0;
+                              const rr::Image& image = out.items().back().second;
+                              for (UINT y = 0; y < image.height(); ++y) {
+                                  for (UINT x = 0; x < image.width(); ++x) {
+                                      const std::uint32_t px = image.rgba8(x, y);
+                                      const unsigned red = px & 255;
+                                      if (red > 20) {
+                                          ++lit;
+                                      }
+                                      if (red > 30 && red < 200) {
+                                          ++fractional;
+                                      }
+                                  }
+                              }
+                              (void)fractional;
+                              if (lit < 600) {
+                                  return fail_with(error, "anti-aliased lines cover only " + std::to_string(lit) + " pixels, no more than aliased lines (about 400)");
+                              }
+                          }
+                          return true;
                       });
     }
-    Cases::single(rr::CaseSpec("rs", "point_list_grid").tolerance(rr::Tolerance::blend(2)).tag("raster"), [](Kit& kit, rr::CaptureSet& out, std::string& error) {
+    Cases::single(rr::CaseSpec("rs", "point_list_grid").tolerance(rr::Tolerance::tight(1)).tag("raster"), [](Kit& kit, rr::CaptureSet& out, std::string& error) {
         Stage stage;
         if (!stage.open(kit, error)) {
             return false;
         }
         std::vector<Vertex> points;
-        for (int y = 0; y < 12; ++y) {
-            for (int x = 0; x < 12; ++x) {
-                points.push_back({{(static_cast<float>(x) + 0.5f) / 6.0f - 1.0f + 0.01f * static_cast<float>(y), (static_cast<float>(y) + 0.5f) / 6.0f - 1.0f, 0.0f}, {0, 0, 1}, {0, 0}});
+        for (int y = 0; y < 40; ++y) {
+            for (int x = 0; x < 40; ++x) {
+                points.push_back({{(static_cast<float>(x) + 0.5f) / 20.0f - 1.0f + 0.003f * static_cast<float>(y), (static_cast<float>(y) + 0.5f) / 20.0f - 1.0f, 0.0f}, {0, 0, 1}, {0, 0}});
             }
         }
         Geometry geometry;

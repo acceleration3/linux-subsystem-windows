@@ -217,7 +217,7 @@ struct Hlsl12 {
     static constexpr const char* kBackdropPs =
         "float4 main(float4 pos : SV_Position, float2 uv : TEXCOORD0) : SV_Target {\n"
         "  float2 c = floor(pos.xy / 16.0); float ch = fmod(c.x + c.y, 2.0);\n"
-        "  return float4(lerp(float3(0.2, 0.35, 0.6), float3(0.8, 0.7, 0.3), uv.x) * (0.6 + 0.4 * ch), 1.0); }\n";
+        "  return float4(lerp(float3(0.2, 0.35, 0.6), float3(0.8, 0.7, 0.3), uv.x) * (0.6 + 0.4 * ch), 0.3 + 0.4 * uv.y); }\n";
     static constexpr const char* kSolidPs =
         "float4 main(float4 pos : SV_Position) : SV_Target { return p0; }\n";
     static constexpr const char* kFlatVs =
