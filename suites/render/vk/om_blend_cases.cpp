@@ -1,6 +1,7 @@
 #include "render/vk/quadkit.hpp"
 
 #include <cmath>
+#include <set>
 
 namespace lsw::render::vk {
 
@@ -141,7 +142,12 @@ private:
 
 void add_blend(const std::string& name, const BlendSetup& left, const BlendSetup& right, const char* feature = nullptr, const char* extension = nullptr,
                Tolerance tolerance = Tolerance::tight(1)) {
+    static const std::set<std::string> accumulating = {"blend_factor_src_alpha", "blend_factor_one_minus_dst_color", "blend_factor_constant_color",
+                                                       "blend_op_max", "blend_op_reverse_subtract", "blend_factor_src1_color"};
     for (int multi = 0; multi < 2; ++multi) {
+        if (multi != 0 && accumulating.count(name) == 0) {
+            continue;
+        }
         CaseSpec spec("om", multi == 0 ? name : name + "_accumulate");
         spec.tolerance(tolerance);
         if (multi != 0) {

@@ -1,0 +1,19 @@
+#version 450
+layout(local_size_x = 8, local_size_y = 8) in;
+layout(std430, set = 0, binding = 0) readonly buffer A { uint a[]; } src;
+layout(std430, set = 0, binding = 1) buffer B { uint b[]; } dst;
+void main() {
+    ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    int n = 0;
+    for (int dy = -1; dy <= 1; ++dy) {
+        for (int dx = -1; dx <= 1; ++dx) {
+            if (dx == 0 && dy == 0) continue;
+            ivec2 q = (p + ivec2(dx, dy) + ivec2(32)) % ivec2(32);
+            n += int(src.a[q.y * 32 + q.x] & 1u);
+        }
+    }
+    uint self = src.a[p.y * 32 + p.x] & 1u;
+    uint alive = (n == 3 || (self == 1u && n == 2)) ? 1u : 0u;
+    uint age = alive == 1u ? min((src.a[p.y * 32 + p.x] >> 1) + (self == 1u ? 1u : 0u), 7u) : 0u;
+    dst.b[p.y * 32 + p.x] = alive | (age << 1);
+}
