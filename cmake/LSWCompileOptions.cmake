@@ -31,6 +31,9 @@ else()
         -Wno-missing-field-initializers
         $<$<CONFIG:Debug>:-fno-omit-frame-pointer>
     )
+    if(WIN32 AND CMAKE_SIZEOF_VOID_P EQUAL 4)
+        target_compile_options(lsw_compile_options INTERFACE -fno-ipa-icf)
+    endif()
 endif()
 
 option(LSW_ENABLE_ASAN "Enable AddressSanitizer (Debug builds, non-MSVC)" OFF)
