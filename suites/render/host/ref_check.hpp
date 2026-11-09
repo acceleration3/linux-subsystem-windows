@@ -59,7 +59,10 @@ Outcome RefCheck::run(Context& context, const typename rr::CaseTable<Kit>::Entry
     std::string marker;
     if (store.read_skip(id, marker)) {
         if (!unsupported.empty()) {
-            return Outcome::skip(marker + " (guest: " + unsupported + ")");
+            if (unsupported != marker) {
+                return Outcome::fail("caps disagree: the host skipped with \"" + marker + "\" but the guest reports \"" + unsupported + "\"");
+            }
+            return Outcome::skip(marker);
         }
         return Outcome::fail("capabilities disagree: the host reference was skipped (" + marker + ") but the guest reports the feature present");
     }
