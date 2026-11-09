@@ -316,7 +316,7 @@ def load_tree(root):
     specs = []
     for host in sorted(os.listdir(root)):
         host_dir = os.path.join(root, host)
-        if not os.path.isdir(host_dir):
+        if not os.path.isdir(host_dir) or host in ("sanity", "evidence", "logs"):
             continue
         for gpu in sorted(os.listdir(host_dir)):
             if not os.path.isdir(os.path.join(host_dir, gpu)):

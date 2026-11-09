@@ -193,7 +193,12 @@ class Context:
         code, out = self.machine.restart()
         say(f"{self.args.host}: restart: {out.strip()[-120:]}")
         try:
-            lsw_link.wait_for_agent(time.monotonic() + 600, port=self.args.agent_port).close()
+            try:
+                lsw_link.wait_for_agent(time.monotonic() + 240, port=self.args.agent_port).close()
+            except lsw_link.LinkError:
+                say(f"{self.args.host}: the guest did not answer 240 s after the start; starting the VM afresh")
+                self.machine.restart()
+                lsw_link.wait_for_agent(time.monotonic() + 420, port=self.args.agent_port).close()
             self.wait_session()
         except lsw_link.LinkError as error:
             say(f"{self.args.host}: the guest did not come back: {error}")

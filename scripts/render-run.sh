@@ -457,7 +457,7 @@ guest_runs() {
         done
         local args=(--bits "${b}" --suite "${suite}" --jobs "${jobs_here}" --timeout "${guest_timeout}"
                     --agent-port "${agent_port}" --smb-port "${smb_port}" --vm "${vm}" --host "${h}" --root "${out}"
-                    --evidence "${out}/evidence/${h}-x${b}" --max-recoveries "${max_recoveries}" --phases "${phases}")
+                    --evidence "${out}/evidence/${h}-${suite}-x${b}-$(date +%H%M%S)" --max-recoveries "${max_recoveries}" --phases "${phases}")
         local effective
         effective="$(effective_filter)"
         [[ -n ${effective} ]] && args+=("--filter=${effective}")
@@ -547,15 +547,15 @@ run_parallel() {
     local logs="${out}/logs" h index=0 pids=() names=()
     mkdir -p "${logs}"
     for h in "${host_list[@]}"; do
-        say "starting ${h} (log ${logs}/${h}.log)"
-        run_host_parallel "${h}" "${index}" > "${logs}/${h}.log" 2>&1 &
+        say "starting ${h} (log ${logs}/${h}-${suite}.log)"
+        run_host_parallel "${h}" "${index}" > "${logs}/${h}-${suite}.log" 2>&1 &
         pids+=($!)
         names+=("${h}")
         index=$((index + 1))
     done
     local status=0 n
     for n in "${!pids[@]}"; do
-        wait "${pids[n]}" || { printf 'render-run: %s failed, see %s/%s.log\n' "${names[n]}" "${logs}" "${names[n]}" >&2; status=1; }
+        wait "${pids[n]}" || { printf 'render-run: %s failed, see %s/%s-%s.log\n' "${names[n]}" "${logs}" "${names[n]}" "${suite}" >&2; status=1; }
     done
     return "${status}"
 }
