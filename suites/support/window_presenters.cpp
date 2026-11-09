@@ -259,6 +259,8 @@ public:
         }
         rig_.window.move(x, y);
         ::SetWindowPos(rig_.window.hwnd(), HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        PIXELFORMATDESCRIPTOR described{};
+        gdi_ = ::DescribePixelFormat(rig_.dc(), rig_.pixel_format, sizeof(described), &described) != 0 && (described.dwFlags & PFD_SUPPORT_GDI) != 0;
         return true;
     }
 
@@ -284,12 +286,13 @@ public:
 
     [[nodiscard]] HWND hwnd() const override { return rig_.window.hwnd(); }
 
-    [[nodiscard]] bool window_dc_has_content() const override { return true; }
+    [[nodiscard]] bool window_dc_has_content() const override { return gdi_; }
 
 private:
     GlRig rig_;
     int width_ = 0;
     int height_ = 0;
+    bool gdi_ = false;
 };
 
 class VulkanPresenter final : public WindowPresenter {
