@@ -305,7 +305,9 @@ const struct Batch21 {
             Fns fns;
             fns.setup = [s](Kit& kit, std::string& error) {
                 Api& gl = kit.gl;
-                if (!s->target.create(kit, TargetDesc{}, error)) {
+                TargetDesc desc;
+                desc.depth = glc::DEPTH24_STENCIL8;
+                if (!s->target.create(kit, desc, error)) {
                     return false;
                 }
                 static const char* cs =
@@ -329,7 +331,7 @@ const struct Batch21 {
                     "layout(std430, binding = 0) readonly buffer Particles { P p[]; };\n"
                     "layout(std430, binding = 1) readonly buffer Cmd { uint count; uint instances; uint first; uint base; uint alive; uint order[]; };\n"
                     "out vec3 v_col;\n"
-                    "void main() { P q = p[order[gl_VertexID]]; v_col = vec3(1.0, 0.4 + 0.5 * q.life, 0.2); gl_PointSize = 3.0 + 4.0 * q.life; gl_Position = vec4(q.pos, 0.0, 1.0); }\n";
+                    "void main() { P q = p[order[gl_VertexID]]; v_col = vec3(1.0, 0.4 + 0.5 * q.life, 0.2); gl_PointSize = 3.0 + 4.0 * q.life; gl_Position = vec4(q.pos, float(order[gl_VertexID]) / 300.0 - 0.9, 1.0); }\n";
                 s->compute = kit.program({{glc::COMPUTE_SHADER, cs}}, error);
                 s->draw = s->compute != 0 ? kit.program(vs, Flat2d::kFragment, error) : 0;
                 if (s->draw == 0) {
@@ -368,7 +370,8 @@ const struct Batch21 {
                 gl.glDispatchCompute(4, 1, 1);
                 gl.glMemoryBarrier(glc::COMMAND_BARRIER_BIT | glc::SHADER_STORAGE_BARRIER_BIT);
                 s->target.bind(kit);
-                Gx::clear(kit, 0.05f, 0.05f, 0.1f);
+                Gx::clear(kit, 0.05f, 0.05f, 0.1f, 1.0f, true);
+                gl.glEnable(glc::DEPTH_TEST);
                 gl.glEnable(glc::PROGRAM_POINT_SIZE);
                 gl.glUseProgram(s->draw);
                 gl.glBindVertexArray(s->vao);

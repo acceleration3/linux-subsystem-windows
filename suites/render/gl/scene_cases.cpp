@@ -90,7 +90,7 @@ const struct Batch22 {
                 const GLenum waited = gl.glClientWaitSync(fence, glc::SYNC_FLUSH_COMMANDS_BIT, 2000000000ull);
                 gl.glDeleteSync(fence);
                 if (waited != glc::ALREADY_SIGNALED && waited != glc::CONDITION_SATISFIED) {
-                    error = "the fence created in the second context did not signal";
+                    error = "the fence created in the second context did not signal (ClientWaitSync returned 0x" + [&] { char t[16]; std::snprintf(t, sizeof t, "%x", waited); return std::string(t); }() + ")";
                     return false;
                 }
                 s->rig.target.bind(kit);

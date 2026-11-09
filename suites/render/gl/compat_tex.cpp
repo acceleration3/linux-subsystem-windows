@@ -58,9 +58,9 @@ const struct Batch3 {
 
         const CombineDef combines[] = {
             {"combine_replace", glc::REPLACE, glc::TEXTURE, glc::SRC_COLOR, glc::PREVIOUS, glc::SRC_COLOR, glc::CONSTANT, glc::SRC_ALPHA, 1},
-            {"combine_modulate", glc::MODULATE, glc::TEXTURE, glc::SRC_COLOR, glc::PRIMARY_COLOR, glc::SRC_COLOR, glc::CONSTANT, glc::SRC_ALPHA, 1},
+            {"combine_modulate", glc::MODULATE, glc::PREVIOUS, glc::SRC_COLOR, glc::CONSTANT, glc::SRC_COLOR, glc::CONSTANT, glc::SRC_ALPHA, 1},
             {"combine_modulate_scale4", glc::MODULATE, glc::TEXTURE, glc::SRC_COLOR, glc::PRIMARY_COLOR, glc::SRC_COLOR, glc::CONSTANT, glc::SRC_ALPHA, 4},
-            {"combine_add", glc::ADD, glc::TEXTURE, glc::SRC_COLOR, glc::PRIMARY_COLOR, glc::SRC_COLOR, glc::CONSTANT, glc::SRC_ALPHA, 1},
+            {"combine_add", glc::ADD, glc::TEXTURE, glc::SRC_COLOR, glc::CONSTANT, glc::SRC_COLOR, glc::CONSTANT, glc::SRC_ALPHA, 1},
             {"combine_add_signed", glc::ADD_SIGNED, glc::TEXTURE, glc::SRC_COLOR, glc::PRIMARY_COLOR, glc::SRC_COLOR, glc::CONSTANT, glc::SRC_ALPHA, 1},
             {"combine_interpolate", glc::INTERPOLATE, glc::TEXTURE, glc::SRC_COLOR, glc::PRIMARY_COLOR, glc::SRC_COLOR, glc::CONSTANT, glc::SRC_COLOR, 1},
             {"combine_interpolate_texalpha", glc::INTERPOLATE, glc::CONSTANT, glc::SRC_COLOR, glc::TEXTURE, glc::SRC_COLOR, glc::TEXTURE, glc::SRC_ALPHA, 1},
@@ -159,7 +159,6 @@ const struct Batch3 {
                     return false;
                 }
                 Api& gl = kit.gl;
-                Legacy::perspective(kit, 20.0f, 25.0f);
                 gl.glEnable(glc::DEPTH_TEST);
                 gl.glBindTexture(glc::TEXTURE_2D, Gx::make_texture(kit, 64, 0, false));
                 gl.glEnable(glc::TEXTURE_2D);
@@ -176,6 +175,7 @@ const struct Batch3 {
                 gl.glEnable(glc::TEXTURE_GEN_S);
                 gl.glEnable(glc::TEXTURE_GEN_T);
                 gl.glEnable(glc::NORMALIZE);
+                Legacy::perspective(kit, 20.0f, 25.0f);
                 Legacy::draw_shape(kit, Shape::sphere(20, 28, 1.1f));
                 return Gx::shot(kit, target, out, error);
             });

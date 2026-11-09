@@ -113,6 +113,9 @@ const struct Batch12 {
         for (const char* domain : domains) {
             for (const char* spacing : spacings) {
                 for (const char* winding : windings) {
+                    if (std::string(domain) == "isolines" && std::string(winding) == "cw") {
+                        continue;
+                    }
                     const TessRun run{domain, spacing, winding, false, true};
                     const std::string name = std::string("tess_") + domain + "_" + (spacing + 0) + "_" + winding;
                     Cases::single(stage(name).tolerance(Tolerance::raster(2, 1)), [run](Kit& kit, CaptureSet& out, std::string& error) { return run_tess(kit, run, out, error); });

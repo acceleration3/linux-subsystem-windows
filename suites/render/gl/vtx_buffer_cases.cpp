@@ -55,7 +55,7 @@ const char* kInstanceVertex =
     "out vec3 v_col;\n"
     "void main() {\n"
     "    v_col = in_col * in_tint;\n"
-    "    gl_Position = vec4(in_pos * 0.35 + in_off, 0.0, 1.0);\n"
+    "    gl_Position = vec4(in_pos * 0.35 + in_off + vec2(0.0, 0.12 * float(gl_InstanceID % 2)), 0.0, 1.0);\n"
     "}\n";
 
 const struct Batch8 {

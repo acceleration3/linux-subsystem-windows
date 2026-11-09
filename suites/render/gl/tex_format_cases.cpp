@@ -19,8 +19,8 @@ void put(Bytes& out, T value) {
     out.insert(out.end(), p, p + sizeof(T));
 }
 
-float channel_value(unsigned x, unsigned y, unsigned c) {
-    const float base = static_cast<float>((x * 5 + y * 3 + c * 7) % 16) / 15.0f;
+float channel_value(unsigned x, unsigned y, unsigned c, unsigned variant) {
+    const float base = static_cast<float>((x * (5 + variant % 4) + y * (3 + variant % 3) + c * 7 + variant) % 16) / 15.0f;
     return c == 3 ? 0.3f + 0.7f * static_cast<float>(y) / 15.0f : base;
 }
 
@@ -76,6 +76,7 @@ struct Fmt {
     bool bgra;
     float scale;
     float bias;
+    unsigned variant = 0;
 };
 
 unsigned format_channels(GLenum format) {
@@ -135,7 +136,7 @@ Bytes build_image(const Fmt& f, unsigned size = 16) {
     Bytes out;
     for (unsigned y = 0; y < size; ++y) {
         for (unsigned x = 0; x < size; ++x) {
-            const float v[4] = {channel_value(x, y, 0), channel_value(x, y, 1), channel_value(x, y, 2), channel_value(x, y, 3)};
+            const float v[4] = {channel_value(x, y, 0, f.variant), channel_value(x, y, 1, f.variant), channel_value(x, y, 2, f.variant), channel_value(x, y, 3, f.variant)};
             const Bytes texel = encode_texel(f, v);
             out.insert(out.end(), texel.begin(), texel.end());
         }
@@ -200,6 +201,7 @@ struct CompressedFmt {
 const struct Batch17 {
     Batch17() {
         const float k8 = 1.0f / 255.0f;
+        unsigned variant_counter = 0;
         const Fmt formats[] = {
             {"r8", glc::R8, glc::RED, glc::UNSIGNED_BYTE, Cls::Float, 1, false, 1, 0},
             {"rg8", glc::RG8, glc::RG, glc::UNSIGNED_BYTE, Cls::Float, 2, false, 1, 0},
@@ -239,7 +241,8 @@ const struct Batch17 {
             {"rgb5_a1", glc::RGB5_A1, glc::RGBA, glc::UNSIGNED_SHORT_5_5_5_1, Cls::Float, 4, false, 1, 0},
             {"rgba4", glc::RGBA4, glc::RGBA, glc::UNSIGNED_SHORT_4_4_4_4, Cls::Float, 4, false, 1, 0},
         };
-        for (const Fmt& f : formats) {
+        for (Fmt f : formats) {
+            f.variant = ++variant_counter;
             const GLenum internal = f.internal;
             Cases::single(tex(std::string("format_") + f.name).tolerance(Tolerance::tight(1)), [f](Kit& kit, CaptureSet& out, std::string& error) {
                 TexRig rig;
@@ -251,6 +254,57 @@ const struct Batch17 {
                 }
                 return Gx::shot(kit, rig.target, out, error);
             }, [internal](Kit& kit) { return supported(kit, internal); });
+        }
+
+        unsigned stream_counter = 0;
+        static_cast<void>(stream_counter);
+        const char* streamed[] = {"rgba8", "r8", "rg8", "rgba16f", "rgba32f", "r11f_g11f_b10f", "rgb10_a2", "rgb565", "rgba8ui", "srgb8_alpha8", "rgba4", "rg16ui"};
+        for (const char* wanted : streamed) {
+            for (Fmt f : formats) {
+                if (std::string(f.name) != wanted) {
+                    continue;
+                }
+                f.variant = 40 + (++variant_counter);
+                const GLenum internal = f.internal;
+                Cases::multi(tex(std::string("stream_rows_") + f.name).frames(8, {0, 3, 7}).tolerance(Tolerance::tight(1)), [f] {
+                    struct State {
+                        TexRig rig;
+                        GLuint texture = 0;
+                        GLuint program = 0;
+                        Bytes image;
+                        unsigned row_bytes = 0;
+                    };
+                    auto s = std::make_shared<State>();
+                    Fns fns;
+                    fns.setup = [s, f](Kit& kit, std::string& error) {
+                        if (!s->rig.open(kit, error)) {
+                            return false;
+                        }
+                        s->image = build_image(f);
+                        s->row_bytes = static_cast<unsigned>(s->image.size() / 16);
+                        s->texture = TexRig::texture(kit, glc::TEXTURE_2D, glc::NEAREST);
+                        kit.gl.glTexStorage2D(glc::TEXTURE_2D, 1, f.internal, 16, 16);
+                        kit.gl.glClearTexImage(s->texture, 0, f.format, f.type, nullptr);
+                        s->program = s->rig.program(kit, display_source(f.cls, f.channels == 4), error);
+                        return s->program != 0 && kit.check("stream setup", error);
+                    };
+                    fns.frame = [s, f](Kit& kit, unsigned frame, std::string& error) {
+                        Api& gl = kit.gl;
+                        gl.glBindTexture(glc::TEXTURE_2D, s->texture);
+                        const unsigned first = (frame * 2) % 16;
+                        gl.glTexSubImage2D(glc::TEXTURE_2D, 0, 0, static_cast<GLint>(first), 16, 2, f.format, f.type, s->image.data() + static_cast<std::size_t>(first) * s->row_bytes);
+                        s->rig.target.bind(kit);
+                        kit.u1i(s->program, "u_tex", 0);
+                        kit.u1f(s->program, "u_scale", f.scale);
+                        kit.u1f(s->program, "u_bias", f.bias);
+                        s->rig.draw(kit, s->program);
+                        return kit.check("stream rows", error);
+                    };
+                    fns.capture = [s](Kit& kit, unsigned, CaptureSet& out, std::string& error) { return Gx::shot(kit, s->rig.target, out, error); };
+                    return fns;
+                });
+                static_cast<void>(internal);
+            }
         }
 
         const Fmt transfers[] = {
@@ -267,7 +321,8 @@ const struct Batch17 {
             {"int_into_rg32ui_clamped", glc::RG32UI, glc::RG_INTEGER, glc::UNSIGNED_INT, Cls::Uint, 2, false, k8, 0},
             {"rgb_ubyte_into_rgba16f", glc::RGBA16F, glc::RGB, glc::UNSIGNED_BYTE, Cls::Float, 3, false, 1, 0},
         };
-        for (const Fmt& f : transfers) {
+        for (Fmt f : transfers) {
+            f.variant = ++variant_counter;
             const GLenum internal = f.internal;
             Cases::single(tex(std::string("transfer_") + f.name).tolerance(Tolerance::tight(1)), [f](Kit& kit, CaptureSet& out, std::string& error) {
                 TexRig rig;

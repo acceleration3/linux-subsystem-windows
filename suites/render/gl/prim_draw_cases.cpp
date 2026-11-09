@@ -190,7 +190,7 @@ const struct Batch6 {
         });
         draw_case("multi_draw_arrays_indirect_count", [](Kit& kit, DrawRig& r) {
             const ArraysCommand cmds[4] = {{6, 2, 0, 0}, {6, 3, 6, 2}, {6, 2, 12, 5}, {6, 4, 0, 9}};
-            const GLsizei count = 3;
+            const GLsizei count = 2;
             kit.gl.glBindVertexArray(r.vao_arrays);
             kit.buffer(glc::DRAW_INDIRECT_BUFFER, cmds, sizeof cmds, glc::STATIC_DRAW);
             kit.buffer(glc::PARAMETER_BUFFER, &count, sizeof count, glc::STATIC_DRAW);
@@ -297,8 +297,10 @@ const struct Batch6 {
                     "layout(location = 1) in vec3 in_col;\n"
                     "out vec2 tf_pos;\n"
                     "out vec3 tf_col;\n"
+                    "uniform float u_k;\nuniform float u_a;\n"
                     "void main() {\n"
-                    "    tf_pos = in_pos * 0.5 + vec2(float(gl_InstanceID % 4) * 0.5 - 0.75, float(gl_InstanceID / 4) * 0.5 - 0.75);\n"
+                    "    vec2 p = in_pos * 0.5 + vec2(float(gl_InstanceID % 4) * 0.5 - 0.75, float(gl_InstanceID / 4) * 0.5 - 0.75);\n"
+                    "    tf_pos = vec2(cos(u_a) * p.x - sin(u_a) * p.y, sin(u_a) * p.x + cos(u_a) * p.y) * u_k;\n"
                     "    tf_col = in_col;\n"
                     "    gl_Position = vec4(tf_pos, 0.0, 1.0);\n"
                     "}\n";
@@ -325,6 +327,9 @@ const struct Batch6 {
                 gl.glBindTransformFeedback(glc::TRANSFORM_FEEDBACK, tfo);
                 gl.glBindBufferBase(glc::TRANSFORM_FEEDBACK_BUFFER, 0, feedback_buffer);
                 kit.defer([&kit, tfo] { kit.gl.glDeleteTransformFeedbacks(1, &tfo); });
+                const float ks[4] = {1.0f, 0.8f, 0.9f, 0.7f};
+                kit.u1f(capture, "u_k", ks[variant]);
+                kit.u1f(capture, "u_a", 0.25f + 0.3f * static_cast<float>(variant));
                 gl.glUseProgram(capture);
                 gl.glBindVertexArray(rig.vao_arrays);
                 gl.glEnable(glc::RASTERIZER_DISCARD);
@@ -333,11 +338,15 @@ const struct Batch6 {
                 gl.glEndTransformFeedback();
                 gl.glDisable(glc::RASTERIZER_DISCARD);
                 gl.glBindTransformFeedback(glc::TRANSFORM_FEEDBACK, 0);
-                const GLuint draw_program = kit.program(Flat2d::kVertex, Flat2d::kFragment, error);
+                const GLuint draw_program = variant >= 2 ? kit.program(Flat2d::kParamsVertex, Flat2d::kFragment, error) : kit.program(Flat2d::kVertex, Flat2d::kFragment, error);
                 if (draw_program == 0) {
                     return false;
                 }
-                kit.u1f(draw_program, "u_size", 1.0f);
+                if (variant >= 2) {
+                    kit.u1i(draw_program, "u_cell", 0);
+                } else {
+                    kit.u1f(draw_program, "u_size", 1.0f);
+                }
                 GLuint replay = 0;
                 gl.glGenVertexArrays(1, &replay);
                 gl.glBindVertexArray(replay);

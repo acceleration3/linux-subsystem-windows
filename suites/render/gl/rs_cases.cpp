@@ -9,8 +9,8 @@ CaseSpec rs(const std::string& name) { return CaseSpec("rs", name).min_version(4
 
 using Body = std::function<bool(Kit&, Scene3&, std::string&)>;
 
-void scene_case(const std::string& name, Body body, Tolerance tolerance = Tolerance::tight(1), NeedFn need = {}, int samples = 1, GLenum depth = glc::DEPTH24_STENCIL8) {
-    Cases::single(rs(name).tolerance(std::move(tolerance)), [body, samples, depth](Kit& kit, CaptureSet& out, std::string& error) {
+void scene_case(const std::string& name, Body body, Tolerance tolerance = Tolerance::tight(1), NeedFn need = {}, int samples = 1, GLenum depth = glc::DEPTH24_STENCIL8, bool with_depth = false) {
+    Cases::single(rs(name).tolerance(std::move(tolerance)), [body, samples, depth, with_depth](Kit& kit, CaptureSet& out, std::string& error) {
         Scene3 scene;
         if (!scene.open(kit, error, samples, depth)) {
             return false;
@@ -18,7 +18,10 @@ void scene_case(const std::string& name, Body body, Tolerance tolerance = Tolera
         if (!body(kit, scene, error)) {
             return false;
         }
-        return Gx::shot(kit, scene.target, out, error);
+        if (!Gx::shot(kit, scene.target, out, error)) {
+            return false;
+        }
+        return !with_depth || Gx::shot_depth(kit, scene.target, out, error);
     }, std::move(need));
 }
 
@@ -106,8 +109,7 @@ const struct Batch13 {
             GLenum face;
             GLenum front;
         };
-        for (const CullDef& def : {CullDef{"cull_back_ccw", glc::BACK, glc::CCW}, CullDef{"cull_front_ccw", glc::FRONT, glc::CCW},
-                                   CullDef{"cull_back_cw", glc::BACK, glc::CW}, CullDef{"cull_front_cw", glc::FRONT, glc::CW}}) {
+        for (const CullDef& def : {CullDef{"cull_back_ccw", glc::BACK, glc::CCW}, CullDef{"cull_front_ccw", glc::FRONT, glc::CCW}}) {
             scene_case(def.name, [def](Kit& kit, Scene3& s, std::string&) {
                 kit.gl.glEnable(glc::CULL_FACE);
                 kit.gl.glCullFace(def.face);
@@ -117,6 +119,15 @@ const struct Batch13 {
                 return true;
             });
         }
+        scene_case("cull_back_front_face_cw_mirrored_geometry", [](Kit& kit, Scene3& s, std::string&) {
+            kit.gl.glEnable(glc::CULL_FACE);
+            kit.gl.glCullFace(glc::BACK);
+            kit.gl.glFrontFace(glc::CW);
+            s.draw(kit, s.torus, Mat4::scale(-1.0f, 1.0f, 1.0f) * Mat4::rotate_x(0.7f));
+            s.draw(kit, s.cube, Mat4::scale(-0.4f, 0.4f, 0.4f));
+            return true;
+        });
+
         scene_case("cull_disabled_two_sided", [](Kit& kit, Scene3& s, std::string&) {
             kit.gl.glDisable(glc::CULL_FACE);
             kit.gl.glDepthFunc(glc::ALWAYS);
@@ -179,9 +190,8 @@ const struct Batch13 {
                 kit.gl.glClearDepth(def.depth == glc::ZERO_TO_ONE ? 1.0 : 1.0);
                 s.draw(kit, s.torus, Mat4::rotate_x(0.6f));
                 s.draw(kit, s.cube, Mat4::translate(0.9f, -0.7f, 0.5f) * Mat4::scale(0.35f, 0.35f, 0.35f));
-                kit.gl.glClipControl(glc::LOWER_LEFT, glc::NEGATIVE_ONE_TO_ONE);
                 return true;
-            });
+            }, Tolerance::tight(1), {}, 1, glc::DEPTH24_STENCIL8, true);
         }
 
         scene_case("clip_distance_eight_planes", [](Kit& kit, Scene3& s, std::string& error) {

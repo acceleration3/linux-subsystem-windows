@@ -358,7 +358,7 @@ const struct Batch19 {
                       "void main() { vec2 c = gl_FragCoord.xy / 128.0; vec4 a = texelFetchOffset(u_tex, ivec2(c * 16.0), 0, ivec2(1, 2)); vec4 b = textureOffset(u_tex, c, ivec2(3, -2)); vec4 d = textureLodOffset(u_tex, c, 1.0, ivec2(-1, 1));\n"
                       "    out_color = c.x < 0.34 ? a : (c.x < 0.67 ? b : d); }", Tolerance::filter(4, 0.001));
         function_case("fn_texture_proj",
-                      "void main() { vec2 c = gl_FragCoord.xy / 128.0; float w = 0.5 + 1.5 * c.y; out_color = textureProj(u_tex, vec3(c * w, w)) * 0.5 + 0.5 * textureProj(u_tex, vec4(c * w, 0.0, w)); }", Tolerance::filter(4, 0.001));
+                      "void main() { vec2 c = gl_FragCoord.xy / 128.0; float w = 0.5 + 1.5 * c.y; out_color = textureProj(u_tex, vec3(c * w * 3.0, w)) * 0.5 + 0.5 * textureProj(u_tex, vec4(c.yx * w * 2.0, 0.0, w)); }", Tolerance::filter(4, 0.001));
 
         tex_case("bindless_texture_handle", [](Kit& kit, TexRig& rig, std::string& error) {
             Api& gl = kit.gl;

@@ -116,7 +116,7 @@ const struct Batch14 {
                 Api& gl = kit.gl;
                 rig.backdrop(kit);
                 gl.glEnable(glc::BLEND);
-                gl.glBlendColor(0.6f, 0.3f, 0.8f, 0.5f);
+                gl.glBlendColor(0.6f, 0.3f, 0.8f, 0.3f);
                 gl.glBlendEquation(glc::FUNC_ADD);
                 gl.glBlendFunc(f.value, glc::ONE);
                 rig.grid(kit, -0.5f);

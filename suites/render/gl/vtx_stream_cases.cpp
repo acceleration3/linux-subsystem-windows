@@ -451,11 +451,7 @@ const struct Batch9 {
             if (!make_capture(kit, kCaptureVertex, varyings, 2, glc::INTERLEAVED_ATTRIBS, capture, error)) {
                 return false;
             }
-            const std::vector<V2> tile = Flat2d::tile(1);
-            std::vector<V2> verts;
-            for (unsigned i : {0u, 1u, 2u, 0u, 2u, 3u}) {
-                verts.push_back(tile[i]);
-            }
+            const std::vector<V2> verts = Flat2d::ring(6, 0.35f, 0.9f, 0.4f);
             const GLuint vao = Flat2d::upload(kit, verts);
             const GLsizeiptr offset = 256;
             const GLuint buffer = kit.buffer(glc::TRANSFORM_FEEDBACK_BUFFER, nullptr, offset + 6 * sizeof(V2), glc::DYNAMIC_COPY);

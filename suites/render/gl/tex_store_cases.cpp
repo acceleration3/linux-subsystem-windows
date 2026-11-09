@@ -56,7 +56,7 @@ const struct Batch18 {
         for (const int alignment : {1, 2, 4, 8}) {
             tex_case("store_unpack_alignment_" + std::to_string(alignment), [alignment](Kit& kit, TexRig& rig, std::string& error) {
                 Api& gl = kit.gl;
-                const unsigned width = 13;
+                const unsigned width = 10 + static_cast<unsigned>(alignment);
                 const unsigned height = 9;
                 const unsigned stride = ((width * 3 + static_cast<unsigned>(alignment) - 1) / static_cast<unsigned>(alignment)) * static_cast<unsigned>(alignment);
                 std::vector<std::uint8_t> data(static_cast<std::size_t>(stride) * height, 0xEE);

@@ -124,9 +124,11 @@ std::vector<FormatDef> format_defs() {
 
 const struct Batch7 {
     Batch7() {
+        unsigned format_index = 0;
         for (const FormatDef& def : format_defs()) {
             const std::string name = std::string("format_") + def.name;
-            Cases::single(vtx(name.c_str()), [def](Kit& kit, CaptureSet& out, std::string& error) {
+            const float phase = 0.23f * static_cast<float>(++format_index);
+            Cases::single(vtx(name.c_str()), [def, phase](Kit& kit, CaptureSet& out, std::string& error) {
                 Target target;
                 if (!target.create(kit, TargetDesc{}, error)) {
                     return false;
@@ -141,7 +143,7 @@ const struct Batch7 {
                 if (program == 0) {
                     return false;
                 }
-                const std::vector<V2> verts = Flat2d::ring(9, 0.45f, 0.85f);
+                const std::vector<V2> verts = Flat2d::ring(9, 0.45f, 0.85f, phase);
                 Bytes positions;
                 Bytes colors;
                 for (const V2& v : verts) {

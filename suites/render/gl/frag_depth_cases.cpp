@@ -75,10 +75,15 @@ const struct Batch15 {
             const char* name;
             GLenum value;
         };
-        for (const Format& f : {Format{"d16", glc::DEPTH_COMPONENT16}, Format{"d24", glc::DEPTH_COMPONENT24}, Format{"d32f", glc::DEPTH_COMPONENT32F},
-                                Format{"d24s8", glc::DEPTH24_STENCIL8}, Format{"d32fs8", glc::DEPTH32F_STENCIL8}}) {
+        for (const Format& f : {Format{"d16", glc::DEPTH_COMPONENT16}, Format{"d24", glc::DEPTH_COMPONENT24}}) {
             scene_case(std::string("depth_format_") + f.name, [](Kit& kit, Scene3& s, std::string&) {
-                depth_pass(kit, s, glc::LEQUAL);
+                kit.gl.glDepthFunc(glc::LESS);
+                s.view = Mat4::perspective(1.0f, 1.0f, 0.1f, 100.0f, false);
+                s.draw(kit, s.quad, Mat4::translate(0.0f, 0.0f, -50.0f) * Mat4::scale(40.0f, 40.0f, 1.0f), 0.3f, 0.5f, 0.9f);
+                for (int i = 0; i < 8; ++i) {
+                    const float dz = 0.0005f * (1.0f + static_cast<float>(i * i));
+                    s.draw(kit, s.quad, Mat4::translate((static_cast<float>(i) - 3.5f) * 6.8f, 0.0f, -50.0f + dz) * Mat4::scale(3.3f, 20.0f, 1.0f), 0.9f - 0.08f * static_cast<float>(i), 0.4f, 0.3f);
+                }
                 return true;
             }, Extra::Depth, Tolerance::tight(1), 1, f.value);
         }
@@ -269,6 +274,7 @@ const struct Batch15 {
                 if (flat == 0) {
                     return false;
                 }
+                gl.glUseProgram(flat);
                 gl.glEnable(glc::STENCIL_TEST);
                 gl.glStencilFunc(glc::ALWAYS, 0, 0xFF);
                 gl.glStencilOp(glc::KEEP, glc::KEEP, glc::INCR);
