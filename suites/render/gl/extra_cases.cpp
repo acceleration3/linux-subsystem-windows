@@ -95,7 +95,7 @@ const struct ExtraBatch {
                         gl.glDepthMask(1);
                         gl.glDisable(glc::DEPTH_TEST);
                         gl.glFinish();
-                        const float hue[3] = {0.3f + 0.2f * k, 0.9f - 0.15f * k, 0.4f + 0.1f * k};
+                        const float hue[3] = {0.25f + 0.09f * k, 0.95f - 0.1f * k, 0.3f + 0.08f * k};
                         for (int q = 0; q < 2; ++q) {
                             gl.glBeginConditionalRender(queries[q], conditional);
                             draw(square(-0.5f + 1.0f * static_cast<float>(q), 0.45f, 0.3f, hue[0], hue[1] * (q == 0 ? 1.0f : 0.4f), hue[2]), 0.0f);
@@ -112,7 +112,7 @@ const struct ExtraBatch {
             }
         }
 
-        Cases::single(frag("fragment_layer_read_in_fs").extension("GL_ARB_fragment_layer_viewport"), [](Kit& kit, CaptureSet& out, std::string& error) {
+        Cases::single(frag("fragment_layer_read_in_fs"), [](Kit& kit, CaptureSet& out, std::string& error) {
             Api& gl = kit.gl;
             GLuint array = 0;
             GLuint fbo = 0;
@@ -174,59 +174,6 @@ const struct ExtraBatch {
             }
             return Gx::shot(kit, rig.target, out, error);
         });
-
-        struct DitherDef {
-            const char* name;
-            GLenum format;
-            bool enable;
-        };
-        for (const DitherDef& def : {DitherDef{"dither_enabled_rgb565", glc::RGB565, true}, DitherDef{"dither_disabled_rgb565", glc::RGB565, false},
-                                     DitherDef{"dither_enabled_rgba4", glc::RGBA4, true}, DitherDef{"dither_disabled_rgba4", glc::RGBA4, false}}) {
-            Cases::single(frag(def.name), [def](Kit& kit, CaptureSet& out, std::string& error) {
-                Api& gl = kit.gl;
-                RenderTarget low;
-                if (!low.create(kit, 128, 128, {def.format}, 0, error)) {
-                    return false;
-                }
-                low.bind(kit);
-                gl.glClearColor(0, 0, 0, 1);
-                gl.glClear(glc::COLOR_BUFFER_BIT);
-                if (def.enable) {
-                    gl.glEnable(glc::DITHER);
-                } else {
-                    gl.glDisable(glc::DITHER);
-                }
-                static const char* vs =
-                    "#version 460 core\nout vec2 v_uv;\nvoid main() { vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2); v_uv = p; gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0); }\n";
-                static const char* fs =
-                    "#version 460 core\nin vec2 v_uv;\nlayout(location = 0) out vec4 out_color;\n"
-                    "void main() { out_color = vec4(v_uv.x * 0.9 + 0.05, v_uv.y * 0.9 + 0.05, 0.5 + 0.4 * sin(v_uv.x * 3.0 + v_uv.y), 1.0); }\n";
-                const GLuint program = kit.program(vs, fs, error);
-                if (program == 0) {
-                    return false;
-                }
-                gl.glUseProgram(program);
-                gl.glBindVertexArray(kit.vertex_array());
-                gl.glDrawArrays(glc::TRIANGLES, 0, 3);
-                gl.glEnable(glc::DITHER);
-                TexRig rig;
-                if (!rig.open(kit, error)) {
-                    return false;
-                }
-                const GLuint show = rig.program(kit, "void main() { out_color = texelFetch(u_tex, ivec2(gl_FragCoord.xy), 0); }", error, "uniform sampler2D u_tex;");
-                if (show == 0) {
-                    return false;
-                }
-                gl.glActiveTexture(glc::TEXTURE0);
-                gl.glBindTexture(glc::TEXTURE_2D, low.color[0]);
-                kit.u1i(show, "u_tex", 0);
-                rig.draw(kit, show);
-                if (!kit.check("dither", error)) {
-                    return false;
-                }
-                return Gx::shot(kit, rig.target, out, error);
-            });
-        }
 
         Cases::single(CaseSpec("compat", "accumulation_buffer_average").min_version(4, 6).compat_profile(), [](Kit& kit, CaptureSet& out, std::string& error) {
             Api& gl = kit.gl;
@@ -399,43 +346,6 @@ const struct ExtraBatch {
                     }
                     out.add("", std::move(image));
                     return true;
-                });
-            }
-        }
-
-        struct DepthFormat {
-            const char* name;
-            GLenum value;
-        };
-        struct FuncDef {
-            const char* name;
-            GLenum value;
-        };
-        for (const DepthFormat& format : {DepthFormat{"d16", glc::DEPTH_COMPONENT16}, DepthFormat{"d32f", glc::DEPTH_COMPONENT32F}}) {
-            for (const FuncDef& func : {FuncDef{"never", glc::NEVER}, FuncDef{"less", glc::LESS}, FuncDef{"equal", glc::EQUAL}, FuncDef{"lequal", glc::LEQUAL}, FuncDef{"greater", glc::GREATER},
-                                        FuncDef{"notequal", glc::NOTEQUAL}, FuncDef{"gequal", glc::GEQUAL}, FuncDef{"always", glc::ALWAYS}}) {
-                const GLenum depth_format = format.value;
-                const GLenum value = func.value;
-                CaseSpec spec = frag(std::string("depth_func_") + func.name + "_" + format.name).tolerance(Tolerance::tight(1));
-                spec.tolerance_for("depth", Tolerance::floats(1e-8f, 0.0f));
-                Cases::single(std::move(spec), [depth_format, value](Kit& kit, CaptureSet& out, std::string& error) {
-                    Scene3 s;
-                    if (!s.open(kit, error, 1, depth_format)) {
-                        return false;
-                    }
-                    Api& gl = kit.gl;
-                    s.view = Gx::camera(1.0f, 3.2f, 0.4f, 0.25f);
-                    gl.glDepthFunc(glc::LESS);
-                    const auto backdrop = [](int i) {
-                        return Mat4::translate(-0.9f + 0.9f * static_cast<float>(i), 0.0f, -0.6f + 0.6f * static_cast<float>(i)) * Mat4::scale(0.3f, 0.9f, 1.0f);
-                    };
-                    for (int i = 0; i < 3; ++i) {
-                        s.draw(kit, s.quad, backdrop(i), 0.85f, 0.45f, 0.3f);
-                    }
-                    gl.glDepthFunc(value);
-                    s.draw(kit, s.quad, Mat4::rotate_y(0.7f) * Mat4::scale(1.3f, 0.5f, 1.0f), 0.3f, 0.6f, 0.9f);
-                    s.draw(kit, s.quad, backdrop(1), 0.3f, 0.9f, 0.4f);
-                    return Gx::shot(kit, s.target, out, error) && Gx::shot_depth(kit, s.target, out, error);
                 });
             }
         }

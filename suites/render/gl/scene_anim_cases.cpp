@@ -162,7 +162,10 @@ std::vector<std::uint8_t> glyph_bitmap(unsigned digit) {
 const struct AnimBatch {
     AnimBatch() {
         for (const bool storage : {false, true}) {
-            Cases::single(scene(storage ? "skinning_ssbo_bone_palette" : "skinning_ubo_bone_palette"), [storage](Kit& kit, CaptureSet& out, std::string& error) {
+            CaseSpec spec = scene(storage ? "skinning_ssbo_bone_palette" : "skinning_ubo_bone_palette");
+            spec.audit_ok(storage ? "same pose as skinning_ubo_bone_palette on purpose: the subject is reading the bone palette from a std430 shader storage buffer instead of a std140 uniform block, and a broken storage path moves the skinned tube"
+                                  : "same pose as skinning_ssbo_bone_palette on purpose: the subject is reading the bone palette from a std140 uniform block instead of a std430 shader storage buffer, and a broken uniform path moves the skinned tube");
+            Cases::single(std::move(spec), [storage](Kit& kit, CaptureSet& out, std::string& error) {
                 SkinState s;
                 if (!skin_setup(kit, s, storage, error)) {
                     return false;

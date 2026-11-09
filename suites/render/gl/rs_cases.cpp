@@ -409,7 +409,7 @@ const struct Batch13 {
             }
             kit.u1f(program, "u_size", 20.0f);
             gl.glDisable(glc::PROGRAM_POINT_SIZE);
-            gl.glPointSize(5.0f);
+            gl.glPointSize(12.0f);
             const GLuint vao = Flat2d::upload(kit, Flat2d::ring(9, 0.5f, 0.8f));
             gl.glBindVertexArray(vao);
             gl.glDrawArrays(glc::POINTS, 0, 9);

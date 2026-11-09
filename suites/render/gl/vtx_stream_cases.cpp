@@ -399,10 +399,10 @@ const struct Batch9 {
             }
             std::vector<V2> verts;
             for (int i = 0; i < 4; ++i) {
-                const std::vector<V2> q = Flat2d::ring(3, 0.3f, 0.3f);
+                const std::vector<V2> q = Flat2d::ring(3, 0.6f, 0.6f);
                 for (V2 v : q) {
-                    v.x = v.x * 0.5f - 0.6f + 0.4f * static_cast<float>(i);
-                    v.y = v.y * 0.5f + 0.4f * static_cast<float>(i % 2) - 0.2f;
+                    v.x = v.x * 0.8f - 0.6f + 0.4f * static_cast<float>(i);
+                    v.y = v.y * 0.8f + 0.4f * static_cast<float>(i % 2) - 0.2f;
                     verts.push_back(v);
                 }
             }

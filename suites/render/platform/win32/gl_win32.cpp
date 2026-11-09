@@ -59,9 +59,13 @@ public:
         if (::DescribePixelFormat(rig_.dc(), rig_.pixel_format, sizeof(pfd), &pfd) == 0) {
             return "pixel format " + std::to_string(rig_.pixel_format);
         }
-        char text[160];
-        std::snprintf(text, sizeof text, "pixel format %d flags 0x%lx color %d alpha %d depth %d stencil %d accum %d", rig_.pixel_format,
-                      static_cast<unsigned long>(pfd.dwFlags), pfd.cColorBits, pfd.cAlphaBits, pfd.cDepthBits, pfd.cStencilBits, pfd.cAccumBits);
+        RECT rect{};
+        ::GetWindowRect(rig_.window.hwnd(), &rect);
+        const LONG_PTR styles = ::GetWindowLongPtrW(rig_.window.hwnd(), GWL_EXSTYLE);
+        char text[256];
+        std::snprintf(text, sizeof text, "pixel format %d flags 0x%lx color %d alpha %d depth %d stencil %d accum %d window %ld,%ld,%ld,%ld topmost %d visible %d", rig_.pixel_format,
+                      static_cast<unsigned long>(pfd.dwFlags), pfd.cColorBits, pfd.cAlphaBits, pfd.cDepthBits, pfd.cStencilBits, pfd.cAccumBits, rect.left, rect.top, rect.right, rect.bottom,
+                      (styles & WS_EX_TOPMOST) != 0 ? 1 : 0, ::IsWindowVisible(rig_.window.hwnd()) ? 1 : 0);
         return text;
     }
 

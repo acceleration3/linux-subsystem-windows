@@ -192,6 +192,7 @@ const struct Batch5 {
                 }
                 kit.u1f(program, "u_size", def.size);
                 kit.gl.glEnable(glc::PROGRAM_POINT_SIZE);
+                kit.gl.glLineWidth(3.0f);
                 const GLuint vao = Flat2d::upload(kit, Flat2d::ring(def.count, def.inner, 0.85f));
                 kit.gl.glBindVertexArray(vao);
                 kit.gl.glDrawArrays(def.mode, 0, static_cast<GLsizei>(def.count));
@@ -229,7 +230,7 @@ const struct Batch5 {
                 kit.gl.glUseProgram(program);
                 const GLuint vao = Flat2d::upload(kit, Flat2d::ring(def.count, 0.4f, 0.85f));
                 kit.gl.glBindVertexArray(vao);
-                kit.gl.glLineWidth(1.0f);
+                kit.gl.glLineWidth(3.0f);
                 kit.gl.glDrawArrays(def.mode, 0, static_cast<GLsizei>(def.count));
                 return Gx::shot(kit, target, out, error);
             });

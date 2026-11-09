@@ -80,7 +80,7 @@ const struct Batch6 {
             kit.gl.glBindVertexArray(r.vao_indexed);
             kit.buffer(glc::ELEMENT_ARRAY_BUFFER, shorts, sizeof shorts, glc::STATIC_DRAW);
             for (int cell = 0; cell < 6; ++cell) {
-                kit.u1i(r.program, "u_cell", cell);
+                kit.u1i(r.program, "u_cell", 11 - 2 * cell);
                 kit.gl.glDrawElements(glc::TRIANGLES, 6, glc::UNSIGNED_SHORT, reinterpret_cast<const void*>(static_cast<std::uintptr_t>((cell % 2) * 12)));
             }
         });

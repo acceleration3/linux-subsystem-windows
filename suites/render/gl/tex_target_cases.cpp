@@ -95,7 +95,7 @@ const struct Batch16 {
             Api& gl = kit.gl;
             const GLuint t = TexRig::texture(kit, glc::TEXTURE_CUBE_MAP, glc::LINEAR);
             gl.glTexStorage2D(glc::TEXTURE_CUBE_MAP, 1, glc::RGBA8, 16, 16);
-            const auto data = TexRig::cells(16, 16, 6, 4);
+            const auto data = TexRig::cells(16, 16, 6, 3);
             for (unsigned face = 0; face < 6; ++face) {
                 gl.glTexSubImage2D(glc::TEXTURE_CUBE_MAP_POSITIVE_X + face, 0, 0, 0, 16, 16, glc::RGBA, glc::UNSIGNED_BYTE, data.data() + 16 * 16 * 4 * face);
             }

@@ -15,7 +15,7 @@ void scene_case(const std::string& name, Body body, Extra extra = Extra::None, T
                 NeedFn need = {}, bool exact_depth = false) {
     CaseSpec spec = frag(name).tolerance(std::move(tolerance));
     if (exact_depth) {
-        spec.tolerance_for("depth", Tolerance::floats(1e-6f, 0.0f));
+        spec.tolerance_for("depth", Tolerance::floats(1e-8f, 0.0f));
     }
     Cases::single(std::move(spec), [body, extra, samples, depth](Kit& kit, CaptureSet& out, std::string& error) {
         Scene3 scene;
@@ -87,18 +87,27 @@ const struct Batch15 {
         for (const Format& f : {Format{"d16", glc::DEPTH_COMPONENT16, 16}, Format{"d24", glc::DEPTH_COMPONENT24, 24}, Format{"d32f", glc::DEPTH_COMPONENT32F, 23},
                                 Format{"d24s8", glc::DEPTH24_STENCIL8, 24}, Format{"d32f_s8", glc::DEPTH32F_STENCIL8, 23}}) {
             const int bits = f.bits;
-            scene_case(std::string("depth_format_") + f.name, [bits](Kit& kit, Scene3& s, std::string&) {
+            const bool stencil = f.value == glc::DEPTH24_STENCIL8 || f.value == glc::DEPTH32F_STENCIL8;
+            scene_case(std::string("depth_format_") + f.name, [bits, stencil](Kit& kit, Scene3& s, std::string&) {
                 kit.gl.glDepthFunc(glc::LESS);
+                if (stencil) {
+                    kit.gl.glEnable(glc::STENCIL_TEST);
+                    kit.gl.glStencilOp(glc::KEEP, glc::KEEP, glc::REPLACE);
+                    kit.gl.glStencilFunc(glc::ALWAYS, 0x40, 0xFF);
+                }
                 s.view = Mat4::perspective(1.0f, 1.0f, 0.1f, 100.0f, false);
                 const double slope = 100.0 * 0.1 / (99.9 * 50.0 * 50.0);
                 const double step = std::ldexp(1.0, -bits) / slope;
                 s.draw(kit, s.quad, Mat4::translate(0.0f, 0.0f, -50.0f) * Mat4::scale(40.0f, 40.0f, 1.0f), 0.3f, 0.5f, 0.9f);
                 for (int i = 0; i < 8; ++i) {
                     const float dz = static_cast<float>(step * static_cast<double>(2 + i));
+                    if (stencil) {
+                        kit.gl.glStencilFunc(glc::ALWAYS, 0x41 + i, 0xFF);
+                    }
                     s.draw(kit, s.quad, Mat4::translate((static_cast<float>(i) - 3.5f) * 6.8f, 0.0f, -50.0f + dz) * Mat4::scale(3.3f, 20.0f, 1.0f), 0.9f - 0.08f * static_cast<float>(i), 0.4f, 0.3f);
                 }
                 return true;
-            }, Extra::Depth, Tolerance::tight(1), 1, f.value, {}, true);
+            }, stencil ? Extra::Both : Extra::Depth, Tolerance::tight(1), 1, f.value, {}, true);
         }
 
         scene_case("depth_range_window", [](Kit& kit, Scene3& s, std::string&) {
