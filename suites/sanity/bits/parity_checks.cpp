@@ -210,7 +210,7 @@ Outcome compare_with_sibling(Context& context, const std::string& kind) {
             continue;
         }
         const std::string theirs = ChildRuns::text(other, key);
-        if (key == "cl.huge_buffer" && value != "n/a" && value != "CL_INVALID_BUFFER_SIZE") {
+        if (key == "cl.huge_buffer" && value != "n/a" && value.rfind("CL_INVALID_BUFFER_SIZE", 0) != 0) {
             problems.add("clCreateBuffer of CL_DEVICE_MAX_MEM_ALLOC_SIZE + 1 bytes returned " + value + ", expected CL_INVALID_BUFFER_SIZE");
         }
         if (value == "n/a" || theirs == "n/a") {

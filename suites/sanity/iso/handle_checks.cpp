@@ -192,7 +192,11 @@ Outcome HandleChecks::no_access_without_handle(Context& context) {
         return Outcome::fail("a shared D3D12 buffer cannot be created: " + error);
     }
     HANDLE handle = nullptr;
-    if (FAILED(rig.device()->CreateSharedHandle(buffer, nullptr, GENERIC_ALL, nullptr, &handle)) || !fill_shared(rig, buffer, error)) {
+    const HRESULT shared = rig.device()->CreateSharedHandle(buffer, nullptr, GENERIC_ALL, nullptr, &handle);
+    if (FAILED(shared)) {
+        return Outcome::fail("CreateSharedHandle of a shared buffer returned " + D3d12Tools::hr(shared));
+    }
+    if (!fill_shared(rig, buffer, error)) {
         return Outcome::fail("preparing the shared buffer failed: " + error);
     }
     const CheckResult child = RobustChild::run(context.id(), "guess", {{"LSW_SUITES_PARENT_PID", std::to_string(::GetCurrentProcessId())}}, 300, -1);
@@ -235,7 +239,11 @@ Outcome HandleChecks::closed_handle_dead(Context& context) {
             return Outcome::fail("a shared D3D12 buffer cannot be created: " + error);
         }
         HANDLE handle = nullptr;
-        if (FAILED(rig.device()->CreateSharedHandle(buffer, nullptr, GENERIC_ALL, Text::wide(name).c_str(), &handle)) || !fill_shared(rig, buffer, error)) {
+        const HRESULT shared = rig.device()->CreateSharedHandle(buffer, nullptr, GENERIC_ALL, Text::wide(name).c_str(), &handle);
+        if (FAILED(shared)) {
+            return Outcome::fail("CreateSharedHandle of a shared buffer returned " + D3d12Tools::hr(shared));
+        }
+        if (!fill_shared(rig, buffer, error)) {
             return Outcome::fail("preparing the shared buffer failed: " + error);
         }
         ::CloseHandle(handle);

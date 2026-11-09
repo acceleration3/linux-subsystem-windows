@@ -182,7 +182,7 @@ Outcome RegChecks::d3d12_caps_enum_defined(Context& context) {
             ++answered;
             bad_bool("OPTIONS3.CopyQueueTimestampQueriesSupported", o.CopyQueueTimestampQueriesSupported);
             bad_bool("OPTIONS3.CastingFullyTypedFormatSupported", o.CastingFullyTypedFormatSupported);
-            if ((static_cast<unsigned>(o.WriteBufferImmediateSupportFlags) & ~0x7u) != 0 || !in_range<int>(o.ViewInstancingTier, 0, 3)) {
+            if ((static_cast<unsigned>(o.WriteBufferImmediateSupportFlags) & ~0x7fu) != 0 || !in_range<int>(o.ViewInstancingTier, 0, 3)) {
                 problems.add("OPTIONS3 holds an undefined flag or tier");
             }
         }

@@ -132,6 +132,7 @@ Outcome mutex_peer(Context& context, const std::string& name) {
 Outcome peer_role(Context& context) {
     const std::string name = ChildMode::variable(L"LSW_SUITES_BITS_NAME");
     const std::string kind = ChildMode::variable(L"LSW_SUITES_BITS_KIND");
+    context.measure("peer", kind.empty() ? std::string("mutex") : kind);
     if (kind == "buffer") {
         return buffer_peer(context, name);
     }
