@@ -460,7 +460,7 @@ guest_runs() {
                     --evidence "${out}/evidence/${h}-x${b}" --max-recoveries "${max_recoveries}" --phases "${phases}")
         local effective
         effective="$(effective_filter)"
-        [[ -n ${effective} ]] && args+=(--filter "${effective}")
+        [[ -n ${effective} ]] && args+=("--filter=${effective}")
         [[ ${dump} -eq 1 ]] && args+=(--dump)
         say "${h}: ${suite} suite x${b} on ${#uuids[@]} adapter(s) at once, jobs ${jobs_here} each"
         python3 "${HERE}/render-run-guest.py" run-set "${args[@]}" "${runs[@]}" || status=1
