@@ -29,7 +29,8 @@ public:
 
     [[nodiscard]] bool make_target(Surface& out, UINT width, UINT height, D3DFORMAT format, std::string& error);
     [[nodiscard]] bool make_depth(Surface& out, UINT width, UINT height, std::string& error);
-    [[nodiscard]] bool read_color(Surface& target, rr::Image& out, std::string& error);
+    [[nodiscard]] bool read_color(Surface& target, rr::Image& out, std::string& error) { return read_color(device(), target, out, error); }
+    [[nodiscard]] bool read_color(IDirect3DDevice9* source, Surface& target, rr::Image& out, std::string& error);
 
     [[nodiscard]] bool end_frame(std::string& error);
     [[nodiscard]] bool begin(std::string& error);

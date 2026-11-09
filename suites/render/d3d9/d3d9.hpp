@@ -11,4 +11,5 @@ template <class SceneType>
 using D3d9Register = rr::Register<Kit, SceneType>;
 
 void add(Suite& suite);
+void add_caps(Suite& suite);
 }  // namespace lsw::suites::render::d3d9

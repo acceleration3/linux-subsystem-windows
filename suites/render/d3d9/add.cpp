@@ -42,6 +42,7 @@ void add(Suite& suite) {
     rr::CaseSpec extended("oracle", "on12ex_warp_clear");
     CaseRegistration::add(suite, "d3d9", "d3d9", plain, [](Context& context) { return on12_clear(context, 0); });
     CaseRegistration::add(suite, "d3d9", "d3d9", extended, [](Context& context) { return on12_clear(context, 1); });
+    add_caps(suite);
     for (const auto* entry : rr::CaseTable<Kit>::instance().sorted()) {
         CaseRegistration::add(suite, "d3d9", "d3d9", entry->spec,
                               [entry](Context& context) { return WarpCheck::run<Kit>(context, *entry); });

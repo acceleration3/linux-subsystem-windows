@@ -152,7 +152,7 @@ bool Kit::make_depth(Surface& out, UINT width, UINT height, std::string& error) 
     return true;
 }
 
-bool Kit::read_color(Surface& target, rr::Image& out, std::string& error) {
+bool Kit::read_color(IDirect3DDevice9* source, Surface& target, rr::Image& out, std::string& error) {
     rr::PixelKind kind = rr::PixelKind::Bgra8Unorm;
     switch (target.format) {
         case D3DFMT_A8R8G8B8:
@@ -186,17 +186,17 @@ bool Kit::read_color(Surface& target, rr::Image& out, std::string& error) {
         return true;
     };
     Com<IDirect3DSurface9> staging;
-    HRESULT result = device()->CreateOffscreenPlainSurface(target.width, target.height, target.format, D3DPOOL_SYSTEMMEM, staging.put(), nullptr);
+    HRESULT result = source->CreateOffscreenPlainSurface(target.width, target.height, target.format, D3DPOOL_SYSTEMMEM, staging.put(), nullptr);
     if (FAILED(result)) {
         error = "CreateOffscreenPlainSurface: " + D3d9Tools::hr(result);
         return false;
     }
-    result = device()->GetRenderTargetData(target.surface.get(), staging.get());
+    result = source->GetRenderTargetData(target.surface.get(), staging.get());
     bool read = SUCCEEDED(result) && copy_rows(staging.get());
     if (!read && warp) {
         Com<IDirect3DSurface9> lockable;
-        if (SUCCEEDED(device()->CreateRenderTarget(target.width, target.height, target.format, D3DMULTISAMPLE_NONE, 0, TRUE, lockable.put(), nullptr)) &&
-            SUCCEEDED(device()->StretchRect(target.surface.get(), nullptr, lockable.get(), nullptr, D3DTEXF_NONE))) {
+        if (SUCCEEDED(source->CreateRenderTarget(target.width, target.height, target.format, D3DMULTISAMPLE_NONE, 0, TRUE, lockable.put(), nullptr)) &&
+            SUCCEEDED(source->StretchRect(target.surface.get(), nullptr, lockable.get(), nullptr, D3DTEXF_NONE))) {
             read = copy_rows(lockable.get());
         }
     }

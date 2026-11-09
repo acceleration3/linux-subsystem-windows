@@ -26,6 +26,8 @@ struct Xf {
     [[nodiscard]] static Xf ortho(float width, float height, float near_plane, float far_plane);
     [[nodiscard]] static Xf look_at(const float eye[3], const float at[3], const float up[3]);
     [[nodiscard]] Xf operator*(const Xf& rhs) const;
+    [[nodiscard]] Xf rigid_inverse() const;
+    [[nodiscard]] Xf mirror_y() const;
     [[nodiscard]] const D3DMATRIX* ptr() const { return reinterpret_cast<const D3DMATRIX*>(this); }
 };
 
@@ -105,6 +107,7 @@ public:
     void clear(D3DCOLOR color, DWORD flags = D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER | D3DCLEAR_STENCIL, float z = 1.0f, DWORD stencil = 0);
     void snap(const std::string& label);
     void snap_surface(Surface& surface, const std::string& label);
+    void snap_on(IDirect3DDevice9* source, Surface& surface, const std::string& label);
     void base_state();
     void camera(float distance, float fovy_degrees = 60.0f);
     void fvf(DWORD value) { chk(d->SetFVF(value), "SetFVF"); }
@@ -132,6 +135,21 @@ struct Layout {
     D3DFORMAT format = D3DFMT_A8R8G8B8;
     D3DFORMAT depth = D3DFMT_D24S8;
     UINT extent = 128;
+};
+
+struct Rtt {
+    Com<IDirect3DTexture9> tex;
+    Com<IDirect3DSurface9> color;
+    Com<IDirect3DSurface9> depth;
+    UINT width = 0;
+    UINT height = 0;
+};
+
+class RttOps {
+public:
+    [[nodiscard]] static bool make(Ctx& c, Rtt& out, UINT width, UINT height, D3DFORMAT format, bool with_depth = true);
+    static void push(Ctx& c, Rtt& target);
+    static void pop(Ctx& c);
 };
 
 using Need = std::function<std::string(IDirect3DDevice9*)>;

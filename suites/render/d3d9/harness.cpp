@@ -106,6 +106,21 @@ Xf Xf::operator*(const Xf& rhs) const {
     return out;
 }
 
+Xf Xf::rigid_inverse() const {
+    Xf out;
+    for (int r = 0; r < 3; ++r) {
+        for (int k = 0; k < 3; ++k) {
+            out.m[r][k] = m[k][r];
+        }
+    }
+    for (int k = 0; k < 3; ++k) {
+        out.m[3][k] = -(m[3][0] * out.m[0][k] + m[3][1] * out.m[1][k] + m[3][2] * out.m[2][k]);
+    }
+    return out;
+}
+
+Xf Xf::mirror_y() const { return scale(1.0f, -1.0f, 1.0f) * *this; }
+
 Mesh Geo::sphere(unsigned slices, unsigned stacks, float radius, DWORD color) {
     Mesh mesh;
     for (unsigned i = 0; i <= stacks; ++i) {
@@ -546,10 +561,16 @@ void Ctx::end() {
 }
 
 void Ctx::clear(D3DCOLOR color, DWORD flags, float z, DWORD stencil) {
-    if (!depth.surface) {
+    Com<IDirect3DSurface9> bound;
+    d->GetDepthStencilSurface(bound.put());
+    if (!bound) {
         flags &= ~(D3DCLEAR_ZBUFFER | D3DCLEAR_STENCIL);
-    } else if (depth.format != D3DFMT_D24S8 && depth.format != D3DFMT_D24X4S4 && depth.format != D3DFMT_D15S1) {
-        flags &= ~D3DCLEAR_STENCIL;
+    } else {
+        D3DSURFACE_DESC desc{};
+        bound->GetDesc(&desc);
+        if (desc.Format != D3DFMT_D24S8 && desc.Format != D3DFMT_D24X4S4 && desc.Format != D3DFMT_D15S1) {
+            flags &= ~D3DCLEAR_STENCIL;
+        }
     }
     chk(d->Clear(0, nullptr, flags, color, z, stencil), "Clear");
 }
@@ -568,6 +589,16 @@ void Ctx::snap_surface(Surface& surface, const std::string& label) {
     }
     if (was) {
         begin();
+    }
+}
+
+void Ctx::snap_on(IDirect3DDevice9* source, Surface& surface, const std::string& label) {
+    rr::Image image;
+    std::string problem;
+    if (!kit.read_color(source, surface, image, problem)) {
+        fail("readback: " + problem);
+    } else {
+        pending.add(label, std::move(image));
     }
 }
 
@@ -752,6 +783,30 @@ D3DCAPS9 Ctx::caps() const {
     return out;
 }
 
+bool RttOps::make(Ctx& c, Rtt& out, UINT width, UINT height, D3DFORMAT format, bool with_depth) {
+    c.chk(c.d->CreateTexture(width, height, 1, D3DUSAGE_RENDERTARGET, format, D3DPOOL_DEFAULT, out.tex.put(), nullptr), "CreateTexture render target");
+    if (!out.tex) {
+        return false;
+    }
+    out.tex->GetSurfaceLevel(0, out.color.put());
+    if (with_depth) {
+        c.chk(c.d->CreateDepthStencilSurface(width, height, D3DFMT_D24S8, D3DMULTISAMPLE_NONE, 0, FALSE, out.depth.put(), nullptr), "CreateDepthStencilSurface");
+    }
+    out.width = width;
+    out.height = height;
+    return c.good;
+}
+
+void RttOps::push(Ctx& c, Rtt& target) {
+    c.chk(c.d->SetRenderTarget(0, target.color.get()), "SetRenderTarget");
+    c.chk(c.d->SetDepthStencilSurface(target.depth.get()), "SetDepthStencilSurface");
+}
+
+void RttOps::pop(Ctx& c) {
+    c.chk(c.d->SetRenderTarget(0, c.target.surface.get()), "SetRenderTarget");
+    c.chk(c.d->SetDepthStencilSurface(c.depth.surface.get()), "SetDepthStencilSurface");
+}
+
 namespace {
 
 class FnScene : public D3d9Scene {
@@ -771,6 +826,7 @@ public:
     }
 
     bool frame(Kit&, unsigned index, std::string& error) override {
+        ctx_->pending = rr::CaptureSet();
         ctx_->begin();
         body_(*ctx_, index);
         ctx_->end();
