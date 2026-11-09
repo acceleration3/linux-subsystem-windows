@@ -109,34 +109,54 @@ ArrayTex make_array(Rig& r, UINT size, UINT slices, UINT mips, UINT misc = 0, DX
     return out;
 }
 
+Com<ID3D10Texture2D> coded_tex(Rig& r, UINT size) {
+    const UINT levels = rr::Pattern::level_count(size, size);
+    std::vector<rr::Pattern::Bytes> store;
+    std::vector<const void*> data;
+    std::vector<UINT> pitch;
+    for (UINT l = 0; l < levels; ++l) {
+        const UINT w = std::max(1u, size >> l);
+        const float* c = palette(l);
+        store.push_back(rr::Pattern::checker(w, w, std::max(1u, w / 8), rr::Pattern::pack(static_cast<unsigned>(c[0] * 255), static_cast<unsigned>(c[1] * 255), static_cast<unsigned>(c[2] * 255)),
+                                             rr::Pattern::pack(static_cast<unsigned>(c[0] * 140), static_cast<unsigned>(c[1] * 140), static_cast<unsigned>(c[2] * 140))));
+    }
+    for (UINT l = 0; l < levels; ++l) {
+        data.push_back(store[l].data());
+        pitch.push_back(std::max(1u, size >> l) * 4);
+    }
+    return r.tex2d(size, size, DXGI_FORMAT_R8G8B8A8_UNORM, D3D10_BIND_SHADER_RESOURCE, levels, 1, data, pitch);
+}
+
 const char* kDimNames[] = {"1d", "1d_array"};
 
 void filter_scene(Rig& r, rr::CaptureSet& o, D3D10_FILTER filter, float aniso) {
     r.begin();
     r.use_std();
-    ArrayTex t = make_array(r, 64, 1, rr::Pattern::level_count(64, 64));
-    Com<ID3D10ShaderResourceView> view = r.srv(t.tex.get());
+    Com<ID3D10Texture2D> tex = coded_tex(r, 64);
+    Com<ID3D10ShaderResourceView> view = r.srv(tex.get());
     auto sd = Rig::sampler_desc(filter, D3D10_TEXTURE_ADDRESS_WRAP);
     sd.MaxAnisotropy = static_cast<UINT>(aniso);
     Com<ID3D10SamplerState> smp = r.sampler(sd);
     if (!r.ok()) return;
-    std::vector<Vtx> a = Geo::quad_uv(-1, 0, 1, 1, 0.5f, 0, 0, 3.2f, 1.6f);
-    std::vector<Vtx> b = Geo::quad_uv(-1, -1, 1, 0, 0.5f, 0, 0, 9.0f, 4.5f);
+    std::vector<Vtx> a = Geo::quad_uv(-1, 0, 0, 1, 0.5f, 0.05f, 0.05f, 0.30f, 0.30f);
+    std::vector<Vtx> b = Geo::quad_uv(0, 0, 1, 1, 0.5f, 0, 0, 1.5f, 1.5f);
+    std::vector<Vtx> c = Geo::quad_uv(-1, -1, 1, 0, 0.5f, 0, 0, 4.5f, 2.25f);
     a.insert(a.end(), b.begin(), b.end());
+    a.insert(a.end(), c.begin(), c.end());
     paint(r, o, "Texture2D t : register(t0); SamplerState s : register(s0);\n" PS_HEAD "  return t.Sample(s, uv); }\n", {view.get()}, {smp.get()}, a);
 }
 
 void aniso_scene(Rig& r, rr::CaptureSet& o, UINT level) {
     r.begin(128, 128, DXGI_FORMAT_R8G8B8A8_UNORM, true);
-    ArrayTex t = make_array(r, 128, 1, rr::Pattern::level_count(128, 128));
-    Com<ID3D10ShaderResourceView> view = r.srv(t.tex.get());
+    Com<ID3D10Texture2D> tex = coded_tex(r, 128);
+    Com<ID3D10ShaderResourceView> view = r.srv(tex.get());
     auto sd = Rig::sampler_desc(D3D10_FILTER_ANISOTROPIC, D3D10_TEXTURE_ADDRESS_WRAP);
-    sd.MaxAnisotropy = level;
+    sd.MaxAnisotropy = r.mutate("tex_aniso") ? 4u : level;
     Com<ID3D10SamplerState> smp = r.sampler(sd);
     ScenePipe pipe(r, "Texture2D t : register(t0); SamplerState s : register(s0);\n"
-                      "float4 main(float4 p : SV_Position, float3 n : NORMAL, float2 uv : TEXCOORD0, float3 w : TEXCOORD1) : SV_Target { return t.Sample(s, uv * 8); }\n");
-    std::vector<float> flat((9) * (9), 0.0f);
-    MeshBuffers m = upload(r, Geo::grid(8, 6.0f, flat));
+                      "float4 main(float4 p : SV_Position, float3 n : NORMAL, float2 uv : TEXCOORD0, float3 w : TEXCOORD1) : SV_Target { return t.Sample(s, uv * 12); }\n");
+    std::vector<float> flat(9 * 9, 0.0f);
+    MeshBuffers m = upload(r, Geo::grid(8, 8.0f, flat));
     auto dd = Rig::depth_desc();
     dd.DepthEnable = TRUE;
     Com<ID3D10DepthStencilState> ds = r.depth(dd);
@@ -145,7 +165,7 @@ void aniso_scene(Rig& r, rr::CaptureSet& o, UINT level) {
     pipe.bind(r);
     r.ps_srv(0, view.get());
     r.ps_smp(0, smp.get());
-    pipe.draw(r, m, rr::Mat4::perspective_d3d(1.0f, 1.0f, 0.3f, 60.0f) * rr::Mat4::rotate_x(0.08f) * rr::Mat4::translate(0, -1.0f, -4.0f) * rr::Mat4::rotate_x(0.0f));
+    pipe.draw(r, m, rr::Mat4::perspective_d3d(1.0f, 1.0f, 0.3f, 60.0f) * rr::Mat4::rotate_x(0.04f) * rr::Mat4::translate(0, -0.7f, -3.0f));
     r.cap_main(o);
 }
 
@@ -165,18 +185,18 @@ void address_scene(Rig& r, rr::CaptureSet& o, D3D10_TEXTURE_ADDRESS_MODE mode, c
     paint(r, o, "Texture2D t : register(t0); SamplerState s : register(s0);\n" PS_HEAD "  return t.Sample(s, uv * 3.0 - 1.0); }\n", {view.get()}, {smp.get()}, full_uv());
 }
 
-void lod_scene(Rig& r, rr::CaptureSet& o, float bias, float min_lod, float max_lod) {
+void lod_scene(Rig& r, rr::CaptureSet& o, float scale, float bias, float min_lod, float max_lod) {
     r.begin();
     r.use_std();
-    ArrayTex t = make_array(r, 64, 1, rr::Pattern::level_count(64, 64));
-    Com<ID3D10ShaderResourceView> view = r.srv(t.tex.get());
-    auto sd = Rig::sampler_desc(D3D10_FILTER_MIN_MAG_MIP_LINEAR, D3D10_TEXTURE_ADDRESS_WRAP);
-    sd.MipLODBias = bias;
+    Com<ID3D10Texture2D> tex = coded_tex(r, 64);
+    Com<ID3D10ShaderResourceView> view = r.srv(tex.get());
+    auto sd = Rig::sampler_desc(D3D10_FILTER_MIN_MAG_MIP_POINT, D3D10_TEXTURE_ADDRESS_WRAP);
+    sd.MipLODBias = r.mutate("tex_lod") ? 0.0f : bias;
     sd.MinLOD = min_lod;
-    sd.MaxLOD = max_lod;
+    sd.MaxLOD = r.mutate("tex_lod") ? D3D10_FLOAT32_MAX : max_lod;
     Com<ID3D10SamplerState> smp = r.sampler(sd);
     if (!r.ok()) return;
-    paint(r, o, "Texture2D t : register(t0); SamplerState s : register(s0);\n" PS_HEAD "  return t.Sample(s, uv * 1.5); }\n", {view.get()}, {smp.get()}, full_uv());
+    paint(r, o, "Texture2D t : register(t0); SamplerState s : register(s0);\n" PS_HEAD "  return t.Sample(s, uv * " + std::to_string(scale) + "); }\n", {view.get()}, {smp.get()}, full_uv());
 }
 
 void sample_fn_scene(Rig& r, rr::CaptureSet& o, const char* body, int variant) {
@@ -323,7 +343,7 @@ const Registrar kFilters{[] {
         single(spec("tex", std::string("filter_") + f.name).tolerance(rr::Tolerance::filter(10, 0.01).with_edge(1)), [filter](Rig& r, rr::CaptureSet& o) { filter_scene(r, o, filter, 1); });
     }
     for (UINT level : {4u, 16u}) {
-        single(spec("tex", "filter_anisotropic_" + std::to_string(level) + "x").tolerance(rr::Tolerance::psnr(26.0)), [level](Rig& r, rr::CaptureSet& o) { aniso_scene(r, o, level); });
+        single(spec("tex", "filter_anisotropic_" + std::to_string(level) + "x").tolerance(rr::Tolerance::psnr(25.0)), [level](Rig& r, rr::CaptureSet& o) { aniso_scene(r, o, level); });
     }
     const float black[4] = {0, 0, 0, 1};
     const float transparent[4] = {0, 0, 0, 0};
@@ -339,10 +359,10 @@ const Registrar kFilters{[] {
            [transparent](Rig& r, rr::CaptureSet& o) { address_scene(r, o, D3D10_TEXTURE_ADDRESS_BORDER, transparent, D3D10_FILTER_MIN_MAG_MIP_LINEAR); });
     single(spec("tex", "address_mirror_once_linear").tolerance(rr::Tolerance::filter(6, 0.01)),
            [black](Rig& r, rr::CaptureSet& o) { address_scene(r, o, D3D10_TEXTURE_ADDRESS_MIRROR_ONCE, black, D3D10_FILTER_MIN_MAG_MIP_LINEAR); });
-    single(spec("tex", "lod_bias_positive").tolerance(rr::Tolerance::filter(8, 0.01)), [](Rig& r, rr::CaptureSet& o) { lod_scene(r, o, 1.5f, 0, D3D10_FLOAT32_MAX); });
-    single(spec("tex", "lod_bias_negative").tolerance(rr::Tolerance::filter(8, 0.01)), [](Rig& r, rr::CaptureSet& o) { lod_scene(r, o, -1.0f, 0, D3D10_FLOAT32_MAX); });
-    single(spec("tex", "lod_min_clamp").tolerance(rr::Tolerance::filter(8, 0.01)), [](Rig& r, rr::CaptureSet& o) { lod_scene(r, o, 0, 2.0f, D3D10_FLOAT32_MAX); });
-    single(spec("tex", "lod_max_clamp").tolerance(rr::Tolerance::filter(8, 0.01)), [](Rig& r, rr::CaptureSet& o) { lod_scene(r, o, 0, 0, 1.0f); });
+    single(spec("tex", "lod_bias_positive").tolerance(rr::Tolerance::filter(8, 0.01).with_edge(1)), [](Rig& r, rr::CaptureSet& o) { lod_scene(r, o, 6.0f, 1.5f, 0, D3D10_FLOAT32_MAX); });
+    single(spec("tex", "lod_bias_negative").tolerance(rr::Tolerance::filter(8, 0.01).with_edge(1)), [](Rig& r, rr::CaptureSet& o) { lod_scene(r, o, 12.0f, -1.5f, 0, D3D10_FLOAT32_MAX); });
+    single(spec("tex", "lod_min_clamp").tolerance(rr::Tolerance::filter(8, 0.01)), [](Rig& r, rr::CaptureSet& o) { lod_scene(r, o, 2.0f, 0, 2.5f, D3D10_FLOAT32_MAX); });
+    single(spec("tex", "lod_max_clamp").tolerance(rr::Tolerance::filter(8, 0.01)), [](Rig& r, rr::CaptureSet& o) { lod_scene(r, o, 12.0f, 0, 0, 1.0f); });
     single(spec("tex", "sample_level_explicit").tolerance(rr::Tolerance::filter(8, 0.01)), [](Rig& r, rr::CaptureSet& o) {
         sample_fn_scene(r, o, "  return t.SampleLevel(s, uv * 2, floor(uv.x * 4) + frac(uv.y * 3)); ", 0);
     });

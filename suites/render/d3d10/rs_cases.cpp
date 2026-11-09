@@ -3,13 +3,13 @@
 namespace lsw::suites::render::d3d10 {
 namespace {
 
-void mesh_with_raster(Rig& r, rr::CaptureSet& o, const D3D10_RASTERIZER_DESC& rd, bool box) {
+void mesh_with_raster(Rig& r, rr::CaptureSet& o, const D3D10_RASTERIZER_DESC& rd, bool box, bool depth_test = true, bool face_colors = false) {
     r.begin(128, 128, DXGI_FORMAT_R8G8B8A8_UNORM, true);
-    ScenePipe pipe(r);
+    ScenePipe pipe(r, face_colors ? "float4 main(float4 p : SV_Position, float3 n : NORMAL, float2 uv : TEXCOORD0, float3 w : TEXCOORD1, bool ff : SV_IsFrontFace) : SV_Target { float l = saturate(dot(normalize(n), float3(0.4, 0.8, 0.5))) * 0.6 + 0.3; return ff ? float4(l, 0.3 * l, 0.1, 1) : float4(0.1, 0.4 * l, l, 1); }\n" : nullptr);
     MeshBuffers m = upload(r, box ? Geo::box(1.0f, 0.8f, 0.9f) : Geo::sphere(10, 16, 1.2f));
     Com<ID3D10RasterizerState> rs = r.raster(rd);
     auto dd = Rig::depth_desc();
-    dd.DepthEnable = TRUE;
+    dd.DepthEnable = depth_test ? TRUE : FALSE;
     Com<ID3D10DepthStencilState> ds = r.depth(dd);
     if (!r.ok()) return;
     r.d->RSSetState(rs.get());
@@ -17,6 +17,88 @@ void mesh_with_raster(Rig& r, rr::CaptureSet& o, const D3D10_RASTERIZER_DESC& rd
     pipe.bind(r);
     pipe.draw(r, m, camera(0.7f, 0.5f, 4.5f));
     r.cap_main(o);
+}
+
+
+struct LineStats {
+    unsigned lit = 0;
+    unsigned fractional = 0;
+    unsigned row_footprint = 0;
+};
+
+LineStats measure(const rr::Image& image) {
+    LineStats s;
+    for (unsigned y = 0; y < image.height(); ++y)
+        for (unsigned x = 0; x < image.width(); ++x) {
+            const double v = (image.channel(x, y, 0) + image.channel(x, y, 1) + image.channel(x, y, 2)) / 3.0;
+            if (v > 8.0) ++s.lit;
+            if (v > 25.0 && v < 230.0) ++s.fractional;
+            if (y == image.height() / 2 && v > 8.0) ++s.row_footprint;
+        }
+    return s;
+}
+
+void draw_lines(Rig& r, bool antialiased, bool multisample_flag) {
+    auto rd = Rig::raster_desc();
+    rd.AntialiasedLineEnable = antialiased ? TRUE : FALSE;
+    rd.MultisampleEnable = multisample_flag ? TRUE : FALSE;
+    Com<ID3D10RasterizerState> rs = r.raster(rd);
+    auto bd = Rig::blend_desc();
+    bd.BlendEnable[0] = TRUE;
+    bd.SrcBlend = D3D10_BLEND_SRC_ALPHA;
+    bd.DestBlend = D3D10_BLEND_INV_SRC_ALPHA;
+    bd.SrcBlendAlpha = D3D10_BLEND_ONE;
+    bd.DestBlendAlpha = D3D10_BLEND_INV_SRC_ALPHA;
+    Com<ID3D10BlendState> bs = r.blend(bd);
+    if (!r.ok()) return;
+    r.d->RSSetState(rs.get());
+    const float f[4] = {1, 1, 1, 1};
+    r.d->OMSetBlendState(bs.get(), f, 0xffffffffu);
+    std::vector<Vtx> v;
+    for (unsigned i = 0; i < 14; ++i) {
+        const float a = 0.2f + 3.1f * static_cast<float>(i) / 14.0f;
+        v.push_back(vtx(0.0f, -0.9f, 0.5f, palette(7)));
+        v.push_back(vtx(0.95f * std::cos(a), -0.9f + 1.8f * std::sin(a), 0.5f, palette(7)));
+    }
+    v.push_back(vtx(-0.7f, -0.8f, 0.5f, palette(7)));
+    v.push_back(vtx(-0.7f, 0.8f, 0.5f, palette(7)));
+    r.draw_std(v, D3D10_PRIMITIVE_TOPOLOGY_LINELIST);
+}
+
+void line_scene(Rig& r, rr::CaptureSet& o, int mode) {
+    const UINT samples = mode == 2 ? 4 : 1;
+    Target a, b;
+    r.target(a, 128, 128, DXGI_FORMAT_R8G8B8A8_UNORM, samples);
+    if (mode > 0) r.target(b, 128, 128, DXGI_FORMAT_R8G8B8A8_UNORM, samples);
+    if (!r.ok()) return;
+    r.use_std(D3D10_PRIMITIVE_TOPOLOGY_LINELIST);
+    r.viewport(128, 128);
+    r.bind_rt(a);
+    r.clear(a, 0, 0, 0, 1);
+    draw_lines(r, false, false);
+    rr::Image first;
+    r.read(a, first);
+    if (mode == 0) {
+        o.add("", first);
+        return;
+    }
+    r.bind_rt(b);
+    r.clear(b, 0, 0, 0, 1);
+    draw_lines(r, mode == 1 && !r.mutate("rs_aa"), mode == 2);
+    rr::Image second;
+    r.read(b, second);
+    if (!r.ok()) return;
+    o.add(mode == 1 ? "aliased" : "ms_off", first);
+    o.add("", second);
+    const LineStats base = measure(first);
+    const LineStats test = measure(second);
+    if (test.fractional < base.fractional + 20) {
+        r.fail("the second image has " + std::to_string(test.fractional) + " fractional-coverage pixels against " + std::to_string(base.fractional) + " in the aliased image");
+    } else if (mode == 1 && test.row_footprint < 2) {
+        r.fail("the antialiased vertical line is " + std::to_string(test.row_footprint) + " pixel wide");
+    } else if (mode == 1 && test.lit <= base.lit) {
+        r.fail("the antialiased lines do not cover more pixels than the aliased lines");
+    }
 }
 
 const std::vector<Vtx>& two_quads() {
@@ -29,7 +111,11 @@ const std::vector<Vtx>& two_quads() {
     return v;
 }
 
-void bias_scene(Rig& r, rr::CaptureSet& o, DXGI_FORMAT format, int bias, float slope, float clamp, bool tilt) {
+void bias_scene(Rig& r, rr::CaptureSet& o, DXGI_FORMAT format, int bias, float slope, float clamp, bool tilt, D3D10_COMPARISON_FUNC func) {
+    if (r.mutate("rs_bias")) {
+        bias = 0;
+        slope = 0;
+    }
     r.target(r.main, 128, 128);
     r.depth_target(r.depth_main, 128, 128, format);
     if (!r.ok()) return;
@@ -40,6 +126,7 @@ void bias_scene(Rig& r, rr::CaptureSet& o, DXGI_FORMAT format, int bias, float s
     r.use_std();
     auto dd = Rig::depth_desc();
     dd.DepthEnable = TRUE;
+    dd.DepthFunc = func;
     Com<ID3D10DepthStencilState> ds = r.depth(dd);
     auto base = Rig::raster_desc();
     Com<ID3D10RasterizerState> flat = r.raster(base);
@@ -206,19 +293,25 @@ const Registrar kRs{[] {
                    });
         }
     }
-    const char* cull_names[] = {"none", "front", "back"};
-    const D3D10_CULL_MODE cull_modes[] = {D3D10_CULL_NONE, D3D10_CULL_FRONT, D3D10_CULL_BACK};
-    for (int c = 0; c < 3; ++c) {
-        for (int ccw = 0; ccw < 2; ++ccw) {
-            if (c == 0 && ccw == 1) continue;
-            single(spec("rs", std::string("cull_") + cull_names[c] + (ccw ? "_ccw" : "_cw")).tolerance(rr::Tolerance::blend()), [c, ccw, cull_modes](Rig& r, rr::CaptureSet& o) {
-                auto rd = Rig::raster_desc();
-                rd.CullMode = cull_modes[c];
-                rd.FrontCounterClockwise = ccw ? TRUE : FALSE;
-                mesh_with_raster(r, o, rd, false);
-            });
-        }
-    }
+    single(spec("rs", "cull_none_without_depth").tolerance(rr::Tolerance::blend()), [](Rig& r, rr::CaptureSet& o) {
+        auto rd = Rig::raster_desc();
+        mesh_with_raster(r, o, rd, false, false);
+    });
+    single(spec("rs", "cull_back_clockwise_front_without_depth").tolerance(rr::Tolerance::blend()), [](Rig& r, rr::CaptureSet& o) {
+        auto rd = Rig::raster_desc();
+        rd.CullMode = r.mutate("rs_cull") ? D3D10_CULL_NONE : D3D10_CULL_BACK;
+        mesh_with_raster(r, o, rd, false, false);
+    });
+    single(spec("rs", "cull_front_clockwise_front_without_depth").tolerance(rr::Tolerance::blend()), [](Rig& r, rr::CaptureSet& o) {
+        auto rd = Rig::raster_desc();
+        rd.CullMode = D3D10_CULL_FRONT;
+        mesh_with_raster(r, o, rd, false, false);
+    });
+    single(spec("rs", "front_counter_clockwise_flag_colours_faces").tolerance(rr::Tolerance::blend()), [](Rig& r, rr::CaptureSet& o) {
+        auto rd = Rig::raster_desc();
+        rd.FrontCounterClockwise = r.mutate("rs_ccw") ? FALSE : TRUE;
+        mesh_with_raster(r, o, rd, false, false, true);
+    });
     struct BiasCase {
         const char* name;
         DXGI_FORMAT format;
@@ -226,15 +319,20 @@ const Registrar kRs{[] {
         float slope;
         float clamp;
         bool tilt;
+        D3D10_COMPARISON_FUNC func;
+        float depth_tol;
     };
     const BiasCase biases[] = {
-        {"bias_d16_negative", DXGI_FORMAT_D16_UNORM, -40, 0, 0, false},   {"bias_d24_negative", DXGI_FORMAT_D24_UNORM_S8_UINT, -4000, 0, 0, false},
-        {"bias_d32f_negative", DXGI_FORMAT_D32_FLOAT, -60000, 0, 0, false}, {"bias_d32f_positive_hides", DXGI_FORMAT_D32_FLOAT, 60000, 0, 0, false},
-        {"bias_slope_scaled", DXGI_FORMAT_D32_FLOAT, 0, -4.0f, 0, true},  {"bias_clamped", DXGI_FORMAT_D24_UNORM_S8_UINT, -400000, 0, -0.0005f, false},
+        {"bias_d16_negative", DXGI_FORMAT_D16_UNORM, -40, 0, 0, false, D3D10_COMPARISON_LESS, 2e-5f},
+        {"bias_d24_negative", DXGI_FORMAT_D24_UNORM_S8_UINT, -4000, 0, 0, false, D3D10_COMPARISON_LESS, 1.5e-7f},
+        {"bias_d32f_negative", DXGI_FORMAT_D32_FLOAT, -60000, 0, 0, false, D3D10_COMPARISON_LESS, 1e-6f},
+        {"bias_d32f_positive_hides", DXGI_FORMAT_D32_FLOAT, 60000, 0, 0, false, D3D10_COMPARISON_LESS_EQUAL, 1e-6f},
+        {"bias_slope_scaled", DXGI_FORMAT_D32_FLOAT, 0, -4.0f, 0, true, D3D10_COMPARISON_LESS, 1e-4f},
+        {"bias_clamped", DXGI_FORMAT_D24_UNORM_S8_UINT, -400000, 0, -0.0005f, false, D3D10_COMPARISON_LESS, 2e-6f},
     };
     for (const BiasCase& b : biases) {
-        single(spec("rs", b.name).tolerance(rr::Tolerance::raster(2, 2)).tolerance_for("depth", rr::Tolerance::floats(2e-3f, 2e-3f)),
-               [b](Rig& r, rr::CaptureSet& o) { bias_scene(r, o, b.format, b.bias, b.slope, b.clamp, b.tilt); });
+        single(spec("rs", b.name).tolerance(rr::Tolerance::raster(2, 1)).tolerance_for("depth", rr::Tolerance::floats(b.depth_tol, 0.0f).with_outliers(2e-4)),
+               [b](Rig& r, rr::CaptureSet& o) { bias_scene(r, o, b.format, b.bias, b.slope, b.clamp, b.tilt, b.func); });
     }
     for (int clip = 0; clip < 2; ++clip) {
         single(spec("rs", clip ? "depth_clip_enabled" : "depth_clip_disabled").tolerance(rr::Tolerance::blend()).tolerance_for("depth", rr::Tolerance::floats(2e-4f, 2e-4f)),
@@ -284,25 +382,9 @@ const Registrar kRs{[] {
         r.draw_std(v);
         r.cap_main(o);
     });
-    for (int aa = 0; aa < 2; ++aa) {
-        single(spec("rs", aa ? "antialiased_lines_on" : "antialiased_lines_off").tolerance(rr::Tolerance::psnr(22.0)), [aa](Rig& r, rr::CaptureSet& o) {
-            r.begin();
-            r.use_std(D3D10_PRIMITIVE_TOPOLOGY_LINELIST);
-            auto rd = Rig::raster_desc();
-            rd.AntialiasedLineEnable = aa ? TRUE : FALSE;
-            Com<ID3D10RasterizerState> rs = r.raster(rd);
-            if (!r.ok()) return;
-            r.d->RSSetState(rs.get());
-            std::vector<Vtx> v;
-            for (unsigned i = 0; i < 14; ++i) {
-                const float a = 0.2f + 3.1f * static_cast<float>(i) / 14.0f;
-                v.push_back(vtx(0.0f, -0.9f, 0.5f, palette(i)));
-                v.push_back(vtx(0.95f * std::cos(a), -0.9f + 1.8f * std::sin(a), 0.5f, palette(i + 2)));
-            }
-            r.draw_std(v, D3D10_PRIMITIVE_TOPOLOGY_LINELIST);
-            r.cap_main(o);
-        });
-    }
+    single(spec("rs", "antialiased_lines_off").tolerance(lines_tol()), [](Rig& r, rr::CaptureSet& o) { line_scene(r, o, 0); });
+    single(spec("rs", "antialiased_lines_on_widen_and_fade").tolerance(rr::Tolerance::psnr(12.0)).tolerance_for("aliased", lines_tol()), [](Rig& r, rr::CaptureSet& o) { line_scene(r, o, 1); });
+    single(spec("rs", "multisample_enable_lines_on_msaa_target").tolerance(rr::Tolerance::psnr(14.0)).tolerance_for("ms_off", rr::Tolerance::psnr(18.0)), [](Rig& r, rr::CaptureSet& o) { line_scene(r, o, 2); });
     single(spec("rs", "fill_rule_shared_quads_additive").tolerance(rr::Tolerance::exact()), [](Rig& r, rr::CaptureSet& o) { fill_rule_scene(r, o, 0); });
     single(spec("rs", "fill_rule_shared_diagonal_additive").tolerance(rr::Tolerance::exact()), [](Rig& r, rr::CaptureSet& o) { fill_rule_scene(r, o, 1); });
     single(spec("rs", "fill_rule_pixel_center_edges_additive").tolerance(rr::Tolerance::exact()), [](Rig& r, rr::CaptureSet& o) { fill_rule_scene(r, o, 2); });

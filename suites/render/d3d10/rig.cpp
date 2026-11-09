@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 
 namespace lsw::suites::render::d3d10 {
@@ -108,6 +109,14 @@ Rig::~Rig() {
 }
 
 Rig::Rig(Kit& k) : kit(k), d(k.device()), sm(k.level_10_1 ? "4_1" : "4_0") {}
+
+bool Rig::mutate(const char* tag) const {
+    if (kit.warp) {
+        return false;
+    }
+    const char* list = std::getenv("LSW_D3D10_MUTATE");
+    return list != nullptr && std::strstr(list, tag) != nullptr;
+}
 
 void Rig::fail(const std::string& text) {
     if (error.empty()) {

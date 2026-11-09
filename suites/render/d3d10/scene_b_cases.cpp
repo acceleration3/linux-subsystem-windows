@@ -379,7 +379,7 @@ const Registrar kUi{[] {
         const float knob[4] = {0.95f, 0.5f, 0.2f, 1};
         panel(206, 70 + scroll * 1.2f, 214, 100 + scroll * 1.2f, knob, 0.9f, fade);
     };
-    multi<S>(spec("scene", "ui_panels_scissor_scroll_alpha").size(256, 256).frames(5, {0, 2, 4}).tolerance(rr::Tolerance::blend(4)), body);
+    multi_single<S>(spec("scene", "ui_panels_scissor_scroll_alpha").size(256, 256).tolerance(rr::Tolerance::blend(4)), body, {0, 2, 4});
 }};
 
 const Registrar kEnv{[] {
@@ -410,6 +410,10 @@ const Registrar kEnv{[] {
             s.faces[i] = r.rtv(s.cube.get(), &rd);
         }
         s.face_depth = r.dsv(s.depth.get());
+        for (int i = 0; i < 6; ++i) {
+            const float init[4] = {0.15f * i, 0.1f, 0.3f - 0.04f * i, 1};
+            r.d->ClearRenderTargetView(s.faces[i].get(), init);
+        }
         D3D10_SHADER_RESOURCE_VIEW_DESC sd{};
         sd.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
         sd.ViewDimension = D3D10_SRV_DIMENSION_TEXTURECUBE;
@@ -461,7 +465,7 @@ const Registrar kEnv{[] {
         r.d->PSSetShader(s.flat_ps.get());
         rr::Mat4 proj = rr::Mat4::perspective_d3d(1.5707963f, 1.0f, 0.1f, 30.0f);
         proj.m[0] = -proj.m[0];
-        for (int i = 0; i < 6; ++i) {
+        for (int i = static_cast<int>(f % 6); i == static_cast<int>(f % 6); i += 6) {
             ID3D10RenderTargetView* rt = s.faces[i].get();
             r.d->OMSetRenderTargets(1, &rt, s.face_depth.get());
             const float sky[4] = {0.3f + 0.1f * i, 0.5f, 0.8f - 0.1f * i, 1};
@@ -490,7 +494,7 @@ const Registrar kEnv{[] {
         draw_mesh(r, s.sphere);
         r.d->PSSetShaderResources(0, 1, &none);
     };
-    multi<S>(spec("scene", "environment_cube_rendered_per_frame_reflection").size(256, 256).frames(4, {0, 2, 3}).tolerance(scene_tol(24, 5e-4, 40)), body);
+    multi<S>(spec("scene", "environment_cube_one_face_refreshed_per_frame").size(256, 256).frames(8, {2, 5, 7}).tolerance(scene_tol(24, 5e-4, 40)), body);
 }};
 
 }  // namespace

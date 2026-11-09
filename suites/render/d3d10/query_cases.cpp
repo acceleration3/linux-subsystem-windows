@@ -28,7 +28,7 @@ bool fetch(Rig& r, ID3D10Query* q, T& out) {
 }
 
 void number_image(rr::CaptureSet& o, const std::string& label, const std::vector<double>& values) {
-    rr::Image image(static_cast<std::uint32_t>(values.size()), 1, rr::PixelKind::Rgba32Float);
+    rr::Image image(static_cast<std::uint32_t>(values.size()), 1, rr::PixelKind::Rgba32Uint);
     for (std::size_t i = 0; i < values.size(); ++i) image.set_channel(static_cast<std::uint32_t>(i), 0, 0, values[i]);
     o.add(label, std::move(image));
 }
@@ -184,11 +184,14 @@ const Registrar kQuery{[] {
     single(spec("query", "so_overflow_predicate_controls_draw").tolerance(rr::Tolerance::blend()).tolerance_for("stats", rr::Tolerance::floats(0.5f, 0.0f)).uniform_ok("stats"),
            [](Rig& r, rr::CaptureSet& o) { so_overflow_scene(r, o, false, true, false); });
     single(spec("query", "so_drawauto_after_overflow").tolerance(rr::Tolerance::blend()), [](Rig& r, rr::CaptureSet& o) { so_overflow_scene(r, o, false, false, true); });
-    single(spec("query", "pipeline_statistics_counts").tolerance(rr::Tolerance::blend()).tolerance_for("stats", rr::Tolerance::floats(0.5f, 0.0f)).uniform_ok("stats"), [](Rig& r, rr::CaptureSet& o) {
+    single(spec("query", "pipeline_statistics_counts_with_pass_through_gs").tolerance(rr::Tolerance::blend()).tolerance_for("stats", rr::Tolerance::floats(0.5f, 0.0f)).uniform_ok("stats"), [](Rig& r, rr::CaptureSet& o) {
         r.begin();
         r.use_std();
+        Com<ID3D10GeometryShader> gs = r.gs("struct VO { float4 p : SV_Position; float4 c : COLOR; float2 uv : TEXCOORD0; };\n"
+                                            "[maxvertexcount(3)] void main(triangle VO v[3], inout TriangleStream<VO> s) { [unroll] for (int i = 0; i < 3; ++i) s.Append(v[i]); }\n");
         Com<ID3D10Query> q = make_query(r, D3D10_QUERY_PIPELINE_STATISTICS);
         if (!r.ok()) return;
+        r.d->GSSetShader(gs.get());
         q->Begin();
         r.draw_std(Geo::triangle(-0.4f, 0.3f, 0.4f, 0.5f, 0.9f, 0.3f, 0.2f));
         r.draw_std(Geo::quad(-0.2f, -0.9f, 0.9f, 0.1f, 0.5f, 0.2f, 0.4f, 0.9f));
@@ -197,7 +200,8 @@ const Registrar kQuery{[] {
         if (!fetch(r, q.get(), stats)) return;
         r.cap_main(o);
         number_image(o, "stats", {static_cast<double>(stats.IAVertices), static_cast<double>(stats.IAPrimitives), static_cast<double>(stats.VSInvocations),
-                                  static_cast<double>(stats.GSInvocations), static_cast<double>(stats.GSPrimitives)});
+                                  static_cast<double>(stats.GSInvocations), static_cast<double>(stats.GSPrimitives), static_cast<double>(stats.CInvocations),
+                                  static_cast<double>(stats.CPrimitives)});
     });
     single(spec("query", "event_and_timestamp_disjoint").tolerance(rr::Tolerance::blend()), [](Rig& r, rr::CaptureSet& o) {
         r.begin();

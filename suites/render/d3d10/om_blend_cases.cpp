@@ -84,9 +84,10 @@ void blend_frame(Rig& r, BlendRun& run, unsigned f) {
     r.draw_std(Geo::quad_uv(-0.85f + shift, -0.85f + shift * 0.5f, 0.85f - 0.1f * shift, 0.85f - shift, 0.5f, 0, 0, 1, 1));
 }
 
-void blend_case(const std::string& name, const BlendCfg& cfg, rr::Tolerance tol, Caps caps = nullptr) {
-    if (name.find("dest_") != std::string::npos || name.find("_dest") != std::string::npos) {
+void blend_case(const std::string& name, const BlendCfg& cfg, rr::Tolerance tol, Caps caps = nullptr, unsigned variant = 0) {
+    if (name == "blend_dest_dest_alpha" || name == "blend_dest_dest_color" || name == "blend_src_dest_color") {
         tol = rr::Tolerance::blend(10);
+        tol.name = "blend(10): the destination squares itself every accumulated frame, doubling a one-level rounding difference";
     }
     MultiBody<BlendRun> body;
     body.setup = [cfg](Rig& r, BlendRun& run) {
@@ -94,7 +95,7 @@ void blend_case(const std::string& name, const BlendCfg& cfg, rr::Tolerance tol,
         blend_setup(r, run);
     };
     body.frame = [](Rig& r, BlendRun& run, unsigned f) { blend_frame(r, run, f); };
-    multi<BlendRun>(spec("om", name).frames(4, {0, 3}).tolerance(tol), body, std::move(caps));
+    multi<BlendRun>(spec("om", name, variant).frames(4, {0, 3}).tolerance(tol), body, std::move(caps));
 }
 
 std::string blend_name(D3D10_BLEND b) {
@@ -202,7 +203,7 @@ const Registrar kBlend{[] {
         blend_case(fb.name, cfg, fb.tol, [format](Rig& r) -> std::string {
             const UINT need = D3D10_FORMAT_SUPPORT_RENDER_TARGET | D3D10_FORMAT_SUPPORT_BLENDABLE;
             return (r.format_support(format) & need) == need ? "" : "blendable render target format " + float_tol_name(format);
-        });
+        }, fb.format == DXGI_FORMAT_B8G8R8A8_UNORM ? 1u : 0u);
     }
     single(spec("om", "blend_factor_changes_between_draws").tolerance(rr::Tolerance::blend()), [](Rig& r, rr::CaptureSet& o) {
         r.begin();

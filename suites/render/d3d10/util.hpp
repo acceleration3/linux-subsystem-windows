@@ -257,4 +257,7 @@ inline rr::Tolerance scene_tol(int delta, double fraction = 3e-4, std::uint64_t 
     t.name = "scene(" + std::to_string(delta) + ")";
     return t;
 }
+
+inline const char* kIdHash =
+    "float3 idcol(uint id) { uint h = id * 2654435761u + 12345u; h ^= h >> 15; h *= 2246822519u; return float3((h >> 8) & 255u, (h >> 16) & 255u, (h >> 24) & 255u) / 255.0; }\n";
 }  // namespace lsw::suites::render::d3d10

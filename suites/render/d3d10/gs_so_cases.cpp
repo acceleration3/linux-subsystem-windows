@@ -190,6 +190,62 @@ void so_multi_buffers(Rig& r, rr::CaptureSet& out, bool separate) {
     r.cap_main(out);
 }
 
+void so_four_buffers_gs(Rig& r, rr::CaptureSet& out) {
+    r.begin();
+    Com<ID3D10VertexShader> svs = r.vs(kSoVsWide);
+    Com<ID3D10InputLayout> layout = r.layout({{"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D10_INPUT_PER_VERTEX_DATA, 0},
+                                              {"COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 12, D3D10_INPUT_PER_VERTEX_DATA, 0},
+                                              {"TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 28, D3D10_INPUT_PER_VERTEX_DATA, 0}});
+    Com<ID3D10GeometryShader> sgs = r.gs_so(
+        "struct VO { float4 p : POSITION; float4 c : COLOR; float4 uv : TEXCOORD0; };\n"
+        "struct GO { float4 p : POSITION; float4 c : COLOR; float4 uv : TEXCOORD0; float4 n : NORMAL; };\n"
+        "[maxvertexcount(3)] void main(triangle VO v[3], inout TriangleStream<GO> s) { float2 e0 = v[1].p.xy - v[0].p.xy, e1 = v[2].p.xy - v[0].p.xy; float area = e0.x * e1.y - e0.y * e1.x; float4 mid = (v[0].p + v[1].p + v[2].p) / 3;\n"
+        "  [unroll] for (int i = 0; i < 3; ++i) { GO o; o.p = v[i].p; o.c = v[i].c; o.uv = v[i].uv; o.n = float4(mid.xy * 0.5 + 0.5, saturate(abs(area) * 2), 1); s.Append(o); } }\n",
+        {{"POSITION", 0, 0, 4, 0}, {"COLOR", 0, 0, 4, 1}, {"TEXCOORD", 0, 0, 4, 2}, {"NORMAL", 0, 0, 4, 3}}, 0);
+    Com<ID3D10Buffer> cb = r.cbuf(16);
+    const float xf[4] = {0.8f, 0.8f, 0.1f, 0.1f};
+    r.d->UpdateSubresource(cb.get(), 0, nullptr, xf, 0, 0);
+    const std::vector<Vtx> source = so_source();
+    Com<ID3D10Buffer> input = r.vbuf(source);
+    const UINT count = static_cast<UINT>(source.size());
+    Com<ID3D10Buffer> bufs[4];
+    for (auto& b : bufs) b = r.vbuf(nullptr, count * 16, D3D10_BIND_STREAM_OUTPUT);
+    Com<ID3D10VertexShader> draw_vs = r.vs("struct VI { float4 p : POSITION; float4 c : COLOR; float4 uv : TEXCOORD0; float4 n : NORMAL; };\n"
+                                           "struct VO { float4 p : SV_Position; float4 c : COLOR; float2 uv : TEXCOORD0; };\n"
+                                           "VO main(VI i) { VO o; o.p = float4(i.p.xyz, 1); o.c = float4(i.c.rgb * (0.4 + 0.6 * i.n.x) * (0.6 + 0.4 * i.n.y) + i.n.z * 0.3, 1); o.uv = i.uv.xy; return o; }\n");
+    Com<ID3D10InputLayout> draw_layout = r.layout({{"POSITION", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 0, D3D10_INPUT_PER_VERTEX_DATA, 0},
+                                                   {"COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 0, D3D10_INPUT_PER_VERTEX_DATA, 0},
+                                                   {"TEXCOORD", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 2, 0, D3D10_INPUT_PER_VERTEX_DATA, 0},
+                                                   {"NORMAL", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 3, 0, D3D10_INPUT_PER_VERTEX_DATA, 0}});
+    Com<ID3D10PixelShader> ps = r.ps(Std::kPsUv);
+    Com<ID3D10DepthStencilState> no_depth = r.depth(Rig::depth_desc());
+    if (!r.ok()) return;
+    r.d->OMSetDepthStencilState(no_depth.get(), 0);
+    r.d->IASetInputLayout(layout.get());
+    r.d->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    r.d->VSSetShader(svs.get());
+    r.d->GSSetShader(sgs.get());
+    r.d->PSSetShader(nullptr);
+    r.vs_cb(0, cb.get());
+    r.std_vb(input.get());
+    ID3D10Buffer* targets[4] = {bufs[0].get(), bufs[1].get(), bufs[2].get(), bufs[3].get()};
+    const UINT offsets[4] = {0, 0, 0, 0};
+    r.d->SOSetTargets(r.mutate("so_slots") ? 3 : 4, targets, offsets);
+    r.d->Draw(count, 0);
+    r.unbind_all();
+    r.d->GSSetShader(nullptr);
+    r.d->OMSetDepthStencilState(nullptr, 0);
+    ID3D10Buffer* vbs[4] = {bufs[0].get(), bufs[1].get(), bufs[2].get(), bufs[3].get()};
+    const UINT strides[4] = {16, 16, 16, 16};
+    r.d->IASetInputLayout(draw_layout.get());
+    r.d->IASetVertexBuffers(0, 4, vbs, strides, offsets);
+    r.d->VSSetShader(draw_vs.get());
+    r.d->PSSetShader(ps.get());
+    r.d->Draw(count, 0);
+    r.cap_main(out);
+    r.cap_buffer(out, "slot3", bufs[3].get(), 4);
+}
+
 const Registrar kGs{[] {
     single(spec("gs", "point_sprites").tolerance(rr::Tolerance::blend()), [](Rig& r, rr::CaptureSet& o) {
         run_gs(r, o,
@@ -200,8 +256,8 @@ const Registrar kGs{[] {
     });
     single(spec("gs", "amplify_disk_strip").tolerance(rr::Tolerance::blend()), [](Rig& r, rr::CaptureSet& o) {
         run_gs(r, o,
-               "[maxvertexcount(66)] void main(point VO v[1], inout TriangleStream<VO> s) { VO o = v[0]; float h = v[0].uv.x * 3;\n"
-               "  [unroll] for (int k = 0; k <= 32; ++k) { float a = k * 6.2831853 / 32; o.p = v[0].p + float4(cos(a) * h, sin(a) * h, 0, 0); o.c = v[0].c * (0.5 + 0.5 * cos(a * 2));\n"
+               "[maxvertexcount(100)] void main(point VO v[1], inout TriangleStream<VO> s) { VO o = v[0]; float h = v[0].uv.x * 3;\n"
+               "  [unroll] for (int k = 0; k < 50; ++k) { float a = k * 6.2831853 / 49; o.p = v[0].p + float4(cos(a) * h, sin(a) * h, 0, 0); o.c = v[0].c * (0.5 + 0.5 * cos(a * 2));\n"
                "    s.Append(o); o.p = v[0].p; o.c = v[0].c; s.Append(o); } }\n",
                sprite_points(10), D3D10_PRIMITIVE_TOPOLOGY_POINTLIST);
     });
@@ -225,7 +281,7 @@ const Registrar kGs{[] {
         Com<ID3D10GeometryShader> gs = r.gs(std::string(kVoDecl) +
                                             "struct GO { float4 p : SV_Position; float4 c : COLOR; uint id : SV_PrimitiveID; };\n"
                                             "[maxvertexcount(3)] void main(triangle VO v[3], uint pid : SV_PrimitiveID, inout TriangleStream<GO> s) { GO o;\n"
-                                            "  [unroll] for (int i = 0; i < 3; ++i) { o.p = v[i].p; o.c = float4(frac(pid * 0.31), frac(pid * 0.57 + 0.2), frac(pid * 0.13 + 0.5), 1); o.id = pid; s.Append(o); } }\n");
+                                            "  [unroll] for (int i = 0; i < 3; ++i) { o.p = v[i].p; uint h = pid * 2654435761u + 99u; o.c = float4(float((h >> 8) & 255u) / 255.0, float((h >> 16) & 255u) / 255.0, float((h >> 24) & 255u) / 255.0, 1); o.id = pid; s.Append(o); } }\n");
         if (!r.ok()) return;
         r.d->GSSetShader(gs.get());
         std::vector<Vtx> v;
@@ -239,7 +295,7 @@ const Registrar kGs{[] {
         r.draw_std(v);
         r.cap_main(o);
     });
-    single(spec("gs", "constant_buffer_explode").tolerance(scene_tol(100, 1e-3, 16)), [](Rig& r, rr::CaptureSet& o) {
+    single(spec("gs", "constant_buffer_explode").tolerance(scene_tol(12)), [](Rig& r, rr::CaptureSet& o) {
         r.begin(128, 128, DXGI_FORMAT_R8G8B8A8_UNORM, true);
         Com<ID3D10VertexShader> vs = r.vs(kSceneVs);
         Com<ID3D10InputLayout> layout = r.layout(mesh_elements());
@@ -249,7 +305,7 @@ const Registrar kGs{[] {
             "struct GO { float4 p : SV_Position; float4 c : COLOR; };\n"
             "[maxvertexcount(3)] void main(triangle VO v[3], uint pid : SV_PrimitiveID, inout TriangleStream<GO> s) { float3 cr = cross(v[1].w - v[0].w, v[2].w - v[0].w); float3 fn = length(cr) > 1e-6 ? cr / length(cr) : float3(0, 1, 0);\n"
             "  float shade = 0.3 + 0.7 * saturate(dot(fn, normalize(float3(0.5, 0.8, 0.6)))); GO o;\n"
-            "  [unroll] for (int i = 0; i < 3; ++i) { o.p = mul(m, float4(v[i].w + fn * tint.x, 1)); o.c = float4(shade * (0.4 + 0.6 * frac(pid * 0.173)), shade * 0.7, shade * frac(pid * 0.41 + 0.3), 1); s.Append(o); } }\n");
+            "  [unroll] for (int i = 0; i < 3; ++i) { o.p = mul(m, float4(v[i].w + fn * tint.x, 1)); uint h = pid * 2654435761u + 7u; o.c = float4(shade * (0.4 + 0.6 * float((h >> 8) & 255u) / 255.0), shade * 0.7, shade * float((h >> 16) & 255u) / 255.0, 1); s.Append(o); } }\n");
         Com<ID3D10PixelShader> ps = r.ps(Std::kPs);
         MeshBuffers m = upload(r, Geo::sphere(10, 14, 1.0f));
         struct { rr::Mat4 m; float tint[4]; } c;
@@ -411,6 +467,7 @@ const Registrar kSo{[] {
     single(spec("so", "overwrite_two_passes").tolerance(rr::Tolerance::blend()), [](Rig& r, rr::CaptureSet& o) { so_capture_pass(r, o, false, 2, false, true); });
     single(spec("so", "geometry_shader_append_two_passes").tolerance(rr::Tolerance::blend()), [](Rig& r, rr::CaptureSet& o) { so_capture_pass(r, o, true, 2, true, true); });
     single(spec("so", "geometry_shader_overwrite_two_passes").tolerance(rr::Tolerance::blend()), [](Rig& r, rr::CaptureSet& o) { so_capture_pass(r, o, true, 2, false, true); });
+    single(spec("so", "geometry_shader_four_separate_buffers").tolerance(rr::Tolerance::blend()).tolerance_for("slot3", rr::Tolerance::floats(1e-5f, 1e-5f)), [](Rig& r, rr::CaptureSet& o) { so_four_buffers_gs(r, o); });
     single(spec("so", "interleaved_single_buffer").tolerance(rr::Tolerance::blend()), [](Rig& r, rr::CaptureSet& o) { so_multi_buffers(r, o, false); });
     single(spec("so", "three_separate_buffers").tolerance(rr::Tolerance::blend()), [](Rig& r, rr::CaptureSet& o) { so_multi_buffers(r, o, true); });
 }};

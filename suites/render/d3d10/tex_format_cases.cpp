@@ -103,7 +103,7 @@ std::vector<std::uint8_t> make_data(const TexFormat& f, UINT width, UINT height,
                 break;
             case 'u':
                 for (unsigned c = 0; c < f.bytes / 4; ++c) {
-                    const std::uint32_t v = next() & 0xfffffu;
+                    const std::uint32_t v = (next() << 16) ^ next();
                     std::memcpy(t + c * 4, &v, 4);
                 }
                 break;
@@ -132,6 +132,13 @@ const char* kLoadPs[3] = {
     "float4 main(float4 p : SV_Position, float4 c : COLOR, float2 uv : TEXCOORD0) : SV_Target { return float4(t.Load(int3(int2(uv * 16), 0))); }\n",
     "Texture2D<int4> t : register(t0);\n"
     "float4 main(float4 p : SV_Position, float4 c : COLOR, float2 uv : TEXCOORD0) : SV_Target { return float4(t.Load(int3(int2(uv * 16), 0))); }\n",
+};
+
+const char* kIntPs[2] = {
+    "Texture2D<uint4> t : register(t0);\n"
+    "uint4 main(float4 p : SV_Position, float4 c : COLOR, float2 uv : TEXCOORD0) : SV_Target { return t.Load(int3(int2(uv * 16), 0)); }\n",
+    "Texture2D<int4> t : register(t0);\n"
+    "uint4 main(float4 p : SV_Position, float4 c : COLOR, float2 uv : TEXCOORD0) : SV_Target { return asuint(t.Load(int3(int2(uv * 16), 0))); }\n",
 };
 
 const char* kSamplePs =
@@ -164,14 +171,14 @@ struct StreamState {
 };
 
 void stream_setup(Rig& r, StreamState& s, const TexFormat& f) {
-    r.begin(128, 128, DXGI_FORMAT_R32G32B32A32_FLOAT);
+    r.begin(128, 128, f.cls == 'f' ? DXGI_FORMAT_R32G32B32A32_FLOAT : DXGI_FORMAT_R32G32B32A32_UINT);
     r.use_std();
     s.data = make_data(f, 16, 16, 12345);
     const bool block = f.gen == 'b';
     std::vector<std::uint8_t> zeros(s.data.size(), 0);
     s.tex = r.tex2d(16, 16, f.format, D3D10_BIND_SHADER_RESOURCE, 1, 1, {zeros.data()}, {block ? 4 * f.bytes : 16 * f.bytes});
     s.view = r.srv(s.tex.get());
-    s.ps = r.ps(kLoadPs[f.cls == 'f' ? 0 : f.cls == 'u' ? 1 : 2]);
+    s.ps = r.ps(f.cls == 'f' ? kLoadPs[0] : kIntPs[f.cls == 'u' ? 0 : 1]);
 }
 
 void stream_frame(Rig& r, StreamState& s, const TexFormat& f, unsigned frame) {
@@ -186,8 +193,9 @@ void stream_frame(Rig& r, StreamState& s, const TexFormat& f, unsigned frame) {
         pitch = 4 * f.bytes;
         for (unsigned y = 0; y < 16; ++y) part.insert(part.end(), s.data.begin() + (y * 16 + 4 * frame) * f.bytes, s.data.begin() + (y * 16 + 4 * frame + 4) * f.bytes);
     }
-    r.d->UpdateSubresource(s.tex.get(), 0, &box, part.data(), pitch, 0);
-    r.clear(r.main, 0, 0, 0, 1);
+    if (!(r.mutate("tex_stream") && frame == 3)) {
+        r.d->UpdateSubresource(s.tex.get(), 0, &box, part.data(), pitch, 0);
+    }
     r.d->PSSetShader(s.ps.get());
     r.ps_srv(0, s.view.get());
     r.draw_std(Geo::quad_uv(-1, -1, 1, 1, 0.5f, 0, 0, 1, 1));
@@ -198,7 +206,7 @@ void stream_case(const TexFormat& f, const Caps& caps) {
     MultiBody<StreamState> body;
     body.setup = [copy](Rig& r, StreamState& s) { stream_setup(r, s, copy); };
     body.frame = [copy](Rig& r, StreamState& s, unsigned frame) { stream_frame(r, s, copy, frame); };
-    multi<StreamState>(spec("tex", std::string("stream_update_load_") + f.name).frames(4, {1, 3}).tolerance(rr::Tolerance::floats(f.tol, f.tol)), body, caps);
+    multi<StreamState>(spec("tex", std::string("stream_update_load_") + f.name, f.name[0] == 'b' ? 1 : 0).frames(4, {1, 3}).tolerance(rr::Tolerance::floats(f.tol, f.tol)), body, caps);
 }
 
 const Registrar kTexFormats{[] {

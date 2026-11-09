@@ -9,6 +9,7 @@
 #include <d3d10effect.h>
 
 #include <cstring>
+#include <algorithm>
 #include <functional>
 #include <memory>
 #include <string>
@@ -80,6 +81,7 @@ public:
     void fail(const std::string& text);
     void check(HRESULT result, const char* what);
     [[nodiscard]] bool level_1() const { return kit.level_10_1; }
+    [[nodiscard]] bool mutate(const char* tag) const;
 
     [[nodiscard]] Com<ID3D10VertexShader> vs(const std::string& source);
     [[nodiscard]] Com<ID3D10PixelShader> ps(const std::string& source);
@@ -241,6 +243,29 @@ void multi(rr::CaseSpec spec, MultiBody<State> body, Caps caps = nullptr) {
     rr::CaseTable<Kit>::instance().add(std::move(spec), [shared, caps] {
         return std::unique_ptr<rr::Scene<Kit>>(new MultiScene<State>(shared.get(), caps));
     });
+}
+
+template <class State>
+void multi_single(rr::CaseSpec spec, MultiBody<State> body, std::vector<unsigned> frames, Caps caps = nullptr) {
+    auto shared = std::make_shared<MultiBody<State>>(std::move(body));
+    single(std::move(spec), [shared, frames](Rig& r, rr::CaptureSet& o) {
+        State state;
+        shared->setup(r, state);
+        for (unsigned f = 0; f <= frames.back() && r.ok(); ++f) {
+            shared->frame(r, state, f);
+            if (std::find(frames.begin(), frames.end(), f) != frames.end()) {
+                rr::CaptureSet set;
+                if (shared->capture) {
+                    shared->capture(r, state, f, set);
+                } else {
+                    r.cap_main(set);
+                }
+                for (const auto& item : set.items()) {
+                    o.add("t" + std::to_string(f) + (item.first.empty() ? "" : "_" + item.first), item.second);
+                }
+            }
+        }
+    }, std::move(caps));
 }
 
 struct Registrar {

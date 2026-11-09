@@ -123,66 +123,63 @@ struct FormatCase {
     const char* name;
     DXGI_FORMAT format;
     char kind;
-    float scale;
+    int comps;
+    char type;
+    int bytes;
 };
 
-void encode(DXGI_FORMAT f, const float* c, std::uint8_t* out, UINT& size) {
-    auto put16 = [&](unsigned i, std::uint16_t v) { std::memcpy(out + i * 2, &v, 2); };
-    auto put32 = [&](unsigned i, std::uint32_t v) { std::memcpy(out + i * 4, &v, 4); };
-    auto putf = [&](unsigned i, float v) { std::memcpy(out + i * 4, &v, 4); };
-    auto n16 = [&](float v) { return static_cast<std::uint16_t>(std::lround(v * 65535.0f)); };
-    auto s16 = [&](float v) { return static_cast<std::uint16_t>(static_cast<std::int16_t>(std::lround(v * 32767.0f))); };
-    switch (f) {
-        case DXGI_FORMAT_R32G32B32A32_FLOAT: size = 16; for (unsigned i = 0; i < 4; ++i) putf(i, c[i]); break;
-        case DXGI_FORMAT_R32G32B32_FLOAT: size = 12; for (unsigned i = 0; i < 3; ++i) putf(i, c[i]); break;
-        case DXGI_FORMAT_R32G32_FLOAT: size = 8; for (unsigned i = 0; i < 2; ++i) putf(i, c[i]); break;
-        case DXGI_FORMAT_R32_FLOAT: size = 4; putf(0, c[0]); break;
-        case DXGI_FORMAT_R16G16_FLOAT: size = 4; for (unsigned i = 0; i < 2; ++i) put16(i, rr::PixelInfo::float_to_half(c[i])); break;
-        case DXGI_FORMAT_R16G16B16A16_FLOAT: size = 8; for (unsigned i = 0; i < 4; ++i) put16(i, rr::PixelInfo::float_to_half(c[i])); break;
-        case DXGI_FORMAT_R16G16_SNORM: size = 4; for (unsigned i = 0; i < 2; ++i) put16(i, s16(c[i])); break;
-        case DXGI_FORMAT_R16G16B16A16_SNORM: size = 8; for (unsigned i = 0; i < 4; ++i) put16(i, s16(c[i])); break;
-        case DXGI_FORMAT_R16G16_UNORM: size = 4; for (unsigned i = 0; i < 2; ++i) put16(i, n16(c[i])); break;
-        case DXGI_FORMAT_R16G16B16A16_UNORM: size = 8; for (unsigned i = 0; i < 4; ++i) put16(i, n16(c[i])); break;
-        case DXGI_FORMAT_R8G8B8A8_UNORM: size = 4; for (unsigned i = 0; i < 4; ++i) out[i] = static_cast<std::uint8_t>(std::lround(c[i] * 255.0f)); break;
-        case DXGI_FORMAT_B8G8R8A8_UNORM: size = 4; out[2] = static_cast<std::uint8_t>(std::lround(c[0] * 255.0f)); out[1] = static_cast<std::uint8_t>(std::lround(c[1] * 255.0f)); out[0] = static_cast<std::uint8_t>(std::lround(c[2] * 255.0f)); out[3] = static_cast<std::uint8_t>(std::lround(c[3] * 255.0f)); break;
-        case DXGI_FORMAT_R8G8B8A8_SNORM: size = 4; for (unsigned i = 0; i < 4; ++i) out[i] = static_cast<std::uint8_t>(static_cast<std::int8_t>(std::lround(c[i] * 127.0f))); break;
-        case DXGI_FORMAT_R8G8_UNORM: size = 2; for (unsigned i = 0; i < 2; ++i) out[i] = static_cast<std::uint8_t>(std::lround(c[i] * 255.0f)); break;
-        case DXGI_FORMAT_R8G8B8A8_UINT: size = 4; for (unsigned i = 0; i < 4; ++i) out[i] = static_cast<std::uint8_t>(std::lround(c[i] * 255.0f)); break;
-        case DXGI_FORMAT_R16G16_UINT: size = 4; for (unsigned i = 0; i < 2; ++i) put16(i, static_cast<std::uint16_t>(std::lround(c[i] * 255.0f))); break;
-        case DXGI_FORMAT_R16G16_SINT: size = 4; for (unsigned i = 0; i < 2; ++i) put16(i, static_cast<std::uint16_t>(std::lround(c[i] * 255.0f))); break;
-        case DXGI_FORMAT_R32G32B32A32_UINT: size = 16; for (unsigned i = 0; i < 4; ++i) put32(i, static_cast<std::uint32_t>(std::lround(c[i] * 255.0f))); break;
-        case DXGI_FORMAT_R32G32_SINT: size = 8; for (unsigned i = 0; i < 2; ++i) put32(i, static_cast<std::uint32_t>(std::lround(c[i] * 255.0f))); break;
-        case DXGI_FORMAT_R10G10B10A2_UNORM: {
-            size = 4;
-            const std::uint32_t v = static_cast<std::uint32_t>(std::lround(c[0] * 1023.0f)) | (static_cast<std::uint32_t>(std::lround(c[1] * 1023.0f)) << 10) |
-                                    (static_cast<std::uint32_t>(std::lround(c[2] * 1023.0f)) << 20) | (3u << 30);
-            put32(0, v);
-            break;
+void encode(const FormatCase& f, const float* c, std::uint8_t* out) {
+    for (int i = 0; i < f.comps; ++i) {
+        const float v = c[i];
+        const std::int32_t unit = static_cast<std::int32_t>(std::lround(v * 255.0f));
+        switch (f.type) {
+            case 'F': std::memcpy(out + i * 4, &v, 4); break;
+            case 'H': { const std::uint16_t h = rr::PixelInfo::float_to_half(v); std::memcpy(out + i * 2, &h, 2); break; }
+            case 'n': { const std::uint16_t u = static_cast<std::uint16_t>(std::lround(v * 65535.0f)); std::memcpy(out + i * 2, &u, 2); break; }
+            case 's': { const std::uint16_t u = static_cast<std::uint16_t>(static_cast<std::int16_t>(std::lround(v * 32767.0f))); std::memcpy(out + i * 2, &u, 2); break; }
+            case 'b': out[i] = static_cast<std::uint8_t>(unit); break;
+            case 'B': out[i] = static_cast<std::uint8_t>(static_cast<std::int8_t>(std::lround(v * 127.0f))); break;
+            case 'u': { const std::uint16_t u = static_cast<std::uint16_t>(unit); std::memcpy(out + i * 2, &u, 2); break; }
+            case 'U': { const std::uint32_t u = static_cast<std::uint32_t>(unit); std::memcpy(out + i * 4, &u, 4); break; }
+            case 'i': { const std::int16_t u = static_cast<std::int16_t>(unit - 128); std::memcpy(out + i * 2, &u, 2); break; }
+            case 'I': { const std::int32_t u = unit - 128; std::memcpy(out + i * 4, &u, 4); break; }
+            case 'c': out[i] = static_cast<std::uint8_t>(static_cast<std::int8_t>(unit - 128)); break;
+            default: break;
         }
-        default:
-            size = 0;
+    }
+    if (f.type == 'R') {
+        const std::uint32_t v = static_cast<std::uint32_t>(std::lround(c[0] * 1023.0f)) | (static_cast<std::uint32_t>(std::lround(c[1] * 1023.0f)) << 10) |
+                                (static_cast<std::uint32_t>(std::lround(c[2] * 1023.0f)) << 20) | (3u << 30);
+        std::memcpy(out, &v, 4);
+    }
+    if (f.type == 'Y') {
+        for (int i = 0; i < 4; ++i) out[i] = static_cast<std::uint8_t>(static_cast<std::int8_t>(std::lround(c[i] * 255.0f) - 128));
     }
 }
 
 const FormatCase kFormats[] = {
-    {"r32g32b32a32_float", DXGI_FORMAT_R32G32B32A32_FLOAT, 'f', 1}, {"r32g32b32_float", DXGI_FORMAT_R32G32B32_FLOAT, 'f', 1},
-    {"r32g32_float", DXGI_FORMAT_R32G32_FLOAT, 'f', 1},             {"r32_float", DXGI_FORMAT_R32_FLOAT, 'f', 1},
-    {"r16g16_float", DXGI_FORMAT_R16G16_FLOAT, 'f', 1},             {"r16g16b16a16_float", DXGI_FORMAT_R16G16B16A16_FLOAT, 'f', 1},
-    {"r16g16_snorm", DXGI_FORMAT_R16G16_SNORM, 'f', 1},             {"r16g16b16a16_snorm", DXGI_FORMAT_R16G16B16A16_SNORM, 'f', 1},
-    {"r16g16_unorm", DXGI_FORMAT_R16G16_UNORM, 'f', 1},             {"r16g16b16a16_unorm", DXGI_FORMAT_R16G16B16A16_UNORM, 'f', 1},
-    {"r8g8b8a8_unorm", DXGI_FORMAT_R8G8B8A8_UNORM, 'f', 1},         {"b8g8r8a8_unorm", DXGI_FORMAT_B8G8R8A8_UNORM, 'f', 1},
-    {"r8g8b8a8_snorm", DXGI_FORMAT_R8G8B8A8_SNORM, 'f', 1},         {"r8g8_unorm", DXGI_FORMAT_R8G8_UNORM, 'f', 1},
-    {"r8g8b8a8_uint", DXGI_FORMAT_R8G8B8A8_UINT, 'u', 255},         {"r16g16_uint", DXGI_FORMAT_R16G16_UINT, 'u', 255},
-    {"r16g16_sint", DXGI_FORMAT_R16G16_SINT, 'i', 255},             {"r32g32b32a32_uint", DXGI_FORMAT_R32G32B32A32_UINT, 'u', 255},
-    {"r32g32_sint", DXGI_FORMAT_R32G32_SINT, 'i', 255},             {"r10g10b10a2_unorm", DXGI_FORMAT_R10G10B10A2_UNORM, 'f', 1},
+    {"r32g32b32a32_float", DXGI_FORMAT_R32G32B32A32_FLOAT, 'f', 4, 'F', 16}, {"r32g32b32_float", DXGI_FORMAT_R32G32B32_FLOAT, 'f', 3, 'F', 12},
+    {"r32g32_float", DXGI_FORMAT_R32G32_FLOAT, 'f', 2, 'F', 8},               {"r32_float", DXGI_FORMAT_R32_FLOAT, 'f', 1, 'F', 4},
+    {"r16g16_float", DXGI_FORMAT_R16G16_FLOAT, 'f', 2, 'H', 4},               {"r16g16b16a16_float", DXGI_FORMAT_R16G16B16A16_FLOAT, 'f', 4, 'H', 8},
+    {"r16_float", DXGI_FORMAT_R16_FLOAT, 'f', 1, 'H', 2},                     {"r16g16_snorm", DXGI_FORMAT_R16G16_SNORM, 'f', 2, 's', 4},
+    {"r16g16b16a16_snorm", DXGI_FORMAT_R16G16B16A16_SNORM, 'f', 4, 's', 8},   {"r16g16_unorm", DXGI_FORMAT_R16G16_UNORM, 'f', 2, 'n', 4},
+    {"r16g16b16a16_unorm", DXGI_FORMAT_R16G16B16A16_UNORM, 'f', 4, 'n', 8},   {"r8g8b8a8_unorm", DXGI_FORMAT_R8G8B8A8_UNORM, 'f', 4, 'b', 4},
+    {"b8g8r8a8_unorm", DXGI_FORMAT_B8G8R8A8_UNORM, 'f', 4, 'z', 4},           {"r8g8b8a8_snorm", DXGI_FORMAT_R8G8B8A8_SNORM, 'f', 4, 'B', 4},
+    {"r8g8_unorm", DXGI_FORMAT_R8G8_UNORM, 'f', 2, 'b', 2},                   {"r8g8b8a8_uint", DXGI_FORMAT_R8G8B8A8_UINT, 'u', 4, 'b', 4},
+    {"r16g16_uint", DXGI_FORMAT_R16G16_UINT, 'u', 2, 'u', 4},                 {"r16g16b16a16_uint", DXGI_FORMAT_R16G16B16A16_UINT, 'u', 4, 'u', 8},
+    {"r32_uint", DXGI_FORMAT_R32_UINT, 'u', 1, 'U', 4},                       {"r32g32b32a32_uint", DXGI_FORMAT_R32G32B32A32_UINT, 'u', 4, 'U', 16},
+    {"r8g8b8a8_sint", DXGI_FORMAT_R8G8B8A8_SINT, 'i', 4, 'c', 4},             {"r16g16_sint", DXGI_FORMAT_R16G16_SINT, 'i', 2, 'i', 4},
+    {"r16g16b16a16_sint", DXGI_FORMAT_R16G16B16A16_SINT, 'i', 4, 'i', 8},     {"r32_sint", DXGI_FORMAT_R32_SINT, 'i', 1, 'I', 4},
+    {"r32g32_sint", DXGI_FORMAT_R32G32_SINT, 'i', 2, 'I', 8},                 {"r10g10b10a2_unorm", DXGI_FORMAT_R10G10B10A2_UNORM, 'f', 3, 'R', 4},
 };
 
 void run_format(Rig& r, rr::CaptureSet& out, const FormatCase& fc) {
     r.begin();
     const char* type = fc.kind == 'f' ? "float4" : fc.kind == 'u' ? "uint4" : "int4";
+    const std::string fix = fc.kind == 'i' ? " + 128.0" : "";
     std::string src = std::string("struct VI { float3 p : POSITION; ") + type + " c : COLOR; };\n" +
                       "struct VO { float4 p : SV_Position; float4 c : COLOR; };\n" +
-                      "VO main(VI i) { VO o; o.p = float4(i.p, 1); o.c = float4(float3(i.c.rgb) / " + std::to_string(fc.scale) + ", 1); return o; }\n";
+                      "VO main(VI i) { VO o; o.p = float4(i.p, 1); float4 v = float4(i.c)" + fix + "; o.c = float4(" + (fc.kind == 'f' ? "v.rgb" : "v.rgb / 255.0") + ", 1); return o; }\n";
     Com<ID3D10VertexShader> vs = r.vs(src);
     Com<ID3D10PixelShader> ps = r.ps(Std::kPs);
     Com<ID3D10InputLayout> layout = r.layout({{"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D10_INPUT_PER_VERTEX_DATA, 0},
@@ -190,10 +187,7 @@ void run_format(Rig& r, rr::CaptureSet& out, const FormatCase& fc) {
     if (!r.ok()) {
         return;
     }
-    std::uint8_t probe[16] = {};
-    UINT size = 0;
-    encode(fc.format, palette(0), probe, size);
-    const UINT stride = 12 + size;
+    const UINT stride = 12 + static_cast<UINT>(fc.bytes);
     std::vector<std::uint8_t> data;
     for (unsigned t = 0; t < 12; ++t) {
         for (unsigned k = 0; k < 3; ++k) {
@@ -201,9 +195,16 @@ void run_format(Rig& r, rr::CaptureSet& out, const FormatCase& fc) {
             const float rad = k == 2 ? 0.35f : 0.9f;
             const float pos[3] = {rad * std::cos(a), rad * std::sin(a), 0.5f};
             const float* col = palette(t + k * 3);
-            std::uint8_t record[32] = {};
+            std::uint8_t record[48] = {};
             std::memcpy(record, pos, 12);
-            encode(fc.format, col, record + 12, size);
+            FormatCase f = fc;
+            if (f.type == 'z') {
+                const std::uint8_t bgra[4] = {static_cast<std::uint8_t>(std::lround(col[2] * 255)), static_cast<std::uint8_t>(std::lround(col[1] * 255)),
+                                              static_cast<std::uint8_t>(std::lround(col[0] * 255)), static_cast<std::uint8_t>(std::lround(col[3] * 255))};
+                std::memcpy(record + 12, bgra, 4);
+            } else {
+                encode(f, col, record + 12);
+            }
             data.insert(data.end(), record, record + stride);
         }
     }
@@ -282,7 +283,7 @@ const Registrar kTopologies{[] {
 const Registrar kFormatCases{[] {
     for (const FormatCase& fc : kFormats) {
         const FormatCase copy = fc;
-        single(spec("ia", std::string("format_") + fc.name).tolerance(rr::Tolerance::blend(3)),
+        single(spec("ia", std::string("format_") + fc.name, fc.name[0] == 'b' ? 1 : 0).tolerance(rr::Tolerance::blend(3)),
                [copy](Rig& r, rr::CaptureSet& o) { run_format(r, o, copy); },
                [copy](Rig& r) -> std::string {
                    return (r.format_support(copy.format) & D3D10_FORMAT_SUPPORT_IA_VERTEX_BUFFER) != 0 ? "" : std::string("IA vertex format ") + copy.name;
@@ -337,7 +338,7 @@ const Registrar kSlots{[] {
 const char* kInstVs =
     "struct VI { float3 p : POSITION; float4 c : COLOR; float2 uv : TEXCOORD0; float3 off : OFFSET; float4 tint : TINT; };\n"
     "struct VO { float4 p : SV_Position; float4 c : COLOR; };\n"
-    "VO main(VI i, uint iid : SV_InstanceID) { VO o; o.p = float4(i.p * 0.14 + i.off, 1); o.c = i.c * i.tint; return o; }\n";
+    "VO main(VI i, uint iid : SV_InstanceID) { VO o; float3 shift = float3(0.0, -0.1 * (iid % 3), 0); o.p = float4(i.p * 0.12 + i.off + shift, 1); o.c = i.c * i.tint * (0.7 + 0.1 * (iid % 4)); return o; }\n";
 
 struct InstanceData {
     float off[3];
@@ -363,8 +364,8 @@ void run_instanced(Rig& r, rr::CaptureSet& out, UINT step_rate, int mode) {
         r.layout({{"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D10_INPUT_PER_VERTEX_DATA, 0},
                   {"COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 12, D3D10_INPUT_PER_VERTEX_DATA, 0},
                   {"TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 28, D3D10_INPUT_PER_VERTEX_DATA, 0},
-                  {"OFFSET", 0, DXGI_FORMAT_R32G32B32_FLOAT, 1, 0, D3D10_INPUT_PER_INSTANCE_DATA, step_rate},
-                  {"TINT", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 12, D3D10_INPUT_PER_INSTANCE_DATA, step_rate}});
+                  {"OFFSET", 0, DXGI_FORMAT_R32G32B32_FLOAT, 1, 0, D3D10_INPUT_PER_INSTANCE_DATA, r.mutate("ia_step") ? 1u : step_rate},
+                  {"TINT", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 12, D3D10_INPUT_PER_INSTANCE_DATA, r.mutate("ia_step") ? 1u : step_rate}});
     const std::vector<InstanceData> inst = instance_grid(16);
     Com<ID3D10Buffer> ib = r.vbuf(inst.data(), static_cast<UINT>(inst.size() * sizeof(InstanceData)));
     const std::vector<Vtx> quad = Geo::quad(-1, -1, 1, 1, 0, 1, 1, 1);
@@ -387,13 +388,12 @@ void run_instanced(Rig& r, rr::CaptureSet& out, UINT step_rate, int mode) {
     r.d->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     r.d->VSSetShader(vs.get());
     r.d->PSSetShader(ps.get());
-    const UINT instances = 16 * step_rate;
     if (mode == 0) {
-        r.d->DrawInstanced(6, instances, 0, 0);
+        r.d->DrawInstanced(6, 16, 0, 0);
     } else if (mode == 1) {
-        r.d->DrawIndexedInstanced(6, instances, 0, 0, 0);
+        r.d->DrawIndexedInstanced(6, 10, 0, 0, 3);
     } else {
-        r.d->DrawInstanced(6, 8 * step_rate, 0, 8 * step_rate);
+        r.d->DrawInstanced(6, 8, 0, 6);
     }
     r.cap_main(out);
 }

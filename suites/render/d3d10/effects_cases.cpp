@@ -295,13 +295,16 @@ const Registrar kEffectFrames{[] {
         s.fx.open(r, src, "Anim");
     };
     real.frame = [](Rig& r, S& s, unsigned f) {
-        r.clear(r.main, 0.06f, 0.06f, 0.1f, 1);
-        r.clear_depth(r.depth_main);
+        if (f == 0) {
+            r.clear(r.main, 0.06f, 0.06f, 0.1f, 1);
+            r.clear_depth(r.depth_main);
+        }
         if (s.fx.time != nullptr) s.fx.time->SetFloat(0.45f * static_cast<float>(f));
-        s.fx.set_tint(1.0f, 1.0f - 0.05f * static_cast<float>(f), 1.0f, 1.0f);
-        s.fx.draw_passes(r, camera(0.3f * static_cast<float>(f), 0.5f, 4.0f));
+        s.fx.set_tint(1.0f, 1.0f - 0.1f * static_cast<float>(f), 0.5f + 0.07f * static_cast<float>(f), 1.0f);
+        r.clear_depth(r.depth_main);
+        s.fx.draw_passes(r, camera(0.0f, 0.3f, 7.0f, 1.0f, 0.9f) * rr::Mat4::translate(-2.8f + 0.8f * static_cast<float>(f), 0.3f * std::sin(static_cast<float>(f)), 0) * rr::Mat4::rotate_x(0.3f * static_cast<float>(f)) * rr::Mat4::scale(0.55f, 0.55f, 0.55f));
     };
-    multi<S>(spec("effects", "per_frame_variables_animation").frames(8, {0, 3, 7}).tolerance(rr::Tolerance::raster(6, 1)), real);
+    multi<S>(spec("effects", "per_frame_variables_leave_a_trail").frames(8, {0, 3, 7}).tolerance(rr::Tolerance::raster(6, 1)), real);
 }};
 
 }  // namespace

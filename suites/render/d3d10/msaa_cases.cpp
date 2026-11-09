@@ -57,7 +57,7 @@ void draw_aa_scene(Rig& r) {
 
 const Registrar kMsaa{[] {
     for (UINT n : {2u, 4u, 8u}) {
-        single(spec("msaa", "color_resolve_" + std::to_string(n) + "x").tolerance(rr::Tolerance::raster(40, 1)),
+        single(spec("msaa", "color_resolve_" + std::to_string(n) + "x").tolerance(rr::Tolerance::raster(8, 1)),
                [n](Rig& r, rr::CaptureSet& o) {
                    msaa_target(r, n, DXGI_FORMAT_R8G8B8A8_UNORM, false);
                    if (!r.ok()) return;
@@ -66,13 +66,16 @@ const Registrar kMsaa{[] {
                },
                [n](Rig& r) { return needs_samples(r, DXGI_FORMAT_R8G8B8A8_UNORM, n); });
     }
-    single(spec("msaa", "float_target_resolve_4x").tolerance(rr::Tolerance::floats(0.15f, 0.05f).with_edge(1)), [](Rig& r, rr::CaptureSet& o) {
+    single(spec("msaa", "float_target_hdr_resolve_4x").tolerance(rr::Tolerance::floats(2e-3f, 2e-3f).with_edge(1).with_outliers(1e-3)), [](Rig& r, rr::CaptureSet& o) {
         msaa_target(r, 4, DXGI_FORMAT_R16G16B16A16_FLOAT, false);
         if (!r.ok()) return;
+        Com<ID3D10PixelShader> hdr = r.ps("float4 main(float4 p : SV_Position, float4 c : COLOR, float2 uv : TEXCOORD0) : SV_Target { return float4(c.rgb * 6.0, 1); }\n");
+        if (!r.ok()) return;
+        r.d->PSSetShader(hdr.get());
         draw_aa_scene(r);
         r.cap_main(o);
     }, [](Rig& r) { return needs_samples(r, DXGI_FORMAT_R16G16B16A16_FLOAT, 4); });
-    single(spec("msaa", "depth_test_intersecting_4x").tolerance(rr::Tolerance::raster(40, 1)), [](Rig& r, rr::CaptureSet& o) {
+    single(spec("msaa", "depth_test_intersecting_4x").tolerance(rr::Tolerance::raster(8, 1)), [](Rig& r, rr::CaptureSet& o) {
         msaa_target(r, 4, DXGI_FORMAT_R8G8B8A8_UNORM, true);
         if (!r.ok()) return;
         auto dd = Rig::depth_desc();
@@ -96,23 +99,23 @@ const Registrar kMsaa{[] {
             r.cap_main(o);
         });
     }
-    single(spec("msaa", "centroid_vs_linear_edges").tolerance(rr::Tolerance::raster(40, 1)), [](Rig& r, rr::CaptureSet& o) {
+    single(spec("msaa", "centroid_vs_linear_edges").tolerance(rr::Tolerance::raster(8, 1)), [](Rig& r, rr::CaptureSet& o) {
         msaa_target(r, 4, DXGI_FORMAT_R8G8B8A8_UNORM, false);
         if (!r.ok()) return;
-        Com<ID3D10PixelShader> centroid = r.ps("float4 main(float4 p : SV_Position, float4 c : COLOR, centroid float2 uv : TEXCOORD0) : SV_Target { return float4(uv.x, uv.y, 0.4, 1); }\n");
-        Com<ID3D10PixelShader> plain = r.ps("float4 main(float4 p : SV_Position, float4 c : COLOR, float2 uv : TEXCOORD0) : SV_Target { return float4(uv.x, uv.y, 0.4, 1); }\n");
+        const char* body = " float2 uv : TEXCOORD0) : SV_Target { float edge = (uv.x < 0 || uv.y < 0 || uv.x + uv.y > 1) ? 1 : 0; return float4(edge, uv.x, uv.y, 1); }\n";
+        Com<ID3D10PixelShader> centroid = r.ps(std::string("float4 main(float4 p : SV_Position, float4 c : COLOR, centroid") + body);
+        Com<ID3D10PixelShader> plain = r.ps(std::string("float4 main(float4 p : SV_Position, float4 c : COLOR,") + body);
         if (!r.ok()) return;
-        std::vector<Vtx> left = Geo::triangle(-0.45f, 0.0f, 0.5f, 0.5f, 1, 1, 1);
-        left[0].u = 0; left[0].v = 0; left[1].u = 1; left[1].v = 0; left[2].u = 0; left[2].v = 1;
+        std::vector<Vtx> left = {vtx(-0.9f, 0.7f, 0.5f, palette(0), 0, 0), vtx(-0.05f, 0.65f, 0.5f, palette(0), 1, 0), vtx(-0.85f, -0.8f, 0.5f, palette(0), 0, 1)};
         std::vector<Vtx> right = left;
-        for (auto& v : right) v.x += 0.9f;
+        for (auto& v : right) v.x += 0.95f;
         r.d->PSSetShader(plain.get());
         r.draw_std(left);
-        r.d->PSSetShader(centroid.get());
+        r.d->PSSetShader(r.mutate("msaa_centroid") ? plain.get() : centroid.get());
         r.draw_std(right);
         r.cap_main(o);
     }, [](Rig& r) { return needs_samples(r, DXGI_FORMAT_R8G8B8A8_UNORM, 4); });
-    single(spec("msaa", "per_sample_shading_sample_index", 1).tolerance(rr::Tolerance::raster(40, 1)), [](Rig& r, rr::CaptureSet& o) {
+    single(spec("msaa", "per_sample_shading_sample_index", 1).tolerance(rr::Tolerance::raster(8, 1)), [](Rig& r, rr::CaptureSet& o) {
         msaa_target(r, 4, DXGI_FORMAT_R8G8B8A8_UNORM, false, true);
         if (!r.ok()) return;
         Com<ID3D10PixelShader> ps = r.ps("float4 main(float4 p : SV_Position, float4 c : COLOR, float2 uv : TEXCOORD0, uint si : SV_SampleIndex) : SV_Target { return float4(si * 0.3 + 0.1, uv.x, 1 - si * 0.2, 1); }\n");
@@ -163,12 +166,17 @@ const Registrar kMsaa{[] {
         r.draw_std(full_uv());
         r.cap(o, "", out);
     });
-    single(spec("msaa", "resolve_subresource_srgb_target").tolerance(rr::Tolerance::raster(40, 1)), [](Rig& r, rr::CaptureSet& o) {
-        msaa_target(r, 4, DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, false);
+    single(spec("msaa", "resolve_subresource_srgb_target_linear_average", 1).tolerance(rr::Tolerance::blend(3)), [](Rig& r, rr::CaptureSet& o) {
+        msaa_target(r, 4, DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, false, true);
         if (!r.ok()) return;
-        draw_aa_scene(r);
+        r.clear(r.main, 0, 0, 0, 1);
+        Com<ID3D10PixelShader> white = r.ps("float4 main(float4 p : SV_Position, float4 c : COLOR, float2 uv : TEXCOORD0) : SV_Target { return float4(1, 1, 1, 1); }\n");
+        if (!r.ok()) return;
+        r.d->PSSetShader(white.get());
+        r.draw_std(Geo::triangle(-0.3f, 0.1f, 0.62f, 0.5f, 1, 1, 1));
+        r.draw_std(Geo::triangle(0.4f, -0.1f, 0.5f, 0.5f, 1, 1, 1));
         r.cap_main(o);
-    }, [](Rig& r) { return needs_samples(r, DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, 4); });
+    });
 }};
 
 }  // namespace

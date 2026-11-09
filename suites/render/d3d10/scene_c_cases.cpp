@@ -198,12 +198,17 @@ const Registrar kWater{[] {
         const rr::Mat4 mirror = rr::Mat4::translate(0, water_y, 0) * rr::Mat4::scale(1, -1, 1) * rr::Mat4::translate(0, -water_y, 0);
         ID3D10ShaderResourceView* none = nullptr;
         r.d->PSSetShaderResources(0, 1, &none);
-        r.bind_rt(s.reflection, &s.reflection_depth);
-        r.clear(s.reflection, 0.5f, 0.65f, 0.85f, 1);
-        r.clear_depth(s.reflection_depth);
         r.d->OMSetDepthStencilState(s.ds.get(), 0);
         s.pipe->bind(r);
-        for (const Obj& o : s.props->items(t)) s.pipe->draw(r, *o.mesh, vp, mirror * o.model, o.color);
+        if (f % 2 == 0) {
+            r.bind_rt(s.reflection, &s.reflection_depth);
+            r.clear(s.reflection, 0.5f, 0.65f, 0.85f, 1);
+            r.clear_depth(s.reflection_depth);
+            for (const Obj& o : s.props->items(t)) s.pipe->draw(r, *o.mesh, vp, mirror * o.model, o.color);
+        } else if (r.mutate("scene_water")) {
+            r.bind_rt(s.reflection, &s.reflection_depth);
+            r.clear(s.reflection, 0.5f, 0.65f, 0.85f, 1);
+        }
         r.bind_rt(r.main, &r.depth_main);
         r.clear(r.main, 0.5f, 0.65f, 0.85f, 1);
         r.clear_depth(r.depth_main);
@@ -223,7 +228,7 @@ const Registrar kWater{[] {
         r.d->OMSetBlendState(nullptr, bf, 0xffffffffu);
         r.d->PSSetShaderResources(0, 1, &none);
     };
-    multi<S>(spec("scene", "water_planar_reflection_with_ripples").size(256, 256).frames(3, {0, 1, 2}).tolerance(scene_tol(24, 1e-3, 64)), body);
+    multi<S>(spec("scene", "water_reflection_reused_on_odd_frames_with_ripples").size(256, 256).frames(4, {1, 2, 3}).tolerance(scene_tol(24, 1e-3, 64)), body);
 }};
 
 const Registrar kDecals{[] {
@@ -302,7 +307,10 @@ const Registrar kBlur{[] {
     struct S {
         std::unique_ptr<ObjPipe> pipe;
         std::unique_ptr<Props> props;
-        Target temp, accum;
+        Target temp, accum, trail[2];
+        Com<ID3D10ShaderResourceView> trail_view[2];
+        Com<ID3D10PixelShader> mix_ps;
+        int cur = 0;
         Depth temp_depth;
         Com<ID3D10ShaderResourceView> temp_view, accum_view;
         Com<ID3D10PixelShader> add_ps, out_ps;
@@ -318,6 +326,11 @@ const Registrar kBlur{[] {
         r.target(s.temp, 256, 256);
         r.target(s.accum, 256, 256, DXGI_FORMAT_R16G16B16A16_FLOAT);
         r.depth_target(s.temp_depth, 256, 256);
+        r.target(s.trail[0], 256, 256, DXGI_FORMAT_R16G16B16A16_FLOAT);
+        r.target(s.trail[1], 256, 256, DXGI_FORMAT_R16G16B16A16_FLOAT);
+        s.trail_view[0] = r.srv(s.trail[0].texture.get());
+        s.trail_view[1] = r.srv(s.trail[1].texture.get());
+        s.mix_ps = r.ps("Texture2D now : register(t0); Texture2D old : register(t1);\nfloat4 main(float4 p : SV_Position, float2 uv : TEXCOORD0) : SV_Target { int3 q = int3(p.xy, 0); return lerp(now.Load(q), old.Load(q), 0.55); }\n");
         s.temp_view = r.srv(s.temp.texture.get());
         s.accum_view = r.srv(s.accum.texture.get());
         s.add_ps = r.ps("Texture2D t : register(t0);\nfloat4 main(float4 p : SV_Position, float2 uv : TEXCOORD0) : SV_Target { return t.Load(int3(p.xy, 0)) * 0.25; }\n");
@@ -356,12 +369,20 @@ const Registrar kBlur{[] {
         }
         r.d->PSSetShaderResources(0, 1, &none);
         r.d->OMSetBlendState(nullptr, bf, 0xffffffffu);
-        r.bind_rt(r.main);
+        const int next = 1 - s.cur;
+        r.bind_rt(s.trail[next]);
         r.ps_srv(0, s.accum_view.get());
+        r.ps_srv(1, (f == 0 || r.mutate("scene_trail")) ? s.accum_view.get() : s.trail_view[s.cur].get());
+        r.fullscreen(s.mix_ps.get());
+        ID3D10ShaderResourceView* none2[2] = {};
+        r.d->PSSetShaderResources(0, 2, none2);
+        r.bind_rt(r.main);
+        r.ps_srv(0, s.trail_view[next].get());
         r.fullscreen(s.out_ps.get());
         r.d->PSSetShaderResources(0, 1, &none);
+        s.cur = next;
     };
-    multi<S>(spec("scene", "motion_blur_four_subframe_accumulation").size(256, 256).frames(6, {1, 3, 5}).tolerance(scene_tol(12, 5e-4, 40)), body);
+    multi<S>(spec("scene", "motion_blur_subframes_with_temporal_trail").size(256, 256).frames(6, {1, 3, 5}).tolerance(scene_tol(12, 5e-4, 40)), body);
 }};
 
 const Registrar kBillboards{[] {
@@ -453,7 +474,7 @@ const Registrar kBillboards{[] {
         r.draw_std(verts);
         r.d->OMSetBlendState(nullptr, bf, 0xffffffffu);
     };
-    multi<S>(spec("scene", "sorted_alpha_blended_billboards_over_opaque").size(256, 256).frames(3, {0, 1, 2}).tolerance(scene_tol(16, 5e-4, 40)), body);
+    multi_single<S>(spec("scene", "sorted_alpha_blended_billboards_over_opaque").size(256, 256).tolerance(scene_tol(16, 5e-4, 40)), body, {0, 1, 2});
 }};
 
 const Registrar kMirror{[] {
@@ -680,7 +701,7 @@ const Registrar kPost{[] {
         ID3D10ShaderResourceView* none[2] = {};
         r.d->PSSetShaderResources(0, 2, none);
     };
-    multi<S>(spec("scene", "post_chain_sobel_edges_and_3d_lut_grade").size(256, 256).frames(3, {0, 1, 2}).tolerance(scene_tol(12, 5e-4, 40)), body);
+    multi_single<S>(spec("scene", "post_chain_sobel_edges_and_3d_lut_grade").size(256, 256).tolerance(scene_tol(12, 5e-4, 40)), body, {0, 1, 2});
 }};
 
 const Registrar kStencilShadow{[] {

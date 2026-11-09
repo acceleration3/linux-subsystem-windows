@@ -137,9 +137,9 @@ const Registrar kCopy{[] {
         r.begin();
         r.use_std();
         Com<ID3D10Texture2D> a = r.rgba_tex(32, 32, rr::Pattern::gradient(32, 32), false, true);
-        Com<ID3D10Texture2D> b = r.rgba_tex(32, 32, rr::Pattern::gradient(32, 32), false, false);
+        Com<ID3D10Texture2D> b = r.rgba_tex(32, 32, rr::Pattern::checker(32, 32, 4, rr::Pattern::pack(200, 30, 30), rr::Pattern::pack(30, 30, 200)), false, false);
         if (!r.ok()) return;
-        r.d->CopyResource(b.get(), a.get());
+        if (!r.mutate("copy_typeless")) r.d->CopyResource(b.get(), a.get());
         show(r, o, b.get());
     });
     single(spec("copy", "copy_array_slice_mip_subresource").tolerance(tol), [](Rig& r, rr::CaptureSet& o) {

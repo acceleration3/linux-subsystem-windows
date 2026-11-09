@@ -48,7 +48,7 @@ const Registrar kPs{[] {
     single(spec("ps", "sv_primitive_id").tolerance(rr::Tolerance::raster(4, 1)), [](Rig& r, rr::CaptureSet& o) {
         r.begin(128, 128, DXGI_FORMAT_R8G8B8A8_UNORM, true);
         ScenePipe pipe(r, "float4 main(float4 p : SV_Position, float3 n : NORMAL, float2 uv : TEXCOORD0, float3 w : TEXCOORD1, uint id : SV_PrimitiveID) : SV_Target {\n"
-                          "  return float4(frac(id * 0.113), frac(id * 0.37 + 0.2), frac(id * 0.71 + 0.6), 1); }\n");
+                          "  uint h = id * 2654435761u + 5u; return float4(float((h >> 8) & 255u) / 255.0, float((h >> 16) & 255u) / 255.0, float((h >> 24) & 255u) / 255.0, 1); }\n");
         MeshBuffers m = upload(r, Geo::sphere(8, 12, 1.2f));
         r.no_cull();
         auto dd = Rig::depth_desc();
@@ -88,9 +88,20 @@ const Registrar kPs{[] {
         paint(r, o, "Texture2D t : register(t0); SamplerState s : register(s0);\n" PS_HEAD "  float4 v = t.Sample(s, uv * 2); if (v.g < 0.5) discard; clip(v.r - 0.2); return float4(v.rgb, 1); }\n",
               {view.get()}, {smp.get()}, full_uv());
     });
-    single(spec("ps", "derivatives_ddx_ddy").tolerance(rr::Tolerance::blend(4)), [](Rig& r, rr::CaptureSet& o) {
-        tilted_plane(r, o, "float4 main(float4 p : SV_Position, float3 n : NORMAL, float2 uv : TEXCOORD0, float3 w : TEXCOORD1) : SV_Target {\n"
-                           "  float2 dx = ddx(uv) * 128, dy = ddy(uv) * 128; return float4(abs(dx) * 4, abs(dy.y) * 4, 1); }\n");
+    single(spec("ps", "derivatives_ddx_ddy").tolerance(rr::Tolerance::blend(6)), [](Rig& r, rr::CaptureSet& o) {
+        r.begin(128, 128, DXGI_FORMAT_R8G8B8A8_UNORM, true);
+        ScenePipe pipe(r, "float4 main(float4 p : SV_Position, float3 n : NORMAL, float2 uv : TEXCOORD0, float3 w : TEXCOORD1) : SV_Target {\n"
+                          "  float3 dx = ddx(w) * 14, dy = ddy(w) * 14; return float4(abs(dx.x) + 0.15, abs(dy.y) + 0.15, abs(dx.z) + abs(dy.z), 1); }\n");
+        MeshBuffers m = upload(r, Geo::sphere(16, 24, 1.3f));
+        r.no_cull();
+        auto dd = Rig::depth_desc();
+        dd.DepthEnable = TRUE;
+        Com<ID3D10DepthStencilState> ds = r.depth(dd);
+        if (!r.ok()) return;
+        r.d->OMSetDepthStencilState(ds.get(), 0);
+        pipe.bind(r);
+        pipe.draw(r, m, camera(0.5f, 0.4f, 4.2f));
+        r.cap_main(o);
     });
     single(spec("ps", "derivatives_fwidth_and_branches").tolerance(rr::Tolerance::blend(4)), [](Rig& r, rr::CaptureSet& o) {
         tilted_plane(r, o, "float4 main(float4 p : SV_Position, float3 n : NORMAL, float2 uv : TEXCOORD0, float3 w : TEXCOORD1) : SV_Target {\n"
@@ -231,6 +242,58 @@ const Registrar kPs{[] {
         r.d->PSSetShaderResources(0, 24, raw);
         r.d->PSSetShader(ps.get());
         r.draw_std(full_uv());
+        r.cap_main(o);
+    });
+    for (int per_sample = 0; per_sample < 2; ++per_sample) {
+        single(spec("ps", per_sample ? "interpolation_sample_modifier_msaa" : "interpolation_linear_extrapolates_at_edges_msaa", 1).tolerance(rr::Tolerance::raster(10, 1)), [per_sample](Rig& r, rr::CaptureSet& o) {
+            D3D10_TEXTURE2D_DESC d = D3d10Tools::desc2d(128, 128, DXGI_FORMAT_R8G8B8A8_UNORM, D3D10_BIND_RENDER_TARGET | D3D10_BIND_SHADER_RESOURCE, D3D10_USAGE_DEFAULT, 0, 1, 1, 4);
+            d.SampleDesc.Quality = 0xffffffffu;
+            r.check(r.d->CreateTexture2D(&d, nullptr, r.main.texture.put()), "standard pattern target");
+            if (!r.ok()) return;
+            r.main.view = r.rtv(r.main.texture.get());
+            d.SampleDesc.Count = 1;
+            d.SampleDesc.Quality = 0;
+            r.check(r.d->CreateTexture2D(&d, nullptr, r.main.resolved.put()), "resolve target");
+            r.main.format = DXGI_FORMAT_R8G8B8A8_UNORM;
+            r.main.width = r.main.height = 128;
+            r.main.samples = 4;
+            if (!r.ok()) return;
+            r.bind_rt(r.main);
+            r.clear(r.main, 0.1f, 0.1f, 0.15f, 1);
+            r.viewport(128, 128);
+            r.use_std();
+            r.no_cull();
+            const std::string mod = per_sample ? "sample " : "";
+            Com<ID3D10PixelShader> ps = r.ps("float4 main(float4 p : SV_Position, float4 c : COLOR, " + mod + "float2 uv : TEXCOORD0) : SV_Target { float edge = (uv.x < 0 || uv.y < 0 || uv.x + uv.y > 1) ? 1 : 0; return float4(edge, uv.x, uv.y, 1); }\n");
+            if (!r.ok()) return;
+            r.d->PSSetShader(ps.get());
+            std::vector<Vtx> t = {vtx(-0.8f, 0.7f, 0.5f, palette(0), 0, 0), vtx(0.7f, 0.65f, 0.5f, palette(0), 1, 0), vtx(-0.75f, -0.8f, 0.5f, palette(0), 0, 1)};
+            r.draw_std(t);
+            r.cap_main(o);
+        });
+    }
+    single(spec("ps", "sv_coverage_output_mask_msaa", 1).tolerance(rr::Tolerance::raster(10, 1)), [](Rig& r, rr::CaptureSet& o) {
+        D3D10_TEXTURE2D_DESC d = D3d10Tools::desc2d(128, 128, DXGI_FORMAT_R8G8B8A8_UNORM, D3D10_BIND_RENDER_TARGET | D3D10_BIND_SHADER_RESOURCE, D3D10_USAGE_DEFAULT, 0, 1, 1, 4);
+        d.SampleDesc.Quality = 0xffffffffu;
+        r.check(r.d->CreateTexture2D(&d, nullptr, r.main.texture.put()), "standard pattern target");
+        if (!r.ok()) return;
+        r.main.view = r.rtv(r.main.texture.get());
+        d.SampleDesc.Count = 1;
+        d.SampleDesc.Quality = 0;
+        r.check(r.d->CreateTexture2D(&d, nullptr, r.main.resolved.put()), "resolve target");
+        r.main.format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        r.main.width = r.main.height = 128;
+        r.main.samples = 4;
+        if (!r.ok()) return;
+        r.bind_rt(r.main);
+        r.clear(r.main, 0.1f, 0.1f, 0.15f, 1);
+        r.viewport(128, 128);
+        r.use_std();
+        r.no_cull();
+        Com<ID3D10PixelShader> ps = r.ps("struct PO { float4 c : SV_Target; uint m : SV_Coverage; };\nPO main(float4 p : SV_Position, float4 c : COLOR, float2 uv : TEXCOORD0) { PO o; o.c = float4(0.9, 0.7 * uv.y + 0.2, 0.2, 1); o.m = uv.x < 0.5 ? 0x5 : 0xa; return o; }\n");
+        if (!r.ok()) return;
+        r.d->PSSetShader(ps.get());
+        r.draw_std(Geo::quad_uv(-0.8f, -0.8f, 0.8f, 0.8f, 0.5f, 0, 0, 1, 1));
         r.cap_main(o);
     });
     single(spec("ps", "sv_position_pixel_centers").tolerance(rr::Tolerance::exact()), [](Rig& r, rr::CaptureSet& o) {

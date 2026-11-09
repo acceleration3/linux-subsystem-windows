@@ -71,6 +71,8 @@ struct ShadowState {
     Com<ID3D10PixelShader> lit_ps;
     Com<ID3D10DepthStencilState> depth_on;
     Com<ID3D10RasterizerState> bias_raster;
+    rr::Mat4 lvp;
+    V3 dir{0, 1, 0};
 };
 
 const Registrar kShadow{[] {
@@ -100,19 +102,25 @@ const Registrar kShadow{[] {
     };
     body.frame = [](Rig& r, ShadowState& s, unsigned f) {
         const float t = 0.6f * static_cast<float>(f);
-        const V3 dir = norm3({std::cos(t * 0.7f) * 0.8f, 1.2f, std::sin(t * 0.7f) * 0.8f});
-        const V3 eye = {dir.x * 7, dir.y * 7, dir.z * 7};
-        const rr::Mat4 lvp = ortho(9, 9, 1.0f, 16.0f) * look_at(eye, {0, 0, 0}, {0, 1, 0});
-        s.pass->set_light(r, lvp, dir, eye);
+        const bool refresh = (f % 2) == 0;
         s.pass->bind(r);
         r.d->OMSetDepthStencilState(s.depth_on.get(), 0);
-        ID3D10ShaderResourceView* none = nullptr;
-        r.d->PSSetShaderResources(0, 1, &none);
-        r.d->OMSetRenderTargets(0, nullptr, s.map_dsv.get());
-        r.d->ClearDepthStencilView(s.map_dsv.get(), D3D10_CLEAR_DEPTH, 1.0f, 0);
-        r.viewport(512, 512);
-        r.d->PSSetShader(nullptr);
-        s.pass->draw(r, lvp, t);
+        if (refresh) {
+            const float lt = t;
+            s.dir = norm3({std::cos(lt * 0.7f) * 0.8f, 1.2f, std::sin(lt * 0.7f) * 0.8f});
+            const V3 eye = {s.dir.x * 7, s.dir.y * 7, s.dir.z * 7};
+            s.lvp = ortho(9, 9, 1.0f, 16.0f) * look_at(eye, {0, 0, 0}, {0, 1, 0});
+            s.pass->set_light(r, s.lvp, s.dir, eye);
+            ID3D10ShaderResourceView* none = nullptr;
+            r.d->PSSetShaderResources(0, 1, &none);
+            r.d->OMSetRenderTargets(0, nullptr, s.map_dsv.get());
+            r.d->ClearDepthStencilView(s.map_dsv.get(), D3D10_CLEAR_DEPTH, 1.0f, 0);
+            r.viewport(512, 512);
+            r.d->PSSetShader(nullptr);
+            s.pass->draw(r, s.lvp, t);
+        } else if (r.mutate("scene_shadow")) {
+            r.d->ClearDepthStencilView(s.map_dsv.get(), D3D10_CLEAR_DEPTH, 1.0f, 0);
+        }
         r.bind_rt(r.main, &r.depth_main);
         r.clear(r.main, 0.4f, 0.55f, 0.75f, 1);
         r.clear_depth(r.depth_main);
@@ -120,7 +128,7 @@ const Registrar kShadow{[] {
         r.d->PSSetShader(s.lit_ps.get());
         r.ps_srv(0, s.map_srv.get());
         r.ps_smp(0, s.cmp.get());
-        s.pass->draw(r, camera(0.5f, 0.6f, 7.0f, 1.0f, 0.9f), t);
+        s.pass->draw(r, camera(0.5f + 0.08f * static_cast<float>(f), 0.6f, 7.0f, 1.0f, 0.9f), t);
     };
     body.capture = [](Rig& r, ShadowState& s, unsigned, rr::CaptureSet& o) {
         r.cap_main(o);
@@ -130,7 +138,7 @@ const Registrar kShadow{[] {
         d.format = DXGI_FORMAT_D32_FLOAT;
         r.cap_depth(o, "shadow_map", d);
     };
-    multi<ShadowState>(spec("scene", "shadow_map_pcf_light_orbit").size(256, 256).frames(6, {0, 3, 5}).tolerance(scene_tol(24)).tolerance_for("shadow_map", rr::Tolerance::floats(2e-3f, 2e-3f).with_outliers(1e-4)), body);
+    multi<ShadowState>(spec("scene", "shadow_map_cached_for_two_frames_light_orbit").size(256, 256).frames(6, {1, 3, 5}).tolerance(scene_tol(24)).tolerance_for("shadow_map", rr::Tolerance::floats(2e-3f, 2e-3f).with_outliers(1e-4)), body);
 }};
 
 struct CubeShadowState {
@@ -187,8 +195,9 @@ const Registrar kCubeShadow{[] {
         r.no_cull();
     };
     body.frame = [](Rig& r, CubeShadowState& s, unsigned f) {
-        const float t = 0.9f * static_cast<float>(f);
+        const float t = 0.9f * static_cast<float>(f & ~1u);
         const V3 lp = {1.6f * std::cos(t), 1.8f, 1.6f * std::sin(t)};
+        const bool refresh = (f % 2) == 0;
         const V3 dirs[6] = {{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}};
         const V3 ups[6] = {{0, 1, 0}, {0, 1, 0}, {0, 0, -1}, {0, 0, 1}, {0, 1, 0}, {0, 1, 0}};
         rr::Mat4 proj = rr::Mat4::perspective_d3d(1.5707963f, 1.0f, 0.1f, 30.0f);
@@ -203,6 +212,7 @@ const Registrar kCubeShadow{[] {
         s.pass->bind(r);
         r.gs_cb(2, s.faces.get());
         r.gs_cb(1, s.pass->light.get());
+        if (refresh) {
         ID3D10ShaderResourceView* none = nullptr;
         r.d->PSSetShaderResources(0, 1, &none);
         ID3D10RenderTargetView* rt = s.rtv.get();
@@ -216,6 +226,7 @@ const Registrar kCubeShadow{[] {
         r.d->PSSetShader(s.dist_ps.get());
         s.pass->draw(r, rr::Mat4::identity(), 0.5f);
         r.d->GSSetShader(nullptr);
+        }
         r.bind_rt(r.main, &r.depth_main);
         r.clear(r.main, 0.02f, 0.02f, 0.04f, 1);
         r.clear_depth(r.depth_main);
@@ -223,9 +234,9 @@ const Registrar kCubeShadow{[] {
         r.d->PSSetShader(s.lit_ps.get());
         r.ps_srv(0, s.srv.get());
         r.ps_smp(0, s.point.get());
-        s.pass->draw(r, camera(0.4f, 0.55f, 7.0f, 1.0f, 0.9f), 0.5f);
+        s.pass->draw(r, camera(0.4f + 0.1f * static_cast<float>(f), 0.55f, 7.0f, 1.0f, 0.9f), 0.5f);
     };
-    multi<CubeShadowState>(spec("scene", "point_light_cube_shadow_gs_replication").size(256, 256).frames(4, {0, 2, 3}).tolerance(scene_tol(30)), body);
+    multi<CubeShadowState>(spec("scene", "point_light_cube_shadow_cached_for_two_frames").size(256, 256).frames(4, {1, 2, 3}).tolerance(scene_tol(30)), body);
 }};
 
 struct DeferredState {
@@ -234,7 +245,10 @@ struct DeferredState {
     Com<ID3D10PixelShader> gbuf_ps, light_ps, ambient_ps;
     Com<ID3D10BlendState> additive, opaque;
     Com<ID3D10DepthStencilState> depth_on, depth_off;
-    Com<ID3D10Buffer> light_cb;
+    Com<ID3D10Buffer> light_cb, blend_cb;
+    Target scene_rt, history;
+    Com<ID3D10PixelShader> temporal_ps;
+    Com<ID3D10SamplerState> point;
 };
 
 const Registrar kDeferred{[] {
@@ -264,6 +278,10 @@ const Registrar kDeferred{[] {
         s.depth_on = r.depth(dd);
         s.depth_off = r.depth(Rig::depth_desc());
         s.light_cb = r.cbuf(32);
+        s.blend_cb = r.cbuf(16);
+        r.target(s.scene_rt, 256, 256, DXGI_FORMAT_R8G8B8A8_UNORM);
+        r.target(s.history, 256, 256, DXGI_FORMAT_R8G8B8A8_UNORM);
+        s.temporal_ps = r.ps("cbuffer W : register(b0) { float4 w; };\nTexture2D now : register(t0); Texture2D old : register(t1);\nfloat4 main(float4 p : SV_Position, float2 uv : TEXCOORD0) : SV_Target { int3 q = int3(p.xy, 0); return lerp(now.Load(q), old.Load(q), w.x); }\n");
         r.no_cull();
     };
     body.frame = [](Rig& r, DeferredState& s, unsigned f) {
@@ -279,8 +297,8 @@ const Registrar kDeferred{[] {
         r.d->OMSetDepthStencilState(s.depth_on.get(), 0);
         r.d->PSSetShader(s.gbuf_ps.get());
         s.pass->draw(r, camera(0.5f, 0.55f, 7.0f, 1.0f, 0.9f), 0.4f);
-        r.bind_rt(r.main);
-        r.clear(r.main, 0.0f, 0.0f, 0.0f, 1);
+        r.bind_rt(s.scene_rt);
+        r.clear(s.scene_rt, 0.0f, 0.0f, 0.0f, 1);
         r.d->OMSetDepthStencilState(s.depth_off.get(), 0);
         ID3D10ShaderResourceView* srvs[3];
         Com<ID3D10ShaderResourceView> keep[3];
@@ -303,17 +321,30 @@ const Registrar kDeferred{[] {
         r.d->OMSetBlendState(s.opaque.get(), f4, 0xffffffffu);
         ID3D10ShaderResourceView* none[3] = {};
         r.d->PSSetShaderResources(0, 3, none);
+        Com<ID3D10ShaderResourceView> now = r.srv(s.scene_rt.texture.get());
+        Com<ID3D10ShaderResourceView> old = r.srv(s.history.texture.get());
+        const float weight[4] = {(f == 0 || r.mutate("scene_history")) ? 0.0f : 0.5f, 0, 0, 0};
+        r.d->UpdateSubresource(s.blend_cb.get(), 0, nullptr, weight, 0, 0);
+        r.bind_rt(r.main);
+        r.ps_cb(0, s.blend_cb.get());
+        r.ps_srv(0, now.get());
+        r.ps_srv(1, old.get());
+        r.fullscreen(s.temporal_ps.get());
+        r.d->PSSetShaderResources(0, 2, none);
+        r.d->CopyResource(s.history.texture.get(), r.main.texture.get());
     };
     body.capture = [](Rig& r, DeferredState& s, unsigned, rr::CaptureSet& o) {
         r.cap_main(o);
         r.cap(o, "normal", s.normal);
     };
-    multi<DeferredState>(spec("scene", "deferred_gbuffer_six_point_lights").size(256, 256).frames(4, {0, 2, 3}).tolerance(scene_tol(12)).tolerance_for("normal", rr::Tolerance::floats(0.03f, 0.03f).with_edge(1)), body);
+    multi<DeferredState>(spec("scene", "deferred_gbuffer_lights_with_temporal_history").size(256, 256).frames(4, {0, 2, 3}).tolerance(scene_tol(12)).tolerance_for("normal", rr::Tolerance::floats(0.03f, 0.03f).with_edge(1)), body);
 }};
 
 struct HdrState {
     std::unique_ptr<WorldPass> pass;
-    Target hdr, half_a, half_b;
+    Target hdr, half_a, half_b, bloom_hist;
+    Com<ID3D10ShaderResourceView> hist_view;
+    Com<ID3D10PixelShader> hist_ps;
     Com<ID3D10PixelShader> scene_ps, bright_ps, blur_ps, combine_ps;
     Com<ID3D10Buffer> params;
     Com<ID3D10SamplerState> linear_clamp;
@@ -328,6 +359,10 @@ const Registrar kHdr{[] {
         r.target(s.hdr, 256, 256, DXGI_FORMAT_R16G16B16A16_FLOAT);
         r.target(s.half_a, 128, 128, DXGI_FORMAT_R16G16B16A16_FLOAT);
         r.target(s.half_b, 128, 128, DXGI_FORMAT_R16G16B16A16_FLOAT);
+        r.target(s.bloom_hist, 128, 128, DXGI_FORMAT_R16G16B16A16_FLOAT);
+        s.hist_view = r.srv(s.bloom_hist.texture.get());
+        r.clear(s.bloom_hist, 0, 0, 0, 1);
+        s.hist_ps = r.ps("Texture2D now : register(t0); Texture2D old : register(t1);\nfloat4 main(float4 p : SV_Position, float2 uv : TEXCOORD0) : SV_Target { int3 q = int3(p.xy, 0); return float4(max(now.Load(q).rgb, old.Load(q).rgb * 0.7), 1); }\n");
         s.scene_ps = r.ps("cbuffer Obj : register(b0) { float4x4 vp; float4x4 model; float4 color; float4 extra; };\ncbuffer Light : register(b1) { float4x4 lvp; float4 ldir; float4 lpos; };\n"
                           "float4 main(float4 p : SV_Position, float3 n : NORMAL, float2 uv : TEXCOORD0, float3 w : TEXCOORD1, float4 sh : TEXCOORD2) : SV_Target {\n"
                           "  float d = saturate(dot(normalize(n), normalize(ldir.xyz))); float spec = pow(saturate(dot(normalize(n), normalize(ldir.xyz + float3(0, 0, 1)))), 24) * 6; return float4(color.rgb * (0.2 + 1.8 * d) + spec, 1); }\n");
@@ -382,15 +417,23 @@ const Registrar kHdr{[] {
         }
         ID3D10ShaderResourceView* none2[2] = {};
         r.d->PSSetShaderResources(0, 2, none2);
+        {
+            r.bind_rt(s.half_b);
+            r.ps_srv(0, a_view.get());
+            r.ps_srv(1, s.hist_view.get());
+            r.fullscreen(s.hist_ps.get());
+            r.d->PSSetShaderResources(0, 2, none2);
+            if (!r.mutate("scene_history")) r.d->CopyResource(s.bloom_hist.texture.get(), s.half_b.texture.get());
+        }
         r.d->UpdateSubresource(s.params.get(), 0, nullptr, h, 0, 0);
         r.bind_rt(r.main);
         r.viewport(256, 256);
         r.ps_srv(0, hdr_view.get());
-        r.ps_srv(1, a_view.get());
+        r.ps_srv(1, b_view.get());
         r.fullscreen(s.combine_ps.get());
         r.d->PSSetShaderResources(0, 2, none2);
     };
-    multi<HdrState>(spec("scene", "hdr_bloom_tonemap_chain").size(256, 256).frames(3, {0, 1, 2}).tolerance(rr::Tolerance::filter(10, 0.01)), body);
+    multi<HdrState>(spec("scene", "hdr_bloom_with_decaying_bloom_history").size(256, 256).frames(3, {0, 1, 2}).tolerance(rr::Tolerance::filter(10, 0.01)), body);
 }};
 
 struct SkinVertex {
@@ -483,7 +526,7 @@ const Registrar kSkin{[] {
         r.d->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
         r.d->DrawIndexed(s.count, 0, 0);
     };
-    multi<SkinState>(spec("scene", "skinned_tube_bone_palette_animation").size(256, 256).frames(8, {0, 4, 7}).tolerance(scene_tol(8)), body);
+    multi_single<SkinState>(spec("scene", "skinned_tube_bone_palette_animation").size(256, 256).tolerance(scene_tol(8)), body, {0, 4, 7});
 }};
 
 MeshData cone(unsigned segments, float radius, float height, float y0) {
@@ -644,7 +687,7 @@ const Registrar kTerrain{[] {
         r.d->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
         r.d->DrawIndexed(s.count, 0, 0);
     };
-    multi<TerrainState>(spec("scene", "terrain_vertex_texture_displacement_flyover").size(256, 256).frames(4, {0, 3}).tolerance(scene_tol(14)), body);
+    multi_single<TerrainState>(spec("scene", "terrain_vertex_texture_displacement_flyover").size(256, 256).tolerance(scene_tol(14)), body, {0, 3});
 }};
 
 }  // namespace
