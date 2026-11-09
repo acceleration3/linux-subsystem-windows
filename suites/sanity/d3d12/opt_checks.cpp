@@ -2,11 +2,40 @@
 
 #include "sanity/d3d12/kit.hpp"
 
+#include "core/text.hpp"
+#include "support/d3d12_frame.hpp"
+#include "support/d3d12_root.hpp"
+#include "support/dxc_compiler.hpp"
+
 #include <cstring>
 
 namespace lsw::suites::sanity::d3d12 {
 
 namespace {
+
+template <D3D12_PIPELINE_STATE_SUBOBJECT_TYPE Type, typename T>
+struct alignas(void*) Sub {
+    D3D12_PIPELINE_STATE_SUBOBJECT_TYPE type = Type;
+    T value{};
+
+    Sub& operator=(const T& assigned) {
+        value = assigned;
+        return *this;
+    }
+};
+
+struct MeshStream {
+    Sub<D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_ROOT_SIGNATURE, ID3D12RootSignature*> root;
+    Sub<D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_AS, D3D12_SHADER_BYTECODE> as;
+    Sub<D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_MS, D3D12_SHADER_BYTECODE> ms;
+    Sub<D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_PS, D3D12_SHADER_BYTECODE> ps;
+    Sub<D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_BLEND, D3D12_BLEND_DESC> blend;
+    Sub<D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_SAMPLE_MASK, UINT> mask;
+    Sub<D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_RASTERIZER, D3D12_RASTERIZER_DESC> rasterizer;
+    Sub<D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_DEPTH_STENCIL, D3D12_DEPTH_STENCIL_DESC> depth_stencil;
+    Sub<D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_RENDER_TARGET_FORMATS, D3D12_RT_FORMAT_ARRAY> targets;
+    Sub<D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_SAMPLE_DESC, DXGI_SAMPLE_DESC> sample;
+};
 
 const char* kRateVs =
     "float4 main(uint id : SV_VertexID) : SV_Position {\n"
@@ -257,9 +286,141 @@ Outcome OptChecks::mesh_shaders(Context& context) {
         if (!problems.empty()) {
             return {};
         }
-        return FAILED(result) || options.MeshShaderTier == D3D12_MESH_SHADER_TIER_NOT_SUPPORTED
-                   ? "mesh shaders are not reported; their pipelines need DXIL, which this build cannot produce"
-                   : "mesh shaders are reported; rendering with them needs DXIL shaders, which this build cannot produce (no dxc)";
+        if (FAILED(result) || options.MeshShaderTier == D3D12_MESH_SHADER_TIER_NOT_SUPPORTED) {
+            return "mesh shaders are not reported; their pipelines need DXIL, which the build compiles only when mesh shaders exist";
+        }
+        DxcCompiler dxc;
+        std::string error;
+        if (!dxc.open(error)) {
+            return "mesh shaders are reported; rendering with them needs a DXIL compiler: " + error;
+        }
+        Com<ID3D12Device2> device2;
+        rig.device()->QueryInterface(__uuidof(ID3D12Device2), device2.put_void());
+        if (!device2) {
+            problems.add("mesh shaders are reported but ID3D12Device2 is not exposed");
+            return {};
+        }
+        D3d12Root empty;
+        ID3D12RootSignature* signature = empty.build(rig, error);
+        if (signature == nullptr) {
+            problems.add("the root signature cannot be built: " + error);
+            return {};
+        }
+        static const char* const kMeshBody =
+            "struct V { float4 pos : SV_Position; float3 col : COLOR; };\n"
+            "void shape(uint t, uint g, float3 colour, out vertices V v[4], out indices uint3 tri[2]) {\n"
+            "  SetMeshOutputCounts(4, 2); float x0 = g == 0 ? -1.0 : 0.0; float x1 = x0 + 1.0;\n"
+            "  if (t < 4) { v[t].pos = float4((t & 1) ? x1 : x0, (t & 2) ? 1.0 : -1.0, 0, 1); v[t].col = colour; }\n"
+            "  if (t < 2) tri[t] = (t == 0) ? uint3(0, 1, 2) : uint3(1, 3, 2);\n"
+            "}\n";
+        const std::string mesh_only = std::string(kMeshBody) +
+            "[numthreads(4, 1, 1)][outputtopology(\"triangle\")]\n"
+            "void main(uint t : SV_GroupThreadID, uint g : SV_GroupID, out vertices V v[4], out indices uint3 tri[2]) { shape(t, g, float3(1, 1, 0), v, tri); }\n";
+        const std::string mesh_payload = std::string("struct Payload { uint r[2]; uint gr[2]; };\n") + kMeshBody +
+            "[numthreads(4, 1, 1)][outputtopology(\"triangle\")]\n"
+            "void main(uint t : SV_GroupThreadID, uint g : SV_GroupID, in payload Payload pl, out vertices V v[4], out indices uint3 tri[2]) {\n"
+            "  shape(t, g, float3(pl.r[g], pl.gr[g], 0) / 255.0, v, tri); }\n";
+        const char* const kAmplification =
+            "struct Payload { uint r[2]; uint gr[2]; };\n"
+            "[numthreads(1, 1, 1)] void main() { Payload p; p.r[0] = 255; p.r[1] = 0; p.gr[0] = 0; p.gr[1] = 255; DispatchMesh(2, 1, 1, p); }\n";
+        const char* const kPixel = "struct V { float4 pos : SV_Position; float3 col : COLOR; };\nfloat4 main(V v) : SV_Target { return float4(v.col, 1); }\n";
+        D3d12Tools::Bytes as_code;
+        D3d12Tools::Bytes only_code;
+        D3d12Tools::Bytes payload_code;
+        D3d12Tools::Bytes ps_code;
+        std::string log;
+        if (!dxc.compile(kAmplification, L"main", L"as_6_5", as_code, log) || !dxc.compile(mesh_only, L"main", L"ms_6_5", only_code, log) ||
+            !dxc.compile(mesh_payload, L"main", L"ms_6_5", payload_code, log) || !dxc.compile(kPixel, L"main", L"ps_6_0", ps_code, log)) {
+            problems.add("compiling the mesh shader sources failed: " + log);
+            return {};
+        }
+        const D3D12_GRAPHICS_PIPELINE_STATE_DESC base = D3d12Tools::graphics_desc(signature, {}, {}, DXGI_FORMAT_R8G8B8A8_UNORM);
+        auto build = [&](const D3d12Tools::Bytes* amplification, const D3d12Tools::Bytes& mesh, std::string& why) -> ID3D12PipelineState* {
+            MeshStream stream;
+            stream.root = signature;
+            stream.as = amplification != nullptr ? D3d12Tools::bytecode(*amplification) : D3D12_SHADER_BYTECODE{};
+            stream.ms = D3d12Tools::bytecode(mesh);
+            stream.ps = D3d12Tools::bytecode(ps_code);
+            stream.blend = base.BlendState;
+            stream.mask = 0xffffffffu;
+            D3D12_RASTERIZER_DESC raster = base.RasterizerState;
+            raster.CullMode = D3D12_CULL_MODE_NONE;
+            stream.rasterizer = raster;
+            stream.depth_stencil = base.DepthStencilState;
+            D3D12_RT_FORMAT_ARRAY formats{};
+            formats.NumRenderTargets = 1;
+            formats.RTFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+            stream.targets = formats;
+            stream.sample = DXGI_SAMPLE_DESC{1, 0};
+            D3D12_PIPELINE_STATE_STREAM_DESC desc{sizeof stream, &stream};
+            Com<ID3D12PipelineState> created;
+            const HRESULT made = device2->CreatePipelineState(&desc, __uuidof(ID3D12PipelineState), created.put_void());
+            if (FAILED(made)) {
+                why = "CreatePipelineState returned " + Kit::hr(made);
+                return nullptr;
+            }
+            return rig.hold(std::move(created));
+        };
+        const auto draw = [&](const std::string& label, ID3D12PipelineState* state, std::uint32_t left, std::uint32_t right) {
+            D3d12Frame frame;
+            TexelImage image;
+            std::string local;
+            bool have6 = true;
+            if (!frame.open(rig, 64, 64, local) ||
+                !frame.run(
+                    [&](ID3D12GraphicsCommandList* list) {
+                        Com<ID3D12GraphicsCommandList6> list6;
+                        list->QueryInterface(__uuidof(ID3D12GraphicsCommandList6), list6.put_void());
+                        if (!list6) {
+                            have6 = false;
+                            return;
+                        }
+                        frame.bind(list);
+                        frame.clear(list, 0, 0, 1, 1);
+                        list->SetGraphicsRootSignature(signature);
+                        list->SetPipelineState(state);
+                        list6->DispatchMesh(2, 1, 1);
+                    },
+                    local) ||
+                !frame.read(image, local)) {
+                problems.add(label + ": " + local);
+                return;
+            }
+            if (!have6) {
+                problems.add("mesh shaders are reported but ID3D12GraphicsCommandList6 is not exposed");
+                return;
+            }
+            std::size_t wrong = 0;
+            std::string first;
+            for (UINT y = 0; y < 64; ++y) {
+                for (UINT x = 0; x < 64; ++x) {
+                    const std::uint32_t want = x < 32 ? left : right;
+                    if (Kit::rgba_pixel(image, x, y) != want) {
+                        if (wrong++ == 0) {
+                            first = " first at (" + std::to_string(x) + "," + std::to_string(y) + ") got 0x" + Text::hex(Kit::rgba_pixel(image, x, y), 8) + " expected 0x" + Text::hex(want, 8);
+                        }
+                    }
+                }
+            }
+            if (wrong != 0) {
+                problems.add(label + ": " + std::to_string(wrong) + " of 4096 pixels differ," + first);
+            }
+        };
+        std::string why;
+        ID3D12PipelineState* only_state = build(nullptr, only_code, why);
+        if (only_state == nullptr) {
+            problems.add("the mesh shader pipeline: " + why);
+            return {};
+        }
+        draw("mesh shader pipeline", only_state, Kit::rgba(255, 255, 0, 255), Kit::rgba(255, 255, 0, 255));
+        ID3D12PipelineState* amplified_state = build(&as_code, payload_code, why);
+        if (amplified_state == nullptr) {
+            problems.add("the amplification and mesh shader pipeline: " + why);
+            return {};
+        }
+        draw("amplification and mesh shader pipeline", amplified_state, Kit::rgba(255, 0, 0, 255), Kit::rgba(0, 255, 0, 255));
+        context.measure("d3d12.mesh_shaders_rendered", true);
+        return {};
     });
 }
 
