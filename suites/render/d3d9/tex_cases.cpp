@@ -48,7 +48,8 @@ void format_cases() {
     for (const FormatInfo& f : formats) {
         Cases::single(rr::CaseSpec("tex", std::string("format_") + f.name).tolerance(rr::Tolerance::blend(4)), [f](Ctx& c) {
             backdrop(c);
-            Com<IDirect3DTexture9> t = c.texture(32, 32, 1, 0, f.format, (std::strcmp(f.name, "ati1") == 0 || std::strcmp(f.name, "ati2") == 0) ? D3DPOOL_DEFAULT : D3DPOOL_MANAGED, alpha_rainbow());
+            const bool ati = std::strcmp(f.name, "ati1") == 0 || std::strcmp(f.name, "ati2") == 0;
+            Com<IDirect3DTexture9> t = c.texture(32, 32, 1, ati ? D3DUSAGE_DYNAMIC : 0, f.format, ati ? D3DPOOL_DEFAULT : D3DPOOL_MANAGED, alpha_rainbow());
             c.tex(0, t.get());
             sampler_linear(c, 0, f.linear);
             c.rs(D3DRS_ALPHABLENDENABLE, TRUE);
@@ -60,7 +61,7 @@ void format_cases() {
                 return std::string();
             }
             Com<IDirect3DTexture9> probe;
-            return SUCCEEDED(device->CreateTexture(32, 32, 1, 0, f.format, D3DPOOL_DEFAULT, probe.put(), nullptr)) ? std::string() : std::string("creating the ") + f.name + " texture";
+            return SUCCEEDED(device->CreateTexture(32, 32, 1, D3DUSAGE_DYNAMIC, f.format, D3DPOOL_DEFAULT, probe.put(), nullptr)) ? std::string() : std::string("creating the ") + f.name + " texture";
         }}));
     }
 }

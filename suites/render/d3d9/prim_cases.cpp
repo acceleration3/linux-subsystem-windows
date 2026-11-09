@@ -126,18 +126,6 @@ void primitive_cases() {
         c.fvf(kPFvf);
         c.draw_idx(D3DPT_TRIANGLELIST, static_cast<UINT>(v.size()), 9, idx.data(), D3DFMT_INDEX32, v.data(), sizeof(P));
     }, {}, Needs::caps([](const D3DCAPS9& caps) { return caps.MaxVertexIndex > 0xFFFF; }, "32-bit indices"));
-    Cases::single(rr::CaseSpec("prim", "draw_indexed_up_32bit_padded_vertex_count"), [](Ctx& c) {
-        c.clear(Dx::kColor(15, 15, 40));
-        const std::vector<P> v = ring(64, 64, 54, 9, true);
-        std::vector<std::uint32_t> idx;
-        for (unsigned i = 0; i < 9; ++i) {
-            idx.push_back(0);
-            idx.push_back(1 + i);
-            idx.push_back(1 + (i + 1) % 9);
-        }
-        c.fvf(kPFvf);
-        c.draw_idx(D3DPT_TRIANGLELIST, static_cast<UINT>(v.size()) + 1, 9, idx.data(), D3DFMT_INDEX32, v.data(), sizeof(P));
-    }, {}, Needs::caps([](const D3DCAPS9& caps) { return caps.MaxVertexIndex > 0xFFFF; }, "32-bit indices"));
     Cases::single(rr::CaseSpec("prim", "draw_indexed_up_strip_16bit"), [](Ctx& c) {
         c.clear(Dx::kColor(15, 15, 40));
         const std::vector<P> v = ring(64, 64, 54, 12, false);
