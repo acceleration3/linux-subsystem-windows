@@ -27,6 +27,7 @@ struct VulkanDevice {
     bool luid_valid = false;
     bool name_terminated = true;
     LUID luid{};
+    std::uint8_t uuid[16] = {};
     std::vector<VulkanHeap> heaps;
 
     [[nodiscard]] std::uint64_t largest_device_local() const;

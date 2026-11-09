@@ -22,6 +22,25 @@ std::filesystem::path RefCheck::root() {
     return exe.parent_path() / "render-refs";
 }
 
+std::filesystem::path RefCheck::store_root(const GuestIdentity& guest) {
+    const std::filesystem::path base = root();
+    std::error_code error;
+    const std::string& uuid = guest.api == "gl" ? guest.gl_uuid : guest.vulkan_uuid;
+    if (!uuid.empty() && std::filesystem::exists(base / uuid / "device.json", error)) {
+        return base / uuid;
+    }
+    if (guest.api == "gl" && !guest.gl_uuid.empty()) {
+        for (const auto& entry : std::filesystem::directory_iterator(base, error)) {
+            rr::DeviceInfo info;
+            std::string ignored;
+            if (entry.is_directory(error) && rr::RefStore(entry.path()).read_device(info, ignored) && info.gl_uuid == guest.gl_uuid) {
+                return entry.path();
+            }
+        }
+    }
+    return base;
+}
+
 std::string RefCheck::hex(const unsigned char* bytes, std::size_t count) {
     std::string out;
     char text[4];

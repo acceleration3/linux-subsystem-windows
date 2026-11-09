@@ -3,6 +3,7 @@
 #include "render/d3d/convert.hpp"
 #include "support/d3d9_tools.hpp"
 #include "support/dyn_library.hpp"
+#include "support/target_adapter.hpp"
 
 #include <cstring>
 
@@ -69,6 +70,12 @@ OpenStatus Kit::open(bool use_warp, const rr::CaseSpec& spec, std::string& error
     warp = use_warp;
     const bool ex = spec.variant() != 0;
     if (!warp) {
+        AvAdapter target;
+        std::string pick_error;
+        if (TargetAdapter::pick(target, pick_error) && !target.has_outputs()) {
+            error = "Direct3D 9 lists only adapters that drive a display, and " + target.name + " (LUID " + target.luid_text() + ") drives none";
+            return OpenStatus::Unsupported;
+        }
         if (!rig_.open(ex, error)) {
             return OpenStatus::Failed;
         }

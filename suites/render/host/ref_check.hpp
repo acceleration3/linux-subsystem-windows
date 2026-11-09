@@ -19,6 +19,8 @@ class RefCheck {
 public:
     [[nodiscard]] static std::filesystem::path root();
 
+    [[nodiscard]] static std::filesystem::path store_root(const GuestIdentity& guest);
+
     [[nodiscard]] static std::string hex(const unsigned char* bytes, std::size_t count);
 
     [[nodiscard]] static bool open_store(rr::RefStore& store, std::string& error);
@@ -38,7 +40,7 @@ template <class Kit>
 Outcome RefCheck::run(Context& context, const typename rr::CaseTable<Kit>::Entry& entry, Kit& kit, const std::string& open_unsupported,
                       const GuestIdentity& guest) {
     const std::string id = entry.spec.id(guest.api);
-    rr::RefStore store(root());
+    rr::RefStore store(store_root(guest));
     std::string error;
     if (!open_store(store, error) || !device_matches(store, guest, error)) {
         return Outcome::fail(error);

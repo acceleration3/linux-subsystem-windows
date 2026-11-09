@@ -135,7 +135,7 @@ struct GpuChoice {
     std::string how;
 };
 
-std::string domain_gpu() {
+std::vector<std::string> domain_gpus() {
     FILE* pipe = popen("virsh -c qemu:///session dumpxml lsw 2>/dev/null", "r");
     if (pipe == nullptr) {
         return {};
@@ -146,16 +146,28 @@ std::string domain_gpu() {
         xml += buffer;
     }
     pclose(pipe);
-    const std::size_t device = xml.find("virtio-gpu-av-pci,id=lsw-gpu,");
-    if (device == std::string::npos) {
-        return {};
+    std::vector<std::string> found;
+    std::size_t device = 0;
+    while ((device = xml.find("virtio-gpu-av-pci,id=", device)) != std::string::npos) {
+        const std::size_t next = xml.find("virtio-gpu-av-pci,id=", device + 1);
+        const std::size_t at = xml.find("host-gpu=", device);
+        if (at != std::string::npos && (next == std::string::npos || at < next)) {
+            const std::size_t end = xml.find_first_of(",'\"", at);
+            if (end != std::string::npos) {
+                const std::string uuid = xml.substr(at + 9, end - at - 9);
+                if (std::find(found.begin(), found.end(), uuid) == found.end()) {
+                    found.push_back(uuid);
+                }
+            }
+        }
+        device = next == std::string::npos ? xml.size() : next;
     }
-    const std::size_t at = xml.find("host-gpu=", device);
-    const std::size_t end = xml.find_first_of(",'", at == std::string::npos ? 0 : at);
-    if (at == std::string::npos || end == std::string::npos) {
-        return {};
-    }
-    return xml.substr(at + 9, end - at - 9);
+    return found;
+}
+
+std::string domain_gpu() {
+    const std::vector<std::string> gpus = domain_gpus();
+    return gpus.empty() ? std::string() : gpus.front();
 }
 
 bool resolve_gpu(const std::string& request, GpuChoice& choice, std::string& error) {
@@ -413,10 +425,65 @@ int run_all(const Options& options, const std::vector<const CaseRef*>& cases, co
     return failed == 0 ? 0 : 1;
 }
 
+int run_every_gpu(const Options& options, int argc, char** argv) {
+    const char* env = std::getenv("LSW_RENDER_REF_HOST_GPU");
+    std::vector<std::string> uuids;
+    if (env != nullptr && *env != '\0') {
+        std::stringstream list(env);
+        std::string item;
+        while (std::getline(list, item, ',')) {
+            uuids.push_back(item);
+        }
+    } else {
+        uuids = domain_gpus();
+    }
+    if (uuids.empty()) {
+        std::fprintf(stderr, "lsw-render-ref: --gpu all found no host-gpu= in the lsw domain\n");
+        return 2;
+    }
+    int worst = 0;
+    for (const std::string& uuid : uuids) {
+        std::vector<std::string> args = {options.self};
+        for (int i = 1; i < argc; ++i) {
+            const std::string arg = argv[i];
+            if (arg == "--out" || arg == "--gpu") {
+                ++i;
+                continue;
+            }
+            args.push_back(arg);
+        }
+        args.push_back("--out");
+        std::string name = uuid;
+        name.erase(std::remove(name.begin(), name.end(), '-'), name.end());
+        std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        args.push_back(options.out + "/" + name);
+        args.push_back("--gpu");
+        args.push_back(uuid == "auto" ? "auto" : "uuid:" + uuid);
+        std::vector<char*> raw;
+        for (std::string& a : args) {
+            raw.push_back(a.data());
+        }
+        raw.push_back(nullptr);
+        std::printf("lsw-render-ref: gpu %s into %s/%s\n", uuid.c_str(), options.out.c_str(), name.c_str());
+        std::fflush(stdout);
+        pid_t pid = 0;
+        if (posix_spawn(&pid, options.self.c_str(), nullptr, nullptr, raw.data(), environ) != 0) {
+            std::printf("FAIL gpu %s: cannot spawn\n", uuid.c_str());
+            worst = std::max(worst, 1);
+            continue;
+        }
+        int status = 0;
+        waitpid(pid, &status, 0);
+        worst = std::max(worst, WIFEXITED(status) ? WEXITSTATUS(status) : 1);
+    }
+    return worst;
+}
+
 void usage() {
     std::puts(
-        "usage: lsw-render-ref --out DIR [--gpu UUID|vendor:device|index|auto] [--filter GLOB[,GLOB]] [--jobs N] [--list] [--png] [--clean] [--selftest]\n"
-        "  --gpu auto reads host-gpu of the lsw libvirt domain (or LSW_RENDER_REF_HOST_GPU), else the first Vulkan device");
+        "usage: lsw-render-ref --out DIR [--gpu UUID|vendor:device|index|auto|all] [--filter GLOB[,GLOB]] [--jobs N] [--list] [--png] [--clean] [--selftest]\n"
+        "  --gpu auto reads host-gpu of the lsw libvirt domain (or LSW_RENDER_REF_HOST_GPU), else the first Vulkan device\n"
+        "  --gpu all renders every host-gpu= of the domain into OUT/<uuid>/, each with its own device.json");
 }
 
 }  // namespace
@@ -491,6 +558,9 @@ int main(int argc, char** argv) {
     if (options.out.empty()) {
         usage();
         return 2;
+    }
+    if (options.run_one.empty() && options.gpu == "all") {
+        return run_every_gpu(options, argc, argv);
     }
     if (!options.run_one.empty()) {
         prctl(PR_SET_PDEATHSIG, SIGKILL);

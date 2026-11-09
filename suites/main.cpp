@@ -6,6 +6,7 @@
 #include "render/render.hpp"
 #include "sanity/sanity.hpp"
 #include "selftest/selftest.hpp"
+#include "support/target_adapter.hpp"
 
 #include <windows.h>
 
@@ -31,6 +32,24 @@ int main(int argc, char** argv) {
     if (options->help) {
         std::fputs(Options::usage().c_str(), stdout);
         return 0;
+    }
+    if (options->list_adapters) {
+        return TargetAdapter::list();
+    }
+    if (!options->adapter.empty()) {
+        _putenv_s("LSW_SUITES_ADAPTER", options->adapter.c_str());
+        SetEnvironmentVariableA("LSW_SUITES_ADAPTER", options->adapter.c_str());
+    }
+    if (options->run_one.empty() && !options->list && std::getenv("LSW_SUITES_DEV_ANY") == nullptr) {
+        AvAdapter adapter;
+        std::size_t index = 0;
+        std::string adapter_error;
+        if (TargetAdapter::resolve(TargetAdapter::spec(), adapter, index, adapter_error)) {
+            TargetAdapter::export_identity(adapter, index);
+        } else if (!options->adapter.empty()) {
+            std::fprintf(stderr, "%s: --adapter: %s\n", ExeIdentity::name().c_str(), adapter_error.c_str());
+            return 2;
+        }
     }
     if (!options->skip_apis.empty()) {
         _putenv_s("LSW_SUITES_SKIP_APIS", options->skip_apis.c_str());

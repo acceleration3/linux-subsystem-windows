@@ -25,7 +25,8 @@ std::string Options::usage() {
     return "usage: lsw-suites [--list] [--suite NAME[,NAME]] [--filter GLOB[,-GLOB]] [--exclude-file PATH]\n"
            "                  [--tag TAG] [--phase all|main|pacing] [--jobs N] [--timeout S] [--repeat N] [--shuffle SEED]\n"
            "                  [--json FILE] [--artifacts DIR] [--skip-apis API[,API]] [--refs DIR]\n"
-           "                  [--dump-captures] [--device-under-test av|warp]\n";
+           "                  [--dump-captures] [--device-under-test av|warp]\n"
+           "                  [--adapter first|N|luid:HEX|uuid:HEX|name:SUBSTR] [--list-adapters]\n";
 }
 
 std::optional<Options> Options::parse(int argc, char** argv, std::string& error) {
@@ -38,6 +39,10 @@ std::optional<Options> Options::parse(int argc, char** argv, std::string& error)
         }
         if (arg == "--help" || arg == "-h") {
             options.help = true;
+            continue;
+        }
+        if (arg == "--list-adapters") {
+            options.list_adapters = true;
             continue;
         }
         if (arg == "--dump-captures") {
@@ -70,6 +75,8 @@ std::optional<Options> Options::parse(int argc, char** argv, std::string& error)
             options.artifacts = value;
         } else if (arg == "--skip-apis") {
             options.skip_apis = value;
+        } else if (arg == "--adapter") {
+            options.adapter = value;
         } else if (arg == "--refs") {
             options.refs = value;
         } else if (arg == "--device-under-test") {

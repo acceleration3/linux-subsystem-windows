@@ -69,6 +69,16 @@ bool JsonReport::write(const std::filesystem::path& path,
     if (under_test != nullptr && std::string(under_test) == "warp") {
         adapter.set("device_under_test", "WARP");
     }
+    for (const auto& [key, name] : {std::pair<const char*, const char*>{"index", "LSW_SUITES_ADAPTER_INDEX"},
+                                    {"name", "LSW_SUITES_ADAPTER_NAME"},
+                                    {"luid", "LSW_SUITES_ADAPTER_LUID"},
+                                    {"vulkan_uuid", "LSW_SUITES_ADAPTER_UUID"},
+                                    {"pci", "LSW_SUITES_ADAPTER_PCI"}}) {
+        const char* value = std::getenv(name);
+        if (value != nullptr && *value != '\0') {
+            adapter.set(key, std::string(value));
+        }
+    }
     root.set("adapter", std::move(adapter));
     root.set("driver", Json::object());
     root.set("started", started_);

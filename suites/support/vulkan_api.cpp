@@ -148,6 +148,7 @@ bool VulkanApi::devices(std::vector<VulkanDevice>& out, std::string& error) cons
         device.api_version = base.apiVersion;
         device.driver_version = base.driverVersion;
         device.type = static_cast<std::uint32_t>(base.deviceType);
+        std::memcpy(device.uuid, id.deviceUUID, sizeof(device.uuid));
         device.luid_valid = id.deviceLUIDValid != VK_FALSE;
         if (device.luid_valid) {
             std::memcpy(&device.luid, id.deviceLUID, sizeof(device.luid));

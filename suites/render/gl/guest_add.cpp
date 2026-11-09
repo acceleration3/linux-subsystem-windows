@@ -2,6 +2,7 @@
 #include "render/host/ref_check.hpp"
 #include "render/host/registration.hpp"
 #include "render/platform/gl_platform.hpp"
+#include "support/target_adapter.hpp"
 
 namespace lsw::suites::render::gl {
 
@@ -13,6 +14,13 @@ void add(Suite& suite) {
     for (const auto* entry : rr::CaseTable<Kit>::instance().sorted()) {
         CaseRegistration::add(suite, "gl", "gl", entry->spec, [entry](Context& context) {
             std::string error;
+            AvAdapter target;
+            if (!TargetAdapter::pick(target, error)) {
+                return Outcome::fail("adapter: " + error);
+            }
+            if (const std::string unavailable = TargetAdapter::gl_unavailable(target); !unavailable.empty()) {
+                return Outcome::skip(unavailable);
+            }
             std::unique_ptr<rr::platform::GlPlatform> host = rr::platform::make_gl_platform({}, error);
             if (!host) {
                 return Outcome::fail("gl platform: " + error);
