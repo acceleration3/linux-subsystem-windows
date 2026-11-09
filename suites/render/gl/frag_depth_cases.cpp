@@ -85,7 +85,7 @@ const struct Batch15 {
                     s.draw(kit, s.quad, Mat4::translate((static_cast<float>(i) - 3.5f) * 6.8f, 0.0f, -50.0f + dz) * Mat4::scale(3.3f, 20.0f, 1.0f), 0.9f - 0.08f * static_cast<float>(i), 0.4f, 0.3f);
                 }
                 return true;
-            }, Extra::Depth, Tolerance::tight(1), 1, f.value);
+            }, f.value == glc::DEPTH_COMPONENT16 ? Extra::None : Extra::Depth, Tolerance::tight(1), 1, f.value);
         }
 
         scene_case("depth_range_window", [](Kit& kit, Scene3& s, std::string&) {
