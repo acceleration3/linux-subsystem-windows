@@ -59,6 +59,22 @@ bool resize_window(TestWindow& window, int width, int height, std::string& error
     return true;
 }
 
+bool fresh_window(SwapRig& rig, int width, int height, std::string& error) {
+    rig.window.destroy();
+    TestWindowConfig config;
+    config.x = rig.options.x;
+    config.y = rig.options.y;
+    config.popup = true;
+    config.width = width;
+    config.height = height;
+    config.visible = rig.options.visible;
+    if (!rig.window.create(config, error)) {
+        return false;
+    }
+    ::SetWindowPos(rig.window.hwnd(), HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    return resize_window(rig.window, width, height, error);
+}
+
 void drain(SwapRig& rig) {
     std::string error;
     rig.device.context->ClearState();
@@ -179,7 +195,7 @@ Outcome ContentChecks::sizes_and_formats(Context& context) {
             const std::string tag = std::string(fc.name) + " " + sc.name;
             rig.chain.reset();
             drain(rig);
-            if (!resize_window(rig.window, sc.window_width, sc.window_height, error)) {
+            if (!fresh_window(rig, sc.window_width, sc.window_height, error)) {
                 problems.add(tag + ": " + error);
                 continue;
             }
