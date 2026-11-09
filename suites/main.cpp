@@ -3,6 +3,7 @@
 #include "core/registry.hpp"
 #include "core/runner.hpp"
 #include "core/single_check.hpp"
+#include "render/render.hpp"
 #include "sanity/sanity.hpp"
 #include "selftest/selftest.hpp"
 
@@ -35,8 +36,14 @@ int main(int argc, char** argv) {
         _putenv_s("LSW_SUITES_SKIP_APIS", options->skip_apis.c_str());
         SetEnvironmentVariableA("LSW_SUITES_SKIP_APIS", options->skip_apis.c_str());
     }
+    if (!options->refs.empty()) {
+        const std::string refs = options->refs.string();
+        _putenv_s("LSW_SUITES_REFS", refs.c_str());
+        SetEnvironmentVariableA("LSW_SUITES_REFS", refs.c_str());
+    }
     Registry registry;
     sanity::add(registry);
+    render::add(registry);
     selftest::add(registry);
     if (!options->run_one.empty()) {
         return SingleCheck(registry, options->artifacts).run(options->run_one);

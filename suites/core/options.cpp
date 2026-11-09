@@ -24,7 +24,7 @@ bool positive(const std::string& text, int& out) {
 std::string Options::usage() {
     return "usage: lsw-suites [--list] [--suite NAME[,NAME]] [--filter GLOB[,-GLOB]] [--exclude-file PATH]\n"
            "                  [--tag TAG] [--phase all|main|pacing] [--jobs N] [--timeout S] [--repeat N] [--shuffle SEED]\n"
-           "                  [--json FILE] [--artifacts DIR] [--skip-apis API[,API]]\n";
+           "                  [--json FILE] [--artifacts DIR] [--skip-apis API[,API]] [--refs DIR]\n";
 }
 
 std::optional<Options> Options::parse(int argc, char** argv, std::string& error) {
@@ -65,6 +65,8 @@ std::optional<Options> Options::parse(int argc, char** argv, std::string& error)
             options.artifacts = value;
         } else if (arg == "--skip-apis") {
             options.skip_apis = value;
+        } else if (arg == "--refs") {
+            options.refs = value;
         } else if (arg == "--run-one") {
             options.run_one = value;
         } else if (arg == "--jobs" || arg == "--timeout" || arg == "--repeat") {
