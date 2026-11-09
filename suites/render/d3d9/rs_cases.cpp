@@ -219,7 +219,7 @@ struct StencilStart {
 
 const StencilStart kStencilOps[] = {
     {"keep", D3DSTENCILOP_KEEP, 0xFE, 2}, {"zero", D3DSTENCILOP_ZERO, 0xFE, 2}, {"replace", D3DSTENCILOP_REPLACE, 0xFE, 2}, {"incrsat", D3DSTENCILOP_INCRSAT, 0xFE, 2},
-    {"decrsat", D3DSTENCILOP_DECRSAT, 0x01, 2}, {"invert", D3DSTENCILOP_INVERT, 0xFE, 1}, {"incr", D3DSTENCILOP_INCR, 0xFE, 2}, {"decr", D3DSTENCILOP_DECR, 0x01, 2},
+    {"decrsat", D3DSTENCILOP_DECRSAT, 0x01, 2}, {"invert", D3DSTENCILOP_INVERT, 0xFE, 1}, {"incr", D3DSTENCILOP_INCR, 0xFE, 5}, {"decr", D3DSTENCILOP_DECR, 0x01, 2},
 };
 
 void stencil_cases() {

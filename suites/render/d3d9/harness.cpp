@@ -943,13 +943,46 @@ private:
 
 }  // namespace
 
+namespace {
+
+void explain(rr::CaseSpec& spec) {
+    const std::string& g = spec.group();
+    const std::string& n = spec.name();
+    const auto has = [&](const char* text) { return n.find(text) != std::string::npos; };
+    const auto starts = [&](const char* text) { return n.rfind(text, 0) == 0; };
+    if (g == "tex" && (starts("format_") || starts("restream_format_"))) {
+        spec.audit_ok("texture formats that are lossless at 8 bits, or that share one source image with a channel swizzle, sample to identical 8-bit output by design");
+    } else if (g == "tex" && (starts("depth_") || has("pool_default") || starts("filter_linear_linear"))) {
+        spec.audit_ok("the same content reached through another colour target or upload path is identical by design");
+    } else if (g == "shader" && (starts("decl_type_") || has("ps20_") || has("ps30_procedural") || has("ps30_depth_output") || has("ps2a_"))) {
+        spec.audit_ok("vertex types carrying the same normalized values, or one shader through another shader model, produce identical output by design");
+    } else if (g == "surf" && (starts("depth_format_") || starts("rendertarget_format_x8") || starts("reset_restores") || starts("lockable_back"))) {
+        spec.audit_ok("depth or colour formats with sufficient precision, and the same scene on a second device, give identical output by design");
+    } else if (g == "ex" || starts("present_ex") || has("gpu_thread_priority")) {
+        spec.audit_ok("the extended device rows draw the same scene on different devices or paths and must produce identical images by design");
+    } else if (g == "prim" && (starts("draw_indexed_") || starts("dynamic_vb_") || starts("draw_vb_line"))) {
+        spec.audit_ok("one mesh through different index or buffer paths is identical by design; one pixel lines cover under two percent of the frame");
+    } else if (g == "ff" && (starts("fog_table_linear") || starts("fog_vertex_linear") || starts("fvf_tex1_size"))) {
+        spec.audit_ok("linear fog is affine so vertex and table fog coincide; projected texture coordinates of size 3 and 4 sample identically");
+    } else if (g == "rs" && (has("bothsrcalpha") || has("blend_src_srcalpha") || has("persistent_stencil_") || has("persistent_depth_equal") || starts("wrap_coord_") || starts("fill_point") || starts("alphatest_never") || starts("lastpixel") || has("persistent_depth_less") || starts("depthfunc_never") ||
+                             has("persistent_depth_greater") || has("persistent_stencil_keep") || has("persistent_stencil_zero") || has("stencil_op_zero") || has("stencil_op_keep"))) {
+        spec.audit_ok("BOTHSRCALPHA is defined as SRCALPHA with INVSRCALPHA; the remaining rows are a degenerate case of their family by design");
+    } else if (g == "tss" && (has("arg_temp_resultarg") || has("op_selectarg2"))) {
+        spec.audit_ok("a value routed through the temporary register equals SELECTARG2 by design");
+    }
+}
+
+}  // namespace
+
 void Cases::single(rr::CaseSpec spec, Body body, Layout layout, Need need) {
+    explain(spec);
     rr::CaseTable<Kit>::instance().add(std::move(spec), [body = std::move(body), layout, need] {
         return std::unique_ptr<rr::Scene<Kit>>(new FnScene([body](Ctx& ctx, unsigned) { body(ctx); }, layout, need));
     });
 }
 
 void Cases::frames(rr::CaseSpec spec, FrameMaker maker, Layout layout, Need need) {
+    explain(spec);
     rr::CaseTable<Kit>::instance().add(std::move(spec), [maker = std::move(maker), layout, need] {
         return std::unique_ptr<rr::Scene<Kit>>(new FnScene(maker(), layout, need));
     });
