@@ -270,6 +270,24 @@ int main(int argc, char** argv) {
           "the render-only adapter is display=off on its own GPU");
     check(render_only.contains(QStringLiteral(",vram-reserve=2048")),
           "the render-only adapter gets the same reserve");
+    check(!xml.contains(QStringLiteral("hybrid=")), "hybrid graphics are off unless asked for");
+    {
+        DomainXmlInputs hybrid = inputs;
+        hybrid.hybrid_graphics = true;
+        const QString hybrid_xml = DomainXmlBuilder::build(vm, hybrid);
+        const QStringList hybrid_gpus = args_after(
+            qemu_args(parse(hybrid_xml, "a hybrid definition is well-formed XML")),
+            QStringLiteral("-device"), QStringLiteral("virtio-gpu-av-pci,"));
+        check(hybrid_gpus.value(0).contains(QStringLiteral(",hybrid=integrated")),
+              "with hybrid graphics the display adapter is the integrated one");
+        check(hybrid_gpus.value(1).contains(QStringLiteral(",hybrid=discrete")),
+              "and the render-only adapter is the discrete one");
+        check(hybrid_xml.count(QStringLiteral("hybrid=")) == 2, "no other adapter has the property");
+        DomainXmlInputs alone = hybrid;
+        alone.render_only_gpu_uuids.clear();
+        check(!DomainXmlBuilder::build(vm, alone).contains(QStringLiteral("hybrid=")),
+              "a single adapter is not hybrid");
+    }
     {
         DomainXmlInputs automatic = inputs;
         automatic.vram_reserve_mib = 0;

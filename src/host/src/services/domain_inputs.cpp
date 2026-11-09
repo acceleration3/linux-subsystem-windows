@@ -79,6 +79,7 @@ vm::DomainXmlInputs domain_inputs_from_settings(const config::Settings& settings
         }
         inputs.render_only_gpu_uuids << uuid;
     }
+    inputs.hybrid_graphics = manager_settings.bool_value(K::kHybridGraphics);
     return inputs;
 }
 

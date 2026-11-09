@@ -20,6 +20,7 @@ struct DomainXmlInputs {
     bool install_display = false;
     QString host_gpu_uuid;
     QStringList render_only_gpu_uuids;
+    bool hybrid_graphics = false;
     int host_window_mib = 8192;
     int vram_reserve_mib = 0;
     QString display_modes;

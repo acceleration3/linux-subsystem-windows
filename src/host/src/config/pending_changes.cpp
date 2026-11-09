@@ -22,6 +22,7 @@ QString label_for(const QString& key) {
         {K::kHostWindowMib, QStringLiteral("host window")},
         {K::kVramReserveMib, QStringLiteral("VRAM kept for the host")},
         {K::kRenderGpus, QStringLiteral("render GPUs")},
+        {K::kHybridGraphics, QStringLiteral("hybrid graphics")},
         {K::kHostShares, QStringLiteral("shared folders")},
     };
     return labels.value(key, key);

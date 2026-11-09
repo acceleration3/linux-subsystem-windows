@@ -172,9 +172,13 @@ QString DomainXmlBuilder::build(const config::VmRecord& vm, const DomainXmlInput
             display += QStringLiteral(",refresh=%1").arg(inputs.display_refresh_millihz);
         }
     }
-    gpu_lines << qemu_arg(QStringLiteral("-device")) << qemu_arg(display);
     const qsizetype render_only =
         qMin<qsizetype>(inputs.render_only_gpu_uuids.size(), kMaxRenderOnlyGpus);
+    const bool hybrid = inputs.hybrid_graphics && render_only > 0 && !inputs.install_display;
+    if (hybrid) {
+        display += QStringLiteral(",hybrid=integrated");
+    }
+    gpu_lines << qemu_arg(QStringLiteral("-device")) << qemu_arg(display);
     for (qsizetype i = 0; i < render_only; ++i) {
         QString device = QStringLiteral("virtio-gpu-av-pci,id=%1-%2,bus=pcie.0,addr=0x%3")
                              .arg(kGpuId)
@@ -182,6 +186,9 @@ QString DomainXmlBuilder::build(const config::VmRecord& vm, const DomainXmlInput
                              .arg(kGpuSlot + 1 + static_cast<int>(i), 0, 16);
         device += gpu_common(inputs, inputs.render_only_gpu_uuids.at(i));
         device += QStringLiteral(",display=off");
+        if (hybrid) {
+            device += QStringLiteral(",hybrid=discrete");
+        }
         if (inputs.install_display) {
             device += QStringLiteral(",max_outputs=0");
         }
