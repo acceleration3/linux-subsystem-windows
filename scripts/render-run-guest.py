@@ -55,8 +55,8 @@ def retry(action, attempts=6, pause=10):
 
 
 def command_push(args):
-    share = lsw_link.GuestShare()
-    link = lsw_link.AgentLink(timeout=60.0)
+    share = lsw_link.GuestShare(port=args.smb_port)
+    link = lsw_link.AgentLink(port=args.agent_port, timeout=60.0)
     deadline = time.monotonic() + args.timeout
     retry(lambda: make_directory(share, GUEST_DIR))
     for pair in args.exe:
@@ -90,8 +90,8 @@ def command_push(args):
 
 
 def command_run(args):
-    share = lsw_link.GuestShare()
-    link = lsw_link.AgentLink(timeout=60.0)
+    share = lsw_link.GuestShare(port=args.smb_port)
+    link = lsw_link.AgentLink(port=args.agent_port, timeout=60.0)
     tag = args.tag
     deadline = time.monotonic() + args.timeout
     program = f"lsw-suites{args.bits}.exe"
@@ -150,6 +150,8 @@ def main():
     push.add_argument("--dxc", required=True)
     push.add_argument("--refs")
     push.add_argument("--timeout", type=int, default=900)
+    push.add_argument("--agent-port", type=int, default=lsw_link.AGENT_PORT)
+    push.add_argument("--smb-port", type=int, default=lsw_link.SMB_PORT)
     run = commands.add_parser("run")
     run.add_argument("--bits", required=True, choices=("64", "32"))
     run.add_argument("--adapter", default="")
@@ -159,6 +161,8 @@ def main():
     run.add_argument("--tag", required=True)
     run.add_argument("--out", required=True)
     run.add_argument("--timeout", type=int, default=1400)
+    run.add_argument("--agent-port", type=int, default=lsw_link.AGENT_PORT)
+    run.add_argument("--smb-port", type=int, default=lsw_link.SMB_PORT)
     args = parser.parse_args()
     try:
         return command_push(args) if args.command == "push" else command_run(args)

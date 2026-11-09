@@ -29,6 +29,10 @@ list_only=0
 baseline=""
 out=""
 remote_timeout=14400
+parallel=0
+stack=0
+host_jobs=""
+guest_timeout=3600
 
 usage() {
     cat <<'EOF'
@@ -44,7 +48,14 @@ HTML report: build-render-report/<timestamp>/report.html
   --adapters all|first|list   local only: every VM-bound GPU, the first one, or list them
   --bits 64|32|both           guest executable bitness (default 64)
   --filter GLOB[,GLOB]        check id filter (also limits the host references)
-  --jobs N                    parallel checks in the guest (default 2)
+  --jobs N                    parallel checks in the guest, per adapter (default 2)
+  --host-jobs HOST=N[,...]    --jobs for single hosts, e.g. local=3,accel=2
+  --parallel                  every selected host at the same time, and on each host every adapter at the same time
+                              (one lsw-suites process per adapter in the guest)
+  --stack                     remote hosts already run the stack (gpu-test.sh deploy-render and stack-install): no deploy
+                              and no matrix run; references are made on the host and the guest is driven through ssh
+                              forwards of its agent and share (implied by --parallel)
+  --guest-timeout SECONDS     limit of one guest run with --parallel (default 3600)
   --no-dump-captures          skip the capture dumps (the report then has no images and there is no audit)
   --images all|differing|failed|none  which rows get images in the report (default all)
   --no-build                  use the executables already built
@@ -70,6 +81,10 @@ while [[ $# -gt 0 ]]; do
         --bits) bits="$2"; shift ;;
         --filter) filter="$2"; shift ;;
         --jobs) jobs="$2"; shift ;;
+        --host-jobs) host_jobs="$2"; shift ;;
+        --parallel) parallel=1; stack=1 ;;
+        --stack) stack=1 ;;
+        --guest-timeout) guest_timeout="$2"; shift ;;
         --no-dump-captures) dump=0 ;;
         --images) images="$2"; shift ;;
         --no-build) build=0 ;;
@@ -357,6 +372,124 @@ run_remote() {
     python3 -B "${HERE}/render-report.py" --import-matrix "${ROOT}/build/gpu-test/${run}" --into "${out}"
 }
 
+jobs_of() {
+    local entry
+    IFS=',' read -ra entries <<< "${host_jobs}"
+    for entry in "${entries[@]}"; do
+        [[ ${entry%%=*} == "$1" ]] && { echo "${entry#*=}"; return; }
+    done
+    echo "${jobs}"
+}
+
+ssh_opts=(-o BatchMode=yes -o ConnectTimeout=10 -o "ControlPath=${LSW_GPU_TEST_CONTROL_PATH:-/tmp/lsw-gpu-test-%C}")
+on_remote() { ssh "${ssh_opts[@]}" "$(target_of "$1")" bash -s; }
+
+remote_references() {
+    local h=$1 refs=$2 ref_filter=$3
+    on_remote "${h}" <<RUN
+set -e
+cd ~/.local/share/lsw-gpu-test/tree
+rm -rf ~/.local/share/lsw-gpu-test/render-refs
+build-render-ref/lsw-render-ref --out ~/.local/share/lsw-gpu-test/render-refs --gpu all --jobs 4 --clean ${ref_filter} > ~/.local/share/lsw-gpu-test/render-ref.log 2>&1
+tail -n 4 ~/.local/share/lsw-gpu-test/render-ref.log
+RUN
+    mkdir -p "${refs}"
+    rsync -a -e "ssh ${ssh_opts[*]}" --exclude '*.png' --exclude .logs --exclude '*.bgra' \
+        "$(target_of "${h}"):.local/share/lsw-gpu-test/render-refs/" "${refs}/"
+}
+
+adapter_run() {
+    local h=$1 uuid=$2 jobs_here=$3 agent_port=$4 smb_port=$5 refs=$6 gpu_name b base adapter_arg run_args
+    gpu_name="$(gpu_name_of "${h}" "${uuid}")"
+    for b in "${bit_list[@]}"; do
+        base="${out}/${h}/$(slug "${gpu_name}")/x${b}"
+        adapter_arg="uuid:${uuid//-/}"
+        run_args=(--bits "${b}" --adapter "${adapter_arg}" --jobs "${jobs_here}" --tag "$(slug "${gpu_name}")-x${b}" --out "${base}"
+                  --agent-port "${agent_port}" --smb-port "${smb_port}" --timeout "${guest_timeout}")
+        [[ -n ${filter} ]] && run_args+=(--filter "${filter}")
+        [[ ${dump} -eq 1 ]] && run_args+=(--dump)
+        say "${h}: render suite x${b} on ${gpu_name} (${adapter_arg}), jobs ${jobs_here}"
+        python3 "${HERE}/render-run-guest.py" run "${run_args[@]}"
+        mkdir -p "${base}"
+        local ref_dir="${refs}/${uuid//-/}"
+        [[ -f ${ref_dir}/device.json ]] || ref_dir="${refs}"
+        local label_name
+        label_name="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("adapter",{}).get("name",""))' "${base}/result.json" 2>/dev/null)"
+        printf '{"host": "%s", "gpu": "%s", "bits": "%s", "refs": "%s"}\n' "${h}" "${label_name:-${gpu_name}}" "${b}" "${ref_dir}" > "${base}/meta.json"
+        if [[ ${dump} -eq 1 && -d ${base}/artifacts && -f ${base}/result.json ]]; then
+            timeout 900 python3 -I "${HERE}/render-audit.py" --guest "${base}/artifacts" --json "${base}/result.json" \
+                --out "${base}/audit.md" --flags "${base}/audit.json" > "${base}/audit.txt" 2>&1 || note "${h}: render-audit exit $? (see ${base}/audit.txt)"
+        fi
+    done
+}
+
+watch_memory() {
+    local h=$1 log=$2
+    while true; do
+        { date +%T; on_remote "${h}" <<< "free -m | sed -n 2p; grep -E '^(pswpin|pswpout) ' /proc/vmstat | tr '\\n' ' '; echo"; } >> "${log}" 2>&1
+        sleep 30
+    done
+}
+
+run_host_parallel() {
+    local h=$1 index=$2 uuids=(${SEL_UUIDS[$1]}) refs="${out}/refs-$1" uuid jobs_here
+    local agent_port=5102 smb_port=5445 ref_filter=""
+    jobs_here="$(jobs_of "${h}")"
+    [[ -n ${filter} ]] && ref_filter="--filter ${filter}"
+    if [[ $(target_of "${h}") == local ]]; then
+        export RR_LOG="${out}/render-ref-${h}.log"
+        capped_step "host references for every VM-bound GPU" 1800 bash -c 'exec "$@" >> "${RR_LOG}" 2>&1' _ "${ROOT}/build-render-ref/lsw-render-ref" --out "${refs}" --gpu all --jobs 4 --clean ${ref_filter} || return 1
+        local lockfd
+        exec {lockfd}> "${LOCK}"
+        flock -w 3600 "${lockfd}" || return 1
+        "${VM}" up || return 1
+    else
+        agent_port=$((15102 + 10 * index))
+        smb_port=$((15445 + 10 * index))
+        say "${h}: host references"
+        remote_references "${h}" "${refs}" "${ref_filter}" || return 1
+        "${GPUTEST}" tunnel "${h}" "${agent_port}" "${smb_port}" || note "${h}: the forward could not be added (already there?)"
+        watch_memory "${h}" "${out}/memory-${h}.log" &
+        local watcher=$!
+    fi
+    local exes=() b
+    for b in "${bit_list[@]}"; do
+        local dir="build-suites"
+        [[ ${b} == 32 ]] && dir="build-suites32"
+        exes+=(--exe "${b}=${ROOT}/${dir}/lsw-suites${b}.exe")
+    done
+    say "${h}: push executables, dxc and references"
+    python3 "${HERE}/render-run-guest.py" push "${exes[@]}" --dxc "${AV}/third_party/dxc" --refs "${refs}" \
+        --agent-port "${agent_port}" --smb-port "${smb_port}" || return 1
+    local pids=() status=0
+    for uuid in "${uuids[@]}"; do
+        adapter_run "${h}" "${uuid}" "${jobs_here}" "${agent_port}" "${smb_port}" "${refs}" &
+        pids+=($!)
+    done
+    local pid
+    for pid in "${pids[@]}"; do wait "${pid}" || status=1; done
+    [[ -n ${watcher:-} ]] && kill "${watcher}" 2>/dev/null
+    [[ -n ${lockfd:-} ]] && { "${VM}" done; eval "exec ${lockfd}>&-"; }
+    return "${status}"
+}
+
+run_parallel() {
+    local logs="${out}/logs" h index=0 pids=() names=()
+    mkdir -p "${logs}"
+    for h in "${host_list[@]}"; do
+        say "starting ${h} (log ${logs}/${h}.log)"
+        run_host_parallel "${h}" "${index}" > "${logs}/${h}.log" 2>&1 &
+        pids+=($!)
+        names+=("${h}")
+        index=$((index + 1))
+    done
+    local status=0 n
+    for n in "${!pids[@]}"; do
+        wait "${pids[n]}" || { printf 'render-run: %s failed, see %s/%s.log\n' "${names[n]}" "${logs}" "${names[n]}" >&2; status=1; }
+    done
+    return "${status}"
+}
+
 TABLE_DONE=1
 collect_hosts
 if [[ ${list_only} -eq 1 ]]; then
@@ -383,6 +516,15 @@ if [[ ${build} -eq 1 ]]; then
 fi
 
 status=0
+if [[ ${parallel} -eq 1 ]]; then
+    if [[ ${dry} -eq 1 ]]; then
+        for h in "${host_list[@]}"; do
+            printf '[dry-run] %s: references, push, then one guest run per adapter at once (%s adapters, jobs %s each)\n' "${h}" "$(wc -w <<< "${SEL_UUIDS[${h}]}")" "$(jobs_of "${h}")"
+        done
+    else
+        run_parallel || status=1
+    fi
+else
 for h in "${host_list[@]}"; do
     if [[ $(target_of "${h}") == local ]]; then
         run_local "${h}" || status=1
@@ -390,6 +532,7 @@ for h in "${host_list[@]}"; do
         run_remote "${h}" || status=1
     fi
 done
+fi
 
 if [[ ${dry} -eq 1 ]]; then
     printf '[dry-run] render-report.py --tree %s%s --out %s/report.html --images %s\n' "${out}" "${baseline:+ --baseline-tree ${baseline}}" "${out}" "${images}"
