@@ -29,6 +29,7 @@ struct StampCase {
     bool depth = false;
     bool stencil_capture = false;
     bool depth_capture = false;
+    VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT;
     std::function<void(Rig&, Env&)> setup;
     std::function<void(Rig&, Env&, unsigned, VkCommandBuffer)> draw;
     std::function<std::string(Kit&)> caps;
@@ -45,6 +46,7 @@ protected:
     void init(Rig& rig) override {
         env_.rig = &rig;
         TargetDesc td;
+        td.samples = entry_->samples;
         if (entry_->depth) {
             td.depth = VK_FORMAT_D32_SFLOAT_S8_UINT;
         }
@@ -428,7 +430,157 @@ void register_stamps() {
     }
 }
 
-const int registered = (register_stamps(), 0);
+
+void register_more() {
+    {
+        StampCase c;
+        c.name = "depth_test_write_toggle";
+        c.depth = true;
+        c.depth_capture = true;
+        c.setup = [](Rig& rig, Env& e) {
+            PipelineDesc p = base_desc(rig, e);
+            p.dynamic = {VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE, VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE, VK_DYNAMIC_STATE_DEPTH_COMPARE_OP};
+            e.pipelines.push_back(rig.pipe(p));
+        };
+        c.draw = [](Rig& rig, Env& e, unsigned f, VkCommandBuffer cb) {
+            rig.kit.api.vkCmdSetDepthTestEnable(cb, f % 3 == 2 ? VK_FALSE : VK_TRUE);
+            rig.kit.api.vkCmdSetDepthWriteEnable(cb, f % 2 == 0 ? VK_TRUE : VK_FALSE);
+            rig.kit.api.vkCmdSetDepthCompareOp(cb, f % 2 == 0 ? VK_COMPARE_OP_LESS : VK_COMPARE_OP_LESS_OR_EQUAL);
+            e.quads->quad(cb, -0.9f + 0.3f * static_cast<float>(f), -0.9f + 0.15f * static_cast<float>(f), 1.2f, 1.2f, palette(f), 0.7f - 0.1f * static_cast<float>(f));
+        };
+        add_stamp(std::move(c), nullptr, nullptr, 3);
+    }
+    {
+        StampCase c;
+        c.name = "stencil_op_cycle";
+        c.depth = true;
+        c.stencil_capture = true;
+        c.setup = [](Rig& rig, Env& e) {
+            PipelineDesc p = base_desc(rig, e);
+            p.stencil = VkStencilOpState{VK_STENCIL_OP_KEEP, VK_STENCIL_OP_KEEP, VK_STENCIL_OP_KEEP, VK_COMPARE_OP_ALWAYS, 0xff, 0xff, 0x44};
+            p.dynamic = {VK_DYNAMIC_STATE_STENCIL_TEST_ENABLE, VK_DYNAMIC_STATE_STENCIL_OP, VK_DYNAMIC_STATE_STENCIL_REFERENCE};
+            e.pipelines.push_back(rig.pipe(p));
+        };
+        c.draw = [](Rig& rig, Env& e, unsigned f, VkCommandBuffer cb) {
+            const VkStencilOp ops[5] = {VK_STENCIL_OP_REPLACE, VK_STENCIL_OP_INCREMENT_AND_CLAMP, VK_STENCIL_OP_INVERT, VK_STENCIL_OP_DECREMENT_AND_WRAP, VK_STENCIL_OP_ZERO};
+            rig.kit.api.vkCmdSetStencilTestEnable(cb, VK_TRUE);
+            rig.kit.api.vkCmdSetStencilOp(cb, VK_STENCIL_FACE_FRONT_AND_BACK, VK_STENCIL_OP_KEEP, ops[f % 5], VK_STENCIL_OP_KEEP, VK_COMPARE_OP_ALWAYS);
+            rig.kit.api.vkCmdSetStencilReference(cb, VK_STENCIL_FACE_FRONT_AND_BACK, 0x44 + f);
+            e.quads->quad(cb, -0.9f + 0.25f * static_cast<float>(f), -0.9f + 0.2f * static_cast<float>(f), 1.2f, 1.2f, palette(f));
+        };
+        add_stamp(std::move(c), nullptr, nullptr, 3);
+    }
+    {
+        StampCase c;
+        c.name = "rasterizer_discard_toggle";
+        c.setup = [](Rig& rig, Env& e) {
+            PipelineDesc p = base_desc(rig, e);
+            p.dynamic = {VK_DYNAMIC_STATE_RASTERIZER_DISCARD_ENABLE};
+            e.pipelines.push_back(rig.pipe(p));
+        };
+        c.draw = [](Rig& rig, Env& e, unsigned f, VkCommandBuffer cb) {
+            rig.kit.api.vkCmdSetRasterizerDiscardEnable(cb, f % 2 == 1 ? VK_TRUE : VK_FALSE);
+            e.quads->quad(cb, -0.9f + 0.3f * static_cast<float>(f), -0.9f + 0.1f * static_cast<float>(f), 0.6f, 1.2f, palette(f));
+        };
+        add_stamp(std::move(c), nullptr, nullptr, 3);
+    }
+    {
+        StampCase c;
+        c.name = "logic_op_sequence";
+        c.setup = [](Rig& rig, Env& e) {
+            for (VkLogicOp op : {VK_LOGIC_OP_XOR, VK_LOGIC_OP_OR, VK_LOGIC_OP_AND, VK_LOGIC_OP_INVERT, VK_LOGIC_OP_COPY_INVERTED}) {
+                PipelineDesc p = base_desc(rig, e);
+                p.logic_op = true;
+                p.logic = op;
+                e.pipelines.push_back(rig.pipe(p));
+            }
+        };
+        c.draw = [](Rig& rig, Env& e, unsigned f, VkCommandBuffer cb) {
+            rig.bind_graphics(cb, e.pipelines[f % 5]);
+            const float k[4] = {0.8f - 0.1f * static_cast<float>(f), 0.4f + 0.1f * static_cast<float>(f), 0.9f, 1.0f};
+            e.quads->quad(cb, -0.9f + 0.15f * static_cast<float>(f), -0.9f + 0.15f * static_cast<float>(f), 1.2f, 1.2f, k);
+        };
+        add_stamp(std::move(c), "logicOp");
+    }
+    {
+        StampCase c;
+        c.name = "dual_source_blend_accumulate";
+        c.setup = [](Rig& rig, Env& e) {
+            PipelineDesc p = base_desc(rig, e);
+            p.fragment = rig.sh("quad_dual.frag");
+            p.blend = true;
+            p.src_color = VK_BLEND_FACTOR_SRC1_COLOR;
+            p.dst_color = VK_BLEND_FACTOR_ONE_MINUS_SRC1_COLOR;
+            p.src_alpha = VK_BLEND_FACTOR_SRC1_ALPHA;
+            p.dst_alpha = VK_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA;
+            e.pipelines.push_back(rig.pipe(p));
+        };
+        c.draw = [](Rig& rig, Env& e, unsigned f, VkCommandBuffer cb) {
+            e.quads->quad(cb, -0.9f + 0.2f * static_cast<float>(f), -0.9f + 0.15f * static_cast<float>(f), 1.3f, 1.3f, palette(f));
+        };
+        add_stamp(std::move(c), "dualSrcBlend");
+    }
+    {
+        StampCase c;
+        c.name = "blend_op_sequence";
+        c.setup = [](Rig& rig, Env& e) {
+            for (VkBlendOp op : {VK_BLEND_OP_ADD, VK_BLEND_OP_REVERSE_SUBTRACT, VK_BLEND_OP_MAX, VK_BLEND_OP_SUBTRACT, VK_BLEND_OP_MIN}) {
+                PipelineDesc p = base_desc(rig, e);
+                p.blend = true;
+                p.src_color = VK_BLEND_FACTOR_ONE;
+                p.dst_color = VK_BLEND_FACTOR_ONE;
+                p.src_alpha = VK_BLEND_FACTOR_ONE;
+                p.dst_alpha = VK_BLEND_FACTOR_ONE;
+                p.color_op = op;
+                p.alpha_op = op;
+                e.pipelines.push_back(rig.pipe(p));
+            }
+        };
+        c.draw = [](Rig& rig, Env& e, unsigned f, VkCommandBuffer cb) {
+            rig.bind_graphics(cb, e.pipelines[f % 5]);
+            const float k[4] = {0.5f, 0.4f + 0.1f * static_cast<float>(f), 0.3f, 0.6f};
+            e.quads->quad(cb, -0.9f + 0.18f * static_cast<float>(f), -0.9f + 0.18f * static_cast<float>(f), 1.3f, 1.3f, k);
+        };
+        add_stamp(std::move(c));
+    }
+    {
+        StampCase c;
+        c.name = "sample_mask_walk_msaa";
+        c.samples = VK_SAMPLE_COUNT_4_BIT;
+        c.caps = [](Kit& kit) -> std::string { return (kit.properties.limits.framebufferColorSampleCounts & VK_SAMPLE_COUNT_4_BIT) != 0 ? std::string() : std::string("4x"); };
+        c.setup = [](Rig& rig, Env& e) {
+            static const VkSampleMask masks[5] = {0x1, 0x2, 0x4, 0x8, 0x5};
+            for (const VkSampleMask& mask : masks) {
+                PipelineDesc p = base_desc(rig, e);
+                p.sample_mask = &mask;
+                e.pipelines.push_back(rig.pipe(p));
+            }
+        };
+        c.draw = [](Rig& rig, Env& e, unsigned f, VkCommandBuffer cb) {
+            rig.bind_graphics(cb, e.pipelines[f % 5]);
+            e.quads->quad(cb, -0.9f + 0.12f * static_cast<float>(f), -0.9f + 0.12f * static_cast<float>(f), 1.4f, 1.4f, palette(f));
+        };
+        add_stamp(std::move(c));
+    }
+    {
+        StampCase c;
+        c.name = "alpha_to_coverage_msaa_accumulate";
+        c.samples = VK_SAMPLE_COUNT_4_BIT;
+        c.caps = [](Kit& kit) -> std::string { return (kit.properties.limits.framebufferColorSampleCounts & VK_SAMPLE_COUNT_4_BIT) != 0 ? std::string() : std::string("4x"); };
+        c.setup = [](Rig& rig, Env& e) {
+            PipelineDesc p = base_desc(rig, e);
+            p.fragment = rig.sh("atoc.frag");
+            p.alpha_to_coverage = true;
+            e.pipelines.push_back(rig.pipe(p));
+        };
+        c.draw = [](Rig& rig, Env& e, unsigned f, VkCommandBuffer cb) {
+            e.quads->quad(cb, -0.9f + 0.22f * static_cast<float>(f), -0.9f + 0.1f * static_cast<float>(f), 1.1f, 1.1f, palette(f));
+        };
+        add_stamp(std::move(c));
+    }
+}
+
+const int registered = (register_stamps(), register_more(), 0);
 
 }  // namespace
 

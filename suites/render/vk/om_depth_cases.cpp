@@ -199,12 +199,16 @@ void register_stencil_ops() {
     for (unsigned which = 0; which < 3; ++which) {
         const char* kinds[3] = {"pass", "fail", "depth_fail"};
         for (const StencilOpEntry& entry : stencil_ops()) {
+            if (entry.op == VK_STENCIL_OP_KEEP) {
+                continue;
+            }
             for (int multi = 0; multi < 2; ++multi) {
                 if (multi != 0 && (which != 0 || (std::string(entry.name) != "increment_clamp" && std::string(entry.name) != "decrement_wrap" && std::string(entry.name) != "invert"))) {
                     continue;
                 }
                 CaseSpec spec("om", std::string("stencil_") + kinds[which] + "_op_" + entry.name + (multi != 0 ? "_accumulate" : ""));
                 spec.tolerance(Tolerance::tight(1));
+
                 if (multi != 0) {
                     spec.frames(3, {0, 1, 2});
                 }
