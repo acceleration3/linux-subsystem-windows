@@ -35,7 +35,14 @@ PresentResult failed(const std::string& error) {
 
 bool statistics_of(IDXGISwapChain* chain, FrameStats& out) {
     DXGI_FRAME_STATISTICS data{};
-    if (chain == nullptr || FAILED(chain->GetFrameStatistics(&data))) {
+    if (chain == nullptr) {
+        return false;
+    }
+    HRESULT result = chain->GetFrameStatistics(&data);
+    if (result == DXGI_ERROR_FRAME_STATISTICS_DISJOINT) {
+        result = chain->GetFrameStatistics(&data);
+    }
+    if (FAILED(result)) {
         return false;
     }
     out.present_count = data.PresentCount;
