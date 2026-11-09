@@ -596,9 +596,12 @@ def crashes_section(runs):
                    (esc(label), esc(str(segment or "")), esc("%s %s" % (incident.get("reason", ""), incident.get("signal", ""))),
                     esc(", ".join(in_flight)), esc(culprit or ""), esc(evidence), esc(evidence), esc(" core " + core if core else "")))
     out.append("</table></div>")
-    hosts = sorted({(r.label, c["id"]) for r in runs for c in r.checks.values() if c.get("host_crash")})
-    if hosts:
-        out.append("<p>Checks that killed the VM when run alone: <span class=\"id bad\">%s</span></p>" % esc(", ".join("%s %s" % h for h in hosts)))
+    alone = sorted({(r.label, c["id"]) for r in runs for c in r.checks.values() if c.get("host_crash") and "when run alone" in c.get("reason", "")})
+    flying = sorted({(r.label, c["id"]) for r in runs for c in r.checks.values() if c.get("host_crash") and "when run alone" not in c.get("reason", "")})
+    if alone:
+        out.append("<p>Checks that killed the VM when run alone: <span class=\"id bad\">%s</span></p>" % esc(", ".join("%s %s" % h for h in alone)))
+    if flying:
+        out.append("<p>Checks in flight when the VM died, not confirmed alone: <span class=\"id\">%s</span></p>" % esc(", ".join("%s %s" % h for h in flying)))
     return "".join(out)
 
 
