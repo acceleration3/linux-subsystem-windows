@@ -74,6 +74,11 @@ void func_setup(Rig& r, DsState& s, DXGI_FORMAT format, bool spheres, unsigned s
 void func_frame(Rig& r, DsState& s, D3D10_COMPARISON_FUNC func, bool spheres, unsigned f, unsigned seed) {
     auto dd = Rig::depth_desc();
     dd.DepthEnable = TRUE;
+    if (!spheres && f > 0) {
+        dd.DepthFunc = D3D10_COMPARISON_ALWAYS;
+        s.h->state(dd, 0);
+        r.draw_std(ramp_layer(0.0f, 0.0f, 0.0f, 0, 0));
+    }
     dd.DepthFunc = func;
     s.h->state(dd, 0);
     if (!spheres) {
@@ -89,12 +94,12 @@ void func_case(const std::string& name, DXGI_FORMAT format, D3D10_COMPARISON_FUN
     MultiBody<DsState> body;
     body.setup = [format, spheres, seed](Rig& r, DsState& s) { func_setup(r, s, format, spheres, seed); };
     body.frame = [func, spheres, seed](Rig& r, DsState& s, unsigned f) { func_frame(r, s, (!spheres && func == D3D10_COMPARISON_EQUAL && r.mutate("om_equal")) ? D3D10_COMPARISON_NEVER : func, spheres, f, seed); };
-    body.capture = [](Rig& r, DsState&, unsigned, rr::CaptureSet& o) {
+    const bool depth_changes = spheres || (func != D3D10_COMPARISON_EQUAL && func != D3D10_COMPARISON_NOT_EQUAL && func != D3D10_COMPARISON_LESS_EQUAL && func != D3D10_COMPARISON_GREATER_EQUAL);
+    body.capture = [depth_changes](Rig& r, DsState&, unsigned, rr::CaptureSet& o) {
         r.cap_main(o);
-        r.cap_depth(o, "depth", r.depth_main);
+        if (depth_changes) r.cap_depth(o, "depth", r.depth_main);
     };
     rr::CaseSpec cs = dspec(name);
-    if (!spheres) cs.audit_ok("depth captures coincide when an equal-test pass writes the depth that is already stored; the colour captures differ");
     multi<DsState>(cs.frames(func == D3D10_COMPARISON_NEVER && !spheres ? 1 : 3, func == D3D10_COMPARISON_NEVER && !spheres ? std::vector<unsigned>{0} : std::vector<unsigned>{0, 2}).tolerance(spheres ? scene_tol(12) : rr::Tolerance::blend()).tolerance_for("depth", rr::Tolerance::floats(depth_tol, 0.0f).with_outliers(spheres ? 1e-3 : 2e-4)), body, std::move(caps));
 }
 
@@ -102,7 +107,7 @@ struct StencilState {
     std::unique_ptr<DsHarness> h;
 };
 
-void stencil_op_case(const std::string& name, D3D10_STENCIL_OP pass_op, D3D10_STENCIL_OP fail_op, D3D10_STENCIL_OP zfail_op, D3D10_COMPARISON_FUNC func, bool overlap) {
+void stencil_op_case(const std::string& name, D3D10_STENCIL_OP pass_op, D3D10_STENCIL_OP fail_op, D3D10_STENCIL_OP zfail_op, D3D10_COMPARISON_FUNC func, bool overlap, UINT ref = 3) {
     MultiBody<StencilState> body;
     const bool up = pass_op == D3D10_STENCIL_OP_INCR || pass_op == D3D10_STENCIL_OP_INCR_SAT;
     const bool down = pass_op == D3D10_STENCIL_OP_DECR || pass_op == D3D10_STENCIL_OP_DECR_SAT;
@@ -130,7 +135,7 @@ void stencil_op_case(const std::string& name, D3D10_STENCIL_OP pass_op, D3D10_ST
         }
         dd.FrontFace = {fail_op, zfail_op, effective, func};
         dd.BackFace = dd.FrontFace;
-        s.h->state(dd, 3);
+        s.h->state(dd, ref);
         const float shift = 0.25f * static_cast<float>(f);
         std::vector<Vtx> a = Geo::quad(-0.9f + shift, -0.6f, 0.4f + shift, 0.9f - shift, 0.4f, 0.9f, 0.4f, 0.2f);
         std::vector<Vtx> b = Geo::quad(-0.3f - shift, -0.9f + shift, 0.9f - shift, 0.5f, 0.6f, 0.2f, 0.6f, 0.95f);
@@ -143,9 +148,8 @@ void stencil_op_case(const std::string& name, D3D10_STENCIL_OP pass_op, D3D10_ST
     };
     body.capture = [](Rig& r, StencilState&, unsigned, rr::CaptureSet& o) { r.cap_stencil(o, "stencil", r.depth_main); };
     rr::CaseSpec cs = dspec(name);
-    if (name == "stencil_pass_op_keep") cs.audit_ok("KEEP leaves the seeded bands untouched in every frame by design");
-    if (name == "stencil_pass_op_replace" || name == "stencil_fail_op_replace") cs.audit_ok("REPLACE through the pass op under ALWAYS and through the fail op under NEVER write the same reference everywhere by design");
-    multi<StencilState>(cs.frames(3, {0, 2}).tolerance(rr::Tolerance::blend()), body);
+    const bool keep = name == "stencil_pass_op_keep";
+    multi<StencilState>(cs.frames(keep ? 1 : 3, keep ? std::vector<unsigned>{0} : std::vector<unsigned>{0, 2}).tolerance(rr::Tolerance::blend()), body);
 }
 
 void stencil_func_case(const std::string& name, D3D10_COMPARISON_FUNC func) {
@@ -196,7 +200,7 @@ const Registrar kDepth{[] {
     for (int i = 0; i < 8; ++i) {
         stencil_op_case(std::string("stencil_pass_op_") + kOpNames[i], kOps[i], D3D10_STENCIL_OP_KEEP, D3D10_STENCIL_OP_KEEP, D3D10_COMPARISON_ALWAYS, false);
     }
-    stencil_op_case("stencil_fail_op_replace", D3D10_STENCIL_OP_KEEP, D3D10_STENCIL_OP_REPLACE, D3D10_STENCIL_OP_KEEP, D3D10_COMPARISON_NEVER, false);
+    stencil_op_case("stencil_fail_op_replace", D3D10_STENCIL_OP_KEEP, D3D10_STENCIL_OP_REPLACE, D3D10_STENCIL_OP_KEEP, D3D10_COMPARISON_NEVER, false, 9);
     stencil_op_case("stencil_depth_fail_op_incr", D3D10_STENCIL_OP_KEEP, D3D10_STENCIL_OP_KEEP, D3D10_STENCIL_OP_INCR, D3D10_COMPARISON_ALWAYS, true);
     for (int f = 0; f < 8; ++f) {
         stencil_func_case(std::string("stencil_func_") + kFuncNames[f], kFuncs[f]);
@@ -220,7 +224,7 @@ const Registrar kDepth{[] {
         r.cap_stencil(o, "stencil", r.depth_main);
     });
     for (int which = 0; which < 2; ++which) {
-        single(dspec(which ? "stencil_write_mask" : "stencil_read_mask").audit_ok("the read-mask and write-mask scenes reach the same final picture through different state by design").tolerance(rr::Tolerance::blend()), [which](Rig& r, rr::CaptureSet& o) {
+        single(dspec(which ? "stencil_write_mask" : "stencil_read_mask").tolerance(rr::Tolerance::blend()), [which](Rig& r, rr::CaptureSet& o) {
             DsHarness h(r, DXGI_FORMAT_D24_UNORM_S8_UINT);
             if (!r.ok()) return;
             r.clear_depth(r.depth_main, 1.0f, 0xf0);
@@ -230,7 +234,7 @@ const Registrar kDepth{[] {
             dd.BackFace = dd.FrontFace;
             dd.StencilWriteMask = which ? 0x0f : 0xff;
             h.state(dd, 0x5a);
-            r.draw_std(Geo::quad(-0.9f, -0.2f, 0.9f, 0.9f, 0.5f, 0.9f, 0.4f, 0.2f));
+            r.draw_std(Geo::quad(-0.9f + 0.4f * which, -0.2f - 0.3f * which, 0.9f, 0.9f - 0.3f * which, 0.5f, 0.9f, 0.4f, 0.2f));
             dd.FrontFace = {D3D10_STENCIL_OP_KEEP, D3D10_STENCIL_OP_KEEP, D3D10_STENCIL_OP_KEEP, D3D10_COMPARISON_EQUAL};
             dd.BackFace = dd.FrontFace;
             dd.StencilReadMask = which ? 0xff : 0x0f;

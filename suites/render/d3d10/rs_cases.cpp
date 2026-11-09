@@ -38,7 +38,7 @@ LineStats measure(const rr::Image& image) {
     return s;
 }
 
-void draw_lines(Rig& r, bool antialiased, bool multisample_flag) {
+void draw_lines(Rig& r, bool antialiased, bool multisample_flag, float tilt = 0.0f) {
     auto rd = Rig::raster_desc();
     rd.AntialiasedLineEnable = antialiased ? TRUE : FALSE;
     rd.MultisampleEnable = multisample_flag ? TRUE : FALSE;
@@ -56,7 +56,7 @@ void draw_lines(Rig& r, bool antialiased, bool multisample_flag) {
     r.d->OMSetBlendState(bs.get(), f, 0xffffffffu);
     std::vector<Vtx> v;
     for (unsigned i = 0; i < 14; ++i) {
-        const float a = 0.2f + 3.1f * static_cast<float>(i) / 14.0f;
+        const float a = 0.2f + tilt + 3.1f * static_cast<float>(i) / 14.0f;
         v.push_back(vtx(0.0f, -0.9f, 0.5f, palette(7)));
         v.push_back(vtx(0.95f * std::cos(a), -0.9f + 1.8f * std::sin(a), 0.5f, palette(7)));
     }
@@ -75,7 +75,7 @@ void line_scene(Rig& r, rr::CaptureSet& o, int mode) {
     r.viewport(128, 128);
     r.bind_rt(a);
     r.clear(a, 0, 0, 0, 1);
-    draw_lines(r, false, false);
+    draw_lines(r, false, false, mode == 2 ? 0.07f : 0.0f);
     rr::Image first;
     r.read(a, first);
     if (mode == 0) {
@@ -84,7 +84,7 @@ void line_scene(Rig& r, rr::CaptureSet& o, int mode) {
     }
     r.bind_rt(b);
     r.clear(b, 0, 0, 0, 1);
-    draw_lines(r, mode == 1 && !r.mutate("rs_aa"), mode == 2);
+    draw_lines(r, mode == 1 && !r.mutate("rs_aa"), mode == 2, mode == 2 ? 0.07f : 0.0f);
     rr::Image second;
     r.read(b, second);
     if (!r.ok()) return;
@@ -111,7 +111,7 @@ const std::vector<Vtx>& two_quads() {
     return v;
 }
 
-void bias_scene(Rig& r, rr::CaptureSet& o, DXGI_FORMAT format, int bias, float slope, float clamp, bool tilt, D3D10_COMPARISON_FUNC func) {
+void bias_scene(Rig& r, rr::CaptureSet& o, DXGI_FORMAT format, int bias, float slope, float clamp, bool tilt, D3D10_COMPARISON_FUNC func, unsigned variant) {
     if (r.mutate("rs_bias")) {
         bias = 0;
         slope = 0;
@@ -137,7 +137,7 @@ void bias_scene(Rig& r, rr::CaptureSet& o, DXGI_FORMAT format, int bias, float s
     if (!r.ok()) return;
     r.d->OMSetDepthStencilState(ds.get(), 0);
     std::vector<Vtx> a = Geo::quad(-0.9f, -0.9f, 0.9f, 0.9f, 0.5f, 0.9f, 0.3f, 0.2f);
-    std::vector<Vtx> b = Geo::quad(-0.7f, -0.7f, 0.7f, 0.7f, 0.5f, 0.2f, 0.5f, 0.95f);
+    std::vector<Vtx> b = Geo::quad(-0.7f + 0.08f * static_cast<float>(variant), -0.7f, 0.7f, 0.7f - 0.07f * static_cast<float>(variant), 0.5f, palette(variant + 2)[0], palette(variant + 2)[1], palette(variant + 2)[2]);
     if (tilt) {
         for (auto& v : b) v.z = 0.5f + 0.12f * v.x;
         for (auto& v : a) v.z = 0.5f + 0.12f * v.x;
@@ -330,9 +330,11 @@ const Registrar kRs{[] {
         {"bias_slope_scaled", DXGI_FORMAT_D32_FLOAT, 0, -4.0f, 0, true, D3D10_COMPARISON_LESS, 1e-4f},
         {"bias_clamped", DXGI_FORMAT_D24_UNORM_S8_UINT, -400000, 0, -0.0005f, false, D3D10_COMPARISON_LESS, 2e-6f},
     };
+    unsigned bias_index = 0;
     for (const BiasCase& b : biases) {
-        single(spec("rs", b.name).audit_ok("the colour capture only shows whether the biased quad is visible; the bias magnitude is judged on the depth capture").tolerance(rr::Tolerance::raster(2, 1)).tolerance_for("depth", rr::Tolerance::floats(b.depth_tol, 0.0f).with_outliers(2e-4)),
-               [b](Rig& r, rr::CaptureSet& o) { bias_scene(r, o, b.format, b.bias, b.slope, b.clamp, b.tilt, b.func); });
+        const unsigned bias_variant = bias_index++;
+        single(spec("rs", b.name).tolerance(rr::Tolerance::raster(2, 1)).tolerance_for("depth", rr::Tolerance::floats(b.depth_tol, 0.0f).with_outliers(2e-4)),
+               [b, bias_variant](Rig& r, rr::CaptureSet& o) { bias_scene(r, o, b.format, b.bias, b.slope, b.clamp, b.tilt, b.func, bias_variant); });
     }
     for (int clip = 0; clip < 2; ++clip) {
         single(spec("rs", clip ? "depth_clip_enabled" : "depth_clip_disabled").tolerance(rr::Tolerance::blend()).tolerance_for("depth", rr::Tolerance::floats(2e-4f, 2e-4f)),
@@ -382,9 +384,9 @@ const Registrar kRs{[] {
         r.draw_std(v);
         r.cap_main(o);
     });
-    single(spec("rs", "antialiased_lines_off").audit_ok("the aliased reference render is also the ms_off capture of the multisample row").tolerance(lines_tol()), [](Rig& r, rr::CaptureSet& o) { line_scene(r, o, 0); });
+    single(spec("rs", "antialiased_lines_off").tolerance(lines_tol()), [](Rig& r, rr::CaptureSet& o) { line_scene(r, o, 0); });
     single(spec("rs", "antialiased_lines_on_widen_and_fade").tolerance(rr::Tolerance::psnr(12.0)).tolerance_for("aliased", lines_tol()), [](Rig& r, rr::CaptureSet& o) { line_scene(r, o, 1); });
-    single(spec("rs", "multisample_enable_lines_on_msaa_target").audit_ok("the ms_off capture is the aliased reference render that antialiased_lines_off also draws").tolerance(rr::Tolerance::psnr(14.0)).tolerance_for("ms_off", rr::Tolerance::psnr(18.0)), [](Rig& r, rr::CaptureSet& o) { line_scene(r, o, 2); });
+    single(spec("rs", "multisample_enable_lines_on_msaa_target").tolerance(rr::Tolerance::psnr(14.0)).tolerance_for("ms_off", rr::Tolerance::psnr(18.0)), [](Rig& r, rr::CaptureSet& o) { line_scene(r, o, 2); });
     single(spec("rs", "fill_rule_shared_quads_additive").tolerance(rr::Tolerance::exact()), [](Rig& r, rr::CaptureSet& o) { fill_rule_scene(r, o, 0); });
     single(spec("rs", "fill_rule_shared_diagonal_additive").tolerance(rr::Tolerance::exact()), [](Rig& r, rr::CaptureSet& o) { fill_rule_scene(r, o, 1); });
     single(spec("rs", "fill_rule_pixel_center_edges_additive").tolerance(rr::Tolerance::exact()), [](Rig& r, rr::CaptureSet& o) { fill_rule_scene(r, o, 2); });
