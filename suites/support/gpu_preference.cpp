@@ -7,7 +7,9 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <cwchar>
 #include <string>
+#include <vector>
 
 namespace lsw::suites {
 
@@ -15,6 +17,7 @@ namespace {
 
 constexpr wchar_t kKey[] = L"Software\\Microsoft\\DirectX\\UserGpuPreferences";
 constexpr wchar_t kHighPerformance[] = L"GpuPreference=2;";
+constexpr wchar_t kPowerSaving[] = L"GpuPreference=1;";
 
 std::wstring module_path() {
     wchar_t buffer[MAX_PATH * 4];
@@ -74,7 +77,7 @@ void sweep_stale(const std::wstring& root) {
 }  // namespace
 
 bool GpuPreferenceScope::needed(const AvAdapter& target) {
-    return target.hybrid_discrete && std::getenv(kMarker) == nullptr;
+    return (target.hybrid_discrete || target.hybrid_integrated) && std::getenv(kMarker) == nullptr;
 }
 
 int GpuPreferenceScope::run_again(const AvAdapter& target) {
@@ -86,18 +89,43 @@ int GpuPreferenceScope::run_again(const AvAdapter& target) {
     sweep_stale(root);
     const std::wstring directory = root + L"\\" + std::to_wstring(::GetCurrentProcessId());
     ::CreateDirectoryW(directory.c_str(), nullptr);
-    const std::wstring copy = directory + L"\\" + original.substr(original.find_last_of(L'\\') + 1);
-    if (!::CopyFileW(original.c_str(), copy.c_str(), FALSE)) {
-        std::fprintf(stderr, "%s: cannot copy the executable for the %s GPU preference: error %lu\n", ExeIdentity::name().c_str(),
-                     target.name.c_str(), ::GetLastError());
-        return 2;
-    }
-    const LONG set = ::RegSetKeyValueW(HKEY_CURRENT_USER, kKey, copy.c_str(), REG_SZ, kHighPerformance, sizeof kHighPerformance);
-    if (set != ERROR_SUCCESS) {
-        std::fprintf(stderr, "%s: cannot set the GPU preference: error %ld\n", ExeIdentity::name().c_str(), set);
-        ::DeleteFileW(copy.c_str());
+    const std::wstring name = original.substr(original.find_last_of(L'\\') + 1);
+    const std::wstring copy = directory + L"\\" + name;
+    std::vector<std::wstring> copies;
+    const auto release = [&] {
+        for (const std::wstring& path : copies) {
+            ::RegDeleteKeyValueW(HKEY_CURRENT_USER, kKey, path.c_str());
+            ::DeleteFileW(path.c_str());
+        }
         ::RemoveDirectoryW(directory.c_str());
-        return 2;
+    };
+    const wchar_t* const preference = target.hybrid_discrete ? kHighPerformance : kPowerSaving;
+    const DWORD preference_size = static_cast<DWORD>((std::wcslen(preference) + 1) * sizeof(wchar_t));
+    std::vector<std::wstring> names{name};
+    for (const wchar_t* const sibling : {L"lsw-suites64.exe", L"lsw-suites32.exe"}) {
+        if (name != sibling) {
+            names.emplace_back(sibling);
+        }
+    }
+    for (const std::wstring& sibling : names) {
+        const std::wstring source = sibling == name ? original : parent_of(original) + L"\\" + sibling;
+        const std::wstring target_path = directory + L"\\" + sibling;
+        if (sibling != name && ::GetFileAttributesW(source.c_str()) == INVALID_FILE_ATTRIBUTES) {
+            continue;
+        }
+        if (!::CopyFileW(source.c_str(), target_path.c_str(), FALSE)) {
+            std::fprintf(stderr, "%s: cannot copy the executable for the %s GPU preference: error %lu\n", ExeIdentity::name().c_str(),
+                         target.name.c_str(), ::GetLastError());
+            release();
+            return 2;
+        }
+        copies.push_back(target_path);
+        const LONG set = ::RegSetKeyValueW(HKEY_CURRENT_USER, kKey, target_path.c_str(), REG_SZ, preference, preference_size);
+        if (set != ERROR_SUCCESS) {
+            std::fprintf(stderr, "%s: cannot set the GPU preference: error %ld\n", ExeIdentity::name().c_str(), set);
+            release();
+            return 2;
+        }
     }
     ::SetEnvironmentVariableA(kMarker, "2");
     set_if_unset("LSW_SUITES_DXC_DIR", narrow(parent_of(original)));
@@ -121,9 +149,7 @@ int GpuPreferenceScope::run_again(const AvAdapter& target) {
         std::fprintf(stderr, "%s: cannot start the executable under the GPU preference: error %lu\n", ExeIdentity::name().c_str(),
                      ::GetLastError());
     }
-    ::RegDeleteKeyValueW(HKEY_CURRENT_USER, kKey, copy.c_str());
-    ::DeleteFileW(copy.c_str());
-    ::RemoveDirectoryW(directory.c_str());
+    release();
     return code;
 }
 

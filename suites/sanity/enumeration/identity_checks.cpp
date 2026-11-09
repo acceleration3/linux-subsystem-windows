@@ -2,6 +2,8 @@
 
 #include "core/text.hpp"
 #include "support/gl_identity.hpp"
+#include "support/gpu_preference.hpp"
+#include "support/target_adapter.hpp"
 #include "support/av_adapters.hpp"
 #include "support/display_devices.hpp"
 #include "support/kmt_api.hpp"
@@ -12,6 +14,8 @@
 #include "support/vulkan_api.hpp"
 
 #include <dxgi1_6.h>
+
+#include <cstdlib>
 
 #include <set>
 
@@ -219,7 +223,12 @@ Outcome IdentityChecks::hybrid_roles(Context& context) {
             DXGI_ADAPTER_DESC1 desc{};
             first->GetDesc1(&desc);
             const AvAdapter* found = AvAdapters::find(adapters, AvAdapters::key(desc.AdapterLuid));
-            if (found == nullptr || !found->hybrid_discrete) {
+            AvAdapter preferred;
+            std::string preferred_error;
+            const bool power_saving = std::getenv(GpuPreferenceScope::kMarker) != nullptr && TargetAdapter::pick(preferred, preferred_error) && preferred.hybrid_integrated;
+            if (power_saving) {
+                context.note("the process runs under the power saving GPU preference, so the high performance order is not asserted");
+            } else if (found == nullptr || !found->hybrid_discrete) {
                 problems.add("the first adapter DXGI lists for high performance is not a hybrid discrete accel-virt adapter");
             }
             first->Release();
@@ -246,10 +255,14 @@ Outcome IdentityChecks::gl_renderer_matches(Context& context) {
     }
     Problems problems;
     std::size_t tested = 0;
+    AvAdapter preferred;
+    std::string preferred_error;
+    const bool under_preference = std::getenv(GpuPreferenceScope::kMarker) != nullptr && TargetAdapter::pick(preferred, preferred_error);
     for (const AvAdapter& adapter : adapters) {
         if (adapter.software) {
             continue;
         }
+        const AvAdapter& expected = under_preference ? preferred : adapter;
         for (const AvOutput& output : adapter.outputs) {
             if (!output.attached) {
                 continue;
@@ -274,8 +287,8 @@ Outcome IdentityChecks::gl_renderer_matches(Context& context) {
                                                              });
             std::string how;
             context.measure(output.device_name + ".gl_uuid", uuid);
-            if (renderer.empty() || !GlIdentity::matches(adapter, uuid, renderer, how)) {
-                problems.add(output.device_name + ": GL_RENDERER '" + renderer + "' is not DXGI adapter '" + adapter.name + "' (" + how + ")");
+            if (renderer.empty() || !GlIdentity::matches(expected, uuid, renderer, how)) {
+                problems.add(output.device_name + ": GL_RENDERER '" + renderer + "' is not DXGI adapter '" + expected.name + "' (" + how + ")");
             }
         }
     }
