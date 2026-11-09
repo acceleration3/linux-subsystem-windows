@@ -1,0 +1,8 @@
+#version 450
+layout(local_size_x = 64) in;
+layout(set = 0, binding = 0, r32ui) uniform uimage2D u_image;
+void main() {
+    uint i = gl_GlobalInvocationID.x;
+    ivec2 p = ivec2(int((i * 7u + 3u) % 4u), int((i * 5u + 1u) % 4u));
+    imageAtomicAdd(u_image, p, 1u + (i & 1u));
+}
