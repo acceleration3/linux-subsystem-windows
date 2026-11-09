@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cmath>
 #include <cstdint>
 #include <vector>
 
@@ -22,6 +23,21 @@ public:
             }
         }
         return out;
+    }
+
+    static void stamp(ColoredVertex* out, unsigned frame) {
+        const float angle = static_cast<float>(frame) * 0.7854f;
+        const float cx = 0.6f * std::cos(angle);
+        const float cy = 0.6f * std::sin(angle);
+        const float t = static_cast<float>(frame) / 7.0f;
+        for (unsigned q = 0; q < 4; ++q) {
+            const float a0 = angle + static_cast<float>(q) * 1.5708f;
+            const float r = 0.16f + 0.01f * static_cast<float>(frame);
+            ColoredVertex* v = out + q * 3;
+            v[0] = {{cx, cy, 0.0f}, {1.0f, t, 0.2f}};
+            v[1] = {{cx + r * std::cos(a0), cy + r * std::sin(a0), 0.0f}, {0.2f, 1.0f, t}};
+            v[2] = {{cx + r * std::cos(a0 + 1.5708f), cy + r * std::sin(a0 + 1.5708f), 0.0f}, {t, 0.3f, 1.0f}};
+        }
     }
 
     [[nodiscard]] static std::vector<std::uint16_t> cube_indices() {

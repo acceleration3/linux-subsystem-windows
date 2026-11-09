@@ -65,6 +65,12 @@ struct Mat4 {
         return out;
     }
 
+    [[nodiscard]] static Mat4 perspective_d3d(float fovy, float aspect, float near_plane, float far_plane) {
+        Mat4 out = perspective(fovy, aspect, near_plane, far_plane, true);
+        out.m[5] = -out.m[5];
+        return out;
+    }
+
     [[nodiscard]] static Mat4 perspective(float fovy, float aspect, float near_plane, float far_plane, bool vulkan) {
         const float f = 1.0f / std::tan(fovy * 0.5f);
         Mat4 out;

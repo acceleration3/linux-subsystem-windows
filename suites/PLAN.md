@@ -53,6 +53,7 @@ suites/
 | `--shuffle SEED` | randomise order within each phase (parallel, exclusive, pacing) |
 | `--json FILE` | write the result file (schema in 2.4); the per-check log goes next to it with the extension `.jsonl` (`r64.json` gives `r64.jsonl`) |
 | `--artifacts DIR` | where failing checks drop images, buffers and logs (default `.\lsw-suites-artifacts`) |
+| `--refs DIR` | host reference images for the render suite (default `<exe dir>\render-refs`; workers get it as `LSW_SUITES_REFS`) |
 | `--run-one ID` | internal: run one check in this process (used by workers) |
 
 ### Parallelism
@@ -1375,3 +1376,36 @@ Implementation note: each measure scans the driver logs in C:\ProgramData\av for
 
 Existing tests stay where they are: accel-virt unit tests, fuzz targets and probes cover units and bring-up;
 this suite covers what an application can rely on, on real GPUs.
+
+## 5. The render suite
+
+`--suite render` draws realistic scenes (indexed meshes, mipmapped and blended textures, MRT, depth and stencil
+captures, multi-frame animations with ring-buffered dynamic data, swap-chain back buffers) and judges every captured
+frame against a reference image under a named tolerance (`exact`, `tight`, `blend`, `filter`, `raster`, `psnr`,
+`float`). Ids are `render.<api>.<group>.<case>` with api `d3d9`, `d3d10`, `d3d11`, `d3d12`, `vk`, `gl`; the suite is
+parallel and no check is exclusive.
+
+```
+suites/render/common/     portable image, tolerance, diff, reference store, PNG, case model (no windows.h)
+suites/render/platform/   vk_platform.hpp, gl_platform.hpp; win32/ (guest) and linux/ (host) implementations
+suites/render/vk, gl/     portable kits and case tables; guest_add.cpp registers them in the guest only
+suites/render/d3d*/       guest-only kits and case tables; add.cpp registers them
+suites/render/host/       guest-side judging: registration, image judge, reference checks
+suites/render-ref/        lsw-render-ref, the Linux tool that renders the Vulkan and OpenGL references
+```
+
+- A case is a `Scene<Kit>` subclass (`setup`, `frame(index)`, `capture(index, set)`, optional `unsupported`) plus one
+  `Register<Kit, Scene>{CaseSpec(group, name).frames(n, {captured}).tolerance(...)}` line. The CMake lists glob each
+  folder, so adding a case touches no shared file. Vulkan shaders are GLSL in `vk/spirv/`; `generate.sh` there writes
+  one registered `.cpp` per shader into `vk/spirv/gen/`.
+- Oracles: D3D10, D3D11 and D3D12 compare the accel-virt adapter with WARP; D3D9 compares it with D3D9On12 over a WARP12
+  device (`Direct3DCreate9On12` and the Ex variant); Vulkan and OpenGL compare with images rendered by
+  `lsw-render-ref` on the same physical GPU through native Vulkan and EGL desktop GL.
+- References: `scripts/render-refs.sh` builds the tool, renders for the GPU the `lsw` domain binds (`--gpu auto`), and
+  pushes `render-refs/` (`device.json`, `<id>/fNNN[_label].rref`, `<id>/skip.txt`) to the guest. The matrix does the
+  same per GPU with the UUID it binds when `--suite-args` names the render suite.
+- Run: `lsw-suites64.exe --suite render --jobs 2 --refs C:\av\gputest\render-refs --json r.json --artifacts art`. A
+  failing frame writes `<frame>.expected.png`, `.actual.png` and `.diff.png`; `psnr`, `bad_pixels` and `max_delta`
+  are recorded for every frame.
+- Caps: a case that needs an optional feature reports it through `unsupported`. A host reference skipped for a missing
+  feature leaves `skip.txt`; the guest skips only if it lacks the feature too, and fails if the two disagree.

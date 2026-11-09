@@ -19,7 +19,8 @@ OpenGL, Vulkan and OpenCL in the guest all reach it by default; then:
   suites   lsw-suites64.exe and lsw-suites32.exe (suites/), in the console
            session: --phase main for both, then --phase pacing for x64 and x32,
            one after the other; a check fails the GPU if it failed in either bitness;
-           --suite-args passes options to both
+           --suite-args passes options to both; with "--suite ... render ..." the matrix first renders the
+           Vulkan and OpenGL references on the VM's host GPU (lsw-render-ref) and pushes them as --refs
   traces   (opt-in) API traces recorded from real applications, replayed and
            judged on their pictures, buffers, memory and speed (trace_suite.py); --traces picks some
 
@@ -98,6 +99,8 @@ SUITES_RUNS = (("64", "main"), ("32", "main"), ("64", "pacing"), ("32", "pacing"
 SUITES_EXECUTABLES = {"64": TREE / "build-suites" / "lsw-suites64.exe",
                       "32": TREE / "build-suites32" / "lsw-suites32.exe"}
 SUITES_TIMEOUT = 2 * 60 * 60
+RENDER_REF = TREE / "build-render-ref" / "lsw-render-ref"
+GUEST_REFS = f"{GUEST_DIR}\\render-refs"
 PROBES = {
     "d3d9": ("avd3d9probe", suite.D3D_STEPS["9"]),
     "d3d11": ("avd3d11probe", suite.D3D_STEPS["11"]),
@@ -631,13 +634,37 @@ def add_host_phase(verdict, phase, out):
         verdict["status"] = "fail"
 
 
-def run_suites(guest, out, suite_args):
+def push_render_refs(guest, gpu, out):
+    if not RENDER_REF.exists():
+        raise suite.StepFailed(f"{RENDER_REF} is not built: run scripts/build-render-ref.sh")
+    refs = out / "render-refs"
+    shutil.rmtree(refs, ignore_errors=True)
+    say(f"render references for {gpu.name} ({gpu.uuid})")
+    done = subprocess.run([str(RENDER_REF), "--out", str(refs), "--gpu", gpu.uuid, "--jobs", "4"],
+                          capture_output=True, text=True, timeout=1800)
+    (out / "render-refs.txt").write_text(done.stdout + done.stderr)
+    if done.returncode != 0:
+        raise suite.StepFailed(f"lsw-render-ref failed (exit {done.returncode}); see {out / 'render-refs.txt'}")
+    shutil.make_archive(str(out / "render-refs"), "zip", refs)
+    archive = f"{GUEST_DIR}\\render-refs.zip"
+    guest.agent.push((out / "render-refs.zip").read_bytes(), archive)
+    guest.powershell(f"Remove-Item -Recurse -Force {GUEST_REFS} -ErrorAction SilentlyContinue; "
+                     f"Expand-Archive -Force -Path {archive} -DestinationPath {GUEST_REFS}")
+
+
+def run_suites(guest, out, suite_args, gpu=None):
     out.mkdir(parents=True, exist_ok=True)
     say("suites lsw-suites64 and lsw-suites32")
     console = suite.ConsoleProgram(guest.agent, SUITES_TIMEOUT)
     guest.powershell(f"New-Item -ItemType Directory -Force {GUEST_DIR} | Out-Null")
     extra = subprocess.list2cmdline(shlex.split(suite_args))
     failures, notes, total = [], [], 0
+    if gpu is not None and "render" in suite_args:
+        try:
+            push_render_refs(guest, gpu, out)
+            extra += f" --refs {GUEST_REFS}"
+        except (AgentError, suite.StepFailed, OSError, subprocess.SubprocessError) as error:
+            failures.append({"case": "render-refs", "detail": str(error)})
     for bits, phase in SUITES_RUNS:
         executable = SUITES_EXECUTABLES[bits]
         program = f"lsw-suites{bits}"
@@ -878,7 +905,7 @@ def gpu_pass(domain, original, share, gpu, args, out):
                 phase = host_phase.HostPhase(work, avgpu_log_path(original),
                                              pathlib.Path.home() / ".cache" / "libvirt" / "qemu" / "log" / f"{DOMAIN}.log",
                                              out / "suites" / "host")
-                result["suites"]["suites"] = run_suites(guest, out / "suites", args.suite_args)
+                result["suites"]["suites"] = run_suites(guest, out / "suites", args.suite_args, gpu)
                 add_host_phase(result["suites"]["suites"], phase, out / "suites")
             elif name in APP_SUITES:
                 result["suites"][name] = run_app_suite(name, guest, out / name, gpu, adapter.get("name", ""))

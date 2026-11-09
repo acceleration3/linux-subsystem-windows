@@ -14,6 +14,15 @@ std::string ImageJudge::label(unsigned frame, const std::string& capture) {
 
 void ImageJudge::compare(Context& context, Problems& problems, const std::string& name, const rr::Image& expected,
                          const rr::Image& actual, const rr::Tolerance& tolerance) {
+    bool uniform = !expected.empty();
+    const std::size_t pixel = rr::PixelInfo::bytes(expected.kind());
+    for (std::size_t i = pixel; uniform && i < expected.bytes().size(); ++i) {
+        uniform = expected.bytes()[i] == expected.bytes()[i % pixel];
+    }
+    if (uniform) {
+        problems.add(name + ": the reference image is a single value, so the scene drew nothing");
+        return;
+    }
     rr::Image diff;
     const rr::DiffResult result = rr::ImageDiff::compare(expected, actual, tolerance, &diff);
     context.measure("psnr." + name, result.psnr);

@@ -66,6 +66,8 @@ cmd_build() {
     cmake --build "${ROOT}/build-agent" --target remotewin-wgcbench
     say "Building lsw-suites"
     "${ROOT}/scripts/build-suites.sh"
+    say "Building lsw-render-ref"
+    "${ROOT}/scripts/build-render-ref.sh"
     say "Building accel-virt's test programs"
     if [[ ! -f ${AV}/build/CMakeCache.txt ]]; then
         cmake -S "${AV}" -B "${AV}/build" -G Ninja
@@ -100,6 +102,7 @@ bundle_paths() (
     echo build-agent/remotewin/source/guest/remotewin-wgcbench.exe
     echo build-suites/lsw-suites64.exe
     echo build-suites32/lsw-suites32.exe
+    echo build-render-ref/lsw-render-ref
     echo build-agent/_deps/vulkanloader-build/loader/vulkan-1.dll
     echo build-agent32/_deps/vulkanloader-build/loader/vulkan-1.dll
     echo external/accel-virt/tools
