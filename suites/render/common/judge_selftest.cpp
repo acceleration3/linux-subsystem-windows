@@ -154,6 +154,22 @@ std::vector<std::string> JudgeSelfTest::run(std::vector<std::string>& passed) {
         expect("the same jitter fails under tight", ImageDiff::compare(expected, actual, Tolerance::tight(1)).pass, false);
         expect("identical triangles pass under exact", ImageDiff::compare(expected, expected, Tolerance::exact()).pass, true);
     }
+    {
+        const auto points = [&](std::uint32_t at, std::uint32_t size) {
+            Image image = Image::solid(128, 128, kDark);
+            for (std::uint32_t y = 0; y < size; ++y) {
+                for (std::uint32_t x = 0; x < size; ++x) {
+                    image.set_rgba8(at + x, at + y, kWhite);
+                }
+            }
+            return image;
+        };
+        const Image expected = points(60, 2);
+        expect("a size 2 point against itself passes under raster", ImageDiff::compare(expected, points(60, 2), Tolerance::raster(1, 1)).pass, true);
+        expect("a size 2 point against size 1 fails under raster", ImageDiff::compare(expected, points(60, 1), Tolerance::raster(1, 1)).pass, false);
+        expect("a size 2 point against size 3 fails under raster", ImageDiff::compare(expected, points(60, 3), Tolerance::raster(1, 1)).pass, false);
+        expect("a size 2 point shifted by one pixel fails under raster", ImageDiff::compare(expected, points(61, 2), Tolerance::raster(1, 1)).pass, false);
+    }
     return failures;
 }
 

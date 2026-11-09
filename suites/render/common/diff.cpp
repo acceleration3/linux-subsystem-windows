@@ -1,13 +1,32 @@
 #include "render/common/diff.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdio>
+#include <map>
 #include <vector>
 
 namespace lsw::render {
 
 namespace {
+
+std::uint64_t drawn_pixels(const Image& image, unsigned channels) {
+    std::map<std::array<double, 4>, std::uint64_t> histogram;
+    std::uint64_t dominant = 0;
+    for (std::uint32_t y = 0; y < image.height(); ++y) {
+        for (std::uint32_t x = 0; x < image.width(); ++x) {
+            std::array<double, 4> key{};
+            for (unsigned c = 0; c < channels && c < 4; ++c) {
+                key[c] = image.channel(x, y, c);
+            }
+            dominant = std::max(dominant, ++histogram[key]);
+        }
+    }
+    return static_cast<std::uint64_t>(image.width()) * image.height() - dominant;
+}
+
+constexpr std::uint64_t kForgiveFloor = 2;
 
 bool channel_close(ChannelClass klass, double a, double b, const Tolerance& tolerance, double& units) {
     if (std::isnan(a) || std::isnan(b)) {
@@ -106,7 +125,7 @@ DiffResult ImageDiff::compare(const Image& expected, const Image& actual, const 
     }
     if (tolerance.edge_radius > 0 && !integer) {
         const int radius = tolerance.edge_radius;
-        const std::uint64_t cap = static_cast<std::uint64_t>(tolerance.forgive_fraction * static_cast<double>(result.total));
+        const std::uint64_t cap = std::max(kForgiveFloor, static_cast<std::uint64_t>(tolerance.forgive_fraction * static_cast<double>(drawn_pixels(expected, channels))));
         for (std::uint32_t y = 0; y < height; ++y) {
             for (std::uint32_t x = 0; x < width; ++x) {
                 const std::size_t at = static_cast<std::size_t>(y) * width + x;
