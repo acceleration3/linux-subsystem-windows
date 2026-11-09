@@ -250,7 +250,6 @@ public:
 };
 
 [[nodiscard]] bool fail_with(std::string& error, const std::string& text);
-[[nodiscard]] const std::vector<std::string>& audit_reasons_of(const std::string& id);
 [[nodiscard]] std::string lacks_options(Kit& kit, const char* what, const std::function<bool(Kit&)>& test);
 void set_cbv_root(ID3D12GraphicsCommandList* list, const rr::Mat4& mvp, const float p0[4], const float p1[4] = nullptr);
 [[nodiscard]] rr::Mat4 camera(float aspect, float distance, float yaw, float pitch);

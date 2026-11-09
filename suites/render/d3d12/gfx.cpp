@@ -665,18 +665,12 @@ private:
 
 void Cases::single(rr::CaseSpec spec, DrawFn draw, NeedFn need) {
     spec.tag("single");
-    for (const std::string& reason : audit_reasons_of(spec.group() + "." + spec.name())) {
-        spec.audit_ok(reason);
-    }
     rr::CaseTable<Kit>::instance().add(std::move(spec), [draw = std::move(draw), need = std::move(need)] {
         return std::unique_ptr<rr::Scene<Kit>>(new FnScene(draw, need));
     });
 }
 
 void Cases::frames(rr::CaseSpec spec, std::function<void(Steps&)> build, NeedFn need) {
-    for (const std::string& reason : audit_reasons_of(spec.group() + "." + spec.name())) {
-        spec.audit_ok(reason);
-    }
     rr::CaseTable<Kit>::instance().add(std::move(spec), [build = std::move(build), need = std::move(need)] {
         auto scene = std::make_unique<Steps>();
         scene->need = need;
