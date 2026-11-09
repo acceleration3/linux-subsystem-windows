@@ -72,7 +72,7 @@ OpenStatus Kit::open(bool use_warp, const rr::CaseSpec& spec, std::string& error
     if (!warp) {
         AvAdapter target;
         std::string pick_error;
-        if (TargetAdapter::pick(target, pick_error) && !target.has_outputs()) {
+        if (TargetAdapter::pick(target, pick_error) && !target.has_outputs() && !target.hybrid_discrete) {
             error = "Direct3D 9 lists only adapters that drive a display, and " + target.name + " (LUID " + target.luid_text() + ") drives none";
             return OpenStatus::Unsupported;
         }

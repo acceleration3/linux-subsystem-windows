@@ -6,6 +6,7 @@
 #include "render/render.hpp"
 #include "sanity/sanity.hpp"
 #include "selftest/selftest.hpp"
+#include "support/gpu_preference.hpp"
 #include "support/target_adapter.hpp"
 
 #include <windows.h>
@@ -46,6 +47,9 @@ int main(int argc, char** argv) {
         std::string adapter_error;
         if (TargetAdapter::resolve(TargetAdapter::spec(), adapter, index, adapter_error)) {
             TargetAdapter::export_identity(adapter, index);
+            if (options->device_under_test == "av" && GpuPreferenceScope::needed(adapter)) {
+                return GpuPreferenceScope::run_again(adapter);
+            }
         } else if (!options->adapter.empty()) {
             std::fprintf(stderr, "%s: --adapter: %s\n", ExeIdentity::name().c_str(), adapter_error.c_str());
             return 2;

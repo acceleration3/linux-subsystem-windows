@@ -88,6 +88,9 @@ std::string TargetAdapter::vulkan_uuid(const AvAdapter& adapter) {
 }
 
 std::string TargetAdapter::gl_unavailable(const AvAdapter& adapter) {
+    if (adapter.hybrid_discrete) {
+        return {};
+    }
     for (const AvOutput& output : adapter.outputs) {
         if (output.attached) {
             return {};

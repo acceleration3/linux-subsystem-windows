@@ -42,6 +42,8 @@ public:
     [[nodiscard]] std::int32_t query(std::uint32_t handle, std::uint32_t type, void* data,
                                      std::uint32_t size) const;
 
+    [[nodiscard]] bool adapter_type(const LUID& luid, std::uint32_t& flags) const;
+
     [[nodiscard]] bool segment_sizes(const LUID& luid, KmtSegmentSizes& out) const;
 
     [[nodiscard]] bool address(const LUID& luid, KmtAddress& out) const;

@@ -14,6 +14,8 @@ public:
 
     [[nodiscard]] static Outcome gl_renderer_matches(Context& context);
 
+    [[nodiscard]] static Outcome hybrid_roles(Context& context);
+
     [[nodiscard]] static Outcome setupapi_matches(Context& context);
 
     [[nodiscard]] static Outcome names_nonempty_printable(Context& context);

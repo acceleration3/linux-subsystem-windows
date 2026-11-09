@@ -249,6 +249,8 @@ void add(Registry& registry) {
                enumeration::IdentityChecks::opencl_luid_matches});
     guarded(suite, {"sanity.enum.identity.gl_renderer_matches", {"enum", "dxgi", "gl"}, false, 60,
                enumeration::IdentityChecks::gl_renderer_matches});
+    guarded(suite, {"sanity.enum.identity.hybrid_roles", {"enum", "dxgi", "kmt"}, false, 30,
+               enumeration::IdentityChecks::hybrid_roles});
     guarded(suite, {"sanity.enum.identity.setupapi_matches", {"enum", "dxgi", "kmt", "setupapi"}, false, 30,
                enumeration::IdentityChecks::setupapi_matches});
     guarded(suite, {"sanity.enum.identity.names_nonempty_printable",

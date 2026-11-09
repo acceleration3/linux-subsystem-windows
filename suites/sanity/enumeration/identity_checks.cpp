@@ -11,6 +11,8 @@
 #include "support/test_window.hpp"
 #include "support/vulkan_api.hpp"
 
+#include <dxgi1_6.h>
+
 #include <set>
 
 namespace lsw::suites::sanity::enumeration {
@@ -178,6 +180,60 @@ Outcome IdentityChecks::opencl_luid_matches(Context& context) {
     }
     if (devices == 0) {
         problems.add("OpenCL exposes no device");
+    }
+    return problems.outcome();
+}
+
+Outcome IdentityChecks::hybrid_roles(Context& context) {
+    std::vector<AvAdapter> adapters;
+    std::string error;
+    if (!AvAdapters::accel(adapters, error)) {
+        return Outcome::fail(error);
+    }
+    Problems problems;
+    std::size_t integrated = 0;
+    std::size_t discrete = 0;
+    for (const AvAdapter& adapter : adapters) {
+        if (adapter.hybrid_integrated && adapter.hybrid_discrete) {
+            problems.add(adapter.name + " " + adapter.luid_text() + ": reports both hybrid roles");
+        }
+        integrated += adapter.hybrid_integrated ? 1 : 0;
+        discrete += adapter.hybrid_discrete ? 1 : 0;
+        context.measure(adapter.luid_text() + ".hybrid", adapter.hybrid_integrated ? "integrated" : adapter.hybrid_discrete ? "discrete" : "none");
+    }
+    if (integrated == 0 && discrete == 0) {
+        context.note("hybrid graphics are off: no adapter reports a hybrid role");
+        return problems.outcome();
+    }
+    if (integrated != 1 || discrete + 1 != adapters.size()) {
+        problems.add("hybrid roles are not one integrated adapter and the rest discrete: " + std::to_string(integrated) + " integrated, " +
+                     std::to_string(discrete) + " discrete of " + std::to_string(adapters.size()));
+    }
+    IDXGIFactory1* factory = nullptr;
+    IDXGIFactory6* factory6 = nullptr;
+    if (SUCCEEDED(::CreateDXGIFactory1(__uuidof(IDXGIFactory1), reinterpret_cast<void**>(&factory))) &&
+        SUCCEEDED(factory->QueryInterface(__uuidof(IDXGIFactory6), reinterpret_cast<void**>(&factory6)))) {
+        IDXGIAdapter1* first = nullptr;
+        if (SUCCEEDED(factory6->EnumAdapterByGpuPreference(0, DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE, __uuidof(IDXGIAdapter1),
+                                                           reinterpret_cast<void**>(&first)))) {
+            DXGI_ADAPTER_DESC1 desc{};
+            first->GetDesc1(&desc);
+            const AvAdapter* found = AvAdapters::find(adapters, AvAdapters::key(desc.AdapterLuid));
+            if (found == nullptr || !found->hybrid_discrete) {
+                problems.add("the first adapter DXGI lists for high performance is not a hybrid discrete accel-virt adapter");
+            }
+            first->Release();
+        } else {
+            problems.add("EnumAdapterByGpuPreference(HIGH_PERFORMANCE) lists no adapter");
+        }
+    } else {
+        problems.add("IDXGIFactory6 is not available");
+    }
+    if (factory6 != nullptr) {
+        factory6->Release();
+    }
+    if (factory != nullptr) {
+        factory->Release();
     }
     return problems.outcome();
 }

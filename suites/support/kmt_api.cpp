@@ -128,6 +128,19 @@ std::int32_t KmtApi::open_from_luid(const LUID& luid, std::uint32_t& handle) con
     return status;
 }
 
+bool KmtApi::adapter_type(const LUID& luid, std::uint32_t& flags) const {
+    constexpr std::uint32_t kQueryAdapterType = 15;
+    std::uint32_t handle = 0;
+    if (open_from_luid(luid, handle) != 0) {
+        return false;
+    }
+    std::uint32_t value = 0;
+    const bool ok = query(handle, kQueryAdapterType, &value, sizeof value) == 0;
+    static_cast<void>(close(handle));
+    flags = value;
+    return ok;
+}
+
 std::int32_t KmtApi::open_from_device_name(const std::wstring& name, KmtAdapter& out) const {
     OpenFromDeviceName args{name.c_str(), 0, {}};
     const std::int32_t status = open_name_(&args);

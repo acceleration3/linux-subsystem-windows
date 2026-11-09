@@ -26,6 +26,8 @@ struct AvAdapter {
     std::uint64_t dedicated_system = 0;
     std::uint64_t shared_system = 0;
     bool software = false;
+    bool hybrid_discrete = false;
+    bool hybrid_integrated = false;
     bool umd_version_known = false;
     std::uint64_t umd_version = 0;
     std::vector<AvOutput> outputs;
@@ -33,6 +35,7 @@ struct AvAdapter {
     [[nodiscard]] bool accel() const { return subsystem == 0x52561AF4; }
 
     [[nodiscard]] bool has_outputs() const { return !outputs.empty(); }
+
 
     [[nodiscard]] std::string luid_text() const;
 

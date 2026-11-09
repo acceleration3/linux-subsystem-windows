@@ -2,6 +2,8 @@
 
 #include "core/text.hpp"
 
+#include "support/kmt_api.hpp"
+
 #include <dxgi.h>
 
 namespace lsw::suites {
@@ -82,6 +84,19 @@ bool AvAdapters::all(std::vector<AvAdapter>& out, std::string& error) {
         adapter->Release();
     }
     factory->Release();
+    KmtApi kmt;
+    std::string ignored;
+    if (kmt.load(ignored)) {
+        constexpr std::uint32_t kHybridDiscrete = 0x10;
+        constexpr std::uint32_t kHybridIntegrated = 0x20;
+        for (AvAdapter& adapter : out) {
+            std::uint32_t flags = 0;
+            if (kmt.adapter_type(adapter.luid, flags)) {
+                adapter.hybrid_discrete = (flags & kHybridDiscrete) != 0;
+                adapter.hybrid_integrated = (flags & kHybridIntegrated) != 0;
+            }
+        }
+    }
     return true;
 }
 
