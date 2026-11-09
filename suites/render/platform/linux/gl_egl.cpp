@@ -39,6 +39,7 @@ public:
     ~EglPlatform() override { destroy(); }
 
     bool open(const GlRequest& request, std::string& error) override {
+        request_ = request;
         setenv("mesa_glthread", "false", 0);
         library_ = dlopen("libEGL.so.1", RTLD_NOW | RTLD_GLOBAL);
         if (library_ == nullptr) {
@@ -106,6 +107,26 @@ public:
         return true;
     }
 
+    bool create_shared_context(std::string& error) override {
+        const EGLint attributes[] = {kContextMajor, request_.major, kContextMinor, request_.minor, kContextProfile,
+                                     request_.core ? kProfileCore : kProfileCompat, EGL_NONE};
+        second_ = eglCreateContext(display_, EGL_NO_CONFIG_KHR, context_, attributes);
+        if (second_ == EGL_NO_CONTEXT) {
+            error = "eglCreateContext for the shared context failed";
+            return false;
+        }
+        return true;
+    }
+
+    bool make_current(unsigned index, std::string& error) override {
+        EGLContext target = index == 0 ? context_ : second_;
+        if (target == EGL_NO_CONTEXT || eglMakeCurrent(display_, EGL_NO_SURFACE, EGL_NO_SURFACE, target) != EGL_TRUE) {
+            error = "eglMakeCurrent failed for context " + std::to_string(index);
+            return false;
+        }
+        return true;
+    }
+
     void* get_proc(const char* name) override { return reinterpret_cast<void*>(eglGetProcAddress(name)); }
 
     std::string device_uuid() override { return uuid_; }
@@ -160,6 +181,9 @@ private:
     void destroy() {
         if (display_ != nullptr) {
             eglMakeCurrent(display_, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+            if (second_ != EGL_NO_CONTEXT) {
+                eglDestroyContext(display_, second_);
+            }
             if (context_ != EGL_NO_CONTEXT) {
                 eglDestroyContext(display_, context_);
             }
@@ -167,6 +191,7 @@ private:
         }
         display_ = nullptr;
         context_ = EGL_NO_CONTEXT;
+        second_ = EGL_NO_CONTEXT;
     }
 
     std::string selector_;
@@ -174,6 +199,8 @@ private:
     void* library_ = nullptr;
     EGLDisplay display_ = nullptr;
     EGLContext context_ = EGL_NO_CONTEXT;
+    EGLContext second_ = EGL_NO_CONTEXT;
+    GlRequest request_;
     GLuint fbo_ = 0;
     void(LSW_GLAPI* flush_)() = nullptr;
 };

@@ -18,7 +18,18 @@ public:
         options.request.major = request.major;
         options.request.minor = request.minor;
         options.request.profile = request.core ? 1 : 2;
+        request_ = options.request;
         return rig_.open(options, error);
+    }
+
+    bool create_shared_context(std::string& error) override { return second_.create(rig_.dc(), request_, rig_.context.handle(), error); }
+
+    bool make_current(unsigned index, std::string& error) override {
+        const bool ok = index == 0 ? rig_.context.make_current(rig_.dc()) : second_.make_current(rig_.dc());
+        if (!ok) {
+            error = "wglMakeCurrent failed for context " + std::to_string(index);
+        }
+        return ok;
     }
 
     void* get_proc(const char* name) override { return lsw::suites::GlLibrary::instance().resolve(name); }
@@ -56,6 +67,8 @@ public:
 
 private:
     lsw::suites::GlRig rig_;
+    lsw::suites::GlContext second_;
+    lsw::suites::GlContextRequest request_;
 };
 
 }  // namespace

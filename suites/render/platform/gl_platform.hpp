@@ -26,6 +26,8 @@ public:
     [[nodiscard]] virtual unsigned back_framebuffer() = 0;
     [[nodiscard]] virtual unsigned back_read_buffer() = 0;
     [[nodiscard]] virtual bool swap(std::string& error) = 0;
+    [[nodiscard]] virtual bool create_shared_context(std::string& error) = 0;
+    [[nodiscard]] virtual bool make_current(unsigned index, std::string& error) = 0;
 };
 
 [[nodiscard]] std::unique_ptr<GlPlatform> make_gl_platform(const GlPlatformConfig& config, std::string& error);
