@@ -721,6 +721,9 @@ def run_suites(guest, out, suite_args, gpu=None, qemu_env=()):
         local_json = out / f"{label}.json"
         try:
             guest.agent.push(executable.read_bytes(), guest_exe)
+            if bits == "64" and "render" in selected_suites(suite_args):
+                for library in ("dxcompiler.dll", "dxil.dll"):
+                    guest.agent.push((AV / "third_party" / "dxc" / library).read_bytes(), f"{GUEST_DIR}\\{library}")
             guest.powershell(f"Remove-Item -Recurse -Force {guest_json},{guest_artifacts} -ErrorAction SilentlyContinue")
             code = console.run(f'cd /d {GUEST_DIR} && {guest_exe} --phase {phase} --json {guest_json} --artifacts {guest_artifacts} {extra}'.rstrip(),
                                guest_text, label)
