@@ -67,7 +67,11 @@ public:
         gl.glUnmapBuffer(glc::ARRAY_BUFFER);
         gl.glUseProgram(program_);
         const Mat4 transform = Mat4::rotate_z(0.05f * static_cast<float>(index));
-        gl.glUniformMatrix4fv(0, 1, glc::FALSE_, transform.m);
+        const GLint location = kit.uniform(program_, "u_transform", error);
+        if (location < 0) {
+            return false;
+        }
+        gl.glUniformMatrix4fv(location, 1, glc::FALSE_, transform.m);
         gl.glDrawArrays(glc::TRIANGLES, static_cast<GLint>(slot * kStampVertices), kStampVertices);
         return kit.check("ring frame", error);
     }
@@ -126,7 +130,11 @@ public:
         gl.glUseProgram(program_);
         const Mat4 transform = Mat4::perspective(1.0f, 1.0f, 0.5f, 20.0f, false) * Mat4::translate(0, 0, -5.0f) *
                                Mat4::rotate_y(0.5f * static_cast<float>(index)) * Mat4::rotate_x(0.4f);
-        gl.glUniformMatrix4fv(0, 1, glc::FALSE_, transform.m);
+        const GLint location = kit.uniform(program_, "u_transform", error);
+        if (location < 0) {
+            return false;
+        }
+        gl.glUniformMatrix4fv(location, 1, glc::FALSE_, transform.m);
         gl.glBindVertexArray(vao_);
         gl.glDrawElements(glc::TRIANGLES, index_count_, glc::UNSIGNED_SHORT, nullptr);
         gl.glFinish();

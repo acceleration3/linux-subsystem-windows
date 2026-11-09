@@ -49,6 +49,11 @@ bool Convert::image_of(const TexelImage& texels, DXGI_FORMAT format, rr::Image& 
         return false;
     }
     std::memcpy(image.bytes().data(), texels.data.data(), image.bytes().size());
+    if (format == DXGI_FORMAT_B8G8R8X8_UNORM) {
+        for (std::size_t i = 3; i < image.bytes().size(); i += 4) {
+            image.bytes()[i] = 255;
+        }
+    }
     out = std::move(image);
     return true;
 }

@@ -47,6 +47,7 @@ import pathlib
 import re
 import shlex
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -634,35 +635,75 @@ def add_host_phase(verdict, phase, out):
         verdict["status"] = "fail"
 
 
-def push_render_refs(guest, gpu, out):
+LOSS_LAYER_VARIABLES = ("VK_ADD_LAYER_PATH", "VK_INSTANCE_LAYERS")
+
+
+def selected_suites(suite_args):
+    words = shlex.split(suite_args)
+    for position, word in enumerate(words):
+        if word == "--suite" and position + 1 < len(words):
+            return [name for name in words[position + 1].split(",") if name]
+        if word.startswith("--suite="):
+            return [name for name in word.split("=", 1)[1].split(",") if name]
+    return ["sanity"]
+
+
+def render_ref_environment(qemu_env):
+    environment = dict(os.environ)
+    for pair in qemu_env:
+        name, _, value = pair.partition("=")
+        if name not in LOSS_LAYER_VARIABLES:
+            environment[name] = value
+    return environment
+
+
+def run_render_ref(command, environment, timeout):
+    process = subprocess.Popen(command, env=environment, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                               start_new_session=True)
+    try:
+        output, _ = process.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        os.killpg(process.pid, signal.SIGKILL)
+        output, _ = process.communicate()
+        return 124, output
+    return process.returncode, output
+
+
+def push_render_refs(guest, gpu, out, qemu_env):
     if not RENDER_REF.exists():
         raise suite.StepFailed(f"{RENDER_REF} is not built: run scripts/build-render-ref.sh")
     refs = out / "render-refs"
     shutil.rmtree(refs, ignore_errors=True)
     say(f"render references for {gpu.name} ({gpu.uuid})")
-    done = subprocess.run([str(RENDER_REF), "--out", str(refs), "--gpu", gpu.uuid, "--jobs", "4"],
-                          capture_output=True, text=True, timeout=1800)
-    (out / "render-refs.txt").write_text(done.stdout + done.stderr)
-    if done.returncode != 0:
-        raise suite.StepFailed(f"lsw-render-ref failed (exit {done.returncode}); see {out / 'render-refs.txt'}")
+    code, output = run_render_ref([str(RENDER_REF), "--out", str(refs), "--gpu", gpu.uuid, "--jobs", "4", "--clean"],
+                                  render_ref_environment(qemu_env), 1800)
+    (out / "render-refs.txt").write_text(output)
+    host_failures = [line for line in output.splitlines() if line.startswith("FAIL ")]
+    if not (refs / "device.json").exists():
+        raise suite.StepFailed(f"lsw-render-ref wrote no device.json (exit {code}); see {out / 'render-refs.txt'}")
     shutil.make_archive(str(out / "render-refs"), "zip", refs)
     archive = f"{GUEST_DIR}\\render-refs.zip"
     guest.agent.push((out / "render-refs.zip").read_bytes(), archive)
-    guest.powershell(f"Remove-Item -Recurse -Force {GUEST_REFS} -ErrorAction SilentlyContinue; "
-                     f"Expand-Archive -Force -Path {archive} -DestinationPath {GUEST_REFS}")
+    status, text = guest.powershell(f"$ErrorActionPreference = 'Stop'; Remove-Item -Recurse -Force {GUEST_REFS} -ErrorAction SilentlyContinue; "
+                                    f"Expand-Archive -Force -Path {archive} -DestinationPath {GUEST_REFS}; "
+                                    f"if (-not (Test-Path {GUEST_REFS}\\device.json)) {{ exit 3 }}")
+    if status != 0:
+        raise suite.StepFailed(f"Expand-Archive of the references failed (exit {status}): {text.strip()[-200:]}")
+    return host_failures if code != 0 else []
 
 
-def run_suites(guest, out, suite_args, gpu=None):
+def run_suites(guest, out, suite_args, gpu=None, qemu_env=()):
     out.mkdir(parents=True, exist_ok=True)
     say("suites lsw-suites64 and lsw-suites32")
     console = suite.ConsoleProgram(guest.agent, SUITES_TIMEOUT)
     guest.powershell(f"New-Item -ItemType Directory -Force {GUEST_DIR} | Out-Null")
     extra = subprocess.list2cmdline(shlex.split(suite_args))
     failures, notes, total = [], [], 0
-    if gpu is not None and "render" in suite_args:
+    if gpu is not None and "render" in selected_suites(suite_args):
+        extra += f" --refs {GUEST_REFS}"
         try:
-            push_render_refs(guest, gpu, out)
-            extra += f" --refs {GUEST_REFS}"
+            for line in push_render_refs(guest, gpu, out, qemu_env):
+                failures.append({"case": "render-refs", "detail": f"host reference {line}"})
         except (AgentError, suite.StepFailed, OSError, subprocess.SubprocessError) as error:
             failures.append({"case": "render-refs", "detail": str(error)})
     for bits, phase in SUITES_RUNS:
@@ -905,7 +946,7 @@ def gpu_pass(domain, original, share, gpu, args, out):
                 phase = host_phase.HostPhase(work, avgpu_log_path(original),
                                              pathlib.Path.home() / ".cache" / "libvirt" / "qemu" / "log" / f"{DOMAIN}.log",
                                              out / "suites" / "host")
-                result["suites"]["suites"] = run_suites(guest, out / "suites", args.suite_args, gpu)
+                result["suites"]["suites"] = run_suites(guest, out / "suites", args.suite_args, gpu, args.qemu_env)
                 add_host_phase(result["suites"]["suites"], phase, out / "suites")
             elif name in APP_SUITES:
                 result["suites"][name] = run_app_suite(name, guest, out / name, gpu, adapter.get("name", ""))

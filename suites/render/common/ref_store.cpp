@@ -121,7 +121,7 @@ bool RefStore::read_frame(const std::string& id, unsigned frame, const std::stri
     const std::uint32_t height = get32(header + 12);
     const std::uint32_t kind = get32(header + 16);
     const std::uint64_t payload = static_cast<std::uint64_t>(get32(header + 24)) | (static_cast<std::uint64_t>(get32(header + 28)) << 32);
-    if (kind > static_cast<std::uint32_t>(PixelKind::R8Uint) || width == 0 || height == 0 || width > 16384 || height > 16384) {
+    if (!PixelInfo::valid(kind) || width == 0 || height == 0 || width > 16384 || height > 16384) {
         error = "bad reference dimensions in " + path.string();
         return false;
     }
@@ -166,6 +166,46 @@ bool RefStore::read_skip(const std::string& id, std::string& reason) const {
 void RefStore::clear_case(const std::string& id) const {
     std::error_code ec;
     std::filesystem::remove_all(root_ / id, ec);
+}
+
+bool RefStore::write_recipe(const std::string& id, const std::string& recipe, std::string& error) const {
+    std::error_code ec;
+    std::filesystem::create_directories(root_ / id, ec);
+    std::ofstream file(root_ / id / "recipe.txt", std::ios::trunc);
+    file << recipe;
+    if (!file) {
+        error = "cannot write recipe.txt for " + id;
+        return false;
+    }
+    return true;
+}
+
+bool RefStore::read_recipe(const std::string& id, std::string& recipe) const {
+    std::ifstream file(root_ / id / "recipe.txt");
+    if (!file) {
+        return false;
+    }
+    std::getline(file, recipe);
+    return true;
+}
+
+std::set<std::pair<unsigned, std::string>> RefStore::list_frames(const std::string& id) const {
+    std::set<std::pair<unsigned, std::string>> out;
+    std::error_code ec;
+    for (const auto& entry : std::filesystem::directory_iterator(root_ / id, ec)) {
+        const std::string name = entry.path().filename().string();
+        if (name.size() < 9 || name[0] != 'f' || name.compare(name.size() - 5, 5, ".rref") != 0) {
+            continue;
+        }
+        const std::string stem = name.substr(1, name.size() - 6);
+        const std::size_t cut = stem.find('_');
+        const std::string number = stem.substr(0, cut);
+        if (number.empty() || number.find_first_not_of("0123456789") != std::string::npos) {
+            continue;
+        }
+        out.insert({static_cast<unsigned>(std::stoul(number)), cut == std::string::npos ? std::string() : stem.substr(cut + 1)});
+    }
+    return out;
 }
 
 bool RefStore::write_device(const DeviceInfo& info, std::string& error) const {

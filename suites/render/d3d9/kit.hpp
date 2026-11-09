@@ -31,6 +31,7 @@ public:
     [[nodiscard]] bool make_depth(Surface& out, UINT width, UINT height, std::string& error);
     [[nodiscard]] bool read_color(Surface& target, rr::Image& out, std::string& error);
 
+    [[nodiscard]] bool end_frame(std::string& error);
     [[nodiscard]] bool begin(std::string& error);
     [[nodiscard]] bool end(std::string& error);
 

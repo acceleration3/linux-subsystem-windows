@@ -28,15 +28,28 @@ OpenStatus Kit::open(bool use_warp, const rr::CaseSpec& spec, std::string& error
     if (!rig.open_queue(D3D12_COMMAND_LIST_TYPE_DIRECT, error)) {
         return OpenStatus::Failed;
     }
+    if (spec.multiframe() && !swap.open(rig.direct().queue(), 128, 128, 3, DXGI_FORMAT_B8G8R8A8_UNORM, false, error)) {
+        return OpenStatus::Failed;
+    }
     if (dxc) {
         std::string dxc_error;
         compiler_ready = compiler.open(dxc_error);
         if (!compiler_ready) {
-            error = "the DXC compiler (" + dxc_error + ")";
+            error = "the DXC compiler is not available (" + dxc_error + ")";
             return OpenStatus::Unsupported;
         }
     }
     return OpenStatus::Ok;
+}
+
+bool Kit::end_frame(std::string& error) {
+    if (!swap.present(error)) {
+        return false;
+    }
+    D3d12Queue& queue = rig.direct();
+    ring[ring_index] = queue.signal();
+    ring_index = (ring_index + 1) % 3;
+    return ring[ring_index] == 0 || queue.wait(ring[ring_index], error);
 }
 
 bool Kit::compile(const std::string& source, char stage, Bytes& code, std::string& error) {

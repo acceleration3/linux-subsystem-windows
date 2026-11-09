@@ -21,11 +21,16 @@ public:
         kit.buffer(glc::ELEMENT_ARRAY_BUFFER, indices.data(), indices.size() * sizeof(std::uint16_t), glc::STATIC_DRAW);
     }
 
-    void draw(Kit& kit, GLuint program, const Mat4& transform) const {
+    bool draw(Kit& kit, GLuint program, const Mat4& transform, std::string& error) const {
         kit.gl.glUseProgram(program);
-        kit.gl.glUniformMatrix4fv(0, 1, glc::FALSE_, transform.m);
+        const GLint location = kit.uniform(program, "u_transform", error);
+        if (location < 0) {
+            return false;
+        }
+        kit.gl.glUniformMatrix4fv(location, 1, glc::FALSE_, transform.m);
         kit.gl.glBindVertexArray(vao);
         kit.gl.glDrawElements(glc::TRIANGLES, index_count, glc::UNSIGNED_SHORT, nullptr);
+        return true;
     }
 
     GLuint vao = 0;
@@ -58,10 +63,13 @@ public:
         gl.glCullFace(glc::BACK);
         const Mat4 projection = Mat4::perspective(1.0f, 1.0f, 0.5f, 20.0f, false);
         const Mat4 view = Mat4::translate(0, 0, -6.0f);
-        cube.draw(kit, program, projection * view * Mat4::translate(-0.6f, 0.0f, 0.0f) * Mat4::rotate_y(0.6f) * Mat4::rotate_x(0.4f));
-        cube.draw(kit, program,
-                  projection * view * Mat4::translate(0.7f, 0.2f, 0.4f) * Mat4::rotate_y(-0.9f) * Mat4::rotate_z(0.5f) *
-                      Mat4::scale(0.9f, 0.9f, 0.9f));
+        if (!cube.draw(kit, program, projection * view * Mat4::translate(-0.6f, 0.0f, 0.0f) * Mat4::rotate_y(0.6f) * Mat4::rotate_x(0.4f), error) ||
+            !cube.draw(kit, program,
+                       projection * view * Mat4::translate(0.7f, 0.2f, 0.4f) * Mat4::rotate_y(-0.9f) * Mat4::rotate_z(0.5f) *
+                           Mat4::scale(0.9f, 0.9f, 0.9f),
+                       error)) {
+            return false;
+        }
         gl.glFinish();
         Image color;
         if (!kit.check("scene", error) || !target.read_color(kit, 0, color, error)) {
@@ -102,9 +110,12 @@ public:
         gl.glEnable(glc::DEPTH_TEST);
         gl.glEnable(glc::CULL_FACE);
         gl.glCullFace(glc::BACK);
-        cube.draw(kit, program,
-                  Mat4::perspective(1.0f, 1.0f, 0.5f, 20.0f, false) * Mat4::translate(0, 0, -5.0f) * Mat4::rotate_y(0.7f) *
-                      Mat4::rotate_x(-0.5f));
+        if (!cube.draw(kit, program,
+                       Mat4::perspective(1.0f, 1.0f, 0.5f, 20.0f, false) * Mat4::translate(0, 0, -5.0f) * Mat4::rotate_y(0.7f) *
+                           Mat4::rotate_x(-0.5f),
+                       error)) {
+            return false;
+        }
         gl.glFinish();
         Image c0;
         Image c1;

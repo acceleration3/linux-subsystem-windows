@@ -24,7 +24,11 @@ OpenStatus Kit::open(bool use_warp, const rr::CaseSpec& spec, std::string& error
         created = level_1 ? dev.create1(adapter.luid, 0, D3D10_FEATURE_LEVEL_10_1, error) : dev.create(adapter.luid, 0, error);
     }
     if (created) {
-        return OpenStatus::Ok;
+        if (!spec.multiframe()) {
+            return OpenStatus::Ok;
+        }
+        IUnknown* base = dev.device;
+        return swap.open(base, 128, 128, 2, DXGI_FORMAT_R8G8B8A8_UNORM, true, error) ? OpenStatus::Ok : OpenStatus::Failed;
     }
     return dev.result == E_INVALIDARG || dev.result == DXGI_ERROR_UNSUPPORTED ? OpenStatus::Unsupported : OpenStatus::Failed;
 }
@@ -158,6 +162,8 @@ bool Kit::read_raw(ID3D10Texture2D* texture, TexelImage& out, std::string& error
     staging->Unmap(0);
     return true;
 }
+
+bool Kit::end_frame(std::string& error) { return swap.present(error); }
 
 void Kit::set_viewport(UINT width, UINT height) { D3d10Tools::set_viewport(dev, width, height); }
 

@@ -129,7 +129,7 @@ Com<IDirect3DPixelShader9> Kit::pixel_shader(const std::string& source, std::str
 }
 
 bool Kit::make_target(Surface& out, UINT width, UINT height, D3DFORMAT format, std::string& error) {
-    const HRESULT result = device()->CreateRenderTarget(width, height, format, D3DMULTISAMPLE_NONE, 0, TRUE, out.surface.put(), nullptr);
+    const HRESULT result = device()->CreateRenderTarget(width, height, format, D3DMULTISAMPLE_NONE, 0, FALSE, out.surface.put(), nullptr);
     if (FAILED(result)) {
         error = "CreateRenderTarget: " + D3d9Tools::hr(result);
         return false;
@@ -141,7 +141,7 @@ bool Kit::make_target(Surface& out, UINT width, UINT height, D3DFORMAT format, s
 }
 
 bool Kit::make_depth(Surface& out, UINT width, UINT height, std::string& error) {
-    const HRESULT result = device()->CreateDepthStencilSurface(width, height, D3DFMT_D24S8, D3DMULTISAMPLE_NONE, 0, TRUE, out.surface.put(), nullptr);
+    const HRESULT result = device()->CreateDepthStencilSurface(width, height, D3DFMT_D24S8, D3DMULTISAMPLE_NONE, 0, FALSE, out.surface.put(), nullptr);
     if (FAILED(result)) {
         error = "CreateDepthStencilSurface: " + D3d9Tools::hr(result);
         return false;
@@ -185,24 +185,43 @@ bool Kit::read_color(Surface& target, rr::Image& out, std::string& error) {
         surface->UnlockRect();
         return true;
     };
-    if (!copy_rows(target.surface.get())) {
-        Com<IDirect3DSurface9> staging;
-        HRESULT result = device()->CreateOffscreenPlainSurface(target.width, target.height, target.format, D3DPOOL_SYSTEMMEM, staging.put(), nullptr);
-        if (FAILED(result)) {
-            error = "CreateOffscreenPlainSurface: " + D3d9Tools::hr(result);
-            return false;
+    Com<IDirect3DSurface9> staging;
+    HRESULT result = device()->CreateOffscreenPlainSurface(target.width, target.height, target.format, D3DPOOL_SYSTEMMEM, staging.put(), nullptr);
+    if (FAILED(result)) {
+        error = "CreateOffscreenPlainSurface: " + D3d9Tools::hr(result);
+        return false;
+    }
+    result = device()->GetRenderTargetData(target.surface.get(), staging.get());
+    bool read = SUCCEEDED(result) && copy_rows(staging.get());
+    if (!read && warp) {
+        Com<IDirect3DSurface9> lockable;
+        if (SUCCEEDED(device()->CreateRenderTarget(target.width, target.height, target.format, D3DMULTISAMPLE_NONE, 0, TRUE, lockable.put(), nullptr)) &&
+            SUCCEEDED(device()->StretchRect(target.surface.get(), nullptr, lockable.get(), nullptr, D3DTEXF_NONE))) {
+            read = copy_rows(lockable.get());
         }
-        result = device()->GetRenderTargetData(target.surface.get(), staging.get());
-        if (FAILED(result)) {
-            error = "GetRenderTargetData: " + D3d9Tools::hr(result);
-            return false;
-        }
-        if (!copy_rows(staging.get())) {
-            error = "LockRect of the staging surface failed";
-            return false;
+    }
+    if (!read) {
+        error = "GetRenderTargetData: " + D3d9Tools::hr(result);
+        return false;
+    }
+    if (target.format == D3DFMT_X8R8G8B8) {
+        for (UINT y = 0; y < target.height; ++y) {
+            for (UINT x = 0; x < target.width; ++x) {
+                image.row(y)[x * 4 + 3] = 255;
+            }
         }
     }
     out = std::move(image);
+    return true;
+}
+
+bool Kit::end_frame(std::string& error) {
+    Com<IDirect3DDevice9Ex> extended = device_.as<IDirect3DDevice9Ex>();
+    const HRESULT result = extended ? extended->PresentEx(nullptr, nullptr, nullptr, nullptr, 0) : device_->Present(nullptr, nullptr, nullptr, nullptr);
+    if (FAILED(result)) {
+        error = "Present: " + D3d9Tools::hr(result);
+        return false;
+    }
     return true;
 }
 

@@ -4,6 +4,7 @@
 
 #include <deque>
 #include <string>
+#include <vector>
 
 namespace lsw::suites {
 class Registry {
@@ -11,6 +12,8 @@ public:
     Suite& add_suite(std::string name, Policy policy);
 
     [[nodiscard]] const std::deque<Suite>& suites() const { return suites_; }
+
+    [[nodiscard]] std::vector<std::string> problems() const;
 
     [[nodiscard]] const Suite* find_suite(const std::string& name) const;
 

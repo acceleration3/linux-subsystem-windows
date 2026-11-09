@@ -1,5 +1,6 @@
 #pragma once
 
+#include "render/d3d/frame_swap.hpp"
 #include "render/d3d/warp_check.hpp"
 #include "support/d3d11_device.hpp"
 #include "support/d3d11_tools.hpp"
@@ -28,6 +29,7 @@ struct Depth {
 class Kit {
 public:
     [[nodiscard]] OpenStatus open(bool use_warp, const rr::CaseSpec& spec, std::string& error);
+    [[nodiscard]] OpenStatus open_swap(const rr::CaseSpec& spec, std::string& error);
 
     [[nodiscard]] ID3D11Device* device() { return dev.device; }
     [[nodiscard]] ID3D11DeviceContext* context() { return dev.context; }
@@ -45,8 +47,11 @@ public:
 
     void set_viewport(UINT width, UINT height);
 
+    [[nodiscard]] bool end_frame(std::string& error);
+
     bool warp = false;
     std::string name;
     D3d11Device dev;
+    FrameSwap swap;
 };
 }  // namespace lsw::suites::render::d3d11

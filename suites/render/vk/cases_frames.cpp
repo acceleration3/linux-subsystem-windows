@@ -252,7 +252,12 @@ public:
         if (!ok) {
             return false;
         }
-        last_ = Image(128, 128, Kit::pixel_kind(presenter.format(), VK_IMAGE_ASPECT_COLOR_BIT));
+        PixelKind kind = PixelKind::Bgra8Unorm;
+        if (!Kit::pixel_kind(presenter.format(), VK_IMAGE_ASPECT_COLOR_BIT, kind)) {
+            error = "the swapchain format is not supported by the judge";
+            return false;
+        }
+        last_ = Image(128, 128, kind);
         std::memcpy(last_.bytes().data(), readback_.mapped, last_.bytes().size());
         return presenter.present(kit, image, rendered_, error);
     }

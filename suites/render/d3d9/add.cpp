@@ -35,6 +35,9 @@ Outcome on12_clear(Context& context, unsigned variant) {
 }  // namespace
 
 void add(Suite& suite) {
+    for (const std::string& problem : rr::CaseTable<Kit>::instance().problems()) {
+        suite.add_problem("d3d9: " + problem);
+    }
     rr::CaseSpec plain("oracle", "on12_warp_clear");
     rr::CaseSpec extended("oracle", "on12ex_warp_clear");
     CaseRegistration::add(suite, "d3d9", "d3d9", plain, [](Context& context) { return on12_clear(context, 0); });

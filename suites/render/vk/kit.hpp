@@ -1,5 +1,6 @@
 #pragma once
 
+#include "render/common/case.hpp"
 #include "render/common/image.hpp"
 #include "render/platform/vk_platform.hpp"
 #include "render/vk/api.hpp"
@@ -17,6 +18,16 @@ struct KitOptions {
     bool present = false;
     std::uint32_t api_version = VK_API_VERSION_1_1;
     std::vector<std::string> device_extensions;
+    std::vector<std::string> features;
+
+    [[nodiscard]] static KitOptions from(const CaseSpec& spec) {
+        KitOptions options;
+        options.present = spec.uses_swapchain();
+        options.api_version = VK_MAKE_API_VERSION(0, spec.major() != 0 ? spec.major() : 1, spec.major() != 0 ? spec.minor() : 1, 0);
+        options.device_extensions = spec.extensions();
+        options.features = spec.features();
+        return options;
+    }
 };
 
 struct Buffer {
@@ -93,7 +104,7 @@ public:
     Kit& operator=(const Kit&) = delete;
     ~Kit();
 
-    [[nodiscard]] bool open(platform::VkPlatform& platform, const KitOptions& options, std::string& error);
+    [[nodiscard]] OpenResult open(platform::VkPlatform& platform, const KitOptions& options, std::string& error);
     void close();
 
     [[nodiscard]] bool check(VkResult result, const char* what, std::string& error) const;
@@ -138,8 +149,7 @@ public:
     [[nodiscard]] bool read_buffer(const Buffer& buffer, VkDeviceSize offset, VkDeviceSize size, std::vector<std::uint8_t>& out,
                                    std::string& error);
 
-    [[nodiscard]] static PixelKind pixel_kind(VkFormat format, VkImageAspectFlags aspect);
-    [[nodiscard]] static std::uint32_t texel_bytes(VkFormat format, VkImageAspectFlags aspect);
+    [[nodiscard]] static bool pixel_kind(VkFormat format, VkImageAspectFlags aspect, PixelKind& kind);
 
     Api api;
     VkInstance instance = VK_NULL_HANDLE;

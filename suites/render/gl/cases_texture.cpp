@@ -51,8 +51,12 @@ public:
         gl.glUseProgram(program);
         gl.glActiveTexture(glc::TEXTURE0);
         gl.glBindTexture(glc::TEXTURE_2D, texture);
-        gl.glUniform1i(0, 0);
-        const GLint tint = 1;
+        const GLint sampler = kit.uniform(program, "u_texture", error);
+        const GLint tint = kit.uniform(program, "u_tint", error);
+        if (sampler < 0 || tint < 0) {
+            return false;
+        }
+        gl.glUniform1i(sampler, 0);
         gl.glUniform4f(tint, 1, 1, 1, 1);
         gl.glDrawArrays(glc::TRIANGLE_STRIP, 0, 4);
         gl.glUniform4f(tint, 1, 1, 1, 0.5f);

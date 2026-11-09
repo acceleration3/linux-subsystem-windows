@@ -8,6 +8,7 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 set(RENDER ${CMAKE_CURRENT_LIST_DIR}/../render)
+include(${RENDER}/RenderHash.cmake)
 
 file(GLOB COMMON_SOURCES CONFIGURE_DEPENDS ${RENDER}/common/*.cpp)
 file(GLOB VK_SOURCES CONFIGURE_DEPENDS ${RENDER}/vk/*.cpp ${RENDER}/vk/spirv/gen/*.cpp)
@@ -15,6 +16,11 @@ file(GLOB GL_SOURCES CONFIGURE_DEPENDS ${RENDER}/gl/*.cpp)
 file(GLOB PLATFORM_SOURCES CONFIGURE_DEPENDS ${RENDER}/platform/linux/*.cpp)
 list(FILTER VK_SOURCES EXCLUDE REGEX "guest_[^/]*\\.cpp$")
 list(FILTER GL_SOURCES EXCLUDE REGEX "guest_[^/]*\\.cpp$")
+
+lsw_render_hash(vk RENDER_VK_HASH)
+lsw_render_hash(gl RENDER_GL_HASH)
+set_source_files_properties(${VK_SOURCES} PROPERTIES COMPILE_DEFINITIONS LSW_RENDER_SOURCE_HASH="${RENDER_VK_HASH}")
+set_source_files_properties(${GL_SOURCES} PROPERTIES COMPILE_DEFINITIONS LSW_RENDER_SOURCE_HASH="${RENDER_GL_HASH}")
 
 add_executable(lsw-render-ref main.cpp ${COMMON_SOURCES} ${VK_SOURCES} ${GL_SOURCES} ${PLATFORM_SOURCES})
 target_include_directories(lsw-render-ref PRIVATE ${CMAKE_CURRENT_LIST_DIR}/..)

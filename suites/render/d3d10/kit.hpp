@@ -1,5 +1,6 @@
 #pragma once
 
+#include "render/d3d/frame_swap.hpp"
 #include "render/d3d/warp_check.hpp"
 #include "support/d3d10_device.hpp"
 #include "support/d3d10_tools.hpp"
@@ -46,8 +47,11 @@ public:
 
     void set_viewport(UINT width, UINT height);
 
+    [[nodiscard]] bool end_frame(std::string& error);
+
     bool warp = false;
     std::string name;
     D3d10Device dev;
+    FrameSwap swap;
 };
 }  // namespace lsw::suites::render::d3d10

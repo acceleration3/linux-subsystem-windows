@@ -7,6 +7,9 @@ namespace lsw::suites::render::gl {
 
 void add(Suite& suite) {
     using Kit = rr::gl::Kit;
+    for (const std::string& problem : rr::CaseTable<Kit>::instance().problems()) {
+        suite.add_problem("gl: " + problem);
+    }
     for (const auto* entry : rr::CaseTable<Kit>::instance().sorted()) {
         CaseRegistration::add(suite, "gl", "gl", entry->spec, [entry](Context& context) {
             std::string error;
@@ -15,15 +18,14 @@ void add(Suite& suite) {
                 return Outcome::fail("gl platform: " + error);
             }
             Kit kit;
-            rr::gl::KitOptions options;
-            options.width = entry->spec.width();
-            options.height = entry->spec.height();
-            options.window = entry->spec.uses_swapchain();
-            if (!kit.open(*host, options, error)) {
+            const rr::OpenResult opened = kit.open(*host, rr::gl::KitOptions::from(entry->spec), error);
+            if (opened == rr::OpenResult::Failed) {
                 return Outcome::fail("gl context: " + error);
             }
             context.measure("gl.renderer", kit.renderer);
-            return RefCheck::run<Kit>(context, *entry, "gl", kit, std::string(), kit.uuid, kit.renderer);
+            context.measure("gl.uuid", kit.uuid);
+            GuestIdentity guest{"gl", std::string(), kit.uuid, kit.renderer};
+            return RefCheck::run<Kit>(context, *entry, kit, opened == rr::OpenResult::Unsupported ? error : std::string(), guest);
         });
     }
 }

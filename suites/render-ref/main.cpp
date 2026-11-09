@@ -1,4 +1,5 @@
 #include "render/common/case.hpp"
+#include "render/common/judge_selftest.hpp"
 #include "render/common/png.hpp"
 #include "render/common/ref_store.hpp"
 #include "render/gl/gl.hpp"
@@ -7,6 +8,7 @@
 #include "render/vk/vk.hpp"
 
 #include <poll.h>
+#include <sys/prctl.h>
 #include <signal.h>
 #include <spawn.h>
 #include <sys/wait.h>
@@ -18,6 +20,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <csignal>
 #include <ctime>
 #include <fstream>
 #include <iostream>
@@ -42,6 +45,8 @@ struct Options {
     int jobs = 0;
     bool list = false;
     bool png = false;
+    bool clean = false;
+    bool selftest = false;
     std::string run_one;
     std::string self;
 };
@@ -53,6 +58,17 @@ struct CaseRef {
     const CaseTable<vk::Kit>::Entry* vk_entry = nullptr;
     const CaseTable<gl::Kit>::Entry* gl_entry = nullptr;
 };
+
+std::vector<std::string> case_problems() {
+    std::vector<std::string> out;
+    for (const std::string& p : CaseTable<vk::Kit>::instance().problems()) {
+        out.push_back("vk: " + p);
+    }
+    for (const std::string& p : CaseTable<gl::Kit>::instance().problems()) {
+        out.push_back("gl: " + p);
+    }
+    return out;
+}
 
 std::vector<CaseRef> all_cases() {
     std::vector<CaseRef> out;
@@ -168,7 +184,7 @@ bool resolve_gpu(const std::string& request, GpuChoice& choice, std::string& err
     std::unique_ptr<platform::VkPlatform> host = platform::make_vk_platform(config, error);
     vk::Kit kit;
     vk::KitOptions options;
-    if (!host || !kit.open(*host, options, error)) {
+    if (!host || kit.open(*host, options, error) != OpenResult::Ok) {
         return false;
     }
     choice.selector = "uuid:" + hex(kit.identity.uuid, 16);
@@ -202,32 +218,46 @@ int run_one(const Options& options, const CaseRef& ref) {
     if (ref.vk_entry != nullptr) {
         std::unique_ptr<platform::VkPlatform> host = platform::make_vk_platform(vk_config, error);
         vk::Kit kit;
-        vk::KitOptions kit_options;
-        kit_options.present = ref.spec->uses_swapchain();
-        if (!host || !kit.open(*host, kit_options, error)) {
+        if (!host) {
+            std::fprintf(stderr, "platform: %s\n", error.c_str());
+            return kExitFail;
+        }
+        const OpenResult opened = kit.open(*host, vk::KitOptions::from(*ref.spec), error);
+        if (opened == OpenResult::Failed) {
             std::fprintf(stderr, "kit: %s\n", error.c_str());
             return kExitFail;
         }
-        std::unique_ptr<Scene<vk::Kit>> scene = ref.vk_entry->make();
-        result = run_scene(kit, *ref.spec, *scene);
+        if (opened == OpenResult::Unsupported) {
+            result.status = RunStatus::Skip;
+            result.reason = error;
+        } else {
+            std::unique_ptr<Scene<vk::Kit>> scene = ref.vk_entry->make();
+            result = run_scene(kit, *ref.spec, *scene);
+        }
     } else {
         platform::GlPlatformConfig gl_config;
         gl_config.selector = options.gpu;
         std::unique_ptr<platform::GlPlatform> host = platform::make_gl_platform(gl_config, error);
         gl::Kit kit;
-        gl::KitOptions kit_options;
-        kit_options.width = ref.spec->width();
-        kit_options.height = ref.spec->height();
-        kit_options.window = ref.spec->uses_swapchain();
-        if (!host || !kit.open(*host, kit_options, error)) {
+        if (!host) {
+            std::fprintf(stderr, "platform: %s\n", error.c_str());
+            return kExitFail;
+        }
+        const OpenResult opened = kit.open(*host, gl::KitOptions::from(*ref.spec), error);
+        if (opened == OpenResult::Failed) {
             std::fprintf(stderr, "kit: %s\n", error.c_str());
             return kExitFail;
         }
-        std::unique_ptr<Scene<gl::Kit>> scene = ref.gl_entry->make();
-        result = run_scene(kit, *ref.spec, *scene);
+        if (opened == OpenResult::Unsupported) {
+            result.status = RunStatus::Skip;
+            result.reason = error;
+        } else {
+            std::unique_ptr<Scene<gl::Kit>> scene = ref.gl_entry->make();
+            result = run_scene(kit, *ref.spec, *scene);
+        }
     }
     if (result.status == RunStatus::Skip) {
-        if (!store.write_skip(ref.id, result.reason, error)) {
+        if (!store.write_skip(ref.id, result.reason, error) || !store.write_recipe(ref.id, ref.spec->recipe(), error)) {
             std::fprintf(stderr, "%s\n", error.c_str());
             return kExitFail;
         }
@@ -250,6 +280,10 @@ int run_one(const Options& options, const CaseRef& ref) {
             }
         }
     }
+    if (!store.write_recipe(ref.id, ref.spec->recipe(), error)) {
+        std::fprintf(stderr, "%s\n", error.c_str());
+        return kExitFail;
+    }
     return kExitOk;
 }
 
@@ -264,6 +298,10 @@ std::string last_line(const std::string& path) {
     }
     return last;
 }
+
+volatile std::sig_atomic_t g_stop = 0;
+
+void on_signal(int) { g_stop = 1; }
 
 struct Running {
     pid_t pid = 0;
@@ -281,7 +319,20 @@ int run_all(const Options& options, const std::vector<const CaseRef*>& cases, co
     int ok = 0;
     int skipped = 0;
     int failed = 0;
+    struct sigaction action{};
+    action.sa_handler = on_signal;
+    sigemptyset(&action.sa_mask);
+    sigaction(SIGTERM, &action, nullptr);
+    sigaction(SIGINT, &action, nullptr);
     while (next < cases.size() || !running.empty()) {
+        if (g_stop != 0) {
+            for (Running& r : running) {
+                kill(r.pid, SIGKILL);
+                waitpid(r.pid, nullptr, 0);
+            }
+            std::fprintf(stderr, "lsw-render-ref: interrupted\n");
+            return 130;
+        }
         while (next < cases.size() && static_cast<int>(running.size()) < jobs) {
             const CaseRef* ref = cases[next++];
             const std::string log = options.out + "/.logs/" + ref->id + ".log";
@@ -351,7 +402,7 @@ int run_all(const Options& options, const std::vector<const CaseRef*>& cases, co
 
 void usage() {
     std::puts(
-        "usage: lsw-render-ref --out DIR [--gpu UUID|vendor:device|index|auto] [--filter GLOB[,GLOB]] [--jobs N] [--list] [--png]\n"
+        "usage: lsw-render-ref --out DIR [--gpu UUID|vendor:device|index|auto] [--filter GLOB[,GLOB]] [--jobs N] [--list] [--png] [--clean] [--selftest]\n"
         "  --gpu auto reads host-gpu of the lsw libvirt domain (or LSW_RENDER_REF_HOST_GPU), else the first Vulkan device");
 }
 
@@ -385,12 +436,34 @@ int main(int argc, char** argv) {
             options.list = true;
         } else if (arg == "--png") {
             options.png = true;
+        } else if (arg == "--clean") {
+            options.clean = true;
+        } else if (arg == "--selftest") {
+            options.selftest = true;
         } else if (arg == "--run-one") {
             options.run_one = value();
         } else {
             usage();
             return arg == "--help" ? 0 : 2;
         }
+    }
+    if (options.selftest) {
+        std::vector<std::string> passed;
+        const std::vector<std::string> failures = JudgeSelfTest::run(passed);
+        for (const std::string& line : passed) {
+            std::printf("ok %s\n", line.c_str());
+        }
+        for (const std::string& line : failures) {
+            std::printf("FAIL %s\n", line.c_str());
+        }
+        std::printf("judge selftest: %zu passed, %zu failed\n", passed.size(), failures.size());
+        return failures.empty() ? 0 : 1;
+    }
+    if (const std::vector<std::string> problems = case_problems(); !problems.empty()) {
+        for (const std::string& problem : problems) {
+            std::fprintf(stderr, "lsw-render-ref: registration error: %s\n", problem.c_str());
+        }
+        return 2;
     }
     const std::vector<CaseRef> cases = all_cases();
     if (options.list) {
@@ -404,6 +477,7 @@ int main(int argc, char** argv) {
         return 2;
     }
     if (!options.run_one.empty()) {
+        prctl(PR_SET_PDEATHSIG, SIGKILL);
         for (const CaseRef& ref : cases) {
             if (ref.id == options.run_one) {
                 return run_one(options, ref);
@@ -437,15 +511,38 @@ int main(int argc, char** argv) {
         gl_config.selector = gpu.selector;
         std::unique_ptr<platform::GlPlatform> host = platform::make_gl_platform(gl_config, error);
         gl::Kit kit;
-        if (host && kit.open(*host, gl::KitOptions{}, error)) {
+        if (host && kit.open(*host, gl::KitOptions{}, error) == OpenResult::Ok) {
             info.gl_renderer = kit.renderer;
             info.gl_uuid = kit.uuid;
         } else {
             std::fprintf(stderr, "lsw-render-ref: GL probe failed: %s\n", error.c_str());
         }
     }
+    RefStore store(options.out);
+    DeviceInfo existing;
+    std::string existing_error;
+    const bool have_device = store.read_device(existing, existing_error);
+    const bool filtered = !options.filters.empty();
+    if (options.clean) {
+        std::filesystem::remove_all(options.out);
+    } else if (have_device) {
+        const bool same_gpu = existing.vulkan_uuid == info.vulkan_uuid;
+        const bool same_stack = existing.driver_version == info.driver_version && existing.gl_uuid == info.gl_uuid &&
+                                existing.gl_renderer == info.gl_renderer;
+        if (!same_gpu || (filtered && !same_stack)) {
+            std::fprintf(stderr,
+                         "lsw-render-ref: %s holds references from %s (uuid %s, driver %s); this run is %s (uuid %s, driver %s). "
+                         "Use --clean to replace them.\n",
+                         options.out.c_str(), existing.gpu_name.c_str(), existing.vulkan_uuid.c_str(), existing.driver_version.c_str(),
+                         info.gpu_name.c_str(), info.vulkan_uuid.c_str(), info.driver_version.c_str());
+            return 2;
+        }
+    }
+    if (!filtered) {
+        std::filesystem::remove_all(options.out);
+    }
     std::filesystem::create_directories(options.out);
-    if (!RefStore(options.out).write_device(info, error)) {
+    if ((!filtered || !have_device || options.clean) && !store.write_device(info, error)) {
         std::fprintf(stderr, "lsw-render-ref: %s\n", error.c_str());
         return 2;
     }

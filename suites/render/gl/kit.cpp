@@ -1,5 +1,6 @@
 #include "render/gl/kit.hpp"
 
+#include <cstdio>
 #include <cstring>
 
 namespace lsw::render::gl {
@@ -13,7 +14,7 @@ void Kit::close() {
     cleanups_.clear();
 }
 
-bool Kit::open(platform::GlPlatform& host, const KitOptions& options, std::string& error) {
+OpenResult Kit::open(platform::GlPlatform& host, const KitOptions& options, std::string& error) {
     platform = &host;
     width = options.width;
     height = options.height;
@@ -25,10 +26,10 @@ bool Kit::open(platform::GlPlatform& host, const KitOptions& options, std::strin
     request.height = options.height;
     request.window = options.window;
     if (!host.open(request, error)) {
-        return false;
+        return OpenResult::Failed;
     }
     if (!gl.load([&host](const char* name) { return host.get_proc(name); }, error)) {
-        return false;
+        return OpenResult::Failed;
     }
     const auto text = [&](GLenum name) {
         const GLubyte* s = gl.glGetString(name);
@@ -43,13 +44,13 @@ bool Kit::open(platform::GlPlatform& host, const KitOptions& options, std::strin
     if (!at_least(options.major, options.minor)) {
         error = "context version " + version + " is below the requested " + std::to_string(options.major) + "." +
                 std::to_string(options.minor);
-        return false;
+        return OpenResult::Unsupported;
     }
     gl.glPixelStorei(glc::PACK_ALIGNMENT, 1);
     gl.glPixelStorei(glc::UNPACK_ALIGNMENT, 1);
     while (gl.glGetError() != glc::NO_ERROR_) {
     }
-    return true;
+    return OpenResult::Ok;
 }
 
 bool Kit::at_least(int wanted_major, int wanted_minor) const {
@@ -172,18 +173,51 @@ GLuint Kit::texture2d(unsigned w, unsigned h, GLenum internal, GLenum format, GL
     return id;
 }
 
-FormatInfo Kit::format_info(GLenum internal) {
+bool Kit::format_info(GLenum internal, FormatInfo& out) {
     switch (internal) {
-        case glc::RGBA16F: return {internal, glc::RGBA, glc::HALF_FLOAT, PixelKind::Rgba16Float};
-        case glc::RGBA32F: return {internal, glc::RGBA, glc::FLOAT, PixelKind::Rgba32Float};
-        case glc::R32F: return {internal, glc::RED, glc::FLOAT, PixelKind::R32Float};
-        case glc::RGBA32UI: return {internal, glc::RGBA_INTEGER, glc::UNSIGNED_INT, PixelKind::Rgba32Uint};
-        default: return {glc::RGBA8, glc::RGBA, glc::UNSIGNED_BYTE, PixelKind::Rgba8Unorm};
+        case glc::RGBA8: out = {internal, glc::RGBA, glc::UNSIGNED_BYTE, PixelKind::Rgba8Unorm}; return true;
+        case glc::RGBA16F: out = {internal, glc::RGBA, glc::HALF_FLOAT, PixelKind::Rgba16Float}; return true;
+        case glc::RGBA32F: out = {internal, glc::RGBA, glc::FLOAT, PixelKind::Rgba32Float}; return true;
+        case glc::R32F: out = {internal, glc::RED, glc::FLOAT, PixelKind::R32Float}; return true;
+        case glc::RGBA32UI: out = {internal, glc::RGBA_INTEGER, glc::UNSIGNED_INT, PixelKind::Rgba32Uint}; return true;
+        case glc::R8: out = {internal, glc::RED, glc::UNSIGNED_BYTE, PixelKind::R8Unorm}; return true;
+        case glc::RG8: out = {internal, glc::RG, glc::UNSIGNED_BYTE, PixelKind::Rg8Unorm}; return true;
+        case glc::R16F: out = {internal, glc::RED, glc::HALF_FLOAT, PixelKind::R16Float}; return true;
+        case glc::RG16F: out = {internal, glc::RG, glc::HALF_FLOAT, PixelKind::Rg16Float}; return true;
+        case glc::R16: out = {internal, glc::RED, glc::UNSIGNED_SHORT, PixelKind::R16Unorm}; return true;
+        case glc::R16UI: out = {internal, glc::RED_INTEGER, glc::UNSIGNED_SHORT, PixelKind::R16Uint}; return true;
+        case glc::RG32F: out = {internal, glc::RG, glc::FLOAT, PixelKind::Rg32Float}; return true;
+        case glc::RGBA16: out = {internal, glc::RGBA, glc::UNSIGNED_SHORT, PixelKind::Rgba16Unorm}; return true;
+        case glc::RGBA8UI: out = {internal, glc::RGBA_INTEGER, glc::UNSIGNED_BYTE, PixelKind::Rgba8Uint}; return true;
+        case glc::RGBA16UI: out = {internal, glc::RGBA_INTEGER, glc::UNSIGNED_SHORT, PixelKind::Rgba16Uint}; return true;
+        default: return false;
     }
 }
 
+GLint Kit::uniform(GLuint program, const char* name, std::string& error) {
+    const GLenum before = gl.glGetError();
+    if (before != glc::NO_ERROR_) {
+        error = std::string("before glGetUniformLocation(") + name + ") the error flag already held " + Api::error_name(before);
+        return -1;
+    }
+    const GLint location = gl.glGetUniformLocation(program, name);
+    const GLenum code = gl.glGetError();
+    if (code != glc::NO_ERROR_) {
+        error = std::string("glGetUniformLocation(") + name + ") raised " + Api::error_name(code);
+        return -1;
+    }
+    if (location < 0) {
+        error = std::string("uniform ") + name + " is not active in the program";
+    }
+    return location;
+}
+
 bool Kit::read_color(GLuint fbo, GLenum read_buffer, GLenum internal, unsigned w, unsigned h, Image& out, std::string& error) {
-    const FormatInfo info = format_info(internal);
+    FormatInfo info;
+    if (!format_info(internal, info)) {
+        error = "readback of GL internal format 0x" + [&] { char t[16]; std::snprintf(t, sizeof t, "%x", internal); return std::string(t); }() + " is not supported by the judge";
+        return false;
+    }
     Image image(w, h, info.kind);
     gl.glBindFramebuffer(glc::READ_FRAMEBUFFER, fbo);
     gl.glReadBuffer(read_buffer);
@@ -238,7 +272,11 @@ bool Target::create(Kit& kit, const TargetDesc& wanted, std::string& error) {
             gl.glFramebufferRenderbuffer(glc::FRAMEBUFFER, glc::COLOR_ATTACHMENT0 + static_cast<GLenum>(i), glc::RENDERBUFFER, id);
             kit.defer([&kit, id] { kit.gl.glDeleteRenderbuffers(1, &id); });
         } else {
-            const FormatInfo info = Kit::format_info(desc.colors[i]);
+            FormatInfo info;
+            if (!Kit::format_info(desc.colors[i], info)) {
+                error = "unsupported colour format for a render target";
+                return false;
+            }
             id = kit.texture2d(desc.width, desc.height, desc.colors[i], info.format, info.type, {}, false);
             gl.glTexParameteri(glc::TEXTURE_2D, glc::TEXTURE_MIN_FILTER, static_cast<GLint>(glc::NEAREST));
             gl.glTexParameteri(glc::TEXTURE_2D, glc::TEXTURE_MAG_FILTER, static_cast<GLint>(glc::NEAREST));
@@ -271,7 +309,11 @@ bool Target::create(Kit& kit, const TargetDesc& wanted, std::string& error) {
         gl.glBindFramebuffer(glc::FRAMEBUFFER, resolve_fbo);
         kit.defer([&kit, id = resolve_fbo] { kit.gl.glDeleteFramebuffers(1, &id); });
         for (std::size_t i = 0; i < desc.colors.size(); ++i) {
-            const FormatInfo info = Kit::format_info(desc.colors[i]);
+            FormatInfo info;
+            if (!Kit::format_info(desc.colors[i], info)) {
+                error = "unsupported colour format for a resolve target";
+                return false;
+            }
             const GLuint id = kit.texture2d(desc.width, desc.height, desc.colors[i], info.format, info.type, {}, false);
             gl.glTexParameteri(glc::TEXTURE_2D, glc::TEXTURE_MIN_FILTER, static_cast<GLint>(glc::NEAREST));
             gl.glFramebufferTexture2D(glc::FRAMEBUFFER, glc::COLOR_ATTACHMENT0 + static_cast<GLenum>(i), glc::TEXTURE_2D, id, 0);

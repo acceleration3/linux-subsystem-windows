@@ -15,7 +15,20 @@ enum class PixelKind : std::uint32_t {
     Depth32Float = 5,
     Rgba32Uint = 6,
     R8Uint = 7,
+    R8Unorm = 8,
+    Rg8Unorm = 9,
+    R16Float = 10,
+    Rg16Float = 11,
+    R16Unorm = 12,
+    R16Uint = 13,
+    Rg32Float = 14,
+    Rgba16Unorm = 15,
+    Rgba8Uint = 16,
+    Rgba16Uint = 17,
+    Count = 18,
 };
+
+enum class ChannelClass { Unorm8, Unorm16, Float, Integer };
 
 class PixelInfo {
 public:
@@ -23,6 +36,8 @@ public:
     [[nodiscard]] static unsigned channels(PixelKind kind);
     [[nodiscard]] static bool is_float(PixelKind kind);
     [[nodiscard]] static bool is_integer(PixelKind kind);
+    [[nodiscard]] static bool valid(std::uint32_t kind);
+    [[nodiscard]] static ChannelClass channel_class(PixelKind kind);
     [[nodiscard]] static const char* name(PixelKind kind);
     [[nodiscard]] static float half_to_float(std::uint16_t half);
     [[nodiscard]] static std::uint16_t float_to_half(float value);

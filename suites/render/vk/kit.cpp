@@ -6,9 +6,37 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <map>
 #include <set>
 
 namespace lsw::render::vk {
+
+namespace {
+
+const std::map<std::string, VkBool32 VkPhysicalDeviceFeatures::*>& feature_table() {
+    static const std::map<std::string, VkBool32 VkPhysicalDeviceFeatures::*> table = {
+        {"geometryShader", &VkPhysicalDeviceFeatures::geometryShader},
+        {"tessellationShader", &VkPhysicalDeviceFeatures::tessellationShader},
+        {"wideLines", &VkPhysicalDeviceFeatures::wideLines},
+        {"largePoints", &VkPhysicalDeviceFeatures::largePoints},
+        {"fillModeNonSolid", &VkPhysicalDeviceFeatures::fillModeNonSolid},
+        {"sampleRateShading", &VkPhysicalDeviceFeatures::sampleRateShading},
+        {"independentBlend", &VkPhysicalDeviceFeatures::independentBlend},
+        {"depthClamp", &VkPhysicalDeviceFeatures::depthClamp},
+        {"depthBiasClamp", &VkPhysicalDeviceFeatures::depthBiasClamp},
+        {"logicOp", &VkPhysicalDeviceFeatures::logicOp},
+        {"multiDrawIndirect", &VkPhysicalDeviceFeatures::multiDrawIndirect},
+        {"fragmentStoresAndAtomics", &VkPhysicalDeviceFeatures::fragmentStoresAndAtomics},
+        {"dualSrcBlend", &VkPhysicalDeviceFeatures::dualSrcBlend},
+        {"samplerAnisotropy", &VkPhysicalDeviceFeatures::samplerAnisotropy},
+        {"textureCompressionBC", &VkPhysicalDeviceFeatures::textureCompressionBC},
+        {"shaderClipDistance", &VkPhysicalDeviceFeatures::shaderClipDistance},
+        {"imageCubeArray", &VkPhysicalDeviceFeatures::imageCubeArray},
+    };
+    return table;
+}
+
+}  // namespace
 
 Kit::~Kit() { close(); }
 
@@ -50,20 +78,20 @@ bool Kit::check(VkResult result, const char* what, std::string& error) const {
     return false;
 }
 
-bool Kit::open(platform::VkPlatform& host, const KitOptions& options, std::string& error) {
+OpenResult Kit::open(platform::VkPlatform& host, const KitOptions& options, std::string& error) {
     platform = &host;
     present_enabled = options.present;
     PFN_vkGetInstanceProcAddr loader = host.loader(error);
     if (loader == nullptr || !api.load_global(loader, error)) {
-        return false;
+        return OpenResult::Failed;
     }
     std::uint32_t instance_version = VK_API_VERSION_1_0;
     if (api.vkEnumerateInstanceVersion != nullptr) {
         api.vkEnumerateInstanceVersion(&instance_version);
     }
     if (instance_version < options.api_version) {
-        error = "the Vulkan loader reports an instance version below the one the case needs";
-        return false;
+        error = "an instance version below the one the case needs";
+        return OpenResult::Unsupported;
     }
     std::uint32_t count = 0;
     api.vkEnumerateInstanceExtensionProperties(nullptr, &count, nullptr);
@@ -76,8 +104,8 @@ bool Kit::open(platform::VkPlatform& host, const KitOptions& options, std::strin
     std::vector<std::string> wanted = host.instance_extensions(options.present);
     for (const std::string& name : wanted) {
         if (have.count(name) == 0) {
-            error = "instance extension " + name + " is not available";
-            return false;
+            error = "instance extension " + name;
+            return OpenResult::Unsupported;
         }
     }
     std::vector<const char*> names;
@@ -94,7 +122,7 @@ bool Kit::open(platform::VkPlatform& host, const KitOptions& options, std::strin
     info.enabledExtensionCount = static_cast<std::uint32_t>(names.size());
     info.ppEnabledExtensionNames = names.data();
     if (!check(api.vkCreateInstance(&info, nullptr, &instance), "vkCreateInstance", error) || !api.load_instance(instance, error)) {
-        return false;
+        return OpenResult::Failed;
     }
     count = 0;
     api.vkEnumeratePhysicalDevices(instance, &count, nullptr);
@@ -102,7 +130,7 @@ bool Kit::open(platform::VkPlatform& host, const KitOptions& options, std::strin
     api.vkEnumeratePhysicalDevices(instance, &count, devices.data());
     if (devices.empty()) {
         error = "no Vulkan physical device";
-        return false;
+        return OpenResult::Failed;
     }
     std::string seen;
     for (std::uint32_t i = 0; i < devices.size() && physical == VK_NULL_HANDLE; ++i) {
@@ -129,14 +157,25 @@ bool Kit::open(platform::VkPlatform& host, const KitOptions& options, std::strin
     }
     if (physical == VK_NULL_HANDLE) {
         error = "no Vulkan physical device matches the requested GPU (saw: " + seen + ")";
-        return false;
+        return OpenResult::Failed;
     }
     if (properties.apiVersion < options.api_version) {
-        error = "the device reports a Vulkan version below the one the case needs";
-        return false;
+        error = "a Vulkan version below the one the case needs";
+        return OpenResult::Unsupported;
     }
     api.vkGetPhysicalDeviceFeatures(physical, &features);
     api.vkGetPhysicalDeviceMemoryProperties(physical, &memory);
+    for (const std::string& name : options.features) {
+        const auto found = feature_table().find(name);
+        if (found == feature_table().end()) {
+            error = "the case names an unknown feature " + name;
+            return OpenResult::Failed;
+        }
+        if (features.*(found->second) == VK_FALSE) {
+            error = "feature " + name;
+            return OpenResult::Unsupported;
+        }
+    }
     count = 0;
     api.vkGetPhysicalDeviceQueueFamilyProperties(physical, &count, nullptr);
     std::vector<VkQueueFamilyProperties> families(count);
@@ -150,7 +189,7 @@ bool Kit::open(platform::VkPlatform& host, const KitOptions& options, std::strin
     }
     if (!found) {
         error = "no graphics and compute queue family";
-        return false;
+        return OpenResult::Failed;
     }
     count = 0;
     api.vkEnumerateDeviceExtensionProperties(physical, nullptr, &count, nullptr);
@@ -164,8 +203,8 @@ bool Kit::open(platform::VkPlatform& host, const KitOptions& options, std::strin
     device_wanted.insert(device_wanted.end(), options.device_extensions.begin(), options.device_extensions.end());
     for (const std::string& name : device_wanted) {
         if (device_have.count(name) == 0) {
-            error = "device extension " + name + " is not available";
-            return false;
+            error = "device extension " + name;
+            return OpenResult::Unsupported;
         }
     }
     std::vector<const char*> device_names;
@@ -189,7 +228,7 @@ bool Kit::open(platform::VkPlatform& host, const KitOptions& options, std::strin
     device_info.pEnabledFeatures = &enabled;
     if (!check(api.vkCreateDevice(physical, &device_info, nullptr, &device), "vkCreateDevice", error) ||
         !api.load_device(device, error)) {
-        return false;
+        return OpenResult::Failed;
     }
     api.vkGetDeviceQueue(device, family, 0, &queue);
     VkCommandPoolCreateInfo pool_info{};
@@ -197,7 +236,7 @@ bool Kit::open(platform::VkPlatform& host, const KitOptions& options, std::strin
     pool_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
     pool_info.queueFamilyIndex = family;
     if (!check(api.vkCreateCommandPool(device, &pool_info, nullptr, &pool), "vkCreateCommandPool", error)) {
-        return false;
+        return OpenResult::Failed;
     }
     VkCommandBufferAllocateInfo alloc{};
     alloc.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -208,7 +247,7 @@ bool Kit::open(platform::VkPlatform& host, const KitOptions& options, std::strin
     fence_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
     if (!check(api.vkAllocateCommandBuffers(device, &alloc, &command_), "vkAllocateCommandBuffers", error) ||
         !check(api.vkCreateFence(device, &fence_info, nullptr, &fence_), "vkCreateFence", error)) {
-        return false;
+        return OpenResult::Failed;
     }
     description = std::string(properties.deviceName) + " vendor 0x" + [&] {
         char text[16];
@@ -218,10 +257,10 @@ bool Kit::open(platform::VkPlatform& host, const KitOptions& options, std::strin
     if (options.present) {
         presenter = host.make_presenter(error);
         if (!presenter) {
-            return false;
+            return OpenResult::Failed;
         }
     }
-    return true;
+    return OpenResult::Ok;
 }
 
 bool Kit::format_supports(VkFormat format, VkFormatFeatureFlags optimal) const {
@@ -692,37 +731,47 @@ void Kit::barrier(VkCommandBuffer cb, VkImage image, VkImageAspectFlags aspect, 
                              1, &b);
 }
 
-PixelKind Kit::pixel_kind(VkFormat format, VkImageAspectFlags aspect) {
+bool Kit::pixel_kind(VkFormat format, VkImageAspectFlags aspect, PixelKind& kind) {
     if (aspect == VK_IMAGE_ASPECT_STENCIL_BIT) {
-        return PixelKind::R8Uint;
+        kind = PixelKind::R8Uint;
+        return true;
+    }
+    if (aspect == VK_IMAGE_ASPECT_DEPTH_BIT) {
+        switch (format) {
+            case VK_FORMAT_D32_SFLOAT:
+            case VK_FORMAT_D32_SFLOAT_S8_UINT:
+                kind = PixelKind::Depth32Float;
+                return true;
+            case VK_FORMAT_D16_UNORM:
+            case VK_FORMAT_D16_UNORM_S8_UINT:
+                kind = PixelKind::R16Unorm;
+                return true;
+            default:
+                return false;
+        }
     }
     switch (format) {
         case VK_FORMAT_R8G8B8A8_UNORM:
-        case VK_FORMAT_R8G8B8A8_SRGB:
-            return PixelKind::Rgba8Unorm;
+        case VK_FORMAT_R8G8B8A8_SRGB: kind = PixelKind::Rgba8Unorm; return true;
         case VK_FORMAT_B8G8R8A8_UNORM:
-        case VK_FORMAT_B8G8R8A8_SRGB:
-            return PixelKind::Bgra8Unorm;
-        case VK_FORMAT_R16G16B16A16_SFLOAT:
-            return PixelKind::Rgba16Float;
-        case VK_FORMAT_R32G32B32A32_SFLOAT:
-            return PixelKind::Rgba32Float;
-        case VK_FORMAT_R32_SFLOAT:
-            return PixelKind::R32Float;
-        case VK_FORMAT_D32_SFLOAT:
-        case VK_FORMAT_D32_SFLOAT_S8_UINT:
-            return PixelKind::Depth32Float;
-        case VK_FORMAT_R32G32B32A32_UINT:
-            return PixelKind::Rgba32Uint;
-        case VK_FORMAT_R8_UINT:
-            return PixelKind::R8Uint;
-        default:
-            return PixelKind::Rgba8Unorm;
+        case VK_FORMAT_B8G8R8A8_SRGB: kind = PixelKind::Bgra8Unorm; return true;
+        case VK_FORMAT_R16G16B16A16_SFLOAT: kind = PixelKind::Rgba16Float; return true;
+        case VK_FORMAT_R32G32B32A32_SFLOAT: kind = PixelKind::Rgba32Float; return true;
+        case VK_FORMAT_R32_SFLOAT: kind = PixelKind::R32Float; return true;
+        case VK_FORMAT_R32G32B32A32_UINT: kind = PixelKind::Rgba32Uint; return true;
+        case VK_FORMAT_R8_UINT: kind = PixelKind::R8Uint; return true;
+        case VK_FORMAT_R8_UNORM: kind = PixelKind::R8Unorm; return true;
+        case VK_FORMAT_R8G8_UNORM: kind = PixelKind::Rg8Unorm; return true;
+        case VK_FORMAT_R16_SFLOAT: kind = PixelKind::R16Float; return true;
+        case VK_FORMAT_R16G16_SFLOAT: kind = PixelKind::Rg16Float; return true;
+        case VK_FORMAT_R16_UNORM: kind = PixelKind::R16Unorm; return true;
+        case VK_FORMAT_R16_UINT: kind = PixelKind::R16Uint; return true;
+        case VK_FORMAT_R32G32_SFLOAT: kind = PixelKind::Rg32Float; return true;
+        case VK_FORMAT_R16G16B16A16_UNORM: kind = PixelKind::Rgba16Unorm; return true;
+        case VK_FORMAT_R8G8B8A8_UINT: kind = PixelKind::Rgba8Uint; return true;
+        case VK_FORMAT_R16G16B16A16_UINT: kind = PixelKind::Rgba16Uint; return true;
+        default: return false;
     }
-}
-
-std::uint32_t Kit::texel_bytes(VkFormat format, VkImageAspectFlags aspect) {
-    return static_cast<std::uint32_t>(PixelInfo::bytes(pixel_kind(format, aspect)));
 }
 
 bool Kit::read_buffer(const Buffer& buffer, VkDeviceSize offset, VkDeviceSize size, std::vector<std::uint8_t>& out,
@@ -746,7 +795,11 @@ bool Kit::read_buffer(const Buffer& buffer, VkDeviceSize offset, VkDeviceSize si
 
 bool Kit::read_texture(const Texture& texture, VkImageLayout layout, VkImageAspectFlags aspect, std::uint32_t layer, Image& out,
                        std::string& error) {
-    const PixelKind kind = pixel_kind(texture.format, aspect);
+    PixelKind kind = PixelKind::Rgba8Unorm;
+    if (!pixel_kind(texture.format, aspect, kind)) {
+        error = "readback of Vulkan format " + std::to_string(static_cast<int>(texture.format)) + " is not supported by the judge";
+        return false;
+    }
     Image image(texture.width, texture.height, kind);
     Buffer staging;
     if (!make_buffer(staging, image.bytes().size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT, true, error)) {

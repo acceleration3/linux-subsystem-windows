@@ -45,6 +45,12 @@ int main(int argc, char** argv) {
     sanity::add(registry);
     render::add(registry);
     selftest::add(registry);
+    if (const std::vector<std::string> problems = registry.problems(); !problems.empty()) {
+        for (const std::string& problem : problems) {
+            std::fprintf(stderr, "%s: registration error: %s\n", ExeIdentity::name().c_str(), problem.c_str());
+        }
+        return 2;
+    }
     if (!options->run_one.empty()) {
         return SingleCheck(registry, options->artifacts).run(options->run_one);
     }

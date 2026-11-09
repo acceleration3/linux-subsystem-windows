@@ -17,10 +17,10 @@ using GlRegister = Register<Kit, SceneType>;
 class GlShaders {
 public:
     static constexpr const char* kMeshVertex =
-        "#version 430 core\n"
+        "#version 330 core\n"
         "layout(location = 0) in vec3 in_pos;\n"
         "layout(location = 1) in vec3 in_color;\n"
-        "layout(location = 0) uniform mat4 u_transform;\n"
+        "uniform mat4 u_transform;\n"
         "out vec3 v_color;\n"
         "void main() {\n"
         "    gl_Position = u_transform * vec4(in_pos, 1.0);\n"
@@ -52,10 +52,10 @@ public:
         "    v_uv = in_uv;\n"
         "}\n";
     static constexpr const char* kTextureFragment =
-        "#version 430 core\n"
+        "#version 330 core\n"
         "in vec2 v_uv;\n"
-        "layout(location = 0) uniform sampler2D u_texture;\n"
-        "layout(location = 1) uniform vec4 u_tint;\n"
+        "uniform sampler2D u_texture;\n"
+        "uniform vec4 u_tint;\n"
         "layout(location = 0) out vec4 out_color;\n"
         "void main() {\n"
         "    out_color = texture(u_texture, v_uv) * u_tint;\n"

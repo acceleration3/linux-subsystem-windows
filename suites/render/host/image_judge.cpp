@@ -3,6 +3,7 @@
 #include "render/common/png.hpp"
 
 #include <cstdio>
+#include <set>
 
 namespace lsw::suites::render {
 
@@ -13,8 +14,8 @@ std::string ImageJudge::label(unsigned frame, const std::string& capture) {
 }
 
 void ImageJudge::compare(Context& context, Problems& problems, const std::string& name, const rr::Image& expected,
-                         const rr::Image& actual, const rr::Tolerance& tolerance) {
-    bool uniform = !expected.empty();
+                         const rr::Image& actual, const rr::Tolerance& tolerance, bool uniform_ok) {
+    bool uniform = !expected.empty() && !uniform_ok;
     const std::size_t pixel = rr::PixelInfo::bytes(expected.kind());
     for (std::size_t i = pixel; uniform && i < expected.bytes().size(); ++i) {
         uniform = expected.bytes()[i] == expected.bytes()[i % pixel];
@@ -28,6 +29,7 @@ void ImageJudge::compare(Context& context, Problems& problems, const std::string
     context.measure("psnr." + name, result.psnr);
     context.measure("bad_pixels." + name, static_cast<double>(result.bad));
     context.measure("max_delta." + name, result.max_delta);
+    context.measure("forgiven." + name, static_cast<double>(result.forgiven));
     if (result.pass) {
         return;
     }
@@ -48,26 +50,48 @@ void ImageJudge::compare(Context& context, Problems& problems, const std::string
     }
 }
 
-void ImageJudge::compare_frames(Context& context, Problems& problems, const rr::FrameCaptures& expected,
-                                const rr::FrameCaptures& actual, const rr::Tolerance& tolerance) {
-    for (const auto& [frame, set] : actual) {
-        const auto found = expected.find(frame);
-        if (found == expected.end()) {
-            problems.add("frame " + std::to_string(frame) + " has no reference capture");
+void ImageJudge::compare_frames(Context& context, Problems& problems, const rr::CaseSpec& spec, const rr::FrameCaptures& expected,
+                                const rr::FrameCaptures& actual) {
+    std::set<unsigned> frames;
+    for (const auto& entry : expected) {
+        frames.insert(entry.first);
+    }
+    for (const auto& entry : actual) {
+        frames.insert(entry.first);
+    }
+    for (unsigned frame : frames) {
+        const auto want = expected.find(frame);
+        const auto got = actual.find(frame);
+        if (want == expected.end() || got == actual.end()) {
+            problems.add("frame " + std::to_string(frame) + " is captured by the " + (want == expected.end() ? "scene only" : "reference only"));
             continue;
         }
-        for (const auto& [capture, image] : set.items()) {
+        std::set<std::string> labels;
+        for (const auto& item : want->second.items()) {
+            labels.insert(item.first);
+        }
+        for (const auto& item : got->second.items()) {
+            labels.insert(item.first);
+        }
+        for (const std::string& capture : labels) {
             const rr::Image* reference = nullptr;
-            for (const auto& [ref_label, ref_image] : found->second.items()) {
-                if (ref_label == capture) {
-                    reference = &ref_image;
+            const rr::Image* image = nullptr;
+            for (const auto& item : want->second.items()) {
+                if (item.first == capture) {
+                    reference = &item.second;
                 }
             }
-            if (reference == nullptr) {
-                problems.add(label(frame, capture) + ": no reference capture of that name");
+            for (const auto& item : got->second.items()) {
+                if (item.first == capture) {
+                    image = &item.second;
+                }
+            }
+            const std::string name = label(frame, capture);
+            if (reference == nullptr || image == nullptr) {
+                problems.add(name + ": captured by the " + (reference == nullptr ? "scene only" : "reference only"));
                 continue;
             }
-            compare(context, problems, label(frame, capture), *reference, image, tolerance);
+            compare(context, problems, name, *reference, *image, spec.resolve(capture, reference->kind()), spec.uniform_allowed(capture));
         }
     }
 }

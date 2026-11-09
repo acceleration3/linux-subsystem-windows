@@ -1,5 +1,6 @@
 #pragma once
 
+#include "render/common/case.hpp"
 #include "render/common/image.hpp"
 #include "render/gl/api.hpp"
 #include "render/platform/gl_platform.hpp"
@@ -16,6 +17,17 @@ struct KitOptions {
     unsigned width = 128;
     unsigned height = 128;
     bool window = false;
+
+    [[nodiscard]] static KitOptions from(const CaseSpec& spec) {
+        KitOptions options;
+        options.core = !spec.compat();
+        options.major = spec.major() != 0 ? static_cast<int>(spec.major()) : 4;
+        options.minor = spec.major() != 0 ? static_cast<int>(spec.minor()) : 6;
+        options.width = spec.width();
+        options.height = spec.height();
+        options.window = spec.uses_swapchain();
+        return options;
+    }
 };
 
 struct FormatInfo {
@@ -32,7 +44,7 @@ public:
     Kit& operator=(const Kit&) = delete;
     ~Kit();
 
-    [[nodiscard]] bool open(platform::GlPlatform& host, const KitOptions& options, std::string& error);
+    [[nodiscard]] OpenResult open(platform::GlPlatform& host, const KitOptions& options, std::string& error);
     void close();
 
     [[nodiscard]] bool check(const char* where, std::string& error);
@@ -46,7 +58,8 @@ public:
     [[nodiscard]] GLuint texture2d(unsigned width, unsigned height, GLenum internal, GLenum format, GLenum type,
                                    const std::vector<std::vector<std::uint8_t>>& levels, bool generate_mips);
 
-    [[nodiscard]] static FormatInfo format_info(GLenum internal);
+    [[nodiscard]] static bool format_info(GLenum internal, FormatInfo& out);
+    [[nodiscard]] GLint uniform(GLuint program, const char* name, std::string& error);
 
     [[nodiscard]] bool read_color(GLuint fbo, GLenum read_buffer, GLenum internal, unsigned width, unsigned height, Image& out,
                                   std::string& error);

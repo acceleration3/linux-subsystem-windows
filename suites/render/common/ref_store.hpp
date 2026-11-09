@@ -3,7 +3,9 @@
 #include "render/common/image.hpp"
 
 #include <filesystem>
+#include <set>
 #include <string>
+#include <utility>
 
 namespace lsw::render {
 struct DeviceInfo {
@@ -36,6 +38,10 @@ public:
     [[nodiscard]] bool write_skip(const std::string& id, const std::string& reason, std::string& error) const;
     [[nodiscard]] bool read_skip(const std::string& id, std::string& reason) const;
     void clear_case(const std::string& id) const;
+
+    [[nodiscard]] bool write_recipe(const std::string& id, const std::string& recipe, std::string& error) const;
+    [[nodiscard]] bool read_recipe(const std::string& id, std::string& recipe) const;
+    [[nodiscard]] std::set<std::pair<unsigned, std::string>> list_frames(const std::string& id) const;
 
     [[nodiscard]] bool write_device(const DeviceInfo& info, std::string& error) const;
     [[nodiscard]] bool read_device(DeviceInfo& info, std::string& error) const;

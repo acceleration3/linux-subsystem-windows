@@ -1398,6 +1398,7 @@ suites/render-ref/        lsw-render-ref, the Linux tool that renders the Vulkan
   `Register<Kit, Scene>{CaseSpec(group, name).frames(n, {captured}).tolerance(...)}` line. The CMake lists glob each
   folder, so adding a case touches no shared file. Vulkan shaders are GLSL in `vk/spirv/`; `generate.sh` there writes
   one registered `.cpp` per shader into `vk/spirv/gen/`.
+- Case authors: in guest code under `lsw::suites::render`, reach portable names through the `rr::` alias (`::lsw::render`), because `render::` there means `lsw::suites::render`. Requirements (`min_version`, `extension`, `feature`, `compat_profile`), per-capture tolerances (`tolerance_for`) and the single-value opt-out (`uniform_ok`) live on `CaseSpec`.
 - Oracles: D3D10, D3D11 and D3D12 compare the accel-virt adapter with WARP; D3D9 compares it with D3D9On12 over a WARP12
   device (`Direct3DCreate9On12` and the Ex variant); Vulkan and OpenGL compare with images rendered by
   `lsw-render-ref` on the same physical GPU through native Vulkan and EGL desktop GL.

@@ -16,7 +16,7 @@ OpenStatus Kit::open(bool use_warp, const rr::CaseSpec& spec, std::string& error
         if (!dev.create_warp(&level, 1, 0, error)) {
             return dev.result == E_INVALIDARG || dev.result == DXGI_ERROR_UNSUPPORTED ? OpenStatus::Unsupported : OpenStatus::Failed;
         }
-        return OpenStatus::Ok;
+        return open_swap(spec, error);
     }
     AvAdapter adapter;
     if (!TargetAdapter::pick(adapter, error)) {
@@ -26,8 +26,17 @@ OpenStatus Kit::open(bool use_warp, const rr::CaseSpec& spec, std::string& error
     if (!dev.create_ex(adapter.luid, &level, 1, 0, error)) {
         return dev.result == E_INVALIDARG || dev.result == DXGI_ERROR_UNSUPPORTED ? OpenStatus::Unsupported : OpenStatus::Failed;
     }
-    return OpenStatus::Ok;
+    return open_swap(spec, error);
 }
+
+OpenStatus Kit::open_swap(const rr::CaseSpec& spec, std::string& error) {
+    if (!spec.multiframe()) {
+        return OpenStatus::Ok;
+    }
+    return swap.open(dev.device, 128, 128, 2, DXGI_FORMAT_B8G8R8A8_UNORM, false, error) ? OpenStatus::Ok : OpenStatus::Failed;
+}
+
+bool Kit::end_frame(std::string& error) { return swap.present(error); }
 
 Com<ID3D11VertexShader> Kit::vertex_shader(const std::string& source, std::vector<std::uint8_t>& code, std::string& error) {
     if (!D3d11Tools::compile(source, "main", "vs_5_0", code, error)) {

@@ -1,5 +1,7 @@
 #include "core/registry.hpp"
 
+#include <set>
+
 #include "core/outcome.hpp"
 
 namespace lsw::suites {
@@ -46,6 +48,27 @@ const Check* Registry::find_check(const std::string& id, const Suite** owner) co
         }
     }
     return nullptr;
+}
+
+std::vector<std::string> Registry::problems() const {
+    std::vector<std::string> out;
+    std::set<std::string> seen;
+    for (const Suite& suite : suites_) {
+        out.insert(out.end(), suite.problems().begin(), suite.problems().end());
+        for (const Check& check : suite.checks()) {
+            if (!seen.insert(check.id).second) {
+                out.push_back("check id " + check.id + " appears in more than one suite");
+            }
+        }
+    }
+    for (std::size_t i = 0; i < suites_.size(); ++i) {
+        for (std::size_t j = i + 1; j < suites_.size(); ++j) {
+            if (suites_[i].name() == suites_[j].name()) {
+                out.push_back("duplicate suite " + suites_[i].name());
+            }
+        }
+    }
+    return out;
 }
 
 }  // namespace lsw::suites

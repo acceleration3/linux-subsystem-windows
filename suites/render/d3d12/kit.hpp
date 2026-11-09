@@ -1,5 +1,6 @@
 #pragma once
 
+#include "render/d3d/frame_swap.hpp"
 #include "render/d3d/warp_check.hpp"
 #include "support/d3d11_tools.hpp"
 #include "support/d3d12_rig.hpp"
@@ -42,6 +43,8 @@ public:
     [[nodiscard]] bool make_depth(Depth& out, UINT width, UINT height, std::string& error);
     [[nodiscard]] ID3D12Resource* make_upload(const void* data, UINT64 size, std::string& error);
 
+    [[nodiscard]] bool end_frame(std::string& error);
+
     [[nodiscard]] bool run(const D3d12Queue::Recorder& record, std::string& error);
 
     [[nodiscard]] bool read_color(Target& target, rr::Image& out, std::string& error);
@@ -56,5 +59,8 @@ public:
     D3d12Rig rig;
     DxcCompiler compiler;
     bool compiler_ready = false;
+    FrameSwap swap;
+    std::uint64_t ring[3] = {0, 0, 0};
+    unsigned ring_index = 0;
 };
 }  // namespace lsw::suites::render::d3d12

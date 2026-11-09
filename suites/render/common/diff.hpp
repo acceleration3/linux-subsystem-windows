@@ -11,6 +11,7 @@ struct DiffResult {
     bool pass = false;
     std::uint64_t total = 0;
     std::uint64_t bad = 0;
+    std::uint64_t forgiven = 0;
     double psnr = 0.0;
     double max_delta = 0.0;
     std::string detail;

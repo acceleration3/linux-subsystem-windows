@@ -6,55 +6,65 @@
 
 namespace lsw::render {
 
-std::size_t PixelInfo::bytes(PixelKind kind) {
-    switch (kind) {
-        case PixelKind::Rgba8Unorm:
-        case PixelKind::Bgra8Unorm:
-        case PixelKind::R32Float:
-        case PixelKind::Depth32Float:
-            return 4;
-        case PixelKind::Rgba16Float:
-            return 8;
-        case PixelKind::Rgba32Float:
-        case PixelKind::Rgba32Uint:
-            return 16;
-        case PixelKind::R8Uint:
-            return 1;
+namespace {
+
+enum class Element { U8, U16, F16, F32, U32 };
+
+struct KindRow {
+    const char* name;
+    unsigned channels;
+    Element element;
+    ChannelClass klass;
+    bool swapped;
+};
+
+const KindRow kRows[] = {
+    {"rgba8", 4, Element::U8, ChannelClass::Unorm8, false},
+    {"bgra8", 4, Element::U8, ChannelClass::Unorm8, true},
+    {"rgba16f", 4, Element::F16, ChannelClass::Float, false},
+    {"rgba32f", 4, Element::F32, ChannelClass::Float, false},
+    {"r32f", 1, Element::F32, ChannelClass::Float, false},
+    {"depth32f", 1, Element::F32, ChannelClass::Float, false},
+    {"rgba32ui", 4, Element::U32, ChannelClass::Integer, false},
+    {"r8ui", 1, Element::U8, ChannelClass::Integer, false},
+    {"r8", 1, Element::U8, ChannelClass::Unorm8, false},
+    {"rg8", 2, Element::U8, ChannelClass::Unorm8, false},
+    {"r16f", 1, Element::F16, ChannelClass::Float, false},
+    {"rg16f", 2, Element::F16, ChannelClass::Float, false},
+    {"r16", 1, Element::U16, ChannelClass::Unorm16, false},
+    {"r16ui", 1, Element::U16, ChannelClass::Integer, false},
+    {"rg32f", 2, Element::F32, ChannelClass::Float, false},
+    {"rgba16", 4, Element::U16, ChannelClass::Unorm16, false},
+    {"rgba8ui", 4, Element::U8, ChannelClass::Integer, false},
+    {"rgba16ui", 4, Element::U16, ChannelClass::Integer, false},
+};
+
+const KindRow& kind_row(PixelKind kind) { return kRows[static_cast<std::size_t>(kind)]; }
+
+std::size_t element_bytes(Element element) {
+    switch (element) {
+        case Element::U8: return 1;
+        case Element::U16:
+        case Element::F16: return 2;
+        default: return 4;
     }
-    return 4;
 }
 
-unsigned PixelInfo::channels(PixelKind kind) {
-    switch (kind) {
-        case PixelKind::R32Float:
-        case PixelKind::Depth32Float:
-        case PixelKind::R8Uint:
-            return 1;
-        default:
-            return 4;
-    }
-}
+}  // namespace
 
-bool PixelInfo::is_float(PixelKind kind) {
-    return kind == PixelKind::Rgba16Float || kind == PixelKind::Rgba32Float || kind == PixelKind::R32Float ||
-           kind == PixelKind::Depth32Float;
-}
+bool PixelInfo::valid(std::uint32_t kind) { return kind < static_cast<std::uint32_t>(PixelKind::Count); }
 
-bool PixelInfo::is_integer(PixelKind kind) { return kind == PixelKind::Rgba32Uint || kind == PixelKind::R8Uint; }
+ChannelClass PixelInfo::channel_class(PixelKind kind) { return kind_row(kind).klass; }
 
-const char* PixelInfo::name(PixelKind kind) {
-    switch (kind) {
-        case PixelKind::Rgba8Unorm: return "rgba8";
-        case PixelKind::Bgra8Unorm: return "bgra8";
-        case PixelKind::Rgba16Float: return "rgba16f";
-        case PixelKind::Rgba32Float: return "rgba32f";
-        case PixelKind::R32Float: return "r32f";
-        case PixelKind::Depth32Float: return "depth32f";
-        case PixelKind::Rgba32Uint: return "rgba32ui";
-        case PixelKind::R8Uint: return "r8ui";
-    }
-    return "?";
-}
+std::size_t PixelInfo::bytes(PixelKind kind) { return kind_row(kind).channels * element_bytes(kind_row(kind).element); }
+
+unsigned PixelInfo::channels(PixelKind kind) { return kind_row(kind).channels; }
+
+bool PixelInfo::is_float(PixelKind kind) { return kind_row(kind).klass == ChannelClass::Float; }
+
+bool PixelInfo::is_integer(PixelKind kind) { return kind_row(kind).klass == ChannelClass::Integer; }
+
+const char* PixelInfo::name(PixelKind kind) { return kind_row(kind).name; }
 
 float PixelInfo::half_to_float(std::uint16_t half) {
     const std::uint32_t sign = (static_cast<std::uint32_t>(half) & 0x8000u) << 16;
@@ -118,29 +128,34 @@ Image::Image(std::uint32_t width, std::uint32_t height, PixelKind kind)
     : width_(width), height_(height), kind_(kind), bytes_(static_cast<std::size_t>(width) * height * PixelInfo::bytes(kind)) {}
 
 double Image::channel(std::uint32_t x, std::uint32_t y, unsigned index) const {
+    const KindRow& r = kind_row(kind_);
+    if (index >= r.channels) {
+        return index == 3 ? (r.klass == ChannelClass::Integer ? 1.0 : (r.klass == ChannelClass::Unorm16 ? 65535.0 : (r.klass == ChannelClass::Unorm8 ? 255.0 : 1.0))) : 0.0;
+    }
     const std::uint8_t* pixel = row(y) + static_cast<std::size_t>(x) * PixelInfo::bytes(kind_);
-    switch (kind_) {
-        case PixelKind::Rgba8Unorm:
+    if (r.swapped) {
+        static constexpr unsigned swap[4] = {2, 1, 0, 3};
+        index = swap[index];
+    }
+    switch (r.element) {
+        case Element::U8:
             return pixel[index];
-        case PixelKind::Bgra8Unorm: {
-            static constexpr unsigned swap[4] = {2, 1, 0, 3};
-            return pixel[swap[index]];
+        case Element::U16: {
+            std::uint16_t value;
+            std::memcpy(&value, pixel + index * 2, 2);
+            return value;
         }
-        case PixelKind::R8Uint:
-            return pixel[0];
-        case PixelKind::Rgba16Float: {
+        case Element::F16: {
             std::uint16_t half;
             std::memcpy(&half, pixel + index * 2, 2);
             return PixelInfo::half_to_float(half);
         }
-        case PixelKind::Rgba32Float:
-        case PixelKind::R32Float:
-        case PixelKind::Depth32Float: {
+        case Element::F32: {
             float value;
             std::memcpy(&value, pixel + index * 4, 4);
             return value;
         }
-        case PixelKind::Rgba32Uint: {
+        case Element::U32: {
             std::uint32_t value;
             std::memcpy(&value, pixel + index * 4, 4);
             return value;
@@ -150,32 +165,35 @@ double Image::channel(std::uint32_t x, std::uint32_t y, unsigned index) const {
 }
 
 void Image::set_channel(std::uint32_t x, std::uint32_t y, unsigned index, double value) {
+    const KindRow& r = kind_row(kind_);
+    if (index >= r.channels) {
+        return;
+    }
     std::uint8_t* pixel = row(y) + static_cast<std::size_t>(x) * PixelInfo::bytes(kind_);
-    switch (kind_) {
-        case PixelKind::Rgba8Unorm:
+    if (r.swapped) {
+        static constexpr unsigned swap[4] = {2, 1, 0, 3};
+        index = swap[index];
+    }
+    switch (r.element) {
+        case Element::U8:
             pixel[index] = static_cast<std::uint8_t>(std::clamp(value, 0.0, 255.0));
             break;
-        case PixelKind::Bgra8Unorm: {
-            static constexpr unsigned swap[4] = {2, 1, 0, 3};
-            pixel[swap[index]] = static_cast<std::uint8_t>(std::clamp(value, 0.0, 255.0));
+        case Element::U16: {
+            const std::uint16_t v = static_cast<std::uint16_t>(std::clamp(value, 0.0, 65535.0));
+            std::memcpy(pixel + index * 2, &v, 2);
             break;
         }
-        case PixelKind::R8Uint:
-            pixel[0] = static_cast<std::uint8_t>(std::clamp(value, 0.0, 255.0));
-            break;
-        case PixelKind::Rgba16Float: {
+        case Element::F16: {
             const std::uint16_t half = PixelInfo::float_to_half(static_cast<float>(value));
             std::memcpy(pixel + index * 2, &half, 2);
             break;
         }
-        case PixelKind::Rgba32Float:
-        case PixelKind::R32Float:
-        case PixelKind::Depth32Float: {
+        case Element::F32: {
             const float f = static_cast<float>(value);
             std::memcpy(pixel + index * 4, &f, 4);
             break;
         }
-        case PixelKind::Rgba32Uint: {
+        case Element::U32: {
             const std::uint32_t u = static_cast<std::uint32_t>(std::clamp(value, 0.0, 4294967295.0));
             std::memcpy(pixel + index * 4, &u, 4);
             break;
@@ -199,28 +217,29 @@ void Image::set_rgba8(std::uint32_t x, std::uint32_t y, std::uint32_t rgba) {
 
 Image Image::to_rgba8() const {
     Image out(width_, height_, PixelKind::Rgba8Unorm);
+    const ChannelClass klass = PixelInfo::channel_class(kind_);
+    const unsigned channels = PixelInfo::channels(kind_);
     for (std::uint32_t y = 0; y < height_; ++y) {
         for (std::uint32_t x = 0; x < width_; ++x) {
             double v[4];
             for (unsigned c = 0; c < 4; ++c) {
-                const double raw = c < PixelInfo::channels(kind_) ? channel(x, y, c) : (c == 3 ? 1.0 : 0.0);
-                switch (kind_) {
-                    case PixelKind::Rgba8Unorm:
-                    case PixelKind::Bgra8Unorm:
-                        v[c] = raw;
+                const double raw = c < channels ? channel(x, y, c) : (c == 3 ? 1.0 : 0.0);
+                switch (klass) {
+                    case ChannelClass::Unorm8:
+                        v[c] = c < channels ? raw : (c == 3 ? 255.0 : 0.0);
                         break;
-                    case PixelKind::Rgba32Uint:
-                        v[c] = std::min(raw, 255.0);
+                    case ChannelClass::Unorm16:
+                        v[c] = c < channels ? raw / 257.0 : (c == 3 ? 255.0 : 0.0);
                         break;
-                    case PixelKind::R8Uint:
-                        v[c] = raw;
+                    case ChannelClass::Integer:
+                        v[c] = c < channels ? std::min(raw, 255.0) : (c == 3 ? 255.0 : 0.0);
                         break;
-                    default:
+                    case ChannelClass::Float:
                         v[c] = std::isnan(raw) ? 0.0 : std::clamp(raw, 0.0, 1.0) * 255.0 + 0.5;
                         break;
                 }
             }
-            if (PixelInfo::channels(kind_) == 1) {
+            if (channels == 1) {
                 v[1] = v[2] = v[0];
                 v[3] = 255.0;
             }

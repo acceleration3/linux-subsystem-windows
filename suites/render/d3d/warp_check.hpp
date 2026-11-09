@@ -23,7 +23,7 @@ public:
             case OpenStatus::Ok:
                 break;
             case OpenStatus::Unsupported:
-                return Outcome::skip("accel-virt adapter lacks " + error);
+                return Outcome::skip("accel-virt device: " + error);
             case OpenStatus::Failed:
                 return Outcome::fail("device creation on the accel-virt adapter failed: " + error);
         }
@@ -31,9 +31,9 @@ public:
             case OpenStatus::Ok:
                 break;
             case OpenStatus::Unsupported:
-                return Outcome::skip("WARP lacks " + error);
+                return Outcome::skip("WARP: " + error);
             case OpenStatus::Failed:
-                return Outcome::skip("WARP unavailable: " + error);
+                return Outcome::fail("the oracle is unavailable: " + error);
         }
         context.measure("device", accel.name);
         std::unique_ptr<rr::Scene<Kit>> accel_scene = entry.make();
@@ -55,7 +55,7 @@ public:
             return Outcome::fail(actual.reason);
         }
         Problems problems;
-        ImageJudge::compare_frames(context, problems, expected.frames, actual.frames, entry.spec.tolerance());
+        ImageJudge::compare_frames(context, problems, entry.spec, expected.frames, actual.frames);
         return problems.outcome();
     }
 };
