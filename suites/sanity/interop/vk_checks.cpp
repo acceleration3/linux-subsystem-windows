@@ -501,15 +501,32 @@ Outcome VkChecks::export_to_gl(Context& context) {
         HANDLE to_gl_handle = nullptr;
         HANDLE from_gl_handle = nullptr;
         VkResult result = exported.export_buffer(rig, VulkanInterop::kOpaque, kBuffer, usage);
+        std::string step = result == VK_SUCCESS ? std::string() : "creating the exportable buffer memory returned " + VulkanTools::result_name(result);
         if (result == VK_SUCCESS) {
             result = VulkanInterop::make_semaphore(rig, to_gl, false, VulkanInterop::kOpaqueSemaphore);
+            step = result == VK_SUCCESS ? step : "creating the first exportable semaphore returned " + VulkanTools::result_name(result);
         }
         if (result == VK_SUCCESS) {
             result = VulkanInterop::make_semaphore(rig, from_gl, false, VulkanInterop::kOpaqueSemaphore);
+            step = result == VK_SUCCESS ? step : "creating the second exportable semaphore returned " + VulkanTools::result_name(result);
         }
-        if (result != VK_SUCCESS || exported.handle(VulkanInterop::kOpaque, memory_handle) != VK_SUCCESS || VulkanInterop::semaphore_handle(rig, to_gl.get(), VulkanInterop::kOpaqueSemaphore, to_gl_handle) != VK_SUCCESS ||
-            VulkanInterop::semaphore_handle(rig, from_gl.get(), VulkanInterop::kOpaqueSemaphore, from_gl_handle) != VK_SUCCESS) {
-            problems.add("the exportable memory or semaphores cannot be created or exported (" + VulkanTools::result_name(result) + ")");
+        VkResult exported_memory = VK_SUCCESS;
+        VkResult exported_first = VK_SUCCESS;
+        VkResult exported_second = VK_SUCCESS;
+        if (result == VK_SUCCESS) {
+            exported_memory = exported.handle(VulkanInterop::kOpaque, memory_handle);
+            exported_first = VulkanInterop::semaphore_handle(rig, to_gl.get(), VulkanInterop::kOpaqueSemaphore, to_gl_handle);
+            exported_second = VulkanInterop::semaphore_handle(rig, from_gl.get(), VulkanInterop::kOpaqueSemaphore, from_gl_handle);
+            if (exported_memory != VK_SUCCESS) {
+                step = "vkGetMemoryWin32HandleKHR returned " + VulkanTools::result_name(exported_memory);
+            } else if (exported_first != VK_SUCCESS) {
+                step = "vkGetSemaphoreWin32HandleKHR for the first semaphore returned " + VulkanTools::result_name(exported_first);
+            } else if (exported_second != VK_SUCCESS) {
+                step = "vkGetSemaphoreWin32HandleKHR for the second semaphore returned " + VulkanTools::result_name(exported_second);
+            }
+        }
+        if (!step.empty()) {
+            problems.add("the exportable memory or semaphores cannot be created or exported: " + step);
             return {};
         }
         (void)api.drain_errors();
@@ -1013,6 +1030,30 @@ Outcome VkChecks::cross_process_present_chain(Context& context) {
     }
     if (ApiPolicy::is_skipped("d3d11") || ApiPolicy::is_skipped("vulkan")) {
         return Context::skip("this row needs both Vulkan and Direct3D 11");
+    }
+    {
+        std::string probe_error;
+        AvAdapter probe_adapter;
+        if (!TargetAdapter::pick(probe_adapter, probe_error)) {
+            return Outcome::fail(probe_error);
+        }
+        VulkanRig probe_rig;
+        bool probe_opened = false;
+        for (const AvAdapter& candidate : VulkanRig::target_adapters(probe_error)) {
+            if (candidate.luid_key() == probe_adapter.luid_key()) {
+                probe_opened = probe_rig.open(candidate, VulkanInterop::options(), probe_error);
+            }
+        }
+        std::string reason;
+        if (!probe_opened || !VulkanInterop::ready(probe_rig, reason)) {
+            return Outcome::fail("the Vulkan device cannot be opened: " + probe_error + reason);
+        }
+        VkResult code = VK_SUCCESS;
+        const VkExternalMemoryFeatureFlags features = VulkanInterop::image_features(probe_rig, VulkanInterop::kD3d11, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_TRANSFER_DST_BIT, &code);
+        if ((features & VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT) == 0) {
+            return Context::skip("D3D11_TEXTURE images are not importable on " + probe_rig.describe() + " (features " + "0x" + Text::hex(features, 2) + ", query " + VulkanTools::result_name(code) +
+                                 "); VUID-VkImportMemoryWin32HandleInfoKHR-handleType-09861: if handleType is not 0, it must be supported for import");
+        }
     }
     SwapRig swap;
     SwapOptions options;
