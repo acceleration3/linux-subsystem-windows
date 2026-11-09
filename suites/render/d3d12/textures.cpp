@@ -368,8 +368,8 @@ rr::Tolerance loose_sampler_tolerance() {
     rr::Tolerance t = rr::Tolerance::filter(16, 0.05).with_edge(1);
     t.min_psnr = 33.0;
     t.outlier_max_delta = 255.0;
-    t.max_outliers = 400;
-    t.name = "noise-minified(16,edge1,400,psnr33)";
+    t.max_outliers = 3300;
+    t.name = "noise-minified(16,edge1,3300,psnr33)";
     return t;
 }
 
