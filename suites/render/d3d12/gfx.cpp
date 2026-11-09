@@ -762,6 +762,9 @@ bool Stage::open(Kit& k, std::string& error, DXGI_FORMAT fmt, DXGI_FORMAT depth,
             depth = DXGI_FORMAT_D16_UNORM;
         }
     }
+    if (k.broken("depth_format_low") && depth == DXGI_FORMAT_D24_UNORM_S8_UINT) {
+        depth = DXGI_FORMAT_D16_UNORM;
+    }
     format = fmt;
     depth_format = depth;
     sample_count = samples;
@@ -821,7 +824,7 @@ public:
     FnScene(Cases::DrawFn draw_fn, Cases::NeedFn need_fn, Cases::RefFn ref_fn) : fn(std::move(draw_fn)), need(std::move(need_fn)), ref(std::move(ref_fn)) {}
     [[nodiscard]] std::string unsupported(Kit& kit) override { return need ? need(kit) : std::string(); }
     [[nodiscard]] bool has_reference() const override { return static_cast<bool>(ref); }
-    [[nodiscard]] bool reference(unsigned index, rr::CaptureSet& out, std::string& error) override { return ref(index, out, error); }
+    [[nodiscard]] bool reference(Kit& device, unsigned index, rr::CaptureSet& out, std::string& error) override { return ref(device, index, out, error); }
     bool draw(Kit& kit, rr::CaptureSet& out, std::string& error) override { return fn(kit, out, error); }
 
 private:
@@ -854,11 +857,11 @@ std::string LineJudge::antialiased(const rr::Image& image, const std::vector<Ver
     }
     const float footprint = length > 0.0f ? static_cast<float>(lit) / length : 0.0f;
     const float fractional = lit != 0 ? static_cast<float>(partial) / static_cast<float>(lit) : 0.0f;
-    if (fractional >= 0.3f && footprint >= 2.0f) {
+    if (fractional >= 0.3f && footprint >= 1.3f) {
         return {};
     }
     return "anti-aliased lines show " + std::to_string(partial) + " fractionally covered pixels of " + std::to_string(lit) + " lit (fraction " + std::to_string(fractional) +
-           ") with a footprint of " + std::to_string(footprint) + " px per px of line: the edge alpha must be fractional and the footprint at least 2 px";
+           ") with a footprint of " + std::to_string(footprint) + " px per px of line: the edge alpha must be fractional and the footprint at least 1.3 px (an aliased line lights 1 px per px of length)";
 }
 
 void Cases::single(rr::CaseSpec spec, DrawFn draw, NeedFn need, RefFn reference) {

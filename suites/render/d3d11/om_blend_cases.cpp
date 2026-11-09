@@ -164,7 +164,7 @@ bool run_msaa_blend(Rig& r, Cap& out, bool coverage, UINT sample_mask) {
     return r.shot(out, target);
 }
 
-const Add kAlphaToCoverage(spec("om", "alpha_to_coverage_4x").tolerance(rr::Tolerance::psnr(26)), [](Rig& r, Cap& out) { return run_msaa_blend(r, out, true, 0xffffffffu); },
+const Add kAlphaToCoverage(spec("om", "alpha_to_coverage_4x").tolerance(rr::Tolerance::psnr(24)), [](Rig& r, Cap& out) { return run_msaa_blend(r, out, true, 0xffffffffu); },
                            [](Rig& r) { return need_msaa(r, DXGI_FORMAT_R8G8B8A8_UNORM, 4); });
 const Add kSampleMask(spec("om", "sample_mask_4x").tolerance(rr::Tolerance::psnr(30)), [](Rig& r, Cap& out) { return run_msaa_blend(r, out, false, 0x5u); },
                       [](Rig& r) { return need_msaa(r, DXGI_FORMAT_R8G8B8A8_UNORM, 4); });

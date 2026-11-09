@@ -1,3 +1,4 @@
+#include "render/common/cpu_raster.hpp"
 #include "render/d3d12/gfx.hpp"
 
 #include <cmath>
@@ -21,9 +22,9 @@ const char* kTessPs =
 
 const char* kLinePs =
     "struct DsOut { float4 pos : SV_Position; float3 wp : WP; };\n"
-    "float4 main(DsOut i) : SV_Target { return float4(p0.rgb * (0.6 + 0.4 * frac(i.wp.x * 4.0)), 1); }\n";
+    "float4 main(DsOut i) : SV_Target { return float4(p0.rgb, 1); }\n";
 
-std::string tess_hull(const char* domain, const char* partition, int points, const char* topology) {
+std::string tess_hull(const char* domain, const char* partition, int points, const char* topology, bool round_pow2 = false) {
     std::string edges = std::string(domain) == "tri" ? "3" : (std::string(domain) == "quad" ? "4" : "2");
     std::string text = std::string(Hlsl12::kRoot) + "struct CP { float3 pos : POSITION; };\n";
     text += "struct Patch { float edges[" + edges + "] : SV_TessFactor;";
@@ -34,13 +35,14 @@ std::string tess_hull(const char* domain, const char* partition, int points, con
     } else {
         text += " };\n";
     }
+    text += std::string("float R(float f) { return ") + (round_pow2 ? "(f <= 1.0 ? 1.0 : (f <= 2.0 ? 2.0 : (f <= 4.0 ? 4.0 : (f <= 8.0 ? 8.0 : (f <= 16.0 ? 16.0 : (f <= 32.0 ? 32.0 : 64.0))))))" : "f") + "; }\n";
     text += "Patch pc(InputPatch<CP, " + std::to_string(points) + "> p) { Patch o;\n";
     if (std::string(domain) == "tri") {
-        text += "  o.edges[0] = p1.x; o.edges[1] = p1.y; o.edges[2] = p1.z; o.inside = p1.w;\n";
+        text += "  o.edges[0] = R(p1.x); o.edges[1] = R(p1.y); o.edges[2] = R(p1.z); o.inside = R(p1.w);\n";
     } else if (std::string(domain) == "quad") {
-        text += "  o.edges[0] = p1.x; o.edges[1] = p1.y; o.edges[2] = p1.z; o.edges[3] = p1.x; o.inside[0] = p1.w; o.inside[1] = p1.w * 0.7;\n";
+        text += "  o.edges[0] = R(p1.x); o.edges[1] = R(p1.y); o.edges[2] = R(p1.z); o.edges[3] = R(p1.x); o.inside[0] = R(p1.w); o.inside[1] = R(p1.w * 0.7);\n";
     } else {
-        text += "  o.edges[0] = p1.x; o.edges[1] = p1.y;\n";
+        text += "  o.edges[0] = R(p1.x); o.edges[1] = R(p1.y);\n";
     }
     text += "  return o; }\n";
     text += std::string("[domain(\"") + domain + "\")][partitioning(\"" + partition + "\")][outputtopology(\"" + topology + "\")][outputcontrolpoints(" +
@@ -101,7 +103,7 @@ std::vector<Vertex> patch_vertices(const DomainCase& domain) {
     return out;
 }
 
-bool draw_tess(Kit& kit, const DomainCase& domain, const char* partition, const float p0[4], const float p1[4], rr::CaptureSet& out, std::string& error) {
+bool draw_tess(Kit& kit, const DomainCase& domain, const char* partition, const float p0[4], const float p1[4], rr::CaptureSet& out, std::string& error, bool round_pow2 = false) {
     Stage stage;
     if (!stage.open(kit, error, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_D32_FLOAT)) {
         return false;
@@ -114,7 +116,7 @@ bool draw_tess(Kit& kit, const DomainCase& domain, const char* partition, const 
     Pso builder(kit, stage.canvas.binder.signature);
     const bool line = std::string(domain.output) == "line";
     builder.vs(kTessVs)
-        .stage(tess_hull(domain.domain, partition, domain.points, domain.output), "main", "hs")
+        .stage(tess_hull(domain.domain, partition, domain.points, domain.output, round_pow2), "main", "hs")
         .stage(tess_domain(domain.domain, domain.points), "main", "ds")
         .ps(Hlsl12::with_root(line ? kLinePs : kTessPs))
         .targets({DXGI_FORMAT_R8G8B8A8_UNORM})
@@ -138,24 +140,114 @@ bool draw_tess(Kit& kit, const DomainCase& domain, const char* partition, const 
     return ok && stage.finish(out, error);
 }
 
+std::vector<float> isoline_points(const std::string& partition, float factor) {
+    std::vector<float> points;
+    if (partition == "integer" || partition == "pow2") {
+        float segments = std::ceil(factor);
+        if (partition == "pow2") {
+            float rounded = 1.0f;
+            while (rounded < segments) {
+                rounded *= 2.0f;
+            }
+            segments = rounded;
+        }
+        for (int k = 0; k <= static_cast<int>(segments); ++k) {
+            points.push_back(static_cast<float>(k) / segments);
+        }
+        return points;
+    }
+    const bool odd = partition == "fractional_odd";
+    float half = factor * 0.5f + (odd ? 0.5f : 0.0f);
+    const float floor_half = std::floor(half);
+    const float fraction = half - floor_half;
+    const int count = static_cast<int>(std::ceil(half));
+    float floor_segments = floor_half * 2.0f - (odd ? 1.0f : 0.0f);
+    const float ceil_segments = std::ceil(half) * 2.0f - (odd ? 1.0f : 0.0f);
+    const int m = count - 1;
+    const int split = odd ? std::min(m, 2 * (m & -m)) : count;
+    const int total = odd ? 2 * count : 2 * count + 1;
+    for (int k = 0; k < total; ++k) {
+        int index = k;
+        bool flip = false;
+        if (index >= count) {
+            index = 2 * count - index - (odd ? 1 : 0);
+            flip = true;
+        }
+        float location = 0.5f;
+        if (index != count) {
+            const int floor_index = index >= split ? index - 1 : index;
+            const float on_floor = static_cast<float>(floor_index) / floor_segments;
+            const float on_ceil = static_cast<float>(index) / ceil_segments;
+            location = on_floor + (on_ceil - on_floor) * fraction;
+        }
+        points.push_back(flip ? 1.0f - location : location);
+    }
+    return points;
+}
+
+bool isoline_reference(const std::string& partition, float lines, float detail, rr::CaptureSet& out) {
+    const rr::Mat4 matrix = rr::Mat4::perspective_d3d(1.0f, 1.0f, 0.5f, 40.0f) * rr::Mat4::translate(0, 0, -2.8f) * rr::Mat4::rotate_x(-0.55f) * rr::Mat4::rotate_y(0.25f);
+    rr::CpuRaster raster(128, 128, rr::CpuRaster::pack(0.05f, 0.05f, 0.1f));
+    const std::vector<float> across = isoline_points(partition, detail);
+    const int count = static_cast<int>(std::ceil(lines));
+    for (int patch = 0; patch < 6; ++patch) {
+        const float y0 = -0.8f + 0.3f * static_cast<float>(patch);
+        for (int line = 0; line < count; ++line) {
+            const float v = static_cast<float>(line) / static_cast<float>(count);
+            float previous[2] = {};
+            for (std::size_t k = 0; k < across.size(); ++k) {
+                const float u = across[k];
+                float x = -0.9f + 1.8f * u;
+                float y = y0 + (v - 0.5f) * 0.5f + 0.1f * std::sin(u * 9.0f);
+                const float z = 0.28f * std::sin(x * 6.0f) * std::cos(y * 5.0f);
+                const rr::Vec4 clip = rr::CpuRaster::transform(matrix, x, y, z);
+                const float sx = (clip.x / clip.w * 0.5f + 0.5f) * 128.0f;
+                const float sy = (0.5f - clip.y / clip.w * 0.5f) * 128.0f;
+                if (k != 0) {
+                    raster.line(previous[0], previous[1], sx, sy, [](float) { return rr::CpuRaster::pack(0.9f, 0.55f, 0.2f); });
+                }
+                previous[0] = sx;
+                previous[1] = sy;
+            }
+        }
+    }
+    out.add("", raster.take());
+    return true;
+}
+
+void register_isolines() {
+    struct Item {
+        const char* partition;
+        float detail;
+    };
+    const Item items[] = {{"integer", 3.7f}, {"fractional_even", 3.7f}, {"fractional_odd", 3.7f}, {"pow2", 5.3f}};
+    for (const Item& item : items) {
+        Cases::single(rr::CaseSpec("stages", std::string("tess_isoline_") + item.partition).tolerance(rr::Tolerance::raster(6, 1).with_outliers(0.02)).tag("tessellation"),
+                      [item](Kit& kit, rr::CaptureSet& out, std::string& error) {
+                          const float color[4] = {0.9f, 0.55f, 0.2f, 1.0f};
+                          const float factors[4] = {4.0f, item.detail, 5.3f, 3.7f};
+                          return draw_tess(kit, kDomains[2], kit.broken("tess_partition") ? (std::string(item.partition) == "integer" ? "fractional_odd" : "integer") : item.partition, color, factors, out, error);
+                      },
+                      {},
+                      [item](Kit&, unsigned, rr::CaptureSet& out, std::string&) { return isoline_reference(item.partition, 4.0f, item.detail, out); });
+    }
+}
+
 void register_tessellation() {
     const char* partitions[] = {"integer", "fractional_even", "fractional_odd", "pow2"};
     for (const DomainCase& domain : kDomains) {
         for (const char* partition : partitions) {
             const bool line = std::string(domain.output) == "line";
+            if (line) {
+                continue;
+            }
             const std::string name = std::string("tess_") + domain.domain + "_" + partition;
-            Cases::single(rr::CaseSpec("stages", name).tolerance(line ? rr::Tolerance::raster(6, 1).with_outliers(0.02) : rr::Tolerance::blend(3)).tag("tessellation"),
+            Cases::single(rr::CaseSpec("stages", name).tolerance(rr::Tolerance::blend(3)).tag("tessellation"),
                           [domain, partition](Kit& kit, rr::CaptureSet& out, std::string& error) {
                               const float color[4] = {0.9f, 0.55f, 0.2f, 1.0f};
-                              const bool is_line = std::string(domain.output) == "line";
-                              const float factors[4] = {is_line ? 4.0f : 5.3f, is_line ? 3.7f : 5.3f, 5.3f, 3.7f};
-                              return draw_tess(kit, domain, partition, color, factors, out, error);
-                          },
-                          [line, partition](Kit& kit) {
-                              if (line) {
-                                  return std::string("deterministic isoline tessellation (the WARP oracle changes every run)");
-                              }
-                              return std::string(partition) == "pow2" ? std::string("pow2 partitioning (WARP renders it like integer partitioning)") : std::string();
+                              const float factors[4] = {5.3f, 5.3f, 5.3f, 3.7f};
+                              const bool oracle = std::string(partition) == "pow2" && kit.warp && !kit.under_test;
+                              return draw_tess(kit, domain, oracle ? "integer" : partition, color, factors, out, error, oracle);
                           });
         }
     }
@@ -403,6 +495,7 @@ void register_geometry_shader() {
 const struct Registrar {
     Registrar() {
         register_tessellation();
+        register_isolines();
         register_tess_variants();
         register_geometry_shader();
     }

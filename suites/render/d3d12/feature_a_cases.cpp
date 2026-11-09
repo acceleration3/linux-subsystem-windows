@@ -1,3 +1,4 @@
+#include "render/common/cpu_raster.hpp"
 #include "render/d3d12/scene_util.hpp"
 
 namespace lsw::suites::render::d3d12 {
@@ -45,17 +46,91 @@ bool read_raw_image(Kit& kit, ID3D12Resource* texture, D3D12_RESOURCE_STATES sta
 
 const char* const kVrsPs =
     "struct VsOut { float4 pos : SV_Position; float3 nrm : NORMAL; float2 uv : TEXCOORD0; };\n"
-    "float4 main(VsOut i) : SV_Target {\n"
-    "  float h = frac(sin(dot(floor(i.pos.xy), float2(12.9898, 78.233))) * 43758.5453);\n"
+    "float noise(uint2 c) { uint x = (c.x * 73856093u) ^ (c.y * 19349663u); x ^= x >> 13; x *= 1274126177u; x ^= x >> 16; return float(x & 255u) / 255.0; }\n"
+    "float4 main(VsOut i, uint rate : SV_ShadingRate) : SV_Target {\n"
+    "  uint2 b = uint2(1u << ((rate >> 2) & 3u), 1u << (rate & 3u));\n"
+    "  float h = noise(uint2(i.pos.xy) / b);\n"
     "  float l = saturate(dot(normalize(i.nrm), normalize(float3(0.5, 0.8, 0.6)))) * 0.6 + 0.4;\n"
-    "  return float4(lerp(p0.rgb * l, float3(h, h, h), 0.35), 1); }\n";
+    "  return float4(lerp(p0.rgb * l, float3(h, h, h), 0.5), 1); }\n";
 
-bool draw_vrs_scene(Kit& kit, const std::function<void(ID3D12GraphicsCommandList5*, Stage&)>& configure, rr::CaptureSet& out, std::string& error) {
+const char* const kVrsBandVs =
+    "struct VsIn { float3 pos : POSITION; float3 nrm : NORMAL; float2 uv : TEXCOORD0; uint id : SV_VertexID; };\n"
+    "struct VsOut { float4 pos : SV_Position; float3 nrm : NORMAL; float2 uv : TEXCOORD0; uint rate : SV_ShadingRate; };\n"
+    "VsOut main(VsIn i) { VsOut o; o.pos = mul(mvp, float4(i.pos, 1)); o.nrm = i.nrm; o.uv = i.uv; uint band = (i.id / 3) / 2; o.rate = band == 0 ? 5 : (band == 1 ? 4 : 0); return o; }\n";
+
+struct VrsBlock {
+    unsigned x = 1;
+    unsigned y = 1;
+};
+
+enum class VrsRows { ImageTiles, CombinerMax, PerPrimitive };
+
+VrsBlock vrs_tile_rate(unsigned tx, unsigned ty, unsigned tiles) {
+    if (tx < tiles / 2) {
+        return {1, 1};
+    }
+    if (ty < tiles / 2) {
+        return {2, 2};
+    }
+    return (tx + ty) % 2 == 0 ? VrsBlock{2, 1} : VrsBlock{1, 2};
+}
+
+VrsBlock vrs_block_at(VrsRows rows, unsigned tile, unsigned x, unsigned y) {
+    const unsigned tiles = (128 + tile - 1) / tile;
+    switch (rows) {
+        case VrsRows::ImageTiles:
+            return vrs_tile_rate(x / tile, y / tile, tiles);
+        case VrsRows::CombinerMax:
+            return x / tile < tiles / 2 ? VrsBlock{2, 2} : VrsBlock{2, 1};
+        case VrsRows::PerPrimitive:
+            if (x >= 16 && x < 48) {
+                return {2, 2};
+            }
+            if (x >= 48 && x < 80) {
+                return {2, 1};
+            }
+            return {1, 1};
+    }
+    return {};
+}
+
+std::vector<Vertex> vrs_vertices(VrsRows rows) {
+    std::vector<Vertex> out;
+    auto corner = [&](float px, float py) {
+        const float x = px / 64.0f - 1.0f;
+        const float y = 1.0f - py / 64.0f;
+        out.push_back({{x, y, 0.5f}, {0.5f * x, 0.5f * y, 1.0f}, {px / 128.0f, py / 128.0f}});
+    };
+    auto rectangle = [&](float x0, float y0, float x1, float y1) {
+        corner(x0, y0);
+        corner(x1, y0);
+        corner(x0, y1);
+        corner(x1, y0);
+        corner(x1, y1);
+        corner(x0, y1);
+    };
+    if (rows == VrsRows::PerPrimitive) {
+        rectangle(16, 16, 48, 112);
+        rectangle(48, 16, 80, 112);
+        rectangle(80, 16, 112, 112);
+    } else {
+        rectangle(0, 0, 128, 128);
+    }
+    return out;
+}
+
+bool draw_vrs_scene(Kit& kit, VrsRows rows, const std::function<void(ID3D12GraphicsCommandList5*, Stage&)>& configure, rr::CaptureSet& out, std::string& error) {
     Stage stage;
     if (!stage.open(kit, error, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_D32_FLOAT)) {
         return false;
     }
-    Pso builder = stage.pso(kVrsPs);
+    const std::vector<Vertex> vertices = vrs_vertices(rows);
+    Geometry geometry;
+    if (!geometry.create_vertices(kit, vertices.data(), static_cast<UINT>(vertices.size()), sizeof(Vertex), error)) {
+        return false;
+    }
+    Pso builder(kit, stage.canvas.binder.signature);
+    builder.vs(Hlsl12::with_root(rows == VrsRows::PerPrimitive ? kVrsBandVs : Hlsl12::kLitVs)).ps(Hlsl12::with_root(kVrsPs)).targets({DXGI_FORMAT_R8G8B8A8_UNORM}).depth(DXGI_FORMAT_D32_FLOAT);
     ID3D12PipelineState* state = builder.build(error);
     if (state == nullptr) {
         return false;
@@ -72,8 +147,10 @@ bool draw_vrs_scene(Kit& kit, const std::function<void(ID3D12GraphicsCommandList
             stage.canvas.begin(list, clear);
             list->SetPipelineState(state);
             configure(list5, stage);
-            stage.mesh(list, stage.torus, rr::Mat4::rotate_x(0.9f), 0.9f, 0.6f, 0.2f);
-            stage.mesh(list, stage.sphere, rr::Mat4::translate(0.2f, -0.2f, -0.4f) * rr::Mat4::scale(0.6f, 0.6f, 0.6f), 0.3f, 0.7f, 0.9f);
+            const float color[4] = {0.9f, 0.6f, 0.2f, 1.0f};
+            set_cbv_root(list, rr::Mat4(), color);
+            geometry.bind(list);
+            geometry.draw_vertices(list);
             list5->Release();
         },
         error);
@@ -83,9 +160,47 @@ bool draw_vrs_scene(Kit& kit, const std::function<void(ID3D12GraphicsCommandList
     return ok && stage.finish(out, error);
 }
 
+std::uint32_t vrs_noise(std::uint32_t cx, std::uint32_t cy) {
+    std::uint32_t x = (cx * 73856093u) ^ (cy * 19349663u);
+    x ^= x >> 13;
+    x *= 1274126177u;
+    x ^= x >> 16;
+    return x & 255u;
+}
+
+bool vrs_reference(Kit& device, VrsRows rows, rr::CaptureSet& out, std::string&) {
+    D3D12_FEATURE_DATA_D3D12_OPTIONS6 options{};
+    unsigned tile = 16;
+    if (SUCCEEDED(D3d12Tools::feature(device.device(), D3D12_FEATURE_D3D12_OPTIONS6, options)) && options.ShadingRateImageTileSize != 0) {
+        tile = options.ShadingRateImageTileSize;
+    }
+    rr::CpuRaster raster(128, 128, rr::CpuRaster::pack(0.05f, 0.05f, 0.1f));
+    const std::vector<Vertex> vertices = vrs_vertices(rows);
+    const float color[3] = {0.9f, 0.6f, 0.2f};
+    for (std::size_t t = 0; t + 2 < vertices.size(); t += 3) {
+        rr::Vec4 clip[3];
+        for (std::size_t k = 0; k < 3; ++k) {
+            const Vertex& v = vertices[t + k];
+            clip[k] = {v.pos[0], v.pos[1], v.pos[2], 1.0f};
+        }
+        raster.triangle(clip, rr::CpuRaster::Cull::None, true, [&](int x, int y, bool, float, const float*) {
+            const VrsBlock block = vrs_block_at(rows, tile, static_cast<unsigned>(x), static_cast<unsigned>(y));
+            const float nx = 0.5f * ((static_cast<float>(x) + 0.5f) / 64.0f - 1.0f);
+            const float ny = 0.5f * (1.0f - (static_cast<float>(y) + 0.5f) / 64.0f);
+            const float length = std::sqrt(nx * nx + ny * ny + 1.0f);
+            const float light = std::min(1.0f, std::max(0.0f, (nx * 0.5f + ny * 0.8f + 0.6f) / length / std::sqrt(0.5f * 0.5f + 0.8f * 0.8f + 0.6f * 0.6f))) * 0.6f + 0.4f;
+            const float h = static_cast<float>(vrs_noise(static_cast<std::uint32_t>(x) / block.x, static_cast<std::uint32_t>(y) / block.y)) / 255.0f;
+            return rr::CpuRaster::pack(color[0] * light + (h - color[0] * light) * 0.5f, color[1] * light + (h - color[1] * light) * 0.5f, color[2] * light + (h - color[2] * light) * 0.5f);
+        });
+    }
+    out.add("", raster.take());
+    return true;
+}
+
 void register_vrs() {
+    const rr::Tolerance tolerance = rr::Tolerance::blend(6).with_outliers(0.01);
     Cases::single(
-        rr::CaseSpec("rs", "vrs_tier2_shading_rate_image_tiles").tolerance(rr::Tolerance::blend(4).with_edge(1)).tag("raster"),
+        rr::CaseSpec("rs", "vrs_tier2_shading_rate_image_tiles").variant(5).tolerance(tolerance).tag("raster").tag("x64-only"),
         [](Kit& kit, rr::CaptureSet& out, std::string& error) {
             D3D12_FEATURE_DATA_D3D12_OPTIONS6 options{};
             if (FAILED(D3d12Tools::feature(kit.device(), D3D12_FEATURE_D3D12_OPTIONS6, options)) || options.ShadingRateImageTileSize == 0) {
@@ -104,18 +219,15 @@ void register_vrs() {
             std::vector<std::uint8_t> rates(static_cast<std::size_t>(tiles) * tiles);
             for (UINT y = 0; y < tiles; ++y) {
                 for (UINT x = 0; x < tiles; ++x) {
-                    std::uint8_t rate = D3D12_SHADING_RATE_1X1;
-                    if (x >= tiles / 2) {
-                        rate = y < tiles / 2 ? D3D12_SHADING_RATE_2X2 : (x + y) % 2 == 0 ? D3D12_SHADING_RATE_2X1 : D3D12_SHADING_RATE_1X2;
-                    }
-                    rates[static_cast<std::size_t>(y) * tiles + x] = rate;
+                    const VrsBlock block = vrs_tile_rate(x, y, tiles);
+                    rates[static_cast<std::size_t>(y) * tiles + x] = static_cast<std::uint8_t>(((block.x == 2 ? 1u : 0u) << 2) | (block.y == 2 ? 1u : 0u));
                 }
             }
             if (!D3d12Tools::write_texture(kit.rig, image, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, 0, rates.data(), error)) {
                 return false;
             }
             const bool ignore = kit.broken("vrs");
-            return draw_vrs_scene(kit, [&](ID3D12GraphicsCommandList5* list5, Stage&) {
+            return draw_vrs_scene(kit, VrsRows::ImageTiles, [&](ID3D12GraphicsCommandList5* list5, Stage&) {
                 ID3D12GraphicsCommandList* base = nullptr;
                 list5->QueryInterface(__uuidof(ID3D12GraphicsCommandList), reinterpret_cast<void**>(&base));
                 D3d12Tools::move(base, image, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_SHADING_RATE_SOURCE);
@@ -125,9 +237,10 @@ void register_vrs() {
                 list5->RSSetShadingRateImage(image);
             }, out, error);
         },
-        [](Kit& kit) { return needs_options6(kit, D3D12_VARIABLE_SHADING_RATE_TIER_2); });
+        [](Kit& kit) { return needs_options6(kit, D3D12_VARIABLE_SHADING_RATE_TIER_2); },
+        [](Kit& device, unsigned, rr::CaptureSet& out, std::string& error) { return vrs_reference(device, VrsRows::ImageTiles, out, error); });
     Cases::single(
-        rr::CaseSpec("rs", "vrs_tier2_combiner_min_image_and_draw_rate").tolerance(rr::Tolerance::blend(4).with_edge(1)).tag("raster"),
+        rr::CaseSpec("rs", "vrs_tier2_combiner_min_image_and_draw_rate").variant(5).tolerance(tolerance).tag("raster").tag("x64-only"),
         [](Kit& kit, rr::CaptureSet& out, std::string& error) {
             D3D12_FEATURE_DATA_D3D12_OPTIONS6 options{};
             if (FAILED(D3d12Tools::feature(kit.device(), D3D12_FEATURE_D3D12_OPTIONS6, options)) || options.ShadingRateImageTileSize == 0) {
@@ -153,7 +266,7 @@ void register_vrs() {
                 return false;
             }
             const bool ignore = kit.broken("vrs");
-            return draw_vrs_scene(kit, [&](ID3D12GraphicsCommandList5* list5, Stage&) {
+            return draw_vrs_scene(kit, VrsRows::CombinerMax, [&](ID3D12GraphicsCommandList5* list5, Stage&) {
                 ID3D12GraphicsCommandList* base = nullptr;
                 list5->QueryInterface(__uuidof(ID3D12GraphicsCommandList), reinterpret_cast<void**>(&base));
                 D3d12Tools::move(base, image, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_SHADING_RATE_SOURCE);
@@ -163,66 +276,19 @@ void register_vrs() {
                 list5->RSSetShadingRateImage(image);
             }, out, error);
         },
-        [](Kit& kit) { return needs_options6(kit, D3D12_VARIABLE_SHADING_RATE_TIER_2); });
+        [](Kit& kit) { return needs_options6(kit, D3D12_VARIABLE_SHADING_RATE_TIER_2); },
+        [](Kit& device, unsigned, rr::CaptureSet& out, std::string& error) { return vrs_reference(device, VrsRows::CombinerMax, out, error); });
     Cases::single(
-        rr::CaseSpec("rs", "vrs_tier2_per_primitive_rate_from_vertex_shader").variant(5).tolerance(rr::Tolerance::blend(4).with_edge(1)).tag("raster").tag("x64-only"),
+        rr::CaseSpec("rs", "vrs_tier2_per_primitive_rate_from_vertex_shader").variant(5).tolerance(tolerance).tag("raster").tag("x64-only"),
         [](Kit& kit, rr::CaptureSet& out, std::string& error) {
-            Stage stage;
-            if (!stage.open(kit, error, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_D32_FLOAT)) {
-                return false;
-            }
-            const MeshData torus = Shapes::torus(24, 12, 0.85f, 0.3f);
-            std::vector<Vertex> expanded;
-            for (std::uint32_t index : torus.indices) {
-                expanded.push_back(torus.vertices[index]);
-            }
-            Geometry geometry;
-            if (!geometry.create_vertices(kit, expanded.data(), static_cast<UINT>(expanded.size()), sizeof(Vertex), error)) {
-                return false;
-            }
-            const char* vs =
-                "struct VsIn { float3 pos : POSITION; float3 nrm : NORMAL; float2 uv : TEXCOORD0; uint id : SV_VertexID; };\n"
-                "struct VsOut { float4 pos : SV_Position; float3 nrm : NORMAL; float2 uv : TEXCOORD0; uint rate : SV_ShadingRate; };\n"
-                "VsOut main(VsIn i) { VsOut o; o.pos = mul(mvp, float4(i.pos, 1)); o.nrm = i.nrm; o.uv = i.uv; uint tri = i.id / 3; o.rate = (tri % 3) == 0 ? 5 : ((tri % 3) == 1 ? 4 : 0); return o; }\n";
-            const char* ps =
-                "struct VsOut { float4 pos : SV_Position; float3 nrm : NORMAL; float2 uv : TEXCOORD0; uint rate : SV_ShadingRate; };\n"
-                "float4 main(VsOut i) : SV_Target {\n"
-                "  float h = frac(sin(dot(floor(i.pos.xy), float2(12.9898, 78.233))) * 43758.5453);\n"
-                "  float l = saturate(dot(normalize(i.nrm), normalize(float3(0.5, 0.8, 0.6)))) * 0.6 + 0.4;\n"
-                "  return float4(lerp(p0.rgb * l, float3(h, h, h), 0.35), 1); }\n";
-            Pso builder(kit, stage.canvas.binder.signature);
-            builder.vs(Hlsl12::with_root(vs)).ps(Hlsl12::with_root(ps)).targets({DXGI_FORMAT_R8G8B8A8_UNORM}).depth(DXGI_FORMAT_D32_FLOAT);
-            ID3D12PipelineState* state = builder.build(error);
-            if (state == nullptr) {
-                return false;
-            }
             const bool ignore = kit.broken("vrs");
-            bool have_list5 = true;
-            const bool ok = kit.run(
-                [&](ID3D12GraphicsCommandList* list) {
-                    ID3D12GraphicsCommandList5* list5 = nullptr;
-                    if (FAILED(list->QueryInterface(__uuidof(ID3D12GraphicsCommandList5), reinterpret_cast<void**>(&list5)))) {
-                        have_list5 = false;
-                        return;
-                    }
-                    const float clear[4] = {0.05f, 0.05f, 0.1f, 1.0f};
-                    stage.canvas.begin(list, clear);
-                    list->SetPipelineState(state);
-                    const D3D12_SHADING_RATE_COMBINER combiners[2] = {ignore ? D3D12_SHADING_RATE_COMBINER_PASSTHROUGH : D3D12_SHADING_RATE_COMBINER_OVERRIDE, D3D12_SHADING_RATE_COMBINER_PASSTHROUGH};
-                    list5->RSSetShadingRate(D3D12_SHADING_RATE_1X1, combiners);
-                    const float color[4] = {0.9f, 0.6f, 0.2f, 1};
-                    set_cbv_root(list, stage.view_projection() * rr::Mat4::rotate_x(0.9f), color);
-                    geometry.bind(list);
-                    geometry.draw_vertices(list);
-                    list5->Release();
-                },
-                error);
-            if (!have_list5) {
-                return fail_with(error, "ID3D12GraphicsCommandList5 is not available");
-            }
-            return ok && stage.finish(out, error);
+            return draw_vrs_scene(kit, VrsRows::PerPrimitive, [&](ID3D12GraphicsCommandList5* list5, Stage&) {
+                const D3D12_SHADING_RATE_COMBINER combiners[2] = {ignore ? D3D12_SHADING_RATE_COMBINER_PASSTHROUGH : D3D12_SHADING_RATE_COMBINER_OVERRIDE, D3D12_SHADING_RATE_COMBINER_PASSTHROUGH};
+                list5->RSSetShadingRate(D3D12_SHADING_RATE_1X1, combiners);
+            }, out, error);
         },
-        [](Kit& kit) { return needs_options6(kit, D3D12_VARIABLE_SHADING_RATE_TIER_2); });
+        [](Kit& kit) { return needs_options6(kit, D3D12_VARIABLE_SHADING_RATE_TIER_2); },
+        [](Kit& device, unsigned, rr::CaptureSet& out, std::string& error) { return vrs_reference(device, VrsRows::PerPrimitive, out, error); });
 }
 
 void register_sampler_feedback() {
@@ -981,6 +1047,33 @@ std::string needs_options19(Kit& kit, std::size_t word, const char* what) {
     return SUCCEEDED(result) && data[word] != 0 ? std::string() : std::string(what);
 }
 
+bool narrow_line_reference(Kit&, unsigned, rr::CaptureSet& out, std::string&) {
+    rr::CpuRaster raster(128, 128, rr::CpuRaster::pack(0.05f, 0.05f, 0.1f));
+    std::vector<std::pair<float, float>> points;
+    for (int k = 0; k < 24; ++k) {
+        const float a = static_cast<float>(k) * 0.2618f;
+        const float r = (k & 1) != 0 ? 0.9f : 0.35f;
+        points.emplace_back((r * std::cos(a) * 0.5f + 0.5f) * 128.0f, (0.5f - r * std::sin(a) * 0.5f) * 128.0f);
+    }
+    auto clip = [](float x, float y) { return rr::Vec4{x / 64.0f - 1.0f, 1.0f - y / 64.0f, 0.5f, 1.0f}; };
+    for (std::size_t k = 0; k + 1 < points.size(); k += 2) {
+        const float dx = points[k + 1].first - points[k].first;
+        const float dy = points[k + 1].second - points[k].second;
+        const float length = std::sqrt(dx * dx + dy * dy);
+        const float nx = -dy / length * 0.5f;
+        const float ny = dx / length * 0.5f;
+        const rr::Vec4 corners[4] = {clip(points[k].first + nx, points[k].second + ny), clip(points[k].first - nx, points[k].second - ny),
+                                     clip(points[k + 1].first - nx, points[k + 1].second - ny), clip(points[k + 1].first + nx, points[k + 1].second + ny)};
+        const rr::Vec4 first[3] = {corners[0], corners[1], corners[2]};
+        const rr::Vec4 second[3] = {corners[0], corners[2], corners[3]};
+        auto shade = [](int, int, bool, float, const float*) { return rr::CpuRaster::pack(0.9f, 0.9f, 0.3f); };
+        raster.triangle(first, rr::CpuRaster::Cull::None, false, shade);
+        raster.triangle(second, rr::CpuRaster::Cull::None, false, shade);
+    }
+    out.add("", raster.take());
+    return true;
+}
+
 void register_line_modes() {
     struct Mode {
         const char* name;
@@ -993,7 +1086,7 @@ void register_line_modes() {
                           {"quadrilateral_wide", 2, false, 3, "rasterizer desc 2 (line rasterization modes)"}, {"quadrilateral_narrow", 3, false, 4, "narrow quadrilateral lines"}};
     for (const Mode& mode : modes) {
         rr::CaseSpec spec("rs", std::string("lines_desc2_") + mode.name);
-        spec.tolerance(mode.value == 1 ? rr::Tolerance::psnr(8) : (mode.value == 2 ? rr::Tolerance::blend(4).with_outliers(0.003) : rr::Tolerance::raster(4, 1))).tag("raster");
+        spec.tolerance(mode.value == 1 ? rr::Tolerance::psnr(8) : (mode.value == 2 ? rr::Tolerance::blend(4).with_outliers(0.003) : (mode.value == 3 ? rr::Tolerance::blend(4).with_edge(1).with_outliers(0.004) : rr::Tolerance::raster(4, 1)))).tag("raster");
         if (mode.value == 0) {
             spec.same_as({"rs.lines_aliased_list"}, "the same star of line segments through the rasterizer desc 2 stream instead of the legacy rasterizer desc; the aliased mode must give the legacy image");
         } else if (mode.value == 1) {
@@ -1077,7 +1170,8 @@ void register_line_modes() {
                 }
                 return true;
             },
-            [mode](Kit& kit) { return needs_options19(kit, mode.cap_word, mode.cap_text); });
+            [mode](Kit& kit) { return needs_options19(kit, mode.cap_word, mode.cap_text); },
+            mode.value == 3 ? Cases::RefFn(narrow_line_reference) : Cases::RefFn());
     }
 }
 
@@ -1120,23 +1214,46 @@ struct ID3D12GraphicsCommandList8 : public ID3D12GraphicsCommandList7 {
     virtual void STDMETHODCALLTYPE OMSetFrontAndBackStencilRef(UINT front_stencil_ref, UINT back_stencil_ref) = 0;
 };
 
+MeshData bowl_shell() {
+    MeshData full = Shapes::sphere(20, 28, 0.9f);
+    MeshData shell;
+    shell.vertices = full.vertices;
+    for (std::size_t i = 0; i + 2 < full.indices.size(); i += 3) {
+        const float y = (full.vertices[full.indices[i]].pos[1] + full.vertices[full.indices[i + 1]].pos[1] + full.vertices[full.indices[i + 2]].pos[1]) / 3.0f;
+        if (y < 0.25f) {
+            shell.indices.insert(shell.indices.end(), full.indices.begin() + static_cast<std::ptrdiff_t>(i), full.indices.begin() + static_cast<std::ptrdiff_t>(i) + 3);
+        }
+    }
+    return shell;
+}
+
+bool stencil_reference(Kit&, unsigned, rr::CaptureSet& out, std::string&) {
+    const MeshData shell = bowl_shell();
+    const rr::Mat4 matrix = rr::Mat4::perspective_d3d(1.0f, 1.0f, 0.5f, 40.0f) * rr::Mat4::translate(0, 0, -3.0f) * rr::Mat4::rotate_x(0.9f);
+    rr::CpuRaster raster(128, 128, rr::CpuRaster::pack(0.05f, 0.05f, 0.1f));
+    for (std::size_t i = 0; i + 2 < shell.indices.size(); i += 3) {
+        rr::Vec4 clip[3];
+        for (int k = 0; k < 3; ++k) {
+            const Vertex& v = shell.vertices[shell.indices[i + static_cast<std::size_t>(k)]];
+            clip[k] = rr::CpuRaster::transform(matrix, v.pos[0], v.pos[1], v.pos[2]);
+        }
+        raster.triangle(clip, rr::CpuRaster::Cull::None, true, [](int, int, bool front, float, const float*) {
+            return front ? rr::CpuRaster::pack(0.2f, 0.9f, 0.3f) : rr::CpuRaster::pack(0.95f, 0.2f, 0.2f);
+        });
+    }
+    out.add("", raster.take());
+    return true;
+}
+
 void register_front_back_stencil_ref() {
     Cases::single(
-        rr::CaseSpec("om", "stencil_front_and_back_ref_and_masks_independent").tolerance(rr::Tolerance::blend(2)).tag("stencil"),
+        rr::CaseSpec("om", "stencil_front_and_back_ref_and_masks_independent").tolerance(rr::Tolerance::blend(2).with_edge(1)).tag("stencil"),
         [](Kit& kit, rr::CaptureSet& out, std::string& error) {
             Stage stage;
             if (!stage.open(kit, error, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_D24_UNORM_S8_UINT)) {
                 return false;
             }
-            MeshData full = Shapes::sphere(20, 28, 0.9f);
-            MeshData shell;
-            shell.vertices = full.vertices;
-            for (std::size_t i = 0; i + 2 < full.indices.size(); i += 3) {
-                const float y = (full.vertices[full.indices[i]].pos[1] + full.vertices[full.indices[i + 1]].pos[1] + full.vertices[full.indices[i + 2]].pos[1]) / 3.0f;
-                if (y < 0.25f) {
-                    shell.indices.insert(shell.indices.end(), full.indices.begin() + static_cast<std::ptrdiff_t>(i), full.indices.begin() + static_cast<std::ptrdiff_t>(i) + 3);
-                }
-            }
+            const MeshData shell = bowl_shell();
             Geometry bowl;
             if (!bowl.create(kit, shell, true, error)) {
                 return false;
@@ -1233,12 +1350,13 @@ void register_front_back_stencil_ref() {
         },
         [](Kit& kit) {
             if (kit.warp) {
-                return std::string("OMSetFrontAndBackStencilRef (the WARP oracle faults with 0xc0000005 on the call)");
+                return std::string("OMSetFrontAndBackStencilRef (the WARP device faults with 0xc0000005 on the call)");
             }
             D3D12_FEATURE_DATA_D3D12_OPTIONS14 options{};
             const HRESULT result = D3d12Tools::feature(kit.device(), D3D12_FEATURE_D3D12_OPTIONS14, options);
             return SUCCEEDED(result) && options.IndependentFrontAndBackStencilRefMaskSupported ? std::string() : std::string("independent front and back stencil reference and masks");
-        });
+        },
+        stencil_reference);
 }
 
 const struct Registrar {

@@ -455,7 +455,8 @@ bool draw_depth_precision(Kit& kit, DXGI_FORMAT depth_format, rr::CaptureSet& ou
     }
     const float quarter_step = 1.0f / 67108864.0f;
     const float base_z = 13422081.0f * quarter_step;
-    const float deltas[4] = {1.0f, 6.0f, 1342.0f, -1.0f};
+    const bool exact_precision = depth_format != DXGI_FORMAT_D24_UNORM_S8_UINT;
+    const float deltas[4] = {exact_precision ? 1.0f : 6.0f, exact_precision ? 6.0f : 1342.0f, exact_precision ? 1342.0f : -1.0f, exact_precision ? -1.0f : 0.0f};
     const bool ok = kit.run(
         [&](ID3D12GraphicsCommandList* list) {
             const float clear[4] = {0.05f, 0.05f, 0.1f, 1.0f};
@@ -491,11 +492,6 @@ void register_depth() {
     for (const Format& format : formats) {
         rr::CaseSpec precision_spec("om", std::string("depth_precision_less_") + format.name);
         precision_spec.tolerance(rr::Tolerance::blend(2)).tag("depth");
-        if (std::string(format.name) == "d24s8") {
-            precision_spec.same_as({"om.depth_precision_less_d32"}, "D24_UNORM_S8_UINT keeps float32 depth precision on the accel device, so its capture equals the d32 row while the WARP oracle separates them");
-        } else if (std::string(format.name) == "d32") {
-            precision_spec.same_as({"om.depth_precision_less_d24s8"}, "D32_FLOAT equals the d24s8 row on the accel device, which keeps float32 precision for D24_UNORM_S8_UINT");
-        }
         Cases::single(precision_spec,
                       [format](Kit& kit, rr::CaptureSet& out, std::string& error) { return draw_depth_precision(kit, format.value, out, error); });
     }

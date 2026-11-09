@@ -1,3 +1,4 @@
+#include "render/common/cpu_raster.hpp"
 #include "render/d3d12/textures.hpp"
 
 #include <cfloat>
@@ -31,7 +32,85 @@ bool run_sampler(Kit& kit, const D3D12_SAMPLER_DESC& sampler, const std::string&
     return texture != nullptr && sample_scene(kit, texture, srv_2d(DXGI_FORMAT_R8G8B8A8_UNORM, 8), &sampler, ps_of(kTexDecl, body), kTint, p1, tilt, out, error);
 }
 
+constexpr UINT kBandTexels = 128;
+constexpr UINT kBandWidth = 8;
+
+std::uint32_t band_color(UINT texel) {
+    const UINT band = (texel % kBandTexels) / kBandWidth;
+    const std::uint32_t r = 40 + ((band * 97) % 13) * 17;
+    const std::uint32_t g = 40 + ((band * 61 + 5) % 11) * 20;
+    const std::uint32_t b = 40 + ((band * 29 + 3) % 9) * 25;
+    return r | (g << 8) | (b << 16) | (255u << 24);
+}
+
+bool draw_minimum_anisotropic(Kit& kit, rr::CaptureSet& out, std::string& error) {
+    TextureSpec spec;
+    spec.width = kBandTexels;
+    spec.height = kBandTexels;
+    spec.mips = 1;
+    ID3D12Resource* texture = TextureFactory::create(kit, spec, false, error);
+    if (texture == nullptr) {
+        return false;
+    }
+    std::vector<std::uint32_t> texels(static_cast<std::size_t>(kBandTexels) * kBandTexels);
+    for (UINT y = 0; y < kBandTexels; ++y) {
+        for (UINT x = 0; x < kBandTexels; ++x) {
+            texels[static_cast<std::size_t>(y) * kBandTexels + x] = band_color(x);
+        }
+    }
+    if (!D3d12Tools::write_texture(kit.rig, texture, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, 0, texels.data(), error)) {
+        return false;
+    }
+    D3D12_SAMPLER_DESC sampler = Binder::sampler_desc(kit.broken("sampler_filter") ? D3D12_FILTER_ANISOTROPIC : D3D12_FILTER_MINIMUM_ANISOTROPIC, D3D12_TEXTURE_ADDRESS_MODE_WRAP);
+    sampler.MaxAnisotropy = 8;
+    const float scale[4] = {1.0f, 1.0f, 0, 0};
+    return sample_scene(kit, texture, srv_2d(DXGI_FORMAT_R8G8B8A8_UNORM, 1), &sampler, ps_of(kTexDecl, "return tex.Sample(smp, i.uv * p1.xy);"), kTint, scale, -1.0f, out, error);
+}
+
+bool minimum_anisotropic_reference(Kit&, unsigned, rr::CaptureSet& out, std::string&) {
+    const rr::Mat4 matrix = rr::Mat4::perspective_d3d(1.0f, 1.0f, 0.5f, 40.0f) * rr::Mat4::translate(0, 0, -2.4f) * rr::Mat4::rotate_x(-1.0f);
+    auto element = [&](int row, int column) { return static_cast<double>(matrix.m[column * 4 + row]); };
+    rr::Image image = rr::Image::solid(128, 128, rr::CpuRaster::pack(0.1f, 0.12f, 0.2f));
+    for (std::uint32_t py = 0; py < 128; ++py) {
+        for (std::uint32_t px = 0; px < 128; ++px) {
+            const double xn = (px + 0.5) / 128.0 * 2.0 - 1.0;
+            const double yn = 1.0 - (py + 0.5) / 128.0 * 2.0;
+            const double a1 = element(0, 0) - xn * element(3, 0);
+            const double a2 = element(0, 1) - xn * element(3, 1);
+            const double c1 = element(0, 3) - xn * element(3, 3);
+            const double b1 = element(1, 0) - yn * element(3, 0);
+            const double b2 = element(1, 1) - yn * element(3, 1);
+            const double c2 = element(1, 3) - yn * element(3, 3);
+            const double det = a1 * b2 - a2 * b1;
+            if (std::fabs(det) < 1e-12) {
+                continue;
+            }
+            const double x = (-c1 * b2 + c2 * a2) / det;
+            const double y = (-a1 * c2 + b1 * c1) / det;
+            const double w = element(3, 0) * x + element(3, 1) * y + element(3, 3);
+            const double z = element(2, 0) * x + element(2, 1) * y + element(2, 3);
+            if (w <= 0.0 || z / w < 0.0 || z / w > 1.0 || std::fabs(x) > 1.2 || std::fabs(y) > 1.2) {
+                continue;
+            }
+            const double texel = (x + 1.2) / 2.4 * kBandTexels;
+            const long first = static_cast<long>(std::floor(texel - 0.5));
+            const std::uint32_t a = band_color(static_cast<UINT>((first % 128 + 128) % 128));
+            const std::uint32_t b = band_color(static_cast<UINT>(((first + 1) % 128 + 128) % 128));
+            std::uint32_t result = 0;
+            for (unsigned channel = 0; channel < 4; ++channel) {
+                const std::uint32_t ca = (a >> (8 * channel)) & 255u;
+                const std::uint32_t cb = (b >> (8 * channel)) & 255u;
+                result |= std::min(ca, cb) << (8 * channel);
+            }
+            image.set_rgba8(px, py, result);
+        }
+    }
+    out.add("", std::move(image));
+    return true;
+}
+
 void register_filters() {
+    Cases::single(rr::CaseSpec("tex", "sampler_filter_minimum_anisotropic").tolerance(rr::Tolerance::blend(3).with_outliers(0.03)).tag("sampler"), draw_minimum_anisotropic, {}, minimum_anisotropic_reference);
     struct Item {
         const char* name;
         D3D12_FILTER filter;
@@ -49,7 +128,6 @@ void register_filters() {
         {"anisotropic_16", D3D12_FILTER_ANISOTROPIC, 16},
         {"minimum_linear", D3D12_FILTER_MINIMUM_MIN_MAG_MIP_LINEAR, 1},
         {"maximum_linear", D3D12_FILTER_MAXIMUM_MIN_MAG_MIP_LINEAR, 1},
-        {"minimum_anisotropic", D3D12_FILTER_MINIMUM_ANISOTROPIC, 8},
     };
     for (const Item& item : items) {
         const bool aniso = item.aniso > 1;
