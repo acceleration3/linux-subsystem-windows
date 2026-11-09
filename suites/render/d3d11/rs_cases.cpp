@@ -84,13 +84,26 @@ bool bias_scene(Rig& r, Cap& out, int variant) {
     r.ctx->OMSetDepthStencilState(test.get(), 0);
     const float front_plane[4] = {0.5f, slope, 0, 0};
     r.ctx->UpdateSubresource(zb.get(), 0, nullptr, front_plane, 0, 0);
+    if (variant == 3) {
+        const D3D11_RECT thirds[3] = {{0, 0, 43, 128}, {43, 0, 85, 128}, {85, 0, 128, 128}};
+        for (int h = 0; h < 3; ++h) {
+            D3D11_RASTERIZER_DESC e = d;
+            e.DepthBias = h == 1 ? 2000 : -2000;
+            Com<ID3D11RasterizerState> rs3 = r.rast(e);
+            if (!rs3) return false;
+            r.ctx->RSSetState(rs3.get());
+            r.ctx->RSSetScissorRects(1, &thirds[h]);
+            r.ctx->Draw(3, 0);
+        }
+        return r.shot(out, target);
+    }
     for (int h = 0; h < 2; ++h) {
         D3D11_RASTERIZER_DESC e = d;
         switch (variant) {
             case 0: e.DepthBias = h == 0 ? -64 : 0; break;
             case 1: e.SlopeScaledDepthBias = h == 0 ? -4.0f : 0.0f; break;
             case 2: e.SlopeScaledDepthBias = -4.0f; e.DepthBiasClamp = (h == 0 && !r.broken("bias_clamp")) ? -1e-7f : 0.0f; break;
-            default: e.DepthBias = h == 0 ? 2000 : -2000; break;
+            default: e.DepthBias = h == 0 ? -2000 : 2000; break;
         }
         Com<ID3D11RasterizerState> rs = r.rast(e);
         if (!rs) return false;
