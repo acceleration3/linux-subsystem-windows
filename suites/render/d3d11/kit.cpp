@@ -9,8 +9,9 @@ namespace lsw::suites::render::d3d11 {
 
 OpenStatus Kit::open(bool use_warp, const rr::CaseSpec& spec, std::string& error) {
     warp = use_warp;
-    static constexpr D3D_FEATURE_LEVEL kLevels[] = {D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_11_1};
-    const D3D_FEATURE_LEVEL level = kLevels[std::min<unsigned>(spec.variant(), 1)];
+    static constexpr D3D_FEATURE_LEVEL kLevels[] = {D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_10_0,
+                                                    D3D_FEATURE_LEVEL_10_1, D3D_FEATURE_LEVEL_12_0,  D3D_FEATURE_LEVEL_12_1};
+    const D3D_FEATURE_LEVEL level = kLevels[std::min<unsigned>(spec.variant(), 5)];
     if (warp) {
         name = "WARP";
         if (!dev.create_warp(&level, 1, 0, error)) {
@@ -33,7 +34,7 @@ OpenStatus Kit::open_swap(const rr::CaseSpec& spec, std::string& error) {
     if (!spec.multiframe()) {
         return OpenStatus::Ok;
     }
-    return swap.open(dev.device, 128, 128, 2, DXGI_FORMAT_B8G8R8A8_UNORM, false, error) ? OpenStatus::Ok : OpenStatus::Failed;
+    return swap.open(dev.device, spec.width(), spec.height(), 2, DXGI_FORMAT_B8G8R8A8_UNORM, false, error) ? OpenStatus::Ok : OpenStatus::Failed;
 }
 
 bool Kit::end_frame(std::string& error) { return swap.present(error); }
