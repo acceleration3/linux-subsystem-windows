@@ -28,7 +28,7 @@ const QHash<QString, QVariant>& defaults() {
         {K::kHostWindowMib, 8192},
         {K::kVramReserveMib, 0},
         {K::kRenderGpus, QStringList{}},
-        {K::kHybridGraphics, true},
+        {K::kHybridGraphics, false},
 
         {K::kSmbEnabled, true},
         {K::kShareScope, QStringLiteral("C$")},
