@@ -32,6 +32,7 @@ public:
 
     [[nodiscard]] bool write_frame(const std::string& id, unsigned frame, const std::string& label, const Image& image,
                                    std::string& error) const;
+    [[nodiscard]] static bool write_image(const std::filesystem::path& path, const Image& image, std::string& error);
     [[nodiscard]] bool read_frame(const std::string& id, unsigned frame, const std::string& label, Image& out,
                                   std::string& error) const;
 

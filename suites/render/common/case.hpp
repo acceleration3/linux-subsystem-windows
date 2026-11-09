@@ -32,6 +32,7 @@ public:
     }
     CaseSpec& tolerance(Tolerance value) {
         tolerance_ = std::move(value);
+        tolerance_set_ = true;
         return *this;
     }
     CaseSpec& timeout(int seconds) {
@@ -56,6 +57,10 @@ public:
     }
     CaseSpec& uniform_ok(const std::string& label = "*") {
         uniform_ok_.insert(label);
+        return *this;
+    }
+    CaseSpec& audit_ok(std::string reason) {
+        audit_ok_.push_back(std::move(reason));
         return *this;
     }
     CaseSpec& min_version(unsigned major, unsigned minor) {
@@ -86,6 +91,9 @@ public:
     [[nodiscard]] unsigned height() const { return height_; }
     [[nodiscard]] unsigned frame_count() const { return frames_; }
     [[nodiscard]] const Tolerance& tolerance() const { return tolerance_; }
+    [[nodiscard]] bool tolerance_set() const { return tolerance_set_; }
+    [[nodiscard]] const std::set<std::string>& uniform_labels() const { return uniform_ok_; }
+    [[nodiscard]] const std::vector<std::string>& audit_reasons() const { return audit_ok_; }
     [[nodiscard]] int timeout_seconds() const { return timeout_seconds_; }
     [[nodiscard]] bool uses_swapchain() const { return swapchain_; }
     [[nodiscard]] unsigned variant() const { return variant_; }
@@ -105,19 +113,26 @@ public:
     [[nodiscard]] Tolerance resolve(const std::string& label, PixelKind kind) const {
         const auto found = overrides_.find(label);
         if (found != overrides_.end()) {
-            return found->second;
+            return in_units_of(found->second, kind);
+        }
+        if (tolerance_set_) {
+            return in_units_of(tolerance_, kind);
         }
         if (PixelInfo::is_integer(kind)) {
             return Tolerance::exact();
         }
         if (PixelInfo::is_float(kind)) {
-            if (tolerance_.absolute != 0.0f || tolerance_.relative != 0.0f) {
-                return tolerance_;
-            }
             const bool depth = kind == PixelKind::Depth32Float || kind == PixelKind::R32Float;
             return depth ? Tolerance::floats(2e-4f, 1e-4f) : Tolerance::floats(4e-3f, 4e-3f);
         }
         return tolerance_;
+    }
+
+    [[nodiscard]] static Tolerance in_units_of(Tolerance value, PixelKind kind) {
+        if (PixelInfo::is_float(kind) && value.byte_delta > 0) {
+            value.absolute = std::max(value.absolute, static_cast<float>(value.byte_delta) / 255.0f);
+        }
+        return value;
     }
 
     [[nodiscard]] std::string problem() const {
@@ -180,12 +195,14 @@ private:
     unsigned frames_ = 1;
     std::vector<unsigned> capture_;
     Tolerance tolerance_ = Tolerance::tight();
+    bool tolerance_set_ = false;
     int timeout_seconds_ = 60;
     bool swapchain_ = false;
     unsigned variant_ = 0;
     std::vector<std::string> tags_;
     std::map<std::string, Tolerance> overrides_;
     std::set<std::string> uniform_ok_;
+    std::vector<std::string> audit_ok_;
     unsigned major_ = 0;
     unsigned minor_ = 0;
     std::vector<std::string> extensions_;

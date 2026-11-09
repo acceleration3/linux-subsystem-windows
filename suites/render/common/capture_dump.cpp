@@ -1,6 +1,7 @@
 #include "render/common/capture_dump.hpp"
 
 #include "render/common/png.hpp"
+#include "render/common/ref_store.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -195,7 +196,17 @@ std::vector<std::filesystem::path> CaptureDump::write(const std::filesystem::pat
         }
     }
     std::string json = "{\"id\":\"" + escape(id) + "\",\"side\":\"" + side + "\",\"outcome\":\"" + escape(outcome) +
-                       "\",\"frames\":" + std::to_string(spec.frame_count()) + ",\"captured\":[";
+                       "\",\"frames\":" + std::to_string(spec.frame_count()) + ",\"uniform_ok\":[";
+    bool first_label = true;
+    for (const std::string& label : spec.uniform_labels()) {
+        json += (first_label ? "\"" : ",\"") + escape(label) + "\"";
+        first_label = false;
+    }
+    json += "],\"audit_ok\":[";
+    for (std::size_t i = 0; i < spec.audit_reasons().size(); ++i) {
+        json += (i ? ",\"" : "\"") + escape(spec.audit_reasons()[i]) + "\"";
+    }
+    json += "],\"captured\":[";
     for (std::size_t i = 0; i < frames.size(); ++i) {
         json += (i ? "," : "") + std::to_string(frames[i]);
     }
@@ -232,7 +243,8 @@ std::vector<std::filesystem::path> CaptureDump::write(const std::filesystem::pat
         json += ",\"tolerance\":{\"name\":\"" + escape(t.name) + "\",\"byte_delta\":" + std::to_string(t.byte_delta) +
                 ",\"absolute\":" + number(t.absolute) + ",\"relative\":" + number(t.relative) +
                 ",\"outlier_fraction\":" + number(t.outlier_fraction) + ",\"edge_radius\":" + std::to_string(t.edge_radius) +
-                ",\"forgive_fraction\":" + number(t.forgive_fraction) + ",\"min_psnr\":" + number(t.min_psnr) + "}";
+                ",\"forgive_fraction\":" + number(t.forgive_fraction) + ",\"min_psnr\":" + number(t.min_psnr) +
+                ",\"outlier_max_delta\":" + number(t.outlier_max_delta) + ",\"max_outliers\":" + std::to_string(t.max_outliers) + "}";
         if (r.judged) {
             json += ",\"psnr\":" + number(r.result.psnr) + ",\"bad\":" + std::to_string(r.result.bad) +
                     ",\"max_delta\":" + number(r.result.max_delta) + ",\"forgiven\":" + std::to_string(r.result.forgiven) +
@@ -252,6 +264,11 @@ std::vector<std::filesystem::path> CaptureDump::write(const std::filesystem::pat
                 const std::filesystem::path path = dir / (stem + file.suffix);
                 if (Png::write(path, preview(*file.image))) {
                     written.push_back(path);
+                }
+                std::string ignored_error;
+                const std::filesystem::path raw = dir / (stem + std::string(file.suffix).replace(std::string(file.suffix).size() - 4, 4, ".rref"));
+                if (RefStore::write_image(raw, *file.image, ignored_error)) {
+                    written.push_back(raw);
                 }
             }
         }

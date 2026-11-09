@@ -21,5 +21,6 @@ struct CheckResult {
     Json measures = Json::object();
     std::string output;
     std::string started;
+    std::string phase;
 };
 }  // namespace lsw::suites

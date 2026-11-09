@@ -77,7 +77,10 @@ std::filesystem::path RefStore::frame_path(const std::string& id, unsigned frame
 
 bool RefStore::write_frame(const std::string& id, unsigned frame, const std::string& label, const Image& image,
                            std::string& error) const {
-    const std::filesystem::path path = frame_path(id, frame, label);
+    return write_image(frame_path(id, frame, label), image, error);
+}
+
+bool RefStore::write_image(const std::filesystem::path& path, const Image& image, std::string& error) {
     std::error_code ec;
     std::filesystem::create_directories(path.parent_path(), ec);
     std::ofstream file(path, std::ios::binary | std::ios::trunc);

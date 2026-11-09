@@ -11,6 +11,8 @@ class ChildProtocol {
 public:
     [[nodiscard]] static std::string encode(const Context& context, const Outcome& outcome);
 
+    static void phase(const std::string& text);
+
     [[nodiscard]] static bool decode(const std::string& output, CheckResult& result);
 };
 }  // namespace lsw::suites

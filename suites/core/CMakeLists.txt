@@ -2,6 +2,7 @@ add_library(suite_core OBJECT
     check_filter.cpp
     child_mode.cpp
     context.cpp
+    crash_dump.cpp
     child_protocol.cpp
     glob.cpp
     json.cpp

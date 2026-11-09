@@ -22,6 +22,8 @@ public:
 
     void note(const std::string& line);
 
+    void phase(const std::string& text);
+
     void measure(const std::string& key, Json value);
 
     [[nodiscard]] static Outcome skip(std::string reason) { return Outcome::skip(std::move(reason)); }

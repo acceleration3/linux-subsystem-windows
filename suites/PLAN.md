@@ -1409,10 +1409,23 @@ suites/render-ref/        lsw-render-ref, the Linux tool that renders the Vulkan
   failing frame writes `<frame>.expected.png`, `.actual.png` and `.diff.png`; `psnr`, `bad_pixels` and `max_delta`
   are recorded for every frame.
 - Audit: `--dump-captures` (worker env `LSW_RENDER_DUMP=1`) makes every render check write `<frame>_<label>.actual.png`,
-  `.oracle.png` (WARP and D3D9On12 checks) and `captures.json` (hashes, pixel statistics, tolerance, judge measures);
-  `lsw-render-ref --png` writes the same `captures.json` for the host references. `scripts/render-audit.py --guest
-  ARTIFACTS [--host REFS] [--json r.json] [--out report.md]` flags uniform captures, indistinguishable checks, static
-  multi-frame checks, trivial clear-colour matches and loose tolerances.
+  `.oracle.png` (WARP and D3D9On12 checks), the raw images as `.actual.rref` and `.oracle.rref`, and `captures.json`
+  (hashes, pixel statistics, every tolerance field, `uniform_ok`, `audit_ok`, judge measures); `lsw-render-ref --png`
+  writes the same `captures.json` for the host references. `scripts/render-audit.py --guest ARTIFACTS [--host REFS]
+  [--json r.json] [--out report.md] [--strict] [--no-swap] [--verify-judge]` flags uniform captures, indistinguishable
+  checks, identical captures inside a family and across families of one API, static multi-frame checks, trivial
+  clear-colour matches, loose tolerances, and the swap test (a sibling's oracle image passes the check's own tolerance,
+  judged by a python port of `common/diff`). `--strict` exits 1 when a gating flag (uniform, indistinguishable, family or
+  cross-family identical, frames identical, trivial match, swap pass) has no explanation; a case explains its flags with
+  `CaseSpec::audit_ok("reason")`. `--verify-judge` re-judges every recorded capture in python and fails on any
+  disagreement with the C++ verdict.
+- Tolerances: a tolerance set on a `CaseSpec` (or per label) is honoured exactly for every capture kind; only an unset
+  tolerance gets the kind default (integer exact, depth `floats(2e-4, 1e-4)`, other float `floats(4e-3, 4e-3)`). On float
+  captures a profile's byte delta counts as `delta / 255` in normalized units (`exact()` stays exact, `psnr(N)` leaves the
+  per-pixel bound open and the PSNR floor decides).
+- Crash attribution: WARP-oracle checks print `@@lsw phase` lines (open, setup, oracle side running, device side
+  running, judging) so a crash or timeout reason ends with `(running: ...)`. `LSW_SUITES_KEEP_DUMPS=1` makes each worker
+  write a minidump of its own crash to `<artifacts>/<id>/crash.dmp` (reported as an artifact); no registry state is used.
 - Self-validation: `--device-under-test warp` (worker env `LSW_RENDER_DUT=warp`) runs every D3D render check with a second, independent WARP device (D3D9On12 over WARP12 for d3d9) as the device under test, records `dut=warp` and marks the JSON adapter; vk and gl checks are unaffected.
 - Caps: a case that needs an optional feature reports it through `unsupported`. A host reference skipped for a missing
   feature leaves `skip.txt`; the guest skips only if it lacks the feature too, and fails if the two disagree.

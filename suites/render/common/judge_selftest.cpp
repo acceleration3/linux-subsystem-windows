@@ -74,6 +74,40 @@ std::vector<std::string> JudgeSelfTest::run(std::vector<std::string>& passed) {
         expect("depth 0.500 against 0.503 fails under the case default", ImageDiff::compare(expected, actual, spec.resolve("depth", PixelKind::Depth32Float)).pass, false);
     }
     {
+        Image expected(32, 32, PixelKind::Rgba16Float);
+        Image near_image(32, 32, PixelKind::Rgba16Float);
+        Image far_image(32, 32, PixelKind::Rgba16Float);
+        for (std::uint32_t y = 0; y < 32; ++y) {
+            for (std::uint32_t x = 0; x < 32; ++x) {
+                for (unsigned c = 0; c < 4; ++c) {
+                    expected.set_channel(x, y, c, 0.5);
+                    near_image.set_channel(x, y, c, 0.5 + 0.0005);
+                    far_image.set_channel(x, y, c, 0.5 + 0.06);
+                }
+            }
+        }
+        const auto judged = [&](const CaseSpec& spec, const Image& actual) {
+            return ImageDiff::compare(expected, actual, spec.resolve("c", PixelKind::Rgba16Float)).pass;
+        };
+        const CaseSpec unset("g", "n");
+        expect("an unset tolerance gives a float capture the float default", judged(unset, near_image), true);
+        CaseSpec exact("g", "n");
+        exact.tolerance(Tolerance::exact());
+        expect("an explicit exact tolerance is exact on a float capture", judged(exact, near_image), false);
+        CaseSpec tight("g", "n");
+        tight.tolerance(Tolerance::tight(1));
+        expect("tight(1) on a float capture allows one byte level", judged(tight, near_image), true);
+        expect("tight(1) on a float capture rejects fifteen byte levels", judged(tight, far_image), false);
+        CaseSpec loose("g", "n");
+        loose.tolerance(Tolerance::psnr(40));
+        expect("psnr(40) on a float capture accepts a tiny error", judged(loose, near_image), true);
+        expect("psnr(40) on a float capture rejects a large error", judged(loose, far_image), false);
+        CaseSpec overridden("g", "n");
+        overridden.tolerance(Tolerance::tight(1)).tolerance_for("c", Tolerance::exact());
+        expect("a per label exact override is exact on a float capture", judged(overridden, near_image), false);
+        expect("an explicit exact tolerance reports itself as set", exact.tolerance_set() && !unset.tolerance_set(), true);
+    }
+    {
         Image expected = Image::solid(128, 128, kDark);
         for (std::uint32_t y = 0; y < 128; ++y) {
             for (std::uint32_t x = 0; x < 128; ++x) {

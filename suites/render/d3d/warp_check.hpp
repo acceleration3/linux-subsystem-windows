@@ -27,6 +27,7 @@ public:
         Kit oracle;
         std::string error;
         const bool self = warp_under_test();
+        context.phase("open device side");
         switch (accel.open(self, entry.spec, error)) {
             case OpenStatus::Ok:
                 break;
@@ -35,6 +36,7 @@ public:
             case OpenStatus::Failed:
                 return Outcome::fail((self ? "device creation on the WARP device under test failed: " : "device creation on the accel-virt adapter failed: ") + error);
         }
+        context.phase("open oracle side");
         switch (oracle.open(true, entry.spec, error)) {
             case OpenStatus::Ok:
                 break;
@@ -49,6 +51,7 @@ public:
         }
         std::unique_ptr<rr::Scene<Kit>> accel_scene = entry.make();
         std::unique_ptr<rr::Scene<Kit>> oracle_scene = entry.make();
+        context.phase("device side setup");
         const std::string accel_lacks = accel_scene->unsupported(accel);
         if (!accel_lacks.empty()) {
             return Outcome::skip((self ? "the WARP device under test lacks " : "accel-virt adapter lacks ") + accel_lacks);
@@ -57,14 +60,17 @@ public:
         if (!oracle_lacks.empty()) {
             return Outcome::skip("WARP lacks " + oracle_lacks);
         }
+        context.phase("oracle side running");
         rr::RunResult expected = rr::run_scene(oracle, entry.spec, *oracle_scene);
         if (expected.status != rr::RunStatus::Ok) {
             return Outcome::fail("the WARP oracle failed: " + expected.reason);
         }
+        context.phase("device side running");
         rr::RunResult actual = rr::run_scene(accel, entry.spec, *accel_scene);
         if (actual.status != rr::RunStatus::Ok) {
             return Outcome::fail(actual.reason);
         }
+        context.phase("judging");
         Problems problems;
         ImageJudge::compare_frames(context, problems, entry.spec, expected.frames, actual.frames, true);
         return problems.outcome();

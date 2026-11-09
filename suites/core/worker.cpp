@@ -8,6 +8,7 @@
 
 #include <chrono>
 #include <cwchar>
+#include <system_error>
 #include <vector>
 
 namespace lsw::suites {
@@ -237,14 +238,20 @@ CheckResult Worker::run(const std::string& id, int timeout_seconds) const {
     DWORD code = 0;
     ::GetExitCodeProcess(process.get(), &code);
     const bool have_status = ChildProtocol::decode(output, result);
+    const std::filesystem::path dump = artifacts_ / id / "crash.dmp";
+    std::error_code dump_error;
+    if (std::filesystem::exists(dump, dump_error)) {
+        result.artifacts.push_back(dump.string());
+    }
+    const std::string where = result.phase.empty() ? std::string() : " (running: " + result.phase + ")";
     if (timed_out) {
         if (triggered) {
             return finish(Status::Timeout, "terminated " + std::to_string(trigger_ms_) + " ms after the child reported ready");
         }
-        return finish(Status::Timeout, timeout_ms_ > 0 ? "no result after " + std::to_string(timeout_ms_) + " ms" : "no result after " + std::to_string(timeout_seconds) + " s");
+        return finish(Status::Timeout, timeout_ms_ > 0 ? "no result after " + std::to_string(timeout_ms_) + " ms" + where : "no result after " + std::to_string(timeout_seconds) + " s" + where);
     }
     if (!have_status) {
-        return finish(Status::Crash, describe_exit(code));
+        return finish(Status::Crash, describe_exit(code) + where);
     }
     return finish(result.status, result.reason);
 }

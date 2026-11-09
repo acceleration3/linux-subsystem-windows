@@ -2,6 +2,7 @@
 
 #include "core/child_protocol.hpp"
 #include "core/context.hpp"
+#include "core/crash_dump.hpp"
 
 #include <windows.h>
 
@@ -40,6 +41,9 @@ SingleCheck::SingleCheck(const Registry& registry, std::filesystem::path artifac
 int SingleCheck::run(const std::string& id) const {
     ::SetErrorMode(SEM_NOGPFAULTERRORBOX | SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX);
     Context context(id, artifacts_);
+    if (CrashDump::requested()) {
+        CrashDump::install(context.artifacts_dir() / "crash.dmp");
+    }
     const Suite* owner = nullptr;
     const Check* check = registry_.find_check(id, &owner);
     if (check == nullptr) {

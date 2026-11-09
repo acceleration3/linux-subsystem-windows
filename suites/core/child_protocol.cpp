@@ -2,6 +2,7 @@
 
 #include "core/text.hpp"
 
+#include <cstdio>
 #include <cstdlib>
 #include <sstream>
 
@@ -87,6 +88,12 @@ std::string ChildProtocol::encode(const Context& context, const Outcome& outcome
     return out;
 }
 
+void ChildProtocol::phase(const std::string& text) {
+    const std::string line = std::string(kPrefix) + "phase " + Text::escape(text) + "\n";
+    std::fputs(line.c_str(), stdout);
+    std::fflush(stdout);
+}
+
 bool ChildProtocol::decode(const std::string& output, CheckResult& result) {
     bool have_status = false;
     std::string plain;
@@ -112,6 +119,8 @@ bool ChildProtocol::decode(const std::string& output, CheckResult& result) {
             result.reason = Text::unescape(rest);
         } else if (verb == "artifact") {
             result.artifacts.push_back(Text::unescape(rest));
+        } else if (verb == "phase") {
+            result.phase = Text::unescape(rest);
         } else if (verb == "note") {
             result.notes.push_back(Text::unescape(rest));
         } else if (verb == "measure") {

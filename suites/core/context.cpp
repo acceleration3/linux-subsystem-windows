@@ -1,5 +1,7 @@
 #include "core/context.hpp"
 
+#include "core/child_protocol.hpp"
+
 #include <cstdio>
 #include <fstream>
 #include <system_error>
@@ -28,6 +30,10 @@ void Context::log(const std::string& line) {
 
 void Context::note(const std::string& line) {
     notes_.push_back(line);
+}
+
+void Context::phase(const std::string& text) {
+    ChildProtocol::phase(text);
 }
 
 void Context::measure(const std::string& key, Json value) {
