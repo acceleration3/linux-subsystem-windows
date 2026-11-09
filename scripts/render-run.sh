@@ -59,7 +59,7 @@ HTML report: build-render-report/<timestamp>/report.html
                               and no matrix run; references are made on the host and the guest is driven through ssh
                               forwards of its agent and share (implied by --parallel)
   --suite render|sanity       the suite to run (default render); sanity runs its main phase on every adapter at once and
-                              its pacing phase one adapter at a time, writes under <out>/sanity/<host>/<gpu> and makes
+                              its exclusive and pacing checks one adapter at a time, writes under <out>/sanity/<host>/<gpu> and makes
                               no references, audit or report
   --hold-file PATH            check ids (one per line) that are never run, e.g. rows that hang the GPU on purpose
   --max-recoveries N          a dead VM is restarted and the run resumed at most N times per host (default 5)
@@ -448,7 +448,7 @@ guest_runs() {
     shift 6
     local uuids=("$@") uuid b gpu_name base status=0
     local phases=all
-    [[ ${suite} == sanity ]] && phases="main:parallel,pacing:serial"
+    [[ ${suite} == sanity ]] && phases="main:parallel,isolated:serial"
     for b in "${bit_list[@]}"; do
         local runs=()
         for uuid in "${uuids[@]}"; do

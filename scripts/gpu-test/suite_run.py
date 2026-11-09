@@ -93,6 +93,7 @@ class Spec:
         self.root = None
         self.outputs = []
         self.aborted = False
+        self.stage_exclude = []
 
 
 class Context:
@@ -282,8 +283,8 @@ def run_segment(ctx, spec, filter_text, phase, exclude, jobs, deadline):
     number = spec.segments
     tag = spec.name
     if exclude:
-        ctx.share.put_bytes(("\r\n".join(sorted(spec.finished) + sorted(spec.retry)) + "\r\n").encode(),
-                            f"{GUEST_DIR}\\ex-{tag}.txt")
+        listed = sorted(set(spec.stage_exclude) | set(spec.finished) | set(spec.retry))
+        ctx.share.put_bytes(("\r\n".join(listed) + "\r\n").encode(), f"{GUEST_DIR}\\ex-{tag}.txt")
     lines, shown = segment_lines(ctx, spec, number, filter_text, phase, exclude, jobs)
     say(f"{ctx.args.host}: {tag} segment {number}: lsw-suites{ctx.args.bits}.exe {shown}")
     generation = ctx.begin()
@@ -361,7 +362,7 @@ def crash_record(ctx, spec, check_id, incident, confirmed):
 
 
 def run_phase(ctx, spec, phase, deadline):
-    exclude = False
+    exclude = bool(spec.stage_exclude)
     while True:
         if spec.aborted or ctx.limit_hit:
             return
@@ -449,15 +450,41 @@ def finish(ctx, spec):
         say(f"{ctx.args.host}: {tag}: no artifacts archive ({error})")
 
 
+def discover(ctx):
+    program = f"lsw-suites{ctx.args.bits}.exe"
+    launch(ctx, "list", [f"{program} --list > list.txt 2>&1"], "done-list.txt")
+    deadline = time.monotonic() + 300
+    while time.monotonic() < deadline and not ctx.present("done-list.txt"):
+        time.sleep(3)
+    text = read_text(ctx, "list.txt") or ""
+    isolated, others = [], []
+    for line in text.splitlines():
+        parts = line.split()
+        if len(parts) < 3 or not parts[0].startswith(ctx.args.suite + "."):
+            continue
+        tags = next((p[5:] for p in parts if p.startswith("tags=")), "").split(",")
+        (isolated if parts[-1] == "exclusive" or "pacing" in tags or "exclusive" in tags else others).append(parts[0])
+    if not isolated and not others:
+        raise lsw_link.LinkError("the check list could not be read from the guest")
+    return isolated, others
+
+
 def execute(args, specs):
     ctx = Context(args)
     deadline = time.monotonic() + args.timeout
     watcher = threading.Thread(target=ctx.supervise, daemon=True)
     watcher.start()
     phases = [p.split(":") + ["parallel"] for p in args.phases.split(",")]
+    isolated = others = None
+    if any(entry[0] in ("main", "isolated") for entry in phases):
+        isolated, others = discover(ctx)
+        say(f"{args.host}: {len(others)} checks run on every adapter at once, {len(isolated)} exclusive or pacing checks "
+            "run one adapter at a time")
     try:
         for entry in phases:
-            phase = None if entry[0] == "all" else entry[0]
+            phase = None
+            for spec in specs:
+                spec.stage_exclude = isolated if entry[0] == "main" else others if entry[0] == "isolated" else []
             serial = entry[1] == "serial"
             groups = [[spec] for spec in specs] if serial else [specs]
             for group in groups:
