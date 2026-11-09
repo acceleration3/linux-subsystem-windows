@@ -103,6 +103,21 @@ def png_decode(blob):
 
 
 
+def swar_sub(a, b):
+    n = len(a)
+    mask = (1 << (8 * n)) - 1
+    high = int.from_bytes(b"\x80" * n, "little")
+    x = int.from_bytes(a, "little")
+    y = int.from_bytes(b, "little")
+    d = ((x | high) - (y & ~high & mask)) ^ ((x ^ ~y) & high)
+    return (d & mask).to_bytes(n, "little")
+
+
+def png_chunk(kind, data):
+    body = kind + data
+    return struct.pack(">I", len(data)) + body + struct.pack(">I", zlib.crc32(body) & 0xffffffff)
+
+
 def png_encode_rgba(width, height, rgba):
     colors = array.array("I", rgba)
     palette = {}
@@ -111,25 +126,33 @@ def png_encode_rgba(width, height, rgba):
             palette[value] = len(palette)
             if len(palette) > 256:
                 break
-
-    def chunk(kind, data):
-        body = kind + data
-        return struct.pack(">I", len(data)) + body + struct.pack(">I", zlib.crc32(body) & 0xffffffff)
-
+    signature = b"\x89PNG\r\n\x1a\n"
     if len(palette) <= 256:
         table = sorted(palette, key=palette.get)
         plte = b"".join(struct.pack("<I", v)[:3] for v in table)
         trns = bytes(struct.pack("<I", v)[3] for v in table)
         lookup = bytes(palette[v] for v in colors)
         raw = b"".join(b"\x00" + lookup[y * width:(y + 1) * width] for y in range(height))
-        extra = chunk(b"PLTE", plte) + (chunk(b"tRNS", trns) if any(b != 255 for b in trns) else b"")
+        extra = png_chunk(b"PLTE", plte) + (png_chunk(b"tRNS", trns) if any(b != 255 for b in trns) else b"")
         header = struct.pack(">IIBBBBB", width, height, 8, 3, 0, 0, 0)
+        return signature + png_chunk(b"IHDR", header) + extra + png_chunk(b"IDAT", zlib.compress(raw, 9)) + png_chunk(b"IEND", b"")
+    opaque = rgba[3::4] == b"\xff" * (len(rgba) // 4)
+    if opaque:
+        pixels = bytearray(len(rgba) // 4 * 3)
+        pixels[0::3] = rgba[0::4]
+        pixels[1::3] = rgba[1::4]
+        pixels[2::3] = rgba[2::4]
+        pixels = bytes(pixels)
+        channels, color = 3, 2
     else:
-        stride = width * 4
-        raw = b"".join(b"\x00" + bytes(rgba[y * stride:(y + 1) * stride]) for y in range(height))
-        extra = b""
-        header = struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0)
-    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header) + extra + chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b"")
+        pixels, channels, color = bytes(rgba), 4, 6
+    stride = width * channels
+    plain = b"".join(b"\x00" + pixels[y * stride:(y + 1) * stride] for y in range(height))
+    up = swar_sub(pixels, b"\x00" * stride + pixels[:-stride])
+    filtered = b"".join(b"\x02" + up[y * stride:(y + 1) * stride] for y in range(height))
+    best = min(zlib.compress(plain, 9), zlib.compress(filtered, 9), key=len)
+    header = struct.pack(">IIBBBBB", width, height, 8, color, 0, 0, 0)
+    return signature + png_chunk(b"IHDR", header) + png_chunk(b"IDAT", best) + png_chunk(b"IEND", b"")
 
 
 def png_to_rgba(blob):
@@ -678,7 +701,7 @@ td.c{text-align:center;width:90px}.s{display:inline-block;min-width:54px;border-
 .s.chg{outline:2px solid var(--chg)}.reason{color:var(--mute);font-size:11px;margin-left:8px}
 aside#panel{height:calc(100vh - 96px);overflow:auto;border-left:1px solid var(--line);padding:10px 14px;background:var(--bg)}
 aside h2{font-size:14px;margin:0 0 6px;word-break:break-all}.row{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:6px 0}
-#view{overflow:auto;max-height:60vh;border:1px solid var(--line);background:repeating-conic-gradient(var(--card) 0 25%,var(--bg) 0 50%) 0 0/16px 16px}
+#view{overflow:auto;max-height:46vh;border:1px solid var(--line);background:repeating-conic-gradient(var(--card) 0 25%,var(--bg) 0 50%) 0 0/16px 16px}
 #view canvas{display:block;image-rendering:pixelated;cursor:crosshair}#readout{font:12px ui-monospace,monospace;min-height:34px;color:var(--mute);white-space:pre}
 .strip{display:flex;gap:6px;overflow-x:auto;padding:4px 0}.strip figure{margin:0;text-align:center;cursor:pointer;border:2px solid transparent}.strip figure.on{border-color:var(--chg)}
 .strip img{width:64px;height:64px;object-fit:contain;image-rendering:pixelated;display:block;background:var(--card)}.strip figcaption{font-size:10px;color:var(--mute)}
@@ -782,12 +805,18 @@ function caps(){var t=rows[S.sel],c=t&&t.c[S.run];return c&&c.c?c.c:[]}
 function labels(){var l=[];caps().forEach(function(c){if(l.indexOf(c.l)<0)l.push(c.l)});return l}
 function frames(){return caps().filter(function(c){return c.l===S.label})}
 function curCap(){var f=frames();return f[Math.min(S.fi,f.length-1)]||null}
-function openTest(ti,ri){if(S.sel>=0&&rows[S.sel])rows[S.sel]._tr.classList.remove('sel');S.sel=ti;S.run=ri;var t=rows[ti];t._tr.classList.add('sel');if(S.cmp!=='ref'&&(!t.c[S.cmp]||S.cmp===S.run))S.cmp='ref';var ls=labels();if(ls.indexOf(S.label)<0)S.label=ls[0]||'';S.fi=Math.min(S.fi,Math.max(0,frames().length-1));main.classList.add('open');panel.hidden=false;t._tr.scrollIntoView({block:'nearest'});render()}
-function closePanel(){panel.hidden=true;main.classList.remove('open');if(S.sel>=0&&rows[S.sel])rows[S.sel]._tr.classList.remove('sel');S.sel=-1}
+function openTest(ti,ri){if(S.sel>=0&&rows[S.sel])rows[S.sel]._tr.classList.remove('sel');S.sel=ti;S.run=ri;var t=rows[ti];t._tr.classList.add('sel');if(S.cmp!=='ref'&&(!t.c[S.cmp]||S.cmp===S.run))S.cmp='ref';var ls=labels();if(ls.indexOf(S.label)<0)S.label=ls[0]||'';S.fi=Math.min(S.fi,Math.max(0,frames().length-1));main.classList.add('open');panel.hidden=false;showRow(t);render()}
+function showRow(t){var w=$('wrap'),top=t._tr.offsetTop;if(top<w.scrollTop+60||top>w.scrollTop+w.clientHeight-40)w.scrollTop=Math.max(0,top-w.clientHeight/2)}
+function writeHash(){if(S.sel<0||!rows[S.sel]){history.replaceState(null,'',location.pathname+location.search);return}var h='test='+encodeURIComponent(rows[S.sel].id)+'&run='+S.run+'&cmp='+S.cmp+'&mode='+S.mode+'&frame='+S.fi+'&label='+encodeURIComponent(S.label)+'&zoom='+S.zoom+'&split='+S.split+'&op='+S.op+'&amp='+S.amp+'&thr='+S.thr;history.replaceState(null,'','#'+h)}
+function readHash(){var h=location.hash.replace(/^#/,'');if(!h)return false;var m={};h.split('&').forEach(function(p){var i=p.indexOf('=');if(i>0)m[p.slice(0,i)]=decodeURIComponent(p.slice(i+1))});if(!m.test)return false;var ti=-1;for(var i=0;i<rows.length;i++)if(rows[i].id===m.test){ti=i;break}if(ti<0)return false;
+ ['mode','fi','zoom','split','op','amp','thr'].forEach(function(k){var src=k==='fi'?m.frame:m[k];if(src!=null&&src!==''&&!isNaN(+src))S[k]=+src});S.label=m.label||'';S.cmp=m.cmp==null||m.cmp==='ref'?'ref':+m.cmp;var run=m.run!=null?+m.run:0;
+ if(S.sel>=0&&rows[S.sel])rows[S.sel]._tr.classList.remove('sel');S.sel=ti;S.run=rows[ti].c[run]?run:firstRun(rows[ti]);var t=rows[ti];t._tr.classList.add('sel');if(S.cmp!=='ref'&&(!t.c[S.cmp]||S.cmp===S.run))S.cmp='ref';var ls=labels();if(ls.indexOf(S.label)<0)S.label=ls[0]||'';S.fi=Math.min(S.fi,Math.max(0,frames().length-1));main.classList.add('open');panel.hidden=false;showRow(t);renderPanel();return true}
+function closePanel(){panel.hidden=true;main.classList.remove('open');if(S.sel>=0&&rows[S.sel])rows[S.sel]._tr.classList.remove('sel');S.sel=-1;writeHash()}
 function step(d){if(!visible.length)return;var p=visible.indexOf(S.sel);var n=p<0?(d>0?0:visible.length-1):Math.max(0,Math.min(visible.length-1,p+d));var ti=visible[n];var t=rows[ti];var r=t.c[S.run]?S.run:firstRun(t);openTest(ti,r)}
 function modeBtn(n,text,bx){var b=el('button',S.mode===n?'on':'',n+' '+text);b.addEventListener('click',function(){S.mode=n;render()});bx.appendChild(b)}
-function slider(bx,text,min,max,key,onc){var l=el('label',null,text+' ');var i=el('input');i.type='range';i.min=min;i.max=max;i.value=S[key];i.addEventListener('input',function(){S[key]=+i.value;draw()});l.appendChild(i);bx.appendChild(l)}
-function render(){
+function slider(bx,text,min,max,key,onc){var l=el('label',null,text+' ');var i=el('input');i.type='range';i.min=min;i.max=max;i.value=S[key];i.addEventListener('input',function(){S[key]=+i.value;draw();writeHash()});l.appendChild(i);bx.appendChild(l)}
+function render(){writeHash();renderPanel()}
+function renderPanel(){
  var t=rows[S.sel];if(!t)return;panel.innerHTML='';
  var top=el('div','row');var cl=el('button',null,'close');cl.addEventListener('click',closePanel);var pv=el('button',null,'prev (k)');pv.addEventListener('click',function(){step(-1)});var nx=el('button',null,'next (j)');nx.addEventListener('click',function(){step(1)});top.appendChild(cl);top.appendChild(pv);top.appendChild(nx);panel.appendChild(top);
  panel.appendChild(el('h2',null,t.id));
@@ -799,7 +828,7 @@ function render(){
  var fr=frames();if(fr.length>1){var pb=el('button',null,'<');pb.addEventListener('click',function(){stepFrame(-1)});var nb=el('button',null,'>');nb.addEventListener('click',function(){stepFrame(1)});r2.appendChild(pb);r2.appendChild(el('span',null,'frame '+(cap?cap.f:'')+' ('+(S.fi+1)+' of '+fr.length+')'));r2.appendChild(nb)}panel.appendChild(r2);
  var r3=el('div','row');modeBtn(1,'side by side',r3);modeBtn(2,'swipe',r3);modeBtn(3,'onion',r3);modeBtn(4,'difference',r3);panel.appendChild(r3);
  var r4=el('div','row');if(S.mode===2)slider(r4,'swipe',0,100,'split');if(S.mode===3)slider(r4,'opacity',0,100,'op');if(S.mode===4){slider(r4,'amplify',1,64,'amp');slider(r4,'threshold',0,64,'thr')}
- var zl=el('label',null,'zoom ');var zi=el('input');zi.type='range';zi.min=1;zi.max=12;zi.value=S.zoom||autoZoom(cap);zi.addEventListener('input',function(){S.zoom=+zi.value;draw()});zl.appendChild(zi);r4.appendChild(zl);panel.appendChild(r4);
+ var zl=el('label',null,'zoom ');var zi=el('input');zi.type='range';zi.min=1;zi.max=12;zi.value=S.zoom||autoZoom(cap);zi.addEventListener('input',function(){S.zoom=+zi.value;draw();writeHash()});zl.appendChild(zi);r4.appendChild(zl);panel.appendChild(r4);
  var view=el('div');view.id='view';panel.appendChild(view);var ro=el('div');ro.id='readout';ro.textContent='hover the image for pixel values';panel.appendChild(ro);P={view:view,ro:ro};
  if(fr.length>1){var strip=el('div','strip');fr.forEach(function(c,i){var f=el('figure',i===S.fi?'on':'');var im=el('img');im.dataset.key=c.dev||'';f.appendChild(im);f.appendChild(el('figcaption',null,'f'+c.f));f.addEventListener('click',function(){S.fi=i;render()});strip.appendChild(f)});panel.appendChild(strip);lazy(strip)}
  var info=el('table','kv');function kv(a,b){var tr=el('tr');tr.appendChild(el('td',null,a));tr.appendChild(el('td',null,b));info.appendChild(tr)}
@@ -808,7 +837,7 @@ function render(){
   if(cap.p!=null)kv('measures','psnr '+(cap.p>900?'inf':cap.p.toFixed(2))+' dB, bad '+cap.b+' of '+cap.n+', max delta '+cap.m+', forgiven '+cap.g+(cap.ok===false?' (failed)':''))}
  if(cell.m){Object.keys(cell.m).forEach(function(k){kv(k,String(cell.m[k]))})}
  var all=el('div');t.c.forEach(function(c,i){if(c){var s=el('span','s '+stClass(c.s),stText(c.s));var ln=el('div','row');ln.appendChild(s);ln.appendChild(document.createTextNode(RUNS[i].label+(c.r&&c.s!=='ok'?': '+c.r:'')));all.appendChild(ln)}});
- panel.appendChild(info);panel.appendChild(el('h2',null,'every run'));panel.appendChild(all);
+ panel.insertBefore(info,view);panel.appendChild(el('h2',null,'every run'));panel.appendChild(all);
  draw()}
 function autoZoom(cap){var w=cap&&cap.w?cap.w:128;return Math.max(1,Math.min(8,Math.floor(560/(S.mode===1?w*2:w))))}
 function stepFrame(d){var f=frames();S.fi=Math.max(0,Math.min(f.length-1,S.fi+d));render()}
@@ -839,7 +868,7 @@ function draw(){
  })}
 document.addEventListener('keydown',function(ev){if(ev.target&&(ev.target.tagName==='INPUT'&&ev.target.type==='search'||ev.target.tagName==='SELECT'))return;if(ev.ctrlKey||ev.metaKey||ev.altKey)return;
  var k=ev.key;if(k==='j'){step(1)}else if(k==='k'){step(-1)}else if(k>='1'&&k<='4'&&S.sel>=0){S.mode=+k;render()}else if(k==='ArrowRight'&&S.sel>=0){stepFrame(1);ev.preventDefault()}else if(k==='ArrowLeft'&&S.sel>=0){stepFrame(-1);ev.preventDefault()}else if(k==='Escape'){closePanel()}});
-fillGroups();apply();
+fillGroups();apply();readHash();window.addEventListener('hashchange',readHash);
 })();
 """
 

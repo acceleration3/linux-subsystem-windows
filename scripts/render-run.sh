@@ -8,8 +8,10 @@ MAIN_TREE="${LSW_MAIN_TREE:-/home/accel/Coding/linux-subsystem-windows}"
 AV="${ROOT}/external/accel-virt"
 [[ -f ${AV}/third_party/dxc/dxcompiler.dll ]] || AV="${MAIN_TREE}/external/accel-virt"
 HOSTS_FILE="${LSW_GPU_TEST_HOSTS:-${ROOT}/scripts/gpu-test/hosts}"
-LOCK="${LSW_RENDER_HEAVY_LOCK:-/home/accel/.claude/jobs/554d52c6/tmp/heavy.lock}"
-VM="${LSW_RENDER_VM:-/home/accel/.claude/jobs/554d52c6/tmp/vm.sh}"
+LOCK="${LSW_RENDER_HEAVY_LOCK:-${XDG_RUNTIME_DIR:-/tmp}/lsw-render.lock}"
+VM="${LSW_RENDER_VM:-${ROOT}/scripts/render-vm.sh}"
+CPU_QUOTA="${LSW_RENDER_CPU_QUOTA:-400%}"
+started_vm=0
 GPUTEST="${ROOT}/scripts/gpu-test/gpu-test.sh"
 STAMP="$(date +%Y%m%d-%H%M%S)"
 
@@ -111,6 +113,20 @@ locked() {
     local seconds=$1
     shift
     flock -w 3600 "${LOCK}" timeout "${seconds}" "$@"
+}
+
+capped() {
+    if command -v systemd-run >/dev/null 2>&1; then
+        systemd-run --user --scope -q -p "CPUQuota=${CPU_QUOTA}" nice -n 10 ionice -c 3 "$@"
+    else
+        nice -n 10 ionice -c 3 "$@"
+    fi
+}
+
+capped_step() {
+    local text=$1 seconds=$2
+    shift 2
+    locked_step "${text}" "${seconds}" bash -c "$(declare -f capped); CPU_QUOTA='${CPU_QUOTA}'; "'capped "$@"' _ "$@"
 }
 
 locked_step() {
@@ -243,29 +259,25 @@ gpu_name_of() {
     echo "${uuid}"
 }
 
-vm_up() {
-    if [[ -x ${VM} ]]; then
-        "${VM}" up
-    else
-        [[ $(virsh -c qemu:///session domstate lsw 2>/dev/null | head -1) == running ]] || virsh -c qemu:///session start lsw >/dev/null || return 1
-        python3 -c "import sys,time; sys.path.insert(0,'${ROOT}/scripts/gpu-test'); import lsw_link as L; L.wait_for_agent(time.monotonic()+300).close()"
+vm_running() { [[ $(virsh -c qemu:///session domstate lsw 2>/dev/null | head -n 1) == running ]]; }
+
+finish() {
+    if [[ ${started_vm} -eq 1 ]]; then
+        locked 400 "${VM}" down
     fi
 }
-
-vm_done() { [[ -x ${VM} ]] && "${VM}" done; return 0; }
 
 guest_locked() {
     local seconds=$1
     shift
-    locked "${seconds}" bash -c 'vm_up_cmd="$1"; vm_done_cmd="$2"; shift 2; eval "${vm_up_cmd}" || exit 1; "$@"; rc=$?; eval "${vm_done_cmd}"; exit ${rc}' _ \
-        "$(declare -f vm_up); VM='${VM}'; ROOT='${ROOT}'; vm_up" "$(declare -f vm_done); VM='${VM}'; vm_done" "$@"
+    locked "${seconds}" bash -c 'vm=$1; shift; "${vm}" up || exit 1; "$@"; rc=$?; "${vm}" done; exit ${rc}' _ "${VM}" "$@"
 }
 
 guest_step() {
     local text=$1 seconds=$2
     shift 2
     if [[ ${dry} -eq 1 ]]; then
-        printf '[dry-run] (heavy lock, %ss, vm.sh up ... done) %s\n' "${seconds}" "${text}"
+        printf '[dry-run] (heavy lock, %ss, render-vm.sh up ... done) %s\n' "${seconds}" "${text}"
         return 0
     fi
     say "${text}"
@@ -280,11 +292,11 @@ run_local() {
     local ref_filter=()
     [[ -n ${filter} ]] && ref_filter=(--filter "${filter}")
     if [[ ${all_selected} -eq 1 ]]; then
-        locked_step "host references for every VM-bound GPU" 1800 bash -c 'exec "$@" >> "${RR_LOG}" 2>&1' _ "${ROOT}/build-render-ref/lsw-render-ref" --out "${refs}" --gpu all --jobs 4 --clean "${ref_filter[@]}"
+        capped_step "host references for every VM-bound GPU" 1800 bash -c 'exec "$@" >> "${RR_LOG}" 2>&1' _ "${ROOT}/build-render-ref/lsw-render-ref" --out "${refs}" --gpu all --jobs 4 --clean "${ref_filter[@]}"
         [[ ${dry} -eq 1 ]] || tail -n 4 "${out}/render-ref.log"
     else
         for uuid in "${uuids[@]}"; do
-            locked_step "host references for ${uuid}" 1800 bash -c 'exec "$@" >> "${RR_LOG}" 2>&1' _ "${ROOT}/build-render-ref/lsw-render-ref" --out "${refs}/${uuid//-/}" --gpu "uuid:${uuid}" --jobs 4 --clean "${ref_filter[@]}"
+            capped_step "host references for ${uuid}" 1800 bash -c 'exec "$@" >> "${RR_LOG}" 2>&1' _ "${ROOT}/build-render-ref/lsw-render-ref" --out "${refs}/${uuid//-/}" --gpu "uuid:${uuid}" --jobs 4 --clean "${ref_filter[@]}"
             [[ ${dry} -eq 1 ]] || tail -n 3 "${out}/render-ref.log"
         done
     fi
@@ -358,12 +370,16 @@ print_gpus
 note "bits: ${bit_list[*]}, filter: ${filter:-none}, jobs: ${jobs}, output: ${out}"
 
 mkdir -p "${out}"
+if [[ ${dry} -eq 0 ]] && ! vm_running; then
+    started_vm=1
+    trap finish EXIT
+fi
 if [[ ${build} -eq 1 ]]; then
-    export CMAKE_BUILD_PARALLEL_LEVEL="${CMAKE_BUILD_PARALLEL_LEVEL:-12}"
+    export CMAKE_BUILD_PARALLEL_LEVEL="${CMAKE_BUILD_PARALLEL_LEVEL:-4}"
     export LSW_SUITES_KHRONOS_DIR="${LSW_SUITES_KHRONOS_DIR:-${AV}/third_party/khronos}"
     export LSW_SUITES_BITS="${bits}"
-    locked_step "build lsw-suites (${bits})" 1200 "${ROOT}/scripts/build-suites.sh" || die "suites build failed"
-    locked_step "build lsw-render-ref" 1200 "${ROOT}/scripts/build-render-ref.sh" || die "lsw-render-ref build failed"
+    capped_step "build lsw-suites (${bits})" 1200 "${ROOT}/scripts/build-suites.sh" || die "suites build failed"
+    capped_step "build lsw-render-ref" 1200 "${ROOT}/scripts/build-render-ref.sh" || die "lsw-render-ref build failed"
 fi
 
 status=0
