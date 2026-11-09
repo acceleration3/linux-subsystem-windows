@@ -154,7 +154,7 @@ HeavyProducer make_producer(Rig& rig, std::uint32_t size) {
 }
 
 void register_barriers() {
-    Cases::add(spec_of("barrier_attachment_to_sampling").audit_ok("legacy barrier, the same heavy scene as barrier2_attachment_to_sampling through vkCmdPipelineBarrier; a missing barrier races the producer"), [](Rig& rig, CaptureSet& out) {
+    Cases::add(spec_of("barrier_attachment_to_sampling").same_as({"sync.barrier2_attachment_to_sampling"}, "legacy barrier, the same heavy scene as barrier2_attachment_to_sampling through vkCmdPipelineBarrier; a missing barrier races the producer"), [](Rig& rig, CaptureSet& out) {
         const HeavyProducer producer = make_producer(rig, 64);
         const SamplePlan plan = plan_sampling(rig, producer.texture, 64);
         rig.run([&](VkCommandBuffer cb) {
@@ -175,7 +175,7 @@ void register_barriers() {
         out.add("", rig.color(*plan.target));
     });
     CaseSpec sync2 = spec_of("barrier2_attachment_to_sampling");
-    sync2.audit_ok("synchronization2 barrier, the same heavy scene as barrier_attachment_to_sampling through vkCmdPipelineBarrier2; the subject is the API path");
+    sync2.same_as({"sync.barrier_attachment_to_sampling"}, "synchronization2 barrier, the same heavy scene as barrier_attachment_to_sampling through vkCmdPipelineBarrier2; the subject is the API path");
     sync2.min_version(1, 3);
     Cases::add(std::move(sync2), [](Rig& rig, CaptureSet& out) {
         const HeavyProducer producer = make_producer(rig, 64);
@@ -526,8 +526,8 @@ private:
 };
 
 void register_submission() {
-    Cases::add_scene(spec_of("binary_semaphore_two_submits").audit_ok("compute queue triangle ordered by a binary semaphore, the same generated triangle as the timeline row; the subject is the semaphore type").frames(4, {0, 1, 3}), [] { return std::make_unique<SemaphoreScene>(false); });
-    Cases::add_scene(spec_of("timeline_semaphore_compute_queue").audit_ok("compute queue triangle ordered by a timeline semaphore, the same generated triangle as the binary row; the subject is the semaphore type").frames(5, {0, 2, 4}).min_version(1, 2), [] { return std::make_unique<SemaphoreScene>(true); });
+    Cases::add_scene(spec_of("binary_semaphore_two_submits").same_as({"sync.timeline_semaphore_compute_queue"}, "compute queue triangle ordered by a binary semaphore, the same generated triangle as the timeline row; the subject is the semaphore type").frames(4, {0, 1, 3}), [] { return std::make_unique<SemaphoreScene>(false); });
+    Cases::add_scene(spec_of("timeline_semaphore_compute_queue").same_as({"sync.binary_semaphore_two_submits"}, "compute queue triangle ordered by a timeline semaphore, the same generated triangle as the binary row; the subject is the semaphore type").frames(5, {0, 2, 4}).min_version(1, 2), [] { return std::make_unique<SemaphoreScene>(true); });
     Cases::add_class<RingFlightScene>(spec_of("frames_in_flight_ring").frames(8, {0, 3, 7}));
     Cases::add(spec_of("secondary_command_buffers_threads"), [](Rig& rig, CaptureSet& out) {
         Kit& kit = rig.kit;

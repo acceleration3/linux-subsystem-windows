@@ -303,7 +303,7 @@ struct SbtLayout {
 };
 
 void register_rt() {
-    Cases::add(rt_spec("ray_query_compute_masks_shadows", false).audit_ok("the all mask capture is the scene of the refit row at frame 0; the masked capture is new"), [](Rig& rig, CaptureSet& out) {
+    Cases::add(rt_spec("ray_query_compute_masks_shadows", false).same_as({"rt.ray_query_blas_refit_frames"}, "the all mask capture is the scene of the refit row at frame 0; the masked capture is new"), [](Rig& rig, CaptureSet& out) {
         TraceTarget t = make_trace_target(rig, VK_SHADER_STAGE_COMPUTE_BIT);
         const QuadMesh mesh = make_quad(rig, 0.0f);
         Accel blas;
@@ -331,7 +331,7 @@ void register_rt() {
         const VkPipeline pipeline = rig.pipe(pipe);
         out.add("", rig.draw(target, pipeline, nullptr, [&](VkCommandBuffer cb) { rig.kit.api.vkCmdDraw(cb, 3, 1, 0, 0); }, layout, {t.set}));
     }, [](Kit& kit) { return rt_caps(kit, false); });
-    Cases::add_scene(rt_spec("ray_query_blas_refit_frames", false).audit_ok("frame 0 is the unrefit scene the compute row traces; later frames refit").frames(4, {0, 2, 3}), [] { return std::make_unique<RefitScene>(); });
+    Cases::add_scene(rt_spec("ray_query_blas_refit_frames", false).same_as({"rt.ray_query_compute_masks_shadows"}, "frame 0 is the unrefit scene the compute row traces; later frames refit").frames(4, {0, 2, 3}), [] { return std::make_unique<RefitScene>(); });
     Cases::add(rt_spec("ray_query_blas_compaction", false), [](Rig& rig, CaptureSet& out) {
         Kit& kit = rig.kit;
         TraceTarget t = make_trace_target(rig, VK_SHADER_STAGE_COMPUTE_BIT);

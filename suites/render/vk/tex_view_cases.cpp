@@ -29,7 +29,7 @@ Image bytes_as_image(const std::vector<std::uint8_t>& bytes, std::uint32_t width
 void register_views() {
     for (int listed = 0; listed < 2; ++listed) {
     CaseSpec alias = spec_of(listed != 0 ? "view_mutable_format_list_srgb_unorm" : "view_mutable_srgb_unorm_alias");
-    alias.audit_ok(listed != 0 ? "the same sRGB and UNORM views as view_mutable_srgb_unorm_alias, created from an image that lists them in VkImageFormatListCreateInfo; the subject is the listed creation path" : "views the unlisted mutable image; view_mutable_format_list_srgb_unorm is the same picture through the format list path");
+    alias.same_as({listed != 0 ? "tex.view_mutable_srgb_unorm_alias" : "tex.view_mutable_format_list_srgb_unorm"}, listed != 0 ? "the same sRGB and UNORM views as view_mutable_srgb_unorm_alias, created from an image that lists them in VkImageFormatListCreateInfo; the subject is the listed creation path" : "views the unlisted mutable image; view_mutable_format_list_srgb_unorm is the same picture through the format list path");
     if (listed != 0) {
         alias.min_version(1, 2);
     }
@@ -193,7 +193,7 @@ void register_atomics_and_ycbcr() {
     const VkFormat ycbcr_format = three != 0 ? VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM : VK_FORMAT_G8_B8R8_2PLANE_420_UNORM;
     CaseSpec ycbcr = spec_of(three != 0 ? "ycbcr_3plane_420_conversion" : "ycbcr_nv12_conversion");
     ycbcr.min_version(1, 1).tolerance(Tolerance::exact());
-    ycbcr.audit_ok(three != 0 ? "the same picture as the NV12 row stored in three planes; the subject is the plane layout" : "the same picture as the 3 plane row stored in two interleaved planes; the subject is the plane layout");
+    ycbcr.same_as({three != 0 ? "tex.ycbcr_nv12_conversion" : "tex.ycbcr_3plane_420_conversion"}, three != 0 ? "the same picture as the NV12 row stored in three planes; the subject is the plane layout" : "the same picture as the 3 plane row stored in two interleaved planes; the subject is the plane layout");
     Cases::add(std::move(ycbcr), [three, ycbcr_format](Rig& rig, CaptureSet& out) {
         Kit& kit = rig.kit;
         Target& target = rig.make_target(TargetDesc{});

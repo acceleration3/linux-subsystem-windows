@@ -271,7 +271,7 @@ void register_blits() {
 }
 
 void register_clears() {
-    Cases::add(spec_of("clear_color_image_ranges").uniform_ok().audit_ok("each layer holds one clear colour by design; a missed range keeps another colour"), [](Rig& rig, CaptureSet& out) {
+    Cases::add(spec_of("clear_color_image_ranges").uniform_ok(), [](Rig& rig, CaptureSet& out) {
         Kit& kit = rig.kit;
         Texture t = xfer_image(rig, 16, 16, VK_FORMAT_R8G8B8A8_UNORM, 4);
         upload_full(rig, t, std::vector<std::uint8_t>(16 * 16 * 4 * 4, 0x40), 4);
@@ -289,7 +289,7 @@ void register_clears() {
             out.add("layer" + std::to_string(l), rig.read(t, kSrc, VK_IMAGE_ASPECT_COLOR_BIT, l));
         }
     }, {});
-    Cases::add(spec_of("clear_depth_stencil_image").uniform_ok().audit_ok("the whole image holds the clear depth and stencil by design; a missed clear leaves the previous values"), [](Rig& rig, CaptureSet& out) {
+    Cases::add(spec_of("clear_depth_stencil_image").uniform_ok(), [](Rig& rig, CaptureSet& out) {
         Kit& kit = rig.kit;
         TextureDesc desc;
         desc.width = desc.height = 16;

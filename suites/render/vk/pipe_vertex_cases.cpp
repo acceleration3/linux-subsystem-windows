@@ -172,12 +172,12 @@ void register_vertex_layouts() {
         }));
     });
     CaseSpec divisor("pipe", "vin_instance_divisor");
-    divisor.extension("VK_EXT_vertex_attribute_divisor").tolerance(Tolerance::exact()).audit_ok("a divisor of 3 over 9 instances draws three overlapping triangles on a mostly empty frame; the row fails if the divisor is ignored");
+    divisor.extension("VK_EXT_vertex_attribute_divisor").tolerance(Tolerance::exact());
     Cases::add(
         std::move(divisor),
         [](Rig& rig, CaptureSet& out) {
             Target& target = rig.make_target(TargetDesc{});
-            const std::vector<float> tri = {0.0f, 0.14f, -0.12f, -0.12f, 0.12f, -0.12f};
+            const std::vector<float> tri = {0.0f, 0.3f, -0.25f, -0.25f, 0.25f, -0.25f};
             std::vector<Instanced> inst;
             for (int i = 0; i < 9; ++i) {
                 inst.push_back({{-0.7f + 0.7f * static_cast<float>(i % 3), -0.7f + 0.7f * static_cast<float>(i / 3)},

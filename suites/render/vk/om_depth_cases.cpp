@@ -122,13 +122,13 @@ void register_formats() {
             spec.uniform_ok("stencil");
         }
         if (entry.format == VK_FORMAT_D16_UNORM) {
-            spec.audit_ok("the depth plane equals the one of depth_format_d16_s8, whose stencil plane is the difference");
+            spec.same_as({"om.depth_format_d16_s8"}, "the depth plane equals the one of the d16 s8 row, whose stencil plane is the difference");
         } else if (entry.format == VK_FORMAT_D16_UNORM_S8_UINT) {
-            spec.audit_ok("the depth plane equals the one of depth_format_d16; the stencil plane holds the clear value 0x5a");
+            spec.same_as({"om.depth_format_d16"}, "the depth plane equals the one of the d16 row; the stencil plane holds the clear value 0x5a");
         } else if (entry.format == VK_FORMAT_D32_SFLOAT) {
-            spec.audit_ok("the depth plane equals the one of depth_format_d32_s8, whose stencil plane is the difference");
+            spec.same_as({"om.depth_format_d32_s8"}, "the depth plane equals the one of the d32 s8 row, whose stencil plane is the difference");
         } else if (entry.format == VK_FORMAT_D32_SFLOAT_S8_UINT) {
-            spec.audit_ok("the depth plane equals the one of depth_format_d32; the stencil plane holds the clear value 0x5a");
+            spec.same_as({"om.depth_format_d32"}, "the depth plane equals the one of the d32 row; the stencil plane holds the clear value 0x5a");
         }
         Cases::add(
             std::move(spec),
@@ -251,12 +251,6 @@ void register_stencil_compare() {
     for (const CompareEntry& entry : compare_ops()) {
         CaseSpec spec("om", std::string("stencil_compare_") + entry.name);
         spec.tolerance(Tolerance::exact()).uniform_ok("color");
-        if (std::string(entry.name) == "always") {
-            spec.audit_ok("ALWAYS passes every fragment so the whole frame is the last quad by design; a driver that applies another compare leaves the other quads");
-        }
-        if (std::string(entry.name) == "never") {
-            spec.audit_ok("NEVER rejects every fragment so the frame stays the clear colour by design; a driver that applies another compare draws quads");
-        }
         Cases::add(std::move(spec), [entry](Rig& rig, CaptureSet& out) {
             TargetDesc td;
             td.depth = VK_FORMAT_D32_SFLOAT_S8_UINT;

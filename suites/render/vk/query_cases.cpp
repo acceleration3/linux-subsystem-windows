@@ -180,7 +180,7 @@ void register_queries() {
         out.add("image", rig.color(target));
     });
     CaseSpec counters = spec_of("pipeline_statistics_counters");
-    counters.feature("pipelineStatisticsQuery").audit_ok("the image is the geometry of the timestamp row, the counters capture is the subject");
+    counters.feature("pipelineStatisticsQuery").same_as({"query.timestamps_and_statistics_leave_image"}, "the image is the geometry of the timestamp row, the counters capture is the subject");
     Cases::add(std::move(counters), [](Rig& rig, CaptureSet& out) {
         Kit& kit = rig.kit;
         Target& target = rig.make_target(TargetDesc{});
@@ -219,7 +219,7 @@ void register_queries() {
         out.add("image", rig.color(target));
     });
     CaseSpec stats = spec_of("timestamps_and_statistics_leave_image");
-    stats.feature("pipelineStatisticsQuery").audit_ok("the image must equal the plain draw, which is the geometry of the counters row; the queries must not alter it");
+    stats.feature("pipelineStatisticsQuery").same_as({"query.pipeline_statistics_counters"}, "the image must equal the plain draw, which is the geometry of the counters row; the queries must not alter it");
     Cases::add(
         std::move(stats),
         [](Rig& rig, CaptureSet& out) {

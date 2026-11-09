@@ -46,7 +46,7 @@ void add_draw(const std::string& name, std::function<void(Rig&, CaptureSet&)> bo
     CaseSpec spec("draw", name);
     spec.tolerance(Tolerance::exact());
     if (name == "xfb_capture_then_draw" || name == "xfb_capture_indirect_byte_count") {
-        spec.audit_ok(name == "xfb_capture_then_draw" ? "draws the captured vertices with an explicit count, the same triangles xfb_capture_indirect_byte_count draws from the byte counter; the row fails if the capture is wrong"
+        spec.same_as({name == "xfb_capture_then_draw" ? "draw.xfb_capture_indirect_byte_count" : "draw.xfb_capture_then_draw"}, name == "xfb_capture_then_draw" ? "draws the captured vertices with an explicit count, the same triangles xfb_capture_indirect_byte_count draws from the byte counter; the row fails if the capture is wrong"
                                                       : "draws from the transform feedback byte counter and must reproduce the explicit count draw of xfb_capture_then_draw exactly");
     }
     if (feature != nullptr) {

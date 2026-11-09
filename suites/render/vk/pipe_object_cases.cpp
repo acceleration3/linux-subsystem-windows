@@ -407,7 +407,7 @@ void register_renderpass_variants() {
 void register_multiview() {
     for (unsigned views : {2u, 4u}) {
         CaseSpec spec = plain(views == 2 ? "obj_multiview_2" : "obj_multiview_4");
-        spec.audit_ok(views == 2 ? "the two views render the first two views of the four view row of the same scene" : "views 0 and 1 render the same scene as the two view row, views 2 and 3 are new");
+        spec.same_as({views == 2 ? "pipe.obj_multiview_4" : "pipe.obj_multiview_2"}, views == 2 ? "the two views render the first two views of the four view row of the same scene" : "views 0 and 1 render the same scene as the two view row, views 2 and 3 are new");
         Cases::add(
             std::move(spec),
             [views](Rig& rig, CaptureSet& out) {

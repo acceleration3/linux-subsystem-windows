@@ -102,10 +102,10 @@ void add_stamp(StampCase value, const char* feature = nullptr, const char* exten
     CaseSpec spec("stamp", entry->name);
     spec.size(128, 128).frames(entry->frames, {0, entry->frames / 2, entry->frames - 1}).tolerance(Tolerance::exact());
     if (entry->name == "depth_test_write_toggle") {
-        spec.audit_ok("frame 0 draws the quad that stencil_op_cycle also draws first; later frames toggle depth state");
+        spec.same_as({"stamp.stencil_op_cycle"}, "frame 0 draws the quad that stencil_op_cycle also draws first; later frames toggle depth state");
     }
     if (entry->name == "stencil_op_cycle") {
-        spec.audit_ok("frame 0 draws the quad that depth_test_write_toggle also draws first; later frames cycle stencil ops");
+        spec.same_as({"stamp.depth_test_write_toggle"}, "frame 0 draws the quad that depth_test_write_toggle also draws first; later frames cycle stencil ops");
     }
     if (feature != nullptr) {
         spec.feature(feature);

@@ -75,21 +75,21 @@ std::vector<Vertex2> fan_arc() {
 
 std::vector<Vertex2> line_adjacency() {
     std::vector<Vertex2> v;
-    const float y[3] = {-0.55f, 0.0f, 0.55f};
-    for (int l = 0; l < 3; ++l) {
-        v.push_back(vertex(-0.95f, y[l] - 0.2f, static_cast<unsigned>(l)));
-        v.push_back(vertex(-0.7f, y[l], static_cast<unsigned>(l + 1)));
-        v.push_back(vertex(0.7f, y[l] + 0.1f, static_cast<unsigned>(l + 2)));
-        v.push_back(vertex(0.95f, y[l] + 0.4f, static_cast<unsigned>(l + 3)));
+    for (int l = 0; l < 8; ++l) {
+        const float y = -0.8f + 0.23f * static_cast<float>(l);
+        v.push_back(vertex(-0.95f, y - 0.1f, static_cast<unsigned>(l)));
+        v.push_back(vertex(-0.7f, y, static_cast<unsigned>(l + 1)));
+        v.push_back(vertex(0.7f, y + 0.05f, static_cast<unsigned>(l + 2)));
+        v.push_back(vertex(0.95f, y + 0.2f, static_cast<unsigned>(l + 3)));
     }
     return v;
 }
 
 std::vector<Vertex2> strip_adjacency_lines() {
     std::vector<Vertex2> v;
-    for (int i = 0; i < 9; ++i) {
-        const float t = static_cast<float>(i) / 8.0f;
-        v.push_back(vertex(-0.85f + 1.7f * t, 0.6f * std::sin(t * 2.0f * kPi), static_cast<unsigned>(i)));
+    for (int i = 0; i < 25; ++i) {
+        const float t = static_cast<float>(i) / 24.0f;
+        v.push_back(vertex(-0.85f + 1.7f * t, 0.8f * std::sin(t * 6.0f * kPi), static_cast<unsigned>(i)));
     }
     return v;
 }
@@ -144,9 +144,6 @@ void register_topologies() {
     for (const TopologyCase& entry : cases) {
         CaseSpec spec("pipe", entry.name);
         spec.tolerance(Tolerance::exact());
-        if (std::string(entry.name) == "topo_line_list_adjacency" || std::string(entry.name) == "topo_line_strip_adjacency") {
-            spec.audit_ok("one pixel wide lines emitted by the geometry shader from the adjacency topology cover under 2 percent of the frame by design");
-        }
         if (entry.feature != nullptr) {
             spec.feature(entry.feature);
         }
@@ -274,7 +271,7 @@ std::vector<Vertex2> restart_vertices() {
 }
 
 void register_restart() {
-    Cases::add(CaseSpec("pipe", "restart_strip_16bit").tolerance(Tolerance::exact()).audit_ok("the strips with restart index 0xFFFF; a wrong restart value breaks the strips, the same strips as the 32 bit row show by design"), [](Rig& rig, CaptureSet& out) {
+    Cases::add(CaseSpec("pipe", "restart_strip_16bit").tolerance(Tolerance::exact()).same_as({"pipe.restart_strip_32bit"}, "the strips with restart index 0xFFFF; a wrong restart value breaks the strips, the same strips as the 32 bit row show by design"), [](Rig& rig, CaptureSet& out) {
         Target& target = rig.make_target(TargetDesc{});
         const std::vector<Vertex2> vertices = restart_vertices();
         const std::vector<std::uint16_t> indices = restart_strips<std::uint16_t>();
@@ -289,7 +286,7 @@ void register_restart() {
             rig.kit.api.vkCmdDrawIndexed(cb, static_cast<std::uint32_t>(indices.size()), 1, 0, 0, 0);
         }));
     });
-    Cases::add(CaseSpec("pipe", "restart_strip_32bit").tolerance(Tolerance::exact()).audit_ok("the strips with restart index 0xFFFFFFFF; a wrong restart value breaks the strips, the same strips as the 16 bit row show by design"), [](Rig& rig, CaptureSet& out) {
+    Cases::add(CaseSpec("pipe", "restart_strip_32bit").tolerance(Tolerance::exact()).same_as({"pipe.restart_strip_16bit"}, "the strips with restart index 0xFFFFFFFF; a wrong restart value breaks the strips, the same strips as the 16 bit row show by design"), [](Rig& rig, CaptureSet& out) {
         Target& target = rig.make_target(TargetDesc{});
         const std::vector<Vertex2> vertices = restart_vertices();
         const std::vector<std::uint32_t> indices = restart_strips<std::uint32_t>();

@@ -240,8 +240,8 @@ void run_layered(Rig& rig, CaptureSet& out, unsigned layers, bool cube) {
 }
 
 void register_layered() {
-    Cases::add(spec_of("layered_array_gs").audit_ok("array layers 0 and 1 hold the same layered scene as the first cube faces; the subject is the array view").feature("geometryShader"), [](Rig& rig, CaptureSet& out) { run_layered(rig, out, 4, false); });
-    Cases::add(spec_of("layered_cube_faces_gs").audit_ok("faces 0 and 1 hold the same layered scene as the array layers; the subject is the cube face layout").feature("geometryShader"), [](Rig& rig, CaptureSet& out) { run_layered(rig, out, 6, true); });
+    Cases::add(spec_of("layered_array_gs").same_as({"stages.layered_cube_faces_gs"}, "array layers 0 and 1 hold the same layered scene as the first cube faces; the subject is the array view").feature("geometryShader"), [](Rig& rig, CaptureSet& out) { run_layered(rig, out, 4, false); });
+    Cases::add(spec_of("layered_cube_faces_gs").same_as({"stages.layered_array_gs"}, "faces 0 and 1 hold the same layered scene as the array layers; the subject is the cube face layout").feature("geometryShader"), [](Rig& rig, CaptureSet& out) { run_layered(rig, out, 6, true); });
 }
 
 void register_shader_builtins() {

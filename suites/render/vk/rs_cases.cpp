@@ -94,9 +94,6 @@ void register_polygon_and_cull() {
             }
             CaseSpec spec = spec_of(std::string("cull_") + cull.name + (front == VK_FRONT_FACE_CLOCKWISE ? "_cw" : "_ccw"));
             spec.uniform_ok();
-            if (cull.mode == VK_CULL_MODE_FRONT_AND_BACK) {
-                spec.audit_ok("FRONT_AND_BACK culls every triangle, so the frame is the clear colour by design; a driver that ignores the cull mode draws the cube");
-            }
             Cases::add(std::move(spec), [cull, front](Rig& rig, CaptureSet& out) {
                 TargetDesc td;
                 td.depth = VK_FORMAT_D32_SFLOAT;
@@ -165,7 +162,7 @@ void register_depth_range() {
         CaseSpec spec = spec_of(clamp != 0 ? "depth_clamp_on" : "depth_clamp_off");
         spec.feature("depthClamp");
         if (clamp == 0) {
-            spec.audit_ok("with clamping off the out of range quads are clipped, which is the same picture as depth_clip_enabled_with_clamp where clamping is on but clipping is explicitly enabled");
+            spec.same_as({"rs.depth_clip_enabled_with_clamp"}, "with clamping off the out of range quads are clipped, which is the same picture as depth_clip_enabled_with_clamp where clamping is on but clipping is explicitly enabled");
         }
         Cases::add(std::move(spec), [clamp](Rig& rig, CaptureSet& out) {
             TargetDesc td;
@@ -190,7 +187,7 @@ void register_depth_range() {
         });
     }
     CaseSpec clip = spec_of("depth_clip_enabled_with_clamp");
-    clip.extension("VK_EXT_depth_clip_enable").feature("depthClamp").audit_ok("explicit clip enable overrides the implicit disable of clamping, so the picture equals depth_clamp_off; a driver that ignores the clip state draws the unclipped picture of depth_clamp_on");
+    clip.extension("VK_EXT_depth_clip_enable").feature("depthClamp").same_as({"rs.depth_clamp_off"}, "explicit clip enable overrides the implicit disable of clamping, so the picture equals depth_clamp_off; a driver that ignores the clip state draws the unclipped picture of depth_clamp_on");
     Cases::add(
         std::move(clip),
         [](Rig& rig, CaptureSet& out) {
@@ -327,9 +324,6 @@ void register_lines_and_points() {
     for (float size : {2.0f, 9.0f, 24.0f}) {
         CaseSpec spec = spec_of("point_size_" + std::to_string(static_cast<int>(size)));
         spec.tolerance(Tolerance::exact());
-        if (size == 2.0f) {
-            spec.audit_ok("nine 2x2 points cover under 1 percent of the frame by design; the judge compares every pixel exactly");
-        }
         if (size > 1.0f) {
             spec.feature("largePoints");
         }
@@ -339,9 +333,11 @@ void register_lines_and_points() {
                 Target& target = rig.make_target(TargetDesc{});
                 std::copy(kClear, kClear + 4, target.clear_color);
                 std::vector<Vertex2> v;
-                for (int y = 0; y < 3; ++y) {
-                    for (int x = 0; x < 3; ++x) {
-                        v.push_back(vertex(-0.6f + 0.6f * static_cast<float>(x) + 0.013f * static_cast<float>(y), -0.6f + 0.6f * static_cast<float>(y) + 0.021f * static_cast<float>(x), static_cast<unsigned>(x + y)));
+                const int n = size == 2.0f ? 11 : 3;
+                const float step = 1.2f / static_cast<float>(n - 1);
+                for (int y = 0; y < n; ++y) {
+                    for (int x = 0; x < n; ++x) {
+                        v.push_back(vertex(-0.6f + step * static_cast<float>(x) + 0.013f * static_cast<float>(y), -0.6f + step * static_cast<float>(y) + 0.021f * static_cast<float>(x), static_cast<unsigned>(x + y)));
                     }
                 }
                 const Buffer vb = rig.buffer(v, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
@@ -353,7 +349,7 @@ void register_lines_and_points() {
                 out.add("", rig.draw(target, pipeline, &vb, [&](VkCommandBuffer cb) {
                     const float constants[4] = {size, 0, 0, 0};
                     rig.push(cb, layout, VK_SHADER_STAGE_VERTEX_BIT, constants, 16);
-                    rig.kit.api.vkCmdDraw(cb, 9, 1, 0, 0);
+                    rig.kit.api.vkCmdDraw(cb, static_cast<uint32_t>(n * n), 1, 0, 0);
                 }, layout));
             },
             [size](Kit& kit) -> std::string { return kit.properties.limits.pointSizeRange[1] < size ? "pointSizeRange" : std::string(); });
@@ -486,7 +482,7 @@ void register_special() {
     }
     for (int half = 0; half < 2; ++half) {
     CaseSpec edge_spec = spec_of(half != 0 ? "top_left_rule" : "shared_edge_watertight");
-    edge_spec.tolerance(Tolerance::exact()).audit_ok(half != 0 ? "quads whose edges pass through pixel centres cover exactly the pixels of the edge aligned quads when the top left rule holds, and one extra pixel per edge when it does not" : "edge aligned quads sharing a diagonal cover the same pixels as the centre aligned quads of top_left_rule; a hole or double hit differs");
+    edge_spec.tolerance(Tolerance::exact()).same_as({half != 0 ? "rs.shared_edge_watertight" : "rs.top_left_rule"}, half != 0 ? "quads whose edges pass through pixel centres cover exactly the pixels of the edge aligned quads when the top left rule holds, and one extra pixel per edge when it does not" : "edge aligned quads sharing a diagonal cover the same pixels as the centre aligned quads of top_left_rule; a hole or double hit differs");
     Cases::add(std::move(edge_spec), [half](Rig& rig, CaptureSet& out) {
         const float shift = half != 0 ? 0.5f : 0.0f;
         Target& target = rig.make_target(TargetDesc{});
