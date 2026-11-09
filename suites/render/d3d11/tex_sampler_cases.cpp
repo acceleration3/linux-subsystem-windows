@@ -119,6 +119,16 @@ struct Registrar {
 };
 const Registrar kRegistrar;
 
+std::string min_max_needs(Rig& r) {
+    D3D11_FEATURE_DATA_D3D11_OPTIONS1 o{};
+    return SUCCEEDED(r.dev->CheckFeatureSupport(D3D11_FEATURE_D3D11_OPTIONS1, &o, sizeof o)) && o.MinMaxFiltering ? std::string() : std::string("min/max reduction filtering");
+}
+
+const Add kMinFilter(spec("tex", "filter_reduction_minimum_linear").variant(1).tolerance(rr::Tolerance::psnr(26)),
+                     [](Rig& r, Cap& out) { return draw_floor(r, out, sdesc(D3D11_FILTER_MINIMUM_MIN_MAG_MIP_LINEAR, D3D11_TEXTURE_ADDRESS_WRAP)); }, min_max_needs);
+const Add kMaxFilter(spec("tex", "filter_reduction_maximum_linear").variant(1).tolerance(rr::Tolerance::psnr(26)),
+                     [](Rig& r, Cap& out) { return draw_floor(r, out, sdesc(D3D11_FILTER_MAXIMUM_MIN_MAG_MIP_LINEAR, D3D11_TEXTURE_ADDRESS_WRAP)); }, min_max_needs);
+
 struct AddressRow {
     const char* name;
     D3D11_TEXTURE_ADDRESS_MODE mode;
