@@ -110,6 +110,8 @@ public:
     void fvf(DWORD value) { chk(d->SetFVF(value), "SetFVF"); }
     void draw(D3DPRIMITIVETYPE type, UINT primitives, const void* vertices, UINT stride);
     void draw_mesh(const Mesh& mesh);
+    void quad(float x0, float y0, float x1, float y1, float z, DWORD tl, DWORD tr, DWORD bl, DWORD br);
+    void quad(float x0, float y0, float x1, float y1, float z, DWORD color) { quad(x0, y0, x1, y1, z, color, color, color, color); }
     void draw_idx(D3DPRIMITIVETYPE type, UINT vertex_count, UINT primitives, const void* indices, D3DFORMAT index_format, const void* vertices,
                   UINT stride);
     void light(DWORD index, const D3DLIGHT9& value, bool enable = true);

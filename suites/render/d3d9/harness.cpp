@@ -376,6 +376,12 @@ bool Texels::pack(D3DFORMAT f, std::uint32_t c, std::uint8_t* dst) {
             dst[0] = static_cast<std::uint8_t>(static_cast<int>(r) - 128);
             dst[1] = static_cast<std::uint8_t>(static_cast<int>(g) - 128);
             return true;
+        case D3DFMT_X8L8V8U8:
+            dst[0] = static_cast<std::uint8_t>(static_cast<int>(r) - 128);
+            dst[1] = static_cast<std::uint8_t>(static_cast<int>(g) - 128);
+            dst[2] = static_cast<std::uint8_t>(b);
+            dst[3] = 0;
+            return true;
         case D3DFMT_Q8W8V8U8:
             dst[0] = static_cast<std::uint8_t>(static_cast<int>(r) - 128);
             dst[1] = static_cast<std::uint8_t>(static_cast<int>(g) - 128);
@@ -586,6 +592,16 @@ void Ctx::draw_mesh(const Mesh& mesh) {
     chk(d->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, static_cast<UINT>(mesh.vertices.size()), mesh.triangles(), mesh.indices.data(), D3DFMT_INDEX16,
                                   mesh.vertices.data(), sizeof(Vtx)),
         "DrawIndexedPrimitiveUP");
+}
+
+void Ctx::quad(float x0, float y0, float x1, float y1, float z, DWORD tl, DWORD tr, DWORD bl, DWORD br) {
+    struct V {
+        float x, y, z, rhw;
+        DWORD color;
+    };
+    const V v[4] = {{x0, y0, z, 1.0f, tl}, {x1, y0, z, 1.0f, tr}, {x0, y1, z, 1.0f, bl}, {x1, y1, z, 1.0f, br}};
+    fvf(D3DFVF_XYZRHW | D3DFVF_DIFFUSE);
+    draw(D3DPT_TRIANGLESTRIP, 2, v, sizeof(V));
 }
 
 void Ctx::draw_idx(D3DPRIMITIVETYPE type, UINT vertex_count, UINT primitives, const void* indices, D3DFORMAT index_format, const void* vertices,
