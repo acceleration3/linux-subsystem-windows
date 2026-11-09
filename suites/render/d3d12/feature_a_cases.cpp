@@ -1,5 +1,6 @@
 #include "render/common/cpu_raster.hpp"
 #include "render/d3d12/scene_util.hpp"
+#include "support/d3d12_command_list8.hpp"
 
 namespace lsw::suites::render::d3d12 {
 
@@ -1208,12 +1209,6 @@ struct StencilStream {
     Sub<D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_PRIMITIVE_TOPOLOGY, D3D12_PRIMITIVE_TOPOLOGY_TYPE> topology;
 };
 
-const GUID kIidCommandList8 = {0xee936ef9, 0x599d, 0x4d28, {0x93, 0x8e, 0x23, 0xc4, 0xad, 0x05, 0xce, 0x51}};
-
-struct ID3D12GraphicsCommandList8 : public ID3D12GraphicsCommandList7 {
-    virtual void STDMETHODCALLTYPE OMSetFrontAndBackStencilRef(UINT front_stencil_ref, UINT back_stencil_ref) = 0;
-};
-
 MeshData bowl_shell() {
     MeshData full = Shapes::sphere(20, 28, 0.9f);
     MeshData shell;
@@ -1317,7 +1312,7 @@ void register_front_back_stencil_ref() {
             const bool ok = kit.run(
                 [&](ID3D12GraphicsCommandList* list) {
                     ID3D12GraphicsCommandList8* list8 = nullptr;
-                    if (FAILED(list->QueryInterface(kIidCommandList8, reinterpret_cast<void**>(&list8)))) {
+                    if (FAILED(list->QueryInterface(__uuidof(ID3D12GraphicsCommandList8), reinterpret_cast<void**>(&list8)))) {
                         have_list8 = false;
                         return;
                     }
