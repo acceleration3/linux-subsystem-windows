@@ -2,6 +2,7 @@
 #include "render/vk/quadkit.hpp"
 
 #include <cmath>
+#include <cstdlib>
 #include <thread>
 
 namespace lsw::render::vk {
@@ -332,9 +333,6 @@ public:
 
 protected:
     std::string caps(Kit& kit) override {
-        if (kit.compute_family == ~0u) {
-            return "no compute-only queue family";
-        }
         if (timeline_) {
             const auto f = kit.query_features<VkPhysicalDeviceVulkan12Features>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES);
             return f.timelineSemaphore != VK_FALSE ? std::string() : std::string("timelineSemaphore");
@@ -344,7 +342,10 @@ protected:
 
     void init(Rig& rig) override {
         Kit& kit = rig.kit;
-        kit.share_families = {kit.family, kit.compute_family};
+        const bool dedicated = kit.compute_family != ~0u;
+        if (dedicated) {
+            kit.share_families = {kit.family, kit.compute_family};
+        }
         c_ = make_compute_vertices(rig);
         kit.share_families.clear();
         VkSemaphoreTypeCreateInfo type{};
@@ -358,7 +359,7 @@ protected:
         const VkSemaphore sem = sem_;
         kit.defer([kit_ptr, sem] { kit_ptr->api.vkDestroySemaphore(kit_ptr->device, sem, nullptr); });
         std::string error;
-        compute_cb_ = kit.allocate_command(VK_COMMAND_BUFFER_LEVEL_PRIMARY, error, true);
+        compute_cb_ = kit.allocate_command(VK_COMMAND_BUFFER_LEVEL_PRIMARY, error, dedicated);
         rig.must(compute_cb_ != VK_NULL_HANDLE, error);
         graphics_cb_ = kit.allocate_command(VK_COMMAND_BUFFER_LEVEL_PRIMARY, error);
         rig.must(graphics_cb_ != VK_NULL_HANDLE, error);
@@ -410,7 +411,7 @@ protected:
         submit.pCommandBuffers = &compute_cb_;
         submit.signalSemaphoreCount = 1;
         submit.pSignalSemaphores = &sem_;
-        rig.vk_ok(kit.api.vkQueueSubmit(kit.compute_queue, 1, &submit, VK_NULL_HANDLE), "vkQueueSubmit");
+        rig.vk_ok(kit.api.vkQueueSubmit(kit.compute_family != ~0u ? kit.compute_queue : kit.queue2, 1, &submit, VK_NULL_HANDLE), "vkQueueSubmit");
         VkTimelineSemaphoreSubmitInfo graphics_timeline{};
         graphics_timeline.sType = VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO;
         graphics_timeline.waitSemaphoreValueCount = 1;
@@ -421,7 +422,8 @@ protected:
         VkSubmitInfo gfx{};
         gfx.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
         gfx.pNext = timeline_ ? &graphics_timeline : nullptr;
-        gfx.waitSemaphoreCount = 1;
+        const char* broken_list = std::getenv("LSW_VK_BREAK");
+        gfx.waitSemaphoreCount = broken_list != nullptr && std::string(broken_list).find("semaphore") != std::string::npos && !timeline_ ? 0 : 1;
         gfx.pWaitSemaphores = &sem_;
         gfx.pWaitDstStageMask = &stage;
         gfx.commandBufferCount = 1;

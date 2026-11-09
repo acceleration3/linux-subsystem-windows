@@ -1,5 +1,9 @@
 #include "render/d3d9/harness.hpp"
 
+#include <algorithm>
+#include <cmath>
+#include <cstdlib>
+
 namespace lsw::suites::render::d3d9 {
 
 namespace {
@@ -317,6 +321,144 @@ struct Tri {
     DWORD color;
 };
 
+
+constexpr UINT kWrapTexels = 128;
+
+std::uint32_t wrap_texel(UINT index) {
+    const double angle = 6.283185307179586 * static_cast<double>(index % kWrapTexels) / kWrapTexels;
+    const unsigned r = (index % kWrapTexels) * 255 / (kWrapTexels - 1);
+    const unsigned g = static_cast<unsigned>(128.0 + 127.0 * std::sin(angle));
+    const unsigned b = 255 - r;
+    return 0xFF000000u | (r << 16) | (g << 8) | b;
+}
+
+struct WrapVertex {
+    float x, y, z, rhw;
+    DWORD color;
+    float u0, v0, u1, v1;
+};
+
+struct WrapScene {
+    const char* name;
+    bool along_u;
+    bool second_set;
+};
+
+const WrapScene kWrapScenes[] = {{"wrap_coord_u", true, false}, {"wrap_coord_v", false, false}, {"wrap_coord_set1_u", true, true}};
+
+std::uint32_t sample_wrapped(double coordinate) {
+    const double t = coordinate * kWrapTexels - 0.5;
+    const double base = std::floor(t);
+    const double f = t - base;
+    const long i0 = static_cast<long>(base);
+    const std::uint32_t a = wrap_texel(static_cast<UINT>(((i0 % 128) + 128) % 128));
+    const std::uint32_t b = wrap_texel(static_cast<UINT>(((i0 + 1) % 128 + 128) % 128));
+    std::uint32_t out = 0xFF000000u;
+    for (unsigned shift = 0; shift < 24; shift += 8) {
+        const double ca = static_cast<double>((a >> shift) & 255u);
+        const double cb = static_cast<double>((b >> shift) & 255u);
+        out |= static_cast<std::uint32_t>(std::lround(ca + (cb - ca) * f)) << shift;
+    }
+    return out;
+}
+
+void wrap_scene(Ctx& c, const WrapScene& scene) {
+    c.clear(Dx::kColor(10, 10, 40, 255));
+    Com<IDirect3DTexture9> t = c.texture(kWrapTexels, kWrapTexels, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, [&](UINT x, UINT y, UINT, UINT) { return wrap_texel(scene.along_u ? x : y); });
+    c.tex(0, t.get());
+    c.ss(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+    c.ss(0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+    c.ss(0, D3DSAMP_ADDRESSU, D3DTADDRESS_WRAP);
+    c.ss(0, D3DSAMP_ADDRESSV, D3DTADDRESS_WRAP);
+    if (scene.second_set) {
+        c.tss(0, D3DTSS_TEXCOORDINDEX, 1);
+    }
+    c.rs(c.broken("wrap") ? D3DRS_WRAP7 : (scene.second_set ? D3DRS_WRAP1 : D3DRS_WRAP0), scene.along_u ? D3DWRAPCOORD_0 : D3DWRAPCOORD_1);
+    const float a = scene.along_u ? 0.9f : 0.5f;
+    const float b = scene.along_u ? 0.1f : 0.5f;
+    const float va = scene.along_u ? 0.5f : 0.9f;
+    const float vb = scene.along_u ? 0.5f : 0.1f;
+    const WrapVertex quad[4] = {{8, 8, 0.5f, 1, 0xFFFFFFFF, scene.second_set ? 0.0f : a, scene.second_set ? 0.0f : va, a, va},
+                                {120, 8, 0.5f, 1, 0xFFFFFFFF, scene.second_set ? 0.0f : b, scene.second_set ? 0.0f : va, b, va},
+                                {8, 120, 0.5f, 1, 0xFFFFFFFF, scene.second_set ? 0.0f : a, scene.second_set ? 0.0f : vb, a, vb},
+                                {120, 120, 0.5f, 1, 0xFFFFFFFF, scene.second_set ? 0.0f : b, scene.second_set ? 0.0f : vb, b, vb}};
+    c.fvf(D3DFVF_XYZRHW | D3DFVF_DIFFUSE | D3DFVF_TEX2);
+    c.draw(D3DPT_TRIANGLESTRIP, 2, quad, sizeof(WrapVertex));
+}
+
+bool wrap_reference(const WrapScene& scene, rr::CaptureSet& out) {
+    rr::Image image(128, 128, rr::PixelKind::Bgra8Unorm);
+    for (UINT y = 0; y < 128; ++y) {
+        for (UINT x = 0; x < 128; ++x) {
+            std::uint32_t argb = 0xFF0A0A28u;
+            if (x >= 8 && x < 120 && y >= 8 && y < 120) {
+                const double along_x = static_cast<double>(x - 8) / 112.0;
+                const double along_y = static_cast<double>(y - 8) / 112.0;
+                argb = sample_wrapped(scene.along_u ? 0.9 + 0.2 * along_x : 0.9 + 0.2 * along_y);
+            }
+            image.set_rgba8(x, y, ((argb >> 16) & 255u) | (((argb >> 8) & 255u) << 8) | ((argb & 255u) << 16) | (255u << 24));
+        }
+    }
+    out.add("", std::move(image));
+    return true;
+}
+
+struct LineSegment {
+    int x0, y0, x1, y1;
+};
+
+const LineSegment kLastPixelLines[] = {{10, 20, 100, 20}, {20, 30, 20, 118}, {30, 40, 90, 100}, {110, 10, 40, 80}};
+
+void lastpixel_scene(Ctx& c, bool last_pixel) {
+    c.clear(Dx::kColor(0, 0, 0, 255));
+    c.rs(D3DRS_LASTPIXEL, (last_pixel != c.broken("lastpixel")) ? TRUE : FALSE);
+    struct V {
+        float x, y, z, rhw;
+        DWORD color;
+    };
+    std::vector<V> vertices;
+    for (const LineSegment& line : kLastPixelLines) {
+        vertices.push_back({static_cast<float>(line.x0), static_cast<float>(line.y0), 0.5f, 1.0f, 0xFFFFFFFF});
+        vertices.push_back({static_cast<float>(line.x1), static_cast<float>(line.y1), 0.5f, 1.0f, 0xFFFFFFFF});
+    }
+    c.fvf(D3DFVF_XYZRHW | D3DFVF_DIFFUSE);
+    c.draw(D3DPT_LINELIST, static_cast<UINT>(vertices.size() / 2), vertices.data(), sizeof(V));
+}
+
+bool lastpixel_reference(bool last_pixel, rr::CaptureSet& out) {
+    rr::Image image(128, 128, rr::PixelKind::Bgra8Unorm);
+    for (UINT y = 0; y < 128; ++y) {
+        for (UINT x = 0; x < 128; ++x) {
+            image.set_rgba8(x, y, 0xFF000000u);
+        }
+    }
+    for (const LineSegment& line : kLastPixelLines) {
+        const int steps = std::max(std::abs(line.x1 - line.x0), std::abs(line.y1 - line.y0));
+        for (int k = 0; k <= steps; ++k) {
+            if (k == steps && !last_pixel) {
+                break;
+            }
+            const double t = steps == 0 ? 0.0 : static_cast<double>(k) / steps;
+            const int px = static_cast<int>(std::lround(line.x0 + (line.x1 - line.x0) * t));
+            const int py = static_cast<int>(std::lround(line.y0 + (line.y1 - line.y0) * t));
+            image.set_rgba8(static_cast<UINT>(px), static_cast<UINT>(py), 0xFFFFFFFFu);
+        }
+    }
+    out.add("", std::move(image));
+    return true;
+}
+
+void wrap_and_lastpixel_cases() {
+    for (const WrapScene& scene : kWrapScenes) {
+        Cases::single(rr::CaseSpec("rs", scene.name).tolerance(rr::Tolerance::blend(3).with_outliers(0.01)), [&scene](Ctx& c) { wrap_scene(c, scene); }, {}, nullptr,
+                      [&scene](Kit&, unsigned, rr::CaptureSet& out, std::string&) { return wrap_reference(scene, out); });
+    }
+    for (int on = 0; on < 2; ++on) {
+        Cases::single(rr::CaseSpec("rs", on != 0 ? "lastpixel_on" : "lastpixel_off").tolerance(rr::Tolerance::exact()), [on](Ctx& c) { lastpixel_scene(c, on != 0); }, {}, nullptr,
+                      [on](Kit&, unsigned, rr::CaptureSet& out, std::string&) { return lastpixel_reference(on != 0, out); });
+    }
+}
+
 void raster_cases() {
     struct CullInfo {
         const char* name;
@@ -392,6 +534,7 @@ const Registrar kWrite(write_cases);
 const Registrar kTest(test_cases);
 const Registrar kStencil(stencil_cases);
 const Registrar kRaster(raster_cases);
+const Registrar kWrapAndLastPixel(wrap_and_lastpixel_cases);
 
 }  // namespace
 
