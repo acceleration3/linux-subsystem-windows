@@ -48,7 +48,13 @@ class Machine:
         (directory / "qemu-log.txt").write_text(out)
         script = f"""
 mkdir -p {CORES}
-pid=$(coredumpctl list --no-pager --no-legend --since=-2h qemu-system-x86_64 2>/dev/null | awk '$5 ~ /^[0-9]+$/ {{ p = $5 }} END {{ print p }}')
+pid=
+for attempt in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+    pid=$(coredumpctl list --no-pager --no-legend --since=-10min qemu-system-x86_64 2>/dev/null | awk '$5 ~ /^[0-9]+$/ {{ p = $5 }} END {{ print p }}')
+    case " {' '.join(sorted(seen))} " in *" $pid "*) pid= ;; esac
+    [ -n "$pid" ] && break
+    sleep 6
+done
 echo "seen: {' '.join(sorted(seen))}"
 [ -n "$pid" ] || {{ echo "no core"; exit 0; }}
 case " {' '.join(sorted(seen))} " in *" $pid "*) echo "no new core"; exit 0;; esac
@@ -63,7 +69,7 @@ else
     echo "core: kept in the journal only (coredumpctl dump $pid), $free G free"
 fi
 """
-        code, out = self.sh(script, 120)
+        code, out = self.sh(script, 240)
         (directory / "coredump.txt").write_text(out)
         info = {"log": str(directory / "qemu-log.txt"), "text": out}
         for line in out.splitlines():
