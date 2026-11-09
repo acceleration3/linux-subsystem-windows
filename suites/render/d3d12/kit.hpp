@@ -6,7 +6,7 @@
 #include "support/d3d12_rig.hpp"
 #include "support/d3d12_root.hpp"
 #include "support/d3d12_tools.hpp"
-#include "support/dxc_compiler.hpp"
+#include "render/d3d12/dxc.hpp"
 
 #include <vector>
 
@@ -39,6 +39,18 @@ public:
 
     [[nodiscard]] bool compile(const std::string& source, char stage, Bytes& code, std::string& error);
 
+    [[nodiscard]] bool compile_as(const std::string& source, const char* entry, const char* stage, Bytes& code, std::string& error,
+                                  const std::vector<const wchar_t*>& arguments = {});
+
+    [[nodiscard]] unsigned shader_minor() const { return dxc ? spec_variant - 1 : 0; }
+
+    [[nodiscard]] bool submit(const D3d12Queue::Recorder& record, std::string& error);
+
+    [[nodiscard]] bool read_image(ID3D12Resource* resource, D3D12_RESOURCE_STATES state, UINT subresource, DXGI_FORMAT format, rr::Image& out,
+                                  std::string& error);
+
+    [[nodiscard]] static bool kind_for(DXGI_FORMAT format, rr::PixelKind& kind);
+
     [[nodiscard]] bool make_target(Target& out, UINT width, UINT height, DXGI_FORMAT format, std::string& error);
     [[nodiscard]] bool make_depth(Depth& out, UINT width, UINT height, std::string& error);
     [[nodiscard]] ID3D12Resource* make_upload(const void* data, UINT64 size, std::string& error);
@@ -57,8 +69,9 @@ public:
     bool dxc = false;
     std::string name;
     D3d12Rig rig;
-    DxcCompiler compiler;
+    Dxc compiler;
     bool compiler_ready = false;
+    unsigned spec_variant = 0;
     FrameSwap swap;
     std::uint64_t ring[3] = {0, 0, 0};
     unsigned ring_index = 0;

@@ -3,13 +3,21 @@
 #include "render/d3d/convert.hpp"
 #include "support/target_adapter.hpp"
 
+#include <cstdlib>
 #include <cstring>
 
 namespace lsw::suites::render::d3d12 {
 
 OpenStatus Kit::open(bool use_warp, const rr::CaseSpec& spec, std::string& error) {
     warp = use_warp;
-    dxc = spec.variant() == 1;
+    if (std::getenv("LSW_D3D12_DEBUG") != nullptr) {
+        Com<ID3D12Debug> debug;
+        if (SUCCEEDED(::D3D12GetDebugInterface(__uuidof(ID3D12Debug), debug.put_void()))) {
+            debug->EnableDebugLayer();
+        }
+    }
+    spec_variant = spec.variant();
+    dxc = spec_variant >= 1;
     bool opened = false;
     if (warp) {
         name = "WARP12";
@@ -53,16 +61,96 @@ bool Kit::end_frame(std::string& error) {
 }
 
 bool Kit::compile(const std::string& source, char stage, Bytes& code, std::string& error) {
+    return compile_as(source, "main", stage == 'v' ? "vs" : "ps", code, error);
+}
+
+bool Kit::compile_as(const std::string& source, const char* entry, const char* stage, Bytes& code, std::string& error,
+                     const std::vector<const wchar_t*>& arguments) {
     if (dxc) {
-        const wchar_t* target = stage == 'v' ? L"vs_6_0" : L"ps_6_0";
+        const std::string target = std::string(stage) + "_6_" + std::to_string(shader_minor());
+        const std::wstring wide_target(target.begin(), target.end());
+        const std::string name_text(entry);
+        const std::wstring wide_entry(name_text.begin(), name_text.end());
         std::string log;
-        if (!compiler.compile(source, L"main", target, code, log)) {
-            error = "DXC compile failed: " + log;
+        if (!compiler.compile(source, std::string(stage) == "lib" ? nullptr : wide_entry.c_str(), wide_target.c_str(), arguments, code, log)) {
+            error = "DXC compile failed (" + target + "): " + log;
             return false;
         }
         return true;
     }
-    return D3d12Tools::compile(source, "main", stage == 'v' ? "vs_5_1" : "ps_5_1", code, error);
+    return D3d12Tools::compile(source, entry, (std::string(stage) + "_5_1").c_str(), code, error);
+}
+
+bool Kit::submit(const D3d12Queue::Recorder& record, std::string& error) {
+    std::uint64_t value = 0;
+    return rig.direct().run(record, value, error);
+}
+
+bool Kit::kind_for(DXGI_FORMAT format, rr::PixelKind& kind) {
+    switch (format) {
+        case DXGI_FORMAT_R8_UNORM:
+            kind = rr::PixelKind::R8Unorm;
+            return true;
+        case DXGI_FORMAT_R8G8_UNORM:
+            kind = rr::PixelKind::Rg8Unorm;
+            return true;
+        case DXGI_FORMAT_R16_FLOAT:
+            kind = rr::PixelKind::R16Float;
+            return true;
+        case DXGI_FORMAT_R16G16_FLOAT:
+            kind = rr::PixelKind::Rg16Float;
+            return true;
+        case DXGI_FORMAT_R16_UNORM:
+            kind = rr::PixelKind::R16Unorm;
+            return true;
+        case DXGI_FORMAT_R16_UINT:
+            kind = rr::PixelKind::R16Uint;
+            return true;
+        case DXGI_FORMAT_R32G32_FLOAT:
+            kind = rr::PixelKind::Rg32Float;
+            return true;
+        case DXGI_FORMAT_R16G16B16A16_UNORM:
+            kind = rr::PixelKind::Rgba16Unorm;
+            return true;
+        case DXGI_FORMAT_R8G8B8A8_UINT:
+            kind = rr::PixelKind::Rgba8Uint;
+            return true;
+        case DXGI_FORMAT_R16G16B16A16_UINT:
+            kind = rr::PixelKind::Rgba16Uint;
+            return true;
+        case DXGI_FORMAT_R32_TYPELESS:
+            kind = rr::PixelKind::R32Float;
+            return true;
+        case DXGI_FORMAT_R10G10B10A2_UNORM:
+        case DXGI_FORMAT_R11G11B10_FLOAT:
+        case DXGI_FORMAT_R8G8B8A8_TYPELESS:
+        case DXGI_FORMAT_R8G8B8A8_SNORM:
+            kind = rr::PixelKind::Rgba8Unorm;
+            return true;
+        default:
+            return Convert::kind_of(format, kind);
+    }
+}
+
+bool Kit::read_image(ID3D12Resource* resource, D3D12_RESOURCE_STATES state, UINT subresource, DXGI_FORMAT format, rr::Image& out,
+                     std::string& error) {
+    TexelImage texels;
+    if (!D3d12Tools::read_texture(rig, resource, state, subresource, texels, error)) {
+        return false;
+    }
+    rr::PixelKind kind;
+    if (!kind_for(format, kind)) {
+        error = "no image kind for DXGI format " + std::to_string(static_cast<int>(format));
+        return false;
+    }
+    rr::Image image(texels.width, texels.rows * texels.depth, kind);
+    if (texels.row_bytes != image.stride() || texels.data.size() != image.bytes().size()) {
+        error = "texel readback size " + std::to_string(texels.data.size()) + " does not match the image kind size " + std::to_string(image.bytes().size());
+        return false;
+    }
+    std::memcpy(image.bytes().data(), texels.data.data(), image.bytes().size());
+    out = std::move(image);
+    return true;
 }
 
 bool Kit::make_target(Target& out, UINT width, UINT height, DXGI_FORMAT format, std::string& error) {
@@ -133,7 +221,27 @@ ID3D12Resource* Kit::make_upload(const void* data, UINT64 size, std::string& err
     return buffer;
 }
 
-bool Kit::run(const D3d12Queue::Recorder& record, std::string& error) { return rig.direct().run_wait(record, error); }
+bool Kit::run(const D3d12Queue::Recorder& record, std::string& error) {
+    if (rig.direct().run_wait(record, error)) {
+        return true;
+    }
+    if (std::getenv("LSW_D3D12_DEBUG") != nullptr) {
+        Com<ID3D12InfoQueue> queue = rig.as<ID3D12InfoQueue>();
+        if (queue) {
+            const UINT64 count = queue->GetNumStoredMessages();
+            for (UINT64 i = 0; i < count && i < 8; ++i) {
+                SIZE_T length = 0;
+                queue->GetMessage(i, nullptr, &length);
+                std::vector<char> storage(length);
+                auto* message = reinterpret_cast<D3D12_MESSAGE*>(storage.data());
+                if (SUCCEEDED(queue->GetMessage(i, message, &length))) {
+                    error += std::string(" | ") + message->pDescription;
+                }
+            }
+        }
+    }
+    return false;
+}
 
 bool Kit::read_color(Target& target, rr::Image& out, std::string& error) {
     TexelImage texels;
