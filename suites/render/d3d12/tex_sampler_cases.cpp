@@ -58,7 +58,7 @@ void register_filters() {
                           D3D12_SAMPLER_DESC sampler = Binder::sampler_desc(item.filter, D3D12_TEXTURE_ADDRESS_MODE_WRAP);
                           sampler.MaxAnisotropy = item.aniso;
                           const float magnify[4] = {0.25f, 0.25f, 0, 0};
-                          return run_sampler(kit, sampler, "return tex.Sample(smp, i.uv * p1.xy);", magnified ? magnify : kScale4, aniso ? -1.35f : -1.2f, out, error);
+                          return run_sampler(kit, sampler, "return tex.Sample(smp, i.uv * p1.xy);", magnified ? magnify : kScale4, aniso ? -1.52f : -1.2f, out, error);
                       });
     }
     struct Lod {

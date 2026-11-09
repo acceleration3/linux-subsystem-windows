@@ -425,7 +425,7 @@ bool draw_depth_strips(Kit& kit, DXGI_FORMAT depth_format, D3D12_COMPARISON_FUNC
         [&](ID3D12GraphicsCommandList* list) {
             const float clear[4] = {0.05f, 0.05f, 0.1f, 1.0f};
             stage.canvas.begin(list, clear);
-            const float offsets[3] = {0.0f, precision ? 0.0001f : 0.02f, precision ? -0.0001f : -0.02f};
+            const float offsets[3] = {0.0f, precision ? 0.00003f : 0.02f, precision ? -0.00003f : -0.02f};
             for (int k = 0; k < 3; ++k) {
                 const float x = -0.75f + 0.75f * static_cast<float>(k);
                 const rr::Mat4 strip = rr::Mat4::translate(x, 0.0f, 0.0f) * rr::Mat4::scale(0.3f, 0.8f, 1.0f);
