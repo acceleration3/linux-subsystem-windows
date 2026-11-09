@@ -526,6 +526,73 @@ void register_shader_model_features() {
         });
 }
 
+void register_immediate_writes() {
+    Cases::single(rr::CaseSpec("cs", "write_buffer_immediate_values_and_ordering").tolerance(rr::Tolerance::exact()).tag("compute"), [](Kit& kit, rr::CaptureSet& out, std::string& error) {
+        ID3D12Resource* buffer = uav_buffer(kit, 64, error);
+        if (buffer == nullptr) {
+            return false;
+        }
+        bool supported = true;
+        const bool ok = kit.run([&](ID3D12GraphicsCommandList* list) {
+            ID3D12GraphicsCommandList2* list2 = nullptr;
+            if (FAILED(list->QueryInterface(__uuidof(ID3D12GraphicsCommandList2), reinterpret_cast<void**>(&list2)))) {
+                supported = false;
+                return;
+            }
+            const D3D12_GPU_VIRTUAL_ADDRESS base = buffer->GetGPUVirtualAddress();
+            D3D12_WRITEBUFFERIMMEDIATE_PARAMETER first[3] = {{base, 0x11111111u}, {base + 4, 0x22222222u}, {base + 8, 0x33333333u}};
+            D3D12_WRITEBUFFERIMMEDIATE_MODE modes[3] = {D3D12_WRITEBUFFERIMMEDIATE_MODE_DEFAULT, D3D12_WRITEBUFFERIMMEDIATE_MODE_MARKER_IN, D3D12_WRITEBUFFERIMMEDIATE_MODE_MARKER_OUT};
+            list2->WriteBufferImmediate(3, first, modes);
+            D3D12_WRITEBUFFERIMMEDIATE_PARAMETER second[2] = {{base + 8, 0xabcdef01u}, {base + 252, 0x7fu}};
+            list2->WriteBufferImmediate(2, second, nullptr);
+            list2->Release();
+        }, error);
+        if (!ok) {
+            return false;
+        }
+        if (!supported) {
+            return fail_with(error, "ID3D12GraphicsCommandList2 is not available");
+        }
+        std::vector<std::uint32_t> words;
+        if (!D3d12Tools::read_words(kit.rig, buffer, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, 64, words, error)) {
+            return false;
+        }
+        out.add("", words_image(words, 4));
+        return true;
+    });
+    Cases::single(rr::CaseSpec("cs", "atomic_copy_buffer_uint").tolerance(rr::Tolerance::exact()).tag("compute"), [](Kit& kit, rr::CaptureSet& out, std::string& error) {
+        ID3D12Resource* source = uav_buffer(kit, 64, error, noise_words(64, 5, 1000000).data());
+        ID3D12Resource* destination = uav_buffer(kit, 64, error);
+        if (source == nullptr || destination == nullptr) {
+            return false;
+        }
+        bool supported = true;
+        const bool ok = kit.run([&](ID3D12GraphicsCommandList* list) {
+            ID3D12GraphicsCommandList1* list1 = nullptr;
+            if (FAILED(list->QueryInterface(__uuidof(ID3D12GraphicsCommandList1), reinterpret_cast<void**>(&list1)))) {
+                supported = false;
+                return;
+            }
+            for (UINT k = 0; k < 16; ++k) {
+                list1->AtomicCopyBufferUINT(destination, k * 16 + 4, source, (15 - k) * 16, 0, nullptr, nullptr);
+            }
+            list1->Release();
+        }, error);
+        if (!ok) {
+            return false;
+        }
+        if (!supported) {
+            return fail_with(error, "ID3D12GraphicsCommandList1 is not available");
+        }
+        std::vector<std::uint32_t> words;
+        if (!D3d12Tools::read_words(kit.rig, destination, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, 64, words, error)) {
+            return false;
+        }
+        out.add("", words_image(words, 4));
+        return true;
+    });
+}
+
 const struct Registrar {
     Registrar() {
         register_uav_formats();
@@ -533,6 +600,7 @@ const struct Registrar {
         register_texture_uavs();
         register_wave();
         register_shader_model_features();
+        register_immediate_writes();
     }
 } kRegistrar;
 
