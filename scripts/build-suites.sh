@@ -23,10 +23,18 @@ build_one() {
     cmake --build "${dir}" ${CMAKE_BUILD_PARALLEL_LEVEL:+-j "${CMAKE_BUILD_PARALLEL_LEVEL}"}
 }
 
-build_one 64-bit "${BUILD}" toolchain-mingw-w64.cmake
-build_one 32-bit "${BUILD32}" toolchain-mingw-w64-i686.cmake
+BITS="${LSW_SUITES_BITS:-both}"
+exes=()
+if [[ "${BITS}" != 32 ]]; then
+    build_one 64-bit "${BUILD}" toolchain-mingw-w64.cmake
+    exes+=("${BUILD}/lsw-suites64.exe")
+fi
+if [[ "${BITS}" != 64 ]]; then
+    build_one 32-bit "${BUILD32}" toolchain-mingw-w64-i686.cmake
+    exes+=("${BUILD32}/lsw-suites32.exe")
+fi
 
-for exe in "${BUILD}/lsw-suites64.exe" "${BUILD32}/lsw-suites32.exe"; do
+for exe in "${exes[@]}"; do
     if [[ ! -f "${exe}" ]]; then
         echo "!!! Build did not produce ${exe}" >&2
         exit 1

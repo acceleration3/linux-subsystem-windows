@@ -54,6 +54,8 @@ suites/
 | `--json FILE` | write the result file (schema in 2.4); the per-check log goes next to it with the extension `.jsonl` (`r64.json` gives `r64.jsonl`) |
 | `--artifacts DIR` | where failing checks drop images, buffers and logs (default `.\lsw-suites-artifacts`) |
 | `--refs DIR` | host reference images for the render suite (default `<exe dir>\render-refs`; workers get it as `LSW_SUITES_REFS`) |
+| `--adapter first\|N\|luid:HEX\|uuid:HEX\|name:SUBSTR` | which accel-virt adapter the checks use (default `first`; workers get it as `LSW_SUITES_ADAPTER`); the result file's `adapter` block names it (`index`, `name`, `luid`, `pci`, `vulkan_uuid`) |
+| `--list-adapters` | print each accel adapter with index, LUID, PCI ids, output count and the Vulkan device UUID, then exit |
 | `--run-one ID` | internal: run one check in this process (used by workers) |
 
 ### Parallelism
@@ -1436,3 +1438,28 @@ suites/render-ref/        lsw-render-ref, the Linux tool that renders the Vulkan
 - Self-validation: `--device-under-test warp` (worker env `LSW_RENDER_DUT=warp`) runs every D3D render check with a second, independent WARP device (D3D9On12 over WARP12 for d3d9) as the device under test, records `dut=warp` and marks the JSON adapter; vk and gl checks are unaffected.
 - Caps: a case that needs an optional feature reports it through `unsupported`. A host reference skipped for a missing
   feature leaves `skip.txt`; the guest skips only if it lacks the feature too, and fails if the two disagree.
+- Adapters: `TargetAdapter::pick` honours `--adapter` for every kit (d3d9 maps the chosen LUID to its D3D9 ordinal, d3d10 to
+  d3d12 and Vulkan open that LUID). OpenGL goes through WGL on a window, so it can only use an adapter that drives a
+  display; for an adapter without outputs (an iGPU with `display=off`) every gl check skips with a reason naming the
+  adapter.
+- Several GPUs: `lsw-render-ref --gpu all` renders every `host-gpu=` of the `lsw` domain into `OUT/<uuid>/` (each with its
+  own `device.json`); `--gpu uuid:HEX` renders one into `OUT` as before. The guest's reference check looks in
+  `<refs>/<its Vulkan or GL device UUID>/` first and falls back to `<refs>/` when that holds a `device.json` for the same UUID.
+- `scripts/render-report.py`: builds one self-contained HTML page from runs (`--run json=R,artifacts=DIR|ZIP,refs=DIR,
+  audit=A,host=H,gpu=G,bits=N` or `--tree ROOT` with `<host>/<gpu>/x<bits>/result.json`). Every test of every run is listed
+  (API, group, test; one status column per host:GPU and bitness) with filters, a baseline comparison (`--baseline-tree`,
+  `--baseline-run`) and a comparison panel (side by side, swipe, onion skin, difference with amplification and threshold,
+  zoom with pixel readout, frame stepper, device against reference or against another GPU's image). Images are
+  deduplicated by hash and embedded as PNG (`--images all|differing|failed|none`); the size is printed and warned about
+  above 100 MB. `--import-matrix DIR --into ROOT` takes the render results of a `gpu-test.sh` run.
+- `scripts/render-run.sh`: one command for a local or multi-host run. It builds, renders the references for the selected
+  GPUs, starts the VM inside the heavy lock (`vm.sh up`, `done`), pushes the executables, dxc and references to
+  `C:\av\render-run`, runs `--suite render --dump-captures` per GPU (`--adapter uuid:`) and bitness, pulls results and
+  captures, runs `render-audit.py`, and writes `build-render-report/<timestamp>/report.html`.
+  `--hosts local,test,accel` and `--gpus all|HOST:uuid:HEX|HOST:name:SUBSTR|HOST:N` select what runs, `--list-gpus`
+  prints every host's GPUs, `--bits`, `--filter`, `--jobs`, `--baseline DIR`, `--images`, `--no-build` and `--dry-run`
+  (prints every step, touches no remote host). Remote hosts use `gpu-test.sh` (deploy, matrix run per GPU, collect) and
+  need an open ssh master (`gpu-test.sh master HOST` prints the command that opens one).
+- `scripts/gpu-test/gpu_matrix.py run --bits 64|32|both` limits the suites suite to one bitness; with only the render
+  suite selected the pacing phase is skipped. `gpu-test.sh render-report [RUN]` writes `render-report-<host>.html` per
+  host and `render-report.html` across hosts into the run directory.

@@ -99,6 +99,7 @@ SUITES = ("probes", "d3d11", "d3d12", "vulkan", "opengl", "opencl", "clgl", "sui
 SUITES_RUNS = (("64", "main"), ("32", "main"), ("64", "pacing"), ("32", "pacing"))
 SUITES_EXECUTABLES = {"64": TREE / "build-suites" / "lsw-suites64.exe",
                       "32": TREE / "build-suites32" / "lsw-suites32.exe"}
+SUITES_BITS = ["64", "32"]
 SUITES_TIMEOUT = 2 * 60 * 60
 RENDER_REF = TREE / "build-render-ref" / "lsw-render-ref"
 GUEST_REFS = f"{GUEST_DIR}\\render-refs"
@@ -706,7 +707,10 @@ def run_suites(guest, out, suite_args, gpu=None, qemu_env=()):
                 failures.append({"case": "render-refs", "detail": f"host reference {line}"})
         except (AgentError, suite.StepFailed, OSError, subprocess.SubprocessError) as error:
             failures.append({"case": "render-refs", "detail": str(error)})
+    render_only = selected_suites(suite_args) == ["render"]
     for bits, phase in SUITES_RUNS:
+        if bits not in SUITES_BITS or (render_only and phase == "pacing"):
+            continue
         executable = SUITES_EXECUTABLES[bits]
         program = f"lsw-suites{bits}"
         label = f"{program}-{phase}"
@@ -1007,6 +1011,7 @@ def command_run(args):
         for problem in problems:
             say(f"preflight: {problem}")
         return 2
+    SUITES_BITS[:] = {"64": ["64"], "32": ["32"]}.get(args.bits, ["64", "32"])
     args.suites = [name.strip() for name in args.suites.split(",") if name.strip()]
     unknown = [name for name in args.suites if name not in SUITES + APP_SUITES + TRACE_SUITES]
     if unknown:
@@ -1136,6 +1141,7 @@ def main():
                                                   "(default: every one in the store)")
     run.add_argument("--suite-args", default="", help="options for lsw-suites64.exe and lsw-suites32.exe of the "
                                                       "suites suite, e.g. \"--suite sanity --filter 'sanity.d3d11.*' --jobs 8\"")
+    run.add_argument("--bits", default="both", choices=("64", "32", "both"), help="which lsw-suites bitness the suites suite runs")
     run.add_argument("--frames", type=int, default=30, help="timed frames per sample: correctness, not speed")
     run.add_argument("--warmup", type=int, default=5)
     run.add_argument("--user", default="lsw", help="the guest account the share is opened as")

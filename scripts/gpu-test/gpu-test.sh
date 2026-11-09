@@ -32,10 +32,15 @@ split_arguments() {
     if [[ ${#HOSTS[@]} -eq 0 ]]; then mapfile -t HOSTS < <(all_hosts); fi
 }
 
+dry() { [[ ${LSW_GPU_TEST_DRY:-0} == 1 ]]; }
+
 on() {
     local target
     target="$(target_of "$1")"
-    if [[ ${target} == local ]]; then
+    if dry; then
+        printf '[dry-run] on %s (%s):\n' "$1" "${target}"
+        sed 's/^/    /'
+    elif [[ ${target} == local ]]; then
         (cd ~ && bash -s)
     else
         ssh "${SSH_OPTS[@]}" "${target}" bash -s
@@ -48,7 +53,31 @@ destination() {
     if [[ ${target} == local ]]; then echo "${HOME}/$2"; else echo "${target}:$2"; fi
 }
 
-sync_to() { rsync -e "ssh ${SSH_OPTS[*]}" "$@"; }
+sync_to() {
+    if dry; then
+        printf '[dry-run] rsync %s\n' "${*: -2:1} -> ${*: -1}"
+    else
+        rsync -e "ssh ${SSH_OPTS[*]}" "$@"
+    fi
+}
+
+control_path() { echo "${LSW_GPU_TEST_CONTROL_PATH:-/tmp/lsw-gpu-test-%C}"; }
+
+master_open() {
+    local target
+    target="$(target_of "$1")"
+    [[ ${target} == local ]] && return 0
+    ssh -O check -o "ControlPath=$(control_path)" "${target}" >/dev/null 2>&1
+}
+
+master_hint() {
+    printf 'no ssh master is open for %s. Open one yourself (it asks for the password), then run again:\n' "$1"
+    printf '  ! ssh -o ControlMaster=yes -o "ControlPath=%s" -o ControlPersist=10m -fN %s\n' "$(control_path)" "$(target_of "$1")"
+}
+
+tree_of() {
+    if [[ $(target_of "$1") == local ]]; then echo "${LSW_GPU_TEST_LOCAL_TREE:-${ROOT}}"; else echo "${BASE}/tree"; fi
+}
 
 last_run() {
     [[ -f ${RESULTS}/last-run ]] || die "no run started yet"
@@ -126,9 +155,12 @@ cmd_deploy() {
     local list
     list="$(mktemp)"
     trap 'rm -f "${list}"' RETURN
-    bundle_paths > "${list}"
+    bundle_paths > "${list}" 2>/dev/null || dry || die "the build outputs are incomplete: run gpu-test.sh build first"
     while read -r path; do
-        [[ -e ${ROOT}/${path} ]] || die "${path} is missing: run gpu-test.sh build first"
+        if [[ ! -e ${ROOT}/${path} ]]; then
+            dry && say "(dry-run) ${path} is missing: gpu-test.sh build would have to run first" && continue
+            die "${path} is missing: run gpu-test.sh build first"
+        fi
     done < "${list}"
     for host in "${HOSTS[@]}"; do
         say "Deploying to ${host}"
@@ -156,6 +188,10 @@ EOF
 
 ship_missing_libraries() {
     local host=$1 round missing name path staged
+    if dry; then
+        say "(dry-run) would ship the shared libraries ${host} lacks for QEMU and the executor"
+        return 0
+    fi
     staged="$(mktemp -d)"
     for round in 1 2 3 4 5; do
         missing="$(on "${host}" <<EOF
@@ -192,10 +228,12 @@ cmd_run() {
     split_arguments "$@"
     local run
     run="${LSW_GPU_TEST_RUN:-$(date +%Y%m%d-%H%M%S)}"
-    mkdir -p "${RESULTS}/${run}"
-    { cat "${RESULTS}/${run}/hosts" 2>/dev/null || true; printf '%s\n' "${HOSTS[@]}"; } | sort -u > "${RESULTS}/${run}/hosts.new"
-    mv "${RESULTS}/${run}/hosts.new" "${RESULTS}/${run}/hosts"
-    echo "${run}" > "${RESULTS}/last-run"
+    if ! dry; then
+        mkdir -p "${RESULTS}/${run}"
+        { cat "${RESULTS}/${run}/hosts" 2>/dev/null || true; printf '%s\n' "${HOSTS[@]}"; } | sort -u > "${RESULTS}/${run}/hosts.new"
+        mv "${RESULTS}/${run}/hosts.new" "${RESULTS}/${run}/hosts"
+        echo "${run}" > "${RESULTS}/last-run"
+    fi
     local options=""
     [[ ${#PASS[@]} -gt 0 ]] && options="$(printf ' %q' "${PASS[@]}")"
     for host in "${HOSTS[@]}"; do
@@ -286,6 +324,45 @@ cmd_all() {
     cmd_report "${run}"
 }
 
+cmd_gpus() {
+    split_arguments "$@"
+    for host in "${HOSTS[@]}"; do
+        on "${host}" <<< "python3 -B $(tree_of "${host}")/scripts/gpu-test/gpu_matrix.py gpus"
+    done
+}
+
+cmd_master() {
+    split_arguments "$@"
+    local status=0
+    for host in "${HOSTS[@]}"; do
+        if master_open "${host}"; then
+            echo "${host}: ssh master open"
+        else
+            master_hint "${host}"
+            status=1
+        fi
+    done
+    return "${status}"
+}
+
+cmd_render_report() {
+    local run="${1:-$(last_run)}"
+    local root="${RESULTS}/${run}"
+    local imported="${root}/render"
+    rm -rf "${imported}"
+    python3 -B "${ROOT}/scripts/render-report.py" --import-matrix "${root}" --into "${imported}"
+    local host
+    for host in $(run_hosts "${run}"); do
+        [[ -d ${imported}/${host} ]] || continue
+        mkdir -p "${root}/render-${host}"
+        cp -a "${imported}/${host}" "${root}/render-${host}/"
+        python3 -B "${ROOT}/scripts/render-report.py" --tree "${root}/render-${host}" --out "${root}/render-report-${host}.html" \
+            --title "Render suite report, ${host}"
+    done
+    python3 -B "${ROOT}/scripts/render-report.py" --tree "${imported}" --out "${root}/render-report.html" \
+        --title "Render suite report, every host"
+}
+
 cmd_restore() {
     split_arguments "$@"
     for host in "${HOSTS[@]}"; do
@@ -362,6 +439,9 @@ runs every graphics API's tests on every GPU of each machine, in its LSW VM.
   wait     [RUN]            until every host finished
   collect  [RUN]            results into build/gpu-test/RUN
   report   [RUN]            the failures, every host and GPU
+  render-report [RUN]       HTML reports of the render suite results in a run, per host and combined
+  gpus     [HOST...]        the GPUs of each host a run would test
+  master   [HOST...]        whether an ssh master is open for each host
   all      [HOST...] [-- OPTIONS]
   restore  [HOST...]        the VM definition a killed run changed
   provision HOST [-- lsw-manager options]
@@ -386,6 +466,9 @@ case "${command}" in
     wait)       cmd_wait "$@" ;;
     collect)    cmd_collect "$@" ;;
     report)     cmd_report "$@" ;;
+    render-report) cmd_render_report "$@" ;;
+    gpus)       cmd_gpus "$@" ;;
+    master)     cmd_master "$@" ;;
     all)        cmd_all "$@" ;;
     restore)    cmd_restore "$@" ;;
     provision)  cmd_provision "$@" ;;
