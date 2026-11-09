@@ -75,4 +75,4 @@ with open(out_dir + "/enums.inc", "w") as out:
             if short in done:
                 continue
             done.add(short)
-            out.write("constexpr GLenum %s = 0x%X;\n" % (short, number))
+            out.write('#pragma push_macro("%s")\n#undef %s\nconstexpr GLenum %s = 0x%X;\n#pragma pop_macro("%s")\n' % (short, short, short, number, short))

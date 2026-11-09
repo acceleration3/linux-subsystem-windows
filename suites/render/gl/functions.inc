@@ -542,4 +542,5 @@
     X(void, glMap2f, GLenum, GLfloat, GLfloat, GLint, GLint, GLfloat, GLfloat, GLint, GLint, const GLfloat *) \
     X(void, glMapGrid2f, GLint, GLfloat, GLfloat, GLint, GLfloat, GLfloat) \
     X(void, glEvalMesh2, GLenum, GLint, GLint, GLint, GLint) \
-    X(void, glEvalCoord2f, GLfloat, GLfloat)
+    X(void, glEvalCoord2f, GLfloat, GLfloat) \
+    X(void, glDrawMeshTasksNV, GLuint, GLuint)
