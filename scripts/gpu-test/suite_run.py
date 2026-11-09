@@ -151,6 +151,10 @@ class Context:
                 seen = self.generation
             state = self.machine.state()
             reason = None
+            if state == "pmsuspended":
+                self.machine.sh("virsh -c qemu:///session dompmwakeup lsw", 60)
+                time.sleep(5)
+                continue
             if state not in ("running", "unknown"):
                 reason = f"the domain is {state}"
             else:
