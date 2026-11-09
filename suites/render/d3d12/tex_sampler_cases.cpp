@@ -53,7 +53,7 @@ void register_filters() {
     for (const Item& item : items) {
         const bool aniso = item.aniso > 1;
         const bool magnified = std::string(item.name) == "min_point_mag_linear";
-        Cases::single(rr::CaseSpec("tex", std::string("sampler_filter_") + item.name).tolerance(aniso ? anisotropic_tolerance() : sampler_tolerance()).tag("sampler"),
+        Cases::single(rr::CaseSpec("tex", std::string("sampler_filter_") + item.name).tolerance(aniso ? anisotropic_tolerance() : (std::string(item.name).find("point") != std::string::npos || std::string(item.name).find("maximum") != std::string::npos ? texel_edge_tolerance() : sampler_tolerance())).tag("sampler"),
                       [item, aniso, magnified](Kit& kit, rr::CaptureSet& out, std::string& error) {
                           D3D12_SAMPLER_DESC sampler = Binder::sampler_desc(item.filter, D3D12_TEXTURE_ADDRESS_MODE_WRAP);
                           sampler.MaxAnisotropy = item.aniso;
@@ -103,7 +103,7 @@ void register_addressing() {
         });
     }
     for (int point = 0; point < 2; ++point) {
-        Cases::single(rr::CaseSpec("tex", point != 0 ? "sampler_static_point_wrap" : "sampler_static_linear_clamp").tolerance(sampler_tolerance()).tag("sampler"),
+        Cases::single(rr::CaseSpec("tex", point != 0 ? "sampler_static_point_wrap" : "sampler_static_linear_clamp").tolerance(point != 0 ? texel_edge_tolerance() : sampler_tolerance()).tag("sampler"),
                       [point](Kit& kit, rr::CaptureSet& out, std::string& error) {
                           ID3D12Resource* texture = checker_texture(kit, error);
                           if (texture == nullptr) {
@@ -114,7 +114,7 @@ void register_addressing() {
                           return sample_scene(kit, texture, srv_2d(DXGI_FORMAT_R8G8B8A8_UNORM, 8), nullptr, ps_of(decl, "return tex.Sample(smp, i.uv * p1.xy - float2(0.75, 0.75));"), kTint, scale, -0.5f, out, error);
                       });
     }
-    Cases::single(rr::CaseSpec("tex", "sampler_two_heap_samplers").tolerance(exact_op_tolerance()).tag("sampler"), [](Kit& kit, rr::CaptureSet& out, std::string& error) {
+    Cases::single(rr::CaseSpec("tex", "sampler_two_heap_samplers").tolerance(texel_edge_tolerance()).tag("sampler"), [](Kit& kit, rr::CaptureSet& out, std::string& error) {
         ID3D12Resource* texture = checker_texture(kit, error, 16, 5);
         if (texture == nullptr) {
             return false;

@@ -58,4 +58,5 @@ extern const char* const kSamplePrefix;
 [[nodiscard]] rr::Tolerance loose_sampler_tolerance();
 [[nodiscard]] rr::Tolerance format_tolerance();
 [[nodiscard]] rr::Tolerance exact_op_tolerance();
+[[nodiscard]] rr::Tolerance texel_edge_tolerance();
 }  // namespace lsw::suites::render::d3d12

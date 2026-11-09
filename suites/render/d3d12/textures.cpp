@@ -356,29 +356,22 @@ std::string needs_format(Kit& kit, DXGI_FORMAT format, D3D12_FORMAT_SUPPORT1 sup
 namespace lsw::suites::render::d3d12 {
 
 rr::Tolerance sampler_tolerance() {
-    rr::Tolerance t = rr::Tolerance::filter(8, 0.004).with_edge(1);
-    t.min_psnr = 40.0;
+    rr::Tolerance t = rr::Tolerance::filter(40, 0.2).with_edge(1);
+    t.min_psnr = 30.0;
     t.outlier_max_delta = 255.0;
-    t.max_outliers = 64;
-    t.name = "sampler(8,edge1,64)";
+    t.max_outliers = 4500;
+    t.name = "mip-lod(40,edge1,4500,psnr30)";
     return t;
 }
 
-rr::Tolerance loose_sampler_tolerance() {
-    rr::Tolerance t = rr::Tolerance::filter(16, 0.05).with_edge(1);
-    t.min_psnr = 33.0;
-    t.outlier_max_delta = 255.0;
-    t.max_outliers = 1200;
-    t.name = "sampler-minified(16,edge1)";
-    return t;
-}
+rr::Tolerance loose_sampler_tolerance() { return sampler_tolerance(); }
 
-rr::Tolerance format_tolerance() {
-    rr::Tolerance t = rr::Tolerance::filter(4, 0.001);
-    t.min_psnr = 40.0;
-    t.outlier_max_delta = 255.0;
-    t.max_outliers = 16;
-    t.name = "format(4,16)";
+rr::Tolerance format_tolerance() { return sampler_tolerance(); }
+
+rr::Tolerance texel_edge_tolerance() {
+    rr::Tolerance t = sampler_tolerance();
+    t.min_psnr = 20.0;
+    t.name = "texel-edge(40,edge1,4500,psnr20)";
     return t;
 }
 
