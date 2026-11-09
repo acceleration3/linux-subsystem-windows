@@ -242,6 +242,18 @@ const struct Batch20 {
             gl.glBindFramebuffer(glc::READ_FRAMEBUFFER, source.fbo);
             gl.glBindFramebuffer(glc::DRAW_FRAMEBUFFER, dest.fbo);
             gl.glBlitFramebuffer(0, 0, 128, 128, 0, 0, 128, 128, glc::DEPTH_BUFFER_BIT | glc::STENCIL_BUFFER_BIT, glc::NEAREST);
+            gl.glBindFramebuffer(glc::FRAMEBUFFER, dest.fbo);
+            gl.glEnable(glc::DEPTH_TEST);
+            gl.glDepthFunc(glc::LEQUAL);
+            gl.glDepthMask(0);
+            gl.glEnable(glc::STENCIL_TEST);
+            gl.glStencilFunc(glc::EQUAL, 7, 0xFF);
+            gl.glStencilOp(glc::KEEP, glc::KEEP, glc::KEEP);
+            const std::vector<V2> quad = {{-1, -1, 0.9f, 0.6f, 0.2f}, {1, -1, 0.2f, 0.8f, 0.9f}, {1, 1, 0.9f, 0.2f, 0.7f}, {-1, -1, 0.9f, 0.6f, 0.2f}, {1, 1, 0.9f, 0.2f, 0.7f}, {-1, 1, 0.3f, 0.9f, 0.3f}};
+            gl.glUseProgram(flat.program);
+            gl.glBindVertexArray(Flat2d::upload(kit, quad));
+            gl.glDrawArrays(glc::TRIANGLES, 0, 6);
+            gl.glDepthMask(1);
             return Gx::shot(kit, dest, out, error) && Gx::shot_depth(kit, dest, out, error) && Gx::shot_stencil(kit, dest, out, error);
         });
 
@@ -299,6 +311,9 @@ const struct Batch20 {
             gl.glClearBufferuiv(glc::COLOR, 1, uinner);
             const GLfloat depth = 0.75f;
             gl.glClearBufferfv(glc::DEPTH, 0, &depth);
+            const GLuint winner[4] = {5000, 6000, 7000, 8000};
+            gl.glClearBufferuiv(glc::COLOR, 2, winner);
+            gl.glClearBufferfi(glc::DEPTH_STENCIL, 0, 0.6f, 33);
             gl.glDisable(glc::SCISSOR_TEST);
             if (!kit.check("clear buffers", error)) {
                 return false;

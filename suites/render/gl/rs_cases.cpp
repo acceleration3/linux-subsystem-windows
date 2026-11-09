@@ -439,9 +439,10 @@ const struct Batch13 {
                     const float y0 = -1.0f + 0.25f * static_cast<float>(y);
                     const float x1 = x0 + 0.25f;
                     const float y1 = y0 + 0.25f;
-                    const float r = k * 1.0f;
+                    const float r = k * (1.0f + 0.5f * static_cast<float>((x + 2 * y) % 3));
+                    const float g = k * (1.0f + 0.5f * static_cast<float>((2 * x + y) % 4) * 0.5f);
                     for (const auto& p : {std::array<float, 2>{x0, y0}, {x1, y0}, {x1, y1}, {x0, y0}, {x1, y1}, {x0, y1}}) {
-                        verts.push_back({p[0], p[1], r, r, r});
+                        verts.push_back({p[0], p[1], r, g, k});
                     }
                 }
             }

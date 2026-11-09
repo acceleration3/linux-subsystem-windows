@@ -183,12 +183,13 @@ const struct Batch15 {
             gl.glDisable(glc::CULL_FACE);
             gl.glEnable(glc::STENCIL_TEST);
             gl.glStencilMask(0xFF);
+            gl.glDisable(glc::DEPTH_TEST);
             gl.glDepthMask(0);
             gl.glColorMask(0, 0, 0, 0);
             gl.glStencilFuncSeparate(glc::FRONT, glc::ALWAYS, 0, 0xFF);
             gl.glStencilFuncSeparate(glc::BACK, glc::ALWAYS, 0, 0xFF);
             gl.glStencilOpSeparate(glc::FRONT, glc::KEEP, glc::KEEP, glc::INCR_WRAP);
-            gl.glStencilOpSeparate(glc::BACK, glc::KEEP, glc::KEEP, glc::DECR_WRAP);
+            gl.glStencilOpSeparate(glc::BACK, glc::KEEP, glc::KEEP, glc::INVERT);
             s.draw(kit, s.torus, Mat4::rotate_x(0.7f));
             s.draw(kit, s.sphere, Mat4::translate(0.8f, 0.3f, 0.0f) * Mat4::scale(0.5f, 0.5f, 0.5f));
             gl.glColorMask(1, 1, 1, 1);
@@ -261,11 +262,13 @@ const struct Batch15 {
                 gl.glClearDepth(0.5);
                 gl.glClearStencil(0);
                 gl.glClear(glc::DEPTH_BUFFER_BIT | glc::STENCIL_BUFFER_BIT);
-                const GLuint flat = kit.program(Flat2d::kVertex, Flat2d::kFragment, error);
+                static const char* sloped_vs =
+                    "#version 460 core\nlayout(location = 0) in vec2 in_pos;\nlayout(location = 1) in vec3 in_col;\nout vec3 v_col;\n"
+                    "void main() { v_col = in_col; gl_Position = vec4(in_pos, in_pos.x * 0.8, 1.0); }\n";
+                const GLuint flat = kit.program(sloped_vs, Flat2d::kFragment, error);
                 if (flat == 0) {
                     return false;
                 }
-                kit.u1f(flat, "u_size", 1.0f);
                 gl.glEnable(glc::STENCIL_TEST);
                 gl.glStencilFunc(glc::ALWAYS, 0, 0xFF);
                 gl.glStencilOp(glc::KEEP, glc::KEEP, glc::INCR);
