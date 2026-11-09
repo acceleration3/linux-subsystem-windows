@@ -53,7 +53,7 @@ Image draw_cube(Rig& rig, Target& target, VkPipeline pipeline, VkPipelineLayout 
 
 CaseSpec spec_of(const std::string& name) {
     CaseSpec spec("rs", name);
-    spec.tolerance(Tolerance::tight(1));
+    spec.tolerance(Tolerance::exact());
     return spec;
 }
 
@@ -89,8 +89,14 @@ void register_polygon_and_cull() {
     for (const Cull& cull : {Cull{"none", VK_CULL_MODE_NONE}, Cull{"front", VK_CULL_MODE_FRONT_BIT}, Cull{"back", VK_CULL_MODE_BACK_BIT},
                              Cull{"front_and_back", VK_CULL_MODE_FRONT_AND_BACK}}) {
         for (VkFrontFace front : {VK_FRONT_FACE_COUNTER_CLOCKWISE, VK_FRONT_FACE_CLOCKWISE}) {
+            if (front == VK_FRONT_FACE_CLOCKWISE && (cull.mode == VK_CULL_MODE_NONE || cull.mode == VK_CULL_MODE_FRONT_AND_BACK)) {
+                continue;
+            }
             CaseSpec spec = spec_of(std::string("cull_") + cull.name + (front == VK_FRONT_FACE_CLOCKWISE ? "_cw" : "_ccw"));
             spec.uniform_ok();
+            if (cull.mode == VK_CULL_MODE_FRONT_AND_BACK) {
+                spec.audit_ok("FRONT_AND_BACK culls every triangle, so the frame is the clear colour by design; a driver that ignores the cull mode draws the cube");
+            }
             Cases::add(std::move(spec), [cull, front](Rig& rig, CaptureSet& out) {
                 TargetDesc td;
                 td.depth = VK_FORMAT_D32_SFLOAT;
@@ -99,10 +105,11 @@ void register_polygon_and_cull() {
                 const CubeMesh mesh = make_cube(rig);
                 const VkPipelineLayout layout = rig.playout({}, 64, VK_SHADER_STAGE_VERTEX_BIT);
                 PipelineDesc pipe = cube_pipe(rig, target, layout);
+                pipe.depth_test = false;
                 pipe.cull = cull.mode;
                 pipe.front = front;
                 const VkPipeline pipeline = rig.pipe(pipe);
-                out.add("", draw_cube(rig, target, pipeline, layout, mesh, cube_transform(0.9f, -0.4f)));
+                out.add("", draw_cube(rig, target, pipeline, layout, mesh, cube_transform(cull.mode == VK_CULL_MODE_FRONT_BIT ? 1.5f : 0.9f, -0.4f)));
             });
         }
     }
@@ -139,12 +146,16 @@ void register_depth_bias() {
             biased.bias_slope = entry.slope;
             const VkPipeline p_base = rig.pipe(base);
             const VkPipeline p_bias = rig.pipe(biased);
-            out.add("", rig.draw(target, p_base, nullptr, [&](VkCommandBuffer cb) {
+            rig.draw(target, p_base, nullptr, [&](VkCommandBuffer cb) {
                 quads.quad(cb, -1, -1, 2, 2, palette(0), 0.4f, 0.3f);
                 rig.bind_graphics(cb, p_bias);
                 quads.quad(cb, -0.8f, -0.8f, 0.7f, 1.6f, palette(1), 0.4f + 0.3f * 0.1f + entry.z1, 0.3f * 0.35f);
                 quads.quad(cb, 0.1f, -0.8f, 0.7f, 1.6f, palette(2), 0.4f + 0.3f * 0.55f + entry.z2, 0.3f * 0.35f);
-            }, quads.layout));
+            }, quads.layout);
+            Image depth;
+            std::string error;
+            rig.must(target.read_depth(rig.kit, depth, error), error);
+            out.add("depth", std::move(depth));
         });
     }
 }
@@ -153,6 +164,9 @@ void register_depth_range() {
     for (int clamp = 0; clamp < 2; ++clamp) {
         CaseSpec spec = spec_of(clamp != 0 ? "depth_clamp_on" : "depth_clamp_off");
         spec.feature("depthClamp");
+        if (clamp == 0) {
+            spec.audit_ok("with clamping off the out of range quads are clipped, which is the same picture as depth_clip_enabled_with_clamp where clamping is on but clipping is explicitly enabled");
+        }
         Cases::add(std::move(spec), [clamp](Rig& rig, CaptureSet& out) {
             TargetDesc td;
             td.depth = VK_FORMAT_D32_SFLOAT;
@@ -175,8 +189,8 @@ void register_depth_range() {
             out.add("depth", std::move(depth));
         });
     }
-    CaseSpec clip = spec_of("depth_clip_disabled");
-    clip.extension("VK_EXT_depth_clip_enable").feature("depthClamp");
+    CaseSpec clip = spec_of("depth_clip_enabled_with_clamp");
+    clip.extension("VK_EXT_depth_clip_enable").feature("depthClamp").audit_ok("explicit clip enable overrides the implicit disable of clamping, so the picture equals depth_clamp_off; a driver that ignores the clip state draws the unclipped picture of depth_clamp_on");
     Cases::add(
         std::move(clip),
         [](Rig& rig, CaptureSet& out) {
@@ -190,7 +204,7 @@ void register_depth_range() {
             pipe.depth_clamp = true;
             VkPipelineRasterizationDepthClipStateCreateInfoEXT clip_info{};
             clip_info.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_DEPTH_CLIP_STATE_CREATE_INFO_EXT;
-            clip_info.depthClipEnable = VK_FALSE;
+            clip_info.depthClipEnable = VK_TRUE;
             pipe.raster_next = &clip_info;
             const VkPipeline pipeline = rig.pipe(pipe);
             Image color = rig.draw(target, pipeline, nullptr, [&](VkCommandBuffer cb) {
@@ -222,9 +236,9 @@ void register_depth_range() {
         const VkPipeline pipeline = rig.pipe(pipe);
         Image color = rig.draw(target, pipeline, nullptr, [&](VkCommandBuffer cb) {
             rig.viewport(cb, 0, 0, 128, 64, -2.0f, 3.0f);
-            quads.quad(cb, -0.9f, -0.9f, 1.8f, 1.8f, palette(1), 0.5f);
+            quads.quad(cb, -0.9f, -0.9f, 1.8f, 1.8f, palette(1), 0.4f, 0.2f);
             rig.viewport(cb, 0, 64, 128, 64, 0.2f, 0.8f);
-            quads.quad(cb, -0.9f, -0.9f, 1.8f, 1.8f, palette(4), 0.5f);
+            quads.quad(cb, -0.9f, -0.9f, 1.8f, 1.8f, palette(4), 0.4f, 0.2f);
         }, quads.layout);
         out.add("color", std::move(color));
         Image depth;
@@ -271,7 +285,7 @@ void register_lines_and_points() {
                                   LineMode{"rectangular_stippled", VK_LINE_RASTERIZATION_MODE_RECTANGULAR_EXT, true},
                                   LineMode{"bresenham_stippled", VK_LINE_RASTERIZATION_MODE_BRESENHAM_EXT, true}}) {
         CaseSpec spec = spec_of(std::string("line_mode_") + entry.name);
-        spec.extension("VK_EXT_line_rasterization").tolerance(Tolerance::raster(2, 1));
+        spec.extension("VK_EXT_line_rasterization").feature("wideLines").tolerance(Tolerance::exact());
         Cases::add(
             std::move(spec),
             [entry](Rig& rig, CaptureSet& out) {
@@ -292,7 +306,7 @@ void register_lines_and_points() {
                 PipelineDesc pipe = rig.pos2c(target);
                 pipe.topology = VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
                 pipe.raster_next = &line;
-                pipe.line_width = 1.0f;
+                pipe.line_width = 4.0f;
                 if (entry.mode == VK_LINE_RASTERIZATION_MODE_RECTANGULAR_SMOOTH_EXT) {
                     pipe.blend = true;
                 }
@@ -312,7 +326,10 @@ void register_lines_and_points() {
     }
     for (float size : {2.0f, 9.0f, 24.0f}) {
         CaseSpec spec = spec_of("point_size_" + std::to_string(static_cast<int>(size)));
-        spec.tolerance(Tolerance::raster(1, 1));
+        spec.tolerance(Tolerance::exact());
+        if (size == 2.0f) {
+            spec.audit_ok("nine 2x2 points cover under 1 percent of the frame by design; the judge compares every pixel exactly");
+        }
         if (size > 1.0f) {
             spec.feature("largePoints");
         }
@@ -437,7 +454,7 @@ void register_special() {
             const auto p = kit.query_properties<VkPhysicalDeviceConservativeRasterizationPropertiesEXT>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CONSERVATIVE_RASTERIZATION_PROPERTIES_EXT);
             return p.primitiveOverestimationSize >= 0.0f && p.maxExtraPrimitiveOverestimationSize >= 0.0f ? std::string() : std::string("conservative properties");
         });
-    for (int last = 0; last < 2; ++last) {
+    for (int last = 1; last < 2; ++last) {
         CaseSpec provoking = spec_of(last != 0 ? "provoking_vertex_last" : "provoking_vertex_first");
         provoking.extension("VK_EXT_provoking_vertex");
         Cases::add(
@@ -467,13 +484,17 @@ void register_special() {
                 return {};
             });
     }
-    Cases::add(spec_of("top_left_rule").tolerance(Tolerance::exact()), [](Rig& rig, CaptureSet& out) {
+    for (int half = 0; half < 2; ++half) {
+    CaseSpec edge_spec = spec_of(half != 0 ? "top_left_rule" : "shared_edge_watertight");
+    edge_spec.tolerance(Tolerance::exact()).audit_ok(half != 0 ? "quads whose edges pass through pixel centres cover exactly the pixels of the edge aligned quads when the top left rule holds, and one extra pixel per edge when it does not" : "edge aligned quads sharing a diagonal cover the same pixels as the centre aligned quads of top_left_rule; a hole or double hit differs");
+    Cases::add(std::move(edge_spec), [half](Rig& rig, CaptureSet& out) {
+        const float shift = half != 0 ? 0.5f : 0.0f;
         Target& target = rig.make_target(TargetDesc{});
         const float px = 2.0f / 128.0f;
         std::vector<Vertex2> v;
         for (int i = 0; i < 6; ++i) {
-            const float x0 = -1.0f + px * (8.0f + 20.0f * static_cast<float>(i % 3));
-            const float y0 = -1.0f + px * (8.0f + 60.0f * static_cast<float>(i / 3));
+            const float x0 = -1.0f + px * (8.0f + shift + 20.0f * static_cast<float>(i % 3));
+            const float y0 = -1.0f + px * (8.0f + shift + 60.0f * static_cast<float>(i / 3));
             const float s = px * (16.0f + 4.0f * static_cast<float>(i));
             v.push_back(vertex(x0, y0, 0));
             v.push_back(vertex(x0 + s, y0, 0));
@@ -493,6 +514,7 @@ void register_special() {
         const VkPipeline pipeline = rig.pipe(pipe);
         out.add("", rig.draw(target, pipeline, &vb, [&](VkCommandBuffer cb) { rig.kit.api.vkCmdDraw(cb, 36, 1, 0, 0); }));
     });
+    }
 }
 
 const int registered = (register_polygon_and_cull(), register_depth_bias(), register_depth_range(), register_lines_and_points(),

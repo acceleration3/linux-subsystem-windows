@@ -10,7 +10,7 @@ namespace {
 
 CaseSpec rt_spec(const std::string& name, bool pipeline) {
     CaseSpec spec("rt", name);
-    spec.min_version(1, 2).extension("VK_KHR_acceleration_structure").extension("VK_KHR_deferred_host_operations").tolerance(Tolerance::tight(1));
+    spec.min_version(1, 2).extension("VK_KHR_acceleration_structure").extension("VK_KHR_deferred_host_operations").tolerance(Tolerance::exact());
     if (pipeline) {
         spec.extension("VK_KHR_ray_tracing_pipeline");
     } else {
@@ -303,7 +303,7 @@ struct SbtLayout {
 };
 
 void register_rt() {
-    Cases::add(rt_spec("ray_query_compute_masks_shadows", false), [](Rig& rig, CaptureSet& out) {
+    Cases::add(rt_spec("ray_query_compute_masks_shadows", false).audit_ok("the all mask capture is the scene of the refit row at frame 0; the masked capture is new"), [](Rig& rig, CaptureSet& out) {
         TraceTarget t = make_trace_target(rig, VK_SHADER_STAGE_COMPUTE_BIT);
         const QuadMesh mesh = make_quad(rig, 0.0f);
         Accel blas;
@@ -314,7 +314,24 @@ void register_rt() {
         out.add("masked", dispatch_query(rig, t, q, 0.0f));
         out.add("all", dispatch_query(rig, t, q, 1.0f));
     }, [](Kit& kit) { return rt_caps(kit, false); });
-    Cases::add_scene(rt_spec("ray_query_blas_refit_frames", false).frames(4, {0, 2, 3}), [] { return std::make_unique<RefitScene>(); });
+    Cases::add(rt_spec("ray_query_fragment_shader", false), [](Rig& rig, CaptureSet& out) {
+        TraceTarget t = make_trace_target(rig, VK_SHADER_STAGE_FRAGMENT_BIT);
+        const QuadMesh mesh = make_quad(rig, 0.0f);
+        Accel blas;
+        build_accel(rig, blas, VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR, triangle_geometry(mesh.vertices, 4, mesh.indices), 2, 0, false);
+        const Accel tlas = build_tlas(rig, scene_instances(blas.address, 0.0f));
+        write_trace(rig, t, tlas);
+        Target& target = rig.make_target(TargetDesc{});
+        const VkPipelineLayout layout = rig.playout({t.set_layout});
+        PipelineDesc pipe;
+        pipe.vertex = rig.sh("full.vert");
+        pipe.fragment = rig.sh("rq_frag.v12.frag");
+        pipe.layout = layout;
+        pipe.pass = target.clear_pass;
+        const VkPipeline pipeline = rig.pipe(pipe);
+        out.add("", rig.draw(target, pipeline, nullptr, [&](VkCommandBuffer cb) { rig.kit.api.vkCmdDraw(cb, 3, 1, 0, 0); }, layout, {t.set}));
+    }, [](Kit& kit) { return rt_caps(kit, false); });
+    Cases::add_scene(rt_spec("ray_query_blas_refit_frames", false).audit_ok("frame 0 is the unrefit scene the compute row traces; later frames refit").frames(4, {0, 2, 3}), [] { return std::make_unique<RefitScene>(); });
     Cases::add(rt_spec("ray_query_blas_compaction", false), [](Rig& rig, CaptureSet& out) {
         Kit& kit = rig.kit;
         TraceTarget t = make_trace_target(rig, VK_SHADER_STAGE_COMPUTE_BIT);

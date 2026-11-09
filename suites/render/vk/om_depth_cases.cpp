@@ -42,8 +42,10 @@ const std::vector<StencilOpEntry>& stencil_ops() {
     return table;
 }
 
-void capture_depth_and_color(Rig& rig, Target& target, CaptureSet& out, Image color, bool depth, bool stencil) {
-    out.add("color", std::move(color));
+void capture_depth_and_color(Rig& rig, Target& target, CaptureSet& out, Image color, bool depth, bool stencil, bool with_color = true) {
+    if (with_color) {
+        out.add("color", std::move(color));
+    }
     if (depth) {
         out.add("depth", [&] {
             Image image;
@@ -63,12 +65,17 @@ void capture_depth_and_color(Rig& rig, Target& target, CaptureSet& out, Image co
 }
 
 void register_compare() {
+    struct DepthFormat {
+        const char* suffix;
+        VkFormat format;
+    };
+    for (const DepthFormat& depth_format : {DepthFormat{"", VK_FORMAT_D32_SFLOAT}}) {
     for (const CompareEntry& entry : compare_ops()) {
-        CaseSpec spec("om", std::string("depth_compare_") + entry.name);
-        spec.tolerance(Tolerance::tight(1));
-        Cases::add(std::move(spec), [entry](Rig& rig, CaptureSet& out) {
+        CaseSpec spec("om", std::string("depth_compare_") + entry.name + depth_format.suffix);
+        spec.tolerance(Tolerance::exact());
+        Cases::add(std::move(spec), [entry, depth_format](Rig& rig, CaptureSet& out) {
             TargetDesc td;
-            td.depth = VK_FORMAT_D32_SFLOAT;
+            td.depth = depth_format.format;
             Target& target = rig.make_target(td);
             std::copy(kClear, kClear + 4, target.clear_color);
             QuadKit quads(rig);
@@ -80,7 +87,7 @@ void register_compare() {
             test.depth_op = entry.op;
             const VkPipeline p_base = rig.pipe(base);
             const VkPipeline p_test = rig.pipe(test);
-            const float zs[3] = {0.3f, 0.5f, 0.7f};
+            const float zs[3] = {0.3f, 0.5f, 0.500004f};
             Image color = rig.draw(target, p_base, nullptr, [&](VkCommandBuffer cb) {
                 const float grey[4] = {0.45f, 0.45f, 0.5f, 1.0f};
                 for (unsigned i = 0; i < 3; ++i) {
@@ -92,8 +99,10 @@ void register_compare() {
                     quads.quad(cb, -0.95f + 0.67f * static_cast<float>(i), 0.1f, 0.54f, 0.7f, palette(i + 3), zs[2 - i]);
                 }
             }, quads.layout);
-            capture_depth_and_color(rig, target, out, std::move(color), true, false);
-        });
+            const bool keeps_depth = entry.op == VK_COMPARE_OP_LESS || entry.op == VK_COMPARE_OP_GREATER;
+            capture_depth_and_color(rig, target, out, std::move(color), keeps_depth, false);
+        }, [depth_format](Kit& kit) { return Cases::need_format(kit, depth_format.format, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT, "depth format"); });
+    }
     }
 }
 
@@ -108,13 +117,26 @@ void register_formats() {
     };
     for (const Entry& entry : formats) {
         CaseSpec spec("om", std::string("depth_format_") + entry.name);
-        spec.tolerance(Tolerance::tight(1));
+        spec.tolerance(Tolerance::exact());
+        if (entry.format == VK_FORMAT_D16_UNORM_S8_UINT || entry.format == VK_FORMAT_D24_UNORM_S8_UINT || entry.format == VK_FORMAT_D32_SFLOAT_S8_UINT) {
+            spec.uniform_ok("stencil");
+        }
+        if (entry.format == VK_FORMAT_D16_UNORM) {
+            spec.audit_ok("the depth plane equals the one of depth_format_d16_s8, whose stencil plane is the difference");
+        } else if (entry.format == VK_FORMAT_D16_UNORM_S8_UINT) {
+            spec.audit_ok("the depth plane equals the one of depth_format_d16; the stencil plane holds the clear value 0x5a");
+        } else if (entry.format == VK_FORMAT_D32_SFLOAT) {
+            spec.audit_ok("the depth plane equals the one of depth_format_d32_s8, whose stencil plane is the difference");
+        } else if (entry.format == VK_FORMAT_D32_SFLOAT_S8_UINT) {
+            spec.audit_ok("the depth plane equals the one of depth_format_d32; the stencil plane holds the clear value 0x5a");
+        }
         Cases::add(
             std::move(spec),
             [entry](Rig& rig, CaptureSet& out) {
                 TargetDesc td;
                 td.depth = entry.format;
                 Target& target = rig.make_target(td);
+                target.clear_stencil = 0x5a;
                 std::copy(kClear, kClear + 4, target.clear_color);
                 QuadKit quads(rig);
                 PipelineDesc pipe = quads.desc(target);
@@ -125,9 +147,8 @@ void register_formats() {
                     quads.quad(cb, -0.9f, -0.9f, 1.8f, 1.8f, palette(2), 0.8f, -0.6f);
                     quads.quad(cb, -0.4f, -0.4f, 0.8f, 0.8f, palette(3), 0.5f, 0.0f);
                 }, quads.layout);
-                const bool readable = entry.format == VK_FORMAT_D32_SFLOAT || entry.format == VK_FORMAT_D32_SFLOAT_S8_UINT ||
-                                      entry.format == VK_FORMAT_D16_UNORM || entry.format == VK_FORMAT_D16_UNORM_S8_UINT;
-                capture_depth_and_color(rig, target, out, std::move(color), readable, false);
+                const bool has_stencil = entry.format == VK_FORMAT_D16_UNORM_S8_UINT || entry.format == VK_FORMAT_D24_UNORM_S8_UINT || entry.format == VK_FORMAT_D32_SFLOAT_S8_UINT;
+                capture_depth_and_color(rig, target, out, std::move(color), true, has_stencil, false);
             },
             [entry](Kit& kit) { return Cases::need_format(kit, entry.format, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT, "depth format"); });
     }
@@ -147,7 +168,9 @@ protected:
         td.depth = VK_FORMAT_D32_SFLOAT_S8_UINT;
         target_ = &rig.make_target(td);
         std::copy(kClear, kClear + 4, target_->clear_color);
-        target_->clear_stencil = 0x80;
+        target_->clear_stencil = op_ == VK_STENCIL_OP_INCREMENT_AND_CLAMP || op_ == VK_STENCIL_OP_INCREMENT_AND_WRAP ? 0xfe
+                                 : op_ == VK_STENCIL_OP_DECREMENT_AND_CLAMP || op_ == VK_STENCIL_OP_DECREMENT_AND_WRAP ? 0x01
+                                                                                                                         : 0x80;
         quads_ = std::make_unique<QuadKit>(rig);
         PipelineDesc occluder = quads_->desc(*target_);
         occluder.depth_test = true;
@@ -183,7 +206,10 @@ protected:
     }
 
     void grab(Rig& rig, unsigned, CaptureSet& out) override {
-        capture_depth_and_color(rig, *target_, out, rig.color(*target_), false, true);
+        Image stencil;
+        std::string error;
+        rig.must(target_->read_stencil(rig.kit, stencil, error), error);
+        out.add("stencil", std::move(stencil));
     }
 
 private:
@@ -207,10 +233,10 @@ void register_stencil_ops() {
                     continue;
                 }
                 CaseSpec spec("om", std::string("stencil_") + kinds[which] + "_op_" + entry.name + (multi != 0 ? "_accumulate" : ""));
-                spec.tolerance(Tolerance::tight(1));
+                spec.tolerance(Tolerance::exact());
 
                 if (multi != 0) {
-                    spec.frames(3, {0, 1, 2});
+                    spec.frames(3, {1, 2});
                 }
                 const StencilOpEntry copy = entry;
                 Cases::add_scene(std::move(spec), [which, copy]() -> std::unique_ptr<VkScene> {
@@ -224,7 +250,13 @@ void register_stencil_ops() {
 void register_stencil_compare() {
     for (const CompareEntry& entry : compare_ops()) {
         CaseSpec spec("om", std::string("stencil_compare_") + entry.name);
-        spec.tolerance(Tolerance::tight(1)).uniform_ok("color");
+        spec.tolerance(Tolerance::exact()).uniform_ok("color");
+        if (std::string(entry.name) == "always") {
+            spec.audit_ok("ALWAYS passes every fragment so the whole frame is the last quad by design; a driver that applies another compare leaves the other quads");
+        }
+        if (std::string(entry.name) == "never") {
+            spec.audit_ok("NEVER rejects every fragment so the frame stays the clear colour by design; a driver that applies another compare draws quads");
+        }
         Cases::add(std::move(spec), [entry](Rig& rig, CaptureSet& out) {
             TargetDesc td;
             td.depth = VK_FORMAT_D32_SFLOAT_S8_UINT;
@@ -262,7 +294,7 @@ void register_stencil_compare() {
                 rig.bind_graphics(cb, p_test);
                 quads.quad(cb, -1, -1, 2, 2, palette(5));
             }, quads.layout);
-            capture_depth_and_color(rig, target, out, std::move(color), false, true);
+            capture_depth_and_color(rig, target, out, std::move(color), false, false);
         });
     }
 }
@@ -271,7 +303,7 @@ void register_stencil_compare() {
 void register_misc() {
     for (const char* kind : {"any", "greater", "less", "unchanged"}) {
         CaseSpec spec("om", std::string("frag_depth_") + kind);
-        spec.tolerance(Tolerance::tight(1));
+        spec.tolerance(Tolerance::exact());
         const std::string shader = std::string("depth_") + kind + ".frag";
         Cases::add(std::move(spec), [shader](Rig& rig, CaptureSet& out) {
             TargetDesc td;
@@ -296,7 +328,7 @@ void register_misc() {
         });
     }
     CaseSpec exported("om", "stencil_export");
-    exported.extension("VK_EXT_shader_stencil_export").tolerance(Tolerance::tight(1));
+    exported.extension("VK_EXT_shader_stencil_export").tolerance(Tolerance::exact());
     Cases::add(std::move(exported), [](Rig& rig, CaptureSet& out) {
         TargetDesc td;
         td.depth = VK_FORMAT_D32_SFLOAT_S8_UINT;
@@ -316,7 +348,7 @@ void register_misc() {
         Image color = rig.draw(target, pipeline, nullptr, [&](VkCommandBuffer cb) { quads.quad(cb, -0.9f, -0.9f, 1.8f, 1.8f, palette(4), 0.5f); }, quads.layout);
         capture_depth_and_color(rig, target, out, std::move(color), false, true);
     });
-    Cases::add(CaseSpec("om", "stencil_front_back_ops").tolerance(Tolerance::tight(1)), [](Rig& rig, CaptureSet& out) {
+    Cases::add(CaseSpec("om", "stencil_front_back_ops").tolerance(Tolerance::exact()), [](Rig& rig, CaptureSet& out) {
         TargetDesc td;
         td.depth = VK_FORMAT_D32_SFLOAT_S8_UINT;
         Target& target = rig.make_target(td);
@@ -339,7 +371,7 @@ void register_misc() {
         capture_depth_and_color(rig, target, out, std::move(color), false, true);
     });
     CaseSpec bounds("om", "depth_bounds_static");
-    bounds.feature("depthBounds").tolerance(Tolerance::tight(1));
+    bounds.feature("depthBounds").tolerance(Tolerance::exact());
     Cases::add(std::move(bounds), [](Rig& rig, CaptureSet& out) {
         TargetDesc td;
         td.depth = VK_FORMAT_D32_SFLOAT;

@@ -96,7 +96,7 @@ public:
     }
 };
 
-const VkRegister<MippedQuadBlend> kMippedQuadBlend{CaseSpec("texture", "mipped_quad_blend").tolerance(Tolerance::blend(2))};
+const VkRegister<MippedQuadBlend> kMippedQuadBlend{CaseSpec("texture", "mipped_quad_blend").tolerance(Tolerance::exact())};
 
 }  // namespace
 

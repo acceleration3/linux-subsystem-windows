@@ -10,7 +10,7 @@ const float kClear[4] = {0.05f, 0.06f, 0.09f, 1.0f};
 
 CaseSpec spec_of(const std::string& name) {
     CaseSpec spec("stages", name);
-    spec.tolerance(Tolerance::tight(1));
+    spec.tolerance(Tolerance::exact());
     return spec;
 }
 
@@ -88,12 +88,13 @@ void register_tessellation() {
         add_tess(std::string("tess_quad_") + spacing, Domain::Quad, std::string("tess_quad_") + spacing + ".tese", false, true);
     }
     add_tess("tess_isoline_equal", Domain::Isoline, "tess_iso_equal.tese", true, false);
+    add_tess("tess_isoline_fractional_even", Domain::Isoline, "tess_iso_fractional_even.tese", true, false);
     add_tess("tess_isoline_fractional_odd", Domain::Isoline, "tess_iso_fractional_odd.tese", true, false);
     add_tess("tess_triangle_point_mode", Domain::Triangle, "tess_tri_point.tese", true, false);
 }
 
 void register_geometry() {
-    Cases::add(spec_of("gs_amplify_triangle").feature("geometryShader").tolerance(Tolerance::tight(1)), [](Rig& rig, CaptureSet& out) {
+    Cases::add(spec_of("gs_amplify_triangle").feature("geometryShader").tolerance(Tolerance::exact()), [](Rig& rig, CaptureSet& out) {
         Target& target = rig.make_target(TargetDesc{});
         std::copy(kClear, kClear + 4, target.clear_color);
         const std::vector<Vertex2> tri = {vertex(-1, -1, 0), vertex(1, -1, 1), vertex(0, 1, 2)};
@@ -239,8 +240,8 @@ void run_layered(Rig& rig, CaptureSet& out, unsigned layers, bool cube) {
 }
 
 void register_layered() {
-    Cases::add(spec_of("layered_array_gs").feature("geometryShader"), [](Rig& rig, CaptureSet& out) { run_layered(rig, out, 4, false); });
-    Cases::add(spec_of("layered_cube_faces_gs").feature("geometryShader"), [](Rig& rig, CaptureSet& out) { run_layered(rig, out, 6, true); });
+    Cases::add(spec_of("layered_array_gs").audit_ok("array layers 0 and 1 hold the same layered scene as the first cube faces; the subject is the array view").feature("geometryShader"), [](Rig& rig, CaptureSet& out) { run_layered(rig, out, 4, false); });
+    Cases::add(spec_of("layered_cube_faces_gs").audit_ok("faces 0 and 1 hold the same layered scene as the array layers; the subject is the cube face layout").feature("geometryShader"), [](Rig& rig, CaptureSet& out) { run_layered(rig, out, 6, true); });
 }
 
 void register_shader_builtins() {

@@ -75,7 +75,7 @@ PipelineDesc blend_pipe(Rig& rig, QuadKit& quads, Target& target, const BlendSet
     p.blend_constants[0] = 0.3f;
     p.blend_constants[1] = 0.6f;
     p.blend_constants[2] = 0.9f;
-    p.blend_constants[3] = 0.5f;
+    p.blend_constants[3] = 0.3f;
     p.blend_next = setup.next;
     return p;
 }
@@ -141,7 +141,7 @@ private:
 };
 
 void add_blend(const std::string& name, const BlendSetup& left, const BlendSetup& right, const char* feature = nullptr, const char* extension = nullptr,
-               Tolerance tolerance = Tolerance::tight(1)) {
+               Tolerance tolerance = Tolerance::exact()) {
     static const std::set<std::string> accumulating = {"blend_factor_src_alpha", "blend_factor_one_minus_dst_color", "blend_factor_constant_color",
                                                        "blend_op_max", "blend_op_reverse_subtract", "blend_factor_src1_color"};
     for (int multi = 0; multi < 2; ++multi) {
@@ -151,7 +151,7 @@ void add_blend(const std::string& name, const BlendSetup& left, const BlendSetup
         CaseSpec spec("om", multi == 0 ? name : name + "_accumulate");
         spec.tolerance(tolerance);
         if (multi != 0) {
-            spec.frames(4, {0, 1, 3});
+            spec.frames(4, {1, 2, 3});
         }
         if (feature != nullptr) {
             spec.feature(feature);
@@ -212,7 +212,7 @@ void register_advanced() {
     for (const Advanced& entry : ops) {
         const BlendSetup setup{VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE, entry.op, entry.op, false, &advanced};
         CaseSpec spec("om", std::string("blend_advanced_") + entry.name);
-        spec.extension("VK_EXT_blend_operation_advanced").tolerance(Tolerance::tight(2));
+        spec.extension("VK_EXT_blend_operation_advanced").tolerance(Tolerance::exact());
         Cases::add_scene(std::move(spec), [setup]() -> std::unique_ptr<VkScene> { return std::make_unique<BlendScene>(setup, setup, 1u, false); });
     }
 }
@@ -232,7 +232,7 @@ void register_logic_ops() {
     };
     for (const Logic& entry : ops) {
         CaseSpec spec("om", std::string("logic_op_") + entry.name);
-        spec.feature("logicOp").tolerance(Tolerance::tight(1));
+        spec.feature("logicOp").tolerance(Tolerance::exact());
         spec.uniform_ok();
         Cases::add(std::move(spec), [entry](Rig& rig, CaptureSet& out) {
             Target& target = rig.make_target(TargetDesc{});
@@ -259,7 +259,7 @@ void register_logic_ops() {
 }
 
 void register_masks_and_independent() {
-    Cases::add(CaseSpec("om", "write_mask_all_16").tolerance(Tolerance::tight(1)), [](Rig& rig, CaptureSet& out) {
+    Cases::add(CaseSpec("om", "write_mask_all_16").tolerance(Tolerance::exact()), [](Rig& rig, CaptureSet& out) {
         Target& target = rig.make_target(TargetDesc{});
         QuadKit quads(rig);
         PipelineDesc bg = quads.desc(target);
@@ -283,7 +283,7 @@ void register_masks_and_independent() {
         }, quads.layout));
     });
     CaseSpec independent("om", "blend_independent_8");
-    independent.feature("independentBlend").tolerance(Tolerance::tight(1));
+    independent.feature("independentBlend").tolerance(Tolerance::exact());
     Cases::add(
         std::move(independent),
         [](Rig& rig, CaptureSet& out) {

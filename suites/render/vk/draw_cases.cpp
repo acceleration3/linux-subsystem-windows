@@ -44,7 +44,11 @@ Image render_env(Rig& rig, DrawEnv& env, const std::function<void(VkCommandBuffe
 void add_draw(const std::string& name, std::function<void(Rig&, CaptureSet&)> body, std::function<std::string(Kit&)> caps = {},
               const char* feature = nullptr, const char* extension = nullptr, unsigned minor = 0) {
     CaseSpec spec("draw", name);
-    spec.tolerance(Tolerance::tight(1));
+    spec.tolerance(Tolerance::exact());
+    if (name == "xfb_capture_then_draw" || name == "xfb_capture_indirect_byte_count") {
+        spec.audit_ok(name == "xfb_capture_then_draw" ? "draws the captured vertices with an explicit count, the same triangles xfb_capture_indirect_byte_count draws from the byte counter; the row fails if the capture is wrong"
+                                                      : "draws from the transform feedback byte counter and must reproduce the explicit count draw of xfb_capture_then_draw exactly");
+    }
     if (feature != nullptr) {
         spec.feature(feature);
     }

@@ -10,7 +10,7 @@ namespace {
 
 CaseSpec spec_of(const std::string& name) {
     CaseSpec spec("tex", name);
-    spec.tolerance(Tolerance::tight(1));
+    spec.tolerance(Tolerance::exact());
     return spec;
 }
 
@@ -27,13 +27,27 @@ Image bytes_as_image(const std::vector<std::uint8_t>& bytes, std::uint32_t width
 }
 
 void register_views() {
-    Cases::add(spec_of("view_mutable_srgb_unorm_alias"), [](Rig& rig, CaptureSet& out) {
+    for (int listed = 0; listed < 2; ++listed) {
+    CaseSpec alias = spec_of(listed != 0 ? "view_mutable_format_list_srgb_unorm" : "view_mutable_srgb_unorm_alias");
+    alias.audit_ok(listed != 0 ? "the same sRGB and UNORM views as view_mutable_srgb_unorm_alias, created from an image that lists them in VkImageFormatListCreateInfo; the subject is the listed creation path" : "views the unlisted mutable image; view_mutable_format_list_srgb_unorm is the same picture through the format list path");
+    if (listed != 0) {
+        alias.min_version(1, 2);
+    }
+    Cases::add(std::move(alias), [listed](Rig& rig, CaptureSet& out) {
         Kit& kit = rig.kit;
         Target& target = rig.make_target(TargetDesc{});
         TextureDesc desc;
         desc.width = desc.height = 16;
         desc.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
         desc.flags = VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
+        const VkFormat listed_formats[2] = {VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_R8G8B8A8_SRGB};
+        VkImageFormatListCreateInfo format_list{};
+        format_list.sType = VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO;
+        format_list.viewFormatCount = 2;
+        format_list.pViewFormats = listed_formats;
+        if (listed != 0) {
+            desc.next = &format_list;
+        }
         const Texture texture = rig.texture(desc);
         std::vector<std::uint8_t> bytes(16 * 16 * 4);
         for (unsigned y = 0; y < 16; ++y) {
@@ -81,6 +95,7 @@ void register_views() {
             }
         }, layout));
     }, [](Kit& kit) { return Cases::need_format(kit, VK_FORMAT_R8G8B8A8_SRGB, VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT, "RGBA8 sRGB sampling"); });
+    }
     CaseSpec block = spec_of("view_uncompressed_block_texel");
     block.feature("textureCompressionBC").min_version(1, 1);
     Cases::add(std::move(block), [](Rig& rig, CaptureSet& out) {
@@ -174,14 +189,17 @@ void register_atomics_and_ycbcr() {
                    }
                    return Cases::need_format(kit, VK_FORMAT_R64_UINT, VK_FORMAT_FEATURE_STORAGE_IMAGE_ATOMIC_BIT, "R64 uint storage atomics");
                });
-    CaseSpec ycbcr = spec_of("ycbcr_nv12_conversion");
-    ycbcr.min_version(1, 1).tolerance(Tolerance::filter(3, 0.01));
-    Cases::add(std::move(ycbcr), [](Rig& rig, CaptureSet& out) {
+    for (int three = 0; three < 2; ++three) {
+    const VkFormat ycbcr_format = three != 0 ? VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM : VK_FORMAT_G8_B8R8_2PLANE_420_UNORM;
+    CaseSpec ycbcr = spec_of(three != 0 ? "ycbcr_3plane_420_conversion" : "ycbcr_nv12_conversion");
+    ycbcr.min_version(1, 1).tolerance(Tolerance::exact());
+    ycbcr.audit_ok(three != 0 ? "the same picture as the NV12 row stored in three planes; the subject is the plane layout" : "the same picture as the 3 plane row stored in two interleaved planes; the subject is the plane layout");
+    Cases::add(std::move(ycbcr), [three, ycbcr_format](Rig& rig, CaptureSet& out) {
         Kit& kit = rig.kit;
         Target& target = rig.make_target(TargetDesc{});
         VkSamplerYcbcrConversionCreateInfo conv_info{};
         conv_info.sType = VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_CREATE_INFO;
-        conv_info.format = VK_FORMAT_G8_B8R8_2PLANE_420_UNORM;
+        conv_info.format = ycbcr_format;
         conv_info.ycbcrModel = VK_SAMPLER_YCBCR_MODEL_CONVERSION_YCBCR_709;
         conv_info.ycbcrRange = VK_SAMPLER_YCBCR_RANGE_ITU_NARROW;
         conv_info.components = {VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY};
@@ -195,7 +213,7 @@ void register_atomics_and_ycbcr() {
         conv_ref.conversion = conversion;
         TextureDesc desc;
         desc.width = desc.height = 32;
-        desc.format = VK_FORMAT_G8_B8R8_2PLANE_420_UNORM;
+        desc.format = ycbcr_format;
         desc.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
         desc.aspect = VK_IMAGE_ASPECT_COLOR_BIT;
         desc.create_view = false;
@@ -208,22 +226,30 @@ void register_atomics_and_ycbcr() {
         }
         for (unsigned y = 0; y < 16; ++y) {
             for (unsigned x = 0; x < 16; ++x) {
-                bytes[32 * 32 + (y * 16 + x) * 2] = static_cast<std::uint8_t>(90 + x * 8);
-                bytes[32 * 32 + (y * 16 + x) * 2 + 1] = static_cast<std::uint8_t>(200 - y * 8);
+                if (three != 0) {
+                    bytes[32 * 32 + y * 16 + x] = static_cast<std::uint8_t>(90 + x * 8);
+                    bytes[32 * 32 + 256 + y * 16 + x] = static_cast<std::uint8_t>(200 - y * 8);
+                } else {
+                    bytes[32 * 32 + (y * 16 + x) * 2] = static_cast<std::uint8_t>(90 + x * 8);
+                    bytes[32 * 32 + (y * 16 + x) * 2 + 1] = static_cast<std::uint8_t>(200 - y * 8);
+                }
             }
         }
-        VkBufferImageCopy regions[2]{};
+        VkBufferImageCopy regions[3]{};
         regions[0].imageSubresource = {VK_IMAGE_ASPECT_PLANE_0_BIT, 0, 0, 1};
         regions[0].imageExtent = {32, 32, 1};
         regions[1].bufferOffset = 32 * 32;
         regions[1].imageSubresource = {VK_IMAGE_ASPECT_PLANE_1_BIT, 0, 0, 1};
         regions[1].imageExtent = {16, 16, 1};
+        regions[2].bufferOffset = 32 * 32 + 256;
+        regions[2].imageSubresource = {VK_IMAGE_ASPECT_PLANE_2_BIT, 0, 0, 1};
+        regions[2].imageExtent = {16, 16, 1};
         Buffer staging;
         std::string error;
         rig.must(kit.make_buffer_with(staging, bytes.data(), bytes.size(), VK_BUFFER_USAGE_TRANSFER_SRC_BIT, error), error);
         rig.run([&](VkCommandBuffer cb) {
             kit.barrier(cb, texture.image, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-            kit.api.vkCmdCopyBufferToImage(cb, staging.buffer, texture.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 2, regions);
+            kit.api.vkCmdCopyBufferToImage(cb, staging.buffer, texture.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, three != 0 ? 3 : 2, regions);
             kit.barrier(cb, texture.image, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         });
         VkImageViewCreateInfo view{};
@@ -231,7 +257,7 @@ void register_atomics_and_ycbcr() {
         view.pNext = &conv_ref;
         view.image = texture.image;
         view.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        view.format = VK_FORMAT_G8_B8R8_2PLANE_420_UNORM;
+        view.format = ycbcr_format;
         view.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
         VkImageView image_view = VK_NULL_HANDLE;
         rig.vk_ok(kit.api.vkCreateImageView(kit.device, &view, nullptr, &image_view), "vkCreateImageView");
@@ -276,14 +302,15 @@ void register_atomics_and_ycbcr() {
         pipe.pass = target.clear_pass;
         const VkPipeline pipeline = rig.pipe(pipe);
         out.add("", rig.draw(target, pipeline, nullptr, [&](VkCommandBuffer cb) { kit.api.vkCmdDraw(cb, 3, 1, 0, 0); }, layout, {set}));
-    }, [](Kit& kit) -> std::string {
+    }, [ycbcr_format](Kit& kit) -> std::string {
         const auto f = kit.query_features<VkPhysicalDeviceVulkan11Features>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES);
         if (f.samplerYcbcrConversion == VK_FALSE) {
             return "samplerYcbcrConversion";
         }
-        return Cases::need_format(kit, VK_FORMAT_G8_B8R8_2PLANE_420_UNORM, VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT |
-                                  VK_FORMAT_FEATURE_MIDPOINT_CHROMA_SAMPLES_BIT | VK_FORMAT_FEATURE_SAMPLED_IMAGE_YCBCR_CONVERSION_LINEAR_FILTER_BIT, "NV12 sampling");
+        return Cases::need_format(kit, ycbcr_format, VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT |
+                                  VK_FORMAT_FEATURE_MIDPOINT_CHROMA_SAMPLES_BIT | VK_FORMAT_FEATURE_SAMPLED_IMAGE_YCBCR_CONVERSION_LINEAR_FILTER_BIT, "YCbCr 4:2:0 sampling");
     });
+    }
 }
 
 const int registered = (register_views(), register_atomics_and_ycbcr(), 0);

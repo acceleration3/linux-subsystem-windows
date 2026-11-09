@@ -42,6 +42,7 @@ struct SampSetup {
     unsigned size = 64;
     unsigned mips = 7;
     float uv_scale = 4.0f;
+    float uv_offset = 0.0f;
     float mode = 0.0f;
     float p1 = 0.0f;
     float p2 = 0.0f;
@@ -124,6 +125,7 @@ void run_plane(Rig& rig, CaptureSet& out, const SampSetup& setup) {
     PlanePush push{};
     std::memcpy(push.m, m.m, sizeof push.m);
     push.uv[0] = push.uv[1] = setup.uv_scale;
+    push.uv[2] = push.uv[3] = setup.uv_offset;
     push.params[0] = setup.mode;
     push.params[1] = setup.p1;
     push.params[2] = setup.p2;
@@ -134,7 +136,7 @@ void run_plane(Rig& rig, CaptureSet& out, const SampSetup& setup) {
 }
 
 void add_sampler(const std::string& name, SampSetup setup, std::function<std::string(Kit&)> caps = {}, const char* feature = nullptr,
-                 const char* extension = nullptr, unsigned minor = 0, Tolerance tolerance = Tolerance::tight(1)) {
+                 const char* extension = nullptr, unsigned minor = 0, Tolerance tolerance = Tolerance::exact()) {
     CaseSpec spec("tex", name);
     spec.tolerance(std::move(tolerance));
     if (feature != nullptr) {
@@ -154,14 +156,16 @@ void register_filters() {
     add_sampler("samp_bilinear_mip_nearest", {[](VkSamplerCreateInfo& s) { s.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST; }});
     add_sampler("samp_trilinear", {[](VkSamplerCreateInfo&) {}});
     add_sampler("samp_mag_linear_min_nearest", {[](VkSamplerCreateInfo& s) { s.minFilter = VK_FILTER_NEAREST; }});
-    add_sampler("samp_mag_nearest_min_linear", {[](VkSamplerCreateInfo& s) { s.magFilter = VK_FILTER_NEAREST; }});
+    SampSetup mag_nearest{[](VkSamplerCreateInfo& s) { s.magFilter = VK_FILTER_NEAREST; }};
+    mag_nearest.uv_scale = 0.5f;
+    add_sampler("samp_mag_nearest_min_linear", mag_nearest);
     for (float aniso : {2.0f, 4.0f, 16.0f}) {
         SampSetup setup{[aniso](VkSamplerCreateInfo& s) { s.anisotropyEnable = VK_TRUE; s.maxAnisotropy = aniso; }};
         setup.uv_scale = 10.0f;
         setup.tilt = 1.25f;
         add_sampler("samp_aniso_" + std::to_string(static_cast<int>(aniso)), setup,
                     [aniso](Kit& kit) -> std::string { return kit.properties.limits.maxSamplerAnisotropy < aniso ? "maxSamplerAnisotropy" : std::string(); },
-                    "samplerAnisotropy", nullptr, 0, Tolerance::filter(6, 0.01));
+                    "samplerAnisotropy", nullptr, 0, Tolerance::exact());
     }
     SampSetup bias_up{[](VkSamplerCreateInfo& s) { s.mipLodBias = 1.0f; }};
     bias_up.uv_scale = 8.0f;
@@ -207,6 +211,7 @@ void register_addressing() {
     }
     SampSetup mirror_clamp{[](VkSamplerCreateInfo& s) { s.addressModeU = s.addressModeV = s.addressModeW = VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE; }};
     mirror_clamp.uv_scale = 2.4f;
+    mirror_clamp.uv_offset = -1.2f;
     mirror_clamp.tilt = 0.6f;
     add_sampler("samp_addr_mirror_clamp_to_edge", mirror_clamp,
                 [](Kit& kit) -> std::string {
@@ -317,10 +322,10 @@ void register_shader_ops() {
     grad.p1 = 3.0f;
     grad.uv_scale = 5.0f;
     add_sampler("samp_texture_grad", grad);
-    SampSetup query{[](VkSamplerCreateInfo&) {}};
+    SampSetup query{[](VkSamplerCreateInfo& s) { s.minLod = 2.0f; s.maxLod = 3.0f; }};
     query.mode = 4.0f;
     query.uv_scale = 9.0f;
-    add_sampler("samp_query_lod", query, {}, nullptr, nullptr, 0, Tolerance::filter(6, 0.01));
+    add_sampler("samp_query_lod", query, {}, nullptr, nullptr, 0, Tolerance::exact());
     for (float comp : {0.0f, 2.0f}) {
         SampSetup gather{[](VkSamplerCreateInfo& s) { s.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST; s.maxLod = 0.0f; }};
         gather.mode = comp == 0.0f ? 3.0f : 7.0f;

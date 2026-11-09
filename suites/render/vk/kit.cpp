@@ -160,6 +160,9 @@ void Kit::close() {
         if (fence_ != VK_NULL_HANDLE) {
             api.vkDestroyFence(device, fence_, nullptr);
         }
+        if (compute_pool != VK_NULL_HANDLE) {
+            api.vkDestroyCommandPool(device, compute_pool, nullptr);
+        }
         if (pool != VK_NULL_HANDLE) {
             api.vkDestroyCommandPool(device, pool, nullptr);
         }
@@ -170,6 +173,9 @@ void Kit::close() {
     }
     fence_ = VK_NULL_HANDLE;
     pool = VK_NULL_HANDLE;
+    compute_pool = VK_NULL_HANDLE;
+    compute_queue = VK_NULL_HANDLE;
+    compute_family = ~0u;
     device = VK_NULL_HANDLE;
     instance = VK_NULL_HANDLE;
 }
@@ -295,6 +301,12 @@ OpenResult Kit::open(platform::VkPlatform& host, const KitOptions& options, std:
         error = "no graphics and compute queue family";
         return OpenResult::Failed;
     }
+    compute_family = ~0u;
+    for (std::uint32_t i = 0; i < count && compute_family == ~0u; ++i) {
+        if ((families[i].queueFlags & VK_QUEUE_COMPUTE_BIT) != 0 && (families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) == 0) {
+            compute_family = i;
+        }
+    }
     count = 0;
     api.vkEnumerateDeviceExtensionProperties(physical, nullptr, &count, nullptr);
     std::vector<VkExtensionProperties> device_available(count);
@@ -321,6 +333,9 @@ OpenResult Kit::open(platform::VkPlatform& host, const KitOptions& options, std:
     queue_info.queueCount = std::min(families[family].queueCount, 2u);
     const float priorities[2] = {1.0f, 1.0f};
     queue_info.pQueuePriorities = priorities;
+    VkDeviceQueueCreateInfo queue_infos[2] = {queue_info, queue_info};
+    queue_infos[1].queueFamilyIndex = compute_family;
+    queue_infos[1].queueCount = 1;
     api_version = options.api_version;
     available_ = device_have;
     enabled_.insert(device_wanted.begin(), device_wanted.end());
@@ -381,8 +396,8 @@ OpenResult Kit::open(platform::VkPlatform& host, const KitOptions& options, std:
     VkDeviceCreateInfo device_info{};
     device_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     device_info.pNext = &features2;
-    device_info.queueCreateInfoCount = 1;
-    device_info.pQueueCreateInfos = &queue_info;
+    device_info.queueCreateInfoCount = compute_family != ~0u ? 2 : 1;
+    device_info.pQueueCreateInfos = queue_infos;
     device_info.enabledExtensionCount = static_cast<std::uint32_t>(device_names.size());
     device_info.ppEnabledExtensionNames = device_names.data();
     if (!check(api.vkCreateDevice(physical, &device_info, nullptr, &device), "vkCreateDevice", error) ||
@@ -397,6 +412,13 @@ OpenResult Kit::open(platform::VkPlatform& host, const KitOptions& options, std:
     pool_info.queueFamilyIndex = family;
     if (!check(api.vkCreateCommandPool(device, &pool_info, nullptr, &pool), "vkCreateCommandPool", error)) {
         return OpenResult::Failed;
+    }
+    if (compute_family != ~0u) {
+        api.vkGetDeviceQueue(device, compute_family, 0, &compute_queue);
+        pool_info.queueFamilyIndex = compute_family;
+        if (!check(api.vkCreateCommandPool(device, &pool_info, nullptr, &compute_pool), "vkCreateCommandPool", error)) {
+            return OpenResult::Failed;
+        }
     }
     VkCommandBufferAllocateInfo alloc{};
     alloc.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -477,6 +499,11 @@ bool Kit::make_buffer_ex(Buffer& out, VkDeviceSize size, VkBufferUsageFlags usag
     info.usage = usage | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT |
                  (address ? VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT : 0);
     info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    if (share_families.size() > 1) {
+        info.sharingMode = VK_SHARING_MODE_CONCURRENT;
+        info.queueFamilyIndexCount = static_cast<std::uint32_t>(share_families.size());
+        info.pQueueFamilyIndices = share_families.data();
+    }
     VkBuffer buffer = VK_NULL_HANDLE;
     if (!check(api.vkCreateBuffer(device, &info, nullptr, &buffer), "vkCreateBuffer", error)) {
         return false;
@@ -652,10 +679,10 @@ bool Kit::make_shader_module(VkShaderModule& out, const std::uint32_t* words, st
     return true;
 }
 
-VkCommandBuffer Kit::allocate_command(VkCommandBufferLevel level, std::string& error) {
+VkCommandBuffer Kit::allocate_command(VkCommandBufferLevel level, std::string& error, bool on_compute) {
     VkCommandBufferAllocateInfo alloc{};
     alloc.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    alloc.commandPool = pool;
+    alloc.commandPool = on_compute ? compute_pool : pool;
     alloc.level = level;
     alloc.commandBufferCount = 1;
     VkCommandBuffer command = VK_NULL_HANDLE;
@@ -1047,6 +1074,10 @@ bool Kit::pixel_kind(VkFormat format, VkImageAspectFlags aspect, PixelKind& kind
             case VK_FORMAT_D16_UNORM_S8_UINT:
                 kind = PixelKind::R16Unorm;
                 return true;
+            case VK_FORMAT_X8_D24_UNORM_PACK32:
+            case VK_FORMAT_D24_UNORM_S8_UINT:
+                kind = PixelKind::Depth32Float;
+                return true;
             default:
                 return false;
         }
@@ -1126,6 +1157,15 @@ bool Kit::read_texture(const Texture& texture, VkImageLayout layout, VkImageAspe
         return false;
     }
     std::memcpy(image.bytes().data(), staging.mapped, image.bytes().size());
+    if (aspect == VK_IMAGE_ASPECT_DEPTH_BIT && (texture.format == VK_FORMAT_X8_D24_UNORM_PACK32 || texture.format == VK_FORMAT_D24_UNORM_S8_UINT)) {
+        for (std::uint32_t y = 0; y < texture.height; ++y) {
+            for (std::uint32_t x = 0; x < texture.width; ++x) {
+                std::uint32_t word = 0;
+                std::memcpy(&word, static_cast<const std::uint8_t*>(staging.mapped) + (static_cast<std::size_t>(y) * texture.width + x) * 4, 4);
+                image.set_channel(x, y, 0, static_cast<double>(word & 0xffffffu) / 16777215.0);
+            }
+        }
+    }
     out = std::move(image);
     return true;
 }

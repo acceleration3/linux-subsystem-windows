@@ -100,7 +100,13 @@ void add_stamp(StampCase value, const char* feature = nullptr, const char* exten
     registry().push_back(std::make_unique<StampCase>(std::move(value)));
     const StampCase* entry = registry().back().get();
     CaseSpec spec("stamp", entry->name);
-    spec.size(128, 128).frames(entry->frames, {0, entry->frames / 2, entry->frames - 1}).tolerance(Tolerance::tight(1));
+    spec.size(128, 128).frames(entry->frames, {0, entry->frames / 2, entry->frames - 1}).tolerance(Tolerance::exact());
+    if (entry->name == "depth_test_write_toggle") {
+        spec.audit_ok("frame 0 draws the quad that stencil_op_cycle also draws first; later frames toggle depth state");
+    }
+    if (entry->name == "stencil_op_cycle") {
+        spec.audit_ok("frame 0 draws the quad that depth_test_write_toggle also draws first; later frames cycle stencil ops");
+    }
     if (feature != nullptr) {
         spec.feature(feature);
     }
@@ -174,10 +180,12 @@ void register_stamps() {
             e.pipelines.push_back(rig.pipe(p));
         };
         c.draw = [](Rig& rig, Env& e, unsigned f, VkCommandBuffer cb) {
-            const std::uint32_t refs[5] = {0x10, 0x30, 0x20, 0x50, 0x2a};
+            const std::uint32_t refs[5] = {0x10, 0x33, 0x1f, 0x10, 0x2a};
+            const std::uint32_t compare_masks[5] = {0xff, 0xf0, 0xff, 0xf0, 0xff};
+            const std::uint32_t write_masks[5] = {0xff, 0xf0, 0xff, 0xff, 0xff};
             rig.kit.api.vkCmdSetStencilReference(cb, VK_STENCIL_FACE_FRONT_AND_BACK, refs[f % 5]);
-            rig.kit.api.vkCmdSetStencilWriteMask(cb, VK_STENCIL_FACE_FRONT_AND_BACK, f % 2 == 0 ? 0xff : 0xf0);
-            rig.kit.api.vkCmdSetStencilCompareMask(cb, VK_STENCIL_FACE_FRONT_AND_BACK, 0xff);
+            rig.kit.api.vkCmdSetStencilWriteMask(cb, VK_STENCIL_FACE_FRONT_AND_BACK, write_masks[f % 5]);
+            rig.kit.api.vkCmdSetStencilCompareMask(cb, VK_STENCIL_FACE_FRONT_AND_BACK, compare_masks[f % 5]);
             e.quads->quad(cb, -0.9f + 0.3f * static_cast<float>(f), -0.9f + 0.2f * static_cast<float>(f), 1.1f, 1.1f, palette(f));
         };
         add_stamp(std::move(c));
@@ -225,7 +233,9 @@ void register_stamps() {
         c.draw = [](Rig& rig, Env& e, unsigned f, VkCommandBuffer cb) {
             const VkCullModeFlags culls[5] = {VK_CULL_MODE_NONE, VK_CULL_MODE_BACK_BIT, VK_CULL_MODE_FRONT_BIT, VK_CULL_MODE_BACK_BIT, VK_CULL_MODE_FRONT_BIT};
             rig.kit.api.vkCmdSetCullMode(cb, culls[f % 5]);
-            rig.kit.api.vkCmdSetFrontFace(cb, f % 2 == 0 ? VK_FRONT_FACE_COUNTER_CLOCKWISE : VK_FRONT_FACE_CLOCKWISE);
+            const VkFrontFace fronts[5] = {VK_FRONT_FACE_COUNTER_CLOCKWISE, VK_FRONT_FACE_COUNTER_CLOCKWISE, VK_FRONT_FACE_CLOCKWISE,
+                                           VK_FRONT_FACE_CLOCKWISE, VK_FRONT_FACE_COUNTER_CLOCKWISE};
+            rig.kit.api.vkCmdSetFrontFace(cb, fronts[f % 5]);
             e.quads->quad(cb, -0.9f + 0.34f * static_cast<float>(f), -0.8f + 0.1f * static_cast<float>(f), 0.5f, 1.2f, palette(f));
         };
         add_stamp(std::move(c), nullptr, nullptr, 3);
@@ -374,7 +384,18 @@ void register_stamps() {
         StampCase c;
         c.name = "mip_level_walk";
         c.setup = [](Rig& rig, Env& e) {
-            e.textures.push_back(rig.sampled(32, 32, VK_FORMAT_R8G8B8A8_UNORM, Pattern::checker(32, 32, 4, Pattern::pack(240, 240, 240), Pattern::pack(220, 40, 40)), 6));
+            static const std::uint32_t light[6] = {Pattern::pack(250, 250, 250), Pattern::pack(250, 220, 120), Pattern::pack(120, 250, 160),
+                                                   Pattern::pack(120, 200, 250), Pattern::pack(250, 140, 220), Pattern::pack(200, 160, 250)};
+            static const std::uint32_t dark[6] = {Pattern::pack(30, 30, 40), Pattern::pack(120, 40, 30), Pattern::pack(30, 110, 50),
+                                                  Pattern::pack(30, 50, 130), Pattern::pack(110, 30, 90), Pattern::pack(60, 30, 120)};
+            std::vector<std::vector<std::uint8_t>> chain;
+            for (unsigned l = 0, dim = 32; l < 6; ++l, dim /= 2) {
+                chain.push_back(Pattern::checker(dim, dim, std::max(1u, dim / 4), light[l], dark[l]));
+            }
+            Texture walked;
+            std::string walk_error;
+            rig.must(rig.kit.make_sampled_texture(walked, 32, 32, VK_FORMAT_R8G8B8A8_UNORM, chain, walk_error), walk_error);
+            e.textures.push_back(walked);
             e.set_layout = rig.dlayout({{0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}});
             e.layout = rig.playout({e.set_layout}, 32, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
             e.sets.resize(5);
@@ -446,7 +467,7 @@ void register_more() {
             rig.kit.api.vkCmdSetDepthTestEnable(cb, f % 3 == 2 ? VK_FALSE : VK_TRUE);
             rig.kit.api.vkCmdSetDepthWriteEnable(cb, f % 2 == 0 ? VK_TRUE : VK_FALSE);
             rig.kit.api.vkCmdSetDepthCompareOp(cb, f % 2 == 0 ? VK_COMPARE_OP_LESS : VK_COMPARE_OP_LESS_OR_EQUAL);
-            e.quads->quad(cb, -0.9f + 0.3f * static_cast<float>(f), -0.9f + 0.15f * static_cast<float>(f), 1.2f, 1.2f, palette(f), 0.7f - 0.1f * static_cast<float>(f));
+            e.quads->quad(cb, -0.9f + 0.3f * static_cast<float>(f), -0.9f + 0.15f * static_cast<float>(f), 1.2f, 1.2f, palette(f), f == 2 ? 0.8f : 0.5f);
         };
         add_stamp(std::move(c), nullptr, nullptr, 3);
     }

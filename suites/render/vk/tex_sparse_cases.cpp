@@ -29,7 +29,7 @@ std::string sparse_caps(Kit& kit) {
 
 void register_sparse() {
     CaseSpec spec("tex", "sparse_residency_unbound_tiles_read_zero");
-    spec.feature("sparseBinding").feature("sparseResidencyImage2D").tolerance(Tolerance::tight(1));
+    spec.feature("sparseBinding").feature("sparseResidencyImage2D").tolerance(Tolerance::exact());
     Cases::add(std::move(spec), [](Rig& rig, CaptureSet& out) {
         Kit& kit = rig.kit;
         Target& target = rig.make_target(TargetDesc{});

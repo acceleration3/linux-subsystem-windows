@@ -10,7 +10,7 @@ const float kClear[4] = {0.04f, 0.05f, 0.09f, 1.0f};
 
 CaseSpec spec_of(const std::string& name) {
     CaseSpec spec("msaa", name);
-    spec.tolerance(Tolerance::tight(1));
+    spec.tolerance(Tolerance::exact());
     return spec;
 }
 
@@ -187,6 +187,13 @@ void register_resolve() {
             kit.api.vkCmdDraw(cb, 9, 1, 0, 0);
             kit.api.vkCmdEndRenderPass(cb);
             kit.barrier(cb, resolved.image, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+            VkClearColorValue border{};
+            border.float32[0] = 0.5f;
+            border.float32[1] = 0.25f;
+            border.float32[2] = 0.125f;
+            border.float32[3] = 1.0f;
+            const VkImageSubresourceRange whole{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+            kit.api.vkCmdClearColorImage(cb, resolved.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &border, 1, &whole);
             VkImageResolve region{};
             region.srcSubresource = region.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
             region.srcOffset = {8, 8, 0};

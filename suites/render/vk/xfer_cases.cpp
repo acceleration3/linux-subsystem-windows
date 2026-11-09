@@ -9,7 +9,7 @@ namespace {
 
 CaseSpec spec_of(const std::string& name) {
     CaseSpec spec("xfer", name);
-    spec.tolerance(Tolerance::tight(1));
+    spec.tolerance(Tolerance::exact());
     return spec;
 }
 
@@ -271,7 +271,7 @@ void register_blits() {
 }
 
 void register_clears() {
-    Cases::add(spec_of("clear_color_image_ranges").uniform_ok(), [](Rig& rig, CaptureSet& out) {
+    Cases::add(spec_of("clear_color_image_ranges").uniform_ok().audit_ok("each layer holds one clear colour by design; a missed range keeps another colour"), [](Rig& rig, CaptureSet& out) {
         Kit& kit = rig.kit;
         Texture t = xfer_image(rig, 16, 16, VK_FORMAT_R8G8B8A8_UNORM, 4);
         upload_full(rig, t, std::vector<std::uint8_t>(16 * 16 * 4 * 4, 0x40), 4);
@@ -289,7 +289,7 @@ void register_clears() {
             out.add("layer" + std::to_string(l), rig.read(t, kSrc, VK_IMAGE_ASPECT_COLOR_BIT, l));
         }
     }, {});
-    Cases::add(spec_of("clear_depth_stencil_image").uniform_ok(), [](Rig& rig, CaptureSet& out) {
+    Cases::add(spec_of("clear_depth_stencil_image").uniform_ok().audit_ok("the whole image holds the clear depth and stencil by design; a missed clear leaves the previous values"), [](Rig& rig, CaptureSet& out) {
         Kit& kit = rig.kit;
         TextureDesc desc;
         desc.width = desc.height = 16;
@@ -403,6 +403,7 @@ void register_copy2() {
             desc.create_view = false;
             const Texture t = rig.texture(desc);
             const auto data = pattern_bytes(32 * 32 * 4, 61);
+            const auto base = pattern_bytes(32 * 32 * 4, 17);
             VkHostImageLayoutTransitionInfoEXT transition{};
             transition.sType = VK_STRUCTURE_TYPE_HOST_IMAGE_LAYOUT_TRANSITION_INFO_EXT;
             transition.image = t.image;
@@ -410,6 +411,18 @@ void register_copy2() {
             transition.newLayout = VK_IMAGE_LAYOUT_GENERAL;
             transition.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
             rig.vk_ok(kit.api.vkTransitionImageLayoutEXT(kit.device, 1, &transition), "vkTransitionImageLayoutEXT");
+            VkMemoryToImageCopyEXT whole{};
+            whole.sType = VK_STRUCTURE_TYPE_MEMORY_TO_IMAGE_COPY_EXT;
+            whole.pHostPointer = base.data();
+            whole.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+            whole.imageExtent = {32, 32, 1};
+            VkCopyMemoryToImageInfoEXT whole_info{};
+            whole_info.sType = VK_STRUCTURE_TYPE_COPY_MEMORY_TO_IMAGE_INFO_EXT;
+            whole_info.dstImage = t.image;
+            whole_info.dstImageLayout = VK_IMAGE_LAYOUT_GENERAL;
+            whole_info.regionCount = 1;
+            whole_info.pRegions = &whole;
+            rig.vk_ok(kit.api.vkCopyMemoryToImageEXT(kit.device, &whole_info), "vkCopyMemoryToImageEXT");
             VkMemoryToImageCopyEXT region{};
             region.sType = VK_STRUCTURE_TYPE_MEMORY_TO_IMAGE_COPY_EXT;
             region.pHostPointer = data.data();
@@ -426,6 +439,22 @@ void register_copy2() {
             info.pRegions = &region;
             rig.vk_ok(kit.api.vkCopyMemoryToImageEXT(kit.device, &info), "vkCopyMemoryToImageEXT");
             out.add("", rig.read(t, VK_IMAGE_LAYOUT_GENERAL));
+            std::vector<std::uint8_t> back(32 * 32 * 4, 0);
+            VkImageToMemoryCopyEXT from{};
+            from.sType = VK_STRUCTURE_TYPE_IMAGE_TO_MEMORY_COPY_EXT;
+            from.pHostPointer = back.data();
+            from.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+            from.imageExtent = {32, 32, 1};
+            VkCopyImageToMemoryInfoEXT from_info{};
+            from_info.sType = VK_STRUCTURE_TYPE_COPY_IMAGE_TO_MEMORY_INFO_EXT;
+            from_info.srcImage = t.image;
+            from_info.srcImageLayout = VK_IMAGE_LAYOUT_GENERAL;
+            from_info.regionCount = 1;
+            from_info.pRegions = &from;
+            rig.vk_ok(kit.api.vkCopyImageToMemoryEXT(kit.device, &from_info), "vkCopyImageToMemoryEXT");
+            Image host(32, 32, PixelKind::Rgba8Unorm);
+            std::memcpy(host.bytes().data(), back.data(), back.size());
+            out.add("host_readback", std::move(host));
         },
         [](Kit& kit) -> std::string {
             const auto f = kit.query_features<VkPhysicalDeviceHostImageCopyFeaturesEXT>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_IMAGE_COPY_FEATURES_EXT);

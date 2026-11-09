@@ -22,7 +22,7 @@ VkStencilOpState stencil_state(VkCompareOp compare, VkStencilOp pass, VkStencilO
 
 CaseSpec core(const char* name) {
     CaseSpec spec("pipe", name);
-    spec.tolerance(Tolerance::tight(1));
+    spec.tolerance(Tolerance::exact());
     return spec;
 }
 
@@ -117,8 +117,8 @@ void register_core_dynamic() {
         const VkPipeline p_read = rig.pipe(read);
         const std::uint32_t refs[4] = {0x11, 0x22, 0x44, 0x8a};
         const std::uint32_t wmask[4] = {0xf0, 0x0f, 0xff, 0x3c};
-        const std::uint32_t rref[4] = {0x10, 0x02, 0x44, 0x08};
-        const std::uint32_t rmask[4] = {0xf0, 0x0f, 0xff, 0x3c};
+        const std::uint32_t rref[4] = {0x1f, 0x02, 0x45, 0x0b};
+        const std::uint32_t rmask[4] = {0xf0, 0xff, 0xfe, 0x3c};
         out.add("", rig.draw(target, p_write, nullptr, [&](VkCommandBuffer cb) {
             for (unsigned i = 0; i < 4; ++i) {
                 rig.kit.api.vkCmdSetStencilReference(cb, VK_STENCIL_FACE_FRONT_AND_BACK, refs[i]);
@@ -197,7 +197,7 @@ void register_core_dynamic() {
 
 CaseSpec eds1(const char* name) {
     CaseSpec spec("pipe", name);
-    spec.min_version(1, 3).tolerance(Tolerance::tight(1));
+    spec.min_version(1, 3).tolerance(Tolerance::exact());
     return spec;
 }
 
@@ -382,7 +382,7 @@ void register_eds1() {
 
 CaseSpec eds_ext(const char* name, const char* extension) {
     CaseSpec spec("pipe", name);
-    spec.extension(extension).tolerance(Tolerance::tight(1));
+    spec.extension(extension).tolerance(Tolerance::exact());
     return spec;
 }
 
@@ -434,9 +434,11 @@ void register_eds2() {
             }
         }
         const std::vector<std::uint16_t> with = {0, 1, 2, 3, 4, 5, 0xFFFF, 6, 7, 8, 9, 10, 11};
-        const std::vector<std::uint16_t> without = {12, 13, 14, 15, 16, 17};
+        const std::vector<std::uint16_t> without = {12, 13, 14, 0xFFFF, 15, 16, 17};
+        v.resize(65536, vertex(0.95f, 0.0f, 2));
         const Buffer vb = rig.buffer(v, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
         const Buffer ib = rig.buffer(with, VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
+        const Buffer ib2 = rig.buffer(without, VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
         PipelineDesc pipe = rig.pos2c(target);
         pipe.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
         pipe.dynamic = {VK_DYNAMIC_STATE_PRIMITIVE_RESTART_ENABLE};
@@ -446,6 +448,7 @@ void register_eds2() {
             rig.kit.api.vkCmdSetPrimitiveRestartEnable(cb, VK_TRUE);
             rig.kit.api.vkCmdDrawIndexed(cb, static_cast<std::uint32_t>(with.size()), 1, 0, 0, 0);
             rig.kit.api.vkCmdSetPrimitiveRestartEnable(cb, VK_FALSE);
+            rig.kit.api.vkCmdBindIndexBuffer(cb, ib2.buffer, 0, VK_INDEX_TYPE_UINT16);
             rig.kit.api.vkCmdDrawIndexed(cb, static_cast<std::uint32_t>(without.size()), 1, 0, 0, 0);
         }));
     });

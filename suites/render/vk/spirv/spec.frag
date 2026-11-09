@@ -1,7 +1,7 @@
 #version 450
-layout(constant_id = 0) const int MODE = 0;
-layout(constant_id = 1) const float SCALE = 1.0;
-layout(constant_id = 2) const bool INVERT = false;
+layout(constant_id = 0) const int MODE = 1;
+layout(constant_id = 1) const float SCALE = 3.0;
+layout(constant_id = 2) const bool INVERT = true;
 layout(location = 0) in vec2 v_uv;
 layout(location = 0) out vec4 out_color;
 void main() {

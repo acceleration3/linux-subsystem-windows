@@ -36,17 +36,23 @@ inline void make_scale(const FormatEntry& entry, float scale[4], float bias[4]) 
                 bias[c] = 0.0f;
                 break;
             case Kind::Snorm:
-                scale[c] = 0.5f;
+                scale[c] = 0.45f;
                 bias[c] = 0.5f;
                 break;
             case Kind::Uscaled:
-            case Kind::Uint:
                 scale[c] = static_cast<float>(1.0 / umax);
                 bias[c] = 0.0f;
                 break;
+            case Kind::Uint:
+                scale[c] = static_cast<float>(0.8 / umax);
+                bias[c] = 0.1f;
+                break;
             case Kind::Sscaled:
-            case Kind::Sint:
                 scale[c] = static_cast<float>(0.5 / smax);
+                bias[c] = 0.5f;
+                break;
+            case Kind::Sint:
+                scale[c] = static_cast<float>(0.4 / smax);
                 bias[c] = 0.5f;
                 break;
         }
@@ -55,7 +61,7 @@ inline void make_scale(const FormatEntry& entry, float scale[4], float bias[4]) 
 
 inline std::vector<std::uint8_t> make_format_bytes(const FormatEntry& entry, unsigned count) {
     std::vector<std::uint8_t> bytes(static_cast<std::size_t>(count) * entry.bytes);
-    std::uint32_t state = 0x1234567u + entry.bytes * 977u;
+    std::uint32_t state = 0x1234567u + entry.bytes * 977u + static_cast<std::uint32_t>(entry.format) * 7919u;
     if (entry.kind == Kind::Float11) {
         for (unsigned v = 0; v < count; ++v) {
             std::uint32_t packed = 0;

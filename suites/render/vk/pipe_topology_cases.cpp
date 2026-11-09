@@ -143,7 +143,10 @@ void register_topologies() {
     };
     for (const TopologyCase& entry : cases) {
         CaseSpec spec("pipe", entry.name);
-        spec.tolerance(Tolerance::tight(1));
+        spec.tolerance(Tolerance::exact());
+        if (std::string(entry.name) == "topo_line_list_adjacency" || std::string(entry.name) == "topo_line_strip_adjacency") {
+            spec.audit_ok("one pixel wide lines emitted by the geometry shader from the adjacency topology cover under 2 percent of the frame by design");
+        }
         if (entry.feature != nullptr) {
             spec.feature(entry.feature);
         }
@@ -219,7 +222,7 @@ void register_patches() {
     };
     for (const PatchCase& entry : cases) {
         CaseSpec spec("pipe", entry.name);
-        spec.feature("tessellationShader").tolerance(Tolerance::tight(1));
+        spec.feature("tessellationShader").tolerance(Tolerance::exact());
         Cases::add(
             std::move(spec),
             [entry](Rig& rig, CaptureSet& out) {
@@ -271,7 +274,7 @@ std::vector<Vertex2> restart_vertices() {
 }
 
 void register_restart() {
-    Cases::add(CaseSpec("pipe", "restart_strip_16bit").tolerance(Tolerance::tight(1)), [](Rig& rig, CaptureSet& out) {
+    Cases::add(CaseSpec("pipe", "restart_strip_16bit").tolerance(Tolerance::exact()).audit_ok("the strips with restart index 0xFFFF; a wrong restart value breaks the strips, the same strips as the 32 bit row show by design"), [](Rig& rig, CaptureSet& out) {
         Target& target = rig.make_target(TargetDesc{});
         const std::vector<Vertex2> vertices = restart_vertices();
         const std::vector<std::uint16_t> indices = restart_strips<std::uint16_t>();
@@ -286,7 +289,7 @@ void register_restart() {
             rig.kit.api.vkCmdDrawIndexed(cb, static_cast<std::uint32_t>(indices.size()), 1, 0, 0, 0);
         }));
     });
-    Cases::add(CaseSpec("pipe", "restart_strip_32bit").tolerance(Tolerance::tight(1)), [](Rig& rig, CaptureSet& out) {
+    Cases::add(CaseSpec("pipe", "restart_strip_32bit").tolerance(Tolerance::exact()).audit_ok("the strips with restart index 0xFFFFFFFF; a wrong restart value breaks the strips, the same strips as the 16 bit row show by design"), [](Rig& rig, CaptureSet& out) {
         Target& target = rig.make_target(TargetDesc{});
         const std::vector<Vertex2> vertices = restart_vertices();
         const std::vector<std::uint32_t> indices = restart_strips<std::uint32_t>();
@@ -301,7 +304,7 @@ void register_restart() {
             rig.kit.api.vkCmdDrawIndexed(cb, static_cast<std::uint32_t>(indices.size()), 1, 0, 0, 0);
         }));
     });
-    Cases::add(CaseSpec("pipe", "restart_line_strip").tolerance(Tolerance::tight(1)), [](Rig& rig, CaptureSet& out) {
+    Cases::add(CaseSpec("pipe", "restart_line_strip").tolerance(Tolerance::exact()), [](Rig& rig, CaptureSet& out) {
         Target& target = rig.make_target(TargetDesc{});
         const std::vector<Vertex2> vertices = zigzag(12);
         const std::vector<std::uint16_t> indices = {0, 1, 2, 3, 0xFFFF, 4, 5, 6, 7, 0xFFFF, 8, 9, 10, 11};
@@ -317,7 +320,7 @@ void register_restart() {
         }));
     });
     CaseSpec list_spec("pipe", "restart_list_ext");
-    list_spec.extension("VK_EXT_primitive_topology_list_restart").tolerance(Tolerance::tight(1));
+    list_spec.extension("VK_EXT_primitive_topology_list_restart").tolerance(Tolerance::exact());
     Cases::add(
         std::move(list_spec),
         [](Rig& rig, CaptureSet& out) {

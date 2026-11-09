@@ -71,7 +71,7 @@ std::vector<FormatEntry> format_table() {
 void register_vertex_formats() {
     for (const FormatEntry& entry : format_table()) {
         CaseSpec spec("pipe", std::string("vin_") + entry.name);
-        spec.tolerance(Tolerance::tight(1));
+        spec.tolerance(Tolerance::exact());
         Cases::add(
             std::move(spec),
             [entry](Rig& rig, CaptureSet& out) {
@@ -122,7 +122,7 @@ struct Instanced {
 };
 
 void register_vertex_layouts() {
-    Cases::add(CaseSpec("pipe", "vin_multi_binding").tolerance(Tolerance::tight(1)), [](Rig& rig, CaptureSet& out) {
+    Cases::add(CaseSpec("pipe", "vin_multi_binding").tolerance(Tolerance::exact()), [](Rig& rig, CaptureSet& out) {
         Target& target = rig.make_target(TargetDesc{});
         const std::vector<float> positions = {-0.6f, -0.6f, 0.6f, -0.6f, 0.0f, 0.6f, -0.2f, 0.1f, 0.5f, 0.2f, 0.1f, 0.7f};
         const std::vector<float> colors = {1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 1, 0, 0, 1, 1, 1, 0, 1};
@@ -146,7 +146,7 @@ void register_vertex_layouts() {
             rig.kit.api.vkCmdDraw(cb, 3, 1, 0, 0);
         }));
     });
-    Cases::add(CaseSpec("pipe", "vin_instance_rate").tolerance(Tolerance::tight(1)), [](Rig& rig, CaptureSet& out) {
+    Cases::add(CaseSpec("pipe", "vin_instance_rate").tolerance(Tolerance::exact()), [](Rig& rig, CaptureSet& out) {
         Target& target = rig.make_target(TargetDesc{});
         const std::vector<float> tri = {0.0f, 0.12f, -0.1f, -0.1f, 0.1f, -0.1f};
         std::vector<Instanced> inst;
@@ -172,7 +172,7 @@ void register_vertex_layouts() {
         }));
     });
     CaseSpec divisor("pipe", "vin_instance_divisor");
-    divisor.extension("VK_EXT_vertex_attribute_divisor").tolerance(Tolerance::tight(1));
+    divisor.extension("VK_EXT_vertex_attribute_divisor").tolerance(Tolerance::exact()).audit_ok("a divisor of 3 over 9 instances draws three overlapping triangles on a mostly empty frame; the row fails if the divisor is ignored");
     Cases::add(
         std::move(divisor),
         [](Rig& rig, CaptureSet& out) {
@@ -211,7 +211,7 @@ void register_vertex_layouts() {
             return f.vertexAttributeInstanceRateDivisor != VK_FALSE ? std::string() : std::string("vertexAttributeInstanceRateDivisor");
         });
     CaseSpec dynamic("pipe", "vin_dynamic_state");
-    dynamic.extension("VK_EXT_vertex_input_dynamic_state").tolerance(Tolerance::tight(1));
+    dynamic.extension("VK_EXT_vertex_input_dynamic_state").tolerance(Tolerance::exact());
     Cases::add(
         std::move(dynamic),
         [](Rig& rig, CaptureSet& out) {
@@ -261,7 +261,7 @@ void register_vertex_layouts() {
                 VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_INPUT_DYNAMIC_STATE_FEATURES_EXT);
             return f.vertexInputDynamicState != VK_FALSE ? std::string() : std::string("vertexInputDynamicState");
         });
-    Cases::add(CaseSpec("pipe", "vin_stride_zero").tolerance(Tolerance::tight(1)), [](Rig& rig, CaptureSet& out) {
+    Cases::add(CaseSpec("pipe", "vin_stride_zero").tolerance(Tolerance::exact()), [](Rig& rig, CaptureSet& out) {
         Target& target = rig.make_target(TargetDesc{});
         const std::vector<float> pos = {-0.7f, -0.7f, 0.0f, -0.7f, 0.7f, -0.7f, -0.7f, 0.1f, 0.0f, 0.1f, 0.7f, 0.1f, -0.2f, 0.4f, 0.2f, 0.9f, 0.6f, 0.4f};
         const std::vector<float> color = {0.2f, 0.9f, 0.5f, 1.0f};

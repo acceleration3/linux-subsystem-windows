@@ -86,7 +86,7 @@ void run_type(Rig& rig, CaptureSet& out, const TypeSetup& setup) {
 void add_type(const char* name, TypeSetup setup, std::function<std::string(Kit&)> caps = {}, const char* feature = nullptr,
               const char* extension = nullptr) {
     CaseSpec spec("tex", name);
-    spec.tolerance(Tolerance::tight(1));
+    spec.tolerance(Tolerance::exact());
     if (feature != nullptr) {
         spec.feature(feature);
     }
@@ -133,7 +133,7 @@ void register_types() {
     cube_array.layers = 12;
     cube_array.shader = "tcubea.frag";
     add_type("type_cube_array", cube_array, {}, "imageCubeArray");
-    Cases::add(CaseSpec("tex", "type_3d_slice_2d_view").extension("VK_EXT_image_2d_view_of_3d").tolerance(Tolerance::tight(1)),
+    Cases::add(CaseSpec("tex", "type_3d_slice_2d_view").extension("VK_EXT_image_2d_view_of_3d").tolerance(Tolerance::exact()),
                [](Rig& rig, CaptureSet& out) {
                    Target& target = rig.make_target(TargetDesc{});
                    TextureDesc desc;
@@ -197,7 +197,7 @@ void register_types() {
                    return f.sampler2DViewOf3D != VK_FALSE ? std::string() : std::string("sampler2DViewOf3D");
                });
     CaseSpec multisample("tex", "type_2d_ms_texel_fetch");
-    multisample.tolerance(Tolerance::tight(1));
+    multisample.tolerance(Tolerance::exact());
     Cases::add(std::move(multisample), [](Rig& rig, CaptureSet& out) {
         if (!rig.kit.format_supports(VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT)) {
             rig.fail("RGBA8 sampling unsupported");

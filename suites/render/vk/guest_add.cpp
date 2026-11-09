@@ -23,6 +23,10 @@ void add(Suite& suite) {
                 return Outcome::fail("vulkan device: " + error);
             }
             context.measure("vk.device", kit.description);
+            if (opened == rr::OpenResult::Ok) {
+                context.measure("vk.queue_family", static_cast<double>(kit.family));
+                context.measure("vk.compute_family", kit.compute_family == ~0u ? -1.0 : static_cast<double>(kit.compute_family));
+            }
             GuestIdentity guest{"vk", RefCheck::hex(kit.identity.uuid, 16), std::string(), kit.description};
             return RefCheck::run<Kit>(context, *entry, kit, opened == rr::OpenResult::Unsupported ? error : std::string(), guest);
         });

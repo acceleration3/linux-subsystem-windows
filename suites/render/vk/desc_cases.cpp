@@ -14,7 +14,7 @@ struct UniformData {
 
 CaseSpec spec_of(const std::string& name) {
     CaseSpec spec("desc", name);
-    spec.tolerance(Tolerance::tight(1));
+    spec.tolerance(Tolerance::exact());
     return spec;
 }
 

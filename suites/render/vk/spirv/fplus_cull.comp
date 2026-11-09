@@ -1,0 +1,24 @@
+#version 450
+layout(local_size_x = 64) in;
+layout(set = 0, binding = 0) readonly buffer Lights { vec4 d[]; } lights;
+layout(set = 0, binding = 1) buffer Tiles { uint d[]; } tiles;
+shared uint masks[2];
+void main() {
+    uint t = gl_WorkGroupID.y * 8u + gl_WorkGroupID.x;
+    if (gl_LocalInvocationIndex < 2u) {
+        masks[gl_LocalInvocationIndex] = 0u;
+    }
+    barrier();
+    uint i = gl_LocalInvocationIndex;
+    vec4 l = lights.d[i * 2u];
+    vec2 lo = vec2(gl_WorkGroupID.xy) * 16.0;
+    vec2 c = clamp(l.xy, lo, lo + 16.0);
+    vec2 dd = l.xy - c;
+    if (dot(dd, dd) <= l.z * l.z) {
+        atomicOr(masks[i >> 5u], 1u << (i & 31u));
+    }
+    barrier();
+    if (gl_LocalInvocationIndex < 2u) {
+        tiles.d[t * 2u + gl_LocalInvocationIndex] = masks[gl_LocalInvocationIndex];
+    }
+}

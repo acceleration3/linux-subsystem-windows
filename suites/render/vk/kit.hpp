@@ -177,7 +177,7 @@ public:
     [[nodiscard]] bool make_shader_module(VkShaderModule& out, const std::uint32_t* words, std::size_t count, std::string& error);
     [[nodiscard]] bool upload_texture(const Texture& texture, const std::vector<VkBufferImageCopy>& regions,
                                       const std::vector<std::uint8_t>& bytes, VkImageLayout final_layout, std::string& error);
-    [[nodiscard]] VkCommandBuffer allocate_command(VkCommandBufferLevel level, std::string& error);
+    [[nodiscard]] VkCommandBuffer allocate_command(VkCommandBufferLevel level, std::string& error, bool on_compute = false);
     [[nodiscard]] bool submit_raw(VkCommandBuffer command, std::string& error);
     [[nodiscard]] bool has_extension(const std::string& name) const { return enabled_.count(name) != 0; }
     [[nodiscard]] bool has_device_extension(const std::string& name) const { return available_.count(name) != 0; }
@@ -247,7 +247,11 @@ public:
     VkDevice device = VK_NULL_HANDLE;
     VkQueue queue = VK_NULL_HANDLE;
     VkQueue queue2 = VK_NULL_HANDLE;
+    VkQueue compute_queue = VK_NULL_HANDLE;
+    VkCommandPool compute_pool = VK_NULL_HANDLE;
     std::uint32_t family = 0;
+    std::uint32_t compute_family = ~0u;
+    std::vector<std::uint32_t> share_families;
     std::uint32_t api_version = VK_API_VERSION_1_1;
     std::set<std::string> enabled_;
     std::set<std::string> available_;

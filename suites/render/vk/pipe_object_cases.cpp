@@ -9,7 +9,7 @@ namespace {
 
 CaseSpec plain(const char* name) {
     CaseSpec spec("pipe", name);
-    spec.tolerance(Tolerance::tight(1));
+    spec.tolerance(Tolerance::exact());
     return spec;
 }
 
@@ -53,6 +53,22 @@ void register_specialization() {
     }
 }
 
+void check_cache_header(Rig& rig, VkPipelineCache cache) {
+    std::size_t size = 0;
+    rig.vk_ok(rig.kit.api.vkGetPipelineCacheData(rig.kit.device, cache, &size, nullptr), "vkGetPipelineCacheData");
+    std::vector<std::uint8_t> data(size);
+    rig.vk_ok(rig.kit.api.vkGetPipelineCacheData(rig.kit.device, cache, &size, data.data()), "vkGetPipelineCacheData");
+    rig.must(size >= 32, "pipeline cache data is smaller than its header");
+    std::uint32_t header[4] = {};
+    std::memcpy(header, data.data(), sizeof header);
+    rig.must(header[0] >= 32, "pipeline cache headerSize is below 32");
+    rig.must(header[1] == VK_PIPELINE_CACHE_HEADER_VERSION_ONE, "pipeline cache header version is not ONE");
+    rig.must(header[2] == rig.kit.properties.vendorID, "pipeline cache header vendorID differs from the device properties");
+    rig.must(header[3] == rig.kit.properties.deviceID, "pipeline cache header deviceID differs from the device properties");
+    rig.must(std::memcmp(data.data() + 16, rig.kit.properties.pipelineCacheUUID, VK_UUID_SIZE) == 0,
+             "pipeline cache header UUID differs from the device properties");
+}
+
 void register_cache_and_derivatives() {
     Cases::add(plain("obj_pipeline_cache_roundtrip"), [](Rig& rig, CaptureSet& out) {
         Target& target = rig.make_target(TargetDesc{});
@@ -69,10 +85,13 @@ void register_cache_and_derivatives() {
         rig.vk_ok(rig.kit.api.vkGetPipelineCacheData(rig.kit.device, first, &size, nullptr), "vkGetPipelineCacheData");
         std::vector<std::uint8_t> data(size);
         rig.vk_ok(rig.kit.api.vkGetPipelineCacheData(rig.kit.device, first, &size, data.data()), "vkGetPipelineCacheData");
+        rig.must(size >= 32, "pipeline cache data is smaller than its header");
+        check_cache_header(rig, first);
         info.initialDataSize = size;
         info.pInitialData = data.data();
         VkPipelineCache second = VK_NULL_HANDLE;
         rig.vk_ok(rig.kit.api.vkCreatePipelineCache(rig.kit.device, &info, nullptr, &second), "vkCreatePipelineCache");
+        check_cache_header(rig, second);
         rig.kit.defer([&kit = rig.kit, second] { kit.api.vkDestroyPipelineCache(kit.device, second, nullptr); });
         PipelineDesc b = quads.desc(target);
         b.cache = second;
@@ -105,6 +124,7 @@ void register_cache_and_derivatives() {
         const VkPipeline p_a = rig.pipe(a);
         const VkPipeline p_b = rig.pipe(b);
         rig.vk_ok(rig.kit.api.vkMergePipelineCaches(rig.kit.device, caches[2], 2, caches), "vkMergePipelineCaches");
+        check_cache_header(rig, caches[2]);
         PipelineDesc c = quads.desc(target);
         c.cache = caches[2];
         c.blend = true;
@@ -387,6 +407,7 @@ void register_renderpass_variants() {
 void register_multiview() {
     for (unsigned views : {2u, 4u}) {
         CaseSpec spec = plain(views == 2 ? "obj_multiview_2" : "obj_multiview_4");
+        spec.audit_ok(views == 2 ? "the two views render the first two views of the four view row of the same scene" : "views 0 and 1 render the same scene as the two view row, views 2 and 3 are new");
         Cases::add(
             std::move(spec),
             [views](Rig& rig, CaptureSet& out) {

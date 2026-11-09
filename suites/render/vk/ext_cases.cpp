@@ -12,7 +12,7 @@ const float kClear[4] = {0.05f, 0.06f, 0.1f, 1.0f};
 
 CaseSpec spec_of(const std::string& group, const std::string& name) {
     CaseSpec spec(group, name);
-    spec.tolerance(Tolerance::tight(1));
+    spec.tolerance(Tolerance::exact());
     return spec;
 }
 
@@ -365,7 +365,7 @@ void register_eds3() {
                 {VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE, VK_BLEND_OP_REVERSE_SUBTRACT, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ZERO, VK_BLEND_OP_ADD}};
             const VkColorComponentFlags masks[4] = {0xf, 0xf, 0x7, 0x3};
             for (unsigned i = 0; i < 4; ++i) {
-                const VkBool32 enable = i == 3 ? VK_TRUE : VK_TRUE;
+                const VkBool32 enable = i == 1 ? VK_FALSE : VK_TRUE;
                 kit.api.vkCmdSetColorBlendEnableEXT(cb, 0, 1, &enable);
                 kit.api.vkCmdSetColorBlendEquationEXT(cb, 0, 1, &eqs[i]);
                 kit.api.vkCmdSetColorWriteMaskEXT(cb, 0, 1, &masks[i]);

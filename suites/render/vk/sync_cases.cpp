@@ -12,7 +12,7 @@ const float kClear[4] = {0.05f, 0.06f, 0.09f, 1.0f};
 
 CaseSpec spec_of(const std::string& name) {
     CaseSpec spec("sync", name);
-    spec.tolerance(Tolerance::tight(1));
+    spec.tolerance(Tolerance::exact());
     return spec;
 }
 
@@ -45,65 +45,162 @@ Image sample_to_target(Rig& rig, const Texture& source, std::uint32_t size) {
     }, layout, {set});
 }
 
-void render_scene_into(Rig& rig, Texture& texture, std::uint32_t size) {
+struct SamplePlan {
+    Target* target = nullptr;
+    VkPipeline pipeline = VK_NULL_HANDLE;
+    VkPipelineLayout layout = VK_NULL_HANDLE;
+    VkDescriptorSet set = VK_NULL_HANDLE;
+    SampleConstants constants{};
+
+    void record(Rig& rig, VkCommandBuffer cb) const {
+        target->begin(rig.kit, cb, true);
+        rig.bind_graphics(cb, pipeline, layout, {set});
+        rig.push(cb, layout, VK_SHADER_STAGE_FRAGMENT_BIT, &constants, sizeof constants);
+        rig.kit.api.vkCmdDraw(cb, 3, 1, 0, 0);
+        target->end(rig.kit, cb);
+    }
+};
+
+SamplePlan plan_sampling(Rig& rig, const Texture& source, std::uint32_t size) {
+    SamplePlan plan;
+    plan.target = &rig.make_target(TargetDesc{});
+    const VkSampler sampler = rig.sampler(VK_FILTER_NEAREST, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE);
+    const VkDescriptorSetLayout set_layout = rig.dlayout({{0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}});
+    DescriptorWrite write;
+    write.binding = 0;
+    write.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    write.image = {sampler, source.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+    plan.set = rig.dset(set_layout, {write});
+    plan.layout = rig.playout({set_layout}, sizeof(SampleConstants), VK_SHADER_STAGE_FRAGMENT_BIT);
+    PipelineDesc pipe;
+    pipe.vertex = rig.sh("full.vert");
+    pipe.fragment = rig.sh("tex_f.frag");
+    pipe.layout = plan.layout;
+    pipe.pass = plan.target->clear_pass;
+    plan.pipeline = rig.pipe(pipe);
+    plan.constants = SampleConstants{{1, 1, 1, 1}, {0, 0, 0, 0}, {static_cast<std::int32_t>(size), static_cast<std::int32_t>(size), 0, 0}};
+    return plan;
+}
+
+struct HeavyProducer {
+    Texture texture;
+    VkRenderPass pass = VK_NULL_HANDLE;
+    VkFramebuffer framebuffer = VK_NULL_HANDLE;
+    VkPipeline pipeline = VK_NULL_HANDLE;
+    std::unique_ptr<QuadKit> quads;
+    std::uint32_t size = 64;
+
+    void record(Rig& rig, VkCommandBuffer cb) const {
+        VkClearValue clear{};
+        std::copy(kClear, kClear + 4, clear.color.float32);
+        VkRenderPassBeginInfo begin{};
+        begin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+        begin.renderPass = pass;
+        begin.framebuffer = framebuffer;
+        begin.renderArea = {{0, 0}, {size, size}};
+        begin.clearValueCount = 1;
+        begin.pClearValues = &clear;
+        rig.kit.api.vkCmdBeginRenderPass(cb, &begin, VK_SUBPASS_CONTENTS_INLINE);
+        rig.viewport(cb, 0, 0, static_cast<float>(size), static_cast<float>(size));
+        rig.scissor(cb, 0, 0, size, size);
+        rig.bind_graphics(cb, pipeline);
+        for (unsigned i = 0; i < 400; ++i) {
+            const float c[4] = {palette(i % 5)[0], palette(i % 5)[1], palette(i % 5)[2], 0.3f};
+            const float t = static_cast<float>(i) * 0.01f;
+            quads->quad(cb, -1.0f + 0.2f * std::sin(t * 3.0f), -1.0f + 0.2f * std::cos(t * 2.0f), 1.6f + 0.4f * std::sin(t), 1.6f + 0.4f * std::cos(t), c);
+        }
+        rig.kit.api.vkCmdEndRenderPass(cb);
+    }
+};
+
+HeavyProducer make_producer(Rig& rig, std::uint32_t size) {
+    HeavyProducer producer;
+    producer.size = size;
+    TextureDesc desc;
+    desc.width = desc.height = size;
+    desc.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    producer.texture = rig.texture(desc);
+    VkAttachmentDescription a{};
+    a.format = VK_FORMAT_R8G8B8A8_UNORM;
+    a.samples = VK_SAMPLE_COUNT_1_BIT;
+    a.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    a.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    a.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    a.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    a.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    a.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    const VkAttachmentReference ref{0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+    VkSubpassDescription sub{};
+    sub.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    sub.colorAttachmentCount = 1;
+    sub.pColorAttachments = &ref;
+    VkRenderPassCreateInfo rp{};
+    rp.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    rp.attachmentCount = 1;
+    rp.pAttachments = &a;
+    rp.subpassCount = 1;
+    rp.pSubpasses = &sub;
+    producer.pass = rig.render_pass(rp);
+    producer.framebuffer = rig.framebuffer(producer.pass, {producer.texture.view}, size, size);
     TargetDesc td;
     td.width = td.height = size;
-    td.color_usage = VK_IMAGE_USAGE_SAMPLED_BIT;
-    Target& source = rig.make_target(td);
-    std::copy(kClear, kClear + 4, source.clear_color);
-    QuadKit quads(rig);
-    const VkPipeline pipeline = rig.pipe(quads.desc(source));
-    rig.draw(source, pipeline, nullptr, [&](VkCommandBuffer cb) {
-        quads.quad(cb, -0.8f, -0.8f, 1.2f, 1.2f, palette(0));
-        quads.quad(cb, -0.2f, -0.3f, 1.0f, 1.0f, palette(2));
-        quads.quad(cb, -0.5f, 0.3f, 1.2f, 0.5f, palette(3));
-    }, quads.layout);
-    texture = source.color_[0];
+    Target& shape = rig.make_target(td);
+    producer.quads = std::make_unique<QuadKit>(rig);
+    PipelineDesc pipe = producer.quads->desc(shape);
+    pipe.pass = producer.pass;
+    pipe.blend = true;
+    producer.pipeline = rig.pipe(pipe);
+    return producer;
 }
 
 void register_barriers() {
-    Cases::add(spec_of("barrier_attachment_to_sampling"), [](Rig& rig, CaptureSet& out) {
-        Texture texture;
-        render_scene_into(rig, texture, 64);
+    Cases::add(spec_of("barrier_attachment_to_sampling").audit_ok("legacy barrier, the same heavy scene as barrier2_attachment_to_sampling through vkCmdPipelineBarrier; a missing barrier races the producer"), [](Rig& rig, CaptureSet& out) {
+        const HeavyProducer producer = make_producer(rig, 64);
+        const SamplePlan plan = plan_sampling(rig, producer.texture, 64);
         rig.run([&](VkCommandBuffer cb) {
+            producer.record(rig, cb);
             VkImageMemoryBarrier b{};
             b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
             b.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
             b.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-            b.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+            b.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
             b.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
             b.srcQueueFamilyIndex = b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            b.image = texture.image;
+            b.image = producer.texture.image;
             b.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
             rig.kit.api.vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0,
                                              nullptr, 1, &b);
+            plan.record(rig, cb);
         });
-        out.add("", sample_to_target(rig, texture, 64));
+        out.add("", rig.color(*plan.target));
     });
     CaseSpec sync2 = spec_of("barrier2_attachment_to_sampling");
+    sync2.audit_ok("synchronization2 barrier, the same heavy scene as barrier_attachment_to_sampling through vkCmdPipelineBarrier2; the subject is the API path");
     sync2.min_version(1, 3);
     Cases::add(std::move(sync2), [](Rig& rig, CaptureSet& out) {
-        Texture texture;
-        render_scene_into(rig, texture, 64);
+        const HeavyProducer producer = make_producer(rig, 64);
+        const SamplePlan plan = plan_sampling(rig, producer.texture, 64);
         rig.run([&](VkCommandBuffer cb) {
+            producer.record(rig, cb);
             VkImageMemoryBarrier2 b{};
             b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
             b.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
             b.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
             b.dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
             b.dstAccessMask = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT;
-            b.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+            b.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
             b.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
             b.srcQueueFamilyIndex = b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            b.image = texture.image;
+            b.image = producer.texture.image;
             b.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
             VkDependencyInfo dep{};
             dep.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
             dep.imageMemoryBarrierCount = 1;
             dep.pImageMemoryBarriers = &b;
             rig.kit.api.vkCmdPipelineBarrier2(cb, &dep);
+            plan.record(rig, cb);
         });
-        out.add("", sample_to_target(rig, texture, 64));
+        out.add("", rig.color(*plan.target));
     });
     Cases::add(spec_of("layout_chain_clear_compute_sample"), [](Rig& rig, CaptureSet& out) {
         Kit& kit = rig.kit;
@@ -235,6 +332,9 @@ public:
 
 protected:
     std::string caps(Kit& kit) override {
+        if (kit.compute_family == ~0u) {
+            return "no compute-only queue family";
+        }
         if (timeline_) {
             const auto f = kit.query_features<VkPhysicalDeviceVulkan12Features>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES);
             return f.timelineSemaphore != VK_FALSE ? std::string() : std::string("timelineSemaphore");
@@ -243,55 +343,35 @@ protected:
     }
 
     void init(Rig& rig) override {
+        Kit& kit = rig.kit;
+        kit.share_families = {kit.family, kit.compute_family};
         c_ = make_compute_vertices(rig);
-        if (timeline_) {
-            VkSemaphoreTypeCreateInfo type{};
-            type.sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO;
-            type.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE;
-            VkSemaphoreCreateInfo info{};
-            info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-            info.pNext = &type;
-            rig.vk_ok(rig.kit.api.vkCreateSemaphore(rig.kit.device, &info, nullptr, &timeline_sem_), "vkCreateSemaphore");
-            Kit* kit = &rig.kit;
-            const VkSemaphore sem = timeline_sem_;
-            rig.kit.defer([kit, sem] { kit->api.vkDestroySemaphore(kit->device, sem, nullptr); });
-            std::string error;
-            compute_cb_ = rig.kit.allocate_command(VK_COMMAND_BUFFER_LEVEL_PRIMARY, error);
-            graphics_cb_ = rig.kit.allocate_command(VK_COMMAND_BUFFER_LEVEL_PRIMARY, error);
-            rig.must(compute_cb_ != VK_NULL_HANDLE && graphics_cb_ != VK_NULL_HANDLE, error);
-            VkFenceCreateInfo fence_info{};
-            fence_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-            rig.vk_ok(rig.kit.api.vkCreateFence(rig.kit.device, &fence_info, nullptr, &fence_), "vkCreateFence");
-            const VkFence fence = fence_;
-            rig.kit.defer([kit, fence] { kit->api.vkDestroyFence(kit->device, fence, nullptr); });
-        } else {
-            sem_ = rig.semaphore();
-        }
+        kit.share_families.clear();
+        VkSemaphoreTypeCreateInfo type{};
+        type.sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO;
+        type.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE;
+        VkSemaphoreCreateInfo info{};
+        info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+        info.pNext = timeline_ ? &type : nullptr;
+        rig.vk_ok(kit.api.vkCreateSemaphore(kit.device, &info, nullptr, &sem_), "vkCreateSemaphore");
+        Kit* kit_ptr = &kit;
+        const VkSemaphore sem = sem_;
+        kit.defer([kit_ptr, sem] { kit_ptr->api.vkDestroySemaphore(kit_ptr->device, sem, nullptr); });
+        std::string error;
+        compute_cb_ = kit.allocate_command(VK_COMMAND_BUFFER_LEVEL_PRIMARY, error, true);
+        rig.must(compute_cb_ != VK_NULL_HANDLE, error);
+        graphics_cb_ = kit.allocate_command(VK_COMMAND_BUFFER_LEVEL_PRIMARY, error);
+        rig.must(graphics_cb_ != VK_NULL_HANDLE, error);
+        VkFenceCreateInfo fence_info{};
+        fence_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+        rig.vk_ok(kit.api.vkCreateFence(kit.device, &fence_info, nullptr, &fence_), "vkCreateFence");
+        const VkFence fence = fence_;
+        kit.defer([kit_ptr, fence] { kit_ptr->api.vkDestroyFence(kit_ptr->device, fence, nullptr); });
     }
 
     void step(Rig& rig, unsigned frame) override {
         Kit& kit = rig.kit;
         const float param = static_cast<float>(frame);
-        const auto record_compute = [&](VkCommandBuffer cb) {
-            kit.api.vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, c_.compute);
-            kit.api.vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_COMPUTE, c_.compute_layout, 0, 1, &c_.set, 0, nullptr);
-            const float params[4] = {param, 0, 0, 0};
-            rig.push(cb, c_.compute_layout, VK_SHADER_STAGE_COMPUTE_BIT, params, 16);
-            kit.api.vkCmdDispatch(cb, 1, 1, 1);
-        };
-        const auto record_graphics = [&](VkCommandBuffer cb) {
-            c_.target->begin(kit, cb, frame == 0);
-            rig.bind_graphics(cb, c_.graphics);
-            rig.bind_vertex(cb, c_.verts);
-            kit.api.vkCmdDraw(cb, 3, 1, 0, 0);
-            c_.target->end(kit, cb);
-        };
-        if (!timeline_) {
-            std::string error;
-            rig.must(kit.submit_sync(record_compute, VK_NULL_HANDLE, 0, sem_, error), error);
-            rig.must(kit.submit_sync(record_graphics, sem_, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, VK_NULL_HANDLE, error), error);
-            return;
-        }
         const auto record = [&](VkCommandBuffer cb, const std::function<void(VkCommandBuffer)>& fn) {
             rig.vk_ok(kit.api.vkResetCommandBuffer(cb, 0), "vkResetCommandBuffer");
             VkCommandBufferBeginInfo begin{};
@@ -301,48 +381,66 @@ protected:
             fn(cb);
             rig.vk_ok(kit.api.vkEndCommandBuffer(cb), "vkEndCommandBuffer");
         };
+        record(compute_cb_, [&](VkCommandBuffer cb) {
+            kit.api.vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, c_.compute);
+            kit.api.vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_COMPUTE, c_.compute_layout, 0, 1, &c_.set, 0, nullptr);
+            const float params[4] = {param, 0, 0, 0};
+            rig.push(cb, c_.compute_layout, VK_SHADER_STAGE_COMPUTE_BIT, params, 16);
+            kit.api.vkCmdDispatch(cb, 1, 1, 1);
+        });
+        record(graphics_cb_, [&](VkCommandBuffer cb) {
+            c_.target->begin(kit, cb, frame == 0);
+            rig.bind_graphics(cb, c_.graphics);
+            rig.bind_vertex(cb, c_.verts);
+            kit.api.vkCmdDraw(cb, 3, 1, 0, 0);
+            c_.target->end(kit, cb);
+        });
         const std::uint64_t base = static_cast<std::uint64_t>(frame) * 2;
-        record(compute_cb_, record_compute);
-        std::uint64_t signal_value = base + 1;
-        VkTimelineSemaphoreSubmitInfo timeline_info{};
-        timeline_info.sType = VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO;
-        timeline_info.signalSemaphoreValueCount = 1;
-        timeline_info.pSignalSemaphoreValues = &signal_value;
+        std::uint64_t compute_signal = base + 1;
+        std::uint64_t graphics_wait = base + 1;
+        std::uint64_t graphics_signal = base + 2;
+        VkTimelineSemaphoreSubmitInfo compute_timeline{};
+        compute_timeline.sType = VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO;
+        compute_timeline.signalSemaphoreValueCount = 1;
+        compute_timeline.pSignalSemaphoreValues = &compute_signal;
         VkSubmitInfo submit{};
         submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-        submit.pNext = &timeline_info;
+        submit.pNext = timeline_ ? &compute_timeline : nullptr;
         submit.commandBufferCount = 1;
         submit.pCommandBuffers = &compute_cb_;
         submit.signalSemaphoreCount = 1;
-        submit.pSignalSemaphores = &timeline_sem_;
-        rig.vk_ok(kit.api.vkQueueSubmit(kit.queue2, 1, &submit, VK_NULL_HANDLE), "vkQueueSubmit");
-        record(graphics_cb_, record_graphics);
-        std::uint64_t wait_value = base + 1;
-        std::uint64_t done_value = base + 2;
-        VkTimelineSemaphoreSubmitInfo gfx_timeline{};
-        gfx_timeline.sType = VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO;
-        gfx_timeline.waitSemaphoreValueCount = 1;
-        gfx_timeline.pWaitSemaphoreValues = &wait_value;
-        gfx_timeline.signalSemaphoreValueCount = 1;
-        gfx_timeline.pSignalSemaphoreValues = &done_value;
+        submit.pSignalSemaphores = &sem_;
+        rig.vk_ok(kit.api.vkQueueSubmit(kit.compute_queue, 1, &submit, VK_NULL_HANDLE), "vkQueueSubmit");
+        VkTimelineSemaphoreSubmitInfo graphics_timeline{};
+        graphics_timeline.sType = VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO;
+        graphics_timeline.waitSemaphoreValueCount = 1;
+        graphics_timeline.pWaitSemaphoreValues = &graphics_wait;
+        graphics_timeline.signalSemaphoreValueCount = 1;
+        graphics_timeline.pSignalSemaphoreValues = &graphics_signal;
         const VkPipelineStageFlags stage = VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
         VkSubmitInfo gfx{};
         gfx.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-        gfx.pNext = &gfx_timeline;
+        gfx.pNext = timeline_ ? &graphics_timeline : nullptr;
         gfx.waitSemaphoreCount = 1;
-        gfx.pWaitSemaphores = &timeline_sem_;
+        gfx.pWaitSemaphores = &sem_;
         gfx.pWaitDstStageMask = &stage;
         gfx.commandBufferCount = 1;
         gfx.pCommandBuffers = &graphics_cb_;
-        gfx.signalSemaphoreCount = 1;
-        gfx.pSignalSemaphores = &timeline_sem_;
-        rig.vk_ok(kit.api.vkQueueSubmit(kit.queue, 1, &gfx, VK_NULL_HANDLE), "vkQueueSubmit");
-        VkSemaphoreWaitInfo wait{};
-        wait.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO;
-        wait.semaphoreCount = 1;
-        wait.pSemaphores = &timeline_sem_;
-        wait.pValues = &done_value;
-        rig.vk_ok(kit.api.vkWaitSemaphores(kit.device, &wait, 30000000000ull), "vkWaitSemaphores");
+        if (timeline_) {
+            gfx.signalSemaphoreCount = 1;
+            gfx.pSignalSemaphores = &sem_;
+        }
+        rig.vk_ok(kit.api.vkQueueSubmit(kit.queue, 1, &gfx, fence_), "vkQueueSubmit");
+        if (timeline_) {
+            VkSemaphoreWaitInfo wait{};
+            wait.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO;
+            wait.semaphoreCount = 1;
+            wait.pSemaphores = &sem_;
+            wait.pValues = &graphics_signal;
+            rig.vk_ok(kit.api.vkWaitSemaphores(kit.device, &wait, 30000000000ull), "vkWaitSemaphores");
+        }
+        rig.vk_ok(kit.api.vkWaitForFences(kit.device, 1, &fence_, VK_TRUE, 30000000000ull), "vkWaitForFences");
+        rig.vk_ok(kit.api.vkResetFences(kit.device, 1, &fence_), "vkResetFences");
     }
 
     void grab(Rig& rig, unsigned, CaptureSet& out) override { out.add("", rig.color(*c_.target)); }
@@ -351,7 +449,6 @@ private:
     bool timeline_;
     ComputeVertices c_;
     VkSemaphore sem_ = VK_NULL_HANDLE;
-    VkSemaphore timeline_sem_ = VK_NULL_HANDLE;
     VkCommandBuffer compute_cb_ = VK_NULL_HANDLE;
     VkCommandBuffer graphics_cb_ = VK_NULL_HANDLE;
     VkFence fence_ = VK_NULL_HANDLE;
@@ -429,8 +526,8 @@ private:
 };
 
 void register_submission() {
-    Cases::add_scene(spec_of("binary_semaphore_two_submits").frames(4, {0, 1, 3}), [] { return std::make_unique<SemaphoreScene>(false); });
-    Cases::add_scene(spec_of("timeline_semaphore_compute_queue").frames(5, {0, 2, 4}).min_version(1, 2), [] { return std::make_unique<SemaphoreScene>(true); });
+    Cases::add_scene(spec_of("binary_semaphore_two_submits").audit_ok("compute queue triangle ordered by a binary semaphore, the same generated triangle as the timeline row; the subject is the semaphore type").frames(4, {0, 1, 3}), [] { return std::make_unique<SemaphoreScene>(false); });
+    Cases::add_scene(spec_of("timeline_semaphore_compute_queue").audit_ok("compute queue triangle ordered by a timeline semaphore, the same generated triangle as the binary row; the subject is the semaphore type").frames(5, {0, 2, 4}).min_version(1, 2), [] { return std::make_unique<SemaphoreScene>(true); });
     Cases::add_class<RingFlightScene>(spec_of("frames_in_flight_ring").frames(8, {0, 3, 7}));
     Cases::add(spec_of("secondary_command_buffers_threads"), [](Rig& rig, CaptureSet& out) {
         Kit& kit = rig.kit;

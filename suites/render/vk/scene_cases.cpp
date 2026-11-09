@@ -14,7 +14,7 @@ const float kClear[4] = {0.05f, 0.06f, 0.1f, 1.0f};
 
 CaseSpec scene_spec(const std::string& name, unsigned frames, std::vector<unsigned> captured) {
     CaseSpec spec("scene", name);
-    spec.size(128, 128).frames(frames, std::move(captured)).tolerance(Tolerance::tight(1)).timeout(120);
+    spec.size(128, 128).frames(frames, std::move(captured)).tolerance(Tolerance::exact()).timeout(120);
     return spec;
 }
 

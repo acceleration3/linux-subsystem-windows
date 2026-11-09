@@ -93,7 +93,7 @@ private:
     VkPipeline pipeline_ = VK_NULL_HANDLE;
 };
 
-const VkRegister<RingAccumulate> kRingAccumulate{CaseSpec("frames", "ring_accumulate").frames(8, {0, 3, 7}).tolerance(Tolerance::tight(1))};
+const VkRegister<RingAccumulate> kRingAccumulate{CaseSpec("frames", "ring_accumulate").frames(8, {0, 3, 7}).tolerance(Tolerance::exact())};
 
 class SwapchainCube : public VkScene {
 public:
@@ -283,7 +283,7 @@ private:
 };
 
 const VkRegister<SwapchainCube> kSwapchainCube{
-    CaseSpec("frames", "swapchain_cube").frames(4, {0, 3}).swapchain().tolerance(Tolerance::tight(1))};
+    CaseSpec("frames", "swapchain_cube").frames(4, {0, 3}).swapchain().tolerance(Tolerance::exact())};
 
 }  // namespace
 

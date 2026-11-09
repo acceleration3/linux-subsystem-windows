@@ -96,7 +96,7 @@ public:
     }
 };
 
-const VkRegister<IndexedCubeDepth> kIndexedCubeDepth{CaseSpec("geometry", "indexed_cube_depth").tolerance(Tolerance::tight(1))};
+const VkRegister<IndexedCubeDepth> kIndexedCubeDepth{CaseSpec("geometry", "indexed_cube_depth").tolerance(Tolerance::exact())};
 
 class MrtDepthCapture : public VkSingleScene {
 public:
@@ -168,7 +168,7 @@ public:
     }
 };
 
-const VkRegister<MrtDepthCapture> kMrtDepthCapture{CaseSpec("targets", "mrt_depth_capture").tolerance(Tolerance::tight(1))};
+const VkRegister<MrtDepthCapture> kMrtDepthCapture{CaseSpec("targets", "mrt_depth_capture").tolerance(Tolerance::exact())};
 
 }  // namespace
 

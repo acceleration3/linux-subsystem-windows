@@ -83,7 +83,7 @@ struct SampleConstants {
 void register_formats() {
     for (const TexFormat& entry : tex_formats()) {
         CaseSpec spec("tex", std::string("fmt_") + entry.name);
-        spec.tolerance(Tolerance::tight(1));
+        spec.tolerance(Tolerance::exact());
         if (entry.feature != nullptr) {
             spec.feature(entry.feature);
         }
