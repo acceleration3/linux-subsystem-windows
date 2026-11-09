@@ -2,6 +2,12 @@
 
 namespace lsw::render::vk {
 
+namespace {
+#define LSW_VK_MISSING(name) [[noreturn]] void VKAPI_CALL missing_##name() { throw MissingFunction{#name}; }
+LSW_VK_LAZY_DEVICE_FUNCTIONS(LSW_VK_MISSING)
+#undef LSW_VK_MISSING
+}  // namespace
+
 bool Api::load_global(PFN_vkGetInstanceProcAddr loader, std::string& error) {
     vkGetInstanceProcAddr = loader;
     vkCreateInstance = reinterpret_cast<PFN_vkCreateInstance>(loader(nullptr, "vkCreateInstance"));
@@ -41,6 +47,13 @@ bool Api::load_device(VkDevice device, std::string& error) {
 #undef LSW_VK_LOAD
 #define LSW_VK_LOAD(name) name = reinterpret_cast<PFN_##name>(vkGetDeviceProcAddr(device, #name));
     LSW_VK_OPTIONAL_DEVICE_FUNCTIONS(LSW_VK_LOAD)
+#undef LSW_VK_LOAD
+#define LSW_VK_LOAD(name)                                                              \
+    name = reinterpret_cast<PFN_##name>(vkGetDeviceProcAddr(device, #name));           \
+    if (name == nullptr) {                                                             \
+        name = reinterpret_cast<PFN_##name>(&missing_##name);                          \
+    }
+    LSW_VK_LAZY_DEVICE_FUNCTIONS(LSW_VK_LOAD)
 #undef LSW_VK_LOAD
     return true;
 }

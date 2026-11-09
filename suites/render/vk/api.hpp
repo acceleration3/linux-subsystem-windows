@@ -12,6 +12,10 @@
     X(vkEnumeratePhysicalDevices)              \
     X(vkGetPhysicalDeviceProperties)           \
     X(vkGetPhysicalDeviceProperties2)          \
+    X(vkGetPhysicalDeviceFeatures2)            \
+    X(vkGetPhysicalDeviceFormatProperties2)    \
+    X(vkGetPhysicalDeviceImageFormatProperties) \
+    X(vkGetPhysicalDeviceImageFormatProperties2) \
     X(vkGetPhysicalDeviceFeatures)             \
     X(vkGetPhysicalDeviceQueueFamilyProperties) \
     X(vkGetPhysicalDeviceMemoryProperties)     \
@@ -21,6 +25,9 @@
     X(vkGetDeviceProcAddr)
 
 #define LSW_VK_OPTIONAL_INSTANCE_FUNCTIONS(X)        \
+    X(vkGetPhysicalDeviceFragmentShadingRatesKHR)    \
+    X(vkGetPhysicalDeviceSparseImageFormatProperties) \
+    X(vkGetPhysicalDeviceMultisamplePropertiesEXT)   \
     X(vkDestroySurfaceKHR)                           \
     X(vkGetPhysicalDeviceSurfaceSupportKHR)          \
     X(vkGetPhysicalDeviceSurfaceCapabilitiesKHR)     \
@@ -103,6 +110,152 @@
     X(vkCmdClearColorImage)              \
     X(vkCmdDispatch)
 
+#define LSW_VK_LAZY_DEVICE_FUNCTIONS(X) \
+    X(vkCreateQueryPool)                    \
+    X(vkDestroyQueryPool)                   \
+    X(vkGetQueryPoolResults)                \
+    X(vkCmdResetQueryPool)                  \
+    X(vkCmdBeginQuery)                      \
+    X(vkCmdEndQuery)                        \
+    X(vkCmdWriteTimestamp)                  \
+    X(vkCmdCopyQueryPoolResults)            \
+    X(vkCmdDrawIndirect)                    \
+    X(vkCmdDrawIndexedIndirect)             \
+    X(vkCmdDispatchIndirect)                \
+    X(vkCmdFillBuffer)                      \
+    X(vkCmdCopyImage)                       \
+    X(vkCmdResolveImage)                    \
+    X(vkCmdClearDepthStencilImage)          \
+    X(vkCmdClearAttachments)                \
+    X(vkCmdNextSubpass)                     \
+    X(vkCmdSetLineWidth)                    \
+    X(vkCmdSetDepthBias)                    \
+    X(vkCmdSetDepthBounds)                  \
+    X(vkCmdSetStencilCompareMask)           \
+    X(vkCmdSetStencilWriteMask)             \
+    X(vkCmdExecuteCommands)                 \
+    X(vkCmdSetEvent)                        \
+    X(vkCmdResetEvent)                      \
+    X(vkCmdWaitEvents)                      \
+    X(vkCreateEvent)                        \
+    X(vkDestroyEvent)                       \
+    X(vkSetEvent)                           \
+    X(vkGetEventStatus)                     \
+    X(vkCreatePipelineCache)                \
+    X(vkDestroyPipelineCache)               \
+    X(vkGetPipelineCacheData)               \
+    X(vkMergePipelineCaches)                \
+    X(vkCreateBufferView)                   \
+    X(vkDestroyBufferView)                  \
+    X(vkResetDescriptorPool)                \
+    X(vkFreeDescriptorSets)                 \
+    X(vkResetCommandPool)                   \
+    X(vkGetImageSubresourceLayout)          \
+    X(vkGetFenceStatus)                     \
+    X(vkQueueBindSparse)                    \
+    X(vkGetImageSparseMemoryRequirements)   \
+    X(vkCreateSamplerYcbcrConversion)       \
+    X(vkDestroySamplerYcbcrConversion)      \
+    X(vkCreateDescriptorUpdateTemplate)     \
+    X(vkDestroyDescriptorUpdateTemplate)    \
+    X(vkUpdateDescriptorSetWithTemplate)    \
+    X(vkCmdPushDescriptorSetKHR)            \
+    X(vkCmdPushDescriptorSetWithTemplateKHR) \
+    X(vkBindBufferMemory2)                  \
+    X(vkBindImageMemory2)                   \
+    X(vkCmdDrawIndirectCount)               \
+    X(vkCmdDrawIndexedIndirectCount)        \
+    X(vkCreateRenderPass2)                  \
+    X(vkCmdBeginRenderPass2)                \
+    X(vkCmdNextSubpass2)                    \
+    X(vkCmdEndRenderPass2)                  \
+    X(vkGetSemaphoreCounterValue)           \
+    X(vkWaitSemaphores)                     \
+    X(vkSignalSemaphore)                    \
+    X(vkGetBufferDeviceAddress)             \
+    X(vkQueueSubmit2)                       \
+    X(vkCmdBeginRendering)                  \
+    X(vkCmdEndRendering)                    \
+    X(vkCmdPipelineBarrier2)                \
+    X(vkCmdSetEvent2)                       \
+    X(vkCmdWaitEvents2)                     \
+    X(vkCmdResetEvent2)                     \
+    X(vkCmdWriteTimestamp2)                 \
+    X(vkCmdCopyBuffer2)                     \
+    X(vkCmdCopyImage2)                      \
+    X(vkCmdCopyBufferToImage2)              \
+    X(vkCmdCopyImageToBuffer2)              \
+    X(vkCmdBlitImage2)                      \
+    X(vkCmdResolveImage2)                   \
+    X(vkCmdSetCullMode)                     \
+    X(vkCmdSetFrontFace)                    \
+    X(vkCmdSetPrimitiveTopology)            \
+    X(vkCmdSetViewportWithCount)            \
+    X(vkCmdSetScissorWithCount)             \
+    X(vkCmdBindVertexBuffers2)              \
+    X(vkCmdSetDepthTestEnable)              \
+    X(vkCmdSetDepthWriteEnable)             \
+    X(vkCmdSetDepthCompareOp)               \
+    X(vkCmdSetDepthBoundsTestEnable)        \
+    X(vkCmdSetStencilTestEnable)            \
+    X(vkCmdSetStencilOp)                    \
+    X(vkCmdSetRasterizerDiscardEnable)      \
+    X(vkCmdSetDepthBiasEnable)              \
+    X(vkCmdSetPrimitiveRestartEnable)       \
+    X(vkCmdSetPatchControlPointsEXT)        \
+    X(vkCmdSetLogicOpEXT)                   \
+    X(vkCmdSetPolygonModeEXT)               \
+    X(vkCmdSetRasterizationSamplesEXT)      \
+    X(vkCmdSetSampleMaskEXT)                \
+    X(vkCmdSetAlphaToCoverageEnableEXT)     \
+    X(vkCmdSetAlphaToOneEnableEXT)          \
+    X(vkCmdSetLogicOpEnableEXT)             \
+    X(vkCmdSetColorBlendEnableEXT)          \
+    X(vkCmdSetColorBlendEquationEXT)        \
+    X(vkCmdSetColorWriteMaskEXT)            \
+    X(vkCmdSetDepthClampEnableEXT)          \
+    X(vkCmdSetDepthClipEnableEXT)           \
+    X(vkCmdSetLineRasterizationModeEXT)     \
+    X(vkCmdSetLineStippleEnableEXT)         \
+    X(vkCmdSetLineStippleEXT)               \
+    X(vkCmdSetProvokingVertexModeEXT)       \
+    X(vkCmdSetVertexInputEXT)               \
+    X(vkCmdSetColorWriteEnableEXT)          \
+    X(vkCmdDrawMultiEXT)                    \
+    X(vkCmdDrawMultiIndexedEXT)             \
+    X(vkCmdBindTransformFeedbackBuffersEXT) \
+    X(vkCmdBeginTransformFeedbackEXT)       \
+    X(vkCmdEndTransformFeedbackEXT)         \
+    X(vkCmdDrawIndirectByteCountEXT)        \
+    X(vkCmdBeginConditionalRenderingEXT)    \
+    X(vkCmdEndConditionalRenderingEXT)      \
+    X(vkCmdDrawMeshTasksEXT)                \
+    X(vkCmdDrawMeshTasksIndirectEXT)        \
+    X(vkCmdDrawMeshTasksIndirectCountEXT)   \
+    X(vkCmdSetSampleLocationsEXT)           \
+    X(vkCmdSetFragmentShadingRateKHR)       \
+    X(vkCreateShadersEXT)                   \
+    X(vkDestroyShaderEXT)                   \
+    X(vkCmdBindShadersEXT)                  \
+    X(vkGetDescriptorSetLayoutSizeEXT)      \
+    X(vkGetDescriptorSetLayoutBindingOffsetEXT) \
+    X(vkGetDescriptorEXT)                   \
+    X(vkCmdBindDescriptorBuffersEXT)        \
+    X(vkCmdSetDescriptorBufferOffsetsEXT)   \
+    X(vkCreateAccelerationStructureKHR)     \
+    X(vkDestroyAccelerationStructureKHR)    \
+    X(vkGetAccelerationStructureBuildSizesKHR) \
+    X(vkCmdBuildAccelerationStructuresKHR)  \
+    X(vkGetAccelerationStructureDeviceAddressKHR) \
+    X(vkCmdCopyAccelerationStructureKHR)    \
+    X(vkCmdWriteAccelerationStructuresPropertiesKHR) \
+    X(vkCreateRayTracingPipelinesKHR)       \
+    X(vkGetRayTracingShaderGroupHandlesKHR) \
+    X(vkCmdTraceRaysKHR)                    \
+    X(vkCopyMemoryToImageEXT)               \
+    X(vkCopyImageToMemoryEXT)               \
+    X(vkTransitionImageLayoutEXT)
+
 #define LSW_VK_OPTIONAL_DEVICE_FUNCTIONS(X) \
     X(vkCreateSwapchainKHR)                 \
     X(vkDestroySwapchainKHR)                \
@@ -111,6 +264,10 @@
     X(vkQueuePresentKHR)
 
 namespace lsw::render::vk {
+struct MissingFunction {
+    const char* name;
+};
+
 class Api {
 public:
     PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr = nullptr;
@@ -122,6 +279,7 @@ public:
     LSW_VK_OPTIONAL_INSTANCE_FUNCTIONS(LSW_VK_MEMBER)
     LSW_VK_DEVICE_FUNCTIONS(LSW_VK_MEMBER)
     LSW_VK_OPTIONAL_DEVICE_FUNCTIONS(LSW_VK_MEMBER)
+    LSW_VK_LAZY_DEVICE_FUNCTIONS(LSW_VK_MEMBER)
 #undef LSW_VK_MEMBER
 
     [[nodiscard]] bool load_global(PFN_vkGetInstanceProcAddr loader, std::string& error);

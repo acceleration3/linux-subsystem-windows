@@ -32,9 +32,113 @@ const std::map<std::string, VkBool32 VkPhysicalDeviceFeatures::*>& feature_table
         {"textureCompressionBC", &VkPhysicalDeviceFeatures::textureCompressionBC},
         {"shaderClipDistance", &VkPhysicalDeviceFeatures::shaderClipDistance},
         {"imageCubeArray", &VkPhysicalDeviceFeatures::imageCubeArray},
+        {"depthBounds", &VkPhysicalDeviceFeatures::depthBounds},
+        {"multiViewport", &VkPhysicalDeviceFeatures::multiViewport},
+        {"shaderFloat64", &VkPhysicalDeviceFeatures::shaderFloat64},
+        {"shaderInt64", &VkPhysicalDeviceFeatures::shaderInt64},
+        {"occlusionQueryPrecise", &VkPhysicalDeviceFeatures::occlusionQueryPrecise},
+        {"pipelineStatisticsQuery", &VkPhysicalDeviceFeatures::pipelineStatisticsQuery},
+        {"vertexPipelineStoresAndAtomics", &VkPhysicalDeviceFeatures::vertexPipelineStoresAndAtomics},
+        {"shaderStorageImageExtendedFormats", &VkPhysicalDeviceFeatures::shaderStorageImageExtendedFormats},
+        {"shaderStorageImageReadWithoutFormat", &VkPhysicalDeviceFeatures::shaderStorageImageReadWithoutFormat},
+        {"shaderStorageImageWriteWithoutFormat", &VkPhysicalDeviceFeatures::shaderStorageImageWriteWithoutFormat},
+        {"shaderSampledImageArrayDynamicIndexing", &VkPhysicalDeviceFeatures::shaderSampledImageArrayDynamicIndexing},
+        {"shaderUniformBufferArrayDynamicIndexing", &VkPhysicalDeviceFeatures::shaderUniformBufferArrayDynamicIndexing},
+        {"textureCompressionETC2", &VkPhysicalDeviceFeatures::textureCompressionETC2},
+        {"textureCompressionASTC_LDR", &VkPhysicalDeviceFeatures::textureCompressionASTC_LDR},
+        {"sparseBinding", &VkPhysicalDeviceFeatures::sparseBinding},
+        {"sparseResidencyImage2D", &VkPhysicalDeviceFeatures::sparseResidencyImage2D},
+        {"sparseResidencyBuffer", &VkPhysicalDeviceFeatures::sparseResidencyBuffer},
+        {"drawIndirectFirstInstance", &VkPhysicalDeviceFeatures::drawIndirectFirstInstance},
+        {"fullDrawIndexUint32", &VkPhysicalDeviceFeatures::fullDrawIndexUint32},
+        {"shaderTessellationAndGeometryPointSize", &VkPhysicalDeviceFeatures::shaderTessellationAndGeometryPointSize},
+        {"shaderImageGatherExtended", &VkPhysicalDeviceFeatures::shaderImageGatherExtended},
+        {"shaderResourceMinLod", &VkPhysicalDeviceFeatures::shaderResourceMinLod},
+        {"variableMultisampleRate", &VkPhysicalDeviceFeatures::variableMultisampleRate},
+        {"inheritedQueries", &VkPhysicalDeviceFeatures::inheritedQueries},
+        {"shaderCullDistance", &VkPhysicalDeviceFeatures::shaderCullDistance},
+        {"alphaToOne", &VkPhysicalDeviceFeatures::alphaToOne},
     };
     return table;
 }
+
+struct ExtensionFeature {
+    const char* extension;
+    VkStructureType type;
+    std::size_t size;
+};
+
+#define LSW_EXT_FEATURE(ext, stype, type) {ext, stype, sizeof(type)}
+
+const std::vector<ExtensionFeature>& extension_features() {
+    static const std::vector<ExtensionFeature> table = {
+        LSW_EXT_FEATURE("VK_EXT_extended_dynamic_state", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT,
+                        VkPhysicalDeviceExtendedDynamicStateFeaturesEXT),
+        LSW_EXT_FEATURE("VK_EXT_extended_dynamic_state2", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_2_FEATURES_EXT,
+                        VkPhysicalDeviceExtendedDynamicState2FeaturesEXT),
+        LSW_EXT_FEATURE("VK_EXT_extended_dynamic_state3", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT,
+                        VkPhysicalDeviceExtendedDynamicState3FeaturesEXT),
+        LSW_EXT_FEATURE("VK_EXT_vertex_input_dynamic_state", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_INPUT_DYNAMIC_STATE_FEATURES_EXT,
+                        VkPhysicalDeviceVertexInputDynamicStateFeaturesEXT),
+        LSW_EXT_FEATURE("VK_EXT_vertex_attribute_divisor", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_DIVISOR_FEATURES_EXT,
+                        VkPhysicalDeviceVertexAttributeDivisorFeaturesEXT),
+        LSW_EXT_FEATURE("VK_EXT_primitive_topology_list_restart",
+                        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRIMITIVE_TOPOLOGY_LIST_RESTART_FEATURES_EXT,
+                        VkPhysicalDevicePrimitiveTopologyListRestartFeaturesEXT),
+        LSW_EXT_FEATURE("VK_EXT_transform_feedback", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TRANSFORM_FEEDBACK_FEATURES_EXT,
+                        VkPhysicalDeviceTransformFeedbackFeaturesEXT),
+        LSW_EXT_FEATURE("VK_EXT_conditional_rendering", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CONDITIONAL_RENDERING_FEATURES_EXT,
+                        VkPhysicalDeviceConditionalRenderingFeaturesEXT),
+        LSW_EXT_FEATURE("VK_EXT_mesh_shader", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT,
+                        VkPhysicalDeviceMeshShaderFeaturesEXT),
+        LSW_EXT_FEATURE("VK_EXT_line_rasterization", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LINE_RASTERIZATION_FEATURES_EXT,
+                        VkPhysicalDeviceLineRasterizationFeaturesEXT),
+        LSW_EXT_FEATURE("VK_EXT_provoking_vertex", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROVOKING_VERTEX_FEATURES_EXT,
+                        VkPhysicalDeviceProvokingVertexFeaturesEXT),
+        LSW_EXT_FEATURE("VK_EXT_depth_clip_enable", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLIP_ENABLE_FEATURES_EXT,
+                        VkPhysicalDeviceDepthClipEnableFeaturesEXT),
+        LSW_EXT_FEATURE("VK_EXT_color_write_enable", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COLOR_WRITE_ENABLE_FEATURES_EXT,
+                        VkPhysicalDeviceColorWriteEnableFeaturesEXT),
+        LSW_EXT_FEATURE("VK_EXT_custom_border_color", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CUSTOM_BORDER_COLOR_FEATURES_EXT,
+                        VkPhysicalDeviceCustomBorderColorFeaturesEXT),
+        LSW_EXT_FEATURE("VK_EXT_image_view_min_lod", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_VIEW_MIN_LOD_FEATURES_EXT,
+                        VkPhysicalDeviceImageViewMinLodFeaturesEXT),
+        LSW_EXT_FEATURE("VK_EXT_image_2d_view_of_3d", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_2D_VIEW_OF_3D_FEATURES_EXT,
+                        VkPhysicalDeviceImage2DViewOf3DFeaturesEXT),
+        LSW_EXT_FEATURE("VK_KHR_fragment_shader_barycentric", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADER_BARYCENTRIC_FEATURES_KHR,
+                        VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR),
+        LSW_EXT_FEATURE("VK_KHR_fragment_shading_rate", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_FEATURES_KHR,
+                        VkPhysicalDeviceFragmentShadingRateFeaturesKHR),
+        LSW_EXT_FEATURE("VK_EXT_descriptor_buffer", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT,
+                        VkPhysicalDeviceDescriptorBufferFeaturesEXT),
+        LSW_EXT_FEATURE("VK_EXT_shader_object", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_OBJECT_FEATURES_EXT,
+                        VkPhysicalDeviceShaderObjectFeaturesEXT),
+        LSW_EXT_FEATURE("VK_EXT_graphics_pipeline_library", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GRAPHICS_PIPELINE_LIBRARY_FEATURES_EXT,
+                        VkPhysicalDeviceGraphicsPipelineLibraryFeaturesEXT),
+        LSW_EXT_FEATURE("VK_KHR_acceleration_structure", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR,
+                        VkPhysicalDeviceAccelerationStructureFeaturesKHR),
+        LSW_EXT_FEATURE("VK_KHR_ray_tracing_pipeline", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR,
+                        VkPhysicalDeviceRayTracingPipelineFeaturesKHR),
+        LSW_EXT_FEATURE("VK_KHR_ray_query", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR,
+                        VkPhysicalDeviceRayQueryFeaturesKHR),
+        LSW_EXT_FEATURE("VK_EXT_multi_draw", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTI_DRAW_FEATURES_EXT,
+                        VkPhysicalDeviceMultiDrawFeaturesEXT),
+        LSW_EXT_FEATURE("VK_EXT_blend_operation_advanced", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BLEND_OPERATION_ADVANCED_FEATURES_EXT,
+                        VkPhysicalDeviceBlendOperationAdvancedFeaturesEXT),
+        LSW_EXT_FEATURE("VK_EXT_host_image_copy", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_IMAGE_COPY_FEATURES_EXT,
+                        VkPhysicalDeviceHostImageCopyFeaturesEXT),
+        LSW_EXT_FEATURE("VK_EXT_shader_image_atomic_int64", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_IMAGE_ATOMIC_INT64_FEATURES_EXT,
+                        VkPhysicalDeviceShaderImageAtomicInt64FeaturesEXT),
+        LSW_EXT_FEATURE("VK_EXT_shader_demote_to_helper_invocation", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DEMOTE_TO_HELPER_INVOCATION_FEATURES,
+                        VkPhysicalDeviceShaderDemoteToHelperInvocationFeatures),
+    };
+    return table;
+}
+
+struct ChainHeader {
+    VkStructureType type;
+    void* next;
+};
 
 }  // namespace
 
@@ -211,26 +315,79 @@ OpenResult Kit::open(platform::VkPlatform& host, const KitOptions& options, std:
     for (const std::string& name : device_wanted) {
         device_names.push_back(name.c_str());
     }
-    const float priority = 1.0f;
     VkDeviceQueueCreateInfo queue_info{};
     queue_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
     queue_info.queueFamilyIndex = family;
-    queue_info.queueCount = 1;
-    queue_info.pQueuePriorities = &priority;
-    VkPhysicalDeviceFeatures enabled = features;
-    enabled.robustBufferAccess = VK_FALSE;
+    queue_info.queueCount = std::min(families[family].queueCount, 2u);
+    const float priorities[2] = {1.0f, 1.0f};
+    queue_info.pQueuePriorities = priorities;
+    api_version = options.api_version;
+    available_ = device_have;
+    enabled_.insert(device_wanted.begin(), device_wanted.end());
+    std::vector<std::unique_ptr<std::uint8_t[]>> chain_storage;
+    ChainHeader* chain_head = nullptr;
+    const auto chain_add = [&](VkStructureType type, std::size_t size) {
+        auto storage = std::make_unique<std::uint8_t[]>(size);
+        std::memset(storage.get(), 0, size);
+        auto* header = reinterpret_cast<ChainHeader*>(storage.get());
+        header->type = type;
+        header->next = chain_head;
+        chain_head = header;
+        chain_storage.push_back(std::move(storage));
+    };
+    if (options.api_version >= VK_API_VERSION_1_1) {
+        chain_add(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES, sizeof(VkPhysicalDeviceVulkan11Features));
+    }
+    if (options.api_version >= VK_API_VERSION_1_2) {
+        chain_add(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES, sizeof(VkPhysicalDeviceVulkan12Features));
+    }
+    if (options.api_version >= VK_API_VERSION_1_3) {
+        chain_add(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES, sizeof(VkPhysicalDeviceVulkan13Features));
+    }
+    for (const ExtensionFeature& known : extension_features()) {
+        if (enabled_.count(known.extension) != 0) {
+            chain_add(known.type, known.size);
+        }
+    }
+    VkPhysicalDeviceFeatures2 features2{};
+    features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    features2.pNext = chain_head;
+    api.vkGetPhysicalDeviceFeatures2(physical, &features2);
+    features2.features.robustBufferAccess = VK_FALSE;
+    for (ChainHeader* node = chain_head; node != nullptr; node = static_cast<ChainHeader*>(node->next)) {
+        if (node->type == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES) {
+            auto* f = reinterpret_cast<VkPhysicalDeviceVulkan12Features*>(node);
+            f->bufferDeviceAddressCaptureReplay = VK_FALSE;
+        } else if (node->type == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES) {
+            auto* f = reinterpret_cast<VkPhysicalDeviceVulkan13Features*>(node);
+            f->robustImageAccess = VK_FALSE;
+        } else if (node->type == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR) {
+            auto* f = reinterpret_cast<VkPhysicalDeviceAccelerationStructureFeaturesKHR*>(node);
+            f->accelerationStructureCaptureReplay = VK_FALSE;
+            f->accelerationStructureHostCommands = VK_FALSE;
+        } else if (node->type == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR) {
+            auto* f = reinterpret_cast<VkPhysicalDeviceRayTracingPipelineFeaturesKHR*>(node);
+            f->rayTracingPipelineShaderGroupHandleCaptureReplay = VK_FALSE;
+            f->rayTracingPipelineShaderGroupHandleCaptureReplayMixed = VK_FALSE;
+        } else if (node->type == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT) {
+            auto* f = reinterpret_cast<VkPhysicalDeviceDescriptorBufferFeaturesEXT*>(node);
+            f->descriptorBufferCaptureReplay = VK_FALSE;
+        }
+    }
+    features = features2.features;
     VkDeviceCreateInfo device_info{};
     device_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+    device_info.pNext = &features2;
     device_info.queueCreateInfoCount = 1;
     device_info.pQueueCreateInfos = &queue_info;
     device_info.enabledExtensionCount = static_cast<std::uint32_t>(device_names.size());
     device_info.ppEnabledExtensionNames = device_names.data();
-    device_info.pEnabledFeatures = &enabled;
     if (!check(api.vkCreateDevice(physical, &device_info, nullptr, &device), "vkCreateDevice", error) ||
         !api.load_device(device, error)) {
         return OpenResult::Failed;
     }
     api.vkGetDeviceQueue(device, family, 0, &queue);
+    api.vkGetDeviceQueue(device, family, queue_info.queueCount > 1 ? 1 : 0, &queue2);
     VkCommandPoolCreateInfo pool_info{};
     pool_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
     pool_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
@@ -306,10 +463,16 @@ VkShaderModule Kit::shader(const std::string& name, std::string& error) {
 }
 
 bool Kit::make_buffer(Buffer& out, VkDeviceSize size, VkBufferUsageFlags usage, bool host_visible, std::string& error) {
+    return make_buffer_ex(out, size, usage, host_visible, false, error);
+}
+
+bool Kit::make_buffer_ex(Buffer& out, VkDeviceSize size, VkBufferUsageFlags usage, bool host_visible, bool address,
+                         std::string& error) {
     VkBufferCreateInfo info{};
     info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     info.size = size;
-    info.usage = usage | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    info.usage = usage | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+                 (address ? VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT : 0);
     info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     VkBuffer buffer = VK_NULL_HANDLE;
     if (!check(api.vkCreateBuffer(device, &info, nullptr, &buffer), "vkCreateBuffer", error)) {
@@ -328,8 +491,12 @@ bool Kit::make_buffer(Buffer& out, VkDeviceSize size, VkBufferUsageFlags usage, 
         error = "no memory type for a buffer";
         return false;
     }
+    VkMemoryAllocateFlagsInfo flags_info{};
+    flags_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO;
+    flags_info.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
     VkMemoryAllocateInfo alloc{};
     alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    alloc.pNext = address ? &flags_info : nullptr;
     alloc.allocationSize = req.size;
     alloc.memoryTypeIndex = type;
     VkDeviceMemory mem = VK_NULL_HANDLE;
@@ -348,6 +515,13 @@ bool Kit::make_buffer(Buffer& out, VkDeviceSize size, VkBufferUsageFlags usage, 
     out.memory = mem;
     out.mapped = mapped;
     out.size = size;
+    out.address = 0;
+    if (address) {
+        VkBufferDeviceAddressInfo address_info{};
+        address_info.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+        address_info.buffer = buffer;
+        out.address = api.vkGetBufferDeviceAddress(device, &address_info);
+    }
     return true;
 }
 
@@ -370,14 +544,17 @@ bool Kit::write(Buffer& buffer, VkDeviceSize offset, const void* data, VkDeviceS
 bool Kit::make_texture(Texture& out, const TextureDesc& desc, std::string& error) {
     VkImageCreateInfo info{};
     info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-    info.flags = desc.view_type == VK_IMAGE_VIEW_TYPE_CUBE ? VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT : 0;
-    info.imageType = VK_IMAGE_TYPE_2D;
+    info.pNext = desc.next;
+    info.flags = desc.flags | ((desc.view_type == VK_IMAGE_VIEW_TYPE_CUBE || desc.view_type == VK_IMAGE_VIEW_TYPE_CUBE_ARRAY)
+                                   ? VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT
+                                   : 0);
+    info.imageType = desc.type;
     info.format = desc.format;
-    info.extent = {desc.width, desc.height, 1};
+    info.extent = {desc.width, desc.height, desc.depth};
     info.mipLevels = desc.mips;
     info.arrayLayers = desc.layers;
     info.samples = desc.samples;
-    info.tiling = VK_IMAGE_TILING_OPTIMAL;
+    info.tiling = desc.tiling;
     info.usage = desc.usage;
     info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -411,13 +588,17 @@ bool Kit::make_texture(Texture& out, const TextureDesc& desc, std::string& error
     const bool viewable = (desc.usage & (VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
                                          VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT |
                                          VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT)) != 0;
-    if (viewable) {
+    if (viewable && desc.create_view) {
         VkImageViewCreateInfo view_info{};
         view_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
         view_info.image = image;
         view_info.viewType = desc.view_type;
-        view_info.format = desc.format;
+        view_info.format = desc.view_format != VK_FORMAT_UNDEFINED ? desc.view_format : desc.format;
         view_info.subresourceRange = {desc.aspect, 0, desc.mips, 0, desc.layers};
+        if (desc.view_override != nullptr) {
+            view_info = *desc.view_override;
+            view_info.image = image;
+        }
         if (!check(api.vkCreateImageView(device, &view_info, nullptr, &view), "vkCreateImageView", error)) {
             return false;
         }
@@ -433,7 +614,65 @@ bool Kit::make_texture(Texture& out, const TextureDesc& desc, std::string& error
     out.mips = desc.mips;
     out.samples = desc.samples;
     out.aspect = desc.aspect;
+    out.depth = desc.depth;
+    out.type = desc.type;
     return true;
+}
+
+bool Kit::upload_texture(const Texture& texture, const std::vector<VkBufferImageCopy>& regions, const std::vector<std::uint8_t>& bytes,
+                         VkImageLayout final_layout, std::string& error) {
+    Buffer staging;
+    if (!make_buffer_with(staging, bytes.data(), bytes.size(), VK_BUFFER_USAGE_TRANSFER_SRC_BIT, error)) {
+        return false;
+    }
+    return submit(
+        [&](VkCommandBuffer cb) {
+            barrier(cb, texture.image, texture.aspect, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, texture.mips,
+                    texture.layers);
+            api.vkCmdCopyBufferToImage(cb, staging.buffer, texture.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                       static_cast<std::uint32_t>(regions.size()), regions.data());
+            barrier(cb, texture.image, texture.aspect, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, final_layout, texture.mips, texture.layers);
+        },
+        error);
+}
+
+bool Kit::make_shader_module(VkShaderModule& out, const std::uint32_t* words, std::size_t count, std::string& error) {
+    VkShaderModuleCreateInfo info{};
+    info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    info.codeSize = count * 4;
+    info.pCode = words;
+    if (!check(api.vkCreateShaderModule(device, &info, nullptr, &out), "vkCreateShaderModule", error)) {
+        return false;
+    }
+    const VkShaderModule module = out;
+    defer([this, module] { api.vkDestroyShaderModule(device, module, nullptr); });
+    return true;
+}
+
+VkCommandBuffer Kit::allocate_command(VkCommandBufferLevel level, std::string& error) {
+    VkCommandBufferAllocateInfo alloc{};
+    alloc.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    alloc.commandPool = pool;
+    alloc.level = level;
+    alloc.commandBufferCount = 1;
+    VkCommandBuffer command = VK_NULL_HANDLE;
+    if (!check(api.vkAllocateCommandBuffers(device, &alloc, &command), "vkAllocateCommandBuffers", error)) {
+        return VK_NULL_HANDLE;
+    }
+    return command;
+}
+
+bool Kit::submit_raw(VkCommandBuffer command, std::string& error) {
+    VkSubmitInfo submit_info{};
+    submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submit_info.commandBufferCount = 1;
+    submit_info.pCommandBuffers = &command;
+    if (!check(api.vkQueueSubmit(queue, 1, &submit_info, fence_), "vkQueueSubmit", error)) {
+        return false;
+    }
+    const VkResult waited = api.vkWaitForFences(device, 1, &fence_, VK_TRUE, 30000000000ull);
+    api.vkResetFences(device, 1, &fence_);
+    return check(waited, "vkWaitForFences", error);
 }
 
 bool Kit::make_sampled_texture(Texture& out, std::uint32_t width, std::uint32_t height, VkFormat format,
@@ -573,16 +812,28 @@ bool Kit::make_descriptor_set(VkDescriptorSet& out, VkDescriptorSetLayout layout
 }
 
 bool Kit::make_pipeline(VkPipeline& out, const PipelineDesc& desc, std::string& error) {
-    VkPipelineShaderStageCreateInfo stages[2]{};
-    stages[0].sType = stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
-    stages[0].module = desc.vertex;
-    stages[0].pName = "main";
-    stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-    stages[1].module = desc.fragment;
-    stages[1].pName = "main";
+    std::vector<VkPipelineShaderStageCreateInfo> stages;
+    const auto add_stage = [&](VkShaderStageFlagBits stage, VkShaderModule module, const VkSpecializationInfo* spec) {
+        VkPipelineShaderStageCreateInfo info{};
+        info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        info.stage = stage;
+        info.module = module;
+        info.pName = "main";
+        info.pSpecializationInfo = spec;
+        stages.push_back(info);
+    };
+    if (desc.vertex != VK_NULL_HANDLE) {
+        add_stage(VK_SHADER_STAGE_VERTEX_BIT, desc.vertex, nullptr);
+    }
+    for (const StageDesc& extra : desc.extra) {
+        add_stage(extra.stage, extra.module, extra.specialization);
+    }
+    if (desc.fragment != VK_NULL_HANDLE) {
+        add_stage(VK_SHADER_STAGE_FRAGMENT_BIT, desc.fragment, nullptr);
+    }
     VkPipelineVertexInputStateCreateInfo vertex{};
     vertex.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+    vertex.pNext = desc.vertex_next;
     vertex.vertexBindingDescriptionCount = static_cast<std::uint32_t>(desc.bindings.size());
     vertex.pVertexBindingDescriptions = desc.bindings.data();
     vertex.vertexAttributeDescriptionCount = static_cast<std::uint32_t>(desc.attributes.size());
@@ -590,28 +841,48 @@ bool Kit::make_pipeline(VkPipeline& out, const PipelineDesc& desc, std::string& 
     VkPipelineInputAssemblyStateCreateInfo assembly{};
     assembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
     assembly.topology = desc.topology;
+    assembly.primitiveRestartEnable = desc.primitive_restart ? VK_TRUE : VK_FALSE;
+    VkPipelineTessellationStateCreateInfo tess{};
+    tess.sType = VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO;
+    tess.patchControlPoints = desc.patch_points;
     VkPipelineViewportStateCreateInfo viewport{};
     viewport.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-    viewport.viewportCount = 1;
-    viewport.scissorCount = 1;
+    viewport.pNext = desc.viewport_next;
+    viewport.viewportCount = desc.viewport_count;
+    viewport.scissorCount = desc.viewport_count;
     VkPipelineRasterizationStateCreateInfo raster{};
     raster.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    raster.pNext = desc.raster_next;
+    raster.depthClampEnable = desc.depth_clamp ? VK_TRUE : VK_FALSE;
+    raster.rasterizerDiscardEnable = desc.rasterizer_discard ? VK_TRUE : VK_FALSE;
     raster.polygonMode = desc.polygon;
     raster.cullMode = desc.cull;
     raster.frontFace = desc.front;
-    raster.lineWidth = 1.0f;
+    raster.depthBiasEnable = desc.depth_bias ? VK_TRUE : VK_FALSE;
+    raster.depthBiasConstantFactor = desc.bias_constant;
+    raster.depthBiasClamp = desc.bias_clamp;
+    raster.depthBiasSlopeFactor = desc.bias_slope;
+    raster.lineWidth = desc.line_width;
     VkPipelineMultisampleStateCreateInfo multisample{};
     multisample.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    multisample.pNext = desc.multisample_next;
     multisample.rasterizationSamples = desc.samples;
+    multisample.sampleShadingEnable = desc.sample_shading ? VK_TRUE : VK_FALSE;
+    multisample.minSampleShading = desc.min_sample_shading;
+    multisample.pSampleMask = desc.sample_mask;
+    multisample.alphaToCoverageEnable = desc.alpha_to_coverage ? VK_TRUE : VK_FALSE;
+    multisample.alphaToOneEnable = desc.alpha_to_one ? VK_TRUE : VK_FALSE;
     VkPipelineDepthStencilStateCreateInfo depth{};
     depth.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
     depth.depthTestEnable = desc.depth_test ? VK_TRUE : VK_FALSE;
     depth.depthWriteEnable = desc.depth_write ? VK_TRUE : VK_FALSE;
     depth.depthCompareOp = desc.depth_op;
+    depth.depthBoundsTestEnable = desc.depth_bounds ? VK_TRUE : VK_FALSE;
     depth.stencilTestEnable = desc.stencil_test ? VK_TRUE : VK_FALSE;
     depth.front = desc.stencil;
-    depth.back = desc.stencil;
-    depth.maxDepthBounds = 1.0f;
+    depth.back = desc.separate_back ? desc.stencil_back : desc.stencil;
+    depth.minDepthBounds = desc.bounds_min;
+    depth.maxDepthBounds = desc.bounds_max;
     VkPipelineColorBlendAttachmentState attachment{};
     attachment.blendEnable = desc.blend ? VK_TRUE : VK_FALSE;
     attachment.srcColorBlendFactor = desc.src_color;
@@ -619,24 +890,49 @@ bool Kit::make_pipeline(VkPipeline& out, const PipelineDesc& desc, std::string& 
     attachment.colorBlendOp = desc.color_op;
     attachment.srcAlphaBlendFactor = desc.src_alpha;
     attachment.dstAlphaBlendFactor = desc.dst_alpha;
-    attachment.alphaBlendOp = VK_BLEND_OP_ADD;
+    attachment.alphaBlendOp = desc.alpha_op;
     attachment.colorWriteMask = desc.write_mask;
-    std::vector<VkPipelineColorBlendAttachmentState> attachments(desc.color_attachments, attachment);
+    std::vector<VkPipelineColorBlendAttachmentState> attachments =
+        desc.blend_states.empty() ? std::vector<VkPipelineColorBlendAttachmentState>(desc.color_attachments, attachment) : desc.blend_states;
     VkPipelineColorBlendStateCreateInfo blend{};
     blend.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    blend.pNext = desc.blend_next;
+    blend.logicOpEnable = desc.logic_op ? VK_TRUE : VK_FALSE;
+    blend.logicOp = desc.logic;
     blend.attachmentCount = static_cast<std::uint32_t>(attachments.size());
     blend.pAttachments = attachments.data();
-    const VkDynamicState dynamic[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
+    for (int i = 0; i < 4; ++i) {
+        blend.blendConstants[i] = desc.blend_constants[i];
+    }
+    std::vector<VkDynamicState> dynamic = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
+    for (VkDynamicState state : desc.dynamic) {
+        if (state == VK_DYNAMIC_STATE_VIEWPORT_WITH_COUNT || state == VK_DYNAMIC_STATE_SCISSOR_WITH_COUNT) {
+            const VkDynamicState plain = state == VK_DYNAMIC_STATE_VIEWPORT_WITH_COUNT ? VK_DYNAMIC_STATE_VIEWPORT : VK_DYNAMIC_STATE_SCISSOR;
+            dynamic.erase(std::remove(dynamic.begin(), dynamic.end(), plain), dynamic.end());
+        }
+        if (std::find(dynamic.begin(), dynamic.end(), state) == dynamic.end()) {
+            dynamic.push_back(state);
+        }
+    }
+    if (std::find(dynamic.begin(), dynamic.end(), VK_DYNAMIC_STATE_VIEWPORT_WITH_COUNT) != dynamic.end()) {
+        viewport.viewportCount = 0;
+    }
+    if (std::find(dynamic.begin(), dynamic.end(), VK_DYNAMIC_STATE_SCISSOR_WITH_COUNT) != dynamic.end()) {
+        viewport.scissorCount = 0;
+    }
     VkPipelineDynamicStateCreateInfo dynamic_info{};
     dynamic_info.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-    dynamic_info.dynamicStateCount = 2;
-    dynamic_info.pDynamicStates = dynamic;
+    dynamic_info.dynamicStateCount = static_cast<std::uint32_t>(dynamic.size());
+    dynamic_info.pDynamicStates = dynamic.data();
     VkGraphicsPipelineCreateInfo info{};
     info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-    info.stageCount = 2;
-    info.pStages = stages;
+    info.pNext = desc.next;
+    info.flags = desc.flags;
+    info.stageCount = static_cast<std::uint32_t>(stages.size());
+    info.pStages = stages.data();
     info.pVertexInputState = &vertex;
     info.pInputAssemblyState = &assembly;
+    info.pTessellationState = desc.patch_points != 0 ? &tess : nullptr;
     info.pViewportState = &viewport;
     info.pRasterizationState = &raster;
     info.pMultisampleState = &multisample;
@@ -646,7 +942,9 @@ bool Kit::make_pipeline(VkPipeline& out, const PipelineDesc& desc, std::string& 
     info.layout = desc.layout;
     info.renderPass = desc.pass;
     info.subpass = desc.subpass;
-    if (!check(api.vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &info, nullptr, &out), "vkCreateGraphicsPipelines", error)) {
+    info.basePipelineHandle = desc.base;
+    info.basePipelineIndex = -1;
+    if (!check(api.vkCreateGraphicsPipelines(device, desc.cache, 1, &info, nullptr, &out), "vkCreateGraphicsPipelines", error)) {
         return false;
     }
     const VkPipeline pipeline = out;

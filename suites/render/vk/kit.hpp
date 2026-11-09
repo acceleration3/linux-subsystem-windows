@@ -8,6 +8,7 @@
 
 #include <functional>
 #include <memory>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -35,6 +36,7 @@ struct Buffer {
     VkDeviceMemory memory = VK_NULL_HANDLE;
     void* mapped = nullptr;
     VkDeviceSize size = 0;
+    VkDeviceAddress address = 0;
 };
 
 struct Texture {
@@ -48,6 +50,8 @@ struct Texture {
     std::uint32_t mips = 1;
     VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT;
     VkImageAspectFlags aspect = VK_IMAGE_ASPECT_COLOR_BIT;
+    std::uint32_t depth = 1;
+    VkImageType type = VK_IMAGE_TYPE_2D;
 };
 
 struct TextureDesc {
@@ -60,11 +64,61 @@ struct TextureDesc {
     VkImageUsageFlags usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     VkImageAspectFlags aspect = VK_IMAGE_ASPECT_COLOR_BIT;
     VkImageViewType view_type = VK_IMAGE_VIEW_TYPE_2D;
+    std::uint32_t depth = 1;
+    VkImageType type = VK_IMAGE_TYPE_2D;
+    VkImageCreateFlags flags = 0;
+    VkImageTiling tiling = VK_IMAGE_TILING_OPTIMAL;
+    bool create_view = true;
+    VkFormat view_format = VK_FORMAT_UNDEFINED;
+    const void* next = nullptr;
+    VkImageViewCreateInfo* view_override = nullptr;
+};
+
+struct StageDesc {
+    VkShaderStageFlagBits stage = VK_SHADER_STAGE_VERTEX_BIT;
+    VkShaderModule module = VK_NULL_HANDLE;
+    const VkSpecializationInfo* specialization = nullptr;
 };
 
 struct PipelineDesc {
     VkShaderModule vertex = VK_NULL_HANDLE;
     VkShaderModule fragment = VK_NULL_HANDLE;
+    std::vector<StageDesc> extra;
+    std::vector<VkDynamicState> dynamic;
+    std::vector<VkPipelineColorBlendAttachmentState> blend_states;
+    float blend_constants[4] = {0, 0, 0, 0};
+    bool logic_op = false;
+    VkLogicOp logic = VK_LOGIC_OP_COPY;
+    std::uint32_t patch_points = 0;
+    bool primitive_restart = false;
+    bool depth_clamp = false;
+    bool rasterizer_discard = false;
+    bool depth_bias = false;
+    float bias_constant = 0.0f;
+    float bias_clamp = 0.0f;
+    float bias_slope = 0.0f;
+    float line_width = 1.0f;
+    bool depth_bounds = false;
+    float bounds_min = 0.0f;
+    float bounds_max = 1.0f;
+    bool separate_back = false;
+    VkStencilOpState stencil_back{};
+    bool sample_shading = false;
+    float min_sample_shading = 1.0f;
+    bool alpha_to_coverage = false;
+    bool alpha_to_one = false;
+    const VkSampleMask* sample_mask = nullptr;
+    std::uint32_t viewport_count = 1;
+    const void* raster_next = nullptr;
+    const void* multisample_next = nullptr;
+    const void* viewport_next = nullptr;
+    const void* vertex_next = nullptr;
+    const void* blend_next = nullptr;
+    const void* next = nullptr;
+    VkPipelineCreateFlags flags = 0;
+    VkPipeline base = VK_NULL_HANDLE;
+    VkPipelineCache cache = VK_NULL_HANDLE;
+
     std::vector<VkVertexInputBindingDescription> bindings;
     std::vector<VkVertexInputAttributeDescription> attributes;
     VkPrimitiveTopology topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
@@ -82,6 +136,7 @@ struct PipelineDesc {
     VkBlendFactor src_alpha = VK_BLEND_FACTOR_ONE;
     VkBlendFactor dst_alpha = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
     VkBlendOp color_op = VK_BLEND_OP_ADD;
+    VkBlendOp alpha_op = VK_BLEND_OP_ADD;
     VkColorComponentFlags write_mask = 0xf;
     std::uint32_t color_attachments = 1;
     VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT;
@@ -117,6 +172,41 @@ public:
 
     [[nodiscard]] bool make_buffer(Buffer& out, VkDeviceSize size, VkBufferUsageFlags usage, bool host_visible,
                                    std::string& error);
+    [[nodiscard]] bool make_buffer_ex(Buffer& out, VkDeviceSize size, VkBufferUsageFlags usage, bool host_visible, bool address,
+                                      std::string& error);
+    [[nodiscard]] bool make_shader_module(VkShaderModule& out, const std::uint32_t* words, std::size_t count, std::string& error);
+    [[nodiscard]] bool upload_texture(const Texture& texture, const std::vector<VkBufferImageCopy>& regions,
+                                      const std::vector<std::uint8_t>& bytes, VkImageLayout final_layout, std::string& error);
+    [[nodiscard]] VkCommandBuffer allocate_command(VkCommandBufferLevel level, std::string& error);
+    [[nodiscard]] bool submit_raw(VkCommandBuffer command, std::string& error);
+    [[nodiscard]] bool has_extension(const std::string& name) const { return enabled_.count(name) != 0; }
+    [[nodiscard]] bool has_device_extension(const std::string& name) const { return available_.count(name) != 0; }
+    [[nodiscard]] bool version_at_least(std::uint32_t major, std::uint32_t minor) const {
+        return api_version >= VK_MAKE_API_VERSION(0, major, minor, 0) && properties.apiVersion >= VK_MAKE_API_VERSION(0, major, minor, 0);
+    }
+
+    template <class T>
+    [[nodiscard]] T query_features(VkStructureType type) const {
+        T value{};
+        value.sType = type;
+        VkPhysicalDeviceFeatures2 features2{};
+        features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+        features2.pNext = &value;
+        api.vkGetPhysicalDeviceFeatures2(physical, &features2);
+        return value;
+    }
+
+    template <class T>
+    [[nodiscard]] T query_properties(VkStructureType type) const {
+        T value{};
+        value.sType = type;
+        VkPhysicalDeviceProperties2 properties2{};
+        properties2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+        properties2.pNext = &value;
+        api.vkGetPhysicalDeviceProperties2(physical, &properties2);
+        return value;
+    }
+
     [[nodiscard]] bool make_buffer_with(Buffer& out, const void* data, VkDeviceSize size, VkBufferUsageFlags usage,
                                         std::string& error);
     [[nodiscard]] bool write(Buffer& buffer, VkDeviceSize offset, const void* data, VkDeviceSize size, std::string& error);
@@ -156,7 +246,11 @@ public:
     VkPhysicalDevice physical = VK_NULL_HANDLE;
     VkDevice device = VK_NULL_HANDLE;
     VkQueue queue = VK_NULL_HANDLE;
+    VkQueue queue2 = VK_NULL_HANDLE;
     std::uint32_t family = 0;
+    std::uint32_t api_version = VK_API_VERSION_1_1;
+    std::set<std::string> enabled_;
+    std::set<std::string> available_;
     VkCommandPool pool = VK_NULL_HANDLE;
     VkPhysicalDeviceProperties properties{};
     VkPhysicalDeviceFeatures features{};
