@@ -35,9 +35,6 @@ Buffer Rig::blank(VkDeviceSize size, VkBufferUsageFlags usage, bool host_visible
     Buffer out;
     std::string error;
     must(kit.make_buffer_ex(out, size, usage, host_visible, address, error), error);
-    if (host_visible && out.mapped != nullptr) {
-        std::memset(out.mapped, 0, static_cast<std::size_t>(size));
-    }
     return out;
 }
 

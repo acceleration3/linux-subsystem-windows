@@ -212,6 +212,7 @@ public:
     [[nodiscard]] bool write(Buffer& buffer, VkDeviceSize offset, const void* data, VkDeviceSize size, std::string& error);
 
     [[nodiscard]] bool make_texture(Texture& out, const TextureDesc& desc, std::string& error);
+    [[nodiscard]] bool zero_fill(const Texture& texture, std::string& error);
     [[nodiscard]] bool make_sampled_texture(Texture& out, std::uint32_t width, std::uint32_t height, VkFormat format,
                                             const std::vector<std::vector<std::uint8_t>>& levels, std::string& error);
 

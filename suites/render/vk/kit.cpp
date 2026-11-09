@@ -13,6 +13,60 @@ namespace lsw::render::vk {
 
 namespace {
 
+bool format_compressed(VkFormat f) {
+    const auto v = static_cast<std::uint32_t>(f);
+    return (v >= static_cast<std::uint32_t>(VK_FORMAT_BC1_RGB_UNORM_BLOCK) && v <= static_cast<std::uint32_t>(VK_FORMAT_ASTC_12x12_SRGB_BLOCK)) ||
+           (v >= 1000066000u && v <= 1000066013u) || (v >= 1000054000u && v <= 1000054007u);
+}
+
+struct PlaneLayout {
+    unsigned planes = 0;
+    unsigned shift_x = 0;
+    unsigned shift_y = 0;
+    bool packed = false;
+};
+
+PlaneLayout ycbcr_layout(VkFormat f) {
+    PlaneLayout out;
+    const auto v = static_cast<std::uint32_t>(f);
+    for (const std::uint32_t base : {1000156002u, 1000156012u, 1000156022u, 1000156029u}) {
+        if (v >= base && v < base + 5) {
+            static const unsigned planes[5] = {3, 2, 3, 2, 3};
+            static const unsigned sx[5] = {1, 1, 1, 1, 0};
+            static const unsigned sy[5] = {1, 1, 0, 0, 0};
+            out.planes = planes[v - base];
+            out.shift_x = sx[v - base];
+            out.shift_y = sy[v - base];
+        }
+    }
+    if (v >= 1000330000u && v <= 1000330003u) {
+        out.planes = 2;
+    }
+    for (const std::uint32_t packed : {1000156000u, 1000156001u, 1000156010u, 1000156011u, 1000156020u, 1000156021u, 1000156027u, 1000156028u}) {
+        if (v == packed) {
+            out.packed = true;
+        }
+    }
+    return out;
+}
+
+VkImageAspectFlags depth_stencil_aspects(VkFormat f) {
+    switch (f) {
+        case VK_FORMAT_D16_UNORM:
+        case VK_FORMAT_X8_D24_UNORM_PACK32:
+        case VK_FORMAT_D32_SFLOAT:
+            return VK_IMAGE_ASPECT_DEPTH_BIT;
+        case VK_FORMAT_S8_UINT:
+            return VK_IMAGE_ASPECT_STENCIL_BIT;
+        case VK_FORMAT_D16_UNORM_S8_UINT:
+        case VK_FORMAT_D24_UNORM_S8_UINT:
+        case VK_FORMAT_D32_SFLOAT_S8_UINT:
+            return VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+        default:
+            return 0;
+    }
+}
+
 const std::map<std::string, VkBool32 VkPhysicalDeviceFeatures::*>& feature_table() {
     static const std::map<std::string, VkBool32 VkPhysicalDeviceFeatures::*> table = {
         {"geometryShader", &VkPhysicalDeviceFeatures::geometryShader},
@@ -552,7 +606,11 @@ bool Kit::make_buffer_ex(Buffer& out, VkDeviceSize size, VkBufferUsageFlags usag
         address_info.buffer = buffer;
         out.address = api.vkGetBufferDeviceAddress(device, &address_info);
     }
-    return true;
+    if (host_visible) {
+        std::memset(mapped, 0, static_cast<std::size_t>(req.size));
+        return true;
+    }
+    return submit([&](VkCommandBuffer cb) { api.vkCmdFillBuffer(cb, buffer, 0, VK_WHOLE_SIZE, 0); }, error);
 }
 
 bool Kit::make_buffer_with(Buffer& out, const void* data, VkDeviceSize size, VkBufferUsageFlags usage, std::string& error) {
@@ -585,7 +643,7 @@ bool Kit::make_texture(Texture& out, const TextureDesc& desc, std::string& error
     info.arrayLayers = desc.layers;
     info.samples = desc.samples;
     info.tiling = desc.tiling;
-    info.usage = desc.usage;
+    info.usage = desc.usage | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     VkImage image = VK_NULL_HANDLE;
@@ -646,7 +704,74 @@ bool Kit::make_texture(Texture& out, const TextureDesc& desc, std::string& error
     out.aspect = desc.aspect;
     out.depth = desc.depth;
     out.type = desc.type;
-    return true;
+    return zero_fill(out, error);
+}
+
+bool Kit::zero_fill(const Texture& texture, std::string& error) {
+    const VkImageAspectFlags ds = depth_stencil_aspects(texture.format);
+    const PlaneLayout planar = ycbcr_layout(texture.format);
+    const bool copy_fill = format_compressed(texture.format) || planar.planes != 0 || planar.packed;
+    if (ds != 0) {
+        return submit(
+            [&](VkCommandBuffer cb) {
+                barrier(cb, texture.image, ds, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, texture.mips, texture.layers);
+                const VkClearDepthStencilValue zero{0.0f, 0};
+                const VkImageSubresourceRange range{ds, 0, texture.mips, 0, texture.layers};
+                api.vkCmdClearDepthStencilImage(cb, texture.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &zero, 1, &range);
+                barrier(cb, texture.image, ds, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL, texture.mips, texture.layers);
+            },
+            error);
+    }
+    if (!copy_fill) {
+        return submit(
+            [&](VkCommandBuffer cb) {
+                barrier(cb, texture.image, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                        texture.mips, texture.layers);
+                const VkClearColorValue zero{};
+                const VkImageSubresourceRange range{VK_IMAGE_ASPECT_COLOR_BIT, 0, texture.mips, 0, texture.layers};
+                api.vkCmdClearColorImage(cb, texture.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &zero, 1, &range);
+                barrier(cb, texture.image, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL,
+                        texture.mips, texture.layers);
+            },
+            error);
+    }
+    std::vector<VkBufferImageCopy> regions;
+    VkDeviceSize total = 0;
+    const unsigned plane_count = planar.planes != 0 ? planar.planes : 1;
+    for (std::uint32_t level = 0; level < texture.mips; ++level) {
+        for (unsigned plane = 0; plane < plane_count; ++plane) {
+            const unsigned sx = plane == 0 ? 0 : planar.shift_x;
+            const unsigned sy = plane == 0 ? 0 : planar.shift_y;
+            const std::uint32_t w = std::max(1u, (std::max(1u, texture.width >> level) + (1u << sx) - 1) >> sx);
+            const std::uint32_t h = std::max(1u, (std::max(1u, texture.height >> level) + (1u << sy) - 1) >> sy);
+            const std::uint32_t d = std::max(1u, texture.depth >> level);
+            VkBufferImageCopy region{};
+            region.bufferOffset = total;
+            region.imageSubresource.aspectMask =
+                planar.planes != 0 ? static_cast<VkImageAspectFlags>(VK_IMAGE_ASPECT_PLANE_0_BIT << plane) : VK_IMAGE_ASPECT_COLOR_BIT;
+            region.imageSubresource.mipLevel = level;
+            region.imageSubresource.baseArrayLayer = 0;
+            region.imageSubresource.layerCount = texture.layers;
+            region.imageExtent = {w, h, d};
+            regions.push_back(region);
+            const VkDeviceSize bytes = static_cast<VkDeviceSize>(w) * h * d * texture.layers * 8;
+            total += (bytes + 15) & ~static_cast<VkDeviceSize>(15);
+        }
+    }
+    Buffer zeros;
+    if (!make_buffer(zeros, total, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, true, error)) {
+        return false;
+    }
+    return submit(
+        [&](VkCommandBuffer cb) {
+            barrier(cb, texture.image, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    texture.mips, texture.layers);
+            api.vkCmdCopyBufferToImage(cb, zeros.buffer, texture.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                       static_cast<std::uint32_t>(regions.size()), regions.data());
+            barrier(cb, texture.image, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL,
+                    texture.mips, texture.layers);
+        },
+        error);
 }
 
 bool Kit::upload_texture(const Texture& texture, const std::vector<VkBufferImageCopy>& regions, const std::vector<std::uint8_t>& bytes,
