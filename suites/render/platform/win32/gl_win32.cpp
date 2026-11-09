@@ -54,6 +54,17 @@ public:
         return out;
     }
 
+    std::string describe() override {
+        PIXELFORMATDESCRIPTOR pfd{};
+        if (::DescribePixelFormat(rig_.dc(), rig_.pixel_format, sizeof(pfd), &pfd) == 0) {
+            return "pixel format " + std::to_string(rig_.pixel_format);
+        }
+        char text[160];
+        std::snprintf(text, sizeof text, "pixel format %d flags 0x%lx color %d alpha %d depth %d stencil %d accum %d", rig_.pixel_format,
+                      static_cast<unsigned long>(pfd.dwFlags), pfd.cColorBits, pfd.cAlphaBits, pfd.cDepthBits, pfd.cStencilBits, pfd.cAccumBits);
+        return text;
+    }
+
     unsigned back_framebuffer() override { return 0; }
     unsigned back_read_buffer() override { return gl::glc::BACK; }
 
