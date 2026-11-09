@@ -77,6 +77,7 @@ public:
     [[nodiscard]] static bool is_block(D3DFORMAT format);
     [[nodiscard]] static bool pack(D3DFORMAT format, std::uint32_t argb, std::uint8_t* dst);
     static void encode_block(D3DFORMAT format, const std::uint32_t texels[16], std::uint8_t* dst);
+    [[nodiscard]] static UINT block_bytes(D3DFORMAT format);
 };
 
 class Ctx {
@@ -93,7 +94,7 @@ public:
     bool in_scene = false;
     rr::CaptureSet pending;
 
-    [[nodiscard]] bool open(UINT extent, D3DFORMAT format, D3DFORMAT depth_format);
+    [[nodiscard]] bool open(UINT extent, D3DFORMAT format, D3DFORMAT depth_format, bool use_back = false);
     void fail(const std::string& message);
     void chk(HRESULT result, const char* what);
     void rs(D3DRENDERSTATETYPE type, DWORD value) { chk(d->SetRenderState(type, value), "SetRenderState"); }
@@ -118,7 +119,7 @@ public:
     void draw_idx(D3DPRIMITIVETYPE type, UINT vertex_count, UINT primitives, const void* indices, D3DFORMAT index_format, const void* vertices,
                   UINT stride);
     void light(DWORD index, const D3DLIGHT9& value, bool enable = true);
-    void material(const D3DMATERIAL9& value) { chk(d->SetMaterial(&value), "SetMaterial"); }
+    void material(const D3DMATERIAL9& value);
     [[nodiscard]] Com<IDirect3DTexture9> texture(UINT width, UINT height, UINT levels, DWORD usage, D3DFORMAT format, D3DPOOL pool,
                                                  const Fill& fill);
     [[nodiscard]] bool fill_level(IDirect3DTexture9* texture, UINT level, D3DFORMAT format, const Fill& fill);
@@ -135,6 +136,7 @@ struct Layout {
     D3DFORMAT format = D3DFMT_A8R8G8B8;
     D3DFORMAT depth = D3DFMT_D24S8;
     UINT extent = 128;
+    bool back = false;
 };
 
 struct Rtt {

@@ -41,7 +41,7 @@ public:
     D3D_FEATURE_LEVEL warp_level = D3D_FEATURE_LEVEL_11_0;
 
 private:
-    [[nodiscard]] bool create_device(IDirect3D9* factory, UINT ordinal, bool ex, std::string& error);
+    [[nodiscard]] bool create_device(IDirect3D9* factory, UINT ordinal, bool ex, UINT width, UINT height, std::string& error);
 
     D3d9Rig rig_;
     D3d12Rig warp12_;

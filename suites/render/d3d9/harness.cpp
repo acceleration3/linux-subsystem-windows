@@ -287,9 +287,57 @@ UINT Texels::bytes_per_texel(D3DFORMAT f) {
     }
 }
 
+constexpr D3DFORMAT kAti1 = static_cast<D3DFORMAT>(MAKEFOURCC('A', 'T', 'I', '1'));
+constexpr D3DFORMAT kAti2 = static_cast<D3DFORMAT>(MAKEFOURCC('A', 'T', 'I', '2'));
+
 bool Texels::is_block(D3DFORMAT f) {
-    return f == D3DFMT_DXT1 || f == D3DFMT_DXT2 || f == D3DFMT_DXT3 || f == D3DFMT_DXT4 || f == D3DFMT_DXT5;
+    return f == D3DFMT_DXT1 || f == D3DFMT_DXT2 || f == D3DFMT_DXT3 || f == D3DFMT_DXT4 || f == D3DFMT_DXT5 || f == kAti1 || f == kAti2;
 }
+
+UINT Texels::block_bytes(D3DFORMAT f) { return (f == D3DFMT_DXT1 || f == kAti1) ? 8 : 16; }
+
+namespace {
+
+void bc4_block(const std::uint8_t v[16], std::uint8_t* dst) {
+    unsigned amin = 255;
+    unsigned amax = 0;
+    for (int i = 0; i < 16; ++i) {
+        amin = std::min<unsigned>(amin, v[i]);
+        amax = std::max<unsigned>(amax, v[i]);
+    }
+    dst[0] = static_cast<std::uint8_t>(amax);
+    dst[1] = static_cast<std::uint8_t>(amin);
+    float pal[8];
+    pal[0] = static_cast<float>(amax);
+    pal[1] = static_cast<float>(amin);
+    if (amax > amin) {
+        for (int k = 1; k < 7; ++k) {
+            pal[1 + k] = (static_cast<float>(7 - k) * pal[0] + static_cast<float>(k) * pal[1]) / 7.0f;
+        }
+    } else {
+        for (int k = 2; k < 8; ++k) {
+            pal[k] = pal[0];
+        }
+    }
+    std::uint64_t bits = 0;
+    for (int i = 0; i < 16; ++i) {
+        int best = 0;
+        float best_d = 1e9f;
+        for (int q = 0; q < 8; ++q) {
+            const float dist = std::fabs(static_cast<float>(v[i]) - pal[q]);
+            if (dist < best_d) {
+                best_d = dist;
+                best = q;
+            }
+        }
+        bits |= static_cast<std::uint64_t>(best) << (3 * i);
+    }
+    for (int i = 0; i < 6; ++i) {
+        dst[2 + i] = static_cast<std::uint8_t>(bits >> (8 * i));
+    }
+}
+
+}  // namespace
 
 bool Texels::pack(D3DFORMAT f, std::uint32_t c, std::uint8_t* dst) {
     const unsigned a = c >> 24;
@@ -409,6 +457,19 @@ bool Texels::pack(D3DFORMAT f, std::uint32_t c, std::uint8_t* dst) {
 }
 
 void Texels::encode_block(D3DFORMAT f, const std::uint32_t t[16], std::uint8_t* dst) {
+    if (f == kAti1 || f == kAti2) {
+        std::uint8_t r[16];
+        std::uint8_t g[16];
+        for (int i = 0; i < 16; ++i) {
+            r[i] = static_cast<std::uint8_t>((t[i] >> 16) & 255);
+            g[i] = static_cast<std::uint8_t>((t[i] >> 8) & 255);
+        }
+        bc4_block(r, dst);
+        if (f == kAti2) {
+            bc4_block(g, dst + 8);
+        }
+        return;
+    }
     const auto luma = [](std::uint32_t c) { return ((c >> 16) & 255) * 3 + ((c >> 8) & 255) * 6 + (c & 255); };
     std::uint32_t lo = t[0];
     std::uint32_t hi = t[0];
@@ -510,9 +571,30 @@ void Texels::encode_block(D3DFORMAT f, const std::uint32_t t[16], std::uint8_t* 
     std::memcpy(color + 4, &indices, 4);
 }
 
-bool Ctx::open(UINT extent, D3DFORMAT format, D3DFORMAT depth_format) {
+void Ctx::material(const D3DMATERIAL9& value) {
+    chk(d->SetMaterial(&value), "SetMaterial");
+    rs(D3DRS_COLORVERTEX, FALSE);
+    rs(D3DRS_DIFFUSEMATERIALSOURCE, D3DMCS_MATERIAL);
+    rs(D3DRS_AMBIENTMATERIALSOURCE, D3DMCS_MATERIAL);
+    rs(D3DRS_EMISSIVEMATERIALSOURCE, D3DMCS_MATERIAL);
+    rs(D3DRS_SPECULARMATERIALSOURCE, D3DMCS_MATERIAL);
+}
+
+bool Ctx::open(UINT extent, D3DFORMAT format, D3DFORMAT depth_format, bool use_back) {
     size = extent;
-    if (!kit.make_target(target, extent, extent, format, error)) {
+    if (use_back) {
+        chk(d->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, target.surface.put()), "GetBackBuffer");
+        D3DSURFACE_DESC desc{};
+        if (target.surface) {
+            target.surface->GetDesc(&desc);
+        }
+        target.format = desc.Format;
+        target.width = desc.Width;
+        target.height = desc.Height;
+        if (desc.Width != extent || desc.Height != extent) {
+            fail("the back buffer is not the scene size");
+        }
+    } else if (!kit.make_target(target, extent, extent, format, error)) {
         good = false;
         return false;
     }
@@ -657,7 +739,7 @@ bool Ctx::fill_level(IDirect3DTexture9* texture, UINT level, D3DFORMAT format, c
     if (Texels::is_block(format)) {
         const UINT bw = (desc.Width + 3) / 4;
         const UINT bh = (desc.Height + 3) / 4;
-        const UINT block_bytes = format == D3DFMT_DXT1 ? 8 : 16;
+        const UINT block_bytes = Texels::block_bytes(format);
         for (UINT by = 0; by < bh; ++by) {
             for (UINT bx = 0; bx < bw; ++bx) {
                 std::uint32_t t[16];
@@ -817,7 +899,7 @@ public:
 
     bool setup(Kit& kit, std::string& error) override {
         ctx_ = std::make_unique<Ctx>(kit);
-        if (!ctx_->open(layout_.extent, layout_.format, layout_.depth)) {
+        if (!ctx_->open(layout_.extent, layout_.format, layout_.depth, layout_.back)) {
             error = ctx_->error;
             return false;
         }
@@ -895,6 +977,9 @@ Need Needs::format(DWORD usage, D3DRESOURCETYPE type, D3DFORMAT format, std::str
 Need Needs::all(std::vector<Need> parts) {
     return [parts = std::move(parts)](IDirect3DDevice9* device) {
         for (const Need& part : parts) {
+            if (!part) {
+                continue;
+            }
             const std::string why = part(device);
             if (!why.empty()) {
                 return why;

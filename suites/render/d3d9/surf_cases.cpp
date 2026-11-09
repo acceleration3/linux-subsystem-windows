@@ -59,16 +59,12 @@ void clear_cases() {
         c.clear(Dx::kColor(10, 10, 40, 255), D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, 1.0f);
         c.rs(D3DRS_ZENABLE, D3DZB_TRUE);
         c.rs(D3DRS_ZFUNC, D3DCMP_LESS);
-        D3DVIEWPORT9 a{0, 0, 128, 128, 0.0f, 0.5f};
-        c.chk(c.d->SetViewport(&a), "SetViewport");
-        c.camera(4.0f);
-        c.fvf(kVtxFvf);
-        const std::vector<Vtx> q = Geo::quad(-1.2f, -1.2f, 0.4f, 1.2f, 0.0f, 0xFF40E060);
-        c.draw(D3DPT_TRIANGLELIST, 2, q.data(), sizeof(Vtx));
-        D3DVIEWPORT9 b{0, 0, 128, 128, 0.25f, 0.75f};
-        c.chk(c.d->SetViewport(&b), "SetViewport");
-        const std::vector<Vtx> q2 = Geo::quad(-0.4f, -1.0f, 1.2f, 1.2f, 0.0f, 0xFFE06040);
-        c.draw(D3DPT_TRIANGLELIST, 2, q2.data(), sizeof(Vtx));
+        D3DVIEWPORT9 far_range{0, 0, 128, 128, 0.25f, 0.75f};
+        c.chk(c.d->SetViewport(&far_range), "SetViewport");
+        c.quad(10, 10, 90, 90, 0.6f, 0xFFE06040);
+        D3DVIEWPORT9 near_range{0, 0, 128, 128, 0.0f, 0.5f};
+        c.chk(c.d->SetViewport(&near_range), "SetViewport");
+        c.quad(40, 40, 120, 120, 0.6f, 0xFF40E060);
         D3DVIEWPORT9 full{0, 0, 128, 128, 0.0f, 1.0f};
         c.chk(c.d->SetViewport(&full), "SetViewport");
     });
@@ -179,45 +175,74 @@ void format_cases() {
 
 void msaa_cases() {
     const D3DMULTISAMPLE_TYPE kinds[2] = {D3DMULTISAMPLE_2_SAMPLES, D3DMULTISAMPLE_4_SAMPLES};
-    for (int k = 0; k < 2; ++k) {
-        Cases::single(rr::CaseSpec("surf", std::string("msaa_resolve_stretchrect_") + (k ? "4x" : "2x")).tolerance(rr::Tolerance::psnr(24.0)), [k, kinds](Ctx& c) {
+    struct Variant {
+        const char* name;
+        int kind;
+        int mode;
+    };
+    const Variant variants[] = {{"msaa_resolve_stretchrect_2x", 0, 0}, {"msaa_resolve_stretchrect_4x", 1, 0}, {"msaa_sample_mask_4x", 1, 1}, {"msaa_centroid_interpolation_4x", 1, 2}};
+    for (const Variant& v : variants) {
+        Cases::single(rr::CaseSpec("surf", v.name).tolerance(rr::Tolerance::blend(3).with_outliers(0.004)), [v, kinds](Ctx& c) {
             Com<IDirect3DSurface9> ms;
             Com<IDirect3DSurface9> msd;
-            c.chk(c.d->CreateRenderTarget(128, 128, D3DFMT_A8R8G8B8, kinds[k], 0, FALSE, ms.put(), nullptr), "CreateRenderTarget multisampled");
-            c.chk(c.d->CreateDepthStencilSurface(128, 128, D3DFMT_D24S8, kinds[k], 0, FALSE, msd.put(), nullptr), "CreateDepthStencilSurface multisampled");
+            c.chk(c.d->CreateRenderTarget(128, 128, D3DFMT_A8R8G8B8, kinds[v.kind], 0, FALSE, ms.put(), nullptr), "CreateRenderTarget multisampled");
+            c.chk(c.d->CreateDepthStencilSurface(128, 128, D3DFMT_D24S8, kinds[v.kind], 0, FALSE, msd.put(), nullptr), "CreateDepthStencilSurface multisampled");
             if (!ms || !msd) {
                 return;
             }
-            c.end();
             c.chk(c.d->SetRenderTarget(0, ms.get()), "SetRenderTarget");
             c.chk(c.d->SetDepthStencilSurface(msd.get()), "SetDepthStencilSurface");
-            c.begin();
             c.clear(Dx::kColor(10, 10, 40, 255));
             c.rs(D3DRS_MULTISAMPLEANTIALIAS, TRUE);
             c.rs(D3DRS_ZENABLE, D3DZB_TRUE);
-            c.camera(4.0f);
-            c.fvf(kVtxFvf);
-            c.xf(D3DTS_WORLD, Xf::rot_y(0.5f) * Xf::rot_x(0.4f));
-            Mesh cube = Geo::cube(1.0f, 0xFFFFFFFF);
-            const DWORD cols[6] = {0xFFE04040, 0xFF40E040, 0xFF4040E0, 0xFFE0E040, 0xFFE040E0, 0xFF40E0E0};
-            for (std::size_t i = 0; i < cube.vertices.size(); ++i) {
-                cube.vertices[i].diffuse = cols[i / 4];
+            if (v.mode == 2) {
+                Com<IDirect3DVertexShader9> vs = c.vs("struct I { float4 p : POSITION; float2 t : TEXCOORD0; };\nstruct O { float4 p : POSITION; float2 t : TEXCOORD0; };\nO main(I i) { O o; o.p = i.p; o.t = i.t; return o; }\n", "vs_3_0");
+                Com<IDirect3DPixelShader9> ps = c.ps("float4 main(centroid float2 uv : TEXCOORD0) : COLOR { return float4(uv.x, uv.y, 1.0 - uv.x * 0.5, 1.0); }\n", "ps_3_0");
+                if (!vs || !ps) {
+                    return;
+                }
+                c.chk(c.d->SetVertexShader(vs.get()), "SetVertexShader");
+                c.chk(c.d->SetPixelShader(ps.get()), "SetPixelShader");
+                struct V { float x, y, z, u, v; };
+                const V tri[6] = {{-0.9f, -0.9f, 0.5f, 0, 0}, {0.0f, 0.95f, 0.5f, 1.0f, 0}, {0.9f, -0.5f, 0.5f, 0, 1.0f}, {-0.6f, 0.9f, 0.4f, 0.1f, 0.9f}, {0.8f, 0.8f, 0.4f, 0.9f, 0.1f}, {0.85f, -0.85f, 0.4f, 0.8f, 0.8f}};
+                c.fvf(D3DFVF_XYZ | D3DFVF_TEX1);
+                c.draw(D3DPT_TRIANGLELIST, 2, tri, sizeof(V));
+                c.chk(c.d->SetVertexShader(nullptr), "SetVertexShader");
+                c.chk(c.d->SetPixelShader(nullptr), "SetPixelShader");
+            } else {
+                if (v.mode == 1) {
+                    c.rs(D3DRS_MULTISAMPLEMASK, 0xFFFFFFFEu);
+                }
+                c.camera(4.0f);
+                c.fvf(kVtxFvf);
+                c.xf(D3DTS_WORLD, Xf::rot_y(0.5f) * Xf::rot_x(0.4f));
+                Mesh cube = Geo::cube(1.0f, 0xFFFFFFFF);
+                const DWORD cols[6] = {0xFFE04040, 0xFF40E040, 0xFF4040E0, 0xFFE0E040, 0xFFE040E0, 0xFF40E0E0};
+                for (std::size_t i = 0; i < cube.vertices.size(); ++i) {
+                    cube.vertices[i].diffuse = cols[i / 4];
+                }
+                c.rs(D3DRS_CULLMODE, D3DCULL_CCW);
+                c.draw_mesh(cube);
+                c.rs(D3DRS_MULTISAMPLEMASK, 0xFFFFFFFFu);
             }
-            c.rs(D3DRS_CULLMODE, D3DCULL_CCW);
-            c.draw_mesh(cube);
             c.end();
             c.chk(c.d->StretchRect(ms.get(), nullptr, c.target.surface.get(), nullptr, D3DTEXF_NONE), "StretchRect resolve");
             c.chk(c.d->SetRenderTarget(0, c.target.surface.get()), "SetRenderTarget");
             c.chk(c.d->SetDepthStencilSurface(c.depth.surface.get()), "SetDepthStencilSurface");
             c.begin();
-        }, {}, [k, kinds](IDirect3DDevice9* device) {
+        }, {}, [v, kinds](IDirect3DDevice9* device) {
             Com<IDirect3D9> factory;
             device->GetDirect3D(factory.put());
             D3DDEVICE_CREATION_PARAMETERS p{};
             device->GetCreationParameters(&p);
             DWORD quality = 0;
-            const bool ok = factory && SUCCEEDED(factory->CheckDeviceMultiSampleType(p.AdapterOrdinal, D3DDEVTYPE_HAL, D3DFMT_A8R8G8B8, TRUE, kinds[k], &quality)) &&
-                            SUCCEEDED(factory->CheckDeviceMultiSampleType(p.AdapterOrdinal, D3DDEVTYPE_HAL, D3DFMT_D24S8, TRUE, kinds[k], &quality));
+            const bool ok = factory && SUCCEEDED(factory->CheckDeviceMultiSampleType(p.AdapterOrdinal, D3DDEVTYPE_HAL, D3DFMT_A8R8G8B8, TRUE, kinds[v.kind], &quality)) &&
+                            SUCCEEDED(factory->CheckDeviceMultiSampleType(p.AdapterOrdinal, D3DDEVTYPE_HAL, D3DFMT_D24S8, TRUE, kinds[v.kind], &quality));
+            if (ok && v.mode == 2) {
+                D3DCAPS9 caps{};
+                device->GetDeviceCaps(&caps);
+                return caps.PixelShaderVersion >= D3DPS_VERSION(3, 0) ? std::string() : std::string("pixel shader 3.0");
+            }
             return ok ? std::string() : std::string("multisampling");
         });
     }

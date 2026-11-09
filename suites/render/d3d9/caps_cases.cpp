@@ -146,10 +146,16 @@ void add_all(Suite& suite) {
     add_check(suite, "max_texture_size_is_creatable", [](CapsRig& r) {
         D3DCAPS9 caps = {};
         r.device()->GetDeviceCaps(&caps);
-        const UINT size = std::min<UINT>(std::min(caps.MaxTextureWidth, caps.MaxTextureHeight), 4096);
-        Com<IDirect3DTexture9> t;
-        const HRESULT result = r.device()->CreateTexture(size, size, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, t.put(), nullptr);
-        return SUCCEEDED(result) ? std::string() : "a " + std::to_string(size) + "x" + std::to_string(size) + " texture within the reported maximum cannot be created: " + D3d9Tools::hr(result);
+        Com<IDirect3DTexture9> wide;
+        Com<IDirect3DTexture9> tall;
+        const HRESULT a = r.device()->CreateTexture(caps.MaxTextureWidth, 1, 1, 0, D3DFMT_A8, D3DPOOL_DEFAULT, wide.put(), nullptr);
+        const HRESULT b = r.device()->CreateTexture(1, caps.MaxTextureHeight, 1, 0, D3DFMT_A8, D3DPOOL_DEFAULT, tall.put(), nullptr);
+        std::string problems;
+        if (FAILED(a) && caps.MaxTextureAspectRatio == 0) problems += "a " + std::to_string(caps.MaxTextureWidth) + "x1 texture within the reported maximum cannot be created: " + D3d9Tools::hr(a) + "; ";
+        if (FAILED(b) && caps.MaxTextureAspectRatio == 0) problems += "a 1x" + std::to_string(caps.MaxTextureHeight) + " texture within the reported maximum cannot be created: " + D3d9Tools::hr(b) + "; ";
+        Com<IDirect3DTexture9> over;
+        if (SUCCEEDED(r.device()->CreateTexture(caps.MaxTextureWidth * 2, 1, 1, 0, D3DFMT_A8, D3DPOOL_DEFAULT, over.put(), nullptr)) && caps.MaxTextureWidth < 65536) problems += "a texture twice the reported maximum width was created; ";
+        return problems;
     });
     add_check(suite, "limits_are_self_consistent", [](CapsRig& r) {
         D3DCAPS9 caps = {};

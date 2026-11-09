@@ -4,7 +4,7 @@ namespace lsw::suites::render::d3d9 {
 
 namespace {
 
-const Layout kScene{D3DFMT_A8R8G8B8, D3DFMT_D24S8, 256};
+const Layout kScene{D3DFMT_A8R8G8B8, D3DFMT_D24S8, 256, true};
 
 rr::CaseSpec scene(const char* name, unsigned frames, std::vector<unsigned> captured, rr::Tolerance tol = rr::Tolerance::blend(3)) {
     return rr::CaseSpec("scene", name).size(256, 256).frames(frames, std::move(captured)).tolerance(std::move(tol));
@@ -256,7 +256,7 @@ void ui_scenes() {
             linear_tex(c, 0, D3DTADDRESS_WRAP, false);
             const float scroll = 0.17f * static_cast<float>(f);
             std::vector<TlVtx> v;
-            for (int ty = 0; ty < 8; ++ty) {
+            for (int ty = 0; ty < 7; ++ty) {
                 for (int tx = 0; tx < 8; ++tx) {
                     const unsigned tile = (static_cast<unsigned>(tx) * 5 + static_cast<unsigned>(ty) * 3 + (static_cast<unsigned>(tx * ty) % 4)) % 16;
                     const float u0 = static_cast<float>(tile % 4) * 0.25f;
@@ -268,6 +268,9 @@ void ui_scenes() {
             }
             c.fvf(kTlFvf);
             c.draw(D3DPT_TRIANGLELIST, static_cast<UINT>(v.size() / 3), v.data(), sizeof(TlVtx));
+            linear_tex(c, 0, D3DTADDRESS_WRAP, false);
+            const std::vector<TlVtx> wrap = Geo::tl_quad(0, 224, 256, 256, 0xFFFFFFFF, scroll, 0, scroll + 5.0f, 0.5f);
+            c.draw(D3DPT_TRIANGLELIST, 2, wrap.data(), sizeof(TlVtx));
             c.tex(0, nullptr);
         });
     }, kScene);
@@ -292,7 +295,7 @@ void ui_scenes() {
         });
     }, kScene, Needs::caps([](const D3DCAPS9& caps) { return (caps.RasterCaps & D3DPRASTERCAPS_SCISSORTEST) != 0; }, "scissor test"));
 
-    Cases::frames(scene("radar_sweep_lines_antialiased", 4, {0, 3}, rr::Tolerance::raster(40, 2).with_outliers(0.02)), [] {
+    Cases::frames(scene("radar_sweep_lines_antialiased", 4, {0, 3}, rr::Tolerance::raster(32, 1).with_outliers(0.003)), [] {
         return FrameBody([](Ctx& c, unsigned f) {
             struct P { float x, y, z, rhw; DWORD color; };
             c.clear(Dx::kColor(0, 16, 8));
@@ -390,7 +393,7 @@ void ui_scenes() {
             sprite_quad(c, 160, 160, 200, 200, 0, 0, 1, 1);
             c.tex(0, nullptr);
         });
-    }, kScene, Needs::caps([](const D3DCAPS9& caps) { return (caps.Caps2 & D3DCAPS2_DYNAMICTEXTURES) != 0 || true; }, "textures"));
+    }, kScene);
 }
 
 const Registrar kUi(ui_scenes);

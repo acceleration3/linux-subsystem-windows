@@ -127,7 +127,7 @@ void stage_cases() {
             "struct I { float3 p : POSITION; float w : BLENDWEIGHT; float idx : BLENDINDICES; };\nstruct O { float4 p : POSITION; float4 c : COLOR0; };\n"
             "float4 xf(float4 p, int b) { return float4(dot(p, pal[b * 4]), dot(p, pal[b * 4 + 1]), dot(p, pal[b * 4 + 2]), 1.0); }\n"
             "O main(I i) { O o; float4 p = float4(i.p, 1.0); int b = (int)i.idx;\n"
-            "float4 a = xf(p, 0); float4 s = xf(p, 1); float4 m = lerp(a, s, i.w);\n"
+            "float4 a = xf(p, b); float4 s = xf(p, b + 1); float4 m = lerp(a, s, i.w);\n"
             "o.p = float4(dot(m, cm[0]), dot(m, cm[1]), dot(m, cm[2]), dot(m, cm[3])); o.c = float4(i.w, 0.6, 1.0 - i.w, 1.0); return o; }\n", "vs_2_0");
         Com<IDirect3DPixelShader9> ps = c.ps("float4 main(float4 c : COLOR0) : COLOR { return c; }\n", "ps_2_0");
         if (!vs || !ps) {
@@ -136,12 +136,15 @@ void stage_cases() {
         columns(c, 0, Xf::translate(0, 0, 5.0f) * Xf::perspective(1.0f, 1.0f, 0.5f, 30.0f));
         columns(c, 8, Xf::rot_z(0.6f));
         columns(c, 12, Xf::rot_z(-0.6f) * Xf::translate(0.5f, 0, 0));
+        columns(c, 16, Xf::translate(-0.7f, 0.2f, 0) * Xf::rot_z(0.9f));
         struct V { float x, y, z, w, idx; };
         std::vector<V> v;
         for (int k = 0; k < 16; ++k) {
             const float t = static_cast<float>(k) / 15.0f;
-            v.push_back({-0.35f, -1.5f + 3.0f * t, 0, t, 0});
-            v.push_back({0.35f, -1.5f + 3.0f * t, 0, t, 0});
+            const float idx = k < 8 ? 0.0f : 1.0f;
+            const float w = k < 8 ? static_cast<float>(k) / 7.0f : static_cast<float>(k - 8) / 7.0f;
+            v.push_back({-0.35f, -1.5f + 3.0f * t, 0, w, idx});
+            v.push_back({0.35f, -1.5f + 3.0f * t, 0, w, idx});
         }
         c.chk(c.d->SetVertexShader(vs.get()), "SetVertexShader");
         c.chk(c.d->SetPixelShader(ps.get()), "SetPixelShader");
@@ -183,7 +186,7 @@ void stage_cases() {
         }
         c.fvf(kSvFvf);
         c.draw(D3DPT_TRIANGLELIST, 6, tris.data(), sizeof(SV));
-    }, {}, Needs::all({vs_need(2, 0), ps_need(2, 0)}));
+    }, {}, Needs::all({vs_need(2, 0), ps_need(2, 0), Needs::caps([](const D3DCAPS9& caps) { return caps.VS20Caps.DynamicFlowControlDepth > 0 && caps.VS20Caps.NumTemps >= 12; }, "vs_2_a dynamic flow control")}));
 
     Cases::single(rr::CaseSpec("shader", "vs30_int_loop_and_bool").tolerance(tol), [](Ctx& c) {
         c.clear(Dx::kColor(15, 15, 40));
@@ -214,7 +217,7 @@ void pixel_cases() {
         const char* name;
         const char* vs;
         const char* ps;
-    } profiles[] = {{"ps20_procedural", "vs_2_0", "ps_2_0"}, {"ps2a_procedural", "vs_2_a", "ps_2_a"}, {"ps2b_procedural", "vs_2_0", "ps_2_b"}, {"ps30_procedural", "vs_3_0", "ps_3_0"}};
+    } profiles[] = {{"ps20_procedural", "vs_2_0", "ps_2_0"}, {"ps30_procedural", "vs_3_0", "ps_3_0"}};
     for (const auto& p : profiles) {
         Cases::single(rr::CaseSpec("shader", p.name).tolerance(rr::Tolerance::blend(4)), [p](Ctx& c) {
             c.clear(Dx::kColor(15, 15, 40));
@@ -228,8 +231,25 @@ void pixel_cases() {
                           "float3 rgb = lerp(s.rgb, col.rgb, 0.35) * (0.6 + 0.4 * ring);\n"
                           "rgb = saturate(rgb * k.x + k.y); return float4(rgb, 1.0); }\n",
                       p.ps, p.vs);
-        }, {}, Needs::all({ps_need(p.ps[3] - '0'), Needs::caps([p](const D3DCAPS9& caps) { return p.ps[6] != 'a' || (caps.PS20Caps.NumInstructionSlots >= 512 && caps.PS20Caps.NumTemps >= 22); }, "ps_2_a capabilities"), vs_need(p.vs[3] - '0')}));
+        }, {}, Needs::all({ps_need(p.ps[3] - '0'), vs_need(p.vs[3] - '0')}));
     }
+    Cases::single(rr::CaseSpec("shader", "ps2a_arbitrary_swizzle_and_derivatives").tolerance(rr::Tolerance::blend(5)), [](Ctx& c) {
+        c.clear(Dx::kColor(15, 15, 40));
+        pass_quad(c,
+                  "float4 main(float4 col : COLOR0, float2 uv : TEXCOORD0) : COLOR {\n"
+                  "float4 a = float4(uv * uv, uv.x * uv.y, 1.0 - uv.x); float2 d = ddx(uv * 7.0) + ddy(uv * 5.0);\n"
+                  "float4 b = a.wzyx * col.zxyw + a.yzxw * 0.3; return float4(saturate(b.xyz + abs(d.xyx) * 0.5), 1.0); }\n",
+                  "ps_2_a", "vs_2_a");
+    }, {}, Needs::all({vs_need(2, 0), ps_need(2, 0), Needs::caps([](const D3DCAPS9& caps) { return (caps.PS20Caps.Caps & D3DPS20CAPS_ARBITRARYSWIZZLE) != 0 && (caps.PS20Caps.Caps & D3DPS20CAPS_GRADIENTINSTRUCTIONS) != 0; }, "ps_2_a swizzle and gradient instructions")}));
+    Cases::single(rr::CaseSpec("shader", "ps2b_long_program_instruction_slots").tolerance(rr::Tolerance::blend(5)), [](Ctx& c) {
+        c.clear(Dx::kColor(15, 15, 40));
+        pass_quad(c,
+                  "float4 main(float4 col : COLOR0, float2 uv : TEXCOORD0) : COLOR {\n"
+                  "float2 p = uv * 3.0; float3 acc = 0;\n"
+                  "[unroll] for (int i = 0; i < 14; i++) { p = float2(sin(p.y * 1.7 + i) , cos(p.x * 1.3 - i)) + uv; acc += float3(p.x * 0.07, p.y * 0.07, (p.x * p.y) * 0.03); }\n"
+                  "return float4(saturate(acc * 0.5 + 0.5) * col.rgb, 1.0); }\n",
+                  "ps_2_b", "vs_2_0");
+    }, {}, Needs::all({vs_need(2, 0), ps_need(2, 0), Needs::caps([](const D3DCAPS9& caps) { return caps.PS20Caps.NumInstructionSlots >= 512; }, "ps_2_b instruction slots")}));
     Cases::single(rr::CaseSpec("shader", "ps30_loop_break").tolerance(tol), [](Ctx& c) {
         c.clear(Dx::kColor(15, 15, 40));
         pass_quad(c,
@@ -240,16 +260,20 @@ void pixel_cases() {
     }, {}, Needs::all({vs_need(3, 0), ps_need(3, 0)}));
     Cases::single(rr::CaseSpec("shader", "ps30_dynamic_branch").tolerance(tol), [](Ctx& c) {
         c.clear(Dx::kColor(15, 15, 40));
-        pass_quad(c,
-                  "float4 main(float4 col : COLOR0, float2 uv : TEXCOORD0) : COLOR {\n"
-                  "float4 o; [flatten] if (uv.x > uv.y) { o = float4(col.rgb, 1); } else { o = float4(1 - col.rgb, 1); }\n"
-                  "if (frac(uv.x * 8.0) < 0.5) { o.rgb *= 0.6; } return o; }\n", "ps_3_0", "vs_3_0");
+        Com<IDirect3DTexture9> t = detail_texture(c);
+        c.tex(0, t.get());
+        pass_quad(c, std::string(kPsHead) +
+                         "float4 main(float4 col : COLOR0, float2 uv : TEXCOORD0) : COLOR {\n"
+                         "float4 o = 0; float v = tex2Dlod(tex, float4(uv * 2.0, 0, 0)).g;\n"
+                         "[branch] if (v > 0.5) { o = tex2Dlod(tex, float4(uv * 4.0, 0, 1)) * col; } else { o = float4(1 - col.rgb, 1) * (0.4 + v); }\n"
+                         "float acc = 0; [loop] for (int i = 0; i < 8; i++) { acc += v * 0.1; if (acc > 0.3 + uv.x * 0.2) break; }\n"
+                         "return float4(o.rgb * (0.7 + acc), 1); }\n", "ps_3_0", "vs_3_0");
     }, {}, Needs::all({vs_need(3, 0), ps_need(3, 0)}));
     Cases::single(rr::CaseSpec("shader", "ps30_int_bool_constants").tolerance(tol), [](Ctx& c) {
         c.clear(Dx::kColor(15, 15, 40));
         Com<IDirect3DPixelShader9> ps = c.ps(
-            "uniform int n;\nuniform bool inv;\n"
-            "float4 main(float4 col : COLOR0, float2 uv : TEXCOORD0) : COLOR {\nfloat acc = 0; for (int k = 0; k < n; k++) { acc += step(0.5, frac(uv.x * (k + 1))) / n; }\n"
+            "int n : register(i0);\nbool inv : register(b0);\nfloat4 scale : register(c0);\n"
+            "float4 main(float4 col : COLOR0, float2 uv : TEXCOORD0) : COLOR {\nfloat acc = 0; for (int k = 0; k < n; k++) { acc += step(0.5, frac(uv.x * (k + 1))) * scale.x; }\n"
             "if (inv) acc = 1 - acc; return float4(acc, col.g * acc, col.b, 1); }\n", "ps_3_0");
         Com<IDirect3DVertexShader9> vs = c.vs(kPassSource, "vs_3_0");
         if (!ps || !vs) {
@@ -257,6 +281,8 @@ void pixel_cases() {
         }
         const int n[4] = {5, 0, 0, 0};
         const BOOL inv = TRUE;
+        const float scale[4] = {0.2f, 0, 0, 0};
+        c.chk(c.d->SetPixelShaderConstantF(0, scale, 1), "const");
         c.chk(c.d->SetPixelShaderConstantI(0, n, 1), "constI");
         c.chk(c.d->SetPixelShaderConstantB(0, &inv, 1), "constB");
         c.chk(c.d->SetVertexShader(vs.get()), "SetVertexShader");
@@ -361,7 +387,7 @@ struct InstVertex {
 
 void instancing_cases() {
     for (int indexed = 0; indexed < 2; ++indexed) {
-        Cases::single(rr::CaseSpec("shader", indexed ? "instancing_indexed_geometry" : "instancing_array_geometry").tolerance(rr::Tolerance::blend(3)), [indexed](Ctx& c) {
+        Cases::single(rr::CaseSpec("shader", indexed ? "instancing_indexed_hexagon_geometry" : "instancing_array_strip_geometry").tolerance(rr::Tolerance::blend(3)), [indexed](Ctx& c) {
             c.clear(Dx::kColor(15, 15, 40));
             Com<IDirect3DVertexShader9> vs = c.vs(
                 "struct I { float2 p : POSITION; float2 t : TEXCOORD0; float4 inst : TEXCOORD1; float4 col : COLOR0; };\nstruct O { float4 p : POSITION; float4 c : COLOR0; float2 t : TEXCOORD0; };\n"
@@ -370,20 +396,32 @@ void instancing_cases() {
             if (!vs || !ps) {
                 return;
             }
-            const InstVertex quad[4] = {{-1, 1, 0, 0}, {1, 1, 1, 0}, {-1, -1, 0, 1}, {1, -1, 1, 1}};
+            std::vector<InstVertex> geometry;
+            std::vector<std::uint16_t> idx;
+            if (indexed) {
+                geometry.push_back({0, 0, 0.5f, 0.5f});
+                for (int i = 0; i < 6; ++i) {
+                    const float a = 1.0471976f * static_cast<float>(i);
+                    geometry.push_back({std::cos(a), std::sin(a), 0.5f + 0.5f * std::cos(a), 0.5f + 0.5f * std::sin(a)});
+                }
+                for (std::uint16_t i = 0; i < 6; ++i) {
+                    idx.insert(idx.end(), {0, static_cast<std::uint16_t>(1 + i), static_cast<std::uint16_t>(1 + (i + 1) % 6)});
+                }
+            } else {
+                geometry = {{-1, 1, 0, 0}, {1, 1, 1, 0}, {-1, -1, 0, 1}, {1, -1, 1, 1}};
+            }
             struct Inst { float x, y, s, pad; DWORD color; };
             std::vector<Inst> inst;
             for (int i = 0; i < 12; ++i) {
                 inst.push_back({-0.75f + 0.5f * static_cast<float>(i % 4), 0.65f - 0.55f * static_cast<float>(i / 4), 0.16f + 0.015f * static_cast<float>(i), 0, Dx::kColor(60 + 15 * static_cast<unsigned>(i), 255 - 18 * static_cast<unsigned>(i), 120 + 8 * static_cast<unsigned>(i))});
             }
-            const std::uint16_t idx[6] = {0, 1, 2, 2, 1, 3};
-            Com<IDirect3DVertexBuffer9> geom = c.vbuffer(quad, sizeof quad);
+            Com<IDirect3DVertexBuffer9> geom = c.vbuffer(geometry.data(), static_cast<UINT>(geometry.size() * sizeof(InstVertex)));
             Com<IDirect3DVertexBuffer9> per = c.vbuffer(inst.data(), static_cast<UINT>(inst.size() * sizeof(Inst)));
-            Com<IDirect3DIndexBuffer9> ib = c.ibuffer(idx, sizeof idx, D3DFMT_INDEX16);
+            Com<IDirect3DIndexBuffer9> ib = indexed ? c.ibuffer(idx.data(), static_cast<UINT>(idx.size() * 2), D3DFMT_INDEX16) : Com<IDirect3DIndexBuffer9>();
             const D3DVERTEXELEMENT9 el[] = {{0, 0, D3DDECLTYPE_FLOAT2, 0, D3DDECLUSAGE_POSITION, 0}, {0, 8, D3DDECLTYPE_FLOAT2, 0, D3DDECLUSAGE_TEXCOORD, 0},
                                             {1, 0, D3DDECLTYPE_FLOAT4, 0, D3DDECLUSAGE_TEXCOORD, 1}, {1, 16, D3DDECLTYPE_D3DCOLOR, 0, D3DDECLUSAGE_COLOR, 0}, D3DDECL_END()};
             Com<IDirect3DVertexDeclaration9> d = c.decl(el);
-            if (!geom || !per || !ib || !d) {
+            if (!geom || !per || !d || (indexed && !ib)) {
                 return;
             }
             c.chk(c.d->SetVertexDeclaration(d.get()), "SetVertexDeclaration");
@@ -391,24 +429,17 @@ void instancing_cases() {
             c.chk(c.d->SetPixelShader(ps.get()), "SetPixelShader");
             c.chk(c.d->SetStreamSource(0, geom.get(), 0, sizeof(InstVertex)), "SetStreamSource");
             c.chk(c.d->SetStreamSource(1, per.get(), 0, sizeof(Inst)), "SetStreamSource");
-            c.chk(c.d->SetIndices(ib.get()), "SetIndices");
             c.chk(c.d->SetStreamSourceFreq(0, D3DSTREAMSOURCE_INDEXEDDATA | 12u), "SetStreamSourceFreq");
             c.chk(c.d->SetStreamSourceFreq(1, D3DSTREAMSOURCE_INSTANCEDATA | 1u), "SetStreamSourceFreq");
-            c.chk(c.d->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0, 4, 0, 2), "DrawIndexedPrimitive");
+            if (indexed) {
+                c.chk(c.d->SetIndices(ib.get()), "SetIndices");
+                c.chk(c.d->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0, 7, 0, 6), "DrawIndexedPrimitive");
+            } else {
+                c.chk(c.d->DrawPrimitive(D3DPT_TRIANGLESTRIP, 0, 2), "DrawPrimitive");
+            }
             c.chk(c.d->SetStreamSourceFreq(0, 1), "SetStreamSourceFreq");
             c.chk(c.d->SetStreamSourceFreq(1, 1), "SetStreamSourceFreq");
             c.chk(c.d->SetStreamSource(1, nullptr, 0, 0), "SetStreamSource");
-            if (indexed) {
-                c.chk(c.d->SetStreamSourceFreq(0, D3DSTREAMSOURCE_INDEXEDDATA | 5u), "SetStreamSourceFreq");
-                c.chk(c.d->SetStreamSourceFreq(1, D3DSTREAMSOURCE_INSTANCEDATA | 1u), "SetStreamSourceFreq");
-                c.chk(c.d->SetStreamSource(1, per.get(), 0, sizeof(Inst)), "SetStreamSource");
-                c.rs(D3DRS_ALPHABLENDENABLE, TRUE);
-                c.rs(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
-                c.rs(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
-                c.chk(c.d->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0, 4, 0, 2), "DrawIndexedPrimitive");
-                c.chk(c.d->SetStreamSourceFreq(0, 1), "SetStreamSourceFreq");
-                c.chk(c.d->SetStreamSourceFreq(1, 1), "SetStreamSourceFreq");
-            }
         }, {}, Needs::all({vs_need(3, 0), ps_need(3, 0)}));
     }
 }
@@ -508,7 +539,7 @@ void decl_cases() {
             c.clear(Dx::kColor(15, 15, 40));
             Com<IDirect3DVertexShader9> vs = c.vs(
                 "float4 k : register(c0);\nstruct I { float2 p : POSITION; float4 a : TEXCOORD0; };\nstruct O { float4 p : POSITION; float4 c : COLOR0; };\n"
-                "O main(I i) { O o; o.p = float4(i.p, 0.5, 1.0); o.c = float4(saturate(i.a.xyz * k.x), 1.0); return o; }\n", "vs_2_0");
+                "O main(I i) { O o; o.p = float4(i.p, 0.5, 1.0); float3 v = k.y > 0.5 ? i.a.xyw : i.a.xyz; o.c = float4(saturate(v * k.x), 1.0); return o; }\n", "vs_2_0");
             Com<IDirect3DPixelShader9> ps = c.ps("float4 main(float4 c : COLOR0) : COLOR { return c; }\n", "ps_2_0");
             if (!vs || !ps) {
                 return;
@@ -521,7 +552,9 @@ void decl_cases() {
                 std::memcpy(&data[static_cast<std::size_t>(k) * stride], pos[k], 8);
                 write_attr(t.type, k, &data[static_cast<std::size_t>(k) * stride + 8], scale);
             }
-            const float kconst[4] = {scale, 0, 0, 0};
+            const bool four = t.type == D3DDECLTYPE_FLOAT4 || t.type == D3DDECLTYPE_D3DCOLOR || t.type == D3DDECLTYPE_UBYTE4 || t.type == D3DDECLTYPE_UBYTE4N || t.type == D3DDECLTYPE_SHORT4 ||
+                              t.type == D3DDECLTYPE_SHORT4N || t.type == D3DDECLTYPE_USHORT4N || t.type == D3DDECLTYPE_FLOAT16_4;
+            const float kconst[4] = {scale, four ? 1.0f : 0.0f, 0, 0};
             c.chk(c.d->SetVertexShaderConstantF(0, kconst, 1), "const");
             const D3DVERTEXELEMENT9 el[] = {{0, 0, D3DDECLTYPE_FLOAT2, 0, D3DDECLUSAGE_POSITION, 0}, {0, 8, static_cast<BYTE>(t.type), 0, D3DDECLUSAGE_TEXCOORD, 0}, D3DDECL_END()};
             Com<IDirect3DVertexDeclaration9> d = c.decl(el);
@@ -585,7 +618,7 @@ void ps1_case(const std::string& name, DWORD version, const Tokens& program, uns
         } else {
             t0 = c.texture(32, 32, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, [](UINT x, UINT y, UINT w, UINT h) {
                 const std::uint32_t g = Texels::rainbow()(x, y, w, h);
-                return ((x / 4 + y / 4) & 1u) ? g : (g & 0x00FFFFFFu) | 0x90000000u;
+                return ((x / 4 + y / 4) & 1u) ? g : (g & 0x00FFFFFFu) | 0x30000000u;
             });
         }
         Com<IDirect3DTexture9> t1 = c.texture(32, 32, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, Texels::checker(4, 0xFFF0E0A0, 0xFF3060A0));
@@ -604,10 +637,10 @@ void ps1_case(const std::string& name, DWORD version, const Tokens& program, uns
             return;
         }
         if (bump) {
-            c.tss(0, D3DTSS_BUMPENVMAT00, Dx::fbits(0.2f));
-            c.tss(0, D3DTSS_BUMPENVMAT01, 0);
-            c.tss(0, D3DTSS_BUMPENVMAT10, 0);
-            c.tss(0, D3DTSS_BUMPENVMAT11, Dx::fbits(0.2f));
+            c.tss(1, D3DTSS_BUMPENVMAT00, Dx::fbits(0.4f));
+            c.tss(1, D3DTSS_BUMPENVMAT01, 0);
+            c.tss(1, D3DTSS_BUMPENVMAT10, 0);
+            c.tss(1, D3DTSS_BUMPENVMAT11, Dx::fbits(0.4f));
         }
         c.chk(c.d->SetPixelShader(ps.get()), "SetPixelShader");
         struct V { float x, y, z; DWORD color; float u0, v0, u1, v1; };

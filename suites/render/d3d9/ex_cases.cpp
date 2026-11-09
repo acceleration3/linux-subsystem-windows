@@ -10,6 +10,7 @@ struct Dev2 {
     Com<IDirect3DDevice9Ex> extended;
     D3DPRESENT_PARAMETERS pp{};
     UINT ordinal = 0;
+    DWORD flags = 0;
 
     bool open(IDirect3DDevice9* like, bool want_ex, UINT width, UINT height, D3DSWAPEFFECT effect, UINT buffers, std::string& error) {
         Com<IDirect3D9> factory;
@@ -18,6 +19,8 @@ struct Dev2 {
         like->GetCreationParameters(&params);
         ordinal = params.AdapterOrdinal;
         TestWindowConfig config;
+        config.x = -30000;
+        config.y = -30000;
         TestWindow::fit_config(config, width, height);
         if (!window.create(config, error)) {
             return false;
@@ -29,6 +32,7 @@ struct Dev2 {
         pp.BackBufferCount = buffers;
         pp.SwapEffect = effect;
         pp.hDeviceWindow = window.hwnd();
+        pp.Flags = flags;
         pp.Windowed = TRUE;
         pp.PresentationInterval = D3DPRESENT_INTERVAL_DEFAULT;
         HRESULT result = E_FAIL;
@@ -248,7 +252,15 @@ void second_device_cases() {
             if (FAILED(state)) {
                 c.fail("CheckDeviceState: " + D3d9Tools::hr(state));
             }
-            c.chk(dev->extended->PresentEx(nullptr, nullptr, nullptr, nullptr, D3DPRESENT_DONOTWAIT), "PresentEx");
+            HRESULT presented = S_OK;
+            for (int attempt = 0; attempt < 500; ++attempt) {
+                presented = dev->extended->PresentEx(nullptr, nullptr, nullptr, nullptr, D3DPRESENT_DONOTWAIT);
+                if (presented != D3DERR_WASSTILLDRAWING) {
+                    break;
+                }
+                Sleep(2);
+            }
+            c.chk(presented, "PresentEx");
         });
     }, {}, ex_need());
 
@@ -279,7 +291,7 @@ void second_device_cases() {
         });
     }, {}, ex_need());
 
-    Cases::frames(rr::CaseSpec("ex", "reset_restores_rendering_plain_device").frames(5, {0, 2, 4}), [] {
+    Cases::frames(rr::CaseSpec("surf", "reset_restores_rendering_plain_device").frames(5, {0, 2, 4}), [] {
         auto dev = std::make_shared<Dev2>();
         return FrameBody([dev](Ctx& c, unsigned f) {
             std::string error;
@@ -303,6 +315,35 @@ void second_device_cases() {
         });
     });
 
+    Cases::single(rr::CaseSpec("surf", "lockable_back_buffer_direct_read"), [](Ctx& c) {
+        Dev2 dev;
+        dev.flags = D3DPRESENTFLAG_LOCKABLE_BACKBUFFER;
+        std::string error;
+        if (!dev.open(c.d, false, 128, 128, D3DSWAPEFFECT_DISCARD, 1, error)) {
+            c.fail(error);
+            return;
+        }
+        IDirect3DDevice9* d = dev.device.get();
+        Surface back = dev.back(128, 128);
+        d->BeginScene();
+        scene_for(d, 128, 128, 2);
+        d->EndScene();
+        D3DLOCKED_RECT locked{};
+        c.chk(back.surface->LockRect(&locked, nullptr, D3DLOCK_READONLY), "LockRect on the back buffer");
+        if (locked.pBits == nullptr) {
+            return;
+        }
+        rr::Image image(128, 128, rr::PixelKind::Bgra8Unorm);
+        for (UINT y = 0; y < 128; ++y) {
+            std::memcpy(image.row(y), static_cast<const std::uint8_t*>(locked.pBits) + static_cast<std::size_t>(y) * locked.Pitch, image.stride());
+            for (UINT x = 0; x < 128; ++x) {
+                image.row(y)[x * 4 + 3] = 255;
+            }
+        }
+        back.surface->UnlockRect();
+        c.pending.add("", std::move(image));
+    });
+
     Cases::single(ex("shared_render_target_opened_by_second_device"), [](Ctx& c) {
         Com<IDirect3DTexture9> source;
         HANDLE shared = nullptr;
@@ -322,9 +363,13 @@ void second_device_cases() {
         if (SUCCEEDED(c.d->CreateQuery(D3DQUERYTYPE_EVENT, done.put())) && done) {
             done->Issue(D3DISSUE_END);
             c.end();
-            int spins = 0;
-            while (done->GetData(nullptr, 0, D3DGETDATA_FLUSH) == S_FALSE && ++spins < 20000) {
-                Sleep(0);
+            const DWORD deadline = GetTickCount() + 5000;
+            while (done->GetData(nullptr, 0, D3DGETDATA_FLUSH) == S_FALSE) {
+                if (GetTickCount() > deadline) {
+                    c.fail("the event query did not complete within five seconds");
+                    break;
+                }
+                Sleep(1);
             }
             c.begin();
         }

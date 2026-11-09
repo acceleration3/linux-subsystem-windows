@@ -42,19 +42,26 @@ void format_cases() {
         {"a16b16g16r16", D3DFMT_A16B16G16R16, true}, {"g16r16", D3DFMT_G16R16, true}, {"r16f", D3DFMT_R16F, true}, {"g16r16f", D3DFMT_G16R16F, true},
         {"a16b16g16r16f", D3DFMT_A16B16G16R16F, true}, {"r32f", D3DFMT_R32F, false}, {"g32r32f", D3DFMT_G32R32F, false}, {"a32b32g32r32f", D3DFMT_A32B32G32R32F, false},
         {"v8u8", D3DFMT_V8U8, true}, {"q8w8v8u8", D3DFMT_Q8W8V8U8, true}, {"dxt1", D3DFMT_DXT1, true}, {"dxt3", D3DFMT_DXT3, true}, {"dxt5", D3DFMT_DXT5, true},
-        {"a8b8g8r8", D3DFMT_A8B8G8R8, true}, {"x8b8g8r8", D3DFMT_X8B8G8R8, true},
+        {"a8b8g8r8", D3DFMT_A8B8G8R8, true}, {"x8b8g8r8", D3DFMT_X8B8G8R8, true}, {"dxt2", D3DFMT_DXT2, true}, {"dxt4", D3DFMT_DXT4, true},
+        {"ati1", static_cast<D3DFORMAT>(MAKEFOURCC('A', 'T', 'I', '1')), true}, {"ati2", static_cast<D3DFORMAT>(MAKEFOURCC('A', 'T', 'I', '2')), true},
     };
     for (const FormatInfo& f : formats) {
         Cases::single(rr::CaseSpec("tex", std::string("format_") + f.name).tolerance(rr::Tolerance::blend(4)), [f](Ctx& c) {
             backdrop(c);
-            Com<IDirect3DTexture9> t = c.texture(32, 32, 1, 0, f.format, D3DPOOL_MANAGED, alpha_rainbow());
+            Com<IDirect3DTexture9> t = c.texture(32, 32, 1, 0, f.format, (std::strcmp(f.name, "ati1") == 0 || std::strcmp(f.name, "ati2") == 0) ? D3DPOOL_DEFAULT : D3DPOOL_MANAGED, alpha_rainbow());
             c.tex(0, t.get());
             sampler_linear(c, 0, f.linear);
             c.rs(D3DRS_ALPHABLENDENABLE, TRUE);
             c.rs(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
             c.rs(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
             tex_quad(c, 12, 12, 116, 116);
-        }, {}, Needs::format(0, D3DRTYPE_TEXTURE, f.format, std::string("texture format ") + f.name));
+        }, {}, Needs::all({Needs::format(0, D3DRTYPE_TEXTURE, f.format, std::string("texture format ") + f.name), [f](IDirect3DDevice9* device) {
+            if (std::strcmp(f.name, "ati1") != 0 && std::strcmp(f.name, "ati2") != 0) {
+                return std::string();
+            }
+            Com<IDirect3DTexture9> probe;
+            return SUCCEEDED(device->CreateTexture(32, 32, 1, 0, f.format, D3DPOOL_DEFAULT, probe.put(), nullptr)) ? std::string() : std::string("creating the ") + f.name + " texture";
+        }}));
     }
 }
 
@@ -127,14 +134,15 @@ void mip_cases() {
         c.ss(0, D3DSAMP_MIPMAPLODBIAS, Dx::fbits(-1.0f));
         ground(c);
     });
-    Cases::single(rr::CaseSpec("tex", "mip_max_level").tolerance(mip_tol), [](Ctx& c) {
+    Cases::single(rr::CaseSpec("tex", "mip_max_level").tolerance(rr::Tolerance::blend(4)), [](Ctx& c) {
         c.clear(Dx::kColor(90, 120, 200, 255));
         Com<IDirect3DTexture9> t = level_texture(c, 64);
         c.tex(0, t.get());
-        sampler_linear(c);
+        c.ss(0, D3DSAMP_MINFILTER, D3DTEXF_POINT);
+        c.ss(0, D3DSAMP_MAGFILTER, D3DTEXF_POINT);
         c.ss(0, D3DSAMP_MIPFILTER, D3DTEXF_POINT);
-        c.ss(0, D3DSAMP_MAXMIPLEVEL, 2);
-        ground(c);
+        c.ss(0, D3DSAMP_MAXMIPLEVEL, 3);
+        ground(c, 1.0f);
     });
     Cases::single(rr::CaseSpec("tex", "mip_autogen").tolerance(rr::Tolerance::raster(16, 1).with_outliers(0.03)), [](Ctx& c) {
         c.clear(Dx::kColor(90, 120, 200, 255));
@@ -146,7 +154,7 @@ void mip_cases() {
     }, {}, Needs::caps([](const D3DCAPS9& caps) { return (caps.Caps2 & D3DCAPS2_CANAUTOGENMIPMAP) != 0; }, "automatic mip generation"));
     const int aniso[3] = {1, 4, 16};
     for (int a : aniso) {
-        Cases::single(rr::CaseSpec("tex", "aniso_" + std::to_string(a)).tolerance(rr::Tolerance::psnr(26.0)), [a](Ctx& c) {
+        Cases::single(rr::CaseSpec("tex", "aniso_" + std::to_string(a)).tolerance(rr::Tolerance::psnr(31.0)), [a](Ctx& c) {
             c.clear(Dx::kColor(90, 120, 200, 255));
             Com<IDirect3DTexture9> t = c.texture(64, 64, 0, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, Texels::checker(8, 0xFFF0F0F0, 0xFF2040C0));
             c.tex(0, t.get());
@@ -394,9 +402,9 @@ void transfer_cases() {
         const RECT d{10, 20, 118, 100};
         c.chk(c.d->StretchRect(src.get(), &s, c.target.surface.get(), &d, D3DTEXF_POINT), "StretchRect");
     });
-    Cases::single(rr::CaseSpec("tex", "stretchrect_linear_minify").tolerance(rr::Tolerance::filter(8, 0.02)), [](Ctx& c) {
+    Cases::single(rr::CaseSpec("tex", "stretchrect_linear_minify").tolerance(rr::Tolerance::blend(4).with_outliers(0.005)), [](Ctx& c) {
         c.clear(Dx::kColor(20, 20, 40, 255));
-        Com<IDirect3DSurface9> src = device_surface(c, 96, 96, D3DFMT_A8R8G8B8, Texels::rainbow());
+        Com<IDirect3DSurface9> src = device_surface(c, 96, 96, D3DFMT_A8R8G8B8, Texels::checker(24, 0xFFF0F0F0, 0xFF203060));
         if (!src) {
             return;
         }

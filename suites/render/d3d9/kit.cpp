@@ -23,15 +23,17 @@ using CreateOn12Ex = HRESULT(WINAPI*)(UINT, On12Args*, UINT, IDirect3D9Ex**);
 
 }  // namespace
 
-bool Kit::create_device(IDirect3D9* factory, UINT ordinal, bool ex, std::string& error) {
+bool Kit::create_device(IDirect3D9* factory, UINT ordinal, bool ex, UINT width, UINT height, std::string& error) {
     TestWindowConfig config;
-    TestWindow::fit_config(config, 128, 128);
+    config.x = -30000;
+    config.y = -30000;
+    TestWindow::fit_config(config, static_cast<int>(width), static_cast<int>(height));
     if (!window_.create(config, error)) {
         return false;
     }
     D3DPRESENT_PARAMETERS pp{};
-    pp.BackBufferWidth = 128;
-    pp.BackBufferHeight = 128;
+    pp.BackBufferWidth = width;
+    pp.BackBufferHeight = height;
     pp.BackBufferFormat = D3DFMT_X8R8G8B8;
     pp.BackBufferCount = 1;
     pp.SwapEffect = D3DSWAPEFFECT_DISCARD;
@@ -73,6 +75,10 @@ OpenStatus Kit::open(bool use_warp, const rr::CaseSpec& spec, std::string& error
         name = rig_.adapter.name;
         D3d9Settings settings;
         settings.depth = false;
+        settings.width = spec.width();
+        settings.height = spec.height();
+        settings.x = -30000;
+        settings.y = -30000;
         if (!rig_.create(settings, error)) {
             return OpenStatus::Failed;
         }
@@ -117,7 +123,7 @@ OpenStatus Kit::open(bool use_warp, const rr::CaseSpec& spec, std::string& error
             return OpenStatus::Failed;
         }
     }
-    return create_device(on12_factory_.get(), 0, ex, error) ? OpenStatus::Ok : OpenStatus::Failed;
+    return create_device(on12_factory_.get(), 0, ex, spec.width(), spec.height(), error) ? OpenStatus::Ok : OpenStatus::Failed;
 }
 
 Com<IDirect3DVertexShader9> Kit::vertex_shader(const std::string& source, std::string& error) {

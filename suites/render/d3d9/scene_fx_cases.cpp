@@ -4,7 +4,7 @@ namespace lsw::suites::render::d3d9 {
 
 namespace {
 
-const Layout kScene{D3DFMT_A8R8G8B8, D3DFMT_D24S8, 256};
+const Layout kScene{D3DFMT_A8R8G8B8, D3DFMT_D24S8, 256, true};
 
 rr::CaseSpec scene(const char* name, unsigned frames, std::vector<unsigned> captured, rr::Tolerance tol = rr::Tolerance::blend(3)) {
     return rr::CaseSpec("scene", name).size(256, 256).frames(frames, std::move(captured)).tolerance(std::move(tol));
@@ -134,7 +134,7 @@ void post_scenes() {
         });
     }, kScene, Needs::all({Needs::shader(2, 2), Needs::format(D3DUSAGE_RENDERTARGET, D3DRTYPE_TEXTURE, D3DFMT_A8R8G8B8, "render target textures")}));
 
-    Cases::frames(scene("hdr_fp16_tonemap_ps30", 3, {0, 2}, rr::Tolerance::floats(8e-3f, 8e-3f).with_outliers(0.002)), [] {
+    Cases::frames(scene("hdr_fp16_tonemap_ps30", 3, {0, 2}, rr::Tolerance::blend(4)), [] {
         struct State {
             Rtt hdr;
             Com<IDirect3DVertexShader9> vs;
@@ -223,7 +223,8 @@ void post_scenes() {
             c.rs(D3DRS_CULLMODE, D3DCULL_NONE);
             c.rs(D3DRS_COLORWRITEENABLE, 0);
             c.fvf(kVtxFvf);
-            c.chk(c.d->SetPixelShader(nullptr), "SetPixelShader");
+            Com<IDirect3DPixelShader9> depth_only = c.ps("float4 main() : COLOR { return 0; }\n", "ps_3_0");
+            c.chk(c.d->SetPixelShader(depth_only.get()), "SetPixelShader");
             c.chk(c.d->SetVertexShader(vs), "SetVertexShader");
             const auto draw_all = [&](const Xf& vp, const Xf& lvp) {
                 upload(c, 0, vp);

@@ -86,13 +86,19 @@ void fvf_cases() {
     Cases::single(rr::CaseSpec("ff", "fvf_xyzw"), [](Ctx& c) {
         clear_blue(c);
         struct V { float x, y, z, w; DWORD color; };
-        const V tri[3] = {{-0.5f, -0.5f, 0.5f, 1.0f, 0xFFFF4040}, {0.0f, 0.6f, 0.5f, 1.0f, 0xFF40FF40}, {0.5f, -0.5f, 0.5f, 1.0f, 0xFF4040FF}};
-        c.xf(D3DTS_WORLD, Xf());
-        c.xf(D3DTS_VIEW, Xf());
-        c.xf(D3DTS_PROJECTION, Xf());
+        const V tri[3] = {{-1.0f, -1.0f, 1.0f, 2.0f, 0xFFFF4040}, {0.0f, 1.2f, 1.0f, 2.0f, 0xFF40FF40}, {1.0f, -1.0f, 1.0f, 2.0f, 0xFF4040FF}};
+        Com<IDirect3DVertexShader9> vs = c.vs("struct I { float4 p : POSITION; float4 c : COLOR0; };\nstruct O { float4 p : POSITION; float4 c : COLOR0; };\nO main(I i) { O o; o.p = i.p; o.c = i.c; return o; }\n", "vs_2_0");
+        Com<IDirect3DPixelShader9> ps = c.ps("float4 main(float4 c : COLOR0) : COLOR { return c; }\n", "ps_2_0");
+        if (!vs || !ps) {
+            return;
+        }
+        c.chk(c.d->SetVertexShader(vs.get()), "SetVertexShader");
+        c.chk(c.d->SetPixelShader(ps.get()), "SetPixelShader");
         c.fvf(D3DFVF_XYZW | D3DFVF_DIFFUSE);
         c.draw(D3DPT_TRIANGLELIST, 1, tri, sizeof(V));
-    });
+        c.chk(c.d->SetVertexShader(nullptr), "SetVertexShader");
+        c.chk(c.d->SetPixelShader(nullptr), "SetPixelShader");
+    }, {}, Needs::shader(2, 2));
 
     for (int weights = 1; weights <= 3; ++weights) {
         Cases::single(rr::CaseSpec("ff", "fvf_xyzb" + std::to_string(weights)), [weights](Ctx& c) {
@@ -138,20 +144,44 @@ void fvf_cases() {
         c.camera(4.5f);
         c.rs(D3DRS_VERTEXBLEND, D3DVBF_1WEIGHTS);
         c.rs(D3DRS_INDEXEDVERTEXBLENDENABLE, TRUE);
-        c.xf(D3DTS_WORLD, Xf::rot_z(0.7f));
-        c.xf(static_cast<D3DTRANSFORMSTATETYPE>(D3DTS_WORLDMATRIX(1)), Xf::rot_z(-0.7f));
-        c.xf(static_cast<D3DTRANSFORMSTATETYPE>(D3DTS_WORLDMATRIX(2)), Xf::translate(0.0f, 0.0f, 0.0f));
+        c.xf(D3DTS_WORLD, Xf::translate(2.5f, 0.0f, 0.0f));
+        c.xf(static_cast<D3DTRANSFORMSTATETYPE>(D3DTS_WORLDMATRIX(1)), Xf::translate(-2.5f, 0.0f, 0.0f));
+        c.xf(static_cast<D3DTRANSFORMSTATETYPE>(D3DTS_WORLDMATRIX(2)), Xf::rot_z(0.7f));
+        c.xf(static_cast<D3DTRANSFORMSTATETYPE>(D3DTS_WORLDMATRIX(3)), Xf::rot_z(-0.7f) * Xf::translate(0.4f, 0.0f, 0.0f));
         struct V { float x, y, z, w; DWORD idx; DWORD color; };
         std::vector<V> v;
         for (unsigned k = 0; k < 12; ++k) {
             const float t = static_cast<float>(k) / 11.0f;
             for (int side = -1; side <= 1; side += 2) {
-                v.push_back({0.4f * static_cast<float>(side), -1.3f + 2.6f * t, 0.0f, t, 0x00000100u, Dx::kColor(255, static_cast<unsigned>(255 * t), 60)});
+                v.push_back({0.4f * static_cast<float>(side), -1.3f + 2.6f * t, 0.0f, t, 0x00000302u, Dx::kColor(255, static_cast<unsigned>(255 * t), 60)});
             }
         }
         c.fvf(D3DFVF_XYZB2 | D3DFVF_LASTBETA_UBYTE4 | D3DFVF_DIFFUSE);
         c.draw(D3DPT_TRIANGLESTRIP, static_cast<UINT>(v.size()) - 2, v.data(), sizeof(V));
-    }, {}, Needs::caps([](const D3DCAPS9& caps) { return caps.MaxVertexBlendMatrixIndex >= 2 && (caps.DeclTypes & D3DDTCAPS_UBYTE4) != 0; }, "indexed vertex blending"));
+    }, {}, Needs::caps([](const D3DCAPS9& caps) { return caps.MaxVertexBlendMatrixIndex >= 3 && (caps.DeclTypes & D3DDTCAPS_UBYTE4) != 0; }, "indexed vertex blending"));
+
+    Cases::single(rr::CaseSpec("ff", "fvf_xyzb4_three_weights_indexed"), [](Ctx& c) {
+        clear_blue(c);
+        c.camera(4.5f);
+        c.rs(D3DRS_VERTEXBLEND, D3DVBF_3WEIGHTS);
+        c.rs(D3DRS_INDEXEDVERTEXBLENDENABLE, TRUE);
+        c.xf(D3DTS_WORLD, Xf::translate(0.0f, 3.0f, 0.0f));
+        c.xf(static_cast<D3DTRANSFORMSTATETYPE>(D3DTS_WORLDMATRIX(1)), Xf::translate(0.0f, -3.0f, 0.0f));
+        c.xf(static_cast<D3DTRANSFORMSTATETYPE>(D3DTS_WORLDMATRIX(2)), Xf::rot_z(0.6f));
+        c.xf(static_cast<D3DTRANSFORMSTATETYPE>(D3DTS_WORLDMATRIX(3)), Xf::rot_z(-0.6f));
+        c.xf(static_cast<D3DTRANSFORMSTATETYPE>(D3DTS_WORLDMATRIX(4)), Xf::translate(0.5f, 0.0f, 0.0f));
+        c.xf(static_cast<D3DTRANSFORMSTATETYPE>(D3DTS_WORLDMATRIX(5)), Xf::translate(-0.5f, 0.0f, 0.0f) * Xf::scale(0.8f, 1.0f, 1.0f));
+        struct V { float x, y, z, w0, w1, w2; DWORD idx; DWORD color; };
+        std::vector<V> v;
+        for (unsigned k = 0; k < 14; ++k) {
+            const float t = static_cast<float>(k) / 13.0f;
+            for (int side = -1; side <= 1; side += 2) {
+                v.push_back({0.4f * static_cast<float>(side), -1.3f + 2.6f * t, 0.0f, 0.5f * (1 - t), 0.5f * t, 0.25f, 0x05040302u, Dx::kColor(static_cast<unsigned>(255 * t), 200, static_cast<unsigned>(255 * (1 - t)))});
+            }
+        }
+        c.fvf(D3DFVF_XYZB4 | D3DFVF_LASTBETA_UBYTE4 | D3DFVF_DIFFUSE);
+        c.draw(D3DPT_TRIANGLESTRIP, static_cast<UINT>(v.size()) - 2, v.data(), sizeof(V));
+    }, {}, Needs::caps([](const D3DCAPS9& caps) { return caps.MaxVertexBlendMatrixIndex >= 5 && (caps.DeclTypes & D3DDTCAPS_UBYTE4) != 0; }, "indexed vertex blending with four weights"));
 
     Cases::single(rr::CaseSpec("ff", "fvf_normal_lit"), [](Ctx& c) {
         clear_blue(c);
@@ -222,6 +252,15 @@ void fvf_cases() {
             c.xf(D3DTS_WORLD, Xf());
             c.xf(D3DTS_VIEW, Xf());
             c.xf(D3DTS_PROJECTION, Xf());
+            if (sc.floats >= 3) {
+                c.tss(0, D3DTSS_TEXTURETRANSFORMFLAGS, (sc.floats == 3 ? D3DTTFF_COUNT3 : D3DTTFF_COUNT4) | D3DTTFF_PROJECTED);
+                for (int i = 0; i < 4; ++i) {
+                    float* q = &data[static_cast<std::size_t>(i * (3 + sc.floats))];
+                    q[3] *= 2.0f;
+                    q[4] *= 2.0f;
+                    q[sc.floats == 3 ? 5 : 6] = 2.0f;
+                }
+            }
             c.fvf(D3DFVF_XYZ | D3DFVF_TEX1 | sc.fvf);
             c.draw(D3DPT_TRIANGLESTRIP, 2, data.data(), static_cast<UINT>((3 + sc.floats) * 4));
         });
@@ -381,7 +420,7 @@ void light_cases() {
     struct Source { const char* name; D3DRENDERSTATETYPE state; };
     const Source sources[] = {{"diffuse", D3DRS_DIFFUSEMATERIALSOURCE}, {"ambient", D3DRS_AMBIENTMATERIALSOURCE}, {"emissive", D3DRS_EMISSIVEMATERIALSOURCE}, {"specular", D3DRS_SPECULARMATERIALSOURCE}};
     for (const Source& src : sources) {
-        Cases::single(rr::CaseSpec("ff", std::string("light_source_") + src.name + "_color1").tolerance(lit_tol), [src](Ctx& c) {
+        Cases::single(rr::CaseSpec("ff", std::string("light_source_") + src.name + (src.state == D3DRS_SPECULARMATERIALSOURCE ? "_color2" : "_color1")).tolerance(lit_tol), [src](Ctx& c) {
             clear_blue(c);
             lit(c, Dx::material(0.3f, 0.3f, 0.3f, 0.2f, 0.2f, 0.2f, 0.0f, 0.0f, 0.0f, 0.6f, 0.6f, 0.6f, 12.0f), Dx::kColor(90, 90, 90));
             Mesh m = Geo::sphere(24, 16, 1.2f, kWhite);
@@ -406,23 +445,38 @@ void light_cases() {
         });
     }
     Cases::single(rr::CaseSpec("ff", "light_colorvertex_off").tolerance(lit_tol), [](Ctx& c) {
-        sphere_scene(c, grey(), Dx::kColor(20, 20, 20), [](Ctx& k) {
-            k.rs(D3DRS_COLORVERTEX, FALSE);
-            k.light(0, Dx::directional(0.3f, -0.4f, 1.0f, 1, 1, 1));
-        });
+        clear_blue(c);
+        lit(c, grey(), Dx::kColor(20, 20, 20));
+        Mesh m = Geo::sphere(24, 16, 1.2f, kWhite);
+        for (Vtx& v : m.vertices) {
+            v.diffuse = Dx::kColor(static_cast<unsigned>((v.nx * 0.5f + 0.5f) * 255), 40, static_cast<unsigned>((v.ny * 0.5f + 0.5f) * 255));
+        }
+        c.rs(D3DRS_COLORVERTEX, FALSE);
+        c.rs(D3DRS_DIFFUSEMATERIALSOURCE, D3DMCS_COLOR1);
+        c.rs(D3DRS_ZENABLE, D3DZB_TRUE);
+        c.rs(D3DRS_CULLMODE, D3DCULL_CCW);
+        c.light(0, Dx::directional(0.3f, -0.4f, 1.0f, 1, 1, 1));
+        c.draw_mesh(m);
     });
     for (int local = 0; local < 2; ++local) {
         Cases::single(rr::CaseSpec("ff", local ? "light_specular_localviewer" : "light_specular_infinite").tolerance(rr::Tolerance::blend(6)), [local](Ctx& c) {
-            sphere_scene(c, grey(24.0f, 1.0f), Dx::kColor(15, 15, 15), [local](Ctx& k) {
+            sphere_scene(c, Dx::material(0.25f, 0.25f, 0.3f, 0.25f, 0.25f, 0.3f, 0, 0, 0, 1, 1, 1, 24.0f), Dx::kColor(15, 15, 15), [local](Ctx& k) {
+                k.camera(2.4f);
                 k.rs(D3DRS_SPECULARENABLE, TRUE);
                 k.rs(D3DRS_LOCALVIEWER, local ? TRUE : FALSE);
-                k.light(0, Dx::point(2.0f, 2.0f, -2.0f, 40.0f, 1.0f, 0.0f, 0.0f, 1, 1, 1));
+                k.light(0, Dx::point(1.6f, 1.6f, -1.8f, 40.0f, 1.0f, 0.0f, 0.0f, 1, 1, 1));
             });
         });
     }
     Cases::single(rr::CaseSpec("ff", "light_specular_power_sharp").tolerance(rr::Tolerance::blend(8)), [](Ctx& c) {
-        sphere_scene(c, grey(90.0f, 1.0f), Dx::kColor(15, 15, 15), [](Ctx& k) {
+        sphere_scene(c, Dx::material(0.2f, 0.2f, 0.25f, 0.2f, 0.2f, 0.25f, 0, 0, 0, 1, 1, 1, 90.0f), Dx::kColor(10, 10, 10), [](Ctx& k) {
             k.rs(D3DRS_SPECULARENABLE, TRUE);
+            k.light(0, Dx::directional(-0.3f, -0.5f, 1.0f, 1, 1, 1));
+        });
+    });
+    Cases::single(rr::CaseSpec("ff", "light_specular_disabled_no_highlight").tolerance(rr::Tolerance::blend(8)), [](Ctx& c) {
+        sphere_scene(c, Dx::material(0.2f, 0.2f, 0.25f, 0.2f, 0.2f, 0.25f, 0, 0, 0, 1, 1, 1, 90.0f), Dx::kColor(10, 10, 10), [](Ctx& k) {
+            k.rs(D3DRS_SPECULARENABLE, FALSE);
             k.light(0, Dx::directional(-0.3f, -0.5f, 1.0f, 1, 1, 1));
         });
     });
@@ -465,7 +519,7 @@ void fog_scene(Ctx& c, const std::function<void(Ctx&)>& fog, bool textured = tru
         c.ss(0, D3DSAMP_ADDRESSV, D3DTADDRESS_WRAP);
     }
     fog(c);
-    static const Mesh terrain = Geo::grid(20, 8.0f, 0.5f, kWhite);
+    static const Mesh terrain = Geo::grid(4, 8.0f, 0.5f, kWhite);
     c.fvf(kVtxFvf);
     c.draw_mesh(terrain);
 }
@@ -501,7 +555,16 @@ void fog_cases() {
             k.rsf(D3DRS_FOGEND, 14.0f);
         });
     }, {}, Needs::caps([](const D3DCAPS9& caps) { return (caps.RasterCaps & D3DPRASTERCAPS_FOGRANGE) != 0; }, "range fog"));
-    Cases::single(rr::CaseSpec("ff", "fog_color_untextured_lit").tolerance(rr::Tolerance::blend(4)), [](Ctx& c) {
+    Cases::single(rr::CaseSpec("ff", "fog_table_linear_w_buffer").tolerance(rr::Tolerance::blend(4)), [](Ctx& c) {
+        fog_scene(c, [](Ctx& k) {
+            k.rs(D3DRS_ZENABLE, D3DZB_USEW);
+            k.rs(D3DRS_FOGTABLEMODE, D3DFOG_LINEAR);
+            k.rs(D3DRS_FOGVERTEXMODE, D3DFOG_NONE);
+            k.rsf(D3DRS_FOGSTART, 4.0f);
+            k.rsf(D3DRS_FOGEND, 16.0f);
+        });
+    }, {}, Needs::caps([](const D3DCAPS9& caps) { return (caps.RasterCaps & D3DPRASTERCAPS_WBUFFER) != 0 && (caps.RasterCaps & D3DPRASTERCAPS_WFOG) != 0; }, "W buffer and W fog"));
+    Cases::single(rr::CaseSpec("ff", "fog_color_untextured").tolerance(rr::Tolerance::blend(4)), [](Ctx& c) {
         fog_scene(c, [](Ctx& k) {
             k.rs(D3DRS_FOGCOLOR, Dx::kColor(230, 90, 40));
             k.rs(D3DRS_FOGVERTEXMODE, D3DFOG_LINEAR);
@@ -582,6 +645,27 @@ void transform_cases() {
         });
     }
 
+    Cases::single(rr::CaseSpec("ff", "xform_tex_count1_scale"), [](Ctx& c) {
+        clear_blue(c);
+        Com<IDirect3DTexture9> t = c.texture(32, 1, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, Texels::rainbow());
+        c.tex(0, t.get());
+        c.ss(0, D3DSAMP_MINFILTER, D3DTEXF_POINT);
+        c.ss(0, D3DSAMP_MAGFILTER, D3DTEXF_POINT);
+        c.ss(0, D3DSAMP_ADDRESSU, D3DTADDRESS_WRAP);
+        c.tss(0, D3DTSS_TEXTURETRANSFORMFLAGS, D3DTTFF_COUNT1);
+        Xf tm;
+        tm.m[0][0] = 3.0f;
+        tm.m[3][0] = 0.25f;
+        c.xf(static_cast<D3DTRANSFORMSTATETYPE>(D3DTS_TEXTURE0), tm);
+        struct V { float x, y, z, u; };
+        const float s = 0.85f;
+        const V q[4] = {{-s, s, 0.5f, 0}, {s, s, 0.5f, 1}, {-s, -s, 0.5f, 0}, {s, -s, 0.5f, 1}};
+        c.xf(D3DTS_WORLD, Xf());
+        c.xf(D3DTS_VIEW, Xf());
+        c.xf(D3DTS_PROJECTION, Xf());
+        c.fvf(D3DFVF_XYZ | D3DFVF_TEX1 | D3DFVF_TEXCOORDSIZE1(0));
+        c.draw(D3DPT_TRIANGLESTRIP, 2, q, sizeof(V));
+    });
     Cases::single(rr::CaseSpec("ff", "xform_tex_count2_rotate"), [](Ctx& c) {
         clear_blue(c);
         Com<IDirect3DTexture9> t = checker(c);
@@ -676,12 +760,12 @@ void transform_cases() {
         c.camera(6.0f);
         c.rs(D3DRS_POINTSPRITEENABLE, TRUE);
         c.rs(D3DRS_POINTSCALEENABLE, TRUE);
-        c.rsf(D3DRS_POINTSIZE, 12.0f);
+        c.rsf(D3DRS_POINTSIZE, 0.2f);
         c.rsf(D3DRS_POINTSIZE_MIN, 1.0f);
         c.rsf(D3DRS_POINTSIZE_MAX, 80.0f);
         c.rsf(D3DRS_POINTSCALE_A, 0.0f);
         c.rsf(D3DRS_POINTSCALE_B, 0.0f);
-        c.rsf(D3DRS_POINTSCALE_C, 0.05f);
+        c.rsf(D3DRS_POINTSCALE_C, 0.01f);
         struct V { float x, y, z; DWORD color; };
         std::vector<V> v;
         for (int i = 0; i < 8; ++i) {

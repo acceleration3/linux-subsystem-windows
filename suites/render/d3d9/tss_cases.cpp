@@ -40,7 +40,8 @@ Pair textures(Ctx& c) {
     Pair p;
     p.a = c.texture(64, 64, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, [](UINT x, UINT y, UINT w, UINT h) {
         const std::uint32_t g = Texels::rainbow()(x, y, w, h);
-        return (((x / 8 + y / 8) & 1) ? g : (g & 0x00FFFFFF) | 0xFF000000u) & 0xFFFFFFFFu;
+        const unsigned a = 255 - y * 200 / std::max(1u, h - 1);
+        return ((x / 8 + y / 8) & 1) ? (g & 0x00FFFFFFu) | (a << 24) : (g & 0x00FFFFFFu) | 0xFF000000u;
     });
     p.b = c.texture(64, 64, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, Texels::alpha_rings());
     for (DWORD s = 0; s < 2; ++s) {
@@ -93,9 +94,23 @@ void op_cases() {
             c.clear(Dx::kColor(30, 30, 60, 255));
             Pair p = textures(c);
             c.rs(D3DRS_TEXTUREFACTOR, 0x8060B0E0);
-            stage(c, 0, D3DTOP_MODULATE, D3DTA_TEXTURE, D3DTA_DIFFUSE, D3DTOP_SELECTARG1, D3DTA_DIFFUSE, D3DTA_CURRENT);
-            stage(c, 1, info.op, D3DTA_TEXTURE, D3DTA_CURRENT);
+            const bool current_alpha = info.op == D3DTOP_BLENDCURRENTALPHA;
+            stage(c, 0, D3DTOP_MODULATE, D3DTA_TEXTURE, D3DTA_DIFFUSE, D3DTOP_SELECTARG1, current_alpha ? D3DTA_TEXTURE : D3DTA_DIFFUSE, D3DTA_CURRENT);
+            if (info.op == D3DTOP_BLENDTEXTUREALPHAPM) {
+                stage(c, 1, info.op, D3DTA_CURRENT, D3DTA_TEXTURE);
+            } else {
+                stage(c, 1, info.op, D3DTA_TEXTURE, D3DTA_CURRENT);
+            }
             c.tss(1, D3DTSS_COLORARG0, D3DTA_TFACTOR);
+            if (info.op == D3DTOP_PREMODULATE) {
+                Com<IDirect3DTexture9> third = c.texture(32, 32, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, Texels::checker(4, 0xFFFFFFFF, 0xFF4060A0));
+                c.tex(2, third.get());
+                stage(c, 2, D3DTOP_MODULATE, D3DTA_TEXTURE, D3DTA_CURRENT);
+                c.tss(2, D3DTSS_TEXCOORDINDEX, 0);
+                c.tss(3, D3DTSS_COLOROP, D3DTOP_DISABLE);
+                draw_quad(c);
+                return;
+            }
             c.tss(2, D3DTSS_COLOROP, D3DTOP_DISABLE);
             draw_quad(c);
         }, {}, op_need(info.cap, info.name));
@@ -120,7 +135,8 @@ void op_cases() {
         c.tss(0, D3DTSS_BUMPENVMAT01, Dx::fbits(0.0f));
         c.tss(0, D3DTSS_BUMPENVMAT10, Dx::fbits(0.0f));
         c.tss(0, D3DTSS_BUMPENVMAT11, Dx::fbits(0.12f));
-        c.tss(0, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
+        c.tss(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
+        c.tss(0, D3DTSS_ALPHAARG1, D3DTA_DIFFUSE);
         stage(c, 1, D3DTOP_SELECTARG1, D3DTA_TEXTURE, D3DTA_CURRENT);
         c.tss(2, D3DTSS_COLOROP, D3DTOP_DISABLE);
         c.tss(1, D3DTSS_TEXCOORDINDEX, 0);
@@ -148,7 +164,8 @@ void op_cases() {
         c.tss(0, D3DTSS_BUMPENVMAT11, Dx::fbits(0.1f));
         c.tss(0, D3DTSS_BUMPENVLSCALE, Dx::fbits(1.0f));
         c.tss(0, D3DTSS_BUMPENVLOFFSET, Dx::fbits(0.0f));
-        c.tss(0, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
+        c.tss(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
+        c.tss(0, D3DTSS_ALPHAARG1, D3DTA_DIFFUSE);
         stage(c, 1, D3DTOP_MODULATE, D3DTA_TEXTURE, D3DTA_CURRENT);
         c.tss(2, D3DTSS_COLOROP, D3DTOP_DISABLE);
         draw_quad(c, 0.9f, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 1.0f);
@@ -256,12 +273,16 @@ void arg_cases() {
         c.clear(Dx::kColor(30, 30, 60));
         Com<IDirect3DTexture9> t[8];
         for (DWORD i = 0; i < 8; ++i) {
-            const unsigned k = 40 + 25 * i;
-            t[i] = c.texture(16, 16, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, Texels::checker(1 + i % 4, Texels::argb(255, 255 - k / 2, 255, 255 - k / 3), Texels::argb(255, 255, 255 - k / 2, 255)));
+            const std::uint32_t lit = Texels::argb(255, 6 + 2 * ((i + 0) % 3) * (i + 1), 5 + 3 * ((i + 1) % 3) * (i + 1) / 2, 4 + 2 * ((i + 2) % 3) * (i + 1));
+            t[i] = c.texture(16, 16, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, Texels::checker(1 + (i * 3) % 7, lit, Texels::argb(255, 2, 2, 2)));
             c.tex(i, t[i].get());
             c.ss(i, D3DSAMP_MINFILTER, D3DTEXF_POINT);
             c.ss(i, D3DSAMP_MAGFILTER, D3DTEXF_POINT);
-            stage(c, i, i == 0 ? D3DTOP_MODULATE : (i % 2 ? D3DTOP_MODULATE : D3DTOP_ADDSIGNED), D3DTA_TEXTURE, i == 0 ? D3DTA_DIFFUSE : D3DTA_CURRENT, D3DTOP_SELECTARG1, D3DTA_DIFFUSE, D3DTA_CURRENT);
+            if (i == 0) {
+                stage(c, i, D3DTOP_SELECTARG1, D3DTA_TEXTURE, D3DTA_DIFFUSE, D3DTOP_SELECTARG1, D3DTA_DIFFUSE, D3DTA_CURRENT);
+            } else {
+                stage(c, i, D3DTOP_ADD, D3DTA_TEXTURE, D3DTA_CURRENT, D3DTOP_SELECTARG1, D3DTA_DIFFUSE, D3DTA_CURRENT);
+            }
             c.tss(i, D3DTSS_TEXCOORDINDEX, 0);
         }
         draw_quad(c, 0.9f, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 1.0f);
