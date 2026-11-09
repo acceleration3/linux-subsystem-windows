@@ -428,6 +428,7 @@ def finish(ctx, spec):
     except lsw_link.LinkError:
         pass
     try:
+        ctx.share.remove(f"{GUEST_DIR}\\done-{tag}-zip.txt")
         launch(ctx, f"{tag} zip", [f'powershell -NoProfile -Command "if (Test-Path art-{tag}) {{ Compress-Archive -Path art-{tag} -DestinationPath art-{tag}.zip -Force }}"'], f"done-{tag}-zip.txt")
         deadline = time.monotonic() + 600
         while time.monotonic() < deadline and not ctx.present(f"done-{tag}-zip.txt"):
