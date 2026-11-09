@@ -369,6 +369,9 @@ OpenResult Kit::open(platform::VkPlatform& host, const KitOptions& options, std:
             auto* f = reinterpret_cast<VkPhysicalDeviceRayTracingPipelineFeaturesKHR*>(node);
             f->rayTracingPipelineShaderGroupHandleCaptureReplay = VK_FALSE;
             f->rayTracingPipelineShaderGroupHandleCaptureReplayMixed = VK_FALSE;
+        } else if (node->type == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT) {
+            auto* f = reinterpret_cast<VkPhysicalDeviceMeshShaderFeaturesEXT*>(node);
+            f->primitiveFragmentShadingRateMeshShader = VK_FALSE;
         } else if (node->type == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT) {
             auto* f = reinterpret_cast<VkPhysicalDeviceDescriptorBufferFeaturesEXT*>(node);
             f->descriptorBufferCaptureReplay = VK_FALSE;

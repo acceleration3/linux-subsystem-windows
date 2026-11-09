@@ -48,13 +48,13 @@ struct BlendSetup {
     const void* next;
 };
 
-void blend_cells(const QuadKit& quads, VkCommandBuffer cb, float x0) {
+void blend_cells(const QuadKit& quads, VkCommandBuffer cb, float x0, unsigned frame = 0) {
     const float alphas[4] = {0.25f, 0.5f, 0.75f, 1.0f};
     for (unsigned col = 0; col < 2; ++col) {
         for (unsigned row = 0; row < 4; ++row) {
-            const float* base = palette(col * 3 + row);
+            const float* base = palette(col * 3 + row + frame * 2);
             const float color[4] = {base[0], base[1], base[2], alphas[row]};
-            quads.quad(cb, x0 + 0.05f + 0.47f * static_cast<float>(col), -0.94f + 0.48f * static_cast<float>(row), 0.4f, 0.42f, color);
+            quads.quad(cb, x0 + 0.05f + 0.47f * static_cast<float>(col) + 0.04f * static_cast<float>(frame), -0.94f + 0.48f * static_cast<float>(row) + 0.03f * static_cast<float>(frame), 0.4f, 0.42f, color);
         }
     }
 }
@@ -79,40 +79,92 @@ PipelineDesc blend_pipe(Rig& rig, QuadKit& quads, Target& target, const BlendSet
     return p;
 }
 
-void run_blend(Rig& rig, CaptureSet& out, const BlendSetup& left, const BlendSetup& right) {
-    Target& target = rig.make_target(TargetDesc{});
-    QuadKit quads(rig);
-    PipelineDesc bg = quads.desc(target);
-    bg.vertex = rig.sh("full.vert");
-    bg.fragment = rig.sh("grad.frag");
-    bg.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-    const VkPipeline p_bg = rig.pipe(bg);
-    const VkPipeline p_left = rig.pipe(blend_pipe(rig, quads, target, left));
-    const VkPipeline p_right = rig.pipe(blend_pipe(rig, quads, target, right));
-    out.add("", rig.draw(target, p_bg, nullptr, [&](VkCommandBuffer cb) {
-        rig.kit.api.vkCmdDraw(cb, 3, 1, 0, 0);
-        rig.bind_graphics(cb, p_left);
-        blend_cells(quads, cb, -1.0f);
-        rig.bind_graphics(cb, p_right);
-        blend_cells(quads, cb, 0.0f);
-    }, quads.layout));
+class BlendScene : public RigScene {
+public:
+    BlendScene(BlendSetup left, BlendSetup right, unsigned frames, bool dual = false) : left_(left), right_(right), frames_(frames), dual_(dual) {}
+
+protected:
+    std::string caps(Kit& kit) override {
+        if (dual_ && kit.properties.limits.maxFragmentDualSrcAttachments < 1) {
+            return "maxFragmentDualSrcAttachments is zero";
+        }
+        if (left_.next != nullptr) {
+            const auto p = kit.query_properties<VkPhysicalDeviceBlendOperationAdvancedPropertiesEXT>(
+                VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BLEND_OPERATION_ADVANCED_PROPERTIES_EXT);
+            if (p.advancedBlendAllOperations == VK_FALSE) {
+                return "advancedBlendAllOperations";
+            }
+        }
+        return {};
+    }
+
+    void init(Rig& rig) override {
+        target_ = &rig.make_target(TargetDesc{});
+        quads_ = std::make_unique<QuadKit>(rig);
+        PipelineDesc bg = quads_->desc(*target_);
+        bg.vertex = rig.sh("full.vert");
+        bg.fragment = rig.sh("grad.frag");
+        bg.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        p_bg_ = rig.pipe(bg);
+        p_left_ = rig.pipe(blend_pipe(rig, *quads_, *target_, left_));
+        p_right_ = rig.pipe(blend_pipe(rig, *quads_, *target_, right_));
+    }
+
+    void step(Rig& rig, unsigned frame) override {
+        rig.run([&](VkCommandBuffer cb) {
+            target_->begin(rig.kit, cb, frame == 0);
+            if (frame == 0) {
+                rig.bind_graphics(cb, p_bg_);
+                rig.kit.api.vkCmdDraw(cb, 3, 1, 0, 0);
+            }
+            rig.bind_graphics(cb, p_left_);
+            blend_cells(*quads_, cb, -1.0f, frame);
+            rig.bind_graphics(cb, p_right_);
+            blend_cells(*quads_, cb, 0.0f, frame);
+            target_->end(rig.kit, cb);
+        });
+    }
+
+    void grab(Rig& rig, unsigned, CaptureSet& out) override { out.add("", rig.color(*target_)); }
+
+private:
+    BlendSetup left_;
+    BlendSetup right_;
+    unsigned frames_;
+    bool dual_;
+    Target* target_ = nullptr;
+    std::unique_ptr<QuadKit> quads_;
+    VkPipeline p_bg_ = VK_NULL_HANDLE;
+    VkPipeline p_left_ = VK_NULL_HANDLE;
+    VkPipeline p_right_ = VK_NULL_HANDLE;
+};
+
+void add_blend(const std::string& name, const BlendSetup& left, const BlendSetup& right, const char* feature = nullptr, const char* extension = nullptr,
+               Tolerance tolerance = Tolerance::tight(1)) {
+    for (int multi = 0; multi < 2; ++multi) {
+        CaseSpec spec("om", multi == 0 ? name : name + "_accumulate");
+        spec.tolerance(tolerance);
+        if (multi != 0) {
+            spec.frames(4, {0, 1, 3});
+        }
+        if (feature != nullptr) {
+            spec.feature(feature);
+        }
+        if (extension != nullptr) {
+            spec.extension(extension);
+        }
+        const unsigned frames = multi == 0 ? 1 : 4;
+        Cases::add_scene(std::move(spec), [left, right, frames]() -> std::unique_ptr<VkScene> {
+            return std::make_unique<BlendScene>(left, right, frames, left.dual);
+        });
+    }
 }
 
 void register_factors() {
     for (const FactorEntry& entry : factors()) {
-        CaseSpec spec("om", std::string("blend_factor_") + entry.name);
-        spec.tolerance(Tolerance::tight(1));
-        if (entry.dual) {
-            spec.feature("dualSrcBlend");
-        }
-        Cases::add(std::move(spec), [entry](Rig& rig, CaptureSet& out) {
-            if (entry.dual && rig.kit.properties.limits.maxFragmentDualSrcAttachments < 1) {
-                rig.fail("maxFragmentDualSrcAttachments is zero");
-            }
-            const BlendSetup left{entry.factor, VK_BLEND_FACTOR_ONE, entry.factor, VK_BLEND_FACTOR_ONE, VK_BLEND_OP_ADD, VK_BLEND_OP_ADD, entry.dual, nullptr};
-            const BlendSetup right{VK_BLEND_FACTOR_ONE, entry.factor, VK_BLEND_FACTOR_ONE, entry.factor, VK_BLEND_OP_ADD, VK_BLEND_OP_ADD, entry.dual, nullptr};
-            run_blend(rig, out, left, right);
-        });
+        const BlendSetup left{entry.factor, VK_BLEND_FACTOR_ONE, entry.factor, VK_BLEND_FACTOR_ONE, VK_BLEND_OP_ADD, VK_BLEND_OP_ADD, entry.dual, nullptr};
+        const BlendSetup right{VK_BLEND_FACTOR_ONE, entry.factor, VK_BLEND_FACTOR_ONE, entry.factor, VK_BLEND_OP_ADD, VK_BLEND_OP_ADD, entry.dual, nullptr};
+        add_blend(std::string("blend_factor_") + entry.name, left, right, entry.dual ? "dualSrcBlend" : nullptr);
     }
 }
 
@@ -127,24 +179,16 @@ void register_ops() {
                                  {"min", VK_BLEND_OP_MIN},
                                  {"max", VK_BLEND_OP_MAX}};
     for (const Op& entry : ops) {
-        CaseSpec spec("om", std::string("blend_op_") + entry.name);
-        spec.tolerance(Tolerance::tight(1));
-        Cases::add(std::move(spec), [entry](Rig& rig, CaptureSet& out) {
-            const BlendSetup left{VK_BLEND_FACTOR_SRC_ALPHA, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_SRC_ALPHA, VK_BLEND_FACTOR_ONE, entry.op, entry.op, false, nullptr};
-            const BlendSetup right{VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA, entry.op, entry.op, false, nullptr};
-            run_blend(rig, out, left, right);
-        });
+        const BlendSetup left{VK_BLEND_FACTOR_SRC_ALPHA, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_SRC_ALPHA, VK_BLEND_FACTOR_ONE, entry.op, entry.op, false, nullptr};
+        const BlendSetup right{VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA, entry.op, entry.op, false, nullptr};
+        add_blend(std::string("blend_op_") + entry.name, left, right);
     }
-    Cases::add(CaseSpec("om", "blend_separate_alpha").tolerance(Tolerance::tight(1)), [](Rig& rig, CaptureSet& out) {
-        const BlendSetup left{VK_BLEND_FACTOR_SRC_ALPHA, VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE, VK_BLEND_OP_ADD, VK_BLEND_OP_MAX, false, nullptr};
-        const BlendSetup right{VK_BLEND_FACTOR_DST_COLOR, VK_BLEND_FACTOR_ZERO, VK_BLEND_FACTOR_ZERO, VK_BLEND_FACTOR_SRC_ALPHA, VK_BLEND_OP_ADD, VK_BLEND_OP_REVERSE_SUBTRACT, false, nullptr};
-        run_blend(rig, out, left, right);
-    });
-    Cases::add(CaseSpec("om", "blend_constant_mix").tolerance(Tolerance::tight(1)), [](Rig& rig, CaptureSet& out) {
-        const BlendSetup left{VK_BLEND_FACTOR_CONSTANT_COLOR, VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_COLOR, VK_BLEND_FACTOR_CONSTANT_ALPHA, VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_ALPHA, VK_BLEND_OP_ADD, VK_BLEND_OP_ADD, false, nullptr};
-        const BlendSetup right{VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_ALPHA, VK_BLEND_FACTOR_CONSTANT_COLOR, VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_COLOR, VK_BLEND_FACTOR_CONSTANT_ALPHA, VK_BLEND_OP_REVERSE_SUBTRACT, VK_BLEND_OP_SUBTRACT, false, nullptr};
-        run_blend(rig, out, left, right);
-    });
+    add_blend("blend_separate_alpha",
+              {VK_BLEND_FACTOR_SRC_ALPHA, VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE, VK_BLEND_OP_ADD, VK_BLEND_OP_MAX, false, nullptr},
+              {VK_BLEND_FACTOR_DST_COLOR, VK_BLEND_FACTOR_ZERO, VK_BLEND_FACTOR_ZERO, VK_BLEND_FACTOR_SRC_ALPHA, VK_BLEND_OP_ADD, VK_BLEND_OP_REVERSE_SUBTRACT, false, nullptr});
+    add_blend("blend_constant_mix",
+              {VK_BLEND_FACTOR_CONSTANT_COLOR, VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_COLOR, VK_BLEND_FACTOR_CONSTANT_ALPHA, VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_ALPHA, VK_BLEND_OP_ADD, VK_BLEND_OP_ADD, false, nullptr},
+              {VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_ALPHA, VK_BLEND_FACTOR_CONSTANT_COLOR, VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_COLOR, VK_BLEND_FACTOR_CONSTANT_ALPHA, VK_BLEND_OP_REVERSE_SUBTRACT, VK_BLEND_OP_SUBTRACT, false, nullptr});
 }
 
 void register_advanced() {
@@ -157,25 +201,13 @@ void register_advanced() {
                                        {"overlay", VK_BLEND_OP_OVERLAY_EXT},
                                        {"difference", VK_BLEND_OP_DIFFERENCE_EXT},
                                        {"hsl_hue", VK_BLEND_OP_HSL_HUE_EXT}};
+    static VkPipelineColorBlendAdvancedStateCreateInfoEXT advanced{VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_ADVANCED_STATE_CREATE_INFO_EXT, nullptr,
+                                                                  VK_TRUE, VK_TRUE, VK_BLEND_OVERLAP_UNCORRELATED_EXT};
     for (const Advanced& entry : ops) {
+        const BlendSetup setup{VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE, entry.op, entry.op, false, &advanced};
         CaseSpec spec("om", std::string("blend_advanced_") + entry.name);
         spec.extension("VK_EXT_blend_operation_advanced").tolerance(Tolerance::tight(2));
-        Cases::add(
-            std::move(spec),
-            [entry](Rig& rig, CaptureSet& out) {
-                VkPipelineColorBlendAdvancedStateCreateInfoEXT advanced{};
-                advanced.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_ADVANCED_STATE_CREATE_INFO_EXT;
-                advanced.srcPremultiplied = VK_TRUE;
-                advanced.dstPremultiplied = VK_TRUE;
-                advanced.blendOverlap = VK_BLEND_OVERLAP_UNCORRELATED_EXT;
-                const BlendSetup setup{VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE, entry.op, entry.op, false, &advanced};
-                run_blend(rig, out, setup, setup);
-            },
-            [](Kit& kit) -> std::string {
-                const auto p = kit.query_properties<VkPhysicalDeviceBlendOperationAdvancedPropertiesEXT>(
-                    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BLEND_OPERATION_ADVANCED_PROPERTIES_EXT);
-                return p.advancedBlendAllOperations != VK_FALSE ? std::string() : std::string("advancedBlendAllOperations");
-            });
+        Cases::add_scene(std::move(spec), [setup]() -> std::unique_ptr<VkScene> { return std::make_unique<BlendScene>(setup, setup, 1u, false); });
     }
 }
 

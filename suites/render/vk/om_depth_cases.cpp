@@ -133,43 +133,86 @@ void register_formats() {
     }
 }
 
+class StencilOpScene : public RigScene {
+public:
+    StencilOpScene(unsigned which, VkStencilOp op) : which_(which), op_(op) {}
+
+protected:
+    std::string caps(Kit& kit) override {
+        return Cases::need_format(kit, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT, "D32S8");
+    }
+
+    void init(Rig& rig) override {
+        TargetDesc td;
+        td.depth = VK_FORMAT_D32_SFLOAT_S8_UINT;
+        target_ = &rig.make_target(td);
+        std::copy(kClear, kClear + 4, target_->clear_color);
+        target_->clear_stencil = 0x80;
+        quads_ = std::make_unique<QuadKit>(rig);
+        PipelineDesc occluder = quads_->desc(*target_);
+        occluder.depth_test = true;
+        PipelineDesc pipe = quads_->desc(*target_);
+        pipe.depth_test = true;
+        pipe.stencil_test = true;
+        pipe.stencil.compareOp = which_ == 1 ? VK_COMPARE_OP_NEVER : VK_COMPARE_OP_ALWAYS;
+        pipe.stencil.compareMask = 0xff;
+        pipe.stencil.writeMask = 0xff;
+        pipe.stencil.reference = 0x7f;
+        pipe.stencil.passOp = which_ == 0 ? op_ : VK_STENCIL_OP_KEEP;
+        pipe.stencil.failOp = which_ == 1 ? op_ : VK_STENCIL_OP_KEEP;
+        pipe.stencil.depthFailOp = which_ == 2 ? op_ : VK_STENCIL_OP_KEEP;
+        p_occluder_ = rig.pipe(occluder);
+        p_test_ = rig.pipe(pipe);
+    }
+
+    void step(Rig& rig, unsigned frame) override {
+        const float grey[4] = {0.4f, 0.4f, 0.45f, 1.0f};
+        const float shift = 0.08f * static_cast<float>(frame);
+        rig.run([&](VkCommandBuffer cb) {
+            target_->begin(rig.kit, cb, frame == 0);
+            rig.bind_graphics(cb, p_occluder_);
+            if (frame == 0) {
+                quads_->quad(cb, 0.0f, -0.5f, 0.7f, 0.9f, grey, 0.4f);
+            }
+            rig.bind_graphics(cb, p_test_);
+            quads_->quad(cb, -0.9f + shift, -0.9f, 1.2f, 1.0f, palette(0), 0.3f);
+            quads_->quad(cb, -0.1f - shift, -0.4f, 1.0f, 1.2f, palette(1), 0.6f);
+            quads_->quad(cb, -0.5f, 0.0f + shift, 1.1f, 0.8f, palette(2), 0.5f);
+            target_->end(rig.kit, cb);
+        });
+    }
+
+    void grab(Rig& rig, unsigned, CaptureSet& out) override {
+        capture_depth_and_color(rig, *target_, out, rig.color(*target_), false, true);
+    }
+
+private:
+    unsigned which_;
+    VkStencilOp op_;
+    Target* target_ = nullptr;
+    std::unique_ptr<QuadKit> quads_;
+    VkPipeline p_occluder_ = VK_NULL_HANDLE;
+    VkPipeline p_test_ = VK_NULL_HANDLE;
+};
+
 void register_stencil_ops() {
     for (unsigned which = 0; which < 3; ++which) {
         const char* kinds[3] = {"pass", "fail", "depth_fail"};
         for (const StencilOpEntry& entry : stencil_ops()) {
-            CaseSpec spec("om", std::string("stencil_") + kinds[which] + "_op_" + entry.name);
-            spec.tolerance(Tolerance::tight(1));
-            Cases::add(std::move(spec), [which, entry](Rig& rig, CaptureSet& out) {
-                TargetDesc td;
-                td.depth = VK_FORMAT_D32_SFLOAT_S8_UINT;
-                Target& target = rig.make_target(td);
-                std::copy(kClear, kClear + 4, target.clear_color);
-                target.clear_stencil = 0x80;
-                QuadKit quads(rig);
-                PipelineDesc occluder = quads.desc(target);
-                occluder.depth_test = true;
-                PipelineDesc pipe = quads.desc(target);
-                pipe.depth_test = true;
-                pipe.stencil_test = true;
-                pipe.stencil.compareOp = which == 1 ? VK_COMPARE_OP_NEVER : VK_COMPARE_OP_ALWAYS;
-                pipe.stencil.compareMask = 0xff;
-                pipe.stencil.writeMask = 0xff;
-                pipe.stencil.reference = 0x7f;
-                pipe.stencil.passOp = which == 0 ? entry.op : VK_STENCIL_OP_KEEP;
-                pipe.stencil.failOp = which == 1 ? entry.op : VK_STENCIL_OP_KEEP;
-                pipe.stencil.depthFailOp = which == 2 ? entry.op : VK_STENCIL_OP_KEEP;
-                const VkPipeline p_occluder = rig.pipe(occluder);
-                const VkPipeline p_test = rig.pipe(pipe);
-                const float grey[4] = {0.4f, 0.4f, 0.45f, 1.0f};
-                Image color = rig.draw(target, p_occluder, nullptr, [&](VkCommandBuffer cb) {
-                    quads.quad(cb, 0.0f, -0.5f, 0.7f, 0.9f, grey, 0.4f);
-                    rig.bind_graphics(cb, p_test);
-                    quads.quad(cb, -0.9f, -0.9f, 1.2f, 1.0f, palette(0), 0.3f);
-                    quads.quad(cb, -0.1f, -0.4f, 1.0f, 1.2f, palette(1), 0.6f);
-                    quads.quad(cb, -0.5f, 0.0f, 1.1f, 0.8f, palette(2), 0.5f);
-                }, quads.layout);
-                capture_depth_and_color(rig, target, out, std::move(color), false, true);
-            });
+            for (int multi = 0; multi < 2; ++multi) {
+                if (multi != 0 && which != 0) {
+                    continue;
+                }
+                CaseSpec spec("om", std::string("stencil_") + kinds[which] + "_op_" + entry.name + (multi != 0 ? "_accumulate" : ""));
+                spec.tolerance(Tolerance::tight(1));
+                if (multi != 0) {
+                    spec.frames(3, {0, 1, 2});
+                }
+                const StencilOpEntry copy = entry;
+                Cases::add_scene(std::move(spec), [which, copy]() -> std::unique_ptr<VkScene> {
+                    return std::make_unique<StencilOpScene>(which, copy.op);
+                });
+            }
         }
     }
 }
