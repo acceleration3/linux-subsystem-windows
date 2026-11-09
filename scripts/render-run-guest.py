@@ -90,56 +90,13 @@ def command_push(args):
 
 
 def command_run(args):
-    share = lsw_link.GuestShare(port=args.smb_port)
-    link = lsw_link.AgentLink(port=args.agent_port, timeout=60.0)
-    tag = args.tag
-    deadline = time.monotonic() + args.timeout
-    program = f"lsw-suites{args.bits}.exe"
-    flags = ["--suite render", f'--filter "{args.filter}"' if args.filter else "", f"--jobs {args.jobs}",
-             "--dump-captures" if args.dump else "", f'--adapter "{args.adapter}"' if args.adapter else "",
-             f"--json r-{tag}.json", f"--artifacts art-{tag}", f"--refs {GUEST_DIR}\\render-refs"]
-    lines = [f"if exist art-{tag} rmdir /s /q art-{tag}", f"if exist art-{tag}.zip del art-{tag}.zip",
-             f"if exist r-{tag}.json del r-{tag}.json", f"if exist rc-{tag}.txt del rc-{tag}.txt",
-             f"{program} {' '.join(f for f in flags if f)} > out-{tag}.txt 2>&1", f"echo %ERRORLEVEL% > rc-{tag}.txt",
-             f'powershell -NoProfile -Command "if (Test-Path art-{tag}) {{ Compress-Archive -Path art-{tag} -DestinationPath art-{tag}.zip -Force }}"']
-    out = pathlib.Path(args.out)
-    out.mkdir(parents=True, exist_ok=True)
-    print(f"run {program} {tag}: {' '.join(f for f in flags if f)}")
-    finished = bat(link, share, f"render-run {tag}", lines, f"done-{tag}.txt", deadline)
-    if not finished:
-        try:
-            link.call("run_script", {"name": "render-run kill", "script": f"@echo off\r\ntaskkill /f /im {program} /t\r\n", "session": 1})
-        except lsw_link.LinkError:
-            pass
-        print(f"the guest run {tag} did not finish within {args.timeout} s; killed {program}", file=sys.stderr)
-    status = 0 if finished else 1
-    for name, target in ((f"out-{tag}.txt", "output.txt"), (f"r-{tag}.json", "result.json"), (f"rc-{tag}.txt", "rc.txt")):
-        try:
-            share.get(f"{GUEST_DIR}\\{name}", out / target)
-        except lsw_link.LinkError as error:
-            print(f"could not fetch {name}: {error}", file=sys.stderr)
-            if target == "result.json":
-                status = 1
-    archive = out / "artifacts.zip"
-    try:
-        share.get(f"{GUEST_DIR}\\art-{tag}.zip", archive)
-        with zipfile.ZipFile(archive) as opened:
-            for member in opened.infolist():
-                target = out / member.filename.replace("\\", "/")
-                if member.is_dir() or member.filename.endswith(("/", "\\")):
-                    target.mkdir(parents=True, exist_ok=True)
-                    continue
-                target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_bytes(opened.read(member))
-        archive.unlink()
-        if (out / f"art-{tag}").is_dir():
-            if (out / "artifacts").exists():
-                import shutil
-                shutil.rmtree(out / "artifacts")
-            (out / f"art-{tag}").rename(out / "artifacts")
-    except lsw_link.LinkError:
-        print("no artifacts archive", file=sys.stderr)
-    return status
+    import suite_run
+    if args.command == "run":
+        runs = [(args.tag, args.adapter, args.out)]
+    else:
+        runs = [tuple(entry.split("|", 2)) for entry in args.run]
+    specs = [suite_run.Spec(name, adapter, out) for name, adapter, out in runs]
+    return suite_run.execute(args, specs)
 
 
 def main():
@@ -152,17 +109,29 @@ def main():
     push.add_argument("--timeout", type=int, default=900)
     push.add_argument("--agent-port", type=int, default=lsw_link.AGENT_PORT)
     push.add_argument("--smb-port", type=int, default=lsw_link.SMB_PORT)
-    run = commands.add_parser("run")
-    run.add_argument("--bits", required=True, choices=("64", "32"))
-    run.add_argument("--adapter", default="")
-    run.add_argument("--filter", default="")
-    run.add_argument("--jobs", type=int, default=2)
-    run.add_argument("--dump", action="store_true")
-    run.add_argument("--tag", required=True)
-    run.add_argument("--out", required=True)
-    run.add_argument("--timeout", type=int, default=1400)
-    run.add_argument("--agent-port", type=int, default=lsw_link.AGENT_PORT)
-    run.add_argument("--smb-port", type=int, default=lsw_link.SMB_PORT)
+    for name in ("run", "run-set"):
+        run = commands.add_parser(name)
+        run.add_argument("--bits", required=True, choices=("64", "32"))
+        run.add_argument("--suite", default="render")
+        run.add_argument("--filter", default="")
+        run.add_argument("--jobs", type=int, default=2)
+        run.add_argument("--dump", action="store_true")
+        run.add_argument("--timeout", type=int, default=3600)
+        run.add_argument("--agent-port", type=int, default=lsw_link.AGENT_PORT)
+        run.add_argument("--smb-port", type=int, default=lsw_link.SMB_PORT)
+        run.add_argument("--vm", default="local", help="local, or ssh:USER@HOST for a VM on another machine")
+        run.add_argument("--host", default="local")
+        run.add_argument("--root", default=".", help="the report tree; evidence paths are relative to it")
+        run.add_argument("--evidence", default="evidence")
+        run.add_argument("--max-recoveries", type=int, default=5)
+        run.add_argument("--silent-seconds", type=int, default=240)
+        run.add_argument("--phases", default="all", help="all, or e.g. main:parallel,pacing:serial")
+        if name == "run":
+            run.add_argument("--adapter", default="")
+            run.add_argument("--tag", required=True)
+            run.add_argument("--out", required=True)
+        else:
+            run.add_argument("--run", action="append", required=True, metavar="TAG|ADAPTER|OUTDIR")
     args = parser.parse_args()
     try:
         return command_push(args) if args.command == "push" else command_run(args)

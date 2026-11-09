@@ -509,6 +509,8 @@ def build_data(runs, baseline, mode):
             status = check["status"]
             want = mode == "all" or (mode == "failed" and status not in ("ok", "skip")) or (mode == "differing" and check_id in rows)
             cell = {"s": status, "r": check.get("reason", ""), "ms": check.get("ms", 0)}
+            if check.get("host_crash"):
+                cell["h"] = check.get("evidence", "")
             old = base_by_key.get(run.key)
             if old is not None:
                 cell["b"] = old.checks.get(check_id, {}).get("status", "-")
@@ -573,6 +575,33 @@ def skips_section(runs):
     return "".join(out)
 
 
+def crashes_section(runs):
+    rows = []
+    for run in runs:
+        incidents = run.data.get("incidents", [])
+        confirmed = {c["id"]: c for c in run.checks.values() if c.get("host_crash")}
+        for crash in run.data.get("crashes", []):
+            incident = crash.get("incident", {})
+            rows.append((run.label, crash.get("segment"), incident, crash.get("in_flight", []), crash.get("confirmed"), confirmed))
+        if not run.data.get("crashes") and incidents:
+            for incident in incidents:
+                rows.append((run.label, None, incident, [], None, confirmed))
+    if not rows:
+        return "<p>No run lost its VM.</p>"
+    out = ["<div class=\"scroll\"><table class=\"plain\"><tr><th>run</th><th>segment</th><th>VM death</th><th>in flight</th><th>culprit</th><th>evidence</th></tr>"]
+    for label, segment, incident, in_flight, culprit, confirmed in rows:
+        evidence = incident.get("evidence", "")
+        core = incident.get("core", "")
+        out.append("<tr><td>%s</td><td class=\"n\">%s</td><td>%s</td><td class=\"id\">%s</td><td class=\"id bad\">%s</td><td><a href=\"%s\">%s</a>%s</td></tr>" %
+                   (esc(label), esc(str(segment or "")), esc("%s %s" % (incident.get("reason", ""), incident.get("signal", ""))),
+                    esc(", ".join(in_flight)), esc(culprit or ""), esc(evidence), esc(evidence), esc(" core " + core if core else "")))
+    out.append("</table></div>")
+    hosts = sorted({(r.label, c["id"]) for r in runs for c in r.checks.values() if c.get("host_crash")})
+    if hosts:
+        out.append("<p>Checks that killed the VM when run alone: <span class=\"id bad\">%s</span></p>" % esc(", ".join("%s %s" % h for h in hosts)))
+    return "".join(out)
+
+
 def audit_section(runs):
     with_audit = [r for r in runs if r.audit]
     if not with_audit:
@@ -607,7 +636,8 @@ def build(runs, baseline, revision, title, mode):
     def blob(value):
         return json.dumps(value, separators=(",", ":")).replace("</", "<\\/")
 
-    static = ["<details id=\"skips\"><summary>Skipped checks by reason</summary>%s</details>" % skips_section(runs),
+    static = ["<details id=\"crashes\" open><summary>Host crashes</summary>%s</details>" % crashes_section(runs),
+              "<details id=\"skips\"><summary>Skipped checks by reason</summary>%s</details>" % skips_section(runs),
               "<details id=\"audit\"><summary>Audit flags</summary>%s</details>" % audit_section(runs)]
     if baseline is not None:
         changes = baseline_changes(runs, baseline)
@@ -832,7 +862,7 @@ function renderPanel(){
  var view=el('div');view.id='view';panel.appendChild(view);var ro=el('div');ro.id='readout';ro.textContent='hover the image for pixel values';panel.appendChild(ro);P={view:view,ro:ro};
  if(fr.length>1){var strip=el('div','strip');fr.forEach(function(c,i){var f=el('figure',i===S.fi?'on':'');var im=el('img');im.dataset.key=c.dev||'';f.appendChild(im);f.appendChild(el('figcaption',null,'f'+c.f));f.addEventListener('click',function(){S.fi=i;render()});strip.appendChild(f)});panel.appendChild(strip);lazy(strip)}
  var info=el('table','kv');function kv(a,b){var tr=el('tr');tr.appendChild(el('td',null,a));tr.appendChild(el('td',null,b));info.appendChild(tr)}
- kv('status',stText(cell.s)+(cell.b&&cell.b!==cell.s?' (baseline '+stText(cell.b)+')':''));if(cell.r)kv('reason',cell.r);kv('time',cell.ms+' ms');
+ kv('status',stText(cell.s)+(cell.b&&cell.b!==cell.s?' (baseline '+stText(cell.b)+')':''));if(cell.r)kv('reason',cell.r);if(cell.h)kv('host crash evidence',cell.h);kv('time',cell.ms+' ms');
  if(cap){kv('capture',(cap.l||'main')+' frame '+cap.f+', '+cap.w+'x'+cap.h+' '+cap.k);if(cap.t&&cap.t.name){var tt=cap.t;kv('tolerance',tt.name+' (byte delta '+tt.byte_delta+', abs '+tt.absolute+', rel '+tt.relative+', outliers '+tt.outlier_fraction+', edge '+tt.edge_radius+', forgive '+tt.forgive_fraction+', min psnr '+tt.min_psnr+')')}
   if(cap.p!=null)kv('measures','psnr '+(cap.p>900?'inf':cap.p.toFixed(2))+' dB, bad '+cap.b+' of '+cap.n+', max delta '+cap.m+', forgiven '+cap.g+(cap.ok===false?' (failed)':''))}
  if(cell.m){Object.keys(cell.m).forEach(function(k){kv(k,String(cell.m[k]))})}

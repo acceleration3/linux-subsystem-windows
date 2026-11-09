@@ -33,6 +33,9 @@ parallel=0
 stack=0
 host_jobs=""
 guest_timeout=3600
+suite=render
+hold_file=""
+max_recoveries=5
 
 usage() {
     cat <<'EOF'
@@ -55,6 +58,11 @@ HTML report: build-render-report/<timestamp>/report.html
   --stack                     remote hosts already run the stack (gpu-test.sh deploy-render and stack-install): no deploy
                               and no matrix run; references are made on the host and the guest is driven through ssh
                               forwards of its agent and share (implied by --parallel)
+  --suite render|sanity       the suite to run (default render); sanity runs its main phase on every adapter at once and
+                              its pacing phase one adapter at a time, writes under <out>/sanity/<host>/<gpu> and makes
+                              no references, audit or report
+  --hold-file PATH            check ids (one per line) that are never run, e.g. rows that hang the GPU on purpose
+  --max-recoveries N          a dead VM is restarted and the run resumed at most N times per host (default 5)
   --guest-timeout SECONDS     limit of one guest run with --parallel (default 3600)
   --no-dump-captures          skip the capture dumps (the report then has no images and there is no audit)
   --images all|differing|failed|none  which rows get images in the report (default all)
@@ -85,6 +93,9 @@ while [[ $# -gt 0 ]]; do
         --parallel) parallel=1; stack=1 ;;
         --stack) stack=1 ;;
         --guest-timeout) guest_timeout="$2"; shift ;;
+        --suite) suite="$2"; shift ;;
+        --hold-file) hold_file="$2"; shift ;;
+        --max-recoveries) max_recoveries="$2"; shift ;;
         --no-dump-captures) dump=0 ;;
         --images) images="$2"; shift ;;
         --no-build) build=0 ;;
@@ -398,29 +409,80 @@ RUN
         "$(target_of "${h}"):.local/share/lsw-gpu-test/render-refs/" "${refs}/"
 }
 
-adapter_run() {
-    local h=$1 uuid=$2 jobs_here=$3 agent_port=$4 smb_port=$5 refs=$6 gpu_name b base adapter_arg run_args
-    gpu_name="$(gpu_name_of "${h}" "${uuid}")"
+effective_filter() {
+    local text="${filter}" id
+    if [[ -n ${hold_file} ]]; then
+        while IFS= read -r id; do
+            [[ -n ${id} ]] && text+="${text:+,}-${id}"
+        done < "${hold_file}"
+    fi
+    printf '%s' "${text}"
+}
+
+finish_adapter() {
+    local h=$1 uuid=$2 refs=$3 b=$4 base=$5 gpu_name=$6
+    mkdir -p "${base}"
+    [[ ${suite} == render ]] || return 0
+    local ref_dir="${refs}/${uuid//-/}"
+    [[ -f ${ref_dir}/device.json ]] || ref_dir="${refs}"
+    local label_name
+    label_name="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("adapter",{}).get("name",""))' "${base}/result.json" 2>/dev/null)"
+    printf '{"host": "%s", "gpu": "%s", "bits": "%s", "refs": "%s"}\n' "${h}" "${label_name:-${gpu_name}}" "${b}" "${ref_dir}" > "${base}/meta.json"
+    if [[ ${dump} -eq 1 && -d ${base}/artifacts && -f ${base}/result.json ]]; then
+        timeout 900 python3 -I "${HERE}/render-audit.py" --guest "${base}/artifacts" --json "${base}/result.json" \
+            --out "${base}/audit.md" --flags "${base}/audit.json" > "${base}/audit.txt" 2>&1 || note "${h}: render-audit exit $? (see ${base}/audit.txt)"
+    fi
+}
+
+adapter_dir() {
+    local h=$1 gpu_name=$2 b=$3
+    if [[ ${suite} == sanity ]]; then
+        echo "${out}/sanity/${h}/$(slug "${gpu_name}")"
+    else
+        echo "${out}/${h}/$(slug "${gpu_name}")/x${b}"
+    fi
+}
+
+guest_runs() {
+    local h=$1 jobs_here=$2 agent_port=$3 smb_port=$4 vm=$5 refs=$6
+    shift 6
+    local uuids=("$@") uuid b gpu_name base status=0
+    local phases=all
+    [[ ${suite} == sanity ]] && phases="main:parallel,pacing:serial"
     for b in "${bit_list[@]}"; do
-        base="${out}/${h}/$(slug "${gpu_name}")/x${b}"
-        adapter_arg="uuid:${uuid//-/}"
-        run_args=(--bits "${b}" --adapter "${adapter_arg}" --jobs "${jobs_here}" --tag "$(slug "${gpu_name}")-x${b}" --out "${base}"
-                  --agent-port "${agent_port}" --smb-port "${smb_port}" --timeout "${guest_timeout}")
-        [[ -n ${filter} ]] && run_args+=(--filter "${filter}")
-        [[ ${dump} -eq 1 ]] && run_args+=(--dump)
-        say "${h}: render suite x${b} on ${gpu_name} (${adapter_arg}), jobs ${jobs_here}"
-        python3 "${HERE}/render-run-guest.py" run "${run_args[@]}"
-        mkdir -p "${base}"
-        local ref_dir="${refs}/${uuid//-/}"
-        [[ -f ${ref_dir}/device.json ]] || ref_dir="${refs}"
-        local label_name
-        label_name="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("adapter",{}).get("name",""))' "${base}/result.json" 2>/dev/null)"
-        printf '{"host": "%s", "gpu": "%s", "bits": "%s", "refs": "%s"}\n' "${h}" "${label_name:-${gpu_name}}" "${b}" "${ref_dir}" > "${base}/meta.json"
-        if [[ ${dump} -eq 1 && -d ${base}/artifacts && -f ${base}/result.json ]]; then
-            timeout 900 python3 -I "${HERE}/render-audit.py" --guest "${base}/artifacts" --json "${base}/result.json" \
-                --out "${base}/audit.md" --flags "${base}/audit.json" > "${base}/audit.txt" 2>&1 || note "${h}: render-audit exit $? (see ${base}/audit.txt)"
-        fi
+        local runs=()
+        for uuid in "${uuids[@]}"; do
+            gpu_name="$(gpu_name_of "${h}" "${uuid}")"
+            runs+=(--run "$(slug "${gpu_name}")-x${b}|uuid:${uuid//-/}|$(adapter_dir "${h}" "${gpu_name}" "${b}")")
+        done
+        local args=(--bits "${b}" --suite "${suite}" --jobs "${jobs_here}" --timeout "${guest_timeout}"
+                    --agent-port "${agent_port}" --smb-port "${smb_port}" --vm "${vm}" --host "${h}" --root "${out}"
+                    --evidence "${out}/evidence/${h}-x${b}" --max-recoveries "${max_recoveries}" --phases "${phases}")
+        local effective
+        effective="$(effective_filter)"
+        [[ -n ${effective} ]] && args+=(--filter "${effective}")
+        [[ ${dump} -eq 1 ]] && args+=(--dump)
+        say "${h}: ${suite} suite x${b} on ${#uuids[@]} adapter(s) at once, jobs ${jobs_here} each"
+        python3 "${HERE}/render-run-guest.py" run-set "${args[@]}" "${runs[@]}" || status=1
+        for uuid in "${uuids[@]}"; do
+            gpu_name="$(gpu_name_of "${h}" "${uuid}")"
+            finish_adapter "${h}" "${uuid}" "${refs}" "${b}" "$(adapter_dir "${h}" "${gpu_name}" "${b}")" "${gpu_name}"
+        done
     done
+    return "${status}"
+}
+
+remote_lock() {
+    coproc ACCEL_LOCK { ssh "${ssh_opts[@]}" "$(target_of "$1")" bash -s; }
+    printf 'exec 9>/tmp/lsw-accel-vm.lock; flock -w 3600 9 || exit 1; echo locked; cat > /dev/null\n' >&"${ACCEL_LOCK[1]}"
+    local line=""
+    read -r -t 3700 line <&"${ACCEL_LOCK[0]}"
+    [[ ${line} == locked ]] || { printf 'render-run: could not take /tmp/lsw-accel-vm.lock on %s\n' "$1" >&2; return 1; }
+}
+
+remote_unlock() {
+    exec {ACCEL_LOCK[1]}>&-
+    wait "${ACCEL_LOCK_PID}" 2>/dev/null
 }
 
 watch_memory() {
@@ -432,44 +494,52 @@ watch_memory() {
 }
 
 run_host_parallel() {
-    local h=$1 index=$2 uuids=(${SEL_UUIDS[$1]}) refs="${out}/refs-$1" uuid jobs_here
-    local agent_port=5102 smb_port=5445 ref_filter=""
+    local h=$1 index=$2 uuids=(${SEL_UUIDS[$1]}) refs="${out}/refs-$1" jobs_here
+    local agent_port=5102 smb_port=5445 ref_filter="" vm=local status=0
     jobs_here="$(jobs_of "${h}")"
     [[ -n ${filter} ]] && ref_filter="--filter ${filter}"
-    if [[ $(target_of "${h}") == local ]]; then
-        export RR_LOG="${out}/render-ref-${h}.log"
-        capped_step "host references for every VM-bound GPU" 1800 bash -c 'exec "$@" >> "${RR_LOG}" 2>&1' _ "${ROOT}/build-render-ref/lsw-render-ref" --out "${refs}" --gpu all --jobs 4 --clean ${ref_filter} || return 1
-        local lockfd
-        exec {lockfd}> "${LOCK}"
-        flock -w 3600 "${lockfd}" || return 1
-        "${VM}" up || return 1
-    else
-        agent_port=$((15102 + 10 * index))
-        smb_port=$((15445 + 10 * index))
-        say "${h}: host references"
-        remote_references "${h}" "${refs}" "${ref_filter}" || return 1
-        "${GPUTEST}" tunnel "${h}" "${agent_port}" "${smb_port}" || note "${h}: the forward could not be added (already there?)"
-        watch_memory "${h}" "${out}/memory-${h}.log" &
-        local watcher=$!
-    fi
     local exes=() b
     for b in "${bit_list[@]}"; do
         local dir="build-suites"
         [[ ${b} == 32 ]] && dir="build-suites32"
         exes+=(--exe "${b}=${ROOT}/${dir}/lsw-suites${b}.exe")
     done
+    local push_refs=(--refs "${refs}")
+    if [[ $(target_of "${h}") == local ]]; then
+        if [[ ${suite} == render ]]; then
+            export RR_LOG="${out}/render-ref-${h}.log"
+            capped_step "host references for every VM-bound GPU" 1800 bash -c 'exec "$@" >> "${RR_LOG}" 2>&1' _ "${ROOT}/build-render-ref/lsw-render-ref" --out "${refs}" --gpu all --jobs 4 --clean ${ref_filter} || return 1
+        else
+            push_refs=()
+        fi
+        local lockfd
+        exec {lockfd}> "${LOCK}"
+        flock -w 3600 "${lockfd}" || return 1
+        "${VM}" up || return 1
+    else
+        vm="ssh:$(target_of "${h}")"
+        agent_port=$((15102 + 10 * index))
+        smb_port=$((15445 + 10 * index))
+        if [[ ${suite} == render ]]; then
+            say "${h}: host references"
+            remote_references "${h}" "${refs}" "${ref_filter}" || return 1
+        else
+            push_refs=()
+        fi
+        "${GPUTEST}" tunnel "${h}" "${agent_port}" "${smb_port}" || note "${h}: the forward could not be added (already there?)"
+        remote_lock "${h}" || return 1
+        watch_memory "${h}" "${out}/memory-${h}-${suite}.log" &
+        local watcher=$!
+    fi
     say "${h}: push executables, dxc and references"
-    python3 "${HERE}/render-run-guest.py" push "${exes[@]}" --dxc "${AV}/third_party/dxc" --refs "${refs}" \
-        --agent-port "${agent_port}" --smb-port "${smb_port}" || return 1
-    local pids=() status=0
-    for uuid in "${uuids[@]}"; do
-        adapter_run "${h}" "${uuid}" "${jobs_here}" "${agent_port}" "${smb_port}" "${refs}" &
-        pids+=($!)
-    done
-    local pid
-    for pid in "${pids[@]}"; do wait "${pid}" || status=1; done
+    python3 "${HERE}/render-run-guest.py" push "${exes[@]}" --dxc "${AV}/third_party/dxc" "${push_refs[@]}" \
+        --agent-port "${agent_port}" --smb-port "${smb_port}" || status=1
+    if [[ ${status} -eq 0 ]]; then
+        guest_runs "${h}" "${jobs_here}" "${agent_port}" "${smb_port}" "${vm}" "${refs}" "${uuids[@]}" || status=1
+    fi
     [[ -n ${watcher:-} ]] && kill "${watcher}" 2>/dev/null
     [[ -n ${lockfd:-} ]] && { "${VM}" done; eval "exec ${lockfd}>&-"; }
+    [[ $(target_of "${h}") == local ]] || remote_unlock
     return "${status}"
 }
 
@@ -540,6 +610,11 @@ if [[ ${dry} -eq 1 ]]; then
 fi
 report_args=(--tree "${out}" --out "${out}/report.html" --images "${images}")
 [[ -n ${baseline} ]] && report_args+=(--baseline-tree "${baseline}")
-python3 -B "${HERE}/render-report.py" "${report_args[@]}" || status=1
+if [[ ${suite} == render ]]; then
+    python3 -B "${HERE}/render-report.py" "${report_args[@]}" || status=1
+else
+    echo "sanity results: ${out}/sanity"
+    exit "${status}"
+fi
 echo "report: ${out}/report.html"
 exit "${status}"
