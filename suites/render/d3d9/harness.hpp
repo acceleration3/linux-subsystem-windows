@@ -159,12 +159,13 @@ public:
 
 using Need = std::function<std::string(IDirect3DDevice9*)>;
 using Body = std::function<void(Ctx&)>;
+using RefFn = std::function<bool(Kit&, unsigned, rr::CaptureSet&, std::string&)>;
 using FrameBody = std::function<void(Ctx&, unsigned)>;
 using FrameMaker = std::function<FrameBody()>;
 
 class Cases {
 public:
-    static void single(rr::CaseSpec spec, Body body, Layout layout = {}, Need need = nullptr);
+    static void single(rr::CaseSpec spec, Body body, Layout layout = {}, Need need = nullptr, RefFn reference = nullptr);
     static void frames(rr::CaseSpec spec, FrameMaker maker, Layout layout = {}, Need need = nullptr);
 };
 

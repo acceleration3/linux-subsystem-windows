@@ -987,7 +987,11 @@ namespace {
 
 class FnScene : public D3d9Scene {
 public:
-    FnScene(FrameBody body, Layout layout, Need need) : body_(std::move(body)), layout_(layout), need_(std::move(need)) {}
+    FnScene(FrameBody body, Layout layout, Need need, RefFn ref = nullptr) : body_(std::move(body)), layout_(layout), need_(std::move(need)), ref_(std::move(ref)) {}
+
+    bool has_reference() const override { return static_cast<bool>(ref_); }
+
+    bool reference(Kit& device, unsigned index, rr::CaptureSet& out, std::string& error) override { return ref_(device, index, out, error); }
 
     std::string unsupported(Kit& kit) override { return need_ ? need_(kit.device()) : std::string(); }
 
@@ -1032,6 +1036,7 @@ private:
     FrameBody body_;
     Layout layout_;
     Need need_;
+    RefFn ref_;
     std::unique_ptr<Ctx> ctx_;
 };
 
@@ -1100,9 +1105,9 @@ void HiRows::present(Ctx& c, IDirect3DTexture9* texture) {
     c.chk(c.d->SetPixelShader(nullptr), "SetPixelShader");
 }
 
-void Cases::single(rr::CaseSpec spec, Body body, Layout layout, Need need) {
-    rr::CaseTable<Kit>::instance().add(std::move(spec), [body = std::move(body), layout, need] {
-        return std::unique_ptr<rr::Scene<Kit>>(new FnScene([body](Ctx& ctx, unsigned) { body(ctx); }, layout, need));
+void Cases::single(rr::CaseSpec spec, Body body, Layout layout, Need need, RefFn reference) {
+    rr::CaseTable<Kit>::instance().add(std::move(spec), [body = std::move(body), layout, need, reference = std::move(reference)] {
+        return std::unique_ptr<rr::Scene<Kit>>(new FnScene([body](Ctx& ctx, unsigned) { body(ctx); }, layout, need, reference));
     });
 }
 

@@ -70,7 +70,7 @@ public:
                     continue;
                 }
                 rr::CaptureSet set;
-                if (!oracle_scene->reference(f, set, error)) {
+                if (!oracle_scene->reference(accel, f, set, error)) {
                     return Outcome::fail("the analytic reference failed: " + error);
                 }
                 expected.frames[f] = std::move(set);
