@@ -145,7 +145,7 @@ Outcome SizeChecks::texture_upload_sizes(Context& context) {
                 device.context->UpdateSubresource(texture, 0, nullptr, source.data(), w * format.bpp, 0);
                 std::vector<std::uint8_t> back;
                 if (!D3d11Textures::read2d(device, texture, w, h, format.bpp, back, error)) {
-                    problems.add(error);
+                    problems.add(std::to_string(w) + "x" + std::to_string(h) + " fmt " + std::to_string(format.format) + ": " + error);
                 } else {
                     std::string detail;
                     if (!BackendHarness::verify(context, "tex " + std::to_string(w) + "x" + std::to_string(h) + " bpp" +

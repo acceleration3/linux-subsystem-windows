@@ -579,7 +579,7 @@ Outcome LeakChecks::shared_resources(Context& context) {
         problems.add("GPU usage did not return to its baseline in the creating process");
     }
     if (ChildRuns::number(child, "child.handle_delta") > LeakLoop::kHandleTolerance) {
-        problems.add("the opening process kept handles after closing the resources");
+        problems.add("the opening process kept " + std::to_string(ChildRuns::number(child, "child.handle_delta")) + " handles after closing the resources");
     }
     if (ChildRuns::number(child, "child.private_delta") > static_cast<long long>(LeakLoop::kPrivateTolerance)) {
         problems.add("the opening process kept private memory after closing the resources");
