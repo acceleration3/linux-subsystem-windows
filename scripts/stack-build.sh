@@ -171,6 +171,9 @@ stage_deploy_files() {
         mkdir -p "${OUT}/stage/$(dirname "${rel}")"
         cp -aL "${MAIN_TREE}/${rel}" "${OUT}/stage/${rel}"
     done
+    mkdir -p "${OUT}/stage/external/accel-virt/third_party"
+    cp -aL "${WT}/tools" "${OUT}/stage/external/accel-virt/tools"
+    cp -aL "${MAIN_AV}/third_party/dxc" "${OUT}/stage/external/accel-virt/third_party/dxc"
 }
 
 step "link the shared third_party sources into ${WT}" && link_third_party
