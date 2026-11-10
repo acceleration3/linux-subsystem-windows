@@ -119,7 +119,6 @@ bundle_paths() (
     cd "${ROOT}"
     echo scripts/gpu-test
     echo ${qemu}/qemu/qemu-system-x86_64
-    find ${qemu}/qemu -maxdepth 1 -name '*.so'
     echo ${qemu}/qemu/qemu-bundle/usr/local/share/qemu
     find ${qemu} -maxdepth 1 \( -name '*.so' -o -name av-renderer \)
     echo build/accel-virt/d3d/lib
@@ -232,8 +231,12 @@ render_bundle_paths() (
 
 cmd_deploy_render() {
     [[ -n ${LSW_RENDER_STACK:-} && -x ${LSW_RENDER_STACK}/libav_executor.so && -d ${LSW_RENDER_STACK}/d3dlib \
-        && -d ${LSW_RENDER_STACK}/av-drivers/package ]] ||
-        die "LSW_RENDER_STACK must name a directory with libav_executor.so, d3dlib/ and av-drivers/"
+        && -d ${LSW_RENDER_STACK}/av-drivers/package \
+        && -f ${LSW_RENDER_STACK}/qemu-modules/hw-display-virtio-gpu-av.so \
+        && -f ${LSW_RENDER_STACK}/qemu-modules/hw-display-virtio-gpu-pci-av.so ]] ||
+        die "LSW_RENDER_STACK must name a directory with libav_executor.so, d3dlib/, av-drivers/ and qemu-modules/"
+    strings -a "${LSW_RENDER_STACK}/qemu-modules/hw-display-virtio-gpu-av.so" | grep -q offer_hybrid ||
+        stack_without_hybrid=1
     split_arguments "$@"
     local list host
     list="$(mktemp)"
@@ -244,9 +247,15 @@ cmd_deploy_render() {
     done < "${list}"
     for host in "${HOSTS[@]}"; do
         say "Deploying the render stack to ${host}"
+        if [[ ${stack_without_hybrid:-0} -eq 1 ]] &&
+            [[ $(on "${host}" <<< "virsh -c qemu:///session dumpxml --inactive ${DOMAIN:-lsw} 2>/dev/null | grep -c 'hybrid='" | tail -n 1) -gt 0 ]]; then
+            die "${host}'s domain uses hybrid= and the stack's virtio-gpu-av module has no offer_hybrid: it would not start"
+        fi
         on "${host}" <<< "mkdir -p ${BASE}/tree/build/accel-virt/qemu ${BASE}/tree/build/accel-virt/d3d ${BASE}/runs"
         sync_to -a -r -L --exclude __pycache__ --files-from="${list}" "${ROOT}/" \
             "$(destination "${host}" "${BASE}/tree/")"
+        sync_to -a -L --include='*.so' --exclude='*' "${LSW_RENDER_STACK}/qemu-modules/" \
+            "$(destination "${host}" "${BASE}/tree/build/accel-virt/qemu/qemu/")"
         sync_to -a -L "${LSW_RENDER_STACK}/libav_executor.so" \
             "$(destination "${host}" "${BASE}/tree/build/accel-virt/qemu/libav_executor.so")"
         sync_to -a -L --delete "${LSW_RENDER_STACK}/d3dlib/" "$(destination "${host}" "${BASE}/tree/build/accel-virt/d3d/lib/")"
@@ -505,7 +514,7 @@ runs every graphics API's tests on every GPU of each machine, in its LSW VM.
 
   build                     LSW and the test programs
   deploy   [HOST...]        rsync the tree, then preflight
-  deploy-render [HOST...]   the render suite's stack only (LSW_RENDER_STACK names the executor, d3dlib and av-drivers)
+  deploy-render [HOST...]   the render suite's stack only (LSW_RENDER_STACK names the executor, d3dlib, av-drivers and qemu-modules; nothing of them comes from this tree's build)
   stack-install [HOST...]   put that stack under the VM: saves the VM's definition, driver package and agent first
   stack-restore [HOST...]   put the saved ones back
   stack-status [HOST...]
