@@ -2,29 +2,20 @@
 
 How to build, deploy and test the accel-virt driver stack on the test GPUs. Read all of it before touching a VM.
 
-## Machines and GPUs
+## Machines
 
-| Host | Reach | GPUs | Notes |
-|---|---|---|---|
-| `local` | this machine, domain `lsw` (`virsh -c qemu:///session`) | RX 9070 XT (adapter 0, drives the desktop), Radeon 610M (adapter 1, `display=off`, hybrid discrete) | the user's own machine |
-| `accel` | `accel@192.168.1.15` | Iris Xe (adapter 0, display, hybrid integrated), RTX 3070 Ti Laptop (adapter 1, `display=off`, hybrid discrete) | 16 GB RAM, x86-64-v3, fish login shell: run remote commands through `bash -s` |
-
-Hosts are listed in `scripts/gpu-test/hosts`. Remote hosts need an ssh master on `/tmp/lsw-gpu-test-%C`; it needs the
-password, so only the user can open it:
-
-```
-ssh -o ControlMaster=yes -o "ControlPath=/tmp/lsw-gpu-test-%C" -o ControlPersist=yes -fN accel@192.168.1.15
-```
-
-`scripts/gpu-test/gpu-test.sh master accel` checks whether it is open.
+Test hosts are listed in `scripts/gpu-test/hosts` (name and ssh target). Remote hosts are reached through an ssh master
+connection that the user opens; `scripts/gpu-test/gpu-test.sh master <host>` checks whether it is open, and its hint
+prints the command to open one. `scripts/gpu-test/gpu-test.sh gpus <host>` lists a host's GPUs and which adapter drives
+a display.
 
 ## Safety rules
 
 - No guest behaviour may hang or crash the host. A host GPU fault, ring reset or QEMU crash is a driver bug to fix, never
   a row to skip.
-- Never try a risky GPU feature on the RX 9070 XT first: it drives the user's desktop. Prove it on the 610M (or accel).
+- Never try a risky GPU feature first on the GPU that drives the user's desktop. Prove it on another GPU first.
 - Watch the kernel log during every run: `journalctl -k -f | grep -iE 'amdgpu.*(fault|timeout|reset)'` locally,
-  `journalctl -k | grep -iE 'xid|i915|gpu hang|fence expiration'` on accel. Stop at the first event.
+  the equivalent on remote hosts (`xid`, `i915`, `gpu hang`, `fence expiration`). Stop at the first event.
 - Rows that hang a GPU on purpose stay in the hold file and are never run until their fix is proven.
 - Builds use at most 4 CPUs: `systemd-run --user --scope -p CPUQuota=400% -p MemoryHigh=6G nice -n 19 ionice -c3`, `-j4`,
   one build at a time on `${XDG_RUNTIME_DIR}/lsw-build.lock`.
@@ -52,27 +43,26 @@ runs, with suites and references of the same revision.
    scripts/stack-build.sh <driver worktree> <stack dir>
    ```
 
-   It builds the executor (x86-64-v3, runs on both hosts), the guest drivers (x64 and x32), the D3D runtime (DXVK,
+   It builds the executor (for the oldest CPU level among the test hosts), the guest drivers (x64 and x32), the D3D runtime (DXVK,
    vkd3d-proton with `tools/*-patches`) and the hybrid-capable QEMU modules, and writes `manifest.json` (driver sha,
    suite sha, md5 of every file). It refuses a dirty worktree unless `LSW_STACK_ALLOW_DIRTY=1`.
 
 2. Run from an LSW tree whose HEAD is the manifest's `suite_sha`:
 
    ```
-   scripts/verify.sh --host local|accel --stack <stack dir> --filter 'render.d3d11.clear*,render.vk.xfer.copy*' \
+   scripts/verify.sh --host <host> --stack <stack dir> --filter 'render.d3d11.clear*,render.vk.xfer.copy*' \
        [--suite render|sanity] [--adapters all|first] [--gpus SEL] [--bits 64|32|both] [--jobs N] [--max-hold SECONDS]
    ```
 
    It builds the suites and `lsw-render-ref` at the tree's revision, waits its turn in a first-come queue for that VM,
-   deploys exactly the stack (local: the dev stack in `~/.local/share/lsw-dev/render-driver` and `redeploy.sh`; accel:
-   `deploy-render` then `stack-apply`), checks the md5 of the executor and QEMU modules that QEMU really maps against
+   deploys exactly the stack (local: the dev stack and its `redeploy.sh`; remote: `deploy-render` then `stack-apply`), checks the md5 of the executor and QEMU modules that QEMU really maps against
    the manifest (no rows run on a mismatch), runs the rows and writes `<stack dir>/results/<timestamp>-<host>/`.
 
    `--queue` shows the queue, `--dry-run` prints every step and touches nothing, `--redeploy` forces a deploy. A run is
    killed after `--max-hold` (default 3600 s): keep filters narrow.
 
-Never run `render-run.sh --hosts accel` without `--parallel`: that path does a full `gpu-test.sh deploy` and replaces
-the stack on accel.
+Never run `render-run.sh` against a remote host without `--parallel`: that path does a full `gpu-test.sh deploy` and replaces
+the stack on a remote host.
 
 ## Locks
 
@@ -81,7 +71,7 @@ the stack on accel.
 | `${XDG_RUNTIME_DIR}/lsw-build.lock` | builds on this machine (one at a time) | `stack-build.sh`, `verify.sh` suite builds, any manual build |
 | `${XDG_RUNTIME_DIR}/lsw-verify-queue/<host>` | first-come order for a VM | `verify.sh` (`scripts/vm_queue.py`) |
 | `${XDG_RUNTIME_DIR}/lsw-render.lock` | the local VM: deploy, run, fetch | `verify.sh` while it holds the queue |
-| `/tmp/lsw-accel-vm.lock` on accel | the accel VM | `verify.sh` while it holds the queue |
+| the VM lock on a remote host | that host's VM | `verify.sh` while it holds the queue |
 
 Hold a VM for the whole deploy, run and fetch of one verification, never per step and never with a placeholder
 (`sleep N`). A run is valid only if nothing else deployed to, restarted or ran on that VM during it.
@@ -109,7 +99,7 @@ display-less adapter through the Windows GPU preference; the suite re-runs itsel
   side-by-side, swipe, onion and difference views. `--baseline-tree` compares with an earlier run.
 - `scripts/render-audit.py --guest <artifacts> --host <refs> --json <result.json> --strict`: checks that each row
   tests what it says (swap test, identical captures across families, the Python judge).
-- `render-progress` (in `~/.local/bin`) shows a running guest run's progress per GPU, local and remote.
+- `render-progress` shows a running guest run's progress per GPU, local and remote.
 - Sanity results land per bitness under `sanity/<host>/<gpu>/x64|x32/result.json`.
 
 ## Other tools
@@ -123,8 +113,7 @@ display-less adapter through the Windows GPU preference; the suite re-runs itsel
 
 ## Where to look when something breaks
 
-- QEMU log: `~/.cache/libvirt/qemu/log/lsw.log` (both hosts).
+- QEMU log: the libvirt session log of the `lsw` domain.
 - Core dumps: `coredumpctl list | grep qemu`; a stack through a Vulkan layer means a host implicit layer got in.
-- Guest driver logs: `C:\` of the guest over SMB on port 5445 (`smbclient //127.0.0.1/C$ -p 5445 -U lsw%lsw`; on accel
-  run it there).
+- Guest driver logs: the guest's `C:\` over the guest file share.
 - A VM that died mid-run: `render-run.sh` keeps crash evidence under the run's `evidence/` and resumes in a new segment.
