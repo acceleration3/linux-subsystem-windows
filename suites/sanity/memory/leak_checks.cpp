@@ -22,6 +22,7 @@
 #include "support/test_window.hpp"
 #include "support/vulkan_backend.hpp"
 
+#include <cstdlib>
 #include <d3d11_1.h>
 #include <dxgi1_2.h>
 
@@ -483,7 +484,9 @@ Outcome LeakChecks::shared_resources(Context& context) {
         AvAdapter adapter;
         std::string error;
         D3d11Device device;
-        if (!pick(adapter, error) || !device.create(adapter.luid, error)) {
+        const D3D_FEATURE_LEVEL level = D3D_FEATURE_LEVEL_11_0;
+        const bool control = prefix.find("-warp-") != std::string::npos;
+        if (control ? !device.create_warp(&level, 1, 0, error) : (!pick(adapter, error) || !device.create(adapter.luid, error))) {
             return Outcome::fail(error);
         }
         ID3D11Device1* device1 = nullptr;
@@ -521,10 +524,12 @@ Outcome LeakChecks::shared_resources(Context& context) {
     AvAdapter adapter;
     std::string error;
     D3d11Device device;
-    if (!pick(adapter, error) || !device.create(adapter.luid, error)) {
+    const bool control = std::getenv("LSW_SUITES_LEAK_WARP") != nullptr;
+    const D3D_FEATURE_LEVEL level = D3D_FEATURE_LEVEL_11_0;
+    if (control ? !device.create_warp(&level, 1, 0, error) : (!pick(adapter, error) || !device.create(adapter.luid, error))) {
         return Outcome::fail(error);
     }
-    const std::string name_prefix = "Local\\lsw-suites-shared-" + std::to_string(::GetCurrentProcessId()) + "-";
+    const std::string name_prefix = std::string("Local\\lsw-suites-shared-") + (control ? "warp-" : "") + std::to_string(::GetCurrentProcessId()) + "-";
     const ProcessSample before = ProcessSampler::take();
     VideoMemory gpu_before;
     static_cast<void>(DxgiBudget::query(adapter.luid, true, gpu_before, error));

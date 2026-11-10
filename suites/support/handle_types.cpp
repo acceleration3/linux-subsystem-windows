@@ -76,7 +76,20 @@ std::map<std::string, long long> HandleTypes::count() {
             }
             found = names.emplace(entry.type, name).first;
         }
-        ++counts[found->second];
+        std::string key = found->second;
+        if (key == "Section") {
+            std::vector<char> info(2048);
+            ULONG length = 0;
+            if (object(reinterpret_cast<HANDLE>(static_cast<ULONG_PTR>(entry.value)), 1, info.data(), static_cast<ULONG>(info.size()), &length) >= 0) {
+                const auto* name = reinterpret_cast<const UNICODE_STRING*>(info.data());
+                key += ":";
+                for (USHORT c = 0; c < name->Length / 2; ++c) {
+                    key += static_cast<char>(name->Buffer[c]);
+                }
+                key += " access=" + std::to_string(entry.access);
+            }
+        }
+        ++counts[key];
     }
     return counts;
 }
