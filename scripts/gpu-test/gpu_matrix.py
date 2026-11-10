@@ -465,7 +465,8 @@ def install_script(staged):
     lines += [
         "if not defined SOURCE set SOURCE=C:\\av",
         "if not exist %SOURCE%\\package (echo %SOURCE% has no package & exit /b 2)",
-        "robocopy %SOURCE% C:\\av\\resign /MIR /NFL /NDL /NJH /NJS /NP >nul",
+        "if exist C:\\av\\resign rmdir /s /q C:\\av\\resign",
+        "robocopy %SOURCE%\\package C:\\av\\resign\\package /MIR /NFL /NDL /NJH /NJS /NP >nul",
         "if %ERRORLEVEL% GEQ 8 exit /b %ERRORLEVEL%",
         "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\av\\provision.ps1 -Package C:\\av\\resign\\package -Stage sign",
         "set SIGNED=%ERRORLEVEL%",
