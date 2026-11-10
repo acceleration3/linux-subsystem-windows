@@ -288,6 +288,9 @@ Outcome LifeChecks::mode_refresh_rate_change(Context& context) {
 }
 
 Outcome LifeChecks::sleep_resume_contents(Context& context) {
+    if (ChildMode::active()) {
+        return RobustChild::child(context, [](Context&, const std::string& role) { return Outcome::fail("unknown role " + role); });
+    }
     AvAdapter adapter;
     std::string error;
     D3d11Device device;
@@ -436,6 +439,9 @@ Outcome LifeChecks::live_driver_update(Context& context) {
 }
 
 Outcome LifeChecks::session_logoff_logon(Context& context) {
+    if (ChildMode::active()) {
+        return RobustChild::child(context, [](Context&, const std::string& role) { return Outcome::fail("unknown role " + role); });
+    }
     DWORD session = 0;
     ::ProcessIdToSessionId(::GetCurrentProcessId(), &session);
     const std::string before = adapter_keys();
