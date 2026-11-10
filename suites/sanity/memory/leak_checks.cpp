@@ -508,7 +508,14 @@ Outcome LeakChecks::shared_resources(Context& context) {
         context.measure("child.private_delta", static_cast<long long>(after.private_bytes) - static_cast<long long>(before.private_bytes));
         context.measure("child.handle_delta", static_cast<long long>(after.handles) - static_cast<long long>(before.handles));
         context.measure("child.handle_types", HandleTypes::grown(types_before, HandleTypes::count()));
+        device.context->ClearState();
+        device.context->Flush();
+        ::Sleep(1500);
+        context.measure("child.handle_delta_after_idle", static_cast<long long>(ProcessSampler::take().handles) - static_cast<long long>(before.handles));
         device1->Release();
+        device.context->Flush();
+        ::Sleep(500);
+        context.measure("child.handle_delta_after_device_release", static_cast<long long>(ProcessSampler::take().handles) - static_cast<long long>(before.handles));
         return Outcome::ok();
     }
     AvAdapter adapter;
@@ -583,7 +590,9 @@ Outcome LeakChecks::shared_resources(Context& context) {
     }
     if (ChildRuns::number(child, "child.handle_delta") > LeakLoop::kHandleTolerance) {
         problems.add("the opening process kept " + std::to_string(ChildRuns::number(child, "child.handle_delta")) + " handles after closing the resources (" +
-                     ChildRuns::text(child, "child.handle_types") + ")");
+                     ChildRuns::text(child, "child.handle_types") + "; after an idle second " +
+                     std::to_string(ChildRuns::number(child, "child.handle_delta_after_idle")) + ", after releasing the device " +
+                     std::to_string(ChildRuns::number(child, "child.handle_delta_after_device_release")) + ")");
     }
     if (ChildRuns::number(child, "child.private_delta") > static_cast<long long>(LeakLoop::kPrivateTolerance)) {
         problems.add("the opening process kept private memory after closing the resources");
