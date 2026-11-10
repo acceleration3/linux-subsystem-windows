@@ -562,11 +562,18 @@ def prune(ctx):
 
 def discover(ctx):
     program = f"lsw-suites{ctx.args.bits}.exe"
+    for stale in ("done-list.txt", "list.txt"):
+        ctx.share.remove(f"{ctx.guest_dir}\\{stale}")
     launch(ctx, "list", [f"{program} --list > list.txt 2>&1"], "done-list.txt")
     deadline = time.monotonic() + 300
     while time.monotonic() < deadline and not ctx.present("done-list.txt"):
         time.sleep(3)
-    text = read_text(ctx, "list.txt") or ""
+    text = ""
+    for attempt in range(5):
+        text = read_text(ctx, "list.txt") or ""
+        if text.strip():
+            break
+        time.sleep(5)
     isolated, others = [], []
     for line in text.splitlines():
         parts = line.split()
