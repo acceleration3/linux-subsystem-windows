@@ -235,7 +235,7 @@ cmd_deploy_render() {
         && -f ${LSW_RENDER_STACK}/qemu-modules/hw-display-virtio-gpu-av.so \
         && -f ${LSW_RENDER_STACK}/qemu-modules/hw-display-virtio-gpu-pci-av.so ]] ||
         die "LSW_RENDER_STACK must name a directory with libav_executor.so, d3dlib/, av-drivers/ and qemu-modules/"
-    strings -a "${LSW_RENDER_STACK}/qemu-modules/hw-display-virtio-gpu-av.so" | grep -q offer_hybrid ||
+    [[ $(strings -a "${LSW_RENDER_STACK}/qemu-modules/hw-display-virtio-gpu-av.so" | grep -c offer_hybrid) -gt 0 ]] ||
         stack_without_hybrid=1
     split_arguments "$@"
     local list host
