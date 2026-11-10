@@ -4,7 +4,7 @@ set -uo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 HERE="${ROOT}/scripts"
-MAIN_TREE="${LSW_MAIN_TREE:-/home/accel/Coding/linux-subsystem-windows}"
+MAIN_TREE="${LSW_MAIN_TREE:-$(git -C "$(dirname "$0")" worktree list --porcelain | sed -n "1s/^worktree //p")}"
 AV="${ROOT}/external/accel-virt"
 [[ -f ${AV}/third_party/dxc/dxcompiler.dll ]] || AV="${MAIN_TREE}/external/accel-virt"
 HOSTS_FILE="${LSW_GPU_TEST_HOSTS:-${ROOT}/scripts/gpu-test/hosts}"

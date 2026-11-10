@@ -4,8 +4,8 @@ set -uo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 HERE="${ROOT}/scripts"
-MAIN_TREE="${LSW_MAIN_TREE:-/home/accel/Coding/linux-subsystem-windows}"
-DEV_STACK="${LSW_RENDER_DRIVER_DIR:-/home/accel/.local/share/lsw-dev/render-driver}"
+MAIN_TREE="${LSW_MAIN_TREE:-$(git -C "$(dirname "$0")" worktree list --porcelain | sed -n "1s/^worktree //p")}"
+DEV_STACK="${LSW_RENDER_DRIVER_DIR:-${XDG_DATA_HOME:-${HOME}/.local/share}/lsw-dev/render-driver}"
 GPUTEST="${HERE}/gpu-test/gpu-test.sh"
 HOSTS_FILE="${LSW_GPU_TEST_HOSTS:-${HERE}/gpu-test/hosts}"
 BUILD_LOCK="${XDG_RUNTIME_DIR:-/tmp}/lsw-build.lock"
