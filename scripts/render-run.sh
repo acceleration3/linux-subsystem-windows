@@ -415,8 +415,35 @@ jobs_of() {
 ssh_opts=(-o BatchMode=yes -o ConnectTimeout=10 -o "ControlPath=${LSW_GPU_TEST_CONTROL_PATH:-/tmp/lsw-gpu-test-%C}")
 on_remote() { ssh "${ssh_opts[@]}" "$(target_of "$1")" bash -s; }
 
+push_reference_tool() {
+    local h=$1 tool="${ROOT}/build-render-ref/lsw-render-ref" local_md5 remote_md5
+    local_md5="$(md5sum "${tool}" | cut -d' ' -f1)"
+    on_remote "${h}" <<< "mkdir -p ~/.local/share/lsw-gpu-test/tree/build-render-ref"
+    rsync -a -e "ssh ${ssh_opts[*]}" "${tool}" "${ROOT}/build-render-ref/REVISION" \
+        "$(target_of "${h}"):.local/share/lsw-gpu-test/tree/build-render-ref/" || return 1
+    remote_md5="$(on_remote "${h}" <<< "md5sum ~/.local/share/lsw-gpu-test/tree/build-render-ref/lsw-render-ref" | cut -d' ' -f1)"
+    [[ ${remote_md5} == "${local_md5}" ]] || { printf 'render-run: %s holds a different lsw-render-ref after the push\n' "${h}" >&2; return 1; }
+    note "${h}: lsw-render-ref $(cat "${ROOT}/build-render-ref/REVISION") pushed"
+}
+
+check_revisions() {
+    local ref_rev suite_rev b dir
+    [[ -f ${ROOT}/build-render-ref/REVISION ]] || die "build-render-ref/REVISION is missing: run scripts/build-render-ref.sh"
+    ref_rev="$(cat "${ROOT}/build-render-ref/REVISION")"
+    grep -qaF -- "${ref_rev}" "${ROOT}/build-render-ref/lsw-render-ref" || die "lsw-render-ref does not embed its revision ${ref_rev}: rebuild it"
+    for b in "${push_list[@]}"; do
+        dir="${ROOT}/build-suites"
+        [[ ${b} == 32 ]] && dir="${ROOT}/build-suites32"
+        [[ -f ${dir}/REVISION ]] || die "${dir}/REVISION is missing: run scripts/build-suites.sh"
+        suite_rev="$(cat "${dir}/REVISION")"
+        [[ ${suite_rev} == "${ref_rev}" ]] || die "lsw-render-ref is revision ${ref_rev} but the x${b} suite build is ${suite_rev}: the rows would not match the references; rebuild both"
+    done
+    [[ ${ref_rev} != *+dirty ]] || note "revision ${ref_rev} has uncommitted changes under suites/"
+}
+
 remote_references() {
     local h=$1 refs=$2 ref_filter=$3
+    push_reference_tool "${h}" || return 1
     on_remote "${h}" <<RUN
 set -e
 cd ~/.local/share/lsw-gpu-test/tree
@@ -493,6 +520,7 @@ guest_runs() {
 }
 
 remote_lock() {
+    [[ ${LSW_RENDER_REMOTE_LOCK_HELD:-0} == 1 ]] && return 0
     coproc ACCEL_LOCK { ssh "${ssh_opts[@]}" "$(target_of "$1")" bash -s; }
     printf 'exec 9>/tmp/lsw-accel-vm.lock; flock -w 3600 9 || exit 1; echo locked; cat > /dev/null\n' >&"${ACCEL_LOCK[1]}"
     local line=""
@@ -501,6 +529,7 @@ remote_lock() {
 }
 
 remote_unlock() {
+    [[ ${LSW_RENDER_REMOTE_LOCK_HELD:-0} == 1 ]] && return 0
     exec {ACCEL_LOCK[1]}>&-
     wait "${ACCEL_LOCK_PID}" 2>/dev/null
 }
@@ -606,6 +635,7 @@ if [[ ${build} -eq 1 ]]; then
     capped_step "build lsw-render-ref" 1200 "${ROOT}/scripts/build-render-ref.sh" || die "lsw-render-ref build failed"
 fi
 
+[[ ${dry} -eq 1 || ${suite} != render ]] || check_revisions
 status=0
 if [[ ${parallel} -eq 1 ]]; then
     if [[ ${dry} -eq 1 ]]; then

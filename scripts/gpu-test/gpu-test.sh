@@ -516,6 +516,8 @@ runs every graphics API's tests on every GPU of each machine, in its LSW VM.
   deploy   [HOST...]        rsync the tree, then preflight
   deploy-render [HOST...]   the render suite's stack only (LSW_RENDER_STACK names the executor, d3dlib, av-drivers and qemu-modules; nothing of them comes from this tree's build)
   stack-install [HOST...]   put that stack under the VM: saves the VM's definition, driver package and agent first
+  stack-apply [HOST...]     after deploy-render on an installed stack: redefine the VM with the tree's paths (hybrid= kept), restart
+                            QEMU and install the tree's driver package if the guest's differs
   stack-restore [HOST...]   put the saved ones back
   stack-status [HOST...]
   tunnel HOST AGENTPORT SMBPORT   forward the remote guest's agent and share to local ports (needs the ssh master)
@@ -548,6 +550,7 @@ case "${command}" in
     deploy)     cmd_deploy "$@" ;;
     deploy-render) cmd_deploy_render "$@" ;;
     stack-install) cmd_stack install "$@" ;;
+    stack-apply) cmd_stack apply "$@" ;;
     stack-restore) cmd_stack restore "$@" ;;
     stack-status) cmd_stack status "$@" ;;
     tunnel)     cmd_tunnel "$@" ;;

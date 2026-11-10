@@ -11,6 +11,11 @@ if command -v ccache >/dev/null 2>&1; then
     launcher=(-DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_C_COMPILER_LAUNCHER=ccache)
 fi
 
+revision="$(git -C "${ROOT}" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+if [[ -n $(git -C "${ROOT}" status --porcelain --untracked-files=no -- suites cmake 2>/dev/null) ]]; then
+    revision+="+dirty"
+fi
+
 build_one() {
     local label=$1 dir=$2 toolchain=$3
     echo ">>> Configuring lsw-suites ${label} -> ${dir}"
@@ -21,6 +26,7 @@ build_one() {
         "${launcher[@]}"
     echo ">>> Building lsw-suites ${label}"
     cmake --build "${dir}" ${CMAKE_BUILD_PARALLEL_LEVEL:+-j "${CMAKE_BUILD_PARALLEL_LEVEL}"}
+    printf '%s\n' "${revision}" > "${dir}/REVISION"
 }
 
 BITS="${LSW_SUITES_BITS:-both}"

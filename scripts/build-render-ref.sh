@@ -11,6 +11,9 @@ if command -v ccache >/dev/null 2>&1; then
 fi
 
 revision="$(git -C "${ROOT}" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+if [[ -n $(git -C "${ROOT}" status --porcelain --untracked-files=no -- suites cmake 2>/dev/null) ]]; then
+    revision+="+dirty"
+fi
 
 echo ">>> Configuring lsw-render-ref -> ${BUILD}"
 cmake -S "${ROOT}/suites/render-ref" -B "${BUILD}" -G Ninja \
@@ -26,4 +29,5 @@ if [[ ! -x "${BUILD}/lsw-render-ref" ]]; then
     echo "!!! Build did not produce ${BUILD}/lsw-render-ref" >&2
     exit 1
 fi
-echo ">>> Built ${BUILD}/lsw-render-ref"
+printf '%s\n' "${revision}" > "${BUILD}/REVISION"
+echo ">>> Built ${BUILD}/lsw-render-ref (${revision})"

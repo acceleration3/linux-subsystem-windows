@@ -6,6 +6,9 @@ Runs on the host under test, from the tree scripts/gpu-test/gpu-test.sh deploy-r
   render_stack.py install    save the VM's definition and its guest's driver package and agent, define the VM
                              with the tree's QEMU, executor and Direct3D runtime on every host GPU, install the
                              tree's driver package and agent in the guest, restart QEMU, and leave the VM running
+  render_stack.py apply      the stack is installed already: define the VM again from its current definition with
+                             the tree's paths on every host GPU (hybrid= kept), restart QEMU so it maps the tree's
+                             executor and modules, and install the tree's driver package when the guest's differs
   render_stack.py restore    put the saved definition, driver package and agent back
   render_stack.py status     what the VM and the guest run
 
@@ -149,6 +152,45 @@ def command_install(args):
     return 0
 
 
+def command_apply(args):
+    domain = matrix.Domain()
+    share = GuestShare()
+    if not SAVED.exists():
+        matrix.say(f"{SAVED} is missing: run stack-install once first")
+        return 2
+    required = [matrix.QEMU_BINARY, matrix.EXECUTOR, matrix.D3D_LIB, matrix.DRIVERS / "package" / "package.sha256",
+                matrix.DRIVERS / "provision.ps1"]
+    problems = [f"{path} is missing: deploy the tree again" for path in required if not path.exists()]
+    if subprocess.run(["pgrep", "-x", "lsw-manager"], capture_output=True).returncode == 0:
+        problems.append("lsw-manager is running: close it, it redefines the VM")
+    if problems:
+        for problem in problems:
+            matrix.say(f"preflight: {problem}")
+        return 2
+    gpus = matrix.host_gpus()
+    out = SAVED / "apply-logs"
+    out.mkdir(exist_ok=True)
+    domain.stop()
+    domain.define(matrix.retarget(domain.definition(), gpus, args.qemu_env))
+    work = matrix.bridge_directory("stack-apply")
+    guest = matrix.boot(domain, work, share)
+    try:
+        matrix.update_driver(guest, gpus, out, False)
+    finally:
+        guest.close()
+    guest = restarted(domain, work, share)
+    try:
+        status = guest.link.call("gpu_status")
+    finally:
+        guest.close()
+    unbound = [adapter.get("name") for adapter in status.get("adapters", []) if not matrix.bound(adapter)]
+    if unbound:
+        matrix.say(f"adapters not on avgpu: {unbound}")
+        return 1
+    matrix.say("the VM runs the tree's stack")
+    return 0
+
+
 def command_restore(args):
     if not SAVED.exists():
         matrix.say("nothing saved: the stack is not installed")
@@ -211,10 +253,12 @@ def main():
     install = commands.add_parser("install")
     install.add_argument("--no-agent", dest="agent", action="store_false")
     install.add_argument("--qemu-env", action="append", default=[], metavar="NAME=VALUE")
+    apply = commands.add_parser("apply")
+    apply.add_argument("--qemu-env", action="append", default=[], metavar="NAME=VALUE")
     commands.add_parser("restore")
     commands.add_parser("status")
     args = parser.parse_args()
-    handler = {"install": command_install, "restore": command_restore, "status": command_status}[args.command]
+    handler = {"install": command_install, "apply": command_apply, "restore": command_restore, "status": command_status}[args.command]
     try:
         return handler(args)
     except (matrix.RunFailed, LinkError, matrix.AgentError, OSError) as error:
