@@ -30,11 +30,13 @@ struct Display {
     AvAdapter adapter;
     std::uint32_t handle = 0;
     std::uint32_t source = 0;
+    bool hybrid_discrete = false;
 
     bool open(std::string& error) {
         if (!TargetAdapter::pick(adapter, error) || !api.load(error) || !extra.load(error)) {
             return false;
         }
+        hybrid_discrete = adapter.hybrid_discrete;
         if (adapter.hybrid_discrete) {
             std::vector<AvAdapter> all;
             if (!AvAdapters::accel(all, error)) {
@@ -241,6 +243,13 @@ Outcome DisplayChecks::source_visible_while_composed(Context& context) {
     bool attached = false;
     for (const AvOutput& output : display.adapter.outputs) {
         attached = attached || output.attached;
+    }
+    if (!attached && display.hybrid_discrete) {
+        DISPLAY_DEVICEW device{};
+        device.cb = sizeof(device);
+        for (DWORD index = 0; ::EnumDisplayDevicesW(nullptr, index, &device, 0) != FALSE; ++index) {
+            attached = attached || (device.StateFlags & DISPLAY_DEVICE_ATTACHED_TO_DESKTOP) != 0;
+        }
     }
     if (!attached) {
         problems.add("no output of the adapter is attached to the desktop");
