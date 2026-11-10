@@ -269,6 +269,8 @@ def retarget(xml, gpus, qemu_env=()):
         device = DeviceProperties(template.text())
         device.set("host-gpu", gpu.uuid)
         device.drop("hybrid")
+        if position == 0 and os.environ.get("LSW_GPU_TEST_OUTPUTS"):
+            device.set("max_outputs", os.environ["LSW_GPU_TEST_OUTPUTS"])
         if hybrid_graphics and len(gpus) > 1:
             device.set("hybrid", "integrated" if position == 0 else "discrete")
         if position > 0:
