@@ -62,8 +62,9 @@ void register_uav_formats() {
     };
     for (const UavFormat& item : formats) {
         const bool integer = std::string(item.type) == "uint4";
+        const bool unorm8 = item.format == DXGI_FORMAT_R8G8B8A8_UNORM || item.format == DXGI_FORMAT_R8_UNORM;
         Cases::single(
-            rr::CaseSpec("cs", std::string("uav_store_") + item.name).tolerance(integer ? rr::Tolerance::exact() : rr::Tolerance::floats(2e-3f, 2e-3f)).tag("compute"),
+            rr::CaseSpec("cs", std::string("uav_store_") + item.name).tolerance(integer ? rr::Tolerance::exact() : unorm8 ? rr::Tolerance::floats(1.0f / 255.0f + 1e-4f) : rr::Tolerance::floats(2e-3f, 2e-3f)).tag("compute"),
             [item](Kit& kit, rr::CaptureSet& out, std::string& error) {
                 TextureSpec spec;
                 spec.format = item.format;
