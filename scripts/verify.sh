@@ -12,7 +12,7 @@ BUILD_LOCK="${XDG_RUNTIME_DIR:-/tmp}/lsw-build.lock"
 REMOTE_BASE=".local/share/lsw-gpu-test"
 ORIG_ARGS=("$@")
 
-host="" stack="" filter="" adapters=all bits=64 suite=render gpus="" out="" max_hold=3600 redeploy=0 dry=0 show_queue=0 jobs=2
+host="" stack="" filter="" adapters=all bits=64 suite=render gpus="" out="" max_hold=3600 redeploy=0 dry=0 show_queue=0 jobs=2 hold_file=""
 
 usage() {
     cat <<'EOT'
@@ -32,6 +32,7 @@ revision, and leaves the results in DIR/results/<timestamp>.
   --bits 64|32|both         default 64
   --jobs N                  parallel checks per adapter (default 2)
   --out DIR                 results directory (default DIR/results/<timestamp>)
+  --hold-file PATH          check ids (one per line, globs allowed) that are never run
   --max-hold SECONDS        the run is killed after this long holding the VM (default 3600)
   --redeploy                deploy even when the VM already runs this stack
   --queue                   show the queue of --host and exit
@@ -54,6 +55,7 @@ while [[ $# -gt 0 ]]; do
         --jobs) jobs="$2"; shift ;;
         --out) out="$2"; shift ;;
         --max-hold) max_hold="$2"; shift ;;
+        --hold-file) hold_file="$(realpath "$2")"; shift ;;
         --redeploy) redeploy=1 ;;
         --queue) show_queue=1 ;;
         --dry-run) dry=1 ;;
@@ -204,6 +206,7 @@ run_inner() {
         local args=(--parallel --no-build --hosts "${host}" --bits "${bits}" --filter "${filter}" --suite "${suite}" --jobs "${jobs}" --out "${out}")
         [[ ${host} == local ]] && args+=(--adapters "${adapters}")
         [[ -n ${gpus} ]] && args+=(--gpus "${gpus}")
+        [[ -n ${hold_file} ]] && args+=(--hold-file "${hold_file}")
         "${HERE}/render-run.sh" "${args[@]}"
         status=$?
     fi
