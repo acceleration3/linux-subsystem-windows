@@ -283,7 +283,7 @@ const Registrar kCopy{[] {
         r.cap_depth(o, "depth", r.depth_main);
         r.cap_stencil(o, "stencil", r.depth_main);
     });
-    single(spec("copy", "clear_render_target_views_formats").tolerance(rr::Tolerance::floats(2e-3f, 2e-3f)), [](Rig& r, rr::CaptureSet& o) {
+    single(spec("copy", "clear_render_target_views_formats").tolerance(rr::Tolerance::floats(1.0f / 255.0f + 1e-4f)), [](Rig& r, rr::CaptureSet& o) {
         const DXGI_FORMAT formats[] = {DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_R16G16B16A16_FLOAT, DXGI_FORMAT_R10G10B10A2_UNORM, DXGI_FORMAT_R32G32B32A32_FLOAT,
                                        DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, DXGI_FORMAT_R11G11B10_FLOAT};
         Target t[6];

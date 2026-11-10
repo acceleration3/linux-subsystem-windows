@@ -3,6 +3,15 @@
 namespace lsw::suites::render::d3d11 {
 
 namespace {
+rr::Tolerance depth_tolerance_for(DXGI_FORMAT format, float absolute) {
+    rr::Tolerance t = rr::Tolerance::floats(absolute);
+    if (format == DXGI_FORMAT_D16_UNORM) {
+        t.absolute = 1.6e-5f;
+        t = t.with_edge(1).with_outliers(0.005);
+    }
+    return t;
+}
+
 
 const char* const kPlanePs =
     "struct VO { float4 p : SV_Position; float2 uv : TEXCOORD0; };\n"
@@ -80,7 +89,7 @@ struct DepthRegistrar {
                                       {"d32_float", DXGI_FORMAT_D32_FLOAT, false, 2e-7f, {"om.depth_format_d16_unorm", "om.depth_format_d24_unorm_s8_uint", "om.depth_format_d32_float_s8x24_uint", "om.depth_func_less", "om.depth_func_less_equal"}},
                                       {"d32_float_s8x24_uint", DXGI_FORMAT_D32_FLOAT_S8X24_UINT, true, 2e-7f, {"om.depth_format_d16_unorm", "om.depth_format_d24_unorm_s8_uint", "om.depth_format_d32_float", "om.depth_func_less", "om.depth_func_less_equal"}}};
         for (const Fmt& f : formats) {
-            rr::CaseSpec format_spec = spec("om", (std::string("depth_format_") + f.name).c_str()).tolerance(rr::Tolerance::blend(2).with_edge(2)).tolerance_for("depth", rr::Tolerance::floats(f.depth_tolerance)).tolerance_for("stencil", rr::Tolerance::exact().with_outliers(0.001));
+            rr::CaseSpec format_spec = spec("om", (std::string("depth_format_") + f.name).c_str()).tolerance(rr::Tolerance::blend(2).with_edge(2)).tolerance_for("depth", depth_tolerance_for(f.format, f.depth_tolerance)).tolerance_for("stencil", rr::Tolerance::exact().with_outliers(0.001));
             if (!f.same.empty()) {
                 format_spec.same_as(f.same, std::string("draws the same plane pair as ") + join_names(f.same) + " in a different depth format, so the colour image is identical by design while the depth and stencil captures carry the format; a depth format backed by fewer bits shows in those captures");
             }

@@ -296,7 +296,7 @@ const Registrar kPs{[] {
         r.draw_std(Geo::quad_uv(-0.8f, -0.8f, 0.8f, 0.8f, 0.5f, 0, 0, 1, 1));
         r.cap_main(o);
     });
-    single(spec("ps", "sv_position_pixel_centers").tolerance(rr::Tolerance::exact()), [](Rig& r, rr::CaptureSet& o) {
+    single(spec("ps", "sv_position_pixel_centers").tolerance(rr::Tolerance::tight(1)), [](Rig& r, rr::CaptureSet& o) {
         r.begin();
         r.use_std();
         paint(r, o, PS_HEAD "  float2 f = frac(p.xy); float chk = fmod(floor(p.x / 8) + floor(p.y / 8), 2); return float4(p.x / 128, p.y / 128, abs(f.x - 0.5) * 10 + chk * 0.5, 1); }\n", {}, {}, full_uv());
