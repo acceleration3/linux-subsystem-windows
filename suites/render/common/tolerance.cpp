@@ -38,6 +38,15 @@ Tolerance Tolerance::raster(int delta, int radius) {
     return t;
 }
 
+Tolerance Tolerance::coverage_edges() {
+    Tolerance t;
+    t.edge_radius = 1;
+    t.forgive_fraction = 0.01;
+    t.integer_edges = true;
+    t.name = "coverage-edges";
+    return t;
+}
+
 Tolerance Tolerance::psnr(double decibels) {
     Tolerance t;
     t.byte_delta = 255;

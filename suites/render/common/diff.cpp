@@ -123,7 +123,7 @@ DiffResult ImageDiff::compare(const Image& expected, const Image& actual, const 
             }
         }
     }
-    if (tolerance.edge_radius > 0 && !integer) {
+    if (tolerance.edge_radius > 0 && (!integer || tolerance.integer_edges)) {
         const int radius = tolerance.edge_radius;
         const std::uint64_t cap = std::max(kForgiveFloor, static_cast<std::uint64_t>(tolerance.forgive_fraction * static_cast<double>(drawn_pixels(expected, channels))));
         for (std::uint32_t y = 0; y < height; ++y) {

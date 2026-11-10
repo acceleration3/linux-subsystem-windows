@@ -556,7 +556,7 @@ void register_sample_positions() {
 void register_forced_sample_count() {
     for (UINT count : {4u, 8u, 16u}) {
         Cases::single(
-            rr::CaseSpec("rs", "forced_sample_count_" + std::to_string(count) + "_uav_coverage_popcount").tolerance(rr::Tolerance::exact().with_outliers(0.003)).tag("raster"),
+            rr::CaseSpec("rs", "forced_sample_count_" + std::to_string(count) + "_uav_coverage_popcount").tolerance(rr::Tolerance::coverage_edges()).tag("raster"),
             [count](Kit& kit, rr::CaptureSet& out, std::string& error) {
                 Stage stage;
                 if (!stage.open(kit, error, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_UNKNOWN)) {

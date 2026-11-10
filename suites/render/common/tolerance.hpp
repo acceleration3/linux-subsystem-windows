@@ -13,6 +13,7 @@ struct Tolerance {
     double forgive_fraction = 0.0;
     double outlier_max_delta = 0.0;
     std::uint64_t max_outliers = 0;
+    bool integer_edges = false;
     double min_psnr = 0.0;
     std::string name = "exact";
 
@@ -22,6 +23,7 @@ struct Tolerance {
     [[nodiscard]] static Tolerance filter(int delta = 4, double outliers = 0.001);
     [[nodiscard]] static Tolerance raster(int delta = 1, int radius = 1);
     [[nodiscard]] static Tolerance psnr(double decibels);
+    [[nodiscard]] static Tolerance coverage_edges();
     [[nodiscard]] static Tolerance floats(float absolute, float relative = 0.0f);
 
     [[nodiscard]] Tolerance with_outliers(double fraction) const;

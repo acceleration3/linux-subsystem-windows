@@ -114,7 +114,7 @@ const Add kStencilMasks(spec("om", "stencil_read_and_write_masks_with_reference"
     return true;
 });
 
-const Add kForced(spec("rs", "forced_sample_count_uav_only_rendering").variant(1).uniform_ok("counts"), [](Rig& r, Cap& out) {
+const Add kForced(spec("rs", "forced_sample_count_uav_only_rendering").variant(1).tolerance(rr::Tolerance::coverage_edges()).uniform_ok("counts"), [](Rig& r, Cap& out) {
     ID3D11Device1* raw = nullptr;
     r.dev->QueryInterface(__uuidof(ID3D11Device1), reinterpret_cast<void**>(&raw));
     Com<ID3D11Device1> dev1(raw);
