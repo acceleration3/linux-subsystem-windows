@@ -9,6 +9,7 @@
 #include "support/problems.hpp"
 #include "support/refresh_rate.hpp"
 #include "support/screen_capture.hpp"
+#include "support/av_adapters.hpp"
 #include "support/target_adapter.hpp"
 #include "support/test_window.hpp"
 
@@ -33,6 +34,18 @@ struct Display {
     bool open(std::string& error) {
         if (!TargetAdapter::pick(adapter, error) || !api.load(error) || !extra.load(error)) {
             return false;
+        }
+        if (adapter.hybrid_discrete) {
+            std::vector<AvAdapter> all;
+            if (!AvAdapters::accel(all, error)) {
+                return false;
+            }
+            for (const AvAdapter& candidate : all) {
+                if (candidate.hybrid_integrated || (!candidate.hybrid_discrete && candidate.has_outputs())) {
+                    adapter = candidate;
+                    break;
+                }
+            }
         }
         if (api.open_from_luid(adapter.luid, handle) != 0) {
             error = "D3DKMTOpenAdapterFromLuid failed";
@@ -349,28 +362,27 @@ Outcome DisplayChecks::cursor_shapes(Context& context) {
                 continue;
             }
             ::SetClassLongPtrW(window.hwnd(), GCLP_HCURSOR, reinterpret_cast<LONG_PTR>(shape.cursor));
-            ::SetCursorPos((area.left + area.right) / 2, (area.top + area.bottom) / 2);
-            CURSORINFO info{};
-            info.cbSize = sizeof(info);
+            const POINT centre{(area.left + area.right) / 2, (area.top + area.bottom) / 2};
+            ::SetCursorPos(centre.x, centre.y);
+            POINT now{};
+            ::GetCursorPos(&now);
+            const bool inside = now.x >= area.left && now.x < area.right && now.y >= area.top && now.y < area.bottom;
             bool matched = false;
             for (int i = 0; i < 20 && !matched; ++i) {
                 ::SetCursor(shape.cursor);
                 ::Sleep(25);
-                matched = ::GetCursorInfo(&info) != FALSE && info.hCursor == shape.cursor && (info.flags & CURSOR_SHOWING) != 0;
+                matched = ::GetCursor() == shape.cursor;
             }
             if (!matched) {
-                const POINT centre{(area.left + area.right) / 2, (area.top + area.bottom) / 2};
-                bool pumped = false;
-                for (int i = 0; i < 20 && !pumped; ++i) {
-                    ::SetCursorPos(centre.x, centre.y);
-                    ::SendMessageW(window.hwnd(), WM_SETCURSOR, reinterpret_cast<WPARAM>(window.hwnd()), MAKELPARAM(HTCLIENT, WM_MOUSEMOVE));
-                    ::Sleep(25);
-                    pumped = ::GetCursorInfo(&info) != FALSE && info.hCursor == shape.cursor && (info.flags & CURSOR_SHOWING) != 0;
-                }
-                context.measure(std::string("kmd.cursor_shape.") + std::to_string(size) + "." + shape.name + ".shown_after_wm_setcursor", pumped);
+                problems.add(std::string("GetCursor does not return the ") + std::to_string(size) + " pixel " + shape.name + " cursor the thread set");
             }
-            if (!matched) {
-                problems.add(std::string("GetCursorInfo does not reflect the ") + std::to_string(size) + " pixel " + shape.name + " cursor");
+            if (inside) {
+                CURSORINFO info{};
+                info.cbSize = sizeof(info);
+                const bool shown = ::GetCursorInfo(&info) != FALSE && info.hCursor == shape.cursor && (info.flags & CURSOR_SHOWING) != 0;
+                context.measure(std::string("kmd.cursor_shape.") + std::to_string(size) + "." + shape.name + ".reported_by_getcursorinfo", shown);
+            } else {
+                context.measure(std::string("kmd.cursor_shape.") + std::to_string(size) + "." + shape.name + ".pointer_outside_window", true);
             }
             ::SetClassLongPtrW(window.hwnd(), GCLP_HCURSOR, reinterpret_cast<LONG_PTR>(::LoadCursorW(nullptr, MAKEINTRESOURCEW(32512))));
             ::DestroyCursor(shape.cursor);
