@@ -14,6 +14,9 @@ CPU_QUOTA="${LSW_RENDER_CPU_QUOTA:-400%}"
 started_vm=0
 GPUTEST="${ROOT}/scripts/gpu-test/gpu-test.sh"
 STAMP="$(date +%Y%m%d-%H%M%S)"
+if [[ -n ${LSW_SUITES_KEEP_DUMPS:-} && ${LSW_SUITES_KEEP_DUMPS} != 0 ]]; then
+    export LSW_RENDER_GUEST_SET="${LSW_RENDER_GUEST_SET:+${LSW_RENDER_GUEST_SET};}LSW_SUITES_KEEP_DUMPS=1"
+fi
 RUN_TOKEN="$$"
 
 hosts=local
