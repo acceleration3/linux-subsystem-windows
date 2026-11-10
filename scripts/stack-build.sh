@@ -65,7 +65,10 @@ printf 'driver %s%s\nsuite  %s\nout    %s\nmarch  %s\n' "${DRIVER_SHA}" "$([[ ${
 
 link_third_party() {
     local name
-    for name in .cache dxc khronos opencl-loader qemu vcredist vulkan-runtime vulkan-samples windows-kit; do
+    for name in .cache dxc dxvk khronos opencl-loader qemu vcredist vkd3d-proton vulkan-runtime vulkan-samples windows-kit; do
+        if [[ -d ${WT}/third_party/${name} && ! -L ${WT}/third_party/${name} && -z $(ls -A "${WT}/third_party/${name}") ]]; then
+            rmdir "${WT}/third_party/${name}"
+        fi
         [[ -e ${WT}/third_party/${name} ]] || ln -s "${MAIN_AV}/third_party/${name}" "${WT}/third_party/${name}"
     done
 }
@@ -74,6 +77,7 @@ build_native() {
     local dir="${WT}/build-stack" launcher=()
     command -v ccache >/dev/null 2>&1 && launcher=(-DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache)
     cmake -S "${WT}" -B "${dir}" -G Ninja -DCMAKE_BUILD_TYPE=Release -DAV_SANITIZE=OFF -DAV_CHECKED=OFF -DAV_QEMU=OFF \
+        -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
         -DCMAKE_C_FLAGS="-march=${MARCH}" -DCMAKE_CXX_FLAGS="-march=${MARCH}" "${launcher[@]}" >/dev/null
     cmake --build "${dir}" -j4 --target av_executor av_device drivers
 }
@@ -106,7 +110,10 @@ build_d3dlib() {
         grep -v 'submodule update' "${WT}/tools/build_d3d_runtime.sh" > "${scratch}/tools/build_d3d_runtime.sh"
         chmod +x "${scratch}/tools/build_d3d_runtime.sh"
         for sub in dxvk vkd3d-proton; do
-            rsync -a --exclude .git "${MAIN_AV}/third_party/${sub}/" "${scratch}/third_party/${sub}/"
+            mkdir -p "${scratch}/third_party/${sub}"
+            git -C "${MAIN_AV}/third_party/${sub}" archive HEAD | tar -x -C "${scratch}/third_party/${sub}"
+            git -C "${MAIN_AV}/third_party/${sub}" submodule foreach --quiet --recursive \
+                "mkdir -p '${scratch}/third_party/${sub}/'\"\$displaypath\" && git archive HEAD | tar -x -C '${scratch}/third_party/${sub}/'\"\$displaypath\""
         done
         for repo in third_party/vkd3d-proton/subprojects/dxil-spirv third_party/dxvk third_party/vkd3d-proton; do
             git -C "${scratch}/${repo}" init -q
@@ -151,7 +158,7 @@ build_modules() {
     find "${QEMU_BUILD}" -maxdepth 1 -name '*.so' -exec cp -L {} "${OUT}/qemu-modules/" \;
     cp -f "${work}/mods"/*.so "${OUT}/qemu-modules/"
     rm -rf "${work}" "${obj}"
-    strings -a "${OUT}/qemu-modules/hw-display-virtio-gpu-av.so" | grep -q offer_hybrid || die "the built module has no offer_hybrid: the worktree's glue lacks hybrid"
+    [[ $(strings -a "${OUT}/qemu-modules/hw-display-virtio-gpu-av.so" | grep -c offer_hybrid) -gt 0 ]] || die "the built module has no offer_hybrid: the worktree's glue lacks hybrid"
 }
 
 stage_deploy_files() {
