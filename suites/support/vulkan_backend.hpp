@@ -28,6 +28,7 @@ public:
                             std::uint64_t destination_offset, std::uint64_t size, std::string& error) override;
 
     [[nodiscard]] bool finish(std::string& error) override;
+    [[nodiscard]] bool release_staging(std::string& error);
 
     [[nodiscard]] std::uint64_t max_allocation() override { return state_->max_allocation_size; }
 

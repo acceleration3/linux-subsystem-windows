@@ -86,6 +86,7 @@ Outcome BudgetChecks::vulkan_budget_moves(Context& context) {
         context.note("VK_EXT_memory_budget is not exposed and no budget data is reported");
         return Outcome::ok();
     }
+    static_cast<void>(backend.release_staging(error));
     const std::uint64_t before = backend.heap_usage(true);
     std::uint64_t during = 0;
     Problems problems;
@@ -109,7 +110,7 @@ Outcome BudgetChecks::vulkan_budget_moves(Context& context) {
             }
         }
     }
-    static_cast<void>(backend.finish(error));
+    static_cast<void>(backend.release_staging(error));
     context.measure("usage.before", before);
     context.measure("usage.during", during);
     if (during + (8ull << 20) < before + kSize) {

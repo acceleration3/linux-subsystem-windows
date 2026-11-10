@@ -523,6 +523,27 @@ bool VulkanBackend::finish(std::string& error) {
     return submit(error);
 }
 
+bool VulkanBackend::release_staging(std::string& error) {
+    if (!submit(error)) {
+        return false;
+    }
+    if (ring_ != VK_NULL_HANDLE) {
+        state_->unmap_memory(state_->device, ring_memory_);
+        state_->destroy_buffer(state_->device, ring_, nullptr);
+        state_->free_memory(state_->device, ring_memory_, nullptr);
+        ring_ = VK_NULL_HANDLE;
+        ring_size_ = 0;
+    }
+    if (readback_ != VK_NULL_HANDLE) {
+        state_->unmap_memory(state_->device, readback_memory_);
+        state_->destroy_buffer(state_->device, readback_, nullptr);
+        state_->free_memory(state_->device, readback_memory_, nullptr);
+        readback_ = VK_NULL_HANDLE;
+        readback_size_ = 0;
+    }
+    return true;
+}
+
 std::uint64_t VulkanBackend::heap_usage(bool device_local) {
     std::vector<VkDeviceSize> usage;
     std::vector<VkDeviceSize> limit;
