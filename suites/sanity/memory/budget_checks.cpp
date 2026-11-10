@@ -8,6 +8,7 @@
 #include "support/target_adapter.hpp"
 #include "support/vulkan_backend.hpp"
 
+#include <algorithm>
 #include <windows.h>
 
 namespace lsw::suites::sanity::memory {
@@ -25,6 +26,8 @@ Outcome BudgetChecks::dxgi_moves_with_alloc(Context& context) {
         VideoMemory during;
         VideoMemory after;
         std::string error;
+        const std::uint64_t resource_limit = std::max<std::uint64_t>(128ull << 20, std::min<std::uint64_t>(adapter.dedicated_video / 4, 2048ull << 20));
+        const std::uint64_t size = std::min(kSize, resource_limit);
         if (!DxgiBudget::query(adapter.luid, true, before, error)) {
             problems.add(api + ": " + error);
             return;
@@ -32,12 +35,12 @@ Outcome BudgetChecks::dxgi_moves_with_alloc(Context& context) {
         {
             AllocStatus status = AllocStatus::Ok;
             std::string detail;
-            std::unique_ptr<GpuBuffer> buffer = backend.create(kSize, BufferKind::Device, status, detail);
+            std::unique_ptr<GpuBuffer> buffer = backend.create(size, BufferKind::Device, status, detail);
             if (buffer == nullptr) {
                 problems.add(api + ": " + detail);
                 return;
             }
-            if (!BackendHarness::fill_and_verify(backend, *buffer, 120, kSize, context, error) ||
+            if (!BackendHarness::fill_and_verify(backend, *buffer, 120, size, context, error) ||
                 !DxgiBudget::query(adapter.luid, true, during, error)) {
                 problems.add(api + ": " + error);
                 return;
@@ -47,15 +50,15 @@ Outcome BudgetChecks::dxgi_moves_with_alloc(Context& context) {
         context.measure(api + ".usage_before", before.usage);
         context.measure(api + ".usage_during", during.usage);
         const std::uint64_t slack = 8ull << 20;
-        if (during.usage + slack < before.usage + kSize) {
+        if (during.usage + slack < before.usage + size) {
             problems.add(api + ": CurrentUsage rose by " + std::to_string((during.usage > before.usage ? during.usage - before.usage : 0) >> 20) +
                          " MiB (" + std::to_string(before.usage) + " to " + std::to_string(during.usage) + " bytes) for a touched " +
-                         std::to_string(kSize >> 20) + " MiB allocation");
+                         std::to_string(size >> 20) + " MiB allocation");
         }
         bool fell = false;
         for (int poll = 0; poll < 30 && !fell; ++poll) {
             if (DxgiBudget::query(adapter.luid, true, after, error)) {
-                fell = after.usage <= before.usage + kSize / 4;
+                fell = after.usage <= before.usage + size / 4;
             }
             if (!fell) {
                 ::Sleep(100);
