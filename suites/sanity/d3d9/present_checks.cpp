@@ -219,6 +219,7 @@ Outcome PresentChecks::presentex_flags(Context& context) {
     }
     settings.effect = D3DSWAPEFFECT_FLIPEX;
     settings.buffers = 2;
+    settings.extra_behavior = D3DCREATE_ENABLE_PRESENTSTATS;
     if (FAILED(rig.try_create(settings))) {
         settings.effect = D3DSWAPEFFECT_DISCARD;
         settings.buffers = 1;
