@@ -83,6 +83,7 @@ def command_push(args):
         finished = bat(link, share, directory, "render-run refs", [
             "if exist render-refs rmdir /s /q render-refs",
             'powershell -NoProfile -Command "Expand-Archive -Force -Path render-refs.zip -DestinationPath render-refs"',
+            'powershell -NoProfile -Command "Write-VolumeCache -DriveLetter C"',
         ], "done-push.txt", deadline)
         if not finished:
             print("the guest did not unpack the references in time", file=sys.stderr)
