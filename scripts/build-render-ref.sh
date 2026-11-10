@@ -29,5 +29,6 @@ if [[ ! -x "${BUILD}/lsw-render-ref" ]]; then
     echo "!!! Build did not produce ${BUILD}/lsw-render-ref" >&2
     exit 1
 fi
+objcopy --remove-section .note.gnu.property "${BUILD}/lsw-render-ref"
 printf '%s\n' "${revision}" > "${BUILD}/REVISION"
 echo ">>> Built ${BUILD}/lsw-render-ref (${revision})"
