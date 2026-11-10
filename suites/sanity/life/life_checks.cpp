@@ -439,19 +439,21 @@ Outcome LifeChecks::session_logoff_logon(Context& context) {
     DWORD session = 0;
     ::ProcessIdToSessionId(::GetCurrentProcessId(), &session);
     const std::string before = adapter_keys();
-    const std::wstring reconnect = L"schtasks.exe /Create /TN lsw-suites-reconnect /TR \"tscon.exe " + std::to_wstring(session) + L" /dest:console\" /SC ONCE /ST 23:59 /RU SYSTEM /RL HIGHEST /F";
+    const std::wstring reconnect = L"schtasks.exe /Create /TN lsw-suites-reconnect /TR \"cmd.exe /c ping -n 8 127.0.0.1 >nul & tscon.exe " + std::to_wstring(session) + L" /dest:console\" /SC ONCE /ST 23:59 /RU SYSTEM /RL HIGHEST /F";
     DWORD code = 0;
     if (!Kit::run(reconnect, code) || code != 0) {
         return Context::skip("a SYSTEM task to reconnect the session cannot be created (schtasks exit " + std::to_string(code) + ")");
     }
     Problems problems;
+    if (!Kit::run(L"schtasks.exe /Run /TN lsw-suites-reconnect", code) || code != 0) {
+        static_cast<void>(Kit::run(L"schtasks.exe /Delete /TN lsw-suites-reconnect /F", code));
+        return Context::skip("the SYSTEM reconnect task cannot be started (schtasks exit " + std::to_string(code) + ")");
+    }
     if (!Kit::run(L"tsdiscon.exe", code) || code != 0) {
         static_cast<void>(Kit::run(L"schtasks.exe /Delete /TN lsw-suites-reconnect /F", code));
         return Context::skip("the session cannot be disconnected (tsdiscon exit " + std::to_string(code) + ")");
     }
-    ::Sleep(3000);
-    static_cast<void>(Kit::run(L"schtasks.exe /Run /TN lsw-suites-reconnect", code));
-    ::Sleep(8000);
+    ::Sleep(14000);
     static_cast<void>(Kit::run(L"schtasks.exe /Delete /TN lsw-suites-reconnect /F", code));
     const std::string after = adapter_keys();
     if (before != after) {
