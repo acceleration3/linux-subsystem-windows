@@ -553,6 +553,27 @@ void register_sample_positions() {
     }
 }
 
+std::string needs_forced_count(Kit& kit, UINT count) {
+    Stage stage;
+    std::string error;
+    if (!stage.open(kit, error, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_UNKNOWN)) {
+        return {};
+    }
+    const char* ps = "void main(float4 pos : SV_Position) {}\n";
+    auto builds = [&](UINT forced) {
+        Pso builder(kit, stage.canvas.binder.signature);
+        builder.vs(Hlsl12::with_root(Hlsl12::kFlatVs)).ps(Hlsl12::with_root(ps)).targets({});
+        builder.desc.NumRenderTargets = 0;
+        builder.desc.RasterizerState.ForcedSampleCount = forced;
+        std::string ignored;
+        return builder.build(ignored) != nullptr;
+    };
+    if (!builds(1)) {
+        return {};
+    }
+    return builds(count) ? std::string() : "forced sample count " + std::to_string(count) + " without render targets";
+}
+
 void register_forced_sample_count() {
     for (UINT count : {4u, 8u, 16u}) {
         Cases::single(
@@ -605,7 +626,8 @@ void register_forced_sample_count() {
                 }
                 out.add("", std::move(image));
                 return true;
-            });
+            },
+            [count](Kit& kit) { return needs_forced_count(kit, count); });
     }
 }
 
