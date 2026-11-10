@@ -11,6 +11,7 @@
 #include "support/dxgi_budget.hpp"
 #include "support/dyn_library.hpp"
 #include "support/gl_backend.hpp"
+#include "support/handle_types.hpp"
 #include "support/leak_loop.hpp"
 #include "support/memory_tools.hpp"
 #include "support/opencl_backend.hpp"
@@ -491,6 +492,7 @@ Outcome LeakChecks::shared_resources(Context& context) {
             return Outcome::fail("ID3D11Device1 is not available");
         }
         const ProcessSample before = ProcessSampler::take();
+        const auto types_before = HandleTypes::count();
         for (int i = 0; i < kShared; ++i) {
             ID3D11Texture2D* texture = nullptr;
             const HRESULT result = device1->OpenSharedResourceByName(Text::wide(prefix + std::to_string(i)).c_str(), DXGI_SHARED_RESOURCE_READ,
@@ -505,6 +507,7 @@ Outcome LeakChecks::shared_resources(Context& context) {
         const ProcessSample after = ProcessSampler::take();
         context.measure("child.private_delta", static_cast<long long>(after.private_bytes) - static_cast<long long>(before.private_bytes));
         context.measure("child.handle_delta", static_cast<long long>(after.handles) - static_cast<long long>(before.handles));
+        context.measure("child.handle_types", HandleTypes::grown(types_before, HandleTypes::count()));
         device1->Release();
         return Outcome::ok();
     }
@@ -579,7 +582,8 @@ Outcome LeakChecks::shared_resources(Context& context) {
         problems.add("GPU usage did not return to its baseline in the creating process");
     }
     if (ChildRuns::number(child, "child.handle_delta") > LeakLoop::kHandleTolerance) {
-        problems.add("the opening process kept " + std::to_string(ChildRuns::number(child, "child.handle_delta")) + " handles after closing the resources");
+        problems.add("the opening process kept " + std::to_string(ChildRuns::number(child, "child.handle_delta")) + " handles after closing the resources (" +
+                     ChildRuns::text(child, "child.handle_types") + ")");
     }
     if (ChildRuns::number(child, "child.private_delta") > static_cast<long long>(LeakLoop::kPrivateTolerance)) {
         problems.add("the opening process kept private memory after closing the resources");

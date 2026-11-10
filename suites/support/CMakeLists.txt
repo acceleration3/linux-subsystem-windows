@@ -51,6 +51,7 @@ add_library(suite_support OBJECT
     gpu_backends.cpp
     opencl_backend.cpp
     process_sampler.cpp
+    handle_types.cpp
     stress_load.cpp
     gate_window.cpp
     render_probe.cpp
