@@ -227,7 +227,7 @@ builds. Area counts are in the headings.
 
 | check | contract |
 |---|---|
-| `sanity.enum.memory.dedicated_vs_shared_consistent` | DXGI dedicated and shared memory sizes, D3DKMT segment sizes and Vulkan heap sizes describe the same adapter within a stated tolerance, and no value is zero for an adapter that is not software. |
+| `sanity.enum.memory.dedicated_vs_shared_consistent` | DXGI dedicated and shared memory sizes, D3DKMT segment sizes and Vulkan heap sizes describe the same adapter within a stated tolerance, and no value is zero for an adapter that is not software; on a unified memory adapter whose only Vulkan heap is device-local, that heap is compared with D3DKMT dedicated plus shared instead of a separate host heap. |
 | `sanity.enum.memory.opencl_global_size` | CL_DEVICE_GLOBAL_MEM_SIZE does not exceed the sum of the heaps Vulkan and DXGI report for the same adapter, and CL_DEVICE_MAX_MEM_ALLOC_SIZE does not exceed the global size. |
 | `sanity.enum.caps.feature_level_vs_api_support` | The maximum feature level D3D11 reports is consistent with what D3D12 and Vulkan report for the same adapter (a device that supports a D3D12 feature level supports the lower D3D11 ones). |
 

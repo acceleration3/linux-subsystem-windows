@@ -88,15 +88,22 @@ Outcome MemoryChecks::dedicated_vs_shared_consistent(Context& context) {
         const std::uint64_t host = device->total_host_heaps();
         context.measure(adapter.luid_text() + ".vk.device_local", local);
         context.measure(adapter.luid_text() + ".vk.host", host);
-        if (local == 0 || host == 0) {
-            problems.add(label + ": Vulkan reports a zero device-local or host heap");
+        const bool unified = host == 0 && local != 0;
+        if (local == 0) {
+            problems.add(label + ": Vulkan reports a zero device-local heap");
         }
         if (!within(local, segments.dedicated_video, kDedicatedTolerancePercent)) {
             problems.add(label + ": Vulkan device-local heap " + std::to_string(local) + " vs D3DKMT dedicated " +
                          std::to_string(segments.dedicated_video) + " differ by more than " +
                          std::to_string(kDedicatedTolerancePercent) + "%");
         }
-        if (!within(host, segments.shared_system, kSharedTolerancePercent)) {
+        if (unified) {
+            const std::uint64_t reachable = segments.dedicated_video + segments.shared_system;
+            if (local > reachable + reachable * kSharedTolerancePercent / 100) {
+                problems.add(label + ": the single Vulkan device-local heap " + std::to_string(local) + " exceeds D3DKMT dedicated plus shared " +
+                             std::to_string(reachable) + " by more than " + std::to_string(kSharedTolerancePercent) + "%");
+            }
+        } else if (!within(host, segments.shared_system, kSharedTolerancePercent)) {
             problems.add(label + ": Vulkan host heaps " + std::to_string(host) + " vs D3DKMT shared " +
                          std::to_string(segments.shared_system) + " differ by more than " +
                          std::to_string(kSharedTolerancePercent) + "%");
