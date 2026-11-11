@@ -137,7 +137,7 @@ const Add kIndependent(spec("om", "blend_independent_eight_targets").tolerance(r
         return true;
     });
 
-bool run_msaa_blend(Rig& r, Cap& out, bool coverage, UINT sample_mask) {
+bool run_msaa_blend(Rig& r, Cap& out, bool coverage, UINT sample_mask, bool with_references = false) {
     Target target;
     if (!r.color(target, 128, 128, DXGI_FORMAT_R8G8B8A8_UNORM, 4)) return false;
     const char* ps_source =
@@ -158,18 +158,25 @@ bool run_msaa_blend(Rig& r, Cap& out, bool coverage, UINT sample_mask) {
     r.bind(target);
     r.ctx->RSSetState(rs.get());
     r.draw_fs(back.get());
+    if (with_references && !r.shot(out, target, "back")) return false;
     const float factor[4] = {};
     r.ctx->OMSetBlendState(state.get(), factor, sample_mask);
     r.draw_fs(ps.get());
-    return r.shot(out, target);
+    if (!r.shot(out, target)) return false;
+    if (!with_references) return true;
+    Com<ID3D11BlendState> plain = r.blend(bdesc());
+    if (!plain) return false;
+    r.ctx->OMSetBlendState(plain.get(), factor, 0xffffffffu);
+    r.draw_fs(ps.get());
+    return r.shot(out, target, "front");
 }
 
 const Add kAlphaToCoverage(spec("om", "alpha_to_coverage_4x").tolerance(rr::Tolerance::psnr(24)), [](Rig& r, Cap& out) { return run_msaa_blend(r, out, true, 0xffffffffu); },
                            [](Rig& r) { return need_msaa(r, DXGI_FORMAT_R8G8B8A8_UNORM, 4); });
 const Add kSampleMask(spec("om", "sample_mask_4x").tolerance(rr::Tolerance::psnr(30)), [](Rig& r, Cap& out) { return run_msaa_blend(r, out, false, 0x5u); },
                       [](Rig& r) { return need_msaa(r, DXGI_FORMAT_R8G8B8A8_UNORM, 4); });
-const Add kAlphaToCoverageMask(spec("om", "alpha_to_coverage_with_sample_mask").tolerance(rr::Tolerance::psnr(24)),
-                               [](Rig& r, Cap& out) { return run_msaa_blend(r, out, true, 0xAu); },
+const Add kAlphaToCoverageMask(spec("om", "alpha_to_coverage_with_sample_mask").tolerance(rr::Tolerance::blend(2)).tolerance_for("", rr::Tolerance::blend(3).with_coverage_blocks()),
+                               [](Rig& r, Cap& out) { return run_msaa_blend(r, out, true, 0xAu, true); },
                                [](Rig& r) { return need_msaa(r, DXGI_FORMAT_R8G8B8A8_UNORM, 4); });
 
 }  // namespace

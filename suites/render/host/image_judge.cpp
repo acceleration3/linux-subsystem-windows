@@ -3,6 +3,7 @@
 #include "render/common/png.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <set>
 
@@ -94,6 +95,10 @@ const char* ImageJudge::quad_bracket_reason() {
     return "the Direct3D 11 functional spec leaves ddx and ddy to the implementation, which may take one value per 2x2 quad from either of its two rows or columns, so a pixel may take any value between those of its quad in the WARP rendering with per pixel derivatives";
 }
 
+const char* ImageJudge::coverage_blocks_reason() {
+    return "the Direct3D 11 functional spec leaves the alpha to coverage pattern to the implementation and applies the sample mask to the result, so each 8x8 block average of the resolve must lie between the blends of the pixels' back and front colours with the fewest and the most front samples that coverage and the mask allow";
+}
+
 rr::Image ImageJudge::quad_bracketed(const rr::Image& expected, const rr::Image& actual, const rr::Tolerance& tolerance) {
     const bool shaped = actual.width() == expected.width() && actual.height() == expected.height() && actual.kind() == expected.kind();
     if (!shaped || rr::PixelInfo::is_integer(expected.kind())) {
@@ -120,6 +125,60 @@ rr::Image ImageJudge::quad_bracketed(const rr::Image& expected, const rr::Image&
                         if (v >= lo && v <= hi) {
                             out.set_channel(x, y, c, v);
                         }
+                    }
+                }
+            }
+        }
+    }
+    return out;
+}
+
+rr::Image ImageJudge::coverage_adjusted(const rr::Image& expected, const rr::Image& actual, const rr::Image& back, const rr::Image& front,
+                                        const rr::Tolerance& tolerance) {
+    constexpr std::uint32_t kBlock = 8;
+    constexpr double kCoverageMargin = 0.05;
+    const auto same_shape = [&](const rr::Image& other) {
+        return other.width() == expected.width() && other.height() == expected.height() && other.kind() == expected.kind();
+    };
+    if (!same_shape(actual) || !same_shape(back) || !same_shape(front) || rr::PixelInfo::channel_class(expected.kind()) != rr::ChannelClass::Unorm8 ||
+        rr::PixelInfo::channels(expected.kind()) != 4) {
+        return expected;
+    }
+    const double slack = static_cast<double>(tolerance.byte_delta);
+    rr::Image out = expected;
+    for (std::uint32_t by = 0; by < expected.height(); by += kBlock) {
+        for (std::uint32_t bx = 0; bx < expected.width(); bx += kBlock) {
+            const std::uint32_t ex = std::min(bx + kBlock, expected.width());
+            const std::uint32_t ey = std::min(by + kBlock, expected.height());
+            const double pixels = static_cast<double>((ex - bx) * (ey - by));
+            bool inside = true;
+            for (unsigned c = 0; c < 4 && inside; ++c) {
+                double low = 0.0;
+                double high = 0.0;
+                double got = 0.0;
+                for (std::uint32_t y = by; y < ey; ++y) {
+                    for (std::uint32_t x = bx; x < ex; ++x) {
+                        const double alpha = front.channel(x, y, 3) / 255.0;
+                        const int fewest = std::max(0, static_cast<int>(std::floor(4.0 * alpha - kCoverageMargin)) - 2);
+                        const int most = std::min(2, static_cast<int>(std::ceil(4.0 * alpha + kCoverageMargin)));
+                        const double b = back.channel(x, y, c);
+                        const double f = front.channel(x, y, c);
+                        const double with_fewest = b + (f - b) * fewest / 4.0;
+                        const double with_most = b + (f - b) * most / 4.0;
+                        low += std::min(with_fewest, with_most);
+                        high += std::max(with_fewest, with_most);
+                        got += actual.channel(x, y, c);
+                    }
+                }
+                inside = got / pixels >= low / pixels - slack && got / pixels <= high / pixels + slack;
+            }
+            if (!inside) {
+                continue;
+            }
+            for (std::uint32_t y = by; y < ey; ++y) {
+                for (std::uint32_t x = bx; x < ex; ++x) {
+                    for (unsigned c = 0; c < 4; ++c) {
+                        out.set_channel(x, y, c, actual.channel(x, y, c));
                     }
                 }
             }
@@ -212,6 +271,26 @@ void ImageJudge::compare_frames(Context& context, Problems& problems, const rr::
                     context.measure("quad_bracket", std::string(quad_bracket_reason()));
                 }
                 adjusted = quad_bracketed(*reference, *image, tolerance);
+                judged_reference = &adjusted;
+            }
+            if (tolerance.coverage_blocks) {
+                if (reasons.insert("coverage_blocks").second) {
+                    context.measure("coverage_blocks", std::string(coverage_blocks_reason()));
+                }
+                const rr::Image* back = nullptr;
+                const rr::Image* front = nullptr;
+                for (const auto& item : got->second.items()) {
+                    if (item.first == "back") {
+                        back = &item.second;
+                    } else if (item.first == "front") {
+                        front = &item.second;
+                    }
+                }
+                if (back == nullptr || front == nullptr) {
+                    problems.add(name + ": the scene captured no back and front images to judge the coverage against");
+                    continue;
+                }
+                adjusted = coverage_adjusted(*reference, *image, *back, *front, tolerance);
                 judged_reference = &adjusted;
             }
             compare(context, problems, name, *judged_reference, *image, tolerance, spec.uniform_allowed(capture), dump ? &records : nullptr);

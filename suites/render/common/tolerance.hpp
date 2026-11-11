@@ -16,6 +16,7 @@ struct Tolerance {
     bool integer_edges = false;
     bool wrap = false;
     bool quad_bracket = false;
+    bool coverage_blocks = false;
     double min_psnr = 0.0;
     std::string name = "exact";
 
@@ -33,5 +34,6 @@ struct Tolerance {
     [[nodiscard]] Tolerance with_edge(int radius) const;
     [[nodiscard]] Tolerance with_wrap() const;
     [[nodiscard]] Tolerance with_quad_bracket() const;
+    [[nodiscard]] Tolerance with_coverage_blocks() const;
 };
 }  // namespace lsw::render

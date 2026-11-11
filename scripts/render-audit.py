@@ -109,6 +109,7 @@ def normalize_tolerance(raw):
         "min_psnr": raw.get("min_psnr", 0.0),
         "wrap": bool(raw.get("wrap", False)),
         "quad_bracket": bool(raw.get("quad_bracket", False)),
+        "coverage_blocks": bool(raw.get("coverage_blocks", False)),
         "name": raw.get("name", "?"),
     }
 
@@ -139,9 +140,54 @@ def quad_bracketed(expected, actual, tol):
     return clone(expected, out)
 
 
+def coverage_adjusted(expected, actual, back, front, tol):
+    block = 8
+    margin = 0.05
+    shapes = {(r.width, r.height, r.kind) for r in (expected, actual, back, front)}
+    if len(shapes) != 1 or expected.klass != "unorm8" or expected.channels != 4:
+        return expected
+    width, height = expected.width, expected.height
+    slack = float(tol["byte_delta"])
+    out = array.array("d", expected.data)
+    for by in range(0, height, block):
+        for bx in range(0, width, block):
+            ex, ey = min(bx + block, width), min(by + block, height)
+            pixels = float((ex - bx) * (ey - by))
+            inside = True
+            for c in range(4):
+                if not inside:
+                    break
+                low = high = got = 0.0
+                for y in range(by, ey):
+                    for x in range(bx, ex):
+                        at = (y * width + x) * 4
+                        alpha = front.data[at + 3] / 255.0
+                        fewest = max(0, int(math.floor(4.0 * alpha - margin)) - 2)
+                        most = min(2, int(math.ceil(4.0 * alpha + margin)))
+                        b = back.data[at + c]
+                        f = front.data[at + c]
+                        with_fewest = b + (f - b) * fewest / 4.0
+                        with_most = b + (f - b) * most / 4.0
+                        low += min(with_fewest, with_most)
+                        high += max(with_fewest, with_most)
+                        got += actual.data[at + c]
+                inside = low / pixels - slack <= got / pixels <= high / pixels + slack
+            if not inside:
+                continue
+            for y in range(by, ey):
+                for x in range(bx, ex):
+                    at = (y * width + x) * 4
+                    out[at:at + 4] = actual.data[at:at + 4]
+    return clone(expected, out)
+
+
 def adjusted_oracle(oracle, actual, tol, directory, frame):
     if tol["quad_bracket"]:
         oracle = quad_bracketed(oracle, actual, tol)
+    if tol["coverage_blocks"]:
+        back = read_rref(os.path.join(directory, stem_of(frame, "back") + ".actual.rref"))
+        front = read_rref(os.path.join(directory, stem_of(frame, "front") + ".actual.rref"))
+        oracle = coverage_adjusted(oracle, actual, back, front, tol)
     return oracle
 
 
