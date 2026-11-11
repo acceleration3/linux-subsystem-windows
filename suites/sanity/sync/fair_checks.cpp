@@ -74,7 +74,7 @@ Outcome FairChecks::contention_no_deadlock(Context& context) {
     ApiLoop::run(problems, GpuBackends::names(), [&](GpuBackend& backend, const std::string& api, const AvAdapter&) {
         std::vector<std::unique_ptr<GpuBackend>> contexts;
         for (int i = 0; i < kThreads; ++i) {
-            std::unique_ptr<GpuBackend> next = backend.new_context();
+            std::unique_ptr<GpuBackend> next = backend.new_device();
             if (next == nullptr) {
                 problems.add(api + ": creating context " + std::to_string(i) + " failed");
                 return;
@@ -140,8 +140,8 @@ Outcome FairChecks::contention_no_deadlock(Context& context) {
 Outcome FairChecks::low_rate_not_starved(Context& context) {
     Problems problems;
     ApiLoop::run(problems, GpuBackends::names(), [&](GpuBackend& backend, const std::string& api, const AvAdapter&) {
-        std::unique_ptr<GpuBackend> light = backend.new_context();
-        std::unique_ptr<GpuBackend> heavy = backend.new_context();
+        std::unique_ptr<GpuBackend> light = backend.new_device();
+        std::unique_ptr<GpuBackend> heavy = backend.new_device();
         if (light == nullptr || heavy == nullptr) {
             problems.add(api + ": creating the contexts failed");
             return;
@@ -194,8 +194,8 @@ Outcome FairChecks::low_rate_not_starved(Context& context) {
 Outcome FairChecks::equal_load_share(Context& context) {
     Problems problems;
     ApiLoop::run(problems, GpuBackends::names(), [&](GpuBackend& backend, const std::string& api, const AvAdapter&) {
-        std::unique_ptr<GpuBackend> a = backend.new_context();
-        std::unique_ptr<GpuBackend> b = backend.new_context();
+        std::unique_ptr<GpuBackend> a = backend.new_device();
+        std::unique_ptr<GpuBackend> b = backend.new_device();
         if (a == nullptr || b == nullptr) {
             problems.add(api + ": creating the contexts failed");
             return;

@@ -66,6 +66,8 @@ public:
     [[nodiscard]] virtual std::uint64_t map_alignment() { return 0; }
 
     [[nodiscard]] virtual std::unique_ptr<GpuBackend> new_context() { return nullptr; }
+
+    [[nodiscard]] virtual std::unique_ptr<GpuBackend> new_device() { return new_context(); }
 };
 
 class GpuBackends {

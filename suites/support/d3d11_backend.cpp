@@ -37,6 +37,13 @@ bool D3d11Backend::init(const LUID& luid, std::string& error) {
 
 std::unique_ptr<GpuBackend> D3d11Backend::new_context() {
     auto other = std::make_unique<D3d11Backend>();
+    other->device_ = device_;
+    other->luid_ = luid_;
+    return other;
+}
+
+std::unique_ptr<GpuBackend> D3d11Backend::new_device() {
+    auto other = std::make_unique<D3d11Backend>();
     other->luid_ = luid_;
     other->device_ = std::make_shared<D3d11Device>();
     std::string error;

@@ -38,6 +38,8 @@ public:
 
     [[nodiscard]] std::unique_ptr<GpuBackend> new_context() override;
 
+    [[nodiscard]] std::unique_ptr<GpuBackend> new_device() override;
+
     [[nodiscard]] std::unique_ptr<GpuBuffer> create_shared(std::uint64_t size, HANDLE& handle, std::string& error);
 
     [[nodiscard]] D3d11Device& shared() { return *device_; }
