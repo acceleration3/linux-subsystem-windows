@@ -341,7 +341,7 @@ class DesktopClear(unittest.TestCase):
         ctx.link = lambda timeout=60.0: FakeLink(ctx)
         return ctx
 
-    def test_suite_shell_and_agent_windows_are_never_closed(self):
+    def test_suite_shell_and_agent_windows_are_never_recorded(self):
         found = suite_run.stray_windows([
             window(1, "C:\\av\\render-run\\x\\lsw-suites64.exe"), window(2, "C:\\Windows\\explorer.exe", "Program Manager"),
             window(3, "C:\\Windows\\System32\\cmd.exe"), window(4, "C:\\av\\lsw-guest-agent.exe"),
@@ -352,45 +352,34 @@ class DesktopClear(unittest.TestCase):
         found = suite_run.stray_windows([window(7, "C:\\Program Files\\Browser\\browser.exe", "Welcome", 77)])
         self.assertEqual([(w["process"], w["title"], w["hwnd"]) for w in found], [("browser.exe", "Welcome", 7)])
 
-    def test_a_stray_window_is_closed_and_recorded(self):
+    def test_a_stray_window_is_recorded_and_left_alone(self):
         stray = window(7, "C:\\Browser\\browser.exe", "Welcome", 77)
-        ctx = self.make([stray], [])
-        with mock.patch.object(suite_run.time, "sleep"):
-            suite_run.clear_desktop(ctx, "isolated")
-        self.assertIn(("close_window", {"hwnd": 7}), ctx.calls)
-        self.assertNotIn("run_script", [c for c, _ in ctx.calls])
-        self.assertEqual([(r["process"], r["title"], r["phase"], r["closed_by"]) for r in ctx.desktop],
-                         [("browser.exe", "Welcome", "isolated", "WM_CLOSE")])
+        ctx = self.make([stray])
+        suite_run.record_desktop(ctx, "isolated")
+        self.assertEqual([c for c, _ in ctx.calls], ["list_windows"])
+        self.assertEqual([(r["process"], r["title"], r["phase"]) for r in ctx.desktop], [("browser.exe", "Welcome", "isolated")])
 
-    def test_a_window_that_stays_open_is_ended_through_the_process(self):
-        stray = window(7, "C:\\Browser\\browser.exe", "Welcome", 77)
-        ctx = self.make([stray], [stray])
-        with mock.patch.object(suite_run.time, "sleep"):
-            suite_run.clear_desktop(ctx, "isolated")
-        script = [p for c, p in ctx.calls if c == "run_script"][0]["script"]
-        self.assertIn("taskkill /f /pid 77", script)
-        self.assertEqual(ctx.desktop[0]["closed_by"], "taskkill")
-
-    def test_the_desktop_is_cleared_again_until_the_settle_window_ends(self):
+    def test_a_window_is_recorded_once_per_phase_while_the_desktop_settles(self):
         late = window(7, "C:\\Browser\\browser.exe", "Welcome", 77)
-        ctx = self.make([window(1, "C:\\Windows\\explorer.exe")], [window(1, "C:\\Windows\\explorer.exe")], [late], [])
-        clock = iter([0.0, 3.0, 6.0, 9.0, 12.0, 31.0])
+        ctx = self.make([window(1, "C:\\Windows\\explorer.exe")], [late], [late], [late])
+        clock = iter([0.0, 3.0, 6.0, 9.0, 31.0])
         with mock.patch.object(suite_run.time, "sleep"), mock.patch.object(
                 suite_run.time, "monotonic", side_effect=lambda: next(clock)):
             suite_run.settle_desktop(ctx, "isolated", window=30.0, interval=3.0)
-        self.assertIn(("close_window", {"hwnd": 7}), ctx.calls)
         self.assertEqual([r["process"] for r in ctx.desktop], ["browser.exe"])
+        self.assertNotIn("close_window", [c for c, _ in ctx.calls])
+        self.assertNotIn("run_script", [c for c, _ in ctx.calls])
 
     def test_a_clean_desktop_records_nothing(self):
         ctx = self.make([window(1, "C:\\Windows\\explorer.exe")])
-        suite_run.clear_desktop(ctx, "isolated")
+        suite_run.record_desktop(ctx, "isolated")
         self.assertEqual(ctx.desktop, [])
         self.assertEqual([c for c, _ in ctx.calls], ["list_windows"])
 
     def test_the_incident_is_written_to_the_result_directory(self):
         ctx = types.SimpleNamespace(args=types.SimpleNamespace(suite="sanity", timeout=1, bits="64", filter=""), limit_hit=False,
                                     incidents=[], desktop=[{"time": "t", "phase": "isolated", "process": "browser.exe",
-                                                            "title": "Welcome", "closed_by": "WM_CLOSE"}])
+                                                            "title": "Welcome"}])
         with tempfile.TemporaryDirectory() as directory:
             spec = suite_run.Spec("x", "", directory)
             ctx.share = types.SimpleNamespace(get=mock.Mock(side_effect=suite_run.lsw_link.LinkError("none")))
