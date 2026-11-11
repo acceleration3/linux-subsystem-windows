@@ -132,11 +132,30 @@ void mouse(int x, int y, DWORD flags) {
     ::SendInput(1, &input, sizeof(input));
 }
 
+bool in_menu_mode(HWND window) {
+    GUITHREADINFO info{};
+    info.cbSize = sizeof(info);
+    const DWORD thread = ::GetWindowThreadProcessId(window, nullptr);
+    return ::GetGUIThreadInfo(thread, &info) != FALSE && (info.flags & (GUI_INMENUMODE | GUI_SYSTEMMENUMODE)) != 0;
+}
+
 void focus(HWND window) {
-    ::keybd_event(VK_MENU, 0, 0, 0);
+    DWORD foreground_pid = 0;
+    const HWND foreground = ::GetForegroundWindow();
+    if (foreground != nullptr) {
+        ::GetWindowThreadProcessId(foreground, &foreground_pid);
+    }
+    if (foreground_pid != ::GetCurrentProcessId()) {
+        INPUT nudge{};
+        nudge.type = INPUT_MOUSE;
+        nudge.mi.dwFlags = MOUSEEVENTF_MOVE;
+        ::SendInput(1, &nudge, sizeof(nudge));
+    }
     ::SetForegroundWindow(window);
-    ::keybd_event(VK_MENU, 0, KEYEVENTF_KEYUP, 0);
     for (int i = 0; i < 40 && ::GetForegroundWindow() != window; ++i) {
+        ::Sleep(25);
+    }
+    for (int i = 0; i < 40 && in_menu_mode(window); ++i) {
         ::Sleep(25);
     }
 }
