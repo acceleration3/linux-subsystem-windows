@@ -244,7 +244,7 @@ Implementation note: query, display and escape rows call the documented D3DKMT e
 | `sanity.kmd.query.unsupported_type_status` | Querying an out-of-range or unsupported info type returns a failure status and never crashes or changes later answers. |
 | `sanity.kmd.query.segment_info_consistent` | Segment descriptors are self-consistent: sizes nonzero, commit limits not above segment size, aperture flags matching the memory heaps DXGI reports for the same adapter. |
 | `sanity.kmd.query.driver_caps_self_consistent` | WDDM caps report a version at or above 2.0 and the supported scheduling, preemption and flip-model capabilities agree with the DXGI-reported capabilities (e.g. flip model present support). |
-| `sanity.kmd.query.open_adapter_from_hdc_and_name` | D3DKMTOpenAdapterFromHdc, FromGdiDisplayName and FromLuid return the same adapter handle identity (same LUID) for the same output. |
+| `sanity.kmd.query.open_adapter_from_hdc_and_name` | D3DKMTOpenAdapterFromHdc and FromGdiDisplayName return the adapter that owns the output's VidPn source (on a hybrid system the integrated adapter, also for outputs DXGI lists under the discrete one) and that source id, as QueryDisplayConfig reports them, and FromLuid opens that adapter. |
 | `sanity.kmd.query.close_adapter_twice` | Closing an adapter handle twice returns a failure the second time without disturbing other handles or processes. |
 
 #### Allocation and lock semantics

@@ -22,6 +22,32 @@ namespace {
 constexpr std::uint32_t kBuffer = 4096;
 constexpr std::uint32_t kKnownTypes[] = {1, 3, 4, 6, 8, 13};
 
+bool display_source_owner(const std::wstring& device, LUID& luid, std::uint32_t& source) {
+    UINT32 paths = 0;
+    UINT32 modes = 0;
+    if (::GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &paths, &modes) != ERROR_SUCCESS) {
+        return false;
+    }
+    std::vector<DISPLAYCONFIG_PATH_INFO> path_list(paths);
+    std::vector<DISPLAYCONFIG_MODE_INFO> mode_list(modes);
+    if (::QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, &paths, path_list.data(), &modes, mode_list.data(), nullptr) != ERROR_SUCCESS) {
+        return false;
+    }
+    for (UINT32 i = 0; i < paths; ++i) {
+        DISPLAYCONFIG_SOURCE_DEVICE_NAME name{};
+        name.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME;
+        name.header.size = sizeof(name);
+        name.header.adapterId = path_list[i].sourceInfo.adapterId;
+        name.header.id = path_list[i].sourceInfo.id;
+        if (::DisplayConfigGetDeviceInfo(&name.header) == ERROR_SUCCESS && device == name.viewGdiDeviceName) {
+            luid = path_list[i].sourceInfo.adapterId;
+            source = path_list[i].sourceInfo.id;
+            return true;
+        }
+    }
+    return false;
+}
+
 struct Session {
     KmtApi api;
     AvAdapter adapter;
@@ -240,7 +266,12 @@ Outcome QueryChecks::open_adapter_from_hdc_and_name(Context&) {
     if (dc != nullptr) {
         ::DeleteDC(dc);
     }
-    auto same = [&](const LUID& luid) { return luid.LowPart == session.adapter.luid.LowPart && luid.HighPart == session.adapter.luid.HighPart; };
+    LUID owner{};
+    std::uint32_t owner_source = 0;
+    if (!display_source_owner(device, owner, owner_source)) {
+        return Outcome::fail("QueryDisplayConfig lists no active path whose source is " + output.device_name);
+    }
+    auto same = [&](const LUID& luid) { return luid.LowPart == owner.LowPart && luid.HighPart == owner.HighPart; };
     if (named != 0 || !same(name_luid)) {
         problems.add("D3DKMTOpenAdapterFromGdiDisplayName returned 0x" + Text::hex(static_cast<std::uint32_t>(named), 8) + " and another LUID");
     }
@@ -250,7 +281,17 @@ Outcome QueryChecks::open_adapter_from_hdc_and_name(Context&) {
     if (named == 0 && from_dc == 0 && source != dc_source) {
         problems.add("the two opens report different VidPn sources");
     }
-    for (std::uint32_t handle : {by_name, by_dc}) {
+    if (named == 0 && source != owner_source) {
+        problems.add("D3DKMTOpenAdapterFromGdiDisplayName reports VidPn source " + std::to_string(source) + ", the display configuration says " + std::to_string(owner_source));
+    }
+    if (from_dc == 0 && dc_source != owner_source) {
+        problems.add("D3DKMTOpenAdapterFromHdc reports VidPn source " + std::to_string(dc_source) + ", the display configuration says " + std::to_string(owner_source));
+    }
+    std::uint32_t by_luid = 0;
+    if (session.api.open_from_luid(owner, by_luid) != 0) {
+        problems.add("D3DKMTOpenAdapterFromLuid failed for the adapter that owns the output");
+    }
+    for (std::uint32_t handle : {by_name, by_dc, by_luid}) {
         if (handle != 0) {
             static_cast<void>(session.api.close(handle));
         }
