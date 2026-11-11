@@ -555,8 +555,8 @@ Outcome DrawChecks::msaa_resolve(Context& context) {
     double px[3];
     double py[3];
     for (int i = 0; i < 3; ++i) {
-        px[i] = (vertices[i][0] * 0.5 + 0.5) * kEdge;
-        py[i] = (0.5 - vertices[i][1] * 0.5) * kEdge;
+        px[i] = std::round((vertices[i][0] * 0.5 + 0.5) * kEdge * 256.0) / 256.0;
+        py[i] = std::round((0.5 - vertices[i][1] * 0.5) * kEdge * 256.0) / 256.0;
     }
     auto edge = [&](int a, int b, double x, double y) { return (px[b] - px[a]) * (y - py[a]) - (py[b] - py[a]) * (x - px[a]); };
     const double area = edge(0, 1, px[2], py[2]);
