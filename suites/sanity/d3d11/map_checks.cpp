@@ -467,7 +467,7 @@ Outcome MapChecks::do_not_wait(Context& context) {
                 }
                 const std::uint32_t* first = static_cast<const std::uint32_t*>(mapped.pData);
                 const float want_color[4] = {0.0f, 0.5f, 0.0f, 1.0f};
-                if (!UnormExpect::rgba8(want_color, first[0])) {
+                if (!UnormExpect::rgba8(UnormRule::Direct3d, want_color, first[0])) {
                     problems.add("the mapped result holds 0x" + Text::hex(first[0], 8));
                 }
                 ctx->Unmap(staging.get(), 0);

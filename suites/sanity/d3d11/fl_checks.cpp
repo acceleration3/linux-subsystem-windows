@@ -814,7 +814,7 @@ Outcome FlChecks::limits_at_level(Context& context) {
                         break;
                     }
                     const double wanted = (i + 1) / 16.0;
-                    if (!UnormExpect::accepts8(wanted, bytes[0]) || bytes[3] != 255) {
+                    if (!UnormExpect::accepts8(UnormRule::Direct3d, wanted, bytes[0]) || bytes[3] != 255) {
                         problems.add(name + "render target " + std::to_string(i) + " holds " + std::to_string(bytes[0]) +
                                      ", expected " + std::to_string(static_cast<int>(std::lround(wanted * 255.0))));
                     }

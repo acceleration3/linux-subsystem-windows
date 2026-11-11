@@ -88,7 +88,7 @@ Outcome ShareChecks::legacy_handle(Context& context) {
         }
         const std::uint32_t want = k == 3 ? Kit::rgba(128, 64, 255, 255) : frame_color(k * 20);
         const float want_floats[4] = {0.5f, 0.25f, 1.0f, 1.0f};
-        const bool matches = k == 3 ? UnormExpect::rgba8(want_floats, center) : center == want;
+        const bool matches = k == 3 ? UnormExpect::rgba8(UnormRule::Direct3d, want_floats, center) : center == want;
         if (!matches || !uniform) {
             problems.add("frame " + std::to_string(k) + " read through the second device is 0x" + Text::hex(center, 8) + ", expected 0x" + Text::hex(want, 8));
         }

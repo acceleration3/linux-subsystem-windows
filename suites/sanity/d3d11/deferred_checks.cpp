@@ -492,7 +492,7 @@ Outcome DeferredChecks::free_threaded(Context& context) {
                 return Outcome::fail(error);
             }
             TexelImage image;
-            if (!D3d11Tools::read_texture(device, target.get(), 0, image, error) || !UnormExpect::rgba8(kShaderColor, image.pixel(1, 1))) {
+            if (!D3d11Tools::read_texture(device, target.get(), 0, image, error) || !UnormExpect::rgba8(UnormRule::Direct3d, kShaderColor, image.pixel(1, 1))) {
                 problems.add("a shader created on thread " + std::to_string(t) + " renders wrongly");
             }
         }

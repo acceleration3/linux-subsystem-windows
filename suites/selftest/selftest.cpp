@@ -13,11 +13,20 @@ void add(Registry& registry) {
                    return Outcome::ok();
                }});
     suite.add({"selftest.unorm.tie_acceptance", {"internal"}, false, 10, [](Context&) {
-                   const bool ties = UnormExpect::accepts8(0.5, 127) && UnormExpect::accepts8(0.5, 128) && !UnormExpect::accepts8(0.5, 126) && !UnormExpect::accepts8(0.5, 129);
-                   const bool exact = UnormExpect::accepts8(1.0 / 255.0, 1) && !UnormExpect::accepts8(1.0 / 255.0, 0) && !UnormExpect::accepts8(1.0 / 255.0, 2) &&
-                                      UnormExpect::accepts8(1.0, 255) && !UnormExpect::accepts8(2.0, 254) && UnormExpect::accepts8(-1.0, 0);
-                   const bool off_tie = UnormExpect::accepts8(0.25, 64) && !UnormExpect::accepts8(0.25, 63) && UnormExpect::accepts(0.5, 2, 1) && UnormExpect::accepts(0.5, 2, 2);
-                   return ties && exact && off_tie ? Outcome::ok() : Outcome::fail("the unorm tie helper accepts or refuses a wrong value");
+                   constexpr UnormRule d3d = UnormRule::Direct3d;
+                   constexpr UnormRule khr = UnormRule::Khronos;
+                   const bool ties = UnormExpect::accepts8(d3d, 0.5, 127) && UnormExpect::accepts8(d3d, 0.5, 128) && !UnormExpect::accepts8(d3d, 0.5, 126) && !UnormExpect::accepts8(d3d, 0.5, 129) &&
+                                     UnormExpect::accepts8(khr, 0.5, 127) && UnormExpect::accepts8(khr, 0.5, 128) && !UnormExpect::accepts8(khr, 0.5, 126) && !UnormExpect::accepts8(khr, 0.5, 129);
+                   bool exact = true;
+                   for (const UnormRule rule : {d3d, khr}) {
+                       exact = exact && UnormExpect::accepts8(rule, 1.0 / 255.0, 1) && !UnormExpect::accepts8(rule, 1.0 / 255.0, 0) && !UnormExpect::accepts8(rule, 1.0 / 255.0, 2) &&
+                               UnormExpect::accepts8(rule, 1.0, 255) && !UnormExpect::accepts8(rule, 2.0, 254) && UnormExpect::accepts8(rule, -1.0, 0);
+                   }
+                   const bool off_tie = UnormExpect::accepts8(d3d, 0.25, 64) && !UnormExpect::accepts8(d3d, 0.25, 63) && UnormExpect::accepts(d3d, 0.5, 2, 1) && UnormExpect::accepts(d3d, 0.5, 2, 2) &&
+                                        UnormExpect::accepts8(khr, 0.25, 63) && UnormExpect::accepts8(khr, 0.25, 64) && !UnormExpect::accepts8(khr, 0.25, 62) && !UnormExpect::accepts8(khr, 0.25, 65);
+                   const bool within_ulp = UnormExpect::accepts8(d3d, 111.5625 / 255.0, 111) && UnormExpect::accepts8(d3d, 111.5625 / 255.0, 112) && !UnormExpect::accepts8(d3d, 111.5625 / 255.0, 110) &&
+                                           UnormExpect::accepts8(d3d, 143.4375 / 255.0, 143) && UnormExpect::accepts8(d3d, 143.4375 / 255.0, 144) && !UnormExpect::accepts8(d3d, 143.4375 / 255.0, 145);
+                   return ties && exact && off_tie && within_ulp ? Outcome::ok() : Outcome::fail("the unorm tie helper accepts or refuses a wrong value");
                }});
     suite.add({"selftest.desktop.guard_scope", {"internal"}, false, 10, [](Context&) {
                    const std::string own = "C:\\run\\suites";

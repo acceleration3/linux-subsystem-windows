@@ -616,7 +616,7 @@ Outcome D3dProcessChecks::invalid_open_errors(Context& context) {
             } else {
                 D3d11Tools::clear(av, view.get(), 0.25f, 0.5f, 0.75f, 1.0f);
                 TexelImage image;
-                if (!D3d11Tools::wait_event(av, av.context, error) || !D3d11Tools::read_texture(av, probe.get(), 0, image, error) || !UnormExpect::rgba8(kClearColor, image.pixel(3, 3) | 0xFF000000u)) {
+                if (!D3d11Tools::wait_event(av, av.context, error) || !D3d11Tools::read_texture(av, probe.get(), 0, image, error) || !UnormExpect::rgba8(UnormRule::Direct3d, kClearColor, image.pixel(3, 3) | 0xFF000000u)) {
                     problems.add(std::string("a clear on the device after opening ") + item.name + " is wrong" + (error.empty() ? "" : ": " + error));
                 }
             }

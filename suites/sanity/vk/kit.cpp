@@ -117,7 +117,7 @@ bool Kit::same_unorm(Context& context, Problems& problems, const std::string& wh
         return false;
     }
     for (std::size_t i = 0; i < actual.size(); ++i) {
-        if (std::abs(static_cast<int>(rounded[i]) - static_cast<int>(actual[i])) > tolerance && !UnormExpect::accepts8(values[i], actual[i])) {
+        if (std::abs(static_cast<int>(rounded[i]) - static_cast<int>(actual[i])) > tolerance && !UnormExpect::accepts8(UnormRule::Khronos, values[i], actual[i])) {
             problems.add(what + ": byte " + std::to_string(i) + " is 0x" + hex(actual[i], 2) + ", expected 0x" + hex(rounded[i], 2));
             ArtifactWriter writer(context);
             const std::string base = sanitize(what);

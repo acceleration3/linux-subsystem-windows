@@ -32,7 +32,7 @@ bool compare_bytes(Context& context, Problems& problems, const std::string& what
         return false;
     }
     for (std::size_t i = 0; i < expected.size(); ++i) {
-        if (std::abs(static_cast<int>(expected[i]) - static_cast<int>(actual[i])) > tolerance && !UnormExpect::accepts8(values[i], actual[i])) {
+        if (std::abs(static_cast<int>(expected[i]) - static_cast<int>(actual[i])) > tolerance && !UnormExpect::accepts8(UnormRule::Khronos, values[i], actual[i])) {
             const std::size_t pixel = i / 4;
             problems.add(what + ": pixel (" + std::to_string(pixel % width) + "," + std::to_string(pixel / width) + ") channel " + std::to_string(i % 4) + " is " +
                          std::to_string(actual[i]) + ", expected " + std::to_string(expected[i]) + (tolerance != 0 ? " within " + std::to_string(tolerance) : ""));
