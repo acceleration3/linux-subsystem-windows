@@ -1,7 +1,7 @@
 #include "sanity/gl/texture_checks.hpp"
 
-#include "render/common/tolerance.hpp"
 #include "sanity/gl/kit.hpp"
+#include "support/bc_codec.hpp"
 #include "support/gl_fetch.hpp"
 #include "support/gl_scene.hpp"
 #include "support/gl_target.hpp"
@@ -423,13 +423,18 @@ Outcome TextureChecks::compressed_formats(Context& context) {
                 problems.add(name + ": " + error);
             } else {
                 const int block_bytes = (format == glc::COMPRESSED_RGB_S3TC_DXT1_EXT || format == glc::COMPRESSED_RGBA_S3TC_DXT1_EXT || format == glc::COMPRESSED_RED_RGTC1) ? 8 : 16;
-                const float tolerance = lsw::render::Tolerance::block_compressed().absolute;
+                const int family = (format == glc::COMPRESSED_RGB_S3TC_DXT1_EXT || format == glc::COMPRESSED_RGBA_S3TC_DXT1_EXT) ? 1
+                                   : format == glc::COMPRESSED_RGBA_S3TC_DXT3_EXT                                               ? 2
+                                   : format == glc::COMPRESSED_RGBA_S3TC_DXT5_EXT                                               ? 3
+                                   : format == glc::COMPRESSED_RED_RGTC1                                                        ? 4
+                                                                                                                                : 5;
                 bool bad = false;
                 for (int by = 0; by < kSide / 4 && !bad; ++by) {
                     for (int bx = 0; bx < kSide / 4 && !bad; ++bx) {
                         int block[16][4];
                         bool dummy = false;
-                        (void)decode_block(format, &blocks[static_cast<std::size_t>(by * (kSide / 4) + bx) * static_cast<std::size_t>(block_bytes)], dummy, block);
+                        const std::uint8_t* source_block = &blocks[static_cast<std::size_t>(by * (kSide / 4) + bx) * static_cast<std::size_t>(block_bytes)];
+                        (void)decode_block(format, source_block, dummy, block);
                         for (int i = 0; i < 16 && !bad; ++i) {
                             const int x = bx * 4 + i % 4;
                             const int y = by * 4 + i / 4;
@@ -439,7 +444,8 @@ Outcome TextureChecks::compressed_formats(Context& context) {
                                 if (transparent && k < 3) {
                                     continue;
                                 }
-                                if (std::fabs(px[k] - static_cast<float>(block[i][k]) / 255.0f) > tolerance) {
+                                const double reference = static_cast<double>(block[i][k]) / 255.0;
+                                if (std::fabs(static_cast<double>(px[k]) - reference) > BcCodec::tolerance(family, source_block, i, k, reference)) {
                                     problems.add(name + ": texel (" + std::to_string(x) + "," + std::to_string(y) + ") channel " + std::to_string(k) + " samples as " +
                                                  std::to_string(px[k] * 255.0f) + ", the CPU decoder gives " + std::to_string(block[i][k]));
                                     bad = true;

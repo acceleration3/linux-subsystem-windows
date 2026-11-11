@@ -51,45 +51,6 @@ Bytes family_blocks(int family, std::uint64_t seed, int count) {
     return data;
 }
 
-unsigned color_index(int family, const std::uint8_t* block, int texel) {
-    const std::uint8_t* indices = family == 1 ? block + 4 : block + 12;
-    std::uint32_t word = 0;
-    std::memcpy(&word, indices, 4);
-    return (word >> (2 * texel)) & 3u;
-}
-
-unsigned ramp_index(const std::uint8_t* block, int texel) {
-    std::uint64_t bits = 0;
-    for (int i = 0; i < 6; ++i) {
-        bits |= static_cast<std::uint64_t>(block[2 + i]) << (8 * i);
-    }
-    return static_cast<unsigned>((bits >> (3 * texel)) & 7u);
-}
-
-double channel_tolerance(int family, const std::uint8_t* block, int texel, int channel) {
-    bool endpoint = false;
-    switch (family) {
-    case 1:
-        endpoint = channel == 3 || color_index(family, block, texel) <= 1;
-        break;
-    case 2:
-        endpoint = channel == 3 || color_index(family, block, texel) <= 1;
-        break;
-    case 3:
-        endpoint = channel == 3 ? ramp_index(block, texel) <= 1 : color_index(family, block, texel) <= 1;
-        break;
-    case 4:
-        endpoint = ramp_index(block, texel) <= 1;
-        break;
-    case 5:
-        endpoint = ramp_index(channel == 0 ? block : block + 8, texel) <= 1;
-        break;
-    default:
-        break;
-    }
-    return BcCodec::tolerance(family, endpoint);
-}
-
 void sample_against_decoder(FormatRunner& runner, Limited& out, int family, DXGI_FORMAT format, const Bytes& data, unsigned width, unsigned height,
                             const std::string& name) {
     std::vector<std::uint32_t> words;
@@ -110,7 +71,7 @@ void sample_against_decoder(FormatRunner& runner, Limited& out, int family, DXGI
             for (int c = 0; c < 4; ++c) {
                 float got = 0.0f;
                 std::memcpy(&got, &words[(static_cast<std::size_t>(y) * width + x) * 4 + static_cast<std::size_t>(c)], 4);
-                const double limit = channel_tolerance(family, block, texel, c);
+                const double limit = BcCodec::tolerance(family, block, texel, c, static_cast<double>(texels[texel][c]));
                 if (!(std::fabs(static_cast<double>(got) - static_cast<double>(texels[texel][c])) <= limit)) {
                     out.add(name + " texel (" + std::to_string(x) + "," + std::to_string(y) + ") channel " + std::to_string(c) + " samples " +
                             std::to_string(got) + ", the reference decoder gives " + std::to_string(texels[texel][c]) + " within " + std::to_string(limit));

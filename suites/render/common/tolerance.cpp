@@ -66,7 +66,7 @@ Tolerance Tolerance::floats(float absolute, float relative) {
 Tolerance Tolerance::block_compressed(bool snorm) {
     Tolerance t;
     t.byte_delta = 9;
-    t.absolute = snorm ? 0.07f : 0.04f;
+    t.absolute = snorm ? 0.0601f : 0.0340f;
     t.outlier_fraction = 0.004;
     t.name = "block-compressed";
     return t;

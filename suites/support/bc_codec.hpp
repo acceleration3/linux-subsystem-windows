@@ -24,7 +24,7 @@ public:
 
     [[nodiscard]] static std::vector<std::uint8_t> blocks(int family, std::uint64_t seed, int count);
 
-    [[nodiscard]] static double tolerance(int family, bool endpoint);
+    [[nodiscard]] static double tolerance(int family, const std::uint8_t* block, int texel, int channel, double reference);
 
     [[nodiscard]] static std::uint32_t blocks_across(std::uint32_t texels) { return texels == 0 ? 0 : (texels + 3) / 4; }
 };

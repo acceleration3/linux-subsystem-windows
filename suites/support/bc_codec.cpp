@@ -1,9 +1,9 @@
 #include "support/bc_codec.hpp"
 
-#include "render/common/tolerance.hpp"
 #include "support/pattern.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 
 namespace lsw::suites {
@@ -233,11 +233,43 @@ std::vector<std::uint8_t> BcCodec::blocks(int f, std::uint64_t seed, int count) 
     return data;
 }
 
-double BcCodec::tolerance(int, bool endpoint) {
-    if (endpoint) {
-        return 1.01 / 255.0;
+double BcCodec::tolerance(int family, const std::uint8_t* block, int texel, int channel, double reference) {
+    constexpr double kExact = 1e-5;
+    if (family < 1 || family > 5 || reference <= 0.0 || reference >= 1.0) {
+        return kExact;
     }
-    return static_cast<double>(render::Tolerance::block_compressed().absolute);
+    double absolute_error = 1.0 / 255.0;
+    double gap = 0.0;
+    const bool ramp_channel = family == 4 || family == 5 || (family == 3 && channel == 3);
+    if (ramp_channel) {
+        const std::uint8_t* ramp = family == 5 && channel == 1 ? block + 8 : block;
+        gap = std::abs(static_cast<double>(ramp[0]) - static_cast<double>(ramp[1])) / 255.0;
+        if (family != 3) {
+            absolute_error = 1.0 / 65535.0;
+            std::uint64_t bits = 0;
+            for (int i = 0; i < 6; ++i) {
+                bits |= static_cast<std::uint64_t>(ramp[2 + i]) << (8 * i);
+            }
+            if (((bits >> (3 * texel)) & 7u) <= 1u) {
+                return kExact;
+            }
+        }
+    } else if (channel < 3) {
+        const std::uint8_t* color = family == 1 ? block : block + 8;
+        std::uint16_t c0 = 0;
+        std::uint16_t c1 = 0;
+        std::memcpy(&c0, color, 2);
+        std::memcpy(&c1, color + 2, 2);
+        const int shift = channel == 0 ? 11 : channel == 1 ? 5 : 0;
+        const int bits = channel == 1 ? 6 : 5;
+        const int mask = (1 << bits) - 1;
+        const int e0 = (c0 >> shift) & mask;
+        const int e1 = (c1 >> shift) & mask;
+        const auto promote = [bits](int v) { return static_cast<double>((v << (8 - bits)) | (v >> (2 * bits - 8))) / 255.0; };
+        const double raw = std::abs(static_cast<double>(e0 - e1)) / static_cast<double>(mask);
+        gap = std::max(raw, std::abs(promote(e0) - promote(e1)));
+    }
+    return absolute_error + 0.03 * gap;
 }
 
 }  // namespace lsw::suites
