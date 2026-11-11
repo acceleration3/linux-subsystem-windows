@@ -90,9 +90,48 @@ rr::Image ImageJudge::bracketed(const rr::Image& expected, const rr::Image& low,
     return out;
 }
 
+const char* ImageJudge::quad_bracket_reason() {
+    return "the Direct3D 11 functional spec leaves ddx and ddy to the implementation, which may take one value per 2x2 quad from either of its two rows or columns, so a pixel may take any value between those of its quad in the WARP rendering with per pixel derivatives";
+}
+
+rr::Image ImageJudge::quad_bracketed(const rr::Image& expected, const rr::Image& actual, const rr::Tolerance& tolerance) {
+    const bool shaped = actual.width() == expected.width() && actual.height() == expected.height() && actual.kind() == expected.kind();
+    if (!shaped || rr::PixelInfo::is_integer(expected.kind())) {
+        return expected;
+    }
+    const bool byte_class = rr::PixelInfo::channel_class(expected.kind()) == rr::ChannelClass::Unorm8;
+    const double slack = byte_class ? static_cast<double>(tolerance.byte_delta) : static_cast<double>(tolerance.absolute);
+    rr::Image out = expected;
+    const unsigned channels = rr::PixelInfo::channels(expected.kind());
+    for (std::uint32_t qy = 0; qy < expected.height(); qy += 2) {
+        for (std::uint32_t qx = 0; qx < expected.width(); qx += 2) {
+            const std::uint32_t x1 = std::min(qx + 1, expected.width() - 1);
+            const std::uint32_t y1 = std::min(qy + 1, expected.height() - 1);
+            for (unsigned c = 0; c < channels; ++c) {
+                const double a = expected.channel(qx, qy, c);
+                const double b = expected.channel(x1, qy, c);
+                const double d = expected.channel(qx, y1, c);
+                const double e = expected.channel(x1, y1, c);
+                const double lo = std::min({a, b, d, e}) - slack;
+                const double hi = std::max({a, b, d, e}) + slack;
+                for (std::uint32_t y = qy; y <= y1; ++y) {
+                    for (std::uint32_t x = qx; x <= x1; ++x) {
+                        const double v = actual.channel(x, y, c);
+                        if (v >= lo && v <= hi) {
+                            out.set_channel(x, y, c, v);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return out;
+}
+
 void ImageJudge::compare_frames(Context& context, Problems& problems, const rr::CaseSpec& spec, const rr::FrameCaptures& expected,
                                 const rr::FrameCaptures& actual, bool oracle, const rr::FrameCaptures* low, const rr::FrameCaptures* high) {
     const bool dump = rr::CaptureDump::enabled();
+    std::set<std::string> reasons;
     std::vector<rr::CaptureRecord> records;
     std::set<unsigned> frames;
     for (const auto& entry : expected) {
@@ -167,6 +206,13 @@ void ImageJudge::compare_frames(Context& context, Problems& problems, const rr::
                     adjusted = bracketed(*reference, *lo_image, *hi_image, *image, tolerance);
                     judged_reference = &adjusted;
                 }
+            }
+            if (oracle && tolerance.quad_bracket) {
+                if (reasons.insert("quad_bracket").second) {
+                    context.measure("quad_bracket", std::string(quad_bracket_reason()));
+                }
+                adjusted = quad_bracketed(*reference, *image, tolerance);
+                judged_reference = &adjusted;
             }
             compare(context, problems, name, *judged_reference, *image, tolerance, spec.uniform_allowed(capture), dump ? &records : nullptr);
         }

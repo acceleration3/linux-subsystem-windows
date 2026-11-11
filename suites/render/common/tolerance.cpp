@@ -91,4 +91,10 @@ Tolerance Tolerance::with_wrap() const {
     return t;
 }
 
+Tolerance Tolerance::with_quad_bracket() const {
+    Tolerance t = *this;
+    t.quad_bracket = true;
+    return t;
+}
+
 }  // namespace lsw::render

@@ -252,7 +252,7 @@ std::vector<std::filesystem::path> CaptureDump::write(const std::filesystem::pat
         json += ",\"tolerance\":{\"name\":\"" + escape(t.name) + "\",\"byte_delta\":" + std::to_string(t.byte_delta) +
                 ",\"absolute\":" + number(t.absolute) + ",\"relative\":" + number(t.relative) +
                 ",\"outlier_fraction\":" + number(t.outlier_fraction) + ",\"edge_radius\":" + std::to_string(t.edge_radius) +
-                ",\"wrap\":" + std::string(t.wrap ? "true" : "false") + ",\"forgive_fraction\":" + number(t.forgive_fraction) + ",\"min_psnr\":" + number(t.min_psnr) +
+                ",\"wrap\":" + std::string(t.wrap ? "true" : "false") + ",\"quad_bracket\":" + std::string(t.quad_bracket ? "true" : "false") + " + ",\"forgive_fraction\":" + number(t.forgive_fraction) + ",\"min_psnr\":" + number(t.min_psnr) +
                 ",\"outlier_max_delta\":" + number(t.outlier_max_delta) + ",\"max_outliers\":" + std::to_string(t.max_outliers) + "}";
         if (r.judged) {
             json += ",\"psnr\":" + number(r.result.psnr) + ",\"bad\":" + std::to_string(r.result.bad) +
