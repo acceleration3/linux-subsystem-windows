@@ -150,5 +150,57 @@ class StackEvidence(unittest.TestCase):
         self.assertIn("coredumpctl", scripts[-1])
 
 
+class LogTail(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.home = pathlib.Path(self.temp.name)
+        self.logs = self.home / ".cache" / "libvirt" / "qemu" / "log"
+        self.logs.mkdir(parents=True)
+        self.old_home = os.environ.get("HOME")
+        os.environ["HOME"] = str(self.home)
+        self.machine = suite_run.Machine("local", "test")
+
+    def tearDown(self):
+        if self.old_home is None:
+            os.environ.pop("HOME", None)
+        else:
+            os.environ["HOME"] = self.old_home
+        self.temp.cleanup()
+
+    def write(self, name, text):
+        (self.logs / name).write_bytes(text)
+
+    def test_rotated_files_come_before_the_current_one_oldest_first(self):
+        self.write("lsw.log", b"current\n")
+        self.write("lsw.log.0", b"newest rotated\n")
+        self.write("lsw.log.1", b"older\n")
+        self.write("lsw.log.10", b"oldest\n")
+        self.assertEqual(self.machine.log_tail(), "oldest\nolder\nnewest rotated\ncurrent\n")
+
+    def test_the_tail_is_bounded_and_keeps_the_end(self):
+        self.write("lsw.log.0", b"a" * 100)
+        self.write("lsw.log", b"b" * 100)
+        self.assertEqual(self.machine.log_tail(150), "a" * 50 + "b" * 100)
+
+    def test_bytes_that_are_not_text_do_not_break_the_save(self):
+        self.write("lsw.log", b"before \xff\xfe after\n")
+        target = self.home / "out" / "qemu-log-s1.txt"
+        self.machine.save_log_tail(target)
+        self.assertIn("after", target.read_text())
+
+    def test_a_missing_log_gives_an_empty_file(self):
+        target = self.home / "out" / "qemu-log-s1.txt"
+        self.machine.save_log_tail(target)
+        self.assertEqual(target.read_text(), "")
+
+    def test_evidence_before_a_restart_keeps_the_log_tail(self):
+        self.write("lsw.log", b"crash trace\n")
+        original = self.machine.sh
+        self.machine.sh = lambda script, timeout=300: (0, "no core") if "coredumpctl" in script else original(script, timeout)
+        out = self.home / "evidence"
+        self.machine.evidence(out, set())
+        self.assertEqual((out / "qemu-log-tail.txt").read_text(), "crash trace\n")
+
+
 if __name__ == "__main__":
     unittest.main()

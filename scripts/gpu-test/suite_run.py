@@ -11,6 +11,7 @@ import zipfile
 import lsw_link
 
 QEMU_LOG = "~/.cache/libvirt/qemu/log/lsw.log"
+QEMU_LOG_TAIL = 4 * 1024 * 1024
 CORES = "~/.local/share/lsw-gpu-test/cores"
 RECOVERY_BUDGET = 5
 STACK_BUDGET = 28
@@ -34,7 +35,7 @@ class Machine:
                        self.mode.split(":", 1)[1], "bash", "-s"]
         try:
             done = subprocess.run(command, input="export LC_ALL=C\n" + script, capture_output=True, text=True,
-                                  timeout=timeout)
+                                  errors="replace", timeout=timeout)
         except subprocess.TimeoutExpired:
             return 124, "timed out"
         return done.returncode, done.stdout + done.stderr
@@ -78,9 +79,28 @@ fi
         (directory / "qemu-stacks.txt").write_text(out)
         return True
 
+    def log_tail(self, limit=QEMU_LOG_TAIL):
+        script = f"""
+log={QEMU_LOG}
+{{
+    for file in $(ls "$log".* 2>/dev/null | sed -n 's/.*\\.\\([0-9][0-9]*\\)$/\\1 &/p' | sort -rn | cut -d' ' -f2); do
+        cat "$file"
+    done
+    cat "$log" 2>/dev/null
+}} | tail -c {limit}
+"""
+        code, out = self.sh(script, 60)
+        return out if code == 0 else f"the QEMU log could not be read: {out.strip()[-200:]}\n"
+
+    def save_log_tail(self, path):
+        path = pathlib.Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(self.log_tail())
+
     def evidence(self, directory, seen):
         directory.mkdir(parents=True, exist_ok=True)
         self.stacks(directory)
+        self.save_log_tail(directory / "qemu-log-tail.txt")
         code, out = self.sh(f"tail -n 120 {QEMU_LOG} 2>&1; echo; virsh -c qemu:///session domstate lsw --reason 2>&1", 60)
         (directory / "qemu-log.txt").write_text(out)
         script = f"""
@@ -381,6 +401,8 @@ def run_segment(ctx, spec, filter_text, phase, exclude, jobs, deadline):
             pass
     finally:
         ctx.end()
+    if status != "dead":
+        ctx.machine.save_log_tail(spec.out / f"qemu-log-s{number}.txt")
     if status == "dead":
         if ctx.generation == generation:
             time.sleep(30)
