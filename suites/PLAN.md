@@ -1328,7 +1328,7 @@ Implementation note: `sanity.reg.stats.transfer_counts_plausible` runs the known
 | check | contract |
 |---|---|
 | `sanity.reg.cl.buffer_alive_while_in_use` | An OpenCL buffer released by the application while a kernel using it is enqueued remains valid until the kernel finishes: the result is correct (reference counting contract). |
-| `sanity.reg.d3d12.caps_enum_defined` | CheckFeatureSupport for every D3D12_FEATURE value either returns a documented structure with in-range values or a failure code; no field holds garbage that violates its enum range. |
+| `sanity.reg.d3d12.caps_enum_defined` | CheckFeatureSupport for every D3D12_FEATURE value either returns a documented structure with in-range values or a failure code; no field holds garbage that violates its enum range. The runtime itself answers feature 52 queried with a 4 byte structure with DXGI_ERROR_DRIVER_INTERNAL_ERROR, on WARP as well, and that answer is accepted. |
 | `sanity.reg.stats.transfer_counts_plausible` | The byte and operation counts shown by the stack's status for a known sequence of uploads and readbacks match the sequence. |
 | `sanity.reg.upload.large_not_slower_than_small` | One full-screen texture upload is correct and takes no longer than 1.5 times the time of 64 uploads of 1/64 of its size. |
 | `sanity.reg.dwm.output_not_toggled` | Over a 30-second window with DWM running, the output does not switch off and on; the display source stays visible and no mode change events occur. [E] |

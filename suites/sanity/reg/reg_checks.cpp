@@ -221,7 +221,8 @@ Outcome RegChecks::d3d12_caps_enum_defined(Context& context) {
             const HRESULT result = device->CheckFeatureSupport(static_cast<D3D12_FEATURE>(feature), buffer, size);
             if (FAILED(result)) {
                 ++refused;
-                if (!D3d12Tools::in(result, {E_INVALIDARG, DXGI_ERROR_UNSUPPORTED, E_NOTIMPL, E_FAIL})) {
+                const bool runtime_answer = feature == 52 && size == 4 && result == DXGI_ERROR_DRIVER_INTERNAL_ERROR;
+                if (!runtime_answer && !D3d12Tools::in(result, {E_INVALIDARG, DXGI_ERROR_UNSUPPORTED, E_NOTIMPL, E_FAIL})) {
                     problems.add("CheckFeatureSupport(" + std::to_string(feature) + ", size " + std::to_string(size) + ") returned the undocumented " + D3d12Tools::hr(result));
                 }
             }
