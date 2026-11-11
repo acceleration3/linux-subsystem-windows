@@ -117,11 +117,11 @@ const FilterRow kFilters[] = {
 struct Registrar {
     Registrar() {
         for (const FilterRow& row : kFilters) {
-            Add(spec("tex", (std::string("filter_") + row.name).c_str()).tolerance(floor_tolerance()),
+            Add(spec("tex", (std::string("filter_") + row.name).c_str()).tolerance(floor_tolerance()).lod_bracket(0.25f),
                 [&row](Rig& r, Cap& out) { return draw_floor(r, out, sdesc(row.filter, D3D11_TEXTURE_ADDRESS_WRAP)); });
         }
         for (UINT level : {2u, 4u, 16u}) {
-            Add(spec("tex", ("filter_anisotropic_" + std::to_string(level)).c_str()).tolerance(rr::Tolerance::psnr(26)), [level](Rig& r, Cap& out) {
+            Add(spec("tex", ("filter_anisotropic_" + std::to_string(level)).c_str()).tolerance(rr::Tolerance::psnr(26)).lod_bracket(0.25f), [level](Rig& r, Cap& out) {
                 D3D11_SAMPLER_DESC d = sdesc(D3D11_FILTER_ANISOTROPIC, D3D11_TEXTURE_ADDRESS_WRAP);
                 d.MaxAnisotropy = level;
                 return draw_floor(r, out, d, 64, 3.0f);
@@ -156,9 +156,9 @@ std::string min_max_needs(Rig& r) {
     return SUCCEEDED(r.dev->CheckFeatureSupport(D3D11_FEATURE_D3D11_OPTIONS1, &o, sizeof o)) && o.MinMaxFiltering ? std::string() : std::string("min/max reduction filtering");
 }
 
-const Add kMinFilter(spec("tex", "filter_reduction_minimum_linear").variant(1).tolerance(rr::Tolerance::psnr(26)),
+const Add kMinFilter(spec("tex", "filter_reduction_minimum_linear").variant(1).tolerance(rr::Tolerance::psnr(26)).lod_bracket(0.25f),
                      [](Rig& r, Cap& out) { return draw_floor(r, out, sdesc(D3D11_FILTER_MINIMUM_MIN_MAG_MIP_LINEAR, D3D11_TEXTURE_ADDRESS_WRAP)); }, min_max_needs);
-const Add kMaxFilter(spec("tex", "filter_reduction_maximum_linear").variant(1).tolerance(rr::Tolerance::psnr(26)),
+const Add kMaxFilter(spec("tex", "filter_reduction_maximum_linear").variant(1).tolerance(rr::Tolerance::psnr(26)).lod_bracket(0.25f),
                      [](Rig& r, Cap& out) { return draw_floor(r, out, sdesc(D3D11_FILTER_MAXIMUM_MIN_MAG_MIP_LINEAR, D3D11_TEXTURE_ADDRESS_WRAP)); }, min_max_needs);
 
 struct AddressRow {

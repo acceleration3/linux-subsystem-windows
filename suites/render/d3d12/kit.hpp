@@ -69,6 +69,7 @@ public:
 
     bool warp = false;
     bool under_test = false;
+    float lod_bias = 0.0f;
     bool dxc = false;
     std::string name;
     D3d12Rig rig;

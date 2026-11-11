@@ -40,6 +40,10 @@ public:
         tolerance_set_ = true;
         return *this;
     }
+    CaseSpec& lod_bracket(float bias) {
+        lod_bracket_ = bias;
+        return *this;
+    }
     CaseSpec& timeout(int seconds) {
         timeout_seconds_ = seconds;
         return *this;
@@ -101,6 +105,10 @@ public:
     [[nodiscard]] unsigned frame_count() const { return frames_; }
     [[nodiscard]] const Tolerance& tolerance() const { return tolerance_; }
     [[nodiscard]] bool tolerance_set() const { return tolerance_set_; }
+    [[nodiscard]] float lod_bracket_bias() const { return lod_bracket_; }
+    [[nodiscard]] static const char* lod_bracket_reason() {
+        return "Direct3D 11 functional spec 7.18.11 permits approximating the LOD calculation and 7.18.10 requires only 8 fractional bits of LOD, so a filtered pixel may lie between the WARP renderings at MipLODBias -d and +d";
+    }
     [[nodiscard]] const std::set<std::string>& uniform_labels() const { return uniform_ok_; }
     [[nodiscard]] const std::vector<std::string>& audit_reasons() const { return audit_ok_; }
     [[nodiscard]] const std::vector<SameAs>& same_as_entries() const { return same_as_; }
@@ -212,6 +220,7 @@ private:
     std::vector<std::string> tags_;
     std::map<std::string, Tolerance> overrides_;
     std::set<std::string> uniform_ok_;
+    float lod_bracket_ = 0.0f;
     std::vector<std::string> audit_ok_;
     std::vector<SameAs> same_as_;
     unsigned major_ = 0;

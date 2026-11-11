@@ -2,6 +2,7 @@
 
 #include "render/common/png.hpp"
 
+#include <algorithm>
 #include <cstdio>
 #include <set>
 
@@ -59,8 +60,38 @@ void ImageJudge::compare(Context& context, Problems& problems, const std::string
     }
 }
 
+rr::Image ImageJudge::bracketed(const rr::Image& expected, const rr::Image& low, const rr::Image& high, const rr::Image& actual,
+                                const rr::Tolerance& tolerance) {
+    const bool shaped = low.width() == expected.width() && low.height() == expected.height() && low.kind() == expected.kind() &&
+                        high.width() == expected.width() && high.height() == expected.height() && high.kind() == expected.kind() &&
+                        actual.width() == expected.width() && actual.height() == expected.height() && actual.kind() == expected.kind();
+    if (!shaped || rr::PixelInfo::is_integer(expected.kind())) {
+        return expected;
+    }
+    const bool byte_class = rr::PixelInfo::channel_class(expected.kind()) == rr::ChannelClass::Unorm8;
+    const double slack = byte_class ? static_cast<double>(tolerance.byte_delta) : static_cast<double>(tolerance.absolute);
+    rr::Image out = expected;
+    const unsigned channels = rr::PixelInfo::channels(expected.kind());
+    for (std::uint32_t y = 0; y < expected.height(); ++y) {
+        for (std::uint32_t x = 0; x < expected.width(); ++x) {
+            for (unsigned c = 0; c < channels; ++c) {
+                const double a = low.channel(x, y, c);
+                const double b = high.channel(x, y, c);
+                const double m = expected.channel(x, y, c);
+                const double lo = std::min({a, b, m}) - slack;
+                const double hi = std::max({a, b, m}) + slack;
+                const double v = actual.channel(x, y, c);
+                if (v >= lo && v <= hi) {
+                    out.set_channel(x, y, c, v);
+                }
+            }
+        }
+    }
+    return out;
+}
+
 void ImageJudge::compare_frames(Context& context, Problems& problems, const rr::CaseSpec& spec, const rr::FrameCaptures& expected,
-                                const rr::FrameCaptures& actual, bool oracle) {
+                                const rr::FrameCaptures& actual, bool oracle, const rr::FrameCaptures* low, const rr::FrameCaptures* high) {
     const bool dump = rr::CaptureDump::enabled();
     std::vector<rr::CaptureRecord> records;
     std::set<unsigned> frames;
@@ -110,8 +141,34 @@ void ImageJudge::compare_frames(Context& context, Problems& problems, const rr::
                 record.oracle = oracle ? reference : nullptr;
                 records.push_back(record);
             }
-            compare(context, problems, name, *reference, *image, spec.resolve(capture, reference->kind()), spec.uniform_allowed(capture),
-                    dump ? &records : nullptr);
+            const rr::Tolerance tolerance = spec.resolve(capture, reference->kind());
+            rr::Image adjusted;
+            const rr::Image* judged_reference = reference;
+            if (low != nullptr && high != nullptr) {
+                const auto lo_frame = low->find(frame);
+                const auto hi_frame = high->find(frame);
+                const rr::Image* lo_image = nullptr;
+                const rr::Image* hi_image = nullptr;
+                if (lo_frame != low->end()) {
+                    for (const auto& item : lo_frame->second.items()) {
+                        if (item.first == capture) {
+                            lo_image = &item.second;
+                        }
+                    }
+                }
+                if (hi_frame != high->end()) {
+                    for (const auto& item : hi_frame->second.items()) {
+                        if (item.first == capture) {
+                            hi_image = &item.second;
+                        }
+                    }
+                }
+                if (lo_image != nullptr && hi_image != nullptr) {
+                    adjusted = bracketed(*reference, *lo_image, *hi_image, *image, tolerance);
+                    judged_reference = &adjusted;
+                }
+            }
+            compare(context, problems, name, *judged_reference, *image, tolerance, spec.uniform_allowed(capture), dump ? &records : nullptr);
         }
     }
     if (dump) {

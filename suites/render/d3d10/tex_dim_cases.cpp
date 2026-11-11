@@ -340,10 +340,10 @@ const Registrar kFilters{[] {
                          {"linear_linear_linear", D3D10_FILTER_MIN_MAG_MIP_LINEAR}};
     for (const F& f : filters) {
         const D3D10_FILTER filter = f.filter;
-        single(spec("tex", std::string("filter_") + f.name).tolerance(rr::Tolerance::filter(10, 0.01).with_edge(1)), [filter](Rig& r, rr::CaptureSet& o) { filter_scene(r, o, filter, 1); });
+        single(spec("tex", std::string("filter_") + f.name).tolerance(rr::Tolerance::filter(10, 0.01).with_edge(1)).lod_bracket(0.25f), [filter](Rig& r, rr::CaptureSet& o) { filter_scene(r, o, filter, 1); });
     }
     for (UINT level : {4u, 16u}) {
-        single(spec("tex", "filter_anisotropic_" + std::to_string(level) + "x").tolerance(rr::Tolerance::psnr(25.0)), [level](Rig& r, rr::CaptureSet& o) { aniso_scene(r, o, level); });
+        single(spec("tex", "filter_anisotropic_" + std::to_string(level) + "x").tolerance(rr::Tolerance::psnr(25.0)).lod_bracket(0.25f), [level](Rig& r, rr::CaptureSet& o) { aniso_scene(r, o, level); });
     }
     const float black[4] = {0, 0, 0, 1};
     const float transparent[4] = {0, 0, 0, 0};

@@ -293,7 +293,9 @@ Com<ID3D10BlendState1> Rig::blend1(const D3D10_BLEND_DESC1& desc) {
     return hold(std::move(out));
 }
 
-Com<ID3D10SamplerState> Rig::sampler(const D3D10_SAMPLER_DESC& desc) {
+Com<ID3D10SamplerState> Rig::sampler(const D3D10_SAMPLER_DESC& source) {
+    D3D10_SAMPLER_DESC desc = source;
+    desc.MipLODBias += kit.lod_bias;
     Com<ID3D10SamplerState> out;
     check(d->CreateSamplerState(&desc, out.put()), "CreateSamplerState");
     return hold(std::move(out));

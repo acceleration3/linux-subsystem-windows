@@ -290,7 +290,9 @@ Com<ID3D11DepthStencilView> Rig::dsv(ID3D11Resource* resource, const D3D11_DEPTH
     return out;
 }
 
-Com<ID3D11SamplerState> Rig::smp(const D3D11_SAMPLER_DESC& desc) {
+Com<ID3D11SamplerState> Rig::smp(const D3D11_SAMPLER_DESC& source) {
+    D3D11_SAMPLER_DESC desc = source;
+    desc.MipLODBias += kit.lod_bias;
     Com<ID3D11SamplerState> out;
     if (!ok(dev->CreateSamplerState(&desc, out.put()), "CreateSamplerState")) {
         return {};

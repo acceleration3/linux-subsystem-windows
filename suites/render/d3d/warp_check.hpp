@@ -91,9 +91,32 @@ public:
         if (actual.status != rr::RunStatus::Ok) {
             return Outcome::fail(actual.reason);
         }
+        rr::RunResult low;
+        rr::RunResult high;
+        const bool bracket = entry.spec.lod_bracket_bias() > 0.0f && !analytic && !self;
+        if (bracket) {
+            context.measure("lod_bracket", std::string(rr::CaseSpec::lod_bracket_reason()));
+            const float bias = entry.spec.lod_bracket_bias();
+            for (int side = 0; side < 2; ++side) {
+                Kit shifted;
+                if (shifted.open(true, entry.spec, error) != OpenStatus::Ok) {
+                    return Outcome::fail("the WARP bracket oracle is unavailable: " + error);
+                }
+                if constexpr (requires { shifted.lod_bias = 0.0f; }) {
+                    shifted.lod_bias = side == 0 ? -bias : bias;
+                }
+                std::unique_ptr<rr::Scene<Kit>> shifted_scene = entry.make();
+                context.phase(side == 0 ? "bracket oracle low" : "bracket oracle high");
+                (side == 0 ? low : high) = rr::run_scene(shifted, entry.spec, *shifted_scene);
+                if ((side == 0 ? low : high).status != rr::RunStatus::Ok) {
+                    return Outcome::fail("the WARP bracket oracle failed: " + (side == 0 ? low : high).reason);
+                }
+            }
+        }
         context.phase("judging");
         Problems problems;
-        ImageJudge::compare_frames(context, problems, entry.spec, expected.frames, actual.frames, true);
+        ImageJudge::compare_frames(context, problems, entry.spec, expected.frames, actual.frames, true, bracket ? &low.frames : nullptr,
+                                   bracket ? &high.frames : nullptr);
         return problems.outcome();
     }
 };

@@ -132,7 +132,7 @@ void register_filters() {
     for (const Item& item : items) {
         const bool aniso = item.aniso > 1;
         const bool magnified = std::string(item.name) == "min_point_mag_linear";
-        Cases::single(rr::CaseSpec("tex", std::string("sampler_filter_") + item.name).tolerance(aniso ? anisotropic_tolerance() : (std::string(item.name).find("point") != std::string::npos || std::string(item.name).find("maximum") != std::string::npos ? texel_edge_tolerance() : sampler_tolerance())).tag("sampler"),
+        Cases::single(rr::CaseSpec("tex", std::string("sampler_filter_") + item.name).tolerance(aniso ? anisotropic_tolerance() : (std::string(item.name).find("point") != std::string::npos || std::string(item.name).find("maximum") != std::string::npos ? texel_edge_tolerance() : sampler_tolerance())).tag("sampler").lod_bracket(0.25f),
                       [item, aniso, magnified](Kit& kit, rr::CaptureSet& out, std::string& error) {
                           D3D12_SAMPLER_DESC sampler = Binder::sampler_desc(item.filter, D3D12_TEXTURE_ADDRESS_MODE_WRAP);
                           sampler.MaxAnisotropy = item.aniso;

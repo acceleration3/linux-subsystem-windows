@@ -18,6 +18,10 @@ public:
                         std::vector<rr::CaptureRecord>* records = nullptr);
 
     static void compare_frames(Context& context, Problems& problems, const rr::CaseSpec& spec, const rr::FrameCaptures& expected,
-                               const rr::FrameCaptures& actual, bool oracle = false);
+                               const rr::FrameCaptures& actual, bool oracle = false, const rr::FrameCaptures* low = nullptr,
+                               const rr::FrameCaptures* high = nullptr);
+
+    [[nodiscard]] static rr::Image bracketed(const rr::Image& expected, const rr::Image& low, const rr::Image& high, const rr::Image& actual,
+                                             const rr::Tolerance& tolerance);
 };
 }  // namespace lsw::suites::render

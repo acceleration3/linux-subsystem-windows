@@ -455,6 +455,7 @@ void Binder::uav_buffer(UINT slot, ID3D12Resource* resource, DXGI_FORMAT format,
 
 void Binder::sampler(UINT slot, const D3D12_SAMPLER_DESC& desc) {
     D3D12_SAMPLER_DESC changed = desc;
+    changed.MipLODBias += owner->lod_bias;
     if (owner->under_test) {
         if (owner->broken("sampler_filter")) {
             const bool point = (changed.Filter & 0x15) == 0;
