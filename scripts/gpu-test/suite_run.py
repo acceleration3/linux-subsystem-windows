@@ -16,6 +16,10 @@ CORES = "~/.local/share/lsw-gpu-test/cores"
 RECOVERY_BUDGET = 5
 STACK_BUDGET = 28
 RECOVERY_CREDIT_CAP = 1800
+SUITE_PROCESSES = ("lsw-suites", "lsw-render-ref")
+OWN_PROCESSES = ("cmd.exe", "conhost.exe", "openconsole.exe", "lsw-guest-agent.exe", "dwm.exe")
+SHELL_PROCESSES = ("explorer.exe", "shellexperiencehost.exe", "startmenuexperiencehost.exe", "searchhost.exe",
+                   "searchapp.exe", "shellhost.exe", "textinputhost.exe", "sihost.exe", "applicationframehost.exe")
 REMOTE_VM_LOCK = "/tmp/lsw-accel-vm.lock"
 
 
@@ -195,6 +199,7 @@ class Context:
         self.credit = 0.0
         self.limit_hit = False
         self.incidents = []
+        self.desktop = []
         self.seen_cores = set()
         self.stop = threading.Event()
 
@@ -320,6 +325,59 @@ class Context:
             return str(pathlib.Path(path).relative_to(self.args.root))
         except ValueError:
             return str(path)
+
+
+def stray_windows(windows):
+    stray = []
+    for window in windows:
+        image = str(window.get("exe_path") or "").replace("\\", "/").rsplit("/", 1)[-1].lower()
+        if not image or image.startswith(SUITE_PROCESSES) or image in OWN_PROCESSES or image in SHELL_PROCESSES:
+            continue
+        stray.append({"process": image, "title": str(window.get("title") or ""), "pid": window.get("pid"),
+                      "hwnd": window.get("hwnd")})
+    return stray
+
+
+def list_windows(ctx):
+    link = ctx.link()
+    try:
+        return link.call("list_windows", {"session": 1}, timeout=60).get("windows", [])
+    finally:
+        link.close()
+
+
+def clear_desktop(ctx, phase, pause=3.0):
+    try:
+        found = stray_windows(list_windows(ctx))
+        if not found:
+            return []
+        link = ctx.link()
+        try:
+            for window in found:
+                link.call("close_window", {"hwnd": window["hwnd"]}, timeout=30)
+        finally:
+            link.close()
+        time.sleep(pause)
+        left = {w["hwnd"] for w in stray_windows(list_windows(ctx))}
+        forced = [w for w in found if w["hwnd"] in left]
+        if forced:
+            lines = [f"taskkill /f /pid {pid}" for pid in sorted({w["pid"] for w in forced if w.get("pid")})]
+            link = ctx.link()
+            try:
+                link.call("run_script", {"name": "suite-run desktop", "script": "@echo off\r\n" + "\r\n".join(lines) + "\r\n",
+                                         "session": 1})
+            finally:
+                link.close()
+    except (lsw_link.LinkError, OSError) as error:
+        say(f"{ctx.args.host}: the desktop could not be cleared before the {phase} phase: {str(error)[-120:]}")
+        return []
+    for window in found:
+        record = {"phase": phase, "process": window["process"], "title": window["title"],
+                  "closed_by": "taskkill" if window in forced else "WM_CLOSE", "time": time.strftime("%Y-%m-%dT%H:%M:%S")}
+        ctx.desktop.append(record)
+        say(f"{ctx.args.host}: incident: a window of {record['process']} titled \"{record['title']}\" was open before the "
+            f"{phase} phase and was closed by {record['closed_by']}")
+    return found
 
 
 def read_text(ctx, name):
@@ -534,7 +592,7 @@ def merged(ctx, spec):
     root = dict(spec.root or {"exe": f"lsw-suites{ctx.args.bits}.exe", "adapter": {}})
     root.update({"complete": not spec.aborted, "summary": summary, "segments": spec.segments,
                  "crashes": spec.crashes, "host_crashes": [c["id"] for c in checks if c.get("host_crash")],
-                 "incidents": ctx.incidents, "checks": checks})
+                 "incidents": ctx.incidents, "desktop_incidents": ctx.desktop, "checks": checks})
     return root
 
 
@@ -569,6 +627,9 @@ def finish(ctx, spec):
     out.mkdir(parents=True, exist_ok=True)
     (out / "result.json").write_text(json.dumps(merged(ctx, spec), indent=1))
     (out / "output.txt").write_text("\n".join(spec.outputs))
+    if ctx.desktop:
+        (out / "desktop-incidents.txt").write_text("".join(
+            f"{item['time']} {item['phase']} {item['process']} \"{item['title']}\" closed by {item['closed_by']}\n" for item in ctx.desktop))
     tag = spec.name
     last = spec.segments
     try:
@@ -725,6 +786,8 @@ def execute(args, specs):
     try:
         for entry in phases:
             phase = None
+            if entry[0] != "main":
+                clear_desktop(ctx, entry[0])
             for spec in specs:
                 spec.stage_exclude = isolated if entry[0] == "main" else others if entry[0] == "isolated" else []
             serial = entry[1] == "serial"

@@ -1,4 +1,5 @@
 import fcntl
+import json
 import os
 import pathlib
 import subprocess
@@ -16,7 +17,7 @@ import suite_run  # noqa: E402
 
 def context(filter_text="", limit_hit=False):
     args = types.SimpleNamespace(filter=filter_text, suite="sanity", timeout=3600, bits="64")
-    return types.SimpleNamespace(args=args, limit_hit=limit_hit, incidents=[])
+    return types.SimpleNamespace(args=args, limit_hit=limit_hit, incidents=[], desktop=[])
 
 
 def spec_with(*finished):
@@ -314,6 +315,83 @@ class RecoveryCredit(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 ctx.recover("dead", 0)
         self.assertEqual(ctx.credit, 240.0)
+
+
+class FakeLink:
+    def __init__(self, ctx):
+        self.ctx = ctx
+
+    def call(self, command, params=None, timeout=None):
+        self.ctx.calls.append((command, params))
+        if command == "list_windows":
+            return {"windows": self.ctx.listings.pop(0) if len(self.ctx.listings) > 1 else self.ctx.listings[0]}
+        return {"ok": True}
+
+    def close(self):
+        pass
+
+
+def window(hwnd, path, title="", pid=10):
+    return {"hwnd": hwnd, "pid": pid, "title": title, "exe_path": path}
+
+
+class DesktopClear(unittest.TestCase):
+    def make(self, *listings):
+        ctx = types.SimpleNamespace(args=types.SimpleNamespace(host="h"), desktop=[], calls=[], listings=list(listings))
+        ctx.link = lambda timeout=60.0: FakeLink(ctx)
+        return ctx
+
+    def test_suite_shell_and_agent_windows_are_never_closed(self):
+        found = suite_run.stray_windows([
+            window(1, "C:\\av\\render-run\\x\\lsw-suites64.exe"), window(2, "C:\\Windows\\explorer.exe", "Program Manager"),
+            window(3, "C:\\Windows\\System32\\cmd.exe"), window(4, "C:\\av\\lsw-guest-agent.exe"),
+            window(5, "C:\\Windows\\SystemApps\\StartMenuExperienceHost.exe"), window(6, "")])
+        self.assertEqual(found, [])
+
+    def test_another_application_window_is_stray(self):
+        found = suite_run.stray_windows([window(7, "C:\\Program Files\\Browser\\browser.exe", "Welcome", 77)])
+        self.assertEqual([(w["process"], w["title"], w["hwnd"]) for w in found], [("browser.exe", "Welcome", 7)])
+
+    def test_a_stray_window_is_closed_and_recorded(self):
+        stray = window(7, "C:\\Browser\\browser.exe", "Welcome", 77)
+        ctx = self.make([stray], [])
+        with mock.patch.object(suite_run.time, "sleep"):
+            suite_run.clear_desktop(ctx, "isolated")
+        self.assertIn(("close_window", {"hwnd": 7}), ctx.calls)
+        self.assertNotIn("run_script", [c for c, _ in ctx.calls])
+        self.assertEqual([(r["process"], r["title"], r["phase"], r["closed_by"]) for r in ctx.desktop],
+                         [("browser.exe", "Welcome", "isolated", "WM_CLOSE")])
+
+    def test_a_window_that_stays_open_is_ended_through_the_process(self):
+        stray = window(7, "C:\\Browser\\browser.exe", "Welcome", 77)
+        ctx = self.make([stray], [stray])
+        with mock.patch.object(suite_run.time, "sleep"):
+            suite_run.clear_desktop(ctx, "isolated")
+        script = [p for c, p in ctx.calls if c == "run_script"][0]["script"]
+        self.assertIn("taskkill /f /pid 77", script)
+        self.assertEqual(ctx.desktop[0]["closed_by"], "taskkill")
+
+    def test_a_clean_desktop_records_nothing(self):
+        ctx = self.make([window(1, "C:\\Windows\\explorer.exe")])
+        suite_run.clear_desktop(ctx, "isolated")
+        self.assertEqual(ctx.desktop, [])
+        self.assertEqual([c for c, _ in ctx.calls], ["list_windows"])
+
+    def test_the_incident_is_written_to_the_result_directory(self):
+        ctx = types.SimpleNamespace(args=types.SimpleNamespace(suite="sanity", timeout=1, bits="64", filter=""), limit_hit=False,
+                                    incidents=[], desktop=[{"time": "t", "phase": "isolated", "process": "browser.exe",
+                                                            "title": "Welcome", "closed_by": "WM_CLOSE"}])
+        with tempfile.TemporaryDirectory() as directory:
+            spec = suite_run.Spec("x", "", directory)
+            ctx.share = types.SimpleNamespace(get=mock.Mock(side_effect=suite_run.lsw_link.LinkError("none")))
+            ctx.guest_dir = "C:\\g"
+            with mock.patch.object(suite_run, "pull_archive", return_value=True):
+                suite_run.finish(ctx, spec)
+            text = (pathlib.Path(directory) / "desktop-incidents.txt").read_text()
+            result = json.loads((pathlib.Path(directory) / "result.json").read_text())
+        self.assertIn("browser.exe", text)
+        self.assertIn("Welcome", text)
+        self.assertEqual(result["desktop_incidents"][0]["process"], "browser.exe")
 
 
 if __name__ == "__main__":
