@@ -133,6 +133,13 @@ class StackEvidence(unittest.TestCase):
         self.assertIn("comm: sleep", text)
         self.assertIn("no stack tool produced output", text)
 
+    def test_a_process_a_killed_tool_left_stopped_runs_again(self):
+        self.tool("eu-stack", f"kill -STOP {self.victim.pid}; sleep 100")
+        self.tool("gdb", "sleep 100")
+        self.collect(budget=2)
+        state = pathlib.Path(f"/proc/{self.victim.pid}/stat").read_text().rsplit(")", 1)[1].split()[0]
+        self.assertNotEqual(state, "T")
+
     def test_a_domain_that_is_not_running_collects_nothing(self):
         os.environ["DOMSTATE"] = "shut off"
         self.assertFalse(self.machine.stacks(self.out))

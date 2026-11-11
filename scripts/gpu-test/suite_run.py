@@ -69,6 +69,7 @@ if [ -z "$stacks" ] && command -v gdb >/dev/null 2>&1; then
     stacks=$(timeout -k 1 "$left" gdb -batch -ex "thread apply all bt" -p "$pid" 2>&1)
     echo "tool: gdb"
 fi
+kill -CONT "$pid" 2>/dev/null
 [ -n "$stacks" ] && printf '%s\\n' "$stacks" || echo "no stack tool produced output"
 """
 
