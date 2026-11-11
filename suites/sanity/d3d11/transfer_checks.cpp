@@ -204,7 +204,7 @@ Outcome TransferChecks::update_bc_and_formats(Context& context) {
         Volume mip(3, 3, 1, f.block, 52);
         device.context->UpdateSubresource(tex.get(), 1, nullptr, mip.bytes.data(), 3 * f.block, 0);
         Volume edge(1, 1, 1, f.block, 53);
-        const D3D11_BOX edge_box{8, 8, 0, 10, 10, 1};
+        const D3D11_BOX edge_box{8, 8, 0, 12, 12, 1};
         device.context->UpdateSubresource(tex.get(), 1, &edge_box, edge.bytes.data(), f.block, 0);
         mip.blit(edge, 0, 0, 0, 1, 1, 1, 2, 2, 0);
         if (!D3d11Tools::read_texture(device, tex.get(), 1, image, error) || image.data != mip.bytes) {
