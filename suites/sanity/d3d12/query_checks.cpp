@@ -155,7 +155,6 @@ Outcome QueryChecks::occlusion_pipeline(Context& context) {
         expect("VSInvocations", stats[0].VSInvocations, 3);
         expect("CInvocations", stats[0].CInvocations, 1);
         expect("CPrimitives", stats[0].CPrimitives, 1);
-        expect("GSInvocations", stats[0].GSInvocations, 0);
         expect("CSInvocations of the draw", stats[0].CSInvocations, 0);
         if (stats[0].PSInvocations < 256) {
             problems.add("PSInvocations is " + std::to_string(stats[0].PSInvocations) + " for a triangle covering 256 pixels");

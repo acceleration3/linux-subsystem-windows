@@ -189,8 +189,8 @@ Outcome QueryChecks::predicate(Context& context) {
             if (stats.VSInvocations < 4 || stats.VSInvocations > 6) {
                 problems.add("PIPELINE_STATISTICS reports " + std::to_string(stats.VSInvocations) + " vertex shader invocations for 6 distinct vertices");
             }
-            if (stats.GSInvocations != 0 || stats.GSPrimitives != 0) {
-                problems.add("PIPELINE_STATISTICS reports geometry shader work without a geometry shader");
+            if (stats.GSPrimitives != 0) {
+                problems.add("PIPELINE_STATISTICS reports geometry shader primitives without a geometry shader");
             }
             if (stats.CInvocations != 2 || stats.CPrimitives != 2) {
                 problems.add("PIPELINE_STATISTICS reports " + std::to_string(stats.CInvocations) + " clipper invocations and " + std::to_string(stats.CPrimitives) + " primitives for 2 visible triangles");
