@@ -152,6 +152,27 @@ std::vector<std::string> JudgeSelfTest::run(std::vector<std::string>& passed) {
         expect("a value far from the sawtooth fails under a wrap aware tolerance", ImageDiff::compare(expected, apart, wrapping).pass, false);
     }
     {
+        Image expected(8, 8, PixelKind::Rgba32Float);
+        Image alpha_step(8, 8, PixelKind::Rgba32Float);
+        Image alpha_far(8, 8, PixelKind::Rgba32Float);
+        Image color_step(8, 8, PixelKind::Rgba32Float);
+        for (std::uint32_t y = 0; y < 8; ++y) {
+            for (std::uint32_t x = 0; x < 8; ++x) {
+                for (unsigned c = 0; c < 4; ++c) {
+                    expected.set_channel(x, y, c, c < 3 ? 0.5 : 2.0 / 3.0);
+                    alpha_step.set_channel(x, y, c, c < 3 ? 0.5 : 1.0);
+                    alpha_far.set_channel(x, y, c, c < 3 ? 0.5 : 0.0);
+                    color_step.set_channel(x, y, c, c < 3 ? 0.5 + 3.0 / 1023.0 : 2.0 / 3.0);
+                }
+            }
+        }
+        const Tolerance per_channel = Tolerance::floats(2.0f / 1023.0f + 1e-5f).with_channel_absolute(0.0f, 0.0f, 0.0f, 1.0f / 3.0f + 1e-5f);
+        expect("a step of the alpha channel passes under its own channel tolerance", ImageDiff::compare(expected, alpha_step, per_channel).pass, true);
+        expect("two steps of the alpha channel fail under its own channel tolerance", ImageDiff::compare(expected, alpha_far, per_channel).pass, false);
+        expect("a step of the alpha channel fails under the colour tolerance alone", ImageDiff::compare(expected, alpha_step, Tolerance::floats(2.0f / 1023.0f + 1e-5f)).pass, false);
+        expect("three steps of a colour channel fail under its channel tolerance", ImageDiff::compare(expected, color_step, per_channel).pass, false);
+    }
+    {
         Image expected = Image::solid(128, 128, kDark);
         for (std::uint32_t y = 0; y < 128; ++y) {
             for (std::uint32_t x = 0; x < 128; ++x) {

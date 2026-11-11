@@ -28,7 +28,8 @@ std::uint64_t drawn_pixels(const Image& image, unsigned channels) {
 
 constexpr std::uint64_t kForgiveFloor = 2;
 
-bool channel_close(ChannelClass klass, double a, double b, const Tolerance& tolerance, double& units) {
+bool channel_close(ChannelClass klass, double a, double b, const Tolerance& tolerance, unsigned channel, double& units) {
+    const double absolute = channel < 4 && tolerance.channel_absolute[channel] > 0.0f ? static_cast<double>(tolerance.channel_absolute[channel]) : static_cast<double>(tolerance.absolute);
     if (std::isnan(a) || std::isnan(b)) {
         const bool both = std::isnan(a) && std::isnan(b);
         units = both ? 0.0 : 255.0;
@@ -56,19 +57,19 @@ bool channel_close(ChannelClass klass, double a, double b, const Tolerance& tole
     switch (klass) {
         case ChannelClass::Float:
             units = delta * 255.0;
-            return delta <= static_cast<double>(tolerance.absolute) + static_cast<double>(tolerance.relative) * std::max(std::fabs(a), std::fabs(b));
+            return delta <= absolute + static_cast<double>(tolerance.relative) * std::max(std::fabs(a), std::fabs(b));
         case ChannelClass::Integer:
             units = delta;
             return false;
         case ChannelClass::Unorm16: {
             units = delta * 255.0 / 65535.0;
             const double larger = std::max(std::fabs(a), std::fabs(b)) * 255.0 / 65535.0;
-            const double allowed = std::max(static_cast<double>(tolerance.byte_delta), static_cast<double>(tolerance.absolute) * 255.0 + static_cast<double>(tolerance.relative) * larger);
+            const double allowed = std::max(static_cast<double>(tolerance.byte_delta), absolute * 255.0 + static_cast<double>(tolerance.relative) * larger);
             return units <= allowed;
         }
         case ChannelClass::Unorm8: {
             units = delta;
-            const double allowed = std::max(static_cast<double>(tolerance.byte_delta), static_cast<double>(tolerance.absolute) * 255.0 + static_cast<double>(tolerance.relative) * std::max(std::fabs(a), std::fabs(b)));
+            const double allowed = std::max(static_cast<double>(tolerance.byte_delta), absolute * 255.0 + static_cast<double>(tolerance.relative) * std::max(std::fabs(a), std::fabs(b)));
             return delta <= allowed;
         }
     }
@@ -84,7 +85,7 @@ bool ImageDiff::close(const Image& a, std::uint32_t ax, std::uint32_t ay, const 
     const ChannelClass klass = PixelInfo::channel_class(a.kind());
     for (unsigned c = 0; c < PixelInfo::channels(a.kind()); ++c) {
         double units = 0.0;
-        if (!channel_close(klass, a.channel(ax, ay, c), b.channel(bx, by, c), tolerance, units)) {
+        if (!channel_close(klass, a.channel(ax, ay, c), b.channel(bx, by, c), tolerance, c, units)) {
             ok = false;
         }
         worst = std::max(worst, units);

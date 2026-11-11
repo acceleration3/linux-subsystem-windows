@@ -85,6 +85,15 @@ Tolerance Tolerance::with_edge(int radius) const {
     return t;
 }
 
+Tolerance Tolerance::with_channel_absolute(float r, float g, float b, float a) const {
+    Tolerance t = *this;
+    t.channel_absolute[0] = r;
+    t.channel_absolute[1] = g;
+    t.channel_absolute[2] = b;
+    t.channel_absolute[3] = a;
+    return t;
+}
+
 Tolerance Tolerance::with_wrap() const {
     Tolerance t = *this;
     t.wrap = true;

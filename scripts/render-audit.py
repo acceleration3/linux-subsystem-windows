@@ -70,7 +70,8 @@ def read_rref(path):
     return Raw(width, height, name, data, payload)
 
 
-def channel_close(klass, a, b, tol):
+def channel_close(klass, a, b, tol, channel=0):
+    absolute = tol["channel_absolute"][channel] if channel < 4 and tol["channel_absolute"][channel] > 0.0 else tol["absolute"]
     a_nan = a != a
     b_nan = b != b
     if a_nan or b_nan:
@@ -86,20 +87,21 @@ def channel_close(klass, a, b, tol):
         delta = math.fmod(delta, period)
         delta = min(delta, period - delta)
     if klass == "float":
-        return delta <= tol["absolute"] + tol["relative"] * max(abs(a), abs(b)), delta * 255.0
+        return delta <= absolute + tol["relative"] * max(abs(a), abs(b)), delta * 255.0
     if klass == "integer":
         return False, delta
     if klass == "unorm16":
         units = delta * 255.0 / 65535.0
         larger = max(abs(a), abs(b)) * 255.0 / 65535.0
-        return units <= max(tol["byte_delta"], tol["absolute"] * 255.0 + tol["relative"] * larger), units
-    return delta <= max(tol["byte_delta"], tol["absolute"] * 255.0 + tol["relative"] * max(abs(a), abs(b))), delta
+        return units <= max(tol["byte_delta"], absolute * 255.0 + tol["relative"] * larger), units
+    return delta <= max(tol["byte_delta"], absolute * 255.0 + tol["relative"] * max(abs(a), abs(b))), delta
 
 
 def normalize_tolerance(raw):
     return {
         "byte_delta": raw.get("byte_delta", 0),
         "absolute": f32(raw.get("absolute", 0.0)),
+        "channel_absolute": [f32(v) for v in (list(raw.get("channel_absolute", [])) + [0.0] * 4)[:4]],
         "relative": f32(raw.get("relative", 0.0)),
         "outlier_fraction": raw.get("outlier_fraction", 0.0),
         "edge_radius": raw.get("edge_radius", 0),
@@ -197,7 +199,7 @@ def pixel_close(expected, ex, ey, actual, ax, ay, tol):
     eo = (ey * expected.width + ex) * channels
     ao = (ay * actual.width + ax) * channels
     for c in range(channels):
-        if not channel_close(klass, expected.data[eo + c], actual.data[ao + c], tol)[0]:
+        if not channel_close(klass, expected.data[eo + c], actual.data[ao + c], tol, c)[0]:
             return False
     return True
 
@@ -231,7 +233,7 @@ def judge(expected, actual, tol, quick=False):
         for c in cs:
             a = ed[pixel * channels + c]
             b = ad[pixel * channels + c]
-            close, units = channel_close(klass, a, b, tol)
+            close, units = channel_close(klass, a, b, tol, c)
             if not close:
                 ok = False
             worst = max(worst, units)

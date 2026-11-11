@@ -250,7 +250,7 @@ std::vector<std::filesystem::path> CaptureDump::write(const std::filesystem::pat
         }
         const Tolerance& t = r.tolerance;
         json += ",\"tolerance\":{\"name\":\"" + escape(t.name) + "\",\"byte_delta\":" + std::to_string(t.byte_delta) +
-                ",\"absolute\":" + number(t.absolute) + ",\"relative\":" + number(t.relative) +
+                ",\"absolute\":" + number(t.absolute) + ",\"relative\":" + number(t.relative) + ",\"channel_absolute\":[" + number(t.channel_absolute[0]) + "," + number(t.channel_absolute[1]) + "," + number(t.channel_absolute[2]) + "," + number(t.channel_absolute[3]) + "]" +
                 ",\"outlier_fraction\":" + number(t.outlier_fraction) + ",\"edge_radius\":" + std::to_string(t.edge_radius) +
                 ",\"wrap\":" + std::string(t.wrap ? "true" : "false") + ",\"quad_bracket\":" + std::string(t.quad_bracket ? "true" : "false") + ",\"coverage_blocks\":" + std::string(t.coverage_blocks ? "true" : "false") + ",\"forgive_fraction\":" + number(t.forgive_fraction) + ",\"min_psnr\":" + number(t.min_psnr) +
                 ",\"outlier_max_delta\":" + number(t.outlier_max_delta) + ",\"max_outliers\":" + std::to_string(t.max_outliers) + "}";

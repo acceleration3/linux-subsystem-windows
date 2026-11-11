@@ -8,6 +8,7 @@ struct Tolerance {
     int byte_delta = 0;
     float absolute = 0.0f;
     float relative = 0.0f;
+    float channel_absolute[4] = {0.0f, 0.0f, 0.0f, 0.0f};
     double outlier_fraction = 0.0;
     int edge_radius = 0;
     double forgive_fraction = 0.0;
@@ -32,6 +33,7 @@ struct Tolerance {
 
     [[nodiscard]] Tolerance with_outliers(double fraction) const;
     [[nodiscard]] Tolerance with_edge(int radius) const;
+    [[nodiscard]] Tolerance with_channel_absolute(float r, float g, float b, float a) const;
     [[nodiscard]] Tolerance with_wrap() const;
     [[nodiscard]] Tolerance with_quad_bracket() const;
     [[nodiscard]] Tolerance with_coverage_blocks() const;
