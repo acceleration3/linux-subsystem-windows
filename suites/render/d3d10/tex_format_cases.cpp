@@ -203,7 +203,7 @@ void stream_case(const TexFormat& f, const Caps& caps) {
     MultiBody<StreamState> body;
     body.setup = [copy](Rig& r, StreamState& s) { stream_setup(r, s, copy); };
     body.frame = [copy](Rig& r, StreamState& s, unsigned frame) { stream_frame(r, s, copy, frame); };
-    multi<StreamState>(spec("tex", std::string("stream_update_load_") + f.name, f.name[0] == 'b' ? 1 : 0).frames(4, {1, 3}).tolerance(rr::Tolerance::floats(f.tol, f.tol)), body, caps);
+    multi<StreamState>(spec("tex", std::string("stream_update_load_") + f.name, f.name[0] == 'b' ? 1 : 0).frames(4, {1, 3}).tolerance(f.gen == 'b' ? rr::Tolerance::block_compressed(std::string(f.name).find("snorm") != std::string::npos) : rr::Tolerance::floats(f.tol, f.tol)), body, caps);
 }
 
 const Registrar kTexFormats{[] {

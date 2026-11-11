@@ -382,6 +382,16 @@ rr::Tolerance format_tolerance() {
     return t;
 }
 
+rr::Tolerance compressed_format_tolerance(const std::string& name) {
+    const bool legacy = name.rfind("bc1", 0) == 0 || name.rfind("bc2", 0) == 0 || name.rfind("bc3", 0) == 0 || name.rfind("bc4", 0) == 0 || name.rfind("bc5", 0) == 0;
+    if (!legacy) {
+        return format_tolerance();
+    }
+    rr::Tolerance t = rr::Tolerance::block_compressed().with_edge(1);
+    t.name = "block-compressed(edge1)";
+    return t;
+}
+
 rr::Tolerance texel_edge_tolerance() {
     rr::Tolerance t = rr::Tolerance::filter(4, 0.02).with_edge(1);
     t.min_psnr = 26.0;

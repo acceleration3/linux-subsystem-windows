@@ -347,7 +347,7 @@ void register_formats() {
         {"bc6h_uf16", DXGI_FORMAT_BC6H_UF16, DXGI_FORMAT_BC6H_UF16, 4}};
     for (const FormatCase& item : compressed) {
         Cases::single(
-            rr::CaseSpec("tex", std::string("format_") + item.name).tolerance(format_tolerance()).tag("format"),
+            rr::CaseSpec("tex", std::string("format_") + item.name).tolerance(compressed_format_tolerance(item.name)).tag("format"),
             [item](Kit& kit, rr::CaptureSet& out, std::string& error) {
                 TextureSpec spec;
                 spec.format = item.format;

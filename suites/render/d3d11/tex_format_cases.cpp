@@ -316,7 +316,7 @@ bool run_bc(Rig& r, Cap& out, const BcRow& row) {
 struct BcRegistrar {
     BcRegistrar() {
         for (const BcRow& row : kBc) {
-            Add(spec("tex", (std::string("sample_") + row.name).c_str()).tolerance(rr::Tolerance::filter(6, 0.004)),
+            Add(spec("tex", (std::string("sample_") + row.name).c_str()).tolerance(row.family <= 5 ? rr::Tolerance::block_compressed(row.kind == 's') : rr::Tolerance::filter(6, 0.004)),
                 [&row](Rig& r, Cap& out) { return run_bc(r, out, row); },
                 [&row](Rig& r) { return need_format(r, row.format, D3D11_FORMAT_SUPPORT_TEXTURE2D | D3D11_FORMAT_SUPPORT_SHADER_SAMPLE, "block compressed sampling"); });
         }

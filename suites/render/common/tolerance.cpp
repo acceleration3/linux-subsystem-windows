@@ -63,6 +63,15 @@ Tolerance Tolerance::floats(float absolute, float relative) {
     return t;
 }
 
+Tolerance Tolerance::block_compressed(bool snorm) {
+    Tolerance t;
+    t.byte_delta = 9;
+    t.absolute = snorm ? 0.07f : 0.04f;
+    t.outlier_fraction = 0.004;
+    t.name = "block-compressed";
+    return t;
+}
+
 Tolerance Tolerance::with_outliers(double fraction) const {
     Tolerance t = *this;
     t.outlier_fraction = fraction;

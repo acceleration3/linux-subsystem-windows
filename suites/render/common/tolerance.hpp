@@ -25,6 +25,7 @@ struct Tolerance {
     [[nodiscard]] static Tolerance psnr(double decibels);
     [[nodiscard]] static Tolerance coverage_edges();
     [[nodiscard]] static Tolerance floats(float absolute, float relative = 0.0f);
+    [[nodiscard]] static Tolerance block_compressed(bool snorm = false);
 
     [[nodiscard]] Tolerance with_outliers(double fraction) const;
     [[nodiscard]] Tolerance with_edge(int radius) const;

@@ -58,6 +58,7 @@ constexpr float kFlatTilt = 1000.0f;
 [[nodiscard]] rr::Tolerance anisotropic_tolerance();
 [[nodiscard]] rr::Tolerance loose_sampler_tolerance();
 [[nodiscard]] rr::Tolerance format_tolerance();
+[[nodiscard]] rr::Tolerance compressed_format_tolerance(const std::string& name);
 [[nodiscard]] rr::Tolerance exact_op_tolerance();
 [[nodiscard]] rr::Tolerance texel_edge_tolerance();
 }  // namespace lsw::suites::render::d3d12
