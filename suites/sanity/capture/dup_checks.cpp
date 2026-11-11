@@ -229,10 +229,15 @@ Outcome DupChecks::dirty_rects_cover_changes(Context& context) {
     DuplicationFrame frame;
     Bitmap previous;
     int baseline_frames = 0;
+    int nudge = 0;
     const auto baseline_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
     while (previous.pixels.empty() && std::chrono::steady_clock::now() < baseline_deadline) {
+        paint({0, 0, kClientW, kClientH}, RGB(40 + (++nudge & 1), 44, 48));
         const HRESULT status = dup.acquire(300, frame, error);
         if (SUCCEEDED(status) && !frame.image.pixels.empty()) {
+            if (frame.info.LastPresentTime.QuadPart == 0 || frame.info.AccumulatedFrames == 0) {
+                continue;
+            }
             ++baseline_frames;
             if (frame.all_zero) {
                 return Outcome::fail(DuplicationSession::zero_frame_finding(baseline_frames, frame.info.LastPresentTime.QuadPart));
@@ -243,7 +248,7 @@ Outcome DupChecks::dirty_rects_cover_changes(Context& context) {
         }
     }
     if (previous.pixels.empty()) {
-        return Outcome::fail("no baseline desktop frame was delivered within 5 s");
+        return Outcome::fail("no desktop frame with a LastPresentTime was delivered within 5 s");
     }
     long long frames_checked = 0;
     long long changes_seen = 0;
@@ -261,6 +266,9 @@ Outcome DupChecks::dirty_rects_cover_changes(Context& context) {
             if (FAILED(status) || !error.empty()) {
                 problems.add(what + ": AcquireNextFrame returned " + Kit::hr(status) + " " + error);
                 return;
+            }
+            if (frame.info.LastPresentTime.QuadPart == 0) {
+                continue;
             }
             if (frame.all_zero) {
                 problems.add(DuplicationSession::zero_frame_finding(static_cast<int>(frames_checked) + 1, frame.info.LastPresentTime.QuadPart));
