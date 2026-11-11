@@ -137,7 +137,7 @@ check_running() {
         rm -f "${report}"
         return 2
     fi
-    python3 -B "${HERE}/stack_manifest.py" check --stack "${stack}" --mapped "${report}"
+    python3 -B "${HERE}/stack_manifest.py" check --stack "${stack}" --mapped "${report}" "$@"
     local rc=$?
     rm -f "${report}"
     return ${rc}
@@ -191,10 +191,10 @@ deploy_accel() {
 deploy_if_needed() {
     local rc
     if [[ ${redeploy} -eq 0 && $(deployed_id) == "$(manifest_id)" ]]; then
-        check_running
+        check_running --package
         rc=$?
         if [[ ${rc} -eq 0 ]]; then
-            printf 'verify: the VM already runs this stack\n'
+            printf 'verify: the VM already runs this stack and its guest has the stack driver package\n'
             return 0
         fi
     fi
@@ -256,7 +256,7 @@ ensure_suites_built
 if [[ ${dry} -eq 1 ]]; then
     printf '[dry-run] queue ticket on %s in %s\n' "${host}" "${LSW_VERIFY_QUEUE:-${XDG_RUNTIME_DIR:-/tmp}/lsw-verify-queue}"
     printf '[dry-run] hold %s, killed after %ss\n' "$([[ ${host} == local ]] && echo 'lsw-render.lock' || echo '/tmp/lsw-accel-vm.lock on accel')" "${max_hold}"
-    printf '[dry-run] deploy stack %s (suite %s, driver %s) unless the VM already runs it\n' "$(manifest_id)" "$(manifest_field suite_sha | cut -c1-8)" "$(manifest_field driver_sha | cut -c1-8)"
+    printf '[dry-run] deploy stack %s (suite %s, driver %s) unless the VM already runs it and its guest has its driver package\n' "$(manifest_id)" "$(manifest_field suite_sha | cut -c1-8)" "$(manifest_field driver_sha | cut -c1-8)"
     printf '[dry-run] check the md5 of the executor and both modules the QEMU maps against the manifest\n'
     printf '[dry-run] render-run.sh --parallel --no-build --hosts %s --bits %s --filter %s --suite %s%s -> %s\n' "${host}" "${bits}" "${filter}" "${suite}" "$([[ ${host} == local ]] && echo " --adapters ${adapters}")" "${out}"
     exit 0

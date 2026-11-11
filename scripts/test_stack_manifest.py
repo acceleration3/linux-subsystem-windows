@@ -1,5 +1,6 @@
 import json
 import pathlib
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -57,6 +58,28 @@ class ManifestTest(unittest.TestCase):
         self.assertEqual(len(problems), 2)
         self.assertIn("libav_executor.so", problems[0])
         self.assertIn("not mapped", problems[1])
+
+    def test_guest_package_is_checked_only_when_asked(self):
+        mapped = {name.rsplit("/", 1)[-1]: md5 for name, md5 in self.manifest["files"].items()}
+        self.assertEqual(sm.check(self.manifest, mapped), [])
+        self.assertIn("could not be read", sm.check(self.manifest, mapped, package=True)[0])
+        mapped[sm.GUEST_PACKAGE] = "0" * 32
+        self.assertIn("driver package has md5", sm.check(self.manifest, mapped, package=True)[0])
+        mapped[sm.GUEST_PACKAGE] = self.manifest["package_sha256"]
+        self.assertEqual(sm.check(self.manifest, mapped, package=True), [])
+
+    def test_guest_package_md5_reads_the_guest_file(self):
+        def run(command, **kwargs):
+            target = command[-1].split('" "')[1].rstrip('"')
+            self.assertEqual(command[-1].split('" "')[0], 'get "\\av\\package\\package.sha256')
+            pathlib.Path(target).write_text("x")
+            return subprocess.CompletedProcess(command, 0, "", "")
+
+        def missing(command, **kwargs):
+            return subprocess.CompletedProcess(command, 1, "NT_STATUS_OBJECT_NAME_NOT_FOUND", "")
+
+        self.assertEqual(sm.guest_package_md5(run), self.manifest["package_sha256"])
+        self.assertIsNone(sm.guest_package_md5(missing))
 
     def test_report_reads_the_mapping_before_the_path(self):
         seen = []
