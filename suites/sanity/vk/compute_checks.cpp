@@ -207,17 +207,32 @@ Outcome ComputeChecks::vs_cpu(Context& context) {
                 if (Kit::succeeds(problems, "subgroup dispatch", program.run(nullptr, 0, groups))) {
                     output.acquire();
                     const std::uint32_t size = rig.subgroup.subgroupSize;
-                    for (std::uint32_t i = 0; i < groups * 64; ++i) {
-                        const std::uint32_t sum = output.words()[i * 2];
-                        const std::uint32_t reported = output.words()[i * 2 + 1];
-                        if (reported != size) {
-                            problems.add("invocation " + std::to_string(i) + " sees gl_SubgroupSize " + std::to_string(reported) + ", the device reports " + std::to_string(size));
-                            break;
+                    const std::uint32_t largest = std::min<std::uint32_t>(size, 64);
+                    bool broken = false;
+                    for (std::uint32_t g = 0; g < groups && !broken; ++g) {
+                        std::vector<std::uint32_t> members(largest + 1, 0);
+                        for (std::uint32_t i = g * 64; i < (g + 1) * 64; ++i) {
+                            const std::uint32_t sum = output.words()[i * 2];
+                            const std::uint32_t reported = output.words()[i * 2 + 1];
+                            if (reported != size) {
+                                problems.add("invocation " + std::to_string(i) + " sees gl_SubgroupSize " + std::to_string(reported) + ", the device reports " + std::to_string(size));
+                                broken = true;
+                                break;
+                            }
+                            if (sum < 1 || sum > largest) {
+                                problems.add("invocation " + std::to_string(i) + " computed subgroupAdd(1) = " + std::to_string(sum) + ", expected 1 to " + std::to_string(largest) +
+                                             " active invocations of its subgroup");
+                                broken = true;
+                                break;
+                            }
+                            ++members[sum];
                         }
-                        if (sum != std::min<std::uint32_t>(size, 64)) {
-                            problems.add("invocation " + std::to_string(i) + " computed subgroupAdd(1) = " + std::to_string(sum) + ", expected " +
-                                         std::to_string(std::min<std::uint32_t>(size, 64)));
-                            break;
+                        for (std::uint32_t sum = 1; sum <= largest && !broken; ++sum) {
+                            if (members[sum] % sum != 0) {
+                                problems.add("workgroup " + std::to_string(g) + " has " + std::to_string(members[sum]) + " invocations that computed subgroupAdd(1) = " + std::to_string(sum) +
+                                             ", which do not form whole subgroups of " + std::to_string(sum));
+                                broken = true;
+                            }
                         }
                     }
                 }

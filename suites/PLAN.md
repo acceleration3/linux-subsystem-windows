@@ -962,7 +962,7 @@ Each loop creates and destroys 5000 objects of the kind with its largest practic
 
 | check | contract |
 |---|---|
-| `sanity.vk.compute.vs_cpu` | Compute shaders (SSBO/UBO/push constant/shared memory/atomic/subgroup per caps) produce results equal to the CPU for several dispatch sizes including indirect and zero-size. |
+| `sanity.vk.compute.vs_cpu` | Compute shaders (SSBO/UBO/push constant/shared memory/atomic/subgroup per caps) produce results equal to the CPU for several dispatch sizes including indirect and zero-size; subgroupAdd(1) is judged only as 1 to the subgroup size with the invocations of a workgroup forming whole subgroups, since a subgroup need not be full. |
 | `sanity.vk.graphics.vs_twin` | A render pass (and dynamic rendering) scene with depth, blending, MSAA, BGRA targets and two colour attachments equals the analytic CPU result, with pixel-centred rectangles of exact coverage. |
 | `sanity.vk.graphics.pipeline_features` | Tessellation, geometry shaders, line/point sizes, wide lines, depth clamp, secondary command buffers and pipeline cache reuse render correctly when the feature is reported. |
 | `sanity.vk.descriptor.pools_templates_samplers` | Descriptor pools with and without FREE_DESCRIPTOR_SET allocate up to maxSets and fail further allocation with VK_ERROR_OUT_OF_POOL_MEMORY or FRAGMENTED_POOL, reset and free make sets available again, update templates, dynamic uniform offsets and immutable samplers produce the CPU result. |
