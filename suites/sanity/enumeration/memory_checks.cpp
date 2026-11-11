@@ -88,7 +88,7 @@ Outcome MemoryChecks::dedicated_vs_shared_consistent(Context& context) {
         const std::uint64_t host = device->total_host_heaps();
         context.measure(adapter.luid_text() + ".vk.device_local", local);
         context.measure(adapter.luid_text() + ".vk.host", host);
-        const bool unified = host == 0 && local != 0;
+        const bool unified = host == 0 && local != 0 && device->type == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU;
         if (local == 0) {
             problems.add(label + ": Vulkan reports a zero device-local heap");
         }
