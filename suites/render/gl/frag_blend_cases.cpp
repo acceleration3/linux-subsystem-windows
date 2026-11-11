@@ -392,6 +392,7 @@ const struct Batch14 {
                 }
                 rig.program = program;
                 rig.backdrop(kit);
+                gl.glBlendBarrierKHR();
                 gl.glEnable(glc::BLEND);
                 gl.glBlendEquation(mode);
                 rig.grid(kit, -0.5f);
