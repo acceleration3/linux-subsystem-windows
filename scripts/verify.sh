@@ -152,13 +152,28 @@ record_deployed() {
     if [[ ${host} == local ]]; then manifest_id > "${DEV_STACK}/stack.deployed"; else on_remote <<< "echo $(manifest_id) > ~/${REMOTE_BASE}/stack.deployed"; fi
 }
 
+forget_deployed() {
+    if [[ ${host} == local ]]; then rm -f "${DEV_STACK}/stack.deployed"; else on_remote <<< "rm -f ~/${REMOTE_BASE}/stack.deployed"; fi
+}
+
 deploy_local() {
     say "local: install the stack into ${DEV_STACK} and restart the guest"
     rsync -a "${stack}/libav_executor.so" "${DEV_STACK}/libav_executor.so" || return 1
     rsync -a --delete "${stack}/av-drivers/" "${DEV_STACK}/av-drivers/" || return 1
     rsync -a --delete "${stack}/d3dlib/" "${DEV_STACK}/d3dlib/" || return 1
     rsync -a --delete "${stack}/qemu-modules/" "${DEV_STACK}/qemu-modules/" || return 1
+    local definition="${DEV_STACK}/state/lsw.new.xml" rc
+    if [[ -n ${qemu_env} ]]; then
+        cp -f "${definition}" "${definition}.clean" || return 1
+        python3 -B "${HERE}/domain_env.py" "${definition}.clean" "${definition}" ${qemu_env} || { mv -f "${definition}.clean" "${definition}"; return 1; }
+    fi
     env -u LSW_AV_BUILD_EXEC -u LSW_AV_BUILD_DRIVERS "${DEV_STACK}/redeploy.sh"
+    rc=$?
+    if [[ -n ${qemu_env} ]]; then
+        mv -f "${definition}.clean" "${definition}" || return 1
+        virsh -c qemu:///session define "${definition}" > /dev/null || return 1
+    fi
+    return ${rc}
 }
 
 deploy_accel() {
@@ -178,8 +193,10 @@ deploy_if_needed() {
             return 0
         fi
     fi
+    forget_deployed
     "deploy_${host}" || return 1
-    check_running
+    check_running || return $?
+    [[ -n ${qemu_env} ]] || record_deployed
 }
 
 run_inner() {
