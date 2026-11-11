@@ -44,8 +44,8 @@ int main() {
     const std::string plain = UpdateBatch::send(5555, release, c, false);
     const std::string forced = UpdateBatch::send(5555, release, c, true);
 
-    check(has(plain, "set STAGE=C:\\ProgramData\\LSW\\update\\0123456789abcdef\r\n"),
-          "the stage is the update directory under the release's first 16 characters");
+    check(has(plain, "set STAGE=C:\\ProgramData\\LSW\\update\\0123456789abcdef-5555\r\n"),
+          "the stage is the update directory under the release's first 16 characters and the port");
     check(has(plain, "-o \"%STAGE%\\C\\ProgramData\\LSW\\lsw-agent.exe\" http://10.0.2.2:5555/f0 ")
               && has(plain, "-o \"%STAGE%\\C\\av\\package\\avgpu.sys\" http://10.0.2.2:5555/f1 ")
               && has(plain, "-o \"%STAGE%\\C\\ProgramData\\LSW\\lsw-guest-update.ps1\" http://10.0.2.2:5555/f2 "),
