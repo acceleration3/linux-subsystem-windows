@@ -1,4 +1,5 @@
 #include "render/common/cpu_raster.hpp"
+#include "render/common/sample_coverage.hpp"
 #include "render/d3d12/scene_util.hpp"
 #include "support/d3d12_command_list8.hpp"
 
@@ -467,6 +468,10 @@ void register_resolve_modes() {
     }
 }
 
+float grid_bar_left(int n) { return (4.0f + 8.0f * static_cast<float>(n) + 0.25f * static_cast<float>(n % 4) + 0.2f) / 64.0f - 1.0f; }
+
+const std::array<rr::SampleCoverage::Position, 16> kGridPositions = {{{7, -6}, {5, 6}, {6, -1}, {7, 3}, {-7, -6}, {-5, 6}, {-6, -1}, {-7, 3}, {-3, 7}, {3, 6}, {0, 7}, {-1, 5}, {3, -7}, {-3, -6}, {0, -7}, {1, -5}}};
+
 void register_sample_positions() {
     for (int grid = 0; grid < 2; ++grid) {
         Cases::single(
@@ -479,7 +484,7 @@ void register_sample_positions() {
                 }
                 std::vector<Vertex> bars;
                 for (int n = 0; n < 15; ++n) {
-                    const float x0 = (4.0f + 8.0f * static_cast<float>(n) + 0.25f * static_cast<float>(n % 4) + 0.2f) / 64.0f - 1.0f;
+                    const float x0 = grid_bar_left(n);
                     const float x1 = x0 + 2.6f / 64.0f;
                     const Vertex quad[6] = {{{x0, -0.9f, 0}, {0, 0, 1}, {0, 0}}, {{x1, -0.9f, 0}, {0, 0, 1}, {0, 0}}, {{x1, 0.9f, 0}, {0, 0, 1}, {0, 0}},
                                             {{x0, -0.9f, 0}, {0, 0, 1}, {0, 0}}, {{x1, 0.9f, 0}, {0, 0, 1}, {0, 0}}, {{x0, 0.9f, 0}, {0, 0, 1}, {0, 0}}};
@@ -499,7 +504,9 @@ void register_sample_positions() {
                 if (grid == 0) {
                     positions = {{7, -6}, {5, 6}, {6, -1}, {7, 3}};
                 } else {
-                    positions = {{7, -6}, {5, 6}, {6, -1}, {7, 3}, {-7, -6}, {-5, 6}, {-6, -1}, {-7, 3}, {-3, 7}, {3, 6}, {0, 7}, {-1, 5}, {3, -7}, {-3, -6}, {0, -7}, {1, -5}};
+                    for (const rr::SampleCoverage::Position& at : kGridPositions) {
+                        positions.push_back({at[0], at[1]});
+                    }
                 }
                 const bool custom = !kit.broken("sample_positions");
                 bool have_list1 = true;
@@ -549,7 +556,20 @@ void register_sample_positions() {
                     return std::string(grid != 0 ? "programmable sample positions tier 2" : "programmable sample positions");
                 }
                 return needs_samples_4(kit);
-            });
+            },
+            grid != 0 ? Cases::RefFn([](Kit&, unsigned, rr::CaptureSet& out, std::string&) {
+                std::vector<rr::CoverageRect> rects;
+                for (int n = 0; n < 15; ++n) {
+                    const float x0 = grid_bar_left(n);
+                    const float x1 = x0 + 2.6f / 64.0f;
+                    rects.push_back({(x0 + 1.0f) * 64.0f, (1.0f - 0.9f) * 64.0f, (x1 + 1.0f) * 64.0f, (1.0f + 0.9f) * 64.0f,
+                                     rr::CpuRaster::pack(1.0f, (n & 1) != 0 ? 0.4f : 1.0f, 1.0f, 1.0f)});
+                }
+                out.add("", rr::SampleCoverage::resolve_rects(128, 128, rr::CpuRaster::pack(0.0f, 0.0f, 0.0f, 1.0f), rects,
+                                                              std::vector<rr::SampleCoverage::Position>(kGridPositions.begin(), kGridPositions.end()), 4));
+                return true;
+            })
+                       : Cases::RefFn());
     }
 }
 
