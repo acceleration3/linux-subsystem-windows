@@ -221,7 +221,7 @@ Outcome QueryChecks::pipeline_stats(Context& context) {
     ID3D11DeviceContext* ctx = device.context;
     Problems problems;
     const char* vs_source = "float4 main(uint id : SV_VertexID) : SV_Position { uint tri = id / 3; uint k = id % 3; float x = -0.9 + (tri % 10) * 0.18; float y = -0.9 + (tri / 10) * 0.18;"
-                            " float2 o[3] = {float2(0, 0), float2(0.15, 0), float2(0, 0.15)}; return float4(x + o[k].x, y + o[k].y, 0.5, 1); }";
+                            " float2 o[3] = {float2(0, 0), float2(0, 0.15), float2(0.15, 0)}; return float4(x + o[k].x, y + o[k].y, 0.5, 1); }";
     Com<ID3D11VertexShader> vs = D3d11Tools::vs(device, vs_source, error);
     Com<ID3D11VertexShader> fullscreen = D3d11Tools::vs(device, D3d11Tools::kFullscreenVs, error);
     Com<ID3D11PixelShader> ps = Kit::color_ps(device, "1, 1, 1, 1", error);
