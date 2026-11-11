@@ -193,6 +193,7 @@ Outcome ComputeChecks::vs_cpu(Context& context) {
             }
         }
         const bool subgroup_arithmetic = rig.at_least(VK_API_VERSION_1_1) && (rig.subgroup.supportedOperations & VK_SUBGROUP_FEATURE_ARITHMETIC_BIT) != 0 &&
+                                         (rig.subgroup.supportedOperations & VK_SUBGROUP_FEATURE_BALLOT_BIT) != 0 &&
                                          (rig.subgroup.supportedStages & VK_SHADER_STAGE_COMPUTE_BIT) != 0;
         context.measure("vk.subgroupSize", rig.subgroup.subgroupSize);
         if (subgroup_arithmetic) {
@@ -200,7 +201,7 @@ Outcome ComputeChecks::vs_cpu(Context& context) {
             VulkanBuffer output;
             const std::uint32_t groups = 4;
             if (Kit::succeeds(problems, "subgroup pipeline", program.create(rig, VulkanShaders::words(VulkanShader::Subgroup), {{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1}}, 0)) &&
-                Kit::succeeds(problems, "subgroup output", Kit::host_buffer(rig, output, groups * 64 * 8))) {
+                Kit::succeeds(problems, "subgroup output", Kit::host_buffer(rig, output, groups * 64 * 12))) {
                 output.fill_value(0xCD);
                 output.publish();
                 program.write_buffer(0, output.buffer);
@@ -212,16 +213,17 @@ Outcome ComputeChecks::vs_cpu(Context& context) {
                     for (std::uint32_t g = 0; g < groups && !broken; ++g) {
                         std::vector<std::uint32_t> members(largest + 1, 0);
                         for (std::uint32_t i = g * 64; i < (g + 1) * 64; ++i) {
-                            const std::uint32_t sum = output.words()[i * 2];
-                            const std::uint32_t reported = output.words()[i * 2 + 1];
+                            const std::uint32_t sum = output.words()[i * 3];
+                            const std::uint32_t reported = output.words()[i * 3 + 1];
+                            const std::uint32_t active = output.words()[i * 3 + 2];
                             if (reported != size) {
                                 problems.add("invocation " + std::to_string(i) + " sees gl_SubgroupSize " + std::to_string(reported) + ", the device reports " + std::to_string(size));
                                 broken = true;
                                 break;
                             }
-                            if (sum < 1 || sum > largest) {
-                                problems.add("invocation " + std::to_string(i) + " computed subgroupAdd(1) = " + std::to_string(sum) + ", expected 1 to " + std::to_string(largest) +
-                                             " active invocations of its subgroup");
+                            if (active < 1 || active > largest || sum != active) {
+                                problems.add("invocation " + std::to_string(i) + " computed subgroupAdd(1) = " + std::to_string(sum) + " in a subgroup whose ballot of the active invocations counts " +
+                                             std::to_string(active) + ", expected equal counts between 1 and " + std::to_string(largest));
                                 broken = true;
                                 break;
                             }
