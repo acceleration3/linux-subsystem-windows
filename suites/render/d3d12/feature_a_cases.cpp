@@ -1248,15 +1248,27 @@ bool stencil_reference(Kit&, unsigned, rr::CaptureSet& out, std::string&) {
     const MeshData shell = bowl_shell();
     const rr::Mat4 matrix = rr::Mat4::perspective_d3d(1.0f, 1.0f, 0.5f, 40.0f) * rr::Mat4::translate(0, 0, -3.0f) * rr::Mat4::rotate_x(0.9f);
     rr::CpuRaster raster(128, 128, rr::CpuRaster::pack(0.05f, 0.05f, 0.1f));
+    std::vector<bool> front_covered(128 * 128, false);
+    std::vector<bool> back_covered(128 * 128, false);
     for (std::size_t i = 0; i + 2 < shell.indices.size(); i += 3) {
         rr::Vec4 clip[3];
         for (int k = 0; k < 3; ++k) {
             const Vertex& v = shell.vertices[shell.indices[i + static_cast<std::size_t>(k)]];
             clip[k] = rr::CpuRaster::transform(matrix, v.pos[0], v.pos[1], v.pos[2]);
         }
-        raster.triangle(clip, rr::CpuRaster::Cull::None, true, [](int, int, bool front, float, const float*) {
-            return front ? rr::CpuRaster::pack(0.2f, 0.9f, 0.3f) : rr::CpuRaster::pack(0.95f, 0.2f, 0.2f);
+        raster.triangle(clip, rr::CpuRaster::Cull::None, false, [&](int x, int y, bool front, float, const float*) {
+            (front ? front_covered : back_covered)[static_cast<std::size_t>(y) * 128 + static_cast<std::size_t>(x)] = true;
+            return rr::CpuRaster::pack(0.05f, 0.05f, 0.1f);
         });
+    }
+    for (std::uint32_t y = 0; y < 128; ++y) {
+        for (std::uint32_t x = 0; x < 128; ++x) {
+            const bool front = front_covered[y * 128 + x];
+            const bool back = back_covered[y * 128 + x];
+            if (front != back) {
+                raster.image().set_rgba8(x, y, front ? rr::CpuRaster::pack(0.2f, 0.9f, 0.3f) : rr::CpuRaster::pack(0.95f, 0.2f, 0.2f));
+            }
+        }
     }
     out.add("", raster.take());
     return true;
@@ -1292,9 +1304,9 @@ void register_front_back_stencil_ref() {
             stream.layout = D3D12_INPUT_LAYOUT_DESC{writer.elements.data(), static_cast<UINT>(writer.elements.size())};
             stream.rasterizer = writer.desc.RasterizerState;
             DepthStencil2 ds{};
-            ds.depth_enable = TRUE;
-            ds.depth_write = D3D12_DEPTH_WRITE_MASK_ALL;
-            ds.depth_func = D3D12_COMPARISON_FUNC_LESS;
+            ds.depth_enable = FALSE;
+            ds.depth_write = D3D12_DEPTH_WRITE_MASK_ZERO;
+            ds.depth_func = D3D12_COMPARISON_FUNC_ALWAYS;
             ds.stencil_enable = TRUE;
             ds.front = {D3D12_STENCIL_OP_KEEP, D3D12_STENCIL_OP_KEEP, D3D12_STENCIL_OP_REPLACE, D3D12_COMPARISON_FUNC_ALWAYS, 0xff, 0xf0};
             ds.back = {D3D12_STENCIL_OP_KEEP, D3D12_STENCIL_OP_KEEP, D3D12_STENCIL_OP_REPLACE, D3D12_COMPARISON_FUNC_ALWAYS, 0xff, 0x0f};
