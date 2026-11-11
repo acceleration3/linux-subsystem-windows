@@ -15,6 +15,7 @@ QEMU_LOG_TAIL = 4 * 1024 * 1024
 CORES = "~/.local/share/lsw-gpu-test/cores"
 RECOVERY_BUDGET = 5
 STACK_BUDGET = 28
+RECOVERY_CREDIT_CAP = 1800
 REMOTE_VM_LOCK = "/tmp/lsw-accel-vm.lock"
 
 
@@ -154,6 +155,16 @@ fi
                        "virsh -c qemu:///session start lsw 2>&1", 180)
 
 
+class Deadline:
+    def __init__(self, ctx, seconds):
+        self.ctx = ctx
+        self.end = time.monotonic() + seconds
+        self.credit = ctx.credit
+
+    def passed(self):
+        return time.monotonic() > self.end + (self.ctx.credit - self.credit)
+
+
 class Spec:
     def __init__(self, name, adapter, out):
         self.name = name
@@ -181,6 +192,7 @@ class Context:
         self.recovered = 0
         self.active = 0
         self.recoveries = 0
+        self.credit = 0.0
         self.limit_hit = False
         self.incidents = []
         self.seen_cores = set()
@@ -237,6 +249,17 @@ class Context:
                 silent = 0
 
     def recover(self, reason, seen):
+        started = time.monotonic()
+        try:
+            self.recover_vm(reason, seen)
+        finally:
+            self.credit_recovery(time.monotonic() - started)
+
+    def credit_recovery(self, seconds):
+        with self.lock:
+            self.credit = min(float(RECOVERY_CREDIT_CAP), self.credit + seconds)
+
+    def recover_vm(self, reason, seen):
         with self.lock:
             if self.generation != seen:
                 return
@@ -393,7 +416,7 @@ def run_segment(ctx, spec, filter_text, phase, exclude, jobs, deadline):
             time.sleep(5)
             if ctx.generation != generation or ctx.limit_hit:
                 status = "dead"
-            elif time.monotonic() > deadline:
+            elif deadline.passed():
                 status = "timeout"
             else:
                 try:
@@ -687,7 +710,7 @@ def expected_rows(phases, isolated, others):
 
 def execute(args, specs):
     ctx = Context(args)
-    deadline = time.monotonic() + args.timeout
+    deadline = Deadline(ctx, args.timeout)
     watcher = threading.Thread(target=ctx.supervise, daemon=True)
     watcher.start()
     phases = [p.split(":") + ["parallel"] for p in args.phases.split(",")]
@@ -708,7 +731,7 @@ def execute(args, specs):
             groups = [[spec] for spec in specs] if serial else [specs]
             for group in groups:
                 if serial:
-                    deadline = time.monotonic() + args.timeout
+                    deadline = Deadline(ctx, args.timeout)
                 threads = [threading.Thread(target=run_phase, args=(ctx, spec, phase, deadline)) for spec in group]
                 for thread in threads:
                     thread.start()

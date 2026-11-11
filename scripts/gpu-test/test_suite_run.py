@@ -7,6 +7,7 @@ import tempfile
 import time
 import types
 import unittest
+from unittest import mock
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
@@ -261,6 +262,58 @@ class LogTail(unittest.TestCase):
         out = self.home / "evidence"
         self.machine.evidence(out, set())
         self.assertEqual((out / "qemu-log-tail.txt").read_text(), "crash trace\n")
+
+
+class RecoveryCredit(unittest.TestCase):
+    def make(self):
+        args = types.SimpleNamespace(run_id="r", smb_port=1, vm="local", host="h")
+        return suite_run.Context(args)
+
+    def test_a_deadline_without_recovery_ends_on_time(self):
+        ctx = self.make()
+        with mock.patch.object(suite_run.time, "monotonic", return_value=100.0):
+            deadline = suite_run.Deadline(ctx, 50)
+        with mock.patch.object(suite_run.time, "monotonic", return_value=149.0):
+            self.assertFalse(deadline.passed())
+        with mock.patch.object(suite_run.time, "monotonic", return_value=151.0):
+            self.assertTrue(deadline.passed())
+
+    def test_a_recovery_moves_the_deadline_by_the_time_it_took(self):
+        ctx = self.make()
+        with mock.patch.object(suite_run.time, "monotonic", return_value=100.0):
+            deadline = suite_run.Deadline(ctx, 50)
+        ctx.credit_recovery(300)
+        with mock.patch.object(suite_run.time, "monotonic", return_value=400.0):
+            self.assertFalse(deadline.passed())
+        with mock.patch.object(suite_run.time, "monotonic", return_value=451.0):
+            self.assertTrue(deadline.passed())
+
+    def test_the_credit_has_a_hard_cap(self):
+        ctx = self.make()
+        ctx.credit_recovery(suite_run.RECOVERY_CREDIT_CAP * 5)
+        ctx.credit_recovery(100)
+        self.assertEqual(ctx.credit, suite_run.RECOVERY_CREDIT_CAP)
+
+    def test_a_deadline_made_after_a_recovery_does_not_inherit_it(self):
+        ctx = self.make()
+        ctx.credit_recovery(300)
+        with mock.patch.object(suite_run.time, "monotonic", return_value=100.0):
+            deadline = suite_run.Deadline(ctx, 50)
+        with mock.patch.object(suite_run.time, "monotonic", return_value=151.0):
+            self.assertTrue(deadline.passed())
+
+    def test_recover_credits_its_own_duration_even_when_it_fails(self):
+        ctx = self.make()
+        clock = iter([1000.0, 1240.0])
+
+        def broken(reason, seen):
+            raise RuntimeError("boom")
+
+        ctx.recover_vm = broken
+        with mock.patch.object(suite_run.time, "monotonic", side_effect=lambda: next(clock)):
+            with self.assertRaises(RuntimeError):
+                ctx.recover("dead", 0)
+        self.assertEqual(ctx.credit, 240.0)
 
 
 if __name__ == "__main__":
