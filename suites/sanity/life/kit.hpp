@@ -15,8 +15,6 @@ class Kit {
 public:
     [[nodiscard]] static std::vector<DWORD> process_ids(const std::wstring& exe);
 
-    [[nodiscard]] static bool run(const std::wstring& command, DWORD& exit_code, int timeout_ms = 60000);
-
     [[nodiscard]] static bool restart_dwm(int timeout_ms, double& ms, std::string& error);
 
     [[nodiscard]] static Outcome app_role(Context& context, const std::string& role);

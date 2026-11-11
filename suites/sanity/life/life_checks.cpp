@@ -14,6 +14,7 @@
 #include "support/refresh_rate.hpp"
 #include "support/robust_child.hpp"
 #include "support/swap_rig.hpp"
+#include "support/system_tool.hpp"
 #include "support/target_adapter.hpp"
 #include "support/test_window.hpp"
 
@@ -347,19 +348,20 @@ Outcome LifeChecks::agent_restart_apps_unaffected(Context& context) {
         return child_dispatch(context);
     }
     DWORD code = 0;
-    if (!Kit::run(L"sc.exe query lsw-agent", code) || code != 0) {
+    std::string tool_error;
+    if (!SystemTool::run(L"sc.exe query lsw-agent", code, tool_error) || code != 0) {
         return Context::skip("the lsw-agent service is not installed in this guest");
     }
     iso::Fleet apps;
     start_apps(apps, context, 24);
     iso::Scene::sleep(5000);
     Problems problems;
-    if (!Kit::run(L"sc.exe stop lsw-agent", code)) {
+    if (!SystemTool::run(L"sc.exe stop lsw-agent", code, tool_error)) {
         problems.add("sc stop did not return");
     }
     iso::Scene::sleep(4000);
-    if (!Kit::run(L"sc.exe start lsw-agent", code) || (code != 0 && code != 1056)) {
-        problems.add("sc start lsw-agent failed with exit code " + std::to_string(code));
+    if (!SystemTool::run(L"sc.exe start lsw-agent", code, tool_error) || (code != 0 && code != 1056)) {
+        problems.add("sc start lsw-agent failed with exit code " + std::to_string(code) + (tool_error.empty() ? "" : " (" + tool_error + ")"));
     }
     apps.join();
     Kit::judge_apps(problems, apps, "across the agent restart, application");
@@ -372,15 +374,16 @@ Outcome LifeChecks::agent_restart_new_apps_work(Context& context) {
         return RobustChild::child(context, [](Context&, const std::string& role) { return Outcome::fail("unknown role " + role); });
     }
     DWORD code = 0;
-    if (!Kit::run(L"sc.exe query lsw-agent", code) || code != 0) {
+    std::string tool_error;
+    if (!SystemTool::run(L"sc.exe query lsw-agent", code, tool_error) || code != 0) {
         return Context::skip("the lsw-agent service is not installed in this guest");
     }
     const std::string before = adapter_keys();
     Problems problems;
-    static_cast<void>(Kit::run(L"sc.exe stop lsw-agent", code));
+    static_cast<void>(SystemTool::run(L"sc.exe stop lsw-agent", code, tool_error));
     iso::Scene::sleep(4000);
-    if (!Kit::run(L"sc.exe start lsw-agent", code) || (code != 0 && code != 1056)) {
-        problems.add("sc start lsw-agent failed with exit code " + std::to_string(code));
+    if (!SystemTool::run(L"sc.exe start lsw-agent", code, tool_error) || (code != 0 && code != 1056)) {
+        problems.add("sc start lsw-agent failed with exit code " + std::to_string(code) + (tool_error.empty() ? "" : " (" + tool_error + ")"));
     }
     iso::Scene::sleep(5000);
     const std::string after = adapter_keys();
@@ -414,9 +417,10 @@ Outcome LifeChecks::live_driver_update(Context& context) {
     start_apps(apps, context, 30);
     iso::Scene::sleep(5000);
     DWORD code = 0;
+    std::string tool_error;
     Problems problems;
-    if (!Kit::run(L"pnputil.exe /restart-device \"" + instance + L"\"", code, 120000) || code != 0) {
-        problems.add("pnputil /restart-device failed with exit code " + std::to_string(code));
+    if (!SystemTool::run(L"pnputil.exe /restart-device \"" + instance + L"\"", code, tool_error, 120000) || code != 0) {
+        problems.add("pnputil /restart-device failed with exit code " + std::to_string(code) + (tool_error.empty() ? "" : " (" + tool_error + ")"));
     }
     apps.join();
     Kit::judge_apps(problems, apps, "across the driver restart, application");
@@ -447,20 +451,21 @@ Outcome LifeChecks::session_logoff_logon(Context& context) {
     const std::string before = adapter_keys();
     const std::wstring reconnect = L"schtasks.exe /Create /TN lsw-suites-reconnect /TR \"cmd.exe /c ping -n 8 127.0.0.1 >nul & tscon.exe " + std::to_wstring(session) + L" /dest:console\" /SC ONCE /ST 23:59 /RU SYSTEM /RL HIGHEST /F";
     DWORD code = 0;
-    if (!Kit::run(reconnect, code) || code != 0) {
-        return Context::skip("a SYSTEM task to reconnect the session cannot be created (schtasks exit " + std::to_string(code) + ")");
+    std::string tool_error;
+    if (!SystemTool::run(reconnect, code, tool_error) || code != 0) {
+        return Context::skip("a SYSTEM task to reconnect the session cannot be created (schtasks exit " + std::to_string(code) + (tool_error.empty() ? "" : ", " + tool_error) + ")");
     }
     Problems problems;
-    if (!Kit::run(L"schtasks.exe /Run /TN lsw-suites-reconnect", code) || code != 0) {
-        static_cast<void>(Kit::run(L"schtasks.exe /Delete /TN lsw-suites-reconnect /F", code));
-        return Context::skip("the SYSTEM reconnect task cannot be started (schtasks exit " + std::to_string(code) + ")");
+    if (!SystemTool::run(L"schtasks.exe /Run /TN lsw-suites-reconnect", code, tool_error) || code != 0) {
+        static_cast<void>(SystemTool::run(L"schtasks.exe /Delete /TN lsw-suites-reconnect /F", code, tool_error));
+        return Context::skip("the SYSTEM reconnect task cannot be started (schtasks exit " + std::to_string(code) + (tool_error.empty() ? "" : ", " + tool_error) + ")");
     }
-    if (!Kit::run(L"tsdiscon.exe", code) || code != 0) {
-        static_cast<void>(Kit::run(L"schtasks.exe /Delete /TN lsw-suites-reconnect /F", code));
-        return Context::skip("the session cannot be disconnected (tsdiscon exit " + std::to_string(code) + ")");
+    if (!SystemTool::run(L"tsdiscon.exe", code, tool_error) || code != 0) {
+        static_cast<void>(SystemTool::run(L"schtasks.exe /Delete /TN lsw-suites-reconnect /F", code, tool_error));
+        return Context::skip("the session cannot be disconnected (tsdiscon exit " + std::to_string(code) + (tool_error.empty() ? "" : ", " + tool_error) + ")");
     }
     ::Sleep(14000);
-    static_cast<void>(Kit::run(L"schtasks.exe /Delete /TN lsw-suites-reconnect /F", code));
+    static_cast<void>(SystemTool::run(L"schtasks.exe /Delete /TN lsw-suites-reconnect /F", code, tool_error));
     const std::string after = adapter_keys();
     if (before != after) {
         problems.add("the adapters and outputs changed across the disconnect: [" + before + "] became [" + after + "]");

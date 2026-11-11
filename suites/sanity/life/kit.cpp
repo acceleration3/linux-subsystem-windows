@@ -5,6 +5,7 @@
 #include "support/bitmap.hpp"
 #include "support/present_path.hpp"
 #include "support/screen_capture.hpp"
+#include "support/system_tool.hpp"
 
 #include <tlhelp32.h>
 
@@ -46,24 +47,6 @@ std::vector<DWORD> Kit::process_ids(const std::wstring& exe) {
     return out;
 }
 
-bool Kit::run(const std::wstring& command, DWORD& exit_code, int timeout_ms) {
-    std::wstring line = command;
-    STARTUPINFOW startup{};
-    startup.cb = sizeof(startup);
-    PROCESS_INFORMATION info{};
-    exit_code = ~0u;
-    if (!::CreateProcessW(nullptr, line.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr, nullptr, &startup, &info)) {
-        return false;
-    }
-    const DWORD waited = ::WaitForSingleObject(info.hProcess, static_cast<DWORD>(timeout_ms));
-    if (waited == WAIT_OBJECT_0) {
-        ::GetExitCodeProcess(info.hProcess, &exit_code);
-    }
-    ::CloseHandle(info.hProcess);
-    ::CloseHandle(info.hThread);
-    return waited == WAIT_OBJECT_0;
-}
-
 bool Kit::restart_dwm(int timeout_ms, double& ms, std::string& error) {
     const std::vector<DWORD> before = process_ids(L"dwm.exe");
     if (before.empty()) {
@@ -72,8 +55,9 @@ bool Kit::restart_dwm(int timeout_ms, double& ms, std::string& error) {
     }
     const auto begin = Clock::now();
     DWORD code = 0;
-    if (!run(L"taskkill.exe /F /IM dwm.exe", code) || code != 0) {
-        error = "taskkill of dwm.exe failed with exit code " + std::to_string(code);
+    std::string reason;
+    if (!SystemTool::run(L"taskkill.exe /F /IM dwm.exe", code, reason) || code != 0) {
+        error = "taskkill of dwm.exe failed with exit code " + std::to_string(code) + (reason.empty() ? "" : " (" + reason + ")");
         return false;
     }
     while (since_ms(begin) < timeout_ms) {

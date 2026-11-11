@@ -11,6 +11,7 @@
 #include "support/d3d12_tools.hpp"
 #include "support/problems.hpp"
 #include "support/robust_child.hpp"
+#include "support/system_tool.hpp"
 #include "support/target_adapter.hpp"
 
 #include <d3d11_1.h>
@@ -148,21 +149,6 @@ Outcome session_role(Context& context, const std::string& role) {
     }
     context.measure("open_session1_name", state);
     return Outcome::ok();
-}
-
-bool run_hidden(const std::wstring& command, DWORD& code) {
-    std::wstring line = command;
-    STARTUPINFOW startup{};
-    startup.cb = sizeof(startup);
-    PROCESS_INFORMATION info{};
-    if (!::CreateProcessW(nullptr, line.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr, nullptr, &startup, &info)) {
-        return false;
-    }
-    ::WaitForSingleObject(info.hProcess, 60000);
-    ::GetExitCodeProcess(info.hProcess, &code);
-    ::CloseHandle(info.hProcess);
-    ::CloseHandle(info.hThread);
-    return true;
 }
 
 std::string read_text(const std::filesystem::path& path) {
@@ -390,12 +376,13 @@ Outcome HandleChecks::service_session_separate(Context& context) {
     }
     const std::string task = "lsw-suites-session0";
     DWORD code = 0;
+    std::string tool_error;
     const std::wstring create = L"schtasks.exe /Create /TN " + Text::wide(task) + L" /TR \"" + script.wstring() + L"\" /SC ONCE /ST 23:59 /RU SYSTEM /RL HIGHEST /F";
-    if (!run_hidden(create, code) || code != 0) {
+    if (!SystemTool::run(create, code, tool_error) || code != 0) {
         ::CloseHandle(handle);
-        return Context::skip("a SYSTEM task for a session 0 process cannot be created (schtasks exit " + std::to_string(code) + ")");
+        return Context::skip("a SYSTEM task for a session 0 process cannot be created (schtasks exit " + std::to_string(code) + (tool_error.empty() ? "" : ", " + tool_error) + ")");
     }
-    const bool started = run_hidden(L"schtasks.exe /Run /TN " + Text::wide(task), code) && code == 0;
+    const bool started = SystemTool::run(L"schtasks.exe /Run /TN " + Text::wide(task), code, tool_error) && code == 0;
     std::string text;
     for (int i = 0; started && i < 240; ++i) {
         text = read_text(output);
@@ -404,7 +391,7 @@ Outcome HandleChecks::service_session_separate(Context& context) {
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(250));
     }
-    run_hidden(L"schtasks.exe /Delete /TN " + Text::wide(task) + L" /F", code);
+    static_cast<void>(SystemTool::run(L"schtasks.exe /Delete /TN " + Text::wide(task) + L" /F", code, tool_error));
     ::CloseHandle(handle);
     CheckResult result;
     if (!started || !ChildProtocol::decode(text, result)) {
