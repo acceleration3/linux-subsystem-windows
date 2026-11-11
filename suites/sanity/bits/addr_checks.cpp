@@ -77,7 +77,7 @@ Outcome probe(Context& context, const std::string& api, bool strict_payload) {
     context.measure(api + ".mapped_bytes", static_cast<long long>(total));
     context.measure(api + ".highest_address", static_cast<long long>(highest));
     context.measure(api + ".first_failure", first_failure);
-    if (strict_payload && highest > 0x80000000u && sizeof(void*) == 4) {
+    if (strict_payload && highest > 0x80000000u) {
         context.measure(api + ".above_2gib", 1);
     }
     for (Mapped& item : held) {
