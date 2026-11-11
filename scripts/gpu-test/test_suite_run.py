@@ -44,6 +44,15 @@ class NotRun(unittest.TestCase):
         suite_run.report_not_run(context("sanity.p*,-sanity.pz*"), spec, ["sanity.p1", "sanity.q1", "sanity.pz1"])
         self.assertEqual(spec.order, ["sanity.p1"])
 
+    def test_every_listed_row_is_expected_when_one_phase_runs_all(self):
+        self.assertEqual(suite_run.expected_rows([["all", "parallel"]], ["render.i"], ["render.a", "render.b"]),
+                         ["render.i", "render.a", "render.b"])
+
+    def test_split_phases_expect_their_own_rows(self):
+        phases = [["main", "parallel"], ["isolated", "serial"]]
+        self.assertEqual(suite_run.expected_rows(phases, ["sanity.i"], ["sanity.a"]), ["sanity.a", "sanity.i"])
+        self.assertEqual(suite_run.expected_rows([["isolated", "serial"]], ["sanity.i"], ["sanity.a"]), ["sanity.i"])
+
     def test_reason_names_the_recovery_limit(self):
         spec = spec_with()
         suite_run.report_not_run(context(limit_hit=True), spec, ["sanity.b"])

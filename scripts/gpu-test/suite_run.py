@@ -664,6 +664,13 @@ def discover(ctx):
     return isolated, others
 
 
+def expected_rows(phases, isolated, others):
+    rows = []
+    for entry in phases:
+        rows += {"main": others, "isolated": isolated, "all": isolated + others}.get(entry[0], [])
+    return rows
+
+
 def execute(args, specs):
     ctx = Context(args)
     deadline = time.monotonic() + args.timeout
@@ -672,12 +679,12 @@ def execute(args, specs):
     phases = [p.split(":") + ["parallel"] for p in args.phases.split(",")]
     isolated = others = None
     expected = []
-    if any(entry[0] in ("main", "isolated") for entry in phases):
+    if any(entry[0] in ("main", "isolated", "all") for entry in phases):
         isolated, others = discover(ctx)
-        say(f"{args.host}: {len(others)} checks run on every adapter at once, {len(isolated)} exclusive or pacing checks "
-            "run one adapter at a time")
-        for entry in phases:
-            expected += others if entry[0] == "main" else isolated if entry[0] == "isolated" else []
+        if any(entry[0] in ("main", "isolated") for entry in phases):
+            say(f"{args.host}: {len(others)} checks run on every adapter at once, {len(isolated)} exclusive or pacing checks "
+                "run one adapter at a time")
+        expected = expected_rows(phases, isolated, others)
     try:
         for entry in phases:
             phase = None
