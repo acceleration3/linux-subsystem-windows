@@ -768,7 +768,7 @@ Each loop creates and destroys 5000 objects of the kind with its largest practic
 |---|---|
 | `sanity.d3d12.desc.heaps_and_tables` | CBV/SRV/UAV and sampler descriptor heaps (shader-visible and not), CopyDescriptors and bindless tables of large size give correct resource access; heap sizes up to the tier's limit work. |
 | `sanity.d3d12.root.signatures` | Root signature 1.0 and 1.1 serialize/deserialize round trip and convert between versions; root constants, root descriptors, tables, static samplers, descriptor/data volatility all produce the analytic result in a test shader. |
-| `sanity.d3d12.pso.graphics_compute` | Graphics PSOs (all state fields, MSAA, depth, blend with logic op) and compute PSOs render or compute the analytic or CPU reference result. |
+| `sanity.d3d12.pso.graphics_compute` | Graphics PSOs (all state fields, MSAA, depth, blend with a logic op on an R8G8B8A8_UINT target) and compute PSOs render or compute the analytic or CPU reference result. |
 | `sanity.d3d12.pso.library_cache` | A pipeline library stores and reloads PSOs; a loaded PSO produces the same output; a corrupted or driver-mismatched blob yields D3D12_ERROR_DRIVER_VERSION_MISMATCH / ADAPTER_NOT_FOUND / INVALID_ARG not a crash; cached PSO blobs in desc work or are ignored. |
 | `sanity.d3d12.render.draw_variants` | DrawInstanced, DrawIndexedInstanced, ExecuteIndirect (draw, indexed draw, dispatch, constant, constant buffer, vertex and index buffer arguments, with count buffers and offsets) and indirect argument buffers match the analytic image; the base vertex of indexed draws offsets the vertex-buffer fetch, not SV_VertexID. |
 | `sanity.d3d12.render.msaa_resolve` | MSAA render with programmable sample positions (if tier reports) and resolve equals WARP. |

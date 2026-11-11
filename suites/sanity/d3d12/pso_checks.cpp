@@ -12,7 +12,7 @@ namespace {
 
 const char* kHalfAlphaPs = "float4 main() : SV_Target { return float4(1.0, 0.0, 0.0, 0.5); }\n";
 
-const char* kLogicPs = "float4 main() : SV_Target { return float4(15.0 / 255.0, 15.0 / 255.0, 15.0 / 255.0, 15.0 / 255.0); }\n";
+const char* kLogicPs = "uint4 main() : SV_Target { return uint4(15, 15, 15, 15); }\n";
 
 const char* kLayoutVs =
     "struct VI { float2 pos : POSITION; float4 color : COLOR; };\n"
@@ -213,7 +213,7 @@ Outcome PsoChecks::graphics_compute(Context& context) {
             D3D12_FEATURE_DATA_D3D12_OPTIONS options{};
             static_cast<void>(D3d12Tools::feature(rig.device(), D3D12_FEATURE_D3D12_OPTIONS, options));
             std::string logic_error;
-            ID3D12PipelineState* logic = signature != nullptr ? Kit::pipeline(rig, signature, kLogicPs, DXGI_FORMAT_R8G8B8A8_UNORM, logic_error, [](D3D12_GRAPHICS_PIPELINE_STATE_DESC& desc) {
+            ID3D12PipelineState* logic = signature != nullptr ? Kit::pipeline(rig, signature, kLogicPs, DXGI_FORMAT_R8G8B8A8_UINT, logic_error, [](D3D12_GRAPHICS_PIPELINE_STATE_DESC& desc) {
                 desc.BlendState.RenderTarget[0].LogicOpEnable = TRUE;
                 desc.BlendState.RenderTarget[0].LogicOp = D3D12_LOGIC_OP_XOR;
                 desc.BlendState.RenderTarget[0].BlendEnable = FALSE;
@@ -227,10 +227,10 @@ Outcome PsoChecks::graphics_compute(Context& context) {
             } else {
                 D3d12Frame logic_frame;
                 TexelImage logic_image;
-                if (!logic_frame.open(rig, 32, 32, error) ||
+                if (!logic_frame.open(rig, 32, 32, error, DXGI_FORMAT_R8G8B8A8_UINT) ||
                     !logic_frame.run(
                         [&](ID3D12GraphicsCommandList* list) {
-                            logic_frame.clear(list, 0.0f, 1.0f, 0.0f, 1.0f);
+                            logic_frame.clear(list, 0.0f, 255.0f, 0.0f, 255.0f);
                             Kit::draw_fullscreen(list, signature, logic);
                         },
                         error) ||
