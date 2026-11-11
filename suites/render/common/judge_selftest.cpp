@@ -155,10 +155,31 @@ std::vector<std::string> JudgeSelfTest::run(std::vector<std::string>& passed) {
                 apart.set_channel(x, y, 0, 100);
             }
         }
-        const Tolerance wrapping = Tolerance::tight(4).with_wrap();
+        const Tolerance wrapping = Tolerance::tight(4).with_wrap(0x1);
         expect("a sawtooth that wrapped from 254 to 1 passes under a wrap aware tolerance", ImageDiff::compare(expected, wrapped, wrapping).pass, true);
         expect("a sawtooth that wrapped from 254 to 1 fails without wrap awareness", ImageDiff::compare(expected, wrapped, Tolerance::tight(4)).pass, false);
         expect("a value far from the sawtooth fails under a wrap aware tolerance", ImageDiff::compare(expected, apart, wrapping).pass, false);
+        expect("a sawtooth that wrapped from 254 to 1 fails when only other channels wrap", ImageDiff::compare(expected, wrapped, Tolerance::tight(4).with_wrap(0x2)).pass, false);
+    }
+    {
+        Image expected(16, 16, PixelKind::Rgba8Unorm);
+        Image red_wrapped(16, 16, PixelKind::Rgba8Unorm);
+        Image alpha_dropped(16, 16, PixelKind::Rgba8Unorm);
+        Image blue_dropped(16, 16, PixelKind::Rgba8Unorm);
+        for (std::uint32_t y = 0; y < 16; ++y) {
+            for (std::uint32_t x = 0; x < 16; ++x) {
+                const double pixel[4] = {255, 40, 255, 255};
+                for (unsigned c = 0; c < 4; ++c) {
+                    expected.set_channel(x, y, c, pixel[c]);
+                    red_wrapped.set_channel(x, y, c, c == 0 ? 0 : pixel[c]);
+                    alpha_dropped.set_channel(x, y, c, c == 3 ? 0 : pixel[c]);
+                    blue_dropped.set_channel(x, y, c, c == 2 ? 0 : pixel[c]);
+                }
+            }
+        }
+        expect("a red sawtooth that wrapped passes when red wraps", ImageDiff::compare(expected, red_wrapped, Tolerance::blend().with_wrap(0x1)).pass, true);
+        expect("an alpha of 0 instead of 255 fails when only the colour channels wrap", ImageDiff::compare(expected, alpha_dropped, Tolerance::tight(4).with_wrap(0x7)).pass, false);
+        expect("a blue of 0 instead of 255 fails when only red wraps", ImageDiff::compare(expected, blue_dropped, Tolerance::blend().with_wrap(0x1)).pass, false);
     }
     {
         Image expected(8, 8, PixelKind::Rgba32Float);

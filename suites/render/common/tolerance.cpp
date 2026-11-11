@@ -94,9 +94,9 @@ Tolerance Tolerance::with_channel_absolute(float r, float g, float b, float a) c
     return t;
 }
 
-Tolerance Tolerance::with_wrap() const {
+Tolerance Tolerance::with_wrap(unsigned channels) const {
     Tolerance t = *this;
-    t.wrap = true;
+    t.wrap_channels = channels;
     return t;
 }
 

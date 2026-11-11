@@ -82,7 +82,7 @@ def channel_close(klass, a, b, tol, channel=0):
     if math.isinf(a) or math.isinf(b):
         return False, 1e9
     delta = abs(a - b)
-    if tol["wrap"] and klass != "integer":
+    if channel < 4 and (tol["wrap"] >> channel) & 1 and klass != "integer":
         period = {"unorm8": 256.0, "unorm16": 65536.0}.get(klass, 1.0)
         delta = math.fmod(delta, period)
         delta = min(delta, period - delta)
@@ -108,7 +108,7 @@ def normalize_tolerance(raw):
         "outlier_max_delta": raw.get("outlier_max_delta", 0.0),
         "max_outliers": raw.get("max_outliers", 0),
         "min_psnr": raw.get("min_psnr", 0.0),
-        "wrap": bool(raw.get("wrap", False)),
+        "wrap": int(raw.get("wrap", 0)),
         "quad_bracket": bool(raw.get("quad_bracket", False)),
         "coverage_blocks": bool(raw.get("coverage_blocks", False)),
         "name": raw.get("name", "?"),

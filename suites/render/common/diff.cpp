@@ -44,7 +44,7 @@ bool channel_close(ChannelClass klass, double a, double b, const Tolerance& tole
         return false;
     }
     double delta = std::fabs(a - b);
-    if (tolerance.wrap && klass != ChannelClass::Integer) {
+    if (channel < 4 && ((tolerance.wrap_channels >> channel) & 1u) != 0 && klass != ChannelClass::Integer) {
         double period = 1.0;
         switch (klass) {
             case ChannelClass::Unorm8: period = 256.0; break;
