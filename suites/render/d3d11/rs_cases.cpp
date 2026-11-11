@@ -201,7 +201,7 @@ const Add kViewportDepth(spec("rs", "viewport_min_max_depth").tolerance(rr::Tole
 bool viewport_scene(Rig& r, Cap& out, float x, float y, float w, float h, bool smooth = false) {
     Target target;
     if (!r.color(target)) return false;
-    Com<ID3D11PixelShader> ps = r.ps("struct VO { float4 p : SV_Position; float2 uv : TEXCOORD0; };\nfloat4 main(VO i) : SV_Target { return float4(frac(i.uv.x * 16.0), frac(i.uv.y * 16.0), frac(i.p.x / 8.0) * 0.5 + frac(i.p.y / 8.0) * 0.5, 1); }\n");
+    Com<ID3D11PixelShader> ps = r.ps("struct VO { float4 p : SV_Position; float2 uv : TEXCOORD0; };\nfloat4 main(VO i) : SV_Target { return float4(frac(i.uv.x * 16.0), frac(i.uv.y * 16.0 + 0.001953125), frac(i.p.x / 8.0) * 0.5 + frac(i.p.y / 8.0) * 0.5, 1); }\n");
     if (smooth) {
         ps = r.ps("struct VO { float4 p : SV_Position; float2 uv : TEXCOORD0; };\nfloat4 main(VO i) : SV_Target { return float4(0.5 + 0.5 * sin(i.uv.x * 60.0), 0.5 + 0.5 * sin(i.uv.y * 50.0), i.uv.x * i.uv.y, 1); }\n");
     }
@@ -211,7 +211,7 @@ bool viewport_scene(Rig& r, Cap& out, float x, float y, float w, float h, bool s
     r.draw_fs(ps.get());
     return r.shot(out, target);
 }
-const Add kFractional(spec("rs", "viewport_fractional").tolerance(rr::Tolerance::tight(2).with_wrap()), [](Rig& r, Cap& out) { return viewport_scene(r, out, 10.5f, 7.25f, 100.75f, 90.5f); });
+const Add kFractional(spec("rs", "viewport_fractional").tolerance(rr::Tolerance::tight(2)), [](Rig& r, Cap& out) { return viewport_scene(r, out, 10.5f, 7.25f, 100.75f, 90.5f); });
 const Add kViewportOut(spec("rs", "viewport_extends_beyond_target").tolerance(rr::Tolerance::blend(12)), [](Rig& r, Cap& out) { return viewport_scene(r, out, -40.0f, -30.0f, 200.0f, 200.0f, true); });
 
 const Add kSixteen(spec("rs", "viewports_sixteen_with_scissors").tolerance(rr::Tolerance::blend(3).with_edge(1)), [](Rig& r, Cap& out) {
