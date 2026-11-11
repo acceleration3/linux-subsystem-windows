@@ -414,7 +414,7 @@ Each loop creates and destroys 5000 objects of the kind with its largest practic
 | `sanity.iso.stall.heavy_load_other_finishes` | A process with a saturating compute loop does not prevent another process from finishing a 1 MiB roundtrip within a stated multiple of its idle time. [E] |
 | `sanity.iso.stall.huge_upload_other_progress` | While one process uploads 512 MiB repeatedly, another's 64 KiB roundtrips each complete within a bounded time. [E] |
 | `sanity.iso.write.out_of_bounds_contained` | Out-of-bounds writes in one process do not alter any other process's buffers, checked by sentinel buffers. |
-| `sanity.iso.share.read_only_enforced` | A resource opened read-only through a shared handle cannot be written by the opener. |
+| `sanity.iso.share.read_only_enforced` | A resource opened by name with read access only cannot be written by the opener. An open by name that asks for write access is decided by the object's default security descriptor, which grants the creating user full access, so it may succeed and writing through it is permitted; only the open with read access is the victim, and the access granted to each open is recorded. |
 | `sanity.iso.session.service_session_separate` | A process in session 0 and one in the user session see the same adapters but not each other's unshared resources; the session 0 process is started through a SYSTEM scheduled task. [E] |
 
 ### 4.7 Synchronisation and concurrency (19)

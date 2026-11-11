@@ -291,7 +291,7 @@ Outcome HandleChecks::read_only_enforced(Context& context) {
     if (FAILED(read_open)) {
         problems.add("opening with the granted read access failed: " + D3d11Tools::hr(read_open));
     }
-    Com<ID3D11Texture2D> victim = SUCCEEDED(write_open) ? std::move(writable) : std::move(readable);
+    Com<ID3D11Texture2D> victim = std::move(readable);
     if (victim) {
         std::vector<std::uint32_t> pixels(64 * 64, 0xff0000ffu);
         Com<ID3D11Texture2D> source = D3d11Tools::texture(opener, D3d11Tools::desc2d(64, 64, DXGI_FORMAT_R8G8B8A8_UNORM, D3D11_BIND_SHADER_RESOURCE));
@@ -323,7 +323,7 @@ Outcome HandleChecks::read_only_enforced(Context& context) {
     for (UINT y = 0; y < 64; y += 21) {
         for (UINT x = 0; x < 64; x += 21) {
             if (image.pixel(x, y) != expected) {
-                problems.add("the owner's texture holds 0x" + Text::hex(image.pixel(x, y), 8) + " at (" + std::to_string(x) + "," + std::to_string(y) + ") after the read-only opener tried to write, expected 0x" + Text::hex(expected, 8));
+                problems.add("the owner's texture holds 0x" + Text::hex(image.pixel(x, y), 8) + " at (" + std::to_string(x) + "," + std::to_string(y) + ") after the opener with read access only tried to write, expected 0x" + Text::hex(expected, 8));
                 x = 64;
                 y = 64;
             }
