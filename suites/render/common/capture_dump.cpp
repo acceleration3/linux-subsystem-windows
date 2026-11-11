@@ -254,6 +254,9 @@ std::vector<std::filesystem::path> CaptureDump::write(const std::filesystem::pat
                 ",\"outlier_fraction\":" + number(t.outlier_fraction) + ",\"edge_radius\":" + std::to_string(t.edge_radius) +
                 ",\"wrap\":" + std::to_string(t.wrap_channels) + ",\"coverage_blocks\":" + std::string(t.coverage_blocks ? "true" : "false") + ",\"forgive_fraction\":" + number(t.forgive_fraction) + ",\"min_psnr\":" + number(t.min_psnr) +
                 ",\"outlier_max_delta\":" + number(t.outlier_max_delta) + ",\"max_outliers\":" + std::to_string(t.max_outliers) + "}";
+        if (r.low != nullptr && r.high != nullptr) {
+            json += ",\"bracket\":true";
+        }
         if (r.judged) {
             json += ",\"psnr\":" + number(r.result.psnr) + ",\"bad\":" + std::to_string(r.result.bad) +
                     ",\"max_delta\":" + number(r.result.max_delta) + ",\"forgiven\":" + std::to_string(r.result.forgiven) +
@@ -277,6 +280,17 @@ std::vector<std::filesystem::path> CaptureDump::write(const std::filesystem::pat
                 std::string ignored_error;
                 const std::filesystem::path raw = dir / (stem + std::string(file.suffix).replace(std::string(file.suffix).size() - 4, 4, ".rref"));
                 if (RefStore::write_image(raw, *file.image, ignored_error)) {
+                    written.push_back(raw);
+                }
+            }
+            const struct {
+                const char* suffix;
+                const Image* image;
+            } brackets[] = {{".low.rref", r.low}, {".high.rref", r.high}};
+            for (const auto& bracket : brackets) {
+                std::string ignored_error;
+                const std::filesystem::path raw = dir / (stem + bracket.suffix);
+                if (bracket.image != nullptr && !bracket.image->empty() && RefStore::write_image(raw, *bracket.image, ignored_error)) {
                     written.push_back(raw);
                 }
             }

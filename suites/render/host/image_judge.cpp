@@ -226,6 +226,10 @@ void ImageJudge::compare_frames(Context& context, Problems& problems, const rr::
                 if (lo_image != nullptr && hi_image != nullptr) {
                     adjusted = bracketed(*reference, *lo_image, *hi_image, *image, tolerance);
                     judged_reference = &adjusted;
+                    if (dump) {
+                        records.back().low = lo_image;
+                        records.back().high = hi_image;
+                    }
                 }
             }
             if (tolerance.coverage_blocks) {

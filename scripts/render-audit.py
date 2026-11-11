@@ -159,12 +159,29 @@ def coverage_adjusted(expected, actual, back, front, tol):
     return clone(expected, out)
 
 
-def adjusted_oracle(oracle, actual, tol, directory, frame):
+def bracketed(expected, low, high, actual, tol):
+    if len({(r.width, r.height, r.kind) for r in (expected, low, high, actual)}) != 1 or expected.klass == "integer":
+        return expected
+    slack = float(tol["byte_delta"]) if expected.klass == "unorm8" else tol["absolute"]
+    out = array.array("d", expected.data)
+    for at, value in enumerate(actual.data):
+        a, b, m = low.data[at], high.data[at], expected.data[at]
+        if min(a, b, m) - slack <= value <= max(a, b, m) + slack and abs(value - m) > slack:
+            out[at] = value
+    return clone(expected, out)
+
+
+def adjusted_oracle(oracle, actual, tol, directory, capture):
+    frame, label = key_of(capture)
+    judged = oracle
+    if capture.get("bracket"):
+        stem = os.path.join(directory, stem_of(frame, label))
+        judged = bracketed(oracle, read_rref(stem + ".low.rref"), read_rref(stem + ".high.rref"), actual, tol)
     if tol["coverage_blocks"]:
         back = read_rref(os.path.join(directory, stem_of(frame, "back") + ".actual.rref"))
         front = read_rref(os.path.join(directory, stem_of(frame, "front") + ".actual.rref"))
-        oracle = coverage_adjusted(oracle, actual, back, front, tol)
-    return oracle
+        judged = coverage_adjusted(oracle, actual, back, front, tol)
+    return judged
 
 
 def pixel_close(expected, ex, ey, actual, ax, ay, tol):
@@ -701,7 +718,11 @@ class Audit:
                     continue
                 tolerance = normalize_tolerance(capture["tolerance"])
                 actual_image = read_rref(stem + ".actual.rref")
-                oracle_image = adjusted_oracle(read_rref(stem + ".oracle.rref"), actual_image, tolerance, dump["_dir"], key[0])
+                try:
+                    oracle_image = adjusted_oracle(read_rref(stem + ".oracle.rref"), actual_image, tolerance, dump["_dir"], capture)
+                except OSError as error:
+                    mismatches.append("%s f%d %s: the images the judge adjusted the oracle with are missing: %s" % (check_id, key[0], key[1], error))
+                    continue
                 verdict = judge(oracle_image, actual_image, tolerance)
                 checked += 1
                 wrong = []

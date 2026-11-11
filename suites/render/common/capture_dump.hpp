@@ -15,6 +15,8 @@ struct CaptureRecord {
     std::string label;
     const Image* actual = nullptr;
     const Image* oracle = nullptr;
+    const Image* low = nullptr;
+    const Image* high = nullptr;
     Tolerance tolerance;
     bool judged = false;
     DiffResult result;
