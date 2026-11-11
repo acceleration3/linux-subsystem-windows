@@ -230,6 +230,13 @@ def retarget(xml, gpus, qemu_env=(), keep=None):
         for child in list(audio):
             audio.remove(child)
         audio.attrib = {"id": audio.get("id", "1"), "type": "none"}
+    for existing in root.findall("./pm"):
+        root.remove(existing)
+    power = ET.Element("pm")
+    ET.SubElement(power, "suspend-to-mem", enabled="no")
+    ET.SubElement(power, "suspend-to-disk", enabled="no")
+    devices = root.find("./devices")
+    root.insert(list(root).index(devices) if devices is not None else len(root), power)
     commandline = root.find(f"{{{QEMU_NS}}}commandline")
     if commandline is None:
         raise RunFailed("the domain has no qemu:commandline: it is not an accel-virt VM")
