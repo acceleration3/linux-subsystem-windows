@@ -42,7 +42,17 @@ bool channel_close(ChannelClass klass, double a, double b, const Tolerance& tole
         units = 1e9;
         return false;
     }
-    const double delta = std::fabs(a - b);
+    double delta = std::fabs(a - b);
+    if (tolerance.wrap && klass != ChannelClass::Integer) {
+        double period = 1.0;
+        switch (klass) {
+            case ChannelClass::Unorm8: period = 256.0; break;
+            case ChannelClass::Unorm16: period = 65536.0; break;
+            default: break;
+        }
+        delta = std::fmod(delta, period);
+        delta = std::min(delta, period - delta);
+    }
     switch (klass) {
         case ChannelClass::Float:
             units = delta * 255.0;

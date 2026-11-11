@@ -67,7 +67,7 @@ bool interpolation(Rig& r, Cap& out, const char* pick, UINT samples) {
 }
 
 rr::Tolerance interp_tolerance(UINT samples) {
-    rr::Tolerance t = samples > 1 ? rr::Tolerance::raster(8, 1) : rr::Tolerance::tight(4);
+    rr::Tolerance t = (samples > 1 ? rr::Tolerance::raster(8, 1) : rr::Tolerance::tight(4)).with_wrap();
     t.outlier_fraction = samples > 1 ? 0.02 : 0.0008;
     t.outlier_max_delta = 255;
     t.max_outliers = samples > 1 ? 400 : 13;

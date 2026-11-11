@@ -136,6 +136,22 @@ std::vector<std::string> JudgeSelfTest::run(std::vector<std::string>& passed) {
         expect("a step of several 8 bit levels on a 16 bit unorm capture fails under floats of one level", ImageDiff::compare(wide, wide_far, one_level).pass, false);
     }
     {
+        Image expected(32, 32, PixelKind::R8Unorm);
+        Image wrapped(32, 32, PixelKind::R8Unorm);
+        Image apart(32, 32, PixelKind::R8Unorm);
+        for (std::uint32_t y = 0; y < 32; ++y) {
+            for (std::uint32_t x = 0; x < 32; ++x) {
+                expected.set_channel(x, y, 0, 254);
+                wrapped.set_channel(x, y, 0, 1);
+                apart.set_channel(x, y, 0, 100);
+            }
+        }
+        const Tolerance wrapping = Tolerance::tight(4).with_wrap();
+        expect("a sawtooth that wrapped from 254 to 1 passes under a wrap aware tolerance", ImageDiff::compare(expected, wrapped, wrapping).pass, true);
+        expect("a sawtooth that wrapped from 254 to 1 fails without wrap awareness", ImageDiff::compare(expected, wrapped, Tolerance::tight(4)).pass, false);
+        expect("a value far from the sawtooth fails under a wrap aware tolerance", ImageDiff::compare(expected, apart, wrapping).pass, false);
+    }
+    {
         Image expected = Image::solid(128, 128, kDark);
         for (std::uint32_t y = 0; y < 128; ++y) {
             for (std::uint32_t x = 0; x < 128; ++x) {

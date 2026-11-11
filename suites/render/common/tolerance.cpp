@@ -85,4 +85,10 @@ Tolerance Tolerance::with_edge(int radius) const {
     return t;
 }
 
+Tolerance Tolerance::with_wrap() const {
+    Tolerance t = *this;
+    t.wrap = true;
+    return t;
+}
+
 }  // namespace lsw::render

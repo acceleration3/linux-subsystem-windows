@@ -81,6 +81,10 @@ def channel_close(klass, a, b, tol):
     if math.isinf(a) or math.isinf(b):
         return False, 1e9
     delta = abs(a - b)
+    if tol["wrap"] and klass != "integer":
+        period = {"unorm8": 256.0, "unorm16": 65536.0}.get(klass, 1.0)
+        delta = math.fmod(delta, period)
+        delta = min(delta, period - delta)
     if klass == "float":
         return delta <= tol["absolute"] + tol["relative"] * max(abs(a), abs(b)), delta * 255.0
     if klass == "integer":
@@ -103,6 +107,7 @@ def normalize_tolerance(raw):
         "outlier_max_delta": raw.get("outlier_max_delta", 0.0),
         "max_outliers": raw.get("max_outliers", 0),
         "min_psnr": raw.get("min_psnr", 0.0),
+        "wrap": bool(raw.get("wrap", False)),
         "name": raw.get("name", "?"),
     }
 

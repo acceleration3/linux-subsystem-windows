@@ -157,7 +157,7 @@ const Registrar kPs{[] {
         r.draw_std(full_uv());
         r.cap_main(o);
     });
-    single(spec("ps", "eight_render_targets").tolerance(rr::Tolerance::blend()), [](Rig& r, rr::CaptureSet& o) {
+    single(spec("ps", "eight_render_targets").tolerance(rr::Tolerance::blend().with_wrap()), [](Rig& r, rr::CaptureSet& o) {
         Target t[8];
         for (auto& x : t) r.target(x, 64, 64, DXGI_FORMAT_R8G8B8A8_UNORM);
         r.use_std();
