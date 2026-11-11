@@ -13,6 +13,7 @@ import lsw_link
 QEMU_LOG = "~/.cache/libvirt/qemu/log/lsw.log"
 CORES = "~/.local/share/lsw-gpu-test/cores"
 RECOVERY_BUDGET = 5
+STACK_BUDGET = 28
 
 
 def say(line):
@@ -42,8 +43,44 @@ class Machine:
         code, out = self.sh("virsh -c qemu:///session domstate lsw | head -n 1", 60)
         return out.strip() if code == 0 else "unknown"
 
+    def stack_script(self, budget=STACK_BUDGET):
+        return f"""
+state=$(virsh -c qemu:///session domstate lsw 2>/dev/null | head -n 1)
+[ "$state" = running ] || {{ echo "domain: ${{state:-unknown}}"; exit 0; }}
+pid=$(cat "${{XDG_RUNTIME_DIR:-/run/user/$(id -u)}}/libvirt/qemu/run/lsw.pid" 2>/dev/null)
+[ -n "$pid" ] && [ -d "/proc/$pid" ] || pid=$(pgrep -f 'qemu-system.*guest=lsw' | head -n 1)
+[ -n "$pid" ] && [ -d "/proc/$pid" ] || {{ echo "no qemu process"; exit 0; }}
+echo "pid $pid"
+start=$SECONDS
+for task in /proc/$pid/task/*; do
+    echo "== thread ${{task##*/}} comm: $(cat "$task/comm" 2>/dev/null)"
+    echo "wchan: $(cat "$task/wchan" 2>/dev/null)"
+    echo "stat: $(cat "$task/stat" 2>/dev/null)"
+done
+echo "== stacks"
+stacks=
+if command -v eu-stack >/dev/null 2>&1; then
+    stacks=$(timeout -k 1 {max(1, budget // 2)} eu-stack -p "$pid" 2>&1) && [ -n "$stacks" ] && echo "tool: eu-stack" || stacks=
+fi
+if [ -z "$stacks" ] && command -v gdb >/dev/null 2>&1; then
+    left=$(( {budget} - (SECONDS - start) ))
+    [ "$left" -ge 1 ] || left=1
+    stacks=$(timeout -k 1 "$left" gdb -batch -ex "thread apply all bt" -p "$pid" 2>&1)
+    echo "tool: gdb"
+fi
+[ -n "$stacks" ] && printf '%s\\n' "$stacks" || echo "no stack tool produced output"
+"""
+
+    def stacks(self, directory):
+        code, out = self.sh(self.stack_script(), STACK_BUDGET + 15)
+        if out.startswith("domain:") or out.startswith("no qemu process"):
+            return False
+        (directory / "qemu-stacks.txt").write_text(out)
+        return True
+
     def evidence(self, directory, seen):
         directory.mkdir(parents=True, exist_ok=True)
+        self.stacks(directory)
         code, out = self.sh(f"tail -n 120 {QEMU_LOG} 2>&1; echo; virsh -c qemu:///session domstate lsw --reason 2>&1", 60)
         (directory / "qemu-log.txt").write_text(out)
         script = f"""
