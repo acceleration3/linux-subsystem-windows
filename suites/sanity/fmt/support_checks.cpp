@@ -40,10 +40,6 @@ bool depth_flag_accepted_by_d3d12(DXGI_FORMAT format) {
     return format == DXGI_FORMAT_R32_FLOAT || format == DXGI_FORMAT_R16_UNORM;
 }
 
-bool texture_refused_by_d3d12_runtime(int number) {
-    return number == 68 || number == 69 || number == 89 || number == 100 || number == 101 || number == 102 || (number >= 106 && number <= 114);
-}
-
 class Limited {
 public:
     explicit Limited(Problems& target) : problems_(target) {}
@@ -199,6 +195,10 @@ void d3d12_part(Context& context, Problems& problems) {
     }
     D3d12FormatRunner runner(rig);
     Limited out(problems);
+    D3d12Rig warp;
+    std::string warp_error;
+    const bool have_warp = warp.open_warp(D3D_FEATURE_LEVEL_11_0, warp_error);
+    int refused_like_warp = 0;
     int exercised = 0;
     for (int number : probe_numbers()) {
         const DXGI_FORMAT format = static_cast<DXGI_FORMAT>(number);
@@ -219,8 +219,14 @@ void d3d12_part(Context& context, Problems& problems) {
         }
         ++exercised;
         const bool texture2d = (bits & D3D11_FORMAT_SUPPORT_TEXTURE2D) != 0;
-        if (texture2d && !texture_refused_by_d3d12_runtime(number) && !create(D3D12_RESOURCE_FLAG_NONE)) {
-            out.add(name + " reports Texture2D support but a texture cannot be created");
+        if (texture2d && !create(D3D12_RESOURCE_FLAG_NONE)) {
+            const bool warp_creates = have_warp && D3d12Tools::texture(warp, D3d12Tools::texture_desc(16, 16, format, D3D12_RESOURCE_FLAG_NONE, 1, 1, 1), D3D12_RESOURCE_STATE_COMMON) != nullptr;
+            if (have_warp && !warp_creates) {
+                ++refused_like_warp;
+                context.note(name + " reports Texture2D support, but neither the driver nor WARP12 creates a texture of it");
+            } else {
+                out.add(name + " reports Texture2D support but a texture cannot be created" + (have_warp ? ", while WARP12 creates one" : ", and WARP12 is unavailable to compare: " + warp_error));
+            }
         }
         if (!texture2d && create(D3D12_RESOURCE_FLAG_NONE) && !typeless) {
             out.add(name + " reports no Texture2D support but a texture was created");
@@ -269,6 +275,7 @@ void d3d12_part(Context& context, Problems& problems) {
         use_checks(runner, out, name, format, bits);
     }
     context.measure("fmt.support.d3d12.formats", exercised);
+    context.measure("fmt.support.d3d12.texture2d_refused_by_warp_too", have_warp ? std::to_string(refused_like_warp) : "WARP12 unavailable: " + warp_error);
 }
 
 struct NineFormat {
