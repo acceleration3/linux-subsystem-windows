@@ -61,17 +61,12 @@ bool channel_close(ChannelClass klass, double a, double b, const Tolerance& tole
         case ChannelClass::Integer:
             units = delta;
             return false;
-        case ChannelClass::Unorm16: {
+        case ChannelClass::Unorm16:
             units = delta * 255.0 / 65535.0;
-            const double larger = std::max(std::fabs(a), std::fabs(b)) * 255.0 / 65535.0;
-            const double allowed = std::max(static_cast<double>(tolerance.byte_delta), absolute * 255.0 + static_cast<double>(tolerance.relative) * larger);
-            return units <= allowed;
-        }
-        case ChannelClass::Unorm8: {
+            return units <= static_cast<double>(tolerance.byte_delta);
+        case ChannelClass::Unorm8:
             units = delta;
-            const double allowed = std::max(static_cast<double>(tolerance.byte_delta), absolute * 255.0 + static_cast<double>(tolerance.relative) * std::max(std::fabs(a), std::fabs(b)));
-            return delta <= allowed;
-        }
+            return delta <= static_cast<double>(tolerance.byte_delta);
     }
     return false;
 }

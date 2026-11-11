@@ -119,9 +119,17 @@ std::vector<std::string> JudgeSelfTest::run(std::vector<std::string>& passed) {
             }
         }
         const Tolerance one_level = Tolerance::floats(1.0f / 255.0f + 1e-4f);
-        expect("one level step on an 8 bit unorm capture passes under floats of one level", ImageDiff::compare(expected, one_step, one_level).pass, true);
-        expect("five level steps on an 8 bit unorm capture fail under floats of one level", ImageDiff::compare(expected, five_steps, one_level).pass, false);
+        expect("one level step on an 8 bit unorm capture fails under a float tolerance, which is exact there", ImageDiff::compare(expected, one_step, one_level).pass, false);
+        expect("one level step on an 8 bit unorm capture passes under tight(1)", ImageDiff::compare(expected, one_step, Tolerance::tight(1)).pass, true);
+        expect("five level steps on an 8 bit unorm capture fail under tight(1)", ImageDiff::compare(expected, five_steps, Tolerance::tight(1)).pass, false);
         expect("one level step on an 8 bit unorm capture fails under exact", ImageDiff::compare(expected, one_step, Tolerance::exact()).pass, false);
+        Image ten_steps(32, 32, PixelKind::R8Unorm);
+        for (std::uint32_t y = 0; y < 32; ++y) {
+            for (std::uint32_t x = 0; x < 32; ++x) {
+                ten_steps.set_channel(x, y, 0, 137);
+            }
+        }
+        expect("ten level steps on an 8 bit unorm capture fail under the snorm block compressed tolerance", ImageDiff::compare(expected, ten_steps, Tolerance::block_compressed(true).with_outliers(0.0)).pass, false);
         Image wide(32, 32, PixelKind::R16Unorm);
         Image wide_step(32, 32, PixelKind::R16Unorm);
         Image wide_far(32, 32, PixelKind::R16Unorm);
@@ -132,8 +140,9 @@ std::vector<std::string> JudgeSelfTest::run(std::vector<std::string>& passed) {
                 wide_far.set_channel(x, y, 0, 31500);
             }
         }
-        expect("a step below one 8 bit level on a 16 bit unorm capture passes under floats of one level", ImageDiff::compare(wide, wide_step, one_level).pass, true);
-        expect("a step of several 8 bit levels on a 16 bit unorm capture fails under floats of one level", ImageDiff::compare(wide, wide_far, one_level).pass, false);
+        expect("a step below one 8 bit level on a 16 bit unorm capture passes under tight(1)", ImageDiff::compare(wide, wide_step, Tolerance::tight(1)).pass, true);
+        expect("a step below one 8 bit level on a 16 bit unorm capture fails under a float tolerance", ImageDiff::compare(wide, wide_step, one_level).pass, false);
+        expect("a step of several 8 bit levels on a 16 bit unorm capture fails under tight(1)", ImageDiff::compare(wide, wide_far, Tolerance::tight(1)).pass, false);
     }
     {
         Image expected(32, 32, PixelKind::R8Unorm);
