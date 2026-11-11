@@ -1031,7 +1031,7 @@ Each loop creates and destroys 5000 objects of the kind with its largest practic
 | `sanity.shader.dxbc.invalid_diagnostics` | Invalid HLSL produces diagnostics from D3DCompile, and garbage bytecode passed to CreateVertexShader/PixelShader fails with E_INVALIDARG, garbage or truncated bytecode in a D3D12 pipeline description fails with any failure code, and none of them lose the device. |
 | `sanity.shader.cl.c_and_il` | CL C kernels at each supported -cl-std and IL kernels (when reported) compile and run correctly; build errors give a log. |
 | `sanity.shader.determinism.created_twice` | The same shader/pipeline created twice in one process gives bit-identical output for the same input, in each API. |
-| `sanity.shader.determinism.two_processes` | Two processes concurrently compiling and running the same shaders (D3D, GL, VK, CL) both get identical outputs, and each is unaffected by the other's invalid shaders. |
+| `sanity.shader.determinism.two_processes` | Two processes concurrently compiling and running the same shaders (D3D, GL, VK, CL) both get identical outputs on each device (Vulkan devices are keyed by device UUID and never compared with one another), and each is unaffected by the other's invalid shaders. |
 | `sanity.shader.cache.reuse_correct` | A pipeline cache or shader cache blob saved and reloaded (Vulkan pipeline cache, GL program binary, D3D12 cached PSO) yields the same output; an incompatible blob is rejected and the application falls back to compiling. |
 
 ### 4.18 Interop (54)

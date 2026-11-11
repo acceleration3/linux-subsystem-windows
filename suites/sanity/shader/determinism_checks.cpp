@@ -174,23 +174,32 @@ void run_all(Context& context, bool poison, Hashes& hashes, Problems& problems, 
         }
     }
     if (Kit::enabled("vulkan")) {
-        std::string value;
+        Hashes devices;
         const Outcome outcome = vk::Kit::each_device(context, [&](VulkanRig& rig, Problems& found) -> std::string {
             Words words;
             const VkResult result = Workload::vulkan(rig, words);
             if (result != VK_SUCCESS) {
                 found.add("the compute pipeline failed: " + vk::Kit::name(result));
-            } else if (value.empty()) {
-                value = hex_hash(words);
-            } else if (value != hex_hash(words)) {
-                found.add("two devices of the same adapter list gave different output");
+                return {};
+            }
+            std::string uuid;
+            for (const std::uint8_t byte : rig.id.deviceUUID) {
+                uuid += Text::hex(byte, 2);
+            }
+            const std::string hash = hex_hash(words);
+            const auto known = devices.find(uuid);
+            if (known == devices.end()) {
+                devices[uuid] = hash;
+            } else if (known->second != hash) {
+                found.add("two runs on the device " + uuid + " gave different output");
             }
             return {};
         });
         if (outcome.status() == Status::Fail) {
             problems.add("Vulkan: " + outcome.reason());
-        } else if (!value.empty()) {
-            hashes["vulkan"] = value;
+        }
+        for (const auto& item : devices) {
+            hashes["vulkan:" + item.first] = item.second;
         }
     }
     if (Kit::enabled("gl")) {
