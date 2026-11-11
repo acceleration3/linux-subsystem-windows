@@ -33,7 +33,7 @@ constexpr const char* kLitVs =
     "    float3 d = lpos.xyz - i.p; float dist = length(d); L = d / dist;\n"
     "    a = dist > lpos.w ? 0 : 1.0 / (att.x + att.y * dist + att.z * dist * dist);\n"
     "    if (ldir.w > 1.5) { float rho = dot(-L, ldir.xyz);\n"
-    "      if (rho > cone.x) s = 1; else if (rho <= cone.y) s = 0; else s = pow((rho - cone.y) / (cone.x - cone.y), att.w); }\n"
+    "      if (rho <= cone.y) s = 0; else s = pow((rho - cone.y) / (cone.x - cone.y), att.w); }\n"
     "  }\n"
     "  float lam = max(0, dot(N, L));\n"
     "  o.c = saturate(amb + mat * (lam * a * s)); o.c.a = mat.a; o.p = float4(i.p, 1); return o;\n"

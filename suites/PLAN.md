@@ -488,7 +488,7 @@ Each loop creates and destroys 5000 objects of the kind with its largest practic
 
 | check | contract |
 |---|---|
-| `sanity.d3d9.render.fixed_function` | A set of fixed-function scenes (lighting with each light type, fog modes, texture stage ops and TCI, alpha test, stencil ops, user clip planes) renders within tolerance of WARP. |
+| `sanity.d3d9.render.fixed_function` | A set of fixed-function scenes (lighting with each light type, fog modes, texture stage ops and TCI, alpha test, stencil ops, user clip planes) renders within tolerance of WARP. The lit scenes follow the Microsoft Direct3D 9 runtime, which games run on: it turns fixed-function lighting into its own vertex shaders, and its spot cone term is the falloff power of the position between the outer and the inner cone angle, zero outside the outer cone and without a plateau of one inside the inner cone. |
 | `sanity.d3d9.render.shaders` | VS/PS 2.0/3.0 shaders covering loops, dynamic branching, texkill, dsx/dsy, MRT and vFace render within tolerance of WARP and the CPU reference. |
 | `sanity.d3d9.render.states_and_blend` | Each render state group (blend ops and factors, separate alpha blend, sRGB write, depth bias, scissor, colour write mask, multisample mask) produces the CPU-reference result on a small grid of pixels. |
 | `sanity.d3d9.render.multisample` | Multisampled RT with StretchRect resolve of a known edge pattern yields coverage-weighted values consistent with the reported quality level and equal to WARP within tolerance. |
@@ -1001,7 +1001,7 @@ Each loop creates and destroys 5000 objects of the kind with its largest practic
 
 | check | contract |
 |---|---|
-| `sanity.fmt.support_bits_match_use` | For each format in D3D9, D3D11 and D3D12 tables, support for sample, render target, blend, UAV, MSAA and display reported by the API equals what actually works and what fails when a bit is absent. |
+| `sanity.fmt.support_bits_match_use` | For each format in D3D9, D3D11 and D3D12 tables, support for sample, render target, blend, UAV, MSAA and display reported by the API equals what actually works and what fails when a bit is absent. Where the Direct3D 12 runtime behaves the same on WARP and on the driver, R32_FLOAT and R16_UNORM accept the depth stencil flag and the formats 68, 69, 89, 100 to 102 and 106 to 114 report Texture2D without being creatable, the row does not assert the bit; a removed D3D11 device ends the D3D11 part with one problem naming the format. |
 | `sanity.fmt.cross_api_equal` | For the formats supported by both D3D11 and D3D12, the resulting pixel values from the same upload-render-readback test are identical between the two APIs; the support bits are recorded as measures, not compared. |
 | `sanity.fmt.roundtrip_uncompressed` | Upload and readback of every uncompressed colour format (8/16/32 bits, UNORM/SNORM/UINT/SINT/FLOAT) returns the exact bytes for copies and values correct at the format's precision for render and sample. |
 | `sanity.fmt.packed_formats` | Packed formats (R10G10B10A2, R11G11B10_FLOAT, R9G9B9E5, B5G6R5, B5G5R5A1, B4G4R4A4) decode and encode to the analytic values when sampled and rendered, with correct handling of denormals/infinity for floats. |

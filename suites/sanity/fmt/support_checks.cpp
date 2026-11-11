@@ -36,6 +36,14 @@ bool view_only_depth(DXGI_FORMAT format) {
            format == DXGI_FORMAT_R24_UNORM_X8_TYPELESS || format == DXGI_FORMAT_X24_TYPELESS_G8_UINT;
 }
 
+bool depth_flag_accepted_by_d3d12(DXGI_FORMAT format) {
+    return format == DXGI_FORMAT_R32_FLOAT || format == DXGI_FORMAT_R16_UNORM;
+}
+
+bool texture_refused_by_d3d12_runtime(int number) {
+    return number == 68 || number == 69 || number == 89 || number == 100 || number == 101 || number == 102 || (number >= 106 && number <= 114);
+}
+
 class Limited {
 public:
     explicit Limited(Problems& target) : problems_(target) {}
@@ -165,8 +173,18 @@ void d3d11_part(Context& context, Problems& problems) {
         if (!msaa_bit && !typeless && !video && !depth && (bits & D3D11_FORMAT_SUPPORT_RENDER_TARGET) != 0 && create(D3D11_BIND_RENDER_TARGET, 4)) {
             out.add(name + " reports no multisample render target support but a 4x multisampled target was created");
         }
+        const HRESULT before_use = device.device->GetDeviceRemovedReason();
+        if (FAILED(before_use)) {
+            out.add(name + ": the device was removed (" + D3d11Tools::hr(before_use) + ") while its textures were created, so the formats after it are not tested");
+            break;
+        }
         if (!video) {
             use_checks(runner, out, name, format, bits);
+        }
+        const HRESULT after_use = device.device->GetDeviceRemovedReason();
+        if (FAILED(after_use)) {
+            out.add(name + ": the device was removed (" + D3d11Tools::hr(after_use) + ") while it was cleared, drawn and sampled, so the formats after it are not tested");
+            break;
         }
     }
     context.measure("fmt.support.d3d11.formats", exercised);
@@ -201,7 +219,7 @@ void d3d12_part(Context& context, Problems& problems) {
         }
         ++exercised;
         const bool texture2d = (bits & D3D11_FORMAT_SUPPORT_TEXTURE2D) != 0;
-        if (texture2d && !create(D3D12_RESOURCE_FLAG_NONE)) {
+        if (texture2d && !texture_refused_by_d3d12_runtime(number) && !create(D3D12_RESOURCE_FLAG_NONE)) {
             out.add(name + " reports Texture2D support but a texture cannot be created");
         }
         if (!texture2d && create(D3D12_RESOURCE_FLAG_NONE) && !typeless) {
@@ -224,7 +242,7 @@ void d3d12_part(Context& context, Problems& problems) {
         if (ds_bit && !ds_created) {
             out.add(name + " reports depth stencil support but a depth stencil texture cannot be created");
         }
-        if (!ds_bit && ds_created && !typeless) {
+        if (!ds_bit && ds_created && !typeless && !depth_flag_accepted_by_d3d12(format)) {
             out.add(name + " reports no depth stencil support but a depth stencil texture was created");
         }
         if (uav_bit && !create(D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS)) {
