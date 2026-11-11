@@ -356,6 +356,9 @@ Outcome TimingChecks::frame_latency_limits(Context& context) {
         return Outcome::fail(error);
     }
     Problems problems;
+    Com<IDXGISwapChainMedia> media = rig.chain.as<IDXGISwapChainMedia>();
+    double mean_ahead_one = -1.0;
+    double mean_ahead_three = -1.0;
     for (const UINT latency : {1u, 2u, 3u}) {
         const HRESULT set = chain2->SetMaximumFrameLatency(latency);
         UINT read = 0;
@@ -365,8 +368,14 @@ Outcome TimingChecks::frame_latency_limits(Context& context) {
             continue;
         }
         long long max_ahead = 0;
+        long long ahead_sum = 0;
+        long long ahead_samples = 0;
+        long long max_incomplete = 0;
+        bool composed = false;
+        bool mode_known = false;
         std::vector<long long> stamps;
         std::vector<double> waits;
+        std::vector<Com<ID3D11Query>> queries;
         std::string failure;
         for (int frame = 0; frame < 70; ++frame) {
             const long long before = QpcClock::now();
@@ -375,10 +384,32 @@ Outcome TimingChecks::frame_latency_limits(Context& context) {
                 break;
             }
             waits.push_back(QpcClock::ms_since(before));
+            long long incomplete = 0;
+            for (auto query = queries.begin(); query != queries.end();) {
+                BOOL done = FALSE;
+                if (rig.device.context->GetData(query->get(), &done, sizeof(done), D3D11_ASYNC_GETDATA_DONOTFLUSH) == S_OK && done) {
+                    query = queries.erase(query);
+                } else {
+                    ++incomplete;
+                    ++query;
+                }
+            }
+            if (frame >= 6) {
+                max_incomplete = std::max(max_incomplete, incomplete);
+            }
             Com<ID3D11RenderTargetView> view = rig.back_view(0);
             draw.frame(view.get(), kSide, kSide, frame % FrameImage::kFrames);
             rig.device.context->OMSetRenderTargets(0, nullptr, nullptr);
             view.reset();
+            D3D11_QUERY_DESC query_desc{};
+            query_desc.Query = D3D11_QUERY_EVENT;
+            Com<ID3D11Query> query;
+            if (FAILED(rig.device.device->CreateQuery(&query_desc, query.put()))) {
+                failure = "CreateQuery(EVENT) failed before frame " + std::to_string(frame);
+                break;
+            }
+            rig.device.context->End(query.get());
+            queries.push_back(std::move(query));
             const HRESULT presented = rig.chain->Present(1, 0);
             stamps.push_back(QpcClock::now());
             if (FAILED(presented)) {
@@ -388,7 +419,15 @@ Outcome TimingChecks::frame_latency_limits(Context& context) {
             UINT issued = 0;
             DXGI_FRAME_STATISTICS stats{};
             if (frame >= 6 && SUCCEEDED(rig.chain->GetLastPresentCount(&issued)) && SUCCEEDED(rig.chain->GetFrameStatistics(&stats)) && issued >= stats.PresentCount) {
-                max_ahead = std::max(max_ahead, static_cast<long long>(issued - stats.PresentCount));
+                const long long ahead = static_cast<long long>(issued - stats.PresentCount);
+                max_ahead = std::max(max_ahead, ahead);
+                ahead_sum += ahead;
+                ++ahead_samples;
+            }
+            DXGI_FRAME_STATISTICS_MEDIA media_stats{};
+            if (frame >= 6 && media && SUCCEEDED(media->GetFrameStatisticsMedia(&media_stats))) {
+                mode_known = true;
+                composed = composed || media_stats.CompositionMode == DXGI_FRAME_PRESENTATION_MODE_COMPOSED;
             }
         }
         if (!failure.empty()) {
@@ -401,12 +440,29 @@ Outcome TimingChecks::frame_latency_limits(Context& context) {
         for (const double wait : waits) {
             wait_sum += wait;
         }
+        const double mean_ahead = ahead_samples > 0 ? static_cast<double>(ahead_sum) / static_cast<double>(ahead_samples) : 0.0;
+        if (latency == 1) {
+            mean_ahead_one = ahead_samples > 0 ? mean_ahead : -1.0;
+        } else if (latency == 3) {
+            mean_ahead_three = ahead_samples > 0 ? mean_ahead : -1.0;
+        }
+        const std::string mode = !mode_known ? "unknown" : composed ? "composed" : "overlay or independent flip";
+        const long long display_bound = static_cast<long long>(latency) + (mode_known && !composed ? 1 : 2);
         context.measure(key + ".max_frames_ahead", max_ahead);
+        context.measure(key + ".mean_frames_ahead", mean_ahead);
+        context.measure(key + ".max_incomplete_gpu_frames", max_incomplete);
+        context.measure(key + ".composition_mode", mode);
         context.measure(key + ".mean_period_ms", cadence.mean);
         context.measure(key + ".mean_wait_ms", wait_sum / static_cast<double>(waits.size()));
-        if (max_ahead > static_cast<long long>(latency) + 1) {
-            problems.add("with a maximum frame latency of " + std::to_string(latency) + " the application ran " + std::to_string(max_ahead) + " frames ahead of the display, above " + std::to_string(latency + 1));
+        if (max_incomplete > static_cast<long long>(latency)) {
+            problems.add("with a maximum frame latency of " + std::to_string(latency) + " the waitable object let the application queue " + std::to_string(max_incomplete) + " frames whose GPU work was incomplete, above " + std::to_string(latency) + " (swap chain composition mode: " + mode + ")");
         }
+        if (max_ahead > display_bound) {
+            problems.add("with a maximum frame latency of " + std::to_string(latency) + " the application ran " + std::to_string(max_ahead) + " frames ahead of the display, above " + std::to_string(display_bound) + " for the composition mode " + mode);
+        }
+    }
+    if (mean_ahead_one >= 0.0 && mean_ahead_three >= 0.0 && !(mean_ahead_one < mean_ahead_three)) {
+        problems.add("a maximum frame latency of 1 kept the application " + std::to_string(mean_ahead_one) + " frames ahead of the display on average, not fewer than the " + std::to_string(mean_ahead_three) + " of a maximum frame latency of 3");
     }
     std::string drain_error;
     static_cast<void>(D3d11Tools::wait_event(rig.device, rig.device.context, drain_error));
@@ -452,16 +508,20 @@ Outcome TimingChecks::present_stats_vs_capture(Context& context) {
             path->close();
             continue;
         }
-        ::Sleep(100);
+        FrameWatcher watcher;
+        watcher.start(path->client());
+        const PresentResult marker = path->present(kWarm, 1);
+        if (!marker.ok) {
+            failure = "frame " + std::to_string(kWarm) + ": " + marker.error;
+        } else if (!Kit::await_frame(*path, kWarm, 3000)) {
+            failure = "frame " + std::to_string(kWarm) + " never became visible";
+        }
         FrameStats first;
         DWM_TIMING_INFO dwm_first{};
         const bool have_first = path->frame_stats(first);
         const bool have_dwm = RefreshRate::dwm_timing(dwm_first);
-        FrameWatcher watcher;
-        watcher.start(path->client());
-        ::Sleep(40);
         const long long begin = QpcClock::now();
-        for (int frame = kWarm; frame < kTotal && failure.empty(); ++frame) {
+        for (int frame = kWarm + 1; frame < kTotal && failure.empty(); ++frame) {
             const PresentResult result = path->present(frame, 1);
             if (!result.ok) {
                 failure = "frame " + std::to_string(frame) + ": " + result.error;
@@ -507,8 +567,8 @@ Outcome TimingChecks::present_stats_vs_capture(Context& context) {
             const long long refreshes = static_cast<long long>(last.present_refresh_count) - static_cast<long long>(first.present_refresh_count);
             context.measure(tag + ".stats.frames", frames);
             context.measure(tag + ".stats.refreshes", refreshes);
-            if (frames != kTotal - kWarm) {
-                problems.add(tag + ": the frame statistics count " + std::to_string(frames) + " presented frames between the two samples, the application presented " + std::to_string(kTotal - kWarm));
+            if (frames != kTotal - kWarm - 1) {
+                problems.add(tag + ": the frame statistics count " + std::to_string(frames) + " presented frames between the two samples, the application presented " + std::to_string(kTotal - kWarm - 1));
             }
             if (std::llabs(refreshes - frames) > 1) {
                 problems.add(tag + ": interval-1 frames advanced the presented refresh count by " + std::to_string(refreshes) + " for " + std::to_string(frames) + " frames, more than 1 apart");
@@ -528,11 +588,11 @@ Outcome TimingChecks::present_stats_vs_capture(Context& context) {
         }
         if (have_dwm && have_dwm_last) {
             const long long refreshed = static_cast<long long>(dwm_last.cRefresh) - static_cast<long long>(dwm_first.cRefresh);
-            const double expected = (elapsed + 100.0) / period;
+            const double expected = elapsed / period;
             context.measure(tag + ".dwm.refreshes", refreshed);
             context.measure(tag + ".dwm.expected_refreshes", expected);
             if (std::fabs(static_cast<double>(refreshed) - expected) > 4.0 + expected * 0.05) {
-                problems.add(tag + ": DwmGetCompositionTimingInfo counts " + std::to_string(refreshed) + " refreshes over " + std::to_string(elapsed + 100.0) + " ms, expected about " + std::to_string(expected));
+                problems.add(tag + ": DwmGetCompositionTimingInfo counts " + std::to_string(refreshed) + " refreshes over " + std::to_string(elapsed) + " ms, expected about " + std::to_string(expected));
             }
         } else {
             context.note(tag + ": DwmGetCompositionTimingInfo is unavailable");
