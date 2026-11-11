@@ -447,7 +447,7 @@ Outcome TimingChecks::frame_latency_limits(Context& context) {
             mean_ahead_three = ahead_samples > 0 ? mean_ahead : -1.0;
         }
         const std::string mode = !mode_known ? "unknown" : composed ? "composed" : "overlay or independent flip";
-        const long long display_bound = static_cast<long long>(latency) + (mode_known && !composed ? 1 : 2);
+        const long long display_bound = static_cast<long long>(latency) + (mode_known && composed ? 2 : 1);
         context.measure(key + ".max_frames_ahead", max_ahead);
         context.measure(key + ".mean_frames_ahead", mean_ahead);
         context.measure(key + ".max_incomplete_gpu_frames", max_incomplete);
