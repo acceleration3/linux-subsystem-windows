@@ -12,7 +12,7 @@ BUILD_LOCK="${XDG_RUNTIME_DIR:-/tmp}/lsw-build.lock"
 REMOTE_BASE=".local/share/lsw-gpu-test"
 ORIG_ARGS=("$@")
 
-host="" stack="" filter="" adapters=all bits=64 suite=render gpus="" out="" max_hold=3600 redeploy=0 dry=0 show_queue=0 jobs=2 hold_file=""
+host="" stack="" filter="" adapters=all bits=64 suite=render gpus="" out="" max_hold=3600 redeploy=0 dry=0 show_queue=0 jobs=2 hold_file="" qemu_env=""
 
 usage() {
     cat <<'EOT'
@@ -34,6 +34,7 @@ revision, and leaves the results in DIR/results/<timestamp>.
   --out DIR                 results directory (default DIR/results/<timestamp>)
   --hold-file PATH          check ids (one per line, globs allowed) that are never run
   --max-hold SECONDS        the run is killed after this long holding the VM (default 3600)
+  --qemu-env NAME=VALUE     set NAME in the executor's environment (repeatable; forces a redeploy)
   --redeploy                deploy even when the VM already runs this stack
   --queue                   show the queue of --host and exit
   --dry-run                 check the stack and print every step, touch no VM and take no ticket
@@ -57,6 +58,7 @@ while [[ $# -gt 0 ]]; do
         --max-hold) max_hold="$2"; shift ;;
         --hold-file) hold_file="$(realpath "$2")"; shift ;;
         --redeploy) redeploy=1 ;;
+        --qemu-env) qemu_env+=" $2"; redeploy=1; shift ;;
         --queue) show_queue=1 ;;
         --dry-run) dry=1 ;;
         -h|--help) usage; exit 0 ;;
@@ -163,7 +165,7 @@ deploy_accel() {
     say "accel: deploy-render and stack-apply"
     rsync -a "${stack}/stage/" "${ROOT}/" || return 1
     LSW_RENDER_STACK="${stack}" "${GPUTEST}" deploy-render accel || return 1
-    "${GPUTEST}" stack-apply accel
+    LSW_STACK_QEMU_ENV="${qemu_env}" "${GPUTEST}" stack-apply accel
 }
 
 deploy_if_needed() {

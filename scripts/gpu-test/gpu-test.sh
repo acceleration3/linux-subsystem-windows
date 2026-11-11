@@ -269,7 +269,10 @@ cmd_stack() {
     local action=$1
     shift
     split_arguments "$@"
-    local host
+    local host pair qemu_env=""
+    for pair in ${LSW_STACK_QEMU_ENV:-}; do
+        qemu_env+=" --qemu-env ${pair}"
+    done
     for host in "${HOSTS[@]}"; do
         say "Render stack ${action} on ${host}"
         on "${host}" <<RUN
@@ -278,9 +281,9 @@ if systemd-run --user --quiet --collect true 2>/dev/null; then
     unit=lsw-render-stack-${action}
     systemctl --user reset-failed "\${unit}.service" 2>/dev/null || true
     systemd-run --user --quiet --collect --wait --pipe --unit="\${unit}" --working-directory="\${HOME}/${BASE}/tree/scripts/gpu-test" \
-        python3 -B render_stack.py ${action}
+        python3 -B render_stack.py ${action}${qemu_env}
 else
-    python3 -B render_stack.py ${action}
+    python3 -B render_stack.py ${action}${qemu_env}
 fi
 RUN
     done
