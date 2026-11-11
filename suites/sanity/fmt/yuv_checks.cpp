@@ -332,7 +332,16 @@ void d3d12_planar(D3d12Rig& rig, Limited& out, int& tested) {
             }
             std::vector<std::uint32_t> words(raw.size() / 4);
             std::memcpy(words.data(), raw.data(), words.size() * 4);
-            compare_planes(planar, frame, words, words, size[0], out, name);
+            std::vector<std::uint32_t> chroma((static_cast<std::size_t>(size[1] / 2) + 1) * size[0] * 4, 0);
+            for (unsigned cy = 0; cy < size[1] / 2; ++cy) {
+                for (unsigned cx = 0; cx < size[0] / 2; ++cx) {
+                    const std::size_t packed = (static_cast<std::size_t>(cy) * 2 * size[0] + cx * 2) * 4;
+                    const std::size_t split = (static_cast<std::size_t>(cy) * size[0] + cx) * 4;
+                    chroma[split] = words[packed + 1];
+                    chroma[split + 1] = words[packed + 2];
+                }
+            }
+            compare_planes(planar, frame, words, chroma, size[0], out, name);
         }
     }
 }
