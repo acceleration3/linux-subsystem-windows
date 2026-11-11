@@ -277,7 +277,7 @@ Outcome QueryChecks::predicate(Context& context) {
                     return false;
                 }
                 if (c.occluded) {
-                    local.draw_rect(dev, -1, -1, 1, 1, 0.1f);
+                    local.draw_rect(dev, ndc_x(8), ndc_y(8), ndc_x(24), ndc_y(24), 0.1f);
                 }
                 predicate->Begin();
                 local.draw_rect(dev, ndc_x(8), ndc_y(8), ndc_x(24), ndc_y(24), 0.5f);
