@@ -88,7 +88,7 @@ const Registrar kPs{[] {
         paint(r, o, "Texture2D t : register(t0); SamplerState s : register(s0);\n" PS_HEAD "  float4 v = t.Sample(s, uv * 2); if (v.g < 0.5) discard; clip(v.r - 0.2); return float4(v.rgb, 1); }\n",
               {view.get()}, {smp.get()}, full_uv());
     });
-    single(spec("ps", "derivatives_ddx_ddy").tolerance(rr::Tolerance::blend(6).with_quad_bracket()), [](Rig& r, rr::CaptureSet& o) {
+    single(spec("ps", "derivatives_ddx_ddy").tolerance(rr::Tolerance::blend(6)), [](Rig& r, rr::CaptureSet& o) {
         r.begin(128, 128, DXGI_FORMAT_R8G8B8A8_UNORM, true);
         ScenePipe pipe(r, "float4 main(float4 p : SV_Position, float3 n : NORMAL, float2 uv : TEXCOORD0, float3 w : TEXCOORD1) : SV_Target {\n"
                           "  float3 dx = ddx(w) * 14, dy = ddy(w) * 14; return float4(abs(dx.x) + 0.15, abs(dy.y) + 0.15, abs(dx.z) + abs(dy.z), 1); }\n");

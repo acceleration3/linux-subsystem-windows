@@ -109,7 +109,6 @@ def normalize_tolerance(raw):
         "max_outliers": raw.get("max_outliers", 0),
         "min_psnr": raw.get("min_psnr", 0.0),
         "wrap": int(raw.get("wrap", 0)),
-        "quad_bracket": bool(raw.get("quad_bracket", False)),
         "coverage_blocks": bool(raw.get("coverage_blocks", False)),
         "name": raw.get("name", "?"),
     }
@@ -117,28 +116,6 @@ def normalize_tolerance(raw):
 
 def clone(raw, data):
     return Raw(raw.width, raw.height, raw.kind, data, None)
-
-
-def quad_bracketed(expected, actual, tol):
-    if (expected.width, expected.height, expected.kind) != (actual.width, actual.height, actual.kind) or expected.klass == "integer":
-        return expected
-    slack = float(tol["byte_delta"]) if expected.klass == "unorm8" else tol["absolute"]
-    width, height, channels = expected.width, expected.height, expected.channels
-    out = array.array("d", expected.data)
-    for qy in range(0, height, 2):
-        for qx in range(0, width, 2):
-            x1 = min(qx + 1, width - 1)
-            y1 = min(qy + 1, height - 1)
-            for c in range(channels):
-                values = [expected.data[(y * width + x) * channels + c] for y in (qy, y1) for x in (qx, x1)]
-                lo = min(values) - slack
-                hi = max(values) + slack
-                for y in range(qy, y1 + 1):
-                    for x in range(qx, x1 + 1):
-                        at = (y * width + x) * channels + c
-                        if lo <= actual.data[at] <= hi:
-                            out[at] = actual.data[at]
-    return clone(expected, out)
 
 
 def coverage_adjusted(expected, actual, back, front, tol):
@@ -183,8 +160,6 @@ def coverage_adjusted(expected, actual, back, front, tol):
 
 
 def adjusted_oracle(oracle, actual, tol, directory, frame):
-    if tol["quad_bracket"]:
-        oracle = quad_bracketed(oracle, actual, tol)
     if tol["coverage_blocks"]:
         back = read_rref(os.path.join(directory, stem_of(frame, "back") + ".actual.rref"))
         front = read_rref(os.path.join(directory, stem_of(frame, "front") + ".actual.rref"))

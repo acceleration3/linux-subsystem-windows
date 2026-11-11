@@ -100,12 +100,6 @@ Tolerance Tolerance::with_wrap(unsigned channels) const {
     return t;
 }
 
-Tolerance Tolerance::with_quad_bracket() const {
-    Tolerance t = *this;
-    t.quad_bracket = true;
-    return t;
-}
-
 Tolerance Tolerance::with_coverage_blocks() const {
     Tolerance t = *this;
     t.coverage_blocks = true;

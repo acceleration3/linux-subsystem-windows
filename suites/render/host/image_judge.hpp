@@ -21,12 +21,9 @@ public:
                                const rr::FrameCaptures& actual, bool oracle = false, const rr::FrameCaptures* low = nullptr,
                                const rr::FrameCaptures* high = nullptr);
 
-    [[nodiscard]] static rr::Image quad_bracketed(const rr::Image& expected, const rr::Image& actual, const rr::Tolerance& tolerance);
-
     [[nodiscard]] static rr::Image coverage_adjusted(const rr::Image& expected, const rr::Image& actual, const rr::Image& back,
                                                      const rr::Image& front, const rr::Tolerance& tolerance);
 
-    [[nodiscard]] static const char* quad_bracket_reason();
     [[nodiscard]] static const char* coverage_blocks_reason();
 
     [[nodiscard]] static rr::Image bracketed(const rr::Image& expected, const rr::Image& low, const rr::Image& high, const rr::Image& actual,
