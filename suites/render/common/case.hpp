@@ -44,6 +44,10 @@ public:
         lod_bracket_ = bias;
         return *this;
     }
+    CaseSpec& tie_bracket(float bias) {
+        tie_bracket_ = bias;
+        return *this;
+    }
     CaseSpec& timeout(int seconds) {
         timeout_seconds_ = seconds;
         return *this;
@@ -108,6 +112,10 @@ public:
     [[nodiscard]] float lod_bracket_bias() const { return lod_bracket_; }
     [[nodiscard]] static const char* lod_bracket_reason() {
         return "Direct3D 11 functional spec 7.18.11 permits approximating the LOD calculation and 7.18.10 requires only 8 fractional bits of LOD, so a filtered pixel may lie between the WARP renderings at MipLODBias -d and +d";
+    }
+    [[nodiscard]] float tie_bracket_bias() const { return tie_bracket_; }
+    [[nodiscard]] static const char* tie_bracket_reason() {
+        return "Direct3D 11 functional spec leaves the rounding of floating point arithmetic to the implementation, so a comparison of two values that are equal in exact arithmetic may go either way and a pixel may lie between the WARP renderings with the comparison biased each way";
     }
     [[nodiscard]] const std::set<std::string>& uniform_labels() const { return uniform_ok_; }
     [[nodiscard]] const std::vector<std::string>& audit_reasons() const { return audit_ok_; }
@@ -221,6 +229,7 @@ private:
     std::map<std::string, Tolerance> overrides_;
     std::set<std::string> uniform_ok_;
     float lod_bracket_ = 0.0f;
+    float tie_bracket_ = 0.0f;
     std::vector<std::string> audit_ok_;
     std::vector<SameAs> same_as_;
     unsigned major_ = 0;

@@ -82,7 +82,7 @@ rr::Image ImageJudge::bracketed(const rr::Image& expected, const rr::Image& low,
                 const double lo = std::min({a, b, m}) - slack;
                 const double hi = std::max({a, b, m}) + slack;
                 const double v = actual.channel(x, y, c);
-                if (v >= lo && v <= hi) {
+                if (v >= lo && v <= hi && std::fabs(v - m) > slack) {
                     out.set_channel(x, y, c, v);
                 }
             }

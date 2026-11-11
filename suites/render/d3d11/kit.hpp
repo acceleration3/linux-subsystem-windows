@@ -53,6 +53,7 @@ public:
     bool debug = false;
     bool under_test = false;
     float lod_bias = 0.0f;
+    float tie_bias = 0.0f;
     std::string name;
     D3d11Device dev;
     FrameSwap swap;

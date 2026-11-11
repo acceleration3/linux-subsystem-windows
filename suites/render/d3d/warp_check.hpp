@@ -93,17 +93,25 @@ public:
         }
         rr::RunResult low;
         rr::RunResult high;
-        const bool bracket = entry.spec.lod_bracket_bias() > 0.0f && !analytic && !self;
+        const bool lod = entry.spec.lod_bracket_bias() > 0.0f;
+        const bool bracket = (lod || entry.spec.tie_bracket_bias() > 0.0f) && !analytic && !self;
         if (bracket) {
-            context.measure("lod_bracket", std::string(rr::CaseSpec::lod_bracket_reason()));
-            const float bias = entry.spec.lod_bracket_bias();
+            context.measure(lod ? "lod_bracket" : "tie_bracket", std::string(lod ? rr::CaseSpec::lod_bracket_reason() : rr::CaseSpec::tie_bracket_reason()));
+            const float bias = lod ? entry.spec.lod_bracket_bias() : entry.spec.tie_bracket_bias();
             for (int side = 0; side < 2; ++side) {
                 Kit shifted;
                 if (shifted.open(true, entry.spec, error) != OpenStatus::Ok) {
                     return Outcome::fail("the WARP bracket oracle is unavailable: " + error);
                 }
                 if constexpr (requires { shifted.lod_bias = 0.0f; }) {
-                    shifted.lod_bias = side == 0 ? -bias : bias;
+                    if (lod) {
+                        shifted.lod_bias = side == 0 ? -bias : bias;
+                    }
+                }
+                if constexpr (requires { shifted.tie_bias = 0.0f; }) {
+                    if (!lod) {
+                        shifted.tie_bias = side == 0 ? -bias : bias;
+                    }
                 }
                 std::unique_ptr<rr::Scene<Kit>> shifted_scene = entry.make();
                 context.phase(side == 0 ? "bracket oracle low" : "bracket oracle high");

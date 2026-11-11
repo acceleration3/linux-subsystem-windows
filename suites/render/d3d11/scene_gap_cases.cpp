@@ -1,5 +1,7 @@
 #include "render/d3d11/scene3d.hpp"
 
+#include <cstdio>
+
 namespace lsw::suites::render::d3d11 {
 
 namespace {
@@ -240,18 +242,24 @@ const Add kSsao(spec("scene", "ssao_hemisphere_kernel_depth_and_normal_buffers")
     return r.shot(out, final_target) && r.shot(out, ao, "ao");
 });
 
-const Add kFxaa(spec("scene", "fxaa_like_luma_edge_blur_post_process").size(256, 256).tolerance(rr::Tolerance::blend(4).with_edge(1)), [](Rig& r, Cap& out) {
+const Add kFxaa(spec("scene", "fxaa_like_luma_edge_blur_post_process").size(256, 256).tolerance(rr::Tolerance::blend(4).with_edge(1)).tie_bracket(0.00001f), [](Rig& r, Cap& out) {
     Stage st;
     Target scene, result;
     Depth depth;
     if (!st.make(r) || !r.color(scene, 256, 256) || !r.color(result, 256, 256) || !r.depth(depth, 256, 256)) return false;
     Com<ID3D11PixelShader> flat = r.ps(std::string(Hlsl3::kLitIn) + "float4 main(VO i) : SV_Target { float l = saturate(dot(normalize(i.n), normalize(float3(0.4, 0.8, 0.3)))); float3 a = color.rgb * (extra.x > 0.5 ? (0.6 + 0.4 * (((int(floor(i.w.x)) + int(floor(i.w.z))) & 1) ? 1 : 0.2)) : 1.0); return float4(a * (0.2 + 0.8 * l), 1); }\n");
+    std::string tie;
+    if (r.kit.tie_bias != 0.0f) {
+        char text[32];
+        std::snprintf(text, sizeof text, " + (%.9g)", static_cast<double>(r.kit.tie_bias));
+        tie = text;
+    }
     Com<ID3D11PixelShader> post = r.ps(std::string(kFsHead) +
         "Texture2D t : register(t0);\nSamplerState s : register(s0);\nfloat luma(float3 c) { return dot(c, float3(0.299, 0.587, 0.114)); }\n"
         "float4 main(VO i) : SV_Target { float2 px = 1.0 / 256.0; float3 m = t.Sample(s, i.uv).rgb; float lm = luma(m);\n"
         "  float ln = luma(t.Sample(s, i.uv + float2(0, -px.y)).rgb), ls = luma(t.Sample(s, i.uv + float2(0, px.y)).rgb), le = luma(t.Sample(s, i.uv + float2(px.x, 0)).rgb), lw = luma(t.Sample(s, i.uv + float2(-px.x, 0)).rgb);\n"
         "  float lo = min(lm, min(min(ln, ls), min(le, lw))), hi = max(lm, max(max(ln, ls), max(le, lw))); float range = hi - lo; if (range < max(0.05, hi * 0.125)) return float4(m, 1);\n"
-        "  bool horizontal = abs(ln + ls - 2 * lm) >= abs(le + lw - 2 * lm); float2 dir = horizontal ? float2(px.x, 0) : float2(0, px.y); float3 a = t.Sample(s, i.uv - dir * 0.5).rgb, b = t.Sample(s, i.uv + dir * 0.5).rgb, c = t.Sample(s, i.uv - dir * 1.5).rgb, d = t.Sample(s, i.uv + dir * 1.5).rgb;\n"
+        "  bool horizontal = abs(ln + ls - 2 * lm)" + tie + " >= abs(le + lw - 2 * lm); float2 dir = horizontal ? float2(px.x, 0) : float2(0, px.y); float3 a = t.Sample(s, i.uv - dir * 0.5).rgb, b = t.Sample(s, i.uv + dir * 0.5).rgb, c = t.Sample(s, i.uv - dir * 1.5).rgb, d = t.Sample(s, i.uv + dir * 1.5).rgb;\n"
         "  return float4((a + b) * 0.35 + (c + d) * 0.15, 1); }\n");
     Com<ID3D11SamplerState> smp = r.smp(sdesc(D3D11_FILTER_MIN_MAG_MIP_LINEAR, D3D11_TEXTURE_ADDRESS_CLAMP));
     Com<ID3D11DepthStencilState> ds = r.dss(ddesc(true, D3D11_COMPARISON_LESS, true));
