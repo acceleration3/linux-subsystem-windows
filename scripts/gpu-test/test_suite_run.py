@@ -371,6 +371,16 @@ class DesktopClear(unittest.TestCase):
         self.assertIn("taskkill /f /pid 77", script)
         self.assertEqual(ctx.desktop[0]["closed_by"], "taskkill")
 
+    def test_the_desktop_is_cleared_again_until_the_settle_window_ends(self):
+        late = window(7, "C:\\Browser\\browser.exe", "Welcome", 77)
+        ctx = self.make([window(1, "C:\\Windows\\explorer.exe")], [window(1, "C:\\Windows\\explorer.exe")], [late], [])
+        clock = iter([0.0, 3.0, 6.0, 9.0, 12.0, 31.0])
+        with mock.patch.object(suite_run.time, "sleep"), mock.patch.object(
+                suite_run.time, "monotonic", side_effect=lambda: next(clock)):
+            suite_run.settle_desktop(ctx, "isolated", window=30.0, interval=3.0)
+        self.assertIn(("close_window", {"hwnd": 7}), ctx.calls)
+        self.assertEqual([r["process"] for r in ctx.desktop], ["browser.exe"])
+
     def test_a_clean_desktop_records_nothing(self):
         ctx = self.make([window(1, "C:\\Windows\\explorer.exe")])
         suite_run.clear_desktop(ctx, "isolated")

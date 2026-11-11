@@ -70,7 +70,10 @@ suites/
   time, with no other worker alive of the same run; the 32-bit and 64-bit runs on one machine take the named
   mutex `Global\lsw-suites-exclusive-check` around each exclusive check, so their exclusive checks never overlap.
   Windows of non-exclusive checks are parked beyond the virtual desktop and never topmost, so they cannot disturb
-  another run's exclusive screen checks. Exclusive is for anything that changes or needs quiet global state:
+  another run's exclusive screen checks. Before every exclusive or `pacing` check the runner minimizes the visible
+  top-level windows of processes that are neither the suite's (the directory of the runner's executable) nor the
+  shell's, never closing them, and records each as a note of that check (process image and title). Exclusive is for anything that changes or needs quiet
+  global state:
   device-loss injection, TDR, memory exhaustion, display mode changes, DWM restarts, frame pacing and timing
   measurements, power transitions, driver log scans.
 - A check tagged `pacing` is one whose verdict depends on presentation, capture, frame order or frame timing.

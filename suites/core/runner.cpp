@@ -1,6 +1,7 @@
 #include "core/runner.hpp"
 
 #include "core/check_filter.hpp"
+#include "core/desktop_guard.hpp"
 #include "core/exe_identity.hpp"
 #include "core/json_report.hpp"
 #include "core/run_guard.hpp"
@@ -35,6 +36,10 @@ std::string join(const std::vector<std::string>& parts) {
         out += part;
     }
     return out;
+}
+
+bool pacing_tagged(const Check& check) {
+    return std::find(check.tags.begin(), check.tags.end(), "pacing") != check.tags.end();
 }
 
 }  // namespace
@@ -72,8 +77,7 @@ bool Runner::select(std::vector<Planned>& plan, std::size_t& parallel_free,
             if (!filter.accepts(check.id, check.tags)) {
                 continue;
             }
-            const bool pacing =
-                std::find(check.tags.begin(), check.tags.end(), "pacing") != check.tags.end();
+            const bool pacing = pacing_tagged(check);
             if (pacing ? options_.phase == "main" : options_.phase == "pacing") {
                 continue;
             }
@@ -144,6 +148,10 @@ void Runner::write_progress(bool complete, bool force) {
 void Runner::execute(const std::vector<Planned>& plan, std::size_t begin, std::size_t end,
                      int jobs, bool machine_wide) {
     const Worker worker(options_.artifacts);
+    const DesktopGuard desktop;
+    const auto guarded = [](const Planned& planned) {
+        return planned.check->exclusive || pacing_tagged(*planned.check);
+    };
     std::atomic<std::size_t> next{begin};
     const auto loop = [&] {
         for (;;) {
@@ -157,17 +165,21 @@ void Runner::execute(const std::vector<Planned>& plan, std::size_t begin, std::s
                                     ? planned.check->timeout_seconds
                                     : kDefaultTimeoutSeconds;
             std::string started;
+            std::vector<std::string> notes;
             CheckResult result;
             if (machine_wide) {
                 const std::lock_guard<MachineLock> held(machine_lock_);
+                notes = guarded(planned) ? desktop.sweep() : std::vector<std::string>();
                 started = utc_now();
                 log_.append_start(planned.check->id, started);
                 result = worker.run(planned.check->id, timeout);
             } else {
+                notes = guarded(planned) ? desktop.sweep() : std::vector<std::string>();
                 started = utc_now();
                 log_.append_start(planned.check->id, started);
                 result = worker.run(planned.check->id, timeout);
             }
+            result.notes.insert(result.notes.begin(), notes.begin(), notes.end());
             result.suite = planned.suite->name();
             result.tags = planned.check->tags;
             result.started = started;

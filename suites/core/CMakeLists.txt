@@ -3,6 +3,7 @@ add_library(suite_core OBJECT
     child_mode.cpp
     context.cpp
     crash_dump.cpp
+    desktop_guard.cpp
     child_protocol.cpp
     glob.cpp
     json.cpp
@@ -20,4 +21,4 @@ add_library(suite_core OBJECT
     dxgi_adapters.cpp
 )
 target_include_directories(suite_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
-target_link_libraries(suite_core PUBLIC LSW::CompileOptions dxgi setupapi cfgmgr32 advapi32)
+target_link_libraries(suite_core PUBLIC LSW::CompileOptions dxgi setupapi cfgmgr32 advapi32 user32 dwmapi)

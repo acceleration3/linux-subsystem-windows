@@ -16,6 +16,7 @@ CORES = "~/.local/share/lsw-gpu-test/cores"
 RECOVERY_BUDGET = 5
 STACK_BUDGET = 28
 RECOVERY_CREDIT_CAP = 1800
+DESKTOP_SETTLE = 30.0
 SUITE_PROCESSES = ("lsw-suites", "lsw-render-ref")
 OWN_PROCESSES = ("cmd.exe", "conhost.exe", "openconsole.exe", "lsw-guest-agent.exe", "dwm.exe")
 SHELL_PROCESSES = ("explorer.exe", "shellexperiencehost.exe", "startmenuexperiencehost.exe", "searchhost.exe",
@@ -200,6 +201,7 @@ class Context:
         self.limit_hit = False
         self.incidents = []
         self.desktop = []
+        self.phase = None
         self.seen_cores = set()
         self.stop = threading.Event()
 
@@ -297,6 +299,8 @@ class Context:
                 self.machine.restart()
                 lsw_link.wait_for_agent(time.monotonic() + 420, port=self.args.agent_port).close()
             self.wait_session()
+            if self.phase not in (None, "main"):
+                settle_desktop(self, self.phase)
         except lsw_link.LinkError as error:
             say(f"{self.args.host}: the guest did not come back: {error}")
             with self.lock:
@@ -539,6 +543,15 @@ def crash_record(ctx, spec, check_id, incident, confirmed):
                        f"{incident['evidence']}" + ("; it killed the VM again when run alone" if confirmed else "")),
             "ms": 0, "pid": 0, "started": "", "artifacts": [], "notes": [], "measures": {}, "output": "",
             "host_crash": True, "evidence": incident["evidence"]}
+
+
+def settle_desktop(ctx, phase, window=DESKTOP_SETTLE, interval=3.0):
+    end = time.monotonic() + window
+    while True:
+        clear_desktop(ctx, phase)
+        if time.monotonic() >= end:
+            return
+        time.sleep(interval)
 
 
 def run_phase(ctx, spec, phase, deadline):
@@ -786,6 +799,7 @@ def execute(args, specs):
     try:
         for entry in phases:
             phase = None
+            ctx.phase = entry[0]
             if entry[0] != "main":
                 clear_desktop(ctx, entry[0])
             for spec in specs:
