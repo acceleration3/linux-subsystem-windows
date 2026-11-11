@@ -201,6 +201,11 @@ std::vector<std::string> JudgeSelfTest::run(std::vector<std::string>& passed) {
         expect("two steps of the alpha channel fail under its own channel tolerance", ImageDiff::compare(expected, alpha_far, per_channel).pass, false);
         expect("a step of the alpha channel fails under the colour tolerance alone", ImageDiff::compare(expected, alpha_step, Tolerance::floats(2.0f / 1023.0f + 1e-5f)).pass, false);
         expect("three steps of a colour channel fail under its channel tolerance", ImageDiff::compare(expected, color_step, per_channel).pass, false);
+        const Tolerance steps = Tolerance::unorm_steps(10, 2, 2, 1);
+        expect("unorm_steps(10, 2, 2, 1) is the per channel tolerance of two 10 bit and one 2 bit alpha step",
+               steps.absolute == per_channel.absolute && steps.channel_absolute[3] == per_channel.channel_absolute[3] && steps.channel_absolute[0] == 0.0f &&
+                   steps.relative == 0.0f && steps.byte_delta == 0,
+               true);
     }
     {
         Image expected = Image::solid(128, 128, kDark);

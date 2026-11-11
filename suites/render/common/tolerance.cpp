@@ -72,6 +72,15 @@ Tolerance Tolerance::block_compressed(bool snorm) {
     return t;
 }
 
+Tolerance Tolerance::unorm_steps(int colour_bits, int colour_steps, int alpha_bits, int alpha_steps) {
+    Tolerance t;
+    t.absolute = static_cast<float>(colour_steps) / static_cast<float>((1 << colour_bits) - 1) + 1e-5f;
+    t.channel_absolute[3] = static_cast<float>(alpha_steps) / static_cast<float>((1 << alpha_bits) - 1) + 1e-5f;
+    t.name = "unorm-steps(" + std::to_string(colour_steps) + " of " + std::to_string(colour_bits) + " bit, " + std::to_string(alpha_steps) + " of " +
+             std::to_string(alpha_bits) + " bit alpha)";
+    return t;
+}
+
 Tolerance Tolerance::with_outliers(double fraction) const {
     Tolerance t = *this;
     t.outlier_fraction = fraction;

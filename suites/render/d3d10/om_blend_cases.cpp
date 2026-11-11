@@ -188,7 +188,7 @@ const Registrar kBlend{[] {
         {"blend_format_rgba32_float", DXGI_FORMAT_R32G32B32A32_FLOAT, true, rr::Tolerance::floats(1e-4f, 1e-4f)},
         {"blend_format_srgb", DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, false, rr::Tolerance::blend(3)},
         {"blend_format_bgra8", DXGI_FORMAT_B8G8R8A8_UNORM, false, rr::Tolerance::blend()},
-        {"blend_format_rgb10a2", DXGI_FORMAT_R10G10B10A2_UNORM, false, rr::Tolerance::floats(2.0f / 1023.0f + 1e-5f).with_channel_absolute(0.0f, 0.0f, 0.0f, 1.0f / 3.0f + 1e-5f)},
+        {"blend_format_rgb10a2", DXGI_FORMAT_R10G10B10A2_UNORM, false, rr::Tolerance::unorm_steps(10, 2, 2, 1)},
         {"blend_format_r11g11b10", DXGI_FORMAT_R11G11B10_FLOAT, true, rr::Tolerance::floats(2e-2f, 3e-2f)},
     };
     for (const FormatBlend& fb : formats) {
