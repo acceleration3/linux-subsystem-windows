@@ -184,7 +184,7 @@ const Registrar kQuery{[] {
     single(spec("query", "so_overflow_predicate_controls_draw").tolerance(rr::Tolerance::blend()).tolerance_for("stats", rr::Tolerance::floats(0.5f, 0.0f)).uniform_ok("stats"),
            [](Rig& r, rr::CaptureSet& o) { so_overflow_scene(r, o, false, true, false); });
     single(spec("query", "so_drawauto_after_overflow").tolerance(rr::Tolerance::blend()), [](Rig& r, rr::CaptureSet& o) { so_overflow_scene(r, o, false, false, true); });
-    single(spec("query", "pipeline_statistics_counts_with_pass_through_gs").tolerance(rr::Tolerance::blend()).tolerance_for("stats", rr::Tolerance::floats(0.5f, 0.0f)).uniform_ok("stats"), [](Rig& r, rr::CaptureSet& o) {
+    single(spec("query", "pipeline_statistics_counts_with_pass_through_gs").tolerance(rr::Tolerance::blend()).tolerance_for("stats", rr::Tolerance::floats(0.5f, 0.0f)).uniform_ok("stats").tolerance_for("cprimitives", rr::Tolerance::floats(0.5f, 0.0f)).uniform_ok("cprimitives"), [](Rig& r, rr::CaptureSet& o) {
         r.begin();
         r.use_std();
         Com<ID3D10GeometryShader> gs = r.gs("struct VO { float4 p : SV_Position; float4 c : COLOR; float2 uv : TEXCOORD0; };\n"
@@ -200,8 +200,11 @@ const Registrar kQuery{[] {
         if (!fetch(r, q.get(), stats)) return;
         r.cap_main(o);
         number_image(o, "stats", {static_cast<double>(stats.IAVertices), static_cast<double>(stats.IAPrimitives), static_cast<double>(stats.VSInvocations),
-                                  static_cast<double>(stats.GSInvocations), static_cast<double>(stats.GSPrimitives), static_cast<double>(stats.CInvocations),
-                                  static_cast<double>(stats.CPrimitives)});
+                                  static_cast<double>(stats.GSInvocations), static_cast<double>(stats.GSPrimitives), static_cast<double>(stats.CInvocations)});
+        const double visible_primitives = 3.0;
+        const double cprimitives = static_cast<double>(stats.CPrimitives);
+        const bool bounded = cprimitives >= visible_primitives && cprimitives <= static_cast<double>(stats.CInvocations) * 7.0;
+        number_image(o, "cprimitives", {bounded ? 1.0 : -1.0 - cprimitives});
     });
     single(spec("query", "event_and_timestamp_disjoint").tolerance(rr::Tolerance::blend()), [](Rig& r, rr::CaptureSet& o) {
         r.begin();
