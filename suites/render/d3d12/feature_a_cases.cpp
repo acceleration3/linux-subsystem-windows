@@ -595,7 +595,7 @@ void register_forced_sample_count() {
                 stage.canvas.binder.uav_texture(0, coverage, DXGI_FORMAT_R32_UINT);
                 const char* ps =
                     "RWTexture2D<uint> cov : register(u0);\n"
-                    "void main(float4 pos : SV_Position, uint c : SV_Coverage) { cov[uint2(pos.xy)] = countbits(c); }\n";
+                    "void main(float4 pos : SV_Position, uint c : SV_Coverage) { InterlockedAdd(cov[uint2(pos.xy)], countbits(c)); }\n";
                 Pso builder(kit, stage.canvas.binder.signature);
                 builder.vs(Hlsl12::with_root(Hlsl12::kFlatVs)).ps(Hlsl12::with_root(ps)).targets({});
                 builder.desc.NumRenderTargets = 0;

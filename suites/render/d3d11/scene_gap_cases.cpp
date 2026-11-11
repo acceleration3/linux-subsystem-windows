@@ -127,7 +127,7 @@ const Add kForced(spec("rs", "forced_sample_count_uav_only_rendering").variant(1
     d.ForcedSampleCount = 4;
     Com<ID3D11RasterizerState1> rs;
     Basic basic;
-    const char* ps = "RWTexture2D<uint> u : register(u0);\nstruct VO { float4 p : SV_Position; float3 c : COLOR; };\nvoid main(VO i, uint cov : SV_Coverage) { u[uint2(i.p.xy)] = countbits(cov) + 1; }\n";
+    const char* ps = "RWTexture2D<uint> u : register(u0);\nstruct VO { float4 p : SV_Position; float3 c : COLOR; };\nvoid main(VO i, uint cov : SV_Coverage) { InterlockedAdd(u[uint2(i.p.xy)], countbits(cov) + 1); }\n";
     if (!tex || !r.ok(dev1->CreateRasterizerState1(&d, rs.put()), "CreateRasterizerState1") || !basic.make(r, ps)) return false;
     Com<ID3D11UnorderedAccessView> uav = r.uav(tex.get());
     Com<ID3D11Buffer> vb = r.vbuf(ring_fan(5, 0.85f, 0, 0, 0.2f));
