@@ -551,7 +551,7 @@ class Audit:
             reason = result.get("reason", "")
             if status == "skip":
                 skips[reason].append(check_id)
-            elif status in ("fail", "timeout", "crash"):
+            elif status in ("fail", "timeout", "crash", "not_run"):
                 fails.append((check_id, status, reason))
         return skips, fails
 

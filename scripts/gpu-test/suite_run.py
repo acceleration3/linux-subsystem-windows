@@ -1,3 +1,4 @@
+import fnmatch
 import json
 import os
 import pathlib
@@ -444,6 +445,32 @@ def merged(ctx, spec):
     return root
 
 
+def wanted(filter_text, check_id):
+    parts = [part for part in (filter_text or "").split(",") if part]
+    include = [part for part in parts if not part.startswith("-")]
+    exclude = [part[1:] for part in parts if part.startswith("-")]
+    if include and not any(fnmatch.fnmatchcase(check_id, glob) for glob in include):
+        return False
+    return not any(fnmatch.fnmatchcase(check_id, glob) for glob in exclude)
+
+
+def not_run_record(ctx, check_id):
+    reason = ("listed by the guest but never run: the recovery limit was reached or the guest did not come back"
+              if ctx.limit_hit else
+              f"listed by the guest but never run: the run ended first (timeout {ctx.args.timeout} s per phase and adapter, "
+              "or an aborted segment), see output.txt")
+    return {"id": check_id, "suite": ctx.args.suite, "tags": [], "status": "not_run", "reason": reason,
+            "ms": 0, "pid": 0, "started": "", "artifacts": [], "notes": [], "measures": {}, "output": ""}
+
+
+def report_not_run(ctx, spec, expected):
+    for check_id in expected:
+        if check_id in spec.finished or not wanted(ctx.args.filter, check_id):
+            continue
+        spec.finished[check_id] = not_run_record(ctx, check_id)
+        spec.order.append(check_id)
+
+
 def finish(ctx, spec):
     out = spec.out
     out.mkdir(parents=True, exist_ok=True)
@@ -585,10 +612,13 @@ def execute(args, specs):
     watcher.start()
     phases = [p.split(":") + ["parallel"] for p in args.phases.split(",")]
     isolated = others = None
+    expected = []
     if any(entry[0] in ("main", "isolated") for entry in phases):
         isolated, others = discover(ctx)
         say(f"{args.host}: {len(others)} checks run on every adapter at once, {len(isolated)} exclusive or pacing checks "
             "run one adapter at a time")
+        for entry in phases:
+            expected += others if entry[0] == "main" else isolated if entry[0] == "isolated" else []
     try:
         for entry in phases:
             phase = None
@@ -597,6 +627,8 @@ def execute(args, specs):
             serial = entry[1] == "serial"
             groups = [[spec] for spec in specs] if serial else [specs]
             for group in groups:
+                if serial:
+                    deadline = time.monotonic() + args.timeout
                 threads = [threading.Thread(target=run_phase, args=(ctx, spec, phase, deadline)) for spec in group]
                 for thread in threads:
                     thread.start()
@@ -607,6 +639,7 @@ def execute(args, specs):
     finally:
         ctx.stop.set()
     for spec in specs:
+        report_not_run(ctx, spec, expected)
         finish(ctx, spec)
     prune(ctx)
     if ctx.limit_hit:

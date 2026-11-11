@@ -67,7 +67,7 @@ HTML report: build-render-report/<timestamp>/report.html
                               no references, audit or report
   --hold-file PATH            check ids (one per line) that are never run, e.g. rows that hang the GPU on purpose
   --max-recoveries N          a dead VM is restarted and the run resumed at most N times per host (default 5)
-  --guest-timeout SECONDS     limit of one guest run with --parallel (default 3600)
+  --guest-timeout SECONDS     limit of one guest run with --parallel (default 3600); each adapter of a serial phase gets its own
   --no-dump-captures          skip the capture dumps (the report then has no images and there is no audit)
   --images all|differing|failed|none  which rows get images in the report (default all)
   --no-build                  use the executables already built
