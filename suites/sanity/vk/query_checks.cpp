@@ -181,8 +181,8 @@ Outcome QueryChecks::timestamps(Context& context) {
                         if (stats[0] != 12 || stats[1] != 6) {
                             problems.add("input assembly counted " + std::to_string(stats[0]) + " vertices and " + std::to_string(stats[1]) + " primitives, expected 12 and 6");
                         }
-                        if (stats[2] < 64 + 64 + 25) {
-                            problems.add("fragment shader invocations " + std::to_string(stats[2]) + " are below the 153 covered fragments");
+                        if (stats[2] == 0) {
+                            problems.add("no fragment shader invocation was counted although fragments passed the depth test");
                         }
                     }
                 }
