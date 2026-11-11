@@ -278,6 +278,22 @@ cmd_stack() {
         on "${host}" <<RUN
 cd ${BASE}/tree/scripts/gpu-test
 if systemd-run --user --quiet --collect true 2>/dev/null; then
+    kept=0
+    for daemon in \$(pgrep -u "\$(id -u)" -x virtqemud); do
+        if grep -q '\.service\$' "/proc/\${daemon}/cgroup" 2>/dev/null && ! grep -q 'lsw-render-stack-' "/proc/\${daemon}/cgroup"; then
+            kept=1
+        elif [ -z "\$(virsh -c qemu:///session list --name 2>/dev/null | tr -d '[:space:]')" ]; then
+            kill "\${daemon}"
+        else
+            kept=1
+        fi
+    done
+    if [ "\${kept}" -eq 0 ]; then
+        for i in 1 2 3 4 5 6 7 8 9 10; do pgrep -u "\$(id -u)" -x virtqemud > /dev/null || break; sleep 0.5; done
+        systemctl --user reset-failed lsw-libvirt-session.service 2>/dev/null || true
+        systemd-run --user --quiet --collect --unit=lsw-libvirt-session virtqemud --timeout=120
+        for i in 1 2 3 4 5 6 7 8 9 10; do virsh -c qemu:///session list --name > /dev/null 2>&1 && break; sleep 0.5; done
+    fi
     unit=lsw-render-stack-${action}
     systemctl --user reset-failed "\${unit}.service" 2>/dev/null || true
     systemd-run --user --quiet --collect --wait --pipe --unit="\${unit}" --working-directory="\${HOME}/${BASE}/tree/scripts/gpu-test" \

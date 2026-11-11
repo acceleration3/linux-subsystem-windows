@@ -171,7 +171,8 @@ def command_apply(args):
     out = SAVED / "apply-logs"
     out.mkdir(exist_ok=True)
     domain.stop()
-    domain.define(matrix.retarget(domain.definition(), gpus, args.qemu_env))
+    domain.define(matrix.retarget(domain.definition(), gpus, args.qemu_env,
+                                  matrix.environment_names((SAVED / "domain.xml").read_text())))
     work = matrix.bridge_directory("stack-apply")
     guest = matrix.boot(domain, work, share)
     try:

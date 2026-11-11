@@ -550,7 +550,8 @@ run_host_parallel() {
     local agent_port=5102 smb_port=5445 ref_filter="" vm=local status=0 run_id
     run_id="$(run_id_of "${h}")"
     jobs_here="$(jobs_of "${h}")"
-    [[ -n ${filter} ]] && ref_filter="--filter ${filter}"
+    local ref_args=()
+    [[ -n ${filter} ]] && { ref_filter="--filter $(printf '%q' "${filter}")"; ref_args=(--filter "${filter}"); }
     local exes=() b
     for b in "${push_list[@]}"; do
         local dir="build-suites"
@@ -561,7 +562,7 @@ run_host_parallel() {
     if [[ $(target_of "${h}") == local ]]; then
         if [[ ${suite} == render ]]; then
             export RR_LOG="${out}/render-ref-${h}.log"
-            capped_step "host references for every VM-bound GPU" 1800 bash -c 'exec "$@" >> "${RR_LOG}" 2>&1' _ "${ROOT}/build-render-ref/lsw-render-ref" --out "${refs}" --gpu all --jobs 4 --clean ${ref_filter} || return 1
+            capped_step "host references for every VM-bound GPU" 1800 bash -c 'exec "$@" >> "${RR_LOG}" 2>&1' _ "${ROOT}/build-render-ref/lsw-render-ref" --out "${refs}" --gpu all --jobs 4 --clean "${ref_args[@]}" || return 1
         else
             push_refs=()
         fi

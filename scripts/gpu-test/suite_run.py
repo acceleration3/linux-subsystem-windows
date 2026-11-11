@@ -12,8 +12,6 @@ import lsw_link
 QEMU_LOG = "~/.cache/libvirt/qemu/log/lsw.log"
 CORES = "~/.local/share/lsw-gpu-test/cores"
 RECOVERY_BUDGET = 5
-KEEP_RUNS = 3
-PRUNE_AGE_SECONDS = 4 * 3600
 
 
 def say(line):
@@ -534,15 +532,13 @@ def prune(ctx):
     names = []
     for line in text.splitlines():
         parts = line.split()
-        if len(parts) >= 2 and parts[1] == "D" and parts[0] not in (".", "..") and run_stamp(parts[0]) is not None:
+        if len(parts) >= 2 and parts[1] == "D" and parts[0] not in (".", ".."):
             names.append(parts[0])
-    names.sort(reverse=True)
     own = ctx.args.run_id
-    old = [n for n in names[KEEP_RUNS:] if n != own and time.time() - run_stamp(n) > PRUNE_AGE_SECONDS]
-    if not old:
-        return
+    old = [n for n in names if n != own]
     marker = f"done-prune-{own}.txt"
     lines = [f'rmdir /s /q "{lsw_link.RUN_BASE}\\{n}"' for n in old]
+    lines.append('for %%f in (*) do del /q "%%f"')
     script = "@echo off\r\ncd /d " + lsw_link.RUN_BASE + "\r\n" + "\r\n".join(lines) + f"\r\necho done > {marker}\r\n"
     try:
         ctx.share.remove(f"{lsw_link.RUN_BASE}\\{marker}")
@@ -557,7 +553,7 @@ def prune(ctx):
         ctx.share.remove(f"{lsw_link.RUN_BASE}\\{marker}")
     except (lsw_link.LinkError, OSError):
         return
-    say(f"{ctx.args.host}: removed {len(old)} old guest run folders, kept the newest {KEEP_RUNS}")
+    say(f"{ctx.args.host}: removed {len(old)} old guest run folders and the loose files beside them")
 
 
 def discover(ctx):

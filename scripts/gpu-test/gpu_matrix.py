@@ -214,7 +214,12 @@ def emulator_path():
     return wrapper
 
 
-def retarget(xml, gpus, qemu_env=()):
+def environment_names(xml):
+    root = ET.fromstring(xml)
+    return {env.get("name") for env in root.iter(f"{{{QEMU_NS}}}env")}
+
+
+def retarget(xml, gpus, qemu_env=(), keep=None):
     ET.register_namespace("qemu", QEMU_NS)
     root = ET.fromstring(xml)
     emulator = root.find("./devices/emulator")
@@ -228,6 +233,11 @@ def retarget(xml, gpus, qemu_env=()):
     commandline = root.find(f"{{{QEMU_NS}}}commandline")
     if commandline is None:
         raise RunFailed("the domain has no qemu:commandline: it is not an accel-virt VM")
+    if keep is not None:
+        kept = set(keep) | {"LD_LIBRARY_PATH", "QEMU_MODULE_DIR", "AV_D3D_PATH", "XDG_RUNTIME_DIR"}
+        for env in commandline.findall(f"{{{QEMU_NS}}}env"):
+            if env.get("name") not in kept:
+                commandline.remove(env)
     environment = commandline.findall(f"{{{QEMU_NS}}}env")
     if SHIPPED_LIBRARIES.is_dir() and not any(env.get("name") == "LD_LIBRARY_PATH" for env in environment):
         added_env = ET.SubElement(commandline, f"{{{QEMU_NS}}}env", name="LD_LIBRARY_PATH")
