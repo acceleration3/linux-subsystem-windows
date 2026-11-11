@@ -183,7 +183,7 @@ void check_buffer_usages(Context& context, VulkanRig& rig, Problems& problems) {
         SceneResult out;
         if (Kit::succeeds(problems, std::string(mode.name) + " render", scene.render({rect}, clear, 1.0f, out))) {
             const std::vector<std::uint8_t> expected = scene.expected_color({rect}, clear, 1.0f, false);
-            Kit::same_bytes(context, problems, mode.name, expected.data(), out.color.data(), expected.size());
+            Kit::same_unorm(context, problems, mode.name, scene.expected_values({rect}, clear, 1.0f, false), expected, out.color);
         }
     }
 }

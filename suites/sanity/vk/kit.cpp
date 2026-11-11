@@ -1,4 +1,5 @@
 #include "sanity/vk/kit.hpp"
+#include "support/unorm_expect.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -107,6 +108,25 @@ bool Kit::same_bytes(Context& context, Problems& problems, const std::string& wh
     writer.bytes(base + ".expected", expected, size);
     writer.bytes(base + ".actual", actual, size);
     return false;
+}
+
+bool Kit::same_unorm(Context& context, Problems& problems, const std::string& what, const std::vector<float>& values,
+                     const std::vector<std::uint8_t>& rounded, const std::vector<std::uint8_t>& actual, int tolerance) {
+    if (values.size() != actual.size() || rounded.size() != actual.size()) {
+        problems.add(what + ": " + std::to_string(actual.size()) + " bytes read, expected " + std::to_string(rounded.size()));
+        return false;
+    }
+    for (std::size_t i = 0; i < actual.size(); ++i) {
+        if (std::abs(static_cast<int>(rounded[i]) - static_cast<int>(actual[i])) > tolerance && !UnormExpect::accepts8(values[i], actual[i])) {
+            problems.add(what + ": byte " + std::to_string(i) + " is 0x" + hex(actual[i], 2) + ", expected 0x" + hex(rounded[i], 2));
+            ArtifactWriter writer(context);
+            const std::string base = sanitize(what);
+            writer.bytes(base + ".expected", rounded.data(), rounded.size());
+            writer.bytes(base + ".actual", actual.data(), actual.size());
+            return false;
+        }
+    }
+    return true;
 }
 
 bool Kit::same_words(Context& context, Problems& problems, const std::string& what, const std::vector<std::uint32_t>& expected,

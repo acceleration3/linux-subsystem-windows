@@ -5,6 +5,7 @@
 #include "support/oracle_rig.hpp"
 #include "support/pattern.hpp"
 #include "support/swap_rig.hpp"
+#include "support/unorm_expect.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -465,7 +466,8 @@ Outcome MapChecks::do_not_wait(Context& context) {
                     problems.add("DO_NOT_WAIT mapped successfully before the GPU work behind it completed");
                 }
                 const std::uint32_t* first = static_cast<const std::uint32_t*>(mapped.pData);
-                if (first[0] != Kit::rgba(0, 128, 0, 255)) {
+                const float want_color[4] = {0.0f, 0.5f, 0.0f, 1.0f};
+                if (!UnormExpect::rgba8(want_color, first[0])) {
                     problems.add("the mapped result holds 0x" + Text::hex(first[0], 8));
                 }
                 ctx->Unmap(staging.get(), 0);

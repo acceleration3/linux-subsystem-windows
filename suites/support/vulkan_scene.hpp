@@ -66,6 +66,9 @@ public:
     [[nodiscard]] std::vector<std::uint8_t> expected_color(const std::vector<SceneRect>& rects, const float clear_color[4],
                                                            float clear_depth, bool second_attachment) const;
 
+    [[nodiscard]] std::vector<float> expected_values(const std::vector<SceneRect>& rects, const float clear_color[4],
+                                                     float clear_depth, bool second_attachment) const;
+
     [[nodiscard]] std::vector<float> expected_depth(const std::vector<SceneRect>& rects, float clear_depth) const;
 
     [[nodiscard]] static std::uint8_t unorm8(float value);
@@ -77,6 +80,9 @@ public:
     [[nodiscard]] VkFormat depth_format() const { return depth_format_; }
 
 private:
+    [[nodiscard]] std::vector<float> expected_image(const std::vector<SceneRect>& rects, const float clear_color[4], float clear_depth,
+                                                    bool second_attachment, bool quantise) const;
+
     [[nodiscard]] VkResult build_pipeline();
 
     void record(VkCommandBuffer commands, const std::vector<SceneRect>& rects, const float clear_color[4], float clear_depth);

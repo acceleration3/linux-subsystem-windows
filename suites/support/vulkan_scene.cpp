@@ -652,14 +652,15 @@ VkResult VulkanScene::render(const std::vector<SceneRect>& rects, const float cl
     return VK_SUCCESS;
 }
 
-std::vector<std::uint8_t> VulkanScene::expected_color(const std::vector<SceneRect>& rects, const float clear_color[4],
-                                                      float clear_depth, bool second_attachment) const {
+std::vector<float> VulkanScene::expected_image(const std::vector<SceneRect>& rects, const float clear_color[4], float clear_depth,
+                                               bool second_attachment, bool quantise) const {
+    const auto step = [quantise](float value) { return quantise ? static_cast<float>(unorm8(value)) / 255.0f : value; };
     const std::size_t pixels = static_cast<std::size_t>(options_.width) * options_.height;
     std::vector<float> color(pixels * 4);
     std::vector<float> depth(pixels, clear_depth);
     for (std::size_t p = 0; p < pixels; ++p) {
         for (std::size_t c = 0; c < 4; ++c) {
-            color[p * 4 + c] = static_cast<float>(unorm8(clear_color[c])) / 255.0f;
+            color[p * 4 + c] = step(clear_color[c]);
         }
     }
     for (const SceneRect& rect : rects) {
@@ -702,21 +703,36 @@ std::vector<std::uint8_t> VulkanScene::expected_color(const std::vector<SceneRec
                 for (int c = 0; c < 4; ++c) {
                     float source = second_attachment ? 1.0f - rect.color[c] : rect.color[c];
                     const float alpha = second_attachment ? 1.0f - rect.color[3] : rect.color[3];
-                    source = static_cast<float>(unorm8(source)) / 255.0f;
+                    source = step(source);
                     float& target = color[p * 4 + static_cast<std::size_t>(c)];
                     target = options_.blend ? source * alpha + target * (1.0f - alpha) : source;
                 }
             }
         }
     }
-    std::vector<std::uint8_t> out(pixels * 4);
+    std::vector<float> out(pixels * 4);
     for (std::size_t p = 0; p < pixels; ++p) {
         for (std::size_t c = 0; c < 4; ++c) {
             const std::size_t slot = bgra() && c < 3 ? 2 - c : c;
-            out[p * 4 + slot] = unorm8(color[p * 4 + c]);
+            out[p * 4 + slot] = color[p * 4 + c];
         }
     }
     return out;
+}
+
+std::vector<std::uint8_t> VulkanScene::expected_color(const std::vector<SceneRect>& rects, const float clear_color[4], float clear_depth,
+                                                      bool second_attachment) const {
+    const std::vector<float> values = expected_image(rects, clear_color, clear_depth, second_attachment, true);
+    std::vector<std::uint8_t> out(values.size());
+    for (std::size_t i = 0; i < values.size(); ++i) {
+        out[i] = unorm8(values[i]);
+    }
+    return out;
+}
+
+std::vector<float> VulkanScene::expected_values(const std::vector<SceneRect>& rects, const float clear_color[4], float clear_depth,
+                                                bool second_attachment) const {
+    return expected_image(rects, clear_color, clear_depth, second_attachment, false);
 }
 
 std::vector<float> VulkanScene::expected_depth(const std::vector<SceneRect>& rects, float clear_depth) const {

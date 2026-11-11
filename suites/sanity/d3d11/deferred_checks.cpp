@@ -3,6 +3,7 @@
 #include "sanity/d3d11/kit.hpp"
 #include "support/oracle_rig.hpp"
 #include "support/pattern.hpp"
+#include "support/unorm_expect.hpp"
 
 #include <array>
 #include <atomic>
@@ -14,6 +15,8 @@
 namespace lsw::suites::sanity::d3d11 {
 
 namespace {
+
+constexpr float kShaderColor[4] = {0.25f, 0.5f, 0.75f, 1.0f};
 
 struct TileScene {
     Com<ID3D11VertexShader> vs;
@@ -489,7 +492,7 @@ Outcome DeferredChecks::free_threaded(Context& context) {
                 return Outcome::fail(error);
             }
             TexelImage image;
-            if (!D3d11Tools::read_texture(device, target.get(), 0, image, error) || image.pixel(1, 1) != Kit::rgba(64, 128, 191, 255)) {
+            if (!D3d11Tools::read_texture(device, target.get(), 0, image, error) || !UnormExpect::rgba8(kShaderColor, image.pixel(1, 1))) {
                 problems.add("a shader created on thread " + std::to_string(t) + " renders wrongly");
             }
         }

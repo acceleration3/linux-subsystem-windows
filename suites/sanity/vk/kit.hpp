@@ -57,6 +57,9 @@ public:
     static bool same_bytes(Context& context, Problems& problems, const std::string& what, const void* expected,
                            const void* actual, std::size_t size);
 
+    static bool same_unorm(Context& context, Problems& problems, const std::string& what, const std::vector<float>& values,
+                           const std::vector<std::uint8_t>& rounded, const std::vector<std::uint8_t>& actual, int tolerance = 0);
+
     static bool same_words(Context& context, Problems& problems, const std::string& what,
                            const std::vector<std::uint32_t>& expected, const std::vector<std::uint32_t>& actual);
 

@@ -1,6 +1,7 @@
 #include "sanity/vk/graphics_checks.hpp"
 
 #include "sanity/vk/kit.hpp"
+#include "support/unorm_expect.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -24,14 +25,14 @@ SceneRect rect(float x0, float y0, float x1, float y1, float r, float g, float b
     return out;
 }
 
-bool compare_bytes(Context& context, Problems& problems, const std::string& what, const std::vector<std::uint8_t>& expected,
+bool compare_bytes(Context& context, Problems& problems, const std::string& what, const std::vector<float>& values, const std::vector<std::uint8_t>& expected,
                    const std::vector<std::uint8_t>& actual, std::uint32_t width, int tolerance) {
     if (expected.size() != actual.size()) {
         problems.add(what + ": " + std::to_string(actual.size()) + " bytes read, expected " + std::to_string(expected.size()));
         return false;
     }
     for (std::size_t i = 0; i < expected.size(); ++i) {
-        if (std::abs(static_cast<int>(expected[i]) - static_cast<int>(actual[i])) > tolerance) {
+        if (std::abs(static_cast<int>(expected[i]) - static_cast<int>(actual[i])) > tolerance && !UnormExpect::accepts8(values[i], actual[i])) {
             const std::size_t pixel = i / 4;
             problems.add(what + ": pixel (" + std::to_string(pixel % width) + "," + std::to_string(pixel / width) + ") channel " + std::to_string(i % 4) + " is " +
                          std::to_string(actual[i]) + ", expected " + std::to_string(expected[i]) + (tolerance != 0 ? " within " + std::to_string(tolerance) : ""));
@@ -55,9 +56,9 @@ void run_scene(Context& context, VulkanRig& rig, Problems& problems, const std::
     if (!Kit::succeeds(problems, name + " render", scene.render(rects, clear, clear_depth, out))) {
         return;
     }
-    compare_bytes(context, problems, name + " colour", scene.expected_color(rects, clear, clear_depth, false), out.color, options.width, tolerance);
+    compare_bytes(context, problems, name + " colour", scene.expected_values(rects, clear, clear_depth, false), scene.expected_color(rects, clear, clear_depth, false), out.color, options.width, tolerance);
     if (options.second) {
-        compare_bytes(context, problems, name + " second attachment", scene.expected_color(rects, clear, clear_depth, true), out.second, options.width, tolerance);
+        compare_bytes(context, problems, name + " second attachment", scene.expected_values(rects, clear, clear_depth, true), scene.expected_color(rects, clear, clear_depth, true), out.second, options.width, tolerance);
     }
     if (options.depth && options.samples == VK_SAMPLE_COUNT_1_BIT) {
         const std::vector<float> expected = scene.expected_depth(rects, clear_depth);

@@ -19,6 +19,7 @@ add_library(suite_support OBJECT
     dxc_compiler.cpp
     packed_codec.cpp
     bc_codec.cpp
+    unorm_expect.cpp
     format_table.cpp
     format_runner.cpp
     d3d11_format_runner.cpp

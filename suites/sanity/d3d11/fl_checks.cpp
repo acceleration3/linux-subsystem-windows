@@ -6,6 +6,7 @@
 #include "support/format_codec.hpp"
 #include "support/problems.hpp"
 #include "support/target_adapter.hpp"
+#include "support/unorm_expect.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -812,10 +813,10 @@ Outcome FlChecks::limits_at_level(Context& context) {
                         problems.add(name + error);
                         break;
                     }
-                    const int want = static_cast<int>(std::lround((i + 1) * 255.0 / 16.0));
-                    if (bytes[0] != want || bytes[3] != 255) {
+                    const double wanted = (i + 1) / 16.0;
+                    if (!UnormExpect::accepts8(wanted, bytes[0]) || bytes[3] != 255) {
                         problems.add(name + "render target " + std::to_string(i) + " holds " + std::to_string(bytes[0]) +
-                                     ", expected " + std::to_string(want));
+                                     ", expected " + std::to_string(static_cast<int>(std::lround(wanted * 255.0))));
                     }
                 }
             }
