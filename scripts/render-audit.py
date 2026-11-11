@@ -87,8 +87,9 @@ def channel_close(klass, a, b, tol):
         return False, delta
     if klass == "unorm16":
         units = delta * 255.0 / 65535.0
-        return units <= tol["byte_delta"], units
-    return delta <= tol["byte_delta"], delta
+        larger = max(abs(a), abs(b)) * 255.0 / 65535.0
+        return units <= max(tol["byte_delta"], tol["absolute"] * 255.0 + tol["relative"] * larger), units
+    return delta <= max(tol["byte_delta"], tol["absolute"] * 255.0 + tol["relative"] * max(abs(a), abs(b))), delta
 
 
 def normalize_tolerance(raw):

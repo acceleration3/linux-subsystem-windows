@@ -108,6 +108,34 @@ std::vector<std::string> JudgeSelfTest::run(std::vector<std::string>& passed) {
         expect("an explicit exact tolerance reports itself as set", exact.tolerance_set() && !unset.tolerance_set(), true);
     }
     {
+        Image expected(32, 32, PixelKind::R8Unorm);
+        Image one_step(32, 32, PixelKind::R8Unorm);
+        Image five_steps(32, 32, PixelKind::R8Unorm);
+        for (std::uint32_t y = 0; y < 32; ++y) {
+            for (std::uint32_t x = 0; x < 32; ++x) {
+                expected.set_channel(x, y, 0, 127);
+                one_step.set_channel(x, y, 0, 128);
+                five_steps.set_channel(x, y, 0, 132);
+            }
+        }
+        const Tolerance one_level = Tolerance::floats(1.0f / 255.0f + 1e-4f);
+        expect("one level step on an 8 bit unorm capture passes under floats of one level", ImageDiff::compare(expected, one_step, one_level).pass, true);
+        expect("five level steps on an 8 bit unorm capture fail under floats of one level", ImageDiff::compare(expected, five_steps, one_level).pass, false);
+        expect("one level step on an 8 bit unorm capture fails under exact", ImageDiff::compare(expected, one_step, Tolerance::exact()).pass, false);
+        Image wide(32, 32, PixelKind::R16Unorm);
+        Image wide_step(32, 32, PixelKind::R16Unorm);
+        Image wide_far(32, 32, PixelKind::R16Unorm);
+        for (std::uint32_t y = 0; y < 32; ++y) {
+            for (std::uint32_t x = 0; x < 32; ++x) {
+                wide.set_channel(x, y, 0, 30000);
+                wide_step.set_channel(x, y, 0, 30200);
+                wide_far.set_channel(x, y, 0, 31500);
+            }
+        }
+        expect("a step below one 8 bit level on a 16 bit unorm capture passes under floats of one level", ImageDiff::compare(wide, wide_step, one_level).pass, true);
+        expect("a step of several 8 bit levels on a 16 bit unorm capture fails under floats of one level", ImageDiff::compare(wide, wide_far, one_level).pass, false);
+    }
+    {
         Image expected = Image::solid(128, 128, kDark);
         for (std::uint32_t y = 0; y < 128; ++y) {
             for (std::uint32_t x = 0; x < 128; ++x) {
