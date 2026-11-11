@@ -987,13 +987,14 @@ namespace {
 
 class FnScene : public D3d9Scene {
 public:
-    FnScene(FrameBody body, Layout layout, Need need, RefFn ref = nullptr) : body_(std::move(body)), layout_(layout), need_(std::move(need)), ref_(std::move(ref)) {}
+    FnScene(FrameBody body, Layout layout, Need need, RefFn ref = nullptr, bool oracle_exempt = false)
+        : body_(std::move(body)), layout_(layout), need_(std::move(need)), ref_(std::move(ref)), oracle_exempt_(oracle_exempt) {}
 
     bool has_reference() const override { return static_cast<bool>(ref_); }
 
     bool reference(Kit& device, unsigned index, rr::CaptureSet& out, std::string& error) override { return ref_(device, index, out, error); }
 
-    std::string unsupported(Kit& kit) override { return need_ ? need_(kit.device()) : std::string(); }
+    std::string unsupported(Kit& kit) override { return need_ && !(oracle_exempt_ && kit.warp) ? need_(kit.device()) : std::string(); }
 
     bool setup(Kit& kit, std::string& error) override {
         ctx_ = std::make_unique<Ctx>(kit);
@@ -1037,6 +1038,7 @@ private:
     Layout layout_;
     Need need_;
     RefFn ref_;
+    bool oracle_exempt_;
     std::unique_ptr<Ctx> ctx_;
 };
 
@@ -1105,9 +1107,9 @@ void HiRows::present(Ctx& c, IDirect3DTexture9* texture) {
     c.chk(c.d->SetPixelShader(nullptr), "SetPixelShader");
 }
 
-void Cases::single(rr::CaseSpec spec, Body body, Layout layout, Need need, RefFn reference) {
-    rr::CaseTable<Kit>::instance().add(std::move(spec), [body = std::move(body), layout, need, reference = std::move(reference)] {
-        return std::unique_ptr<rr::Scene<Kit>>(new FnScene([body](Ctx& ctx, unsigned) { body(ctx); }, layout, need, reference));
+void Cases::single(rr::CaseSpec spec, Body body, Layout layout, Need need, RefFn reference, bool oracle_exempt) {
+    rr::CaseTable<Kit>::instance().add(std::move(spec), [body = std::move(body), layout, need, reference = std::move(reference), oracle_exempt] {
+        return std::unique_ptr<rr::Scene<Kit>>(new FnScene([body](Ctx& ctx, unsigned) { body(ctx); }, layout, need, reference, oracle_exempt));
     });
 }
 

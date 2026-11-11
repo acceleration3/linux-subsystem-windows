@@ -28,6 +28,79 @@ std::vector<P> ring(float cx, float cy, float r, unsigned n, bool with_center) {
     return v;
 }
 
+struct PnVec {
+    float x, y, z;
+};
+PnVec operator+(PnVec a, PnVec b) { return {a.x + b.x, a.y + b.y, a.z + b.z}; }
+PnVec operator-(PnVec a, PnVec b) { return {a.x - b.x, a.y - b.y, a.z - b.z}; }
+PnVec operator*(PnVec a, float s) { return {a.x * s, a.y * s, a.z * s}; }
+float pn_dot(PnVec a, PnVec b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
+PnVec pn_unit(PnVec a) {
+    const float len = std::sqrt(pn_dot(a, a));
+    return len > 0.0f ? a * (1.0f / len) : a;
+}
+
+struct PnVertex {
+    float x, y, z, nx, ny, nz;
+};
+
+PnVec pn_edge(PnVec pa, PnVec pb, PnVec na) { return (pa * 2.0f + pb - na * pn_dot(pb - pa, na)) * (1.0f / 3.0f); }
+
+PnVec pn_middle(PnVec pa, PnVec pb, PnVec na, PnVec nb) {
+    const PnVec d = pb - pa;
+    const float len2 = pn_dot(d, d);
+    const float v = len2 > 0.0f ? 2.0f * pn_dot(d, na + nb) / len2 : 0.0f;
+    return pn_unit(na + nb - d * v);
+}
+
+void pn_tessellate(const std::vector<PnVertex>& in, const std::vector<std::uint16_t>& indices, unsigned segments, std::vector<PnVertex>& out,
+                   std::vector<std::uint16_t>& out_indices) {
+    for (std::size_t t = 0; t + 2 < indices.size(); t += 3) {
+        PnVec p[3];
+        PnVec n[3];
+        for (int i = 0; i < 3; ++i) {
+            const PnVertex& v = in[indices[t + static_cast<std::size_t>(i)]];
+            p[i] = {v.x, v.y, v.z};
+            n[i] = {v.nx, v.ny, v.nz};
+        }
+        const PnVec b210 = pn_edge(p[0], p[1], n[0]);
+        const PnVec b120 = pn_edge(p[1], p[0], n[1]);
+        const PnVec b021 = pn_edge(p[1], p[2], n[1]);
+        const PnVec b012 = pn_edge(p[2], p[1], n[2]);
+        const PnVec b102 = pn_edge(p[2], p[0], n[2]);
+        const PnVec b201 = pn_edge(p[0], p[2], n[0]);
+        const PnVec e = (b210 + b120 + b021 + b012 + b102 + b201) * (1.0f / 6.0f);
+        const PnVec c = (p[0] + p[1] + p[2]) * (1.0f / 3.0f);
+        const PnVec b111 = e + (e - c) * 0.5f;
+        const std::size_t base = out.size();
+        std::vector<std::size_t> row_start(segments + 1);
+        for (unsigned row = 0; row <= segments; ++row) {
+            row_start[row] = base + row * (segments + 1) - row * (row == 0 ? 0 : row - 1) / 2;
+            for (unsigned col = 0; col + row <= segments; ++col) {
+                const float u = static_cast<float>(col) / static_cast<float>(segments);
+                const float v = static_cast<float>(row) / static_cast<float>(segments);
+                const float w = 1.0f - u - v;
+                const PnVec pos = p[0] * (w * w * w) + p[1] * (u * u * u) + p[2] * (v * v * v) + b210 * (3.0f * w * w * u) + b120 * (3.0f * w * u * u) +
+                                  b201 * (3.0f * w * w * v) + b021 * (3.0f * u * u * v) + b102 * (3.0f * w * v * v) + b012 * (3.0f * u * v * v) +
+                                  b111 * (6.0f * w * u * v);
+                const PnVec nrm = pn_unit(n[0] * w + n[1] * u + n[2] * v);
+                out.push_back({pos.x, pos.y, pos.z, nrm.x, nrm.y, nrm.z});
+            }
+        }
+        for (unsigned row = 0; row < segments; ++row) {
+            for (unsigned col = 0; col + row < segments; ++col) {
+                const auto a = static_cast<std::uint16_t>(row_start[row] + col);
+                const auto b = static_cast<std::uint16_t>(a + 1);
+                const auto d = static_cast<std::uint16_t>(row_start[row + 1] + col);
+                out_indices.insert(out_indices.end(), {a, b, d});
+                if (col + row + 1 < segments) {
+                    out_indices.insert(out_indices.end(), {b, static_cast<std::uint16_t>(d + 1), d});
+                }
+            }
+        }
+    }
+}
+
 void primitive_cases() {
     struct Type {
         const char* name;
@@ -197,16 +270,22 @@ void primitive_cases() {
         c.rs(D3DRS_AMBIENT, 0xFF404040);
         c.material(Dx::material(0.9f, 0.7f, 0.5f, 0.9f, 0.7f, 0.5f));
         c.light(0, Dx::directional(0.3f, -0.4f, 1.0f, 1, 1, 1));
-        c.chk(c.d->SetNPatchMode(4.0f), "SetNPatchMode");
         c.fvf(D3DFVF_XYZ | D3DFVF_NORMAL);
-        struct V { float x, y, z, nx, ny, nz; };
         const Mesh m = Geo::sphere(6, 4, 1.3f, 0xFFFFFFFF);
-        std::vector<V> v;
+        std::vector<PnVertex> v;
         for (const Vtx& q : m.vertices) {
             v.push_back({q.x, q.y, q.z, q.nx, q.ny, q.nz});
         }
-        c.draw_idx(D3DPT_TRIANGLELIST, static_cast<UINT>(v.size()), m.triangles(), m.indices.data(), D3DFMT_INDEX16, v.data(), sizeof(V));
-    }, {}, Needs::caps([](const D3DCAPS9& caps) { return (caps.DevCaps & D3DDEVCAPS_NPATCHES) != 0; }, "N-patches"));
+        if (c.kit.warp) {
+            std::vector<PnVertex> tv;
+            std::vector<std::uint16_t> ti;
+            pn_tessellate(v, m.indices, 4, tv, ti);
+            c.draw_idx(D3DPT_TRIANGLELIST, static_cast<UINT>(tv.size()), static_cast<UINT>(ti.size() / 3), ti.data(), D3DFMT_INDEX16, tv.data(), sizeof(PnVertex));
+            return;
+        }
+        c.chk(c.d->SetNPatchMode(4.0f), "SetNPatchMode");
+        c.draw_idx(D3DPT_TRIANGLELIST, static_cast<UINT>(v.size()), m.triangles(), m.indices.data(), D3DFMT_INDEX16, v.data(), sizeof(PnVertex));
+    }, {}, Needs::caps([](const D3DCAPS9& caps) { return (caps.DevCaps & D3DDEVCAPS_NPATCHES) != 0; }, "N-patches"), nullptr, true);
 }
 
 void dynamic_cases() {

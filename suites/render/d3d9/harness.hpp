@@ -165,7 +165,8 @@ using FrameMaker = std::function<FrameBody()>;
 
 class Cases {
 public:
-    static void single(rr::CaseSpec spec, Body body, Layout layout = {}, Need need = nullptr, RefFn reference = nullptr);
+    static void single(rr::CaseSpec spec, Body body, Layout layout = {}, Need need = nullptr, RefFn reference = nullptr,
+                       bool oracle_exempt = false);
     static void frames(rr::CaseSpec spec, FrameMaker maker, Layout layout = {}, Need need = nullptr);
 };
 

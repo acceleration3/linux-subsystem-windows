@@ -577,13 +577,13 @@ void fog_cases() {
     }, {}, Needs::caps([](const D3DCAPS9& caps) { return (caps.RasterCaps & D3DPRASTERCAPS_FOGRANGE) != 0; }, "range fog"));
     Cases::single(rr::CaseSpec("ff", "fog_table_linear_w_buffer").tolerance(rr::Tolerance::blend(4)), [](Ctx& c) {
         fog_scene(c, [](Ctx& k) {
-            k.rs(D3DRS_ZENABLE, D3DZB_USEW);
+            k.rs(D3DRS_ZENABLE, (k.kit.warp && (k.caps().RasterCaps & D3DPRASTERCAPS_WBUFFER) == 0) ? D3DZB_TRUE : D3DZB_USEW);
             k.rs(D3DRS_FOGTABLEMODE, D3DFOG_LINEAR);
             k.rs(D3DRS_FOGVERTEXMODE, D3DFOG_NONE);
             k.rsf(D3DRS_FOGSTART, 4.0f);
             k.rsf(D3DRS_FOGEND, 16.0f);
         });
-    }, {}, Needs::caps([](const D3DCAPS9& caps) { return (caps.RasterCaps & D3DPRASTERCAPS_WBUFFER) != 0 && (caps.RasterCaps & D3DPRASTERCAPS_WFOG) != 0; }, "W buffer and W fog"));
+    }, {}, Needs::caps([](const D3DCAPS9& caps) { return (caps.RasterCaps & D3DPRASTERCAPS_WBUFFER) != 0 && (caps.RasterCaps & D3DPRASTERCAPS_WFOG) != 0; }, "W buffer and W fog"), nullptr, true);
     Cases::single(rr::CaseSpec("ff", "fog_color_untextured").tolerance(rr::Tolerance::blend(4)), [](Ctx& c) {
         fog_scene(c, [](Ctx& k) {
             k.rs(D3DRS_FOGCOLOR, Dx::kColor(230, 90, 40));
