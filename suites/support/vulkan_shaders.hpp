@@ -14,6 +14,7 @@ enum class VulkanShader {
     PointVert,
     RectFrag,
     Rect2Frag,
+    CoordFrag,
     RectGeom,
     TessControl,
     TessEval,

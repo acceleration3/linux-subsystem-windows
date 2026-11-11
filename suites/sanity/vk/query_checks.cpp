@@ -149,6 +149,7 @@ Outcome QueryChecks::timestamps(Context& context) {
             SceneOptions options;
             options.depth = true;
             options.query_count = 3;
+            options.fragment_words = VulkanShaders::words(VulkanShader::CoordFrag);
             const bool precise = rig.features.occlusionQueryPrecise != VK_FALSE;
             options.occlusion_flags = precise ? VK_QUERY_CONTROL_PRECISE_BIT : 0;
             bool ready = Kit::succeeds(problems, "occlusion pool", rig.make_query_pool(occlusion, VK_QUERY_TYPE_OCCLUSION, 3));
@@ -181,8 +182,8 @@ Outcome QueryChecks::timestamps(Context& context) {
                         if (stats[0] != 12 || stats[1] != 6) {
                             problems.add("input assembly counted " + std::to_string(stats[0]) + " vertices and " + std::to_string(stats[1]) + " primitives, expected 12 and 6");
                         }
-                        if (stats[2] == 0) {
-                            problems.add("no fragment shader invocation was counted although fragments passed the depth test");
+                        if (stats[2] < 64 + 48) {
+                            problems.add("fragment shader invocations " + std::to_string(stats[2]) + " are below the 112 fragments that pass the depth test, each shading its own gl_FragCoord");
                         }
                     }
                 }
