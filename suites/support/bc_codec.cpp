@@ -1,5 +1,6 @@
 #include "support/bc_codec.hpp"
 
+#include "render/common/tolerance.hpp"
 #include "support/pattern.hpp"
 
 #include <algorithm>
@@ -232,11 +233,11 @@ std::vector<std::uint8_t> BcCodec::blocks(int f, std::uint64_t seed, int count) 
     return data;
 }
 
-double BcCodec::tolerance(int f, bool endpoint) {
+double BcCodec::tolerance(int, bool endpoint) {
     if (endpoint) {
         return 1.01 / 255.0;
     }
-    return f <= 3 ? 3.01 / 255.0 : 2.01 / 255.0;
+    return static_cast<double>(render::Tolerance::block_compressed().absolute);
 }
 
 }  // namespace lsw::suites
