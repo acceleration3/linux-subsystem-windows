@@ -17,6 +17,21 @@ DOMAIN = """<domain type='kvm' xmlns:qemu='http://libvirt.org/schemas/domain/qem
   </qemu:commandline>
 </domain>"""
 
+HYBRID = """<domain type='kvm' xmlns:qemu='http://libvirt.org/schemas/domain/qemu/1.0'>
+  <name>lsw</name>
+  <qemu:commandline>
+    <qemu:arg value='-device'/>
+    <qemu:arg value='virtio-gpu-av-pci,id=lsw-gpu,bus=pcie.0,addr=0x11,max_outputs=1,hybrid=integrated'/>
+    <qemu:arg value='-device'/>
+    <qemu:arg value='virtio-gpu-av-pci,id=lsw-gpu-1,bus=pcie.0,addr=0x12,display=off,hybrid=discrete'/>
+    <qemu:env name='KEEP' value='1'/>
+  </qemu:commandline>
+</domain>"""
+
+
+def arguments(text):
+    return [arg.get("value") for arg in ET.fromstring(text).find(f"{NS}commandline").findall(f"{NS}arg")]
+
 
 def environment(text):
     root = ET.fromstring(text)
@@ -31,6 +46,13 @@ class WithEnvironment(unittest.TestCase):
     def test_source_text_is_not_changed(self):
         domain_env.with_environment(DOMAIN, ["ADDED=1"])
         self.assertEqual(environment(DOMAIN), {"KEEP": "1", "SET": "old"})
+
+    def test_hybrid_roles_of_both_adapters_are_kept(self):
+        result = domain_env.with_environment(HYBRID, ["ADDED=1"])
+        self.assertEqual(arguments(result), arguments(HYBRID))
+        devices = [arg for arg in arguments(result) if arg.startswith("virtio-gpu-av-pci")]
+        self.assertEqual([device.rsplit(",", 1)[1] for device in devices], ["hybrid=integrated", "hybrid=discrete"])
+        self.assertEqual(environment(result), {"KEEP": "1", "ADDED": "1"})
 
     def test_rejects_a_pair_without_value(self):
         with self.assertRaises(ValueError):

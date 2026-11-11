@@ -12,7 +12,7 @@ BUILD_LOCK="${XDG_RUNTIME_DIR:-/tmp}/lsw-build.lock"
 REMOTE_BASE=".local/share/lsw-gpu-test"
 ORIG_ARGS=("$@")
 
-host="" stack="" filter="" adapters=all bits=64 suite=render gpus="" out="" max_hold=3600 redeploy=0 dry=0 show_queue=0 jobs=2 hold_file="" qemu_env=""
+host="" stack="" filter="" adapters=all bits=64 suite=render gpus="" out="" max_hold=3600 redeploy=0 dry=0 show_queue=0 jobs=2 hold_file="" qemu_env="" env_definition=""
 
 usage() {
     cat <<'EOT'
@@ -162,18 +162,23 @@ deploy_local() {
     rsync -a --delete "${stack}/av-drivers/" "${DEV_STACK}/av-drivers/" || return 1
     rsync -a --delete "${stack}/d3dlib/" "${DEV_STACK}/d3dlib/" || return 1
     rsync -a --delete "${stack}/qemu-modules/" "${DEV_STACK}/qemu-modules/" || return 1
-    local definition="${DEV_STACK}/state/lsw.new.xml" rc
-    if [[ -n ${qemu_env} ]]; then
-        cp -f "${definition}" "${definition}.clean" || return 1
-        python3 -B "${HERE}/domain_env.py" "${definition}.clean" "${definition}" ${qemu_env} || { mv -f "${definition}.clean" "${definition}"; return 1; }
+    env -u LSW_AV_BUILD_EXEC -u LSW_AV_BUILD_DRIVERS "${DEV_STACK}/redeploy.sh" || return 1
+    [[ -n ${qemu_env} ]] || return 0
+    say "local: define the domain with${qemu_env} for this verification and restart the guest"
+    python3 -B "${HERE}/domain_env.py" "${DEV_STACK}/state/lsw.new.xml" "${env_definition}" ${qemu_env} || return 1
+    virsh -c qemu:///session define "${env_definition}" > /dev/null || return 1
+    virsh -c qemu:///session destroy lsw > /dev/null 2>&1
+    "${HERE}/render-vm.sh" up
+}
+
+restore_definition() {
+    [[ -n ${env_definition} ]] || return 0
+    if [[ -s ${env_definition} ]]; then
+        say "local: define the domain from ${DEV_STACK}/state/lsw.new.xml again"
+        virsh -c qemu:///session define "${DEV_STACK}/state/lsw.new.xml" > /dev/null
     fi
-    env -u LSW_AV_BUILD_EXEC -u LSW_AV_BUILD_DRIVERS "${DEV_STACK}/redeploy.sh"
-    rc=$?
-    if [[ -n ${qemu_env} ]]; then
-        mv -f "${definition}.clean" "${definition}" || return 1
-        virsh -c qemu:///session define "${definition}" > /dev/null || return 1
-    fi
-    return ${rc}
+    rm -f "${env_definition}"
+    env_definition=""
 }
 
 deploy_accel() {
@@ -205,6 +210,12 @@ run_inner() {
         exec {lockfd}> "${XDG_RUNTIME_DIR:-/tmp}/lsw-render.lock"
         flock -w 900 "${lockfd}" || die "lsw-render.lock is held by something outside the queue"
         export LSW_RENDER_HEAVY_LOCK="${XDG_RUNTIME_DIR:-/tmp}/lsw-render-inner.lock"
+        if [[ -n ${qemu_env} ]]; then
+            env_definition="$(mktemp -p "${XDG_RUNTIME_DIR:-/tmp}" lsw-env-XXXXXX.xml)"
+            trap restore_definition EXIT
+            trap 'exit 130' INT
+            trap 'exit 143' TERM
+        fi
     else
         "${GPUTEST}" master accel >/dev/null 2>&1 || { "${GPUTEST}" master accel >&2; die "no ssh master for accel"; }
         coproc ACCEL_LOCK { ssh "${ssh_opts[@]}" "${target}" bash -s; }
@@ -229,6 +240,7 @@ run_inner() {
         "${HERE}/render-run.sh" "${args[@]}"
         status=$?
     fi
+    restore_definition
     [[ -n ${lockfd:-} ]] && eval "exec ${lockfd}>&-"
     [[ -n ${ACCEL_LOCK_PID:-} ]] && { exec {ACCEL_LOCK[1]}>&-; wait "${ACCEL_LOCK_PID}" 2>/dev/null; }
     return "${status}"
