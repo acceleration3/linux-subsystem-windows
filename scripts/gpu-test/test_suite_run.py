@@ -1,3 +1,4 @@
+import fcntl
 import os
 import pathlib
 import subprocess
@@ -57,6 +58,50 @@ class NotRun(unittest.TestCase):
         spec = spec_with()
         suite_run.report_not_run(context(limit_hit=True), spec, ["sanity.b"])
         self.assertIn("recovery limit", spec.finished["sanity.b"]["reason"])
+
+
+class VmLock(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.lock = pathlib.Path(self.temp.name) / "vm.lock"
+        self.old = os.environ.get("LSW_RENDER_HEAVY_LOCK")
+        os.environ["LSW_RENDER_HEAVY_LOCK"] = str(self.lock)
+        self.machine = suite_run.Machine("local", "test")
+
+    def tearDown(self):
+        if self.old is None:
+            os.environ.pop("LSW_RENDER_HEAVY_LOCK", None)
+        else:
+            os.environ["LSW_RENDER_HEAVY_LOCK"] = self.old
+        self.temp.cleanup()
+
+    def test_the_lock_is_seen_only_while_someone_holds_it(self):
+        self.assertFalse(self.machine.vm_lock_held())
+        with open(self.lock, "w") as handle:
+            fcntl.flock(handle, fcntl.LOCK_EX)
+            self.assertTrue(self.machine.vm_lock_held())
+        self.assertFalse(self.machine.vm_lock_held())
+
+    def test_prune_touches_no_guest_folder_without_the_lock(self):
+        class Share:
+            calls = []
+
+            share_path = staticmethod(suite_run.lsw_link.GuestShare.share_path)
+
+            def smbclient(self, *args):
+                self.calls.append(args)
+                return 0, ""
+
+            def remove(self, path):
+                raise OSError(path)
+
+        ctx = types.SimpleNamespace(machine=self.machine, share=Share(), args=types.SimpleNamespace(host="test", run_id="r"))
+        suite_run.prune(ctx)
+        self.assertEqual(Share.calls, [])
+        with open(self.lock, "w") as handle:
+            fcntl.flock(handle, fcntl.LOCK_EX)
+            suite_run.prune(ctx)
+        self.assertEqual(len(Share.calls), 1)
 
 
 class StackEvidence(unittest.TestCase):

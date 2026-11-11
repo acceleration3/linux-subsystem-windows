@@ -269,20 +269,26 @@ cmd_stack() {
     local action=$1
     shift
     split_arguments "$@"
-    local host pair qemu_env=""
+    local host pair qemu_env="" vm_lock
     for pair in ${LSW_STACK_QEMU_ENV:-}; do
         qemu_env+=" --qemu-env ${pair}"
     done
     for host in "${HOSTS[@]}"; do
         say "Render stack ${action} on ${host}"
+        vm_lock=/tmp/lsw-accel-vm.lock
+        [[ $(target_of "${host}") == local ]] && vm_lock="${LSW_RENDER_HEAVY_LOCK:-${XDG_RUNTIME_DIR:-/tmp}/lsw-render.lock}"
         on "${host}" <<RUN
 cd ${BASE}/tree/scripts/gpu-test
 if systemd-run --user --quiet --collect true 2>/dev/null; then
     kept=0
+    lock_held=0
+    flock -n "${vm_lock}" true 2>/dev/null
+    [ \$? -eq 1 ] && lock_held=1
+    [ "\${lock_held}" -eq 1 ] || echo "${vm_lock} is not held: the running libvirt session daemons are left as they are"
     for daemon in \$(pgrep -u "\$(id -u)" -x virtqemud); do
         if grep -q '\.service\$' "/proc/\${daemon}/cgroup" 2>/dev/null && ! grep -q 'lsw-render-stack-' "/proc/\${daemon}/cgroup"; then
             kept=1
-        elif [ -z "\$(virsh -c qemu:///session list --name 2>/dev/null | tr -d '[:space:]')" ]; then
+        elif [ "\${lock_held}" -eq 1 ] && [ -z "\$(virsh -c qemu:///session list --name 2>/dev/null | tr -d '[:space:]')" ]; then
             kill "\${daemon}"
         else
             kept=1

@@ -15,6 +15,7 @@ QEMU_LOG_TAIL = 4 * 1024 * 1024
 CORES = "~/.local/share/lsw-gpu-test/cores"
 RECOVERY_BUDGET = 5
 STACK_BUDGET = 28
+REMOTE_VM_LOCK = "/tmp/lsw-accel-vm.lock"
 
 
 def say(line):
@@ -39,6 +40,15 @@ class Machine:
         except subprocess.TimeoutExpired:
             return 124, "timed out"
         return done.returncode, done.stdout + done.stderr
+
+    def vm_lock(self):
+        if self.mode == "local":
+            return os.environ.get("LSW_RENDER_HEAVY_LOCK") or (os.environ.get("XDG_RUNTIME_DIR") or "/tmp") + "/lsw-render.lock"
+        return REMOTE_VM_LOCK
+
+    def vm_lock_held(self):
+        code, _ = self.sh(f"command -v flock > /dev/null || exit 0\nflock -n '{self.vm_lock()}' true\n", 30)
+        return code == 1
 
     def state(self):
         code, out = self.sh("virsh -c qemu:///session domstate lsw | head -n 1", 60)
@@ -608,6 +618,9 @@ def run_stamp(name):
 
 
 def prune(ctx):
+    if not ctx.machine.vm_lock_held():
+        say(f"{ctx.args.host}: {ctx.machine.vm_lock()} is not held, so the other guest run folders are kept")
+        return
     try:
         code, text = ctx.share.smbclient(f'ls "{ctx.share.share_path(lsw_link.RUN_BASE)}\\*"', 120)
     except (lsw_link.LinkError, OSError, subprocess.SubprocessError):
