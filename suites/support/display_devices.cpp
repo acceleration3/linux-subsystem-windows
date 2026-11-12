@@ -112,6 +112,44 @@ std::vector<DisplayDevice> DisplayDevices::enumerate(bool present_only) {
     return out;
 }
 
+bool DisplayDevices::match_accel(const std::vector<std::uint64_t>& adapter_ids, std::size_t adapter_index,
+                                 const std::vector<DisplayDevice>& devices, std::size_t& device_index) {
+    if (adapter_index >= adapter_ids.size()) {
+        return false;
+    }
+    std::vector<std::size_t> accel;
+    for (std::size_t i = 0; i < devices.size(); ++i) {
+        if (devices[i].accel) {
+            accel.push_back(i);
+        }
+    }
+    const std::uint64_t wanted = adapter_ids[adapter_index];
+    std::size_t rank = 0;
+    for (std::size_t i = 0; i < adapter_index; ++i) {
+        if (adapter_ids[i] == wanted) {
+            ++rank;
+        }
+    }
+    std::vector<std::size_t> same;
+    for (const std::size_t i : accel) {
+        if ((static_cast<std::uint64_t>(devices[i].vendor) << 32 | devices[i].device) == wanted) {
+            same.push_back(i);
+        }
+    }
+    if (!same.empty()) {
+        if (rank >= same.size()) {
+            return false;
+        }
+        device_index = same[rank];
+        return true;
+    }
+    if (adapter_index >= accel.size()) {
+        return false;
+    }
+    device_index = accel[adapter_index];
+    return true;
+}
+
 std::vector<DisplayInterface> DisplayDevices::interfaces() {
     static const GUID kArrival = {0x1ca05180, 0xa699, 0x450a, {0x9a, 0x0c, 0xde, 0x4f, 0xbe, 0x3d, 0xdd, 0x89}};
     std::vector<DisplayInterface> out;

@@ -72,6 +72,24 @@ std::string TargetAdapter::spec() {
     return env != nullptr && *env != '\0' ? env : "first";
 }
 
+bool TargetAdapter::find_uuid(const std::vector<std::string>& uuids, const std::string& wanted, std::size_t& index) {
+    const std::string key = hex_digits(wanted);
+    if (key.empty()) {
+        return false;
+    }
+    for (std::size_t i = 0; i < uuids.size(); ++i) {
+        if (uuids[i] == key) {
+            index = i;
+            return true;
+        }
+    }
+    return false;
+}
+
+std::string TargetAdapter::stable_spec(const std::string& uuid, const std::string& luid_spec) {
+    return uuid.empty() ? luid_spec : "uuid:" + uuid;
+}
+
 std::string TargetAdapter::vulkan_uuid(const AvAdapter& adapter) {
     VulkanApi api;
     std::vector<VulkanDevice> devices;
@@ -155,11 +173,12 @@ bool TargetAdapter::resolve(const std::string& spec, AvAdapter& out, std::size_t
         return false;
     }
     if (kind == "uuid") {
-        const std::string wanted = hex_digits(arg);
-        for (std::size_t i = 0; i < adapters.size(); ++i) {
-            if (vulkan_uuid(adapters[i]) == wanted) {
-                return take(i);
-            }
+        std::vector<std::string> uuids;
+        for (const AvAdapter& adapter : adapters) {
+            uuids.push_back(vulkan_uuid(adapter));
+        }
+        if (std::size_t found = 0; find_uuid(uuids, arg, found)) {
+            return take(found);
         }
         error = "no accel adapter reports the Vulkan device UUID " + arg;
         return false;
@@ -188,11 +207,12 @@ bool TargetAdapter::pick(AvAdapter& out, std::string& error) {
 }
 
 void TargetAdapter::export_identity(const AvAdapter& adapter, std::size_t index) {
-    set_env("LSW_SUITES_ADAPTER", "luid:" + Text::hex(static_cast<std::uint32_t>(adapter.luid.HighPart), 8) + Text::hex(adapter.luid.LowPart, 8));
+    const std::string uuid = vulkan_uuid(adapter);
+    set_env("LSW_SUITES_ADAPTER", stable_spec(uuid, "luid:" + Text::hex(static_cast<std::uint32_t>(adapter.luid.HighPart), 8) + Text::hex(adapter.luid.LowPart, 8)));
     set_env("LSW_SUITES_ADAPTER_INDEX", std::to_string(index));
     set_env("LSW_SUITES_ADAPTER_NAME", adapter.name);
     set_env("LSW_SUITES_ADAPTER_LUID", adapter.luid_text());
-    set_env("LSW_SUITES_ADAPTER_UUID", vulkan_uuid(adapter));
+    set_env("LSW_SUITES_ADAPTER_UUID", uuid);
     set_env("LSW_SUITES_ADAPTER_PCI", Text::hex(adapter.vendor, 4) + ":" + Text::hex(adapter.device, 4));
 }
 

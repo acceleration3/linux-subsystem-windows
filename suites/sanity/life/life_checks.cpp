@@ -401,18 +401,24 @@ Outcome LifeChecks::live_driver_update(Context& context) {
     if (Kit::app_apis().empty()) {
         return Context::skip("no D3D11 or Vulkan present path is available");
     }
-    std::wstring instance;
-    std::string version_before;
-    for (const DisplayDevice& device : DisplayDevices::enumerate(true)) {
-        if (device.accel) {
-            instance = device.instance_id;
-            version_before = device.driver_version;
-            break;
-        }
+    std::vector<AvAdapter> accel_adapters;
+    std::string adapter_error;
+    AvAdapter target;
+    std::size_t target_index = 0;
+    if (!AvAdapters::accel(accel_adapters, adapter_error) || !TargetAdapter::resolve(TargetAdapter::spec(), target, target_index, adapter_error)) {
+        return Outcome::fail(adapter_error);
     }
-    if (instance.empty()) {
-        return Outcome::fail("the accel-virt display device is not enumerated");
+    std::vector<std::uint64_t> adapter_ids;
+    for (const AvAdapter& adapter : accel_adapters) {
+        adapter_ids.push_back(static_cast<std::uint64_t>(adapter.vendor) << 32 | adapter.device);
     }
+    const std::vector<DisplayDevice> devices = DisplayDevices::enumerate(true);
+    std::size_t device_index = 0;
+    if (!DisplayDevices::match_accel(adapter_ids, target_index, devices, device_index)) {
+        return Outcome::fail("the display device of the adapter under test (" + target.name + ") is not enumerated");
+    }
+    const std::wstring instance = devices[device_index].instance_id;
+    const std::string version_before = devices[device_index].driver_version;
     iso::Fleet apps;
     start_apps(apps, context, 30);
     iso::Scene::sleep(5000);
@@ -428,7 +434,7 @@ Outcome LifeChecks::live_driver_update(Context& context) {
     std::string version_after;
     bool started = false;
     for (const DisplayDevice& device : DisplayDevices::enumerate(true)) {
-        if (device.accel) {
+        if (device.instance_id == instance) {
             version_after = device.driver_version;
             started = device.started;
         }

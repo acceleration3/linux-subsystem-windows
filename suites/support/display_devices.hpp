@@ -35,5 +35,8 @@ public:
     [[nodiscard]] static std::vector<DisplayDevice> enumerate(bool present_only);
 
     [[nodiscard]] static std::vector<DisplayInterface> interfaces();
+
+    [[nodiscard]] static bool match_accel(const std::vector<std::uint64_t>& adapter_ids, std::size_t adapter_index,
+                                          const std::vector<DisplayDevice>& devices, std::size_t& device_index);
 };
 }  // namespace lsw::suites
