@@ -1244,6 +1244,7 @@ struct StencilStream {
     Sub<D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_VS, D3D12_SHADER_BYTECODE> vs;
     Sub<D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_PS, D3D12_SHADER_BYTECODE> ps;
     Sub<D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_INPUT_LAYOUT, D3D12_INPUT_LAYOUT_DESC> layout;
+    Sub<D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_BLEND, D3D12_BLEND_DESC> blend;
     Sub<D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_RASTERIZER, D3D12_RASTERIZER_DESC> rasterizer;
     Sub<kDepthStencil2, DepthStencil2> depth_stencil;
     Sub<D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_RENDER_TARGET_FORMATS, D3D12_RT_FORMAT_ARRAY> targets;
@@ -1285,7 +1286,9 @@ bool stencil_reference(Kit&, unsigned, rr::CaptureSet& out, std::string&) {
         for (std::uint32_t x = 0; x < 128; ++x) {
             const bool front = front_covered[y * 128 + x];
             const bool back = back_covered[y * 128 + x];
-            if (front != back) {
+            if (front && back) {
+                raster.image().set_rgba8(x, y, rr::CpuRaster::pack(0.2f, 0.3f, 0.95f));
+            } else if (front != back) {
                 raster.image().set_rgba8(x, y, front ? rr::CpuRaster::pack(0.2f, 0.9f, 0.3f) : rr::CpuRaster::pack(0.95f, 0.2f, 0.2f));
             }
         }
@@ -1322,6 +1325,9 @@ void register_front_back_stencil_ref() {
             stream.vs = D3d12Tools::bytecode(writer.vs_code);
             stream.ps = D3d12Tools::bytecode(writer.ps_code);
             stream.layout = D3D12_INPUT_LAYOUT_DESC{writer.elements.data(), static_cast<UINT>(writer.elements.size())};
+            D3D12_BLEND_DESC blend = writer.desc.BlendState;
+            blend.RenderTarget[0].RenderTargetWriteMask = 0;
+            stream.blend = blend;
             stream.rasterizer = writer.desc.RasterizerState;
             DepthStencil2 ds{};
             ds.depth_enable = FALSE;
@@ -1383,11 +1389,15 @@ void register_front_back_stencil_ref() {
                     list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
                     const float green[4] = {0.2f, 0.9f, 0.3f, 1};
                     const float red[4] = {0.95f, 0.2f, 0.2f, 1};
+                    const float blue[4] = {0.2f, 0.3f, 0.95f, 1};
                     list->SetGraphicsRoot32BitConstants(0, 4, green, 16);
                     list->OMSetStencilRef(0x10);
                     list->DrawInstanced(3, 1, 0, 0);
                     list->SetGraphicsRoot32BitConstants(0, 4, red, 16);
                     list->OMSetStencilRef(0x02);
+                    list->DrawInstanced(3, 1, 0, 0);
+                    list->SetGraphicsRoot32BitConstants(0, 4, blue, 16);
+                    list->OMSetStencilRef(0x12);
                     list->DrawInstanced(3, 1, 0, 0);
                     list8->Release();
                 },
