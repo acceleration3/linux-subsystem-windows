@@ -12,7 +12,7 @@ BUILD_LOCK="${XDG_RUNTIME_DIR:-/tmp}/lsw-build.lock"
 REMOTE_BASE=".local/share/lsw-gpu-test"
 ORIG_ARGS=("$@")
 
-host="" stack="" filter="" adapters=all bits=64 suite=render gpus="" out="" max_hold=3600 redeploy=0 dry=0 show_queue=0 jobs=2 hold_file="" qemu_env="" env_definition="" smoke=0 bits_given=0
+host="" stack="" filter="" adapters=all bits=64 suite=render gpus="" out="" max_hold=3600 redeploy=0 dry=0 show_queue=0 jobs=2 hold_file="" qemu_env="" env_definition="" smoke=0 bits_given=0 bits2=""
 
 usage() {
     cat <<'EOT'
@@ -27,13 +27,13 @@ revision, and leaves the results in DIR/results/<timestamp>.
   --stack DIR               a stack-build.sh output; its suite sha must be this tree's HEAD
   --filter GLOB[,GLOB]      check ids, e.g. 'render.d3d11.clear*,render.vk.xfer.copy*' (required unless --smoke: keep holds short)
   --smoke                   the short gate: the rows of scripts/smoke-selection.txt from both suites, run twice in one VM
-                            session (default --bits both), judged for failures, QEMU crashes, host GPU kernel events, row
+                            session (pass 1 x64 and x32, pass 2 x64 only unless --bits 64|32 is given), judged for failures, QEMU crashes, host GPU kernel events, row
                             times against scripts/smoke-baseline.json (scripts/smoke_baseline.py update) and rows that
                             pass the first time and fail the second; exit 0 only when all hold
   --suite render|sanity     default render
   --adapters all|first      local: which VM-bound GPUs (default all)
   --gpus SEL[,SEL]          accel: HOST:SEL entries of render-run.sh --gpus (default every GPU)
-  --bits 64|32|both         default 64
+  --bits 64|32|both         default 64 (--smoke: both, the second pass x64 only; --smoke --bits both is the same)
   --jobs N                  parallel checks per adapter (default 2)
   --out DIR                 results directory (default DIR/results/<timestamp>)
   --hold-file PATH          check ids (one per line, globs allowed) that are never run
@@ -79,6 +79,8 @@ stack="$(cd "${stack}" && pwd)"
 if [[ ${smoke} -eq 1 ]]; then
     [[ -z ${filter} ]] || die "--smoke sets the rows itself: drop --filter"
     [[ ${bits_given} -eq 1 ]] || bits=both
+    bits2="${bits}"
+    [[ ${bits} != both ]] || bits2=64
     filter="smoke"
 fi
 [[ -n ${filter} ]] || die "--filter is required: a verification holds the VM for the whole run"
@@ -214,10 +216,13 @@ deploy_if_needed() {
     [[ -n ${qemu_env} ]] || record_deployed
 }
 
+smoke_bits() { [[ $1 -eq 1 ]] && echo "${bits}" || echo "${bits2}"; }
+
 smoke_rows() {
     local pass=$1 which=$2 rows_filter args
     rows_filter="$(python3 -B "${HERE}/smoke_verdict.py" filter --suite "${which}")"
-    args=(--parallel --no-build --hosts "${host}" --bits "${bits}" --filter "${rows_filter}" --suite "${which}" --jobs "${jobs}" --out "${out}/pass${pass}")
+    args=(--parallel --no-build --hosts "${host}" --bits "$(smoke_bits "${pass}")" --filter "${rows_filter}" --suite "${which}" --jobs "${jobs}" --out "${out}/pass${pass}")
+    [[ ${pass} -eq 2 && ${which} == render ]] && args+=(--reuse-refs "${out}/pass1")
     [[ ${host} == local ]] && args+=(--adapters "${adapters}")
     [[ -n ${gpus} ]] && args+=(--gpus "${gpus}")
     [[ -n ${hold_file} ]] && args+=(--hold-file "${hold_file}")
@@ -243,7 +248,7 @@ smoke_run() {
         done
     done
     kernel_log_since "${since}" > "${out}/smoke-kernel.log"
-    python3 -B "${HERE}/smoke_verdict.py" verdict --pass "${out}/pass1" --pass "${out}/pass2" --kernel-log "${out}/smoke-kernel.log" --summary "${out}/smoke-summary.txt"
+    python3 -B "${HERE}/smoke_verdict.py" verdict --pass "${out}/pass1" --pass "${out}/pass2" --kernel-log "${out}/smoke-kernel.log" --pass2-bits "${bits2}" --summary "${out}/smoke-summary.txt"
 }
 
 run_inner() {
@@ -306,10 +311,10 @@ if [[ ${dry} -eq 1 ]]; then
     if [[ ${smoke} -eq 1 ]]; then
         for pass in 1 2; do
             for which in render sanity; do
-                printf '[dry-run] smoke pass %s: render-run.sh --parallel --no-build --hosts %s --bits %s --suite %s --filter <%s rows of scripts/smoke-selection.txt>%s -> %s/pass%s\n' "${pass}" "${host}" "${bits}" "${which}" "${which}" "$([[ ${host} == local ]] && echo " --adapters ${adapters}")" "${out}" "${pass}"
+                printf '[dry-run] smoke pass %s: render-run.sh --parallel --no-build --hosts %s --bits %s --suite %s --filter <%s rows of scripts/smoke-selection.txt>%s%s -> %s/pass%s\n' "${pass}" "${host}" "$(smoke_bits "${pass}")" "${which}" "${which}" "$([[ ${host} == local ]] && echo " --adapters ${adapters}")" "$([[ ${pass} -eq 2 && ${which} == render ]] && echo " --reuse-refs ${out}/pass1")" "${out}" "${pass}"
             done
         done
-        printf '[dry-run] collect the kernel log since the start, then smoke_verdict.py: failures, QEMU crashes, kernel events, row times against scripts/smoke-baseline.json, rows degraded in pass 2\n'
+        printf '[dry-run] collect the kernel log since the start, then smoke_verdict.py: failures, QEMU crashes, kernel events, row times against scripts/smoke-baseline.json, rows degraded in pass 2 (x%s)\n' "${bits2}"
     else
         printf '[dry-run] render-run.sh --parallel --no-build --hosts %s --bits %s --filter %s --suite %s%s -> %s\n' "${host}" "${bits}" "${filter}" "${suite}" "$([[ ${host} == local ]] && echo " --adapters ${adapters}")" "${out}"
     fi

@@ -39,6 +39,7 @@ host_jobs=""
 guest_timeout=3600
 suite=render
 hold_file=""
+reuse_refs=""
 max_recoveries=5
 
 usage() {
@@ -70,6 +71,8 @@ HTML report: build-render-report/<timestamp>/report.html
   --guest-timeout SECONDS     limit of one guest run with --parallel (default 3600); each adapter of a serial phase gets its own
   --no-dump-captures          skip the capture dumps (the report then has no images and there is no audit)
   --images all|differing|failed|none  which rows get images in the report (default all)
+  --reuse-refs DIR            with --parallel and the render suite: push the host references of DIR (the refs-HOST directory of an
+                              earlier run) instead of making them again
   --no-build                  use the executables already built
   --baseline DIR             an earlier build-render-report/<timestamp> to compare against
   --out DIR                   output directory (default build-render-report/<timestamp>)
@@ -102,6 +105,7 @@ while [[ $# -gt 0 ]]; do
         --max-recoveries) max_recoveries="$2"; shift ;;
         --no-dump-captures) dump=0 ;;
         --images) images="$2"; shift ;;
+        --reuse-refs) reuse_refs="$2"; shift ;;
         --no-build) build=0 ;;
         --baseline) baseline="$2"; shift ;;
         --out) out="$2"; shift ;;
@@ -559,8 +563,15 @@ run_host_parallel() {
         exes+=(--exe "${b}=${ROOT}/${dir}/lsw-suites${b}.exe")
     done
     local push_refs=(--refs "${refs}")
+    if [[ -n ${reuse_refs} && ${suite} == render ]]; then
+        refs="${reuse_refs}/refs-${h}"
+        [[ ${dry} -eq 1 || -d ${refs} ]] || die "--reuse-refs: ${refs} does not exist"
+        push_refs=(--refs "${refs}")
+    fi
     if [[ $(target_of "${h}") == local ]]; then
-        if [[ ${suite} == render ]]; then
+        if [[ ${suite} == render && -n ${reuse_refs} ]]; then
+            say "${h}: host references of ${refs}"
+        elif [[ ${suite} == render ]]; then
             export RR_LOG="${out}/render-ref-${h}.log"
             capped_step "host references for every VM-bound GPU" 1800 bash -c 'exec "$@" >> "${RR_LOG}" 2>&1' _ "${ROOT}/build-render-ref/lsw-render-ref" --out "${refs}" --gpu all --jobs 4 --clean "${ref_args[@]}" || return 1
         else
@@ -574,7 +585,9 @@ run_host_parallel() {
         vm="ssh:$(target_of "${h}")"
         agent_port=$((15102 + 10 * index))
         smb_port=$((15445 + 10 * index))
-        if [[ ${suite} == render ]]; then
+        if [[ ${suite} == render && -n ${reuse_refs} ]]; then
+            say "${h}: host references of ${refs}"
+        elif [[ ${suite} == render ]]; then
             say "${h}: host references"
             remote_references "${h}" "${refs}" "${ref_filter}" || return 1
         else

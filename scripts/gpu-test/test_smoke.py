@@ -93,6 +93,18 @@ class VerdictTests(unittest.TestCase):
         second = {"gpu1/x64": result([row("a")])}
         self.assertIn("result set differs between the passes: gpu2/x64", sv.verdict([first, second], BASELINE, "")["problems"])
 
+    def test_second_pass_of_x64_only_does_not_miss_x32_results(self):
+        first = {"gpu/x64": result([row("a")]), "gpu/x32": result([row("a")]), "sanity/local/gpu/x32": result([row("a")])}
+        second = {"gpu/x64": result([row("a", "fail")])}
+        found = sv.verdict([first, second], BASELINE, "", "64")
+        self.assertEqual(found["degraded"], ["gpu/x64:a (fail)"])
+        self.assertFalse(any("differs" in p for p in found["problems"]))
+        self.assertTrue(any("differs" in p for p in sv.verdict([first, second], BASELINE, "")["problems"]))
+
+    def test_second_pass_still_fails_on_a_missing_x64_result(self):
+        first = {"gpu/x64": result([row("a")]), "gpu/x32": result([row("a")])}
+        self.assertIn("result set differs between the passes: gpu/x64", sv.verdict([first, {}], BASELINE, "", "64")["problems"])
+
     def test_slow_rows_and_summary(self):
         slow = {"gpu/x64": result([row("a", ms=9000), row("b", ms=200)])}
         found = sv.verdict([slow, slow], BASELINE, "")

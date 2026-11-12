@@ -62,10 +62,11 @@ runs, with suites and references of the same revision.
    killed after `--max-hold` (default 3600 s): keep filters narrow.
 
 `--smoke` replaces `--filter` with the fixed gate in `scripts/smoke-selection.txt` (one glob per line, about 240 rows from both
-suites, `--bits both` unless given): the selection runs twice in one VM session and the run fails on any failed, crashed or
+suites): the selection runs twice in one VM session, pass 1 with x64 and x32 and pass 2 with x64 only (pass 2 reuses the host
+references of pass 1; `--bits 64` or `--bits 32` runs that bitness in both passes, `--bits both` is the default), and the run fails on any failed, crashed or
 not-run row, QEMU crash, host GPU kernel event, row time over twice the median or over max(5 x, +3 s) of its entry in
 `scripts/smoke-baseline.json` (`scripts/smoke_baseline.py update <result.json>...` rewrites it from healthy runs), or row
-that passed the first time and failed the second ("degraded during the run"). Exit 0 only if all hold; the summary is also
+that passed the first time and failed the second, compared on the rows of pass 2 ("degraded during the run"). Exit 0 only if all hold; the summary is also
 in `<results>/smoke-summary.txt`.
 
 Never run `render-run.sh` against a remote host without `--parallel`: that path does a full `gpu-test.sh deploy` and replaces

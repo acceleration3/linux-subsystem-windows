@@ -56,16 +56,17 @@ def degraded_rows(first, second):
     return degraded
 
 
-def missing_results(first, second):
-    return sorted(set(first) ^ set(second))
+def missing_results(first, second, second_bits="both"):
+    expected = {k for k in first if second_bits == "both" or k.rsplit("/", 1)[-1] == f"x{second_bits}"}
+    return sorted(expected ^ set(second))
 
 
-def verdict(passes, baseline, kernel_text):
+def verdict(passes, baseline, kernel_text, second_bits="both"):
     judged = [judge_pass(p) for p in passes]
     times = [t for j in judged for t in j["times"]]
     budget = sb.check_budget(times, baseline)
     degraded = degraded_rows(passes[0], passes[1]) if len(passes) > 1 else []
-    absent = missing_results(passes[0], passes[1]) if len(passes) > 1 else []
+    absent = missing_results(passes[0], passes[1], second_bits) if len(passes) > 1 else []
     events = kernel_events(kernel_text)
     problems = []
     for index, j in enumerate(judged, 1):
@@ -113,7 +114,7 @@ def run_verdict(args):
     baseline = json.loads(pathlib.Path(args.baseline).read_text())
     passes = [load_pass(root) for root in args.passes]
     kernel_text = pathlib.Path(args.kernel_log).read_text(errors="replace") if args.kernel_log and pathlib.Path(args.kernel_log).exists() else ""
-    result = verdict(passes, baseline, kernel_text)
+    result = verdict(passes, baseline, kernel_text, args.pass2_bits)
     text = summary(result)
     print(text)
     if args.summary:
@@ -138,6 +139,7 @@ def main(argv=None):
     ver.add_argument("--baseline", default=str(sb.DEFAULT_BASELINE))
     ver.add_argument("--kernel-log")
     ver.add_argument("--summary")
+    ver.add_argument("--pass2-bits", choices=("64", "32", "both"), default="both")
     ver.set_defaults(func=run_verdict)
     args = parser.parse_args(argv)
     return args.func(args)
