@@ -16,6 +16,7 @@ say() { printf '\033[1;36m==>\033[0m %s\n' "$*"; }
 die() { printf 'gpu-test: %s\n' "$*" >&2; exit 1; }
 
 target_of() { awk -v name="$1" '!/^[[:space:]]*#/ && $1 == name { print $2 }' "${HOSTS_FILE}"; }
+setting_of() { awk -v name="$1" -v key="$2" '!/^[[:space:]]*#/ && $1 == name { for (i = 3; i <= NF; i++) if (index($i, key "=") == 1) print substr($i, length(key) + 2) }' "${HOSTS_FILE}"; }
 all_hosts() { awk '!/^[[:space:]]*#/ && NF >= 2 { print $1 }' "${HOSTS_FILE}"; }
 
 HOSTS=()
@@ -269,12 +270,17 @@ cmd_stack() {
     local action=$1
     shift
     split_arguments "$@"
-    local host pair qemu_env="" vm_lock
+    local host pair qemu_env="" vm_lock host_args disk_cache
     for pair in ${LSW_STACK_QEMU_ENV:-}; do
         qemu_env+=" --qemu-env ${pair}"
     done
     for host in "${HOSTS[@]}"; do
         say "Render stack ${action} on ${host}"
+        host_args=${qemu_env}
+        disk_cache="$(setting_of "${host}" disk-cache)"
+        if [[ -n ${disk_cache} && ( ${action} == apply || ${action} == install ) ]]; then
+            host_args+=" --disk-cache ${disk_cache}"
+        fi
         vm_lock=/tmp/lsw-accel-vm.lock
         [[ $(target_of "${host}") == local ]] && vm_lock="${LSW_RENDER_HEAVY_LOCK:-${XDG_RUNTIME_DIR:-/tmp}/lsw-render.lock}"
         on "${host}" <<RUN
@@ -303,9 +309,9 @@ if systemd-run --user --quiet --collect true 2>/dev/null; then
     unit=lsw-render-stack-${action}
     systemctl --user reset-failed "\${unit}.service" 2>/dev/null || true
     systemd-run --user --quiet --collect --wait --pipe --unit="\${unit}" --working-directory="\${HOME}/${BASE}/tree/scripts/gpu-test" \
-        python3 -B render_stack.py ${action}${qemu_env}
+        python3 -B render_stack.py ${action}${host_args}
 else
-    python3 -B render_stack.py ${action}${qemu_env}
+    python3 -B render_stack.py ${action}${host_args}
 fi
 RUN
     done

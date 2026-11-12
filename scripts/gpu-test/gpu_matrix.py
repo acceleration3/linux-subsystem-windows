@@ -219,9 +219,34 @@ def environment_names(xml):
     return {env.get("name") for env in root.iter(f"{{{QEMU_NS}}}env")}
 
 
-def retarget(xml, gpus, qemu_env=(), keep=None):
+DISK_CACHE_MODES = {"none": "native", "directsync": "native", "writeback": "threads", "writethrough": "threads"}
+
+
+def apply_disk_cache(root, mode):
+    if mode not in DISK_CACHE_MODES:
+        raise RunFailed(f"disk cache mode '{mode}' is not one of {', '.join(DISK_CACHE_MODES)}")
+    for disk in root.findall("./devices/disk"):
+        driver = disk.find("driver")
+        if disk.get("device") == "disk" and driver is not None and driver.get("type") in ("qcow2", "raw"):
+            driver.set("cache", mode)
+            driver.set("io", DISK_CACHE_MODES[mode])
+
+
+def disk_caches(xml):
+    root = ET.fromstring(xml)
+    found = []
+    for disk in root.findall("./devices/disk"):
+        driver = disk.find("driver")
+        if disk.get("device") == "disk" and driver is not None:
+            found.append((driver.get("type"), driver.get("cache"), driver.get("io")))
+    return found
+
+
+def retarget(xml, gpus, qemu_env=(), keep=None, disk_cache=None):
     ET.register_namespace("qemu", QEMU_NS)
     root = ET.fromstring(xml)
+    if disk_cache is not None:
+        apply_disk_cache(root, disk_cache)
     emulator = root.find("./devices/emulator")
     if emulator is None:
         raise RunFailed("the domain names no emulator")

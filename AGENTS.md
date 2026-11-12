@@ -9,6 +9,10 @@ connection that the user opens; `scripts/gpu-test/gpu-test.sh master <host>` che
 prints the command to open one. `scripts/gpu-test/gpu-test.sh gpus <host>` lists a host's GPUs and which adapter drives
 a display.
 
+A host line may end with `key=value` settings. `disk-cache=none|writeback|writethrough|directsync` makes `stack-install`
+and `stack-apply` set that cache mode, with a matching `io` (`threads` for buffered modes), on the VM's qcow2 and raw disks;
+without it the disk is untouched. `stack-status <host>` prints the disk's cache and io; `stack-restore` brings back the original.
+
 ## Safety rules
 
 - No guest behaviour may hang or crash the host. A host GPU fault, ring reset or QEMU crash is a driver bug to fix, never

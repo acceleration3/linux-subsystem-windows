@@ -7,7 +7,7 @@ Runs on the host under test, from the tree scripts/gpu-test/gpu-test.sh deploy-r
                              with the tree's QEMU, executor and Direct3D runtime on every host GPU, install the
                              tree's driver package and agent in the guest, restart QEMU, and leave the VM running
   render_stack.py apply      the stack is installed already: define the VM again from its current definition with
-                             the tree's paths on every host GPU (hybrid= kept), restart QEMU so it maps the tree's
+                             the tree's paths on every host GPU (hybrid= kept, the disk cache the hosts file names applied), restart QEMU so it maps the tree's
                              executor and modules, and install the tree's driver package when the guest's differs
   render_stack.py restore    put the saved definition, driver package and agent back
   render_stack.py status     what the VM and the guest run
@@ -123,7 +123,8 @@ def command_install(args):
     out = SAVED / "install-logs"
     out.mkdir(exist_ok=True)
     domain.stop()
-    domain.define(matrix.retarget((SAVED / "domain.xml").read_text(), gpus, args.qemu_env))
+    domain.define(matrix.retarget((SAVED / "domain.xml").read_text(), gpus, args.qemu_env,
+                                  disk_cache=args.disk_cache))
     work = matrix.bridge_directory("stack")
     guest = matrix.boot(domain, work, share)
     try:
@@ -172,7 +173,8 @@ def command_apply(args):
     out.mkdir(exist_ok=True)
     domain.stop()
     domain.define(matrix.retarget(domain.definition(), gpus, args.qemu_env,
-                                  matrix.environment_names((SAVED / "domain.xml").read_text())))
+                                  matrix.environment_names((SAVED / "domain.xml").read_text()),
+                                  disk_cache=args.disk_cache))
     work = matrix.bridge_directory("stack-apply")
     guest = matrix.boot(domain, work, share)
     try:
@@ -235,6 +237,8 @@ def command_status(args):
     domain = matrix.Domain()
     print("saved state:", SAVED if SAVED.exists() else "none")
     print("domain:", domain.state())
+    for kind, cache, io in matrix.disk_caches(domain.definition()):
+        print(f"disk: {kind} cache={cache or 'default'} io={io or 'default'}")
     if domain.running():
         pids = subprocess.run(["pgrep", "-f", "qemu-system-x86_64.*guest=lsw"], capture_output=True, text=True).stdout.split()
         if pids:
@@ -254,8 +258,10 @@ def main():
     install = commands.add_parser("install")
     install.add_argument("--no-agent", dest="agent", action="store_false")
     install.add_argument("--qemu-env", action="append", default=[], metavar="NAME=VALUE")
+    install.add_argument("--disk-cache", metavar="MODE")
     apply = commands.add_parser("apply")
     apply.add_argument("--qemu-env", action="append", default=[], metavar="NAME=VALUE")
+    apply.add_argument("--disk-cache", metavar="MODE")
     commands.add_parser("restore")
     commands.add_parser("status")
     args = parser.parse_args()
