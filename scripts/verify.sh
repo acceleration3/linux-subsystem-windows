@@ -12,7 +12,7 @@ BUILD_LOCK="${XDG_RUNTIME_DIR:-/tmp}/lsw-build.lock"
 REMOTE_BASE=".local/share/lsw-gpu-test"
 ORIG_ARGS=("$@")
 
-host="" stack="" filter="" adapters=all bits=64 suite=render gpus="" out="" max_hold=3600 redeploy=0 dry=0 show_queue=0 jobs=2 hold_file="" qemu_env="" env_definition="" smoke=0 bits_given=0 bits2=""
+host="" stack="" filter="" adapters=all bits=64 suite=render gpus="" out="" max_hold=3600 redeploy=0 dry=0 show_queue=0 jobs=2 hold_file="" qemu_env="" env_definition="" smoke=0 bits_given=0 bits2="" guest_timeout=""
 
 usage() {
     cat <<'EOT'
@@ -40,6 +40,8 @@ revision, and leaves the results in DIR/results/<timestamp>.
   --status-url URL          the suite executables report their status to URL, the address of scripts/suite-status/suite_status.py
                             as the VM sees it (default: LSW_SUITE_STATUS_URL; unset: no reports)
   --max-hold SECONDS        the run is killed after this long holding the VM (default 3600)
+  --guest-timeout SECONDS   time one phase may take on one adapter before its remaining rows count as not run
+                            (default: render-run.sh's)
   --qemu-env NAME=VALUE     set NAME in the executor's environment (repeatable; forces a redeploy)
   --redeploy                deploy even when the VM already runs this stack
   --queue                   show the queue of --host and exit
@@ -63,6 +65,7 @@ while [[ $# -gt 0 ]]; do
         --jobs) jobs="$2"; shift ;;
         --out) out="$2"; shift ;;
         --max-hold) max_hold="$2"; shift ;;
+        --guest-timeout) guest_timeout="$2"; shift ;;
         --hold-file) hold_file="$(realpath "$2")"; shift ;;
         --status-url) export LSW_SUITE_STATUS_URL="$2"; shift ;;
         --redeploy) redeploy=1 ;;
@@ -290,6 +293,7 @@ run_inner() {
         [[ ${host} == local ]] && args+=(--adapters "${adapters}")
         [[ -n ${gpus} ]] && args+=(--gpus "${gpus}")
         [[ -n ${hold_file} ]] && args+=(--hold-file "${hold_file}")
+        [[ -n ${guest_timeout} ]] && args+=(--guest-timeout "${guest_timeout}")
         "${HERE}/render-run.sh" "${args[@]}"
         status=$?
     fi
