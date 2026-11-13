@@ -133,6 +133,8 @@ def main():
         run.add_argument("--max-recoveries", type=int, default=5)
         run.add_argument("--silent-seconds", type=int, default=240)
         run.add_argument("--phases", default="all", help="all, or e.g. main:parallel,pacing:serial")
+        run.add_argument("--status-url", default=os.environ.get("LSW_SUITE_STATUS_URL", ""),
+                         help="where the suite executables report their status, as seen from inside the VM")
         if name == "run":
             run.add_argument("--adapter", default="")
             run.add_argument("--tag", required=True)

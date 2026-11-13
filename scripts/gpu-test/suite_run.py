@@ -400,6 +400,9 @@ def segment_lines(ctx, spec, number, filter_text, phase, exclude, jobs):
              f"--jobs {jobs}", "--dump-captures" if args.dump else "",
              f'--adapter "{spec.adapter}"' if spec.adapter else "",
              f"--json r-{tag}-s{number}.json", f"--artifacts art-{tag}", f"--refs {ctx.guest_dir}\\render-refs"]
+    if args.status_url:
+        flags += [f'--status-url "{args.status_url}"', f'--status-run "{args.run_id}"',
+                  f'--status-label "segment {number}{" " + ctx.phase if ctx.phase else ""}"']
     cleanup = [f"if exist r-{tag}-s{number}.json del r-{tag}-s{number}.json",
                f"if exist r-{tag}-s{number}.jsonl del r-{tag}-s{number}.jsonl",
                f"if exist done-{tag}-s{number}.txt del done-{tag}-s{number}.txt"]

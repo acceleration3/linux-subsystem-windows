@@ -122,6 +122,13 @@ display-less adapter through the Windows GPU preference; the suite re-runs itsel
 | `scripts/gpu-test/gpu-test.sh stack-status\|stack-restore <host>` | what stack a remote host runs; put its original stack back |
 | `scripts/gpu-test/gpu-test.sh gpus <host>` | list a host's GPUs |
 | avinspector MCP | live state of a running stack (stalls, connections, surfaces, threads); check it before reading logs |
+| `scripts/suite-status/suite_status.py serve` | receives what the suite executables report and serves `/status`, `/api/machines` and the status page |
+
+Live status: start `scripts/suite-status/suite_status.py serve` on each test machine (port 5190, loopback only; `--bind` opens it)
+and pass `--status-url http://<the VM's gateway to its host>:5190/report` to `verify.sh` or `render-run.sh` (or set
+`LSW_SUITE_STATUS_URL`); each `lsw-suites` process then reports its plan, the checks it starts and their results itself, and a run
+without the option reports nothing. The page at `http://127.0.0.1:5190/` shows this machine and every other machine of the hosts
+file; `--tunnel` reaches their servers through the open ssh masters, `--peer NAME=URL` adds one by hand.
 
 ## Where to look when something breaks
 

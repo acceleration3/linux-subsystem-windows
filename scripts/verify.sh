@@ -37,6 +37,8 @@ revision, and leaves the results in DIR/results/<timestamp>.
   --jobs N                  parallel checks per adapter (default 2)
   --out DIR                 results directory (default DIR/results/<timestamp>)
   --hold-file PATH          check ids (one per line, globs allowed) that are never run
+  --status-url URL          the suite executables report their status to URL, the address of scripts/suite-status/suite_status.py
+                            as the VM sees it (default: LSW_SUITE_STATUS_URL; unset: no reports)
   --max-hold SECONDS        the run is killed after this long holding the VM (default 3600)
   --qemu-env NAME=VALUE     set NAME in the executor's environment (repeatable; forces a redeploy)
   --redeploy                deploy even when the VM already runs this stack
@@ -62,6 +64,7 @@ while [[ $# -gt 0 ]]; do
         --out) out="$2"; shift ;;
         --max-hold) max_hold="$2"; shift ;;
         --hold-file) hold_file="$(realpath "$2")"; shift ;;
+        --status-url) export LSW_SUITE_STATUS_URL="$2"; shift ;;
         --redeploy) redeploy=1 ;;
         --qemu-env) qemu_env+=" $2"; redeploy=1; shift ;;
         --queue) show_queue=1 ;;

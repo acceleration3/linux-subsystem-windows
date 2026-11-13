@@ -213,6 +213,28 @@ class StackEvidence(unittest.TestCase):
         self.assertIn("coredumpctl", scripts[-1])
 
 
+class StatusFlags(unittest.TestCase):
+    def lines(self, status_url, phase="main"):
+        args = types.SimpleNamespace(bits="64", suite="sanity", dump=False, status_url=status_url, run_id="20260101-000000-1-local-all-x64")
+        ctx = types.SimpleNamespace(args=args, guest_dir="C:\\run", phase=phase)
+        return suite_run.segment_lines(ctx, suite_run.Spec("gpu-x64", "uuid:aa", "/nonexistent"), 2, "sanity.env.*", None, False, 2)
+
+    def test_without_a_status_url_the_command_line_has_no_status_flag(self):
+        lines, shown = self.lines("")
+        self.assertNotIn("--status", shown)
+        self.assertFalse(any("--status" in line for line in lines))
+
+    def test_a_status_url_reaches_every_invocation_with_the_run_and_the_segment(self):
+        lines, shown = self.lines("http://gateway:5190/report")
+        self.assertIn('--status-url "http://gateway:5190/report"', shown)
+        self.assertIn('--status-run "20260101-000000-1-local-all-x64"', shown)
+        self.assertIn('--status-label "segment 2 main"', shown)
+        self.assertTrue(any(line.startswith("lsw-suites64.exe") and shown in line for line in lines))
+
+    def test_a_run_without_phases_labels_the_segment_only(self):
+        self.assertIn('--status-label "segment 2"', self.lines("http://gateway:5190/report", phase=None)[1])
+
+
 class LogTail(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()

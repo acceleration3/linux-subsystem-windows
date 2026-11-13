@@ -68,6 +68,8 @@ HTML report: build-render-report/<timestamp>/report.html
                               no references, audit or report
   --hold-file PATH            check ids (one per line) that are never run, e.g. rows that hang the GPU on purpose
   --max-recoveries N          a dead VM is restarted and the run resumed at most N times per host (default 5)
+  --status-url URL            the suite executables report their status to URL, the address of scripts/suite-status/suite_status.py
+                              as the VM sees it (default: LSW_SUITE_STATUS_URL; unset: no reports)
   --guest-timeout SECONDS     limit of one guest run with --parallel (default 3600); each adapter of a serial phase gets its own
   --no-dump-captures          skip the capture dumps (the report then has no images and there is no audit)
   --images all|differing|failed|none  which rows get images in the report (default all)
@@ -103,6 +105,7 @@ while [[ $# -gt 0 ]]; do
         --suite) suite="$2"; shift ;;
         --hold-file) hold_file="$2"; shift ;;
         --max-recoveries) max_recoveries="$2"; shift ;;
+        --status-url) export LSW_SUITE_STATUS_URL="$2"; shift ;;
         --no-dump-captures) dump=0 ;;
         --images) images="$2"; shift ;;
         --reuse-refs) reuse_refs="$2"; shift ;;
