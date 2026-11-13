@@ -6,6 +6,7 @@
 #include "core/report_printer.hpp"
 #include "core/machine_lock.hpp"
 #include "core/result_log.hpp"
+#include "core/status_reporter.hpp"
 
 #include <chrono>
 #include <mutex>
@@ -37,11 +38,14 @@ private:
 
     void write_progress(bool complete, bool force);
 
+    void report_status(const std::vector<Planned>& plan, int jobs);
+
     const Registry& registry_;
     const Options& options_;
     ReportPrinter printer_;
     ResultLog log_;
     MachineLock machine_lock_;
+    StatusReporter status_;
     std::mutex mutex_;
     std::vector<CheckResult> results_;
     std::vector<bool> done_;

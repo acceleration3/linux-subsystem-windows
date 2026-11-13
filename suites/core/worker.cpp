@@ -112,7 +112,8 @@ Worker::Worker(std::filesystem::path artifacts) : artifacts_(std::move(artifacts
     exe_.assign(buffer, length);
 }
 
-CheckResult Worker::run(const std::string& id, int timeout_seconds) const {
+CheckResult Worker::run(const std::string& id, int timeout_seconds,
+                        const std::function<void(std::uint32_t)>& spawned) const {
     CheckResult result;
     result.id = id;
     const auto begin = std::chrono::steady_clock::now();
@@ -211,6 +212,9 @@ CheckResult Worker::run(const std::string& id, int timeout_seconds) const {
         return finish(Status::Crash, "cannot place the worker in its job");
     }
     ::ResumeThread(thread.get());
+    if (spawned) {
+        spawned(result.pid);
+    }
 
     auto deadline = timeout_ms_ > 0 ? begin + std::chrono::milliseconds(timeout_ms_) : begin + std::chrono::seconds(timeout_seconds);
     std::string output;

@@ -16,9 +16,11 @@ add_library(suite_core OBJECT
     run_guard.cpp
     runner.cpp
     single_check.cpp
+    status_http.cpp
+    status_reporter.cpp
     text.cpp
     worker.cpp
     dxgi_adapters.cpp
 )
 target_include_directories(suite_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
-target_link_libraries(suite_core PUBLIC LSW::CompileOptions dxgi setupapi cfgmgr32 advapi32 user32 dwmapi)
+target_link_libraries(suite_core PUBLIC LSW::CompileOptions dxgi setupapi cfgmgr32 advapi32 user32 dwmapi winhttp)

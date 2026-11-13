@@ -5,7 +5,10 @@
 #include "core/exe_identity.hpp"
 #include "core/json_report.hpp"
 #include "core/run_guard.hpp"
+#include "core/status_http.hpp"
 #include "core/worker.hpp"
+
+#include <process.h>
 
 #include <algorithm>
 #include <atomic>
@@ -167,22 +170,24 @@ void Runner::execute(const std::vector<Planned>& plan, std::size_t begin, std::s
             std::string started;
             std::vector<std::string> notes;
             CheckResult result;
+            const auto spawned = [&](std::uint32_t pid) { status_.check_started(planned.check->id, pid); };
             if (machine_wide) {
                 const std::lock_guard<MachineLock> held(machine_lock_);
                 notes = guarded(planned) ? desktop.sweep() : std::vector<std::string>();
                 started = utc_now();
                 log_.append_start(planned.check->id, started);
-                result = worker.run(planned.check->id, timeout);
+                result = worker.run(planned.check->id, timeout, spawned);
             } else {
                 notes = guarded(planned) ? desktop.sweep() : std::vector<std::string>();
                 started = utc_now();
                 log_.append_start(planned.check->id, started);
-                result = worker.run(planned.check->id, timeout);
+                result = worker.run(planned.check->id, timeout, spawned);
             }
             result.notes.insert(result.notes.begin(), notes.begin(), notes.end());
             result.suite = planned.suite->name();
             result.tags = planned.check->tags;
             result.started = started;
+            status_.check_finished(result);
             const std::lock_guard<std::mutex> lock(mutex_);
             log_.append(result);
             results_[index] = std::move(result);
@@ -201,6 +206,38 @@ void Runner::execute(const std::vector<Planned>& plan, std::size_t begin, std::s
     for (std::thread& thread : pool) {
         thread.join();
     }
+}
+
+void Runner::report_status(const std::vector<Planned>& plan, int jobs) {
+    if (options_.status_url.empty()) {
+        return;
+    }
+    StatusReporter::Identity identity;
+    identity.adapter = JsonReport::adapter_json();
+    const Json* under_test = identity.adapter.find("device_under_test");
+    for (const char* key : {"vulkan_uuid", "luid", "name"}) {
+        const Json* value = identity.adapter.find(key);
+        if (identity.part.empty() && value != nullptr) {
+            identity.part = value->as_string();
+        }
+    }
+    identity.part = (identity.part.empty() ? "default" : identity.part) + (under_test != nullptr ? "-warp" : "") +
+                    "-x" + std::to_string(ExeIdentity::kBitness);
+    identity.run = options_.status_run.empty() ? started_ : options_.status_run;
+    identity.invocation = started_ + "-" + std::to_string(_getpid());
+    identity.label = options_.status_label;
+    identity.exe = ExeIdentity::name();
+    identity.bitness = ExeIdentity::kBitness;
+    identity.suites = options_.suites;
+    identity.started = started_;
+    identity.phase = options_.phase;
+    identity.jobs = jobs;
+    std::vector<std::string> ids;
+    ids.reserve(plan.size());
+    for (const Planned& planned : plan) {
+        ids.push_back(planned.check->id);
+    }
+    status_.open(std::make_unique<StatusHttp>(options_.status_url), std::move(identity), std::move(ids));
 }
 
 int Runner::run() {
@@ -239,6 +276,7 @@ int Runner::run() {
             std::fprintf(stderr, "%s: cannot write %s\n", ExeIdentity::name().c_str(), log_path.string().c_str());
         }
     }
+    report_status(plan, jobs);
     execute(plan, 0, free_end, jobs);
     execute(plan, free_end, exclusive_end, 1, true);
     execute(plan, exclusive_end, serial_end, 1);
@@ -257,13 +295,18 @@ int Runner::run() {
         }
     }
     printer_.summary(passed, failed, skipped);
+    bool written = true;
     if (!options_.json.empty()) {
         const JsonReport report(ExeIdentity::name(), started_);
-        if (!report.write(options_.json, results_, true)) {
+        written = report.write(options_.json, results_, true);
+        if (!written) {
             std::fprintf(stderr, "%s: cannot write %s\n", ExeIdentity::name().c_str(),
                          options_.json.string().c_str());
-            return 2;
         }
+    }
+    status_.close(true);
+    if (!written) {
+        return 2;
     }
     return failed > 0 ? 1 : 0;
 }

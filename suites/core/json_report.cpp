@@ -41,6 +41,25 @@ Json JsonReport::check_json(const CheckResult& result) {
     return check;
 }
 
+Json JsonReport::adapter_json() {
+    Json adapter = Json::object();
+    const char* under_test = std::getenv("LSW_RENDER_DUT");
+    if (under_test != nullptr && std::string(under_test) == "warp") {
+        adapter.set("device_under_test", "WARP");
+    }
+    for (const auto& [key, name] : {std::pair<const char*, const char*>{"index", "LSW_SUITES_ADAPTER_INDEX"},
+                                    {"name", "LSW_SUITES_ADAPTER_NAME"},
+                                    {"luid", "LSW_SUITES_ADAPTER_LUID"},
+                                    {"vulkan_uuid", "LSW_SUITES_ADAPTER_UUID"},
+                                    {"pci", "LSW_SUITES_ADAPTER_PCI"}}) {
+        const char* value = std::getenv(name);
+        if (value != nullptr && *value != '\0') {
+            adapter.set(key, std::string(value));
+        }
+    }
+    return adapter;
+}
+
 bool JsonReport::write(const std::filesystem::path& path,
                        const std::vector<CheckResult>& results, bool complete) const {
     Json checks = Json::array();
@@ -64,22 +83,7 @@ bool JsonReport::write(const std::filesystem::path& path,
     Json root = Json::object();
     root.set("exe", exe_);
     root.set("bitness", ExeIdentity::kBitness);
-    Json adapter = Json::object();
-    const char* under_test = std::getenv("LSW_RENDER_DUT");
-    if (under_test != nullptr && std::string(under_test) == "warp") {
-        adapter.set("device_under_test", "WARP");
-    }
-    for (const auto& [key, name] : {std::pair<const char*, const char*>{"index", "LSW_SUITES_ADAPTER_INDEX"},
-                                    {"name", "LSW_SUITES_ADAPTER_NAME"},
-                                    {"luid", "LSW_SUITES_ADAPTER_LUID"},
-                                    {"vulkan_uuid", "LSW_SUITES_ADAPTER_UUID"},
-                                    {"pci", "LSW_SUITES_ADAPTER_PCI"}}) {
-        const char* value = std::getenv(name);
-        if (value != nullptr && *value != '\0') {
-            adapter.set(key, std::string(value));
-        }
-    }
-    root.set("adapter", std::move(adapter));
+    root.set("adapter", adapter_json());
     root.set("driver", Json::object());
     root.set("started", started_);
     root.set("complete", complete);

@@ -27,6 +27,9 @@ struct Options {
     bool list_adapters = false;
     std::string adapter;
     std::string device_under_test = "av";
+    std::string status_url;
+    std::string status_run;
+    std::string status_label;
 
     [[nodiscard]] static std::optional<Options> parse(int argc, char** argv, std::string& error);
 

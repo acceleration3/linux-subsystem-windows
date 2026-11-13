@@ -26,7 +26,8 @@ std::string Options::usage() {
            "                  [--tag TAG] [--phase all|main|pacing] [--jobs N] [--timeout S] [--repeat N] [--shuffle SEED]\n"
            "                  [--json FILE] [--artifacts DIR] [--skip-apis API[,API]] [--refs DIR]\n"
            "                  [--dump-captures] [--device-under-test av|warp]\n"
-           "                  [--adapter first|N|luid:HEX|uuid:HEX|name:SUBSTR] [--list-adapters]\n";
+           "                  [--adapter first|N|luid:HEX|uuid:HEX|name:SUBSTR] [--list-adapters]\n"
+           "                  [--status-url URL] [--status-run NAME] [--status-label TEXT]\n";
 }
 
 std::optional<Options> Options::parse(int argc, char** argv, std::string& error) {
@@ -85,6 +86,12 @@ std::optional<Options> Options::parse(int argc, char** argv, std::string& error)
                 return std::nullopt;
             }
             options.device_under_test = value;
+        } else if (arg == "--status-url") {
+            options.status_url = value;
+        } else if (arg == "--status-run") {
+            options.status_run = value;
+        } else if (arg == "--status-label") {
+            options.status_label = value;
         } else if (arg == "--run-one") {
             options.run_one = value;
         } else if (arg == "--jobs" || arg == "--timeout" || arg == "--repeat") {

@@ -2,7 +2,9 @@
 
 #include "core/check_result.hpp"
 
+#include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -12,7 +14,8 @@ class Worker {
 public:
     explicit Worker(std::filesystem::path artifacts);
 
-    [[nodiscard]] CheckResult run(const std::string& id, int timeout_seconds) const;
+    [[nodiscard]] CheckResult run(const std::string& id, int timeout_seconds,
+                                  const std::function<void(std::uint32_t)>& spawned = {}) const;
 
     void set_exe(const std::filesystem::path& exe) { exe_ = exe.wstring(); }
 
