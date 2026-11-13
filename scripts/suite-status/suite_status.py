@@ -17,6 +17,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REASON_CHARS = 400
 FAILURES_KEPT = 600
 RATE_WINDOW = 300.0
+RATE_MIN_SPAN = 10.0
 BODY_LIMIT = 64 << 20
 
 
@@ -97,7 +98,7 @@ class Invocation:
         while self.finish_times and now - self.finish_times[0] > RATE_WINDOW:
             self.finish_times.popleft()
         span = min(RATE_WINDOW, now - self.first_report)
-        if span < 1.0:
+        if span < RATE_MIN_SPAN:
             return None
         return round(len(self.finish_times) * 60.0 / span, 1)
 

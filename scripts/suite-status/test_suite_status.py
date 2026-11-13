@@ -114,7 +114,9 @@ class StoreTests(unittest.TestCase):
 
     def test_the_rate_counts_the_results_of_the_last_five_minutes(self):
         self.store.report(batch(1, begin_record=begin(PLAN * 50), done=0))
-        self.clock.now += 60
+        self.clock.now += 5
+        self.assertIsNone(self.only()["checks_per_minute"])
+        self.clock.now += 55
         self.store.report(batch(2, [finish(PLAN[0], index) for index in range(30)], done=30))
         self.assertEqual(self.only()["checks_per_minute"], 30.0)
         self.clock.now += 540
