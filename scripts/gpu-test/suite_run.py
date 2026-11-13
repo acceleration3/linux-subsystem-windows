@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import threading
 import time
+import urllib.parse
 import zipfile
 
 import lsw_link
@@ -764,6 +765,29 @@ def discover(ctx):
     return isolated, others
 
 
+def expected_parts(args, specs):
+    parts = []
+    for spec in specs:
+        kind, _, value = spec.adapter.partition(":")
+        if kind == "uuid" and value:
+            parts.append({"part": f"{value.replace('-', '').lower()}-x{args.bits}", "adapter": spec.name.removesuffix(f"-x{args.bits}"),
+                          "bits": int(args.bits)})
+    return parts
+
+
+def announce(ctx, specs):
+    parts = expected_parts(ctx.args, specs)
+    if not ctx.args.status_url or not parts:
+        return None
+    port = urllib.parse.urlsplit(ctx.args.status_url).port or 80
+    body = json.dumps({"run": ctx.args.run_id, "parts": parts})
+    script = ("curl -s -m 3 -o /dev/null -H 'Content-Type: application/json' --data-binary @- "
+              f"http://127.0.0.1:{port}/expect <<'LSW_EXPECT'\n{body}\nLSW_EXPECT\n")
+    thread = threading.Thread(target=ctx.machine.sh, args=(script, 10), daemon=True)
+    thread.start()
+    return thread
+
+
 def expected_rows(phases, isolated, others):
     rows = []
     for entry in phases:
@@ -776,6 +800,7 @@ def execute(args, specs):
     deadline = Deadline(ctx, args.timeout)
     watcher = threading.Thread(target=ctx.supervise, daemon=True)
     watcher.start()
+    announce(ctx, specs)
     phases = [p.split(":") + ["parallel"] for p in args.phases.split(",")]
     isolated = others = None
     expected = []

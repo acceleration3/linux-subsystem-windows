@@ -235,6 +235,40 @@ class StatusFlags(unittest.TestCase):
         self.assertIn('--status-label "segment 2"', self.lines("http://gateway:5190/report", phase=None)[1])
 
 
+class StatusAnnouncement(unittest.TestCase):
+    def context(self, status_url):
+        scripts = []
+        args = types.SimpleNamespace(bits="32", status_url=status_url, run_id="20260101-000000-1-local-all-xboth")
+        machine = types.SimpleNamespace(sh=lambda script, timeout=300: scripts.append((script, timeout)) or (0, ""))
+        return types.SimpleNamespace(args=args, machine=machine), scripts
+
+    def specs(self):
+        return [suite_run.Spec("gpu-a-x32", "uuid:00AA-00bb", "/nonexistent"), suite_run.Spec("gpu-b-x32", "uuid:cc", "/nonexistent")]
+
+    def test_the_expected_parts_are_keyed_like_the_executable_keys_its_reports(self):
+        ctx, _ = self.context("http://gateway:5190/report")
+        self.assertEqual(suite_run.expected_parts(ctx.args, self.specs()),
+                         [{"part": "00aa00bb-x32", "adapter": "gpu-a", "bits": 32}, {"part": "cc-x32", "adapter": "gpu-b", "bits": 32}])
+        self.assertEqual(suite_run.expected_parts(ctx.args, [suite_run.Spec("x-x32", "", "/nonexistent")]), [])
+
+    def test_the_run_and_its_parts_are_posted_to_the_status_server_on_the_vm_host(self):
+        ctx, scripts = self.context("http://gateway:5190/report")
+        suite_run.announce(ctx, self.specs()).join(5)
+        script, timeout = scripts[0]
+        self.assertIn("http://127.0.0.1:5190/expect", script)
+        self.assertIn("curl -s -m 3", script)
+        self.assertLessEqual(timeout, 10)
+        body = json.loads(script.splitlines()[1])
+        self.assertEqual((body["run"], [part["part"] for part in body["parts"]]), ("20260101-000000-1-local-all-xboth", ["00aa00bb-x32", "cc-x32"]))
+
+    def test_nothing_is_posted_without_a_status_url_or_without_a_known_adapter(self):
+        ctx, scripts = self.context("")
+        self.assertIsNone(suite_run.announce(ctx, self.specs()))
+        ctx, scripts_known = self.context("http://gateway:5190/report")
+        self.assertIsNone(suite_run.announce(ctx, [suite_run.Spec("x-x32", "", "/nonexistent")]))
+        self.assertEqual(scripts + scripts_known, [])
+
+
 class LogTail(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
