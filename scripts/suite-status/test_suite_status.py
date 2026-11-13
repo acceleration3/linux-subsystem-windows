@@ -50,7 +50,7 @@ class StoreTests(unittest.TestCase):
         self.store = suite_status.Store("here", silent_after=30.0, runs_kept=2, clock=self.clock)
 
     def only(self):
-        return self.store.status()["runs"][0]["parts"][0]["invocations"][0]
+        return self.store.status()["runs"][0]["parts"][0]
 
     def test_no_report_gives_no_run(self):
         status = self.store.status()
@@ -63,10 +63,10 @@ class StoreTests(unittest.TestCase):
         self.clock.now += 7
         self.assertEqual(self.store.report(batch(3, [finish(PLAN[0], 5), start(PLAN[1], 7)], done=1))[0], 200)
         shown = self.only()
-        self.assertEqual((shown["planned"], shown["done"], shown["counts"]), (4, 1, {"ok": 1}))
+        self.assertEqual((shown["total"], shown["done"], shown["counts"]), (4, 1, {"ok": 1, "running": 2, "not_run": 1}))
         self.assertEqual([(entry["id"], entry["pid"], entry["seconds"]) for entry in shown["running"]], [(PLAN[2], 6, 7), (PLAN[1], 7, 0)])
         self.assertEqual(shown["apis"], {"d3d11": {"planned": 2, "done": 1, "bad": 0}, "vk": {"planned": 2, "done": 0, "bad": 0}})
-        self.assertEqual((shown["state"], shown["label"], shown["bits"]), ("running", "segment 1 main", 64))
+        self.assertEqual((shown["state"], shown["segments"][0]["label"], shown["bits"]), ("running", "segment 1 main", 64))
         part = self.store.status()["runs"][0]["parts"][0]
         self.assertEqual((part["part"], part["adapter"], part["state"]), ("aa-x64", "Adapter A", "running"))
 
@@ -88,7 +88,7 @@ class StoreTests(unittest.TestCase):
         again = batch(8, [finish(PLAN[0], 1, ago_ms=4000), finish(PLAN[1], 2), start(PLAN[2], 3, ago_ms=2500)], done=2, begin_record=begin(PLAN))
         self.assertEqual(self.store.report(again)[0], 200)
         shown = self.only()
-        self.assertEqual((shown["done"], shown["planned"]), (2, 4))
+        self.assertEqual((shown["done"], shown["total"]), (2, 4))
         self.assertEqual([(entry["id"], entry["seconds"]) for entry in shown["running"]], [(PLAN[2], 2)])
         self.assertEqual(self.store.report(batch(9, [finish(PLAN[2], 3)], done=3))[0], 200)
 
@@ -100,7 +100,7 @@ class StoreTests(unittest.TestCase):
         again = batch(5, [finish(PLAN[0], 1), finish(PLAN[1], 2), finish(PLAN[2], 3)], done=3, begin_record=begin(PLAN))
         self.assertEqual(self.store.report(again)[0], 200)
         shown = self.only()
-        self.assertEqual((shown["done"], shown["resends"]), (3, 1))
+        self.assertEqual((shown["done"], shown["segments"][0]["resends"]), (3, 1))
 
     def test_totals_that_do_not_match_the_received_results_are_refused(self):
         self.store.report(batch(1, begin_record=begin(PLAN), done=0))
@@ -152,7 +152,7 @@ class StoreTests(unittest.TestCase):
         self.store.report(batch(1, begin_record=dict(begin(PLAN), bitness=32), done=0, part="aa-x32", invocation="inv-3"))
         parts = self.store.status()["runs"][0]["parts"]
         self.assertEqual([part["part"] for part in parts], ["aa-x32", "aa-x64"])
-        self.assertEqual([(inv["label"], inv["planned"]) for inv in parts[1]["invocations"]], [("segment 1 main", 2), ("segment 2 isolated", 2)])
+        self.assertEqual([(inv["label"], inv["planned"]) for inv in parts[1]["segments"]], [("segment 1 main", 2), ("segment 2 isolated", 2)])
         self.assertEqual(parts[0]["bits"], 32)
 
     def test_finished_runs_stay_and_only_the_latest_are_kept(self):
@@ -160,6 +160,86 @@ class StoreTests(unittest.TestCase):
             self.clock.now += 100
             self.store.report(batch(1, begin_record=begin(PLAN), done=0, run=f"run-{index}"))
         self.assertEqual([run["run"] for run in self.store.status()["runs"]], ["run-2", "run-1"])
+
+
+END = {"t": "end", "ago_ms": 0, "complete": True, "crashed": 0, "timed_out": 0, "failed": 0}
+
+
+class RollupTests(unittest.TestCase):
+    def setUp(self):
+        self.clock = Clock()
+        self.store = suite_status.Store("here", silent_after=30.0, clock=self.clock)
+
+    def part(self, index=0):
+        return self.store.status()["runs"][0]["parts"][index]
+
+    def die_then_resume(self):
+        self.store.report(batch(1, begin_record=begin(PLAN, "segment 1 main"), done=0))
+        self.store.report(batch(2, [finish(PLAN[0], 1, "fail", "pixel differs"), start(PLAN[1], 2), start(PLAN[2], 3)], done=1))
+        self.clock.now += 120
+        self.store.report(batch(1, begin_record=begin(PLAN[2:], "segment 2 main"), done=0, invocation="inv-2"))
+
+    def test_a_resume_after_a_silent_segment_keeps_the_whole_plan_and_the_earlier_results(self):
+        self.die_then_resume()
+        self.store.report(batch(2, [finish(PLAN[2], 9), start(PLAN[3], 10)], done=1, invocation="inv-2"))
+        shown = self.part()
+        self.assertEqual((shown["total"], shown["done"], shown["state"]), (4, 2, "running"))
+        self.assertEqual(shown["counts"], {"fail": 1, "lost": 1, "ok": 1, "running": 1})
+        self.assertEqual([(segment["label"], segment["state"], segment["done"], segment["planned"]) for segment in shown["segments"]],
+                         [("segment 1 main", "silent", 1, 4), ("segment 2 main", "running", 1, 2)])
+        self.assertEqual([entry["id"] for entry in shown["running"]], [PLAN[3]])
+
+    def test_a_check_running_when_its_segment_went_silent_is_lost_until_a_later_segment_reports_it(self):
+        self.die_then_resume()
+        lost = [entry for entry in self.part()["failures"] if entry["status"] == "lost"]
+        self.assertEqual([(entry["id"], entry["segment"]) for entry in lost], [(PLAN[1], "segment 1 main"), (PLAN[2], "segment 1 main")])
+        self.store.report(batch(1, begin_record=begin(PLAN[1:2], "segment 3"), done=0, invocation="inv-3"))
+        self.store.report(batch(2, [finish(PLAN[1], 20, "crash", "exception"), END], done=1, invocation="inv-3"))
+        shown = self.part()
+        self.assertEqual(shown["counts"], {"fail": 1, "crash": 1, "lost": 1, "not_run": 1})
+        self.assertEqual([(entry["id"], entry["status"], entry["segment"]) for entry in shown["failures"]],
+                         [(PLAN[0], "fail", "segment 1 main"), (PLAN[1], "crash", "segment 3"), (PLAN[2], "lost", "segment 1 main")])
+
+    def test_a_check_still_running_in_the_only_segment_that_turns_silent_is_lost(self):
+        self.store.report(batch(1, begin_record=begin(PLAN), done=0))
+        self.store.report(batch(2, [start(PLAN[0], 1)], done=0))
+        self.assertEqual(self.part()["counts"], {"running": 1, "not_run": 3})
+        self.clock.now += 31
+        self.assertEqual(self.part()["counts"], {"lost": 1, "not_run": 3})
+
+    def test_the_same_check_reported_twice_counts_once_with_its_latest_result(self):
+        self.store.report(batch(1, begin_record=begin(PLAN[:2], "segment 1"), done=0))
+        self.store.report(batch(2, [finish(PLAN[0], 1, "crash", "exception"), finish(PLAN[1], 2), END], done=2))
+        self.store.report(batch(1, begin_record=begin(PLAN[:1], "segment 2"), done=0, invocation="inv-2"))
+        self.store.report(batch(2, [finish(PLAN[0], 3), END], done=1, invocation="inv-2"))
+        shown = self.part()
+        self.assertEqual((shown["total"], shown["done"], shown["counts"], shown["failures"]), (2, 2, {"ok": 2}, []))
+        self.assertEqual(shown["apis"], {"d3d11": {"planned": 2, "done": 2, "bad": 0}})
+
+    def test_the_rate_of_a_part_counts_the_results_of_all_its_segments(self):
+        self.store.report(batch(1, begin_record=begin(PLAN[:2], "segment 1"), done=0))
+        self.clock.now += 30
+        self.store.report(batch(2, [finish(PLAN[0], 1), finish(PLAN[1], 2), END], done=2))
+        self.store.report(batch(1, begin_record=begin(PLAN[2:], "segment 2"), done=0, invocation="inv-2"))
+        self.clock.now += 30
+        self.store.report(batch(2, [finish(PLAN[2], 3)], done=1, invocation="inv-2"))
+        self.assertEqual(self.part()["checks_per_minute"], 3.0)
+
+    def test_an_expected_part_that_never_reports_is_shown_as_never_reported(self):
+        announced = {"run": "run-1", "parts": [{"part": "aa-x64", "adapter": "adapter-a", "bits": 64}, {"part": "bb-x64", "adapter": "adapter-b", "bits": 64}]}
+        self.assertEqual(self.store.expect(announced)[0], 200)
+        run = self.store.status()["runs"][0]
+        self.assertEqual((run["state"], [part["state"] for part in run["parts"]]), ("never_reported", ["never_reported", "never_reported"]))
+        self.store.report(batch(1, begin_record=begin(PLAN), done=0))
+        self.store.report(batch(2, [finish(PLAN[0], 1, "fail", "x")], done=1))
+        run = self.store.status()["runs"][0]
+        self.assertEqual([(part["part"], part["state"], part["adapter"]) for part in run["parts"]],
+                         [("aa-x64", "running", "Adapter A"), ("bb-x64", "never_reported", "adapter-b")])
+        self.assertEqual(run["rollup"], {"parts": 2, "expected": 2, "never_reported": 1, "total": 4, "done": 1, "counts": {"fail": 1, "not_run": 3}})
+
+    def test_a_malformed_announcement_is_refused(self):
+        self.assertEqual(self.store.expect({"run": "r"})[0], 400)
+        self.assertEqual(self.store.expect([])[0], 400)
 
 
 class ServerTests(unittest.TestCase):
@@ -198,8 +278,13 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(self.post("/report", batch(3, [finish(PLAN[0], 1)], done=1, begin_record=begin(PLAN))), 200)
         self.assertEqual(self.post("/report", batch(4, [start(PLAN[1], 2)], done=1)), 200)
         status = json.loads(self.get("/status"))
-        shown = status["runs"][0]["parts"][0]["invocations"][0]
+        shown = status["runs"][0]["parts"][0]
         self.assertEqual((status["machine"], status["reports"], shown["done"], shown["running"][0]["id"]), ("here", 3, 1, PLAN[1]))
+
+    def test_an_announcement_posted_to_the_server_shows_the_expected_part(self):
+        self.assertEqual(self.post("/expect", {"run": "run-1", "parts": [{"part": "bb-x32", "adapter": "adapter-b", "bits": 32}]}), 200)
+        part = json.loads(self.get("/status"))["runs"][0]["parts"][0]
+        self.assertEqual((part["part"], part["state"], part["bits"]), ("bb-x32", "never_reported", 32))
 
     def test_a_report_to_another_path_or_without_json_is_refused(self):
         self.assertEqual(self.post("/status", batch(1, begin_record=begin(PLAN))), 404)

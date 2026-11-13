@@ -7,13 +7,13 @@
 <style>
 :root {
   --bg: #f4f5f7; --panel: #ffffff; --line: #e2e5ea; --text: #1b1f27; --dim: #667085; --faint: #98a2b3;
-  --ok: #2e9e63; --fail: #d6453d; --timeout: #d98a1c; --crash: #a23bbf; --skip: #9aa4b2; --todo: #e6e9ee;
+  --ok: #2e9e63; --fail: #d6453d; --timeout: #d98a1c; --crash: #a23bbf; --skip: #9aa4b2; --lost: #7a4a2b; --todo: #e6e9ee;
   --accent: #3466d6; --chip: #eef1f5; --shadow: 0 1px 2px rgba(16,24,40,.06), 0 4px 14px rgba(16,24,40,.05);
 }
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #0f1216; --panel: #171b21; --line: #272d36; --text: #e7eaef; --dim: #9aa4b2; --faint: #6b7584;
-    --ok: #3fb97a; --fail: #ef6259; --timeout: #e6a23c; --crash: #c56be0; --skip: #5d6775; --todo: #242a33;
+    --ok: #3fb97a; --fail: #ef6259; --timeout: #e6a23c; --crash: #c56be0; --skip: #5d6775; --lost: #c08a5f; --todo: #242a33;
     --accent: #6f9bff; --chip: #20262e; --shadow: none;
   }
 }
@@ -83,6 +83,21 @@ input.find { width: 100%; margin-top: 6px; padding: 6px 9px; border-radius: 7px;
 .now .item .id { flex: 1; min-width: 0; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 12.5px; overflow-wrap: anywhere; }
 .now .item .for { color: var(--dim); font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 12.5px; }
 .now .more { padding: 4px 10px; color: var(--faint); font-size: 12px; border-top: 1px solid var(--line); }
+.bar .lost { background: var(--lost); }
+.bar.thin { height: 6px; margin: 4px 0 6px; }
+.figures .lost b, .row .state.lost { color: var(--lost); }
+.live.never { background: var(--fail); }
+.statetext.never_reported { color: var(--fail); font-weight: 600; }
+.part.never { background: color-mix(in srgb, var(--fail) 7%, transparent); margin: 0 -8px; padding-left: 8px; padding-right: 8px; border-radius: 8px; }
+.part .hint { color: var(--dim); font-size: 12.5px; margin-top: 4px; }
+.rollup { margin: -2px 0 8px; }
+.rollup .figures { font-size: 13px; }
+.figures .never b { color: var(--fail); }
+.segs .seg { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 5px 10px; font-size: 12.5px; }
+.segs .seg + .seg { border-top: 1px solid var(--line); }
+.segs .seg .label { font-weight: 600; }
+.segs .seg .count { margin-left: auto; color: var(--dim); font-variant-numeric: tabular-nums; }
+.row .from { grid-column: 2; color: var(--faint); font-size: 12px; }
 @media (max-width: 520px) {
   header { padding: 14px 12px 4px; }
   main { padding: 8px 8px 28px; gap: 10px; }
@@ -90,7 +105,7 @@ input.find { width: 100%; margin-top: 6px; padding: 6px 9px; border-radius: 7px;
   .inv { padding: 8px; }
   .figures { gap: 4px 12px; }
   .row { grid-template-columns: 1fr; }
-  .row .why { grid-column: 1; }
+  .row .why, .row .from { grid-column: 1; }
 }
 </style>
 </head>
@@ -101,7 +116,9 @@ input.find { width: 100%; margin-top: 6px; padding: 6px 9px; border-radius: 7px;
 </header>
 <main id="machines"><div class="empty">reading the machines…</div></main>
 <script>
-const order = ["ok", "fail", "timeout", "crash", "skip"];
+const bars = ["ok", "fail", "timeout", "crash", "lost", "skip", "running"];
+const shown = ["ok", "fail", "timeout", "crash", "lost", "skip", "running", "not_run"];
+const names = {ok: "ok", fail: "fail", timeout: "timeout", crash: "crash", lost: "lost", skip: "skip", running: "running", not_run: "not yet run"};
 const runningShown = 8;
 const open = new Set();
 const finds = new Map();
@@ -124,122 +141,151 @@ function clock(text) {
 }
 function stateText(thing) {
   if (thing.state === "running") return "running";
+  if (thing.state === "never_reported") return "never reported";
   if (thing.state === "silent") return "silent since " + clock(thing.silent_since);
   if (thing.end) return (thing.end.complete ? "finished " : "ended incomplete ") + clock(thing.end.time);
   return "finished";
 }
 function dot(state) {
-  return el("span", "live" + (state === "running" ? " on" : state === "silent" ? " silent" : " done"));
+  return el("span", "live" + (state === "running" ? " on" : state === "silent" ? " silent" : state === "never_reported" ? " never" : " done"));
 }
-function failuresNode(key, inv) {
-  const total = inv.failures.length + inv.failures_cut;
+function barNode(counts, total, thin) {
+  const bar = el("div", thin ? "bar thin" : "bar");
+  for (const state of bars) {
+    const count = counts[state] || 0;
+    if (!count || !total) continue;
+    const piece = el("i", state);
+    piece.style.width = (100 * count / total) + "%";
+    piece.title = names[state] + " " + count;
+    bar.append(piece);
+  }
+  return bar;
+}
+function figuresNode(counts, total, done) {
+  const figures = el("div", "figures");
+  const first = el("span");
+  first.append(el("b", "", String(done)), " of " + total + " done");
+  figures.append(first);
+  for (const state of shown) {
+    const count = counts[state] || 0;
+    if (!count && state !== "ok" && state !== "fail") continue;
+    const item = el("span", state);
+    item.append(el("b", "", String(count)), " " + names[state]);
+    figures.append(item);
+  }
+  return figures;
+}
+function failuresNode(key, part) {
+  const total = part.failures.length + part.failures_cut;
   const box = el("details");
   box.open = open.has(key);
   box.addEventListener("toggle", () => box.open ? open.add(key) : open.delete(key));
   box.append(el("summary", "", total + " not passing"));
   const find = el("input", "find");
-  find.placeholder = "filter by id or reason";
+  find.placeholder = "filter by id, reason or segment";
   find.value = finds.get(key) || "";
   const rows = el("div", "rows");
   const fill = () => {
     const needle = find.value.toLowerCase();
     finds.set(key, find.value);
     rows.replaceChildren();
-    for (const failure of inv.failures) {
-      if (needle && !(failure.id + " " + failure.reason).toLowerCase().includes(needle)) continue;
+    for (const failure of part.failures) {
+      if (needle && !(failure.id + " " + failure.reason + " " + failure.segment + " " + failure.status).toLowerCase().includes(needle)) continue;
       const row = el("div", "row");
       row.append(el("span", "state " + failure.status, failure.status), el("span", "id", failure.id));
       if (failure.reason) row.append(el("span", "why", failure.reason));
+      row.append(el("span", "from", failure.segment));
       rows.append(row);
     }
-    if (inv.failures_cut) rows.append(el("div", "row", "… and " + inv.failures_cut + " more not listed"));
+    if (part.failures_cut) rows.append(el("div", "row", "… and " + part.failures_cut + " more not listed"));
   };
   find.addEventListener("input", fill);
   fill();
   box.append(find, rows);
   return box;
 }
-function invocationNode(key, inv) {
-  const node = el("div", "inv");
-  const name = el("div", "invname");
-  name.append(dot(inv.state));
-  name.append(el("span", "label", inv.label || "started " + clock(inv.first_report)));
-  for (const suite of inv.suites) name.append(el("span", "badge", suite));
-  if (inv.jobs) name.append(el("span", "badge", inv.jobs + " at a time"));
-  name.append(el("span", "statetext " + inv.state, stateText(inv)));
-  if (inv.end && inv.end.crashed) name.append(el("span", "pill bad", inv.end.crashed + " crashed"));
-  if (inv.end && inv.end.timed_out) name.append(el("span", "pill bad", inv.end.timed_out + " timed out"));
-  node.append(name);
-
-  const bar = el("div", "bar");
-  let counted = 0;
-  const piece = (cls, count, title) => {
-    if (!count || !inv.planned) return;
-    const part = el("i", cls);
-    part.style.width = (100 * count / inv.planned) + "%";
-    part.title = title + " " + count;
-    bar.append(part);
-  };
-  for (const state of order) {
-    counted += inv.counts[state] || 0;
-    piece(state, inv.counts[state] || 0, state);
+function segmentsNode(key, part) {
+  const box = el("details");
+  box.open = open.has(key);
+  box.addEventListener("toggle", () => box.open ? open.add(key) : open.delete(key));
+  box.append(el("summary", "", part.segments.length + (part.segments.length === 1 ? " segment" : " segments")));
+  const rows = el("div", "rows segs");
+  for (const segment of part.segments) {
+    const row = el("div", "seg");
+    row.append(dot(segment.state), el("span", "label", segment.label), el("span", "statetext " + segment.state, stateText(segment)));
+    if (segment.resends) row.append(el("span", "statetext", "sent again " + segment.resends + " times"));
+    row.append(el("span", "count", segment.done + " of " + segment.planned));
+    rows.append(row);
   }
-  piece("other", inv.done - counted, "other");
-  piece("running", inv.running.length, "running");
-  node.append(bar);
-
-  const figures = el("div", "figures");
-  const done = el("span");
-  done.append(el("b", "", String(inv.done)), " of " + inv.planned + " planned");
-  figures.append(done);
-  for (const state of order) {
-    const count = inv.counts[state] || 0;
-    if (!count && state !== "ok" && state !== "fail") continue;
-    const item = el("span", state);
-    item.append(el("b", "", String(count)), " " + state);
-    figures.append(item);
-  }
-  if (inv.state === "running" && inv.checks_per_minute !== null) {
-    const rate = el("span");
-    rate.append(el("b", "", String(inv.checks_per_minute)), " checks/min");
-    figures.append(rate);
-  }
-  if (inv.state !== "finished") figures.append(el("span", "", "last report " + span(inv.seconds_since_report) + " ago"));
-  if (inv.resends) figures.append(el("span", "", "sent again " + inv.resends + " times"));
-  node.append(figures);
-
-  const apis = el("div", "apis");
-  for (const api of Object.keys(inv.apis).sort()) {
-    const tally = inv.apis[api];
-    apis.append(el("span", "api" + (tally.bad ? " bad" : ""), api + " " + tally.done + "/" + tally.planned + (tally.bad ? " · " + tally.bad + " bad" : "")));
-  }
-  node.append(apis);
-
-  if (inv.running.length) {
-    const now = el("div", "now");
-    now.append(el("div", "head", inv.state === "silent" ? "running at the last report" : "running now"));
-    for (const check of inv.running.slice(0, runningShown)) {
-      const item = el("div", "item");
-      item.append(el("span", "id", check.id), el("span", "for", span(check.seconds)));
-      now.append(item);
-    }
-    if (inv.running.length > runningShown) now.append(el("div", "more", "and " + (inv.running.length - runningShown) + " more"));
-    node.append(now);
-  }
-  if (inv.failures.length) node.append(failuresNode(key, inv));
-  return node;
+  box.append(rows);
+  return box;
 }
 function partNode(machine, run, part) {
-  const node = el("div", "part");
+  const key = [machine, run, part.part].join("|");
+  const node = el("div", "part" + (part.state === "never_reported" ? " never" : ""));
   const name = el("div", "partname");
   name.append(dot(part.state));
   name.append(el("span", "gpu", part.adapter || part.part));
   if (part.bits) name.append(el("span", "badge", "x" + part.bits));
-  const latest = part.invocations[part.invocations.length - 1];
-  name.append(el("span", "statetext " + part.state, stateText({state: part.state, silent_since: part.silent_since, end: latest.end})));
+  for (const suite of part.suites) name.append(el("span", "badge", suite));
+  name.append(el("span", "statetext " + part.state, stateText(part)));
   node.append(name);
-  for (const inv of part.invocations) node.append(invocationNode([machine, run, part.part, inv.invocation].join("|"), inv));
+  if (part.state === "never_reported") {
+    node.append(el("div", "hint", "the harness announced this part, and no suite executable has reported for it"));
+    return node;
+  }
+  node.append(barNode(part.counts, part.total, false));
+  const figures = figuresNode(part.counts, part.total, part.done);
+  if (part.state === "running" && part.checks_per_minute !== null) {
+    const rate = el("span");
+    rate.append(el("b", "", String(part.checks_per_minute)), " checks/min");
+    figures.append(rate);
+  }
+  if (part.state !== "finished") figures.append(el("span", "", "last report " + span(part.seconds_since_report) + " ago"));
+  node.append(figures);
+
+  const apis = el("div", "apis");
+  for (const api of Object.keys(part.apis)) {
+    const tally = part.apis[api];
+    apis.append(el("span", "api" + (tally.bad ? " bad" : ""), api + " " + tally.done + "/" + tally.planned + (tally.bad ? " · " + tally.bad + " bad" : "")));
+  }
+  node.append(apis);
+
+  if (part.running.length) {
+    const now = el("div", "now");
+    now.append(el("div", "head", "running now"));
+    for (const check of part.running.slice(0, runningShown)) {
+      const item = el("div", "item");
+      item.append(el("span", "id", check.id), el("span", "for", span(check.seconds)));
+      now.append(item);
+    }
+    if (part.running.length > runningShown) now.append(el("div", "more", "and " + (part.running.length - runningShown) + " more"));
+    node.append(now);
+  }
+  if (part.failures.length) node.append(failuresNode(key + "|failures", part));
+  node.append(segmentsNode(key + "|segments", part));
   return node;
+}
+function runNode(machine, run) {
+  const box = el("div", "run");
+  const name = el("div", "runname");
+  name.append(el("b", "", run.run), el("span", "", "first report " + clock(run.first_report)));
+  box.append(name);
+  const rollup = el("div", "rollup");
+  rollup.append(barNode(run.rollup.counts, run.rollup.total, true));
+  const figures = figuresNode(run.rollup.counts, run.rollup.total, run.rollup.done);
+  const parts = el("span");
+  parts.append(el("b", "", String(run.rollup.parts)), run.rollup.parts === 1 ? " part" : " parts");
+  figures.prepend(parts);
+  if (run.rollup.never_reported) {
+    const never = el("span", "never");
+    never.append(el("b", "", String(run.rollup.never_reported)), " never reported");
+    parts.after(never);
+  }
+  rollup.append(figures);
+  box.append(rollup);
+  for (const part of run.parts) box.append(partNode(machine, run.run, part));
+  return box;
 }
 function machineNode(machine) {
   const node = el("section", "machine");
@@ -259,14 +305,7 @@ function machineNode(machine) {
   if (status.last_report) top.append(el("span", "pill", "last report " + clock(status.last_report)));
   node.append(top);
   if (!status.runs.length) node.append(el("div", "note", "no suite executable has reported to this machine since its status server started"));
-  for (const run of status.runs) {
-    const box = el("div", "run");
-    const name = el("div", "runname");
-    name.append(el("b", "", run.run), el("span", "", "first report " + clock(run.first_report)));
-    box.append(name);
-    for (const part of run.parts) box.append(partNode(machine.name, run.run, part));
-    node.append(box);
-  }
+  for (const run of status.runs) node.append(runNode(machine.name, run));
   return node;
 }
 async function refresh() {

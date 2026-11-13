@@ -42,17 +42,13 @@ class Invocation:
         self.phase = str(begin.get("phase") or "")
         self.jobs = begin.get("jobs")
         self.planned = [str(check_id) for check_id in begin.get("planned") or []]
-        self.planned_apis = collections.Counter(api_of(check_id) for check_id in self.planned)
         self.first_report = first_report
         self.last_report = first_report
         self.resends = resends
         self.seq = 0
         self.running = {}
-        self.counts = collections.Counter()
-        self.done_apis = collections.Counter()
-        self.bad_apis = collections.Counter()
-        self.failures = []
-        self.failures_cut = 0
+        self.results = {}
+        self.finished = 0
         self.finish_times = collections.deque()
         self.end = None
         self.totals = {}
@@ -69,53 +65,37 @@ class Invocation:
                 self.running[(check_id, event.get("pid"))] = moment
             elif kind == "finish":
                 self.running.pop((check_id, event.get("pid")), None)
-                state = str(event.get("status") or "?")
-                api = api_of(check_id)
-                self.counts[state] += 1
-                self.done_apis[api] += 1
+                self.finished += 1
                 self.finish_times.append(moment)
-                if state not in ("ok", "skip"):
-                    self.bad_apis[api] += 1
-                    if len(self.failures) < FAILURES_KEPT:
-                        self.failures.append({"id": check_id, "status": state, "ms": event.get("ms"),
-                                              "reason": str(event.get("reason") or "")[:REASON_CHARS]})
-                    else:
-                        self.failures_cut += 1
+                self.results[check_id] = {"status": str(event.get("status") or "?"), "ms": event.get("ms"),
+                                          "reason": str(event.get("reason") or "")[:REASON_CHARS]}
             elif kind == "end":
                 self.running.clear()
                 self.end = {"time": clock_text(moment), "complete": bool(event.get("complete")),
                             "failed": event.get("failed"), "crashed": event.get("crashed"), "timed_out": event.get("timed_out")}
 
     def done(self):
-        return sum(self.counts.values())
+        return self.finished
 
     def state(self, now, silent_after):
         if self.end is not None:
             return "finished"
         return "silent" if now - self.last_report > silent_after else "running"
 
-    def rate(self, now):
+    def name(self):
+        return self.label or "started " + clock_text(self.first_report)
+
+    def recent(self, now):
         while self.finish_times and now - self.finish_times[0] > RATE_WINDOW:
             self.finish_times.popleft()
-        span = min(RATE_WINDOW, now - self.first_report)
-        if span < RATE_MIN_SPAN:
-            return None
-        return round(len(self.finish_times) * 60.0 / span, 1)
+        return len(self.finish_times)
 
     def view(self, now, silent_after):
         state = self.state(now, silent_after)
-        apis = {api: {"planned": self.planned_apis.get(api, 0), "done": self.done_apis.get(api, 0), "bad": self.bad_apis.get(api, 0)}
-                for api in sorted(set(self.planned_apis) | set(self.done_apis))}
-        running = sorted(({"id": check_id, "pid": pid, "seconds": max(0, int(now - since))}
-                          for (check_id, pid), since in self.running.items()), key=lambda entry: -entry["seconds"])
-        return {"invocation": self.key, "label": self.label, "exe": self.exe, "bits": self.bits, "suites": self.suites,
-                "phase": self.phase, "jobs": self.jobs, "started": self.started, "state": state,
-                "first_report": clock_text(self.first_report), "last_report": clock_text(self.last_report),
-                "seconds_since_report": max(0, int(now - self.last_report)),
-                "silent_since": clock_text(self.last_report) if state == "silent" else None,
-                "planned": len(self.planned), "done": self.done(), "counts": dict(self.counts),
-                "apis": apis, "running": running, "checks_per_minute": self.rate(now), "failures": self.failures,
-                "failures_cut": self.failures_cut, "end": self.end, "resends": self.resends,
+        return {"invocation": self.key, "label": self.name(), "exe": self.exe, "suites": self.suites, "phase": self.phase,
+                "jobs": self.jobs, "started": self.started, "state": state, "first_report": clock_text(self.first_report),
+                "last_report": clock_text(self.last_report), "silent_since": clock_text(self.last_report) if state == "silent" else None,
+                "planned": len(self.planned), "done": self.done(), "end": self.end, "resends": self.resends,
                 "reporter_dropped": self.totals.get("dropped")}
 
 
@@ -124,12 +104,70 @@ class Part:
         self.key = key
         self.invocations = {}
 
+    @staticmethod
+    def never_reported(key, expected):
+        return {"part": key, "adapter": str(expected.get("adapter") or ""), "bits": expected.get("bits"), "state": "never_reported",
+                "silent_since": None, "last_report": None, "seconds_since_report": None, "suites": [], "jobs": None,
+                "total": 0, "done": 0, "counts": {}, "apis": {}, "running": [], "checks_per_minute": None,
+                "failures": [], "failures_cut": 0, "segments": []}
+
     def view(self, now, silent_after):
-        shown = [invocation.view(now, silent_after) for invocation in self.invocations.values()]
-        latest = list(self.invocations.values())[-1]
-        return {"part": self.key, "adapter": str(latest.adapter.get("name") or ""), "adapter_identity": latest.adapter,
-                "bits": latest.bits, "state": shown[-1]["state"], "silent_since": shown[-1]["silent_since"],
-                "last_report": shown[-1]["last_report"], "invocations": shown}
+        invocations = list(self.invocations.values())
+        segments = [invocation.view(now, silent_after) for invocation in invocations]
+        newest = invocations[-1]
+        union = {}
+        latest = {}
+        running = {}
+        lost = {}
+        for index, invocation in enumerate(invocations):
+            dead = invocation.end is None and (segments[index]["state"] == "silent" or invocation is not newest)
+            if dead:
+                segments[index].update(state="silent", silent_since=clock_text(invocation.last_report))
+            union.update(dict.fromkeys(invocation.planned))
+            for check_id, result in invocation.results.items():
+                union[check_id] = None
+                latest[check_id] = (result, invocation)
+            for (check_id, pid), since in invocation.running.items():
+                union[check_id] = None
+                if dead:
+                    lost[check_id] = invocation
+                else:
+                    running[check_id] = {"id": check_id, "pid": pid, "seconds": max(0, int(now - since))}
+        counts = collections.Counter()
+        apis = {}
+        failures = []
+        for check_id in union:
+            api = apis.setdefault(api_of(check_id), {"planned": 0, "done": 0, "bad": 0})
+            api["planned"] += 1
+            if check_id in latest:
+                result, invocation = latest[check_id]
+                state = result["status"]
+                api["done"] += 1
+                entry = {"id": check_id, "status": state, "ms": result["ms"], "reason": result["reason"], "segment": invocation.name()}
+            elif check_id in running:
+                counts["running"] += 1
+                continue
+            elif check_id in lost:
+                state = "lost"
+                entry = {"id": check_id, "status": state, "ms": None, "segment": lost[check_id].name(),
+                         "reason": "running when this segment stopped reporting; no result since"}
+            else:
+                counts["not_run"] += 1
+                continue
+            counts[state] += 1
+            if state not in ("ok", "skip"):
+                api["bad"] += 1
+                failures.append(entry)
+        span = min(RATE_WINDOW, now - invocations[0].first_report)
+        rate = round(sum(invocation.recent(now) for invocation in invocations) * 60.0 / span, 1) if span >= RATE_MIN_SPAN else None
+        state = segments[-1]["state"]
+        return {"part": self.key, "adapter": str(newest.adapter.get("name") or ""), "adapter_identity": newest.adapter,
+                "bits": newest.bits, "state": state, "silent_since": segments[-1]["silent_since"], "end": newest.end,
+                "last_report": segments[-1]["last_report"], "seconds_since_report": max(0, int(now - newest.last_report)),
+                "suites": newest.suites, "jobs": newest.jobs, "total": len(union), "done": len(latest), "counts": dict(counts),
+                "apis": {api: apis[api] for api in sorted(apis)},
+                "running": sorted(running.values(), key=lambda entry: -entry["seconds"]), "checks_per_minute": rate,
+                "failures": failures[:FAILURES_KEPT], "failures_cut": max(0, len(failures) - FAILURES_KEPT), "segments": segments}
 
 
 class Run:
@@ -138,13 +176,20 @@ class Run:
         self.first_report = now
         self.last_report = now
         self.parts = {}
+        self.expected = {}
 
     def view(self, now, silent_after):
-        parts = [self.parts[key].view(now, silent_after) for key in sorted(self.parts)]
+        parts = [self.parts[key].view(now, silent_after) if key in self.parts else Part.never_reported(key, self.expected[key])
+                 for key in sorted(set(self.parts) | set(self.expected))]
         states = {part["state"] for part in parts}
-        state = "running" if "running" in states else "silent" if "silent" in states else "finished"
+        state = next((name for name in ("running", "silent", "finished") if name in states), "never_reported")
+        counts = collections.Counter()
+        for part in parts:
+            counts.update(part["counts"])
+        rollup = {"parts": len(parts), "expected": len(self.expected), "never_reported": sum(part["state"] == "never_reported" for part in parts),
+                  "total": sum(part["total"] for part in parts), "done": sum(part["done"] for part in parts), "counts": dict(counts)}
         return {"run": self.label, "state": state, "first_report": clock_text(self.first_report),
-                "last_report": clock_text(self.last_report), "parts": parts}
+                "last_report": clock_text(self.last_report), "rollup": rollup, "parts": parts}
 
 
 class Store:
@@ -157,6 +202,27 @@ class Store:
         self.runs = {}
         self.reports = 0
         self.last_report = None
+
+    def run_of(self, label, now):
+        run = self.runs.get(label)
+        if run is None:
+            run = self.runs[label] = Run(label, now)
+            self.forget_old_runs()
+        return run
+
+    def expect(self, data):
+        parts = data.get("parts") if isinstance(data, dict) else None
+        label = data.get("run") if isinstance(data, dict) else None
+        if not isinstance(label, str) or not label or not isinstance(parts, list):
+            return 400, {"error": "the announcement needs run and parts"}
+        now = self.clock()
+        with self.lock:
+            run = self.run_of(label, now)
+            run.last_report = now
+            for part in parts:
+                if isinstance(part, dict) and isinstance(part.get("part"), str) and part["part"]:
+                    run.expected[part["part"]] = {"adapter": part.get("adapter"), "bits": part.get("bits")}
+        return 200, {"ok": True}
 
     def report(self, batch):
         if not isinstance(batch, dict):
@@ -177,9 +243,7 @@ class Store:
             part = run.parts.get(part_key) if run else None
             known = part.invocations.get(invocation_key) if part else None
             if isinstance(begin, dict):
-                if run is None:
-                    run = self.runs[run_label] = Run(run_label, now)
-                    self.forget_old_runs()
+                run = self.run_of(run_label, now)
                 if part is None:
                     part = run.parts[part_key] = Part(part_key)
                 invocation = Invocation(invocation_key, begin, known.first_report if known else now, known.resends + 1 if known else 0)
@@ -318,7 +382,8 @@ def make_handler(store, peers):
                 self.send_json(411 if length < 0 else 413, {"error": "the report needs a Content-Length within the limit"})
                 return
             body = self.rfile.read(length)
-            if self.path.split("?", 1)[0] != "/report":
+            path = self.path.split("?", 1)[0]
+            if path not in ("/report", "/expect"):
                 self.send_json(404, {"error": "not found"})
             elif not self.from_loopback():
                 self.send_json(403, {"error": "reports are accepted from this machine's VM only"})
@@ -328,7 +393,7 @@ def make_handler(store, peers):
                 except ValueError:
                     self.send_json(400, {"error": "the report is not JSON"})
                     return
-                self.send_json(*store.report(batch))
+                self.send_json(*(store.report(batch) if path == "/report" else store.expect(batch)))
 
         def do_GET(self):
             path = self.path.split("?", 1)[0]
