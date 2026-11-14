@@ -35,6 +35,7 @@ public:
 
     struct Channel {
         quint32 context = 0;
+        quint32 d3d_versions = 0;
         quint64 reports = 0;
         quint64 rejected = 0;
         quint64 split_transfers = 0;

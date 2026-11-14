@@ -32,6 +32,7 @@ struct HostWindowStatus {
         quint32 context = 0;
         QString name;
         quint32 sub_api = 0;
+        quint32 d3d_versions = 0;
         quint64 held_bytes = 0;
         int blobs = 0;
         std::optional<double> submits_per_s;
