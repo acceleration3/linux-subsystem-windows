@@ -37,8 +37,8 @@ std::string lines_of(const std::string& manifest, bool config) {
     for (size_t at = 0; at < manifest.size();) {
         const size_t end = manifest.find('\n', at);
         const std::string line = manifest.substr(at, end - at + 1);
-        const bool is_config = line.find("C:\\av\\adapters.txt") != std::string::npos
-                               || line.find(GuestBundle::kSharesGuestPath) != std::string::npos;
+        const bool is_config = line.find("C:\\av\\adapters.txt") != std::string::npos ||
+                               line.find(GuestBundle::kSharesGuestPath) != std::string::npos;
         if (is_config == config) {
             kept += line;
         }
@@ -47,9 +47,13 @@ std::string lines_of(const std::string& manifest, bool config) {
     return kept;
 }
 
-std::string release_of(const std::string& manifest) { return sha256(lines_of(manifest, false)); }
+std::string release_of(const std::string& manifest) {
+    return sha256(lines_of(manifest, false));
+}
 
-std::string config_of(const std::string& manifest) { return sha256(lines_of(manifest, true)); }
+std::string config_of(const std::string& manifest) {
+    return sha256(lines_of(manifest, true));
+}
 
 class Tree {
 public:
@@ -154,7 +158,8 @@ int main(int argc, char** argv) {
         }
         check(hashes, "each line's hash is the SHA-256 of the file's bytes");
         check(base->release == release_of(base->manifest) && base->release.size() == 64,
-              "the release is the SHA-256 hex of the manifest lines of everything but the mount list and adapters.txt");
+              "the release is the SHA-256 hex of the manifest lines of everything but the mount "
+              "list and adapters.txt");
         check(base->config == config_of(base->manifest) && base->config.size() == 64,
               "the config is the SHA-256 hex of the mount list's and adapters.txt's lines");
     }
@@ -191,7 +196,8 @@ int main(int argc, char** argv) {
         check(collect()->release == base->release, "putting the bytes back puts the release back");
     }
     {
-        const Contents mounted = collect(QStringLiteral("10de\t2684\tRTX\t32.0.1.2\n"), "d=D:=SG9zdA==");
+        const Contents mounted =
+            collect(QStringLiteral("10de\t2684\tRTX\t32.0.1.2\n"), "d=D:=SG9zdA==");
         check(mounted->release == base->release && mounted->config != base->config,
               "a different mount list gives the same release and a different config");
     }
@@ -200,7 +206,8 @@ int main(int argc, char** argv) {
     {
         const Contents versioned = collect(QStringLiteral("10de\t2684\tRTX\t32.0.1.3\n"));
         check(versioned->release == base->release && versioned->config != base->config,
-              "a different driver version in adapters.txt gives the same release and a different config");
+              "a different driver version in adapters.txt gives the same release and a different "
+              "config");
     }
     {
         const QString ab = QStringLiteral("1002\t7550\tAMD\t1.2.3.4\n10de\t2684\tRTX\t32.0.1.2\n");
@@ -216,8 +223,8 @@ int main(int argc, char** argv) {
     }
     check(!has(collect(QString{}), "C:\\av\\adapters.txt"), "no adapter names, no adapters.txt");
 
-    check(!base->version.empty() && base->manifest.find(base->version) == std::string::npos
-              && base->release == release_of(base->manifest),
+    check(!base->version.empty() && base->manifest.find(base->version) == std::string::npos &&
+              base->release == release_of(base->manifest),
           "the version is in the contents, and in neither the manifest nor the release");
     check(base->shares == "none", "the mount list is carried in the contents");
 
@@ -260,7 +267,8 @@ int main(int argc, char** argv) {
         check(no_virtiofs, "missing shared-folder files are left out");
         check(has(c, "C:\\ProgramData\\LSW\\lsw-agent.exe") && has(c, "C:\\av\\package\\avgpu.sys"),
               "the required files are still there");
-        check(c->release != base->release && c->release == release_of(c->manifest), "and the release is that of what is there");
+        check(c->release != base->release && c->release == release_of(c->manifest),
+              "and the release is that of what is there");
         tree.point_all();
     }
 
@@ -288,8 +296,11 @@ int main(int argc, char** argv) {
         check(GuestBundle::shares_argument({}) == QStringLiteral("none"), "no mounts is 'none'");
         const QString arg = GuestBundle::shares_argument(
             {Mount{"d", "D:", "Documents"}, Mount{"e", "E:", "Müsik"}});
-        const auto b64 = [](const char* text) { return QString::fromLatin1(QByteArray{text}.toBase64()); };
-        check(arg == QStringLiteral("D:%1:%2,E:%3:%4").arg(b64("d"), b64("Documents"), b64("e"), b64("M\xc3\xbcsik")),
+        const auto b64 = [](const char* text) {
+            return QString::fromLatin1(QByteArray{text}.toBase64());
+        };
+        check(arg == QStringLiteral("D:%1:%2,E:%3:%4")
+                         .arg(b64("d"), b64("Documents"), b64("e"), b64("M\xc3\xbcsik")),
               "a mount is drive:base64(tag):base64(name) and mounts are comma-joined");
         lsw::host::vm::DomainDescription definition;
         definition.shares = {{"Documents", "/home/u/Documents", false, "d"},
@@ -297,8 +308,8 @@ int main(int argc, char** argv) {
                              {"digit", "/tmp/digit", false, "1"},
                              {"Host", "/", false, "z"}};
         const auto mounts = GuestBundle::mounts_of(definition);
-        check(mounts.size() == 2 && mounts[0].tag == "Documents" && mounts[0].drive == "D:"
-                  && mounts[0].name == "Documents",
+        check(mounts.size() == 2 && mounts[0].tag == "Documents" && mounts[0].drive == "D:" &&
+                  mounts[0].name == "Documents",
               "a share's drive is its letter, upper-cased with a colon, and its name is its tag");
         check(mounts.size() == 2 && mounts[1].drive == "Z:" && mounts[1].name == "Host",
               "the host's root keeps the name it was given");

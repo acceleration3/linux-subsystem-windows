@@ -58,8 +58,8 @@ int main() {
     check(count(plain, "exit /b 8)") == 5, "every download that fails exits 8");
     check(!has(plain, "avgpu.sys\" >>") && !has(plain, "download of avgpu"),
           "the log lines carry the file's index, not its path");
-    check(has(plain, "-Stage \"%STAGE%\" -Release " + release
-                         + " -Config c0ffee -ProgressUrl http://10.0.2.2:5555 -Version 0.2.0"),
+    check(has(plain, "-Stage \"%STAGE%\" -Release " + release +
+                         " -Config c0ffee -ProgressUrl http://10.0.2.2:5555 -Version 0.2.0"),
           "run.cmd is written with -Stage, -Release, -Config, -ProgressUrl and -Version");
     check(has(plain, "lsw-guest-update.ps1\" -Stage"), "run.cmd runs the update script from the stage");
     check(!has(plain, "-Force"), "an unforced run has no -Force");

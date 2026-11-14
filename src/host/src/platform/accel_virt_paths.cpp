@@ -14,7 +14,8 @@ AccelVirtPaths::QemuTree AccelVirtPaths::qemu_tree() {
         return {dir, QDir(dir).filePath(QStringLiteral("qemu/qemu-system-x86_64")),
                 QDir(dir).filePath(QStringLiteral("qemu"))};
     };
-    const QString installed = QDir::cleanPath(exe_dir + QStringLiteral("/../lib/lsw/accel-virt/qemu"));
+    const QString installed =
+        QDir::cleanPath(exe_dir + QStringLiteral("/../lib/lsw/accel-virt/qemu"));
     const QString named = qEnvironmentVariable("LSW_AV_QEMU_BUILD");
     const QemuTree candidates[] = {
         named.isEmpty() ? QemuTree{} : build_tree(named),
