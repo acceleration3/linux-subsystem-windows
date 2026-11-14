@@ -92,6 +92,8 @@ public:
         static constexpr const char* kItemNote = "ItemNote";
         static constexpr const char* kDriveBadge = "DriveBadge";
         static constexpr const char* kStepChip = "StepChip";
+        static constexpr const char* kChip = "Chip";
+        static constexpr const char* kCode = "Code";
     };
 
     struct Tone {

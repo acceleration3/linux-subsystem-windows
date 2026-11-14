@@ -304,6 +304,12 @@ LineIcon::Built LineIcon::build(Shape shape) {
         lines("M2.5 11h15");
         dot(14, 13, 0.6);
         break;
+    case Shape::Network:
+        rect(7.5, 2.5, 5, 4.5, 1);
+        rect(2.5, 13, 5, 4.5, 1);
+        rect(12.5, 13, 5, 4.5, 1);
+        lines("M10 7v3M5 13v-3h10v3");
+        break;
     case Shape::Count:
         break;
     }

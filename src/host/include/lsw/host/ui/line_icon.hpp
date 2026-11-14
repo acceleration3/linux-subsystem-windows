@@ -28,6 +28,7 @@ public:
         Plus,
         Hid,
         Disk,
+        Network,
         Count
     };
 

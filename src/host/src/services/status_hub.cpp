@@ -185,6 +185,7 @@ void StatusHub::on_stats(const QUuid& uuid, const vm::VmStats& stats) {
     }
     if (!stats.running) {
         boot_clock_.invalidate();
+        vm_.guest_ipv4.clear();
     } else if (stats.agent_reachable && !was_online && boot_clock_.isValid()) {
         manager_settings_.set_value(K::kLastBootMs, boot_clock_.elapsed());
         boot_clock_.invalidate();
@@ -263,6 +264,14 @@ void StatusHub::refresh(Area area) {
 
 void StatusHub::set_vm(const VmStatus& status) {
     vm_ = status;
+    Q_EMIT changed(Area::Vm);
+}
+
+void StatusHub::set_guest_address(const QString& ipv4) {
+    if (ipv4 == vm_.guest_ipv4) {
+        return;
+    }
+    vm_.guest_ipv4 = ipv4;
     Q_EMIT changed(Area::Vm);
 }
 

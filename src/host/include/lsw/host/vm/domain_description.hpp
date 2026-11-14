@@ -38,6 +38,8 @@ struct DomainDescription {
     bool installing = false;
     QVector<Share> shares;
     QVector<UsbDevice> usb_devices;
+    QVector<config::PortForward> forwards;
+    QStringList bridges;
 
     [[nodiscard]] const GpuDevice* display() const noexcept;
 

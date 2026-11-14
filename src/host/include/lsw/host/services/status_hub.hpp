@@ -60,6 +60,8 @@ public:
 
     void set_vm(const VmStatus& status);
 
+    void set_guest_address(const QString& ipv4);
+
     void set_update(const GuestUpdateStatus& status);
 
     void set_clipboard(const ClipboardStatus& status);

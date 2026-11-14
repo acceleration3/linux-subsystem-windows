@@ -34,6 +34,7 @@ class GraphicsPage;
 class LogPanel;
 class ManagerExit;
 class MaintenancePage;
+class NetworkPage;
 class RunOnVmDialog;
 class AppErrorDialog;
 class UsbPage;
@@ -129,6 +130,7 @@ private:
     DisplayPage* display_page_ = nullptr;
     FilesPage* files_page_ = nullptr;
     UsbPage* usb_page_ = nullptr;
+    NetworkPage* network_page_ = nullptr;
     MaintenancePage* maintenance_page_ = nullptr;
     GraphicsPage* graphics_page_ = nullptr;
     GpuStatusPage* gpu_status_page_ = nullptr;

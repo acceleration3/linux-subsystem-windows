@@ -392,6 +392,9 @@ QFrame#OptionCard[selected="true"] {
     background-color: #1b1a19;
     border: 1px solid #a8672a;
 }
+QFrame#OptionCard:focus {
+    border: 1px solid #ff9f45;
+}
 
 QLabel#IconSlot {
     background-color: #0f131a;
@@ -856,6 +859,43 @@ QLabel#StepChip[tone="bad"] {
     color: #f2555a;
     border-color: #6b2f32;
     background-color: #24181a;
+}
+
+QPushButton#Chip {
+    font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace;
+    font-size: 11px;
+    font-weight: 400;
+    color: #9aa3b4;
+    background-color: #0f131a;
+    border: 1px solid #272d3a;
+    border-radius: 11px;
+    padding: 3px 10px;
+    min-height: 14px;
+}
+QPushButton#Chip:hover {
+    color: #e4e8f0;
+    border-color: #39415a;
+}
+QPushButton#Chip[applied="true"] {
+    color: #4ec98a;
+    border-color: #2c5c44;
+    background-color: #16241d;
+}
+QPushButton#Chip:focus {
+    border-color: #ff9f45;
+}
+
+QLabel#Code {
+    font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace;
+    font-size: 12px;
+    background-color: #0f131a;
+    border: 1px solid #272d3a;
+    border-radius: 4px;
+    padding: 2px 8px;
+}
+
+QFrame#Separator[soft="true"] {
+    background-color: #1b202a;
 }
 
 QFrame#Panel[danger="true"] {

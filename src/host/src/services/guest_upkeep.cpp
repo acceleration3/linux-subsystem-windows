@@ -42,6 +42,7 @@ GuestUpkeep::GuestUpkeep(StatusHub& status, link::AgentRpcClient& rpc, GuestUpda
         if (update_.running()) {
             set_state(State::Updating);
         }
+        status_.set_guest_address(probe.ipv4);
     });
     connect(&update_, &GuestUpdate::succeeded, this, [this] {
         if (!awaiting_update_ && state_ != State::Failed) {
@@ -162,7 +163,8 @@ GuestUpkeep::Probe GuestUpkeep::probe() {
         LSW_WARN("upkeep: system_info: {}", info.error);
         return {false, {}, {}, {}, {}, {}, false,
                 QStringLiteral("Windows did not say which LSW release it has: %1")
-                    .arg(QString::fromStdString(info.error))};
+                    .arg(QString::fromStdString(info.error)),
+                {}};
     }
     const auto text = [&info](const char* key) {
         const auto value = info.body.value(key, nlohmann::json{});
@@ -170,7 +172,7 @@ GuestUpkeep::Probe GuestUpkeep::probe() {
     };
     const auto last = info.body.value("last_update", nlohmann::json{});
     return {true, text("release"), text("release_config"), text("release_version"), GuestUpdate::steps_of(last),
-            GuestUpdate::finished_of(last), GuestUpdate::ok_of(last), {}};
+            GuestUpdate::finished_of(last), GuestUpdate::ok_of(last), {}, text("ipv4")};
 }
 
 GuestUpkeep::Clock GuestUpkeep::set_clock() {

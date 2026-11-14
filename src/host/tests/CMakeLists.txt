@@ -237,6 +237,13 @@ add_test(NAME lsw_host_network_settings_test COMMAND lsw_host_network_settings_t
 set_tests_properties(lsw_host_network_settings_test PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)
 
+add_executable(lsw_host_network_page_test network_page_test.cpp)
+target_link_libraries(lsw_host_network_page_test PRIVATE lsw_host_manager LSW::CompileOptions)
+target_compile_definitions(lsw_host_network_page_test PRIVATE QT_NO_KEYWORDS)
+add_test(NAME lsw_host_network_page_test COMMAND lsw_host_network_page_test)
+set_tests_properties(lsw_host_network_page_test PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)
+
 add_executable(lsw_host_usb_devices_test host_usb_devices_test.cpp)
 target_link_libraries(lsw_host_usb_devices_test
     PRIVATE

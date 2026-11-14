@@ -48,6 +48,7 @@ private:
         QString finished;
         bool last_ok = false;
         QString error;
+        QString ipv4;
     };
     struct Clock {
         bool ok = true;

@@ -8,6 +8,7 @@ namespace lsw::host::vm {
 namespace {
 
 constexpr QLatin1StringView kGpuDriver{"virtio-gpu-av-pci"};
+constexpr QLatin1StringView kUserNetwork{"user"};
 
 qint64 in_mib(qint64 value, const QString& unit) {
     const QString u = unit.trimmed();
@@ -147,6 +148,7 @@ std::optional<DomainDescription> DomainDescription::parse(const QString& xml) {
     bool in_usb_hostdev = false;
     bool in_hostdev_source = false;
     UsbDevice usb;
+    bool in_bridge = false;
     QString previous_arg;
 
     while (!reader.atEnd()) {
@@ -164,6 +166,8 @@ std::optional<DomainDescription> DomainDescription::parse(const QString& xml) {
                 in_video = false;
             } else if (name == QLatin1StringView("source") && in_usb_hostdev) {
                 in_hostdev_source = false;
+            } else if (name == QLatin1StringView("interface")) {
+                in_bridge = false;
             } else if (name == QLatin1StringView("hostdev") && in_usb_hostdev) {
                 in_usb_hostdev = false;
                 out.usb_devices.push_back(usb);
@@ -211,6 +215,13 @@ std::optional<DomainDescription> DomainDescription::parse(const QString& xml) {
         } else if (in_hostdev_source && name == QLatin1StringView("address")) {
             usb.bus = attrs.value(QLatin1StringView("bus")).toString().toInt();
             usb.device = attrs.value(QLatin1StringView("device")).toString().toInt();
+        } else if (in_devices && name == QLatin1StringView("interface")) {
+            in_bridge = attrs.value(QLatin1StringView("type")) == QLatin1StringView("bridge");
+        } else if (in_bridge && name == QLatin1StringView("source")) {
+            const QString bridge = attrs.value(QLatin1StringView("bridge")).toString();
+            if (!bridge.isEmpty()) {
+                out.bridges << bridge;
+            }
         } else if (in_devices && name == QLatin1StringView("filesystem")) {
             in_filesystem = true;
             filesystem_virtiofs = false;
@@ -242,6 +253,15 @@ std::optional<DomainDescription> DomainDescription::parse(const QString& xml) {
                 const QStringList options = split_options(value);
                 if (!options.isEmpty() && options.first() == kGpuDriver) {
                     out.gpus.push_back(gpu_from(options));
+                }
+            } else if (previous_arg == QLatin1StringView("-netdev")) {
+                const QStringList options = split_options(value);
+                if (!options.isEmpty() && options.first() == kUserNetwork) {
+                    for (const QString& option : options.mid(1)) {
+                        if (const auto forward = config::PortForwards::from_hostfwd(option)) {
+                            out.forwards.push_back(*forward);
+                        }
+                    }
                 }
             }
             previous_arg = value;

@@ -662,6 +662,30 @@ svg.ico{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stro
 .editlist .foot{padding:8px 10px;background:#131720;border-top:1px solid var(--line);display:flex;gap:8px;align-items:center}
 .srow.wide{grid-template-columns:1fr;gap:10px}
 
+.modes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.modes .opt:focus-visible{outline:none;border-color:var(--amber)}
+.modes .opt .t{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.modes .opt .d{display:block}
+.checkl{gap:8px;border-top:1px solid #1b202a}
+.checkl .ck{display:grid;grid-template-columns:16px minmax(0,1fr);gap:9px;font-size:12.5px;align-items:baseline}
+.checkl .ck .mk{font-family:"JetBrains Mono",monospace;font-weight:600}
+.checkl .ck .fix{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:5px}
+.checkl .ck .cmd{border:1px solid var(--line);border-radius:4px;padding:2px 8px;background:#0f131a;font-size:12px}
+button.chip2{cursor:pointer}
+button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
+.tbl.fwd td{padding:6px 12px}
+.tbl.fwd th{padding:8px 12px 7px}
+.tbl.fwd td.tight{width:1%;white-space:nowrap}
+.tbl.fwd tr.joined td{border-bottom:none}
+.tbl.fwd tr.note td{padding-top:0;padding-bottom:8px}
+.tbl.fwd tr.add td{border-top:1px solid var(--line)}
+.tbl.fwd tr.add + tr.note td{border-bottom:none}
+.tbl.fwd tr.empty td{padding:10px 12px}
+.tbl.fwd .rm{width:22px;height:22px;border-radius:var(--r-sm);border:1px solid var(--line);
+  background:var(--raised);color:var(--fg-faint);display:grid;place-items:center;font-size:13px}
+.tbl.fwd .rm:hover{color:var(--bad);border-color:#6b2f32}
+.input.sm2{display:inline-block;padding:4px 8px;font-size:12px;width:96px}
+
 .picker{display:grid;grid-template-columns:190px minmax(0,1fr);min-height:430px}
 @media (max-width:640px){.picker{grid-template-columns:1fr}}
 .places{background:#10141b;border-right:1px solid var(--line);padding:9px 8px;display:flex;
@@ -761,6 +785,7 @@ svg.ico{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stro
     <symbol id="i-gpustatus" viewBox="0 0 20 20"><rect x="2.5" y="4.5" width="15" height="11" rx="2"/><path d="M5.5 10h2.5l1.5-3 2 6 1.5-3h2"/></symbol>
     <symbol id="i-files" viewBox="0 0 20 20"><path d="M2.5 6.5v8a1.5 1.5 0 0 0 1.5 1.5h12a1.5 1.5 0 0 0 1.5-1.5V8a1.5 1.5 0 0 0-1.5-1.5H10L8.3 4.5H4A1.5 1.5 0 0 0 2.5 6Z"/></symbol>
     <symbol id="i-usb" viewBox="0 0 20 20"><rect x="7.25" y="2.5" width="5.5" height="4" rx="0.8"/><rect x="5.5" y="6.5" width="9" height="7" rx="2"/><path d="M10 13.5v4"/></symbol>
+    <symbol id="i-network" viewBox="0 0 20 20"><rect x="7.5" y="2.5" width="5" height="4.5" rx="1"/><rect x="2.5" y="13" width="5" height="4.5" rx="1"/><rect x="12.5" y="13" width="5" height="4.5" rx="1"/><path d="M10 7v3M5 13v-3h10v3"/></symbol>
     <symbol id="i-console" viewBox="0 0 20 20"><rect x="2.5" y="3.5" width="15" height="13" rx="2"/><path d="M6 8l2.5 2.25L6 12.5M10.5 12.5H14"/></symbol>
     <symbol id="i-log" viewBox="0 0 20 20"><path d="M7.5 5.5h9M7.5 10h9M7.5 14.5h9"/><circle cx="4" cy="5.5" r="1.15" fill="currentColor" stroke="none"/><circle cx="4" cy="10" r="1.15" fill="currentColor" stroke="none"/><circle cx="4" cy="14.5" r="1.15" fill="currentColor" stroke="none"/></symbol>
     <symbol id="i-maint" viewBox="0 0 20 20"><path d="M12.6 3.2a4 4 0 0 0-3.7 5.4l-5.6 5.6a1.6 1.6 0 0 0 2.3 2.3l5.6-5.6a4 4 0 0 0 5.4-3.7l-2.4 2.4-2.3-.6-.6-2.3Z"/></symbol>
@@ -796,6 +821,7 @@ svg.ico{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stro
         <li><button data-view="m-gpustatus">GPU status</button></li>
         <li><button data-view="m-files">Files</button></li>
         <li><button data-view="m-usb">USB</button></li>
+        <li><button data-view="m-network">Network</button></li>
         <li><button data-view="m-console">Console</button></li>
         <li><button data-view="m-log">Log</button></li>
         <li><button data-view="m-maint">Maintenance</button></li>
@@ -1752,6 +1778,198 @@ svg.ico{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stro
     </div>
 
   </section>
+  <section data-view="m-network" hidden>
+    <div class="stage-head">
+      <span class="eyebrow">Manager</span>
+      <h1>Network</h1>
+    </div>
+    <div class="frame">
+      <div class="titlebar">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <span class="t"><img class="logo" src="../../packaging/lsw-manager.svg" alt="">LSW</span>
+        <span class="spacer mono">1000 &times; 1180</span>
+      </div>
+      <div class="mgr2">
+        <aside class="nav">
+          <div class="id">
+            <span class="n">lsw</span>
+            <span class="m">Windows 11 Pro 26200<br>8 cores &middot; 8 GiB &middot; 60 GiB<br>AMD Radeon RX 9070 XT +1 render</span>
+          </div>
+          <ul data-nav="network"></ul>
+          <div class="power">
+            <span class="badge on">ONLINE</span>
+            <button class="btn stop">Stop the guest</button>
+          </div>
+        </aside>
+        <div class="content">
+          <div class="cbar">
+            <h4>Network</h4>
+            <span class="sub">Shared with this computer &middot; 6 ports forwarded &middot; 3 changes wait for a restart</span>
+          </div>
+
+          <div class="areas" style="flex:1">
+            <div class="area">
+              <header>
+                <span class="nm">How Windows is connected</span>
+                <span class="cap">the network Windows starts with</span>
+                <span class="right"><span class="tagr">restart</span></span>
+              </header>
+              <div class="in">
+                <div class="modes">
+                  <div class="opt" role="radio" aria-checked="false" tabindex="0">
+                    <span class="dial"></span>
+                    <span>
+                      <span class="t">Shared with this computer <span class="pill done">In use</span></span>
+                      <span class="d">Windows reaches the network through this computer. Other machines reach Windows only through the forwarded ports.</span>
+                    </span>
+                  </div>
+                  <div class="opt" role="radio" aria-checked="true" tabindex="0">
+                    <span class="dial"></span>
+                    <span>
+                      <span class="t">Bridged to a host bridge <span class="tagr">restart</span></span>
+                      <span class="d">Windows appears on the network as a machine of its own, with its own address.</span>
+                    </span>
+                  </div>
+                </div>
+                <dl class="kv" style="align-items:center">
+                  <dt>Adapters</dt><dd>Shared adapter</dd>
+                  <dt>Windows address</dt><dd style="display:flex;align-items:center;gap:10px"><span class="mono">10.0.2.15</span><button class="btn quiet" style="padding:2px 9px;font-size:12px">Copy</button><span class="meta">as Windows reported when it started</span></dd>
+                </dl>
+              </div>
+            </div>
+
+            <div class="area">
+              <header>
+                <span class="nm">Bridge</span>
+                <span class="cap">the bridge of this computer Windows joins</span>
+                <span class="right"><span class="tagr">restart</span></span>
+              </header>
+              <div class="rows">
+                <div class="drow">
+                  <span class="ic"><svg class="ico"><use href="#i-network"/></svg></span>
+                  <span class="who"><span class="n">br0</span><span class="f">192.168.1.20 &middot; 2 interfaces</span></span>
+                  <span class="side">
+                    <span class="pill done">Up</span>
+                    <span class="tline"><span class="radio on"></span> Join</span>
+                  </span>
+                </div>
+                <div class="drow">
+                  <span class="ic"><svg class="ico"><use href="#i-network"/></svg></span>
+                  <span class="who"><span class="n">virbr0</span><span class="f">192.168.122.1 &middot; no interface</span></span>
+                  <span class="side">
+                    <span class="pill pend">Down</span>
+                    <span class="tline"><span class="radio"></span> Join</span>
+                  </span>
+                </div>
+              </div>
+              <div class="in checkl">
+                <div class="ck"><span class="mk yes">&#10003;</span><span>QEMU's bridge helper is installed <span class="meta">/usr/lib/qemu/qemu-bridge-helper</span></span></div>
+                <div class="ck"><span class="mk yes">&#10003;</span><span>The helper may create the adapter</span></div>
+                <div class="ck"><span class="mk no">&#10007;</span><span>/etc/qemu/bridge.conf does not allow br0
+                  <span class="fix"><span class="meta">Add this line to /etc/qemu/bridge.conf</span><span class="mono cmd">allow br0</span><button class="btn quiet" style="padding:2px 9px;font-size:12px">Copy</button></span></span></div>
+                <span class="meta">Until every line is met Windows starts with the shared network only.</span>
+              </div>
+              <div class="foot"><span class="meta">LSW changes nothing on this computer: the bridge, QEMU's helper and its rules are set up outside it.</span></div>
+            </div>
+
+            <div class="area">
+              <header>
+                <span class="nm">Forwarded ports</span>
+                <span class="cap">a port of this computer that leads to a port in Windows</span>
+                <span class="right"><span class="tagr">restart</span><span class="meta">8 ports</span></span>
+              </header>
+              <div class="in" style="padding-bottom:4px">
+                <div class="chips">
+                  <button class="chip2 ok" title="TCP 47984, 47989, 48010 and UDP 47998 to 48000, from the network">&#10003; Sunshine / Moonlight</button>
+                  <button class="chip2" title="TCP 3389 and UDP 3389">Remote Desktop</button>
+                  <button class="chip2 ok" title="TCP 1433">&#10003; SQL Server</button>
+                  <button class="chip2" title="TCP 2222 to port 22 in Windows">SSH</button>
+                  <button class="chip2" title="TCP 8080 to port 80 and TCP 8443 to port 443 in Windows">Web server</button>
+                </div>
+                <span class="tline"><span class="meta">SQL Server is added.</span><button class="btn" style="padding:2px 9px;font-size:12px">Remove its port</button><button class="btn quiet" style="padding:2px 9px;font-size:12px">Keep</button></span>
+              </div>
+              <table class="tbl fwd">
+                <thead>
+                  <tr><th>Protocol</th><th>On this computer</th><th>In Windows</th><th>Reachable from</th><th>State</th><th></th></tr>
+                </thead>
+                <tbody>
+                  <tr><td><span class="chip2">TCP</span></td><td class="mono">47984</td><td class="mono">47984</td><td><span class="seg"><button>This computer</button><button class="on">The network</button></span></td><td><span class="pill done">Active</span></td><td class="tight"><button class="rm" title="Stop forwarding this port">&times;</button></td></tr>
+                  <tr><td><span class="chip2">TCP</span></td><td class="mono">47989</td><td class="mono">47989</td><td><span class="seg"><button>This computer</button><button class="on">The network</button></span></td><td><span class="pill done">Active</span></td><td class="tight"><button class="rm">&times;</button></td></tr>
+                  <tr><td><span class="chip2">TCP</span></td><td class="mono">48010</td><td class="mono">48010</td><td><span class="seg"><button>This computer</button><button class="on">The network</button></span></td><td><span class="pill done">Active</span></td><td class="tight"><button class="rm">&times;</button></td></tr>
+                  <tr><td><span class="chip2">UDP</span></td><td class="mono">47998</td><td class="mono">47998</td><td><span class="seg"><button>This computer</button><button class="on">The network</button></span></td><td><span class="pill done">Active</span></td><td class="tight"><button class="rm">&times;</button></td></tr>
+                  <tr><td><span class="chip2">UDP</span></td><td class="mono">47999</td><td class="mono">47999</td><td><span class="seg"><button>This computer</button><button class="on">The network</button></span></td><td><span class="pill done">Active</span></td><td class="tight"><button class="rm">&times;</button></td></tr>
+                  <tr><td><span class="chip2">UDP</span></td><td class="mono">48000</td><td class="mono">48000</td><td><span class="seg"><button>This computer</button><button class="on">The network</button></span></td><td><span class="pill done">Active</span></td><td class="tight"><button class="rm">&times;</button></td></tr>
+                  <tr><td><span class="chip2">TCP</span></td><td class="mono">1433</td><td class="mono">1433</td><td><span class="seg"><button class="on">This computer</button><button>The network</button></span></td><td><span class="pill pend">After restart</span></td><td class="tight"><button class="rm">&times;</button></td></tr>
+                  <tr class="joined"><td><span class="chip2">TCP</span></td><td class="mono">8080</td><td class="mono">80</td><td><span class="seg"><button class="on">This computer</button><button>The network</button></span></td><td><span class="pill fail">Port in use</span></td><td class="tight"><button class="rm">&times;</button></td></tr>
+                  <tr class="note"><td colspan="6"><span class="meta" style="color:var(--bad)">Something else on this computer already uses TCP port 8080, so the guest would not start. Pick another host port.</span></td></tr>
+                  <tr class="add"><td><span class="input select sm" style="width:64px">TCP</span></td><td><span class="input mono ph sm2">Port</span></td><td><span class="input mono ph sm2">Same port</span></td><td><span class="seg"><button class="on">This computer</button><button>The network</button></span></td><td colspan="2"><button class="btn" style="padding:3px 12px">Add</button></td></tr>
+                  <tr class="note"><td></td><td colspan="5"><span class="meta" style="color:var(--bad)">LSW itself uses TCP port 5445 of this computer.</span></td></tr>
+                </tbody>
+              </table>
+              <div class="in" style="gap:7px;border-top:1px solid #1b202a">
+                <span class="tline"><span class="meta">Removed TCP 3389 &rarr; 3389.</span><button class="btn quiet" style="padding:2px 9px;font-size:12px">Undo</button></span>
+                <span class="tline"><span class="meta">Other machines connect to</span><span class="mono" style="color:var(--fg)">192.168.1.20</span><span class="meta">enp5s0</span><button class="btn quiet" style="padding:2px 9px;font-size:12px">Copy</button></span>
+              </div>
+              <div class="foot"><span class="meta">LSW itself uses TCP 5102, 5103 and 5445. This computer lets only the administrator listen on ports below 1024, so those cannot be forwarded.</span></div>
+            </div>
+
+            <div class="area">
+              <header>
+                <span class="nm">Forwarded ports</span>
+                <span class="cap">with nothing forwarded</span>
+                <span class="right"><span class="tagr">restart</span><span class="meta">no port</span></span>
+              </header>
+              <div class="in" style="padding-bottom:4px">
+                <div class="chips">
+                  <button class="chip2">Sunshine / Moonlight</button>
+                  <button class="chip2">Remote Desktop</button>
+                  <button class="chip2">SQL Server</button>
+                  <button class="chip2">SSH</button>
+                  <button class="chip2">Web server</button>
+                </div>
+              </div>
+              <table class="tbl fwd">
+                <thead>
+                  <tr><th>Protocol</th><th>On this computer</th><th>In Windows</th><th>Reachable from</th><th>State</th><th></th></tr>
+                </thead>
+                <tbody>
+                  <tr class="empty"><td colspan="6"><span style="font-size:12.5px;color:var(--fg-dim)">A forwarded port lets a program on this computer, or another machine, reach a server that runs in Windows. Pick a set above or add a port here.</span></td></tr>
+                  <tr class="add"><td><span class="input select sm" style="width:64px">TCP</span></td><td><span class="input mono ph sm2">Port</span></td><td><span class="input mono ph sm2">Same port</span></td><td><span class="seg"><button class="on">This computer</button><button>The network</button></span></td><td colspan="2"><button class="btn" style="padding:3px 12px">Add</button></td></tr>
+                </tbody>
+              </table>
+              <div class="foot"><span class="meta">LSW itself uses TCP 5102, 5103 and 5445. This computer lets only the administrator listen on ports below 1024, so those cannot be forwarded.</span></div>
+            </div>
+
+            <div class="area">
+              <header>
+                <span class="nm">Bridge</span>
+                <span class="cap">on a computer without one</span>
+                <span class="right"><span class="tagr">restart</span></span>
+              </header>
+              <div class="in">
+                <span style="font-size:12.5px;color:var(--fg-dim);line-height:1.55">A bridge is a virtual switch on this computer that puts machines on one of its networks. This computer has none: one must exist here before Windows can join it, and LSW does not create bridges.</span>
+              </div>
+              <div class="foot"><span class="meta">LSW changes nothing on this computer: the bridge, QEMU's helper and its rules are set up outside it.</span></div>
+            </div>
+          </div>
+
+          <div class="applybar">
+            <span class="eyebrow" style="color:var(--amber)">3 changes need a restart</span>
+            <span class="diffs">
+              <span class="diff">network <span class="f">shared</span> <span class="t">bridged</span></span>
+              <span class="diff">bridge <span class="f">none</span> <span class="t">br0</span></span>
+              <span class="diff">forwarded ports <span class="f">6</span> <span class="t">8</span></span>
+            </span>
+            <span class="acts">
+              <button class="btn quiet">Revert</button>
+              <button class="btn primary">Apply and restart the guest</button>
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </section>
   <section data-view="m-settings" hidden>
     <div class="stage-head">
       <span class="eyebrow">Manager</span>
@@ -1824,86 +2042,6 @@ svg.ico{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stro
                   <span class="input mono" style="width:110px;text-align:right">60 GiB</span>
                   <button class="btn">Grow</button>
                 </span>
-              </div>
-            </div>
-
-            <div class="sgroup">
-              <h5>Network</h5>
-              <div class="srow">
-                <span>
-                  <span class="k">Network <span class="tagr">restart</span></span>
-                  <span class="d">Shared: Windows reaches the network through this computer and can be reached only through the forwarded ports. Bridged: Windows also joins a bridge of this computer and gets its own address on that network.</span>
-                </span>
-                <span class="ctl"><span class="input select" style="width:260px">Shared with this computer (NAT)</span></span>
-              </div>
-              <div class="srow">
-                <span>
-                  <span class="k">Bridge <span class="tagr">restart</span></span>
-                  <span class="d">Used only when the network is bridged. Windows could not join it now: /etc/qemu/bridge.conf does not allow br0; it needs the line "allow br0".</span>
-                </span>
-                <span class="ctl"><span class="input select" style="width:260px">br0</span></span>
-              </div>
-              <div class="srow">
-                <span>
-                  <span class="k">Forwarded ports <span class="tagr">restart</span></span>
-                  <span class="d">A connection to a port of this computer goes to a port in Windows. LSW itself uses TCP 5102, 5103, 5445. Add Sunshine ports forwards what Moonlight needs to reach Sunshine in Windows from the network: TCP 47984, 47989 and 48010, UDP 47998 to 48000.</span>
-                </span>
-                <span class="ctl"><button class="btn" style="white-space:nowrap">Add Sunshine ports</button></span>
-              </div>
-              <div class="srow wide">
-                <div class="editlist">
-                  <table>
-                    <thead>
-                      <tr><th>Port here &rarr; port in Windows</th><th>Reachable</th><th class="tight"></th></tr>
-                    </thead>
-                    <tbody>
-                    <tr>
-                      <td><span class="mono" style="color:var(--fg)">TCP 47984 &rarr; 47984</span></td>
-                      <td class="mono" style="color:var(--fg-faint);font-size:11.5px">from the network</td>
-                      <td class="tight"><button class="rm" style="display:inline-grid" title="Stop forwarding this port">&times;</button></td>
-                    </tr>
-                    <tr>
-                      <td><span class="mono" style="color:var(--fg)">TCP 47989 &rarr; 47989</span></td>
-                      <td class="mono" style="color:var(--fg-faint);font-size:11.5px">from the network</td>
-                      <td class="tight"><button class="rm" style="display:inline-grid" title="Stop forwarding this port">&times;</button></td>
-                    </tr>
-                    <tr>
-                      <td><span class="mono" style="color:var(--fg)">TCP 48010 &rarr; 48010</span></td>
-                      <td class="mono" style="color:var(--fg-faint);font-size:11.5px">from the network</td>
-                      <td class="tight"><button class="rm" style="display:inline-grid" title="Stop forwarding this port">&times;</button></td>
-                    </tr>
-                    <tr>
-                      <td><span class="mono" style="color:var(--fg)">UDP 47998 &rarr; 47998</span></td>
-                      <td class="mono" style="color:var(--fg-faint);font-size:11.5px">from the network</td>
-                      <td class="tight"><button class="rm" style="display:inline-grid" title="Stop forwarding this port">&times;</button></td>
-                    </tr>
-                    <tr>
-                      <td><span class="mono" style="color:var(--fg)">UDP 47999 &rarr; 47999</span></td>
-                      <td class="mono" style="color:var(--fg-faint);font-size:11.5px">from the network</td>
-                      <td class="tight"><button class="rm" style="display:inline-grid" title="Stop forwarding this port">&times;</button></td>
-                    </tr>
-                    <tr>
-                      <td><span class="mono" style="color:var(--fg)">UDP 48000 &rarr; 48000</span></td>
-                      <td class="mono" style="color:var(--fg-faint);font-size:11.5px">from the network</td>
-                      <td class="tight"><button class="rm" style="display:inline-grid" title="Stop forwarding this port">&times;</button></td>
-                    </tr>
-                    <tr>
-                      <td><span class="mono" style="color:var(--fg)">TCP 1433 &rarr; 1433</span></td>
-                      <td class="mono" style="color:var(--fg-faint);font-size:11.5px">from this computer only</td>
-                      <td class="tight"><button class="rm" style="display:inline-grid" title="Stop forwarding this port">&times;</button></td>
-                    </tr>
-                    </tbody>
-                  </table>
-                  <div class="foot" style="flex-wrap:wrap">
-                    <span class="input select" style="width:70px">TCP</span>
-                    <span class="input mono ph" style="width:110px">Host port</span>
-                    <span class="meta">&rarr;</span>
-                    <span class="input mono ph" style="width:230px">Port in Windows (same if empty)</span>
-                    <span class="input select" style="width:170px;white-space:nowrap">This computer only</span>
-                    <button class="btn">Add</button>
-                    <span class="meta" style="color:var(--bad);flex-basis:100%">LSW itself uses TCP port 5445 of this computer.</span>
-                  </div>
-                </div>
               </div>
             </div>
 
@@ -3509,7 +3647,7 @@ svg.ico{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stro
 
   var NAV = [
     ["overview", "Overview"], null,
-    ["display", "Display"], ["graphics", "Graphics"], ["gpustatus", "GPU status"], ["files", "Files"], ["usb", "USB"], null,
+    ["display", "Display"], ["graphics", "Graphics"], ["gpustatus", "GPU status"], ["files", "Files"], ["usb", "USB"], ["network", "Network"], null,
     ["console", "Console"], ["log", "Log"], ["maint", "Maintenance"], null,
     ["settings", "Settings"]
   ];
@@ -3518,6 +3656,7 @@ svg.ico{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stro
     usb: '<span class="count">2</span>',
     graphics: '<span class="count" style="color:var(--amber)">1</span>',
     files: '<span class="count" style="color:var(--amber)">1</span>',
+    network: '<span class="count" style="color:var(--amber)">3</span>',
     settings: '<span class="count" style="color:var(--amber)">2</span>'
   };
   document.querySelectorAll("ul[data-nav]").forEach(function(ul){

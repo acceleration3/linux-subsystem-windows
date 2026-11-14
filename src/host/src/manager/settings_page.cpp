@@ -4,9 +4,7 @@
 #include "lsw/host/config/manager_settings.hpp"
 #include "lsw/host/config/pending_changes.hpp"
 #include "lsw/host/config/vm_sizing.hpp"
-#include "lsw/host/config/port_forwards.hpp"
 #include "lsw/host/manager/manager_exit.hpp"
-#include "lsw/host/manager/port_forward_editor.hpp"
 #include "lsw/host/manager/setting_controls.hpp"
 #include "lsw/host/platform/host_memory.hpp"
 #include "lsw/host/services/status_hub.hpp"
@@ -64,7 +62,6 @@ SettingsPage::SettingsPage(config::ManagerSettings& settings, config::PendingCha
     : ui::ScrollPage(parent), pending_(pending), status_(status),
       verbosity_(verbosity), controls_(new SettingControls(settings, pending, this)) {
     build_machine();
-    build_network(settings);
     build_startup();
     build_desktop();
     build_logging();
@@ -78,7 +75,6 @@ SettingsPage::SettingsPage(config::ManagerSettings& settings, config::PendingCha
 
 void SettingsPage::showEvent(QShowEvent* event) {
     ui::ScrollPage::showEvent(event);
-    refresh_network();
     refresh_debug_row();
     debug_clock_.start();
 }
@@ -248,100 +244,6 @@ void SettingsPage::refresh_priority_note() {
     if (priority_note_ != nullptr) {
         priority_note_->setText(priority_note(status_.priority()));
     }
-}
-
-void SettingsPage::build_network(config::ManagerSettings& settings) {
-    using Mode = config::ManagerSettings::NetworkMode;
-    auto* network = new_group(QStringLiteral("Network"));
-    add_row(network, K::kNetworkMode, QStringLiteral("Network"),
-            QStringLiteral("Shared: Windows reaches the network through this computer and can be "
-                           "reached only through the forwarded ports. Bridged: Windows also joins "
-                           "a bridge of this computer and gets its own address on that network."),
-            controls_->choice(K::kNetworkMode,
-                              {
-                                  {QStringLiteral("Shared with this computer (NAT)"), QString{Mode::kShared}},
-                                  {QStringLiteral("Bridged to a host bridge"), QString{Mode::kBridged}},
-                              }));
-
-    bridge_ = new QComboBox;
-    connect(bridge_, &QComboBox::activated, this,
-            [this](int index) { controls_->put(K::kNetworkBridge, bridge_->itemData(index)); });
-    auto* bridge_row = add_row(network, K::kNetworkBridge, QStringLiteral("Bridge"), QString{}, bridge_);
-    bridge_note_ = bridge_row->findChild<QLabel*>(QStringLiteral("rowDescription"));
-    controls_->follow(K::kNetworkMode, this, [this] { refresh_network(); });
-    controls_->follow(K::kNetworkBridge, this, [this] { refresh_network(); });
-
-    QStringList own;
-    for (const config::PortForward& forward : config::PortForwards::own()) {
-        own << QString::number(forward.host_port);
-    }
-    auto* sunshine = Widgets::button(QStringLiteral("Add Sunshine ports"));
-    add_row(network, K::kPortForwards, QStringLiteral("Forwarded ports"),
-            QStringLiteral("A connection to a port of this computer goes to a port in Windows. "
-                           "LSW itself uses TCP %1. Add Sunshine ports forwards what Moonlight "
-                           "needs to reach Sunshine in Windows from the network: TCP 47984, 47989 "
-                           "and 48010, UDP 47998 to 48000.")
-                .arg(own.join(QStringLiteral(", "))),
-            right_aligned(sunshine));
-    forwards_ = new PortForwardEditor(settings, pending_);
-    network->addWidget(forwards_);
-    connect(sunshine, &QPushButton::clicked, forwards_, [this] { (void)forwards_->add_sunshine(); });
-    refresh_network();
-}
-
-QString SettingsPage::bridge_note(bool bridged, const QString& bridge,
-                                  const platform::HostBridges::Facts& facts) {
-    if (facts.bridges.isEmpty() && bridge.isEmpty()) {
-        return QStringLiteral("This computer has no bridge. One must exist here before Windows "
-                              "can join it; LSW does not create bridges.");
-    }
-    const QString missing = platform::HostBridges::missing(facts, bridge);
-    if (!bridged) {
-        if (bridge.isEmpty()) {
-            return QStringLiteral("Used only when the network is bridged.");
-        }
-        return missing.isEmpty()
-                   ? QStringLiteral("Used only when the network is bridged. Windows can join %1.")
-                         .arg(bridge)
-                   : QStringLiteral("Used only when the network is bridged. Windows could not "
-                                    "join it now: %1")
-                         .arg(missing);
-    }
-    if (!missing.isEmpty()) {
-        return QStringLiteral("Not in effect, Windows starts with the shared network only: %1")
-            .arg(missing);
-    }
-    return QStringLiteral("Windows gets a second network adapter on %1. LSW keeps its own "
-                          "connections to Windows on the shared adapter.")
-        .arg(bridge);
-}
-
-void SettingsPage::refresh_network() {
-    if (bridge_ == nullptr || bridge_note_ == nullptr) {
-        return;
-    }
-    const platform::HostBridges::Facts facts = platform::HostBridges::probe();
-    const QString chosen = controls_->current(K::kNetworkBridge).toString();
-    {
-        const QSignalBlocker quiet(bridge_);
-        bridge_->clear();
-        if (chosen.isEmpty()) {
-            bridge_->addItem(facts.bridges.isEmpty() ? QStringLiteral("No bridge on this computer")
-                                                     : QStringLiteral("Choose a bridge"),
-                             QString{});
-        }
-        for (const QString& name : facts.bridges) {
-            bridge_->addItem(name, name);
-        }
-        if (!chosen.isEmpty() && !facts.bridges.contains(chosen)) {
-            bridge_->addItem(QStringLiteral("%1 (not on this computer)").arg(chosen), chosen);
-        }
-        bridge_->setCurrentIndex(bridge_->findData(chosen));
-        bridge_->setEnabled(bridge_->count() > 1);
-    }
-    const bool bridged = controls_->current(K::kNetworkMode).toString()
-                         == config::ManagerSettings::NetworkMode::kBridged;
-    bridge_note_->setText(bridge_note(bridged, chosen, facts).toHtmlEscaped());
 }
 
 void SettingsPage::build_startup() {

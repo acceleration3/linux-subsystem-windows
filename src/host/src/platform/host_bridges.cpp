@@ -26,6 +26,26 @@ bool privileged(const QString& path) {
     return ::getxattr(native.constData(), "security.capability", nullptr, 0) > 0;
 }
 
+enum class Verdict { Allowed, Denied, NotAllowed };
+
+Verdict verdict(const QVector<HostBridges::Rule>& rules, const QString& bridge) {
+    bool allowed = false;
+    bool denied = false;
+    for (const HostBridges::Rule& rule : rules) {
+        if (rule.bridge.isEmpty() || rule.bridge == bridge) {
+            (rule.allow ? allowed : denied) = true;
+        }
+    }
+    if (denied) {
+        return Verdict::Denied;
+    }
+    return allowed ? Verdict::Allowed : Verdict::NotAllowed;
+}
+
+QString allow_line(const QString& bridge) {
+    return QStringLiteral("allow %1").arg(bridge);
+}
+
 }
 
 HostBridges::Places HostBridges::system_places() {
@@ -45,9 +65,20 @@ HostBridges::Facts HostBridges::probe(const Places& places) {
     Facts facts;
     const QDir interfaces(places.interfaces);
     for (const QString& name : interfaces.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name)) {
-        if (QFileInfo(interfaces.filePath(name + QStringLiteral("/bridge"))).isDir()) {
-            facts.bridges << name;
+        if (!QFileInfo(interfaces.filePath(name + QStringLiteral("/bridge"))).isDir()) {
+            continue;
         }
+        facts.bridges << name;
+        Bridge bridge;
+        bridge.name = name;
+        QFile state(interfaces.filePath(name + QStringLiteral("/operstate")));
+        if (state.open(QIODevice::ReadOnly)) {
+            bridge.state = QString::fromLatin1(state.readAll()).trimmed();
+        }
+        bridge.members = static_cast<int>(QDir(interfaces.filePath(name + QStringLiteral("/brif")))
+                                              .entryList(QDir::AllEntries | QDir::NoDotAndDotDot)
+                                              .size());
+        facts.details.push_back(bridge);
     }
     facts.helper_places = places.helpers;
     for (const QString& helper : places.helpers) {
@@ -100,24 +131,69 @@ QString HostBridges::missing(const Facts& facts, const QString& bridge) {
                               "attach the guest to a bridge.")
             .arg(facts.helper);
     }
-    bool allowed = false;
-    bool denied = false;
-    for (const Rule& rule : facts.rules) {
-        if (rule.bridge.isEmpty() || rule.bridge == bridge) {
-            (rule.allow ? allowed : denied) = true;
-        }
-    }
-    if (denied) {
+    switch (verdict(facts.rules, bridge)) {
+    case Verdict::Denied:
         return QStringLiteral("%1 denies %2.").arg(facts.rules_file, bridge);
-    }
-    if (!allowed) {
+    case Verdict::NotAllowed:
         return facts.rules_readable
-                   ? QStringLiteral("%1 does not allow %2; it needs the line \"allow %2\".")
-                         .arg(facts.rules_file, bridge)
-                   : QStringLiteral("%1 cannot be read; it needs the line \"allow %2\".")
-                         .arg(facts.rules_file, bridge);
+                   ? QStringLiteral("%1 does not allow %2; it needs the line \"%3\".")
+                         .arg(facts.rules_file, bridge, allow_line(bridge))
+                   : QStringLiteral("%1 cannot be read; it needs the line \"%2\".")
+                         .arg(facts.rules_file, allow_line(bridge));
+    case Verdict::Allowed:
+        break;
     }
     return {};
+}
+
+QVector<HostBridges::Requirement> HostBridges::readiness(const Facts& facts, const QString& bridge) {
+    using State = Requirement::State;
+    QVector<Requirement> out;
+    if (bridge.isEmpty()) {
+        return out;
+    }
+    if (!facts.bridges.contains(bridge)) {
+        out.push_back({State::Unmet,
+                       QStringLiteral("This computer has no bridge named %1").arg(bridge),
+                       QStringLiteral("Choose a bridge that is here, or create this one."),
+                       {}});
+    }
+    if (facts.helper.isEmpty()) {
+        out.push_back({State::Unmet, QStringLiteral("QEMU's bridge helper is not installed"),
+                       QStringLiteral("It comes with QEMU. Looked for %1")
+                           .arg(facts.helper_places.join(QStringLiteral(", "))),
+                       {}});
+        out.push_back({State::Unknown, QStringLiteral("The helper may create the adapter"),
+                       QStringLiteral("Not checked without the helper."), {}});
+    } else {
+        out.push_back({State::Met, QStringLiteral("QEMU's bridge helper is installed"), facts.helper, {}});
+        if (facts.helper_privileged) {
+            out.push_back({State::Met, QStringLiteral("The helper may create the adapter"), {}, {}});
+        } else {
+            out.push_back({State::Unmet, QStringLiteral("The helper may not create the adapter"),
+                           QStringLiteral("It is neither setuid root nor given a capability. Run "
+                                          "this as the administrator"),
+                           QStringLiteral("chmod u+s %1").arg(facts.helper)});
+        }
+    }
+    switch (verdict(facts.rules, bridge)) {
+    case Verdict::Allowed:
+        out.push_back({State::Met, QStringLiteral("%1 allows %2").arg(facts.rules_file, bridge), {}, {}});
+        break;
+    case Verdict::Denied:
+        out.push_back({State::Unmet, QStringLiteral("%1 denies %2").arg(facts.rules_file, bridge),
+                       QStringLiteral("Remove the line that denies it from that file."), {}});
+        break;
+    case Verdict::NotAllowed:
+        out.push_back({State::Unmet,
+                       facts.rules_readable
+                           ? QStringLiteral("%1 does not allow %2").arg(facts.rules_file, bridge)
+                           : QStringLiteral("%1 cannot be read").arg(facts.rules_file),
+                       QStringLiteral("Add this line to %1").arg(facts.rules_file),
+                       allow_line(bridge)});
+        break;
+    }
+    return out;
 }
 
 }

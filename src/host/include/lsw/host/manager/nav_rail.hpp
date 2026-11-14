@@ -19,6 +19,7 @@ public:
         GpuStatus,
         Files,
         Usb,
+        Network,
         Console,
         Log,
         Maintenance,

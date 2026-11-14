@@ -16,6 +16,7 @@
 #include "lsw/host/manager/log_panel.hpp"
 #include "lsw/host/manager/manager_exit.hpp"
 #include "lsw/host/manager/maintenance_page.hpp"
+#include "lsw/host/manager/network_page.hpp"
 #include "lsw/host/manager/notice_board.hpp"
 #include "lsw/host/manager/run_on_vm_dialog.hpp"
 #include "lsw/host/manager/screen_pixels.hpp"
@@ -87,6 +88,7 @@ constexpr std::array<PageInfo, static_cast<std::size_t>(NavRail::Page::Count)> k
     {"GPU status", ""},
     {"Files", ""},
     {"USB", ""},
+    {"Network", ""},
     {"Console", ""},
     {"Log", ""},
     {"Maintenance", ""},
@@ -328,6 +330,9 @@ void MainWindow::build_pages() {
     connect(maintenance_page_, &MaintenancePage::summary_changed, this, &MainWindow::refresh_detail);
     usb_page_ = new UsbPage(services_.status(), services_.usb(), this);
     connect(usb_page_, &UsbPage::summary_changed, this, &MainWindow::refresh_detail);
+    network_page_ = new NetworkPage(services_.status(), services_.manager_settings(),
+                                    services_.pending_changes(), NetworkPage::Host::system(), this);
+    connect(network_page_, &NetworkPage::summary_changed, this, &MainWindow::refresh_detail);
     alerts_ = new GraphicsAlerts(services_.status(), this);
     graphics_page_ =
         new GraphicsPage(services_.status(), *alerts_, services_.manager_settings(),
@@ -347,6 +352,7 @@ void MainWindow::build_pages() {
     stack_->addWidget(gpu_status_page_);
     stack_->addWidget(files_page_);
     stack_->addWidget(usb_page_);
+    stack_->addWidget(network_page_);
     stack_->addWidget(console_);
     stack_->addWidget(log_);
     stack_->addWidget(maintenance_page_);
@@ -616,6 +622,8 @@ QString MainWindow::page_detail(NavRail::Page page) const {
         return files_page_ != nullptr ? files_page_->summary() : QString{};
     case NavRail::Page::Usb:
         return usb_page_ != nullptr ? usb_page_->summary() : QString{};
+    case NavRail::Page::Network:
+        return network_page_ != nullptr ? network_page_->summary() : QString{};
     case NavRail::Page::Maintenance:
         return maintenance_page_ != nullptr ? maintenance_page_->summary() : QString{};
     case NavRail::Page::Count:

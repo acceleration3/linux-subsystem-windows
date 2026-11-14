@@ -238,6 +238,7 @@ int App::capture_screens(const QString& dir) {
         {manager::NavRail::Page::Usb, "manager-09-usb", 800},
         {manager::NavRail::Page::Maintenance, "manager-10-maintenance", 700},
         {manager::NavRail::Page::GpuStatus, "manager-11-gpu-status", 860},
+        {manager::NavRail::Page::Network, "manager-12-network", 1100},
     };
     for (const auto& entry : kPages) {
         window->resize(1000, entry.height);

@@ -53,6 +53,9 @@ NavRail::Page ApplyBar::page_of(const QString& key) {
     if (key == K::kHostShares) {
         return NavRail::Page::Files;
     }
+    if (key == K::kNetworkMode || key == K::kNetworkBridge || key == K::kPortForwards) {
+        return NavRail::Page::Network;
+    }
     return NavRail::Page::Settings;
 }
 
