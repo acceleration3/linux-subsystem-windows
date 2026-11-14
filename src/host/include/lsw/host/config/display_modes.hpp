@@ -2,6 +2,7 @@
 
 #include <QString>
 #include <QStringList>
+#include <QVector>
 #include <optional>
 
 namespace lsw::host::config {
@@ -21,10 +22,13 @@ struct DisplayMode {
 class DisplayModes {
 public:
     static constexpr int kMinEdge = 100;
-    static constexpr int kMaxEdge = 4095;
+    static constexpr int kMaxEdge = 8192;
     static constexpr int kMaxModes = 32;
 
     DisplayModes() = delete;
+
+    [[nodiscard]] static const QVector<DisplayMode>& common();
+    [[nodiscard]] static QVector<DisplayMode> offerable(const QVector<DisplayMode>& monitors);
 
     [[nodiscard]] static std::optional<DisplayMode> parse(const QString& text);
 

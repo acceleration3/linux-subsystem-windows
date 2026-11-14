@@ -151,13 +151,17 @@ void follows_the_window_and_restores(ManagerSettings& settings) {
     spin(kQuiet);
     check(guest.offers.size() == 2 && guest.switches.size() == 2, "the same size again changes nothing");
 
-    desktop.resized(QSize(5000, 60));
+    desktop.resized(QSize(5120, 1440));
     spin(kQuiet);
-    check(guest.offers.last() == QStringLiteral("4095x100") && guest.now == (DisplayMode{4095, 100}),
+    check(guest.offers.last() == QStringLiteral("5120x1440") && guest.now == (DisplayMode{5120, 1440}),
+          "an ultrawide window's size is offered to the pixel");
+    desktop.resized(QSize(9000, 60));
+    spin(kQuiet);
+    check(guest.offers.last() == QStringLiteral("8192x100") && guest.now == (DisplayMode{8192, 100}),
           "a size past what the display can offer is the nearest it can");
-    desktop.resized(QSize(5200, 40));
+    desktop.resized(QSize(9200, 40));
     spin(kQuiet);
-    check(guest.offers.size() == 3, "and another size past it is that same mode, not a change");
+    check(guest.offers.size() == 4, "and another size past it is that same mode, not a change");
     check(settings.string_value(K::kDesktopRestore) == QStringLiteral("2560x1440"),
           "what to return to stays the resolution from before the desktop opened");
 
@@ -336,7 +340,7 @@ int main(int argc, char** argv) {
 
     check(DisplayModes::clamped(DisplayMode{1201, 841}) == (DisplayMode{1201, 841}),
           "a size the display can offer is kept to the pixel, odd sides too");
-    check(DisplayModes::clamped(DisplayMode{99, 4096}) == (DisplayMode{100, 4095}) &&
+    check(DisplayModes::clamped(DisplayMode{99, 8193}) == (DisplayMode{100, 8192}) &&
               DisplayModes::refusal(DisplayModes::clamped(DisplayMode{20000, 1})).isEmpty(),
           "a clamped size is one the display accepts");
     check(!ManagerSettings::default_value(K::kOneToOneDesktop).toBool() &&
