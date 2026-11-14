@@ -3,22 +3,20 @@
 #include "lsw/host/ui/lsw_style.hpp"
 #include "lsw/host/ui/sort_item.hpp"
 #include "lsw/host/ui/table_header.hpp"
+#include "theme_qss.hpp"
 
 #include <QApplication>
+#include <QColor>
 #include <QFont>
 #include <QFontDatabase>
+#include <QHeaderView>
 #include <QPalette>
+#include <QScrollBar>
 #include <QString>
 #include <QStyleFactory>
-
-#include <QColor>
-#include <QHeaderView>
-#include <QScrollBar>
 #include <QStyledItemDelegate>
 #include <QTableWidget>
 #include <QWidget>
-
-#include "theme_qss.hpp"
 
 void init_lsw_theme_resources() {
     Q_INIT_RESOURCE(resources);

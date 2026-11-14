@@ -2,7 +2,6 @@
 
 #include <QFile>
 #include <QStringList>
-
 #include <algorithm>
 
 namespace lsw::host::config {
@@ -35,7 +34,7 @@ QLatin1StringView wire(PortForward::Protocol protocol) {
     return protocol == PortForward::Protocol::Udp ? kUdp : kTcp;
 }
 
-}
+}  // namespace
 
 const QVector<PortForward>& PortForwards::own() {
     static const QVector<PortForward> entries = {
@@ -86,18 +85,20 @@ const QVector<PortPreset>& PortForwards::presets() {
 }
 
 bool PortForwards::applied(const QVector<PortForward>& entries, const PortPreset& preset) {
-    return std::all_of(preset.ports.begin(), preset.ports.end(), [&entries](const PortForward& port) {
-        return std::any_of(entries.begin(), entries.end(),
-                           [&port](const PortForward& entry) { return same_ports(entry, port); });
-    });
+    return std::all_of(
+        preset.ports.begin(), preset.ports.end(), [&entries](const PortForward& port) {
+            return std::any_of(entries.begin(), entries.end(), [&port](const PortForward& entry) {
+                return same_ports(entry, port);
+            });
+        });
 }
 
 QVector<PortForward> PortForwards::with(QVector<PortForward> entries, const PortPreset& preset,
                                         QStringList* refusals, int first_host_port) {
     for (const PortForward& port : preset.ports) {
-        const bool present = std::any_of(entries.begin(), entries.end(), [&port](const PortForward& entry) {
-            return same_ports(entry, port);
-        });
+        const bool present =
+            std::any_of(entries.begin(), entries.end(),
+                        [&port](const PortForward& entry) { return same_ports(entry, port); });
         if (present) {
             continue;
         }
@@ -126,11 +127,11 @@ QString PortForwards::mapping(const PortPreset& preset) {
         parts << ports_text(port);
         from_network = from_network || port.from_network;
     }
-    return QStringLiteral("%1. %2")
-        .arg(parts.join(QStringLiteral(", ")),
-             from_network ? QStringLiteral("Reachable from the network.")
-                          : QStringLiteral("Reachable from this computer only; switch a row to "
-                                           "open it to the network."));
+    return QStringLiteral("%1. %2").arg(
+        parts.join(QStringLiteral(", ")),
+        from_network ? QStringLiteral("Reachable from the network.")
+                     : QStringLiteral("Reachable from this computer only; switch a row to "
+                                      "open it to the network."));
 }
 
 int PortForwards::first_unprivileged_port() {
@@ -146,7 +147,9 @@ int PortForwards::first_unprivileged_port() {
 QString PortForwards::refusal(const QVector<PortForward>& entries, const PortForward& candidate,
                               int first_host_port) {
     if (!in_range(candidate.host_port) || !in_range(candidate.guest_port)) {
-        return QStringLiteral("A port is a number from %1 to %2.").arg(kLowestPort).arg(kHighestPort);
+        return QStringLiteral("A port is a number from %1 to %2.")
+            .arg(kLowestPort)
+            .arg(kHighestPort);
     }
     if (candidate.host_port < first_host_port) {
         return QStringLiteral("This computer lets only the administrator listen on ports below %1.")
@@ -196,13 +199,13 @@ QVector<PortForward> PortForwards::decode(const QString& blob) {
     QVector<PortForward> out;
     for (const QString& record : blob.split(QLatin1Char(' '), Qt::SkipEmptyParts)) {
         const QStringList fields = record.split(QLatin1Char(':'));
-        if (fields.size() != 4 || (fields.at(0) != kTcp && fields.at(0) != kUdp)
-            || (fields.at(3) != kLocal && fields.at(3) != kNetwork)) {
+        if (fields.size() != 4 || (fields.at(0) != kTcp && fields.at(0) != kUdp) ||
+            (fields.at(3) != kLocal && fields.at(3) != kNetwork)) {
             continue;
         }
         PortForward entry;
-        entry.protocol = fields.at(0) == kUdp ? PortForward::Protocol::Udp
-                                              : PortForward::Protocol::Tcp;
+        entry.protocol =
+            fields.at(0) == kUdp ? PortForward::Protocol::Udp : PortForward::Protocol::Tcp;
         entry.host_port = fields.at(1).toInt();
         entry.guest_port = fields.at(2).toInt();
         entry.from_network = fields.at(3) == kNetwork;
@@ -256,4 +259,4 @@ std::optional<PortForward> PortForwards::from_hostfwd(const QString& option) {
     return entry;
 }
 
-}
+}  // namespace lsw::host::config

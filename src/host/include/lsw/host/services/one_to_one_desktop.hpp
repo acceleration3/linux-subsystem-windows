@@ -6,7 +6,6 @@
 #include <QSize>
 #include <QString>
 #include <QTimer>
-
 #include <functional>
 #include <optional>
 
@@ -68,4 +67,4 @@ private:
     bool busy_ = false;
 };
 
-}
+}  // namespace lsw::host::services

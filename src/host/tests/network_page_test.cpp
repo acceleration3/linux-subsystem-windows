@@ -26,7 +26,6 @@
 #include <QRadioButton>
 #include <QTcpServer>
 #include <QTemporaryDir>
-
 #include <cstdio>
 
 using lsw::host::config::ManagerSettings;
@@ -65,6 +64,7 @@ void check(bool ok, const char* label) {
 class NoProbe : public lsw::host::vm::IGuestStatsProbe {
 public:
     bool available() const override { return false; }
+
     lsw::host::vm::GuestStatsSample sample() override { return {}; }
 };
 
@@ -102,11 +102,12 @@ ChoiceCard* card(QWidget& page, const QString& title) {
     return nullptr;
 }
 
-template <typename Button>
+template<typename Button>
 Button* button(QWidget& page, const QString& name) {
     settle();
     for (Button* known : page.findChildren<Button*>()) {
-        if (known->isVisibleTo(&page) && (known->text() == name || known->accessibleName() == name)) {
+        if (known->isVisibleTo(&page) &&
+            (known->text() == name || known->accessibleName() == name)) {
             return known;
         }
     }
@@ -159,7 +160,7 @@ void shoot(NetworkPage& page, const QString& dir, const QString& name, int heigh
     page.hide();
 }
 
-}
+}  // namespace
 
 int main(int argc, char** argv) {
     QTemporaryDir home;
@@ -198,17 +199,21 @@ int main(int argc, char** argv) {
     if (shared == nullptr || bridged == nullptr || picker == nullptr || forwards == nullptr) {
         return 1;
     }
-    check(shows(page, QStringLiteral("How Windows is connected")) && shows(page, QStringLiteral("Forwarded ports")),
+    check(shows(page, QStringLiteral("How Windows is connected")) &&
+              shows(page, QStringLiteral("Forwarded ports")),
           "each part has its heading");
-    check(shared->selected() && !bridged->selected() && !shared->in_use() && !bridged->in_use()
-              && !shared->waiting() && !bridged->waiting(),
+    check(shared->selected() && !bridged->selected() && !shared->in_use() && !bridged->in_use() &&
+              !shared->waiting() && !bridged->waiting(),
           "untouched and with the guest off, shared is chosen and nothing is in use or waiting");
-    check(shows(page, QStringLiteral("The guest is off")) && !shows(page, QStringLiteral("Shared adapter")),
+    check(shows(page, QStringLiteral("The guest is off")) &&
+              !shows(page, QStringLiteral("Shared adapter")),
           "with the guest off it says so instead of showing adapters");
     check(!picker->isVisibleTo(&page), "the bridge part is not there while shared is chosen");
-    check(shows(page, QStringLiteral("A forwarded port lets")) && shows(page, QStringLiteral("no port")),
+    check(shows(page, QStringLiteral("A forwarded port lets")) &&
+              shows(page, QStringLiteral("no port")),
           "with nothing forwarded it says what a forwarded port is for");
-    check(page.summary() == QStringLiteral("Guest off · starts shared with this computer · no port to forward"),
+    check(page.summary() ==
+              QStringLiteral("Guest off · starts shared with this computer · no port to forward"),
           "the summary says the guest is off and what it starts with");
     check(shows(page, QStringLiteral("LSW itself uses TCP 5102, 5103, 5445")),
           "the ports LSW uses itself are named");
@@ -224,50 +229,57 @@ int main(int argc, char** argv) {
     hub.set_vm(running_guest({active}, {}, QStringLiteral("192.0.2.44")));
     check(shared->in_use() && !bridged->in_use() && shared->selected(),
           "with the guest running on the shared network, shared carries In use");
-    check(!shows(page, QStringLiteral("The guest is off")) && shows(page, QStringLiteral("Shared adapter"))
-              && !shows(page, QStringLiteral("Bridged adapter")) && shows(page, QStringLiteral("192.0.2.44"))
-              && shows(page, QStringLiteral("as Windows reported when it started")),
+    check(!shows(page, QStringLiteral("The guest is off")) &&
+              shows(page, QStringLiteral("Shared adapter")) &&
+              !shows(page, QStringLiteral("Bridged adapter")) &&
+              shows(page, QStringLiteral("192.0.2.44")) &&
+              shows(page, QStringLiteral("as Windows reported when it started")),
           "and the page shows its adapter and the address Windows reported");
     check(page.summary() == QStringLiteral("Shared with this computer · 1 port forwarded"),
           "the summary is what the guest runs with");
-    check(forwards->state_of(active) == ForwardState::Active && shows(page, QStringLiteral("Active"))
-              && shows(page, QStringLiteral("1 port")),
+    check(forwards->state_of(active) == ForwardState::Active &&
+              shows(page, QStringLiteral("Active")) && shows(page, QStringLiteral("1 port")),
           "the forward the guest runs with is active");
     hub.set_guest_address(QString{});
-    check(shows(page, QStringLiteral("Windows has not reported one yet")) && !shows(page, QStringLiteral("192.0.2.44")),
+    check(shows(page, QStringLiteral("Windows has not reported one yet")) &&
+              !shows(page, QStringLiteral("192.0.2.44")),
           "without a reported address it says none was reported");
     hub.set_guest_address(QStringLiteral("192.0.2.44"));
 
     const int before = summaries;
     press(bridged, Qt::Key_Space);
-    check(pending.keys().contains(K::kNetworkMode)
-              && pending.staged_or_current(K::kNetworkMode).toString() == Mode::kBridged
-              && manager_settings.string_value(K::kNetworkMode) == Mode::kShared,
+    check(pending.keys().contains(K::kNetworkMode) &&
+              pending.staged_or_current(K::kNetworkMode).toString() == Mode::kBridged &&
+              manager_settings.string_value(K::kNetworkMode) == Mode::kShared,
           "choosing bridged from the keyboard stages it and stores nothing");
-    check(bridged->selected() && bridged->waiting() && !bridged->in_use() && shared->in_use()
-              && !shared->selected() && !shared->waiting(),
+    check(bridged->selected() && bridged->waiting() && !bridged->in_use() && shared->in_use() &&
+              !shared->selected() && !shared->waiting(),
           "bridged is chosen and waits for a restart while shared stays in use");
-    check(summaries > before
-              && page.summary()
-                     == QStringLiteral("Shared with this computer · 1 port forwarded · 1 change waits for a restart"),
-          "the summary says a change waits");
-    check(ApplyBar::page_of(K::kNetworkMode) == NavRail::Page::Network
-              && ApplyBar::page_of(K::kNetworkBridge) == NavRail::Page::Network
-              && ApplyBar::page_of(K::kPortForwards) == NavRail::Page::Network
-              && ApplyBar::page_of(K::kCpuCores) == NavRail::Page::Settings,
+    check(
+        summaries > before &&
+            page.summary() ==
+                QStringLiteral(
+                    "Shared with this computer · 1 port forwarded · 1 change waits for a restart"),
+        "the summary says a change waits");
+    check(ApplyBar::page_of(K::kNetworkMode) == NavRail::Page::Network &&
+              ApplyBar::page_of(K::kNetworkBridge) == NavRail::Page::Network &&
+              ApplyBar::page_of(K::kPortForwards) == NavRail::Page::Network &&
+              ApplyBar::page_of(K::kCpuCores) == NavRail::Page::Settings,
           "changes to the network count on the Network entry of the rail");
-    check(picker->isVisibleTo(&page) && shows(page, QStringLiteral("A bridge is a virtual switch"))
-              && shows(page, QStringLiteral("one must exist here"))
-              && button<QRadioButton>(page, QStringLiteral("Join")) == nullptr,
-          "bridged on a computer without a bridge explains what a bridge is and that one must exist");
+    check(
+        picker->isVisibleTo(&page) && shows(page, QStringLiteral("A bridge is a virtual switch")) &&
+            shows(page, QStringLiteral("one must exist here")) &&
+            button<QRadioButton>(page, QStringLiteral("Join")) == nullptr,
+        "bridged on a computer without a bridge explains what a bridge is and that one must exist");
     shoot(page, shots, QStringLiteral("network-4-bridged-no-bridge"), 700);
 
     host.facts = host_with_bridges();
     page.read_host();
-    check(!shows(page, QStringLiteral("A bridge is a virtual switch")) && shows(page, QStringLiteral("br-lan"))
-              && shows(page, QStringLiteral("203.0.113.1 · 2 interfaces"))
-              && shows(page, QStringLiteral("no address · no interface")) && shows(page, QStringLiteral("Up"))
-              && shows(page, QStringLiteral("Down")),
+    check(!shows(page, QStringLiteral("A bridge is a virtual switch")) &&
+              shows(page, QStringLiteral("br-lan")) &&
+              shows(page, QStringLiteral("203.0.113.1 · 2 interfaces")) &&
+              shows(page, QStringLiteral("no address · no interface")) &&
+              shows(page, QStringLiteral("Up")) && shows(page, QStringLiteral("Down")),
           "with bridges it lists each with its state, address and interfaces");
     check(shows(page, QStringLiteral("Choose a bridge to see")),
           "and asks for a choice before judging one");
@@ -276,39 +288,40 @@ int main(int argc, char** argv) {
     if (join_lab != nullptr) {
         join_lab->click();
     }
-    check(pending.staged_or_current(K::kNetworkBridge).toString() == QStringLiteral("br-lab")
-              && manager_settings.string_value(K::kNetworkBridge).isEmpty(),
+    check(pending.staged_or_current(K::kNetworkBridge).toString() == QStringLiteral("br-lab") &&
+              manager_settings.string_value(K::kNetworkBridge).isEmpty(),
           "choosing a bridge stages it");
     join_lab = button<QRadioButton>(page, QStringLiteral("Join br-lab"));
-    check(join_lab != nullptr && join_lab->isChecked()
-              && !button<QRadioButton>(page, QStringLiteral("Join br-lan"))->isChecked(),
+    check(join_lab != nullptr && join_lab->isChecked() &&
+              !button<QRadioButton>(page, QStringLiteral("Join br-lan"))->isChecked(),
           "and marks it");
-    check(shows(page, QStringLiteral("QEMU's bridge helper is installed"))
-              && shows(page, QStringLiteral("The helper may create the adapter"))
-              && shows(page, QStringLiteral("/rules/bridge.conf does not allow br-lab"))
-              && shows(page, QStringLiteral("Add this line to /rules/bridge.conf"))
-              && shows(page, QStringLiteral("allow br-lab"))
-              && button<QPushButton>(page, QStringLiteral("Copy allow br-lab")) != nullptr,
-          "the checklist says what is met and, for what is not, the line to add with a copy button");
+    check(
+        shows(page, QStringLiteral("QEMU's bridge helper is installed")) &&
+            shows(page, QStringLiteral("The helper may create the adapter")) &&
+            shows(page, QStringLiteral("/rules/bridge.conf does not allow br-lab")) &&
+            shows(page, QStringLiteral("Add this line to /rules/bridge.conf")) &&
+            shows(page, QStringLiteral("allow br-lab")) &&
+            button<QPushButton>(page, QStringLiteral("Copy allow br-lab")) != nullptr,
+        "the checklist says what is met and, for what is not, the line to add with a copy button");
     if (auto* copy = button<QPushButton>(page, QStringLiteral("Copy allow br-lab"))) {
         copy->click();
     }
     shoot(page, shots, QStringLiteral("network-3-bridged-failing-checklist"), 900);
     host.facts.helper_privileged = false;
     page.read_host();
-    check(shows(page, QStringLiteral("The helper may not create the adapter"))
-              && shows(page, QStringLiteral("chmod u+s /helpers/qemu-bridge-helper")),
+    check(shows(page, QStringLiteral("The helper may not create the adapter")) &&
+              shows(page, QStringLiteral("chmod u+s /helpers/qemu-bridge-helper")),
           "a helper without privilege is said with the command");
     host.facts.helper.clear();
     page.read_host();
-    check(shows(page, QStringLiteral("QEMU's bridge helper is not installed"))
-              && shows(page, QStringLiteral("Looked for /helpers/qemu-bridge-helper")),
+    check(shows(page, QStringLiteral("QEMU's bridge helper is not installed")) &&
+              shows(page, QStringLiteral("Looked for /helpers/qemu-bridge-helper")),
           "a missing helper is said with where it was looked for");
     host.facts = host_with_bridges();
     page.read_host();
     button<QRadioButton>(page, QStringLiteral("Join br-lan"))->click();
-    check(shows(page, QStringLiteral("/rules/bridge.conf allows br-lan"))
-              && !shows(page, QStringLiteral("does not allow")),
+    check(shows(page, QStringLiteral("/rules/bridge.conf allows br-lan")) &&
+              !shows(page, QStringLiteral("does not allow")),
           "a bridge that is ready has every line met");
 
     QTcpServer squatter;
@@ -322,23 +335,27 @@ int main(int argc, char** argv) {
     const PortForward staged{Protocol::Udp, staged_port, staged_port, true};
     check(forwards->add(staged).isEmpty() && forwards->add(blocked).isEmpty(),
           "forwards are added on the page");
-    check(pending.keys().contains(K::kPortForwards)
-              && PortForwards::decode(pending.staged_or_current(K::kPortForwards).toString())
-                     == QVector<PortForward>{active, staged, blocked}
-              && PortForwards::decode(manager_settings.string_value(K::kPortForwards))
-                     == QVector<PortForward>{active},
+    check(pending.keys().contains(K::kPortForwards) &&
+              PortForwards::decode(pending.staged_or_current(K::kPortForwards).toString()) ==
+                  QVector<PortForward>{active, staged, blocked} &&
+              PortForwards::decode(manager_settings.string_value(K::kPortForwards)) ==
+                  QVector<PortForward>{active},
           "and reach the pending changes without being stored");
-    check(forwards->state_of(active) == ForwardState::Active
-              && forwards->state_of(staged) == ForwardState::AfterRestart
-              && forwards->state_of(blocked) == ForwardState::PortInUse
-              && shows(page, QStringLiteral("Active")) && shows(page, QStringLiteral("After restart"))
-              && shows(page, QStringLiteral("Port in use")) && shows(page, QStringLiteral("3 ports")),
+    check(forwards->state_of(active) == ForwardState::Active &&
+              forwards->state_of(staged) == ForwardState::AfterRestart &&
+              forwards->state_of(blocked) == ForwardState::PortInUse &&
+              shows(page, QStringLiteral("Active")) &&
+              shows(page, QStringLiteral("After restart")) &&
+              shows(page, QStringLiteral("Port in use")) && shows(page, QStringLiteral("3 ports")),
           "the rows show one active, one waiting for a restart and one whose port is in use");
-    check(shows(page, QStringLiteral("Other machines connect to")) && shows(page, QStringLiteral("192.0.2.10"))
-              && shows(page, QStringLiteral("203.0.113.1")) && !shows(page, QStringLiteral("127.0.0.1")),
+    check(shows(page, QStringLiteral("Other machines connect to")) &&
+              shows(page, QStringLiteral("192.0.2.10")) &&
+              shows(page, QStringLiteral("203.0.113.1")) &&
+              !shows(page, QStringLiteral("127.0.0.1")),
           "a forward open to the network lists this computer's addresses, not loopback");
-    check(page.summary()
-              == QStringLiteral("Shared with this computer · 1 port forwarded · 3 changes wait for a restart"),
+    check(page.summary() ==
+              QStringLiteral(
+                  "Shared with this computer · 1 port forwarded · 3 changes wait for a restart"),
           "the summary counts the three waiting changes");
     shoot(page, shots, QStringLiteral("network-5-running-forwards-in-each-state"), 1000);
 
@@ -371,8 +388,8 @@ int main(int argc, char** argv) {
     if (host_port != nullptr) {
         host_port->setText(QStringLiteral("5445"));
         press(host_port, Qt::Key_Return);
-        check(shows(page, QStringLiteral("LSW itself uses TCP port 5445")) && host_port->text() == QStringLiteral("5445")
-                  && forwards->entries().size() == 3,
+        check(shows(page, QStringLiteral("LSW itself uses TCP port 5445")) &&
+                  host_port->text() == QStringLiteral("5445") && forwards->entries().size() == 3,
               "Enter on a port LSW uses is refused in place and the field keeps what was typed");
         const int typed = [] {
             QTcpServer finder;
@@ -381,24 +398,30 @@ int main(int argc, char** argv) {
         }();
         host_port->setText(QString::number(typed));
         press(host_port, Qt::Key_Return);
-        check(forwards->entries().size() == 4 && forwards->entries().last() == PortForward{Protocol::Tcp, typed, typed, false}
-                  && host_port->text().isEmpty() && !shows(page, QStringLiteral("LSW itself uses TCP port 5445")),
-              "Enter adds a typed port, to the same port in Windows, and empties the field for the next");
+        check(forwards->entries().size() == 4 &&
+                  forwards->entries().last() == PortForward{Protocol::Tcp, typed, typed, false} &&
+                  host_port->text().isEmpty() &&
+                  !shows(page, QStringLiteral("LSW itself uses TCP port 5445")),
+              "Enter adds a typed port, to the same port in Windows, and empties the field for the "
+              "next");
     }
 
     pending.revert();
-    check(!pending.keys().contains(K::kPortForwards) && forwards->entries() == QVector<PortForward>{active}
-              && shared->selected() && !bridged->waiting() && !picker->isVisibleTo(&page),
+    check(!pending.keys().contains(K::kPortForwards) &&
+              forwards->entries() == QVector<PortForward>{active} && shared->selected() &&
+              !bridged->waiting() && !picker->isVisibleTo(&page),
           "reverting puts the page back to what is stored");
 
     hub.set_vm(running_guest({active}, {QStringLiteral("br-lan")}, QStringLiteral("203.0.113.9")));
-    check(bridged->in_use() && !shared->in_use() && shows(page, QStringLiteral("Bridged adapter on br-lan"))
-              && page.summary() == QStringLiteral("Bridged to br-lan · 1 port forwarded"),
+    check(bridged->in_use() && !shared->in_use() &&
+              shows(page, QStringLiteral("Bridged adapter on br-lan")) &&
+              page.summary() == QStringLiteral("Bridged to br-lan · 1 port forwarded"),
           "a guest that runs bridged shows it, with its second adapter");
     manager_settings.set_value(K::kNetworkMode, QString{Mode::kBridged});
     manager_settings.set_value(K::kNetworkBridge, QStringLiteral("br-lab"));
     hub.set_vm(running_guest({active}, {}, QStringLiteral("192.0.2.44")));
-    check(shared->in_use() && bridged->selected() && shows(page, QStringLiteral("Bridged is not in effect")),
+    check(shared->in_use() && bridged->selected() &&
+              shows(page, QStringLiteral("Bridged is not in effect")),
           "a guest set to bridged that started shared says bridged is not in effect");
 
     hub.set_vm(VmStatus{});
@@ -409,19 +432,22 @@ int main(int argc, char** argv) {
     if (auto* sunshine = button<QPushButton>(page, QStringLiteral("Sunshine / Moonlight"))) {
         sunshine->click();
     }
-    check(forwards->entries().size() == 6 && pending.keys() == QStringList{QString{K::kPortForwards}}
-              && page.summary()
-                     == QStringLiteral("Guest off · starts shared with this computer · no port to forward · "
-                                       "1 change waits for a restart"),
+    check(forwards->entries().size() == 6 &&
+              pending.keys() == QStringList{QString{K::kPortForwards}} &&
+              page.summary() ==
+                  QStringLiteral(
+                      "Guest off · starts shared with this computer · no port to forward · "
+                      "1 change waits for a restart"),
           "the Sunshine set staged with the guest off waits as one change");
     shoot(page, shots, QStringLiteral("network-2-shared-sunshine-staged"), 820);
     pending.revert();
 
     lsw::host::config::LogVerbosity verbosity{manager_settings};
     SettingsPage settings_page{manager_settings, pending, hub, verbosity};
-    check(!shows(settings_page, QStringLiteral("Forwarded ports")) && !shows(settings_page, QStringLiteral("Bridge"))
-              && settings_page.findChild<PortForwardEditor*>() == nullptr
-              && shows(settings_page, QStringLiteral("Processor cores")),
+    check(!shows(settings_page, QStringLiteral("Forwarded ports")) &&
+              !shows(settings_page, QStringLiteral("Bridge")) &&
+              settings_page.findChild<PortForwardEditor*>() == nullptr &&
+              shows(settings_page, QStringLiteral("Processor cores")),
           "the Settings page no longer has the network group");
 
     NavRail rail;
@@ -446,11 +472,12 @@ int main(int argc, char** argv) {
         }
         ++index;
     }
-    check(entry != nullptr && position > 0 && labels.value(position - 1) == QStringLiteral("USB")
-              && labels.value(position + 1) == QStringLiteral("Console"),
+    check(entry != nullptr && position > 0 && labels.value(position - 1) == QStringLiteral("USB") &&
+              labels.value(position + 1) == QStringLiteral("Console"),
           "the rail has a Network entry after USB and before Console");
     NavRail::Page selected = NavRail::Page::Overview;
-    QObject::connect(&rail, &NavRail::page_selected, &rail, [&selected](NavRail::Page chosen) { selected = chosen; });
+    QObject::connect(&rail, &NavRail::page_selected, &rail,
+                     [&selected](NavRail::Page chosen) { selected = chosen; });
     if (entry != nullptr) {
         entry->click();
     }

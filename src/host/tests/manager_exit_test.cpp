@@ -4,7 +4,6 @@
 #include <QCoreApplication>
 #include <QElapsedTimer>
 #include <QTemporaryDir>
-
 #include <chrono>
 #include <cstdio>
 
@@ -44,17 +43,17 @@ struct Case {
 
     Case(ManagerSettings& settings, bool to_tray, bool shut_guest, Machine start = {},
          std::chrono::milliseconds wait = std::chrono::milliseconds{5000})
-        : machine(start),
-          exit((settings.set_value(K::kCloseToTray, to_tray),
-                settings.set_value(K::kShutGuestOnQuit, shut_guest), settings),
-               ManagerExit::Host{[this] { return machine.tray; },
-                                 [this] { return machine.guest_running; },
-                                 [this] { ++machine.shutdown_requests; }},
-               nullptr, wait, std::chrono::milliseconds{10}) {
+        : machine(start), exit((settings.set_value(K::kCloseToTray, to_tray),
+                                settings.set_value(K::kShutGuestOnQuit, shut_guest), settings),
+                               ManagerExit::Host{[this] { return machine.tray; },
+                                                 [this] { return machine.guest_running; },
+                                                 [this] { ++machine.shutdown_requests; }},
+                               nullptr, wait, std::chrono::milliseconds{10}) {
         QObject::connect(&exit, &ManagerExit::hide_requested, [this] { ++seen.hides; });
         QObject::connect(&exit, &ManagerExit::left, [this] { ++seen.lefts; });
         QObject::connect(&exit, &ManagerExit::quit_requested, [this] { ++seen.quits; });
-        QObject::connect(&exit, &ManagerExit::tray_wanted, [this](bool wanted) { seen.tray << wanted; });
+        QObject::connect(&exit, &ManagerExit::tray_wanted,
+                         [this](bool wanted) { seen.tray << wanted; });
     }
 };
 
@@ -66,7 +65,7 @@ void spin(int ms) {
     }
 }
 
-}
+}  // namespace
 
 int main(int argc, char** argv) {
     QTemporaryDir home;
@@ -78,21 +77,21 @@ int main(int argc, char** argv) {
           "the manager stays in the tray unless that is turned off");
     check(ManagerSettings::default_value(K::kShutGuestOnQuit).toBool(),
           "quitting shuts the guest down unless the setting is turned off");
-    check(!ManagerSettings::needs_restart(K::kShutGuestOnQuit),
-          "the quit setting applies at once");
+    check(!ManagerSettings::needs_restart(K::kShutGuestOnQuit), "the quit setting applies at once");
 
     {
         Machine machine;
         int quits = 0;
-        ManagerExit untouched{settings,
-                              ManagerExit::Host{[&] { return machine.tray; },
-                                                [&] { return machine.guest_running; },
-                                                [&] { ++machine.shutdown_requests; }},
-                              nullptr, std::chrono::milliseconds{150}, std::chrono::milliseconds{10}};
+        ManagerExit untouched{
+            settings,
+            ManagerExit::Host{[&] { return machine.tray; }, [&] { return machine.guest_running; },
+                              [&] { ++machine.shutdown_requests; }},
+            nullptr, std::chrono::milliseconds{150}, std::chrono::milliseconds{10}};
         QObject::connect(&untouched, &ManagerExit::quit_requested, [&] { ++quits; });
         untouched.window_closed();
-        check(quits == 0 && machine.shutdown_requests == 0 && !untouched.leaving(),
-              "with the settings untouched, closing the window hides it and asks the guest nothing");
+        check(
+            quits == 0 && machine.shutdown_requests == 0 && !untouched.leaving(),
+            "with the settings untouched, closing the window hides it and asks the guest nothing");
         untouched.quit();
         check(machine.shutdown_requests == 1 && quits == 0,
               "with the settings untouched, quitting asks the guest to shut down and waits");

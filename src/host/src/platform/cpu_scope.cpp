@@ -2,15 +2,14 @@
 
 #include <QDBusArgument>
 #include <QDBusConnection>
-#include <QDBusMessage>
 #include <QDBusError>
+#include <QDBusMessage>
 #include <QDBusMetaType>
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
 #include <QDBusVariant>
 #include <QFile>
 #include <QList>
-
 #include <utility>
 
 namespace lsw::host::platform {
@@ -78,10 +77,11 @@ QByteArray slurp(const QString& path) {
 }
 
 UnitProperty cpu_weight(int weight) {
-    return {QStringLiteral("CPUWeight"), QDBusVariant(QVariant::fromValue(static_cast<qulonglong>(weight)))};
+    return {QStringLiteral("CPUWeight"),
+            QDBusVariant(QVariant::fromValue(static_cast<qulonglong>(weight)))};
 }
 
-}
+}  // namespace
 
 SystemdCpuScope::SystemdCpuScope(QString prefix) : prefix_(std::move(prefix)) {}
 
@@ -137,7 +137,8 @@ void SystemdCpuScope::enter(qint64 pid, int weight, Done done) {
     const QList<UnitProperty> properties = {
         {QStringLiteral("Description"), QDBusVariant(QStringLiteral("LSW Windows guest process"))},
         {QStringLiteral("CollectMode"), QDBusVariant(QStringLiteral("inactive-or-failed"))},
-        {QStringLiteral("PIDs"), QDBusVariant(QVariant::fromValue(QList<uint>{static_cast<uint>(pid)}))},
+        {QStringLiteral("PIDs"),
+         QDBusVariant(QVariant::fromValue(QList<uint>{static_cast<uint>(pid)}))},
         cpu_weight(weight),
     };
     call(QStringLiteral("StartTransientUnit"),
@@ -153,4 +154,4 @@ void SystemdCpuScope::set_weight(qint64 pid, int weight, Done done) {
          std::move(done));
 }
 
-}
+}  // namespace lsw::host::platform

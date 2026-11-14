@@ -35,4 +35,4 @@ private:
     QLabel* waiting_ = nullptr;
 };
 
-}
+}  // namespace lsw::host::ui

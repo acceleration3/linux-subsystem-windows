@@ -228,10 +228,11 @@ void DisplayPage::build_resolutions() {
     panel.body->addWidget(toggle_line(controls_->toggle(K::kMatchHostOutput),
                                       QStringLiteral("Put the size of the monitor this window is on "
                                                      "first, and follow it to another monitor")));
-    panel.body->addWidget(toggle_line(controls_->toggle(K::kOneToOneDesktop),
-                                      QStringLiteral("1:1 desktop: while the desktop window is open, Windows "
-                                                     "uses exactly its size in pixels and follows it when it "
-                                                     "is resized; closing it brings these resolutions back")));
+    panel.body->addWidget(
+        toggle_line(controls_->toggle(K::kOneToOneDesktop),
+                    QStringLiteral("1:1 desktop: while the desktop window is open, Windows "
+                                   "uses exactly its size in pixels and follows it when it "
+                                   "is resized; closing it brings these resolutions back")));
 
     list_box_ = new QWidget;
     auto* list_column = new QVBoxLayout(list_box_);

@@ -19,4 +19,4 @@ private:
     [[nodiscard]] static bool offered(const Resolution& wanted);
 };
 
-}
+}  // namespace lsw::agent::win

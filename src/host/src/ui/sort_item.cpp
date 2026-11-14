@@ -7,9 +7,9 @@
 
 namespace lsw::host::ui {
 
-SortItem::SortItem(const QString& text, std::optional<double> value, int natural, const QString& key)
-    : QTableWidgetItem(text), value_(value), key_(key.isEmpty() ? text : key), natural_(natural) {
-}
+SortItem::SortItem(const QString& text, std::optional<double> value, int natural,
+                   const QString& key)
+    : QTableWidgetItem(text), value_(value), key_(key.isEmpty() ? text : key), natural_(natural) {}
 
 SortItem* SortItem::put(QTableWidget* table, int row, int column, const QString& text,
                         std::optional<double> value, const QString& key) {
@@ -30,7 +30,8 @@ SortItem* SortItem::put(QTableWidget* table, int row, int column, const QString&
 
 bool SortItem::operator<(const QTableWidgetItem& other) const {
     const auto* rhs = dynamic_cast<const SortItem*>(&other);
-    const QHeaderView* head = tableWidget() != nullptr ? tableWidget()->horizontalHeader() : nullptr;
+    const QHeaderView* head =
+        tableWidget() != nullptr ? tableWidget()->horizontalHeader() : nullptr;
     if (rhs == nullptr || head == nullptr) {
         return QTableWidgetItem::operator<(other);
     }
@@ -38,7 +39,8 @@ bool SortItem::operator<(const QTableWidgetItem& other) const {
         return natural_ < rhs->natural_;
     }
     if (value_.has_value() != rhs->value_.has_value()) {
-        return TableHeader::order(head) == Qt::DescendingOrder ? !value_.has_value() : value_.has_value();
+        return TableHeader::order(head) == Qt::DescendingOrder ? !value_.has_value()
+                                                               : value_.has_value();
     }
     if (value_ && rhs->value_ && *value_ != *rhs->value_) {
         return *value_ < *rhs->value_;
@@ -49,7 +51,8 @@ bool SortItem::operator<(const QTableWidgetItem& other) const {
             return compared < 0;
         }
     }
-    return TableHeader::order(head) == Qt::DescendingOrder ? natural_ > rhs->natural_ : natural_ < rhs->natural_;
+    return TableHeader::order(head) == Qt::DescendingOrder ? natural_ > rhs->natural_
+                                                           : natural_ < rhs->natural_;
 }
 
-}
+}  // namespace lsw::host::ui

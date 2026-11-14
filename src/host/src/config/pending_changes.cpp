@@ -5,8 +5,8 @@
 
 #include <QDir>
 #include <QHash>
-#include <algorithm>
 #include <QStringList>
+#include <algorithm>
 
 namespace lsw::host::config {
 

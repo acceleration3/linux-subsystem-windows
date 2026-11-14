@@ -17,11 +17,12 @@ class QVBoxLayout;
 namespace lsw::host::config {
 class ManagerSettings;
 class PendingChanges;
-}
+}  // namespace lsw::host::config
+
 namespace lsw::host::ui {
 class FlowLayout;
 class SegmentedControl;
-}
+}  // namespace lsw::host::ui
 
 namespace lsw::host::manager {
 
@@ -40,6 +41,7 @@ public:
     void remove_preset(const config::PortPreset& preset);
     void set_reach(const config::PortForward& entry, bool from_network);
     void undo();
+
     [[nodiscard]] bool can_undo() const noexcept { return undo_.has_value(); }
 
     void set_live(const NetworkState::Live& live);
@@ -55,7 +57,8 @@ private:
     void build_presets(QVBoxLayout* column);
     void build_table(QVBoxLayout* column);
     void build_notes(QVBoxLayout* column);
-    [[nodiscard]] QWidget* row_for(const config::PortForward& entry, NetworkState::ForwardState state);
+    [[nodiscard]] QWidget* row_for(const config::PortForward& entry,
+                                   NetworkState::ForwardState state);
     void add_typed();
     void rebuild();
     void show_presets(const QVector<config::PortForward>& now);
@@ -106,4 +109,4 @@ private:
     ui::FlowLayout* reach_flow_ = nullptr;
 };
 
-}
+}  // namespace lsw::host::manager

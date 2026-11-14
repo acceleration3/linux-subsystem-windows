@@ -153,7 +153,8 @@ void OneToOneDesktop::restore() {
 
 void OneToOneDesktop::ask(const std::optional<Mode>& wanted, Answer done) {
     if (busy_) {
-        if (const std::optional<Switch> dropped = std::exchange(waiting_, Switch{wanted, std::move(done)})) {
+        if (const std::optional<Switch> dropped =
+                std::exchange(waiting_, Switch{wanted, std::move(done)})) {
             dropped->done(std::nullopt);
         }
         return;
@@ -186,4 +187,4 @@ void OneToOneDesktop::forget() {
     settings_.set_value(K::kDesktopRestore, QString());
 }
 
-}
+}  // namespace lsw::host::services

@@ -24,7 +24,8 @@ void check(bool ok, const char* label) {
     }
 }
 
-const char* const kLiveXml = R"(<domain type='kvm' id='3' xmlns:qemu='http://libvirt.org/schemas/domain/qemu/1.0'>
+const char* const kLiveXml =
+    R"(<domain type='kvm' id='3' xmlns:qemu='http://libvirt.org/schemas/domain/qemu/1.0'>
   <name>lsw</name>
   <memory unit='KiB'>16777216</memory>
   <currentMemory unit='KiB'>16777216</currentMemory>
@@ -51,7 +52,6 @@ const char* const kLiveXml = R"(<domain type='kvm' id='3' xmlns:qemu='http://lib
     <qemu:arg value='user,id=lsw-net'/>
   </qemu:commandline>
 </domain>)";
-
 }
 
 int main(int argc, char** argv) {
@@ -134,11 +134,11 @@ int main(int argc, char** argv) {
         check(live->disk_path.endsWith(QStringLiteral("lsw.qcow2")),
               "the cdrom before the disk is not taken for it");
         check(live->disk_bus == QStringLiteral("nvme"), "the live disk reads as NVMe");
-        check(live->gpus.size() == 2 && live->display() != nullptr
-                  && live->display()->hostmem_mib == 16384
-                  && live->display()->vram_reserve_mib == 1024
-                  && live->gpus.at(1).vram_reserve_mib == 0
-                  && live->display()->modes == QStringLiteral("2560x1440,1920x1080"),
+        check(live->gpus.size() == 2 && live->display() != nullptr &&
+                  live->display()->hostmem_mib == 16384 &&
+                  live->display()->vram_reserve_mib == 1024 &&
+                  live->gpus.at(1).vram_reserve_mib == 0 &&
+                  live->display()->modes == QStringLiteral("2560x1440,1920x1080"),
               "the live GPU lines read back");
         check(live->gpus.size() == 2 && !live->gpus.at(1).display, "display=off read");
     }

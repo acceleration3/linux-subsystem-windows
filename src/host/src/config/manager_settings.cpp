@@ -71,9 +71,9 @@ const QHash<QString, QVariant>& defaults() {
 
 const QStringList& restart_keys() {
     static const QStringList keys = {
-        K::kCpuCores,      K::kMemoryMib,  K::kDiskGib,    K::kHostGpu,
-        K::kHostWindowMib, K::kVramReserveMib, K::kRenderGpus, K::kHybridGraphics, K::kHostShares,
-        K::kNetworkMode,   K::kNetworkBridge,  K::kPortForwards,
+        K::kCpuCores,      K::kMemoryMib,      K::kDiskGib,       K::kHostGpu,
+        K::kHostWindowMib, K::kVramReserveMib, K::kRenderGpus,    K::kHybridGraphics,
+        K::kHostShares,    K::kNetworkMode,    K::kNetworkBridge, K::kPortForwards,
     };
     return keys;
 }

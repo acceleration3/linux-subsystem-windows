@@ -13,10 +13,11 @@ class LogVerbosity;
 class ManagerSettings;
 class PendingChanges;
 }
+
 namespace lsw::host::services {
 class StatusHub;
 struct PriorityStatus;
-}
+}  // namespace lsw::host::services
 
 namespace lsw::host::manager {
 

@@ -17,7 +17,6 @@
 #include <QLineEdit>
 #include <QPushButton>
 #include <QVBoxLayout>
-
 #include <algorithm>
 
 namespace lsw::host::manager {
@@ -41,11 +40,14 @@ constexpr int kPortWidth = 132;
 constexpr const char* kForward = "forward";
 
 QVector<ui::SegmentedControl::Option> reach_options() {
-    return {{QStringLiteral("This computer"), {}, false}, {QStringLiteral("The network"), {}, true}};
+    return {{QStringLiteral("This computer"), {}, false},
+            {QStringLiteral("The network"), {}, true}};
 }
 
 QString row_key(const PortForward& entry) {
-    return QStringLiteral("%1 %2").arg(PortForwards::protocol_name(entry.protocol)).arg(entry.host_port);
+    return QStringLiteral("%1 %2")
+        .arg(PortForwards::protocol_name(entry.protocol))
+        .arg(entry.host_port);
 }
 
 QString one(const PortForward& entry) {
@@ -100,7 +102,7 @@ void clear(QLayout* layout) {
     }
 }
 
-}
+}  // namespace
 
 PortForwardEditor::PortForwardEditor(config::ManagerSettings& settings,
                                      config::PendingChanges& pending, QWidget* parent)
@@ -313,8 +315,8 @@ bool PortForwardEditor::busy(const PortForward& entry) const {
     const bool held_by_guest =
         live_.running && std::any_of(live_.forwards.begin(), live_.forwards.end(),
                                      [&entry](const PortForward& active) {
-                                         return active.protocol == entry.protocol
-                                                && active.host_port == entry.host_port;
+                                         return active.protocol == entry.protocol &&
+                                                active.host_port == entry.host_port;
                                      });
     if (held_by_guest) {
         return false;
@@ -344,18 +346,18 @@ void PortForwardEditor::stage(const QVector<PortForward>& entries) {
 void PortForwardEditor::say(const QString& refusal, Under under) {
     refusal_->setText(refusal);
     said_under_ = under;
-    refusal_pad_->setFixedWidth(kProtocolWidth + kGap
-                                + (under == Under::Guest ? kPortWidth + kGap : 0));
+    refusal_pad_->setFixedWidth(kProtocolWidth + kGap +
+                                (under == Under::Guest ? kPortWidth + kGap : 0));
     refusal_row_->setVisible(!refusal.isEmpty());
 }
 
 QString PortForwardEditor::add(const PortForward& entry) {
     QVector<PortForward> now = entries();
     const QString refusal = PortForwards::refusal(now, entry);
-    const bool guest_side = entry.host_port >= PortForwards::kLowestPort
-                            && entry.host_port <= PortForwards::kHighestPort
-                            && (entry.guest_port < PortForwards::kLowestPort
-                                || entry.guest_port > PortForwards::kHighestPort);
+    const bool guest_side = entry.host_port >= PortForwards::kLowestPort &&
+                            entry.host_port <= PortForwards::kHighestPort &&
+                            (entry.guest_port < PortForwards::kLowestPort ||
+                             entry.guest_port > PortForwards::kHighestPort);
     say(refusal, guest_side ? Under::Guest : Under::Host);
     if (refusal.isEmpty()) {
         undo_.reset();
@@ -408,8 +410,9 @@ void PortForwardEditor::remove_preset(const PortPreset& preset) {
     preset_refusal_->hide();
     undo_ = before;
     const auto gone = before.size() - now.size();
-    undo_text_ = gone == 1 ? QStringLiteral("Removed the port of %1.").arg(preset.name)
-                           : QStringLiteral("Removed the %1 ports of %2.").arg(gone).arg(preset.name);
+    undo_text_ = gone == 1
+                     ? QStringLiteral("Removed the port of %1.").arg(preset.name)
+                     : QStringLiteral("Removed the %1 ports of %2.").arg(gone).arg(preset.name);
     offered_ = -1;
     stage(now);
 }
@@ -463,8 +466,8 @@ void PortForwardEditor::check_ports() {
 
 void PortForwardEditor::add_typed() {
     PortForward entry;
-    entry.protocol = protocol_->currentIndex() == 1 ? PortForward::Protocol::Udp
-                                                    : PortForward::Protocol::Tcp;
+    entry.protocol =
+        protocol_->currentIndex() == 1 ? PortForward::Protocol::Udp : PortForward::Protocol::Tcp;
     entry.host_port = host_port_->text().trimmed().toInt();
     const QString guest = guest_port_->text().trimmed();
     entry.guest_port = guest.isEmpty() ? entry.host_port : guest.toInt();
@@ -500,9 +503,10 @@ QWidget* PortForwardEditor::row_for(const PortForward& entry, ForwardState state
     reach->set_options(reach_options());
     reach->set_current(entry.from_network);
     reach->setAccessibleName(QStringLiteral("Who can reach %1").arg(row_key(entry)));
-    connect(reach, &ui::SegmentedControl::chosen, this,
-            [this, entry](const QVariant& value) { set_reach(entry, value.toBool()); },
-            Qt::QueuedConnection);
+    connect(
+        reach, &ui::SegmentedControl::chosen, this,
+        [this, entry](const QVariant& value) { set_reach(entry, value.toBool()); },
+        Qt::QueuedConnection);
     line->addWidget(fixed_cell(reach, reach_width_));
 
     line->addWidget(pill_for(state));
@@ -511,8 +515,9 @@ QWidget* PortForwardEditor::row_for(const PortForward& entry, ForwardState state
     remove_button->setToolTip(QStringLiteral("Stop forwarding this port"));
     remove_button->setAccessibleName(QStringLiteral("Stop forwarding %1").arg(row_key(entry)));
     remove_button->setCursor(Qt::PointingHandCursor);
-    connect(remove_button, &QPushButton::clicked, this, [this, entry] { remove(entry); },
-            Qt::QueuedConnection);
+    connect(
+        remove_button, &QPushButton::clicked, this, [this, entry] { remove(entry); },
+        Qt::QueuedConnection);
     line->addWidget(remove_button);
     box->addLayout(line);
 
@@ -595,10 +600,10 @@ void PortForwardEditor::show_presets(const QVector<PortForward>& now) {
         const bool applied = PortForwards::applied(now, preset);
         QPushButton* chip = chips_.at(i);
         chip->setText(applied ? QStringLiteral("✓ %1").arg(preset.name) : preset.name);
-        chip->setToolTip(QStringLiteral("%1\n%2%3")
-                             .arg(preset.description, PortForwards::mapping(preset),
-                                  applied ? QStringLiteral("\nAdded. Click to remove its ports.")
-                                          : QString{}));
+        chip->setToolTip(
+            QStringLiteral("%1\n%2%3")
+                .arg(preset.description, PortForwards::mapping(preset),
+                     applied ? QStringLiteral("\nAdded. Click to remove its ports.") : QString{}));
         if (chip->property("applied").toBool() != applied) {
             Widgets::set_flag(chip, "applied", applied);
         }
@@ -610,9 +615,10 @@ void PortForwardEditor::show_presets(const QVector<PortForward>& now) {
     if (offered_ >= 0) {
         const PortPreset& preset = presets.at(offered_);
         offer_text_->setText(QStringLiteral("%1 is added.").arg(preset.name));
-        offer_remove_->setText(preset.ports.size() == 1
-                                   ? QStringLiteral("Remove its port")
-                                   : QStringLiteral("Remove its %1 ports").arg(preset.ports.size()));
+        offer_remove_->setText(
+            preset.ports.size() == 1
+                ? QStringLiteral("Remove its port")
+                : QStringLiteral("Remove its %1 ports").arg(preset.ports.size()));
     }
 }
 
@@ -687,4 +693,4 @@ void PortForwardEditor::order_tabs() {
     }
 }
 
-}
+}  // namespace lsw::host::manager

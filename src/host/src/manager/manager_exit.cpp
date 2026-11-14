@@ -14,8 +14,7 @@ using K = config::ManagerSettings::Key;
 }
 
 ManagerExit::ManagerExit(config::ManagerSettings& settings, Host host, QObject* parent,
-                         std::chrono::milliseconds guest_wait,
-                         std::chrono::milliseconds guest_poll)
+                         std::chrono::milliseconds guest_wait, std::chrono::milliseconds guest_poll)
     : QObject(parent), settings_(settings), host_(std::move(host)), guest_wait_(guest_wait) {
     poll_.setInterval(guest_poll);
     connect(&poll_, &QTimer::timeout, this, &ManagerExit::poll);
@@ -49,7 +48,8 @@ void ManagerExit::quit() {
         finish();
         return;
     }
-    LSW_INFO("quit: asking the guest to shut down, waiting up to {} s for it", guest_wait_.count() / 1000);
+    LSW_INFO("quit: asking the guest to shut down, waiting up to {} s for it",
+             guest_wait_.count() / 1000);
     state_ = State::WaitingForGuest;
     Q_EMIT left();
     host_.shut_guest_down();
@@ -87,4 +87,4 @@ void ManagerExit::finish() {
     Q_EMIT quit_requested();
 }
 
-}
+}  // namespace lsw::host::manager

@@ -22,4 +22,4 @@ nlohmann::json DiscoveredWindow::row() const {
     };
 }
 
-}
+}  // namespace lsw::agent::win

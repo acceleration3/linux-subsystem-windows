@@ -19,4 +19,4 @@ public:
     [[nodiscard]] static bool is_off(const Sizes& sizes, quint64 vram_bytes);
 };
 
-}
+}  // namespace lsw::host::platform

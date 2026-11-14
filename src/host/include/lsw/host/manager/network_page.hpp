@@ -13,9 +13,15 @@ class QLabel;
 namespace lsw::host::config {
 class ManagerSettings;
 class PendingChanges;
+}  // namespace lsw::host::config
+
+namespace lsw::host::services {
+class StatusHub;
 }
-namespace lsw::host::services { class StatusHub; }
-namespace lsw::host::ui { class ChoiceCard; }
+
+namespace lsw::host::ui {
+class ChoiceCard;
+}
 
 namespace lsw::host::manager {
 
@@ -83,4 +89,4 @@ private:
     QLabel* forward_count_ = nullptr;
 };
 
-}
+}  // namespace lsw::host::manager

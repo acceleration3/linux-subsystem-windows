@@ -3,11 +3,12 @@
 #include <QElapsedTimer>
 #include <QObject>
 #include <QTimer>
-
 #include <chrono>
 #include <functional>
 
-namespace lsw::host::config { class ManagerSettings; }
+namespace lsw::host::config {
+class ManagerSettings;
+}
 
 namespace lsw::host::manager {
 
@@ -28,7 +29,9 @@ public:
                 std::chrono::milliseconds guest_poll = kGuestPoll);
 
     [[nodiscard]] bool stays_in_tray() const;
+
     [[nodiscard]] bool leaving() const noexcept { return state_ != State::Running; }
+
     [[nodiscard]] bool finished() const noexcept { return state_ == State::Finished; }
 
     void window_closed();
@@ -55,4 +58,4 @@ private:
     State state_ = State::Running;
 };
 
-}
+}  // namespace lsw::host::manager

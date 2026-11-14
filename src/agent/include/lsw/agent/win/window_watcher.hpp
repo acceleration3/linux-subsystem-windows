@@ -17,8 +17,8 @@ public:
     [[nodiscard]] apps::WindowAnnouncements& announcements() noexcept { return announcements_; }
 
 private:
-    static void __stdcall on_event(void* hook, unsigned long event, void* hwnd, long object, long child,
-                                   unsigned long thread, unsigned long time);
+    static void __stdcall on_event(void* hook, unsigned long event, void* hwnd, long object,
+                                   long child, unsigned long thread, unsigned long time);
 
     void run();
 
@@ -27,4 +27,4 @@ private:
     std::thread thread_;
 };
 
-}
+}  // namespace lsw::agent::win

@@ -22,7 +22,8 @@ namespace lsw::host::apps {
 class GuestAppLauncher : public QObject {
     Q_OBJECT
 public:
-    GuestAppLauncher(link::AgentRpcClient& rpc, mirror::GuestMirrors& mirrors, QObject* parent = nullptr);
+    GuestAppLauncher(link::AgentRpcClient& rpc, mirror::GuestMirrors& mirrors,
+                     QObject* parent = nullptr);
 
     void launch(const apps::AppConfig& app, const QString& activation_token,
                 const QStringList& documents = {});
@@ -53,10 +54,12 @@ private:
     };
     void flush_queued(const QString& identity);
     QHash<QString, Queued> queued_;
+
     struct Launched {
         QString path;
         QStringList documents;
     };
+
     QHash<QString, Launched> launched_;
     QList<QPair<quint32, quint64>> ended_;
     link::EventSubscription ended_sub_;

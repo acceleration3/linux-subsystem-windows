@@ -9,21 +9,20 @@
 #include "lsw/host/manager/display_facts.hpp"
 #include "lsw/host/manager/graphics_alerts.hpp"
 #include "lsw/host/manager/setting_controls.hpp"
-#include "lsw/host/services/status_hub.hpp"
 #include "lsw/host/manager/warning_strip.hpp"
 #include "lsw/host/platform/accel_virt_paths.hpp"
+#include "lsw/host/services/status_hub.hpp"
 #include "lsw/host/ui/flow_layout.hpp"
 #include "lsw/host/ui/format.hpp"
 #include "lsw/host/ui/key_values.hpp"
 #include "lsw/host/ui/panel.hpp"
-#include "lsw/host/ui/status_pill.hpp"
 #include "lsw/host/ui/sort_item.hpp"
+#include "lsw/host/ui/status_pill.hpp"
 #include "lsw/host/ui/table_header.hpp"
 #include "lsw/host/ui/theme.hpp"
 #include "lsw/host/ui/widgets.hpp"
 
 #include <QComboBox>
-#include <algorithm>
 #include <QDir>
 #include <QFrame>
 #include <QGridLayout>
@@ -34,6 +33,7 @@
 #include <QScrollArea>
 #include <QTableWidget>
 #include <QVBoxLayout>
+#include <algorithm>
 
 namespace lsw::host::manager {
 
@@ -193,7 +193,8 @@ QStringList GraphicsPage::status_facts() const {
     }
     if (device != nullptr && device->hostmem_mib > 0) {
         facts << QStringLiteral("hostmem %1")
-                     .arg(platform::HostGpus::format_mib(static_cast<quint64>(device->hostmem_mib)));
+                     .arg(
+                         platform::HostGpus::format_mib(static_cast<quint64>(device->hostmem_mib)));
     }
     const QString preferred = g.live_modes.value_or(QString{}).section(QLatin1Char(','), 0, 0);
     if (const auto mode = config::DisplayModes::parse(preferred)) {
@@ -206,10 +207,12 @@ QStringList GraphicsPage::status_facts() const {
         QStringList what;
         if (g.pending.host_window_mib) {
             what << QStringLiteral("hostmem %1")
-                        .arg(platform::HostGpus::format_mib(static_cast<quint64>(*g.pending.host_window_mib)));
+                        .arg(platform::HostGpus::format_mib(
+                            static_cast<quint64>(*g.pending.host_window_mib)));
         }
         if (g.pending.vram_reserve_mib) {
-            what << QStringLiteral("vram reserve %1").arg(config::VramReserve::label(*g.pending.vram_reserve_mib));
+            what << QStringLiteral("vram reserve %1")
+                        .arg(config::VramReserve::label(*g.pending.vram_reserve_mib));
         }
         if (g.pending.adapters) {
             what << QStringLiteral("adapters");
@@ -239,9 +242,8 @@ QString GraphicsPage::signature() const {
     }
     const auto& g = status_.graphics();
     const auto& facts = g.log_facts;
-    parts << QString::number(status_.vm().running())
-          << g.live_modes.value_or(QStringLiteral("-")) << QString::number(g.probed)
-          << QString::number(facts.host_window_taken.value_or(false))
+    parts << QString::number(status_.vm().running()) << g.live_modes.value_or(QStringLiteral("-"))
+          << QString::number(g.probed) << QString::number(facts.host_window_taken.value_or(false))
           << QString::number(facts.host_window_taken.has_value())
           << QString::number(facts.modes_taken) << facts.preferred_mode
           << settings_.string_list_value(K::kDisplayModes).join(QLatin1Char(','));
@@ -383,9 +385,10 @@ QWidget* GraphicsPage::build_apis() const {
         return panel.frame;
     }
     auto* table = new QTableWidget(static_cast<int>(apis.size()), 3);
-    Theme::rows_table(table, {QStringLiteral("API"), QStringLiteral("THE HOST RUNS IT ON"),
-                              QStringLiteral("STATE")},
-                      QStringLiteral("graphics-apis"), {112, 420, 124});
+    Theme::rows_table(
+        table,
+        {QStringLiteral("API"), QStringLiteral("THE HOST RUNS IT ON"), QStringLiteral("STATE")},
+        QStringLiteral("graphics-apis"), {112, 420, 124});
     table->verticalHeader()->setDefaultSectionSize(34);
     for (int row = 0; row < apis.size(); ++row) {
         const auto& api = apis.at(row);
@@ -479,7 +482,7 @@ QWidget* GraphicsPage::build_device() {
                                          platform::HostGpus::format_mib(total_mib));
             caps << (adapters.size() > 1
                          ? QStringLiteral("%1: %2").arg(adapter.display ? QStringLiteral("display")
-                                                                         : QStringLiteral("render"),
+                                                                        : QStringLiteral("render"),
                                                         cap)
                          : cap);
         }
@@ -487,18 +490,18 @@ QWidget* GraphicsPage::build_device() {
         auto* line = new QHBoxLayout(holder);
         line->setContentsMargins(0, 0, 0, 0);
         line->setSpacing(8);
-        auto* reserve = controls_->choice(K::kVramReserveMib,
-                                          {{QStringLiteral("Auto"), 0},
-                                           {QStringLiteral("512 MiB"), 512},
-                                           {QStringLiteral("1 GiB"), 1024},
-                                           {QStringLiteral("2 GiB"), 2048},
-                                           {QStringLiteral("4 GiB"), 4096},
-                                           {QStringLiteral("8 GiB"), 8192}});
+        auto* reserve = controls_->choice(K::kVramReserveMib, {{QStringLiteral("Auto"), 0},
+                                                               {QStringLiteral("512 MiB"), 512},
+                                                               {QStringLiteral("1 GiB"), 1024},
+                                                               {QStringLiteral("2 GiB"), 2048},
+                                                               {QStringLiteral("4 GiB"), 4096},
+                                                               {QStringLiteral("8 GiB"), 8192}});
         line->addWidget(reserve);
         line->addWidget(Widgets::tag(true));
         line->addWidget(Widgets::meta(QStringLiteral("applies at the next VM start"), true), 1);
         rows.add_widget(QStringLiteral("VRAM kept for the host"), holder);
-        rows.add(QStringLiteral("Guest VRAM cap"), caps.isEmpty() ? QStringLiteral("-") : caps.join(QStringLiteral(", ")),
+        rows.add(QStringLiteral("Guest VRAM cap"),
+                 caps.isEmpty() ? QStringLiteral("-") : caps.join(QStringLiteral(", ")),
                  caps.isEmpty() ? Theme::Tone::kFaint : nullptr,
                  caps.isEmpty() ? QStringLiteral("the host GPU is not known yet")
                                 : QStringLiteral("what is left for the guest"));
@@ -528,5 +531,4 @@ QWidget* GraphicsPage::build_device() {
     panel.body->addStretch(1);
     return panel.frame;
 }
-
 }

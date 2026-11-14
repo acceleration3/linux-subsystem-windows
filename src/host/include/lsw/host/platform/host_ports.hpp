@@ -11,4 +11,4 @@ public:
     [[nodiscard]] static bool udp_free(const QHostAddress& address, int port);
 };
 
-}
+}  // namespace lsw::host::platform

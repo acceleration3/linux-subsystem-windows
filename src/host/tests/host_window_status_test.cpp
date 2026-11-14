@@ -23,7 +23,8 @@ bool near(double a, double b) {
     return std::fabs(a - b) < 1e-9;
 }
 
-AvStateDump::Snapshot device(quint64 window, std::initializer_list<AvStateDump::Context> contexts = {}) {
+AvStateDump::Snapshot device(quint64 window,
+                             std::initializer_list<AvStateDump::Context> contexts = {}) {
     AvStateDump::Snapshot snap;
     snap.device = true;
     snap.window_bytes = window;
@@ -33,7 +34,8 @@ AvStateDump::Snapshot device(quint64 window, std::initializer_list<AvStateDump::
     return snap;
 }
 
-AvStateDump::Context context(quint32 id, quint64 write_back, quint64 write_combined = 0, const char* name = "") {
+AvStateDump::Context context(quint32 id, quint64 write_back, quint64 write_combined = 0,
+                             const char* name = "") {
     AvStateDump::Context out;
     out.id = id;
     out.name = QString::fromLatin1(name);
@@ -67,7 +69,7 @@ const HostWindowStatus::App* transfer(const HostWindowTracker& tracker, quint32 
     return nullptr;
 }
 
-}
+}  // namespace
 
 int main(int argc, char** argv) {
     QCoreApplication app{argc, argv};
@@ -75,27 +77,35 @@ int main(int argc, char** argv) {
     {
         HostWindowTracker tracker;
         tracker.add(AvStateDump::Snapshot{}, 1000);
-        check(!tracker.status().read && tracker.status().history.isEmpty(), "a snapshot with neither module is not read");
+        check(!tracker.status().read && tracker.status().history.isEmpty(),
+              "a snapshot with neither module is not read");
     }
     {
         HostWindowTracker tracker;
         tracker.add(device(1000, {context(1, 100, 50, "A"), context(2, 300), context(3, 0)}), 1000);
         const auto& status = tracker.status();
-        check(status.read && !status.channels_known && status.at_ms == 1000, "a device snapshot is read");
+        check(status.read && !status.channels_known && status.at_ms == 1000,
+              "a device snapshot is read");
         check(status.window_bytes == 1000 && status.used_bytes == 450, "window and used bytes");
         check(status.apps.size() == 3, "every context is an app, holding something or not");
-        check(status.apps.at(0).context == 2 && status.apps.at(1).context == 1 && status.apps.at(2).context == 3,
+        check(status.apps.at(0).context == 2 && status.apps.at(1).context == 1 &&
+                  status.apps.at(2).context == 3,
               "apps with no submit rate sort by held bytes");
-        check(status.apps.at(1).label() == QStringLiteral("A") && status.apps.at(0).label() == QStringLiteral("context 2"),
+        check(status.apps.at(1).label() == QStringLiteral("A") &&
+                  status.apps.at(0).label() == QStringLiteral("context 2"),
               "an unnamed app is labelled by its context");
-        check(status.apps.at(0).held_bytes == 300 && status.apps.at(1).held_bytes == 150 && status.apps.at(1).blobs == 1,
+        check(status.apps.at(0).held_bytes == 300 && status.apps.at(1).held_bytes == 150 &&
+                  status.apps.at(1).blobs == 1,
               "an app carries the bytes and blobs it holds");
-        check(!status.apps.at(0).has_channel && !status.apps.at(0).submits_per_s, "an app without a channel or batches has neither");
-        check(status.history.size() == 1 && status.history.at(0).write_back == 400 && status.history.at(0).write_combined == 50,
+        check(!status.apps.at(0).has_channel && !status.apps.at(0).submits_per_s,
+              "an app without a channel or batches has neither");
+        check(status.history.size() == 1 && status.history.at(0).write_back == 400 &&
+                  status.history.at(0).write_combined == 50,
               "history records the split by caching");
         check(status.peak_bytes == 450, "the peak falls back to the history maximum");
         tracker.clear();
-        check(!tracker.status().read && tracker.status().history.isEmpty(), "clear forgets everything");
+        check(!tracker.status().read && tracker.status().history.isEmpty(),
+              "clear forgets everything");
     }
     {
         HostWindowTracker tracker;
@@ -106,7 +116,8 @@ int main(int argc, char** argv) {
         stats.peak_pages_in_use = 3;
         snap.window_stats = stats;
         tracker.add(snap, 0);
-        check(tracker.status().window_bytes == 40960, "window_stats total_pages stands in for host_window_bytes");
+        check(tracker.status().window_bytes == 40960,
+              "window_stats total_pages stands in for host_window_bytes");
         check(tracker.status().peak_bytes == 3 * 4096, "the peak comes from peak_pages_in_use");
         snap.window_bytes = 5000;
         tracker.add(snap, 1000);
@@ -128,20 +139,24 @@ int main(int argc, char** argv) {
         tracker.add(device(1000, {context(1, 10)}), 0);
         tracker.add(device(1000, {context(1, 20)}), 1);
         tracker.add(device(1000, {context(1, 30)}), 600'000);
-        check(tracker.status().history.size() == 3, "history keeps samples exactly ten minutes old");
+        check(tracker.status().history.size() == 3,
+              "history keeps samples exactly ten minutes old");
         tracker.add(device(1000, {context(1, 40)}), 600'001);
         check(tracker.status().history.size() == 3 && tracker.status().history.first().at_ms == 1,
               "history drops samples older than ten minutes");
         tracker.add(device(1000, {context(1, 50)}), 2'000'000);
-        check(tracker.status().history.size() == 1 && tracker.status().history.first().write_back == 50,
+        check(tracker.status().history.size() == 1 &&
+                  tracker.status().history.first().write_back == 50,
               "a long gap leaves only the new sample");
         check(tracker.status().peak_bytes == 50, "the fallback peak covers only retained history");
     }
     {
         HostWindowTracker tracker;
         tracker.add(executor({channel(1)}), 0);
-        check(tracker.status().read == false && tracker.status().channels_known, "an executor-only snapshot has channels");
-        check(tracker.status().history.isEmpty() && !tracker.status().peak_bytes, "an executor-only snapshot has no window history");
+        check(tracker.status().read == false && tracker.status().channels_known,
+              "an executor-only snapshot has channels");
+        check(tracker.status().history.isEmpty() && !tracker.status().peak_bytes,
+              "an executor-only snapshot has no window history");
     }
     {
         HostWindowTracker tracker;
@@ -174,7 +189,8 @@ int main(int argc, char** argv) {
         check(tracker.status().window_refused_at_ms == 2000, "rising refusals stamp the time");
         snap.window_stats->refusals = 6;
         tracker.add(snap, 3000);
-        check(tracker.status().window_refused_at_ms == 2000, "the stamp stays until refusals rise again");
+        check(tracker.status().window_refused_at_ms == 2000,
+              "the stamp stays until refusals rise again");
         snap.window_stats->refusals = 2;
         tracker.add(snap, 4000);
         check(tracker.status().window_refused_at_ms == 2000, "a falling count is not a refusal");
@@ -187,7 +203,8 @@ int main(int argc, char** argv) {
         auto first = executor({channel(1)});
         tracker.add(first, 0);
         const auto* t = transfer(tracker, 1);
-        check(t && t->splits.total == 0 && near(t->splits.per_s, 0) && !t->blob_room_wait.avg_ms && !t->blob_room_wait.count,
+        check(t && t->splits.total == 0 && near(t->splits.per_s, 0) && !t->blob_room_wait.avg_ms &&
+                  !t->blob_room_wait.count,
               "a new channel has no rates");
         auto second = executor({channel(1)});
         second.channels[0].split_transfers = 20;
@@ -200,28 +217,37 @@ int main(int argc, char** argv) {
         second.channels[0].fence_wait_us = 3000;
         tracker.add(second, 2000);
         t = transfer(tracker, 1);
-        check(t && t->splits.total == 20 && near(t->splits.per_s, 10), "splits are a total and a recent rate");
-        check(t && t->extra.total == 50 && near(t->extra.per_s, 25), "the extra trips are the split pieces, not pieces minus splits");
-        check(t && t->blob_room_wait.count == 4 && near(t->blob_room_wait.per_s, 2), "waits are a count and a recent rate");
-        check(t && t->blob_room_wait.avg_ms && near(*t->blob_room_wait.avg_ms, 2.0), "the average wait is wait time over waits");
-        check(t && t->ring_wait.count == 2 && near(t->ring_wait.per_s, 1) && t->ring_wait.avg_ms && near(*t->ring_wait.avg_ms, 0.5),
+        check(t && t->splits.total == 20 && near(t->splits.per_s, 10),
+              "splits are a total and a recent rate");
+        check(t && t->extra.total == 50 && near(t->extra.per_s, 25),
+              "the extra trips are the split pieces, not pieces minus splits");
+        check(t && t->blob_room_wait.count == 4 && near(t->blob_room_wait.per_s, 2),
+              "waits are a count and a recent rate");
+        check(t && t->blob_room_wait.avg_ms && near(*t->blob_room_wait.avg_ms, 2.0),
+              "the average wait is wait time over waits");
+        check(t && t->ring_wait.count == 2 && near(t->ring_wait.per_s, 1) && t->ring_wait.avg_ms &&
+                  near(*t->ring_wait.avg_ms, 0.5),
               "ring waits have their own count, rate and average");
-        check(t && t->fence_wait.count == 6 && near(t->fence_wait.per_s, 3) && t->fence_wait.avg_ms && near(*t->fence_wait.avg_ms, 0.5),
+        check(t && t->fence_wait.count == 6 && near(t->fence_wait.per_s, 3) &&
+                  t->fence_wait.avg_ms && near(*t->fence_wait.avg_ms, 0.5),
               "fence waits have their own count, rate and average");
         auto third = second;
         tracker.add(third, 3000);
         t = transfer(tracker, 1);
-        check(t && t->splits.total == 20 && near(t->splits.per_s, 20.0 / 3), "the rate covers the recent window, not one interval");
+        check(t && t->splits.total == 20 && near(t->splits.per_s, 20.0 / 3),
+              "the rate covers the recent window, not one interval");
         tracker.add(third, 20000);
         t = transfer(tracker, 1);
-        check(t && t->splits.total == 20 && near(t->splits.per_s, 0) && t->blob_room_wait.avg_ms && near(*t->blob_room_wait.avg_ms, 2.0),
+        check(t && t->splits.total == 20 && near(t->splits.per_s, 0) && t->blob_room_wait.avg_ms &&
+                  near(*t->blob_room_wait.avg_ms, 2.0),
               "a burst leaves the rate after ten seconds but stays in the totals and the average");
         auto fourth = third;
         fourth.channels[0].split_transfers = 5;
         fourth.channels[0].split_pieces = 1;
         tracker.add(fourth, 21000);
         t = transfer(tracker, 1);
-        check(t && t->splits.total == 5 && near(t->splits.per_s, 0) && t->extra.total == 1 && near(t->extra.per_s, 0),
+        check(t && t->splits.total == 5 && near(t->splits.per_s, 0) && t->extra.total == 1 &&
+                  near(t->extra.per_s, 0),
               "a counter that went backwards counts as no change");
     }
     {
@@ -233,12 +259,15 @@ int main(int argc, char** argv) {
         snap.channels[0].split_pieces = 7;
         tracker.add(snap, 2000);
         tracker.add(snap, 5000);
-        check(near(transfer(tracker, 1)->splits.per_s, 1) && near(transfer(tracker, 1)->extra.per_s, 7.0 / 5),
+        check(near(transfer(tracker, 1)->splits.per_s, 1) &&
+                  near(transfer(tracker, 1)->extra.per_s, 7.0 / 5),
               "a burst stays visible as a rate for a few seconds");
         tracker.add(snap, 11000);
-        check(near(transfer(tracker, 1)->splits.per_s, 5.0 / 10), "it is still there while its starting sample is inside the window");
+        check(near(transfer(tracker, 1)->splits.per_s, 5.0 / 10),
+              "it is still there while its starting sample is inside the window");
         tracker.add(snap, 12500);
-        check(near(transfer(tracker, 1)->splits.per_s, 0) && transfer(tracker, 1)->splits.total == 5,
+        check(near(transfer(tracker, 1)->splits.per_s, 0) &&
+                  transfer(tracker, 1)->splits.total == 5,
               "and gone once the window has passed it");
     }
     {
@@ -253,10 +282,13 @@ int main(int argc, char** argv) {
         second.contexts[1].batches = 100;
         second.contexts[2].batches = 5;
         tracker.add(second, 2000);
-        check(transfer(tracker, 1)->submits_per_s && near(*transfer(tracker, 1)->submits_per_s, 300),
+        check(transfer(tracker, 1)->submits_per_s &&
+                  near(*transfer(tracker, 1)->submits_per_s, 300),
               "submits are batch deltas per second");
-        check(transfer(tracker, 2)->submits_per_s && near(*transfer(tracker, 2)->submits_per_s, 0), "no new batches is a zero rate");
-        check(!transfer(tracker, 3)->submits_per_s, "a context whose batches were unknown has no rate yet");
+        check(transfer(tracker, 2)->submits_per_s && near(*transfer(tracker, 2)->submits_per_s, 0),
+              "no new batches is a zero rate");
+        check(!transfer(tracker, 3)->submits_per_s,
+              "a context whose batches were unknown has no rate yet");
         check(tracker.status().apps.at(0).context == 1 && tracker.status().apps.at(1).context == 3,
               "apps sort by submit rate, then held bytes");
         auto third = second;
@@ -269,7 +301,8 @@ int main(int argc, char** argv) {
         tracker.add(fourth, 4000);
         check(!transfer(tracker, 1)->submits_per_s, "missing batches stay unknown");
         tracker.add(fourth, 4000);
-        check(!transfer(tracker, 2)->submits_per_s, "two snapshots at the same time give no submit rate");
+        check(!transfer(tracker, 2)->submits_per_s,
+              "two snapshots at the same time give no submit rate");
     }
     {
         HostWindowTracker tracker;
@@ -291,7 +324,8 @@ int main(int argc, char** argv) {
         auto snap = executor({channel(1)});
         snap.channels[0].split_transfers = 1;
         tracker.add(snap, 1000);
-        check(near(transfer(tracker, 1)->splits.per_s, 0), "two snapshots at the same time give no rates");
+        check(near(transfer(tracker, 1)->splits.per_s, 0),
+              "two snapshots at the same time give no rates");
     }
     {
         HostWindowTracker tracker;
@@ -302,7 +336,8 @@ int main(int argc, char** argv) {
         snap.channels[2].split_transfers = 30;
         tracker.add(snap, 1000);
         const auto& rows = tracker.status().apps;
-        check(rows.size() == 3 && rows.at(0).context == 1 && rows.at(1).context == 2 && rows.at(2).context == 3,
+        check(rows.size() == 3 && rows.at(0).context == 1 && rows.at(1).context == 2 &&
+                  rows.at(2).context == 3,
               "apps with equal submits and held bytes sort by context");
     }
     {
@@ -311,19 +346,24 @@ int main(int argc, char** argv) {
         tracker.add(snap, 0);
         snap.channels[0].split_transfers = 5;
         tracker.add(snap, 1000);
-        check(tracker.status().apps.at(0).hot_split_ms == 0, "exactly 5 splits per second is not hot");
+        check(tracker.status().apps.at(0).hot_split_ms == 0,
+              "exactly 5 splits per second is not hot");
         snap.channels[0].split_transfers = 11;
         tracker.add(snap, 2000);
-        check(tracker.status().apps.at(0).hot_split_ms == 1000, "over 5 per second starts hot from the previous sample");
+        check(tracker.status().apps.at(0).hot_split_ms == 1000,
+              "over 5 per second starts hot from the previous sample");
         snap.channels[0].split_transfers = 30;
         tracker.add(snap, 4000);
-        check(tracker.status().apps.at(0).hot_split_ms == 3000, "the hot time grows while the rate holds");
+        check(tracker.status().apps.at(0).hot_split_ms == 3000,
+              "the hot time grows while the rate holds");
         snap.channels[0].split_transfers = 100;
         tracker.add(snap, 12000);
-        check(tracker.status().apps.at(0).hot_split_ms == 11000, "hot for over ten seconds is reported as such");
+        check(tracker.status().apps.at(0).hot_split_ms == 11000,
+              "hot for over ten seconds is reported as such");
         snap.channels[0].split_transfers = 100;
         tracker.add(snap, 13000);
-        check(tracker.status().apps.at(0).hot_split_ms == 0, "a quiet interval resets the hot time");
+        check(tracker.status().apps.at(0).hot_split_ms == 0,
+              "a quiet interval resets the hot time");
     }
     {
         HostWindowTracker tracker;
@@ -331,7 +371,8 @@ int main(int argc, char** argv) {
         tracker.add(snap, 0);
         snap.channels[0].refused_no_space = 1;
         tracker.add(snap, 1000);
-        check(transfer(tracker, 1)->refused_at_ms == 1000 && transfer(tracker, 1)->refusals == 1, "rising refusals stamp the channel");
+        check(transfer(tracker, 1)->refused_at_ms == 1000 && transfer(tracker, 1)->refusals == 1,
+              "rising refusals stamp the channel");
         tracker.add(snap, 2000);
         check(transfer(tracker, 1)->refused_at_ms == 1000, "the refusal stamp persists");
         snap.channels[0].refused_other = 2;
@@ -346,7 +387,8 @@ int main(int argc, char** argv) {
         check(!transfer(tracker, 1)->copied_at_ms, "no copied mappings, no stamp");
         snap.channels[0].copied_mappings = 3;
         tracker.add(snap, 2000);
-        check(transfer(tracker, 1)->copied_at_ms == 2000 && transfer(tracker, 1)->copied_mappings == 3,
+        check(transfer(tracker, 1)->copied_at_ms == 2000 &&
+                  transfer(tracker, 1)->copied_mappings == 3,
               "rising copied mappings stamp the channel");
         tracker.add(snap, 3000);
         check(transfer(tracker, 1)->copied_at_ms == 2000, "the copied stamp persists");
@@ -357,25 +399,30 @@ int main(int argc, char** argv) {
         snap.channels[0].arena_bytes = 1000;
         snap.channels[0].arena_peak_ring_bytes = 900;
         tracker.add(snap, 0);
-        check(!transfer(tracker, 1)->arena_full_at_ms, "the first sample never raises the arena alert");
+        check(!transfer(tracker, 1)->arena_full_at_ms,
+              "the first sample never raises the arena alert");
         snap.channels[0].blob_room_waits = 1;
         tracker.add(snap, 1000);
-        check(transfer(tracker, 1)->arena_full_at_ms == 1000, "a peak at 90 percent with a new room wait stamps");
+        check(transfer(tracker, 1)->arena_full_at_ms == 1000,
+              "a peak at 90 percent with a new room wait stamps");
         check(transfer(tracker, 1)->arena_peak_percent() == 90, "the peak percent is reported");
         tracker.add(snap, 2000);
         check(transfer(tracker, 1)->arena_full_at_ms == 1000, "no new waits keep the old stamp");
         snap.channels[0].blob_room_waits = 2;
         snap.channels[0].arena_peak_ring_bytes = 899;
         tracker.add(snap, 3000);
-        check(transfer(tracker, 1)->arena_full_at_ms == 1000, "a peak under 90 percent does not stamp");
+        check(transfer(tracker, 1)->arena_full_at_ms == 1000,
+              "a peak under 90 percent does not stamp");
         snap.channels[0].blob_room_waits = 3;
         snap.channels[0].arena_peak_ring_bytes = 1000;
         tracker.add(snap, 4000);
-        check(transfer(tracker, 1)->arena_full_at_ms == 4000, "a full peak with waits stamps again");
+        check(transfer(tracker, 1)->arena_full_at_ms == 4000,
+              "a full peak with waits stamps again");
         snap.channels[0].blob_room_waits = 4;
         snap.channels[0].arena_bytes.reset();
         tracker.add(snap, 5000);
-        check(transfer(tracker, 1)->arena_full_at_ms == 4000 && !transfer(tracker, 1)->arena_peak_percent(),
+        check(transfer(tracker, 1)->arena_full_at_ms == 4000 &&
+                  !transfer(tracker, 1)->arena_peak_percent(),
               "an unknown arena does not stamp");
     }
     {
@@ -387,7 +434,8 @@ int main(int argc, char** argv) {
         snap.channels[0].ring_waits = 5;
         snap.channels[0].fence_waits = 5;
         tracker.add(snap, 1000);
-        check(!transfer(tracker, 1)->arena_full_at_ms, "ring and fence waits do not stamp the arena alert");
+        check(!transfer(tracker, 1)->arena_full_at_ms,
+              "ring and fence waits do not stamp the arena alert");
     }
     {
         HostWindowTracker tracker;
@@ -397,12 +445,13 @@ int main(int argc, char** argv) {
         snap.channels[0].parked_blobs = 1;
         tracker.add(snap, 0);
         check(!transfer(tracker, 1)->arena_grows_per_s, "the first sample has no grow rate");
-        check(transfer(tracker, 1)->arena_segments == 3 && transfer(tracker, 1)->parked_blobs == 1
-                  && transfer(tracker, 1)->arena_grows == 2,
+        check(transfer(tracker, 1)->arena_segments == 3 &&
+                  transfer(tracker, 1)->parked_blobs == 1 && transfer(tracker, 1)->arena_grows == 2,
               "segments, parked blobs and grows are carried");
         snap.channels[0].arena_grows = 6;
         tracker.add(snap, 2000);
-        check(transfer(tracker, 1)->arena_grows_per_s == 2.0, "grows are a per second rate from deltas");
+        check(transfer(tracker, 1)->arena_grows_per_s == 2.0,
+              "grows are a per second rate from deltas");
         tracker.add(snap, 3000);
         check(transfer(tracker, 1)->arena_grows_per_s == 0.0, "no new grows is a zero rate");
         snap.channels[0].arena_grows.reset();
@@ -423,15 +472,18 @@ int main(int argc, char** argv) {
         t.arena_peak_ring_bytes = 74;
         check(t.arena_peak_percent() == 74, "the percent rounds down");
         t.context = 4;
-        check(t.label() == QStringLiteral("context 4"), "an unnamed transfer is labelled by its context");
+        check(t.label() == QStringLiteral("context 4"),
+              "an unnamed transfer is labelled by its context");
         t.name = QStringLiteral("Game");
         check(t.label() == QStringLiteral("Game"), "a named transfer shows its name");
-        check(!t.pid() && t.process() == QStringLiteral("Game"), "a name without a process id is the whole name");
+        check(!t.pid() && t.process() == QStringLiteral("Game"),
+              "a name without a process id is the whole name");
         t.name = QStringLiteral("6204 Half Life.exe");
         check(t.pid() == 6204 && t.process() == QStringLiteral("Half Life.exe"),
               "a name that starts with a process id is split into the id and the rest");
         t.name.clear();
-        check(!t.pid() && t.process() == QStringLiteral("context 4"), "an unnamed app has no process id");
+        check(!t.pid() && t.process() == QStringLiteral("context 4"),
+              "an unnamed app has no process id");
         check(t.api().isEmpty(), "an app whose context names no API shows none");
         t.sub_api = 8;
         check(t.api() == QStringLiteral("Direct3D"), "a Direct3D context is named");
@@ -449,9 +501,11 @@ int main(int argc, char** argv) {
         snap.channels.push_back(channel(1));
         snap.channels.push_back(channel(2));
         tracker.add(snap, 0);
-        check(transfer(tracker, 1)->name == QStringLiteral("Named") && transfer(tracker, 2)->name.isEmpty(),
+        check(transfer(tracker, 1)->name == QStringLiteral("Named") &&
+                  transfer(tracker, 2)->name.isEmpty(),
               "a transfer takes the name of its context");
-        check(tracker.status().read && tracker.status().channels_known, "device and executor together are both known");
+        check(tracker.status().read && tracker.status().channels_known,
+              "device and executor together are both known");
     }
     {
         HostWindowTracker tracker;
@@ -464,7 +518,8 @@ int main(int argc, char** argv) {
         snap.channels.push_back(channel(2));
         snap.channels[1].split_transfers = 50;
         tracker.add(snap, 2000);
-        check(near(transfer(tracker, 2)->splits.per_s, 0), "a returning channel starts from a baseline");
+        check(near(transfer(tracker, 2)->splits.per_s, 0),
+              "a returning channel starts from a baseline");
     }
     {
         HostWindowTracker tracker;
@@ -473,7 +528,8 @@ int main(int argc, char** argv) {
         auto snap = executor({channel(1)});
         snap.channels[0].split_transfers = 99;
         tracker.add(snap, 2000);
-        check(near(transfer(tracker, 1)->splits.per_s, 0), "an empty snapshot resets the baselines");
+        check(near(transfer(tracker, 1)->splits.per_s, 0),
+              "an empty snapshot resets the baselines");
     }
     {
         HostWindowTracker tracker;
@@ -490,7 +546,8 @@ int main(int argc, char** argv) {
             snap.contexts[0].batches = a;
             snap.contexts[1].batches = b;
             tracker.add(snap, i * 1000);
-            held = held && tracker.status().apps.at(0).context == 1 && tracker.status().apps.at(1).context == 2;
+            held = held && tracker.status().apps.at(0).context == 1 &&
+                   tracker.status().apps.at(1).context == 2;
         }
         check(held, "two rates that trade places keep their rows in order");
         b += 200;
@@ -506,12 +563,13 @@ int main(int argc, char** argv) {
         snap.contexts[0].batches = a;
         snap.contexts[1].batches = b;
         tracker.add(snap, 8000);
-        check(tracker.status().apps.size() == 3 && tracker.status().apps.at(0).context == 2
-                  && tracker.status().apps.at(2).context == 3,
+        check(tracker.status().apps.size() == 3 && tracker.status().apps.at(0).context == 2 &&
+                  tracker.status().apps.at(2).context == 3,
               "a new app is inserted by its rate");
         snap.contexts.removeAt(0);
         tracker.add(snap, 9000);
-        check(tracker.status().apps.size() == 2 && tracker.status().apps.at(0).context == 2, "an app that is gone loses its row");
+        check(tracker.status().apps.size() == 2 && tracker.status().apps.at(0).context == 2,
+              "an app that is gone loses its row");
     }
     {
         HostWindowTracker tracker;
@@ -521,17 +579,20 @@ int main(int argc, char** argv) {
         tracker.add(snap, 1000);
         snap.channels[0].split_transfers = 200;
         tracker.add(snap, 20000);
-        check(transfer(tracker, 1)->hot_split_ms == 20000, "a steady hot channel is hot since the sample before its first fast one");
+        check(transfer(tracker, 1)->hot_split_ms == 20000,
+              "a steady hot channel is hot since the sample before its first fast one");
         auto gap = executor({channel(2)});
         tracker.add(gap, 30000);
         auto back = executor({channel(1)});
         back.channels[0].split_transfers = 5000;
         tracker.add(back, 40000);
         tracker.add(back, 41000);
-        check(transfer(tracker, 1)->hot_split_ms == 0, "a channel that comes back after a gap starts cold");
+        check(transfer(tracker, 1)->hot_split_ms == 0,
+              "a channel that comes back after a gap starts cold");
         back.channels[0].split_transfers = 5100;
         tracker.add(back, 42000);
-        check(transfer(tracker, 1)->hot_split_ms == 1000, "and turns hot only from its own samples");
+        check(transfer(tracker, 1)->hot_split_ms == 1000,
+              "and turns hot only from its own samples");
     }
     {
         HostWindowTracker tracker;
@@ -544,10 +605,12 @@ int main(int argc, char** argv) {
         snap.contexts[1].batches = 400;
         tracker.add(snap, 1000);
         const auto& apps = tracker.status().apps;
-        check(apps.size() == 2 && apps.at(0).name == QStringLiteral("B") && apps.at(0).held_bytes == 20
-                  && apps.at(1).name == QStringLiteral("A") && apps.at(1).held_bytes == 10,
+        check(apps.size() == 2 && apps.at(0).name == QStringLiteral("B") &&
+                  apps.at(0).held_bytes == 20 && apps.at(1).name == QStringLiteral("A") &&
+                  apps.at(1).held_bytes == 10,
               "contexts with the same id on two devices are two apps");
-        check(apps.at(0).submits_per_s && near(*apps.at(0).submits_per_s, 400) && near(*apps.at(1).submits_per_s, 100),
+        check(apps.at(0).submits_per_s && near(*apps.at(0).submits_per_s, 400) &&
+                  near(*apps.at(1).submits_per_s, 100),
               "each has its own submit rate");
         snap.executor = true;
         snap.channels.push_back(channel(1));
@@ -571,7 +634,8 @@ int main(int argc, char** argv) {
         tracker.add(snap, 4000);
         snap.channels[0].split_transfers = 10;
         tracker.add(snap, 5000);
-        check(near(transfer(tracker, 1)->splits.per_s, 10), "after a counter drop the rate reads right at the next sample");
+        check(near(transfer(tracker, 1)->splits.per_s, 10),
+              "after a counter drop the rate reads right at the next sample");
         snap.channels[0].split_transfers = 20;
         tracker.add(snap, 6000);
         check(near(transfer(tracker, 1)->splits.per_s, 10), "and keeps reading it");
@@ -587,7 +651,8 @@ int main(int argc, char** argv) {
         tracker.add(snap, 2000);
         snap.channels[0].ring_waits = 10;
         tracker.add(snap, 3000);
-        check(near(transfer(tracker, 1)->ring_wait.per_s, 10), "a wait counter that dropped restarts the rate window too");
+        check(near(transfer(tracker, 1)->ring_wait.per_s, 10),
+              "a wait counter that dropped restarts the rate window too");
     }
 
     return g_failures == 0 ? 0 : 1;

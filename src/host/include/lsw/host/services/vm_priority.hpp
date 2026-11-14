@@ -7,16 +7,16 @@
 #include <QSet>
 #include <QString>
 #include <QVector>
-
 #include <functional>
 
 namespace lsw::host::config {
 class ManagerSettings;
 }
+
 namespace lsw::host::platform {
 class ICpuScope;
 class IProcessThreads;
-}
+}  // namespace lsw::host::platform
 
 namespace lsw::host::services {
 class VmPriority : public QObject {
@@ -56,6 +56,7 @@ private:
 
         [[nodiscard]] bool touched() const noexcept { return calling || asked || raised; }
     };
+
     struct Threads {
         QString main_thread;
         QSet<qint64> seen;
@@ -92,4 +93,4 @@ private:
     bool told_mirror_refusal_ = false;
 };
 
-}
+}  // namespace lsw::host::services

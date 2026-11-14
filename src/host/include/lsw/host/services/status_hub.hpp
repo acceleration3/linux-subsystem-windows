@@ -50,12 +50,14 @@ public:
 
     [[nodiscard]] const VmStatus& vm() const noexcept { return vm_; }
     [[nodiscard]] const GraphicsStatus& graphics() const noexcept { return graphics_; }
+
     [[nodiscard]] const HostWindowStatus& host_window() const noexcept { return window_.status(); }
     [[nodiscard]] const GuestSessions& sessions() const noexcept { return sessions_; }
     [[nodiscard]] const UsbStatus& usb() const noexcept { return usb_; }
     [[nodiscard]] const GuestUpdateStatus& update() const noexcept { return update_; }
 
     [[nodiscard]] const ClipboardStatus& clipboard() const noexcept { return clipboard_; }
+
     [[nodiscard]] const PriorityStatus& priority() const noexcept { return priority_; }
 
     void set_vm(const VmStatus& status);

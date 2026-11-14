@@ -24,7 +24,7 @@ QString capitalised(QString text) {
     return text;
 }
 
-}
+}  // namespace
 
 NetworkState::Live NetworkState::live(const services::VmStatus& vm) {
     Live out;
@@ -44,7 +44,8 @@ NetworkState::Live NetworkState::live(const services::VmStatus& vm) {
 }
 
 bool NetworkState::host_port_free(const PortForward& forward) {
-    const QHostAddress address(forward.from_network ? QHostAddress::AnyIPv4 : QHostAddress::LocalHost);
+    const QHostAddress address(forward.from_network ? QHostAddress::AnyIPv4
+                                                    : QHostAddress::LocalHost);
     return forward.protocol == PortForward::Protocol::Udp
                ? platform::HostPorts::udp_free(address, forward.host_port)
                : platform::HostPorts::tcp_free(address, forward.host_port);
@@ -87,4 +88,4 @@ QString NetworkState::summary(const Live& live, const QString& next_bridge, int 
     return parts.join(QStringLiteral(" · "));
 }
 
-}
+}  // namespace lsw::host::manager

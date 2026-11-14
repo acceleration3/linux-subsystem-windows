@@ -1,5 +1,7 @@
 #include "lsw/host/manager/main_window.hpp"
 
+#include "lsw/host/apps/app_config_store.hpp"
+#include "lsw/host/apps/guest_app_launcher.hpp"
 #include "lsw/host/config/display_refresh.hpp"
 #include "lsw/host/config/vm_state.hpp"
 #include "lsw/host/link/agent_reply.hpp"
@@ -14,8 +16,8 @@
 #include "lsw/host/manager/graphics_alerts.hpp"
 #include "lsw/host/manager/graphics_page.hpp"
 #include "lsw/host/manager/log_panel.hpp"
-#include "lsw/host/manager/manager_exit.hpp"
 #include "lsw/host/manager/maintenance_page.hpp"
+#include "lsw/host/manager/manager_exit.hpp"
 #include "lsw/host/manager/network_page.hpp"
 #include "lsw/host/manager/notice_board.hpp"
 #include "lsw/host/manager/run_on_vm_dialog.hpp"
@@ -23,8 +25,6 @@
 #include "lsw/host/manager/settings_page.hpp"
 #include "lsw/host/manager/update_dialog.hpp"
 #include "lsw/host/manager/usb_page.hpp"
-#include "lsw/host/apps/app_config_store.hpp"
-#include "lsw/host/apps/guest_app_launcher.hpp"
 #include "lsw/host/manager/vm_detail_panel.hpp"
 #include "lsw/host/manager/warning_strip.hpp"
 #include "lsw/host/mirror/guest_mirrors.hpp"
@@ -41,14 +41,14 @@
 #include "lsw/host/vm/graceful_shutdown.hpp"
 #include "lsw/linkproto/commands.hpp"
 
+#include <QApplication>
 #include <QCloseEvent>
 #include <QDesktopServices>
 #include <QDir>
 #include <QEvent>
+#include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QLabel>
-#include <QApplication>
-#include <QGuiApplication>
 #include <QMenu>
 #include <QMessageBox>
 #include <QPushButton>
@@ -60,10 +60,9 @@
 #include <QUrl>
 #include <QVBoxLayout>
 #include <QWindow>
-#include <nlohmann/json.hpp>
-
 #include <algorithm>
 #include <array>
+#include <nlohmann/json.hpp>
 #include <utility>
 
 namespace lsw::host::manager {
@@ -689,6 +688,7 @@ void MainWindow::refresh_warning() {
         NavRail::Page page;
         QString open;
     };
+
     std::optional<Shown> shown;
     for (const auto& warning : alerts_->warnings()) {
         if (warning.kind == GraphicsAlerts::Warning::Kind::NoDirect3d) {
@@ -916,7 +916,8 @@ void MainWindow::follow_upkeep() {
 void MainWindow::follow_launches() {
     auto& launcher = services_.app_launcher();
     auto& mirrors = services_.mirrors();
-    mirrors.set_output_source([this] { return screen() != nullptr ? screen()->name() : QString(); });
+    mirrors.set_output_source(
+        [this] { return screen() != nullptr ? screen()->name() : QString(); });
     connect(&mirrors, &mirror::GuestMirrors::desktop_failed, this, [this](const QString& reason) {
         notices_->post(QStringLiteral("desktop"), false,
                        QStringLiteral("The desktop could not be opened."), reason);
@@ -998,7 +999,8 @@ void MainWindow::setup_exit() {
         tray_->hide();
         hide();
     });
-    connect(exit_, &ManagerExit::quit_requested, qApp, &QCoreApplication::quit, Qt::QueuedConnection);
+    connect(exit_, &ManagerExit::quit_requested, qApp, &QCoreApplication::quit,
+            Qt::QueuedConnection);
 }
 
 void MainWindow::on_tray_activated(QSystemTrayIcon::ActivationReason reason) {
@@ -1040,5 +1042,4 @@ void MainWindow::closeEvent(QCloseEvent* e) {
     e->ignore();
     exit_->window_closed();
 }
-
 }

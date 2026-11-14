@@ -57,4 +57,4 @@ private:
     static bool read_rules(const QString& path, QVector<Rule>& rules, int depth);
 };
 
-}
+}  // namespace lsw::host::platform

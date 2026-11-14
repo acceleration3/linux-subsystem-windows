@@ -24,10 +24,9 @@ QString DisplayMode::aspect() const {
 
 const QVector<DisplayMode>& DisplayModes::common() {
     static const QVector<DisplayMode> sizes = {
-        {1280, 720},  {1366, 768},  {1600, 900},  {1920, 1080}, {1920, 1200},
-        {2560, 1080}, {2560, 1440}, {2560, 1600}, {3440, 1440}, {3840, 1600},
-        {3840, 2160}, {5120, 1440}, {5120, 2160}, {5120, 2880}, {7680, 2160},
-        {7680, 4320},
+        {1280, 720},  {1366, 768},  {1600, 900},  {1920, 1080}, {1920, 1200}, {2560, 1080},
+        {2560, 1440}, {2560, 1600}, {3440, 1440}, {3840, 1600}, {3840, 2160}, {5120, 1440},
+        {5120, 2160}, {5120, 2880}, {7680, 2160}, {7680, 4320},
     };
     return sizes;
 }
@@ -71,7 +70,8 @@ QString DisplayModes::refusal(const DisplayMode& mode) {
 }
 
 DisplayMode DisplayModes::clamped(const DisplayMode& mode) {
-    return DisplayMode{std::clamp(mode.width, kMinEdge, kMaxEdge), std::clamp(mode.height, kMinEdge, kMaxEdge)};
+    return DisplayMode{std::clamp(mode.width, kMinEdge, kMaxEdge),
+                       std::clamp(mode.height, kMinEdge, kMaxEdge)};
 }
 
 QString DisplayModes::refusal_to_add(const QStringList& list, const DisplayMode& mode) {

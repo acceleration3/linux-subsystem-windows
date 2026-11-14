@@ -2,18 +2,17 @@
 
 #include "lsw/base/log.hpp"
 #include "lsw/host/apps/desktop_launcher.hpp"
+#include "lsw/host/link/agent_reply.hpp"
 #include "lsw/host/platform/dolphin_places.hpp"
 #include "lsw/host/platform/gtk_bookmarks.hpp"
 #include "lsw/host/platform/guest_smb_share.hpp"
 #include "lsw/host/platform/qemu_process.hpp"
-#include "lsw/host/link/agent_reply.hpp"
 #include "lsw/host/services/domain_inputs.hpp"
 #include "lsw/linkproto/commands.hpp"
 #include "lsw/linkproto/envelope.hpp"
 
 #include <QDir>
 #include <QSet>
-
 #include <chrono>
 #include <nlohmann/json.hpp>
 #include <optional>
@@ -64,8 +63,8 @@ HostServices::HostServices(QObject* parent)
           settings_, rpc_, log_store_, [this] { return status_.vm().agent_online(); },
           [this] { return status_.vm().running(); }, this),
       mirrors_(rpc_, this), app_launcher_(rpc_, mirrors_, this),
-      one_to_one_(manager_settings_, guest_display(), this),
-      vm_scope_(QStringLiteral("lsw-vm")), mirror_scope_(QStringLiteral("lsw-mirror")),
+      one_to_one_(manager_settings_, guest_display(), this), vm_scope_(QStringLiteral("lsw-vm")),
+      mirror_scope_(QStringLiteral("lsw-mirror")),
       priority_(
           manager_settings_, vm_scope_, mirror_scope_, process_threads_,
           [this] { return platform::QemuProcess::pid_of(status_.vm().uuid); }, this) {
@@ -87,12 +86,17 @@ HostServices::HostServices(QObject* parent)
                 }
             });
 
-    connect(&mirrors_, &mirror::GuestMirrors::desktop_opened, &one_to_one_, &OneToOneDesktop::opened);
-    connect(&mirrors_, &mirror::GuestMirrors::desktop_resized, &one_to_one_, &OneToOneDesktop::resized);
-    connect(&mirrors_, &mirror::GuestMirrors::desktop_closed, &one_to_one_, &OneToOneDesktop::closed);
-    connect(&mirrors_, &mirror::GuestMirrors::host_started, &priority_, &VmPriority::mirror_started);
+    connect(&mirrors_, &mirror::GuestMirrors::desktop_opened, &one_to_one_,
+            &OneToOneDesktop::opened);
+    connect(&mirrors_, &mirror::GuestMirrors::desktop_resized, &one_to_one_,
+            &OneToOneDesktop::resized);
+    connect(&mirrors_, &mirror::GuestMirrors::desktop_closed, &one_to_one_,
+            &OneToOneDesktop::closed);
+    connect(&mirrors_, &mirror::GuestMirrors::host_started, &priority_,
+            &VmPriority::mirror_started);
     connect(&mirrors_, &mirror::GuestMirrors::host_ended, &priority_, &VmPriority::mirror_ended);
-    connect(&priority_, &VmPriority::changed, this, [this] { status_.set_priority(priority_.status()); });
+    connect(&priority_, &VmPriority::changed, this,
+            [this] { status_.set_priority(priority_.status()); });
     status_.set_priority(priority_.status());
     connect(&status_, &StatusHub::changed, this, [this](StatusHub::Area area) {
         if (area == StatusHub::Area::Vm) {
@@ -134,12 +138,14 @@ OneToOneDesktop::Guest HostServices::guest_display() {
     };
     guest.resolution = [this, now, params](const std::optional<config::DisplayMode>& wanted,
                                            OneToOneDesktop::Answer done) {
-        rpc_.request_async(linkproto::cmd::kSetDisplay, params(wanted), this,
-                           [now, done = std::move(done)](const link::AgentReply& reply) { done(now(reply)); });
+        rpc_.request_async(
+            linkproto::cmd::kSetDisplay, params(wanted), this,
+            [now, done = std::move(done)](const link::AgentReply& reply) { done(now(reply)); });
     };
     guest.resolution_now = [this, now, params](const std::optional<config::DisplayMode>& wanted) {
         return status_.vm().agent_online()
-                   ? now(rpc_.request(linkproto::cmd::kSetDisplay, params(wanted), kShutdownSwitchTimeout))
+                   ? now(rpc_.request(linkproto::cmd::kSetDisplay, params(wanted),
+                                      kShutdownSwitchTimeout))
                    : std::nullopt;
     };
     return guest;

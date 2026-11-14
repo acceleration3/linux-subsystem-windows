@@ -11,8 +11,8 @@ QVector<HostAddresses::Interface> HostAddresses::system() {
         Interface interface;
         interface.name = found.name();
         const auto flags = found.flags();
-        interface.up = flags.testFlag(QNetworkInterface::IsUp)
-                       && flags.testFlag(QNetworkInterface::IsRunning);
+        interface.up =
+            flags.testFlag(QNetworkInterface::IsUp) && flags.testFlag(QNetworkInterface::IsRunning);
         interface.loopback = flags.testFlag(QNetworkInterface::IsLoopBack);
         for (const QNetworkAddressEntry& entry : found.addressEntries()) {
             if (entry.ip().protocol() == QAbstractSocket::IPv4Protocol) {
@@ -32,8 +32,8 @@ QVector<HostAddresses::Address> HostAddresses::reachable(const QVector<Interface
         }
         for (const QString& text : interface.ipv4) {
             const QHostAddress address(text);
-            if (address.protocol() != QAbstractSocket::IPv4Protocol || address.isLoopback()
-                || address.isLinkLocal()) {
+            if (address.protocol() != QAbstractSocket::IPv4Protocol || address.isLoopback() ||
+                address.isLinkLocal()) {
                 continue;
             }
             out.push_back({text, interface.name});
@@ -51,4 +51,4 @@ QStringList HostAddresses::of(const QVector<Interface>& interfaces, const QStrin
     return {};
 }
 
-}
+}  // namespace lsw::host::platform

@@ -14,4 +14,4 @@ public:
     [[nodiscard]] static bool runs_domain(const QByteArray& cmdline, const QByteArray& uuid);
 };
 
-}
+}  // namespace lsw::host::platform

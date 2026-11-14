@@ -10,7 +10,6 @@
 #include <QPointer>
 #include <QSize>
 #include <QString>
-
 #include <functional>
 #include <nlohmann/json_fwd.hpp>
 #include <utility>
@@ -28,9 +27,11 @@ public:
     void set_output_source(std::function<QString()> source) { output_source_ = std::move(source); }
 
     void open_desktop(const QString& title);
+
     [[nodiscard]] bool desktop_open() const { return !desktop_.isNull(); }
 
-    void show(const QString& identity, const WindowMirror::Application& application, bool keep_previous);
+    void show(const QString& identity, const WindowMirror::Application& application,
+              bool keep_previous);
     void forget(const QString& identity);
     void raise(const QString& identity, const QString& activation_token) const;
 
@@ -62,6 +63,7 @@ private:
         bool unowned = false;
         bool resumed = false;
     };
+
     struct GuestWindow {
         quint32 pid = 0;
         quint32 root_pid = 0;
@@ -69,6 +71,7 @@ private:
         bool mirrorable = false;
 
         explicit GuestWindow(const nlohmann::json& row);
+
         [[nodiscard]] quint32 owner_pid() const { return root_pid != 0 ? root_pid : pid; }
     };
 
@@ -98,4 +101,4 @@ private:
     link::EventSubscription appeared_sub_;
 };
 
-}
+}  // namespace lsw::host::mirror

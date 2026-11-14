@@ -1,10 +1,9 @@
 #include "lsw/host/platform/av_state_dump.hpp"
 
 #include <QDir>
-#include <QFileInfo>
 #include <QFile>
+#include <QFileInfo>
 #include <QRegularExpression>
-
 #include <algorithm>
 #include <cerrno>
 #include <poll.h>
@@ -51,8 +50,8 @@ QString unescape(const QByteArray& raw) {
             out.append('\n');
         } else if (next == 'r') {
             out.append('\r');
-        } else if (next == 'x' && i + 2 < size && hex_digit(raw.at(i + 1)) >= 0
-                   && hex_digit(raw.at(i + 2)) >= 0) {
+        } else if (next == 'x' && i + 2 < size && hex_digit(raw.at(i + 1)) >= 0 &&
+                   hex_digit(raw.at(i + 2)) >= 0) {
             out.append(static_cast<char>(hex_digit(raw.at(i + 1)) * 16 + hex_digit(raw.at(i + 2))));
             i += 2;
         } else {
@@ -167,7 +166,7 @@ std::optional<qint64> parent_of(qint64 pid) {
     return ok ? std::optional<qint64>{parent} : std::nullopt;
 }
 
-}
+}  // namespace
 
 quint64 AvStateDump::Snapshot::used_bytes() const {
     quint64 total = 0;
@@ -234,7 +233,8 @@ void AvStateDump::parse(const QByteArray& dump, Snapshot& into) {
     QHash<quint64, int> context_index;
     QHash<quint32, int> channel_index;
     for (const Context& context : std::as_const(into.contexts)) {
-        context_index.insert(context_key(context.device, context.id), static_cast<int>(context_index.size()));
+        context_index.insert(context_key(context.device, context.id),
+                             static_cast<int>(context_index.size()));
     }
     for (const Channel& channel : std::as_const(into.channels)) {
         channel_index.insert(channel.context, static_cast<int>(channel_index.size()));
@@ -254,56 +254,68 @@ void AvStateDump::parse(const QByteArray& dump, Snapshot& into) {
         const auto values = fields(line, &path);
         const QStringList parts = path.split(QLatin1Char('/'));
         const qsizetype n = parts.size();
-        if (n >= 3 && parts.at(0) == QLatin1String("module") && parts.at(2) == QLatin1String("device")) {
+        if (n >= 3 && parts.at(0) == QLatin1String("module") &&
+            parts.at(2) == QLatin1String("device")) {
             if (n == 4) {
                 into.device = true;
                 if (const auto bytes = number(values, QStringLiteral("host_window_bytes"))) {
                     into.window_bytes = into.window_bytes.value_or(0) + *bytes;
                 }
-            } else if (n == 8 && parts.at(4) == QLatin1String("host_blobs")
-                       && parts.at(6) == QLatin1String("host_blob")) {
+            } else if (n == 8 && parts.at(4) == QLatin1String("host_blobs") &&
+                       parts.at(6) == QLatin1String("host_blob")) {
                 const quint32 device = segment_id(parts.at(3)).value_or(0);
                 const auto id = number(values, QStringLiteral("context"));
                 const auto size = number(values, QStringLiteral("size"));
                 const auto caching = number(values, QStringLiteral("caching"));
-                if (!id || *id > 0xffffffffULL || !size || flag(values, QStringLiteral("mapped")) != true
-                    || (!context_index.contains(context_key(device, static_cast<quint32>(*id))) && context_index.size() >= kMaxContexts)) {
+                if (!id || *id > 0xffffffffULL || !size ||
+                    flag(values, QStringLiteral("mapped")) != true ||
+                    (!context_index.contains(context_key(device, static_cast<quint32>(*id))) &&
+                     context_index.size() >= kMaxContexts)) {
                     continue;
                 }
-                Context& context = context_for(into, context_index, device, static_cast<quint32>(*id));
+                Context& context =
+                    context_for(into, context_index, device, static_cast<quint32>(*id));
                 if (caching == kCachingWriteCombined) {
                     context.write_combined_bytes += *size;
                 } else {
                     context.write_back_bytes += *size;
                 }
                 ++context.blobs;
-            } else if (n == 8 && parts.at(4) == QLatin1String("contexts") && parts.at(6) == QLatin1String("context")) {
+            } else if (n == 8 && parts.at(4) == QLatin1String("contexts") &&
+                       parts.at(6) == QLatin1String("context")) {
                 const quint32 device = segment_id(parts.at(3)).value_or(0);
                 const auto id = segment_id(parts.at(7));
                 const auto name = values.constFind(QStringLiteral("name"));
-                if (!id || name == values.constEnd()
-                    || (!context_index.contains(context_key(device, *id)) && context_index.size() >= kMaxContexts)) {
+                if (!id || name == values.constEnd() ||
+                    (!context_index.contains(context_key(device, *id)) &&
+                     context_index.size() >= kMaxContexts)) {
                     continue;
                 }
                 Context& context = context_for(into, context_index, device, *id);
                 context.name = *name;
-                context.sub_api = static_cast<quint32>(number(values, QStringLiteral("sub_api")).value_or(0));
+                context.sub_api =
+                    static_cast<quint32>(number(values, QStringLiteral("sub_api")).value_or(0));
                 context.batches = number(values, QStringLiteral("batches"));
             } else if (n == 6 && parts.at(4) == QLatin1String("window_stats")) {
                 WindowStats stats = into.window_stats.value_or(WindowStats{});
-                stats.attached = stats.attached || flag(values, QStringLiteral("attached")).value_or(false);
-                stats.stable = stats.stable || flag(values, QStringLiteral("stable")).value_or(false);
+                stats.attached =
+                    stats.attached || flag(values, QStringLiteral("attached")).value_or(false);
+                stats.stable =
+                    stats.stable || flag(values, QStringLiteral("stable")).value_or(false);
                 stats.total_pages += number_or_zero(values, QStringLiteral("total_pages"));
                 stats.pages_in_use += number_or_zero(values, QStringLiteral("pages_in_use"));
-                stats.peak_pages_in_use += number_or_zero(values, QStringLiteral("peak_pages_in_use"));
+                stats.peak_pages_in_use +=
+                    number_or_zero(values, QStringLiteral("peak_pages_in_use"));
                 stats.refusals += number_or_zero(values, QStringLiteral("refusals"));
                 stats.refused_bytes += number_or_zero(values, QStringLiteral("refused_bytes"));
                 stats.largest_free_run_at_refusal =
-                    std::max(stats.largest_free_run_at_refusal, number_or_zero(values, QStringLiteral("largest_free_run_at_refusal")));
+                    std::max(stats.largest_free_run_at_refusal,
+                             number_or_zero(values, QStringLiteral("largest_free_run_at_refusal")));
                 into.window_stats = stats;
             }
-        } else if (n == 6 && parts.at(0) == QLatin1String("executor") && parts.at(2) == QLatin1String("session")
-                   && parts.at(4) == QLatin1String("channel")) {
+        } else if (n == 6 && parts.at(0) == QLatin1String("executor") &&
+                   parts.at(2) == QLatin1String("session") &&
+                   parts.at(4) == QLatin1String("channel")) {
             const auto id = segment_id(parts.at(5));
             if (!id || (!channel_index.contains(*id) && channel_index.size() >= kMaxChannels)) {
                 continue;
@@ -314,7 +326,8 @@ void AvStateDump::parse(const QByteArray& dump, Snapshot& into) {
             channel.split_transfers += number_or_zero(values, QStringLiteral("split_transfers"));
             channel.split_pieces += number_or_zero(values, QStringLiteral("split_pieces"));
             add_known(channel.blob_room_waits, number(values, QStringLiteral("blob_room_waits")));
-            add_known(channel.blob_room_wait_us, number(values, QStringLiteral("blob_room_wait_us")));
+            add_known(channel.blob_room_wait_us,
+                      number(values, QStringLiteral("blob_room_wait_us")));
             add_known(channel.ring_waits, number(values, QStringLiteral("ring_waits")));
             add_known(channel.ring_wait_us, number(values, QStringLiteral("ring_wait_us")));
             add_known(channel.fence_waits, number(values, QStringLiteral("fence_waits")));
@@ -323,17 +336,21 @@ void AvStateDump::parse(const QByteArray& dump, Snapshot& into) {
             channel.copied_mappings += number_or_zero(values, QStringLiteral("copied_mappings"));
             channel.slice_waits += number_or_zero(values, QStringLiteral("slice_waits"));
             channel.refused_no_space += number_or_zero(values, QStringLiteral("refused_no_space"));
-            channel.refused_no_memory += number_or_zero(values, QStringLiteral("refused_no_memory"));
+            channel.refused_no_memory +=
+                number_or_zero(values, QStringLiteral("refused_no_memory"));
             channel.refused_other += number_or_zero(values, QStringLiteral("refused_other"));
             add_known(channel.arena_grows, number(values, QStringLiteral("arena_grows")));
             add_known(channel.arena_bytes, number(values, QStringLiteral("arena_bytes")));
-            add_known(channel.arena_peak_ring_bytes, number(values, QStringLiteral("arena_peak_ring_bytes")));
-            add_known(channel.arena_set_aside_bytes, number(values, QStringLiteral("arena_set_aside_bytes")));
+            add_known(channel.arena_peak_ring_bytes,
+                      number(values, QStringLiteral("arena_peak_ring_bytes")));
+            add_known(channel.arena_set_aside_bytes,
+                      number(values, QStringLiteral("arena_set_aside_bytes")));
             add_known(channel.arena_segments, number(values, QStringLiteral("arena_segments")));
             add_known(channel.parked_blobs, number(values, QStringLiteral("parked_blobs")));
             into.executor = true;
-        } else if (n == 6 && parts.at(0) == QLatin1String("executor") && parts.at(2) == QLatin1String("gpu_shares")
-                   && parts.at(4) == QLatin1String("memory_source")) {
+        } else if (n == 6 && parts.at(0) == QLatin1String("executor") &&
+                   parts.at(2) == QLatin1String("gpu_shares") &&
+                   parts.at(4) == QLatin1String("memory_source")) {
             const auto device = segment_id(parts.at(3));
             const auto cap = number(values, QStringLiteral("vram_cap_bytes"));
             const auto reserve = number(values, QStringLiteral("vram_reserve_bytes"));
@@ -371,7 +388,8 @@ std::optional<QByteArray> AvStateDump::fetch(const QString& socket_path) {
         return fail();
     }
     static constexpr char kRequest[] = "state\n";
-    if (::send(fd, kRequest, sizeof kRequest - 1, MSG_NOSIGNAL) != static_cast<ssize_t>(sizeof kRequest - 1)) {
+    if (::send(fd, kRequest, sizeof kRequest - 1, MSG_NOSIGNAL) !=
+        static_cast<ssize_t>(sizeof kRequest - 1)) {
         return fail();
     }
     QByteArray out;
@@ -412,8 +430,9 @@ QVector<QString> AvStateDump::sockets(qint64 qemu_pid) {
     static const QRegularExpression pattern(
         QStringLiteral("^av-state-(device|executor)-(\\d{1,10})\\.sock$"));
     const QDir shm(QStringLiteral("/dev/shm"));
-    for (const QFileInfo& entry : shm.entryInfoList({QStringLiteral("av-state-*.sock")},
-                                                    QDir::System | QDir::Files | QDir::NoDotAndDotDot)) {
+    for (const QFileInfo& entry :
+         shm.entryInfoList({QStringLiteral("av-state-*.sock")},
+                           QDir::System | QDir::Files | QDir::NoDotAndDotDot)) {
         const auto match = pattern.match(entry.fileName());
         if (!match.hasMatch()) {
             continue;
@@ -436,4 +455,4 @@ AvStateDump::Snapshot AvStateDump::read(qint64 qemu_pid) {
     return snapshot;
 }
 
-}
+}  // namespace lsw::host::platform

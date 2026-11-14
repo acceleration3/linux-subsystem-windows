@@ -36,7 +36,9 @@ public:
     [[nodiscard]] bool worth_following(std::uint64_t now) const;
     [[nodiscard]] static bool keep_polling(unsigned long elapsed_ms);
     [[nodiscard]] std::optional<unsigned long> pick(const std::vector<Candidate>& candidates) const;
+
     void reject(unsigned long pid) { rejected_.insert(pid); }
+
     void followed(unsigned long pid) { chain_.insert(pid); }
 
     [[nodiscard]] static constexpr unsigned long poll_ms() { return 100; }
@@ -47,4 +49,4 @@ private:
     std::unordered_set<unsigned long> chain_;
 };
 
-}
+}  // namespace lsw::agent::apps

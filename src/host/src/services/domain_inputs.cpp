@@ -42,8 +42,8 @@ void network_inputs_from_settings(vm::DomainXmlInputs& inputs,
     inputs.forwards = config::PortForwards::accepted(
         config::PortForwards::decode(manager_settings.string_value(K::kPortForwards)));
     inputs.bridge.clear();
-    if (manager_settings.string_value(K::kNetworkMode)
-        != config::ManagerSettings::NetworkMode::kBridged) {
+    if (manager_settings.string_value(K::kNetworkMode) !=
+        config::ManagerSettings::NetworkMode::kBridged) {
         return;
     }
     const QString bridge = manager_settings.string_value(K::kNetworkBridge);

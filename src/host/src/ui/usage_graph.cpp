@@ -5,7 +5,6 @@
 
 #include <QPainter>
 #include <QPainterPath>
-
 #include <algorithm>
 
 namespace lsw::host::ui {
@@ -30,7 +29,7 @@ QString span_text(qint64 span_ms) {
                         : QStringLiteral("%1 s").arg(span_ms / 1000);
 }
 
-}
+}  // namespace
 
 UsageGraph::UsageGraph(QWidget* parent) : QWidget(parent) {
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
@@ -63,8 +62,8 @@ void UsageGraph::paintEvent(QPaintEvent*) {
 
     const QFont label_font = Theme::mono_font(kLabelPx);
     const QFontMetrics metrics(label_font);
-    const QRectF plot = frame.adjusted(kInset, kInset + metrics.height(), -kInset,
-                                       -(kInset + metrics.height()));
+    const QRectF plot =
+        frame.adjusted(kInset, kInset + metrics.height(), -kInset, -(kInset + metrics.height()));
     painter.setFont(label_font);
     painter.setPen(Theme::color(Theme::Color::kFgFaint));
     painter.drawText(QRectF(frame.left() + kInset, frame.bottom() - kInset - metrics.height(),
@@ -84,10 +83,12 @@ void UsageGraph::paintEvent(QPaintEvent*) {
     }
     const qint64 from = now_ms_ - span_ms_;
     const auto x_at = [&](qint64 at) {
-        return plot.left() + plot.width() * static_cast<double>(at - from) / static_cast<double>(span_ms_);
+        return plot.left() +
+               plot.width() * static_cast<double>(at - from) / static_cast<double>(span_ms_);
     };
     const auto y_at = [&](quint64 value) {
-        return plot.bottom() - plot.height() * static_cast<double>(value) / static_cast<double>(top);
+        return plot.bottom() -
+               plot.height() * static_cast<double>(value) / static_cast<double>(top);
     };
     painter.drawText(QRectF(frame.left() + kInset, frame.top() + kInset / 2.0, frame.width() / 2,
                             metrics.height()),
@@ -97,7 +98,8 @@ void UsageGraph::paintEvent(QPaintEvent*) {
     painter.setClipRect(plot);
     const auto fill = [&](bool upper_band, const QColor& color) {
         QPainterPath path;
-        path.moveTo(x_at(points_.first().at_ms), y_at(upper_band ? points_.first().upper : points_.first().lower));
+        path.moveTo(x_at(points_.first().at_ms),
+                    y_at(upper_band ? points_.first().upper : points_.first().lower));
         for (const Point& point : points_) {
             path.lineTo(x_at(point.at_ms), y_at(upper_band ? point.upper : point.lower));
         }
@@ -121,4 +123,4 @@ void UsageGraph::paintEvent(QPaintEvent*) {
     }
 }
 
-}
+}  // namespace lsw::host::ui

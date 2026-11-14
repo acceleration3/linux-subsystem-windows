@@ -309,7 +309,10 @@ int main(int argc, char** argv) {
                           "UI asks to reuse an existing guest app");
                     body = reject_launch
                                ? nlohmann::json{{"ok", false}, {"error", "activation refused"}}
-                               : nlohmann::json{{"ok", true}, {"pid", launch_pid}, {"pid_created", 777}, {"job", "test-job"}};
+                               : nlohmann::json{{"ok", true},
+                                                {"pid", launch_pid},
+                                                {"pid_created", 777},
+                                                {"job", "test-job"}};
                 } else if (message["cmd"] == "open_package") {
                     ++packages;
                     check(message["params"]["path"] == "C:\\test.MSIX",
@@ -335,13 +338,15 @@ int main(int argc, char** argv) {
                                ? nlohmann::json{{"ok", false}, {"error", "missing guest mirror"}}
                                : nlohmann::json{{"ok", true}, {"pid", 456}};
                 }
-                const auto send = [socket, reply = nlohmann::json{{"id", message["id"]}, {"result", body}}.dump()] {
-                    std::uint8_t header[5];
-                    lsw::linkproto::write_header(header, lsw::linkproto::FrameType::Control,
-                                                 static_cast<std::uint32_t>(reply.size()));
-                    socket->write(reinterpret_cast<const char*>(header), 5);
-                    socket->write(reply.data(), static_cast<qint64>(reply.size()));
-                };
+                const auto send =
+                    [socket,
+                     reply = nlohmann::json{{"id", message["id"]}, {"result", body}}.dump()] {
+                        std::uint8_t header[5];
+                        lsw::linkproto::write_header(header, lsw::linkproto::FrameType::Control,
+                                                     static_cast<std::uint32_t>(reply.size()));
+                        socket->write(reinterpret_cast<const char*>(header), 5);
+                        socket->write(reply.data(), static_cast<qint64>(reply.size()));
+                    };
                 if (defer_launch && message["cmd"] == "launch")
                     deferred_launch = send;
                 else
@@ -475,7 +480,8 @@ int main(int argc, char** argv) {
         config.path = QStringLiteral("C:\\ended.exe");
         const int before = mirror_starts;
         launcher.launch(config, QString());
-        check(wait_for([&] { return mirror_starts == before + 1; }), "launch under test starts a mirror");
+        check(wait_for([&] { return mirror_starts == before + 1; }),
+              "launch under test starts a mirror");
         push_ended(123, 555);
         push_ended(124, 777);
         wait_for([] { return false; }, 300);
@@ -490,11 +496,12 @@ int main(int argc, char** argv) {
         check(marker.open(QIODevice::WriteOnly), "frames flow for the exclusivity scenario");
         marker.close();
         const auto window = [](quint32 pid, quint32 root_pid, bool task, const char* image) {
-            return nlohmann::json{{"hwnd", pid * 10},   {"owner", 0},          {"pid", pid},
-                                  {"root_pid", root_pid}, {"has_caption", task}, {"exe_path", image},
-                                  {"title", "window"},  {"client_w", 640},     {"client_h", 480},
-                                  {"screen_x", 100},    {"screen_y", 100},     {"minimized", false},
-                                  {"on_screen", true},  {"task_window", task}};
+            return nlohmann::json{
+                {"hwnd", pid * 10},     {"owner", 0},          {"pid", pid},
+                {"root_pid", root_pid}, {"has_caption", task}, {"exe_path", image},
+                {"title", "window"},    {"client_w", 640},     {"client_h", 480},
+                {"screen_x", 100},      {"screen_y", 100},     {"minimized", false},
+                {"on_screen", true},    {"task_window", task}};
         };
         const auto appeared = [&](nlohmann::json row) {
             row["event"] = "window_appeared";
@@ -549,14 +556,18 @@ int main(int argc, char** argv) {
         check(wait_for([&] { return opened == 1; }) && mirrored() == QList<quint32>{123},
               "a launched application has its own mirror while no desktop is open");
         const QStringList launched_badges = badges(false);
-        check(launched_badges.size() == 1 && launched_badges.first().startsWith(directory.path() + QLatin1Char('/')),
-              "a launched application's mirror is given an icon badge kept in the runtime directory");
+        check(
+            launched_badges.size() == 1 &&
+                launched_badges.first().startsWith(directory.path() + QLatin1Char('/')),
+            "a launched application's mirror is given an icon badge kept in the runtime directory");
         QFile badge_file(launched_badges.value(0));
-        const QByteArray badge = badge_file.open(QIODevice::ReadOnly) ? badge_file.readAll() : QByteArray();
+        const QByteArray badge =
+            badge_file.open(QIODevice::ReadOnly) ? badge_file.readAll() : QByteArray();
         const auto side_at = [&](qsizetype offset) {
             quint32 side = 0;
             for (int byte = 0; byte < 4 && offset + byte < badge.size(); ++byte)
-                side |= static_cast<quint32>(static_cast<unsigned char>(badge[offset + byte])) << (8 * byte);
+                side |= static_cast<quint32>(static_cast<unsigned char>(badge[offset + byte]))
+                        << (8 * byte);
             return side;
         };
         const quint32 badge_width = side_at(0);
@@ -573,7 +584,8 @@ int main(int argc, char** argv) {
         for (qsizetype at = 8; at + 3 < badge.size(); at += 4) {
             const auto alpha = static_cast<unsigned char>(badge[at + 3]);
             for (int channel = 0; channel < 3; ++channel)
-                premultiplied = premultiplied && static_cast<unsigned char>(badge[at + channel]) <= alpha;
+                premultiplied =
+                    premultiplied && static_cast<unsigned char>(badge[at + channel]) <= alpha;
         }
         check(premultiplied, "no colour of the badge exceeds its alpha");
         check(badge_pixel(0, 0, 3) == 0 && badge_pixel(badge_width - 1, badge_height - 1, 3) == 0,
@@ -584,7 +596,8 @@ int main(int argc, char** argv) {
                   badge_pixel(badge_width / 2, badge_height / 2, 2) == 255,
               "the middle of the badge, between its panes, is the opaque white tile");
         check(badge_pixel(badge_width / 3, badge_height / 3, 3) == 255 &&
-                  badge_pixel(badge_width / 3, badge_height / 3, 0) > badge_pixel(badge_width / 3, badge_height / 3, 2),
+                  badge_pixel(badge_width / 3, badge_height / 3, 0) >
+                      badge_pixel(badge_width / 3, badge_height / 3, 2),
               "a pane of the badge is blue, stored blue first");
 
         int desktop_opens = 0;
@@ -604,20 +617,24 @@ int main(int argc, char** argv) {
         check(badges(true) == QStringList{QString()}, "the desktop mirror is given no icon badge");
         check(wait_for([&] { return !desktop_rooms.isEmpty(); }) &&
                   desktop_rooms == QList<QSize>{QSize(1201, 841)},
-              "the size the desktop window settles on is passed on in pixels, and a malformed one is not");
+              "the size the desktop window settles on is passed on in pixels, and a malformed one "
+              "is not");
         check(mirrored().isEmpty(), "opening the desktop closes every application mirror");
         check(launcher.running(first) && !launcher.opening(first),
               "an application the desktop shows is still running");
 
         appeared(window(900, 0, true, "C:\\installer.exe"));
         settle();
-        check(mirrored().isEmpty(), "a window appearing while the desktop is open starts no mirror");
+        check(mirrored().isEmpty(),
+              "a window appearing while the desktop is open starts no mirror");
 
         launch_pid = 321;
         launcher.launch(second, QString());
-        check(wait_for([&] { return opened == 2; }) && launcher.running(second) && !launcher.opening(second),
+        check(wait_for([&] { return opened == 2; }) && launcher.running(second) &&
+                  !launcher.opening(second),
               "a launch while the desktop is open completes without waiting for a mirror");
-        check(mirrored().isEmpty(), "a launch while the desktop is open starts no application mirror");
+        check(mirrored().isEmpty(),
+              "a launch while the desktop is open starts no application mirror");
 
         auto parked = window(60, 0, true, "C:\\Windows\\System32\\svchost.exe");
         parked["on_screen"] = false;
@@ -631,8 +648,9 @@ int main(int argc, char** argv) {
         auto owned = window(70, 0, false, "C:\\dialog.exe");
         owned["owner"] = 5;
         owned["has_caption"] = true;
-        auto office = window(10172, 0, true,
-                             "C:\\Program Files\\Common Files\\microsoft shared\\ClickToRun\\OfficeC2RClient.exe");
+        auto office = window(
+            10172, 0, true,
+            "C:\\Program Files\\Common Files\\microsoft shared\\ClickToRun\\OfficeC2RClient.exe");
         office["owner"] = 591164;
         office["has_caption"] = false;
         office["title"] = "Microsoft 365 and Office";
@@ -674,12 +692,15 @@ int main(int argc, char** argv) {
                          minimized};
         close_desktop();
         check(wait_for([&] { return mirrored() == QList<quint32>{80, 123, 321, 900}; }),
-              "closing the desktop mirrors each launched application that shows a window, a task window or "
+              "closing the desktop mirrors each launched application that shows a window, a task "
+              "window or "
               "not, and one mirror per other process with a task window on screen");
         settle();
         check(mirrored() == QList<quint32>{80, 123, 321, 900},
-              "the desktop background, the taskbar, an owned dialog, a tool window, a popup, a row that does "
-              "not say it is a task window and off-screen and degenerate task windows get no mirror of their own");
+              "the desktop background, the taskbar, an owned dialog, a tool window, a popup, a row "
+              "that does "
+              "not say it is a task window and off-screen and degenerate task windows get no "
+              "mirror of their own");
         check(desktop_closes == 1 && desktop_opens == 1, "the desktop closing is said once");
         check(!mirrors.desktop_open() && launcher.running(first) && launcher.running(second) &&
                   !launcher.opening(first) && !launcher.opening(second),
@@ -710,7 +731,8 @@ int main(int argc, char** argv) {
         appeared(window(501, 123, true, "C:\\first-helper.exe"));
         settle();
         check(badges(false).size() == 7 && badges(false).count(launched_badges.first()) == 7,
-              "a mirror started for a window nothing launched is given the same icon badge as a launched application's");
+              "a mirror started for a window nothing launched is given the same icon badge as a "
+              "launched application's");
         check(mirrored() == QList<quint32>{50, 80, 123, 321, 900, 950, 10172},
               "a second window of a mirrored process and windows not worth a mirror start none");
 
@@ -725,7 +747,8 @@ int main(int argc, char** argv) {
         check(!mirrored().contains(555), "a window appearing during a launch waits for the launch");
         defer_launch = false;
         deferred_launch();
-        check(wait_for([&] { return opened == 3; }) && mirrored().count(555) == 1 && launcher.running(third),
+        check(wait_for([&] { return opened == 3; }) && mirrored().count(555) == 1 &&
+                  launcher.running(third),
               "the window of a launch in flight is mirrored once, under the launched application");
 
         lsw::host::apps::AppConfig store;
@@ -733,14 +756,16 @@ int main(int argc, char** argv) {
         store.aumid = QStringLiteral("Vendor.App_abc!App");
         launch_pid = 666;
         launcher.launch(store, QString());
-        check(wait_for([&] { return opened == 4; }) && mirrored().contains(666), "a store application is mirrored");
+        check(wait_for([&] { return opened == 4; }) && mirrored().contains(666),
+              "a store application is mirrored");
         qputenv("LSW_TEST_FRAME_HOST_CLAIM", store.aumid.toUtf8());
         appeared(window(667, 0, true, "C:\\Windows\\System32\\ApplicationFrameHost.exe"));
         check(wait_for([&] { return mirrored().contains(667); }),
               "the frame host of a store application starts a mirror when its window appears");
         check(wait_for([&] { return !mirrored().contains(667); }) && mirrored().contains(666) &&
                   launcher.running(store),
-              "a mirror that turns out to show a launched store application's windows gives way to that application's");
+              "a mirror that turns out to show a launched store application's windows gives way to "
+              "that application's");
         qunsetenv("LSW_TEST_FRAME_HOST_CLAIM");
 
         mirrors.open_desktop(QStringLiteral("test desktop"));
@@ -751,11 +776,14 @@ int main(int argc, char** argv) {
               "an application that ends while the desktop shows it stops running");
         guest_windows = {window(123, 123, true, "C:\\first.exe")};
         close_desktop();
-        check(wait_for([&] { return mirrored() == QList<quint32>{123, 666} && !launcher.running(third); }),
+        check(wait_for([&] {
+                  return mirrored() == QList<quint32>{123, 666} && !launcher.running(third);
+              }),
               "an application that shows no window when the desktop closes is no longer running");
         check(launcher.running(store),
               "a store application, whose windows another process may own, is mirrored again");
-        check(launcher.running(first), "an application that still shows a window is mirrored again");
+        check(launcher.running(first),
+              "an application that still shows a window is mirrored again");
         launch_pid = 123;
     }
     QFile::remove(frame);
@@ -797,12 +825,15 @@ int main(int argc, char** argv) {
         int opens = 0;
         int closes = 0;
         int errors = 0;
-        QObject::connect(&mirrors, &lsw::host::mirror::GuestMirrors::desktop_opened, &app, [&] { ++opens; });
-        QObject::connect(&mirrors, &lsw::host::mirror::GuestMirrors::desktop_closed, &app, [&] { ++closes; });
+        QObject::connect(&mirrors, &lsw::host::mirror::GuestMirrors::desktop_opened, &app,
+                         [&] { ++opens; });
+        QObject::connect(&mirrors, &lsw::host::mirror::GuestMirrors::desktop_closed, &app,
+                         [&] { ++closes; });
         QObject::connect(&mirrors, &lsw::host::mirror::GuestMirrors::desktop_failed, &app,
                          [&](const QString&) { ++errors; });
         mirrors.open_desktop(QStringLiteral("failing desktop"));
-        check(wait_for([&] { return closes == 1; }) && opens == 1 && errors == 1 && !mirrors.desktop_open(),
+        check(wait_for([&] { return closes == 1; }) && opens == 1 && errors == 1 &&
+                  !mirrors.desktop_open(),
               "a desktop mirror that fails is said to have opened and to have closed, once each");
     }
     QThreadPool::globalInstance()->waitForDone();

@@ -22,4 +22,4 @@ public:
     [[nodiscard]] static QString label(int setting_mib);
 };
 
-}
+}  // namespace lsw::host::config

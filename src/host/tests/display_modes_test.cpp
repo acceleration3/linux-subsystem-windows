@@ -50,27 +50,30 @@ int main(int argc, char** argv) {
     check(fits(100, 100) && !fits(99, 100) && !fits(100, 99), "100 is the smallest edge");
     check(fits(8192, 1000) && !fits(8193, 1000) && !fits(1000, 8193), "8192 is the largest edge");
     check(fits(3840, 2160) && fits(8192, 8192), "no size is refused for its pixel clock");
-    check(fits(5120, 1440) && fits(7680, 4320), "an ultrawide and an 8K monitor's sizes are accepted");
-    check(DisplayModes::refusal(DisplayMode{8193, 2880}).contains(QStringLiteral("8192"))
-              && DisplayModes::refusal(DisplayMode{2880, 8193}).contains(QStringLiteral("8192")),
+    check(fits(5120, 1440) && fits(7680, 4320),
+          "an ultrawide and an 8K monitor's sizes are accepted");
+    check(DisplayModes::refusal(DisplayMode{8193, 2880}).contains(QStringLiteral("8192")) &&
+              DisplayModes::refusal(DisplayMode{2880, 8193}).contains(QStringLiteral("8192")),
           "a refusal names the limit");
     check(DisplayModes::refusal(DisplayMode{99, 2880}).contains(QStringLiteral("100")),
           "also the lower one");
 
     const QStringList wide = {QStringLiteral("5120x1440"), QStringLiteral("7680x4320"),
                               QStringLiteral("8193x1440"), QStringLiteral("1920x1080")};
-    check(DisplayModes::normalized(wide)
-              == QStringList({QStringLiteral("5120x1440"), QStringLiteral("7680x4320"),
-                              QStringLiteral("1920x1080")}),
+    check(DisplayModes::normalized(wide) ==
+              QStringList({QStringLiteral("5120x1440"), QStringLiteral("7680x4320"),
+                           QStringLiteral("1920x1080")}),
           "sizes wider than 3840 stay in the configured list, one past the limit does not");
-    check(DisplayModes::refusal_to_add({QStringLiteral("1920x1080")}, DisplayMode{5120, 1440}).isEmpty()
-              && DisplayModes::refusal_to_add({QStringLiteral("1920x1080")}, DisplayMode{7680, 4320}).isEmpty(),
+    check(DisplayModes::refusal_to_add({QStringLiteral("1920x1080")}, DisplayMode{5120, 1440})
+                  .isEmpty() &&
+              DisplayModes::refusal_to_add({QStringLiteral("1920x1080")}, DisplayMode{7680, 4320})
+                  .isEmpty(),
           "and can be added to it");
-    check(DisplayModes::effective({QStringLiteral("1920x1080")}, DisplayMode{5120, 1440})
-              == QStringList({QStringLiteral("5120x1440"), QStringLiteral("1920x1080")}),
+    check(DisplayModes::effective({QStringLiteral("1920x1080")}, DisplayMode{5120, 1440}) ==
+              QStringList({QStringLiteral("5120x1440"), QStringLiteral("1920x1080")}),
           "an ultrawide monitor's size goes first");
-    check(DisplayModes::effective({QStringLiteral("1920x1080")}, DisplayMode{10240, 4320})
-              == QStringList({QStringLiteral("1920x1080")}),
+    check(DisplayModes::effective({QStringLiteral("1920x1080")}, DisplayMode{10240, 4320}) ==
+              QStringList({QStringLiteral("1920x1080")}),
           "a monitor past the limit is not offered");
 
     const QVector<DisplayMode>& common = DisplayModes::common();
@@ -79,15 +82,15 @@ int main(int argc, char** argv) {
         common_fit = common_fit && fits(mode.width, mode.height);
     }
     check(common_fit, "every common size is one the display accepts");
-    check(common.contains(DisplayMode{3440, 1440}) && common.contains(DisplayMode{5120, 1440})
-              && common.contains(DisplayMode{5120, 2160}) && common.contains(DisplayMode{7680, 2160})
-              && common.contains(DisplayMode{7680, 4320}),
+    check(common.contains(DisplayMode{3440, 1440}) && common.contains(DisplayMode{5120, 1440}) &&
+              common.contains(DisplayMode{5120, 2160}) &&
+              common.contains(DisplayMode{7680, 2160}) && common.contains(DisplayMode{7680, 4320}),
           "the common sizes reach the ultrawide and 8K ones");
-    const QVector<DisplayMode> offered = DisplayModes::offerable(
-        {DisplayMode{5120, 1440}, DisplayMode{6880, 2880}, DisplayMode{10240, 4320},
-         DisplayMode{6880, 2880}});
-    check(offered.value(0) == (DisplayMode{5120, 1440}) && offered.value(1) == (DisplayMode{6880, 2880})
-              && offered.size() == common.size() + 1,
+    const QVector<DisplayMode> offered =
+        DisplayModes::offerable({DisplayMode{5120, 1440}, DisplayMode{6880, 2880},
+                                 DisplayMode{10240, 4320}, DisplayMode{6880, 2880}});
+    check(offered.value(0) == (DisplayMode{5120, 1440}) &&
+              offered.value(1) == (DisplayMode{6880, 2880}) && offered.size() == common.size() + 1,
           "the sizes to pick from start with the monitors' own, each once");
     check(!offered.contains(DisplayMode{10240, 4320}),
           "a monitor past the limit is not among them");
@@ -139,9 +142,9 @@ int main(int argc, char** argv) {
                   QStringLiteral("5120x1440,2560x1440"),
               "an ultrawide monitor's size is sent to the device");
         settings.set_value(K::kMatchHostOutput, false);
-        settings.set_value(K::kDisplayModes, QStringList{QStringLiteral("5120x1440"),
-                                                         QStringLiteral("7680x4320"),
-                                                         QStringLiteral("8193x4320")});
+        settings.set_value(K::kDisplayModes,
+                           QStringList{QStringLiteral("5120x1440"), QStringLiteral("7680x4320"),
+                                       QStringLiteral("8193x4320")});
         check(lsw::host::services::display_modes_from_settings(settings) ==
                   QStringLiteral("5120x1440,7680x4320"),
               "configured sizes up to the limit are sent to the device, one past it is not");

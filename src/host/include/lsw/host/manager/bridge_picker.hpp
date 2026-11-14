@@ -12,7 +12,9 @@ class QLabel;
 class QRadioButton;
 class QVBoxLayout;
 
-namespace lsw::host::ui { class ItemList; }
+namespace lsw::host::ui {
+class ItemList;
+}
 
 namespace lsw::host::manager {
 class BridgePicker : public QWidget {
@@ -47,4 +49,4 @@ private:
     QStringList checks_signature_;
 };
 
-}
+}  // namespace lsw::host::manager

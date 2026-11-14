@@ -12,7 +12,8 @@ void WindowAnnouncements::appeared(const win::DiscoveredWindow& window) {
         return;
     }
     const std::lock_guard lock(mu_);
-    std::erase_if(pending_, [&](const win::DiscoveredWindow& known) { return known.hwnd == window.hwnd; });
+    std::erase_if(pending_,
+                  [&](const win::DiscoveredWindow& known) { return known.hwnd == window.hwnd; });
     if (pending_.size() >= kMostPending) {
         pending_.erase(pending_.begin());
     }
@@ -33,4 +34,4 @@ std::vector<rpc::Event> WindowAnnouncements::collect_pending() {
     return out;
 }
 
-}
+}  // namespace lsw::agent::apps

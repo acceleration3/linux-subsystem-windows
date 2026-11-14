@@ -10,9 +10,10 @@ bool recent(const std::optional<qint64>& at, qint64 now) {
     return at.has_value() && now - *at <= HostWindowAlerts::kRiseShownMs;
 }
 
-}
+}  // namespace
 
-QVector<HostWindowAlerts::Warning> HostWindowAlerts::warnings(const HostWindowStatus& w, qint64 now) {
+QVector<HostWindowAlerts::Warning> HostWindowAlerts::warnings(const HostWindowStatus& w,
+                                                              qint64 now) {
     QVector<Warning> out;
     if (!w.read) {
         return out;
@@ -21,9 +22,10 @@ QVector<HostWindowAlerts::Warning> HostWindowAlerts::warnings(const HostWindowSt
     for (const auto& app : w.apps) {
         apps.push_back(&app);
     }
-    std::sort(apps.begin(), apps.end(), [](const HostWindowStatus::App* a, const HostWindowStatus::App* b) {
-        return a->device != b->device ? a->device < b->device : a->context < b->context;
-    });
+    std::sort(apps.begin(), apps.end(),
+              [](const HostWindowStatus::App* a, const HostWindowStatus::App* b) {
+                  return a->device != b->device ? a->device < b->device : a->context < b->context;
+              });
     if (w.full_since_ms && now - *w.full_since_ms >= kFullHoldMs) {
         const HostWindowStatus::App* top = nullptr;
         for (const auto* app : apps) {
@@ -45,11 +47,11 @@ QVector<HostWindowAlerts::Warning> HostWindowAlerts::warnings(const HostWindowSt
         const auto& app = *app_ptr;
         if (recent(app.refused_at_ms, now)) {
             named = true;
-            out.push_back({Warning::Kind::Refusals, true,
-                           QStringLiteral("%1 is being refused host window memory.")
-                               .arg(app.label()),
-                           QStringLiteral("The app sees out-of-memory errors. The host window "
-                                          "has no room for what it asks for.")});
+            out.push_back(
+                {Warning::Kind::Refusals, true,
+                 QStringLiteral("%1 is being refused host window memory.").arg(app.label()),
+                 QStringLiteral("The app sees out-of-memory errors. The host window "
+                                "has no room for what it asks for.")});
         }
     }
     if (!named && recent(w.window_refused_at_ms, now)) {
@@ -95,4 +97,4 @@ QVector<HostWindowAlerts::Warning> HostWindowAlerts::warnings(const HostWindowSt
     return out;
 }
 
-}
+}  // namespace lsw::host::services

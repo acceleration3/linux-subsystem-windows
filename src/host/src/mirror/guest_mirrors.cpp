@@ -7,7 +7,6 @@
 
 #include <QFileInfo>
 #include <QMetaObject>
-
 #include <iterator>
 #include <nlohmann/json.hpp>
 #include <string>
@@ -18,22 +17,26 @@ namespace lsw::host::mirror {
 namespace {
 constexpr int kSmallestWindow = 32;
 constexpr qsizetype kMostParked = 64;
-}
+}  // namespace
 
 GuestMirrors::GuestWindow::GuestWindow(const nlohmann::json& row)
     : pid(row.value("pid", quint32{0})), root_pid(row.value("root_pid", quint32{0})),
       image(QString::fromStdString(row.value("exe_path", std::string{}))) {
-    const bool placed = row.value("minimized", false) ||
-                        (row.value("on_screen", false) && row.value("client_w", 0) >= kSmallestWindow &&
-                         row.value("client_h", 0) >= kSmallestWindow);
+    const bool placed =
+        row.value("minimized", false) ||
+        (row.value("on_screen", false) && row.value("client_w", 0) >= kSmallestWindow &&
+         row.value("client_h", 0) >= kSmallestWindow);
     mirrorable = pid != 0 && row.value("task_window", false) && placed;
 }
 
-GuestMirrors::GuestMirrors(link::AgentRpcClient& rpc, QObject* parent) : QObject(parent), rpc_(rpc) {
-    appeared_sub_ = rpc_.subscribe(linkproto::topic::kWindowAppeared, [this](const nlohmann::json& row) {
-        QMetaObject::invokeMethod(
-            this, [this, window = GuestWindow(row)] { appeared(window); }, Qt::QueuedConnection);
-    });
+GuestMirrors::GuestMirrors(link::AgentRpcClient& rpc, QObject* parent)
+    : QObject(parent), rpc_(rpc) {
+    appeared_sub_ =
+        rpc_.subscribe(linkproto::topic::kWindowAppeared, [this](const nlohmann::json& row) {
+            QMetaObject::invokeMethod(
+                this, [this, window = GuestWindow(row)] { appeared(window); },
+                Qt::QueuedConnection);
+        });
 }
 
 QString GuestMirrors::window_key(quint32 pid) const {
@@ -105,19 +108,20 @@ void GuestMirrors::resume() {
         return;
     }
     LSW_INFO("mirror: the desktop closed; every window is mirrored again");
-    rpc_.request_async(linkproto::cmd::kListWindows, nlohmann::json::object(), this,
-                       [this](const link::AgentReply& reply) {
-                           if (desktop_ || !suspended_) {
-                               return;
-                           }
-                           suspended_ = false;
-                           if (!reply.ok) {
-                               LSW_WARN("mirror: the guest's windows could not be listed: {}", reply.error);
-                           }
-                           const auto windows = reply.body.find("windows");
-                           remirror(windows != reply.body.end() && windows->is_array() ? *windows
-                                                                                       : nlohmann::json::array());
-                       });
+    rpc_.request_async(
+        linkproto::cmd::kListWindows, nlohmann::json::object(), this,
+        [this](const link::AgentReply& reply) {
+            if (desktop_ || !suspended_) {
+                return;
+            }
+            suspended_ = false;
+            if (!reply.ok) {
+                LSW_WARN("mirror: the guest's windows could not be listed: {}", reply.error);
+            }
+            const auto windows = reply.body.find("windows");
+            remirror(windows != reply.body.end() && windows->is_array() ? *windows
+                                                                        : nlohmann::json::array());
+        });
 }
 
 void GuestMirrors::remirror(const nlohmann::json& rows) {
@@ -181,7 +185,8 @@ void GuestMirrors::adopt(const GuestWindow& window) {
     Entry entry;
     entry.application.pid = pid;
     entry.application.log_name =
-        QFileInfo(QString(window.image).replace(QLatin1Char('\\'), QLatin1Char('/'))).completeBaseName();
+        QFileInfo(QString(window.image).replace(QLatin1Char('\\'), QLatin1Char('/')))
+            .completeBaseName();
     entry.unowned = true;
     entries_.insert(identity, entry);
     LSW_INFO("mirror: pid {} '{}' shows a window no mirror owns; it gets its own", pid,
@@ -220,15 +225,17 @@ void GuestMirrors::show(const QString& identity, const WindowMirror::Application
         const Entry kept = *previous;
         remove(identity);
         if (keep_previous && !kept.mirror.isNull() && kept.application.pid != application.pid) {
-            const QString beside = identity + QLatin1Char('#') + QString::number(kept.application.pid);
+            const QString beside =
+                identity + QLatin1Char('#') + QString::number(kept.application.pid);
             entries_.insert(beside, kept);
             kept.mirror->disconnect(this);
             follow_host(kept.mirror);
-            connect(kept.mirror, &WindowMirror::finished, this, [this, beside, mirror = kept.mirror.data()] {
-                if (this->mirror(beside) == mirror) {
-                    remove(beside);
-                }
-            });
+            connect(kept.mirror, &WindowMirror::finished, this,
+                    [this, beside, mirror = kept.mirror.data()] {
+                        if (this->mirror(beside) == mirror) {
+                            remove(beside);
+                        }
+                    });
         } else if (!kept.mirror.isNull()) {
             kept.mirror->deleteLater();
         }
@@ -237,7 +244,8 @@ void GuestMirrors::show(const QString& identity, const WindowMirror::Application
     entry.application = application;
     entries_.insert(identity, entry);
     if (desktop_) {
-        LSW_INFO("mirror: pid {} is shown by the open desktop; its own mirror starts when the desktop closes",
+        LSW_INFO("mirror: pid {} is shown by the open desktop; its own mirror starts when the "
+                 "desktop closes",
                  application.pid);
         desktop_->raise(application.activation_token);
         entries_[identity].application.activation_token.clear();
@@ -258,11 +266,12 @@ void GuestMirrors::start(const QString& identity) {
     if (!entries_[identity].unowned && !application.aumid.isEmpty()) {
         shown_by_.insert(application.aumid, identity);
     }
-    connect(mirror, &WindowMirror::app_identified, this, [this, identity, mirror](const QString& claim) {
-        if (this->mirror(identity) == mirror) {
-            identified(identity, claim);
-        }
-    });
+    connect(mirror, &WindowMirror::app_identified, this,
+            [this, identity, mirror](const QString& claim) {
+                if (this->mirror(identity) == mirror) {
+                    identified(identity, claim);
+                }
+            });
     connect(mirror, &WindowMirror::ready, this, [this, identity, mirror] {
         if (this->mirror(identity) == mirror) {
             entries_[identity].resumed = false;
@@ -357,11 +366,12 @@ quint32 GuestMirrors::pid(const QString& identity) const {
 
 QString GuestMirrors::identity_of(quint32 pid, quint64 pid_created) const {
     for (auto it = entries_.cbegin(); it != entries_.cend(); ++it) {
-        if (!it->unowned && it->application.pid == pid && it->application.pid_created == pid_created) {
+        if (!it->unowned && it->application.pid == pid &&
+            it->application.pid_created == pid_created) {
             return it.key();
         }
     }
     return {};
 }
 
-}
+}  // namespace lsw::host::mirror

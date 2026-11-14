@@ -60,7 +60,7 @@ std::optional<quint64> current_size(const QString& path, int bar) {
     return *end - *start + 1;
 }
 
-}
+}  // namespace
 
 std::optional<ResizableBar::Sizes> ResizableBar::read(const QString& pci_address) {
     if (pci_address.isEmpty()) {
@@ -93,4 +93,4 @@ bool ResizableBar::is_off(const Sizes& sizes, quint64 vram_bytes) {
     return sizes.current_bytes < target;
 }
 
-}
+}  // namespace lsw::host::platform

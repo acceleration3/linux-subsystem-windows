@@ -18,7 +18,8 @@ VramReserve::Split VramReserve::resolve(int setting_mib, quint64 total_mib) {
         reserve = std::min(reserve, most);
     }
     Split out;
-    const quint64 cap = total > reserve && total - reserve >= total / 2 ? total - reserve : total / 2;
+    const quint64 cap =
+        total > reserve && total - reserve >= total / 2 ? total - reserve : total / 2;
     out.reserve_mib = reserve / kMib;
     out.guest_cap_mib = cap / kMib;
     return out;
@@ -29,4 +30,4 @@ QString VramReserve::label(int setting_mib) {
                             : platform::HostGpus::format_mib(static_cast<quint64>(setting_mib));
 }
 
-}
+}  // namespace lsw::host::config

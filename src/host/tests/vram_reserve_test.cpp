@@ -23,7 +23,7 @@ void check(bool ok, const char* label) {
     }
 }
 
-}
+}  // namespace
 
 int main(int argc, char** argv) {
     QCoreApplication app{argc, argv};
@@ -39,13 +39,16 @@ int main(int argc, char** argv) {
 
     const auto four = VramReserve::resolve(4096, 16384);
     check(four.reserve_mib == 4096 && four.guest_cap_mib == 12288, "an explicit reserve is taken");
-    check(VramReserve::resolve(64, 16384).reserve_mib == 256, "an explicit reserve is at least 256 MiB");
+    check(VramReserve::resolve(64, 16384).reserve_mib == 256,
+          "an explicit reserve is at least 256 MiB");
     const auto greedy = VramReserve::resolve(16384, 16384);
     check(greedy.reserve_mib == 15872 && greedy.guest_cap_mib == 8192,
           "the reserve leaves 512 MiB and the guest cap never drops under half");
-    check(VramReserve::resolve(8192, 8192).reserve_mib == 7680, "a reserve of all of it leaves 512 MiB");
+    check(VramReserve::resolve(8192, 8192).reserve_mib == 7680,
+          "a reserve of all of it leaves 512 MiB");
     check(VramReserve::resolve(12288, 16384).guest_cap_mib == 8192, "the half rule holds the cap");
-    check(VramReserve::resolve(0, 0).guest_cap_mib == 0 && VramReserve::resolve(2048, 0).guest_cap_mib == 0,
+    check(VramReserve::resolve(0, 0).guest_cap_mib == 0 &&
+              VramReserve::resolve(2048, 0).guest_cap_mib == 0,
           "an unknown total leaves nothing to compute");
     check(VramReserve::label(0) == QStringLiteral("Auto") &&
               VramReserve::label(2048) == QStringLiteral("2 GiB") &&
@@ -56,7 +59,8 @@ int main(int argc, char** argv) {
     QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, dir.path());
     {
         ManagerSettings settings;
-        check(ManagerSettings::needs_restart(K::kVramReserveMib), "the reserve applies at the next start");
+        check(ManagerSettings::needs_restart(K::kVramReserveMib),
+              "the reserve applies at the next start");
         check(settings.int_value(K::kVramReserveMib) == 0, "the default is Auto");
         lsw::host::config::Settings paths;
         check(lsw::host::services::domain_inputs_from_settings(paths, settings, std::nullopt)

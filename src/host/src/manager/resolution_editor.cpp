@@ -58,8 +58,9 @@ ResolutionEditor::ResolutionEditor(config::ManagerSettings& settings, const serv
     column->setSpacing(0);
 
     table_ = new QTableWidget(0, 4);
-    Theme::rows_table(table_, {QStringLiteral("PREFERRED"), QStringLiteral("RESOLUTION"),
-                               QStringLiteral("ASPECT"), QString{}},
+    Theme::rows_table(table_,
+                      {QStringLiteral("PREFERRED"), QStringLiteral("RESOLUTION"),
+                       QStringLiteral("ASPECT"), QString{}},
                       QStringLiteral("display-resolutions"), {96, 320, 90, 104}, {0, 1, 2, 3});
     table_->verticalHeader()->setDefaultSectionSize(38);
     table_->setProperty("controls", true);

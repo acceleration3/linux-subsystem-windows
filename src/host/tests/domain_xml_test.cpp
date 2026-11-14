@@ -117,8 +117,8 @@ void check_network() {
         "user,id=lsw-net,hostfwd=tcp:127.0.0.1:5102-:5102,hostfwd=tcp:127.0.0.1:5103-:5103,"
         "hostfwd=tcp:127.0.0.1:5445-:445");
     const QString plain = fixed_definition(DomainXmlInputs{});
-    check(digest(plain)
-              == QStringLiteral("a005a2f5d51fff31eef2f120d72b271a506bed27ee88c6bc3cea7e4bb9d25077"),
+    check(digest(plain) ==
+              QStringLiteral("a005a2f5d51fff31eef2f120d72b271a506bed27ee88c6bc3cea7e4bb9d25077"),
           "with the network settings untouched the definition is byte for byte the one from "
           "before there were any");
     check(user_net(plain) == own, "untouched, the user network forwards LSW's three ports only");
@@ -130,9 +130,10 @@ void check_network() {
         {PortForward::Protocol::Tcp, 47989, 47989, true},
     };
     const QString with_forwards = fixed_definition(forwarded);
-    check(user_net(with_forwards)
-              == own + QStringLiteral(",hostfwd=tcp:127.0.0.1:8080-:80,hostfwd=udp:0.0.0.0:47998-:47998,"
-                                      "hostfwd=tcp:0.0.0.0:47989-:47989"),
+    check(user_net(with_forwards) ==
+              own +
+                  QStringLiteral(",hostfwd=tcp:127.0.0.1:8080-:80,hostfwd=udp:0.0.0.0:47998-:47998,"
+                                 "hostfwd=tcp:0.0.0.0:47989-:47989"),
           "each forwarded port follows LSW's own on the one user network, in order");
     check(with_forwards.contains(QStringLiteral("hostfwd=tcp:127.0.0.1:8080-:80")),
           "a port for this computer only listens on the loopback address");
@@ -140,12 +141,13 @@ void check_network() {
           "a port reachable from the network listens on every address, with its protocol");
     const QDomDocument forwarded_doc = parse(with_forwards, "the definition with forwards parses");
     const QStringList forwarded_args = qemu_args(forwarded_doc);
-    check(args_after(forwarded_args, QStringLiteral("-device"), QStringLiteral("e1000e,")).size() == 1
-              && forwarded_doc.elementsByTagName(QStringLiteral("interface")).isEmpty(),
+    check(args_after(forwarded_args, QStringLiteral("-device"), QStringLiteral("e1000e,")).size() ==
+                  1 &&
+              forwarded_doc.elementsByTagName(QStringLiteral("interface")).isEmpty(),
           "forwarding ports adds no network adapter");
     QString without_forwards = with_forwards;
-    without_forwards.remove(QStringLiteral(
-        ",hostfwd=tcp:127.0.0.1:8080-:80,hostfwd=udp:0.0.0.0:47998-:47998,hostfwd=tcp:0.0.0.0:47989-:47989"));
+    without_forwards.remove(QStringLiteral(",hostfwd=tcp:127.0.0.1:8080-:80,hostfwd=udp:0.0.0.0:"
+                                           "47998-:47998,hostfwd=tcp:0.0.0.0:47989-:47989"));
     check(without_forwards == plain, "and changes nothing else in the definition");
 
     DomainXmlInputs bridged = forwarded;
@@ -154,24 +156,27 @@ void check_network() {
     const QDomDocument bridged_doc = parse(with_bridge, "the bridged definition parses");
     const QDomNodeList interfaces = bridged_doc.elementsByTagName(QStringLiteral("interface"));
     const QDomElement nic = interfaces.at(0).toElement();
-    check(interfaces.count() == 1 && nic.attribute(QStringLiteral("type")) == QStringLiteral("bridge")
-              && nic.parentNode().nodeName() == QStringLiteral("devices"),
+    check(interfaces.count() == 1 &&
+              nic.attribute(QStringLiteral("type")) == QStringLiteral("bridge") &&
+              nic.parentNode().nodeName() == QStringLiteral("devices"),
           "bridged, the guest has one libvirt adapter of type bridge among its devices");
-    check(nic.firstChildElement(QStringLiteral("source")).attribute(QStringLiteral("bridge"))
-              == QStringLiteral("br-test"),
+    check(nic.firstChildElement(QStringLiteral("source")).attribute(QStringLiteral("bridge")) ==
+              QStringLiteral("br-test"),
           "it joins the chosen bridge");
-    check(nic.firstChildElement(QStringLiteral("model")).attribute(QStringLiteral("type"))
-              == QStringLiteral("e1000e"),
+    check(nic.firstChildElement(QStringLiteral("model")).attribute(QStringLiteral("type")) ==
+              QStringLiteral("e1000e"),
           "it is an e1000e, which Windows drives without extra drivers");
-    const QString mac = nic.firstChildElement(QStringLiteral("mac")).attribute(QStringLiteral("address"));
+    const QString mac =
+        nic.firstChildElement(QStringLiteral("mac")).attribute(QStringLiteral("address"));
     check(mac == QStringLiteral("52:54:00:6b:8d:90"),
           "its address is fixed by the machine's identity, so Windows sees the same adapter on "
           "every start");
-    check(user_net(with_bridge) == user_net(with_forwards)
-              && args_after(qemu_args(bridged_doc), QStringLiteral("-device"), QStringLiteral("e1000e,"))
-                         .value(0)
-                     == QStringLiteral("e1000e,netdev=lsw-net,id=lsw-nic,bus=pcie.0,addr=0x10"),
-          "bridged, the user network adapter with LSW's own ports and the forwards stays");
+    check(
+        user_net(with_bridge) == user_net(with_forwards) &&
+            args_after(qemu_args(bridged_doc), QStringLiteral("-device"), QStringLiteral("e1000e,"))
+                    .value(0) ==
+                QStringLiteral("e1000e,netdev=lsw-net,id=lsw-nic,bus=pcie.0,addr=0x10"),
+        "bridged, the user network adapter with LSW's own ports and the forwards stays");
     QString without_bridge = with_bridge;
     const qsizetype from = without_bridge.indexOf(QStringLiteral("\n    <interface"));
     const qsizetype to = without_bridge.indexOf(QStringLiteral("</interface>"));
@@ -186,13 +191,13 @@ void check_network() {
 
     DomainXmlInputs odd;
     odd.bridge = QStringLiteral("br'<&>");
-    const QDomDocument odd_doc = parse(fixed_definition(odd), "a bridge name with XML specials parses");
-    check(odd_doc.elementsByTagName(QStringLiteral("source")).count() > 0
-              && odd_doc.elementsByTagName(QStringLiteral("interface"))
-                         .at(0)
-                         .firstChildElement(QStringLiteral("source"))
-                         .attribute(QStringLiteral("bridge"))
-                     == QStringLiteral("br'<&>"),
+    const QDomDocument odd_doc =
+        parse(fixed_definition(odd), "a bridge name with XML specials parses");
+    check(odd_doc.elementsByTagName(QStringLiteral("source")).count() > 0 &&
+              odd_doc.elementsByTagName(QStringLiteral("interface"))
+                      .at(0)
+                      .firstChildElement(QStringLiteral("source"))
+                      .attribute(QStringLiteral("bridge")) == QStringLiteral("br'<&>"),
           "and survives intact");
 }
 
@@ -390,14 +395,15 @@ int main(int argc, char** argv) {
         DomainXmlInputs hybrid = inputs;
         hybrid.hybrid_graphics = true;
         const QString hybrid_xml = DomainXmlBuilder::build(vm, hybrid);
-        const QStringList hybrid_gpus = args_after(
-            qemu_args(parse(hybrid_xml, "a hybrid definition is well-formed XML")),
-            QStringLiteral("-device"), QStringLiteral("virtio-gpu-av-pci,"));
+        const QStringList hybrid_gpus =
+            args_after(qemu_args(parse(hybrid_xml, "a hybrid definition is well-formed XML")),
+                       QStringLiteral("-device"), QStringLiteral("virtio-gpu-av-pci,"));
         check(hybrid_gpus.value(0).contains(QStringLiteral(",hybrid=integrated")),
               "with hybrid graphics the display adapter is the integrated one");
         check(hybrid_gpus.value(1).contains(QStringLiteral(",hybrid=discrete")),
               "and the render-only adapter is the discrete one");
-        check(hybrid_xml.count(QStringLiteral("hybrid=")) == 2, "no other adapter has the property");
+        check(hybrid_xml.count(QStringLiteral("hybrid=")) == 2,
+              "no other adapter has the property");
         DomainXmlInputs alone = hybrid;
         alone.render_only_gpu_uuids.clear();
         check(!DomainXmlBuilder::build(vm, alone).contains(QStringLiteral("hybrid=")),

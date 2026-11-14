@@ -32,7 +32,8 @@ public:
 
     [[nodiscard]] static const QVector<PortForward>& own();
     [[nodiscard]] static const QVector<PortPreset>& presets();
-    [[nodiscard]] static bool applied(const QVector<PortForward>& entries, const PortPreset& preset);
+    [[nodiscard]] static bool applied(const QVector<PortForward>& entries,
+                                      const PortPreset& preset);
     [[nodiscard]] static QVector<PortForward> with(QVector<PortForward> entries,
                                                    const PortPreset& preset, QStringList* refusals,
                                                    int first_host_port = first_unprivileged_port());
@@ -45,8 +46,8 @@ public:
     [[nodiscard]] static QString refusal(const QVector<PortForward>& entries,
                                          const PortForward& candidate,
                                          int first_host_port = first_unprivileged_port());
-    [[nodiscard]] static QVector<PortForward> accepted(const QVector<PortForward>& entries,
-                                                       int first_host_port = first_unprivileged_port());
+    [[nodiscard]] static QVector<PortForward>
+    accepted(const QVector<PortForward>& entries, int first_host_port = first_unprivileged_port());
 
     [[nodiscard]] static QString encode(const QVector<PortForward>& entries);
     [[nodiscard]] static QVector<PortForward> decode(const QString& blob);
@@ -57,4 +58,4 @@ public:
     [[nodiscard]] static std::optional<PortForward> from_hostfwd(const QString& option);
 };
 
-}
+}  // namespace lsw::host::config

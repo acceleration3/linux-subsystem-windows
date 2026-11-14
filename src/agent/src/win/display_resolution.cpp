@@ -18,7 +18,7 @@ DEVMODEW blank_mode() {
     return mode;
 }
 
-}
+}  // namespace
 
 std::optional<DisplayResolution::Resolution> DisplayResolution::current() {
     DEVMODEW mode = blank_mode();
@@ -65,4 +65,4 @@ bool DisplayResolution::apply(const Resolution& wanted) {
     return true;
 }
 
-}
+}  // namespace lsw::agent::win

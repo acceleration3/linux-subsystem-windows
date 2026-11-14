@@ -19,7 +19,9 @@ public:
         int blobs = 0;
         std::optional<quint64> batches;
 
-        [[nodiscard]] quint64 bytes() const noexcept { return write_back_bytes + write_combined_bytes; }
+        [[nodiscard]] quint64 bytes() const noexcept {
+            return write_back_bytes + write_combined_bytes;
+        }
     };
 
     struct WindowStats {
@@ -97,4 +99,4 @@ public:
     [[nodiscard]] static QHash<QString, QString> fields(const QByteArray& line, QString* path);
 };
 
-}
+}  // namespace lsw::host::platform

@@ -20,7 +20,6 @@ namespace lsw::host::services { class HostServices; }
 
 namespace lsw::host::vm { class GracefulShutdown; }
 
-
 namespace lsw::host::manager {
 
 class ApplyBar;

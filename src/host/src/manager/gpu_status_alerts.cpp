@@ -28,7 +28,7 @@ GpuStatusAlerts::Warning::Kind kind_of(services::HostWindowAlerts::Warning::Kind
     return GpuStatusAlerts::Warning::Kind::ArenaFull;
 }
 
-}
+}  // namespace
 
 GpuStatusAlerts::GpuStatusAlerts(services::StatusHub& status, QObject* parent)
     : QObject(parent), status_(status) {
@@ -56,9 +56,10 @@ GpuStatusAlerts::GpuStatusAlerts(services::StatusHub& status, QObject* parent)
 QString GpuStatusAlerts::window_signature() const {
     QStringList parts;
     for (const auto& warning : warnings()) {
-        if (warning.kind == Warning::Kind::WindowFull || warning.kind == Warning::Kind::Refusals
-            || warning.kind == Warning::Kind::SplitTransfers
-            || warning.kind == Warning::Kind::CopiedMappings || warning.kind == Warning::Kind::ArenaFull) {
+        if (warning.kind == Warning::Kind::WindowFull || warning.kind == Warning::Kind::Refusals ||
+            warning.kind == Warning::Kind::SplitTransfers ||
+            warning.kind == Warning::Kind::CopiedMappings ||
+            warning.kind == Warning::Kind::ArenaFull) {
             parts << warning.headline << warning.detail << QString::number(warning.critical);
         }
     }
@@ -113,7 +114,8 @@ QVector<GpuStatusAlerts::Warning> GpuStatusAlerts::warnings() const {
     if (running) {
         const auto& w = status_.host_window();
         for (const auto& warning : services::HostWindowAlerts::warnings(w, w.at_ms)) {
-            out.push_back({kind_of(warning.kind), warning.critical, warning.headline, warning.detail});
+            out.push_back(
+                {kind_of(warning.kind), warning.critical, warning.headline, warning.detail});
         }
     }
     return out;
@@ -130,4 +132,4 @@ GpuStatusAlerts::Severity GpuStatusAlerts::worst() const {
     return out;
 }
 
-}
+}  // namespace lsw::host::manager

@@ -1,7 +1,6 @@
 #pragma once
 
 #include <nlohmann/json_fwd.hpp>
-
 #include <optional>
 
 namespace lsw::agent::system {
@@ -17,7 +16,10 @@ public:
     explicit DisplayRequest(const nlohmann::json& params);
 
     [[nodiscard]] int scaling_percent() const noexcept { return scaling_percent_; }
-    [[nodiscard]] const std::optional<Resolution>& resolution() const noexcept { return resolution_; }
+
+    [[nodiscard]] const std::optional<Resolution>& resolution() const noexcept {
+        return resolution_;
+    }
 
     static void answer(nlohmann::json& reply, const std::optional<Resolution>& now);
 
@@ -26,4 +28,4 @@ private:
     std::optional<Resolution> resolution_;
 };
 
-}
+}  // namespace lsw::agent::system

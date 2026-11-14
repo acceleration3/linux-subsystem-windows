@@ -23,7 +23,6 @@
 #include <QPushButton>
 #include <QStringList>
 #include <QVBoxLayout>
-
 #include <algorithm>
 #include <chrono>
 
@@ -256,12 +255,13 @@ void SettingsPage::build_startup() {
                            "guest keep running. Off: there is no tray icon and closing the window "
                            "quits the manager."),
             right_aligned(controls_->toggle(K::kCloseToTray)));
-    add_row(startup, K::kShutGuestOnQuit, QStringLiteral("Shut the guest down when the manager quits"),
-            QStringLiteral("On: quitting asks Windows to shut down and waits up to %1 seconds for "
-                           "it before the manager exits. Off: the guest keeps running without the "
-                           "manager.")
-                .arg(std::chrono::duration_cast<std::chrono::seconds>(ManagerExit::kGuestWait).count()),
-            right_aligned(controls_->toggle(K::kShutGuestOnQuit)));
+    add_row(
+        startup, K::kShutGuestOnQuit, QStringLiteral("Shut the guest down when the manager quits"),
+        QStringLiteral("On: quitting asks Windows to shut down and waits up to %1 seconds for "
+                       "it before the manager exits. Off: the guest keeps running without the "
+                       "manager.")
+            .arg(std::chrono::duration_cast<std::chrono::seconds>(ManagerExit::kGuestWait).count()),
+        right_aligned(controls_->toggle(K::kShutGuestOnQuit)));
 }
 
 void SettingsPage::build_desktop() {

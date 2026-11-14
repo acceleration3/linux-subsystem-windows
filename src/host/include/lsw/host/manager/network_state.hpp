@@ -6,7 +6,9 @@
 #include <QStringList>
 #include <QVector>
 
-namespace lsw::host::services { struct VmStatus; }
+namespace lsw::host::services {
+struct VmStatus;
+}
 
 namespace lsw::host::manager {
 class NetworkState {
@@ -36,4 +38,4 @@ public:
                                          int next_forwards, int waiting);
 };
 
-}
+}  // namespace lsw::host::manager

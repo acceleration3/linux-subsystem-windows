@@ -197,7 +197,8 @@ void WindowMirror::read_status() {
             announce_ready();
         } else if (line.startsWith("SIZE ")) {
             const QList<QByteArray> sides = line.mid(5).split(' ');
-            const QSize pixels = sides.size() == 2 ? QSize(sides[0].toInt(), sides[1].toInt()) : QSize();
+            const QSize pixels =
+                sides.size() == 2 ? QSize(sides[0].toInt(), sides[1].toInt()) : QSize();
             if (!pixels.isEmpty()) {
                 Q_EMIT room_settled(pixels);
             }

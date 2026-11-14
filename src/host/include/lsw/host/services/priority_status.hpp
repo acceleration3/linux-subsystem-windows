@@ -20,4 +20,4 @@ struct PriorityStatus {
     [[nodiscard]] bool operator==(const PriorityStatus&) const = default;
 };
 
-}
+}  // namespace lsw::host::services

@@ -2,16 +2,16 @@
 
 #include "lsw/host/apps/app_config_store.hpp"
 #include "lsw/host/apps/guest_app_launcher.hpp"
-#include "lsw/host/mirror/guest_mirrors.hpp"
 #include "lsw/host/apps/log_store.hpp"
 #include "lsw/host/config/manager_settings.hpp"
 #include "lsw/host/config/pending_changes.hpp"
 #include "lsw/host/config/settings.hpp"
 #include "lsw/host/config/vm_state.hpp"
-#include "lsw/host/platform/cpu_scope.hpp"
-#include "lsw/host/platform/process_threads.hpp"
 #include "lsw/host/link/agent_guest_stats_probe.hpp"
 #include "lsw/host/link/agent_rpc_client.hpp"
+#include "lsw/host/mirror/guest_mirrors.hpp"
+#include "lsw/host/platform/cpu_scope.hpp"
+#include "lsw/host/platform/process_threads.hpp"
 #include "lsw/host/services/agent_log_levels.hpp"
 #include "lsw/host/services/app_errors.hpp"
 #include "lsw/host/services/clipboard_sync.hpp"
@@ -76,6 +76,7 @@ public:
 
     [[nodiscard]] mirror::GuestMirrors& mirrors() noexcept { return mirrors_; }
     [[nodiscard]] apps::GuestAppLauncher& app_launcher() noexcept { return app_launcher_; }
+
     [[nodiscard]] OneToOneDesktop& one_to_one() noexcept { return one_to_one_; }
 
     [[nodiscard]] config::ManagerSettings& manager_settings() noexcept { return manager_settings_; }

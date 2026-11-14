@@ -22,7 +22,6 @@
 #include <QPushButton>
 #include <QStringList>
 #include <QVBoxLayout>
-
 #include <utility>
 
 namespace lsw::host::manager {
@@ -39,7 +38,7 @@ using K = config::ManagerSettings::Key;
 using Mode = config::ManagerSettings::NetworkMode;
 using Area = services::StatusHub::Area;
 
-}
+}  // namespace
 
 NetworkPage::Host NetworkPage::Host::system() {
     return {[] { return HostBridges::probe(); }, [] { return HostAddresses::system(); }};
@@ -98,7 +97,8 @@ QString NetworkPage::summary() const {
     const QString next_bridge =
         bridged && HostBridges::missing(facts_, bridge).isEmpty() ? bridge : QString{};
     const auto next_forwards =
-        PortForwards::accepted(PortForwards::decode(settings_.string_value(K::kPortForwards))).size();
+        PortForwards::accepted(PortForwards::decode(settings_.string_value(K::kPortForwards)))
+            .size();
     return NetworkState::summary(NetworkState::live(status_.vm()), next_bridge,
                                  static_cast<int>(next_forwards), waiting());
 }
@@ -118,13 +118,16 @@ void NetworkPage::build_connection() {
         QStringLiteral("Bridged to a host bridge"),
         QStringLiteral("Windows appears on the network as a machine of its own, with its own "
                        "address."));
-    connect(shared_, &ui::ChoiceCard::chosen, this, [this] { choose_mode(QString{Mode::kShared}); });
-    connect(bridged_, &ui::ChoiceCard::chosen, this, [this] { choose_mode(QString{Mode::kBridged}); });
+    connect(shared_, &ui::ChoiceCard::chosen, this,
+            [this] { choose_mode(QString{Mode::kShared}); });
+    connect(bridged_, &ui::ChoiceCard::chosen, this,
+            [this] { choose_mode(QString{Mode::kBridged}); });
     cards->addWidget(shared_, 1);
     cards->addWidget(bridged_, 1);
     panel.body->addLayout(cards);
 
-    off_ = Widgets::meta(QStringLiteral("The guest is off, so Windows is not connected now."), true);
+    off_ =
+        Widgets::meta(QStringLiteral("The guest is off, so Windows is not connected now."), true);
     panel.body->addWidget(off_);
 
     now_ = new QWidget;
@@ -133,7 +136,8 @@ void NetworkPage::build_connection() {
     grid->setHorizontalSpacing(16);
     grid->setVerticalSpacing(8);
     grid->setColumnStretch(1, 1);
-    grid->addWidget(Widgets::caption(QStringLiteral("Adapters")), 0, 0, Qt::AlignLeft | Qt::AlignVCenter);
+    grid->addWidget(Widgets::caption(QStringLiteral("Adapters")), 0, 0,
+                    Qt::AlignLeft | Qt::AlignVCenter);
     adapters_ = new QLabel;
     grid->addWidget(adapters_, 0, 1);
     grid->addWidget(Widgets::caption(QStringLiteral("Windows address")), 1, 0,
@@ -280,4 +284,4 @@ void NetworkPage::refresh_now(const NetworkState::Live& live) {
     }
 }
 
-}
+}  // namespace lsw::host::manager

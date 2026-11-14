@@ -12,4 +12,4 @@ private:
     bool tried_ = false;
 };
 
-}
+}  // namespace lsw::host::mirror

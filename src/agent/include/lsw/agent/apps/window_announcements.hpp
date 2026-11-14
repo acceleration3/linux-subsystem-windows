@@ -20,4 +20,4 @@ private:
     std::vector<win::DiscoveredWindow> pending_;
 };
 
-}
+}  // namespace lsw::agent::apps

@@ -33,10 +33,10 @@ PayloadPage::PayloadPage(Wizard& wizard, QWidget* parent)
         QStringLiteral("The answer file, the guest binaries and the GPU driver Windows "
                        "installs before the first logon."));
     table_ = new QTableWidget(2, 3);
-    ui::Theme::rows_table(table_, QStringList{QStringLiteral("ARTIFACT"),
-                                              QStringLiteral("SOURCE"),
-                                              QStringLiteral("STATE")},
-                         QStringLiteral("wizard-payload"), {300, 220, 190}, {0, 1, 2});
+    ui::Theme::rows_table(
+        table_,
+        QStringList{QStringLiteral("ARTIFACT"), QStringLiteral("SOURCE"), QStringLiteral("STATE")},
+        QStringLiteral("wizard-payload"), {300, 220, 190}, {0, 1, 2});
     table_->setItem(kRowPayloadIso, kColTask, new QTableWidgetItem("lsw-payload.iso"));
     table_->setItem(kRowAvgpu, kColTask,
                     new QTableWidgetItem("avgpu driver package, x64 and x86"));

@@ -9,8 +9,8 @@ class QTableWidget;
 namespace lsw::host::ui {
 class SortItem : public QTableWidgetItem {
 public:
-    explicit SortItem(const QString& text, std::optional<double> value = std::nullopt, int natural = 0,
-                      const QString& key = {});
+    explicit SortItem(const QString& text, std::optional<double> value = std::nullopt,
+                      int natural = 0, const QString& key = {});
 
     static SortItem* put(QTableWidget* table, int row, int column, const QString& text,
                          std::optional<double> value = std::nullopt, const QString& key = {});
@@ -23,4 +23,4 @@ private:
     int natural_;
 };
 
-}
+}  // namespace lsw::host::ui

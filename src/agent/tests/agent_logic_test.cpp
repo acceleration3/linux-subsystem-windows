@@ -407,15 +407,21 @@ void test_display_request() {
     check(!DisplayRequest{nlohmann::json{{"width", 1920}}}.resolution().has_value() &&
               !DisplayRequest{nlohmann::json{{"height", 1080}}}.resolution().has_value(),
           "one side alone is no resolution");
-    check(!DisplayRequest{nlohmann::json{{"width", 0}, {"height", 1080}}}.resolution().has_value() &&
-              !DisplayRequest{nlohmann::json{{"width", -5}, {"height", 1080}}}.resolution().has_value() &&
-              !DisplayRequest{nlohmann::json{{"width", "1920"}, {"height", 1080}}}.resolution().has_value(),
-          "a side that is not a positive whole number is no resolution");
+    check(
+        !DisplayRequest{nlohmann::json{{"width", 0}, {"height", 1080}}}.resolution().has_value() &&
+            !DisplayRequest{nlohmann::json{{"width", -5}, {"height", 1080}}}
+                 .resolution()
+                 .has_value() &&
+            !DisplayRequest{nlohmann::json{{"width", "1920"}, {"height", 1080}}}
+                 .resolution()
+                 .has_value(),
+        "a side that is not a positive whole number is no resolution");
     check(!DisplayRequest{nlohmann::json::array()}.resolution().has_value(),
           "parameters that are not an object ask for nothing");
     nlohmann::json reply = {{"dpi", false}};
     DisplayRequest::answer(reply, Resolution{2560, 1440});
-    check(reply.value("width", 0) == 2560 && reply.value("height", 0) == 1440 && reply.contains("dpi"),
+    check(reply.value("width", 0) == 2560 && reply.value("height", 0) == 1440 &&
+              reply.contains("dpi"),
           "the reply says the resolution Windows has now beside what it had");
     nlohmann::json unknown = nlohmann::json::object();
     DisplayRequest::answer(unknown, std::nullopt);
@@ -543,7 +549,8 @@ static void test_launch_continuation() {
     check(launch.pick({}) == std::nullopt, "no processes, no continuation");
     check(launch.pick({relaunch(10228, soon)}) == 10228UL,
           "a same-image process started by Explorer after the launch continues it");
-    check(launch.pick({relaunch(10228, 100 * s - 1)}) == std::nullopt, "started before the launch: no");
+    check(launch.pick({relaunch(10228, 100 * s - 1)}) == std::nullopt,
+          "started before the launch: no");
     check(launch.pick({relaunch(10228, 100 * s + 200'000'000ULL)}) == std::nullopt,
           "started long after the launch: no");
     C other_session = relaunch(10228, soon);
@@ -556,7 +563,8 @@ static void test_launch_continuation() {
     owned.owned_by_other_launch = true;
     check(launch.pick({owned}) == std::nullopt, "owned by another launch: no");
     check(launch.pick({relaunch(8772, soon)}) == std::nullopt, "the root itself: no");
-    check(launch.pick({relaunch(30, soon + 4'000'000), relaunch(20, soon)}) == 20UL, "the earliest wins");
+    check(launch.pick({relaunch(30, soon + 4'000'000), relaunch(20, soon)}) == 20UL,
+          "the earliest wins");
     C jobbed = relaunch(10228, soon);
     jobbed.in_job = true;
     check(launch.pick({jobbed}) == std::nullopt, "a process in a job: no");
@@ -581,7 +589,8 @@ static void test_launch_continuation() {
           "created before the newer launch started: ours");
     LaunchContinuation retry(root());
     retry.reject(10228);
-    check(retry.pick({relaunch(10228, soon)}) == std::nullopt, "a rejected pid is not picked again");
+    check(retry.pick({relaunch(10228, soon)}) == std::nullopt,
+          "a rejected pid is not picked again");
     check(retry.pick({relaunch(10228, soon), relaunch(10300, soon + 1'000'000)}) == 10300UL,
           "polling goes on to the next candidate after a failed assign");
     check(LaunchContinuation::keep_polling(0) && LaunchContinuation::keep_polling(3000) &&
@@ -613,12 +622,16 @@ void test_task_window() {
     };
     check(app().qualifies(), "a visible unowned application window is a task window");
     check(owned(false, TaskWindow::Front::Mine).qualifies(),
-          "a window owned by a hidden window is a task window when it is the one its owner chain shows");
-    check(owned(false, TaskWindow::Front::None).qualifies(),
-          "a window owned by a hidden window is a task window when its owner chain was never active");
+          "a window owned by a hidden window is a task window when it is the one its owner chain "
+          "shows");
+    check(
+        owned(false, TaskWindow::Front::None).qualifies(),
+        "a window owned by a hidden window is a task window when its owner chain was never active");
     check(!owned(false, TaskWindow::Front::Another).qualifies(),
-          "a window owned by a hidden window is no task window while another window stands for the chain");
-    check(!owned(true, TaskWindow::Front::Mine).qualifies() && !owned(true, TaskWindow::Front::Another).qualifies() &&
+          "a window owned by a hidden window is no task window while another window stands for the "
+          "chain");
+    check(!owned(true, TaskWindow::Front::Mine).qualifies() &&
+              !owned(true, TaskWindow::Front::Another).qualifies() &&
               !owned(true, TaskWindow::Front::None).qualifies(),
           "a dialog of a shown window is no task window");
     auto asked = owned(true, TaskWindow::Front::Another);
@@ -638,14 +651,16 @@ void test_task_window() {
     tool.extended_style = TaskWindow::kToolWindow | kTopmost;
     auto passive = app();
     passive.extended_style = TaskWindow::kNoActivate;
-    check(!tool.qualifies() && !passive.qualifies(), "a tool window or one that never activates is no task window");
+    check(!tool.qualifies() && !passive.qualifies(),
+          "a tool window or one that never activates is no task window");
     tool.extended_style |= TaskWindow::kAppWindow;
     passive.extended_style |= TaskWindow::kAppWindow;
     check(tool.qualifies() && passive.qualifies(), "unless it asks for a taskbar button");
     check(TaskWindow::styled_as_task(0) && TaskWindow::styled_as_task(kTopmost) &&
               !TaskWindow::styled_as_task(TaskWindow::kToolWindow) &&
               !TaskWindow::styled_as_task(TaskWindow::kNoActivate) &&
-              TaskWindow::styled_as_task(TaskWindow::kToolWindow | TaskWindow::kNoActivate | TaskWindow::kAppWindow),
+              TaskWindow::styled_as_task(TaskWindow::kToolWindow | TaskWindow::kNoActivate |
+                                         TaskWindow::kAppWindow),
           "the style test alone tells tool and never-activating windows apart");
 
     auto shell = app();
@@ -658,12 +673,14 @@ void test_task_window() {
         surface.class_name = name;
         surface.extended_style = TaskWindow::kAppWindow;
         check(TaskWindow::system_surface(name) && !surface.qualifies(),
-              "the desktop, the taskbars, shell-hosted core windows and input method windows are no task windows");
+              "the desktop, the taskbars, shell-hosted core windows and input method windows are "
+              "no task windows");
     }
     auto folder = app();
     folder.class_name = L"CabinetWClass";
-    check(!TaskWindow::system_surface(L"CabinetWClass") && !TaskWindow::system_surface(L"progman") &&
-              !TaskWindow::system_surface(L"") && folder.qualifies(),
+    check(!TaskWindow::system_surface(L"CabinetWClass") &&
+              !TaskWindow::system_surface(L"progman") && !TaskWindow::system_surface(L"") &&
+              folder.qualifies(),
           "a folder window of the shell's process is a task window");
 
     auto tooltip = owned(true, TaskWindow::Front::Another);
@@ -678,15 +695,15 @@ void test_task_window() {
           "tooltips, menus and dropdown popups are no task windows");
     auto parked = app();
     parked.class_name = L"SvchostParkedWindow";
-    check(parked.qualifies(),
-          "a captioned unowned window parked off screen is a task window; its place is the manager's to judge");
+    check(parked.qualifies(), "a captioned unowned window parked off screen is a task window; its "
+                              "place is the manager's to judge");
 }
 
 void test_window_announcements() {
     using lsw::agent::apps::WindowAnnouncements;
     using lsw::agent::win::DiscoveredWindow;
-    const auto window = [](std::uintptr_t hwnd, std::uint32_t pid, bool caption, std::uintptr_t owner,
-                           bool task = true) {
+    const auto window = [](std::uintptr_t hwnd, std::uint32_t pid, bool caption,
+                           std::uintptr_t owner, bool task = true) {
         DiscoveredWindow found{};
         found.hwnd = hwnd;
         found.pid = pid;
@@ -711,20 +728,23 @@ void test_window_announcements() {
     check(events.size() == 1 && events[0].topic == lsw::linkproto::topic::kWindowAppeared,
           "only a task window is announced");
     const auto& row = events[0].payload;
-    check(row == window(1, 100, true, 0).row(), "the announcement is the window's list_windows row");
-    for (const char* field : {"hwnd", "owner", "pid", "root_pid", "title", "exe_path", "client_w", "client_h",
-                              "screen_x", "screen_y", "minimized", "maximized", "has_caption", "task_window",
-                              "on_screen"}) {
+    check(row == window(1, 100, true, 0).row(),
+          "the announcement is the window's list_windows row");
+    for (const char* field : {"hwnd", "owner", "pid", "root_pid", "title", "exe_path", "client_w",
+                              "client_h", "screen_x", "screen_y", "minimized", "maximized",
+                              "has_caption", "task_window", "on_screen"}) {
         check(row.contains(field), "a window row carries every field the manager reads");
     }
-    check(row["pid"] == 100 && row["root_pid"] == 0 && row["has_caption"] == true && row["task_window"] == true &&
-              row["on_screen"] == true && row["client_w"] == 640 && row["screen_y"] == 20,
+    check(row["pid"] == 100 && row["root_pid"] == 0 && row["has_caption"] == true &&
+              row["task_window"] == true && row["on_screen"] == true && row["client_w"] == 640 &&
+              row["screen_y"] == 20,
           "a window row carries the window's values");
     announcements.appeared(window(4, 400, false, 9));
     events = announcements.collect_pending();
-    check(events.size() == 1 && events[0].payload["has_caption"] == false && events[0].payload["owner"] == 9 &&
-              events[0].payload["task_window"] == true,
-          "an uncaptioned task window with an owner is announced, with its caption and owner as they are");
+    check(events.size() == 1 && events[0].payload["has_caption"] == false &&
+              events[0].payload["owner"] == 9 && events[0].payload["task_window"] == true,
+          "an uncaptioned task window with an owner is announced, with its caption and owner as "
+          "they are");
     check(announcements.collect_pending().empty(), "an announcement is delivered once");
 
     auto moved = window(1, 100, true, 0);
@@ -739,7 +759,8 @@ void test_window_announcements() {
         announcements.appeared(window(hwnd, 100, true, 0));
     }
     events = announcements.collect_pending();
-    check(events.size() == WindowAnnouncements::kMostPending && events.front().payload["hwnd"] == 6 &&
+    check(events.size() == WindowAnnouncements::kMostPending &&
+              events.front().payload["hwnd"] == 6 &&
               events.back().payload["hwnd"] == WindowAnnouncements::kMostPending + 5,
           "undelivered announcements are bounded and the oldest are dropped");
 }

@@ -6,7 +6,6 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QtEndian>
-
 #include <cmath>
 
 namespace lsw::host::apps {
@@ -21,8 +20,8 @@ constexpr int kOutline = 3;
 void draw_mark(QPainter& painter, const QRectF& tile) {
     QPainterPath outline;
     const double radius = tile.width() * kTileRounding;
-    outline.addRoundedRect(tile.adjusted(-kOutline, -kOutline, kOutline, kOutline), radius + kOutline,
-                           radius + kOutline);
+    outline.addRoundedRect(tile.adjusted(-kOutline, -kOutline, kOutline, kOutline),
+                           radius + kOutline, radius + kOutline);
     painter.fillPath(outline, QColor(0, 0, 0, 70));
 
     QPainterPath body;
@@ -95,5 +94,4 @@ QByteArray WindowsBadge::raw_mark() {
     }
     return out;
 }
-
 }

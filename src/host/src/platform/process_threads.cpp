@@ -2,7 +2,6 @@
 
 #include <QFile>
 #include <QList>
-
 #include <algorithm>
 #include <ctime>
 #include <dirent.h>
@@ -31,7 +30,7 @@ qint64 uptime_ms() {
     return static_cast<qint64>(now.tv_sec) * 1000 + now.tv_nsec / 1000000;
 }
 
-}
+}  // namespace
 
 std::optional<ProcProcessThreads::Schedule> ProcProcessThreads::parse_stat(const QByteArray& stat) {
     const qsizetype name_end = stat.lastIndexOf(')');
@@ -106,4 +105,4 @@ bool ProcProcessThreads::set_nice(qint64 tid, int nice) {
     return setpriority(PRIO_PROCESS, static_cast<id_t>(tid), nice) == 0;
 }
 
-}
+}  // namespace lsw::host::platform

@@ -21,11 +21,10 @@
 #include <QTemporaryDir>
 #include <QThreadPool>
 #include <QTimer>
-#include <nlohmann/json.hpp>
-
 #include <cstdio>
 #include <functional>
 #include <memory>
+#include <nlohmann/json.hpp>
 
 namespace {
 int failures = 0;

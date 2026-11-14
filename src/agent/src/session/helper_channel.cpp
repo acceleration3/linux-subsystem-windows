@@ -213,7 +213,8 @@ void HelperChannel::on_message(nlohmann::json message) {
         return;
     }
     if (topic == linkproto::topic::kWindowAppeared &&
-        apps::LaunchGroup::root_of(static_cast<unsigned long>(message.value("pid", std::uint64_t{0}))) != 0) {
+        apps::LaunchGroup::root_of(
+            static_cast<unsigned long>(message.value("pid", std::uint64_t{0}))) != 0) {
         return;
     }
     message.erase("event");

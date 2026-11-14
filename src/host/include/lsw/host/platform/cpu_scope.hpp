@@ -5,7 +5,6 @@
 #include <QString>
 #include <QVariantList>
 #include <QtGlobal>
-
 #include <functional>
 #include <optional>
 
@@ -41,4 +40,4 @@ private:
     QObject pending_;
 };
 
-}
+}  // namespace lsw::host::platform

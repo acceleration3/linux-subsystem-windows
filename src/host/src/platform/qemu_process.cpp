@@ -43,4 +43,4 @@ qint64 QemuProcess::pid_of(const QUuid& uuid) {
     return -1;
 }
 
-}
+}  // namespace lsw::host::platform

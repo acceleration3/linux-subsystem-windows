@@ -14,7 +14,6 @@
 #include <QPushButton>
 #include <QRadioButton>
 #include <QVBoxLayout>
-
 #include <algorithm>
 
 namespace lsw::host::manager {
@@ -47,14 +46,13 @@ QLabel* mark(State state) {
                                                      : QStringLiteral("–"));
     label->setFont(Theme::mono_font(13));
     label->setFixedWidth(kMarkWidth);
-    label->setProperty(Theme::Tone::kProperty,
-                       state == State::Met     ? Theme::Tone::kOk
-                       : state == State::Unmet ? Theme::Tone::kBad
-                                               : Theme::Tone::kFaint);
+    label->setProperty(Theme::Tone::kProperty, state == State::Met     ? Theme::Tone::kOk
+                                               : state == State::Unmet ? Theme::Tone::kBad
+                                                                       : Theme::Tone::kFaint);
     return label;
 }
 
-}
+}  // namespace
 
 BridgePicker::BridgePicker(QWidget* parent) : QWidget(parent) {
     auto* column = new QVBoxLayout(this);
@@ -84,12 +82,13 @@ BridgePicker::BridgePicker(QWidget* parent) : QWidget(parent) {
 }
 
 QString BridgePicker::facts_line(const HostBridges::Bridge& bridge, const QStringList& addresses) {
-    const QString members = bridge.members == 0   ? QStringLiteral("no interface")
-                            : bridge.members == 1 ? QStringLiteral("1 interface")
-                                                  : QStringLiteral("%1 interfaces").arg(bridge.members);
-    return QStringLiteral("%1 · %2")
-        .arg(addresses.isEmpty() ? QStringLiteral("no address") : addresses.join(QStringLiteral(", ")),
-             members);
+    const QString members = bridge.members == 0 ? QStringLiteral("no interface")
+                            : bridge.members == 1
+                                ? QStringLiteral("1 interface")
+                                : QStringLiteral("%1 interfaces").arg(bridge.members);
+    return QStringLiteral("%1 · %2").arg(addresses.isEmpty() ? QStringLiteral("no address")
+                                                             : addresses.join(QStringLiteral(", ")),
+                                         members);
 }
 
 void BridgePicker::show_state(const HostBridges::Facts& facts,
@@ -109,8 +108,9 @@ void BridgePicker::rebuild_rows(const HostBridges::Facts& facts,
                                 const QString& picked) {
     QVector<HostBridges::Bridge> bridges = facts.details;
     for (const QString& name : facts.bridges) {
-        const bool known = std::any_of(bridges.begin(), bridges.end(),
-                                       [&name](const HostBridges::Bridge& b) { return b.name == name; });
+        const bool known =
+            std::any_of(bridges.begin(), bridges.end(),
+                        [&name](const HostBridges::Bridge& b) { return b.name == name; });
         if (!known) {
             bridges.push_back({name, QString{}, 0});
         }
@@ -154,7 +154,8 @@ void BridgePicker::rebuild_rows(const HostBridges::Facts& facts,
                 state_pill(bridge.state), QString{});
         }
         if (absent) {
-            add(picked, QString{}, StatusPill::make(StatusPill::State::Failed, QStringLiteral("Missing")),
+            add(picked, QString{},
+                StatusPill::make(StatusPill::State::Failed, QStringLiteral("Missing")),
                 QStringLiteral("The picked bridge is not on this computer."));
         }
     }
@@ -169,7 +170,8 @@ void BridgePicker::rebuild_checks(const HostBridges::Facts& facts, const QString
     const QVector<HostBridges::Requirement> lines = HostBridges::readiness(facts, picked);
     QStringList signature{picked};
     for (const HostBridges::Requirement& line : lines) {
-        signature << QString::number(static_cast<int>(line.state)) << line.text << line.detail << line.fix;
+        signature << QString::number(static_cast<int>(line.state)) << line.text << line.detail
+                  << line.fix;
     }
     if (signature == checks_signature_ && checks_box_->count() > 0) {
         return;
@@ -229,9 +231,9 @@ void BridgePicker::rebuild_checks(const HostBridges::Facts& facts, const QString
         row->addLayout(text, 1);
         checks_box_->addWidget(holder);
     }
-    const bool ready = std::all_of(lines.begin(), lines.end(), [](const HostBridges::Requirement& line) {
-        return line.state == State::Met;
-    });
+    const bool ready =
+        std::all_of(lines.begin(), lines.end(),
+                    [](const HostBridges::Requirement& line) { return line.state == State::Met; });
     if (!ready) {
         checks_box_->addWidget(Widgets::meta(
             QStringLiteral("Until every line is met Windows starts with the shared network only."),
@@ -239,4 +241,4 @@ void BridgePicker::rebuild_checks(const HostBridges::Facts& facts, const QString
     }
 }
 
-}
+}  // namespace lsw::host::manager

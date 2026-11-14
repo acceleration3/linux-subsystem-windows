@@ -1,7 +1,6 @@
 #include "lsw/host/vm/domain_xml_builder.hpp"
 
 #include "domain_template.hpp"
-
 #include "lsw/base/log.hpp"
 
 #include <QHash>
@@ -236,19 +235,19 @@ QString DomainXmlBuilder::build(const config::VmRecord& vm, const DomainXmlInput
         qemu_arg(QStringLiteral("e1000e,netdev=lsw-net,id=lsw-nic,bus=pcie.0,addr=0x10")),
     };
     vars["network_args_inner"] = network_lines.join(QLatin1Char('\n'));
-    vars["bridge_inner"] =
-        inputs.bridge.isEmpty()
-            ? QString{}
-            : QStringLiteral("\n    <interface type='bridge'>\n"
-                             "      <source bridge='%1'/>\n"
-                             "      <mac address='%2'/>\n"
-                             "      <model type='e1000e'/>\n"
-                             "    </interface>")
-                  .arg(esc(inputs.bridge), bridge_mac(vm.uuid));
+    vars["bridge_inner"] = inputs.bridge.isEmpty()
+                               ? QString{}
+                               : QStringLiteral("\n    <interface type='bridge'>\n"
+                                                "      <source bridge='%1'/>\n"
+                                                "      <mac address='%2'/>\n"
+                                                "      <model type='e1000e'/>\n"
+                                                "    </interface>")
+                                     .arg(esc(inputs.bridge), bridge_mac(vm.uuid));
     LSW_DEBUG("domain: {} MiB, {} cpus, {} render-only GPUs, {} shares, {} forwarded ports, "
               "bridge {}, display {} refresh {} mHz, host window {} MiB, install display {}",
               vm.sizing.memory_mib, vm.sizing.cpu_cores, render_only, inputs.shares.size(),
-              inputs.forwards.size(), inputs.bridge.isEmpty() ? "none" : inputs.bridge.toStdString(),
+              inputs.forwards.size(),
+              inputs.bridge.isEmpty() ? "none" : inputs.bridge.toStdString(),
               inputs.display_modes.isEmpty() ? "host modes" : inputs.display_modes.toStdString(),
               inputs.display_refresh_millihz, inputs.host_window_mib, inputs.install_display);
 

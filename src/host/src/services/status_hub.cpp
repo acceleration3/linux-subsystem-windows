@@ -18,10 +18,8 @@
 #include <QGuiApplication>
 #include <QScreen>
 #include <QtConcurrent/QtConcurrentRun>
-
-#include <nlohmann/json.hpp>
-
 #include <algorithm>
+#include <nlohmann/json.hpp>
 
 namespace lsw::host::services {
 
@@ -69,16 +67,17 @@ StatusHub::StatusHub(vm::LibvirtConnection& libvirt, vm::Lifecycle& lifecycle,
     usb_timer_.setInterval(kUsbPollMs);
     connect(&usb_timer_, &QTimer::timeout, this, &StatusHub::read_usb);
 
-    connect(&manager_settings_, &config::ManagerSettings::changed, this, [this](const QString& key) {
-        if (key == K::kHostGpu || key == K::kRenderGpus || key == K::kHostWindowMib
-            || key == K::kVramReserveMib) {
-            rematch();
-            read_vram();
-            Q_EMIT changed(Area::Graphics);
-        } else if (key == K::kUsbAlways && usb_.read) {
-            rebuild_usb();
-        }
-    });
+    connect(&manager_settings_, &config::ManagerSettings::changed, this,
+            [this](const QString& key) {
+                if (key == K::kHostGpu || key == K::kRenderGpus || key == K::kHostWindowMib ||
+                    key == K::kVramReserveMib) {
+                    rematch();
+                    read_vram();
+                    Q_EMIT changed(Area::Graphics);
+                } else if (key == K::kUsbAlways && usb_.read) {
+                    rebuild_usb();
+                }
+            });
     monitors_timer_.setSingleShot(true);
     monitors_timer_.setInterval(kMonitorsSettleMs);
     connect(&monitors_timer_, &QTimer::timeout, this, &StatusHub::read_monitors);
@@ -695,9 +694,9 @@ void StatusHub::compare_settings() {
     }
     if (definition != nullptr) {
         const int reserve = manager_settings_.int_value(K::kVramReserveMib);
-        const bool differs =
-            std::any_of(definition->gpus.begin(), definition->gpus.end(),
-                        [reserve](const auto& device) { return device.vram_reserve_mib != reserve; });
+        const bool differs = std::any_of(
+            definition->gpus.begin(), definition->gpus.end(),
+            [reserve](const auto& device) { return device.vram_reserve_mib != reserve; });
         if (differs) {
             pending.vram_reserve_mib = reserve;
         }

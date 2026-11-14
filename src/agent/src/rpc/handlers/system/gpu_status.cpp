@@ -221,8 +221,8 @@ nlohmann::json display_core_loaded() {
         return nullptr;
     }
     for (const auto& process : ProcessInfo::snapshot()) {
-        if (::_wcsicmp(process.exe_name.c_str(), L"dwm.exe") != 0
-            || WtsSessions::of_process(process.pid) != console) {
+        if (::_wcsicmp(process.exe_name.c_str(), L"dwm.exe") != 0 ||
+            WtsSessions::of_process(process.pid) != console) {
             continue;
         }
         const auto loaded = has_module(process.pid, L"ddisplay.dll");

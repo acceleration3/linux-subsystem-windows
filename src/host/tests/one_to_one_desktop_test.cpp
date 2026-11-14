@@ -77,10 +77,13 @@ struct FakeGuest {
             }
             return true;
         };
-        guest.resolution = [this](const std::optional<DisplayMode>& wanted, OneToOneDesktop::Answer done) {
+        guest.resolution = [this](const std::optional<DisplayMode>& wanted,
+                                  OneToOneDesktop::Answer done) {
             QTimer::singleShot(1, qApp, [this, wanted, done] { done(answer(wanted)); });
         };
-        guest.resolution_now = [this](const std::optional<DisplayMode>& wanted) { return answer(wanted); };
+        guest.resolution_now = [this](const std::optional<DisplayMode>& wanted) {
+            return answer(wanted);
+        };
         return guest;
     }
 };
@@ -128,7 +131,8 @@ void follows_the_window_and_restores(ManagerSettings& settings) {
     spin(kQuiet);
     check(guest.offers == QStringList{QStringLiteral("1200x840")},
           "a settled size is offered to Windows as the display's only mode");
-    check(guest.switches == QStringList{QStringLiteral("1200x840")} && guest.now == (DisplayMode{1200, 840}),
+    check(guest.switches == QStringList{QStringLiteral("1200x840")} &&
+              guest.now == (DisplayMode{1200, 840}),
           "and Windows is switched to it");
     check(desktop.applied() == std::optional<DisplayMode>(DisplayMode{1200, 840}) &&
               desktop.modes(std::nullopt) == QStringLiteral("1200x840"),
@@ -149,15 +153,18 @@ void follows_the_window_and_restores(ManagerSettings& settings) {
 
     desktop.resized(QSize(1300, 900));
     spin(kQuiet);
-    check(guest.offers.size() == 2 && guest.switches.size() == 2, "the same size again changes nothing");
+    check(guest.offers.size() == 2 && guest.switches.size() == 2,
+          "the same size again changes nothing");
 
     desktop.resized(QSize(5120, 1440));
     spin(kQuiet);
-    check(guest.offers.last() == QStringLiteral("5120x1440") && guest.now == (DisplayMode{5120, 1440}),
+    check(guest.offers.last() == QStringLiteral("5120x1440") &&
+              guest.now == (DisplayMode{5120, 1440}),
           "an ultrawide window's size is offered to the pixel");
     desktop.resized(QSize(9000, 60));
     spin(kQuiet);
-    check(guest.offers.last() == QStringLiteral("8192x100") && guest.now == (DisplayMode{8192, 100}),
+    check(guest.offers.last() == QStringLiteral("8192x100") &&
+              guest.now == (DisplayMode{8192, 100}),
           "a size past what the display can offer is the nearest it can");
     desktop.resized(QSize(9200, 40));
     spin(kQuiet);
@@ -167,12 +174,15 @@ void follows_the_window_and_restores(ManagerSettings& settings) {
 
     desktop.closed();
     spin(kQuiet);
-    check(guest.offers.last() == kConfiguredProperty, "closing the desktop offers the configured modes again");
-    check(guest.switches.last() == QStringLiteral("2560x1440") && guest.now == (DisplayMode{2560, 1440}),
+    check(guest.offers.last() == kConfiguredProperty,
+          "closing the desktop offers the configured modes again");
+    check(guest.switches.last() == QStringLiteral("2560x1440") &&
+              guest.now == (DisplayMode{2560, 1440}),
           "and returns Windows to the resolution it had");
     check(!desktop.applied().has_value() && settings.string_value(K::kDesktopRestore).isEmpty(),
           "after which nothing is left to restore");
-    check(settings.string_list_value(K::kDisplayModes) == kConfigured, "the configured list is still as it was");
+    check(settings.string_list_value(K::kDisplayModes) == kConfigured,
+          "the configured list is still as it was");
 
     const int offers = static_cast<int>(guest.offers.size());
     desktop.resized(QSize(1000, 700));
@@ -206,7 +216,8 @@ void a_window_already_that_size_changes_nothing(ManagerSettings& settings) {
           "a window that already holds Windows' resolution changes nothing");
     desktop.closed();
     spin(kQuiet);
-    check(guest.offers.isEmpty() && guest.switches.isEmpty(), "and closing it has nothing to put back");
+    check(guest.offers.isEmpty() && guest.switches.isEmpty(),
+          "and closing it has nothing to put back");
 }
 
 void shutdown_restores(ManagerSettings& settings) {
@@ -217,9 +228,11 @@ void shutdown_restores(ManagerSettings& settings) {
         desktop.opened();
         desktop.resized(QSize(1200, 840));
         spin(kQuiet);
-        check(guest.now == (DisplayMode{1200, 840}), "the desktop is at the window's size before the manager exits");
+        check(guest.now == (DisplayMode{1200, 840}),
+              "the desktop is at the window's size before the manager exits");
         desktop.shutdown();
-        check(guest.offers.last() == kConfiguredProperty && guest.now == (DisplayMode{2560, 1440}) &&
+        check(guest.offers.last() == kConfiguredProperty &&
+                  guest.now == (DisplayMode{2560, 1440}) &&
                   settings.string_value(K::kDesktopRestore).isEmpty(),
               "the manager exiting restores the modes and the resolution before it is gone");
     }
@@ -227,7 +240,8 @@ void shutdown_restores(ManagerSettings& settings) {
         FakeGuest idle;
         OneToOneDesktop desktop(settings, idle.hooks(), nullptr, kSettle);
         desktop.shutdown();
-        check(idle.offers.isEmpty() && idle.switches.isEmpty(), "an exit with nothing applied touches nothing");
+        check(idle.offers.isEmpty() && idle.switches.isEmpty(),
+              "an exit with nothing applied touches nothing");
     }
 }
 
@@ -242,9 +256,11 @@ void a_stale_state_is_restored(ManagerSettings& settings) {
           "a manager that starts offers the configured modes whatever an earlier one left");
     desktop.guest_ready();
     spin(kQuiet);
-    check(guest.offers == QStringList{kConfiguredProperty} && guest.now == (DisplayMode{1920, 1080}) &&
+    check(guest.offers == QStringList{kConfiguredProperty} &&
+              guest.now == (DisplayMode{1920, 1080}) &&
               settings.string_value(K::kDesktopRestore).isEmpty(),
-          "a guest left at a desktop window's size by a manager that died is put back when it is reachable");
+          "a guest left at a desktop window's size by a manager that died is put back when it is "
+          "reachable");
     desktop.guest_ready();
     spin(kQuiet);
     check(guest.offers.size() == 1 && guest.switches.size() == 1, "and only once");
@@ -269,12 +285,14 @@ void an_unreachable_guest_is_restored_later(ManagerSettings& settings) {
     spin(kQuiet);
     check(guest.offers.last() == kConfiguredProperty &&
               settings.string_value(K::kDesktopRestore) == QStringLiteral("2560x1440"),
-          "a close the guest's agent does not answer puts the modes back and keeps what to return to");
+          "a close the guest's agent does not answer puts the modes back and keeps what to return "
+          "to");
     guest.agent = true;
     guest.now = DisplayMode{1920, 1080};
     desktop.guest_ready();
     spin(kQuiet);
-    check(guest.now == (DisplayMode{2560, 1440}) && settings.string_value(K::kDesktopRestore).isEmpty(),
+    check(guest.now == (DisplayMode{2560, 1440}) &&
+              settings.string_value(K::kDesktopRestore).isEmpty(),
           "and the resolution follows when the agent is back");
 
     guest.running = false;
@@ -296,7 +314,8 @@ void the_setting_is_followed_while_open(ManagerSettings& settings) {
     check(guest.offers.isEmpty(), "off: nothing");
     settings.set_value(K::kOneToOneDesktop, true);
     spin(kQuiet);
-    check(guest.offers == QStringList{QStringLiteral("1200x840")} && guest.now == (DisplayMode{1200, 840}),
+    check(guest.offers == QStringList{QStringLiteral("1200x840")} &&
+              guest.now == (DisplayMode{1200, 840}),
           "turning the setting on with the desktop open applies the window's size at once");
     settings.set_value(K::kOneToOneDesktop, false);
     spin(kQuiet);
@@ -324,14 +343,16 @@ void a_quick_reopen_ends_applied(ManagerSettings& settings) {
     spin(kQuiet);
     check(guest.now == (DisplayMode{1300, 900}) && desktop.applied().has_value() &&
               settings.string_value(K::kDesktopRestore) == QStringLiteral("2560x1440"),
-          "closing and reopening at once ends at the new window's size, still knowing what to return to");
+          "closing and reopening at once ends at the new window's size, still knowing what to "
+          "return to");
     desktop.closed();
     spin(kQuiet);
-    check(guest.now == (DisplayMode{2560, 1440}) && settings.string_value(K::kDesktopRestore).isEmpty(),
+    check(guest.now == (DisplayMode{2560, 1440}) &&
+              settings.string_value(K::kDesktopRestore).isEmpty(),
           "and the close after it restores");
 }
 
-}
+}  // namespace
 
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);

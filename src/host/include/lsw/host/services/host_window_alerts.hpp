@@ -26,4 +26,4 @@ public:
     [[nodiscard]] static QVector<Warning> warnings(const HostWindowStatus& status, qint64 now_ms);
 };
 
-}
+}  // namespace lsw::host::services

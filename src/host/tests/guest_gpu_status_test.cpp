@@ -1,8 +1,7 @@
 #include "lsw/host/services/guest_gpu_status.hpp"
 
-#include <nlohmann/json.hpp>
-
 #include <cstdio>
+#include <nlohmann/json.hpp>
 
 using lsw::host::services::GuestGpuStatus;
 
@@ -17,7 +16,7 @@ void check(bool ok, const char* label) {
     }
 }
 
-}
+}  // namespace
 
 int main() {
     const auto loaded = GuestGpuStatus::from_json(nlohmann::json::parse(
@@ -26,13 +25,13 @@ int main() {
     check(loaded.display_core_loaded.has_value() && *loaded.display_core_loaded,
           "a loaded DisplayCore is read");
 
-    const auto clean = GuestGpuStatus::from_json(nlohmann::json::parse(
-        R"({"display_core_disabled": true, "display_core_loaded": false})"));
+    const auto clean = GuestGpuStatus::from_json(
+        nlohmann::json::parse(R"({"display_core_disabled": true, "display_core_loaded": false})"));
     check(clean.display_core_loaded.has_value() && !*clean.display_core_loaded,
           "a DisplayCore that is not loaded is read");
 
-    const auto unknown = GuestGpuStatus::from_json(nlohmann::json::parse(
-        R"({"display_core_disabled": false, "display_core_loaded": null})"));
+    const auto unknown = GuestGpuStatus::from_json(
+        nlohmann::json::parse(R"({"display_core_disabled": false, "display_core_loaded": null})"));
     check(!unknown.display_core_disabled && !unknown.display_core_loaded.has_value(),
           "null means the loaded state is unknown");
 

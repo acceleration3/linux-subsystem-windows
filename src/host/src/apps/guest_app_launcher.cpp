@@ -7,13 +7,11 @@
 #include "lsw/host/link/agent_rpc_client.hpp"
 #include "lsw/host/mirror/guest_mirrors.hpp"
 #include "lsw/host/mirror/window_mirror.hpp"
-
 #include "lsw/linkproto/commands.hpp"
 
 #include <QFileInfo>
 #include <QMetaObject>
 #include <QPointer>
-
 #include <nlohmann/json.hpp>
 
 namespace lsw::host::apps {
@@ -22,7 +20,8 @@ namespace {
 constexpr qsizetype kMostEnded = 64;
 }
 
-GuestAppLauncher::GuestAppLauncher(link::AgentRpcClient& rpc, mirror::GuestMirrors& mirrors, QObject* parent)
+GuestAppLauncher::GuestAppLauncher(link::AgentRpcClient& rpc, mirror::GuestMirrors& mirrors,
+                                   QObject* parent)
     : QObject(parent), rpc_(rpc), mirrors_(mirrors) {
     connect(&mirrors_, &mirror::GuestMirrors::shown, this, &GuestAppLauncher::shown);
     connect(&mirrors_, &mirror::GuestMirrors::failed, this, &GuestAppLauncher::mirror_failed);
@@ -50,7 +49,8 @@ void GuestAppLauncher::launch_ended(quint32 pid, quint64 created) {
     }
     if (!pending_.contains(identity)) {
         if (mirrors_.mirror(identity) == nullptr) {
-            LSW_INFO("launch {}: every process ended while the desktop showed it", identity.toStdString());
+            LSW_INFO("launch {}: every process ended while the desktop showed it",
+                     identity.toStdString());
             mirrors_.forget(identity);
             launched_.remove(identity);
             Q_EMIT changed();
@@ -173,8 +173,10 @@ void GuestAppLauncher::launch(const apps::AppConfig& app, const QString& activat
                 return;
             }
             const mirror::WindowMirror::Application application{
-                pid, !image.isEmpty() ? image : executable ? app_path : QString(), app_aumid, desktop_id, log_name,
-                activation_token, QString(), pid_created};
+                pid,       !image.isEmpty() ? image : executable ? app_path : QString(),
+                app_aumid, desktop_id,
+                log_name,  activation_token,
+                QString(), pid_created};
             launched_.insert(identity, {path, documents});
             mirrors_.show(identity, application, has_documents);
             mirrors_.launch_settled();

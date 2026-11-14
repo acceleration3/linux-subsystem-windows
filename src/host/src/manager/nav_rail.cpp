@@ -44,7 +44,6 @@ constexpr std::array<ItemSpec, kPageCount> kItems{{
     {NavRail::Page::Maintenance, Shape::Maintenance, "Maintenance", true},
     {NavRail::Page::Settings, Shape::Settings, "Settings", false},
 }};
-
 }
 
 NavRail::NavRail(QWidget* parent) : QWidget(parent) {
@@ -244,5 +243,4 @@ void NavRail::set_graphics_warning(const char* tone) {
 void NavRail::set_gpu_status_warning(const char* tone) {
     set_marker(Page::GpuStatus, tone != nullptr ? QStringLiteral("●") : QString{}, tone);
 }
-
 }

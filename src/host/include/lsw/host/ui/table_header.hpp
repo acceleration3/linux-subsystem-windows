@@ -45,4 +45,4 @@ private:
     QTimer save_;
 };
 
-}
+}  // namespace lsw::host::ui

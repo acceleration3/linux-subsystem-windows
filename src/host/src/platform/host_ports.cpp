@@ -16,4 +16,4 @@ bool HostPorts::udp_free(const QHostAddress& address, int port) {
     return socket.bind(address, static_cast<quint16>(port), QAbstractSocket::DontShareAddress);
 }
 
-}
+}  // namespace lsw::host::platform

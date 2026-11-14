@@ -8,12 +8,10 @@
 #include "lsw/agent/util/text_encoding.hpp"
 #include "lsw/agent/win/error_text.hpp"
 #include "lsw/agent/win/process_info.hpp"
-
 #include "lsw/linkproto/commands.hpp"
 
-#include <nlohmann/json.hpp>
-
 #include <iterator>
+#include <nlohmann/json.hpp>
 #include <utility>
 #include <windows.h>
 

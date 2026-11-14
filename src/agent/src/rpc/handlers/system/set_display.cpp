@@ -53,10 +53,11 @@ struct SetDisplayHandler : RpcHandler {
     }
 
     [[nodiscard]] std::string summarize(const nlohmann::json& reply) const override {
-        return std::string{"dpi="} + (reply.value("dpi", false) ? "1" : "0") + " scale=" +
-               std::to_string(reply.value("scale_percent", 0)) + "% on " +
+        return std::string{"dpi="} + (reply.value("dpi", false) ? "1" : "0") +
+               " scale=" + std::to_string(reply.value("scale_percent", 0)) + "% on " +
                std::to_string(reply.value("displays", 0)) + " display(s), now " +
-               std::to_string(reply.value("width", 0)) + "x" + std::to_string(reply.value("height", 0));
+               std::to_string(reply.value("width", 0)) + "x" +
+               std::to_string(reply.value("height", 0));
     }
 
     [[nodiscard]] Placement placement() const override { return Placement::UserSession; }

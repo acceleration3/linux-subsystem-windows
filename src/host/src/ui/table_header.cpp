@@ -47,8 +47,9 @@ Remembered load(const QString& key, int columns) {
     if (store.status() != QSettings::NoError) {
         return out;
     }
-    const QStringList parts =
-        store.value(QStringLiteral("columns/") + key).toString().split(QLatin1Char(','), Qt::SkipEmptyParts);
+    const QStringList parts = store.value(QStringLiteral("columns/") + key)
+                                  .toString()
+                                  .split(QLatin1Char(','), Qt::SkipEmptyParts);
     QVector<int> widths;
     for (const QString& part : parts) {
         bool ok = false;
@@ -63,14 +64,16 @@ Remembered load(const QString& key, int columns) {
         out.widths = widths;
         out.has_widths = true;
     }
-    const QStringList sort = store.value(QStringLiteral("sort/") + key).toString().split(QLatin1Char(','));
+    const QStringList sort =
+        store.value(QStringLiteral("sort/") + key).toString().split(QLatin1Char(','));
     if (sort.size() == 2) {
         bool ok = false;
         const int column = sort.at(0).toInt(&ok);
-        if (ok && column >= 0 && column < columns
-            && (sort.at(1) == QLatin1String("asc") || sort.at(1) == QLatin1String("desc"))) {
+        if (ok && column >= 0 && column < columns &&
+            (sort.at(1) == QLatin1String("asc") || sort.at(1) == QLatin1String("desc"))) {
             out.column = column;
-            out.order = sort.at(1) == QLatin1String("desc") ? Qt::DescendingOrder : Qt::AscendingOrder;
+            out.order =
+                sort.at(1) == QLatin1String("desc") ? Qt::DescendingOrder : Qt::AscendingOrder;
             out.has_sort = true;
         }
     }
@@ -78,10 +81,10 @@ Remembered load(const QString& key, int columns) {
     return out;
 }
 
-}
+}  // namespace
 
-TableHeader* TableHeader::attach(QHeaderView* header, const QString& key, const QVector<int>& widths,
-                                 const QVector<int>& unsortable) {
+TableHeader* TableHeader::attach(QHeaderView* header, const QString& key,
+                                 const QVector<int>& widths, const QVector<int>& unsortable) {
     if (header == nullptr || widths.isEmpty()) {
         return nullptr;
     }
@@ -102,7 +105,8 @@ bool TableHeader::natural(const QHeaderView* header) {
 }
 
 Qt::SortOrder TableHeader::order(const QHeaderView* header) {
-    return header->property(kDescendingProperty).toBool() ? Qt::DescendingOrder : Qt::AscendingOrder;
+    return header->property(kDescendingProperty).toBool() ? Qt::DescendingOrder
+                                                          : Qt::AscendingOrder;
 }
 
 TableHeader::TableHeader(QHeaderView* header, const QString& key, const QVector<int>& widths,
@@ -218,14 +222,15 @@ void TableHeader::flush() {
         store.setValue(QStringLiteral("columns/") + key_, parts.join(QLatin1Char(',')));
     }
     if (dirty_sort_) {
-        const QString direction = column_ < 0                         ? QStringLiteral("none")
+        const QString direction = column_ < 0                     ? QStringLiteral("none")
                                   : order_ == Qt::DescendingOrder ? QStringLiteral("desc")
                                                                   : QStringLiteral("asc");
-        store.setValue(QStringLiteral("sort/") + key_, QStringLiteral("%1,%2").arg(qMax(column_, 0)).arg(direction));
+        store.setValue(QStringLiteral("sort/") + key_,
+                       QStringLiteral("%1,%2").arg(qMax(column_, 0)).arg(direction));
     }
     dirty_widths_ = false;
     dirty_sort_ = false;
     store.sync();
 }
 
-}
+}  // namespace lsw::host::ui

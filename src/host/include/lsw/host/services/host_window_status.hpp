@@ -123,4 +123,4 @@ private:
     std::optional<quint64> previous_refusals_;
 };
 
-}
+}  // namespace lsw::host::services

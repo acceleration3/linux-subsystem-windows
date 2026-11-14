@@ -1,11 +1,11 @@
 #pragma once
 
+#include "lsw/agent/win/discovered_window.hpp"
+
 #include <cstdint>
 #include <optional>
 #include <string>
 #include <vector>
-
-#include "lsw/agent/win/discovered_window.hpp"
 
 namespace lsw::agent::win {
 class Window {

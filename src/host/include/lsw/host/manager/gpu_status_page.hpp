@@ -7,8 +7,13 @@ class QLabel;
 class QTableWidget;
 class QVBoxLayout;
 
-namespace lsw::host::services { class StatusHub; }
-namespace lsw::host::ui { class UsageGraph; }
+namespace lsw::host::services {
+class StatusHub;
+}
+
+namespace lsw::host::ui {
+class UsageGraph;
+}
 
 namespace lsw::host::manager {
 
@@ -59,4 +64,4 @@ private:
     QString built_for_;
 };
 
-}
+}  // namespace lsw::host::manager

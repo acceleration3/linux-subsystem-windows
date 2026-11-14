@@ -30,4 +30,4 @@ public:
     [[nodiscard]] static QStringList of(const QVector<Interface>& interfaces, const QString& name);
 };
 
-}
+}  // namespace lsw::host::platform

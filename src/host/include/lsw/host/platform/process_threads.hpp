@@ -39,4 +39,4 @@ public:
     [[nodiscard]] bool set_nice(qint64 tid, int nice) override;
 };
 
-}
+}  // namespace lsw::host::platform

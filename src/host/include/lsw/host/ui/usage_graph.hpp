@@ -31,4 +31,4 @@ private:
     qint64 span_ms_ = 1;
 };
 
-}
+}  // namespace lsw::host::ui

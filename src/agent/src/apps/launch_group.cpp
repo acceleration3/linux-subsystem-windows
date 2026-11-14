@@ -332,12 +332,13 @@ bool LaunchGroup::follow_relaunch(unsigned long pid) {
             if (::ProcessIdToSessionId(p.pid, &session) != 0) {
                 c.session = session;
             }
-            const win::UniqueHandle h{::OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, p.pid)};
+            const win::UniqueHandle h{
+                ::OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, p.pid)};
             BOOL in_job = FALSE;
             c.in_job = !h || ::IsProcessInJob(h.get(), nullptr, &in_job) == 0 || in_job != FALSE;
             const auto parent = by_pid.find(p.ppid);
-            c.parent_is_explorer = parent != by_pid.end() &&
-                                   parent->second->image_lc.ends_with(L"\\explorer.exe");
+            c.parent_is_explorer =
+                parent != by_pid.end() && parent->second->image_lc.ends_with(L"\\explorer.exe");
             const auto parent_owner = s.owner_of.find(p.ppid);
             c.parent_in_launch = parent_owner != s.owner_of.end() && parent_owner->second == pid;
             const auto owner = s.owner_of.find(p.pid);
@@ -373,5 +374,4 @@ bool LaunchGroup::follow_relaunch(unsigned long pid) {
     }
     return adopted;
 }
-
 }

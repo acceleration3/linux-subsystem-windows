@@ -3,23 +3,23 @@
 #include "lsw/base/log.hpp"
 #include "lsw/host/app/unattended_runner.hpp"
 #include "lsw/host/apps/desktop_launcher.hpp"
+#include "lsw/host/manager/app_config_dialog.hpp"
+#include "lsw/host/manager/app_error_dialog.hpp"
 #include "lsw/host/manager/collect_logs_dialog.hpp"
 #include "lsw/host/manager/document_opener.hpp"
 #include "lsw/host/manager/guest_app_launch_controller.hpp"
-#include "lsw/host/manager/app_config_dialog.hpp"
-#include "lsw/host/manager/app_error_dialog.hpp"
 #include "lsw/host/manager/launch_splash.hpp"
-#include "lsw/host/manager/update_dialog.hpp"
-#include "lsw/host/services/guest_update_status.hpp"
 #include "lsw/host/manager/main_window.hpp"
 #include "lsw/host/manager/open_document_dialog.hpp"
 #include "lsw/host/manager/remote_file_dialog.hpp"
-#include "lsw/host/tools/download_image_dialog.hpp"
-#include "lsw/host/tools/trim_image_dialog.hpp"
+#include "lsw/host/manager/update_dialog.hpp"
 #include "lsw/host/mcp/mcp_server.hpp"
 #include "lsw/host/platform/accel_virt_paths.hpp"
 #include "lsw/host/platform/agent_exe_path.hpp"
 #include "lsw/host/platform/mirror_exe_paths.hpp"
+#include "lsw/host/services/guest_update_status.hpp"
+#include "lsw/host/tools/download_image_dialog.hpp"
+#include "lsw/host/tools/trim_image_dialog.hpp"
 #include "lsw/host/ui/theme.hpp"
 #include "lsw/host/ui/widgets.hpp"
 #include "lsw/host/vm/domain_importer.hpp"
@@ -32,7 +32,6 @@
 #include <QIcon>
 #include <QMetaObject>
 #include <QProcess>
-
 #include <cstdint>
 #include <string>
 #include <utility>

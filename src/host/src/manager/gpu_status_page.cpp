@@ -3,11 +3,11 @@
 #include "lsw/host/manager/gpu_status_alerts.hpp"
 #include "lsw/host/manager/warning_strip.hpp"
 #include "lsw/host/services/status_hub.hpp"
+#include "lsw/host/ui/format.hpp"
 #include "lsw/host/ui/key_values.hpp"
 #include "lsw/host/ui/panel.hpp"
-#include "lsw/host/ui/status_pill.hpp"
-#include "lsw/host/ui/format.hpp"
 #include "lsw/host/ui/sort_item.hpp"
+#include "lsw/host/ui/status_pill.hpp"
 #include "lsw/host/ui/table_header.hpp"
 #include "lsw/host/ui/theme.hpp"
 #include "lsw/host/ui/usage_graph.hpp"
@@ -42,13 +42,13 @@ constexpr int kLogLines = 6;
 
 QString short_name(const QString& name) {
     static const QStringList vendor_words = {
-        QStringLiteral("AMD"),    QStringLiteral("Radeon"),   QStringLiteral("Intel"),
+        QStringLiteral("AMD"),      QStringLiteral("Radeon"), QStringLiteral("Intel"),
         QStringLiteral("Intel(R)"), QStringLiteral("NVIDIA"), QStringLiteral("GeForce"),
         QStringLiteral("Graphics"), QStringLiteral("(TM)"),   QStringLiteral("Mesa")};
     QStringList words = name.split(QLatin1Char(' '), Qt::SkipEmptyParts);
     words.removeIf([](const QString& w) {
-        return vendor_words.contains(w) || w == QLatin1StringView("Processor")
-               || w.endsWith(QLatin1StringView("-Core"));
+        return vendor_words.contains(w) || w == QLatin1StringView("Processor") ||
+               w.endsWith(QLatin1StringView("-Core"));
     });
     const qsizetype bracket = words.indexOf(QRegularExpression(QStringLiteral("^\\(.*")));
     if (bracket > 0) {
@@ -70,7 +70,7 @@ ui::Panel card(const QString& name, const QString& caption, QWidget* right = nul
     return panel;
 }
 
-}
+}  // namespace
 
 GpuStatusPage::GpuStatusPage(services::StatusHub& status, GpuStatusAlerts& alerts, QWidget* parent)
     : QWidget(parent), status_(status), alerts_(alerts) {
@@ -122,7 +122,9 @@ QString GpuStatusPage::summary() const {
     for (const auto& adapter : adapters) {
         started += adapter.guest && adapter.guest->running() ? 1 : 0;
     }
-    return QStringLiteral("avgpu.sys · %1 of %2 adapters started").arg(started).arg(adapters.size());
+    return QStringLiteral("avgpu.sys · %1 of %2 adapters started")
+        .arg(started)
+        .arg(adapters.size());
 }
 
 void GpuStatusPage::refresh() {
@@ -210,8 +212,8 @@ QWidget* GpuStatusPage::build_warnings() {
         switch (warning.kind) {
         case Warning::Kind::DisplayNotRunning:
         case Warning::Kind::DisplayNoDriver:
-            connect(strip->add_button(QStringLiteral("Open the driver log")),
-                    &QPushButton::clicked, this, &GpuStatusPage::open_log);
+            connect(strip->add_button(QStringLiteral("Open the driver log")), &QPushButton::clicked,
+                    this, &GpuStatusPage::open_log);
             break;
         case Warning::Kind::NoDriver:
         case Warning::Kind::WindowFull:
@@ -258,7 +260,7 @@ QWidget* GpuStatusPage::build_guest_driver() const {
 
     const bool known = status_.vm().running() && guest.valid;
     const QString off_note = status_.vm().running() ? QStringLiteral("the agent has not answered")
-                                              : QStringLiteral("the guest is off");
+                                                    : QStringLiteral("the guest is off");
     for (const auto& adapter : adapters) {
         const QString key = adapters.size() == 1
                                 ? QStringLiteral("Device")
@@ -312,9 +314,9 @@ QWidget* GpuStatusPage::build_guest_driver() const {
         }
     }
     const auto& facts = status_.graphics().log_facts;
-    const std::optional<bool> ums =
-        facts.user_mode_submission.has_value() ? facts.user_mode_submission
-                                               : guest.user_mode_submission;
+    const std::optional<bool> ums = facts.user_mode_submission.has_value()
+                                        ? facts.user_mode_submission
+                                        : guest.user_mode_submission;
     const std::optional<bool> fences =
         facts.native_fences.has_value() ? facts.native_fences : guest.native_fences;
     if (!ums.has_value()) {
@@ -323,10 +325,9 @@ QWidget* GpuStatusPage::build_guest_driver() const {
     } else {
         rows.add(QStringLiteral("Submission"),
                  *ums ? QStringLiteral("User mode") : QStringLiteral("Kernel"), nullptr,
-                 fences.has_value()
-                     ? (*fences ? QStringLiteral("native fences on")
-                                : QStringLiteral("native fences off"))
-                     : QString{});
+                 fences.has_value() ? (*fences ? QStringLiteral("native fences on")
+                                               : QStringLiteral("native fences off"))
+                                    : QString{});
     }
     panel.body->addStretch(1);
     return panel.frame;
@@ -340,7 +341,8 @@ QWidget* GpuStatusPage::build_host_window() {
         QStringLiteral("<span style=\"color:%1\">&#9632;</span> write-back &nbsp; "
                        "<span style=\"color:%2\">&#9632;</span> write-combined &nbsp; "
                        "<span style=\"color:%3\">- -</span> window size")
-            .arg(QString::fromLatin1(Theme::Color::kInfo), QString::fromLatin1(Theme::Color::kAmber),
+            .arg(QString::fromLatin1(Theme::Color::kInfo),
+                 QString::fromLatin1(Theme::Color::kAmber),
                  QString::fromLatin1(Theme::Color::kFgDim)));
     legend->setTextFormat(Qt::RichText);
     panel.body->addWidget(legend);
@@ -360,15 +362,20 @@ QWidget* GpuStatusPage::build_guest_vram() {
     const auto& adapters = status_.graphics().adapters;
     const qsizetype devices = std::max<qsizetype>(adapters.size(), 1);
     for (qsizetype i = 0; i < devices; ++i) {
-        const QString prefix = devices > 1
-                                   ? short_name(platform::HostGpus::adapter_name(adapters.at(i).gpu)) + QStringLiteral(" ")
-                                   : QString{};
+        const QString prefix =
+            devices > 1 ? short_name(platform::HostGpus::adapter_name(adapters.at(i).gpu)) +
+                              QStringLiteral(" ")
+                        : QString{};
         vram_cap_.push_back(qobject_cast<QLabel*>(
-            rows.add(prefix + QStringLiteral("Guest VRAM cap"), QStringLiteral("-"), Theme::Tone::kFaint,
-                     QStringLiteral("the most GPU memory the guest may use"))->itemAt(0)->widget()));
+            rows.add(prefix + QStringLiteral("Guest VRAM cap"), QStringLiteral("-"),
+                     Theme::Tone::kFaint, QStringLiteral("the most GPU memory the guest may use"))
+                ->itemAt(0)
+                ->widget()));
         vram_reserve_.push_back(qobject_cast<QLabel*>(
-            rows.add(prefix + QStringLiteral("Kept for the host"), QStringLiteral("-"), Theme::Tone::kFaint,
-                     QStringLiteral("the reserve in effect"))->itemAt(0)->widget()));
+            rows.add(prefix + QStringLiteral("Kept for the host"), QStringLiteral("-"),
+                     Theme::Tone::kFaint, QStringLiteral("the reserve in effect"))
+                ->itemAt(0)
+                ->widget()));
     }
     panel.body->addStretch(1);
     return panel.frame;
@@ -382,12 +389,13 @@ QWidget* GpuStatusPage::build_apps() {
     apps_table_ = new QTableWidget(0, 15);
     Theme::rows_table(apps_table_,
                       {QStringLiteral("PID"), QStringLiteral("APP"), QStringLiteral("API"),
-                       QStringLiteral("SUBMITS"), QStringLiteral("HELD"),
-                       QStringLiteral("ARENA"), QStringLiteral("SPLITS"), QStringLiteral("EXTRA"),
-                       QStringLiteral("ARENA ROOM"), QStringLiteral("RING"), QStringLiteral("FENCE"),
-                       QStringLiteral("INLINE"), QStringLiteral("COPIED"), QStringLiteral("SLICE"),
-                       QStringLiteral("REFUSED")},
-                      QStringLiteral("gpu-apps"), {70, 170, 90, 84, 96, 250, 110, 110, 170, 170, 170, 70, 70, 70, 80});
+                       QStringLiteral("SUBMITS"), QStringLiteral("HELD"), QStringLiteral("ARENA"),
+                       QStringLiteral("SPLITS"), QStringLiteral("EXTRA"),
+                       QStringLiteral("ARENA ROOM"), QStringLiteral("RING"),
+                       QStringLiteral("FENCE"), QStringLiteral("INLINE"), QStringLiteral("COPIED"),
+                       QStringLiteral("SLICE"), QStringLiteral("REFUSED")},
+                      QStringLiteral("gpu-apps"),
+                      {70, 170, 90, 84, 96, 250, 110, 110, 170, 170, 170, 70, 70, 70, 80});
     apps_table_->verticalHeader()->setDefaultSectionSize(30);
     apps_table_->setVisible(false);
     panel.body->addWidget(apps_table_);
@@ -401,12 +409,15 @@ void GpuStatusPage::update_window() {
     const auto& w = status_.host_window();
     QVector<ui::UsageGraph::Point> points;
     for (const auto& sample : w.history) {
-        points.push_back({sample.at_ms, sample.write_back, sample.write_back + sample.write_combined});
+        points.push_back(
+            {sample.at_ms, sample.write_back, sample.write_back + sample.write_combined});
     }
     graph_->set_series(points, w.window_bytes, w.at_ms, services::HostWindowStatus::kHistoryMs);
-    const QString window = w.window_bytes ? ui::Format::bytes(*w.window_bytes) : QStringLiteral("-");
-    window_use_->setText(w.read ? QStringLiteral("%1 of %2").arg(ui::Format::bytes(w.used_bytes), window)
-                                : QStringLiteral("-"));
+    const QString window =
+        w.window_bytes ? ui::Format::bytes(*w.window_bytes) : QStringLiteral("-");
+    window_use_->setText(
+        w.read ? QStringLiteral("%1 of %2").arg(ui::Format::bytes(w.used_bytes), window)
+               : QStringLiteral("-"));
     window_peak_->setText(w.peak_bytes ? ui::Format::bytes(*w.peak_bytes) : QStringLiteral("-"));
     for (qsizetype i = 0; i < vram_cap_.size(); ++i) {
         const auto found = std::find_if(w.vram.begin(), w.vram.end(), [i](const auto& entry) {
@@ -445,11 +456,13 @@ void GpuStatusPage::fill_apps() {
     const auto rate = [](double value) { return QString::number(value, 'f', 1); };
     const QString none = QStringLiteral("-");
     using Value = std::optional<double>;
+
     struct Cell {
         QString text;
         Value value;
         QString key;
     };
+
     for (int row = 0; row < rows; ++row) {
         const auto& app = w.apps.at(row);
         QString arena = none;
@@ -457,19 +470,20 @@ void GpuStatusPage::fill_apps() {
         if (app.arena_bytes && *app.arena_bytes > 0) {
             const auto peak = app.arena_peak_percent();
             const QString size = ui::Format::bytes(*app.arena_bytes);
-            const QString in_segments = app.arena_segments
-                                            ? QStringLiteral("%1 in %2 %3")
-                                                  .arg(size)
-                                                  .arg(*app.arena_segments)
-                                                  .arg(*app.arena_segments == 1 ? QStringLiteral("segment")
-                                                                                : QStringLiteral("segments"))
-                                            : size;
+            const QString in_segments =
+                app.arena_segments ? QStringLiteral("%1 in %2 %3")
+                                         .arg(size)
+                                         .arg(*app.arena_segments)
+                                         .arg(*app.arena_segments == 1 ? QStringLiteral("segment")
+                                                                       : QStringLiteral("segments"))
+                                   : size;
             arena = peak ? QStringLiteral("%1, peak %2%").arg(in_segments).arg(*peak) : in_segments;
             arena_value = static_cast<double>(*app.arena_bytes);
         }
         const bool channel = app.has_channel;
         const auto count = [&](quint64 value) {
-            return channel ? Cell{QString::number(value), static_cast<double>(value), {}} : Cell{none, {}, {}};
+            return channel ? Cell{QString::number(value), static_cast<double>(value), {}}
+                           : Cell{none, {}, {}};
         };
         const auto rated = [&](const services::HostWindowStatus::Counter& value) {
             if (!channel) {
@@ -500,8 +514,9 @@ void GpuStatusPage::fill_apps() {
             pid ? Cell{QString::number(*pid), static_cast<double>(*pid), {}} : Cell{none, {}, {}},
             {app.process(), {}, {}},
             {api.isEmpty() ? none : api, {}, {}},
-            app.submits_per_s ? Cell{QStringLiteral("%1/s").arg(rate(*app.submits_per_s)), *app.submits_per_s, {}}
-                              : Cell{none, {}, {}},
+            app.submits_per_s
+                ? Cell{QStringLiteral("%1/s").arg(rate(*app.submits_per_s)), *app.submits_per_s, {}}
+                : Cell{none, {}, {}},
             {ui::Format::bytes(app.held_bytes), static_cast<double>(app.held_bytes), {}},
             {arena, arena_value, {}},
             rated(app.splits),
@@ -514,8 +529,8 @@ void GpuStatusPage::fill_apps() {
             count(app.slice_waits),
             count(app.refusals)};
         for (int column = 0; column < cells.size(); ++column) {
-            ui::SortItem::put(apps_table_, row, column, cells.at(column).text, cells.at(column).value,
-                              cells.at(column).key);
+            ui::SortItem::put(apps_table_, row, column, cells.at(column).text,
+                              cells.at(column).value, cells.at(column).key);
         }
     }
     Theme::fit_rows(apps_table_);
@@ -565,10 +580,9 @@ void GpuStatusPage::update_log() {
     const qsizetype from = qMax<qsizetype>(0, lines.size() - kLogLines);
     for (qsizetype i = from; i < lines.size(); ++i) {
         const QString text = lines.at(i).toHtmlEscaped();
-        shown << (i + 1 == lines.size()
-                      ? QStringLiteral("<span style=\"color:%1\">%2</span>")
-                            .arg(QString::fromLatin1(Theme::Color::kFg), text)
-                      : text);
+        shown << (i + 1 == lines.size() ? QStringLiteral("<span style=\"color:%1\">%2</span>")
+                                              .arg(QString::fromLatin1(Theme::Color::kFg), text)
+                                        : text);
     }
     log_text_->setText(shown.join(QStringLiteral("<br>")));
 }
@@ -577,4 +591,4 @@ void GpuStatusPage::open_log() const {
     QDesktopServices::openUrl(QUrl::fromLocalFile(status_.graphics().log_path));
 }
 
-}
+}  // namespace lsw::host::manager

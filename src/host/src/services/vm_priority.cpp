@@ -7,7 +7,6 @@
 
 #include <QRegularExpression>
 #include <QVector>
-
 #include <algorithm>
 #include <utility>
 
@@ -19,14 +18,16 @@ using K = config::ManagerSettings::Key;
 
 const QSet<QString>& frame_threads() {
     static const QSet<QString> names = {
-        QStringLiteral("av-context"),  QStringLiteral("dxvk-cs"),     QStringLiteral("dxvk-submit"),
-        QStringLiteral("dxvk-queue"),  QStringLiteral("dxvk-frame"),  QStringLiteral("dxvk-descriptor"),
-        QStringLiteral("vkd3d_queue"), QStringLiteral("vkd3d_fence"), QStringLiteral("vkd3d-swapchain"),
+        QStringLiteral("av-context"),      QStringLiteral("dxvk-cs"),
+        QStringLiteral("dxvk-submit"),     QStringLiteral("dxvk-queue"),
+        QStringLiteral("dxvk-frame"),      QStringLiteral("dxvk-descriptor"),
+        QStringLiteral("vkd3d_queue"),     QStringLiteral("vkd3d_fence"),
+        QStringLiteral("vkd3d-swapchain"),
     };
     return names;
 }
 
-}
+}  // namespace
 
 VmPriority::VmPriority(config::ManagerSettings& settings, platform::ICpuScope& vm_scope,
                        platform::ICpuScope& mirror_scope, platform::IProcessThreads& threads,
@@ -172,7 +173,8 @@ void VmPriority::weigh(qint64 pid, bool mirror, Level level, bool confirm) {
             if (done) {
                 called->asked = false;
                 called->raised = false;
-                LSW_INFO("priority: the processor weight of pid {} is back at {}", pid, kDefaultWeight);
+                LSW_INFO("priority: the processor weight of pid {} is back at {}", pid,
+                         kDefaultWeight);
             } else {
                 called->kept = true;
                 LSW_WARN("priority: the processor weight of pid {} could not be put back: {}", pid,
@@ -275,8 +277,9 @@ void VmPriority::raise_threads(const QVector<qint64>& alive) {
         }
     }
     if (process.main_thread.isEmpty()) {
-        const auto main = std::find_if(fresh.cbegin(), fresh.cend(),
-                                       [this](const auto& entry) { return entry.first == vm_pid_; });
+        const auto main = std::find_if(fresh.cbegin(), fresh.cend(), [this](const auto& entry) {
+            return entry.first == vm_pid_;
+        });
         process.unnamed = main != fresh.cend() && !guest_code_named;
         if (main == fresh.cend() || process.unnamed) {
             return;
@@ -300,7 +303,8 @@ void VmPriority::raise_threads(const QVector<qint64>& alive) {
         }
     }
     if (refused_now && !process.refused) {
-        LSW_WARN("priority: the system refused nice {} for threads of pid {}", process.nice, vm_pid_);
+        LSW_WARN("priority: the system refused nice {} for threads of pid {}", process.nice,
+                 vm_pid_);
     }
     process.refused = process.refused || refused_now;
 }
@@ -315,7 +319,8 @@ void VmPriority::settle() {
         (void)threads_.set_nice(tid, 0);
     }
     if (!process.raised.isEmpty()) {
-        LSW_INFO("priority: {} threads of pid {} are back at nice 0", process.raised.size(), vm_pid_);
+        LSW_INFO("priority: {} threads of pid {} are back at nice 0", process.raised.size(),
+                 vm_pid_);
     }
     const QString main_thread = process.main_thread;
     process = Threads{};
@@ -343,4 +348,4 @@ void VmPriority::publish(Level level) {
     Q_EMIT changed();
 }
 
-}
+}  // namespace lsw::host::services

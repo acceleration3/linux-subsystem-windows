@@ -11,7 +11,7 @@ int whole(const nlohmann::json& params, const char* name) {
     return found != params.end() && found->is_number_integer() ? found->get<int>() : 0;
 }
 
-}
+}  // namespace
 
 DisplayRequest::DisplayRequest(const nlohmann::json& params) {
     if (!params.is_object()) {
@@ -31,4 +31,4 @@ void DisplayRequest::answer(nlohmann::json& reply, const std::optional<Resolutio
     }
 }
 
-}
+}  // namespace lsw::agent::system

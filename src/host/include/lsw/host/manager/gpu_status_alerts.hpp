@@ -4,7 +4,9 @@
 #include <QString>
 #include <QVector>
 
-namespace lsw::host::services { class StatusHub; }
+namespace lsw::host::services {
+class StatusHub;
+}
 
 namespace lsw::host::manager {
 class GpuStatusAlerts : public QObject {
@@ -46,4 +48,4 @@ private:
     bool agent_online_ = false;
 };
 
-}
+}  // namespace lsw::host::manager

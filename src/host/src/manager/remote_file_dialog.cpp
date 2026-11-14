@@ -2,30 +2,26 @@
 
 #include "lsw/host/link/agent_reply.hpp"
 #include "lsw/host/link/agent_rpc_client.hpp"
-
 #include "lsw/host/ui/dialog_chrome.hpp"
 #include "lsw/host/ui/format.hpp"
 #include "lsw/host/ui/table_header.hpp"
 #include "lsw/host/ui/theme.hpp"
 #include "lsw/host/ui/widgets.hpp"
+#include "lsw/linkproto/commands.hpp"
 
+#include <QButtonGroup>
+#include <QComboBox>
 #include <QDateTime>
 #include <QFrame>
 #include <QHBoxLayout>
+#include <QHeaderView>
 #include <QLabel>
 #include <QLineEdit>
-#include <QButtonGroup>
-#include <QComboBox>
-#include <QHeaderView>
 #include <QPushButton>
 #include <QTreeWidget>
 #include <QVBoxLayout>
-
-#include <optional>
-
 #include <nlohmann/json.hpp>
-
-#include "lsw/linkproto/commands.hpp"
+#include <optional>
 
 namespace lsw::host::manager {
 
@@ -39,10 +35,10 @@ constexpr int kRoleIsDir = Qt::UserRole + 1;
 
 class EntryItem : public QTreeWidgetItem {
 public:
-    EntryItem(QTreeWidget* parent, bool directory, std::optional<double> size, std::optional<double> modified)
+    EntryItem(QTreeWidget* parent, bool directory, std::optional<double> size,
+              std::optional<double> modified)
         : QTreeWidgetItem(parent), directory_(directory), size_(size), modified_(modified),
-          natural_(parent->topLevelItemCount()) {
-    }
+          natural_(parent->topLevelItemCount()) {}
 
     bool operator<(const QTreeWidgetItem& other) const override {
         const auto* rhs = dynamic_cast<const EntryItem*>(&other);
@@ -404,9 +400,10 @@ void RemoteFileDialog::render_entries(const link::AgentReply& reply) {
         const auto size = entry.value("size", std::int64_t{0});
         const auto mtime = entry.value("mtime", std::int64_t{0});
 
-        auto* item = new EntryItem(entries_, is_dir,
-                                   is_dir || size <= 0 ? std::nullopt : std::optional<double>{static_cast<double>(size)},
-                                   mtime > 0 ? std::optional<double>{static_cast<double>(mtime)} : std::nullopt);
+        auto* item = new EntryItem(
+            entries_, is_dir,
+            is_dir || size <= 0 ? std::nullopt : std::optional<double>{static_cast<double>(size)},
+            mtime > 0 ? std::optional<double>{static_cast<double>(mtime)} : std::nullopt);
         item->setText(0, name);
         item->setText(1, is_dir || size <= 0 ? QString{}
                                              : ui::Format::bytes(static_cast<quint64>(size)));

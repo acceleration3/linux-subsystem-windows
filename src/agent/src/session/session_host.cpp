@@ -139,8 +139,8 @@ void run_gate(Shared& shared) {
                  {"waited_s", static_cast<std::int64_t>(waited.count())}});
 }
 
-void run_pump(Shared& shared, uia::Uia& uia, win::ClipboardWatcher* clipboard, win::WindowWatcher* windows,
-              std::uint32_t session) {
+void run_pump(Shared& shared, uia::Uia& uia, win::ClipboardWatcher* clipboard,
+              win::WindowWatcher* windows, std::uint32_t session) {
     std::uint64_t log_cursor = 0;
     while (!shared.stopping()) {
         for (const auto& record : log::collect_since(log_cursor, log_cursor)) {

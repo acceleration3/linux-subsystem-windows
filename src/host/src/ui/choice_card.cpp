@@ -87,8 +87,8 @@ void ChoiceCard::mouseReleaseEvent(QMouseEvent* event) {
 }
 
 void ChoiceCard::keyPressEvent(QKeyEvent* event) {
-    if (event->key() == Qt::Key_Space || event->key() == Qt::Key_Return
-        || event->key() == Qt::Key_Enter) {
+    if (event->key() == Qt::Key_Space || event->key() == Qt::Key_Return ||
+        event->key() == Qt::Key_Enter) {
         Q_EMIT chosen();
         return;
     }
@@ -105,4 +105,4 @@ void ChoiceCard::focusOutEvent(QFocusEvent* event) {
     update();
 }
 
-}
+}  // namespace lsw::host::ui

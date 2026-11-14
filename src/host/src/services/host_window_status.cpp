@@ -1,7 +1,6 @@
 #include "lsw/host/services/host_window_status.hpp"
 
 #include <QStringList>
-
 #include <algorithm>
 #include <array>
 #include <utility>
@@ -104,8 +103,8 @@ void HostWindowTracker::add(const platform::AvStateDump::Snapshot& snapshot, qin
         status_.peak_bytes = peak;
     }
 
-    if (snapshot.device && status_.window_bytes && *status_.window_bytes > 0
-        && status_.used_bytes > *status_.window_bytes / 10 * 9) {
+    if (snapshot.device && status_.window_bytes && *status_.window_bytes > 0 &&
+        status_.used_bytes > *status_.window_bytes / 10 * 9) {
         status_.full_since_ms = full_since.value_or(at_ms);
     }
 
@@ -118,8 +117,9 @@ void HostWindowTracker::add(const platform::AvStateDump::Snapshot& snapshot, qin
     }
     status_.window_refused_at_ms = window_refused_at;
 
-    const double seconds =
-        previous_at_ms_ && at_ms > *previous_at_ms_ ? static_cast<double>(at_ms - *previous_at_ms_) / 1000.0 : 0.0;
+    const double seconds = previous_at_ms_ && at_ms > *previous_at_ms_
+                               ? static_cast<double>(at_ms - *previous_at_ms_) / 1000.0
+                               : 0.0;
     QHash<quint64, Memory> next;
     QHash<quint64, const platform::AvStateDump::Channel*> channels;
     QVector<quint64> keys;
@@ -127,10 +127,11 @@ void HostWindowTracker::add(const platform::AvStateDump::Snapshot& snapshot, qin
         keys.push_back(HostWindowStatus::key(context.device, context.id));
     }
     for (const auto& channel : snapshot.channels) {
-        const auto* owner = snapshot.contexts_with_id(channel.context) == 1 ? snapshot.find_context(channel.context)
-                                                                          : nullptr;
-        const quint64 key = HostWindowStatus::key(owner != nullptr ? owner->device : HostWindowStatus::kNoDevice,
-                                                  channel.context);
+        const auto* owner = snapshot.contexts_with_id(channel.context) == 1
+                                ? snapshot.find_context(channel.context)
+                                : nullptr;
+        const quint64 key = HostWindowStatus::key(
+            owner != nullptr ? owner->device : HostWindowStatus::kNoDevice, channel.context);
         if (owner == nullptr) {
             keys.push_back(key);
         }
@@ -140,7 +141,8 @@ void HostWindowTracker::add(const platform::AvStateDump::Snapshot& snapshot, qin
         const quint32 device = static_cast<quint32>(key >> 32);
         const quint32 id = static_cast<quint32>(key & 0xffffffffULL);
         Memory memory = memory_.value(key);
-        const auto* context = device == HostWindowStatus::kNoDevice ? nullptr : snapshot.find_context(device, id);
+        const auto* context =
+            device == HostWindowStatus::kNoDevice ? nullptr : snapshot.find_context(device, id);
         const auto* found = channels.value(key, nullptr);
         const bool known = memory.has_counters;
         const auto& before = memory.counters;
@@ -153,7 +155,8 @@ void HostWindowTracker::add(const platform::AvStateDump::Snapshot& snapshot, qin
             app.held_bytes = context->bytes();
             app.blobs = context->blobs;
             if (context->batches && memory.batches && seconds > 0) {
-                const quint64 batches = *context->batches >= *memory.batches ? *context->batches - *memory.batches : 0;
+                const quint64 batches =
+                    *context->batches >= *memory.batches ? *context->batches - *memory.batches : 0;
                 app.submits_per_s = static_cast<double>(batches) / seconds;
             }
             memory.batches = context->batches;
@@ -174,17 +177,22 @@ void HostWindowTracker::add(const platform::AvStateDump::Snapshot& snapshot, qin
         }
         const auto& channel = *found;
         app.has_channel = true;
-        const auto delta = [&](quint64 now, quint64 was) { return now >= was ? now - was : quint64{0}; };
+        const auto delta = [&](quint64 now, quint64 was) {
+            return now >= was ? now - was : quint64{0};
+        };
         double interval_splits_per_s = 0;
         if (known && seconds > 0) {
             const quint64 splits = delta(channel.split_transfers, before.split_transfers);
-            const auto optional_delta = [&](const std::optional<quint64>& now, const std::optional<quint64>& was) {
+            const auto optional_delta = [&](const std::optional<quint64>& now,
+                                            const std::optional<quint64>& was) {
                 return now ? delta(*now, was.value_or(0)) : quint64{0};
             };
-            const quint64 blob_room_waits = optional_delta(channel.blob_room_waits, before.blob_room_waits);
+            const quint64 blob_room_waits =
+                optional_delta(channel.blob_room_waits, before.blob_room_waits);
             interval_splits_per_s = static_cast<double>(splits) / seconds;
             if (channel.arena_grows && before.arena_grows) {
-                app.arena_grows_per_s = static_cast<double>(delta(*channel.arena_grows, *before.arena_grows)) / seconds;
+                app.arena_grows_per_s =
+                    static_cast<double>(delta(*channel.arena_grows, *before.arena_grows)) / seconds;
             }
             if (interval_splits_per_s > kHotSplitsPerSecond) {
                 memory.hot_since_ms = memory.hot_since_ms.value_or(*previous_at_ms_);
@@ -197,19 +205,23 @@ void HostWindowTracker::add(const platform::AvStateDump::Snapshot& snapshot, qin
             if (delta(channel.copied_mappings, before.copied_mappings) > 0) {
                 memory.copied_at_ms = at_ms;
             }
-            if (blob_room_waits > 0 && channel.arena_bytes && *channel.arena_bytes > 0 && channel.arena_peak_ring_bytes
-                && *channel.arena_peak_ring_bytes * 10 >= *channel.arena_bytes * 9) {
+            if (blob_room_waits > 0 && channel.arena_bytes && *channel.arena_bytes > 0 &&
+                channel.arena_peak_ring_bytes &&
+                *channel.arena_peak_ring_bytes * 10 >= *channel.arena_bytes * 9) {
                 memory.arena_full_at_ms = at_ms;
             }
         }
         if (!memory.recent.isEmpty()) {
             const auto& last = memory.recent.last().counters;
-            const auto below = [](const std::optional<quint64>& now, const std::optional<quint64>& was) {
+            const auto below = [](const std::optional<quint64>& now,
+                                  const std::optional<quint64>& was) {
                 return now && was && *now < *was;
             };
-            if (channel.split_transfers < last.split_transfers || channel.split_pieces < last.split_pieces
-                || below(channel.blob_room_waits, last.blob_room_waits) || below(channel.ring_waits, last.ring_waits)
-                || below(channel.fence_waits, last.fence_waits)) {
+            if (channel.split_transfers < last.split_transfers ||
+                channel.split_pieces < last.split_pieces ||
+                below(channel.blob_room_waits, last.blob_room_waits) ||
+                below(channel.ring_waits, last.ring_waits) ||
+                below(channel.fence_waits, last.fence_waits)) {
                 memory.recent.clear();
             }
         }
@@ -219,12 +231,15 @@ void HostWindowTracker::add(const platform::AvStateDump::Snapshot& snapshot, qin
         }
         const auto& base = memory.recent.first();
         const double span = static_cast<double>(at_ms - base.at_ms) / 1000.0;
-        const auto per_s = [&](const std::optional<quint64>& now, const std::optional<quint64>& was) {
+        const auto per_s = [&](const std::optional<quint64>& now,
+                               const std::optional<quint64>& was) {
             return span > 0 && now ? static_cast<double>(delta(*now, was.value_or(0))) / span : 0.0;
         };
-        app.splits = {channel.split_transfers, per_s(channel.split_transfers, base.counters.split_transfers)};
+        app.splits = {channel.split_transfers,
+                      per_s(channel.split_transfers, base.counters.split_transfers)};
         app.extra = {channel.split_pieces, per_s(channel.split_pieces, base.counters.split_pieces)};
-        const auto wait = [&](const std::optional<quint64>& count, const std::optional<quint64>& micros,
+        const auto wait = [&](const std::optional<quint64>& count,
+                              const std::optional<quint64>& micros,
                               const std::optional<quint64>& was_count) {
             HostWindowStatus::Wait result;
             result.count = count;
@@ -234,9 +249,11 @@ void HostWindowTracker::add(const platform::AvStateDump::Snapshot& snapshot, qin
             }
             return result;
         };
-        app.blob_room_wait = wait(channel.blob_room_waits, channel.blob_room_wait_us, base.counters.blob_room_waits);
+        app.blob_room_wait =
+            wait(channel.blob_room_waits, channel.blob_room_wait_us, base.counters.blob_room_waits);
         app.ring_wait = wait(channel.ring_waits, channel.ring_wait_us, base.counters.ring_waits);
-        app.fence_wait = wait(channel.fence_waits, channel.fence_wait_us, base.counters.fence_waits);
+        app.fence_wait =
+            wait(channel.fence_waits, channel.fence_wait_us, base.counters.fence_waits);
         memory.counters = channel;
         memory.has_counters = true;
         app.inline_bulk = channel.inline_bulk;
@@ -261,7 +278,9 @@ void HostWindowTracker::add(const platform::AvStateDump::Snapshot& snapshot, qin
 }
 
 void HostWindowTracker::order() {
-    const auto rate = [](const HostWindowStatus::App& app) { return app.submits_per_s.value_or(0); };
+    const auto rate = [](const HostWindowStatus::App& app) {
+        return app.submits_per_s.value_or(0);
+    };
     const auto before = [&](const HostWindowStatus::App& a, const HostWindowStatus::App& b) {
         if (rate(a) != rate(b)) {
             return rate(a) > rate(b);
@@ -307,4 +326,4 @@ void HostWindowTracker::order() {
     status_.apps = std::move(ordered);
 }
 
-}
+}  // namespace lsw::host::services
