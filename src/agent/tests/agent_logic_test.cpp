@@ -10,6 +10,7 @@
 #include "lsw/agent/session/pipe_codec.hpp"
 #include "lsw/agent/session/session_routing.hpp"
 #include "lsw/agent/session/session_selector.hpp"
+#include "lsw/agent/system/display_request.hpp"
 #include "lsw/agent/system/scale_steps.hpp"
 #include "lsw/agent/util/base64.hpp"
 #include "lsw/agent/util/wide_string.hpp"
@@ -389,6 +390,38 @@ void test_command_line() {
     check(!CommandLine::parse({L"--srevice"}).error.empty(), "a typo is an error, not the foreground");
 }
 
+void test_display_request() {
+    using lsw::agent::system::DisplayRequest;
+    using Resolution = DisplayRequest::Resolution;
+    const DisplayRequest nothing{nlohmann::json::object()};
+    check(nothing.scaling_percent() == 0 && !nothing.resolution().has_value(),
+          "a request without fields changes nothing");
+    const DisplayRequest scale{nlohmann::json{{"scaling_percent", 125}}};
+    check(scale.scaling_percent() == 125 && !scale.resolution().has_value(),
+          "a scale alone leaves the resolution as it is");
+    const DisplayRequest size{nlohmann::json{{"width", 1201}, {"height", 841}}};
+    check(size.resolution() == std::optional<Resolution>(Resolution{1201, 841}) &&
+              size.scaling_percent() == 0,
+          "a width and a height are a resolution, and no scale");
+    check(!DisplayRequest{nlohmann::json{{"width", 1920}}}.resolution().has_value() &&
+              !DisplayRequest{nlohmann::json{{"height", 1080}}}.resolution().has_value(),
+          "one side alone is no resolution");
+    check(!DisplayRequest{nlohmann::json{{"width", 0}, {"height", 1080}}}.resolution().has_value() &&
+              !DisplayRequest{nlohmann::json{{"width", -5}, {"height", 1080}}}.resolution().has_value() &&
+              !DisplayRequest{nlohmann::json{{"width", "1920"}, {"height", 1080}}}.resolution().has_value(),
+          "a side that is not a positive whole number is no resolution");
+    check(!DisplayRequest{nlohmann::json::array()}.resolution().has_value(),
+          "parameters that are not an object ask for nothing");
+    nlohmann::json reply = {{"dpi", false}};
+    DisplayRequest::answer(reply, Resolution{2560, 1440});
+    check(reply.value("width", 0) == 2560 && reply.value("height", 0) == 1440 && reply.contains("dpi"),
+          "the reply says the resolution Windows has now beside what it had");
+    nlohmann::json unknown = nlohmann::json::object();
+    DisplayRequest::answer(unknown, std::nullopt);
+    check(!unknown.contains("width") && !unknown.contains("height"),
+          "a resolution Windows did not report is left out, not zero");
+}
+
 void test_scale_steps() {
     using lsw::agent::system::ScaleSteps;
     const ScaleSteps at_100{0, 4};
@@ -632,6 +665,7 @@ int main() {
     test_pending_calls();
     test_command_line();
     test_scale_steps();
+    test_display_request();
     test_start_menu_filter();
     test_document_command();
     test_window_announcements();

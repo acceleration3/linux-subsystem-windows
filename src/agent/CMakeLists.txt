@@ -87,6 +87,7 @@ set(_lsw_agent_win_sources
     src/win/gdiplus_runtime.cpp
     src/win/com.cpp
     src/win/desktop_session.cpp
+    src/win/display_resolution.cpp
     src/win/display_scale.cpp
     src/win/token_privileges.cpp
     src/win/error_text.cpp
@@ -172,6 +173,7 @@ set(_lsw_agent_system_sources
     src/system/info.cpp
     src/system/volume_grower.cpp
     src/system/scale_steps.cpp
+    src/system/display_request.cpp
     src/system/log_packer.cpp
     src/system/log_clearer.cpp
     src/system/driver_log_pruner.cpp
