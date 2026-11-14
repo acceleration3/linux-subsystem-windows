@@ -29,6 +29,7 @@ public:
         QString activation_token;
         QString output;
         quint64 pid_created = 0;
+        QString icon_badge;
     };
 
     ~WindowMirror() override;

@@ -14,6 +14,8 @@
 #include <QProcess>
 #include <QSize>
 #include <QSocketNotifier>
+#include <QString>
+#include <QStringList>
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QTemporaryDir>
@@ -265,6 +267,7 @@ int main(int argc, char** argv) {
     check(directory.isValid(), "temporary directory available");
     const QString frame = directory.filePath("frame");
     const QString raised = directory.filePath("raised");
+    qputenv("XDG_RUNTIME_DIR", directory.path().toUtf8());
     qputenv("LSW_REMOTEWIN", QCoreApplication::applicationFilePath().toUtf8());
     qputenv("LSW_TEST_FRAME", frame.toUtf8());
     qputenv("LSW_TEST_RAISED", raised.toUtf8());
@@ -516,6 +519,18 @@ int main(int argc, char** argv) {
                     process->closeWriteChannel();
             }
         };
+        const auto badges = [&](bool desktop) {
+            QStringList paths;
+            for (const auto* process : mirrors.findChildren<QProcess*>()) {
+                const auto arguments = process->arguments();
+                if (process->state() == QProcess::NotRunning ||
+                    arguments.contains(QStringLiteral("--desktop")) != desktop)
+                    continue;
+                const auto index = arguments.indexOf(QStringLiteral("--icon-badge"));
+                paths << (index >= 0 ? arguments.value(index + 1) : QString());
+            }
+            return paths;
+        };
         const auto settle = [] { wait_for([] { return false; }, 300); };
         int opened = 0;
         QObject::connect(&launcher, &lsw::host::apps::GuestAppLauncher::launched, &app,
@@ -533,6 +548,44 @@ int main(int argc, char** argv) {
         launcher.launch(first, QString());
         check(wait_for([&] { return opened == 1; }) && mirrored() == QList<quint32>{123},
               "a launched application has its own mirror while no desktop is open");
+        const QStringList launched_badges = badges(false);
+        check(launched_badges.size() == 1 && launched_badges.first().startsWith(directory.path() + QLatin1Char('/')),
+              "a launched application's mirror is given an icon badge kept in the runtime directory");
+        QFile badge_file(launched_badges.value(0));
+        const QByteArray badge = badge_file.open(QIODevice::ReadOnly) ? badge_file.readAll() : QByteArray();
+        const auto side_at = [&](qsizetype offset) {
+            quint32 side = 0;
+            for (int byte = 0; byte < 4 && offset + byte < badge.size(); ++byte)
+                side |= static_cast<quint32>(static_cast<unsigned char>(badge[offset + byte])) << (8 * byte);
+            return side;
+        };
+        const quint32 badge_width = side_at(0);
+        const quint32 badge_height = side_at(4);
+        check(badge_width >= 64 && badge_width <= 256 && badge_width == badge_height,
+              "the icon badge file starts with its width and height, little-endian, and is square");
+        check(badge.size() == 8 + qsizetype{badge_width} * badge_height * 4,
+              "and holds four bytes for each of its pixels after them");
+        const auto badge_pixel = [&](quint32 x, quint32 y, int channel) {
+            const qsizetype at = 8 + (qsizetype{y} * badge_width + x) * 4 + channel;
+            return at < badge.size() ? static_cast<unsigned char>(badge[at]) : 0;
+        };
+        bool premultiplied = badge.size() > 8;
+        for (qsizetype at = 8; at + 3 < badge.size(); at += 4) {
+            const auto alpha = static_cast<unsigned char>(badge[at + 3]);
+            for (int channel = 0; channel < 3; ++channel)
+                premultiplied = premultiplied && static_cast<unsigned char>(badge[at + channel]) <= alpha;
+        }
+        check(premultiplied, "no colour of the badge exceeds its alpha");
+        check(badge_pixel(0, 0, 3) == 0 && badge_pixel(badge_width - 1, badge_height - 1, 3) == 0,
+              "the badge is transparent outside its rounded corners");
+        check(badge_pixel(badge_width / 2, badge_height / 2, 3) == 255 &&
+                  badge_pixel(badge_width / 2, badge_height / 2, 0) == 255 &&
+                  badge_pixel(badge_width / 2, badge_height / 2, 1) == 255 &&
+                  badge_pixel(badge_width / 2, badge_height / 2, 2) == 255,
+              "the middle of the badge, between its panes, is the opaque white tile");
+        check(badge_pixel(badge_width / 3, badge_height / 3, 3) == 255 &&
+                  badge_pixel(badge_width / 3, badge_height / 3, 0) > badge_pixel(badge_width / 3, badge_height / 3, 2),
+              "a pane of the badge is blue, stored blue first");
 
         int desktop_opens = 0;
         int desktop_closes = 0;
@@ -548,6 +601,7 @@ int main(int argc, char** argv) {
         check(wait_for([&] { return desktops == desktops_before + 1; }) && mirrors.desktop_open(),
               "the desktop mirror opens");
         check(desktop_opens == 1 && desktop_closes == 0, "and says so once");
+        check(badges(true) == QStringList{QString()}, "the desktop mirror is given no icon badge");
         check(wait_for([&] { return !desktop_rooms.isEmpty(); }) &&
                   desktop_rooms == QList<QSize>{QSize(1201, 841)},
               "the size the desktop window settles on is passed on in pixels, and a malformed one is not");
@@ -614,6 +668,8 @@ int main(int argc, char** argv) {
         appeared(owned);
         appeared(window(501, 123, true, "C:\\first-helper.exe"));
         settle();
+        check(badges(false).size() == 5 && badges(false).count(launched_badges.first()) == 5,
+              "a mirror started for a window nothing launched is given the same icon badge as a launched application's");
         check(mirrored() == QList<quint32>{80, 123, 321, 900, 950},
               "a second window of a mirrored process and windows not worth a mirror start none");
 

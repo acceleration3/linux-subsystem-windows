@@ -245,6 +245,7 @@ void GuestMirrors::show(const QString& identity, const WindowMirror::Application
 void GuestMirrors::start(const QString& identity) {
     WindowMirror::Application application = entries_[identity].application;
     application.output = output();
+    application.icon_badge = icon_badge_.path();
     entries_[identity].application.activation_token.clear();
     auto* mirror = WindowMirror::of_application(rpc_, application, this);
     entries_[identity].mirror = mirror;

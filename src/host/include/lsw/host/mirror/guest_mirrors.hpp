@@ -1,6 +1,7 @@
 #pragma once
 
 #include "lsw/host/link/event_subscription.hpp"
+#include "lsw/host/mirror/icon_badge_file.hpp"
 #include "lsw/host/mirror/window_mirror.hpp"
 
 #include <QHash>
@@ -84,6 +85,7 @@ private:
 
     link::AgentRpcClient& rpc_;
     std::function<QString()> output_source_;
+    IconBadgeFile icon_badge_;
     QHash<QString, Entry> entries_;
     QHash<QString, QString> shown_by_;
     QPointer<WindowMirror> desktop_;

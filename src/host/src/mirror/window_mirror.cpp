@@ -40,6 +40,9 @@ WindowMirror* WindowMirror::of_application(link::AgentRpcClient& rpc, const Appl
     if (!application.output.isEmpty()) {
         arguments << QStringLiteral("--output") << application.output;
     }
+    if (!application.icon_badge.isEmpty()) {
+        arguments << QStringLiteral("--icon-badge") << application.icon_badge;
+    }
     return new WindowMirror(rpc,
                             QStringLiteral("pid %1 '%2'")
                                 .arg(application.pid)
