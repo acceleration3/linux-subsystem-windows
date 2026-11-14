@@ -53,7 +53,7 @@ HostServices::HostServices(QObject* parent)
       log_cleaner_(
           settings_, rpc_, log_store_, [this] { return status_.vm().agent_online(); },
           [this] { return status_.vm().running(); }, this),
-      app_launcher_(rpc_, this) {
+      mirrors_(rpc_, this), app_launcher_(rpc_, mirrors_, this) {
     log_store_.attach(rpc_);
 
     lifecycle_.set_before_start([this] { vm_logs_.prepare_start(); });

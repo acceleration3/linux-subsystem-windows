@@ -3,6 +3,7 @@
 #include "lsw/host/link/agent_rpc_client.hpp"
 #include "lsw/host/manager/app_list.hpp"
 #include "lsw/host/manager/store_app_dialog.hpp"
+#include "lsw/host/mirror/guest_mirrors.hpp"
 #include "lsw/host/ui/theme.hpp"
 #include "lsw/linkproto/envelope.hpp"
 
@@ -179,7 +180,8 @@ int main(int argc, char** argv) {
             cfg.icon_png_base64 = QString::fromStdString(entry["icon_png_base64"].get<std::string>());
             store.upsert(cfg);
         }
-        lsw::host::apps::GuestAppLauncher launcher(rpc);
+        lsw::host::mirror::GuestMirrors mirrors(rpc);
+        lsw::host::apps::GuestAppLauncher launcher(rpc, mirrors);
         lsw::host::manager::AppListWidget grid(store, rpc, launcher);
         grid.resize(420, 240);
         grid.show();

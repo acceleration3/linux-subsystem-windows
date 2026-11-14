@@ -25,7 +25,7 @@
 #include "lsw/host/apps/guest_app_launcher.hpp"
 #include "lsw/host/manager/vm_detail_panel.hpp"
 #include "lsw/host/manager/warning_strip.hpp"
-#include "lsw/host/mirror/window_mirror.hpp"
+#include "lsw/host/mirror/guest_mirrors.hpp"
 #include "lsw/host/platform/guest_smb_share.hpp"
 #include "lsw/host/platform/host_scale.hpp"
 #include "lsw/host/services/domain_inputs.hpp"
@@ -476,27 +476,10 @@ void MainWindow::open_windows_files() {
 }
 
 void MainWindow::open_desktop() {
-    if (desktop_ != nullptr) {
-        desktop_->raise(QString());
-        return;
-    }
     const config::VmRecord* record = services_.vms().primary();
     const QString name =
         record == nullptr || record->name.isEmpty() ? QStringLiteral("lsw") : record->name;
-    desktop_ = mirror::WindowMirror::of_desktop(services_.rpc(), QStringLiteral("%1 desktop").arg(name),
-                                                screen() != nullptr ? screen()->name() : QString(), this);
-    connect(desktop_, &mirror::WindowMirror::finished, desktop_, &QObject::deleteLater);
-    connect(desktop_, &mirror::WindowMirror::failed, this, [this](const QString& reason) {
-        notices_->post(QStringLiteral("desktop"), false,
-                       QStringLiteral("The desktop could not be opened."), reason);
-    });
-    connect(desktop_, &mirror::WindowMirror::ready, this,
-            [this] { notices_->withdraw(QStringLiteral("desktop")); });
-    if (!desktop_->start()) {
-        desktop_->deleteLater();
-        desktop_ = nullptr;
-        return;
-    }
+    services_.mirrors().open_desktop(QStringLiteral("%1 desktop").arg(name));
 }
 
 QWidget* MainWindow::build_empty_state() {
@@ -923,7 +906,14 @@ void MainWindow::follow_upkeep() {
 
 void MainWindow::follow_launches() {
     auto& launcher = services_.app_launcher();
-    launcher.set_output_source([this] { return screen() != nullptr ? screen()->name() : QString(); });
+    auto& mirrors = services_.mirrors();
+    mirrors.set_output_source([this] { return screen() != nullptr ? screen()->name() : QString(); });
+    connect(&mirrors, &mirror::GuestMirrors::desktop_failed, this, [this](const QString& reason) {
+        notices_->post(QStringLiteral("desktop"), false,
+                       QStringLiteral("The desktop could not be opened."), reason);
+    });
+    connect(&mirrors, &mirror::GuestMirrors::desktop_ready, this,
+            [this] { notices_->withdraw(QStringLiteral("desktop")); });
     connect(&launcher, &apps::GuestAppLauncher::failed, this,
             [this](const QString& target, const QString& error) {
         QString name = target.section(QLatin1Char('\\'), -1);

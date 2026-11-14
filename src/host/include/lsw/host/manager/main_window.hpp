@@ -20,7 +20,6 @@ namespace lsw::host::services { class HostServices; }
 
 namespace lsw::host::vm { class GracefulShutdown; }
 
-namespace lsw::host::mirror { class WindowMirror; }
 
 namespace lsw::host::manager {
 
@@ -134,7 +133,6 @@ private:
     UpdateDialog* update_dialog_ = nullptr;
     QSystemTrayIcon* tray_ = nullptr;
     vm::GracefulShutdown* restart_ = nullptr;
-    QPointer<mirror::WindowMirror> desktop_;
 };
 
 }

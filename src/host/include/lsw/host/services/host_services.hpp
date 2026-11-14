@@ -2,6 +2,7 @@
 
 #include "lsw/host/apps/app_config_store.hpp"
 #include "lsw/host/apps/guest_app_launcher.hpp"
+#include "lsw/host/mirror/guest_mirrors.hpp"
 #include "lsw/host/apps/log_store.hpp"
 #include "lsw/host/config/manager_settings.hpp"
 #include "lsw/host/config/pending_changes.hpp"
@@ -69,6 +70,7 @@ public:
     [[nodiscard]] LogCollector& log_collector() noexcept { return log_collector_; }
     [[nodiscard]] LogCleaner& log_cleaner() noexcept { return log_cleaner_; }
 
+    [[nodiscard]] mirror::GuestMirrors& mirrors() noexcept { return mirrors_; }
     [[nodiscard]] apps::GuestAppLauncher& app_launcher() noexcept { return app_launcher_; }
 
     [[nodiscard]] config::ManagerSettings& manager_settings() noexcept { return manager_settings_; }
@@ -107,6 +109,7 @@ private:
     AgentLogLevels agent_log_levels_;
     LogCollector log_collector_;
     LogCleaner log_cleaner_;
+    mirror::GuestMirrors mirrors_;
     apps::GuestAppLauncher app_launcher_;
 };
 
