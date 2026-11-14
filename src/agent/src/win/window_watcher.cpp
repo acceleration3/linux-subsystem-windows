@@ -2,6 +2,7 @@
 
 #include "lsw/agent/log.hpp"
 #include "lsw/agent/win/error_text.hpp"
+#include "lsw/agent/win/task_window.hpp"
 #include "lsw/agent/win/window.hpp"
 
 // clang-format off
@@ -17,7 +18,7 @@ constexpr DWORD kShown = 0x8002;
 constexpr DWORD kUncloaked = 0x8018;
 
 std::atomic<WindowWatcher*> g_watcher{nullptr};
-}
+}  // namespace
 
 WindowWatcher::WindowWatcher() {
     std::promise<void> ready;
@@ -45,12 +46,13 @@ void __stdcall WindowWatcher::on_event(void*, unsigned long, void* hwnd, long ob
     if (object != OBJID_WINDOW || child != CHILDID_SELF || window == nullptr) {
         return;
     }
-    if ((::GetWindowLongW(window, GWL_STYLE) & WS_CAPTION) != WS_CAPTION ||
-        ::GetAncestor(window, GA_ROOT) != window || ::GetWindow(window, GW_OWNER) != nullptr) {
+    if (!TaskWindow::styled_as_task(
+            static_cast<std::uint32_t>(::GetWindowLongW(window, GWL_EXSTYLE))) ||
+        ::GetAncestor(window, GA_ROOT) != window) {
         return;
     }
     WindowWatcher* self = g_watcher.load();
-    if (self == nullptr) {
+    if (self == nullptr || !Window::task_window(reinterpret_cast<std::uintptr_t>(window))) {
         return;
     }
     if (const auto found = Window::describe(reinterpret_cast<std::uintptr_t>(window))) {
@@ -63,7 +65,8 @@ void WindowWatcher::run() {
     const auto proc = reinterpret_cast<WINEVENTPROC>(&WindowWatcher::on_event);
     const DWORD flags = WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS;
     const HWINEVENTHOOK shown = ::SetWinEventHook(kShown, kShown, nullptr, proc, 0, 0, flags);
-    const HWINEVENTHOOK uncloaked = ::SetWinEventHook(kUncloaked, kUncloaked, nullptr, proc, 0, 0, flags);
+    const HWINEVENTHOOK uncloaked =
+        ::SetWinEventHook(kUncloaked, kUncloaked, nullptr, proc, 0, 0, flags);
     if (shown == nullptr || uncloaked == nullptr) {
         LSW_AGENT_WARN("window_watcher: no window event hook ({}); new windows of applications the "
                        "manager did not start are not announced",
@@ -82,4 +85,4 @@ void WindowWatcher::run() {
     g_watcher.store(nullptr);
 }
 
-}
+}  // namespace lsw::agent::win

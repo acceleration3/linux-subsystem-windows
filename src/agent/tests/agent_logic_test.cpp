@@ -15,6 +15,7 @@
 #include "lsw/agent/util/base64.hpp"
 #include "lsw/agent/util/wide_string.hpp"
 #include "lsw/agent/win/discovered_window.hpp"
+#include "lsw/agent/win/task_window.hpp"
 #include "lsw/linkproto/commands.hpp"
 
 #include <chrono>
@@ -592,15 +593,106 @@ static void test_launch_continuation() {
           "a launch that did not run the app's own executable is not");
 }
 
+void test_task_window() {
+    using lsw::agent::win::TaskWindow;
+    constexpr std::uint32_t kTopmost = 0x00000008;
+    const auto app = [] {
+        TaskWindow facts;
+        facts.visible = true;
+        facts.top_level = true;
+        facts.class_name = L"ApplicationFrameWindow";
+        return facts;
+    };
+    const auto owned = [&](bool owner_shown, TaskWindow::Front front) {
+        TaskWindow facts = app();
+        facts.class_name = L"Click2RunSetupUIClass";
+        facts.owned = true;
+        facts.owner_shown = owner_shown;
+        facts.front = front;
+        return facts;
+    };
+    check(app().qualifies(), "a visible unowned application window is a task window");
+    check(owned(false, TaskWindow::Front::Mine).qualifies(),
+          "a window owned by a hidden window is a task window when it is the one its owner chain shows");
+    check(owned(false, TaskWindow::Front::None).qualifies(),
+          "a window owned by a hidden window is a task window when its owner chain was never active");
+    check(!owned(false, TaskWindow::Front::Another).qualifies(),
+          "a window owned by a hidden window is no task window while another window stands for the chain");
+    check(!owned(true, TaskWindow::Front::Mine).qualifies() && !owned(true, TaskWindow::Front::Another).qualifies() &&
+              !owned(true, TaskWindow::Front::None).qualifies(),
+          "a dialog of a shown window is no task window");
+    auto asked = owned(true, TaskWindow::Front::Another);
+    asked.extended_style = TaskWindow::kAppWindow;
+    check(asked.qualifies(), "an owned window that asks for a taskbar button is a task window");
+
+    auto hidden = app();
+    hidden.visible = false;
+    auto cloaked = app();
+    cloaked.cloaked = true;
+    auto child = app();
+    child.top_level = false;
+    check(!hidden.qualifies() && !cloaked.qualifies() && !child.qualifies(),
+          "a hidden, cloaked or child window is no task window");
+
+    auto tool = app();
+    tool.extended_style = TaskWindow::kToolWindow | kTopmost;
+    auto passive = app();
+    passive.extended_style = TaskWindow::kNoActivate;
+    check(!tool.qualifies() && !passive.qualifies(), "a tool window or one that never activates is no task window");
+    tool.extended_style |= TaskWindow::kAppWindow;
+    passive.extended_style |= TaskWindow::kAppWindow;
+    check(tool.qualifies() && passive.qualifies(), "unless it asks for a taskbar button");
+    check(TaskWindow::styled_as_task(0) && TaskWindow::styled_as_task(kTopmost) &&
+              !TaskWindow::styled_as_task(TaskWindow::kToolWindow) &&
+              !TaskWindow::styled_as_task(TaskWindow::kNoActivate) &&
+              TaskWindow::styled_as_task(TaskWindow::kToolWindow | TaskWindow::kNoActivate | TaskWindow::kAppWindow),
+          "the style test alone tells tool and never-activating windows apart");
+
+    auto shell = app();
+    shell.shell_window = true;
+    shell.class_name = L"SomeOtherShell";
+    check(!shell.qualifies(), "the shell's desktop window is no task window whatever its class");
+    for (const wchar_t* name : {L"Progman", L"WorkerW", L"Shell_TrayWnd", L"Shell_SecondaryTrayWnd",
+                                L"Windows.UI.Core.CoreWindow", L"IME", L"MSCTFIME UI"}) {
+        auto surface = app();
+        surface.class_name = name;
+        surface.extended_style = TaskWindow::kAppWindow;
+        check(TaskWindow::system_surface(name) && !surface.qualifies(),
+              "the desktop, the taskbars, shell-hosted core windows and input method windows are no task windows");
+    }
+    auto folder = app();
+    folder.class_name = L"CabinetWClass";
+    check(!TaskWindow::system_surface(L"CabinetWClass") && !TaskWindow::system_surface(L"progman") &&
+              !TaskWindow::system_surface(L"") && folder.qualifies(),
+          "a folder window of the shell's process is a task window");
+
+    auto tooltip = owned(true, TaskWindow::Front::Another);
+    tooltip.class_name = L"tooltips_class32";
+    tooltip.extended_style = TaskWindow::kToolWindow | kTopmost;
+    auto menu = app();
+    menu.class_name = L"#32768";
+    menu.extended_style = TaskWindow::kToolWindow | kTopmost;
+    auto dropdown = owned(true, TaskWindow::Front::Another);
+    dropdown.class_name = L"Chrome_WidgetWin_2";
+    check(!tooltip.qualifies() && !menu.qualifies() && !dropdown.qualifies(),
+          "tooltips, menus and dropdown popups are no task windows");
+    auto parked = app();
+    parked.class_name = L"SvchostParkedWindow";
+    check(parked.qualifies(),
+          "a captioned unowned window parked off screen is a task window; its place is the manager's to judge");
+}
+
 void test_window_announcements() {
     using lsw::agent::apps::WindowAnnouncements;
     using lsw::agent::win::DiscoveredWindow;
-    const auto window = [](std::uintptr_t hwnd, std::uint32_t pid, bool caption, std::uintptr_t owner) {
+    const auto window = [](std::uintptr_t hwnd, std::uint32_t pid, bool caption, std::uintptr_t owner,
+                           bool task = true) {
         DiscoveredWindow found{};
         found.hwnd = hwnd;
         found.pid = pid;
         found.owner = owner;
         found.has_caption = caption;
+        found.task_window = task;
         found.exe_path = "C:\\app.exe";
         found.title = "window";
         found.client_w = 640;
@@ -613,20 +705,26 @@ void test_window_announcements() {
     WindowAnnouncements announcements;
     check(announcements.collect_pending().empty(), "nothing is announced before a window appears");
     announcements.appeared(window(1, 100, true, 0));
-    announcements.appeared(window(2, 200, false, 0));
-    announcements.appeared(window(3, 300, true, 1));
+    announcements.appeared(window(2, 200, true, 0, false));
+    announcements.appeared(window(3, 300, true, 1, false));
     auto events = announcements.collect_pending();
     check(events.size() == 1 && events[0].topic == lsw::linkproto::topic::kWindowAppeared,
-          "only a captioned top-level window without an owner is announced");
+          "only a task window is announced");
     const auto& row = events[0].payload;
     check(row == window(1, 100, true, 0).row(), "the announcement is the window's list_windows row");
     for (const char* field : {"hwnd", "owner", "pid", "root_pid", "title", "exe_path", "client_w", "client_h",
-                              "screen_x", "screen_y", "minimized", "maximized", "has_caption", "on_screen"}) {
+                              "screen_x", "screen_y", "minimized", "maximized", "has_caption", "task_window",
+                              "on_screen"}) {
         check(row.contains(field), "a window row carries every field the manager reads");
     }
-    check(row["pid"] == 100 && row["root_pid"] == 0 && row["has_caption"] == true && row["on_screen"] == true &&
-              row["client_w"] == 640 && row["screen_y"] == 20,
+    check(row["pid"] == 100 && row["root_pid"] == 0 && row["has_caption"] == true && row["task_window"] == true &&
+              row["on_screen"] == true && row["client_w"] == 640 && row["screen_y"] == 20,
           "a window row carries the window's values");
+    announcements.appeared(window(4, 400, false, 9));
+    events = announcements.collect_pending();
+    check(events.size() == 1 && events[0].payload["has_caption"] == false && events[0].payload["owner"] == 9 &&
+              events[0].payload["task_window"] == true,
+          "an uncaptioned task window with an owner is announced, with its caption and owner as they are");
     check(announcements.collect_pending().empty(), "an announcement is delivered once");
 
     auto moved = window(1, 100, true, 0);
@@ -668,6 +766,7 @@ int main() {
     test_display_request();
     test_start_menu_filter();
     test_document_command();
+    test_task_window();
     test_window_announcements();
     std::printf("agent logic: %d checks passed\n", g_checks);
     return 0;

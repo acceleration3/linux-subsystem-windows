@@ -82,6 +82,7 @@ set(_lsw_agent_win_sources
     src/win/mirror_process.cpp
     src/win/window.cpp
     src/win/discovered_window.cpp
+    src/win/task_window.cpp
     src/win/window_watcher.cpp
     src/win/icon_extractor.cpp
     src/win/gdiplus_runtime.cpp

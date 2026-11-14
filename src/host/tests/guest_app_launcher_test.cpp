@@ -489,12 +489,12 @@ int main(int argc, char** argv) {
         QFile marker(frame);
         check(marker.open(QIODevice::WriteOnly), "frames flow for the exclusivity scenario");
         marker.close();
-        const auto window = [](quint32 pid, quint32 root_pid, bool caption, const char* image) {
+        const auto window = [](quint32 pid, quint32 root_pid, bool task, const char* image) {
             return nlohmann::json{{"hwnd", pid * 10},   {"owner", 0},          {"pid", pid},
-                                  {"root_pid", root_pid}, {"has_caption", caption}, {"exe_path", image},
+                                  {"root_pid", root_pid}, {"has_caption", task}, {"exe_path", image},
                                   {"title", "window"},  {"client_w", 640},     {"client_h", 480},
                                   {"screen_x", 100},    {"screen_y", 100},     {"minimized", false},
-                                  {"on_screen", true}};
+                                  {"on_screen", true},  {"task_window", task}};
         };
         const auto appeared = [&](nlohmann::json row) {
             row["event"] = "window_appeared";
@@ -628,8 +628,30 @@ int main(int argc, char** argv) {
         auto tiny = window(61, 0, true, "C:\\tiny.exe");
         tiny["client_w"] = 20;
         tiny["client_h"] = 20;
-        auto owned = window(70, 0, true, "C:\\dialog.exe");
+        auto owned = window(70, 0, false, "C:\\dialog.exe");
         owned["owner"] = 5;
+        owned["has_caption"] = true;
+        auto office = window(10172, 0, true,
+                             "C:\\Program Files\\Common Files\\microsoft shared\\ClickToRun\\OfficeC2RClient.exe");
+        office["owner"] = 591164;
+        office["has_caption"] = false;
+        office["title"] = "Microsoft 365 and Office";
+        office["client_w"] = 823;
+        office["client_h"] = 503;
+        office["screen_x"] = 890;
+        office["screen_y"] = 460;
+        auto taskbar = window(50, 0, false, "C:\\Windows\\explorer.exe");
+        taskbar["hwnd"] = 501;
+        taskbar["client_w"] = 1920;
+        taskbar["client_h"] = 48;
+        auto tool = window(62, 0, false, "C:\\palette.exe");
+        tool["has_caption"] = true;
+        auto popup = window(63, 0, false, "C:\\menu.exe");
+        popup["owner"] = 7;
+        auto folder = window(50, 0, true, "C:\\Windows\\explorer.exe");
+        folder["hwnd"] = 502;
+        auto unlabelled = window(64, 0, true, "C:\\unlabelled.exe");
+        unlabelled.erase("task_window");
         auto minimized = window(80, 0, true, "C:\\minimized.exe");
         minimized["minimized"] = true;
         minimized["on_screen"] = false;
@@ -642,17 +664,22 @@ int main(int argc, char** argv) {
                          window(900, 0, true, "C:\\installer.exe"),
                          another,
                          window(50, 0, false, "C:\\Windows\\explorer.exe"),
+                         taskbar,
                          parked,
                          tiny,
                          owned,
+                         tool,
+                         popup,
+                         unlabelled,
                          minimized};
         close_desktop();
         check(wait_for([&] { return mirrored() == QList<quint32>{80, 123, 321, 900}; }),
-              "closing the desktop mirrors each launched application that shows a window, captioned or "
-              "not, and one mirror per other process with a captioned window on screen");
+              "closing the desktop mirrors each launched application that shows a window, a task window or "
+              "not, and one mirror per other process with a task window on screen");
         settle();
         check(mirrored() == QList<quint32>{80, 123, 321, 900},
-              "uncaptioned, owned, off-screen and degenerate windows get no mirror of their own");
+              "the desktop background, the taskbar, an owned dialog, a tool window, a popup, a row that does "
+              "not say it is a task window and off-screen and degenerate task windows get no mirror of their own");
         check(desktop_closes == 1 && desktop_opens == 1, "the desktop closing is said once");
         check(!mirrors.desktop_open() && launcher.running(first) && launcher.running(second) &&
                   !launcher.opening(first) && !launcher.opening(second),
@@ -661,16 +688,30 @@ int main(int argc, char** argv) {
 
         appeared(window(950, 0, true, "C:\\AppInstaller.exe"));
         check(wait_for([&] { return mirrored().contains(950); }),
-              "an unowned captioned window appearing with no desktop open gets a mirror");
+              "a captioned unowned task window appearing with no desktop open gets a mirror");
+        appeared(office);
+        check(wait_for([&] { return mirrored().contains(10172); }),
+              "an uncaptioned task window owned by a hidden window gets a mirror");
+        appeared(taskbar);
+        appeared(tool);
+        appeared(popup);
+        appeared(unlabelled);
+        settle();
+        check(!mirrored().contains(50), "the shell's own windows start no mirror of its process");
+        appeared(folder);
+        check(wait_for([&] { return mirrored().contains(50); }),
+              "a folder window gets a mirror of the shell's process");
+        appeared(taskbar);
+        appeared(folder);
         appeared(window(950, 0, true, "C:\\AppInstaller.exe"));
         appeared(window(951, 0, false, "C:\\Windows\\explorer.exe"));
         appeared(parked);
         appeared(owned);
         appeared(window(501, 123, true, "C:\\first-helper.exe"));
         settle();
-        check(badges(false).size() == 5 && badges(false).count(launched_badges.first()) == 5,
+        check(badges(false).size() == 7 && badges(false).count(launched_badges.first()) == 7,
               "a mirror started for a window nothing launched is given the same icon badge as a launched application's");
-        check(mirrored() == QList<quint32>{80, 123, 321, 900, 950},
+        check(mirrored() == QList<quint32>{50, 80, 123, 321, 900, 950, 10172},
               "a second window of a mirrored process and windows not worth a mirror start none");
 
         launch_pid = 555;

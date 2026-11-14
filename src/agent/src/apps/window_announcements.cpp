@@ -8,7 +8,7 @@
 namespace lsw::agent::apps {
 
 void WindowAnnouncements::appeared(const win::DiscoveredWindow& window) {
-    if (!window.has_caption || window.owner != 0) {
+    if (!window.task_window) {
         return;
     }
     const std::lock_guard lock(mu_);

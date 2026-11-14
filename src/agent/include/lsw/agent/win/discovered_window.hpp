@@ -18,6 +18,7 @@ struct DiscoveredWindow {
     bool minimized;
     bool maximized;
     bool has_caption;
+    bool task_window;
     bool on_screen;
 
     [[nodiscard]] nlohmann::json row() const;

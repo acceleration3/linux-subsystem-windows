@@ -8,7 +8,6 @@
 #include <QFileInfo>
 #include <QMetaObject>
 
-#include <cstdint>
 #include <iterator>
 #include <nlohmann/json.hpp>
 #include <string>
@@ -27,8 +26,7 @@ GuestMirrors::GuestWindow::GuestWindow(const nlohmann::json& row)
     const bool placed = row.value("minimized", false) ||
                         (row.value("on_screen", false) && row.value("client_w", 0) >= kSmallestWindow &&
                          row.value("client_h", 0) >= kSmallestWindow);
-    mirrorable = pid != 0 && row.value("has_caption", false) && row.value("owner", std::uint64_t{0}) == 0 &&
-                 placed;
+    mirrorable = pid != 0 && row.value("task_window", false) && placed;
 }
 
 GuestMirrors::GuestMirrors(link::AgentRpcClient& rpc, QObject* parent) : QObject(parent), rpc_(rpc) {

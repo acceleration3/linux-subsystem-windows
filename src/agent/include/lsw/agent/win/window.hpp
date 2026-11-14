@@ -14,6 +14,8 @@ public:
 
     [[nodiscard]] static std::optional<DiscoveredWindow> describe(std::uintptr_t hwnd);
 
+    [[nodiscard]] static bool task_window(std::uintptr_t hwnd);
+
     [[nodiscard]] static bool close_window(std::uintptr_t hwnd);
 
     [[nodiscard]] static bool system_command(std::uintptr_t hwnd,

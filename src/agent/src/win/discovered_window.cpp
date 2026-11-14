@@ -17,6 +17,7 @@ nlohmann::json DiscoveredWindow::row() const {
         {"minimized", minimized},
         {"maximized", maximized},
         {"has_caption", has_caption},
+        {"task_window", task_window},
         {"on_screen", on_screen},
     };
 }

@@ -17,6 +17,7 @@ add_executable(lsw_agent_logic_test
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/apps/launch_continuation.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/apps/window_announcements.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/win/discovered_window.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/win/task_window.cpp
 )
 
 target_include_directories(lsw_agent_logic_test
