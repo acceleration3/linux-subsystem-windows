@@ -33,6 +33,7 @@ public:
 
     void window_closed();
     void quit();
+    void hand_over();
 
 Q_SIGNALS:
     void tray_wanted(bool wanted);

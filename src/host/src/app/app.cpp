@@ -431,6 +431,9 @@ void App::spawn_manager_and_quit() {
 bool App::hand_over(const QStringList& args) {
     single_instance_.release();
     if (QProcess::startDetached(QCoreApplication::applicationFilePath(), args)) {
+        if (main_window_ != nullptr) {
+            main_window_->hand_over();
+        }
         quit();
         return true;
     }

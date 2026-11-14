@@ -52,6 +52,8 @@ public:
 
     RestartResult restart_guest(QString* reason = nullptr);
 
+    void hand_over();
+
 Q_SIGNALS:
     void wizard_requested();
     void launch_requested(const QString& app_id);

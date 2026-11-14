@@ -76,11 +76,50 @@ int main(int argc, char** argv) {
 
     check(ManagerSettings::default_value(K::kCloseToTray).toBool(),
           "the manager stays in the tray unless that is turned off");
-    check(!ManagerSettings::default_value(K::kShutGuestOnQuit).toBool(),
-          "quitting leaves the guest running unless the setting is turned on");
+    check(ManagerSettings::default_value(K::kShutGuestOnQuit).toBool(),
+          "quitting shuts the guest down unless the setting is turned off");
     check(!ManagerSettings::needs_restart(K::kShutGuestOnQuit),
           "the quit setting applies at once");
 
+    {
+        Machine machine;
+        int quits = 0;
+        ManagerExit untouched{settings,
+                              ManagerExit::Host{[&] { return machine.tray; },
+                                                [&] { return machine.guest_running; },
+                                                [&] { ++machine.shutdown_requests; }},
+                              nullptr, std::chrono::milliseconds{150}, std::chrono::milliseconds{10}};
+        QObject::connect(&untouched, &ManagerExit::quit_requested, [&] { ++quits; });
+        untouched.window_closed();
+        check(quits == 0 && machine.shutdown_requests == 0 && !untouched.leaving(),
+              "with the settings untouched, closing the window hides it and asks the guest nothing");
+        untouched.quit();
+        check(machine.shutdown_requests == 1 && quits == 0,
+              "with the settings untouched, quitting asks the guest to shut down and waits");
+        spin(60);
+        check(quits == 0, "for a guest that is still shutting down");
+        spin(400);
+        check(quits == 1 && machine.shutdown_requests == 1,
+              "no longer than the bound, having asked once");
+    }
+    {
+        Case c{settings, false, true};
+        c.exit.hand_over();
+        check(c.exit.finished() && c.seen.lefts == 1 && c.seen.quits == 0,
+              "handing over to another manager process takes the window and the tray icon away");
+        c.exit.window_closed();
+        c.exit.quit();
+        spin(40);
+        check(c.machine.shutdown_requests == 0 && c.seen.quits == 0,
+              "and leaves the guest alone, also when the windows are closed for the exit");
+    }
+    {
+        Case c{settings, true, true};
+        c.exit.quit();
+        c.exit.hand_over();
+        check(c.machine.shutdown_requests == 1 && !c.exit.finished(),
+              "a hand-over does not cut a quit that is already waiting for the guest");
+    }
     {
         Case c{settings, true, false};
         check(c.exit.stays_in_tray(), "with the option on and a tray there is a tray icon");

@@ -54,7 +54,7 @@ const QHash<QString, QVariant>& defaults() {
         {K::kAutostart, false},
 
         {K::kCloseToTray, true},
-        {K::kShutGuestOnQuit, false},
+        {K::kShutGuestOnQuit, true},
 
         {K::kLogManager, QStringLiteral("info")},
         {K::kLogMirrors, QStringLiteral("info")},

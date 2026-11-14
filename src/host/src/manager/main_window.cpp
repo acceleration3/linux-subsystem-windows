@@ -1020,6 +1020,10 @@ bool MainWindow::event(QEvent* e) {
     return QMainWindow::event(e);
 }
 
+void MainWindow::hand_over() {
+    exit_->hand_over();
+}
+
 void MainWindow::closeEvent(QCloseEvent* e) {
     if (exit_->finished()) {
         QMainWindow::closeEvent(e);

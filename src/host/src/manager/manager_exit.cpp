@@ -57,6 +57,14 @@ void ManagerExit::quit() {
     poll_.start();
 }
 
+void ManagerExit::hand_over() {
+    if (leaving()) {
+        return;
+    }
+    state_ = State::Finished;
+    Q_EMIT left();
+}
+
 void ManagerExit::poll() {
     if (!host_.guest_running()) {
         finish();
