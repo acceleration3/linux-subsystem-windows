@@ -248,6 +248,9 @@ void GuestMirrors::start(const QString& identity) {
     entries_[identity].application.activation_token.clear();
     auto* mirror = WindowMirror::of_application(rpc_, application, this);
     entries_[identity].mirror = mirror;
+    if (!entries_[identity].unowned && !application.aumid.isEmpty()) {
+        shown_by_.insert(application.aumid, identity);
+    }
     connect(mirror, &WindowMirror::app_identified, this, [this, identity, mirror](const QString& claim) {
         if (this->mirror(identity) == mirror) {
             identified(identity, claim);

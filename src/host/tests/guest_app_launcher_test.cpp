@@ -59,6 +59,10 @@ int fake_mirror(QCoreApplication& app) {
         std::puts("LISTENING 99999");
         std::fflush(stdout);
     } else {
+        const QByteArray frame_host_claim = qgetenv("LSW_TEST_FRAME_HOST_CLAIM");
+        if (!frame_host_claim.isEmpty() && !app.arguments().contains(QStringLiteral("--aumid"))) {
+            std::printf("APP %s\n", frame_host_claim.constData());
+        }
         std::printf("LIST");
         std::fflush(stdout);
         QTimer::singleShot(10, &app, [] {
@@ -633,6 +637,14 @@ int main(int argc, char** argv) {
         launch_pid = 666;
         launcher.launch(store, QString());
         check(wait_for([&] { return opened == 4; }) && mirrored().contains(666), "a store application is mirrored");
+        qputenv("LSW_TEST_FRAME_HOST_CLAIM", store.aumid.toUtf8());
+        appeared(window(667, 0, true, "C:\\Windows\\System32\\ApplicationFrameHost.exe"));
+        check(wait_for([&] { return mirrored().contains(667); }),
+              "the frame host of a store application starts a mirror when its window appears");
+        check(wait_for([&] { return !mirrored().contains(667); }) && mirrored().contains(666) &&
+                  launcher.running(store),
+              "a mirror that turns out to show a launched store application's windows gives way to that application's");
+        qunsetenv("LSW_TEST_FRAME_HOST_CLAIM");
 
         mirrors.open_desktop(QStringLiteral("test desktop"));
         check(wait_for([&] { return desktops == desktops_before + 2; }) && mirrored().isEmpty(),
