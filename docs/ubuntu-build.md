@@ -215,5 +215,3 @@ breaks `libwinpthread.a` which also expects MSVCRT-linked symbols.
   `#include <cstddef>` to a small number of files in `external/remotewin/`
   that rely on `std::size_t` being transitively included, which libstdc++ does
   but libc++ does not.
-
-Both are documented with step-by-step instructions in `docs/next.md`.
