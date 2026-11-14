@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -10,6 +11,8 @@ namespace lsw::agent::win {
 class Window {
 public:
     [[nodiscard]] static std::vector<DiscoveredWindow> enumerate();
+
+    [[nodiscard]] static std::optional<DiscoveredWindow> describe(std::uintptr_t hwnd);
 
     [[nodiscard]] static bool close_window(std::uintptr_t hwnd);
 

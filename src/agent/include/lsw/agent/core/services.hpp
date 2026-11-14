@@ -16,6 +16,7 @@ class Uia;
 
 namespace lsw::agent::win {
 class ClipboardWatcher;
+class WindowWatcher;
 }
 
 namespace lsw::agent::session {
@@ -45,6 +46,8 @@ public:
 
     [[nodiscard]] win::ClipboardWatcher* clipboard() noexcept { return clipboard_.get(); }
 
+    [[nodiscard]] win::WindowWatcher* windows() noexcept { return windows_.get(); }
+
     [[nodiscard]] session::SessionManager& sessions();
 
     void attach_sessions(std::unique_ptr<session::SessionManager> sessions);
@@ -63,6 +66,7 @@ private:
     win::Apartment apartment_;
     std::unique_ptr<uia::Uia> uia_;
     std::unique_ptr<win::ClipboardWatcher> clipboard_;
+    std::unique_ptr<win::WindowWatcher> windows_;
     std::unique_ptr<session::SessionManager> sessions_;
     mutable std::mutex mirror_level_mu_;
     std::string mirror_log_level_ = "info";

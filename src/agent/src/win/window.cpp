@@ -25,18 +25,28 @@ RECT frame_rect_of(HWND hwnd) {
 
 BOOL CALLBACK enum_proc(HWND hwnd, LPARAM lparam) {
     auto* out = reinterpret_cast<std::vector<DiscoveredWindow>*>(lparam);
+    if (auto found = Window::describe(reinterpret_cast<std::uintptr_t>(hwnd))) {
+        out->push_back(std::move(*found));
+    }
+    return TRUE;
+}
+
+}
+
+std::optional<DiscoveredWindow> Window::describe(std::uintptr_t hwnd_raw) {
+    auto* hwnd = reinterpret_cast<HWND>(hwnd_raw);
     if (!::IsWindowVisible(hwnd)) {
-        return TRUE;
+        return std::nullopt;
     }
     int cloaked = 0;
     if (::DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked)) == S_OK &&
         cloaked != 0) {
-        return TRUE;
+        return std::nullopt;
     }
     wchar_t cls[64] = {};
     ::GetClassNameW(hwnd, cls, 64);
     if (::lstrcmpiW(cls, L"tooltips_class32") == 0) {
-        return TRUE;
+        return std::nullopt;
     }
 
     int title_len = ::GetWindowTextLengthW(hwnd);
@@ -50,12 +60,12 @@ BOOL CALLBACK enum_proc(HWND hwnd, LPARAM lparam) {
     ::GetWindowThreadProcessId(hwnd, &pid);
     const std::wstring image = ProcessInfo::image_path(pid);
     if (!image.empty() && image == ProcessInfo::self_path()) {
-        return TRUE;
+        return std::nullopt;
     }
 
     const RECT fr = frame_rect_of(hwnd);
     if (fr.right - fr.left <= 0 || fr.bottom - fr.top <= 0) {
-        return TRUE;
+        return std::nullopt;
     }
     DiscoveredWindow w;
     w.hwnd = reinterpret_cast<std::uintptr_t>(hwnd);
@@ -71,10 +81,8 @@ BOOL CALLBACK enum_proc(HWND hwnd, LPARAM lparam) {
     w.minimized = ::IsIconic(hwnd) != FALSE;
     w.maximized = ::IsZoomed(hwnd) != FALSE;
     w.has_caption = (::GetWindowLongW(hwnd, GWL_STYLE) & WS_CAPTION) == WS_CAPTION;
-    out->push_back(std::move(w));
-    return TRUE;
-}
-
+    w.on_screen = w.minimized || ::MonitorFromRect(&fr, MONITOR_DEFAULTTONULL) != nullptr;
+    return w;
 }
 
 bool Window::system_command(std::uintptr_t hwnd_raw, const std::string& command) {

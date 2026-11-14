@@ -1,6 +1,7 @@
 #include "lsw/agent/apps/launch_continuation.hpp"
 #include "lsw/agent/apps/program_command.hpp"
 #include "lsw/agent/apps/start_menu_filter.hpp"
+#include "lsw/agent/apps/window_announcements.hpp"
 #include "lsw/agent/core/command_line.hpp"
 #include "lsw/agent/install/job_id_generator.hpp"
 #include "lsw/agent/install/url_file_name.hpp"
@@ -12,6 +13,8 @@
 #include "lsw/agent/system/scale_steps.hpp"
 #include "lsw/agent/util/base64.hpp"
 #include "lsw/agent/util/wide_string.hpp"
+#include "lsw/agent/win/discovered_window.hpp"
+#include "lsw/linkproto/commands.hpp"
 
 #include <chrono>
 #include <cstdint>
@@ -556,6 +559,60 @@ static void test_launch_continuation() {
           "a launch that did not run the app's own executable is not");
 }
 
+void test_window_announcements() {
+    using lsw::agent::apps::WindowAnnouncements;
+    using lsw::agent::win::DiscoveredWindow;
+    const auto window = [](std::uintptr_t hwnd, std::uint32_t pid, bool caption, std::uintptr_t owner) {
+        DiscoveredWindow found{};
+        found.hwnd = hwnd;
+        found.pid = pid;
+        found.owner = owner;
+        found.has_caption = caption;
+        found.exe_path = "C:\\app.exe";
+        found.title = "window";
+        found.client_w = 640;
+        found.client_h = 480;
+        found.screen_x = 10;
+        found.screen_y = 20;
+        found.on_screen = true;
+        return found;
+    };
+    WindowAnnouncements announcements;
+    check(announcements.collect_pending().empty(), "nothing is announced before a window appears");
+    announcements.appeared(window(1, 100, true, 0));
+    announcements.appeared(window(2, 200, false, 0));
+    announcements.appeared(window(3, 300, true, 1));
+    auto events = announcements.collect_pending();
+    check(events.size() == 1 && events[0].topic == lsw::linkproto::topic::kWindowAppeared,
+          "only a captioned top-level window without an owner is announced");
+    const auto& row = events[0].payload;
+    check(row == window(1, 100, true, 0).row(), "the announcement is the window's list_windows row");
+    for (const char* field : {"hwnd", "owner", "pid", "root_pid", "title", "exe_path", "client_w", "client_h",
+                              "screen_x", "screen_y", "minimized", "maximized", "has_caption", "on_screen"}) {
+        check(row.contains(field), "a window row carries every field the manager reads");
+    }
+    check(row["pid"] == 100 && row["root_pid"] == 0 && row["has_caption"] == true && row["on_screen"] == true &&
+              row["client_w"] == 640 && row["screen_y"] == 20,
+          "a window row carries the window's values");
+    check(announcements.collect_pending().empty(), "an announcement is delivered once");
+
+    auto moved = window(1, 100, true, 0);
+    moved.screen_x = 500;
+    announcements.appeared(window(1, 100, true, 0));
+    announcements.appeared(moved);
+    events = announcements.collect_pending();
+    check(events.size() == 1 && events[0].payload["screen_x"] == 500,
+          "a window shown again before delivery is announced once, with its latest state");
+
+    for (std::uintptr_t hwnd = 1; hwnd <= WindowAnnouncements::kMostPending + 5; ++hwnd) {
+        announcements.appeared(window(hwnd, 100, true, 0));
+    }
+    events = announcements.collect_pending();
+    check(events.size() == WindowAnnouncements::kMostPending && events.front().payload["hwnd"] == 6 &&
+              events.back().payload["hwnd"] == WindowAnnouncements::kMostPending + 5,
+          "undelivered announcements are bounded and the oldest are dropped");
+}
+
 int main() {
     test_launch_continuation();
     test_base64_vectors();
@@ -577,6 +634,7 @@ int main() {
     test_scale_steps();
     test_start_menu_filter();
     test_document_command();
+    test_window_announcements();
     std::printf("agent logic: %d checks passed\n", g_checks);
     return 0;
 }

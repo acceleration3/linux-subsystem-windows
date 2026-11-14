@@ -81,6 +81,8 @@ set(_lsw_agent_rpc_sources
 set(_lsw_agent_win_sources
     src/win/mirror_process.cpp
     src/win/window.cpp
+    src/win/discovered_window.cpp
+    src/win/window_watcher.cpp
     src/win/icon_extractor.cpp
     src/win/gdiplus_runtime.cpp
     src/win/com.cpp
@@ -146,6 +148,7 @@ set(_lsw_agent_apps_sources
     src/apps/import_resolver.cpp
     src/apps/launch_watcher.cpp
     src/apps/upload_store.cpp
+    src/apps/window_announcements.cpp
 )
 set(_lsw_agent_install_sources
     src/install/installer.cpp

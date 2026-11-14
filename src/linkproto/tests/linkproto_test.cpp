@@ -191,6 +191,8 @@ void test_command_names_unique() {
         topic::kConsoleOutput,   topic::kConsoleClosed,
         topic::kUiaWindowOpened, topic::kUiaWindowClosed, topic::kUiaFocusChanged,
         topic::kUiaStateChanged, topic::kUiaTitleChanged, topic::kUiaModalChanged,
+        topic::kAppsChanged,     topic::kAppError,        topic::kLaunchEnded,
+        topic::kWindowAppeared,  topic::kClipboardChanged,
     };
     std::set<std::string> topic_seen;
     for (const char* name : topics) {
