@@ -43,6 +43,8 @@ public:
     void launch_settled();
 
 Q_SIGNALS:
+    void host_started(qint64 pid);
+    void host_ended(qint64 pid);
     void desktop_opened();
     void desktop_resized(const QSize& pixels);
     void desktop_closed();
@@ -72,6 +74,7 @@ private:
 
     [[nodiscard]] QString window_key(quint32 pid) const;
     [[nodiscard]] QString output() const;
+    void follow_host(WindowMirror* mirror);
     void start(const QString& identity);
     void remove(const QString& identity);
     void identified(const QString& identity, const QString& claim);

@@ -18,6 +18,7 @@ const QHash<QString, QVariant>& defaults() {
         {K::kCpuCores, VmSizing::host_cores()},
         {K::kMemoryMib, 8192},
         {K::kDiskGib, 60},
+        {K::kPriority, QStringLiteral("normal")},
 
         {K::kDisplayModes, QStringList{}},
         {K::kMatchHostOutput, false},

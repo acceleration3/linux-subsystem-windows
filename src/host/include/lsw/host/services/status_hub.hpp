@@ -5,6 +5,7 @@
 #include "lsw/host/services/guest_sessions.hpp"
 #include "lsw/host/services/guest_update_status.hpp"
 #include "lsw/host/services/host_window_status.hpp"
+#include "lsw/host/services/priority_status.hpp"
 #include "lsw/host/services/usb_status.hpp"
 #include "lsw/host/services/vm_status.hpp"
 #include "lsw/host/vm/avgpu_log.hpp"
@@ -55,12 +56,15 @@ public:
     [[nodiscard]] const GuestUpdateStatus& update() const noexcept { return update_; }
 
     [[nodiscard]] const ClipboardStatus& clipboard() const noexcept { return clipboard_; }
+    [[nodiscard]] const PriorityStatus& priority() const noexcept { return priority_; }
 
     void set_vm(const VmStatus& status);
 
     void set_update(const GuestUpdateStatus& status);
 
     void set_clipboard(const ClipboardStatus& status);
+
+    void set_priority(const PriorityStatus& status);
 
     void refresh(Area area);
 
@@ -126,6 +130,7 @@ private:
     UsbStatus usb_;
     GuestUpdateStatus update_;
     ClipboardStatus clipboard_;
+    PriorityStatus priority_;
     QVector<platform::HostUsbDevice> usb_host_;
     QHash<QString, QString> usb_names_;
     QVector<vm::DomainDescription::UsbDevice> usb_live_;

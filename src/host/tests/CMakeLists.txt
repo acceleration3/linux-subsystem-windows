@@ -132,6 +132,13 @@ target_compile_definitions(lsw_host_one_to_one_desktop_test PRIVATE QT_NO_KEYWOR
 add_test(NAME lsw_host_one_to_one_desktop_test COMMAND lsw_host_one_to_one_desktop_test)
 set_tests_properties(lsw_host_one_to_one_desktop_test PROPERTIES TIMEOUT 30)
 
+add_executable(lsw_host_vm_priority_test vm_priority_test.cpp)
+target_link_libraries(lsw_host_vm_priority_test PRIVATE lsw_host_manager LSW::CompileOptions)
+target_compile_definitions(lsw_host_vm_priority_test PRIVATE QT_NO_KEYWORDS)
+add_test(NAME lsw_host_vm_priority_test COMMAND lsw_host_vm_priority_test)
+set_tests_properties(lsw_host_vm_priority_test PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)
+
 add_executable(lsw_host_display_refresh_test display_refresh_test.cpp)
 target_link_libraries(lsw_host_display_refresh_test
     PRIVATE

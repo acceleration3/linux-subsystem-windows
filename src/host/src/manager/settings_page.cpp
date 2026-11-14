@@ -20,6 +20,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QStringList>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -133,6 +134,21 @@ void SettingsPage::build_machine() {
                 .arg(config::VmSizing::host_cores()),
             cores);
 
+    auto* priority_row = add_row(
+        machine, K::kPriority, QStringLiteral("Priority"), QString{},
+        controls_->choice(K::kPriority, {
+                                            {QStringLiteral("Normal"), QStringLiteral("normal")},
+                                            {QStringLiteral("High"), QStringLiteral("high")},
+                                            {QStringLiteral("Highest"), QStringLiteral("highest")},
+                                        }));
+    priority_note_ = priority_row->findChild<QLabel*>(QStringLiteral("rowDescription"));
+    connect(&status_, &services::StatusHub::changed, this, [this](services::StatusHub::Area area) {
+        if (area == services::StatusHub::Area::Host) {
+            refresh_priority_note();
+        }
+    });
+    refresh_priority_note();
+
     const auto host_mib = platform::HostMemory::total_mib();
     add_row(machine, K::kMemoryMib, QStringLiteral("Memory"),
             host_mib ? QStringLiteral("Fixed: the guest holds all of it while it runs. %1 GiB on "
@@ -163,6 +179,65 @@ void SettingsPage::build_machine() {
                 }
             });
     follow_disk();
+}
+
+QString SettingsPage::priority_note(const services::PriorityStatus& status) {
+    using Level = services::PriorityStatus::Level;
+    QStringList parts;
+    switch (status.wanted) {
+    case Level::Normal:
+        parts << QStringLiteral("The guest shares the processors with other programs like any "
+                                "program.");
+        break;
+    case Level::High:
+        parts << QStringLiteral("When the processors are busy the guest gets time ahead of other "
+                                "programs.");
+        break;
+    case Level::Highest:
+        parts << QStringLiteral("As High, and the threads that carry the picture run ahead of "
+                                "ordinary threads.");
+        break;
+    }
+    if (status.wanted == Level::Normal) {
+        if (status.weight_raised) {
+            parts << QStringLiteral("The larger share the guest had could not be taken back; it "
+                                    "ends when the guest stops.");
+        }
+        return parts.join(QLatin1Char(' '));
+    }
+    if (!status.vm_running) {
+        parts << QStringLiteral("In effect once the guest runs.");
+        return parts.join(QLatin1Char(' '));
+    }
+    if (status.weight_refused) {
+        parts << QStringLiteral("Not in effect: this session did not let the manager give the "
+                                "guest a larger share of the processors.");
+    }
+    if (status.wanted != Level::Highest) {
+        return parts.join(QLatin1Char(' '));
+    }
+    if (status.threads_unnamed) {
+        parts << QStringLiteral("The picture threads stay at normal priority: QEMU's threads "
+                                "carry no names to tell them apart.");
+    } else if (status.threads_refused) {
+        parts << (status.threads_raised
+                      ? QStringLiteral("The system refused the priority for some of the picture "
+                                       "threads.")
+                      : QStringLiteral("The picture threads stay at normal priority: this "
+                                       "account's limits do not allow a higher one."));
+    }
+    if (status.clamped()) {
+        parts << QStringLiteral("This account's limits allow nice %1 rather than %2.")
+                     .arg(status.nice)
+                     .arg(status.wanted_nice);
+    }
+    return parts.join(QLatin1Char(' '));
+}
+
+void SettingsPage::refresh_priority_note() {
+    if (priority_note_ != nullptr) {
+        priority_note_->setText(priority_note(status_.priority()));
+    }
 }
 
 void SettingsPage::build_startup() {

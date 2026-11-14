@@ -26,6 +26,7 @@ public:
         static constexpr QLatin1StringView kCpuCores{"machine/cpu_cores"};
         static constexpr QLatin1StringView kMemoryMib{"machine/memory_mib"};
         static constexpr QLatin1StringView kDiskGib{"machine/disk_gib"};
+        static constexpr QLatin1StringView kPriority{"machine/priority"};
         static constexpr QLatin1StringView kDisplayModes{"display/modes"};
         static constexpr QLatin1StringView kMatchHostOutput{"display/match_host_output"};
         static constexpr QLatin1StringView kOneToOneDesktop{"display/one_to_one_desktop"};

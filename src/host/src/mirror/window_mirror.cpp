@@ -75,6 +75,10 @@ WindowMirror::WindowMirror(link::AgentRpcClient& rpc, QString what, QStringList 
         fail(QStringLiteral("No window appeared within 60 seconds. The application may still "
                             "be running in Windows; open the guest desktop or try again."));
     });
+    connect(host_end_, &QProcess::started, this, [this] {
+        host_pid_ = host_end_->processId();
+        Q_EMIT host_started(host_pid_);
+    });
     connect(host_end_, &QProcess::readyReadStandardOutput, this, &WindowMirror::read_status);
     connect(host_end_, &QProcess::readyReadStandardError, this, &WindowMirror::read_log);
     connect(host_end_, &QProcess::finished, this, &WindowMirror::on_host_end_finished);
@@ -106,6 +110,7 @@ void WindowMirror::on_host_end_finished(int code, QProcess::ExitStatus status) {
     read_status();
     read_log();
     log_.finish();
+    Q_EMIT host_ended(std::exchange(host_pid_, 0));
     LSW_INFO("mirror: {} exited with code {}{} after {:.1f} s", what_.toStdString(), code,
              status == QProcess::CrashExit ? " (crashed)" : "", static_cast<double>(running_.elapsed()) / 1000.0);
     deadline_.stop();

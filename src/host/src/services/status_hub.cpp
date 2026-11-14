@@ -282,6 +282,14 @@ void StatusHub::set_clipboard(const ClipboardStatus& status) {
     Q_EMIT changed(Area::Host);
 }
 
+void StatusHub::set_priority(const PriorityStatus& status) {
+    if (status == priority_) {
+        return;
+    }
+    priority_ = status;
+    Q_EMIT changed(Area::Host);
+}
+
 void StatusHub::boot_started(const QUuid& uuid) {
     if (uuid == vm_.uuid && !uuid.isNull()) {
         boot_clock_.start();

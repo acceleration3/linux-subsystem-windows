@@ -8,6 +8,8 @@
 #include "lsw/host/config/pending_changes.hpp"
 #include "lsw/host/config/settings.hpp"
 #include "lsw/host/config/vm_state.hpp"
+#include "lsw/host/platform/cpu_scope.hpp"
+#include "lsw/host/platform/process_threads.hpp"
 #include "lsw/host/link/agent_guest_stats_probe.hpp"
 #include "lsw/host/link/agent_rpc_client.hpp"
 #include "lsw/host/services/agent_log_levels.hpp"
@@ -23,6 +25,7 @@
 #include "lsw/host/services/one_to_one_desktop.hpp"
 #include "lsw/host/services/status_hub.hpp"
 #include "lsw/host/services/usb_passthrough.hpp"
+#include "lsw/host/services/vm_priority.hpp"
 #include "lsw/host/vm/libvirt_connection.hpp"
 #include "lsw/host/vm/lifecycle.hpp"
 #include "lsw/host/vm/vm_log_files.hpp"
@@ -116,6 +119,9 @@ private:
     mirror::GuestMirrors mirrors_;
     apps::GuestAppLauncher app_launcher_;
     OneToOneDesktop one_to_one_;
+    platform::SystemdCpuScope cpu_scope_;
+    platform::ProcProcessThreads process_threads_;
+    VmPriority priority_;
     bool agent_online_ = false;
 };
 

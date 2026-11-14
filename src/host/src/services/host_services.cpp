@@ -5,6 +5,7 @@
 #include "lsw/host/platform/dolphin_places.hpp"
 #include "lsw/host/platform/gtk_bookmarks.hpp"
 #include "lsw/host/platform/guest_smb_share.hpp"
+#include "lsw/host/platform/qemu_process.hpp"
 #include "lsw/host/link/agent_reply.hpp"
 #include "lsw/host/services/domain_inputs.hpp"
 #include "lsw/linkproto/commands.hpp"
@@ -63,7 +64,10 @@ HostServices::HostServices(QObject* parent)
           settings_, rpc_, log_store_, [this] { return status_.vm().agent_online(); },
           [this] { return status_.vm().running(); }, this),
       mirrors_(rpc_, this), app_launcher_(rpc_, mirrors_, this),
-      one_to_one_(manager_settings_, guest_display(), this) {
+      one_to_one_(manager_settings_, guest_display(), this),
+      priority_(
+          manager_settings_, cpu_scope_, process_threads_,
+          [this] { return platform::QemuProcess::pid_of(status_.vm().uuid); }, this) {
     log_store_.attach(rpc_);
 
     lifecycle_.set_before_start([this] { vm_logs_.prepare_start(); });
@@ -85,6 +89,15 @@ HostServices::HostServices(QObject* parent)
     connect(&mirrors_, &mirror::GuestMirrors::desktop_opened, &one_to_one_, &OneToOneDesktop::opened);
     connect(&mirrors_, &mirror::GuestMirrors::desktop_resized, &one_to_one_, &OneToOneDesktop::resized);
     connect(&mirrors_, &mirror::GuestMirrors::desktop_closed, &one_to_one_, &OneToOneDesktop::closed);
+    connect(&mirrors_, &mirror::GuestMirrors::host_started, &priority_, &VmPriority::mirror_started);
+    connect(&mirrors_, &mirror::GuestMirrors::host_ended, &priority_, &VmPriority::mirror_ended);
+    connect(&priority_, &VmPriority::changed, this, [this] { status_.set_priority(priority_.status()); });
+    status_.set_priority(priority_.status());
+    connect(&status_, &StatusHub::changed, this, [this](StatusHub::Area area) {
+        if (area == StatusHub::Area::Vm) {
+            priority_.vm_seen(status_.vm().running() ? status_.vm().domain_id : -1);
+        }
+    });
     connect(&status_, &StatusHub::changed, this, [this](StatusHub::Area area) {
         if (area != StatusHub::Area::Vm || status_.vm().agent_online() == agent_online_) {
             return;

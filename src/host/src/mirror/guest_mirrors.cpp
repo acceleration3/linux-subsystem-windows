@@ -46,12 +46,18 @@ QString GuestMirrors::output() const {
     return output_source_ ? output_source_() : QString();
 }
 
+void GuestMirrors::follow_host(WindowMirror* mirror) {
+    connect(mirror, &WindowMirror::host_started, this, &GuestMirrors::host_started);
+    connect(mirror, &WindowMirror::host_ended, this, &GuestMirrors::host_ended);
+}
+
 void GuestMirrors::open_desktop(const QString& title) {
     if (desktop_) {
         desktop_->raise(QString());
         return;
     }
     auto* desktop = WindowMirror::of_desktop(rpc_, title, output(), this);
+    follow_host(desktop);
     connect(desktop, &WindowMirror::finished, this, [this, desktop] {
         desktop->deleteLater();
         if (desktop_ == desktop) {
@@ -219,6 +225,7 @@ void GuestMirrors::show(const QString& identity, const WindowMirror::Application
             const QString beside = identity + QLatin1Char('#') + QString::number(kept.application.pid);
             entries_.insert(beside, kept);
             kept.mirror->disconnect(this);
+            follow_host(kept.mirror);
             connect(kept.mirror, &WindowMirror::finished, this, [this, beside, mirror = kept.mirror.data()] {
                 if (this->mirror(beside) == mirror) {
                     remove(beside);
@@ -249,6 +256,7 @@ void GuestMirrors::start(const QString& identity) {
     entries_[identity].application.activation_token.clear();
     auto* mirror = WindowMirror::of_application(rpc_, application, this);
     entries_[identity].mirror = mirror;
+    follow_host(mirror);
     if (!entries_[identity].unowned && !application.aumid.isEmpty()) {
         shown_by_.insert(application.aumid, identity);
     }
