@@ -435,13 +435,6 @@ int main(int argc, char** argv) {
         check(t.api().isEmpty(), "an app whose context names no API shows none");
         t.sub_api = 8;
         check(t.api() == QStringLiteral("Direct3D"), "a Direct3D context is named");
-        t.d3d_versions = 1U << 9;
-        check(t.api() == QStringLiteral("Direct3D 9"), "a Direct3D context that opened a version 9 device says so");
-        t.d3d_versions = 1U << 12;
-        check(t.api() == QStringLiteral("Direct3D 12"), "a version 12 device is named");
-        t.d3d_versions = (1U << 10) | (1U << 11);
-        check(t.api() == QStringLiteral("Direct3D 10/11"), "a context that opened two versions names both");
-        t.d3d_versions = 0;
         t.sub_api = 1;
         check(t.api() == QStringLiteral("Vulkan"), "a Vulkan context is named");
         t.sub_api = 2;

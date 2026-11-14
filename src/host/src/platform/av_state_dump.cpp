@@ -233,7 +233,6 @@ QHash<QString, QString> AvStateDump::fields(const QByteArray& line, QString* pat
 void AvStateDump::parse(const QByteArray& dump, Snapshot& into) {
     QHash<quint64, int> context_index;
     QHash<quint32, int> channel_index;
-    QHash<quint32, quint32> session_versions;
     for (const Context& context : std::as_const(into.contexts)) {
         context_index.insert(context_key(context.device, context.id), static_cast<int>(context_index.size()));
     }
@@ -303,12 +302,6 @@ void AvStateDump::parse(const QByteArray& dump, Snapshot& into) {
                     std::max(stats.largest_free_run_at_refusal, number_or_zero(values, QStringLiteral("largest_free_run_at_refusal")));
                 into.window_stats = stats;
             }
-        } else if (n == 4 && parts.at(0) == QLatin1String("executor") && parts.at(2) == QLatin1String("session")) {
-            if (const auto session = segment_id(parts.at(3))) {
-                session_versions.insert(*session,
-                                        static_cast<quint32>(number_or_zero(values, QStringLiteral("d3d_versions"))));
-            }
-            into.executor = true;
         } else if (n == 6 && parts.at(0) == QLatin1String("executor") && parts.at(2) == QLatin1String("session")
                    && parts.at(4) == QLatin1String("channel")) {
             const auto id = segment_id(parts.at(5));
@@ -316,7 +309,6 @@ void AvStateDump::parse(const QByteArray& dump, Snapshot& into) {
                 continue;
             }
             Channel& channel = channel_for(into, channel_index, *id);
-            channel.d3d_versions |= session_versions.value(segment_id(parts.at(3)).value_or(0xffffffffU));
             channel.reports += number_or_zero(values, QStringLiteral("reports"));
             channel.rejected += number_or_zero(values, QStringLiteral("rejected"));
             channel.split_transfers += number_or_zero(values, QStringLiteral("split_transfers"));

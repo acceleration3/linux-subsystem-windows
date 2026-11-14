@@ -36,20 +36,11 @@ QString HostWindowStatus::App::api() const {
         {2U, QLatin1StringView("OpenGL")},
         {4U, QLatin1StringView("OpenCL")},
     }};
-    QStringList versions;
-    for (quint32 version = 9; version <= 12; ++version) {
-        if (((d3d_versions >> version) & 1U) != 0) {
-            versions << QString::number(version);
-        }
-    }
     QStringList names;
     for (const auto& [bit, text] : known) {
-        if ((sub_api & bit) == 0) {
-            continue;
+        if ((sub_api & bit) != 0) {
+            names << text;
         }
-        names << (bit == 8U && !versions.isEmpty()
-                      ? QStringLiteral("%1 %2").arg(text, versions.join(QLatin1Char('/')))
-                      : QString(text));
     }
     return names.join(QStringLiteral(" + "));
 }
@@ -183,7 +174,6 @@ void HostWindowTracker::add(const platform::AvStateDump::Snapshot& snapshot, qin
         }
         const auto& channel = *found;
         app.has_channel = true;
-        app.d3d_versions = channel.d3d_versions;
         const auto delta = [&](quint64 now, quint64 was) { return now >= was ? now - was : quint64{0}; };
         double interval_splits_per_s = 0;
         if (known && seconds > 0) {

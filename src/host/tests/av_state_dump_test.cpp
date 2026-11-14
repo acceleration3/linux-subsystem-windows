@@ -193,19 +193,6 @@ int main(int argc, char** argv) {
     }
     {
         QByteArray dump;
-        dump += "executor/0/session/1 api=d3d gpu=0 d3d_versions=4096\n";
-        dump += "executor/0/session/1/channel/7 reports=1\n";
-        dump += "executor/0/session/2 api=d3d gpu=0\n";
-        dump += "executor/0/session/2/channel/8 reports=1\n";
-        const auto snap = parsed(dump);
-        check(snap.channels.size() == 2, "both channels are parsed");
-        for (const auto& channel : snap.channels) {
-            check(channel.d3d_versions == (channel.context == 7 ? 4096U : 0U),
-                  "a channel carries the Direct3D versions its session opened");
-        }
-    }
-    {
-        QByteArray dump;
         for (int i = 0; i < 5000; ++i) {
             dump += "module/device/device/1/contexts/1/context/" + QByteArray::number(i) + " name=n\n";
         }
