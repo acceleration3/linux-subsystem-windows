@@ -93,12 +93,15 @@ WindowMirror::WindowMirror(link::AgentRpcClient& rpc, QString what, QStringList 
 
 WindowMirror::~WindowMirror() {
     disconnect(host_end_, nullptr, this, nullptr);
-    if (host_end_->state() == QProcess::NotRunning)
-        return;
-    host_end_->closeWriteChannel();
-    if (!host_end_->waitForFinished(250)) {
-        host_end_->kill();
-        host_end_->waitForFinished(1000);
+    if (host_end_->state() != QProcess::NotRunning) {
+        host_end_->closeWriteChannel();
+        if (!host_end_->waitForFinished(250)) {
+            host_end_->kill();
+            host_end_->waitForFinished(1000);
+        }
+    }
+    if (host_pid_ != 0) {
+        Q_EMIT host_ended(std::exchange(host_pid_, 0));
     }
 }
 

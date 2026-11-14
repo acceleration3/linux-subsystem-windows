@@ -3,10 +3,15 @@
 #include <QDBusArgument>
 #include <QDBusConnection>
 #include <QDBusMessage>
+#include <QDBusError>
 #include <QDBusMetaType>
+#include <QDBusPendingCall>
+#include <QDBusPendingCallWatcher>
 #include <QDBusVariant>
 #include <QFile>
 #include <QList>
+
+#include <utility>
 
 namespace lsw::host::platform {
 
@@ -76,30 +81,30 @@ UnitProperty cpu_weight(int weight) {
     return {QStringLiteral("CPUWeight"), QDBusVariant(QVariant::fromValue(static_cast<qulonglong>(weight)))};
 }
 
-bool call(const QString& method, const QVariantList& arguments, QString* error_out) {
+}
+
+SystemdCpuScope::SystemdCpuScope(QString prefix) : prefix_(std::move(prefix)) {}
+
+QString SystemdCpuScope::unit_name(qint64 pid) const {
+    return QStringLiteral("%1-%2.scope").arg(prefix_).arg(pid);
+}
+
+void SystemdCpuScope::call(const QString& method, const QVariantList& arguments, Done done) {
     const auto bus = QDBusConnection::sessionBus();
     if (!bus.isConnected()) {
-        if (error_out != nullptr) {
-            *error_out = QStringLiteral("no session bus");
-        }
-        return false;
+        done(false, QStringLiteral("no session bus"));
+        return;
     }
     QDBusMessage message = QDBusMessage::createMethodCall(kService, kPath, kInterface, method);
     message.setArguments(arguments);
-    const QDBusMessage reply = bus.call(message, QDBus::Block, kCallTimeoutMs);
-    if (reply.type() == QDBusMessage::ReplyMessage) {
-        return true;
-    }
-    if (error_out != nullptr) {
-        *error_out = reply.errorMessage().isEmpty() ? reply.errorName() : reply.errorMessage();
-    }
-    return false;
-}
-
-}
-
-QString SystemdCpuScope::unit_name(qint64 pid) {
-    return QStringLiteral("lsw-vm-%1.scope").arg(pid);
+    auto* watcher = new QDBusPendingCallWatcher(bus.asyncCall(message, kCallTimeoutMs), &pending_);
+    QObject::connect(watcher, &QDBusPendingCallWatcher::finished, &pending_,
+                     [done = std::move(done)](QDBusPendingCallWatcher* finished) {
+                         const QDBusError error = finished->error();
+                         const bool failed = finished->isError();
+                         finished->deleteLater();
+                         done(!failed, error.message().isEmpty() ? error.name() : error.message());
+                     });
 }
 
 QString SystemdCpuScope::group_of(const QByteArray& cgroup) {
@@ -127,24 +132,25 @@ std::optional<int> SystemdCpuScope::weight(qint64 pid) {
     return ok ? std::optional<int>{weight} : std::nullopt;
 }
 
-bool SystemdCpuScope::enter(qint64 pid, int weight, QString* error_out) {
+void SystemdCpuScope::enter(qint64 pid, int weight, Done done) {
     register_types();
     const QList<UnitProperty> properties = {
-        {QStringLiteral("Description"), QDBusVariant(QStringLiteral("LSW Windows guest"))},
+        {QStringLiteral("Description"), QDBusVariant(QStringLiteral("LSW Windows guest process"))},
+        {QStringLiteral("CollectMode"), QDBusVariant(QStringLiteral("inactive-or-failed"))},
         {QStringLiteral("PIDs"), QDBusVariant(QVariant::fromValue(QList<uint>{static_cast<uint>(pid)}))},
         cpu_weight(weight),
     };
-    return call(QStringLiteral("StartTransientUnit"),
-                {unit_name(pid), QStringLiteral("fail"), QVariant::fromValue(properties),
-                 QVariant::fromValue(QList<UnitAuxiliary>{})},
-                error_out);
+    call(QStringLiteral("StartTransientUnit"),
+         {unit_name(pid), QStringLiteral("fail"), QVariant::fromValue(properties),
+          QVariant::fromValue(QList<UnitAuxiliary>{})},
+         std::move(done));
 }
 
-bool SystemdCpuScope::set_weight(qint64 pid, int weight, QString* error_out) {
+void SystemdCpuScope::set_weight(qint64 pid, int weight, Done done) {
     register_types();
-    return call(QStringLiteral("SetUnitProperties"),
-                {unit_name(pid), true, QVariant::fromValue(QList<UnitProperty>{cpu_weight(weight)})},
-                error_out);
+    call(QStringLiteral("SetUnitProperties"),
+         {unit_name(pid), true, QVariant::fromValue(QList<UnitProperty>{cpu_weight(weight)})},
+         std::move(done));
 }
 
 }

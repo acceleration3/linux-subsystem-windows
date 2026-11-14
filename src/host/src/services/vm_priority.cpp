@@ -28,11 +28,11 @@ const QSet<QString>& frame_threads() {
 
 }
 
-VmPriority::VmPriority(config::ManagerSettings& settings, platform::ICpuScope& scope,
-                       platform::IProcessThreads& threads, std::function<qint64()> qemu_pid,
-                       QObject* parent)
-    : QObject(parent), settings_(settings), scope_(scope), threads_(threads),
-      qemu_pid_(std::move(qemu_pid)) {
+VmPriority::VmPriority(config::ManagerSettings& settings, platform::ICpuScope& vm_scope,
+                       platform::ICpuScope& mirror_scope, platform::IProcessThreads& threads,
+                       std::function<qint64()> qemu_pid, QObject* parent)
+    : QObject(parent), settings_(settings), vm_scope_(vm_scope), mirror_scope_(mirror_scope),
+      threads_(threads), qemu_pid_(std::move(qemu_pid)) {
     status_.wanted = wanted();
     status_.wanted_nice = kRaisedNice;
     connect(&settings_, &config::ManagerSettings::changed, this, [this](const QString& key) {
@@ -66,137 +66,180 @@ VmPriority::Level VmPriority::wanted() const {
     return level_of(settings_.string_value(K::kPriority));
 }
 
+VmPriority::Weight* VmPriority::weight_of(qint64 pid, bool mirror) {
+    if (!mirror) {
+        return pid == vm_pid_ ? &vm_weight_ : nullptr;
+    }
+    const auto found = mirrors_.find(pid);
+    return found != mirrors_.end() ? &*found : nullptr;
+}
+
 void VmPriority::setting_changed() {
-    weight_refused_ = false;
-    const auto again = [](Process& process) {
-        process.seen = process.raised;
-        process.refused = false;
-        process.told_limit = false;
+    const auto again = [](Weight& weight) {
+        weight.refused = false;
+        weight.kept = false;
     };
-    again(vm_);
-    for (Process& mirror : mirrors_) {
+    again(vm_weight_);
+    for (Weight& mirror : mirrors_) {
         again(mirror);
     }
-    apply();
+    told_mirror_refusal_ = false;
+    vm_threads_.seen = vm_threads_.raised;
+    vm_threads_.refused = false;
+    vm_threads_.told_limit = false;
+    apply(false);
+}
+
+void VmPriority::forget_vm() {
+    vm_pid_ = -1;
+    vm_weight_ = Weight{};
+    vm_threads_ = Threads{};
 }
 
 void VmPriority::vm_seen(int boot) {
     if (boot != boot_) {
         boot_ = boot;
-        vm_ = Process{};
-        weight_asked_ = false;
-        weight_raised_ = false;
-        weight_refused_ = false;
+        forget_vm();
     }
-    apply();
+    apply(true);
 }
 
 void VmPriority::mirror_started(qint64 pid) {
     if (pid <= 0) {
         return;
     }
-    Process mirror;
-    mirror.pid = pid;
-    mirror.every_thread = true;
-    mirrors_.insert(pid, mirror);
-    apply();
+    mirrors_.insert(pid, Weight{});
+    apply(false);
 }
 
 void VmPriority::mirror_ended(qint64 pid) {
     if (mirrors_.remove(pid)) {
-        apply();
+        publish(wanted());
     }
 }
 
-void VmPriority::apply() {
+void VmPriority::apply(bool confirm) {
     const Level level = wanted();
     const bool touching =
-        level != Level::Normal || weight_asked_ || weight_raised_ || !vm_.raised.isEmpty();
-    if (boot_ >= 0 && vm_.pid <= 0 && touching) {
-        vm_.pid = qemu_pid_();
+        level != Level::Normal || vm_weight_.touched() || !vm_threads_.raised.isEmpty();
+    if (boot_ >= 0 && vm_pid_ <= 0 && touching) {
+        vm_pid_ = qemu_pid_();
     }
-    if (vm_.pid > 0) {
-        weigh(level);
+    if (vm_pid_ > 0) {
+        weigh(vm_pid_, false, level, confirm);
     }
-    for (auto mirror = mirrors_.begin(); mirror != mirrors_.end();) {
+    const QList<qint64> mirrors = mirrors_.keys();
+    for (const qint64 pid : mirrors) {
+        weigh(pid, true, level, confirm);
+    }
+    if (vm_pid_ > 0) {
         if (level != Level::Highest) {
-            settle(*mirror);
-        } else if (!raise(*mirror)) {
-            mirror = mirrors_.erase(mirror);
-            continue;
-        }
-        ++mirror;
-    }
-    if (vm_.pid > 0) {
-        if (level != Level::Highest) {
-            settle(vm_);
-        } else if (!raise(vm_)) {
-            vm_ = Process{};
-            weight_asked_ = false;
-            weight_raised_ = false;
-            weight_refused_ = false;
+            settle();
+        } else if (!raise()) {
+            forget_vm();
         }
     }
     publish(level);
 }
 
-void VmPriority::weigh(Level level) {
-    QString error;
-    if (level == Level::Normal) {
-        if (!weight_raised_ && !weight_asked_) {
-            return;
-        }
-        if (scope_.set_weight(vm_.pid, kDefaultWeight, &error)) {
-            weight_asked_ = false;
-            weight_raised_ = false;
-            LSW_INFO("priority: the guest's processor weight is back at {}", kDefaultWeight);
-        } else {
-            LSW_DEBUG("priority: the guest's processor weight could not be put back: {}",
-                      error.toStdString());
-        }
+void VmPriority::refuse(qint64 pid, bool mirror, Weight& weight, const QString& error) {
+    weight.refused = true;
+    if (mirror && std::exchange(told_mirror_refusal_, true)) {
         return;
     }
-    if (weight_raised_ || weight_refused_) {
-        return;
-    }
-    if (weight_asked_) {
-        weight_asked_ = false;
-        if (scope_.holds(vm_.pid) && scope_.weight(vm_.pid) == kRaisedWeight) {
-            weight_raised_ = true;
-            LSW_INFO("priority: the guest (pid {}) runs in its own scope with processor weight {}",
-                     vm_.pid, kRaisedWeight);
-            return;
-        }
-        error = QStringLiteral("the scope was asked for but the weight is not in force; the cpu "
-                               "controller may not be delegated to this session");
-    } else if (scope_.holds(vm_.pid) ? scope_.set_weight(vm_.pid, kRaisedWeight, &error)
-                                     : scope_.enter(vm_.pid, kRaisedWeight, &error)) {
-        weight_asked_ = true;
-        return;
-    }
-    weight_refused_ = true;
-    LSW_WARN("priority: the guest could not be given processor weight {}: {}. The rest of the "
+    LSW_WARN("priority: {} (pid {}) could not be given processor weight {}: {}. The rest of the "
              "setting still applies",
-             kRaisedWeight, error.toStdString());
+             mirror ? "a window mirror" : "the guest", pid, kRaisedWeight, error.toStdString());
 }
 
-bool VmPriority::raise(Process& process) {
-    const QVector<qint64> alive = threads_.list(process.pid);
+void VmPriority::weigh(qint64 pid, bool mirror, Level level, bool confirm) {
+    Weight* weight = weight_of(pid, mirror);
+    if (weight == nullptr || weight->calling) {
+        return;
+    }
+    platform::ICpuScope& scope = mirror ? mirror_scope_ : vm_scope_;
+    if (level == Level::Normal) {
+        if ((!weight->raised && !weight->asked) || weight->kept) {
+            return;
+        }
+        weight->calling = true;
+        scope.set_weight(pid, kDefaultWeight, [this, pid, mirror](bool done, const QString& error) {
+            Weight* called = weight_of(pid, mirror);
+            if (called == nullptr) {
+                return;
+            }
+            called->calling = false;
+            if (done) {
+                called->asked = false;
+                called->raised = false;
+                LSW_INFO("priority: the processor weight of pid {} is back at {}", pid, kDefaultWeight);
+            } else {
+                called->kept = true;
+                LSW_WARN("priority: the processor weight of pid {} could not be put back: {}", pid,
+                         error.toStdString());
+            }
+            publish(wanted());
+        });
+        return;
+    }
+    if (weight->raised || weight->refused) {
+        return;
+    }
+    if (weight->asked) {
+        if (!confirm) {
+            return;
+        }
+        weight->asked = false;
+        if (scope.holds(pid) && scope.weight(pid) == kRaisedWeight) {
+            weight->raised = true;
+            LSW_INFO("priority: {} (pid {}) runs in its own scope with processor weight {}",
+                     mirror ? "a window mirror" : "the guest", pid, kRaisedWeight);
+        } else {
+            refuse(pid, mirror, *weight,
+                   QStringLiteral("the scope was asked for but the weight is not in force; the cpu "
+                                  "controller may not be delegated to this session"));
+        }
+        return;
+    }
+    weight->calling = true;
+    const auto asked = [this, pid, mirror](bool done, const QString& error) {
+        Weight* called = weight_of(pid, mirror);
+        if (called == nullptr) {
+            return;
+        }
+        called->calling = false;
+        if (done) {
+            called->asked = true;
+        } else {
+            refuse(pid, mirror, *called, error);
+        }
+        publish(wanted());
+    };
+    if (scope.holds(pid)) {
+        scope.set_weight(pid, kRaisedWeight, asked);
+    } else {
+        scope.enter(pid, kRaisedWeight, asked);
+    }
+}
+
+bool VmPriority::raise() {
+    Threads& process = vm_threads_;
+    const QVector<qint64> alive = threads_.list(vm_pid_);
     if (alive.isEmpty()) {
         return false;
     }
     if (process.nice == 0 && !process.refused) {
-        const int lowest = threads_.lowest_nice(process.pid);
+        const int lowest = threads_.lowest_nice(vm_pid_);
         process.nice = std::max(kRaisedNice, lowest);
         if (process.nice != kRaisedNice && !process.told_limit) {
             process.told_limit = true;
             if (process.nice < 0) {
-                LSW_WARN("priority: the limits of pid {} allow nice {}, not {}; using {}", process.pid,
+                LSW_WARN("priority: the limits of pid {} allow nice {}, not {}; using {}", vm_pid_,
                          lowest, kRaisedNice, process.nice);
             } else {
                 LSW_WARN("priority: the limits of pid {} allow no nice below 0; its threads stay "
                          "at normal priority",
-                         process.pid);
+                         vm_pid_);
             }
         }
     }
@@ -205,34 +248,35 @@ bool VmPriority::raise(Process& process) {
         process.refused = true;
         return true;
     }
-    raise_threads(process, alive);
+    raise_threads(alive);
     return true;
 }
 
-void VmPriority::raise_threads(Process& process, const QVector<qint64>& alive) {
+void VmPriority::raise_threads(const QVector<qint64>& alive) {
     using Thread = platform::IProcessThreads::Thread;
+    Threads& process = vm_threads_;
     const QSet<qint64> now(alive.cbegin(), alive.cend());
     process.seen.intersect(now);
     process.raised.intersect(now);
 
     QVector<std::pair<qint64, Thread>> fresh;
-    bool guest_code_named = process.every_thread || !process.main_thread.isEmpty();
+    bool guest_code_named = !process.main_thread.isEmpty();
     for (const qint64 tid : alive) {
         if (process.seen.contains(tid)) {
             continue;
         }
-        const auto thread = threads_.read(process.pid, tid);
+        const auto thread = threads_.read(vm_pid_, tid);
         if (!thread) {
             continue;
         }
         guest_code_named = guest_code_named || runs_guest_code(thread->name);
-        if (process.every_thread || thread->age_ms >= kNamedAfterMs) {
+        if (thread->age_ms >= kNamedAfterMs) {
             fresh.push_back({tid, *thread});
         }
     }
-    if (!process.every_thread && process.main_thread.isEmpty()) {
+    if (process.main_thread.isEmpty()) {
         const auto main = std::find_if(fresh.cbegin(), fresh.cend(),
-                                       [&process](const auto& entry) { return entry.first == process.pid; });
+                                       [this](const auto& entry) { return entry.first == vm_pid_; });
         process.unnamed = main != fresh.cend() && !guest_code_named;
         if (main == fresh.cend() || process.unnamed) {
             return;
@@ -243,7 +287,7 @@ void VmPriority::raise_threads(Process& process, const QVector<qint64>& alive) {
     bool refused_now = false;
     for (const auto& [tid, thread] : std::as_const(fresh)) {
         process.seen.insert(tid);
-        if (!process.every_thread && !on_frame_path(thread.name, process.main_thread)) {
+        if (!on_frame_path(thread.name, process.main_thread)) {
             if (thread.nice == process.nice) {
                 (void)threads_.set_nice(tid, 0);
             }
@@ -256,30 +300,26 @@ void VmPriority::raise_threads(Process& process, const QVector<qint64>& alive) {
         }
     }
     if (refused_now && !process.refused) {
-        LSW_WARN("priority: the system refused nice {} for threads of pid {}", process.nice,
-                 process.pid);
+        LSW_WARN("priority: the system refused nice {} for threads of pid {}", process.nice, vm_pid_);
     }
     process.refused = process.refused || refused_now;
 }
 
-void VmPriority::settle(Process& process) {
+void VmPriority::settle() {
+    Threads& process = vm_threads_;
     if (!process.raised.isEmpty()) {
-        const QVector<qint64> alive = threads_.list(process.pid);
+        const QVector<qint64> alive = threads_.list(vm_pid_);
         process.raised.intersect(QSet<qint64>(alive.cbegin(), alive.cend()));
     }
     for (const qint64 tid : std::as_const(process.raised)) {
         (void)threads_.set_nice(tid, 0);
     }
     if (!process.raised.isEmpty()) {
-        LSW_INFO("priority: {} threads of pid {} are back at nice 0", process.raised.size(),
-                 process.pid);
+        LSW_INFO("priority: {} threads of pid {} are back at nice 0", process.raised.size(), vm_pid_);
     }
-    process.raised.clear();
-    process.seen.clear();
-    process.nice = 0;
-    process.refused = false;
-    process.unnamed = false;
-    process.told_limit = false;
+    const QString main_thread = process.main_thread;
+    process = Threads{};
+    process.main_thread = main_thread;
 }
 
 void VmPriority::publish(Level level) {
@@ -287,22 +327,14 @@ void VmPriority::publish(Level level) {
     next.wanted = level;
     next.wanted_nice = kRaisedNice;
     next.vm_running = boot_ >= 0;
-    next.weight_raised = weight_raised_ || (weight_asked_ && level == Level::Normal);
-    next.weight_refused = weight_refused_;
-    const auto count = [&next](const Process& process) {
-        if (process.pid <= 0) {
-            return;
-        }
-        next.threads_refused = next.threads_refused || process.refused;
-        next.threads_unnamed = next.threads_unnamed || process.unnamed;
-        if (!process.raised.isEmpty()) {
-            next.threads_raised = true;
-            next.nice = next.nice == 0 ? process.nice : std::max(next.nice, process.nice);
-        }
-    };
-    count(vm_);
-    for (const Process& mirror : std::as_const(mirrors_)) {
-        count(mirror);
+    next.weight_raised = vm_weight_.raised;
+    next.weight_refused = vm_weight_.refused;
+    next.threads_refused = vm_threads_.refused;
+    next.threads_unnamed = vm_threads_.unnamed;
+    next.threads_raised = !vm_threads_.raised.isEmpty();
+    next.nice = next.threads_raised ? vm_threads_.nice : 0;
+    for (const Weight& mirror : std::as_const(mirrors_)) {
+        next.mirrors_refused = next.mirrors_refused || mirror.refused;
     }
     if (next == status_) {
         return;

@@ -119,7 +119,8 @@ private:
     mirror::GuestMirrors mirrors_;
     apps::GuestAppLauncher app_launcher_;
     OneToOneDesktop one_to_one_;
-    platform::SystemdCpuScope cpu_scope_;
+    platform::SystemdCpuScope vm_scope_;
+    platform::SystemdCpuScope mirror_scope_;
     platform::ProcProcessThreads process_threads_;
     VmPriority priority_;
     bool agent_online_ = false;

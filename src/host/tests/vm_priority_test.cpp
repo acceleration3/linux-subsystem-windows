@@ -14,8 +14,10 @@
 #include <QTemporaryDir>
 #include <cstdio>
 #include <cstdlib>
+#include <functional>
 #include <optional>
 #include <unistd.h>
+#include <utility>
 
 using lsw::host::config::ManagerSettings;
 using lsw::host::manager::SettingsPage;
@@ -47,8 +49,24 @@ struct FakeScope : ICpuScope {
     QSet<qint64> inside;
     QHash<qint64, int> weights;
     QStringList calls;
+    QVector<std::function<void()>> waiting;
     bool refuse = false;
     bool controller = true;
+    bool slow = false;
+
+    void answer(Done done, bool ok) {
+        const auto reply = [done = std::move(done), ok] { done(ok, ok ? QString() : QStringLiteral("refused")); };
+        if (slow) {
+            waiting.push_back(reply);
+        } else {
+            reply();
+        }
+    }
+    void answer_all() {
+        for (const auto& reply : std::exchange(waiting, {})) {
+            reply();
+        }
+    }
 
     bool holds(qint64 pid) override { return inside.contains(pid); }
     std::optional<int> weight(qint64 pid) override {
@@ -57,24 +75,21 @@ struct FakeScope : ICpuScope {
         }
         return weights.value(pid, VmPriority::kDefaultWeight);
     }
-    bool enter(qint64 pid, int weight, QString* error_out) override {
+    void enter(qint64 pid, int weight, Done done) override {
         calls << QStringLiteral("enter %1 %2").arg(pid).arg(weight);
-        if (refuse) {
-            *error_out = QStringLiteral("refused");
-            return false;
+        if (!refuse) {
+            inside.insert(pid);
+            weights.insert(pid, weight);
         }
-        inside.insert(pid);
-        weights.insert(pid, weight);
-        return true;
+        answer(std::move(done), !refuse);
     }
-    bool set_weight(qint64 pid, int weight, QString* error_out) override {
+    void set_weight(qint64 pid, int weight, Done done) override {
         calls << QStringLiteral("weight %1 %2").arg(pid).arg(weight);
-        if (refuse || !inside.contains(pid)) {
-            *error_out = QStringLiteral("refused");
-            return false;
+        const bool ok = !refuse && inside.contains(pid);
+        if (ok) {
+            weights.insert(pid, weight);
         }
-        weights.insert(pid, weight);
-        return true;
+        answer(std::move(done), ok);
     }
 };
 
@@ -127,6 +142,7 @@ struct FakeThreads : IProcessThreads {
 
 struct Machine {
     FakeScope scope;
+    FakeScope mirror_scope;
     FakeThreads threads;
     qint64 pid = kQemu;
     int lookups = 0;
@@ -134,7 +150,7 @@ struct Machine {
     VmPriority priority;
 
     explicit Machine(ManagerSettings& settings)
-        : priority(settings, scope, threads, [this] {
+        : priority(settings, scope, mirror_scope, threads, [this] {
               ++lookups;
               return pid;
           }) {
@@ -203,8 +219,9 @@ void normal_touches_nothing(ManagerSettings& settings) {
     machine.priority.vm_seen(1);
     machine.priority.mirror_started(7000);
     machine.priority.vm_seen(1);
-    check(machine.scope.calls.isEmpty() && machine.threads.sets.isEmpty(),
-          "Normal: no scope is made, no weight set, no thread touched");
+    check(machine.scope.calls.isEmpty() && machine.mirror_scope.calls.isEmpty() &&
+              machine.threads.sets.isEmpty(),
+          "Normal: no scope is made for the guest or a mirror, no weight set, no thread touched");
     check(machine.lookups == 0 && machine.threads.lists == 0 && machine.threads.reads == 0,
           "Normal: the guest's process is not even looked at");
     check(machine.priority.status().wanted == Level::Normal && !machine.priority.status().weight_raised &&
@@ -230,6 +247,9 @@ void high_weighs_the_guest(ManagerSettings& settings) {
     check(machine.scope.calls.size() == 1, "High: the scope is asked for once, not at every update");
     check(machine.threads.sets.isEmpty() && machine.threads.lists == 0,
           "High: no thread of the guest or of a mirror is touched or listed");
+    check(machine.mirror_scope.calls == QStringList{QStringLiteral("enter 7000 1000")} &&
+              machine.mirror_scope.weights.value(7000) == 1000,
+          "High: a mirror that starts enters its own scope with weight 1000");
 }
 
 void highest_raises_the_frame_path(ManagerSettings& settings) {
@@ -449,39 +469,117 @@ void mirrors_follow_the_level(ManagerSettings& settings) {
     machine.boot();
     machine.priority.vm_seen(1);
     machine.threads.add(7000, 7000, "remotewin", kYoung);
-    machine.threads.add(7000, 7001, "remotewin:disk$0", kYoung);
+    machine.threads.add(7500, 7500, "remotewin", kYoung);
+    const qsizetype sets = machine.threads.sets.size();
     machine.priority.mirror_started(7000);
-    check(machine.threads.at(7000, -10) == (QSet<qint64>{7000, 7001}),
-          "Highest: a mirror's threads are raised when it is spawned");
-    machine.threads.add(7000, 7002, "wl-render", kYoung);
+    machine.priority.mirror_started(7500);
+    check(machine.mirror_scope.calls ==
+              (QStringList{QStringLiteral("enter 7000 1000"), QStringLiteral("enter 7500 1000")}),
+          "Highest: an application mirror and the desktop mirror each enter a scope with weight 1000 when spawned");
+    check(machine.threads.sets.size() == sets && machine.threads.nice(7000, 7000) == 0,
+          "Highest: a mirror's threads keep their nice; alone in its scope the weight is what counts");
+    check(machine.scope.calls == QStringList{QStringLiteral("enter 5000 1000")},
+          "a mirror never goes through the guest's scope");
     machine.priority.vm_seen(1);
-    check(machine.threads.nice(7000, 7002) == -10, "and a thread it starts later at the next update");
+    machine.priority.vm_seen(1);
+    check(machine.mirror_scope.calls.size() == 2 && !machine.priority.status().mirrors_refused,
+          "a mirror's scope is asked for once");
 
     set(settings, "high");
-    check(machine.threads.at(7000, 0).size() == 3, "back to High: the mirror's threads return to nice 0");
+    check(machine.mirror_scope.calls.size() == 2 && machine.mirror_scope.weights.value(7000) == 1000,
+          "Highest to High: the mirrors keep their weight");
+    set(settings, "normal");
+    check(machine.mirror_scope.weights.value(7000) == 100 && machine.mirror_scope.weights.value(7500) == 100 &&
+              machine.scope.weights.value(kQemu) == 100,
+          "Normal: the running mirrors and the guest return to weight 100");
+    const qsizetype calls = machine.mirror_scope.calls.size();
     machine.threads.add(7100, 7100, "remotewin", kYoung);
     machine.priority.mirror_started(7100);
-    check(machine.threads.nice(7100, 7100) == 0, "High: a mirror spawned now is left alone");
-    set(settings, "highest");
-    check(machine.threads.nice(7100, 7100) == -10 && machine.threads.at(7000, -10).size() == 3,
-          "Highest again: the running mirrors are raised at once");
+    machine.priority.vm_seen(1);
+    check(machine.mirror_scope.calls.size() == calls, "Normal: a mirror spawned now is left alone, the others are not set again");
+
+    set(settings, "high");
+    check(QSet<QString>(machine.mirror_scope.calls.cbegin() + calls, machine.mirror_scope.calls.cend()) ==
+              (QSet<QString>{QStringLiteral("weight 7000 1000"), QStringLiteral("weight 7500 1000"),
+                             QStringLiteral("enter 7100 1000")}),
+          "High again: every running mirror is weighted at once, reusing the scope it is in");
 
     machine.priority.mirror_ended(7100);
-    machine.threads.processes.remove(7100);
-    machine.threads.add(7100, 7100, "another-program");
-    machine.threads.processes.remove(7000);
-    machine.priority.vm_seen(1);
-    machine.threads.add(7000, 7000, "another-program");
-    machine.priority.vm_seen(1);
-    check(machine.threads.nice(7100, 7100) == 0 && machine.threads.nice(7000, 7000) == 0,
-          "a mirror that ended, or whose process is gone, is forgotten");
+    machine.priority.mirror_ended(7500);
+    const qsizetype after = machine.mirror_scope.calls.size();
+    set(settings, "normal");
+    check(machine.mirror_scope.calls.mid(after) == QStringList{QStringLiteral("weight 7000 100")},
+          "a mirror that ended is forgotten");
+}
 
-    Machine limited(settings);
-    limited.threads.lowest.insert(7000, 0);
-    limited.threads.add(7000, 7000, "remotewin", kYoung);
-    limited.priority.mirror_started(7000);
-    check(limited.threads.sets.isEmpty() && limited.priority.status().threads_refused,
-          "a mirror whose limits allow nothing is reported and left alone");
+void a_refused_mirror_scope_is_reported(ManagerSettings& settings) {
+    set(settings, "high");
+    Machine machine(settings);
+    machine.mirror_scope.refuse = true;
+    machine.boot();
+    machine.priority.vm_seen(1);
+    machine.priority.vm_seen(1);
+    machine.priority.mirror_started(7000);
+    machine.priority.vm_seen(1);
+    machine.priority.vm_seen(1);
+    check(machine.mirror_scope.calls.size() == 1 && machine.priority.status().mirrors_refused,
+          "a refused mirror scope is reported and not asked for again at every update");
+    check(machine.priority.status().weight_raised && !machine.priority.status().weight_refused,
+          "and the guest keeps its weight");
+    check(SettingsPage::priority_note(machine.priority.status()).contains(QStringLiteral("window mirrors run with the normal share")) &&
+              !SettingsPage::priority_note(machine.priority.status()).contains(QStringLiteral("Not in effect")),
+          "the caption says the mirrors run with the normal share, and only that");
+    machine.priority.mirror_ended(7000);
+    check(!machine.priority.status().mirrors_refused, "the report goes when that mirror ends");
+
+    Machine undelegated(settings);
+    undelegated.mirror_scope.controller = false;
+    undelegated.boot();
+    undelegated.priority.vm_seen(1);
+    undelegated.priority.mirror_started(7000);
+    check(!undelegated.priority.status().mirrors_refused, "a mirror's weight is not judged before the next update");
+    undelegated.priority.vm_seen(1);
+    check(undelegated.priority.status().mirrors_refused && undelegated.priority.status().weight_raised,
+          "a mirror scope whose weight is not in force is reported as refused");
+}
+
+void answers_may_come_late(ManagerSettings& settings) {
+    set(settings, "high");
+    Machine machine(settings);
+    machine.scope.slow = true;
+    machine.mirror_scope.slow = true;
+    machine.boot();
+    machine.priority.vm_seen(1);
+    machine.priority.mirror_started(7000);
+    machine.priority.vm_seen(1);
+    machine.priority.vm_seen(1);
+    check(machine.scope.calls.size() == 1 && machine.mirror_scope.calls.size() == 1 &&
+              !machine.priority.status().weight_raised,
+          "while the answer is awaited nothing is asked twice and nothing is shown as raised");
+    set(settings, "normal");
+    check(machine.scope.calls.size() == 1 && machine.mirror_scope.calls.size() == 1,
+          "a level chosen meanwhile waits for the answer");
+    machine.scope.answer_all();
+    machine.mirror_scope.answer_all();
+    machine.priority.vm_seen(1);
+    machine.scope.answer_all();
+    machine.mirror_scope.answer_all();
+    check(machine.scope.calls.last() == QLatin1String("weight 5000 100") &&
+              machine.mirror_scope.calls.last() == QLatin1String("weight 7000 100") &&
+              machine.scope.weights.value(kQemu) == 100 && machine.mirror_scope.weights.value(7000) == 100 &&
+              !machine.priority.status().weight_raised,
+          "and is applied once it has come");
+
+    set(settings, "high");
+    machine.priority.mirror_started(7200);
+    machine.priority.mirror_ended(7200);
+    machine.threads.processes.remove(kQemu);
+    machine.priority.vm_seen(-1);
+    machine.scope.answer_all();
+    machine.mirror_scope.answer_all();
+    check(!machine.priority.status().weight_raised && !machine.priority.status().mirrors_refused &&
+              !machine.priority.status().vm_running,
+          "an answer for a process that is gone changes nothing");
 }
 
 void the_caption_shows_only_what_holds() {
@@ -522,12 +620,13 @@ void the_system_side_reads_this_process() {
               ProcProcessThreads::lowest_nice_of("Max nice priority         40                   40\n") == -20 &&
               ProcProcessThreads::lowest_nice_of("") == 0,
           "the lowest nice a process may take comes from its limits");
-    check(SystemdCpuScope::unit_name(5000) == QLatin1String("lsw-vm-5000.scope") &&
+    SystemdCpuScope scope(QStringLiteral("lsw-vm"));
+    check(scope.unit_name(5000) == QLatin1String("lsw-vm-5000.scope") &&
+              SystemdCpuScope(QStringLiteral("lsw-mirror")).unit_name(7000) == QLatin1String("lsw-mirror-7000.scope") &&
               SystemdCpuScope::group_of("0::/user.slice/app.slice/lsw-vm-5000.scope\n") ==
                   QLatin1String("/user.slice/app.slice/lsw-vm-5000.scope") &&
               SystemdCpuScope::group_of("1:name=systemd:/x\n").isEmpty(),
-          "the scope is named after the process and found in its cgroup line");
-    SystemdCpuScope scope;
+          "a scope is named after its kind and process and found in the cgroup line");
     check(!scope.holds(self), "this process is not in a guest scope");
 }
 
@@ -548,6 +647,8 @@ int main(int argc, char** argv) {
     a_running_guest_is_taken_over(settings);
     a_restarted_guest_gets_the_level_again(settings);
     mirrors_follow_the_level(settings);
+    a_refused_mirror_scope_is_reported(settings);
+    answers_may_come_late(settings);
     the_caption_shows_only_what_holds();
     the_system_side_reads_this_process();
 

@@ -190,8 +190,8 @@ QString SettingsPage::priority_note(const services::PriorityStatus& status) {
                                 "program.");
         break;
     case Level::High:
-        parts << QStringLiteral("When the processors are busy the guest gets time ahead of other "
-                                "programs.");
+        parts << QStringLiteral("When the processors are busy the guest and its windows get time "
+                                "ahead of other programs.");
         break;
     case Level::Highest:
         parts << QStringLiteral("As High, and the threads that carry the picture run ahead of "
@@ -212,6 +212,10 @@ QString SettingsPage::priority_note(const services::PriorityStatus& status) {
     if (status.weight_refused) {
         parts << QStringLiteral("Not in effect: this session did not let the manager give the "
                                 "guest a larger share of the processors.");
+    }
+    if (status.mirrors_refused) {
+        parts << QStringLiteral("The window mirrors run with the normal share: this session did "
+                                "not let the manager give them a larger one.");
     }
     if (status.wanted != Level::Highest) {
         return parts.join(QLatin1Char(' '));

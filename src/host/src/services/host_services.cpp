@@ -65,8 +65,9 @@ HostServices::HostServices(QObject* parent)
           [this] { return status_.vm().running(); }, this),
       mirrors_(rpc_, this), app_launcher_(rpc_, mirrors_, this),
       one_to_one_(manager_settings_, guest_display(), this),
+      vm_scope_(QStringLiteral("lsw-vm")), mirror_scope_(QStringLiteral("lsw-mirror")),
       priority_(
-          manager_settings_, cpu_scope_, process_threads_,
+          manager_settings_, vm_scope_, mirror_scope_, process_threads_,
           [this] { return platform::QemuProcess::pid_of(status_.vm().uuid); }, this) {
     log_store_.attach(rpc_);
 

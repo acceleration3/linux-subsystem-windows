@@ -29,9 +29,9 @@ public:
     static constexpr int kRaisedNice = -10;
     static constexpr qint64 kNamedAfterMs = 1000;
 
-    VmPriority(config::ManagerSettings& settings, platform::ICpuScope& scope,
-               platform::IProcessThreads& threads, std::function<qint64()> qemu_pid,
-               QObject* parent = nullptr);
+    VmPriority(config::ManagerSettings& settings, platform::ICpuScope& vm_scope,
+               platform::ICpuScope& mirror_scope, platform::IProcessThreads& threads,
+               std::function<qint64()> qemu_pid, QObject* parent = nullptr);
 
     [[nodiscard]] static Level level_of(const QString& value);
     [[nodiscard]] static bool on_frame_path(const QString& thread, const QString& main_thread);
@@ -47,9 +47,16 @@ Q_SIGNALS:
     void changed();
 
 private:
-    struct Process {
-        qint64 pid = -1;
-        bool every_thread = false;
+    struct Weight {
+        bool calling = false;
+        bool asked = false;
+        bool raised = false;
+        bool refused = false;
+        bool kept = false;
+
+        [[nodiscard]] bool touched() const noexcept { return calling || asked || raised; }
+    };
+    struct Threads {
         QString main_thread;
         QSet<qint64> seen;
         QSet<qint64> raised;
@@ -60,25 +67,29 @@ private:
     };
 
     [[nodiscard]] Level wanted() const;
+    [[nodiscard]] Weight* weight_of(qint64 pid, bool mirror);
     void setting_changed();
-    void apply();
-    void weigh(Level level);
-    [[nodiscard]] bool raise(Process& process);
-    void raise_threads(Process& process, const QVector<qint64>& alive);
-    void settle(Process& process);
+    void apply(bool confirm);
+    void forget_vm();
+    void weigh(qint64 pid, bool mirror, Level level, bool confirm);
+    void refuse(qint64 pid, bool mirror, Weight& weight, const QString& error);
+    [[nodiscard]] bool raise();
+    void raise_threads(const QVector<qint64>& alive);
+    void settle();
     void publish(Level level);
 
     config::ManagerSettings& settings_;
-    platform::ICpuScope& scope_;
+    platform::ICpuScope& vm_scope_;
+    platform::ICpuScope& mirror_scope_;
     platform::IProcessThreads& threads_;
     std::function<qint64()> qemu_pid_;
     PriorityStatus status_;
-    Process vm_;
-    QHash<qint64, Process> mirrors_;
+    qint64 vm_pid_ = -1;
+    Weight vm_weight_;
+    Threads vm_threads_;
+    QHash<qint64, Weight> mirrors_;
     int boot_ = -1;
-    bool weight_asked_ = false;
-    bool weight_raised_ = false;
-    bool weight_refused_ = false;
+    bool told_mirror_refusal_ = false;
 };
 
 }

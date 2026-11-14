@@ -8,6 +8,7 @@ struct PriorityStatus {
     bool vm_running = false;
     bool weight_raised = false;
     bool weight_refused = false;
+    bool mirrors_refused = false;
     bool threads_raised = false;
     bool threads_refused = false;
     bool threads_unnamed = false;
