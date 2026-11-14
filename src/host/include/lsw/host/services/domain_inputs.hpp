@@ -4,6 +4,7 @@
 #include "lsw/host/config/manager_settings.hpp"
 #include "lsw/host/config/settings.hpp"
 #include "lsw/host/config/vm_sizing.hpp"
+#include "lsw/host/platform/host_bridges.hpp"
 #include "lsw/host/vm/domain_xml_inputs.hpp"
 
 #include <optional>
@@ -13,6 +14,10 @@ namespace lsw::host::services {
 domain_inputs_from_settings(const config::Settings& settings,
                             const config::ManagerSettings& manager_settings,
                             std::optional<quint32> monitor_refresh_millihz = std::nullopt);
+
+void network_inputs_from_settings(vm::DomainXmlInputs& inputs,
+                                  const config::ManagerSettings& manager_settings,
+                                  const platform::HostBridges::Facts& bridges);
 
 [[nodiscard]] std::optional<quint32>
 display_refresh_from_settings(const config::ManagerSettings& manager_settings,

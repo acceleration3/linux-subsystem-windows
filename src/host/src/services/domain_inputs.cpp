@@ -3,6 +3,7 @@
 #include "lsw/base/log.hpp"
 #include "lsw/host/config/display_refresh.hpp"
 #include "lsw/host/config/log_verbosity.hpp"
+#include "lsw/host/config/port_forwards.hpp"
 #include "lsw/host/platform/host_gpus.hpp"
 #include "lsw/host/services/host_share_layout.hpp"
 
@@ -35,11 +36,32 @@ std::optional<quint32> display_refresh_from_settings(const config::ManagerSettin
     return config::DisplayRefresh::resolve(manager_settings.string_value(K::kDisplayRefresh), monitor);
 }
 
+void network_inputs_from_settings(vm::DomainXmlInputs& inputs,
+                                  const config::ManagerSettings& manager_settings,
+                                  const platform::HostBridges::Facts& bridges) {
+    inputs.forwards = config::PortForwards::accepted(
+        config::PortForwards::decode(manager_settings.string_value(K::kPortForwards)));
+    inputs.bridge.clear();
+    if (manager_settings.string_value(K::kNetworkMode)
+        != config::ManagerSettings::NetworkMode::kBridged) {
+        return;
+    }
+    const QString bridge = manager_settings.string_value(K::kNetworkBridge);
+    const QString missing = platform::HostBridges::missing(bridges, bridge);
+    if (missing.isEmpty()) {
+        inputs.bridge = bridge;
+    } else {
+        LSW_WARN("the guest is not bridged, it gets the shared network only: {}",
+                 missing.toStdString());
+    }
+}
+
 vm::DomainXmlInputs domain_inputs_from_settings(const config::Settings& settings,
                                                 const config::ManagerSettings& manager_settings,
                                                 std::optional<quint32> monitor_refresh_millihz) {
     vm::DomainXmlInputs inputs;
     inputs.shares = HostShareLayout::assign(manager_settings.host_shares());
+    network_inputs_from_settings(inputs, manager_settings, platform::HostBridges::probe());
 
     inputs.host_window_mib = manager_settings.int_value(K::kHostWindowMib);
     inputs.vram_reserve_mib = manager_settings.int_value(K::kVramReserveMib);

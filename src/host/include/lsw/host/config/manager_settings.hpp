@@ -49,6 +49,9 @@ public:
         static constexpr QLatin1StringView kFileAssociations{"desktop/mime"};
         static constexpr QLatin1StringView kShareClipboard{"desktop/share_clipboard"};
         static constexpr QLatin1StringView kUsbAlways{"usb/always"};
+        static constexpr QLatin1StringView kNetworkMode{"network/mode"};
+        static constexpr QLatin1StringView kNetworkBridge{"network/bridge"};
+        static constexpr QLatin1StringView kPortForwards{"network/forwards"};
         static constexpr QLatin1StringView kAutostart{"guest/autostart"};
         static constexpr QLatin1StringView kCloseToTray{"host/close_to_tray"};
         static constexpr QLatin1StringView kShutGuestOnQuit{"host/shut_guest_on_quit"};
@@ -60,6 +63,11 @@ public:
         static constexpr QLatin1StringView kLogDebugUntil{"logs/debug_until"};
         static constexpr QLatin1StringView kLastBootMs{"state/last_boot_ms"};
         static constexpr QLatin1StringView kDesktopRestore{"state/desktop_restore"};
+    };
+
+    struct NetworkMode {
+        static constexpr QLatin1StringView kShared{"shared"};
+        static constexpr QLatin1StringView kBridged{"bridged"};
     };
 
     explicit ManagerSettings(QObject* parent = nullptr);

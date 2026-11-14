@@ -1,5 +1,6 @@
 #include "lsw/host/config/pending_changes.hpp"
 
+#include "lsw/host/config/port_forwards.hpp"
 #include "lsw/host/config/vram_reserve.hpp"
 
 #include <QDir>
@@ -24,6 +25,9 @@ QString label_for(const QString& key) {
         {K::kRenderGpus, QStringLiteral("render GPUs")},
         {K::kHybridGraphics, QStringLiteral("hybrid graphics")},
         {K::kHostShares, QStringLiteral("shared folders")},
+        {K::kNetworkMode, QStringLiteral("network")},
+        {K::kNetworkBridge, QStringLiteral("bridge")},
+        {K::kPortForwards, QStringLiteral("forwarded ports")},
     };
     return labels.value(key, key);
 }
@@ -32,6 +36,12 @@ QString render(const QString& key, const QVariant& value) {
     if (key == K::kHostShares) {
         return QStringLiteral("%1 folders")
             .arg(ManagerSettings::decode_host_shares(value.toString()).size());
+    }
+    if (key == K::kPortForwards) {
+        return QStringLiteral("%1 ports").arg(PortForwards::decode(value.toString()).size());
+    }
+    if (key == K::kNetworkBridge && value.toString().isEmpty()) {
+        return QStringLiteral("none");
     }
     if (value.typeId() == QMetaType::QStringList) {
         return QString::number(value.toStringList().size());

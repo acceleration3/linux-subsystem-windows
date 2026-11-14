@@ -47,6 +47,10 @@ const QHash<QString, QVariant>& defaults() {
 
         {K::kUsbAlways, QStringList{}},
 
+        {K::kNetworkMode, QString{ManagerSettings::NetworkMode::kShared}},
+        {K::kNetworkBridge, QString{}},
+        {K::kPortForwards, QString{}},
+
         {K::kAutostart, false},
 
         {K::kCloseToTray, true},
@@ -69,6 +73,7 @@ const QStringList& restart_keys() {
     static const QStringList keys = {
         K::kCpuCores,      K::kMemoryMib,  K::kDiskGib,    K::kHostGpu,
         K::kHostWindowMib, K::kVramReserveMib, K::kRenderGpus, K::kHybridGraphics, K::kHostShares,
+        K::kNetworkMode,   K::kNetworkBridge,  K::kPortForwards,
     };
     return keys;
 }

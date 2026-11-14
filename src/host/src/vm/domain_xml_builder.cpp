@@ -8,6 +8,7 @@
 #include <QProcessEnvironment>
 #include <QRegularExpression>
 #include <QStringList>
+#include <QUuid>
 #include <utility>
 
 namespace lsw::host::vm {
@@ -17,6 +18,7 @@ constexpr int kGpuSlot = 0x11;
 constexpr int kMaxRenderOnlyGpus = 8;
 
 constexpr QLatin1StringView kGpuId{"lsw-gpu"};
+constexpr int kBridgeMacUuidBytes = 3;
 
 QString qemu_opt(const QString& value) {
     QString out = value;
@@ -25,6 +27,11 @@ QString qemu_opt(const QString& value) {
 
 QString qemu_arg(const QString& value) {
     return QStringLiteral("    <qemu:arg value='%1'/>").arg(DomainXmlBuilder::xml_escape(value));
+}
+
+QString bridge_mac(const QUuid& uuid) {
+    const QByteArray tail = uuid.toRfc4122().right(kBridgeMacUuidBytes);
+    return QStringLiteral("52:54:00:") + QString::fromLatin1(tail.toHex(':'));
 }
 
 QString gpu_common(const DomainXmlInputs& inputs, const QString& host_gpu) {
@@ -214,9 +221,34 @@ QString DomainXmlBuilder::build(const config::VmRecord& vm, const DomainXmlInput
             << qemu_arg(QStringLiteral("chardev=lsw-input,mode=control"));
     }
     vars["input_args_inner"] = input_lines.join(QLatin1Char('\n'));
-    LSW_DEBUG("domain: {} MiB, {} cpus, {} render-only GPUs, {} shares, display {} refresh {} mHz, "
-              "host window {} MiB, install display {}",
+
+    QStringList user_net{QStringLiteral("user"), QStringLiteral("id=lsw-net")};
+    for (const config::PortForward& forward : config::PortForwards::own()) {
+        user_net << config::PortForwards::hostfwd(forward);
+    }
+    for (const config::PortForward& forward : inputs.forwards) {
+        user_net << config::PortForwards::hostfwd(forward);
+    }
+    const QStringList network_lines{
+        qemu_arg(QStringLiteral("-netdev")),
+        qemu_arg(user_net.join(QLatin1Char(','))),
+        qemu_arg(QStringLiteral("-device")),
+        qemu_arg(QStringLiteral("e1000e,netdev=lsw-net,id=lsw-nic,bus=pcie.0,addr=0x10")),
+    };
+    vars["network_args_inner"] = network_lines.join(QLatin1Char('\n'));
+    vars["bridge_inner"] =
+        inputs.bridge.isEmpty()
+            ? QString{}
+            : QStringLiteral("\n    <interface type='bridge'>\n"
+                             "      <source bridge='%1'/>\n"
+                             "      <mac address='%2'/>\n"
+                             "      <model type='e1000e'/>\n"
+                             "    </interface>")
+                  .arg(esc(inputs.bridge), bridge_mac(vm.uuid));
+    LSW_DEBUG("domain: {} MiB, {} cpus, {} render-only GPUs, {} shares, {} forwarded ports, "
+              "bridge {}, display {} refresh {} mHz, host window {} MiB, install display {}",
               vm.sizing.memory_mib, vm.sizing.cpu_cores, render_only, inputs.shares.size(),
+              inputs.forwards.size(), inputs.bridge.isEmpty() ? "none" : inputs.bridge.toStdString(),
               inputs.display_modes.isEmpty() ? "host modes" : inputs.display_modes.toStdString(),
               inputs.display_refresh_millihz, inputs.host_window_mib, inputs.install_display);
 

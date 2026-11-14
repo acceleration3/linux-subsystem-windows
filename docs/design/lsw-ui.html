@@ -1828,6 +1828,86 @@ svg.ico{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stro
             </div>
 
             <div class="sgroup">
+              <h5>Network</h5>
+              <div class="srow">
+                <span>
+                  <span class="k">Network <span class="tagr">restart</span></span>
+                  <span class="d">Shared: Windows reaches the network through this computer and can be reached only through the forwarded ports. Bridged: Windows also joins a bridge of this computer and gets its own address on that network.</span>
+                </span>
+                <span class="ctl"><span class="input select" style="width:260px">Shared with this computer (NAT)</span></span>
+              </div>
+              <div class="srow">
+                <span>
+                  <span class="k">Bridge <span class="tagr">restart</span></span>
+                  <span class="d">Used only when the network is bridged. Windows could not join it now: /etc/qemu/bridge.conf does not allow br0; it needs the line "allow br0".</span>
+                </span>
+                <span class="ctl"><span class="input select" style="width:260px">br0</span></span>
+              </div>
+              <div class="srow">
+                <span>
+                  <span class="k">Forwarded ports <span class="tagr">restart</span></span>
+                  <span class="d">A connection to a port of this computer goes to a port in Windows. LSW itself uses TCP 5102, 5103, 5445. Add Sunshine ports forwards what Moonlight needs to reach Sunshine in Windows from the network: TCP 47984, 47989 and 48010, UDP 47998 to 48000.</span>
+                </span>
+                <span class="ctl"><button class="btn" style="white-space:nowrap">Add Sunshine ports</button></span>
+              </div>
+              <div class="srow wide">
+                <div class="editlist">
+                  <table>
+                    <thead>
+                      <tr><th>Port here &rarr; port in Windows</th><th>Reachable</th><th class="tight"></th></tr>
+                    </thead>
+                    <tbody>
+                    <tr>
+                      <td><span class="mono" style="color:var(--fg)">TCP 47984 &rarr; 47984</span></td>
+                      <td class="mono" style="color:var(--fg-faint);font-size:11.5px">from the network</td>
+                      <td class="tight"><button class="rm" style="display:inline-grid" title="Stop forwarding this port">&times;</button></td>
+                    </tr>
+                    <tr>
+                      <td><span class="mono" style="color:var(--fg)">TCP 47989 &rarr; 47989</span></td>
+                      <td class="mono" style="color:var(--fg-faint);font-size:11.5px">from the network</td>
+                      <td class="tight"><button class="rm" style="display:inline-grid" title="Stop forwarding this port">&times;</button></td>
+                    </tr>
+                    <tr>
+                      <td><span class="mono" style="color:var(--fg)">TCP 48010 &rarr; 48010</span></td>
+                      <td class="mono" style="color:var(--fg-faint);font-size:11.5px">from the network</td>
+                      <td class="tight"><button class="rm" style="display:inline-grid" title="Stop forwarding this port">&times;</button></td>
+                    </tr>
+                    <tr>
+                      <td><span class="mono" style="color:var(--fg)">UDP 47998 &rarr; 47998</span></td>
+                      <td class="mono" style="color:var(--fg-faint);font-size:11.5px">from the network</td>
+                      <td class="tight"><button class="rm" style="display:inline-grid" title="Stop forwarding this port">&times;</button></td>
+                    </tr>
+                    <tr>
+                      <td><span class="mono" style="color:var(--fg)">UDP 47999 &rarr; 47999</span></td>
+                      <td class="mono" style="color:var(--fg-faint);font-size:11.5px">from the network</td>
+                      <td class="tight"><button class="rm" style="display:inline-grid" title="Stop forwarding this port">&times;</button></td>
+                    </tr>
+                    <tr>
+                      <td><span class="mono" style="color:var(--fg)">UDP 48000 &rarr; 48000</span></td>
+                      <td class="mono" style="color:var(--fg-faint);font-size:11.5px">from the network</td>
+                      <td class="tight"><button class="rm" style="display:inline-grid" title="Stop forwarding this port">&times;</button></td>
+                    </tr>
+                    <tr>
+                      <td><span class="mono" style="color:var(--fg)">TCP 1433 &rarr; 1433</span></td>
+                      <td class="mono" style="color:var(--fg-faint);font-size:11.5px">from this computer only</td>
+                      <td class="tight"><button class="rm" style="display:inline-grid" title="Stop forwarding this port">&times;</button></td>
+                    </tr>
+                    </tbody>
+                  </table>
+                  <div class="foot" style="flex-wrap:wrap">
+                    <span class="input select" style="width:70px">TCP</span>
+                    <span class="input mono ph" style="width:110px">Host port</span>
+                    <span class="meta">&rarr;</span>
+                    <span class="input mono ph" style="width:230px">Port in Windows (same if empty)</span>
+                    <span class="input select" style="width:170px;white-space:nowrap">This computer only</span>
+                    <button class="btn">Add</button>
+                    <span class="meta" style="color:var(--bad);flex-basis:100%">LSW itself uses TCP port 5445 of this computer.</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="sgroup">
               <h5>Startup</h5>
               <div class="srow">
                 <span>
@@ -3346,7 +3426,7 @@ svg.ico{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stro
           <li><b>Two wizard pages become dialogs.</b> <span class="mono">DebloatPage</span> and <span class="mono">DownloadPage</span> lose their page ids (<span class="mono">Wizard::Debloat</span>, <span class="mono">Wizard::Download</span>) and their widgets move into <span class="mono">TrimImageDialog</span> and <span class="mono">DownloadImageDialog</span>. Each owns its worker, each returns the path it wrote.</li>
           <li><b>Output directory.</b> <span class="mono">DebloatStager::trim()</span> already takes an output directory, so the dialog passes the chosen folder plus a filename instead of <span class="mono">settings().isos_dir()</span>. The downloader gains the same pair.</li>
           <li><b>IsoChoicePage shrinks</b> to one path field and two buttons. <span class="mono">MicrosoftClient</span> and <span class="mono">IsoSourceFetcher</span> move with the download dialog, so the page no longer owns network state or a ban flag.</li>
-          <li><b>Manager tabs.</b> Display, Files, USB and Maintenance become pages of the stack beside Overview, Graphics, Console, Log and Settings, in four groups split by thin rules. <span class="mono">SettingsPage</span> keeps only settings: machine size, startup, desktop integration, storage and logging. The adapter roles and the host window move onto the Graphics page, the display controls onto Display, the shared folders and the SMB share onto Files, the device list onto USB, the image tools, the guest update and the reinstall onto Maintenance.</li>
+          <li><b>Manager tabs.</b> Display, Files, USB and Maintenance become pages of the stack beside Overview, Graphics, Console, Log and Settings, in four groups split by thin rules. <span class="mono">SettingsPage</span> keeps only settings: machine size, network, startup, desktop integration, storage and logging. The adapter roles and the host window move onto the Graphics page, the display controls onto Display, the shared folders and the SMB share onto Files, the device list onto USB, the image tools, the guest update and the reinstall onto Maintenance.</li>
           <li><b>One apply bar.</b> It moves from <span class="mono">SettingsPage</span> to <span class="mono">MainWindow</span>, under the stack, and shows on every page while <span class="mono">PendingChanges</span> holds a change. Each rail item shows in amber how many of the waiting changes are its own.</li>
           <li><b>Rail icons.</b> Line icons drawn by <span class="mono">NavIcon</span> with QPainter, one shape per page, coloured from the button: faint, dim on hover, amber when current. The mockup draws the same shapes as SVG symbols.</li>
           <li><b>Data behind the new pages.</b> Display reads <span class="mono">GraphicsStatus</span>'s live modes and refresh and the monitor the window is on; the scale needs the one the agent last applied kept in <span class="mono">StatusHub</span>. Files compares the folder list with the running definition for In Windows and After restart. USB is <span class="mono">UsbStatus</span> split by place. Maintenance is <span class="mono">GuestUpdateStatus</span>, its steps included.</li>

@@ -2,6 +2,7 @@
 #include "lsw/host/vm/domain_xml_builder.hpp"
 
 #include <QCoreApplication>
+#include <QCryptographicHash>
 #include <QDomDocument>
 #include <QHash>
 #include <QStringList>
@@ -79,6 +80,120 @@ QVector<QDomElement> disks(const QDomDocument& doc, const QString& device) {
         }
     }
     return out;
+}
+
+QString fixed_definition(const DomainXmlInputs& inputs) {
+    const QByteArray runtime = qgetenv("XDG_RUNTIME_DIR");
+    qputenv("XDG_RUNTIME_DIR", "/run/lsw-test");
+    VmRecord vm;
+    vm.uuid = QUuid(QStringLiteral("6f1c2a54-9d3e-4b7a-8c15-0e2f4a6b8d90"));
+    vm.name = QStringLiteral("lsw");
+    vm.vsock_cid = 100;
+    vm.sizing.cpu_cores = 4;
+    vm.sizing.memory_mib = 8192;
+    vm.disk_path = QStringLiteral("/var/lib/lsw-test/lsw.qcow2");
+    vm.nvram_path = QStringLiteral("/var/lib/lsw-test/nvram.fd");
+    vm.install_media_path = QStringLiteral("/var/lib/lsw-test/install.qcow2");
+    vm.payload_iso_path = QStringLiteral("/var/lib/lsw-test/payload.iso");
+    const QString xml = DomainXmlBuilder::build(vm, inputs);
+    qputenv("XDG_RUNTIME_DIR", runtime);
+    return xml;
+}
+
+QString digest(const QString& text) {
+    return QString::fromLatin1(
+        QCryptographicHash::hash(text.toUtf8(), QCryptographicHash::Sha256).toHex());
+}
+
+QString user_net(const QString& xml) {
+    return args_after(qemu_args(parse(xml, "the definition parses")), QStringLiteral("-netdev"),
+                      QStringLiteral("user,"))
+        .join(QLatin1Char('|'));
+}
+
+void check_network() {
+    using lsw::host::config::PortForward;
+    const QString own = QStringLiteral(
+        "user,id=lsw-net,hostfwd=tcp:127.0.0.1:5102-:5102,hostfwd=tcp:127.0.0.1:5103-:5103,"
+        "hostfwd=tcp:127.0.0.1:5445-:445");
+    const QString plain = fixed_definition(DomainXmlInputs{});
+    check(digest(plain)
+              == QStringLiteral("a005a2f5d51fff31eef2f120d72b271a506bed27ee88c6bc3cea7e4bb9d25077"),
+          "with the network settings untouched the definition is byte for byte the one from "
+          "before there were any");
+    check(user_net(plain) == own, "untouched, the user network forwards LSW's three ports only");
+
+    DomainXmlInputs forwarded;
+    forwarded.forwards = {
+        {PortForward::Protocol::Tcp, 8080, 80, false},
+        {PortForward::Protocol::Udp, 47998, 47998, true},
+        {PortForward::Protocol::Tcp, 47989, 47989, true},
+    };
+    const QString with_forwards = fixed_definition(forwarded);
+    check(user_net(with_forwards)
+              == own + QStringLiteral(",hostfwd=tcp:127.0.0.1:8080-:80,hostfwd=udp:0.0.0.0:47998-:47998,"
+                                      "hostfwd=tcp:0.0.0.0:47989-:47989"),
+          "each forwarded port follows LSW's own on the one user network, in order");
+    check(with_forwards.contains(QStringLiteral("hostfwd=tcp:127.0.0.1:8080-:80")),
+          "a port for this computer only listens on the loopback address");
+    check(with_forwards.contains(QStringLiteral("hostfwd=udp:0.0.0.0:47998-:47998")),
+          "a port reachable from the network listens on every address, with its protocol");
+    const QDomDocument forwarded_doc = parse(with_forwards, "the definition with forwards parses");
+    const QStringList forwarded_args = qemu_args(forwarded_doc);
+    check(args_after(forwarded_args, QStringLiteral("-device"), QStringLiteral("e1000e,")).size() == 1
+              && forwarded_doc.elementsByTagName(QStringLiteral("interface")).isEmpty(),
+          "forwarding ports adds no network adapter");
+    QString without_forwards = with_forwards;
+    without_forwards.remove(QStringLiteral(
+        ",hostfwd=tcp:127.0.0.1:8080-:80,hostfwd=udp:0.0.0.0:47998-:47998,hostfwd=tcp:0.0.0.0:47989-:47989"));
+    check(without_forwards == plain, "and changes nothing else in the definition");
+
+    DomainXmlInputs bridged = forwarded;
+    bridged.bridge = QStringLiteral("br-test");
+    const QString with_bridge = fixed_definition(bridged);
+    const QDomDocument bridged_doc = parse(with_bridge, "the bridged definition parses");
+    const QDomNodeList interfaces = bridged_doc.elementsByTagName(QStringLiteral("interface"));
+    const QDomElement nic = interfaces.at(0).toElement();
+    check(interfaces.count() == 1 && nic.attribute(QStringLiteral("type")) == QStringLiteral("bridge")
+              && nic.parentNode().nodeName() == QStringLiteral("devices"),
+          "bridged, the guest has one libvirt adapter of type bridge among its devices");
+    check(nic.firstChildElement(QStringLiteral("source")).attribute(QStringLiteral("bridge"))
+              == QStringLiteral("br-test"),
+          "it joins the chosen bridge");
+    check(nic.firstChildElement(QStringLiteral("model")).attribute(QStringLiteral("type"))
+              == QStringLiteral("e1000e"),
+          "it is an e1000e, which Windows drives without extra drivers");
+    const QString mac = nic.firstChildElement(QStringLiteral("mac")).attribute(QStringLiteral("address"));
+    check(mac == QStringLiteral("52:54:00:6b:8d:90"),
+          "its address is fixed by the machine's identity, so Windows sees the same adapter on "
+          "every start");
+    check(user_net(with_bridge) == user_net(with_forwards)
+              && args_after(qemu_args(bridged_doc), QStringLiteral("-device"), QStringLiteral("e1000e,"))
+                         .value(0)
+                     == QStringLiteral("e1000e,netdev=lsw-net,id=lsw-nic,bus=pcie.0,addr=0x10"),
+          "bridged, the user network adapter with LSW's own ports and the forwards stays");
+    QString without_bridge = with_bridge;
+    const qsizetype from = without_bridge.indexOf(QStringLiteral("\n    <interface"));
+    const qsizetype to = without_bridge.indexOf(QStringLiteral("</interface>"));
+    without_bridge.remove(from, to + QStringLiteral("</interface>").size() - from);
+    check(from > 0 && to > from && without_bridge == with_forwards,
+          "the bridged adapter is the only difference from the shared network");
+
+    DomainXmlInputs unusable = forwarded;
+    unusable.bridge.clear();
+    check(fixed_definition(unusable) == with_forwards,
+          "without a bridge the guest can join, the definition is the shared network's");
+
+    DomainXmlInputs odd;
+    odd.bridge = QStringLiteral("br'<&>");
+    const QDomDocument odd_doc = parse(fixed_definition(odd), "a bridge name with XML specials parses");
+    check(odd_doc.elementsByTagName(QStringLiteral("source")).count() > 0
+              && odd_doc.elementsByTagName(QStringLiteral("interface"))
+                         .at(0)
+                         .firstChildElement(QStringLiteral("source"))
+                         .attribute(QStringLiteral("bridge"))
+                     == QStringLiteral("br'<&>"),
+          "and survives intact");
 }
 
 void check_inbox_devices(const QDomDocument& doc) {
@@ -404,6 +519,8 @@ int main(int argc, char** argv) {
     check(ManagerSettings::decode_host_shares(blob) == shares, "host shares round-trip");
     check(ManagerSettings::encode_host_shares({}).isEmpty(), "no shares encode as empty");
     check(ManagerSettings::decode_host_shares(QString{}).isEmpty(), "empty decodes as no shares");
+
+    check_network();
 
     std::printf("%s\n", g_failures == 0 ? "PASS" : "FAIL");
     return g_failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
