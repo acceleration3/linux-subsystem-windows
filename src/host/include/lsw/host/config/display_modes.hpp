@@ -30,6 +30,8 @@ public:
 
     [[nodiscard]] static QString refusal(const DisplayMode& mode);
 
+    [[nodiscard]] static DisplayMode clamped(const DisplayMode& mode);
+
     [[nodiscard]] static QString refusal_to_add(const QStringList& list, const DisplayMode& mode);
 
     [[nodiscard]] static QStringList normalized(const QStringList& list);

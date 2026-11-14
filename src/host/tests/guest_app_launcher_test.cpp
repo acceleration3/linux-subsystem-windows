@@ -12,6 +12,7 @@
 #include <QList>
 #include <QPointer>
 #include <QProcess>
+#include <QSize>
 #include <QSocketNotifier>
 #include <QTcpServer>
 #include <QTcpSocket>
@@ -71,6 +72,11 @@ int fake_mirror(QCoreApplication& app) {
             return;
         frames.stop();
         std::puts("READY");
+        if (app.arguments().contains(QStringLiteral("--desktop"))) {
+            std::puts("SIZE 0 840");
+            std::puts("SIZE wide");
+            std::puts("SIZE 1201 841");
+        }
         std::fflush(stdout);
     });
     frames.start(10);
@@ -524,10 +530,23 @@ int main(int argc, char** argv) {
         check(wait_for([&] { return opened == 1; }) && mirrored() == QList<quint32>{123},
               "a launched application has its own mirror while no desktop is open");
 
+        int desktop_opens = 0;
+        int desktop_closes = 0;
+        QList<QSize> desktop_rooms;
+        QObject::connect(&mirrors, &lsw::host::mirror::GuestMirrors::desktop_opened, &app,
+                         [&] { ++desktop_opens; });
+        QObject::connect(&mirrors, &lsw::host::mirror::GuestMirrors::desktop_closed, &app,
+                         [&] { ++desktop_closes; });
+        QObject::connect(&mirrors, &lsw::host::mirror::GuestMirrors::desktop_resized, &app,
+                         [&](const QSize& pixels) { desktop_rooms << pixels; });
         const int desktops_before = desktops;
         mirrors.open_desktop(QStringLiteral("test desktop"));
         check(wait_for([&] { return desktops == desktops_before + 1; }) && mirrors.desktop_open(),
               "the desktop mirror opens");
+        check(desktop_opens == 1 && desktop_closes == 0, "and says so once");
+        check(wait_for([&] { return !desktop_rooms.isEmpty(); }) &&
+                  desktop_rooms == QList<QSize>{QSize(1201, 841)},
+              "the size the desktop window settles on is passed on in pixels, and a malformed one is not");
         check(mirrored().isEmpty(), "opening the desktop closes every application mirror");
         check(launcher.running(first) && !launcher.opening(first),
               "an application the desktop shows is still running");
@@ -576,6 +595,7 @@ int main(int argc, char** argv) {
         settle();
         check(mirrored() == QList<quint32>{80, 123, 321, 900},
               "uncaptioned, owned, off-screen and degenerate windows get no mirror of their own");
+        check(desktop_closes == 1 && desktop_opens == 1, "the desktop closing is said once");
         check(!mirrors.desktop_open() && launcher.running(first) && launcher.running(second) &&
                   !launcher.opening(first) && !launcher.opening(second),
               "after the desktop closes the launched applications run under their own identity");
@@ -660,6 +680,21 @@ int main(int argc, char** argv) {
         check(errors == 1 && !reason.isEmpty(), "failure reported exactly once with a reason");
         if (mode == "mismatch")
             check(reason.contains("versions"), "version mismatch has an actionable error");
+    }
+    {
+        qputenv("LSW_TEST_MIRROR_MODE", "early-exit");
+        qputenv("LSW_REMOTEWIN", QCoreApplication::applicationFilePath().toUtf8());
+        lsw::host::mirror::GuestMirrors mirrors(rpc);
+        int opens = 0;
+        int closes = 0;
+        int errors = 0;
+        QObject::connect(&mirrors, &lsw::host::mirror::GuestMirrors::desktop_opened, &app, [&] { ++opens; });
+        QObject::connect(&mirrors, &lsw::host::mirror::GuestMirrors::desktop_closed, &app, [&] { ++closes; });
+        QObject::connect(&mirrors, &lsw::host::mirror::GuestMirrors::desktop_failed, &app,
+                         [&](const QString&) { ++errors; });
+        mirrors.open_desktop(QStringLiteral("failing desktop"));
+        check(wait_for([&] { return closes == 1; }) && opens == 1 && errors == 1 && !mirrors.desktop_open(),
+              "a desktop mirror that fails is said to have opened and to have closed, once each");
     }
     QThreadPool::globalInstance()->waitForDone();
     return failures == 0 ? 0 : 1;

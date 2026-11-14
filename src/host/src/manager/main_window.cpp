@@ -759,8 +759,7 @@ void MainWindow::push_display_modes() {
         return;
     }
     QString error;
-    const QString modes =
-        services::display_modes_from_settings(services_.manager_settings(), current_output());
+    const QString modes = services_.one_to_one().modes(current_output());
     if (!services_.lifecycle().set_display_modes(record->uuid, modes, &error)) {
         notices_->post(QStringLiteral("resolution"), false,
                        QStringLiteral("The resolution did not reach the guest."), error);

@@ -1,6 +1,7 @@
 #include "lsw/host/config/display_modes.hpp"
 
 #include <QRegularExpression>
+#include <algorithm>
 #include <numeric>
 
 namespace lsw::host::config {
@@ -42,6 +43,10 @@ QString DisplayModes::refusal(const DisplayMode& mode) {
             .arg(kMaxEdge);
     }
     return {};
+}
+
+DisplayMode DisplayModes::clamped(const DisplayMode& mode) {
+    return DisplayMode{std::clamp(mode.width, kMinEdge, kMaxEdge), std::clamp(mode.height, kMinEdge, kMaxEdge)};
 }
 
 QString DisplayModes::refusal_to_add(const QStringList& list, const DisplayMode& mode) {

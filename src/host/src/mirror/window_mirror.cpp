@@ -184,6 +184,12 @@ void WindowMirror::read_status() {
         } else if (line == "READY" && guest_started_) {
             first_frame_ = true;
             announce_ready();
+        } else if (line.startsWith("SIZE ")) {
+            const QList<QByteArray> sides = line.mid(5).split(' ');
+            const QSize pixels = sides.size() == 2 ? QSize(sides[0].toInt(), sides[1].toInt()) : QSize();
+            if (!pixels.isEmpty()) {
+                Q_EMIT room_settled(pixels);
+            }
         } else if (line.startsWith("APP ")) {
             const QString aumid = QString::fromUtf8(line.mid(4));
             if (!aumid.isEmpty() && !app_ids_.contains(aumid)) {

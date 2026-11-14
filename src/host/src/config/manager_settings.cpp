@@ -21,6 +21,7 @@ const QHash<QString, QVariant>& defaults() {
 
         {K::kDisplayModes, QStringList{}},
         {K::kMatchHostOutput, false},
+        {K::kOneToOneDesktop, false},
         {K::kDisplayRefresh, QStringLiteral("monitor")},
         {K::kScalingPercent, 0},
 
@@ -57,6 +58,7 @@ const QHash<QString, QVariant>& defaults() {
         {K::kLogDebugUntil, qlonglong{0}},
 
         {K::kLastBootMs, 0},
+        {K::kDesktopRestore, QString{}},
     };
     return table;
 }

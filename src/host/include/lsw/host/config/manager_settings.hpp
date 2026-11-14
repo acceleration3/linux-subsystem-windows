@@ -28,6 +28,7 @@ public:
         static constexpr QLatin1StringView kDiskGib{"machine/disk_gib"};
         static constexpr QLatin1StringView kDisplayModes{"display/modes"};
         static constexpr QLatin1StringView kMatchHostOutput{"display/match_host_output"};
+        static constexpr QLatin1StringView kOneToOneDesktop{"display/one_to_one_desktop"};
         static constexpr QLatin1StringView kDisplayRefresh{"display/refresh"};
         static constexpr QLatin1StringView kScalingPercent{"display/scaling_percent"};
         static constexpr QLatin1StringView kHostGpu{"graphics/host_gpu"};
@@ -56,6 +57,7 @@ public:
         static constexpr QLatin1StringView kLogGpu{"logs/gpu"};
         static constexpr QLatin1StringView kLogDebugUntil{"logs/debug_until"};
         static constexpr QLatin1StringView kLastBootMs{"state/last_boot_ms"};
+        static constexpr QLatin1StringView kDesktopRestore{"state/desktop_restore"};
     };
 
     explicit ManagerSettings(QObject* parent = nullptr);

@@ -7,6 +7,7 @@
 #include <QList>
 #include <QObject>
 #include <QPointer>
+#include <QSize>
 #include <QString>
 
 #include <functional>
@@ -41,6 +42,9 @@ public:
     void launch_settled();
 
 Q_SIGNALS:
+    void desktop_opened();
+    void desktop_resized(const QSize& pixels);
+    void desktop_closed();
     void desktop_ready();
     void desktop_failed(const QString& reason);
     void shown(const QString& identity);

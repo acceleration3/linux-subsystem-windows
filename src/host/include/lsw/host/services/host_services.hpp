@@ -20,6 +20,7 @@
 #include "lsw/host/services/host_shutdown_watch.hpp"
 #include "lsw/host/services/log_cleaner.hpp"
 #include "lsw/host/services/log_collector.hpp"
+#include "lsw/host/services/one_to_one_desktop.hpp"
 #include "lsw/host/services/status_hub.hpp"
 #include "lsw/host/services/usb_passthrough.hpp"
 #include "lsw/host/vm/libvirt_connection.hpp"
@@ -72,6 +73,7 @@ public:
 
     [[nodiscard]] mirror::GuestMirrors& mirrors() noexcept { return mirrors_; }
     [[nodiscard]] apps::GuestAppLauncher& app_launcher() noexcept { return app_launcher_; }
+    [[nodiscard]] OneToOneDesktop& one_to_one() noexcept { return one_to_one_; }
 
     [[nodiscard]] config::ManagerSettings& manager_settings() noexcept { return manager_settings_; }
 
@@ -86,6 +88,8 @@ public:
     void apply_integrations();
 
 private:
+    [[nodiscard]] OneToOneDesktop::Guest guest_display();
+
     config::Settings settings_;
     config::ManagerSettings manager_settings_;
     config::PendingChanges pending_changes_;
@@ -111,6 +115,8 @@ private:
     LogCleaner log_cleaner_;
     mirror::GuestMirrors mirrors_;
     apps::GuestAppLauncher app_launcher_;
+    OneToOneDesktop one_to_one_;
+    bool agent_online_ = false;
 };
 
 }

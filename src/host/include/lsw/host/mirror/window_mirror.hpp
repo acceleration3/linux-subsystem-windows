@@ -6,6 +6,7 @@
 #include <QElapsedTimer>
 #include <QObject>
 #include <QProcess>
+#include <QSize>
 #include <QString>
 #include <QStringList>
 #include <QTimer>
@@ -47,6 +48,7 @@ Q_SIGNALS:
     void app_identified(const QString& aumid);
     void finished();
     void ready();
+    void room_settled(const QSize& pixels);
     void failed(const QString& reason);
 
 private:

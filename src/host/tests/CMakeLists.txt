@@ -122,6 +122,16 @@ target_link_libraries(lsw_host_display_modes_test
 target_compile_definitions(lsw_host_display_modes_test PRIVATE QT_NO_KEYWORDS)
 add_test(NAME lsw_host_display_modes_test COMMAND lsw_host_display_modes_test)
 
+add_executable(lsw_host_one_to_one_desktop_test one_to_one_desktop_test.cpp)
+target_link_libraries(lsw_host_one_to_one_desktop_test
+    PRIVATE
+        lsw_host_core
+        LSW::CompileOptions
+)
+target_compile_definitions(lsw_host_one_to_one_desktop_test PRIVATE QT_NO_KEYWORDS)
+add_test(NAME lsw_host_one_to_one_desktop_test COMMAND lsw_host_one_to_one_desktop_test)
+set_tests_properties(lsw_host_one_to_one_desktop_test PROPERTIES TIMEOUT 30)
+
 add_executable(lsw_host_display_refresh_test display_refresh_test.cpp)
 target_link_libraries(lsw_host_display_refresh_test
     PRIVATE

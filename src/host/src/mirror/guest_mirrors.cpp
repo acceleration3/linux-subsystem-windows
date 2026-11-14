@@ -56,9 +56,11 @@ void GuestMirrors::open_desktop(const QString& title) {
         desktop->deleteLater();
         if (desktop_ == desktop) {
             desktop_.clear();
+            Q_EMIT desktop_closed();
             resume();
         }
     });
+    connect(desktop, &WindowMirror::room_settled, this, &GuestMirrors::desktop_resized);
     connect(desktop, &WindowMirror::failed, this, &GuestMirrors::desktop_failed);
     connect(desktop, &WindowMirror::ready, this, &GuestMirrors::desktop_ready);
     desktop_ = desktop;
@@ -68,6 +70,7 @@ void GuestMirrors::open_desktop(const QString& title) {
         return;
     }
     if (desktop_ == desktop) {
+        Q_EMIT desktop_opened();
         suspend();
     }
 }
