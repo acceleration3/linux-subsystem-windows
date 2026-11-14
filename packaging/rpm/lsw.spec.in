@@ -41,6 +41,7 @@ cp -a %{_stage}/usr %{buildroot}/
 %files
 %license %{_datadir}/licenses/lsw
 %{_bindir}/lsw-manager
+%{_bindir}/lsw-qemu-system-x86_64
 %{_prefix}/lib/lsw
 %{_datadir}/lsw
 %{_datadir}/applications/lsw-manager.desktop

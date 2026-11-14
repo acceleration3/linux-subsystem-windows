@@ -143,12 +143,14 @@ echo "kvm_intel" | sudo tee /etc/modules-load.d/kvm.conf
 ### AppArmor — allow LSW's custom QEMU
 
 Ubuntu's libvirt AppArmor profile only permits executing QEMU from system
-paths. Add a local override to allow the installed binary:
+paths such as `/usr/bin`. The packages install LSW's QEMU as
+`/usr/bin/lsw-qemu-system-x86_64` and need nothing more. An install under
+`~/.local` puts it in `~/.local/bin`, which the profile does not cover; add a
+local override for it:
 
 ```sh
 sudo tee /etc/apparmor.d/local/usr.sbin.libvirtd > /dev/null << 'EOF'
-@{HOME}/.local/lib/lsw/accel-virt/qemu/qemu-system-x86_64 PUx,
-@{HOME}/.local/lib/lsw/accel-virt/qemu/qemu-system-x86_64/** r,
+@{HOME}/.local/bin/lsw-qemu-system-x86_64 PUx,
 EOF
 sudo apparmor_parser -r /etc/apparmor.d/usr.sbin.libvirtd
 ```

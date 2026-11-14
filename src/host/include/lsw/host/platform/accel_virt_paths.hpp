@@ -19,6 +19,7 @@ private:
     struct QemuTree {
         QString dir;
         QString binary;
+        QString module_dir;
     };
     [[nodiscard]] static QemuTree qemu_tree();
     [[nodiscard]] static QString in_qemu_tree(const QString& name);
