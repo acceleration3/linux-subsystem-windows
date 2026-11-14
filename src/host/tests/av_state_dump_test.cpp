@@ -185,6 +185,14 @@ int main(int argc, char** argv) {
     }
     {
         QByteArray dump;
+        dump += "module/device/device/1/contexts/1/context/7 name=hl2.exe sub_api=8\n";
+        dump += "module/device/device/1/contexts/1/context/8 name=a\n";
+        const auto snap = parsed(dump);
+        check(snap.find_context(7)->sub_api == 8, "a context's API is parsed");
+        check(snap.find_context(8)->sub_api == 0, "a context that names no API has none");
+    }
+    {
+        QByteArray dump;
         for (int i = 0; i < 5000; ++i) {
             dump += "module/device/device/1/contexts/1/context/" + QByteArray::number(i) + " name=n\n";
         }

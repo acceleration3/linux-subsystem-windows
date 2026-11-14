@@ -31,6 +31,7 @@ struct HostWindowStatus {
         quint32 device = 0;
         quint32 context = 0;
         QString name;
+        quint32 sub_api = 0;
         quint64 held_bytes = 0;
         int blobs = 0;
         std::optional<double> submits_per_s;
@@ -56,6 +57,9 @@ struct HostWindowStatus {
         std::optional<qint64> copied_at_ms;
 
         [[nodiscard]] QString label() const;
+        [[nodiscard]] std::optional<quint64> pid() const;
+        [[nodiscard]] QString process() const;
+        [[nodiscard]] QString api() const;
         [[nodiscard]] std::optional<int> arena_peak_percent() const;
     };
 

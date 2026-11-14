@@ -13,6 +13,7 @@ public:
         quint32 device = 0;
         quint32 id = 0;
         QString name;
+        quint32 sub_api = 0;
         quint64 write_back_bytes = 0;
         quint64 write_combined_bytes = 0;
         int blobs = 0;

@@ -1,6 +1,10 @@
 #include "lsw/host/services/host_window_status.hpp"
 
+#include <QStringList>
+
 #include <algorithm>
+#include <array>
+#include <utility>
 
 namespace lsw::host::services {
 
@@ -12,6 +16,33 @@ constexpr double kHotSplitsPerSecond = 5.0;
 
 QString HostWindowStatus::App::label() const {
     return name.isEmpty() ? QStringLiteral("context %1").arg(context) : name;
+}
+
+std::optional<quint64> HostWindowStatus::App::pid() const {
+    const qsizetype space = name.indexOf(QLatin1Char(' '));
+    bool whole = false;
+    const quint64 value = name.left(space).toULongLong(&whole);
+    return space > 0 && whole && value > 0 ? std::optional<quint64>(value) : std::nullopt;
+}
+
+QString HostWindowStatus::App::process() const {
+    return pid() ? name.mid(name.indexOf(QLatin1Char(' ')) + 1) : label();
+}
+
+QString HostWindowStatus::App::api() const {
+    static const std::array<std::pair<quint32, QLatin1StringView>, 4> known = {{
+        {8U, QLatin1StringView("Direct3D")},
+        {1U, QLatin1StringView("Vulkan")},
+        {2U, QLatin1StringView("OpenGL")},
+        {4U, QLatin1StringView("OpenCL")},
+    }};
+    QStringList names;
+    for (const auto& [bit, text] : known) {
+        if ((sub_api & bit) != 0) {
+            names << text;
+        }
+    }
+    return names.join(QStringLiteral(" + "));
 }
 
 std::optional<int> HostWindowStatus::App::arena_peak_percent() const {
@@ -118,6 +149,7 @@ void HostWindowTracker::add(const platform::AvStateDump::Snapshot& snapshot, qin
         app.context = id;
         if (context != nullptr) {
             app.name = context->name;
+            app.sub_api = context->sub_api;
             app.held_bytes = context->bytes();
             app.blobs = context->blobs;
             if (context->batches && memory.batches && seconds > 0) {

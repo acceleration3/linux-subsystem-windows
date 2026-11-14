@@ -287,6 +287,7 @@ void AvStateDump::parse(const QByteArray& dump, Snapshot& into) {
                 }
                 Context& context = context_for(into, context_index, device, *id);
                 context.name = *name;
+                context.sub_api = static_cast<quint32>(number(values, QStringLiteral("sub_api")).value_or(0));
                 context.batches = number(values, QStringLiteral("batches"));
             } else if (n == 6 && parts.at(4) == QLatin1String("window_stats")) {
                 WindowStats stats = into.window_stats.value_or(WindowStats{});

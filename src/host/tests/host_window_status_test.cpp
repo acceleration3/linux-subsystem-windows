@@ -426,6 +426,21 @@ int main(int argc, char** argv) {
         check(t.label() == QStringLiteral("context 4"), "an unnamed transfer is labelled by its context");
         t.name = QStringLiteral("Game");
         check(t.label() == QStringLiteral("Game"), "a named transfer shows its name");
+        check(!t.pid() && t.process() == QStringLiteral("Game"), "a name without a process id is the whole name");
+        t.name = QStringLiteral("6204 Half Life.exe");
+        check(t.pid() == 6204 && t.process() == QStringLiteral("Half Life.exe"),
+              "a name that starts with a process id is split into the id and the rest");
+        t.name.clear();
+        check(!t.pid() && t.process() == QStringLiteral("context 4"), "an unnamed app has no process id");
+        check(t.api().isEmpty(), "an app whose context names no API shows none");
+        t.sub_api = 8;
+        check(t.api() == QStringLiteral("Direct3D"), "a Direct3D context is named");
+        t.sub_api = 1;
+        check(t.api() == QStringLiteral("Vulkan"), "a Vulkan context is named");
+        t.sub_api = 2;
+        check(t.api() == QStringLiteral("OpenGL"), "an OpenGL context is named");
+        t.sub_api = 4;
+        check(t.api() == QStringLiteral("OpenCL"), "an OpenCL context is named");
     }
     {
         HostWindowTracker tracker;

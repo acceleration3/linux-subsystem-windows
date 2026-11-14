@@ -35,7 +35,6 @@ using ui::KeyValues;
 using ui::StatusPill;
 using ui::Theme;
 using ui::Widgets;
-using Adapter = services::GraphicsAdapter;
 using Warning = GpuStatusAlerts::Warning;
 using Area = services::StatusHub::Area;
 
@@ -69,26 +68,6 @@ ui::Panel card(const QString& name, const QString& caption, QWidget* right = nul
         panel.header->addWidget(right);
     }
     return panel;
-}
-
-QLabel* adapter_pill(const services::StatusHub& status, const Adapter& adapter) {
-    if (!status.vm().running()) {
-        return StatusPill::make(StatusPill::State::Pending, QStringLiteral("Guest off"));
-    }
-    if (!status.graphics().guest.valid) {
-        return StatusPill::make(StatusPill::State::Pending, QStringLiteral("Waiting for the agent"));
-    }
-    if (!adapter.guest) {
-        return StatusPill::make(StatusPill::State::Failed, QStringLiteral("Not in Windows"));
-    }
-    if (adapter.guest->running()) {
-        return StatusPill::make(StatusPill::State::Done, QStringLiteral("Started"));
-    }
-    if (adapter.guest->no_driver()) {
-        return StatusPill::make(StatusPill::State::Warning, QStringLiteral("No driver"));
-    }
-    return StatusPill::make(StatusPill::State::Failed,
-                            QStringLiteral("Problem code %1").arg(adapter.guest->problem_code));
 }
 
 }
@@ -205,7 +184,6 @@ void GpuStatusPage::rebuild() {
     if (auto* warnings = build_warnings()) {
         content_->addWidget(warnings);
     }
-    content_->addWidget(build_adapters());
     content_->addWidget(build_guest_driver());
     content_->addWidget(build_host_window());
     content_->addWidget(build_guest_vram());
@@ -246,42 +224,6 @@ QWidget* GpuStatusPage::build_warnings() {
         column->addWidget(strip);
     }
     return box;
-}
-
-QWidget* GpuStatusPage::build_adapters() const {
-    const auto& adapters = status_.graphics().adapters;
-    auto panel = card(QStringLiteral("Adapters"), QStringLiteral("what Windows lists"));
-    if (adapters.isEmpty()) {
-        panel.body->addWidget(Widgets::meta(QStringLiteral("-")));
-        return panel.frame;
-    }
-    auto* table = new QTableWidget(static_cast<int>(adapters.size()), 3);
-    Theme::rows_table(table, {QStringLiteral("ADAPTER"), QStringLiteral("ROLE"),
-                              QStringLiteral("IN WINDOWS")},
-                      QStringLiteral("gpu-adapters"), {420, 112, 200});
-    table->verticalHeader()->setDefaultSectionSize(34);
-    for (int row = 0; row < adapters.size(); ++row) {
-        const auto& adapter = adapters.at(row);
-        table->setItem(row, 0, new ui::SortItem(platform::HostGpus::adapter_name(adapter.gpu), std::nullopt, row));
-        table->setItem(row, 1,
-                       new ui::SortItem(adapter.display ? QStringLiteral("Display")
-                                                        : QStringLiteral("Render only"),
-                                        std::nullopt, row));
-        auto* holder = new QWidget;
-        auto* line = new QHBoxLayout(holder);
-        line->setContentsMargins(8, 0, 8, 0);
-        QLabel* pill = adapter_pill(status_, adapter);
-        pill->ensurePolished();
-        pill->setMinimumWidth(pill->sizeHint().width());
-        line->addWidget(pill, 0, Qt::AlignLeft | Qt::AlignVCenter);
-        line->addStretch(1);
-        table->setItem(row, 2, new ui::SortItem(QString{}, std::nullopt, row, pill->text()));
-        table->setCellWidget(row, 2, holder);
-    }
-    Theme::fit_rows(table);
-    ui::TableHeader::refresh(table->horizontalHeader());
-    panel.body->addWidget(table);
-    return panel.frame;
 }
 
 QWidget* GpuStatusPage::build_guest_driver() const {
@@ -437,14 +379,15 @@ QWidget* GpuStatusPage::build_apps() {
                       QStringLiteral("totals and recent rate, click a header to sort"));
     apps_note_ = Widgets::meta(QStringLiteral("-"));
     panel.body->addWidget(apps_note_);
-    apps_table_ = new QTableWidget(0, 13);
+    apps_table_ = new QTableWidget(0, 15);
     Theme::rows_table(apps_table_,
-                      {QStringLiteral("APP"), QStringLiteral("SUBMITS"), QStringLiteral("HELD"),
+                      {QStringLiteral("PID"), QStringLiteral("APP"), QStringLiteral("API"),
+                       QStringLiteral("SUBMITS"), QStringLiteral("HELD"),
                        QStringLiteral("ARENA"), QStringLiteral("SPLITS"), QStringLiteral("EXTRA"),
                        QStringLiteral("ARENA ROOM"), QStringLiteral("RING"), QStringLiteral("FENCE"),
                        QStringLiteral("INLINE"), QStringLiteral("COPIED"), QStringLiteral("SLICE"),
                        QStringLiteral("REFUSED")},
-                      QStringLiteral("gpu-apps"), {210, 84, 96, 250, 110, 110, 170, 170, 170, 70, 70, 70, 80});
+                      QStringLiteral("gpu-apps"), {70, 170, 90, 84, 96, 250, 110, 110, 170, 170, 170, 70, 70, 70, 80});
     apps_table_->verticalHeader()->setDefaultSectionSize(30);
     apps_table_->setVisible(false);
     panel.body->addWidget(apps_table_);
@@ -551,13 +494,12 @@ void GpuStatusPage::fill_apps() {
             }
             return Cell{text, static_cast<double>(*value.count), {}};
         };
-        QString name = app.label();
-        const qsizetype space = name.indexOf(QLatin1Char(' '));
-        if (space > 0 && name.left(space).toULongLong() > 0) {
-            name = name.mid(space + 1);
-        }
+        const auto pid = app.pid();
+        const QString api = app.api();
         const QVector<Cell> cells = {
-            {app.label(), {}, name},
+            pid ? Cell{QString::number(*pid), static_cast<double>(*pid), {}} : Cell{none, {}, {}},
+            {app.process(), {}, {}},
+            {api.isEmpty() ? none : api, {}, {}},
             app.submits_per_s ? Cell{QStringLiteral("%1/s").arg(rate(*app.submits_per_s)), *app.submits_per_s, {}}
                               : Cell{none, {}, {}},
             {ui::Format::bytes(app.held_bytes), static_cast<double>(app.held_bytes), {}},

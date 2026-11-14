@@ -37,7 +37,6 @@ private:
     [[nodiscard]] QString signature() const;
 
     [[nodiscard]] QWidget* build_warnings();
-    [[nodiscard]] QWidget* build_adapters() const;
     [[nodiscard]] QWidget* build_guest_driver() const;
     [[nodiscard]] QWidget* build_host_window();
     [[nodiscard]] QWidget* build_guest_vram();
