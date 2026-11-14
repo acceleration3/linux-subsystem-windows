@@ -23,6 +23,7 @@ void check(bool ok, const char* label) {
 DomainDescription::Share share(const char* tag, const char* path) {
     DomainDescription::Share s;
     s.tag = QString::fromLatin1(tag);
+    s.drive = QString::fromLatin1(tag);
     s.host_path = QString::fromLatin1(path);
     return s;
 }
