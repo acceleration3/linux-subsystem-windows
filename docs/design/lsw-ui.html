@@ -1839,9 +1839,16 @@ svg.ico{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stro
               <div class="srow">
                 <span>
                   <span class="k">Keep running in the tray when closed <span class="tagr live">now</span></span>
-                  <span class="d">Closing the window leaves the guest running.</span>
+                  <span class="d">On: closing the window hides it; the manager, its tray icon and the guest keep running. Off: there is no tray icon and closing the window quits the manager.</span>
                 </span>
                 <span class="ctl"><span class="toggle on"><i></i></span></span>
+              </div>
+              <div class="srow">
+                <span>
+                  <span class="k">Shut the guest down when the manager quits <span class="tagr live">now</span></span>
+                  <span class="d">On: quitting asks Windows to shut down and waits up to 30 seconds for it before the manager exits. Off: the guest keeps running without the manager.</span>
+                </span>
+                <span class="ctl"><span class="toggle"><i></i></span></span>
               </div>
             </div>
 

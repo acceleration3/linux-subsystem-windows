@@ -14,6 +14,7 @@
 #include "lsw/host/manager/graphics_alerts.hpp"
 #include "lsw/host/manager/graphics_page.hpp"
 #include "lsw/host/manager/log_panel.hpp"
+#include "lsw/host/manager/manager_exit.hpp"
 #include "lsw/host/manager/maintenance_page.hpp"
 #include "lsw/host/manager/notice_board.hpp"
 #include "lsw/host/manager/run_on_vm_dialog.hpp"
@@ -62,6 +63,7 @@
 
 #include <algorithm>
 #include <array>
+#include <utility>
 
 namespace lsw::host::manager {
 
@@ -291,7 +293,7 @@ MainWindow::MainWindow(services::HostServices& services, QWidget* parent)
     refresh_status_bar();
     show_page(NavRail::Page::Overview);
     on_graphics_changed();
-    setup_tray();
+    setup_exit();
 
     const auto watch = [this](QScreen* screen) {
         connect(screen, &QScreen::refreshRateChanged, this, [this] { follow_monitor_refresh(); });
@@ -962,10 +964,33 @@ void MainWindow::setup_tray() {
         raise();
     });
     menu->addSeparator();
-    menu->addAction(QStringLiteral("Quit"), this, &MainWindow::on_quit);
+    menu->addAction(QStringLiteral("Quit"), exit_, &ManagerExit::quit);
     tray_->setContextMenu(menu);
     connect(tray_, &QSystemTrayIcon::activated, this, &MainWindow::on_tray_activated);
-    tray_->show();
+    tray_->setVisible(exit_->stays_in_tray());
+}
+
+void MainWindow::setup_exit() {
+    ManagerExit::Host host;
+    host.tray_available = [] { return QSystemTrayIcon::isSystemTrayAvailable(); };
+    host.guest_running = [this] {
+        const config::VmRecord* record = services_.vms().primary();
+        return record != nullptr && services_.lifecycle().is_running(record->uuid);
+    };
+    host.shut_guest_down = [this] {
+        if (const config::VmRecord* record = services_.vms().primary()) {
+            (void)services_.lifecycle().shutdown(record->uuid);
+        }
+    };
+    exit_ = new ManagerExit(services_.manager_settings(), std::move(host), this);
+    setup_tray();
+    connect(exit_, &ManagerExit::tray_wanted, tray_, &QSystemTrayIcon::setVisible);
+    connect(exit_, &ManagerExit::hide_requested, this, &QWidget::hide);
+    connect(exit_, &ManagerExit::left, this, [this] {
+        tray_->hide();
+        hide();
+    });
+    connect(exit_, &ManagerExit::quit_requested, qApp, &QCoreApplication::quit, Qt::QueuedConnection);
 }
 
 void MainWindow::on_tray_activated(QSystemTrayIcon::ActivationReason reason) {
@@ -996,20 +1021,12 @@ bool MainWindow::event(QEvent* e) {
 }
 
 void MainWindow::closeEvent(QCloseEvent* e) {
-    const bool to_tray = services_.manager_settings().bool_value(K::kCloseToTray);
-    if (tray_ != nullptr && to_tray && QSystemTrayIcon::isSystemTrayAvailable()) {
-        hide();
-        e->ignore();
+    if (exit_->finished()) {
+        QMainWindow::closeEvent(e);
         return;
     }
-    QMainWindow::closeEvent(e);
-}
-
-void MainWindow::on_quit() {
-    if (tray_ != nullptr) {
-        tray_->hide();
-    }
-    qApp->quit();
+    e->ignore();
+    exit_->window_closed();
 }
 
 }

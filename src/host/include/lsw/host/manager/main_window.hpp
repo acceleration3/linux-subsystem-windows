@@ -32,6 +32,7 @@ class GpuStatusPage;
 class GraphicsAlerts;
 class GraphicsPage;
 class LogPanel;
+class ManagerExit;
 class MaintenancePage;
 class RunOnVmDialog;
 class AppErrorDialog;
@@ -61,7 +62,6 @@ protected:
     bool event(QEvent* e) override;
 
 private Q_SLOTS:
-    void on_quit();
     void on_tray_activated(QSystemTrayIcon::ActivationReason reason);
 
 private:
@@ -77,6 +77,7 @@ private:
     void start_guest();
     void follow_agent_for_desktop(bool online);
     void setup_tray();
+    void setup_exit();
     void show_app_error(const services::AppErrorReport& report);
     void refresh_identity();
     void refresh_pending_counts();
@@ -132,6 +133,7 @@ private:
     SettingsPage* settings_page_ = nullptr;
     UpdateDialog* update_dialog_ = nullptr;
     QSystemTrayIcon* tray_ = nullptr;
+    ManagerExit* exit_ = nullptr;
     vm::GracefulShutdown* restart_ = nullptr;
 };
 
