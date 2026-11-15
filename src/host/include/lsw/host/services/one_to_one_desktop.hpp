@@ -7,6 +7,7 @@
 #include <QString>
 #include <QTimer>
 #include <functional>
+#include <nlohmann/json_fwd.hpp>
 #include <optional>
 
 namespace lsw::host::config {
@@ -32,6 +33,9 @@ public:
                     int settle_ms = kSettleMs);
 
     [[nodiscard]] QString modes(const std::optional<Mode>& output);
+
+    [[nodiscard]] static nlohmann::json request(const std::optional<Mode>& wanted,
+                                                std::optional<int> scale_percent);
 
     void opened();
     void resized(const QSize& pixels);

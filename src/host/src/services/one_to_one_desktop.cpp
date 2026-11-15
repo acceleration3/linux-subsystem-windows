@@ -4,6 +4,7 @@
 #include "lsw/host/config/manager_settings.hpp"
 #include "lsw/host/services/domain_inputs.hpp"
 
+#include <nlohmann/json.hpp>
 #include <utility>
 
 namespace lsw::host::services {
@@ -47,6 +48,20 @@ QString OneToOneDesktop::modes(const std::optional<Mode>& output) {
         return config::DisplayModes::property({target_->text()});
     }
     return display_modes_from_settings(settings_, output_);
+}
+
+nlohmann::json OneToOneDesktop::request(const std::optional<Mode>& wanted,
+                                        std::optional<int> scale_percent) {
+    nlohmann::json params = nlohmann::json::object();
+    if (!wanted) {
+        return params;
+    }
+    params["width"] = wanted->width;
+    params["height"] = wanted->height;
+    if (scale_percent && *scale_percent > 0) {
+        params["scaling_percent"] = *scale_percent;
+    }
+    return params;
 }
 
 void OneToOneDesktop::opened() {

@@ -12,6 +12,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <functional>
+#include <nlohmann/json.hpp>
 #include <optional>
 
 using lsw::host::config::DisplayMode;
@@ -356,6 +357,17 @@ void a_quick_reopen_ends_applied(ManagerSettings& settings) {
 
 }  // namespace
 
+void a_switch_carries_the_scale_windows_had() {
+    const nlohmann::json plain = OneToOneDesktop::request(DisplayMode{1412, 757}, std::nullopt);
+    check(plain == nlohmann::json({{"width", 1412}, {"height", 757}}),
+          "a switch with no scale known asks for the size alone");
+    const nlohmann::json scaled = OneToOneDesktop::request(DisplayMode{1412, 757}, 125);
+    check(scaled == nlohmann::json({{"width", 1412}, {"height", 757}, {"scaling_percent", 125}}),
+          "a switch asks for the scale Windows was given, since a new resolution starts at 100 %");
+    check(OneToOneDesktop::request(std::nullopt, 125) == nlohmann::json::object(),
+          "asking what the resolution is changes neither");
+}
+
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
     QTemporaryDir dir;
@@ -372,6 +384,7 @@ int main(int argc, char** argv) {
 
     ManagerSettings settings;
     off_changes_nothing(settings);
+    a_switch_carries_the_scale_windows_had();
     follows_the_window_and_restores(settings);
     keeps_a_resolution_that_is_not_preferred(settings);
     a_window_already_that_size_changes_nothing(settings);

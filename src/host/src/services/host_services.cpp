@@ -122,9 +122,8 @@ OneToOneDesktop::Guest HostServices::guest_display() {
         }
         return mode;
     };
-    const auto params = [](const std::optional<config::DisplayMode>& wanted) {
-        return wanted ? nlohmann::json{{"width", wanted->width}, {"height", wanted->height}}
-                      : nlohmann::json::object();
+    const auto params = [this](const std::optional<config::DisplayMode>& wanted) {
+        return OneToOneDesktop::request(wanted, status_.graphics().scale_percent);
     };
     OneToOneDesktop::Guest guest;
     guest.offer = [this](const QString& modes) {
