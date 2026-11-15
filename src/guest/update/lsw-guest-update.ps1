@@ -312,6 +312,11 @@ function Step-Driver {
     if (Test-Path -LiteralPath $DriverMarker -PathType Leaf) { $have = [System.IO.File]::ReadAllText($DriverMarker, $Utf8) }
     $current = $have -ceq $wanted -and (Tree-Is-Current 'C:\av\package')
     foreach ($path in $set) { if (-not (Is-Current $path $path)) { $current = $false } }
+    $unnamed = @(Adapters-Not-In 'C:\av\resign\package\avgpu.inf')
+    if ($unnamed.Count) {
+        L ('adapters the installed package does not name: ' + ($unnamed -join '; '))
+        $current = $false
+    }
     if ($current -and -not $Force) { $script:State = 'skipped'; return }
     Remove-Item -LiteralPath $DriverMarker -Force -ErrorAction SilentlyContinue
 
@@ -338,13 +343,29 @@ function Package-Version([string] $Inf) {
     throw ($Inf + ' has no DriverVer')
 }
 
+function Av-Hardware-Id {
+    '^PCI\\VEN_([0-9A-F]{4})&DEV_([0-9A-F]{4})&SUBSYS_52561AF4$'
+}
+
+function Av-Adapters {
+    $pattern = Av-Hardware-Id
+    @(Get-PnpDevice -PresentOnly -ErrorAction SilentlyContinue |
+        Where-Object { @($_.HardwareID | Where-Object { $_ -match $pattern }).Count })
+}
+
+function Adapters-Not-In([string] $Inf) {
+    if (-not (Test-Path -LiteralPath $Inf -PathType Leaf)) { return @() }
+    $pattern = Av-Hardware-Id
+    $named = (Get-Content -LiteralPath $Inf) -join "`n"
+    @(Av-Adapters | ForEach-Object { $_.HardwareID } | Where-Object { $_ -match $pattern } |
+        Where-Object { $named.IndexOf($_, [StringComparison]::OrdinalIgnoreCase) -lt 0 } | Select-Object -Unique)
+}
+
 function Driver-Is-Live([string] $Inf, [int] $Seconds) {
     $version = Package-Version $Inf
-    $pattern = '^PCI\\VEN_([0-9A-F]{4})&DEV_([0-9A-F]{4})&SUBSYS_52561AF4$'
     $until = (Get-Date).AddSeconds($Seconds)
     while ($true) {
-        $devices = @(Get-PnpDevice -PresentOnly -ErrorAction SilentlyContinue |
-            Where-Object { @($_.HardwareID | Where-Object { $_ -match $pattern }).Count })
+        $devices = @(Av-Adapters)
         $live = $devices.Count -gt 0
         $report = @()
         foreach ($device in $devices) {
