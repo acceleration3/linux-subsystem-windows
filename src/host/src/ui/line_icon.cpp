@@ -256,6 +256,10 @@ LineIcon::Built LineIcon::build(Shape shape) {
         rect(8.5, 8.5, 3, 3, 0);
         lines("M8 2.5v3M12 2.5v3M8 14.5v3M12 14.5v3M2.5 8h3M2.5 12h3M14.5 8h3M14.5 12h3");
         break;
+    case Shape::GpuStatus:
+        rect(2.5, 4.5, 15, 11, 2);
+        lines("M5.5 10h2.5l1.5-3 2 6 1.5-3h2");
+        break;
     case Shape::Files:
         lines("M2.5 6.5v8a1.5 1.5 0 0 0 1.5 1.5h12a1.5 1.5 0 0 0 1.5-1.5V8a1.5 1.5 0 0 0-1.5-1.5H10"
               "L8.3 4.5H4A1.5 1.5 0 0 0 2.5 6Z");
@@ -299,6 +303,12 @@ LineIcon::Built LineIcon::build(Shape shape) {
         rect(2.5, 5, 15, 10, 2);
         lines("M2.5 11h15");
         dot(14, 13, 0.6);
+        break;
+    case Shape::Network:
+        rect(7.5, 2.5, 5, 4.5, 1);
+        rect(2.5, 13, 5, 4.5, 1);
+        rect(12.5, 13, 5, 4.5, 1);
+        lines("M10 7v3M5 13v-3h10v3");
         break;
     case Shape::Count:
         break;

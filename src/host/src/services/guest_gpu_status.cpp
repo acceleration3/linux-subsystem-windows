@@ -55,6 +55,8 @@ GuestGpuStatus GuestGpuStatus::from_json(const nlohmann::json& body) {
     out.driver_search_off = flag(body, "driver_search_off").value_or(false);
     out.user_mode_submission = flag(body, "user_mode_submission");
     out.native_fences = flag(body, "native_fences");
+    out.display_core_disabled = flag(body, "display_core_disabled").value_or(false);
+    out.display_core_loaded = flag(body, "display_core_loaded");
     return out;
 }
 

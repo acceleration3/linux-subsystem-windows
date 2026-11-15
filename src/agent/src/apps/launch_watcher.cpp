@@ -3,16 +3,15 @@
 #include "lsw/agent/apps/error_report.hpp"
 #include "lsw/agent/apps/exit_reporter.hpp"
 #include "lsw/agent/apps/exit_status.hpp"
+#include "lsw/agent/apps/launch_group.hpp"
 #include "lsw/agent/log.hpp"
 #include "lsw/agent/util/text_encoding.hpp"
 #include "lsw/agent/win/error_text.hpp"
 #include "lsw/agent/win/process_info.hpp"
-
 #include "lsw/linkproto/commands.hpp"
 
-#include <nlohmann/json.hpp>
-
 #include <iterator>
+#include <nlohmann/json.hpp>
 #include <utility>
 #include <windows.h>
 
@@ -273,16 +272,26 @@ void LaunchWatcher::on_exit_process(unsigned long pid) {
 
 void LaunchWatcher::on_launch_ended(unsigned long key) {
     LSW_AGENT_DEBUG("launch_watcher: launch {} has no process left", key);
+    std::thread([this, key] {
+        if (!LaunchGroup::follow_relaunch(key)) {
+            report_launch_ended(key);
+        }
+    }).detach();
+}
+
+void LaunchWatcher::report_launch_ended(unsigned long key) {
     const std::lock_guard lock(mu_);
     std::string app_id;
+    std::uint64_t created = 0;
     if (const auto id = identities_.find(key); id != identities_.end()) {
         app_id = id->second.app_id;
+        created = id->second.created;
     }
     if (pending_.size() >= kMaxPendingReports) {
         pending_.erase(pending_.begin());
     }
     pending_.emplace_back(linkproto::topic::kLaunchEnded,
-                          nlohmann::json{{"pid", key}, {"app_id", app_id}});
+                          nlohmann::json{{"pid", key}, {"created", created}, {"app_id", app_id}});
 }
 
 void LaunchWatcher::report_async(ExitedProcess exited) {

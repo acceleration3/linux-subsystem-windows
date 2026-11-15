@@ -15,7 +15,7 @@ constexpr const char* kStageRoot = "C:\\ProgramData\\LSW\\update\\";
 std::string UpdateBatch::send(unsigned short port, const std::string& release,
                                 const GuestBundle::Contents& contents, bool force) {
     LSW_DEBUG("update batch: {} files, port {}{}", contents.files.size(), port, force ? ", forced" : "");
-    const std::string stage = kStageRoot + release.substr(0, 16);
+    const std::string stage = kStageRoot + release.substr(0, 16) + "-" + std::to_string(port);
     const std::string url = "http://10.0.2.2:" + std::to_string(port) + "/";
     std::string text = "@echo off\r\nsetlocal\r\n";
     text += "set STAGE=" + stage + "\r\n";

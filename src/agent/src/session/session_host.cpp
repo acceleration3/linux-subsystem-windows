@@ -12,6 +12,7 @@
 #include "lsw/agent/win/error_text.hpp"
 #include "lsw/agent/win/overlapped_pipe.hpp"
 #include "lsw/agent/win/process_info.hpp"
+#include "lsw/agent/win/window_watcher.hpp"
 #include "lsw/agent/win/wts_sessions.hpp"
 
 // clang-format off
@@ -139,7 +140,7 @@ void run_gate(Shared& shared) {
 }
 
 void run_pump(Shared& shared, uia::Uia& uia, win::ClipboardWatcher* clipboard,
-              std::uint32_t session) {
+              win::WindowWatcher* windows, std::uint32_t session) {
     std::uint64_t log_cursor = 0;
     while (!shared.stopping()) {
         for (const auto& record : log::collect_since(log_cursor, log_cursor)) {
@@ -158,6 +159,13 @@ void run_pump(Shared& shared, uia::Uia& uia, win::ClipboardWatcher* clipboard,
                 nlohmann::json message = std::move(ev.payload);
                 message["event"] = ev.topic;
                 message["session"] = session;
+                shared.send(message);
+            }
+        }
+        if (windows != nullptr) {
+            for (auto& ev : windows->announcements().collect_pending()) {
+                nlohmann::json message = std::move(ev.payload);
+                message["event"] = ev.topic;
                 shared.send(message);
             }
         }
@@ -216,7 +224,7 @@ int SessionHost::run(const std::wstring& pipe_name) {
     std::thread{[shared] { run_gate(*shared); }}.detach();
 
     std::thread pump{[shared, services, session] {
-        run_pump(*shared, services->uia(), services->clipboard(), session);
+        run_pump(*shared, services->uia(), services->clipboard(), services->windows(), session);
     }};
     std::vector<std::thread> workers;
     for (int i = 0; i < kWorkers; ++i) {

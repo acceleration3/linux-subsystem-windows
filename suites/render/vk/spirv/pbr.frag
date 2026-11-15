@@ -1,0 +1,41 @@
+#version 450
+layout(set = 0, binding = 0) uniform samplerCube u_irradiance;
+layout(set = 0, binding = 1) uniform samplerCube u_prefilter;
+layout(set = 0, binding = 2) uniform sampler2D u_brdf;
+layout(push_constant) uniform P { mat4 vp; vec4 center; vec4 material; vec4 eye; } pc;
+layout(location = 0) in vec3 v_world;
+layout(location = 1) in vec3 v_n;
+layout(location = 0) out vec4 out_color;
+const float PI = 3.14159265;
+void main() {
+    vec3 base = vec3(0.95, 0.6, 0.25);
+    float rough = pc.material.x;
+    float metal = pc.material.y;
+    vec3 n = normalize(v_n);
+    vec3 v = normalize(pc.eye.xyz - v_world);
+    vec3 r = reflect(-v, n);
+    float ndv = max(dot(n, v), 0.0);
+    vec3 f0 = mix(vec3(0.04), base, metal);
+    vec3 l = normalize(vec3(0.5, 0.6, 0.4));
+    vec3 h = normalize(v + l);
+    float ndl = max(dot(n, l), 0.0);
+    float ndh = max(dot(n, h), 0.0);
+    float a = rough * rough;
+    float a2 = a * a;
+    float d = a2 / (PI * pow(ndh * ndh * (a2 - 1.0) + 1.0, 2.0));
+    float k = (rough + 1.0) * (rough + 1.0) / 8.0;
+    float g = (ndv / (ndv * (1.0 - k) + k)) * (ndl / (ndl * (1.0 - k) + k));
+    vec3 f = f0 + (1.0 - f0) * pow(1.0 - max(dot(h, v), 0.0), 5.0);
+    vec3 spec_direct = d * g * f / max(4.0 * ndv * ndl, 1e-3);
+    vec3 kd_direct = (1.0 - f) * (1.0 - metal);
+    vec3 direct = (kd_direct * base / PI + spec_direct) * vec3(3.0, 2.8, 2.4) * ndl;
+    vec3 fr = f0 + (max(vec3(1.0 - rough), f0) - f0) * pow(1.0 - ndv, 5.0);
+    vec3 kd = (1.0 - fr) * (1.0 - metal);
+    vec3 diffuse = texture(u_irradiance, n).rgb * base;
+    vec3 prefiltered = textureLod(u_prefilter, r, rough * 4.0).rgb;
+    vec2 lut = texture(u_brdf, vec2(ndv, rough)).rg;
+    vec3 ambient = kd * diffuse + prefiltered * (fr * lut.x + lut.y);
+    vec3 color = direct + ambient;
+    color = color / (1.0 + color);
+    out_color = vec4(pow(color, vec3(1.0 / 2.2)), 1.0);
+}

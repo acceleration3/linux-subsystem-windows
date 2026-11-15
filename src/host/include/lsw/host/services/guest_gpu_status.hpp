@@ -31,6 +31,8 @@ struct GuestGpuStatus {
     QVector<Adapter> adapters;
     bool test_signing = false;
     bool driver_search_off = false;
+    bool display_core_disabled = false;
+    std::optional<bool> display_core_loaded;
     std::optional<bool> user_mode_submission;
     std::optional<bool> native_fences;
 

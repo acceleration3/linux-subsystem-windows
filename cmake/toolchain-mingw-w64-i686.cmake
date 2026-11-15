@@ -15,6 +15,8 @@ set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
 set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
 set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
 
+add_compile_definitions(_WIN32_WINNT=0x0A00 WINVER=0x0A00)
+
 set(CMAKE_EXE_LINKER_FLAGS_INIT
     "-static -static-libgcc -static-libstdc++ -mconsole -Wl,-Bstatic,--whole-archive -lwinpthread -Wl,--no-whole-archive")
 

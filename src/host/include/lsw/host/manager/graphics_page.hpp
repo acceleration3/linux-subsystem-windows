@@ -39,16 +39,12 @@ protected:
 private:
     void refresh();
     void rebuild();
-    void update_log();
     [[nodiscard]] QString signature() const;
 
     [[nodiscard]] QWidget* build_warnings();
     [[nodiscard]] QWidget* build_adapter_card(const platform::HostGpu& gpu);
     [[nodiscard]] QWidget* build_apis() const;
     [[nodiscard]] QWidget* build_device();
-    [[nodiscard]] QWidget* build_guest_driver() const;
-    [[nodiscard]] QWidget* build_log();
-    void open_log() const;
 
     services::StatusHub& status_;
     GraphicsAlerts& alerts_;
@@ -57,8 +53,6 @@ private:
     AdapterRoles* roles_ = nullptr;
     SettingControls* controls_ = nullptr;
     QVBoxLayout* content_ = nullptr;
-    QLabel* log_meta_ = nullptr;
-    QLabel* log_text_ = nullptr;
     QString built_for_;
 };
 

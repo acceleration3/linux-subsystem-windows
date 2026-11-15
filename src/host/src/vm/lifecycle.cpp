@@ -447,9 +447,7 @@ bool Lifecycle::fill_accel_virt(DomainXmlInputs& inputs) {
         }
     }
 
-    if (inputs.qemu_module_dir.isEmpty() && !inputs.qemu_binary.isEmpty()) {
-        inputs.qemu_module_dir = QFileInfo(inputs.qemu_binary).absolutePath();
-    }
+    fill(inputs.qemu_module_dir, &platform::AccelVirtPaths::qemu_module_dir);
     fill(inputs.qemu_data_dir, &platform::AccelVirtPaths::qemu_data_dir);
     if (inputs.qemu_binary.isEmpty()) {
         last_error_ = QStringLiteral(

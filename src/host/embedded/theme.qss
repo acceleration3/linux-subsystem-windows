@@ -270,7 +270,30 @@ QTableWidget#Rows QHeaderView, QTableView#Rows QHeaderView {
     background: transparent;
     border: none;
 }
-QTableWidget#Rows QHeaderView::section, QTableView#Rows
+QTableWidget#Rows QHeaderView::section, QTableView#Rows QHeaderView::section {
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid #272d3a;
+    border-right: 1px solid transparent;
+    padding: 0px 12px 7px 12px;
+}
+QTableWidget#Rows QHeaderView::section:hover, QTableView#Rows QHeaderView::section:hover {
+    border-right: 1px solid #394152;
+}
+QHeaderView::up-arrow {
+    image: url(:/lsw/sort-up.png);
+    width: 9px;
+    height: 9px;
+    subcontrol-origin: padding;
+    subcontrol-position: center right;
+}
+QHeaderView::down-arrow {
+    image: url(:/lsw/sort-down.png);
+    width: 9px;
+    height: 9px;
+    subcontrol-origin: padding;
+    subcontrol-position: center right;
+}
 QListWidget#StoreApps, QWidget#StoreAppsEmpty {
     background-color: #0d0f14;
     border: none;
@@ -368,6 +391,9 @@ QFrame#OptionCard:hover {
 QFrame#OptionCard[selected="true"] {
     background-color: #1b1a19;
     border: 1px solid #a8672a;
+}
+QFrame#OptionCard:focus {
+    border: 1px solid #ff9f45;
 }
 
 QLabel#IconSlot {
@@ -835,6 +861,43 @@ QLabel#StepChip[tone="bad"] {
     background-color: #24181a;
 }
 
+QPushButton#Chip {
+    font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace;
+    font-size: 11px;
+    font-weight: 400;
+    color: #9aa3b4;
+    background-color: #0f131a;
+    border: 1px solid #272d3a;
+    border-radius: 11px;
+    padding: 3px 10px;
+    min-height: 14px;
+}
+QPushButton#Chip:hover {
+    color: #e4e8f0;
+    border-color: #39415a;
+}
+QPushButton#Chip[applied="true"] {
+    color: #4ec98a;
+    border-color: #2c5c44;
+    background-color: #16241d;
+}
+QPushButton#Chip:focus {
+    border-color: #ff9f45;
+}
+
+QLabel#Code {
+    font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace;
+    font-size: 12px;
+    background-color: #0f131a;
+    border: 1px solid #272d3a;
+    border-radius: 4px;
+    padding: 2px 8px;
+}
+
+QFrame#Separator[soft="true"] {
+    background-color: #1b202a;
+}
+
 QFrame#Panel[danger="true"] {
     border-color: #6b2f32;
 }
@@ -854,4 +917,25 @@ QPushButton[compact="true"] {
 QComboBox[compact="true"] {
     padding: 3px 8px;
     font-size: 11px;
+}
+
+QHeaderView::section {
+    border-right: 1px solid transparent;
+}
+QHeaderView::section:hover {
+    border-right: 1px solid #394152;
+}
+QHeaderView::up-arrow {
+    image: url(:/lsw/sort-up.png);
+    width: 9px;
+    height: 9px;
+    subcontrol-origin: padding;
+    subcontrol-position: center right;
+}
+QHeaderView::down-arrow {
+    image: url(:/lsw/sort-down.png);
+    width: 9px;
+    height: 9px;
+    subcontrol-origin: padding;
+    subcontrol-position: center right;
 }

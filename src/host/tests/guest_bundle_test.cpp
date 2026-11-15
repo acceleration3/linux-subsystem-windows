@@ -32,6 +32,29 @@ std::string sha256(const std::string& text) {
         .toStdString();
 }
 
+std::string lines_of(const std::string& manifest, bool config) {
+    std::string kept;
+    for (size_t at = 0; at < manifest.size();) {
+        const size_t end = manifest.find('\n', at);
+        const std::string line = manifest.substr(at, end - at + 1);
+        const bool is_config = line.find("C:\\av\\adapters.txt") != std::string::npos ||
+                               line.find(GuestBundle::kSharesGuestPath) != std::string::npos;
+        if (is_config == config) {
+            kept += line;
+        }
+        at = end + 1;
+    }
+    return kept;
+}
+
+std::string release_of(const std::string& manifest) {
+    return sha256(lines_of(manifest, false));
+}
+
+std::string config_of(const std::string& manifest) {
+    return sha256(lines_of(manifest, true));
+}
+
 class Tree {
 public:
     Tree() {
@@ -134,8 +157,11 @@ int main(int argc, char** argv) {
                      && base->manifest.find(f.sha256 + "  " + f.guest_path + "\n") != std::string::npos;
         }
         check(hashes, "each line's hash is the SHA-256 of the file's bytes");
-        check(base->release == sha256(base->manifest) && base->release.size() == 64,
-              "the release is the SHA-256 hex of the manifest text");
+        check(base->release == release_of(base->manifest) && base->release.size() == 64,
+              "the release is the SHA-256 hex of the manifest lines of everything but the mount "
+              "list and adapters.txt");
+        check(base->config == config_of(base->manifest) && base->config.size() == 64,
+              "the config is the SHA-256 hex of the mount list's and adapters.txt's lines");
     }
 
     check(has(base, "C:\\ProgramData\\LSW\\lsw-agent.exe") && has(base, "C:\\ProgramData\\LSW\\remotewin-guest.exe")
@@ -169,12 +195,20 @@ int main(int argc, char** argv) {
         tree.write("virtiofs/winfsp.msi", "winfsp");
         check(collect()->release == base->release, "putting the bytes back puts the release back");
     }
-    check(collect(QStringLiteral("10de\t2684\tRTX\t32.0.1.2\n"), "d=D:=SG9zdA==")->release != base->release,
-          "a different mount list gives a different release");
+    {
+        const Contents mounted =
+            collect(QStringLiteral("10de\t2684\tRTX\t32.0.1.2\n"), "d=D:=SG9zdA==");
+        check(mounted->release == base->release && mounted->config != base->config,
+              "a different mount list gives the same release and a different config");
+    }
     check(collect(QStringLiteral("10de\t2684\tRTX\t32.0.1.2\n"), "none")->release == base->release,
           "the same mount list gives the same");
-    check(collect(QStringLiteral("10de\t2684\tRTX\t32.0.1.3\n"))->release != base->release,
-          "a different driver version in adapters.txt gives a different release");
+    {
+        const Contents versioned = collect(QStringLiteral("10de\t2684\tRTX\t32.0.1.3\n"));
+        check(versioned->release == base->release && versioned->config != base->config,
+              "a different driver version in adapters.txt gives the same release and a different "
+              "config");
+    }
     {
         const QString ab = QStringLiteral("1002\t7550\tAMD\t1.2.3.4\n10de\t2684\tRTX\t32.0.1.2\n");
         const QString ba = QStringLiteral("10de\t2684\tRTX\t32.0.1.2\n1002\t7550\tAMD\t1.2.3.4\n");
@@ -189,8 +223,8 @@ int main(int argc, char** argv) {
     }
     check(!has(collect(QString{}), "C:\\av\\adapters.txt"), "no adapter names, no adapters.txt");
 
-    check(!base->version.empty() && base->manifest.find(base->version) == std::string::npos
-              && base->release == sha256(base->manifest),
+    check(!base->version.empty() && base->manifest.find(base->version) == std::string::npos &&
+              base->release == release_of(base->manifest),
           "the version is in the contents, and in neither the manifest nor the release");
     check(base->shares == "none", "the mount list is carried in the contents");
 
@@ -233,7 +267,8 @@ int main(int argc, char** argv) {
         check(no_virtiofs, "missing shared-folder files are left out");
         check(has(c, "C:\\ProgramData\\LSW\\lsw-agent.exe") && has(c, "C:\\av\\package\\avgpu.sys"),
               "the required files are still there");
-        check(c->release != base->release && c->release == sha256(c->manifest), "and the release is that of what is there");
+        check(c->release != base->release && c->release == release_of(c->manifest),
+              "and the release is that of what is there");
         tree.point_all();
     }
 
@@ -261,21 +296,24 @@ int main(int argc, char** argv) {
         check(GuestBundle::shares_argument({}) == QStringLiteral("none"), "no mounts is 'none'");
         const QString arg = GuestBundle::shares_argument(
             {Mount{"d", "D:", "Documents"}, Mount{"e", "E:", "Müsik"}});
-        check(arg == QStringLiteral("d=D:=%1,e=E:=%2")
-                         .arg(QString::fromLatin1(QByteArray{"Documents"}.toBase64()),
-                              QString::fromLatin1(QByteArray{"M\xc3\xbcsik"}.toBase64())),
-              "a mount is tag=drive=base64(name) and mounts are comma-joined");
+        const auto b64 = [](const char* text) {
+            return QString::fromLatin1(QByteArray{text}.toBase64());
+        };
+        check(arg == QStringLiteral("D:%1:%2,E:%3:%4")
+                         .arg(b64("d"), b64("Documents"), b64("e"), b64("M\xc3\xbcsik")),
+              "a mount is drive:base64(tag):base64(name) and mounts are comma-joined");
         lsw::host::vm::DomainDescription definition;
-        definition.shares = {{"d", "/home/u/Documents", false},
-                             {"xx", "/tmp/two", false},
-                             {"1", "/tmp/digit", false},
-                             {"z", "/", false}};
+        definition.shares = {{"Documents", "/home/u/Documents", false, "d"},
+                             {"two", "/tmp/two", false, "xx"},
+                             {"digit", "/tmp/digit", false, "1"},
+                             {"Host", "/", false, "z"}};
         const auto mounts = GuestBundle::mounts_of(definition);
-        check(mounts.size() == 2 && mounts[0].tag == "d" && mounts[0].drive == "D:" && mounts[0].name == "Documents",
-              "a share's tag is its drive letter, upper-cased with a colon, named by the folder");
+        check(mounts.size() == 2 && mounts[0].tag == "Documents" && mounts[0].drive == "D:" &&
+                  mounts[0].name == "Documents",
+              "a share's drive is its letter, upper-cased with a colon, and its name is its tag");
         check(mounts.size() == 2 && mounts[1].drive == "Z:" && mounts[1].name == "Host",
-              "the host's root is called Host");
-        check(mounts.size() == 2, "a tag that is not a single letter is no share of LSW's");
+              "the host's root keeps the name it was given");
+        check(mounts.size() == 2, "a drive that is not a single letter is no share Windows mounts");
     }
 
     std::printf("%d failure(s)\n", g_failures);

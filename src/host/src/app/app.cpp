@@ -3,23 +3,23 @@
 #include "lsw/base/log.hpp"
 #include "lsw/host/app/unattended_runner.hpp"
 #include "lsw/host/apps/desktop_launcher.hpp"
+#include "lsw/host/manager/app_config_dialog.hpp"
+#include "lsw/host/manager/app_error_dialog.hpp"
 #include "lsw/host/manager/collect_logs_dialog.hpp"
 #include "lsw/host/manager/document_opener.hpp"
 #include "lsw/host/manager/guest_app_launch_controller.hpp"
-#include "lsw/host/manager/app_config_dialog.hpp"
-#include "lsw/host/manager/app_error_dialog.hpp"
 #include "lsw/host/manager/launch_splash.hpp"
-#include "lsw/host/manager/update_dialog.hpp"
-#include "lsw/host/services/guest_update_status.hpp"
 #include "lsw/host/manager/main_window.hpp"
 #include "lsw/host/manager/open_document_dialog.hpp"
 #include "lsw/host/manager/remote_file_dialog.hpp"
-#include "lsw/host/tools/download_image_dialog.hpp"
-#include "lsw/host/tools/trim_image_dialog.hpp"
+#include "lsw/host/manager/update_dialog.hpp"
 #include "lsw/host/mcp/mcp_server.hpp"
 #include "lsw/host/platform/accel_virt_paths.hpp"
 #include "lsw/host/platform/agent_exe_path.hpp"
 #include "lsw/host/platform/mirror_exe_paths.hpp"
+#include "lsw/host/services/guest_update_status.hpp"
+#include "lsw/host/tools/download_image_dialog.hpp"
+#include "lsw/host/tools/trim_image_dialog.hpp"
 #include "lsw/host/ui/theme.hpp"
 #include "lsw/host/ui/widgets.hpp"
 #include "lsw/host/vm/domain_importer.hpp"
@@ -32,7 +32,7 @@
 #include <QIcon>
 #include <QMetaObject>
 #include <QProcess>
-
+#include <cstdint>
 #include <string>
 #include <utility>
 
@@ -236,6 +236,8 @@ int App::capture_screens(const QString& dir) {
         {manager::NavRail::Page::Files, "manager-08-files", 700},
         {manager::NavRail::Page::Usb, "manager-09-usb", 800},
         {manager::NavRail::Page::Maintenance, "manager-10-maintenance", 700},
+        {manager::NavRail::Page::GpuStatus, "manager-11-gpu-status", 860},
+        {manager::NavRail::Page::Network, "manager-12-network", 1100},
     };
     for (const auto& entry : kPages) {
         window->resize(1000, entry.height);
@@ -404,7 +406,8 @@ void App::start_mcp_server() {
         return;
     }
     mcp_server_ = std::make_unique<mcp::McpServer>(services_.rpc(), services_.log_store(), services_.guest_update(), services_.status(), services_.log_collector(), services_.log_cleaner(), this);
-    (void)mcp_server_->listen();
+    const int port = qEnvironmentVariableIntValue("LSW_MCP_PORT");
+    (void)mcp_server_->listen(port > 0 ? static_cast<std::uint16_t>(port) : std::uint16_t{5105});
 }
 
 void App::on_wizard_complete() {
@@ -428,6 +431,9 @@ void App::spawn_manager_and_quit() {
 bool App::hand_over(const QStringList& args) {
     single_instance_.release();
     if (QProcess::startDetached(QCoreApplication::applicationFilePath(), args)) {
+        if (main_window_ != nullptr) {
+            main_window_->hand_over();
+        }
         quit();
         return true;
     }

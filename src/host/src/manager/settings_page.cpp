@@ -4,6 +4,7 @@
 #include "lsw/host/config/manager_settings.hpp"
 #include "lsw/host/config/pending_changes.hpp"
 #include "lsw/host/config/vm_sizing.hpp"
+#include "lsw/host/manager/manager_exit.hpp"
 #include "lsw/host/manager/setting_controls.hpp"
 #include "lsw/host/platform/host_memory.hpp"
 #include "lsw/host/services/status_hub.hpp"
@@ -20,9 +21,10 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QStringList>
 #include <QVBoxLayout>
-
 #include <algorithm>
+#include <chrono>
 
 namespace lsw::host::manager {
 
@@ -133,6 +135,21 @@ void SettingsPage::build_machine() {
                 .arg(config::VmSizing::host_cores()),
             cores);
 
+    auto* priority_row = add_row(
+        machine, K::kPriority, QStringLiteral("Priority"), QString{},
+        controls_->choice(K::kPriority, {
+                                            {QStringLiteral("Normal"), QStringLiteral("normal")},
+                                            {QStringLiteral("High"), QStringLiteral("high")},
+                                            {QStringLiteral("Highest"), QStringLiteral("highest")},
+                                        }));
+    priority_note_ = priority_row->findChild<QLabel*>(QStringLiteral("rowDescription"));
+    connect(&status_, &services::StatusHub::changed, this, [this](services::StatusHub::Area area) {
+        if (area == services::StatusHub::Area::Host) {
+            refresh_priority_note();
+        }
+    });
+    refresh_priority_note();
+
     const auto host_mib = platform::HostMemory::total_mib();
     add_row(machine, K::kMemoryMib, QStringLiteral("Memory"),
             host_mib ? QStringLiteral("Fixed: the guest holds all of it while it runs. %1 GiB on "
@@ -165,14 +182,86 @@ void SettingsPage::build_machine() {
     follow_disk();
 }
 
+QString SettingsPage::priority_note(const services::PriorityStatus& status) {
+    using Level = services::PriorityStatus::Level;
+    QStringList parts;
+    switch (status.wanted) {
+    case Level::Normal:
+        parts << QStringLiteral("The guest shares the processors with other programs like any "
+                                "program.");
+        break;
+    case Level::High:
+        parts << QStringLiteral("When the processors are busy the guest and its windows get time "
+                                "ahead of other programs.");
+        break;
+    case Level::Highest:
+        parts << QStringLiteral("As High, and the threads that carry the picture run ahead of "
+                                "ordinary threads.");
+        break;
+    }
+    if (status.wanted == Level::Normal) {
+        if (status.weight_raised) {
+            parts << QStringLiteral("The larger share the guest had could not be taken back; it "
+                                    "ends when the guest stops.");
+        }
+        return parts.join(QLatin1Char(' '));
+    }
+    if (!status.vm_running) {
+        parts << QStringLiteral("In effect once the guest runs.");
+        return parts.join(QLatin1Char(' '));
+    }
+    if (status.weight_refused) {
+        parts << QStringLiteral("Not in effect: this session did not let the manager give the "
+                                "guest a larger share of the processors.");
+    }
+    if (status.mirrors_refused) {
+        parts << QStringLiteral("The window mirrors run with the normal share: this session did "
+                                "not let the manager give them a larger one.");
+    }
+    if (status.wanted != Level::Highest) {
+        return parts.join(QLatin1Char(' '));
+    }
+    if (status.threads_unnamed) {
+        parts << QStringLiteral("The picture threads stay at normal priority: QEMU's threads "
+                                "carry no names to tell them apart.");
+    } else if (status.threads_refused) {
+        parts << (status.threads_raised
+                      ? QStringLiteral("The system refused the priority for some of the picture "
+                                       "threads.")
+                      : QStringLiteral("The picture threads stay at normal priority: this "
+                                       "account's limits do not allow a higher one."));
+    }
+    if (status.clamped()) {
+        parts << QStringLiteral("This account's limits allow nice %1 rather than %2.")
+                     .arg(status.nice)
+                     .arg(status.wanted_nice);
+    }
+    return parts.join(QLatin1Char(' '));
+}
+
+void SettingsPage::refresh_priority_note() {
+    if (priority_note_ != nullptr) {
+        priority_note_->setText(priority_note(status_.priority()));
+    }
+}
+
 void SettingsPage::build_startup() {
     auto* startup = new_group(QStringLiteral("Startup"));
     add_row(startup, K::kAutostart, QStringLiteral("Start the guest when the manager opens"),
             QStringLiteral("Otherwise it starts the first time you launch an application."),
             right_aligned(controls_->toggle(K::kAutostart)));
     add_row(startup, K::kCloseToTray, QStringLiteral("Keep running in the tray when closed"),
-            QStringLiteral("Closing the window leaves the guest running."),
+            QStringLiteral("On: closing the window hides it; the manager, its tray icon and the "
+                           "guest keep running. Off: there is no tray icon and closing the window "
+                           "quits the manager."),
             right_aligned(controls_->toggle(K::kCloseToTray)));
+    add_row(
+        startup, K::kShutGuestOnQuit, QStringLiteral("Shut the guest down when the manager quits"),
+        QStringLiteral("On: quitting asks Windows to shut down and waits up to %1 seconds for "
+                       "it before the manager exits. Off: the guest keeps running without the "
+                       "manager.")
+            .arg(std::chrono::duration_cast<std::chrono::seconds>(ManagerExit::kGuestWait).count()),
+        right_aligned(controls_->toggle(K::kShutGuestOnQuit)));
 }
 
 void SettingsPage::build_desktop() {

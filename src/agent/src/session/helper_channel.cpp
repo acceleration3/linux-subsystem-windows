@@ -1,5 +1,6 @@
 #include "lsw/agent/session/helper_channel.hpp"
 
+#include "lsw/agent/apps/launch_group.hpp"
 #include "lsw/agent/core/paths.hpp"
 #include "lsw/agent/log.hpp"
 #include "lsw/agent/session/helper_protocol.hpp"
@@ -10,6 +11,7 @@
 #include "lsw/agent/win/process_info.hpp"
 #include "lsw/agent/win/run_as.hpp"
 #include "lsw/agent/win/security_attributes.hpp"
+#include "lsw/linkproto/commands.hpp"
 
 // clang-format off
 #include <windows.h>
@@ -208,6 +210,11 @@ void HelperChannel::on_message(nlohmann::json message) {
                        message.value("waited_s", std::int64_t{0}));
         desktop_ready_.store(ready);
         sink_.helper_changed();
+        return;
+    }
+    if (topic == linkproto::topic::kWindowAppeared &&
+        apps::LaunchGroup::root_of(
+            static_cast<unsigned long>(message.value("pid", std::uint64_t{0}))) != 0) {
         return;
     }
     message.erase("event");

@@ -6,26 +6,25 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
-#include <utility>
 
 namespace lsw::host::platform {
 AccelVirtPaths::QemuTree AccelVirtPaths::qemu_tree() {
-    const QString build_binary = QStringLiteral("qemu/qemu-system-x86_64");
     const QString exe_dir = QCoreApplication::applicationDirPath();
-    const QString named = qEnvironmentVariable("LSW_AV_QEMU_BUILD");
-    const std::pair<QString, QString> candidates[] = {
-        {named, build_binary},
-        {QDir::cleanPath(exe_dir + QStringLiteral("/../../accel-virt/qemu")), build_binary},
-        {QDir::cleanPath(exe_dir + QStringLiteral("/../lib/lsw/accel-virt/qemu")),
-         QStringLiteral("qemu-system-x86_64")},
+    const auto build_tree = [](const QString& dir) -> QemuTree {
+        return {dir, QDir(dir).filePath(QStringLiteral("qemu/qemu-system-x86_64")),
+                QDir(dir).filePath(QStringLiteral("qemu"))};
     };
-    for (const auto& [dir, binary] : candidates) {
-        if (dir.isEmpty()) {
-            continue;
-        }
-        const QString path = QDir(dir).filePath(binary);
-        if (QFile::exists(path)) {
-            return {dir, path};
+    const QString installed =
+        QDir::cleanPath(exe_dir + QStringLiteral("/../lib/lsw/accel-virt/qemu"));
+    const QString named = qEnvironmentVariable("LSW_AV_QEMU_BUILD");
+    const QemuTree candidates[] = {
+        named.isEmpty() ? QemuTree{} : build_tree(named),
+        build_tree(QDir::cleanPath(exe_dir + QStringLiteral("/../../accel-virt/qemu"))),
+        {installed, QDir(exe_dir).filePath(QStringLiteral("lsw-qemu-system-x86_64")), installed},
+    };
+    for (const QemuTree& tree : candidates) {
+        if (!tree.binary.isEmpty() && QFile::exists(tree.binary)) {
+            return tree;
         }
     }
     return {};
@@ -45,16 +44,15 @@ QString AccelVirtPaths::qemu_binary() {
 }
 
 QString AccelVirtPaths::qemu_module_dir() {
-    const QString binary = qemu_binary();
-    return binary.isEmpty() ? QString{} : QFileInfo(binary).absolutePath();
+    return qemu_tree().module_dir;
 }
 
 QString AccelVirtPaths::qemu_data_dir() {
-    const QString binary = qemu_binary();
-    if (binary.isEmpty()) {
+    const QString modules = qemu_module_dir();
+    if (modules.isEmpty()) {
         return {};
     }
-    const QString dir = QFileInfo(binary).absoluteDir().filePath(QStringLiteral("share"));
+    const QString dir = QDir(modules).filePath(QStringLiteral("share"));
     return QFileInfo(dir).isDir() ? dir : QString{};
 }
 

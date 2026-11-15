@@ -39,6 +39,7 @@ private:
     void on_new_process(unsigned long key, unsigned long pid);
     void on_exit_process(unsigned long pid);
     void on_launch_ended(unsigned long key);
+    void report_launch_ended(unsigned long key);
     void report_async(ExitedProcess exited);
     void publish(const ErrorReport& report);
 

@@ -1,6 +1,7 @@
 #include "lsw/host/config/display_modes.hpp"
 
 #include <QRegularExpression>
+#include <algorithm>
 #include <numeric>
 
 namespace lsw::host::config {
@@ -19,6 +20,30 @@ QString DisplayMode::aspect() const {
     }
     const int divisor = std::gcd(width, height);
     return QStringLiteral("%1:%2").arg(width / divisor).arg(height / divisor);
+}
+
+const QVector<DisplayMode>& DisplayModes::common() {
+    static const QVector<DisplayMode> sizes = {
+        {1280, 720},  {1366, 768},  {1600, 900},  {1920, 1080}, {1920, 1200}, {2560, 1080},
+        {2560, 1440}, {2560, 1600}, {3440, 1440}, {3840, 1600}, {3840, 2160}, {5120, 1440},
+        {5120, 2160}, {5120, 2880}, {7680, 2160}, {7680, 4320},
+    };
+    return sizes;
+}
+
+QVector<DisplayMode> DisplayModes::offerable(const QVector<DisplayMode>& monitors) {
+    QVector<DisplayMode> out;
+    for (const DisplayMode& mode : monitors) {
+        if (refusal(mode).isEmpty() && !out.contains(mode)) {
+            out.push_back(mode);
+        }
+    }
+    for (const DisplayMode& mode : common()) {
+        if (!out.contains(mode)) {
+            out.push_back(mode);
+        }
+    }
+    return out;
 }
 
 std::optional<DisplayMode> DisplayModes::parse(const QString& text) {
@@ -42,6 +67,11 @@ QString DisplayModes::refusal(const DisplayMode& mode) {
             .arg(kMaxEdge);
     }
     return {};
+}
+
+DisplayMode DisplayModes::clamped(const DisplayMode& mode) {
+    return DisplayMode{std::clamp(mode.width, kMinEdge, kMaxEdge),
+                       std::clamp(mode.height, kMinEdge, kMaxEdge)};
 }
 
 QString DisplayModes::refusal_to_add(const QStringList& list, const DisplayMode& mode) {

@@ -1,0 +1,13 @@
+#version 450
+layout(local_size_x = 64) in;
+layout(std430, set = 0, binding = 0) buffer P { vec4 p[]; } parts;
+layout(push_constant) uniform Pc { vec4 params; } pc;
+void main() {
+    uint i = gl_GlobalInvocationID.x;
+    vec4 s = parts.p[i];
+    s.zw += vec2(0.0, -0.02) * pc.params.x;
+    s.xy += s.zw * pc.params.x;
+    if (s.y < -0.95) { s.y = -0.95; s.w = -s.w * 0.8; }
+    if (abs(s.x) > 0.95) { s.x = sign(s.x) * 0.95; s.z = -s.z; }
+    parts.p[i] = s;
+}

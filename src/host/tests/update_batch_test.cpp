@@ -30,6 +30,7 @@ size_t count(const std::string& text, const std::string& part) {
 GuestBundle::Contents contents() {
     GuestBundle::Contents c;
     c.version = "0.2.0";
+    c.config = "c0ffee";
     c.files.push_back({"C:\\ProgramData\\LSW\\lsw-agent.exe", {}, "h1"});
     c.files.push_back({"C:\\av\\package\\avgpu.sys", {}, "h2"});
     c.files.push_back({"C:\\ProgramData\\LSW\\lsw-guest-update.ps1", {}, "h3"});
@@ -44,8 +45,8 @@ int main() {
     const std::string plain = UpdateBatch::send(5555, release, c, false);
     const std::string forced = UpdateBatch::send(5555, release, c, true);
 
-    check(has(plain, "set STAGE=C:\\ProgramData\\LSW\\update\\0123456789abcdef\r\n"),
-          "the stage is the update directory under the release's first 16 characters");
+    check(has(plain, "set STAGE=C:\\ProgramData\\LSW\\update\\0123456789abcdef-5555\r\n"),
+          "the stage is the update directory under the release's first 16 characters and the port");
     check(has(plain, "-o \"%STAGE%\\C\\ProgramData\\LSW\\lsw-agent.exe\" http://10.0.2.2:5555/f0 ")
               && has(plain, "-o \"%STAGE%\\C\\av\\package\\avgpu.sys\" http://10.0.2.2:5555/f1 ")
               && has(plain, "-o \"%STAGE%\\C\\ProgramData\\LSW\\lsw-guest-update.ps1\" http://10.0.2.2:5555/f2 "),
@@ -57,8 +58,9 @@ int main() {
     check(count(plain, "exit /b 8)") == 5, "every download that fails exits 8");
     check(!has(plain, "avgpu.sys\" >>") && !has(plain, "download of avgpu"),
           "the log lines carry the file's index, not its path");
-    check(has(plain, "-Stage \"%STAGE%\" -Release " + release + " -Version 0.2.0"),
-          "run.cmd is written with -Stage, -Release and -Version");
+    check(has(plain, "-Stage \"%STAGE%\" -Release " + release +
+                         " -Config c0ffee -ProgressUrl http://10.0.2.2:5555 -Version 0.2.0"),
+          "run.cmd is written with -Stage, -Release, -Config, -ProgressUrl and -Version");
     check(has(plain, "lsw-guest-update.ps1\" -Stage"), "run.cmd runs the update script from the stage");
     check(!has(plain, "-Force"), "an unforced run has no -Force");
     check(has(forced, "-Version 0.2.0 -Force\r\n"), "a forced run ends run.cmd's line with -Force");

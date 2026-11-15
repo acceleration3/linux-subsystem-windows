@@ -18,15 +18,19 @@ const QHash<QString, QVariant>& defaults() {
         {K::kCpuCores, VmSizing::host_cores()},
         {K::kMemoryMib, 8192},
         {K::kDiskGib, 60},
+        {K::kPriority, QStringLiteral("normal")},
 
         {K::kDisplayModes, QStringList{}},
         {K::kMatchHostOutput, false},
+        {K::kOneToOneDesktop, false},
         {K::kDisplayRefresh, QStringLiteral("monitor")},
         {K::kScalingPercent, 0},
 
         {K::kHostGpu, QStringLiteral("auto")},
         {K::kHostWindowMib, 8192},
+        {K::kVramReserveMib, 0},
         {K::kRenderGpus, QStringList{}},
+        {K::kHybridGraphics, false},
 
         {K::kSmbEnabled, true},
         {K::kShareScope, QStringLiteral("C$")},
@@ -43,9 +47,14 @@ const QHash<QString, QVariant>& defaults() {
 
         {K::kUsbAlways, QStringList{}},
 
+        {K::kNetworkMode, QString{ManagerSettings::NetworkMode::kShared}},
+        {K::kNetworkBridge, QString{}},
+        {K::kPortForwards, QString{}},
+
         {K::kAutostart, false},
 
         {K::kCloseToTray, true},
+        {K::kShutGuestOnQuit, true},
 
         {K::kLogManager, QStringLiteral("info")},
         {K::kLogMirrors, QStringLiteral("info")},
@@ -55,14 +64,16 @@ const QHash<QString, QVariant>& defaults() {
         {K::kLogDebugUntil, qlonglong{0}},
 
         {K::kLastBootMs, 0},
+        {K::kDesktopRestore, QString{}},
     };
     return table;
 }
 
 const QStringList& restart_keys() {
     static const QStringList keys = {
-        K::kCpuCores,      K::kMemoryMib,  K::kDiskGib,    K::kHostGpu,
-        K::kHostWindowMib, K::kRenderGpus, K::kHostShares,
+        K::kCpuCores,      K::kMemoryMib,      K::kDiskGib,       K::kHostGpu,
+        K::kHostWindowMib, K::kVramReserveMib, K::kRenderGpus,    K::kHybridGraphics,
+        K::kHostShares,    K::kNetworkMode,    K::kNetworkBridge, K::kPortForwards,
     };
     return keys;
 }

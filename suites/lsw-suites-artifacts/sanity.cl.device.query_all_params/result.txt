@@ -1,0 +1,4 @@
+@@lsw measure n cl.params_queried 105
+@@lsw measure n cl.devices 1
+@@lsw reason AMD Radeon RX 9070 XT (radeonsi, gfx1201, ACO, DRM 3.64, 7.3.1-1-cachyos) (display adapter): CL_DEVICE_EXTENSIONS is not a NUL-terminated string of the reported size 18142
+@@lsw status fail

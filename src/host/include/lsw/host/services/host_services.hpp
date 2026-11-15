@@ -9,6 +9,9 @@
 #include "lsw/host/config/vm_state.hpp"
 #include "lsw/host/link/agent_guest_stats_probe.hpp"
 #include "lsw/host/link/agent_rpc_client.hpp"
+#include "lsw/host/mirror/guest_mirrors.hpp"
+#include "lsw/host/platform/cpu_scope.hpp"
+#include "lsw/host/platform/process_threads.hpp"
 #include "lsw/host/services/agent_log_levels.hpp"
 #include "lsw/host/services/app_errors.hpp"
 #include "lsw/host/services/clipboard_sync.hpp"
@@ -19,8 +22,10 @@
 #include "lsw/host/services/host_shutdown_watch.hpp"
 #include "lsw/host/services/log_cleaner.hpp"
 #include "lsw/host/services/log_collector.hpp"
+#include "lsw/host/services/one_to_one_desktop.hpp"
 #include "lsw/host/services/status_hub.hpp"
 #include "lsw/host/services/usb_passthrough.hpp"
+#include "lsw/host/services/vm_priority.hpp"
 #include "lsw/host/vm/libvirt_connection.hpp"
 #include "lsw/host/vm/lifecycle.hpp"
 #include "lsw/host/vm/vm_log_files.hpp"
@@ -69,7 +74,10 @@ public:
     [[nodiscard]] LogCollector& log_collector() noexcept { return log_collector_; }
     [[nodiscard]] LogCleaner& log_cleaner() noexcept { return log_cleaner_; }
 
+    [[nodiscard]] mirror::GuestMirrors& mirrors() noexcept { return mirrors_; }
     [[nodiscard]] apps::GuestAppLauncher& app_launcher() noexcept { return app_launcher_; }
+
+    [[nodiscard]] OneToOneDesktop& one_to_one() noexcept { return one_to_one_; }
 
     [[nodiscard]] config::ManagerSettings& manager_settings() noexcept { return manager_settings_; }
 
@@ -84,6 +92,8 @@ public:
     void apply_integrations();
 
 private:
+    [[nodiscard]] OneToOneDesktop::Guest guest_display();
+
     config::Settings settings_;
     config::ManagerSettings manager_settings_;
     config::PendingChanges pending_changes_;
@@ -107,7 +117,14 @@ private:
     AgentLogLevels agent_log_levels_;
     LogCollector log_collector_;
     LogCleaner log_cleaner_;
+    mirror::GuestMirrors mirrors_;
     apps::GuestAppLauncher app_launcher_;
+    OneToOneDesktop one_to_one_;
+    platform::SystemdCpuScope vm_scope_;
+    platform::SystemdCpuScope mirror_scope_;
+    platform::ProcProcessThreads process_threads_;
+    VmPriority priority_;
+    bool agent_online_ = false;
 };
 
 }

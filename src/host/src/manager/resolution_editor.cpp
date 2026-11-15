@@ -36,11 +36,6 @@ constexpr int kColSize = 1;
 constexpr int kColAspect = 2;
 constexpr int kColActions = 3;
 
-constexpr DisplayMode kCommon[] = {
-    {1280, 720},  {1366, 768},  {1600, 900},  {1920, 1080}, {1920, 1200},
-    {2560, 1080}, {2560, 1440}, {2560, 1600}, {3440, 1440}, {3840, 2160},
-};
-
 QPushButton* small(const QString& glyph, const QString& tip) {
     auto* button = Widgets::button(glyph, Theme::Role::kIconButton);
     button->setToolTip(tip);
@@ -63,18 +58,12 @@ ResolutionEditor::ResolutionEditor(config::ManagerSettings& settings, const serv
     column->setSpacing(0);
 
     table_ = new QTableWidget(0, 4);
-    Theme::rows_table(table_, {QStringLiteral("PREFERRED"), QStringLiteral("RESOLUTION"),
-                               QStringLiteral("ASPECT"), QString{}});
+    Theme::rows_table(table_,
+                      {QStringLiteral("PREFERRED"), QStringLiteral("RESOLUTION"),
+                       QStringLiteral("ASPECT"), QString{}},
+                      QStringLiteral("display-resolutions"), {96, 320, 90, 104}, {0, 1, 2, 3});
     table_->verticalHeader()->setDefaultSectionSize(38);
     table_->setProperty("controls", true);
-    auto* head = table_->horizontalHeader();
-    head->setSectionResizeMode(kColPreferred, QHeaderView::Fixed);
-    head->setSectionResizeMode(kColSize, QHeaderView::Stretch);
-    head->setSectionResizeMode(kColAspect, QHeaderView::Fixed);
-    head->setSectionResizeMode(kColActions, QHeaderView::Fixed);
-    table_->setColumnWidth(kColPreferred, 96);
-    table_->setColumnWidth(kColAspect, 90);
-    table_->setColumnWidth(kColActions, 104);
     column->addWidget(table_);
 
     auto* foot = new QWidget;
@@ -147,13 +136,18 @@ void ResolutionEditor::fill_presets() {
             continue;
         }
         const DisplayMode mode{size->width(), size->height()};
+        if (!DisplayModes::refusal(mode).isEmpty() || presets_->findData(mode.text()) >= 0) {
+            continue;
+        }
         presets_->addItem(screen->name().isEmpty()
                               ? mode.label()
                               : QStringLiteral("%1 · %2").arg(mode.label(), screen->name()),
                           mode.text());
     }
-    for (const auto& mode : kCommon) {
-        presets_->addItem(mode.label(), mode.text());
+    for (const auto& mode : DisplayModes::common()) {
+        if (presets_->findData(mode.text()) < 0) {
+            presets_->addItem(mode.label(), mode.text());
+        }
     }
 }
 
@@ -166,8 +160,7 @@ void ResolutionEditor::suggest(const QStringList& list) {
             candidates.push_back({size->width(), size->height()});
         }
     }
-    candidates.append(QVector<DisplayMode>(std::begin(kCommon), std::end(kCommon)));
-    for (const auto& mode : candidates) {
+    for (const auto& mode : DisplayModes::offerable(candidates)) {
         if (DisplayModes::refusal_to_add(list, mode).isEmpty()) {
             suggestion = mode;
             break;

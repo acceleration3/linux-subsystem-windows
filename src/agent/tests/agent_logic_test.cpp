@@ -1,5 +1,7 @@
+#include "lsw/agent/apps/launch_continuation.hpp"
 #include "lsw/agent/apps/program_command.hpp"
 #include "lsw/agent/apps/start_menu_filter.hpp"
+#include "lsw/agent/apps/window_announcements.hpp"
 #include "lsw/agent/core/command_line.hpp"
 #include "lsw/agent/install/job_id_generator.hpp"
 #include "lsw/agent/install/url_file_name.hpp"
@@ -8,9 +10,13 @@
 #include "lsw/agent/session/pipe_codec.hpp"
 #include "lsw/agent/session/session_routing.hpp"
 #include "lsw/agent/session/session_selector.hpp"
+#include "lsw/agent/system/display_request.hpp"
 #include "lsw/agent/system/scale_steps.hpp"
 #include "lsw/agent/util/base64.hpp"
 #include "lsw/agent/util/wide_string.hpp"
+#include "lsw/agent/win/discovered_window.hpp"
+#include "lsw/agent/win/task_window.hpp"
+#include "lsw/linkproto/commands.hpp"
 
 #include <chrono>
 #include <cstdint>
@@ -385,6 +391,44 @@ void test_command_line() {
     check(!CommandLine::parse({L"--srevice"}).error.empty(), "a typo is an error, not the foreground");
 }
 
+void test_display_request() {
+    using lsw::agent::system::DisplayRequest;
+    using Resolution = DisplayRequest::Resolution;
+    const DisplayRequest nothing{nlohmann::json::object()};
+    check(nothing.scaling_percent() == 0 && !nothing.resolution().has_value(),
+          "a request without fields changes nothing");
+    const DisplayRequest scale{nlohmann::json{{"scaling_percent", 125}}};
+    check(scale.scaling_percent() == 125 && !scale.resolution().has_value(),
+          "a scale alone leaves the resolution as it is");
+    const DisplayRequest size{nlohmann::json{{"width", 1201}, {"height", 841}}};
+    check(size.resolution() == std::optional<Resolution>(Resolution{1201, 841}) &&
+              size.scaling_percent() == 0,
+          "a width and a height are a resolution, and no scale");
+    check(!DisplayRequest{nlohmann::json{{"width", 1920}}}.resolution().has_value() &&
+              !DisplayRequest{nlohmann::json{{"height", 1080}}}.resolution().has_value(),
+          "one side alone is no resolution");
+    check(
+        !DisplayRequest{nlohmann::json{{"width", 0}, {"height", 1080}}}.resolution().has_value() &&
+            !DisplayRequest{nlohmann::json{{"width", -5}, {"height", 1080}}}
+                 .resolution()
+                 .has_value() &&
+            !DisplayRequest{nlohmann::json{{"width", "1920"}, {"height", 1080}}}
+                 .resolution()
+                 .has_value(),
+        "a side that is not a positive whole number is no resolution");
+    check(!DisplayRequest{nlohmann::json::array()}.resolution().has_value(),
+          "parameters that are not an object ask for nothing");
+    nlohmann::json reply = {{"dpi", false}};
+    DisplayRequest::answer(reply, Resolution{2560, 1440});
+    check(reply.value("width", 0) == 2560 && reply.value("height", 0) == 1440 &&
+              reply.contains("dpi"),
+          "the reply says the resolution Windows has now beside what it had");
+    nlohmann::json unknown = nlohmann::json::object();
+    DisplayRequest::answer(unknown, std::nullopt);
+    check(!unknown.contains("width") && !unknown.contains("height"),
+          "a resolution Windows did not report is left out, not zero");
+}
+
 void test_scale_steps() {
     using lsw::agent::system::ScaleSteps;
     const ScaleSteps at_100{0, 4};
@@ -475,7 +519,254 @@ void test_start_menu_filter() {
 
 }
 
+static void test_launch_continuation() {
+    using lsw::agent::apps::LaunchContinuation;
+    using C = LaunchContinuation::Candidate;
+    constexpr std::uint64_t s = 1'000'000'000ULL;
+    const std::wstring ff = L"c:\\program files\\mozilla firefox\\firefox.exe";
+    const auto root = [&](bool own = true, std::vector<std::uint64_t> newer = {}) {
+        LaunchContinuation::Root r;
+        r.pid = 8772;
+        r.session = 1;
+        r.image_lc = ff;
+        r.started = 100 * s;
+        r.runs_own_executable = own;
+        r.newer_launch_starts = std::move(newer);
+        return r;
+    };
+    const auto relaunch = [&](unsigned long pid, std::uint64_t at) {
+        C c;
+        c.pid = pid;
+        c.parent = 1656;
+        c.session = 1;
+        c.image_lc = ff;
+        c.created = at;
+        c.parent_is_explorer = true;
+        return c;
+    };
+    const std::uint64_t soon = 100 * s + 5'000'000;
+    const LaunchContinuation launch(root());
+    check(launch.pick({}) == std::nullopt, "no processes, no continuation");
+    check(launch.pick({relaunch(10228, soon)}) == 10228UL,
+          "a same-image process started by Explorer after the launch continues it");
+    check(launch.pick({relaunch(10228, 100 * s - 1)}) == std::nullopt,
+          "started before the launch: no");
+    check(launch.pick({relaunch(10228, 100 * s + 200'000'000ULL)}) == std::nullopt,
+          "started long after the launch: no");
+    C other_session = relaunch(10228, soon);
+    other_session.session = 2;
+    check(launch.pick({other_session}) == std::nullopt, "another session: no");
+    C other_image = relaunch(10228, soon);
+    other_image.image_lc = L"c:\\other.exe";
+    check(launch.pick({other_image}) == std::nullopt, "another image: no");
+    C owned = relaunch(10228, soon);
+    owned.owned_by_other_launch = true;
+    check(launch.pick({owned}) == std::nullopt, "owned by another launch: no");
+    check(launch.pick({relaunch(8772, soon)}) == std::nullopt, "the root itself: no");
+    check(launch.pick({relaunch(30, soon + 4'000'000), relaunch(20, soon)}) == 20UL,
+          "the earliest wins");
+    C jobbed = relaunch(10228, soon);
+    jobbed.in_job = true;
+    check(launch.pick({jobbed}) == std::nullopt, "a process in a job: no");
+    C stranger = relaunch(10228, soon);
+    stranger.parent_is_explorer = false;
+    stranger.parent = 777;
+    check(launch.pick({stranger}) == std::nullopt, "a process of an unrelated parent: no");
+    stranger.parent_in_launch = true;
+    check(launch.pick({stranger}) == 10228UL, "a child of a process of the launch: yes");
+    stranger.parent_in_launch = false;
+    stranger.parent = 8772;
+    check(launch.pick({stranger}) == 10228UL, "a child of the root: yes");
+    LaunchContinuation chained(root());
+    stranger.parent = 10408;
+    check(chained.pick({stranger}) == std::nullopt, "the child of a stranger: no");
+    chained.followed(10408);
+    check(chained.pick({stranger}) == 10228UL, "the child of a followed process: yes");
+    const LaunchContinuation older(root(true, {100 * s + 1'000'000}));
+    check(older.pick({relaunch(10228, soon)}) == std::nullopt,
+          "created after a newer launch of the same image started: its");
+    check(older.pick({relaunch(10228, 100 * s + 500'000)}) == 10228UL,
+          "created before the newer launch started: ours");
+    LaunchContinuation retry(root());
+    retry.reject(10228);
+    check(retry.pick({relaunch(10228, soon)}) == std::nullopt,
+          "a rejected pid is not picked again");
+    check(retry.pick({relaunch(10228, soon), relaunch(10300, soon + 1'000'000)}) == 10300UL,
+          "polling goes on to the next candidate after a failed assign");
+    check(LaunchContinuation::keep_polling(0) && LaunchContinuation::keep_polling(3000) &&
+              !LaunchContinuation::keep_polling(3001),
+          "polling stops at the deadline");
+    check(launch.worth_following(100 * s + 100'000'000ULL), "a young launch is worth following");
+    check(!launch.worth_following(100 * s + 200'000'000ULL), "an old launch is not");
+    check(!LaunchContinuation(root(false)).worth_following(100 * s + 1),
+          "a launch that did not run the app's own executable is not");
+}
+
+void test_task_window() {
+    using lsw::agent::win::TaskWindow;
+    constexpr std::uint32_t kTopmost = 0x00000008;
+    const auto app = [] {
+        TaskWindow facts;
+        facts.visible = true;
+        facts.top_level = true;
+        facts.class_name = L"ApplicationFrameWindow";
+        return facts;
+    };
+    const auto owned = [&](bool owner_shown, TaskWindow::Front front) {
+        TaskWindow facts = app();
+        facts.class_name = L"Click2RunSetupUIClass";
+        facts.owned = true;
+        facts.owner_shown = owner_shown;
+        facts.front = front;
+        return facts;
+    };
+    check(app().qualifies(), "a visible unowned application window is a task window");
+    check(owned(false, TaskWindow::Front::Mine).qualifies(),
+          "a window owned by a hidden window is a task window when it is the one its owner chain "
+          "shows");
+    check(
+        owned(false, TaskWindow::Front::None).qualifies(),
+        "a window owned by a hidden window is a task window when its owner chain was never active");
+    check(!owned(false, TaskWindow::Front::Another).qualifies(),
+          "a window owned by a hidden window is no task window while another window stands for the "
+          "chain");
+    check(!owned(true, TaskWindow::Front::Mine).qualifies() &&
+              !owned(true, TaskWindow::Front::Another).qualifies() &&
+              !owned(true, TaskWindow::Front::None).qualifies(),
+          "a dialog of a shown window is no task window");
+    auto asked = owned(true, TaskWindow::Front::Another);
+    asked.extended_style = TaskWindow::kAppWindow;
+    check(asked.qualifies(), "an owned window that asks for a taskbar button is a task window");
+
+    auto hidden = app();
+    hidden.visible = false;
+    auto cloaked = app();
+    cloaked.cloaked = true;
+    auto child = app();
+    child.top_level = false;
+    check(!hidden.qualifies() && !cloaked.qualifies() && !child.qualifies(),
+          "a hidden, cloaked or child window is no task window");
+
+    auto tool = app();
+    tool.extended_style = TaskWindow::kToolWindow | kTopmost;
+    auto passive = app();
+    passive.extended_style = TaskWindow::kNoActivate;
+    check(!tool.qualifies() && !passive.qualifies(),
+          "a tool window or one that never activates is no task window");
+    tool.extended_style |= TaskWindow::kAppWindow;
+    passive.extended_style |= TaskWindow::kAppWindow;
+    check(tool.qualifies() && passive.qualifies(), "unless it asks for a taskbar button");
+    check(TaskWindow::styled_as_task(0) && TaskWindow::styled_as_task(kTopmost) &&
+              !TaskWindow::styled_as_task(TaskWindow::kToolWindow) &&
+              !TaskWindow::styled_as_task(TaskWindow::kNoActivate) &&
+              TaskWindow::styled_as_task(TaskWindow::kToolWindow | TaskWindow::kNoActivate |
+                                         TaskWindow::kAppWindow),
+          "the style test alone tells tool and never-activating windows apart");
+
+    auto shell = app();
+    shell.shell_window = true;
+    shell.class_name = L"SomeOtherShell";
+    check(!shell.qualifies(), "the shell's desktop window is no task window whatever its class");
+    for (const wchar_t* name : {L"Progman", L"WorkerW", L"Shell_TrayWnd", L"Shell_SecondaryTrayWnd",
+                                L"Windows.UI.Core.CoreWindow", L"IME", L"MSCTFIME UI"}) {
+        auto surface = app();
+        surface.class_name = name;
+        surface.extended_style = TaskWindow::kAppWindow;
+        check(TaskWindow::system_surface(name) && !surface.qualifies(),
+              "the desktop, the taskbars, shell-hosted core windows and input method windows are "
+              "no task windows");
+    }
+    auto folder = app();
+    folder.class_name = L"CabinetWClass";
+    check(!TaskWindow::system_surface(L"CabinetWClass") &&
+              !TaskWindow::system_surface(L"progman") && !TaskWindow::system_surface(L"") &&
+              folder.qualifies(),
+          "a folder window of the shell's process is a task window");
+
+    auto tooltip = owned(true, TaskWindow::Front::Another);
+    tooltip.class_name = L"tooltips_class32";
+    tooltip.extended_style = TaskWindow::kToolWindow | kTopmost;
+    auto menu = app();
+    menu.class_name = L"#32768";
+    menu.extended_style = TaskWindow::kToolWindow | kTopmost;
+    auto dropdown = owned(true, TaskWindow::Front::Another);
+    dropdown.class_name = L"Chrome_WidgetWin_2";
+    check(!tooltip.qualifies() && !menu.qualifies() && !dropdown.qualifies(),
+          "tooltips, menus and dropdown popups are no task windows");
+    auto parked = app();
+    parked.class_name = L"SvchostParkedWindow";
+    check(parked.qualifies(), "a captioned unowned window parked off screen is a task window; its "
+                              "place is the manager's to judge");
+}
+
+void test_window_announcements() {
+    using lsw::agent::apps::WindowAnnouncements;
+    using lsw::agent::win::DiscoveredWindow;
+    const auto window = [](std::uintptr_t hwnd, std::uint32_t pid, bool caption,
+                           std::uintptr_t owner, bool task = true) {
+        DiscoveredWindow found{};
+        found.hwnd = hwnd;
+        found.pid = pid;
+        found.owner = owner;
+        found.has_caption = caption;
+        found.task_window = task;
+        found.exe_path = "C:\\app.exe";
+        found.title = "window";
+        found.client_w = 640;
+        found.client_h = 480;
+        found.screen_x = 10;
+        found.screen_y = 20;
+        found.on_screen = true;
+        return found;
+    };
+    WindowAnnouncements announcements;
+    check(announcements.collect_pending().empty(), "nothing is announced before a window appears");
+    announcements.appeared(window(1, 100, true, 0));
+    announcements.appeared(window(2, 200, true, 0, false));
+    announcements.appeared(window(3, 300, true, 1, false));
+    auto events = announcements.collect_pending();
+    check(events.size() == 1 && events[0].topic == lsw::linkproto::topic::kWindowAppeared,
+          "only a task window is announced");
+    const auto& row = events[0].payload;
+    check(row == window(1, 100, true, 0).row(),
+          "the announcement is the window's list_windows row");
+    for (const char* field : {"hwnd", "owner", "pid", "root_pid", "title", "exe_path", "client_w",
+                              "client_h", "screen_x", "screen_y", "minimized", "maximized",
+                              "has_caption", "task_window", "on_screen"}) {
+        check(row.contains(field), "a window row carries every field the manager reads");
+    }
+    check(row["pid"] == 100 && row["root_pid"] == 0 && row["has_caption"] == true &&
+              row["task_window"] == true && row["on_screen"] == true && row["client_w"] == 640 &&
+              row["screen_y"] == 20,
+          "a window row carries the window's values");
+    announcements.appeared(window(4, 400, false, 9));
+    events = announcements.collect_pending();
+    check(events.size() == 1 && events[0].payload["has_caption"] == false &&
+              events[0].payload["owner"] == 9 && events[0].payload["task_window"] == true,
+          "an uncaptioned task window with an owner is announced, with its caption and owner as "
+          "they are");
+    check(announcements.collect_pending().empty(), "an announcement is delivered once");
+
+    auto moved = window(1, 100, true, 0);
+    moved.screen_x = 500;
+    announcements.appeared(window(1, 100, true, 0));
+    announcements.appeared(moved);
+    events = announcements.collect_pending();
+    check(events.size() == 1 && events[0].payload["screen_x"] == 500,
+          "a window shown again before delivery is announced once, with its latest state");
+
+    for (std::uintptr_t hwnd = 1; hwnd <= WindowAnnouncements::kMostPending + 5; ++hwnd) {
+        announcements.appeared(window(hwnd, 100, true, 0));
+    }
+    events = announcements.collect_pending();
+    check(events.size() == WindowAnnouncements::kMostPending &&
+              events.front().payload["hwnd"] == 6 &&
+              events.back().payload["hwnd"] == WindowAnnouncements::kMostPending + 5,
+          "undelivered announcements are bounded and the oldest are dropped");
+}
+
 int main() {
+    test_launch_continuation();
     test_base64_vectors();
     test_base64_binary();
     test_url_file_name();
@@ -493,8 +784,11 @@ int main() {
     test_pending_calls();
     test_command_line();
     test_scale_steps();
+    test_display_request();
     test_start_menu_filter();
     test_document_command();
+    test_task_window();
+    test_window_announcements();
     std::printf("agent logic: %d checks passed\n", g_checks);
     return 0;
 }

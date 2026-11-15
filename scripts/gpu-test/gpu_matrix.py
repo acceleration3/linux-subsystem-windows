@@ -16,6 +16,11 @@ OpenGL, Vulkan and OpenCL in the guest all reach it by default; then:
            ran it and whether its picture matches the host's
   clgl     the OpenCL-OpenGL sharing samples (tools/clgl_samples.py), each
            judging the values it moved itself
+  suites   lsw-suites64.exe and lsw-suites32.exe (suites/), in the console
+           session: --phase main for both, then --phase pacing for x64 and x32,
+           one after the other; a check fails the GPU if it failed in either bitness;
+           --suite-args passes options to both; with "--suite ... render ..." the matrix first renders the
+           Vulkan and OpenGL references on the VM's host GPU (lsw-render-ref) and pushes them as --refs
   traces   (opt-in) API traces recorded from real applications, replayed and
            judged on their pictures, buffers, memory and speed (trace_suite.py); --traces picks some
 
@@ -40,7 +45,9 @@ import json
 import os
 import pathlib
 import re
+import shlex
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -51,8 +58,9 @@ import xml.etree.ElementTree as ET
 HERE = pathlib.Path(__file__).resolve().parent
 TREE = HERE.parents[1]
 AV = TREE / "external" / "accel-virt"
-sys.path[:0] = [str(HERE), str(AV / "tools"), str(AV / "tools" / "guest"), str(AV / "tools" / "host")]
+sys.path[:0] = [str(HERE), str(AV / "tools"), str(AV / "tools" / "mcp"), str(AV / "tools" / "guest"), str(AV / "tools" / "host")]
 
+import host_phase  # noqa: E402
 import list_gpus  # noqa: E402
 import run_guest_suite as suite  # noqa: E402
 from guest_agent import AgentError, wait_for_agent as wait_for_bridge  # noqa: E402
@@ -87,7 +95,14 @@ HOST_PROGRAMS = [AV / "build" / name for name in
 GUEST_DIR = "C:\\av\\gputest"
 GPU_DEVICE = "virtio-gpu-av-pci"
 FIRST_RENDER_SLOT = 0x12
-SUITES = ("probes", "d3d11", "d3d12", "vulkan", "opengl", "opencl", "clgl")
+SUITES = ("probes", "d3d11", "d3d12", "vulkan", "opengl", "opencl", "clgl", "suites")
+SUITES_RUNS = (("64", "main"), ("32", "main"), ("64", "pacing"), ("32", "pacing"))
+SUITES_EXECUTABLES = {"64": TREE / "build-suites" / "lsw-suites64.exe",
+                      "32": TREE / "build-suites32" / "lsw-suites32.exe"}
+SUITES_BITS = ["64", "32"]
+SUITES_TIMEOUT = 2 * 60 * 60
+RENDER_REF = TREE / "build-render-ref" / "lsw-render-ref"
+GUEST_REFS = f"{GUEST_DIR}\\render-refs"
 PROBES = {
     "d3d9": ("avd3d9probe", suite.D3D_STEPS["9"]),
     "d3d11": ("avd3d11probe", suite.D3D_STEPS["11"]),
@@ -199,9 +214,39 @@ def emulator_path():
     return wrapper
 
 
-def retarget(xml, gpus, qemu_env=()):
+def environment_names(xml):
+    root = ET.fromstring(xml)
+    return {env.get("name") for env in root.iter(f"{{{QEMU_NS}}}env")}
+
+
+DISK_CACHE_MODES = {"none": "native", "directsync": "native", "writeback": "threads", "writethrough": "threads"}
+
+
+def apply_disk_cache(root, mode):
+    if mode not in DISK_CACHE_MODES:
+        raise RunFailed(f"disk cache mode '{mode}' is not one of {', '.join(DISK_CACHE_MODES)}")
+    for disk in root.findall("./devices/disk"):
+        driver = disk.find("driver")
+        if disk.get("device") == "disk" and driver is not None and driver.get("type") in ("qcow2", "raw"):
+            driver.set("cache", mode)
+            driver.set("io", DISK_CACHE_MODES[mode])
+
+
+def disk_caches(xml):
+    root = ET.fromstring(xml)
+    found = []
+    for disk in root.findall("./devices/disk"):
+        driver = disk.find("driver")
+        if disk.get("device") == "disk" and driver is not None:
+            found.append((driver.get("type"), driver.get("cache"), driver.get("io")))
+    return found
+
+
+def retarget(xml, gpus, qemu_env=(), keep=None, disk_cache=None):
     ET.register_namespace("qemu", QEMU_NS)
     root = ET.fromstring(xml)
+    if disk_cache is not None:
+        apply_disk_cache(root, disk_cache)
     emulator = root.find("./devices/emulator")
     if emulator is None:
         raise RunFailed("the domain names no emulator")
@@ -210,9 +255,21 @@ def retarget(xml, gpus, qemu_env=()):
         for child in list(audio):
             audio.remove(child)
         audio.attrib = {"id": audio.get("id", "1"), "type": "none"}
+    for existing in root.findall("./pm"):
+        root.remove(existing)
+    power = ET.Element("pm")
+    ET.SubElement(power, "suspend-to-mem", enabled="no")
+    ET.SubElement(power, "suspend-to-disk", enabled="no")
+    devices = root.find("./devices")
+    root.insert(list(root).index(devices) if devices is not None else len(root), power)
     commandline = root.find(f"{{{QEMU_NS}}}commandline")
     if commandline is None:
         raise RunFailed("the domain has no qemu:commandline: it is not an accel-virt VM")
+    if keep is not None:
+        kept = set(keep) | {"LD_LIBRARY_PATH", "QEMU_MODULE_DIR", "AV_D3D_PATH", "XDG_RUNTIME_DIR"}
+        for env in commandline.findall(f"{{{QEMU_NS}}}env"):
+            if env.get("name") not in kept:
+                commandline.remove(env)
     environment = commandline.findall(f"{{{QEMU_NS}}}env")
     if SHIPPED_LIBRARIES.is_dir() and not any(env.get("name") == "LD_LIBRARY_PATH" for env in environment):
         added_env = ET.SubElement(commandline, f"{{{QEMU_NS}}}env", name="LD_LIBRARY_PATH")
@@ -246,12 +303,18 @@ def retarget(xml, gpus, qemu_env=()):
             commandline.remove(arguments[index + 1] if value == "-L" else arguments[index - 1])
     if template is None:
         raise RunFailed(f"the domain has no {GPU_DEVICE}")
+    hybrid_graphics = os.environ.get("LSW_HYBRID_GRAPHICS", "1") != "0"
     template.drop("display")
     template.set("executor", str(EXECUTOR))
     added = []
     for position, gpu in enumerate(gpus):
         device = DeviceProperties(template.text())
         device.set("host-gpu", gpu.uuid)
+        device.drop("hybrid")
+        if position == 0 and os.environ.get("LSW_GPU_TEST_OUTPUTS"):
+            device.set("max_outputs", os.environ["LSW_GPU_TEST_OUTPUTS"])
+        if hybrid_graphics and len(gpus) > 1:
+            device.set("hybrid", "integrated" if position == 0 else "discrete")
         if position > 0:
             device.set("id", f"{template.get('id') or 'lsw-gpu'}-{position}")
             device.set("addr", f"0x{FIRST_RENDER_SLOT + position - 1:x}")
@@ -409,16 +472,16 @@ def boot(domain, work, share):
     return guest
 
 
-def driver_files():
+def driver_files(drivers=DRIVERS, own_loaders=True):
     files = [(path, f"C:\\av\\incoming\\package\\{path.name}")
-             for path in sorted((DRIVERS / "package").iterdir()) if path.is_file()]
-    files.append((DRIVERS / "provision.ps1", "C:\\av\\provision.ps1"))
+             for path in sorted((drivers / "package").iterdir()) if path.is_file()]
+    files.append((drivers / "provision.ps1", "C:\\av\\provision.ps1"))
     for arch in ("x64", "x86"):
-        loaders = DRIVERS / "loaders" / arch
+        loaders = drivers / "loaders" / arch
         for path in sorted(loaders.iterdir()) if loaders.is_dir() else []:
-            if path.name.lower() != "vulkan-1.dll" or not VULKAN_LOADERS[arch].exists():
+            if not own_loaders or path.name.lower() != "vulkan-1.dll" or not VULKAN_LOADERS[arch].exists():
                 files.append((path, f"C:\\av\\loaders\\{arch}\\{path.name}"))
-        if VULKAN_LOADERS[arch].exists():
+        if own_loaders and VULKAN_LOADERS[arch].exists():
             files.append((VULKAN_LOADERS[arch], f"C:\\av\\loaders\\{arch}\\vulkan-1.dll"))
     return files
 
@@ -444,7 +507,8 @@ def install_script(staged):
     lines += [
         "if not defined SOURCE set SOURCE=C:\\av",
         "if not exist %SOURCE%\\package (echo %SOURCE% has no package & exit /b 2)",
-        "robocopy %SOURCE% C:\\av\\resign /MIR /NFL /NDL /NJH /NJS /NP >nul",
+        "if exist C:\\av\\resign rmdir /s /q C:\\av\\resign",
+        "robocopy %SOURCE%\\package C:\\av\\resign\\package /MIR /NFL /NDL /NJH /NJS /NP >nul",
         "if %ERRORLEVEL% GEQ 8 exit /b %ERRORLEVEL%",
         "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\av\\provision.ps1 -Package C:\\av\\resign\\package -Stage sign",
         "set SIGNED=%ERRORLEVEL%",
@@ -473,8 +537,8 @@ def run_install(guest, staged, log):
     return code
 
 
-def update_driver(guest, gpus, out, force):
-    ours = (DRIVERS / "package" / "package.sha256").read_bytes()
+def update_driver(guest, gpus, out, force, drivers=DRIVERS, own_loaders=True):
+    ours = (drivers / "package" / "package.sha256").read_bytes()
     try:
         theirs = guest.share.get_bytes("C:\\av\\package\\package.sha256")
     except LinkError:
@@ -488,7 +552,7 @@ def update_driver(guest, gpus, out, force):
     stage = "C:\\av\\gputest-stage"
     staged = []
     guest.share.make_directories(stage)
-    for index, (local, target) in enumerate(driver_files()):
+    for index, (local, target) in enumerate(driver_files(drivers, own_loaders)):
         source = f"{stage}\\{index:02d}-{local.name}"
         guest.share.put(local, source)
         staged.append((source, target))
@@ -594,6 +658,155 @@ def run_probes(guest, out, device_loss=False):
         except (AgentError, OSError):
             (out / name).unlink(missing_ok=True)
     return results
+
+
+def judge_suites_json(path, bits):
+    report = json.loads(path.read_text())
+    failures, notes, count = [], [], 0
+    for check in report.get("checks", []):
+        count += 1
+        status, name = check.get("status"), check.get("id", "?")
+        reason = check.get("reason") or status
+        if status == "skip":
+            notes.append({"case": f"{name} ({bits}-bit)", "detail": f"skipped: {reason}"})
+        elif status != "ok":
+            failures.append({"case": name, "detail": f"{bits}-bit {status}: {reason}"})
+    return failures, notes, count
+
+
+def add_host_phase(verdict, phase, out):
+    verdicts = phase.finish(host_phase.guest_metrics(sorted(out.glob("lsw-suites*.json"))))
+    failures, notes = host_phase.to_matrix(verdicts)
+    (out / "host-verdicts.json").write_text(json.dumps(verdicts, indent=1))
+    verdict["failures"] += failures
+    verdict["notes"] += notes
+    verdict["checks"] += len(verdicts) - len(notes)
+    if failures:
+        verdict["status"] = "fail"
+
+
+LOSS_LAYER_VARIABLES = ("VK_ADD_LAYER_PATH", "VK_INSTANCE_LAYERS")
+
+
+def selected_suites(suite_args):
+    words = shlex.split(suite_args)
+    for position, word in enumerate(words):
+        if word == "--suite" and position + 1 < len(words):
+            return [name for name in words[position + 1].split(",") if name]
+        if word.startswith("--suite="):
+            return [name for name in word.split("=", 1)[1].split(",") if name]
+    return ["sanity"]
+
+
+def render_ref_environment(qemu_env):
+    environment = dict(os.environ)
+    for pair in qemu_env:
+        name, _, value = pair.partition("=")
+        if name not in LOSS_LAYER_VARIABLES:
+            environment[name] = value
+    return environment
+
+
+def run_render_ref(command, environment, timeout):
+    process = subprocess.Popen(command, env=environment, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                               start_new_session=True)
+    try:
+        output, _ = process.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        os.killpg(process.pid, signal.SIGKILL)
+        output, _ = process.communicate()
+        return 124, output
+    return process.returncode, output
+
+
+def push_render_refs(guest, gpu, out, qemu_env):
+    if not RENDER_REF.exists():
+        raise suite.StepFailed(f"{RENDER_REF} is not built: run scripts/build-render-ref.sh")
+    refs = out / "render-refs"
+    shutil.rmtree(refs, ignore_errors=True)
+    say(f"render references for {gpu.name} ({gpu.uuid})")
+    code, output = run_render_ref([str(RENDER_REF), "--out", str(refs), "--gpu", gpu.uuid, "--jobs", "4", "--clean"],
+                                  render_ref_environment(qemu_env), 1800)
+    (out / "render-refs.txt").write_text(output)
+    host_failures = [line for line in output.splitlines() if line.startswith("FAIL ")]
+    if not (refs / "device.json").exists():
+        raise suite.StepFailed(f"lsw-render-ref wrote no device.json (exit {code}); see {out / 'render-refs.txt'}")
+    shutil.make_archive(str(out / "render-refs"), "zip", refs)
+    archive = f"{GUEST_DIR}\\render-refs.zip"
+    guest.agent.push((out / "render-refs.zip").read_bytes(), archive)
+    status, text = guest.powershell(f"$ErrorActionPreference = 'Stop'; Remove-Item -Recurse -Force {GUEST_REFS} -ErrorAction SilentlyContinue; "
+                                    f"Expand-Archive -Force -Path {archive} -DestinationPath {GUEST_REFS}; "
+                                    f"if (-not (Test-Path {GUEST_REFS}\\device.json)) {{ exit 3 }}")
+    if status != 0:
+        raise suite.StepFailed(f"Expand-Archive of the references failed (exit {status}): {text.strip()[-200:]}")
+    return host_failures if code != 0 else []
+
+
+def run_suites(guest, out, suite_args, gpu=None, qemu_env=()):
+    out.mkdir(parents=True, exist_ok=True)
+    say("suites lsw-suites64 and lsw-suites32")
+    console = suite.ConsoleProgram(guest.agent, SUITES_TIMEOUT)
+    guest.powershell(f"New-Item -ItemType Directory -Force {GUEST_DIR} | Out-Null")
+    extra = subprocess.list2cmdline(shlex.split(suite_args))
+    failures, notes, total = [], [], 0
+    if gpu is not None and "render" in selected_suites(suite_args):
+        extra += f" --refs {GUEST_REFS}"
+        try:
+            for line in push_render_refs(guest, gpu, out, qemu_env):
+                failures.append({"case": "render-refs", "detail": f"host reference {line}"})
+        except (AgentError, suite.StepFailed, OSError, subprocess.SubprocessError) as error:
+            failures.append({"case": "render-refs", "detail": str(error)})
+    render_only = selected_suites(suite_args) == ["render"]
+    for bits, phase in SUITES_RUNS:
+        if bits not in SUITES_BITS or (render_only and phase == "pacing"):
+            continue
+        executable = SUITES_EXECUTABLES[bits]
+        program = f"lsw-suites{bits}"
+        label = f"{program}-{phase}"
+        if not executable.exists():
+            failures.append({"case": label, "detail": f"{executable} is not built: run scripts/build-suites.sh"})
+            continue
+        guest_exe = f"{GUEST_DIR}\\{program}.exe"
+        guest_json = f"{GUEST_DIR}\\{label}.json"
+        guest_text = f"{GUEST_DIR}\\{label}.txt"
+        guest_artifacts = f"{GUEST_DIR}\\{label}-artifacts"
+        local_text = out / f"{label}.txt"
+        local_json = out / f"{label}.json"
+        try:
+            guest.agent.push(executable.read_bytes(), guest_exe)
+            if bits == "64" and "render" in selected_suites(suite_args):
+                for library in ("dxcompiler.dll", "dxil.dll"):
+                    guest.agent.push((AV / "third_party" / "dxc" / library).read_bytes(), f"{GUEST_DIR}\\{library}")
+            guest.powershell(f"Remove-Item -Recurse -Force {guest_json},{guest_artifacts} -ErrorAction SilentlyContinue")
+            code = console.run(f'cd /d {GUEST_DIR} && {guest_exe} --phase {phase} --json {guest_json} --artifacts {guest_artifacts} {extra}'.rstrip(),
+                               guest_text, label)
+            guest.agent.pull(guest_text, local_text)
+        except (AgentError, suite.StepFailed, OSError) as error:
+            failures.append({"case": label, "detail": str(error)})
+            continue
+        try:
+            guest.agent.pull(guest_json, local_json)
+        except (AgentError, OSError):
+            local_json.unlink(missing_ok=True)
+        archive = f"{GUEST_DIR}\\{label}-artifacts.zip"
+        try:
+            guest.powershell(f"Remove-Item {archive} -ErrorAction SilentlyContinue; "
+                             f"if (Test-Path {guest_artifacts}) {{ Compress-Archive -Path {guest_artifacts} -DestinationPath {archive} }}")
+            guest.agent.pull(archive, out / f"{label}-artifacts.zip")
+        except (AgentError, OSError):
+            (out / f"{label}-artifacts.zip").unlink(missing_ok=True)
+        if not local_json.exists():
+            failures.append({"case": label, "detail": f"no result file (exit {code}); see {local_text}"})
+            continue
+        found, skipped, count = judge_suites_json(local_json, bits)
+        failures += found
+        notes += skipped
+        total += count
+        if code not in (0, 1):
+            failures.append({"case": label, "detail": f"the runner failed (exit {code}); see {local_text}"})
+        if count == 0:
+            failures.append({"case": label, "detail": "no check ran"})
+    return {"status": "fail" if failures else "pass", "failures": failures, "notes": notes, "checks": total}
 
 
 def console_user(guest, fallback):
@@ -785,6 +998,12 @@ def gpu_pass(domain, original, share, gpu, args, out):
                                          run_probes(guest, out / "probes", args.device_loss).items()})
             elif name == "clgl":
                 result["suites"]["clgl"] = run_clgl(work, out / "clgl", user)
+            elif name == "suites":
+                phase = host_phase.HostPhase(work, avgpu_log_path(original),
+                                             pathlib.Path.home() / ".cache" / "libvirt" / "qemu" / "log" / f"{DOMAIN}.log",
+                                             out / "suites" / "host")
+                result["suites"]["suites"] = run_suites(guest, out / "suites", args.suite_args, gpu, args.qemu_env)
+                add_host_phase(result["suites"]["suites"], phase, out / "suites")
             elif name in APP_SUITES:
                 result["suites"][name] = run_app_suite(name, guest, out / name, gpu, adapter.get("name", ""))
             elif name in TRACE_SUITES:
@@ -841,6 +1060,7 @@ def command_run(args):
         for problem in problems:
             say(f"preflight: {problem}")
         return 2
+    SUITES_BITS[:] = {"64": ["64"], "32": ["32"]}.get(args.bits, ["64", "32"])
     args.suites = [name.strip() for name in args.suites.split(",") if name.strip()]
     unknown = [name for name in args.suites if name not in SUITES + APP_SUITES + TRACE_SUITES]
     if unknown:
@@ -968,6 +1188,9 @@ def main():
                           f"{', '.join(APP_SUITES)} and {', '.join(TRACE_SUITES)}")
     run.add_argument("--traces", default="", help="the traces suite's traces: comma-separated apps, APP/FUNC or patterns (resolve/fx-*) "
                                                   "(default: every one in the store)")
+    run.add_argument("--suite-args", default="", help="options for lsw-suites64.exe and lsw-suites32.exe of the "
+                                                      "suites suite, e.g. \"--suite sanity --filter 'sanity.d3d11.*' --jobs 8\"")
+    run.add_argument("--bits", default="both", choices=("64", "32", "both"), help="which lsw-suites bitness the suites suite runs")
     run.add_argument("--frames", type=int, default=30, help="timed frames per sample: correctness, not speed")
     run.add_argument("--warmup", type=int, default=5)
     run.add_argument("--user", default="lsw", help="the guest account the share is opened as")

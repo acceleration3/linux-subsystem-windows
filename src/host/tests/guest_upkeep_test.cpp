@@ -133,7 +133,10 @@ int main(int argc, char** argv) {
                     ++info_requests;
                     if (answer_system_info) {
                         body = {{"id", request["id"]},
-                                {"result", {{"release", guest_release}, {"release_version", "0.1.0"}}}};
+                                {"result",
+                                 {{"release", guest_release},
+                                  {"release_version", "0.1.0"},
+                                  {"ipv4", "192.0.2.44"}}}};
                     } else {
                         body = {{"id", request["id"]}, {"error", "the agent is busy"}};
                     }
@@ -177,6 +180,8 @@ int main(int argc, char** argv) {
     check(update.calls[0].release == QStringLiteral("guest-release") && update.calls[0].version == QStringLiteral("0.1.0"),
           "run_if_stale is called with the release and version the guest reports");
     check(upkeep.state() == State::Updating, "while the update runs the state is Updating");
+    check(hub.vm().guest_ipv4 == QStringLiteral("192.0.2.44"),
+          "the address Windows reports with its release is kept in the status");
     check(!upkeep.shares_ready(), "and the shared folders are not ready");
     hub.set_vm(machine(true, true, false));
     hub.set_vm(machine(true, true, false));

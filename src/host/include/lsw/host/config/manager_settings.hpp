@@ -26,13 +26,17 @@ public:
         static constexpr QLatin1StringView kCpuCores{"machine/cpu_cores"};
         static constexpr QLatin1StringView kMemoryMib{"machine/memory_mib"};
         static constexpr QLatin1StringView kDiskGib{"machine/disk_gib"};
+        static constexpr QLatin1StringView kPriority{"machine/priority"};
         static constexpr QLatin1StringView kDisplayModes{"display/modes"};
         static constexpr QLatin1StringView kMatchHostOutput{"display/match_host_output"};
+        static constexpr QLatin1StringView kOneToOneDesktop{"display/one_to_one_desktop"};
         static constexpr QLatin1StringView kDisplayRefresh{"display/refresh"};
         static constexpr QLatin1StringView kScalingPercent{"display/scaling_percent"};
         static constexpr QLatin1StringView kHostGpu{"graphics/host_gpu"};
         static constexpr QLatin1StringView kHostWindowMib{"graphics/host_window_mib"};
+        static constexpr QLatin1StringView kVramReserveMib{"graphics/vram_reserve_mib"};
         static constexpr QLatin1StringView kRenderGpus{"graphics/render_gpus"};
+        static constexpr QLatin1StringView kHybridGraphics{"graphics/hybrid_graphics"};
         static constexpr QLatin1StringView kSmbEnabled{"files/smb_enabled"};
         static constexpr QLatin1StringView kShareScope{"files/share_scope"};
         static constexpr QLatin1StringView kBookmarkDolphin{"files/bookmark_dolphin"};
@@ -45,8 +49,12 @@ public:
         static constexpr QLatin1StringView kFileAssociations{"desktop/mime"};
         static constexpr QLatin1StringView kShareClipboard{"desktop/share_clipboard"};
         static constexpr QLatin1StringView kUsbAlways{"usb/always"};
+        static constexpr QLatin1StringView kNetworkMode{"network/mode"};
+        static constexpr QLatin1StringView kNetworkBridge{"network/bridge"};
+        static constexpr QLatin1StringView kPortForwards{"network/forwards"};
         static constexpr QLatin1StringView kAutostart{"guest/autostart"};
         static constexpr QLatin1StringView kCloseToTray{"host/close_to_tray"};
+        static constexpr QLatin1StringView kShutGuestOnQuit{"host/shut_guest_on_quit"};
         static constexpr QLatin1StringView kLogManager{"logs/manager"};
         static constexpr QLatin1StringView kLogMirrors{"logs/mirrors"};
         static constexpr QLatin1StringView kLogAgent{"logs/agent"};
@@ -54,6 +62,12 @@ public:
         static constexpr QLatin1StringView kLogGpu{"logs/gpu"};
         static constexpr QLatin1StringView kLogDebugUntil{"logs/debug_until"};
         static constexpr QLatin1StringView kLastBootMs{"state/last_boot_ms"};
+        static constexpr QLatin1StringView kDesktopRestore{"state/desktop_restore"};
+    };
+
+    struct NetworkMode {
+        static constexpr QLatin1StringView kShared{"shared"};
+        static constexpr QLatin1StringView kBridged{"bridged"};
     };
 
     explicit ManagerSettings(QObject* parent = nullptr);

@@ -17,6 +17,7 @@ public:
         Overview,
         Display,
         Graphics,
+        GpuStatus,
         Files,
         Usb,
         Console,
@@ -27,6 +28,7 @@ public:
         Plus,
         Hid,
         Disk,
+        Network,
         Count
     };
 

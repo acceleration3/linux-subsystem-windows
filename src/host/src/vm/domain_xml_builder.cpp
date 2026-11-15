@@ -1,13 +1,13 @@
 #include "lsw/host/vm/domain_xml_builder.hpp"
 
 #include "domain_template.hpp"
-
 #include "lsw/base/log.hpp"
 
 #include <QHash>
 #include <QProcessEnvironment>
 #include <QRegularExpression>
 #include <QStringList>
+#include <QUuid>
 #include <utility>
 
 namespace lsw::host::vm {
@@ -17,6 +17,7 @@ constexpr int kGpuSlot = 0x11;
 constexpr int kMaxRenderOnlyGpus = 8;
 
 constexpr QLatin1StringView kGpuId{"lsw-gpu"};
+constexpr int kBridgeMacUuidBytes = 3;
 
 QString qemu_opt(const QString& value) {
     QString out = value;
@@ -25,6 +26,11 @@ QString qemu_opt(const QString& value) {
 
 QString qemu_arg(const QString& value) {
     return QStringLiteral("    <qemu:arg value='%1'/>").arg(DomainXmlBuilder::xml_escape(value));
+}
+
+QString bridge_mac(const QUuid& uuid) {
+    const QByteArray tail = uuid.toRfc4122().right(kBridgeMacUuidBytes);
+    return QStringLiteral("52:54:00:") + QString::fromLatin1(tail.toHex(':'));
 }
 
 QString gpu_common(const DomainXmlInputs& inputs, const QString& host_gpu) {
@@ -36,7 +42,11 @@ QString gpu_common(const DomainXmlInputs& inputs, const QString& host_gpu) {
 }
 
 QString gpu_tail(const DomainXmlInputs& inputs) {
-    return QStringLiteral(",vectors=11,hostmem=%1M").arg(inputs.host_window_mib);
+    QString out = QStringLiteral(",vectors=11,hostmem=%1M").arg(inputs.host_window_mib);
+    if (inputs.vram_reserve_mib > 0) {
+        out += QStringLiteral(",vram-reserve=%1").arg(inputs.vram_reserve_mib);
+    }
+    return out;
 }
 
 }
@@ -168,9 +178,13 @@ QString DomainXmlBuilder::build(const config::VmRecord& vm, const DomainXmlInput
             display += QStringLiteral(",refresh=%1").arg(inputs.display_refresh_millihz);
         }
     }
-    gpu_lines << qemu_arg(QStringLiteral("-device")) << qemu_arg(display);
     const qsizetype render_only =
         qMin<qsizetype>(inputs.render_only_gpu_uuids.size(), kMaxRenderOnlyGpus);
+    const bool hybrid = inputs.hybrid_graphics && render_only > 0 && !inputs.install_display;
+    if (hybrid) {
+        display += QStringLiteral(",hybrid=integrated");
+    }
+    gpu_lines << qemu_arg(QStringLiteral("-device")) << qemu_arg(display);
     for (qsizetype i = 0; i < render_only; ++i) {
         QString device = QStringLiteral("virtio-gpu-av-pci,id=%1-%2,bus=pcie.0,addr=0x%3")
                              .arg(kGpuId)
@@ -178,6 +192,9 @@ QString DomainXmlBuilder::build(const config::VmRecord& vm, const DomainXmlInput
                              .arg(kGpuSlot + 1 + static_cast<int>(i), 0, 16);
         device += gpu_common(inputs, inputs.render_only_gpu_uuids.at(i));
         device += QStringLiteral(",display=off");
+        if (hybrid) {
+            device += QStringLiteral(",hybrid=discrete");
+        }
         if (inputs.install_display) {
             device += QStringLiteral(",max_outputs=0");
         }
@@ -203,9 +220,34 @@ QString DomainXmlBuilder::build(const config::VmRecord& vm, const DomainXmlInput
             << qemu_arg(QStringLiteral("chardev=lsw-input,mode=control"));
     }
     vars["input_args_inner"] = input_lines.join(QLatin1Char('\n'));
-    LSW_DEBUG("domain: {} MiB, {} cpus, {} render-only GPUs, {} shares, display {} refresh {} mHz, "
-              "host window {} MiB, install display {}",
+
+    QStringList user_net{QStringLiteral("user"), QStringLiteral("id=lsw-net")};
+    for (const config::PortForward& forward : config::PortForwards::own()) {
+        user_net << config::PortForwards::hostfwd(forward);
+    }
+    for (const config::PortForward& forward : inputs.forwards) {
+        user_net << config::PortForwards::hostfwd(forward);
+    }
+    const QStringList network_lines{
+        qemu_arg(QStringLiteral("-netdev")),
+        qemu_arg(user_net.join(QLatin1Char(','))),
+        qemu_arg(QStringLiteral("-device")),
+        qemu_arg(QStringLiteral("e1000e,netdev=lsw-net,id=lsw-nic,bus=pcie.0,addr=0x10")),
+    };
+    vars["network_args_inner"] = network_lines.join(QLatin1Char('\n'));
+    vars["bridge_inner"] = inputs.bridge.isEmpty()
+                               ? QString{}
+                               : QStringLiteral("\n    <interface type='bridge'>\n"
+                                                "      <source bridge='%1'/>\n"
+                                                "      <mac address='%2'/>\n"
+                                                "      <model type='e1000e'/>\n"
+                                                "    </interface>")
+                                     .arg(esc(inputs.bridge), bridge_mac(vm.uuid));
+    LSW_DEBUG("domain: {} MiB, {} cpus, {} render-only GPUs, {} shares, {} forwarded ports, "
+              "bridge {}, display {} refresh {} mHz, host window {} MiB, install display {}",
               vm.sizing.memory_mib, vm.sizing.cpu_cores, render_only, inputs.shares.size(),
+              inputs.forwards.size(),
+              inputs.bridge.isEmpty() ? "none" : inputs.bridge.toStdString(),
               inputs.display_modes.isEmpty() ? "host modes" : inputs.display_modes.toStdString(),
               inputs.display_refresh_millihz, inputs.host_window_mib, inputs.install_display);
 

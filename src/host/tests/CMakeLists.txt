@@ -122,6 +122,23 @@ target_link_libraries(lsw_host_display_modes_test
 target_compile_definitions(lsw_host_display_modes_test PRIVATE QT_NO_KEYWORDS)
 add_test(NAME lsw_host_display_modes_test COMMAND lsw_host_display_modes_test)
 
+add_executable(lsw_host_one_to_one_desktop_test one_to_one_desktop_test.cpp)
+target_link_libraries(lsw_host_one_to_one_desktop_test
+    PRIVATE
+        lsw_host_core
+        LSW::CompileOptions
+)
+target_compile_definitions(lsw_host_one_to_one_desktop_test PRIVATE QT_NO_KEYWORDS)
+add_test(NAME lsw_host_one_to_one_desktop_test COMMAND lsw_host_one_to_one_desktop_test)
+set_tests_properties(lsw_host_one_to_one_desktop_test PROPERTIES TIMEOUT 30)
+
+add_executable(lsw_host_vm_priority_test vm_priority_test.cpp)
+target_link_libraries(lsw_host_vm_priority_test PRIVATE lsw_host_manager LSW::CompileOptions)
+target_compile_definitions(lsw_host_vm_priority_test PRIVATE QT_NO_KEYWORDS)
+add_test(NAME lsw_host_vm_priority_test COMMAND lsw_host_vm_priority_test)
+set_tests_properties(lsw_host_vm_priority_test PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)
+
 add_executable(lsw_host_display_refresh_test display_refresh_test.cpp)
 target_link_libraries(lsw_host_display_refresh_test
     PRIVATE
@@ -150,6 +167,12 @@ target_link_libraries(lsw_host_guest_sessions_test
     PRIVATE lsw_host_core LSW::CompileOptions nlohmann_json::nlohmann_json)
 target_compile_definitions(lsw_host_guest_sessions_test PRIVATE QT_NO_KEYWORDS)
 add_test(NAME lsw_host_guest_sessions_test COMMAND lsw_host_guest_sessions_test)
+
+add_executable(lsw_host_guest_gpu_status_test guest_gpu_status_test.cpp)
+target_link_libraries(lsw_host_guest_gpu_status_test
+    PRIVATE lsw_host_core LSW::CompileOptions nlohmann_json::nlohmann_json)
+target_compile_definitions(lsw_host_guest_gpu_status_test PRIVATE QT_NO_KEYWORDS)
+add_test(NAME lsw_host_guest_gpu_status_test COMMAND lsw_host_guest_gpu_status_test)
 
 add_executable(lsw_host_guest_swap_test guest_swap_test.cpp)
 target_link_libraries(lsw_host_guest_swap_test
@@ -198,6 +221,27 @@ target_link_libraries(lsw_host_notice_board_test PRIVATE lsw_host_manager LSW::C
 target_compile_definitions(lsw_host_notice_board_test PRIVATE QT_NO_KEYWORDS)
 add_test(NAME lsw_host_notice_board_test COMMAND lsw_host_notice_board_test)
 set_tests_properties(lsw_host_notice_board_test PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)
+
+add_executable(lsw_host_manager_exit_test manager_exit_test.cpp)
+target_link_libraries(lsw_host_manager_exit_test PRIVATE lsw_host_manager LSW::CompileOptions)
+target_compile_definitions(lsw_host_manager_exit_test PRIVATE QT_NO_KEYWORDS)
+add_test(NAME lsw_host_manager_exit_test COMMAND lsw_host_manager_exit_test)
+set_tests_properties(lsw_host_manager_exit_test PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)
+
+add_executable(lsw_host_network_settings_test network_settings_test.cpp)
+target_link_libraries(lsw_host_network_settings_test PRIVATE lsw_host_manager LSW::CompileOptions)
+target_compile_definitions(lsw_host_network_settings_test PRIVATE QT_NO_KEYWORDS)
+add_test(NAME lsw_host_network_settings_test COMMAND lsw_host_network_settings_test)
+set_tests_properties(lsw_host_network_settings_test PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)
+
+add_executable(lsw_host_network_page_test network_page_test.cpp)
+target_link_libraries(lsw_host_network_page_test PRIVATE lsw_host_manager LSW::CompileOptions)
+target_compile_definitions(lsw_host_network_page_test PRIVATE QT_NO_KEYWORDS)
+add_test(NAME lsw_host_network_page_test COMMAND lsw_host_network_page_test)
+set_tests_properties(lsw_host_network_page_test PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)
 
 add_executable(lsw_host_usb_devices_test host_usb_devices_test.cpp)
@@ -294,3 +338,55 @@ target_link_libraries(lsw_host_log_cleaner_test PRIVATE lsw_host_core LSW::Compi
 target_compile_definitions(lsw_host_log_cleaner_test PRIVATE QT_NO_KEYWORDS)
 add_test(NAME lsw_host_log_cleaner_test COMMAND lsw_host_log_cleaner_test)
 set_tests_properties(lsw_host_log_cleaner_test PROPERTIES TIMEOUT 120)
+
+add_executable(lsw_host_av_state_dump_test av_state_dump_test.cpp)
+target_link_libraries(lsw_host_av_state_dump_test
+    PRIVATE
+        lsw_host_core
+        LSW::CompileOptions
+)
+target_compile_definitions(lsw_host_av_state_dump_test PRIVATE QT_NO_KEYWORDS)
+add_test(NAME lsw_host_av_state_dump_test COMMAND lsw_host_av_state_dump_test)
+
+add_executable(lsw_host_host_window_status_test host_window_status_test.cpp)
+target_link_libraries(lsw_host_host_window_status_test
+    PRIVATE
+        lsw_host_core
+        LSW::CompileOptions
+)
+target_compile_definitions(lsw_host_host_window_status_test PRIVATE QT_NO_KEYWORDS)
+add_test(NAME lsw_host_host_window_status_test COMMAND lsw_host_host_window_status_test)
+
+add_executable(lsw_host_qemu_process_test qemu_process_test.cpp)
+target_link_libraries(lsw_host_qemu_process_test
+    PRIVATE
+        lsw_host_core
+        LSW::CompileOptions
+)
+target_compile_definitions(lsw_host_qemu_process_test PRIVATE QT_NO_KEYWORDS)
+add_test(NAME lsw_host_qemu_process_test COMMAND lsw_host_qemu_process_test)
+
+add_executable(lsw_host_host_window_alerts_test host_window_alerts_test.cpp)
+target_link_libraries(lsw_host_host_window_alerts_test
+    PRIVATE
+        lsw_host_core
+        LSW::CompileOptions
+)
+target_compile_definitions(lsw_host_host_window_alerts_test PRIVATE QT_NO_KEYWORDS)
+add_test(NAME lsw_host_host_window_alerts_test COMMAND lsw_host_host_window_alerts_test)
+
+add_executable(lsw_host_table_header_test table_header_test.cpp)
+target_link_libraries(lsw_host_table_header_test PRIVATE lsw_host_core LSW::CompileOptions)
+target_compile_definitions(lsw_host_table_header_test PRIVATE QT_NO_KEYWORDS)
+add_test(NAME lsw_host_table_header_test COMMAND lsw_host_table_header_test)
+set_tests_properties(lsw_host_table_header_test PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 60)
+
+add_executable(lsw_host_vram_reserve_test vram_reserve_test.cpp)
+target_link_libraries(lsw_host_vram_reserve_test
+    PRIVATE
+        lsw_host_core
+        LSW::CompileOptions
+)
+target_compile_definitions(lsw_host_vram_reserve_test PRIVATE QT_NO_KEYWORDS)
+add_test(NAME lsw_host_vram_reserve_test COMMAND lsw_host_vram_reserve_test)

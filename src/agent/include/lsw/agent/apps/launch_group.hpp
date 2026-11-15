@@ -14,6 +14,8 @@ public:
     [[nodiscard]] static std::string job_name(unsigned long pid);
 
     [[nodiscard]] static unsigned long root_of(unsigned long pid);
+
+    [[nodiscard]] static bool follow_relaunch(unsigned long pid);
 };
 
 }

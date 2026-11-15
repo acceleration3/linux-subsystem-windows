@@ -1,0 +1,8 @@
+#version 450
+layout(local_size_x = 64) in;
+layout(binding = 0) uniform usamplerBuffer src;
+layout(binding = 1, r32ui) uniform uimageBuffer dst;
+void main() {
+    int i = int(gl_GlobalInvocationID.x);
+    imageStore(dst, i, uvec4(texelFetch(src, i).x ^ 0xA5A5A5A5u));
+}

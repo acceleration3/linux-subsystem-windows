@@ -2,20 +2,29 @@
 
 #include "lsw/base/log.hpp"
 #include "lsw/host/apps/desktop_launcher.hpp"
+#include "lsw/host/link/agent_reply.hpp"
 #include "lsw/host/platform/dolphin_places.hpp"
 #include "lsw/host/platform/gtk_bookmarks.hpp"
 #include "lsw/host/platform/guest_smb_share.hpp"
+#include "lsw/host/platform/qemu_process.hpp"
 #include "lsw/host/services/domain_inputs.hpp"
+#include "lsw/linkproto/commands.hpp"
 #include "lsw/linkproto/envelope.hpp"
 
 #include <QDir>
 #include <QSet>
+#include <chrono>
+#include <nlohmann/json.hpp>
+#include <optional>
+#include <utility>
 
 namespace lsw::host::services {
 
 namespace {
 
 using K = config::ManagerSettings::Key;
+
+constexpr std::chrono::milliseconds kShutdownSwitchTimeout{4000};
 
 const QSet<QString>& integration_keys() {
     static const QSet<QString> keys = {
@@ -53,7 +62,12 @@ HostServices::HostServices(QObject* parent)
       log_cleaner_(
           settings_, rpc_, log_store_, [this] { return status_.vm().agent_online(); },
           [this] { return status_.vm().running(); }, this),
-      app_launcher_(rpc_, this) {
+      mirrors_(rpc_, this), app_launcher_(rpc_, mirrors_, this),
+      one_to_one_(manager_settings_, guest_display(), this), vm_scope_(QStringLiteral("lsw-vm")),
+      mirror_scope_(QStringLiteral("lsw-mirror")),
+      priority_(
+          manager_settings_, vm_scope_, mirror_scope_, process_threads_,
+          [this] { return platform::QemuProcess::pid_of(status_.vm().uuid); }, this) {
     log_store_.attach(rpc_);
 
     lifecycle_.set_before_start([this] { vm_logs_.prepare_start(); });
@@ -71,6 +85,70 @@ HostServices::HostServices(QObject* parent)
                     apply_integrations();
                 }
             });
+
+    connect(&mirrors_, &mirror::GuestMirrors::desktop_opened, &one_to_one_,
+            &OneToOneDesktop::opened);
+    connect(&mirrors_, &mirror::GuestMirrors::desktop_resized, &one_to_one_,
+            &OneToOneDesktop::resized);
+    connect(&mirrors_, &mirror::GuestMirrors::desktop_closed, &one_to_one_,
+            &OneToOneDesktop::closed);
+    connect(&mirrors_, &mirror::GuestMirrors::host_started, &priority_,
+            &VmPriority::mirror_started);
+    connect(&mirrors_, &mirror::GuestMirrors::host_ended, &priority_, &VmPriority::mirror_ended);
+    connect(&priority_, &VmPriority::changed, this,
+            [this] { status_.set_priority(priority_.status()); });
+    status_.set_priority(priority_.status());
+    connect(&status_, &StatusHub::changed, this, [this](StatusHub::Area area) {
+        if (area == StatusHub::Area::Vm) {
+            priority_.vm_seen(status_.vm().running() ? status_.vm().domain_id : -1);
+        }
+    });
+    connect(&status_, &StatusHub::changed, this, [this](StatusHub::Area area) {
+        if (area != StatusHub::Area::Vm || status_.vm().agent_online() == agent_online_) {
+            return;
+        }
+        agent_online_ = status_.vm().agent_online();
+        if (agent_online_) {
+            one_to_one_.guest_ready();
+        }
+    });
+}
+
+OneToOneDesktop::Guest HostServices::guest_display() {
+    const auto now = [](const link::AgentReply& reply) -> std::optional<config::DisplayMode> {
+        const config::DisplayMode mode{reply.body.value("width", 0), reply.body.value("height", 0)};
+        if (!reply.ok || mode.width <= 0 || mode.height <= 0) {
+            return std::nullopt;
+        }
+        return mode;
+    };
+    const auto params = [](const std::optional<config::DisplayMode>& wanted) {
+        return wanted ? nlohmann::json{{"width", wanted->width}, {"height", wanted->height}}
+                      : nlohmann::json::object();
+    };
+    OneToOneDesktop::Guest guest;
+    guest.offer = [this](const QString& modes) {
+        const config::VmRecord* record = vms_.primary();
+        if (record == nullptr || !status_.vm().running()) {
+            return false;
+        }
+        const bool offered = lifecycle_.set_display_modes(record->uuid, modes, nullptr);
+        status_.refresh(StatusHub::Area::Graphics);
+        return offered;
+    };
+    guest.resolution = [this, now, params](const std::optional<config::DisplayMode>& wanted,
+                                           OneToOneDesktop::Answer done) {
+        rpc_.request_async(
+            linkproto::cmd::kSetDisplay, params(wanted), this,
+            [now, done = std::move(done)](const link::AgentReply& reply) { done(now(reply)); });
+    };
+    guest.resolution_now = [this, now, params](const std::optional<config::DisplayMode>& wanted) {
+        return status_.vm().agent_online()
+                   ? now(rpc_.request(linkproto::cmd::kSetDisplay, params(wanted),
+                                      kShutdownSwitchTimeout))
+                   : std::nullopt;
+    };
+    return guest;
 }
 
 void HostServices::apply_integrations() {
@@ -132,7 +210,9 @@ int HostServices::start_vm(const QUuid& uuid) {
     return rc;
 }
 
-HostServices::~HostServices() = default;
+HostServices::~HostServices() {
+    one_to_one_.shutdown();
+}
 
 bool HostServices::open() {
     if (!settings_.ensure_directories()) {

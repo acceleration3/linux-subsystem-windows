@@ -1,0 +1,13 @@
+#version 450
+layout(local_size_x = 16) in;
+layout(std430, set = 0, binding = 0) readonly buffer In { vec4 items[]; } src;
+layout(std430, set = 0, binding = 1) buffer Out { vec4 items[]; } dst;
+layout(std430, set = 0, binding = 2) buffer Cmd { uint vertex_count; uint instance_count; uint first_vertex; uint first_instance; } cmd;
+void main() {
+    uint i = gl_GlobalInvocationID.x;
+    vec4 item = src.items[i];
+    if (item.w >= 0.0 && fract(item.w * 7.0) > 0.35) {
+        uint slot = atomicAdd(cmd.instance_count, 1u);
+        dst.items[slot] = item;
+    }
+}

@@ -4,6 +4,8 @@
 #include "lsw/host/services/graphics_status.hpp"
 #include "lsw/host/services/guest_sessions.hpp"
 #include "lsw/host/services/guest_update_status.hpp"
+#include "lsw/host/services/host_window_status.hpp"
+#include "lsw/host/services/priority_status.hpp"
 #include "lsw/host/services/usb_status.hpp"
 #include "lsw/host/services/vm_status.hpp"
 #include "lsw/host/vm/avgpu_log.hpp"
@@ -33,7 +35,7 @@ namespace lsw::host::services {
 class StatusHub : public QObject {
     Q_OBJECT
 public:
-    enum class Area { Vm, Graphics, Host, Sessions, Usb, Update };
+    enum class Area { Vm, Graphics, Host, Sessions, Usb, Update, HostWindow };
 
     StatusHub(vm::LibvirtConnection& libvirt, vm::Lifecycle& lifecycle,
               link::AgentRpcClient& rpc, vm::IGuestStatsProbe& guest_probe,
@@ -48,17 +50,25 @@ public:
 
     [[nodiscard]] const VmStatus& vm() const noexcept { return vm_; }
     [[nodiscard]] const GraphicsStatus& graphics() const noexcept { return graphics_; }
+
+    [[nodiscard]] const HostWindowStatus& host_window() const noexcept { return window_.status(); }
     [[nodiscard]] const GuestSessions& sessions() const noexcept { return sessions_; }
     [[nodiscard]] const UsbStatus& usb() const noexcept { return usb_; }
     [[nodiscard]] const GuestUpdateStatus& update() const noexcept { return update_; }
 
     [[nodiscard]] const ClipboardStatus& clipboard() const noexcept { return clipboard_; }
 
+    [[nodiscard]] const PriorityStatus& priority() const noexcept { return priority_; }
+
     void set_vm(const VmStatus& status);
+
+    void set_guest_address(const QString& ipv4);
 
     void set_update(const GuestUpdateStatus& status);
 
     void set_clipboard(const ClipboardStatus& status);
+
+    void set_priority(const PriorityStatus& status);
 
     void refresh(Area area);
 
@@ -74,6 +84,8 @@ Q_SIGNALS:
 private:
     void on_stats(const QUuid& uuid, const vm::VmStats& stats);
     void tick_graphics();
+    void sample_window();
+    void update_window_timer();
     void probe_host();
     void watch_screen(QScreen* screen);
     void read_monitors();
@@ -104,7 +116,11 @@ private:
     vm::AvgpuLog log_;
     QTimer graphics_timer_;
     int graphics_ticks_ = 0;
-    bool graphics_detail_ = false;
+    int graphics_detail_ = 0;
+    QTimer window_timer_;
+    bool window_reading_ = false;
+    HostWindowTracker window_;
+    QElapsedTimer clock_;
     QTimer sessions_timer_;
     bool probing_ = false;
     QTimer monitors_timer_;
@@ -118,6 +134,7 @@ private:
     UsbStatus usb_;
     GuestUpdateStatus update_;
     ClipboardStatus clipboard_;
+    PriorityStatus priority_;
     QVector<platform::HostUsbDevice> usb_host_;
     QHash<QString, QString> usb_names_;
     QVector<vm::DomainDescription::UsbDevice> usb_live_;

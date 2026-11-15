@@ -1,0 +1,14 @@
+#version 450
+layout(local_size_x = 1) in;
+layout(std430, binding = 0) buffer B { uint v; } bufs[8];
+void main() {
+    uint total = bufs[0].v + bufs[1].v + bufs[2].v + bufs[3].v + bufs[4].v + bufs[5].v + bufs[6].v + bufs[7].v;
+    bufs[0].v = total;
+    bufs[1].v = total + 1u;
+    bufs[2].v = total + 2u;
+    bufs[3].v = total + 3u;
+    bufs[4].v = total + 4u;
+    bufs[5].v = total + 5u;
+    bufs[6].v = total + 6u;
+    bufs[7].v = total + 7u;
+}

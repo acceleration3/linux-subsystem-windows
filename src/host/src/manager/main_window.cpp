@@ -1,5 +1,7 @@
 #include "lsw/host/manager/main_window.hpp"
 
+#include "lsw/host/apps/app_config_store.hpp"
+#include "lsw/host/apps/guest_app_launcher.hpp"
 #include "lsw/host/config/display_refresh.hpp"
 #include "lsw/host/config/vm_state.hpp"
 #include "lsw/host/link/agent_reply.hpp"
@@ -9,21 +11,23 @@
 #include "lsw/host/manager/console_panel.hpp"
 #include "lsw/host/manager/display_page.hpp"
 #include "lsw/host/manager/files_page.hpp"
+#include "lsw/host/manager/gpu_status_alerts.hpp"
+#include "lsw/host/manager/gpu_status_page.hpp"
 #include "lsw/host/manager/graphics_alerts.hpp"
 #include "lsw/host/manager/graphics_page.hpp"
 #include "lsw/host/manager/log_panel.hpp"
 #include "lsw/host/manager/maintenance_page.hpp"
+#include "lsw/host/manager/manager_exit.hpp"
+#include "lsw/host/manager/network_page.hpp"
 #include "lsw/host/manager/notice_board.hpp"
 #include "lsw/host/manager/run_on_vm_dialog.hpp"
 #include "lsw/host/manager/screen_pixels.hpp"
 #include "lsw/host/manager/settings_page.hpp"
 #include "lsw/host/manager/update_dialog.hpp"
 #include "lsw/host/manager/usb_page.hpp"
-#include "lsw/host/apps/app_config_store.hpp"
-#include "lsw/host/apps/guest_app_launcher.hpp"
 #include "lsw/host/manager/vm_detail_panel.hpp"
 #include "lsw/host/manager/warning_strip.hpp"
-#include "lsw/host/mirror/window_mirror.hpp"
+#include "lsw/host/mirror/guest_mirrors.hpp"
 #include "lsw/host/platform/guest_smb_share.hpp"
 #include "lsw/host/platform/host_scale.hpp"
 #include "lsw/host/services/domain_inputs.hpp"
@@ -37,14 +41,14 @@
 #include "lsw/host/vm/graceful_shutdown.hpp"
 #include "lsw/linkproto/commands.hpp"
 
+#include <QApplication>
 #include <QCloseEvent>
 #include <QDesktopServices>
 #include <QDir>
 #include <QEvent>
+#include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QLabel>
-#include <QApplication>
-#include <QGuiApplication>
 #include <QMenu>
 #include <QMessageBox>
 #include <QPushButton>
@@ -56,10 +60,10 @@
 #include <QUrl>
 #include <QVBoxLayout>
 #include <QWindow>
-#include <nlohmann/json.hpp>
-
 #include <algorithm>
 #include <array>
+#include <nlohmann/json.hpp>
+#include <utility>
 
 namespace lsw::host::manager {
 
@@ -80,8 +84,10 @@ constexpr std::array<PageInfo, static_cast<std::size_t>(NavRail::Page::Count)> k
     {"Overview", ""},
     {"Display", ""},
     {"Graphics", ""},
+    {"GPU status", ""},
     {"Files", ""},
     {"USB", ""},
+    {"Network", ""},
     {"Console", ""},
     {"Log", ""},
     {"Maintenance", ""},
@@ -258,6 +264,9 @@ MainWindow::MainWindow(services::HostServices& services, QWidget* parent)
     refresh_pending_counts();
     connect(alerts_, &GraphicsAlerts::changed, this, &MainWindow::on_graphics_changed);
     connect(graphics_page_, &GraphicsPage::summary_changed, this, &MainWindow::on_graphics_changed);
+    connect(gpu_status_alerts_, &GpuStatusAlerts::changed, this, &MainWindow::on_graphics_changed);
+    connect(gpu_status_page_, &GpuStatusPage::summary_changed, this,
+            &MainWindow::on_graphics_changed);
     connect(&services_.manager_settings(), &config::ManagerSettings::changed, this,
             [this](const QString& key) {
                 if (key == K::kDisplayModes || key == K::kMatchHostOutput) {
@@ -285,7 +294,7 @@ MainWindow::MainWindow(services::HostServices& services, QWidget* parent)
     refresh_status_bar();
     show_page(NavRail::Page::Overview);
     on_graphics_changed();
-    setup_tray();
+    setup_exit();
 
     const auto watch = [this](QScreen* screen) {
         connect(screen, &QScreen::refreshRateChanged, this, [this] { follow_monitor_refresh(); });
@@ -320,10 +329,15 @@ void MainWindow::build_pages() {
     connect(maintenance_page_, &MaintenancePage::summary_changed, this, &MainWindow::refresh_detail);
     usb_page_ = new UsbPage(services_.status(), services_.usb(), this);
     connect(usb_page_, &UsbPage::summary_changed, this, &MainWindow::refresh_detail);
+    network_page_ = new NetworkPage(services_.status(), services_.manager_settings(),
+                                    services_.pending_changes(), NetworkPage::Host::system(), this);
+    connect(network_page_, &NetworkPage::summary_changed, this, &MainWindow::refresh_detail);
     alerts_ = new GraphicsAlerts(services_.status(), this);
     graphics_page_ =
         new GraphicsPage(services_.status(), *alerts_, services_.manager_settings(),
                          services_.pending_changes(), this);
+    gpu_status_alerts_ = new GpuStatusAlerts(services_.status(), this);
+    gpu_status_page_ = new GpuStatusPage(services_.status(), *gpu_status_alerts_, this);
     settings_page_ = new SettingsPage(services_.manager_settings(), services_.pending_changes(),
                                       services_.status(), services_.log_verbosity(), this);
 
@@ -334,8 +348,10 @@ void MainWindow::build_pages() {
     stack_->addWidget(overview_stack_);
     stack_->addWidget(display_page_);
     stack_->addWidget(graphics_page_);
+    stack_->addWidget(gpu_status_page_);
     stack_->addWidget(files_page_);
     stack_->addWidget(usb_page_);
+    stack_->addWidget(network_page_);
     stack_->addWidget(console_);
     stack_->addWidget(log_);
     stack_->addWidget(maintenance_page_);
@@ -467,27 +483,10 @@ void MainWindow::open_windows_files() {
 }
 
 void MainWindow::open_desktop() {
-    if (desktop_ != nullptr) {
-        desktop_->raise(QString());
-        return;
-    }
     const config::VmRecord* record = services_.vms().primary();
     const QString name =
         record == nullptr || record->name.isEmpty() ? QStringLiteral("lsw") : record->name;
-    desktop_ = mirror::WindowMirror::of_desktop(services_.rpc(), QStringLiteral("%1 desktop").arg(name),
-                                                screen() != nullptr ? screen()->name() : QString(), this);
-    connect(desktop_, &mirror::WindowMirror::finished, desktop_, &QObject::deleteLater);
-    connect(desktop_, &mirror::WindowMirror::failed, this, [this](const QString& reason) {
-        notices_->post(QStringLiteral("desktop"), false,
-                       QStringLiteral("The desktop could not be opened."), reason);
-    });
-    connect(desktop_, &mirror::WindowMirror::ready, this,
-            [this] { notices_->withdraw(QStringLiteral("desktop")); });
-    if (!desktop_->start()) {
-        desktop_->deleteLater();
-        desktop_ = nullptr;
-        return;
-    }
+    services_.mirrors().open_desktop(QStringLiteral("%1 desktop").arg(name));
 }
 
 QWidget* MainWindow::build_empty_state() {
@@ -607,6 +606,8 @@ QString MainWindow::page_detail(NavRail::Page page) const {
     }
     case NavRail::Page::Graphics:
         return graphics_page_ != nullptr ? graphics_page_->summary() : QString{};
+    case NavRail::Page::GpuStatus:
+        return gpu_status_page_ != nullptr ? gpu_status_page_->summary() : QString{};
     case NavRail::Page::Log:
         return services_.status().vm().agent_online() ? QStringLiteral("live")
                                                       : QStringLiteral("agent not answering");
@@ -620,6 +621,8 @@ QString MainWindow::page_detail(NavRail::Page page) const {
         return files_page_ != nullptr ? files_page_->summary() : QString{};
     case NavRail::Page::Usb:
         return usb_page_ != nullptr ? usb_page_->summary() : QString{};
+    case NavRail::Page::Network:
+        return network_page_ != nullptr ? network_page_->summary() : QString{};
     case NavRail::Page::Maintenance:
         return maintenance_page_ != nullptr ? maintenance_page_->summary() : QString{};
     case NavRail::Page::Count:
@@ -669,17 +672,39 @@ void MainWindow::on_graphics_changed() {
 
 void MainWindow::refresh_warning() {
     using Severity = GraphicsAlerts::Severity;
+    const auto tone = [](bool red, bool amber) -> const char* {
+        return red ? Theme::Tone::kBad : amber ? Theme::Tone::kAmber : nullptr;
+    };
     const Severity worst = alerts_->worst();
-    rail_->set_graphics_warning(worst == Severity::Red     ? Theme::Tone::kBad
-                                : worst == Severity::Amber ? Theme::Tone::kAmber
-                                                           : nullptr);
-    std::optional<GraphicsAlerts::Warning> shown;
+    rail_->set_graphics_warning(tone(worst == Severity::Red, worst == Severity::Amber));
+    const GpuStatusAlerts::Severity gpu_worst = gpu_status_alerts_->worst();
+    rail_->set_gpu_status_warning(tone(gpu_worst == GpuStatusAlerts::Severity::Red,
+                                       gpu_worst == GpuStatusAlerts::Severity::Amber));
+
+    struct Shown {
+        bool critical;
+        QString headline;
+        QString detail;
+        NavRail::Page page;
+        QString open;
+    };
+
+    std::optional<Shown> shown;
     for (const auto& warning : alerts_->warnings()) {
-        if (warning.kind == GraphicsAlerts::Warning::Kind::NoDirect3d ||
-            warning.kind == GraphicsAlerts::Warning::Kind::DisplayNotRunning ||
-            warning.kind == GraphicsAlerts::Warning::Kind::DisplayNoDriver) {
-            shown = warning;
+        if (warning.kind == GraphicsAlerts::Warning::Kind::NoDirect3d) {
+            shown = Shown{warning.critical, warning.headline, warning.detail,
+                          NavRail::Page::Graphics, QStringLiteral("Open Graphics")};
             break;
+        }
+    }
+    if (!shown) {
+        for (const auto& warning : gpu_status_alerts_->warnings()) {
+            if (warning.kind == GpuStatusAlerts::Warning::Kind::DisplayNotRunning ||
+                warning.kind == GpuStatusAlerts::Warning::Kind::DisplayNoDriver) {
+                shown = Shown{warning.critical, warning.headline, warning.detail,
+                              NavRail::Page::GpuStatus, QStringLiteral("Open GPU status")};
+                break;
+            }
         }
     }
     if (!shown || rail_->current() != NavRail::Page::Overview) {
@@ -687,10 +712,9 @@ void MainWindow::refresh_warning() {
         return;
     }
     warn_strip_->set_message(shown->critical, shown->headline, shown->detail);
-    if (warn_strip_->findChild<QPushButton*>() == nullptr) {
-        connect(warn_strip_->add_button(QStringLiteral("Open Graphics")), &QPushButton::clicked,
-                this, [this] { show_page(NavRail::Page::Graphics); });
-    }
+    warn_strip_->clear_buttons();
+    connect(warn_strip_->add_button(shown->open), &QPushButton::clicked, this,
+            [this, page = shown->page] { show_page(page); });
     warn_strip_->setVisible(true);
 }
 
@@ -745,8 +769,7 @@ void MainWindow::push_display_modes() {
         return;
     }
     QString error;
-    const QString modes =
-        services::display_modes_from_settings(services_.manager_settings(), current_output());
+    const QString modes = services_.one_to_one().modes(current_output());
     if (!services_.lifecycle().set_display_modes(record->uuid, modes, &error)) {
         notices_->post(QStringLiteral("resolution"), false,
                        QStringLiteral("The resolution did not reach the guest."), error);
@@ -892,7 +915,15 @@ void MainWindow::follow_upkeep() {
 
 void MainWindow::follow_launches() {
     auto& launcher = services_.app_launcher();
-    launcher.set_output_source([this] { return screen() != nullptr ? screen()->name() : QString(); });
+    auto& mirrors = services_.mirrors();
+    mirrors.set_output_source(
+        [this] { return screen() != nullptr ? screen()->name() : QString(); });
+    connect(&mirrors, &mirror::GuestMirrors::desktop_failed, this, [this](const QString& reason) {
+        notices_->post(QStringLiteral("desktop"), false,
+                       QStringLiteral("The desktop could not be opened."), reason);
+    });
+    connect(&mirrors, &mirror::GuestMirrors::desktop_ready, this,
+            [this] { notices_->withdraw(QStringLiteral("desktop")); });
     connect(&launcher, &apps::GuestAppLauncher::failed, this,
             [this](const QString& target, const QString& error) {
         QString name = target.section(QLatin1Char('\\'), -1);
@@ -942,10 +973,34 @@ void MainWindow::setup_tray() {
         raise();
     });
     menu->addSeparator();
-    menu->addAction(QStringLiteral("Quit"), this, &MainWindow::on_quit);
+    menu->addAction(QStringLiteral("Quit"), exit_, &ManagerExit::quit);
     tray_->setContextMenu(menu);
     connect(tray_, &QSystemTrayIcon::activated, this, &MainWindow::on_tray_activated);
-    tray_->show();
+    tray_->setVisible(exit_->stays_in_tray());
+}
+
+void MainWindow::setup_exit() {
+    ManagerExit::Host host;
+    host.tray_available = [] { return QSystemTrayIcon::isSystemTrayAvailable(); };
+    host.guest_running = [this] {
+        const config::VmRecord* record = services_.vms().primary();
+        return record != nullptr && services_.lifecycle().is_running(record->uuid);
+    };
+    host.shut_guest_down = [this] {
+        if (const config::VmRecord* record = services_.vms().primary()) {
+            (void)services_.lifecycle().shutdown(record->uuid);
+        }
+    };
+    exit_ = new ManagerExit(services_.manager_settings(), std::move(host), this);
+    setup_tray();
+    connect(exit_, &ManagerExit::tray_wanted, tray_, &QSystemTrayIcon::setVisible);
+    connect(exit_, &ManagerExit::hide_requested, this, &QWidget::hide);
+    connect(exit_, &ManagerExit::left, this, [this] {
+        tray_->hide();
+        hide();
+    });
+    connect(exit_, &ManagerExit::quit_requested, qApp, &QCoreApplication::quit,
+            Qt::QueuedConnection);
 }
 
 void MainWindow::on_tray_activated(QSystemTrayIcon::ActivationReason reason) {
@@ -975,21 +1030,16 @@ bool MainWindow::event(QEvent* e) {
     return QMainWindow::event(e);
 }
 
+void MainWindow::hand_over() {
+    exit_->hand_over();
+}
+
 void MainWindow::closeEvent(QCloseEvent* e) {
-    const bool to_tray = services_.manager_settings().bool_value(K::kCloseToTray);
-    if (tray_ != nullptr && to_tray && QSystemTrayIcon::isSystemTrayAvailable()) {
-        hide();
-        e->ignore();
+    if (exit_->finished()) {
+        QMainWindow::closeEvent(e);
         return;
     }
-    QMainWindow::closeEvent(e);
+    e->ignore();
+    exit_->window_closed();
 }
-
-void MainWindow::on_quit() {
-    if (tray_ != nullptr) {
-        tray_->hide();
-    }
-    qApp->quit();
-}
-
 }

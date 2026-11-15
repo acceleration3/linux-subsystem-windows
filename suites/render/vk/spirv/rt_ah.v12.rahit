@@ -1,0 +1,10 @@
+#version 460
+#extension GL_EXT_ray_tracing : require
+hitAttributeEXT vec2 attribs;
+void main() {
+    vec3 p = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
+    vec2 c = fract(p.xy * 1.25) - 0.5;
+    if (dot(c, c) < 0.09) {
+        ignoreIntersectionEXT;
+    }
+}

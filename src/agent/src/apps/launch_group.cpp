@@ -1,5 +1,6 @@
 #include "lsw/agent/apps/launch_group.hpp"
 
+#include "lsw/agent/apps/launch_continuation.hpp"
 #include "lsw/agent/apps/launch_watcher.hpp"
 #include "lsw/agent/log.hpp"
 #include "lsw/agent/util/text_encoding.hpp"
@@ -9,9 +10,11 @@
 #include "lsw/agent/win/security_attributes.hpp"
 #include "lsw/agent/win/unique_handle.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <iterator>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -35,7 +38,11 @@ struct Group {
     win::UniqueHandle process;
     win::UniqueHandle job;
     std::wstring dir_lc;
+    std::wstring image_lc;
     std::uint64_t started = 0;
+    unsigned long session = 0;
+    bool own_executable = false;
+    bool following = false;
 };
 
 struct Proc {
@@ -100,9 +107,7 @@ std::vector<Proc> scan_processes() {
     return out;
 }
 
-void rebuild_locked(State& s) {
-    const std::vector<Proc> procs = scan_processes();
-
+void rebuild_locked(State& s, const std::vector<Proc>& procs) {
     std::unordered_map<unsigned long, unsigned long> next;
     std::unordered_map<unsigned long, const Proc*> by_pid;
     by_pid.reserve(procs.size());
@@ -162,7 +167,8 @@ void rebuild_locked(State& s) {
 
     const std::uint64_t now = now_ticks();
     for (auto it = s.groups.begin(); it != s.groups.end();) {
-        if (it->second.started != 0 && now - it->second.started < kRelaunchTicks) {
+        if (it->second.following ||
+            (it->second.started != 0 && now - it->second.started < kRelaunchTicks)) {
             ++it;
             continue;
         }
@@ -192,7 +198,7 @@ void refresh_locked(State& s) {
     if (std::chrono::steady_clock::now() - s.built < kSnapshotMaxAge) {
         return;
     }
-    rebuild_locked(s);
+    rebuild_locked(s, scan_processes());
 }
 
 }
@@ -212,9 +218,19 @@ bool LaunchGroup::adopt(void* process, unsigned long pid, LaunchIdentity identit
     }
     g.started = win::ProcessInfo::creation_time(handle).value_or(0);
     const std::wstring image = util::WideString::lower(win::ProcessInfo::image_path(handle));
+    g.image_lc = image;
+    DWORD session = 0;
+    if (::ProcessIdToSessionId(pid, &session) != 0) {
+        g.session = session;
+    }
     if (const auto dir = util::WideString::parent_dir(image)) {
         g.dir_lc = image.substr(0, dir->size() + 1);
     }
+
+    std::wstring identity_image = util::WideString::lower(identity.image);
+    std::replace(identity_image.begin(), identity_image.end(), L'/', L'\\');
+    g.own_executable = !identity_image.empty() && identity_image == image;
+    identity.created = g.started;
 
     const std::wstring name = util::TextEncoding::to_wide(job_name(pid));
     win::SecurityAttributes security{L"D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;0x120004;;;IU)"};
@@ -225,19 +241,19 @@ bool LaunchGroup::adopt(void* process, unsigned long pid, LaunchIdentity identit
                        win::ErrorText::last_error());
     } else {
         (void)LaunchWatcher::shared().attach(g.job.get(), pid, std::move(identity));
-        if (::AssignProcessToJobObject(g.job.get(), static_cast<HANDLE>(process)) == 0) {
-            LSW_AGENT_WARN("launch_group: AssignProcessToJobObject failed (err={}) for pid {}",
-                           win::ErrorText::last_error(), pid);
-            g.job.reset();
-        }
     }
 
     State& s = state();
     const std::lock_guard lock(s.mu);
     s.groups.erase(pid);
-    s.groups[pid] = std::move(g);
+    Group& slot = s.groups[pid] = std::move(g);
     s.owner_of[pid] = pid;
     s.built = {};
+    if (slot.job && ::AssignProcessToJobObject(slot.job.get(), static_cast<HANDLE>(process)) == 0) {
+        LSW_AGENT_WARN("launch_group: AssignProcessToJobObject failed (err={}) for pid {}",
+                       win::ErrorText::last_error(), pid);
+        slot.job.reset();
+    }
     return true;
 }
 
@@ -255,4 +271,107 @@ unsigned long LaunchGroup::root_of(unsigned long pid) {
     return it == s.owner_of.end() ? 0 : it->second;
 }
 
+bool LaunchGroup::follow_relaunch(unsigned long pid) {
+    std::optional<LaunchContinuation> rule;
+    {
+        State& s = state();
+        const std::lock_guard lock(s.mu);
+        const auto it = s.groups.find(pid);
+        if (it == s.groups.end() || !it->second.job) {
+            return false;
+        }
+        Group& g = it->second;
+        LaunchContinuation::Root root;
+        root.pid = pid;
+        root.session = g.session;
+        root.image_lc = g.image_lc;
+        root.started = g.started;
+        root.runs_own_executable = g.own_executable;
+        for (const auto& [other_pid, other] : s.groups) {
+            if (other_pid != pid && other.image_lc == g.image_lc && other.started > g.started) {
+                root.newer_launch_starts.push_back(other.started);
+            }
+        }
+        rule.emplace(std::move(root));
+        if (!rule->worth_following(now_ticks())) {
+            return false;
+        }
+        g.following = true;
+    }
+
+    bool adopted = false;
+    for (unsigned long waited = 0; !adopted && LaunchContinuation::keep_polling(waited);
+         waited += LaunchContinuation::poll_ms()) {
+        if (waited != 0) {
+            ::Sleep(LaunchContinuation::poll_ms());
+        }
+        const std::vector<Proc> procs = scan_processes();
+        std::unordered_map<unsigned long, const Proc*> by_pid;
+        for (const Proc& p : procs) {
+            by_pid[p.pid] = &p;
+        }
+
+        State& s = state();
+        const std::lock_guard lock(s.mu);
+        rebuild_locked(s, procs);
+        const auto it = s.groups.find(pid);
+        if (it == s.groups.end() || !it->second.job) {
+            break;
+        }
+        std::vector<LaunchContinuation::Candidate> candidates;
+        for (const Proc& p : procs) {
+            if (p.image_lc != it->second.image_lc) {
+                continue;
+            }
+            LaunchContinuation::Candidate c;
+            c.pid = p.pid;
+            c.parent = p.ppid;
+            c.image_lc = p.image_lc;
+            c.created = p.started;
+            DWORD session = 0;
+            if (::ProcessIdToSessionId(p.pid, &session) != 0) {
+                c.session = session;
+            }
+            const win::UniqueHandle h{
+                ::OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, p.pid)};
+            BOOL in_job = FALSE;
+            c.in_job = !h || ::IsProcessInJob(h.get(), nullptr, &in_job) == 0 || in_job != FALSE;
+            const auto parent = by_pid.find(p.ppid);
+            c.parent_is_explorer =
+                parent != by_pid.end() && parent->second->image_lc.ends_with(L"\\explorer.exe");
+            const auto parent_owner = s.owner_of.find(p.ppid);
+            c.parent_in_launch = parent_owner != s.owner_of.end() && parent_owner->second == pid;
+            const auto owner = s.owner_of.find(p.pid);
+            c.owned_by_other_launch = owner != s.owner_of.end() && owner->second != pid;
+            candidates.push_back(std::move(c));
+        }
+        const auto found = rule->pick(candidates);
+        if (!found) {
+            continue;
+        }
+        const win::UniqueHandle process{
+            ::OpenProcess(PROCESS_SET_QUOTA | PROCESS_TERMINATE | PROCESS_QUERY_LIMITED_INFORMATION,
+                          FALSE, *found)};
+        if (!process || ::AssignProcessToJobObject(it->second.job.get(), process.get()) == 0) {
+            LSW_AGENT_DEBUG("launch_group: cannot follow pid {} into its relaunch pid {} (err={}); "
+                            "trying again",
+                            pid, *found, win::ErrorText::last_error());
+            rule->reject(*found);
+            continue;
+        }
+        LSW_AGENT_INFO("launch: pid {} relaunched itself as pid {} outside its job; following it",
+                       pid, *found);
+        s.owner_of[*found] = pid;
+        s.built = {};
+        rule->followed(*found);
+        adopted = true;
+    }
+
+    State& s = state();
+    const std::lock_guard lock(s.mu);
+    if (const auto it = s.groups.find(pid); it != s.groups.end()) {
+        it->second.following = false;
+    }
+    return adopted;
+}
 }

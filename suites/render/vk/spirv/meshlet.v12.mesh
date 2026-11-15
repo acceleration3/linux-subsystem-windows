@@ -1,0 +1,19 @@
+#version 450
+#extension GL_EXT_mesh_shader : require
+layout(local_size_x = 1) in;
+layout(triangles, max_vertices = 3, max_primitives = 1) out;
+layout(location = 0) out vec4 v_color[];
+void main() {
+    SetMeshOutputsEXT(3, 1);
+    float g = float(gl_WorkGroupID.x);
+    vec2 base = vec2(-0.82 + 0.34 * mod(g, 5.0), -0.7 + 0.5 * floor(g / 5.0));
+    gl_MeshVerticesEXT[0].gl_Position = vec4(base, 0.0, 1.0);
+    gl_MeshVerticesEXT[1].gl_Position = vec4(base + vec2(0.28, 0.0), 0.0, 1.0);
+    gl_MeshVerticesEXT[2].gl_Position = vec4(base + vec2(0.14, 0.4), 0.0, 1.0);
+    float h = g * 0.9;
+    vec4 c = vec4(0.5 + 0.5 * sin(h), 0.5 + 0.5 * sin(h + 2.0), 0.5 + 0.5 * sin(h + 4.0), 1.0);
+    v_color[0] = c;
+    v_color[1] = c.gbra;
+    v_color[2] = c.brga;
+    gl_PrimitiveTriangleIndicesEXT[0] = uvec3(0, 1, 2);
+}

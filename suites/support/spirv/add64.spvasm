@@ -1,0 +1,32 @@
+OpCapability Addresses
+OpCapability Kernel
+OpCapability Int64
+OpMemoryModel Physical64 OpenCL
+OpEntryPoint Kernel %main "lsw_add" %gid
+OpName %main "lsw_add"
+OpDecorate %gid BuiltIn GlobalInvocationId
+OpDecorate %gid Constant
+%void = OpTypeVoid
+%uint = OpTypeInt 32 0
+%sizet = OpTypeInt 64 0
+%v3 = OpTypeVector %sizet 3
+%ptr_in = OpTypePointer Input %v3
+%gid = OpVariable %ptr_in Input
+%ptr_cw = OpTypePointer CrossWorkgroup %uint
+%fn = OpTypeFunction %void %ptr_cw %ptr_cw %ptr_cw
+%main = OpFunction %void None %fn
+%a = OpFunctionParameter %ptr_cw
+%b = OpFunctionParameter %ptr_cw
+%c = OpFunctionParameter %ptr_cw
+%entry = OpLabel
+%idv = OpLoad %v3 %gid Aligned 8
+%id = OpCompositeExtract %sizet %idv 0
+%pa = OpInBoundsPtrAccessChain %ptr_cw %a %id
+%pb = OpInBoundsPtrAccessChain %ptr_cw %b %id
+%pc = OpInBoundsPtrAccessChain %ptr_cw %c %id
+%va = OpLoad %uint %pa Aligned 4
+%vb = OpLoad %uint %pb Aligned 4
+%sum = OpIAdd %uint %va %vb
+OpStore %pc %sum Aligned 4
+OpReturn
+OpFunctionEnd

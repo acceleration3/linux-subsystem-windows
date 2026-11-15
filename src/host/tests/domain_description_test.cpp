@@ -24,7 +24,8 @@ void check(bool ok, const char* label) {
     }
 }
 
-const char* const kLiveXml = R"(<domain type='kvm' id='3' xmlns:qemu='http://libvirt.org/schemas/domain/qemu/1.0'>
+const char* const kLiveXml =
+    R"(<domain type='kvm' id='3' xmlns:qemu='http://libvirt.org/schemas/domain/qemu/1.0'>
   <name>lsw</name>
   <memory unit='KiB'>16777216</memory>
   <currentMemory unit='KiB'>16777216</currentMemory>
@@ -44,14 +45,13 @@ const char* const kLiveXml = R"(<domain type='kvm' id='3' xmlns:qemu='http://lib
   </devices>
   <qemu:commandline>
     <qemu:arg value='-device'/>
-    <qemu:arg value='virtio-gpu-av-pci,id=lsw-gpu,bus=pcie.0,addr=0x11,host-gpu=auto,max_outputs=1,vectors=11,hostmem=16384M,modes=2560x1440,,1920x1080'/>
+    <qemu:arg value='virtio-gpu-av-pci,id=lsw-gpu,bus=pcie.0,addr=0x11,host-gpu=auto,max_outputs=1,vectors=11,hostmem=16384M,vram-reserve=1024,modes=2560x1440,,1920x1080'/>
     <qemu:arg value='-device'/>
     <qemu:arg value='virtio-gpu-av-pci,id=lsw-gpu-1,bus=pcie.0,addr=0x12,host-gpu=fedcba98-7654-3210-fedc-ba9876543210,display=off,vectors=11,hostmem=16384M'/>
     <qemu:arg value='-netdev'/>
     <qemu:arg value='user,id=lsw-net'/>
   </qemu:commandline>
 </domain>)";
-
 }
 
 int main(int argc, char** argv) {
@@ -83,6 +83,7 @@ int main(int argc, char** argv) {
     inputs.render_only_gpu_uuids = {QStringLiteral("fedcba98-7654-3210-fedc-ba9876543210"),
                                     QStringLiteral("11111111-2222-3333-4444-555555555555")};
     inputs.host_window_mib = 4096;
+    inputs.vram_reserve_mib = 2048;
     inputs.display_modes = QStringLiteral("2560x1440,1920x1080");
     inputs.display_refresh_millihz = 359980;
     const auto built = DomainDescription::parse(DomainXmlBuilder::build(vm, inputs));
@@ -99,6 +100,7 @@ int main(int argc, char** argv) {
         if (display != nullptr) {
             check(display->host_gpu == inputs.host_gpu_uuid, "the display's host-gpu");
             check(display->hostmem_mib == 4096, "the display's host window");
+            check(display->vram_reserve_mib == 2048, "the display's VRAM reserve");
             check(display->modes == inputs.display_modes, "the display's modes, commas restored");
             check(display->refresh_millihz == 359980u, "the display's refresh, in millihertz");
         }
@@ -132,9 +134,11 @@ int main(int argc, char** argv) {
         check(live->disk_path.endsWith(QStringLiteral("lsw.qcow2")),
               "the cdrom before the disk is not taken for it");
         check(live->disk_bus == QStringLiteral("nvme"), "the live disk reads as NVMe");
-        check(live->gpus.size() == 2 && live->display() != nullptr
-                  && live->display()->hostmem_mib == 16384
-                  && live->display()->modes == QStringLiteral("2560x1440,1920x1080"),
+        check(live->gpus.size() == 2 && live->display() != nullptr &&
+                  live->display()->hostmem_mib == 16384 &&
+                  live->display()->vram_reserve_mib == 1024 &&
+                  live->gpus.at(1).vram_reserve_mib == 0 &&
+                  live->display()->modes == QStringLiteral("2560x1440,1920x1080"),
               "the live GPU lines read back");
         check(live->gpus.size() == 2 && !live->gpus.at(1).display, "display=off read");
     }

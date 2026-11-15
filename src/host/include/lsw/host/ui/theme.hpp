@@ -4,6 +4,7 @@
 #include <QFont>
 #include <QString>
 #include <QStringList>
+#include <QVector>
 
 class QTableWidget;
 class QTableWidgetItem;
@@ -18,9 +19,10 @@ public:
 
     static void surface(QWidget* widget, const char* role);
 
-    static void rows_table(QTableWidget* table, const QStringList& headers);
+    static void rows_table(QTableWidget* table, const QStringList& headers, const QString& key,
+                           const QVector<int>& widths, const QVector<int>& unsortable = {});
 
-    [[nodiscard]] static QTableWidgetItem* kind_cell(const QString& text);
+    [[nodiscard]] static QTableWidgetItem* kind_cell(const QString& text, int natural = 0);
 
     static void fit_rows(QTableWidget* table);
 
@@ -90,6 +92,8 @@ public:
         static constexpr const char* kItemNote = "ItemNote";
         static constexpr const char* kDriveBadge = "DriveBadge";
         static constexpr const char* kStepChip = "StepChip";
+        static constexpr const char* kChip = "Chip";
+        static constexpr const char* kCode = "Code";
     };
 
     struct Tone {

@@ -1,0 +1,13 @@
+#version 450
+layout(local_size_x_id = 0) in;
+layout(constant_id = 1) const uint N = 1u;
+layout(std430, binding = 0) buffer B { uint b[]; };
+layout(push_constant) uniform PC { uint v[N]; } pc;
+void main() {
+    uint i = gl_GlobalInvocationID.x;
+    uint acc = 0u;
+    for (uint k = 0u; k < N; ++k) {
+        acc += pc.v[k];
+    }
+    b[i] = ((gl_LocalInvocationID.x & 0xFFFFu) | (gl_WorkGroupID.x << 16)) ^ acc;
+}

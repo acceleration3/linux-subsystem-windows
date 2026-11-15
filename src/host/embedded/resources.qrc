@@ -3,6 +3,8 @@
   <qresource prefix="/lsw">
     <file>caret.png</file>
     <file>caret-disabled.png</file>
+    <file>sort-up.png</file>
+    <file>sort-down.png</file>
     <file alias="lsw-manager.svg">../../../packaging/lsw-manager.svg</file>
   </qresource>
 </RCC>

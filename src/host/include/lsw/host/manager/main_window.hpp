@@ -20,18 +20,20 @@ namespace lsw::host::services { class HostServices; }
 
 namespace lsw::host::vm { class GracefulShutdown; }
 
-namespace lsw::host::mirror { class WindowMirror; }
-
 namespace lsw::host::manager {
 
 class ApplyBar;
 class ConsolePanel;
 class DisplayPage;
 class FilesPage;
+class GpuStatusAlerts;
+class GpuStatusPage;
 class GraphicsAlerts;
 class GraphicsPage;
 class LogPanel;
+class ManagerExit;
 class MaintenancePage;
+class NetworkPage;
 class RunOnVmDialog;
 class AppErrorDialog;
 class UsbPage;
@@ -50,6 +52,8 @@ public:
 
     RestartResult restart_guest(QString* reason = nullptr);
 
+    void hand_over();
+
 Q_SIGNALS:
     void wizard_requested();
     void launch_requested(const QString& app_id);
@@ -60,7 +64,6 @@ protected:
     bool event(QEvent* e) override;
 
 private Q_SLOTS:
-    void on_quit();
     void on_tray_activated(QSystemTrayIcon::ActivationReason reason);
 
 private:
@@ -76,6 +79,7 @@ private:
     void start_guest();
     void follow_agent_for_desktop(bool online);
     void setup_tray();
+    void setup_exit();
     void show_app_error(const services::AppErrorReport& report);
     void refresh_identity();
     void refresh_pending_counts();
@@ -121,16 +125,19 @@ private:
     ConsolePanel* console_ = nullptr;
     LogPanel* log_ = nullptr;
     GraphicsAlerts* alerts_ = nullptr;
+    GpuStatusAlerts* gpu_status_alerts_ = nullptr;
     DisplayPage* display_page_ = nullptr;
     FilesPage* files_page_ = nullptr;
     UsbPage* usb_page_ = nullptr;
+    NetworkPage* network_page_ = nullptr;
     MaintenancePage* maintenance_page_ = nullptr;
     GraphicsPage* graphics_page_ = nullptr;
+    GpuStatusPage* gpu_status_page_ = nullptr;
     SettingsPage* settings_page_ = nullptr;
     UpdateDialog* update_dialog_ = nullptr;
     QSystemTrayIcon* tray_ = nullptr;
+    ManagerExit* exit_ = nullptr;
     vm::GracefulShutdown* restart_ = nullptr;
-    QPointer<mirror::WindowMirror> desktop_;
 };
 
 }

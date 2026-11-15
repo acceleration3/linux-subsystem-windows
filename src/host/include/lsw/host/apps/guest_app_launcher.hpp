@@ -5,31 +5,28 @@
 
 #include <QHash>
 #include <QObject>
-#include <QPointer>
+#include <QPair>
 #include <QSet>
 #include <QString>
 #include <QStringList>
-
-#include <functional>
 
 namespace lsw::host::link {
 class AgentRpcClient;
 }
 
 namespace lsw::host::mirror {
-class WindowMirror;
+class GuestMirrors;
 }
 
 namespace lsw::host::apps {
 class GuestAppLauncher : public QObject {
     Q_OBJECT
 public:
-    explicit GuestAppLauncher(link::AgentRpcClient& rpc, QObject* parent = nullptr);
+    GuestAppLauncher(link::AgentRpcClient& rpc, mirror::GuestMirrors& mirrors,
+                     QObject* parent = nullptr);
 
     void launch(const apps::AppConfig& app, const QString& activation_token,
                 const QStringList& documents = {});
-
-    void set_output_source(std::function<QString()> source) { output_source_ = std::move(source); }
 
 Q_SIGNALS:
     void launched(const QString& guest_path, quint32 pid);
@@ -42,11 +39,13 @@ public:
 
 private:
     [[nodiscard]] QString key(const apps::AppConfig& app) const;
-    void identified(const QString& identity, const QString& aumid, const QString& path);
-    void forget(const QString& identity);
-    void launch_ended(quint32 pid);
+    void launch_ended(quint32 pid, quint64 created);
+    void shown(const QString& identity);
+    void mirror_failed(const QString& identity, const QString& error);
+    void mirror_closed(const QString& identity);
+    void merged(const QString& identity, const QString& into);
     link::AgentRpcClient& rpc_;
-    std::function<QString()> output_source_;
+    mirror::GuestMirrors& mirrors_;
     QSet<QString> pending_;
     struct Queued {
         apps::AppConfig app;
@@ -55,10 +54,14 @@ private:
     };
     void flush_queued(const QString& identity);
     QHash<QString, Queued> queued_;
-    QHash<QString, QPointer<mirror::WindowMirror>> mirrors_;
-    QHash<QString, quint32> pids_;
-    QHash<QString, QString> shown_by_;
-    QList<quint32> ended_;
+
+    struct Launched {
+        QString path;
+        QStringList documents;
+    };
+
+    QHash<QString, Launched> launched_;
+    QList<QPair<quint32, quint64>> ended_;
     link::EventSubscription ended_sub_;
 };
 

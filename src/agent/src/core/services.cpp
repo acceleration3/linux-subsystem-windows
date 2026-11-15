@@ -5,6 +5,7 @@
 #include "lsw/agent/session/session_manager.hpp"
 #include "lsw/agent/uia/uia.hpp"
 #include "lsw/agent/win/clipboard_watcher.hpp"
+#include "lsw/agent/win/window_watcher.hpp"
 
 #include <stdexcept>
 #include <utility>
@@ -20,6 +21,7 @@ AgentServices::AgentServices(Role role)
         } catch (const std::exception& e) {
             LSW_AGENT_WARN("clipboard: sharing unavailable in this session: {}", e.what());
         }
+        windows_ = std::make_unique<win::WindowWatcher>();
     }
 }
 
@@ -61,6 +63,7 @@ void AgentServices::shutdown() {
         uia_->shutdown();
     }
     clipboard_.reset();
+    windows_.reset();
 }
 
 }

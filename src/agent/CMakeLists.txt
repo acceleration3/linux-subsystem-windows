@@ -81,10 +81,14 @@ set(_lsw_agent_rpc_sources
 set(_lsw_agent_win_sources
     src/win/mirror_process.cpp
     src/win/window.cpp
+    src/win/discovered_window.cpp
+    src/win/task_window.cpp
+    src/win/window_watcher.cpp
     src/win/icon_extractor.cpp
     src/win/gdiplus_runtime.cpp
     src/win/com.cpp
     src/win/desktop_session.cpp
+    src/win/display_resolution.cpp
     src/win/display_scale.cpp
     src/win/token_privileges.cpp
     src/win/error_text.cpp
@@ -137,6 +141,7 @@ set(_lsw_agent_apps_sources
     src/apps/start_menu_watcher.cpp
     src/apps/start_menu_filter.cpp
     src/apps/file_associations.cpp
+    src/apps/launch_continuation.cpp
     src/apps/launch_group.cpp
     src/apps/launch_command.cpp
     src/apps/launcher.cpp
@@ -145,6 +150,7 @@ set(_lsw_agent_apps_sources
     src/apps/import_resolver.cpp
     src/apps/launch_watcher.cpp
     src/apps/upload_store.cpp
+    src/apps/window_announcements.cpp
 )
 set(_lsw_agent_install_sources
     src/install/installer.cpp
@@ -168,6 +174,7 @@ set(_lsw_agent_system_sources
     src/system/info.cpp
     src/system/volume_grower.cpp
     src/system/scale_steps.cpp
+    src/system/display_request.cpp
     src/system/log_packer.cpp
     src/system/log_clearer.cpp
     src/system/driver_log_pruner.cpp

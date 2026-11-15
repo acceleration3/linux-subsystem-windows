@@ -153,7 +153,8 @@ set(_lsw_av_exec_perms
     OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
 
 install(PROGRAMS "${_lsw_av_qemu_build}/qemu/qemu-system-x86_64"
-        DESTINATION ${_lsw_av_qemu_dest}
+        DESTINATION bin
+        RENAME lsw-qemu-system-x86_64
         COMPONENT ${LSW_INSTALL_COMPONENT})
 install(FILES
             "${_lsw_av_qemu_build}/libav_executor.so"

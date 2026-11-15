@@ -15,6 +15,7 @@ struct VmStatus {
     std::optional<vm::DomainDescription> running_device;
     std::optional<vm::DomainDescription> next_boot;
     std::optional<quint64> disk_bytes;
+    QString guest_ipv4;
 
     [[nodiscard]] bool running() const noexcept { return stats.running; }
     [[nodiscard]] bool agent_online() const noexcept { return stats.agent_reachable; }

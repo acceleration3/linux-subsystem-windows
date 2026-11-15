@@ -16,21 +16,7 @@ struct ListWindowsHandler : RpcHandler {
         const auto wins = win::Window::enumerate();
         nlohmann::json arr = nlohmann::json::array();
         for (const auto& w : wins) {
-            arr.push_back({
-                {"hwnd", static_cast<std::uint64_t>(w.hwnd)},
-                {"owner", static_cast<std::uint64_t>(w.owner)},
-                {"pid", static_cast<std::uint64_t>(w.pid)},
-                {"root_pid", std::uint64_t{0}},
-                {"title", w.title},
-                {"exe_path", w.exe_path},
-                {"client_w", w.client_w},
-                {"client_h", w.client_h},
-                {"screen_x", w.screen_x},
-                {"screen_y", w.screen_y},
-                {"minimized", w.minimized},
-                {"maximized", w.maximized},
-                {"has_caption", w.has_caption},
-            });
+            arr.push_back(w.row());
         }
         return {{"windows", std::move(arr)}};
     }

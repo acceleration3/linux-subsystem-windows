@@ -59,6 +59,10 @@
   <on_poweroff>destroy</on_poweroff>
   <on_reboot>restart</on_reboot>
   <on_crash>restart</on_crash>
+  <pm>
+    <suspend-to-mem enabled='no'/>
+    <suspend-to-disk enabled='no'/>
+  </pm>
 
   <devices>
     <emulator>{{emulator}}</emulator>
@@ -102,7 +106,7 @@
     </sound>
     <audio id='1' type='pipewire'/>
 
-    <memballoon model='none'/>
+    <memballoon model='none'/>{{bridge_inner}}
 {{host_shares_inner}}
 
     <panic model='isa'/>
@@ -112,9 +116,6 @@
 {{qemu_env_inner}}
 {{gpu_args_inner}}
 {{input_args_inner}}
-    <qemu:arg value='-netdev'/>
-    <qemu:arg value='user,id=lsw-net,hostfwd=tcp:127.0.0.1:5102-:5102,hostfwd=tcp:127.0.0.1:5103-:5103,hostfwd=tcp:127.0.0.1:5445-:445'/>
-    <qemu:arg value='-device'/>
-    <qemu:arg value='e1000e,netdev=lsw-net,id=lsw-nic,bus=pcie.0,addr=0x10'/>
+{{network_args_inner}}
   </qemu:commandline>
 </domain>

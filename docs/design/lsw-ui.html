@@ -347,6 +347,22 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
   letter-spacing:0.13em;text-transform:uppercase;color:var(--fg-faint);
   padding:0 12px 8px;border-bottom:1px solid var(--line);
 }
+.tbl th{position:relative}
+.tbl th:not(:last-child)::after{
+  content:"";position:absolute;right:0;top:2px;bottom:8px;width:1px;background:transparent;
+}
+.tbl th:hover::after{background:var(--line-hi)}
+.tbl th.sortable{cursor:pointer}
+.tbl th.sortable:hover{color:var(--fg-dim)}
+.tbl th.sorted{color:var(--amber)}
+.tbl th.sorted::before{
+  content:"";position:absolute;right:8px;top:3px;border:4px solid transparent;
+}
+.tbl th.sorted.asc::before{border-bottom:5px solid var(--amber);border-top:0}
+.tbl th.sorted.desc::before{border-top:5px solid var(--amber);border-bottom:0}
+.tbl-scroll{overflow-x:auto}
+.tbl-scroll .tbl{width:max-content;min-width:100%}
+.tbl-scroll .tbl th,.tbl-scroll .tbl td{white-space:nowrap}
 .tbl td{padding:9px 12px;border-bottom:1px solid #1b202a;vertical-align:middle}
 .tbl tr:last-child td{border-bottom:none}
 .tbl .kind{font-family:"JetBrains Mono",monospace;font-size:11.5px;color:var(--fg-faint)}
@@ -646,6 +662,30 @@ svg.ico{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stro
 .editlist .foot{padding:8px 10px;background:#131720;border-top:1px solid var(--line);display:flex;gap:8px;align-items:center}
 .srow.wide{grid-template-columns:1fr;gap:10px}
 
+.modes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.modes .opt:focus-visible{outline:none;border-color:var(--amber)}
+.modes .opt .t{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.modes .opt .d{display:block}
+.checkl{gap:8px;border-top:1px solid #1b202a}
+.checkl .ck{display:grid;grid-template-columns:16px minmax(0,1fr);gap:9px;font-size:12.5px;align-items:baseline}
+.checkl .ck .mk{font-family:"JetBrains Mono",monospace;font-weight:600}
+.checkl .ck .fix{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:5px}
+.checkl .ck .cmd{border:1px solid var(--line);border-radius:4px;padding:2px 8px;background:#0f131a;font-size:12px}
+button.chip2{cursor:pointer}
+button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
+.tbl.fwd td{padding:6px 12px}
+.tbl.fwd th{padding:8px 12px 7px}
+.tbl.fwd td.tight{width:1%;white-space:nowrap}
+.tbl.fwd tr.joined td{border-bottom:none}
+.tbl.fwd tr.note td{padding-top:0;padding-bottom:8px}
+.tbl.fwd tr.add td{border-top:1px solid var(--line)}
+.tbl.fwd tr.add + tr.note td{border-bottom:none}
+.tbl.fwd tr.empty td{padding:10px 12px}
+.tbl.fwd .rm{width:22px;height:22px;border-radius:var(--r-sm);border:1px solid var(--line);
+  background:var(--raised);color:var(--fg-faint);display:grid;place-items:center;font-size:13px}
+.tbl.fwd .rm:hover{color:var(--bad);border-color:#6b2f32}
+.input.sm2{display:inline-block;padding:4px 8px;font-size:12px;width:96px}
+
 .picker{display:grid;grid-template-columns:190px minmax(0,1fr);min-height:430px}
 @media (max-width:640px){.picker{grid-template-columns:1fr}}
 .places{background:#10141b;border-right:1px solid var(--line);padding:9px 8px;display:flex;
@@ -742,8 +782,10 @@ svg.ico{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stro
     <symbol id="i-overview" viewBox="0 0 20 20"><rect x="3" y="3" width="6" height="6" rx="1.5"/><rect x="11" y="3" width="6" height="6" rx="1.5"/><rect x="3" y="11" width="6" height="6" rx="1.5"/><rect x="11" y="11" width="6" height="6" rx="1.5"/></symbol>
     <symbol id="i-display" viewBox="0 0 20 20"><rect x="2.5" y="3.5" width="15" height="10.5" rx="2"/><path d="M10 14v2.5M6.5 16.5h7"/></symbol>
     <symbol id="i-graphics" viewBox="0 0 20 20"><rect x="5.5" y="5.5" width="9" height="9" rx="1.5"/><rect x="8.5" y="8.5" width="3" height="3"/><path d="M8 2.5v3M12 2.5v3M8 14.5v3M12 14.5v3M2.5 8h3M2.5 12h3M14.5 8h3M14.5 12h3"/></symbol>
+    <symbol id="i-gpustatus" viewBox="0 0 20 20"><rect x="2.5" y="4.5" width="15" height="11" rx="2"/><path d="M5.5 10h2.5l1.5-3 2 6 1.5-3h2"/></symbol>
     <symbol id="i-files" viewBox="0 0 20 20"><path d="M2.5 6.5v8a1.5 1.5 0 0 0 1.5 1.5h12a1.5 1.5 0 0 0 1.5-1.5V8a1.5 1.5 0 0 0-1.5-1.5H10L8.3 4.5H4A1.5 1.5 0 0 0 2.5 6Z"/></symbol>
     <symbol id="i-usb" viewBox="0 0 20 20"><rect x="7.25" y="2.5" width="5.5" height="4" rx="0.8"/><rect x="5.5" y="6.5" width="9" height="7" rx="2"/><path d="M10 13.5v4"/></symbol>
+    <symbol id="i-network" viewBox="0 0 20 20"><rect x="7.5" y="2.5" width="5" height="4.5" rx="1"/><rect x="2.5" y="13" width="5" height="4.5" rx="1"/><rect x="12.5" y="13" width="5" height="4.5" rx="1"/><path d="M10 7v3M5 13v-3h10v3"/></symbol>
     <symbol id="i-console" viewBox="0 0 20 20"><rect x="2.5" y="3.5" width="15" height="13" rx="2"/><path d="M6 8l2.5 2.25L6 12.5M10.5 12.5H14"/></symbol>
     <symbol id="i-log" viewBox="0 0 20 20"><path d="M7.5 5.5h9M7.5 10h9M7.5 14.5h9"/><circle cx="4" cy="5.5" r="1.15" fill="currentColor" stroke="none"/><circle cx="4" cy="10" r="1.15" fill="currentColor" stroke="none"/><circle cx="4" cy="14.5" r="1.15" fill="currentColor" stroke="none"/></symbol>
     <symbol id="i-maint" viewBox="0 0 20 20"><path d="M12.6 3.2a4 4 0 0 0-3.7 5.4l-5.6 5.6a1.6 1.6 0 0 0 2.3 2.3l5.6-5.6a4 4 0 0 0 5.4-3.7l-2.4 2.4-2.3-.6-.6-2.3Z"/></symbol>
@@ -776,8 +818,10 @@ svg.ico{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stro
         <li><button data-view="m-main" aria-current="true">Overview</button></li>
         <li><button data-view="m-display">Display</button></li>
         <li><button data-view="m-gpu">Graphics</button></li>
+        <li><button data-view="m-gpustatus">GPU status</button></li>
         <li><button data-view="m-files">Files</button></li>
         <li><button data-view="m-usb">USB</button></li>
+        <li><button data-view="m-network">Network</button></li>
         <li><button data-view="m-console">Console</button></li>
         <li><button data-view="m-log">Log</button></li>
         <li><button data-view="m-maint">Maintenance</button></li>
@@ -1013,9 +1057,9 @@ svg.ico{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stro
       <div class="titlebar">
         <span class="dot"></span><span class="dot"></span><span class="dot"></span>
         <span class="t"><img class="logo" src="../../packaging/lsw-manager.svg" alt="">LSW</span>
-        <span class="spacer mono">1000 &times; 1076, scrolls</span>
+        <span class="spacer mono">1000 &times; 860</span>
       </div>
-      <div class="mgr2" style="min-height:1060px">
+      <div class="mgr2" style="min-height:844px">
         <aside class="nav">
           <div class="id">
             <span class="n">lsw</span>
@@ -1040,7 +1084,7 @@ svg.ico{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stro
               <header>
                 <span class="nm">AMD Radeon RX 9070 XT</span>
                 <span class="cap">1002:7550</span>
-                <span class="right"><span class="input select sm" style="width:128px">Display</span><span class="pill done">Started</span></span>
+                <span class="right"><span class="input select sm" style="width:128px">Display</span></span>
               </header>
               <div class="in">
                 <div class="kpis">
@@ -1075,7 +1119,7 @@ svg.ico{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stro
               </header>
               <div class="in">
                 <table class="tbl tight">
-                  <thead><tr><th style="width:112px">API</th><th>The host runs it on</th><th style="width:110px">State</th></tr></thead>
+                  <thead><tr><th class="sortable" style="width:112px">API</th><th class="sortable">The host runs it on</th><th class="sortable" style="width:110px">State</th></tr></thead>
                   <tbody>
                     <tr><td>Vulkan</td><td class="kind">RADV and ANV, the host Vulkan drivers</td><td><span class="pill done">Served</span></td></tr>
                     <tr><td>OpenGL</td><td class="kind">EGL, radeonsi</td><td><span class="pill done">Served</span></td></tr>
@@ -1088,50 +1132,19 @@ svg.ico{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stro
               </div>
             </div>
 
-            <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px">
-              <div class="area">
-                <header>
-                  <span class="nm">Device</span>
-                  <span class="cap">virtio-gpu-av-pci</span>
-                </header>
-                <div class="in">
-                  <dl class="kv">
-                    <dt>Host window</dt><dd style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="input select sm" style="width:92px">8 GiB</span><span class="tagr">restart</span><span class="meta" style="margin:0">write-back, used on demand</span></dd>
-                    <dt>Display</dt><dd>2560 &times; 1440 at 360 Hz <span class="meta">set on the Display page</span></dd>
-                    <dt>Adapters</dt><dd>1 <span class="meta">the display; a render-only one after a restart</span></dd>
-                  </dl>
-                </div>
-              </div>
-
-              <div class="area">
-                <header>
-                  <span class="nm">Guest driver</span>
-                  <span class="cap">avgpu.sys 0.9.0.41</span>
-                  <span class="right"><span class="pill done">Running</span></span>
-                </header>
-                <div class="in">
-                  <dl class="kv">
-                    <dt>RX 9070 XT</dt><dd><span class="yes">Running</span> <span class="meta">no problem code</span></dd>
-                    <dt>Test signing</dt><dd><span class="yes">On</span> <span class="meta">the driver needs it</span></dd>
-                    <dt>Driver search</dt><dd><span class="yes">Off</span> <span class="meta">Update cannot replace it</span></dd>
-                    <dt>Submission</dt><dd>User mode <span class="meta">native fences on</span></dd>
-                  </dl>
-                </div>
-              </div>
-            </div>
-
-            <div class="panel">
-              <header>Driver log
-                <span class="meta" style="letter-spacing:0;text-transform:none">avgpu.log &middot; 1 906 lines &middot; live</span>
-                <span class="tools"><button class="btn quiet" style="padding:2px 9px;font-size:12px;letter-spacing:0;text-transform:none;font-family:Archivo,sans-serif">Open the full log</button></span>
+            <div class="area">
+              <header>
+                <span class="nm">Device</span>
+                <span class="cap">virtio-gpu-av-pci</span>
               </header>
-              <div class="term" style="padding:9px 14px;font-size:11.5px;line-height:1.7">
-                <div><span class="d">avgpu: device capset status 0x00000000</span></div>
-                <div><span class="d">avgpu: presents are moved by the device's present engine</span></div>
-                <div><span class="d">avgpu: the host offers 4 modes, 4 taken, preferred 2560x1440</span></div>
-                <div><span class="d">avgpu: StartDevice</span></div>
-                <div><span class="d">avgpu: av context on doorbell 4 message 3 status 0x00000000</span></div>
-                <div>avgpu: av context on doorbell 5 message 4 status 0x00000000</div>
+              <div class="in">
+                <dl class="kv">
+                  <dt>Host window</dt><dd style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="input select sm" style="width:92px">8 GiB</span><span class="tagr">restart</span><span class="meta" style="margin:0">write-back, used on demand</span></dd>
+                  <dt>VRAM kept for the host</dt><dd style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="input select sm" style="width:92px">Auto</span><span class="tagr">restart</span><span class="meta" style="margin:0">Auto or a size; applies at the next VM start</span></dd>
+                  <dt>Guest VRAM cap</dt><dd>14.0 GiB of 16.0 GiB <span class="meta">what is left for the guest</span></dd>
+                  <dt>Display</dt><dd>2560 &times; 1440 at 360 Hz <span class="meta">set on the Display page</span></dd>
+                  <dt>Adapters</dt><dd>1 <span class="meta">the display; a render-only one after a restart</span></dd>
+                </dl>
               </div>
             </div>
           </div>
@@ -1173,10 +1186,175 @@ svg.ico{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stro
           <span class="msg"><b>The host serves no Direct3D.</b> DXVK and vkd3d-proton were not found, and Windows draws its desktop with Direct3D 11, so it will keep restarting until they are.</span>
           <span class="acts"><button class="btn">Check again</button></span>
         </div>
+        <div class="warnstrip" style="border-bottom:none">
+          <span class="wdot"></span>
+          <span class="msg"><b>Resizable BAR is off for Radeon RX 9070 XT.</b> The CPU can reach only 256 MiB of its VRAM, so once that fills, uploads through the host window go to system RAM. Turn on Above 4G Decoding and Resizable BAR in the firmware settings.</span>
+        </div>
+      </div>
+    </div>
+
+  </section>
+
+  <section data-view="m-gpustatus" hidden>
+    <div class="stage-head">
+      <span class="eyebrow">Manager</span>
+      <h1>GPU status</h1>
+    </div>
+
+    <div class="frame">
+      <div class="titlebar">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <span class="t"><img class="logo" src="../../packaging/lsw-manager.svg" alt="">LSW</span>
+        <span class="spacer mono">1000 &times; 860</span>
+      </div>
+      <div class="mgr2" style="min-height:844px">
+        <aside class="nav">
+          <div class="id">
+            <span class="n">lsw</span>
+            <span class="m">Windows 11 Pro 26200<br>8 cores &middot; 8 GiB &middot; 60 GiB<br>AMD Radeon RX 9070 XT +1 render</span>
+          </div>
+          <ul data-nav="gpustatus"></ul>
+          <div class="power">
+            <span class="badge on">ONLINE</span>
+            <button class="btn stop">Stop the guest</button>
+          </div>
+        </aside>
+
+        <div class="content">
+          <div class="cbar">
+            <h4>GPU status</h4>
+            <span class="sub">avgpu.sys &middot; 1 of 1 adapters started</span>
+          </div>
+
+          <div class="areas" style="flex:1">
+            <div class="area">
+              <header>
+                <span class="nm">Guest driver</span>
+                <span class="cap">avgpu.sys 0.9.0.41</span>
+                <span class="right"><span class="pill done">Running</span></span>
+              </header>
+              <div class="in">
+                <dl class="kv">
+                  <dt>RX 9070 XT</dt><dd><span class="yes">Running</span> <span class="meta">no problem code</span></dd>
+                  <dt>Test signing</dt><dd><span class="yes">On</span> <span class="meta">the driver needs it</span></dd>
+                  <dt>Driver search</dt><dd><span class="yes">Off</span> <span class="meta">Update cannot replace it</span></dd>
+                  <dt>Display path</dt><dd><span class="yes">Classic</span> <span class="meta">DisplayCore off</span></dd>
+                  <dt>Submission</dt><dd>User mode <span class="meta">native fences on</span></dd>
+                </dl>
+              </div>
+            </div>
+
+            <div class="area">
+              <header>
+                <span class="nm">Host window</span>
+                <span class="cap">last 10 minutes</span>
+              </header>
+              <div class="in">
+                <svg viewBox="0 0 640 120" preserveAspectRatio="none" style="width:100%;height:120px;display:block;background:#0f131a;border:1px solid var(--line);border-radius:4px">
+                  <polygon points="10.0,94.6 61.7,94.6 113.3,93.5 165.0,93.5 216.7,92.5 268.3,91.4 320.0,90.3 371.7,91.4 423.3,92.5 475.0,92.5 526.7,92.5 578.3,92.5 630.0,92.5 630.0,100.0 10.0,100.0" fill="var(--info)" fill-opacity="0.6"/>
+                  <polygon points="10.0,90.3 61.7,89.2 113.3,86.0 165.0,87.1 216.7,80.7 268.3,72.0 320.0,63.5 371.7,74.2 423.3,78.5 475.0,77.4 526.7,77.4 578.3,78.5 630.0,77.4 630.0,92.5 578.3,92.5 526.7,92.5 475.0,92.5 423.3,92.5 371.7,91.4 320.0,90.3 268.3,91.4 216.7,92.5 165.0,93.5 113.3,93.5 61.7,94.6 10.0,94.6" fill="var(--amber)" fill-opacity="0.6"/>
+                  <line x1="10" y1="14" x2="630" y2="14" stroke="var(--fg-dim)" stroke-dasharray="4 3"/>
+                  <text x="10" y="10" fill="var(--fg-faint)" font-size="9" font-family="JetBrains Mono,monospace">8 GiB</text>
+                  <text x="10" y="116" fill="var(--fg-faint)" font-size="9" font-family="JetBrains Mono,monospace">10 min</text>
+                </svg>
+                <div class="meta" style="margin-top:8px"><span style="color:var(--info)">&#9632;</span> write-back &nbsp; <span style="color:var(--amber)">&#9632;</span> write-combined &nbsp; <span style="color:var(--fg-dim)">- -</span> window size</div>
+                <dl class="kv" style="margin-top:10px">
+                  <dt>In use</dt><dd>2.1 GiB of 8.0 GiB</dd>
+                  <dt>Peak</dt><dd>3.4 GiB</dd>
+                </dl>
+              </div>
+            </div>
+
+            <div class="area">
+              <header>
+                <span class="nm">Guest VRAM</span>
+                <span class="cap">from the executor</span>
+              </header>
+              <div class="in">
+                <dl class="kv">
+                  <dt>Guest VRAM cap</dt><dd>14.0 GiB <span class="meta">the most GPU memory the guest may use</span></dd>
+                  <dt>Kept for the host</dt><dd>2.0 GiB <span class="meta">the reserve in effect; - when the executor has not reported</span></dd>
+                </dl>
+              </div>
+            </div>
+
+            <div class="area">
+              <header>
+                <span class="nm">Apps</span>
+                <span class="cap">totals and recent rate, click a header to sort</span>
+              </header>
+              <div class="in tbl-scroll">
+                <table class="tbl tight">
+                  <thead><tr><th class="sortable" style="width:70px">PID</th><th class="sortable" style="width:170px">App</th><th class="sortable" style="width:90px">API</th><th class="sortable sorted desc" style="width:84px">Submits</th><th class="sortable" style="width:96px">Held</th><th class="sortable" style="width:250px">Arena</th><th class="sortable" style="width:110px">Splits</th><th class="sortable" style="width:110px">Extra</th><th class="sortable" style="width:170px">Arena room</th><th class="sortable" style="width:170px">Ring</th><th class="sortable" style="width:170px">Fence</th><th class="sortable" style="width:70px">Inline</th><th class="sortable" style="width:70px">Copied</th><th class="sortable" style="width:70px">Slice</th><th class="sortable" style="width:80px">Refused</th></tr></thead>
+                  <tbody>
+                    <tr><td>6204</td><td>hl2.exe</td><td>Direct3D</td><td>412.0/s</td><td>64.0 MiB</td><td>16 MiB in 1 segment, peak 41%</td><td>196</td><td>267 &middot; 5.8/s</td><td>3 &middot; 18.7 ms avg</td><td>0</td><td>12 &middot; 1.4 ms avg &middot; 0.4/s</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
+                    <tr><td>3412</td><td>Photoshop.exe</td><td>OpenGL</td><td>38.0/s</td><td>896.0 MiB</td><td>32 MiB in 3 segments, peak 93%</td><td>1204 &middot; 7.2/s</td><td>2408 &middot; 14.4/s</td><td>88 &middot; 2.5 ms avg &middot; 1.0/s</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
+                    <tr><td>7788</td><td>chrome.exe</td><td>Direct3D</td><td>6.0/s</td><td>384.0 MiB</td><td>-</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>212</td><td>0</td><td>0</td></tr>
+                    <tr><td>5120</td><td>explorer.exe</td><td>Direct3D</td><td>0.0/s</td><td>512.0 MiB</td><td>-</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
+                    <tr><td>-</td><td>context 450</td><td>Vulkan</td><td>-</td><td>168.0 MiB</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="panel">
+              <header>Driver log
+                <span class="meta" style="letter-spacing:0;text-transform:none">avgpu.log &middot; 1 906 lines &middot; live</span>
+                <span class="tools"><button class="btn quiet" style="padding:2px 9px;font-size:12px;letter-spacing:0;text-transform:none;font-family:Archivo,sans-serif">Open the full log</button></span>
+              </header>
+              <div class="term" style="padding:9px 14px;font-size:11.5px;line-height:1.7">
+                <div><span class="d">avgpu: device capset status 0x00000000</span></div>
+                <div><span class="d">avgpu: presents are moved by the device's present engine</span></div>
+                <div><span class="d">avgpu: the host offers 4 modes, 4 taken, preferred 2560x1440</span></div>
+                <div><span class="d">avgpu: StartDevice</span></div>
+                <div><span class="d">avgpu: av context on doorbell 4 message 3 status 0x00000000</span></div>
+                <div>avgpu: av context on doorbell 5 message 4 status 0x00000000</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="statusbar">
+            <span><b>agent</b> 127.0.0.1:5102</span>
+            <span class="sep"></span>
+            <span><b>disk</b> NVMe, 60 GiB</span>
+            <span class="sep"></span>
+            <span><b>guest</b> agent answering</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h3 style="margin:26px 0 12px;font-size:14px">What it warns about</h3>
+    <div class="frame">
+      <div class="titlebar">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <span class="t">LSW, GPU status, warning strips</span>
+      </div>
+      <div style="background:var(--ink)">
         <div class="warnstrip crit">
           <span class="wdot"></span>
           <span class="msg"><b>Windows is not running avgpu.sys.</b> The adapter reports problem code 52: test signing is off, so Windows refused the driver's signature.</span>
           <span class="acts"><button class="btn">Open the driver log</button></span>
+        </div>
+        <div class="warnstrip crit">
+          <span class="wdot"></span>
+          <span class="msg"><b>Photoshop.exe is being refused host window memory.</b> The app sees out-of-memory errors. The host window has no room for what it asks for.</span>
+        </div>
+        <div class="warnstrip">
+          <span class="wdot"></span>
+          <span class="msg"><b>The host window is over 90% full, mostly with Photoshop.exe.</b> It has stayed that full for several seconds. When it runs out, allocations are refused and the apps see out-of-memory errors.</span>
+        </div>
+        <div class="warnstrip">
+          <span class="wdot"></span>
+          <span class="msg"><b>Photoshop.exe's transfers need several trips through the host window.</b> More than 5 transfers a second have been sent in pieces for 10 seconds, because the window had no room for each one whole.</span>
+        </div>
+        <div class="warnstrip">
+          <span class="wdot"></span>
+          <span class="msg"><b>chrome.exe's dynamic buffers are copied instead of drawn in place.</b> The app keeps rewriting buffers the host cannot share directly, so every change is copied.</span>
+        </div>
+        <div class="warnstrip">
+          <span class="wdot"></span>
+          <span class="msg"><b>Photoshop.exe's transfer arena is nearly full, so its uploads wait for room.</b> Its transfer ring has reached 90% of the arena, and uploads have been waiting for room.</span>
         </div>
         <div class="warnstrip" style="border-bottom:none">
           <span class="wdot"></span>
@@ -1249,6 +1427,7 @@ svg.ico{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stro
               <div class="in">
                 <span class="seg"><button class="on">This list</button><button>The host monitors' own modes</button></span>
                 <span class="tline"><span class="toggle"><i></i></span> Put the size of the monitor this window is on first, and follow it to another monitor</span>
+                <span class="tline"><span class="toggle"><i></i></span> 1:1 desktop: while the desktop window is open, Windows uses exactly its size in pixels and follows it when it is resized; closing it brings these resolutions back</span>
                 <div class="editlist">
                   <table>
                     <thead>
@@ -1283,7 +1462,7 @@ svg.ico{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stro
                     <button class="btn" style="white-space:nowrap">Add a resolution</button>
                   </div>
                 </div>
-                <span class="meta">Windows uses the preferred size, and it is the largest a maximised application window can be. Any size from 100 &times; 100 to 4095 on an edge; a change reaches Windows at once, as if a monitor were replugged.</span>
+                <span class="meta">Windows uses the preferred size, and it is the largest a maximised application window can be. Any size from 100 &times; 100 to 8192 &times; 8192; a change reaches Windows at once, as if a monitor were replugged.</span>
               </div>
             </div>
 
@@ -1599,6 +1778,198 @@ svg.ico{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stro
     </div>
 
   </section>
+  <section data-view="m-network" hidden>
+    <div class="stage-head">
+      <span class="eyebrow">Manager</span>
+      <h1>Network</h1>
+    </div>
+    <div class="frame">
+      <div class="titlebar">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <span class="t"><img class="logo" src="../../packaging/lsw-manager.svg" alt="">LSW</span>
+        <span class="spacer mono">1000 &times; 1180</span>
+      </div>
+      <div class="mgr2">
+        <aside class="nav">
+          <div class="id">
+            <span class="n">lsw</span>
+            <span class="m">Windows 11 Pro 26200<br>8 cores &middot; 8 GiB &middot; 60 GiB<br>AMD Radeon RX 9070 XT +1 render</span>
+          </div>
+          <ul data-nav="network"></ul>
+          <div class="power">
+            <span class="badge on">ONLINE</span>
+            <button class="btn stop">Stop the guest</button>
+          </div>
+        </aside>
+        <div class="content">
+          <div class="cbar">
+            <h4>Network</h4>
+            <span class="sub">Shared with this computer &middot; 6 ports forwarded &middot; 3 changes wait for a restart</span>
+          </div>
+
+          <div class="areas" style="flex:1">
+            <div class="area">
+              <header>
+                <span class="nm">How Windows is connected</span>
+                <span class="cap">the network Windows starts with</span>
+                <span class="right"><span class="tagr">restart</span></span>
+              </header>
+              <div class="in">
+                <div class="modes">
+                  <div class="opt" role="radio" aria-checked="false" tabindex="0">
+                    <span class="dial"></span>
+                    <span>
+                      <span class="t">Shared with this computer <span class="pill done">In use</span></span>
+                      <span class="d">Windows reaches the network through this computer. Other machines reach Windows only through the forwarded ports.</span>
+                    </span>
+                  </div>
+                  <div class="opt" role="radio" aria-checked="true" tabindex="0">
+                    <span class="dial"></span>
+                    <span>
+                      <span class="t">Bridged to a host bridge <span class="tagr">restart</span></span>
+                      <span class="d">Windows appears on the network as a machine of its own, with its own address.</span>
+                    </span>
+                  </div>
+                </div>
+                <dl class="kv" style="align-items:center">
+                  <dt>Adapters</dt><dd>Shared adapter</dd>
+                  <dt>Windows address</dt><dd style="display:flex;align-items:center;gap:10px"><span class="mono">10.0.2.15</span><button class="btn quiet" style="padding:2px 9px;font-size:12px">Copy</button><span class="meta">as Windows reported when it started</span></dd>
+                </dl>
+              </div>
+            </div>
+
+            <div class="area">
+              <header>
+                <span class="nm">Bridge</span>
+                <span class="cap">the bridge of this computer Windows joins</span>
+                <span class="right"><span class="tagr">restart</span></span>
+              </header>
+              <div class="rows">
+                <div class="drow">
+                  <span class="ic"><svg class="ico"><use href="#i-network"/></svg></span>
+                  <span class="who"><span class="n">br0</span><span class="f">192.168.1.20 &middot; 2 interfaces</span></span>
+                  <span class="side">
+                    <span class="pill done">Up</span>
+                    <span class="tline"><span class="radio on"></span> Join</span>
+                  </span>
+                </div>
+                <div class="drow">
+                  <span class="ic"><svg class="ico"><use href="#i-network"/></svg></span>
+                  <span class="who"><span class="n">virbr0</span><span class="f">192.168.122.1 &middot; no interface</span></span>
+                  <span class="side">
+                    <span class="pill pend">Down</span>
+                    <span class="tline"><span class="radio"></span> Join</span>
+                  </span>
+                </div>
+              </div>
+              <div class="in checkl">
+                <div class="ck"><span class="mk yes">&#10003;</span><span>QEMU's bridge helper is installed <span class="meta">/usr/lib/qemu/qemu-bridge-helper</span></span></div>
+                <div class="ck"><span class="mk yes">&#10003;</span><span>The helper may create the adapter</span></div>
+                <div class="ck"><span class="mk no">&#10007;</span><span>/etc/qemu/bridge.conf does not allow br0
+                  <span class="fix"><span class="meta">Add this line to /etc/qemu/bridge.conf</span><span class="mono cmd">allow br0</span><button class="btn quiet" style="padding:2px 9px;font-size:12px">Copy</button></span></span></div>
+                <span class="meta">Until every line is met Windows starts with the shared network only.</span>
+              </div>
+              <div class="foot"><span class="meta">LSW changes nothing on this computer: the bridge, QEMU's helper and its rules are set up outside it.</span></div>
+            </div>
+
+            <div class="area">
+              <header>
+                <span class="nm">Forwarded ports</span>
+                <span class="cap">a port of this computer that leads to a port in Windows</span>
+                <span class="right"><span class="tagr">restart</span><span class="meta">8 ports</span></span>
+              </header>
+              <div class="in" style="padding-bottom:4px">
+                <div class="chips">
+                  <button class="chip2 ok" title="TCP 47984, 47989, 48010 and UDP 47998 to 48000, from the network">&#10003; Sunshine / Moonlight</button>
+                  <button class="chip2" title="TCP 3389 and UDP 3389">Remote Desktop</button>
+                  <button class="chip2 ok" title="TCP 1433">&#10003; SQL Server</button>
+                  <button class="chip2" title="TCP 2222 to port 22 in Windows">SSH</button>
+                  <button class="chip2" title="TCP 8080 to port 80 and TCP 8443 to port 443 in Windows">Web server</button>
+                </div>
+                <span class="tline"><span class="meta">SQL Server is added.</span><button class="btn" style="padding:2px 9px;font-size:12px">Remove its port</button><button class="btn quiet" style="padding:2px 9px;font-size:12px">Keep</button></span>
+              </div>
+              <table class="tbl fwd">
+                <thead>
+                  <tr><th>Protocol</th><th>On this computer</th><th>In Windows</th><th>Reachable from</th><th>State</th><th></th></tr>
+                </thead>
+                <tbody>
+                  <tr><td><span class="chip2">TCP</span></td><td class="mono">47984</td><td class="mono">47984</td><td><span class="seg"><button>This computer</button><button class="on">The network</button></span></td><td><span class="pill done">Active</span></td><td class="tight"><button class="rm" title="Stop forwarding this port">&times;</button></td></tr>
+                  <tr><td><span class="chip2">TCP</span></td><td class="mono">47989</td><td class="mono">47989</td><td><span class="seg"><button>This computer</button><button class="on">The network</button></span></td><td><span class="pill done">Active</span></td><td class="tight"><button class="rm">&times;</button></td></tr>
+                  <tr><td><span class="chip2">TCP</span></td><td class="mono">48010</td><td class="mono">48010</td><td><span class="seg"><button>This computer</button><button class="on">The network</button></span></td><td><span class="pill done">Active</span></td><td class="tight"><button class="rm">&times;</button></td></tr>
+                  <tr><td><span class="chip2">UDP</span></td><td class="mono">47998</td><td class="mono">47998</td><td><span class="seg"><button>This computer</button><button class="on">The network</button></span></td><td><span class="pill done">Active</span></td><td class="tight"><button class="rm">&times;</button></td></tr>
+                  <tr><td><span class="chip2">UDP</span></td><td class="mono">47999</td><td class="mono">47999</td><td><span class="seg"><button>This computer</button><button class="on">The network</button></span></td><td><span class="pill done">Active</span></td><td class="tight"><button class="rm">&times;</button></td></tr>
+                  <tr><td><span class="chip2">UDP</span></td><td class="mono">48000</td><td class="mono">48000</td><td><span class="seg"><button>This computer</button><button class="on">The network</button></span></td><td><span class="pill done">Active</span></td><td class="tight"><button class="rm">&times;</button></td></tr>
+                  <tr><td><span class="chip2">TCP</span></td><td class="mono">1433</td><td class="mono">1433</td><td><span class="seg"><button class="on">This computer</button><button>The network</button></span></td><td><span class="pill pend">After restart</span></td><td class="tight"><button class="rm">&times;</button></td></tr>
+                  <tr class="joined"><td><span class="chip2">TCP</span></td><td class="mono">8080</td><td class="mono">80</td><td><span class="seg"><button class="on">This computer</button><button>The network</button></span></td><td><span class="pill fail">Port in use</span></td><td class="tight"><button class="rm">&times;</button></td></tr>
+                  <tr class="note"><td colspan="6"><span class="meta" style="color:var(--bad)">Something else on this computer already uses TCP port 8080, so the guest would not start. Pick another host port.</span></td></tr>
+                  <tr class="add"><td><span class="input select sm" style="width:64px">TCP</span></td><td><span class="input mono ph sm2">Port</span></td><td><span class="input mono ph sm2">Same port</span></td><td><span class="seg"><button class="on">This computer</button><button>The network</button></span></td><td colspan="2"><button class="btn" style="padding:3px 12px">Add</button></td></tr>
+                  <tr class="note"><td></td><td colspan="5"><span class="meta" style="color:var(--bad)">LSW itself uses TCP port 5445 of this computer.</span></td></tr>
+                </tbody>
+              </table>
+              <div class="in" style="gap:7px;border-top:1px solid #1b202a">
+                <span class="tline"><span class="meta">Removed TCP 3389 &rarr; 3389.</span><button class="btn quiet" style="padding:2px 9px;font-size:12px">Undo</button></span>
+                <span class="tline"><span class="meta">Other machines connect to</span><span class="mono" style="color:var(--fg)">192.168.1.20</span><span class="meta">enp5s0</span><button class="btn quiet" style="padding:2px 9px;font-size:12px">Copy</button></span>
+              </div>
+              <div class="foot"><span class="meta">LSW itself uses TCP 5102, 5103 and 5445. This computer lets only the administrator listen on ports below 1024, so those cannot be forwarded.</span></div>
+            </div>
+
+            <div class="area">
+              <header>
+                <span class="nm">Forwarded ports</span>
+                <span class="cap">with nothing forwarded</span>
+                <span class="right"><span class="tagr">restart</span><span class="meta">no port</span></span>
+              </header>
+              <div class="in" style="padding-bottom:4px">
+                <div class="chips">
+                  <button class="chip2">Sunshine / Moonlight</button>
+                  <button class="chip2">Remote Desktop</button>
+                  <button class="chip2">SQL Server</button>
+                  <button class="chip2">SSH</button>
+                  <button class="chip2">Web server</button>
+                </div>
+              </div>
+              <table class="tbl fwd">
+                <thead>
+                  <tr><th>Protocol</th><th>On this computer</th><th>In Windows</th><th>Reachable from</th><th>State</th><th></th></tr>
+                </thead>
+                <tbody>
+                  <tr class="empty"><td colspan="6"><span style="font-size:12.5px;color:var(--fg-dim)">A forwarded port lets a program on this computer, or another machine, reach a server that runs in Windows. Pick a set above or add a port here.</span></td></tr>
+                  <tr class="add"><td><span class="input select sm" style="width:64px">TCP</span></td><td><span class="input mono ph sm2">Port</span></td><td><span class="input mono ph sm2">Same port</span></td><td><span class="seg"><button class="on">This computer</button><button>The network</button></span></td><td colspan="2"><button class="btn" style="padding:3px 12px">Add</button></td></tr>
+                </tbody>
+              </table>
+              <div class="foot"><span class="meta">LSW itself uses TCP 5102, 5103 and 5445. This computer lets only the administrator listen on ports below 1024, so those cannot be forwarded.</span></div>
+            </div>
+
+            <div class="area">
+              <header>
+                <span class="nm">Bridge</span>
+                <span class="cap">on a computer without one</span>
+                <span class="right"><span class="tagr">restart</span></span>
+              </header>
+              <div class="in">
+                <span style="font-size:12.5px;color:var(--fg-dim);line-height:1.55">A bridge is a virtual switch on this computer that puts machines on one of its networks. This computer has none: one must exist here before Windows can join it, and LSW does not create bridges.</span>
+              </div>
+              <div class="foot"><span class="meta">LSW changes nothing on this computer: the bridge, QEMU's helper and its rules are set up outside it.</span></div>
+            </div>
+          </div>
+
+          <div class="applybar">
+            <span class="eyebrow" style="color:var(--amber)">3 changes need a restart</span>
+            <span class="diffs">
+              <span class="diff">network <span class="f">shared</span> <span class="t">bridged</span></span>
+              <span class="diff">bridge <span class="f">none</span> <span class="t">br0</span></span>
+              <span class="diff">forwarded ports <span class="f">6</span> <span class="t">8</span></span>
+            </span>
+            <span class="acts">
+              <button class="btn quiet">Revert</button>
+              <button class="btn primary">Apply and restart the guest</button>
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </section>
   <section data-view="m-settings" hidden>
     <div class="stage-head">
       <span class="eyebrow">Manager</span>
@@ -1647,6 +2018,13 @@ svg.ico{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stro
               </div>
               <div class="srow">
                 <span>
+                  <span class="k">Priority <span class="tagr live">now</span></span>
+                  <span class="d">The guest shares the processors with other programs like any program.</span>
+                </span>
+                <span class="ctl"><span class="input select" style="width:220px">Normal</span></span>
+              </div>
+              <div class="srow">
+                <span>
                   <span class="k">Memory <span class="tagr">restart</span></span>
                   <span class="d">Fixed: the guest holds all of it while it runs. 31 GiB on the host.</span>
                 </span>
@@ -1679,7 +2057,14 @@ svg.ico{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stro
               <div class="srow">
                 <span>
                   <span class="k">Keep running in the tray when closed <span class="tagr live">now</span></span>
-                  <span class="d">Closing the window leaves the guest running.</span>
+                  <span class="d">On: closing the window hides it; the manager, its tray icon and the guest keep running. Off: there is no tray icon and closing the window quits the manager.</span>
+                </span>
+                <span class="ctl"><span class="toggle on"><i></i></span></span>
+              </div>
+              <div class="srow">
+                <span>
+                  <span class="k">Shut the guest down when the manager quits <span class="tagr live">now</span></span>
+                  <span class="d">On: quitting asks Windows to shut down and waits up to 30 seconds for it before the manager exits. Off: the guest keeps running without the manager.</span>
                 </span>
                 <span class="ctl"><span class="toggle on"><i></i></span></span>
               </div>
@@ -3117,6 +3502,10 @@ svg.ico{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stro
         <span class="msg"><b>The host serves no Direct3D.</b> Windows' desktop will keep restarting.</span>
         <span class="acts"><button class="btn">Check again</button></span>
       </div>
+      <div class="warnstrip" style="border-bottom:none">
+        <span class="wdot"></span>
+        <span class="msg"><b>Resizable BAR is off for Radeon RX 9070 XT.</b> The CPU can reach only 256 MiB of its VRAM.</span>
+      </div>
     </div>
 
     <h3 style="margin:24px 0 10px;font-size:14px">Facts</h3>
@@ -3175,7 +3564,7 @@ svg.ico{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stro
           <li><b>Two wizard pages become dialogs.</b> <span class="mono">DebloatPage</span> and <span class="mono">DownloadPage</span> lose their page ids (<span class="mono">Wizard::Debloat</span>, <span class="mono">Wizard::Download</span>) and their widgets move into <span class="mono">TrimImageDialog</span> and <span class="mono">DownloadImageDialog</span>. Each owns its worker, each returns the path it wrote.</li>
           <li><b>Output directory.</b> <span class="mono">DebloatStager::trim()</span> already takes an output directory, so the dialog passes the chosen folder plus a filename instead of <span class="mono">settings().isos_dir()</span>. The downloader gains the same pair.</li>
           <li><b>IsoChoicePage shrinks</b> to one path field and two buttons. <span class="mono">MicrosoftClient</span> and <span class="mono">IsoSourceFetcher</span> move with the download dialog, so the page no longer owns network state or a ban flag.</li>
-          <li><b>Manager tabs.</b> Display, Files, USB and Maintenance become pages of the stack beside Overview, Graphics, Console, Log and Settings, in four groups split by thin rules. <span class="mono">SettingsPage</span> keeps only settings: machine size, startup, desktop integration, storage and logging. The adapter roles and the host window move onto the Graphics page, the display controls onto Display, the shared folders and the SMB share onto Files, the device list onto USB, the image tools, the guest update and the reinstall onto Maintenance.</li>
+          <li><b>Manager tabs.</b> Display, Files, USB and Maintenance become pages of the stack beside Overview, Graphics, Console, Log and Settings, in four groups split by thin rules. <span class="mono">SettingsPage</span> keeps only settings: machine size, network, startup, desktop integration, storage and logging. The adapter roles and the host window move onto the Graphics page, the display controls onto Display, the shared folders and the SMB share onto Files, the device list onto USB, the image tools, the guest update and the reinstall onto Maintenance.</li>
           <li><b>One apply bar.</b> It moves from <span class="mono">SettingsPage</span> to <span class="mono">MainWindow</span>, under the stack, and shows on every page while <span class="mono">PendingChanges</span> holds a change. Each rail item shows in amber how many of the waiting changes are its own.</li>
           <li><b>Rail icons.</b> Line icons drawn by <span class="mono">NavIcon</span> with QPainter, one shape per page, coloured from the button: faint, dim on hover, amber when current. The mockup draws the same shapes as SVG symbols.</li>
           <li><b>Data behind the new pages.</b> Display reads <span class="mono">GraphicsStatus</span>'s live modes and refresh and the monitor the window is on; the scale needs the one the agent last applied kept in <span class="mono">StatusHub</span>. Files compares the folder list with the running definition for In Windows and After restart. USB is <span class="mono">UsbStatus</span> split by place. Maintenance is <span class="mono">GuestUpdateStatus</span>, its steps included.</li>
@@ -3258,7 +3647,7 @@ svg.ico{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stro
 
   var NAV = [
     ["overview", "Overview"], null,
-    ["display", "Display"], ["graphics", "Graphics"], ["files", "Files"], ["usb", "USB"], null,
+    ["display", "Display"], ["graphics", "Graphics"], ["gpustatus", "GPU status"], ["files", "Files"], ["usb", "USB"], ["network", "Network"], null,
     ["console", "Console"], ["log", "Log"], ["maint", "Maintenance"], null,
     ["settings", "Settings"]
   ];
@@ -3267,6 +3656,7 @@ svg.ico{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stro
     usb: '<span class="count">2</span>',
     graphics: '<span class="count" style="color:var(--amber)">1</span>',
     files: '<span class="count" style="color:var(--amber)">1</span>',
+    network: '<span class="count" style="color:var(--amber)">3</span>',
     settings: '<span class="count" style="color:var(--amber)">2</span>'
   };
   document.querySelectorAll("ul[data-nav]").forEach(function(ul){

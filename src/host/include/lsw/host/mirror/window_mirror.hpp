@@ -6,6 +6,7 @@
 #include <QElapsedTimer>
 #include <QObject>
 #include <QProcess>
+#include <QSize>
 #include <QString>
 #include <QStringList>
 #include <QTimer>
@@ -28,6 +29,7 @@ public:
         QString activation_token;
         QString output;
         quint64 pid_created = 0;
+        QString icon_badge;
     };
 
     ~WindowMirror() override;
@@ -44,9 +46,12 @@ public:
     [[nodiscard]] const QStringList& app_ids() const noexcept { return app_ids_; }
 
 Q_SIGNALS:
+    void host_started(qint64 pid);
+    void host_ended(qint64 pid);
     void app_identified(const QString& aumid);
     void finished();
     void ready();
+    void room_settled(const QSize& pixels);
     void failed(const QString& reason);
 
 private:
@@ -70,6 +75,7 @@ private:
     QString activation_token_;
     QStringList app_ids_;
     QProcess* host_end_;
+    qint64 host_pid_ = 0;
     MirrorLog log_;
     QElapsedTimer running_;
     QTimer deadline_;

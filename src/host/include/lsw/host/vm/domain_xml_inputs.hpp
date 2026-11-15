@@ -1,5 +1,7 @@
 #pragma once
 
+#include "lsw/host/config/port_forwards.hpp"
+
 #include <QString>
 #include <QStringList>
 #include <QVector>
@@ -16,11 +18,15 @@ struct DomainShare {
 
 struct DomainXmlInputs {
     QVector<DomainShare> shares;
+    QVector<config::PortForward> forwards;
+    QString bridge;
 
     bool install_display = false;
     QString host_gpu_uuid;
     QStringList render_only_gpu_uuids;
+    bool hybrid_graphics = false;
     int host_window_mib = 8192;
+    int vram_reserve_mib = 0;
     QString display_modes;
     quint32 display_refresh_millihz = 0;
     QString avgpu_log;

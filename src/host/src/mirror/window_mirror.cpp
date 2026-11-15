@@ -40,6 +40,9 @@ WindowMirror* WindowMirror::of_application(link::AgentRpcClient& rpc, const Appl
     if (!application.output.isEmpty()) {
         arguments << QStringLiteral("--output") << application.output;
     }
+    if (!application.icon_badge.isEmpty()) {
+        arguments << QStringLiteral("--icon-badge") << application.icon_badge;
+    }
     return new WindowMirror(rpc,
                             QStringLiteral("pid %1 '%2'")
                                 .arg(application.pid)
@@ -72,6 +75,10 @@ WindowMirror::WindowMirror(link::AgentRpcClient& rpc, QString what, QStringList 
         fail(QStringLiteral("No window appeared within 60 seconds. The application may still "
                             "be running in Windows; open the guest desktop or try again."));
     });
+    connect(host_end_, &QProcess::started, this, [this] {
+        host_pid_ = host_end_->processId();
+        Q_EMIT host_started(host_pid_);
+    });
     connect(host_end_, &QProcess::readyReadStandardOutput, this, &WindowMirror::read_status);
     connect(host_end_, &QProcess::readyReadStandardError, this, &WindowMirror::read_log);
     connect(host_end_, &QProcess::finished, this, &WindowMirror::on_host_end_finished);
@@ -86,12 +93,15 @@ WindowMirror::WindowMirror(link::AgentRpcClient& rpc, QString what, QStringList 
 
 WindowMirror::~WindowMirror() {
     disconnect(host_end_, nullptr, this, nullptr);
-    if (host_end_->state() == QProcess::NotRunning)
-        return;
-    host_end_->closeWriteChannel();
-    if (!host_end_->waitForFinished(250)) {
-        host_end_->kill();
-        host_end_->waitForFinished(1000);
+    if (host_end_->state() != QProcess::NotRunning) {
+        host_end_->closeWriteChannel();
+        if (!host_end_->waitForFinished(250)) {
+            host_end_->kill();
+            host_end_->waitForFinished(1000);
+        }
+    }
+    if (host_pid_ != 0) {
+        Q_EMIT host_ended(std::exchange(host_pid_, 0));
     }
 }
 
@@ -103,6 +113,7 @@ void WindowMirror::on_host_end_finished(int code, QProcess::ExitStatus status) {
     read_status();
     read_log();
     log_.finish();
+    Q_EMIT host_ended(std::exchange(host_pid_, 0));
     LSW_INFO("mirror: {} exited with code {}{} after {:.1f} s", what_.toStdString(), code,
              status == QProcess::CrashExit ? " (crashed)" : "", static_cast<double>(running_.elapsed()) / 1000.0);
     deadline_.stop();
@@ -184,6 +195,13 @@ void WindowMirror::read_status() {
         } else if (line == "READY" && guest_started_) {
             first_frame_ = true;
             announce_ready();
+        } else if (line.startsWith("SIZE ")) {
+            const QList<QByteArray> sides = line.mid(5).split(' ');
+            const QSize pixels =
+                sides.size() == 2 ? QSize(sides[0].toInt(), sides[1].toInt()) : QSize();
+            if (!pixels.isEmpty()) {
+                Q_EMIT room_settled(pixels);
+            }
         } else if (line.startsWith("APP ")) {
             const QString aumid = QString::fromUtf8(line.mid(4));
             if (!aumid.isEmpty() && !app_ids_.contains(aumid)) {
