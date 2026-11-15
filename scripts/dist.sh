@@ -38,7 +38,7 @@ DEPS_ARCH=(
 )
 DEPS_DEB=(
     build-essential dpkg-dev fakeroot git file findutils tar patch ca-certificates cmake ninja-build python3 python3-venv meson
-    glslang-tools clang lld llvm libsdl3-dev wine64-tools
+    glslang-tools spirv-tools-dev clang lld llvm libsdl3-dev wine64-tools
     qt6-base-dev libvirt-dev libvulkan-dev libisofs-dev libvncserver-dev
     libxcb1-dev libwim-dev libhivex-dev zlib1g-dev libspdlog-dev libfmt-dev nlohmann-json3-dev
     libwayland-dev wayland-protocols libxkbcommon-dev libdrm-dev pkgconf
@@ -52,7 +52,7 @@ DEPS_DEB=(
 )
 DEPS_RPM=(
     gcc gcc-c++ make git file which findutils tar patch ca-certificates cmake ninja-build python3 meson rpm-build
-    glslang clang lld llvm SDL3-devel wine-devel
+    glslang spirv-tools-devel clang lld llvm SDL3-devel wine-devel
     qt6-qtbase-devel libvirt-devel vulkan-headers vulkan-loader-devel libisofs-devel
     libvncserver-devel libxcb-devel wimlib-devel hivex-devel zlib-ng-compat-devel spdlog-devel
     fmt-devel json-devel

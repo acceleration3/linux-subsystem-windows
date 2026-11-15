@@ -25,7 +25,7 @@ the UCRT headers but absent from Ubuntu's `libmsvcrt.a`. See
 sudo apt-get update
 sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
   build-essential git cmake ninja-build python3 python3-venv meson \
-  glslang-tools clang lld llvm \
+  glslang-tools spirv-tools-dev clang lld llvm \
   qt6-base-dev libvirt-dev libvulkan-dev libisofs-dev libvncserver-dev \
   libxcb1-dev libwim-dev libhivex-dev zlib1g-dev libspdlog-dev libfmt-dev \
   nlohmann-json3-dev libwayland-dev wayland-protocols libxkbcommon-dev \
