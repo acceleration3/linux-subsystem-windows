@@ -293,6 +293,9 @@ stray="$(find "${STAGE}" -name 'remotewin-probe*' -print -quit)"
 
 mapfile -t elfs < <(find "${STAGE}" -type f -exec sh -c 'readelf -h "$1" >/dev/null 2>&1' _ {} \; -print)
 strip --strip-unneeded "${elfs[@]}"
+printf '%s\n' '{"execute":"qmp_capabilities"}' '{"execute":"qom-list-types"}' '{"execute":"quit"}' \
+    | "${STAGE}/usr/bin/lsw-qemu-system-x86_64" -S -no-user-config -nodefaults -nographic -machine none -qmp stdio >/dev/null \
+    || fail "the staged QEMU does not answer the capability probe libvirt runs before it defines a VM"
 
 mapfile -t bundled < <({ find "${STAGE}" -name '*.so*' \( -type f -o -type l \) -printf '%f\n'
                          for f in "${elfs[@]}"; do

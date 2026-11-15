@@ -178,9 +178,37 @@ jobs:
           compression-level: 0
           if-no-files-found: error
 
+  verify:
+    name: verify ${{ matrix.target }}
+    needs: host
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: arch
+            image: archlinux:latest
+          - target: deb
+            image: ubuntu:26.04
+          - target: rpm
+            image: fedora:45
+    container:
+      image: ${{ matrix.image }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist-${{ matrix.target }}
+          path: dist
+
+      - name: Install the package beside the distribution's QEMU and probe it as libvirt does
+        run: scripts/verify-package.sh ${{ matrix.target }} dist
+
   release:
     name: release
-    needs: [plan, host]
+    needs: [plan, host, verify]
     if: needs.plan.outputs.publish == 'true'
     runs-on: ubuntu-latest
     permissions:
@@ -210,7 +238,7 @@ jobs:
               git tag -l --format='%(contents)' "${tag}" > notes.md
           fi
           if ! grep -q '[^[:space:]]' notes.md 2>/dev/null; then
-              bump="$(git log -1 --format=%H --fixed-strings --grep="LSW ${VERSION}" "${GITHUB_SHA}")"
+              bump="$(git log --format='%H %s' "${GITHUB_SHA}" | awk -v s="LSW ${VERSION}" '{ h = $1; sub(/^[^ ]+ /, ""); if ($0 == s) { print h; exit } }')"
               if [ -n "${bump}" ]; then
                   git log -1 --format=%b "${bump}" > notes.md
               fi

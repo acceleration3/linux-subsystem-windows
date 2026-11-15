@@ -32,9 +32,11 @@ void check(bool ok, const char* label) {
 }
 
 void spin(int ms) {
-    QEventLoop loop;
-    QTimer::singleShot(ms, &loop, &QEventLoop::quit);
-    loop.exec();
+    for (const int wait : {ms, 10, 10, 10}) {
+        QEventLoop loop;
+        QTimer::singleShot(wait, &loop, &QEventLoop::quit);
+        loop.exec();
+    }
 }
 
 constexpr int kSettle = 30;
