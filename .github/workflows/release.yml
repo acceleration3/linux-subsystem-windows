@@ -331,11 +331,12 @@ jobs:
           AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
           VERSION: ${{ needs.release.outputs.version }}
         run: |
-          install -d -m700 ~/.ssh
-          printf '%s\n' "${AUR_SSH_KEY}" > ~/.ssh/aur
-          chmod 600 ~/.ssh/aur
-          ssh-keyscan -t ed25519,rsa aur.archlinux.org > ~/.ssh/known_hosts
-          export GIT_SSH_COMMAND='ssh -i ~/.ssh/aur -o IdentitiesOnly=yes -o UserKnownHostsFile=~/.ssh/known_hosts'
+          keys="$(mktemp -d)"
+          printf '%s\n' "${AUR_SSH_KEY}" > "${keys}/aur"
+          chmod 600 "${keys}/aur"
+          ssh-keyscan -t ed25519,rsa aur.archlinux.org > "${keys}/known_hosts"
+          [ -s "${keys}/known_hosts" ] || { echo "::error::aur.archlinux.org gave no host key"; exit 1; }
+          export GIT_SSH_COMMAND="ssh -i ${keys}/aur -o IdentitiesOnly=yes -o UserKnownHostsFile=${keys}/known_hosts"
           git clone ssh://aur@aur.archlinux.org/lsw-bin.git ../aur-repo
           for f in PKGBUILD .SRCINFO lsw-bin.install .gitignore; do
               cp packaging/aur/"${f}" ../aur-repo/
