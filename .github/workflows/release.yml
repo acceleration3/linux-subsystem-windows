@@ -210,7 +210,7 @@ jobs:
               git tag -l --format='%(contents)' "${tag}" > notes.md
           fi
           if ! grep -q '[^[:space:]]' notes.md 2>/dev/null; then
-              bump="$(git log -1 --format=%H --fixed-strings --grep="LSW ${VERSION}" "${GITHUB_SHA}")"
+              bump="$(git log --format='%H %s' "${GITHUB_SHA}" | awk -v s="LSW ${VERSION}" '{ h = $1; sub(/^[^ ]+ /, ""); if ($0 == s) { print h; exit } }')"
               if [ -n "${bump}" ]; then
                   git log -1 --format=%b "${bump}" > notes.md
               fi
