@@ -551,16 +551,16 @@ function Step-Shares {
     elseif ($rc -ne 0) { throw ('lsw-shares.ps1 exited ' + $rc) }
 }
 
-function Network-Driver-Version([string] $Inf) {
+function Inf-Version([string] $Inf) {
     $line = Select-String -LiteralPath $Inf -Pattern '^\s*DriverVer\s*=\s*[^,]*,\s*([0-9.]+)' | Select-Object -First 1
     if (-not $line) { throw ($Inf + ' has no DriverVer') }
     return $line.Matches[0].Groups[1].Value
 }
 
-function Network-Driver-Staged([string] $Version) {
+function Driver-Staged([string] $Name, [string] $Version) {
     $text = (& pnputil.exe /enum-drivers 2>&1) -join "`n"
     foreach ($block in ($text -split "`n\s*`n")) {
-        if ($block -match '(?im):\s*netkvm\.inf\s*$' -and $block -match ('(?m)\s' + [regex]::Escape($Version) + '\s*$')) {
+        if ($block -match ('(?im):\s*' + [regex]::Escape($Name) + '\s*$') -and $block -match ('(?m)\s' + [regex]::Escape($Version) + '\s*$')) {
             return $true
         }
     }
@@ -580,15 +580,50 @@ function Step-Network {
         $script:State = 'skipped'
         return
     }
-    $version = Network-Driver-Version $inf
-    if ((Network-Driver-Staged $version) -and -not $Force) {
+    $version = Inf-Version $inf
+    if ((Driver-Staged 'netkvm.inf' $version) -and -not $Force) {
         L ('netkvm ' + $version + ' is already in the driver store')
         return
     }
     $rc = Run-Native 'pnputil netkvm' 'pnputil.exe' @('/add-driver', $inf, '/install')
     if ($rc -ne 0 -and $rc -ne 259 -and $rc -ne 3010 -and $rc -ne 1641) { throw ('pnputil /add-driver netkvm.inf exited ' + $rc) }
-    if (-not (Network-Driver-Staged $version)) { throw ('netkvm ' + $version + ' is not in the driver store after pnputil') }
+    if (-not (Driver-Staged 'netkvm.inf' $version)) { throw ('netkvm ' + $version + ' is not in the driver store after pnputil') }
     L ('netkvm ' + $version + ' is in the driver store')
+}
+
+function Step-Balloon {
+    $dir = $Root + '\balloon'
+    $service = 'BalloonService'
+    if (-not (Tree-Is-Current $dir) -or $Force) {
+        if (Get-Service -Name $service -ErrorAction SilentlyContinue) {
+            Stop-Service -Name $service -Force -ErrorAction SilentlyContinue
+        }
+        if (Test-Path -LiteralPath (Stage-Path $dir)) { Mirror-Tree (Stage-Path $dir) $dir }
+        elseif (Test-Path -LiteralPath $dir) { Remove-Item -LiteralPath $dir -Recurse -Force }
+    }
+    $inf = Join-Path $dir 'balloon.inf'
+    if (-not (Test-Path -LiteralPath $inf)) {
+        L 'the bundle has no balloon driver; the guest keeps all its memory'
+        $script:State = 'skipped'
+        return
+    }
+    $version = Inf-Version $inf
+    if (-not (Driver-Staged 'balloon.inf' $version) -or $Force) {
+        $rc = Run-Native 'pnputil balloon' 'pnputil.exe' @('/add-driver', $inf, '/install')
+        if ($rc -ne 0 -and $rc -ne 259 -and $rc -ne 3010 -and $rc -ne 1641) { throw ('pnputil /add-driver balloon.inf exited ' + $rc) }
+        if (-not (Driver-Staged 'balloon.inf' $version)) { throw ('balloon ' + $version + ' is not in the driver store after pnputil') }
+    }
+    $exe = Join-Path $dir 'blnsvr.exe'
+    $key = 'HKLM:\SYSTEM\CurrentControlSet\Services\' + $service
+    $props = Get-ItemProperty -LiteralPath $key -ErrorAction SilentlyContinue
+    if (-not $props -or $props.ImagePath -notlike ('*' + $exe + '*')) {
+        if ($props) { $rc = Run-Native 'blnsvr -u' $exe @('-u') }
+        $rc = Run-Native 'blnsvr -i' $exe @('-i')
+        if ($rc -ne 0) { throw ('blnsvr.exe -i exited ' + $rc) }
+    }
+    Set-Service -Name $service -StartupType Automatic
+    Start-Service -Name $service -ErrorAction SilentlyContinue
+    L ('balloon ' + $version + ' in the driver store; ' + $service + ' ' + (Get-Service -Name $service).Status)
 }
 
 function Step-Service {
@@ -656,6 +691,7 @@ Run-Step 'display path' { Step-DisplayPath }
 Run-Step 'loaders' { Step-Loaders }
 Run-Step 'shared folders' { Step-Shares }
 Run-Step 'network driver' { Step-Network }
+Run-Step 'balloon driver' { Step-Balloon }
 Run-Step 'service and firewall' { Step-Service }
 Run-Step 'start' { Step-Start } -Always
 

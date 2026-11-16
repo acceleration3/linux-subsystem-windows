@@ -106,7 +106,9 @@
     </sound>
     <audio id='1' type='pipewire'/>
 
-    <memballoon model='none'/>{{bridge_inner}}
+    <memballoon model='virtio' autodeflate='on'>
+      <stats period='5'/>
+    </memballoon>{{bridge_inner}}
 {{host_shares_inner}}
 
     <panic model='isa'/>

@@ -118,7 +118,7 @@ void check_network() {
         "hostfwd=tcp:127.0.0.1:5445-:445");
     const QString plain = fixed_definition(DomainXmlInputs{});
     check(digest(plain) ==
-              QStringLiteral("a005a2f5d51fff31eef2f120d72b271a506bed27ee88c6bc3cea7e4bb9d25077"),
+              QStringLiteral("3391518739919705dde091e39eaada225a37ee689c528bd7bb504f5f85157fef"),
           "with the network settings untouched the definition is byte for byte the one from "
           "before there were any");
     check(user_net(plain) == own, "untouched, the user network forwards LSW's three ports only");
@@ -240,9 +240,11 @@ void check_inbox_devices(const QDomDocument& doc) {
     check(doc.elementsByTagName(QStringLiteral("rng")).isEmpty(), "no RNG device");
     const QDomNodeList balloons = doc.elementsByTagName(QStringLiteral("memballoon"));
     check(balloons.count() == 1
-              && balloons.at(0).toElement().attribute(QStringLiteral("model"))
-                     == QStringLiteral("none"),
-          "the balloon is spelled out as none");
+              && balloons.at(0).toElement().attribute(QStringLiteral("model")) == QStringLiteral("virtio")
+              && balloons.at(0).toElement().attribute(QStringLiteral("autodeflate")) == QStringLiteral("on")
+              && balloons.at(0).firstChildElement(QStringLiteral("stats")).attribute(QStringLiteral("period"))
+                     == QStringLiteral("5"),
+          "the guest has a virtio balloon that reports its memory and gives it back when Windows runs short");
     check(doc.elementsByTagName(QStringLiteral("vsock")).isEmpty(), "no vsock device");
     check(doc.elementsByTagName(QStringLiteral("iothreads")).isEmpty(), "no iothreads");
     const QString all_text = doc.toString();

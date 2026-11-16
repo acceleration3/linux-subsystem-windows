@@ -390,3 +390,8 @@ target_link_libraries(lsw_host_vram_reserve_test
 )
 target_compile_definitions(lsw_host_vram_reserve_test PRIVATE QT_NO_KEYWORDS)
 add_test(NAME lsw_host_vram_reserve_test COMMAND lsw_host_vram_reserve_test)
+
+add_executable(lsw_host_balloon_policy_test balloon_policy_test.cpp)
+target_link_libraries(lsw_host_balloon_policy_test PRIVATE lsw_host_manager LSW::CompileOptions)
+target_compile_definitions(lsw_host_balloon_policy_test PRIVATE QT_NO_KEYWORDS)
+add_test(NAME lsw_host_balloon_policy_test COMMAND lsw_host_balloon_policy_test)

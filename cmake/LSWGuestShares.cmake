@@ -48,6 +48,12 @@ set(LSW_VIRTIO_NET_FILES
     "FILE_netkvm_w11_amd64.cat=netkvm.cat=b4c5c6c70df75777b1e5a44df8fa67bf0f2a85c016cf93f3113c0b3ab01ebc90"
     "FILE_netkvm_netkvmp_w11_amd64=netkvmp.exe=d0188e6abc35693776930a757c377067b3738d049a51ec317dbfe5214f5fef74")
 set(LSW_GUEST_NETWORK_DIR "${CMAKE_BINARY_DIR}/guest-network")
+set(LSW_VIRTIO_BALLOON_FILES
+    "FILE_balloon_w11_amd64.inf=balloon.inf=b06919cf19339e6a4a03331117019f3657250ed6bf8c30a26b981eeb187a0100"
+    "FILE_balloon_w11_amd64.sys=balloon.sys=28a8be0505a5a058a83a65cec8ef755d5065ee2a4ed2d92f4e1abf4a26298f3a"
+    "FILE_balloon_w11_amd64.cat=balloon.cat=acbcdaac730ac6735320674817d3b0b0634c7e6a38c66d135e881c7060de256e"
+    "FILE_blnsvr_w11_amd64=blnsvr.exe=0c74d6949bee6f62e69165064e85f22c51a8470fb2b628f750c633e8ded83b97")
+set(LSW_GUEST_BALLOON_DIR "${CMAKE_BINARY_DIR}/guest-balloon")
 
 function(_lsw_extract_virtio dir files pins_extra out_fresh)
     set(_stamp "${dir}/.pins")
@@ -100,6 +106,10 @@ _lsw_extract_virtio("${LSW_GUEST_NETWORK_DIR}" "${LSW_VIRTIO_NET_FILES}" "" _lsw
 if(_lsw_network_fresh)
     message(STATUS "Guest network driver: virtio-win ${LSW_VIRTIO_WIN_VERSION} -> ${LSW_GUEST_NETWORK_DIR}")
 endif()
+_lsw_extract_virtio("${LSW_GUEST_BALLOON_DIR}" "${LSW_VIRTIO_BALLOON_FILES}" "" _lsw_balloon_fresh)
+if(_lsw_balloon_fresh)
+    message(STATUS "Guest memory balloon: virtio-win ${LSW_VIRTIO_WIN_VERSION} -> ${LSW_GUEST_BALLOON_DIR}")
+endif()
 
 add_custom_command(
     OUTPUT "${LSW_GUEST_VIRTIOFS_DIR}/lsw-shares.ps1"
@@ -119,5 +129,9 @@ install(DIRECTORY "${LSW_GUEST_VIRTIOFS_DIR}/"
         PATTERN ".pins" EXCLUDE)
 install(DIRECTORY "${LSW_GUEST_NETWORK_DIR}/"
         DESTINATION ${LSW_INSTALL_GUESTDIR}/network
+        COMPONENT ${LSW_INSTALL_COMPONENT}
+        PATTERN ".pins" EXCLUDE)
+install(DIRECTORY "${LSW_GUEST_BALLOON_DIR}/"
+        DESTINATION ${LSW_INSTALL_GUESTDIR}/balloon
         COMPONENT ${LSW_INSTALL_COMPONENT}
         PATTERN ".pins" EXCLUDE)

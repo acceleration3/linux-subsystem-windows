@@ -9,6 +9,7 @@ public:
     HostMemory() = delete;
 
     [[nodiscard]] static std::optional<qint64> total_mib();
+    [[nodiscard]] static std::optional<qint64> available_mib();
 };
 
 }

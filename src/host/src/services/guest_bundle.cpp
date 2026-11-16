@@ -5,9 +5,8 @@
 #include "lsw/host/config/settings.hpp"
 #include "lsw/host/platform/accel_virt_paths.hpp"
 #include "lsw/host/platform/agent_exe_path.hpp"
-#include "lsw/host/platform/guest_network_path.hpp"
+#include "lsw/host/platform/guest_payload_dir.hpp"
 #include "lsw/host/platform/guest_update_script.hpp"
-#include "lsw/host/platform/guest_virtiofs_path.hpp"
 #include "lsw/host/platform/host_gpus.hpp"
 #include "lsw/host/platform/mirror_exe_paths.hpp"
 #include "lsw/host/services/adapter_names.hpp"
@@ -29,8 +28,17 @@ namespace lsw::host::services {
 
 namespace {
 constexpr const char* kGuestUpdateScript = "C:\\ProgramData\\LSW\\lsw-guest-update.ps1";
-constexpr const char* kGuestVirtiofsDir = "C:\\ProgramData\\LSW\\virtiofs\\";
-constexpr const char* kGuestNetworkDir = "C:\\ProgramData\\LSW\\network\\";
+struct Payload {
+    const char* name;
+    const char* guest_dir;
+    const char* without;
+};
+
+constexpr Payload kPayloads[] = {
+    {"virtiofs", "C:\\ProgramData\\LSW\\virtiofs\\", "Windows gets no shared folders"},
+    {"network", "C:\\ProgramData\\LSW\\network\\", "the guest keeps its emulated network adapter"},
+    {"balloon", "C:\\ProgramData\\LSW\\balloon\\", "the guest's memory cannot be given back to the host"},
+};
 constexpr const char* kGuestAv = "C:\\av\\";
 
 class Gathering {
@@ -220,19 +228,14 @@ std::shared_ptr<const GuestBundle::Contents> GuestBundle::collect(const QString&
             LSW_WARN("update: the {}-bit Vulkan loader: {}", bits, error.toStdString());
         }
     }
-    const QString virtiofs = platform::GuestVirtiofsPath::locate();
-    if (virtiofs.isEmpty()) {
-        LSW_WARN("update: no shared-folder guest files found (share/lsw/guest/virtiofs, or "
-                 "$LSW_GUEST_VIRTIOFS); the guest gets none");
-    } else if (!gathering.add_dir(kGuestVirtiofsDir, virtiofs, &error)) {
-        LSW_WARN("update: the shared-folder guest files: {}", error.toStdString());
-    }
-    const QString network = platform::GuestNetworkPath::locate();
-    if (network.isEmpty()) {
-        LSW_WARN("update: no network driver for the guest found (share/lsw/guest/network, or "
-                 "$LSW_GUEST_NETWORK); the guest keeps its emulated network adapter");
-    } else if (!gathering.add_dir(kGuestNetworkDir, network, &error)) {
-        LSW_WARN("update: the network driver for the guest: {}", error.toStdString());
+    for (const Payload& payload : kPayloads) {
+        const QString dir = platform::GuestPayloadDir::locate(QString::fromLatin1(payload.name));
+        if (dir.isEmpty()) {
+            LSW_WARN("update: no guest {} files (share/lsw/guest/{}, or $LSW_GUEST_{}); {}", payload.name,
+                     payload.name, QString::fromLatin1(payload.name).toUpper().toStdString(), payload.without);
+        } else if (!gathering.add_dir(payload.guest_dir, dir, &error)) {
+            LSW_WARN("update: the guest {} files: {}", payload.name, error.toStdString());
+        }
     }
 
     if (!adapter_names.isEmpty()) {

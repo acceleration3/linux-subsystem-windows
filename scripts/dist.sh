@@ -284,6 +284,10 @@ for f in viofs.inf viofs.sys viofs.cat virtiofs.exe lsw-shares.ps1; do
     [[ -f "${STAGE}/usr/share/lsw/guest/virtiofs/${f}" ]] \
         || fail "the staged guest tree has no virtiofs/${f}"
 done
+for f in balloon.inf balloon.sys balloon.cat blnsvr.exe; do
+    [[ -f "${STAGE}/usr/share/lsw/guest/balloon/${f}" ]] \
+        || fail "the staged guest tree has no balloon/${f}"
+done
 for f in netkvm.inf netkvm.sys netkvm.cat netkvmp.exe; do
     [[ -f "${STAGE}/usr/share/lsw/guest/network/${f}" ]] \
         || fail "the staged guest tree has no network/${f}"

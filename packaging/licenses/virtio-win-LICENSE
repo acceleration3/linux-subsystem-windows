@@ -14,7 +14,13 @@ under /usr/share/lsw/guest/virtiofs, and
   - the netkvm network driver for Windows 11 amd64: netkvm.inf, netkvm.sys,
     netkvm.cat, netkvmp.exe
 
-under /usr/share/lsw/guest/network. virtio-win's Windows drivers and
+under /usr/share/lsw/guest/network, and
+
+  - the balloon driver for Windows 11 amd64 and the service that reports
+    the guest's memory to it: balloon.inf, balloon.sys, balloon.cat,
+    blnsvr.exe
+
+under /usr/share/lsw/guest/balloon. virtio-win's Windows drivers and
 virtiofs.exe are licensed under the BSD 3-Clause license below, which is
 the virtio_win_license.txt that release carries.
 

@@ -15,7 +15,7 @@ public:
 
     static constexpr const char* kRestart = "restart";
 
-    [[nodiscard]] static const std::array<Entry, 9>& all();
+    [[nodiscard]] static const std::array<Entry, 10>& all();
 
     [[nodiscard]] static QString title_of(const QString& key);
 

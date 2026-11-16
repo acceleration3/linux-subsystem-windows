@@ -497,6 +497,7 @@ manager_env() {
         LSW_GUEST_UPDATE_SCRIPT="${tree}/build/guest-update/lsw-guest-update.ps1"
         LSW_GUEST_VIRTIOFS="${tree}/build/guest-virtiofs"
         LSW_GUEST_NETWORK="${tree}/build/guest-network"
+        LSW_GUEST_BALLOON="${tree}/build/guest-balloon"
         LSW_VULKAN_LOADER="${tree}/build-agent/_deps/vulkanloader-build/loader/vulkan-1.dll"
         LSW_VULKAN_LOADER_X86="${tree}/build-agent32/_deps/vulkanloader-build/loader/vulkan-1.dll"
         LSW_USB_ACCESS="${tree}/packaging/lsw-usb-access")
