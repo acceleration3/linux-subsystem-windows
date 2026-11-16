@@ -40,6 +40,7 @@ private:
     QTimer timer_;
     QHash<QUuid, VmStats> stats_;
     QHash<QUuid, unsigned int> domain_ids_;
+    QHash<QUuid, quint64> ballooned_bytes_;
     QHash<QUuid, quint64> last_cpu_ns_;
     QHash<QUuid, qint64> last_sample_ms_;
     QHash<QUuid, std::shared_ptr<std::atomic<bool>>> agent_poll_in_flight_;

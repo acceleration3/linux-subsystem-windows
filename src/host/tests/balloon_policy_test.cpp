@@ -1,5 +1,6 @@
 #include "lsw/host/platform/host_memory.hpp"
 #include "lsw/host/services/balloon_policy.hpp"
+#include "lsw/host/vm/vm_stats.hpp"
 
 #include <cstdio>
 
@@ -87,6 +88,15 @@ void check_steady() {
     check(!BalloonPolicy::target_kib(settled), "a Windows using what it has, on a host with room, is left");
 }
 
+void check_meter() {
+    lsw::host::vm::VmStats stats;
+    stats.set_guest_memory(14 * kGib * 1024, 1 * kGib * 1024, 9 * kGib * 1024);
+    check(stats.memory_total_bytes == 14 * kGib * 1024 && stats.memory_used_bytes == 4 * kGib * 1024,
+          "the RAM meter shows what Windows uses, without what the balloon holds, of the guest's whole size");
+    stats.set_guest_memory(14 * kGib * 1024, 2 * kGib * 1024, 13 * kGib * 1024);
+    check(stats.memory_used_bytes == 0, "a balloon bigger than what Windows counts in use leaves nothing, not a wrap");
+}
+
 void check_host() {
     using lsw::host::platform::HostMemory;
     const auto total = HostMemory::total_mib();
@@ -99,6 +109,7 @@ void check_host() {
 
 int main() {
     check_host();
+    check_meter();
     check_marks();
     check_shrink();
     check_grow();

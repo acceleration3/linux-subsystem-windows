@@ -37,6 +37,7 @@ void Monitor::unwatch(const QUuid& uuid) {
     LSW_DEBUG("monitor: no longer watching {}", uuid.toString(QUuid::WithoutBraces).toStdString());
     stats_.remove(uuid);
     domain_ids_.remove(uuid);
+    ballooned_bytes_.remove(uuid);
     last_cpu_ns_.remove(uuid);
     last_sample_ms_.remove(uuid);
     agent_poll_in_flight_.remove(uuid);
@@ -98,6 +99,7 @@ void Monitor::poll_one(const QUuid& uuid) {
         s.running = true;
     }
     domain_ids_[uuid] = domain_id;
+    ballooned_bytes_[uuid] = info.maxMem > info.memory ? (info.maxMem - info.memory) * 1024ULL : 0;
 
     const auto last_agent = last_agent_ms_.value(uuid, 0);
     s.agent_reachable = (last_agent != 0) && (now_ms - last_agent <= kAgentStaleMs);
@@ -166,8 +168,7 @@ void Monitor::kick_agent_poll(const QUuid& uuid) {
             s.cpu_percent = std::clamp(g.cpu_percent, 0, 100);
         }
         if (g.mem_total > 0) {
-            s.memory_total_bytes = g.mem_total;
-            s.memory_used_bytes = g.mem_avail <= g.mem_total ? g.mem_total - g.mem_avail : 0;
+            s.set_guest_memory(g.mem_total, g.mem_avail, ballooned_bytes_.value(uuid, 0));
         }
         if (g.disk_total > 0) {
             s.disk_total_bytes = g.disk_total;

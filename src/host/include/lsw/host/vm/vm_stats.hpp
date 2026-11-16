@@ -13,6 +13,8 @@ struct VmStats {
     quint64 disk_total_bytes = 0;
     quint64 net_rx_bytes = 0;
     quint64 net_tx_bytes = 0;
+
+    void set_guest_memory(quint64 total, quint64 available, quint64 ballooned) noexcept;
 };
 
 }
