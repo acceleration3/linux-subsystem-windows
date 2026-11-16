@@ -4,6 +4,7 @@
 #include "lsw/host/mcp/http_server.hpp"
 #include "lsw/host/mcp/json_rpc_router.hpp"
 #include "lsw/host/mcp/tool_registry.hpp"
+#include "lsw/host/mcp/tools/restart_guest_tool.hpp"
 
 #include <QObject>
 
@@ -25,7 +26,7 @@ public:
     McpServer(link::AgentRpcClient& rpc, apps::LogStore& log_store,
               services::GuestUpdate& update, services::StatusHub& status,
               services::LogCollector& collector, services::LogCleaner& cleaner,
-              QObject* parent = nullptr);
+              RestartGuestTool::Restarter restarter, QObject* parent = nullptr);
     ~McpServer() override;
 
     [[nodiscard]] bool listen(std::uint16_t port = 5105);
@@ -35,7 +36,7 @@ public:
 private:
     void register_tools(apps::LogStore& log_store, services::GuestUpdate& update,
                         services::StatusHub& status, services::LogCollector& collector,
-                        services::LogCleaner& cleaner);
+                        services::LogCleaner& cleaner, RestartGuestTool::Restarter restarter);
 
     link::AgentRpcClient& agent_;
     ConsoleSessionBuffer consoles_;

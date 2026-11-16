@@ -221,9 +221,12 @@ void AgentRpcClient::reader_loop() {
         }
         const auto chunk = client_.recv_some(kRecvChunk);
         if (chunk.isEmpty()) {
-            std::lock_guard<std::mutex> lock(io_mu_);
-            drop_connection_locked();
-            reader.reset();
+            {
+                std::lock_guard<std::mutex> lock(io_mu_);
+                drop_connection_locked();
+                reader.reset();
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(kReconnectBackoffMs));
             continue;
         }
         if (!announced_.exchange(true)) {
