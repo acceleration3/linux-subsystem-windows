@@ -28,6 +28,7 @@ QString label_for(const QString& key) {
         {K::kNetworkMode, QStringLiteral("network")},
         {K::kNetworkBridge, QStringLiteral("bridge")},
         {K::kPortForwards, QStringLiteral("forwarded ports")},
+        {K::kNetworkAdapter, QStringLiteral("network adapter")},
     };
     return labels.value(key, key);
 }
@@ -39,6 +40,10 @@ QString render(const QString& key, const QVariant& value) {
     }
     if (key == K::kPortForwards) {
         return QStringLiteral("%1 ports").arg(PortForwards::decode(value.toString()).size());
+    }
+    if (key == K::kNetworkAdapter) {
+        return value.toString() == ManagerSettings::NetworkAdapter::kVirtio ? QStringLiteral("virtio")
+                                                                             : QStringLiteral("emulated Intel");
     }
     if (key == K::kNetworkBridge && value.toString().isEmpty()) {
         return QStringLiteral("none");

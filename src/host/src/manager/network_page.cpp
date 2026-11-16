@@ -84,7 +84,8 @@ void NetworkPage::read_host() {
 int NetworkPage::waiting() const {
     int count = 0;
     for (const QString& key : pending_.keys()) {
-        if (key == K::kNetworkMode || key == K::kNetworkBridge || key == K::kPortForwards) {
+        if (key == K::kNetworkMode || key == K::kNetworkBridge || key == K::kPortForwards ||
+            key == K::kNetworkAdapter) {
             ++count;
         }
     }

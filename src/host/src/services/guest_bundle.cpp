@@ -5,6 +5,7 @@
 #include "lsw/host/config/settings.hpp"
 #include "lsw/host/platform/accel_virt_paths.hpp"
 #include "lsw/host/platform/agent_exe_path.hpp"
+#include "lsw/host/platform/guest_network_path.hpp"
 #include "lsw/host/platform/guest_update_script.hpp"
 #include "lsw/host/platform/guest_virtiofs_path.hpp"
 #include "lsw/host/platform/host_gpus.hpp"
@@ -29,6 +30,7 @@ namespace lsw::host::services {
 namespace {
 constexpr const char* kGuestUpdateScript = "C:\\ProgramData\\LSW\\lsw-guest-update.ps1";
 constexpr const char* kGuestVirtiofsDir = "C:\\ProgramData\\LSW\\virtiofs\\";
+constexpr const char* kGuestNetworkDir = "C:\\ProgramData\\LSW\\network\\";
 constexpr const char* kGuestAv = "C:\\av\\";
 
 class Gathering {
@@ -224,6 +226,13 @@ std::shared_ptr<const GuestBundle::Contents> GuestBundle::collect(const QString&
                  "$LSW_GUEST_VIRTIOFS); the guest gets none");
     } else if (!gathering.add_dir(kGuestVirtiofsDir, virtiofs, &error)) {
         LSW_WARN("update: the shared-folder guest files: {}", error.toStdString());
+    }
+    const QString network = platform::GuestNetworkPath::locate();
+    if (network.isEmpty()) {
+        LSW_WARN("update: no network driver for the guest found (share/lsw/guest/network, or "
+                 "$LSW_GUEST_NETWORK); the guest keeps its emulated network adapter");
+    } else if (!gathering.add_dir(kGuestNetworkDir, network, &error)) {
+        LSW_WARN("update: the network driver for the guest: {}", error.toStdString());
     }
 
     if (!adapter_names.isEmpty()) {

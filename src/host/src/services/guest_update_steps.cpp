@@ -2,14 +2,15 @@
 
 namespace lsw::host::services {
 
-const std::array<GuestUpdateSteps::Entry, 8>& GuestUpdateSteps::all() {
-    static const std::array<Entry, 8> steps{{
+const std::array<GuestUpdateSteps::Entry, 9>& GuestUpdateSteps::all() {
+    static const std::array<Entry, 9> steps{{
         {"verify", "Checking the files", "checked"},
         {"stop", "Stopping the agent", "done"},
         {"agent and mirror", "Agent and window mirror", "updated"},
         {"driver", "GPU driver", "updated"},
         {"loaders", "Graphics loaders", "updated"},
         {"shared folders", "Shared folders", "updated"},
+        {"network driver", "Network driver", "installed"},
         {"service and firewall", "Service and firewall", "updated"},
         {"start", "Starting the agent", "done"},
     }};

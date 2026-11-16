@@ -20,7 +20,7 @@ $Marker = 'C:\av\installed.sha256'
 $SessionKey = 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager'
 $SharesPseudo = 'C:\ProgramData\LSW\update\shares.txt'
 $Utf8 = New-Object System.Text.UTF8Encoding($false)
-$StepNames = @('verify', 'stop', 'agent and mirror', 'driver', 'loaders', 'shared folders', 'service and firewall', 'start')
+$StepNames = @('verify', 'stop', 'agent and mirror', 'driver', 'loaders', 'shared folders', 'network driver', 'service and firewall', 'start')
 
 $script:Passed = 0
 $script:Failed = 0
@@ -331,7 +331,7 @@ function Scenario-Rejected([string] $Tag, [scriptblock] $Spoil, [string] $Messag
     $verifyFailed = (Get-StepStatus $run.Result 'verify') -eq 'failed'
     Check ($Tag + '. run ends at verify, ok:false, exit 1') ($run.ExitCode -eq 1 -and $run.Result.ok -eq $false -and $verifyFailed) (Format-Steps $run.Result)
     Check ($Tag + '. message names verify and the file') ($run.Result.message -like ('verify:*' + $MessagePart + '*')) ('message: ' + $run.Result.message)
-    $later = @('stop', 'agent and mirror', 'driver', 'loaders', 'shared folders', 'service and firewall')
+    $later = @('stop', 'agent and mirror', 'driver', 'loaders', 'shared folders', 'network driver', 'service and firewall')
     $allNotRun = @($later | Where-Object { (Get-StepStatus $run.Result $_) -ne 'not run' }).Count -eq 0
     Check ($Tag + '. later steps not run, start skipped') ($allNotRun -and (Get-StepStatus $run.Result 'start') -eq 'skipped') (Format-Steps $run.Result)
     Check ($Tag + '. agent never stopped (same PID)') ($pidBefore -ne 0 -and (Get-AgentPid) -eq $pidBefore -and $run.PidBefore -eq $pidBefore) ('before ' + $pidBefore + ' after ' + (Get-AgentPid))

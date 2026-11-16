@@ -32,7 +32,7 @@ function(_lsw_fetch_pinned url sha256 dest)
         file(REMOVE "${dest}.part")
         list(GET _status 1 _why)
         message(FATAL_ERROR "Could not fetch ${url}: ${_why}\n"
-                            "The guest's shared folders need it; the build needs the network once.")
+                            "The guest's shared folders and network driver need it; the build needs the network once.")
     endif()
     file(RENAME "${dest}.part" "${dest}")
 endfunction()
@@ -42,43 +42,63 @@ set(_lsw_winfsp_msi "${_lsw_shares_downloads}/winfsp-${LSW_WINFSP_VERSION}.msi")
 _lsw_fetch_pinned("${LSW_VIRTIO_WIN_URL}" "${LSW_VIRTIO_WIN_SHA256}" "${_lsw_virtio_msi}")
 _lsw_fetch_pinned("${LSW_WINFSP_URL}" "${LSW_WINFSP_SHA256}" "${_lsw_winfsp_msi}")
 
-set(_lsw_shares_stamp "${LSW_GUEST_VIRTIOFS_DIR}/.pins")
-set(_lsw_shares_pins "${LSW_VIRTIO_WIN_SHA256} ${LSW_WINFSP_SHA256} ${LSW_VIRTIO_WIN_FILES}")
-set(_lsw_shares_current "")
-if(EXISTS "${_lsw_shares_stamp}")
-    file(READ "${_lsw_shares_stamp}" _lsw_shares_current)
-endif()
-if(NOT _lsw_shares_current STREQUAL _lsw_shares_pins)
-    file(REMOVE_RECURSE "${LSW_GUEST_VIRTIOFS_DIR}")
-    set(_lsw_pairs "")
-    foreach(_entry IN LISTS LSW_VIRTIO_WIN_FILES)
+set(LSW_VIRTIO_NET_FILES
+    "FILE_netkvm_w11_amd64.inf=netkvm.inf=60f7c0ff6815b6edc7a8acf2b46b83c4605ddfbacbcd74b15c9d9653159a3a45"
+    "FILE_netkvm_w11_amd64.sys=netkvm.sys=1b6f8892d39efe28c1a6b20dcc92b76f7dede567d9628fa8d6cebb62d33daf4c"
+    "FILE_netkvm_w11_amd64.cat=netkvm.cat=b4c5c6c70df75777b1e5a44df8fa67bf0f2a85c016cf93f3113c0b3ab01ebc90"
+    "FILE_netkvm_netkvmp_w11_amd64=netkvmp.exe=d0188e6abc35693776930a757c377067b3738d049a51ec317dbfe5214f5fef74")
+set(LSW_GUEST_NETWORK_DIR "${CMAKE_BINARY_DIR}/guest-network")
+
+function(_lsw_extract_virtio dir files pins_extra out_fresh)
+    set(_stamp "${dir}/.pins")
+    set(_pins "${LSW_VIRTIO_WIN_SHA256} ${pins_extra} ${files}")
+    set(_current "")
+    if(EXISTS "${_stamp}")
+        file(READ "${_stamp}" _current)
+    endif()
+    if(_current STREQUAL _pins)
+        set(${out_fresh} FALSE PARENT_SCOPE)
+        return()
+    endif()
+    file(REMOVE_RECURSE "${dir}")
+    set(_pairs "")
+    foreach(_entry IN LISTS files)
         string(REPLACE "=" ";" _parts "${_entry}")
         list(GET _parts 0 _key)
         list(GET _parts 1 _name)
-        list(APPEND _lsw_pairs "${_key}=${_name}")
+        list(APPEND _pairs "${_key}=${_name}")
     endforeach()
     execute_process(
-        COMMAND "${Python3_EXECUTABLE}" -I "${CMAKE_CURRENT_LIST_DIR}/msi_extract.py"
-                "${_lsw_virtio_msi}" "${LSW_GUEST_VIRTIOFS_DIR}" ${_lsw_pairs}
+        COMMAND "${Python3_EXECUTABLE}" -I "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/msi_extract.py"
+                "${_lsw_virtio_msi}" "${dir}" ${_pairs}
         RESULT_VARIABLE _rc)
     if(NOT _rc EQUAL 0)
-        message(FATAL_ERROR "Could not take the viofs driver out of ${_lsw_virtio_msi}")
+        message(FATAL_ERROR "Could not take ${_pairs} out of ${_lsw_virtio_msi}")
     endif()
-    foreach(_entry IN LISTS LSW_VIRTIO_WIN_FILES)
+    foreach(_entry IN LISTS files)
         string(REPLACE "=" ";" _parts "${_entry}")
         list(GET _parts 1 _name)
         list(GET _parts 2 _want)
-        file(SHA256 "${LSW_GUEST_VIRTIOFS_DIR}/${_name}" _have)
+        file(SHA256 "${dir}/${_name}" _have)
         if(NOT _have STREQUAL _want)
-            file(REMOVE_RECURSE "${LSW_GUEST_VIRTIOFS_DIR}")
+            file(REMOVE_RECURSE "${dir}")
             message(FATAL_ERROR "${_name} from virtio-win ${LSW_VIRTIO_WIN_VERSION} has SHA-256 "
                                 "${_have}, not the pinned ${_want}")
         endif()
     endforeach()
+    file(WRITE "${_stamp}" "${_pins}")
+    set(${out_fresh} TRUE PARENT_SCOPE)
+endfunction()
+
+_lsw_extract_virtio("${LSW_GUEST_VIRTIOFS_DIR}" "${LSW_VIRTIO_WIN_FILES}" "${LSW_WINFSP_SHA256}" _lsw_shares_fresh)
+if(_lsw_shares_fresh)
     file(COPY_FILE "${_lsw_winfsp_msi}" "${LSW_GUEST_VIRTIOFS_DIR}/winfsp-${LSW_WINFSP_VERSION}.msi")
-    file(WRITE "${_lsw_shares_stamp}" "${_lsw_shares_pins}")
     message(STATUS "Guest shared folders: virtio-win ${LSW_VIRTIO_WIN_VERSION}, "
                    "WinFsp ${LSW_WINFSP_VERSION} -> ${LSW_GUEST_VIRTIOFS_DIR}")
+endif()
+_lsw_extract_virtio("${LSW_GUEST_NETWORK_DIR}" "${LSW_VIRTIO_NET_FILES}" "" _lsw_network_fresh)
+if(_lsw_network_fresh)
+    message(STATUS "Guest network driver: virtio-win ${LSW_VIRTIO_WIN_VERSION} -> ${LSW_GUEST_NETWORK_DIR}")
 endif()
 
 add_custom_command(
@@ -95,5 +115,9 @@ endif()
 
 install(DIRECTORY "${LSW_GUEST_VIRTIOFS_DIR}/"
         DESTINATION ${LSW_INSTALL_GUESTDIR}/virtiofs
+        COMPONENT ${LSW_INSTALL_COMPONENT}
+        PATTERN ".pins" EXCLUDE)
+install(DIRECTORY "${LSW_GUEST_NETWORK_DIR}/"
+        DESTINATION ${LSW_INSTALL_GUESTDIR}/network
         COMPONENT ${LSW_INSTALL_COMPONENT}
         PATTERN ".pins" EXCLUDE)

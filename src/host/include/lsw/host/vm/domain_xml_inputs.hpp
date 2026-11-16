@@ -20,6 +20,7 @@ struct DomainXmlInputs {
     QVector<DomainShare> shares;
     QVector<config::PortForward> forwards;
     QString bridge;
+    bool virtio_net = false;
 
     bool install_display = false;
     QString host_gpu_uuid;

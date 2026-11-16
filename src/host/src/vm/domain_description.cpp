@@ -149,6 +149,10 @@ std::optional<DomainDescription> DomainDescription::parse(const QString& xml) {
     bool in_hostdev_source = false;
     UsbDevice usb;
     bool in_bridge = false;
+    bool in_interface = false;
+    bool in_port_forward = false;
+    config::PortForward::Protocol forward_protocol = config::PortForward::Protocol::Tcp;
+    bool forward_from_network = false;
     QString previous_arg;
 
     while (!reader.atEnd()) {
@@ -168,6 +172,9 @@ std::optional<DomainDescription> DomainDescription::parse(const QString& xml) {
                 in_hostdev_source = false;
             } else if (name == QLatin1StringView("interface")) {
                 in_bridge = false;
+                in_interface = false;
+            } else if (name == QLatin1StringView("portForward")) {
+                in_port_forward = false;
             } else if (name == QLatin1StringView("hostdev") && in_usb_hostdev) {
                 in_usb_hostdev = false;
                 out.usb_devices.push_back(usb);
@@ -216,7 +223,22 @@ std::optional<DomainDescription> DomainDescription::parse(const QString& xml) {
             usb.bus = attrs.value(QLatin1StringView("bus")).toString().toInt();
             usb.device = attrs.value(QLatin1StringView("device")).toString().toInt();
         } else if (in_devices && name == QLatin1StringView("interface")) {
+            in_interface = true;
             in_bridge = attrs.value(QLatin1StringView("type")) == QLatin1StringView("bridge");
+        } else if (in_interface && name == QLatin1StringView("portForward")) {
+            in_port_forward = true;
+            forward_protocol = attrs.value(QLatin1StringView("proto")) == QLatin1StringView("udp")
+                                   ? config::PortForward::Protocol::Udp
+                                   : config::PortForward::Protocol::Tcp;
+            forward_from_network = attrs.value(QLatin1StringView("address")) != QLatin1StringView("127.0.0.1");
+        } else if (in_port_forward && name == QLatin1StringView("range")) {
+            config::PortForward entry;
+            entry.protocol = forward_protocol;
+            entry.from_network = forward_from_network;
+            entry.host_port = attrs.value(QLatin1StringView("start")).toInt();
+            const auto to = attrs.value(QLatin1StringView("to"));
+            entry.guest_port = to.isEmpty() ? entry.host_port : to.toInt();
+            out.forwards.push_back(entry);
         } else if (in_bridge && name == QLatin1StringView("source")) {
             const QString bridge = attrs.value(QLatin1StringView("bridge")).toString();
             if (!bridge.isEmpty()) {

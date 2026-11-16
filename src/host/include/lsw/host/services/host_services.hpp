@@ -18,6 +18,7 @@
 #include "lsw/host/services/guest_shells.hpp"
 #include "lsw/host/services/guest_update.hpp"
 #include "lsw/host/services/guest_upkeep.hpp"
+#include "lsw/host/services/network_adapter_offer.hpp"
 #include "lsw/host/services/host_logging.hpp"
 #include "lsw/host/services/host_shutdown_watch.hpp"
 #include "lsw/host/services/log_cleaner.hpp"
@@ -108,6 +109,7 @@ private:
     ClipboardSync clipboard_;
     GuestUpdate guest_update_;
     GuestUpkeep upkeep_;
+    NetworkAdapterOffer network_offer_;
     UsbPassthrough usb_;
     HostShutdownWatch host_shutdown_;
     apps::AppConfigStore app_configs_;

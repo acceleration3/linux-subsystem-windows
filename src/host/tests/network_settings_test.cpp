@@ -5,7 +5,11 @@
 #include "lsw/host/manager/port_forward_editor.hpp"
 #include "lsw/host/platform/host_addresses.hpp"
 #include "lsw/host/platform/host_bridges.hpp"
+#include "lsw/host/config/vm_record.hpp"
 #include "lsw/host/services/domain_inputs.hpp"
+#include "lsw/host/services/guest_update_status.hpp"
+#include "lsw/host/services/network_adapter_offer.hpp"
+#include "lsw/host/vm/domain_xml_builder.hpp"
 #include "lsw/host/services/vm_status.hpp"
 #include "lsw/host/vm/domain_description.hpp"
 
@@ -17,6 +21,7 @@
 #include <QTcpServer>
 #include <QTemporaryDir>
 #include <QUdpSocket>
+#include <QUuid>
 #include <cstdio>
 
 using lsw::host::config::ManagerSettings;
@@ -33,6 +38,7 @@ using lsw::host::vm::DomainDescription;
 using lsw::host::vm::DomainXmlInputs;
 using K = ManagerSettings::Key;
 using Mode = ManagerSettings::NetworkMode;
+using Adapter = ManagerSettings::NetworkAdapter;
 using Protocol = PortForward::Protocol;
 using ForwardState = NetworkState::ForwardState;
 using Met = HostBridges::Requirement::State;
@@ -223,6 +229,62 @@ void check_presets() {
               !PortForwards::from_hostfwd(QStringLiteral("id=lsw-net")) &&
               !PortForwards::from_hostfwd(QStringLiteral("hostfwd=tcp::0-:80")),
           "a forward is read back from the option QEMU is given");
+}
+
+void check_passt(ManagerSettings& settings) {
+    check(ManagerSettings::default_value(K::kNetworkAdapter).toString() == Adapter::kEmulated &&
+              ManagerSettings::needs_restart(K::kNetworkAdapter),
+          "the guest starts on the emulated adapter, and changing it needs a restart");
+    DomainXmlInputs inputs;
+    settings.set_value(K::kNetworkAdapter, QString{Adapter::kVirtio});
+    lsw::host::services::network_inputs_from_settings(inputs, settings, usable_host());
+    check(inputs.virtio_net, "the virtio adapter reaches the definition");
+    settings.set_value(K::kNetworkAdapter, QString{Adapter::kEmulated});
+    lsw::host::services::network_inputs_from_settings(inputs, settings, usable_host());
+    check(!inputs.virtio_net, "and the emulated one does too");
+
+    lsw::host::config::VmRecord vm;
+    vm.name = QStringLiteral("lsw");
+    vm.uuid = QUuid(QStringLiteral("6f1c2a54-9d3e-4b7a-8c15-0e2f4a6b8d90"));
+    inputs.forwards = {{Protocol::Tcp, 8080, 80, false}, {Protocol::Udp, 47998, 47998, true}};
+    inputs.bridge = QStringLiteral("br-lan");
+    inputs.virtio_net = true;
+    const QString xml = lsw::host::vm::DomainXmlBuilder::build(vm, inputs);
+    check(xml.contains(QStringLiteral("<interface type='user'>\n      <backend type='passt'/>")) &&
+              xml.contains(QStringLiteral("<ip family='ipv4' address='10.0.2.15' prefix='24'/>")) &&
+              xml.contains(QStringLiteral("<route family='ipv4' gateway='10.0.2.2'/>")) &&
+              xml.contains(QStringLiteral("<range start='5445' to='445'/>")) &&
+              xml.contains(QStringLiteral("<portForward proto='udp' address='0.0.0.0'>")) &&
+              xml.contains(QStringLiteral("slot='0x10'")) && !xml.contains(QStringLiteral("-netdev")) &&
+              !xml.contains(QStringLiteral("e1000e")),
+          "the virtio adapter is passt started by libvirt, with the guest's old addresses, in the old slot; "
+          "the bridge is virtio too");
+    check(xml.count(QStringLiteral("<mac address='52:54:00:6f:1c:2a'/>")) == 1,
+          "the adapter's address comes from the machine, so Windows sees the same adapter every boot");
+    const auto defined = DomainDescription::parse(xml);
+    check(defined.has_value() && defined->forwards.size() == 5 &&
+              defined->forwards.contains(PortForward{Protocol::Udp, 47998, 47998, true}) &&
+              defined->forwards.contains(PortForward{Protocol::Tcp, 5445, 445, false}),
+          "a passt definition says which ports it forwards");
+    const auto unforwarded = DomainDescription::parse(QStringLiteral(
+        "<domain><devices><interface type='user'><portForward proto='tcp' address='0.0.0.0'>"
+        "<range start='2222'/></portForward></interface></devices></domain>"));
+    check(unforwarded.has_value() && unforwarded->forwards == QVector<PortForward>{{Protocol::Tcp, 2222, 2222, true}},
+          "a range without a guest port forwards to the same port");
+    inputs.virtio_net = false;
+    const QString emulated = lsw::host::vm::DomainXmlBuilder::build(vm, inputs);
+    check(emulated.contains(QStringLiteral("e1000e,netdev=lsw-net")) && !emulated.contains(QStringLiteral("<backend type='passt'/>")),
+          "the emulated adapter keeps QEMU's user network");
+
+    using lsw::host::services::GuestUpdateStatus;
+    using lsw::host::services::NetworkAdapterOffer;
+    GuestUpdateStatus update;
+    check(!NetworkAdapterOffer::driver_installed(update), "no update says nothing of the driver");
+    update.last_steps = {{QStringLiteral("shared folders"), QStringLiteral("done"), {}, false},
+                         {QStringLiteral("network driver"), QStringLiteral("skipped"), {}, false}};
+    check(!NetworkAdapterOffer::driver_installed(update), "a release without the driver does not offer virtio");
+    update.last_steps.back().status = QStringLiteral("done");
+    check(NetworkAdapterOffer::driver_installed(update), "the driver in Windows' store offers virtio");
 }
 
 void check_bridges(const QString& root) {
@@ -813,6 +875,7 @@ int main(int argc, char** argv) {
     ManagerSettings settings;
 
     check_forwards();
+    check_passt(settings);
     check_presets();
     check_bridges(home.path() + QStringLiteral("/host"));
     check_inputs(settings);

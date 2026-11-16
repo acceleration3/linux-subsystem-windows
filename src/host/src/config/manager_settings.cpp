@@ -50,6 +50,7 @@ const QHash<QString, QVariant>& defaults() {
         {K::kNetworkMode, QString{ManagerSettings::NetworkMode::kShared}},
         {K::kNetworkBridge, QString{}},
         {K::kPortForwards, QString{}},
+        {K::kNetworkAdapter, QString{ManagerSettings::NetworkAdapter::kEmulated}},
 
         {K::kAutostart, false},
 
@@ -74,6 +75,7 @@ const QStringList& restart_keys() {
         K::kCpuCores,      K::kMemoryMib,      K::kDiskGib,       K::kHostGpu,
         K::kHostWindowMib, K::kVramReserveMib, K::kRenderGpus,    K::kHybridGraphics,
         K::kHostShares,    K::kNetworkMode,    K::kNetworkBridge, K::kPortForwards,
+        K::kNetworkAdapter,
     };
     return keys;
 }

@@ -551,6 +551,46 @@ function Step-Shares {
     elseif ($rc -ne 0) { throw ('lsw-shares.ps1 exited ' + $rc) }
 }
 
+function Network-Driver-Version([string] $Inf) {
+    $line = Select-String -LiteralPath $Inf -Pattern '^\s*DriverVer\s*=\s*[^,]*,\s*([0-9.]+)' | Select-Object -First 1
+    if (-not $line) { throw ($Inf + ' has no DriverVer') }
+    return $line.Matches[0].Groups[1].Value
+}
+
+function Network-Driver-Staged([string] $Version) {
+    $text = (& pnputil.exe /enum-drivers 2>&1) -join "`n"
+    foreach ($block in ($text -split "`n\s*`n")) {
+        if ($block -match '(?im):\s*netkvm\.inf\s*$' -and $block -match ('(?m)\s' + [regex]::Escape($Version) + '\s*$')) {
+            return $true
+        }
+    }
+    return $false
+}
+
+function Step-Network {
+    $dir = $Root + '\network'
+    $current = Tree-Is-Current $dir
+    if (-not $current -or $Force) {
+        if (Test-Path -LiteralPath (Stage-Path $dir)) { Mirror-Tree (Stage-Path $dir) $dir }
+        elseif (Test-Path -LiteralPath $dir) { Remove-Item -LiteralPath $dir -Recurse -Force }
+    }
+    $inf = Join-Path $dir 'netkvm.inf'
+    if (-not (Test-Path -LiteralPath $inf)) {
+        L 'the bundle has no network driver; the guest keeps the emulated adapter'
+        $script:State = 'skipped'
+        return
+    }
+    $version = Network-Driver-Version $inf
+    if ((Network-Driver-Staged $version) -and -not $Force) {
+        L ('netkvm ' + $version + ' is already in the driver store')
+        return
+    }
+    $rc = Run-Native 'pnputil netkvm' 'pnputil.exe' @('/add-driver', $inf, '/install')
+    if ($rc -ne 0 -and $rc -ne 259 -and $rc -ne 3010 -and $rc -ne 1641) { throw ('pnputil /add-driver netkvm.inf exited ' + $rc) }
+    if (-not (Network-Driver-Staged $version)) { throw ('netkvm ' + $version + ' is not in the driver store after pnputil') }
+    L ('netkvm ' + $version + ' is in the driver store')
+}
+
 function Step-Service {
     $bin = 'C:\ProgramData\LSW\lsw-agent.exe --service'
     if (Get-Service -Name $ServiceName -ErrorAction SilentlyContinue) { Set-Recovery $true }
@@ -615,6 +655,7 @@ Run-Step 'driver' { Step-Driver }
 Run-Step 'display path' { Step-DisplayPath }
 Run-Step 'loaders' { Step-Loaders }
 Run-Step 'shared folders' { Step-Shares }
+Run-Step 'network driver' { Step-Network }
 Run-Step 'service and firewall' { Step-Service }
 Run-Step 'start' { Step-Start } -Always
 

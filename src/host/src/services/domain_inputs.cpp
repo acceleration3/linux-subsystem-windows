@@ -41,6 +41,8 @@ void network_inputs_from_settings(vm::DomainXmlInputs& inputs,
                                   const platform::HostBridges::Facts& bridges) {
     inputs.forwards = config::PortForwards::accepted(
         config::PortForwards::decode(manager_settings.string_value(K::kPortForwards)));
+    inputs.virtio_net = manager_settings.string_value(K::kNetworkAdapter) ==
+                        config::ManagerSettings::NetworkAdapter::kVirtio;
     inputs.bridge.clear();
     if (manager_settings.string_value(K::kNetworkMode) !=
         config::ManagerSettings::NetworkMode::kBridged) {

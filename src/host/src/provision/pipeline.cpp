@@ -201,6 +201,8 @@ void Pipeline::run_build_payload() {
         auto& settings = services_.manager_settings();
         settings.set_value(QLatin1String(K::kGuestUser), inputs_.user_name);
         settings.set_value(QLatin1String(K::kGuestPassword), inputs_.user_password);
+        settings.set_value(QLatin1String(K::kNetworkAdapter),
+                           QString{config::ManagerSettings::NetworkAdapter::kEmulated});
     }
     payload_stager_ = new PayloadIsoStager(services_.settings(), services_.manager_settings(), this);
     const auto generation = generation_;

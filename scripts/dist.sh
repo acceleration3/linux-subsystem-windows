@@ -284,6 +284,10 @@ for f in viofs.inf viofs.sys viofs.cat virtiofs.exe lsw-shares.ps1; do
     [[ -f "${STAGE}/usr/share/lsw/guest/virtiofs/${f}" ]] \
         || fail "the staged guest tree has no virtiofs/${f}"
 done
+for f in netkvm.inf netkvm.sys netkvm.cat netkvmp.exe; do
+    [[ -f "${STAGE}/usr/share/lsw/guest/network/${f}" ]] \
+        || fail "the staged guest tree has no network/${f}"
+done
 compgen -G "${STAGE}/usr/share/lsw/guest/virtiofs/winfsp-*.msi" >/dev/null \
     || fail "the staged guest tree has no WinFsp installer"
 [[ ! -e "${STAGE}/usr/share/lsw/guest/av-drivers/adapters.txt" ]] \
