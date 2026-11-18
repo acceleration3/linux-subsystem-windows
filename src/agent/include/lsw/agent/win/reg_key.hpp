@@ -15,6 +15,9 @@ public:
     [[nodiscard]] static std::optional<RegKey> create(HKEY root, const wchar_t* subkey,
                                                       REGSAM access, long* status = nullptr);
 
+    [[nodiscard]] static std::optional<RegKey>
+    create_volatile(HKEY root, const wchar_t* subkey, REGSAM access, long* status = nullptr);
+
     [[nodiscard]] std::optional<RegKey> open_subkey(const wchar_t* name, REGSAM access) const;
 
     [[nodiscard]] std::optional<std::wstring> read_string(const wchar_t* name) const;
@@ -35,6 +38,9 @@ public:
 
 private:
     explicit RegKey(HKEY key) noexcept : key_(key) {}
+
+    [[nodiscard]] static std::optional<RegKey>
+    create_with(HKEY root, const wchar_t* subkey, DWORD options, REGSAM access, long* status);
 
     UniqueRegKey key_;
 };

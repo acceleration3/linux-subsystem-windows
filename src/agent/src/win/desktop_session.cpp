@@ -3,6 +3,7 @@
 #include "lsw/agent/core/paths.hpp"
 #include "lsw/agent/log.hpp"
 #include "lsw/agent/win/file_system.hpp"
+#include "lsw/agent/win/reg_key.hpp"
 #include "lsw/agent/win/unique_handle.hpp"
 
 #include <cstdio>
@@ -19,6 +20,7 @@ namespace lsw::agent::win {
 
 namespace {
 constexpr int kCoverSlackPx = 2;
+constexpr const wchar_t* kUsableThisSignIn = L"Software\\LSW\\DesktopUsableThisSignIn";
 
 struct OverlayScan {
     HWND shell = nullptr;
@@ -68,6 +70,18 @@ BOOL CALLBACK overlay_proc(HWND window, LPARAM param) {
     return scan;
 }
 
+bool usable_earlier_this_sign_in() {
+    return RegKey::open(HKEY_CURRENT_USER, kUsableThisSignIn, KEY_READ).has_value();
+}
+
+void remember_usable_this_sign_in() {
+    long status = 0;
+    if (!RegKey::create_volatile(HKEY_CURRENT_USER, kUsableThisSignIn, KEY_READ, &status)) {
+        LSW_AGENT_WARN("desktop: cannot note the usable desktop for this sign-in (error {})",
+                       status);
+    }
+}
+
 void write_flag() {
     const UniqueHandle file{::CreateFileW(core::Paths::desktop_ready_flag().c_str(), GENERIC_WRITE,
                                           0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL,
@@ -103,6 +117,10 @@ bool DesktopSession::wait_for_desktop(std::chrono::seconds timeout,
                                       std::chrono::seconds first_boot_grace) {
     const auto started = std::chrono::steady_clock::now();
     const auto deadline = started + timeout;
+    if (shell_ready() && usable_earlier_this_sign_in()) {
+        LSW_AGENT_INFO("desktop: ready, it was usable earlier in this sign-in ({})", diagnostics());
+        return true;
+    }
 
     const bool first_boot = !FileSystem::exists(core::Paths::desktop_ready_flag());
     bool overlay_seen = false;
@@ -139,6 +157,7 @@ bool DesktopSession::wait_for_desktop(std::chrono::seconds timeout,
                 const auto waited = std::chrono::duration_cast<std::chrono::seconds>(now - started);
                 LSW_AGENT_INFO("desktop: ready after {}s ({})", waited.count(), diagnostics());
                 write_flag();
+                remember_usable_this_sign_in();
                 return true;
             }
         } else {

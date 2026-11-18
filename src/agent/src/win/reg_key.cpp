@@ -21,9 +21,19 @@ std::optional<RegKey> RegKey::open(HKEY root, const wchar_t* subkey, REGSAM acce
 
 std::optional<RegKey> RegKey::create(HKEY root, const wchar_t* subkey, REGSAM access,
                                      long* status) {
+    return create_with(root, subkey, REG_OPTION_NON_VOLATILE, access, status);
+}
+
+std::optional<RegKey> RegKey::create_volatile(HKEY root, const wchar_t* subkey, REGSAM access,
+                                              long* status) {
+    return create_with(root, subkey, REG_OPTION_VOLATILE, access, status);
+}
+
+std::optional<RegKey> RegKey::create_with(HKEY root, const wchar_t* subkey, DWORD options,
+                                          REGSAM access, long* status) {
     HKEY key = nullptr;
-    const LSTATUS rc = ::RegCreateKeyExW(root, subkey, 0, nullptr, REG_OPTION_NON_VOLATILE, access,
-                                         nullptr, &key, nullptr);
+    const LSTATUS rc =
+        ::RegCreateKeyExW(root, subkey, 0, nullptr, options, access, nullptr, &key, nullptr);
     if (status != nullptr) {
         *status = rc;
     }
