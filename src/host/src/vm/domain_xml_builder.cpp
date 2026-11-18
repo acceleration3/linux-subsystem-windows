@@ -182,8 +182,13 @@ QString DomainXmlBuilder::build(const config::VmRecord& vm, const DomainXmlInput
 
     vars["emulator"] = esc(inputs.qemu_binary);
 
+    const QProcessEnvironment manager_env = QProcessEnvironment::systemEnvironment();
     const std::pair<const char*, QString> env[] = {
         {"QEMU_MODULE_DIR", inputs.qemu_module_dir},
+        {"AV_PERFETTO", manager_env.value(QStringLiteral("AV_PERFETTO"))},
+        {"AV_TRACE_SCOPES", manager_env.value(QStringLiteral("AV_TRACE_SCOPES"))},
+        {"AV_TRACE_DEPTH", manager_env.value(QStringLiteral("AV_TRACE_DEPTH"))},
+        {"AV_TRACE_ONLY", manager_env.value(QStringLiteral("AV_TRACE_ONLY"))},
         {"AV_D3D_PATH", inputs.d3d_lib_dir},
         {"XDG_RUNTIME_DIR", QProcessEnvironment::systemEnvironment().value("XDG_RUNTIME_DIR")},
         {"MESA_SHADER_CACHE_DIR", inputs.shader_cache_dir},
