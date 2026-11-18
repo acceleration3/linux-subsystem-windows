@@ -104,7 +104,10 @@ QString gpu_common(const DomainXmlInputs& inputs, const QString& host_gpu) {
 }
 
 QString gpu_tail(const DomainXmlInputs& inputs) {
-    QString out = QStringLiteral(",vectors=11,hostmem=%1M").arg(inputs.host_window_mib);
+    QString out = QStringLiteral(",vectors=11");
+    if (!inputs.install_display) {
+        out += QStringLiteral(",hostmem=%1M").arg(inputs.host_window_mib);
+    }
     if (inputs.vram_reserve_mib > 0) {
         out += QStringLiteral(",vram-reserve=%1").arg(inputs.vram_reserve_mib);
     }

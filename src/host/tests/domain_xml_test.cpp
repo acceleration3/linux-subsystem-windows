@@ -1,4 +1,5 @@
 #include "lsw/host/config/manager_settings.hpp"
+#include "lsw/host/platform/host_memory.hpp"
 #include "lsw/host/vm/domain_xml_builder.hpp"
 
 #include <QCoreApplication>
@@ -448,6 +449,8 @@ int main(int argc, char** argv) {
               install_doc.elementsByTagName(QStringLiteral("graphics")).at(0).toElement()
                   .attribute(QStringLiteral("type")) == QStringLiteral("vnc"),
           "Windows setup keeps the plain VGA VNC console until WGC is available");
+    check(!DomainXmlBuilder::build(vm, install).contains(QStringLiteral("hostmem=")),
+          "Windows setup reserves no host window");
     check(install_doc.elementsByTagName(QStringLiteral("video"))
                   .at(0)
                   .firstChildElement(QStringLiteral("model"))
@@ -514,10 +517,17 @@ int main(int argc, char** argv) {
           "the GPU device's settings need a restart");
     check(ManagerSettings::default_value(ManagerSettings::Key::kHostGpu) ==
                   QStringLiteral("auto") &&
-              ManagerSettings::default_value(ManagerSettings::Key::kHostWindowMib) == 8192 &&
               ManagerSettings::default_value(ManagerSettings::Key::kRenderGpus).toStringList()
                   .isEmpty(),
-          "the GPU defaults are auto, no render GPUs and an 8 GiB window");
+          "the GPU defaults are auto and no render GPUs");
+    {
+        const int window = ManagerSettings::default_value(ManagerSettings::Key::kHostWindowMib).toInt();
+        const auto host_mib = lsw::host::platform::HostMemory::total_mib();
+        const qint64 half = host_mib ? (*host_mib + 1023) / 1024 * 1024 / 2 : 8192;
+        check((window == 2048 || window == 4096 || window == 8192) &&
+                  (window <= half || window == 2048),
+              "the default host window is at most 8 GiB and half the host's memory");
+    }
 
     const QVector<HostShare> shares = {
         HostShare{QStringLiteral("/home/me/a b"), QStringLiteral("Z:"), false},

@@ -2,6 +2,7 @@
 #include "lsw/host/config/vm_sizing.hpp"
 
 #include "lsw/host/config/display_modes.hpp"
+#include "lsw/host/platform/host_memory.hpp"
 
 #include <QHash>
 #include <QStringList>
@@ -12,6 +13,21 @@ namespace lsw::host::config {
 namespace {
 
 using K = ManagerSettings::Key;
+
+int default_host_window_mib() {
+    constexpr int kWindows[] = {8192, 4096, 2048};
+    const auto total = platform::HostMemory::total_mib();
+    if (!total) {
+        return kWindows[0];
+    }
+    const qint64 half = (*total + 1023) / 1024 * 1024 / 2;
+    for (const int window : kWindows) {
+        if (window <= half) {
+            return window;
+        }
+    }
+    return kWindows[2];
+}
 
 const QHash<QString, QVariant>& defaults() {
     static const QHash<QString, QVariant> table = {
@@ -27,7 +43,7 @@ const QHash<QString, QVariant>& defaults() {
         {K::kScalingPercent, 0},
 
         {K::kHostGpu, QStringLiteral("auto")},
-        {K::kHostWindowMib, 8192},
+        {K::kHostWindowMib, default_host_window_mib()},
         {K::kVramReserveMib, 0},
         {K::kRenderGpus, QStringList{}},
         {K::kHybridGraphics, false},
