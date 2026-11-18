@@ -16,7 +16,9 @@ InstallPage::InstallPage(Wizard& wizard, QWidget* parent) : PipelinePage(parent)
 
     auto* lay =
         install_chrome(QStringLiteral("Installing Windows"),
-                       QStringLiteral("Booting the VM and running the unattended installer."));
+                       QStringLiteral("The VM boots and runs the unattended installer. Windows "
+                                      "setup usually takes 10 to 30 minutes and reboots itself "
+                                      "several times."));
     auto* head = chrome().head;
     bar_ = new QProgressBar;
     bar_->setRange(0, 0);
@@ -24,8 +26,7 @@ InstallPage::InstallPage(Wizard& wizard, QWidget* parent) : PipelinePage(parent)
     elapsed_ = ui::Widgets::meta(QString{}, true);
     head->addWidget(elapsed_);
 
-    status_ = new QLabel(QStringLiteral("Windows setup usually takes 10 to 30 minutes "
-                                        "and reboots itself several times."));
+    status_ = new QLabel;
     status_->setObjectName(QString::fromLatin1(ui::Theme::Role::kDim));
     status_->setWordWrap(true);
     head->addWidget(status_);
@@ -51,8 +52,7 @@ void InstallPage::set_phase(const QString& text) {
 void InstallPage::initializePage() {
     reset_complete();
     ui::Widgets::set_flag(status_, ui::Theme::Tone::kProperty, QVariant{});
-    status_->setText(QStringLiteral("Windows setup usually takes 10 to 30 minutes and reboots "
-                                    "itself several times."));
+    status_->clear();
 
     auto* p = wizard_.pipeline();
     if (p == nullptr) {

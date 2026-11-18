@@ -10,6 +10,7 @@
 #include "lsw/host/manager/setting_controls.hpp"
 #include "lsw/host/platform/host_scale.hpp"
 #include "lsw/host/services/status_hub.hpp"
+#include "lsw/host/ui/info_tip.hpp"
 #include "lsw/host/ui/key_values.hpp"
 #include "lsw/host/ui/monitor_sketch.hpp"
 #include "lsw/host/ui/panel.hpp"
@@ -61,16 +62,15 @@ QString scale_text(qreal ratio) {
     return QString::number(ratio, 'g', 3);
 }
 
-QWidget* toggle_line(ui::ToggleSwitch* toggle, const QString& text) {
+QWidget* toggle_line(ui::ToggleSwitch* toggle, const QString& text, const QString& about) {
     auto* line = new QWidget;
     auto* row = new QHBoxLayout(line);
     row->setContentsMargins(0, 0, 0, 0);
     row->setSpacing(9);
     row->addWidget(toggle);
-    auto* label = new QLabel(text);
-    label->setObjectName(QString::fromLatin1(Theme::Role::kDim));
-    label->setWordWrap(true);
-    row->addWidget(label, 1);
+    row->addWidget(new QLabel(text));
+    row->addWidget(new ui::InfoTip(about));
+    row->addStretch(1);
     return line;
 }
 
@@ -82,6 +82,7 @@ DisplayPage::DisplayPage(services::StatusHub& status, config::ManagerSettings& s
       controls_(new SettingControls(settings, pending, this)) {
     build_now();
     build_resolutions();
+    build_one_to_one();
     build_refresh_and_scale();
     column()->addStretch(1);
 
@@ -116,8 +117,10 @@ void DisplayPage::refresh() {
 }
 
 void DisplayPage::build_now() {
-    auto panel = ui::Panel::area(QStringLiteral("What Windows shows"),
-                                 QStringLiteral("read from the running device"));
+    auto panel = ui::Panel::area(
+        QStringLiteral("Current display mode"),
+        QStringLiteral("The resolution, refresh rate and scale Windows is using right now, as the "
+                       "guest's display device reports them."));
     live_pill_ = StatusPill::make(StatusPill::State::Pending, QStringLiteral("Guest off"));
     panel.header->addWidget(live_pill_);
 
@@ -156,17 +159,17 @@ void DisplayPage::refresh_now() {
     sketch_->show_mode(facts.mode ? facts.mode->width : 0, facts.mode ? facts.mode->height : 0,
                        mode, detail);
 
-    const QString off = running ? QStringLiteral("not reported yet") : QStringLiteral("the guest is off");
     const bool follows = !DisplayRefresh::fixed(settings_.string_value(K::kDisplayRefresh));
     const int scale_setting = settings_.int_value(K::kScalingPercent);
     QString window_name = QStringLiteral("-");
-    QString window_note = QStringLiteral("no screen reported");
     if (screen != nullptr) {
-        window_name = screen->name().isEmpty() ? QStringLiteral("-") : screen->name();
-        window_note = QStringLiteral("%1 at %2, scale %3")
-                          .arg(size_label(pixels.of(screen, window()->windowHandle())),
-                               DisplayRefresh::label(DisplayRefresh::from_hertz(screen->refreshRate())),
-                               scale_text(window_scale));
+        QStringList parts{size_label(pixels.of(screen, window()->windowHandle())),
+                          DisplayRefresh::label(DisplayRefresh::from_hertz(screen->refreshRate())),
+                          QStringLiteral("scale %1").arg(scale_text(window_scale))};
+        if (!screen->name().isEmpty()) {
+            parts.prepend(screen->name());
+        }
+        window_name = parts.join(QStringLiteral(" · "));
     }
     const QStringList signature{
         mode,
@@ -176,8 +179,7 @@ void DisplayPage::refresh_now() {
         follows ? QStringLiteral("monitor") : QStringLiteral("fixed"),
         QString::number(scale_setting),
         window_name,
-        window_note,
-        off,
+        running ? QStringLiteral("running") : QStringLiteral("off"),
     };
     if (signature == facts_signature_) {
         return;
@@ -195,28 +197,26 @@ void DisplayPage::refresh_now() {
     column_layout->setContentsMargins(0, 0, 0, 0);
     KeyValues rows(column_layout);
     rows.add(QStringLiteral("Resolution"), mode, nullptr,
-             facts.mode ? (facts.offered > 0
-                               ? QStringLiteral("the preferred one of %1 offered").arg(facts.offered)
-                               : QStringLiteral("the preferred one"))
-                        : (facts.host_modes ? QStringLiteral("the connected monitors decide") : off));
+             facts.mode && facts.offered > 0
+                 ? QStringLiteral("The preferred one of the %1 the guest's monitor offers.").arg(facts.offered)
+                 : (facts.host_modes ? QStringLiteral("The connected monitors decide.")
+                                     : QStringLiteral("The size Windows runs at, read from the running device.")));
     rows.add(QStringLiteral("Refresh"), refresh, nullptr,
-             facts.refresh_millihz ? (follows ? QStringLiteral("same as the monitor this window is on")
-                                              : QStringLiteral("fixed on the Refresh row below"))
-                                   : off);
+             follows ? QStringLiteral("Follows the monitor this window is on.")
+                     : QStringLiteral("Fixed on the Refresh row below."));
     rows.add(QStringLiteral("Scale"), facts.scale_label(), nullptr,
-             facts.scale_percent
-                 ? (scale_setting == 0
-                        ? QStringLiteral("matching this desktop, %1")
-                              .arg(scale_text(window_scale))
-                        : QStringLiteral("fixed on the Scale row below"))
-                 : off);
-    rows.add(QStringLiteral("This window"), window_name, nullptr, window_note);
+             scale_setting == 0 ? QStringLiteral("Matches this desktop, now %1.").arg(scale_text(window_scale))
+                                : QStringLiteral("Fixed on the Scale row below."));
+    rows.add(QStringLiteral("Manager's monitor"), window_name, nullptr,
+             QStringLiteral("The monitor this manager window is on: its name, size, refresh rate and "
+                            "scale. Same as monitor and Match this desktop follow it."));
     facts_box_->addWidget(holder);
 }
 
 void DisplayPage::build_resolutions() {
     auto panel = ui::Panel::area(QStringLiteral("Resolutions"),
-                                 QStringLiteral("what the guest's monitor offers Windows"));
+                                 QStringLiteral("The sizes the guest's virtual monitor offers Windows to "
+                                                "choose from."));
     panel.header->addWidget(Widgets::tag(false));
     panel.body->setSpacing(11);
 
@@ -225,14 +225,10 @@ void DisplayPage::build_resolutions() {
                           {QStringLiteral("The host monitors' own modes"), {},
                            QStringLiteral("host")}});
     panel.body->addWidget(source_);
-    panel.body->addWidget(toggle_line(controls_->toggle(K::kMatchHostOutput),
-                                      QStringLiteral("Put the size of the monitor this window is on "
-                                                     "first, and follow it to another monitor")));
-    panel.body->addWidget(
-        toggle_line(controls_->toggle(K::kOneToOneDesktop),
-                    QStringLiteral("1:1 desktop: while the desktop window is open, Windows "
-                                   "uses exactly its size in pixels and follows it when it "
-                                   "is resized; closing it brings these resolutions back")));
+    panel.body->addWidget(toggle_line(
+        controls_->toggle(K::kMatchHostOutput), QStringLiteral("Follow this window's monitor"),
+        QStringLiteral("Makes the size of the monitor this manager window is on the preferred one, "
+                       "and follows the window when it moves to another monitor.")));
 
     list_box_ = new QWidget;
     auto* list_column = new QVBoxLayout(list_box_);
@@ -240,13 +236,12 @@ void DisplayPage::build_resolutions() {
     list_column->setSpacing(11);
     editor_ = new ResolutionEditor(settings_, status_);
     list_column->addWidget(editor_);
-    list_column->addWidget(Widgets::meta(
-        QStringLiteral("Windows uses the preferred size, and it is the largest a maximised "
-                       "application window can be. Any size from %1 × %1 to %2 × %2; a "
-                       "change reaches Windows at once, as if a monitor were replugged.")
-            .arg(DisplayModes::kMinEdge)
-            .arg(DisplayModes::kMaxEdge),
-        true));
+    panel.explain(QStringLiteral("Windows uses the preferred size, and no window can be larger. Sizes "
+                                 "from %1 × %1 to %2 × %2. Changes reach Windows at once.")
+                      .arg(DisplayModes::kMinEdge)
+                      .arg(DisplayModes::kMaxEdge));
+    panel.explain(QStringLiteral("With the host monitors' own modes the list is kept for when you "
+                                 "switch back."));
     panel.body->addWidget(list_box_);
 
     host_box_ = new QWidget;
@@ -258,6 +253,21 @@ void DisplayPage::build_resolutions() {
     connect(source_, &SegmentedControl::chosen, this, [this](const QVariant& value) {
         editor_->use_host_modes(value.toString() == QLatin1String("host"));
     });
+    column()->addWidget(panel.frame);
+}
+
+void DisplayPage::build_one_to_one() {
+    auto panel = ui::Panel::area(
+        QStringLiteral("Desktop mirroring"),
+        QStringLiteral("While the desktop window is open, Windows uses exactly its size in pixels and "
+                       "follows it when it is resized. Closing it brings the resolutions back."));
+    panel.header->addWidget(Widgets::tag(config::ManagerSettings::needs_restart(K::kOneToOneDesktop)));
+    auto* line = new QHBoxLayout;
+    line->setSpacing(9);
+    line->addWidget(controls_->toggle(K::kOneToOneDesktop));
+    line->addWidget(new QLabel(QStringLiteral("Match the desktop window in pixels")));
+    line->addStretch(1);
+    panel.body->addLayout(line);
     column()->addWidget(panel.frame);
 }
 
@@ -299,21 +309,21 @@ void DisplayPage::refresh_resolutions() {
         rows.add(screen->name().isEmpty() ? QStringLiteral("Monitor") : screen->name(),
                  size_label(pixels.of(screen, handle)), nullptr,
                  screen == largest ? (settings_.bool_value(K::kMatchHostOutput)
-                                          ? QStringLiteral("preferred, the monitor this window is on")
-                                          : QStringLiteral("preferred, the largest monitor's best mode"))
+                                          ? QStringLiteral("Preferred: the monitor this window is on.")
+                                          : QStringLiteral("Preferred: the largest monitor's best mode."))
                                    : QString{});
     }
     if (screens.isEmpty()) {
-        rows.add(QStringLiteral("Monitors"), QStringLiteral("-"), nullptr,
-                 QStringLiteral("no monitor reported"));
+        rows.add(QStringLiteral("Monitors"), QStringLiteral("-"));
     }
-    column_layout->addWidget(Widgets::meta(QStringLiteral("The list is kept for when you switch back."), true));
     host_column_->addWidget(host_facts_);
 }
 
 void DisplayPage::build_refresh_and_scale() {
-    auto panel = ui::Panel::area(QStringLiteral("Refresh and scale"),
-                                 QStringLiteral("Windows switches at once, no restart"));
+    auto panel = ui::Panel::area(
+        QStringLiteral("Refresh and scale"),
+        QStringLiteral("How often Windows redraws, and how large it draws text and controls. Changes "
+                       "apply at once."));
     panel.header->addWidget(Widgets::tag(false));
     panel.body->setSpacing(11);
 
@@ -331,8 +341,7 @@ void DisplayPage::build_refresh_and_scale() {
     rows.add_widget(QStringLiteral("Scale"), scale_seg_);
     panel.body->addWidget(rows_widget);
 
-    refresh_meta_ = Widgets::meta(QString{}, true);
-    panel.body->addWidget(refresh_meta_);
+    refresh_tip_ = panel.info;
     column()->addWidget(panel.frame);
 }
 
@@ -458,7 +467,9 @@ void DisplayPage::refresh_refresh_and_scale() {
     }
     refresh_seg_->set_options(options);
     refresh_seg_->set_current(current);
-    refresh_meta_->setText(refresh_note(all, shown_count));
+    refresh_tip_->set_text(QStringLiteral("How often Windows redraws, and how large it draws text "
+                                          "and controls. Changes apply at once.<br><br>") +
+                           refresh_note(all, shown_count));
 
     QVector<SegmentedControl::Option> scales;
     scales.push_back({QStringLiteral("Match this desktop"),

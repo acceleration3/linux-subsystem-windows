@@ -63,7 +63,8 @@ QString short_name(const QString& name) {
 }
 
 ui::Panel card(const QString& name, const QString& caption, QWidget* right = nullptr) {
-    auto panel = ui::Panel::area(name, caption);
+    auto panel = ui::Panel::area(name);
+    panel.show_caption(caption);
     if (right != nullptr) {
         panel.header->addWidget(right);
     }
@@ -259,58 +260,61 @@ QWidget* GpuStatusPage::build_guest_driver() const {
     KeyValues rows(panel.body);
 
     const bool known = status_.vm().running() && guest.valid;
-    const QString off_note = status_.vm().running() ? QStringLiteral("the agent has not answered")
-                                                    : QStringLiteral("the guest is off");
+    const QString device_about = QStringLiteral("Whether Windows is running LSW's graphics driver for "
+                                                "this GPU. Without it, Windows applications cannot "
+                                                "use the GPU.");
+    const QString signing_about = QStringLiteral("LSW's graphics driver is test-signed, so Windows has to "
+                                                 "allow test-signed drivers.");
+    const QString search_about = QStringLiteral("Windows Update must not look for display drivers, or "
+                                                "it may replace LSW's graphics driver with its own.");
+    const QString path_about = QStringLiteral("Windows has two ways of driving a display. The newer "
+                                              "one, DisplayCore, turns LSW's display off, so the guest "
+                                              "update disables it.");
     for (const auto& adapter : adapters) {
         const QString key = adapters.size() == 1
                                 ? QStringLiteral("Device")
                                 : short_name(platform::HostGpus::adapter_name(adapter.gpu));
         if (!known) {
-            rows.add(key, QStringLiteral("-"), Theme::Tone::kFaint, off_note);
+            rows.add(key, QStringLiteral("-"), Theme::Tone::kFaint, device_about);
         } else if (!adapter.guest) {
             rows.add(key, QStringLiteral("Absent"), Theme::Tone::kBad,
                      QStringLiteral("Windows lists no adapter for it"));
         } else if (adapter.guest->running()) {
-            rows.add(key, QStringLiteral("Running"), Theme::Tone::kOk,
-                     QStringLiteral("no problem code"));
+            rows.add(key, QStringLiteral("Running"), Theme::Tone::kOk, device_about);
         } else if (adapter.guest->no_driver()) {
             rows.add(key, QStringLiteral("No driver"), Theme::Tone::kAmber,
-                     QStringLiteral("problem code %1").arg(adapter.guest->problem_code));
+                     QStringLiteral("Problem code %1").arg(adapter.guest->problem_code));
         } else {
             rows.add(key, QStringLiteral("Problem"), Theme::Tone::kBad,
-                     QStringLiteral("problem code %1").arg(adapter.guest->problem_code));
+                     QStringLiteral("Problem code %1").arg(adapter.guest->problem_code));
         }
     }
     if (!known) {
-        rows.add(QStringLiteral("Test signing"), QStringLiteral("-"), Theme::Tone::kFaint,
-                 QStringLiteral("the driver needs it"));
-        rows.add(QStringLiteral("Driver search"), QStringLiteral("-"), Theme::Tone::kFaint,
-                 QStringLiteral("must be off"));
-        rows.add(QStringLiteral("Display path"), QStringLiteral("-"), Theme::Tone::kFaint,
-                 QStringLiteral("DisplayCore must be off"));
+        rows.add(QStringLiteral("Test signing"), QStringLiteral("-"), Theme::Tone::kFaint, signing_about);
+        rows.add(QStringLiteral("Driver search"), QStringLiteral("-"), Theme::Tone::kFaint, search_about);
+        rows.add(QStringLiteral("Display path"), QStringLiteral("-"), Theme::Tone::kFaint, path_about);
     } else {
         rows.add(QStringLiteral("Test signing"),
                  guest.test_signing ? QStringLiteral("On") : QStringLiteral("Off"),
                  guest.test_signing ? Theme::Tone::kOk : Theme::Tone::kBad,
-                 QStringLiteral("the driver needs it"));
+                 guest.test_signing ? signing_about : QStringLiteral("The driver needs it on"));
         rows.add(QStringLiteral("Driver search"),
                  guest.driver_search_off ? QStringLiteral("Off") : QStringLiteral("On"),
                  guest.driver_search_off ? Theme::Tone::kOk : Theme::Tone::kBad,
-                 guest.driver_search_off ? QStringLiteral("Update cannot replace it")
-                                         : QStringLiteral("Update may replace it"));
+                 guest.driver_search_off ? search_about
+                                         : QStringLiteral("Windows Update may replace the driver"));
         if (!guest.display_core_disabled) {
             rows.add(QStringLiteral("Display path"), QStringLiteral("DisplayCore"),
                      Theme::Tone::kBad,
-                     QStringLiteral("the display output switches off; update turns it off"));
+                     QStringLiteral("The display output switches off; the guest update turns it off"));
         } else if (guest.display_core_loaded.value_or(false)) {
             rows.add(QStringLiteral("Display path"), QStringLiteral("DisplayCore"),
-                     Theme::Tone::kAmber, QStringLiteral("off after DWM restarts"));
+                     Theme::Tone::kAmber, QStringLiteral("Off once DWM restarts"));
         } else if (guest.display_core_loaded.has_value()) {
             rows.add(QStringLiteral("Display path"), QStringLiteral("Classic"), Theme::Tone::kOk,
-                     QStringLiteral("DisplayCore off"));
+                     path_about);
         } else {
-            rows.add(QStringLiteral("Display path"), QStringLiteral("-"), Theme::Tone::kFaint,
-                     QStringLiteral("DisplayCore must be off"));
+            rows.add(QStringLiteral("Display path"), QStringLiteral("-"), Theme::Tone::kFaint, path_about);
         }
     }
     const auto& facts = status_.graphics().log_facts;
@@ -319,15 +323,17 @@ QWidget* GpuStatusPage::build_guest_driver() const {
                                         : guest.user_mode_submission;
     const std::optional<bool> fences =
         facts.native_fences.has_value() ? facts.native_fences : guest.native_fences;
+    const QString submission_about = QStringLiteral("How Windows sends GPU work to this computer. User "
+                                                    "mode sends it straight from the application; "
+                                                    "Kernel goes through Windows first.");
     if (!ums.has_value()) {
-        rows.add(QStringLiteral("Submission"), QStringLiteral("-"), Theme::Tone::kFaint,
-                 QStringLiteral("not reported yet"));
+        rows.add(QStringLiteral("Submission"), QStringLiteral("-"), Theme::Tone::kFaint, submission_about);
     } else {
-        rows.add(QStringLiteral("Submission"),
-                 *ums ? QStringLiteral("User mode") : QStringLiteral("Kernel"), nullptr,
-                 fences.has_value() ? (*fences ? QStringLiteral("native fences on")
-                                               : QStringLiteral("native fences off"))
-                                    : QString{});
+        QString value = *ums ? QStringLiteral("User mode") : QStringLiteral("Kernel");
+        if (fences.has_value()) {
+            value += *fences ? QStringLiteral(" · native fences") : QStringLiteral(" · no native fences");
+        }
+        rows.add(QStringLiteral("Submission"), value, nullptr, submission_about);
     }
     panel.body->addStretch(1);
     return panel.frame;
@@ -335,6 +341,11 @@ QWidget* GpuStatusPage::build_guest_driver() const {
 
 QWidget* GpuStatusPage::build_host_window() {
     auto panel = card(QStringLiteral("Host window"), QStringLiteral("last 10 minutes"));
+    panel.explain(QStringLiteral(
+        "How much of the host window Windows is using: memory on this computer that Windows reads "
+        "and writes directly for GPU data. Write-back is cached system RAM, used for data Windows "
+        "reads back; write-combined is VRAM or uncached RAM, used for data Windows writes for the "
+        "GPU. The dashed line is the window's size, set on the Graphics page."));
     graph_ = new ui::UsageGraph;
     panel.body->addWidget(graph_);
     auto* legend = Widgets::meta(
@@ -355,7 +366,9 @@ QWidget* GpuStatusPage::build_host_window() {
 }
 
 QWidget* GpuStatusPage::build_guest_vram() {
-    auto panel = card(QStringLiteral("Guest VRAM"), QStringLiteral("from the executor"));
+    auto panel = card(QStringLiteral("Guest VRAM"), QString{});
+    panel.explain(QStringLiteral("How much of each GPU's memory Windows may use, and how much is kept "
+                                 "free for this computer's own desktop and applications."));
     KeyValues rows(panel.body);
     vram_cap_.clear();
     vram_reserve_.clear();
@@ -368,12 +381,12 @@ QWidget* GpuStatusPage::build_guest_vram() {
                         : QString{};
         vram_cap_.push_back(qobject_cast<QLabel*>(
             rows.add(prefix + QStringLiteral("Guest VRAM cap"), QStringLiteral("-"),
-                     Theme::Tone::kFaint, QStringLiteral("the most GPU memory the guest may use"))
+                     Theme::Tone::kFaint, QStringLiteral("The most memory Windows can use on this GPU."))
                 ->itemAt(0)
                 ->widget()));
         vram_reserve_.push_back(qobject_cast<QLabel*>(
             rows.add(prefix + QStringLiteral("Kept for the host"), QStringLiteral("-"),
-                     Theme::Tone::kFaint, QStringLiteral("the reserve in effect"))
+                     Theme::Tone::kFaint, QStringLiteral("Memory on this GPU kept free for this computer. Set on the Graphics page."))
                 ->itemAt(0)
                 ->widget()));
     }
@@ -382,8 +395,9 @@ QWidget* GpuStatusPage::build_guest_vram() {
 }
 
 QWidget* GpuStatusPage::build_apps() {
-    auto panel = card(QStringLiteral("Apps"),
-                      QStringLiteral("totals and recent rate, click a header to sort"));
+    auto panel = card(QStringLiteral("Applications using the GPU"), QString{});
+    panel.explain(QStringLiteral("Each Windows application that draws with the GPU: its totals since it "
+                                 "started and its recent rate. Click a column header to sort."));
     apps_note_ = Widgets::meta(QStringLiteral("-"));
     panel.body->addWidget(apps_note_);
     apps_table_ = new QTableWidget(0, 15);
@@ -569,11 +583,7 @@ void GpuStatusPage::update_log() {
                            .arg(status_.vm().running() ? QStringLiteral(" · live") : QString{}));
     const QStringList& lines = g.log_lines;
     if (lines.isEmpty()) {
-        log_text_->setText(
-            status_.vm().running()
-                ? QStringLiteral("Nothing from the driver yet.")
-                : QStringLiteral("Nothing yet. The driver writes here from its first line on "
-                                 "the next boot."));
+        log_text_->setText(QStringLiteral("No lines yet"));
         return;
     }
     QStringList shown;

@@ -4,6 +4,7 @@
 #include "lsw/host/provision/debloat_stager.hpp"
 #include "lsw/host/provision/install/wim_edition.hpp"
 #include "lsw/host/provision/install/wim_edition_lister.hpp"
+#include "lsw/host/ui/info_tip.hpp"
 #include "lsw/host/ui/dialog_chrome.hpp"
 #include "lsw/host/ui/format.hpp"
 #include "lsw/host/ui/theme.hpp"
@@ -66,7 +67,9 @@ TrimImageDialog::TrimImageDialog(config::Settings& settings, QString source_iso,
 
     auto* source_box = new QVBoxLayout;
     source_box->setSpacing(6);
-    source_box->addWidget(Widgets::caption(QStringLiteral("Source image")));
+    source_box->addWidget(Widgets::caption_with(
+        QStringLiteral("Source image"),
+        QStringLiteral("The source image is read only and is never modified.")));
     auto* source_row = new QHBoxLayout;
     source_edit_ = new QLineEdit(source_iso_);
     source_edit_->setPlaceholderText(QStringLiteral("Path to a Windows ISO"));
@@ -112,18 +115,11 @@ TrimImageDialog::TrimImageDialog(config::Settings& settings, QString source_iso,
         row->setSpacing(10);
         auto* radio = new QRadioButton;
         level_group_->addButton(radio, static_cast<int>(entry.level));
-        row->addWidget(radio, 0, Qt::AlignTop);
+        row->addWidget(radio, 0, Qt::AlignVCenter);
 
-        auto* text = new QLabel(
-            QStringLiteral("<span style=\"color:%1\">%2</span>  "
-                           "<span style=\"color:%3\">%4</span>")
-                .arg(QString::fromLatin1(Theme::Color::kFg),
-                     QString::fromLatin1(entry.title).toHtmlEscaped(),
-                     QString::fromLatin1(Theme::Color::kFgDim),
-                     DebloatPlan{entry.level}.summary().toHtmlEscaped()));
-        text->setWordWrap(true);
-        text->setTextFormat(Qt::RichText);
-        row->addWidget(text, 1);
+        row->addWidget(new QLabel(QString::fromLatin1(entry.title)));
+        row->addWidget(new ui::InfoTip(DebloatPlan{entry.level}.summary().toHtmlEscaped()));
+        row->addStretch(1);
         card_layout->addLayout(row);
 
         card->installEventFilter(this);
@@ -172,9 +168,7 @@ TrimImageDialog::TrimImageDialog(config::Settings& settings, QString source_iso,
     root->addStretch(1);
 
     auto* footer = chrome.foot;
-    footer->addWidget(
-        Widgets::meta(QStringLiteral("The source image is read only and is never modified."), true),
-        1);
+    footer->addStretch(1);
     close_button_ = new QPushButton(QStringLiteral("Close"));
     run_button_ = Widgets::button(QStringLiteral("Trim image"), Theme::Role::kPrimary);
     footer->addWidget(close_button_);

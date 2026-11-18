@@ -3,6 +3,7 @@
 #include "lsw/host/services/host_services.hpp"
 #include "lsw/host/tools/download_image_dialog.hpp"
 #include "lsw/host/tools/trim_image_dialog.hpp"
+#include "lsw/host/ui/info_tip.hpp"
 #include "lsw/host/ui/broken_mark.hpp"
 #include "lsw/host/ui/format.hpp"
 #include "lsw/host/ui/theme.hpp"
@@ -36,12 +37,14 @@ QWidget* tool_card(const QString& title, const QString& blurb, QPushButton* butt
     font.setWeight(QFont::Medium);
     name->setFont(font);
 
-    auto* text = new QLabel(blurb);
-    text->setObjectName(QString::fromLatin1(Theme::Role::kDim));
-    text->setWordWrap(true);
+    auto* head = new QHBoxLayout;
+    head->setSpacing(8);
+    head->addWidget(name);
+    head->addWidget(new ui::InfoTip(blurb));
+    head->addStretch(1);
 
-    layout->addWidget(name);
-    layout->addWidget(text, 1);
+    layout->addLayout(head);
+    layout->addStretch(1);
     layout->addWidget(button, 0, Qt::AlignLeft);
     return frame;
 }
@@ -54,7 +57,7 @@ IsoChoicePage::IsoChoicePage(Wizard& wizard, QWidget* parent)
     auto* root =
         install_chrome(QStringLiteral("Which Windows image should be installed"),
                        QStringLiteral("Any retail or evaluation Windows 10 or 11 ISO. If you do "
-                                      "not have one, download it here."));
+                                      "not have one, download it here."), QString{});
 
     root->addWidget(ui::Widgets::caption(QStringLiteral("Image")));
 

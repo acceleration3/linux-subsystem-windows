@@ -8,6 +8,7 @@
 #include "lsw/host/manager/setting_controls.hpp"
 #include "lsw/host/platform/host_memory.hpp"
 #include "lsw/host/services/status_hub.hpp"
+#include "lsw/host/ui/info_tip.hpp"
 #include "lsw/host/ui/machine_limits.hpp"
 #include "lsw/host/ui/panel.hpp"
 #include "lsw/host/ui/slider_spin.hpp"
@@ -37,12 +38,6 @@ using K = config::ManagerSettings::Key;
 constexpr int kControlWidth = 292;
 constexpr int kControlLeast = 190;
 constexpr int kMibPerGib = 1024;
-
-QString mono(const QString& text) {
-    return QStringLiteral("<span style=\"font-family:'JetBrains Mono','DejaVu Sans Mono',monospace;"
-                          "font-size:11px\">%1</span>")
-        .arg(text.toHtmlEscaped());
-}
 
 QWidget* right_aligned(QWidget* widget) {
     auto* cell = new QWidget;
@@ -91,8 +86,9 @@ QVBoxLayout* SettingsPage::new_group(const QString& title) {
     return group.body;
 }
 
-QWidget* SettingsPage::add_row(QVBoxLayout* group, const QString& key, const QString& label,
-                               const QString& description, QWidget* control) {
+SettingsPage::Row SettingsPage::add_row(QVBoxLayout* group, const QString& key,
+                                        const QString& label, const QString& about,
+                                        QWidget* control) {
     auto* row = new QWidget;
     auto* layout = new QHBoxLayout(row);
     layout->setContentsMargins(12, 10, 12, 10);
@@ -103,16 +99,19 @@ QWidget* SettingsPage::add_row(QVBoxLayout* group, const QString& key, const QSt
     auto* head = new QHBoxLayout;
     head->setSpacing(8);
     head->addWidget(new QLabel(label));
+    Row out;
+    out.about = new ui::InfoTip(about);
+    head->addWidget(out.about);
     if (!key.isEmpty()) {
         head->addWidget(Widgets::tag(config::ManagerSettings::needs_restart(key)));
     }
     head->addStretch(1);
     text->addLayout(head);
 
-    auto* prose = Widgets::prose(description);
-    prose->setObjectName(QStringLiteral("rowDescription"));
-    prose->setTextFormat(Qt::RichText);
-    text->addWidget(prose);
+    out.note = Widgets::prose(QString{});
+    out.note->setProperty(Theme::Tone::kProperty, Theme::Tone::kWarm);
+    out.note->hide();
+    text->addWidget(out.note);
 
     layout->addLayout(text, 1);
     control->setMinimumWidth(kControlLeast);
@@ -122,7 +121,7 @@ QWidget* SettingsPage::add_row(QVBoxLayout* group, const QString& key, const QSt
 
     group->addWidget(row);
     group->addWidget(Widgets::separator());
-    return row;
+    return out;
 }
 
 void SettingsPage::build_machine() {
@@ -130,19 +129,17 @@ void SettingsPage::build_machine() {
     auto* cores = controls_->slider(K::kCpuCores, ui::MachineLimits::kCores, QString{});
     cores->set_maximum(config::VmSizing::host_cores());
     add_row(machine, K::kCpuCores, QStringLiteral("Processor cores"),
-            QStringLiteral("The host has %1 threads. The guest topology is one socket, cores only, "
-                           "no SMT.")
+            QStringLiteral("How many processor cores Windows gets. This computer has %1 threads.")
                 .arg(config::VmSizing::host_cores()),
             cores);
 
-    auto* priority_row = add_row(
+    priority_row_ = add_row(
         machine, K::kPriority, QStringLiteral("Priority"), QString{},
         controls_->choice(K::kPriority, {
                                             {QStringLiteral("Normal"), QStringLiteral("normal")},
                                             {QStringLiteral("High"), QStringLiteral("high")},
                                             {QStringLiteral("Highest"), QStringLiteral("highest")},
                                         }));
-    priority_note_ = priority_row->findChild<QLabel*>(QStringLiteral("rowDescription"));
     connect(&status_, &services::StatusHub::changed, this, [this](services::StatusHub::Area area) {
         if (area == services::StatusHub::Area::Host) {
             refresh_priority_note();
@@ -152,16 +149,16 @@ void SettingsPage::build_machine() {
 
     const auto host_mib = platform::HostMemory::total_mib();
     add_row(machine, K::kMemoryMib, QStringLiteral("Memory"),
-            host_mib ? QStringLiteral("Fixed: the guest holds all of it while it runs. %1 GiB on "
-                                      "the host.")
-                           .arg(*host_mib / kMibPerGib)
-                     : QStringLiteral("Fixed: the guest holds all of it while it runs."),
+            QStringLiteral("The most memory Windows has. While it runs, Windows gives back what it "
+                           "does not use.%1")
+                .arg(host_mib ? QStringLiteral(" This computer has %1 GiB.").arg(*host_mib / kMibPerGib)
+                              : QString{}),
             controls_->slider(K::kMemoryMib, ui::MachineLimits::kMemoryMib, QStringLiteral(" MiB")));
 
     auto* disk = controls_->slider(K::kDiskGib, ui::MachineLimits::kDiskGib, QStringLiteral(" GiB"));
     add_row(machine, K::kDiskGib, QStringLiteral("Disk"),
-            QStringLiteral("Grows only. The qcow2 is resized on the host and Windows extends the "
-                           "volume on the next boot."),
+            QStringLiteral("The size of Windows's disk. It can only grow; Windows extends its drive "
+                           "the next time it starts."),
             disk);
     const auto follow_disk = [this, disk] {
         const auto bytes = status_.vm().disk_bytes;
@@ -182,23 +179,24 @@ void SettingsPage::build_machine() {
     follow_disk();
 }
 
+QString SettingsPage::priority_about(const services::PriorityStatus& status) {
+    using Level = services::PriorityStatus::Level;
+    switch (status.wanted) {
+    case Level::High:
+        return QStringLiteral("When the processors are busy the guest and its windows get time "
+                              "ahead of other programs.");
+    case Level::Highest:
+        return QStringLiteral("As High, and the threads that carry the picture run ahead of "
+                              "ordinary threads.");
+    case Level::Normal:
+        break;
+    }
+    return QStringLiteral("The guest shares the processors with other programs like any program.");
+}
+
 QString SettingsPage::priority_note(const services::PriorityStatus& status) {
     using Level = services::PriorityStatus::Level;
     QStringList parts;
-    switch (status.wanted) {
-    case Level::Normal:
-        parts << QStringLiteral("The guest shares the processors with other programs like any "
-                                "program.");
-        break;
-    case Level::High:
-        parts << QStringLiteral("When the processors are busy the guest and its windows get time "
-                                "ahead of other programs.");
-        break;
-    case Level::Highest:
-        parts << QStringLiteral("As High, and the threads that carry the picture run ahead of "
-                                "ordinary threads.");
-        break;
-    }
     if (status.wanted == Level::Normal) {
         if (status.weight_raised) {
             parts << QStringLiteral("The larger share the guest had could not be taken back; it "
@@ -207,8 +205,7 @@ QString SettingsPage::priority_note(const services::PriorityStatus& status) {
         return parts.join(QLatin1Char(' '));
     }
     if (!status.vm_running) {
-        parts << QStringLiteral("In effect once the guest runs.");
-        return parts.join(QLatin1Char(' '));
+        return QStringLiteral("In effect once the guest runs.");
     }
     if (status.weight_refused) {
         parts << QStringLiteral("Not in effect: this session did not let the manager give the "
@@ -240,26 +237,29 @@ QString SettingsPage::priority_note(const services::PriorityStatus& status) {
 }
 
 void SettingsPage::refresh_priority_note() {
-    if (priority_note_ != nullptr) {
-        priority_note_->setText(priority_note(status_.priority()));
+    if (priority_row_.note == nullptr) {
+        return;
     }
+    priority_row_.about->set_text(priority_about(status_.priority()));
+    const QString note = priority_note(status_.priority());
+    priority_row_.note->setText(note);
+    priority_row_.note->setVisible(!note.isEmpty());
 }
 
 void SettingsPage::build_startup() {
     auto* startup = new_group(QStringLiteral("Startup"));
     add_row(startup, K::kAutostart, QStringLiteral("Start the guest when the manager opens"),
-            QStringLiteral("Otherwise it starts the first time you launch an application."),
+            QStringLiteral("Starts Windows as soon as the manager opens. Otherwise it starts the "
+                           "first time you open a Windows application."),
             right_aligned(controls_->toggle(K::kAutostart)));
     add_row(startup, K::kCloseToTray, QStringLiteral("Keep running in the tray when closed"),
-            QStringLiteral("On: closing the window hides it; the manager, its tray icon and the "
-                           "guest keep running. Off: there is no tray icon and closing the window "
-                           "quits the manager."),
+            QStringLiteral("Closing the window keeps the manager and Windows running, with an icon "
+                           "in the tray. When off, closing the window quits the manager."),
             right_aligned(controls_->toggle(K::kCloseToTray)));
     add_row(
         startup, K::kShutGuestOnQuit, QStringLiteral("Shut the guest down when the manager quits"),
-        QStringLiteral("On: quitting asks Windows to shut down and waits up to %1 seconds for "
-                       "it before the manager exits. Off: the guest keeps running without the "
-                       "manager.")
+        QStringLiteral("Quitting the manager shuts Windows down too, waiting up to %1 seconds. "
+                       "When off, Windows keeps running after the manager quits.")
             .arg(std::chrono::duration_cast<std::chrono::seconds>(ManagerExit::kGuestWait).count()),
         right_aligned(controls_->toggle(K::kShutGuestOnQuit)));
 }
@@ -267,24 +267,24 @@ void SettingsPage::build_startup() {
 void SettingsPage::build_desktop() {
     auto* desktop = new_group(QStringLiteral("Desktop integration"));
     add_row(desktop, K::kPublishEntries, QStringLiteral("Put guest applications in your menu"),
-            QStringLiteral("Writes one %1 file per application into %2, with the icon pulled out "
-                           "of the executable.")
-                .arg(mono(QStringLiteral(".desktop")), mono(QStringLiteral("~/.local/share/applications"))),
+            QStringLiteral("Adds each Windows application to your application menu, with its own "
+                           "icon."),
             right_aligned(controls_->toggle(K::kPublishEntries)));
     add_row(desktop, K::kMenuCategory, QStringLiteral("Menu category"),
-            QStringLiteral("The submenu they appear under. Written as a merged menu fragment, which "
-                           "KDE, GNOME and LXQt all honour."),
+            QStringLiteral("The submenu Windows applications appear under in your application "
+                           "menu."),
             controls_->text(K::kMenuCategory));
     add_row(desktop, K::kFileAssociations,
             QStringLiteral("Open Windows file types with these applications"),
-            QStringLiteral("Windows applications open the file types nothing on this machine "
-                           "handles. For the rest, use Make it the default in an application's "
-                           "settings."),
+            QStringLiteral("Files no application on this computer opens are opened by the Windows "
+                           "application that handles them. For other file types, use Make it the "
+                           "default in that application's settings."),
             right_aligned(controls_->toggle(K::kFileAssociations)));
-    auto* clipboard_row =
-        add_row(desktop, K::kShareClipboard, QStringLiteral("Share the clipboard"), QString{},
+    clipboard_row_ =
+        add_row(desktop, K::kShareClipboard, QStringLiteral("Share the clipboard"),
+                QStringLiteral("Text and images copied on this computer paste into Windows "
+                               "applications, and the other way round."),
                 right_aligned(controls_->toggle(K::kShareClipboard)));
-    clipboard_note_ = clipboard_row->findChild<QLabel*>(QStringLiteral("rowDescription"));
     connect(&status_, &services::StatusHub::changed, this, [this](services::StatusHub::Area area) {
         if (area == services::StatusHub::Area::Host) {
             refresh_clipboard_note();
@@ -294,29 +294,27 @@ void SettingsPage::build_desktop() {
     auto* rewrite = Widgets::button(QStringLiteral("Rewrite now"));
     connect(rewrite, &QPushButton::clicked, this, &SettingsPage::rewrite_entries_requested);
     add_row(desktop, QString{}, QStringLiteral("Rewrite the entries"),
-            QStringLiteral("Regenerates every .desktop file and icon. Use it if a launcher is "
-                           "showing a stale name or a missing icon."),
+            QStringLiteral("Recreates every menu entry and icon. Use it when a menu entry shows an "
+                           "old name or a missing icon."),
             right_aligned(rewrite));
 }
 
 void SettingsPage::refresh_clipboard_note() {
-    if (clipboard_note_ == nullptr) {
+    if (clipboard_row_.note == nullptr) {
         return;
     }
     const auto& state = status_.clipboard();
+    QString note;
     if (state.limited) {
-        clipboard_note_->setText(
-            QStringLiteral("This desktop does not let applications follow the clipboard in the "
-                           "background, so only copies made while the manager window is "
-                           "focused reach Windows."));
+        note = QStringLiteral("This desktop does not let applications follow the clipboard in the "
+                              "background, so only copies made while the manager window is "
+                              "focused reach Windows.");
     } else if (state.enabled && !state.working) {
-        clipboard_note_->setText(QStringLiteral(
-            "The clipboard connection to this desktop is down; it reconnects on its own."));
-    } else {
-        clipboard_note_->setText(
-            QStringLiteral("Text and images copied on this machine paste into Windows "
-                           "applications and the desktop view, and the other way round."));
+        note = QStringLiteral("The clipboard connection to this desktop is down; it reconnects on "
+                              "its own.");
     }
+    clipboard_row_.note->setText(note);
+    clipboard_row_.note->setVisible(!note.isEmpty());
 }
 
 void SettingsPage::build_logging() {
@@ -329,20 +327,22 @@ void SettingsPage::build_logging() {
         {QStringLiteral("Error"), QStringLiteral("error")},
     };
     auto* logs = new_group(QStringLiteral("Logging"));
-    add_row(logs, K::kLogManager, QStringLiteral("Manager"), QStringLiteral("How much the manager says."),
+    add_row(logs, K::kLogManager, QStringLiteral("Manager"), QStringLiteral("How much detail the manager writes to its log."),
             controls_->choice(K::kLogManager, levels));
     add_row(logs, QString{}, QStringLiteral("Window mirrors"),
-            QStringLiteral("Applies to mirrors started from now on."),
+            QStringLiteral("How much detail the Windows application windows on this desktop log. "
+                           "Applies to windows opened from now on."),
             controls_->choice(K::kLogMirrors, levels));
     add_row(logs, K::kLogAgent, QStringLiteral("Windows agent"),
-            QStringLiteral("How much the agent in Windows says."),
+            QStringLiteral("How much detail LSW's service inside Windows logs."),
             controls_->choice(K::kLogAgent, levels));
     add_row(logs, QString{}, QStringLiteral("Window mirrors in Windows"),
-            QStringLiteral("Applies to mirrors started from now on."),
+            QStringLiteral("How much detail the Windows side of each application window logs. "
+                           "Applies to windows opened from now on."),
             controls_->choice(K::kLogGuestMirrors, levels));
     add_row(logs, QString{}, QStringLiteral("GPU"),
-            QStringLiteral("The GPU device, DXVK and vkd3d-proton. Applies the next time the "
-                           "guest starts."),
+            QStringLiteral("How much detail the virtual GPU and the Direct3D translation (DXVK, "
+                           "vkd3d-proton) log. Applies the next time Windows starts."),
             controls_->choice(K::kLogGpu, levels));
 
     auto* debug = new QWidget;
@@ -356,7 +356,8 @@ void SettingsPage::build_logging() {
     connect(debug_button_, &QPushButton::clicked, this, [this] { verbosity_.start_debug(); });
     connect(debug_stop_, &QPushButton::clicked, this, [this] { verbosity_.stop_debug(); });
     add_row(logs, QString{}, QStringLiteral("Debug logging"),
-            QStringLiteral("Every part at debug for %1 minutes, then back to the levels above.")
+            QStringLiteral("Logs everything in full detail for %1 minutes, then returns to the levels "
+                           "above. Use it before reporting a problem.")
                 .arg(config::LogVerbosity::kDebugMinutes),
             debug);
 }

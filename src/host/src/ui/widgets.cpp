@@ -1,8 +1,10 @@
 #include "lsw/host/ui/widgets.hpp"
 
+#include "lsw/host/ui/info_tip.hpp"
 #include "lsw/host/ui/theme.hpp"
 
 #include <QFrame>
+#include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
 #include <QStyle>
@@ -29,6 +31,28 @@ QLabel* Widgets::meta(const QString& text, bool wrap) {
     label->setObjectName(QString::fromLatin1(Theme::Role::kMeta));
     label->setWordWrap(wrap);
     return label;
+}
+
+QWidget* Widgets::empty_state(const QString& text, const QString& about) {
+    auto* holder = new QWidget;
+    auto* line = new QHBoxLayout(holder);
+    line->setContentsMargins(0, 0, 0, 0);
+    line->setSpacing(8);
+    line->addWidget(meta(text));
+    line->addWidget(new InfoTip(about));
+    line->addStretch(1);
+    return holder;
+}
+
+QWidget* Widgets::caption_with(const QString& text, const QString& about) {
+    auto* holder = new QWidget;
+    auto* line = new QHBoxLayout(holder);
+    line->setContentsMargins(0, 0, 0, 0);
+    line->setSpacing(6);
+    line->addWidget(caption(text));
+    line->addWidget(new InfoTip(about));
+    line->addStretch(1);
+    return holder;
 }
 
 QLabel* Widgets::prose(const QString& text) {

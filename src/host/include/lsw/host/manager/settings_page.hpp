@@ -19,6 +19,10 @@ class StatusHub;
 struct PriorityStatus;
 }  // namespace lsw::host::services
 
+namespace lsw::host::ui {
+class InfoTip;
+}
+
 namespace lsw::host::manager {
 
 class SettingControls;
@@ -30,6 +34,7 @@ public:
                  services::StatusHub& status, config::LogVerbosity& verbosity,
                  QWidget* parent = nullptr);
 
+    [[nodiscard]] static QString priority_about(const services::PriorityStatus& status);
     [[nodiscard]] static QString priority_note(const services::PriorityStatus& status);
 
 Q_SIGNALS:
@@ -48,17 +53,22 @@ private:
     void refresh_clipboard_note();
     void refresh_priority_note();
 
+    struct Row {
+        ui::InfoTip* about = nullptr;
+        QLabel* note = nullptr;
+    };
+
     QVBoxLayout* new_group(const QString& title);
-    QWidget* add_row(QVBoxLayout* group, const QString& key, const QString& label,
-                     const QString& description, QWidget* control);
+    Row add_row(QVBoxLayout* group, const QString& key, const QString& label, const QString& about,
+                QWidget* control);
 
     config::PendingChanges& pending_;
     services::StatusHub& status_;
     config::LogVerbosity& verbosity_;
     SettingControls* controls_ = nullptr;
 
-    QLabel* priority_note_ = nullptr;
-    QLabel* clipboard_note_ = nullptr;
+    Row priority_row_;
+    Row clipboard_row_;
     QPushButton* debug_button_ = nullptr;
     QPushButton* debug_stop_ = nullptr;
     QTimer debug_clock_;

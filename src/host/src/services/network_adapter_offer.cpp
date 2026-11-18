@@ -36,11 +36,13 @@ bool NetworkAdapterOffer::driver_installed(const GuestUpdateStatus& update) {
 }
 
 void NetworkAdapterOffer::offer() {
-    if (settings_.string_value(K::kNetworkAdapter) != Adapter::kEmulated ||
+    if (settings_.bool_value(K::kNetworkAdapterOffered) ||
+        settings_.string_value(K::kNetworkAdapter) != Adapter::kEmulated ||
         pending_.keys().contains(K::kNetworkAdapter) || !driver_installed(status_.update())) {
         return;
     }
     LSW_INFO("network: Windows has the virtio network driver; the virtio adapter waits for a restart");
+    settings_.set_value(K::kNetworkAdapterOffered, true);
     pending_.stage(K::kNetworkAdapter, QString{Adapter::kVirtio});
 }
 

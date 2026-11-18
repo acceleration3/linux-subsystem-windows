@@ -3,6 +3,7 @@
 #include "lsw/base/log.hpp"
 #include "lsw/host/config/settings.hpp"
 #include "lsw/host/provision/iso/downloader.hpp"
+#include "lsw/host/ui/info_tip.hpp"
 #include "lsw/host/ui/dialog_chrome.hpp"
 #include "lsw/host/ui/format.hpp"
 #include "lsw/host/ui/theme.hpp"
@@ -77,10 +78,11 @@ DownloadImageDialog::DownloadImageDialog(config::Settings& settings, QWidget* pa
     root->addLayout(pickers);
 
     source_status_ =
-        Widgets::meta(QStringLiteral("Asking microsoft.com for the current editions."), true);
+        Widgets::meta(QStringLiteral("Asking microsoft.com…"), true);
     root->addWidget(source_status_);
 
-    root->addWidget(Widgets::caption(QStringLiteral("Save to")));
+    root->addWidget(Widgets::caption_with(QStringLiteral("Save to"),
+                                          QStringLiteral("The download resumes if the connection drops.")));
     auto* out_row = new QHBoxLayout;
     output_dir_ = new QLineEdit(settings_.isos_dir());
     auto* choose = new QPushButton(QStringLiteral("Choose folder"));
@@ -115,7 +117,7 @@ DownloadImageDialog::DownloadImageDialog(config::Settings& settings, QWidget* pa
     root->addStretch(1);
 
     auto* footer = chrome.foot;
-    footer->addWidget(Widgets::meta(QStringLiteral("Resumes if the connection drops."), true), 1);
+    footer->addStretch(1);
     close_button_ = new QPushButton(QStringLiteral("Close"));
     run_button_ = Widgets::button(QStringLiteral("Download"), Theme::Role::kPrimary);
     run_button_->setEnabled(false);

@@ -10,11 +10,10 @@ class FieldStack {
 public:
     explicit FieldStack(QVBoxLayout* into) : into_(into) {}
 
-    void add(const QString& name, QWidget* control);
+    void add(const QString& name, QWidget* control, const QString& about = {});
 
-    void add_note(const QString& text);
-
-    [[nodiscard]] static QVBoxLayout* column(const QString& name, QWidget* control);
+    [[nodiscard]] static QVBoxLayout* column(const QString& name, QWidget* control,
+                                             const QString& about = {});
 
 private:
     QVBoxLayout* into_;

@@ -59,10 +59,11 @@ BridgePicker::BridgePicker(QWidget* parent) : QWidget(parent) {
     column->setContentsMargins(0, 0, 0, 0);
     column->setSpacing(0);
 
-    none_ = Widgets::prose(QStringLiteral(
-        "A bridge is a virtual switch on this computer that puts machines on one of its "
-        "networks. This computer has none: one must exist here before Windows can join it, and "
-        "LSW does not create bridges."));
+    none_ = Widgets::empty_state(
+        QStringLiteral("No bridge on this computer"),
+        QStringLiteral("A bridge is a virtual switch on this computer that puts machines on one "
+                       "of its networks. One must exist here before Windows can join it, and LSW "
+                       "does not create bridges."));
     none_->setContentsMargins(12, 12, 12, 12);
     column->addWidget(none_);
 
@@ -186,7 +187,7 @@ void BridgePicker::rebuild_checks(const HostBridges::Facts& facts, const QString
     }
     if (picked.isEmpty()) {
         checks_box_->addWidget(Widgets::meta(
-            QStringLiteral("Choose a bridge to see whether Windows can join it."), true));
+            QStringLiteral("Pick a bridge to check it"), true));
         return;
     }
     for (const HostBridges::Requirement& line : lines) {
@@ -236,8 +237,7 @@ void BridgePicker::rebuild_checks(const HostBridges::Facts& facts, const QString
                     [](const HostBridges::Requirement& line) { return line.state == State::Met; });
     if (!ready) {
         checks_box_->addWidget(Widgets::meta(
-            QStringLiteral("Until every line is met Windows starts with the shared network only."),
-            true));
+            QStringLiteral("Windows starts on the shared network until every line is met"), true));
     }
 }
 

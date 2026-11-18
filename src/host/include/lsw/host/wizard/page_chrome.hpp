@@ -25,7 +25,7 @@ struct PageChrome {
     QPushButton* next = nullptr;
 
     [[nodiscard]] static PageChrome install(QWizardPage* page, const QString& title,
-                                            const QString& subtitle);
+                                            const QString& about, const QString& subtitle);
 };
 
 }

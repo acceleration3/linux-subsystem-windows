@@ -1,6 +1,7 @@
 #include "lsw/host/ui/panel.hpp"
 
 #include "lsw/host/ui/elided_label.hpp"
+#include "lsw/host/ui/info_tip.hpp"
 #include "lsw/host/ui/theme.hpp"
 #include "lsw/host/ui/widgets.hpp"
 
@@ -27,6 +28,8 @@ Panel Panel::make(const QString& caption) {
     if (!caption.isEmpty()) {
         panel.header->addWidget(Widgets::caption(caption));
     }
+    panel.info = new InfoTip;
+    panel.header->addWidget(panel.info);
 
     auto* body_widget = new QWidget;
     panel.body = new QVBoxLayout(body_widget);
@@ -38,26 +41,41 @@ Panel Panel::make(const QString& caption) {
     return panel;
 }
 
-Panel Panel::area(const QString& name, const QString& caption, bool danger) {
+Panel Panel::area(const QString& name, const QString& about, bool danger) {
     Panel panel = make();
     panel.header->setContentsMargins(12, 8, 12, 8);
     panel.header->setSpacing(10);
     auto* title = new ElidedLabel(name);
     title->setObjectName(QString::fromLatin1(Theme::Role::kCardName));
-    panel.header->addWidget(title);
-    if (!caption.isEmpty()) {
-        auto* cap = new ElidedLabel(caption);
-        cap->setObjectName(QString::fromLatin1(Theme::Role::kMeta));
-        panel.header->addWidget(cap, 1);
-    } else {
-        panel.header->addStretch(1);
-    }
+    panel.header->insertWidget(0, title);
+    panel.explain(about);
+    panel.header->addStretch(1);
     if (danger) {
         Widgets::set_flag(panel.frame, "danger", true);
         Widgets::set_flag(panel.header->parentWidget(), "danger", true);
         Widgets::set_flag(title, "danger", true);
     }
     return panel;
+}
+
+void Panel::show_caption(const QString& data) const {
+    if (data.isEmpty()) {
+        return;
+    }
+    auto* caption = new ElidedLabel(data);
+    caption->setObjectName(QString::fromLatin1(Theme::Role::kMeta));
+    header->insertWidget(1, caption);
+}
+
+void Panel::explain(const QString& text) const {
+    if (text.isEmpty()) {
+        return;
+    }
+    QString sentence = text.left(1).toUpper() + text.mid(1);
+    if (!sentence.endsWith(QLatin1Char('.'))) {
+        sentence += QLatin1Char('.');
+    }
+    info->append(sentence);
 }
 
 void Panel::add_foot(const QString& meta_text) const {

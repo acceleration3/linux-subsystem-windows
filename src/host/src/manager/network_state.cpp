@@ -39,6 +39,7 @@ NetworkState::Live NetworkState::live(const services::VmStatus& vm) {
         }
     }
     out.bridges = vm.running_device->bridges;
+    out.passt = vm.running_device->passt;
     out.guest_ipv4 = vm.guest_ipv4;
     return out;
 }

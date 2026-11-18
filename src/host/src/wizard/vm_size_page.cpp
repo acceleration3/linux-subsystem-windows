@@ -5,6 +5,7 @@
 #include "lsw/host/config/vm_state.hpp"
 #include "lsw/host/provision/install/media_language.hpp"
 #include "lsw/host/services/host_services.hpp"
+#include "lsw/host/ui/info_tip.hpp"
 #include "lsw/host/ui/field_stack.hpp"
 #include "lsw/host/ui/machine_limits.hpp"
 #include "lsw/host/ui/slider_spin.hpp"
@@ -12,6 +13,7 @@
 #include "lsw/host/ui/widgets.hpp"
 #include "lsw/host/wizard/wizard.hpp"
 
+#include <QHBoxLayout>
 #include <QFormLayout>
 #include <QGridLayout>
 #include <QLabel>
@@ -42,8 +44,8 @@ VmSizePage::VmSizePage(Wizard& wizard, QWidget* parent) : WizardPage(parent), wi
 
     auto* body = install_chrome(
         QStringLiteral("Size the machine and name the account"),
-        QStringLiteral("Both are baked into the answer file, so they are set before the "
-                       "installer boots."));
+        QStringLiteral("Windows Setup reads these before it starts. Cores, memory and disk can be "
+                       "changed later in Settings; the account cannot."));
 
     auto* account = new QGridLayout;
     account->setHorizontalSpacing(16);
@@ -101,8 +103,14 @@ VmSizePage::VmSizePage(Wizard& wizard, QWidget* parent) : WizardPage(parent), wi
     sizing->addRow(Widgets::caption(QStringLiteral("Memory")), mem_slider_);
     sizing->addRow(Widgets::caption(QStringLiteral("Disk")), disk_slider_);
 
-    footnote_ = Widgets::meta(QString{}, true);
-    body->addWidget(footnote_);
+    auto* footnote_row = new QHBoxLayout;
+    footnote_row->setSpacing(8);
+    footnote_ = Widgets::meta(QString{});
+    footnote_row->addWidget(footnote_);
+    footnote_row->addWidget(new ui::InfoTip(QStringLiteral("The disk is sparse and grows as the guest "
+                                                           "fills it.")));
+    footnote_row->addStretch(1);
+    body->addLayout(footnote_row);
 
     if (wizard_.services().vms().primary() != nullptr) {
         auto* replaces = new QLabel(QStringLiteral(
@@ -214,8 +222,7 @@ void VmSizePage::on_languages_ready() {
 
 void VmSizePage::refresh_footnote() {
     const qint64 free_gib = wizard_.state().host_free_disk_bytes / (1024LL * 1024 * 1024);
-    footnote_->setText(QStringLiteral("Leaves %1 GiB free on the host. The disk is sparse "
-                                      "and grows as the guest fills it.")
+    footnote_->setText(QStringLiteral("Leaves %1 GiB free on the host")
                            .arg(qMax<qint64>(0, free_gib - disk_slider_->value())));
 }
 
@@ -274,10 +281,10 @@ void VmSizePage::demo_fill() {
 void VmSizePage::show_reading() {
     edition_combo_->clear();
     edition_combo_->setEnabled(false);
-    edition_status_->setText("Reading editions from the ISO (this can take ~10 s)...");
+    edition_status_->setText(QStringLiteral("Reading editions…"));
     language_combo_->clear();
     language_combo_->setEnabled(false);
-    language_status_->setText(QStringLiteral("Reading the languages from the ISO..."));
+    language_status_->setText(QStringLiteral("Reading languages…"));
 }
 
 int VmSizePage::nextId() const {

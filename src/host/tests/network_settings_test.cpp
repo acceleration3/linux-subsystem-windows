@@ -275,6 +275,9 @@ void check_passt(ManagerSettings& settings) {
     const QString emulated = lsw::host::vm::DomainXmlBuilder::build(vm, inputs);
     check(emulated.contains(QStringLiteral("e1000e,netdev=lsw-net")) && !emulated.contains(QStringLiteral("<backend type='passt'/>")),
           "the emulated adapter keeps QEMU's user network");
+    const auto emulated_defined = DomainDescription::parse(emulated);
+    check(defined->passt && emulated_defined.has_value() && !emulated_defined->passt,
+          "a definition says whether Windows's shared network runs on passt");
 
     using lsw::host::services::GuestUpdateStatus;
     using lsw::host::services::NetworkAdapterOffer;
@@ -700,7 +703,7 @@ void check_editor(ManagerSettings& settings) {
     PortForwardEditor editor{settings, pending};
     int changes = 0;
     QObject::connect(&editor, &PortForwardEditor::changed, &editor, [&changes] { ++changes; });
-    check(editor.entries().isEmpty() && shows(editor, QStringLiteral("A forwarded port lets")),
+    check(editor.entries().isEmpty() && shows(editor, QStringLiteral("No port forwarded")),
           "with nothing forwarded it says what a forwarded port is for");
     check(button(editor, QStringLiteral("Sunshine / Moonlight")) != nullptr &&
               button(editor, QStringLiteral("Remote Desktop")) != nullptr &&
@@ -716,7 +719,7 @@ void check_editor(ManagerSettings& settings) {
     check(editor.add({Protocol::Tcp, first, 80, false}).isEmpty(), "adding a forward is accepted");
     check(editor.entries() == QVector<PortForward>{{Protocol::Tcp, first, 80, false}} &&
               shows(editor, QString::number(first)) && shows(editor, QStringLiteral("TCP")) &&
-              !shows(editor, QStringLiteral("A forwarded port lets")),
+              !shows(editor, QStringLiteral("No port forwarded")),
           "and it is listed with its protocol and ports");
     check(editor.state_of({Protocol::Tcp, first, 80, false}) == ForwardState::NextStart &&
               shows(editor, QStringLiteral("Next start")),
@@ -761,8 +764,8 @@ void check_editor(ManagerSettings& settings) {
     check(editor.add({Protocol::Tcp, taken, 443, false}).isEmpty() &&
               editor.state_of({Protocol::Tcp, taken, 443, false}) == ForwardState::PortInUse &&
               shows(editor, QStringLiteral("Port in use")) &&
-              shows(editor, QStringLiteral("already uses TCP port %1").arg(taken)) &&
-              shows(editor, QStringLiteral("Pick another host port")),
+              shows(editor, QStringLiteral("TCP %1 is in use").arg(taken)) &&
+              shows(editor, QStringLiteral("pick another port")),
           "a forward whose host port is taken is added, marked in use, and says what to do");
     squatter.close();
     check(editor.state_of({Protocol::Tcp, taken, 443, false}) == ForwardState::PortInUse,
@@ -855,14 +858,14 @@ void check_editor(ManagerSettings& settings) {
     button(editor, QStringLiteral("Remove its 6 ports"))->click();
     check(editor.entries().isEmpty() &&
               shows(editor, QStringLiteral("Removed the 6 ports of Sunshine / Moonlight.")) &&
-              editor.can_undo() && shows(editor, QStringLiteral("A forwarded port lets")),
+              editor.can_undo() && shows(editor, QStringLiteral("No port forwarded")),
           "removing the set takes its ports and can be undone");
     editor.undo();
     check(editor.entries() == sunshine.ports, "undo brings the set back");
 
     settings.set_value(K::kPortForwards, QString{});
     settle();
-    check(editor.entries().isEmpty() && shows(editor, QStringLiteral("A forwarded port lets")),
+    check(editor.entries().isEmpty() && shows(editor, QStringLiteral("No port forwarded")),
           "a list emptied elsewhere is shown empty");
 }
 

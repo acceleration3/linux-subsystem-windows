@@ -1,5 +1,6 @@
 #include "lsw/host/wizard/page_chrome.hpp"
 
+#include "lsw/host/ui/info_tip.hpp"
 #include "lsw/host/ui/theme.hpp"
 #include "lsw/host/ui/widgets.hpp"
 
@@ -60,7 +61,7 @@ QWidget* build_rail(PageChrome& chrome) {
 
 }
 
-PageChrome PageChrome::install(QWizardPage* page, const QString& title,
+PageChrome PageChrome::install(QWizardPage* page, const QString& title, const QString& about,
                                const QString& subtitle) {
     PageChrome chrome;
     auto* columns = new QHBoxLayout(page);
@@ -83,8 +84,12 @@ PageChrome PageChrome::install(QWizardPage* page, const QString& title,
 
     auto* heading = new QLabel(title);
     heading->setObjectName(QString::fromLatin1(Theme::Role::kWizardTitle));
-    heading->setWordWrap(true);
-    head_layout->addWidget(heading);
+    auto* heading_row = new QHBoxLayout;
+    heading_row->setSpacing(10);
+    heading_row->addWidget(heading);
+    heading_row->addWidget(new ui::InfoTip(about), 0, Qt::AlignVCenter);
+    heading_row->addStretch(1);
+    head_layout->addLayout(heading_row);
 
     auto* sub = new QLabel(subtitle);
     sub->setObjectName(QString::fromLatin1(Theme::Role::kDim));

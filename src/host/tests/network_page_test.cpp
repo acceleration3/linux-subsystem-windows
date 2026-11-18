@@ -12,6 +12,7 @@
 #include "lsw/host/manager/settings_page.hpp"
 #include "lsw/host/services/status_hub.hpp"
 #include "lsw/host/ui/choice_card.hpp"
+#include "lsw/host/ui/info_tip.hpp"
 #include "lsw/host/ui/theme.hpp"
 #include "lsw/host/vm/guest_stats_probe.hpp"
 #include "lsw/host/vm/libvirt_connection.hpp"
@@ -44,6 +45,7 @@ using lsw::host::platform::HostBridges;
 using lsw::host::services::StatusHub;
 using lsw::host::services::VmStatus;
 using lsw::host::ui::ChoiceCard;
+using lsw::host::ui::InfoTip;
 using lsw::host::vm::DomainDescription;
 using K = ManagerSettings::Key;
 using Mode = ManagerSettings::NetworkMode;
@@ -87,6 +89,16 @@ bool shows(QWidget& page, const QString& text) {
     settle();
     for (QLabel* label : page.findChildren<QLabel*>()) {
         if (label->isVisibleTo(&page) && label->text().contains(text)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool explains(QWidget& page, const QString& text) {
+    settle();
+    for (InfoTip* tip : page.findChildren<InfoTip*>()) {
+        if (tip->isVisibleTo(&page) && tip->text().contains(text)) {
             return true;
         }
     }
@@ -199,23 +211,23 @@ int main(int argc, char** argv) {
     if (shared == nullptr || bridged == nullptr || picker == nullptr || forwards == nullptr) {
         return 1;
     }
-    check(shows(page, QStringLiteral("How Windows is connected")) &&
+    check(shows(page, QStringLiteral("Connection")) &&
               shows(page, QStringLiteral("Forwarded ports")),
           "each part has its heading");
     check(shared->selected() && !bridged->selected() && !shared->in_use() && !bridged->in_use() &&
               !shared->waiting() && !bridged->waiting(),
           "untouched and with the guest off, shared is chosen and nothing is in use or waiting");
-    check(shows(page, QStringLiteral("The guest is off")) &&
+    check(shows(page, QStringLiteral("Not connected: the guest is off")) &&
               !shows(page, QStringLiteral("Shared adapter")),
           "with the guest off it says so instead of showing adapters");
     check(!picker->isVisibleTo(&page), "the bridge part is not there while shared is chosen");
-    check(shows(page, QStringLiteral("A forwarded port lets")) &&
+    check(shows(page, QStringLiteral("No port forwarded")) &&
               shows(page, QStringLiteral("no port")),
           "with nothing forwarded it says what a forwarded port is for");
     check(page.summary() ==
               QStringLiteral("Guest off · starts shared with this computer · no port to forward"),
           "the summary says the guest is off and what it starts with");
-    check(shows(page, QStringLiteral("LSW itself uses TCP 5102, 5103, 5445")),
+    check(explains(page, QStringLiteral("LSW itself uses TCP 5102, 5103, 5445")),
           "the ports LSW uses itself are named");
     shoot(page, shots, QStringLiteral("network-1-empty-shared"), 560);
 
@@ -229,11 +241,11 @@ int main(int argc, char** argv) {
     hub.set_vm(running_guest({active}, {}, QStringLiteral("192.0.2.44")));
     check(shared->in_use() && !bridged->in_use() && shared->selected(),
           "with the guest running on the shared network, shared carries In use");
-    check(!shows(page, QStringLiteral("The guest is off")) &&
+    check(!shows(page, QStringLiteral("Not connected: the guest is off")) &&
               shows(page, QStringLiteral("Shared adapter")) &&
               !shows(page, QStringLiteral("Bridged adapter")) &&
               shows(page, QStringLiteral("192.0.2.44")) &&
-              shows(page, QStringLiteral("as Windows reported when it started")),
+              explains(page, QStringLiteral("as Windows reported it when it started")),
           "and the page shows its adapter and the address Windows reported");
     check(page.summary() == QStringLiteral("Shared with this computer · 1 port forwarded"),
           "the summary is what the guest runs with");
@@ -241,8 +253,7 @@ int main(int argc, char** argv) {
               shows(page, QStringLiteral("Active")) && shows(page, QStringLiteral("1 port")),
           "the forward the guest runs with is active");
     hub.set_guest_address(QString{});
-    check(shows(page, QStringLiteral("Windows has not reported one yet")) &&
-              !shows(page, QStringLiteral("192.0.2.44")),
+    check(!shows(page, QStringLiteral("192.0.2.44")),
           "without a reported address it says none was reported");
     hub.set_guest_address(QStringLiteral("192.0.2.44"));
 
@@ -267,21 +278,21 @@ int main(int argc, char** argv) {
               ApplyBar::page_of(K::kCpuCores) == NavRail::Page::Settings,
           "changes to the network count on the Network entry of the rail");
     check(
-        picker->isVisibleTo(&page) && shows(page, QStringLiteral("A bridge is a virtual switch")) &&
-            shows(page, QStringLiteral("one must exist here")) &&
+        picker->isVisibleTo(&page) && shows(page, QStringLiteral("No bridge on this computer")) &&
+            explains(page, QStringLiteral("One must exist here")) &&
             button<QRadioButton>(page, QStringLiteral("Join")) == nullptr,
         "bridged on a computer without a bridge explains what a bridge is and that one must exist");
     shoot(page, shots, QStringLiteral("network-4-bridged-no-bridge"), 700);
 
     host.facts = host_with_bridges();
     page.read_host();
-    check(!shows(page, QStringLiteral("A bridge is a virtual switch")) &&
+    check(!shows(page, QStringLiteral("No bridge on this computer")) &&
               shows(page, QStringLiteral("br-lan")) &&
               shows(page, QStringLiteral("203.0.113.1 · 2 interfaces")) &&
               shows(page, QStringLiteral("no address · no interface")) &&
               shows(page, QStringLiteral("Up")) && shows(page, QStringLiteral("Down")),
           "with bridges it lists each with its state, address and interfaces");
-    check(shows(page, QStringLiteral("Choose a bridge to see")),
+    check(shows(page, QStringLiteral("Pick a bridge to check it")),
           "and asks for a choice before judging one");
     auto* join_lab = button<QRadioButton>(page, QStringLiteral("Join br-lab"));
     check(join_lab != nullptr, "each bridge can be chosen");

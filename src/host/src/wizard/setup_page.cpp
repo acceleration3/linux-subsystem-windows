@@ -41,8 +41,9 @@ SetupPage::SetupPage(Wizard& wizard, QWidget* parent) : PipelinePage(parent), wi
 
     auto* lay = install_chrome(
         QStringLiteral("Finishing setup inside the guest"),
-        QStringLiteral("Reported live by the agent. The display driver is already in: "
-                       "Windows installed it at the end of setup, from the payload."));
+        QStringLiteral("LSW finishes configuring Windows; its graphics driver is already "
+                       "installed. Afterwards Windows restarts on that driver and the manager "
+                       "connects to it again."));
 
     auto* stage_row = new QWidget;
     auto* stage_layout = new QHBoxLayout(stage_row);
@@ -75,10 +76,7 @@ SetupPage::SetupPage(Wizard& wizard, QWidget* parent) : PipelinePage(parent), wi
     progress_->setValue(0);
     lay->addWidget(progress_);
 
-    status_label_ = ui::Widgets::meta(
-        QStringLiteral("Then the VM shuts down, restarts on its own display driver, and the "
-                       "agent reconnects."),
-        true);
+    status_label_ = ui::Widgets::meta(QString{}, true);
     lay->addWidget(status_label_);
 }
 
@@ -144,9 +142,7 @@ void SetupPage::demo_fill() {
     populate_from_plan({stage});
     set_row_status(0, RowStatus::Running, QStringLiteral("Applying registry"));
     progress_->setValue(40);
-    status_label_->setText(QStringLiteral(
-        "Then the VM shuts down, restarts on its own display driver, and the agent "
-        "reconnects."));
+    status_label_->clear();
 }
 
 int SetupPage::nextId() const {

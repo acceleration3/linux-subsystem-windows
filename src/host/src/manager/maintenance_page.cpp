@@ -94,9 +94,10 @@ QString MaintenancePage::summary() const {
 }
 
 void MaintenancePage::build_update() {
-    auto panel = ui::Panel::area(QStringLiteral("LSW in Windows"),
-                                 QStringLiteral("agent, window mirror, GPU driver, loaders, shared "
-                                                "folders"));
+    auto panel = ui::Panel::area(QStringLiteral("LSW software in Windows"),
+                                 QStringLiteral("The software LSW puts inside Windows: the service "
+                                                "the manager talks to, window mirroring, the "
+                                                "graphics driver and shared folder support."));
     pill_ = StatusPill::make(StatusPill::State::Pending, QStringLiteral("Unknown"));
     panel.header->addWidget(pill_);
     update_button_ = Widgets::button(QStringLiteral("Update"));
@@ -113,10 +114,9 @@ void MaintenancePage::build_update() {
     chips_->setContentsMargins(0, 0, 0, 0);
     panel.body->addWidget(chip_row_);
 
-    panel.body->addWidget(Widgets::meta(
-        QStringLiteral("Update replaces every LSW file in Windows and restarts Windows when the "
-                       "driver changes. It runs by itself when the two releases differ."),
-        true));
+    panel.explain(QStringLiteral("Update copies this version of LSW's software into Windows, and "
+                                 "restarts Windows if the graphics driver changed. It runs by itself "
+                                 "when the versions differ."));
     column()->addWidget(panel.frame);
 }
 
@@ -129,31 +129,28 @@ void MaintenancePage::build_tools() {
     auto download = ui::Panel::area(QStringLiteral("Download a Windows image"));
     auto* download_button = Widgets::button(QStringLiteral("Download"));
     connect(download_button, &QPushButton::clicked, this, &MaintenancePage::download_requested);
-    download.body->addWidget(tool_row(
-        QStringLiteral("Fetch an installation ISO from microsoft.com into any folder, for a "
-                       "reinstall or a second edition."),
-        download_button));
+    download.explain(QStringLiteral("Fetch an installation ISO from microsoft.com into any folder, "
+                                    "for a reinstall or a second edition."));
+    download.body->addWidget(download_button, 0, Qt::AlignLeft);
     ui::BrokenMark::apply(download.frame);
     grid->addWidget(download.frame);
 
     auto trim = ui::Panel::area(QStringLiteral("Trim a Windows image"));
     auto* trim_button = Widgets::button(QStringLiteral("Trim"));
     connect(trim_button, &QPushButton::clicked, this, &MaintenancePage::trim_requested);
-    trim.body->addWidget(tool_row(
-        QStringLiteral("Build a smaller install ISO from one you have. Does not touch the running "
-                       "guest."),
-        trim_button));
+    trim.explain(QStringLiteral("Build a smaller install ISO from one you have. Does not touch the "
+                                "running guest."));
+    trim.body->addWidget(trim_button, 0, Qt::AlignLeft);
     grid->addWidget(trim.frame);
     column()->addWidget(pair);
 
     auto danger = ui::Panel::area(QStringLiteral("Reinstall the guest"), {}, true);
     auto* reinstall = Widgets::button(QStringLiteral("Reinstall"), Theme::Role::kStop);
     connect(reinstall, &QPushButton::clicked, this, &MaintenancePage::reinstall_requested);
+    danger.explain(QStringLiteral("Runs the first-run wizard again. Closing the wizard before the "
+                                  "install starts changes nothing."));
     danger.body->addWidget(tool_row(
-        QStringLiteral("Runs the first-run wizard again. Its install replaces the disk, and "
-                       "applications installed in Windows are lost; closing the wizard before the "
-                       "install starts changes nothing."),
-        reinstall));
+        QStringLiteral("Replaces the disk: applications installed in Windows are lost."), reinstall));
     column()->addWidget(danger.frame);
 }
 
@@ -192,18 +189,19 @@ void MaintenancePage::refresh() {
     auto* holder_column = new QVBoxLayout(holder);
     holder_column->setContentsMargins(0, 0, 0, 0);
     ui::KeyValues rows(holder_column);
-    rows.add(QStringLiteral("Windows has"), brief(update.guest_release), nullptr,
-             update.guest_version.isEmpty() ? QString{}
-                                            : QStringLiteral("LSW %1").arg(update.guest_version));
-    rows.add(QStringLiteral("This LSW ships"), brief(update.shipped_release), nullptr,
-             update.shipped_version.isEmpty() ? QString{}
-                                              : QStringLiteral("LSW %1").arg(update.shipped_version));
-    rows.add(QStringLiteral("Last update"), update.finished.isEmpty() ? QStringLiteral("-")
-                                                                      : time_text(update.finished),
-             nullptr,
-             update.finished.isEmpty() ? QStringLiteral("none recorded")
-                                       : (!update.last_ok ? QStringLiteral("failed")
-                                                                        : QStringLiteral("finished")));
+    const auto release = [](const QString& version, const QString& sha) {
+        return version.isEmpty() ? brief(sha) : QStringLiteral("LSW %1 · %2").arg(version, brief(sha));
+    };
+    rows.add(QStringLiteral("Windows has"), release(update.guest_version, update.guest_release));
+    rows.add(QStringLiteral("This LSW ships"), release(update.shipped_version, update.shipped_release));
+    if (update.finished.isEmpty()) {
+        rows.add(QStringLiteral("Last update"), QStringLiteral("-"));
+    } else if (update.last_ok) {
+        rows.add(QStringLiteral("Last update"), time_text(update.finished));
+    } else {
+        rows.add(QStringLiteral("Last update"), time_text(update.finished), Theme::Tone::kBad,
+                 QStringLiteral("Failed"));
+    }
     facts_box_->addWidget(holder);
 
     while (QLayoutItem* item = chips_->takeAt(0)) {

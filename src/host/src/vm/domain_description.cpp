@@ -239,6 +239,8 @@ std::optional<DomainDescription> DomainDescription::parse(const QString& xml) {
             const auto to = attrs.value(QLatin1StringView("to"));
             entry.guest_port = to.isEmpty() ? entry.host_port : to.toInt();
             out.forwards.push_back(entry);
+        } else if (in_interface && name == QLatin1StringView("backend")) {
+            out.passt = out.passt || attrs.value(QLatin1StringView("type")) == QLatin1StringView("passt");
         } else if (in_bridge && name == QLatin1StringView("source")) {
             const QString bridge = attrs.value(QLatin1StringView("bridge")).toString();
             if (!bridge.isEmpty()) {

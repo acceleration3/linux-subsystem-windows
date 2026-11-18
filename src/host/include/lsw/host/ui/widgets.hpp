@@ -19,6 +19,10 @@ public:
 
     [[nodiscard]] static QLabel* prose(const QString& text);
 
+    [[nodiscard]] static QWidget* empty_state(const QString& text, const QString& about);
+
+    [[nodiscard]] static QWidget* caption_with(const QString& text, const QString& about);
+
     [[nodiscard]] static QLabel* step_line(const QString& mark, const QString& text,
                                            const char* tone);
 

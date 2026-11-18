@@ -6,8 +6,10 @@
 #include "lsw/host/manager/bridge_picker.hpp"
 #include "lsw/host/manager/port_forward_editor.hpp"
 #include "lsw/host/manager/setting_controls.hpp"
+#include "lsw/host/services/network_adapter_offer.hpp"
 #include "lsw/host/services/status_hub.hpp"
 #include "lsw/host/ui/choice_card.hpp"
+#include "lsw/host/ui/info_tip.hpp"
 #include "lsw/host/ui/panel.hpp"
 #include "lsw/host/ui/theme.hpp"
 #include "lsw/host/ui/widgets.hpp"
@@ -36,6 +38,7 @@ using ui::Theme;
 using ui::Widgets;
 using K = config::ManagerSettings::Key;
 using Mode = config::ManagerSettings::NetworkMode;
+using Adapter = config::ManagerSettings::NetworkAdapter;
 using Area = services::StatusHub::Area;
 
 }  // namespace
@@ -49,13 +52,19 @@ NetworkPage::NetworkPage(services::StatusHub& status, config::ManagerSettings& s
     : ui::ScrollPage(parent), status_(status), settings_(settings), pending_(pending),
       host_(std::move(host)), controls_(new SettingControls(settings, pending, this)) {
     build_connection();
+    build_adapter();
     build_bridge();
     build_forwards();
     column()->addStretch(1);
 
     controls_->follow(K::kNetworkMode, this, [this] { refresh(); });
     controls_->follow(K::kNetworkBridge, this, [this] { refresh(); });
+    controls_->follow(K::kNetworkAdapter, this, [this] { refresh(); });
     connect(&status_, &services::StatusHub::changed, this, [this](Area area) {
+        if (area == Area::Update) {
+            refresh();
+            return;
+        }
         if (area != Area::Vm) {
             return;
         }
@@ -105,8 +114,9 @@ QString NetworkPage::summary() const {
 }
 
 void NetworkPage::build_connection() {
-    auto panel = ui::Panel::area(QStringLiteral("How Windows is connected"),
-                                 QStringLiteral("the network Windows starts with"));
+    auto panel = ui::Panel::area(QStringLiteral("Connection"),
+                                 QStringLiteral("How Windows reaches the network, and how other "
+                                                "machines reach Windows."));
     panel.header->addWidget(Widgets::tag(true));
 
     auto* cards = new QHBoxLayout;
@@ -127,8 +137,7 @@ void NetworkPage::build_connection() {
     cards->addWidget(bridged_, 1);
     panel.body->addLayout(cards);
 
-    off_ =
-        Widgets::meta(QStringLiteral("The guest is off, so Windows is not connected now."), true);
+    off_ = Widgets::meta(QStringLiteral("Not connected: the guest is off"));
     panel.body->addWidget(off_);
 
     now_ = new QWidget;
@@ -141,8 +150,13 @@ void NetworkPage::build_connection() {
                     Qt::AlignLeft | Qt::AlignVCenter);
     adapters_ = new QLabel;
     grid->addWidget(adapters_, 0, 1);
-    grid->addWidget(Widgets::caption(QStringLiteral("Windows address")), 1, 0,
-                    Qt::AlignLeft | Qt::AlignVCenter);
+    auto* address_key = new QHBoxLayout;
+    address_key->setSpacing(6);
+    address_key->addWidget(Widgets::caption(QStringLiteral("Windows address")));
+    address_key->addWidget(new ui::InfoTip(QStringLiteral("Windows's own network address, as Windows reported it "
+                                                          "when it started.")));
+    address_key->addStretch(1);
+    grid->addLayout(address_key, 1, 0);
     auto* address_row = new QHBoxLayout;
     address_row->setSpacing(10);
     address_ = new QLabel;
@@ -154,10 +168,10 @@ void NetworkPage::build_connection() {
     connect(copy, &QPushButton::clicked, this,
             [this] { QApplication::clipboard()->setText(address_->text()); });
     address_copy_ = copy;
-    address_note_ = Widgets::meta(QString{});
+    address_missing_ = Widgets::meta(QStringLiteral("-"));
     address_row->addWidget(address_);
+    address_row->addWidget(address_missing_);
     address_row->addWidget(copy);
-    address_row->addWidget(address_note_);
     address_row->addStretch(1);
     grid->addLayout(address_row, 1, 1);
     panel.body->addWidget(now_);
@@ -169,9 +183,40 @@ void NetworkPage::build_connection() {
     column()->addWidget(panel.frame);
 }
 
+void NetworkPage::build_adapter() {
+    auto panel = ui::Panel::area(QStringLiteral("Network adapter"),
+                                 QStringLiteral("The virtual network card Windows uses for the shared "
+                                                "connection."));
+    panel.header->addWidget(Widgets::tag(true));
+
+    auto* cards = new QHBoxLayout;
+    cards->setSpacing(10);
+    virtio_ = new ui::ChoiceCard(
+        QStringLiteral("Virtio on passt"),
+        QStringLiteral("The faster network card. Windows needs its virtio network driver, which "
+                       "the guest update installs."));
+    emulated_ = new ui::ChoiceCard(
+        QStringLiteral("Emulated Intel e1000e"),
+        QStringLiteral("An emulated Intel network card that Windows has a driver for out of the box. "
+                       "Slower; Windows Setup always uses it."));
+    connect(virtio_, &ui::ChoiceCard::chosen, this,
+            [this] { controls_->put(K::kNetworkAdapter, QString{Adapter::kVirtio}); });
+    connect(emulated_, &ui::ChoiceCard::chosen, this,
+            [this] { controls_->put(K::kNetworkAdapter, QString{Adapter::kEmulated}); });
+    cards->addWidget(virtio_, 1);
+    cards->addWidget(emulated_, 1);
+    panel.body->addLayout(cards);
+
+    driver_note_ = Widgets::meta(QString{}, true);
+    panel.body->addWidget(driver_note_);
+
+    column()->addWidget(panel.frame);
+}
+
 void NetworkPage::build_bridge() {
     auto panel = ui::Panel::area(QStringLiteral("Bridge"),
-                                 QStringLiteral("the bridge of this computer Windows joins"));
+                                 QStringLiteral("The bridge on this computer that Windows joins when "
+                                                "it is bridged."));
     panel.header->addWidget(Widgets::tag(true));
     panel.body->setContentsMargins(0, 0, 0, 0);
     panel.body->setSpacing(0);
@@ -179,16 +224,16 @@ void NetworkPage::build_bridge() {
     connect(picker_, &BridgePicker::chosen, this,
             [this](const QString& bridge) { controls_->put(K::kNetworkBridge, bridge); });
     panel.body->addWidget(picker_);
-    panel.add_foot(QStringLiteral("LSW changes nothing on this computer: the bridge, QEMU's helper "
-                                  "and its rules are set up outside it."));
+    panel.explain(QStringLiteral("LSW does not create or change bridges. The bridge and QEMU's bridge "
+                                 "helper must be set up on this computer first."));
     bridge_area_ = panel.frame;
     column()->addWidget(panel.frame);
 }
 
 void NetworkPage::build_forwards() {
     auto panel = ui::Panel::area(QStringLiteral("Forwarded ports"),
-                                 QStringLiteral("a port of this computer that leads to a port in "
-                                                "Windows"));
+                                 QStringLiteral("Ports on this computer that lead to ports in "
+                                                "Windows."));
     panel.header->addWidget(Widgets::tag(true));
     forward_count_ = Widgets::meta(QString{});
     panel.header->addWidget(forward_count_);
@@ -208,7 +253,7 @@ void NetworkPage::build_forwards() {
                                "%1, so those cannot be forwarded.")
                     .arg(first);
     }
-    panel.add_foot(foot);
+    panel.explain(foot);
     column()->addWidget(panel.frame);
 }
 
@@ -231,6 +276,7 @@ void NetworkPage::refresh() {
     bridged_->set_waiting(mode_waits && bridged);
 
     refresh_now(live);
+    refresh_adapter(live);
 
     bridge_area_->setVisible(bridged);
     picker_->show_state(facts_, interfaces_, controls_->current(K::kNetworkBridge).toString());
@@ -248,7 +294,9 @@ void NetworkPage::refresh() {
 void NetworkPage::order_tabs() {
     QWidget* previous = address_copy_;
     QWidget::setTabOrder(shared_, bridged_);
-    QWidget::setTabOrder(bridged_, previous);
+    QWidget::setTabOrder(bridged_, virtio_);
+    QWidget::setTabOrder(virtio_, emulated_);
+    QWidget::setTabOrder(emulated_, previous);
     for (QAbstractButton* button : picker_->findChildren<QAbstractButton*>()) {
         if (button->isVisibleTo(picker_)) {
             QWidget::setTabOrder(previous, button);
@@ -260,11 +308,28 @@ void NetworkPage::order_tabs() {
     }
 }
 
+void NetworkPage::refresh_adapter(const NetworkState::Live& live) {
+    const bool virtio = controls_->current(K::kNetworkAdapter).toString() == Adapter::kVirtio;
+    const bool waits = pending_.keys().contains(K::kNetworkAdapter);
+    const bool driver = services::NetworkAdapterOffer::driver_installed(status_.update());
+
+    virtio_->set_selected(virtio);
+    emulated_->set_selected(!virtio);
+    virtio_->set_in_use(live.known && live.passt);
+    emulated_->set_in_use(live.known && !live.passt);
+    virtio_->set_waiting(waits && virtio);
+    emulated_->set_waiting(waits && !virtio);
+    virtio_->setEnabled(driver || virtio);
+    driver_note_->setText(QStringLiteral("Virtio waits for its driver in Windows"));
+    driver_note_->setVisible(!driver);
+}
+
 void NetworkPage::refresh_now(const NetworkState::Live& live) {
     off_->setVisible(!live.running);
     now_->setVisible(live.known);
     if (live.known) {
-        QStringList adapters{QStringLiteral("Shared adapter")};
+        QStringList adapters{live.passt ? QStringLiteral("Shared adapter, virtio-net on passt")
+                                        : QStringLiteral("Shared adapter, emulated e1000e")};
         for (const QString& bridge : live.bridges) {
             adapters << QStringLiteral("Bridged adapter on %1").arg(bridge);
         }
@@ -273,8 +338,7 @@ void NetworkPage::refresh_now(const NetworkState::Live& live) {
         address_->setText(live.guest_ipv4);
         address_->setVisible(reported);
         address_copy_->setVisible(reported);
-        address_note_->setText(reported ? QStringLiteral("as Windows reported when it started")
-                                        : QStringLiteral("Windows has not reported one yet"));
+        address_missing_->setVisible(!reported);
     }
     const bool stored_bridged = settings_.string_value(K::kNetworkMode) == Mode::kBridged;
     const bool refused = live.known && stored_bridged && live.bridges.isEmpty();

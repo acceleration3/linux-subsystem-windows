@@ -15,6 +15,10 @@ class PendingChanges;
 namespace lsw::host::services { class StatusHub; }
 namespace lsw::host::ui { class MonitorSketch; }
 
+namespace lsw::host::ui {
+class InfoTip;
+}
+
 namespace lsw::host::manager {
 
 class ResolutionEditor;
@@ -46,6 +50,7 @@ private:
 
     void build_now();
     void build_resolutions();
+    void build_one_to_one();
     void build_refresh_and_scale();
 
     void refresh_now();
@@ -75,7 +80,7 @@ private:
 
     ui::SegmentedControl* refresh_seg_ = nullptr;
     ui::SegmentedControl* scale_seg_ = nullptr;
-    QLabel* refresh_meta_ = nullptr;
+    ui::InfoTip* refresh_tip_ = nullptr;
     QVector<Rate> hidden_rates_;
 };
 

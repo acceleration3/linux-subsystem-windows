@@ -129,28 +129,26 @@ void ConsolePanel::refresh() {
     QString text;
     bool typing = true;
     if (!agent_online_) {
-        text = tr("Windows is not answering. The console opens when it does.");
+        text = tr("Windows is not answering");
         typing = false;
     } else if (!shown_) {
-        text = tr("Asking Windows which sessions there are.");
+        text = tr("Asking Windows for its sessions…");
         typing = false;
     } else if (shell == nullptr || shell->state == State::Idle) {
-        text = tr("The console opens when this page is shown.");
+        text = QString{};
     } else if (shell->state == State::Opening) {
-        text = tr("Opening cmd.exe in Windows session %1.").arg(*shown_);
+        text = tr("Opening cmd.exe…");
     } else if (shell->state == State::Open) {
-        text = tr("cmd.exe in Windows session %1 as %2%3. Type a command and press Enter.")
-                   .arg(*shown_)
-                   .arg(shell->user.isEmpty() ? tr("an unnamed user") : shell->user,
-                        shell->elevated ? tr(", elevated") : QString{});
+        text = QString{};
     } else if (shell->state == State::Exited) {
-        text = tr("cmd.exe exited (code %1). Press Enter for a new one.").arg(shell->exit_code);
+        text = tr("cmd.exe exited (code %1); Enter opens a new one").arg(shell->exit_code);
     } else if (shell->state == State::Failed) {
-        text = tr("No console: %1. Press Enter to try again.").arg(shell->error);
+        text = tr("No console: %1; Enter tries again").arg(shell->error);
     } else {
-        text = tr("That cmd.exe went with the agent. Press Enter for a new one.");
+        text = tr("cmd.exe went with the agent; Enter opens a new one");
     }
     status_->setText(text);
+    status_->setVisible(!text.isEmpty());
     input_->setEnabled(typing);
     Q_EMIT summary_changed();
 }

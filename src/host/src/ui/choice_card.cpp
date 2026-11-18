@@ -1,5 +1,6 @@
 #include "lsw/host/ui/choice_card.hpp"
 
+#include "lsw/host/ui/info_tip.hpp"
 #include "lsw/host/ui/status_pill.hpp"
 #include "lsw/host/ui/theme.hpp"
 #include "lsw/host/ui/widgets.hpp"
@@ -26,7 +27,7 @@ ChoiceCard::ChoiceCard(const QString& title, const QString& description, QWidget
     grid->setHorizontalSpacing(10);
     grid->setVerticalSpacing(4);
     grid->setColumnStretch(1, 1);
-    grid->setRowStretch(2, 1);
+    grid->setRowStretch(1, 1);
 
     dial_ = new QRadioButton;
     dial_->setAutoExclusive(false);
@@ -39,6 +40,7 @@ ChoiceCard::ChoiceCard(const QString& title, const QString& description, QWidget
     auto* name = new QLabel(title);
     name->setObjectName(QString::fromLatin1(Theme::Role::kCardName));
     head->addWidget(name);
+    head->addWidget(new InfoTip(description));
     in_use_ = StatusPill::make(StatusPill::State::Done, QStringLiteral("In use"));
     in_use_->hide();
     head->addWidget(in_use_);
@@ -47,8 +49,6 @@ ChoiceCard::ChoiceCard(const QString& title, const QString& description, QWidget
     head->addWidget(waiting_);
     head->addStretch(1);
     grid->addLayout(head, 0, 1);
-
-    grid->addWidget(Widgets::prose(description), 1, 1);
 }
 
 void ChoiceCard::set_selected(bool selected) {

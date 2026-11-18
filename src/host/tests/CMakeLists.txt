@@ -395,3 +395,9 @@ add_executable(lsw_host_balloon_policy_test balloon_policy_test.cpp)
 target_link_libraries(lsw_host_balloon_policy_test PRIVATE lsw_host_manager LSW::CompileOptions)
 target_compile_definitions(lsw_host_balloon_policy_test PRIVATE QT_NO_KEYWORDS)
 add_test(NAME lsw_host_balloon_policy_test COMMAND lsw_host_balloon_policy_test)
+
+add_executable(lsw_host_info_tip_test info_tip_test.cpp)
+target_link_libraries(lsw_host_info_tip_test PRIVATE lsw_host_core LSW::CompileOptions)
+add_test(NAME lsw_host_info_tip_test COMMAND lsw_host_info_tip_test)
+set_tests_properties(lsw_host_info_tip_test PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)

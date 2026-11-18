@@ -13,7 +13,8 @@ public:
     [[nodiscard]] const PageChrome& chrome() const noexcept { return chrome_; }
 
 protected:
-    QVBoxLayout* install_chrome(const QString& title, const QString& subtitle);
+    QVBoxLayout* install_chrome(const QString& title, const QString& about,
+                                const QString& subtitle = {});
 
 private:
     PageChrome chrome_;

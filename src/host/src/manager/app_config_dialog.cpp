@@ -94,12 +94,12 @@ AppConfigDialog::AppConfigDialog(apps::AppConfig initial, link::AgentRpcClient& 
     if (store) {
         path_edit_->setReadOnly(true);
         browse->hide();
-        fields.add(QStringLiteral("Store application"), path_row);
-        fields.add_note(QStringLiteral("Windows starts it by this ID; there is no path to change."));
+        fields.add(QStringLiteral("Store application"), path_row,
+                   QStringLiteral("Windows starts it by this ID; there is no path to change."));
     } else {
-        fields.add(QStringLiteral("Path in Windows"), path_row);
-        fields.add_note(QStringLiteral("Browsing opens a file picker that reads the guest, "
-                                       "not this machine."));
+        fields.add(QStringLiteral("Path in Windows"), path_row,
+                   QStringLiteral("Browsing opens a file picker that reads the guest, not this "
+                                  "machine."));
     }
 
     connect(browse, &QPushButton::clicked, this, [this] {
@@ -178,10 +178,10 @@ AppConfigDialog::AppConfigDialog(apps::AppConfig initial, link::AgentRpcClient& 
                                        : QStringLiteral("Needs file types Windows lists for it, and an entry in your menu"));
     found_layout->addWidget(found, 1);
     found_layout->addWidget(make_default_);
-    fields.add(QStringLiteral("Opens these file types"), found_row);
-    fields.add_note(QStringLiteral("Found in Windows. Types nothing on this machine opens start this "
-                                   "application on a double click; Make it the default also does it "
-                                   "for the rest."));
+    fields.add(QStringLiteral("Opens these file types"), found_row,
+               QStringLiteral("Found in Windows. Types nothing on this machine opens start this "
+                              "application on a double click; Make it the default also does it "
+                              "for the rest."));
     connect(make_default_, &QPushButton::clicked, this, [this] { make_default(); });
 
     mime_edit_ = new QLineEdit(cfg_.mime_types.split(QLatin1Char('\n'),

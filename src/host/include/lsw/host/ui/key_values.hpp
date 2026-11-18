@@ -15,7 +15,7 @@ public:
     QHBoxLayout* add(const QString& key, const QString& value, const char* tone = nullptr,
                      const QString& note = {});
 
-    QHBoxLayout* add_widget(const QString& key, QWidget* value);
+    QHBoxLayout* add_widget(const QString& key, QWidget* value, const QString& about = {});
 
 private:
     QGridLayout* grid_;

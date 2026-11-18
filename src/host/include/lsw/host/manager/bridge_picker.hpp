@@ -38,7 +38,7 @@ private:
                       const QString& picked);
     void rebuild_checks(const platform::HostBridges::Facts& facts, const QString& picked);
 
-    QLabel* none_ = nullptr;
+    QWidget* none_ = nullptr;
     ui::ItemList* list_ = nullptr;
     QFrame* rule_ = nullptr;
     QWidget* checks_ = nullptr;

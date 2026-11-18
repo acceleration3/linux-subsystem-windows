@@ -53,6 +53,7 @@ public:
         static constexpr QLatin1StringView kNetworkBridge{"network/bridge"};
         static constexpr QLatin1StringView kPortForwards{"network/forwards"};
         static constexpr QLatin1StringView kNetworkAdapter{"network/adapter"};
+        static constexpr QLatin1StringView kNetworkAdapterOffered{"network/adapter_offered"};
         static constexpr QLatin1StringView kAutostart{"guest/autostart"};
         static constexpr QLatin1StringView kCloseToTray{"host/close_to_tray"};
         static constexpr QLatin1StringView kShutGuestOnQuit{"host/shut_guest_on_quit"};

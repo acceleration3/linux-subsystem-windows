@@ -40,6 +40,7 @@ struct DomainDescription {
     QVector<UsbDevice> usb_devices;
     QVector<config::PortForward> forwards;
     QStringList bridges;
+    bool passt = false;
 
     [[nodiscard]] const GpuDevice* display() const noexcept;
 

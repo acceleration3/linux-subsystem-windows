@@ -30,8 +30,8 @@ PayloadPage::PayloadPage(Wizard& wizard, QWidget* parent)
 
     auto* lay = install_chrome(
         QStringLiteral("Building the install payload"),
-        QStringLiteral("The answer file, the guest binaries and the GPU driver Windows "
-                       "installs before the first logon."));
+        QStringLiteral("A disc with the answers Windows Setup reads, and the LSW software and "
+                       "drivers Windows installs before you first sign in."));
     table_ = new QTableWidget(2, 3);
     ui::Theme::rows_table(
         table_,

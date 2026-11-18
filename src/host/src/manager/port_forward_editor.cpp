@@ -224,9 +224,11 @@ void PortForwardEditor::build_table(QVBoxLayout* column) {
     rows_box_->setSpacing(0);
     column->addWidget(rows_);
 
-    empty_ = Widgets::prose(QStringLiteral(
-        "A forwarded port lets a program on this computer, or another machine, reach a server "
-        "that runs in Windows. Pick a set above or add a port here."));
+    empty_ = Widgets::empty_state(
+        QStringLiteral("No port forwarded"),
+        QStringLiteral("A forwarded port lets a program on this computer, or another machine, "
+                       "reach a server that runs in Windows. Pick a set above or add a port "
+                       "here."));
     empty_->setContentsMargins(kSide, 10, kSide, 10);
     column->addWidget(empty_);
     column->addWidget(Widgets::separator());
@@ -523,8 +525,7 @@ QWidget* PortForwardEditor::row_for(const PortForward& entry, ForwardState state
 
     if (state == ForwardState::PortInUse) {
         auto* note = Widgets::meta(
-            QStringLiteral("Something else on this computer already uses %1 port %2, so the "
-                           "guest would not start. Pick another host port.")
+            QStringLiteral("%1 %2 is in use on this computer; pick another port or the guest will not start")
                 .arg(PortForwards::protocol_name(entry.protocol))
                 .arg(entry.host_port),
             true);

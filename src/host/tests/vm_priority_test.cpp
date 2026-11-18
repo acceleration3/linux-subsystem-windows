@@ -623,8 +623,8 @@ void answers_may_come_late(ManagerSettings& settings) {
 
 void the_caption_shows_only_what_holds() {
     PriorityStatus status;
-    check(!SettingsPage::priority_note(status).contains(QStringLiteral("Not in effect")) &&
-              SettingsPage::priority_note(status).contains(QStringLiteral("like any program")),
+    check(SettingsPage::priority_note(status).isEmpty() &&
+              SettingsPage::priority_about(status).contains(QStringLiteral("like any program")),
           "Normal reads as nothing changed");
     status.wanted = Level::High;
     status.vm_running = true;

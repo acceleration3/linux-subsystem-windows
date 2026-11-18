@@ -67,6 +67,7 @@ const QHash<QString, QVariant>& defaults() {
         {K::kNetworkBridge, QString{}},
         {K::kPortForwards, QString{}},
         {K::kNetworkAdapter, QString{ManagerSettings::NetworkAdapter::kEmulated}},
+        {K::kNetworkAdapterOffered, false},
 
         {K::kAutostart, false},
 

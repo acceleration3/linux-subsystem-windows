@@ -60,11 +60,14 @@ UsbPage::UsbPage(services::StatusHub& status, services::UsbPassthrough& usb, QWi
     root->addWidget(scroll, 1);
     auto* column = scroll->column();
 
-    guest_ = make_section(QStringLiteral("In Windows"),
-                          QStringLiteral("gone from this machine until you return it"));
-    host_ = make_section(QStringLiteral("On this machine"), QStringLiteral("plugged in now"));
+    guest_ = make_section(QStringLiteral("Passed to Windows"),
+                          QStringLiteral("Devices Windows has now. This computer cannot use them "
+                                         "until you return them."));
+    host_ = make_section(QStringLiteral("Plugged into this computer"),
+                         QStringLiteral("Devices you can pass to Windows."));
     remembered_ = make_section(
-        QStringLiteral("Remembered"), QStringLiteral("not plugged in"),
+        QStringLiteral("Always passed to Windows"),
+        QStringLiteral("Remembered devices that are not plugged in now."),
         QStringLiteral("Always passes a device to Windows whenever it is plugged in and the guest "
                        "is running."));
     column->addWidget(guest_.frame);
@@ -102,7 +105,7 @@ UsbPage::Section UsbPage::make_section(const QString& name, const QString& capti
     section.list = new ui::ItemList;
     panel.body->addWidget(section.list);
     if (!foot.isEmpty()) {
-        panel.add_foot(foot);
+        panel.explain(foot);
     }
     return section;
 }

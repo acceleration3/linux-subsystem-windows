@@ -91,7 +91,7 @@ private:
 
     QWidget* rows_ = nullptr;
     QVBoxLayout* rows_box_ = nullptr;
-    QLabel* empty_ = nullptr;
+    QWidget* empty_ = nullptr;
     QComboBox* protocol_ = nullptr;
     QLineEdit* host_port_ = nullptr;
     QLineEdit* guest_port_ = nullptr;

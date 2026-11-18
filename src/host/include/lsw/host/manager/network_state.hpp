@@ -23,6 +23,7 @@ public:
         QVector<config::PortForward> forwards;
         QStringList bridges;
         QString guest_ipv4;
+        bool passt = false;
 
         [[nodiscard]] bool operator==(const Live&) const = default;
     };

@@ -16,8 +16,12 @@ namespace lsw::host::wizard {
 
 DonePage::DonePage(Wizard& wizard, QWidget* parent) : WizardPage(parent), wizard_(wizard) {
 
-    auto* lay = install_chrome(QStringLiteral("Installation finished"),
-                               QStringLiteral("The guest agent is online. The VM is ready."));
+    auto* lay = install_chrome(
+        QStringLiteral("Installation finished"),
+        QStringLiteral("The manager lists the applications installed in Windows. Open one and its "
+                       "window appears on your desktop, drawn by this computer's GPU. Install more "
+                       "Windows software from inside Windows."),
+                               QStringLiteral("Windows is running and ready."));
     auto* grid = new QGridLayout;
     grid->setSpacing(8);
     const auto tile = [](const QString& key, const QString& value, QLabel** value_out) {
@@ -45,14 +49,6 @@ DonePage::DonePage(Wizard& wizard, QWidget* parent) : WizardPage(parent), wizard
             &DonePage::show_guest);
     lay->addLayout(grid);
 
-    auto* body = new QLabel(
-        QStringLiteral("The manager lists the applications found inside the guest. "
-                       "Double click one and its window opens on your desktop, drawn on "
-                       "this machine's GPU through the guest's accel-virt adapter. "
-                       "Installing more Windows software is done from inside the guest."));
-    body->setObjectName(QString::fromLatin1(ui::Theme::Role::kDim));
-    body->setWordWrap(true);
-    lay->addWidget(body);
     lay->addStretch(1);
 }
 
@@ -63,7 +59,7 @@ void DonePage::initializePage() {
         chrome().subtitle->setText(state.failure);
     } else {
         chrome().title->setText(QStringLiteral("Installation finished"));
-        chrome().subtitle->setText(QStringLiteral("The guest agent is online. The VM is ready."));
+        chrome().subtitle->setText(QStringLiteral("Windows is running and ready."));
     }
     chrome().subtitle->setVisible(true);
     auto& services = wizard_.services();

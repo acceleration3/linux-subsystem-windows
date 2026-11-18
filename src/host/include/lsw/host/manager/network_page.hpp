@@ -55,10 +55,12 @@ protected:
 
 private:
     void build_connection();
+    void build_adapter();
     void build_bridge();
     void build_forwards();
     void refresh();
     void refresh_now(const NetworkState::Live& live);
+    void refresh_adapter(const NetworkState::Live& live);
     void choose_mode(const QString& mode);
     void order_tabs();
     [[nodiscard]] int waiting() const;
@@ -79,8 +81,12 @@ private:
     QLabel* adapters_ = nullptr;
     QLabel* address_ = nullptr;
     QWidget* address_copy_ = nullptr;
-    QLabel* address_note_ = nullptr;
+    QLabel* address_missing_ = nullptr;
     QLabel* not_bridged_ = nullptr;
+
+    ui::ChoiceCard* virtio_ = nullptr;
+    ui::ChoiceCard* emulated_ = nullptr;
+    QLabel* driver_note_ = nullptr;
 
     QFrame* bridge_area_ = nullptr;
     BridgePicker* picker_ = nullptr;

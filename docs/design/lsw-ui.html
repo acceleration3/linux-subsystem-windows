@@ -775,6 +775,13 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
 .block ul b{color:var(--page-fg);font-weight:500}
 .specimen{background:var(--ink);border-radius:var(--r-md);padding:18px;display:flex;
   flex-wrap:wrap;gap:10px;align-items:center;border:1px solid #000}
+
+.info{display:inline-grid;place-items:center;width:15px;height:15px;border:1.2px solid var(--fg-faint);border-radius:50%;
+  font:700 10px/1 "Inter",sans-serif;color:var(--fg-faint);cursor:help;vertical-align:middle;flex:none}
+.info:hover,.info:focus{color:var(--fg);border-color:var(--fg);outline:none}
+.info .tip{display:none}
+#infotip{position:fixed;z-index:1000;max-width:480px;padding:8px 11px;background:#1c212c;color:#e4e8f0;
+  border:1px solid #272d3a;border-radius:6px;font-size:13px;line-height:1.45;text-wrap:balance;pointer-events:none;display:none}
 </style>
 
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
@@ -1114,7 +1121,7 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
 
             <div class="area">
               <header>
-                <span class="nm">Host APIs</span>
+                <span class="nm">Graphics APIs</span>
                 <span class="cap">served on every adapter</span>
               </header>
               <div class="in">
@@ -1134,16 +1141,16 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
 
             <div class="area">
               <header>
-                <span class="nm">Device</span>
+                <span class="nm">Guest GPU device</span>
                 <span class="cap">virtio-gpu-av-pci</span>
               </header>
               <div class="in">
                 <dl class="kv">
-                  <dt>Host window</dt><dd style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="input select sm" style="width:92px">8 GiB</span><span class="tagr">restart</span><span class="meta" style="margin:0">write-back, used on demand</span></dd>
-                  <dt>VRAM kept for the host</dt><dd style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="input select sm" style="width:92px">Auto</span><span class="tagr">restart</span><span class="meta" style="margin:0">Auto or a size; applies at the next VM start</span></dd>
-                  <dt>Guest VRAM cap</dt><dd>14.0 GiB of 16.0 GiB <span class="meta">what is left for the guest</span></dd>
-                  <dt>Display</dt><dd>2560 &times; 1440 at 360 Hz <span class="meta">set on the Display page</span></dd>
-                  <dt>Adapters</dt><dd>1 <span class="meta">the display; a render-only one after a restart</span></dd>
+                  <dt>Host window <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">Memory on this computer that Windows reads and writes directly for GPU data, such as textures it uploads and results it reads back, with no copy in between.<br><br><b>What fills it.</b> Each piece is allocated by this computer's GPU driver, from the GPU's own memory (VRAM) or from system RAM, and placed in the window when Windows asks for it.<br><br><b>VRAM or RAM.</b> Data Windows writes for the GPU goes to VRAM the processor can reach (all of it with Resizable BAR, a small part without), write-combined; if that is full, to uncached system RAM. Data Windows reads back goes to cached (write-back) system RAM, which the processor reads quickly. Vulkan applications get the kind of memory they ask for. System RAM counts against the memory LSW lets the guest's GPU use.<br><br><b>The size.</b> Memory is only taken as pieces are needed; this sets the most. When the window is full, new buffers are placed in Windows's own memory instead.</span></span></dt><dd style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="input select sm" style="width:92px">8 GiB</span><span class="tagr">restart</span></dd>
+                  <dt>VRAM kept for the host <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">Memory on each GPU that Windows may not use, so this computer's desktop and applications keep room. Auto picks an amount from the GPU's size.</span></span></dt><dd style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="input select sm" style="width:92px">Auto</span><span class="tagr">restart</span></dd>
+                  <dt>Guest VRAM cap <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">The most memory Windows can use on each GPU: its total minus what is kept for this computer.</span></span></dt><dd>14.0 GiB of 16.0 GiB</dd>
+                  <dt>Display <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">The resolution and refresh rate Windows is using. Change them on the Display page.</span></span></dt><dd>2560 &times; 1440 at 360 Hz</dd>
+                  <dt>Adapters</dt><dd><span style="color:var(--amber)">Display only</span> <span class="meta">1 display, 1 render only after a restart</span></dd>
                 </dl>
               </div>
             </div>
@@ -1235,18 +1242,18 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
               </header>
               <div class="in">
                 <dl class="kv">
-                  <dt>RX 9070 XT</dt><dd><span class="yes">Running</span> <span class="meta">no problem code</span></dd>
-                  <dt>Test signing</dt><dd><span class="yes">On</span> <span class="meta">the driver needs it</span></dd>
-                  <dt>Driver search</dt><dd><span class="yes">Off</span> <span class="meta">Update cannot replace it</span></dd>
-                  <dt>Display path</dt><dd><span class="yes">Classic</span> <span class="meta">DisplayCore off</span></dd>
-                  <dt>Submission</dt><dd>User mode <span class="meta">native fences on</span></dd>
+                  <dt>RX 9070 XT <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">Whether Windows is running LSW's graphics driver for this GPU. Without it, Windows applications cannot use the GPU.</span></span></dt><dd><span class="yes">Running</span></dd>
+                  <dt>Test signing <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">LSW's graphics driver is test-signed, so Windows has to allow test-signed drivers.</span></span></dt><dd><span class="yes">On</span></dd>
+                  <dt>Driver search <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">Windows Update must not look for display drivers, or it may replace LSW's graphics driver with its own.</span></span></dt><dd><span class="yes">Off</span></dd>
+                  <dt>Display path <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">Windows has two ways of driving a display. The newer one, DisplayCore, turns LSW's display off, so the guest update disables it.</span></span></dt><dd><span class="yes">Classic</span></dd>
+                  <dt>Submission <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">How Windows sends GPU work to this computer. User mode sends it straight from the application; Kernel goes through Windows first.</span></span></dt><dd>User mode &middot; native fences</dd>
                 </dl>
               </div>
             </div>
 
             <div class="area">
               <header>
-                <span class="nm">Host window</span>
+                <span class="nm">Host window</span> <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">How much of the host window Windows is using: memory on this computer that Windows reads and writes directly for GPU data. Write-back is cached system RAM, used for data Windows reads back; write-combined is VRAM or uncached RAM, used for data Windows writes for the GPU. The dashed line is the window's size, set on the Graphics page.</span></span>
                 <span class="cap">last 10 minutes</span>
               </header>
               <div class="in">
@@ -1267,21 +1274,19 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
 
             <div class="area">
               <header>
-                <span class="nm">Guest VRAM</span>
-                <span class="cap">from the executor</span>
+                <span class="nm">Guest VRAM</span> <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">How much of each GPU's memory Windows may use, and how much is kept free for this computer's own desktop and applications.</span></span>
               </header>
               <div class="in">
                 <dl class="kv">
-                  <dt>Guest VRAM cap</dt><dd>14.0 GiB <span class="meta">the most GPU memory the guest may use</span></dd>
-                  <dt>Kept for the host</dt><dd>2.0 GiB <span class="meta">the reserve in effect; - when the executor has not reported</span></dd>
+                  <dt>Guest VRAM cap <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">The most memory Windows can use on this GPU.</span></span></dt><dd>14.0 GiB</dd>
+                  <dt>Kept for the host <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">Memory on this GPU kept free for this computer. Set on the Graphics page.</span></span></dt><dd>2.0 GiB</dd>
                 </dl>
               </div>
             </div>
 
             <div class="area">
               <header>
-                <span class="nm">Apps</span>
-                <span class="cap">totals and recent rate, click a header to sort</span>
+                <span class="nm">Applications using the GPU</span> <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">Each Windows application that draws with the GPU: its totals since it started and its recent rate. Click a column header to sort.</span></span>
               </header>
               <div class="in tbl-scroll">
                 <table class="tbl tight">
@@ -1398,8 +1403,7 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
           <div class="areas" style="flex:1">
             <div class="area">
               <header>
-                <span class="nm">What Windows shows</span>
-                <span class="cap">read from the running device</span>
+                <span class="nm">Current display mode</span> <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">The resolution, refresh rate and scale Windows is using right now, as the guest's display device reports them.</span></span>
                 <span class="right"><span class="pill done">Live</span></span>
               </header>
               <div class="in">
@@ -1409,10 +1413,10 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
                     <i class="stand"></i><i class="base"></i>
                   </div>
                   <dl class="kv">
-                    <dt>Resolution</dt><dd>2560 &times; 1440 <span class="meta">the preferred one of 3 offered</span></dd>
-                    <dt>Refresh</dt><dd>360 Hz <span class="meta">same as the monitor this window is on</span></dd>
-                    <dt>Scale</dt><dd>125 % <span class="meta">matching this desktop, 1.25</span></dd>
-                    <dt>This window</dt><dd>DP-2 <span class="meta">2560 &times; 1440 at 360 Hz, scale 1.25</span></dd>
+                    <dt>Resolution <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">The preferred one of the 3 the guest's monitor offers.</span></span></dt><dd>2560 &times; 1440</dd>
+                    <dt>Refresh <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">Follows the monitor this window is on.</span></span></dt><dd>360 Hz</dd>
+                    <dt>Scale <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">Matches this desktop, now 1.25.</span></span></dt><dd>125 %</dd>
+                    <dt>Manager's monitor <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">The monitor this manager window is on: its name, size, refresh rate and scale. Same as monitor and Match this desktop follow it.</span></span></dt><dd>DP-2 &middot; 2560 &times; 1440 &middot; 360 Hz &middot; scale 1.25</dd>
                   </dl>
                 </div>
               </div>
@@ -1420,14 +1424,12 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
 
             <div class="area">
               <header>
-                <span class="nm">Resolutions</span>
-                <span class="cap">what the guest's monitor offers Windows</span>
+                <span class="nm">Resolutions</span> <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">The sizes the guest's virtual monitor offers Windows to choose from.<br><br>Windows uses the preferred size, and no window can be larger. Sizes from 100 &times; 100 to 8192 &times; 8192. Changes reach Windows at once.<br><br>With the host monitors' own modes the list is kept for when you switch back.</span></span>
                 <span class="right"><span class="tagr live">now</span></span>
               </header>
               <div class="in">
                 <span class="seg"><button class="on">This list</button><button>The host monitors' own modes</button></span>
-                <span class="tline"><span class="toggle"><i></i></span> Put the size of the monitor this window is on first, and follow it to another monitor</span>
-                <span class="tline"><span class="toggle"><i></i></span> 1:1 desktop: while the desktop window is open, Windows uses exactly its size in pixels and follows it when it is resized; closing it brings these resolutions back</span>
+                <span class="tline"><span class="toggle"><i></i></span> Follow this window's monitor <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">Makes the size of the monitor this manager window is on the preferred one, and follows the window when it moves to another monitor.</span></span></span>
                 <div class="editlist">
                   <table>
                     <thead>
@@ -1462,14 +1464,22 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
                     <button class="btn" style="white-space:nowrap">Add a resolution</button>
                   </div>
                 </div>
-                <span class="meta">Windows uses the preferred size, and it is the largest a maximised application window can be. Any size from 100 &times; 100 to 8192 &times; 8192; a change reaches Windows at once, as if a monitor were replugged.</span>
               </div>
             </div>
 
             <div class="area">
               <header>
-                <span class="nm">Refresh and scale</span>
-                <span class="cap">Windows switches at once, no restart</span>
+                <span class="nm">Desktop mirroring</span> <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">While the desktop window is open, Windows uses exactly its size in pixels and follows it when it is resized. Closing it brings these resolutions back.</span></span>
+                <span class="right"><span class="tagr live">now</span></span>
+              </header>
+              <div class="in">
+                <span class="tline"><span class="toggle"><i></i></span> Match the desktop window in pixels</span>
+              </div>
+            </div>
+
+            <div class="area">
+              <header>
+                <span class="nm">Refresh and scale</span> <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">How often Windows redraws, and how large it draws text and controls. Changes apply at once.<br><br>Same as monitor and Match this desktop follow the screen this window is on. A higher rate is more GPU work on the host; 240 Hz is DP-2 only. The scale is the nearest step Windows has, and mirrored windows stay one guest pixel to one screen pixel.</span></span>
                 <span class="right"><span class="tagr live">now</span></span>
               </header>
               <div class="in">
@@ -1477,7 +1487,6 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
                   <dt>Refresh</dt><dd><span class="seg"><button class="on">Same as monitor<span class="o">360 Hz</span></button><button>360 Hz</button><button>240 Hz</button><button>144 Hz</button><button>120 Hz</button><button>60 Hz</button></span></dd>
                   <dt>Scale</dt><dd><span class="seg"><button class="on">Match this desktop<span class="o">125 %</span></button><button>100 %</button><button>125 %</button><button>150 %</button><button>175 %</button><button>200 %</button></span></dd>
                 </dl>
-                <span class="meta">Same as monitor and Match this desktop follow the screen this window is on. A higher rate is more GPU work on the host; 240 Hz is DP-2 only. The scale is the nearest step Windows has, and mirrored windows stay one guest pixel to one screen pixel.</span>
               </div>
             </div>
           </div>
@@ -1502,17 +1511,15 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
       <div class="areas" style="background:var(--ink)">
         <div class="area">
           <header>
-            <span class="nm">Resolutions</span>
-            <span class="cap">what the guest's monitor offers Windows</span>
+            <span class="nm">Resolutions</span> <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">The sizes the guest's virtual monitor offers Windows to choose from.<br><br>With the host monitors' own modes the list is kept for when you switch back.</span></span>
             <span class="right"><span class="tagr live">now</span></span>
           </header>
           <div class="in">
             <span class="seg"><button>This list</button><button class="on">The host monitors' own modes</button></span>
             <dl class="kv">
-              <dt>DP-2</dt><dd>2560 &times; 1440 <span class="meta">preferred, the largest monitor's best mode</span></dd>
+              <dt>DP-2 <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">Preferred: the largest monitor's best mode.</span></span></dt><dd>2560 &times; 1440</dd>
               <dt>HDMI-A-1</dt><dd>1920 &times; 1080</dd>
             </dl>
-            <span class="meta">The list is kept for when you switch back.</span>
           </div>
         </div>
       </div>
@@ -1552,8 +1559,7 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
           <div class="areas" style="flex:1">
             <div class="area">
               <header>
-                <span class="nm">Folders Windows can see</span>
-                <span class="cap">a drive letter each</span>
+                <span class="nm">Shared folders</span> <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">Folders on this computer that Windows sees as drives, one drive letter each.<br><br>Windows sees each folder as a drive of its own. Adding or removing a folder takes effect when Windows restarts.</span></span>
                 <span class="right"><span class="tagr">restart</span><span class="meta">3 of 23 letters</span><button class="btn">Add a folder</button></span>
               </header>
               <div class="rows">
@@ -1588,13 +1594,12 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
                   </span>
                 </div>
               </div>
-              <div class="foot"><span class="meta">Each folder is a virtiofs device on the machine, mounted in Windows with WinFsp - Windows File System Proxy, Copyright (C) Bill Zissimopoulos (github.com/winfsp/winfsp). Changes to this list wait for the next restart.</span></div>
+              <div class="foot"><span class="meta">WinFsp - Windows File System Proxy, Copyright (C) Bill Zissimopoulos (github.com/winfsp/winfsp)</span></div>
             </div>
 
             <div class="area">
               <header>
-                <span class="nm">Windows in your file manager</span>
-                <span class="cap">SMB, served in userspace</span>
+                <span class="nm">Windows disk on this computer</span> <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">Windows shares its disk over SMB so this computer's file manager can open it.<br><br>The bookmarks add a Windows entry to your file manager's sidebar. Nothing is mounted on this computer.</span></span>
                 <span class="right"><span class="pill done">Serving</span><span class="toggle on"><i></i></span></span>
               </header>
               <div class="in">
@@ -1606,7 +1611,6 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
                     <span class="tline"><span class="toggle on"><i></i></span> GNOME Files and Thunar</span>
                   </dd>
                 </dl>
-                <span class="meta">A Places entry titled Windows. Nothing is mounted, so Windows junctions never turn into extra mounts.</span>
               </div>
             </div>
           </div>
@@ -1661,8 +1665,7 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
           <div class="areas" style="flex:1">
             <div class="area">
               <header>
-                <span class="nm">In Windows</span>
-                <span class="cap">gone from this machine until you return it</span>
+                <span class="nm">Passed to Windows</span> <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">Devices Windows has now. This computer cannot use them until you return them.</span></span>
               </header>
               <div class="rows">
                 <div class="drow">
@@ -1686,8 +1689,7 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
 
             <div class="area">
               <header>
-                <span class="nm">On this machine</span>
-                <span class="cap">plugged in now</span>
+                <span class="nm">Plugged into this computer</span> <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">Devices you can pass to Windows.</span></span>
               </header>
               <div class="rows">
                 <div class="drow">
@@ -1727,8 +1729,7 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
 
             <div class="area">
               <header>
-                <span class="nm">Remembered</span>
-                <span class="cap">not plugged in</span>
+                <span class="nm">Always passed to Windows</span> <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">Remembered devices that are not plugged in now.<br><br>Always passes a device to Windows whenever it is plugged in and the guest is running.</span></span>
               </header>
               <div class="rows">
                 <div class="drow off">
@@ -1740,7 +1741,6 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
                   </span>
                 </div>
               </div>
-              <div class="foot"><span class="meta">Always passes a device to Windows whenever it is plugged in and the guest is running.</span></div>
             </div>
           </div>
         </div>
@@ -1761,7 +1761,7 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
         </div>
         <div class="areas">
           <div class="area">
-            <header><span class="nm">On this machine</span><span class="cap">plugged in now</span></header>
+            <header><span class="nm">Plugged into this computer</span> <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">Devices you can pass to Windows.</span></span></header>
             <div class="rows">
                 <div class="drow">
                   <span class="ic"><svg class="ico"><use href="#i-usb"/></svg></span>
@@ -1810,8 +1810,7 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
           <div class="areas" style="flex:1">
             <div class="area">
               <header>
-                <span class="nm">How Windows is connected</span>
-                <span class="cap">the network Windows starts with</span>
+                <span class="nm">Connection</span> <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">How Windows reaches the network, and how other machines reach Windows.</span></span>
                 <span class="right"><span class="tagr">restart</span></span>
               </header>
               <div class="in">
@@ -1819,29 +1818,49 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
                   <div class="opt" role="radio" aria-checked="false" tabindex="0">
                     <span class="dial"></span>
                     <span>
-                      <span class="t">Shared with this computer <span class="pill done">In use</span></span>
-                      <span class="d">Windows reaches the network through this computer. Other machines reach Windows only through the forwarded ports.</span>
+                      <span class="t">Shared with this computer <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">Windows reaches the network through this computer. Other machines reach Windows only through the forwarded ports.</span></span> <span class="pill done">In use</span></span>
                     </span>
                   </div>
                   <div class="opt" role="radio" aria-checked="true" tabindex="0">
                     <span class="dial"></span>
                     <span>
-                      <span class="t">Bridged to a host bridge <span class="tagr">restart</span></span>
-                      <span class="d">Windows appears on the network as a machine of its own, with its own address.</span>
+                      <span class="t">Bridged to a host bridge <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">Windows appears on the network as a machine of its own, with its own address.</span></span> <span class="tagr">restart</span></span>
                     </span>
                   </div>
                 </div>
                 <dl class="kv" style="align-items:center">
-                  <dt>Adapters</dt><dd>Shared adapter</dd>
-                  <dt>Windows address</dt><dd style="display:flex;align-items:center;gap:10px"><span class="mono">10.0.2.15</span><button class="btn quiet" style="padding:2px 9px;font-size:12px">Copy</button><span class="meta">as Windows reported when it started</span></dd>
+                  <dt>Adapters</dt><dd>Shared adapter, virtio-net on passt</dd>
+                  <dt>Windows address <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">Windows's own network address, as Windows reported it when it started.</span></span></dt><dd style="display:flex;align-items:center;gap:10px"><span class="mono">10.0.2.15</span><button class="btn quiet" style="padding:2px 9px;font-size:12px">Copy</button></dd>
                 </dl>
               </div>
             </div>
 
             <div class="area">
               <header>
-                <span class="nm">Bridge</span>
-                <span class="cap">the bridge of this computer Windows joins</span>
+                <span class="nm">Network adapter</span> <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">The virtual network card Windows uses for the shared connection.</span></span>
+                <span class="right"><span class="tagr">restart</span></span>
+              </header>
+              <div class="in">
+                <div class="modes">
+                  <div class="opt" role="radio" aria-checked="true" tabindex="0">
+                    <span class="dial"></span>
+                    <span>
+                      <span class="t">Virtio on passt <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">The faster network card. Windows needs its virtio network driver, which the guest update installs.</span></span> <span class="pill done">In use</span></span>
+                    </span>
+                  </div>
+                  <div class="opt" role="radio" aria-checked="false" tabindex="0">
+                    <span class="dial"></span>
+                    <span>
+                      <span class="t">Emulated Intel e1000e <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">An emulated Intel network card that Windows has a driver for out of the box. Slower; Windows Setup always uses it.</span></span></span>
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="area">
+              <header>
+                <span class="nm">Bridge</span> <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">The bridge on this computer that Windows joins when it is bridged.<br><br>LSW does not create or change bridges. The bridge and QEMU's bridge helper must be set up on this computer first.</span></span>
                 <span class="right"><span class="tagr">restart</span></span>
               </header>
               <div class="rows">
@@ -1867,15 +1886,13 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
                 <div class="ck"><span class="mk yes">&#10003;</span><span>The helper may create the adapter</span></div>
                 <div class="ck"><span class="mk no">&#10007;</span><span>/etc/qemu/bridge.conf does not allow br0
                   <span class="fix"><span class="meta">Add this line to /etc/qemu/bridge.conf</span><span class="mono cmd">allow br0</span><button class="btn quiet" style="padding:2px 9px;font-size:12px">Copy</button></span></span></div>
-                <span class="meta">Until every line is met Windows starts with the shared network only.</span>
+                <span class="meta">Windows starts on the shared network until every line is met</span>
               </div>
-              <div class="foot"><span class="meta">LSW changes nothing on this computer: the bridge, QEMU's helper and its rules are set up outside it.</span></div>
             </div>
 
             <div class="area">
               <header>
-                <span class="nm">Forwarded ports</span>
-                <span class="cap">a port of this computer that leads to a port in Windows</span>
+                <span class="nm">Forwarded ports</span> <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">Ports on this computer that lead to ports in Windows.<br><br>LSW itself uses TCP 5102, 5103 and 5445. This computer lets only the administrator listen on ports below 1024, so those cannot be forwarded.</span></span>
                 <span class="right"><span class="tagr">restart</span><span class="meta">8 ports</span></span>
               </header>
               <div class="in" style="padding-bottom:4px">
@@ -1901,7 +1918,7 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
                   <tr><td><span class="chip2">UDP</span></td><td class="mono">48000</td><td class="mono">48000</td><td><span class="seg"><button>This computer</button><button class="on">The network</button></span></td><td><span class="pill done">Active</span></td><td class="tight"><button class="rm">&times;</button></td></tr>
                   <tr><td><span class="chip2">TCP</span></td><td class="mono">1433</td><td class="mono">1433</td><td><span class="seg"><button class="on">This computer</button><button>The network</button></span></td><td><span class="pill pend">After restart</span></td><td class="tight"><button class="rm">&times;</button></td></tr>
                   <tr class="joined"><td><span class="chip2">TCP</span></td><td class="mono">8080</td><td class="mono">80</td><td><span class="seg"><button class="on">This computer</button><button>The network</button></span></td><td><span class="pill fail">Port in use</span></td><td class="tight"><button class="rm">&times;</button></td></tr>
-                  <tr class="note"><td colspan="6"><span class="meta" style="color:var(--bad)">Something else on this computer already uses TCP port 8080, so the guest would not start. Pick another host port.</span></td></tr>
+                  <tr class="note"><td colspan="6"><span class="meta" style="color:var(--bad)">TCP 8080 is in use on this computer; pick another port or the guest will not start</span></td></tr>
                   <tr class="add"><td><span class="input select sm" style="width:64px">TCP</span></td><td><span class="input mono ph sm2">Port</span></td><td><span class="input mono ph sm2">Same port</span></td><td><span class="seg"><button class="on">This computer</button><button>The network</button></span></td><td colspan="2"><button class="btn" style="padding:3px 12px">Add</button></td></tr>
                   <tr class="note"><td></td><td colspan="5"><span class="meta" style="color:var(--bad)">LSW itself uses TCP port 5445 of this computer.</span></td></tr>
                 </tbody>
@@ -1910,13 +1927,11 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
                 <span class="tline"><span class="meta">Removed TCP 3389 &rarr; 3389.</span><button class="btn quiet" style="padding:2px 9px;font-size:12px">Undo</button></span>
                 <span class="tline"><span class="meta">Other machines connect to</span><span class="mono" style="color:var(--fg)">192.168.1.20</span><span class="meta">enp5s0</span><button class="btn quiet" style="padding:2px 9px;font-size:12px">Copy</button></span>
               </div>
-              <div class="foot"><span class="meta">LSW itself uses TCP 5102, 5103 and 5445. This computer lets only the administrator listen on ports below 1024, so those cannot be forwarded.</span></div>
             </div>
 
             <div class="area">
               <header>
-                <span class="nm">Forwarded ports</span>
-                <span class="cap">with nothing forwarded</span>
+                <span class="nm">Forwarded ports</span> <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">With nothing forwarded.<br><br>LSW itself uses TCP 5102, 5103 and 5445. This computer lets only the administrator listen on ports below 1024, so those cannot be forwarded.</span></span>
                 <span class="right"><span class="tagr">restart</span><span class="meta">no port</span></span>
               </header>
               <div class="in" style="padding-bottom:4px">
@@ -1933,23 +1948,20 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
                   <tr><th>Protocol</th><th>On this computer</th><th>In Windows</th><th>Reachable from</th><th>State</th><th></th></tr>
                 </thead>
                 <tbody>
-                  <tr class="empty"><td colspan="6"><span style="font-size:12.5px;color:var(--fg-dim)">A forwarded port lets a program on this computer, or another machine, reach a server that runs in Windows. Pick a set above or add a port here.</span></td></tr>
+                  <tr class="empty"><td colspan="6"><span class="meta">No port forwarded</span> <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">A forwarded port lets a program on this computer, or another machine, reach a server that runs in Windows. Pick a set above or add a port here.</span></span></td></tr>
                   <tr class="add"><td><span class="input select sm" style="width:64px">TCP</span></td><td><span class="input mono ph sm2">Port</span></td><td><span class="input mono ph sm2">Same port</span></td><td><span class="seg"><button class="on">This computer</button><button>The network</button></span></td><td colspan="2"><button class="btn" style="padding:3px 12px">Add</button></td></tr>
                 </tbody>
               </table>
-              <div class="foot"><span class="meta">LSW itself uses TCP 5102, 5103 and 5445. This computer lets only the administrator listen on ports below 1024, so those cannot be forwarded.</span></div>
             </div>
 
             <div class="area">
               <header>
-                <span class="nm">Bridge</span>
-                <span class="cap">on a computer without one</span>
+                <span class="nm">Bridge</span> <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">On a computer without one.<br><br>LSW does not create or change bridges. The bridge and QEMU's bridge helper must be set up on this computer first.</span></span>
                 <span class="right"><span class="tagr">restart</span></span>
               </header>
               <div class="in">
-                <span style="font-size:12.5px;color:var(--fg-dim);line-height:1.55">A bridge is a virtual switch on this computer that puts machines on one of its networks. This computer has none: one must exist here before Windows can join it, and LSW does not create bridges.</span>
+                <span class="meta">No bridge on this computer</span> <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">A bridge is a virtual switch on this computer that puts machines on one of its networks. One must exist here before Windows can join it, and LSW does not create bridges.</span></span>
               </div>
-              <div class="foot"><span class="meta">LSW changes nothing on this computer: the bridge, QEMU's helper and its rules are set up outside it.</span></div>
             </div>
           </div>
 
@@ -2008,8 +2020,7 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
               <h5>Machine</h5>
               <div class="srow">
                 <span>
-                  <span class="k">Processor cores <span class="tagr">restart</span></span>
-                  <span class="d">The host has 20 threads. The guest topology is one socket, cores only, no SMT.</span>
+                  <span class="k">Processor cores <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">How many processor cores Windows gets. This computer has 20 threads.</span></span> <span class="tagr">restart</span></span>
                 </span>
                 <span class="ctl">
                   <span class="track" style="flex:1"><i class="fill" style="width:60%"></i><span class="knob" style="left:60%"></span></span>
@@ -2018,15 +2029,13 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
               </div>
               <div class="srow">
                 <span>
-                  <span class="k">Priority <span class="tagr live">now</span></span>
-                  <span class="d">The guest shares the processors with other programs like any program.</span>
+                  <span class="k">Priority <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">The guest shares the processors with other programs like any program.</span></span> <span class="tagr live">now</span></span>
                 </span>
                 <span class="ctl"><span class="input select" style="width:220px">Normal</span></span>
               </div>
               <div class="srow">
                 <span>
-                  <span class="k">Memory <span class="tagr">restart</span></span>
-                  <span class="d">Fixed: the guest holds all of it while it runs. 31 GiB on the host.</span>
+                  <span class="k">Memory <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">The most memory Windows has. While it runs, Windows gives back what it does not use. This computer has 31 GiB.</span></span> <span class="tagr">restart</span></span>
                 </span>
                 <span class="ctl">
                   <span class="track" style="flex:1"><i class="fill" style="width:39%"></i><span class="knob" style="left:39%"></span></span>
@@ -2035,8 +2044,7 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
               </div>
               <div class="srow">
                 <span>
-                  <span class="k">Disk <span class="tagr">restart</span></span>
-                  <span class="d">Grows only. The qcow2 is resized on the host and Windows extends the volume on the next boot.</span>
+                  <span class="k">Disk <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">The size of Windows's disk. It can only grow; Windows extends its drive the next time it starts.</span></span> <span class="tagr">restart</span></span>
                 </span>
                 <span class="ctl">
                   <span class="input mono" style="width:110px;text-align:right">60 GiB</span>
@@ -2049,22 +2057,19 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
               <h5>Startup</h5>
               <div class="srow">
                 <span>
-                  <span class="k">Start the guest when the manager opens <span class="tagr live">now</span></span>
-                  <span class="d">Otherwise it starts the first time you launch an application.</span>
+                  <span class="k">Start the guest when the manager opens <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">Starts Windows as soon as the manager opens. Otherwise it starts the first time you open a Windows application.</span></span> <span class="tagr live">now</span></span>
                 </span>
                 <span class="ctl"><span class="toggle on"><i></i></span></span>
               </div>
               <div class="srow">
                 <span>
-                  <span class="k">Keep running in the tray when closed <span class="tagr live">now</span></span>
-                  <span class="d">On: closing the window hides it; the manager, its tray icon and the guest keep running. Off: there is no tray icon and closing the window quits the manager.</span>
+                  <span class="k">Keep running in the tray when closed <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">Closing the window keeps the manager and Windows running, with an icon in the tray. When off, closing the window quits the manager.</span></span> <span class="tagr live">now</span></span>
                 </span>
                 <span class="ctl"><span class="toggle on"><i></i></span></span>
               </div>
               <div class="srow">
                 <span>
-                  <span class="k">Shut the guest down when the manager quits <span class="tagr live">now</span></span>
-                  <span class="d">On: quitting asks Windows to shut down and waits up to 30 seconds for it before the manager exits. Off: the guest keeps running without the manager.</span>
+                  <span class="k">Shut the guest down when the manager quits <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">Quitting the manager shuts Windows down too, waiting up to 30 seconds. When off, Windows keeps running after the manager quits.</span></span> <span class="tagr live">now</span></span>
                 </span>
                 <span class="ctl"><span class="toggle on"><i></i></span></span>
               </div>
@@ -2074,43 +2079,37 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
               <h5>Desktop integration</h5>
               <div class="srow">
                 <span>
-                  <span class="k">Put guest applications in your menu <span class="tagr live">now</span></span>
-                  <span class="d">Writes one <span class="mono">.desktop</span> file per application into <span class="mono">~/.local/share/applications</span>, with the icon pulled out of the executable.</span>
+                  <span class="k">Put guest applications in your menu <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">Adds each Windows application to your application menu, with its own icon.</span></span> <span class="tagr live">now</span></span>
                 </span>
                 <span class="ctl"><span class="toggle on"><i></i></span></span>
               </div>
               <div class="srow">
                 <span>
-                  <span class="k">Menu category <span class="tagr live">now</span></span>
-                  <span class="d">The submenu they appear under. Written as a merged menu fragment, which KDE, GNOME and LXQt all honour.</span>
+                  <span class="k">Menu category <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">The submenu Windows applications appear under in your application menu.</span></span> <span class="tagr live">now</span></span>
                 </span>
                 <span class="ctl"><span class="input" style="width:180px">Windows</span></span>
               </div>
               <div class="srow">
                 <span>
-                  <span class="k">Open Windows file types with these applications <span class="tagr live">now</span></span>
-                  <span class="d">Windows applications open the file types nothing on this machine handles. For the rest, use Make it the default in an application's settings.</span>
+                  <span class="k">Open Windows file types with these applications <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">Files no application on this computer opens are opened by the Windows application that handles them. For other file types, use Make it the default in that application's settings.</span></span> <span class="tagr live">now</span></span>
                 </span>
                 <span class="ctl"><span class="toggle on"><i></i></span></span>
               </div>
               <div class="srow">
                 <span>
-                  <span class="k">Share the clipboard <span class="tagr live">now</span></span>
-                  <span class="d">Text and images copied on this machine paste into Windows applications and the desktop view, and the other way round.</span>
+                  <span class="k">Share the clipboard <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">Text and images copied on this computer paste into Windows applications, and the other way round.</span></span> <span class="tagr live">now</span></span>
                 </span>
                 <span class="ctl"><span class="toggle on"><i></i></span></span>
               </div>
               <div class="srow">
                 <span>
-                  <span class="k">Which applications</span>
-                  <span class="d">10 found in the guest, 8 published. Turn individual ones off from the application's own settings.</span>
+                  <span class="k">Which applications <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">10 found in the guest, 8 published. Turn individual ones off from the application's own settings.</span></span></span>
                 </span>
                 <span class="ctl"><button class="btn">Choose applications</button></span>
               </div>
               <div class="srow">
                 <span>
-                  <span class="k">Rewrite the entries</span>
-                  <span class="d">Regenerates every .desktop file and icon. Use it if a launcher is showing a stale name or a missing icon.</span>
+                  <span class="k">Rewrite the entries <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">Recreates every menu entry and icon. Use it when a menu entry shows an old name or a missing icon.</span></span></span>
                 </span>
                 <span class="ctl"><button class="btn">Rewrite now</button></span>
               </div>
@@ -2120,8 +2119,7 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
               <h5>Storage</h5>
               <div class="srow">
                 <span>
-                  <span class="k">Data folder <span class="tagr live">now</span></span>
-                  <span class="d">Disks, ISOs and firmware variables. Moving it moves 40 GiB.</span>
+                  <span class="k">Data folder <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">Disks, ISOs and firmware variables. Moving it moves 40 GiB.</span></span> <span class="tagr live">now</span></span>
                 </span>
                 <span class="ctl">
                   <span class="input" style="flex:1;overflow:hidden">~/.local/share/lsw</span>
@@ -2134,43 +2132,37 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
               <h5>Logging</h5>
               <div class="srow">
                 <span>
-                  <span class="k">Manager <span class="tagr live">now</span></span>
-                  <span class="d">How much the manager says.</span>
+                  <span class="k">Manager <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">How much detail the manager writes to its log.</span></span> <span class="tagr live">now</span></span>
                 </span>
                 <span class="ctl"><span class="input select" style="width:220px">Info</span></span>
               </div>
               <div class="srow">
                 <span>
-                  <span class="k">Window mirrors</span>
-                  <span class="d">Applies to mirrors started from now on.</span>
+                  <span class="k">Window mirrors <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">How much detail the Windows application windows on this desktop log. Applies to windows opened from now on.</span></span></span>
                 </span>
                 <span class="ctl"><span class="input select" style="width:220px">Info</span></span>
               </div>
               <div class="srow">
                 <span>
-                  <span class="k">Windows agent <span class="tagr live">now</span></span>
-                  <span class="d">How much the agent in Windows says.</span>
+                  <span class="k">Windows agent <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">How much detail LSW's service inside Windows logs.</span></span> <span class="tagr live">now</span></span>
                 </span>
                 <span class="ctl"><span class="input select" style="width:220px">Info</span></span>
               </div>
               <div class="srow">
                 <span>
-                  <span class="k">Window mirrors in Windows</span>
-                  <span class="d">Applies to mirrors started from now on.</span>
+                  <span class="k">Window mirrors in Windows <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">How much detail the Windows side of each application window logs. Applies to windows opened from now on.</span></span></span>
                 </span>
                 <span class="ctl"><span class="input select" style="width:220px">Info</span></span>
               </div>
               <div class="srow">
                 <span>
-                  <span class="k">GPU</span>
-                  <span class="d">The GPU device, DXVK and vkd3d-proton. Applies the next time the guest starts.</span>
+                  <span class="k">GPU <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">How much detail the virtual GPU and the Direct3D translation (DXVK, vkd3d-proton) log. Applies the next time Windows starts.</span></span></span>
                 </span>
                 <span class="ctl"><span class="input select" style="width:220px">Warn</span></span>
               </div>
               <div class="srow">
                 <span>
-                  <span class="k">Debug logging</span>
-                  <span class="d">Every part at debug for 30 minutes, then back to the levels above.</span>
+                  <span class="k">Debug logging <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">Logs everything in full detail for 30 minutes, then returns to the levels above. Use it before reporting a problem.</span></span></span>
                 </span>
                 <span class="ctl"><button class="btn" disabled>Debug on, 24 min left</button><button class="btn">Stop</button></span>
               </div>
@@ -2341,42 +2333,38 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
           <div class="areas" style="flex:1">
             <div class="area">
               <header>
-                <span class="nm">LSW in Windows</span>
-                <span class="cap">agent, window mirror, GPU driver, loaders, shared folders</span>
+                <span class="nm">LSW software in Windows</span> <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">The software LSW puts inside Windows: the service the manager talks to, window mirroring, the graphics driver and shared folder support.<br><br>Update copies this version of LSW's software into Windows, and restarts Windows if the graphics driver changed. It runs by itself when the versions differ.</span></span>
                 <span class="right"><span class="pill done">Up to date</span><button class="btn">Update</button></span>
               </header>
               <div class="in">
                 <dl class="kv">
-                  <dt>Windows has</dt><dd>8bfc503c53ae <span class="meta">LSW 0.2.2</span></dd>
-                  <dt>This LSW ships</dt><dd>8bfc503c53ae</dd>
-                  <dt>Last update</dt><dd>3 Nov, 10:21 <span class="meta">finished, Windows restarted</span></dd>
+                  <dt>Windows has</dt><dd>LSW 0.2.2 &middot; 8bfc503c53ae</dd>
+                  <dt>This LSW ships</dt><dd>LSW 0.2.2 &middot; 8bfc503c53ae</dd>
+                  <dt>Last update</dt><dd>3 Nov, 10:21</dd>
                 </dl>
                 <div class="chips"><span class="chip2 ok">&#10003; verify</span><span class="chip2 ok">&#10003; stop</span><span class="chip2 ok">&#10003; agent and mirror</span><span class="chip2 ok">&#10003; driver</span><span class="chip2 ok">&#10003; loaders</span><span class="chip2 ok">&#10003; shared folders</span><span class="chip2 skip">&ndash; service and firewall</span><span class="chip2 ok">&#10003; start</span></div>
-                <span class="meta">Update replaces every LSW file in Windows and restarts Windows when the driver changes. It runs by itself when the two releases differ.</span>
               </div>
             </div>
 
             <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px">
               <div class="area broken">
-                <header><span class="nm">Download a Windows image</span></header>
+                <header><span class="nm">Download a Windows image</span> <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">Fetch an installation ISO from microsoft.com into any folder, for a reinstall or a second edition.</span></span></header>
                 <div class="in toolrow">
-                  <p>Fetch an installation ISO from microsoft.com into any folder, for a reinstall or a second edition.</p>
                   <button class="btn" disabled>Download</button>
                 </div>
               </div>
               <div class="area">
-                <header><span class="nm">Trim a Windows image</span></header>
+                <header><span class="nm">Trim a Windows image</span> <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">Build a smaller install ISO from one you have. Does not touch the running guest.</span></span></header>
                 <div class="in toolrow">
-                  <p>Build a smaller install ISO from one you have. Does not touch the running guest.</p>
                   <button class="btn">Trim</button>
                 </div>
               </div>
             </div>
 
             <div class="area danger">
-              <header><span class="nm">Reinstall the guest</span></header>
+              <header><span class="nm">Reinstall the guest</span> <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">Runs the first-run wizard again. Closing the wizard before the install starts changes nothing.</span></span></header>
               <div class="in toolrow">
-                <p>Runs the first-run wizard again. Its install replaces the disk, and applications installed in Windows are lost; closing the wizard before the install starts changes nothing.</p>
+                <p>Replaces the disk: applications installed in Windows are lost.</p>
                 <button class="btn stop">Reinstall</button>
               </div>
             </div>
@@ -2474,9 +2462,10 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
         </label>
       </div>
       <div class="dlg-foot">
-        <span class="meta" style="margin-right:auto">Closing this leaves the guest starting</span>
+        <span style="margin-right:auto"></span>
         <button class="btn quiet">Cancel</button>
         <button class="btn">Hide</button>
+        <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">Hiding this leaves the guest starting.</span></span>
       </div>
     </div>
 
@@ -2551,12 +2540,11 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
         </div>
         <div class="field"><label>Name</label><span class="input">Photoshop 2024</span></div>
         <div class="field">
-          <label>Path in Windows</label>
+          <label>Path in Windows <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">Browsing opens a file picker that reads the guest, not this machine.</span></span></label>
           <span style="display:flex;gap:8px">
             <span class="input focused" style="flex:1;overflow:hidden">C:\Program Files\Adobe\Photoshop 2024\Photoshop.exe</span>
             <button class="btn">Browse the guest</button>
           </span>
-          <span class="meta">Browsing opens a file picker that reads the guest, not this machine.</span>
         </div>
         <div class="field">
           <label>Working folder</label>
@@ -2568,12 +2556,11 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
         <div class="field"><label>Arguments</label><span class="input ph">Optional, passed after the executable</span></div>
         <div class="field"><label>Environment</label><span class="input" style="min-height:60px;line-height:1.7">__COMPAT_LAYER=HighDpiAware<br>TEMP=X:\scratch</span></div>
         <div class="field">
-          <label>Opens these file types</label>
+          <label>Opens these file types <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">Found in Windows. Types nothing on this machine opens start this application on a double click; Make it the default also does it for the rest.</span></span></label>
           <span style="display:flex;gap:8px;align-items:center">
             <span class="input" style="flex:1;color:var(--fg-dim)">.xlsx .xlsm .csv</span>
             <button class="btn">Make it the default</button>
           </span>
-          <span class="meta">Found in Windows. Types nothing on this machine opens start this application on a double click; Make it the default also does it for the rest.</span>
         </div>
         <div class="field"><label>MIME types</label><span class="input ph">Optional, one per line, added to the ones found</span></div>
       </div>
@@ -2601,8 +2588,7 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
           <span style="font-size:15px;font-weight:600">report.xlsx</span>
           <span class="meta mono">/home/accel/Documents/work</span>
         </div>
-        <span style="font-size:12.5px;color:var(--fg-dim);line-height:1.55">That folder is not shared with Windows. Share it and Excel opens the file itself, and saving writes it back here. Or open a read-only copy, which Windows keeps to itself.</span>
-        <span class="meta">Sharing needs Windows to restart, which closes the applications running in it. A copy's changes stay in Windows.</span>
+        <span style="display:flex;align-items:center;gap:8px">That folder is not shared with Windows. <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">Share it and Excel opens the file itself, and saving writes it back here. A read-only copy stays in Windows, with its changes. Sharing restarts Windows, which closes the applications running in it.</span></span></span>
       </div>
       <div class="dlg-foot">
         <button class="btn">Cancel</button>
@@ -2925,29 +2911,28 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
         </aside>
         <div class="wiz-main">
           <div class="wiz-head">
-            <h3>Run Windows applications on Linux</h3>
-            <p>LSW installs a Windows guest and renders its windows onto your desktop. Four stages, roughly 25 minutes, mostly unattended.</p>
+            <h3>Run Windows applications on Linux <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">LSW installs a Windows guest and renders its windows onto your desktop. Nothing on this machine is modified outside ~/.local/share/lsw; the guest is a single qcow2 file you can delete.</span></span></h3>
+            <p>Four stages, about 25 minutes, mostly unattended.</p>
           </div>
           <div class="wiz-body">
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px">
               <div style="border:1px solid var(--line);border-radius:5px;padding:12px 13px;background:var(--surface)">
-                <div class="meta" style="color:var(--amber)">01 &middot; IMAGE</div>
-                <div style="margin-top:5px;color:var(--fg-dim);font-size:12.5px;line-height:1.55">Point at a Windows ISO you have. Tools to download one or shrink one sit next to the field.</div>
+                <div class="meta" style="color:var(--amber);display:flex;align-items:center;gap:8px">01 &middot; IMAGE <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">Point at a Windows ISO you have. Tools to download one or shrink one sit next to the field.</span></span></div>
+                <div style="margin-top:5px;color:var(--fg-dim);font-size:12.5px">A Windows ISO</div>
               </div>
               <div style="border:1px solid var(--line);border-radius:5px;padding:12px 13px;background:var(--surface)">
-                <div class="meta" style="color:var(--amber)">02 &middot; MACHINE</div>
-                <div style="margin-top:5px;color:var(--fg-dim);font-size:12.5px;line-height:1.55">Size cores, memory and disk, and name the local Windows account.</div>
+                <div class="meta" style="color:var(--amber);display:flex;align-items:center;gap:8px">02 &middot; MACHINE <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">Size cores, memory and disk, and name the local Windows account.</span></span></div>
+                <div style="margin-top:5px;color:var(--fg-dim);font-size:12.5px">Cores, memory, disk and account</div>
               </div>
               <div style="border:1px solid var(--line);border-radius:5px;padding:12px 13px;background:var(--surface)">
-                <div class="meta" style="color:var(--amber)">03 &middot; PAYLOAD</div>
-                <div style="margin-top:5px;color:var(--fg-dim);font-size:12.5px;line-height:1.55">Answer file, guest binaries, and the drivers that must exist on the first boot, the avgpu package among them.</div>
+                <div class="meta" style="color:var(--amber);display:flex;align-items:center;gap:8px">03 &middot; PAYLOAD <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">The answers Windows Setup reads, and the drivers Windows needs from its first start, LSW's graphics driver among them.</span></span></div>
+                <div style="margin-top:5px;color:var(--fg-dim);font-size:12.5px">Answer file and drivers</div>
               </div>
               <div style="border:1px solid var(--line);border-radius:5px;padding:12px 13px;background:var(--surface)">
-                <div class="meta" style="color:var(--amber)">04 &middot; INSTALL</div>
-                <div style="margin-top:5px;color:var(--fg-dim);font-size:12.5px;line-height:1.55">Unattended Windows setup, then the guest agent and the avgpu display driver.</div>
+                <div class="meta" style="color:var(--amber);display:flex;align-items:center;gap:8px">04 &middot; INSTALL <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">Windows installs itself without questions, then LSW's software and graphics driver.</span></span></div>
+                <div style="margin-top:5px;color:var(--fg-dim);font-size:12.5px">Unattended setup</div>
               </div>
             </div>
-            <p>Nothing on this machine is modified outside <span class="mono" style="color:var(--amber)">~/.local/share/lsw</span>. The guest is a single qcow2 file you can delete.</p>
           </div>
           <div class="wiz-foot">
             <span class="hint">step 1 of 8</span>
@@ -2971,8 +2956,7 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
           <div class="foot"><span>host: 20 threads, 31 GiB</span><span>free: 412 GiB</span></div></aside>
         <div class="wiz-main">
           <div class="wiz-head">
-            <h3>Microsoft Windows licensing</h3>
-            <p>LSW is not affiliated with Microsoft, and does not bundle Windows.</p>
+            <h3>Microsoft Windows licensing <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">LSW is not affiliated with Microsoft, and does not bundle Windows.</span></span></h3>
           </div>
           <div class="wiz-body">
             <p>Installing or running Windows requires a license from Microsoft and compliance with the Microsoft Software License Terms. The full terms are shown during Windows setup.</p>
@@ -3001,8 +2985,7 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
           <div class="foot"><span>host: 20 threads, 31 GiB</span><span>free: 412 GiB</span></div></aside>
         <div class="wiz-main">
           <div class="wiz-head">
-            <h3>Which Windows image should be installed</h3>
-            <p>Any retail or evaluation Windows 10 or 11 ISO. If you do not have one, download it here.</p>
+            <h3>Which Windows image should be installed <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">Any retail or evaluation Windows 10 or 11 ISO. If you do not have one, download it here.</span></span></h3>
           </div>
           <div class="wiz-body">
             <div class="field">
@@ -3019,13 +3002,11 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
             <span class="eyebrow" style="color:var(--fg-faint)">Image tools, optional</span>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
               <div class="broken" style="border:1px solid var(--line);border-radius:5px;padding:13px;background:var(--surface);display:flex;flex-direction:column;gap:7px;align-items:flex-start">
-                <span style="font-size:13.5px;font-weight:500">No image yet</span>
-                <span style="font-size:12.5px;color:var(--fg-dim);line-height:1.55">Fetch one from microsoft.com, into any folder you choose.</span>
+                <span style="font-size:13.5px;font-weight:500;display:flex;align-items:center;gap:8px">No image yet <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">Fetch one from microsoft.com, into any folder you choose.</span></span></span>
                 <button class="btn" style="margin-top:auto" disabled>Download an image</button>
               </div>
               <div style="border:1px solid var(--line);border-radius:5px;padding:13px;background:var(--surface);display:flex;flex-direction:column;gap:7px;align-items:flex-start">
-                <span style="font-size:13.5px;font-weight:500">Smaller guest</span>
-                <span style="font-size:12.5px;color:var(--fg-dim);line-height:1.55">Cut the bundled apps, or strip the image down to the minimum.</span>
+                <span style="font-size:13.5px;font-weight:500;display:flex;align-items:center;gap:8px">Smaller guest <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">Cut the bundled apps, or strip the image down to the minimum.</span></span></span>
                 <button class="btn" style="margin-top:auto">Trim this image</button>
               </div>
             </div>
@@ -3052,8 +3033,7 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
           <div class="foot"><span>host: 20 threads, 31 GiB</span><span>free: 412 GiB</span></div></aside>
         <div class="wiz-main">
           <div class="wiz-head">
-            <h3>Size the machine and name the account</h3>
-            <p>Both are baked into the answer file, so they are set before the installer boots.</p>
+            <h3>Size the machine and name the account <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">Windows Setup reads these before it starts. Cores, memory and disk can be changed later in Settings; the account cannot.</span></span></h3>
           </div>
           <div class="wiz-body" style="gap:14px">
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
@@ -3081,7 +3061,7 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
                 <span class="val">60 GiB</span>
               </div>
             </div>
-            <span class="meta">Leaves <b>352 GiB</b> free on the host. The disk is sparse and grows as the guest fills it.</span>
+            <span class="meta" style="display:flex;align-items:center;gap:8px">Leaves <b>352 GiB</b> free on the host <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">The disk is sparse and grows as the guest fills it.</span></span></span>
             <div class="callout crit" hidden>Next starts the install, which replaces the current guest. It is shut down, its disk is deleted, and every application installed in Windows goes with it.</div>
           </div>
           <div class="wiz-foot">
@@ -3123,7 +3103,7 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
         <div style="height:1px;background:var(--line)"></div>
 
         <div class="field">
-          <label>Save to</label>
+          <label>Save to <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">The download resumes if the connection drops.</span></span></label>
           <span style="display:flex;gap:8px">
             <span class="input" style="flex:1">/home/accel/images/windows</span>
             <button class="btn">Choose folder</button>
@@ -3162,7 +3142,7 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
       </div>
 
       <div class="dlg-foot">
-        <span class="meta" style="margin-right:auto">Resumes if the connection drops</span>
+        <span style="margin-right:auto"></span>
         <button class="btn">Close</button>
         <button class="btn primary">Download</button>
       </div>
@@ -3185,7 +3165,7 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
 
       <div class="dlg-body" id="trimBody">
         <div class="field">
-          <label>Source image</label>
+          <label>Source image <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">The source image is read only and is never modified.</span></span></label>
           <span style="display:flex;gap:8px">
             <span class="input" style="flex:1">/home/accel/Downloads/Win11_25H2_x64.iso</span>
             <button class="btn">Browse</button>
@@ -3205,18 +3185,15 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
           <span class="eyebrow" style="color:var(--fg-faint)">How much to remove</span>
           <div class="opt" data-trim="none" aria-checked="false">
             <span class="dial"></span>
-            <span><span class="t">Keep everything</span>
-            <span class="d">Windows exactly as Microsoft ships it. Useful only to repack a different edition.</span></span>
+            <span><span class="t">Keep everything <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">Windows exactly as Microsoft ships it. Useful only to repack a different edition.</span></span></span></span>
           </div>
           <div class="opt" data-trim="sane" aria-checked="true">
             <span class="dial"></span>
-            <span><span class="t">Remove the bundled apps and telemetry</span>
-            <span class="d">32 consumer apps, Copilot, Recall, widgets and web search. Windows Update, Defender and the recovery environment keep working.</span></span>
+            <span><span class="t">Remove the bundled apps and telemetry <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">32 consumer apps, Copilot, Recall, widgets and web search. Windows Update, Defender and the recovery environment keep working.</span></span></span></span>
           </div>
           <div class="opt" data-trim="max" aria-checked="false">
             <span class="dial"></span>
-            <span><span class="t">Strip it to the minimum</span>
-            <span class="d">Everything above, plus Edge, WebView2, Defender, most of the component store, and drivers for hardware this VM does not have.</span></span>
+            <span><span class="t">Strip it to the minimum <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">Everything above, plus Edge, WebView2, Defender, most of the component store, and drivers for hardware this VM does not have.</span></span></span></span>
           </div>
           <div id="trimWarn" class="callout" hidden>
             This cannot be undone from inside the guest. Gutting the component store takes Windows Update with it, along with sfc, DISM repair and any way to add a feature later. Choose it for a disposable guest that runs one program.
@@ -3251,7 +3228,7 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
       </div>
 
       <div class="dlg-foot">
-        <span class="meta" style="margin-right:auto">Source image is read only, never modified</span>
+        <span style="margin-right:auto"></span>
         <button class="btn">Close</button>
         <button class="btn primary">Trim image</button>
       </div>
@@ -3271,8 +3248,7 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
           <div class="foot"><span>payload: lsw-payload.iso</span><span>staging: ~/.local/share/lsw</span></div></aside>
         <div class="wiz-main">
           <div class="wiz-head">
-            <h3>Building the install payload</h3>
-            <p>The answer file, the guest binaries and the GPU driver Windows installs before the first logon.</p>
+            <h3>Building the install payload <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">A disc with the answers Windows Setup reads, and the LSW software and drivers Windows installs before you first sign in.</span></span></h3>
           </div>
           <div class="wiz-body">
             <table class="tbl">
@@ -3304,12 +3280,11 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
           <div class="foot"><span>vm: lsw, running</span><span>waiting for agent</span></div></aside>
         <div class="wiz-main">
           <div class="wiz-head" style="padding-bottom:14px">
-            <h3>Running the unattended installer</h3>
+            <h3>Running the unattended installer <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">The VM boots and runs the unattended installer. Windows setup usually takes 10 to 30 minutes and reboots itself several times.</span></span></h3>
             <div style="display:flex;align-items:center;gap:12px;margin-top:10px">
               <span class="bar stripe" style="flex:1"><i style="width:100%"></i></span>
               <span class="meta" style="white-space:nowrap"><b>08:14</b> elapsed</span>
             </div>
-            <p style="margin-top:8px">Windows setup usually takes 10 to 30 minutes and reboots itself several times.</p>
           </div>
           <div class="wiz-body" style="padding:14px 16px">
             <div class="screen">
@@ -3339,8 +3314,7 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
           <div class="foot"><span>agent: online</span><span>1 step</span></div></aside>
         <div class="wiz-main">
           <div class="wiz-head">
-            <h3>Finishing setup inside the guest</h3>
-            <p>Reported live by the agent. The display driver is already in: Windows installed it at the end of setup, from the payload.</p>
+            <h3>Finishing setup inside the guest <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">LSW finishes configuring Windows; its graphics driver is already installed. Afterwards Windows restarts on that driver and the manager connects to it again.</span></span></h3>
           </div>
           <div class="wiz-body">
             <div class="meta" style="display:flex;align-items:center;gap:8px">
@@ -3355,7 +3329,6 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
             </table>
             <div style="margin-top:auto;display:flex;flex-direction:column;gap:8px">
               <div class="bar"><i style="width:40%"></i></div>
-              <span class="meta">Then the VM shuts down, restarts on its own display driver, and the agent reconnects.</span>
             </div>
           </div>
           <div class="wiz-foot">
@@ -3379,7 +3352,7 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
           <div class="foot"><span>total: 24 min 51 s</span><span>agent online</span></div></aside>
         <div class="wiz-main">
           <div class="wiz-head">
-            <h3>The guest is ready</h3>
+            <h3>The guest is ready <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">The manager lists the applications installed in Windows. Open one and its window appears on your desktop, drawn by this computer's GPU. Install more Windows software from inside Windows.</span></span></h3>
             <p>Windows 11 Pro is installed, trimmed, and its agent is answering.</p>
           </div>
           <div class="wiz-body">
@@ -3393,7 +3366,6 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
               <div style="border:1px solid var(--line);border-radius:5px;padding:11px 13px;background:var(--surface);display:flex;justify-content:space-between;align-items:baseline">
                 <span class="meta">GRAPHICS</span><span class="mono" style="font-size:12.5px">RX 9070 XT, avgpu.sys started</span></div>
             </div>
-            <p>The manager lists the applications found inside the guest. Double click one and its window opens on your desktop, drawn on this machine's GPU through the guest's accel-virt adapter. Installing more Windows software is done from inside the guest.</p>
           </div>
           <div class="wiz-foot">
             <span class="hint">step 8 of 8</span>
@@ -3537,8 +3509,8 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
 
     <h3 style="margin:24px 0 10px;font-size:14px">Choice</h3>
     <div class="specimen" style="display:flex;flex-direction:column;gap:8px;align-items:stretch">
-      <div class="opt" aria-checked="true"><span class="dial"></span><span><span class="t">Selected option</span><span class="d">The description sits inside the card, so the choice and its cost are one target.</span></span></div>
-      <div class="opt" aria-checked="false"><span class="dial"></span><span><span class="t">Unselected option</span><span class="d">Same geometry, quieter fill.</span></span></div>
+      <div class="opt" aria-checked="true"><span class="dial"></span><span><span class="t">Selected option <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">The description sits inside the card, so the choice and its cost are one target.</span></span></span></span></div>
+      <div class="opt" aria-checked="false"><span class="dial"></span><span><span class="t">Unselected option <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">Same geometry, quieter fill.</span></span></span></span></div>
     </div>
   </section>
 
@@ -3759,5 +3731,26 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
       });
     });
   }
+})();
+</script>
+<script>
+(() => {
+  const box = document.createElement("div");
+  box.id = "infotip";
+  document.body.appendChild(box);
+  const show = (el) => {
+    box.innerHTML = el.querySelector(".tip").innerHTML;
+    const r = el.getBoundingClientRect();
+    box.style.left = Math.max(8, Math.min(r.left, innerWidth - 360)) + "px";
+    box.style.top = (r.bottom + 4) + "px";
+    box.style.display = "block";
+  };
+  const hide = () => { box.style.display = "none"; };
+  document.querySelectorAll(".info").forEach((el) => {
+    el.addEventListener("mouseenter", () => show(el));
+    el.addEventListener("focus", () => show(el));
+    el.addEventListener("mouseleave", hide);
+    el.addEventListener("blur", hide);
+  });
 })();
 </script>
