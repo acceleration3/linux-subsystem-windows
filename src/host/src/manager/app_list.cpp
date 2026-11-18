@@ -98,9 +98,9 @@ public:
         QTextLayout layout;
         lay_out_name(layout, index.data(Qt::DisplayRole).toString(), option.font);
         p->save();
-        p->setPen(option.palette.color((option.state & QStyle::State_Selected) != 0
-                                           ? QPalette::HighlightedText
-                                           : QPalette::Text));
+        p->setPen((option.state & QStyle::State_Selected) != 0
+                      ? QColor(QString::fromLatin1(ui::Theme::Color::kAmber))
+                      : option.palette.color(QPalette::Text));
         layout.draw(p, QPointF(option.rect.left() + kTilePad, icon.bottom() + 1 + kIconGap));
         p->restore();
 
