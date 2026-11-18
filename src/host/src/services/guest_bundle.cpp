@@ -20,7 +20,6 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QtConcurrent/QtConcurrentRun>
-
 #include <map>
 #include <utility>
 
@@ -28,6 +27,7 @@ namespace lsw::host::services {
 
 namespace {
 constexpr const char* kGuestUpdateScript = "C:\\ProgramData\\LSW\\lsw-guest-update.ps1";
+
 struct Payload {
     const char* name;
     const char* guest_dir;
@@ -37,7 +37,8 @@ struct Payload {
 constexpr Payload kPayloads[] = {
     {"virtiofs", "C:\\ProgramData\\LSW\\virtiofs\\", "Windows gets no shared folders"},
     {"network", "C:\\ProgramData\\LSW\\network\\", "the guest keeps its emulated network adapter"},
-    {"balloon", "C:\\ProgramData\\LSW\\balloon\\", "the guest's memory cannot be given back to the host"},
+    {"balloon", "C:\\ProgramData\\LSW\\balloon\\",
+     "the guest's memory cannot be given back to the host"},
 };
 constexpr const char* kGuestAv = "C:\\av\\";
 
@@ -231,8 +232,9 @@ std::shared_ptr<const GuestBundle::Contents> GuestBundle::collect(const QString&
     for (const Payload& payload : kPayloads) {
         const QString dir = platform::GuestPayloadDir::locate(QString::fromLatin1(payload.name));
         if (dir.isEmpty()) {
-            LSW_WARN("update: no guest {} files (share/lsw/guest/{}, or $LSW_GUEST_{}); {}", payload.name,
-                     payload.name, QString::fromLatin1(payload.name).toUpper().toStdString(), payload.without);
+            LSW_WARN("update: no guest {} files (share/lsw/guest/{}, or $LSW_GUEST_{}); {}",
+                     payload.name, payload.name,
+                     QString::fromLatin1(payload.name).toUpper().toStdString(), payload.without);
         } else if (!gathering.add_dir(payload.guest_dir, dir, &error)) {
             LSW_WARN("update: the guest {} files: {}", payload.name, error.toStdString());
         }

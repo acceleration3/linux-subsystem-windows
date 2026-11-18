@@ -5,17 +5,17 @@
 #include "lsw/host/config/vm_state.hpp"
 #include "lsw/host/provision/install/media_language.hpp"
 #include "lsw/host/services/host_services.hpp"
-#include "lsw/host/ui/info_tip.hpp"
 #include "lsw/host/ui/field_stack.hpp"
+#include "lsw/host/ui/info_tip.hpp"
 #include "lsw/host/ui/machine_limits.hpp"
 #include "lsw/host/ui/slider_spin.hpp"
 #include "lsw/host/ui/theme.hpp"
 #include "lsw/host/ui/widgets.hpp"
 #include "lsw/host/wizard/wizard.hpp"
 
-#include <QHBoxLayout>
 #include <QFormLayout>
 #include <QGridLayout>
+#include <QHBoxLayout>
 #include <QLabel>
 #include <QLocale>
 #include <QSpinBox>
@@ -107,8 +107,9 @@ VmSizePage::VmSizePage(Wizard& wizard, QWidget* parent) : WizardPage(parent), wi
     footnote_row->setSpacing(8);
     footnote_ = Widgets::meta(QString{});
     footnote_row->addWidget(footnote_);
-    footnote_row->addWidget(new ui::InfoTip(QStringLiteral("The disk is sparse and grows as the guest "
-                                                           "fills it.")));
+    footnote_row->addWidget(
+        new ui::InfoTip(QStringLiteral("The disk is sparse and grows as the guest "
+                                       "fills it.")));
     footnote_row->addStretch(1);
     body->addLayout(footnote_row);
 

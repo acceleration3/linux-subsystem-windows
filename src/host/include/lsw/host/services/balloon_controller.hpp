@@ -3,7 +3,6 @@
 #include <QElapsedTimer>
 #include <QObject>
 #include <QTimer>
-
 #include <optional>
 
 namespace lsw::host::vm {
@@ -33,4 +32,4 @@ private:
     QElapsedTimer asked_at_;
 };
 
-}
+}  // namespace lsw::host::services

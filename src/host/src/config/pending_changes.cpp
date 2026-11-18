@@ -42,8 +42,9 @@ QString render(const QString& key, const QVariant& value) {
         return QStringLiteral("%1 ports").arg(PortForwards::decode(value.toString()).size());
     }
     if (key == K::kNetworkAdapter) {
-        return value.toString() == ManagerSettings::NetworkAdapter::kVirtio ? QStringLiteral("virtio")
-                                                                             : QStringLiteral("emulated Intel");
+        return value.toString() == ManagerSettings::NetworkAdapter::kVirtio
+                   ? QStringLiteral("virtio")
+                   : QStringLiteral("emulated Intel");
     }
     if (key == K::kNetworkBridge && value.toString().isEmpty()) {
         return QStringLiteral("none");

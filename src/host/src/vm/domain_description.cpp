@@ -230,7 +230,8 @@ std::optional<DomainDescription> DomainDescription::parse(const QString& xml) {
             forward_protocol = attrs.value(QLatin1StringView("proto")) == QLatin1StringView("udp")
                                    ? config::PortForward::Protocol::Udp
                                    : config::PortForward::Protocol::Tcp;
-            forward_from_network = attrs.value(QLatin1StringView("address")) != QLatin1StringView("127.0.0.1");
+            forward_from_network =
+                attrs.value(QLatin1StringView("address")) != QLatin1StringView("127.0.0.1");
         } else if (in_port_forward && name == QLatin1StringView("range")) {
             config::PortForward entry;
             entry.protocol = forward_protocol;
@@ -240,7 +241,8 @@ std::optional<DomainDescription> DomainDescription::parse(const QString& xml) {
             entry.guest_port = to.isEmpty() ? entry.host_port : to.toInt();
             out.forwards.push_back(entry);
         } else if (in_interface && name == QLatin1StringView("backend")) {
-            out.passt = out.passt || attrs.value(QLatin1StringView("type")) == QLatin1StringView("passt");
+            out.passt =
+                out.passt || attrs.value(QLatin1StringView("type")) == QLatin1StringView("passt");
         } else if (in_bridge && name == QLatin1StringView("source")) {
             const QString bridge = attrs.value(QLatin1StringView("bridge")).toString();
             if (!bridge.isEmpty()) {

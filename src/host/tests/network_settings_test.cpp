@@ -1,17 +1,17 @@
 #include "lsw/host/config/manager_settings.hpp"
 #include "lsw/host/config/pending_changes.hpp"
 #include "lsw/host/config/port_forwards.hpp"
+#include "lsw/host/config/vm_record.hpp"
 #include "lsw/host/manager/network_state.hpp"
 #include "lsw/host/manager/port_forward_editor.hpp"
 #include "lsw/host/platform/host_addresses.hpp"
 #include "lsw/host/platform/host_bridges.hpp"
-#include "lsw/host/config/vm_record.hpp"
 #include "lsw/host/services/domain_inputs.hpp"
 #include "lsw/host/services/guest_update_status.hpp"
 #include "lsw/host/services/network_adapter_offer.hpp"
-#include "lsw/host/vm/domain_xml_builder.hpp"
 #include "lsw/host/services/vm_status.hpp"
 #include "lsw/host/vm/domain_description.hpp"
+#include "lsw/host/vm/domain_xml_builder.hpp"
 
 #include <QApplication>
 #include <QDir>
@@ -255,12 +255,14 @@ void check_passt(ManagerSettings& settings) {
               xml.contains(QStringLiteral("<route family='ipv4' gateway='10.0.2.2'/>")) &&
               xml.contains(QStringLiteral("<range start='5445' to='445'/>")) &&
               xml.contains(QStringLiteral("<portForward proto='udp' address='0.0.0.0'>")) &&
-              xml.contains(QStringLiteral("slot='0x10'")) && !xml.contains(QStringLiteral("-netdev")) &&
-              !xml.contains(QStringLiteral("e1000e")),
-          "the virtio adapter is passt started by libvirt, with the guest's old addresses, in the old slot; "
+              xml.contains(QStringLiteral("slot='0x10'")) &&
+              !xml.contains(QStringLiteral("-netdev")) && !xml.contains(QStringLiteral("e1000e")),
+          "the virtio adapter is passt started by libvirt, with the guest's old addresses, in the "
+          "old slot; "
           "the bridge is virtio too");
     check(xml.count(QStringLiteral("<mac address='52:54:00:6f:1c:2a'/>")) == 1,
-          "the adapter's address comes from the machine, so Windows sees the same adapter every boot");
+          "the adapter's address comes from the machine, so Windows sees the same adapter every "
+          "boot");
     const auto defined = DomainDescription::parse(xml);
     check(defined.has_value() && defined->forwards.size() == 5 &&
               defined->forwards.contains(PortForward{Protocol::Udp, 47998, 47998, true}) &&
@@ -269,11 +271,13 @@ void check_passt(ManagerSettings& settings) {
     const auto unforwarded = DomainDescription::parse(QStringLiteral(
         "<domain><devices><interface type='user'><portForward proto='tcp' address='0.0.0.0'>"
         "<range start='2222'/></portForward></interface></devices></domain>"));
-    check(unforwarded.has_value() && unforwarded->forwards == QVector<PortForward>{{Protocol::Tcp, 2222, 2222, true}},
+    check(unforwarded.has_value() &&
+              unforwarded->forwards == QVector<PortForward>{{Protocol::Tcp, 2222, 2222, true}},
           "a range without a guest port forwards to the same port");
     inputs.virtio_net = false;
     const QString emulated = lsw::host::vm::DomainXmlBuilder::build(vm, inputs);
-    check(emulated.contains(QStringLiteral("e1000e,netdev=lsw-net")) && !emulated.contains(QStringLiteral("<backend type='passt'/>")),
+    check(emulated.contains(QStringLiteral("e1000e,netdev=lsw-net")) &&
+              !emulated.contains(QStringLiteral("<backend type='passt'/>")),
           "the emulated adapter keeps QEMU's user network");
     const auto emulated_defined = DomainDescription::parse(emulated);
     check(defined->passt && emulated_defined.has_value() && !emulated_defined->passt,
@@ -285,9 +289,11 @@ void check_passt(ManagerSettings& settings) {
     check(!NetworkAdapterOffer::driver_installed(update), "no update says nothing of the driver");
     update.last_steps = {{QStringLiteral("shared folders"), QStringLiteral("done"), {}, false},
                          {QStringLiteral("network driver"), QStringLiteral("skipped"), {}, false}};
-    check(!NetworkAdapterOffer::driver_installed(update), "a release without the driver does not offer virtio");
+    check(!NetworkAdapterOffer::driver_installed(update),
+          "a release without the driver does not offer virtio");
     update.last_steps.back().status = QStringLiteral("done");
-    check(NetworkAdapterOffer::driver_installed(update), "the driver in Windows' store offers virtio");
+    check(NetworkAdapterOffer::driver_installed(update),
+          "the driver in Windows' store offers virtio");
 }
 
 void check_bridges(const QString& root) {

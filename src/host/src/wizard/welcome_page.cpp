@@ -39,7 +39,6 @@ QWidget* stage_card(const QString& number, const QString& title, const QString& 
     layout->addWidget(text, 1);
     return frame;
 }
-
 }
 
 WelcomePage::WelcomePage(QWidget* parent) : WizardPage(parent) {
@@ -53,11 +52,11 @@ WelcomePage::WelcomePage(QWidget* parent) : WizardPage(parent) {
 
     auto* grid = new QGridLayout;
     grid->setSpacing(10);
-    grid->addWidget(stage_card(QStringLiteral("01"), QStringLiteral("Image"),
-                               QStringLiteral("A Windows ISO"),
-                               QStringLiteral("Point at a Windows ISO you have. Tools to download one "
-                                              "or shrink one sit next to the field.")),
-                    0, 0);
+    grid->addWidget(
+        stage_card(QStringLiteral("01"), QStringLiteral("Image"), QStringLiteral("A Windows ISO"),
+                   QStringLiteral("Point at a Windows ISO you have. Tools to download one "
+                                  "or shrink one sit next to the field.")),
+        0, 0);
     grid->addWidget(stage_card(QStringLiteral("02"), QStringLiteral("Machine"),
                                QStringLiteral("Cores, memory, disk and account"),
                                QStringLiteral("Size cores, memory and disk, and name the local "
@@ -69,11 +68,12 @@ WelcomePage::WelcomePage(QWidget* parent) : WizardPage(parent) {
                                               "Windows needs from its first start, LSW's graphics "
                                               "driver among them.")),
                     1, 0);
-    grid->addWidget(stage_card(QStringLiteral("04"), QStringLiteral("Install"),
-                               QStringLiteral("Unattended setup"),
-                               QStringLiteral("Windows installs itself without questions, then LSW's "
-                                              "software and graphics driver.")),
-                    1, 1);
+    grid->addWidget(
+        stage_card(QStringLiteral("04"), QStringLiteral("Install"),
+                   QStringLiteral("Unattended setup"),
+                   QStringLiteral("Windows installs itself without questions, then LSW's "
+                                  "software and graphics driver.")),
+        1, 1);
     root->addLayout(grid);
     root->addStretch(1);
 }

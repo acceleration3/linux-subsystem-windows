@@ -156,9 +156,10 @@ void FilesPage::stage_shares(const QVector<HostShare>& shares) {
 }
 
 void FilesPage::build_folders() {
-    auto panel = ui::Panel::area(QStringLiteral("Shared folders"),
-                                 QStringLiteral("Folders on this computer that Windows sees as drives, "
-                                                "one drive letter each."));
+    auto panel =
+        ui::Panel::area(QStringLiteral("Shared folders"),
+                        QStringLiteral("Folders on this computer that Windows sees as drives, "
+                                       "one drive letter each."));
     panel.header->addWidget(Widgets::tag(true));
     letters_ = Widgets::meta(QString{});
     panel.header->addWidget(letters_);
@@ -174,8 +175,9 @@ void FilesPage::build_folders() {
     empty_ = Widgets::meta(QStringLiteral("No folder is shared with Windows yet."), true);
     empty_->setContentsMargins(12, 10, 12, 10);
     panel.body->addWidget(empty_);
-    panel.explain(QStringLiteral("Windows sees each folder as a drive of its own. Adding or removing a "
-                                 "folder takes effect when Windows restarts."));
+    panel.explain(
+        QStringLiteral("Windows sees each folder as a drive of its own. Adding or removing a "
+                       "folder takes effect when Windows restarts."));
     panel.add_foot(QStringLiteral("WinFsp - Windows File System Proxy, Copyright (C) Bill "
                                   "Zissimopoulos (github.com/winfsp/winfsp)"));
     column()->addWidget(panel.frame);
@@ -303,9 +305,10 @@ void FilesPage::refresh_folders() {
 }
 
 void FilesPage::build_smb() {
-    auto panel = ui::Panel::area(QStringLiteral("Windows disk on this computer"),
-                                 QStringLiteral("Windows shares its disk over SMB so this computer's "
-                                                "file manager can open it."));
+    auto panel =
+        ui::Panel::area(QStringLiteral("Windows disk on this computer"),
+                        QStringLiteral("Windows shares its disk over SMB so this computer's "
+                                       "file manager can open it."));
     serving_ = StatusPill::make(StatusPill::State::Pending, QStringLiteral("Off"));
     panel.header->addWidget(serving_);
     auto* entry_toggle = controls_->toggle(K::kSmbEnabled);
@@ -348,8 +351,9 @@ void FilesPage::build_smb() {
     rows.add_widget(QStringLiteral("Bookmarks"), bookmarks);
 
     panel.body->addWidget(rows_widget);
-    panel.explain(QStringLiteral("The bookmarks add a Windows entry to your file manager's sidebar. "
-                                 "Nothing is mounted on this computer."));
+    panel.explain(
+        QStringLiteral("The bookmarks add a Windows entry to your file manager's sidebar. "
+                       "Nothing is mounted on this computer."));
     column()->addWidget(panel.frame);
 }
 

@@ -11,7 +11,8 @@ qint64 BalloonPolicy::low_kib(qint64 host_total_kib) noexcept {
 qint64 BalloonPolicy::floor_kib(const Reading& reading) noexcept {
     qint64 floor = std::max(kLeastGuestKib, reading.guest_max_kib / 4);
     if (reading.guest_usable_kib) {
-        floor = std::max(floor, reading.guest_actual_kib - *reading.guest_usable_kib + kGuestHeadroomKib);
+        floor = std::max(floor,
+                         reading.guest_actual_kib - *reading.guest_usable_kib + kGuestHeadroomKib);
     }
     return std::min(floor, reading.guest_max_kib);
 }
@@ -43,4 +44,4 @@ std::optional<qint64> BalloonPolicy::target_kib(const Reading& reading) noexcept
     return std::nullopt;
 }
 
-}
+}  // namespace lsw::host::services

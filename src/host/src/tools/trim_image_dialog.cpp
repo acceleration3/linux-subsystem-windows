@@ -4,9 +4,9 @@
 #include "lsw/host/provision/debloat_stager.hpp"
 #include "lsw/host/provision/install/wim_edition.hpp"
 #include "lsw/host/provision/install/wim_edition_lister.hpp"
-#include "lsw/host/ui/info_tip.hpp"
 #include "lsw/host/ui/dialog_chrome.hpp"
 #include "lsw/host/ui/format.hpp"
+#include "lsw/host/ui/info_tip.hpp"
 #include "lsw/host/ui/theme.hpp"
 #include "lsw/host/ui/widgets.hpp"
 
@@ -14,6 +14,7 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDir>
+#include <QEvent>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFrame>
@@ -21,15 +22,13 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMouseEvent>
 #include <QProgressBar>
 #include <QPushButton>
-#include <QEvent>
-#include <QMouseEvent>
 #include <QRadioButton>
 #include <QStorageInfo>
 #include <QVBoxLayout>
 #include <QtConcurrent>
-
 #include <memory>
 
 namespace lsw::host::tools {

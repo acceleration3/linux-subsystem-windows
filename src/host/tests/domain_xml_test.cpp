@@ -240,12 +240,16 @@ void check_inbox_devices(const QDomDocument& doc) {
           "libvirt adds no NIC of its own");
     check(doc.elementsByTagName(QStringLiteral("rng")).isEmpty(), "no RNG device");
     const QDomNodeList balloons = doc.elementsByTagName(QStringLiteral("memballoon"));
-    check(balloons.count() == 1
-              && balloons.at(0).toElement().attribute(QStringLiteral("model")) == QStringLiteral("virtio")
-              && balloons.at(0).toElement().attribute(QStringLiteral("autodeflate")) == QStringLiteral("on")
-              && balloons.at(0).firstChildElement(QStringLiteral("stats")).attribute(QStringLiteral("period"))
-                     == QStringLiteral("5"),
-          "the guest has a virtio balloon that reports its memory and gives it back when Windows runs short");
+    check(balloons.count() == 1 &&
+              balloons.at(0).toElement().attribute(QStringLiteral("model")) ==
+                  QStringLiteral("virtio") &&
+              balloons.at(0).toElement().attribute(QStringLiteral("autodeflate")) ==
+                  QStringLiteral("on") &&
+              balloons.at(0)
+                      .firstChildElement(QStringLiteral("stats"))
+                      .attribute(QStringLiteral("period")) == QStringLiteral("5"),
+          "the guest has a virtio balloon that reports its memory and gives it back when Windows "
+          "runs short");
     check(doc.elementsByTagName(QStringLiteral("vsock")).isEmpty(), "no vsock device");
     check(doc.elementsByTagName(QStringLiteral("iothreads")).isEmpty(), "no iothreads");
     const QString all_text = doc.toString();
@@ -517,11 +521,13 @@ int main(int argc, char** argv) {
           "the GPU device's settings need a restart");
     check(ManagerSettings::default_value(ManagerSettings::Key::kHostGpu) ==
                   QStringLiteral("auto") &&
-              ManagerSettings::default_value(ManagerSettings::Key::kRenderGpus).toStringList()
+              ManagerSettings::default_value(ManagerSettings::Key::kRenderGpus)
+                  .toStringList()
                   .isEmpty(),
           "the GPU defaults are auto and no render GPUs");
     {
-        const int window = ManagerSettings::default_value(ManagerSettings::Key::kHostWindowMib).toInt();
+        const int window =
+            ManagerSettings::default_value(ManagerSettings::Key::kHostWindowMib).toInt();
         const auto host_mib = lsw::host::platform::HostMemory::total_mib();
         const qint64 half = host_mib ? (*host_mib + 1023) / 1024 * 1024 / 2 : 8192;
         check((window == 2048 || window == 4096 || window == 8192) &&

@@ -375,11 +375,13 @@ QWidget* GraphicsPage::build_adapter_card(const platform::HostGpu& gpu) {
 }
 
 QWidget* GraphicsPage::build_apis() const {
-    auto panel = card(QStringLiteral("Graphics APIs"),
-                      status_.graphics().adapters.size() > 1 ? QStringLiteral("served on every adapter")
-                                                   : QStringLiteral("what the host serves"));
-    panel.explain(QStringLiteral("The graphics APIs Windows applications can use, and what runs each "
-                                 "one on this computer."));
+    auto panel =
+        card(QStringLiteral("Graphics APIs"), status_.graphics().adapters.size() > 1
+                                                  ? QStringLiteral("served on every adapter")
+                                                  : QStringLiteral("what the host serves"));
+    panel.explain(
+        QStringLiteral("The graphics APIs Windows applications can use, and what runs each "
+                       "one on this computer."));
     const auto& apis = status_.graphics().apis;
     if (!status_.graphics().probed) {
         panel.body->addWidget(Widgets::meta(QStringLiteral("Asking the host…")));
@@ -448,7 +450,8 @@ QWidget* GraphicsPage::build_device() {
     if (device == nullptr) {
         rows.add(QStringLiteral("Host window"), QStringLiteral("-"), Theme::Tone::kFaint);
     } else {
-        const bool refused = live && facts.host_window_taken.has_value() && !*facts.host_window_taken;
+        const bool refused =
+            live && facts.host_window_taken.has_value() && !*facts.host_window_taken;
         auto* holder = new QWidget;
         auto* line = new QHBoxLayout(holder);
         line->setContentsMargins(0, 0, 0, 0);
@@ -461,26 +464,35 @@ QWidget* GraphicsPage::build_device() {
         line->addWidget(window);
         line->addWidget(Widgets::tag(true));
         if (refused) {
-            auto* warning = Widgets::meta(QStringLiteral("Refused by the driver: buffers use guest RAM"), true);
+            auto* warning =
+                Widgets::meta(QStringLiteral("Refused by the driver: buffers use guest RAM"), true);
             warning->setProperty(Theme::Tone::kProperty, Theme::Tone::kWarm);
             line->addWidget(warning, 1);
         }
-        rows.add_widget(QStringLiteral("Host window"), holder,
-                        QStringLiteral(
-            "Memory on this computer that Windows reads and writes directly for GPU data, such as "
-            "textures it uploads and results it reads back, with no copy in between."
-            "<br><br><b>What fills it.</b> Each piece is allocated by this computer's GPU driver, "
-            "from the GPU's own memory (VRAM) or from system RAM, and placed in the window when "
-            "Windows asks for it."
-            "<br><br><b>VRAM or RAM.</b> Data Windows writes for the GPU goes to VRAM the processor "
-            "can reach (all of it with Resizable BAR, a small part without), write-combined; if "
-            "that is full, to uncached system RAM. Data Windows reads back goes to cached "
-            "(write-back) system RAM, which the processor reads quickly. Vulkan applications get "
-            "the kind of memory they ask for. System RAM counts against the memory LSW lets the "
-            "guest's GPU use."
-            "<br><br><b>The size.</b> Memory is only taken as pieces are needed; this sets the "
-            "most. When the window is full, new buffers are placed in Windows's own memory "
-            "instead."));
+        rows.add_widget(
+            QStringLiteral("Host window"), holder,
+            QStringLiteral(
+                "Memory on this computer that Windows reads and writes directly for GPU data, such "
+                "as "
+                "textures it uploads and results it reads back, with no copy in between."
+                "<br><br><b>What fills it.</b> Each piece is allocated by this computer's GPU "
+                "driver, "
+                "from the GPU's own memory (VRAM) or from system RAM, and placed in the window "
+                "when "
+                "Windows asks for it."
+                "<br><br><b>VRAM or RAM.</b> Data Windows writes for the GPU goes to VRAM the "
+                "processor "
+                "can reach (all of it with Resizable BAR, a small part without), write-combined; "
+                "if "
+                "that is full, to uncached system RAM. Data Windows reads back goes to cached "
+                "(write-back) system RAM, which the processor reads quickly. Vulkan applications "
+                "get "
+                "the kind of memory they ask for. System RAM counts against the memory LSW lets "
+                "the "
+                "guest's GPU use."
+                "<br><br><b>The size.</b> Memory is only taken as pieces are needed; this sets the "
+                "most. When the window is full, new buffers are placed in Windows's own memory "
+                "instead."));
     }
 
     {
@@ -517,19 +529,22 @@ QWidget* GraphicsPage::build_device() {
                         QStringLiteral("Memory on each GPU that Windows may not use, so this "
                                        "computer's desktop and applications keep room. Auto picks "
                                        "an amount from the GPU's size."));
-        rows.add(QStringLiteral("Guest VRAM cap"),
-                 caps.isEmpty() ? QStringLiteral("-") : caps.join(QStringLiteral(", ")),
-                 caps.isEmpty() ? Theme::Tone::kFaint : nullptr,
-                 QStringLiteral("The most memory Windows can use on each GPU: its total minus what is "
-                                "kept for this computer."));
+        rows.add(
+            QStringLiteral("Guest VRAM cap"),
+            caps.isEmpty() ? QStringLiteral("-") : caps.join(QStringLiteral(", ")),
+            caps.isEmpty() ? Theme::Tone::kFaint : nullptr,
+            QStringLiteral("The most memory Windows can use on each GPU: its total minus what is "
+                           "kept for this computer."));
     }
 
     const DisplayFacts display = DisplayFacts::read(status_);
     rows.add(QStringLiteral("Display"),
-             display.mode ? QStringLiteral("%1 at %2").arg(display.mode_label(), display.refresh_label())
-                          : display.mode_label(),
-             nullptr, QStringLiteral("The resolution and refresh rate Windows is using. Change them on the "
-                                "Display page."));
+             display.mode
+                 ? QStringLiteral("%1 at %2").arg(display.mode_label(), display.refresh_label())
+                 : display.mode_label(),
+             nullptr,
+             QStringLiteral("The resolution and refresh rate Windows is using. Change them on the "
+                            "Display page."));
 
     int render = 0;
     for (const auto& adapter : adapters) {
@@ -543,7 +558,8 @@ QWidget* GraphicsPage::build_device() {
     if (g.pending.adapters) {
         after = QStringLiteral("%1 after a restart").arg(roles(roles_->staged_render_count()));
     }
-    rows.add(QStringLiteral("Adapters"), roles(render), g.pending.adapters ? Theme::Tone::kAmber : nullptr,
+    rows.add(QStringLiteral("Adapters"), roles(render),
+             g.pending.adapters ? Theme::Tone::kAmber : nullptr,
              after.isEmpty() ? QStringLiteral("The GPUs Windows sees. The display GPU draws the "
                                               "desktop; render-only GPUs run applications. Choose "
                                               "each GPU's role above.")

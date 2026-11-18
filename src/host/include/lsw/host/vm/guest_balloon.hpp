@@ -2,7 +2,6 @@
 
 #include <QUuid>
 #include <QtGlobal>
-
 #include <optional>
 
 namespace lsw::host::vm {
@@ -26,4 +25,4 @@ private:
     LibvirtConnection& conn_;
 };
 
-}
+}  // namespace lsw::host::vm

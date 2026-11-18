@@ -26,5 +26,4 @@ QVBoxLayout* FieldStack::column(const QString& name, QWidget* control, const QSt
 void FieldStack::add(const QString& name, QWidget* control, const QString& about) {
     into_->addLayout(column(name, control, about));
 }
-
 }

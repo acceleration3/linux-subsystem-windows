@@ -3,9 +3,9 @@
 #include "lsw/host/services/host_services.hpp"
 #include "lsw/host/tools/download_image_dialog.hpp"
 #include "lsw/host/tools/trim_image_dialog.hpp"
-#include "lsw/host/ui/info_tip.hpp"
 #include "lsw/host/ui/broken_mark.hpp"
 #include "lsw/host/ui/format.hpp"
+#include "lsw/host/ui/info_tip.hpp"
 #include "lsw/host/ui/theme.hpp"
 #include "lsw/host/ui/widgets.hpp"
 #include "lsw/host/wizard/wizard.hpp"
@@ -57,7 +57,8 @@ IsoChoicePage::IsoChoicePage(Wizard& wizard, QWidget* parent)
     auto* root =
         install_chrome(QStringLiteral("Which Windows image should be installed"),
                        QStringLiteral("Any retail or evaluation Windows 10 or 11 ISO. If you do "
-                                      "not have one, download it here."), QString{});
+                                      "not have one, download it here."),
+                       QString{});
 
     root->addWidget(ui::Widgets::caption(QStringLiteral("Image")));
 

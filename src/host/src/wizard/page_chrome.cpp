@@ -160,5 +160,4 @@ PageChrome PageChrome::install(QWizardPage* page, const QString& title, const QS
                      [page, next] { next->setEnabled(page->isComplete()); });
     return chrome;
 }
-
 }

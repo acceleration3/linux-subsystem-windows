@@ -7,7 +7,6 @@
 #include "lsw/host/mcp/tools/restart_guest_tool.hpp"
 
 #include <QObject>
-
 #include <cstdint>
 
 namespace lsw::host::apps { class LogStore; }
@@ -23,10 +22,10 @@ namespace lsw::host::mcp {
 class McpServer : public QObject {
     Q_OBJECT
 public:
-    McpServer(link::AgentRpcClient& rpc, apps::LogStore& log_store,
-              services::GuestUpdate& update, services::StatusHub& status,
-              services::LogCollector& collector, services::LogCleaner& cleaner,
-              RestartGuestTool::Restarter restarter, QObject* parent = nullptr);
+    McpServer(link::AgentRpcClient& rpc, apps::LogStore& log_store, services::GuestUpdate& update,
+              services::StatusHub& status, services::LogCollector& collector,
+              services::LogCleaner& cleaner, RestartGuestTool::Restarter restarter,
+              QObject* parent = nullptr);
     ~McpServer() override;
 
     [[nodiscard]] bool listen(std::uint16_t port = 5105);

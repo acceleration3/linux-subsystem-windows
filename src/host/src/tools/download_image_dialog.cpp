@@ -3,9 +3,9 @@
 #include "lsw/base/log.hpp"
 #include "lsw/host/config/settings.hpp"
 #include "lsw/host/provision/iso/downloader.hpp"
-#include "lsw/host/ui/info_tip.hpp"
 #include "lsw/host/ui/dialog_chrome.hpp"
 #include "lsw/host/ui/format.hpp"
+#include "lsw/host/ui/info_tip.hpp"
 #include "lsw/host/ui/theme.hpp"
 #include "lsw/host/ui/widgets.hpp"
 
@@ -77,12 +77,12 @@ DownloadImageDialog::DownloadImageDialog(config::Settings& settings, QWidget* pa
     pickers->addLayout(language_col, 1);
     root->addLayout(pickers);
 
-    source_status_ =
-        Widgets::meta(QStringLiteral("Asking microsoft.com…"), true);
+    source_status_ = Widgets::meta(QStringLiteral("Asking microsoft.com…"), true);
     root->addWidget(source_status_);
 
-    root->addWidget(Widgets::caption_with(QStringLiteral("Save to"),
-                                          QStringLiteral("The download resumes if the connection drops.")));
+    root->addWidget(
+        Widgets::caption_with(QStringLiteral("Save to"),
+                              QStringLiteral("The download resumes if the connection drops.")));
     auto* out_row = new QHBoxLayout;
     output_dir_ = new QLineEdit(settings_.isos_dir());
     auto* choose = new QPushButton(QStringLiteral("Choose folder"));

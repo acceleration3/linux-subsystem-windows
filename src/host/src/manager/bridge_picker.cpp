@@ -186,8 +186,7 @@ void BridgePicker::rebuild_checks(const HostBridges::Facts& facts, const QString
         delete item;
     }
     if (picked.isEmpty()) {
-        checks_box_->addWidget(Widgets::meta(
-            QStringLiteral("Pick a bridge to check it"), true));
+        checks_box_->addWidget(Widgets::meta(QStringLiteral("Pick a bridge to check it"), true));
         return;
     }
     for (const HostBridges::Requirement& line : lines) {

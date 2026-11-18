@@ -148,18 +148,20 @@ void SettingsPage::build_machine() {
     refresh_priority_note();
 
     const auto host_mib = platform::HostMemory::total_mib();
-    add_row(machine, K::kMemoryMib, QStringLiteral("Memory"),
-            QStringLiteral("The most memory Windows has. While it runs, Windows gives back what it "
-                           "does not use.%1")
-                .arg(host_mib ? QStringLiteral(" This computer has %1 GiB.").arg(*host_mib / kMibPerGib)
-                              : QString{}),
-            controls_->slider(K::kMemoryMib, ui::MachineLimits::kMemoryMib, QStringLiteral(" MiB")));
+    add_row(
+        machine, K::kMemoryMib, QStringLiteral("Memory"),
+        QStringLiteral("The most memory Windows has. While it runs, Windows gives back what it "
+                       "does not use.%1")
+            .arg(host_mib ? QStringLiteral(" This computer has %1 GiB.").arg(*host_mib / kMibPerGib)
+                          : QString{}),
+        controls_->slider(K::kMemoryMib, ui::MachineLimits::kMemoryMib, QStringLiteral(" MiB")));
 
     auto* disk = controls_->slider(K::kDiskGib, ui::MachineLimits::kDiskGib, QStringLiteral(" GiB"));
-    add_row(machine, K::kDiskGib, QStringLiteral("Disk"),
-            QStringLiteral("The size of Windows's disk. It can only grow; Windows extends its drive "
-                           "the next time it starts."),
-            disk);
+    add_row(
+        machine, K::kDiskGib, QStringLiteral("Disk"),
+        QStringLiteral("The size of Windows's disk. It can only grow; Windows extends its drive "
+                       "the next time it starts."),
+        disk);
     const auto follow_disk = [this, disk] {
         const auto bytes = status_.vm().disk_bytes;
         if (!bytes) {
@@ -327,7 +329,8 @@ void SettingsPage::build_logging() {
         {QStringLiteral("Error"), QStringLiteral("error")},
     };
     auto* logs = new_group(QStringLiteral("Logging"));
-    add_row(logs, K::kLogManager, QStringLiteral("Manager"), QStringLiteral("How much detail the manager writes to its log."),
+    add_row(logs, K::kLogManager, QStringLiteral("Manager"),
+            QStringLiteral("How much detail the manager writes to its log."),
             controls_->choice(K::kLogManager, levels));
     add_row(logs, QString{}, QStringLiteral("Window mirrors"),
             QStringLiteral("How much detail the Windows application windows on this desktop log. "
@@ -355,11 +358,12 @@ void SettingsPage::build_logging() {
     debug_layout->addWidget(debug_stop_);
     connect(debug_button_, &QPushButton::clicked, this, [this] { verbosity_.start_debug(); });
     connect(debug_stop_, &QPushButton::clicked, this, [this] { verbosity_.stop_debug(); });
-    add_row(logs, QString{}, QStringLiteral("Debug logging"),
-            QStringLiteral("Logs everything in full detail for %1 minutes, then returns to the levels "
-                           "above. Use it before reporting a problem.")
-                .arg(config::LogVerbosity::kDebugMinutes),
-            debug);
+    add_row(
+        logs, QString{}, QStringLiteral("Debug logging"),
+        QStringLiteral("Logs everything in full detail for %1 minutes, then returns to the levels "
+                       "above. Use it before reporting a problem.")
+            .arg(config::LogVerbosity::kDebugMinutes),
+        debug);
 }
 
 void SettingsPage::refresh_debug_row() {

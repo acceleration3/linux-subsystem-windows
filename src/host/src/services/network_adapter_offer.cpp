@@ -14,7 +14,7 @@ using Adapter = config::ManagerSettings::NetworkAdapter;
 
 constexpr QLatin1StringView kDriverStep{"network driver"};
 constexpr QLatin1StringView kDone{"done"};
-}
+}  // namespace
 
 NetworkAdapterOffer::NetworkAdapterOffer(StatusHub& status, config::ManagerSettings& settings,
                                          config::PendingChanges& pending, QObject* parent)
@@ -41,9 +41,10 @@ void NetworkAdapterOffer::offer() {
         pending_.keys().contains(K::kNetworkAdapter) || !driver_installed(status_.update())) {
         return;
     }
-    LSW_INFO("network: Windows has the virtio network driver; the virtio adapter waits for a restart");
+    LSW_INFO(
+        "network: Windows has the virtio network driver; the virtio adapter waits for a restart");
     settings_.set_value(K::kNetworkAdapterOffered, true);
     pending_.stage(K::kNetworkAdapter, QString{Adapter::kVirtio});
 }
 
-}
+}  // namespace lsw::host::services

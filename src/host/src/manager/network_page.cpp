@@ -153,8 +153,9 @@ void NetworkPage::build_connection() {
     auto* address_key = new QHBoxLayout;
     address_key->setSpacing(6);
     address_key->addWidget(Widgets::caption(QStringLiteral("Windows address")));
-    address_key->addWidget(new ui::InfoTip(QStringLiteral("Windows's own network address, as Windows reported it "
-                                                          "when it started.")));
+    address_key->addWidget(
+        new ui::InfoTip(QStringLiteral("Windows's own network address, as Windows reported it "
+                                       "when it started.")));
     address_key->addStretch(1);
     grid->addLayout(address_key, 1, 0);
     auto* address_row = new QHBoxLayout;
@@ -184,9 +185,10 @@ void NetworkPage::build_connection() {
 }
 
 void NetworkPage::build_adapter() {
-    auto panel = ui::Panel::area(QStringLiteral("Network adapter"),
-                                 QStringLiteral("The virtual network card Windows uses for the shared "
-                                                "connection."));
+    auto panel =
+        ui::Panel::area(QStringLiteral("Network adapter"),
+                        QStringLiteral("The virtual network card Windows uses for the shared "
+                                       "connection."));
     panel.header->addWidget(Widgets::tag(true));
 
     auto* cards = new QHBoxLayout;
@@ -197,8 +199,9 @@ void NetworkPage::build_adapter() {
                        "the guest update installs."));
     emulated_ = new ui::ChoiceCard(
         QStringLiteral("Emulated Intel e1000e"),
-        QStringLiteral("An emulated Intel network card that Windows has a driver for out of the box. "
-                       "Slower; Windows Setup always uses it."));
+        QStringLiteral(
+            "An emulated Intel network card that Windows has a driver for out of the box. "
+            "Slower; Windows Setup always uses it."));
     connect(virtio_, &ui::ChoiceCard::chosen, this,
             [this] { controls_->put(K::kNetworkAdapter, QString{Adapter::kVirtio}); });
     connect(emulated_, &ui::ChoiceCard::chosen, this,
@@ -214,9 +217,10 @@ void NetworkPage::build_adapter() {
 }
 
 void NetworkPage::build_bridge() {
-    auto panel = ui::Panel::area(QStringLiteral("Bridge"),
-                                 QStringLiteral("The bridge on this computer that Windows joins when "
-                                                "it is bridged."));
+    auto panel =
+        ui::Panel::area(QStringLiteral("Bridge"),
+                        QStringLiteral("The bridge on this computer that Windows joins when "
+                                       "it is bridged."));
     panel.header->addWidget(Widgets::tag(true));
     panel.body->setContentsMargins(0, 0, 0, 0);
     panel.body->setSpacing(0);
@@ -224,8 +228,9 @@ void NetworkPage::build_bridge() {
     connect(picker_, &BridgePicker::chosen, this,
             [this](const QString& bridge) { controls_->put(K::kNetworkBridge, bridge); });
     panel.body->addWidget(picker_);
-    panel.explain(QStringLiteral("LSW does not create or change bridges. The bridge and QEMU's bridge "
-                                 "helper must be set up on this computer first."));
+    panel.explain(
+        QStringLiteral("LSW does not create or change bridges. The bridge and QEMU's bridge "
+                       "helper must be set up on this computer first."));
     bridge_area_ = panel.frame;
     column()->addWidget(panel.frame);
 }

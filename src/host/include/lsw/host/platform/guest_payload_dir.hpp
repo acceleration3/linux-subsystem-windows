@@ -11,4 +11,4 @@ public:
     [[nodiscard]] static QString locate(QStringView name);
 };
 
-}
+}  // namespace lsw::host::platform

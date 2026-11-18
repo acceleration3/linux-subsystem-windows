@@ -4,7 +4,6 @@
 #include "lsw/host/mcp/mcp_tool.hpp"
 
 #include <QString>
-
 #include <functional>
 
 class QObject;
@@ -27,4 +26,4 @@ private:
     Restarter restarter_;
 };
 
-}
+}  // namespace lsw::host::mcp

@@ -42,7 +42,8 @@ McpServer::~McpServer() = default;
 
 void McpServer::register_tools(apps::LogStore& log_store, services::GuestUpdate& update,
                                services::StatusHub& status, services::LogCollector& collector,
-                               services::LogCleaner& cleaner, RestartGuestTool::Restarter restarter) {
+                               services::LogCleaner& cleaner,
+                               RestartGuestTool::Restarter restarter) {
     tools_.add(std::make_unique<SystemInfoTool>(agent_));
     tools_.add(std::make_unique<ListAppsTool>(agent_));
     tools_.add(std::make_unique<ListWindowsTool>(agent_));

@@ -11,6 +11,7 @@ public:
 
     void set_text(const QString& text);
     void append(const QString& text);
+
     [[nodiscard]] const QString& text() const noexcept { return text_; }
 
     [[nodiscard]] QSize sizeHint() const override;
@@ -31,4 +32,4 @@ private:
     bool lit_ = false;
 };
 
-}
+}  // namespace lsw::host::ui

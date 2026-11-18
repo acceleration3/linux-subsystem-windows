@@ -525,7 +525,8 @@ QWidget* PortForwardEditor::row_for(const PortForward& entry, ForwardState state
 
     if (state == ForwardState::PortInUse) {
         auto* note = Widgets::meta(
-            QStringLiteral("%1 %2 is in use on this computer; pick another port or the guest will not start")
+            QStringLiteral(
+                "%1 %2 is in use on this computer; pick another port or the guest will not start")
                 .arg(PortForwards::protocol_name(entry.protocol))
                 .arg(entry.host_port),
             true);

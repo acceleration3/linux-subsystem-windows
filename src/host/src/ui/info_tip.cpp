@@ -2,9 +2,6 @@
 
 #include "lsw/host/ui/theme.hpp"
 
-#include <algorithm>
-#include <cmath>
-
 #include <QAbstractTextDocumentLayout>
 #include <QFocusEvent>
 #include <QFontMetricsF>
@@ -13,6 +10,8 @@
 #include <QPointer>
 #include <QScreen>
 #include <QTextDocument>
+#include <algorithm>
+#include <cmath>
 
 namespace lsw::host::ui {
 
@@ -48,7 +47,8 @@ public:
         doc_.setTextWidth(balanced_width());
         const QSize text = doc_.size().toSize();
         setFixedSize(text.width() + 2 * kPadX, text.height() + 2 * kPadY);
-        QPoint at = anchor->mapToGlobal(QPoint(anchor->width() / 2 - kSide, anchor->height() + kGap));
+        QPoint at =
+            anchor->mapToGlobal(QPoint(anchor->width() / 2 - kSide, anchor->height() + kGap));
         if (const QScreen* screen = anchor->screen()) {
             const QRect room = screen->availableGeometry();
             at.setX(std::clamp(at.x(), room.left() + kGap, room.right() - width() - kGap));
@@ -115,7 +115,7 @@ Bubble& bubble() {
     }
     return *shared;
 }
-}
+}  // namespace
 
 InfoTip::InfoTip(const QString& text, QWidget* parent) : QWidget(parent) {
     setFixedSize(kSide, kSide);
@@ -167,7 +167,8 @@ void InfoTip::show_tip() {
 void InfoTip::paintEvent(QPaintEvent*) {
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
-    const QColor ink(QString::fromLatin1(lit_ || hasFocus() ? Theme::Color::kFg : Theme::Color::kFgFaint));
+    const QColor ink(
+        QString::fromLatin1(lit_ || hasFocus() ? Theme::Color::kFg : Theme::Color::kFgFaint));
     painter.setPen(QPen(ink, 1.2));
     painter.drawEllipse(QRectF(rect()).adjusted(0.6, 0.6, -0.6, -0.6));
     QFont glyph = font();
@@ -201,4 +202,4 @@ void InfoTip::focusOutEvent(QFocusEvent* event) {
     bubble().hide();
 }
 
-}
+}  // namespace lsw::host::ui

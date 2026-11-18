@@ -8,4 +8,4 @@ void VmStats::set_guest_memory(quint64 total, quint64 available, quint64 balloon
     memory_used_bytes = taken > ballooned ? taken - ballooned : 0;
 }
 
-}
+}  // namespace lsw::host::vm

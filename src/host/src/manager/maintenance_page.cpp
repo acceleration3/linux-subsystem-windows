@@ -114,9 +114,10 @@ void MaintenancePage::build_update() {
     chips_->setContentsMargins(0, 0, 0, 0);
     panel.body->addWidget(chip_row_);
 
-    panel.explain(QStringLiteral("Update copies this version of LSW's software into Windows, and "
-                                 "restarts Windows if the graphics driver changed. It runs by itself "
-                                 "when the versions differ."));
+    panel.explain(
+        QStringLiteral("Update copies this version of LSW's software into Windows, and "
+                       "restarts Windows if the graphics driver changed. It runs by itself "
+                       "when the versions differ."));
     column()->addWidget(panel.frame);
 }
 
@@ -149,8 +150,9 @@ void MaintenancePage::build_tools() {
     connect(reinstall, &QPushButton::clicked, this, &MaintenancePage::reinstall_requested);
     danger.explain(QStringLiteral("Runs the first-run wizard again. Closing the wizard before the "
                                   "install starts changes nothing."));
-    danger.body->addWidget(tool_row(
-        QStringLiteral("Replaces the disk: applications installed in Windows are lost."), reinstall));
+    danger.body->addWidget(
+        tool_row(QStringLiteral("Replaces the disk: applications installed in Windows are lost."),
+                 reinstall));
     column()->addWidget(danger.frame);
 }
 
@@ -190,10 +192,12 @@ void MaintenancePage::refresh() {
     holder_column->setContentsMargins(0, 0, 0, 0);
     ui::KeyValues rows(holder_column);
     const auto release = [](const QString& version, const QString& sha) {
-        return version.isEmpty() ? brief(sha) : QStringLiteral("LSW %1 · %2").arg(version, brief(sha));
+        return version.isEmpty() ? brief(sha)
+                                 : QStringLiteral("LSW %1 · %2").arg(version, brief(sha));
     };
     rows.add(QStringLiteral("Windows has"), release(update.guest_version, update.guest_release));
-    rows.add(QStringLiteral("This LSW ships"), release(update.shipped_version, update.shipped_release));
+    rows.add(QStringLiteral("This LSW ships"),
+             release(update.shipped_version, update.shipped_release));
     if (update.finished.isEmpty()) {
         rows.add(QStringLiteral("Last update"), QStringLiteral("-"));
     } else if (update.last_ok) {

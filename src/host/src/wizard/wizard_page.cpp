@@ -7,5 +7,4 @@ QVBoxLayout* WizardPage::install_chrome(const QString& title, const QString& abo
     chrome_ = PageChrome::install(this, title, about, subtitle);
     return chrome_.body;
 }
-
 }

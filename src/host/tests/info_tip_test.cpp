@@ -34,7 +34,8 @@ void settle() {
 QString words_spanning(const QFont& font, int width) {
     const QFontMetrics metrics(font);
     QString text;
-    while (metrics.horizontalAdvance(text) < width) text += QStringLiteral("memory window ");
+    while (metrics.horizontalAdvance(text) < width)
+        text += QStringLiteral("memory window ");
     return text.trimmed();
 }
 
@@ -60,7 +61,7 @@ void leave(lsw::host::ui::InfoTip& tip) {
     settle();
 }
 
-}
+}  // namespace
 
 int main(int argc, char** argv) {
     QApplication app(argc, argv);
@@ -68,13 +69,15 @@ int main(int argc, char** argv) {
     const QString shots = argc > 1 ? QString::fromLocal8Bit(argv[1]) : QString{};
 
     int windows_before = 0;
-    for (QWidget* top : QApplication::topLevelWidgets()) windows_before += top->isVisible() ? 1 : 0;
+    for (QWidget* top : QApplication::topLevelWidgets())
+        windows_before += top->isVisible() ? 1 : 0;
     auto* loose = new lsw::host::ui::InfoTip(QStringLiteral("Made before it has a parent."));
     auto* emptied = new lsw::host::ui::InfoTip;
     emptied->set_text(QStringLiteral("Given text before it has a parent."));
     settle();
     int windows_after = 0;
-    for (QWidget* top : QApplication::topLevelWidgets()) windows_after += top->isVisible() ? 1 : 0;
+    for (QWidget* top : QApplication::topLevelWidgets())
+        windows_after += top->isVisible() ? 1 : 0;
     check(!loose->isVisible() && !emptied->isVisible() && windows_after == windows_before,
           "an icon made without a parent never shows as a window of its own");
 
@@ -89,8 +92,8 @@ int main(int argc, char** argv) {
     auto* empty_tip = new lsw::host::ui::InfoTip;
     QString paragraphs;
     for (int i = 0; i < 4; ++i) {
-        paragraphs += QStringLiteral("<b>Part %1.</b> ").arg(i + 1) + words_spanning(text_font, 4 * kWideBubble) +
-                      QStringLiteral("<br><br>");
+        paragraphs += QStringLiteral("<b>Part %1.</b> ").arg(i + 1) +
+                      words_spanning(text_font, 4 * kWideBubble) + QStringLiteral("<br><br>");
     }
     auto* paragraphs_tip = new lsw::host::ui::InfoTip(paragraphs);
     row->addWidget(paragraphs_tip);
@@ -112,7 +115,8 @@ int main(int argc, char** argv) {
     if (shown != nullptr) {
         long_width = shown->width();
         const int lines = (shown->height() - 16 + line / 2) / line;
-        check(shown->width() <= kNarrowBubble + 40, "a long explanation wraps instead of running wide");
+        check(shown->width() <= kNarrowBubble + 40,
+              "a long explanation wraps instead of running wide");
         check(lines >= 2 && lines <= 5, "a long explanation takes a few lines");
         if (!shots.isEmpty()) {
             shown->grab().save(QDir(shots).filePath(QStringLiteral("info-tip-long.png")));
@@ -130,7 +134,8 @@ int main(int argc, char** argv) {
     leave(*short_tip);
 
     shown = hover(*paragraphs_tip);
-    check(shown != nullptr && shown->width() > long_width + 60 && shown->width() <= kWideBubble + 40,
+    check(shown != nullptr && shown->width() > long_width + 60 &&
+              shown->width() <= kWideBubble + 40,
           "an explanation of several paragraphs gets a wider bubble, not a tall column");
     if (shown != nullptr && !shots.isEmpty()) {
         shown->grab().save(QDir(shots).filePath(QStringLiteral("info-tip-paragraphs.png")));

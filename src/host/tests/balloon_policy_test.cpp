@@ -31,14 +31,16 @@ BalloonPolicy::Reading host_with(qint64 available_gib, qint64 actual_gib) {
 
 void check_marks() {
     check(BalloonPolicy::low_kib(31 * kGib) > 31 * kGib / 16 + kGib,
-          "the guest is shrunk well before the host has as little left as the GPU's own allocations stop at");
+          "the guest is shrunk well before the host has as little left as the GPU's own "
+          "allocations stop at");
 }
 
 void check_shrink() {
     const auto target = BalloonPolicy::target_kib(host_with(1, 20));
     const qint64 low = BalloonPolicy::low_kib(31 * kGib);
-    check(target && *target == 20 * kGib - (2 * low - 1 * kGib),
-          "a host short of memory takes back enough of the guest's to have twice its low mark again");
+    check(
+        target && *target == 20 * kGib - (2 * low - 1 * kGib),
+        "a host short of memory takes back enough of the guest's to have twice its low mark again");
 
     BalloonPolicy::Reading busy = host_with(1, 20);
     busy.guest_usable_kib = 2 * kGib;
@@ -49,7 +51,8 @@ void check_shrink() {
     BalloonPolicy::Reading unknown = host_with(0, 6);
     unknown.guest_usable_kib.reset();
     const auto floor = BalloonPolicy::target_kib(unknown);
-    check(floor && *floor == 5 * kGib, "nor below a quarter of the guest's size when Windows says nothing");
+    check(floor && *floor == 5 * kGib,
+          "nor below a quarter of the guest's size when Windows says nothing");
 
     check(!BalloonPolicy::target_kib(host_with(1, 5)), "a guest already at its floor is left");
 }
@@ -63,12 +66,14 @@ void check_grow() {
     check(BalloonPolicy::target_kib(starved) == 20 * kGib, "never more than the guest's size");
     BalloonPolicy::Reading tight = host_with(5, 10);
     tight.guest_usable_kib = 512 * 1024;
-    check(BalloonPolicy::target_kib(tight) == 10 * kGib + 5 * kGib - BalloonPolicy::low_kib(31 * kGib),
+    check(BalloonPolicy::target_kib(tight) ==
+              10 * kGib + 5 * kGib - BalloonPolicy::low_kib(31 * kGib),
           "and only what the host has over its low mark");
 
     BalloonPolicy::Reading silent = host_with(12, 10);
     silent.guest_usable_kib.reset();
-    check(BalloonPolicy::target_kib(silent) == 10 * kGib + (12 * kGib - 2 * BalloonPolicy::low_kib(31 * kGib)),
+    check(BalloonPolicy::target_kib(silent) ==
+              10 * kGib + (12 * kGib - 2 * BalloonPolicy::low_kib(31 * kGib)),
           "a Windows that says nothing gets back what the host has over twice its low mark");
 }
 
@@ -76,7 +81,8 @@ void check_reclaim() {
     BalloonPolicy::Reading idle = host_with(12, 14);
     idle.guest_usable_kib = 10 * kGib;
     check(BalloonPolicy::target_kib(idle) == 14 * kGib - 8 * kGib,
-          "memory Windows does not use goes back to the host, though the host has room, leaving it a spare");
+          "memory Windows does not use goes back to the host, though the host has room, leaving it "
+          "a spare");
     BalloonPolicy::Reading barely = host_with(12, 14);
     barely.guest_usable_kib = 3 * kGib;
     check(!BalloonPolicy::target_kib(barely), "a spare within its slack is left");
@@ -85,16 +91,20 @@ void check_reclaim() {
 void check_steady() {
     BalloonPolicy::Reading settled = host_with(5, 14);
     settled.guest_usable_kib = 2 * kGib;
-    check(!BalloonPolicy::target_kib(settled), "a Windows using what it has, on a host with room, is left");
+    check(!BalloonPolicy::target_kib(settled),
+          "a Windows using what it has, on a host with room, is left");
 }
 
 void check_meter() {
     lsw::host::vm::VmStats stats;
     stats.set_guest_memory(14 * kGib * 1024, 1 * kGib * 1024, 9 * kGib * 1024);
-    check(stats.memory_total_bytes == 14 * kGib * 1024 && stats.memory_used_bytes == 4 * kGib * 1024,
-          "the RAM meter shows what Windows uses, without what the balloon holds, of the guest's whole size");
+    check(stats.memory_total_bytes == 14 * kGib * 1024 &&
+              stats.memory_used_bytes == 4 * kGib * 1024,
+          "the RAM meter shows what Windows uses, without what the balloon holds, of the guest's "
+          "whole size");
     stats.set_guest_memory(14 * kGib * 1024, 2 * kGib * 1024, 13 * kGib * 1024);
-    check(stats.memory_used_bytes == 0, "a balloon bigger than what Windows counts in use leaves nothing, not a wrap");
+    check(stats.memory_used_bytes == 0,
+          "a balloon bigger than what Windows counts in use leaves nothing, not a wrap");
 }
 
 void check_host() {
@@ -105,7 +115,7 @@ void check_host() {
           "the host's memory and what it has available are read from /proc/meminfo");
 }
 
-}
+}  // namespace
 
 int main() {
     check_host();

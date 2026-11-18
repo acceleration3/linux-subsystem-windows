@@ -1,7 +1,7 @@
 #include "lsw/host/config/manager_settings.hpp"
-#include "lsw/host/config/vm_sizing.hpp"
 
 #include "lsw/host/config/display_modes.hpp"
+#include "lsw/host/config/vm_sizing.hpp"
 #include "lsw/host/platform/host_memory.hpp"
 
 #include <QHash>
@@ -89,10 +89,9 @@ const QHash<QString, QVariant>& defaults() {
 
 const QStringList& restart_keys() {
     static const QStringList keys = {
-        K::kCpuCores,      K::kMemoryMib,      K::kDiskGib,       K::kHostGpu,
-        K::kHostWindowMib, K::kVramReserveMib, K::kRenderGpus,    K::kHybridGraphics,
-        K::kHostShares,    K::kNetworkMode,    K::kNetworkBridge, K::kPortForwards,
-        K::kNetworkAdapter,
+        K::kCpuCores,       K::kMemoryMib,    K::kDiskGib,        K::kHostGpu,    K::kHostWindowMib,
+        K::kVramReserveMib, K::kRenderGpus,   K::kHybridGraphics, K::kHostShares, K::kNetworkMode,
+        K::kNetworkBridge,  K::kPortForwards, K::kNetworkAdapter,
     };
     return keys;
 }

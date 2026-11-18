@@ -58,7 +58,8 @@ QString nic_mac(const QUuid& uuid) {
 
 QString passt_port_forwards(const QVector<config::PortForward>& forwards) {
     QStringList blocks;
-    for (const auto protocol : {config::PortForward::Protocol::Tcp, config::PortForward::Protocol::Udp}) {
+    for (const auto protocol :
+         {config::PortForward::Protocol::Tcp, config::PortForward::Protocol::Udp}) {
         for (const bool from_network : {false, true}) {
             QStringList ranges;
             for (const config::PortForward& entry : every_forward(forwards)) {
@@ -71,10 +72,13 @@ QString passt_port_forwards(const QVector<config::PortForward>& forwards) {
             if (ranges.isEmpty()) {
                 continue;
             }
-            blocks << QStringLiteral("      <portForward proto='%1' address='%2'>\n%3\n      </portForward>")
-                          .arg(protocol == config::PortForward::Protocol::Udp ? QStringLiteral("udp")
-                                                                              : QStringLiteral("tcp"),
-                               from_network ? QStringLiteral("0.0.0.0") : QStringLiteral("127.0.0.1"),
+            blocks << QStringLiteral(
+                          "      <portForward proto='%1' address='%2'>\n%3\n      </portForward>")
+                          .arg(protocol == config::PortForward::Protocol::Udp
+                                   ? QStringLiteral("udp")
+                                   : QStringLiteral("tcp"),
+                               from_network ? QStringLiteral("0.0.0.0")
+                                            : QStringLiteral("127.0.0.1"),
                                ranges.join(QLatin1Char('\n')));
         }
     }
@@ -82,15 +86,16 @@ QString passt_port_forwards(const QVector<config::PortForward>& forwards) {
 }
 
 QString passt_interface(const QVector<config::PortForward>& forwards, const QUuid& uuid) {
-    return QStringLiteral("\n    <interface type='user'>\n"
-                          "      <backend type='passt'/>\n"
-                          "      <mac address='%1'/>\n"
-                          "      <ip family='ipv4' address='10.0.2.15' prefix='24'/>\n"
-                          "      <route family='ipv4' gateway='10.0.2.2'/>\n"
-                          "%2\n"
-                          "      <model type='virtio'/>\n"
-                          "      <address type='pci' domain='0x0000' bus='0x00' slot='0x%3' function='0x0'/>\n"
-                          "    </interface>")
+    return QStringLiteral(
+               "\n    <interface type='user'>\n"
+               "      <backend type='passt'/>\n"
+               "      <mac address='%1'/>\n"
+               "      <ip family='ipv4' address='10.0.2.15' prefix='24'/>\n"
+               "      <route family='ipv4' gateway='10.0.2.2'/>\n"
+               "%2\n"
+               "      <model type='virtio'/>\n"
+               "      <address type='pci' domain='0x0000' bus='0x00' slot='0x%3' function='0x0'/>\n"
+               "    </interface>")
         .arg(nic_mac(uuid), passt_port_forwards(forwards))
         .arg(kNicSlot, 0, 16);
 }
@@ -295,19 +300,23 @@ QString DomainXmlBuilder::build(const config::VmRecord& vm, const DomainXmlInput
         qemu_arg(QStringLiteral("-netdev")),
         qemu_arg(user_netdev(inputs.forwards)),
         qemu_arg(QStringLiteral("-device")),
-        qemu_arg(QStringLiteral("%1,netdev=lsw-net,id=lsw-nic,bus=pcie.0,addr=0x%2").arg(kEmulatedNic).arg(kNicSlot, 0, 16)),
+        qemu_arg(QStringLiteral("%1,netdev=lsw-net,id=lsw-nic,bus=pcie.0,addr=0x%2")
+                     .arg(kEmulatedNic)
+                     .arg(kNicSlot, 0, 16)),
     };
-    vars["network_args_inner"] = inputs.virtio_net ? QString{} : network_lines.join(QLatin1Char('\n'));
+    vars["network_args_inner"] =
+        inputs.virtio_net ? QString{} : network_lines.join(QLatin1Char('\n'));
     const QString passt = inputs.virtio_net ? passt_interface(inputs.forwards, vm.uuid) : QString{};
-    vars["bridge_inner"] = passt + (inputs.bridge.isEmpty()
-                               ? QString{}
-                               : QStringLiteral("\n    <interface type='bridge'>\n"
-                                                "      <source bridge='%1'/>\n"
-                                                "      <mac address='%2'/>\n"
-                                                "      <model type='%3'/>\n"
-                                                "    </interface>")
-                                     .arg(esc(inputs.bridge), bridge_mac(vm.uuid),
-                                          inputs.virtio_net ? QStringLiteral("virtio") : QStringLiteral("e1000e")));
+    vars["bridge_inner"] =
+        passt + (inputs.bridge.isEmpty() ? QString{}
+                                         : QStringLiteral("\n    <interface type='bridge'>\n"
+                                                          "      <source bridge='%1'/>\n"
+                                                          "      <mac address='%2'/>\n"
+                                                          "      <model type='%3'/>\n"
+                                                          "    </interface>")
+                                               .arg(esc(inputs.bridge), bridge_mac(vm.uuid),
+                                                    inputs.virtio_net ? QStringLiteral("virtio")
+                                                                      : QStringLiteral("e1000e")));
     LSW_DEBUG("domain: {} MiB, {} cpus, {} render-only GPUs, {} shares, {} forwarded ports, "
               "bridge {}, display {} refresh {} mHz, host window {} MiB, install display {}",
               vm.sizing.memory_mib, vm.sizing.cpu_cores, render_only, inputs.shares.size(),

@@ -1,7 +1,6 @@
 #pragma once
 
 #include <QtGlobal>
-
 #include <optional>
 
 namespace lsw::host::services {
@@ -33,4 +32,4 @@ public:
     [[nodiscard]] static std::optional<qint64> target_kib(const Reading& reading) noexcept;
 };
 
-}
+}  // namespace lsw::host::services

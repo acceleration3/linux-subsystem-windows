@@ -10,4 +10,4 @@ QString GuestPayloadDir::locate(QStringView name) {
                                  QStringLiteral("/../share/lsw/guest/") + name);
 }
 
-}
+}  // namespace lsw::host::platform

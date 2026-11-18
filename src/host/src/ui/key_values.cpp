@@ -14,7 +14,8 @@ namespace lsw::host::ui {
 namespace {
 
 bool warns(const char* tone) {
-    return tone != nullptr && (qstrcmp(tone, Theme::Tone::kBad) == 0 || qstrcmp(tone, Theme::Tone::kAmber) == 0);
+    return tone != nullptr &&
+           (qstrcmp(tone, Theme::Tone::kBad) == 0 || qstrcmp(tone, Theme::Tone::kAmber) == 0);
 }
 
 QWidget* key_cell(const QString& key, const QString& about) {
@@ -27,7 +28,6 @@ QWidget* key_cell(const QString& key, const QString& about) {
     line->addStretch(1);
     return cell;
 }
-
 }
 
 KeyValues::KeyValues(QVBoxLayout* body) : grid_(new QGridLayout) {
@@ -52,7 +52,8 @@ QHBoxLayout* KeyValues::add(const QString& key, const QString& value, const char
     } else {
         line->addStretch(1);
     }
-    grid_->addWidget(key_cell(key, warning ? QString{} : note), row_, 0, Qt::AlignLeft | Qt::AlignVCenter);
+    grid_->addWidget(key_cell(key, warning ? QString{} : note), row_, 0,
+                     Qt::AlignLeft | Qt::AlignVCenter);
     grid_->addLayout(line, row_, 1);
     ++row_;
     return line;
@@ -68,5 +69,4 @@ QHBoxLayout* KeyValues::add_widget(const QString& key, QWidget* value, const QSt
     ++row_;
     return line;
 }
-
 }

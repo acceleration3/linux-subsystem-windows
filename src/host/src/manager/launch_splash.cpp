@@ -1,7 +1,7 @@
 #include "lsw/host/manager/launch_splash.hpp"
 
-#include "lsw/host/ui/info_tip.hpp"
 #include "lsw/host/ui/format.hpp"
+#include "lsw/host/ui/info_tip.hpp"
 #include "lsw/host/ui/theme.hpp"
 #include "lsw/host/ui/widgets.hpp"
 
@@ -102,7 +102,8 @@ LaunchSplash::LaunchSplash(QString application, QIcon icon, std::optional<qint64
     auto* hide_button = new QPushButton(QStringLiteral("Hide"));
     footer_layout->addWidget(cancel);
     footer_layout->addWidget(hide_button);
-    footer_layout->addWidget(new ui::InfoTip(QStringLiteral("Hiding this leaves the guest starting.")));
+    footer_layout->addWidget(
+        new ui::InfoTip(QStringLiteral("Hiding this leaves the guest starting.")));
     root->addWidget(footer_);
 
     stalled_footer_ = new QWidget;

@@ -21,7 +21,7 @@ DonePage::DonePage(Wizard& wizard, QWidget* parent) : WizardPage(parent), wizard
         QStringLiteral("The manager lists the applications installed in Windows. Open one and its "
                        "window appears on your desktop, drawn by this computer's GPU. Install more "
                        "Windows software from inside Windows."),
-                               QStringLiteral("Windows is running and ready."));
+        QStringLiteral("Windows is running and ready."));
     auto* grid = new QGridLayout;
     grid->setSpacing(8);
     const auto tile = [](const QString& key, const QString& value, QLabel** value_out) {

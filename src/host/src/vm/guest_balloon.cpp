@@ -4,10 +4,9 @@
 #include "lsw/host/vm/domain_handle.hpp"
 #include "lsw/host/vm/libvirt_connection.hpp"
 
+#include <array>
 #include <libvirt/libvirt.h>
 #include <libvirt/virterror.h>
-
-#include <array>
 
 namespace lsw::host::vm {
 
@@ -26,15 +25,15 @@ std::optional<GuestBalloon::Reading> GuestBalloon::read(const QUuid& uuid) const
     for (int i = 0; i < count; ++i) {
         const auto value = static_cast<qint64>(stats[static_cast<std::size_t>(i)].val);
         switch (stats[static_cast<std::size_t>(i)].tag) {
-            case VIR_DOMAIN_MEMORY_STAT_ACTUAL_BALLOON:
-                reading.actual_kib = value;
-                has_actual = true;
-                break;
-            case VIR_DOMAIN_MEMORY_STAT_USABLE:
-                reading.usable_kib = value;
-                break;
-            default:
-                break;
+        case VIR_DOMAIN_MEMORY_STAT_ACTUAL_BALLOON:
+            reading.actual_kib = value;
+            has_actual = true;
+            break;
+        case VIR_DOMAIN_MEMORY_STAT_USABLE:
+            reading.usable_kib = value;
+            break;
+        default:
+            break;
         }
     }
     reading.max_kib = static_cast<qint64>(::virDomainGetMaxMemory(dom.raw()));
@@ -46,13 +45,15 @@ bool GuestBalloon::set_target(const QUuid& uuid, qint64 kib) const {
     if (!dom.valid()) {
         return false;
     }
-    if (::virDomainSetMemoryFlags(dom.raw(), static_cast<unsigned long>(kib), VIR_DOMAIN_AFFECT_LIVE) != 0) {
+    if (::virDomainSetMemoryFlags(dom.raw(), static_cast<unsigned long>(kib),
+                                  VIR_DOMAIN_AFFECT_LIVE) != 0) {
         const virErrorPtr error = ::virGetLastError();
         LSW_WARN("balloon: the guest's memory was not set to {} MiB: {}", kib / 1024,
-                 error != nullptr && error->message != nullptr ? error->message : "libvirt gave no reason");
+                 error != nullptr && error->message != nullptr ? error->message
+                                                               : "libvirt gave no reason");
         return false;
     }
     return true;
 }
 
-}
+}  // namespace lsw::host::vm
