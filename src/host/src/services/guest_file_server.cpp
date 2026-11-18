@@ -1,13 +1,15 @@
 #include "lsw/host/services/guest_file_server.hpp"
 
 #include "lsw/base/log.hpp"
+
 #include <arpa/inet.h>
 #include <cctype>
 #include <cerrno>
+#include <chrono>
 #include <cstring>
 #include <netinet/in.h>
+#include <poll.h>
 #include <string>
-#include <sys/select.h>
 #include <sys/socket.h>
 #include <unistd.h>
 #include <utility>
@@ -15,6 +17,10 @@
 namespace lsw::host::services {
 
 namespace {
+
+constexpr auto kRequestDeadline = std::chrono::seconds(30);
+constexpr int kStopCheckMs = 100;
+constexpr std::size_t kMaxRequestBytes = 16 * 1024;
 
 void send_all(int connection, const char* bytes, std::size_t size) {
     while (size > 0) {
@@ -146,29 +152,42 @@ void GuestFileServer::serve_loop() {
             }
             continue;
         }
-        std::string request;
-        request.reserve(512);
-        char buf[4096];
-        for (int i = 0; i < 8; ++i) {
-            timeval tv{0, 100 * 1000};
-            fd_set rd;
-            FD_ZERO(&rd);
-            FD_SET(conn, &rd);
-            if (::select(conn + 1, &rd, nullptr, nullptr, &tv) <= 0) {
-                break;
-            }
-            const ssize_t n = ::recv(conn, buf, sizeof(buf), 0);
-            if (n <= 0) {
-                break;
-            }
-            request.append(buf, static_cast<std::size_t>(n));
-            if (request.find("\r\n\r\n") != std::string::npos) {
-                break;
-            }
+        const std::string request = read_request(conn);
+        if (request.find("\r\n\r\n") != std::string::npos) {
+            answer(conn, request);
+        } else {
+            LSW_WARN("file server: no whole request from the guest within {} s ({} bytes)",
+                     std::chrono::duration_cast<std::chrono::seconds>(kRequestDeadline).count(),
+                     request.size());
         }
-        answer(conn, request);
         ::close(conn);
     }
+}
+
+std::string GuestFileServer::read_request(int connection) const {
+    std::string request;
+    request.reserve(512);
+    char buf[4096];
+    const auto deadline = std::chrono::steady_clock::now() + kRequestDeadline;
+    while (!stop_.load() && std::chrono::steady_clock::now() < deadline) {
+        pollfd readable{connection, POLLIN, 0};
+        const int ready = ::poll(&readable, 1, kStopCheckMs);
+        if (ready < 0 && errno != EINTR) {
+            break;
+        }
+        if (ready <= 0) {
+            continue;
+        }
+        const ssize_t n = ::recv(connection, buf, sizeof(buf), 0);
+        if (n <= 0) {
+            break;
+        }
+        request.append(buf, static_cast<std::size_t>(n));
+        if (request.find("\r\n\r\n") != std::string::npos || request.size() > kMaxRequestBytes) {
+            break;
+        }
+    }
+    return request;
 }
 
 void GuestFileServer::answer(int connection, std::string_view request) {

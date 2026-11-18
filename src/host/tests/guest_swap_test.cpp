@@ -2,13 +2,14 @@
 #include "lsw/host/services/guest_swap_script.hpp"
 
 #include <arpa/inet.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <unistd.h>
-
+#include <chrono>
 #include <cstdio>
+#include <netinet/in.h>
 #include <string>
 #include <string_view>
+#include <sys/socket.h>
+#include <thread>
+#include <unistd.h>
 
 using lsw::host::services::GuestFileServer;
 using lsw::host::services::GuestSwapScript;
@@ -24,7 +25,9 @@ void check(bool ok, const char* label) {
     }
 }
 
-std::string fetch(unsigned short port, std::string_view path) {
+std::string fetch(unsigned short port, std::string_view path,
+                  std::chrono::milliseconds before = std::chrono::milliseconds{0},
+                  std::chrono::milliseconds mid_header = std::chrono::milliseconds{0}) {
     const int fd = ::socket(AF_INET, SOCK_STREAM, 0);
     sockaddr_in addr{};
     addr.sin_family = AF_INET;
@@ -32,9 +35,12 @@ std::string fetch(unsigned short port, std::string_view path) {
     addr.sin_port = htons(port);
     std::string response;
     if (::connect(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) == 0) {
-        const std::string request =
-            "GET " + std::string{path} + " HTTP/1.1\r\nHost: 10.0.2.2\r\n\r\n";
-        (void)::send(fd, request.data(), request.size(), MSG_NOSIGNAL);
+        const std::string line = "GET " + std::string{path} + " HTTP/1.1\r\n";
+        const std::string rest = "Host: 10.0.2.2\r\n\r\n";
+        std::this_thread::sleep_for(before);
+        (void)::send(fd, line.data(), line.size(), MSG_NOSIGNAL);
+        std::this_thread::sleep_for(mid_header);
+        (void)::send(fd, rest.data(), rest.size(), MSG_NOSIGNAL);
         char buf[4096];
         for (ssize_t n = 0; (n = ::recv(fd, buf, sizeof(buf), 0)) > 0;) {
             response.append(buf, static_cast<std::size_t>(n));
@@ -69,6 +75,14 @@ void serves_by_name() {
           "the mirror's guest half is served under its name");
     check(missing.rfind("HTTP/1.1 404", 0) == 0, "any other name is not found");
     check(server.downloads_served() == 2, "only the two served count as downloads");
+    const std::string late =
+        fetch(server.port(), "/lsw-guest-agent.exe", std::chrono::milliseconds{600});
+    check(late.rfind("HTTP/1.1 200", 0) == 0 && ends_with(late, "\r\n\r\nAGENT"),
+          "a request that arrives late, from a guest busy after boot, is still served");
+    const std::string split = fetch(server.port(), "/remotewin-guest.exe",
+                                    std::chrono::milliseconds{0}, std::chrono::milliseconds{600});
+    check(split.rfind("HTTP/1.1 200", 0) == 0 && ends_with(split, "\r\n\r\nMIRROR"),
+          "a request whose header comes in two parts far apart is served whole");
     server.stop();
 }
 

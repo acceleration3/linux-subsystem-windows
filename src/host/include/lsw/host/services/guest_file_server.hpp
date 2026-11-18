@@ -46,6 +46,7 @@ public:
 
 private:
     void serve_loop();
+    [[nodiscard]] std::string read_request(int connection) const;
     void answer(int connection, std::string_view request);
 
     Files files_;
