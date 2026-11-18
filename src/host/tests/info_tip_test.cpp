@@ -4,12 +4,17 @@
 #include <QApplication>
 #include <QDir>
 #include <QEnterEvent>
+#include <QFont>
 #include <QFontMetrics>
 #include <QHBoxLayout>
 #include <QWidget>
 #include <cstdio>
 
 namespace {
+
+constexpr int kTextPixels = 13;
+constexpr int kNarrowBubble = 360;
+constexpr int kWideBubble = 480;
 
 int failures = 0;
 
@@ -24,6 +29,13 @@ void settle() {
     for (int i = 0; i < 5; ++i) {
         QCoreApplication::processEvents();
     }
+}
+
+QString words_spanning(const QFont& font, int width) {
+    const QFontMetrics metrics(font);
+    QString text;
+    while (metrics.horizontalAdvance(text) < width) text += QStringLiteral("memory window ");
+    return text.trimmed();
 }
 
 QWidget* bubble() {
@@ -70,18 +82,15 @@ int main(int argc, char** argv) {
     auto* row = new QHBoxLayout(&window);
     row->addWidget(loose);
     row->addWidget(emptied);
-    auto* long_tip = new lsw::host::ui::InfoTip(QStringLiteral(
-        "Write-back host memory the guest's GPU buffers are placed in. It is used on demand; the "
-        "size only caps it, and the guest asks for more only when an application maps a buffer "
-        "it needs to read back on the processor."));
+    QFont text_font = window.font();
+    text_font.setPixelSize(kTextPixels);
+    auto* long_tip = new lsw::host::ui::InfoTip(words_spanning(text_font, 3 * kNarrowBubble));
     auto* short_tip = new lsw::host::ui::InfoTip(QStringLiteral("Set on the Display page."));
     auto* empty_tip = new lsw::host::ui::InfoTip;
     QString paragraphs;
     for (int i = 0; i < 4; ++i) {
-        paragraphs += QStringLiteral("<b>Part %1.</b> Memory on this computer that Windows reads and writes "
-                                     "directly for GPU data, such as textures it uploads and results it "
-                                     "reads back, with no copy in between.<br><br>")
-                          .arg(i + 1);
+        paragraphs += QStringLiteral("<b>Part %1.</b> ").arg(i + 1) + words_spanning(text_font, 4 * kWideBubble) +
+                      QStringLiteral("<br><br>");
     }
     auto* paragraphs_tip = new lsw::host::ui::InfoTip(paragraphs);
     row->addWidget(paragraphs_tip);
@@ -96,8 +105,6 @@ int main(int argc, char** argv) {
     check(loose->isVisibleTo(&window) && emptied->isVisibleTo(&window),
           "an icon made before its parent shows once it is in a window");
 
-    QFont text_font = long_tip->font();
-    text_font.setPixelSize(13);
     const int line = QFontMetrics(text_font).lineSpacing();
     QWidget* shown = hover(*long_tip);
     check(shown != nullptr, "hovering the icon opens the bubble");
@@ -105,7 +112,7 @@ int main(int argc, char** argv) {
     if (shown != nullptr) {
         long_width = shown->width();
         const int lines = (shown->height() - 16 + line / 2) / line;
-        check(shown->width() <= 400, "a long explanation wraps instead of running wide");
+        check(shown->width() <= kNarrowBubble + 40, "a long explanation wraps instead of running wide");
         check(lines >= 2 && lines <= 5, "a long explanation takes a few lines");
         if (!shots.isEmpty()) {
             shown->grab().save(QDir(shots).filePath(QStringLiteral("info-tip-long.png")));
@@ -123,7 +130,7 @@ int main(int argc, char** argv) {
     leave(*short_tip);
 
     shown = hover(*paragraphs_tip);
-    check(shown != nullptr && shown->width() > long_width + 60 && shown->width() <= 520,
+    check(shown != nullptr && shown->width() > long_width + 60 && shown->width() <= kWideBubble + 40,
           "an explanation of several paragraphs gets a wider bubble, not a tall column");
     if (shown != nullptr && !shots.isEmpty()) {
         shown->grab().save(QDir(shots).filePath(QStringLiteral("info-tip-paragraphs.png")));
