@@ -341,7 +341,7 @@ restore_user() {
     for dir in "$STATE"/*/; do
         [[ -f "${dir}argv" ]] || continue
         log "restoring lsw-manager from ${dir}"
-        python3 -I - "$dir" <<'PY' >>"${LOG:-/dev/null}" 2>&1
+        if python3 -I - "$dir" <<'PY' >>"${LOG:-/dev/null}" 2>&1
 import os, subprocess, sys
 d = sys.argv[1]
 def text(name):
@@ -351,14 +351,25 @@ env = dict(item.split("=", 1) for item in open(os.path.join(d, "environ"), "rb")
 def sink(name):
     target = text(name)
     return open(target, "ab") if os.path.isfile(target) else subprocess.DEVNULL
-subprocess.Popen(argv, executable=text("exe"), cwd=text("cwd"), env=env, stdin=subprocess.DEVNULL,
-                 stdout=sink("stdout"), stderr=sink("stderr"), start_new_session=True)
-print("started", argv)
+exe = text("exe")
+if exe.endswith(" (deleted)"):
+    exe = exe[: -len(" (deleted)")]
+try:
+    subprocess.Popen(argv, executable=exe, cwd=text("cwd"), env=env, stdin=subprocess.DEVNULL,
+                     stdout=sink("stdout"), stderr=sink("stderr"), start_new_session=True)
+except OSError as error:
+    print("could not start", exe, error)
+    sys.exit(1)
+print("started", exe, argv)
 PY
-        started=1
+        then
+            started=1
+        else
+            note "could not restart the real lsw-manager ($(tr '\n' ' ' <"${dir}argv")); start it yourself"
+        fi
     done
-    if [[ "$started" -eq 1 ]]; then
-        wait_until 180 "the real VM" user_domain_running || true
+    if [[ "$started" -eq 1 ]] && wait_until 180 "the real VM" user_domain_running; then
+        :
     elif [[ "$was" == running ]]; then
         virshq start "$USER_DOMAIN" >>"${LOG:-/dev/null}" 2>&1 || true
     fi
@@ -458,6 +469,7 @@ prepare_tree() {
     say "${label}: preparing ${ref} (${sha:0:12})"
     mkdir -p "$TREES"
     if [[ ! -e "${dir}/.git" ]]; then
+        git -C "$ROOT" worktree prune >>"$LOG" 2>&1
         git -C "$ROOT" worktree add -q --detach "$dir" "$sha" >>"$LOG" 2>&1 || die "git worktree add failed for ${sha}"
     fi
     clone_submodule "$dir" accel-virt "$SUBGIT"
