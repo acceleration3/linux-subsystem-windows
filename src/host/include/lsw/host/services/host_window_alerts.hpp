@@ -3,6 +3,7 @@
 #include "lsw/host/services/host_window_status.hpp"
 
 #include <QString>
+#include <QStringList>
 #include <QVector>
 
 namespace lsw::host::services {
@@ -23,7 +24,8 @@ public:
 
     HostWindowAlerts() = delete;
 
-    [[nodiscard]] static QVector<Warning> warnings(const HostWindowStatus& status, qint64 now_ms);
+    [[nodiscard]] static QVector<Warning> warnings(const HostWindowStatus& status, qint64 now_ms,
+                                                   const QStringList& gpu_names = {});
 };
 
 }  // namespace lsw::host::services

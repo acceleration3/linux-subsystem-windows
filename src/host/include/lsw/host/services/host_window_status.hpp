@@ -16,6 +16,17 @@ struct HostWindowStatus {
         quint64 write_combined = 0;
     };
 
+    struct Window {
+        quint32 device = 0;
+        std::optional<quint64> window_bytes;
+        quint64 used_bytes = 0;
+        std::optional<quint64> peak_bytes;
+        std::optional<quint64> refusals;
+        std::optional<qint64> refused_at_ms;
+        std::optional<qint64> full_since_ms;
+        QVector<Sample> history;
+    };
+
     struct Counter {
         quint64 total = 0;
         double per_s = 0;
@@ -74,13 +85,7 @@ struct HostWindowStatus {
     bool read = false;
     bool channels_known = false;
     qint64 at_ms = 0;
-    std::optional<quint64> window_bytes;
-    quint64 used_bytes = 0;
-    std::optional<quint64> peak_bytes;
-    quint64 window_refusals = 0;
-    std::optional<qint64> window_refused_at_ms;
-    std::optional<qint64> full_since_ms;
-    QVector<Sample> history;
+    QVector<Window> windows;
     QVector<platform::AvStateDump::GpuVram> vram;
     QVector<App> apps;
 };
@@ -119,8 +124,10 @@ private:
     HostWindowStatus status_;
     QHash<quint64, Memory> memory_;
     QVector<quint64> order_;
+    void add_windows(const platform::AvStateDump::Snapshot& snapshot,
+                     QVector<HostWindowStatus::Window> before, qint64 at_ms);
+
     std::optional<qint64> previous_at_ms_;
-    std::optional<quint64> previous_refusals_;
 };
 
 }  // namespace lsw::host::services

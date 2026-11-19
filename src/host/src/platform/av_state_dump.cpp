@@ -20,6 +20,7 @@ constexpr qsizetype kMaxValue = 512;
 constexpr qsizetype kMaxLine = 16 * 1024;
 constexpr int kTimeoutMs = 1500;
 constexpr int kMaxContexts = 4096;
+constexpr int kMaxWindows = 64;
 constexpr int kMaxChannels = 4096;
 constexpr int kCachingWriteCombined = 2;
 
@@ -115,6 +116,23 @@ std::optional<quint32> segment_id(const QString& text) {
     return ok ? std::optional<quint32>{value} : std::nullopt;
 }
 
+AvStateDump::Window* window_for(AvStateDump::Snapshot& into, const QString& segment) {
+    const auto device = segment_id(segment);
+    if (!device) {
+        return nullptr;
+    }
+    for (auto& window : into.windows) {
+        if (window.device == *device) {
+            return &window;
+        }
+    }
+    if (into.windows.size() >= kMaxWindows) {
+        return nullptr;
+    }
+    into.windows.push_back({*device, std::nullopt, std::nullopt});
+    return &into.windows.last();
+}
+
 quint64 context_key(quint32 device, quint32 id) {
     return (static_cast<quint64>(device) << 32) | id;
 }
@@ -174,6 +192,25 @@ quint64 AvStateDump::Snapshot::used_bytes() const {
         total += context.bytes();
     }
     return total;
+}
+
+quint64 AvStateDump::Snapshot::used_bytes(quint32 device) const {
+    quint64 total = 0;
+    for (const auto& context : contexts) {
+        if (context.device == device) {
+            total += context.bytes();
+        }
+    }
+    return total;
+}
+
+const AvStateDump::Window* AvStateDump::Snapshot::window(quint32 device) const {
+    for (const auto& window : windows) {
+        if (window.device == device) {
+            return &window;
+        }
+    }
+    return nullptr;
 }
 
 const AvStateDump::Context* AvStateDump::Snapshot::find_context(quint32 device, quint32 id) const {
@@ -259,7 +296,9 @@ void AvStateDump::parse(const QByteArray& dump, Snapshot& into) {
             if (n == 4) {
                 into.device = true;
                 if (const auto bytes = number(values, QStringLiteral("host_window_bytes"))) {
-                    into.window_bytes = into.window_bytes.value_or(0) + *bytes;
+                    if (auto* window = window_for(into, parts.at(3)); window != nullptr) {
+                        window->bytes = *bytes;
+                    }
                 }
             } else if (n == 8 && parts.at(4) == QLatin1String("host_blobs") &&
                        parts.at(6) == QLatin1String("host_blob")) {
@@ -297,7 +336,11 @@ void AvStateDump::parse(const QByteArray& dump, Snapshot& into) {
                     static_cast<quint32>(number(values, QStringLiteral("sub_api")).value_or(0));
                 context.batches = number(values, QStringLiteral("batches"));
             } else if (n == 6 && parts.at(4) == QLatin1String("window_stats")) {
-                WindowStats stats = into.window_stats.value_or(WindowStats{});
+                auto* window = window_for(into, parts.at(3));
+                if (window == nullptr) {
+                    continue;
+                }
+                WindowStats stats = window->stats.value_or(WindowStats{});
                 stats.attached =
                     stats.attached || flag(values, QStringLiteral("attached")).value_or(false);
                 stats.stable =
@@ -311,7 +354,7 @@ void AvStateDump::parse(const QByteArray& dump, Snapshot& into) {
                 stats.largest_free_run_at_refusal =
                     std::max(stats.largest_free_run_at_refusal,
                              number_or_zero(values, QStringLiteral("largest_free_run_at_refusal")));
-                into.window_stats = stats;
+                window->stats = stats;
             }
         } else if (n == 6 && parts.at(0) == QLatin1String("executor") &&
                    parts.at(2) == QLatin1String("session") &&

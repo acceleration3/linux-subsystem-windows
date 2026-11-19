@@ -71,16 +71,23 @@ public:
         std::optional<quint64> reserve_bytes;
     };
 
+    struct Window {
+        quint32 device = 0;
+        std::optional<quint64> bytes;
+        std::optional<WindowStats> stats;
+    };
+
     struct Snapshot {
         bool device = false;
         bool executor = false;
-        std::optional<quint64> window_bytes;
-        std::optional<WindowStats> window_stats;
+        QVector<Window> windows;
         QVector<Context> contexts;
         QVector<Channel> channels;
         QVector<GpuVram> vram;
 
         [[nodiscard]] quint64 used_bytes() const;
+        [[nodiscard]] quint64 used_bytes(quint32 device) const;
+        [[nodiscard]] const Window* window(quint32 device) const;
         [[nodiscard]] const Context* find_context(quint32 id) const;
         [[nodiscard]] const Context* find_context(quint32 device, quint32 id) const;
         [[nodiscard]] int contexts_with_id(quint32 id) const;

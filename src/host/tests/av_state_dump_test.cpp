@@ -22,6 +22,26 @@ AvStateDump::Snapshot parsed(const QByteArray& dump) {
     return snapshot;
 }
 
+std::optional<quint64> bytes_of(const AvStateDump::Snapshot& snap, quint32 device) {
+    const auto* window = snap.window(device);
+    return window != nullptr ? window->bytes : std::nullopt;
+}
+
+std::optional<AvStateDump::WindowStats> stats_of(const AvStateDump::Snapshot& snap,
+                                                 quint32 device) {
+    const auto* window = snap.window(device);
+    return window != nullptr ? window->stats : std::nullopt;
+}
+
+bool any_bytes(const AvStateDump::Snapshot& snap) {
+    for (const auto& window : snap.windows) {
+        if (window.bytes) {
+            return true;
+        }
+    }
+    return false;
+}
+
 QByteArray blob(int index, const QByteArray& body) {
     return "module/device/device/1/host_blobs/1/host_blob/" + QByteArray::number(index) + " " +
            body + "\n";
@@ -115,7 +135,8 @@ int main(int argc, char** argv) {
         const auto snap = parsed("module/device/device/1 host_window_bytes=1000\n"
                                  "module/device/device/2 host_window_bytes=500\n");
         check(snap.device && !snap.executor, "device lines mark the device");
-        check(snap.window_bytes == 1500, "host_window_bytes sums across devices");
+        check(bytes_of(snap, 1) == 1000 && bytes_of(snap, 2) == 500 && snap.windows.size() == 2,
+              "each device keeps its own window size");
     }
     {
         const auto snap =
@@ -124,19 +145,19 @@ int main(int argc, char** argv) {
                    "module/device/device/3 host_window_bytes=-5\n"
                    "module/device/device/4 host_window_bytes=\n"
                    "module/device/device/5 host_window_bytes=123456789012345678901\n");
-        check(snap.device && !snap.window_bytes,
+        check(snap.device && !any_bytes(snap),
               "overflowing, non-digit, signed, empty and long numbers are missing");
-        check(parsed("module/device/device/1 host_window_bytes=18446744073709551615\n")
-                      .window_bytes == std::optional<quint64>{18446744073709551615ULL},
+        check(bytes_of(parsed("module/device/device/1 host_window_bytes=18446744073709551615\n"),
+                       1) == std::optional<quint64>{18446744073709551615ULL},
               "the largest 64-bit number is accepted");
-        check(parsed("module/device/device/1 host_window_bytes=0\n").window_bytes ==
+        check(bytes_of(parsed("module/device/device/1 host_window_bytes=0\n"), 1) ==
                   std::optional<quint64>{0},
               "zero is a number");
-        check(!parsed("module/device/device/1 host_window_bytes= 5\n").window_bytes,
+        check(!bytes_of(parsed("module/device/device/1 host_window_bytes= 5\n"), 1),
               "a space ends the value");
-        check(!parsed("module/device/device/1 host_window_bytes=+5\n").window_bytes,
+        check(!bytes_of(parsed("module/device/device/1 host_window_bytes=+5\n"), 1),
               "a plus sign is not a digit");
-        check(!parsed("module/device/device/1 host_window_bytes=0x10\n").window_bytes,
+        check(!bytes_of(parsed("module/device/device/1 host_window_bytes=0x10\n"), 1),
               "hex is not a number");
     }
     {
@@ -257,22 +278,26 @@ int main(int argc, char** argv) {
             "module/device/device/2/window_stats/1 attached=false stable=true total_pages=50 "
             "pages_in_use=1 "
             "peak_pages_in_use=2 refusals=1 refused_bytes=1 largest_free_run_at_refusal=9\n");
-        check(snap.window_stats.has_value(), "window_stats lines make stats");
-        const auto stats = snap.window_stats.value_or(AvStateDump::WindowStats{});
-        check(stats.attached && stats.stable, "flags are true when any line says so");
-        check(stats.total_pages == 150 && stats.pages_in_use == 41 && stats.peak_pages_in_use == 62,
-              "page counts sum");
-        check(stats.refusals == 3 && stats.refused_bytes == 8193, "refusals sum");
-        check(stats.largest_free_run_at_refusal == 9, "the largest free run is the maximum");
-        check(!snap.window_bytes, "window_stats does not set window_bytes");
+        check(stats_of(snap, 1).has_value() && stats_of(snap, 2).has_value(),
+              "window_stats lines make stats for their device");
+        const auto one = stats_of(snap, 1).value_or(AvStateDump::WindowStats{});
+        const auto two = stats_of(snap, 2).value_or(AvStateDump::WindowStats{});
+        check(one.attached && !one.stable && !two.attached && two.stable,
+              "flags belong to their device");
+        check(one.total_pages == 100 && one.pages_in_use == 40 && one.peak_pages_in_use == 60 &&
+                  two.total_pages == 50,
+              "page counts belong to their device, not summed across devices");
+        check(one.refusals == 2 && one.refused_bytes == 8192 && two.refusals == 1,
+              "refusals belong to their device");
+        check(!bytes_of(snap, 1), "window_stats does not set window_bytes");
     }
     {
         const auto snap = parsed("module/device/device/1/window_stats/1 attached=yes "
                                  "total_pages=-4 refusals=99999999999999999999999\n");
-        const auto stats = snap.window_stats.value_or(AvStateDump::WindowStats{});
-        check(snap.window_stats && !stats.attached && stats.total_pages == 0 && stats.refusals == 0,
+        const auto stats = stats_of(snap, 1).value_or(AvStateDump::WindowStats{});
+        check(stats_of(snap, 1) && !stats.attached && stats.total_pages == 0 && stats.refusals == 0,
               "bad flags and numbers in window_stats count as missing");
-        check(!parsed("module/device/device/1/window_stats/1/extra a=1\n").window_stats,
+        check(parsed("module/device/device/1/window_stats/1/extra a=1\n").windows.isEmpty(),
               "window_stats at the wrong depth is ignored");
     }
     {
@@ -352,11 +377,11 @@ int main(int argc, char** argv) {
                    "module/device/device/1/host_blobs/1/other/1 context=1 size=1 mapped=true\n"
                    "module/device/device/1/other/1/host_blob/1 context=1 size=1 mapped=true\n"
                    "\xff\xfe\x00\x01 a=b\n");
-        check(!snap.device && !snap.executor && !snap.window_bytes && !snap.window_stats &&
-                  snap.contexts.isEmpty() && snap.channels.isEmpty(),
+        check(!snap.device && !snap.executor && snap.windows.isEmpty() && snap.contexts.isEmpty() &&
+                  snap.channels.isEmpty(),
               "garbage and forged lines change nothing");
         check(parsed(QByteArray{}).contexts.isEmpty(), "an empty dump is empty");
-        check(parsed("module/x/device/1 host_window_bytes=7").window_bytes == 7,
+        check(bytes_of(parsed("module/x/device/1 host_window_bytes=7"), 1) == 7,
               "a last line needs no newline");
     }
     {
@@ -364,10 +389,10 @@ int main(int argc, char** argv) {
             "module/device/device/1 host_window_bytes=" + QByteArray(20000, '9') + "\n";
         dump += "module/device/device/2 host_window_bytes=3\n";
         const auto snap = parsed(dump);
-        check(snap.window_bytes == 3, "a line over 16 KiB is cut and its number is lost");
+        check(bytes_of(snap, 2) == 3, "a line over 16 KiB is cut and its number is lost");
         QByteArray tail =
             "module/device/device/1 " + QByteArray(17000, 'x') + " host_window_bytes=5\n";
-        check(!parsed(tail).window_bytes, "fields past the 16 KiB line bound are lost");
+        check(!bytes_of(parsed(tail), 1), "fields past the 16 KiB line bound are lost");
     }
     {
         AvStateDump::Snapshot snap;

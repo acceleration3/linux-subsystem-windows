@@ -178,9 +178,7 @@ void GpuStatusPage::rebuild() {
     }
     log_meta_ = nullptr;
     log_text_ = nullptr;
-    graph_ = nullptr;
-    window_use_ = nullptr;
-    window_peak_ = nullptr;
+    windows_.clear();
     apps_table_ = nullptr;
     apps_note_ = nullptr;
 
@@ -356,9 +354,25 @@ QWidget* GpuStatusPage::build_host_window() {
         "How much of the host window Windows is using: memory on this computer that Windows reads "
         "and writes directly for GPU data. Write-back is cached system RAM, used for data Windows "
         "reads back; write-combined is VRAM or uncached RAM, used for data Windows writes for the "
-        "GPU. The dashed line is the window's size, set on the Graphics page."));
-    graph_ = new ui::UsageGraph;
-    panel.body->addWidget(graph_);
+        "GPU. The dashed line is the window's size, set on the Graphics page. Each GPU "
+        "Windows uses has a window of that size."));
+    const auto& adapters = status_.graphics().adapters;
+    const qsizetype devices = std::max<qsizetype>(adapters.size(), 1);
+    for (qsizetype i = 0; i < devices; ++i) {
+        if (devices > 1) {
+            panel.body->addWidget(
+                Widgets::caption(short_name(platform::HostGpus::adapter_name(adapters.at(i).gpu))));
+        }
+        WindowView view;
+        view.graph = new ui::UsageGraph;
+        panel.body->addWidget(view.graph);
+        KeyValues rows(panel.body);
+        view.use = qobject_cast<QLabel*>(
+            rows.add(QStringLiteral("In use"), QStringLiteral("-"))->itemAt(0)->widget());
+        view.peak = qobject_cast<QLabel*>(
+            rows.add(QStringLiteral("Peak"), QStringLiteral("-"))->itemAt(0)->widget());
+        windows_.push_back(view);
+    }
     auto* legend = Widgets::meta(
         QStringLiteral("<span style=\"color:%1\">&#9632;</span> write-back &nbsp; "
                        "<span style=\"color:%2\">&#9632;</span> write-combined &nbsp; "
@@ -367,12 +381,7 @@ QWidget* GpuStatusPage::build_host_window() {
                  QString::fromLatin1(Theme::Color::kAmber),
                  QString::fromLatin1(Theme::Color::kFgDim)));
     legend->setTextFormat(Qt::RichText);
-    panel.body->addWidget(legend);
-    KeyValues rows(panel.body);
-    window_use_ = qobject_cast<QLabel*>(
-        rows.add(QStringLiteral("In use"), QStringLiteral("-"))->itemAt(0)->widget());
-    window_peak_ = qobject_cast<QLabel*>(
-        rows.add(QStringLiteral("Peak"), QStringLiteral("-"))->itemAt(0)->widget());
+    panel.body->insertWidget(0, legend);
     return panel.frame;
 }
 
@@ -433,22 +442,37 @@ QWidget* GpuStatusPage::build_apps() {
 }
 
 void GpuStatusPage::update_window() {
-    if (graph_ == nullptr) {
+    if (windows_.isEmpty()) {
         return;
     }
     const auto& w = status_.host_window();
-    QVector<ui::UsageGraph::Point> points;
-    for (const auto& sample : w.history) {
-        points.push_back(
-            {sample.at_ms, sample.write_back, sample.write_back + sample.write_combined});
+    for (qsizetype i = 0; i < windows_.size(); ++i) {
+        const auto& view = windows_.at(i);
+        const auto found = std::find_if(w.windows.begin(), w.windows.end(), [i](const auto& entry) {
+            return entry.device == static_cast<quint32>(i);
+        });
+        if (found == w.windows.end()) {
+            view.graph->set_series({}, std::nullopt, w.at_ms,
+                                   services::HostWindowStatus::kHistoryMs);
+            view.use->setText(QStringLiteral("-"));
+            view.peak->setText(QStringLiteral("-"));
+            continue;
+        }
+        QVector<ui::UsageGraph::Point> points;
+        for (const auto& sample : found->history) {
+            points.push_back(
+                {sample.at_ms, sample.write_back, sample.write_back + sample.write_combined});
+        }
+        view.graph->set_series(points, found->window_bytes, w.at_ms,
+                               services::HostWindowStatus::kHistoryMs);
+        const QString size =
+            found->window_bytes ? ui::Format::bytes(*found->window_bytes) : QStringLiteral("-");
+        view.use->setText(
+            w.read ? QStringLiteral("%1 of %2").arg(ui::Format::bytes(found->used_bytes), size)
+                   : QStringLiteral("-"));
+        view.peak->setText(found->peak_bytes ? ui::Format::bytes(*found->peak_bytes)
+                                             : QStringLiteral("-"));
     }
-    graph_->set_series(points, w.window_bytes, w.at_ms, services::HostWindowStatus::kHistoryMs);
-    const QString window =
-        w.window_bytes ? ui::Format::bytes(*w.window_bytes) : QStringLiteral("-");
-    window_use_->setText(
-        w.read ? QStringLiteral("%1 of %2").arg(ui::Format::bytes(w.used_bytes), window)
-               : QStringLiteral("-"));
-    window_peak_->setText(w.peak_bytes ? ui::Format::bytes(*w.peak_bytes) : QStringLiteral("-"));
     for (qsizetype i = 0; i < vram_cap_.size(); ++i) {
         const auto found = std::find_if(w.vram.begin(), w.vram.end(), [i](const auto& entry) {
             return entry.device == static_cast<quint32>(i);

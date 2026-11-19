@@ -113,7 +113,11 @@ QVector<GpuStatusAlerts::Warning> GpuStatusAlerts::warnings() const {
     }
     if (running) {
         const auto& w = status_.host_window();
-        for (const auto& warning : services::HostWindowAlerts::warnings(w, w.at_ms)) {
+        QStringList gpu_names;
+        for (const auto& adapter : g.adapters) {
+            gpu_names << platform::HostGpus::adapter_name(adapter.gpu);
+        }
+        for (const auto& warning : services::HostWindowAlerts::warnings(w, w.at_ms, gpu_names)) {
             out.push_back(
                 {kind_of(warning.kind), warning.critical, warning.headline, warning.detail});
         }

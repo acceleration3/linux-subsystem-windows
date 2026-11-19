@@ -22,6 +22,7 @@ HostWindowStatus status() {
     HostWindowStatus out;
     out.read = true;
     out.at_ms = 100'000;
+    out.windows.push_back({});
     return out;
 }
 
@@ -51,23 +52,49 @@ int main(int argc, char** argv) {
 
     {
         auto s = status();
+        s.windows = {HostWindowStatus::Window{}, HostWindowStatus::Window{}};
+        s.windows[1].device = 1;
+        s.windows[1].full_since_ms = 0;
+        auto paint = transfer(1, "Paint");
+        paint.device = 1;
+        paint.held_bytes = 100;
+        auto word = transfer(2, "Word");
+        word.held_bytes = 500;
+        s.apps = {paint, word};
+        const auto w = HostWindowAlerts::warnings(
+            s, s.at_ms, {QStringLiteral("Radeon 780M"), QStringLiteral("Radeon RX 9070 XT")});
+        check(count(w, Kind::WindowFull) == 1 &&
+                  w.at(0).headline == QStringLiteral("The host window of Radeon RX 9070 XT is over "
+                                                     "90% full, mostly with Paint."),
+              "with two GPUs the full warning names the full window's GPU and its own biggest app");
+        s.windows[1].full_since_ms.reset();
+        s.windows[0].refused_at_ms = s.at_ms;
+        const auto refused = HostWindowAlerts::warnings(s, s.at_ms, {});
+        check(count(refused, Kind::Refusals) == 1 &&
+                  refused.at(0).headline ==
+                      QStringLiteral("The host window of GPU 1 is refusing allocations."),
+              "a GPU with no known name is named by its number");
+    }
+
+    {
+        auto s = status();
         check(warnings(s).isEmpty(), "a quiet status has no warnings");
         s.read = false;
-        s.full_since_ms = 0;
-        s.window_refused_at_ms = s.at_ms;
+        s.windows[0].full_since_ms = 0;
+        s.windows[0].refused_at_ms = s.at_ms;
         check(warnings(s).isEmpty(), "an unread status has no warnings");
     }
     {
         auto s = status();
-        s.full_since_ms = s.at_ms - 4999;
+        s.windows[0].full_since_ms = s.at_ms - 4999;
         check(warnings(s).isEmpty(), "full for 4999 ms is not yet a warning");
-        s.full_since_ms = s.at_ms - 5000;
+        s.windows[0].full_since_ms = s.at_ms - 5000;
         auto w = warnings(s);
         check(w.size() == 1 && w.at(0).kind == Kind::WindowFull && !w.at(0).critical,
               "full for 5000 ms warns, not critical");
         check(w.at(0).headline == QStringLiteral("The host window is over 90% full."),
               "no holder, no name in the headline");
-        s.full_since_ms = s.at_ms - 60'000;
+        s.windows[0].full_since_ms = s.at_ms - 60'000;
         auto big = transfer(1, "Big");
         big.held_bytes = 900;
         auto small = transfer(2);
@@ -83,17 +110,17 @@ int main(int argc, char** argv) {
     }
     {
         auto s = status();
-        s.window_refused_at_ms = s.at_ms - 60'000;
+        s.windows[0].refused_at_ms = s.at_ms - 60'000;
         auto w = warnings(s);
         check(w.size() == 1 && w.at(0).kind == Kind::Refusals && w.at(0).critical,
               "a refusal 60 s ago is shown, critical");
         check(w.at(0).headline == QStringLiteral("The host window is refusing allocations."),
               "without an app the window is named");
-        s.window_refused_at_ms = s.at_ms - 60'001;
+        s.windows[0].refused_at_ms = s.at_ms - 60'001;
         check(warnings(s).isEmpty(), "a refusal 60001 ms ago is not shown");
-        s.window_refused_at_ms = s.at_ms;
+        s.windows[0].refused_at_ms = s.at_ms;
         check(warnings(s).size() == 1, "a refusal right now is shown");
-        s.window_refused_at_ms = s.at_ms + 5;
+        s.windows[0].refused_at_ms = s.at_ms + 5;
         check(warnings(s).size() == 1, "a stamp slightly ahead of now is still recent");
     }
     {
@@ -105,7 +132,7 @@ int main(int argc, char** argv) {
         auto c = transfer(3, "Old");
         c.refused_at_ms = s.at_ms - 60'001;
         s.apps = {a, b, c};
-        s.window_refused_at_ms = s.at_ms;
+        s.windows[0].refused_at_ms = s.at_ms;
         const auto w = warnings(s);
         check(w.size() == 2 && count(w, Kind::Refusals) == 2,
               "each recently refused app has its own warning");
@@ -167,8 +194,8 @@ int main(int argc, char** argv) {
     }
     {
         auto s = status();
-        s.full_since_ms = 0;
-        s.window_refused_at_ms = s.at_ms;
+        s.windows[0].full_since_ms = 0;
+        s.windows[0].refused_at_ms = s.at_ms;
         auto a = transfer(1, "A");
         a.hot_split_ms = 20'000;
         a.copied_at_ms = s.at_ms;

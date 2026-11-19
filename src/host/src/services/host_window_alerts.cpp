@@ -12,8 +12,18 @@ bool recent(const std::optional<qint64>& at, qint64 now) {
 
 }  // namespace
 
-QVector<HostWindowAlerts::Warning> HostWindowAlerts::warnings(const HostWindowStatus& w,
-                                                              qint64 now) {
+QVector<HostWindowAlerts::Warning> HostWindowAlerts::warnings(const HostWindowStatus& w, qint64 now,
+                                                              const QStringList& gpu_names) {
+    const auto window_of = [&](quint32 device) {
+        if (w.windows.size() < 2) {
+            return QStringLiteral("The host window");
+        }
+        const QString gpu = device < static_cast<quint32>(gpu_names.size()) &&
+                                    !gpu_names.at(static_cast<qsizetype>(device)).isEmpty()
+                                ? gpu_names.at(static_cast<qsizetype>(device))
+                                : QStringLiteral("GPU %1").arg(device + 1);
+        return QStringLiteral("The host window of %1").arg(gpu);
+    };
     QVector<Warning> out;
     if (!w.read) {
         return out;
@@ -26,18 +36,22 @@ QVector<HostWindowAlerts::Warning> HostWindowAlerts::warnings(const HostWindowSt
               [](const HostWindowStatus::App* a, const HostWindowStatus::App* b) {
                   return a->device != b->device ? a->device < b->device : a->context < b->context;
               });
-    if (w.full_since_ms && now - *w.full_since_ms >= kFullHoldMs) {
+    for (const auto& window : w.windows) {
+        if (!window.full_since_ms || now - *window.full_since_ms < kFullHoldMs) {
+            continue;
+        }
         const HostWindowStatus::App* top = nullptr;
         for (const auto* app : apps) {
-            if (app->held_bytes > 0 && (top == nullptr || app->held_bytes > top->held_bytes)) {
+            if (app->device == window.device && app->held_bytes > 0 &&
+                (top == nullptr || app->held_bytes > top->held_bytes)) {
                 top = app;
             }
         }
         out.push_back({Warning::Kind::WindowFull, false,
                        top != nullptr
-                           ? QStringLiteral("The host window is over 90% full, mostly with %1.")
-                                 .arg(top->label())
-                           : QStringLiteral("The host window is over 90% full."),
+                           ? QStringLiteral("%1 is over 90% full, mostly with %2.")
+                                 .arg(window_of(window.device), top->label())
+                           : QStringLiteral("%1 is over 90% full.").arg(window_of(window.device)),
                        QStringLiteral("It has stayed that full for several seconds. When it "
                                       "runs out, allocations are refused and the apps see "
                                       "out-of-memory errors.")});
@@ -54,9 +68,12 @@ QVector<HostWindowAlerts::Warning> HostWindowAlerts::warnings(const HostWindowSt
                                 "has no room for what it asks for.")});
         }
     }
-    if (!named && recent(w.window_refused_at_ms, now)) {
+    for (const auto& window : w.windows) {
+        if (named || !recent(window.refused_at_ms, now)) {
+            continue;
+        }
         out.push_back({Warning::Kind::Refusals, true,
-                       QStringLiteral("The host window is refusing allocations."),
+                       QStringLiteral("%1 is refusing allocations.").arg(window_of(window.device)),
                        QStringLiteral("An app sees out-of-memory errors. The host window has "
                                       "no room for what it asks for.")});
     }

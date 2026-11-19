@@ -56,7 +56,6 @@ void HostWindowTracker::clear() {
     memory_.clear();
     order_.clear();
     previous_at_ms_.reset();
-    previous_refusals_.reset();
 }
 
 void HostWindowTracker::add(const platform::AvStateDump::Snapshot& snapshot, qint64 at_ms) {
@@ -64,58 +63,13 @@ void HostWindowTracker::add(const platform::AvStateDump::Snapshot& snapshot, qin
         clear();
         return;
     }
-    auto history = std::move(status_.history);
-    auto window_refused_at = status_.window_refused_at_ms;
-    auto full_since = status_.full_since_ms;
+    auto before = std::move(status_.windows);
     status_ = HostWindowStatus{};
     status_.read = snapshot.device;
     status_.channels_known = snapshot.executor && !snapshot.channels.isEmpty();
     status_.at_ms = at_ms;
     status_.vram = snapshot.vram;
-
-    const auto& stats = snapshot.window_stats;
-    status_.window_bytes = snapshot.window_bytes;
-    if (!status_.window_bytes && stats && stats->total_pages > 0) {
-        status_.window_bytes = stats->total_pages * HostWindowStatus::kPageBytes;
-    }
-    if (snapshot.device) {
-        status_.used_bytes = snapshot.used_bytes();
-        quint64 write_back = 0;
-        quint64 write_combined = 0;
-        for (const auto& context : snapshot.contexts) {
-            write_back += context.write_back_bytes;
-            write_combined += context.write_combined_bytes;
-        }
-        history.push_back({at_ms, write_back, write_combined});
-    }
-    while (!history.isEmpty() && at_ms - history.first().at_ms > HostWindowStatus::kHistoryMs) {
-        history.removeFirst();
-    }
-    status_.history = std::move(history);
-
-    if (stats && stats->peak_pages_in_use > 0) {
-        status_.peak_bytes = stats->peak_pages_in_use * HostWindowStatus::kPageBytes;
-    } else if (snapshot.device) {
-        quint64 peak = 0;
-        for (const auto& sample : status_.history) {
-            peak = std::max(peak, sample.write_back + sample.write_combined);
-        }
-        status_.peak_bytes = peak;
-    }
-
-    if (snapshot.device && status_.window_bytes && *status_.window_bytes > 0 &&
-        status_.used_bytes > *status_.window_bytes / 10 * 9) {
-        status_.full_since_ms = full_since.value_or(at_ms);
-    }
-
-    if (stats) {
-        status_.window_refusals = stats->refusals;
-        if (previous_refusals_ && stats->refusals > *previous_refusals_) {
-            window_refused_at = at_ms;
-        }
-        previous_refusals_ = stats->refusals;
-    }
-    status_.window_refused_at_ms = window_refused_at;
+    add_windows(snapshot, std::move(before), at_ms);
 
     const double seconds = previous_at_ms_ && at_ms > *previous_at_ms_
                                ? static_cast<double>(at_ms - *previous_at_ms_) / 1000.0
@@ -275,6 +229,79 @@ void HostWindowTracker::add(const platform::AvStateDump::Snapshot& snapshot, qin
     memory_ = std::move(next);
     previous_at_ms_ = at_ms;
     order();
+}
+
+void HostWindowTracker::add_windows(const platform::AvStateDump::Snapshot& snapshot,
+                                    QVector<HostWindowStatus::Window> before, qint64 at_ms) {
+    QVector<quint32> devices;
+    for (const auto& window : snapshot.windows) {
+        devices.push_back(window.device);
+    }
+    if (snapshot.device) {
+        for (const auto& context : snapshot.contexts) {
+            devices.push_back(context.device);
+        }
+    }
+    std::sort(devices.begin(), devices.end());
+    devices.erase(std::unique(devices.begin(), devices.end()), devices.end());
+
+    for (const quint32 device : devices) {
+        const auto was = std::find_if(before.begin(), before.end(),
+                                      [device](const auto& w) { return w.device == device; });
+        const bool had = was != before.end();
+        const auto* dumped = snapshot.window(device);
+        const auto stats = dumped != nullptr ? dumped->stats : std::nullopt;
+
+        HostWindowStatus::Window window;
+        window.device = device;
+        window.window_bytes = dumped != nullptr ? dumped->bytes : std::nullopt;
+        if (!window.window_bytes && stats && stats->total_pages > 0) {
+            window.window_bytes = stats->total_pages * HostWindowStatus::kPageBytes;
+        }
+        auto history = had ? std::move(was->history) : QVector<HostWindowStatus::Sample>{};
+        if (snapshot.device) {
+            window.used_bytes = snapshot.used_bytes(device);
+            quint64 write_back = 0;
+            quint64 write_combined = 0;
+            for (const auto& context : snapshot.contexts) {
+                if (context.device == device) {
+                    write_back += context.write_back_bytes;
+                    write_combined += context.write_combined_bytes;
+                }
+            }
+            history.push_back({at_ms, write_back, write_combined});
+        }
+        while (!history.isEmpty() && at_ms - history.first().at_ms > HostWindowStatus::kHistoryMs) {
+            history.removeFirst();
+        }
+        window.history = std::move(history);
+
+        if (stats && stats->peak_pages_in_use > 0) {
+            window.peak_bytes = stats->peak_pages_in_use * HostWindowStatus::kPageBytes;
+        } else if (snapshot.device) {
+            quint64 peak = 0;
+            for (const auto& sample : window.history) {
+                peak = std::max(peak, sample.write_back + sample.write_combined);
+            }
+            window.peak_bytes = peak;
+        }
+
+        if (snapshot.device && window.window_bytes && *window.window_bytes > 0 &&
+            window.used_bytes > *window.window_bytes / 10 * 9) {
+            window.full_since_ms = had && was->full_since_ms ? was->full_since_ms : at_ms;
+        }
+
+        window.refused_at_ms = had ? was->refused_at_ms : std::nullopt;
+        if (stats) {
+            window.refusals = stats->refusals;
+            if (had && was->refusals && stats->refusals > *was->refusals) {
+                window.refused_at_ms = at_ms;
+            }
+        } else if (had) {
+            window.refusals = was->refusals;
+        }
+        status_.windows.push_back(std::move(window));
+    }
 }
 
 void HostWindowTracker::order() {

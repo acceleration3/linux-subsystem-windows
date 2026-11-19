@@ -27,7 +27,7 @@ AvStateDump::Snapshot device(quint64 window,
                              std::initializer_list<AvStateDump::Context> contexts = {}) {
     AvStateDump::Snapshot snap;
     snap.device = true;
-    snap.window_bytes = window;
+    snap.windows.push_back({0, window, std::nullopt});
     for (const auto& context : contexts) {
         snap.contexts.push_back(context);
     }
@@ -60,6 +60,17 @@ AvStateDump::Snapshot executor(std::initializer_list<AvStateDump::Channel> chann
     return snap;
 }
 
+AvStateDump::Window& win(AvStateDump::Snapshot& snap) {
+    if (snap.windows.isEmpty()) {
+        snap.windows.push_back({});
+    }
+    return snap.windows.first();
+}
+
+HostWindowStatus::Window one(const HostWindowTracker& tracker) {
+    return tracker.status().windows.value(0);
+}
+
 const HostWindowStatus::App* transfer(const HostWindowTracker& tracker, quint32 id) {
     for (const auto& t : tracker.status().apps) {
         if (t.context == id) {
@@ -77,7 +88,7 @@ int main(int argc, char** argv) {
     {
         HostWindowTracker tracker;
         tracker.add(AvStateDump::Snapshot{}, 1000);
-        check(!tracker.status().read && tracker.status().history.isEmpty(),
+        check(!tracker.status().read && one(tracker).history.isEmpty(),
               "a snapshot with neither module is not read");
     }
     {
@@ -86,7 +97,8 @@ int main(int argc, char** argv) {
         const auto& status = tracker.status();
         check(status.read && !status.channels_known && status.at_ms == 1000,
               "a device snapshot is read");
-        check(status.window_bytes == 1000 && status.used_bytes == 450, "window and used bytes");
+        check(one(tracker).window_bytes == 1000 && one(tracker).used_bytes == 450,
+              "window and used bytes");
         check(status.apps.size() == 3, "every context is an app, holding something or not");
         check(status.apps.at(0).context == 2 && status.apps.at(1).context == 1 &&
                   status.apps.at(2).context == 3,
@@ -99,104 +111,124 @@ int main(int argc, char** argv) {
               "an app carries the bytes and blobs it holds");
         check(!status.apps.at(0).has_channel && !status.apps.at(0).submits_per_s,
               "an app without a channel or batches has neither");
-        check(status.history.size() == 1 && status.history.at(0).write_back == 400 &&
-                  status.history.at(0).write_combined == 50,
+        check(one(tracker).history.size() == 1 && one(tracker).history.at(0).write_back == 400 &&
+                  one(tracker).history.at(0).write_combined == 50,
               "history records the split by caching");
-        check(status.peak_bytes == 450, "the peak falls back to the history maximum");
+        check(one(tracker).peak_bytes == 450, "the peak falls back to the history maximum");
         tracker.clear();
-        check(!tracker.status().read && tracker.status().history.isEmpty(),
-              "clear forgets everything");
+        check(!tracker.status().read && one(tracker).history.isEmpty(), "clear forgets everything");
     }
     {
         HostWindowTracker tracker;
         auto snap = device(0, {context(1, 4096)});
-        snap.window_bytes.reset();
+        win(snap).bytes.reset();
         AvStateDump::WindowStats stats;
         stats.total_pages = 10;
         stats.peak_pages_in_use = 3;
-        snap.window_stats = stats;
+        win(snap).stats = stats;
         tracker.add(snap, 0);
-        check(tracker.status().window_bytes == 40960,
+        check(one(tracker).window_bytes == 40960,
               "window_stats total_pages stands in for host_window_bytes");
-        check(tracker.status().peak_bytes == 3 * 4096, "the peak comes from peak_pages_in_use");
-        snap.window_bytes = 5000;
+        check(one(tracker).peak_bytes == 3 * 4096, "the peak comes from peak_pages_in_use");
+        win(snap).bytes = 5000;
         tracker.add(snap, 1000);
-        check(tracker.status().window_bytes == 5000, "host_window_bytes wins over window_stats");
-        snap.window_bytes.reset();
-        snap.window_stats->total_pages = 0;
+        check(one(tracker).window_bytes == 5000, "host_window_bytes wins over window_stats");
+        win(snap).bytes.reset();
+        win(snap).stats->total_pages = 0;
         tracker.add(snap, 2000);
-        check(!tracker.status().window_bytes, "no window size when both are missing");
+        check(!one(tracker).window_bytes, "no window size when both are missing");
     }
     {
         HostWindowTracker tracker;
         tracker.add(device(1000, {context(1, 100)}), 0);
         tracker.add(device(1000, {context(1, 700)}), 1000);
         tracker.add(device(1000, {context(1, 200)}), 2000);
-        check(tracker.status().peak_bytes == 700, "the history peak survives a drop");
+        check(one(tracker).peak_bytes == 700, "the history peak survives a drop");
     }
     {
         HostWindowTracker tracker;
         tracker.add(device(1000, {context(1, 10)}), 0);
         tracker.add(device(1000, {context(1, 20)}), 1);
         tracker.add(device(1000, {context(1, 30)}), 600'000);
-        check(tracker.status().history.size() == 3,
-              "history keeps samples exactly ten minutes old");
+        check(one(tracker).history.size() == 3, "history keeps samples exactly ten minutes old");
         tracker.add(device(1000, {context(1, 40)}), 600'001);
-        check(tracker.status().history.size() == 3 && tracker.status().history.first().at_ms == 1,
+        check(one(tracker).history.size() == 3 && one(tracker).history.first().at_ms == 1,
               "history drops samples older than ten minutes");
         tracker.add(device(1000, {context(1, 50)}), 2'000'000);
-        check(tracker.status().history.size() == 1 &&
-                  tracker.status().history.first().write_back == 50,
+        check(one(tracker).history.size() == 1 && one(tracker).history.first().write_back == 50,
               "a long gap leaves only the new sample");
-        check(tracker.status().peak_bytes == 50, "the fallback peak covers only retained history");
+        check(one(tracker).peak_bytes == 50, "the fallback peak covers only retained history");
     }
     {
         HostWindowTracker tracker;
         tracker.add(executor({channel(1)}), 0);
         check(tracker.status().read == false && tracker.status().channels_known,
               "an executor-only snapshot has channels");
-        check(tracker.status().history.isEmpty() && !tracker.status().peak_bytes,
+        check(one(tracker).history.isEmpty() && !one(tracker).peak_bytes,
               "an executor-only snapshot has no window history");
     }
     {
         HostWindowTracker tracker;
         tracker.add(device(1000, {context(1, 900)}), 0);
-        check(!tracker.status().full_since_ms, "exactly 90 percent is not full");
+        check(!one(tracker).full_since_ms, "exactly 90 percent is not full");
         tracker.add(device(1000, {context(1, 901)}), 1000);
-        check(tracker.status().full_since_ms == 1000, "over 90 percent starts the full timer");
+        check(one(tracker).full_since_ms == 1000, "over 90 percent starts the full timer");
         tracker.add(device(1000, {context(1, 950)}), 4000);
-        check(tracker.status().full_since_ms == 1000, "the full timer keeps its start while over");
+        check(one(tracker).full_since_ms == 1000, "the full timer keeps its start while over");
         tracker.add(device(1000, {context(1, 100)}), 5000);
-        check(!tracker.status().full_since_ms, "dropping below 90 percent clears the timer");
+        check(!one(tracker).full_since_ms, "dropping below 90 percent clears the timer");
         tracker.add(device(1000, {context(1, 950)}), 6000);
-        check(tracker.status().full_since_ms == 6000, "the timer restarts after a drop");
+        check(one(tracker).full_since_ms == 6000, "the timer restarts after a drop");
         tracker.add(device(0, {context(1, 950)}), 7000);
-        check(!tracker.status().full_since_ms, "an unknown window is never full");
+        check(!one(tracker).full_since_ms, "an unknown window is never full");
+    }
+    {
+        constexpr quint64 kWindow = 8ULL << 30;
+        AvStateDump::Snapshot snap;
+        snap.device = true;
+        snap.windows.push_back({0, kWindow, std::nullopt});
+        snap.windows.push_back({1, kWindow, std::nullopt});
+        auto busy = context(1, kWindow / 10 * 9 + 1);
+        auto quiet = context(2, 1000);
+        quiet.device = 1;
+        snap.contexts = {busy, quiet};
+        HostWindowTracker tracker;
+        tracker.add(snap, 0);
+        const auto& windows = tracker.status().windows;
+        check(windows.size() == 2 && windows.at(0).device == 0 && windows.at(1).device == 1,
+              "each GPU device has its own window");
+        check(windows.at(0).window_bytes == kWindow && windows.at(1).window_bytes == kWindow,
+              "a window's size is its device's, not the sum of all devices'");
+        check(windows.at(0).used_bytes == kWindow / 10 * 9 + 1 && windows.at(1).used_bytes == 1000,
+              "a window's use is what its device's contexts hold");
+        check(windows.at(0).full_since_ms == 0 && !windows.at(1).full_since_ms,
+              "one full window is full though all windows together are half full");
+        check(windows.at(1).history.size() == 1 && windows.at(1).history.first().write_back == 1000,
+              "each window keeps its own history");
     }
     {
         HostWindowTracker tracker;
         auto snap = device(1000);
         AvStateDump::WindowStats stats;
         stats.refusals = 5;
-        snap.window_stats = stats;
+        win(snap).stats = stats;
         tracker.add(snap, 0);
-        check(tracker.status().window_refusals == 5 && !tracker.status().window_refused_at_ms,
+        check(one(tracker).refusals == 5 && !one(tracker).refused_at_ms,
               "the first refusal count is a baseline");
         tracker.add(snap, 1000);
-        check(!tracker.status().window_refused_at_ms, "a steady refusal count raises no alert");
-        snap.window_stats->refusals = 6;
+        check(!one(tracker).refused_at_ms, "a steady refusal count raises no alert");
+        win(snap).stats->refusals = 6;
         tracker.add(snap, 2000);
-        check(tracker.status().window_refused_at_ms == 2000, "rising refusals stamp the time");
-        snap.window_stats->refusals = 6;
+        check(one(tracker).refused_at_ms == 2000, "rising refusals stamp the time");
+        win(snap).stats->refusals = 6;
         tracker.add(snap, 3000);
-        check(tracker.status().window_refused_at_ms == 2000,
-              "the stamp stays until refusals rise again");
-        snap.window_stats->refusals = 2;
+        check(one(tracker).refused_at_ms == 2000, "the stamp stays until refusals rise again");
+        win(snap).stats->refusals = 2;
         tracker.add(snap, 4000);
-        check(tracker.status().window_refused_at_ms == 2000, "a falling count is not a refusal");
-        snap.window_stats->refusals = 3;
+        check(one(tracker).refused_at_ms == 2000, "a falling count is not a refusal");
+        win(snap).stats->refusals = 3;
         tracker.add(snap, 5000);
-        check(tracker.status().window_refused_at_ms == 5000, "a rise after a reset counts again");
+        check(one(tracker).refused_at_ms == 5000, "a rise after a reset counts again");
     }
     {
         HostWindowTracker tracker;

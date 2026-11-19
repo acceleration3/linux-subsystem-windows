@@ -54,9 +54,14 @@ private:
     QVBoxLayout* content_ = nullptr;
     QLabel* log_meta_ = nullptr;
     QLabel* log_text_ = nullptr;
-    ui::UsageGraph* graph_ = nullptr;
-    QLabel* window_use_ = nullptr;
-    QLabel* window_peak_ = nullptr;
+
+    struct WindowView {
+        ui::UsageGraph* graph = nullptr;
+        QLabel* use = nullptr;
+        QLabel* peak = nullptr;
+    };
+
+    QVector<WindowView> windows_;
     QVector<QLabel*> vram_cap_;
     QVector<QLabel*> vram_reserve_;
     QTableWidget* apps_table_ = nullptr;
