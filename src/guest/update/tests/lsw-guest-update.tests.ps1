@@ -137,6 +137,10 @@ function Enumerate-Installed {
     foreach ($dir in @('C:\av\package', 'C:\av\loaders', 'C:\ProgramData\LSW\virtiofs')) {
         $paths += @(Get-ChildItem -LiteralPath $dir -Recurse -File -Force | ForEach-Object { $_.FullName })
     }
+    foreach ($dir in @('C:\ProgramData\LSW\network', 'C:\ProgramData\LSW\balloon')) {
+        if (-not (Test-Path -LiteralPath $dir -PathType Container)) { throw ($dir + ' is not installed; update Windows from the manager first') }
+        $paths += @(Get-ChildItem -LiteralPath $dir -Recurse -File -Force | ForEach-Object { $_.FullName })
+    }
     return $paths
 }
 
@@ -312,13 +316,13 @@ function Scenario-A {
     $run = Invoke-Update $st
     Check 'a. exit 0 and result ok' ($run.ExitCode -eq 0 -and $run.Result.ok -eq $true) (Format-Steps $run.Result)
     Check-Steps 'a.' $run @{
-        'verify' = 'done'; 'stop' = 'done'; 'agent and mirror' = 'skipped'; 'driver' = 'skipped'; 'loaders' = 'skipped'
-        'shared folders' = 'done'; 'service and firewall' = 'skipped'; 'start' = 'done' }
+        'verify' = 'done'; 'stop' = 'skipped'; 'agent and mirror' = 'skipped'; 'driver' = 'skipped'; 'loaders' = 'skipped'
+        'shared folders' = 'done'; 'service and firewall' = 'skipped'; 'start' = 'skipped' }
     Check 'a. no restart marked' ($run.Result.restart -eq $false) ('restart=' + $run.Result.restart)
     Check 'a. release.json has the stage release' ($run.Release -and $run.Release.release -eq $st.Release -and $run.Release.manifest -ceq $st.ManifestText) ('release=' + $run.Release.release + ' want ' + $st.Release)
     Check 'a. release.json is newly written' ((Sha $ReleaseJson) -ne $releaseBefore)
     Check 'a. agent answering on 5102 afterwards' (Wait-Agent 90)
-    Check 'a. agent was restarted (new process)' ((Get-AgentPid) -ne $run.PidBefore) ('pid ' + $run.PidBefore)
+    Check 'a. the agent, whose files are current, kept running' ((Get-AgentPid) -eq $run.PidBefore) ('pid ' + $run.PidBefore + ' now ' + (Get-AgentPid))
     Check-Recovery 'a'
 }
 
@@ -384,7 +388,8 @@ function Scenario-E {
     $all = @{}
     foreach ($stepName in $StepNames) { $all[$stepName] = 'done' }
     Check-Steps 'e.' $run $all
-    Check 'e. restart recorded true, not performed' ($run.Result.restart -eq $true -and $run.Log -match 'a restart is due; -NoRestart') ('restart=' + $run.Result.restart)
+    $wanted = $run.Log -match 'restart needed: '
+    Check 'e. a restart is recorded exactly when a step needed one, and not performed' ($run.Result.restart -eq $wanted -and (-not $wanted -or $run.Log -match 'a restart is due; -NoRestart')) ('restart=' + $run.Result.restart + ', needed=' + $wanted)
     Check 'e. driver re-signed and installed (provision sign and install ran)' ($run.Log -match 'provision sign exited (0|3010)' -and $run.Log -match 'provision install exited (0|3010)')
     $want = Driver-Lines $st.Map
     $have = ''
@@ -423,7 +428,7 @@ function Scenario-G {
     $have = ''
     if (Test-Path -LiteralPath $Marker) { $have = [System.IO.File]::ReadAllText($Marker, $Utf8) }
     Check 'g. the marker is written after it' ($have -ceq $want) ('marker ' + $have.Length + ' bytes, want ' + $want.Length)
-    Check 'g. restart recorded' ($run.Result.restart -eq $true)
+    Check 'g. a restart is recorded exactly when the driver did not switch over live' ($run.Result.restart -eq ($run.Log -match 'restart needed: ')) ('restart=' + $run.Result.restart)
     Check 'g. agent answering on 5102 afterwards' (Wait-Agent 90)
     Check-Recovery 'g'
 }

@@ -5,7 +5,8 @@ param(
     [string] $ProgressUrl = '',
     [string] $Version = '',
     [switch] $Force,
-    [switch] $NoRestart
+    [switch] $NoRestart,
+    [string] $Lane = ''
 )
 
 $ErrorActionPreference = 'Continue'
@@ -41,10 +42,24 @@ function Roll-Log([string] $LogFile) {
     } catch { }
 }
 
-Roll-Log $Log
+if (-not $Lane) { Roll-Log $Log }
+
+$script:LogLock = New-Object System.Threading.Mutex($false, 'Global\lsw-guest-update-log')
 
 function L([string] $Message) {
-    ('{0} {1}' -f (Get-Date -Format s), $Message) | Add-Content -LiteralPath $Log -Encoding Ascii
+    $line = '{0} {1}{2}' -f (Get-Date -Format s), $(if ($Lane) { '[' + $Lane + '] ' } else { '' }), $Message
+    $held = $false
+    try {
+        $held = $script:LogLock.WaitOne(10000)
+    } catch [System.Threading.AbandonedMutexException] {
+        $held = $true
+    }
+    try {
+        $line | Add-Content -LiteralPath $Log -Encoding Ascii
+    } catch {
+    } finally {
+        if ($held) { $script:LogLock.ReleaseMutex() }
+    }
 }
 
 function Utc-Now {
@@ -85,17 +100,19 @@ function Write-Result([bool] $Succeeded, [string] $Text, $StepList) {
 $script:Restart = $false
 $script:StepRestart = $false
 $script:Reasons = @()
-$script:UpdateLock = New-Object System.Threading.Mutex($false, 'Global\lsw-guest-update')
-$locked = $false
-try {
-    $locked = $script:UpdateLock.WaitOne(5000)
-} catch [System.Threading.AbandonedMutexException] {
-    $locked = $true
-}
-if (-not $locked) {
-    L 'another update is running in Windows; this one does nothing'
-    Write-Result $false 'another update is running in Windows' @()
-    exit 1
+if (-not $Lane) {
+    $script:UpdateLock = New-Object System.Threading.Mutex($false, 'Global\lsw-guest-update')
+    $locked = $false
+    try {
+        $locked = $script:UpdateLock.WaitOne(5000)
+    } catch [System.Threading.AbandonedMutexException] {
+        $locked = $true
+    }
+    if (-not $locked) {
+        L 'another update is running in Windows; this one does nothing'
+        Write-Result $false 'another update is running in Windows' @()
+        exit 1
+    }
 }
 
 $script:Manifest = @{}
@@ -249,7 +266,7 @@ function Run-Step([string] $Name, [scriptblock] $Body, [switch] $Always) {
     $script:Steps += [pscustomobject]@{ name = $Name; status = $script:State; message = $message; restart = $script:StepRestart }
 }
 
-function Step-Verify {
+function Load-Manifest {
     $manifestPath = Join-Path $Stage 'manifest.txt'
     if (-not (Test-Path -LiteralPath $manifestPath)) { throw 'manifest.txt is not in the staging directory' }
     $script:ManifestText = [System.IO.File]::ReadAllText($manifestPath, $Utf8)
@@ -259,6 +276,10 @@ function Step-Verify {
         if ($line -notmatch '^([0-9a-f]{64})  (.+)$') { throw ('not a manifest line: ' + $line) }
         $script:Manifest[$Matches[2]] = $Matches[1]
     }
+}
+
+function Step-Verify {
+    Load-Manifest
     foreach ($guest in $script:Manifest.Keys) {
         $path = Stage-Path $guest
         if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw ('staged file missing: ' + $guest) }
@@ -681,19 +702,119 @@ function Step-Start {
     throw ('the agent did not listen on ' + $AgentPort + ' within 60 s')
 }
 
+$StepBodies = [ordered]@{
+    'verify'               = { Step-Verify }
+    'stop'                 = { Step-Stop }
+    'agent and mirror'     = { Step-AgentAndMirror }
+    'driver'               = { Step-Driver }
+    'display path'         = { Step-DisplayPath }
+    'loaders'              = { Step-Loaders }
+    'shared folders'       = { Step-Shares }
+    'network driver'       = { Step-Network }
+    'balloon driver'       = { Step-Balloon }
+    'service and firewall' = { Step-Service }
+    'start'                = { Step-Start }
+}
+$Lanes = [ordered]@{
+    'display' = @('driver', 'display path')
+    'shares'  = @('shared folders')
+    'devices' = @('network driver', 'balloon driver')
+}
+$OwnSteps = @('agent and mirror', 'loaders', 'service and firewall')
+$LaneLimitMs = 15 * 60 * 1000
+
+function Lane-File([string] $Name) {
+    return Join-Path $Stage ('lane-' + $Name + '.json')
+}
+
+function Quote([string] $Value) {
+    return '"' + $Value + '"'
+}
+
+function Start-Lane([string] $Script, [string] $Name) {
+    Remove-Item -LiteralPath (Lane-File $Name) -Force -ErrorAction SilentlyContinue
+    $arguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Quote $Script),
+        '-Stage', (Quote $Stage), '-Release', (Quote $Release), '-Config', (Quote $Config),
+        '-ProgressUrl', (Quote $ProgressUrl), '-Version', (Quote $Version), '-Lane', (Quote $Name))
+    if ($Force) { $arguments += '-Force' }
+    if ($NoRestart) { $arguments += '-NoRestart' }
+    return Start-Process -FilePath 'powershell.exe' -ArgumentList ($arguments -join ' ') -WindowStyle Hidden -PassThru
+}
+
+function Lane-Steps([string] $Name, $Process) {
+    $file = Lane-File $Name
+    $result = $null
+    if (Test-Path -LiteralPath $file -PathType Leaf) {
+        try { $result = [System.IO.File]::ReadAllText($file, $Utf8) | ConvertFrom-Json } catch { $result = $null }
+    }
+    if (-not $result) {
+        $code = if ($Process -and $Process.HasExited) { [string] $Process.ExitCode } else { 'none, it was stopped' }
+        $why = 'the ' + $Name + ' steps ended without a result (exit code ' + $code + ')'
+        L ('FAILED ' + $why)
+        return @($Lanes[$Name] | ForEach-Object { [pscustomobject]@{ name = $_; status = 'failed'; message = $why; restart = $false } })
+    }
+    if ($result.restart) { $script:Restart = $true }
+    foreach ($reason in @($result.reasons)) {
+        if ($reason -and $script:Reasons -notcontains $reason) { $script:Reasons += $reason }
+    }
+    return @($result.steps)
+}
+
+function Run-Lanes {
+    $laneScript = Join-Path $Stage 'lane.ps1'
+    Copy-Item -LiteralPath $PSCommandPath -Destination $laneScript -Force
+    $running = [ordered]@{}
+    foreach ($name in $Lanes.Keys) { $running[$name] = Start-Lane $laneScript $name }
+    foreach ($name in $OwnSteps) { Run-Step $name $StepBodies[$name] }
+    $clock = [System.Diagnostics.Stopwatch]::StartNew()
+    foreach ($name in $running.Keys) {
+        $process = $running[$name]
+        $left = [math]::Max(0, $LaneLimitMs - [int] $clock.ElapsedMilliseconds)
+        if (-not $process.WaitForExit($left)) {
+            L ('the ' + $name + ' steps did not finish within ' + ($LaneLimitMs / 60000) + ' min; stopping them')
+            try { $process.Kill() } catch { }
+        }
+    }
+    $byName = @{}
+    foreach ($step in $script:Steps) { $byName[$step.name] = $step }
+    foreach ($name in $running.Keys) {
+        foreach ($step in (Lane-Steps $name $running[$name])) { $byName[$step.name] = $step }
+    }
+    $script:Steps = @($StepBodies.Keys | Where-Object { $byName.ContainsKey($_) } | ForEach-Object { $byName[$_] })
+    $script:Failure = $null
+    foreach ($step in $script:Steps) {
+        if ($step.status -eq 'failed') {
+            $script:Failure = @{ Step = $step.name; Message = $step.message }
+            break
+        }
+    }
+}
+
+if ($Lane) {
+    try {
+        Load-Manifest
+        foreach ($name in $Lanes[$Lane]) { Run-Step $name $StepBodies[$name] }
+    } catch {
+        L ('FAILED ' + $Lane + ': ' + $_.Exception.Message)
+        exit 1
+    }
+    $outcome = [ordered]@{ steps = @($script:Steps); restart = $script:Restart; reasons = @($script:Reasons) }
+    [System.IO.File]::WriteAllText((Lane-File $Lane), ($outcome | ConvertTo-Json -Depth 4 -Compress), $Utf8)
+    exit 0
+}
+
 L ('=== update to release ' + $Release + ($(if ($Force) { ' (forced)' } else { '' })) + ' from ' + $Stage)
 
-Run-Step 'verify' { Step-Verify }
-Run-Step 'stop' { Step-Stop }
-Run-Step 'agent and mirror' { Step-AgentAndMirror }
-Run-Step 'driver' { Step-Driver }
-Run-Step 'display path' { Step-DisplayPath }
-Run-Step 'loaders' { Step-Loaders }
-Run-Step 'shared folders' { Step-Shares }
-Run-Step 'network driver' { Step-Network }
-Run-Step 'balloon driver' { Step-Balloon }
-Run-Step 'service and firewall' { Step-Service }
-Run-Step 'start' { Step-Start } -Always
+Run-Step 'verify' $StepBodies['verify']
+Run-Step 'stop' $StepBodies['stop']
+if ($script:Failure) {
+    foreach ($name in $StepBodies.Keys) {
+        if ($name -ne 'verify' -and $name -ne 'stop' -and $name -ne 'start') { Run-Step $name $StepBodies[$name] }
+    }
+} else {
+    Run-Lanes
+}
+Run-Step 'start' $StepBodies['start'] -Always
 
 $ok = -not $script:Failure
 $message = if ($ok) { 'updated to release ' + $Release } else { $script:Failure.Step + ': ' + $script:Failure.Message }

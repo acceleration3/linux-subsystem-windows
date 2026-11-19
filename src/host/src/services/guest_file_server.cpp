@@ -152,16 +152,25 @@ void GuestFileServer::serve_loop() {
             }
             continue;
         }
-        const std::string request = read_request(conn);
-        if (request.find("\r\n\r\n") != std::string::npos) {
-            answer(conn, request);
-        } else {
-            LSW_WARN("file server: no whole request from the guest within {} s ({} bytes)",
-                     std::chrono::duration_cast<std::chrono::seconds>(kRequestDeadline).count(),
-                     request.size());
-        }
-        ::close(conn);
+        connections_.emplace_back([this, conn] { serve(conn); });
     }
+}
+
+void GuestFileServer::serve(int connection) {
+    const std::string request = read_request(connection);
+    if (request.find("\r\n\r\n") != std::string::npos) {
+        answer(connection, request);
+    } else {
+        LSW_WARN("file server: no whole request from the guest within {} s ({} bytes)",
+                 std::chrono::duration_cast<std::chrono::seconds>(kRequestDeadline).count(),
+                 request.size());
+    }
+    ::close(connection);
+}
+
+void GuestFileServer::add(std::string name, QByteArray bytes) {
+    const std::lock_guard lock{files_mu_};
+    files_.insert_or_assign(std::move(name), std::move(bytes));
 }
 
 std::string GuestFileServer::read_request(int connection) const {
@@ -201,15 +210,23 @@ void GuestFileServer::answer(int connection, std::string_view request) {
         }
         return;
     }
-    const auto file = files_.find(requested_name(request));
-    if (file == files_.end()) {
+    QByteArray payload;
+    bool found = false;
+    {
+        const std::lock_guard lock{files_mu_};
+        const auto file = files_.find(requested_name(request));
+        found = file != files_.end();
+        if (found) {
+            payload = file->second;
+        }
+    }
+    if (!found) {
         constexpr std::string_view kNotFound =
             "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
         LSW_DEBUG("file server: {} not found", std::string{requested_name(request)});
         send_all(connection, kNotFound.data(), kNotFound.size());
         return;
     }
-    const QByteArray& payload = file->second;
     const std::string header = std::string{"HTTP/1.1 200 OK\r\n"}
                                + "Content-Type: application/octet-stream\r\n"
                                + "Content-Length: " + std::to_string(payload.size()) + "\r\n"
@@ -231,6 +248,10 @@ void GuestFileServer::stop() {
     if (thread_.joinable()) {
         thread_.join();
     }
+    for (std::thread& connection : connections_) {
+        connection.join();
+    }
+    connections_.clear();
 }
 
 }

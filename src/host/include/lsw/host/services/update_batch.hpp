@@ -21,8 +21,14 @@ public:
     static constexpr int kResultFailed = 22;
     static constexpr int kResultOk = 23;
 
+    static constexpr const char* kFetchConfig = "fetch.cfg";
+    static constexpr int kParallelDownloads = 8;
+
     [[nodiscard]] static std::string send(unsigned short port, const std::string& release,
                                           const GuestBundle::Contents& contents, bool force);
+
+    [[nodiscard]] static std::string fetch_config(unsigned short port, const std::string& release,
+                                                  const GuestBundle::Contents& contents);
 
     [[nodiscard]] static std::string read_result(const std::string& finished_before);
 

@@ -2,6 +2,10 @@
 
 #include "lsw/base/log.hpp"
 
+#include <string>
+#include <utility>
+#include <vector>
+
 namespace lsw::host::services {
 
 namespace {
@@ -10,13 +14,56 @@ constexpr const char* kGuestResult = "C:\\ProgramData\\LSW\\update-result.json";
 
 constexpr const char* kStageRoot = "C:\\ProgramData\\LSW\\update\\";
 
+std::string stage_dir(unsigned short port, const std::string& release) {
+    return kStageRoot + release.substr(0, 16) + "-" + std::to_string(port);
+}
+
+std::string base_url(unsigned short port) {
+    return "http://10.0.2.2:" + std::to_string(port) + "/";
+}
+
+std::vector<std::pair<std::string, std::string>> downloads(const GuestBundle::Contents& contents) {
+    std::vector<std::pair<std::string, std::string>> out;
+    for (std::size_t i = 0; i < static_cast<std::size_t>(contents.files.size()); ++i) {
+        out.emplace_back(
+            "f" + std::to_string(i),
+            GuestBundle::staged_path(contents.files[static_cast<qsizetype>(i)].guest_path));
+    }
+    out.emplace_back("manifest.txt", "manifest.txt");
+    out.emplace_back("shares.txt", "shares.txt");
+    return out;
+}
+
+std::string config_quoted(const std::string& value) {
+    std::string out = "\"";
+    for (const char c : value) {
+        if (c == '\\' || c == '"') {
+            out += '\\';
+        }
+        out += c;
+    }
+    return out + "\"";
+}
+
+}  // namespace
+
+std::string UpdateBatch::fetch_config(unsigned short port, const std::string& release,
+                                      const GuestBundle::Contents& contents) {
+    const std::string stage = stage_dir(port, release);
+    std::string text = "parallel\nparallel-max = " + std::to_string(kParallelDownloads) +
+                       "\nfail\nsilent\nshow-error\nlocation\ncreate-dirs\n";
+    for (const auto& [name, to] : downloads(contents)) {
+        text += "url = " + config_quoted(base_url(port) + name) + "\n";
+        text += "output = " + config_quoted(stage + "\\" + to) + "\n";
+    }
+    return text;
 }
 
 std::string UpdateBatch::send(unsigned short port, const std::string& release,
                                 const GuestBundle::Contents& contents, bool force) {
     LSW_DEBUG("update batch: {} files, port {}{}", contents.files.size(), port, force ? ", forced" : "");
-    const std::string stage = kStageRoot + release.substr(0, 16) + "-" + std::to_string(port);
-    const std::string url = "http://10.0.2.2:" + std::to_string(port) + "/";
+    const std::string stage = stage_dir(port, release);
+    const std::string url = base_url(port);
     std::string text = "@echo off\r\nsetlocal\r\n";
     text += "set STAGE=" + stage + "\r\n";
     text += "set LOG=" + std::string{kGuestLog} + "\r\n";
@@ -31,11 +78,15 @@ std::string UpdateBatch::send(unsigned short port, const std::string& release,
         text += "if errorlevel 1 (echo [manager] download of " + name + " failed>> \"%LOG%\" & exit /b "
                 + std::to_string(kDownloadFailed) + ")\r\n";
     };
-    for (std::size_t i = 0; i < static_cast<std::size_t>(contents.files.size()); ++i) {
-        fetch("f" + std::to_string(i), GuestBundle::staged_path(contents.files[static_cast<qsizetype>(i)].guest_path));
+    text += "curl.exe --fail -s -S -o \"%STAGE%\\" + std::string{kFetchConfig} + "\" " + url +
+            kFetchConfig + " >> \"%LOG%\" 2>&1 && curl.exe -K \"%STAGE%\\" + kFetchConfig +
+            "\" >> \"%LOG%\" 2>&1 && goto fetched\r\n";
+    text +=
+        "echo [manager] the parallel download failed; fetching one file at a time>> \"%LOG%\"\r\n";
+    for (const auto& [name, to] : downloads(contents)) {
+        fetch(name, to);
     }
-    fetch("manifest.txt", "manifest.txt");
-    fetch("shares.txt", "shares.txt");
+    text += ":fetched\r\n";
 
     const std::string run = "powershell -NoProfile -ExecutionPolicy Bypass -File \"%STAGE%\\C\\ProgramData\\LSW\\"
                             "lsw-guest-update.ps1\" -Stage \"%STAGE%\" -Release " + release

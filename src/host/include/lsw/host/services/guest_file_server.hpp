@@ -1,14 +1,15 @@
 #pragma once
 
 #include <QByteArray>
-
 #include <atomic>
 #include <functional>
 #include <map>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <thread>
+#include <vector>
 
 namespace lsw::host::services {
 class GuestFileServer {
@@ -32,6 +33,8 @@ public:
 
     [[nodiscard]] bool start();
 
+    void add(std::string name, QByteArray bytes);
+
     void stop();
 
     [[nodiscard]] unsigned short port() const noexcept { return port_; }
@@ -46,9 +49,11 @@ public:
 
 private:
     void serve_loop();
+    void serve(int connection);
     [[nodiscard]] std::string read_request(int connection) const;
     void answer(int connection, std::string_view request);
 
+    mutable std::mutex files_mu_;
     Files files_;
     ProgressSink sink_;
     int listen_fd_ = -1;
@@ -56,6 +61,7 @@ private:
     std::atomic<bool> stop_{false};
     std::atomic<int> served_{0};
     std::thread thread_;
+    std::vector<std::thread> connections_;
     std::string error_;
 };
 

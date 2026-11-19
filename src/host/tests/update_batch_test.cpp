@@ -54,7 +54,32 @@ int main() {
     check(has(plain, "-o \"%STAGE%\\manifest.txt\" http://10.0.2.2:5555/manifest.txt ")
               && has(plain, "-o \"%STAGE%\\shares.txt\" http://10.0.2.2:5555/shares.txt "),
           "manifest.txt and shares.txt are fetched into the stage's top");
-    check(count(plain, "curl.exe") == 5, "one download a file and the two lists, no more");
+    check(count(plain, "curl.exe") == 7, "the parallel download's list and run, then one download "
+                                         "a file and the two lists for the fallback");
+    const auto parallel = plain.find("curl.exe -K \"%STAGE%\\fetch.cfg\"");
+    const auto fallback = plain.find("one file at a time");
+    const auto fetched = plain.find(":fetched\r\n");
+    check(has(plain, "http://10.0.2.2:5555/fetch.cfg ") && parallel != std::string::npos &&
+              has(plain, "2>&1 && goto fetched\r\n"),
+          "the guest fetches the download list and runs it in one curl, skipping the fallback when "
+          "it works");
+    check(parallel < fallback && fallback < plain.find("/f0 ") &&
+              plain.find("/shares.txt ") < fetched && fetched < plain.find("schtasks /Create"),
+          "a failed parallel download falls back to the files one at a time, both before the task "
+          "is made");
+
+    const std::string config = UpdateBatch::fetch_config(5555, release, c);
+    check(has(config, "parallel\n") && has(config, "parallel-max = 8\n") && has(config, "fail\n") &&
+              has(config, "create-dirs\n"),
+          "the download list runs its transfers in parallel, fails on an HTTP error and makes "
+          "directories");
+    check(has(config, "url = \"http://10.0.2.2:5555/f1\"\noutput = "
+                      "\"C:\\\\ProgramData\\\\LSW\\\\update\\\\0123456789abcdef-"
+                      "5555\\\\C\\\\av\\\\package\\\\avgpu.sys\"\n"),
+          "each file's output is its staged path, with curl's backslash escapes");
+    check(count(config, "url = ") == 5 && count(config, "output = ") == 5 &&
+              has(config, "/manifest.txt\"") && has(config, "/shares.txt\""),
+          "the list has every file and the two lists");
     check(count(plain, "exit /b 8)") == 5, "every download that fails exits 8");
     check(!has(plain, "avgpu.sys\" >>") && !has(plain, "download of avgpu"),
           "the log lines carry the file's index, not its path");

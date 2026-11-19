@@ -266,7 +266,9 @@ GuestUpdate::Outcome GuestUpdate::carry_out(const std::shared_ptr<const GuestBun
                            .arg(QString::fromStdString(server.error()))};
     }
 
-    LSW_DEBUG("update: serving {} files on port {}", contents->files.size() + 2, server.port());
+    server.add(UpdateBatch::kFetchConfig, QByteArray::fromStdString(UpdateBatch::fetch_config(
+                                              server.port(), contents->release, *contents)));
+    LSW_DEBUG("update: serving {} files on port {}", contents->files.size() + 3, server.port());
     link::AgentReply before;
     for (int attempt = 0; attempt < 3 && !cancel_.load(); ++attempt) {
         if (attempt > 0) {

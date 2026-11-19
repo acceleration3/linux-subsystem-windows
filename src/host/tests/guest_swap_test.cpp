@@ -83,7 +83,28 @@ void serves_by_name() {
                                     std::chrono::milliseconds{0}, std::chrono::milliseconds{600});
     check(split.rfind("HTTP/1.1 200", 0) == 0 && ends_with(split, "\r\n\r\nMIRROR"),
           "a request whose header comes in two parts far apart is served whole");
+
+    const int stalled = ::socket(AF_INET, SOCK_STREAM, 0);
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    addr.sin_port = htons(server.port());
+    const bool open = ::connect(stalled, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) == 0;
+    const std::string partial = "GET /lsw-guest-agent.exe HTTP/1.1\r\n";
+    (void)::send(stalled, partial.data(), partial.size(), MSG_NOSIGNAL);
+    const auto began = std::chrono::steady_clock::now();
+    const std::string beside = fetch(server.port(), "/remotewin-guest.exe");
+    const auto took = std::chrono::steady_clock::now() - began;
+    check(open && beside.rfind("HTTP/1.1 200", 0) == 0 && took < std::chrono::seconds{1},
+          "a connection that stalls mid-request does not hold up a download beside it");
+    server.add("late.txt", QByteArray("ADDED"));
+    const std::string added = fetch(server.port(), "/late.txt");
+    check(ends_with(added, "\r\n\r\nADDED"), "a file added after the start is served");
+    const auto stopping = std::chrono::steady_clock::now();
     server.stop();
+    ::close(stalled);
+    check(std::chrono::steady_clock::now() - stopping < std::chrono::seconds{2},
+          "stopping does not wait out a stalled connection's deadline");
 }
 
 void swaps_the_mirror_aside() {
