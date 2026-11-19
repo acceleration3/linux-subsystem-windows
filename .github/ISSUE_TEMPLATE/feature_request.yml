@@ -1,0 +1,21 @@
+name: Feature request
+description: Something LSW could do that it does not.
+labels: ["enhancement", "triage"]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: What you want to do
+      description: The task you are trying to get done, and what gets in the way today.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: How LSW could help
+      description: What you imagine, if you have something in mind.
+  - type: textarea
+    id: else
+    attributes:
+      label: Anything else
+      description: Workarounds you use now, or how other tools do it.

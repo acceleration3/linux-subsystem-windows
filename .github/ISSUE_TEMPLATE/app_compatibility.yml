@@ -1,0 +1,67 @@
+name: Application or game report
+description: A Windows application or game that does not run, or runs badly, under LSW.
+labels: ["compatibility", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Reports of what does and does not work help decide what to fix next. A log archive from **Collect logs** (Log page or Settings), taken right after the problem, says which driver call failed.
+  - type: input
+    id: app
+    attributes:
+      label: Application or game
+      description: Its name and version, and where it came from (an installer, Steam, the Microsoft Store, ...).
+      placeholder: Photoshop CS6 13.0, from its installer
+    validations:
+      required: true
+  - type: dropdown
+    id: result
+    attributes:
+      label: How it runs
+      options:
+        - It does not start
+        - It starts, then crashes or freezes
+        - It runs, with wrong or missing graphics
+        - It runs, but slowly
+        - It runs, with a problem in its windows, menus or input
+        - Something else, described below
+    validations:
+      required: true
+  - type: dropdown
+    id: api
+    attributes:
+      label: Graphics API, if you know it
+      options:
+        - I don't know
+        - Direct3D 12
+        - Direct3D 11
+        - Direct3D 9
+        - Vulkan
+        - OpenGL
+        - OpenCL
+  - type: textarea
+    id: details
+    attributes:
+      label: What you see
+      description: What happens, and when. Screenshots or a short video help.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Drag the archive from **Collect logs** here.
+  - type: input
+    id: version
+    attributes:
+      label: LSW version
+      description: The **Maintenance** page shows it.
+    validations:
+      required: true
+  - type: input
+    id: gpu
+    attributes:
+      label: GPU and driver
+      placeholder: NVIDIA GeForce RTX 4070, 580.95
+    validations:
+      required: true

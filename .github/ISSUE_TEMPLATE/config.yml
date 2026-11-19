@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions and ideas
+    url: https://github.com/acceleration3/linux-subsystem-windows/discussions
+    about: How do I ..., is it possible to ..., and ideas to talk over before they become a request.
+  - name: Report a security vulnerability
+    url: https://github.com/acceleration3/linux-subsystem-windows/security/advisories/new
+    about: Privately, so it can be fixed before it is public.
+  - name: The GPU stack (accel-virt)
+    url: https://github.com/acceleration3/accel-virt/issues
+    about: Driver and protocol work on the paravirtual GPU itself, for developers.
+  - name: The window mirror (remotewin)
+    url: https://github.com/acceleration3/remotewin/issues
+    about: Work on window remoting itself, for developers.

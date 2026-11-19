@@ -1,0 +1,24 @@
+"area: manager":
+  - changed-files:
+      - any-glob-to-any-file: ["src/host/**", "src/base/**"]
+"area: guest":
+  - changed-files:
+      - any-glob-to-any-file: ["src/agent/**", "src/guest/**"]
+"area: protocol":
+  - changed-files:
+      - any-glob-to-any-file: ["src/linkproto/**"]
+"area: gpu":
+  - changed-files:
+      - any-glob-to-any-file: ["external/accel-virt"]
+"area: windows":
+  - changed-files:
+      - any-glob-to-any-file: ["external/remotewin"]
+"area: packaging":
+  - changed-files:
+      - any-glob-to-any-file: ["packaging/**", "scripts/dist.sh", ".github/workflows/release.yml"]
+"area: scripts":
+  - changed-files:
+      - any-glob-to-any-file: ["scripts/**"]
+"documentation":
+  - changed-files:
+      - any-glob-to-any-file: ["**/*.md", "docs/**"]

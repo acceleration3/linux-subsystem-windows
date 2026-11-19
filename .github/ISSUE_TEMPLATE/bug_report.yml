@@ -1,0 +1,72 @@
+name: Bug report
+description: Something in LSW does not work as it should.
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. The log archive is what makes most bugs fixable: in the manager, open the **Log** page or **Settings** and press **Collect logs**, then drag the archive into the Logs box below.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead. Screenshots help.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open the manager
+        2. Launch ...
+        3. ...
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Drag the archive from **Collect logs** here. Without it, the first reply will usually be a request for it.
+      placeholder: Drop lsw-logs-....tar.gz here
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: LSW version
+      description: The **Maintenance** page shows it, for example 0.3.2.
+    validations:
+      required: true
+  - type: input
+    id: distro
+    attributes:
+      label: Distribution and desktop
+      placeholder: Arch Linux, KDE Plasma 6.5 on Wayland
+    validations:
+      required: true
+  - type: input
+    id: gpu
+    attributes:
+      label: GPU and driver
+      placeholder: AMD Radeon RX 7800 XT, Mesa 25.2
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How LSW was installed
+      options:
+        - AUR (lsw-bin)
+        - .deb package
+        - .rpm package
+        - Release tarball
+        - Built from source
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched the existing issues and this is not one of them.
+          required: true
+        - label: I accepted the manager's update of Windows after installing this version of LSW.
