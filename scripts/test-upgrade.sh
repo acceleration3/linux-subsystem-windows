@@ -699,12 +699,16 @@ probe_script() {
 session_one_up() {
     rpc list_sessions | jq -e '[.. | objects | select(.id? == 1 or .session? == 1)] | length > 0' >/dev/null
 }
+share_up() {
+    rpc list_dir '{"path":"Z:\\_upgrade"}' | jq -e '.entries | type == "array"' >/dev/null
+}
 
 run_probes() {
     local label="$1" round="$2" arch tree out probe code
     local archs="x64"
     [[ "$X86" -eq 1 ]] && archs="x64 x86"
     wait_until 300 "a user session in the guest" session_one_up
+    wait_until 300 "the shared folder in the guest" share_up
     for arch in $archs; do
         tree="${BR_TREE}/build/accel-virt/drivers/guest"
         [[ "$arch" == x86 ]] && tree="${BR_TREE}/build/accel-virt/drivers/guest32"
