@@ -3,6 +3,7 @@
 #include "lsw/agent/log.hpp"
 #include "lsw/agent/session/session_manager.hpp"
 #include "lsw/agent/system/driver_log_pruner.hpp"
+#include "lsw/agent/system/host_link.hpp"
 #include "lsw/agent/system/volume_grower.hpp"
 #include "lsw/agent/transport/host_endpoint.hpp"
 #include "lsw/agent/win/token_privileges.hpp"
@@ -30,6 +31,9 @@ int AgentService::run(Mode mode) {
                    as_service ? "the lsw-agent service" : "a foreground process (debugging)");
 
     (void)win::TokenPrivileges::enable_install_privileges();
+
+    system::HostLink host_link;
+    host_link.start();
 
     auto* services = new AgentServices{AgentServices::Role::Service};
     services->attach_sessions(std::make_unique<session::SessionManager>(as_service));

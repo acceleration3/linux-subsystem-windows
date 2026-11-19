@@ -76,6 +76,9 @@ private:
     std::atomic<quint64> generation_{0};
     quint64 last_generation_ = 0;
     std::atomic<bool> announced_{false};
+    std::atomic<bool> beating_{false};
+    std::atomic<bool> agent_beats_{false};
+    std::atomic<std::int64_t> last_received_ms_{0};
 
     std::atomic<bool> stop_{false};
     std::thread reader_;

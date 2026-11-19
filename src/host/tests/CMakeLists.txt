@@ -401,3 +401,9 @@ target_link_libraries(lsw_host_info_tip_test PRIVATE lsw_host_core LSW::CompileO
 add_test(NAME lsw_host_info_tip_test COMMAND lsw_host_info_tip_test)
 set_tests_properties(lsw_host_info_tip_test PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)
+
+add_executable(lsw_host_agent_heartbeat_test agent_heartbeat_test.cpp)
+target_link_libraries(lsw_host_agent_heartbeat_test PRIVATE lsw_host_core LSW::CompileOptions)
+target_compile_definitions(lsw_host_agent_heartbeat_test PRIVATE QT_NO_KEYWORDS)
+add_test(NAME lsw_host_agent_heartbeat_test COMMAND lsw_host_agent_heartbeat_test)
+set_tests_properties(lsw_host_agent_heartbeat_test PROPERTIES TIMEOUT 90)

@@ -40,7 +40,7 @@ bool EnvelopeWriter::write_all(const std::uint8_t* p, int n) {
         }
         p += w;
         n -= w;
-        bytes_sent_ += static_cast<std::uint64_t>(w);
+        bytes_sent_.fetch_add(static_cast<std::uint64_t>(w));
     }
     return true;
 }
@@ -53,6 +53,7 @@ bool EnvelopeWriter::send(linkproto::FrameType type, const std::uint8_t* payload
     }
     std::uint8_t header[linkproto::kHeaderSize];
     linkproto::write_header(header, type, static_cast<std::uint32_t>(payload_len));
+    const std::lock_guard lock{send_mu_};
     if (!write_all(header, static_cast<int>(linkproto::kHeaderSize))) {
         return false;
     }
@@ -67,6 +68,5 @@ bool EnvelopeWriter::send_control(const nlohmann::json& message) {
     return send(linkproto::FrameType::Control,
                 reinterpret_cast<const std::uint8_t*>(body.data()), body.size());
 }
-
 
 }

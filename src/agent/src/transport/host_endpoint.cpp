@@ -14,6 +14,7 @@
 #include "lsw/agent/transport/log_event_source.hpp"
 #include "lsw/linkproto/envelope.hpp"
 #include "lsw/linkproto/frame_reader.hpp"
+#include "lsw/linkproto/heartbeat.hpp"
 
 // clang-format off
 #include <winsock2.h>
@@ -22,10 +23,13 @@
 // clang-format on
 
 #include <chrono>
+#include <condition_variable>
 #include <cstdint>
 #include <functional>
+#include <mutex>
 #include <nlohmann/json.hpp>
 #include <string>
+#include <thread>
 
 namespace lsw::agent::transport {
 
@@ -61,6 +65,47 @@ constexpr std::size_t kMaxLogPayload = 200;
     return message.is_object() && !message.contains("event") && message.contains("id") &&
            message.contains("cmd") && message["cmd"].is_string();
 }
+
+class Heartbeat {
+public:
+    Heartbeat(EnvelopeWriter& writer, SOCKET socket) : writer_(&writer), socket_(socket) {
+        thread_ = std::thread([this] { run(); });
+    }
+
+    ~Heartbeat() {
+        {
+            const std::lock_guard lock{mu_};
+            stop_ = true;
+        }
+        wake_.notify_all();
+        ::shutdown(socket_, SD_BOTH);
+        thread_.join();
+    }
+
+    Heartbeat(const Heartbeat&) = delete;
+    Heartbeat& operator=(const Heartbeat&) = delete;
+
+private:
+    void run() {
+        const nlohmann::json beat = {{"event", linkproto::heartbeat::kEvent}};
+        std::unique_lock lock{mu_};
+        do {
+            lock.unlock();
+            const bool sent = writer_->send_control(beat);
+            lock.lock();
+            if (!sent) {
+                return;
+            }
+        } while (!wake_.wait_for(lock, linkproto::heartbeat::kInterval, [this] { return stop_; }));
+    }
+
+    EnvelopeWriter* writer_;
+    SOCKET socket_;
+    std::mutex mu_;
+    std::condition_variable wake_;
+    bool stop_ = false;
+    std::thread thread_;
+};
 
 struct ConnectionStats {
     std::uint64_t bytes_received = 0;
@@ -273,6 +318,8 @@ void HostEndpoint::handle_connection(std::intptr_t accepted_fd) {
     ConnectionStats stats;
     EnvelopeWriter writer{accepted_fd, peer};
     RequestDispatcher dispatcher{rpc_ctx, stats};
+
+    const Heartbeat heartbeat{writer, s};
 
     const auto reply_over_socket = [&](const nlohmann::json& message) {
         return writer.send_control(message);

@@ -28,6 +28,8 @@ public:
 
     [[nodiscard]] long write_dword(const wchar_t* name, DWORD value) const;
 
+    [[nodiscard]] long write_string(const wchar_t* name, const std::wstring& value) const;
+
     [[nodiscard]] long delete_value(const wchar_t* name) const;
 
     [[nodiscard]] std::vector<std::wstring> subkey_names() const;

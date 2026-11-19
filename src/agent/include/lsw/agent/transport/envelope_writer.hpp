@@ -2,7 +2,9 @@
 
 #include "lsw/linkproto/envelope.hpp"
 
+#include <atomic>
 #include <cstdint>
+#include <mutex>
 #include <nlohmann/json_fwd.hpp>
 #include <string>
 
@@ -19,15 +21,15 @@ public:
 
     [[nodiscard]] bool send_control(const nlohmann::json& message);
 
-
-    [[nodiscard]] std::uint64_t bytes_sent() const noexcept { return bytes_sent_; }
+    [[nodiscard]] std::uint64_t bytes_sent() const noexcept { return bytes_sent_.load(); }
 
 private:
     [[nodiscard]] bool write_all(const std::uint8_t* p, int n);
 
     std::intptr_t socket_;
     std::string peer_;
-    std::uint64_t bytes_sent_ = 0;
+    std::mutex send_mu_;
+    std::atomic<std::uint64_t> bytes_sent_{0};
 };
 
 }

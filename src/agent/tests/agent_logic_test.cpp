@@ -11,6 +11,7 @@
 #include "lsw/agent/session/session_routing.hpp"
 #include "lsw/agent/session/session_selector.hpp"
 #include "lsw/agent/system/display_request.hpp"
+#include "lsw/agent/system/host_link_plan.hpp"
 #include "lsw/agent/system/scale_steps.hpp"
 #include "lsw/agent/util/base64.hpp"
 #include "lsw/agent/util/wide_string.hpp"
@@ -18,6 +19,7 @@
 #include "lsw/agent/win/task_window.hpp"
 #include "lsw/linkproto/commands.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
@@ -773,6 +775,103 @@ void test_window_announcements() {
           "undelivered announcements are bounded and the oldest are dropped");
 }
 
+void test_host_link_plan() {
+    using lsw::agent::system::HostLinkPlan;
+    using lsw::agent::system::HostLinkRepair;
+    using lsw::agent::system::HostLinkState;
+    using lsw::agent::system::RepairBackoff;
+    using R = HostLinkRepair;
+    using V = std::vector<HostLinkRepair>;
+
+    HostLinkState healthy;
+    healthy.device = HostLinkState::Device::Working;
+    healthy.ipv4_bound = true;
+    healthy.has_address = true;
+    healthy.metric_v4 = true;
+    healthy.host_route = true;
+    healthy.named = true;
+    check(HostLinkPlan::repairs(healthy).empty(), "host link: a healthy link needs nothing");
+
+    HostLinkState state = healthy;
+    state.device = HostLinkState::Device::Disabled;
+    check(HostLinkPlan::repairs(state) == V{R::Enable}, "host link: a disabled adapter is enabled");
+    state.device = HostLinkState::Device::Absent;
+    check(HostLinkPlan::repairs(state) == V{R::Rescan},
+          "host link: an uninstalled adapter is found again");
+    state.device = HostLinkState::Device::Failing;
+    check(HostLinkPlan::repairs(state) == V{R::Rescan},
+          "host link: an adapter that fails to start is retried");
+    state.device = HostLinkState::Device::NoDriver;
+    check(HostLinkPlan::repairs(state) == V{R::InstallDriver},
+          "host link: a driverless adapter gets its driver");
+    state.firewall = false;
+    check(HostLinkPlan::repairs(state) == V{R::Firewall, R::InstallDriver},
+          "host link: the firewall is repaired whatever the adapter's state");
+
+    state = healthy;
+    state.ipv4_bound = false;
+    state.metric_v4 = false;
+    state.named = false;
+    check(HostLinkPlan::repairs(state) == V{R::BindIpv4},
+          "host link: IPv4 is bound before anything that needs it");
+
+    state = healthy;
+    state.dhcp = false;
+    state.has_address = false;
+    state.host_route = false;
+    check(HostLinkPlan::repairs(state) == V{R::RestoreDhcp},
+          "host link: a static address off the host network goes back to DHCP, with no route yet");
+    state.has_address = true;
+    check(HostLinkPlan::repairs(state) == V{R::HostRoute},
+          "host link: a static address on the host network is kept");
+
+    state = healthy;
+    state.has_address = false;
+    state.host_route = false;
+    check(HostLinkPlan::repairs(state).empty(),
+          "host link: an address still coming from DHCP is waited for");
+
+    state = healthy;
+    state.ghosts = true;
+    state.metric_v6 = false;
+    state.named = false;
+    check(HostLinkPlan::repairs(state) == V{R::RemoveGhosts, R::Metric, R::Name},
+          "host link: leftovers, an IPv6 metric and the name are fixed together");
+
+    const auto t0 = RepairBackoff::Time{} + std::chrono::hours{1};
+    RepairBackoff backoff;
+    backoff.observe({R::Enable, R::Metric}, t0);
+    check(backoff.due(R::Metric, t0), "host link: setting the metric is done at once");
+    check(!backoff.due(R::Enable, t0 + RepairBackoff::kConfirm - std::chrono::seconds{1}),
+          "host link: enabling waits until the state has lasted");
+    check(backoff.next_due() == t0, "host link: the soonest repair sets the next wake");
+    backoff.tried(R::Metric, t0);
+    check(backoff.next_due() == t0 + RepairBackoff::kRetry[0],
+          "host link: the next wake is the soonest retry or confirmation");
+    check(backoff.due(R::Enable, t0 + RepairBackoff::kConfirm),
+          "host link: a lasting state is repaired");
+
+    auto at = t0 + RepairBackoff::kConfirm;
+    backoff.observe({R::Enable}, at);
+    const std::size_t rounds = RepairBackoff::kRetry.size() + 2;
+    for (std::size_t i = 0; i < rounds; ++i) {
+        check(backoff.due(R::Enable, at), "host link: a repair is due again after its wait");
+        backoff.tried(R::Enable, at);
+        const auto gap = RepairBackoff::kRetry[std::min(i, RepairBackoff::kRetry.size() - 1)];
+        check(!backoff.due(R::Enable, at + gap - std::chrono::seconds{1}),
+              "host link: repeated repairs back off");
+        at += gap;
+        backoff.observe({R::Enable}, at);
+    }
+    check(backoff.attempts(R::Enable) == static_cast<int>(rounds),
+          "host link: attempts are counted while the problem lasts");
+    backoff.observe({}, at);
+    check(backoff.attempts(R::Enable) == 0 && !backoff.next_due().has_value(),
+          "host link: a fixed problem forgets its backoff");
+    backoff.observe({R::Enable}, at);
+    check(!backoff.due(R::Enable, at), "host link: a problem that comes back is confirmed again");
+}
+
 int main() {
     test_launch_continuation();
     test_base64_vectors();
@@ -797,6 +896,7 @@ int main() {
     test_document_command();
     test_task_window();
     test_window_announcements();
+    test_host_link_plan();
     std::printf("agent logic: %d checks passed\n", g_checks);
     return 0;
 }

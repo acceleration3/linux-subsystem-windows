@@ -108,6 +108,12 @@ long RegKey::write_dword(const wchar_t* name, DWORD value) const {
                             sizeof(value));
 }
 
+long RegKey::write_string(const wchar_t* name, const std::wstring& value) const {
+    return ::RegSetValueExW(key_.get(), name, 0, REG_SZ,
+                            reinterpret_cast<const BYTE*>(value.c_str()),
+                            static_cast<DWORD>((value.size() + 1) * sizeof(wchar_t)));
+}
+
 long RegKey::delete_value(const wchar_t* name) const {
     return ::RegDeleteValueW(key_.get(), name);
 }

@@ -1,22 +1,19 @@
 #include "lsw/host/link/agent_rpc_client.hpp"
 
+#include "lsw/base/log.hpp"
 #include "lsw/host/link/agent_reply.hpp"
 #include "lsw/host/link/pending_calls.hpp"
-
-#include "lsw/base/log.hpp"
-
 #include "lsw/linkproto/commands.hpp"
 #include "lsw/linkproto/envelope.hpp"
 #include "lsw/linkproto/frame_reader.hpp"
+#include "lsw/linkproto/heartbeat.hpp"
 
 #include <QtConcurrent>
-
 #include <chrono>
 #include <cstdint>
+#include <nlohmann/json.hpp>
 #include <optional>
 #include <string>
-
-#include <nlohmann/json.hpp>
 
 namespace lsw::host::link {
 
@@ -24,6 +21,13 @@ namespace {
 
 constexpr int kRecvChunk = 64 * 1024;
 constexpr int kReconnectBackoffMs = 500;
+constexpr int kWatchMs = 1000;
+
+std::int64_t now_ms() {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+               std::chrono::steady_clock::now().time_since_epoch())
+        .count();
+}
 
 using linkproto::FrameType;
 
@@ -78,6 +82,7 @@ bool AgentRpcClient::ensure_connected_locked() {
     if (gen != last_generation_) {
         drop_connection_locked();
         last_generation_ = gen;
+        agent_beats_.store(false);
     }
     if (client_.is_open()) {
         return true;
@@ -91,6 +96,8 @@ bool AgentRpcClient::ensure_connected_locked() {
         LSW_TRACE("agent_rpc_client: connect to cid {} port {} failed", cid, port);
         return false;
     }
+    beating_.store(false);
+    last_received_ms_.store(now_ms());
     LSW_DEBUG("agent_rpc_client: connected to cid {} port {}", cid, port);
     return true;
 }
@@ -182,6 +189,11 @@ void AgentRpcClient::route_message(const nlohmann::json& message) {
         return;
     }
     if (message.contains("event")) {
+        if (message["event"] == linkproto::heartbeat::kEvent) {
+            beating_.store(true);
+            agent_beats_.store(true);
+            return;
+        }
         events_->dispatch(message);
         return;
     }
@@ -219,6 +231,23 @@ void AgentRpcClient::reader_loop() {
                 continue;
             }
         }
+        if (!client_.wait_readable(kWatchMs)) {
+            const auto silent_ms = now_ms() - last_received_ms_.load();
+            const bool beating = beating_.load();
+            const auto limit = beating ? linkproto::heartbeat::kSilenceLimit
+                                       : linkproto::heartbeat::kFirstBeatLimit;
+            if ((beating || agent_beats_.load()) &&
+                silent_ms >= std::chrono::milliseconds{limit}.count()) {
+                LSW_WARN("agent_rpc_client: {} for {} ms; reconnecting",
+                         beating ? "nothing from the agent, not even its heartbeat"
+                                 : "no first heartbeat on the new connection",
+                         silent_ms);
+                std::lock_guard<std::mutex> lock(io_mu_);
+                drop_connection_locked();
+                reader.reset();
+            }
+            continue;
+        }
         const auto chunk = client_.recv_some(kRecvChunk);
         if (chunk.isEmpty()) {
             {
@@ -229,6 +258,7 @@ void AgentRpcClient::reader_loop() {
             std::this_thread::sleep_for(std::chrono::milliseconds(kReconnectBackoffMs));
             continue;
         }
+        last_received_ms_.store(now_ms());
         if (!announced_.exchange(true)) {
             LSW_INFO("agent_rpc_client: the agent answers (cid {}, port {})", cid_.load(), port_.load());
         }

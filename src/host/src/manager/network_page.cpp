@@ -128,7 +128,8 @@ void NetworkPage::build_connection() {
     bridged_ = new ui::ChoiceCard(
         QStringLiteral("Bridged to a host bridge"),
         QStringLiteral("Windows appears on the network as a machine of its own, with its own "
-                       "address."));
+                       "address, and uses it for its traffic. It keeps a second adapter, LSW "
+                       "host link, that LSW needs to reach it."));
     connect(shared_, &ui::ChoiceCard::chosen, this,
             [this] { choose_mode(QString{Mode::kShared}); });
     connect(bridged_, &ui::ChoiceCard::chosen, this,

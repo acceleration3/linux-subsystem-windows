@@ -178,6 +178,8 @@ set(_lsw_agent_system_sources
     src/system/log_packer.cpp
     src/system/log_clearer.cpp
     src/system/driver_log_pruner.cpp
+    src/system/host_link.cpp
+    src/system/host_link_plan.cpp
 )
 
 add_executable(lsw-guest-agent

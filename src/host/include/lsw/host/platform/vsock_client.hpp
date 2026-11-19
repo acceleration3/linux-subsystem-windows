@@ -19,6 +19,8 @@ public:
 
     [[nodiscard]] QByteArray recv_some(int n);
 
+    [[nodiscard]] bool wait_readable(int timeout_ms) const noexcept;
+
 private:
     int fd_ = -1;
 };

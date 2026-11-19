@@ -7,6 +7,7 @@
 #include <cstring>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <poll.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -89,4 +90,12 @@ QByteArray VsockClient::recv_some(int n) {
     return buf;
 }
 
+bool VsockClient::wait_readable(int timeout_ms) const noexcept {
+    if (fd_ < 0) {
+        return true;
+    }
+    pollfd entry{fd_, POLLIN, 0};
+    const int ready = ::poll(&entry, 1, timeout_ms);
+    return ready != 0;
+}
 }

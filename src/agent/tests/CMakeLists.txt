@@ -12,6 +12,7 @@ add_executable(lsw_agent_logic_test
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/session/pending_calls.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/system/scale_steps.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/system/display_request.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/system/host_link_plan.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/apps/start_menu_filter.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/apps/program_command.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/apps/launch_continuation.cpp
