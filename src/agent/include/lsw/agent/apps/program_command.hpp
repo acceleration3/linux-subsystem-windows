@@ -13,6 +13,7 @@ public:
         std::wstring program;
         std::wstring leading_args;
         bool placeholder = false;
+        bool runs_itself = false;
     };
     [[nodiscard]] static DocumentCommand split_for_document(const std::wstring& command_line);
 };

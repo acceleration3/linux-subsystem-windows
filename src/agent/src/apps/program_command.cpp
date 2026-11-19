@@ -21,6 +21,14 @@ ProgramCommand::DocumentCommand ProgramCommand::split_for_document(const std::ws
     if (out.program.empty()) {
         return out;
     }
+    const std::wstring first =
+        util::WideString::lower(out.program.substr(0, out.program.find_first_of(L" \t")));
+    if (first == L"%1" || first == L"%l") {
+        out.program.clear();
+        out.placeholder = true;
+        out.runs_itself = true;
+        return out;
+    }
     std::size_t at = out.program.size();
     if (!command_line.empty() && command_line.front() == L'"') {
         at += 2;

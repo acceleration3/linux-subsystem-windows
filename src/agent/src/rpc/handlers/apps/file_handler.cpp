@@ -59,6 +59,9 @@ struct FileHandlerHandler : RpcHandler {
         }
         const auto command = apps::ProgramCommand::split_for_document(
             associated(ASSOCSTR_COMMAND, extension));
+        if (command.runs_itself) {
+            return {{"self", true}, {"name", util::TextEncoding::to_utf8(name)}};
+        }
         std::wstring exe = command.program.empty() ? associated(ASSOCSTR_EXECUTABLE, extension) : command.program;
         if (exe.empty()) {
             throw std::runtime_error("no program is registered for " +
@@ -81,6 +84,9 @@ struct FileHandlerHandler : RpcHandler {
     }
 
     [[nodiscard]] std::string summarize(const nlohmann::json& reply) const override {
+        if (reply.value("self", false)) {
+            return "the file runs itself";
+        }
         return reply.value("exe_path", reply.value("aumid", std::string{}));
     }
 };

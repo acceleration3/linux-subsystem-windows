@@ -52,6 +52,7 @@ struct Handler {
     QString target;
     QString args;
     QString error;
+    bool runs_itself = false;
 };
 
 }
@@ -306,6 +307,8 @@ void GuestAppLaunchController::resolve_handlers(const Request& request, const QS
                                     .arg(extension.isEmpty() ? file_name_of(document)
                                                              : QStringLiteral(".") + extension,
                                          QString::fromStdString(reply.error));
+            } else if (reply.body.value("self", false)) {
+                handler.runs_itself = true;
             } else {
                 handler.target = QString::fromStdString(
                     reply.body.value("aumid", reply.body.value("exe_path", std::string{})));
@@ -328,6 +331,14 @@ void GuestAppLaunchController::resolve_handlers(const Request& request, const QS
             if (!found.at(i).error.isEmpty()) {
                 errors << found.at(i).error;
                 failed_documents << request.documents.at(i);
+                continue;
+            }
+            if (found.at(i).runs_itself) {
+                Request program = request;
+                program.documents.clear();
+                program.target = request.documents.at(i);
+                program.leading_args.clear();
+                launch_group(program, program.target);
                 continue;
             }
             const QString key = found.at(i).target.toCaseFolded() + QLatin1Char('\n') + found.at(i).args;

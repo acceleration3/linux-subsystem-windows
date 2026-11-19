@@ -464,6 +464,14 @@ void test_document_command() {
     check(plain.program == L"C:\\Windows\\notepad.exe" && plain.leading_args.empty(), "unquoted, as notepad is");
     const auto many = ProgramCommand::split_for_document(L"\"X.exe\" /new \"C:\\a b\" /open %L /x");
     check(many.leading_args == L"/new \"C:\\a b\" /open", "quoted arguments stay whole, what follows is dropped");
+    for (const wchar_t* runs : {L"\"%1\" %*", L"%1 %*", L"\"%L\"", L"\"%l\" %*"}) {
+        const auto itself = ProgramCommand::split_for_document(runs);
+        check(itself.runs_itself && itself.program.empty() && itself.leading_args.empty(),
+              "an .exe, .bat or .cmd file, whose command is the document itself, runs itself and "
+              "names no program");
+    }
+    check(!jar.runs_itself && !excel.runs_itself && !plain.runs_itself,
+          "a named program does not run itself");
     const auto none = ProgramCommand::split_for_document(L"");
     check(none.program.empty() && !none.placeholder, "nothing in, nothing out");
 }
