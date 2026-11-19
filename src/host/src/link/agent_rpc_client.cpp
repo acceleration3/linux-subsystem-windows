@@ -22,6 +22,7 @@ namespace {
 constexpr int kRecvChunk = 64 * 1024;
 constexpr int kReconnectBackoffMs = 500;
 constexpr int kWatchMs = 1000;
+constexpr const char* kDropped = "the connection to the agent dropped";
 
 std::int64_t now_ms() {
     return std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -73,8 +74,7 @@ void AgentRpcClient::drop_connection_locked() {
         LSW_INFO("agent_rpc_client: disconnected from the agent");
     }
     client_.close();
-    pending_->fail_all(stop_.load() ? "the agent client is shutting down"
-                                    : "the connection to the agent dropped");
+    pending_->fail_all(stop_.load() ? "the agent client is shutting down" : kDropped);
 }
 
 bool AgentRpcClient::ensure_connected_locked() {
@@ -161,7 +161,9 @@ AgentReply AgentRpcClient::request(std::string_view cmd, const nlohmann::json& p
         return AgentReply::failure("the agent did not answer " + std::string{cmd} + " within " +
                                    std::to_string(timeout.count()) + " ms");
     }
-    if (!reply->ok) {
+    if (!reply->ok && reply->error == kDropped && reconnecting_.load()) {
+        LSW_DEBUG("agent_rpc_client: id={} cmd={} failed: {}", id, cmd, reply->error);
+    } else if (!reply->ok) {
         LSW_WARN("agent_rpc_client: id={} cmd={} failed: {}", id, cmd, reply->error);
     }
     LSW_DEBUG("agent_rpc_client: cmd={} {} ms ok={}", cmd,
@@ -238,10 +240,14 @@ void AgentRpcClient::reader_loop() {
                                        : linkproto::heartbeat::kFirstBeatLimit;
             if ((beating || agent_beats_.load()) &&
                 silent_ms >= std::chrono::milliseconds{limit}.count()) {
-                LSW_WARN("agent_rpc_client: {} for {} ms; reconnecting",
-                         beating ? "nothing from the agent, not even its heartbeat"
-                                 : "no first heartbeat on the new connection",
-                         silent_ms);
+                const char* why = beating ? "nothing from the agent, not even its heartbeat"
+                                          : "no first heartbeat on the new connection";
+                if (!reconnecting_.exchange(true)) {
+                    LSW_WARN("agent_rpc_client: {} for {} ms; reconnecting until it answers", why,
+                             silent_ms);
+                } else {
+                    LSW_DEBUG("agent_rpc_client: {} for {} ms; reconnecting", why, silent_ms);
+                }
                 std::lock_guard<std::mutex> lock(io_mu_);
                 drop_connection_locked();
                 reader.reset();
@@ -259,6 +265,7 @@ void AgentRpcClient::reader_loop() {
             continue;
         }
         last_received_ms_.store(now_ms());
+        reconnecting_.store(false);
         if (!announced_.exchange(true)) {
             LSW_INFO("agent_rpc_client: the agent answers (cid {}, port {})", cid_.load(), port_.load());
         }

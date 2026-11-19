@@ -78,6 +78,7 @@ private:
     std::atomic<bool> announced_{false};
     std::atomic<bool> beating_{false};
     std::atomic<bool> agent_beats_{false};
+    std::atomic<bool> reconnecting_{false};
     std::atomic<std::int64_t> last_received_ms_{0};
 
     std::atomic<bool> stop_{false};
