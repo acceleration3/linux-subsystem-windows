@@ -263,17 +263,16 @@ void DisplayPage::build_resolutions() {
 void DisplayPage::build_one_to_one() {
     auto panel = ui::Panel::area(
         QStringLiteral("Desktop mirroring"),
-        QStringLiteral(
-            "While the desktop window is open, Windows uses exactly its size in pixels and "
-            "follows it when it is resized. Closing it brings the resolutions back."));
+        QStringLiteral("Open desktop shows the whole Windows desktop in one window, besides the "
+                       "windows of the apps. This sets how that window sizes Windows' screen."));
     panel.header->addWidget(
         Widgets::tag(config::ManagerSettings::needs_restart(K::kOneToOneDesktop)));
-    auto* line = new QHBoxLayout;
-    line->setSpacing(9);
-    line->addWidget(controls_->toggle(K::kOneToOneDesktop));
-    line->addWidget(new QLabel(QStringLiteral("Match the desktop window in pixels")));
-    line->addStretch(1);
-    panel.body->addLayout(line);
+    panel.body->addWidget(toggle_line(
+        controls_->toggle(K::kOneToOneDesktop),
+        QStringLiteral("Match the desktop window in pixels"),
+        QStringLiteral("While the desktop window is open, Windows uses exactly its size in pixels "
+                       "and follows it when it is resized. Closing it brings the resolutions "
+                       "back.")));
     column()->addWidget(panel.frame);
 }
 
