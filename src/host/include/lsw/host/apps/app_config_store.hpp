@@ -30,6 +30,8 @@ public:
 
     void restore(const QString& id);
 
+    void restore(const QStringList& ids);
+
     void restore_all();
 
     void merge_from_agent(const QList<AppEntry>& entries);

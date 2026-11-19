@@ -413,3 +413,10 @@ target_link_libraries(lsw_host_app_config_store_test PRIVATE lsw_host_core LSW::
 target_compile_definitions(lsw_host_app_config_store_test PRIVATE QT_NO_KEYWORDS)
 add_test(NAME lsw_host_app_config_store_test COMMAND lsw_host_app_config_store_test)
 set_tests_properties(lsw_host_app_config_store_test PROPERTIES TIMEOUT 30)
+
+add_executable(lsw_host_removed_apps_popup_test removed_apps_popup_test.cpp)
+target_link_libraries(lsw_host_removed_apps_popup_test PRIVATE lsw_host_manager LSW::CompileOptions)
+target_compile_definitions(lsw_host_removed_apps_popup_test PRIVATE QT_NO_KEYWORDS)
+add_test(NAME lsw_host_removed_apps_popup_test COMMAND lsw_host_removed_apps_popup_test)
+set_tests_properties(lsw_host_removed_apps_popup_test PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)

@@ -123,31 +123,34 @@ void AppConfigStore::hide(const QString& id) {
 }
 
 void AppConfigStore::restore(const QString& id) {
-    for (auto it = hidden_.begin(); it != hidden_.end(); ++it) {
-        if (it->id != id) {
+    restore(QStringList{id});
+}
+
+void AppConfigStore::restore(const QStringList& ids) {
+    bool any = false;
+    for (auto it = hidden_.begin(); it != hidden_.end();) {
+        if (!ids.contains(it->id)) {
+            ++it;
             continue;
         }
         AppConfig cfg = std::move(*it);
-        hidden_.erase(it);
+        it = hidden_.erase(it);
         cfg.hidden = false;
         (void)write_file(cfg);
         configs_.append(std::move(cfg));
+        any = true;
+    }
+    if (any) {
         Q_EMIT changed();
-        return;
     }
 }
 
 void AppConfigStore::restore_all() {
-    if (hidden_.isEmpty()) {
-        return;
+    QStringList ids;
+    for (const auto& cfg : hidden_) {
+        ids << cfg.id;
     }
-    for (AppConfig& cfg : hidden_) {
-        cfg.hidden = false;
-        (void)write_file(cfg);
-        configs_.append(std::move(cfg));
-    }
-    hidden_.clear();
-    Q_EMIT changed();
+    restore(ids);
 }
 
 void AppConfigStore::merge_from_agent(const QList<AppEntry>& entries) {
