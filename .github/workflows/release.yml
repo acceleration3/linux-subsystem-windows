@@ -30,7 +30,7 @@ jobs:
       version: ${{ steps.plan.outputs.version }}
       publish: ${{ steps.plan.outputs.publish }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Version and whether to publish it
         id: plan
@@ -78,7 +78,7 @@ jobs:
       - name: Bootstrap
         run: pacman -Syu --noconfirm --needed git tar zstd ca-certificates
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
           fetch-depth: 0
@@ -86,7 +86,7 @@ jobs:
       - name: Mark the workspace safe for git
         run: git config --global --add safe.directory '*'
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: external/accel-virt/third_party/.cache
           key: accel-virt-downloads-${{ hashFiles('external/accel-virt/tools/*pins.txt', 'external/accel-virt/tools/fetch_*.sh') }}
@@ -98,7 +98,7 @@ jobs:
       - name: Pack the guest half
         run: tar -C build-release --zstd -cf guest.tar.zst guest/stage guest/drivers/av-drivers
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: guest
           path: guest.tar.zst
@@ -144,7 +144,7 @@ jobs:
               dnf -y install git tar zstd ca-certificates
           fi
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
           fetch-depth: 0
@@ -152,13 +152,13 @@ jobs:
       - name: Mark the workspace safe for git
         run: git config --global --add safe.directory '*'
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: external/accel-virt/third_party/.cache
           key: accel-virt-downloads-${{ hashFiles('external/accel-virt/tools/*pins.txt', 'external/accel-virt/tools/fetch_*.sh') }}
           restore-keys: accel-virt-downloads-
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: guest
 
@@ -171,7 +171,7 @@ jobs:
       - name: Build and package
         run: scripts/dist.sh --in-box ${{ matrix.target }} --setup
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dist-${{ matrix.target }}
           path: ${{ matrix.output }}
@@ -196,9 +196,9 @@ jobs:
     container:
       image: ${{ matrix.image }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: dist-${{ matrix.target }}
           path: dist
@@ -217,11 +217,11 @@ jobs:
       aur: ${{ steps.aur.outputs.enabled }}
       version: ${{ needs.plan.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: dist-*
           merge-multiple: true
@@ -279,14 +279,14 @@ jobs:
       - name: Bootstrap
         run: pacman -Syu --noconfirm --needed base-devel git namcap openssh
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: master
 
       - name: Mark the workspace safe for git
         run: git config --global --add safe.directory '*'
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: dist-arch
           path: dist

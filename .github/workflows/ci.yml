@@ -29,7 +29,7 @@ jobs:
       - name: Bootstrap
         run: pacman -Syu --noconfirm --needed git tar zstd ca-certificates
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
 
@@ -42,7 +42,7 @@ jobs:
           pacman -S --noconfirm --needed ccache 7zip tzdata qemu-img
           ln -sf /usr/share/zoneinfo/Europe/London /etc/localtime
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: .ccache
           key: ccache-host-${{ github.ref_name }}-${{ github.sha }}
@@ -81,7 +81,7 @@ jobs:
       - name: Bootstrap
         run: pacman -Syu --noconfirm --needed git tar zstd ca-certificates
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
 
@@ -93,7 +93,7 @@ jobs:
           scripts/dist.sh --deps arch
           pacman -S --noconfirm --needed ccache
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: .ccache
           key: ccache-guest-${{ github.ref_name }}-${{ github.sha }}
@@ -113,7 +113,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Extract the PowerShell embedded in the unattend file
         run: |
@@ -173,7 +173,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
