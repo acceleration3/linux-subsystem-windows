@@ -1,44 +1,100 @@
 # Linux Subsystem for Windows (LSW)
 
-Run Windows applications on Linux as native desktop windows, with their graphics running on your real GPU.
+**Run Windows applications on Linux as native desktop windows, with their graphics running on your real GPU.**
 
-LSW is WSL in reverse. It installs Windows 11 into a virtual machine and keeps it out of your way: each application gets its own windows, taskbar entry and input on your Linux desktop, instead of living inside a VM window.
+[![Latest release](https://img.shields.io/github/v/release/acceleration3/linux-subsystem-windows?label=release)](https://github.com/acceleration3/linux-subsystem-windows/releases)
+[![AUR](https://img.shields.io/aur/version/lsw-bin?label=AUR%20lsw-bin)](https://aur.archlinux.org/packages/lsw-bin)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
-> **Status:** early and moving fast. Expect rough edges, and expect things to break between releases.
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/hero-dark.svg">
+    <img alt="Windows applications, a spreadsheet, a photo editor with its menu open and a game, open as ordinary windows on the Linux desktop with their own taskbar entries, while Windows 11 runs out of sight in a virtual machine." src="docs/images/hero-light.svg" width="100%">
+  </picture>
+</p>
+
+LSW is WSL in reverse. It installs Windows 11 into a virtual machine and keeps it
+out of your way: each application gets its own windows, taskbar entry and input
+on your Linux desktop, instead of living inside a VM window.
+
+> [!NOTE]
+> **Status:** early and moving fast. Expect rough edges, and expect things to
+> break between releases.
+
+<p align="center">
+  <a href="#features">Features</a> ·
+  <a href="#requirements">Requirements</a> ·
+  <a href="#install">Install</a> ·
+  <a href="#getting-started">Getting started</a> ·
+  <a href="#how-it-works">How it works</a> ·
+  <a href="#building">Building</a> ·
+  <a href="#contributing">Contributing</a> ·
+  <a href="#ai-disclosure">AI disclosure</a>
+</p>
 
 ## AI disclosure
 
-LSW is designed and directed by its author. What it does, how it is built and which features it gets are decisions made by a person. AI tools are part of the workflow around that work, and this section says where.
+LSW is designed and directed by its author. What it does, how it is built and
+which features it gets are decisions made by a person. AI tools are part of the
+workflow around that work, and this section says where.
 
 **Where AI is used**
 
 - **Commit messages.** Commit messages are written with an AI assistant.
-- **Release packaging.** Building the release tarball, the AUR package and the deb and rpm packages is automated with AI assistance.
-- **Debugging.** An AI agent can inspect a running system: read logs from the host and from Windows, open a console in the guest, list windows and drive applications, and collect a log bundle when something goes wrong.
-- **Benchmarking.** An AI agent can run the same graphics workloads across several test machines with different GPUs and compare the results.
+- **Release packaging.** Building the release tarball, the AUR package and the
+  deb and rpm packages is automated with AI assistance.
+- **Debugging.** An AI agent can inspect a running system: read logs from the
+  host and from Windows, open a console in the guest, list windows and drive
+  applications, and collect a log bundle when something goes wrong.
+- **Benchmarking.** An AI agent can run the same graphics workloads across
+  several test machines with different GPUs and compare the results.
 
 **What is in the repository for this**
 
-- **An MCP server in the manager.** The manager runs a Model Context Protocol server that only listens on `127.0.0.1`. It exposes the VM and the guest to a local AI agent: guest console, launching apps, listing windows, logs, the guest update and log collection. Nothing is reachable from other machines.
-- **Claude skills.** `.claude/skills/` holds instructions for an AI agent to control the VM (`lsw-control`), debug it (`lsw-debug`) and deploy a new guest agent (`lsw-deploy`).
-- **Test scripts.** `scripts/gpu-test/` runs workloads on several machines through that same interface.
+- **An MCP server in the manager.** The manager runs a Model Context Protocol
+  server that only listens on `127.0.0.1`. It exposes the VM and the guest to a
+  local AI agent: guest console, launching apps, listing windows, logs, the
+  guest update and log collection. Nothing is reachable from other machines.
+- **Claude skills.** `.claude/skills/` holds instructions for an AI agent to
+  control the VM (`lsw-control`), debug it (`lsw-debug`) and deploy a new guest
+  agent (`lsw-deploy`).
+- **Test scripts.** `scripts/gpu-test/` runs workloads on several machines
+  through that same interface.
 
-None of this is needed to use LSW. The MCP server is a development tool, and the application works the same without any AI involved.
-
+None of this is needed to use LSW. The MCP server is a development tool, and the
+application works the same without any AI involved.
 
 ## Features
 
-- **Per-application windows.** Each Windows application appears as its own native Wayland windows, including its menus and popups.
-- **GPU acceleration.** Windows sees a real display adapter named after your host GPU, and the work runs on that GPU.
-- **Guided setup.** A first-run wizard installs Windows unattended, from your own ISO or a download from Microsoft.
-- **Shared folders.** Any host folder can appear in Windows as a drive letter.
-- **Open files from the host.** Double-click a `.xlsx` in your file manager and it opens in Excel, in its own window, and saving writes your file. A file in a folder Windows cannot see can have the folder shared, or open as a copy.
-- **USB devices.** Pass a USB device to Windows from Settings, once or whenever it is plugged in. Letting LSW open a device asks for your password once per kind of device.
-- **Refresh rate.** Windows runs at the refresh rate of your monitor by default, or at any rate your monitors support, and a change applies while Windows runs, with no restart. A higher rate means more GPU work on the host.
-- **Run on VM.** Pick a local program, installer or script, and LSW copies it into Windows and runs it.
-- **Desktop access.** A live preview of the Windows desktop in the manager, and a full desktop window when you need one.
+### Applications and windows
 
-### Graphics APIs
+- **Per-application windows.** Each Windows application appears as its own
+  native Wayland windows, including its menus and popups. Installers and windows
+  that other applications open appear too, each with its own taskbar entry and
+  icon, badged as a Windows app.
+- **Your apps, from the Start menu.** The manager lists what is installed in
+  Windows and launches it in one click. An app you remove from the list stays
+  removed, and can be brought back.
+- **Open files from the host.** Double-click a `.xlsx` in your file manager and
+  it opens in Excel, in its own window, and saving writes your file (see
+  [Opening files](#opening-files-from-linux)).
+- **Run on VM.** Pick a local program, installer or script, and LSW copies it
+  into Windows and runs it.
+- **Desktop access.** A live preview of the Windows desktop in the manager, and
+  a full desktop window when you need one, which can keep Windows at exactly its
+  size in pixels.
+
+### Graphics
+
+- **GPU acceleration.** Windows sees a real display adapter named after your
+  host GPU, and the work runs on that GPU.
+- **Refresh rate and resolutions.** Windows runs at the refresh rate of your
+  monitor by default, or at any rate your monitors support, and a change applies
+  while Windows runs, with no restart. A higher rate means more GPU work on the
+  host. Large and ultrawide displays are supported, up to 8192 pixels on either
+  edge.
+- **GPU status.** A page shows which Windows applications use the GPU, with
+  which API, how much host memory they hold, and a warning when a limit is near.
 
 | API | Offered |
 |---|---|
@@ -51,77 +107,186 @@ None of this is needed to use LSW. The MCP server is a development tool, and the
 
 All of these work in 32-bit processes too.
 
+### Files, devices and network
+
+- **Shared folders.** Any host folder can appear in Windows as a drive letter.
+- **USB devices.** Pass a USB device to Windows from Settings, once or whenever
+  it is plugged in. Letting LSW open a device asks for your password once per
+  kind of device.
+- **Networking.** Windows shares your computer's connection, or joins your
+  network through a host bridge with an address of its own. Forwarded ports show
+  whether each one is active, with one-click sets for Sunshine / Moonlight,
+  Remote Desktop, SQL Server, SSH and a web server. A faster virtio network
+  adapter can replace the emulated one.
+
+### Running Windows
+
+- **Guided setup.** A first-run wizard installs Windows unattended, from your own
+  ISO or a download from Microsoft.
+- **Kept up to date.** After you update LSW, the manager updates its own files
+  inside Windows to match.
+- **Memory given back.** Windows hands the memory it does not use back to Linux.
+- **Stays out of the way.** Settings let the manager keep running in the tray,
+  give the VM more CPU time when the host is busy, and shut Windows down when you
+  quit.
+- **Bug reports in one click.** **Collect logs** gathers what is needed into one
+  archive.
+
 ## Requirements
 
-**Host**
+<table>
+<tr><th width="50%">Host</th><th width="50%">Guest</th></tr>
+<tr valign="top"><td>
 
-- x86-64 Linux with KVM, where your user can open `/dev/kvm`
-- A Wayland desktop. LSW places windows through KWin, and KDE Plasma is what it is tested on
-- A Vulkan driver for your GPU; AMD, Intel and NVIDIA are the ones tested
-- Optional: `virtiofsd` for shared folders, `polkit` for passing USB devices to the guest, an OpenCL driver for OpenCL in the guest, and Mesa for OpenGL in the guest on AMD or Intel
+- x86-64 Linux with KVM, where your user can open `/dev/kvm`.
+- A Wayland desktop. KDE Plasma is what LSW is tested on, and on KWin it places
+  windows itself. Other compositors, such as Hyprland, place the windows
+  themselves.
+- A Vulkan driver for your GPU. AMD, Intel and NVIDIA are the ones tested.
+- Optional:
+  - `virtiofsd` for shared folders;
+  - `polkit` for passing USB devices to the guest;
+  - an OpenCL driver for OpenCL in the guest;
+  - Mesa for OpenGL in the guest on AMD or Intel.
 
-**Guest**
+</td><td>
 
-- Windows 11 24H2 (build 26100) or newer, which the GPU driver's WDDM 3.2 requires
-- The guest runs with test signing on, because the driver is test-signed. That means UEFI without enrolled Secure Boot keys
+- Windows 11 24H2 (build 26100) or newer, which the GPU driver's WDDM 3.2
+  requires.
+- The guest runs with test signing on, because the driver is test-signed. That
+  means UEFI without enrolled Secure Boot keys.
+- LSW sets all of this up itself when it installs Windows.
 
-VMs run under your user's libvirt session (`qemu:///session`), so you don't need a system `libvirtd` or membership of the `libvirt` group.
+</td></tr>
+</table>
+
+VMs run under your user's libvirt session (`qemu:///session`), so you don't need
+a system `libvirtd` or membership of the `libvirt` group.
 
 ## Install
 
-On Arch Linux, install [`lsw-bin`](https://aur.archlinux.org/packages/lsw-bin) from the AUR:
+| Distribution | Package |
+|---|---|
+| **Arch Linux** | [`lsw-bin`](https://aur.archlinux.org/packages/lsw-bin) from the AUR: `yay -S lsw-bin` |
+| **Ubuntu 26.04** | `lsw_<version>-1_amd64.deb` from [GitHub releases](https://github.com/acceleration3/linux-subsystem-windows/releases): `sudo apt install ./lsw_<version>-1_amd64.deb` |
+| **Fedora 45** | `lsw-<version>-1.fc45.x86_64.rpm` from [GitHub releases](https://github.com/acceleration3/linux-subsystem-windows/releases): `sudo dnf install ./lsw-<version>-1.fc45.x86_64.rpm` |
+| **Others** | `lsw-<version>-x86_64.tar.zst` from [GitHub releases](https://github.com/acceleration3/linux-subsystem-windows/releases). It is built against Arch's libraries, so it may need the same library versions. |
 
-```sh
-yay -S lsw-bin
-```
-
-Other distributions can use the `lsw-<version>-x86_64.tar.zst` tarball from [GitHub releases](https://github.com/acceleration3/linux-subsystem-windows/releases). It is built against Arch's libraries, so it may need the same library versions.
+The `.deb` installs QEMU as `/usr/bin/lsw-qemu-system-x86_64`, so a VM can be
+created on Ubuntu without a local AppArmor rule.
 
 ## Getting started
 
+```mermaid
+flowchart LR
+    A["Start<br/>LSW Manager"] --> B["Accept the<br/>Windows licence"]
+    B --> C["Your ISO, or a<br/>download from Microsoft"]
+    C --> D["The VM's size and<br/>your Windows account"]
+    D --> E["Unattended<br/>install"]
+    E --> F["Launch apps<br/>from the manager"]
+```
+
 1. Start **LSW Manager** from your application menu, or run `lsw-manager`.
-2. Follow the wizard: accept the Windows licence, choose an ISO or a download, then set the VM's size and your Windows account.
-3. Wait for the unattended install to finish. The wizard moves on when Windows is ready.
+2. Follow the wizard: accept the Windows licence, choose an ISO or a download,
+   then set the VM's size and your Windows account.
+3. Wait for the unattended install to finish. The wizard moves on when Windows
+   is ready.
 4. Launch applications from the manager. Their windows open on your desktop.
 
-To install without the GUI, pass the install flags; `lsw-manager --help` lists them.
+To install without the GUI, pass the install flags; `lsw-manager --help` lists
+them.
+
+### Opening files from Linux
+
+A Windows application is offered in your file manager for the file types it
+opens that no Linux application handles, and its settings in the manager can
+make it the default for all of them. When you open a file with one, LSW checks
+whether Windows can see it:
+
+```mermaid
+flowchart LR
+    F["You open a file<br/>with a Windows app"] --> Q{"Is its folder<br/>shared with Windows?"}
+    Q -- yes --> O["It opens in place,<br/>and saving writes your file"]
+    Q -- no --> A["LSW asks"]
+    A --> S["Share the folder<br/>(restarts Windows if it is running)"] --> O
+    A --> C["Open a<br/>read-only copy"]
+```
+
+## How it works
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/architecture-dark.svg">
+    <img alt="On the Linux host, lsw-manager, a remotewin process per application, QEMU with accel-virt on your GPU, and virtiofsd per shared folder; in the Windows 11 VM, lsw-guest-agent.exe, remotewin-guest.exe beside each application, avgpu.sys with its API drivers, and WinFsp. They are joined by the guest link, the window link, accel-virt and the shared folders." src="docs/images/architecture-light.svg" width="100%">
+  </picture>
+</p>
+
+- **The manager** provisions Windows, runs the VM through libvirt, and keeps
+  LSW's files inside the guest up to date. The guest agent is a Windows service
+  that does its work inside the VM.
+- **[remotewin](https://github.com/acceleration3/remotewin)** carries windows.
+  Each application gets its own `remotewin` process on the host, which owns that
+  application's pixels, input, menus and taskbar identity.
+- **[accel-virt](https://github.com/acceleration3/accel-virt)** carries GPU work.
+  A WDDM kernel driver and user-mode drivers in the guest send commands through a
+  patched QEMU device, and the host runs them on its own Vulkan, EGL and OpenCL,
+  using DXVK and vkd3d-proton for Direct3D.
+- **Shared folders** use a virtio-fs device per folder, with virtio-win's driver
+  and WinFsp in the guest.
+
+The window mirror and the GPU stack meet at a mirrored window's frames, which
+stay on the GPU instead of being copied back through the guest where the setup
+allows it. Otherwise frames cross as pixels over the guest's network.
+
+> [!NOTE]
+> LSW looks up the current Windows driver version for your GPU in the Microsoft
+> Update Catalog, which sends your GPU's PCI IDs to Microsoft, and falls back to
+> a built-in version offline.
 
 ## Building
+
 ```sh
 git clone --recurse-submodules https://github.com/acceleration3/linux-subsystem-windows
 cd linux-subsystem-windows
 ./scripts/build.sh
 ```
 
-`build.sh` cross-builds the Windows guest half, then builds the manager, the window mirror and the GPU stack.
+`build.sh` cross-builds the Windows guest half, then builds the manager, the
+window mirror and the GPU stack. Run the result with `./build/src/host/lsw-manager`.
 
 | Command | Builds |
 |---|---|
 | `./scripts/build.sh` | Everything |
 | `./scripts/build.sh --no-gpu` | Skips `accel-virt`; quickest when working on the manager |
 | `./scripts/build.sh --host-only` | Skips the mingw cross-build |
+| `cmake -S . -B build -G Ninja && cmake --build build` | The host build, directly with CMake |
 
-To run the host build directly with CMake:
+The first GPU build fetches about 550 MB (a Windows kit subset, the Khronos
+registries, QEMU's source and the OpenCL loader) and compiles QEMU, DXVK and
+vkd3d-proton, so it takes a while. Later builds are incremental. If you already
+have a Windows kit, `-DAV_WINDOWS_KIT_DIR=<dir>` avoids downloading another.
 
-```sh
-cmake -S . -B build -G Ninja
-cmake --build build
-```
+<details>
+<summary><b>Build dependencies</b></summary>
 
-Run the result with `./build/src/host/lsw-manager`.
-
-The first GPU build fetches about 550 MB (a Windows kit subset, the Khronos registries, QEMU's source and the OpenCL loader) and compiles QEMU, DXVK and vkd3d-proton, so it takes a while. Later builds are incremental.
-
-### Build dependencies
-
-- **Core:** CMake 3.25+, a C++20 compiler, Qt 6, libvirt, Vulkan headers and loader
-- **Window mirror:** a C compiler, pkg-config, `wayland-client`, `wayland-scanner`, `wayland-protocols` 1.38+, `xkbcommon`, `libdrm` 2.4.116+, `libsystemd`
-- **GPU stack:** clang, clang-cl, `lld`, `llvm-lib`, `llvm-rc`, `llvm-mt`, Python 3.11+, meson, glslang, and QEMU's build dependencies (glib2, pixman, gtk3, libepoxy, libslirp)
+- **Core:** CMake 3.25+, a C++20 compiler, Qt 6, libvirt, Vulkan headers and
+  loader
+- **Window mirror:** a C compiler, pkg-config, `wayland-client`,
+  `wayland-scanner`, `wayland-protocols` 1.38+, `xkbcommon`, `libdrm` 2.4.116+,
+  `libsystemd`
+- **GPU stack:** clang, clang-cl, `lld`, `llvm-lib`, `llvm-rc`, `llvm-mt`,
+  Python 3.11+, meson, glslang, and QEMU's build dependencies (glib2, pixman,
+  gtk3, libepoxy, libslirp)
 - **Guest half:** mingw-w64
 
-Configure names whichever window-mirror dependency is missing. For the exact package lists, see `scripts/dist.sh`.
+Configure names whichever window-mirror dependency is missing. For the exact
+package lists, see `scripts/dist.sh`, and for building on Ubuntu,
+[`docs/ubuntu-build.md`](docs/ubuntu-build.md).
 
-### Build options
+</details>
+
+<details>
+<summary><b>Build options</b></summary>
 
 | Option | Effect when `OFF` |
 |---|---|
@@ -129,7 +294,7 @@ Configure names whichever window-mirror dependency is missing. For the exact pac
 | `LSW_BUILD_REMOTEWIN` | No window mirror |
 | `LSW_BUILD_TESTS` | No unit tests |
 
-If you already have a Windows kit, `-DAV_WINDOWS_KIT_DIR=<dir>` avoids downloading another.
+</details>
 
 ### Tests
 
@@ -137,34 +302,11 @@ If you already have a Windows kit, `-DAV_WINDOWS_KIT_DIR=<dir>` avoids downloadi
 ctest --test-dir build --output-on-failure
 ```
 
-`scripts/verify-install.sh` checks that an installed VM is up, and `scripts/gpu-test/gpu-test.sh` runs the GPU suites.
+`scripts/verify-install.sh` checks that an installed VM is up, and
+`scripts/gpu-test/gpu-test.sh` runs the GPU suites.
 
-## How it works
-
-```
- Linux desktop                         Windows VM
-┌──────────────────────┐              ┌───────────────────────────┐
-│ lsw-manager          │  guest link  │ lsw-guest-agent.exe       │
-│                      │◄────────────►│                           │
-│ remotewin            │   windows    │ remotewin-guest.exe       │
-│ (one per app)        │◄────────────►│ (beside the application)  │
-│                      │              │                           │
-│ QEMU with accel-virt │  GPU work    │ avgpu.sys + API drivers   │
-│ runs on the host GPU │◄────────────►│ (D3D, Vulkan, GL, CL)     │
-└──────────────────────┘              └───────────────────────────┘
-```
-
-- **The manager** provisions Windows, runs the VM through libvirt, and keeps LSW's files inside the guest up to date. The guest agent is a Windows service that does its work inside the VM.
-- **[remotewin](external/remotewin)** carries windows. Each application gets its own `remotewin` process on the host, which owns that application's pixels, input, menus and taskbar identity.
-- **[accel-virt](external/accel-virt)** carries GPU work. A WDDM kernel driver and user-mode drivers in the guest send commands through a patched QEMU device, and the host runs them on its own Vulkan, EGL and OpenCL, using DXVK and vkd3d-proton for Direct3D.
-
-The two meet at a mirrored window's frames, which stay on the GPU instead of being copied back through the guest where the setup allows it. Otherwise frames cross as pixels over the guest's network.
-
-LSW looks up the current Windows driver version for your GPU in the Microsoft Update Catalog, which sends your GPU's PCI IDs to Microsoft, and falls back to a built-in version offline.
-
-Shared folders use a virtio-fs device per folder, with virtio-win's driver and WinFsp in the guest.
-
-## Layout
+<details>
+<summary><b>Source layout</b></summary>
 
 ```
 src/
@@ -178,24 +320,38 @@ external/
   accel-virt/  the GPU stack
 scripts/       building, packaging, testing
 packaging/     the AUR, deb and rpm package files, icons and licenses
-docs/          the UI design mockup
+docs/          the UI design mockup, the Ubuntu build notes, and this README's images
 ```
 
-Every module has one `include/` tree and one `src/` tree, with one class per header, so includes read `lsw/<module>/<concern>/<class>.hpp`.
+Every module has one `include/` tree and one `src/` tree, with one class per
+header, so includes read `lsw/<module>/<concern>/<class>.hpp`. The README's
+illustrations come from `scripts/readme_diagrams.py`.
+
+</details>
 
 ## Contributing
 
-Start with [CONTRIBUTING.md](CONTRIBUTING.md), which covers development setup, style and how to change each part. In short:
+Start with [CONTRIBUTING.md](CONTRIBUTING.md), which covers development setup,
+style and how to change each part. In short:
 
-- Format C++ with `clang-format`, using the repo's `.clang-format` and `.clang-tidy`.
+- Format C++ with `clang-format`, using the repo's `.clang-format` and
+  `.clang-tidy`.
 - Write commit subjects in the imperative mood, around 70 characters.
-- Make GPU changes in `accel-virt` and window changes in `remotewin`, then bump the submodule pointer here.
-- Anything the manager and the guest agent must agree on belongs in `src/linkproto/`.
+- Make GPU changes in `accel-virt` and window changes in `remotewin`, then bump
+  the submodule pointer here.
+- Anything the manager and the guest agent must agree on belongs in
+  `src/linkproto/`.
 
-When reporting a bug, attach the archive from **Collect logs** (Log page or Settings). [CONTRIBUTING.md](CONTRIBUTING.md#reporting-a-bug) says what is in it and how to capture more detail.
+> [!TIP]
+> When reporting a bug, attach the archive from **Collect logs** (Log page or
+> Settings). [CONTRIBUTING.md](CONTRIBUTING.md#reporting-a-bug) says what is in
+> it and how to capture more detail.
 
 ## License
 
-LSW is licensed under Apache-2.0; see [LICENSE](LICENSE). Bundled third-party components keep their own licences, and release packages carry their texts in `usr/share/licenses`.
+LSW is licensed under Apache-2.0; see [LICENSE](LICENSE). Bundled third-party
+components keep their own licences, and release packages carry their texts in
+`usr/share/licenses`.
 
-Shared folders are mounted with **WinFsp - Windows File System Proxy, Copyright (C) Bill Zissimopoulos**, <https://github.com/winfsp/winfsp>.
+Shared folders are mounted with **WinFsp - Windows File System Proxy, Copyright
+(C) Bill Zissimopoulos**, <https://github.com/winfsp/winfsp>.

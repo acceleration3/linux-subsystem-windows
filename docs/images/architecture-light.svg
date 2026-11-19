@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="556" viewBox="0 0 1200 556" role="img" aria-label="The LSW manager, the window mirrors, QEMU with accel-virt and virtiofsd on the Linux host, linked to the guest agent, the mirrors&#x27; guest halves, the GPU drivers and the shared folders in Windows">
+<defs>
+<marker id="e0969da" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#0969da"/></marker>
+<marker id="s0969da" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M10,0 L0,5 L10,10 z" fill="#0969da"/></marker>
+<marker id="e1a7f37" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1a7f37"/></marker>
+<marker id="s1a7f37" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M10,0 L0,5 L10,10 z" fill="#1a7f37"/></marker>
+<marker id="e59636e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#59636e"/></marker>
+<marker id="s59636e" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M10,0 L0,5 L10,10 z" fill="#59636e"/></marker>
+<marker id="e8250df" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#8250df"/></marker>
+<marker id="s8250df" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M10,0 L0,5 L10,10 z" fill="#8250df"/></marker>
+<marker id="ebf8700" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#bf8700"/></marker>
+<marker id="sbf8700" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M10,0 L0,5 L10,10 z" fill="#bf8700"/></marker>
+</defs>
+<rect x="16" y="16" width="400" height="524" rx="14" fill="#eef8f1" stroke="#a3d4b0" stroke-width="1.2"/>
+<rect x="784" y="16" width="400" height="524" rx="14" fill="#eef4fd" stroke="#a8c3ec" stroke-width="1.2"/>
+<text x="36" y="48" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="18" font-weight="700" fill="#1a7f37" text-anchor="start">Linux host</text>
+<text x="396" y="48" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#59636e" text-anchor="end" font-style="italic">your user, no root</text>
+<text x="804" y="48" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="18" font-weight="700" fill="#0969da" text-anchor="start">Windows 11 VM</text>
+<text x="1164" y="48" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#59636e" text-anchor="end" font-style="italic">libvirt session, QEMU/KVM</text>
+<rect x="36" y="68" width="360" height="88" rx="8" fill="#ffffff" stroke="#d1d9e0" stroke-width="1.2"/>
+<rect x="36" y="76" width="3" height="72" rx="1.5" fill="#1a7f37"/>
+<text x="52" y="98.0" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="16" font-weight="600" fill="#1f2328" text-anchor="start">lsw-manager</text>
+<text x="52" y="118.0" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="13.5" font-weight="400" fill="#59636e" text-anchor="start">installs Windows, runs the VM, lists apps,</text>
+<text x="52" y="138.0" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="13.5" font-weight="400" fill="#59636e" text-anchor="start">opens files, keeps Windows&#x27; side current</text>
+<rect x="36" y="186" width="360" height="88" rx="8" fill="#ffffff" stroke="#d1d9e0" stroke-width="1.2"/>
+<rect x="36" y="194" width="3" height="72" rx="1.5" fill="#1a7f37"/>
+<text x="52" y="216.0" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="16" font-weight="600" fill="#1f2328" text-anchor="start">remotewin</text>
+<text x="52" y="236.0" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="13.5" font-weight="400" fill="#59636e" text-anchor="start">one per app: a native Wayland window with</text>
+<text x="52" y="256.0" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="13.5" font-weight="400" fill="#59636e" text-anchor="start">its pixels, input, menus and taskbar entry</text>
+<rect x="36" y="304" width="360" height="88" rx="8" fill="#ffffff" stroke="#d1d9e0" stroke-width="1.2"/>
+<rect x="36" y="312" width="3" height="72" rx="1.5" fill="#1a7f37"/>
+<text x="52" y="334.0" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="16" font-weight="600" fill="#1f2328" text-anchor="start">QEMU + accel-virt</text>
+<text x="52" y="354.0" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="13.5" font-weight="400" fill="#59636e" text-anchor="start">runs Direct3D, Vulkan, OpenGL and OpenCL</text>
+<text x="52" y="374.0" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="13.5" font-weight="400" fill="#59636e" text-anchor="start">on the host&#x27;s own drivers</text>
+<rect x="36" y="410" width="360" height="40" rx="8" fill="#1f2328"/>
+<text x="216.0" y="435" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="15" font-weight="700" fill="#ffffff" text-anchor="middle">your GPU</text>
+<path d="M216.0,392 L216.0,408" fill="none" stroke="#59636e" stroke-width="1.6" marker-end="url(#e59636e)"/>
+<rect x="36" y="460" width="360" height="60" rx="8" fill="#ffffff" stroke="#d1d9e0" stroke-width="1.2"/>
+<rect x="36" y="468" width="3" height="44" rx="1.5" fill="#1a7f37"/>
+<text x="52" y="486.0" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="16" font-weight="600" fill="#1f2328" text-anchor="start">virtiofsd</text>
+<text x="52" y="506.0" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="13.5" font-weight="400" fill="#59636e" text-anchor="start">one per shared folder</text>
+<path d="M366,302 L366,276" fill="none" stroke="#1a7f37" stroke-width="1.6" stroke-dasharray="4 3" marker-end="url(#e1a7f37)"/>
+<text x="358" y="302" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="12.5" font-weight="400" fill="#1a7f37" text-anchor="end" font-style="italic">frames stay on the GPU</text>
+<rect x="804" y="68" width="360" height="88" rx="8" fill="#ffffff" stroke="#d1d9e0" stroke-width="1.2"/>
+<rect x="804" y="76" width="3" height="72" rx="1.5" fill="#0969da"/>
+<text x="820" y="98.0" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="16" font-weight="600" fill="#1f2328" text-anchor="start">lsw-guest-agent.exe</text>
+<text x="820" y="118.0" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="13.5" font-weight="400" fill="#59636e" text-anchor="start">a Windows service: launches apps, reads</text>
+<text x="820" y="138.0" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="13.5" font-weight="400" fill="#59636e" text-anchor="start">the Start menu, runs LSW&#x27;s updates</text>
+<rect x="804" y="186" width="360" height="88" rx="8" fill="#ffffff" stroke="#d1d9e0" stroke-width="1.2"/>
+<rect x="804" y="194" width="3" height="72" rx="1.5" fill="#0969da"/>
+<text x="820" y="216.0" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="16" font-weight="600" fill="#1f2328" text-anchor="start">remotewin-guest.exe</text>
+<text x="820" y="236.0" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="13.5" font-weight="400" fill="#59636e" text-anchor="start">beside each application: captures its</text>
+<text x="820" y="256.0" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="13.5" font-weight="400" fill="#59636e" text-anchor="start">windows and replays your input</text>
+<rect x="804" y="304" width="360" height="88" rx="8" fill="#ffffff" stroke="#d1d9e0" stroke-width="1.2"/>
+<rect x="804" y="312" width="3" height="72" rx="1.5" fill="#0969da"/>
+<text x="820" y="334.0" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="16" font-weight="600" fill="#1f2328" text-anchor="start">avgpu.sys</text>
+<text x="820" y="354.0" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="13.5" font-weight="400" fill="#59636e" text-anchor="start">a display adapter named after your GPU, with</text>
+<text x="820" y="374.0" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="13.5" font-weight="400" fill="#59636e" text-anchor="start">Direct3D, Vulkan, OpenGL and OpenCL drivers</text>
+<rect x="804" y="410" width="360" height="40" rx="8" fill="#ffffff" stroke="#d1d9e0" stroke-width="1.2"/>
+<text x="984.0" y="435" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="15" font-weight="600" fill="#1f2328" text-anchor="middle">your Windows applications</text>
+<rect x="804" y="460" width="360" height="60" rx="8" fill="#ffffff" stroke="#d1d9e0" stroke-width="1.2"/>
+<rect x="804" y="468" width="3" height="44" rx="1.5" fill="#0969da"/>
+<text x="820" y="486.0" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="16" font-weight="600" fill="#1f2328" text-anchor="start">WinFsp</text>
+<text x="820" y="506.0" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="13.5" font-weight="400" fill="#59636e" text-anchor="start">with virtio-win&#x27;s virtio-fs driver</text>
+<path d="M418,112 L782,112" fill="none" stroke="#8250df" stroke-width="2" marker-end="url(#e8250df)" marker-start="url(#s8250df)"/>
+<rect x="483.6" y="84" width="232.8" height="56" rx="10" fill="#ffffff" stroke="#8250df" stroke-width="1.4"/>
+<text x="600.0" y="106" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="15" font-weight="700" fill="#8250df" text-anchor="middle">guest link</text>
+<text x="600.0" y="126" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="13" font-weight="400" fill="#59636e" text-anchor="middle">control, apps, files, updates</text>
+<path d="M418,230 L782,230" fill="none" stroke="#0969da" stroke-width="2" marker-end="url(#e0969da)" marker-start="url(#s0969da)"/>
+<rect x="490.8" y="202" width="218.4" height="56" rx="10" fill="#ffffff" stroke="#0969da" stroke-width="1.4"/>
+<text x="600.0" y="224" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="15" font-weight="700" fill="#0969da" text-anchor="middle">window link</text>
+<text x="600.0" y="244" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="13" font-weight="400" fill="#59636e" text-anchor="middle">frames, input, menus, icons</text>
+<path d="M418,348 L782,348" fill="none" stroke="#1a7f37" stroke-width="2" marker-end="url(#e1a7f37)" marker-start="url(#s1a7f37)"/>
+<rect x="480.0" y="320" width="240.0" height="56" rx="10" fill="#ffffff" stroke="#1a7f37" stroke-width="1.4"/>
+<text x="600.0" y="342" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="15" font-weight="700" fill="#1a7f37" text-anchor="middle">accel-virt</text>
+<text x="600.0" y="362" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="13" font-weight="400" fill="#59636e" text-anchor="middle">GPU commands and shared memory</text>
+<path d="M418,490 L782,490" fill="none" stroke="#bf8700" stroke-width="2" marker-end="url(#ebf8700)" marker-start="url(#sbf8700)"/>
+<rect x="498.0" y="462" width="204.0" height="56" rx="10" fill="#ffffff" stroke="#bf8700" stroke-width="1.4"/>
+<text x="600.0" y="484" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="15" font-weight="700" fill="#bf8700" text-anchor="middle">shared folders</text>
+<text x="600.0" y="504" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="13" font-weight="400" fill="#59636e" text-anchor="middle">a drive letter per folder</text>
+</svg>

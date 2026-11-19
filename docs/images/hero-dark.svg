@@ -1,0 +1,199 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="640" viewBox="0 0 1200 640" role="img" aria-label="Windows applications open as ordinary windows on the Linux desktop, while Windows 11 runs out of sight in a virtual machine">
+<defs>
+<marker id="e3fb950" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#3fb950"/></marker>
+<marker id="s3fb950" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M10,0 L0,5 L10,10 z" fill="#3fb950"/></marker>
+<marker id="e4493f8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#4493f8"/></marker>
+<marker id="s4493f8" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M10,0 L0,5 L10,10 z" fill="#4493f8"/></marker>
+<marker id="ed29922" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#d29922"/></marker>
+<marker id="sd29922" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M10,0 L0,5 L10,10 z" fill="#d29922"/></marker>
+</defs>
+<defs><linearGradient id="desk" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#16233a"/><stop offset="1" stop-color="#0f1622"/></linearGradient><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7cc4ff"/><stop offset="1" stop-color="#ffd8a8"/></linearGradient><radialGradient id="shade" cx="0.35" cy="0.3" r="0.8"><stop offset="0" stop-color="#ffb86b"/><stop offset="1" stop-color="#e5534b"/></radialGradient></defs>
+<rect x="20" y="20" width="1160" height="470" rx="16" fill="url(#desk)" stroke="#2f3d52" stroke-width="1.6"/>
+<text x="42" y="56" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="15" font-weight="700" fill="#9198a1" text-anchor="start">Your Linux desktop</text>
+<rect x="63" y="86" width="470" height="300" rx="10" fill="#00000066"/>
+<rect x="60" y="80" width="470" height="300" rx="10" fill="#0d1117" stroke="#3d444d" stroke-width="1.2"/>
+<path d="M70,80 H520 A10,10 0 0 1 530,90 V112 H60 V90 A10,10 0 0 1 70,80 Z" fill="#1c222b"/>
+<line x1="60" y1="112" x2="530" y2="112" stroke="#3d444d"/>
+<rect x="72" y="90" width="5.4" height="5.4" rx="0.6" fill="#4493f8"/>
+<rect x="72" y="96.6" width="5.4" height="5.4" rx="0.6" fill="#4493f8"/>
+<rect x="78.6" y="90" width="5.4" height="5.4" rx="0.6" fill="#4493f8"/>
+<rect x="78.6" y="96.6" width="5.4" height="5.4" rx="0.6" fill="#4493f8"/>
+<text x="92" y="101" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="13" font-weight="600" fill="#e6edf3" text-anchor="start">Budget.xlsx</text>
+<text x="466" y="101" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="middle">—</text>
+<text x="488" y="101" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="middle">□</text>
+<text x="510" y="101" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="middle">✕</text>
+<rect x="74" y="126" width="54" height="24" fill="#161b22" stroke="#262c36"/>
+<rect x="128" y="126" width="54" height="24" fill="#161b22" stroke="#262c36"/>
+<rect x="182" y="126" width="54" height="24" fill="#161b22" stroke="#262c36"/>
+<rect x="236" y="126" width="54" height="24" fill="#161b22" stroke="#262c36"/>
+<rect x="290" y="126" width="54" height="24" fill="#161b22" stroke="#262c36"/>
+<rect x="344" y="126" width="54" height="24" fill="#161b22" stroke="#262c36"/>
+<rect x="74" y="150" width="54" height="24" fill="#161b22" stroke="#262c36"/>
+<rect x="128" y="150" width="54" height="24" fill="#0d1117" stroke="#262c36"/>
+<rect x="182" y="150" width="54" height="24" fill="#0d1117" stroke="#262c36"/>
+<rect x="236" y="150" width="54" height="24" fill="#0d1117" stroke="#262c36"/>
+<rect x="290" y="150" width="54" height="24" fill="#0d1117" stroke="#262c36"/>
+<rect x="344" y="150" width="54" height="24" fill="#0d1117" stroke="#262c36"/>
+<rect x="74" y="174" width="54" height="24" fill="#161b22" stroke="#262c36"/>
+<rect x="128" y="174" width="54" height="24" fill="#0d1117" stroke="#262c36"/>
+<rect x="182" y="174" width="54" height="24" fill="#0d1117" stroke="#262c36"/>
+<rect x="236" y="174" width="54" height="24" fill="#0d1117" stroke="#262c36"/>
+<rect x="290" y="174" width="54" height="24" fill="#0d1117" stroke="#262c36"/>
+<rect x="344" y="174" width="54" height="24" fill="#0d1117" stroke="#262c36"/>
+<rect x="74" y="198" width="54" height="24" fill="#161b22" stroke="#262c36"/>
+<rect x="128" y="198" width="54" height="24" fill="#0d1117" stroke="#262c36"/>
+<rect x="182" y="198" width="54" height="24" fill="#0d1117" stroke="#262c36"/>
+<rect x="236" y="198" width="54" height="24" fill="#0d1117" stroke="#262c36"/>
+<rect x="290" y="198" width="54" height="24" fill="#0d1117" stroke="#262c36"/>
+<rect x="344" y="198" width="54" height="24" fill="#0d1117" stroke="#262c36"/>
+<rect x="74" y="222" width="54" height="24" fill="#161b22" stroke="#262c36"/>
+<rect x="128" y="222" width="54" height="24" fill="#0d1117" stroke="#262c36"/>
+<rect x="182" y="222" width="54" height="24" fill="#0d1117" stroke="#262c36"/>
+<rect x="236" y="222" width="54" height="24" fill="#0d1117" stroke="#262c36"/>
+<rect x="290" y="222" width="54" height="24" fill="#0d1117" stroke="#262c36"/>
+<rect x="344" y="222" width="54" height="24" fill="#0d1117" stroke="#262c36"/>
+<rect x="74" y="246" width="54" height="24" fill="#161b22" stroke="#262c36"/>
+<rect x="128" y="246" width="54" height="24" fill="#0d1117" stroke="#262c36"/>
+<rect x="182" y="246" width="54" height="24" fill="#0d1117" stroke="#262c36"/>
+<rect x="236" y="246" width="54" height="24" fill="#0d1117" stroke="#262c36"/>
+<rect x="290" y="246" width="54" height="24" fill="#0d1117" stroke="#262c36"/>
+<rect x="344" y="246" width="54" height="24" fill="#0d1117" stroke="#262c36"/>
+<rect x="74" y="270" width="54" height="24" fill="#161b22" stroke="#262c36"/>
+<rect x="128" y="270" width="54" height="24" fill="#0d1117" stroke="#262c36"/>
+<rect x="182" y="270" width="54" height="24" fill="#0d1117" stroke="#262c36"/>
+<rect x="236" y="270" width="54" height="24" fill="#0d1117" stroke="#262c36"/>
+<rect x="290" y="270" width="54" height="24" fill="#0d1117" stroke="#262c36"/>
+<rect x="344" y="270" width="54" height="24" fill="#0d1117" stroke="#262c36"/>
+<rect x="74" y="294" width="54" height="24" fill="#161b22" stroke="#262c36"/>
+<rect x="128" y="294" width="54" height="24" fill="#0d1117" stroke="#262c36"/>
+<rect x="182" y="294" width="54" height="24" fill="#0d1117" stroke="#262c36"/>
+<rect x="236" y="294" width="54" height="24" fill="#0d1117" stroke="#262c36"/>
+<rect x="290" y="294" width="54" height="24" fill="#0d1117" stroke="#262c36"/>
+<rect x="344" y="294" width="54" height="24" fill="#0d1117" stroke="#262c36"/>
+<text x="155.0" y="142" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="11" font-weight="400" fill="#9198a1" text-anchor="middle">A</text>
+<text x="209.0" y="142" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="11" font-weight="400" fill="#9198a1" text-anchor="middle">B</text>
+<text x="263.0" y="142" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="11" font-weight="400" fill="#9198a1" text-anchor="middle">C</text>
+<text x="317.0" y="142" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="11" font-weight="400" fill="#9198a1" text-anchor="middle">D</text>
+<text x="371.0" y="142" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="11" font-weight="400" fill="#9198a1" text-anchor="middle">E</text>
+<text x="101.0" y="166" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="11" font-weight="400" fill="#9198a1" text-anchor="middle">1</text>
+<text x="176" y="166" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="11" font-weight="400" fill="#e6edf3" text-anchor="end">1,240</text>
+<text x="101.0" y="190" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="11" font-weight="400" fill="#9198a1" text-anchor="middle">2</text>
+<text x="176" y="190" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="11" font-weight="400" fill="#e6edf3" text-anchor="end">980</text>
+<text x="101.0" y="214" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="11" font-weight="400" fill="#9198a1" text-anchor="middle">3</text>
+<text x="176" y="214" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="11" font-weight="400" fill="#e6edf3" text-anchor="end">1,530</text>
+<text x="101.0" y="238" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="11" font-weight="400" fill="#9198a1" text-anchor="middle">4</text>
+<text x="176" y="238" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="11" font-weight="400" fill="#e6edf3" text-anchor="end">1,110</text>
+<text x="101.0" y="262" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="11" font-weight="400" fill="#9198a1" text-anchor="middle">5</text>
+<text x="176" y="262" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="11" font-weight="400" fill="#e6edf3" text-anchor="end">1,675</text>
+<text x="101.0" y="286" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="11" font-weight="400" fill="#9198a1" text-anchor="middle">6</text>
+<text x="176" y="286" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="11" font-weight="400" fill="#e6edf3" text-anchor="end">1,320</text>
+<text x="101.0" y="310" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="11" font-weight="400" fill="#9198a1" text-anchor="middle">7</text>
+<text x="176" y="310" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="11" font-weight="400" fill="#e6edf3" text-anchor="end">1,890</text>
+<rect x="192" y="160" width="142" height="148" rx="4" fill="#0d1117" stroke="#3d444d" stroke-width="1.2"/>
+<rect x="204" y="248.4" width="13" height="49.6" rx="2" fill="#4493f8" opacity="0.85"/>
+<rect x="224" y="277.7090909090909" width="13" height="20.29090909090909" rx="2" fill="#4493f8" opacity="0.85"/>
+<rect x="244" y="215.7090909090909" width="13" height="82.2909090909091" rx="2" fill="#4493f8" opacity="0.85"/>
+<rect x="264" y="263.05454545454546" width="13" height="34.945454545454545" rx="2" fill="#4493f8" opacity="0.85"/>
+<rect x="284" y="199.36363636363637" width="13" height="98.63636363636363" rx="2" fill="#4493f8" opacity="0.85"/>
+<rect x="304" y="239.38181818181818" width="13" height="58.61818181818182" rx="2" fill="#4493f8" opacity="0.85"/>
+<rect x="324" y="175.12727272727273" width="13" height="122.87272727272727" rx="2" fill="#4493f8" opacity="0.85"/>
+<rect x="433" y="206" width="400" height="228" rx="10" fill="#00000066"/>
+<rect x="430" y="200" width="400" height="228" rx="10" fill="#0d1117" stroke="#4493f8" stroke-width="1.6"/>
+<path d="M440,200 H820 A10,10 0 0 1 830,210 V232 H430 V210 A10,10 0 0 1 440,200 Z" fill="#1c222b"/>
+<line x1="430" y1="232" x2="830" y2="232" stroke="#3d444d"/>
+<rect x="442" y="210" width="5.4" height="5.4" rx="0.6" fill="#4493f8"/>
+<rect x="442" y="216.6" width="5.4" height="5.4" rx="0.6" fill="#4493f8"/>
+<rect x="448.6" y="210" width="5.4" height="5.4" rx="0.6" fill="#4493f8"/>
+<rect x="448.6" y="216.6" width="5.4" height="5.4" rx="0.6" fill="#4493f8"/>
+<text x="462" y="221" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="13" font-weight="600" fill="#e6edf3" text-anchor="start">Photo editor</text>
+<text x="766" y="221" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="middle">—</text>
+<text x="788" y="221" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="middle">□</text>
+<text x="810" y="221" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="middle">✕</text>
+<rect x="442" y="244" width="34" height="172" rx="6" fill="#161b22" stroke="#262c36" stroke-width="1.2"/>
+<rect x="449" y="254" width="20" height="20" rx="4" fill="#0d1117" stroke="#3d444d" stroke-width="1.2"/>
+<rect x="449" y="284" width="20" height="20" rx="4" fill="#0d1117" stroke="#3d444d" stroke-width="1.2"/>
+<rect x="449" y="314" width="20" height="20" rx="4" fill="#0d1117" stroke="#3d444d" stroke-width="1.2"/>
+<rect x="449" y="344" width="20" height="20" rx="4" fill="#0d1117" stroke="#3d444d" stroke-width="1.2"/>
+<rect x="449" y="374" width="20" height="20" rx="4" fill="#0d1117" stroke="#3d444d" stroke-width="1.2"/>
+<rect x="488" y="244" width="330" height="172" rx="6" fill="url(#sky)"/>
+<circle cx="748" cy="294" r="22" fill="#fff4c2"/>
+<path d="M488,416 L578,334 L648,394 L718,314 L818,404 L818,416 Z" fill="#3d6b5a" opacity="0.9"/>
+<rect x="553" y="262" width="150" height="104" rx="8" fill="#00000066"/>
+<rect x="550" y="258" width="150" height="104" rx="8" fill="#0d1117" stroke="#3d444d" stroke-width="1.2"/>
+<text x="564" y="280" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#e6edf3" text-anchor="start">Adjustments</text>
+<rect x="554" y="288" width="142" height="22" rx="5" fill="#132f57"/>
+<text x="564" y="304" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#e6edf3" text-anchor="start">Filters</text>
+<text x="564" y="328" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#e6edf3" text-anchor="start">Resize image</text>
+<text x="564" y="352" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#e6edf3" text-anchor="start">Export as...</text>
+<rect x="863" y="86" width="290" height="220" rx="10" fill="#00000066"/>
+<rect x="860" y="80" width="290" height="220" rx="10" fill="#0d1117" stroke="#3d444d" stroke-width="1.2"/>
+<path d="M870,80 H1140 A10,10 0 0 1 1150,90 V112 H860 V90 A10,10 0 0 1 870,80 Z" fill="#1c222b"/>
+<line x1="860" y1="112" x2="1150" y2="112" stroke="#3d444d"/>
+<rect x="872" y="90" width="5.4" height="5.4" rx="0.6" fill="#4493f8"/>
+<rect x="872" y="96.6" width="5.4" height="5.4" rx="0.6" fill="#4493f8"/>
+<rect x="878.6" y="90" width="5.4" height="5.4" rx="0.6" fill="#4493f8"/>
+<rect x="878.6" y="96.6" width="5.4" height="5.4" rx="0.6" fill="#4493f8"/>
+<text x="892" y="101" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="13" font-weight="600" fill="#e6edf3" text-anchor="start">Game</text>
+<text x="1086" y="101" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="middle">—</text>
+<text x="1108" y="101" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="middle">□</text>
+<text x="1130" y="101" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="middle">✕</text>
+<rect x="861" y="113" width="288" height="186" rx="0" fill="#05070c"/>
+<path d="M1005,140 L1080,270 L930,270 Z" fill="url(#shade)"/>
+<path d="M1005,140 L1080,270 L1035,245 Z" fill="#00000040"/>
+<text x="1138" y="134" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="11" font-weight="600" fill="#3fb950" text-anchor="end">144 fps</text>
+<rect x="92" y="400" width="238.8" height="24" rx="12" fill="#0d1117" stroke="#4493f8" stroke-width="1.4"/>
+<text x="211.4" y="416" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="12" font-weight="600" fill="#4493f8" text-anchor="middle">its own window and taskbar entry</text>
+<rect x="470" y="168" width="128.4" height="24" rx="12" fill="#0d1117" stroke="#ab7df8" stroke-width="1.4"/>
+<text x="534.2" y="184" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="12" font-weight="600" fill="#ab7df8" text-anchor="middle">menus and popups</text>
+<rect x="900" y="316" width="135.3" height="24" rx="12" fill="#0d1117" stroke="#3fb950" stroke-width="1.4"/>
+<text x="967.65" y="332" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="12" font-weight="600" fill="#3fb950" text-anchor="middle">drawn on your GPU</text>
+<path d="M21,446 H1179 V474 A15,15 0 0 1 1164,489 H36 A15,15 0 0 1 21,474 Z" fill="#151b23" stroke="#30363d"/>
+<rect x="41" y="455" width="26" height="26" rx="6" fill="#8b949e"/>
+<rect x="81" y="455" width="26" height="26" rx="6" fill="#d29922"/>
+<rect x="121" y="455" width="26" height="26" rx="6" fill="#57606a"/>
+<rect x="161" y="455" width="26" height="26" rx="6" fill="#1a7f37"/>
+<rect x="178" y="472" width="4.9" height="4.9" rx="0.6" fill="#ffffff"/>
+<rect x="178" y="478.1" width="4.9" height="4.9" rx="0.6" fill="#ffffff"/>
+<rect x="184.1" y="472" width="4.9" height="4.9" rx="0.6" fill="#ffffff"/>
+<rect x="184.1" y="478.1" width="4.9" height="4.9" rx="0.6" fill="#ffffff"/>
+<rect x="177" y="471" width="13" height="13" rx="2" fill="#4493f8" opacity="0.9"/>
+<rect x="179" y="473" width="3.9" height="3.9" rx="0.6" fill="#ffffff"/>
+<rect x="179" y="478.1" width="3.9" height="3.9" rx="0.6" fill="#ffffff"/>
+<rect x="184.1" y="473" width="3.9" height="3.9" rx="0.6" fill="#ffffff"/>
+<rect x="184.1" y="478.1" width="3.9" height="3.9" rx="0.6" fill="#ffffff"/>
+<rect x="201" y="455" width="26" height="26" rx="6" fill="#8250df"/>
+<rect x="218" y="472" width="4.9" height="4.9" rx="0.6" fill="#ffffff"/>
+<rect x="218" y="478.1" width="4.9" height="4.9" rx="0.6" fill="#ffffff"/>
+<rect x="224.1" y="472" width="4.9" height="4.9" rx="0.6" fill="#ffffff"/>
+<rect x="224.1" y="478.1" width="4.9" height="4.9" rx="0.6" fill="#ffffff"/>
+<rect x="217" y="471" width="13" height="13" rx="2" fill="#4493f8" opacity="0.9"/>
+<rect x="219" y="473" width="3.9" height="3.9" rx="0.6" fill="#ffffff"/>
+<rect x="219" y="478.1" width="3.9" height="3.9" rx="0.6" fill="#ffffff"/>
+<rect x="224.1" y="473" width="3.9" height="3.9" rx="0.6" fill="#ffffff"/>
+<rect x="224.1" y="478.1" width="3.9" height="3.9" rx="0.6" fill="#ffffff"/>
+<rect x="207" y="484" width="14" height="3" rx="1.5" fill="#4493f8"/>
+<rect x="241" y="455" width="26" height="26" rx="6" fill="#cf222e"/>
+<rect x="258" y="472" width="4.9" height="4.9" rx="0.6" fill="#ffffff"/>
+<rect x="258" y="478.1" width="4.9" height="4.9" rx="0.6" fill="#ffffff"/>
+<rect x="264.1" y="472" width="4.9" height="4.9" rx="0.6" fill="#ffffff"/>
+<rect x="264.1" y="478.1" width="4.9" height="4.9" rx="0.6" fill="#ffffff"/>
+<rect x="257" y="471" width="13" height="13" rx="2" fill="#4493f8" opacity="0.9"/>
+<rect x="259" y="473" width="3.9" height="3.9" rx="0.6" fill="#ffffff"/>
+<rect x="259" y="478.1" width="3.9" height="3.9" rx="0.6" fill="#ffffff"/>
+<rect x="264.1" y="473" width="3.9" height="3.9" rx="0.6" fill="#ffffff"/>
+<rect x="264.1" y="478.1" width="3.9" height="3.9" rx="0.6" fill="#ffffff"/>
+<text x="291" y="473" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="start">Windows apps sit in your taskbar beside Linux ones</text>
+<rect x="20" y="540" width="1160" height="80" rx="14" fill="#151b23" stroke="#3d444d" stroke-width="1.2" stroke-dasharray="6 5"/>
+<rect x="42" y="562" width="9.4" height="9.4" rx="0.6" fill="#6e7681"/>
+<rect x="42" y="572.6" width="9.4" height="9.4" rx="0.6" fill="#6e7681"/>
+<rect x="52.6" y="562" width="9.4" height="9.4" rx="0.6" fill="#6e7681"/>
+<rect x="52.6" y="572.6" width="9.4" height="9.4" rx="0.6" fill="#6e7681"/>
+<text x="76" y="576" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="15" font-weight="700" fill="#9198a1" text-anchor="start">Windows 11, in a virtual machine you never have to look at</text>
+<text x="76" y="598" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="13" font-weight="400" fill="#6e7681" text-anchor="start">QEMU/KVM under your own user. LSW installs it, keeps it updated, and starts it when an app needs it.</text>
+<path d="M300,538 L300,494" fill="none" stroke="#4493f8" stroke-width="1.8" marker-end="url(#e4493f8)" marker-start="url(#s4493f8)"/>
+<text x="310" y="524" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="12" font-weight="600" fill="#4493f8" text-anchor="start">windows</text>
+<path d="M640,538 L640,494" fill="none" stroke="#3fb950" stroke-width="1.8" marker-end="url(#e3fb950)" marker-start="url(#s3fb950)"/>
+<text x="650" y="524" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="12" font-weight="600" fill="#3fb950" text-anchor="start">GPU work</text>
+<path d="M1000,538 L1000,494" fill="none" stroke="#d29922" stroke-width="1.8" marker-end="url(#ed29922)" marker-start="url(#sd29922)"/>
+<text x="1010" y="524" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif" font-size="12" font-weight="600" fill="#d29922" text-anchor="start">files</text>
+</svg>
