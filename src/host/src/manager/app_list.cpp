@@ -5,6 +5,7 @@
 #include "lsw/host/link/agent_reply.hpp"
 #include "lsw/host/link/agent_rpc_client.hpp"
 #include "lsw/host/manager/app_config_dialog.hpp"
+#include "lsw/host/manager/removed_apps_bar.hpp"
 #include "lsw/host/manager/store_app_dialog.hpp"
 #include "lsw/host/ui/line_icon.hpp"
 #include "lsw/host/ui/theme.hpp"
@@ -22,9 +23,9 @@
 #include <QTextOption>
 #include <QToolButton>
 #include <QVBoxLayout>
-#include <nlohmann/json.hpp>
-
+#include <algorithm>
 #include <cmath>
+#include <nlohmann/json.hpp>
 
 namespace lsw::host::manager {
 
@@ -168,6 +169,16 @@ AppListWidget::AppListWidget(apps::AppConfigStore& store, link::AgentRpcClient& 
     list_->setContextMenuPolicy(Qt::CustomContextMenu);
     list_->setItemDelegate(new AppTileDelegate(list_));
     root->addWidget(list_, 1);
+    removed_ = new RemovedAppsBar(store_, this);
+    root->addWidget(removed_);
+    connect(removed_, &RemovedAppsBar::restored, this, &AppListWidget::select);
+    auto* remove = new QShortcut(QKeySequence::Delete, list_);
+    remove->setContext(Qt::WidgetShortcut);
+    connect(remove, &QShortcut::activated, this, [this] {
+        if (auto* item = list_->currentItem(); item != nullptr) {
+            remove_app(item->data(Qt::UserRole).toString());
+        }
+    });
     connect(&launcher_, &apps::GuestAppLauncher::changed, this,
             &AppListWidget::update_launch_state);
 
@@ -215,7 +226,12 @@ void AppListWidget::set_agent_online(bool online, int boot_id) {
 
 void AppListWidget::rebuild() {
     list_->clear();
-    for (const auto& cfg : store_.configs()) {
+    QList<apps::AppConfig> shown = store_.configs();
+    std::stable_sort(shown.begin(), shown.end(),
+                     [](const apps::AppConfig& a, const apps::AppConfig& b) {
+                         return a.name.localeAwareCompare(b.name) < 0;
+                     });
+    for (const auto& cfg : shown) {
         auto* item = new QListWidgetItem(cfg.name, list_);
         QImage img = cfg.icon_image();
         if (!img.isNull()) {
@@ -344,7 +360,7 @@ void AppListWidget::on_context_menu(const QPoint& pos) {
     menu.setDefaultAction(open_act);
     menu.addSeparator();
     auto* cfg_act = menu.addAction("Configure...");
-    auto* del_act = menu.addAction("Delete");
+    auto* del_act = menu.addAction(QStringLiteral("Remove from the list"));
     auto* chosen = menu.exec(list_->viewport()->mapToGlobal(pos));
     if (chosen == nullptr) {
         return;
@@ -354,7 +370,7 @@ void AppListWidget::on_context_menu(const QPoint& pos) {
         return;
     }
     if (chosen == del_act) {
-        store_.remove(id);
+        remove_app(id);
         return;
     }
     if (chosen == cfg_act) {
@@ -365,6 +381,15 @@ void AppListWidget::on_context_menu(const QPoint& pos) {
     }
 }
 
+void AppListWidget::remove_app(const QString& id) {
+    const int row = list_->currentRow();
+    store_.hide(id);
+    removed_->removed(id);
+    if (list_->count() > 0) {
+        list_->setCurrentRow(std::min(row, list_->count() - 1));
+    }
+}
+
 void AppListWidget::open_config_dialog(const apps::AppConfig& initial) {
     AppConfigDialog dlg(initial, rpc_, this);
     if (dlg.exec() != QDialog::Accepted) {
@@ -372,7 +397,7 @@ void AppListWidget::open_config_dialog(const apps::AppConfig& initial) {
     }
     if (dlg.removal_requested()) {
         if (!initial.id.isEmpty()) {
-            store_.remove(initial.id);
+            remove_app(initial.id);
         }
         return;
     }

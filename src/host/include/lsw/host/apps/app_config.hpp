@@ -16,6 +16,7 @@ struct AppConfig {
     QString icon_png_base64;
     bool discovered_via_agent = false;
     qint64 last_seen_unix = 0;
+    bool hidden = false;
 
     bool publish_entry = true;
     QString mime_types;

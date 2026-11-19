@@ -195,7 +195,7 @@ AppConfigDialog::AppConfigDialog(apps::AppConfig initial, link::AgentRpcClient& 
     root->addStretch(1);
 
     auto* footer = chrome.foot;
-    auto* remove = Widgets::button(QStringLiteral("Remove"), Theme::Role::kQuiet);
+    auto* remove = Widgets::button(QStringLiteral("Remove from the list"), Theme::Role::kQuiet);
     remove->setVisible(!cfg_.id.isEmpty());
     auto* cancel = new QPushButton(QStringLiteral("Cancel"));
     auto* save = Widgets::button(QStringLiteral("Save"), Theme::Role::kPrimary);

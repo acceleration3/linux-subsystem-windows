@@ -19,12 +19,18 @@ public:
 
     [[nodiscard]] const QList<AppConfig>& configs() const noexcept { return configs_; }
 
+    [[nodiscard]] const QList<AppConfig>& hidden() const noexcept { return hidden_; }
+
     [[nodiscard]] AppConfig* find(const QString& id);
     [[nodiscard]] const AppConfig* find(const QString& id) const;
 
     void upsert(AppConfig cfg);
 
-    void remove(const QString& id);
+    void hide(const QString& id);
+
+    void restore(const QString& id);
+
+    void restore_all();
 
     void merge_from_agent(const QList<AppEntry>& entries);
 
@@ -39,6 +45,7 @@ private:
 
     QString dir_;
     QList<AppConfig> configs_;
+    QList<AppConfig> hidden_;
 };
 
 }

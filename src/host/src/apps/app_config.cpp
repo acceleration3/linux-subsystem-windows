@@ -55,6 +55,7 @@ QString AppConfig::to_json() const {
     j["icon_png_base64"] = icon_png_base64.toStdString();
     j["discovered_via_agent"] = discovered_via_agent;
     j["last_seen_unix"] = static_cast<std::int64_t>(last_seen_unix);
+    j["hidden"] = hidden;
     j["publish_entry"] = publish_entry;
     j["mime_types"] = mime_types.toStdString();
     auto extensions = json::array();
@@ -90,6 +91,7 @@ AppConfig AppConfig::from_json(const QString& s, bool* ok) {
     out.icon_png_base64 = QString::fromStdString(j.value("icon_png_base64", std::string{}));
     out.discovered_via_agent = j.value("discovered_via_agent", false);
     out.last_seen_unix = j.value("last_seen_unix", static_cast<std::int64_t>(0));
+    out.hidden = j.value("hidden", false);
     out.publish_entry = j.value("publish_entry", true);
     out.mime_types = QString::fromStdString(j.value("mime_types", std::string{}));
     if (const auto it = j.find("file_extensions"); it != j.end() && it->is_array()) {

@@ -8,6 +8,7 @@
 #include <QFile>
 #include <QSaveFile>
 #include <QSet>
+#include <algorithm>
 
 namespace lsw::host::apps {
 
@@ -37,7 +38,8 @@ QString AppConfigStore::file_for(const QString& id) const {
 }
 
 void AppConfigStore::reload() {
-    QList<AppConfig> next;
+    QList<AppConfig> shown;
+    QList<AppConfig> hidden;
     QDir d{dir_};
     const auto entries = d.entryList({"*.json"}, QDir::Files, QDir::Name);
     for (const auto& fn : entries) {
@@ -46,17 +48,13 @@ void AppConfigStore::reload() {
             continue;
         }
         bool ok = false;
-        const auto cfg = AppConfig::from_json(QString::fromUtf8(f.readAll()), &ok);
+        auto cfg = AppConfig::from_json(QString::fromUtf8(f.readAll()), &ok);
         if (ok) {
-            next.append(cfg);
+            (cfg.hidden ? hidden : shown).append(std::move(cfg));
         }
     }
-    if (next.size() != configs_.size()) {
-        configs_ = std::move(next);
-        Q_EMIT changed();
-        return;
-    }
-    configs_ = std::move(next);
+    configs_ = std::move(shown);
+    hidden_ = std::move(hidden);
     Q_EMIT changed();
 }
 
@@ -96,9 +94,11 @@ void AppConfigStore::upsert(AppConfig cfg) {
     if (cfg.id.isEmpty()) {
         cfg.id = AppConfig::make_id(cfg.target().isEmpty() ? cfg.name : cfg.target());
     }
+    cfg.hidden = false;
     if (!write_file(cfg)) {
         return;
     }
+    hidden_.removeIf([&cfg](const AppConfig& gone) { return gone.id == cfg.id; });
     if (auto* existing = find(cfg.id); existing != nullptr) {
         *existing = std::move(cfg);
     } else {
@@ -107,18 +107,46 @@ void AppConfigStore::upsert(AppConfig cfg) {
     Q_EMIT changed();
 }
 
-void AppConfigStore::remove(const QString& id) {
-    auto* existing = find(id);
-    if (existing == nullptr) {
+void AppConfigStore::hide(const QString& id) {
+    for (auto it = configs_.begin(); it != configs_.end(); ++it) {
+        if (it->id != id) {
+            continue;
+        }
+        AppConfig cfg = std::move(*it);
+        configs_.erase(it);
+        cfg.hidden = true;
+        (void)write_file(cfg);
+        hidden_.append(std::move(cfg));
+        Q_EMIT changed();
         return;
     }
-    QFile::remove(file_for(id));
-    for (auto it = configs_.begin(); it != configs_.end(); ++it) {
-        if (it->id == id) {
-            configs_.erase(it);
-            break;
+}
+
+void AppConfigStore::restore(const QString& id) {
+    for (auto it = hidden_.begin(); it != hidden_.end(); ++it) {
+        if (it->id != id) {
+            continue;
         }
+        AppConfig cfg = std::move(*it);
+        hidden_.erase(it);
+        cfg.hidden = false;
+        (void)write_file(cfg);
+        configs_.append(std::move(cfg));
+        Q_EMIT changed();
+        return;
     }
+}
+
+void AppConfigStore::restore_all() {
+    if (hidden_.isEmpty()) {
+        return;
+    }
+    for (AppConfig& cfg : hidden_) {
+        cfg.hidden = false;
+        (void)write_file(cfg);
+        configs_.append(std::move(cfg));
+    }
+    hidden_.clear();
     Q_EMIT changed();
 }
 
@@ -129,6 +157,13 @@ void AppConfigStore::merge_from_agent(const QList<AppEntry>& entries) {
     for (const auto& e : entries) {
         const QString id = AppConfig::make_id(e.id.isEmpty() ? e.name : e.id);
         reported.insert(id);
+        if (const auto gone = std::find_if(hidden_.begin(), hidden_.end(),
+                                           [&id](const AppConfig& cfg) { return cfg.id == id; });
+            gone != hidden_.end()) {
+            gone->last_seen_unix = now;
+            (void)write_file(*gone);
+            continue;
+        }
         if (auto* existing = find(id); existing != nullptr) {
             existing->last_seen_unix = now;
             if (existing->discovered_via_agent && (existing->name != e.name || existing->cmdline != e.args)) {

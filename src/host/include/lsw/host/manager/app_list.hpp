@@ -16,6 +16,8 @@ class AgentRpcClient;
 }
 
 namespace lsw::host::manager {
+class RemovedAppsBar;
+
 class AppListWidget : public QWidget {
     Q_OBJECT
 public:
@@ -42,6 +44,7 @@ private Q_SLOTS:
 
 private:
     void open_config_dialog(const apps::AppConfig& initial);
+    void remove_app(const QString& id);
     void rebuild();
     void select(const QString& id);
 
@@ -53,6 +56,7 @@ private:
     void update_launch_state();
     QToolBar* toolbar_ = nullptr;
     QListWidget* list_ = nullptr;
+    RemovedAppsBar* removed_ = nullptr;
 
     QUuid uuid_;
     bool agent_online_ = false;
