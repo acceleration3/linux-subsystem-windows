@@ -141,7 +141,7 @@ GPUs and runs, and so the benchmark suite later shares the schema.
 - `--suite-args "..."` passes options through (`--suite sanity --filter 'sanity.d3d11.*' --jobs 8`).
 - Host phase (to build). Around each run the matrix records host state and judges host invariants (section 4.24):
   executor and device state dumps before and after, the driver log (`avgpu.log`) delta, the QEMU log delta,
-  avinspector stalls. A run that passes in the guest but leaks host objects or logs driver errors fails.
+  stalled host threads (av-inspect `host_threads`). A run that passes in the guest but leaks host objects or logs driver errors fails.
 - `aggregate.py` reports `suites` checks like the others: "on every GPU" against "this GPU only", and 64 against
   32-bit.
 - Results stay comparable over time: the matrix keeps the last green JSON per GPU and flags checks that went from

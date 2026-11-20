@@ -124,7 +124,7 @@ display-less adapter through the Windows GPU preference; the suite re-runs itsel
 | `scripts/render-vm.sh up\|down\|done\|status\|idle-watch` | start/stop the local VM; `idle-watch` stops a VM it started after `LSW_RENDER_VM_IDLE` seconds idle |
 | `scripts/gpu-test/gpu-test.sh stack-status\|stack-restore <host>` | what stack a remote host runs; put its original stack back |
 | `scripts/gpu-test/gpu-test.sh gpus <host>` | list a host's GPUs |
-| avinspector MCP | live state of a running stack (stalls, connections, surfaces, threads); check it before reading logs |
+| av-inspect MCP (`external/accel-virt/tools/mcp/av_inspect.py`) | live state of a running stack: guest and host threads and stalls, contexts, handles, driver log, crashes; check it before reading logs |
 | `scripts/suite-status/suite_status.py serve` | receives what the suite executables report and serves `/status`, `/api/machines` and the status page |
 
 Live status: start `scripts/suite-status/suite_status.py serve` on each test machine (port 5190, loopback only; `--bind` opens it)
