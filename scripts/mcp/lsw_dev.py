@@ -4,6 +4,7 @@ import os
 import pathlib
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.request
 
@@ -18,6 +19,7 @@ HOSTS_FILE = SCRIPTS / "gpu-test" / "hosts"
 MANAGER_URL = os.environ.get("LSW_MCP_URL", "http://127.0.0.1:5105/")
 MANAGER_TIMEOUT = 5
 QUICK_TIMEOUT = 120
+SCREENSHOT_TIMEOUT = 180
 DEFAULT_HOST_TESTS = "lsw_host_|linkproto|agent_"
 REPOSITORIES = {"lsw": ROOT, "accel-virt": ROOT / "external" / "accel-virt", "remotewin": ROOT / "external" / "remotewin"}
 BUILD_TARGETS = {
@@ -32,7 +34,7 @@ BUILD_TARGETS = {
     "all-without-gpu": [str(SCRIPTS / "build.sh"), "--no-gpu"],
 }
 REMOTE_ACTIONS = {"master": True, "gpus": True, "stack-status": True, "stack-restore": False}
-UPGRADE_OPTIONS = {"make-baseline", "pause-vm", "restore-user", "keep", "x86"}
+UPGRADE_OPTIONS = {"make-baseline", "pause-vm", "restore-user", "keep", "build-only"}
 
 
 class ManagerClient:
@@ -150,6 +152,11 @@ class LswDev(JobTools):
             tool("guest_update_test", "In-VM scenario tests of the guest update script (scripts/test-guest-update.sh). "
                  "Needs the manager and Windows up.",
                  {"only": {"type": "string", "description": "scenario letters"}, "keep": {"type": "boolean"}}),
+            tool("guest_screenshot", "A screenshot of the Windows desktop (or a rectangle of it) saved as a PNG on "
+                 "the host; read the returned path to see it. Starts the elevated desktop helper of "
+                 "scripts/gpu-test/desk.py when it is not running.",
+                 {"rect": {"type": "array", "items": {"type": "integer"}, "description": "x, y, width, height"},
+                  "scale": {"type": "number"}}),
             tool("tidy", "clang-tidy over the given paths of build/compile_commands.json (a job).",
                  {"paths": {"type": "array", "items": {"type": "string"}}}),
             *self.job_tools(),
@@ -337,6 +344,25 @@ class LswDev(JobTools):
         command = [str(SCRIPTS / "test-guest-update.sh")] + (["--only", only] if only else [])
         command += ["--keep"] if keep else []
         return self.jobs.start("guest-update-test", command, ROOT, exclusive="vm:local")
+
+    def guest_screenshot(self, rect=None, scale=None):
+        if rect and len(rect) != 4:
+            raise ToolError("rect is x, y, width, height")
+        folder = self.memory.path.parent / "screenshots"
+        folder.mkdir(parents=True, exist_ok=True)
+        out = folder / (time.strftime("%Y%m%d-%H%M%S") + ".png")
+        desk = ["python3", str(SCRIPTS / "gpu-test" / "desk.py")]
+        shot = desk + ["shot", str(out), *[str(value) for value in rect or []]]
+        shot += ["--scale", str(scale)] if scale else []
+        code, output = self.run(shot, timeout=SCREENSHOT_TIMEOUT)
+        if code != 0:
+            started, detail = self.run(desk + ["start"], timeout=SCREENSHOT_TIMEOUT)
+            if started != 0:
+                raise ToolError(f"the desktop helper did not start: {detail[-600:]}")
+            code, output = self.run(shot, timeout=SCREENSHOT_TIMEOUT)
+        if code != 0 or not out.is_file():
+            raise ToolError(f"no screenshot: {output[-600:]}")
+        return {"path": str(out), "bytes": out.stat().st_size}
 
     def tidy(self, paths=None):
         if not (BUILD / "compile_commands.json").exists():

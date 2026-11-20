@@ -1,6 +1,6 @@
 ---
 name: lsw-control
-description: Drive the LSW Windows VM — enumerate installed apps, launch a program in the user session, watch its window appear, and shut windows down. Use to script repeatable workflows ("install Foo, launch it, screenshot the first window") or to verify a build by exercising the agent's launch/list pathways from outside the manager UI.
+description: Drive the LSW Windows VM — enumerate installed apps, launch a program in the user session, watch its window appear, and shut windows down. Use to script repeatable workflows ("install Foo, launch it, look at its first window") or to verify a build by exercising the agent's launch/list pathways from outside the manager UI.
 ---
 
 # Drive the LSW guest
@@ -22,17 +22,17 @@ Spawns the executable as the logged-on user, elevated (their full token), in the
 After a successful launch, poll `list_windows` until you see a row whose `pid` matches.
 
 ### `list_windows` (no args)
-Top-level visible windows in the console user's session (another session: `rpc cmd="list_windows" params={"session": N}`). Each entry: `{hwnd, pid, title, exe_path, client_w, client_h}`. `client_w/h` are the window's content rect, useful for screenshot sizing.
+Top-level visible windows in the console user's session (another session: `rpc cmd="list_windows" params={"session": N}`). Each entry: `{hwnd, pid, title, exe_path, client_w, client_h}`. `client_w/h` are the window's content rect, useful as the `rect` of a screenshot.
 
 ### `rpc cmd="close_window" params={"hwnd": <int>}`
 Posts WM_CLOSE to the window. The app gets a chance to refuse (e.g., "save changes?" dialogs); for force-close use `taskkill` via a console session.
 
-### `screenshot` (no args)
-Captures the full desktop. The MCP returns it as an inline image block — readable directly by an LLM client without saving to disk.
+### Screenshots
+The manager has no screenshot tool: use `guest_screenshot` of the `lsw-dev` server. It saves the desktop, or `rect=[x, y, w, h]` of it, as a PNG on the host and returns the path; read the file to see it. The first call starts an elevated desktop helper in the console session.
 
 ## Common recipes
 
-### "Launch Notepad and screenshot its window"
+### "Launch Notepad and look at its window"
 ```
 list_apps
 # Find {"name": "Notepad", "exe_path": "C:\\Windows\\System32\\notepad.exe"}
@@ -40,14 +40,14 @@ launch app_id="C:\\Windows\\System32\\notepad.exe"
 # wait ~1 s for the window to render
 list_windows
 # Find the row with pid matching the launch reply
-screenshot
+guest_screenshot   # lsw-dev
 ```
 
 ### "Verify an installer ran cleanly"
 The agent's `download_install` / `download_extract` / `run_script` RPCs return a `job_id` and push `setup_progress` / `setup_done` events. From an MCP client these events don't surface — but you can confirm the end-state:
 1. Fire the install via `rpc cmd="download_install" params={...}`.
 2. Poll `list_apps` until the new program appears (the agent re-enumerates each call).
-3. Optionally `launch` the new app_id and `screenshot` to confirm it runs.
+3. Optionally `launch` the new app_id and take a `guest_screenshot` (lsw-dev) to confirm it runs.
 
 ### "Close every window from a specific exe"
 ```
@@ -60,5 +60,5 @@ rpc cmd="close_window" params={"hwnd": <hwnd>}
 ## Caveats
 
 - **Interactive session required**: `launch` spawns in a user session. With nobody logged in it fails ("no user is logged on") unless you pass `session: 0`; at a lock screen processes start but you won't see their windows. Window and UI Automation RPCs fail with "the session helper in session N is not running" if that session's helper is down — the service relaunches it within seconds (`list_sessions` shows `helper`).
-- **Per-call cost**: `screenshot` returns ~250 KB of base64 PNG by default (1280×800 desktop). Cheap to call once, expensive in a tight loop — prefer subscribing to window mirrors via the agent's `subscribe_window` RPC if you need a stream.
+- **Per-call cost**: a screenshot is a full-desktop PNG file; take one when it answers a question, not in a loop. For a stream, subscribe to window mirrors with the agent's `subscribe_window` RPC.
 - **HWNDs are unstable**: window handles change every time the app is launched. Re-fetch via `list_windows` before each `close_window` / window-targeted RPC.
