@@ -3,6 +3,26 @@
     "lsw-manager": {
       "type": "http",
       "url": "http://127.0.0.1:5105"
+    },
+    "lsw-dev": {
+      "type": "stdio",
+      "command": "python3",
+      "args": ["scripts/mcp/lsw_dev.py"]
+    },
+    "av-dev": {
+      "type": "stdio",
+      "command": "python3",
+      "args": ["external/accel-virt/tools/mcp/av_dev.py"]
+    },
+    "av-inspect": {
+      "type": "stdio",
+      "command": "python3",
+      "args": ["external/accel-virt/tools/mcp/av_inspect.py"]
+    },
+    "rwin-dev": {
+      "type": "stdio",
+      "command": "python3",
+      "args": ["external/remotewin/tools/mcp/rwin_dev.py"]
     }
   }
 }
