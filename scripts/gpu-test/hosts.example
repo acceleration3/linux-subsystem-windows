@@ -1,0 +1,5 @@
+# Copy to scripts/gpu-test/hosts (ignored by git) and fill in. One host per line: name, ssh target, settings.
+# disk-cache=none|writeback|writethrough|directsync sets the VM disks' cache mode on stack-install and stack-apply.
+local   local
+test    user@test-machine
+accel   user@other-machine disk-cache=writeback

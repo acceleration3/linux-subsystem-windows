@@ -34,3 +34,5 @@ generated/
 
 # Release packages (scripts/dist.sh)
 dist/
+
+scripts/gpu-test/hosts

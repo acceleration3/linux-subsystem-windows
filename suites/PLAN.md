@@ -1407,9 +1407,8 @@ suites/render-ref/        lsw-render-ref, the Linux tool that renders the Vulkan
 - Oracles: D3D10, D3D11 and D3D12 compare the accel-virt adapter with WARP; D3D9 compares it with D3D9On12 over a WARP12
   device (`Direct3DCreate9On12` and the Ex variant); Vulkan and OpenGL compare with images rendered by
   `lsw-render-ref` on the same physical GPU through native Vulkan and EGL desktop GL.
-- References: `scripts/render-refs.sh` builds the tool, renders for the GPU the `lsw` domain binds (`--gpu auto`), and
-  pushes `render-refs/` (`device.json`, `<id>/fNNN[_label].rref`, `<id>/skip.txt`) to the guest. The matrix does the
-  same per GPU with the UUID it binds when `--suite-args` names the render suite.
+- References: `scripts/render-run.sh` (and so `scripts/verify.sh`) renders them with `lsw-render-ref` for every GPU
+  the VM binds and pushes `render-refs/` (`device.json`, `<id>/fNNN[_label].rref`, `<id>/skip.txt`) to the guest.
 - Run: `lsw-suites64.exe --suite render --jobs 2 --refs C:\av\gputest\render-refs --json r.json --artifacts art`. A
   failing frame writes `<frame>.expected.png`, `.actual.png` and `.diff.png`; `psnr`, `bad_pixels` and `max_delta`
   are recorded for every frame.
