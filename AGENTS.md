@@ -48,7 +48,7 @@ runs, with suites and references of the same revision.
    ```
 
    It builds the executor (for the oldest CPU level among the test hosts), the guest drivers (x64 and x32), the D3D runtime (DXVK,
-   vkd3d-proton with `tools/*-patches`) and the hybrid-capable QEMU modules, and writes `manifest.json` (driver sha,
+   vkd3d-proton from accel-virt's forks, with the `tools/*-spirv-patches` of their shader compilers) and the hybrid-capable QEMU modules, and writes `manifest.json` (driver sha,
    suite sha, md5 of every file). It refuses a dirty worktree unless `LSW_STACK_ALLOW_DIRTY=1`.
 
 2. Run from an LSW tree whose HEAD is the manifest's `suite_sha`:

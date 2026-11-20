@@ -99,7 +99,7 @@ build_d3dlib() {
             die "${MAIN_AV}/third_party/${sub} is not at the ${sha} this driver pins"
         key+="${sha}"
     done
-    key="$({ cat "${WT}"/tools/dxvk-patches/*.patch "${WT}"/tools/vkd3d-proton-patches/*.patch "${WT}"/tools/dxil-spirv-patches/*.patch \
+    key="$({ cat "${WT}"/tools/dxbc-spirv-patches/*.patch "${WT}"/tools/dxil-spirv-patches/*.patch \
         "${WT}/tools/build_d3d_runtime.sh"; printf "%s" "${key}"; } | md5sum | cut -c1-16)"
     cache="${XDG_CACHE_HOME:-${HOME}/.cache}/lsw-stack/d3dlib-${key}"
     if [[ ! -f ${cache}/libvkd3d-proton-d3d12.so ]]; then
@@ -115,7 +115,7 @@ build_d3dlib() {
             git -C "${MAIN_AV}/third_party/${sub}" submodule foreach --quiet --recursive \
                 "mkdir -p '${scratch}/third_party/${sub}/'\"\$displaypath\" && git archive HEAD | tar -x -C '${scratch}/third_party/${sub}/'\"\$displaypath\""
         done
-        for repo in third_party/vkd3d-proton/subprojects/dxil-spirv third_party/dxvk third_party/vkd3d-proton; do
+        for repo in third_party/dxvk/subprojects/dxbc-spirv third_party/vkd3d-proton/subprojects/dxil-spirv; do
             git -C "${scratch}/${repo}" init -q
             git -C "${scratch}/${repo}" add -A >/dev/null 2>&1
             git -C "${scratch}/${repo}" -c user.name=stack -c user.email=stack@localhost commit -qm base
