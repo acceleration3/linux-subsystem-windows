@@ -1,6 +1,6 @@
 ---
 name: lsw-debug
-description: Inspect what's happening inside the LSW Windows guest VM — pull recent agent logs, capture a screenshot of the desktop, drive cmd.exe interactively, and enumerate visible windows. Use when something feels broken in the manager UI (stats not updating, RPCs hanging, agent unreachable) or when you need to reproduce a guest-side issue without leaving the chat.
+description: Inspect what's happening inside the LSW Windows guest VM — pull recent agent logs, look at the desktop, drive cmd.exe interactively, and enumerate visible windows. Use when something feels broken in the manager UI (stats not updating, RPCs hanging, agent unreachable) or when you need to reproduce a guest-side issue without leaving the chat.
 ---
 
 # LSW debug toolkit
@@ -9,7 +9,7 @@ The manager exposes an MCP server at `http://127.0.0.1:5105/`. These tools all r
 
 ## When to use
 
-- The manager UI shows something stale or wrong (stats, thumbnail, app list) — pull `recent_logs` and a `screenshot` to confirm what the agent sees vs. what the UI renders.
+- The manager UI shows something stale or wrong (stats, thumbnail, app list) — pull `recent_logs` and a `guest_screenshot` (lsw-dev) to confirm what the agent sees vs. what the UI renders.
 - An RPC the manager makes is hanging — `recent_logs` shows the REQ but no REP, suggesting either the agent's dispatcher threw or the manager's reader thread is stuck.
 - Need to reproduce a guest-side issue interactively — open a cmd session, run commands, read output.
 
@@ -27,8 +27,8 @@ The agent's structured log stream as the manager has accumulated it. Bounded rin
 - `sessions:` — the session helpers (one `lsw-agent.exe --session` per logged-on user, started by the service): started/connected/went away/relaunching, and while the install gate holds `:5102` closed, `still waiting for a usable desktop`. Records with source `agent session N` are that helper's own log, forwarded (its pre-connection log is `C:\ProgramData\LSW\logs\agent-session-N.log`).
 - `service:` — SCM start/stop.
 
-### `screenshot` (no args)
-Captures the user-session desktop as PNG, returned as an inline MCP image block. Good for "what is the guest actually showing right now" before diving into logs.
+### Screenshots
+The manager has no screenshot tool: `guest_screenshot` of the `lsw-dev` server saves the desktop as a PNG on the host and returns its path; read the file. Good for "what is the guest actually showing right now" before diving into logs.
 
 ### `list_windows` (no args)
 Top-level visible HWNDs as `{hwnd, pid, title, exe_path, client_w, client_h}`. Use to confirm a launched app actually opened a window, or to find HWND for a `close_window` RPC.
@@ -66,6 +66,6 @@ console_close
 ```
 
 ### "An RPC keeps failing — what's the agent saying?"
-1. `recent_logs count=100` — search for the verb name (`list_apps`, `screenshot`, etc).
+1. `recent_logs count=100` — search for the verb name (`list_apps`, `launch`, etc).
 2. Look for the `REQ id=N cmd=X` line and the matching `REP id=N`. If REP has `error: <msg>`, the agent's dispatcher threw — message is the C++ exception's `what()`.
 3. If there's no REP, the agent crashed mid-call or the manager dropped the connection (look for `peer ... EOF`).

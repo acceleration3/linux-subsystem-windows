@@ -16,14 +16,14 @@ host="" stack="" filter="" adapters=all bits=64 suite=render gpus="" out="" max_
 
 usage() {
     cat <<'EOT'
-usage: scripts/verify.sh --host local|accel --stack DIR (--filter GLOB[,GLOB] | --smoke) [options]
+usage: scripts/verify.sh --host local|HOST --stack DIR (--filter GLOB[,GLOB] | --smoke) [options]
 
-The one way to verify a driver change on the local VM or on accel. Takes the VM's turn in a first-come first-served
+The one way to verify a driver change on the local VM or a remote test host. Takes the VM's turn in a first-come first-served
 queue, deploys exactly the stack in DIR (built by scripts/stack-build.sh), checks that the running QEMU maps the stack's
 executor and modules, runs scripts/render-run.sh from this tree with its suites and reference tool at this tree's
 revision, and leaves the results in DIR/results/<timestamp>.
 
-  --host local|accel        the VM to use
+  --host local|HOST         the VM to use: local, or a host of scripts/gpu-test/hosts
   --stack DIR               a stack-build.sh output; its suite sha must be this tree's HEAD
   --filter GLOB[,GLOB]      check ids, e.g. 'render.d3d11.clear*,render.vk.xfer.copy*' (required unless --smoke: keep holds short)
   --smoke                   the short gate: the rows of scripts/smoke-selection.txt from both suites, run twice in one VM
@@ -32,7 +32,7 @@ revision, and leaves the results in DIR/results/<timestamp>.
                             pass the first time and fail the second; exit 0 only when all hold
   --suite render|sanity     default render
   --adapters all|first      local: which VM-bound GPUs (default all)
-  --gpus SEL[,SEL]          accel: HOST:SEL entries of render-run.sh --gpus (default every GPU)
+  --gpus SEL[,SEL]          remote: HOST:SEL entries of render-run.sh --gpus (default every GPU)
   --bits 64|32|both         default 64 (--smoke: both, the second pass x64 only; --smoke --bits both is the same)
   --jobs N                  parallel checks per adapter (default 2)
   --out DIR                 results directory (default DIR/results/<timestamp>)
@@ -78,7 +78,7 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 
-case "${host}" in local|accel) ;; *) usage >&2; die "--host needs local or accel" ;; esac
+[[ -n ${host} ]] || { usage >&2; die "--host needs local or a host of the hosts file"; }
 [[ ${show_queue} -eq 1 ]] && exec python3 -B "${HERE}/vm_queue.py" status --host "${host}"
 [[ -n ${stack} && -f ${stack}/manifest.json ]] || die "--stack needs a stack-build.sh output directory with manifest.json"
 stack="$(cd "${stack}" && pwd)"
@@ -134,8 +134,8 @@ ensure_suites_built() {
     local av="${ROOT}/external/accel-virt"
     [[ -f ${av}/third_party/khronos/include/CL/cl.h || -d ${av}/third_party/khronos ]] || av="${MAIN_TREE}/external/accel-virt"
     say "build suites and lsw-render-ref at ${rev}"
-    flock -w 7200 "${BUILD_LOCK}" systemd-run --user --scope -q -p CPUQuota=400% -p MemoryHigh=6G nice -n 19 ionice -c3 \
-        env CMAKE_BUILD_PARALLEL_LEVEL=4 LSW_SUITES_KHRONOS_DIR="${av}/third_party/khronos" LSW_SUITES_BITS=both bash -c \
+    flock -w 7200 "${BUILD_LOCK}" "${ROOT}/scripts/build-limited.sh" \
+        env LSW_SUITES_KHRONOS_DIR="${av}/third_party/khronos" LSW_SUITES_BITS=both bash -c \
         '"$1/scripts/build-suites.sh" && "$1/scripts/build-render-ref.sh"' _ "${ROOT}" || die "the suite build failed"
 }
 
@@ -199,11 +199,11 @@ restore_definition() {
     env_definition=""
 }
 
-deploy_accel() {
-    say "accel: deploy-render and stack-apply"
+deploy_remote() {
+    say "${host}: deploy-render and stack-apply"
     rsync -a "${stack}/stage/" "${ROOT}/" || return 1
-    LSW_RENDER_STACK="${stack}" "${GPUTEST}" deploy-render accel || return 1
-    LSW_STACK_QEMU_ENV="${qemu_env}" "${GPUTEST}" stack-apply accel
+    LSW_RENDER_STACK="${stack}" "${GPUTEST}" deploy-render "${host}" || return 1
+    LSW_STACK_QEMU_ENV="${qemu_env}" "${GPUTEST}" stack-apply "${host}"
 }
 
 deploy_if_needed() {
@@ -217,7 +217,7 @@ deploy_if_needed() {
         fi
     fi
     forget_deployed
-    "deploy_${host}" || return 1
+    if [[ ${host} == local ]]; then deploy_local || return 1; else deploy_remote || return 1; fi
     check_running || return $?
     [[ -n ${qemu_env} ]] || record_deployed
 }
@@ -270,12 +270,12 @@ run_inner() {
             trap 'exit 143' TERM
         fi
     else
-        "${GPUTEST}" master accel >/dev/null 2>&1 || { "${GPUTEST}" master accel >&2; die "no ssh master for accel"; }
-        coproc ACCEL_LOCK { ssh "${ssh_opts[@]}" "${target}" bash -s; }
-        printf 'exec 9>/tmp/lsw-accel-vm.lock; flock -w 900 9 || exit 1; echo locked; cat > /dev/null\n' >&"${ACCEL_LOCK[1]}"
+        "${GPUTEST}" master "${host}" >/dev/null 2>&1 || { "${GPUTEST}" master "${host}" >&2; die "no ssh master for ${host}"; }
+        coproc REMOTE_LOCK { ssh "${ssh_opts[@]}" "${target}" bash -s; }
+        printf 'exec 9>/tmp/lsw-vm.lock; flock -w 900 9 || exit 1; echo locked; cat > /dev/null\n' >&"${REMOTE_LOCK[1]}"
         local line=""
-        read -r -t 1000 line <&"${ACCEL_LOCK[0]}"
-        [[ ${line} == locked ]] || die "could not take /tmp/lsw-accel-vm.lock on accel"
+        read -r -t 1000 line <&"${REMOTE_LOCK[0]}"
+        [[ ${line} == locked ]] || die "could not take /tmp/lsw-vm.lock on ${host}"
         export LSW_RENDER_REMOTE_LOCK_HELD=1
     fi
     mkdir -p "${out}"
@@ -299,7 +299,7 @@ run_inner() {
     fi
     restore_definition
     [[ -n ${lockfd:-} ]] && eval "exec ${lockfd}>&-"
-    [[ -n ${ACCEL_LOCK_PID:-} ]] && { exec {ACCEL_LOCK[1]}>&-; wait "${ACCEL_LOCK_PID}" 2>/dev/null; }
+    [[ -n ${REMOTE_LOCK_PID:-} ]] && { exec {REMOTE_LOCK[1]}>&-; wait "${REMOTE_LOCK_PID}" 2>/dev/null; }
     return "${status}"
 }
 
@@ -312,7 +312,7 @@ check_stack
 ensure_suites_built
 if [[ ${dry} -eq 1 ]]; then
     printf '[dry-run] queue ticket on %s in %s\n' "${host}" "${LSW_VERIFY_QUEUE:-${XDG_RUNTIME_DIR:-/tmp}/lsw-verify-queue}"
-    printf '[dry-run] hold %s, killed after %ss\n' "$([[ ${host} == local ]] && echo 'lsw-render.lock' || echo '/tmp/lsw-accel-vm.lock on accel')" "${max_hold}"
+    printf '[dry-run] hold %s, killed after %ss\n' "$([[ ${host} == local ]] && echo 'lsw-render.lock' || echo "/tmp/lsw-vm.lock on ${host}")" "${max_hold}"
     printf '[dry-run] deploy stack %s (suite %s, driver %s) unless the VM already runs it and its guest has its driver package\n' "$(manifest_id)" "$(manifest_field suite_sha | cut -c1-8)" "$(manifest_field driver_sha | cut -c1-8)"
     printf '[dry-run] check the md5 of the executor and both modules the QEMU maps against the manifest\n'
     if [[ ${smoke} -eq 1 ]]; then

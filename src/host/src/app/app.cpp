@@ -271,8 +271,8 @@ int App::capture_screens(const QString& dir) {
         shoot(&splash, QStringLiteral("dialog-5-starting"));
 
         manager::OpenDocumentDialog open_document{
-            {QStringLiteral("/home/accel/Documents/work/report.xlsx")},
-            {QStringLiteral("/home/accel/Documents/work")},
+            {QDir::home().filePath(QStringLiteral("Documents/work/report.xlsx"))},
+            {QDir::home().filePath(QStringLiteral("Documents/work"))},
             QStringLiteral("Excel"),
             true,
             0};

@@ -141,7 +141,7 @@ GPUs and runs, and so the benchmark suite later shares the schema.
 - `--suite-args "..."` passes options through (`--suite sanity --filter 'sanity.d3d11.*' --jobs 8`).
 - Host phase (to build). Around each run the matrix records host state and judges host invariants (section 4.24):
   executor and device state dumps before and after, the driver log (`avgpu.log`) delta, the QEMU log delta,
-  avinspector stalls. A run that passes in the guest but leaks host objects or logs driver errors fails.
+  stalled host threads (av-inspect `host_threads`). A run that passes in the guest but leaks host objects or logs driver errors fails.
 - `aggregate.py` reports `suites` checks like the others: "on every GPU" against "this GPU only", and 64 against
   32-bit.
 - Results stay comparable over time: the matrix keeps the last green JSON per GPU and flags checks that went from
@@ -1407,9 +1407,8 @@ suites/render-ref/        lsw-render-ref, the Linux tool that renders the Vulkan
 - Oracles: D3D10, D3D11 and D3D12 compare the accel-virt adapter with WARP; D3D9 compares it with D3D9On12 over a WARP12
   device (`Direct3DCreate9On12` and the Ex variant); Vulkan and OpenGL compare with images rendered by
   `lsw-render-ref` on the same physical GPU through native Vulkan and EGL desktop GL.
-- References: `scripts/render-refs.sh` builds the tool, renders for the GPU the `lsw` domain binds (`--gpu auto`), and
-  pushes `render-refs/` (`device.json`, `<id>/fNNN[_label].rref`, `<id>/skip.txt`) to the guest. The matrix does the
-  same per GPU with the UUID it binds when `--suite-args` names the render suite.
+- References: `scripts/render-run.sh` (and so `scripts/verify.sh`) renders them with `lsw-render-ref` for every GPU
+  the VM binds and pushes `render-refs/` (`device.json`, `<id>/fNNN[_label].rref`, `<id>/skip.txt`) to the guest.
 - Run: `lsw-suites64.exe --suite render --jobs 2 --refs C:\av\gputest\render-refs --json r.json --artifacts art`. A
   failing frame writes `<frame>.expected.png`, `.actual.png` and `.diff.png`; `psnr`, `bad_pixels` and `max_delta`
   are recorded for every frame.

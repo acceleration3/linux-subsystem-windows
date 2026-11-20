@@ -281,7 +281,7 @@ cmd_stack() {
         if [[ -n ${disk_cache} && ( ${action} == apply || ${action} == install ) ]]; then
             host_args+=" --disk-cache ${disk_cache}"
         fi
-        vm_lock=/tmp/lsw-accel-vm.lock
+        vm_lock=/tmp/lsw-vm.lock
         [[ $(target_of "${host}") == local ]] && vm_lock="${LSW_RENDER_HEAVY_LOCK:-${XDG_RUNTIME_DIR:-/tmp}/lsw-render.lock}"
         on "${host}" <<RUN
 cd ${BASE}/tree/scripts/gpu-test

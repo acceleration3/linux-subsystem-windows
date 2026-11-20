@@ -50,7 +50,7 @@ Runs the lsw-suites render suite on this machine and/or the test machines of
 scripts/gpu-test/hosts, per GPU and bitness, and merges every selected GPU into one
 HTML report: build-render-report/<timestamp>/report.html
 
-  --hosts local,test,accel    machines to run on (default local)
+  --hosts local,HOST,...      machines of scripts/gpu-test/hosts to run on (default local)
   --gpus all|HOST:SEL[,...]   SEL is uuid:HEX, name:SUBSTR or an index from --list-gpus
                               (default: every GPU of every selected host)
   --adapters all|first|list   local only: every VM-bound GPU, the first one, or list them
@@ -531,17 +531,17 @@ guest_runs() {
 
 remote_lock() {
     [[ ${LSW_RENDER_REMOTE_LOCK_HELD:-0} == 1 ]] && return 0
-    coproc ACCEL_LOCK { ssh "${ssh_opts[@]}" "$(target_of "$1")" bash -s; }
-    printf 'exec 9>/tmp/lsw-accel-vm.lock; flock -w 3600 9 || exit 1; echo locked; cat > /dev/null\n' >&"${ACCEL_LOCK[1]}"
+    coproc REMOTE_LOCK { ssh "${ssh_opts[@]}" "$(target_of "$1")" bash -s; }
+    printf 'exec 9>/tmp/lsw-vm.lock; flock -w 3600 9 || exit 1; echo locked; cat > /dev/null\n' >&"${REMOTE_LOCK[1]}"
     local line=""
-    read -r -t 3700 line <&"${ACCEL_LOCK[0]}"
-    [[ ${line} == locked ]] || { printf 'render-run: could not take /tmp/lsw-accel-vm.lock on %s\n' "$1" >&2; return 1; }
+    read -r -t 3700 line <&"${REMOTE_LOCK[0]}"
+    [[ ${line} == locked ]] || { printf 'render-run: could not take /tmp/lsw-vm.lock on %s\n' "$1" >&2; return 1; }
 }
 
 remote_unlock() {
     [[ ${LSW_RENDER_REMOTE_LOCK_HELD:-0} == 1 ]] && return 0
-    exec {ACCEL_LOCK[1]}>&-
-    wait "${ACCEL_LOCK_PID}" 2>/dev/null
+    exec {REMOTE_LOCK[1]}>&-
+    wait "${REMOTE_LOCK_PID}" 2>/dev/null
 }
 
 watch_memory() {

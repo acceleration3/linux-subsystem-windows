@@ -18,11 +18,12 @@ without it the disk is untouched. `stack-status <host>` prints the disk's cache 
 - No guest behaviour may hang or crash the host. A host GPU fault, ring reset or QEMU crash is a driver bug to fix, never
   a row to skip.
 - Never try a risky GPU feature first on the GPU that drives the user's desktop. Prove it on another GPU first.
-- Watch the kernel log during every run: `journalctl -k -f | grep -iE 'amdgpu.*(fault|timeout|reset)'` locally,
-  the equivalent on remote hosts (`xid`, `i915`, `gpu hang`, `fence expiration`). Stop at the first event.
+- Watch the kernel log of every host during every run for the GPU driver's faults, timeouts, ring resets, hangs and
+  Xid errors (`gpu_kernel_events` of the `lsw-dev` server, or `journalctl -k -f`). Stop at the first event.
 - Rows that hang a GPU on purpose stay in the hold file and are never run until their fix is proven.
-- Builds use at most 4 CPUs: `systemd-run --user --scope -p CPUQuota=400% -p MemoryHigh=6G nice -n 19 ionice -c3`, `-j4`,
-  one build at a time on `${XDG_RUNTIME_DIR}/lsw-build.lock`.
+- Builds run one at a time on `${XDG_RUNTIME_DIR}/lsw-build.lock`, through `scripts/build-limited.sh`: nice and ionice,
+  `LSW_BUILD_JOBS` jobs (default every CPU), and `LSW_BUILD_CPU_QUOTA` / `LSW_BUILD_MEMORY_HIGH` as systemd limits when
+  set. Set them in your environment to keep builds from taking the machine you work on.
 - Keep the local VM off when it is not needed (`scripts/render-vm.sh down`). Do not run the full suites while the user is
   working on this machine unless asked.
 - Never redefine a domain by hand. `gpu-test.sh stack-apply` (through `retarget`) is the only path that keeps the
@@ -34,7 +35,8 @@ without it the disk is untouched. `stack-status <host>` prints the disk's cache 
 Fix in batches: code plus unit tests (`ctest` in the driver build), landed on the branch. Run the guest suites once,
 after the batch, with `verify.sh`. Do not run a suite after every fix. A live probe of one row is fine when the cause
 cannot be found from the code, the logs or a host-side harness (the full-stack tests in `tests/harness` run the guest
-ICD against the real executor in one process, no VM needed; `AV_TEST_HOST_GPU` picks the GPU).
+ICD against the real executor in one process, no VM needed: the `*_device` and `test_fullstack_*` ctest tests, on the first
+GPU DXVK runs on; without one they pass with "nothing judged").
 
 ## Running the suites: `verify.sh`
 
@@ -48,7 +50,7 @@ runs, with suites and references of the same revision.
    ```
 
    It builds the executor (for the oldest CPU level among the test hosts), the guest drivers (x64 and x32), the D3D runtime (DXVK,
-   vkd3d-proton with `tools/*-patches`) and the hybrid-capable QEMU modules, and writes `manifest.json` (driver sha,
+   vkd3d-proton from accel-virt's forks, with the `tools/*-spirv-patches` of their shader compilers) and the hybrid-capable QEMU modules, and writes `manifest.json` (driver sha,
    suite sha, md5 of every file). It refuses a dirty worktree unless `LSW_STACK_ALLOW_DIRTY=1`.
 
 2. Run from an LSW tree whose HEAD is the manifest's `suite_sha`:
@@ -111,17 +113,18 @@ display-less adapter through the Windows GPU preference; the suite re-runs itsel
   side-by-side, swipe, onion and difference views. `--baseline-tree` compares with an earlier run.
 - `scripts/render-audit.py --guest <artifacts> --host <refs> --json <result.json> --strict`: checks that each row
   tests what it says (swap test, identical captures across families, the Python judge).
-- `render-progress` shows a running guest run's progress per GPU, local and remote.
+- The verify job's log (`job_log` of `lsw-dev`) and the live status page below show a running guest run's progress.
 - Sanity results land per bitness under `sanity/<host>/<gpu>/x64|x32/result.json`.
 
 ## Other tools
 
 | Tool | Use |
 |---|---|
+| MCP servers `lsw-dev`, `av-dev`, `rwin-dev` | build, test, deploy, stacks and verify runs as jobs under the build lock; `.mcp.json` registers them |
 | `scripts/render-vm.sh up\|down\|done\|status\|idle-watch` | start/stop the local VM; `idle-watch` stops a VM it started after `LSW_RENDER_VM_IDLE` seconds idle |
 | `scripts/gpu-test/gpu-test.sh stack-status\|stack-restore <host>` | what stack a remote host runs; put its original stack back |
 | `scripts/gpu-test/gpu-test.sh gpus <host>` | list a host's GPUs |
-| avinspector MCP | live state of a running stack (stalls, connections, surfaces, threads); check it before reading logs |
+| av-inspect MCP (`external/accel-virt/tools/mcp/av_inspect.py`) | live state of a running stack: guest and host threads and stalls, contexts, handles, driver log, crashes; check it before reading logs |
 | `scripts/suite-status/suite_status.py serve` | receives what the suite executables report and serves `/status`, `/api/machines` and the status page |
 
 Live status: start `scripts/suite-status/suite_status.py serve` on each test machine (port 5190, loopback only; `--bind` opens it)
