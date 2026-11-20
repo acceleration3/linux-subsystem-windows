@@ -17,16 +17,17 @@ usage: scripts/stack-build.sh [--dry-run] DRIVER_WORKTREE OUT_DIR
 
 Builds the complete render stack of one accel-virt worktree into OUT_DIR, so a verification deploys one thing:
 
-  libav_executor.so   built for x86-64-v3, runs on this machine and on accel
+  libav_executor.so   built for LSW_STACK_MARCH (default x86-64-v3): the oldest CPU level among the test hosts
   av-drivers/         guest drivers x64 and x32 as the VM installs them (package/, loaders/, provision.ps1)
-  d3dlib/             DXVK and the patched vkd3d-proton, cached by the content of the patches
+  d3dlib/             DXVK and vkd3d-proton from accel-virt's forks, cached by their commits and the shader compiler series
   qemu-modules/       the QEMU modules of this machine's QEMU build, with virtio-gpu-av and virtio-gpu-pci-av
                       compiled from the worktree's glue and device library (hybrid capable)
   stage/              what gpu-test.sh deploy-render wants besides the stack (QEMU binary, agent, vulkan loaders)
   manifest.json       driver sha, suite sha (this tree), md5 of the executor and the two modules
 
 The worktree must be clean (LSW_STACK_ALLOW_DIRTY=1 builds it anyway and records it). The build holds
-${XDG_RUNTIME_DIR}/lsw-build.lock and runs with CPUQuota=400%, nice and ionice, -j4.
+${XDG_RUNTIME_DIR}/lsw-build.lock and runs through scripts/build-limited.sh: LSW_BUILD_JOBS jobs (default every
+CPU), LSW_BUILD_CPU_QUOTA and LSW_BUILD_MEMORY_HIGH when set, nice and ionice.
 EOT
 }
 
@@ -57,8 +58,7 @@ if [[ -n $(git -C "${WT}" status --porcelain --untracked-files=no | grep -v ' th
 fi
 
 if [[ ${dry} -eq 0 && ${LSW_STACK_INNER:-0} != 1 ]]; then
-    exec flock -w 7200 "${BUILD_LOCK}" systemd-run --user --scope -q -p CPUQuota=400% -p MemoryHigh=6G \
-        nice -n 19 ionice -c3 env LSW_STACK_INNER=1 "$0" "$@"
+    exec flock -w 7200 "${BUILD_LOCK}" "${ROOT}/scripts/build-limited.sh" env LSW_STACK_INNER=1 "$0" "$@"
 fi
 
 printf 'driver %s%s\nsuite  %s\nout    %s\nmarch  %s\n' "${DRIVER_SHA}" "$([[ ${DRIVER_DIRTY} -eq 1 ]] && echo ' (dirty)')" "${SUITE_SHA}" "${OUT}" "${MARCH}"
@@ -79,7 +79,7 @@ build_native() {
     cmake -S "${WT}" -B "${dir}" -G Ninja -DCMAKE_BUILD_TYPE=Release -DAV_SANITIZE=OFF -DAV_CHECKED=OFF -DAV_QEMU=OFF \
         -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
         -DCMAKE_C_FLAGS="-march=${MARCH}" -DCMAKE_CXX_FLAGS="-march=${MARCH}" "${launcher[@]}" >/dev/null
-    cmake --build "${dir}" -j4 --target av_executor av_device drivers
+    cmake --build "${dir}" -j"${LSW_BUILD_JOBS:-$(nproc)}" --target av_executor av_device drivers
 }
 
 install_package() {
@@ -120,7 +120,7 @@ build_d3dlib() {
             git -C "${scratch}/${repo}" add -A >/dev/null 2>&1
             git -C "${scratch}/${repo}" -c user.name=stack -c user.email=stack@localhost commit -qm base
         done
-        CC="${CC:-ccache gcc}" CXX="${CXX:-ccache g++}" JOBS=4 "${scratch}/tools/build_d3d_runtime.sh" >/dev/null
+        CC="${CC:-ccache gcc}" CXX="${CXX:-ccache g++}" JOBS="${LSW_BUILD_JOBS:-$(nproc)}" "${scratch}/tools/build_d3d_runtime.sh" >/dev/null
         mkdir -p "${cache}.new"
         cp -aL "${scratch}/build-d3d/lib/." "${cache}.new/"
         rm -rf "${cache}"

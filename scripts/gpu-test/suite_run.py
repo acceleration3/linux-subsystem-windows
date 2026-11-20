@@ -23,7 +23,7 @@ OWN_PROCESSES = ("cmd.exe", "conhost.exe", "openconsole.exe", "lsw-guest-agent.e
 SHELL_PROCESSES = ("explorer.exe", "shellexperiencehost.exe", "startmenuexperiencehost.exe", "searchhost.exe",
                    "searchapp.exe", "shellhost.exe", "textinputhost.exe", "sihost.exe", "applicationframehost.exe",
                    "lockapp.exe", "logonui.exe", "csrss.exe")
-REMOTE_VM_LOCK = "/tmp/lsw-accel-vm.lock"
+REMOTE_VM_LOCK = "/tmp/lsw-vm.lock"
 
 
 def say(line):

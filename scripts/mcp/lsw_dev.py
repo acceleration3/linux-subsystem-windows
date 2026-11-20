@@ -90,12 +90,13 @@ class LswDev(JobTools):
 
     def tools(self):
         stack = {"type": "string", "description": "a stack directory from stack_build; default: the last one used"}
-        host = {"type": "string", "description": "a host name from the hosts file (local, test, accel)"}
+        host = {"type": "string", "description": "local, or a host name from scripts/gpu-test/hosts"}
         return [
             tool("status", "One look at the development state: branch and changes of LSW, accel-virt and remotewin, "
                  "whether the VM and the manager run, whether a build holds the build lock, the verify queue and "
                  "the running jobs."),
-            tool("build", "Builds one part of LSW as a background job, at four CPUs under the build lock. manager, "
+            tool("build", "Builds one part of LSW as a background job under the build lock, at the limits LSW_BUILD_JOBS, "
+                 "LSW_BUILD_CPU_QUOTA and LSW_BUILD_MEMORY_HIGH set. manager, "
                  "remotewin, accel-virt and host-tests build in build/; agent cross-builds the guest agent and "
                  "remotewin-guest; suites builds lsw-suites64/32.exe; render-ref the native references; all runs "
                  "scripts/build.sh.",

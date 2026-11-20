@@ -8,7 +8,8 @@ description: Build, test and deploy LSW's own components (the Qt manager, the Wi
 The `lsw-dev` MCP server (`scripts/mcp/lsw_dev.py`) runs every step. Long steps are background jobs: a call
 returns a job id at once, `wait_job` waits up to 55 s and returns the log tail, `job_log` greps the log, and
 `cancel_job` stops the job and everything it started. Jobs outlive the server, so `list_jobs` finds them again after
-a restart. Builds take `$XDG_RUNTIME_DIR/lsw-build.lock`, run at four CPUs and refuse to start beside another build.
+a restart. Builds take `$XDG_RUNTIME_DIR/lsw-build.lock`, run at the limits `LSW_BUILD_JOBS`,
+`LSW_BUILD_CPU_QUOTA` and `LSW_BUILD_MEMORY_HIGH` set, and refuse to start beside another build.
 
 Start with `status`: the branch and changes of LSW, accel-virt and remotewin, whether the VM and the manager run,
 and what holds the build lock.
@@ -64,7 +65,7 @@ When the swap times out:
 
 ## Rules
 
-- At most four CPUs for builds, one build at a time: the server enforces it, so do not start builds beside it by hand.
+- One build at a time, under the build limits: the server enforces both, so do not start builds beside it by hand.
 - Keep the VM off when nothing needs it (`vm action=down`); the user's desktop runs on this machine.
 - Long or heavy runs (upgrade test, full suites) are the user's call: ask first.
 - Commit on the checked-out branch; no AI attribution in commits.
