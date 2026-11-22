@@ -200,6 +200,11 @@ QString DomainXmlBuilder::build(const config::VmRecord& vm, const DomainXmlInput
         {"__GL_SHADER_DISK_CACHE_PATH", inputs.shader_cache_dir},
         {"DXVK_SHADER_CACHE_PATH", inputs.shader_cache_dir},
         {"VKD3D_SHADER_CACHE_PATH", inputs.shader_cache_dir},
+        {"NEO_CACHE_DIR", inputs.shader_cache_dir},
+        {"NEO_CACHE_PERSISTENT", inputs.shader_cache_dir.isEmpty() ? QString() : QStringLiteral("1")},
+        {"AMD_COMGR_CACHE_DIR", inputs.shader_cache_dir},
+        {"MESA_SHADER_CACHE_MAX_SIZE", inputs.shader_cache_dir.isEmpty() ? QString() : QStringLiteral("4G")},
+        {"__GL_SHADER_DISK_CACHE_SKIP_CLEANUP", inputs.shader_cache_dir.isEmpty() ? QString() : QStringLiteral("1")},
         {"DXVK_LOG_LEVEL", inputs.dxvk_log_level},
         {"VKD3D_DEBUG", inputs.vkd3d_debug},
     };

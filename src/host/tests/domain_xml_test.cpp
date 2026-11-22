@@ -343,11 +343,18 @@ int main(int argc, char** argv) {
           "QEMU_MODULE_DIR is passed, read back exactly");
     check(qemu_env(doc, QStringLiteral("AV_D3D_PATH")) == inputs.d3d_lib_dir,
           "AV_D3D_PATH is passed, read back exactly");
-    for (const char* cache : {"MESA_SHADER_CACHE_DIR", "DXVK_SHADER_CACHE_PATH", "VKD3D_SHADER_CACHE_PATH"}) {
+    for (const char* cache : {"MESA_SHADER_CACHE_DIR", "__GL_SHADER_DISK_CACHE_PATH", "DXVK_SHADER_CACHE_PATH",
+                              "VKD3D_SHADER_CACHE_PATH", "NEO_CACHE_DIR", "AMD_COMGR_CACHE_DIR"}) {
         check(qemu_env(doc, QLatin1String(cache)) == inputs.shader_cache_dir,
               "every shader cache the host runtimes keep is in the shader cache directory, not in the "
               "domain's private XDG_CACHE_HOME that libvirt deletes when the VM stops");
     }
+    check(qemu_env(doc, QStringLiteral("NEO_CACHE_PERSISTENT")) == QStringLiteral("1"),
+          "Intel's OpenCL compiler keeps its cache across runs");
+    check(qemu_env(doc, QStringLiteral("__GL_SHADER_DISK_CACHE_SKIP_CLEANUP")) == QStringLiteral("1"),
+          "NVIDIA's shader cache is not pruned to its small default size");
+    check(!qemu_env(doc, QStringLiteral("MESA_SHADER_CACHE_MAX_SIZE")).isEmpty(),
+          "Mesa's shader cache is given room for every API and GPU sharing it");
     {
         const QStringList all = qemu_args(doc);
         check(all.count(QStringLiteral("-L")) == 1 &&

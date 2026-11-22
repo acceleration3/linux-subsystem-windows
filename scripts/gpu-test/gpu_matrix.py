@@ -83,7 +83,7 @@ EXECUTOR = TREE / "build" / "accel-virt" / "qemu" / "libav_executor.so"
 D3D_LIB = TREE / "build" / "accel-virt" / "d3d" / "lib"
 SHADER_CACHE = pathlib.Path.home() / ".cache" / "lsw" / "shader-cache"
 SHADER_CACHE_ENV = ("MESA_SHADER_CACHE_DIR", "__GL_SHADER_DISK_CACHE_PATH", "DXVK_SHADER_CACHE_PATH",
-                    "VKD3D_SHADER_CACHE_PATH")
+                    "VKD3D_SHADER_CACHE_PATH", "NEO_CACHE_DIR", "AMD_COMGR_CACHE_DIR")
 DRIVERS = TREE / "build" / "av-drivers"
 VULKAN_LOADERS = {"x64": TREE / "build-agent" / "_deps" / "vulkanloader-build" / "loader" / "vulkan-1.dll",
                   "x86": TREE / "build-agent32" / "_deps" / "vulkanloader-build" / "loader" / "vulkan-1.dll"}
