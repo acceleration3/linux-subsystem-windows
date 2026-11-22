@@ -198,7 +198,7 @@ QString DomainXmlBuilder::build(const config::VmRecord& vm, const DomainXmlInput
         {"XDG_RUNTIME_DIR", QProcessEnvironment::systemEnvironment().value("XDG_RUNTIME_DIR")},
         {"MESA_SHADER_CACHE_DIR", inputs.shader_cache_dir},
         {"__GL_SHADER_DISK_CACHE_PATH", inputs.shader_cache_dir},
-        {"DXVK_STATE_CACHE_PATH", inputs.shader_cache_dir},
+        {"DXVK_SHADER_CACHE_PATH", inputs.shader_cache_dir},
         {"VKD3D_SHADER_CACHE_PATH", inputs.shader_cache_dir},
         {"DXVK_LOG_LEVEL", inputs.dxvk_log_level},
         {"VKD3D_DEBUG", inputs.vkd3d_debug},

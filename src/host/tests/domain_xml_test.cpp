@@ -307,6 +307,7 @@ int main(int argc, char** argv) {
     inputs.qemu_data_dir = QStringLiteral("/opt/o'av/qemu/share");
     inputs.executor = QStringLiteral("/opt/a,b/libav_executor.so");
     inputs.d3d_lib_dir = QStringLiteral("/opt/av & d3d/lib");
+    inputs.shader_cache_dir = QStringLiteral("/home/o'brien/.cache/lsw/shader-cache");
     inputs.host_gpu_uuid = QStringLiteral("01234567-89ab-cdef-0123-456789abcdef");
     inputs.render_only_gpu_uuids = {QStringLiteral("fedcba98-7654-3210-fedc-ba9876543210")};
     inputs.host_window_mib = 4096;
@@ -342,6 +343,11 @@ int main(int argc, char** argv) {
           "QEMU_MODULE_DIR is passed, read back exactly");
     check(qemu_env(doc, QStringLiteral("AV_D3D_PATH")) == inputs.d3d_lib_dir,
           "AV_D3D_PATH is passed, read back exactly");
+    for (const char* cache : {"MESA_SHADER_CACHE_DIR", "DXVK_SHADER_CACHE_PATH", "VKD3D_SHADER_CACHE_PATH"}) {
+        check(qemu_env(doc, QLatin1String(cache)) == inputs.shader_cache_dir,
+              "every shader cache the host runtimes keep is in the shader cache directory, not in the "
+              "domain's private XDG_CACHE_HOME that libvirt deletes when the VM stops");
+    }
     {
         const QStringList all = qemu_args(doc);
         check(all.count(QStringLiteral("-L")) == 1 &&
