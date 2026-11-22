@@ -125,6 +125,7 @@ bundle_paths() (
     echo build/accel-virt/d3d/lib
     echo build/av-drivers
     echo build/src/host/lsw-manager
+    echo build/guest-update
     echo build/remotewin/source/host/remotewin
     echo build-agent/src/agent/lsw-guest-agent.exe
     ls build-agent/remotewin/source/guest/remotewin-guest.exe 2>/dev/null || true
