@@ -178,9 +178,11 @@ void MaintenancePage::build_release() {
     panel.body->addWidget(holder);
 
     panel.explain(QStringLiteral("Check for updates asks github.com for LSW's releases. The manager "
-                                 "never checks by itself. A newer LSW comes from your package "
-                                 "manager or the release page; once it is installed, the manager "
-                                 "updates the software in Windows by itself."));
+                                 "also checks each time it opens when Check for updates on startup "
+                                 "is on in Settings, and otherwise never checks by itself. A newer "
+                                 "LSW comes from your package manager or the release page; once it "
+                                 "is installed, the manager updates the software in Windows by "
+                                 "itself."));
     column()->addWidget(panel.frame);
 }
 
