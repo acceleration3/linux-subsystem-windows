@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QPointer>
 #include <QString>
 #include <QWidget>
 
@@ -30,6 +31,8 @@ private:
 
     QString text_;
     bool lit_ = false;
+    bool keyed_ = false;
+    QPointer<QWidget> from_;
 };
 
 }  // namespace lsw::host::ui

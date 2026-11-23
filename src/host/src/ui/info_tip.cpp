@@ -3,6 +3,7 @@
 #include "lsw/host/ui/theme.hpp"
 
 #include <QAbstractTextDocumentLayout>
+#include <QApplication>
 #include <QFocusEvent>
 #include <QFontMetricsF>
 #include <QGuiApplication>
@@ -10,6 +11,7 @@
 #include <QPointer>
 #include <QScreen>
 #include <QTextDocument>
+#include <QTimer>
 #include <algorithm>
 #include <cmath>
 
@@ -122,6 +124,11 @@ InfoTip::InfoTip(const QString& text, QWidget* parent) : QWidget(parent) {
     setCursor(Qt::WhatsThisCursor);
     setFocusPolicy(Qt::TabFocus);
     setAccessibleName(QStringLiteral("More about this"));
+    connect(qApp, &QApplication::focusChanged, this, [this](QWidget* old, QWidget* now) {
+        if (now == this) {
+            from_ = old;
+        }
+    });
     set_text(text);
 }
 
@@ -129,7 +136,7 @@ void InfoTip::set_text(const QString& text) {
     text_ = text;
     setAccessibleDescription(text_);
     show_if_placed();
-    if (lit_ || hasFocus()) {
+    if (lit_ || (keyed_ && hasFocus())) {
         show_tip();
     }
 }
@@ -168,7 +175,7 @@ void InfoTip::paintEvent(QPaintEvent*) {
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
     const QColor ink(
-        QString::fromLatin1(lit_ || hasFocus() ? Theme::Color::kFg : Theme::Color::kFgFaint));
+        QString::fromLatin1(lit_ || (keyed_ && hasFocus()) ? Theme::Color::kFg : Theme::Color::kFgFaint));
     painter.setPen(QPen(ink, 1.2));
     painter.drawEllipse(QRectF(rect()).adjusted(0.6, 0.6, -0.6, -0.6));
     QFont glyph = font();
@@ -192,12 +199,21 @@ void InfoTip::leaveEvent(QEvent*) {
 
 void InfoTip::focusInEvent(QFocusEvent* event) {
     QWidget::focusInEvent(event);
+    keyed_ = false;
     update();
-    show_tip();
+    QTimer::singleShot(0, this, [this] {
+        if (!hasFocus() || (from_ != nullptr && !from_->isEnabled())) {
+            return;
+        }
+        keyed_ = true;
+        update();
+        show_tip();
+    });
 }
 
 void InfoTip::focusOutEvent(QFocusEvent* event) {
     QWidget::focusOutEvent(event);
+    keyed_ = false;
     update();
     bubble().hide();
 }

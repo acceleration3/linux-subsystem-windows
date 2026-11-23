@@ -7,6 +7,8 @@
 #include <QFont>
 #include <QFontMetrics>
 #include <QHBoxLayout>
+#include <QKeyEvent>
+#include <QPushButton>
 #include <QWidget>
 #include <cstdio>
 
@@ -141,6 +143,36 @@ int main(int argc, char** argv) {
         shown->grab().save(QDir(shots).filePath(QStringLiteral("info-tip-paragraphs.png")));
     }
     leave(*paragraphs_tip);
+
+    {
+        QWidget panel;
+        auto* line_of = new QHBoxLayout(&panel);
+        auto* button = new QPushButton(QStringLiteral("Check for updates"));
+        auto* next = new lsw::host::ui::InfoTip(QStringLiteral("The next panel's explanation."));
+        line_of->addWidget(button);
+        line_of->addWidget(next);
+        panel.show();
+        panel.activateWindow();
+        settle();
+
+        button->setFocus(Qt::MouseFocusReason);
+        settle();
+        button->setEnabled(false);
+        settle();
+        check(bubble() == nullptr,
+              "a button disabling itself does not open the next icon's bubble with the focus it hands on");
+
+        button->setEnabled(true);
+        button->setFocus(Qt::MouseFocusReason);
+        settle();
+        QKeyEvent tab(QEvent::KeyPress, Qt::Key_Tab, Qt::NoModifier);
+        QApplication::sendEvent(button, &tab);
+        settle();
+        check(next->hasFocus() && bubble() != nullptr, "tabbing onto the icon opens its bubble");
+        button->setFocus(Qt::MouseFocusReason);
+        settle();
+        check(bubble() == nullptr, "tabbing away closes the bubble");
+    }
 
     if (failures == 0) {
         std::printf("ok\n");
