@@ -115,9 +115,9 @@ struct ConnectionStats {
     std::uint64_t events_sent = 0;
 
     [[nodiscard]] std::string describe(std::uint64_t bytes_sent) const {
-        return std::to_string(requests_handled.load()) + " requests, " + std::to_string(events_sent) +
-               " events, " + std::to_string(bytes_received) + "B in / " +
-               std::to_string(bytes_sent) + "B out";
+        return std::to_string(requests_handled.load()) + " requests, " +
+               std::to_string(events_sent) + " events, " + std::to_string(bytes_received) +
+               "B in / " + std::to_string(bytes_sent) + "B out";
     }
 };
 
@@ -128,8 +128,10 @@ public:
     RequestDispatcher(rpc::RpcContext& ctx, ConnectionStats& stats) : ctx_(&ctx), stats_(&stats) {}
 
     [[nodiscard]] bool waits_on_a_session(const nlohmann::json& request) const {
-        const auto* handler = rpc::RpcRegistry::instance().find(request.value("cmd", std::string{}));
-        return handler != nullptr && handler->placement() == rpc::RpcHandler::Placement::UserSession;
+        const auto* handler =
+            rpc::RpcRegistry::instance().find(request.value("cmd", std::string{}));
+        return handler != nullptr &&
+               handler->placement() == rpc::RpcHandler::Placement::UserSession;
     }
 
     [[nodiscard]] bool handle(const nlohmann::json& request, const ReplySink& reply_sink) {
@@ -193,7 +195,8 @@ class SessionRequests {
 public:
     using Handle = std::function<void(const nlohmann::json&)>;
 
-    explicit SessionRequests(Handle handle) : handle_(std::move(handle)), thread_([this] { run(); }) {}
+    explicit SessionRequests(Handle handle)
+        : handle_(std::move(handle)), thread_([this] { run(); }) {}
 
     ~SessionRequests() {
         {
@@ -239,7 +242,6 @@ private:
     bool stop_ = false;
     std::thread thread_;
 };
-
 }
 
 HostEndpoint::HostEndpoint(core::AgentServices& services) : services_(&services) {
@@ -382,8 +384,9 @@ void HostEndpoint::handle_connection(std::intptr_t accepted_fd) {
     const auto reply_over_socket = [&](const nlohmann::json& message) {
         return writer.send_control(message);
     };
-    SessionRequests session_requests{
-        [&](const nlohmann::json& request) { (void)dispatcher.handle(request, reply_over_socket); }};
+    SessionRequests session_requests{[&](const nlohmann::json& request) {
+        (void)dispatcher.handle(request, reply_over_socket);
+    }};
 
     LogEventSource logs;
     ConsoleEventSource console{services_->console()};

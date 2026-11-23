@@ -259,10 +259,12 @@ int main(int argc, char** argv) {
 
     update.calls.clear();
     hub.set_vm(machine(true, true, false));
-    check(wait_for([&] { return update.calls.size() == 1; }), "a boot after an update starts its check");
+    check(wait_for([&] { return update.calls.size() == 1; }),
+          "a boot after an update starts its check");
     hub.set_vm(machine(true, false, false));
     update.end_failed(QStringLiteral("Windows did not answer before the update."));
-    check(wait_for([&] { return upkeep.state() == State::Failed; }), "an update Windows stopped answering fails the pass");
+    check(wait_for([&] { return upkeep.state() == State::Failed; }),
+          "an update Windows stopped answering fails the pass");
     hub.set_vm(machine(true, true, false));
     check(wait_for([&] { return update.calls.size() == 2; }),
           "when Windows answers again the pass runs again by itself and the update follows");
@@ -275,7 +277,8 @@ int main(int argc, char** argv) {
     hub.set_vm(machine(true, true, false));
     check(wait_for([&] { return update.calls.size() == 1; }), "a later boot is checked");
     update.end_failed(QStringLiteral("could not copy"));
-    check(wait_for([&] { return upkeep.state() == State::Failed; }), "a failure while Windows still answers ends Failed");
+    check(wait_for([&] { return upkeep.state() == State::Failed; }),
+          "a failure while Windows still answers ends Failed");
     hub.set_vm(machine(true, true, false));
     settle();
     check(update.calls.size() == 1, "and is not retried while the agent never went away");
@@ -283,7 +286,8 @@ int main(int argc, char** argv) {
         hub.set_vm(machine(true, false, false));
         settle();
         hub.set_vm(machine(true, true, false));
-        check(wait_for([&] { return update.calls.size() == round; }), "each time Windows comes back a failed pass is retried");
+        check(wait_for([&] { return update.calls.size() == round; }),
+              "each time Windows comes back a failed pass is retried");
         update.end_failed(QStringLiteral("could not copy"));
         check(wait_for([&] { return upkeep.state() == State::Failed; }), "and fails again");
     }
@@ -291,7 +295,8 @@ int main(int argc, char** argv) {
     settle();
     hub.set_vm(machine(true, true, false));
     settle();
-    check(update.calls.size() == 3, "after two automatic retries in one boot only the user's retry runs it again");
+    check(update.calls.size() == 3,
+          "after two automatic retries in one boot only the user's retry runs it again");
     hub.set_vm(machine(false, false, false));
     settle();
 
