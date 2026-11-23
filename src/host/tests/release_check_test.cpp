@@ -1,12 +1,21 @@
+#include "lsw/host/config/manager_settings.hpp"
+#include "lsw/host/config/settings.hpp"
+#include "lsw/host/link/agent_rpc_client.hpp"
 #include "lsw/host/services/release_check.hpp"
+#include "lsw/host/services/status_hub.hpp"
+#include "lsw/host/vm/guest_stats_probe.hpp"
+#include "lsw/host/vm/libvirt_connection.hpp"
+#include "lsw/host/vm/lifecycle.hpp"
 
-#include <QCoreApplication>
+#include <QApplication>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <cstdio>
 
 using lsw::host::services::ReleaseCheck;
+using lsw::host::services::ReleaseStatus;
+using lsw::host::services::StatusHub;
 
 namespace {
 
@@ -35,10 +44,16 @@ QByteArray page(const QJsonArray& releases) {
     return QJsonDocument(releases).toJson();
 }
 
+class NoProbe : public lsw::host::vm::IGuestStatsProbe {
+public:
+    bool available() const override { return false; }
+    lsw::host::vm::GuestStatsSample sample() override { return {}; }
+};
+
 }
 
 int main(int argc, char** argv) {
-    QCoreApplication app{argc, argv};
+    QApplication app{argc, argv};
 
     {
         const QStringList lines = ReleaseCheck::headlines(QStringLiteral(
@@ -96,6 +111,47 @@ int main(int argc, char** argv) {
         check(!ReleaseCheck::newer_than(page({release("v0.3.4", "")}), QStringLiteral("unknown"), &error) &&
                   !error.isEmpty(),
               "a build without a version cannot claim anything is newer");
+    }
+
+    {
+        lsw::host::link::AgentRpcClient rpc;
+        lsw::host::config::Settings settings;
+        lsw::host::config::ManagerSettings manager_settings;
+        lsw::host::vm::LibvirtConnection libvirt;
+        lsw::host::vm::Lifecycle lifecycle{libvirt};
+        NoProbe probe;
+        StatusHub hub{libvirt, lifecycle, rpc, probe, settings, manager_settings};
+        int asked = 0;
+        ReleaseCheck::Done pending;
+        ReleaseCheck release_check{hub, QStringLiteral("0.3.3"),
+                                   [&](const QUrl&, ReleaseCheck::Done done) {
+                                       ++asked;
+                                       pending = std::move(done);
+                                   }};
+
+        check(hub.release().state == ReleaseStatus::State::Unchecked, "nothing is known before a check");
+        release_check.check();
+        release_check.check();
+        check(asked == 1 && hub.release().state == ReleaseStatus::State::Checking,
+              "a check asks once and shows that it is checking until GitHub answers");
+        pending(page({release("v0.3.4", "- **Three four**"), release("v0.3.3", "")}), {});
+        check(hub.release().state == ReleaseStatus::State::Newer && hub.release().newer.size() == 1 &&
+                  hub.release().newer.first().version == QStringLiteral("0.3.4") && !hub.release().checked.isEmpty(),
+              "the answer reaches the status the pages read, with the newer release and when it was checked");
+
+        release_check.check();
+        pending({}, QStringLiteral("Host api.github.com not found"));
+        check(hub.release().state == ReleaseStatus::State::Failed &&
+                  hub.release().error.contains(QStringLiteral("not found")),
+              "a failed request is shown as a failed check with its reason");
+
+        release_check.check();
+        pending(page({release("v0.3.3", "")}), {});
+        check(hub.release().state == ReleaseStatus::State::Latest && hub.release().newer.isEmpty(),
+              "running the newest release shows as the latest");
+        check(!lsw::host::config::ManagerSettings::default_value(
+                   lsw::host::config::ManagerSettings::Key::kCheckUpdates).toBool(),
+              "the manager does not ask GitHub on startup unless the setting is turned on");
     }
 
     check(ReleaseCheck::releases_url().host() == QStringLiteral("api.github.com"),

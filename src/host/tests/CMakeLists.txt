@@ -423,9 +423,8 @@ set_tests_properties(lsw_host_removed_apps_popup_test PROPERTIES
 
 add_executable(lsw_host_release_check_test release_check_test.cpp)
 target_link_libraries(lsw_host_release_check_test
-    PRIVATE
-        lsw_host_provision
-        LSW::CompileOptions
-)
+    PRIVATE lsw_host_core LSW::CompileOptions)
 target_compile_definitions(lsw_host_release_check_test PRIVATE QT_NO_KEYWORDS)
 add_test(NAME lsw_host_release_check_test COMMAND lsw_host_release_check_test)
+set_tests_properties(lsw_host_release_check_test PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 60)

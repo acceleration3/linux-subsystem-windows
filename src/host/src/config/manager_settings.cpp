@@ -73,6 +73,7 @@ const QHash<QString, QVariant>& defaults() {
 
         {K::kCloseToTray, true},
         {K::kShutGuestOnQuit, true},
+        {K::kCheckUpdates, false},
 
         {K::kLogManager, QStringLiteral("info")},
         {K::kLogMirrors, QStringLiteral("info")},

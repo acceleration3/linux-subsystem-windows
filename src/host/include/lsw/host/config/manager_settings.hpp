@@ -57,6 +57,7 @@ public:
         static constexpr QLatin1StringView kAutostart{"guest/autostart"};
         static constexpr QLatin1StringView kCloseToTray{"host/close_to_tray"};
         static constexpr QLatin1StringView kShutGuestOnQuit{"host/shut_guest_on_quit"};
+        static constexpr QLatin1StringView kCheckUpdates{"host/check_updates"};
         static constexpr QLatin1StringView kLogManager{"logs/manager"};
         static constexpr QLatin1StringView kLogMirrors{"logs/mirrors"};
         static constexpr QLatin1StringView kLogAgent{"logs/agent"};

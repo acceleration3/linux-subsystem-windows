@@ -264,6 +264,11 @@ void SettingsPage::build_startup() {
                        "When off, Windows keeps running after the manager quits.")
             .arg(std::chrono::duration_cast<std::chrono::seconds>(ManagerExit::kGuestWait).count()),
         right_aligned(controls_->toggle(K::kShutGuestOnQuit)));
+    add_row(startup, K::kCheckUpdates, QStringLiteral("Check for updates on startup"),
+            QStringLiteral("Each time the manager opens, it asks github.com for LSW's releases and "
+                           "tells you when a newer LSW is out. When off, it only checks when you "
+                           "click Check for updates on the Maintenance page."),
+            right_aligned(controls_->toggle(K::kCheckUpdates)));
 }
 
 void SettingsPage::build_desktop() {

@@ -176,6 +176,9 @@ int App::run() {
     } else {
         start_mcp_server();
         show_main_window();
+        if (services_.manager_settings().bool_value(config::ManagerSettings::Key::kCheckUpdates)) {
+            services_.release_check().check();
+        }
         const config::VmRecord* primary = services_.vms().primary();
         if (services_.manager_settings().bool_value(config::ManagerSettings::Key::kAutostart)
             && primary != nullptr && cli_.launch_app_id.isEmpty() && cli_.files.isEmpty()

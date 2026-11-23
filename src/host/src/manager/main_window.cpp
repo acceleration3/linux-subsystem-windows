@@ -251,9 +251,27 @@ MainWindow::MainWindow(services::HostServices& services, QWidget* parent)
                 if (area != services::StatusHub::Area::Release) {
                     return;
                 }
-                const bool newer = services_.status().release().state ==
-                                   services::ReleaseStatus::State::Newer;
+                const auto& release = services_.status().release();
+                const bool newer = release.state == services::ReleaseStatus::State::Newer;
                 rail_->set_maintenance_warning(newer ? ui::Theme::Tone::kAmber : nullptr);
+                if (!newer) {
+                    if (release.state != services::ReleaseStatus::State::Checking) {
+                        notices_->withdraw(QStringLiteral("release"));
+                    }
+                    return;
+                }
+                if (rail_->current() == NavRail::Page::Maintenance) {
+                    return;
+                }
+                const auto& newest = release.newer.first();
+                QStringList lines = newest.headlines.mid(0, 3);
+                notices_->post(QStringLiteral("release"), false,
+                               QStringLiteral("LSW %1 is out.").arg(newest.version),
+                               lines.join(QStringLiteral(" · ")),
+                               {{QStringLiteral("See what's new"), [this] {
+                                     notices_->withdraw(QStringLiteral("release"));
+                                     show_page(NavRail::Page::Maintenance);
+                                 }}});
             });
     connect(console_, &ConsolePanel::open_failed, this, [this](const QString& reason) {
         notices_->post(QStringLiteral("console"), false, QStringLiteral("Could not open a console."),
