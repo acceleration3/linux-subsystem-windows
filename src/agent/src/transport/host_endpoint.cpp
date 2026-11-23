@@ -22,9 +22,11 @@
 #include <windows.h>
 // clang-format on
 
+#include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <cstdint>
+#include <deque>
 #include <functional>
 #include <mutex>
 #include <nlohmann/json.hpp>
@@ -109,11 +111,11 @@ private:
 
 struct ConnectionStats {
     std::uint64_t bytes_received = 0;
-    std::uint64_t requests_handled = 0;
+    std::atomic<std::uint64_t> requests_handled = 0;
     std::uint64_t events_sent = 0;
 
     [[nodiscard]] std::string describe(std::uint64_t bytes_sent) const {
-        return std::to_string(requests_handled) + " requests, " + std::to_string(events_sent) +
+        return std::to_string(requests_handled.load()) + " requests, " + std::to_string(events_sent) +
                " events, " + std::to_string(bytes_received) + "B in / " +
                std::to_string(bytes_sent) + "B out";
     }
@@ -124,6 +126,11 @@ public:
     using ReplySink = std::function<bool(const nlohmann::json&)>;
 
     RequestDispatcher(rpc::RpcContext& ctx, ConnectionStats& stats) : ctx_(&ctx), stats_(&stats) {}
+
+    [[nodiscard]] bool waits_on_a_session(const nlohmann::json& request) const {
+        const auto* handler = rpc::RpcRegistry::instance().find(request.value("cmd", std::string{}));
+        return handler != nullptr && handler->placement() == rpc::RpcHandler::Placement::UserSession;
+    }
 
     [[nodiscard]] bool handle(const nlohmann::json& request, const ReplySink& reply_sink) {
         const auto started = std::chrono::steady_clock::now();
@@ -180,6 +187,57 @@ public:
 private:
     rpc::RpcContext* ctx_;
     ConnectionStats* stats_;
+};
+
+class SessionRequests {
+public:
+    using Handle = std::function<void(const nlohmann::json&)>;
+
+    explicit SessionRequests(Handle handle) : handle_(std::move(handle)), thread_([this] { run(); }) {}
+
+    ~SessionRequests() {
+        {
+            std::lock_guard lock(mu_);
+            stop_ = true;
+        }
+        wake_.notify_all();
+        thread_.join();
+    }
+
+    SessionRequests(const SessionRequests&) = delete;
+    SessionRequests& operator=(const SessionRequests&) = delete;
+
+    void push(nlohmann::json request) {
+        {
+            std::lock_guard lock(mu_);
+            queue_.push_back(std::move(request));
+        }
+        wake_.notify_one();
+    }
+
+private:
+    void run() {
+        for (;;) {
+            nlohmann::json request;
+            {
+                std::unique_lock lock(mu_);
+                wake_.wait(lock, [this] { return stop_ || !queue_.empty(); });
+                if (stop_) {
+                    return;
+                }
+                request = std::move(queue_.front());
+                queue_.pop_front();
+            }
+            handle_(request);
+        }
+    }
+
+    Handle handle_;
+    std::mutex mu_;
+    std::condition_variable wake_;
+    std::deque<nlohmann::json> queue_;
+    bool stop_ = false;
+    std::thread thread_;
 };
 
 }
@@ -324,6 +382,8 @@ void HostEndpoint::handle_connection(std::intptr_t accepted_fd) {
     const auto reply_over_socket = [&](const nlohmann::json& message) {
         return writer.send_control(message);
     };
+    SessionRequests session_requests{
+        [&](const nlohmann::json& request) { (void)dispatcher.handle(request, reply_over_socket); }};
 
     LogEventSource logs;
     ConsoleEventSource console{services_->console()};
@@ -363,6 +423,10 @@ void HostEndpoint::handle_connection(std::intptr_t accepted_fd) {
             return true;
         }
         if (!is_request(frame)) {
+            return true;
+        }
+        if (dispatcher.waits_on_a_session(frame)) {
+            session_requests.push(std::move(frame));
             return true;
         }
         return dispatcher.handle(frame, reply_over_socket);
