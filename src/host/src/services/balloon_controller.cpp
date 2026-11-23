@@ -35,6 +35,9 @@ void BalloonController::tick() {
     if (!target) {
         return;
     }
+    if (*target < guest->actual_kib && status_.update().running()) {
+        return;
+    }
     LSW_INFO("balloon: the host has {} MiB available; the guest goes from {} to {} MiB of {} "
              "(Windows can spare {})",
              *available, guest->actual_kib / kKibPerMib, *target / kKibPerMib,

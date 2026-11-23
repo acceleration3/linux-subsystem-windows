@@ -77,6 +77,8 @@ private:
     bool shares_reached_ = false;
     bool awaiting_update_ = false;
     bool stopped_during_pass_ = false;
+    bool agent_dropped_since_failure_ = false;
+    int automatic_retries_ = 0;
 };
 
 }

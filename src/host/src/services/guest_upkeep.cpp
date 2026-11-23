@@ -19,6 +19,10 @@
 
 namespace lsw::host::services {
 
+namespace {
+constexpr int kMostAutomaticRetries = 2;
+}
+
 GuestUpkeep::GuestUpkeep(StatusHub& status, link::AgentRpcClient& rpc, GuestUpdate& update,
                          QObject* parent)
     : QObject(parent), status_(status), rpc_(rpc), update_(update) {
@@ -106,7 +110,20 @@ void GuestUpkeep::on_status() {
     if (!status_.vm().running()) {
         passed_ = false;
         shares_reached_ = false;
+        agent_dropped_since_failure_ = false;
+        automatic_retries_ = 0;
         set_state(State::Idle);
+        return;
+    }
+    if (state_ == State::Failed && !status_.vm().agent_online()) {
+        agent_dropped_since_failure_ = true;
+    }
+    if (state_ == State::Failed && agent_dropped_since_failure_ && ready() &&
+        automatic_retries_ < kMostAutomaticRetries) {
+        ++automatic_retries_;
+        LSW_INFO("upkeep: Windows answers again after a failed pass; checking again ({} of {})",
+                 automatic_retries_, kMostAutomaticRetries);
+        start();
         return;
     }
     if (!passed_ && ready()) {
@@ -135,6 +152,7 @@ void GuestUpkeep::start() {
     passed_ = true;
     shares_reached_ = false;
     stopped_during_pass_ = false;
+    agent_dropped_since_failure_ = false;
     set_state(State::Checking);
     error_.clear();
     probe_watcher_.setFuture(QtConcurrent::run([this] { return probe(); }));
@@ -142,6 +160,7 @@ void GuestUpkeep::start() {
 
 void GuestUpkeep::finish_pass(bool ok, const QString& error) {
     error_ = error;
+    agent_dropped_since_failure_ = !ok && !status_.vm().agent_online();
     if (!set_state(ok ? State::Current : State::Failed)) {
         Q_EMIT changed();
     }

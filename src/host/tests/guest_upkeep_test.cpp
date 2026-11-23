@@ -257,6 +257,44 @@ int main(int argc, char** argv) {
     check(wait_for([&] { return upkeep.state() == State::Idle; }) && !upkeep.shares_ready(),
           "an update that ends after the machine stopped is about a boot that is over: Idle, no shares");
 
+    update.calls.clear();
+    hub.set_vm(machine(true, true, false));
+    check(wait_for([&] { return update.calls.size() == 1; }), "a boot after an update starts its check");
+    hub.set_vm(machine(true, false, false));
+    update.end_failed(QStringLiteral("Windows did not answer before the update."));
+    check(wait_for([&] { return upkeep.state() == State::Failed; }), "an update Windows stopped answering fails the pass");
+    hub.set_vm(machine(true, true, false));
+    check(wait_for([&] { return update.calls.size() == 2; }),
+          "when Windows answers again the pass runs again by itself and the update follows");
+    update.end_ok();
+    check(wait_for([&] { return upkeep.state() == State::Current; }), "and that pass ends Current");
+
+    hub.set_vm(machine(false, false, false));
+    settle();
+    update.calls.clear();
+    hub.set_vm(machine(true, true, false));
+    check(wait_for([&] { return update.calls.size() == 1; }), "a later boot is checked");
+    update.end_failed(QStringLiteral("could not copy"));
+    check(wait_for([&] { return upkeep.state() == State::Failed; }), "a failure while Windows still answers ends Failed");
+    hub.set_vm(machine(true, true, false));
+    settle();
+    check(update.calls.size() == 1, "and is not retried while the agent never went away");
+    for (std::size_t round = 2; round <= 3; ++round) {
+        hub.set_vm(machine(true, false, false));
+        settle();
+        hub.set_vm(machine(true, true, false));
+        check(wait_for([&] { return update.calls.size() == round; }), "each time Windows comes back a failed pass is retried");
+        update.end_failed(QStringLiteral("could not copy"));
+        check(wait_for([&] { return upkeep.state() == State::Failed; }), "and fails again");
+    }
+    hub.set_vm(machine(true, false, false));
+    settle();
+    hub.set_vm(machine(true, true, false));
+    settle();
+    check(update.calls.size() == 3, "after two automatic retries in one boot only the user's retry runs it again");
+    hub.set_vm(machine(false, false, false));
+    settle();
+
     QThreadPool::globalInstance()->waitForDone();
     std::printf("%d failure(s)\n", g_failures);
     return g_failures == 0 ? 0 : 1;
