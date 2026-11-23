@@ -44,6 +44,7 @@ CliOptions CliParser::parse(const QStringList& argv) {
         "install pipeline headlessly and prints step transitions / progress to "
         "stdout, exiting with code 0 on success and non-zero on failure.");
     p.addHelpOption();
+    p.addVersionOption();
     p.addPositionalArgument(QStringLiteral("files"),
                             QStringLiteral("Files to open in Windows, with --launch in that "
                                            "application, without in the program Windows has for "

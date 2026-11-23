@@ -26,6 +26,10 @@ QString StartupHeader::version() {
                            : QStringLiteral(LSW_VERSION " (build %1)").arg(build);
 }
 
+QString StartupHeader::number() {
+    return QStringLiteral(LSW_VERSION);
+}
+
 QString StartupHeader::libvirt_version() {
     unsigned long lib = 0;
     if (::virGetVersion(&lib, nullptr, nullptr) != 0 || lib == 0) {

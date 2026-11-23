@@ -6,6 +6,7 @@
 #include "lsw/host/services/guest_update_status.hpp"
 #include "lsw/host/services/host_window_status.hpp"
 #include "lsw/host/services/priority_status.hpp"
+#include "lsw/host/services/release_status.hpp"
 #include "lsw/host/services/usb_status.hpp"
 #include "lsw/host/services/vm_status.hpp"
 #include "lsw/host/vm/avgpu_log.hpp"
@@ -35,7 +36,7 @@ namespace lsw::host::services {
 class StatusHub : public QObject {
     Q_OBJECT
 public:
-    enum class Area { Vm, Graphics, Host, Sessions, Usb, Update, HostWindow };
+    enum class Area { Vm, Graphics, Host, Sessions, Usb, Update, HostWindow, Release };
 
     StatusHub(vm::LibvirtConnection& libvirt, vm::Lifecycle& lifecycle,
               link::AgentRpcClient& rpc, vm::IGuestStatsProbe& guest_probe,
@@ -55,6 +56,7 @@ public:
     [[nodiscard]] const GuestSessions& sessions() const noexcept { return sessions_; }
     [[nodiscard]] const UsbStatus& usb() const noexcept { return usb_; }
     [[nodiscard]] const GuestUpdateStatus& update() const noexcept { return update_; }
+    [[nodiscard]] const ReleaseStatus& release() const noexcept { return release_; }
 
     [[nodiscard]] const ClipboardStatus& clipboard() const noexcept { return clipboard_; }
 
@@ -65,6 +67,8 @@ public:
     void set_guest_address(const QString& ipv4);
 
     void set_update(const GuestUpdateStatus& status);
+
+    void set_release(const ReleaseStatus& status);
 
     void set_clipboard(const ClipboardStatus& status);
 
@@ -133,6 +137,7 @@ private:
     bool usb_live_again_ = false;
     UsbStatus usb_;
     GuestUpdateStatus update_;
+    ReleaseStatus release_;
     ClipboardStatus clipboard_;
     PriorityStatus priority_;
     QVector<platform::HostUsbDevice> usb_host_;

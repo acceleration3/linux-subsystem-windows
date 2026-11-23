@@ -8,6 +8,7 @@
 #include "lsw/host/platform/guest_smb_share.hpp"
 #include "lsw/host/platform/qemu_process.hpp"
 #include "lsw/host/services/domain_inputs.hpp"
+#include "lsw/host/services/startup_header.hpp"
 #include "lsw/linkproto/commands.hpp"
 #include "lsw/linkproto/envelope.hpp"
 
@@ -44,6 +45,7 @@ HostServices::HostServices(QObject* parent)
       shells_(rpc_, status_, this), app_errors_(rpc_, this),
       clipboard_(rpc_, status_, manager_settings_, this),
       guest_update_(settings_, status_, rpc_, this), upkeep_(status_, rpc_, guest_update_, this),
+      release_check_(status_, StartupHeader::number(), {}, this),
       network_offer_(status_, manager_settings_, pending_changes_, this), guest_balloon_(libvirt_),
       balloon_(status_, guest_balloon_, this), usb_(lifecycle_, status_, manager_settings_, this),
       host_shutdown_(lifecycle_, status_, this),

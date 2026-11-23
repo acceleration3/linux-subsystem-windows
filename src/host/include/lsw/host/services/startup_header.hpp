@@ -9,6 +9,8 @@ public:
 
     [[nodiscard]] static QString version();
 
+    [[nodiscard]] static QString number();
+
     static void write();
 
     [[nodiscard]] static QString libvirt_version();

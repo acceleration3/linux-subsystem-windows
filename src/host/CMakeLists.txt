@@ -46,7 +46,7 @@ embed_text_file("${CMAKE_CURRENT_SOURCE_DIR}/embedded/theme.qss"
 
 lsw_host_sources(LSW_CORE_SOURCES ${LSW_CORE_CONCERNS})
 set(CMAKE_AUTORCC ON)
-execute_process(COMMAND git -C "${CMAKE_CURRENT_SOURCE_DIR}" describe --always --dirty --abbrev=10
+execute_process(COMMAND git -C "${CMAKE_CURRENT_SOURCE_DIR}" describe --always --dirty --abbrev=10 --exclude=*
     OUTPUT_VARIABLE LSW_BUILD_ID ERROR_QUIET OUTPUT_STRIP_TRAILING_WHITESPACE)
 set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/src/services/guest_bundle.cpp
     PROPERTIES COMPILE_DEFINITIONS "LSW_VERSION=\"${PROJECT_VERSION}\"")

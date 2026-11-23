@@ -28,6 +28,8 @@
 #include "lsw/host/wizard/vm_size_page.hpp"
 #include "lsw/host/wizard/wizard.hpp"
 
+#include <QDateTime>
+#include <QUrl>
 #include <QDir>
 #include <QIcon>
 #include <QMetaObject>
@@ -243,6 +245,26 @@ int App::capture_screens(const QString& dir) {
         window->resize(1000, entry.height);
         window->show_page(entry.page);
         shoot(window, QString::fromLatin1(entry.name));
+    }
+    {
+        const services::ReleaseStatus real_release = services_.status().release();
+        services::ReleaseStatus release;
+        release.state = services::ReleaseStatus::State::Newer;
+        release.checked = QDateTime::currentDateTime().toString(Qt::ISODate);
+        release.newer = {
+            {QStringLiteral("0.3.5"), QStringLiteral("2026-11-28T10:00:00Z"),
+             QUrl(QStringLiteral("https://github.com/acceleration3/linux-subsystem-windows/releases")),
+             {QStringLiteral("Windows starts in half the time"),
+              QStringLiteral("The version is shown on every page")}},
+            {QStringLiteral("0.3.4"), QStringLiteral("2026-11-24T10:00:00Z"),
+             QUrl(QStringLiteral("https://github.com/acceleration3/linux-subsystem-windows/releases")),
+             {QStringLiteral("USB devices reconnect after Windows restarts")}},
+        };
+        services_.status().set_release(release);
+        window->resize(1000, 860);
+        window->show_page(manager::NavRail::Page::Maintenance);
+        shoot(window, QStringLiteral("manager-13-maintenance-release"));
+        services_.status().set_release(real_release);
     }
     window->deleteLater();
 

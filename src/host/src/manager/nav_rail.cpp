@@ -1,6 +1,7 @@
 #include "lsw/host/manager/nav_rail.hpp"
 
 #include "lsw/host/manager/nav_icon.hpp"
+#include "lsw/host/services/startup_header.hpp"
 #include "lsw/host/ui/theme.hpp"
 #include "lsw/host/ui/widgets.hpp"
 
@@ -149,8 +150,15 @@ NavRail::NavRail(QWidget* parent) : QWidget(parent) {
         }
     });
 
+    version_ = Widgets::meta(QStringLiteral("LSW %1").arg(services::StartupHeader::number()));
+    version_->setStyleSheet(QStringLiteral("font-size: 10px;"));
+    version_->setAlignment(Qt::AlignCenter);
+    version_->setToolTip(services::StartupHeader::version());
+    version_->setTextInteractionFlags(Qt::TextSelectableByMouse);
+
     power_layout->addWidget(badge_);
     power_layout->addWidget(power_);
+    power_layout->addWidget(version_);
     root->addWidget(power_box);
 
     set_identity(QStringLiteral("lsw"), QString{});
@@ -242,5 +250,9 @@ void NavRail::set_graphics_warning(const char* tone) {
 
 void NavRail::set_gpu_status_warning(const char* tone) {
     set_marker(Page::GpuStatus, tone != nullptr ? QStringLiteral("●") : QString{}, tone);
+}
+
+void NavRail::set_maintenance_warning(const char* tone) {
+    set_marker(Page::Maintenance, tone != nullptr ? QStringLiteral("●") : QString{}, tone);
 }
 }

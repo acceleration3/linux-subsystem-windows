@@ -41,6 +41,7 @@ public:
     void set_pending(Page page, int changes);
     void set_graphics_warning(const char* tone);
     void set_gpu_status_warning(const char* tone);
+    void set_maintenance_warning(const char* tone);
 
     void set_guest_provisioned(bool provisioned);
 
@@ -63,6 +64,7 @@ private:
     QLabel* detail_label_ = nullptr;
     QLabel* badge_ = nullptr;
     QPushButton* power_ = nullptr;
+    QLabel* version_ = nullptr;
     QButtonGroup* group_ = nullptr;
     QPushButton* items_[static_cast<int>(Page::Count)]{};
     QLabel* markers_[static_cast<int>(Page::Count)]{};

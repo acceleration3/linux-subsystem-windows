@@ -21,16 +21,23 @@ public:
 Q_SIGNALS:
     void summary_changed();
     void update_requested();
+    void check_requested();
     void download_requested();
     void trim_requested();
     void reinstall_requested();
 
 private:
+    void build_release();
     void build_update();
     void build_tools();
     void refresh();
+    void refresh_release();
 
     services::StatusHub& status_;
+    QLabel* release_pill_ = nullptr;
+    QPushButton* copy_button_ = nullptr;
+    QPushButton* check_button_ = nullptr;
+    QVBoxLayout* release_box_ = nullptr;
     QLabel* pill_ = nullptr;
     QPushButton* update_button_ = nullptr;
     QVBoxLayout* facts_box_ = nullptr;

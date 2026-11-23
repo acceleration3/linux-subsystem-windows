@@ -489,6 +489,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 .navitem .count{margin-left:auto;font-family:"JetBrains Mono",monospace;font-size:10.5px;color:var(--fg-faint)}
 .nav .power{margin-top:auto;border-top:1px solid var(--line);padding:11px 12px;display:flex;flex-direction:column;gap:9px}
 .nav .power .btn{justify-content:center}
+.nav .power .ver{font-family:"JetBrains Mono",monospace;font-size:10px;color:var(--fg-faint);text-align:center}
 
 .content{display:flex;flex-direction:column;min-width:0}
 .cbar{display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--line);background:var(--surface)}
@@ -567,6 +568,11 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
   text-transform:uppercase;color:var(--fg-faint);white-space:nowrap}
 .kv dd{margin:0;font-size:12.5px;color:var(--fg);min-width:0}
 .kv dd .meta{margin-left:4px}
+.news{display:flex;flex-direction:column;gap:8px;font-size:12.5px}
+.news .rel{color:var(--fg)}
+.news .rel b{font-weight:600}
+.news ul{margin:4px 0 0;padding-left:18px;color:var(--fg-dim);display:flex;flex-direction:column;gap:3px}
+.news a{color:var(--info)}
 .yes{color:var(--ok)}
 .no{color:var(--bad)}
 .warn{color:var(--amber)}
@@ -900,6 +906,7 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
           <div class="power">
             <span class="badge on">ONLINE</span>
             <button class="btn stop">Stop the guest</button>
+            <span class="ver">LSW 0.3.3</span>
           </div>
         </aside>
         <div class="content">
@@ -1076,6 +1083,7 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
           <div class="power">
             <span class="badge on">ONLINE</span>
             <button class="btn stop">Stop the guest</button>
+            <span class="ver">LSW 0.3.3</span>
           </div>
         </aside>
 
@@ -1224,6 +1232,7 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
           <div class="power">
             <span class="badge on">ONLINE</span>
             <button class="btn stop">Stop the guest</button>
+            <span class="ver">LSW 0.3.3</span>
           </div>
         </aside>
 
@@ -1391,6 +1400,7 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
           <div class="power">
             <span class="badge on">ONLINE</span>
             <button class="btn stop">Stop the guest</button>
+            <span class="ver">LSW 0.3.3</span>
           </div>
         </aside>
         <div class="content">
@@ -1547,6 +1557,7 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
           <div class="power">
             <span class="badge on">ONLINE</span>
             <button class="btn stop">Stop the guest</button>
+            <span class="ver">LSW 0.3.3</span>
           </div>
         </aside>
         <div class="content">
@@ -1654,6 +1665,7 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
           <div class="power">
             <span class="badge on">ONLINE</span>
             <button class="btn stop">Stop the guest</button>
+            <span class="ver">LSW 0.3.3</span>
           </div>
         </aside>
         <div class="content">
@@ -1799,6 +1811,7 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
           <div class="power">
             <span class="badge on">ONLINE</span>
             <button class="btn stop">Stop the guest</button>
+            <span class="ver">LSW 0.3.3</span>
           </div>
         </aside>
         <div class="content">
@@ -2004,6 +2017,7 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
           <div class="power">
             <span class="badge on">ONLINE</span>
             <button class="btn stop">Stop the guest</button>
+            <span class="ver">LSW 0.3.3</span>
           </div>
         </aside>
         <div class="content">
@@ -2208,6 +2222,7 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
           <div class="power">
             <span class="badge on">ONLINE</span>
             <button class="btn stop">Stop the guest</button>
+            <span class="ver">LSW 0.3.3</span>
           </div>
         </aside>
         <div class="content">
@@ -2260,6 +2275,7 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
           <div class="power">
             <span class="badge on">ONLINE</span>
             <button class="btn stop">Stop the guest</button>
+            <span class="ver">LSW 0.3.3</span>
           </div>
         </aside>
         <div class="content">
@@ -2322,24 +2338,45 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
           <div class="power">
             <span class="badge on">ONLINE</span>
             <button class="btn stop">Stop the guest</button>
+            <span class="ver">LSW 0.3.3</span>
           </div>
         </aside>
         <div class="content">
           <div class="cbar">
             <h4>Maintenance</h4>
-            <span class="sub">LSW 0.2.2 &middot; Windows has the same release</span>
+            <span class="sub">LSW 0.3.3 &middot; Windows has the same release</span>
           </div>
 
           <div class="areas" style="flex:1">
             <div class="area">
               <header>
-                <span class="nm">LSW software in Windows</span> <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">The software LSW puts inside Windows: the service the manager talks to, window mirroring, the graphics driver and shared folder support.<br><br>Update copies this version of LSW's software into Windows, and restarts Windows if the graphics driver changed. It runs by itself when the versions differ.</span></span>
+                <span class="nm">This LSW</span> <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">The version of LSW installed on this computer.<br><br>Check for updates asks github.com for LSW's releases. The manager never checks by itself. A newer LSW comes from your package manager or the release page; once it is installed, the manager updates the software in Windows by itself.</span></span>
+                <span class="right"><span class="pill warn">LSW 0.3.5 available</span><button class="btn">Copy version</button><button class="btn">Check for updates</button></span>
+              </header>
+              <div class="in">
+                <dl class="kv">
+                  <dt>Version</dt><dd>0.3.3 (build 93ac55f52a)</dd>
+                  <dt>Latest release</dt><dd>LSW 0.3.5 &middot; 28 Nov</dd>
+                  <dt>Checked</dt><dd>30 Nov, 09:12</dd>
+                </dl>
+                <div class="news">
+                  <div class="rel"><b>LSW 0.3.5</b> &middot; 28 Nov &middot; <a href="#">Release notes</a>
+                    <ul><li>Windows starts in half the time</li><li>The version is shown on every page</li></ul></div>
+                  <div class="rel"><b>LSW 0.3.4</b> &middot; 24 Nov &middot; <a href="#">Release notes</a>
+                    <ul><li>USB devices reconnect after Windows restarts</li></ul></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="area">
+              <header>
+                <span class="nm">LSW software in Windows</span> <span class="info" tabindex="0" aria-label="More about this">i<span class="tip">The software LSW puts inside Windows: the service the manager talks to, window mirroring, the graphics driver and shared folder support.<br><br>Update copies this version of LSW's software into Windows, and restarts Windows if the graphics driver changed. It runs by itself when the versions differ. Out of date means Windows has older software than this LSW, not that a newer LSW is out.</span></span>
                 <span class="right"><span class="pill done">Up to date</span><button class="btn">Update</button></span>
               </header>
               <div class="in">
                 <dl class="kv">
-                  <dt>Windows has</dt><dd>LSW 0.2.2 &middot; 8bfc503c53ae</dd>
-                  <dt>This LSW ships</dt><dd>LSW 0.2.2 &middot; 8bfc503c53ae</dd>
+                  <dt>Windows has</dt><dd>LSW 0.3.3 &middot; 8bfc503c53ae</dd>
+                  <dt>This LSW ships</dt><dd>LSW 0.3.3 &middot; 8bfc503c53ae</dd>
                   <dt>Last update</dt><dd>3 Nov, 10:21</dd>
                 </dl>
                 <div class="chips"><span class="chip2 ok">&#10003; verify</span><span class="chip2 ok">&#10003; stop</span><span class="chip2 ok">&#10003; agent and mirror</span><span class="chip2 ok">&#10003; driver</span><span class="chip2 ok">&#10003; loaders</span><span class="chip2 ok">&#10003; shared folders</span><span class="chip2 skip">&ndash; service and firewall</span><span class="chip2 ok">&#10003; start</span></div>
@@ -2867,6 +2904,7 @@ button.chip2:hover{color:var(--fg);border-color:var(--line-hi)}
           <div class="power">
             <span class="badge off">NO GUEST</span>
             <button class="btn" disabled>Start the guest</button>
+            <span class="ver">LSW 0.3.3</span>
           </div>
         </aside>
         <div class="content">

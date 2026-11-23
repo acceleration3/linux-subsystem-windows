@@ -254,6 +254,7 @@ void StatusHub::refresh(Area area) {
         read_usb();
         break;
     case Area::Update:
+    case Area::Release:
         break;
     case Area::HostWindow:
         sample_window();
@@ -288,6 +289,14 @@ void StatusHub::set_clipboard(const ClipboardStatus& status) {
     }
     clipboard_ = status;
     Q_EMIT changed(Area::Host);
+}
+
+void StatusHub::set_release(const ReleaseStatus& status) {
+    if (status == release_) {
+        return;
+    }
+    release_ = status;
+    Q_EMIT changed(Area::Release);
 }
 
 void StatusHub::set_priority(const PriorityStatus& status) {

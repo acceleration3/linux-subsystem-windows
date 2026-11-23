@@ -25,6 +25,7 @@
 #include "lsw/host/services/log_collector.hpp"
 #include "lsw/host/services/network_adapter_offer.hpp"
 #include "lsw/host/services/one_to_one_desktop.hpp"
+#include "lsw/host/services/release_check.hpp"
 #include "lsw/host/services/status_hub.hpp"
 #include "lsw/host/services/usb_passthrough.hpp"
 #include "lsw/host/services/vm_priority.hpp"
@@ -64,6 +65,7 @@ public:
 
     [[nodiscard]] GuestUpdate& guest_update() noexcept { return guest_update_; }
     [[nodiscard]] GuestUpkeep& upkeep() noexcept { return upkeep_; }
+    [[nodiscard]] ReleaseCheck& release_check() noexcept { return release_check_; }
 
     [[nodiscard]] UsbPassthrough& usb() noexcept { return usb_; }
     [[nodiscard]] HostShutdownWatch& host_shutdown() noexcept { return host_shutdown_; }
@@ -111,6 +113,7 @@ private:
     ClipboardSync clipboard_;
     GuestUpdate guest_update_;
     GuestUpkeep upkeep_;
+    ReleaseCheck release_check_;
     NetworkAdapterOffer network_offer_;
     vm::GuestBalloon guest_balloon_;
     BalloonController balloon_;

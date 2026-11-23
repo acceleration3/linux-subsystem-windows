@@ -246,6 +246,15 @@ MainWindow::MainWindow(services::HostServices& services, QWidget* parent)
                         return device.place == services::UsbStatus::Place::Guest;
                     })));
             });
+    connect(&services_.status(), &services::StatusHub::changed, this,
+            [this](services::StatusHub::Area area) {
+                if (area != services::StatusHub::Area::Release) {
+                    return;
+                }
+                const bool newer = services_.status().release().state ==
+                                   services::ReleaseStatus::State::Newer;
+                rail_->set_maintenance_warning(newer ? ui::Theme::Tone::kAmber : nullptr);
+            });
     connect(console_, &ConsolePanel::open_failed, this, [this](const QString& reason) {
         notices_->post(QStringLiteral("console"), false, QStringLiteral("Could not open a console."),
                        reason);
@@ -377,6 +386,8 @@ void MainWindow::build_pages() {
     connect(&cleaner, &services::LogCleaner::finished, this, &MainWindow::show_cleared);
     connect(maintenance_page_, &MaintenancePage::update_requested, this,
             [this] { services_.guest_update().run(true); });
+    connect(maintenance_page_, &MaintenancePage::check_requested, this,
+            [this] { services_.release_check().check(); });
     update_dialog_ = new UpdateDialog(services_.status(), this);
     connect(update_dialog_, &UpdateDialog::retry_requested, this,
             [this] { services_.guest_update().retry(); });
