@@ -7,7 +7,6 @@
 #include <QObject>
 #include <QString>
 #include <QUrl>
-
 #include <functional>
 #include <optional>
 
@@ -26,8 +25,8 @@ public:
 
     [[nodiscard]] static QUrl releases_url();
 
-    [[nodiscard]] static std::optional<QVector<ReleaseStatus::Release>> newer_than(
-        const QByteArray& page, const QString& running, QString* error);
+    [[nodiscard]] static std::optional<QVector<ReleaseStatus::Release>>
+    newer_than(const QByteArray& page, const QString& running, QString* error);
 
     [[nodiscard]] static QStringList headlines(const QString& notes);
 
@@ -40,4 +39,4 @@ private:
     QNetworkAccessManager nam_;
 };
 
-}
+}  // namespace lsw::host::services

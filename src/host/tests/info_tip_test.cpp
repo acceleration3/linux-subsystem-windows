@@ -159,8 +159,8 @@ int main(int argc, char** argv) {
         settle();
         button->setEnabled(false);
         settle();
-        check(bubble() == nullptr,
-              "a button disabling itself does not open the next icon's bubble with the focus it hands on");
+        check(bubble() == nullptr, "a button disabling itself does not open the next icon's bubble "
+                                   "with the focus it hands on");
 
         button->setEnabled(true);
         button->setFocus(Qt::MouseFocusReason);

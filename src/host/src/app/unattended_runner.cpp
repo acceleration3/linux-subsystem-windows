@@ -159,7 +159,8 @@ bool UnattendedRunner::resolve_local_iso(provision::PipelineInputs& in) {
     in.image_index = chosen;
     const auto it = std::find_if(editions.begin(), editions.end(),
         [chosen](const provision::install::WimEdition& e) { return e.index == chosen; });
-    if (it != editions.end()) in.edition_id = it->edition_id;
+    if (it != editions.end())
+        in.edition_id = it->edition_id;
     println(QStringLiteral("[editions] installing #%1: %2")
                 .arg(chosen).arg(it != editions.end() ? it->name : QString{}));
     return true;

@@ -29,11 +29,11 @@
 #include "lsw/host/wizard/wizard.hpp"
 
 #include <QDateTime>
-#include <QUrl>
 #include <QDir>
 #include <QIcon>
 #include <QMetaObject>
 #include <QProcess>
+#include <QUrl>
 #include <cstdint>
 #include <string>
 #include <utility>
@@ -255,12 +255,16 @@ int App::capture_screens(const QString& dir) {
         release.state = services::ReleaseStatus::State::Newer;
         release.checked = QDateTime::currentDateTime().toString(Qt::ISODate);
         release.newer = {
-            {QStringLiteral("0.3.5"), QStringLiteral("2026-11-28T10:00:00Z"),
-             QUrl(QStringLiteral("https://github.com/acceleration3/linux-subsystem-windows/releases")),
+            {QStringLiteral("0.3.5"),
+             QStringLiteral("2026-11-28T10:00:00Z"),
+             QUrl(QStringLiteral(
+                 "https://github.com/acceleration3/linux-subsystem-windows/releases")),
              {QStringLiteral("Windows starts in half the time"),
               QStringLiteral("The version is shown on every page")}},
-            {QStringLiteral("0.3.4"), QStringLiteral("2026-11-24T10:00:00Z"),
-             QUrl(QStringLiteral("https://github.com/acceleration3/linux-subsystem-windows/releases")),
+            {QStringLiteral("0.3.4"),
+             QStringLiteral("2026-11-24T10:00:00Z"),
+             QUrl(QStringLiteral(
+                 "https://github.com/acceleration3/linux-subsystem-windows/releases")),
              {QStringLiteral("USB devices reconnect after Windows restarts")}},
         };
         services_.status().set_release(release);

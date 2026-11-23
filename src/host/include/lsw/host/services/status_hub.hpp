@@ -56,6 +56,7 @@ public:
     [[nodiscard]] const GuestSessions& sessions() const noexcept { return sessions_; }
     [[nodiscard]] const UsbStatus& usb() const noexcept { return usb_; }
     [[nodiscard]] const GuestUpdateStatus& update() const noexcept { return update_; }
+
     [[nodiscard]] const ReleaseStatus& release() const noexcept { return release_; }
 
     [[nodiscard]] const ClipboardStatus& clipboard() const noexcept { return clipboard_; }

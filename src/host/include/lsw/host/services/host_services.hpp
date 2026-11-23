@@ -65,6 +65,7 @@ public:
 
     [[nodiscard]] GuestUpdate& guest_update() noexcept { return guest_update_; }
     [[nodiscard]] GuestUpkeep& upkeep() noexcept { return upkeep_; }
+
     [[nodiscard]] ReleaseCheck& release_check() noexcept { return release_check_; }
 
     [[nodiscard]] UsbPassthrough& usb() noexcept { return usb_; }

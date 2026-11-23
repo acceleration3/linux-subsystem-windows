@@ -3,8 +3,8 @@
 #include "lsw/host/services/guest_update_steps.hpp"
 #include "lsw/host/services/startup_header.hpp"
 #include "lsw/host/services/status_hub.hpp"
-#include "lsw/host/ui/flow_layout.hpp"
 #include "lsw/host/ui/broken_mark.hpp"
+#include "lsw/host/ui/flow_layout.hpp"
 #include "lsw/host/ui/key_values.hpp"
 #include "lsw/host/ui/panel.hpp"
 #include "lsw/host/ui/status_pill.hpp"
@@ -13,14 +13,13 @@
 
 #include <QClipboard>
 #include <QDateTime>
-#include <QGuiApplication>
 #include <QGridLayout>
+#include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
 #include <QTimer>
 #include <QVBoxLayout>
-
 #include <algorithm>
 
 namespace lsw::host::manager {
@@ -28,9 +27,9 @@ namespace lsw::host::manager {
 namespace {
 
 using services::GuestUpdateStatus;
+using services::GuestUpdateSteps;
 using services::ReleaseStatus;
 using services::StartupHeader;
-using services::GuestUpdateSteps;
 using ui::StatusPill;
 using ui::Theme;
 using ui::Widgets;
@@ -65,7 +64,8 @@ QString news_html(const QVector<ReleaseStatus::Release>& newer) {
     const int releases = std::min<int>(static_cast<int>(newer.size()), kReleasesShown);
     for (int i = 0; i < releases; ++i) {
         const auto& release = newer[i];
-        html += QStringLiteral("<p style=\"margin:0 0 4px 0\"><b>LSW %1</b>").arg(release.version.toHtmlEscaped());
+        html += QStringLiteral("<p style=\"margin:0 0 4px 0\"><b>LSW %1</b>")
+                    .arg(release.version.toHtmlEscaped());
         const QString day = day_text(release.published);
         if (!day.isEmpty()) {
             html += QStringLiteral(" &middot; %1").arg(day);
@@ -77,18 +77,21 @@ QString news_html(const QVector<ReleaseStatus::Release>& newer) {
         html += QStringLiteral("</p>");
         if (!release.headlines.isEmpty()) {
             html += QStringLiteral("<ul style=\"margin:0 0 10px 0\">");
-            const int lines = std::min<int>(static_cast<int>(release.headlines.size()), kHeadlinesShown);
+            const int lines =
+                std::min<int>(static_cast<int>(release.headlines.size()), kHeadlinesShown);
             for (int j = 0; j < lines; ++j) {
                 html += QStringLiteral("<li>%1</li>").arg(release.headlines[j].toHtmlEscaped());
             }
             if (release.headlines.size() > lines) {
-                html += QStringLiteral("<li>%1 more in the release notes</li>").arg(release.headlines.size() - lines);
+                html += QStringLiteral("<li>%1 more in the release notes</li>")
+                            .arg(release.headlines.size() - lines);
             }
             html += QStringLiteral("</ul>");
         }
     }
     if (newer.size() > releases) {
-        html += QStringLiteral("<p style=\"margin:0\">and %1 older releases</p>").arg(newer.size() - releases);
+        html += QStringLiteral("<p style=\"margin:0\">and %1 older releases</p>")
+                    .arg(newer.size() - releases);
     }
     return html;
 }
@@ -177,12 +180,13 @@ void MaintenancePage::build_release() {
     release_box_->setSpacing(11);
     panel.body->addWidget(holder);
 
-    panel.explain(QStringLiteral("Check for updates asks github.com for LSW's releases. The manager "
-                                 "also checks each time it opens when Check for updates on startup "
-                                 "is on in Settings, and otherwise never checks by itself. A newer "
-                                 "LSW comes from your package manager or the release page; once it "
-                                 "is installed, the manager updates the software in Windows by "
-                                 "itself."));
+    panel.explain(
+        QStringLiteral("Check for updates asks github.com for LSW's releases. The manager "
+                       "also checks each time it opens when Check for updates on startup "
+                       "is on in Settings, and otherwise never checks by itself. A newer "
+                       "LSW comes from your package manager or the release page; once it "
+                       "is installed, the manager updates the software in Windows by "
+                       "itself."));
     column()->addWidget(panel.frame);
 }
 
@@ -229,7 +233,8 @@ void MaintenancePage::refresh_release() {
                  day.isEmpty() ? QStringLiteral("LSW %1").arg(newest.version)
                                : QStringLiteral("LSW %1 · %2").arg(newest.version, day));
     } else if (release.state == ReleaseStatus::State::Latest) {
-        rows.add(QStringLiteral("Latest release"), QStringLiteral("LSW %1").arg(StartupHeader::number()));
+        rows.add(QStringLiteral("Latest release"),
+                 QStringLiteral("LSW %1").arg(StartupHeader::number()));
     } else {
         rows.add(QStringLiteral("Latest release"), QStringLiteral("-"));
     }

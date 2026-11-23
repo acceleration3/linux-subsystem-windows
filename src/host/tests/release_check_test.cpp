@@ -28,7 +28,8 @@ void check(bool ok, const char* label) {
     }
 }
 
-QJsonObject release(const char* tag, const char* body, bool draft = false, bool prerelease = false) {
+QJsonObject release(const char* tag, const char* body, bool draft = false,
+                    bool prerelease = false) {
     return QJsonObject{
         {QStringLiteral("tag_name"), QString::fromLatin1(tag)},
         {QStringLiteral("html_url"),
@@ -47,10 +48,11 @@ QByteArray page(const QJsonArray& releases) {
 class NoProbe : public lsw::host::vm::IGuestStatsProbe {
 public:
     bool available() const override { return false; }
+
     lsw::host::vm::GuestStatsSample sample() override { return {}; }
 };
 
-}
+}  // namespace
 
 int main(int argc, char** argv) {
     QApplication app{argc, argv};
@@ -65,7 +67,8 @@ int main(int argc, char** argv) {
         check(lines.size() == 4, "every bold bullet lead is a headline and nothing else is");
         check(lines.value(0) == QStringLiteral("Opening a program from the command line runs it"),
               "a headline is the bold text alone");
-        check(lines.value(1) == QStringLiteral("The manager reconnects when its connection to Windows dies"),
+        check(lines.value(1) ==
+                  QStringLiteral("The manager reconnects when its connection to Windows dies"),
               "a headline drops its closing full stop");
         check(lines.value(2) == QStringLiteral("lsw --version prints the version"),
               "a headline drops code marks");
@@ -81,34 +84,41 @@ int main(int argc, char** argv) {
                   release("nightly", "- **Not a version**")}),
             QStringLiteral("0.3.3"), &error);
         check(newer.has_value(), "a list of releases is read");
-        check(newer && newer->size() == 2, "only published releases newer than the running one count");
+        check(newer && newer->size() == 2,
+              "only published releases newer than the running one count");
         check(newer && newer->value(0).version == QStringLiteral("0.3.10") &&
                   newer->value(1).version == QStringLiteral("0.3.4"),
               "newer releases are ordered newest first by number, not by text");
         check(newer && newer->value(1).headlines == QStringList{QStringLiteral("Three four")},
               "each release carries its own headlines");
-        check(newer && newer->value(0).page.toString() == QStringLiteral("https://github.com/o/r/releases/tag/v0.3.10"),
+        check(newer && newer->value(0).page.toString() ==
+                           QStringLiteral("https://github.com/o/r/releases/tag/v0.3.10"),
               "each release links to its page");
     }
 
     {
         QString error;
-        const auto newer = ReleaseCheck::newer_than(page({release("v0.3.3", "")}), QStringLiteral("0.3.3"), &error);
+        const auto newer = ReleaseCheck::newer_than(page({release("v0.3.3", "")}),
+                                                    QStringLiteral("0.3.3"), &error);
         check(newer && newer->isEmpty(), "the running release itself is not newer");
-        const auto ahead = ReleaseCheck::newer_than(page({release("v0.3.3", "")}), QStringLiteral("0.4.0"), &error);
+        const auto ahead = ReleaseCheck::newer_than(page({release("v0.3.3", "")}),
+                                                    QStringLiteral("0.4.0"), &error);
         check(ahead && ahead->isEmpty(), "a build ahead of every release has nothing newer");
     }
 
     {
         QString error;
-        check(!ReleaseCheck::newer_than("{\"message\":\"API rate limit exceeded\"}", QStringLiteral("0.3.3"), &error) &&
+        check(!ReleaseCheck::newer_than("{\"message\":\"API rate limit exceeded\"}",
+                                        QStringLiteral("0.3.3"), &error) &&
                   !error.isEmpty(),
               "an answer that is not a list is an error, not an empty list");
         error.clear();
-        check(!ReleaseCheck::newer_than("not json", QStringLiteral("0.3.3"), &error) && !error.isEmpty(),
+        check(!ReleaseCheck::newer_than("not json", QStringLiteral("0.3.3"), &error) &&
+                  !error.isEmpty(),
               "an unreadable answer is an error");
         error.clear();
-        check(!ReleaseCheck::newer_than(page({release("v0.3.4", "")}), QStringLiteral("unknown"), &error) &&
+        check(!ReleaseCheck::newer_than(page({release("v0.3.4", "")}), QStringLiteral("unknown"),
+                                        &error) &&
                   !error.isEmpty(),
               "a build without a version cannot claim anything is newer");
     }
@@ -129,15 +139,19 @@ int main(int argc, char** argv) {
                                        pending = std::move(done);
                                    }};
 
-        check(hub.release().state == ReleaseStatus::State::Unchecked, "nothing is known before a check");
+        check(hub.release().state == ReleaseStatus::State::Unchecked,
+              "nothing is known before a check");
         release_check.check();
         release_check.check();
         check(asked == 1 && hub.release().state == ReleaseStatus::State::Checking,
               "a check asks once and shows that it is checking until GitHub answers");
         pending(page({release("v0.3.4", "- **Three four**"), release("v0.3.3", "")}), {});
-        check(hub.release().state == ReleaseStatus::State::Newer && hub.release().newer.size() == 1 &&
-                  hub.release().newer.first().version == QStringLiteral("0.3.4") && !hub.release().checked.isEmpty(),
-              "the answer reaches the status the pages read, with the newer release and when it was checked");
+        check(hub.release().state == ReleaseStatus::State::Newer &&
+                  hub.release().newer.size() == 1 &&
+                  hub.release().newer.first().version == QStringLiteral("0.3.4") &&
+                  !hub.release().checked.isEmpty(),
+              "the answer reaches the status the pages read, with the newer release and when it "
+              "was checked");
 
         release_check.check();
         pending({}, QStringLiteral("Host api.github.com not found"));
@@ -150,7 +164,8 @@ int main(int argc, char** argv) {
         check(hub.release().state == ReleaseStatus::State::Latest && hub.release().newer.isEmpty(),
               "running the newest release shows as the latest");
         check(!lsw::host::config::ManagerSettings::default_value(
-                   lsw::host::config::ManagerSettings::Key::kCheckUpdates).toBool(),
+                   lsw::host::config::ManagerSettings::Key::kCheckUpdates)
+                   .toBool(),
               "the manager does not ask GitHub on startup unless the setting is turned on");
     }
 

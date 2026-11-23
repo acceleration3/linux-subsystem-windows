@@ -31,4 +31,4 @@ struct ReleaseStatus {
     [[nodiscard]] bool operator==(const ReleaseStatus&) const = default;
 };
 
-}
+}  // namespace lsw::host::services

@@ -11,7 +11,6 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QVBoxLayout>
-
 #include <array>
 
 namespace lsw::host::manager {

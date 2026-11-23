@@ -174,8 +174,8 @@ void InfoTip::show_tip() {
 void InfoTip::paintEvent(QPaintEvent*) {
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
-    const QColor ink(
-        QString::fromLatin1(lit_ || (keyed_ && hasFocus()) ? Theme::Color::kFg : Theme::Color::kFgFaint));
+    const QColor ink(QString::fromLatin1(lit_ || (keyed_ && hasFocus()) ? Theme::Color::kFg
+                                                                        : Theme::Color::kFgFaint));
     painter.setPen(QPen(ink, 1.2));
     painter.drawEllipse(QRectF(rect()).adjusted(0.6, 0.6, -0.6, -0.6));
     QFont glyph = font();

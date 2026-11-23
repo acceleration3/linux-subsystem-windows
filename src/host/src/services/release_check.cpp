@@ -11,7 +11,6 @@
 #include <QNetworkRequest>
 #include <QRegularExpression>
 #include <QVersionNumber>
-
 #include <algorithm>
 #include <utility>
 
@@ -37,7 +36,7 @@ const QRegularExpression& headline_pattern() {
     return pattern;
 }
 
-}
+}  // namespace
 
 ReleaseCheck::ReleaseCheck(StatusHub& status, QString running, Fetch fetch, QObject* parent)
     : QObject(parent), status_(status), running_(std::move(running)), fetch_(std::move(fetch)) {
@@ -72,8 +71,10 @@ void ReleaseCheck::check() {
     checking.state = ReleaseStatus::State::Checking;
     checking.error.clear();
     status_.set_release(checking);
-    LSW_INFO("release check: asking GitHub for LSW's releases (running {})", running_.toStdString());
-    fetch_(releases_url(), [this](const QByteArray& page, const QString& error) { answer(page, error); });
+    LSW_INFO("release check: asking GitHub for LSW's releases (running {})",
+             running_.toStdString());
+    fetch_(releases_url(),
+           [this](const QByteArray& page, const QString& error) { answer(page, error); });
 }
 
 void ReleaseCheck::answer(const QByteArray& page, const QString& error) {
@@ -96,18 +97,19 @@ void ReleaseCheck::answer(const QByteArray& page, const QString& error) {
         LSW_WARN("release check failed: {}", problem.toStdString());
     } else {
         result.newer = *newer;
-        result.state = newer->isEmpty() ? ReleaseStatus::State::Latest : ReleaseStatus::State::Newer;
-        LSW_INFO("release check: {}", newer->isEmpty()
-                                          ? std::string{"this is the latest release"}
-                                          : "LSW " + newer->first().version.toStdString() + " is out");
+        result.state =
+            newer->isEmpty() ? ReleaseStatus::State::Latest : ReleaseStatus::State::Newer;
+        LSW_INFO("release check: {}",
+                 newer->isEmpty() ? std::string{"this is the latest release"}
+                                  : "LSW " + newer->first().version.toStdString() + " is out");
     }
     status_.set_release(result);
 }
 
-std::optional<QVector<ReleaseStatus::Release>> ReleaseCheck::newer_than(const QByteArray& page,
-                                                                        const QString& running,
-                                                                        QString* error) {
-    const auto fail = [error](const QString& text) -> std::optional<QVector<ReleaseStatus::Release>> {
+std::optional<QVector<ReleaseStatus::Release>>
+ReleaseCheck::newer_than(const QByteArray& page, const QString& running, QString* error) {
+    const auto fail =
+        [error](const QString& text) -> std::optional<QVector<ReleaseStatus::Release>> {
         if (error != nullptr) {
             *error = text;
         }
@@ -115,7 +117,8 @@ std::optional<QVector<ReleaseStatus::Release>> ReleaseCheck::newer_than(const QB
     };
     const QVersionNumber mine = number_of(running);
     if (mine.isNull()) {
-        return fail(QStringLiteral("this build of LSW has no version to compare (%1)").arg(running));
+        return fail(
+            QStringLiteral("this build of LSW has no version to compare (%1)").arg(running));
     }
     QJsonParseError parse{};
     const QJsonDocument document = QJsonDocument::fromJson(page, &parse);
@@ -168,4 +171,4 @@ QStringList ReleaseCheck::headlines(const QString& notes) {
     return lines;
 }
 
-}
+}  // namespace lsw::host::services
