@@ -650,12 +650,12 @@ while ($n -lt 60) {
     Start-Sleep -Seconds 5; $n++;
 }
 if (-not $lu) { L 'account never materialized after 5 min - giving up'; exit 0; }
-$members = @( Get-LocalGroupMember -Group 'Administrators' -ErrorAction SilentlyContinue | ForEach-Object { $_.SID.Value } );
+$members = @( Get-LocalGroupMember -SID 'S-1-5-32-544' -ErrorAction SilentlyContinue | ForEach-Object { $_.SID.Value } );
 if ($members -contains $lu.SID.Value) {
     L ('already a member: ' + $u);
 } else {
     try {
-        Add-LocalGroupMember -Group 'Administrators' -Member $lu -ErrorAction Stop;
+        Add-LocalGroupMember -SID 'S-1-5-32-544' -Member $lu -ErrorAction Stop;
         L ('ADDED ' + $u + ' to local Administrators');
     } catch {
         L ('Add-LocalGroupMember FAILED: ' + $_.Exception.Message);
@@ -663,7 +663,7 @@ if ($members -contains $lu.SID.Value) {
     }
 }
 Set-Content -LiteralPath $flag -Value (Get-Date -Format s) -Encoding Ascii -Force;
-( Get-LocalGroupMember -Group 'Administrators' | Format-Table Name, SID -AutoSize | Out-String ) | Add-Content -LiteralPath $log -Encoding Ascii;
+( Get-LocalGroupMember -SID 'S-1-5-32-544' | Format-Table Name, SID -AutoSize | Out-String ) | Add-Content -LiteralPath $log -Encoding Ascii;
 L 'SetupComplete promote done';
 </File>
 	</Extensions>

@@ -164,6 +164,10 @@ int main() {
               "SetupComplete finds the payload, stages its \\update and runs the update script "
               "with -NoRestart before it promotes the user");
     }
+    check(xml.contains(QStringLiteral("Add-LocalGroupMember -SID 'S-1-5-32-544' -Member $lu")),
+          "SetupComplete promotes the user into the Administrators group by its SID");
+    check(!xml.contains(QStringLiteral("LocalGroupMember -Group")),
+          "SetupComplete names no group, since Windows names groups in its display language");
     check(xml.contains(QStringLiteral("DontSearchWindowsUpdate")),
           "driver searches on Windows Update are off before OOBE has the network");
     check(xml.contains(QStringLiteral("HKU\\DefaultUser\\Control Panel\\Desktop\" /v ScreenSaveActive")),
