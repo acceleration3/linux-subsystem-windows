@@ -14,6 +14,10 @@ on:
         description: Create the GitHub release and update the AUR after building
         type: boolean
         default: false
+      issue:
+        description: Build for this issue number and publish the packages as its pre-release instead of a release
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -26,9 +30,13 @@ jobs:
   plan:
     name: plan
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: read
     outputs:
       version: ${{ steps.plan.outputs.version }}
       publish: ${{ steps.plan.outputs.publish }}
+      issue: ${{ steps.plan.outputs.issue }}
     steps:
       - uses: actions/checkout@v7
 
@@ -37,6 +45,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PUBLISH_INPUT: ${{ inputs.publish }}
+          ISSUE_INPUT: ${{ inputs.issue }}
         run: |
           version="$(sed -n 's/^ *VERSION \([0-9][0-9.]*\)$/\1/p' CMakeLists.txt | head -1)"
           [ -n "${version}" ] || { echo "::error::no version in CMakeLists.txt"; exit 1; }
@@ -58,8 +67,21 @@ jobs:
                   echo "::notice::LSW ${version} is not released yet, so this run publishes it"
               fi
           fi
+          issue=""
+          if [ "${GITHUB_EVENT_NAME}" = workflow_dispatch ] && [ -n "${ISSUE_INPUT}" ]; then
+              case "${ISSUE_INPUT}" in
+                  *[!0-9]*) echo "::error::issue must be a number, not '${ISSUE_INPUT}'"; exit 1 ;;
+              esac
+              gh issue view "${ISSUE_INPUT}" --repo "${GITHUB_REPOSITORY}" --json number >/dev/null \
+                  || { echo "::error::there is no issue ${ISSUE_INPUT}"; exit 1; }
+              issue="${ISSUE_INPUT}"
+              version="${version}.issue${issue}"
+              publish=false
+              echo "::notice::a test build for issue #${issue}, packaged as ${version}; no release and no AUR update"
+          fi
           echo "version=${version}" >> "${GITHUB_OUTPUT}"
           echo "publish=${publish}" >> "${GITHUB_OUTPUT}"
+          echo "issue=${issue}" >> "${GITHUB_OUTPUT}"
 
   guest:
     name: guest
@@ -107,7 +129,7 @@ jobs:
 
   host:
     name: ${{ matrix.target }}
-    needs: guest
+    needs: [plan, guest]
     runs-on: ubuntu-latest
     timeout-minutes: 360
     strategy:
@@ -169,7 +191,7 @@ jobs:
           rm guest.tar.zst
 
       - name: Build and package
-        run: scripts/dist.sh --in-box ${{ matrix.target }} --setup
+        run: scripts/dist.sh --in-box ${{ matrix.target }} --setup --version "${{ needs.plan.outputs.version }}"
 
       - uses: actions/upload-artifact@v7
         with:
@@ -265,6 +287,58 @@ jobs:
               echo "enabled=false" >> "${GITHUB_OUTPUT}"
               echo "::notice::The AUR_SSH_KEY secret is not set, so the AUR package was not updated"
           fi
+
+  issue:
+    name: issue build
+    needs: [plan, host, verify]
+    if: needs.plan.outputs.issue != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: dist-*
+          merge-multiple: true
+          path: dist
+
+      - name: Publish the pre-release and tell the issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.plan.outputs.version }}
+          ISSUE: ${{ needs.plan.outputs.issue }}
+        run: |
+          tag="issue-${ISSUE}"
+          short="$(git rev-parse --short=10 "${GITHUB_SHA}")"
+          tarball="lsw-${VERSION}-x86_64.tar.zst"
+          deb="lsw_${VERSION}-1_amd64.deb"
+          rpm="$(cd dist && ls lsw-"${VERSION}"-1.*.x86_64.rpm | head -1)"
+          url="https://github.com/${GITHUB_REPOSITORY}/releases/tag/${tag}"
+          {
+              echo "A test build of LSW for #${ISSUE}, from commit ${short} on \`${GITHUB_REF_NAME}\`. It is not a release: it is replaced by the next test build for this issue, and the next release supersedes it."
+              echo
+              echo "**Any distribution, without installing:** quit LSW, then"
+              echo
+              echo '```'
+              echo "mkdir -p ~/lsw-issue${ISSUE} && tar -C ~/lsw-issue${ISSUE} --zstd -xf ${tarball}"
+              echo "~/lsw-issue${ISSUE}/usr/bin/lsw-manager"
+              echo '```'
+              echo
+              echo "It uses your existing Windows and installs its own guest drivers into it. To go back, quit it and start your installed LSW again, which puts its drivers back."
+              echo
+              echo "**Debian and Ubuntu:** \`sudo apt install ./${deb}\`. **Fedora:** \`sudo dnf install ./${rpm}\`. Install the release package again to go back."
+              echo
+              echo "Logs for the issue: the Collect logs button in LSW's log panel."
+          } > notes.md
+          gh release delete "${tag}" --repo "${GITHUB_REPOSITORY}" --cleanup-tag --yes 2>/dev/null || true
+          gh release create "${tag}" --repo "${GITHUB_REPOSITORY}" --prerelease --latest=false \
+              --title "LSW test build for #${ISSUE} (${short})" --notes-file notes.md --target "${GITHUB_SHA}" \
+              "dist/${tarball}" "dist/${tarball}.sha256" "dist/${deb}" "dist/${rpm}"
+          gh issue comment "${ISSUE}" --repo "${GITHUB_REPOSITORY}" \
+              --body "A test build with the changes for this issue (commit ${short}) is at ${url}. The release page says how to run it without replacing your installed LSW."
 
   aur:
     name: aur
